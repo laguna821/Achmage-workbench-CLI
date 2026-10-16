@@ -1,0 +1,16 @@
+{
+  "name": "@workbench/host",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/main.ts",
+    "start": "node src/main.ts",
+    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/host.mjs --external:@anthropic-ai/claude-agent-sdk --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\""
+  },
+  "dependencies": {
+    "@workbench/contracts": "0.1.0",
+    "@workbench/provider-codex": "0.1.0",
+    "@workbench/provider-claude": "0.1.0"
+  }
+}

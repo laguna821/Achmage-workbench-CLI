@@ -1,0 +1,8 @@
+node_modules/
+dist/
+target/
+*.log
+.vite/
+coverage/
+apps/desktop/src-tauri/gen/
+apps/desktop/src-tauri/binaries/

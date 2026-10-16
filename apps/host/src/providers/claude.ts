@@ -1,0 +1,388 @@
+import { execFile, spawn } from "node:child_process";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
+import { promisify } from "node:util";
+import {
+  query,
+  type CanUseTool,
+  type PermissionResult,
+  type Query,
+  type SDKUserMessage,
+} from "@anthropic-ai/claude-agent-sdk";
+import type { ApprovalDecision, ProviderStatus, Session, UsageWindow, Work } from "@workbench/contracts";
+import { ClaudeTranscriptMapper, describeTool, type MapperOutput } from "@workbench/provider-claude";
+import { resolveClaude, type ResolvedBinary } from "../binaries.ts";
+import { emptyStatus, type AdapterSink, type LoginStart, type ProviderAdapter } from "./types.ts";
+
+const run = promisify(execFile);
+
+/** Async iterable fed by `send`; keeps one Claude Code process per active session. */
+class InputQueue implements AsyncIterable<SDKUserMessage> {
+  private readonly items: SDKUserMessage[] = [];
+  private waiting: ((result: IteratorResult<SDKUserMessage>) => void) | null = null;
+  private closed = false;
+
+  push(message: SDKUserMessage) {
+    if (this.waiting) {
+      const resolve = this.waiting;
+      this.waiting = null;
+      resolve({ value: message, done: false });
+    } else {
+      this.items.push(message);
+    }
+  }
+
+  close() {
+    this.closed = true;
+    this.waiting?.({ value: undefined, done: true });
+    this.waiting = null;
+  }
+
+  [Symbol.asyncIterator](): AsyncIterator<SDKUserMessage> {
+    return {
+      next: () => {
+        const item = this.items.shift();
+        if (item) {
+          return Promise.resolve({ value: item, done: false });
+        }
+        if (this.closed) {
+          return Promise.resolve({ value: undefined, done: true });
+        }
+        return new Promise((resolve) => {
+          this.waiting = resolve;
+        });
+      },
+    };
+  }
+}
+
+type PendingApproval = {
+  toolUseId: string;
+  input: Record<string, unknown>;
+  resolve: (result: PermissionResult) => void;
+  item: { kind: "approval"; id: string; title: string; detail: string | null; reason: string | null; decision: null; at: number };
+};
+
+type Runtime = {
+  sessionId: string;
+  input: InputQueue;
+  query: Query;
+  mapper: ClaudeTranscriptMapper;
+  turnKey: string;
+  turnActive: boolean;
+  interrupting: boolean;
+  approvals: Map<string, PendingApproval>;
+  idleTimer: NodeJS.Timeout | null;
+};
+
+function sdkBundledBinary(): string | null {
+  try {
+    const require = createRequire(import.meta.url);
+    const pkg = require.resolve(`@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}/package.json`);
+    return join(dirname(pkg), process.platform === "win32" ? "claude.exe" : "claude");
+  } catch {
+    return null;
+  }
+}
+
+export class ClaudeAdapter implements ProviderAdapter {
+  readonly provider = "claude" as const;
+  private current: ProviderStatus = emptyStatus("claude");
+  private binary: ResolvedBinary | null = null;
+  private readonly runtimes = new Map<string, Runtime>();
+  private readonly sink: AdapterSink;
+  private readonly idleMs: number;
+  private readonly permissionMode: "default" | "acceptEdits";
+  private readonly usage = new Map<string, UsageWindow>();
+  private initializing: Promise<void> | null = null;
+
+  constructor(sink: AdapterSink, options?: { idleMs?: number; permissionMode?: "default" | "acceptEdits" }) {
+    this.sink = sink;
+    this.idleMs = options?.idleMs ?? 10 * 60_000;
+    this.permissionMode = options?.permissionMode ?? "default";
+  }
+
+  status() {
+    return this.current;
+  }
+
+  private publish(patch: Partial<ProviderStatus>) {
+    this.current = { ...this.current, ...patch };
+    this.sink.providerStatus(this.current);
+  }
+
+  init() {
+    this.initializing ??= this.initOnce();
+    return this.initializing;
+  }
+
+  private async initOnce() {
+    this.binary = await resolveClaude(sdkBundledBinary());
+    if (!this.binary) {
+      this.publish({ installed: false, error: "claude를 찾지 못했습니다." });
+      return;
+    }
+    this.publish({ installed: true, binary: this.binary.path, version: this.binary.version, error: null });
+    await this.refreshStatus();
+  }
+
+  async refreshStatus(): Promise<ProviderStatus> {
+    if (!this.binary) {
+      return this.current;
+    }
+    try {
+      const { stdout } = await run(this.binary.path, ["auth", "status", "--json"], { timeout: 20_000 });
+      const status = JSON.parse(stdout) as { loggedIn?: boolean; email?: string; subscriptionType?: string };
+      this.publish({ loggedIn: Boolean(status.loggedIn), account: status.email ?? null, plan: status.subscriptionType ?? null, error: null });
+    } catch (error) {
+      // `auth status` exits non-zero when logged out.
+      const output = (error as { stdout?: string }).stdout;
+      try {
+        const status = JSON.parse(output ?? "") as { loggedIn?: boolean };
+        this.publish({ loggedIn: Boolean(status.loggedIn), account: null, plan: null, error: null });
+      } catch {
+        this.publish({ error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    return this.current;
+  }
+
+  async login(): Promise<LoginStart> {
+    if (!this.binary) {
+      throw new Error("claude를 찾지 못했습니다.");
+    }
+    const child = spawn(this.binary.path, ["auth", "login", "--claudeai"], { stdio: ["ignore", "pipe", "pipe"] });
+    const url = await new Promise<string | null>((resolve) => {
+      let buffer = "";
+      const timer = setTimeout(() => resolve(null), 15_000);
+      const onData = (chunk: Buffer) => {
+        buffer += chunk.toString("utf8");
+        const match = buffer.match(/https:\/\/\S+/);
+        if (match) {
+          clearTimeout(timer);
+          resolve(match[0]);
+        }
+      };
+      child.stdout.on("data", onData);
+      child.stderr.on("data", onData);
+      child.on("exit", () => {
+        clearTimeout(timer);
+        resolve(null);
+      });
+    });
+    child.on("exit", () => void this.refreshStatus());
+    return { url, message: "브라우저에서 Claude 로그인을 마치면 자동으로 연결됩니다." };
+  }
+
+  private startRuntime(session: Session, work: Work): Runtime {
+    if (!this.binary) {
+      throw new Error("claude를 찾지 못했습니다.");
+    }
+    const input = new InputQueue();
+    const runtime: Runtime = {
+      sessionId: session.id,
+      input,
+      query: undefined as unknown as Query,
+      mapper: new ClaudeTranscriptMapper(),
+      turnKey: "",
+      turnActive: false,
+      interrupting: false,
+      approvals: new Map(),
+      idleTimer: null,
+    };
+    const canUseTool: CanUseTool = (toolName, toolInput, options) =>
+      new Promise<PermissionResult>((resolve) => {
+        const view = describeTool(toolName, toolInput);
+        const itemId = `approval:${options.toolUseID}`;
+        const item = {
+          kind: "approval" as const,
+          id: itemId,
+          title: options.title ?? `${toolName} 사용을 허용할까요?`,
+          detail: view.title,
+          reason: options.decisionReason ?? options.description ?? null,
+          decision: null,
+          at: Date.now(),
+        };
+        runtime.approvals.set(itemId, { toolUseId: options.toolUseID, input: toolInput, resolve, item });
+        this.sink.upsertItem(session.id, item);
+        this.sink.updateSession(session.id, { status: "awaitingApproval", activity: "승인 필요" });
+        options.signal.addEventListener("abort", () => {
+          if (runtime.approvals.delete(itemId)) {
+            this.sink.upsertItem(session.id, { ...item, decision: "expired" });
+            resolve({ behavior: "deny", message: "Request aborted" });
+          }
+        });
+      });
+    runtime.query = query({
+      prompt: input,
+      options: {
+        cwd: work.cwd,
+        resume: session.nativeSessionId ?? undefined,
+        model: session.model ?? undefined,
+        permissionMode: this.permissionMode,
+        canUseTool,
+        includePartialMessages: true,
+        settingSources: ["user", "project", "local"],
+        systemPrompt: { type: "preset", preset: "claude_code" },
+        pathToClaudeCodeExecutable: this.binary.path,
+      },
+    });
+    this.runtimes.set(session.id, runtime);
+    void this.consume(runtime);
+    return runtime;
+  }
+
+  private async consume(runtime: Runtime) {
+    const sessionId = runtime.sessionId;
+    try {
+      for await (const message of runtime.query) {
+        for (const output of runtime.mapper.handle(message, runtime.turnKey)) {
+          this.apply(runtime, output);
+        }
+      }
+    } catch (error) {
+      if (runtime.turnActive) {
+        this.sink.upsertItem(sessionId, {
+          kind: "notice",
+          id: `error:${Date.now()}`,
+          level: "error",
+          text: `Claude 실행이 중단되었습니다: ${error instanceof Error ? error.message : String(error)}`,
+          at: Date.now(),
+        });
+      }
+    } finally {
+      if (this.runtimes.get(sessionId) === runtime) {
+        this.runtimes.delete(sessionId);
+      }
+      if (runtime.idleTimer) {
+        clearTimeout(runtime.idleTimer);
+      }
+      if (runtime.turnActive) {
+        this.sink.updateSession(sessionId, { status: "idle", activity: null });
+      }
+    }
+  }
+
+  private apply(runtime: Runtime, output: MapperOutput) {
+    const sessionId = runtime.sessionId;
+    switch (output.type) {
+      case "init":
+        this.sink.updateSession(sessionId, { nativeSessionId: output.nativeSessionId, model: output.model });
+        break;
+      case "upsert":
+        this.sink.upsertItem(sessionId, output.item);
+        break;
+      case "delta":
+        this.sink.delta(sessionId, output.itemId, output.text);
+        break;
+      case "activity":
+        if (runtime.turnActive && runtime.approvals.size === 0) {
+          this.sink.updateSession(sessionId, { activity: output.text, status: output.text ? "running" : "idle" });
+        }
+        break;
+      case "usage":
+        this.usage.set(output.window.label, output.window);
+        this.publish({ usage: [...this.usage.values()], usageObservedAt: Date.now() });
+        break;
+      case "authError":
+        this.publish({ loggedIn: false, error: output.message });
+        break;
+      case "turnEnd": {
+        const status = runtime.interrupting ? "interrupted" : output.status;
+        runtime.turnActive = false;
+        runtime.interrupting = false;
+        if (status === "failed" && output.error) {
+          this.sink.upsertItem(sessionId, { kind: "notice", id: `error:${runtime.turnKey}`, level: "error", text: output.error, at: Date.now() });
+        }
+        this.sink.upsertItem(sessionId, {
+          kind: "turnEnd",
+          id: `end:${runtime.turnKey}`,
+          status,
+          durationMs: output.durationMs,
+          at: Date.now(),
+        });
+        this.sink.updateSession(sessionId, { status: "idle", activity: null, lastError: status === "failed" ? output.error : null });
+        this.scheduleIdle(runtime);
+        break;
+      }
+    }
+  }
+
+  /** Close the Claude Code process after inactivity; the next message resumes the session. */
+  private scheduleIdle(runtime: Runtime) {
+    if (runtime.idleTimer) {
+      clearTimeout(runtime.idleTimer);
+    }
+    runtime.idleTimer = setTimeout(() => {
+      if (!runtime.turnActive && this.runtimes.get(runtime.sessionId) === runtime) {
+        this.runtimes.delete(runtime.sessionId);
+        runtime.input.close();
+        runtime.query.close();
+      }
+    }, this.idleMs);
+  }
+
+  async send(session: Session, work: Work, text: string, turnKey: string) {
+    await this.init();
+    const runtime = this.runtimes.get(session.id) ?? this.startRuntime(session, work);
+    if (runtime.idleTimer) {
+      clearTimeout(runtime.idleTimer);
+      runtime.idleTimer = null;
+    }
+    runtime.turnKey = turnKey;
+    runtime.turnActive = true;
+    runtime.input.push({
+      type: "user",
+      message: { role: "user", content: text },
+      parent_tool_use_id: null,
+      origin: { kind: "human" },
+    });
+  }
+
+  async interrupt(session: Session) {
+    const runtime = this.runtimes.get(session.id);
+    if (!runtime || !runtime.turnActive) {
+      this.sink.updateSession(session.id, { status: "idle", activity: null });
+      return;
+    }
+    runtime.interrupting = true;
+    this.sink.updateSession(session.id, { status: "interrupting", activity: "중단하는 중" });
+    for (const [itemId, pending] of runtime.approvals) {
+      runtime.approvals.delete(itemId);
+      pending.resolve({ behavior: "deny", message: "User interrupted", interrupt: true });
+      this.sink.upsertItem(session.id, { ...pending.item, decision: "decline" });
+    }
+    await runtime.query.interrupt();
+  }
+
+  async answerApproval(session: Session, itemId: string, decision: ApprovalDecision) {
+    const runtime = this.runtimes.get(session.id);
+    const pending = runtime?.approvals.get(itemId);
+    if (!runtime || !pending) {
+      return false;
+    }
+    runtime.approvals.delete(itemId);
+    if (decision === "accept") {
+      pending.resolve({ behavior: "allow", updatedInput: pending.input });
+    } else {
+      pending.resolve({ behavior: "deny", message: "The user declined this action." });
+      const declined = runtime.mapper.markDeclined(pending.toolUseId);
+      if (declined) {
+        this.sink.upsertItem(session.id, declined);
+      }
+    }
+    this.sink.upsertItem(session.id, { ...pending.item, decision });
+    if (runtime.approvals.size === 0) {
+      this.sink.updateSession(session.id, { status: "running", activity: "응답 준비 중" });
+    }
+    return true;
+  }
+
+  async shutdown() {
+    for (const runtime of this.runtimes.values()) {
+      runtime.input.close();
+      runtime.query.close();
+    }
+    this.runtimes.clear();
+  }
+}
