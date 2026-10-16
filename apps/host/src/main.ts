@@ -8,6 +8,7 @@ import { ClaudeAdapter } from "./providers/claude.ts";
 import { CodexAdapter } from "./providers/codex.ts";
 import { SessionManager } from "./sessions.ts";
 import { Store } from "./store.ts";
+import { Kordoc } from "./kordoc.ts";
 
 // Local gateway: owns engine processes and state, serves the UI and an HTTP + SSE API on
 // 127.0.0.1 only. Prints one `WORKBENCH_READY {json}` line once it accepts connections.
@@ -48,6 +49,8 @@ const manager = new SessionManager(store, bus, {
   hostId: env.WORKBENCH_HOST_ID ?? hostname(),
   hostLabel,
   managedWorksDir: join(dataDir, "works"),
+  dataDir,
+  kordoc: new Kordoc(),
 });
 
 const claudeIdleMs = env.WORKBENCH_CLAUDE_IDLE_MS ? Number(env.WORKBENCH_CLAUDE_IDLE_MS) : undefined;

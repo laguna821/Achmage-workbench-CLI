@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { EFFORT_LABEL, PROVIDER_LABEL, type Provider, type Session, type Work } from "@workbench/contracts";
+import { EFFORT_LABEL, PROVIDER_LABEL, type DocRef, type Provider, type Session, type Work } from "@workbench/contracts";
 import { folderPath, isBusy, sessionsOf, type State } from "../state.ts";
 import { sessionLabel, statusText, statusTone } from "../format.ts";
 import { Composer } from "./Composer.tsx";
@@ -14,7 +14,11 @@ import { useUnseen } from "./Overview.tsx";
 import { Transcript } from "./Transcript.tsx";
 
 export type WorkActions = {
-  send: (session: Session, text: string) => Promise<boolean>;
+  send: (session: Session, text: string, refs?: DocRef[]) => Promise<boolean>;
+  handoff: (source: Session, target: Session, text: string, refs?: DocRef[]) => Promise<boolean>;
+  pickSession: (work: Work, exclude: Session | null) => Promise<Session | null>;
+  openArtifact: (artifactId: string) => void;
+  openFile: (work: Work, path: string) => Promise<void>;
   interrupt: (session: Session) => void;
   answer: (session: Session, itemId: string, decision: "accept" | "decline") => void;
   newSession: (work: Work, provider: Provider, choice?: ModelChoice) => Promise<Session | null>;
@@ -39,12 +43,14 @@ function TargetPicker({
   hostLabel,
   onSelect,
   onNew,
+  onHandoff,
 }: {
   sessions: Session[];
   active: Session | null;
   hostLabel: string;
   onSelect: (session: Session) => void;
   onNew: (provider: Provider) => void;
+  onHandoff: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
@@ -89,6 +95,18 @@ function TargetPicker({
             </span>
           </MenuItem>
         ))}
+        <div className="menu-divider" />
+        <MenuItem
+          hint="답은 이 작업으로"
+          onSelect={() => {
+            close();
+            onHandoff();
+          }}
+        >
+          <span className="menu-engine">
+            <Icon name="send" size={15} /> 다른 세션에 보내기…
+          </span>
+        </MenuItem>
       </Popover>
     </div>
   );
@@ -100,12 +118,14 @@ export function WorkView({
   actions,
   engine,
   setEngine,
+  pickFile,
 }: {
   state: State;
   work: Work;
   actions: WorkActions;
   engine: Provider;
   setEngine: (provider: Provider) => void;
+  pickFile: ((folder: string) => Promise<string | null>) | null;
 }) {
   const { lookOf, openMenu } = useAppearance();
   const unseen = useUnseen();
@@ -128,6 +148,15 @@ export function WorkView({
   const [folderOpen, setFolderOpen] = useState(false);
   const closeFolder = useCallback(() => setFolderOpen(false), []);
   const [renaming, setRenaming] = useState<string | null>(null);
+  // "다른 세션에": the receiving session, and documents pinned to the next request.
+  const [handoffTo, setHandoffTo] = useState<Session | null>(null);
+  const [attached, setAttached] = useState<string[]>([]);
+  const [docsOpen, setDocsOpen] = useState(false);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [pathInput, setPathInput] = useState("");
+  const artifacts = Object.values(state.artifacts)
+    .filter((artifact) => artifact.workId === work.id)
+    .sort((a, b) => b.updatedAt - a.updatedAt);
 
   const recency = (session: Session) => Math.max(session.previewAt ?? 0, session.updatedAt);
   const keep = new Set(
@@ -183,6 +212,53 @@ export function WorkView({
               </MenuItem>
             ))}
             {!folderOptions.length ? <div className="menu-label">작업 찾기에서 폴더를 만들 수 있습니다.</div> : null}
+          </Popover>
+        </div>
+        <div className="anchor">
+          <button type="button" className="ghost-button docs-button" onClick={() => setDocsOpen(!docsOpen)} aria-expanded={docsOpen} title="이 작업의 문서">
+            <Icon name="file" size={15} /> 문서 {artifacts.length ? artifacts.length : ""}
+          </button>
+          <Popover open={docsOpen} onClose={() => setDocsOpen(false)} align="left" className="docs-menu">
+            <div className="menu-label">이 작업의 문서</div>
+            {artifacts.map((artifact) => (
+              <MenuItem
+                key={artifact.id}
+                hint={`r${artifact.revision}`}
+                onSelect={() => {
+                  setDocsOpen(false);
+                  actions.openArtifact(artifact.id);
+                }}
+              >
+                {artifact.name}
+              </MenuItem>
+            ))}
+            {!artifacts.length ? <div className="menu-label">AI가 만든 문서나 연 파일이 여기에 모입니다.</div> : null}
+            <div className="menu-divider" />
+            {pickFile ? (
+              <MenuItem
+                onSelect={() => {
+                  setDocsOpen(false);
+                  void pickFile(work.cwd).then((path) => {
+                    if (path) void actions.openFile(work, path);
+                  });
+                }}
+              >
+                파일 열기…
+              </MenuItem>
+            ) : (
+              <form
+                className="menu-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (!pathInput.trim()) return;
+                  setDocsOpen(false);
+                  void actions.openFile(work, pathInput.trim());
+                  setPathInput("");
+                }}
+              >
+                <input value={pathInput} onChange={(event) => setPathInput(event.target.value)} placeholder="작업 폴더 기준 경로 (예: 강의.md)" />
+              </form>
+            )}
           </Popover>
         </div>
         {active ? (
@@ -271,6 +347,7 @@ export function WorkView({
 
       {active ? (
         <Transcript
+          sessionId={active.id}
           items={transcript?.items ?? []}
           provider={active.provider}
           running={working}
@@ -301,10 +378,46 @@ export function WorkView({
           busy={busy}
           waiting={working}
           autoFocus
+          header={
+            handoffTo || attached.length ? (
+              <div className="doc-chips">
+                {handoffTo ? (
+                  <span className="target-chip" style={accentStyle(lookOf(handoffTo.provider))}>
+                    <EngineMark provider={handoffTo.provider} size={13} /> @{handoffTo.purpose}
+                    <button type="button" onClick={() => setHandoffTo(null)} aria-label="받는 세션 지우기">
+                      <Icon name="x" size={11} />
+                    </button>
+                  </span>
+                ) : null}
+                {attached.map((artifactId) => {
+                  const artifact = state.artifacts[artifactId];
+                  return artifact ? (
+                    <span key={artifactId} className="ref-chip">
+                      <Icon name="file" size={12} /> {artifact.name} · r{artifact.revision}
+                      <button type="button" onClick={() => setAttached(attached.filter((id) => id !== artifactId))} aria-label="문서 빼기">
+                        <Icon name="x" size={11} />
+                      </button>
+                    </span>
+                  ) : null;
+                })}
+                {handoffTo ? <span className="muted">회신: 이 작업</span> : null}
+              </div>
+            ) : null
+          }
           onSend={async (text) => {
-            if (active) return actions.send(active, text);
-            const created = await actions.newSession(work, engine, draftChoice);
-            return created ? actions.send(created, text) : false;
+            // Attached documents travel as the revision they have now; handoffs are read-only.
+            const refs: DocRef[] = attached
+              .map((artifactId) => state.artifacts[artifactId])
+              .filter((artifact): artifact is NonNullable<typeof artifact> => Boolean(artifact))
+              .map((artifact) => ({ artifactId: artifact.id, revision: artifact.revision, mode: "review" as const, selection: null }));
+            const source: Session | null = active ?? (await actions.newSession(work, engine, draftChoice));
+            if (!source) return false;
+            const sent = handoffTo ? await actions.handoff(source, handoffTo, text, refs) : await actions.send(source, text, refs);
+            if (sent) {
+              setHandoffTo(null);
+              setAttached([]);
+            }
+            return sent;
           }}
           onStop={active ? () => actions.interrupt(active) : undefined}
           target={
@@ -321,8 +434,31 @@ export function WorkView({
                 hostLabel={state.hostLabel}
                 onSelect={(session) => actions.selectSession(work, session)}
                 onNew={(provider) => void actions.newSession(work, provider)}
+                onHandoff={() => void actions.pickSession(work, active).then((picked) => picked && picked.id !== active.id && setHandoffTo(picked))}
               />
             ) : null}
+            <div className="anchor">
+              <button type="button" className="icon-button" onClick={() => setAttachOpen(!attachOpen)} title="문서 붙이기" aria-label="문서 붙이기">
+                <Icon name="file" size={17} />
+              </button>
+              <Popover open={attachOpen} onClose={() => setAttachOpen(false)} placement="above" align="right">
+                <div className="menu-label">요청에 붙일 문서 · 지금 판으로 고정</div>
+                {artifacts.map((artifact) => (
+                  <MenuItem
+                    key={artifact.id}
+                    active={attached.includes(artifact.id)}
+                    hint={`r${artifact.revision}`}
+                    onSelect={() => {
+                      setAttached(attached.includes(artifact.id) ? attached.filter((id) => id !== artifact.id) : [...attached, artifact.id]);
+                      setAttachOpen(false);
+                    }}
+                  >
+                    {artifact.name}
+                  </MenuItem>
+                ))}
+                {!artifacts.length ? <div className="menu-label">이 작업에 문서가 아직 없습니다.</div> : null}
+              </Popover>
+            </div>
             </>
           }
         />

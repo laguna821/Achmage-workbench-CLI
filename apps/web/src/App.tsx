@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import type { Provider, Session, UiPrefs, Work } from "@workbench/contracts";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import type { DocRef, Proposal, Provider, Session, UiPrefs, Work } from "@workbench/contracts";
 import { Api, ApiRequestError, readToken } from "./api.ts";
 import { initialState, reducer, sessionsOf } from "./state.ts";
 import { newRequestId, titleFrom } from "./format.ts";
@@ -15,6 +15,11 @@ import { WorkView, type WorkActions } from "./components/WorkView.tsx";
 import { AppearanceSheet, type SheetTarget } from "./components/AppearanceSheet.tsx";
 import { EngineMenu } from "./components/EngineMenu.tsx";
 import { Overview, Switcher, UnseenContext } from "./components/Overview.tsx";
+import { DocContext, type DocActions } from "./components/DocCards.tsx";
+import { SessionPicker } from "./components/SessionPicker.tsx";
+
+// Editors (CodeMirror, PDF.js) load only when a document opens.
+const DocumentView = lazy(() => import("./components/docs/DocumentView.tsx"));
 import { AppearanceContext, DEFAULT_APPEARANCE, engineTheme, lookStyle, readAppearance, type AppearanceApi } from "./appearance.ts";
 import { isThemePref, resolveTheme, setRootTheme, useSystemTheme, type ThemePref } from "./theme.ts";
 
@@ -36,6 +41,18 @@ async function pickFolderNative(): Promise<string | null> {
   return typeof picked === "string" ? picked : null;
 }
 
+async function pickFileNative(folder: string): Promise<string | null> {
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const picked = await open({
+    directory: false,
+    multiple: false,
+    defaultPath: folder,
+    title: "문서 열기",
+    filters: [{ name: "문서", extensions: ["md", "markdown", "html", "htm", "pdf", "hwpx", "hwp", "txt"] }],
+  });
+  return typeof picked === "string" ? picked : null;
+}
+
 async function openExternal(url: string) {
   if (inDesktop) {
     const { openUrl } = await import("@tauri-apps/plugin-opener");
@@ -45,7 +62,12 @@ async function openExternal(url: string) {
   }
 }
 
-type View = { kind: "work" } | { kind: "finder" } | { kind: "new"; folderId: string | null } | { kind: "overview"; workId: string | null };
+type View =
+  | { kind: "work" }
+  | { kind: "finder" }
+  | { kind: "new"; folderId: string | null }
+  | { kind: "overview"; workId: string | null }
+  | { kind: "document"; artifactId: string; proposalId: string | null };
 
 const SEEN_KEY = "workbench.seen";
 const MRU_KEY = "workbench.recentSessions";
@@ -174,16 +196,41 @@ export function App() {
     };
   }, [api, activeSession, state.transcripts, fail]);
 
+  // "어느 세션에 보낼까요?" picker, answered through a promise.
+  const [picker, setPicker] = useState<{ workId: string; excludeSessionId: string | null; resolve: (session: Session | null) => void } | null>(null);
+
   const actions: WorkActions = useMemo(
     () => ({
-      send: async (session: Session, text: string) => {
+      send: async (session: Session, text: string, refs: DocRef[] = []) => {
         if (!api) return false;
         try {
-          await api.send(session.id, newRequestId(), text);
+          await api.send(session.id, newRequestId(), text, refs);
           return true;
         } catch (error) {
           fail(error);
           return false;
+        }
+      },
+      handoff: async (source: Session, target: Session, text: string, refs: DocRef[] = []) => {
+        if (!api) return false;
+        try {
+          await api.handoff({ requestId: newRequestId(), sourceSessionId: source.id, targetSessionId: target.id, text, refs });
+          return true;
+        } catch (error) {
+          fail(error);
+          return false;
+        }
+      },
+      pickSession: (work: Work, exclude: Session | null) =>
+        new Promise<Session | null>((resolve) => setPicker({ workId: work.id, excludeSessionId: exclude?.id ?? null, resolve })),
+      openArtifact: (artifactId: string) => setView({ kind: "document", artifactId, proposalId: null }),
+      openFile: async (target: Work, path: string) => {
+        if (!api) return;
+        try {
+          const artifact = await api.openFile(target.id, path);
+          setView({ kind: "document", artifactId: artifact.id, proposalId: null });
+        } catch (error) {
+          fail(error);
         }
       },
       interrupt: (session) => void api?.interrupt(session.id).catch(fail),
@@ -209,6 +256,45 @@ export function App() {
       openOverview: (target) => setView({ kind: "overview", workId: target?.id ?? null }),
     }),
     [api, fail],
+  );
+
+  const docActions: DocActions = useMemo(
+    () => ({
+      openArtifact: (artifactId, proposalId) => {
+        const artifact = state.artifacts[artifactId];
+        if (artifact) setWorkId(artifact.workId);
+        setView({ kind: "document", artifactId, proposalId: proposalId ?? null });
+      },
+      applyProposal: (proposal: Proposal) =>
+        void api
+          ?.applyProposal(proposal.id)
+          .then((result) => setToast(`수정안을 적용했습니다 → ${result.artifact.name} r${result.artifact.revision}`))
+          .catch(fail),
+      discardProposal: (proposal: Proposal) => void api?.discardProposal(proposal.id).catch(fail),
+      retryProposal: async (proposal: Proposal) => {
+        if (!api) return;
+        const session = state.sessions[proposal.sessionId];
+        const artifact = state.artifacts[proposal.artifactId];
+        if (!session || !artifact) return;
+        try {
+          // The same request again, on the latest revision; the old proposal is set aside.
+          const { items } = await api.items(session.id);
+          const original = items.find((item) => item.kind === "user" && item.id === `user:${proposal.requestId}`);
+          const text = original && original.kind === "user" ? original.text : `${artifact.name}을(를) 최신 판 기준으로 다시 고쳐 주세요.`;
+          await api.discardProposal(proposal.id);
+          await api.send(session.id, newRequestId(), text, [{ artifactId: artifact.id, revision: artifact.revision, mode: "edit", selection: null }]);
+          setToast(`r${artifact.revision} 기준으로 다시 요청했습니다.`);
+        } catch (error) {
+          fail(error);
+        }
+      },
+      openSession: (sessionId: string) => {
+        const session = state.sessions[sessionId];
+        const target = session ? state.works[session.workId] : undefined;
+        if (session && target) actions.selectSession(target, session);
+      },
+    }),
+    [api, fail, state.artifacts, state.sessions, state.works, actions],
   );
 
   const startWork = async (
@@ -386,6 +472,7 @@ export function App() {
   return (
     <AppearanceContext.Provider value={appearanceApi}>
     <UnseenContext.Provider value={unseen}>
+    <DocContext.Provider value={{ state, actions: docActions }}>
     <div
       className="app look-scope"
       data-theme={focusedTheme}
@@ -513,6 +600,29 @@ export function App() {
       {sidebarOpen && state.ready ? <Sidebar state={state} currentWorkId={view.kind === "work" ? work?.id ?? null : null} actions={treeActions} /> : null}
       {!state.ready ? (
         <main className="loading">불러오는 중…</main>
+      ) : view.kind === "document" && work ? (
+        <Suspense fallback={<main className="loading">문서를 여는 중…</main>}>
+          <DocumentView
+            key={view.artifactId}
+            api={api}
+            state={state}
+            artifactId={view.artifactId}
+            focusProposalId={view.proposalId}
+            work={work}
+            session={activeSession ?? null}
+            onBack={() => setView({ kind: "work" })}
+            onToast={setToast}
+            onOpenArtifact={(artifactId) => setView({ kind: "document", artifactId, proposalId: null })}
+            onPickTarget={() => actions.pickSession(work, activeSession ?? null)}
+            onSend={async (session, text, refs, handoffTo) => {
+              let source = session;
+              if (!source) source = await actions.newSession(work, engine);
+              if (!source) return false;
+              if (handoffTo) return actions.handoff(source, handoffTo, text, refs);
+              return actions.send(source, text, refs);
+            }}
+          />
+        </Suspense>
       ) : view.kind === "overview" ? (
         <Overview
           state={state}
@@ -538,7 +648,7 @@ export function App() {
           setEngine={setEngine}
         />
       ) : work ? (
-        <WorkView state={state} work={work} actions={actions} engine={engine} setEngine={setEngine} />
+        <WorkView state={state} work={work} actions={actions} engine={engine} setEngine={setEngine} pickFile={inDesktop ? pickFileNative : null} />
       ) : null}
       </div>
 
@@ -553,6 +663,27 @@ export function App() {
       ) : null}
       {engineMenu ? <EngineMenu provider={engineMenu.provider} x={engineMenu.x} y={engineMenu.y} onClose={closeEngineMenu} /> : null}
       {switcher !== null ? <Switcher state={state} sessions={switchable} index={switcher} unseen={unseen} /> : null}
+      {picker ? (
+        <SessionPicker
+          state={state}
+          workId={picker.workId}
+          excludeSessionId={picker.excludeSessionId}
+          onPick={(session) => {
+            picker.resolve(session);
+            setPicker(null);
+          }}
+          onNew={async (provider) => {
+            const target = state.works[picker.workId];
+            const created = target ? await actions.newSession(target, provider) : null;
+            picker.resolve(created);
+            setPicker(null);
+          }}
+          onClose={() => {
+            picker.resolve(null);
+            setPicker(null);
+          }}
+        />
+      ) : null}
 
       {toast ? (
         <div className="toast" role="status" onClick={() => setToast(null)}>
@@ -560,6 +691,7 @@ export function App() {
         </div>
       ) : null}
     </div>
+    </DocContext.Provider>
     </UnseenContext.Provider>
     </AppearanceContext.Provider>
   );

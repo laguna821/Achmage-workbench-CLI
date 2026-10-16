@@ -80,8 +80,96 @@ export type PlanStep = { text: string; status: "pending" | "inProgress" | "compl
 
 export type ApprovalDecision = "accept" | "decline";
 
+/** Documents the app tracks with exact revisions (PRD 3.3). */
+export type DocFormat = "markdown" | "html" | "pdf" | "hwpx" | "hwp" | "text";
+
+export type Artifact = {
+  id: string;
+  workId: string;
+  /** Absolute path of the real file in the work folder. */
+  path: string;
+  name: string;
+  format: DocFormat;
+  /** Latest recorded revision (1-based). Each revision is an immutable copy kept by the gateway. */
+  revision: number;
+  sha256: string;
+  size: number;
+  /** Disk compared with the latest revision, as of the last check. */
+  diskState: "same" | "changed" | "missing";
+  /** Revision each session last received with a request: what that AI actually read. */
+  readBy: Record<string, number>;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type ArtifactRevision = {
+  artifactId: string;
+  revision: number;
+  sha256: string;
+  size: number;
+  author: "user" | "engine" | "external";
+  sessionId: string | null;
+  baseRevision: number | null;
+  note: string | null;
+  at: number;
+};
+
+/** What a request carries about a document: a pinned revision and, optionally, a selection. */
+export type DocRef = {
+  artifactId: string;
+  revision: number;
+  /** edit: the session may change it (through a working copy). review: read only. */
+  mode: "edit" | "review";
+  selection?: { from: number; to: number; text: string; label: string } | null;
+};
+
+/**
+ * A change an engine made in a working copy of a pinned revision. Never written to the real file
+ * until applied, and never applied automatically when the document moved on.
+ */
+export type Proposal = {
+  id: string;
+  artifactId: string;
+  sessionId: string;
+  requestId: string;
+  baseRevision: number;
+  workingPath: string;
+  status: "running" | "pending" | "applied" | "discarded" | "empty";
+  added: number;
+  removed: number;
+  appliedRevision: number | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+/** A request sent from one session to another, answered back into the source conversation. */
+export type Handoff = {
+  /** The requestId; repeating it never sends twice. */
+  id: string;
+  sourceSessionId: string;
+  targetSessionId: string;
+  text: string;
+  refs: DocRef[];
+  status: "sent" | "answered" | "failed";
+  reply: string | null;
+  error: string | null;
+  createdAt: number;
+  answeredAt: number | null;
+};
+
+export type RefSummary = { artifactId: string; name: string; revision: number; mode: DocRef["mode"]; selection: string | null };
+
 export type TranscriptItem =
-  | { kind: "user"; id: string; text: string; at: number }
+  | {
+      kind: "user";
+      id: string;
+      text: string;
+      at: number;
+      /** Documents pinned to this request. */
+      refs?: RefSummary[];
+      /** Sent from another session ("다른 세션에"). */
+      from?: { sessionId: string; label: string } | null;
+    }
   | { kind: "assistant"; id: string; text: string; streaming: boolean; at: number }
   | { kind: "reasoning"; id: string; text: string; at: number }
   | {
@@ -93,6 +181,8 @@ export type TranscriptItem =
       output: string | null;
       status: ItemStatus;
       at: number;
+      /** Files this tool wrote (file changes). */
+      paths?: string[];
     }
   | { kind: "plan"; id: string; steps: PlanStep[]; at: number }
   | {
@@ -106,6 +196,10 @@ export type TranscriptItem =
       at: number;
     }
   | { kind: "notice"; id: string; level: "info" | "error"; text: string; at: number }
+  /** A document this turn created or changed, opened in the central area. */
+  | { kind: "artifact"; id: string; artifactId: string; revision: number; change: "created" | "modified"; at: number }
+  | { kind: "proposal"; id: string; proposalId: string; at: number }
+  | { kind: "handoff"; id: string; handoffId: string; at: number }
   | {
       kind: "turnEnd";
       id: string;
@@ -163,6 +257,9 @@ export type WorkbenchEvent =
   | { type: "item.upserted"; sessionId: string; item: TranscriptItem }
   | { type: "item.delta"; sessionId: string; itemId: string; textDelta: string }
   | { type: "provider.status"; status: ProviderStatus }
+  | { type: "artifact.upserted"; artifact: Artifact }
+  | { type: "proposal.upserted"; proposal: Proposal }
+  | { type: "handoff.upserted"; handoff: Handoff }
   | { type: "prefs.updated"; prefs: UiPrefs };
 
 /**
@@ -183,6 +280,9 @@ export type Snapshot = {
   sessions: Session[];
   providers: ProviderStatus[];
   prefs: UiPrefs;
+  artifacts: Artifact[];
+  proposals: Proposal[];
+  handoffs: Handoff[];
 };
 
 export type ApiError = { code: string; message: string; requestId?: string };
@@ -211,7 +311,39 @@ export type SendMessageRequest = {
   /** Client-generated id; repeating it never sends the message twice. */
   requestId: string;
   text: string;
+  refs?: DocRef[];
 };
+
+export type HandoffRequest = {
+  requestId: string;
+  sourceSessionId: string;
+  targetSessionId: string;
+  text: string;
+  refs?: DocRef[];
+};
+
+export type SaveArtifactRequest = { requestId: string; expectedRevision: number; text: string };
+
+export const FORMAT_LABEL: Record<DocFormat, string> = {
+  markdown: "Markdown",
+  html: "HTML",
+  pdf: "PDF",
+  hwpx: "한글(HWPX)",
+  hwp: "한글(HWP)",
+  text: "텍스트",
+};
+
+/** Formats the app opens as documents, by file extension. */
+export function formatOf(path: string): DocFormat | null {
+  const extension = path.toLowerCase().split(".").pop() ?? "";
+  if (extension === "md" || extension === "markdown") return "markdown";
+  if (extension === "html" || extension === "htm") return "html";
+  if (extension === "pdf") return "pdf";
+  if (extension === "hwpx") return "hwpx";
+  if (extension === "hwp") return "hwp";
+  if (extension === "txt") return "text";
+  return null;
+}
 
 export type ApprovalAnswerRequest = { decision: ApprovalDecision };
 

@@ -1,0 +1,662 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { FORMAT_LABEL, PROVIDER_LABEL, type Artifact, type ArtifactRevision, type DocRef, type Proposal, type Session, type Work } from "@workbench/contracts";
+import { ApiRequestError, type Api } from "../../api.ts";
+import { accentStyle, useAppearance } from "../../appearance.ts";
+import { ago } from "../../format.ts";
+import { isBusy, type State } from "../../state.ts";
+import { Composer } from "../Composer.tsx";
+import { FormatBadge } from "../DocCards.tsx";
+import { EngineMark } from "../EngineMark.tsx";
+import { Icon } from "../Icon.tsx";
+import { Popover, MenuItem } from "../Popover.tsx";
+import { DiffView } from "./DiffView.tsx";
+import { HtmlView } from "./HtmlView.tsx";
+import { MarkdownEditor, type EditorSelection } from "./MarkdownEditor.tsx";
+import { PdfView } from "./PdfView.tsx";
+import { HwpxView } from "./HwpxView.tsx";
+
+/** Save operations only; "unsaved" is derived from the text, never stored (no stale overwrite). */
+type SaveState = "idle" | "saving" | "failed" | "conflict";
+type Conflict = { code: string; message: string } | null;
+
+const DRAFT_KEY = (artifactId: string) => `workbench.docDraft.${artifactId}`;
+const TEXT_FORMATS = new Set(["markdown", "text", "html", "hwpx", "hwp"]);
+
+export type DocSend = (target: Session | null, text: string, refs: DocRef[], handoffTo: Session | null) => Promise<boolean>;
+
+/**
+ * A document in the central area (mockup 03). Saving makes a revision; requests carry the saved
+ * revision; AI changes arrive as proposals bound to the revision they were made from.
+ */
+export default function DocumentView({
+  api,
+  state,
+  artifactId,
+  focusProposalId,
+  work,
+  session,
+  onBack,
+  onSend,
+  onPickTarget,
+  onOpenArtifact,
+  onToast,
+}: {
+  api: Api;
+  state: State;
+  artifactId: string;
+  focusProposalId: string | null;
+  work: Work;
+  session: Session | null;
+  onBack: () => void;
+  onSend: DocSend;
+  /** Opens the "어느 세션에 보낼까요?" picker; resolves with the chosen session. */
+  onPickTarget: () => Promise<Session | null>;
+  onOpenArtifact: (artifactId: string) => void;
+  onToast: (message: string) => void;
+}) {
+  const { lookOf } = useAppearance();
+  const artifact = state.artifacts[artifactId] as Artifact | undefined;
+  const textual = artifact ? TEXT_FORMATS.has(artifact.format) : false;
+  const [base, setBase] = useState<{ revision: number; text: string } | null>(null);
+  const [text, setText] = useState("");
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [conflict, setConflict] = useState<Conflict>(null);
+  const hangul = artifact?.format === "hwpx" || artifact?.format === "hwp";
+  const [mode, setMode] = useState<"edit" | "preview" | "split" | "render" | "source" | "pages">(
+    artifact?.format === "html" ? "render" : hangul ? "pages" : "edit",
+  );
+  const [selection, setSelection] = useState<EditorSelection>(null);
+  const [compare, setCompare] = useState<{ title: string; before: string; after: string; beforeLabel: string; afterLabel: string; proposal?: Proposal } | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<ArtifactRevision[]>([]);
+  const [viewing, setViewing] = useState<{ revision: number; text: string } | null>(null);
+  const [includeDoc, setIncludeDoc] = useState(true);
+  const [requestMode, setRequestMode] = useState<"edit" | "review">("edit");
+  const [handoffTo, setHandoffTo] = useState<Session | null>(null);
+  const [targetOpen, setTargetOpen] = useState(false);
+  const saving = useRef<Promise<number | null> | null>(null);
+  // Revisions this view saved itself: their events must not look like someone else's change.
+  const ownRevisions = useRef(new Set<number>());
+  const timer = useRef<number | undefined>(undefined);
+
+  // Load the latest revision; recover a draft the app kept if the window closed before saving.
+  const load = useCallback(async () => {
+    if (!textual) return;
+    const result = await api.artifactText(artifactId);
+    setBase({ revision: result.revision, text: result.text });
+    const draft = JSON.parse(localStorage.getItem(DRAFT_KEY(artifactId)) ?? "null") as { baseRevision: number; text: string } | null;
+    if (draft && draft.baseRevision === result.revision && draft.text !== result.text) {
+      setText(draft.text);
+      onToast("저장되지 않았던 편집을 되살렸습니다.");
+    } else {
+      setText(result.text);
+    }
+    setSaveState("idle");
+    setConflict(null);
+  }, [api, artifactId, textual, onToast]);
+
+  useEffect(() => {
+    void load().catch((error: Error) => onToast(error.message));
+  }, [load, onToast]);
+
+  // Keep a local copy of unsaved edits.
+  useEffect(() => {
+    if (!base) return;
+    if (text !== base.text) localStorage.setItem(DRAFT_KEY(artifactId), JSON.stringify({ baseRevision: base.revision, text }));
+    else localStorage.removeItem(DRAFT_KEY(artifactId));
+  }, [artifactId, base, text]);
+
+  const save = useCallback(async (): Promise<number | null> => {
+    if (!base) return artifact?.revision ?? null;
+    if (text === base.text) return base.revision;
+    if (saving.current) return saving.current;
+    setSaveState("saving");
+    const run = api
+      .saveArtifact(artifactId, base.revision, text)
+      .then((saved) => {
+        ownRevisions.current.add(saved.revision);
+        setBase({ revision: saved.revision, text });
+        setSaveState("idle");
+        setConflict(null);
+        return saved.revision;
+      })
+      .catch((error: unknown) => {
+        if (error instanceof ApiRequestError && error.status === 409) {
+          setConflict({ code: error.code, message: error.message });
+          setSaveState("conflict");
+        } else {
+          // Never shown as saved; the edit stays in the editor and in the local draft.
+          setSaveState((current) => {
+            if (current !== "failed") onToast(`저장하지 못했습니다: ${error instanceof Error ? error.message : String(error)}`);
+            return "failed";
+          });
+        }
+        return null;
+      })
+      .finally(() => {
+        saving.current = null;
+      });
+    saving.current = run;
+    return run;
+  }, [api, artifactId, artifact?.revision, base, text, onToast]);
+
+  // Autosave shortly after typing stops.
+  useEffect(() => {
+    if (!base || text === base.text || saveState === "conflict" || saveState === "saving") return;
+    window.clearTimeout(timer.current);
+    // After a failed save, retry slowly instead of hammering the gateway.
+    timer.current = window.setTimeout(() => void save(), saveState === "failed" ? 10_000 : 1200);
+    return () => window.clearTimeout(timer.current);
+  }, [text, base, saveState, save]);
+  const unsaved = Boolean(base && text !== base.text);
+
+  // A new revision from elsewhere (an applied proposal, a revert): reload when nothing is unsaved here.
+  useEffect(() => {
+    if (!artifact || !base || artifact.revision <= base.revision || saving.current) return;
+    if (ownRevisions.current.has(artifact.revision)) return;
+    if (text === base.text) void load();
+    else {
+      setConflict({ code: "revision_conflict", message: `다른 곳에서 r${artifact.revision}이 생겼습니다. 내 편집은 그대로 두었습니다.` });
+      setSaveState("conflict");
+    }
+  }, [artifact, base, text, load]);
+
+  const proposals = useMemo(
+    () => Object.values(state.proposals).filter((proposal) => proposal.artifactId === artifactId && (proposal.status === "pending" || proposal.status === "running")),
+    [state.proposals, artifactId],
+  );
+
+  const showProposal = useCallback(
+    async (proposal: Proposal) => {
+      const texts = await api.proposal(proposal.id);
+      const engine = PROVIDER_LABEL[state.sessions[proposal.sessionId]?.provider ?? "claude"];
+      setCompare({
+        title: `${engine}의 수정안`,
+        before: texts.base,
+        after: texts.proposed,
+        beforeLabel: `r${proposal.baseRevision}`,
+        afterLabel: "수정안",
+        proposal,
+      });
+    },
+    [api, state.sessions],
+  );
+
+  useEffect(() => {
+    const focused = focusProposalId ? state.proposals[focusProposalId] : null;
+    if (focused) void showProposal(focused).catch((error: Error) => onToast(error.message));
+    // Only when asked to show a specific proposal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusProposalId]);
+
+  if (!artifact) {
+    return (
+      <main className="document-view">
+        <div className="column empty-hint">문서를 찾을 수 없습니다.</div>
+      </main>
+    );
+  }
+
+  const stale = (proposal: Proposal) => proposal.status === "pending" && artifact.revision !== proposal.baseRevision;
+  const apply = async (proposal: Proposal) => {
+    const pending = await save();
+    if (pending === null) return;
+    try {
+      const result = await api.applyProposal(proposal.id);
+      onToast(`수정안을 적용했습니다 → r${result.artifact.revision}`);
+      setCompare(null);
+    } catch (error) {
+      onToast(error instanceof Error ? error.message : String(error));
+    }
+  };
+  const discard = async (proposal: Proposal) => {
+    await api.discardProposal(proposal.id).catch((error: Error) => onToast(error.message));
+    setCompare(null);
+  };
+
+  const readers = Object.entries(artifact.readBy)
+    .map(([sessionId, revision]) => ({ session: state.sessions[sessionId], revision }))
+    .filter((entry): entry is { session: Session; revision: number } => Boolean(entry.session));
+
+  const sendTarget = handoffTo ?? session;
+  // PDF and HWP cannot take AI edits (no working copy to patch from); they are always reviewed.
+  const editable = artifact.format !== "pdf" && artifact.format !== "hwp";
+  const effectiveMode: DocRef["mode"] = handoffTo || !editable ? "review" : requestMode;
+  const working = Object.values(state.proposals).find((proposal) => proposal.artifactId === artifactId && proposal.status === "running");
+  const reviewing = Object.values(state.handoffs).filter(
+    (handoff) => handoff.status === "sent" && handoff.refs.some((ref) => ref.artifactId === artifactId),
+  );
+
+  const shownState = saveState === "idle" ? (unsaved ? "dirty" : "saved") : saveState;
+  const statusLabel =
+    shownState === "saved"
+      ? `r${base?.revision ?? artifact.revision} 저장됨`
+      : shownState === "saving"
+        ? "저장 중…"
+        : shownState === "dirty"
+          ? "저장 안 됨"
+          : shownState === "failed"
+            ? "저장 못 함"
+            : "충돌";
+
+  const body = (() => {
+    if (compare) {
+      return (
+        <div className="doc-compare">
+          <div className="doc-compare-head">
+            <strong>{compare.title}</strong>
+            {compare.proposal && stale(compare.proposal) ? (
+              <span className="proposal-warning">
+                r{compare.proposal.baseRevision} 기준 · 지금 r{artifact.revision} — 자동으로 적용하지 않습니다
+              </span>
+            ) : null}
+            <span className="doc-compare-actions">
+              {compare.proposal && compare.proposal.status === "pending" && !stale(compare.proposal) ? (
+                <button type="button" className="button small primary" onClick={() => void apply(compare.proposal!)}>
+                  적용
+                </button>
+              ) : null}
+              {compare.proposal && compare.proposal.status === "pending" ? (
+                <button type="button" className="button small" onClick={() => void discard(compare.proposal!)}>
+                  취소
+                </button>
+              ) : null}
+              <button type="button" className="button small" onClick={() => setCompare(null)}>
+                닫기
+              </button>
+            </span>
+          </div>
+          <DiffView before={compare.before} after={compare.after} beforeLabel={compare.beforeLabel} afterLabel={compare.afterLabel} />
+        </div>
+      );
+    }
+    if (viewing) {
+      return (
+        <div className="doc-readonly">
+          <div className="notice">
+            r{viewing.revision}을 보는 중입니다(읽기 전용).{" "}
+            <button type="button" className="link" onClick={() => setViewing(null)}>
+              최신 판으로
+            </button>{" "}
+            ·{" "}
+            <button
+              type="button"
+              className="link"
+              onClick={() =>
+                void api
+                  .revert(artifactId, viewing.revision)
+                  .then((reverted) => {
+                    onToast(`r${viewing.revision} 내용으로 새 판 r${reverted.revision}을 만들었습니다`);
+                    setViewing(null);
+                  })
+                  .catch((error: Error) => onToast(error.message))
+              }
+            >
+              이 판으로 되돌리기(새 판으로)
+            </button>
+          </div>
+          <MarkdownEditor value={viewing.text} readOnly onChange={() => undefined} onSelection={() => undefined} />
+        </div>
+      );
+    }
+    if (artifact.format === "pdf") {
+      return (
+        <PdfView
+          api={api}
+          artifactId={artifactId}
+          revision={artifact.revision}
+          onSelection={setSelection}
+          onEdit={async (edit) => {
+            try {
+              const created = await api.editPdf(artifactId, edit);
+              onToast(`PDFCraft로 새 파일을 만들었습니다: ${created.name}`);
+              onOpenArtifact(created.id);
+            } catch (error) {
+              onToast(error instanceof Error ? error.message : String(error));
+            }
+          }}
+        />
+      );
+    }
+    if (hangul && mode === "pages") {
+      return <HwpxView api={api} artifact={artifact} revision={base?.revision ?? artifact.revision} />;
+    }
+    if (!base) return <div className="column empty-hint">불러오는 중…</div>;
+    if (hangul) {
+      return (
+        <div className="doc-hangul-text">
+          <div className="notice">
+            {artifact.format === "hwp"
+              ? "HWP는 읽기 전용입니다. 고치려면 HWPX로 만든 뒤 여세요."
+              : "한글 문서의 글 보기입니다. 문단·표 칸의 글자를 바꾸면 원래 서식을 유지한 채 HWPX에 반영됩니다. 문단을 새로 만들거나 지우는 편집은 반영되지 않고 원본을 유지합니다."}
+          </div>
+          <MarkdownEditor value={text} readOnly={artifact.format === "hwp"} onChange={setText} onSelection={setSelection} onBlur={() => void save()} />
+        </div>
+      );
+    }
+    if (artifact.format === "html" && mode === "render") {
+      return <HtmlView api={api} artifactId={artifactId} revision={base.revision} />;
+    }
+    const editor = <MarkdownEditor value={text} onChange={setText} onSelection={setSelection} onBlur={() => void save()} />;
+    if (artifact.format === "markdown" && mode === "preview") {
+      return (
+        <div className="doc-preview">
+          <div className="markdown">
+            <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>
+          </div>
+        </div>
+      );
+    }
+    if (artifact.format === "markdown" && mode === "split") {
+      return (
+        <div className="doc-split">
+          {editor}
+          <div className="doc-preview">
+            <div className="markdown">
+              <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return editor;
+  })();
+
+  return (
+    <main className="document-view">
+      <header className="doc-header">
+        <button type="button" className="ghost-button" onClick={() => void save().then(onBack)}>
+          <Icon name="arrowLeft" size={15} /> 대화
+        </button>
+        <div className="doc-title">
+          <FormatBadge format={artifact.format} />
+          <span className="doc-name" title={artifact.path}>
+            {artifact.name}
+          </span>
+        </div>
+        <div className="doc-header-right">
+          {artifact.format === "markdown" ? (
+            <div className="segmented small" role="radiogroup" aria-label="보기">
+              {(["edit", "split", "preview"] as const).map((value) => (
+                <button key={value} type="button" role="radio" aria-checked={mode === value} className={mode === value ? "active" : ""} onClick={() => setMode(value)}>
+                  {value === "edit" ? "편집" : value === "split" ? "나란히" : "미리보기"}
+                </button>
+              ))}
+            </div>
+          ) : hangul ? (
+            <div className="segmented small" role="radiogroup" aria-label="보기">
+              {(["pages", "edit"] as const).map((value) => (
+                <button key={value} type="button" role="radio" aria-checked={mode === value} className={mode === value ? "active" : ""} onClick={() => setMode(value)}>
+                  {value === "pages" ? "쪽 보기" : artifact.format === "hwp" ? "글 보기" : "글 편집"}
+                </button>
+              ))}
+            </div>
+          ) : artifact.format === "html" ? (
+            <div className="segmented small" role="radiogroup" aria-label="보기">
+              {(["render", "source"] as const).map((value) => (
+                <button key={value} type="button" role="radio" aria-checked={mode === value} className={mode === value ? "active" : ""} onClick={() => setMode(value)}>
+                  {value === "render" ? "화면" : "원문"}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <div className="anchor">
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => {
+                setHistoryOpen(!historyOpen);
+                if (!historyOpen) void api.revisions(artifactId).then(setHistory).catch(() => undefined);
+              }}
+              title="판 기록"
+            >
+              r{artifact.revision} <Icon name={historyOpen ? "chevronUp" : "chevronDown"} size={13} />
+            </button>
+            <Popover open={historyOpen} onClose={() => setHistoryOpen(false)} align="right" className="history-menu">
+              <div className="menu-label">판 기록 · 되돌리기도 새 판으로 남습니다</div>
+              {[...history].reverse().map((entry) => (
+                <MenuItem
+                  key={entry.revision}
+                  hint={ago(entry.at)}
+                  onSelect={() => {
+                    setHistoryOpen(false);
+                    if (entry.revision === artifact.revision) {
+                      setViewing(null);
+                      return;
+                    }
+                    void api.artifactText(artifactId, entry.revision).then((result) => setViewing({ revision: entry.revision, text: result.text }));
+                  }}
+                >
+                  r{entry.revision} ·{" "}
+                  {entry.author === "user" ? "내 편집" : entry.author === "engine" ? `${PROVIDER_LABEL[state.sessions[entry.sessionId ?? ""]?.provider ?? "claude"]}` : "외부 변경"}
+                  {entry.note ? ` · ${entry.note}` : ""}
+                </MenuItem>
+              ))}
+            </Popover>
+          </div>
+          <span
+            className={`save-state save-${shownState}`}
+            data-base-revision={base?.revision ?? ""}
+            data-unsaved={base ? String(text !== base.text) : ""}
+          >
+            {textual ? statusLabel : `r${artifact.revision}`}
+          </span>
+        </div>
+      </header>
+
+      {readers.length || artifact.diskState !== "same" ? (
+        <div className="doc-readers">
+          {readers.map(({ session: reader, revision }) => (
+            <span key={reader.id} className={`reader-chip${revision === artifact.revision ? " current" : ""}`} style={accentStyle(lookOf(reader.provider))}>
+              <EngineMark provider={reader.provider} size={13} /> {reader.purpose}이(가) 읽은 판 r{revision}
+              {revision !== artifact.revision ? ` · 지금 r${artifact.revision}` : ""}
+            </span>
+          ))}
+          {artifact.diskState === "changed" ? <span className="reader-chip warn">디스크의 파일이 바뀌었습니다</span> : null}
+          {artifact.diskState === "missing" ? <span className="reader-chip warn">디스크에서 파일이 사라졌습니다</span> : null}
+        </div>
+      ) : null}
+
+      {conflict ? (
+        <div className="doc-conflict" role="alert">
+          <strong>저장하지 않았습니다.</strong> {conflict.message}
+          <span className="doc-conflict-actions">
+            <button
+              type="button"
+              className="button small"
+              onClick={() =>
+                void api.artifactText(artifactId).then((latest) =>
+                  setCompare({ title: "최신 판과 내 편집", before: latest.text, after: text, beforeLabel: `r${latest.revision}`, afterLabel: "내 편집" }),
+                )
+              }
+            >
+              차이 보기
+            </button>
+            <button
+              type="button"
+              className="button small"
+              onClick={() => {
+                localStorage.setItem(`${DRAFT_KEY(artifactId)}.kept.${Date.now()}`, text);
+                void load();
+              }}
+            >
+              최신 판 받기(내 편집은 보관)
+            </button>
+            <button
+              type="button"
+              className="button small primary"
+              onClick={async () => {
+                try {
+                  if (conflict.code === "disk_changed") await api.adoptDisk(artifactId);
+                  const latest = await api.artifactText(artifactId);
+                  const saved = await api.saveArtifact(artifactId, latest.revision, text);
+                  ownRevisions.current.add(saved.revision);
+                  setBase({ revision: saved.revision, text });
+                  setConflict(null);
+                  setSaveState("idle");
+                  onToast(`내 편집을 새 판 r${saved.revision}으로 저장했습니다. 이전 판은 기록에 남아 있습니다.`);
+                } catch (error) {
+                  onToast(error instanceof Error ? error.message : String(error));
+                }
+              }}
+            >
+              내 편집을 새 판으로
+            </button>
+          </span>
+        </div>
+      ) : null}
+
+      {proposals.length && !compare ? (
+        <div className="doc-proposals">
+          {proposals.map((proposal) => {
+            const owner = state.sessions[proposal.sessionId];
+            return (
+              <div key={proposal.id} className={`doc-proposal${stale(proposal) ? " stale" : ""}`} style={owner ? accentStyle(lookOf(owner.provider)) : undefined}>
+                {owner ? <EngineMark provider={owner.provider} size={14} /> : null}
+                <span>
+                  {owner ? PROVIDER_LABEL[owner.provider] : "AI"}의 수정안 · r{proposal.baseRevision} 기준
+                  {proposal.status === "running" ? " · 만드는 중…" : ` · +${proposal.added} −${proposal.removed}`}
+                  {stale(proposal) ? ` · 지금 r${artifact.revision}, 자동 적용 안 함` : ""}
+                </span>
+                {proposal.status === "pending" ? (
+                  <span className="doc-proposal-actions">
+                    <button type="button" className="button small" onClick={() => void showProposal(proposal)}>
+                      {stale(proposal) ? "차이 보기" : "미리보기"}
+                    </button>
+                    {!stale(proposal) ? (
+                      <button type="button" className="button small primary" onClick={() => void apply(proposal)}>
+                        적용
+                      </button>
+                    ) : null}
+                    <button type="button" className="button small" onClick={() => void discard(proposal)}>
+                      취소
+                    </button>
+                  </span>
+                ) : (
+                  <span className="spinner small" />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
+      <div className="doc-body">{body}</div>
+
+      <div className="column composer-area doc-composer">
+        <Composer
+          draftKey={`doc:${artifactId}`}
+          placeholder={selection ? "이 부분에 요청하기" : "이 문서에 요청하기"}
+          busy={Boolean(sendTarget && isBusy(sendTarget))}
+          waiting={Boolean(sendTarget && (sendTarget.status === "running" || sendTarget.status === "starting"))}
+          header={
+            <div className="doc-chips">
+              {handoffTo ? (
+                <span className="target-chip" style={accentStyle(lookOf(handoffTo.provider))}>
+                  <EngineMark provider={handoffTo.provider} size={13} /> @{handoffTo.purpose}
+                  <button type="button" onClick={() => setHandoffTo(null)} aria-label="받는 세션 지우기">
+                    <Icon name="x" size={11} />
+                  </button>
+                </span>
+              ) : null}
+              {includeDoc ? (
+                <span className="ref-chip">
+                  <Icon name="file" size={12} /> 현재 문서 · r{base?.revision ?? artifact.revision}
+                  {unsaved ? " (보낼 때 저장)" : ""}
+                  <button type="button" onClick={() => setIncludeDoc(false)} aria-label="문서 빼기">
+                    <Icon name="x" size={11} />
+                  </button>
+                </span>
+              ) : (
+                <button type="button" className="ref-chip add" onClick={() => setIncludeDoc(true)}>
+                  <Icon name="plus" size={12} /> 현재 문서 붙이기
+                </button>
+              )}
+              {includeDoc && selection ? (
+                <span className="ref-chip selection">
+                  선택한 부분 · {selection.label}
+                  <button type="button" onClick={() => setSelection(null)} aria-label="선택 빼기">
+                    <Icon name="x" size={11} />
+                  </button>
+                </span>
+              ) : null}
+              {!handoffTo && includeDoc && editable ? (
+                <div className="segmented small" role="radiogroup" aria-label="요청 종류">
+                  <button type="button" className={requestMode === "edit" ? "active" : ""} onClick={() => setRequestMode("edit")} title="AI가 작업 사본을 고치고 수정안으로 보여 줍니다">
+                    수정 요청
+                  </button>
+                  <button type="button" className={requestMode === "review" ? "active" : ""} onClick={() => setRequestMode("review")} title="읽고 답만 합니다">
+                    검토 요청
+                  </button>
+                </div>
+              ) : null}
+              {handoffTo ? <span className="muted">회신: 이 작업 · 읽기 전용 판으로 보냄</span> : null}
+            </div>
+          }
+          onSend={async (message) => {
+            const revision = await save();
+            if (revision === null) {
+              onToast("문서를 저장하지 못해 보내지 않았습니다. 충돌이나 저장 오류를 먼저 확인해 주세요.");
+              return false;
+            }
+            const refs: DocRef[] = includeDoc ? [{ artifactId, revision, mode: effectiveMode, selection: selection && textual ? selection : selection ? { ...selection } : null }] : [];
+            const sent = await onSend(session, message, refs, handoffTo);
+            if (sent && handoffTo) setHandoffTo(null);
+            return sent;
+          }}
+          target={
+            <div className="anchor">
+              <button type="button" className="select-button" onClick={() => setTargetOpen(!targetOpen)}>
+                {sendTarget ? <EngineMark provider={sendTarget.provider} size={14} /> : null}
+                {handoffTo ? `다른 세션에 · ${handoffTo.purpose}` : session ? `${PROVIDER_LABEL[session.provider]} · ${session.purpose}` : "새 세션"}
+                <Icon name={targetOpen ? "chevronUp" : "chevronDown"} size={14} />
+              </button>
+              <Popover open={targetOpen} onClose={() => setTargetOpen(false)} placement="above" align="right">
+                {session ? (
+                  <MenuItem
+                    active={!handoffTo}
+                    onSelect={() => {
+                      setHandoffTo(null);
+                      setTargetOpen(false);
+                    }}
+                  >
+                    이 세션 · {session.purpose}
+                  </MenuItem>
+                ) : null}
+                <MenuItem
+                  active={Boolean(handoffTo)}
+                  hint="검토 요청"
+                  onSelect={() => {
+                    setTargetOpen(false);
+                    void onPickTarget().then((picked) => picked && setHandoffTo(picked.id === session?.id ? null : picked));
+                  }}
+                >
+                  다른 세션에…
+                </MenuItem>
+              </Popover>
+            </div>
+          }
+        />
+        <div className="footer-line">
+          {working ? (
+            <span>
+              <span className="spinner small" /> {PROVIDER_LABEL[state.sessions[working.sessionId]?.provider ?? "claude"]}가 r{working.baseRevision} 기준 수정안을 만드는 중
+            </span>
+          ) : null}
+          {reviewing.map((handoff) => {
+            const target = state.sessions[handoff.targetSessionId];
+            return target ? (
+              <span key={handoff.id}>
+                {" "}
+                · {target.purpose} · {PROVIDER_LABEL[target.provider]}가 확인 중
+              </span>
+            ) : null;
+          })}
+          {!working && !reviewing.length ? <span className="muted">{FORMAT_LABEL[artifact.format]} · {work.title}</span> : null}
+        </div>
+      </div>
+    </main>
+  );
+}

@@ -17,6 +17,7 @@ export function Composer({
   onSend,
   onStop,
   target,
+  header,
   autoFocus,
 }: {
   draftKey: string;
@@ -27,6 +28,8 @@ export function Composer({
   onSend: (text: string) => Promise<boolean>;
   onStop?: () => void;
   target?: ReactNode;
+  /** Chips above the text (documents, selection, receiving session). */
+  header?: ReactNode;
   autoFocus?: boolean;
 }) {
   const [text, setText] = useState(() => localStorage.getItem(DRAFT_PREFIX + draftKey) ?? "");
@@ -68,6 +71,7 @@ export function Composer({
 
   return (
     <div className="composer" data-phase={waiting ? "waiting" : undefined}>
+      {header ? <div className="composer-header">{header}</div> : null}
       <textarea
         ref={ref}
         className="composer-input"

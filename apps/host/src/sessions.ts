@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { execFile } from "node:child_process";
+import { existsSync, mkdirSync } from "node:fs";
+import { delimiter, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import {
   PROTOCOL_VERSION,
   applyItemEvent,
@@ -14,23 +15,23 @@ import {
   type Snapshot,
   type TranscriptItem,
   type UiPrefs,
+  formatOf,
+  type DocRef,
+  type Handoff,
+  type HandoffRequest,
+  type Proposal,
   type UpdateSessionRequest,
   type Work,
 } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
+import { HttpError } from "./errors.ts";
+import { Documents, isWorkbenchPath } from "./artifacts.ts";
+import type { Kordoc } from "./kordoc.ts";
 import type { AdapterSink, LoginStart, ProviderAdapter } from "./providers/types.ts";
 import type { Store } from "./store.ts";
 import { adaptTitle, titleFor } from "./titles.ts";
 
-export class HttpError extends Error {
-  readonly status: number;
-  readonly code: string;
-  constructor(status: number, code: string, message: string) {
-    super(message);
-    this.status = status;
-    this.code = code;
-  }
-}
+export { HttpError };
 
 const hashText = (text: string) => createHash("sha256").update(text).digest("hex");
 
@@ -39,9 +40,20 @@ export type ManagerOptions = {
   hostLabel: string;
   /** Parent directory for works started without a folder. */
   managedWorksDir: string;
+  /** Gateway data folder (document revisions live under it). Defaults to the parent of managedWorksDir. */
+  dataDir?: string;
+  /** Hangul document engine; without it HWPX/HWP are listed but not opened as text. */
+  kordoc?: Kordoc | null;
 };
 
 const DEFAULT_PURPOSE = /^대화 \d+$/;
+
+function findOnPath(name: string) {
+  for (const dir of (process.env.PATH ?? "").split(delimiter)) {
+    for (const candidate of [join(dir, name), join(dir, `${name}.exe`)]) if (dir && existsSync(candidate)) return candidate;
+  }
+  return null;
+}
 
 /** Plain start of a reply for overview cards. */
 export function previewOf(text: string) {
@@ -66,6 +78,8 @@ export class SessionManager {
   private readonly dirtyItems = new Map<string, Set<string>>();
   private flushTimer: NodeJS.Timeout | null = null;
   private readonly adapters = new Map<Provider, ProviderAdapter>();
+  private readonly handoffs = new Map<string, Handoff>();
+  readonly documents: Documents;
   private readonly store: Store;
   private readonly bus: EventBus;
   private readonly options: ManagerOptions;
@@ -74,6 +88,8 @@ export class SessionManager {
     this.store = store;
     this.bus = bus;
     this.options = options;
+    this.documents = new Documents(store, bus, options.dataDir ?? dirname(options.managedWorksDir), options.kordoc ?? null);
+    for (const handoff of store.handoffs()) this.handoffs.set(handoff.id, handoff);
     for (const folder of store.folders()) this.folders.set(folder.id, folder);
     for (const work of store.works()) this.works.set(work.id, { ...work, titleSource: work.titleSource ?? "auto" });
     // Rows written by older versions may lack newer fields.
@@ -124,6 +140,10 @@ export class SessionManager {
         this.sink.updateSession(sessionId, { preview: previewOf(item.text), previewAt: Date.now() });
       }
       if (item.kind === "user" || item.kind === "turnEnd") this.retitle(sessionId);
+      if (item.kind === "tool" && item.tool === "fileChange" && item.status === "completed" && item.paths?.length) {
+        this.trackFiles(sessionId, item.id, item.paths);
+      }
+      if (item.kind === "turnEnd") this.afterTurn(sessionId, item.status);
     },
     delta: (sessionId, itemId, textDelta) => {
       const items = this.loadItems(sessionId);
@@ -186,6 +206,9 @@ export class SessionManager {
       sessions: [...this.sessions.values()],
       providers: [...this.adapters.values()].map((adapter) => adapter.status()),
       prefs: this.prefs(),
+      artifacts: this.documents.list(),
+      proposals: this.documents.listProposals(),
+      handoffs: [...this.handoffs.values()],
     };
   }
 
@@ -309,14 +332,21 @@ export class SessionManager {
     return this.requireSession(sessionId);
   }
 
-  async send(sessionId: string, requestId: string, text: string): Promise<{ duplicate: boolean }> {
+  async send(
+    sessionId: string,
+    requestId: string,
+    text: string,
+    refs: DocRef[] = [],
+    from: { sessionId: string; label: string } | null = null,
+  ): Promise<{ duplicate: boolean }> {
     const session = this.requireSession(sessionId);
     const trimmed = text.trim();
     if (!requestId) throw new HttpError(400, "missing_request_id", "requestId가 필요합니다.");
     if (!trimmed) throw new HttpError(400, "empty_message", "보낼 내용이 없습니다.");
+    const fingerprint = hashText(refs.length ? `${trimmed}\u0000${JSON.stringify(refs)}` : trimmed);
     const seen = this.store.findRequest(requestId);
     if (seen) {
-      if (seen.sessionId !== sessionId || seen.textHash !== hashText(trimmed)) {
+      if (seen.sessionId !== sessionId || seen.textHash !== fingerprint) {
         throw new HttpError(409, "request_id_conflict", "같은 requestId로 다른 요청을 보냈습니다.");
       }
       return { duplicate: true };
@@ -324,19 +354,192 @@ export class SessionManager {
     if (session.status !== "idle" && session.status !== "error") {
       throw new HttpError(409, "session_busy", "이 세션은 아직 응답 중입니다.");
     }
-    this.store.saveRequest(requestId, sessionId, hashText(trimmed));
     const work = this.requireWork(session.workId);
-    this.sink.upsertItem(sessionId, { kind: "user", id: `user:${requestId}`, text: trimmed, at: Date.now() });
+    // Pin each document: the engine reads exactly this revision; edits go to a working copy.
+    const prepared: { ref: DocRef; pinned: string; pinnedView: string | null; proposal: Proposal | null }[] = [];
+    for (const ref of refs) prepared.push({ ref, ...(await this.documents.prepare(ref, sessionId, requestId, work.cwd)) });
+    this.store.saveRequest(requestId, sessionId, fingerprint);
+    const engineText = this.engineText(trimmed, prepared, work.cwd, from);
+    this.sink.upsertItem(sessionId, {
+      kind: "user",
+      id: `user:${requestId}`,
+      text: trimmed,
+      at: Date.now(),
+      ...(refs.length ? { refs: refs.map((ref) => this.documents.summary(ref)) } : {}),
+      ...(from ? { from } : {}),
+    });
     this.sink.updateSession(sessionId, { status: "starting", activity: "응답 준비 중", lastError: null });
     this.saveWork({ ...work, activeSessionId: sessionId, updatedAt: Date.now() });
     try {
-      await this.adapter(session.provider).send(this.requireSession(sessionId), work, trimmed, requestId);
+      await this.adapter(session.provider).send(this.requireSession(sessionId), work, engineText, requestId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      for (const entry of prepared) if (entry.proposal) this.documents.discardProposal(entry.proposal.id);
       this.sink.upsertItem(sessionId, { kind: "notice", id: `error:${requestId}`, level: "error", text: `보내지 못했습니다: ${message}`, at: Date.now() });
       this.sink.updateSession(sessionId, { status: "error", activity: null, lastError: message });
     }
     return { duplicate: false };
+  }
+
+  /** What the engine actually receives: the request plus pinned documents and where to write. */
+  private engineText(
+    text: string,
+    prepared: { ref: DocRef; pinned: string; pinnedView: string | null; proposal: Proposal | null }[],
+    cwd: string,
+    from: { sessionId: string; label: string } | null,
+  ) {
+    const parts: string[] = [];
+    if (from) parts.push(`[다른 세션에서 온 요청] 보낸 곳: ${from.label}. 이 대화에 답하면 보낸 곳으로 전달됩니다.`);
+    if (prepared.length) {
+      parts.push("[Achmage Workbench] 이 요청에는 문서가 고정된 판으로 첨부되어 있습니다.");
+      for (const entry of prepared) parts.push(this.documents.promptFor(entry.ref, entry.pinned, entry.proposal, cwd, entry.pinnedView));
+    }
+    if (!parts.length) return text;
+    return `${parts.join("\n")}\n\n요청:\n${text}`;
+  }
+
+  /** Open a file of the work folder (or any path the user picked) as a tracked document. */
+  openFile(workId: string, rawPath: string) {
+    const work = this.requireWork(workId);
+    if (!rawPath.trim()) throw new HttpError(400, "missing_path", "파일 경로가 필요합니다.");
+    const path = isAbsolute(rawPath) ? rawPath : resolve(work.cwd, rawPath);
+    if (!existsSync(path)) throw new HttpError(404, "file_missing", "파일이 없습니다.");
+    if (!formatOf(path)) throw new HttpError(415, "unsupported_format", "Markdown·HTML·PDF·HWPX·HWP·텍스트만 열 수 있습니다.");
+    const tracked = this.documents.track(work.id, work.cwd, path, "external", null, "작업 폴더에서 열기");
+    if (tracked) return tracked.artifact;
+    const existing = this.documents.list().find((artifact) => artifact.workId === work.id && artifact.path === path);
+    if (!existing) throw new HttpError(415, "unsupported_format", "문서로 열 수 없는 파일입니다.");
+    return this.documents.check(existing.id);
+  }
+
+  /**
+   * PDF page edits through PDFCraft (rotate, delete, move). The result is a new file next to the
+   * original; the original and its revisions stay untouched.
+   */
+  async editPdf(artifactId: string, edit: { rotate?: { pages: number[]; degrees: number }[]; delete?: number[]; move?: { from: number; to: number }[] }) {
+    const artifact = this.documents.check(artifactId);
+    if (artifact.format !== "pdf") throw new HttpError(400, "not_pdf", "PDF 문서가 아닙니다.");
+    const cli = findOnPath("pdfcraft-cli");
+    if (!cli) throw new HttpError(501, "pdfcraft_missing", "PDFCraft(pdfcraft-cli)가 설치되어 있지 않아 PDF를 편집할 수 없습니다.");
+    const args = ["edit", this.documents.revisionPath(artifactId, artifact.revision)];
+    const rotations = (edit.rotate ?? []).filter((entry) => entry.pages.length && [90, 180, 270].includes(entry.degrees));
+    for (const entry of rotations) args.push("--rotate", `${entry.pages.join(",")}:${entry.degrees}`);
+    if (edit.delete?.length) args.push("--delete", edit.delete.join(","));
+    for (const entry of edit.move ?? []) args.push("--move", `${entry.from}:${entry.to}`);
+    if (args.length === 2) throw new HttpError(400, "no_edit", "바꿀 내용이 없습니다.");
+    const extension = extname(artifact.path);
+    const stem = artifact.path.slice(0, -extension.length);
+    let out = `${stem}.편집${extension}`;
+    for (let index = 2; existsSync(out); index += 1) out = `${stem}.편집${index}${extension}`;
+    args.push("--out", out);
+    await new Promise<void>((done, fail) =>
+      execFile(cli, args, { timeout: 60_000 }, (error, _stdout, stderr) =>
+        error ? fail(new HttpError(500, "pdfcraft_failed", `PDFCraft 편집 실패: ${String(stderr || error.message).slice(0, 300)}`)) : done(),
+      ),
+    );
+    const work = this.requireWork(artifact.workId);
+    const tracked = this.documents.track(work.id, work.cwd, out, "user", null, `${artifact.name} r${artifact.revision}에서 PDFCraft로 편집`);
+    if (!tracked) throw new HttpError(500, "pdfcraft_failed", "편집 결과를 읽지 못했습니다.");
+    return tracked.artifact;
+  }
+
+  /** Files an engine wrote: documents get a new revision and a card in the conversation. */
+  private trackFiles(sessionId: string, itemId: string, paths: string[]) {
+    const session = this.sessions.get(sessionId);
+    const work = session ? this.works.get(session.workId) : undefined;
+    if (!session || !work) return;
+    for (const path of paths) {
+      if (isWorkbenchPath(path)) continue;
+      try {
+        const tracked = this.documents.track(work.id, work.cwd, path, "engine", sessionId, null);
+        if (!tracked) continue;
+        this.sink.upsertItem(sessionId, {
+          kind: "artifact",
+          id: `artifact:${itemId}:${tracked.artifact.id}`,
+          artifactId: tracked.artifact.id,
+          revision: tracked.artifact.revision,
+          change: tracked.change,
+          at: Date.now(),
+        });
+      } catch {
+        // A file that cannot be read now is simply not shown as a document.
+      }
+    }
+  }
+
+  /** A turn ended: working copies become proposals, and answered handoffs go back to their source. */
+  private afterTurn(sessionId: string, status: "completed" | "interrupted" | "failed") {
+    for (const running of this.documents.runningProposals(sessionId)) {
+      const proposal = status === "completed" ? this.documents.finishProposal(running.id) : this.documents.discardProposal(running.id);
+      if (proposal.status === "pending") {
+        this.sink.upsertItem(sessionId, { kind: "proposal", id: `proposal:${proposal.id}`, proposalId: proposal.id, at: Date.now() });
+      } else if (proposal.status === "empty") {
+        const name = this.documents.get(proposal.artifactId).name;
+        this.sink.upsertItem(sessionId, { kind: "notice", id: `proposal-empty:${proposal.id}`, level: "info", text: `${name}: 작업 사본이 바뀌지 않아 수정안이 없습니다.`, at: Date.now() });
+      }
+    }
+    for (const handoff of this.handoffs.values()) {
+      if (handoff.targetSessionId !== sessionId || handoff.status !== "sent") continue;
+      const items = this.loadItems(sessionId);
+      const start = items.findIndex((item) => item.id === `user:${handoff.id}`);
+      if (start === -1) continue;
+      const reply = items
+        .slice(start + 1)
+        .flatMap((item) => (item.kind === "assistant" && item.text.trim() ? [item.text.trim()] : []))
+        .join("\n\n");
+      const answered: Handoff =
+        status === "completed"
+          ? { ...handoff, status: "answered", reply: reply || null, answeredAt: Date.now() }
+          : { ...handoff, status: "failed", reply: reply || null, error: status === "interrupted" ? "중단됨" : "응답이 끝나지 못했습니다", answeredAt: Date.now() };
+      this.saveHandoff(answered);
+    }
+  }
+
+  private saveHandoff(handoff: Handoff) {
+    this.handoffs.set(handoff.id, handoff);
+    this.store.saveHandoff(handoff);
+    this.bus.publish({ type: "handoff.upserted", handoff });
+  }
+
+  /**
+   * "다른 세션에": the request and pinned documents go to another session; its answer comes back
+   * as a card in the source conversation. One request, one answer, never an automatic loop.
+   */
+  async handoff(request: HandoffRequest): Promise<Handoff> {
+    const existing = this.handoffs.get(request.requestId);
+    if (existing) return existing;
+    const source = this.requireSession(request.sourceSessionId);
+    const target = this.requireSession(request.targetSessionId);
+    if (source.id === target.id) throw new HttpError(400, "same_session", "같은 세션에는 보낼 수 없습니다.");
+    if (target.status !== "idle" && target.status !== "error") {
+      throw new HttpError(409, "session_busy", "받을 세션이 아직 응답 중입니다. 끝난 뒤에 보내 주세요.");
+    }
+    const refs = (request.refs ?? []).map((ref) => ({ ...ref, mode: "review" as const }));
+    const sourceWork = this.requireWork(source.workId);
+    const handoff: Handoff = {
+      id: request.requestId,
+      sourceSessionId: source.id,
+      targetSessionId: target.id,
+      text: request.text.trim(),
+      refs,
+      status: "sent",
+      reply: null,
+      error: null,
+      createdAt: Date.now(),
+      answeredAt: null,
+    };
+    this.saveHandoff(handoff);
+    this.sink.upsertItem(source.id, { kind: "handoff", id: `handoff:${handoff.id}`, handoffId: handoff.id, at: handoff.createdAt });
+    try {
+      await this.send(target.id, request.requestId, request.text, refs, {
+        sessionId: source.id,
+        label: `${sourceWork.title} · ${source.purpose} (${source.provider === "claude" ? "Claude" : "Codex"})`,
+      });
+    } catch (error) {
+      this.saveHandoff({ ...handoff, status: "failed", error: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
+    return this.handoffs.get(handoff.id)!;
   }
 
   async interrupt(sessionId: string) {

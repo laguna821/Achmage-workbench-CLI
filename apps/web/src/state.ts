@@ -1,5 +1,8 @@
 import {
   applyItemEvent,
+  type Artifact,
+  type Handoff,
+  type Proposal,
   type Folder,
   type Provider,
   type ProviderStatus,
@@ -24,6 +27,9 @@ export type State = {
   providers: Partial<Record<Provider, ProviderStatus>>;
   transcripts: Record<string, Transcript>;
   prefs: UiPrefs;
+  artifacts: Record<string, Artifact>;
+  proposals: Record<string, Proposal>;
+  handoffs: Record<string, Handoff>;
 };
 
 export const initialState: State = {
@@ -37,6 +43,9 @@ export const initialState: State = {
   providers: {},
   transcripts: {},
   prefs: {},
+  artifacts: {},
+  proposals: {},
+  handoffs: {},
 };
 
 export type Action =
@@ -64,6 +73,9 @@ export function reducer(state: State, action: Action): State {
         // Loaded transcripts may have missed events; they are refetched on demand.
         transcripts: {},
         prefs: snapshot.prefs ?? {},
+        artifacts: byId(snapshot.artifacts ?? []),
+        proposals: byId(snapshot.proposals ?? []),
+        handoffs: byId(snapshot.handoffs ?? []),
       };
     }
     case "connected":
@@ -84,6 +96,12 @@ export function reducer(state: State, action: Action): State {
           return { ...next, sessions: { ...state.sessions, [event.session.id]: event.session } };
         case "prefs.updated":
           return { ...next, prefs: event.prefs };
+        case "artifact.upserted":
+          return { ...next, artifacts: { ...state.artifacts, [event.artifact.id]: event.artifact } };
+        case "proposal.upserted":
+          return { ...next, proposals: { ...state.proposals, [event.proposal.id]: event.proposal } };
+        case "handoff.upserted":
+          return { ...next, handoffs: { ...state.handoffs, [event.handoff.id]: event.handoff } };
         case "provider.status":
           return { ...next, providers: { ...state.providers, [event.status.provider]: event.status } };
         case "item.upserted":

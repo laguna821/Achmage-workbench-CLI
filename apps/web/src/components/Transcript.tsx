@@ -3,6 +3,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { PROVIDER_LABEL, type Provider, type TranscriptItem } from "@workbench/contracts";
 import { EngineMark } from "./EngineMark.tsx";
+import { FileCard, HandoffCard, ProposalCard, RefChips, useDocs } from "./DocCards.tsx";
 import { Icon, type IconName } from "./Icon.tsx";
 
 type Item<K extends TranscriptItem["kind"]> = Extract<TranscriptItem, { kind: K }>;
@@ -14,6 +15,9 @@ type Block =
   | { type: "approval"; item: Item<"approval"> }
   | { type: "plan"; item: Item<"plan"> }
   | { type: "notice"; item: Item<"notice"> }
+  | { type: "artifact"; item: Item<"artifact"> }
+  | { type: "proposal"; item: Item<"proposal"> }
+  | { type: "handoff"; item: Item<"handoff"> }
   | { type: "turnEnd"; item: Item<"turnEnd"> };
 
 /** Group consecutive tool calls and reasoning into one folded block, Codex-style. */
@@ -51,6 +55,15 @@ export function toBlocks(items: TranscriptItem[]): Block[] {
         break;
       case "notice":
         blocks.push({ type: "notice", item });
+        break;
+      case "artifact":
+        blocks.push({ type: "artifact", item });
+        break;
+      case "proposal":
+        blocks.push({ type: "proposal", item });
+        break;
+      case "handoff":
+        blocks.push({ type: "handoff", item });
         break;
       case "turnEnd":
         blocks.push({ type: "turnEnd", item });
@@ -220,18 +233,21 @@ function duration(ms: number | null) {
 type RailMark = { id: string; index: number; top: number; text: string; attention: boolean };
 
 export function Transcript({
+  sessionId,
   items,
   provider,
   running,
   loading,
   onAnswer,
 }: {
+  sessionId: string;
   items: TranscriptItem[];
   provider: Provider;
   running: boolean;
   loading: boolean;
   onAnswer: (itemId: string, decision: "accept" | "decline") => void;
 }) {
+  const { state, actions: docActions } = useDocs();
   const scroller = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
   const sections = useRef(new Map<string, HTMLElement>());
@@ -337,6 +353,18 @@ export function Transcript({
             {block.item.text}
           </div>
         );
+      case "artifact": {
+        const artifact = state.artifacts[block.item.artifactId];
+        return artifact ? <FileCard key={block.item.id} artifact={artifact} revision={block.item.revision} change={block.item.change} /> : null;
+      }
+      case "proposal": {
+        const proposal = state.proposals[block.item.proposalId];
+        return proposal ? <ProposalCard key={block.item.id} proposal={proposal} /> : null;
+      }
+      case "handoff": {
+        const handoff = state.handoffs[block.item.handoffId];
+        return handoff ? <HandoffCard key={block.item.id} handoff={handoff} viewer={sessionId} /> : null;
+      }
       case "turnEnd":
         return null;
     }
@@ -381,7 +409,13 @@ export function Transcript({
                     <span className="turn-meta-sep">·</span>
                     <span>{clock(turn.user.at)}</span>
                   </div>
+                  {turn.user.from ? (
+                    <button type="button" className="from-badge" onClick={() => turn.user?.from && docActions.openSession(turn.user.from.sessionId)}>
+                      <Icon name="arrowLeft" size={12} /> {turn.user.from.label}에서 온 요청
+                    </button>
+                  ) : null}
                   <div className="user-bubble">{turn.user.text}</div>
+                  {turn.user.refs?.length ? <RefChips refs={turn.user.refs} /> : null}
                 </header>
               ) : null}
               <div className="turn-body">

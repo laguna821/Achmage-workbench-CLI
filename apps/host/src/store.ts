@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Folder, Session, TranscriptItem, Work } from "@workbench/contracts";
+import type { Artifact, ArtifactRevision, Folder, Handoff, Proposal, Session, TranscriptItem, Work } from "@workbench/contracts";
 
 // Local state only: works, folders, sessions, transcript items and request ids.
 // Never place this database in Dropbox (live SQLite must not be synced).
@@ -32,6 +32,15 @@ export class Store {
         created_at INTEGER NOT NULL
       );
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, work_id TEXT NOT NULL, path TEXT NOT NULL, json TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS revisions (
+        artifact_id TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        json TEXT NOT NULL,
+        PRIMARY KEY (artifact_id, revision)
+      );
+      CREATE TABLE IF NOT EXISTS proposals (id TEXT PRIMARY KEY, artifact_id TEXT NOT NULL, json TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS handoffs (id TEXT PRIMARY KEY, json TEXT NOT NULL);
     `);
   }
 
@@ -88,6 +97,47 @@ export class Store {
     this.db
       .prepare("INSERT INTO items (session_id, item_id, ord, json) VALUES (?, ?, ?, ?)")
       .run(sessionId, item.id, Number(next?.ord ?? 1), JSON.stringify(item));
+  }
+
+  artifacts(): Artifact[] {
+    return this.all<Artifact>("SELECT json FROM artifacts");
+  }
+
+  saveArtifact(artifact: Artifact) {
+    this.db
+      .prepare("INSERT OR REPLACE INTO artifacts (id, work_id, path, json) VALUES (?, ?, ?, ?)")
+      .run(artifact.id, artifact.workId, artifact.path, JSON.stringify(artifact));
+  }
+
+  revisions(artifactId: string): ArtifactRevision[] {
+    return this.db
+      .prepare("SELECT json FROM revisions WHERE artifact_id = ? ORDER BY revision")
+      .all(artifactId)
+      .map((row) => JSON.parse(String(row.json)) as ArtifactRevision);
+  }
+
+  saveRevision(revision: ArtifactRevision) {
+    this.db
+      .prepare("INSERT INTO revisions (artifact_id, revision, json) VALUES (?, ?, ?)")
+      .run(revision.artifactId, revision.revision, JSON.stringify(revision));
+  }
+
+  proposals(): Proposal[] {
+    return this.all<Proposal>("SELECT json FROM proposals");
+  }
+
+  saveProposal(proposal: Proposal) {
+    this.db
+      .prepare("INSERT OR REPLACE INTO proposals (id, artifact_id, json) VALUES (?, ?, ?)")
+      .run(proposal.id, proposal.artifactId, JSON.stringify(proposal));
+  }
+
+  handoffs(): Handoff[] {
+    return this.all<Handoff>("SELECT json FROM handoffs");
+  }
+
+  saveHandoff(handoff: Handoff) {
+    this.db.prepare("INSERT OR REPLACE INTO handoffs (id, json) VALUES (?, ?)").run(handoff.id, JSON.stringify(handoff));
   }
 
   /** Returns the stored text hash when the request id was already used. */

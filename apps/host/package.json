@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@workbench/contracts": "0.1.0",
+    "@workbench/provider-claude": "0.1.0",
     "@workbench/provider-codex": "0.1.0",
-    "@workbench/provider-claude": "0.1.0"
+    "diff": "^9.0.0"
   }
 }

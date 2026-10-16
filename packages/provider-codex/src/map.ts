@@ -62,6 +62,7 @@ export function mapThreadItem(item: ThreadItem, at: number, inProgress: boolean)
         output: clip(item.changes.map((change) => change.diff).join("\n")),
         status: toItemStatus(item.status),
         at,
+        paths,
       };
     }
     case "mcpToolCall":

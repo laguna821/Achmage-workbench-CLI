@@ -1,0 +1,10 @@
+/** An error with an HTTP status and a stable code for the UI. */
+export class HttpError extends Error {
+  readonly status: number;
+  readonly code: string;
+  constructor(status: number, code: string, message: string) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
