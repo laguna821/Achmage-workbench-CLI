@@ -5,6 +5,7 @@ import { sessionLabel, statusTone } from "../format.ts";
 import { Icon } from "./Icon.tsx";
 import { EngineMark } from "./EngineMark.tsx";
 import { accentStyle, useAppearance } from "../appearance.ts";
+import { useUnseen } from "./Overview.tsx";
 
 const COLLAPSED_KEY = "workbench.collapsedFolders";
 
@@ -51,6 +52,7 @@ export function WorkTree({
   const creating = creatingInside !== undefined ? creatingInside : creatingAt;
   const indent = compact ? 16 : 22;
   const { lookOf, openMenu } = useAppearance();
+  const unseen = useUnseen();
 
   const works = Object.values(state.works);
   const folders = Object.values(state.folders);
@@ -93,6 +95,7 @@ export function WorkTree({
                 >
                   {isBusy(session) ? <span className={`dot dot-${statusTone(session)}`} /> : <EngineMark provider={session.provider} size={13} className="session-row-mark" />}
                   <span className="tree-label">{sessionLabel(session)}</span>
+                  {unseen.has(session.id) ? <span className="new-dot" title="새 답" /> : null}
                 </button>
               </li>
             ))}

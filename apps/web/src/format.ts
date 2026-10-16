@@ -34,7 +34,23 @@ export function statusTone(session: Session): Tone {
   }
 }
 
-export const sessionLabel = (session: Session) => `${session.purpose} · ${PROVIDER_LABEL[session.provider]}`;
+/** Session name; the engine is shown by its mark and color next to it. */
+export const sessionLabel = (session: Session) => session.purpose;
+
+export const sessionTitle = (session: Session) => `${session.purpose} · ${PROVIDER_LABEL[session.provider]}`;
+
+export function ago(at: number | null): string {
+  if (!at) return "";
+  const minutes = Math.floor((Date.now() - at) / 60_000);
+  if (minutes < 1) return "방금";
+  if (minutes < 60) return `${minutes}분 전`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}시간 전`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "어제";
+  if (days < 7) return `${days}일 전`;
+  return new Date(at).toLocaleDateString("ko-KR", { month: "long", day: "numeric" });
+}
 
 export function resetIn(resetsAt: number | null): string | null {
   if (!resetsAt) return null;

@@ -189,6 +189,36 @@ function PlanCard({ item }: { item: Item<"plan"> }) {
   );
 }
 
+type Turn = { id: string; index: number; user: Item<"user"> | null; blocks: Block[]; end: Item<"turnEnd"> | null; attention: boolean };
+
+/** A turn is one request and everything the engine did for it. */
+function toTurns(blocks: Block[]): Turn[] {
+  const turns: Turn[] = [];
+  let index = 0;
+  for (const block of blocks) {
+    if (block.type === "user" || !turns.length) {
+      if (block.type === "user") index += 1;
+      turns.push({ id: block.type === "user" ? block.item.id : "start", index, user: block.type === "user" ? block.item : null, blocks: [], end: null, attention: false });
+      if (block.type === "user") continue;
+    }
+    const turn = turns[turns.length - 1];
+    if (block.type === "turnEnd") turn.end = block.item;
+    else turn.blocks.push(block);
+    if (block.type === "approval" && block.item.decision === null) turn.attention = true;
+  }
+  return turns;
+}
+
+const clock = (at: number) => new Date(at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
+
+function duration(ms: number | null) {
+  if (!ms) return null;
+  const seconds = Math.round(ms / 1000);
+  return seconds < 60 ? `${seconds}초` : `${Math.floor(seconds / 60)}분 ${seconds % 60}초`;
+}
+
+type RailMark = { id: string; index: number; top: number; text: string; attention: boolean };
+
 export function Transcript({
   items,
   provider,
@@ -204,14 +234,53 @@ export function Transcript({
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
+  const sections = useRef(new Map<string, HTMLElement>());
   const blocks = toBlocks(items);
+  const turns = toTurns(blocks);
   const pending = items.find((item): item is Item<"approval"> => item.kind === "approval" && item.decision === null);
   // The engine is working but nothing has arrived since the last request yet.
   const waitingFirst = running && blocks[blocks.length - 1]?.type === "user";
+  const [sticky, setSticky] = useState<Turn | null>(null);
+  const [rail, setRail] = useState<{ marks: RailMark[]; viewTop: number; viewHeight: number; current: string | null }>({ marks: [], viewTop: 0, viewHeight: 1, current: null });
+
+  // Which request the reader is inside (sticky header) and where every request sits (turn rail).
+  const measure = () => {
+    const element = scroller.current;
+    if (!element) return;
+    const top = element.scrollTop;
+    const height = Math.max(element.scrollHeight, 1);
+    let current: Turn | null = null;
+    const marks: RailMark[] = [];
+    for (const turn of turns) {
+      const section = sections.current.get(turn.id);
+      if (!section || !turn.user) continue;
+      marks.push({ id: turn.id, index: turn.index, top: section.offsetTop / height, text: turn.user.text, attention: turn.attention });
+      if (section.offsetTop <= top + 12) current = turn;
+    }
+    const header = current ? sections.current.get(current.id)?.querySelector<HTMLElement>(".turn-request") : null;
+    const section = current ? sections.current.get(current.id) : null;
+    // Offsets are relative to the scroller (the positioned ancestor of both).
+    const headerGone = header ? header.offsetTop + header.offsetHeight < top + 4 : false;
+    const stillInside = section ? section.offsetTop + section.offsetHeight > top + 80 : false;
+    const nextSticky = current && headerGone && stillInside ? current : null;
+    setSticky((previous) => (previous?.id === nextSticky?.id ? previous : nextSticky));
+    const next = { marks, viewTop: top / height, viewHeight: element.clientHeight / height, current: current?.id ?? null };
+    // Measuring runs after every render, so state only changes when something visible moved.
+    const key = (value: typeof next) =>
+      `${value.current}|${value.viewTop.toFixed(3)}|${value.viewHeight.toFixed(3)}|${value.marks.map((mark) => `${mark.id}:${mark.top.toFixed(3)}:${mark.attention}`).join(",")}`;
+    setRail((previous) => (key(previous) === key(next) ? previous : next));
+  };
 
   useLayoutEffect(() => {
     const element = scroller.current;
     if (element && pinned.current) element.scrollTop = element.scrollHeight;
+    measure();
+  });
+
+  useEffect(() => {
+    const onResize = () => measure();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   });
 
   // Enter / Esc answer the pending approval when focus is not in a text field.
@@ -227,80 +296,136 @@ export function Transcript({
     return () => window.removeEventListener("keydown", onKey);
   }, [pending, onAnswer]);
 
+  const jumpTo = (turnId: string) => {
+    const section = sections.current.get(turnId);
+    const element = scroller.current;
+    if (section && element) element.scrollTo({ top: section.offsetTop - 8, behavior: "smooth" });
+  };
+
+  const speaker = (
+    <div className="speaker engine">
+      <EngineMark provider={provider} size={15} />
+      {PROVIDER_LABEL[provider]}
+    </div>
+  );
+
+  const renderBlock = (block: Block) => {
+    switch (block.type) {
+      case "user":
+        return null;
+      case "assistant":
+        return (
+          <div key={block.item.id} className="turn-assistant">
+            {block.speaker ? speaker : null}
+            <AssistantText text={block.item.text} streaming={block.item.streaming} />
+          </div>
+        );
+      case "work":
+        return (
+          <div key={block.id} className="turn-assistant">
+            {block.speaker ? speaker : null}
+            <WorkBlock block={block} />
+          </div>
+        );
+      case "approval":
+        return <ApprovalCard key={block.item.id} item={block.item} onAnswer={(decision) => onAnswer(block.item.id, decision)} />;
+      case "plan":
+        return <PlanCard key={block.item.id} item={block.item} />;
+      case "notice":
+        return (
+          <div key={block.item.id} className={`notice notice-${block.item.level}`}>
+            {block.item.text}
+          </div>
+        );
+      case "turnEnd":
+        return null;
+    }
+  };
+
   return (
-    <div
-      className="transcript"
-      ref={scroller}
-      onScroll={(event) => {
-        const element = event.currentTarget;
-        pinned.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
-      }}
-    >
-      <div className="column transcript-inner">
-        {loading ? <div className="empty-hint">불러오는 중…</div> : null}
-        {!loading && !blocks.length ? <div className="empty-hint">이 세션에 요청을 보내면 여기에 대화가 이어집니다.</div> : null}
-        {blocks.map((block) => {
-          switch (block.type) {
-            case "user":
-              return (
-                <section key={block.item.id} className="turn-user">
-                  <div className="user-bubble">{block.item.text}</div>
-                </section>
-              );
-            case "assistant":
-              return (
-                <section key={block.item.id} className="turn-assistant">
-                  {block.speaker ? <div className="speaker engine">
-              <EngineMark provider={provider} size={15} />
-              {PROVIDER_LABEL[provider]}
-            </div> : null}
-                  <AssistantText text={block.item.text} streaming={block.item.streaming} />
-                </section>
-              );
-            case "work":
-              return (
-                <section key={block.id} className="turn-assistant">
-                  {block.speaker ? <div className="speaker engine">
-              <EngineMark provider={provider} size={15} />
-              {PROVIDER_LABEL[provider]}
-            </div> : null}
-                  <WorkBlock block={block} />
-                </section>
-              );
-            case "approval":
-              return <ApprovalCard key={block.item.id} item={block.item} onAnswer={(decision) => onAnswer(block.item.id, decision)} />;
-            case "plan":
-              return <PlanCard key={block.item.id} item={block.item} />;
-            case "notice":
-              return (
-                <div key={block.item.id} className={`notice notice-${block.item.level}`}>
-                  {block.item.text}
+    <div className="transcript-wrap">
+      <div
+        className="transcript"
+        ref={scroller}
+        onScroll={(event) => {
+          const element = event.currentTarget;
+          pinned.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+          measure();
+        }}
+      >
+        <div className="turn-sticky-slot">
+          {sticky?.user ? (
+            <button type="button" className="column turn-sticky" onClick={() => jumpTo(sticky.id)} title="이 요청으로 올라가기">
+              <span className="turn-no">{sticky.index}</span>
+              <span className="turn-sticky-text">{sticky.user.text}</span>
+            </button>
+          ) : null}
+        </div>
+        <div className="column transcript-inner">
+          {loading ? <div className="empty-hint">불러오는 중…</div> : null}
+          {!loading && !blocks.length ? <div className="empty-hint">이 세션에 요청을 보내면 여기에 대화가 이어집니다.</div> : null}
+          {turns.map((turn, position) => (
+            <section
+              key={turn.id}
+              className="turn"
+              ref={(element) => {
+                if (element) sections.current.set(turn.id, element);
+                else sections.current.delete(turn.id);
+              }}
+            >
+              {turn.user ? (
+                <header className="turn-request">
+                  <div className="turn-meta">
+                    <span className="turn-no">{turn.index}</span>
+                    <span>요청</span>
+                    <span className="turn-meta-sep">·</span>
+                    <span>{clock(turn.user.at)}</span>
+                  </div>
+                  <div className="user-bubble">{turn.user.text}</div>
+                </header>
+              ) : null}
+              <div className="turn-body">
+                {turn.blocks.map(renderBlock)}
+                {waitingFirst && position === turns.length - 1 ? (
+                  <div className="turn-assistant">
+                    {speaker}
+                    <div className="response-pending" role="status" aria-label="응답을 기다리는 중">
+                      <span className="response-pending-dots">
+                        <i />
+                        <i />
+                        <i />
+                      </span>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+              {turn.end ? (
+                <div className={`turn-end turn-end-${turn.end.status}`}>
+                  {turn.end.status === "completed" ? <Icon name="check" size={13} /> : null}
+                  {turn.end.status === "completed" ? "끝남" : turn.end.status === "interrupted" ? "중단됨" : "응답이 끝나지 못했습니다"}
+                  {duration(turn.end.durationMs) ? <span className="muted"> · {duration(turn.end.durationMs)}</span> : null}
                 </div>
-              );
-            case "turnEnd":
-              return block.item.status === "completed" ? null : (
-                <div key={block.item.id} className="turn-end">
-                  {block.item.status === "interrupted" ? "중단됨" : "응답이 끝나지 못했습니다"}
-                </div>
-              );
-          }
-        })}
-        {waitingFirst ? (
-          <section className="turn-assistant">
-            <div className="speaker engine">
-              <EngineMark provider={provider} size={15} />
-              {PROVIDER_LABEL[provider]}
-            </div>
-            <div className="response-pending" role="status" aria-label="응답을 기다리는 중">
-              <span className="response-pending-dots">
-                <i />
-                <i />
-                <i />
-              </span>
-            </div>
-          </section>
-        ) : null}
+              ) : null}
+            </section>
+          ))}
+        </div>
       </div>
+      {rail.marks.length >= 3 ? (
+        <nav className="turn-rail" aria-label="요청 목록">
+          <span className="turn-rail-view" style={{ top: `${rail.viewTop * 100}%`, height: `${Math.min(rail.viewHeight, 1) * 100}%` }} />
+          {rail.marks.map((mark) => (
+            <button
+              key={mark.id}
+              type="button"
+              className={`turn-rail-mark${mark.id === rail.current ? " current" : ""}${mark.attention ? " attention" : ""}`}
+              style={{ top: `${mark.top * 100}%` }}
+              onClick={() => jumpTo(mark.id)}
+              title={`${mark.index}. ${mark.text.slice(0, 80)}`}
+              aria-label={`요청 ${mark.index}`}
+            />
+          ))}
+        </nav>
+      ) : null}
     </div>
   );
 }

@@ -17,9 +17,13 @@ export type Folder = {
   sort: number;
 };
 
+/** "auto": follows what the requests keep coming back to (local, no model call). "user": named by hand. */
+export type TitleSource = "auto" | "user";
+
 export type Work = {
   id: string;
   title: string;
+  titleSource: TitleSource;
   folderId: string | null;
   /** Working directory handed to both engines. */
   cwd: string;
@@ -48,6 +52,7 @@ export type Session = {
   nativeSessionId: string | null;
   /** Purpose label shown on the tab, e.g. "강의 작성". */
   purpose: string;
+  purposeSource: TitleSource;
   /** Null means the engine default. Applies from the next turn. */
   model: string | null;
   /** Reasoning effort id as the engine names it (e.g. "medium", "xhigh"); null = engine default. */
@@ -56,6 +61,9 @@ export type Session = {
   engineModel: string | null;
   /** Effort the engine reported for the latest turn, when it reports one (Codex). */
   engineEffort: string | null;
+  /** Start of the latest finished reply, plain text, for overviews. */
+  preview: string | null;
+  previewAt: number | null;
   status: SessionStatus;
   /** Short human-readable activity, e.g. "명령 실행 중". */
   activity: string | null;
@@ -181,6 +189,7 @@ export type ApiError = { code: string; message: string; requestId?: string };
 
 export type CreateWorkRequest = {
   title: string;
+  titleSource?: TitleSource;
   folderId?: string | null;
   cwd?: string | null;
 };

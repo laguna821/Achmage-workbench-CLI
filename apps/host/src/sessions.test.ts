@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ApprovalDecision, ProviderStatus, Session, Work } from "@workbench/contracts";
 import { EventBus } from "./bus.ts";
-import { HttpError, SessionManager } from "./sessions.ts";
+import { HttpError, SessionManager, previewOf } from "./sessions.ts";
 import { Store } from "./store.ts";
 import { emptyStatus, type AdapterSink, type ProviderAdapter } from "./providers/types.ts";
 
@@ -81,7 +81,37 @@ describe("SessionManager", () => {
     expect(session).toMatchObject({ model: "opus", effort: "high", purpose: "대화 1" });
     expect(manager.updateSession(session.id, { effort: "max" })).toMatchObject({ model: "opus", effort: "max" });
     expect(manager.updateSession(session.id, { model: null, effort: null })).toMatchObject({ model: null, effort: null });
-    expect(() => manager.updateSession(session.id, { purpose: "  " })).toThrow(HttpError);
+    expect(manager.updateSession(session.id, { purpose: "  " }).purposeSource).toBe("auto");
+  });
+
+  it("titles sessions and works from their requests until a name is typed by hand", async () => {
+    const { manager } = setup();
+    const work = manager.createWork({ title: "임시 제목" });
+    const session = manager.createSession(work.id, { provider: "claude" });
+    const finish = (id: string) => {
+      manager.sink.upsertItem(session.id, { kind: "turnEnd", id: `end:${id}`, status: "completed", durationMs: 1, at: Date.now() });
+      manager.sink.updateSession(session.id, { status: "idle" });
+    };
+    await manager.send(session.id, "r1", "## 미디어 리터러시 과목 업데이트 계획을 세워보자");
+    finish("r1");
+    manager.sink.upsertItem(session.id, { kind: "assistant", id: "a:done", text: "**계획**은 `세 단계`입니다.", streaming: false, at: 2 });
+    const snapshot = () => manager.snapshot();
+    const current = () => snapshot().sessions.find((entry) => entry.id === session.id)!;
+    expect(current()).toMatchObject({ purpose: "미디어 리터러시 과목 업데이트 계획", purposeSource: "auto", preview: "계획은 세 단계입니다." });
+    expect(snapshot().works.find((entry) => entry.id === work.id)!.title).toBe("미디어 리터러시 과목 업데이트 계획");
+
+    manager.updateSession(session.id, { purpose: "강의 개편" });
+    await manager.send(session.id, "r2", "수업 계획서 초안 써줘");
+    finish("r2");
+    expect(current()).toMatchObject({ purpose: "강의 개편", purposeSource: "user" });
+
+    // Clearing the name gives it back to the automatic title.
+    expect(manager.updateSession(session.id, { purpose: "" }).purposeSource).toBe("auto");
+    manager.updateWork(work.id, { title: "내 작업" });
+    await manager.send(session.id, "r3", "수업 계획서 평가 기준 추가");
+    finish("r3");
+    expect(snapshot().works.find((entry) => entry.id === work.id)!).toMatchObject({ title: "내 작업", titleSource: "user" });
+    expect(previewOf("a".repeat(400)).length).toBe(181);
   });
 
   it("persists streamed text and shows interrupted work as stopped after a restart", async () => {

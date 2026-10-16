@@ -14,6 +14,7 @@ import { StartView, useEngineChoice } from "./components/StartView.tsx";
 import { WorkView, type WorkActions } from "./components/WorkView.tsx";
 import { AppearanceSheet, type SheetTarget } from "./components/AppearanceSheet.tsx";
 import { EngineMenu } from "./components/EngineMenu.tsx";
+import { Overview, Switcher, UnseenContext } from "./components/Overview.tsx";
 import { AppearanceContext, DEFAULT_APPEARANCE, engineTheme, lookStyle, readAppearance, type AppearanceApi } from "./appearance.ts";
 import { isThemePref, resolveTheme, setRootTheme, useSystemTheme, type ThemePref } from "./theme.ts";
 
@@ -44,7 +45,18 @@ async function openExternal(url: string) {
   }
 }
 
-type View = { kind: "work" } | { kind: "finder" } | { kind: "new"; folderId: string | null };
+type View = { kind: "work" } | { kind: "finder" } | { kind: "new"; folderId: string | null } | { kind: "overview"; workId: string | null };
+
+const SEEN_KEY = "workbench.seen";
+const MRU_KEY = "workbench.recentSessions";
+const readJson = <T,>(key: string, fallback: T): T => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+};
 
 export function App() {
   const api = useMemo(() => {
@@ -194,6 +206,7 @@ export function App() {
       setModel: (session, choice) => void api?.updateSession(session.id, { model: choice.model, effort: choice.effort }).catch(fail),
       moveWork: (target, folderId) => void api?.updateWork(target.id, { folderId }).catch(fail),
       openFinder: () => setView({ kind: "finder" }),
+      openOverview: (target) => setView({ kind: "overview", workId: target?.id ?? null }),
     }),
     [api, fail],
   );
@@ -220,6 +233,93 @@ export function App() {
   };
 
   const pendingApprovals = Object.values(state.sessions).filter((session) => session.status === "awaitingApproval");
+  const runningCount = Object.values(state.sessions).filter((session) => session.status === "starting" || session.status === "running").length;
+
+  // What the user has looked at: replies arriving in sessions not on screen are marked new.
+  const visibleSession = view.kind === "work" && activeSession ? activeSession : null;
+  const [seen, setSeen] = useState<Record<string, number> | null>(() => readJson<Record<string, number> | null>(SEEN_KEY, null));
+  useEffect(() => {
+    if (!state.ready) return;
+    if (seen === null) {
+      // First run: everything already there counts as seen.
+      const initial = Object.fromEntries(Object.values(state.sessions).map((session) => [session.id, session.previewAt ?? 0]));
+      setSeen(initial);
+      localStorage.setItem(SEEN_KEY, JSON.stringify(initial));
+      return;
+    }
+    if (visibleSession?.previewAt && visibleSession.previewAt > (seen[visibleSession.id] ?? 0)) {
+      const next = { ...seen, [visibleSession.id]: visibleSession.previewAt };
+      setSeen(next);
+      localStorage.setItem(SEEN_KEY, JSON.stringify(next));
+    }
+  }, [state.ready, state.sessions, seen, visibleSession]);
+  const unseen = useMemo(
+    () =>
+      new Set(
+        Object.values(state.sessions)
+          .filter((session) => seen && session.previewAt && session.previewAt > (seen[session.id] ?? 0) && session.id !== visibleSession?.id)
+          .map((session) => session.id),
+      ),
+    [state.sessions, seen, visibleSession],
+  );
+
+  // Sessions in the order they were last looked at, for Ctrl+Tab.
+  const [recent, setRecent] = useState<string[]>(() => readJson<string[]>(MRU_KEY, []));
+  useEffect(() => {
+    if (!visibleSession) return;
+    setRecent((list) => {
+      if (list[0] === visibleSession.id) return list;
+      const next = [visibleSession.id, ...list.filter((id) => id !== visibleSession.id)].slice(0, 24);
+      localStorage.setItem(MRU_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, [visibleSession?.id]);
+  const switchable = recent.map((id) => state.sessions[id]).filter((session): session is Session => Boolean(session)).slice(0, 8);
+  const [switcher, setSwitcher] = useState<number | null>(null);
+  const switcherRef = useRef<number | null>(null);
+  const openSession = useCallback(
+    (session: Session) => {
+      const target = state.works[session.workId];
+      if (target) actions.selectSession(target, session);
+    },
+    [state.works, actions],
+  );
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.key === "Tab") {
+        event.preventDefault();
+        if (switchable.length < 2) return;
+        const count = switchable.length;
+        const step = event.shiftKey ? -1 : 1;
+        const current = switcherRef.current;
+        const next = current === null ? (step === 1 ? 1 : count - 1) : (current + step + count) % count;
+        switcherRef.current = next;
+        setSwitcher(next);
+      } else if (event.ctrlKey && (event.key === "k" || event.key === "K")) {
+        event.preventDefault();
+        setView((current) => (current.kind === "overview" ? { kind: "work" } : { kind: "overview", workId: null }));
+      }
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key !== "Control" || switcherRef.current === null) return;
+      const target = switchable[switcherRef.current];
+      switcherRef.current = null;
+      setSwitcher(null);
+      if (target) openSession(target);
+    };
+    const onBlur = () => {
+      switcherRef.current = null;
+      setSwitcher(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [switchable, openSession]);
 
   // The engine in focus dresses the window: the visible session's engine, else the engine picked
   // for a new request. While the appearance sheet is open, the look being edited is shown instead.
@@ -285,6 +385,7 @@ export function App() {
 
   return (
     <AppearanceContext.Provider value={appearanceApi}>
+    <UnseenContext.Provider value={unseen}>
     <div
       className="app look-scope"
       data-theme={focusedTheme}
@@ -311,6 +412,16 @@ export function App() {
             aria-expanded={view.kind === "finder"}
           >
             작업 <Icon name={view.kind === "finder" ? "chevronUp" : "chevronDown"} size={14} />
+          </button>
+          <button
+            type="button"
+            className={`ghost-button overview-button${view.kind === "overview" ? " pressed" : ""}`}
+            onClick={() => setView(view.kind === "overview" ? { kind: "work" } : { kind: "overview", workId: null })}
+            title="한눈에 · 모든 세션 (Ctrl+K)"
+          >
+            <Icon name="grid" size={15} /> 한눈에
+            {runningCount ? <span className="count-chip active" title="진행 중">{runningCount}</span> : null}
+            {unseen.size ? <span className="count-chip new" title="새 답">{unseen.size}</span> : null}
           </button>
           <button
             type="button"
@@ -402,6 +513,14 @@ export function App() {
       {sidebarOpen && state.ready ? <Sidebar state={state} currentWorkId={view.kind === "work" ? work?.id ?? null : null} actions={treeActions} /> : null}
       {!state.ready ? (
         <main className="loading">불러오는 중…</main>
+      ) : view.kind === "overview" ? (
+        <Overview
+          state={state}
+          unseen={unseen}
+          workFilter={view.workId ? state.works[view.workId] ?? null : null}
+          onOpen={openSession}
+          onClose={() => setView({ kind: "work" })}
+        />
       ) : view.kind === "finder" ? (
         <Finder state={state} currentWorkId={work?.id ?? null} actions={treeActions} onBack={work ? () => setView({ kind: "work" }) : null} />
       ) : showStart ? (
@@ -433,6 +552,7 @@ export function App() {
         />
       ) : null}
       {engineMenu ? <EngineMenu provider={engineMenu.provider} x={engineMenu.x} y={engineMenu.y} onClose={closeEngineMenu} /> : null}
+      {switcher !== null ? <Switcher state={state} sessions={switchable} index={switcher} unseen={unseen} /> : null}
 
       {toast ? (
         <div className="toast" role="status" onClick={() => setToast(null)}>
@@ -440,6 +560,7 @@ export function App() {
         </div>
       ) : null}
     </div>
+    </UnseenContext.Provider>
     </AppearanceContext.Provider>
   );
 }

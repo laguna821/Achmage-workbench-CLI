@@ -174,14 +174,14 @@
 }
 
 .look-scope[data-bubble="rail"] {
-  --bubble-bg: color-mix(in srgb, var(--accent) 6%, var(--surface));
+  --bubble-bg: color-mix(in srgb, var(--accent) 13%, var(--surface));
   --bubble-text: var(--text);
-  --bubble-border: color-mix(in srgb, var(--accent) 30%, var(--line));
+  --bubble-border: color-mix(in srgb, var(--accent) 50%, var(--line));
   --bubble-radius: 5px 14px 5px 14px;
   --bubble-shadow: inset 2px 0 0 var(--accent), 0 8px 24px var(--deep-shadow);
-  --assistant-bg: color-mix(in srgb, var(--accent) 4%, var(--surface));
-  --assistant-border: color-mix(in srgb, var(--accent) 22%, var(--line));
-  --assistant-shadow: inset 2px 0 0 var(--accent), 0 8px 22px var(--deep-shadow);
+  --assistant-bg: var(--surface);
+  --assistant-border: var(--line);
+  --assistant-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 45%, var(--line)), 0 8px 22px var(--deep-shadow);
   --assistant-pad: 12px 16px;
   --assistant-radius: 5px 14px 14px 5px;
   --pending-radius: 5px 14px 14px 5px;
@@ -690,6 +690,7 @@ textarea {
 }
 
 .context-row {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 22px;
@@ -762,6 +763,7 @@ textarea {
 }
 
 .session-tabs {
+  flex: 0 0 auto;
   display: flex;
   gap: 4px;
   padding-top: 10px;
@@ -799,18 +801,172 @@ textarea {
   color: inherit;
 }
 
+.transcript-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+
 .transcript {
+  position: relative;
   flex: 1 1 auto;
   overflow-y: auto;
   min-height: 0;
 }
 
 .transcript-inner {
-  padding-top: 28px;
+  padding-top: 12px;
   padding-bottom: 24px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+}
+
+/*
+ * Turns: one request and everything done for it. Three layers read apart from a distance:
+ * the request (numbered, engine color), the answer (body text), the work log (quiet strip).
+ */
+.turn {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 0 18px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+}
+
+.turn:first-child {
+  border-top: none;
+}
+
+.turn-request {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 7px;
+}
+
+.turn-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--accent);
+}
+
+.turn-meta-sep {
+  color: var(--faint);
+}
+
+.turn-no {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+}
+
+.turn-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* The request being read stays on top while its long answer scrolls by. */
+.turn-sticky-slot {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  height: 0;
+}
+
+.turn-sticky {
+  position: absolute;
+  top: 8px;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: calc(100% - 48px);
+  max-width: calc(var(--column) - 48px);
+  height: 38px;
+  margin: 0 auto;
+  padding: 0 14px 0 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--composer-shadow);
+  color: var(--text);
+  font-family: var(--e-font);
+  font-size: 14.5px;
+  text-align: left;
+  animation: pending-arrive 140ms ease-out;
+}
+
+.turn-sticky-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Turn rail: every request as a tick, approvals in amber, the visible range shaded. */
+.turn-rail {
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  right: 8px;
+  width: 14px;
+}
+
+.turn-rail-view {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  pointer-events: none;
+}
+
+.turn-rail-mark {
+  position: absolute;
+  left: 0;
+  width: 14px;
+  height: 4px;
+  margin-top: -2px;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 50%, transparent);
+  cursor: pointer;
+  transition:
+    transform 120ms ease,
+    background-color 120ms ease;
+}
+
+.turn-rail-mark:hover {
+  transform: scaleY(1.8);
+  background: var(--accent);
+}
+
+.turn-rail-mark.current {
+  height: 6px;
+  margin-top: -3px;
+  background: var(--accent);
+  box-shadow: 0 0 calc(6px * var(--glow)) var(--accent);
+}
+
+.turn-rail-mark.attention {
+  background: var(--amber);
 }
 
 .empty-hint {
@@ -831,12 +987,6 @@ textarea {
   gap: 6px;
   color: var(--accent);
   font-weight: 600;
-}
-
-.turn-user {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 10px;
 }
 
 /* User bubble: filled accent in light (Conversation Studio), tinted rail card in dark (Operator Console). */
@@ -1000,10 +1150,14 @@ textarea {
   }
 }
 
-/* Folded tool work */
+/* Folded tool work: a quiet strip, clearly not part of the answer. */
 .work-block {
-  border-left: 2px solid var(--line);
-  padding-left: 12px;
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 2px 8px 2px 6px;
+  border-left: 2px solid color-mix(in srgb, var(--muted) 35%, transparent);
+  border-radius: 0 8px 8px 0;
+  background: color-mix(in srgb, var(--surface-raised) 55%, transparent);
 }
 
 .work-summary {
@@ -1016,7 +1170,7 @@ textarea {
   border: none;
   border-radius: 6px;
   background: transparent;
-  font-size: 15px;
+  font-size: 13.5px;
   color: var(--muted);
 }
 
@@ -1308,8 +1462,21 @@ kbd {
 }
 
 .turn-end {
-  font-size: 13.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-start;
+  font-size: 12.5px;
   color: var(--muted);
+}
+
+.turn-end-completed svg {
+  color: var(--ok);
+}
+
+.turn-end-interrupted,
+.turn-end-failed {
+  color: var(--danger);
 }
 
 /* Composer */
@@ -2293,4 +2460,297 @@ kbd {
 .sheet-actions {
   flex-direction: row;
   flex-wrap: wrap;
+}
+
+/* Unseen replies and live counts */
+.new-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+  flex: 0 0 auto;
+}
+
+.session-tab.active .new-dot {
+  background: var(--on-accent);
+}
+
+.session-tab.more {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-button {
+  gap: 6px;
+}
+
+.count-chip {
+  display: inline-grid;
+  place-items: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.count-chip.active {
+  background: color-mix(in srgb, var(--motion) 20%, transparent);
+  color: var(--ok);
+}
+
+.count-chip.new {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.ghost-button.pressed .count-chip.new {
+  background: var(--on-accent);
+  color: var(--accent);
+}
+
+/* Overview ("한눈에") */
+.overview-view {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.overview-inner {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 26px 28px 40px;
+}
+
+.overview-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.overview-head .page-title {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.overview-search {
+  flex: 1;
+  max-width: 560px;
+}
+
+.overview-lanes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+@media (max-width: 1000px) {
+  .overview-lanes {
+    grid-template-columns: 1fr;
+  }
+}
+
+.overview-lane {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.overview-lane h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 2px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.lane-attention h2 {
+  color: var(--amber-text);
+}
+
+.overview-count {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: var(--surface-raised);
+  color: var(--text-soft);
+  font-size: 12px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-empty {
+  padding: 18px 14px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  color: var(--faint);
+  font-size: 13.5px;
+}
+
+/* A session card carries its own engine look (its own .look-scope). */
+.session-card {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 13px 15px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  border-left: 4px solid var(--accent);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text);
+  text-align: left;
+  box-shadow: 0 4px 14px var(--deep-shadow);
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease,
+    border-color 120ms ease;
+}
+
+.session-card:hover,
+.session-card.focused {
+  transform: translateY(-1px);
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent),
+    0 8px 22px var(--deep-shadow);
+}
+
+.session-card[data-tone="attention"] {
+  border-left-color: var(--amber);
+}
+
+.session-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.session-card-model {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-weight: 500;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.session-card-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  white-space: nowrap;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.session-card-status.tone-attention {
+  color: var(--amber-text);
+  font-weight: 650;
+}
+
+.session-card-status.tone-active {
+  color: var(--ok);
+}
+
+.session-card-title {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-family: var(--e-font);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--heading);
+}
+
+.session-card-purpose {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--text-soft);
+}
+
+.session-card-preview {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-family: var(--e-font);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.session-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.session-card-new {
+  padding: 1px 7px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+}
+
+.session-card-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Ctrl+Tab switcher */
+.switcher-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  display: grid;
+  place-content: center;
+  gap: 12px;
+  background: color-mix(in srgb, #000000 28%, transparent);
+  backdrop-filter: blur(3px);
+}
+
+.switcher {
+  display: flex;
+  gap: 10px;
+  max-width: calc(100vw - 60px);
+  padding: 14px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  box-shadow: var(--popover-shadow);
+  overflow-x: auto;
+}
+
+.switcher .session-card {
+  width: 220px;
+  flex: 0 0 auto;
+}
+
+.switcher-hint {
+  justify-self: center;
+  padding: 4px 12px;
+  border-radius: 10px;
+  background: var(--toast-bg);
+  color: var(--toast-text);
+  font-size: 12.5px;
 }

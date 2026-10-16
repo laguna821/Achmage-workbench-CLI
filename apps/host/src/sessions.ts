@@ -20,6 +20,7 @@ import {
 import type { EventBus } from "./bus.ts";
 import type { AdapterSink, LoginStart, ProviderAdapter } from "./providers/types.ts";
 import type { Store } from "./store.ts";
+import { adaptTitle, titleFor } from "./titles.ts";
 
 export class HttpError extends Error {
   readonly status: number;
@@ -40,6 +41,23 @@ export type ManagerOptions = {
   managedWorksDir: string;
 };
 
+const DEFAULT_PURPOSE = /^대화 \d+$/;
+
+/** Plain start of a reply for overview cards. */
+export function previewOf(text: string) {
+  const flat = plain(text);
+  return flat.length > 180 ? `${flat.slice(0, 180).trimEnd()}…` : flat;
+}
+
+function plain(text: string) {
+  return text
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/[#>*_`~|]+/g, "")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export class SessionManager {
   private readonly folders = new Map<string, Folder>();
   private readonly works = new Map<string, Work>();
@@ -57,11 +75,40 @@ export class SessionManager {
     this.bus = bus;
     this.options = options;
     for (const folder of store.folders()) this.folders.set(folder.id, folder);
-    for (const work of store.works()) this.works.set(work.id, work);
+    for (const work of store.works()) this.works.set(work.id, { ...work, titleSource: work.titleSource ?? "auto" });
     // Rows written by older versions may lack newer fields.
-    for (const session of store.sessions()) this.sessions.set(session.id, { ...session, effort: session.effort ?? null, engineModel: session.engineModel ?? null, engineEffort: session.engineEffort ?? null });
+    for (const session of store.sessions()) this.sessions.set(session.id, {
+        ...session,
+        effort: session.effort ?? null,
+        engineModel: session.engineModel ?? null,
+        engineEffort: session.engineEffort ?? null,
+        preview: session.preview ?? null,
+        previewAt: session.previewAt ?? null,
+        purposeSource: session.purposeSource ?? (DEFAULT_PURPOSE.test(session.purpose) ? "auto" : "user"),
+      });
+    this.backfillOverview();
     this.recoverAfterRestart();
   }
+
+  /** Sessions from before auto titles and previews: derive both once from their stored transcript. */
+  private backfillOverview() {
+    for (const session of this.sessions.values()) {
+      if (session.previewAt !== null && !DEFAULT_PURPOSE.test(session.purpose)) continue;
+      const items = this.store.items(session.id);
+      const requests = items.flatMap((item) => (item.kind === "user" ? [item.text] : []));
+      const lastReply = items.findLast((item) => item.kind === "assistant" && item.text.trim());
+      const patch: Partial<Session> = {};
+      if (requests.length && session.purposeSource === "auto" && DEFAULT_PURPOSE.test(session.purpose)) {
+        patch.purpose = titleFor(requests) ?? session.purpose;
+      }
+      if (lastReply && lastReply.kind === "assistant" && session.previewAt === null) {
+        patch.preview = previewOf(lastReply.text);
+        patch.previewAt = lastReply.at;
+      }
+      if (Object.keys(patch).length) this.saveSession({ ...session, ...patch });
+    }
+  }
+
 
   /** Adapters report through this sink; every change is persisted and published. */
   readonly sink: AdapterSink = {
@@ -73,6 +120,10 @@ export class SessionManager {
       this.transcripts.set(sessionId, applyItemEvent(items, { type: "item.upserted", sessionId, item }));
       this.store.saveItem(sessionId, item);
       this.bus.publish({ type: "item.upserted", sessionId, item });
+      if (item.kind === "assistant" && !item.streaming && item.text.trim()) {
+        this.sink.updateSession(sessionId, { preview: previewOf(item.text), previewAt: Date.now() });
+      }
+      if (item.kind === "user" || item.kind === "turnEnd") this.retitle(sessionId);
     },
     delta: (sessionId, itemId, textDelta) => {
       const items = this.loadItems(sessionId);
@@ -187,7 +238,7 @@ export class SessionManager {
       mkdirSync(cwd, { recursive: true });
     }
     const now = Date.now();
-    const work: Work = { id, title, folderId, cwd, cwdManaged, activeSessionId: null, createdAt: now, updatedAt: now };
+    const work: Work = { id, title, titleSource: request.titleSource ?? "auto", folderId, cwd, cwdManaged, activeSessionId: null, createdAt: now, updatedAt: now };
     this.saveWork(work);
     return work;
   }
@@ -197,9 +248,16 @@ export class SessionManager {
     if (patch.activeSessionId && this.sessions.get(patch.activeSessionId)?.workId !== workId) {
       throw new HttpError(400, "invalid_session", "다른 작업의 세션입니다.");
     }
-    const next = { ...work, ...patch, updatedAt: Date.now() };
+    const next: Work = { ...work, ...patch, updatedAt: Date.now() };
+    if (patch.title !== undefined) {
+      // A name typed by hand stays; clearing it hands the title back to the automatic one.
+      const title = patch.title.trim();
+      next.title = title ? title.slice(0, 80) : work.title;
+      next.titleSource = title ? "user" : "auto";
+    }
     this.saveWork(next);
-    return next;
+    if (next.titleSource === "auto" && patch.title !== undefined) this.retitleWork(workId, true);
+    return this.requireWork(workId);
   }
 
   createSession(workId: string, request: CreateSessionRequest): Session {
@@ -216,10 +274,13 @@ export class SessionManager {
       hostId: this.options.hostId,
       nativeSessionId: null,
       purpose: request.purpose?.trim() || `대화 ${count + 1}`,
+      purposeSource: request.purpose?.trim() ? "user" : "auto",
       model: request.model ?? null,
       effort: request.effort ?? null,
       engineModel: null,
       engineEffort: null,
+      preview: null,
+      previewAt: null,
       status: "idle",
       activity: null,
       lastError: null,
@@ -236,14 +297,16 @@ export class SessionManager {
     const session = this.requireSession(sessionId);
     const next = { ...session, updatedAt: Date.now() };
     if (patch.purpose !== undefined) {
+      // A name typed by hand stays; clearing it hands the name back to the automatic title.
       const trimmed = patch.purpose.trim();
-      if (!trimmed) throw new HttpError(400, "invalid_name", "세션 이름이 비어 있습니다.");
-      next.purpose = trimmed.slice(0, 60);
+      next.purpose = trimmed ? trimmed.slice(0, 60) : session.purpose;
+      next.purposeSource = trimmed ? "user" : "auto";
     }
     if (patch.model !== undefined) next.model = patch.model || null;
     if (patch.effort !== undefined) next.effort = patch.effort || null;
     this.saveSession(next);
-    return next;
+    if (patch.purpose !== undefined && next.purposeSource === "auto") this.retitle(sessionId, true);
+    return this.requireSession(sessionId);
   }
 
   async send(sessionId: string, requestId: string, text: string): Promise<{ duplicate: boolean }> {
@@ -308,6 +371,37 @@ export class SessionManager {
   async shutdown() {
     this.flush();
     await Promise.all([...this.adapters.values()].map((adapter) => adapter.shutdown()));
+  }
+
+  /** Automatic titles follow the requests (no model call); see titles.ts. */
+  private retitle(sessionId: string, fresh = false) {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+    if (session.purposeSource === "auto") {
+      const requests = this.requestsOf([sessionId]);
+      const current = fresh || DEFAULT_PURPOSE.test(session.purpose) || requests.length <= 1 ? null : session.purpose;
+      const purpose = adaptTitle(requests, current);
+      if (purpose && purpose !== session.purpose) this.saveSession({ ...session, purpose, updatedAt: Date.now() });
+    }
+    this.retitleWork(session.workId);
+  }
+
+  private retitleWork(workId: string, fresh = false) {
+    const work = this.works.get(workId);
+    if (!work || work.titleSource !== "auto") return;
+    const sessionIds = [...this.sessions.values()].filter((session) => session.workId === workId).map((session) => session.id);
+    const requests = this.requestsOf(sessionIds);
+    if (!requests.length) return;
+    const title = adaptTitle(requests, fresh || requests.length <= 1 ? null : work.title);
+    if (title && title !== work.title) this.saveWork({ ...this.requireWork(workId), title });
+  }
+
+  /** Requests of the given sessions, oldest first. */
+  private requestsOf(sessionIds: string[]) {
+    return sessionIds
+      .flatMap((id) => this.loadItems(id).flatMap((item) => (item.kind === "user" ? [{ at: item.at, text: item.text }] : [])))
+      .sort((a, b) => a.at - b.at)
+      .map((entry) => entry.text);
   }
 
   /** An interrupted or failed turn may never send a final message; stop showing it as in progress. */

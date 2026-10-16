@@ -10,6 +10,7 @@ import { MenuItem, Popover } from "./Popover.tsx";
 import { EngineMark } from "./EngineMark.tsx";
 import { EngineTabs } from "./StartView.tsx";
 import { accentStyle, useAppearance } from "../appearance.ts";
+import { useUnseen } from "./Overview.tsx";
 import { Transcript } from "./Transcript.tsx";
 
 export type WorkActions = {
@@ -22,7 +23,11 @@ export type WorkActions = {
   setModel: (session: Session, choice: ModelChoice) => void;
   moveWork: (work: Work, folderId: string | null) => void;
   openFinder: () => void;
+  openOverview: (work?: Work) => void;
 };
+
+/** Tabs that stay readable with many sessions: the active one and the latest few, the rest behind "+N". */
+const MAX_TABS = 5;
 
 function StatusDot({ tone }: { tone: string }) {
   return <span className={`dot dot-${tone}`} aria-hidden />;
@@ -63,7 +68,10 @@ function TargetPicker({
               close();
             }}
           >
-            {sessionLabel(session)}
+            <span className="menu-engine" style={accentStyle(lookOf(session.provider))}>
+              <EngineMark provider={session.provider} size={15} />
+              {sessionLabel(session)}
+            </span>
           </MenuItem>
         ))}
         {sessions.length ? <div className="menu-divider" /> : null}
@@ -100,6 +108,7 @@ export function WorkView({
   setEngine: (provider: Provider) => void;
 }) {
   const { lookOf, openMenu } = useAppearance();
+  const unseen = useUnseen();
   const sessions = sessionsOf(state, work.id);
   const active = (work.activeSessionId && state.sessions[work.activeSessionId]) || sessions[sessions.length - 1] || null;
   const transcript = active ? state.transcripts[active.id] : undefined;
@@ -119,6 +128,16 @@ export function WorkView({
   const [folderOpen, setFolderOpen] = useState(false);
   const closeFolder = useCallback(() => setFolderOpen(false), []);
   const [renaming, setRenaming] = useState<string | null>(null);
+
+  const recency = (session: Session) => Math.max(session.previewAt ?? 0, session.updatedAt);
+  const keep = new Set(
+    [...sessions]
+      .sort((a, b) => Number(b.id === active?.id) - Number(a.id === active?.id) || Number(isBusy(b)) - Number(isBusy(a)) || recency(b) - recency(a))
+      .slice(0, MAX_TABS - 1 + Number(sessions.length <= MAX_TABS))
+      .map((session) => session.id),
+  );
+  const tabSessions = sessions.filter((session) => keep.has(session.id));
+  const hiddenTabs = sessions.length - tabSessions.length;
 
   // Folders flattened in tree order for the "move to" menu.
   const folderOptions: { id: string; name: string; depth: number }[] = [];
@@ -215,7 +234,7 @@ export function WorkView({
 
       {sessions.length > 1 ? (
         <nav className="column session-tabs" aria-label="세션">
-          {sessions.map((session) =>
+          {tabSessions.map((session) =>
             renaming === session.id ? (
               <EditableText
                 key={session.id}
@@ -237,9 +256,16 @@ export function WorkView({
               >
                 {isBusy(session) ? <StatusDot tone={statusTone(session)} /> : <EngineMark provider={session.provider} size={14} />}
                 {sessionLabel(session)}
+                {unseen.has(session.id) ? <span className="new-dot" title="새 답" /> : null}
               </button>
             ),
           )}
+          {hiddenTabs ? (
+            <button type="button" className="session-tab more" onClick={() => actions.openOverview(work)} title="이 작업의 모든 세션">
+              +{hiddenTabs}
+              {sessions.some((session) => unseen.has(session.id) && !tabSessions.includes(session)) ? <span className="new-dot" /> : null}
+            </button>
+          ) : null}
         </nav>
       ) : null}
 
