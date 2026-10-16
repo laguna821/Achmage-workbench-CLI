@@ -16,12 +16,16 @@ let host: { child: ChildProcess; url: string; token: string } | null = null;
 const results: { name: string; ok: boolean; detail: string }[] = [];
 
 function startHost(): Promise<NonNullable<typeof host>> {
-  const child = spawn(process.execPath, ["apps/host/src/main.ts"], {
+  // HOST_ENTRY=apps/host/dist/host.mjs checks the bundled gateway shipped in the app.
+  const child = spawn(process.execPath, [process.env.HOST_ENTRY ?? "apps/host/src/main.ts"], {
     env: {
       ...process.env,
       WORKBENCH_DATA_DIR: dataDir,
       // Ask before every non-trivial Codex command so approvals can be exercised.
       WORKBENCH_CODEX_APPROVAL: "untrusted",
+      // Short idle windows so the "engine stopped while idle, then resumed" path is exercised.
+      WORKBENCH_CODEX_IDLE_MS: "2000",
+      WORKBENCH_CLAUDE_IDLE_MS: "2000",
     },
     stdio: ["ignore", "pipe", "inherit"],
   });
@@ -153,6 +157,15 @@ async function runProvider(provider: Provider) {
     const end = await turnEnd(sid, id, 60_000);
     if (end.status !== "interrupted") throw new Error(`status=${end.status}`);
     return "중단됨으로 종료";
+  });
+
+  await step(`${provider}: resume after idle stop`, async () => {
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    const id = await send(sid, "What single word did I first ask you to reply with? Reply with that one word only.");
+    const end = await turnEnd(sid, id);
+    const text = textAfter(await items(sid), id);
+    if (end.status !== "completed" || !/pong/i.test(text)) throw new Error(`status=${end.status} text=${text.slice(0, 120)}`);
+    return `엔진을 내린 뒤 같은 세션으로 재개: "${text.trim().slice(0, 30)}"`;
   });
 
   return { workId: work.id, sessionId: sid };

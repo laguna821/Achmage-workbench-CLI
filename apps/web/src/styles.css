@@ -146,8 +146,7 @@ textarea {
 }
 
 .breadcrumb-anchor {
-  min-width: 0;
-  max-width: 45%;
+  flex: 0 1 auto;
 }
 
 .topbar-title {
@@ -398,7 +397,7 @@ textarea {
 
 .breadcrumb {
   display: block;
-  max-width: 100%;
+  max-width: 380px;
   height: 34px;
   padding: 0 10px;
   margin-left: -10px;

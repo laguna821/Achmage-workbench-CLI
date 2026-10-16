@@ -183,7 +183,16 @@ export function App() {
           >
             작업 <Icon name={view.kind === "finder" ? "chevronUp" : "chevronDown"} size={14} />
           </button>
-          <button type="button" className="ghost-button" onClick={() => setView({ kind: "new", folderId: null })} title="새 작업">
+          <button
+            type="button"
+            className={`ghost-button${showStart ? " pressed" : ""}`}
+            onClick={() => {
+              setView({ kind: "new", folderId: null });
+              // Already on the start screen: make the click visibly do something.
+              window.requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer-input")?.focus());
+            }}
+            title="새 작업"
+          >
             <Icon name="plus" size={15} /> 새 작업
           </button>
         </div>

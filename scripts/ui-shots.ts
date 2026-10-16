@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 // Drive the real UI against a real host and capture screenshots for visual review.
 // Usage: node scripts/ui-shots.ts <outDir>
 
@@ -39,7 +40,7 @@ const capture = async (name: string) => {
   console.log(file);
 };
 const waitIdle = async (p: Page) => {
-  await p.waitForSelector(".dot-active", { state: "detached", timeout: 240_000 }).catch(() => undefined);
+  await p.waitForFunction(() => document.querySelector(".status-pill")?.textContent?.includes("대기 중"), null, { timeout: 240_000 });
 };
 
 try {

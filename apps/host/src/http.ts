@@ -16,7 +16,7 @@ const MIME: Record<string, string> = {
   ".json": "application/json; charset=utf-8",
 };
 
-export type HttpOptions = { token: string; webDir: string | null };
+export type HttpOptions = { token: string; webDir: string | null; onClientLog?: (message: string) => void };
 
 function sameToken(given: string | null, expected: string) {
   if (!given) return false;
@@ -152,6 +152,11 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       }
       if (method === "POST" && parts[0] === "providers" && parts[2] === "login") {
         return sendJson(res, 200, await manager.login(parts[1] as Provider));
+      }
+      if (method === "POST" && path === "/api/client-log") {
+        const body = await readJson(req);
+        options.onClientLog?.(String(body.message ?? "").slice(0, 4000));
+        return sendJson(res, 204, {});
       }
       if (method === "POST" && path === "/api/providers/refresh") {
         return sendJson(res, 200, await manager.refreshProviders());

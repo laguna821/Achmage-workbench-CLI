@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { existsSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { homedir, hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { EventBus } from "./bus.ts";
@@ -17,7 +17,19 @@ const dataDir = env.WORKBENCH_DATA_DIR ?? join(env.XDG_DATA_HOME ?? join(homedir
 const token = env.WORKBENCH_TOKEN ?? randomBytes(24).toString("base64url");
 const port = Number(env.WORKBENCH_PORT ?? 0);
 const webDir = env.WORKBENCH_WEB_DIR ? resolve(env.WORKBENCH_WEB_DIR) : null;
-const hostLabel = env.WORKBENCH_HOST_LABEL ?? "이 PC";
+/** Short place name for the status line: from Achmage's device id when available. */
+function defaultHostLabel() {
+  try {
+    const config = JSON.parse(readFileSync(join(homedir(), ".local/state/achmage/config.json"), "utf8")) as { deviceId?: string };
+    const device = config.deviceId ?? "";
+    if (/laptop|notebook/i.test(device)) return "노트북";
+    if (/lab/i.test(device)) return "연구실";
+  } catch {
+    // No Achmage config on this machine.
+  }
+  return "이 PC";
+}
+const hostLabel = env.WORKBENCH_HOST_LABEL ?? defaultHostLabel();
 
 const store = new Store(join(dataDir, "state.sqlite"));
 const bus = new EventBus();
@@ -33,12 +45,15 @@ manager.registerAdapter(
   new CodexAdapter(manager.sink, {
     approvalPolicy: env.WORKBENCH_CODEX_APPROVAL ?? "on-request",
     sandbox: env.WORKBENCH_CODEX_SANDBOX ?? "workspace-write",
+    idleMs: env.WORKBENCH_CODEX_IDLE_MS ? Number(env.WORKBENCH_CODEX_IDLE_MS) : undefined,
   }),
 );
 
 const server = createHttpServer(manager, bus, {
   token,
   webDir: webDir && existsSync(webDir) ? webDir : null,
+  // UI errors stay on this machine, next to the state database.
+  onClientLog: (message) => appendFileSync(join(dataDir, "client.log"), `${new Date().toISOString()} ${message}\n`),
 });
 
 server.listen(port, "127.0.0.1", () => {

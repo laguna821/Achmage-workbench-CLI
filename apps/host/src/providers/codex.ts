@@ -71,11 +71,35 @@ export class CodexAdapter implements ProviderAdapter {
   private readonly interrupting = new Set<string>();
   /** approval item id -> pending server request */
   private readonly approvals = new Map<string, PendingApproval>();
+  private idleTimer: NodeJS.Timeout | null = null;
+  private readonly idleMs: number;
 
-  constructor(sink: AdapterSink, options?: { approvalPolicy?: string; sandbox?: string }) {
+  constructor(sink: AdapterSink, options?: { approvalPolicy?: string; sandbox?: string; idleMs?: number }) {
     this.sink = sink;
     this.approvalPolicy = options?.approvalPolicy ?? "on-request";
     this.sandbox = options?.sandbox ?? "workspace-write";
+    this.idleMs = options?.idleMs ?? 10 * 60_000;
+  }
+
+  /**
+   * The app-server is only kept while Codex is in use. When nothing runs and no approval is
+   * pending it is stopped; the next request starts it again and resumes the same threads.
+   */
+  private scheduleIdleStop(ms: number) {
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = null;
+      if (this.activeTurns.size === 0 && this.approvals.size === 0) {
+        this.rpc?.stop();
+      }
+    }, ms);
+  }
+
+  private cancelIdleStop() {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
   }
 
   status() {
@@ -83,7 +107,9 @@ export class CodexAdapter implements ProviderAdapter {
   }
 
   async init() {
+    // Read login and usage once, then let the engine go idle until Codex is actually used.
     await this.ensureRunning().catch(() => undefined);
+    this.scheduleIdleStop(60_000);
   }
 
   private publish(patch: Partial<ProviderStatus>) {
@@ -92,6 +118,7 @@ export class CodexAdapter implements ProviderAdapter {
   }
 
   private ensureRunning(): Promise<void> {
+    this.cancelIdleStop();
     if (this.rpc?.running && this.ready) {
       return this.ready;
     }
@@ -144,6 +171,11 @@ export class CodexAdapter implements ProviderAdapter {
   }
 
   async refreshStatus(): Promise<ProviderStatus> {
+    if (!this.rpc?.running) {
+      // Explicit refresh: start briefly to read account and usage.
+      await this.ensureRunning().catch(() => undefined);
+      this.scheduleIdleStop(60_000);
+    }
     const rpc = this.rpc;
     if (!rpc?.running) {
       return this.current;
@@ -248,6 +280,7 @@ export class CodexAdapter implements ProviderAdapter {
   }
 
   async shutdown() {
+    this.cancelIdleStop();
     this.rpc?.stop();
   }
 
@@ -410,6 +443,7 @@ export class CodexAdapter implements ProviderAdapter {
           lastError: status === "failed" ? turn.error?.message ?? "실패" : null,
         });
         void this.refreshStatus();
+        if (this.activeTurns.size === 0) this.scheduleIdleStop(this.idleMs);
         break;
       }
     }

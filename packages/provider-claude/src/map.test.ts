@@ -1,0 +1,93 @@
+import { describe, expect, it } from "vitest";
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { ClaudeTranscriptMapper, usageFromRateLimit } from "./map.ts";
+
+const msg = (value: unknown) => value as SDKMessage;
+const streamEvent = (event: unknown) => msg({ type: "stream_event", event, parent_tool_use_id: null, uuid: "u", session_id: "s" });
+
+describe("ClaudeTranscriptMapper", () => {
+  it("streams text into one assistant item and finalizes it", () => {
+    const mapper = new ClaudeTranscriptMapper(() => 1);
+    const out = [
+      ...mapper.handle(streamEvent({ type: "message_start", message: { id: "m1" } }), "t1"),
+      ...mapper.handle(streamEvent({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }), "t1"),
+      ...mapper.handle(streamEvent({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "안녕" } }), "t1"),
+      ...mapper.handle(streamEvent({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "하세요" } }), "t1"),
+      ...mapper.handle(streamEvent({ type: "content_block_stop", index: 0 }), "t1"),
+    ];
+    expect(out.filter((o) => o.type === "delta").map((o) => (o.type === "delta" ? o.text : ""))).toEqual(["안녕", "하세요"]);
+    const final = out.filter((o) => o.type === "upsert").at(-1);
+    expect(final).toMatchObject({ item: { kind: "assistant", id: "m1:0", text: "안녕하세요", streaming: false } });
+  });
+
+  it("does not duplicate streamed text when the full assistant message arrives", () => {
+    const mapper = new ClaudeTranscriptMapper(() => 1);
+    mapper.handle(streamEvent({ type: "message_start", message: { id: "m1" } }), "t1");
+    mapper.handle(streamEvent({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }), "t1");
+    const out = mapper.handle(
+      msg({ type: "assistant", message: { id: "m1", content: [{ type: "text", text: "hi" }] }, parent_tool_use_id: null, uuid: "a1", session_id: "s" }),
+      "t1",
+    );
+    expect(out.some((o) => o.type === "upsert" && o.item.kind === "assistant")).toBe(false);
+  });
+
+  it("maps tool use and its result, and TodoWrite to a plan", () => {
+    const mapper = new ClaudeTranscriptMapper(() => 1);
+    const started = mapper.handle(
+      msg({
+        type: "assistant",
+        message: {
+          id: "m2",
+          content: [
+            { type: "tool_use", id: "tool1", name: "Bash", input: { command: "ls -la", description: "list" } },
+            { type: "tool_use", id: "tool2", name: "TodoWrite", input: { todos: [{ content: "읽기", status: "completed" }, { content: "쓰기", status: "in_progress" }] } },
+          ],
+        },
+        parent_tool_use_id: null,
+        uuid: "a2",
+        session_id: "s",
+      }),
+      "turn-9",
+    );
+    expect(started).toContainEqual(expect.objectContaining({ type: "upsert", item: expect.objectContaining({ kind: "tool", tool: "command", title: "ls -la", status: "running" }) }));
+    expect(started).toContainEqual(
+      expect.objectContaining({
+        type: "upsert",
+        item: expect.objectContaining({ kind: "plan", id: "plan:turn-9", steps: [{ text: "읽기", status: "completed" }, { text: "쓰기", status: "inProgress" }] }),
+      }),
+    );
+    const finished = mapper.handle(
+      msg({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "tool1", content: "total 0", is_error: false }] }, parent_tool_use_id: null }),
+      "turn-9",
+    );
+    expect(finished[0]).toMatchObject({ type: "upsert", item: { id: "tool1", status: "completed", output: "total 0" } });
+  });
+
+  it("keeps a declined tool declined when its error result arrives", () => {
+    const mapper = new ClaudeTranscriptMapper(() => 1);
+    mapper.handle(
+      msg({ type: "assistant", message: { id: "m3", content: [{ type: "tool_use", id: "t", name: "Write", input: { file_path: "/a" } }] }, parent_tool_use_id: null, uuid: "x", session_id: "s" }),
+      "k",
+    );
+    mapper.markDeclined("t");
+    const out = mapper.handle(msg({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t", content: "denied", is_error: true }] }, parent_tool_use_id: null }), "k");
+    expect(out[0]).toMatchObject({ item: { status: "declined" } });
+  });
+
+  it("ends the turn on result messages", () => {
+    const mapper = new ClaudeTranscriptMapper(() => 1);
+    const out = mapper.handle(msg({ type: "result", subtype: "error_during_execution", is_error: true, errors: ["boom"], duration_ms: 5 }), "k");
+    expect(out[0]).toEqual({ type: "turnEnd", status: "failed", durationMs: 5, error: "boom" });
+  });
+});
+
+describe("usageFromRateLimit", () => {
+  it("converts fractional utilization and second timestamps", () => {
+    expect(usageFromRateLimit({ status: "allowed", rateLimitType: "five_hour", utilization: 0.42, resetsAt: 1_800_000_000 })).toEqual({
+      label: "5시간",
+      usedPercent: 42,
+      resetsAt: 1_800_000_000_000,
+    });
+    expect(usageFromRateLimit({ status: "allowed" })).toBeNull();
+  });
+});
