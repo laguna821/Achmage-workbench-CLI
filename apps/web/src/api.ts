@@ -6,6 +6,7 @@ import type {
   Session,
   Snapshot,
   TranscriptItem,
+  UiPrefs,
   Work,
 } from "@workbench/contracts";
 
@@ -72,6 +73,10 @@ export class Api {
    * Subscribe to events after `since`. Reconnects with the last seen seq so nothing is applied
    * twice; if the host can no longer replay that far, `onResync` reloads the snapshot.
    */
+  savePrefs(prefs: UiPrefs) {
+    return this.request<{ prefs: UiPrefs }>("PUT", "/api/prefs", { prefs });
+  }
+
   events(since: number, onEvent: (event: SequencedEvent) => void, onResync: () => void, onStatus: (connected: boolean) => void) {
     let lastSeq = since;
     let source: EventSource | null = null;

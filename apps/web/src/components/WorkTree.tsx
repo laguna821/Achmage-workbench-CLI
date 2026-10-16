@@ -3,6 +3,8 @@ import type { Folder, Session, Work } from "@workbench/contracts";
 import { folderPath, isBusy, sessionsOf, type State } from "../state.ts";
 import { sessionLabel, statusTone } from "../format.ts";
 import { Icon } from "./Icon.tsx";
+import { EngineMark } from "./EngineMark.tsx";
+import { accentStyle, useAppearance } from "../appearance.ts";
 
 const COLLAPSED_KEY = "workbench.collapsedFolders";
 
@@ -48,6 +50,7 @@ export function WorkTree({
   const [creatingInside, setCreatingInside] = useState<string | null | undefined>(undefined);
   const creating = creatingInside !== undefined ? creatingInside : creatingAt;
   const indent = compact ? 16 : 22;
+  const { lookOf, openMenu } = useAppearance();
 
   const works = Object.values(state.works);
   const folders = Object.values(state.folders);
@@ -81,8 +84,14 @@ export function WorkTree({
           <ul>
             {sessions.map((session) => (
               <li key={session.id}>
-                <button type="button" className="tree-row session-row" style={{ paddingLeft: 36 + depth * indent }} onClick={() => actions.onOpenSession(work, session)}>
-                  {isBusy(session) ? <span className={`dot dot-${statusTone(session)}`} /> : null}
+                <button
+                  type="button"
+                  className="tree-row session-row"
+                  style={{ paddingLeft: 36 + depth * indent, ...accentStyle(lookOf(session.provider)) }}
+                  onClick={() => actions.onOpenSession(work, session)}
+                  onContextMenu={(event) => openMenu(event, session.provider)}
+                >
+                  {isBusy(session) ? <span className={`dot dot-${statusTone(session)}`} /> : <EngineMark provider={session.provider} size={13} className="session-row-mark" />}
                   <span className="tree-label">{sessionLabel(session)}</span>
                 </button>
               </li>

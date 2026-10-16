@@ -5,6 +5,8 @@ import { Composer } from "./Composer.tsx";
 import { Icon } from "./Icon.tsx";
 import { MenuItem, Popover } from "./Popover.tsx";
 import { ModelPicker, type ModelChoice } from "./ModelPicker.tsx";
+import { EngineMark } from "./EngineMark.tsx";
+import { accentStyle, fontStack, useAppearance } from "../appearance.ts";
 
 const ENGINE_KEY = "workbench.lastEngine";
 
@@ -19,21 +21,33 @@ export function useEngineChoice() {
   ] as const;
 }
 
-export function EngineToggle({ value, onChange }: { value: Provider; onChange: (provider: Provider) => void }) {
+/**
+ * Engine tabs above the input box. Each tab wears its engine's own look (mark, color, type), and the
+ * selected engine's look covers the screen, so the choice is visible before anything is sent.
+ */
+export function EngineTabs({ value, onChange }: { value: Provider; onChange: (provider: Provider) => void }) {
+  const { lookOf, openMenu } = useAppearance();
   return (
-    <div className="segmented" role="radiogroup" aria-label="엔진">
-      {(["claude", "codex"] as const).map((provider) => (
-        <button
-          key={provider}
-          type="button"
-          role="radio"
-          aria-checked={value === provider}
-          className={value === provider ? "active" : ""}
-          onClick={() => onChange(provider)}
-        >
-          {PROVIDER_LABEL[provider]}
-        </button>
-      ))}
+    <div className="engine-tabs" role="radiogroup" aria-label="엔진">
+      {(["claude", "codex"] as const).map((provider) => {
+        const look = lookOf(provider);
+        return (
+          <button
+            key={provider}
+            type="button"
+            role="radio"
+            aria-checked={value === provider}
+            className="engine-tab"
+            style={{ ...accentStyle(look), fontFamily: fontStack(look.font) }}
+            onClick={() => onChange(provider)}
+            onContextMenu={(event) => openMenu(event, provider)}
+            title="오른쪽 클릭: 이 엔진의 외형"
+          >
+            <EngineMark provider={provider} size={19} />
+            {PROVIDER_LABEL[provider]}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -121,6 +135,8 @@ export function StartView({
   onStart,
   onOpenWork,
   pickFolder,
+  engine,
+  setEngine,
 }: {
   state: State;
   folderId: string | null;
@@ -128,8 +144,10 @@ export function StartView({
   onStart: (text: string, provider: Provider, cwd: string | null, choice: ModelChoice) => Promise<boolean>;
   onOpenWork: (work: Work) => void;
   pickFolder: (() => Promise<string | null>) | null;
+  engine: Provider;
+  setEngine: (provider: Provider) => void;
 }) {
-  const [engine, setEngine] = useEngineChoice();
+  const { openMenu } = useAppearance();
   const [cwd, setCwd] = useState<string | null>(null);
   const [choice, setChoice] = useState<ModelChoice>({ model: null, effort: null });
   const works = Object.values(state.works).sort((a, b) => b.updatedAt - a.updatedAt);
@@ -137,7 +155,7 @@ export function StartView({
   const path = folderPath(state, folderId);
 
   return (
-    <main className="start-view">
+    <main className="start-view" onContextMenu={(event) => openMenu(event, engine)}>
       <div className="column start-inner">
         <h1 className="start-title">무엇을 할까요?</h1>
         {path.length ? (
@@ -149,6 +167,13 @@ export function StartView({
             </button>
           </div>
         ) : null}
+        <EngineTabs
+          value={engine}
+          onChange={(next) => {
+            setEngine(next);
+            setChoice({ model: null, effort: null });
+          }}
+        />
         <Composer
           draftKey={`new:${folderId ?? "root"}`}
           placeholder="새 작업의 첫 요청을 입력하세요"
@@ -158,13 +183,6 @@ export function StartView({
           target={
             <>
               <ModelPicker models={state.providers[engine]?.models ?? []} value={choice} onChange={setChoice} />
-              <EngineToggle
-                value={engine}
-                onChange={(next) => {
-                  setEngine(next);
-                  setChoice({ model: null, effort: null });
-                }}
-              />
               <FolderChoice value={cwd} recent={recentFolders} onChange={setCwd} pickFolder={pickFolder} />
             </>
           }

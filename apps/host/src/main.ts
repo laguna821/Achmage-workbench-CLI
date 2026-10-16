@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { EventBus } from "./bus.ts";
@@ -15,7 +15,18 @@ import { Store } from "./store.ts";
 const env = process.env;
 const dataDir = env.WORKBENCH_DATA_DIR ?? join(env.XDG_DATA_HOME ?? join(homedir(), ".local/share"), "achmage-workbench");
 const token = env.WORKBENCH_TOKEN ?? randomBytes(24).toString("base64url");
-const port = Number(env.WORKBENCH_PORT ?? 0);
+// The window's storage (drafts, screen choices) belongs to the page origin, so the gateway keeps
+// the same port across launches: reuse the last one, and only fall back to a new one if it is taken.
+const portFile = join(dataDir, "port");
+function preferredPort() {
+  if (env.WORKBENCH_PORT) return Number(env.WORKBENCH_PORT);
+  try {
+    const saved = Number(readFileSync(portFile, "utf8").trim());
+    return Number.isInteger(saved) && saved > 1024 && saved < 65536 ? saved : 0;
+  } catch {
+    return 0;
+  }
+}
 const webDir = env.WORKBENCH_WEB_DIR ? resolve(env.WORKBENCH_WEB_DIR) : null;
 /** Short place name for the status line: from Achmage's device id when available. */
 function defaultHostLabel() {
@@ -58,14 +69,26 @@ const server = createHttpServer(manager, bus, {
   onClientLog: (message) => appendFileSync(join(dataDir, "client.log"), `${new Date().toISOString()} ${message}\n`),
 });
 
-server.listen(port, "127.0.0.1", () => {
+function onListening() {
   const address = server.address();
-  const boundPort = typeof address === "object" && address ? address.port : port;
+  const boundPort = typeof address === "object" && address ? address.port : 0;
+  if (!env.WORKBENCH_PORT) {
+    mkdirSync(dataDir, { recursive: true });
+    writeFileSync(portFile, String(boundPort));
+  }
   process.stdout.write(
     `WORKBENCH_READY ${JSON.stringify({ url: `http://127.0.0.1:${boundPort}`, port: boundPort, token, dataDir })}\n`,
   );
   void manager.initProviders();
+}
+
+const port = preferredPort();
+server.once("listening", onListening);
+server.once("error", (error: NodeJS.ErrnoException) => {
+  if (error.code !== "EADDRINUSE" || env.WORKBENCH_PORT || port === 0) throw error;
+  server.listen(0, "127.0.0.1");
 });
+server.listen(port, "127.0.0.1");
 
 let stopping = false;
 async function stop() {

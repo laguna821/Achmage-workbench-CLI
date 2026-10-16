@@ -1,0 +1,12 @@
+{
+  "version": "Version 1.000",
+  "edition": "full",
+  "family": "Achmage SameTone",
+  "files": [
+    {
+      "path": "fonts/AchmageSameTone[wght].woff2",
+      "bytes": 2140332,
+      "sha256": "5ddc1264367dc547619dbae3f16df530cb74209f8d43808e86268d8cf9406d16"
+    }
+  ]
+}

@@ -1,113 +1,202 @@
-/*
- * Skin: Achmage vault Minimal style settings (light / dark) with the CMDS Achmage chat skins
- * (light: Conversation Studio, dark: Operator Console). Resolved theme sits on <html data-theme>.
- */
+/* Achmage SameTone (OFL, by the user) is the default type. An installed copy wins over the bundled one. */
+@font-face {
+  font-family: "Achmage SameTone";
+  src:
+    local("Achmage SameTone"),
+    url("/fonts/sametone/fonts/AchmageSameTone%5Bwght%5D.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 @property --orbit-angle {
   syntax: "<angle>";
   initial-value: 0deg;
   inherits: false;
 }
 
+/*
+ * Looks. Each engine has a light look and a dark look (Minimal style settings of the Achmage vault
+ * and the CMDS Achmage chat skins are the starting sets). A `.look-scope` element carries one look:
+ * base tokens arrive inline (lookStyle), everything else is derived here on the scope element
+ * itself. Theme, bubble and frame differences are tokens too, never descendant selectors, so a pane
+ * in another look can later sit inside it (split view).
+ */
 :root {
   --bg: #ffffff;
-  --sidebar-bg: #f7f9fc;
   --surface: #ffffff;
-  --surface-raised: #f0f5fa;
-  --surface-muted: #eaf1f8;
-  --line: #d7e1ec;
-  --line-strong: #b8c8da;
   --text: #000000;
-  --text-soft: #1f2d45;
   --muted: #526174;
-  --faint: #9aa6b5;
+  --line: #d7e1ec;
   --accent: #005bac;
-  --accent-strong: #002870;
   --on-accent: #ffffff;
-  --accent-soft: #e6eff8;
-  --active-bg: #005bac;
-  --active-text: #ffffff;
-  --active-hint: #c3dbef;
-  --selected: #c3dbef;
-  --selected-text: #00102e;
-  --brand: #002870;
   --motion: #00ada9;
-  --ok: #00807c;
-  --glow: 0.6;
-  --shadow: #002e6e;
-  --h1: #00102e;
-  --h2: #001d53;
-  --h3: #00328d;
-  --h4: #0140b2;
+  --heading: #00102e;
+  --heading-alt: #00328d;
   --strong: #002870;
-  --em: #002870;
   --link: #005bac;
-  --link-external: #002870;
   --code-bg: #193664;
   --code-text: #ffffff;
-  --tag-bg: #002870;
-  --tag-text: #ffffff;
+  --glow: var(--theme-glow);
+  --e-font: var(--font);
+  --e-size: 17px;
+  --e-line: 1.75;
+  --e-weight: 400;
+  --e-border: 1px;
+  --e-radius: 16px;
+  --radius: 12px;
+  --column: 920px;
+  --font-fallback: "Pretendard", "Pretendard Variable", -apple-system, "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif;
+  --font: "Achmage SameTone", var(--font-fallback);
+  --mono: "JetBrains Mono", "D2Coding", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+/* First paint in dark before the app applies a look. */
+:root[data-theme="dark"] {
+  --bg: #08090a;
+  --surface: #121317;
+  --text: #d7d7dc;
+}
+
+:root,
+.look-scope {
+  --sidebar-bg: color-mix(in srgb, var(--bg) 95%, var(--accent) 5%);
+  --surface-raised: color-mix(in srgb, var(--surface) 93%, var(--text) 7%);
+  --surface-muted: color-mix(in srgb, var(--surface) 90%, var(--accent) 10%);
+  --line-strong: color-mix(in srgb, var(--line) 70%, var(--text) 30%);
+  --text-soft: color-mix(in srgb, var(--text) 82%, var(--bg) 18%);
+  --faint: color-mix(in srgb, var(--muted) 62%, var(--bg) 38%);
+  --accent-soft: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  --selected: color-mix(in srgb, var(--accent) 20%, var(--surface));
+  --brand: var(--strong);
+  --h1: var(--heading);
+  --h2: color-mix(in srgb, var(--heading) 65%, var(--heading-alt));
+  --h3: var(--heading-alt);
+  --h4: color-mix(in srgb, var(--heading-alt) 75%, var(--accent));
+  --em: var(--heading-alt);
+  --link-external: var(--strong);
+  --ok: color-mix(in srgb, var(--motion) 78%, var(--text));
+  --composer-border: var(--line);
+  background: var(--bg);
+  color: var(--text);
+}
+
+:root,
+.look-scope[data-theme="light"] {
+  color-scheme: light;
+  --theme-glow: 0.6;
+  --accent-strong: color-mix(in srgb, var(--accent) 78%, #000000);
+  --active-bg: var(--accent);
+  --active-text: var(--on-accent);
+  --active-hint: color-mix(in srgb, var(--on-accent) 70%, var(--accent));
+  --selected-text: var(--text);
+  --deep-shadow: color-mix(in srgb, var(--heading) 13%, transparent);
+  --popover-shadow: 0 12px 32px color-mix(in srgb, var(--heading) 12%, transparent);
+  --composer-shadow: 0 8px 24px color-mix(in srgb, var(--heading) 7%, transparent);
+  --composer-focus:
+    0 0 0 2px color-mix(in srgb, var(--accent) 11%, transparent),
+    0 10px 28px color-mix(in srgb, var(--heading) 7%, transparent);
+  --primary-glow: none;
+  --primary-disabled-bg: color-mix(in srgb, var(--accent) 28%, var(--surface));
+  --primary-disabled-text: var(--surface);
+  --segmented-bg: var(--surface-muted);
+  --segmented-ring: none;
+  --orbit-filter: drop-shadow(0 0 calc(5px * var(--glow)) color-mix(in srgb, var(--motion) 42%, transparent));
+  --toast-bg: var(--heading);
+  --toast-text: var(--bg);
   --amber: #e19b2d;
   --amber-soft: #fdf4e6;
   --amber-text: #9a6210;
   --danger: #a52834;
   --danger-soft: #fbecee;
-  --toast-bg: #00102e;
-  --toast-text: #ffffff;
-  --popover-shadow: 0 12px 32px rgba(0, 46, 110, 0.12);
-  --radius: 12px;
-  --column: 920px;
-  --font: "Pretendard", "Pretendard Variable", -apple-system, "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif;
-  --mono: "JetBrains Mono", "D2Coding", ui-monospace, "SFMono-Regular", Menlo, monospace;
-  color-scheme: light;
 }
 
-:root[data-theme="dark"] {
-  --bg: #08090a;
-  --sidebar-bg: #0b0c0e;
-  --surface: #121317;
-  --surface-raised: #1b1c21;
-  --surface-muted: #1b1c21;
-  --line: #2a2b30;
-  --line-strong: #393a40;
-  --text: #d7d7dc;
-  --text-soft: #a0a0a7;
-  --muted: #888991;
-  --faint: #5d5e66;
-  --accent: #f27aa4;
-  --accent-strong: #ff9fbe;
-  --on-accent: #08090a;
-  --accent-soft: #1b1418;
-  --active-bg: #1b1c21;
-  --active-text: #f27aa4;
-  --active-hint: #888991;
-  --selected: #24161c;
-  --selected-text: #f27aa4;
-  --brand: #f27aa4;
-  --motion: #00ada9;
-  --ok: #00ada9;
-  --glow: 1;
-  --shadow: #000000;
-  --h1: #f27aa4;
-  --h2: #f27aa4;
-  --h3: #ff9fbe;
-  --h4: #ff9fbe;
-  --strong: #f27aa4;
-  --em: #ff9fbe;
-  --link: #f27aa4;
-  --link-external: #ffb2cb;
-  --code-bg: #111216;
-  --code-text: #ff9fbe;
-  --tag-bg: #f27aa4;
-  --tag-text: #08090a;
+.look-scope[data-theme="dark"] {
+  color-scheme: dark;
+  --theme-glow: 1;
+  --accent-strong: color-mix(in srgb, var(--accent) 78%, #ffffff);
+  --active-bg: var(--surface-raised);
+  --active-text: var(--accent);
+  --active-hint: var(--muted);
+  --selected-text: var(--accent);
+  --deep-shadow: #00000080;
+  --popover-shadow: 0 0 0 1px #000000, 0 14px 36px #000000cc;
+  --composer-shadow: 0 0 0 1px #000000, 0 10px 28px #00000099;
+  --composer-focus:
+    0 0 0 1px color-mix(in srgb, var(--accent) 27%, transparent),
+    0 0 calc(18px * var(--glow)) color-mix(in srgb, var(--accent) 9%, transparent);
+  --primary-glow: 0 0 calc(12px * var(--glow)) color-mix(in srgb, var(--accent) 22%, transparent);
+  --primary-disabled-bg: var(--surface-raised);
+  --primary-disabled-text: var(--faint);
+  --segmented-bg: var(--sidebar-bg);
+  --segmented-ring: inset 0 0 0 1px var(--line);
+  --orbit-filter: drop-shadow(0 0 calc(4px * var(--glow)) color-mix(in srgb, var(--accent) 44%, transparent))
+    drop-shadow(0 0 calc(9px * var(--glow)) color-mix(in srgb, var(--motion) 18%, transparent));
+  --toast-bg: var(--surface-raised);
+  --toast-text: var(--text);
   --amber: #f0b45a;
   --amber-soft: #2a2112;
   --amber-text: #f0b45a;
   --danger: #ff6675;
   --danger-soft: #2a1417;
-  --toast-bg: #1b1c21;
-  --toast-text: #d7d7dc;
-  --popover-shadow: 0 0 0 1px #000000, 0 14px 36px #000000cc;
-  color-scheme: dark;
+}
+
+/* User bubble styles: filled (Conversation Studio), soft, rail cards (Operator Console). */
+:root,
+.look-scope[data-bubble="filled"] {
+  --bubble-bg: var(--accent);
+  --bubble-text: var(--on-accent);
+  --bubble-border: color-mix(in srgb, var(--accent) 85%, #000000);
+  --bubble-radius: 17px 17px 5px 17px;
+  --bubble-shadow: 0 5px 16px var(--deep-shadow);
+  --assistant-bg: transparent;
+  --assistant-border: transparent;
+  --assistant-shadow: none;
+  --assistant-pad: 0;
+  --assistant-radius: 0;
+  --pending-radius: 17px 17px 17px 5px;
+  --pending-surface: color-mix(in srgb, var(--surface) 82%, var(--selected) 18%);
+}
+
+.look-scope[data-bubble="soft"] {
+  --bubble-bg: color-mix(in srgb, var(--accent) 11%, var(--surface));
+  --bubble-text: var(--text);
+  --bubble-border: color-mix(in srgb, var(--accent) 20%, var(--line));
+  --bubble-radius: 20px 20px 6px 20px;
+  --bubble-shadow: none;
+  --assistant-bg: transparent;
+  --assistant-border: transparent;
+  --assistant-shadow: none;
+  --assistant-pad: 0;
+  --assistant-radius: 0;
+  --pending-radius: 20px 20px 20px 6px;
+  --pending-surface: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+.look-scope[data-bubble="rail"] {
+  --bubble-bg: color-mix(in srgb, var(--accent) 6%, var(--surface));
+  --bubble-text: var(--text);
+  --bubble-border: color-mix(in srgb, var(--accent) 30%, var(--line));
+  --bubble-radius: 5px 14px 5px 14px;
+  --bubble-shadow: inset 2px 0 0 var(--accent), 0 8px 24px var(--deep-shadow);
+  --assistant-bg: color-mix(in srgb, var(--accent) 4%, var(--surface));
+  --assistant-border: color-mix(in srgb, var(--accent) 22%, var(--line));
+  --assistant-shadow: inset 2px 0 0 var(--accent), 0 8px 22px var(--deep-shadow);
+  --assistant-pad: 12px 16px;
+  --assistant-radius: 5px 14px 14px 5px;
+  --pending-radius: 5px 14px 14px 5px;
+  --pending-surface: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+
+/* The engine color framing the input box while idle. */
+.look-scope[data-frame="on"] {
+  --composer-border: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+
+.look-scope {
+  transition:
+    background-color 180ms ease,
+    color 180ms ease;
 }
 
 * {
@@ -454,18 +543,13 @@ textarea {
   background: var(--accent-strong);
 }
 
+.icon-button.primary:not(:disabled) {
+  box-shadow: var(--primary-glow);
+}
+
 .icon-button.primary:disabled {
-  background: color-mix(in srgb, var(--accent) 28%, var(--surface));
-  color: var(--surface);
-}
-
-:root[data-theme="dark"] .icon-button.primary:not(:disabled) {
-  box-shadow: 0 0 calc(12px * var(--glow)) color-mix(in srgb, var(--accent) 22%, transparent);
-}
-
-:root[data-theme="dark"] .icon-button.primary:disabled {
-  background: var(--surface-raised);
-  color: var(--faint);
+  background: var(--primary-disabled-bg);
+  color: var(--primary-disabled-text);
 }
 
 .dot {
@@ -702,9 +786,17 @@ textarea {
   background: var(--surface-muted);
 }
 
+.session-tab .engine-mark {
+  color: var(--accent);
+}
+
 .session-tab.active {
-  background: var(--active-bg);
-  color: var(--active-text);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.session-tab.active .engine-mark {
+  color: inherit;
 }
 
 .transcript {
@@ -734,7 +826,10 @@ textarea {
 }
 
 .speaker.engine {
-  color: var(--brand);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
   font-weight: 600;
 }
 
@@ -748,40 +843,32 @@ textarea {
 .user-bubble {
   max-width: min(82%, 680px);
   padding: 10px 16px;
-  border: 1px solid color-mix(in srgb, var(--accent) 85%, #000000);
-  border-radius: 17px 17px 5px 17px;
-  background: var(--accent);
-  color: var(--on-accent);
-  box-shadow: 0 5px 16px color-mix(in srgb, var(--shadow) 12%, transparent);
-  font-size: 17px;
+  border: 1px solid var(--bubble-border);
+  border-radius: var(--bubble-radius);
+  background: var(--bubble-bg);
+  color: var(--bubble-text);
+  box-shadow: var(--bubble-shadow);
+  font-family: var(--e-font);
+  font-size: var(--e-size);
+  font-weight: var(--e-weight);
   line-height: 1.6;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-:root[data-theme="dark"] .user-bubble {
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
-  border-radius: 5px 14px 5px 14px;
-  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
-  color: var(--text);
-  box-shadow:
-    inset 2px 0 0 var(--accent),
-    0 8px 24px #00000080;
-}
-
-:root[data-theme="dark"] .turn-assistant > .markdown {
-  padding: 12px 16px;
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
-  border-radius: 5px 14px 14px 5px;
-  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
-  box-shadow:
-    inset 2px 0 0 var(--accent),
-    0 8px 22px #00000070;
+.turn-assistant > .markdown {
+  padding: var(--assistant-pad);
+  border: 1px solid var(--assistant-border);
+  border-radius: var(--assistant-radius);
+  background: var(--assistant-bg);
+  box-shadow: var(--assistant-shadow);
 }
 
 .markdown {
-  font-size: 17px;
-  line-height: 1.75;
+  font-family: var(--e-font);
+  font-size: var(--e-size);
+  font-weight: var(--e-weight);
+  line-height: var(--e-line);
   color: var(--text);
   overflow-wrap: anywhere;
 }
@@ -1235,31 +1322,19 @@ kbd {
 .composer {
   position: relative;
   isolation: isolate;
-  border: 1px solid var(--line);
-  border-radius: 16px;
+  border: var(--e-border) solid var(--composer-border);
+  border-radius: var(--e-radius);
   background: var(--surface);
   padding: 14px 14px 12px 18px;
-  box-shadow: 0 8px 24px rgba(0, 46, 110, 0.07);
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  box-shadow: var(--composer-shadow);
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .composer:focus-within {
   border-color: var(--accent);
-  box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--accent) 11%, transparent),
-    0 10px 28px color-mix(in srgb, var(--shadow) 7%, transparent);
-}
-
-:root[data-theme="dark"] .composer {
-  box-shadow:
-    0 0 0 1px #000000,
-    0 10px 28px #00000099;
-}
-
-:root[data-theme="dark"] .composer:focus-within {
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--accent) 27%, transparent),
-    0 0 calc(18px * var(--glow)) color-mix(in srgb, var(--accent) 9%, transparent);
+  box-shadow: var(--composer-focus);
 }
 
 /* Luminous trail orbiting the input while the engine works (CMDS Achmage composer orbit). */
@@ -1269,7 +1344,7 @@ kbd {
   z-index: 5;
   inset: -2px;
   padding: 2px;
-  border-radius: 18px;
+  border-radius: calc(var(--e-radius) + 2px);
   pointer-events: none;
   background: conic-gradient(
     from var(--orbit-angle),
@@ -1279,7 +1354,7 @@ kbd {
     var(--motion) 84%,
     transparent 94% 100%
   );
-  filter: drop-shadow(0 0 calc(5px * var(--glow)) color-mix(in srgb, var(--motion) 42%, transparent));
+  filter: var(--orbit-filter);
   -webkit-mask:
     linear-gradient(#000 0 0) content-box,
     linear-gradient(#000 0 0);
@@ -1289,11 +1364,6 @@ kbd {
     linear-gradient(#000 0 0);
   mask-composite: exclude;
   animation: composer-orbit 1.8s linear infinite;
-}
-
-:root[data-theme="dark"] .composer[data-phase="waiting"]::before {
-  filter: drop-shadow(0 0 calc(4px * var(--glow)) color-mix(in srgb, var(--accent) 44%, transparent))
-    drop-shadow(0 0 calc(9px * var(--glow)) color-mix(in srgb, var(--motion) 18%, transparent));
 }
 
 @keyframes composer-orbit {
@@ -1311,10 +1381,10 @@ kbd {
   height: 40px;
   overflow: hidden;
   isolation: isolate;
-  border: 1px solid var(--line);
-  border-radius: 17px 17px 17px 5px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  border-radius: var(--pending-radius);
   background: var(--surface);
-  box-shadow: 0 5px 16px color-mix(in srgb, var(--shadow) 7%, transparent);
+  box-shadow: 0 5px 16px var(--deep-shadow);
   animation: pending-arrive 160ms ease-out;
 }
 
@@ -1345,17 +1415,7 @@ kbd {
   z-index: 1;
   inset: 1.5px;
   border-radius: inherit;
-  background: color-mix(in srgb, var(--surface) 82%, var(--selected) 18%);
-}
-
-:root[data-theme="dark"] .response-pending {
-  border-color: color-mix(in srgb, var(--accent) 22%, var(--line));
-  border-radius: 5px 14px 14px 5px;
-  box-shadow: 0 8px 22px #00000070;
-}
-
-:root[data-theme="dark"] .response-pending::after {
-  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+  background: var(--pending-surface);
 }
 
 .response-pending-dots {
@@ -1415,7 +1475,9 @@ kbd {
   outline: none;
   resize: none;
   background: transparent;
-  font-size: 17px;
+  font-family: var(--e-font);
+  font-size: var(--e-size);
+  font-weight: var(--e-weight);
   line-height: 1.6;
 }
 
@@ -1458,7 +1520,7 @@ kbd {
   display: inline-flex;
   padding: 3px;
   border-radius: 9px;
-  background: var(--surface-muted);
+  background: var(--segmented-bg);
 }
 
 .segmented button {
@@ -1476,9 +1538,8 @@ kbd {
   color: var(--active-text);
 }
 
-:root[data-theme="dark"] .segmented {
-  background: var(--sidebar-bg);
-  box-shadow: inset 0 0 0 1px var(--line);
+.segmented {
+  box-shadow: var(--segmented-ring);
 }
 
 .theme-choice {
@@ -1876,4 +1937,360 @@ kbd {
     background: CanvasText;
     filter: none;
   }
+}
+
+/* Engine identity */
+.engine-mark {
+  flex: 0 0 auto;
+}
+
+.status-engine,
+.menu-engine {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-engine .engine-mark,
+.menu-engine .engine-mark,
+.select-button .engine-mark,
+.session-row-mark {
+  color: var(--accent);
+}
+
+.engine-tabs {
+  display: flex;
+  gap: 10px;
+  margin: 0 0 12px;
+}
+
+.engine-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  height: 46px;
+  padding: 0 20px 0 15px;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+  color: var(--text-soft);
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    color 140ms ease;
+}
+
+.engine-tab .engine-mark {
+  color: var(--accent);
+}
+
+.engine-tab:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+
+.engine-tab[aria-checked="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
+.engine-tab[aria-checked="true"] .engine-mark {
+  color: inherit;
+}
+
+/* Right-click quick look menu */
+.engine-menu {
+  position: fixed;
+  z-index: 90;
+  width: 312px;
+  max-width: calc(100vw - 16px);
+}
+
+.engine-menu-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 4px;
+  font-size: 14.5px;
+  font-weight: 650;
+  color: var(--accent);
+}
+
+.swatch-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 10px 8px;
+}
+
+.swatch {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.swatch.active {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.swatch.custom {
+  overflow: hidden;
+  background: conic-gradient(#f87171, #fbbf24, #34d399, #60a5fa, #a78bfa, #f472b6, #f87171);
+}
+
+.swatch.custom input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.engine-menu-row,
+.option-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  font-size: 14px;
+}
+
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 8px;
+  background: var(--segmented-bg);
+  box-shadow: var(--segmented-ring);
+}
+
+.stepper button {
+  width: 30px;
+  height: 28px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 16px;
+}
+
+.stepper button:hover {
+  background: var(--surface-muted);
+}
+
+.stepper span {
+  min-width: 26px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: 13.5px;
+}
+
+.segmented.small button {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+/* Appearance sheet: a side panel, so the real screen behind it previews every change. */
+.appearance-sheet {
+  position: fixed;
+  z-index: 70;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(420px, 100vw);
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--popover-shadow);
+  animation: sheet-in 160ms ease-out;
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 14px 10px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sheet-head h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.sheet-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 20px 24px;
+}
+
+.sheet-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.sheet-section:last-child {
+  border-bottom: none;
+}
+
+.sheet-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.sheet-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.look-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.look-card {
+  display: grid;
+  gap: 7px;
+  padding: 10px 11px 12px;
+  border: 2px solid;
+  border-radius: 12px;
+  text-align: left;
+}
+
+.look-card.active {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.look-card-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.look-card-bubble {
+  justify-self: end;
+  padding: 2px 9px;
+  border-radius: 10px 10px 3px 10px;
+  font-size: 11.5px;
+}
+
+.look-card-line {
+  height: 6px;
+  width: 86%;
+  border-radius: 3px;
+  opacity: 0.8;
+}
+
+.look-card-line.short {
+  width: 58%;
+  opacity: 0.5;
+}
+
+.color-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.color-row {
+  display: grid;
+  grid-template-columns: 30px 1fr 86px;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0;
+  font-size: 14px;
+}
+
+.color-row input[type="color"] {
+  width: 30px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: none;
+  cursor: pointer;
+}
+
+.color-row .hex,
+.sheet-input,
+.sheet-select {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+
+.sheet-input,
+.sheet-select {
+  font-family: var(--font);
+  font-size: 14px;
+  padding: 7px 9px;
+}
+
+.slider-row {
+  display: grid;
+  grid-template-columns: 58px 1fr 56px;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.slider-row input[type="range"] {
+  accent-color: var(--accent);
+}
+
+.slider-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.check-row input {
+  accent-color: var(--accent);
+}
+
+.sheet-actions {
+  flex-direction: row;
+  flex-wrap: wrap;
 }

@@ -13,6 +13,7 @@ import {
   type Session,
   type Snapshot,
   type TranscriptItem,
+  type UiPrefs,
   type UpdateSessionRequest,
   type Work,
 } from "@workbench/contracts";
@@ -133,7 +134,28 @@ export class SessionManager {
       works: [...this.works.values()],
       sessions: [...this.sessions.values()],
       providers: [...this.adapters.values()].map((adapter) => adapter.status()),
+      prefs: this.prefs(),
     };
+  }
+
+  prefs(): UiPrefs {
+    try {
+      return JSON.parse(this.store.getMeta("ui.prefs") ?? "{}") as UiPrefs;
+    } catch {
+      return {};
+    }
+  }
+
+  setPrefs(prefs: unknown): UiPrefs {
+    if (!prefs || typeof prefs !== "object" || Array.isArray(prefs)) {
+      throw new HttpError(400, "invalid_prefs", "화면 설정 형식이 올바르지 않습니다.");
+    }
+    const json = JSON.stringify(prefs);
+    if (json.length > 64_000) throw new HttpError(413, "prefs_too_large", "화면 설정이 너무 큽니다.");
+    this.store.setMeta("ui.prefs", json);
+    const saved = JSON.parse(json) as UiPrefs;
+    this.bus.publish({ type: "prefs.updated", prefs: saved });
+    return saved;
   }
 
   items(sessionId: string) {

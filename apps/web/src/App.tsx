@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
-import type { Provider, Session, Work } from "@workbench/contracts";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import type { Provider, Session, UiPrefs, Work } from "@workbench/contracts";
 import { Api, ApiRequestError, readToken } from "./api.ts";
 import { initialState, reducer, sessionsOf } from "./state.ts";
 import { newRequestId, titleFrom } from "./format.ts";
@@ -10,12 +10,23 @@ import { Icon } from "./components/Icon.tsx";
 import { Popover } from "./components/Popover.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
 import type { TreeActions } from "./components/WorkTree.tsx";
-import { StartView } from "./components/StartView.tsx";
+import { StartView, useEngineChoice } from "./components/StartView.tsx";
 import { WorkView, type WorkActions } from "./components/WorkView.tsx";
-import { useTheme } from "./theme.ts";
+import { AppearanceSheet, type SheetTarget } from "./components/AppearanceSheet.tsx";
+import { EngineMenu } from "./components/EngineMenu.tsx";
+import { AppearanceContext, DEFAULT_APPEARANCE, engineTheme, lookStyle, readAppearance, type AppearanceApi } from "./appearance.ts";
+import { isThemePref, resolveTheme, setRootTheme, useSystemTheme, type ThemePref } from "./theme.ts";
 
 const LAST_WORK_KEY = "workbench.lastWork";
-const SIDEBAR_KEY = "workbench.sidebar";
+const PREFS_CACHE_KEY = "workbench.prefsCache";
+
+function cachedPrefs(): UiPrefs {
+  try {
+    return JSON.parse(localStorage.getItem(PREFS_CACHE_KEY) ?? "{}") as UiPrefs;
+  } catch {
+    return {};
+  }
+}
 const inDesktop = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 async function pickFolderNative(): Promise<string | null> {
@@ -45,17 +56,13 @@ export function App() {
   const [view, setView] = useState<View>({ kind: "work" });
   const [toast, setToast] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const theme = useTheme();
   const [loginMessage, setLoginMessage] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
-  // Closed by default (PRD 2.1); remembered once the user pins it.
-  const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem(SIDEBAR_KEY) === "open");
-  const toggleSidebar = () => {
-    const next = !sidebarOpen;
-    setSidebarOpen(next);
-    localStorage.setItem(SIDEBAR_KEY, next ? "open" : "closed");
-  };
+  const [engine, setEngine] = useEngineChoice();
+  const [engineMenu, setEngineMenu] = useState<{ provider: Provider; x: number; y: number } | null>(null);
+  const [sheet, setSheet] = useState<SheetTarget | null>(null);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
+  const closeEngineMenu = useCallback(() => setEngineMenu(null), []);
 
   const setWorkId = (id: string | null) => {
     setWorkIdState(id);
@@ -100,6 +107,43 @@ export function App() {
       stop();
     };
   }, [api, fail]);
+
+  // Screen preferences: kept by the gateway, edited optimistically, cached for the first frame.
+  const [localPrefs, setLocalPrefs] = useState<UiPrefs | null>(null);
+  const saveTimer = useRef<number | undefined>(undefined);
+  const latestSave = useRef<UiPrefs | null>(null);
+  const prefs = localPrefs ?? (state.ready ? state.prefs : cachedPrefs());
+  useEffect(() => {
+    if (state.ready) localStorage.setItem(PREFS_CACHE_KEY, JSON.stringify(state.prefs));
+  }, [state.ready, state.prefs]);
+  const savePrefs = useCallback(
+    (patch: UiPrefs) => {
+      setLocalPrefs((current) => {
+        const next = { ...(current ?? state.prefs), ...patch };
+        latestSave.current = next;
+        window.clearTimeout(saveTimer.current);
+        saveTimer.current = window.setTimeout(() => {
+          void api
+            ?.savePrefs(next)
+            .then((saved) => {
+              dispatch({ type: "prefs", prefs: saved.prefs });
+              if (latestSave.current === next) setLocalPrefs(null);
+            })
+            .catch(fail);
+        }, 250);
+        return next;
+      });
+    },
+    [api, fail, state.prefs],
+  );
+
+  const systemTheme = useSystemTheme();
+  const themePref: ThemePref = isThemePref(prefs.theme) ? prefs.theme : "system";
+  const appTheme = resolveTheme(themePref, systemTheme);
+  const appearance = useMemo(() => readAppearance(prefs.appearance), [prefs.appearance]);
+  // Closed by default (PRD 2.1); remembered once the user pins it.
+  const sidebarOpen = prefs.sidebar === true;
+  const toggleSidebar = () => savePrefs({ sidebar: !sidebarOpen });
 
   const work = workId ? state.works[workId] : undefined;
   const activeSession =
@@ -177,6 +221,41 @@ export function App() {
 
   const pendingApprovals = Object.values(state.sessions).filter((session) => session.status === "awaitingApproval");
 
+  // The engine in focus dresses the window: the visible session's engine, else the engine picked
+  // for a new request. While the appearance sheet is open, the look being edited is shown instead.
+  const startScreen = view.kind === "new" || (view.kind === "work" && !work);
+  const focusedProvider: Provider = sheet?.provider ?? (!startScreen && activeSession ? activeSession.provider : engine);
+  const focusedTheme = sheet?.theme ?? engineTheme(appearance[focusedProvider], appTheme);
+  const focusedLook = appearance[focusedProvider][focusedTheme];
+  useEffect(() => setRootTheme(focusedTheme), [focusedTheme]);
+
+  const appearanceApi: AppearanceApi = {
+    appearance,
+    appTheme,
+    themeOf: (provider) => engineTheme(appearance[provider], appTheme),
+    lookOf: (provider) => appearance[provider][engineTheme(appearance[provider], appTheme)],
+    updateLook: (provider, theme, patch) => {
+      const current = appearance[provider][theme];
+      const next = { ...current, ...patch, palette: { ...current.palette, ...(patch.palette ?? {}) } };
+      savePrefs({ appearance: { ...appearance, [provider]: { ...appearance[provider], [theme]: next } } });
+    },
+    setMode: (provider, mode) => savePrefs({ appearance: { ...appearance, [provider]: { ...appearance[provider], mode } } }),
+    resetLook: (provider, theme) =>
+      savePrefs({ appearance: { ...appearance, [provider]: { ...appearance[provider], [theme]: DEFAULT_APPEARANCE[provider][theme] } } }),
+    openMenu: (event, provider) => {
+      // Text fields and selected text keep the system menu (copy, paste).
+      const target = event.target as HTMLElement;
+      if (target.closest("textarea, input, a, [contenteditable=true]") || window.getSelection()?.toString()) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setEngineMenu({ provider, x: event.clientX, y: event.clientY });
+    },
+    openSettings: (provider, theme) => {
+      const target = provider ?? focusedProvider;
+      setSheet({ provider: target, theme: theme ?? engineTheme(appearance[target], appTheme) });
+    },
+  };
+
   const treeActions: TreeActions = {
     onOpenWork: (target) => {
       setWorkId(target.id);
@@ -201,11 +280,18 @@ export function App() {
     );
   }
 
-  const showStart = view.kind === "new" || (view.kind === "work" && !work);
+  const showStart = startScreen;
   const title = view.kind === "finder" ? work?.title ?? "" : showStart ? "새 작업" : work?.title ?? "";
 
   return (
-    <div className="app">
+    <AppearanceContext.Provider value={appearanceApi}>
+    <div
+      className="app look-scope"
+      data-theme={focusedTheme}
+      data-bubble={focusedLook.bubble}
+      data-frame={focusedLook.frame ? "on" : "off"}
+      style={lookStyle(focusedLook)}
+    >
       <header className="topbar">
         <div className="topbar-left">
           <button
@@ -274,11 +360,11 @@ export function App() {
           <button
             type="button"
             className="icon-button"
-            onClick={() => theme.choose(theme.theme === "dark" ? "light" : "dark")}
-            aria-label={theme.theme === "dark" ? "라이트 화면으로" : "다크 화면으로"}
-            title={theme.theme === "dark" ? "라이트 화면으로" : "다크 화면으로"}
+            onClick={() => savePrefs({ theme: focusedTheme === "dark" ? "light" : "dark" })}
+            aria-label={focusedTheme === "dark" ? "라이트 화면으로" : "다크 화면으로"}
+            title={focusedTheme === "dark" ? "라이트 화면으로" : "다크 화면으로"}
           >
-            <Icon name={theme.theme === "dark" ? "sun" : "moon"} size={18} />
+            <Icon name={focusedTheme === "dark" ? "sun" : "moon"} size={18} />
           </button>
           <div className="anchor">
             <button type="button" className="icon-button" onClick={() => setMenuOpen(!menuOpen)} aria-label="연결과 설정" aria-expanded={menuOpen}>
@@ -290,8 +376,12 @@ export function App() {
                 connected={state.connected}
                 hostLabel={state.hostLabel}
                 loginMessage={loginMessage}
-                themePref={theme.pref}
-                onTheme={theme.choose}
+                themePref={themePref}
+                onTheme={(pref) => savePrefs({ theme: pref })}
+                onAppearance={() => {
+                  closeMenu();
+                  appearanceApi.openSettings();
+                }}
                 onRefresh={() => void api.refreshProviders().catch(fail)}
                 onLogin={(provider) =>
                   void api
@@ -325,11 +415,24 @@ export function App() {
             setView({ kind: "work" });
           }}
           pickFolder={inDesktop ? pickFolderNative : null}
+          engine={engine}
+          setEngine={setEngine}
         />
       ) : work ? (
-        <WorkView state={state} work={work} actions={actions} />
+        <WorkView state={state} work={work} actions={actions} engine={engine} setEngine={setEngine} />
       ) : null}
       </div>
+
+      {sheet ? (
+        <AppearanceSheet
+          target={sheet}
+          onTarget={setSheet}
+          themePref={themePref}
+          onThemePref={(pref) => savePrefs({ theme: pref })}
+          onClose={() => setSheet(null)}
+        />
+      ) : null}
+      {engineMenu ? <EngineMenu provider={engineMenu.provider} x={engineMenu.x} y={engineMenu.y} onClose={closeEngineMenu} /> : null}
 
       {toast ? (
         <div className="toast" role="status" onClick={() => setToast(null)}>
@@ -337,5 +440,6 @@ export function App() {
         </div>
       ) : null}
     </div>
+    </AppearanceContext.Provider>
   );
 }

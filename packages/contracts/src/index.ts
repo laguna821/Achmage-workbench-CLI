@@ -154,7 +154,14 @@ export type WorkbenchEvent =
   | { type: "session.upserted"; session: Session }
   | { type: "item.upserted"; sessionId: string; item: TranscriptItem }
   | { type: "item.delta"; sessionId: string; itemId: string; textDelta: string }
-  | { type: "provider.status"; status: ProviderStatus };
+  | { type: "provider.status"; status: ProviderStatus }
+  | { type: "prefs.updated"; prefs: UiPrefs };
+
+/**
+ * Screen preferences (theme, sidebar, per-engine look). Owned by the UI; the gateway only stores
+ * them so they survive restarts and stay the same however the window is opened.
+ */
+export type UiPrefs = Record<string, unknown>;
 
 export type SequencedEvent = WorkbenchEvent & { seq: number; at: number };
 
@@ -167,6 +174,7 @@ export type Snapshot = {
   works: Work[];
   sessions: Session[];
   providers: ProviderStatus[];
+  prefs: UiPrefs;
 };
 
 export type ApiError = { code: string; message: string; requestId?: string };

@@ -7,6 +7,7 @@ import {
   type Session,
   type Snapshot,
   type TranscriptItem,
+  type UiPrefs,
   type Work,
 } from "@workbench/contracts";
 
@@ -22,6 +23,7 @@ export type State = {
   sessions: Record<string, Session>;
   providers: Partial<Record<Provider, ProviderStatus>>;
   transcripts: Record<string, Transcript>;
+  prefs: UiPrefs;
 };
 
 export const initialState: State = {
@@ -34,13 +36,15 @@ export const initialState: State = {
   sessions: {},
   providers: {},
   transcripts: {},
+  prefs: {},
 };
 
 export type Action =
   | { type: "snapshot"; snapshot: Snapshot }
   | { type: "event"; event: SequencedEvent }
   | { type: "transcript"; sessionId: string; transcript: Transcript }
-  | { type: "connected"; connected: boolean };
+  | { type: "connected"; connected: boolean }
+  | { type: "prefs"; prefs: UiPrefs };
 
 const byId = <T extends { id: string }>(list: T[]) => Object.fromEntries(list.map((entry) => [entry.id, entry]));
 
@@ -59,10 +63,13 @@ export function reducer(state: State, action: Action): State {
         providers: Object.fromEntries(snapshot.providers.map((status) => [status.provider, status])),
         // Loaded transcripts may have missed events; they are refetched on demand.
         transcripts: {},
+        prefs: snapshot.prefs ?? {},
       };
     }
     case "connected":
       return { ...state, connected: action.connected };
+    case "prefs":
+      return { ...state, prefs: action.prefs };
     case "transcript":
       return { ...state, transcripts: { ...state.transcripts, [action.sessionId]: action.transcript } };
     case "event": {
@@ -75,6 +82,8 @@ export function reducer(state: State, action: Action): State {
           return { ...next, works: { ...state.works, [event.work.id]: event.work } };
         case "session.upserted":
           return { ...next, sessions: { ...state.sessions, [event.session.id]: event.session } };
+        case "prefs.updated":
+          return { ...next, prefs: event.prefs };
         case "provider.status":
           return { ...next, providers: { ...state.providers, [event.status.provider]: event.status } };
         case "item.upserted":

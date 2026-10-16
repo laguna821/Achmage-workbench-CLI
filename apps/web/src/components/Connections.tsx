@@ -14,6 +14,7 @@ export function Connections({
   loginMessage,
   themePref,
   onTheme,
+  onAppearance,
 }: {
   providers: Partial<Record<Provider, ProviderStatus>>;
   connected: boolean;
@@ -23,6 +24,7 @@ export function Connections({
   loginMessage: string | null;
   themePref: ThemePref;
   onTheme: (pref: ThemePref) => void;
+  onAppearance: () => void;
 }) {
   return (
     <div className="connections">
@@ -83,6 +85,9 @@ export function Connections({
           </button>
         ))}
       </div>
+      <button type="button" className="text-button" onClick={onAppearance}>
+        외형 설정 · 엔진별 색과 글자…
+      </button>
     </div>
   );
 }

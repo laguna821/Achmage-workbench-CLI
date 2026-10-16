@@ -7,7 +7,9 @@ import { EditableText } from "./EditableText.tsx";
 import { ModelPicker, type ModelChoice } from "./ModelPicker.tsx";
 import { Icon } from "./Icon.tsx";
 import { MenuItem, Popover } from "./Popover.tsx";
-import { EngineToggle, useEngineChoice } from "./StartView.tsx";
+import { EngineMark } from "./EngineMark.tsx";
+import { EngineTabs } from "./StartView.tsx";
+import { accentStyle, useAppearance } from "../appearance.ts";
 import { Transcript } from "./Transcript.tsx";
 
 export type WorkActions = {
@@ -41,9 +43,11 @@ function TargetPicker({
 }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
+  const { lookOf } = useAppearance();
   return (
     <div className="anchor">
       <button type="button" className="select-button" onClick={() => setOpen(!open)} aria-haspopup="menu" aria-expanded={open}>
+        {active ? <EngineMark provider={active.provider} size={15} /> : null}
         {active ? `${PROVIDER_LABEL[active.provider]} · ${hostLabel}` : "엔진 선택"}
         <Icon name={open ? "chevronUp" : "chevronDown"} size={14} />
       </button>
@@ -71,7 +75,10 @@ function TargetPicker({
               close();
             }}
           >
-            새 {PROVIDER_LABEL[provider]} 세션
+            <span className="menu-engine" style={accentStyle(lookOf(provider))}>
+              <EngineMark provider={provider} size={15} />
+              새 {PROVIDER_LABEL[provider]} 세션
+            </span>
           </MenuItem>
         ))}
       </Popover>
@@ -79,7 +86,20 @@ function TargetPicker({
   );
 }
 
-export function WorkView({ state, work, actions }: { state: State; work: Work; actions: WorkActions }) {
+export function WorkView({
+  state,
+  work,
+  actions,
+  engine,
+  setEngine,
+}: {
+  state: State;
+  work: Work;
+  actions: WorkActions;
+  engine: Provider;
+  setEngine: (provider: Provider) => void;
+}) {
+  const { lookOf, openMenu } = useAppearance();
   const sessions = sessionsOf(state, work.id);
   const active = (work.activeSessionId && state.sessions[work.activeSessionId]) || sessions[sessions.length - 1] || null;
   const transcript = active ? state.transcripts[active.id] : undefined;
@@ -91,7 +111,6 @@ export function WorkView({ state, work, actions }: { state: State; work: Work; a
     (other) => other.id !== work.id && sessionsOf(state, other.id).some((session) => isBusy(session)),
   ).length;
 
-  const [engine, setEngine] = useEngineChoice();
   const [draftChoice, setDraftChoice] = useState<ModelChoice>({ model: null, effort: null });
   const pickerProvider = active?.provider ?? engine;
   const models = state.providers[pickerProvider]?.models ?? [];
@@ -115,7 +134,7 @@ export function WorkView({ state, work, actions }: { state: State; work: Work; a
   walk(null, 0);
 
   return (
-    <main className="work-view">
+    <main className="work-view" onContextMenu={(event) => openMenu(event, active?.provider ?? engine)}>
       <div className="column context-row">
         <div className="anchor breadcrumb-anchor">
           <button type="button" className="breadcrumb" onClick={() => setFolderOpen(!folderOpen)} title="분류 옮기기" aria-expanded={folderOpen}>
@@ -153,7 +172,10 @@ export function WorkView({ state, work, actions }: { state: State; work: Work; a
               <StatusDot tone={statusTone(active)} />
               <span>{statusText(active)}</span>
               <span className="status-sep">·</span>
-              <span>{PROVIDER_LABEL[active.provider]}</span>
+              <span className="status-engine">
+                <EngineMark provider={active.provider} size={14} />
+                {PROVIDER_LABEL[active.provider]}
+              </span>
               <span className="status-sep">·</span>
               <span>{state.hostLabel}</span>
               <Icon name={statusOpen ? "chevronUp" : "chevronDown"} size={14} />
@@ -207,11 +229,13 @@ export function WorkView({ state, work, actions }: { state: State; work: Work; a
                 key={session.id}
                 type="button"
                 className={`session-tab${session.id === active?.id ? " active" : ""}`}
+                style={accentStyle(lookOf(session.provider))}
                 onClick={() => actions.selectSession(work, session)}
                 onDoubleClick={() => setRenaming(session.id)}
-                title="두 번 눌러 이름 바꾸기"
+                onContextMenu={(event) => openMenu(event, session.provider)}
+                title="두 번 눌러 이름 바꾸기 · 오른쪽 클릭으로 외형"
               >
-                {isBusy(session) ? <StatusDot tone={statusTone(session)} /> : null}
+                {isBusy(session) ? <StatusDot tone={statusTone(session)} /> : <EngineMark provider={session.provider} size={14} />}
                 {sessionLabel(session)}
               </button>
             ),
@@ -236,6 +260,15 @@ export function WorkView({ state, work, actions }: { state: State; work: Work; a
       )}
 
       <div className="column composer-area">
+        {!active ? (
+          <EngineTabs
+            value={engine}
+            onChange={(next) => {
+              setEngine(next);
+              setDraftChoice({ model: null, effort: null });
+            }}
+          />
+        ) : null}
         <Composer
           draftKey={`work:${work.id}:${active?.id ?? "none"}`}
           placeholder="이 작업에 이어서 요청하기"
@@ -255,23 +288,15 @@ export function WorkView({ state, work, actions }: { state: State; work: Work; a
               value={active ? { model: active.model, effort: active.effort } : draftChoice}
               onChange={(choice) => (active ? actions.setModel(active, choice) : setDraftChoice(choice))}
             />
-            {!active ? (
-              <EngineToggle
-                value={engine}
-                onChange={(next) => {
-                  setEngine(next);
-                  setDraftChoice({ model: null, effort: null });
-                }}
+            {active ? (
+              <TargetPicker
+                sessions={sessions}
+                active={active}
+                hostLabel={state.hostLabel}
+                onSelect={(session) => actions.selectSession(work, session)}
+                onNew={(provider) => void actions.newSession(work, provider)}
               />
-            ) : (
-            <TargetPicker
-              sessions={sessions}
-              active={active}
-              hostLabel={state.hostLabel}
-              onSelect={(session) => actions.selectSession(work, session)}
-              onNew={(provider) => void actions.newSession(work, provider)}
-            />
-            )}
+            ) : null}
             </>
           }
         />

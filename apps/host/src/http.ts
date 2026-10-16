@@ -166,6 +166,10 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       if (method === "POST" && parts[0] === "providers" && parts[2] === "login") {
         return sendJson(res, 200, await manager.login(parts[1] as Provider));
       }
+      if (method === "PUT" && path === "/api/prefs") {
+        const body = await readJson(req);
+        return sendJson(res, 200, { prefs: manager.setPrefs(body.prefs) });
+      }
       if (method === "POST" && path === "/api/client-log") {
         const body = await readJson(req);
         options.onClientLog?.(String(body.message ?? "").slice(0, 4000));

@@ -2,6 +2,7 @@ import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { PROVIDER_LABEL, type Provider, type TranscriptItem } from "@workbench/contracts";
+import { EngineMark } from "./EngineMark.tsx";
 import { Icon, type IconName } from "./Icon.tsx";
 
 type Item<K extends TranscriptItem["kind"]> = Extract<TranscriptItem, { kind: K }>;
@@ -249,14 +250,20 @@ export function Transcript({
             case "assistant":
               return (
                 <section key={block.item.id} className="turn-assistant">
-                  {block.speaker ? <div className="speaker engine">{PROVIDER_LABEL[provider]}</div> : null}
+                  {block.speaker ? <div className="speaker engine">
+              <EngineMark provider={provider} size={15} />
+              {PROVIDER_LABEL[provider]}
+            </div> : null}
                   <AssistantText text={block.item.text} streaming={block.item.streaming} />
                 </section>
               );
             case "work":
               return (
                 <section key={block.id} className="turn-assistant">
-                  {block.speaker ? <div className="speaker engine">{PROVIDER_LABEL[provider]}</div> : null}
+                  {block.speaker ? <div className="speaker engine">
+              <EngineMark provider={provider} size={15} />
+              {PROVIDER_LABEL[provider]}
+            </div> : null}
                   <WorkBlock block={block} />
                 </section>
               );
@@ -280,7 +287,10 @@ export function Transcript({
         })}
         {waitingFirst ? (
           <section className="turn-assistant">
-            <div className="speaker engine">{PROVIDER_LABEL[provider]}</div>
+            <div className="speaker engine">
+              <EngineMark provider={provider} size={15} />
+              {PROVIDER_LABEL[provider]}
+            </div>
             <div className="response-pending" role="status" aria-label="응답을 기다리는 중">
               <span className="response-pending-dots">
                 <i />
