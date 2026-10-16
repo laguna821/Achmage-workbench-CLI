@@ -131,6 +131,30 @@ async function runProvider(provider: Provider) {
     return `"${text.trim().slice(0, 40)}"`;
   });
 
+  // Pick a model and effort right after a turn, so Claude switches inside the live process.
+  await step(`${provider}: model + effort`, async () => {
+    const snapshot = await api<Snapshot>("GET", "/api/snapshot");
+    const models = snapshot.providers.find((status) => status.provider === provider)?.models ?? [];
+    const target =
+      provider === "claude"
+        ? models.find((model) => model.id === "sonnet")
+        : (models.find((model) => !model.isDefault && model.id.includes("luna")) ?? models.find((model) => !model.isDefault));
+    if (!target) throw new Error(`no alternative model in ${models.map((model) => model.id).join(",")}`);
+    const effort = target.efforts.find((value) => value !== target.defaultEffort) ?? null;
+    await api("PATCH", `/api/sessions/${sid}`, { model: target.id, effort });
+    const id = await send(sid, "Reply with exactly the single word: ok");
+    const end = await turnEnd(sid, id);
+    const after = (await api<Snapshot>("GET", "/api/snapshot")).sessions.find((entry) => entry.id === sid)!;
+    const modelOk = provider === "claude" ? /sonnet/.test(after.engineModel ?? "") : after.engineModel === target.id;
+    const effortOk = provider === "claude" || after.engineEffort === effort;
+    if (end.status !== "completed" || !modelOk || !effortOk) {
+      throw new Error(`status=${end.status} engine=${after.engineModel}/${after.engineEffort} wanted=${target.id}/${effort}`);
+    }
+    // Back to the engine default for the remaining steps.
+    await api("PATCH", `/api/sessions/${sid}`, { model: null, effort: null });
+    return `${target.id}${effort ? ` · ${effort}` : ""} → 엔진 보고 ${after.engineModel}${after.engineEffort ? ` · ${after.engineEffort}` : ""}`;
+  });
+
   await step(`${provider}: approve`, async () => {
     const id = await send(sid, `Use a shell command to run exactly: touch ${fileName}  — then reply "done".`);
     const approval = await pendingApproval(sid, id);

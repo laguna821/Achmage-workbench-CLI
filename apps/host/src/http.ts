@@ -126,7 +126,12 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         return sendJson(
           res,
           201,
-          manager.createSession(parts[1], { provider: body.provider as Provider, purpose: body.purpose as string | undefined, model: (body.model as string | null) ?? null }),
+          manager.createSession(parts[1], {
+            provider: body.provider as Provider,
+            purpose: body.purpose as string | undefined,
+            model: (body.model as string | null) ?? null,
+            effort: (body.effort as string | null) ?? null,
+          }),
         );
       }
       if (parts[0] === "sessions" && parts[1]) {
@@ -134,7 +139,15 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         if (method === "GET" && parts[2] === "items") return sendJson(res, 200, manager.items(sessionId));
         if (method === "PATCH" && parts.length === 2) {
           const body = await readJson(req);
-          return sendJson(res, 200, manager.renameSession(sessionId, String(body.purpose ?? "")));
+          return sendJson(
+            res,
+            200,
+            manager.updateSession(sessionId, {
+              purpose: typeof body.purpose === "string" ? body.purpose : undefined,
+              model: body.model === undefined ? undefined : ((body.model as string | null) ?? null),
+              effort: body.effort === undefined ? undefined : ((body.effort as string | null) ?? null),
+            }),
+          );
         }
         if (method === "POST" && parts[2] === "messages") {
           const body = await readJson(req);

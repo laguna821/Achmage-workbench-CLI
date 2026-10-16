@@ -48,7 +48,14 @@ export type Session = {
   nativeSessionId: string | null;
   /** Purpose label shown on the tab, e.g. "강의 작성". */
   purpose: string;
+  /** Null means the engine default. Applies from the next turn. */
   model: string | null;
+  /** Reasoning effort id as the engine names it (e.g. "medium", "xhigh"); null = engine default. */
+  effort: string | null;
+  /** Model the engine reported for the latest turn (what actually answered). */
+  engineModel: string | null;
+  /** Effort the engine reported for the latest turn, when it reports one (Codex). */
+  engineEffort: string | null;
   status: SessionStatus;
   /** Short human-readable activity, e.g. "명령 실행 중". */
   activity: string | null;
@@ -106,6 +113,27 @@ export type UsageWindow = {
   resetsAt: number | null;
 };
 
+export type ModelOption = {
+  id: string;
+  label: string;
+  description: string | null;
+  /** Effort ids this model accepts, in the engine's order. Empty when the model has no effort control. */
+  efforts: string[];
+  defaultEffort: string | null;
+  isDefault: boolean;
+};
+
+export const EFFORT_LABEL: Record<string, string> = {
+  none: "없음",
+  minimal: "최소",
+  low: "낮음",
+  medium: "중간",
+  high: "높음",
+  xhigh: "매우 높음",
+  max: "최대",
+  ultra: "울트라",
+};
+
 export type ProviderStatus = {
   provider: Provider;
   installed: boolean;
@@ -116,6 +144,7 @@ export type ProviderStatus = {
   plan: string | null;
   usage: UsageWindow[];
   usageObservedAt: number | null;
+  models: ModelOption[];
   error: string | null;
 };
 
@@ -152,6 +181,13 @@ export type CreateSessionRequest = {
   provider: Provider;
   purpose?: string;
   model?: string | null;
+  effort?: string | null;
+};
+
+export type UpdateSessionRequest = {
+  purpose?: string;
+  model?: string | null;
+  effort?: string | null;
 };
 
 export type SendMessageRequest = {

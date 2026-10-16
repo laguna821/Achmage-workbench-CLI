@@ -44,6 +44,7 @@ export function emptyStatus(provider: Provider): ProviderStatus {
     plan: null,
     usage: [],
     usageObservedAt: null,
+    models: [],
     error: null,
   };
 }

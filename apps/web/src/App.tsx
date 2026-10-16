@@ -8,10 +8,14 @@ import { EditableText } from "./components/EditableText.tsx";
 import { Finder } from "./components/Finder.tsx";
 import { Icon } from "./components/Icon.tsx";
 import { Popover } from "./components/Popover.tsx";
+import { Sidebar } from "./components/Sidebar.tsx";
+import type { TreeActions } from "./components/WorkTree.tsx";
 import { StartView } from "./components/StartView.tsx";
 import { WorkView, type WorkActions } from "./components/WorkView.tsx";
+import { useTheme } from "./theme.ts";
 
 const LAST_WORK_KEY = "workbench.lastWork";
+const SIDEBAR_KEY = "workbench.sidebar";
 const inDesktop = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 async function pickFolderNative(): Promise<string | null> {
@@ -41,8 +45,16 @@ export function App() {
   const [view, setView] = useState<View>({ kind: "work" });
   const [toast, setToast] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const theme = useTheme();
   const [loginMessage, setLoginMessage] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
+  // Closed by default (PRD 2.1); remembered once the user pins it.
+  const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem(SIDEBAR_KEY) === "open");
+  const toggleSidebar = () => {
+    const next = !sidebarOpen;
+    setSidebarOpen(next);
+    localStorage.setItem(SIDEBAR_KEY, next ? "open" : "closed");
+  };
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 
   const setWorkId = (id: string | null) => {
@@ -120,10 +132,10 @@ export function App() {
       },
       interrupt: (session) => void api?.interrupt(session.id).catch(fail),
       answer: (session, itemId, decision) => void api?.answer(session.id, itemId, decision).catch(fail),
-      newSession: async (target: Work, provider: Provider) => {
+      newSession: async (target: Work, provider: Provider, choice) => {
         if (!api) return null;
         try {
-          return await api.createSession(target.id, provider);
+          return await api.createSession(target.id, provider, { model: choice?.model ?? null, effort: choice?.effort ?? null });
         } catch (error) {
           fail(error);
           return null;
@@ -134,18 +146,25 @@ export function App() {
         setView({ kind: "work" });
         if (target.activeSessionId !== session.id) void api?.updateWork(target.id, { activeSessionId: session.id }).catch(fail);
       },
-      renameSession: (session, purpose) => void api?.renameSession(session.id, purpose).catch(fail),
+      renameSession: (session, purpose) => void api?.updateSession(session.id, { purpose }).catch(fail),
+      setModel: (session, choice) => void api?.updateSession(session.id, { model: choice.model, effort: choice.effort }).catch(fail),
       moveWork: (target, folderId) => void api?.updateWork(target.id, { folderId }).catch(fail),
       openFinder: () => setView({ kind: "finder" }),
     }),
     [api, fail],
   );
 
-  const startWork = async (text: string, provider: Provider, cwd: string | null, folderId: string | null) => {
+  const startWork = async (
+    text: string,
+    provider: Provider,
+    cwd: string | null,
+    folderId: string | null,
+    choice: { model: string | null; effort: string | null },
+  ) => {
     if (!api) return false;
     try {
       const created = await api.createWork(titleFrom(text), folderId, cwd);
-      const session = await api.createSession(created.id, provider);
+      const session = await api.createSession(created.id, provider, choice);
       setWorkId(created.id);
       setView({ kind: "work" });
       await api.send(session.id, newRequestId(), text);
@@ -157,6 +176,21 @@ export function App() {
   };
 
   const pendingApprovals = Object.values(state.sessions).filter((session) => session.status === "awaitingApproval");
+
+  const treeActions: TreeActions = {
+    onOpenWork: (target) => {
+      setWorkId(target.id);
+      setView({ kind: "work" });
+    },
+    onOpenSession: actions.selectSession,
+    onNewWork: (folderId) => {
+      setView({ kind: "new", folderId });
+      window.requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer-input")?.focus());
+    },
+    onCreateFolder: async (name, parentId) => {
+      await api?.createFolder(name, parentId).catch(fail);
+    },
+  };
 
   if (!api) {
     return (
@@ -174,6 +208,15 @@ export function App() {
     <div className="app">
       <header className="topbar">
         <div className="topbar-left">
+          <button
+            type="button"
+            className={`icon-button${sidebarOpen ? " pressed" : ""}`}
+            onClick={toggleSidebar}
+            aria-label={sidebarOpen ? "사이드바 닫기" : "사이드바 열기"}
+            title={sidebarOpen ? "사이드바 닫기" : "사이드바 열기"}
+          >
+            <Icon name="sidebar" size={18} />
+          </button>
           <span className="brand">Achmage</span>
           <button
             type="button"
@@ -228,6 +271,15 @@ export function App() {
             </button>
           ) : null}
           {!state.connected && state.ready ? <span className="offline">연결 끊김</span> : null}
+          <button
+            type="button"
+            className="icon-button"
+            onClick={() => theme.choose(theme.theme === "dark" ? "light" : "dark")}
+            aria-label={theme.theme === "dark" ? "라이트 화면으로" : "다크 화면으로"}
+            title={theme.theme === "dark" ? "라이트 화면으로" : "다크 화면으로"}
+          >
+            <Icon name={theme.theme === "dark" ? "sun" : "moon"} size={18} />
+          </button>
           <div className="anchor">
             <button type="button" className="icon-button" onClick={() => setMenuOpen(!menuOpen)} aria-label="연결과 설정" aria-expanded={menuOpen}>
               <Icon name="dots" size={18} />
@@ -238,6 +290,8 @@ export function App() {
                 connected={state.connected}
                 hostLabel={state.hostLabel}
                 loginMessage={loginMessage}
+                themePref={theme.pref}
+                onTheme={theme.choose}
                 onRefresh={() => void api.refreshProviders().catch(fail)}
                 onLogin={(provider) =>
                   void api
@@ -254,29 +308,18 @@ export function App() {
         </div>
       </header>
 
+      <div className={`body${sidebarOpen && state.ready ? " with-sidebar" : ""}`}>
+      {sidebarOpen && state.ready ? <Sidebar state={state} currentWorkId={view.kind === "work" ? work?.id ?? null : null} actions={treeActions} /> : null}
       {!state.ready ? (
         <main className="loading">불러오는 중…</main>
       ) : view.kind === "finder" ? (
-        <Finder
-          state={state}
-          currentWorkId={work?.id ?? null}
-          onOpenWork={(target) => {
-            setWorkId(target.id);
-            setView({ kind: "work" });
-          }}
-          onOpenSession={actions.selectSession}
-          onNewWork={(folderId) => setView({ kind: "new", folderId })}
-          onCreateFolder={async (name, parentId) => {
-            await api.createFolder(name, parentId).catch(fail);
-          }}
-          onBack={work ? () => setView({ kind: "work" }) : null}
-        />
+        <Finder state={state} currentWorkId={work?.id ?? null} actions={treeActions} onBack={work ? () => setView({ kind: "work" }) : null} />
       ) : showStart ? (
         <StartView
           state={state}
           folderId={view.kind === "new" ? view.folderId : null}
           onClearFolder={() => setView({ kind: "new", folderId: null })}
-          onStart={(text, provider, cwd) => startWork(text, provider, cwd, view.kind === "new" ? view.folderId : null)}
+          onStart={(text, provider, cwd, choice) => startWork(text, provider, cwd, view.kind === "new" ? view.folderId : null, choice)}
           onOpenWork={(target) => {
             setWorkId(target.id);
             setView({ kind: "work" });
@@ -286,6 +329,7 @@ export function App() {
       ) : work ? (
         <WorkView state={state} work={work} actions={actions} />
       ) : null}
+      </div>
 
       {toast ? (
         <div className="toast" role="status" onClick={() => setToast(null)}>

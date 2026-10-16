@@ -4,6 +4,7 @@ import { folderPath, type State } from "../state.ts";
 import { Composer } from "./Composer.tsx";
 import { Icon } from "./Icon.tsx";
 import { MenuItem, Popover } from "./Popover.tsx";
+import { ModelPicker, type ModelChoice } from "./ModelPicker.tsx";
 
 const ENGINE_KEY = "workbench.lastEngine";
 
@@ -124,12 +125,13 @@ export function StartView({
   state: State;
   folderId: string | null;
   onClearFolder: () => void;
-  onStart: (text: string, provider: Provider, cwd: string | null) => Promise<boolean>;
+  onStart: (text: string, provider: Provider, cwd: string | null, choice: ModelChoice) => Promise<boolean>;
   onOpenWork: (work: Work) => void;
   pickFolder: (() => Promise<string | null>) | null;
 }) {
   const [engine, setEngine] = useEngineChoice();
   const [cwd, setCwd] = useState<string | null>(null);
+  const [choice, setChoice] = useState<ModelChoice>({ model: null, effort: null });
   const works = Object.values(state.works).sort((a, b) => b.updatedAt - a.updatedAt);
   const recentFolders = [...new Set(works.filter((work) => !work.cwdManaged).map((work) => work.cwd))].slice(0, 5);
   const path = folderPath(state, folderId);
@@ -152,10 +154,17 @@ export function StartView({
           placeholder="새 작업의 첫 요청을 입력하세요"
           busy={false}
           autoFocus
-          onSend={(text) => onStart(text, engine, cwd)}
+          onSend={(text) => onStart(text, engine, cwd, choice)}
           target={
             <>
-              <EngineToggle value={engine} onChange={setEngine} />
+              <ModelPicker models={state.providers[engine]?.models ?? []} value={choice} onChange={setChoice} />
+              <EngineToggle
+                value={engine}
+                onChange={(next) => {
+                  setEngine(next);
+                  setChoice({ model: null, effort: null });
+                }}
+              />
               <FolderChoice value={cwd} recent={recentFolders} onChange={setCwd} pickFolder={pickFolder} />
             </>
           }

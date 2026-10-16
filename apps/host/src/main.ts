@@ -40,7 +40,9 @@ const manager = new SessionManager(store, bus, {
 });
 
 const claudeIdleMs = env.WORKBENCH_CLAUDE_IDLE_MS ? Number(env.WORKBENCH_CLAUDE_IDLE_MS) : undefined;
-manager.registerAdapter(new ClaudeAdapter(manager.sink, { idleMs: claudeIdleMs }));
+manager.registerAdapter(
+  new ClaudeAdapter(manager.sink, { idleMs: claudeIdleMs, modelCacheFile: join(dataDir, "claude-models.json") }),
+);
 manager.registerAdapter(
   new CodexAdapter(manager.sink, {
     approvalPolicy: env.WORKBENCH_CODEX_APPROVAL ?? "on-request",

@@ -6,11 +6,13 @@ const DRAFT_PREFIX = "workbench.draft.";
 /**
  * The single input box. Enter sends, Shift+Enter breaks the line, and Enter while a Korean
  * syllable is still being composed never sends. Drafts survive switching work and reloads.
+ * While the engine is working, a light trail orbits the box border (CMDS Achmage).
  */
 export function Composer({
   draftKey,
   placeholder,
   busy,
+  waiting,
   disabled,
   onSend,
   onStop,
@@ -20,6 +22,7 @@ export function Composer({
   draftKey: string;
   placeholder: string;
   busy: boolean;
+  waiting?: boolean;
   disabled?: boolean;
   onSend: (text: string) => Promise<boolean>;
   onStop?: () => void;
@@ -64,7 +67,7 @@ export function Composer({
   };
 
   return (
-    <div className="composer">
+    <div className="composer" data-phase={waiting ? "waiting" : undefined}>
       <textarea
         ref={ref}
         className="composer-input"

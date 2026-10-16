@@ -1,9 +1,10 @@
 import { useCallback, useState } from "react";
-import { PROVIDER_LABEL, type Provider, type Session, type Work } from "@workbench/contracts";
+import { EFFORT_LABEL, PROVIDER_LABEL, type Provider, type Session, type Work } from "@workbench/contracts";
 import { folderPath, isBusy, sessionsOf, type State } from "../state.ts";
 import { sessionLabel, statusText, statusTone } from "../format.ts";
 import { Composer } from "./Composer.tsx";
 import { EditableText } from "./EditableText.tsx";
+import { ModelPicker, type ModelChoice } from "./ModelPicker.tsx";
 import { Icon } from "./Icon.tsx";
 import { MenuItem, Popover } from "./Popover.tsx";
 import { EngineToggle, useEngineChoice } from "./StartView.tsx";
@@ -13,9 +14,10 @@ export type WorkActions = {
   send: (session: Session, text: string) => Promise<boolean>;
   interrupt: (session: Session) => void;
   answer: (session: Session, itemId: string, decision: "accept" | "decline") => void;
-  newSession: (work: Work, provider: Provider) => Promise<Session | null>;
+  newSession: (work: Work, provider: Provider, choice?: ModelChoice) => Promise<Session | null>;
   selectSession: (work: Work, session: Session) => void;
   renameSession: (session: Session, purpose: string) => void;
+  setModel: (session: Session, choice: ModelChoice) => void;
   moveWork: (work: Work, folderId: string | null) => void;
   openFinder: () => void;
 };
@@ -83,11 +85,16 @@ export function WorkView({ state, work, actions }: { state: State; work: Work; a
   const transcript = active ? state.transcripts[active.id] : undefined;
   const path = folderPath(state, work.folderId);
   const busy = isBusy(active ?? undefined);
+  // The engine itself is working (not waiting on the user's approval).
+  const working = active?.status === "starting" || active?.status === "running";
   const otherActive = Object.values(state.works).filter(
     (other) => other.id !== work.id && sessionsOf(state, other.id).some((session) => isBusy(session)),
   ).length;
 
   const [engine, setEngine] = useEngineChoice();
+  const [draftChoice, setDraftChoice] = useState<ModelChoice>({ model: null, effort: null });
+  const pickerProvider = active?.provider ?? engine;
+  const models = state.providers[pickerProvider]?.models ?? [];
   const [statusOpen, setStatusOpen] = useState(false);
   const closeStatus = useCallback(() => setStatusOpen(false), []);
   const [folderOpen, setFolderOpen] = useState(false);
@@ -156,7 +163,18 @@ export function WorkView({ state, work, actions }: { state: State; work: Work; a
                 <dt>세션</dt>
                 <dd>{sessionLabel(active)}</dd>
                 <dt>모델</dt>
-                <dd>{active.model ?? "엔진 기본값"}</dd>
+                <dd>{models.find((model) => model.id === active.model)?.label ?? active.model ?? "엔진 기본값"}</dd>
+                <dt>추론 강도</dt>
+                <dd>{active.effort ? (EFFORT_LABEL[active.effort] ?? active.effort) : "모델 기본값"}</dd>
+                {active.engineModel ? (
+                  <>
+                    <dt>최근 응답</dt>
+                    <dd className="mono">
+                      {active.engineModel}
+                      {active.engineEffort ? ` · ${EFFORT_LABEL[active.engineEffort] ?? active.engineEffort}` : ""}
+                    </dd>
+                  </>
+                ) : null}
                 <dt>실행 위치</dt>
                 <dd>{state.hostLabel}</dd>
                 <dt>작업 폴더</dt>
@@ -205,6 +223,7 @@ export function WorkView({ state, work, actions }: { state: State; work: Work; a
         <Transcript
           items={transcript?.items ?? []}
           provider={active.provider}
+          running={working}
           loading={!transcript}
           onAnswer={(itemId, decision) => actions.answer(active, itemId, decision)}
         />
@@ -221,16 +240,29 @@ export function WorkView({ state, work, actions }: { state: State; work: Work; a
           draftKey={`work:${work.id}:${active?.id ?? "none"}`}
           placeholder="이 작업에 이어서 요청하기"
           busy={busy}
+          waiting={working}
           autoFocus
           onSend={async (text) => {
             if (active) return actions.send(active, text);
-            const created = await actions.newSession(work, engine);
+            const created = await actions.newSession(work, engine, draftChoice);
             return created ? actions.send(created, text) : false;
           }}
           onStop={active ? () => actions.interrupt(active) : undefined}
           target={
-            !active ? (
-              <EngineToggle value={engine} onChange={setEngine} />
+            <>
+            <ModelPicker
+              models={models}
+              value={active ? { model: active.model, effort: active.effort } : draftChoice}
+              onChange={(choice) => (active ? actions.setModel(active, choice) : setDraftChoice(choice))}
+            />
+            {!active ? (
+              <EngineToggle
+                value={engine}
+                onChange={(next) => {
+                  setEngine(next);
+                  setDraftChoice({ model: null, effort: null });
+                }}
+              />
             ) : (
             <TargetPicker
               sessions={sessions}
@@ -239,7 +271,8 @@ export function WorkView({ state, work, actions }: { state: State; work: Work; a
               onSelect={(session) => actions.selectSession(work, session)}
               onNew={(provider) => void actions.newSession(work, provider)}
             />
-            )
+            )}
+            </>
           }
         />
         <div className="footer-line">

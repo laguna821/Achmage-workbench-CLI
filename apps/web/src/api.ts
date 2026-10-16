@@ -56,9 +56,10 @@ export class Api {
   createWork = (title: string, folderId: string | null, cwd: string | null) => this.request<Work>("POST", "/api/works", { title, folderId, cwd });
   updateWork = (workId: string, patch: Partial<Pick<Work, "title" | "folderId" | "activeSessionId">>) =>
     this.request<Work>("PATCH", `/api/works/${workId}`, patch);
-  createSession = (workId: string, provider: Provider, purpose?: string) =>
-    this.request<Session>("POST", `/api/works/${workId}/sessions`, { provider, purpose });
-  renameSession = (sessionId: string, purpose: string) => this.request<Session>("PATCH", `/api/sessions/${sessionId}`, { purpose });
+  createSession = (workId: string, provider: Provider, options?: { purpose?: string; model?: string | null; effort?: string | null }) =>
+    this.request<Session>("POST", `/api/works/${workId}/sessions`, { provider, ...options });
+  updateSession = (sessionId: string, patch: { purpose?: string; model?: string | null; effort?: string | null }) =>
+    this.request<Session>("PATCH", `/api/sessions/${sessionId}`, patch);
   send = (sessionId: string, requestId: string, text: string) =>
     this.request<{ duplicate: boolean }>("POST", `/api/sessions/${sessionId}/messages`, { requestId, text });
   interrupt = (sessionId: string) => this.request("POST", `/api/sessions/${sessionId}/interrupt`);

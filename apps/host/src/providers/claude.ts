@@ -1,15 +1,19 @@
 import { execFile, spawn } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import {
   query,
   type CanUseTool,
+  type EffortLevel,
+  type ModelInfo,
   type PermissionResult,
   type Query,
+  type SDKMessage,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { ApprovalDecision, ProviderStatus, Session, UsageWindow, Work } from "@workbench/contracts";
+import type { ApprovalDecision, ModelOption, ProviderStatus, Session, UsageWindow, Work } from "@workbench/contracts";
 import { ClaudeTranscriptMapper, describeTool, type MapperOutput } from "@workbench/provider-claude";
 import { resolveClaude, type ResolvedBinary } from "../binaries.ts";
 import { emptyStatus, type AdapterSink, type LoginStart, type ProviderAdapter } from "./types.ts";
@@ -65,6 +69,11 @@ type PendingApproval = {
 
 type Runtime = {
   sessionId: string;
+  /** Model and effort the running Claude Code process was last told to use. */
+  model: string | null;
+  effort: string | null;
+  /** Model Claude Code last reported answering with. */
+  engineModel: string | null;
   input: InputQueue;
   query: Query;
   mapper: ClaudeTranscriptMapper;
@@ -74,6 +83,19 @@ type Runtime = {
   approvals: Map<string, PendingApproval>;
   idleTimer: NodeJS.Timeout | null;
 };
+
+export function modelsFromInfo(models: ModelInfo[]): ModelOption[] {
+  return models.map((model, index) => ({
+    id: model.value,
+    label: model.displayName || model.value,
+    description: model.description || null,
+    efforts: model.supportedEffortLevels ?? [],
+    defaultEffort: null,
+    isDefault: model.value === "default" || index === 0,
+  }));
+}
+
+const MODEL_CACHE_TTL = 24 * 60 * 60_000;
 
 function sdkBundledBinary(): string | null {
   try {
@@ -96,10 +118,51 @@ export class ClaudeAdapter implements ProviderAdapter {
   private readonly usage = new Map<string, UsageWindow>();
   private initializing: Promise<void> | null = null;
 
-  constructor(sink: AdapterSink, options?: { idleMs?: number; permissionMode?: "default" | "acceptEdits" }) {
+  private readonly modelCache: string | null;
+
+  constructor(
+    sink: AdapterSink,
+    options?: { idleMs?: number; permissionMode?: "default" | "acceptEdits"; modelCacheFile?: string },
+  ) {
     this.sink = sink;
     this.idleMs = options?.idleMs ?? 10 * 60_000;
     this.permissionMode = options?.permissionMode ?? "default";
+    this.modelCache = options?.modelCacheFile ?? null;
+  }
+
+  /**
+   * The model list comes from Claude Code itself (initialize response). It is cached so the picker
+   * works before the first message, and refreshed in the background at most once a day.
+   */
+  private async loadModels() {
+    let cachedAt = 0;
+    if (this.modelCache) {
+      try {
+        const cached = JSON.parse(readFileSync(this.modelCache, "utf8")) as { at: number; models: ModelOption[] };
+        cachedAt = cached.at;
+        this.publish({ models: cached.models });
+      } catch {
+        // No cache yet.
+      }
+    }
+    if (Date.now() - cachedAt < MODEL_CACHE_TTL || !this.binary || !this.current.loggedIn) {
+      return;
+    }
+    const input = new InputQueue();
+    const probe = query({ prompt: input, options: { pathToClaudeCodeExecutable: this.binary.path, settingSources: [] } });
+    try {
+      const init = await probe.initializationResult();
+      const models = modelsFromInfo(init.models);
+      if (models.length) {
+        this.publish({ models });
+        if (this.modelCache) writeFileSync(this.modelCache, JSON.stringify({ at: Date.now(), models }));
+      }
+    } catch {
+      // Keep whatever list we had; the picker falls back to the engine default.
+    } finally {
+      input.close();
+      probe.close();
+    }
   }
 
   status() {
@@ -124,6 +187,7 @@ export class ClaudeAdapter implements ProviderAdapter {
     }
     this.publish({ installed: true, binary: this.binary.path, version: this.binary.version, error: null });
     await this.refreshStatus();
+    void this.loadModels();
   }
 
   async refreshStatus(): Promise<ProviderStatus> {
@@ -181,6 +245,9 @@ export class ClaudeAdapter implements ProviderAdapter {
     const input = new InputQueue();
     const runtime: Runtime = {
       sessionId: session.id,
+      model: session.model,
+      effort: session.effort,
+      engineModel: null,
       input,
       query: undefined as unknown as Query,
       mapper: new ClaudeTranscriptMapper(),
@@ -219,6 +286,7 @@ export class ClaudeAdapter implements ProviderAdapter {
         cwd: work.cwd,
         resume: session.nativeSessionId ?? undefined,
         model: session.model ?? undefined,
+        effort: (session.effort as EffortLevel | null) ?? undefined,
         permissionMode: this.permissionMode,
         canUseTool,
         includePartialMessages: true,
@@ -232,10 +300,20 @@ export class ClaudeAdapter implements ProviderAdapter {
     return runtime;
   }
 
+  /** Record the model that actually answers, so a picker change can be checked against the engine. */
+  private noteModel(runtime: Runtime, message: SDKMessage) {
+    const model =
+      message.type === "assistant" ? message.message.model : message.type === "system" && message.subtype === "init" ? message.model : null;
+    if (!model || model === runtime.engineModel) return;
+    runtime.engineModel = model;
+    this.sink.updateSession(runtime.sessionId, { engineModel: model });
+  }
+
   private async consume(runtime: Runtime) {
     const sessionId = runtime.sessionId;
     try {
       for await (const message of runtime.query) {
+        this.noteModel(runtime, message);
         for (const output of runtime.mapper.handle(message, runtime.turnKey)) {
           this.apply(runtime, output);
         }
@@ -267,7 +345,7 @@ export class ClaudeAdapter implements ProviderAdapter {
     const sessionId = runtime.sessionId;
     switch (output.type) {
       case "init":
-        this.sink.updateSession(sessionId, { nativeSessionId: output.nativeSessionId, model: output.model });
+        this.sink.updateSession(sessionId, { nativeSessionId: output.nativeSessionId });
         break;
       case "upsert":
         this.sink.upsertItem(sessionId, output.item);
@@ -328,6 +406,15 @@ export class ClaudeAdapter implements ProviderAdapter {
     if (runtime.idleTimer) {
       clearTimeout(runtime.idleTimer);
       runtime.idleTimer = null;
+    }
+    // A model or effort picked since the process started applies from this message on.
+    if (runtime.model !== session.model) {
+      await runtime.query.setModel(session.model ?? undefined);
+      runtime.model = session.model;
+    }
+    if (runtime.effort !== session.effort) {
+      await runtime.query.applyFlagSettings({ effortLevel: (session.effort as EffortLevel | null) ?? null });
+      runtime.effort = session.effort;
     }
     runtime.turnKey = turnKey;
     runtime.turnActive = true;

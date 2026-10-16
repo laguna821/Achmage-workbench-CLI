@@ -1,5 +1,8 @@
 import { PROVIDER_LABEL, type Provider, type ProviderStatus } from "@workbench/contracts";
 import { usageText } from "../format.ts";
+import type { ThemePref } from "../theme.ts";
+
+const THEME_LABEL: Record<ThemePref, string> = { system: "시스템", light: "라이트", dark: "다크" };
 
 /** Engine login and usage state. Shows only values the engines report; unknown stays unknown. */
 export function Connections({
@@ -9,6 +12,8 @@ export function Connections({
   onLogin,
   onRefresh,
   loginMessage,
+  themePref,
+  onTheme,
 }: {
   providers: Partial<Record<Provider, ProviderStatus>>;
   connected: boolean;
@@ -16,6 +21,8 @@ export function Connections({
   onLogin: (provider: Provider) => void;
   onRefresh: () => void;
   loginMessage: string | null;
+  themePref: ThemePref;
+  onTheme: (pref: ThemePref) => void;
 }) {
   return (
     <div className="connections">
@@ -67,6 +74,15 @@ export function Connections({
       <button type="button" className="text-button" onClick={onRefresh}>
         상태 새로 고침
       </button>
+      <div className="menu-divider" />
+      <div className="menu-label">화면</div>
+      <div className="segmented theme-choice" role="radiogroup" aria-label="화면">
+        {(["system", "light", "dark"] as const).map((pref) => (
+          <button key={pref} type="button" role="radio" aria-checked={themePref === pref} className={themePref === pref ? "active" : ""} onClick={() => onTheme(pref)}>
+            {THEME_LABEL[pref]}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

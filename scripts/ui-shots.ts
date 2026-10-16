@@ -43,42 +43,66 @@ const waitIdle = async (p: Page) => {
   await p.waitForFunction(() => document.querySelector(".status-pill")?.textContent?.includes("대기 중"), null, { timeout: 240_000 });
 };
 
+const toggleTheme = async () => {
+  await page.locator('.topbar-right button[aria-label$="화면으로"]').click();
+  await page.waitForTimeout(300);
+};
+
 try {
   await page.goto(`${ready.url}/?token=${ready.token}`);
   await page.waitForSelector(".start-title");
   await page.waitForTimeout(1500);
-  await capture("start");
+  await capture("start-light");
 
   await page.getByRole("radio", { name: "Claude" }).click();
-  await page.locator(".composer-input").fill("7주차 강의 자료의 도입부를 두 문장으로 써줘. 주제는 '질문에서 시작하는 지식 생산'.");
+  await page.locator(".composer-right .plain-select").first().click();
+  await capture("model-menu-light");
+  await page.keyboard.press("Escape");
+  await page.mouse.click(10, 880);
+
+  await page.locator(".composer-input").fill("7주차 강의 자료의 도입부를 두 문장으로 써줘. 주제는 '질문에서 시작하는 지식 생산'. 핵심 단어 하나는 **굵게** 표시해줘.");
   await page.keyboard.press("Enter");
   await page.waitForSelector(".turn-user");
-  await page.waitForTimeout(2500);
-  await capture("claude-streaming");
+  await page.waitForTimeout(700);
+  await capture("claude-waiting-light");
+  await page.waitForSelector(".turn-assistant .markdown", { timeout: 240_000 });
+  await capture("claude-streaming-light");
   await page.waitForSelector(".turn-assistant .markdown:not(.streaming)", { timeout: 240_000 });
   await waitIdle(page);
-  await capture("claude-reply");
+  await capture("claude-reply-light");
+
+  await toggleTheme();
+  await capture("claude-reply-dark");
+  await page.locator('.topbar-left button[aria-label="사이드바 열기"]').click();
+  await page.waitForSelector(".sidebar");
+  await capture("sidebar-dark");
 
   await page.locator(".composer-right .select-button").click();
-  await capture("target-menu");
   await page.getByRole("menuitem", { name: "새 Codex 세션" }).click();
   await page.waitForSelector(".session-tabs");
   await page.locator(".composer-input").fill("Run the shell command `touch codex-check.txt` and then reply done.");
   await page.keyboard.press("Enter");
+  await page.waitForTimeout(900);
+  await capture("codex-waiting-dark");
   await page.waitForSelector(".approval-card", { timeout: 240_000 });
-  await capture("codex-approval");
+  await capture("codex-approval-dark");
   await page.getByRole("button", { name: /허용/ }).click();
   await waitIdle(page);
   await page.waitForTimeout(1000);
-  await capture("codex-done");
+  await capture("codex-done-dark");
 
+  await toggleTheme();
+  await capture("sidebar-light");
   await page.getByRole("button", { name: /작업/ }).first().click();
   await page.waitForSelector(".finder-inner");
   await page.getByRole("button", { name: "폴더" }).last().click();
   await page.locator(".tree-form input").fill("강의");
   await page.keyboard.press("Enter");
   await page.waitForTimeout(500);
-  await capture("finder");
+  await capture("finder-light");
+  await page.locator('.topbar-right button[aria-label="연결과 설정"]').click();
+  await page.waitForTimeout(300);
+  await capture("settings-menu-light");
 } finally {
   await browser.close();
   child.kill("SIGTERM");

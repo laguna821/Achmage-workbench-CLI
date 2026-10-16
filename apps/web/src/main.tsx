@@ -2,9 +2,11 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import { readToken } from "./api.ts";
+import { applyTheme, readThemePref } from "./theme.ts";
 import "./styles.css";
 
 readToken();
+applyTheme(readThemePref());
 
 // Report UI errors to the local gateway log so failures in the desktop webview are visible.
 function report(message: string) {

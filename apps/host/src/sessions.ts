@@ -13,6 +13,7 @@ import {
   type Session,
   type Snapshot,
   type TranscriptItem,
+  type UpdateSessionRequest,
   type Work,
 } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
@@ -56,7 +57,8 @@ export class SessionManager {
     this.options = options;
     for (const folder of store.folders()) this.folders.set(folder.id, folder);
     for (const work of store.works()) this.works.set(work.id, work);
-    for (const session of store.sessions()) this.sessions.set(session.id, session);
+    // Rows written by older versions may lack newer fields.
+    for (const session of store.sessions()) this.sessions.set(session.id, { ...session, effort: session.effort ?? null, engineModel: session.engineModel ?? null, engineEffort: session.engineEffort ?? null });
     this.recoverAfterRestart();
   }
 
@@ -193,6 +195,9 @@ export class SessionManager {
       nativeSessionId: null,
       purpose: request.purpose?.trim() || `대화 ${count + 1}`,
       model: request.model ?? null,
+      effort: request.effort ?? null,
+      engineModel: null,
+      engineEffort: null,
       status: "idle",
       activity: null,
       lastError: null,
@@ -204,11 +209,17 @@ export class SessionManager {
     return session;
   }
 
-  renameSession(sessionId: string, purpose: string): Session {
+  /** Rename, or pick the model / effort used from the next turn on. */
+  updateSession(sessionId: string, patch: UpdateSessionRequest): Session {
     const session = this.requireSession(sessionId);
-    const trimmed = purpose.trim();
-    if (!trimmed) throw new HttpError(400, "invalid_name", "세션 이름이 비어 있습니다.");
-    const next = { ...session, purpose: trimmed.slice(0, 60), updatedAt: Date.now() };
+    const next = { ...session, updatedAt: Date.now() };
+    if (patch.purpose !== undefined) {
+      const trimmed = patch.purpose.trim();
+      if (!trimmed) throw new HttpError(400, "invalid_name", "세션 이름이 비어 있습니다.");
+      next.purpose = trimmed.slice(0, 60);
+    }
+    if (patch.model !== undefined) next.model = patch.model || null;
+    if (patch.effort !== undefined) next.effort = patch.effort || null;
     this.saveSession(next);
     return next;
   }

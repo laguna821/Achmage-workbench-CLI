@@ -17,6 +17,9 @@
 | 새 작업 | 첫 화면에서 엔진(Claude/Codex)·폴더(없이 시작 / 선택 / 최근)를 고르고 바로 보내기. 폴더 없이 시작하면 앱 전용 폴더 생성. |
 | 작업 찾기(시안 04) | 검색, 최근/폴더 탭, 중첩 폴더 생성·접기, 폴더별 새 작업, 확인 필요 바로가기. 분류 이동은 앱 안 분류만 바꾸고 실제 파일은 그대로. |
 | 입력 | 한글 조합 중 Enter 오발송 방지, 작업·세션별 초안 보존. |
+| 모델 · 추론 강도 | 입력창 오른쪽 선택기. 목록은 엔진이 직접 알려준 값(Codex `model/list` + `config/read`, Claude Code initialize, 24시간 캐시). "기본"은 사용자 설정(예: `~/.codex/config.toml`)을 따른다. 바꾸면 다음 메시지부터 적용: Codex는 매 턴 모델·강도를 명시해 "기본으로 되돌리기"도 실제로 되돌아가고, Claude는 실행 중인 프로세스에 `setModel`·`effortLevel` 적용. 상태 팝오버에 엔진이 보고한 "최근 응답" 모델 표시. |
+| 왼쪽 사이드바 | PRD 2.1대로 기본은 닫힘. 상단 왼쪽 버튼으로 고정 열기/닫기(기억됨): 새 작업 · 찾기 · 폴더 트리 · + 폴더. |
+| 스킨 | Achmage 볼트의 Minimal Style Settings 라이트/다크 값 + CMDS Achmage 채팅 스킨(라이트: Conversation Studio, 다크: Operator Console). 상단 해/달 버튼과 ⋯ 메뉴의 화면(시스템·라이트·다크). 엔진이 일하는 동안 입력창 테두리를 도는 빛 궤적(1.8초), 첫 출력 전 궤도 대기 말풍선, 스트리밍 꼬리 글로우, 궤도 로더. `prefers-reduced-motion`이면 정지. |
 | 로그인 | Codex: app-server `account/login/start` → 브라우저. Claude: `claude auth login --claudeai`. 상태는 공식 명령 값만 표시, 모르면 "확인 불가". |
 
 ### 실제 검증됨 (모의 응답 없음)
@@ -49,7 +52,8 @@
 - **창 닫기 = 앱 종료**: PRD의 "트레이로 이동, 작업 유지"는 미구현. 닫으면 진행 중 응답이 멈추고 다음 실행에서 "멈춤"으로 표시된다.
 - **Node 24+ 필요**: 게이트웨이를 시스템 Node로 실행한다(번들하지 않음).
 - 이 노트북 설치는 시스템 WebKit 실행 파일. 배포용 AppImage는 별도로 빌드된다.
-- 모델 선택 메뉴 없음(엔진 기본 모델). 세션별 승인 방식 선택 없음(Claude: 매번 묻기, Codex: on-request + workspace-write).
+- Claude의 추론 강도는 엔진이 적용 결과를 보고하지 않아 "최근 응답"에는 모델만 표시된다(Codex는 모델·강도 모두).
+- 세션별 승인 방식 선택 없음(Claude: 매번 묻기, Codex: on-request + workspace-write).
 - Claude 세션은 사용자 설정(`~/.claude`)을 읽으므로 Achmage 훅도 함께 실행된다.
 
 ## 다음

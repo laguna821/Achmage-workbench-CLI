@@ -191,11 +191,13 @@ function PlanCard({ item }: { item: Item<"plan"> }) {
 export function Transcript({
   items,
   provider,
+  running,
   loading,
   onAnswer,
 }: {
   items: TranscriptItem[];
   provider: Provider;
+  running: boolean;
   loading: boolean;
   onAnswer: (itemId: string, decision: "accept" | "decline") => void;
 }) {
@@ -203,6 +205,8 @@ export function Transcript({
   const pinned = useRef(true);
   const blocks = toBlocks(items);
   const pending = items.find((item): item is Item<"approval"> => item.kind === "approval" && item.decision === null);
+  // The engine is working but nothing has arrived since the last request yet.
+  const waitingFirst = running && blocks[blocks.length - 1]?.type === "user";
 
   useLayoutEffect(() => {
     const element = scroller.current;
@@ -239,8 +243,7 @@ export function Transcript({
             case "user":
               return (
                 <section key={block.item.id} className="turn-user">
-                  <div className="speaker">나</div>
-                  <div className="user-text">{block.item.text}</div>
+                  <div className="user-bubble">{block.item.text}</div>
                 </section>
               );
             case "assistant":
@@ -275,6 +278,18 @@ export function Transcript({
               );
           }
         })}
+        {waitingFirst ? (
+          <section className="turn-assistant">
+            <div className="speaker engine">{PROVIDER_LABEL[provider]}</div>
+            <div className="response-pending" role="status" aria-label="응답을 기다리는 중">
+              <span className="response-pending-dots">
+                <i />
+                <i />
+                <i />
+              </span>
+            </div>
+          </section>
+        ) : null}
       </div>
     </div>
   );

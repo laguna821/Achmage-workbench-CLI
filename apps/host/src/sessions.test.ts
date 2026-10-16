@@ -74,6 +74,16 @@ describe("SessionManager", () => {
     await expect(manager.send(session.id, "r2", "second")).rejects.toMatchObject({ code: "session_busy" });
   });
 
+  it("keeps model and reasoning effort per session and clears them back to the engine default", () => {
+    const { manager } = setup();
+    const work = manager.createWork({ title: "w" });
+    const session = manager.createSession(work.id, { provider: "claude", model: "opus", effort: "high" });
+    expect(session).toMatchObject({ model: "opus", effort: "high", purpose: "대화 1" });
+    expect(manager.updateSession(session.id, { effort: "max" })).toMatchObject({ model: "opus", effort: "max" });
+    expect(manager.updateSession(session.id, { model: null, effort: null })).toMatchObject({ model: null, effort: null });
+    expect(() => manager.updateSession(session.id, { purpose: "  " })).toThrow(HttpError);
+  });
+
   it("persists streamed text and shows interrupted work as stopped after a restart", async () => {
     const first = setup();
     const work = first.manager.createWork({ title: "w" });

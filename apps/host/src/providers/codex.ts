@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import type { ApprovalDecision, ProviderStatus, Session, UsageWindow, Work } from "@workbench/contracts";
+import type { ApprovalDecision, ModelOption, ProviderStatus, Session, UsageWindow, Work } from "@workbench/contracts";
 import { CodexRpc, mapPlanSteps, mapThreadItem, type RpcNotification, type RpcServerRequest } from "@workbench/provider-codex";
 import type { AgentMessageDeltaNotification } from "@workbench/provider-codex/src/generated/v2/AgentMessageDeltaNotification.ts";
 import type { CommandExecutionRequestApprovalParams } from "@workbench/provider-codex/src/generated/v2/CommandExecutionRequestApprovalParams.ts";
@@ -9,6 +9,11 @@ import type { GetAccountRateLimitsResponse } from "@workbench/provider-codex/src
 import type { GetAccountResponse } from "@workbench/provider-codex/src/generated/v2/GetAccountResponse.ts";
 import type { ItemCompletedNotification } from "@workbench/provider-codex/src/generated/v2/ItemCompletedNotification.ts";
 import type { ItemStartedNotification } from "@workbench/provider-codex/src/generated/v2/ItemStartedNotification.ts";
+import type { ReasoningEffort } from "@workbench/provider-codex/src/generated/ReasoningEffort.ts";
+import type { ConfigReadResponse } from "@workbench/provider-codex/src/generated/v2/ConfigReadResponse.ts";
+import type { ModelListResponse } from "@workbench/provider-codex/src/generated/v2/ModelListResponse.ts";
+import type { ThreadReadResponse } from "@workbench/provider-codex/src/generated/v2/ThreadReadResponse.ts";
+import type { ThreadSettingsUpdatedNotification } from "@workbench/provider-codex/src/generated/v2/ThreadSettingsUpdatedNotification.ts";
 import type { LoginAccountResponse } from "@workbench/provider-codex/src/generated/v2/LoginAccountResponse.ts";
 import type { PermissionsRequestApprovalParams } from "@workbench/provider-codex/src/generated/v2/PermissionsRequestApprovalParams.ts";
 import type { RateLimitSnapshot } from "@workbench/provider-codex/src/generated/v2/RateLimitSnapshot.ts";
@@ -52,6 +57,36 @@ export function usageFromSnapshot(snapshot: RateLimitSnapshot | null | undefined
       usedPercent: window.usedPercent,
       resetsAt: window.resetsAt ? window.resetsAt * 1000 : null,
     }));
+}
+
+/**
+ * Picker options from `model/list`. The user's config.toml (`model`, `model_reasoning_effort`)
+ * decides what "default" means, so it overrides the built-in default marks when it names a listed model.
+ */
+export function modelsFromList(list: ModelListResponse, configured?: { model: string | null; effort: string | null }): ModelOption[] {
+  const options = list.data
+    .filter((model) => !model.hidden)
+    .map((model) => ({
+      id: model.model || model.id,
+      label: model.displayName || model.model,
+      description: model.description || null,
+      efforts: model.supportedReasoningEfforts.map((option) => option.reasoningEffort),
+      defaultEffort: model.defaultReasoningEffort ?? null,
+      isDefault: model.isDefault,
+    }));
+  const base = options.find((option) => option.id === configured?.model) ?? options.find((option) => option.isDefault);
+  if (!base) return options;
+  const effort = configured?.effort && base.efforts.includes(configured.effort) ? configured.effort : base.defaultEffort;
+  return options.map((option) => (option.id === base.id ? { ...option, isDefault: true, defaultEffort: effort } : { ...option, isDefault: false }));
+}
+
+/**
+ * Codex keeps a turn's model and effort for later turns, so every turn names them explicitly;
+ * otherwise going back to "default" in the picker would silently keep the last override.
+ */
+export function turnSettings(session: Pick<Session, "model" | "effort">, models: ModelOption[]) {
+  const chosen = (session.model && models.find((model) => model.id === session.model)) || (!session.model && models.find((model) => model.isDefault)) || null;
+  return { model: session.model ?? chosen?.id ?? null, effort: session.effort ?? chosen?.defaultEffort ?? null };
 }
 
 export class CodexAdapter implements ProviderAdapter {
@@ -192,6 +227,15 @@ export class CodexAdapter implements ProviderAdapter {
       if (loggedIn) {
         const limits = await rpc.request<GetAccountRateLimitsResponse>("account/rateLimits/read", undefined);
         this.publish({ usage: usageFromSnapshot(limits.rateLimits), usageObservedAt: Date.now() });
+        if (!this.current.models.length) {
+          const [models, config] = await Promise.all([
+            rpc.request<ModelListResponse>("model/list", { limit: 100 }),
+            rpc.request<ConfigReadResponse>("config/read", {}).catch(() => null),
+          ]);
+          this.publish({
+            models: modelsFromList(models, { model: config?.config.model ?? null, effort: config?.config.model_reasoning_effort ?? null }),
+          });
+        }
       }
     } catch (error) {
       this.publish({ error: error instanceof Error ? error.message : String(error) });
@@ -222,25 +266,34 @@ export class CodexAdapter implements ProviderAdapter {
         serviceName: "achmage_workbench",
       });
       threadId = started.thread.id;
-      this.sink.updateSession(session.id, { nativeSessionId: threadId, model: started.model });
+      this.sink.updateSession(session.id, { nativeSessionId: threadId, engineModel: started.model, engineEffort: started.reasoningEffort });
       this.loaded.add(threadId);
     } else if (!this.loaded.has(threadId)) {
-      const resumed = await rpc.request<ThreadStartResponse>("thread/resume", {
+      await rpc.request<ThreadStartResponse>("thread/resume", {
         threadId,
         cwd: work.cwd,
         approvalPolicy: this.approvalPolicy,
         sandbox: this.sandbox,
         excludeTurns: true,
       });
-      this.sink.updateSession(session.id, { model: resumed.model });
       this.loaded.add(threadId);
     }
     this.threads.set(threadId, session.id);
+    // Model and effort are per turn, so a change in the picker applies to the next message.
+    const { model, effort } = turnSettings(session, this.current.models);
     const response = await rpc.request<TurnStartResponse>("turn/start", {
       threadId,
       input: [{ type: "text", text, text_elements: [] }],
+      ...(model ? { model } : {}),
+      ...(effort ? { effort: effort as ReasoningEffort } : {}),
     });
     this.activeTurns.set(threadId, response.turn.id);
+    // Codex 0.160 sends no settings notification for per-turn overrides; read what the thread now uses.
+    const sessionId = session.id;
+    void rpc
+      .request<ThreadReadResponse>("thread/read", { threadId })
+      .then(({ thread }) => this.sink.updateSession(sessionId, { engineModel: thread.model, engineEffort: thread.reasoningEffort }))
+      .catch(() => undefined);
   }
 
   async interrupt(session: Session) {
@@ -361,6 +414,12 @@ export class CodexAdapter implements ProviderAdapter {
       return;
     }
     switch (method) {
+      case "thread/settings/updated": {
+        // Reported after a turn applies the picked model / effort.
+        const { threadSettings } = params as ThreadSettingsUpdatedNotification;
+        this.sink.updateSession(sessionId, { engineModel: threadSettings.model, engineEffort: threadSettings.effort });
+        break;
+      }
       case "turn/started": {
         const { turn } = params as TurnStartedNotification;
         this.activeTurns.set(threadId, turn.id);
