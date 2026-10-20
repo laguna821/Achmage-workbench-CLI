@@ -19,7 +19,7 @@
   },
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json && tsc -p apps/web/tsconfig.json",
-    "build": "npm run build -w @workbench/web && npm run build -w @workbench/host"
+    "typecheck": "tsc -p tsconfig.json && tsc -p apps/web/tsconfig.json && tsc -p apps/design/tsconfig.json",
+    "build": "npm run build -w @workbench/web && npm run build -w @workbench/design && npm run build -w @workbench/host"
   }
 }

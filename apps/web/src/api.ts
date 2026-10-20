@@ -71,6 +71,7 @@ export class Api {
   handoff = (request: { requestId: string; sourceSessionId: string; targetSessionId: string; text: string; refs: DocRef[] }) =>
     this.request<Handoff>("POST", "/api/handoffs", request);
   openFile = (workId: string, path: string) => this.request<Artifact>("POST", `/api/works/${workId}/artifacts`, { path });
+  createDesign = (workId: string, name: string, preset: string) => this.request<Artifact>("POST", `/api/works/${workId}/designs`, { name, preset });
   artifactText = (artifactId: string, revision?: number) =>
     this.request<{ artifact: Artifact; revision: number; text: string; editable: boolean; view: boolean }>(
       "GET",

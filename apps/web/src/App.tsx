@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { DocRef, Proposal, Provider, Session, UiPrefs, Work } from "@workbench/contracts";
 import { Api, ApiRequestError, readToken } from "./api.ts";
+import { configureDesign } from "./design.ts";
 import { initialState, reducer, sessionsOf } from "./state.ts";
 import { newRequestId, titleFrom } from "./format.ts";
 import { Connections } from "./components/Connections.tsx";
@@ -83,6 +84,7 @@ const readJson = <T,>(key: string, fallback: T): T => {
 export function App() {
   const api = useMemo(() => {
     const token = readToken();
+    if (token) configureDesign(token);
     return token ? new Api(token) : null;
   }, []);
   const [state, dispatch] = useReducer(reducer, initialState);
@@ -228,6 +230,15 @@ export function App() {
         if (!api) return;
         try {
           const artifact = await api.openFile(target.id, path);
+          setView({ kind: "document", artifactId: artifact.id, proposalId: null });
+        } catch (error) {
+          fail(error);
+        }
+      },
+      newDesign: async (target: Work, preset: string) => {
+        if (!api) return;
+        try {
+          const artifact = await api.createDesign(target.id, "새 디자인", preset);
           setView({ kind: "document", artifactId: artifact.id, proposalId: null });
         } catch (error) {
           fail(error);

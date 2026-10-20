@@ -1,9 +1,10 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { FORMAT_LABEL, PROVIDER_LABEL, type Artifact, type DocFormat, type Handoff, type Proposal, type RefSummary } from "@workbench/contracts";
 import { accentStyle, useAppearance } from "../appearance.ts";
 import { ago } from "../format.ts";
+import { changeKindLabel, designChanges, firstChangedPage, proposalTexts, useDesignThumb, type DesignChange } from "../design.ts";
 import type { State } from "../state.ts";
 import { EngineMark } from "./EngineMark.tsx";
 import { Icon } from "./Icon.tsx";
@@ -28,18 +29,24 @@ export function useDocs() {
   return value;
 }
 
-const FORMAT_MARK: Record<DocFormat, string> = { markdown: "MD", html: "HTML", pdf: "PDF", hwpx: "HWPX", hwp: "HWP", text: "TXT" };
+const FORMAT_MARK: Record<DocFormat, string> = { markdown: "MD", html: "HTML", pdf: "PDF", hwpx: "HWPX", hwp: "HWP", text: "TXT", design: "디자인" };
 
 export function FormatBadge({ format }: { format: DocFormat }) {
   return <span className={`format-badge format-${format}`}>{FORMAT_MARK[format]}</span>;
+}
+
+/** First page of a design revision, drawn small for the conversation. */
+function DesignCardThumb({ artifactId, revision }: { artifactId: string; revision: number }) {
+  const thumb = useDesignThumb({ artifactId, revision }, 0, 240);
+  return <span className="design-card-thumb">{thumb.url ? <img src={thumb.url} alt="" /> : <span className="design-thumb-wait">{thumb.error ? "미리보기 없음" : ""}</span>}</span>;
 }
 
 export function FileCard({ artifact, revision, change }: { artifact: Artifact; revision: number; change: "created" | "modified" }) {
   const { actions } = useDocs();
   const newer = artifact.revision > revision;
   return (
-    <button type="button" className="doc-card" onClick={() => actions.openArtifact(artifact.id)} title={artifact.path}>
-      <FormatBadge format={artifact.format} />
+    <button type="button" className={`doc-card${artifact.format === "design" ? " design" : ""}`} onClick={() => actions.openArtifact(artifact.id)} title={artifact.path}>
+      {artifact.format === "design" ? <DesignCardThumb artifactId={artifact.id} revision={revision} /> : <FormatBadge format={artifact.format} />}
       <span className="doc-card-main">
         <span className="doc-card-name">{artifact.name}</span>
         <span className="doc-card-meta">
@@ -52,6 +59,51 @@ export function FileCard({ artifact, revision, change }: { artifact: Artifact; r
         열기 <Icon name="arrowRight" size={14} />
       </span>
     </button>
+  );
+}
+
+/** Before and after of the page an AI changed, with the first few changes in words. */
+function DesignProposalPreview({ proposal }: { proposal: Proposal }) {
+  const [changes, setChanges] = useState<DesignChange[] | null>(null);
+  useEffect(() => {
+    let active = true;
+    proposalTexts(proposal.id)
+      .then(([base, proposed]) => active && setChanges(designChanges(base, proposed) ?? []))
+      .catch(() => active && setChanges([]));
+    return () => {
+      active = false;
+    };
+  }, [proposal.id]);
+  const page = useMemo(() => firstChangedPage(changes), [changes]);
+  const before = useDesignThumb(changes ? { artifactId: proposal.artifactId, proposalId: proposal.id, side: "base" } : null, page, 280);
+  const after = useDesignThumb(changes && !proposal.problem ? { artifactId: proposal.artifactId, proposalId: proposal.id, side: "proposed" } : null, page, 280);
+  return (
+    <div className="design-proposal">
+      <div className="design-proposal-pair">
+        <figure>
+          <figcaption>r{proposal.baseRevision}</figcaption>
+          {before.url ? <img src={before.url} alt={`수정 전 ${page + 1}쪽`} /> : <div className="design-thumb-wait" />}
+        </figure>
+        <Icon name="arrowRight" size={14} />
+        <figure>
+          <figcaption>수정안</figcaption>
+          {proposal.problem ? <div className="design-thumb-wait">파일 오류</div> : after.url ? <img src={after.url} alt={`수정안 ${page + 1}쪽`} /> : <div className="design-thumb-wait" />}
+        </figure>
+      </div>
+      {changes?.length ? (
+        <ul className="design-changes compact">
+          {changes.slice(0, 4).map((change, index) => (
+            <li key={index} className={`design-change kind-${change.kind}`}>
+              <span className="design-change-kind">{changeKindLabel(change.kind)}</span>
+              <span className="design-change-label">
+                {change.page + 1}쪽 · {change.kind === "text" && change.detail ? change.detail : change.label}
+              </span>
+            </li>
+          ))}
+          {changes.length > 4 ? <li className="muted">그 밖에 {changes.length - 4}건</li> : null}
+        </ul>
+      ) : null}
+    </div>
   );
 }
 
@@ -71,9 +123,17 @@ export function ProposalCard({ proposal }: { proposal: Proposal }) {
           {engine}의 수정안 · {artifact.name}
         </span>
         <span className="proposal-meta">
-          r{proposal.baseRevision} 기준 · <span className="diff-add">+{proposal.added}</span> <span className="diff-del">−{proposal.removed}</span>
+          r{proposal.baseRevision} 기준
+          {artifact.format === "design" ? null : (
+            <>
+              {" "}
+              · <span className="diff-add">+{proposal.added}</span> <span className="diff-del">−{proposal.removed}</span>
+            </>
+          )}
         </span>
       </div>
+      {artifact.format === "design" && proposal.status !== "running" && proposal.status !== "empty" ? <DesignProposalPreview proposal={proposal} /> : null}
+      {proposal.problem && proposal.status === "pending" ? <div className="proposal-warning">디자인 파일이 올바르지 않아 적용할 수 없습니다: {proposal.problem}</div> : null}
       {proposal.status === "pending" ? (
         stale ? (
           <>
@@ -97,9 +157,11 @@ export function ProposalCard({ proposal }: { proposal: Proposal }) {
             <button type="button" className="button small" onClick={() => actions.openArtifact(artifact.id, proposal.id)}>
               미리보기
             </button>
-            <button type="button" className="button small primary" onClick={() => actions.applyProposal(proposal)}>
-              적용
-            </button>
+            {proposal.problem ? null : (
+              <button type="button" className="button small primary" onClick={() => actions.applyProposal(proposal)}>
+                적용
+              </button>
+            )}
             <button type="button" className="button small" onClick={() => actions.discardProposal(proposal)}>
               취소
             </button>

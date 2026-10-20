@@ -81,7 +81,7 @@ export type PlanStep = { text: string; status: "pending" | "inProgress" | "compl
 export type ApprovalDecision = "accept" | "decline";
 
 /** Documents the app tracks with exact revisions (PRD 3.3). */
-export type DocFormat = "markdown" | "html" | "pdf" | "hwpx" | "hwp" | "text";
+export type DocFormat = "markdown" | "html" | "pdf" | "hwpx" | "hwp" | "text" | "design";
 
 export type Artifact = {
   id: string;
@@ -120,7 +120,11 @@ export type DocRef = {
   revision: number;
   /** edit: the session may change it (through a working copy). review: read only. */
   mode: "edit" | "review";
-  selection?: { from: number; to: number; text: string; label: string } | null;
+  /**
+   * Part of the document the request is about. Text formats use the character range; designs use the
+   * page and object ids (`text` then describes the selected objects).
+   */
+  selection?: { from: number; to: number; text: string; label: string; pageId?: string; objectIds?: string[] } | null;
 };
 
 /**
@@ -138,6 +142,8 @@ export type Proposal = {
   added: number;
   removed: number;
   appliedRevision: number | null;
+  /** Why the working copy cannot be applied as it is (a design that is no longer valid JSON…). */
+  problem?: string | null;
   createdAt: number;
   updatedAt: number;
 };
@@ -331,11 +337,14 @@ export const FORMAT_LABEL: Record<DocFormat, string> = {
   hwpx: "한글(HWPX)",
   hwp: "한글(HWP)",
   text: "텍스트",
+  design: "디자인",
 };
 
 /** Formats the app opens as documents, by file extension. */
 export function formatOf(path: string): DocFormat | null {
-  const extension = path.toLowerCase().split(".").pop() ?? "";
+  const lower = path.toLowerCase();
+  if (lower.endsWith(".design.json")) return "design";
+  const extension = lower.split(".").pop() ?? "";
   if (extension === "md" || extension === "markdown") return "markdown";
   if (extension === "html" || extension === "htm") return "html";
   if (extension === "pdf") return "pdf";
@@ -344,6 +353,36 @@ export function formatOf(path: string): DocFormat | null {
   if (extension === "txt") return "text";
   return null;
 }
+
+/** Extension of design documents: a doory document (schema v1) as JSON. */
+export const DESIGN_EXTENSION = ".design.json";
+
+/** What the user selected in the design editor; becomes the selection of a request about the design. */
+export type DesignSelection = { pageId: string; pageIndex: number; objectIds: string[]; label: string; text: string };
+
+export type DesignSaveState = "idle" | "dirty" | "saving" | "saved" | "conflict" | "error";
+
+/** Workbench window → design page (iframe at /design/). */
+export type DesignHostMessage =
+  | { type: "design:init"; token: string; artifactId: string; revision: number | null; readOnly: boolean; theme: "light" | "dark" }
+  | { type: "design:theme"; theme: "light" | "dark" }
+  | { type: "design:flush" }
+  | { type: "render:init"; token: string }
+  | { type: "render:request"; id: string; artifactId: string; document: string; page: number; width: number };
+
+/** Design page → Workbench window. */
+export type DesignPageMessage =
+  | { type: "design:ready" }
+  | { type: "design:opened"; revision: number; pages: number }
+  | { type: "design:saved"; revision: number }
+  | { type: "design:state"; state: DesignSaveState; message?: string }
+  | { type: "design:selection"; selection: DesignSelection | null }
+  | { type: "design:reload" }
+  | { type: "design:copied"; artifactId: string }
+  | { type: "design:exported"; name: string; path: string; artifactId: string | null }
+  | { type: "design:error"; message: string }
+  | { type: "render:ready" }
+  | { type: "render:result"; id: string; dataUrl: string | null; pages: number; error?: string };
 
 export type ApprovalAnswerRequest = { decision: ApprovalDecision };
 

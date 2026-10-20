@@ -2,11 +2,12 @@ import { createHash, randomUUID } from "node:crypto";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { diffLines } from "diff";
-import { formatOf, type Artifact, type ArtifactRevision, type DocRef, type Proposal, type RefSummary } from "@workbench/contracts";
+import { DESIGN_EXTENSION, formatOf, type Artifact, type ArtifactRevision, type DocRef, type Proposal, type RefSummary } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
 import { HttpError } from "./errors.ts";
 import type { Store } from "./store.ts";
 import type { Kordoc } from "./kordoc.ts";
+import { designAssetPath, designGuide, designProblem, designStem, saveDesignAsset } from "./design.ts";
 
 // Documents with exact revisions (PRD 3.3). Every recorded revision is an immutable copy under the
 // gateway's data folder; the real file stays where it is in the work folder. AI edits happen in a
@@ -34,6 +35,9 @@ function writeAtomic(path: string, data: Buffer | string) {
 }
 
 const isHangul = (format: string) => format === "hwpx" || format === "hwp";
+
+/** Extension kept on copies of a document (designs keep their two-part `.design.json`). */
+const extensionOf = (artifact: Pick<Artifact, "format" | "name">) => (artifact.format === "design" ? DESIGN_EXTENSION : extname(artifact.name));
 
 export function isWorkbenchPath(path: string) {
   return path.split(/[\\/]/).includes(WORKBENCH_DIR);
@@ -240,6 +244,10 @@ export class Documents {
       throw new HttpError(409, "disk_changed", "다른 프로그램이 이 파일을 바꿨습니다. 내 수정은 그대로 두고 비교해 주세요.");
     }
     if (isHangul(artifact.format) && text === (await this.view(artifactId, expectedRevision))) return artifact;
+    if (artifact.format === "design") {
+      const problem = designProblem(text);
+      if (problem) throw new HttpError(422, "invalid_design", `디자인을 저장하지 않았습니다: ${problem}`);
+    }
     const data = await this.contentFor(artifact, expectedRevision, text);
     if (sha256(data) === artifact.sha256) return artifact;
     const current = this.check(artifactId);
@@ -280,8 +288,8 @@ export class Documents {
     }
     const hangul = isHangul(artifact.format);
     const source = this.revisionPath(artifact.id, ref.revision);
-    const extension = extname(artifact.name);
-    const stem = basename(artifact.name, extension);
+    const extension = extensionOf(artifact);
+    const stem = artifact.format === "design" ? designStem(artifact.name) : basename(artifact.name, extension);
     const pinnedDir = join(cwd, WORKBENCH_DIR, "pinned");
     mkdirSync(pinnedDir, { recursive: true });
     const pinned = join(pinnedDir, `${stem}.r${ref.revision}${extension}`);
@@ -352,7 +360,8 @@ export class Documents {
       return empty;
     }
     const counts = countChanges(base.toString("utf8"), working.toString("utf8"));
-    const pending: Proposal = { ...proposal, ...counts, status: "pending", updatedAt: now };
+    const problem = artifact.format === "design" ? designProblem(working.toString("utf8")) : null;
+    const pending: Proposal = { ...proposal, ...counts, problem, status: "pending", updatedAt: now };
     this.saveProposal(pending);
     return pending;
   }
@@ -392,6 +401,10 @@ export class Documents {
     if (artifact.diskState !== "same") throw new HttpError(409, "disk_changed", "다른 프로그램이 이 파일을 바꿨습니다.");
     const working = readFileOrNull(proposal.workingPath);
     if (!working) throw new HttpError(410, "proposal_missing", "수정안 사본이 사라졌습니다.");
+    if (artifact.format === "design") {
+      const problem = designProblem(working.toString("utf8"));
+      if (problem) throw new HttpError(422, "invalid_design", `이 수정안은 디자인 파일로 열 수 없어 적용하지 않습니다: ${problem}`);
+    }
     const data = isHangul(artifact.format) ? await this.contentFor(artifact, proposal.baseRevision, working.toString("utf8")) : working;
     const latest = this.check(artifact.id);
     if (latest.revision !== proposal.baseRevision || latest.diskState !== "same") throw new HttpError(409, "stale_proposal", "적용하는 동안 문서가 바뀌었습니다.");
@@ -434,8 +447,13 @@ export class Documents {
     } else {
       lines.push("  · 이 판을 읽고 답하세요. 파일은 고치지 마세요.");
     }
+    if (artifact.format === "design") {
+      const source = proposal ? proposal.workingPath : pinned;
+      lines.push(...designGuide(readFileOrNull(source)?.toString("utf8") ?? null, artifact.path));
+    }
     if (ref.selection) {
       lines.push(`  · 선택 범위(${ref.selection.label}):`);
+      if (ref.selection.objectIds?.length) lines.push(`    페이지 id ${ref.selection.pageId ?? "?"}, 개체 id ${ref.selection.objectIds.join(", ")}`);
       for (const line of ref.selection.text.slice(0, 4000).split("\n")) lines.push(`    > ${line}`);
       if (proposal) lines.push("    요청은 이 범위를 대상으로 합니다. 범위 밖은 바꾸지 마세요.");
     }
@@ -444,6 +462,20 @@ export class Documents {
 
   private revisionSha(artifactId: string, revision: number) {
     return this.store.revisions(artifactId).find((entry) => entry.revision === revision)?.sha256 ?? "";
+  }
+
+  /** Keep an image the user put into a design next to the design file. */
+  saveAsset(artifactId: string, data: Buffer, contentType: string, name: string) {
+    const artifact = this.get(artifactId);
+    if (artifact.format !== "design") throw new HttpError(400, "not_design", "디자인 문서가 아닙니다.");
+    return { src: saveDesignAsset(artifact.path, data, contentType, name) };
+  }
+
+  /** File behind an image src of a design (relative to the design's folder). */
+  assetPath(artifactId: string, src: string) {
+    const artifact = this.get(artifactId);
+    if (artifact.format !== "design") throw new HttpError(400, "not_design", "디자인 문서가 아닙니다.");
+    return designAssetPath(artifact.path, src);
   }
 
   stat(artifactId: string) {

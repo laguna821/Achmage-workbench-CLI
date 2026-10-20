@@ -19,6 +19,7 @@ export type WorkActions = {
   pickSession: (work: Work, exclude: Session | null) => Promise<Session | null>;
   openArtifact: (artifactId: string) => void;
   openFile: (work: Work, path: string) => Promise<void>;
+  newDesign: (work: Work, preset: string) => Promise<void>;
   interrupt: (session: Session) => void;
   answer: (session: Session, itemId: string, decision: "accept" | "decline") => void;
   newSession: (work: Work, provider: Provider, choice?: ModelChoice) => Promise<Session | null>;
@@ -29,6 +30,15 @@ export type WorkActions = {
   openFinder: () => void;
   openOverview: (work?: Work) => void;
 };
+
+/** Sizes a new design starts with (the gateway knows the same ids). */
+const DESIGN_PRESETS = [
+  { id: "square", label: "정사각 (SNS)", size: "1080×1080" },
+  { id: "portrait", label: "카드뉴스", size: "1080×1350" },
+  { id: "story", label: "세로 (스토리)", size: "1080×1920" },
+  { id: "wide", label: "가로 (썸네일·화면)", size: "1920×1080" },
+  { id: "a4", label: "A4 문서", size: "794×1123" },
+];
 
 /** Tabs that stay readable with many sessions: the active one and the latest few, the rest behind "+N". */
 const MAX_TABS = 5;
@@ -233,6 +243,20 @@ export function WorkView({
               </MenuItem>
             ))}
             {!artifacts.length ? <div className="menu-label">AI가 만든 문서나 연 파일이 여기에 모입니다.</div> : null}
+            <div className="menu-divider" />
+            <div className="menu-label">새 디자인</div>
+            {DESIGN_PRESETS.map((preset) => (
+              <MenuItem
+                key={preset.id}
+                hint={preset.size}
+                onSelect={() => {
+                  setDocsOpen(false);
+                  void actions.newDesign(work, preset.id);
+                }}
+              >
+                {preset.label}
+              </MenuItem>
+            ))}
             <div className="menu-divider" />
             {pickFile ? (
               <MenuItem

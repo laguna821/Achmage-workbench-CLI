@@ -6,6 +6,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { DocRef, Provider, SequencedEvent } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
 import { HttpError, type SessionManager } from "./sessions.ts";
+import { DESIGN_PRESETS, systemFonts, type DesignPreset } from "./design.ts";
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -28,6 +29,13 @@ const MIME: Record<string, string> = {
   ".otf": "font/otf",
   ".hwpx": "application/octet-stream",
   ".hwp": "application/octet-stream",
+  ".avif": "image/avif",
+  ".mp3": "audio/mpeg",
+  ".ogg": "audio/ogg",
+  ".wav": "audio/wav",
+  ".m4a": "audio/mp4",
+  ".weba": "audio/webm",
+  ".wasm": "application/wasm",
 };
 
 /**
@@ -52,7 +60,14 @@ function parseRefs(value: unknown): DocRef[] {
         mode: ref.mode === "edit" ? "edit" : "review",
         selection:
           selection && typeof selection.text === "string"
-            ? { from: Number(selection.from ?? 0), to: Number(selection.to ?? 0), text: selection.text, label: String(selection.label ?? "선택 범위") }
+            ? {
+                from: Number(selection.from ?? 0),
+                to: Number(selection.to ?? 0),
+                text: selection.text,
+                label: String(selection.label ?? "선택 범위"),
+                ...(typeof selection.pageId === "string" ? { pageId: selection.pageId } : {}),
+                ...(Array.isArray(selection.objectIds) ? { objectIds: selection.objectIds.filter((id): id is string => typeof id === "string").slice(0, 200) } : {}),
+              }
             : null,
       } satisfies DocRef,
     ];
@@ -73,17 +88,22 @@ function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.end(JSON.stringify(body));
 }
 
-async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+async function readBody(req: IncomingMessage, limit: number): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
-    if (size > 1_000_000) throw new HttpError(413, "too_large", "요청이 너무 큽니다.");
+    if (size > limit) throw new HttpError(413, "too_large", "요청이 너무 큽니다.");
     chunks.push(chunk as Buffer);
   }
-  if (!chunks.length) return {};
+  return Buffer.concat(chunks);
+}
+
+async function readJson(req: IncomingMessage, limit = 1_000_000): Promise<Record<string, unknown>> {
+  const body = await readBody(req, limit);
+  if (!body.length) return {};
   try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+    return JSON.parse(body.toString("utf8")) as Record<string, unknown>;
   } catch {
     throw new HttpError(400, "invalid_json", "JSON 형식이 아닙니다.");
   }
@@ -92,8 +112,10 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
 function serveStatic(res: ServerResponse, webDir: string, pathname: string) {
   const safe = normalize(decodeURIComponent(pathname)).replace(/^(\.\.[/\\])+/, "");
   let file = join(webDir, safe);
+  // The design page is its own app under /design/; everything else falls back to the main UI.
+  const app = safe.replace(/^[/\\]+/, "").startsWith("design") ? join(webDir, "design", "index.html") : join(webDir, "index.html");
   if (!file.startsWith(webDir) || !existsSync(file) || statSync(file).isDirectory()) {
-    file = join(webDir, "index.html");
+    file = existsSync(app) ? app : join(webDir, "index.html");
   }
   res.writeHead(200, {
     "content-type": MIME[extname(file)] ?? "application/octet-stream",
@@ -108,6 +130,8 @@ function streamEvents(req: IncomingMessage, res: ServerResponse, bus: EventBus, 
     "cache-control": "no-store",
     connection: "keep-alive",
   });
+  // Send the headers at once: the browser reports the stream as open only when they arrive.
+  res.write(": open\n\n");
   const write = (event: SequencedEvent) => res.write(`id: ${event.seq}\ndata: ${JSON.stringify(event)}\n\n`);
   const backlog = bus.replay(since);
   if (backlog === null) {
@@ -156,6 +180,8 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         }
         return;
       }
+      // The vendored design editor asks a doory server for optional catalogues; there is none.
+      if (path.startsWith("/api/v1/")) throw new HttpError(404, "no_doory_server", "doory 서버 없이 동작합니다.");
       const bearer = req.headers.authorization?.replace(/^Bearer\s+/i, "") ?? null;
       // A token in the URL is accepted only for the event stream (EventSource cannot set headers).
       const queryToken = req.method === "GET" && path === "/api/events" ? url.searchParams.get("token") : null;
@@ -227,6 +253,12 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           return sendJson(res, 200, { ok: true });
         }
       }
+      if (parts[0] === "works" && parts[1] && parts[2] === "designs" && method === "POST") {
+        const body = await readJson(req, 64_000_000);
+        const preset = (typeof body.preset === "string" && body.preset in DESIGN_PRESETS ? body.preset : "square") as DesignPreset;
+        return sendJson(res, 201, manager.createDesign(parts[1], String(body.name ?? ""), preset, typeof body.text === "string" ? body.text : null));
+      }
+      if (method === "GET" && path === "/api/fonts") return sendJson(res, 200, { fonts: systemFonts() });
       if (parts[0] === "works" && parts[1] && parts[2] === "artifacts" && method === "POST") {
         const body = await readJson(req);
         return sendJson(res, 200, manager.openFile(parts[1], String(body.path ?? "")));
@@ -238,7 +270,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         if (method === "GET" && parts[2] === "text") return sendJson(res, 200, await documents.text(artifactId, revision));
         if (method === "GET" && parts[2] === "pages") return sendJson(res, 200, await documents.pages(artifactId, revision));
         if (method === "PUT" && parts[2] === "text") {
-          const body = await readJson(req);
+          const body = await readJson(req, 64_000_000);
           return sendJson(res, 200, await documents.saveText(artifactId, Number(body.expectedRevision), String(body.text ?? "")));
         }
         if (method === "GET" && parts[2] === "revisions") return sendJson(res, 200, documents.revisions(artifactId));
@@ -246,6 +278,26 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           const artifact = documents.check(artifactId);
           const file = documents.revisionPath(artifactId, revision ?? artifact.revision);
           res.writeHead(200, { "content-type": MIME[extname(file).toLowerCase()] ?? "application/octet-stream", "cache-control": "no-store" });
+          createReadStream(file).pipe(res);
+          return;
+        }
+        if (method === "POST" && parts[2] === "assets") {
+          const data = await readBody(req, 50_000_000);
+          const name = decodeURIComponent(String(req.headers["x-file-name"] ?? ""));
+          return sendJson(res, 201, documents.saveAsset(artifactId, data, String(req.headers["content-type"] ?? ""), name));
+        }
+        if (method === "POST" && parts[2] === "exports") {
+          const data = await readBody(req, 500_000_000);
+          return sendJson(res, 201, manager.exportDesign(artifactId, data, decodeURIComponent(String(req.headers["x-file-name"] ?? ""))));
+        }
+        if (method === "GET" && parts[2] === "asset") {
+          const file = documents.assetPath(artifactId, url.searchParams.get("src") ?? "");
+          res.writeHead(200, {
+            "content-type": MIME[extname(file).toLowerCase()] ?? "application/octet-stream",
+            "cache-control": "private, max-age=86400",
+            "x-content-type-options": "nosniff",
+            "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:",
+          });
           createReadStream(file).pipe(res);
           return;
         }

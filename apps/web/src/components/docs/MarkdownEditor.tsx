@@ -6,7 +6,7 @@ import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { markdown } from "@codemirror/lang-markdown";
 import { tags } from "@lezer/highlight";
 
-export type EditorSelection = { from: number; to: number; text: string; label: string } | null;
+export type EditorSelection = { from: number; to: number; text: string; label: string; pageId?: string; objectIds?: string[] } | null;
 
 // Colors come from the look tokens, so the editor wears the engine's look.
 const highlight = HighlightStyle.define([

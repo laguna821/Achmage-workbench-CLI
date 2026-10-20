@@ -3508,3 +3508,208 @@ kbd {
 .doc-composer {
   flex: 0 0 auto;
 }
+
+/* Design documents (vendored doory editor in its own page) */
+.format-design {
+  background: color-mix(in srgb, var(--motion) 12%, var(--surface));
+  color: var(--motion);
+  font-family: var(--font);
+}
+
+.design-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--surface);
+}
+
+.doc-readonly:has(.design-frame) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.doc-readonly .design-frame {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.doc-card.design {
+  align-items: stretch;
+}
+
+.design-card-thumb {
+  flex: 0 0 auto;
+  width: 96px;
+  min-height: 72px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface-muted);
+  border: 1px solid var(--line);
+}
+
+.design-card-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.design-thumb-wait {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 72px;
+  font-size: 11px;
+  color: var(--faint);
+  background: repeating-linear-gradient(135deg, var(--surface-muted) 0 8px, transparent 8px 16px);
+}
+
+.design-proposal {
+  margin: 10px 0 4px;
+}
+
+.design-proposal-pair {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--faint);
+}
+
+.design-proposal-pair figure,
+.design-thumb-figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.design-proposal-pair figure {
+  width: 150px;
+}
+
+.design-proposal-pair figcaption,
+.design-thumb-figure figcaption {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.design-proposal-pair img,
+.design-thumb-figure img {
+  display: block;
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+
+.design-compare {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 20px 24px;
+}
+
+.design-compare-pages {
+  align-self: flex-start;
+}
+
+.design-compare-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.design-compare-pair .design-thumb-wait {
+  min-height: 240px;
+}
+
+.design-changes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.design-changes.compact {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.design-change {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.design-change.current .design-change-label {
+  color: var(--text);
+}
+
+.design-change-kind {
+  flex: 0 0 auto;
+  min-width: 52px;
+  padding: 0 6px;
+  border-radius: 5px;
+  font-size: 11px;
+  text-align: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.design-change.kind-added .design-change-kind,
+.design-change.kind-page-added .design-change-kind {
+  background: color-mix(in srgb, var(--ok, #16a34a) 14%, var(--surface));
+  color: var(--ok, #16a34a);
+}
+
+.design-change.kind-removed .design-change-kind,
+.design-change.kind-page-removed .design-change-kind {
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+  color: var(--danger);
+}
+
+.design-change-label {
+  color: var(--text-soft);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.design-change-detail {
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.start-credit {
+  margin-top: 18px;
+  font-size: 11px;
+  color: var(--faint);
+  text-align: center;
+}
+
+.start-credit a {
+  color: inherit;
+}
+
+.design-compare-pair .design-thumb-figure img {
+  max-height: max(160px, calc(100vh - 560px));
+  min-height: 160px;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  align-self: center;
+}

@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
-import { delimiter, dirname, extname, isAbsolute, join, resolve } from "node:path";
+import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { basename, delimiter, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import {
   PROTOCOL_VERSION,
   applyItemEvent,
@@ -16,6 +16,7 @@ import {
   type TranscriptItem,
   type UiPrefs,
   formatOf,
+  DESIGN_EXTENSION,
   type DocRef,
   type Handoff,
   type HandoffRequest,
@@ -30,6 +31,7 @@ import type { Kordoc } from "./kordoc.ts";
 import type { AdapterSink, LoginStart, ProviderAdapter } from "./providers/types.ts";
 import type { Store } from "./store.ts";
 import { adaptTitle, titleFor } from "./titles.ts";
+import { blankDesign, designProblem, type DesignPreset } from "./design.ts";
 
 export { HttpError };
 
@@ -47,6 +49,37 @@ export type ManagerOptions = {
 };
 
 const DEFAULT_PURPOSE = /^대화 \d+$/;
+
+const SKIPPED_DIRS = new Set(["node_modules", ".git", ".venv", "venv", "__pycache__", "dist", "build", "target", ".next", ".cache"]);
+
+/** Document files under a folder modified after `since` (shallow and bounded: work folders can be large). */
+export function recentDocuments(root: string, since: number, maxDepth = 3, maxEntries = 4000): string[] {
+  const found: string[] = [];
+  let seen = 0;
+  const walk = (dir: string, depth: number) => {
+    let entries: import("node:fs").Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (++seen > maxEntries) return;
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (depth < maxDepth && !entry.name.startsWith(".") && !SKIPPED_DIRS.has(entry.name)) walk(path, depth + 1);
+      } else if (entry.isFile() && formatOf(path) && !isWorkbenchPath(path)) {
+        try {
+          if (statSync(path).mtimeMs >= since) found.push(path);
+        } catch {
+          // Gone in the meantime.
+        }
+      }
+    }
+  };
+  walk(root, 0);
+  return found;
+}
 
 function findOnPath(name: string) {
   for (const dir of (process.env.PATH ?? "").split(delimiter)) {
@@ -79,6 +112,8 @@ export class SessionManager {
   private flushTimer: NodeJS.Timeout | null = null;
   private readonly adapters = new Map<Provider, ProviderAdapter>();
   private readonly handoffs = new Map<string, Handoff>();
+  /** When each session's current turn began (for the after-turn folder scan). */
+  private readonly turnStarted = new Map<string, number>();
   readonly documents: Documents;
   private readonly store: Store;
   private readonly bus: EventBus;
@@ -368,6 +403,7 @@ export class SessionManager {
       ...(refs.length ? { refs: refs.map((ref) => this.documents.summary(ref)) } : {}),
       ...(from ? { from } : {}),
     });
+    this.turnStarted.set(sessionId, Date.now());
     this.sink.updateSession(sessionId, { status: "starting", activity: "응답 준비 중", lastError: null });
     this.saveWork({ ...work, activeSessionId: sessionId, updatedAt: Date.now() });
     try {
@@ -404,12 +440,45 @@ export class SessionManager {
     if (!rawPath.trim()) throw new HttpError(400, "missing_path", "파일 경로가 필요합니다.");
     const path = isAbsolute(rawPath) ? rawPath : resolve(work.cwd, rawPath);
     if (!existsSync(path)) throw new HttpError(404, "file_missing", "파일이 없습니다.");
-    if (!formatOf(path)) throw new HttpError(415, "unsupported_format", "Markdown·HTML·PDF·HWPX·HWP·텍스트만 열 수 있습니다.");
+    if (!formatOf(path)) throw new HttpError(415, "unsupported_format", "Markdown·HTML·PDF·HWPX·HWP·텍스트·디자인(.design.json)만 열 수 있습니다.");
     const tracked = this.documents.track(work.id, work.cwd, path, "external", null, "작업 폴더에서 열기");
     if (tracked) return tracked.artifact;
     const existing = this.documents.list().find((artifact) => artifact.workId === work.id && artifact.path === path);
     if (!existing) throw new HttpError(415, "unsupported_format", "문서로 열 수 없는 파일입니다.");
     return this.documents.check(existing.id);
+  }
+
+  /** A new design file in the work folder (never overwrites: a number is added to a taken name). */
+  createDesign(workId: string, name: string, preset: DesignPreset, text: string | null = null) {
+    const work = this.requireWork(workId);
+    const problem = text === null ? null : designProblem(text);
+    if (problem) throw new HttpError(422, "invalid_design", `디자인을 만들지 않았습니다: ${problem}`);
+    const stem = (name.trim() || "새 디자인").replace(/[\\/:*?"<>|]/g, "_").replace(/\.design\.json$/i, "").slice(0, 80);
+    let path = resolve(work.cwd, `${stem}${DESIGN_EXTENSION}`);
+    for (let index = 2; existsSync(path); index += 1) path = resolve(work.cwd, `${stem} ${index}${DESIGN_EXTENSION}`);
+    writeFileSync(path, text ?? blankDesign(preset), { flag: "wx" });
+    const tracked = this.documents.track(work.id, work.cwd, path, "user", null, "새 디자인");
+    if (!tracked) throw new HttpError(500, "design_not_tracked", "디자인 파일을 만들지 못했습니다.");
+    return tracked.artifact;
+  }
+
+  /**
+   * A file the design editor exported (PNG, PDF, video…): written next to the design without
+   * overwriting anything, and tracked when it is a document format (a PDF opens in the app).
+   */
+  exportDesign(artifactId: string, data: Buffer, rawName: string) {
+    const design = this.documents.check(artifactId);
+    if (design.format !== "design") throw new HttpError(400, "not_design", "디자인 문서가 아닙니다.");
+    const work = this.requireWork(design.workId);
+    const name = basename(rawName.replace(/\\/g, "/")).replace(/[\u0000-\u001f<>:"|?*]/g, "_").trim() || "내보내기";
+    if (data.length === 0) throw new HttpError(400, "export_empty", "빈 파일입니다.");
+    const extension = extname(name);
+    const stem = name.slice(0, name.length - extension.length);
+    let path = join(dirname(design.path), name);
+    for (let index = 2; existsSync(path); index += 1) path = join(dirname(design.path), `${stem} ${index}${extension}`);
+    writeFileSync(path, data, { flag: "wx" });
+    const tracked = this.documents.track(work.id, work.cwd, path, "user", null, `「${design.name}」에서 내보냄`);
+    return { path, name: basename(path), artifactId: tracked?.artifact.id ?? null };
   }
 
   /**
@@ -444,6 +513,20 @@ export class SessionManager {
   }
 
   /** Files an engine wrote: documents get a new revision and a card in the conversation. */
+  /**
+   * Engines also write files through shell commands (a script, `cat >`), which report no paths.
+   * After a turn, documents in the work folder that changed since the turn began are tracked too.
+   */
+  private trackChangedFiles(sessionId: string) {
+    const started = this.turnStarted.get(sessionId);
+    this.turnStarted.delete(sessionId);
+    const session = this.sessions.get(sessionId);
+    const work = session ? this.works.get(session.workId) : undefined;
+    if (!started || !work || !existsSync(work.cwd)) return;
+    const changed = recentDocuments(work.cwd, started - 2000);
+    if (changed.length) this.trackFiles(sessionId, `scan:${started}`, changed);
+  }
+
   private trackFiles(sessionId: string, itemId: string, paths: string[]) {
     const session = this.sessions.get(sessionId);
     const work = session ? this.works.get(session.workId) : undefined;
@@ -469,6 +552,7 @@ export class SessionManager {
 
   /** A turn ended: working copies become proposals, and answered handoffs go back to their source. */
   private afterTurn(sessionId: string, status: "completed" | "interrupted" | "failed") {
+    this.trackChangedFiles(sessionId);
     for (const running of this.documents.runningProposals(sessionId)) {
       const proposal = status === "completed" ? this.documents.finishProposal(running.id) : this.documents.discardProposal(running.id);
       if (proposal.status === "pending") {

@@ -199,6 +199,13 @@ export function StartView({
             ))}
           </div>
         ) : null}
+        {/* Attribution Assurance License: shown each time the app starts (the design editor is doory). */}
+        <p className="start-credit">
+          디자인 편집기: Doory by Siam, creator and maintainer of Doory,{" "}
+          <a href="https://github.com/shaongitbd/doory" target="_blank" rel="noreferrer">
+            https://github.com/shaongitbd/doory
+          </a>
+        </p>
       </div>
     </main>
   );

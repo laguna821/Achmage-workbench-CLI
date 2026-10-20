@@ -1,0 +1,90 @@
+/* Achmage SameTone (OFL, the user's own font) for the editor's own chrome; an installed copy wins. */
+@font-face {
+  font-family: "Achmage SameTone";
+  src:
+    local("Achmage SameTone"),
+    url("/fonts/sametone/fonts/AchmageSameTone%5Bwght%5D.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+:root {
+  --font-sans: "Achmage SameTone", system-ui, sans-serif;
+  --font-display: "Achmage SameTone", system-ui, sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}
+
+.wb-design {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.wb-design-editor {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.wb-design-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 10px;
+  max-width: 40vw;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+}
+
+.wb-design-rev {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Required attribution (Attribution Assurance License): always visible while the editor runs. */
+.wb-design-credit {
+  flex: none;
+  padding: 3px 12px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  border-top: 1px solid var(--color-border, rgba(127, 127, 127, 0.2));
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wb-design-credit:hover {
+  color: var(--color-text);
+}
+
+.wb-design-status {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.wb-design-error {
+  color: #c2410c;
+  padding: 0 24px;
+  text-align: center;
+}

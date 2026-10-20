@@ -16,6 +16,9 @@ import { HtmlView } from "./HtmlView.tsx";
 import { MarkdownEditor, type EditorSelection } from "./MarkdownEditor.tsx";
 import { PdfView } from "./PdfView.tsx";
 import { HwpxView } from "./HwpxView.tsx";
+import { DesignView, type DesignHandle, type DesignStatus } from "./DesignView.tsx";
+import { DesignCompare } from "./DesignCompare.tsx";
+import type { ThumbSource } from "../../design.ts";
 
 /** Save operations only; "unsaved" is derived from the text, never stored (no stale overwrite). */
 type SaveState = "idle" | "saving" | "failed" | "conflict";
@@ -68,7 +71,19 @@ export default function DocumentView({
     artifact?.format === "html" ? "render" : hangul ? "pages" : "edit",
   );
   const [selection, setSelection] = useState<EditorSelection>(null);
-  const [compare, setCompare] = useState<{ title: string; before: string; after: string; beforeLabel: string; afterLabel: string; proposal?: Proposal } | null>(null);
+  const [compare, setCompare] = useState<{
+    title: string;
+    before: string;
+    after: string;
+    beforeLabel: string;
+    afterLabel: string;
+    proposal?: Proposal;
+    /** Designs are compared as pictures, page by page. */
+    design?: { before: ThumbSource; after: ThumbSource };
+  } | null>(null);
+  const design = artifact?.format === "design";
+  const designRef = useRef<DesignHandle>(null);
+  const [designStatus, setDesignStatus] = useState<DesignStatus>({ state: "idle", revision: null });
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<ArtifactRevision[]>([]);
   const [viewing, setViewing] = useState<{ revision: number; text: string } | null>(null);
@@ -109,6 +124,8 @@ export default function DocumentView({
   }, [artifactId, base, text]);
 
   const save = useCallback(async (): Promise<number | null> => {
+    // The design editor saves by itself; make sure the last edits are in before anything is sent.
+    if (design) return designRef.current ? designRef.current.flush() : (artifact?.revision ?? null);
     if (!base) return artifact?.revision ?? null;
     if (text === base.text) return base.revision;
     if (saving.current) return saving.current;
@@ -140,7 +157,7 @@ export default function DocumentView({
       });
     saving.current = run;
     return run;
-  }, [api, artifactId, artifact?.revision, base, text, onToast]);
+  }, [api, artifactId, artifact?.revision, base, text, onToast, design]);
 
   // Autosave shortly after typing stops.
   useEffect(() => {
@@ -179,9 +196,12 @@ export default function DocumentView({
         beforeLabel: `r${proposal.baseRevision}`,
         afterLabel: "수정안",
         proposal,
+        design: design
+          ? { before: { artifactId: proposal.artifactId, proposalId: proposal.id, side: "base" }, after: { artifactId: proposal.artifactId, proposalId: proposal.id, side: "proposed" } }
+          : undefined,
       });
     },
-    [api, state.sessions],
+    [api, state.sessions, design],
   );
 
   useEffect(() => {
@@ -229,7 +249,19 @@ export default function DocumentView({
     (handoff) => handoff.status === "sent" && handoff.refs.some((ref) => ref.artifactId === artifactId),
   );
 
-  const shownState = saveState === "idle" ? (unsaved ? "dirty" : "saved") : saveState;
+  const shownState = design
+    ? designStatus.state === "idle"
+      ? "saved"
+      : designStatus.state === "error"
+        ? "failed"
+        : designStatus.state
+    : saveState === "idle"
+      ? unsaved
+        ? "dirty"
+        : "saved"
+      : saveState;
+  const designLabel =
+    designStatus.state === "saving" ? "저장 중…" : designStatus.state === "dirty" ? "저장 안 됨" : designStatus.state === "conflict" ? "충돌" : designStatus.state === "error" ? "저장 못 함" : `r${artifact.revision} 저장됨`;
   const statusLabel =
     shownState === "saved"
       ? `r${base?.revision ?? artifact.revision} 저장됨`
@@ -253,7 +285,7 @@ export default function DocumentView({
               </span>
             ) : null}
             <span className="doc-compare-actions">
-              {compare.proposal && compare.proposal.status === "pending" && !stale(compare.proposal) ? (
+              {compare.proposal && compare.proposal.status === "pending" && !stale(compare.proposal) && !compare.proposal.problem ? (
                 <button type="button" className="button small primary" onClick={() => void apply(compare.proposal!)}>
                   적용
                 </button>
@@ -268,7 +300,19 @@ export default function DocumentView({
               </button>
             </span>
           </div>
-          <DiffView before={compare.before} after={compare.after} beforeLabel={compare.beforeLabel} afterLabel={compare.afterLabel} />
+          {compare.proposal?.problem ? <div className="proposal-warning">디자인 파일이 올바르지 않아 적용할 수 없습니다: {compare.proposal.problem}</div> : null}
+          {compare.design ? (
+            <DesignCompare
+              before={compare.design.before}
+              after={compare.design.after}
+              beforeText={compare.before}
+              afterText={compare.after}
+              beforeLabel={compare.beforeLabel}
+              afterLabel={compare.afterLabel}
+            />
+          ) : (
+            <DiffView before={compare.before} after={compare.after} beforeLabel={compare.beforeLabel} afterLabel={compare.afterLabel} />
+          )}
         </div>
       );
     }
@@ -297,8 +341,39 @@ export default function DocumentView({
               이 판으로 되돌리기(새 판으로)
             </button>
           </div>
-          <MarkdownEditor value={viewing.text} readOnly onChange={() => undefined} onSelection={() => undefined} />
+          {design ? (
+            <DesignView
+              artifact={artifact}
+              revision={viewing.revision}
+              onStatus={() => undefined}
+              onSelection={() => undefined}
+              onCopied={onOpenArtifact}
+              onExported={(name) => onToast(`작업 폴더에 저장했습니다: ${name}`)}
+              onError={onToast}
+            />
+          ) : (
+            <MarkdownEditor value={viewing.text} readOnly onChange={() => undefined} onSelection={() => undefined} />
+          )}
         </div>
+      );
+    }
+    if (design) {
+      return (
+        <DesignView
+          ref={designRef}
+          artifact={artifact}
+          onStatus={setDesignStatus}
+          onSelection={(picked) => setSelection(picked ? { from: 0, to: 0, text: picked.text, label: picked.label, pageId: picked.pageId, objectIds: picked.objectIds } : null)}
+          onCopied={(created) => {
+            onToast("내 편집을 새 디자인 파일로 저장했습니다.");
+            onOpenArtifact(created);
+          }}
+          onExported={(name, created) => {
+            onToast(`작업 폴더에 저장했습니다: ${name}`);
+            if (created && name.toLowerCase().endsWith(".pdf")) onOpenArtifact(created);
+          }}
+          onError={onToast}
+        />
       );
     }
     if (artifact.format === "pdf") {
@@ -426,7 +501,8 @@ export default function DocumentView({
                       setViewing(null);
                       return;
                     }
-                    void api.artifactText(artifactId, entry.revision).then((result) => setViewing({ revision: entry.revision, text: result.text }));
+                    if (design) setViewing({ revision: entry.revision, text: "" });
+                    else void api.artifactText(artifactId, entry.revision).then((result) => setViewing({ revision: entry.revision, text: result.text }));
                   }}
                 >
                   r{entry.revision} ·{" "}
@@ -441,7 +517,7 @@ export default function DocumentView({
             data-base-revision={base?.revision ?? ""}
             data-unsaved={base ? String(text !== base.text) : ""}
           >
-            {textual ? statusLabel : `r${artifact.revision}`}
+            {textual ? statusLabel : design ? designLabel : `r${artifact.revision}`}
           </span>
         </div>
       </header>
@@ -517,7 +593,7 @@ export default function DocumentView({
                 {owner ? <EngineMark provider={owner.provider} size={14} /> : null}
                 <span>
                   {owner ? PROVIDER_LABEL[owner.provider] : "AI"}의 수정안 · r{proposal.baseRevision} 기준
-                  {proposal.status === "running" ? " · 만드는 중…" : ` · +${proposal.added} −${proposal.removed}`}
+                  {proposal.status === "running" ? " · 만드는 중…" : design ? (proposal.problem ? " · 파일 오류" : "") : ` · +${proposal.added} −${proposal.removed}`}
                   {stale(proposal) ? ` · 지금 r${artifact.revision}, 자동 적용 안 함` : ""}
                 </span>
                 {proposal.status === "pending" ? (
@@ -525,7 +601,7 @@ export default function DocumentView({
                     <button type="button" className="button small" onClick={() => void showProposal(proposal)}>
                       {stale(proposal) ? "차이 보기" : "미리보기"}
                     </button>
-                    {!stale(proposal) ? (
+                    {!stale(proposal) && !proposal.problem ? (
                       <button type="button" className="button small primary" onClick={() => void apply(proposal)}>
                         적용
                       </button>
@@ -564,7 +640,7 @@ export default function DocumentView({
               {includeDoc ? (
                 <span className="ref-chip">
                   <Icon name="file" size={12} /> 현재 문서 · r{base?.revision ?? artifact.revision}
-                  {unsaved ? " (보낼 때 저장)" : ""}
+                  {unsaved || (design && designStatus.state === "dirty") ? " (보낼 때 저장)" : ""}
                   <button type="button" onClick={() => setIncludeDoc(false)} aria-label="문서 빼기">
                     <Icon name="x" size={11} />
                   </button>
