@@ -1,0 +1,122 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.error {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-danger-soft);
+  border-radius: var(--radius-md);
+  color: var(--color-danger);
+  font-weight: 500;
+}
+
+.row {
+  display: grid;
+  gap: var(--space-4);
+  align-items: end;
+}
+
+.fieldset {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.fieldset legend {
+  padding: 0;
+  margin-bottom: var(--space-2);
+  font-weight: 700;
+}
+
+.colors {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.colorRow {
+  display: grid;
+  grid-template-columns: auto minmax(5rem, 8rem) minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: start;
+}
+
+.swatch {
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.swatch::-webkit-color-swatch-wrapper {
+  padding: 3px;
+}
+
+.swatch::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-md) - 3px);
+}
+
+.fonts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.hint {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.logos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: var(--space-3);
+  width: 100%;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.logo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.logo[data-selected] {
+  border-color: var(--color-brand);
+  background: var(--color-brand-soft);
+}
+
+.logoThumb {
+  border-radius: var(--radius-sm);
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+@media (min-width: 640px) {
+  .row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}

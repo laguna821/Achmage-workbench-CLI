@@ -1,0 +1,74 @@
+/* The page-time chip (page header, notes bar) and its popover. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+  font: 600 11px / 1 var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+button.chip {
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+button.chip:hover {
+  background: var(--color-brand-soft-hover);
+}
+button.chip:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+button.chip[aria-expanded='true'] {
+  background: var(--color-brand);
+  color: var(--color-on-brand);
+}
+/* No time of its own: a quiet clock that only needs to be found. */
+.chip[data-unset] {
+  width: 22px;
+  padding: 0;
+  justify-content: center;
+  background: transparent;
+  color: var(--color-text-muted);
+}
+.chip[data-unset]:hover {
+  background: var(--color-bg-muted);
+  color: var(--color-text);
+}
+.chip[data-unset][aria-expanded='true'] {
+  background: var(--color-brand);
+  color: var(--color-on-brand);
+}
+
+.panel {
+  width: 248px;
+  padding: 14px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.unit {
+  color: var(--color-text-muted);
+  font: 500 var(--text-sm) / 1.2 var(--font-sans);
+}
+.hint {
+  margin: 8px 0 12px;
+  color: var(--color-text-muted);
+  font: 400 11px / 1.45 var(--font-sans);
+}
+.wide {
+  width: 100%;
+  justify-content: center;
+}
+.wide + .wide {
+  margin-top: 6px;
+}

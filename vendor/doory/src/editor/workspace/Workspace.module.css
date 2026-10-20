@@ -1,0 +1,64 @@
+.workspace {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  background-color: var(--ed-canvas-bg);
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--color-text) 5%, transparent) 0.75px, transparent 0.75px);
+  background-size: 20px 20px;
+  overflow: hidden;
+}
+
+.scroller {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+  touch-action: pan-x pan-y;
+}
+
+.withRulers {
+  top: 24px;
+  left: 24px;
+}
+
+.content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+  padding-inline: 64px;
+  width: max-content;
+  min-width: 100%;
+}
+
+.hand,
+.hand * {
+  cursor: grab !important;
+}
+
+.grabbing,
+.grabbing * {
+  cursor: grabbing !important;
+}
+
+.textTool :global(.doory-canvas) {
+  cursor: text;
+}
+
+.dropHint {
+  position: absolute;
+  inset: 12px;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--color-brand);
+  border-radius: var(--radius-xl);
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+  font: 600 var(--text-base) / 1.4 var(--font-sans);
+  pointer-events: none;
+  z-index: 5;
+}

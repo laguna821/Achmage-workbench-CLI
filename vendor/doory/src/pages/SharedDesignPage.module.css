@@ -1,0 +1,57 @@
+.center {
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  padding: var(--space-4);
+}
+
+.gate {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: 24rem;
+  padding: var(--space-8);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+}
+
+.gateIcon {
+  display: grid;
+  place-items: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: var(--radius-lg);
+  background: var(--color-brand-soft);
+  color: var(--color-brand-strong);
+}
+
+.gateTitle {
+  font-size: var(--text-2xl);
+}
+
+.gateLead {
+  color: var(--color-text-muted);
+}
+
+.topEnd {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.owner {
+  display: none;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+@media (min-width: 1024px) {
+  .owner {
+    display: inline-flex;
+  }
+}

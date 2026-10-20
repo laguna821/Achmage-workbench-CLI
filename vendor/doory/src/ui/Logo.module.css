@@ -1,0 +1,30 @@
+.logo {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: calc(var(--logo-h) * 0.22);
+  height: var(--logo-h);
+  color: inherit;
+}
+
+.mark {
+  width: var(--logo-h);
+  height: var(--logo-h);
+  transform: rotate(-8deg);
+  transition: transform var(--duration-slow) var(--ease-out);
+}
+
+a:hover > .logo .mark,
+a:focus-visible > .logo .mark {
+  transform: rotate(4deg) scale(1.06);
+}
+
+.word {
+  font-family: var(--font-display);
+  font-size: calc(var(--logo-h) * 0.8);
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}

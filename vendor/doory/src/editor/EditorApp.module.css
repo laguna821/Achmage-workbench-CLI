@@ -1,0 +1,105 @@
+.root {
+  /*
+   * The editor's names for its colours and metrics, mapped onto the Doory tokens: the chrome
+   * stylesheets (chrome/ed.module.css and friends) are written against these, so re-theming is one place.
+   */
+  --ed-bg: var(--color-bg-subtle);
+  --ed-surface: var(--color-surface);
+  --ed-surface-2: var(--color-bg-subtle);
+  --ed-surface-3: var(--color-bg-muted);
+  --ed-surface-hover: var(--color-bg-muted);
+  --ed-border: var(--color-border);
+  --ed-border-light: var(--color-bg-muted);
+  --ed-text: var(--color-text);
+  --ed-text-dim: var(--color-text-muted);
+  --ed-accent: var(--color-brand);
+  --ed-accent-hover: var(--color-brand-hover);
+  --ed-accent-glow: var(--color-brand-soft);
+  --ed-focus-glow: 0 0 0 3px var(--ed-accent-glow); /* the focus halo on text fields and selects */
+  --ed-canvas-bg: var(--color-canvas-workspace);
+  --ed-danger: var(--color-danger);
+  --ed-danger-dim: var(--color-danger-soft);
+  --ed-radius: 12px;
+  --ed-radius-sm: 8px;
+  --ed-topbar-h: 54px;
+  --ed-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ed-dur: 0.18s;
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--ed-bg);
+  color: var(--ed-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/*
+ * High contrast: the light dividers use a background colour (--color-bg-muted), so they get the border colour, and the
+ * pale focus halo on text fields becomes the real focus ring.
+ */
+:global(:root[data-contrast='more']) .root {
+  --ed-border-light: var(--color-border);
+  --ed-focus-glow: var(--focus-ring);
+}
+
+.root *,
+.root *::before,
+.root *::after {
+  box-sizing: border-box;
+}
+
+.root button,
+.root input,
+.root select,
+.root textarea {
+  font-family: inherit;
+}
+
+.body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Below the desktop breakpoint the tools are a bar along the bottom; sheets open on top of it. */
+@media (max-width: 1023px) {
+  .root {
+    --ed-rail-bottom: calc(61px + env(safe-area-inset-bottom));
+  }
+}
+
+.live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .root *,
+  .root *::before,
+  .root *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,128 @@
+.button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  flex: none;
+  height: 2.5rem;
+  padding: 0 var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
+  user-select: none;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.button:hover {
+  text-decoration: none;
+}
+
+.button:active:not(:disabled):not([data-loading]) {
+  transform: translateY(1px) scale(0.99);
+}
+
+.button svg {
+  flex: none;
+}
+
+.button[data-full] {
+  width: 100%;
+}
+
+.button[data-size='sm'] {
+  height: 2rem;
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+  gap: var(--space-1);
+}
+
+.button[data-size='lg'] {
+  height: 3rem;
+  padding: 0 var(--space-6);
+  font-size: var(--text-lg);
+}
+
+.button[data-variant='primary'] {
+  background: var(--color-cta);
+  color: var(--color-on-cta);
+  font-weight: 800;
+}
+
+.button[data-variant='primary']:hover:not(:disabled) {
+  background: var(--color-cta-hover);
+}
+
+/* The big calls to action (the landing page, an empty dashboard) keep the drawn offset shadow; buttons inside forms,
+   dialogs and toolbars stay flat, so the shadow still means "start here" and does not decorate every action. */
+.button[data-variant='primary'][data-size='lg'] {
+  --offset: 5px;
+  box-shadow: var(--offset) var(--offset) 0 var(--color-cta-shadow);
+}
+
+.button[data-variant='primary'][data-size='lg']:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: calc(var(--offset) + 1px) calc(var(--offset) + 1px) 0 var(--color-cta-shadow);
+}
+
+.button[data-variant='primary'][data-size='lg']:active:not(:disabled):not([data-loading]) {
+  transform: translate(1px, 1px);
+  box-shadow: calc(var(--offset) - 2px) calc(var(--offset) - 2px) 0 var(--color-cta-shadow);
+}
+
+.button[data-variant='secondary'] {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.button[data-variant='secondary']:hover:not(:disabled) {
+  background: var(--color-bg-muted);
+}
+
+.button[data-variant='ghost'] {
+  background: transparent;
+  color: var(--color-text);
+}
+
+.button[data-variant='ghost']:hover:not(:disabled) {
+  background: var(--color-bg-muted);
+}
+
+.button[data-variant='danger'] {
+  background: var(--color-danger);
+  color: var(--color-bg);
+  box-shadow: var(--shadow-sm);
+}
+
+.button[data-variant='danger']:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  box-shadow: none;
+}
+
+.button[data-loading] {
+  cursor: progress;
+}
+
+.spinner {
+  margin-inline: -2px;
+}
+
+.label {
+  display: inline-block;
+}

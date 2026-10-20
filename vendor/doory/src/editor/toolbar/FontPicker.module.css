@@ -1,0 +1,215 @@
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 300px;
+  padding: 8px;
+  overscroll-behavior: contain;
+}
+
+.search {
+  position: relative;
+}
+.search svg {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ed-text-dim);
+}
+.search input {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px 0 32px;
+  border: 1px solid var(--ed-border);
+  border-radius: 6px;
+  background: var(--ed-bg);
+  color: var(--ed-text);
+  font: 400 13px / 1 var(--font-sans);
+}
+.search input:focus {
+  outline: none;
+  border-color: var(--ed-accent);
+  box-shadow: var(--ed-focus-glow);
+}
+
+.chips {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.chip {
+  flex: none;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-muted);
+  font: 600 11px / 1 var(--font-sans);
+  cursor: pointer;
+}
+.chip:hover {
+  color: var(--color-text);
+}
+.chipOn {
+  border-color: var(--color-brand);
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+}
+.chip:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.upload {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 34px;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text);
+  font: 600 12px / 1 var(--font-sans);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+.upload:hover {
+  border-color: var(--color-brand);
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+}
+.upload:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  padding: 2px 4px;
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.list {
+  position: relative;
+  overflow-y: auto;
+  margin: 0 -6px;
+  padding: 0 6px;
+  scrollbar-width: thin;
+}
+
+.heading {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 4px;
+  color: var(--ed-text-dim);
+  font: 600 12px / 1.3 var(--font-sans);
+}
+
+.row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  width: auto;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 1.3;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.row:focus-visible {
+  outline: none;
+}
+.rowOn {
+  background: color-mix(in srgb, var(--ed-accent) 8%, transparent);
+}
+.rowHi,
+.rowOn.rowHi {
+  background: color-mix(in srgb, var(--ed-accent) 18%, transparent);
+  box-shadow: inset 2px 0 0 var(--ed-accent);
+}
+
+.loading {
+  position: absolute;
+  bottom: 14px;
+  left: 12px;
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+  font: 500 var(--text-xs) / 1.35 var(--font-sans);
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-4);
+  color: var(--color-text-muted);
+  font: 500 var(--text-sm) / 1.4 var(--font-sans);
+  text-align: center;
+}
+
+/* Language filter: fonts that have the letters of one script. */
+.script {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.script select {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: 500 13px / 1 var(--font-sans);
+}
+.script select:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+/* A word in the chosen script, set in the row's font, beside its name. */
+.sample {
+  margin-left: auto;
+  padding-left: 12px;
+  color: var(--color-text-muted);
+  font-size: 15px;
+}

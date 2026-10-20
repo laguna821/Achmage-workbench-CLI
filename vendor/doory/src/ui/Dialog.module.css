@@ -1,0 +1,128 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: var(--color-overlay);
+  backdrop-filter: blur(3px);
+  animation: fade var(--duration-base) var(--ease-out);
+  overflow-y: auto;
+}
+
+.panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 30rem;
+  max-height: calc(100dvh - var(--space-8));
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  animation: rise var(--duration-slow) var(--ease-out);
+}
+
+.panel:focus-visible {
+  box-shadow: var(--shadow-lg);
+  outline: none;
+}
+
+.panel[data-size='sm'] {
+  max-width: 24rem;
+}
+
+.panel[data-size='lg'] {
+  max-width: 40rem;
+}
+
+.panel[data-size='xl'] {
+  max-width: 64rem;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-5) 0;
+}
+
+.headerHidden {
+  padding: 0;
+  height: 0;
+}
+
+.headings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.title {
+  font-size: var(--text-xl);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.description {
+  color: var(--color-text-muted);
+  font-size: var(--text-base);
+}
+
+.header > :last-child:not(.headings) {
+  margin: calc(var(--space-1) * -1) calc(var(--space-2) * -1) 0 0;
+}
+
+.body {
+  padding: var(--space-5);
+  overflow-y: auto;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg-subtle);
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+}
+
+@media (max-width: 480px) {
+  .overlay {
+    place-items: end center;
+    padding: 0;
+  }
+
+  .panel {
+    max-width: none;
+    max-height: 92dvh;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  }
+}

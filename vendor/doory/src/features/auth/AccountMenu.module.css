@@ -1,0 +1,14 @@
+.trigger {
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  transition: box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.trigger:hover {
+  box-shadow: 0 0 0 3px var(--color-brand-soft-hover);
+}
+
+.trigger[aria-expanded='true'] {
+  box-shadow: 0 0 0 3px var(--color-brand-soft-hover);
+}

@@ -1,0 +1,15 @@
+.input {
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-brand);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--focus-ring);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.input:focus-visible {
+  outline: none;
+}

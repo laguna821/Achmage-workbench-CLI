@@ -1,0 +1,62 @@
+.field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  transition: border-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.field:focus-within {
+  border-color: var(--color-brand);
+  box-shadow: var(--focus-ring);
+}
+
+.disabled {
+  opacity: 0.45;
+}
+
+.label {
+  flex: none;
+  color: var(--color-text-subtle);
+  font: 600 var(--text-xs) / 1 var(--font-sans);
+  user-select: none;
+}
+
+.scrub {
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--color-text);
+  font: 600 var(--text-sm) / 1 var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.suffix {
+  color: var(--color-text-subtle);
+  font: 500 var(--text-xs) / 1 var(--font-sans);
+}
+
+.glyph {
+  display: inline-flex;
+  color: var(--color-text-subtle);
+}

@@ -1,0 +1,144 @@
+/* ── Docked panel beside the tool rail (its width comes from the panel) ── */
+.sidebar {
+  flex: none;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 14px 14px 0;
+  background: var(--ed-surface);
+  border-right: 1px solid var(--ed-border);
+  animation: sidebar-in 0.22s var(--ed-ease);
+}
+.sidebarHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 -14px;
+  padding: 2px 10px 8px 14px;
+  border-bottom: 1px solid var(--ed-border-light);
+}
+.sidebarTitle {
+  margin: 0;
+  color: var(--ed-text);
+  font: 700 19px / 1.2 var(--font-display);
+  letter-spacing: -0.02em;
+}
+.close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ed-text-dim);
+  cursor: pointer;
+}
+.close:hover {
+  background: var(--ed-surface-3);
+  color: var(--ed-text);
+}
+.close:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.sidebarBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+/* Tools made of sections (Text, Image, Shapes, Background) scroll as one column. */
+.sidebarScroll {
+  flex: 1;
+  min-height: 0;
+  margin: 0 -14px;
+  padding: 4px 14px 18px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ed-border) transparent;
+}
+@keyframes sidebar-in {
+  from {
+    transform: translateX(-12px);
+    opacity: 0;
+  }
+}
+
+/* ── Bottom sheet (below the desktop breakpoint) ── */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-drawer) - 1);
+  background: rgb(0 0 0 / 0.25);
+  animation: fade 0.2s ease;
+}
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--ed-rail-bottom, 0px);
+  z-index: var(--z-drawer);
+  display: flex;
+  flex-direction: column;
+  max-height: min(calc(100dvh - var(--ed-rail-bottom, 0px) - 120px), 620px);
+  background: var(--ed-surface);
+  border-top: 1px solid var(--ed-border);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -4px 24px rgb(0 0 0 / 0.12);
+  animation: sheet-in 0.22s var(--ed-ease);
+}
+.sheet:focus {
+  outline: none;
+}
+.grab {
+  align-self: center;
+  width: 36px;
+  height: 4px;
+  margin: 8px 0 2px;
+  border-radius: 4px;
+  background: var(--ed-border);
+}
+.sheetHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 10px 8px 16px;
+  border-bottom: 1px solid var(--ed-border-light);
+}
+.sheetBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 8px;
+}
+.sheetBody > .sidebarBody {
+  padding: 12px 14px 14px;
+}
+@keyframes sheet-in {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .sheet,
+  .backdrop {
+    animation: none;
+  }
+}

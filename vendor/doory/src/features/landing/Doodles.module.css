@@ -1,0 +1,88 @@
+.doodles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.doodles svg {
+  position: absolute;
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  animation: float 6s ease-in-out infinite;
+}
+
+.doodles .d1 {
+  top: 3rem;
+  left: 6%;
+  animation-delay: -1s;
+}
+
+.doodles .d2 {
+  top: 9rem;
+  right: 8%;
+  animation-delay: -3s;
+}
+
+.doodles .d3 {
+  top: 25rem;
+  left: 10%;
+  animation-delay: -2s;
+}
+
+.doodles .d4 {
+  top: 29rem;
+  right: 6%;
+  animation-delay: -4s;
+}
+
+.doodles .d5 {
+  top: 47rem;
+  left: 3%;
+  animation-delay: -5s;
+}
+
+.doodles .d6 {
+  top: 55rem;
+  right: 4%;
+  animation-delay: -1.5s;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+
+  50% {
+    transform: translateY(-12px) rotate(6deg);
+  }
+}
+
+@media (max-width: 640px) {
+  .doodles svg {
+    scale: 0.7;
+  }
+
+  .d3,
+  .d6 {
+    display: none;
+  }
+
+  .d1,
+  .d5 {
+    left: 2%;
+  }
+
+  .d2,
+  .d4 {
+    right: 2%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .doodles svg {
+    animation: none;
+  }
+}

@@ -1,0 +1,38 @@
+.page {
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: var(--space-12) var(--space-4) var(--space-16);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 40rem;
+}
+
+.eyebrow {
+  align-self: flex-start;
+  padding: 0 var(--space-2);
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.1;
+  background: linear-gradient(transparent 55%, var(--pastel-butter) 55%, var(--pastel-butter) 92%, transparent 92%);
+  transform: rotate(-2deg);
+}
+
+.title {
+  font-size: clamp(2.2rem, 5vw, 3.4rem);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+}
+
+.lead {
+  font-size: var(--text-lg);
+  color: var(--color-text-muted);
+}

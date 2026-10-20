@@ -1,0 +1,57 @@
+{
+  "about": "Structured export file names (#59). Read by frontend/src/editor/engine/export/filenames.test.ts and backend/apps/exports/tests/test_filenames.py, so the browser and the server name a file the same way. `page` is 1-based and only used when `pages` (the design's page count) is above 1; null means the file is not per page (PDF, video, ZIP).",
+  "cases": [
+    {
+      "input": { "title": "Summer Sale", "platform": "instagram", "preset": "instagram-story", "width": 1080, "height": 1920, "page": 2, "pages": 3, "unix": 1792259000, "extension": "png" },
+      "expected": "summer-sale_instagram_instagram-story_1080x1920_p02_1792259000.png"
+    },
+    {
+      "input": { "title": "Summer Sale", "platform": "instagram", "preset": "instagram-story", "width": 1080, "height": 1920, "page": 1, "pages": 1, "unix": null, "extension": "png" },
+      "expected": "summer-sale_instagram_instagram-story_1080x1920.png"
+    },
+    {
+      "input": { "title": "Summer Sale", "platform": null, "preset": null, "width": 1234, "height": 567.6, "page": 1, "pages": 1, "unix": null, "extension": "jpg" },
+      "expected": "summer-sale_1234x568.jpg"
+    },
+    {
+      "input": { "title": "Report", "platform": "paper", "preset": "a4", "width": 794, "height": 1123, "page": 7, "pages": 120, "unix": null, "extension": "svg" },
+      "expected": "report_paper_a4_794x1123_p007.svg"
+    },
+    {
+      "input": { "title": "Report", "platform": "paper", "preset": "a4", "width": 794, "height": 1123, "page": null, "pages": 12, "unix": 1792259000, "extension": "pdf" },
+      "expected": "report_paper_a4_794x1123_1792259000.pdf"
+    },
+    {
+      "input": { "title": "Café Menü (v2)", "platform": "X", "preset": "x_post", "width": 1600, "height": 900, "page": 1, "pages": 1, "unix": null, "extension": "webp" },
+      "expected": "cafe-menu-v2_x_x-post_1600x900.webp"
+    },
+    {
+      "input": { "title": "", "platform": null, "preset": null, "width": 100, "height": 100, "page": 1, "pages": 1, "unix": null, "extension": "gif" },
+      "expected": "design_100x100.gif"
+    },
+    {
+      "input": { "title": "日本語のデザイン", "platform": null, "preset": null, "width": 100, "height": 100, "page": 1, "pages": 1, "unix": null, "extension": "png" },
+      "expected": "design_100x100.png"
+    },
+    {
+      "input": { "title": "../../etc/passwd\r\nSet-Cookie: x=1", "platform": null, "preset": null, "width": 10, "height": 20, "page": 1, "pages": 1, "unix": null, "extension": "png" },
+      "expected": "etc-passwd-set-cookie-x-1_10x20.png"
+    },
+    {
+      "input": { "title": "Summer Sale", "platform": null, "preset": null, "width": null, "height": null, "page": null, "pages": 3, "unix": 1792259000, "extension": "zip" },
+      "expected": "summer-sale_1792259000.zip"
+    },
+    {
+      "input": { "title": "Summer Sale", "platform": null, "preset": null, "width": null, "height": null, "page": null, "pages": 3, "unix": null, "extension": "zip" },
+      "expected": "summer-sale.zip"
+    },
+    {
+      "input": { "title": "Poster", "platform": "posters-flyers", "preset": "poster", "width": 1587, "height": 2245, "page": null, "pages": 1, "unix": null, "suffix": "print", "extension": "pdf" },
+      "expected": "poster_posters-flyers_poster_1587x2245_print.pdf"
+    },
+    {
+      "input": { "title": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "platform": null, "preset": null, "width": 1, "height": 1, "page": 1, "pages": 1, "unix": null, "extension": "png" },
+      "expected": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1x1.png"
+    }
+  ]
+}

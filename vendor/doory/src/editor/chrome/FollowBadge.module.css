@@ -1,0 +1,43 @@
+.badge {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  z-index: 50;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 140px);
+  padding: 5px 6px 5px 8px;
+  border: 1px solid var(--ed-accent);
+  border-radius: 999px;
+  background: var(--ed-surface);
+  color: var(--ed-text);
+  box-shadow: var(--shadow-md);
+  font: 600 12px / 1 var(--font-sans);
+  transform: translateX(-50%);
+}
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stop {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ed-surface-3);
+  color: var(--ed-text-dim);
+  cursor: pointer;
+}
+.stop:hover {
+  background: var(--ed-accent-glow);
+  color: var(--ed-accent);
+}
+.stop:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}

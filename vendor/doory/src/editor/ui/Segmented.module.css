@@ -1,0 +1,50 @@
+.group {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-muted);
+}
+
+.option {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 32px;
+  height: 30px;
+  padding: 0 var(--space-3);
+  border-radius: calc(var(--radius-md) - 3px);
+  color: var(--color-text-muted);
+  font: 600 var(--text-xs) / 1 var(--font-sans);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+
+.option:hover {
+  color: var(--color-text);
+}
+
+.on {
+  background: var(--color-surface);
+  color: var(--color-brand);
+  box-shadow: var(--shadow-sm);
+}
+/* High contrast: muted text is nearly ink there, so the selected option also gets the selected outline. */
+:global(:root[data-contrast='more']) .on {
+  outline: 2px solid var(--color-text);
+  outline-offset: -2px;
+}
+
+.radio {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.option:has(.radio:focus-visible) {
+  box-shadow: var(--focus-ring);
+}

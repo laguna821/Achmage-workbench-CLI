@@ -1,0 +1,187 @@
+.panel {
+  position: relative;
+  display: none;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-8);
+  padding: var(--space-12);
+  overflow: hidden;
+  color: var(--ink);
+  background-color: var(--violet-100);
+  background-image:
+    radial-gradient(rgb(106 82 217 / 0.16) 1.2px, transparent 1.3px),
+    linear-gradient(160deg, var(--violet-100) 0%, var(--violet-200) 55%, var(--pastel-pink) 100%);
+  background-size:
+    26px 26px,
+    100% 100%;
+}
+
+@media (min-width: 960px) {
+  .panel {
+    display: flex;
+  }
+}
+
+.scene {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 1;
+  min-height: 20rem;
+}
+
+.card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 13rem;
+  height: 17rem;
+  margin: -9.5rem 0 0 -13rem;
+  padding: var(--space-6) var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--pastel-butter);
+  box-shadow: var(--shadow-card);
+  transform: rotate(-9deg);
+  animation: float 8s ease-in-out infinite;
+}
+
+/* washi tape */
+.card::before {
+  content: '';
+  position: absolute;
+  top: -0.8rem;
+  left: 50%;
+  width: 5.5rem;
+  height: 1.5rem;
+  margin-left: -2.75rem;
+  background:
+    repeating-linear-gradient(45deg, rgb(255 255 255 / 0.45) 0 6px, transparent 6px 12px),
+    var(--pastel-mint);
+  opacity: 0.9;
+  transform: rotate(-4deg);
+}
+
+.cardHand {
+  color: #7a5c12;
+  font-family: var(--font-hand);
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.cardTitle {
+  margin-top: var(--space-3);
+  font-family: var(--font-display);
+  font-size: 2.6rem;
+  font-weight: 700;
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+  text-align: left;
+}
+
+.cardDots {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: auto;
+}
+
+.cardDots span {
+  width: 1.4rem;
+  height: 1.4rem;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: var(--paper);
+}
+
+.cardDots span:nth-child(2) {
+  background: var(--pastel-pink);
+}
+
+.cardDots span:nth-child(3) {
+  background: var(--pastel-lilac);
+}
+
+.bunny {
+  position: relative;
+  width: auto;
+  height: 16rem;
+  margin-left: 9rem;
+  transform-origin: 50% 95%;
+  animation: bob 4.5s ease-in-out infinite;
+}
+
+.bubble {
+  position: absolute;
+  top: 12%;
+  right: 6%;
+  padding: 0.5rem 1rem 0.65rem;
+  background: var(--paper);
+  border: 2.5px solid var(--ink);
+  border-radius: 22px 22px 6px 22px;
+  box-shadow: 4px 4px 0 var(--pastel-pink);
+  font-family: var(--font-hand);
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1;
+  transform: rotate(-5deg);
+}
+
+.sparkle,
+.heart {
+  position: absolute;
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  animation: drift 6s ease-in-out infinite;
+}
+
+.sparkle {
+  top: 6%;
+  left: 8%;
+  stroke: var(--violet-600);
+}
+
+.heart {
+  bottom: 8%;
+  right: 12%;
+  stroke: #ff8fa6;
+  animation-delay: -3s;
+}
+
+.copy {
+  position: relative;
+}
+
+.headline {
+  max-width: 22rem;
+  font-size: var(--text-4xl);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+@keyframes float {
+  50% {
+    transform: translateY(-10px) rotate(-7deg);
+  }
+}
+
+@keyframes bob {
+  0%,
+  100% {
+    transform: rotate(-3deg) translateY(0);
+  }
+
+  50% {
+    transform: rotate(0deg) translateY(-12px);
+  }
+}
+
+@keyframes drift {
+  50% {
+    transform: translateY(-10px) rotate(8deg);
+  }
+}

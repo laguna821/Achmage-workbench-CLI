@@ -1,0 +1,2094 @@
+[
+  {
+    "name": "heading text",
+    "kind": "text",
+    "factory": {
+      "fn": "createTextbox",
+      "opts": {
+        "text": "Hello world",
+        "preset": "heading"
+      }
+    },
+    "object": {
+      "id": "case-1",
+      "type": "textbox",
+      "text": "Hello world",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 576,
+      "height": 44.07,
+      "fontFamily": "\"Plus Jakarta Sans\", sans-serif",
+      "fontSize": 39,
+      "fontWeight": 700,
+      "fill": "#1a1a2e",
+      "textAlign": "center",
+      "lineHeight": 1.16,
+      "splitByGrapheme": false,
+      "strokeUniform": true
+    }
+  },
+  {
+    "name": "styled body text",
+    "kind": "text",
+    "factory": {
+      "fn": "createTextbox",
+      "opts": {
+        "text": "Summer sale on everything",
+        "preset": "body",
+        "width": 300,
+        "fontFamily": "\"Playfair Display\", serif",
+        "fontSize": 28,
+        "fontWeight": 600,
+        "fill": "#ff0000",
+        "textAlign": "left"
+      }
+    },
+    "object": {
+      "id": "case-2",
+      "type": "textbox",
+      "text": "Summer sale on everything",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 300,
+      "height": 68.342,
+      "fontFamily": "\"Playfair Display\", serif",
+      "fontSize": 28,
+      "fontWeight": 600,
+      "fill": "#ff0000",
+      "textAlign": "left",
+      "lineHeight": 1.16,
+      "splitByGrapheme": false,
+      "strokeUniform": true
+    },
+    "ignore": [
+      "top"
+    ]
+  },
+  {
+    "name": "rounded rectangle",
+    "kind": "shape",
+    "factory": {
+      "fn": "createRect",
+      "size": 120,
+      "radius": 12
+    },
+    "object": {
+      "id": "case-3",
+      "type": "rect",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "fill": "#7a64e0",
+      "stroke": null,
+      "strokeWidth": 0,
+      "strokeUniform": true,
+      "shapeKind": "rect",
+      "width": 120,
+      "height": 120,
+      "rx": 12,
+      "ry": 12
+    }
+  },
+  {
+    "name": "circle",
+    "kind": "shape",
+    "factory": {
+      "fn": "createEllipse",
+      "size": 90
+    },
+    "object": {
+      "id": "case-4",
+      "type": "ellipse",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "fill": "#7a64e0",
+      "stroke": null,
+      "strokeWidth": 0,
+      "strokeUniform": true,
+      "shapeKind": "ellipse",
+      "width": 90,
+      "height": 90,
+      "rx": 45,
+      "ry": 45
+    }
+  },
+  {
+    "name": "triangle",
+    "kind": "shape",
+    "factory": {
+      "fn": "createTriangle",
+      "size": 80
+    },
+    "object": {
+      "id": "case-5",
+      "type": "triangle",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "fill": "#7a64e0",
+      "stroke": null,
+      "strokeWidth": 0,
+      "strokeUniform": true,
+      "shapeKind": "triangle",
+      "width": 80,
+      "height": 72
+    }
+  },
+  {
+    "name": "hexagon",
+    "kind": "shape",
+    "factory": {
+      "fn": "createPolygon",
+      "size": 100,
+      "sides": 6
+    },
+    "object": {
+      "id": "case-6",
+      "type": "polygon",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "fill": "#7a64e0",
+      "stroke": null,
+      "strokeWidth": 0,
+      "strokeUniform": true,
+      "shapeKind": "polygon",
+      "width": 100,
+      "height": 100,
+      "scaleX": 1,
+      "scaleY": 1,
+      "sides": 6,
+      "points": [
+        {
+          "x": 50,
+          "y": 0
+        },
+        {
+          "x": 100,
+          "y": 25
+        },
+        {
+          "x": 100,
+          "y": 75
+        },
+        {
+          "x": 50,
+          "y": 100
+        },
+        {
+          "x": 0,
+          "y": 75
+        },
+        {
+          "x": 0,
+          "y": 25
+        }
+      ]
+    }
+  },
+  {
+    "name": "star",
+    "kind": "shape",
+    "factory": {
+      "fn": "createStar",
+      "size": 150,
+      "points": 7,
+      "innerRatio": 0.4
+    },
+    "object": {
+      "id": "case-7",
+      "type": "polygon",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "fill": "#7a64e0",
+      "stroke": null,
+      "strokeWidth": 0,
+      "strokeUniform": true,
+      "shapeKind": "star",
+      "width": 100,
+      "height": 100,
+      "scaleX": 1.5,
+      "scaleY": 1.5,
+      "starPoints": 7,
+      "innerRatio": 0.4,
+      "points": [
+        {
+          "x": 50,
+          "y": 0
+        },
+        {
+          "x": 58.901,
+          "y": 33.647
+        },
+        {
+          "x": 90.097,
+          "y": 19.806
+        },
+        {
+          "x": 70,
+          "y": 47.922
+        },
+        {
+          "x": 100,
+          "y": 64.31
+        },
+        {
+          "x": 66.039,
+          "y": 65.724
+        },
+        {
+          "x": 72.252,
+          "y": 100
+        },
+        {
+          "x": 50,
+          "y": 73.647
+        },
+        {
+          "x": 27.748,
+          "y": 100
+        },
+        {
+          "x": 33.961,
+          "y": 65.724
+        },
+        {
+          "x": 0,
+          "y": 64.31
+        },
+        {
+          "x": 30,
+          "y": 47.922
+        },
+        {
+          "x": 9.903,
+          "y": 19.806
+        },
+        {
+          "x": 41.099,
+          "y": 33.647
+        }
+      ]
+    }
+  },
+  {
+    "name": "stretched octagon with a border",
+    "kind": "shape",
+    "object": {
+      "id": "case-8",
+      "type": "polygon",
+      "originX": "center",
+      "originY": "center",
+      "left": 160,
+      "top": 80,
+      "fill": "#7a64e0",
+      "stroke": "#000000",
+      "strokeWidth": 4,
+      "strokeUniform": true,
+      "shapeKind": "polygon",
+      "width": 100,
+      "height": 100,
+      "scaleX": 3,
+      "scaleY": 1.2,
+      "sides": 8,
+      "points": [
+        {
+          "x": 50,
+          "y": 0
+        },
+        {
+          "x": 85.355,
+          "y": 14.645
+        },
+        {
+          "x": 100,
+          "y": 50
+        },
+        {
+          "x": 85.355,
+          "y": 85.355
+        },
+        {
+          "x": 50,
+          "y": 100
+        },
+        {
+          "x": 14.645,
+          "y": 85.355
+        },
+        {
+          "x": 0,
+          "y": 50
+        },
+        {
+          "x": 14.645,
+          "y": 14.645
+        }
+      ]
+    }
+  },
+  {
+    "name": "arrow",
+    "kind": "line",
+    "factory": {
+      "fn": "createLine",
+      "opts": {
+        "length": 200,
+        "arrowEnd": "triangle"
+      }
+    },
+    "object": {
+      "id": "case-9",
+      "type": "doryline",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 200,
+      "height": 0,
+      "angle": 0,
+      "stroke": "#1c1517",
+      "strokeWidth": 6,
+      "strokeDashArray": null,
+      "arrowStart": "none",
+      "arrowEnd": "triangle"
+    }
+  },
+  {
+    "name": "dashed diagonal line",
+    "kind": "line",
+    "object": {
+      "id": "case-10",
+      "type": "doryline",
+      "originX": "center",
+      "originY": "center",
+      "left": 150,
+      "top": 200,
+      "width": 500,
+      "height": 0,
+      "angle": 53.13,
+      "stroke": "#3366ff",
+      "strokeWidth": 3,
+      "strokeDashArray": [
+        12,
+        6
+      ],
+      "arrowStart": "none",
+      "arrowEnd": "none"
+    }
+  },
+  {
+    "name": "image",
+    "kind": "image",
+    "factory": {
+      "fn": "createImage",
+      "src": "/media/assets/a/b.png",
+      "fit": 100
+    },
+    "object": {
+      "id": "case-11",
+      "type": "image",
+      "src": "/media/assets/a/b.png",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 10,
+      "height": 10,
+      "scaleX": 10,
+      "scaleY": 10,
+      "strokeUniform": true
+    }
+  },
+  {
+    "name": "uploaded photo",
+    "kind": "image",
+    "object": {
+      "id": "case-12",
+      "type": "image",
+      "src": "https://cdn.example.com/photo.jpg",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 400,
+      "width": 10,
+      "height": 10,
+      "scaleX": 80,
+      "scaleY": 80,
+      "strokeUniform": true,
+      "assetId": "0b5e7a46-6f1e-4cf0-9f0e-6b3cf7f1d001",
+      "name": "Beach"
+    }
+  },
+  {
+    "name": "photo cropped to a heart",
+    "kind": "image",
+    "object": {
+      "id": "case-13",
+      "type": "image",
+      "src": "/media/assets/a/b.png",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 10,
+      "height": 10,
+      "scaleX": 10,
+      "scaleY": 10,
+      "strokeUniform": true,
+      "maskShape": "heart"
+    },
+    "expect": {
+      "clipPath": true
+    }
+  },
+  {
+    "name": "photo with rounded corners",
+    "kind": "image",
+    "object": {
+      "id": "case-14",
+      "type": "image",
+      "src": "/media/assets/a/b.png",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 10,
+      "height": 10,
+      "scaleX": 10,
+      "scaleY": 10,
+      "strokeUniform": true,
+      "maskShape": "rounded",
+      "maskRadius": 0.3
+    },
+    "expect": {
+      "clipPath": true
+    }
+  },
+  {
+    "name": "replaced masked photo",
+    "kind": "image",
+    "object": {
+      "id": "case-15",
+      "type": "image",
+      "src": "/media/assets/a/new.png",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 10,
+      "height": 5,
+      "scaleX": 20,
+      "scaleY": 20,
+      "strokeUniform": true,
+      "maskShape": "rounded",
+      "maskRadius": 0.2,
+      "cropX": 0,
+      "cropY": 1,
+      "assetId": "0b5e7a46-6f1e-4cf0-9f0e-6b3cf7f1d002",
+      "name": "Portrait"
+    },
+    "expect": {
+      "clipPath": true
+    }
+  },
+  {
+    "name": "photo filling a placeholder slot",
+    "kind": "image",
+    "object": {
+      "id": "case-16",
+      "type": "image",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 330,
+      "stroke": null,
+      "strokeWidth": 0,
+      "strokeUniform": true,
+      "width": 10,
+      "height": 10,
+      "name": "Portrait",
+      "slot": {
+        "cx": 400,
+        "cy": 300,
+        "width": 200,
+        "height": 100,
+        "angle": 0,
+        "mask": "circle"
+      },
+      "scaleX": 20,
+      "scaleY": 20,
+      "angle": 0,
+      "cropX": 0,
+      "cropY": 0,
+      "src": "/media/assets/a/new.png",
+      "assetId": "0b5e7a46-6f1e-4cf0-9f0e-6b3cf7f1d002"
+    },
+    "expect": {
+      "clipPath": true
+    }
+  },
+  {
+    "name": "qr code",
+    "kind": "qr",
+    "object": {
+      "id": "case-17",
+      "type": "image",
+      "name": "QR code",
+      "qr": {
+        "text": "https://doory.example/menu",
+        "fg": "#000000",
+        "bg": "#ffffff"
+      },
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 512,
+      "height": 512,
+      "scaleX": 0.391,
+      "scaleY": 0.391
+    }
+  },
+  {
+    "name": "heart shape",
+    "kind": "shape",
+    "factory": {
+      "fn": "createPathShape",
+      "shapeId": "heart",
+      "size": 168
+    },
+    "object": {
+      "id": "case-18",
+      "type": "path",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 92,
+      "height": 83,
+      "scaleX": 1.826087,
+      "scaleY": 1.826087,
+      "path": [
+        [
+          "M",
+          50,
+          90
+        ],
+        [
+          "C",
+          18,
+          66,
+          4,
+          48,
+          4,
+          31
+        ],
+        [
+          "C",
+          4,
+          17,
+          15,
+          7,
+          29,
+          7
+        ],
+        [
+          "C",
+          38,
+          7,
+          46,
+          12,
+          50,
+          20
+        ],
+        [
+          "C",
+          54,
+          12,
+          62,
+          7,
+          71,
+          7
+        ],
+        [
+          "C",
+          85,
+          7,
+          96,
+          17,
+          96,
+          31
+        ],
+        [
+          "C",
+          96,
+          48,
+          82,
+          66,
+          50,
+          90
+        ],
+        [
+          "Z"
+        ]
+      ],
+      "fillRule": "nonzero",
+      "fill": "#7a64e0",
+      "stroke": null,
+      "strokeWidth": 0,
+      "strokeUniform": true,
+      "shapeKind": "path",
+      "shapeId": "heart"
+    }
+  },
+  {
+    "name": "speech shape",
+    "kind": "shape",
+    "factory": {
+      "fn": "createPathShape",
+      "shapeId": "speech",
+      "size": 168
+    },
+    "object": {
+      "id": "case-19",
+      "type": "path",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 88,
+      "height": 86,
+      "scaleX": 1.909091,
+      "scaleY": 1.909091,
+      "path": [
+        [
+          "M",
+          16,
+          6
+        ],
+        [
+          "L",
+          84,
+          6
+        ],
+        [
+          "Q",
+          94,
+          6,
+          94,
+          16
+        ],
+        [
+          "L",
+          94,
+          58
+        ],
+        [
+          "Q",
+          94,
+          68,
+          84,
+          68
+        ],
+        [
+          "L",
+          46,
+          68
+        ],
+        [
+          "L",
+          26,
+          92
+        ],
+        [
+          "L",
+          26,
+          68
+        ],
+        [
+          "L",
+          16,
+          68
+        ],
+        [
+          "Q",
+          6,
+          68,
+          6,
+          58
+        ],
+        [
+          "L",
+          6,
+          16
+        ],
+        [
+          "Q",
+          6,
+          6,
+          16,
+          6
+        ],
+        [
+          "Z"
+        ]
+      ],
+      "fillRule": "nonzero",
+      "fill": "#7a64e0",
+      "stroke": null,
+      "strokeWidth": 0,
+      "strokeUniform": true,
+      "shapeKind": "path",
+      "shapeId": "speech"
+    }
+  },
+  {
+    "name": "arrow-right shape",
+    "kind": "shape",
+    "factory": {
+      "fn": "createPathShape",
+      "shapeId": "arrow-right",
+      "size": 168
+    },
+    "object": {
+      "id": "case-20",
+      "type": "path",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 92,
+      "height": 76,
+      "scaleX": 1.826087,
+      "scaleY": 1.826087,
+      "path": [
+        [
+          "M",
+          4,
+          36
+        ],
+        [
+          "L",
+          56,
+          36
+        ],
+        [
+          "L",
+          56,
+          12
+        ],
+        [
+          "L",
+          96,
+          50
+        ],
+        [
+          "L",
+          56,
+          88
+        ],
+        [
+          "L",
+          56,
+          64
+        ],
+        [
+          "L",
+          4,
+          64
+        ],
+        [
+          "Z"
+        ]
+      ],
+      "fillRule": "nonzero",
+      "fill": "#7a64e0",
+      "stroke": null,
+      "strokeWidth": 0,
+      "strokeUniform": true,
+      "shapeKind": "path",
+      "shapeId": "arrow-right"
+    }
+  },
+  {
+    "name": "cross shape",
+    "kind": "shape",
+    "factory": {
+      "fn": "createPathShape",
+      "shapeId": "cross",
+      "size": 168
+    },
+    "object": {
+      "id": "case-21",
+      "type": "path",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 92,
+      "height": 92,
+      "scaleX": 1.826087,
+      "scaleY": 1.826087,
+      "path": [
+        [
+          "M",
+          36,
+          4
+        ],
+        [
+          "L",
+          64,
+          4
+        ],
+        [
+          "L",
+          64,
+          36
+        ],
+        [
+          "L",
+          96,
+          36
+        ],
+        [
+          "L",
+          96,
+          64
+        ],
+        [
+          "L",
+          64,
+          64
+        ],
+        [
+          "L",
+          64,
+          96
+        ],
+        [
+          "L",
+          36,
+          96
+        ],
+        [
+          "L",
+          36,
+          64
+        ],
+        [
+          "L",
+          4,
+          64
+        ],
+        [
+          "L",
+          4,
+          36
+        ],
+        [
+          "L",
+          36,
+          36
+        ],
+        [
+          "Z"
+        ]
+      ],
+      "fillRule": "nonzero",
+      "fill": "#7a64e0",
+      "stroke": null,
+      "strokeWidth": 0,
+      "strokeUniform": true,
+      "shapeKind": "path",
+      "shapeId": "cross"
+    }
+  },
+  {
+    "name": "diamond shape",
+    "kind": "shape",
+    "factory": {
+      "fn": "createPathShape",
+      "shapeId": "diamond",
+      "size": 168
+    },
+    "object": {
+      "id": "case-22",
+      "type": "path",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 96,
+      "height": 96,
+      "scaleX": 1.75,
+      "scaleY": 1.75,
+      "path": [
+        [
+          "M",
+          50,
+          2
+        ],
+        [
+          "L",
+          98,
+          50
+        ],
+        [
+          "L",
+          50,
+          98
+        ],
+        [
+          "L",
+          2,
+          50
+        ],
+        [
+          "Z"
+        ]
+      ],
+      "fillRule": "nonzero",
+      "fill": "#7a64e0",
+      "stroke": null,
+      "strokeWidth": 0,
+      "strokeUniform": true,
+      "shapeKind": "path",
+      "shapeId": "diamond"
+    }
+  },
+  {
+    "name": "trapezoid shape",
+    "kind": "shape",
+    "factory": {
+      "fn": "createPathShape",
+      "shapeId": "trapezoid",
+      "size": 168
+    },
+    "object": {
+      "id": "case-23",
+      "type": "path",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 96,
+      "height": 64,
+      "scaleX": 1.75,
+      "scaleY": 1.75,
+      "path": [
+        [
+          "M",
+          22,
+          18
+        ],
+        [
+          "L",
+          78,
+          18
+        ],
+        [
+          "L",
+          98,
+          82
+        ],
+        [
+          "L",
+          2,
+          82
+        ],
+        [
+          "Z"
+        ]
+      ],
+      "fillRule": "nonzero",
+      "fill": "#7a64e0",
+      "stroke": null,
+      "strokeWidth": 0,
+      "strokeUniform": true,
+      "shapeKind": "path",
+      "shapeId": "trapezoid"
+    }
+  },
+  {
+    "name": "parallelogram shape",
+    "kind": "shape",
+    "factory": {
+      "fn": "createPathShape",
+      "shapeId": "parallelogram",
+      "size": 168
+    },
+    "object": {
+      "id": "case-24",
+      "type": "path",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 96,
+      "height": 64,
+      "scaleX": 1.75,
+      "scaleY": 1.75,
+      "path": [
+        [
+          "M",
+          26,
+          18
+        ],
+        [
+          "L",
+          98,
+          18
+        ],
+        [
+          "L",
+          74,
+          82
+        ],
+        [
+          "L",
+          2,
+          82
+        ],
+        [
+          "Z"
+        ]
+      ],
+      "fillRule": "nonzero",
+      "fill": "#7a64e0",
+      "stroke": null,
+      "strokeWidth": 0,
+      "strokeUniform": true,
+      "shapeKind": "path",
+      "shapeId": "parallelogram"
+    }
+  },
+  {
+    "name": "ring shape",
+    "kind": "shape",
+    "factory": {
+      "fn": "createPathShape",
+      "shapeId": "ring",
+      "size": 168
+    },
+    "object": {
+      "id": "case-25",
+      "type": "path",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 96,
+      "height": 96,
+      "scaleX": 1.75,
+      "scaleY": 1.75,
+      "path": [
+        [
+          "M",
+          50,
+          2
+        ],
+        [
+          "C",
+          76.50869154259364,
+          2.002761322050658,
+          97.99638059592303,
+          23.493808089128922,
+          97.99499993489583,
+          50.0024997395867
+        ],
+        [
+          "C",
+          97.99361927386863,
+          76.51119139004449,
+          76.50369168641251,
+          97.99999973958332,
+          49.99500000000002,
+          97.99999973958333
+        ],
+        [
+          "C",
+          23.48630831358752,
+          97.99999973958334,
+          1.9963807261313775,
+          76.51119139004452,
+          1.9950000651041648,
+          50.00249973958673
+        ],
+        [
+          "C",
+          1.9936194040769522,
+          23.49380808912895,
+          23.481308457406353,
+          2.0027613220506746,
+          49.98999999999999,
+          2
+        ],
+        [
+          "Z"
+        ],
+        [
+          "M",
+          50,
+          24
+        ],
+        [
+          "C",
+          35.64157307091734,
+          24.002761235998964,
+          24.003619502186446,
+          35.644072391032076,
+          24.00500012019231,
+          50.002499519242335
+        ],
+        [
+          "C",
+          24.006380738198175,
+          64.36092664745259,
+          35.646572805413875,
+          75.99999951923077,
+          50.004999999999995,
+          75.99999951923077
+        ],
+        [
+          "C",
+          64.36342719458612,
+          75.99999951923077,
+          76.00361926180183,
+          64.36092664745259,
+          76.00499987980768,
+          50.00249951924233
+        ],
+        [
+          "C",
+          76.00638049781355,
+          35.64407239103207,
+          64.36842692908266,
+          24.002761235998964,
+          50.010000000000005,
+          24.000000000000004
+        ],
+        [
+          "Z"
+        ]
+      ],
+      "fillRule": "evenodd",
+      "fill": "#7a64e0",
+      "stroke": null,
+      "strokeWidth": 0,
+      "strokeUniform": true,
+      "shapeKind": "path",
+      "shapeId": "ring"
+    }
+  },
+  {
+    "name": "cloud shape",
+    "kind": "shape",
+    "factory": {
+      "fn": "createPathShape",
+      "shapeId": "cloud",
+      "size": 168
+    },
+    "object": {
+      "id": "case-26",
+      "type": "path",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 92.3436,
+      "height": 65.4914,
+      "scaleX": 1.819292,
+      "scaleY": 1.819292,
+      "path": [
+        [
+          "M",
+          26,
+          82
+        ],
+        [
+          "C",
+          10,
+          82,
+          2,
+          70,
+          6,
+          57
+        ],
+        [
+          "C",
+          8,
+          47,
+          18,
+          42,
+          25,
+          44
+        ],
+        [
+          "C",
+          25,
+          27,
+          41,
+          16,
+          56,
+          23
+        ],
+        [
+          "C",
+          64,
+          11,
+          85,
+          16,
+          86,
+          35
+        ],
+        [
+          "C",
+          99,
+          37,
+          101,
+          56,
+          91,
+          67
+        ],
+        [
+          "C",
+          87,
+          77,
+          79,
+          82,
+          70,
+          82
+        ],
+        [
+          "Z"
+        ]
+      ],
+      "fillRule": "nonzero",
+      "fill": "#7a64e0",
+      "stroke": null,
+      "strokeWidth": 0,
+      "strokeUniform": true,
+      "shapeKind": "path",
+      "shapeId": "cloud"
+    }
+  },
+  {
+    "name": "bolt shape",
+    "kind": "shape",
+    "factory": {
+      "fn": "createPathShape",
+      "shapeId": "bolt",
+      "size": 168
+    },
+    "object": {
+      "id": "case-27",
+      "type": "path",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 68,
+      "height": 96,
+      "scaleX": 1.75,
+      "scaleY": 1.75,
+      "path": [
+        [
+          "M",
+          58,
+          2
+        ],
+        [
+          "L",
+          16,
+          56
+        ],
+        [
+          "L",
+          44,
+          56
+        ],
+        [
+          "L",
+          36,
+          98
+        ],
+        [
+          "L",
+          84,
+          40
+        ],
+        [
+          "L",
+          56,
+          40
+        ],
+        [
+          "Z"
+        ]
+      ],
+      "fillRule": "nonzero",
+      "fill": "#7a64e0",
+      "stroke": null,
+      "strokeWidth": 0,
+      "strokeUniform": true,
+      "shapeKind": "path",
+      "shapeId": "bolt"
+    }
+  },
+  {
+    "name": "chevron shape",
+    "kind": "shape",
+    "factory": {
+      "fn": "createPathShape",
+      "shapeId": "chevron",
+      "size": 168
+    },
+    "object": {
+      "id": "case-28",
+      "type": "path",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 78,
+      "height": 88,
+      "scaleX": 1.909091,
+      "scaleY": 1.909091,
+      "path": [
+        [
+          "M",
+          18,
+          6
+        ],
+        [
+          "L",
+          66,
+          6
+        ],
+        [
+          "L",
+          96,
+          50
+        ],
+        [
+          "L",
+          66,
+          94
+        ],
+        [
+          "L",
+          18,
+          94
+        ],
+        [
+          "L",
+          48,
+          50
+        ],
+        [
+          "Z"
+        ]
+      ],
+      "fillRule": "nonzero",
+      "fill": "#7a64e0",
+      "stroke": null,
+      "strokeWidth": 0,
+      "strokeUniform": true,
+      "shapeKind": "path",
+      "shapeId": "chevron"
+    }
+  },
+  {
+    "name": "banner shape",
+    "kind": "shape",
+    "factory": {
+      "fn": "createPathShape",
+      "shapeId": "banner",
+      "size": 168
+    },
+    "object": {
+      "id": "case-29",
+      "type": "path",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 96,
+      "height": 56,
+      "scaleX": 1.75,
+      "scaleY": 1.75,
+      "path": [
+        [
+          "M",
+          2,
+          22
+        ],
+        [
+          "L",
+          98,
+          22
+        ],
+        [
+          "L",
+          86,
+          50
+        ],
+        [
+          "L",
+          98,
+          78
+        ],
+        [
+          "L",
+          2,
+          78
+        ],
+        [
+          "L",
+          14,
+          50
+        ],
+        [
+          "Z"
+        ]
+      ],
+      "fillRule": "nonzero",
+      "fill": "#7a64e0",
+      "stroke": null,
+      "strokeWidth": 0,
+      "strokeUniform": true,
+      "shapeKind": "path",
+      "shapeId": "banner"
+    }
+  },
+  {
+    "name": "moon shape",
+    "kind": "shape",
+    "factory": {
+      "fn": "createPathShape",
+      "shapeId": "moon",
+      "size": 168
+    },
+    "object": {
+      "id": "case-30",
+      "type": "path",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 88.8118,
+      "height": 92.017,
+      "scaleX": 1.82575,
+      "scaleY": 1.82575,
+      "path": [
+        [
+          "M",
+          62,
+          4
+        ],
+        [
+          "C",
+          38.13031247927275,
+          -0.653796726474309,
+          14.762271705052335,
+          14.076095458540937,
+          8.666019094564078,
+          37.6187272234397
+        ],
+        [
+          "C",
+          2.5697664840758208,
+          61.16135898833846,
+          15.851848562872185,
+          85.38162630849652,
+          38.98034107043331,
+          92.89778494414239
+        ],
+        [
+          "C",
+          62.10883357799444,
+          100.41394357978825,
+          87.09173738862019,
+          88.62880163762979,
+          96.00000000000001,
+          65.99999999999999
+        ],
+        [
+          "C",
+          79.56698181720536,
+          71.30153961147523,
+          61.684136666589524,
+          64.18875686084851,
+          53.38158437674029,
+          49.04880856759404
+        ],
+        [
+          "C",
+          45.07903208689106,
+          33.908860274339546,
+          48.69535122453369,
+          15.006213236603351,
+          62.00000000000001,
+          4
+        ],
+        [
+          "Z"
+        ]
+      ],
+      "fillRule": "nonzero",
+      "fill": "#7a64e0",
+      "stroke": null,
+      "strokeWidth": 0,
+      "strokeUniform": true,
+      "shapeKind": "path",
+      "shapeId": "moon"
+    }
+  },
+  {
+    "name": "drop shape",
+    "kind": "shape",
+    "factory": {
+      "fn": "createPathShape",
+      "shapeId": "drop",
+      "size": 168
+    },
+    "object": {
+      "id": "case-31",
+      "type": "path",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 72,
+      "height": 98,
+      "scaleX": 1.714286,
+      "scaleY": 1.714286,
+      "path": [
+        [
+          "M",
+          50,
+          2
+        ],
+        [
+          "C",
+          50,
+          2,
+          14,
+          42,
+          14,
+          64
+        ],
+        [
+          "C",
+          14,
+          83.88225099390857,
+          30.117749006091437,
+          100,
+          50,
+          100
+        ],
+        [
+          "C",
+          69.88225099390857,
+          100,
+          86,
+          83.88225099390857,
+          86,
+          64
+        ],
+        [
+          "C",
+          86,
+          42,
+          50,
+          2,
+          50,
+          2
+        ],
+        [
+          "Z"
+        ]
+      ],
+      "fillRule": "nonzero",
+      "fill": "#7a64e0",
+      "stroke": null,
+      "strokeWidth": 0,
+      "strokeUniform": true,
+      "shapeKind": "path",
+      "shapeId": "drop"
+    }
+  },
+  {
+    "name": "stretched heart with a border",
+    "kind": "shape",
+    "object": {
+      "id": "case-32",
+      "type": "path",
+      "originX": "center",
+      "originY": "center",
+      "left": 160,
+      "top": 80,
+      "width": 92,
+      "height": 83,
+      "scaleX": 3.26087,
+      "scaleY": 1.445783,
+      "path": [
+        [
+          "M",
+          50,
+          90
+        ],
+        [
+          "C",
+          18,
+          66,
+          4,
+          48,
+          4,
+          31
+        ],
+        [
+          "C",
+          4,
+          17,
+          15,
+          7,
+          29,
+          7
+        ],
+        [
+          "C",
+          38,
+          7,
+          46,
+          12,
+          50,
+          20
+        ],
+        [
+          "C",
+          54,
+          12,
+          62,
+          7,
+          71,
+          7
+        ],
+        [
+          "C",
+          85,
+          7,
+          96,
+          17,
+          96,
+          31
+        ],
+        [
+          "C",
+          96,
+          48,
+          82,
+          66,
+          50,
+          90
+        ],
+        [
+          "Z"
+        ]
+      ],
+      "fillRule": "nonzero",
+      "fill": "#7a64e0",
+      "stroke": "#000",
+      "strokeWidth": 4,
+      "strokeUniform": true,
+      "shapeKind": "path",
+      "shapeId": "heart"
+    }
+  },
+  {
+    "name": "group of a rotated rectangle with a border and a circle",
+    "kind": "group",
+    "factory": {
+      "fn": "createGroup",
+      "children": [
+        {
+          "fn": "createRect",
+          "size": 120,
+          "radius": 12,
+          "set": {
+            "left": 250,
+            "top": 200,
+            "angle": 30,
+            "stroke": "#000000",
+            "strokeWidth": 6
+          }
+        },
+        {
+          "fn": "createEllipse",
+          "size": 90,
+          "set": {
+            "left": 500,
+            "top": 380
+          }
+        }
+      ]
+    },
+    "object": {
+      "id": "case-33",
+      "type": "group",
+      "originX": "center",
+      "originY": "center",
+      "left": 355.0192,
+      "top": 270.0192,
+      "width": 379.9615,
+      "height": 309.9615,
+      "strokeWidth": 0,
+      "layoutManager": {
+        "type": "layoutManager",
+        "strategy": "fit-content"
+      },
+      "interactive": false,
+      "subTargetCheck": false,
+      "objects": [
+        {
+          "id": "child-rect",
+          "type": "rect",
+          "originX": "center",
+          "originY": "center",
+          "left": -105.0192,
+          "top": -70.0192,
+          "fill": "#7a64e0",
+          "stroke": "#000000",
+          "strokeWidth": 6,
+          "strokeUniform": true,
+          "shapeKind": "rect",
+          "width": 120,
+          "height": 120,
+          "rx": 12,
+          "ry": 12,
+          "angle": 30
+        },
+        {
+          "id": "child-circle",
+          "type": "ellipse",
+          "originX": "center",
+          "originY": "center",
+          "left": 144.9808,
+          "top": 109.9808,
+          "fill": "#7a64e0",
+          "stroke": null,
+          "strokeWidth": 0,
+          "strokeUniform": true,
+          "shapeKind": "ellipse",
+          "width": 90,
+          "height": 90,
+          "rx": 45,
+          "ry": 45
+        }
+      ]
+    }
+  },
+  {
+    "name": "rotated, scaled group, ungrouped",
+    "kind": "group",
+    "object": {
+      "id": "case-34",
+      "type": "group",
+      "originX": "center",
+      "originY": "center",
+      "left": 355.0192,
+      "top": 270.0192,
+      "width": 379.9615,
+      "height": 309.9615,
+      "strokeWidth": 0,
+      "layoutManager": {
+        "type": "layoutManager",
+        "strategy": "fit-content"
+      },
+      "interactive": false,
+      "subTargetCheck": false,
+      "objects": [
+        {
+          "id": "child-rect",
+          "type": "rect",
+          "originX": "center",
+          "originY": "center",
+          "left": -105.0192,
+          "top": -70.0192,
+          "fill": "#7a64e0",
+          "stroke": "#000000",
+          "strokeWidth": 6,
+          "strokeUniform": true,
+          "shapeKind": "rect",
+          "width": 120,
+          "height": 120,
+          "rx": 12,
+          "ry": 12,
+          "angle": 30
+        },
+        {
+          "id": "child-circle",
+          "type": "ellipse",
+          "originX": "center",
+          "originY": "center",
+          "left": 144.9808,
+          "top": 109.9808,
+          "fill": "#7a64e0",
+          "stroke": null,
+          "strokeWidth": 0,
+          "strokeUniform": true,
+          "shapeKind": "ellipse",
+          "width": 90,
+          "height": 90,
+          "rx": 45,
+          "ry": 45
+        }
+      ],
+      "angle": 45,
+      "scaleX": 1.5,
+      "scaleY": 1.5
+    },
+    "ungrouped": [
+      {
+        "id": "child-rect",
+        "type": "rect",
+        "originX": "center",
+        "originY": "center",
+        "left": 317.8961,
+        "top": 84.3629,
+        "fill": "#7a64e0",
+        "stroke": "#000000",
+        "strokeWidth": 6,
+        "strokeUniform": true,
+        "shapeKind": "rect",
+        "width": 120,
+        "height": 120,
+        "rx": 12,
+        "ry": 12,
+        "angle": 75,
+        "scaleX": 1.5,
+        "scaleY": 1.5
+      },
+      {
+        "id": "child-circle",
+        "type": "ellipse",
+        "originX": "center",
+        "originY": "center",
+        "left": 392.1423,
+        "top": 540.4468,
+        "fill": "#7a64e0",
+        "stroke": null,
+        "strokeWidth": 0,
+        "strokeUniform": true,
+        "shapeKind": "ellipse",
+        "width": 90,
+        "height": 90,
+        "rx": 45,
+        "ry": 45,
+        "angle": 45,
+        "scaleX": 1.5,
+        "scaleY": 1.5
+      }
+    ]
+  },
+  {
+    "name": "text with effects",
+    "kind": "text",
+    "object": {
+      "id": "case-35",
+      "type": "textbox",
+      "text": "Glow up",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 576,
+      "height": 44.07,
+      "fontFamily": "\"Plus Jakarta Sans\", sans-serif",
+      "fontSize": 39,
+      "fontWeight": 700,
+      "fill": "#1a1a2e",
+      "textAlign": "center",
+      "lineHeight": 1.16,
+      "splitByGrapheme": false,
+      "strokeUniform": true,
+      "effects": {
+        "glow": {
+          "color": "#7a64e0",
+          "blur": 18
+        },
+        "outline": {
+          "color": "#ff0000",
+          "width": 3
+        },
+        "background": {
+          "color": "#fde047"
+        }
+      },
+      "stroke": "#ff0000",
+      "strokeWidth": 3,
+      "paintFirst": "stroke",
+      "strokeLineJoin": "round",
+      "textBackgroundColor": "#fde047"
+    },
+    "expect": {
+      "shadow": true,
+      "stroke": "#ff0000",
+      "textBackgroundColor": "#fde047"
+    }
+  },
+  {
+    "name": "curved text",
+    "kind": "text",
+    "object": {
+      "id": "case-36",
+      "type": "textbox",
+      "text": "Curved",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 576,
+      "height": 44.07,
+      "fontFamily": "\"Plus Jakarta Sans\", sans-serif",
+      "fontSize": 39,
+      "fontWeight": 700,
+      "fill": "#1a1a2e",
+      "textAlign": "center",
+      "lineHeight": 1.16,
+      "splitByGrapheme": false,
+      "strokeUniform": true,
+      "curveAmount": -150
+    },
+    "expect": {
+      "path": true
+    }
+  },
+  {
+    "name": "shrink-to-fit short text",
+    "kind": "text",
+    "object": {
+      "id": "case-37",
+      "type": "textbox",
+      "text": "Short headline",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 400,
+      "height": 44.07,
+      "fontFamily": "\"Plus Jakarta Sans\", sans-serif",
+      "fontSize": 39,
+      "fontWeight": 700,
+      "fill": "#1a1a2e",
+      "textAlign": "center",
+      "lineHeight": 1.16,
+      "splitByGrapheme": false,
+      "strokeUniform": true,
+      "fit": {
+        "mode": "shrink"
+      },
+      "fitFontSize": 39
+    }
+  },
+  {
+    "name": "shrink-to-fit long text",
+    "kind": "text",
+    "object": {
+      "id": "case-38",
+      "type": "textbox",
+      "text": "Summer Music Festival Live",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 360,
+      "height": 67.8,
+      "fontFamily": "\"Plus Jakarta Sans\", sans-serif",
+      "fontSize": 60,
+      "fontWeight": 700,
+      "fill": "#1a1a2e",
+      "textAlign": "center",
+      "lineHeight": 1.16,
+      "splitByGrapheme": false,
+      "strokeUniform": true,
+      "fit": {
+        "mode": "shrink",
+        "minFontSize": 24
+      },
+      "fitFontSize": 27
+    }
+  },
+  {
+    "name": "shrink-to-fit overflowing text",
+    "kind": "text",
+    "object": {
+      "id": "case-39",
+      "type": "textbox",
+      "text": "Registration for the annual neighbourhood summer block party is open all week",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "width": 240,
+      "height": 44.07,
+      "fontFamily": "\"Plus Jakarta Sans\", sans-serif",
+      "fontSize": 39,
+      "fontWeight": 700,
+      "fill": "#1a1a2e",
+      "textAlign": "center",
+      "lineHeight": 1.16,
+      "splitByGrapheme": false,
+      "strokeUniform": true,
+      "fit": {
+        "mode": "shrink",
+        "minFontSize": 24
+      },
+      "fitFontSize": 24
+    }
+  },
+  {
+    "name": "shape with a shadow",
+    "kind": "shape",
+    "object": {
+      "id": "case-40",
+      "type": "rect",
+      "originX": "center",
+      "originY": "center",
+      "left": 400,
+      "top": 300,
+      "fill": "#7a64e0",
+      "stroke": null,
+      "strokeWidth": 0,
+      "strokeUniform": true,
+      "shapeKind": "rect",
+      "width": 120,
+      "height": 80,
+      "rx": 0,
+      "ry": 0,
+      "effects": {
+        "shadow": {
+          "color": "#00000066",
+          "blur": 12,
+          "offsetX": 4,
+          "offsetY": 6
+        }
+      }
+    },
+    "expect": {
+      "shadow": true
+    }
+  }
+]

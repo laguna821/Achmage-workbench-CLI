@@ -1,0 +1,193 @@
+.tree {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  margin: 0 -14px;
+  padding: 0 14px 18px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ed-border) transparent;
+}
+.tree > * {
+  flex: none;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-8) var(--space-4);
+  color: var(--color-text-muted);
+  font: 500 var(--text-sm) / 1.5 var(--font-sans);
+  text-align: center;
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding-right: 6px;
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font: 500 var(--text-sm) / 1.2 var(--font-sans);
+  cursor: pointer;
+  user-select: none;
+}
+.row:hover {
+  background: var(--color-bg-muted);
+}
+.row:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.selected,
+.selected:hover {
+  background: var(--color-brand-soft);
+}
+.selected .label {
+  color: var(--color-brand);
+  font-weight: 600;
+}
+
+.hidden .label,
+.hidden .icon,
+.hidden .thumb {
+  opacity: 0.45;
+}
+
+.above::before,
+.below::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--color-brand);
+}
+.above::before {
+  top: -2px;
+}
+.below::after {
+  bottom: -2px;
+}
+
+.grip {
+  display: inline-flex;
+  width: 14px;
+  flex: none;
+  color: var(--color-text-subtle);
+  opacity: 0;
+  cursor: grab;
+}
+.row:hover .grip {
+  opacity: 1;
+}
+
+.chev,
+.chevSpace {
+  flex: none;
+  width: 18px;
+}
+.chev {
+  display: grid;
+  place-items: center;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.chev:hover {
+  background: var(--color-border);
+}
+/* High contrast: the border colour is a mid-tone there, too dark to put icons on. */
+:global(:root[data-contrast='more']) .chev:hover,
+:global(:root[data-contrast='more']) .toggle:hover {
+  background: var(--color-brand-soft-hover);
+}
+
+.icon,
+.thumb {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--color-bg-muted);
+  color: var(--color-text-muted);
+  object-fit: cover;
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rename {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--color-brand);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: 500 var(--text-sm) / 1 var(--font-sans);
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+
+.toggles {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+
+.toggle {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-subtle);
+  cursor: pointer;
+  opacity: 0;
+}
+.row:hover .toggle,
+.row:focus-within .toggle,
+.toggle.on {
+  opacity: 1;
+}
+.toggle:hover {
+  background: var(--color-border);
+  color: var(--color-text);
+}
+.toggle.on {
+  color: var(--color-brand);
+}
+@media (hover: none) {
+  .toggle {
+    opacity: 1;
+  }
+}
+
+.fieldTag {
+  display: inline-flex;
+  flex: none;
+  margin-right: 4px;
+  color: var(--color-brand);
+}

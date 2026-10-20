@@ -1,0 +1,50 @@
+.page {
+  display: grid;
+  grid-template-columns: 1fr;
+  min-height: 100dvh;
+}
+
+.formSide {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  padding: var(--space-4);
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logo {
+  display: inline-flex;
+  color: var(--color-text);
+}
+
+.main {
+  display: grid;
+  flex: 1;
+  align-items: center;
+  justify-items: center;
+  padding: var(--space-8) 0;
+}
+
+.main:focus {
+  outline: none;
+}
+
+.card {
+  width: 100%;
+  max-width: 26rem;
+}
+
+@media (min-width: 960px) {
+  .page {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  }
+
+  .formSide {
+    padding: var(--space-6) var(--space-10);
+  }
+}

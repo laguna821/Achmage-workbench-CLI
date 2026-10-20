@@ -1,0 +1,102 @@
+.btn {
+  --btn-h: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: var(--btn-h);
+  min-width: var(--btn-h);
+  padding: 0 var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text);
+  font: 500 var(--text-sm) / 1 var(--font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn svg {
+  flex: none;
+}
+
+.sm {
+  --btn-h: 30px;
+  padding: 0 var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.icon {
+  padding: 0;
+  width: var(--btn-h);
+}
+
+.default {
+  background: var(--color-surface);
+  border-color: var(--color-border-strong);
+}
+.default:hover:not(:disabled) {
+  background: var(--color-bg-muted);
+}
+
+.ghost:hover:not(:disabled) {
+  background: var(--color-bg-muted);
+}
+.ghost:active:not(:disabled) {
+  background: var(--color-border);
+}
+/* High contrast: the border colour is a mid-tone there, too dark to put the label on. */
+:global(:root[data-contrast='more']) .ghost:active:not(:disabled) {
+  background: var(--color-brand-soft-hover);
+}
+
+.soft {
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+}
+.soft:hover:not(:disabled) {
+  background: var(--color-brand-soft-hover);
+}
+
+.primary {
+  border-radius: 999px;
+  background: var(--color-cta);
+  color: var(--color-on-cta);
+  font-weight: 800;
+}
+.primary:hover:not(:disabled) {
+  background: var(--color-cta-hover);
+}
+.primary:active:not(:disabled) {
+  background: var(--color-brand-active);
+  transform: translateY(0.5px);
+}
+
+.danger {
+  color: var(--color-danger);
+}
+.danger:hover:not(:disabled) {
+  background: var(--color-danger-soft);
+}
+
+.pressed,
+.ghost.pressed:hover:not(:disabled) {
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+}

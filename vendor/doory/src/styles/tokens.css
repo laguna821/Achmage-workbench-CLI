@@ -1,0 +1,167 @@
+/*
+ * Doory design tokens — the lilac theme: a soft lavender page, ink-brown lines and pastel accents taken from the
+ * Doory bunny.
+ * Components must use these variables and never hard-code colours.
+ * There is one light theme, with a high-contrast variant (the `data-contrast='more'` block at the end).
+ */
+:root {
+  /* Brand — violet scale */
+  --violet-50: #f5f2ff;
+  --violet-100: #ece6ff;
+  --violet-200: #dcd2ff;
+  --violet-300: #c9bcff;
+  --violet-400: #a996f5;
+  --violet-500: #8b75ea;
+  --violet-600: #6a52d9;
+  --violet-700: #5b43c4;
+  --violet-800: #4a35a3;
+  --violet-900: #3a2b7d;
+  --violet-950: #221a4a;
+
+  /* Ink and pastels — the bunny's outline and colours, used for illustration and accents */
+  --ink: #2b1c17;
+  --paper: #fffdf8;
+  --pastel-lilac: #c9bcff;
+  --pastel-pink: #ffc9d3;
+  --pastel-blush: #ffa9b9;
+  --pastel-butter: #ffe8a8;
+  --pastel-mint: #c4ecd9;
+  --pastel-sky: #cfe1ff;
+
+  /* Semantic — light. The accent is the bunny's ink; selected and hovered things get a pale lilac wash, and violet is
+     kept for the canvas selection handles and as a drawn accent (--accent-lilac), never for whole surfaces. */
+  --color-brand: var(--ink);
+  --color-brand-hover: #4a3530;
+  --color-brand-active: #160e0b;
+  --color-brand-soft: #f1edff;
+  --color-brand-soft-hover: #e4ddff;
+  --color-on-brand: var(--paper);
+  --accent-lilac: #7a64e0;
+
+  /* Call to action: ink pills with a lilac offset shadow */
+  --color-cta: var(--ink);
+  --color-cta-hover: #3f2b24;
+  --color-on-cta: var(--paper);
+  --color-cta-shadow: var(--violet-300);
+
+  --color-bg: #f9f7ff;
+  --color-bg-subtle: #f6f2f6;
+  --color-bg-muted: #f0e9ee;
+  --color-surface: #ffffff;
+  --color-surface-raised: #ffffff;
+  --color-canvas-workspace: #ebe7f5; /* area around the artboard in the editor */
+  --color-border: #ebe2e8;
+  --color-border-strong: #d9ccd5;
+  --color-checker: #d9ccd5; /* transparency checkerboards; high contrast leaves it, so colours preview the same */
+  --color-text: var(--ink);
+  --color-text-muted: #6f6170;
+  --color-text-subtle: #73667a;
+  --color-overlay: rgb(43 28 23 / 0.5);
+  /* The slideshow stage is black and its text white in every theme: it is a projected screen, not chrome. */
+  --color-stage: #000000;
+  --color-on-stage: #ffffff;
+
+  --color-success: #15803d;
+  --color-success-soft: #dcfce7;
+  --color-warning: #b45309;
+  --color-warning-soft: #fef3c7;
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fee2e2;
+  --color-info: #1d4ed8;
+  --color-info-soft: #dbeafe;
+
+  --focus-ring: 0 0 0 3px rgb(122 100 224 / 0.35);
+  --selection-color: #6a52d9; /* canvas selection handles & guides */
+  --guide-color: #ec5f98;
+
+  /* Typography */
+  --font-sans: 'Nunito Variable', 'Nunito', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Fraunces Variable', 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-hand: 'Caveat Variable', 'Caveat', 'Segoe Print', 'Bradley Hand', cursive;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-lg: 1.0625rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 2rem;
+  --text-4xl: 2.75rem;
+  --text-5xl: 3.75rem;
+  --leading-tight: 1.15;
+  --leading-normal: 1.5;
+
+  /* Space (4px grid) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-24: 6rem;
+
+  /* Shape & depth */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 999px;
+  --shadow-sm: 0 1px 2px rgb(60 40 110 / 0.07), 0 1px 1px rgb(43 28 23 / 0.04);
+  --shadow-md: 0 4px 12px rgb(60 40 110 / 0.1), 0 2px 4px rgb(43 28 23 / 0.04);
+  --shadow-lg: 0 18px 40px rgb(60 40 110 / 0.16), 0 4px 10px rgb(43 28 23 / 0.06);
+  --shadow-artboard: 0 2px 6px rgb(60 40 110 / 0.12), 0 12px 32px rgb(60 40 110 / 0.12);
+  --shadow-card: 0 0 0 1px rgb(43 28 23 / 0.06), 0 2px 0 rgb(43 28 23 / 0.05), 0 28px 50px -18px rgb(90 60 150 / 0.38);
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+
+  /* Layout */
+  --editor-topbar-h: 56px;
+  --editor-rail-w: 72px;
+  --editor-panel-w: 340px;
+  --editor-toolbar-h: 48px;
+  --z-dropdown: 50;
+  --z-sticky: 100;
+  --z-drawer: 200;
+  --z-modal: 300;
+  --z-toast: 400;
+
+  color-scheme: light;
+}
+
+/*
+ * High contrast: the same light theme with darker text, lines and focus rings. Set on <html> by src/lib/contrast.ts.
+ * Colours only, and never the page, workspace or stage backgrounds, so presenting and exports look the same.
+ */
+:root[data-contrast='more'] {
+  --color-text-muted: #3f3340; /* at least 9:1 on every surface, the workspace and the lilac washes */
+  --color-text-subtle: #4a3d4b; /* at least 7.8:1 */
+  /* Mid-tones: tracks and meters pair them with ink fills, so they keep 3:1 against ink as well as the surfaces. */
+  --color-border: #837585; /* at least 3.3:1 on every surface, 3.7:1 against ink */
+  --color-border-strong: #7a6c7b; /* at least 3.7:1 on every surface, 3.3:1 against ink */
+  --accent-lilac: var(--violet-800);
+  --selection-color: var(--violet-800); /* 7.4:1 on the workspace */
+  --guide-color: #86198f; /* fuchsia-800, 6.8:1 on the workspace, and told apart from the violet selection */
+  --color-success: #166534;
+  --color-warning: #92400e;
+  --color-danger: #991b1b;
+  --color-info: #1e40af;
+  /* One shadow, so the `inset var(--focus-ring)` rings keep working. */
+  --focus-ring: 0 0 0 3px var(--violet-800);
+  --shadow-artboard: 0 0 0 1px var(--color-border-strong), 0 2px 6px rgb(60 40 110 / 0.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+    --duration-slow: 0ms;
+  }
+}

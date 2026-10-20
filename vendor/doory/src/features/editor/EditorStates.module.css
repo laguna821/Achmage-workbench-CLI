@@ -1,0 +1,56 @@
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  background: var(--color-bg);
+}
+
+.skTop {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: var(--editor-topbar-h);
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.skEnd {
+  margin-left: auto;
+}
+
+.skBody {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.skRail {
+  width: var(--editor-rail-w);
+  border-radius: 0;
+}
+
+.skPanel {
+  display: none;
+  width: var(--editor-panel-w);
+  border-radius: 0;
+}
+
+.skCanvas {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  background: var(--color-canvas-workspace);
+}
+
+@media (min-width: 900px) {
+  .skPanel {
+    display: block;
+  }
+}
+
+.problem {
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  padding: var(--space-4);
+}

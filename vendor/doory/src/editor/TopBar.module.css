@@ -1,0 +1,149 @@
+.bar {
+  flex: none;
+  z-index: 100;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  height: var(--ed-topbar-h);
+  padding: 0 12px 0 14px;
+  background: var(--ed-surface);
+  border-bottom: 1px solid var(--ed-border);
+}
+
+.left,
+.right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.right {
+  justify-content: flex-end;
+}
+.presence {
+  display: flex;
+  flex: none;
+}
+.end {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  white-space: nowrap;
+}
+
+.menus {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  margin-left: 4px;
+}
+.menuBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--ed-text);
+  font: 600 13px / 1 var(--font-sans);
+  cursor: pointer;
+  transition: background var(--ed-dur);
+}
+.menuBtn:hover,
+.menuBtn[aria-expanded='true'] {
+  background: var(--ed-surface-3);
+}
+.menuBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.menuIcon {
+  width: 34px;
+  padding: 0;
+}
+
+/* Undo and redo sit after the menus, set off by a thin rule. */
+.history {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  margin-left: 2px;
+  padding-left: 8px;
+  border-left: 1px solid var(--ed-border);
+}
+
+.center {
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+.title {
+  width: clamp(140px, 24vw, 300px);
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ed-text);
+  font: 600 14px / 1 var(--font-sans);
+  text-align: center;
+  text-overflow: ellipsis;
+}
+.title:hover:not(:read-only) {
+  border-color: var(--ed-border);
+  background: var(--ed-surface-2);
+}
+.title:focus {
+  outline: none;
+  border-color: var(--ed-accent);
+  background: var(--ed-surface);
+  box-shadow: var(--ed-focus-glow);
+  text-align: left;
+}
+
+.share {
+  gap: 6px;
+  margin-left: 2px;
+  padding-right: 10px;
+}
+.chevron {
+  margin-left: -1px;
+  opacity: 0.8;
+}
+
+/* Narrow bars: one menu, the title fills what is left of the left-hand group and the Share label goes. */
+.bar[data-narrow] {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  padding: 0 8px;
+}
+.bar[data-narrow] .title {
+  flex: 1 1 60px;
+  width: auto;
+  min-width: 40px;
+  text-align: left;
+}
+.bar[data-narrow] .history {
+  padding-left: 4px;
+}
+.bar[data-narrow] .btnLabel {
+  display: none;
+}
+
+@media (max-width: 1180px) {
+  .bar:not([data-narrow]) .title {
+    width: clamp(120px, 18vw, 220px);
+  }
+}
+
+/* Phones: the title gives its room to the history and the actions; File > Rename still changes it. */
+@media (max-width: 479px) {
+  .bar[data-narrow] .title {
+    display: none;
+  }
+}

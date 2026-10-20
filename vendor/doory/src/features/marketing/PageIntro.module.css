@@ -1,0 +1,184 @@
+.intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-10);
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: var(--space-12) var(--space-4) var(--space-8);
+}
+
+.copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.eyebrow {
+  align-self: flex-start;
+  padding: 0 var(--space-2);
+  color: var(--color-text);
+  font-family: var(--font-hand);
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.1;
+  /* a highlighter swipe behind the words */
+  background: linear-gradient(transparent 55%, var(--pastel-butter) 55%, var(--pastel-butter) 92%, transparent 92%);
+  transform: rotate(-2deg);
+}
+
+.title {
+  font-size: clamp(2.4rem, 5.5vw, 4rem);
+  font-weight: 600;
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+}
+
+.lead {
+  max-width: 34rem;
+  color: var(--color-text-muted);
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.accent {
+  position: relative;
+  z-index: 0;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.accent svg {
+  position: absolute;
+  z-index: -1;
+  bottom: -0.55rem;
+  left: -3%;
+  width: 106%;
+  height: 1rem;
+  fill: none;
+  stroke: var(--pastel-blush);
+  stroke-width: 6;
+  stroke-linecap: round;
+}
+
+/* the bunny with its speech bubble */
+.stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 15rem;
+  padding-top: 2.5rem;
+}
+
+.bunny {
+  width: auto;
+  height: 14rem;
+  transform-origin: 50% 95%;
+  animation: bob 4.5s ease-in-out infinite;
+}
+
+.ground {
+  width: 7.5rem;
+  height: 0.9rem;
+  margin-top: -0.8rem;
+  border-radius: 50%;
+  background: rgb(43 28 23 / 0.08);
+}
+
+.bubble {
+  position: absolute;
+  top: 0;
+  right: -1.5rem;
+  padding: 0.45rem 0.95rem 0.6rem;
+  background: var(--paper);
+  border: 2.5px solid var(--ink);
+  border-radius: 20px 20px 20px 6px;
+  box-shadow: 4px 4px 0 var(--pastel-pink);
+  font-family: var(--font-hand);
+  font-size: 1.45rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  transform: rotate(6deg);
+}
+
+.sparkle,
+.heart {
+  position: absolute;
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  animation: drift 6s ease-in-out infinite;
+}
+
+.sparkle {
+  top: 5rem;
+  left: -0.5rem;
+  stroke: #e8b84a;
+}
+
+.heart {
+  right: -0.5rem;
+  bottom: 3rem;
+  stroke: #ff8fa6;
+  animation-delay: -3s;
+}
+
+@keyframes bob {
+  0%,
+  100% {
+    transform: rotate(-3deg) translateY(0);
+  }
+
+  50% {
+    transform: rotate(0deg) translateY(-10px);
+  }
+}
+
+@keyframes drift {
+  50% {
+    transform: translateY(-10px) rotate(8deg);
+  }
+}
+
+@media (max-width: 760px) {
+  .intro {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+    padding-top: var(--space-6);
+    text-align: center;
+  }
+
+  .copy {
+    align-items: center;
+  }
+
+  .eyebrow {
+    align-self: center;
+  }
+
+  .stage {
+    order: -1;
+    justify-self: center;
+    width: 12rem;
+  }
+
+  .bunny {
+    height: 10.5rem;
+  }
+
+  .bubble {
+    right: -2.5rem;
+    font-size: 1.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bunny,
+  .sparkle,
+  .heart {
+    animation: none;
+  }
+}

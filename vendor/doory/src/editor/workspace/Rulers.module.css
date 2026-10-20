@@ -1,0 +1,45 @@
+.rulers {
+  --ruler-bg: var(--color-surface);
+  --ruler-fg: var(--color-text-subtle);
+  --ruler-accent: var(--selection-color);
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  pointer-events: none;
+}
+
+.corner {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 24px;
+  height: 24px;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.ruler {
+  position: absolute;
+  pointer-events: auto;
+  background: var(--color-surface);
+}
+.h {
+  left: 24px;
+  top: 0;
+  border-bottom: 1px solid var(--color-border);
+  cursor: row-resize;
+}
+.v {
+  left: 0;
+  top: 24px;
+  border-right: 1px solid var(--color-border);
+  cursor: col-resize;
+}
+
+.dragLine {
+  display: none;
+  position: absolute;
+  background: var(--guide-color);
+  pointer-events: none;
+}

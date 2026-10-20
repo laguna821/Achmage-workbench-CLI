@@ -1,0 +1,6 @@
+.root {
+  display: grid;
+  place-items: center;
+  min-height: 40dvh;
+  color: var(--color-brand);
+}

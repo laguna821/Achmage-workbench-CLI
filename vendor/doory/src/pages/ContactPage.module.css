@@ -1,0 +1,167 @@
+.page {
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 0 var(--space-4) var(--space-16);
+}
+
+/* Three ways to reach us, as taped-down cards */
+.ways {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: var(--space-10) var(--space-6);
+  margin-top: var(--space-12);
+}
+
+.way {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-6) var(--space-6);
+  border-radius: var(--radius-lg);
+  background: var(--tone);
+  box-shadow:
+    0 1px 0 rgb(43 28 23 / 0.06),
+    0 18px 30px -18px rgb(43 28 23 / 0.35);
+  transform: rotate(var(--tilt));
+}
+
+.way:nth-child(1) {
+  --tilt: -1.4deg;
+}
+
+.way:nth-child(2) {
+  --tilt: 1deg;
+}
+
+.way:nth-child(3) {
+  --tilt: -0.6deg;
+}
+
+/* washi tape */
+.way::before {
+  content: '';
+  position: absolute;
+  top: -0.7rem;
+  left: 50%;
+  width: 4.75rem;
+  height: 1.4rem;
+  margin-left: -2.375rem;
+  background:
+    repeating-linear-gradient(45deg, rgb(255 255 255 / 0.5) 0 6px, transparent 6px 12px),
+    var(--tape);
+  opacity: 0.9;
+  transform: rotate(-3deg);
+}
+
+.way[data-tone='pink'] {
+  --tone: var(--pastel-pink);
+  --tape: var(--pastel-mint);
+}
+
+.way[data-tone='butter'] {
+  --tone: var(--pastel-butter);
+  --tape: var(--pastel-pink);
+}
+
+.way[data-tone='mint'] {
+  --tone: var(--pastel-mint);
+  --tape: var(--pastel-butter);
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 2px 2px 0 rgb(43 28 23 / 0.15);
+}
+
+.wayTitle {
+  color: var(--ink);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.wayText {
+  flex: 1;
+  color: #4a3b3f;
+  font-weight: 600;
+}
+
+.wayAction {
+  margin-top: var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.wayAction:hover {
+  background: var(--color-bg-muted);
+}
+
+/* Leave a note */
+.note {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: var(--space-10);
+  margin-top: var(--space-16);
+  padding: var(--space-10);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.noteHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.hand {
+  color: var(--color-text-muted);
+  font-family: var(--font-hand);
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1;
+  transform: rotate(-2deg);
+  transform-origin: left center;
+}
+
+.noteTitle {
+  font-size: clamp(1.9rem, 4vw, 2.6rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.noteLead {
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.send {
+  align-self: flex-start;
+  margin-top: var(--space-2);
+}
+
+@media (max-width: 760px) {
+  .note {
+    grid-template-columns: 1fr;
+    gap: var(--space-6);
+    padding: var(--space-6);
+  }
+}

@@ -1,0 +1,49 @@
+.wrap {
+  display: inline-flex;
+  min-width: 0;
+}
+
+.tip {
+  position: fixed;
+  z-index: var(--z-toast);
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 5px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--color-text);
+  color: var(--color-bg);
+  font: 500 var(--text-xs) / 1.2 var(--font-sans);
+  white-space: nowrap;
+  box-shadow: var(--shadow-md);
+  animation: tip-in var(--duration-fast) var(--ease-out);
+}
+
+.top {
+  transform: translate(-50%, -100%);
+}
+.bottom {
+  transform: translate(-50%, 0);
+}
+.right {
+  transform: translate(0, -50%);
+}
+.left {
+  transform: translate(-100%, -50%);
+}
+
+.kbd {
+  font: 600 10.5px / 1 var(--font-sans);
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-bg) 22%, transparent);
+  color: inherit;
+  opacity: 0.85;
+}
+
+@keyframes tip-in {
+  from {
+    opacity: 0;
+  }
+}

@@ -1,0 +1,305 @@
+.search {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 38px;
+  padding: 0 12px 0 38px;
+  border: 1px solid var(--ed-border);
+  border-radius: 999px;
+  background: var(--ed-surface);
+  transition:
+    border-color var(--ed-dur) var(--ed-ease),
+    box-shadow var(--ed-dur) var(--ed-ease);
+}
+.search:focus-within {
+  border-color: var(--ed-accent);
+  box-shadow: var(--ed-focus-glow);
+}
+.searchIcon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  display: flex;
+  color: var(--ed-text-dim);
+  transform: translateY(-50%);
+}
+.search input {
+  flex: 1;
+  height: 100%;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--ed-text);
+  font: 400 13px / 1 var(--font-sans);
+}
+.search input:focus {
+  outline: none;
+}
+.search input::placeholder {
+  color: var(--ed-text-dim);
+}
+.clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--ed-surface-3);
+  color: var(--ed-text-dim);
+  cursor: pointer;
+}
+.clear:hover {
+  background: var(--ed-border);
+  color: var(--ed-text);
+}
+/* High contrast: the border colour is a mid-tone there, too dark to put the icon on. */
+:global(:root[data-contrast='more']) .clear:hover {
+  background: var(--color-brand-soft-hover);
+}
+.clear:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.category {
+  position: relative;
+  flex: none;
+}
+.categoryBtn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--ed-border);
+  border-radius: 999px;
+  background: var(--ed-surface);
+  color: var(--ed-text);
+  font: 500 13px / 1 var(--font-sans);
+  cursor: pointer;
+  transition:
+    border-color var(--ed-dur) var(--ed-ease),
+    background var(--ed-dur) var(--ed-ease);
+}
+.categoryBtn:hover:not(:disabled) {
+  border-color: var(--ed-text-dim);
+}
+.categoryBtn:focus-visible,
+.categoryBtn.open {
+  outline: none;
+  border-color: var(--ed-accent);
+  box-shadow: var(--ed-focus-glow);
+}
+.categoryBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.categoryBtn svg {
+  color: var(--ed-text-dim);
+  transition: transform var(--ed-dur) var(--ed-ease);
+}
+.categoryBtn.open svg {
+  transform: rotate(180deg);
+}
+.menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 6;
+  max-height: 280px;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--ed-border);
+  border-radius: 12px;
+  background: var(--ed-surface);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.12);
+  animation: menu-in 0.14s var(--ed-ease);
+}
+.menu li {
+  margin: 0;
+}
+.group {
+  padding: 8px 12px 4px;
+  color: var(--ed-text-dim);
+  font: 600 12px / 1.3 var(--font-sans);
+}
+.menu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ed-text);
+  font: 400 13px / 1.2 var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+.menu button:hover,
+.menu button:focus-visible {
+  outline: none;
+  background: var(--ed-surface-2);
+}
+/* High contrast: keyboard focus gets the focus ring, apart from the outline on the selected option. */
+:global(:root[data-contrast='more']) .menu button:focus-visible {
+  box-shadow: inset var(--focus-ring);
+}
+.menu button.active {
+  background: var(--ed-accent-glow);
+  font-weight: 600;
+}
+.count {
+  color: var(--ed-text-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.menu button.active .count {
+  color: var(--ed-accent-hover);
+}
+
+.gridWrap {
+  flex: 1;
+  min-height: 0;
+  margin: 4px -14px 0;
+  padding: 4px 14px 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-top: 1px solid var(--ed-border-light);
+  scrollbar-width: thin;
+  scrollbar-color: var(--ed-border) transparent;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding-top: 10px;
+}
+.cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background var(--ed-dur) var(--ed-ease),
+    border-color var(--ed-dur) var(--ed-ease),
+    transform var(--ed-dur) var(--ed-ease);
+}
+.cell:hover {
+  border-color: var(--ed-border);
+  background: var(--ed-surface-2);
+  transform: translateY(-1px);
+}
+.cell:active {
+  background: var(--ed-surface-3);
+  transform: translateY(0);
+}
+.cell:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.cell img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+.packs {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  margin: 2px -14px 0;
+  padding: 2px 14px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ed-border) transparent;
+}
+.pack {
+  flex: none;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--ed-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ed-text-dim);
+  font: 600 11px / 1 var(--font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pack:hover {
+  color: var(--ed-text);
+}
+.pack[aria-pressed='true'] {
+  border-color: var(--ed-accent);
+  color: var(--ed-accent);
+}
+.pack:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  max-width: calc(100% - 8px);
+  padding: 2px 5px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--color-overlay);
+  color: var(--color-on-brand);
+  font: 600 9px / 1.2 var(--font-sans);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--ed-dur) var(--ed-ease);
+}
+.cell:hover .badge,
+.cell:focus-visible .badge {
+  opacity: 1;
+}
+.skel {
+  aspect-ratio: 1 / 1;
+  border-radius: 10px;
+}
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 30px 16px;
+  color: var(--ed-text-dim);
+  font: 400 12px / 1.5 var(--font-sans);
+  text-align: center;
+}
+.sentinel {
+  height: 1px;
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .menu {
+    animation: none;
+  }
+}

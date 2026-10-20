@@ -1,0 +1,104 @@
+.pill {
+  display: inline-flex;
+  /* In a tight top bar the pill gives way (its text is cut with an ellipsis) instead of running over the tools. */
+  flex: 0 1 auto;
+  min-width: 30px;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-full);
+  font: 600 var(--text-xs) / 1 var(--font-sans);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.neutral,
+.ok {
+  background: var(--color-bg-muted);
+  color: var(--color-text-muted);
+}
+.warn {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+.error {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+.live {
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+}
+.liveDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-brand);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-brand) 45%, transparent);
+  animation: beat 2.4s ease-out infinite;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-text-subtle);
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+.retry {
+  flex: none;
+  margin-left: 2px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-danger);
+  color: var(--color-bg);
+  font: 700 11px / 1 var(--font-sans);
+  cursor: pointer;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 1100px) {
+  .text {
+    display: none;
+  }
+  .pill {
+    padding: 0 9px;
+  }
+  .error .text,
+  .warn .text {
+    display: inline;
+  }
+}
+
+@keyframes beat {
+  70% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin,
+  .liveDot {
+    animation: none;
+  }
+}

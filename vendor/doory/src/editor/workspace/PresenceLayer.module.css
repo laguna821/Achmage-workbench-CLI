@@ -1,0 +1,87 @@
+.layer {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.box {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--peer);
+  border-radius: 2px;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-on-brand) 70%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--color-on-brand) 45%, transparent);
+  transition: opacity 0.25s;
+}
+.box[data-editing] {
+  border-style: dashed;
+}
+.box[data-idle] {
+  opacity: 0.5;
+}
+
+.tag {
+  position: absolute;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 240px;
+  padding: 2px 7px;
+  overflow: hidden;
+  border-radius: 6px 6px 6px 0;
+  background: var(--peer);
+  color: var(--peer-text);
+  font: 600 11px / 1.35 var(--font-sans);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: translateY(calc(-100% - 2px));
+  box-shadow: var(--shadow-sm);
+}
+
+.cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  will-change: transform;
+  transition:
+    transform 0.09s linear,
+    opacity 0.3s;
+}
+.cursor[data-idle] {
+  opacity: 0.35;
+}
+.arrow {
+  display: block;
+  fill: var(--peer);
+  stroke: var(--color-on-brand);
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 1.5px color-mix(in srgb, var(--color-text) 40%, transparent));
+}
+.name {
+  position: absolute;
+  left: 12px;
+  top: 14px;
+  max-width: 180px;
+  padding: 2px 7px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--peer);
+  color: var(--peer-text);
+  font: 600 11px / 1.35 var(--font-sans);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cursor,
+  .box {
+    transition: none;
+  }
+}

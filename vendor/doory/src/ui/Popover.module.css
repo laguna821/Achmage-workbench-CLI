@@ -1,0 +1,9 @@
+.popover {
+  padding: var(--space-4);
+  min-width: 14rem;
+}
+
+.popover:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-lg);
+}

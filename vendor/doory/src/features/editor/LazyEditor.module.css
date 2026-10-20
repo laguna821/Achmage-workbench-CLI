@@ -1,0 +1,6 @@
+/* The editor fills whatever it is given (`height: 100%`), and the shell's root only has a minimum height: without a frame of its own height it collapses to its top bars and leaves no workspace. */
+.frame {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+}

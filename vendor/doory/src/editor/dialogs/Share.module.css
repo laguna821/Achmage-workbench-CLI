@@ -1,0 +1,131 @@
+.create {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.row > * {
+  min-width: 0;
+}
+.grow {
+  flex: 1;
+}
+.links {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.link {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.link[data-status='off'],
+.link[data-status='expired'] {
+  opacity: 0.75;
+}
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  color: var(--color-text-muted);
+  font: 500 var(--text-xs) / 1.3 var(--font-sans);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+  font: 700 11px / 1 var(--font-sans);
+}
+.chipMuted {
+  background: var(--color-bg-muted);
+  color: var(--color-text-muted);
+}
+.url {
+  flex: 1;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+  font: 500 var(--text-xs) / 1 var(--font-mono);
+}
+.empty {
+  margin: 0;
+  padding: var(--space-4);
+  color: var(--color-text-muted);
+  font: 400 var(--text-sm) / 1.5 var(--font-sans);
+  text-align: center;
+}
+.versions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 46vh;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+.version {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.versionThumb {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  background: var(--color-bg-muted) center / cover no-repeat;
+}
+.versionText {
+  flex: 1;
+  min-width: 0;
+}
+.versionText strong {
+  display: block;
+  overflow: hidden;
+  font: 600 var(--text-sm) / 1.3 var(--font-sans);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.versionText small {
+  color: var(--color-text-muted);
+  font: 400 var(--text-xs) / 1.4 var(--font-sans);
+}
+
+.field {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.full {
+  display: flex;
+  width: 100%;
+}

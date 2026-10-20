@@ -1,0 +1,194 @@
+/* Doory global styles: modern reset + base typography on tokens. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: calc(var(--space-16) + var(--space-4));
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+#root {
+  min-height: 100dvh;
+  isolation: isolate;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-family: var(--font-display);
+  line-height: var(--leading-tight);
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+img,
+svg,
+video,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+img {
+  height: auto;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+a {
+  color: var(--color-brand-strong);
+  text-decoration: none;
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  margin: 0;
+}
+
+code,
+kbd,
+samp {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
+}
+
+/*
+ * High contrast: things that are selected or pressed are shown only by a pale wash, so they also get an inset outline
+ * (no layout change). Checked menu items already show a tick, and breadcrumbs mark the current page in their text.
+ * Not while focused: the outline would cover the focus ring (inset rings) or replace the focus outline.
+ */
+:root[data-contrast='more'] :is([aria-pressed='true'], [aria-selected='true'], [aria-current]:not([aria-current='page'], [aria-current='false'])):not(:focus-visible) {
+  outline: 2px solid var(--color-text);
+  outline-offset: -2px;
+}
+/* While focused, the state shows as an inset line inside the focus ring instead. */
+:root[data-contrast='more'] :is([aria-pressed='true'], [aria-selected='true'], [aria-current]:not([aria-current='page'], [aria-current='false'])):focus-visible {
+  box-shadow: var(--focus-ring), inset 0 0 0 2px var(--color-text);
+}
+
+::selection {
+  background: var(--pastel-butter);
+  color: var(--ink);
+}
+
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/*
+ * Accessible brand aliases layered on tokens.css.
+ * --color-brand-fill*  : solid ink surfaces that carry paper-white text (>= 4.5:1).
+ * --color-brand-strong : accent text on tinted/soft backgrounds (>= 4.5:1).
+ */
+:root {
+  --color-brand-fill: var(--ink);
+  --color-brand-fill-hover: #4a3530;
+  --color-brand-fill-active: #160e0b;
+  --color-brand-strong: var(--ink);
+}
+

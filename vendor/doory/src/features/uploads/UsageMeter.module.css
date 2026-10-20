@@ -1,0 +1,51 @@
+.meter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 12rem;
+}
+
+.label {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.label strong {
+  color: var(--color-text);
+}
+
+.bar {
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-muted);
+  overflow: hidden;
+}
+
+.bar::-webkit-progress-bar {
+  background: var(--color-bg-muted);
+}
+
+.bar::-webkit-progress-value {
+  background: var(--color-brand-fill);
+  border-radius: var(--radius-full);
+}
+
+.bar::-moz-progress-bar {
+  background: var(--color-brand-fill);
+}
+
+.bar[data-high]::-webkit-progress-value {
+  background: var(--color-danger);
+}
+
+.bar[data-high]::-moz-progress-bar {
+  background: var(--color-danger);
+}
+
+/* High contrast: the pale track gets an outline, so the full length of the bar shows. */
+:global(:root[data-contrast='more']) .bar {
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}

@@ -1,0 +1,70 @@
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.card:hover {
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.thumb {
+  border-radius: var(--radius-md);
+  background:
+    repeating-conic-gradient(var(--color-bg-muted) 0% 25%, var(--color-bg-subtle) 0% 50%) 50% / 16px 16px;
+}
+
+.info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 0 var(--space-2) var(--space-2);
+}
+
+.name {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.menu {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.card:hover .menu,
+.card:focus-within .menu {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .menu {
+    opacity: 1;
+  }
+}

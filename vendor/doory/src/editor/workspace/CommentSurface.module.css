@@ -1,0 +1,16 @@
+/* In comment mode the page is one big target: nothing under it (objects, text, the context menu) sees the pointer. */
+.surface {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  cursor: crosshair;
+}
+.surface:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: -2px;
+}
+
+/* Stands in for the pins' layer (which is above the page, z-index 5) while its code is on its way. */
+.waiting {
+  z-index: 5;
+}
