@@ -33,6 +33,7 @@ import { resolveCodex } from "../binaries.ts";
 import { billingVarsIn, engineEnv } from "../engine-env.ts";
 import { codexAccountInfo } from "../engine-login.ts";
 import { emptyStatus, type AdapterSink, type LoginStart, type ProviderAdapter } from "./types.ts";
+import type { BrowserEngineHooks } from "../browse.ts";
 
 const CLIENT_VERSION = "0.1.0";
 
@@ -55,11 +56,15 @@ const ACCESS: Record<AccessMode, { approvalPolicy: AskForApproval; sandbox: Sand
   full: { approvalPolicy: "never", sandbox: "danger-full-access" },
 };
 
-function sandboxPolicy(mode: SandboxMode): SandboxPolicy {
+/** `roots`: folders writable besides the work folder (the agent browser's spool for its session). */
+function sandboxPolicy(mode: SandboxMode, roots: string[] = []): SandboxPolicy {
   if (mode === "danger-full-access") return { type: "dangerFullAccess" };
   if (mode === "read-only") return { type: "readOnly", networkAccess: false };
-  return { type: "workspaceWrite", writableRoots: [], networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false };
+  return { type: "workspaceWrite", writableRoots: roots, networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false };
 }
+
+/** What a thread's turns run with: the access and the extra writable folders. */
+const policyKey = (access: AccessMode, roots: string[] = []) => `${access}|${roots.join("\n")}`;
 
 /** The access the user's own Codex settings give (config.toml approval_policy / sandbox_mode). */
 export function configuredAccess(config: Pick<Config, "approval_policy" | "sandbox_mode"> | null | undefined): AccessMode | null {
@@ -137,8 +142,8 @@ export class CodexAdapter implements ProviderAdapter {
   private readonly sink: AdapterSink;
   /** Fixed by the environment for tests (WORKBENCH_CODEX_APPROVAL / _SANDBOX); otherwise per session. */
   private readonly forced: { approvalPolicy?: string; sandbox?: string };
-  /** threadId -> the access its turns run with now */
-  private readonly threadAccess = new Map<string, AccessMode>();
+  /** threadId -> what its turns run with now (policyKey) */
+  private readonly threadAccess = new Map<string, string>();
   /** sessionId -> the access the user last set (approvals arriving meanwhile follow it) */
   private readonly sessionAccess = new Map<string, AccessMode>();
   /** threads compacting on request (their turn is not a reply) */
@@ -160,11 +165,13 @@ export class CodexAdapter implements ProviderAdapter {
   private readonly approvals = new Map<string, PendingApproval>();
   private idleTimer: NodeJS.Timeout | null = null;
   private readonly idleMs: number;
+  private readonly browser: BrowserEngineHooks | null;
 
-  constructor(sink: AdapterSink, options?: { approvalPolicy?: string; sandbox?: string; idleMs?: number }) {
+  constructor(sink: AdapterSink, options?: { approvalPolicy?: string; sandbox?: string; idleMs?: number; browser?: BrowserEngineHooks | null }) {
     this.sink = sink;
     this.forced = { approvalPolicy: options?.approvalPolicy, sandbox: options?.sandbox };
     this.idleMs = options?.idleMs ?? 10 * 60_000;
+    this.browser = options?.browser ?? null;
   }
 
   /**
@@ -217,7 +224,8 @@ export class CodexAdapter implements ProviderAdapter {
       this.publish({ installed: true, binary: binary.path, binarySource: binary.source, version: binary.version, billingVars: billingVarsIn(), error: null });
       const rpc = new CodexRpc({
         binary: binary.path,
-        env: engineEnv({ command: binary.path }),
+        // The agent browser's playwright-cli on PATH; commands find their session by CODEX_THREAD_ID.
+        env: engineEnv({ command: binary.path, paths: this.browser?.pathDirs() }),
         onNotification: (notification) => this.onNotification(notification),
         onServerRequest: (request) => this.onServerRequest(request),
         onExit: (code, stderr) => this.onExit(code, stderr),
@@ -319,20 +327,24 @@ export class CodexAdapter implements ProviderAdapter {
     const rpc = this.rpc!;
     let threadId = session.nativeSessionId;
     if (!threadId) {
+      // Developer instructions given at the start stay in the thread's history (also across resumes).
+      const instructions = this.browser?.instructions(session) ?? null;
       const started = await rpc.request<ThreadStartResponse>("thread/start", {
         cwd: work.cwd,
         model: session.model,
         ...this.policyFor(session.access),
         serviceName: "achmage_workbench",
+        ...(instructions ? { developerInstructions: instructions } : {}),
       });
       threadId = started.thread.id;
+      if (instructions) this.browser?.setTold(session.id, true);
       this.sink.updateSession(session.id, { nativeSessionId: threadId, engineModel: started.model, engineEffort: started.reasoningEffort });
       this.loaded.add(threadId);
-      this.threadAccess.set(threadId, session.access);
+      this.threadAccess.set(threadId, policyKey(session.access));
     } else if (!this.loaded.has(threadId)) {
       await rpc.request<ThreadStartResponse>("thread/resume", { threadId, cwd: work.cwd, ...this.policyFor(session.access), excludeTurns: true });
       this.loaded.add(threadId);
-      this.threadAccess.set(threadId, session.access);
+      this.threadAccess.set(threadId, policyKey(session.access));
     }
     this.threads.set(threadId, session.id);
     this.sessionAccess.set(session.id, session.access);
@@ -343,18 +355,21 @@ export class CodexAdapter implements ProviderAdapter {
     await this.ensureRunning();
     const rpc = this.rpc!;
     const threadId = await this.threadFor(session, work);
+    await this.tellBrowser(session, threadId);
     // Model and effort are per turn, so a change in the picker applies to the next message.
     const { model, effort } = turnSettings(session, this.current.models);
     // So is access: a change since the thread started is passed with the turn (and kept by Codex).
+    // With the agent browser on, the sandbox also lets commands write the session's spool folder.
     const policy = this.policyFor(session.access);
-    const changed = this.threadAccess.get(threadId) !== session.access;
-    this.threadAccess.set(threadId, session.access);
+    const roots = this.browser?.writableRoots(session) ?? [];
+    const changed = this.threadAccess.get(threadId) !== policyKey(session.access, roots);
+    this.threadAccess.set(threadId, policyKey(session.access, roots));
     const response = await rpc.request<TurnStartResponse>("turn/start", {
       threadId,
       input: [{ type: "text", text, text_elements: [] }],
       ...(model ? { model } : {}),
       ...(effort ? { effort: effort as ReasoningEffort } : {}),
-      ...(changed ? { approvalPolicy: policy.approvalPolicy, sandboxPolicy: sandboxPolicy(policy.sandbox) } : {}),
+      ...(changed ? { approvalPolicy: policy.approvalPolicy, sandboxPolicy: sandboxPolicy(policy.sandbox, roots) } : {}),
     });
     this.activeTurns.set(threadId, response.turn.id);
     // Codex 0.160 sends no settings notification for per-turn overrides; read what the thread now uses.
@@ -363,6 +378,21 @@ export class CodexAdapter implements ProviderAdapter {
       .request<ThreadReadResponse>("thread/read", { threadId })
       .then(({ thread }) => this.sink.updateSession(sessionId, { engineModel: thread.model, engineEffort: thread.reasoningEffort }))
       .catch(() => undefined);
+  }
+
+  /**
+   * The browser was switched on or off since the thread last heard about it. Codex keeps the
+   * developer instructions a thread started with and ignores new ones on resume, so the change
+   * goes into the thread's history as a developer message before the turn.
+   */
+  private async tellBrowser(session: Session, threadId: string) {
+    if (!this.browser) return;
+    const want = Boolean(session.browser);
+    if (want === (this.browser.told(session.id) ?? false)) return;
+    const text = want ? this.browser.instructions(session) : this.browser.offNote(session);
+    if (!text) return;
+    await this.rpc!.request("thread/inject_items", { threadId, items: [{ type: "message", role: "developer", content: [{ type: "input_text", text }] }] });
+    this.browser.setTold(session.id, want);
   }
 
   /** Put a request into the running turn (`turn/steer`); false when that turn is already over. */
@@ -511,6 +541,14 @@ export class CodexAdapter implements ProviderAdapter {
     if (!sessionId || !supported.includes(request.method)) {
       this.rpc?.respondError(request.id, `Achmage Workbench does not handle ${request.method}`);
       return;
+    }
+    // A bare playwright-cli command: the agent browser asks by the session's access itself.
+    if (request.method === "item/commandExecution/requestApproval") {
+      const command = (request.params as CommandExecutionRequestApprovalParams).command;
+      if (command && this.browser?.allowsCommand(sessionId, command)) {
+        this.rpc?.respond(request.id, { decision: "accept" });
+        return;
+      }
     }
     // An MCP server may ask for a tool approval (an empty form Codex marks as such) or for real
     // input: a form with fields or a link to open. Only approvals can be answered here so far;

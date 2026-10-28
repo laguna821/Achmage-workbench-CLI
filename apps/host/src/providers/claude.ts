@@ -23,6 +23,7 @@ import { resolveClaude, type ResolvedBinary } from "../binaries.ts";
 import { billingVarsIn, claudeSdkEnv, engineEnv } from "../engine-env.ts";
 import { parseClaudeAuthStatus } from "../engine-login.ts";
 import { emptyStatus, type AdapterSink, type LoginStart, type ProviderAdapter } from "./types.ts";
+import type { BrowserEngineHooks } from "../browse.ts";
 
 const run = promisify(execFile);
 
@@ -85,6 +86,8 @@ type Runtime = {
   effort: string | null;
   /** Model Claude Code last reported answering with. */
   engineModel: string | null;
+  /** Started with the agent browser's instructions in its system prompt. */
+  browser: boolean;
   input: InputQueue;
   query: Query;
   mapper: ClaudeTranscriptMapper;
@@ -179,14 +182,16 @@ export class ClaudeAdapter implements ProviderAdapter {
   private initializing: Promise<void> | null = null;
 
   private readonly modelCache: string | null;
+  private readonly browser: BrowserEngineHooks | null;
 
   constructor(
     sink: AdapterSink,
-    options?: { idleMs?: number; modelCacheFile?: string },
+    options?: { idleMs?: number; modelCacheFile?: string; browser?: BrowserEngineHooks | null },
   ) {
     this.sink = sink;
     this.idleMs = options?.idleMs ?? 10 * 60_000;
     this.modelCache = options?.modelCacheFile ?? null;
+    this.browser = options?.browser ?? null;
   }
 
   /**
@@ -357,6 +362,7 @@ export class ClaudeAdapter implements ProviderAdapter {
       throw new Error("claude를 찾지 못했습니다.");
     }
     const input = new InputQueue();
+    const browser = this.browser?.instructions(session) ?? null;
     const runtime: Runtime = {
       sessionId: session.id,
       access: session.access,
@@ -364,6 +370,7 @@ export class ClaudeAdapter implements ProviderAdapter {
       model: session.model,
       effort: session.effort,
       engineModel: null,
+      browser: Boolean(browser),
       input,
       query: undefined as unknown as Query,
       mapper: new ClaudeTranscriptMapper(),
@@ -377,7 +384,8 @@ export class ClaudeAdapter implements ProviderAdapter {
     const canUseTool: CanUseTool = (toolName, toolInput, options) =>
       new Promise<PermissionResult>((resolve) => {
         // The access was raised while Claude Code was deciding: let it through as the new mode would.
-        if (allows(runtime.access, toolName)) {
+        // A bare playwright-cli command is the agent browser's to judge (it asks by the same access).
+        if (allows(runtime.access, toolName) || (toolName === "Bash" && typeof toolInput.command === "string" && this.browser?.allowsCommand(session.id, toolInput.command))) {
           resolve({ behavior: "allow", updatedInput: toolInput });
           return;
         }
@@ -415,10 +423,11 @@ export class ClaudeAdapter implements ProviderAdapter {
         canUseTool,
         includePartialMessages: true,
         settingSources: ["user", "project", "local"],
-        systemPrompt: { type: "preset", preset: "claude_code" },
+        systemPrompt: { type: "preset", preset: "claude_code", ...(browser ? { append: browser } : {}) },
         pathToClaudeCodeExecutable: this.binary.path,
         // Never an API key or cloud route left in the gateway's environment: the user's login.
-        env: claudeSdkEnv(this.binary.path),
+        // The agent browser's playwright-cli is on PATH, and names this session's browser while on.
+        env: claudeSdkEnv(this.binary.path, { paths: this.browser?.pathDirs(), extra: this.browser?.sessionEnv(session) }),
       },
     });
     this.runtimes.set(session.id, runtime);
@@ -535,6 +544,13 @@ export class ClaudeAdapter implements ProviderAdapter {
     }
   }
 
+  private closeRuntime(runtime: Runtime) {
+    if (this.runtimes.get(runtime.sessionId) === runtime) this.runtimes.delete(runtime.sessionId);
+    if (runtime.idleTimer) clearTimeout(runtime.idleTimer);
+    runtime.input.close();
+    runtime.query.close();
+  }
+
   /** Close the Claude Code process after inactivity; the next message resumes the session. */
   private scheduleIdle(runtime: Runtime) {
     if (runtime.idleTimer) {
@@ -551,7 +567,14 @@ export class ClaudeAdapter implements ProviderAdapter {
 
   async send(session: Session & { access: AccessMode }, work: Work, text: string, turnKey: string) {
     await this.init();
-    const runtime = this.runtimes.get(session.id) ?? this.startRuntime(session, work);
+    let current = this.runtimes.get(session.id);
+    // The browser was switched since this process started. Its instructions are part of the system
+    // prompt, so a new process resumes the same session with the new ones.
+    if (current && !current.turnActive && current.browser !== Boolean(this.browser?.instructions(session))) {
+      this.closeRuntime(current);
+      current = undefined;
+    }
+    const runtime = current ?? this.startRuntime(session, work);
     if (runtime.access !== session.access) {
       await runtime.query.setPermissionMode(PERMISSION_MODE[session.access]);
       runtime.access = session.access;

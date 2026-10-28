@@ -1,5 +1,6 @@
 // Shared contract between the host gateway and the UI.
 // Provider-specific protocols stay inside the host adapters; the UI only sees these shapes.
+import type { AgentBrowserStatus } from "./browse.ts";
 
 export const PROTOCOL_VERSION = 1;
 
@@ -91,6 +92,8 @@ export type Session = {
   access: AccessMode | null;
   /** How full the conversation's context window is, as the engine last reported it. */
   context: ContextUsage | null;
+  /** The session may use the agent browser ("브라우저" under the input); off when absent. */
+  browser?: boolean;
   createdAt: number;
   updatedAt: number;
 };
@@ -378,7 +381,8 @@ export type WorkbenchEvent =
   | { type: "proposal.upserted"; proposal: Proposal }
   | { type: "handoff.upserted"; handoff: Handoff }
   | { type: "prefs.updated"; prefs: UiPrefs }
-  | { type: "tools.status"; tools: DocumentTools };
+  | { type: "tools.status"; tools: DocumentTools }
+  | { type: "browser.status"; status: AgentBrowserStatus };
 
 /**
  * Screen preferences (theme, sidebar, per-engine look). Owned by the UI; the gateway only stores
@@ -429,6 +433,8 @@ export type Snapshot = {
   proposals: Proposal[];
   handoffs: Handoff[];
   tools: DocumentTools;
+  /** The agent browser (absent from gateways without it). */
+  browser?: AgentBrowserStatus;
 };
 
 export type ApiError = { code: string; message: string; requestId?: string };
@@ -446,6 +452,7 @@ export type CreateSessionRequest = {
   model?: string | null;
   effort?: string | null;
   access?: AccessMode | null;
+  browser?: boolean;
 };
 
 export type UpdateSessionRequest = {
@@ -459,6 +466,8 @@ export type UpdateSessionRequest = {
   seen?: boolean;
   /** Applies at once: to the running turn where the engine allows it, else from the next one. */
   access?: AccessMode | null;
+  /** Let the session use the agent browser; the engine is told from its next turn. */
+  browser?: boolean;
 };
 
 export type UpdateWorkRequest = {
@@ -661,3 +670,4 @@ export function applyItemEvent(items: TranscriptItem[], event: WorkbenchEvent): 
   }
   return items;
 }
+export * from "./browse.ts";

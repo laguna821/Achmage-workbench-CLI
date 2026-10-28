@@ -9,6 +9,7 @@ import { HttpError, type SessionManager } from "./sessions.ts";
 import { DESIGN_PRESETS, systemFonts, type DesignPreset } from "./design.ts";
 import { parseCreate } from "./create.ts";
 import { officeEditorKind, type EditorGrants } from "./editors.ts";
+import type { AgentBrowser } from "./browse.ts";
 
 export const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -92,6 +93,8 @@ export type HttpOptions = {
   onClientLog?: (message: string) => void;
   /** The office editors' own origin (editors.ts) and the grants that let one page open one document. */
   editors?: { grants: EditorGrants; origin: () => string | null };
+  /** The agent browser (browse.ts). */
+  browse?: AgentBrowser | null;
 };
 
 function sameToken(given: string | null, expected: string) {
@@ -286,6 +289,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
             model: (body.model as string | null) ?? null,
             effort: (body.effort as string | null) ?? null,
             access: isAccessMode(body.access) ? body.access : null,
+            browser: body.browser === true,
           }),
         );
       }
@@ -306,6 +310,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
               archived: typeof body.archived === "boolean" ? body.archived : undefined,
               seen: typeof body.seen === "boolean" ? body.seen : undefined,
               access: body.access === undefined ? undefined : body.access === null ? null : (body.access as AccessMode),
+              browser: typeof body.browser === "boolean" ? body.browser : undefined,
             }),
           );
         }
@@ -489,6 +494,23 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const body = await readJson(req);
         options.onClientLog?.(String(body.message ?? "").slice(0, 4000));
         return sendJson(res, 204, {});
+      }
+      if (parts[0] === "agent-browser") {
+        const browse = options.browse;
+        if (!browse) throw new HttpError(404, "no_browser", "에이전트 브라우저가 없는 게이트웨이입니다.");
+        const action = parts.slice(1).join("/");
+        if (method === "GET" && !action) return sendJson(res, 200, browse.status());
+        if (method === "POST" && action === "install") return sendJson(res, 202, browse.install());
+        if (method === "POST" && action === "login") {
+          const body = await readJson(req);
+          return sendJson(res, 200, await browse.openLogin(typeof body.url === "string" ? body.url : null));
+        }
+        if (method === "POST" && action === "login/close") return sendJson(res, 200, await browse.closeLogin());
+        if (method === "POST" && action === "focus") return sendJson(res, 200, await browse.focus());
+        if (method === "POST" && action === "pause") {
+          const body = await readJson(req);
+          return sendJson(res, 200, browse.setPaused(String(body.sessionId ?? ""), body.paused === true));
+        }
       }
       if (method === "POST" && path === "/api/providers/refresh") {
         return sendJson(res, 200, await manager.refreshProviders());
