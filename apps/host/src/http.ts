@@ -9,6 +9,7 @@ import { HttpError, type SessionManager } from "./sessions.ts";
 import { DESIGN_PRESETS, systemFonts, type DesignPreset } from "./design.ts";
 import { parseCreate } from "./create.ts";
 import { officeEditorKind, type EditorGrants } from "./editors.ts";
+import { parseStartRequest } from "./links.ts";
 
 export const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -477,6 +478,22 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
             refs: parseRefs(body.refs),
           }),
         );
+      }
+      // "세션 잇기": start, pause, go on, cut, one more round, and what was exchanged.
+      if (parts[0] === "links") {
+        const links = manager.links;
+        if (method === "POST" && parts.length === 1) return sendJson(res, 201, await links.start(parseStartRequest(await readJson(req))));
+        const linkId = parts[1] ?? "";
+        if (method === "GET" && parts[2] === "turns") return sendJson(res, 200, links.turns(linkId));
+        if (method === "POST" && parts[2] === "pause") return sendJson(res, 200, links.pause(linkId));
+        if (method === "POST" && parts[2] === "resume") return sendJson(res, 200, await links.resume(linkId));
+        if (method === "POST" && parts[2] === "stop") return sendJson(res, 200, await links.stop(linkId));
+        if (method === "POST" && parts[2] === "extend") return sendJson(res, 200, links.extend(linkId));
+        if (method === "POST" && parts[2] === "export") {
+          const body = await readJson(req);
+          const target = body.target === "path" ? "path" : body.target === "text" ? "text" : "work";
+          return sendJson(res, 200, links.exportMarkdown(linkId, { target, path: typeof body.path === "string" ? body.path : undefined }));
+        }
       }
       if (method === "POST" && parts[0] === "providers" && parts[2] === "login") {
         return sendJson(res, 200, await manager.login(parts[1] as Provider));

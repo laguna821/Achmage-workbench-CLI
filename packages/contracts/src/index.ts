@@ -1,6 +1,8 @@
 // Shared contract between the host gateway and the UI.
 // Provider-specific protocols stay inside the host adapters; the UI only sees these shapes.
 
+import type { LinkHop, SessionLink } from "./links.ts";
+
 export const PROTOCOL_VERSION = 1;
 
 export type Provider = "claude" | "codex";
@@ -278,6 +280,8 @@ export type TranscriptItem =
       undelivered?: boolean;
       /** Written by another Claude Code session (its own cross-session messages), not typed here. */
       peer?: { name: string | null; from: string | null } | null;
+      /** Handed over by a linked-session relay ("세션 잇기"): the goal, or another session's reply. */
+      link?: LinkHop | null;
     }
   | { kind: "assistant"; id: string; text: string; streaming: boolean; at: number }
   | { kind: "reasoning"; id: string; text: string; at: number }
@@ -309,6 +313,8 @@ export type TranscriptItem =
   | { kind: "artifact"; id: string; artifactId: string; revision: number; change: "created" | "modified"; at: number }
   | { kind: "proposal"; id: string; proposalId: string; at: number }
   | { kind: "handoff"; id: string; handoffId: string; at: number }
+  /** A linked-session exchange ended here (the card shows its rounds, reason and time). */
+  | { kind: "link"; id: string; linkId: string; at: number }
   | {
       kind: "turnEnd";
       id: string;
@@ -379,6 +385,7 @@ export type WorkbenchEvent =
   | { type: "artifact.upserted"; artifact: Artifact }
   | { type: "proposal.upserted"; proposal: Proposal }
   | { type: "handoff.upserted"; handoff: Handoff }
+  | { type: "link.upserted"; link: SessionLink }
   | { type: "prefs.updated"; prefs: UiPrefs }
   | { type: "tools.status"; tools: DocumentTools };
 
@@ -430,6 +437,7 @@ export type Snapshot = {
   artifacts: Artifact[];
   proposals: Proposal[];
   handoffs: Handoff[];
+  links: SessionLink[];
   tools: DocumentTools;
 };
 
@@ -663,3 +671,4 @@ export function applyItemEvent(items: TranscriptItem[], event: WorkbenchEvent): 
   }
   return items;
 }
+export * from "./links.ts";

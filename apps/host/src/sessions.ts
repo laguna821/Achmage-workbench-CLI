@@ -33,6 +33,7 @@ import {
   type UpdateWorkRequest,
   type Handoff,
   type HandoffRequest,
+  type LinkHop,
   type Proposal,
   type UpdateSessionRequest,
   type Work,
@@ -50,6 +51,7 @@ import { findHop, openInHop, openWithDesktop } from "./hop.ts";
 import { createGuide, reservePath } from "./create.ts";
 import { copyMcp, copySkill, integrations, type EngineBinaries } from "./integrations.ts";
 import { exportFileName, sessionMarkdown } from "./export-md.ts";
+import { SessionLinks } from "./links.ts";
 
 export { HttpError };
 
@@ -198,6 +200,8 @@ export class SessionManager {
   /** The new document each running request asked for. */
   private readonly creating = new Map<string, PendingCreate>();
   readonly documents: Documents;
+  /** Linked sessions ("세션 잇기"): replies relayed between sessions in turn (links.ts). */
+  readonly links: SessionLinks;
   private readonly store: Store;
   private readonly bus: EventBus;
   private readonly options: ManagerOptions;
@@ -240,6 +244,19 @@ export class SessionManager {
       });
     this.backfillOverview();
     this.recoverAfterRestart();
+    this.links = new SessionLinks(store, bus, {
+      session: (id) => this.sessions.get(id),
+      work: (id) => this.works.get(id),
+      items: (id) => this.loadItems(id),
+      send: (id, requestId, text, relay) => this.send(id, requestId, text, [], null, null, "auto", relay),
+      interrupt: (id) => this.interrupt(id),
+      note: (id, item) => this.sink.upsertItem(id, item),
+      usage: (provider) => this.adapters.get(provider)?.status().usage ?? [],
+      track: (workId, path, note) => {
+        const work = this.works.get(workId);
+        return work ? (this.documents.track(work.id, work.cwd, path, "user", null, note)?.artifact.id ?? this.artifactAt(work.id, path)) : null;
+      },
+    });
   }
 
   /** Sessions from before auto titles and previews: derive both once from their stored transcript. */
@@ -440,6 +457,7 @@ export class SessionManager {
       artifacts: this.documents.list(),
       proposals: this.documents.listProposals(),
       handoffs: [...this.handoffs.values()],
+      links: this.links.list(),
       tools: this.tools(),
     };
   }
@@ -847,6 +865,8 @@ export class SessionManager {
     from: { sessionId: string; label: string } | null = null,
     create: CreateTarget | null = null,
     mode: "auto" | "steer" | "queue" = "auto",
+    /** A message a linked-session relay hands over: marked on the request, `header` read by the engine only. */
+    relay: { hop: LinkHop; header: string } | null = null,
   ): Promise<SendResult> {
     const session = this.requireSession(sessionId);
     const trimmed = text.trim();
@@ -861,8 +881,11 @@ export class SessionManager {
       return { duplicate: true, delivery: "turn" };
     }
     if (session.queued.some((entry) => entry.id === requestId)) return { duplicate: true, delivery: "queued" };
+    // Anything else sent to a linked session comes from the user: it pauses the link.
+    if (!relay) this.links.userInput(sessionId);
     const work = this.requireWork(session.workId);
     if (session.status !== "idle" && session.status !== "error") {
+      if (relay) throw new HttpError(409, "session_busy", "받을 세션이 아직 응답 중입니다.");
       // The engine is working. A request steers into the running turn (the engine takes it at its
       // next step) when it can; otherwise it waits and becomes the next turn ("끝나면 보내기").
       const adapter = this.adapter(session.provider);
@@ -917,7 +940,7 @@ export class SessionManager {
       this.creating.set(sessionId, created);
     }
     this.store.saveRequest(requestId, sessionId, fingerprint);
-    const engineText = this.engineText(trimmed, prepared, work.cwd, from, created);
+    const engineText = relay ? `${relay.header}\n\n${trimmed}` : this.engineText(trimmed, prepared, work.cwd, from, created);
     this.sink.upsertItem(sessionId, {
       kind: "user",
       id: `user:${requestId}`,
@@ -926,10 +949,12 @@ export class SessionManager {
       ...(refs.length ? { refs: refs.map((ref) => this.documents.summary(ref)) } : {}),
       ...(from ? { from } : {}),
       ...(created ? { create: { format: created.target.format, name: basename(created.path), path: created.path } } : {}),
+      ...(relay ? { link: relay.hop } : {}),
     });
     this.turnStarted.set(sessionId, Date.now());
     this.sink.updateSession(sessionId, { status: "starting", activity: "응답 준비 중", lastError: null });
-    this.saveWork({ ...work, activeSessionId: sessionId, updatedAt: Date.now() });
+    // A relayed message does not switch the conversation on screen (it goes back and forth).
+    this.saveWork({ ...work, ...(relay ? {} : { activeSessionId: sessionId }), updatedAt: Date.now() });
     try {
       const current = this.requireSession(sessionId);
       await this.adapter(session.provider).send({ ...current, access: this.accessOf(current) }, work, engineText, requestId);
@@ -1291,6 +1316,7 @@ export class SessionManager {
         return { ...proposal, name: this.documents.list().find((artifact) => artifact.id === proposal.artifactId)?.name ?? null };
       },
       handoff: (id) => this.handoffs.get(id) ?? null,
+      link: (id) => this.links.get(id),
       sessionLabel: (id) => {
         const target = this.sessions.get(id);
         const targetWork = target ? this.works.get(target.workId) : undefined;
@@ -1390,7 +1416,7 @@ export class SessionManager {
   /** Requests of the given sessions, oldest first (what another session wrote is not the user's request). */
   private requestsOf(sessionIds: string[]) {
     return sessionIds
-      .flatMap((id) => this.loadItems(id).flatMap((item) => (item.kind === "user" && !item.peer ? [{ at: item.at, text: item.text }] : [])))
+      .flatMap((id) => this.loadItems(id).flatMap((item) => (item.kind === "user" && !item.peer && !item.link ? [{ at: item.at, text: item.text }] : [])))
       .sort((a, b) => a.at - b.at)
       .map((entry) => entry.text);
   }

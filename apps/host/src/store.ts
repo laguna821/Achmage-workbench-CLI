@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Artifact, ArtifactRevision, Folder, Handoff, Proposal, Session, TranscriptItem, Work } from "@workbench/contracts";
+import type { Artifact, ArtifactRevision, Folder, Handoff, Proposal, Session, SessionLink, TranscriptItem, Work } from "@workbench/contracts";
 
 // Local state only: works, folders, sessions, transcript items and request ids.
 // Never place this database in Dropbox (live SQLite must not be synced).
@@ -56,6 +56,7 @@ export class Store {
       );
       CREATE TABLE IF NOT EXISTS proposals (id TEXT PRIMARY KEY, artifact_id TEXT NOT NULL, json TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS handoffs (id TEXT PRIMARY KEY, json TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS links (id TEXT PRIMARY KEY, json TEXT NOT NULL);
       -- Full-text search over messages and documents. Trigram: matches any part of a word, so Korean
       -- finds without a morphological analyser; terms shorter than three characters scan instead.
       -- Row ids follow the items and artifacts tables, so a changed row replaces its entry directly.
@@ -221,6 +222,14 @@ export class Store {
 
   saveHandoff(handoff: Handoff) {
     this.db.prepare("INSERT OR REPLACE INTO handoffs (id, json) VALUES (?, ?)").run(handoff.id, JSON.stringify(handoff));
+  }
+
+  links(): SessionLink[] {
+    return this.all<SessionLink>("SELECT json FROM links");
+  }
+
+  saveLink(link: SessionLink) {
+    this.db.prepare("INSERT OR REPLACE INTO links (id, json) VALUES (?, ?)").run(link.id, JSON.stringify(link));
   }
 
   /** Returns the stored text hash when the request id was already used. */
