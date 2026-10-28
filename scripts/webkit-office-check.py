@@ -362,6 +362,10 @@ try:
     loop.run()
 finally:
     host.terminate()
+    host.wait(timeout=30)
+    # The gateway's data and the work folder belong to this run only.
+    for folder in (data_dir, cwd):
+        shutil.rmtree(folder, ignore_errors=True)
 with open(os.path.join(out_dir, f"webkit-{kind}-results.json"), "w") as handle:
     json.dump({"results": results, "support": state.get("support")}, handle, ensure_ascii=False, indent=2)
 failed = [r for r in results if not r["ok"]]

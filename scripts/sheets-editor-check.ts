@@ -8,7 +8,7 @@
 // Usage: node scripts/sheets-editor-check.ts [outDir]   (CHECK_STACKS=1: page errors with their stacks and step)
 
 import { execFileSync, spawn } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -214,6 +214,9 @@ try {
   writeFileSync(join(outDir, "results.json"), JSON.stringify(results, null, 2));
   await browser.close();
   child.kill();
+  // The gateway's data, the work folder and the downloaded revisions belong to this run only.
+  await new Promise((resolve) => (child.exitCode === null && child.signalCode === null ? child.once("exit", resolve) : resolve(null)));
+  for (const dir of [dataDir, cwd, scratch]) rmSync(dir, { recursive: true, force: true });
   const failed = results.filter((result) => !result.ok).length;
   console.log(`${results.length - failed}/${results.length} passed · console: ${logs.length ? logs.slice(0, 6).join(" | ") : "clean"}`);
   process.exitCode = failed ? 1 : 0;
