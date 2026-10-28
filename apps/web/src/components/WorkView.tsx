@@ -21,6 +21,7 @@ import { PendingFiles, usePendingFiles } from "./Attachments.tsx";
 import { PlanToggle } from "./PlanFirst.tsx";
 import { DrawChip, DrawPill, type DrawState } from "./ImageGen.tsx";
 import { readDrawChoice, writeDrawChoice } from "../imagegen.ts";
+import { LinkBar } from "./LinkBar.tsx";
 
 export type WorkActions = {
   /** Send a request; while the engine works it steers into the turn or waits ("queue"). */
@@ -597,6 +598,7 @@ export function WorkView({
       )}
 
       <div className="column composer-area">
+        {active ? <LinkBar session={active} /> : null}
         {active ? <QueuedList session={active} busy={busy} actions={actions.queued} /> : null}
         {!active ? (
           <EngineTabs

@@ -189,6 +189,18 @@ export function zoneAt(offsetY: number, height: number, canHoldInside: boolean):
 export const holds = (target: Row, dragged: Row) => target.type === "folder" && (dragged.type === "folder" || dragged.type === "work");
 
 /**
+ * The sessions a drop on a row's middle links ("세션 잇기"): a session row dropped on another one.
+ * A work row with a single session stands for that session, except work on work (that only moves).
+ */
+export function linkPair(dragged: Row, target: Row): [Session, Session] | null {
+  if (dragged.type === "work" && target.type === "work") return null;
+  const sessionOf = (row: Row) => (row.type === "session" ? row.session : row.type === "work" && row.sessions.length === 1 ? row.sessions[0]! : null);
+  const from = sessionOf(dragged);
+  const to = sessionOf(target);
+  return from && to && from.id !== to.id ? [from, to] : null;
+}
+
+/**
  * What a drop does, or null when it is not allowed: folders move among folders (never into
  * themselves), works into folders or next to other works, sessions only within their own work.
  */

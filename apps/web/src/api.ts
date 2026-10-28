@@ -14,6 +14,7 @@ import type {
   ExportMarkdownResult,
   Handoff,
   IntegrationsView,
+  LinkTurn,
   Proposal,
   Folder,
   Provider,
@@ -22,6 +23,8 @@ import type {
   SequencedEvent,
   Session,
   Snapshot,
+  SessionLink,
+  StartLinkRequest,
   TranscriptItem,
   UiPrefs,
   UpdateFolderRequest,
@@ -123,6 +126,14 @@ export class Api {
   draw = (sessionId: string, request: DrawRequest) => this.request<DrawResult>("POST", `/api/sessions/${sessionId}/images`, request);
   handoff = (request: { requestId: string; sourceSessionId: string; targetSessionId: string; text: string; refs: DocRef[]; attachments?: Attachment[] }) =>
     this.request<Handoff>("POST", "/api/handoffs", request);
+  /** "세션 잇기": start, pause, go on, cut, one more round; what was exchanged, as turns or Markdown. */
+  startLink = (request: StartLinkRequest) => this.request<SessionLink>("POST", "/api/links", request);
+  pauseLink = (linkId: string) => this.request<SessionLink>("POST", `/api/links/${linkId}/pause`);
+  resumeLink = (linkId: string) => this.request<SessionLink>("POST", `/api/links/${linkId}/resume`);
+  stopLink = (linkId: string) => this.request<SessionLink>("POST", `/api/links/${linkId}/stop`);
+  extendLink = (linkId: string) => this.request<SessionLink>("POST", `/api/links/${linkId}/extend`);
+  linkTurns = (linkId: string) => this.request<{ link: SessionLink; turns: LinkTurn[] }>("GET", `/api/links/${linkId}/turns`);
+  exportLink = (linkId: string, request: ExportMarkdownRequest) => this.request<ExportMarkdownResult>("POST", `/api/links/${linkId}/export`, request);
   openFile = (workId: string, path: string) => this.request<Artifact>("POST", `/api/works/${workId}/artifacts`, { path });
   createDesign = (workId: string, name: string, preset: string) => this.request<Artifact>("POST", `/api/works/${workId}/designs`, { name, preset });
   officePages = (artifactId: string, revision: number) =>

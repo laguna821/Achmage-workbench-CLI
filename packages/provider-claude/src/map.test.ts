@@ -108,6 +108,52 @@ describe("ClaudeTranscriptMapper", () => {
     const out = mapper.handle(msg({ type: "result", subtype: "error_during_execution", is_error: true, errors: ["boom"], duration_ms: 5 }), "k");
     expect(out[0]).toEqual({ type: "turnEnd", status: "failed", durationMs: 5, error: "boom", queued: 0 });
   });
+
+  it("shows a message another Claude Code session sent as a request from that session", () => {
+    const mapper = new ClaudeTranscriptMapper(() => 7);
+    // The harness gives the decoded body and the sender's display name.
+    const decoded = mapper.handle(
+      msg({
+        type: "user",
+        message: { role: "user", content: '<cross-session-message from="local_1" from-name="리서치">\n표 2를 다시 봐 주세요\n</cross-session-message>' },
+        parent_tool_use_id: null,
+        origin: { kind: "peer", from: "local_1", name: "리서치", body: "표 2를 다시 봐 주세요" },
+        uuid: "p1",
+        session_id: "s",
+      }),
+      "k",
+    );
+    expect(decoded).toEqual([
+      { type: "peer", item: { kind: "user", id: "peer:p1", text: "표 2를 다시 봐 주세요", at: 7, peer: { name: "리서치", from: "local_1" } }, starts: true },
+    ]);
+    // Older senders: only the envelope, which is taken apart here.
+    const wrapped = mapper.handle(
+      msg({
+        type: "user",
+        message: { role: "user", content: [{ type: "text", text: '<cross-session-message from="local_2" from-name="초안">\n끝났어요\n</cross-session-message>' }] },
+        parent_tool_use_id: null,
+        origin: { kind: "peer", from: "local_2" },
+        session_id: "s",
+      }),
+      "k",
+    );
+    expect(wrapped[0]).toMatchObject({ type: "peer", item: { text: "끝났어요", peer: { name: "초안", from: "local_2" } } });
+    // Relayed between sessions of a coordinator; a message only appended (no turn) does not start one.
+    const relayed = mapper.handle(
+      msg({ type: "user", message: { role: "user", content: "검토 부탁" }, parent_tool_use_id: null, origin: { kind: "task-notification", subkind: "peer-send-message" }, shouldQuery: false, uuid: "p3", session_id: "s" }),
+      "k",
+    );
+    expect(relayed).toEqual([{ type: "peer", item: { kind: "user", id: "peer:p3", text: "검토 부탁", at: 7, peer: { name: null, from: null } }, starts: false }]);
+  });
+
+  it("keeps ignoring other user messages: the user's own (not echoed), tool results, other notifications", () => {
+    const mapper = new ClaudeTranscriptMapper(() => 1);
+    expect(mapper.handle(msg({ type: "user", message: { role: "user", content: "hi" }, parent_tool_use_id: null, origin: { kind: "human" } }), "k")).toEqual([]);
+    expect(mapper.handle(msg({ type: "user", message: { role: "user", content: "hi" }, parent_tool_use_id: null }), "k")).toEqual([]);
+    expect(mapper.handle(msg({ type: "user", message: { role: "user", content: "done" }, parent_tool_use_id: null, origin: { kind: "task-notification" } }), "k")).toEqual([]);
+    // A subagent's peer traffic stays inside the subagent.
+    expect(mapper.handle(msg({ type: "user", message: { role: "user", content: "x" }, parent_tool_use_id: "t1", origin: { kind: "peer", from: "a", body: "x" } }), "k")).toEqual([]);
+  });
 });
 
 describe("usageFromRateLimit", () => {

@@ -10,6 +10,9 @@
 //   a drawing turn (Workbench's "그림" instructions): the image tool draws a small PNG — landscape,
 //     portrait or square as the prompt asks — saved under a temp folder like Codex's own home, and
 //     sent as base64 too; "한도" in the prompt fails with the image usage limit, "천천히" takes 2.5 s
+//   "[세션 잇기 k/m"  a linked-session hand-over: a reply of its own each time; with "합의:N" in the
+//                     goal its last line is [[합의]] from message N on, with "되풀이" it repeats itself,
+//                     "천천히" takes about 2 s and "길게" about 8 s
 //   anything else: a short answer
 // Local images in the input are reported at the start of the answer ("받은 그림 1장 · 1234바이트").
 // "스크린샷": like a browsing step, a command saves a screenshot (Playwright CLI's output names it),
@@ -111,6 +114,18 @@ async function draw(threadId, thread, turnId, text) {
   writeFileSync(savedPath, data);
   notify("item/completed", { threadId, turnId, item: { ...item, status: "completed", revisedPrompt: `A simple picture. ${prompt.split("\n")[0].slice(0, 160)}`, result: data.toString("base64"), savedPath } });
   return "흰 바탕에 파란 원 하나를 그렸습니다.";
+}
+
+/** Lines of a reply to a linked-session hand-over (null for any other request). */
+function linkReply(text, engine) {
+  const hop = /\[세션 잇기 (\d+)\/(\d+)/.exec(text);
+  if (!hop) return null;
+  if (text.includes("되풀이")) return ["같은 말을 되풀이합니다. 더 보탤 것이 없습니다."];
+  const k = Number(hop[1]);
+  const lines = [`${engine}의 ${k}번째 의견입니다 (${k}/${hop[2]}).`, "", `- 받은 글 ${text.length}자를 읽었습니다.`, `- 제안 ${k}: ${["2주차와 3주차를 합칩니다", "3주차는 실습으로 바꿉니다", "평가 기준을 4주차로 옮깁니다", "사전 설문을 넣습니다", "토론 시간을 늘립니다", "마지막 주에 발표를 둡니다"][(k - 1) % 6]}.`];
+  const agree = /합의:(\d+)/.exec(text);
+  if (agree && k >= Number(agree[1])) lines.push("", "[[합의]]");
+  return lines;
 }
 
 function ask(method, params) {
@@ -227,7 +242,8 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
   let itemId = `msg_${++counter}`;
   notify("item/started", { threadId, turnId, item: { type: "agentMessage", id: itemId, text: "", phase: null, memoryCitation: null } });
   const planning = thread.sandbox === "readOnly";
-  const lines = planning ? 0 : text.includes("길게") ? 160 : text.includes("도식") ? 14 : 6;
+  const linked = planning ? null : linkReply(text, "Codex");
+  const lines = planning ? 0 : linked ? linked.length + (text.includes("길게") ? 150 : text.includes("천천히") ? 30 : 0) : text.includes("길게") ? 160 : text.includes("도식") ? 14 : 6;
   let full = "";
   const skill = text.match(/\[스킬 ([^ ]+) · ([^\]]+)\]/);
   if (skill) {
@@ -259,10 +275,18 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
     }
     // "도식": a Mermaid mind map, sent in pieces like any reply.
     const diagram = text.includes("도식") ? "여기 마인드맵입니다.\n\n```mermaid\nmindmap\n  root((Achmage))\n    대화\n      끼어들기\n      끝나면 보내기\n    문서\n      워드\n      한글\n    도식\n      Pele\n```\n".match(/[^\n]*\n/g) : null;
-    const line = diagram ? (diagram[index] ?? "") : index % 20 === 0 ? `\n## ${index / 20 + 1}. 단락\n\n` : `${index}번째 줄입니다. 응답이 계속 이어지는 동안 위로 올려 읽을 수 있어야 합니다.\n\n`;
+    const line = linked
+      ? index < linked.length
+        ? `${linked[index]}\n`
+        : `\n덧붙임 ${index - linked.length + 1}.`
+      : diagram
+        ? (diagram[index] ?? "")
+        : index % 20 === 0
+          ? `\n## ${index / 20 + 1}. 단락\n\n`
+          : `${index}번째 줄입니다. 응답이 계속 이어지는 동안 위로 올려 읽을 수 있어야 합니다.\n\n`;
     full += line;
     notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: line });
-    await sleep(text.includes("길게") ? 50 : 30);
+    await sleep(text.includes("길게") || (linked && text.includes("천천히")) ? 50 : 30);
     if (index === Math.floor(lines / 2)) {
       thread.used += 4_000;
       notify("thread/tokenUsage/updated", { threadId, turnId, tokenUsage: usage(thread, 400) });

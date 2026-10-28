@@ -25,6 +25,8 @@ import { DocTabs } from "./components/DocTabs.tsx";
 import { IntegrationsSheet } from "./components/IntegrationsSheet.tsx";
 import { Onboarding } from "./components/Onboarding.tsx";
 import { SessionPicker } from "./components/SessionPicker.tsx";
+import { LinkLayer } from "./components/LinkCards.tsx";
+import { LinkContext, hopsText, linkOfSession, useLinkApi } from "./links.ts";
 
 // Editors (CodeMirror, PDF.js) load only when a document opens.
 const DocumentView = lazy(() => import("./components/docs/DocumentView.tsx"));
@@ -723,6 +725,19 @@ export function App() {
     [api, state.works, docActions, fail, setToast],
   );
 
+  // "세션 잇기": its actions, the start dialog and "주고받은 내용" (links.ts).
+  const linkApi = useLinkApi({
+    api,
+    state,
+    visibleSessionId: visibleSession?.id ?? null,
+    fail,
+    toast: setToast,
+    openSession: docActions.openSession,
+    openArtifact: docActions.openArtifact,
+    copyText,
+    pickSavePath: inDesktop ? pickSavePath : null,
+  });
+
   const openPath = useCallback(
     async (path: string, reveal = false) => {
       if (!inDesktop) {
@@ -750,6 +765,7 @@ export function App() {
         const busy = isBusy(session);
         const resume = resumeCommand(session, owner);
         const unseenNow = isUnseen(session);
+        const linked = linkOfSession(state, session.id);
         const items: MenuEntry[] = [
           { kind: "item", label: "열기", icon: "chat", hint: "Enter", onSelect: () => openSession(session) },
           { kind: "item", label: "이름 바꾸기", icon: "edit", hint: "F2", onSelect: () => setSidebarPending({ rename: session.id }) },
@@ -765,6 +781,22 @@ export function App() {
             },
           },
           { kind: "separator" },
+          linked
+            ? {
+                kind: "submenu",
+                label: `세션 잇기 ⇄ ${hopsText(linked)}${linked.state === "paused" ? " · 멈춤" : ""}`,
+                icon: "link",
+                items: [
+                  linked.state === "active"
+                    ? { kind: "item", label: "멈춤", onSelect: () => linkApi.pause(linked) }
+                    : { kind: "item", label: "이어 가기", onSelect: () => linkApi.resume(linked) },
+                  { kind: "item", label: "+1왕복", onSelect: () => linkApi.extend(linked) },
+                  { kind: "item", label: "주고받은 내용", onSelect: () => linkApi.openView(linked.id) },
+                  { kind: "separator" },
+                  { kind: "item", label: "끊기", danger: true, onSelect: () => linkApi.stop(linked) },
+                ],
+              }
+            : { kind: "item", label: "세션 잇기…", icon: "link", hint: "다른 세션과 주고받기", onSelect: () => linkApi.openDialog([session.id]) },
           {
             kind: "submenu",
             label: "마크다운으로 내보내기",
@@ -858,7 +890,7 @@ export function App() {
       return null;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [api, state, actions, archive, exportSession, openPath, openSession, visibleSession?.id, startNew, docActions, fail, setToast],
+    [api, state, actions, archive, exportSession, openPath, openSession, visibleSession?.id, startNew, docActions, fail, setToast, linkApi],
   );
 
   function openWorkNow(target: Work) {
@@ -903,8 +935,10 @@ export function App() {
     archive,
     openSearch: () => setPaletteOpen(true),
     openArchive: () => setView({ kind: "archive" }),
+    linkSessions: (pair) => linkApi.openDialog(pair.map((session) => session.id)),
   };
 
+  const visibleLink = visibleSession ? linkOfSession(state, visibleSession.id) : null;
   const paletteCommands: PaletteCommand[] = [
     { id: "new", label: "새 세션", icon: "plus", hint: "Ctrl+N", run: () => startNew(null) },
     { id: "home", label: "홈", icon: "home", run: () => startNew(null) },
@@ -914,6 +948,9 @@ export function App() {
           { id: "export-copy", label: "지금 대화를 마크다운으로 복사", icon: "copy" as const, run: () => void exportSession(visibleSession, "text") },
         ]
       : []),
+    visibleLink
+      ? { id: "link-view", label: `주고받은 내용 보기 (세션 잇기 ${hopsText(visibleLink)})`, icon: "link" as const, run: () => linkApi.openView(visibleLink.id) }
+      : { id: "link", label: "세션 잇기… (다른 세션과 주고받기)", icon: "link" as const, run: () => linkApi.openDialog(visibleSession ? [visibleSession.id] : []) },
     { id: "archive", label: "보관함 열기", icon: "archive", run: () => setView({ kind: "archive" }) },
     { id: "sidebar", label: sidebarOpen ? "사이드바 숨기기" : "사이드바 보이기", icon: "sidebar", run: toggleSidebar },
     { id: "theme", label: focusedTheme === "dark" ? "라이트 화면으로" : "다크 화면으로", icon: focusedTheme === "dark" ? "sun" : "moon", run: () => savePrefs({ theme: focusedTheme === "dark" ? "light" : "dark" }) },
@@ -949,6 +986,7 @@ export function App() {
     <AppearanceContext.Provider value={appearanceApi}>
     <UnseenContext.Provider value={unseen}>
     <DocContext.Provider value={{ state, actions: docActions }}>
+    <LinkContext.Provider value={linkApi}>
     <div
       className="app look-scope"
       data-theme={focusedTheme}
@@ -1212,6 +1250,7 @@ export function App() {
         />
       ) : null}
       {switcher !== null ? <Switcher state={state} sessions={switchable} index={switcher} unseen={unseen} /> : null}
+      <LinkLayer api={api} inDesktop={inDesktop} />
       {picker ? (
         <SessionPicker
           state={state}
@@ -1253,6 +1292,7 @@ export function App() {
         </div>
       ) : null}
     </div>
+    </LinkContext.Provider>
     </DocContext.Provider>
     </UnseenContext.Provider>
     </AppearanceContext.Provider>

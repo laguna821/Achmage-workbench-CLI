@@ -1,4 +1,4 @@
-import { PROVIDER_LABEL, type Handoff, type Proposal, type Session, type TranscriptItem, type Work } from "@workbench/contracts";
+import { LINK_REASON_LABEL, PROVIDER_LABEL, linkElapsedMs, linkMaxHops, type Handoff, type Proposal, type Session, type SessionLink, type TranscriptItem, type Work } from "@workbench/contracts";
 
 // "마크다운으로 내보내기": a conversation as a Markdown file a person reads and other tools reuse.
 // Made by fixed rules from the stored log — no model, no summary — so the same conversation always
@@ -16,23 +16,25 @@ export type ExportContext = {
   proposal: (proposalId: string) => (Proposal & { name: string | null }) | null;
   handoff: (handoffId: string) => Handoff | null;
   sessionLabel: (sessionId: string) => string | null;
+  /** A linked-session exchange ("세션 잇기"), for its end line. */
+  link?: (linkId: string) => SessionLink | null;
   /** List every tool call instead of one summary line. */
   tools?: boolean;
 };
 
 const pad = (value: number) => String(value).padStart(2, "0");
-const day = (at: number) => {
+export const day = (at: number) => {
   const date = new Date(at);
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 };
-const clock = (at: number) => {
+export const clock = (at: number) => {
   const date = new Date(at);
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
-const stamp = (at: number) => `${day(at)} ${clock(at)}`;
+export const stamp = (at: number) => `${day(at)} ${clock(at)}`;
 
 /** A YAML scalar that never needs a second look: always double-quoted. */
-const yamlString = (value: string) => `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, " ")}"`;
+export const yamlString = (value: string) => `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, " ")}"`;
 
 /** One line for a heading: the first non-empty line, without Markdown marks, at most 60 characters. */
 export function headingOf(text: string) {
@@ -150,7 +152,14 @@ export function sessionMarkdown(context: ExportContext): string {
         number += 1;
         speakerShown = false;
         lines.push("", `## ${number}. ${headingOf(item.text)}`, "");
-        lines.push(item.from ? `**${item.from.label}에서 온 요청** · ${clock(item.at)}` : `**나** · ${clock(item.at)}`);
+        const who = item.from
+          ? `${item.from.label}에서 온 요청`
+          : item.peer
+            ? `다른 세션에서 온 메시지${item.peer.name ? ` (${item.peer.name})` : ""}`
+            : item.link
+              ? `세션 잇기 ${item.link.hop}/${item.link.of} · ${item.link.fromSessionId ? `${context.sessionLabel(item.link.fromSessionId) ?? "다른 세션"}의 답` : "목표"}`
+              : "나";
+        lines.push(`**${who}** · ${clock(item.at)}`);
         const request = tidyMessage(item.text);
         if (request) lines.push("", request);
         const notes: string[] = [];
@@ -215,6 +224,13 @@ export function sessionMarkdown(context: ExportContext): string {
         const { image } = item;
         const result = image.status === "done" ? `\`${image.relPath ?? image.path ?? ""}\`` : image.status === "failed" ? `그리지 못함${image.error ? ` — ${image.error}` : ""}` : "그리는 중";
         lines.push("", `> 그림: ${headingOf(image.brief)}${image.template ? ` (${image.template})` : ""} → ${result}`);
+        break;
+      }
+      case "link": {
+        const link = context.link?.(item.linkId);
+        if (!link) break;
+        const minutes = Math.max(1, Math.round(linkElapsedMs(link, link.endedAt ?? item.at) / 60_000));
+        lines.push("", `> 세션 잇기 끝: ${link.reason ? LINK_REASON_LABEL[link.reason] : "끝남"} · ${link.hops}/${linkMaxHops(link)}번 주고받음 · ${minutes}분`);
         break;
       }
       case "turnEnd":

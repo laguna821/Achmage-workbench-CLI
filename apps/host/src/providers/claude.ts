@@ -494,8 +494,26 @@ export class ClaudeAdapter implements ProviderAdapter {
     }
   }
 
+  /**
+   * A turn nobody here sent (a message from another session, also one folded in after a turn):
+   * the session is busy with it like with any other, and it gets an end line of its own.
+   */
+  private beginOwnTurn(runtime: Runtime, turnKey: string, activity: string) {
+    runtime.turnKey = turnKey;
+    runtime.turnActive = true;
+    if (runtime.idleTimer) {
+      clearTimeout(runtime.idleTimer);
+      runtime.idleTimer = null;
+    }
+    this.sink.updateSession(runtime.sessionId, { status: "running", activity, lastError: null });
+  }
+
   private apply(runtime: Runtime, output: MapperOutput) {
     const sessionId = runtime.sessionId;
+    // Output while no turn is open: Claude Code is answering something that did not come from here.
+    if (!runtime.turnActive && (output.type === "delta" || (output.type === "upsert" && (output.item.kind === "assistant" || output.item.kind === "tool")))) {
+      this.beginOwnTurn(runtime, `own:${Date.now()}`, "응답 중");
+    }
     switch (output.type) {
       case "init":
         this.sink.updateSession(sessionId, { nativeSessionId: output.nativeSessionId });
@@ -505,6 +523,11 @@ export class ClaudeAdapter implements ProviderAdapter {
         break;
       case "images":
         this.sink.toolImages(sessionId, output.itemId, output.images);
+        break;
+      case "peer":
+        // Another Claude Code session wrote here and Claude Code answers it on its own.
+        if (output.starts && !runtime.turnActive) this.beginOwnTurn(runtime, output.item.id, "다른 세션의 메시지에 답하는 중");
+        this.sink.upsertItem(sessionId, output.item);
         break;
       case "delta":
         this.sink.delta(sessionId, output.itemId, output.text);
