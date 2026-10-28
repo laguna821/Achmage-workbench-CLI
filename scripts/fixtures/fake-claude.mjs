@@ -7,9 +7,12 @@
 //
 // What a request says decides what the fake does:
 //   "길게"  a long answer (about 8 s)      "명령"  runs `ls -la` (asks first in "default" mode)
-//   "압축" or "/compact"  compacts         anything else: a short answer
+//   "압축" or "/compact"  compacts         "고쳐"  appends to the working copy the request names
+//   anything else: a short answer
 
 import { randomUUID } from "node:crypto";
+import { appendFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { createInterface } from "node:readline";
 
 const args = process.argv.slice(2);
@@ -109,6 +112,9 @@ async function runTurn(text) {
     }
     send({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolId, content: allowed ? "total 0" : "The user declined this action.", is_error: !allowed }] }, parent_tool_use_id: null, ...base() });
   }
+  // A document edit: the gateway names the working copy to change; the file itself stays as it is.
+  const working = text.match(/작업 사본만 수정하세요: (.+)/);
+  if (text.includes("고쳐") && working) appendFileSync(resolve(process.cwd(), working[1].trim()), "\n\n고친 문단입니다. 도입부를 질문 하나로 시작하게 바꿨습니다.\n");
   if (!(text.trim() === "/compact")) {
     const steer = text.startsWith("[steer]") ? `이어서 받은 요청을 반영합니다: ${text.slice(7)}\n\n` : "";
     const long = text.includes("길게");

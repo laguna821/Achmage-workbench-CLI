@@ -7,8 +7,11 @@
 // What a request says decides what the fake does:
 //   "길게"  a long answer (about 8 s)      "명령"  runs `ls -la` (approval first unless "never")
 //   "압축"  compacts the conversation      "느리게" steered requests wait until line 100
+//   "고쳐"  appends a paragraph to the working copy the request names (a proposal)
 //   anything else: a short answer
 
+import { appendFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { createInterface } from "node:readline";
 
 if (process.argv.includes("--version")) {
@@ -85,6 +88,12 @@ async function runTurn(threadId, thread, turnId, text) {
   notify("item/completed", { threadId, turnId, item: request });
   if (text.includes("압축")) {
     await compact(threadId, thread, turnId);
+  }
+  // A document edit: the gateway names the working copy to change; the file itself stays as it is.
+  const working = text.match(/작업 사본만 수정하세요: (.+)/);
+  if (text.includes("고쳐") && working) {
+    const path = resolve(thread.cwd, working[1].trim());
+    appendFileSync(path, "\n\n고친 문단입니다. 도입부를 질문 하나로 시작하게 바꿨습니다.\n");
   }
   if (text.includes("MCP")) {
     // An MCP tool that needs approval: Codex asks through an elicitation it marks as such.
