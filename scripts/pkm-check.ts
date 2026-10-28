@@ -482,8 +482,34 @@ async function flow(provider: Provider) {
   }
 }
 
+/** The mirror in the dark theme: Notebook Navigator's colour there (the add-on's light override does not apply). */
+async function darkLook() {
+  await api("PUT", "/api/prefs", { prefs: { onboarding: "done", startScreen: "last", theme: "dark" } });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 860 } });
+  page.on("console", (message) => message.type() === "error" && logs.push(`[dark error] ${message.text().slice(0, 200)}`));
+  page.on("pageerror", (error) => logs.push(`[dark pageerror] ${error.message.slice(0, 200)}`));
+  try {
+    await page.goto(`${ready.url}/?token=${ready.token}`);
+    await page.waitForSelector(".vault-tree .vault-row", { timeout: 10_000 });
+    await row(page, "20. Information (I)").click();
+    await page.waitForSelector(".pkm-card");
+    await page.waitForTimeout(300);
+    const color = await row(page, "20. Information (I)").locator(".side-row-label").evaluate((element) => getComputedStyle(element).color);
+    await page.screenshot({ path: join(outDir, "dark-01-cards.png") });
+    await page.locator(".pkm-card", { hasText: "AI 글쓰기 수업 설계" }).click();
+    await page.waitForSelector(".pkm-note-body");
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: join(outDir, "dark-02-note.png") });
+    check("다크 테마: 폴더 글자는 NN 색(라이트 덮어쓰기는 라이트에서만)", color === "rgb(189, 154, 175)", color);
+  } finally {
+    await page.close();
+    await api("PUT", "/api/prefs", { prefs: { onboarding: "done", startScreen: "last" } });
+  }
+}
+
 try {
   for (const provider of providers) await flow(provider);
+  await darkLook();
   const tree = await api<VaultTree>("GET", "/api/pkm/vault/tree");
   check("볼트 API에 다른 플러그인 설정이 나오지 않음", !JSON.stringify(tree).includes("FIXTURE-SECRET"));
   const after = listing(vault);

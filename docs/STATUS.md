@@ -424,7 +424,8 @@
 
 ### 검사 요약 (feat/pkm 마지막)
 - `npm run typecheck`, `npx vitest run` 139건(이 기능 45건).
-- `scripts/pkm-check.ts` 50/50(Codex·Claude 같은 단계 25개씩, 콘솔 깨끗, 끝에 가짜 볼트 바이트·시각 비교).
+- `scripts/pkm-check.ts` 51/51(Codex·Claude 같은 단계 25개씩 + 다크 테마 1, 콘솔 깨끗, 끝에 가짜 볼트 바이트·시각 비교). 스크린숏은 실행마다 출력 폴더에(`codex-*`, `claude-*`, `dark-*`).
+- 실제 볼트 읽기 측정(쓰기 없음, 끝에 파일 목록 비교): 노트 1269·폴더 161을 24ms에 훑고 트리 14ms, 모든 노트 앞부분 첫 읽기 471ms(한 번, 이후 2ms). NN 색·아이콘·묶음 3개·고정 노트가 설정대로 나왔다.
 - 기존 검사: `meta-session-check` 19/19, `chat-flow-check` 32/32, `session-controls-check` 13/13, `doc-drawer-check` 8/8.
 - 실제 엔진: `scripts/smoke-pkm.ts` 5/5(짧은 2턴).
 - 사람이 확인할 것: WebKitGTK(설치본)에서 카드 끌어 놓기, 데스크톱 opener의 `obsidian://` 열기(권한 바뀐 새 빌드 필요), 실제 볼트(1279 노트)에서 첫 보기 계산 시간.
