@@ -1,0 +1,129 @@
+/* "격리 사본": the chip of a session working in a worktree, and its review. */
+
+.worktree-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.worktree-chip code {
+  font-size: 12px;
+}
+
+.worktree-review {
+  width: min(920px, calc(100vw - 40px));
+  height: min(86vh, 860px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px 24px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--popover-shadow);
+}
+
+.worktree-head h2 {
+  margin: 0 0 6px;
+  font-size: 21px;
+}
+
+.worktree-head p {
+  margin: 0;
+  font-size: 13.5px;
+}
+
+.worktree-empty {
+  padding: 10px 2px;
+  color: var(--muted);
+}
+
+.worktree-files {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 160px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  font-size: 13.5px;
+}
+
+.worktree-files li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.worktree-status {
+  flex: none;
+  min-width: 56px;
+  padding: 0 6px;
+  border-radius: 999px;
+  text-align: center;
+  font-size: 11.5px;
+  background: var(--surface-muted);
+  color: var(--muted);
+}
+
+.worktree-status.added {
+  color: #1a7f37;
+}
+
+.worktree-status.deleted {
+  color: var(--danger);
+}
+
+.worktree-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono, ui-monospace, monospace);
+}
+
+.worktree-diff {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.worktree-diff .diff-add {
+  color: #1a7f37;
+  background: color-mix(in srgb, #1a7f37 8%, transparent);
+}
+
+.worktree-diff .diff-del {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+.worktree-diff .diff-hunk {
+  color: var(--accent);
+}
+
+.worktree-diff .diff-head {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.worktree-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.worktree-spacer {
+  flex: 1;
+}

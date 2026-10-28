@@ -20,6 +20,7 @@ import { Transcript } from "./Transcript.tsx";
 import { AccessPicker, ContextGauge } from "./SessionControls.tsx";
 import { PendingFiles, usePendingFiles } from "./Attachments.tsx";
 import { PlanToggle } from "./PlanFirst.tsx";
+import "../styles/worktrees.css";
 import { DrawChip, DrawPill, type DrawState } from "./ImageGen.tsx";
 import { readDrawChoice, writeDrawChoice } from "../imagegen.ts";
 import { LinkBar } from "./LinkBar.tsx";
@@ -53,7 +54,9 @@ export type WorkActions = {
   newDesign: (work: Work, preset: string) => Promise<void>;
   interrupt: (session: Session) => void;
   answer: (session: Session, itemId: string, decision: "accept" | "decline") => void;
-  newSession: (work: Work, provider: Provider, choice?: ModelChoice, options?: { browser?: boolean }) => Promise<Session | null>;
+  newSession: (work: Work, provider: Provider, choice?: ModelChoice, options?: { browser?: boolean; worktree?: boolean }) => Promise<Session | null>;
+  /** "변경 검토" of a session working in a git worktree ("격리 사본"). */
+  reviewWorktree: (session: Session) => void;
   selectSession: (work: Work, session: Session) => void;
   renameSession: (session: Session, purpose: string) => void;
   setModel: (session: Session, choice: ModelChoice) => void;
@@ -173,7 +176,8 @@ function TargetPicker({
   active: Session | null;
   hostLabel: string;
   onSelect: (session: Session) => void;
-  onNew: (provider: Provider) => void;
+  /** `worktree`: "격리 사본에서", in a new git worktree of the work's repository. */
+  onNew: (provider: Provider, worktree?: boolean) => void;
   onHandoff: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -216,6 +220,20 @@ function TargetPicker({
             <span className="menu-engine" style={accentStyle(lookOf(provider))}>
               <EngineMark provider={provider} size={15} />
               새 {PROVIDER_LABEL[provider]} 세션
+            </span>
+          </MenuItem>
+        ))}
+        {(["claude", "codex"] as const).map((provider) => (
+          <MenuItem
+            key={`${provider}-worktree`}
+            hint="git 저장소"
+            onSelect={() => {
+              onNew(provider, true);
+              close();
+            }}
+          >
+            <span className="menu-engine" style={accentStyle(lookOf(provider))}>
+              <EngineMark provider={provider} size={15} />새 {PROVIDER_LABEL[provider]} 세션 · 격리 사본에서
             </span>
           </MenuItem>
         ))}
@@ -479,6 +497,14 @@ export function WorkView({
               <span>{state.hostLabel}</span>
               <Icon name={statusOpen ? "chevronUp" : "chevronDown"} size={14} />
             </button>
+            {active.worktree ? (
+              <span className="worktree-chip" title={`격리 사본: ${active.worktree.path}`}>
+                격리 사본 <code>{active.worktree.branch}</code>
+                <button type="button" className="text-button" onClick={() => actions.reviewWorktree(active)}>
+                  변경 검토
+                </button>
+              </span>
+            ) : null}
             <Popover open={statusOpen} onClose={closeStatus} align="left" className="status-detail">
               <dl>
                 <dt>세션</dt>
@@ -762,7 +788,7 @@ export function WorkView({
                 active={active}
                 hostLabel={state.hostLabel}
                 onSelect={(session) => actions.selectSession(work, session)}
-                onNew={(provider) => void actions.newSession(work, provider)}
+                onNew={(provider, worktree) => void actions.newSession(work, provider, undefined, worktree ? { worktree: true } : undefined)}
                 onHandoff={() => void actions.pickSession(work, active).then((picked) => picked && picked.id !== active.id && setHandoffTo(picked))}
               />
             ) : null}

@@ -6,6 +6,7 @@ import type {
   EngineCommand,
   ImportCandidate,
   CreateScheduleRequest,
+  WorktreeChanges,
   Schedule,
   ForkResult,
   ImportRequest,
@@ -100,7 +101,7 @@ export class Api {
   exportMarkdown = (sessionId: string, request: ExportMarkdownRequest) => this.request<ExportMarkdownResult>("POST", `/api/sessions/${sessionId}/export`, request);
   createWork = (title: string, folderId: string | null, cwd: string | null) => this.request<Work>("POST", "/api/works", { title, folderId, cwd });
   updateWork = (workId: string, patch: UpdateWorkRequest) => this.request<Work>("PATCH", `/api/works/${workId}`, patch);
-  createSession = (workId: string, provider: Provider, options?: { purpose?: string; model?: string | null; effort?: string | null; browser?: boolean }) =>
+  createSession = (workId: string, provider: Provider, options?: { purpose?: string; model?: string | null; effort?: string | null; browser?: boolean; worktree?: boolean }) =>
     this.request<Session>("POST", `/api/works/${workId}/sessions`, { provider, ...options });
   updateSession = (sessionId: string, patch: UpdateSessionRequest) => this.request<Session>("PATCH", `/api/sessions/${sessionId}`, patch);
   /** A new Markdown page in the work folder. */
@@ -109,6 +110,10 @@ export class Api {
   importCandidates = (provider: Provider, query: string) =>
     this.request<{ candidates: ImportCandidate[] }>("GET", `/api/import?${new URLSearchParams({ provider, q: query })}`).then((result) => result.candidates);
   importSession = (request: ImportRequest) => this.request<Session>("POST", "/api/import", request);
+  /** "격리 사본": what a worktree session changed, applying it to the original, or throwing it away. */
+  worktreeChanges = (sessionId: string) => this.request<WorktreeChanges>("GET", `/api/sessions/${sessionId}/worktree`);
+  applyWorktree = (sessionId: string) => this.request<{ ok: boolean }>("POST", `/api/sessions/${sessionId}/worktree/apply`);
+  discardWorktree = (sessionId: string) => this.request<{ ok: boolean }>("POST", `/api/sessions/${sessionId}/worktree/discard`);
   /** "예약 작업": requests a session gets at set times. */
   createSchedule = (request: CreateScheduleRequest) => this.request<Schedule>("POST", "/api/schedules", request);
   updateSchedule = (id: string, patch: { enabled: boolean }) => this.request<Schedule>("PATCH", `/api/schedules/${encodeURIComponent(id)}`, patch);

@@ -5,6 +5,7 @@ import type { AgentBrowserStatus } from "./browse.ts";
 import type { ImageItem, RequestDraw } from "./imagegen.ts";
 import type { LinkHop, SessionLink } from "./links.ts";
 import type { Schedule } from "./schedules.ts";
+import type { SessionWorktree } from "./worktrees.ts";
 
 export const PROTOCOL_VERSION = 1;
 
@@ -92,6 +93,8 @@ export type Session = {
   seenAt: number | null;
   /** No OS notifications for this session ("알림 끄기"). */
   muted?: boolean;
+  /** "격리 사본": works in a git worktree of the work's repository (null: in the work folder). */
+  worktree?: SessionWorktree | null;
   /** Marked "읽지 않음" by hand. */
   unread: boolean;
   /** Requests waiting to be sent when the current turn ends ("끝나면 보내기"), oldest first. */
@@ -502,6 +505,8 @@ export type CreateSessionRequest = {
   effort?: string | null;
   access?: AccessMode | null;
   browser?: boolean;
+  /** "격리 사본에서": work in a new git worktree of the work's repository. */
+  worktree?: boolean;
 };
 
 export type UpdateSessionRequest = {
@@ -744,3 +749,4 @@ export * from "./imports.ts";
 export * from "./doc-images.ts";
 export * from "./pkm.ts";
 export * from "./schedules.ts";
+export * from "./worktrees.ts";

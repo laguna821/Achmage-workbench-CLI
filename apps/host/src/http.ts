@@ -3,7 +3,7 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { dirname, extname, join, normalize, resolve, sep } from "node:path";
 import { timingSafeEqual } from "node:crypto";
-import { isAccessMode, type AccessMode, type Attachment, type DocRef, type Provider, type SequencedEvent, type Timeline } from "@workbench/contracts";
+import { isAccessMode, type AccessMode, type Attachment, type CreateSessionRequest, type DocRef, type Provider, type SequencedEvent, type Timeline } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
 import { HttpError, type SessionManager } from "./sessions.ts";
 import { DESIGN_PRESETS, systemFonts, type DesignPreset } from "./design.ts";
@@ -294,7 +294,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         return sendJson(
           res,
           201,
-          manager.createSession(parts[1], {
+          await (body.worktree === true ? manager.createIsolatedSession.bind(manager) : async (workId: string, request: CreateSessionRequest) => manager.createSession(workId, request))(parts[1], {
             provider: body.provider as Provider,
             purpose: body.purpose as string | undefined,
             model: (body.model as string | null) ?? null,
@@ -342,6 +342,9 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         if (method === "POST" && parts[2] === "compact") return sendJson(res, 202, await manager.compact(sessionId));
         if (method === "GET" && parts[2] === "commands") return sendJson(res, 200, { commands: await manager.commands(sessionId) });
         if (method === "POST" && parts[2] === "fork") return sendJson(res, 201, await manager.forkBefore(sessionId, String((await readJson(req)).itemId ?? "")));
+        if (method === "GET" && parts[2] === "worktree" && parts.length === 3) return sendJson(res, 200, await manager.worktreeChanges(sessionId));
+        if (method === "POST" && parts[2] === "worktree" && parts[3] === "apply") return sendJson(res, 200, await manager.applyWorktree(sessionId));
+        if (method === "POST" && parts[2] === "worktree" && parts[3] === "discard") return sendJson(res, 200, await manager.discardWorktree(sessionId));
         if (method === "POST" && parts[2] === "export") {
           const body = await readJson(req);
           const target = body.target === "path" ? "path" : body.target === "text" ? "text" : "work";

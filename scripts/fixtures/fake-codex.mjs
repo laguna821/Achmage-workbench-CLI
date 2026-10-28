@@ -349,6 +349,11 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
     full += said;
     notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: said });
   }
+  if (text.includes("작업 폴더")) {
+    const said = `작업 폴더: ${thread.cwd}\n\n`;
+    full += said;
+    notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: said });
+  }
   if (images) {
     const said = `요청을 받았습니다${images}.\n\n`;
     full += said;

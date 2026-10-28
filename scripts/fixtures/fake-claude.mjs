@@ -274,6 +274,7 @@ async function runTurn(text) {
     const chunks = [];
     if (browserLine) chunks.push({ text: `${browserLine}\n\n`, wait: 30 });
     if (steer) chunks.push({ text: steer, wait: 30 });
+    if (text.includes("작업 폴더")) chunks.push({ text: `작업 폴더: ${process.cwd()}\n\n`, wait: 30 });
     if (resumedRequests !== null) {
       chunks.push({ text: `이어 받은 기록: 요청 ${resumedRequests}개\n\n`, wait: 30 });
       resumedRequests = null;

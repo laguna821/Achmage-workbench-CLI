@@ -61,6 +61,7 @@ import { imagesNamed, keepImage, withImages } from "./tool-images.ts";
 import { ImageGen } from "./imagegen.ts";
 import { SessionLinks } from "./links.ts";
 import { Schedules } from "./schedules.ts";
+import { applyWorktree, createWorktree, removeWorktree, worktreeChanges } from "./worktrees.ts";
 import type { AgentBrowser } from "./browse.ts";
 
 export { HttpError };
@@ -894,6 +895,50 @@ export class SessionManager {
     return session;
   }
 
+  /** "격리 사본에서": a new session working in a git worktree of the work's repository. */
+  async createIsolatedSession(workId: string, request: CreateSessionRequest): Promise<Session> {
+    const work = this.requireWork(workId);
+    if (request.provider !== "claude" && request.provider !== "codex") throw new HttpError(400, "invalid_provider", "지원하지 않는 엔진입니다.");
+    // The copy first: a session is made only once it exists.
+    const worktree = await createWorktree(work.cwd, this.options.dataDir ?? dirname(this.options.managedWorksDir), randomUUID());
+    const session = this.createSession(workId, { ...request, worktree: false });
+    this.saveSession({ ...this.requireSession(session.id), worktree, purpose: request.purpose?.trim() || `${session.purpose} · 격리 사본` });
+    return this.requireSession(session.id);
+  }
+
+  /** "변경 검토": what an isolated session changed against where it started. */
+  async worktreeChanges(sessionId: string) {
+    const worktree = this.requireSession(sessionId).worktree;
+    if (!worktree) throw new HttpError(409, "no_worktree", "격리 사본에서 일하는 세션이 아닙니다.");
+    return worktreeChanges(worktree);
+  }
+
+  /** "원래 폴더에 적용": the changes go to the original checkout's files; the copy stays. */
+  async applyWorktree(sessionId: string) {
+    const session = this.requireSession(sessionId);
+    if (!session.worktree) throw new HttpError(409, "no_worktree", "격리 사본에서 일하는 세션이 아닙니다.");
+    if (session.status !== "idle" && session.status !== "error") throw new HttpError(409, "session_busy", "응답이 끝난 뒤에 적용할 수 있습니다.");
+    await applyWorktree(session.worktree);
+    this.sink.upsertItem(sessionId, { kind: "notice", id: `worktree-applied:${Date.now()}`, level: "info", text: `격리 사본의 변경을 원래 폴더(${session.worktree.root})에 적용했습니다.`, at: Date.now() });
+    return { ok: true };
+  }
+
+  /** "버리기": the copy and its branch go; the session is archived (its record stays readable). */
+  async discardWorktree(sessionId: string) {
+    const session = this.requireSession(sessionId);
+    if (!session.worktree) throw new HttpError(409, "no_worktree", "격리 사본에서 일하는 세션이 아닙니다.");
+    if (session.status !== "idle" && session.status !== "error") throw new HttpError(409, "session_busy", "응답이 끝난 뒤에 버릴 수 있습니다.");
+    await removeWorktree(session.worktree);
+    this.sink.upsertItem(sessionId, { kind: "notice", id: `worktree-removed:${Date.now()}`, level: "info", text: "격리 사본을 버렸습니다. 이 세션은 보관함으로 옮겼습니다.", at: Date.now() });
+    this.saveSession({ ...this.requireSession(sessionId), archivedAt: Date.now() });
+    return { ok: true };
+  }
+
+  /** Where the engine works for a session: its worktree, else the work folder. */
+  private engineWork(session: Session, work: Work): Work {
+    return session.worktree ? { ...work, cwd: session.worktree.cwd } : work;
+  }
+
   /** The access a session runs with (its own, else the one last picked for its engine, else the engine's). */
   accessOf(session: Session): AccessMode {
     return accessFor(session.provider, session.access, this.prefs(), this.adapters.get(session.provider)?.status().configuredAccess);
@@ -979,7 +1024,7 @@ export class SessionManager {
     // Before the first request there is nothing to keep: the new session starts empty.
     if (session.nativeSessionId && keep.requests > 0) {
       if (!adapter.forkNative) throw new HttpError(400, "fork_unsupported", "이 엔진은 갈래를 만들 수 없습니다.");
-      nativeSessionId = await adapter.forkNative({ ...session, access: this.accessOf(session) }, work, keep).catch((error: unknown) => {
+      nativeSessionId = await adapter.forkNative({ ...session, access: this.accessOf(session) }, this.engineWork(session, work), keep).catch((error: unknown) => {
         throw new HttpError(409, "fork_failed", `갈래를 만들지 못했습니다: ${error instanceof Error ? error.message : String(error)}`);
       });
     }
@@ -1047,7 +1092,7 @@ export class SessionManager {
     const session = this.requireSession(sessionId);
     const adapter = this.adapter(session.provider);
     if (!adapter.commands) return [];
-    return adapter.commands({ ...session, access: this.accessOf(session) }, this.requireWork(session.workId));
+    return adapter.commands({ ...session, access: this.accessOf(session) }, this.engineWork(session, this.requireWork(session.workId)));
   }
 
   async compact(sessionId: string) {
@@ -1056,7 +1101,7 @@ export class SessionManager {
     const adapter = this.adapter(session.provider);
     if (!session.nativeSessionId || !adapter.compact) throw new HttpError(409, "nothing_to_compact", "아직 압축할 대화가 없습니다.");
     const work = this.requireWork(session.workId);
-    const started = await adapter.compact({ ...session, access: this.accessOf(session) }, work);
+    const started = await adapter.compact({ ...session, access: this.accessOf(session) }, this.engineWork(session, work));
     if (!started) throw new HttpError(409, "nothing_to_compact", "지금은 압축할 수 없습니다.");
     return { ok: true };
   }
@@ -1119,7 +1164,7 @@ export class SessionManager {
         const steering = this.steering.get(sessionId) ?? new Map<string, Steered>();
         this.steering.set(sessionId, steering.set(requestId, entry));
         const read = notes.length && this.noteHook ? this.noteHook(notes, work.cwd, sessionId) : null;
-        const steered = await adapter.steer!(session, work, this.engineText(trimmed, pinned, work.cwd, null, null, read?.prompt), requestId, files).catch(() => false);
+        const steered = await adapter.steer!(session, this.engineWork(session, work), this.engineText(trimmed, pinned, work.cwd, null, null, read?.prompt), requestId, files).catch(() => false);
         if (steered) {
           this.store.saveRequest(requestId, sessionId, fingerprint);
           entry.item = {
@@ -1196,7 +1241,7 @@ export class SessionManager {
     this.saveWork({ ...work, activeSessionId: options.activate === false || relay ? work.activeSessionId : sessionId, updatedAt: Date.now() });
     try {
       const current = this.requireSession(sessionId);
-      await this.adapter(session.provider).send({ ...current, access: this.accessOf(current), plan }, work, engineText, requestId, files);
+      await this.adapter(session.provider).send({ ...current, access: this.accessOf(current), plan }, this.engineWork(current, work), engineText, requestId, files);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       for (const entry of prepared) if (entry.proposal) this.documents.discardProposal(entry.proposal.id);

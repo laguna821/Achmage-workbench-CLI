@@ -30,6 +30,7 @@ import { SessionPicker } from "./components/SessionPicker.tsx";
 import { LinkLayer } from "./components/LinkCards.tsx";
 import { ImportDialog } from "./components/ImportDialog.tsx";
 import { ScheduleDialog } from "./components/ScheduleDialog.tsx";
+import { WorktreeReview } from "./components/WorktreeReview.tsx";
 import { writeDraft } from "./components/Composer.tsx";
 import { LinkContext, hopsText, linkOfSession, useLinkApi } from "./links.ts";
 import { SplitView, WorkModeBar, useWorkModeKeys } from "./components/WorkModes.tsx";
@@ -386,6 +387,7 @@ export function App() {
         cancel: (session, queuedId) => void api?.cancelQueued(session.id, queuedId).catch(fail),
       },
       clipboardPicture: () => (api ? api.clipboardPicture().catch(() => null) : Promise.resolve(null)),
+      reviewWorktree: (session: Session) => setReviewing(session.id),
       fork: (session: Session, itemId: string) => {
         if (!api) return;
         void api
@@ -463,7 +465,7 @@ export function App() {
       newSession: async (target: Work, provider: Provider, choice, options) => {
         if (!api) return null;
         try {
-          return await api.createSession(target.id, provider, { model: choice?.model ?? null, effort: choice?.effort ?? null, ...(options?.browser ? { browser: true } : {}) });
+          return await api.createSession(target.id, provider, { model: choice?.model ?? null, effort: choice?.effort ?? null, ...(options?.browser ? { browser: true } : {}), ...(options?.worktree ? { worktree: true } : {}) });
         } catch (error) {
           fail(error);
           return null;
@@ -616,6 +618,8 @@ export function App() {
   const [importOpen, setImportOpen] = useState(false);
   // "예약 작업" of the session whose dialog is open.
   const [scheduling, setScheduling] = useState<string | null>(null);
+  // "변경 검토" of the worktree session whose dialog is open.
+  const [reviewing, setReviewing] = useState<string | null>(null);
   const openImported = useCallback(
     (session: Session) => {
       // The gateway made it the work's active session.
@@ -1548,6 +1552,9 @@ export function App() {
       {switcher !== null ? <Switcher state={state} sessions={switchable} index={switcher} unseen={unseen} /> : null}
       <LinkLayer api={api} inDesktop={inDesktop} />
       {importOpen ? <ImportDialog api={api} onClose={() => setImportOpen(false)} onOpen={openImported} onError={fail} /> : null}
+      {reviewing && state.sessions[reviewing]?.worktree ? (
+        <WorktreeReview api={api} session={state.sessions[reviewing]} onClose={() => setReviewing(null)} onToast={setToast} onError={fail} />
+      ) : null}
       {scheduling && state.sessions[scheduling] ? (
         <ScheduleDialog api={api} session={state.sessions[scheduling]} schedules={state.schedules} onClose={() => setScheduling(null)} onError={fail} />
       ) : null}
