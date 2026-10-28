@@ -242,12 +242,20 @@ export const EFFORT_LABEL: Record<string, string> = {
   ultra: "울트라",
 };
 
+/** How an engine is signed in: the user's subscription, or a route billed per use (API key, cloud). */
+export type LoginMethod = "subscription" | "metered" | "unknown";
+
 export type ProviderStatus = {
   provider: Provider;
   installed: boolean;
   binary: string | null;
+  /** installed: the user's own engine; bundled: the copy shipped with the SDK; override: set by env. */
+  binarySource: "installed" | "bundled" | "override" | null;
   version: string | null;
   loggedIn: boolean | null;
+  loginMethod: LoginMethod | null;
+  /** Billing variables found in the gateway's environment; engines are started without them. */
+  billingVars: string[];
   account: string | null;
   plan: string | null;
   usage: UsageWindow[];

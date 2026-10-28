@@ -38,14 +38,19 @@ export function Connections({
             ? "설치되지 않음"
             : status.loggedIn === null
               ? "확인 중"
-              : status.loggedIn
-                ? "로그인됨"
-                : "로그인 필요";
+              : !status.loggedIn
+                ? "로그인 필요"
+                : status.loginMethod === "subscription"
+                  ? "구독 연결됨"
+                  : status.loginMethod === "metered"
+                    ? "종량제 로그인"
+                    : "로그인됨";
+        const tone = status?.loggedIn && status.loginMethod !== "metered" ? "ok" : status?.loggedIn === false || status?.loginMethod === "metered" ? "warn" : "";
         return (
           <div key={provider} className="connection">
             <div className="connection-head">
               <span className="connection-name">{PROVIDER_LABEL[provider]}</span>
-              <span className={`connection-state ${status?.loggedIn ? "ok" : status?.loggedIn === false ? "warn" : ""}`}>{state}</span>
+              <span className={`connection-state ${tone}`}>{state}</span>
             </div>
             {status?.account ? (
               <div className="connection-meta">
@@ -61,6 +66,17 @@ export function Connections({
               ))
             ) : status?.loggedIn ? (
               <div className="connection-meta muted">사용량 확인 불가 (첫 요청 후 표시)</div>
+            ) : null}
+            {status?.loginMethod === "metered" ? (
+              <div className="connection-meta warn">API 키나 클라우드 경로로 로그인되어 있어 쓴 만큼 요금이 나갑니다. 구독으로 쓰려면 구독 계정으로 다시 로그인하세요.</div>
+            ) : null}
+            {status?.billingVars.length ? (
+              <div className="connection-meta muted">
+                {status.billingVars.join(", ")} 환경변수는 엔진에 넘기지 않습니다(구독 로그인으로 실행).
+              </div>
+            ) : null}
+            {status?.binarySource === "bundled" ? (
+              <div className="connection-meta muted">설치된 Claude Code가 없어 SDK에 들어 있는 엔진으로 실행합니다.</div>
             ) : null}
             {status?.version ? <div className="connection-meta muted mono">{status.version}</div> : null}
             {status?.error && !status.loggedIn ? <div className="connection-meta warn">{status.error}</div> : null}

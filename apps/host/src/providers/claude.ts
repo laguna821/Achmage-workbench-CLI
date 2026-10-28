@@ -16,6 +16,8 @@ import {
 import type { ApprovalDecision, ModelOption, ProviderStatus, Session, UsageWindow, Work } from "@workbench/contracts";
 import { ClaudeTranscriptMapper, describeTool, type MapperOutput } from "@workbench/provider-claude";
 import { resolveClaude, type ResolvedBinary } from "../binaries.ts";
+import { billingVarsIn, claudeSdkEnv, engineEnv } from "../engine-env.ts";
+import { parseClaudeAuthStatus } from "../engine-login.ts";
 import { emptyStatus, type AdapterSink, type LoginStart, type ProviderAdapter } from "./types.ts";
 
 const run = promisify(execFile);
@@ -149,7 +151,7 @@ export class ClaudeAdapter implements ProviderAdapter {
       return;
     }
     const input = new InputQueue();
-    const probe = query({ prompt: input, options: { pathToClaudeCodeExecutable: this.binary.path, settingSources: [] } });
+    const probe = query({ prompt: input, options: { pathToClaudeCodeExecutable: this.binary.path, settingSources: [], env: claudeSdkEnv(this.binary.path) } });
     try {
       const init = await probe.initializationResult();
       const models = modelsFromInfo(init.models);
@@ -185,7 +187,7 @@ export class ClaudeAdapter implements ProviderAdapter {
       this.publish({ installed: false, error: "claude를 찾지 못했습니다." });
       return;
     }
-    this.publish({ installed: true, binary: this.binary.path, version: this.binary.version, error: null });
+    this.publish({ installed: true, binary: this.binary.path, binarySource: this.binary.source, version: this.binary.version, billingVars: billingVarsIn(), error: null });
     await this.refreshStatus();
     void this.loadModels();
   }
@@ -194,19 +196,24 @@ export class ClaudeAdapter implements ProviderAdapter {
     if (!this.binary) {
       return this.current;
     }
+    // The same environment the sessions get, so the status names the login they will use.
+    const env = engineEnv({ command: this.binary.path });
+    let stdout = "";
+    let failure: unknown = null;
     try {
-      const { stdout } = await run(this.binary.path, ["auth", "status", "--json"], { timeout: 20_000 });
-      const status = JSON.parse(stdout) as { loggedIn?: boolean; email?: string; subscriptionType?: string };
-      this.publish({ loggedIn: Boolean(status.loggedIn), account: status.email ?? null, plan: status.subscriptionType ?? null, error: null });
+      stdout = (await run(this.binary.path, ["auth", "status", "--json"], { timeout: 20_000, env })).stdout;
     } catch (error) {
-      // `auth status` exits non-zero when logged out.
-      const output = (error as { stdout?: string }).stdout;
-      try {
-        const status = JSON.parse(output ?? "") as { loggedIn?: boolean };
-        this.publish({ loggedIn: Boolean(status.loggedIn), account: null, plan: null, error: null });
-      } catch {
-        this.publish({ error: error instanceof Error ? error.message : String(error) });
-      }
+      // `auth status` exits non-zero when logged out, with the JSON still on stdout.
+      stdout = (error as { stdout?: string }).stdout ?? "";
+      failure = error;
+    }
+    const login = parseClaudeAuthStatus(stdout);
+    if (!login) {
+      this.publish({ error: failure instanceof Error ? failure.message : "로그인 상태를 읽지 못했습니다." });
+    } else if (!login.signedIn) {
+      this.publish({ loggedIn: false, loginMethod: null, account: null, plan: null, error: null });
+    } else {
+      this.publish({ loggedIn: true, loginMethod: login.method, account: login.account, plan: login.plan, error: null });
     }
     return this.current;
   }
@@ -215,7 +222,7 @@ export class ClaudeAdapter implements ProviderAdapter {
     if (!this.binary) {
       throw new Error("claude를 찾지 못했습니다.");
     }
-    const child = spawn(this.binary.path, ["auth", "login", "--claudeai"], { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(this.binary.path, ["auth", "login", "--claudeai"], { stdio: ["ignore", "pipe", "pipe"], env: engineEnv({ command: this.binary.path }) });
     const url = await new Promise<string | null>((resolve) => {
       let buffer = "";
       const timer = setTimeout(() => resolve(null), 15_000);
@@ -293,6 +300,8 @@ export class ClaudeAdapter implements ProviderAdapter {
         settingSources: ["user", "project", "local"],
         systemPrompt: { type: "preset", preset: "claude_code" },
         pathToClaudeCodeExecutable: this.binary.path,
+        // Never an API key or cloud route left in the gateway's environment: the user's login.
+        env: claudeSdkEnv(this.binary.path),
       },
     });
     this.runtimes.set(session.id, runtime);

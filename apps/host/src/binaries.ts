@@ -1,12 +1,12 @@
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { promisify } from "node:util";
 
 const run = promisify(execFile);
 
-export type ResolvedBinary = { path: string; version: string };
+export type ResolvedBinary = { path: string; version: string; source: "installed" | "bundled" | "override" };
 
 async function versionOf(path: string): Promise<string | null> {
   try {
@@ -29,7 +29,7 @@ function compareVersions(a: string, b: string) {
   return 0;
 }
 
-async function newest(candidates: string[]): Promise<ResolvedBinary | null> {
+async function newest(candidates: string[], source: ResolvedBinary["source"]): Promise<ResolvedBinary | null> {
   let best: ResolvedBinary | null = null;
   const seen = new Set<string>();
   for (const candidate of candidates) {
@@ -39,49 +39,74 @@ async function newest(candidates: string[]): Promise<ResolvedBinary | null> {
     seen.add(candidate);
     const version = await versionOf(candidate);
     if (version && (!best || compareVersions(version, best.version) > 0)) {
-      best = { path: candidate, version };
+      best = { path: candidate, version, source };
     }
   }
   return best;
 }
 
-function onPath(name: string): string[] {
-  return (process.env.PATH ?? "")
-    .split(":")
-    .filter(Boolean)
-    .map((dir) => join(dir, name))
-    .filter((path) => existsSync(path));
+/**
+ * Folders where the official installers and Node version managers put command line tools,
+ * besides PATH: a desktop app started from the launcher often has a shorter PATH than a shell.
+ * (The list follows IeumOffice's locate.ts, Apache-2.0.)
+ */
+function toolFolders(): string[] {
+  const home = homedir();
+  const folders = [
+    join(home, ".local/bin"),
+    join(home, ".npm-global/bin"),
+    join(home, ".volta/bin"),
+    join(home, ".bun/bin"),
+    join(home, ".yarn/bin"),
+    "/usr/local/bin",
+    "/opt/homebrew/bin",
+  ];
+  try {
+    const nvm = join(home, ".nvm/versions/node");
+    for (const version of readdirSync(nvm)) folders.push(join(nvm, version, "bin"));
+  } catch {
+    // No nvm.
+  }
+  return folders;
+}
+
+function candidates(name: string): string[] {
+  const onPath = (process.env.PATH ?? "").split(delimiter).filter(Boolean);
+  return [...new Set([...onPath, ...toolFolders()])].map((dir) => join(dir, name)).filter((path) => existsSync(path));
 }
 
 /**
- * Codex: newest of an explicit override, `codex` on PATH and the engine bundled with the
- * ChatGPT desktop app (it usually ships a newer engine, which matters for new models).
+ * Codex: newest of an explicit override, `codex` on PATH and in the usual tool folders, and the
+ * engine bundled with the ChatGPT desktop app (it usually ships a newer engine, which matters for
+ * new models).
  */
 export function resolveCodex(): Promise<ResolvedBinary | null> {
   const override = process.env.WORKBENCH_CODEX_BIN;
   if (override) {
-    return newest([override]);
+    return newest([override], "override");
   }
-  return newest([...onPath("codex"), "/usr/lib/chatgpt/resources/codex", join(homedir(), ".local/bin/codex")].filter((path) => existsSync(path)));
+  return newest([...candidates("codex"), "/usr/lib/chatgpt/resources/codex"].filter((path) => existsSync(path)), "installed");
 }
 
 /**
  * Claude: the user's installed official `claude` first (kept up to date by its own updater),
- * falling back to the binary shipped with the Agent SDK.
+ * falling back to the binary shipped with the Agent SDK, which is reported as such.
  */
 export async function resolveClaude(sdkBundled: string | null): Promise<ResolvedBinary | null> {
   const override = process.env.WORKBENCH_CLAUDE_BIN;
-  const candidates = override ? [override] : [join(homedir(), ".local/bin/claude"), ...onPath("claude")];
-  for (const candidate of candidates.filter((path) => existsSync(path))) {
+  if (override) {
+    return newest([override], "override");
+  }
+  for (const candidate of candidates("claude")) {
     const version = await versionOf(candidate);
     if (version) {
-      return { path: candidate, version };
+      return { path: candidate, version, source: "installed" };
     }
   }
   if (sdkBundled && existsSync(sdkBundled)) {
     const version = await versionOf(sdkBundled);
     if (version) {
-      return { path: sdkBundled, version };
+      return { path: sdkBundled, version, source: "bundled" };
     }
   }
   return null;

@@ -24,6 +24,8 @@ import type { TurnPlanUpdatedNotification } from "@workbench/provider-codex/src/
 import type { TurnStartResponse } from "@workbench/provider-codex/src/generated/v2/TurnStartResponse.ts";
 import type { TurnStartedNotification } from "@workbench/provider-codex/src/generated/v2/TurnStartedNotification.ts";
 import { resolveCodex } from "../binaries.ts";
+import { billingVarsIn, engineEnv } from "../engine-env.ts";
+import { codexAccountInfo } from "../engine-login.ts";
 import { emptyStatus, type AdapterSink, type LoginStart, type ProviderAdapter } from "./types.ts";
 
 const CLIENT_VERSION = "0.1.0";
@@ -163,9 +165,10 @@ export class CodexAdapter implements ProviderAdapter {
         this.publish({ installed: false, error: "codex를 찾지 못했습니다." });
         throw new Error("codex를 찾지 못했습니다.");
       }
-      this.publish({ installed: true, binary: binary.path, version: binary.version, error: null });
+      this.publish({ installed: true, binary: binary.path, binarySource: binary.source, version: binary.version, billingVars: billingVarsIn(), error: null });
       const rpc = new CodexRpc({
         binary: binary.path,
+        env: engineEnv({ command: binary.path }),
         onNotification: (notification) => this.onNotification(notification),
         onServerRequest: (request) => this.onServerRequest(request),
         onExit: (code, stderr) => this.onExit(code, stderr),
@@ -217,13 +220,13 @@ export class CodexAdapter implements ProviderAdapter {
     }
     try {
       const account = await rpc.request<GetAccountResponse>("account/read", { refreshToken: false });
-      const loggedIn = account.account !== null || !account.requiresOpenaiAuth;
-      const chatgpt = account.account?.type === "chatgpt" ? account.account : null;
-      this.publish({
-        loggedIn,
-        account: chatgpt?.email ?? (account.account?.type === "apiKey" ? "API 키" : null),
-        plan: chatgpt?.planType ?? null,
-      });
+      const login = codexAccountInfo(account);
+      const loggedIn = Boolean(login?.signedIn);
+      this.publish(
+        login?.signedIn
+          ? { loggedIn, loginMethod: login.method, account: login.account ?? (login.method === "metered" ? "API 키" : null), plan: login.plan }
+          : { loggedIn, loginMethod: null, account: null, plan: null },
+      );
       if (loggedIn) {
         const limits = await rpc.request<GetAccountRateLimitsResponse>("account/rateLimits/read", undefined);
         this.publish({ usage: usageFromSnapshot(limits.rateLimits), usageObservedAt: Date.now() });

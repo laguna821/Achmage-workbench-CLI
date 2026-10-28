@@ -1,0 +1,22 @@
+Parts of Achmage Workbench are adapted from IeumOffice
+(https://github.com/pblsketch/openoffice), which is based on GenOffice.
+
+GenOffice
+Copyright 2026 Mainfunc, Inc.
+
+This product includes software developed at Mainfunc, Inc.
+
+IeumOffice and its changes are licensed under the Apache License, Version 2.0
+(LICENSE in this folder). The names IeumOffice, 이음오피스 and GenOffice are
+not licensed for use; Workbench uses them only to state where code came from.
+
+Adapted files (each carries a header naming its source file, the upstream
+commit and what was changed):
+
+  apps/host/src/engine-env.ts
+      from packages/ai-provider/src/subscription/env.ts @ 9052297
+  apps/host/src/engine-login.ts
+      from packages/ai-provider/src/subscription/status.ts and contract.ts @ 9052297
+
+The `ieumoffice` command line tool that Workbench can call is not part of
+this repository; it ships inside an installed IeumOffice application.
