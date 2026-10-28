@@ -30,6 +30,7 @@
           "path": "$HOME/**"
         }
       ]
-    }
+    },
+    "notification:default"
   ]
 }

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { PROVIDER_LABEL, isUnseen, type AccessMode, type Artifact, type CreateTarget, type DocRef, type Proposal, type Provider, type Session, type UiPrefs, type Work } from "@workbench/contracts";
+import { PROVIDER_LABEL, isUnseen, type AccessMode, type Artifact, type CreateTarget, type DocRef, type Proposal, type Provider, type Session, type SessionStatus, type UiPrefs, type Work } from "@workbench/contracts";
 import { Api, ApiRequestError, readToken } from "./api.ts";
 import { configureDesign } from "./design.ts";
 import { initialState, isBusy, reducer, sessionsOf } from "./state.ts";
@@ -41,6 +41,15 @@ function cachedPrefs(): UiPrefs {
   }
 }
 const inDesktop = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+/** An OS notification (desktop app); the first one asks for permission where the system wants that. */
+async function notify(title: string, body: string) {
+  const { isPermissionGranted, requestPermission, sendNotification } = await import("@tauri-apps/plugin-notification");
+  if (!(await isPermissionGranted()) && (await requestPermission()) !== "granted") return;
+  sendNotification({ title, body });
+}
+
+const BUSY: SessionStatus[] = ["starting", "running", "interrupting", "awaitingApproval"];
 
 async function pickFolderNative(): Promise<string | null> {
   const { open } = await import("@tauri-apps/plugin-dialog");
@@ -499,6 +508,25 @@ export function App() {
     },
     [setView],
   );
+  // While the window is behind other windows or hidden in the tray: a reply that arrived, an
+  // approval that waits, a turn that failed. Only changes are told, never what was already so.
+  const statuses = useRef(new Map<string, SessionStatus>());
+  useEffect(() => {
+    const seen = statuses.current;
+    const away = !document.hasFocus() || document.hidden;
+    for (const session of Object.values(state.sessions)) {
+      const before = seen.get(session.id);
+      seen.set(session.id, session.status);
+      if (!before || before === session.status || !inDesktop || !away || prefsRef.current.notify === false) continue;
+      const where = `${state.works[session.workId]?.title ?? ""} — ${session.purpose}`;
+      if (session.status === "awaitingApproval") void notify(`확인이 필요합니다 · ${PROVIDER_LABEL[session.provider]}`, where).catch(() => undefined);
+      else if (session.status === "error") void notify(`응답이 끝나지 못했습니다 · ${PROVIDER_LABEL[session.provider]}`, where).catch(() => undefined);
+      else if (session.status === "idle" && BUSY.includes(before)) {
+        void notify(`답이 왔습니다 · ${PROVIDER_LABEL[session.provider]}`, `${where}${session.preview ? `\n${session.preview.split("\n")[0]}` : ""}`).catch(() => undefined);
+      }
+    }
+  }, [state.sessions, state.works]);
+
   // "앱을 열면: 마지막 작업" set elsewhere (another window, a cleared cache): honoured once the
   // gateway's prefs arrive, if the user has not moved away from home meanwhile.
   const startSettled = useRef(false);
@@ -988,6 +1016,8 @@ export function App() {
                 onStartScreen={(next) => savePrefs({ startScreen: next })}
                 brandMotion={prefs.brandMotion !== false}
                 onBrandMotion={(next) => savePrefs({ brandMotion: next })}
+                notifications={prefs.notify !== false}
+                onNotifications={(next) => savePrefs({ notify: next })}
               />
             </Popover>
           </div>

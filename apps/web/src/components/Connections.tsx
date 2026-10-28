@@ -60,6 +60,8 @@ export function Connections({
   onStartScreen,
   brandMotion,
   onBrandMotion,
+  notifications,
+  onNotifications,
 }: {
   tools: DocumentTools | null;
   onIntegrations: () => void;
@@ -81,6 +83,9 @@ export function Connections({
   /** The logo's short entrance on home. */
   brandMotion: boolean;
   onBrandMotion: (next: boolean) => void;
+  /** OS notifications while the window is behind or in the tray. */
+  notifications: boolean;
+  onNotifications: (next: boolean) => void;
 }) {
   return (
     <div className="connections">
@@ -183,6 +188,10 @@ export function Connections({
       <label className="check-row">
         <input type="checkbox" checked={brandMotion} onChange={(event) => onBrandMotion(event.target.checked)} />
         홈 로고 움직임
+      </label>
+      <label className="check-row" title="창이 뒤에 있거나 트레이에 있을 때: 답이 오면, 확인이 필요하면, 실패하면">
+        <input type="checkbox" checked={notifications} onChange={(event) => onNotifications(event.target.checked)} />
+        끝나면 알림(OS)
       </label>
     </div>
   );

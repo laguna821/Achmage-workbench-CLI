@@ -519,6 +519,11 @@ export function Sidebar({
                 )}
               </div>
             ))}
+            {now.running.length > 4 ? (
+              <div className="now-memory" title="Claude·Codex 세션 하나가 엔진 프로세스로 약 250~350MB를 씁니다(이 노트북 측정). 막지는 않습니다.">
+                동시에 {now.running.length}개 진행 중 · 메모리를 세션당 약 300MB 씁니다
+              </div>
+            ) : null}
           </section>
         ) : null}
 

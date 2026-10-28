@@ -1,10 +1,17 @@
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
-use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::TrayIconBuilder;
+use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+use tauri_plugin_notification::NotificationExt;
+
+/// Closing the window only hides it (work goes on, PRD "트레이로 이동, 작업 유지"); said once.
+static HIDDEN_ONCE: AtomicBool = AtomicBool::new(false);
 
 /// The local gateway (Node) owns engine processes and state; the window only shows its UI.
 struct Gateway(Mutex<Option<Child>>);
@@ -112,6 +119,35 @@ fn open_main_window(app: &tauri::AppHandle, ready: &Ready) -> tauri::Result<()> 
     Ok(())
 }
 
+fn show_main(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
+/// The tray entry: open the window again, or quit (which stops the gateway and its engines).
+/// Linux trays (AppIndicator) only open the menu, so "열기" is a menu item, not a click.
+fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let open = MenuItem::with_id(app, "open", "Achmage Workbench 열기", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "끝내기 (진행 중인 응답도 멈춤)", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&open, &quit])?;
+    let mut tray = TrayIconBuilder::with_id("main")
+        .tooltip("Achmage Workbench")
+        .menu(&menu)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "open" => show_main(app),
+            "quit" => app.exit(0),
+            _ => {}
+        });
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+    tray.build(app)?;
+    Ok(())
+}
+
 fn stop_gateway(app: &tauri::AppHandle) {
     if let Some(state) = app.try_state::<Gateway>() {
         if let Some(mut child) = state.0.lock().unwrap().take() {
@@ -132,14 +168,27 @@ fn stop_gateway(app: &tauri::AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            }
-        }))
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                    if !HIDDEN_ONCE.swap(true, Ordering::SeqCst) {
+                        let _ = window
+                            .app_handle()
+                            .notification()
+                            .builder()
+                            .title("Achmage Workbench는 계속 일합니다")
+                            .body("창만 닫았습니다. 진행 중인 응답은 이어지고, 끝나면 알려 드립니다. 트레이의 Achmage에서 다시 열거나 끝낼 수 있습니다.")
+                            .show();
+                    }
+                }
+            }
+        })
         .manage(Gateway(Mutex::new(None)))
         .setup(|app| {
             let handle = app.handle().clone();
@@ -147,6 +196,11 @@ pub fn run() {
                 Ok((child, ready)) => {
                     *handle.state::<Gateway>().0.lock().unwrap() = Some(child);
                     open_main_window(&handle, &ready)?;
+                    // Without a tray (no StatusNotifier host) the app still works; launching it
+                    // again shows the hidden window (single instance).
+                    if let Err(error) = build_tray(&handle) {
+                        eprintln!("tray unavailable: {error}");
+                    }
                 }
                 Err(message) => {
                     handle
