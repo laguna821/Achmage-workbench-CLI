@@ -86,6 +86,16 @@ async function runTurn(threadId, thread, turnId, text) {
   if (text.includes("압축")) {
     await compact(threadId, thread, turnId);
   }
+  if (text.includes("MCP")) {
+    // An MCP tool that needs approval: Codex asks through an elicitation it marks as such.
+    const answer = await ask("mcpServer/elicitation/request", {
+      threadId, turnId, serverName: "achmage", mode: "form", _meta: { codex_approval_kind: "mcp_tool_call" },
+      message: "search 도구로 볼트를 찾습니다", requestedSchema: { type: "object", properties: {} },
+    });
+    const ok = answer?.action === "accept";
+    const id = `mcp_${++counter}`;
+    notify("item/completed", { threadId, turnId, item: { type: "mcpToolCall", id, server: "achmage", tool: "search", status: ok ? "completed" : "failed", arguments: { query: "근거" }, result: null, error: null, durationMs: 5 } });
+  }
   if (text.includes("명령")) {
     const itemId = `cmd_${++counter}`;
     let decision = "accept";

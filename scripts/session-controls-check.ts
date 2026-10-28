@@ -143,6 +143,16 @@ async function flow(provider: Provider) {
     await idle();
     pass("'묻기'로 바꾸면 다시 확인을 받음", options === 3 && asked && (await session(engine.id)).access === "ask");
 
+    // ── Codex: an MCP tool approval is a card like any other (it used to fail) ───────────────
+    if (provider === "codex") {
+      await type("MCP 도구 써 줘");
+      const card = await page.waitForSelector(".approval-card", { timeout: 10_000 }).then((element) => element.innerText()).catch(() => "");
+      await page.locator(".approval-card .button.primary").click().catch(() => undefined);
+      await idle();
+      const tool = (await items(engine.id)).find((item) => item.kind === "tool" && item.tool === "mcp");
+      pass("MCP 도구 승인이 카드로 와서 허용하면 이어서 끝남", card.includes("achmage MCP 도구를 쓸까요?") && tool?.kind === "tool" && tool.status === "completed", card.replace(/\s+/g, " ").slice(0, 60));
+    }
+
     // ── plan limits of both engines at the foot of the sidebar ──────────────────────────────
     await page.locator(".usage-card").scrollIntoViewIfNeeded();
     const card = await page.locator(".usage-card").innerText();

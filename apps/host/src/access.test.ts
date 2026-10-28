@@ -7,7 +7,7 @@ import { EventBus } from "./bus.ts";
 import { SessionManager } from "./sessions.ts";
 import { Store } from "./store.ts";
 import { configuredAccess as claudeAccess, usageFromPlan } from "./providers/claude.ts";
-import { configuredAccess as codexAccess } from "./providers/codex.ts";
+import { configuredAccess as codexAccess, isToolApproval } from "./providers/codex.ts";
 import { emptyStatus, type AdapterSink, type ProviderAdapter } from "./providers/types.ts";
 
 // How freely an engine acts: the engine's own settings, the user's last pick, the session's choice.
@@ -30,6 +30,14 @@ describe("access defaults", () => {
     expect(accessFor("claude", null, { access: { claude: "full" } }, "ask")).toBe("full");
     expect(accessFor("codex", null, { access: { claude: "full" } }, "ask")).toBe("ask");
     expect(accessFor("codex", null, { access: { codex: "bogus" } }, null)).toBe("auto");
+  });
+
+  it("tells an MCP tool approval from an MCP server asking for real input", () => {
+    const base = { threadId: "t", turnId: "u", serverName: "achmage", message: "m" };
+    expect(isToolApproval({ ...base, mode: "form", _meta: { codex_approval_kind: "mcp_tool_call" }, requestedSchema: { type: "object", properties: { x: { type: "string" } } } } as never)).toBe(true);
+    expect(isToolApproval({ ...base, mode: "form", _meta: null, requestedSchema: { type: "object", properties: {} } } as never)).toBe(true);
+    expect(isToolApproval({ ...base, mode: "form", _meta: null, requestedSchema: { type: "object", properties: { name: { type: "string" } } } } as never)).toBe(false);
+    expect(isToolApproval({ ...base, mode: "url", _meta: null, url: "https://example.com", elicitationId: "e" } as never)).toBe(false);
   });
 
   it("reads Claude plan limits from get_usage (0–100, ISO reset)", () => {

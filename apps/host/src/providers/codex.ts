@@ -23,6 +23,7 @@ import type { TurnCompletedNotification } from "@workbench/provider-codex/src/ge
 import type { TurnPlanUpdatedNotification } from "@workbench/provider-codex/src/generated/v2/TurnPlanUpdatedNotification.ts";
 import type { TurnStartResponse } from "@workbench/provider-codex/src/generated/v2/TurnStartResponse.ts";
 import type { TurnStartedNotification } from "@workbench/provider-codex/src/generated/v2/TurnStartedNotification.ts";
+import type { McpServerElicitationRequestParams } from "@workbench/provider-codex/src/generated/v2/McpServerElicitationRequestParams.ts";
 import type { AskForApproval } from "@workbench/provider-codex/src/generated/v2/AskForApproval.ts";
 import type { Config } from "@workbench/provider-codex/src/generated/v2/Config.ts";
 import type { SandboxMode } from "@workbench/provider-codex/src/generated/v2/SandboxMode.ts";
@@ -117,6 +118,15 @@ export function modelsFromList(list: ModelListResponse, configured?: { model: st
 export function turnSettings(session: Pick<Session, "model" | "effort">, models: ModelOption[]) {
   const chosen = (session.model && models.find((model) => model.id === session.model)) || (!session.model && models.find((model) => model.isDefault)) || null;
   return { model: session.model ?? chosen?.id ?? null, effort: session.effort ?? chosen?.defaultEffort ?? null };
+}
+
+/** An MCP elicitation that is a tool-call approval: Codex marks it, or it asks for nothing but yes/no. */
+export function isToolApproval(params: McpServerElicitationRequestParams) {
+  const meta = params._meta as { codex_approval_kind?: unknown } | null;
+  if (meta && typeof meta === "object" && meta.codex_approval_kind === "mcp_tool_call") return true;
+  if (params.mode !== "form") return false;
+  const schema = params.requestedSchema as { properties?: Record<string, unknown> } | null;
+  return !schema?.properties || Object.keys(schema.properties).length === 0;
 }
 
 export class CodexAdapter implements ProviderAdapter {
@@ -401,6 +411,8 @@ export class CodexAdapter implements ProviderAdapter {
       const params = pending.params as PermissionsRequestApprovalParams;
       const granted = decision === "accept" ? { ...(params.permissions.network ? { network: params.permissions.network } : {}), ...(params.permissions.fileSystem ? { fileSystem: params.permissions.fileSystem } : {}) } : {};
       this.rpc?.respond(pending.rpcId, { permissions: granted, scope: "turn" });
+    } else if (pending.method === "mcpServer/elicitation/request") {
+      this.rpc?.respond(pending.rpcId, decision === "accept" ? { action: "accept", content: {}, _meta: null } : { action: "decline", content: null, _meta: null });
     } else {
       this.rpc?.respond(pending.rpcId, { decision });
     }
@@ -449,6 +461,18 @@ export class CodexAdapter implements ProviderAdapter {
         at,
       };
     }
+    if (pending.method === "mcpServer/elicitation/request") {
+      const params = pending.params as McpServerElicitationRequestParams;
+      return {
+        kind: "approval" as const,
+        id: itemId,
+        title: `${params.serverName} MCP 도구를 쓸까요?`,
+        detail: params.message || null,
+        reason: null,
+        decision: null,
+        at,
+      };
+    }
     const params = pending.params as PermissionsRequestApprovalParams;
     return {
       kind: "approval" as const,
@@ -482,9 +506,25 @@ export class CodexAdapter implements ProviderAdapter {
       "item/commandExecution/requestApproval",
       "item/fileChange/requestApproval",
       "item/permissions/requestApproval",
+      "mcpServer/elicitation/request",
     ];
     if (!sessionId || !supported.includes(request.method)) {
       this.rpc?.respondError(request.id, `Achmage Workbench does not handle ${request.method}`);
+      return;
+    }
+    // An MCP server may ask for a tool approval (an empty form Codex marks as such) or for real
+    // input: a form with fields or a link to open. Only approvals can be answered here so far;
+    // the rest is declined with a word on why, instead of failing silently.
+    if (request.method === "mcpServer/elicitation/request" && !isToolApproval(request.params as McpServerElicitationRequestParams)) {
+      const params = request.params as McpServerElicitationRequestParams;
+      this.rpc?.respond(request.id, { action: "decline", content: null, _meta: null });
+      this.sink.upsertItem(sessionId, {
+        kind: "notice",
+        id: `elicitation:${String(request.id)}`,
+        level: "info",
+        text: `${params.serverName} MCP 서버가 입력${params.mode === "url" ? "(링크 열기)" : ""}을 요청했지만 Workbench에서는 아직 받을 수 없어 거절했습니다: ${params.message}`,
+        at: Date.now(),
+      });
       return;
     }
     const itemId = `approval:${String(request.id)}`;
