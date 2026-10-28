@@ -1,7 +1,8 @@
 // Real-engine run (no mocks) of "계획 먼저", per engine, in a temp folder: a small task sent to plan
 // first comes back as a plan waiting for the go-ahead and changes nothing; going ahead then does
 // the task with the session's access ("자동"). Claude plans in its plan mode (ExitPlanMode asks);
-// Codex plans in a read-only turn and the gateway asks. Usage: node scripts/smoke-plan.ts [claude|codex|all]
+// Codex plans in a read-only turn and the gateway asks.
+// Usage: node scripts/smoke-plan.ts [claude|codex|all] [auto|full]  (the session's access; default auto)
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -12,6 +13,7 @@ import { randomUUID } from "node:crypto";
 import type { Provider, Session, Snapshot, TranscriptItem, Work } from "@workbench/contracts";
 
 const which = (process.argv[2] ?? "all") as Provider | "all";
+const access = process.argv[3] === "full" ? "full" : "auto";
 const dataDir = mkdtempSync(join(tmpdir(), "workbench-smoke-plan-"));
 const results: { name: string; ok: boolean; detail: string }[] = [];
 const record = (name: string, ok: boolean, detail = "") => {
@@ -62,7 +64,7 @@ async function run(provider: Provider) {
   const label = provider === "codex" ? "Codex" : "Claude";
   const cwd = mkdtempSync(join(tmpdir(), `wb-plan-${provider}-`));
   const work = await api<Work>("POST", "/api/works", { title: `${label} 계획 먼저`, cwd });
-  const session = await api<Session>("POST", `/api/works/${work.id}/sessions`, { provider, purpose: "계획", access: "auto" });
+  const session = await api<Session>("POST", `/api/works/${work.id}/sessions`, { provider, purpose: "계획", access });
   const file = join(cwd, "hello.txt");
   try {
     await api("POST", `/api/sessions/${session.id}/messages`, { requestId: randomUUID(), text: TASK, plan: true });
@@ -78,7 +80,7 @@ async function run(provider: Provider) {
     await waitFor("file", async () => existsSync(file) && (await sessionOf(session.id)).status === "idle");
     const text = readFileSync(file, "utf8").trim();
     const lastError = (await sessionOf(session.id)).lastError;
-    record(`[${label}] '계획대로 진행' 뒤에 일을 함(세션 권한 '자동')`, text === "hi", lastError ? `오류: ${lastError}` : `hello.txt: ${JSON.stringify(text)}`);
+    record(`[${label}] '계획대로 진행' 뒤에 일을 함(세션 권한 ${access === "full" ? "'전체 접근'" : "'자동'"})`, text === "hi", lastError ? `오류: ${lastError}` : `hello.txt: ${JSON.stringify(text)}`);
   } catch (error) {
     record(`[${label}] 계획 먼저`, false, error instanceof Error ? error.message : String(error));
     await api("POST", `/api/sessions/${session.id}/interrupt`).catch(() => undefined);
