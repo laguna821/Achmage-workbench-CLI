@@ -9,3 +9,7 @@ apps/desktop/src-tauri/binaries/
 
 # IeumOffice source checkout (scripts/fetch-ieum.sh)
 vendor/ieumoffice/
+
+# Built from vendor/ieumoffice by apps/office/native/build-xlsx-wasm.sh
+apps/office/native/xlsx-wasm/engine/
+apps/office/src/sheets/xlsx-engine.wasm

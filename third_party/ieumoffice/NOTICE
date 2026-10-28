@@ -29,9 +29,15 @@ editing code, written for Electron's main process, runs in the page's worker
 with Workbench's platform modules (apps/office/src/platform) wherever it asks
 Electron or Node for something. apps/office/src/slides/fonts.ts stands in for
 apps/slides/src/main/fonts.ts and takes its Carlito line-metric rule and
-script fallback from it. The built pages carry THIRD-PARTY-NOTICES.txt with
-this NOTICE, the LICENSE, the font licences and the licences of the npm
-packages bundled into them.
+script fallback from it. The spreadsheet editor runs the same way (screen and
+preload in the page, editing code in the page's worker); its Rust xlsx engine
+(apps/sheets/native/xlsx-engine), which IeumOffice runs as a separate program,
+is compiled to WebAssembly from a copy with apps/office/native/xlsx-wasm/
+wasi.patch applied (a temporary folder and sheet indexing without threads),
+and apps/office/native/xlsx-wasm/src/lib.rs adapts the engine's request
+dispatch from its src/main.rs. The built pages carry THIRD-PARTY-NOTICES.txt
+with this NOTICE, the LICENSE, the font licences, the licences of the npm
+packages bundled into them and of the Rust crates compiled into the engine.
 
 The `ieumoffice` command line tool that Workbench can call is not part of
 this repository; it ships inside an installed IeumOffice application.

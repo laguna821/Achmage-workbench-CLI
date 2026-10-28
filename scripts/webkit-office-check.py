@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Check the in-app Word or PowerPoint editor in WebKitGTK (the engine the Linux app runs on), off screen.
+"""Check the in-app Word, PowerPoint or Excel editor in WebKitGTK (the engine the Linux app runs on), off screen.
 
-Starts a gateway on a temporary data folder with a small .docx or .pptx, loads the real Workbench
-UI, opens the document (the editor page comes from the editors' own origin), edits it (Word: types
-into the text; PowerPoint: double-clicks the title on the slide canvas and types), saves with
-Ctrl+S and reads revision 2 back from the gateway. The editor page is on another origin, so a
-helper script injected into every frame reports its state to the window and performs the input.
-Also reports which newer CSS features the editors rely on are available. Writes a snapshot PNG.
-Usage: python3 scripts/webkit-office-check.py [docs|slides] [out-dir]
+Starts a gateway on a temporary data folder with a small .docx, .pptx or .xlsx, loads the real
+Workbench UI in a window made active (as the app's window is in use), opens the document (the
+editor page comes from the editors' own origin), edits it (Word: types into the text; PowerPoint:
+double-clicks the title on the slide canvas and types; Excel: moves to a cell with the arrow keys
+and types), saves with Ctrl+S and reads revision 2 back from the gateway. The editor page is on
+another origin, so a helper script injected into every frame reports its state to the window and
+performs the input. Also reports which newer CSS features the editors rely on are available.
+Writes a snapshot PNG.
+Usage: python3 scripts/webkit-office-check.py [docs|slides|sheets] [out-dir]
 """
 import io
 import json
@@ -29,11 +31,12 @@ os.environ.setdefault("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
 import gi
 
 gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
 gi.require_version("WebKit2", "4.1")
-from gi.repository import GLib, Gtk, WebKit2  # noqa: E402
+from gi.repository import Gdk, GLib, Gtk, WebKit2  # noqa: E402
 
 args = [a for a in sys.argv[1:]]
-kind = args.pop(0) if args and args[0] in ("docs", "slides") else "docs"
+kind = args.pop(0) if args and args[0] in ("docs", "slides", "sheets") else "docs"
 out_dir = args[0] if args else os.path.join(tempfile.gettempdir(), f"wb-webkit-{kind}")
 os.makedirs(out_dir, exist_ok=True)
 repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -67,9 +70,21 @@ def pptx_text(data):
 if kind == "docs":
     DOC_NAME, FIRST_TEXT, TYPED, read_text = "계획.docx", "질문에서 시작하는 글쓰기", " — 웹킷에서 고침", docx_text
     make_docx(os.path.join(cwd, DOC_NAME), ["가을 특강 계획", "질문에서 시작하는 글쓰기", "10월 28일 오후 3시"])
-else:
+elif kind == "slides":
     DOC_NAME, FIRST_TEXT, TYPED, read_text = "표지.pptx", "질문에서", " 웹킷", pptx_text
     shutil.copyfile(os.path.join(repo, "scripts", "fixtures", "cover.pptx"), os.path.join(cwd, DOC_NAME))
+else:
+    def xlsx_cell(data):
+        """B2's value, with the total next to it (D2: its formula and recalculated value)."""
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            sheet = z.read("xl/worksheets/sheet1.xml").decode("utf-8")
+        def cell(ref, tag):
+            m = re.search(r'<c r="%s"[^>]*?>(.*?)</c>' % ref, sheet, re.S)
+            v = re.search(r"<%s[^>]*>([^<]*)</%s>" % (tag, tag), m.group(1)) if m else None
+            return v.group(1) if v else ""
+        return f"{cell('B2', 'v')} (D2 {cell('D2', 'f')}={cell('D2', 'v')})"
+    DOC_NAME, FIRST_TEXT, TYPED, read_text = "비품.xlsx", "통합 문서를 모두 로드했습니다", "77", xlsx_cell
+    shutil.copyfile(os.path.join(repo, "scripts", "fixtures", "supplies.xlsx"), os.path.join(cwd, DOC_NAME))
 
 host = subprocess.Popen(
     ["node", os.environ.get("HOST_ENTRY", "apps/host/src/main.ts")],
@@ -139,11 +154,38 @@ FRAME_SCRIPT = """
     const stage = mainStage();
     return stage ? stage.find("Text").map((node) => node.text()).join("") : null;
   };
+  window.__typed = "";
   setInterval(() => {
     const editor = document.querySelector(".ProseMirror");
-    window.parent.postMessage({ __test: "state", text: editor ? editor.textContent : slideText(), support, href: location.href, ready: document.readyState,
+    const sheets = location.pathname.endsWith("/sheets.html");
+    const text = editor ? editor.textContent : sheets ? (document.body ? document.body.innerText : "") + " " + window.__typed : slideText();
+    window.parent.postMessage({ __test: "state", text, support, href: location.href, ready: document.readyState,
       body: document.body ? document.body.innerHTML.length : -1, errors: window.__errors || [] }, "*");
   }, 400);
+  /**
+   * Excel: from the first cell, move to a cell with the arrow keys, type, and press Enter — keys the
+   * editor takes in its own cell input, which has focus while the sheet is in use. The editor
+   * (Univer) finishes setting up its screen just after the load message; a person does not type in
+   * that first second either.
+   */
+  const typeIntoCell = async (ref, text) => {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const input = document.getElementById("__editor___INTERNAL_EDITOR__DOCS_NORMAL");
+    if (!input) return false;
+    if (document.activeElement !== input) input.focus();
+    const key = (key, keyCode) =>
+      document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key, code: key, keyCode, which: keyCode, bubbles: true, cancelable: true }));
+    const [, letters, digits] = /^([A-Z]+)([0-9]+)$/.exec(ref);
+    const column = [...letters].reduce((sum, letter) => sum * 26 + letter.charCodeAt(0) - 64, 0);
+    for (let row = 1; row < Number(digits); row += 1) key("ArrowDown", 40);
+    for (let col = 1; col < column; col += 1) key("ArrowRight", 39);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    document.execCommand("insertText", false, text);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    key("Enter", 13);
+    window.__typed = text;
+    return true;
+  };
   const typeInto = (element, text) => {
     element.focus();
     const range = document.createRange();
@@ -181,6 +223,7 @@ FRAME_SCRIPT = """
     if (data.__test === "type") {
       const editor = document.querySelector(".ProseMirror");
       if (editor) typeInto(editor.querySelector("p"), data.text);
+      else if (location.pathname.endsWith("/sheets.html")) void typeIntoCell("B2", data.text);
       else
         void doubleClickWord(data.word).then(async () => {
           for (let tries = 0; tries < 40 && !document.querySelector("[contenteditable]"); tries += 1) await new Promise((resolve) => setTimeout(resolve, 100));
@@ -210,6 +253,14 @@ view.get_settings().set_hardware_acceleration_policy(WebKit2.HardwareAcceleratio
 view.get_settings().set_enable_write_console_messages_to_stdout(True)
 window.add(view)
 window.show_all()
+# An offscreen window is never the active window, so the page would never have focus (and WebKit
+# keeps focus out of an unfocused page). Make it active, as the app's window is while in use.
+view.grab_focus()
+focus_in = Gdk.Event.new(Gdk.EventType.FOCUS_CHANGE)
+focus_in.focus_change.window = window.get_window()
+focus_in.focus_change.send_event = 1
+focus_in.focus_change.in_ = 1
+window.event(focus_in)
 view.load_uri(f"{url}/?token={token}")
 loop = GLib.MainLoop()
 
@@ -244,7 +295,8 @@ def snapshot_then_quit():
 
 def post_to_frame(message):
     evaluate(
-        "const frame = document.querySelector('iframe.office-frame'); frame && frame.contentWindow.postMessage(%s, '*'); return { sent: Boolean(frame) };" % json.dumps(message),
+        # Focus goes into the editor first, as a click into it would.
+        "const frame = document.querySelector('iframe.office-frame'); if (frame) { frame.focus(); frame.contentWindow.postMessage(%s, '*'); } return { sent: Boolean(frame) };" % json.dumps(message),
         lambda v: None,
     )
 
@@ -275,7 +327,7 @@ def tick():
             state["phase"] = "open"
             state["deadline"] = time.time() + 90
         elif state["phase"] == "open" and FIRST_TEXT in text and "r1 저장됨" in status:
-            check(f"WebKitGTK에서 {'워드' if kind == 'docs' else 'PPT'} 편집기 열림(다른 출처)", True, f"{time.time() - state['started']:.1f}s")
+            check(f"WebKitGTK에서 {dict(docs='워드', slides='PPT', sheets='엑셀')[kind]} 편집기 열림(다른 출처)", True, f"{time.time() - state['started']:.1f}s")
             state["support"] = frame.get("support")
             state["phase"] = "type"
             state["deadline"] = time.time() + 30
@@ -287,7 +339,9 @@ def tick():
             post_to_frame({"__test": "save"})
         elif state["phase"] == "save" and "r2 저장됨" in status:
             saved = read_text(request("GET", f"/api/artifacts/{artifact['id']}/raw?revision=2", raw=True))
-            check("Ctrl+S → r2, 파일에 반영", TYPED.strip() in saved, saved.split("\n")[0])
+            # Excel: the typed cell, and the total over it still a formula with its new result (77 × 1200).
+            expected = TYPED.strip() in saved if kind != "sheets" else saved == "77 (D2 B2*C2=92400)"
+            check("Ctrl+S → r2, 파일에 반영", expected, saved.split("\n")[0])
             support = state.get("support") or {}
             print("INFO CSS 지원: " + json.dumps(support), flush=True)
             state["phase"] = "done"

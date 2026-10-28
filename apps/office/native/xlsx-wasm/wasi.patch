@@ -1,0 +1,57 @@
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -161,7 +161,12 @@
+     session_id: &str,
+     cancelled: &AtomicBool,
+ ) -> Result<CacheDirectory, SidecarError> {
+-    let path = std::env::temp_dir().join(format!("genspark-ai-excel-{session_id}"));
++    // Workbench (WASI): there is no temporary folder; the worker's own /tmp holds the cache.
++    let path = if cfg!(target_os = "wasi") {
++        PathBuf::from("/tmp").join(format!("genspark-ai-excel-{session_id}"))
++    } else {
++        std::env::temp_dir().join(format!("genspark-ai-excel-{session_id}"))
++    };
+     let directory = CacheDirectory::create(path)?;
+     if cancelled.load(Ordering::Acquire) {
+         return Err(SidecarError::cancelled());
+@@ -677,6 +682,13 @@
+         if runtime.handle.is_some() {
+             return Ok(());
+         }
++        // Workbench (WASI): no threads; a sheet is indexed once, inline, on its first use.
++        if cfg!(target_os = "wasi") {
++            let (lock, _) = &*runtime.state;
++            if lock.lock().map(|index| index.complete || index.error.is_some()).unwrap_or(false) {
++                return Ok(());
++            }
++        }
+         let path = self.path.clone();
+         let worksheet_path = runtime.worksheet_path.clone();
+         let cache_directory = self.cache_directory.clone();
+@@ -694,9 +706,7 @@
+                 .collect(),
+         );
+         let cancelled = Arc::clone(&self.cancelled);
+-        let handle = thread::Builder::new()
+-            .name(format!("xlsx-index-{sheet_index}"))
+-            .spawn(move || {
++        let index_task = move || {
+                 let result = index_worksheet(
+                     &path,
+                     &worksheet_path,
+@@ -717,7 +727,14 @@
+                     }
+                     condition.notify_all();
+                 }
+-            })?;
++        };
++        if cfg!(target_os = "wasi") {
++            index_task();
++            return Ok(());
++        }
++        let handle = thread::Builder::new()
++            .name(format!("xlsx-index-{sheet_index}"))
++            .spawn(index_task)?;
+         runtime.handle = Some(handle);
+         Ok(())
+     }

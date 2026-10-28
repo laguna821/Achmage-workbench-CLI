@@ -326,6 +326,14 @@ export const screen = Object.assign(new EventEmitter(), {
   getCursorScreenPoint: () => ({ x: 0, y: 0 }),
 });
 export const desktopCapturer = { getSources: () => resolved([]) };
+export const systemPreferences = {
+  getUserDefault: () => undefined,
+  getAccentColor: () => "0a84ffff",
+  isDarkMode: () => false,
+  getMediaAccessStatus: () => "denied",
+  askForMediaAccess: () => resolved(false),
+  on: noop,
+};
 export const nativeTheme = Object.assign(new EventEmitter(), { shouldUseDarkColors: false, themeSource: "system" });
 export const net = { fetch: (...args: Parameters<typeof fetch>) => fetch(...args), isOnline: () => true };
 export const protocol = { registerSchemesAsPrivileged: noop, handle: noop, unhandle: noop, isProtocolHandled: () => false };
@@ -448,6 +456,7 @@ export default {
   shell,
   screen,
   desktopCapturer,
+  systemPreferences,
   nativeTheme,
   net,
   protocol,

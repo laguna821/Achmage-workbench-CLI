@@ -10,12 +10,15 @@ import { collectModules, thirdPartyNotices } from "./notices.ts";
 //   slides — the screen and preload run in the page; the editing code written for Electron's main
 //            process runs in the page's worker, with Workbench's platform (src/platform) wherever
 //            it asks Electron or Node for something (files, windows, dialogs, fonts).
+//   sheets — the same, and its Rust xlsx engine runs in the worker as WebAssembly
+//            (native/build-xlsx-wasm.sh) instead of a separate process.
 // The editors resolve their own packages from the vendored node_modules.
 const ieum = fileURLToPath(new URL("../../vendor/ieumoffice", import.meta.url));
 if (!existsSync(`${ieum}/node_modules`)) throw new Error("vendor/ieumoffice is missing: run scripts/fetch-ieum.sh first");
 const packages = `${ieum}/packages`;
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 const slidesMain = `${ieum}/apps/slides/src/main/`;
+const sheetsMain = `${ieum}/apps/sheets/src/main/`;
 
 /** Workspace packages read from source (as IeumOffice's own builds do); subpaths before bare names. */
 const aliases: Alias[] = [
@@ -72,8 +75,14 @@ function workbenchPlatform(): Plugin {
     "node:child_process": platform("node.ts"),
     "node:stream/promises": platform("node.ts"),
     "node:url": platform("node.ts"),
+    "node:http": platform("unused.ts"),
     undici: platform("unused.ts"),
+    "@genoffice/ai-provider": platform("unused.ts"),
+    "@genoffice/ai-provider/codex-app-server": platform("unused.ts"),
     "@genoffice/ai-provider/subscription": platform("unused.ts"),
+    "@genoffice/ai-search": platform("unused.ts"),
+    "@genoffice/file-parse": platform("unused.ts"),
+    "@genoffice/ui/ai-subscription-login-window": platform("unused.ts"),
     "@genoffice/project-store": platform("unused.ts"),
     "@genoffice/pipelines/slides": platform("unused.ts"),
     "@genoffice/font-metrics": platform("unused.ts"),
@@ -105,12 +114,22 @@ function workbenchPlatform(): Plugin {
       ].map((name) => [`./${name}`, platform("unused.ts")]),
     ),
   };
+  // And of the sheets main code: its AI runs, PDF export, template fonts, legacy .xls conversion,
+  // and the engine process client (the engine runs here as WebAssembly).
+  const SHEETS_LOCAL: Record<string, string> = {
+    "./ai-run": platform("unused.ts"),
+    "./pdf-export": platform("unused.ts"),
+    "./template-fonts": platform("unused.ts"),
+    "./legacy-import": platform("unused.ts"),
+    "./xlsx-sidecar-client": here("./src/sheets/engine-client.ts"),
+  };
   return {
     name: "workbench-platform",
     enforce: "pre",
     resolveId(source, importer) {
       if (BY_NAME[source]) return BY_NAME[source];
       if (importer?.startsWith(slidesMain) && LOCAL[source]) return LOCAL[source];
+      if (importer?.startsWith(sheetsMain) && SHEETS_LOCAL[source]) return SHEETS_LOCAL[source];
       // The engine's streamed save writes through Node streams; the main code gets one that writes the working copy.
       if (importer?.startsWith(slidesMain) && source === `${packages}/pptx-engine/src/index.ts`) return here("./src/slides/engine.ts");
       return null;
@@ -161,6 +180,38 @@ export default defineConfig({
         title: "Fonts bundled with the editors",
         files: [`${ieum}/apps/docs/src/renderer/fonts/README.md`, `${packages}/ui/src/fonts/README.md`, `${ieum}/apps/docs/src/renderer/fonts/LICENSE-OFL.txt`],
       },
+    ], [
+      {
+        title: "Rust crates in the spreadsheet engine (assets/xlsx-engine-*.wasm)",
+        manifest: here("./native/xlsx-wasm/Cargo.toml"),
+        target: "wasm32-wasip1",
+        about: [
+          "The spreadsheet engine is IeumOffice's xlsx engine (apps/sheets/native/xlsx-engine, Apache-2.0,",
+          "above) built for WebAssembly by Workbench (apps/office/native/xlsx-wasm, with wasi.patch).",
+        ],
+        alsoContains: [
+          "Rust standard library — MIT OR Apache-2.0 — https://github.com/rust-lang/rust",
+          "wasi-libc — Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT — https://github.com/WebAssembly/wasi-libc",
+          "  Its parts from musl (https://musl.libc.org):",
+          "",
+          "  Copyright © 2005-2020 Rich Felker, et al.",
+          "",
+          "  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and",
+          "  associated documentation files (the \"Software\"), to deal in the Software without restriction,",
+          "  including without limitation the rights to use, copy, modify, merge, publish, distribute,",
+          "  sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is",
+          "  furnished to do so, subject to the following conditions:",
+          "",
+          "  The above copyright notice and this permission notice shall be included in all copies or",
+          "  substantial portions of the Software.",
+          "",
+          "  THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT",
+          "  NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND",
+          "  NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES",
+          "  OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN",
+          "  CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
+        ],
+      },
     ]),
   ],
   resolve: { alias: aliases },
@@ -177,6 +228,6 @@ export default defineConfig({
     target: "es2022",
     sourcemap: false,
     chunkSizeWarningLimit: 6000,
-    rollupOptions: { input: { docs: here("./docs.html"), slides: here("./slides.html") } },
+    rollupOptions: { input: { docs: here("./docs.html"), slides: here("./slides.html"), sheets: here("./sheets.html") } },
   },
 });

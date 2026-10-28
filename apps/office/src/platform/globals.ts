@@ -14,6 +14,7 @@ scope.process ??= {
   versions: { node: "24.0.0" },
   version: "v24.0.0",
   pid: 1,
+  resourcesPath: "/resources",
   cwd: () => "/",
   nextTick: (fn: (...args: unknown[]) => void, ...args: unknown[]) => queueMicrotask(() => fn(...args)),
   on: () => undefined,

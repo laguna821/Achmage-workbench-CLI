@@ -18,8 +18,8 @@ export type OfficeConflict = { code: string; message: string };
 export type OfficeStatus = { dirty: boolean; revision: number | null; conflict: OfficeConflict | null };
 
 /**
- * A Word or PowerPoint document in the central area, edited with IeumOffice's editor built into
- * Workbench (apps/office: /office/docs.html, /office/slides.html, on the editors' own origin).
+ * A Word, PowerPoint or Excel document in the central area, edited with IeumOffice's editor built
+ * into Workbench (apps/office: /office/docs.html, slides.html, sheets.html, on the editors' own origin).
  * Saves become revisions; a save over a revision made elsewhere is refused and reported, and a
  * revision made elsewhere is opened when nothing here is unsaved.
  */
@@ -196,7 +196,7 @@ export const OfficeEditor = forwardRef<
       style={hidden ? { display: "none" } : undefined}
       allow="fullscreen; clipboard-read; clipboard-write"
       src={`${opened.current.url}?a=${artifact.id}&g=${generation}&host=${encodeURIComponent(location.origin)}`}
-      title={`${artifact.format === "pptx" ? "PPT" : "워드"} 편집기 · ${artifact.name}`}
+      title={`${artifact.format === "pptx" ? "PPT" : artifact.format === "xlsx" ? "엑셀" : "워드"} 편집기 · ${artifact.name}`}
     />
   );
 });

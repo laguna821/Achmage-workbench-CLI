@@ -82,8 +82,8 @@ export default function DocumentView({
   const [conflict, setConflict] = useState<Conflict>(null);
   const hangul = artifact?.format === "hwpx" || artifact?.format === "hwp";
   const office = artifact ? isOfficeFormat(artifact.format) : false;
-  // Word and PowerPoint documents are edited in the central area with the editors built from IeumOffice.
-  const wordEditor = artifact?.format === "docx" || artifact?.format === "pptx";
+  // Word, PowerPoint and Excel documents are edited in the central area with the editors built from IeumOffice.
+  const wordEditor = artifact?.format === "docx" || artifact?.format === "pptx" || artifact?.format === "xlsx";
   const [mode, setMode] = useState<"edit" | "preview" | "split" | "render" | "source" | "pages">(
     artifact?.format === "html" ? "render" : wordEditor ? "edit" : hangul || office ? "pages" : "edit",
   );

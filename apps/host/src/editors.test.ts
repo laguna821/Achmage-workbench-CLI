@@ -45,10 +45,10 @@ function setup() {
 }
 
 describe("office editor pages", () => {
-  it("edit Word and PowerPoint documents, for now", () => {
+  it("edit Word, PowerPoint and Excel documents", () => {
     expect(officeEditorKind("docx")).toBe("docs");
     expect(officeEditorKind("pptx")).toBe("slides");
-    expect(officeEditorKind("xlsx")).toBeNull();
+    expect(officeEditorKind("xlsx")).toBe("sheets");
     expect(officeEditorKind("markdown")).toBeNull();
   });
 

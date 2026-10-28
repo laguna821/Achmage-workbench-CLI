@@ -2,9 +2,12 @@
 // document's working copy (Workbench keeps the revisions) and the few files the code writes for
 // itself (recent lists, settings). Nothing here reaches the user's disk.
 import { Buffer } from "buffer";
+import { EventEmitter } from "./emitter.ts";
 
 type Encoding = "utf8" | "utf-8" | "ascii" | "latin1" | "binary" | "base64" | "base64url" | "hex" | "ucs2" | "utf16le";
-import { posix } from "path-browserify";
+import path from "path-browserify";
+
+const { posix } = path;
 
 type Data = Uint8Array;
 const files = new Map<string, { data: Data; mtimeMs: number }>();
@@ -34,7 +37,7 @@ function ensureDir(path: string) {
   for (const entry of missing) dirs.add(entry);
 }
 
-/** For Workbench's own code: put and take a file. */
+/** For Workbench's own code (and the WASI layer, wasi.ts): files and folders by absolute path. */
 export const vfs = {
   write(path: string, data: Data) {
     const at = norm(path);
@@ -43,6 +46,31 @@ export const vfs = {
   },
   read(path: string): Data | null {
     return files.get(norm(path))?.data ?? null;
+  },
+  stat(path: string): { directory: boolean; size: number; mtimeMs: number } | null {
+    const at = norm(path);
+    const file = files.get(at);
+    if (file) return { directory: false, size: file.data.length, mtimeMs: file.mtimeMs };
+    return dirs.has(at) ? { directory: true, size: 0, mtimeMs: 0 } : null;
+  },
+  list(path: string): { name: string; directory: boolean }[] {
+    const at = norm(path);
+    const prefix = at === "/" ? "/" : `${at}/`;
+    const out: { name: string; directory: boolean }[] = [];
+    for (const file of files.keys()) if (file.startsWith(prefix) && !file.slice(prefix.length).includes("/")) out.push({ name: file.slice(prefix.length), directory: false });
+    for (const dir of dirs) if (dir !== at && dir.startsWith(prefix) && !dir.slice(prefix.length).includes("/")) out.push({ name: dir.slice(prefix.length), directory: true });
+    return out;
+  },
+  mkdir(path: string) {
+    mkdirSync(path);
+  },
+  remove(path: string) {
+    return files.delete(norm(path));
+  },
+  removeDir(path: string) {
+    const at = norm(path);
+    if (vfs.list(at).length) return false;
+    return dirs.delete(at);
   },
 };
 
@@ -140,14 +168,83 @@ export function realpathSync(path: string) {
 export function accessSync(path: string) {
   if (!existsSync(path)) throw failure("ENOENT", "access", norm(path));
 }
-export function openSync(): never {
-  throw failure("ENOTSUP", "open", "(file descriptors)");
+// ── file descriptors (the sync API: open, read, write, close) ──
+type Descriptor = { path: string; data: Uint8Array; size: number; pos: number; writable: boolean; append: boolean };
+const descriptors = new Map<number, Descriptor>();
+let nextDescriptor = 100;
+
+export function openSync(path: string, flags: string | number = "r") {
+  const at = norm(path);
+  const mode = typeof flags === "number" ? "r" : flags;
+  const exists = files.has(at);
+  if (mode.includes("x") && exists) throw failure("EEXIST", "open", at);
+  if (mode.startsWith("r") && !exists) throw failure("ENOENT", "open", at);
+  if (dirs.has(at)) throw failure("EISDIR", "open", at);
+  const truncate = mode.startsWith("w");
+  const data = truncate || !exists ? new Uint8Array() : files.get(at)!.data.slice();
+  if (!exists || truncate) vfs.write(at, data);
+  const fd = nextDescriptor++;
+  descriptors.set(fd, { path: at, data, size: data.length, pos: 0, writable: mode !== "r", append: mode.startsWith("a") });
+  return fd;
+}
+function descriptor(fd: number) {
+  const entry = descriptors.get(fd);
+  if (!entry) throw failure("EBADF", "fd", String(fd));
+  return entry;
+}
+export function writeSync(fd: number, data: Uint8Array | string, offset?: number, length?: number, position?: number | null) {
+  const entry = descriptor(fd);
+  if (!entry.writable) throw failure("EBADF", "write", entry.path);
+  const chunk = typeof data === "string" ? Buffer.from(data) : data.subarray(offset ?? 0, (offset ?? 0) + (length ?? data.length - (offset ?? 0)));
+  const at = entry.append ? entry.size : (position ?? entry.pos);
+  if (at + chunk.length > entry.data.length) {
+    const grown = new Uint8Array(Math.max(at + chunk.length, entry.data.length * 2, 4096));
+    grown.set(entry.data.subarray(0, entry.size));
+    entry.data = grown;
+  }
+  entry.data.set(chunk, at);
+  entry.size = Math.max(entry.size, at + chunk.length);
+  if (position === undefined || position === null) entry.pos = at + chunk.length;
+  return chunk.length;
+}
+export function readSync(fd: number, buffer: Uint8Array, offset = 0, length = buffer.length - offset, position: number | null = null) {
+  const entry = descriptor(fd);
+  const from = position ?? entry.pos;
+  const chunk = entry.data.subarray(from, Math.min(entry.size, from + length));
+  buffer.set(chunk, offset);
+  if (position === null) entry.pos = from + chunk.length;
+  return chunk.length;
+}
+export function fsyncSync(fd: number) {
+  const entry = descriptor(fd);
+  if (entry.writable) vfs.write(entry.path, entry.data.slice(0, entry.size));
+}
+export function closeSync(fd: number) {
+  fsyncSync(fd);
+  descriptors.delete(fd);
+}
+export function fstatSync(fd: number) {
+  const entry = descriptor(fd);
+  return new Stats(entry.size, Date.now(), false);
+}
+
+/** A whole file as one chunk (for hashing code that reads files as streams). */
+export function createReadStream(path: string) {
+  const stream = new EventEmitter();
+  queueMicrotask(() => {
+    try {
+      const data = readFileSync(path);
+      stream.emit("data", data);
+      stream.emit("end");
+      stream.emit("close");
+    } catch (error) {
+      stream.emit("error", error);
+    }
+  });
+  return Object.assign(stream, { destroy: () => stream, pipe: <T>(target: T) => target });
 }
 export function createWriteStream(): never {
   throw failure("ENOTSUP", "createWriteStream", "(streams)");
-}
-export function createReadStream(): never {
-  throw failure("ENOTSUP", "createReadStream", "(streams)");
 }
 export function watch() {
   return { close: () => undefined, on: () => undefined };
@@ -191,6 +288,11 @@ export const promises = {
   copyFile: async (from: string, to: string) => copyFileSync(from, to),
   access: async (path: string) => accessSync(path),
   realpath: async (path: string) => realpathSync(path),
+  mkdtemp: async (prefix: string) => {
+    const path = `${prefix}${Math.random().toString(36).slice(2, 8)}`;
+    mkdirSync(path);
+    return norm(path);
+  },
   open: async (path: string) => {
     const file = files.get(norm(path));
     if (!file) throw failure("ENOENT", "open", norm(path));
@@ -214,6 +316,11 @@ export default {
   realpathSync,
   accessSync,
   openSync,
+  writeSync,
+  readSync,
+  fsyncSync,
+  closeSync,
+  fstatSync,
   createWriteStream,
   createReadStream,
   watch,

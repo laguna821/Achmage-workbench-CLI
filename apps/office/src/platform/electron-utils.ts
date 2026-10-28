@@ -1,7 +1,9 @@
 // @genoffice/electron-utils as the slides editor code uses it inside Workbench: there are no file
 // dialogs, menus, crash-recovery folders or other windows here (Workbench keeps revisions and the
 // page keeps unsaved edits), so these answer "nothing to do"; file writes go to fs.ts.
-import { posix } from "path-browserify";
+import path from "path-browserify";
+
+const { posix } = path;
 import { renameSync, writeFileSync } from "./fs.ts";
 
 const noop = () => {};
@@ -14,6 +16,8 @@ export const configuredDefaultSaveDir = () => "/documents";
 export const appMenuLabels = () => ({});
 export const contextMenuLabels = () => ({});
 export const helpMenuTemplate = () => [];
+export const viewMenuTemplate = () => [];
+export const windowMenuTemplate = () => [];
 export const toggleDevToolsItem = () => ({ visible: false });
 export const installContextMenu = noop;
 export const installNavigationGuard = noop;
@@ -44,6 +48,11 @@ export const showSaveDialogWithMemory = async () => ({ canceled: true, filePath:
 export async function atomicWriteFile(path: string, data: Uint8Array | string) {
   writeFileSync(path, data);
 }
+export function writeJsonAtomic(path: string, value: unknown) {
+  writeFileSync(path, JSON.stringify(value));
+}
+/** Workbench saves what the editor holds; there is no other unsaved copy of a file to wait for. */
+export const assertFileSaved = async () => undefined;
 export async function atomicWriteVia(path: string, write: (temp: string) => Promise<void>) {
   const temp = `${path}.saving`;
   await write(temp);
@@ -56,8 +65,27 @@ export const readBodyCapped = async () => {
   throw new Error("Workbench에서는 웹 이미지를 직접 받지 않습니다.");
 };
 
+// ── app lifetime, printing ───────────────────────────────────────────────
+let shuttingDown = false;
+export const isAppShuttingDown = () => shuttingDown;
+export const markAppShuttingDown = () => {
+  shuttingDown = true;
+};
+export const resetAppShuttingDown = () => {
+  shuttingDown = false;
+};
+/** Ends an operation when its page goes away; returns the unsubscribe. */
+export const abortOnDestroyed = () => () => undefined;
+export const buildPrintableHtml = () => "";
+export const printHtmlToPdf = async () => {
+  throw new Error("PDF 내보내기는 Workbench에서 아직 지원하지 않습니다.");
+};
+
 // ── crash recovery: the editor page keeps unsaved edits itself ───────────
 type Identity = { kind: string; filePath?: string; untitledId?: string; ext?: string };
+export const recoveryFolderName = (kind: string) => `${kind}-recovery`;
+export const resumeDiscardedCopies = () => undefined;
+export const unprotectableNoticeText = () => "";
 export const isUntitledIdentity = (identity: Identity) => typeof identity?.untitledId === "string";
 export const newUntitledRecoveryId = () => crypto.randomUUID();
 export const registerRecoveryEditor = noop;
@@ -75,6 +103,8 @@ export function createRecoveryStore() {
     markCopyLoaded: noop,
     setCopyState: noop,
     adoptUntitledCopy: () => null,
+    listCopies: () => [],
+    openPlan: () => ({ action: "original" as const }),
   };
 }
 
@@ -87,6 +117,10 @@ export class OfficeDecryptError extends Error {
   }
 }
 export const isEncryptedOoxml = () => false;
+export const isEncryptedOfficeFile = () => false;
+/** An OLE compound file (a legacy .xls/.doc, or a password-protected package). */
+export const isCfbHeader = (bytes: Uint8Array) =>
+  bytes.length >= 8 && bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0 && bytes[4] === 0xa1 && bytes[5] === 0xb1 && bytes[6] === 0x1a && bytes[7] === 0xe1;
 export const decryptOfficeFile = async () => {
   throw new OfficeDecryptError("unsupported", "암호가 걸린 문서는 Workbench에서 아직 열지 못합니다.");
 };

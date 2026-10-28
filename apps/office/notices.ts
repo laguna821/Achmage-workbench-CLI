@@ -1,12 +1,16 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Plugin } from "vite";
 
 // THIRD-PARTY-NOTICES.txt next to the office pages: IeumOffice's LICENSE and NOTICE (Apache-2.0
-// asks that they travel with the work), the licences of the fonts and data it bundles, and the
-// licence of every npm package that has code in the built pages (taken from the bundle itself).
+// asks that they travel with the work), the licences of the fonts and data it bundles, the
+// licence of every npm package that has code in the built pages (taken from the bundle itself),
+// and the Rust crates compiled into the pages' WebAssembly modules (from cargo's resolution).
 
 type Section = { title: string; files: string[] };
+/** A WebAssembly module built with cargo: its crates are listed with their licence texts. */
+type RustModule = { title: string; manifest: string; target: string; about: string[]; alsoContains: string[] };
 
 /** The package directory a bundled module belongs to (…/node_modules/<name> or …/node_modules/@scope/<name>). */
 function packageRoot(id: string) {
@@ -22,6 +26,63 @@ function packageRoot(id: string) {
 function licenceText(root: string) {
   const file = readdirSync(root).find((name) => /^(licen[cs]e|copying)(\.|-|$)/i.test(name));
   return file ? readFileSync(join(root, file), "utf8").trim() : null;
+}
+
+/** Licence files of a crate (dual-licensed crates carry one per licence; the MIT one has the copyright line). */
+const LICENCE_FILE = /^(licen[cs]e|copying|copyright)([-._].*)?$/i;
+function crateLicences(dir: string, sys: boolean) {
+  const files = (at: string, pattern: RegExp) =>
+    readdirSync(at, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && pattern.test(entry.name) && !/\.(rs|toml|json|sh|py)$/i.test(entry.name))
+      .map((entry) => join(at, entry.name))
+      .sort();
+  const found = files(dir, LICENCE_FILE);
+  // A -sys crate builds a bundled C library: its licence sits in the library's own folder
+  // (LICENSE files only — zstd's COPYING is the GPL alternative it is not used under here).
+  if (sys) for (const entry of readdirSync(dir, { withFileTypes: true })) if (entry.isDirectory()) found.push(...files(join(dir, entry.name), /^licen[cs]e([-._].*)?$/i));
+  return [...new Set(found.map((file) => readFileSync(file, "utf8").trim()).filter(Boolean))];
+}
+
+type CargoPackage = { id: string; name: string; version: string; license?: string | null; repository?: string | null; manifest_path: string; targets: { kind: string[] }[] };
+type CargoMetadata = { packages: CargoPackage[]; resolve: { root: string; nodes: { id: string; deps: { pkg: string; dep_kinds: { kind: string | null }[] }[] }[] } };
+
+/** The crates linked into the module: normal dependencies for its target (proc macros only run while building). */
+function linkedCrates(module: RustModule) {
+  const metadata = JSON.parse(
+    execFileSync("cargo", ["metadata", "--format-version", "1", "--filter-platform", module.target, "--locked", "--offline", "--manifest-path", module.manifest], {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
+    }),
+  ) as CargoMetadata;
+  const packages = new Map(metadata.packages.map((entry) => [entry.id, entry]));
+  const nodes = new Map(metadata.resolve.nodes.map((node) => [node.id, node]));
+  const linked = new Set<string>();
+  const queue = [metadata.resolve.root];
+  while (queue.length > 0) {
+    const id = queue.pop()!;
+    const entry = packages.get(id);
+    if (linked.has(id) || !entry || entry.targets.some((target) => target.kind.includes("proc-macro"))) continue;
+    linked.add(id);
+    for (const dep of nodes.get(id)?.deps ?? []) if (dep.dep_kinds.some((kind) => kind.kind === null)) queue.push(dep.pkg);
+  }
+  linked.delete(metadata.resolve.root);
+  return [...linked].map((id) => packages.get(id)!).sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version));
+}
+
+function rustSection(module: RustModule, rule: string) {
+  const crates = linkedCrates(module);
+  const parts = ["", rule, `${module.title} (${crates.length} crates)`, rule, "", ...module.about, ""];
+  for (const crate of crates) parts.push(`  ${crate.name} ${crate.version} — ${crate.license ?? "see the repository"} — ${crate.repository ?? `https://crates.io/crates/${crate.name}`}`);
+  parts.push("", "Also in the module:", ...module.alsoContains.map((line) => `  ${line}`));
+  // Each licence text once, with the crates that carry it.
+  const texts = new Map<string, string[]>();
+  for (const crate of crates) {
+    for (const text of crateLicences(dirname(crate.manifest_path), crate.name.endsWith("-sys"))) texts.set(text, [...(texts.get(text) ?? []), `${crate.name} ${crate.version}`]);
+  }
+  parts.push("", "-".repeat(78), "Licence texts of the crates above (each once)", "-".repeat(78));
+  for (const [text, owners] of texts) parts.push("", `[${owners.join(", ")}]`, text);
+  return parts;
 }
 
 /** Packages found in bundles built so far (workers are built before the pages that start them). */
@@ -51,7 +112,7 @@ export function collectModules(): Plugin {
   };
 }
 
-export function thirdPartyNotices(sections: Section[]): Plugin {
+export function thirdPartyNotices(sections: Section[], modules: RustModule[] = []): Plugin {
   return {
     name: "workbench-third-party-notices",
     apply: "build",
@@ -74,6 +135,7 @@ export function thirdPartyNotices(sections: Section[]): Plugin {
       for (const entry of sorted) {
         parts.push("", `${entry.name}@${entry.version} — ${entry.license}`, "-".repeat(78), entry.text ?? "(no licence file in the package; licence as declared above)");
       }
+      for (const module of modules) parts.push(...rustSection(module, rule));
       this.emitFile({ type: "asset", fileName: "THIRD-PARTY-NOTICES.txt", source: `${parts.join("\n")}\n` });
     },
   };

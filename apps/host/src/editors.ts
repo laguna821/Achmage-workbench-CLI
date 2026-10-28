@@ -15,7 +15,7 @@ import { MIME, readBody, sendJson, serveStatic } from "./http.ts";
 
 /** Which editor page edits a format, if any. */
 export function officeEditorKind(format: DocFormat): OfficeEditorKind | null {
-  return format === "docx" ? "docs" : format === "pptx" ? "slides" : null;
+  return format === "docx" ? "docs" : format === "pptx" ? "slides" : format === "xlsx" ? "sheets" : null;
 }
 
 /** Tokens that open one document each, for as long as the gateway runs (the most recent ones). */
