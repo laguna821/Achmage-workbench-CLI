@@ -92,7 +92,7 @@ describe("office editor pages", () => {
     const origin = await listen(createEditorsServer(manager.documents, grants, web));
     const token = grants.issue(plan.id);
     const put = (expected: number, body: Buffer) =>
-      fetch(`${origin}/api/artifacts/${plan.id}/bytes?expectedRevision=${expected}`, { method: "PUT", headers: { authorization: `Bearer ${token}` }, body });
+      fetch(`${origin}/api/artifacts/${plan.id}/bytes?expectedRevision=${expected}`, { method: "PUT", headers: { authorization: `Bearer ${token}` }, body: new Uint8Array(body) });
 
     const saved = await put(1, pkg("r2"));
     expect(saved.status).toBe(200);
