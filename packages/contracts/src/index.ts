@@ -1,6 +1,8 @@
 // Shared contract between the host gateway and the UI.
 // Provider-specific protocols stay inside the host adapters; the UI only sees these shapes.
 
+import type { ImageItem, RequestDraw } from "./imagegen.ts";
+
 export const PROTOCOL_VERSION = 1;
 
 export type Provider = "claude" | "codex";
@@ -276,6 +278,8 @@ export type TranscriptItem =
       steered?: boolean;
       /** Steered in, then the turn was stopped before the engine took it: it waits again above the input. */
       undelivered?: boolean;
+      /** A request for a picture ("그림"): the engine drew it with its image tool. */
+      draw?: RequestDraw | null;
     }
   | { kind: "assistant"; id: string; text: string; streaming: boolean; at: number }
   | { kind: "reasoning"; id: string; text: string; at: number }
@@ -307,6 +311,8 @@ export type TranscriptItem =
   | { kind: "artifact"; id: string; artifactId: string; revision: number; change: "created" | "modified"; at: number }
   | { kind: "proposal"; id: string; proposalId: string; at: number }
   | { kind: "handoff"; id: string; handoffId: string; at: number }
+  /** A picture drawn with GPT Image through Codex (imagegen.ts). */
+  | ImageItem
   | {
       kind: "turnEnd";
       id: string;
@@ -364,6 +370,8 @@ export type ProviderStatus = {
   models: ModelOption[];
   /** The access the engine's own settings give (Claude permissions.defaultMode, Codex approval/sandbox). */
   configuredAccess: AccessMode | null;
+  /** Whether the engine can draw pictures (Codex's image tool), as it reports; absent or null when unknown. */
+  imageGeneration?: boolean | null;
   error: string | null;
 };
 
@@ -661,3 +669,4 @@ export function applyItemEvent(items: TranscriptItem[], event: WorkbenchEvent): 
   }
   return items;
 }
+export * from "./imagegen.ts";

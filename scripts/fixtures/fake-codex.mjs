@@ -7,9 +7,16 @@
 // What a request says decides what the fake does:
 //   "길게"  a long answer (about 8 s)      "명령"  runs `ls -la` (approval first unless "never")
 //   "압축"  compacts the conversation      "느리게" steered requests wait until line 100
+//   a drawing turn (Workbench's "그림" instructions): the image tool draws a small PNG — landscape,
+//     portrait or square as the prompt asks — saved under a temp folder like Codex's own home, and
+//     sent as base64 too; "한도" in the prompt fails with the image usage limit, "천천히" takes 2.5 s
 //   anything else: a short answer
 
+import { mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createInterface } from "node:readline";
+import { crc32, deflateSync } from "node:zlib";
 
 if (process.argv.includes("--version")) {
   console.log("codex-cli 0.0.0-fake");
@@ -48,6 +55,57 @@ const usage = (thread, last) => ({
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** A real PNG: a filled circle of `rgb` on white. */
+function png(width, height, [r, g, b]) {
+  const chunk = (type, data) => {
+    const body = Buffer.concat([Buffer.from(type, "latin1"), data]);
+    const out = Buffer.alloc(8 + body.length);
+    out.writeUInt32BE(data.length, 0);
+    body.copy(out, 4);
+    out.writeUInt32BE(crc32(body) >>> 0, 4 + body.length);
+    return out;
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8; // bit depth
+  header[9] = 2; // RGB
+  const radius = Math.min(width, height) * 0.35;
+  const rows = [];
+  for (let y = 0; y < height; y += 1) {
+    const row = Buffer.alloc(1 + width * 3);
+    for (let x = 0; x < width; x += 1) {
+      const inside = (x - width / 2) ** 2 + (y - height / 2) ** 2 < radius ** 2;
+      row[1 + x * 3] = inside ? r : 255;
+      row[2 + x * 3] = inside ? g : 255;
+      row[3 + x * 3] = inside ? b : 255;
+    }
+    rows.push(row);
+  }
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", header), chunk("IDAT", deflateSync(Buffer.concat(rows))), chunk("IEND", Buffer.alloc(0))]);
+}
+
+/** Codex's image tool: draws once, saves the file under its own folder, and reports the item. */
+async function draw(threadId, thread, turnId, text) {
+  const prompt = text.split("프롬프트:\n")[1] ?? text;
+  const [width, height] = /Landscape/.test(prompt) ? [120, 80] : /Portrait/.test(prompt) ? [80, 120] : [96, 96];
+  const item = { type: "imageGeneration", id: `ig_${++counter}`, status: "in_progress", revisedPrompt: null, result: "", failure: null };
+  notify("item/started", { threadId, turnId, item });
+  await sleep(prompt.includes("천천히") ? 2500 : 400);
+  if (thread.turn?.interrupted) return null;
+  if (prompt.includes("한도")) {
+    notify("item/completed", { threadId, turnId, item: { ...item, status: "failed", failure: { type: "usageLimitExceeded", limitId: "images", resetsAt: now() + 3600 } } });
+    return "이미지 생성 한도를 다 써서 그리지 못했습니다.";
+  }
+  const data = png(width, height, [47, 111, 235]);
+  const folder = join(tmpdir(), "fake-codex-images", threadId);
+  mkdirSync(folder, { recursive: true });
+  const savedPath = join(folder, `${item.id}.png`);
+  writeFileSync(savedPath, data);
+  notify("item/completed", { threadId, turnId, item: { ...item, status: "completed", revisedPrompt: `A simple picture. ${prompt.split("\n")[0].slice(0, 160)}`, result: data.toString("base64"), savedPath } });
+  return "흰 바탕에 파란 원 하나를 그렸습니다.";
+}
+
 function ask(method, params) {
   const id = serverRequestId++;
   send({ id, method, params });
@@ -85,6 +143,22 @@ async function runTurn(threadId, thread, turnId, text) {
   notify("item/completed", { threadId, turnId, item: request });
   if (text.includes("압축")) {
     await compact(threadId, thread, turnId);
+  }
+  if (text.startsWith("[Achmage Workbench · 그림]")) {
+    // A drawing: the picture, then one sentence about it.
+    const said = await draw(threadId, thread, turnId, text);
+    const id = `msg_${++counter}`;
+    if (said) {
+      notify("item/started", { threadId, turnId, item: { type: "agentMessage", id, text: "", phase: null, memoryCitation: null } });
+      notify("item/agentMessage/delta", { threadId, turnId, itemId: id, delta: said });
+      notify("item/completed", { threadId, turnId, item: { type: "agentMessage", id, text: said, phase: null, memoryCitation: null } });
+    }
+    const interrupted = Boolean(thread.turn?.interrupted);
+    thread.used += 3_000;
+    notify("thread/tokenUsage/updated", { threadId, turnId, tokenUsage: usage(thread, 60) });
+    thread.turn = null;
+    notify("turn/completed", { threadId, turn: { id: turnId, items: [], itemsView: "full", status: interrupted ? "interrupted" : "completed", error: null, startedAt: null, completedAt: now(), durationMs: Date.now() - started } });
+    return;
   }
   if (text.includes("MCP")) {
     // An MCP tool that needs approval: Codex asks through an elicitation it marks as such.
@@ -164,6 +238,8 @@ async function handle(message) {
       return reply({ rateLimits: rateLimits(), rateLimitsByLimitId: null });
     case "model/list":
       return reply({ data: [{ id: "fake-model", model: "fake-model", displayName: "Fake", description: "가짜 모델", hidden: false, supportedReasoningEfforts: [{ reasoningEffort: "medium", description: "" }], defaultReasoningEffort: "medium", isDefault: true }], nextCursor: null });
+    case "modelProvider/capabilities/read":
+      return reply({ namespaceTools: true, imageGeneration: true, webSearch: true });
     case "config/read":
       return reply({ config: { model: null, model_reasoning_effort: null, approval_policy: "on-request", sandbox_mode: "workspace-write", model_auto_compact_token_limit: 232_000 }, origins: {} });
     case "thread/start": {

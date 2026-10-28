@@ -9,6 +9,7 @@ import { HttpError, type SessionManager } from "./sessions.ts";
 import { DESIGN_PRESETS, systemFonts, type DesignPreset } from "./design.ts";
 import { parseCreate } from "./create.ts";
 import { officeEditorKind, type EditorGrants } from "./editors.ts";
+import { parseDrawRequest } from "./imagegen.ts";
 
 export const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -288,6 +289,19 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
             access: isAccessMode(body.access) ? body.access : null,
           }),
         );
+      }
+      // "그림": draw with GPT Image through Codex, the drawings, templates, and picture files of a work.
+      if (parts[0] === "sessions" && parts[1] && parts[2] === "images" && method === "POST" && parts.length === 3) {
+        return sendJson(res, 202, await manager.images.draw(parts[1], parseDrawRequest(await readJson(req))));
+      }
+      if (parts[0] === "images" && parts[1] && method === "GET" && parts.length === 2) return sendJson(res, 200, manager.images.get(decodeURIComponent(parts[1])));
+      if (path === "/api/image-templates" && method === "GET") return sendJson(res, 200, manager.images.templates());
+      if (path === "/api/image-templates" && method === "PUT") return sendJson(res, 200, manager.images.saveTemplates(await readJson(req)));
+      if (parts[0] === "works" && parts[1] && parts[2] === "image" && method === "GET") {
+        const file = manager.images.file(parts[1], url.searchParams.get("path") ?? "");
+        res.writeHead(200, { "content-type": file.type, "cache-control": "no-cache", "x-content-type-options": "nosniff" });
+        createReadStream(file.path).pipe(res);
+        return;
       }
       if (parts[0] === "sessions" && parts[1]) {
         const sessionId = parts[1];

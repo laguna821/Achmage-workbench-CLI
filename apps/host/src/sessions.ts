@@ -34,6 +34,7 @@ import {
   type Handoff,
   type HandoffRequest,
   type Proposal,
+  type RequestDraw,
   type UpdateSessionRequest,
   type Work,
 } from "@workbench/contracts";
@@ -50,6 +51,7 @@ import { findHop, openInHop, openWithDesktop } from "./hop.ts";
 import { createGuide, reservePath } from "./create.ts";
 import { copyMcp, copySkill, integrations, type EngineBinaries } from "./integrations.ts";
 import { exportFileName, sessionMarkdown } from "./export-md.ts";
+import { ImageGen } from "./imagegen.ts";
 
 export { HttpError };
 
@@ -98,6 +100,12 @@ export type ManagerOptions = {
 };
 
 const DEFAULT_PURPOSE = /^대화 \d+$/;
+
+/**
+ * A request sent with more than its text: a drawing gives the engine its own instructions, marks
+ * the request as "그림", and does not make the drawing session the one its work shows.
+ */
+export type SendOptions = { engineText?: string; draw?: RequestDraw; activate?: boolean };
 
 type PendingCreate = { requestId: string; path: string; target: CreateTarget; sources: { artifactId: string; revision: number }[] };
 
@@ -198,6 +206,8 @@ export class SessionManager {
   /** The new document each running request asked for. */
   private readonly creating = new Map<string, PendingCreate>();
   readonly documents: Documents;
+  /** "그림": pictures drawn with GPT Image through Codex (imagegen.ts). */
+  readonly images: ImageGen;
   private readonly store: Store;
   private readonly bus: EventBus;
   private readonly options: ManagerOptions;
@@ -207,6 +217,19 @@ export class SessionManager {
     this.bus = bus;
     this.options = options;
     this.documents = new Documents(store, bus, options.dataDir ?? dirname(options.managedWorksDir), options.kordoc ?? null, options.ieum ?? null);
+    this.images = new ImageGen(
+      {
+        session: (id) => this.sessions.get(id),
+        work: (id) => this.works.get(id),
+        sessions: () => [...this.sessions.values()],
+        createSession: (workId, request) => this.createSession(workId, request, false),
+        send: (sessionId, requestId, text, from, options) => this.send(sessionId, requestId, text, [], from, null, "auto", { ...options, activate: false }),
+        upsertItem: (sessionId, item) => this.sink.upsertItem(sessionId, item),
+        getMeta: (key) => store.getMeta(key),
+        setMeta: (key, value) => store.setMeta(key, value),
+      },
+      options.dataDir ?? dirname(options.managedWorksDir),
+    );
     for (const handoff of store.handoffs()) this.handoffs.set(handoff.id, handoff);
     // Rows written by older versions may lack newer fields.
     for (const folder of store.folders()) this.folders.set(folder.id, { ...folder, archivedAt: folder.archivedAt ?? null });
@@ -240,6 +263,7 @@ export class SessionManager {
       });
     this.backfillOverview();
     this.recoverAfterRestart();
+    this.images.recover();
   }
 
   /** Sessions from before auto titles and previews: derive both once from their stored transcript. */
@@ -308,6 +332,7 @@ export class SessionManager {
       }
       this.requeueDropped(sessionId, lost);
     },
+    image: (sessionId, image) => this.images.onEngineImage(sessionId, image),
   };
 
   /** Requests steered into a session's turns since its last own turn started (by request id). */
@@ -726,7 +751,8 @@ export class SessionManager {
     return this.requireWork(workId);
   }
 
-  createSession(workId: string, request: CreateSessionRequest): Session {
+  /** `activate`: the new session becomes the one its work shows (not for a drawing session made on the side). */
+  createSession(workId: string, request: CreateSessionRequest, activate = true): Session {
     const work = this.requireWork(workId);
     if (request.provider !== "claude" && request.provider !== "codex") {
       throw new HttpError(400, "invalid_provider", "지원하지 않는 엔진입니다.");
@@ -762,7 +788,7 @@ export class SessionManager {
       updatedAt: now,
     };
     this.saveSession(session);
-    this.saveWork({ ...work, activeSessionId: session.id, updatedAt: now });
+    this.saveWork({ ...work, activeSessionId: activate ? session.id : work.activeSessionId, updatedAt: now });
     return session;
   }
 
@@ -847,6 +873,7 @@ export class SessionManager {
     from: { sessionId: string; label: string } | null = null,
     create: CreateTarget | null = null,
     mode: "auto" | "steer" | "queue" = "auto",
+    options: SendOptions = {},
   ): Promise<SendResult> {
     const session = this.requireSession(sessionId);
     const trimmed = text.trim();
@@ -862,6 +889,8 @@ export class SessionManager {
     }
     if (session.queued.some((entry) => entry.id === requestId)) return { duplicate: true, delivery: "queued" };
     const work = this.requireWork(session.workId);
+    // A drawing is a turn of its own: never steered in or kept for later without its instructions.
+    if (options.engineText && session.status !== "idle" && session.status !== "error") throw new HttpError(409, "session_busy", "이 세션이 일하는 중입니다. 끝난 뒤에 다시 보내 주세요.");
     if (session.status !== "idle" && session.status !== "error") {
       // The engine is working. A request steers into the running turn (the engine takes it at its
       // next step) when it can; otherwise it waits and becomes the next turn ("끝나면 보내기").
@@ -917,7 +946,7 @@ export class SessionManager {
       this.creating.set(sessionId, created);
     }
     this.store.saveRequest(requestId, sessionId, fingerprint);
-    const engineText = this.engineText(trimmed, prepared, work.cwd, from, created);
+    const engineText = options.engineText ?? this.engineText(trimmed, prepared, work.cwd, from, created);
     this.sink.upsertItem(sessionId, {
       kind: "user",
       id: `user:${requestId}`,
@@ -926,10 +955,11 @@ export class SessionManager {
       ...(refs.length ? { refs: refs.map((ref) => this.documents.summary(ref)) } : {}),
       ...(from ? { from } : {}),
       ...(created ? { create: { format: created.target.format, name: basename(created.path), path: created.path } } : {}),
+      ...(options.draw ? { draw: options.draw } : {}),
     });
     this.turnStarted.set(sessionId, Date.now());
     this.sink.updateSession(sessionId, { status: "starting", activity: "응답 준비 중", lastError: null });
-    this.saveWork({ ...work, activeSessionId: sessionId, updatedAt: Date.now() });
+    this.saveWork({ ...work, activeSessionId: options.activate === false ? work.activeSessionId : sessionId, updatedAt: Date.now() });
     try {
       const current = this.requireSession(sessionId);
       await this.adapter(session.provider).send({ ...current, access: this.accessOf(current) }, work, engineText, requestId);
@@ -1141,6 +1171,7 @@ export class SessionManager {
       });
     }
     this.finishCreate(sessionId, status);
+    this.images.afterTurn(sessionId, status);
     this.trackChangedFiles(sessionId);
     for (const running of this.documents.runningProposals(sessionId)) {
       const proposal = status === "completed" ? this.documents.finishProposal(running.id) : this.documents.discardProposal(running.id);

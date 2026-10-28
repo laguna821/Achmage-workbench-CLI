@@ -8,6 +8,19 @@ import type {
   Work,
 } from "@workbench/contracts";
 
+/**
+ * A picture an engine drew (Codex's image tool): where the engine saved it and/or the image data
+ * (base64), the prompt as the image model rewrote it, and why it failed when it did.
+ */
+export type EngineImage = {
+  id: string;
+  status: string;
+  result: string | null;
+  savedPath: string | null;
+  revisedPrompt: string | null;
+  failure: { type: string; resetsAt?: number | null } | null;
+};
+
 /** Callbacks an adapter uses to report what its engine is doing. */
 export type AdapterSink = {
   upsertItem(sessionId: string, item: TranscriptItem): void;
@@ -16,6 +29,8 @@ export type AdapterSink = {
   providerStatus(status: ProviderStatus): void;
   /** Requests steered into a turn (by their turn keys) that the engine dropped when the turn stopped. */
   steerDropped(sessionId: string, turnKeys: string[]): void;
+  /** The engine finished drawing a picture (or failed to). */
+  image?(sessionId: string, image: EngineImage): void;
 };
 
 export type LoginStart = { url: string | null; message: string };

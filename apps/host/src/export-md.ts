@@ -158,6 +158,7 @@ export function sessionMarkdown(context: ExportContext): string {
           notes.push(`붙인 문서: ${item.refs.map((ref) => `${ref.name} r${ref.revision}(${ref.mode === "edit" ? "고치기" : "읽기"})${ref.selection ? ` — ${ref.selection}` : ""}`).join(", ")}`);
         }
         if (item.create) notes.push(`새 문서 요청: ${item.create.name}`);
+        if (item.draw) notes.push(`그림 요청${item.draw.template ? ` · ${item.draw.template}` : ""}`);
         if (notes.length) lines.push("", ...notes.map((note) => `> ${note}`));
         break;
       }
@@ -208,6 +209,12 @@ export function sessionMarkdown(context: ExportContext): string {
         const target = context.sessionLabel(handoff.targetSessionId) ?? "다른 세션";
         lines.push("", `> 다른 세션에 보냄: ${target} — ${handoff.status === "answered" ? "답 받음" : handoff.status === "failed" ? "실패" : "답 기다리는 중"}`);
         if (handoff.reply && handoff.targetSessionId !== session.id) lines.push(">", ...tidyMessage(handoff.reply).split("\n").map((line) => (line ? `> ${line}` : ">")));
+        break;
+      }
+      case "image": {
+        const { image } = item;
+        const result = image.status === "done" ? `\`${image.relPath ?? image.path ?? ""}\`` : image.status === "failed" ? `그리지 못함${image.error ? ` — ${image.error}` : ""}` : "그리는 중";
+        lines.push("", `> 그림: ${headingOf(image.brief)}${image.template ? ` (${image.template})` : ""} → ${result}`);
         break;
       }
       case "turnEnd":
