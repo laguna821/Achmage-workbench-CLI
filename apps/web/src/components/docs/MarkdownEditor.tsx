@@ -5,6 +5,7 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirro
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { markdown } from "@codemirror/lang-markdown";
 import { tags } from "@lezer/highlight";
+import { imagePaste, type ImageHandling } from "./image-paste.ts";
 
 export type EditorSelection = { from: number; to: number; text: string; label: string; pageId?: string; objectIds?: string[] } | null;
 
@@ -55,17 +56,20 @@ export function MarkdownEditor({
   onChange,
   onSelection,
   onBlur,
+  images,
 }: {
   value: string;
   readOnly?: boolean;
   onChange: (text: string) => void;
   onSelection: (selection: EditorSelection) => void;
   onBlur?: () => void;
+  /** What pasted or dropped pictures become (image-paste.ts); none: the editor's own paste. */
+  images?: ImageHandling | null;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
-  const callbacks = useRef({ onChange, onSelection, onBlur });
-  callbacks.current = { onChange, onSelection, onBlur };
+  const callbacks = useRef({ onChange, onSelection, onBlur, images });
+  callbacks.current = { onChange, onSelection, onBlur, images };
 
   useEffect(() => {
     if (!host.current) return;
@@ -82,6 +86,7 @@ export function MarkdownEditor({
           theme,
           placeholderExtension("내용을 입력하세요"),
           EditorState.readOnly.of(Boolean(readOnly)),
+          imagePaste(() => callbacks.current.images ?? null),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) callbacks.current.onChange(update.state.doc.toString());
             if (update.selectionSet || update.docChanged) callbacks.current.onSelection(selectionOf(update.state));

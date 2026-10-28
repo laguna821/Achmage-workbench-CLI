@@ -22,6 +22,7 @@ import { Switcher, UnseenContext } from "./components/SessionCards.tsx";
 import { DocContext, type DocActions } from "./components/DocCards.tsx";
 import { DocTabs } from "./components/DocTabs.tsx";
 import { IntegrationsSheet } from "./components/IntegrationsSheet.tsx";
+import { ImageUploadRow, ImageUploadSheet } from "./components/ImageUploadSheet.tsx";
 import { Onboarding } from "./components/Onboarding.tsx";
 import { SessionPicker } from "./components/SessionPicker.tsx";
 
@@ -158,6 +159,7 @@ export function App() {
       .finally(() => setViewNow(resolved));
   }, []);
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
+  const [imageUploadOpen, setImageUploadOpen] = useState(false);
   const [onboardingAgain, setOnboardingAgain] = useState(false);
   // Documents opened in each work, shown as tabs and offered first by "@".
   const [openDocs, setOpenDocs] = useState<Record<string, string[]>>(() => readJson(OPEN_DOCS_KEY, {}));
@@ -1038,6 +1040,15 @@ export function App() {
                 onBrandMotion={(next) => savePrefs({ brandMotion: next })}
                 notifications={prefs.notify !== false}
                 onNotifications={(next) => savePrefs({ notify: next })}
+                imageUpload={
+                  <ImageUploadRow
+                    api={api}
+                    onOpen={() => {
+                      closeMenu();
+                      setImageUploadOpen(true);
+                    }}
+                  />
+                }
               />
             </Popover>
           </div>
@@ -1132,6 +1143,7 @@ export function App() {
       </div>
 
       {integrationsOpen && api ? <IntegrationsSheet api={api} onClose={() => setIntegrationsOpen(false)} onToast={setToast} /> : null}
+      {imageUploadOpen && api ? <ImageUploadSheet api={api} onClose={() => setImageUploadOpen(false)} onToast={setToast} /> : null}
       {state.ready && api && (prefs.onboarding !== "done" || onboardingAgain) ? (
         <Onboarding
           providers={state.providers}

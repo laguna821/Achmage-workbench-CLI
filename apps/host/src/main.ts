@@ -11,6 +11,7 @@ import { Store } from "./store.ts";
 import { Kordoc } from "./kordoc.ts";
 import { IeumOffice } from "./ieumoffice.ts";
 import { createEditorsServer, EditorGrants } from "./editors.ts";
+import { DocImages } from "./doc-images.ts";
 
 // Local gateway: owns engine processes and state, serves the UI and an HTTP + SSE API on
 // 127.0.0.1 only. Prints one `WORKBENCH_READY {json}` line once it accepts connections.
@@ -75,12 +76,15 @@ manager.registerAdapter(
 const grants = new EditorGrants();
 const editors = createEditorsServer(manager.documents, grants, webDir && existsSync(webDir) ? webDir : null);
 let editorsOrigin: string | null = null;
+// Images pasted into Markdown documents: the user's R2 bucket, or the work folder (doc-images.ts).
+const docImages = new DocImages({ dataDir, documents: manager.documents, workCwd: (workId) => manager.workCwd(workId), endpoint: env.WORKBENCH_R2_ENDPOINT ?? null });
 const server = createHttpServer(manager, bus, {
   token,
   webDir: webDir && existsSync(webDir) ? webDir : null,
   // UI errors stay on this machine, next to the state database.
   onClientLog: (message) => appendFileSync(join(dataDir, "client.log"), `${new Date().toISOString()} ${message}\n`),
   editors: { grants, origin: () => editorsOrigin },
+  docImages,
 });
 
 /** Listen on the port used last time, or on any free one when it is taken; remember the one bound. */

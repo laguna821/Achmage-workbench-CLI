@@ -1451,6 +1451,11 @@ export class SessionManager {
     this.bus.publish({ type: "session.upserted", session });
   }
 
+  /** The folder a work runs in (images pasted into its documents are kept under it). */
+  workCwd(workId: string) {
+    return this.requireWork(workId).cwd;
+  }
+
   private requireWork(workId: string) {
     const work = this.works.get(workId);
     if (!work) throw new HttpError(404, "work_not_found", "작업을 찾지 못했습니다.");

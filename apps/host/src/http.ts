@@ -9,6 +9,7 @@ import { HttpError, type SessionManager } from "./sessions.ts";
 import { DESIGN_PRESETS, systemFonts, type DesignPreset } from "./design.ts";
 import { parseCreate } from "./create.ts";
 import { officeEditorKind, type EditorGrants } from "./editors.ts";
+import { routeDocImages, type DocImages } from "./doc-images.ts";
 
 export const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -92,6 +93,8 @@ export type HttpOptions = {
   onClientLog?: (message: string) => void;
   /** The office editors' own origin (editors.ts) and the grants that let one page open one document. */
   editors?: { grants: EditorGrants; origin: () => string | null };
+  /** Images pasted into Markdown documents (doc-images.ts). */
+  docImages?: DocImages;
 };
 
 function sameToken(given: string | null, expected: string) {
@@ -376,6 +379,8 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const body = await readJson(req);
         return sendJson(res, 200, manager.openFile(parts[1], String(body.path ?? "")));
       }
+      // Pictures in documents: R2 settings, pasted images, Markdown preview pictures.
+      if (options.docImages && (await routeDocImages(options.docImages, req, res, url))) return;
       if (parts[0] === "artifacts" && parts[1]) {
         const documents = manager.documents;
         const artifactId = parts[1];

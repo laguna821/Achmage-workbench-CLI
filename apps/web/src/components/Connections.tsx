@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { PROVIDER_LABEL, type DocumentTools, type Provider, type ProviderStatus } from "@workbench/contracts";
 import { usageText } from "../format.ts";
 import type { ThemePref } from "../theme.ts";
@@ -62,6 +63,7 @@ export function Connections({
   onBrandMotion,
   notifications,
   onNotifications,
+  imageUpload,
 }: {
   tools: DocumentTools | null;
   onIntegrations: () => void;
@@ -86,6 +88,8 @@ export function Connections({
   /** OS notifications while the window is behind or in the tray. */
   notifications: boolean;
   onNotifications: (next: boolean) => void;
+  /** Where pictures pasted into documents go (ImageUploadSheet.tsx). */
+  imageUpload?: ReactNode;
 }) {
   return (
     <div className="connections">
@@ -160,6 +164,7 @@ export function Connections({
       <button type="button" className="text-button" onClick={onOnboarding}>
         처음 안내 다시 보기
       </button>
+      {imageUpload}
       <div className="menu-divider" />
       <div className="menu-label">화면</div>
       <div className="segmented theme-choice" role="radiogroup" aria-label="화면">
