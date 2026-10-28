@@ -581,6 +581,9 @@ export function App() {
             </button>
             <Popover open={menuOpen} onClose={closeMenu} align="right">
               <Connections
+                tools={state.tools}
+                onInstallIeum={() => void api.installIeumOffice().catch(fail)}
+                onRefreshTools={() => void api.refreshTools().catch(fail)}
                 providers={state.providers}
                 connected={state.connected}
                 hostLabel={state.hostLabel}

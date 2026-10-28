@@ -36,7 +36,17 @@ const MIME: Record<string, string> = {
   ".m4a": "audio/mp4",
   ".weba": "audio/webm",
   ".wasm": "application/wasm",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".xlsm": "application/vnd.ms-excel.sheet.macroEnabled.12",
 };
+
+/** A rendered page image; revisions never change, so it can be kept. */
+function sendPng(res: ServerResponse, file: string) {
+  res.writeHead(200, { "content-type": "image/png", "cache-control": "private, max-age=86400", "x-content-type-options": "nosniff" });
+  createReadStream(file).pipe(res);
+}
 
 /**
  * HTML previews run as an opaque origin (CSP sandbox): scripts work, but the page cannot read the
@@ -259,6 +269,9 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         return sendJson(res, 201, manager.createDesign(parts[1], String(body.name ?? ""), preset, typeof body.text === "string" ? body.text : null));
       }
       if (method === "GET" && path === "/api/fonts") return sendJson(res, 200, { fonts: systemFonts() });
+      if (method === "GET" && path === "/api/tools") return sendJson(res, 200, manager.tools());
+      if (method === "POST" && path === "/api/tools/refresh") return sendJson(res, 200, await manager.refreshTools());
+      if (method === "POST" && path === "/api/tools/ieumoffice/install") return sendJson(res, 202, manager.installIeumOffice());
       if (parts[0] === "works" && parts[1] && parts[2] === "artifacts" && method === "POST") {
         const body = await readJson(req);
         return sendJson(res, 200, manager.openFile(parts[1], String(body.path ?? "")));
@@ -301,6 +314,12 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           createReadStream(file).pipe(res);
           return;
         }
+        if (method === "GET" && parts[2] === "office-pages") return sendJson(res, 200, await documents.officePages(artifactId, revision));
+        if (method === "GET" && parts[2] === "office-page") {
+          const artifact = documents.get(artifactId);
+          return sendPng(res, await documents.officePagePath(artifactId, revision ?? artifact.revision, Number(url.searchParams.get("page") ?? 1)));
+        }
+        if (method === "POST" && parts[2] === "open-external") return sendJson(res, 200, manager.openExternal(artifactId));
         if (method === "POST" && parts[2] === "adopt-disk") return sendJson(res, 200, documents.adoptDisk(artifactId));
         if (method === "POST" && parts[2] === "revert") {
           const body = await readJson(req);
@@ -322,6 +341,14 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const documents = manager.documents;
         if (method === "GET" && parts.length === 2) return sendJson(res, 200, await documents.proposalTexts(parts[1]));
         if (method === "POST" && parts[2] === "apply") return sendJson(res, 200, await documents.applyProposal(parts[1]));
+        if (method === "GET" && (parts[2] === "office-pages" || parts[2] === "office-page")) {
+          const side = url.searchParams.get("side") === "base" ? "base" : "proposed";
+          const pages = await documents.proposalPages(parts[1], side);
+          if (parts[2] === "office-pages") return sendJson(res, 200, { side, pages: pages.map(({ page, width, height }) => ({ page, width, height })) });
+          const found = pages.find((entry) => entry.page === Number(url.searchParams.get("page") ?? 1));
+          if (!found) throw new HttpError(404, "page_not_found", "그 쪽이 없습니다.");
+          return sendPng(res, found.file);
+        }
         if (method === "POST" && parts[2] === "discard") return sendJson(res, 200, documents.discardProposal(parts[1]));
       }
       if (method === "POST" && path === "/api/handoffs") {

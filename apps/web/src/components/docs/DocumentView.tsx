@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { FORMAT_LABEL, PROVIDER_LABEL, type Artifact, type ArtifactRevision, type DocRef, type Proposal, type Session, type Work } from "@workbench/contracts";
+import { FORMAT_LABEL, PROVIDER_LABEL, isOfficeFormat, type Artifact, type ArtifactRevision, type DocRef, type Proposal, type Session, type Work } from "@workbench/contracts";
 import { ApiRequestError, type Api } from "../../api.ts";
 import { accentStyle, useAppearance } from "../../appearance.ts";
 import { ago } from "../../format.ts";
@@ -19,6 +19,8 @@ import { HwpxView } from "./HwpxView.tsx";
 import { DesignView, type DesignHandle, type DesignStatus } from "./DesignView.tsx";
 import { DesignCompare } from "./DesignCompare.tsx";
 import type { ThumbSource } from "../../design.ts";
+import { OfficeView } from "./OfficeView.tsx";
+import { OfficeCompare } from "./OfficeCompare.tsx";
 
 /** Save operations only; "unsaved" is derived from the text, never stored (no stale overwrite). */
 type SaveState = "idle" | "saving" | "failed" | "conflict";
@@ -67,8 +69,9 @@ export default function DocumentView({
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [conflict, setConflict] = useState<Conflict>(null);
   const hangul = artifact?.format === "hwpx" || artifact?.format === "hwp";
+  const office = artifact ? isOfficeFormat(artifact.format) : false;
   const [mode, setMode] = useState<"edit" | "preview" | "split" | "render" | "source" | "pages">(
-    artifact?.format === "html" ? "render" : hangul ? "pages" : "edit",
+    artifact?.format === "html" ? "render" : hangul || office ? "pages" : "edit",
   );
   const [selection, setSelection] = useState<EditorSelection>(null);
   const [compare, setCompare] = useState<{
@@ -80,6 +83,8 @@ export default function DocumentView({
     proposal?: Proposal;
     /** Designs are compared as pictures, page by page. */
     design?: { before: ThumbSource; after: ThumbSource };
+    /** Word/PowerPoint/Excel proposals: rendered pages, or the text difference. */
+    office?: boolean;
   } | null>(null);
   const design = artifact?.format === "design";
   const designRef = useRef<DesignHandle>(null);
@@ -199,9 +204,10 @@ export default function DocumentView({
         design: design
           ? { before: { artifactId: proposal.artifactId, proposalId: proposal.id, side: "base" }, after: { artifactId: proposal.artifactId, proposalId: proposal.id, side: "proposed" } }
           : undefined,
+        office,
       });
     },
-    [api, state.sessions, design],
+    [api, state.sessions, design, office],
   );
 
   useEffect(() => {
@@ -301,7 +307,9 @@ export default function DocumentView({
             </span>
           </div>
           {compare.proposal?.problem ? <div className="proposal-warning">디자인 파일이 올바르지 않아 적용할 수 없습니다: {compare.proposal.problem}</div> : null}
-          {compare.design ? (
+          {compare.office && compare.proposal ? (
+            <OfficeCompare proposalId={compare.proposal.id} before={compare.before} after={compare.after} beforeLabel={compare.beforeLabel} afterLabel={compare.afterLabel} />
+          ) : compare.design ? (
             <DesignCompare
               before={compare.design.before}
               after={compare.design.after}
@@ -341,7 +349,9 @@ export default function DocumentView({
               이 판으로 되돌리기(새 판으로)
             </button>
           </div>
-          {design ? (
+          {office ? (
+            <OfficeView api={api} artifact={artifact} revision={viewing.revision} mode={mode === "pages" ? "pages" : "text"} />
+          ) : design ? (
             <DesignView
               artifact={artifact}
               revision={viewing.revision}
@@ -357,6 +367,7 @@ export default function DocumentView({
         </div>
       );
     }
+    if (office) return <OfficeView api={api} artifact={artifact} revision={artifact.revision} mode={mode === "pages" ? "pages" : "text"} />;
     if (design) {
       return (
         <DesignView
@@ -468,6 +479,14 @@ export default function DocumentView({
                 </button>
               ))}
             </div>
+          ) : office ? (
+            <div className="segmented small" role="radiogroup" aria-label="보기">
+              {(["pages", "preview"] as const).map((value) => (
+                <button key={value} type="button" role="radio" aria-checked={mode === value} className={mode === value ? "active" : ""} onClick={() => setMode(value)}>
+                  {value === "pages" ? "쪽 보기" : "글 보기"}
+                </button>
+              ))}
+            </div>
           ) : artifact.format === "html" ? (
             <div className="segmented small" role="radiogroup" aria-label="보기">
               {(["render", "source"] as const).map((value) => (
@@ -476,6 +495,21 @@ export default function DocumentView({
                 </button>
               ))}
             </div>
+          ) : null}
+          {office || hangul || artifact.format === "pdf" ? (
+            <button
+              type="button"
+              className="ghost-button"
+              title={hangul && state.tools?.hop.available ? "Achmage HOP에서 편집하고 저장하면 새 판으로 받을 수 있습니다" : "이 컴퓨터의 기본 앱에서 엽니다"}
+              onClick={() =>
+                void api
+                  .openExternal(artifactId)
+                  .then((opened) => onToast(`${opened.app}에서 열었습니다. 저장하면 여기서 새 판으로 받을 수 있습니다.`))
+                  .catch((error: Error) => onToast(error.message))
+              }
+            >
+              <Icon name="file" size={14} /> {hangul && state.tools?.hop.available ? "HOP로 열기" : "앱으로 열기"}
+            </button>
           ) : null}
           <div className="anchor">
             <button
@@ -501,7 +535,7 @@ export default function DocumentView({
                       setViewing(null);
                       return;
                     }
-                    if (design) setViewing({ revision: entry.revision, text: "" });
+                    if (design || office) setViewing({ revision: entry.revision, text: "" });
                     else void api.artifactText(artifactId, entry.revision).then((result) => setViewing({ revision: entry.revision, text: result.text }));
                   }}
                 >
@@ -530,7 +564,25 @@ export default function DocumentView({
               {revision !== artifact.revision ? ` · 지금 r${artifact.revision}` : ""}
             </span>
           ))}
-          {artifact.diskState === "changed" ? <span className="reader-chip warn">디스크의 파일이 바뀌었습니다</span> : null}
+          {artifact.diskState === "changed" ? (
+            <span className="reader-chip warn">
+              디스크의 파일이 바뀌었습니다
+              {!unsaved ? (
+                <button
+                  type="button"
+                  className="link"
+                  onClick={() =>
+                    void api
+                      .adoptDisk(artifactId)
+                      .then((adopted) => onToast(`바뀐 내용을 새 판 r${adopted.revision}로 받았습니다.`))
+                      .catch((error: Error) => onToast(error.message))
+                  }
+                >
+                  새 판으로 받기
+                </button>
+              ) : null}
+            </span>
+          ) : null}
           {artifact.diskState === "missing" ? <span className="reader-chip warn">디스크에서 파일이 사라졌습니다</span> : null}
         </div>
       ) : null}
@@ -593,7 +645,7 @@ export default function DocumentView({
                 {owner ? <EngineMark provider={owner.provider} size={14} /> : null}
                 <span>
                   {owner ? PROVIDER_LABEL[owner.provider] : "AI"}의 수정안 · r{proposal.baseRevision} 기준
-                  {proposal.status === "running" ? " · 만드는 중…" : design ? (proposal.problem ? " · 파일 오류" : "") : ` · +${proposal.added} −${proposal.removed}`}
+                  {proposal.status === "running" ? " · 만드는 중…" : design || office ? (proposal.problem ? " · 파일 오류" : "") : ` · +${proposal.added} −${proposal.removed}`}
                   {stale(proposal) ? ` · 지금 r${artifact.revision}, 자동 적용 안 함` : ""}
                 </span>
                 {proposal.status === "pending" ? (

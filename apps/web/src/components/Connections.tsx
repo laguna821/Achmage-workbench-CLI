@@ -1,11 +1,50 @@
-import { PROVIDER_LABEL, type Provider, type ProviderStatus } from "@workbench/contracts";
+import { PROVIDER_LABEL, type DocumentTools, type Provider, type ProviderStatus } from "@workbench/contracts";
 import { usageText } from "../format.ts";
 import type { ThemePref } from "../theme.ts";
 
 const THEME_LABEL: Record<ThemePref, string> = { system: "시스템", light: "라이트", dark: "다크" };
 
 /** Engine login and usage state. Shows only values the engines report; unknown stays unknown. */
+/** Document engines: what each one does here and whether it is on this computer. */
+function ToolsSection({ tools, onInstallIeum, onRefreshTools }: { tools: DocumentTools | null; onInstallIeum: () => void; onRefreshTools: () => void }) {
+  if (!tools) return null;
+  const rows = [
+    { key: "kordoc", name: "kordoc", role: "한글(HWPX) 만들기·글 보기·쪽 미리보기", status: tools.kordoc },
+    { key: "hop", name: "Achmage HOP", role: "한글 문서를 사람이 편집(HOP로 열기 → 저장하면 새 판)", status: tools.hop },
+    { key: "ieumoffice", name: "이음오피스", role: "워드·PPT·엑셀 미리보기·글 보기·AI 수정", status: tools.ieumoffice },
+  ] as const;
+  return (
+    <>
+      <div className="menu-divider" />
+      <div className="menu-label">문서 도구</div>
+      {rows.map((row) => (
+        <div key={row.key} className="connection">
+          <div className="connection-head">
+            <span className="connection-name">{row.name}</span>
+            <span className={`connection-state ${row.status.available ? "ok" : "warn"}`}>
+              {row.status.busy ? "설치 중…" : row.status.available ? (row.status.version ? `사용 가능 · ${row.status.version}` : "사용 가능") : "없음"}
+            </span>
+          </div>
+          <div className="connection-meta muted">{row.role}</div>
+          {row.status.message ? <div className="connection-meta">{row.status.message}</div> : null}
+          {row.key === "ieumoffice" && !row.status.busy ? (
+            <button type="button" className="button small" onClick={onInstallIeum} title="GitHub 배포판을 받아 체크섬을 확인한 뒤 ~/.local/opt/ieumoffice에 풉니다">
+              {row.status.available ? "최신판으로 업데이트" : "이음오피스 설치"}
+            </button>
+          ) : null}
+        </div>
+      ))}
+      <button type="button" className="text-button" onClick={onRefreshTools}>
+        문서 도구 다시 확인
+      </button>
+    </>
+  );
+}
+
 export function Connections({
+  tools,
+  onInstallIeum,
+  onRefreshTools,
   providers,
   connected,
   hostLabel,
@@ -16,6 +55,9 @@ export function Connections({
   onTheme,
   onAppearance,
 }: {
+  tools: DocumentTools | null;
+  onInstallIeum: () => void;
+  onRefreshTools: () => void;
   providers: Partial<Record<Provider, ProviderStatus>>;
   connected: boolean;
   hostLabel: string;
@@ -92,6 +134,7 @@ export function Connections({
       <button type="button" className="text-button" onClick={onRefresh}>
         상태 새로 고침
       </button>
+      <ToolsSection tools={tools} onInstallIeum={onInstallIeum} onRefreshTools={onRefreshTools} />
       <div className="menu-divider" />
       <div className="menu-label">화면</div>
       <div className="segmented theme-choice" role="radiogroup" aria-label="화면">

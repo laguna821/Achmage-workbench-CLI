@@ -81,7 +81,12 @@ export type PlanStep = { text: string; status: "pending" | "inProgress" | "compl
 export type ApprovalDecision = "accept" | "decline";
 
 /** Documents the app tracks with exact revisions (PRD 3.3). */
-export type DocFormat = "markdown" | "html" | "pdf" | "hwpx" | "hwp" | "text" | "design";
+export type DocFormat = "markdown" | "html" | "pdf" | "hwpx" | "hwp" | "text" | "design" | "docx" | "pptx" | "xlsx";
+
+/** Word, PowerPoint and Excel: previewed and edited through the IeumOffice command line tool. */
+export const OFFICE_FORMATS = ["docx", "pptx", "xlsx"] as const;
+export type OfficeFormat = (typeof OFFICE_FORMATS)[number];
+export const isOfficeFormat = (format: DocFormat): format is OfficeFormat => (OFFICE_FORMATS as readonly string[]).includes(format);
 
 export type Artifact = {
   id: string;
@@ -274,7 +279,8 @@ export type WorkbenchEvent =
   | { type: "artifact.upserted"; artifact: Artifact }
   | { type: "proposal.upserted"; proposal: Proposal }
   | { type: "handoff.upserted"; handoff: Handoff }
-  | { type: "prefs.updated"; prefs: UiPrefs };
+  | { type: "prefs.updated"; prefs: UiPrefs }
+  | { type: "tools.status"; tools: DocumentTools };
 
 /**
  * Screen preferences (theme, sidebar, per-engine look). Owned by the UI; the gateway only stores
@@ -283,6 +289,18 @@ export type WorkbenchEvent =
 export type UiPrefs = Record<string, unknown>;
 
 export type SequencedEvent = WorkbenchEvent & { seq: number; at: number };
+
+/** A document engine the gateway can use: kordoc (Hangul), IeumOffice (Office formats), HOP (Hangul editor). */
+export type ToolStatus = {
+  available: boolean;
+  version: string | null;
+  path: string | null;
+  /** Install or update running (IeumOffice). */
+  busy: boolean;
+  message: string | null;
+};
+
+export type DocumentTools = { kordoc: ToolStatus; ieumoffice: ToolStatus; hop: ToolStatus };
 
 export type Snapshot = {
   protocolVersion: number;
@@ -297,6 +315,7 @@ export type Snapshot = {
   artifacts: Artifact[];
   proposals: Proposal[];
   handoffs: Handoff[];
+  tools: DocumentTools;
 };
 
 export type ApiError = { code: string; message: string; requestId?: string };
@@ -346,6 +365,9 @@ export const FORMAT_LABEL: Record<DocFormat, string> = {
   hwp: "한글(HWP)",
   text: "텍스트",
   design: "디자인",
+  docx: "워드(DOCX)",
+  pptx: "PPT(PPTX)",
+  xlsx: "엑셀(XLSX)",
 };
 
 /** Formats the app opens as documents, by file extension. */
@@ -359,6 +381,9 @@ export function formatOf(path: string): DocFormat | null {
   if (extension === "hwpx") return "hwpx";
   if (extension === "hwp") return "hwp";
   if (extension === "txt") return "text";
+  if (extension === "docx") return "docx";
+  if (extension === "pptx") return "pptx";
+  if (extension === "xlsx" || extension === "xlsm") return "xlsx";
   return null;
 }
 

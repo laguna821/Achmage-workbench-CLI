@@ -1,6 +1,7 @@
 import {
   applyItemEvent,
   type Artifact,
+  type DocumentTools,
   type Handoff,
   type Proposal,
   type Folder,
@@ -30,6 +31,7 @@ export type State = {
   artifacts: Record<string, Artifact>;
   proposals: Record<string, Proposal>;
   handoffs: Record<string, Handoff>;
+  tools: DocumentTools | null;
 };
 
 export const initialState: State = {
@@ -46,6 +48,7 @@ export const initialState: State = {
   artifacts: {},
   proposals: {},
   handoffs: {},
+  tools: null,
 };
 
 export type Action =
@@ -76,6 +79,7 @@ export function reducer(state: State, action: Action): State {
         artifacts: byId(snapshot.artifacts ?? []),
         proposals: byId(snapshot.proposals ?? []),
         handoffs: byId(snapshot.handoffs ?? []),
+        tools: snapshot.tools ?? null,
       };
     }
     case "connected":
@@ -100,6 +104,8 @@ export function reducer(state: State, action: Action): State {
           return { ...next, artifacts: { ...state.artifacts, [event.artifact.id]: event.artifact } };
         case "proposal.upserted":
           return { ...next, proposals: { ...state.proposals, [event.proposal.id]: event.proposal } };
+        case "tools.status":
+          return { ...next, tools: event.tools };
         case "handoff.upserted":
           return { ...next, handoffs: { ...state.handoffs, [event.handoff.id]: event.handoff } };
         case "provider.status":

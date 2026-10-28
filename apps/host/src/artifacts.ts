@@ -2,12 +2,13 @@ import { createHash, randomUUID } from "node:crypto";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { diffLines } from "diff";
-import { DESIGN_EXTENSION, formatOf, type Artifact, type ArtifactRevision, type DocRef, type Proposal, type RefSummary } from "@workbench/contracts";
+import { DESIGN_EXTENSION, formatOf, isOfficeFormat, type Artifact, type ArtifactRevision, type DocRef, type Proposal, type RefSummary } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
 import { HttpError } from "./errors.ts";
 import type { Store } from "./store.ts";
 import type { Kordoc } from "./kordoc.ts";
 import { designAssetPath, designGuide, designProblem, designStem, saveDesignAsset } from "./design.ts";
+import type { IeumOffice, OfficePage } from "./ieumoffice.ts";
 
 // Documents with exact revisions (PRD 3.3). Every recorded revision is an immutable copy under the
 // gateway's data folder; the real file stays where it is in the work folder. AI edits happen in a
@@ -60,13 +61,17 @@ export class Documents {
   private readonly bus: EventBus;
   private readonly root: string;
   readonly kordoc: Kordoc | null;
+  /** Word/PowerPoint/Excel engine; replaced when IeumOffice is installed while the gateway runs. */
+  ieum: IeumOffice | null;
   private readonly pageCache = new Map<string, Promise<import("./kordoc.ts").HangulPage[]>>();
+  private readonly officeCache = new Map<string, Promise<OfficePage[]>>();
 
-  constructor(store: Store, bus: EventBus, dataDir: string, kordoc: Kordoc | null = null) {
+  constructor(store: Store, bus: EventBus, dataDir: string, kordoc: Kordoc | null = null, ieum: IeumOffice | null = null) {
     this.store = store;
     this.bus = bus;
     this.root = join(dataDir, "artifacts");
     this.kordoc = kordoc;
+    this.ieum = ieum;
     for (const artifact of store.artifacts()) this.artifacts.set(artifact.id, { ...artifact, readBy: artifact.readBy ?? {} });
     for (const proposal of store.proposals()) {
       // A turn cut short by a restart never finished its working copy; judge it now.
@@ -188,20 +193,28 @@ export class Documents {
     const artifact = this.check(artifactId);
     const target = revision ?? artifact.revision;
     const text = await this.view(artifactId, target);
-    return { artifact, revision: target, text, editable: artifact.format !== "hwp" && artifact.format !== "pdf", view: isHangul(artifact.format) };
+    const office = isOfficeFormat(artifact.format);
+    return { artifact, revision: target, text, editable: artifact.format !== "hwp" && artifact.format !== "pdf" && !office, view: isHangul(artifact.format) || office };
   }
 
   /** Text form of a revision: the file itself, or the cached kordoc Markdown view for Hangul files. */
   async view(artifactId: string, revision: number): Promise<string> {
     const artifact = this.get(artifactId);
     const file = this.revisionPath(artifactId, revision);
-    if (!isHangul(artifact.format)) {
+    const office = isOfficeFormat(artifact.format);
+    if (!isHangul(artifact.format) && !office) {
       if (artifact.format === "pdf") throw new HttpError(415, "binary_document", "PDF는 텍스트로 열지 않습니다.");
       return readFileSync(file, "utf8");
     }
     const cached = join(this.root, artifactId, `r${revision}.view.md`);
     const existing = readFileOrNull(cached);
     if (existing) return existing.toString("utf8");
+    if (office) {
+      if (!this.ieum?.available) throw new HttpError(501, "ieumoffice_missing", "이음오피스가 없어 이 문서의 글을 볼 수 없습니다. 연결 설정에서 설치하세요.");
+      const markdown = await this.ieum.textView(file, artifact.format as "docx" | "pptx" | "xlsx");
+      writeFileSync(cached, markdown);
+      return markdown;
+    }
     if (!this.kordoc?.available) throw new HttpError(501, "kordoc_missing", "한글 문서 엔진(kordoc)이 없어 이 문서를 텍스트로 볼 수 없습니다.");
     const markdown = await this.kordoc.read(file);
     writeFileSync(cached, markdown);
@@ -222,6 +235,59 @@ export class Documents {
       this.pageCache.set(key, pages);
     }
     return pages.then((list) => ({ revision: target, pages: list }));
+  }
+
+  /** Page images of a Word/PowerPoint/Excel revision, rendered once by IeumOffice and kept. */
+  officePages(artifactId: string, revision?: number) {
+    const artifact = this.check(artifactId);
+    if (!isOfficeFormat(artifact.format)) throw new HttpError(415, "not_office", "워드·PPT·엑셀 문서가 아닙니다.");
+    const target = revision ?? artifact.revision;
+    return this.renderPages(`${artifactId}:${target}`, this.revisionPath(artifactId, target), join(this.root, artifactId, `r${target}.pages`)).then((pages) => ({
+      revision: target,
+      pages: pages.map(({ page, width, height }) => ({ page, width, height })),
+    }));
+  }
+
+  /** The PNG of one page of a revision (after `officePages`). */
+  async officePagePath(artifactId: string, revision: number, page: number) {
+    const artifact = this.get(artifactId);
+    if (!isOfficeFormat(artifact.format)) throw new HttpError(415, "not_office", "워드·PPT·엑셀 문서가 아닙니다.");
+    const pages = await this.renderPages(`${artifactId}:${revision}`, this.revisionPath(artifactId, revision), join(this.root, artifactId, `r${revision}.pages`));
+    const found = pages.find((entry) => entry.page === page);
+    if (!found) throw new HttpError(404, "page_not_found", `${page}쪽이 없습니다.`);
+    return found.file;
+  }
+
+  /** Page images of a proposal's base revision or of its working copy. */
+  async proposalPages(proposalId: string, side: "base" | "proposed") {
+    const proposal = this.proposal(proposalId);
+    const artifact = this.get(proposal.artifactId);
+    if (!isOfficeFormat(artifact.format)) throw new HttpError(415, "not_office", "워드·PPT·엑셀 문서가 아닙니다.");
+    if (side === "base") return this.renderPages(`${artifact.id}:${proposal.baseRevision}`, this.revisionPath(artifact.id, proposal.baseRevision), join(this.root, artifact.id, `r${proposal.baseRevision}.pages`));
+    const working = readFileOrNull(proposal.workingPath);
+    if (!working) throw new HttpError(410, "proposal_missing", "수정안 사본이 사라졌습니다.");
+    const digest = sha256(working).slice(0, 16);
+    return this.renderPages(`${proposalId}:${digest}`, proposal.workingPath, join(this.root, artifact.id, "proposals", `${proposalId}-${digest}`));
+  }
+
+  private renderPages(key: string, input: string, folder: string): Promise<OfficePage[]> {
+    let pages = this.officeCache.get(key);
+    if (!pages) {
+      const manifest = join(folder, "pages.json");
+      const kept = readFileOrNull(manifest);
+      pages = kept
+        ? Promise.resolve(JSON.parse(kept.toString("utf8")) as OfficePage[])
+        : (async () => {
+            if (!this.ieum?.available) throw new HttpError(501, "ieumoffice_missing", "이음오피스가 없어 미리보기를 만들 수 없습니다. 연결 설정에서 설치하세요.");
+            const rendered = await this.ieum.render(input, folder);
+            writeFileSync(manifest, JSON.stringify(rendered));
+            return rendered;
+          })();
+      pages.catch(() => this.officeCache.delete(key));
+      this.officeCache.set(key, pages);
+      if (this.officeCache.size > 200) this.officeCache.delete(this.officeCache.keys().next().value!);
+    }
+    return pages;
   }
 
   /** New file content for an edited text: the text itself, or the HWPX patched from its Markdown view. */
@@ -286,6 +352,10 @@ export class Documents {
     if (ref.mode === "edit" && (artifact.format === "hwp" || artifact.format === "pdf")) {
       throw new HttpError(400, "not_editable", `${artifact.format.toUpperCase()}는 AI 수정안을 만들 수 없습니다. 검토 요청으로 보내 주세요.`);
     }
+    const office = isOfficeFormat(artifact.format);
+    if (ref.mode === "edit" && office && !this.ieum?.available) {
+      throw new HttpError(400, "ieumoffice_missing", "워드·PPT·엑셀 수정 요청에는 이음오피스가 필요합니다. 연결 설정에서 설치하세요.");
+    }
     const hangul = isHangul(artifact.format);
     const source = this.revisionPath(artifact.id, ref.revision);
     const extension = extensionOf(artifact);
@@ -297,8 +367,16 @@ export class Documents {
       copyFileSync(source, pinned);
       chmodSync(pinned, 0o444);
     }
-    // Hangul files also get their Markdown view, which is what the engine reads and edits.
+    // Hangul files also get their Markdown view, which is what the engine reads and edits; Office
+    // files get a text view to read (edits go through the ieumoffice tool on the working copy).
     let pinnedView: string | null = null;
+    if (office && this.ieum?.available) {
+      pinnedView = join(pinnedDir, `${stem}.r${ref.revision}${extension}.md`);
+      if (!existsSync(pinnedView)) {
+        writeFileSync(pinnedView, await this.view(artifact.id, ref.revision));
+        chmodSync(pinnedView, 0o444);
+      }
+    }
     if (hangul && this.kordoc?.available) {
       pinnedView = join(pinnedDir, `${stem}.r${ref.revision}${extension}.md`);
       if (!existsSync(pinnedView)) {
@@ -359,11 +437,30 @@ export class Documents {
       this.saveProposal(empty);
       return empty;
     }
-    const counts = countChanges(base.toString("utf8"), working.toString("utf8"));
+    const office = isOfficeFormat(artifact.format);
+    const counts = office ? { added: 0, removed: 0 } : countChanges(base.toString("utf8"), working.toString("utf8"));
     const problem = artifact.format === "design" ? designProblem(working.toString("utf8")) : null;
     const pending: Proposal = { ...proposal, ...counts, problem, status: "pending", updatedAt: now };
     this.saveProposal(pending);
+    if (office) void this.checkOffice(pending.id);
     return pending;
+  }
+
+  /** A Word/PowerPoint/Excel working copy must still open; otherwise the proposal says why and is not applied. */
+  private async checkOffice(proposalId: string) {
+    const proposal = this.proposal(proposalId);
+    const problem = await this.officeProblem(proposal.workingPath);
+    if (problem && this.proposal(proposalId).status === "pending") this.saveProposal({ ...this.proposal(proposalId), problem, updatedAt: Date.now() });
+  }
+
+  private async officeProblem(path: string): Promise<string | null> {
+    if (!this.ieum?.available) return null;
+    try {
+      await this.ieum.run(["info", path], [dirname(path)], 60_000);
+      return null;
+    } catch (error) {
+      return `이음오피스가 이 파일을 열지 못했습니다: ${error instanceof Error ? error.message : String(error)}`;
+    }
   }
 
   runningProposals(sessionId: string) {
@@ -378,7 +475,11 @@ export class Documents {
       proposal,
       artifact,
       base: await this.view(artifact.id, proposal.baseRevision),
-      proposed: readFileOrNull(proposal.workingPath)?.toString("utf8") ?? "",
+      proposed: isOfficeFormat(artifact.format)
+        ? existsSync(proposal.workingPath) && this.ieum?.available
+          ? await this.ieum.textView(proposal.workingPath, artifact.format as "docx" | "pptx" | "xlsx")
+          : ""
+        : (readFileOrNull(proposal.workingPath)?.toString("utf8") ?? ""),
       current: await this.view(artifact.id, artifact.revision),
     };
   }
@@ -404,6 +505,10 @@ export class Documents {
     if (artifact.format === "design") {
       const problem = designProblem(working.toString("utf8"));
       if (problem) throw new HttpError(422, "invalid_design", `이 수정안은 디자인 파일로 열 수 없어 적용하지 않습니다: ${problem}`);
+    }
+    if (isOfficeFormat(artifact.format)) {
+      const problem = await this.officeProblem(proposal.workingPath);
+      if (problem) throw new HttpError(422, "invalid_document", `이 수정안은 적용하지 않습니다. ${problem}`);
     }
     const data = isHangul(artifact.format) ? await this.contentFor(artifact, proposal.baseRevision, working.toString("utf8")) : working;
     const latest = this.check(artifact.id);
@@ -451,6 +556,7 @@ export class Documents {
       const source = proposal ? proposal.workingPath : pinned;
       lines.push(...designGuide(readFileOrNull(source)?.toString("utf8") ?? null, artifact.path));
     }
+    if (isOfficeFormat(artifact.format)) lines.push(...this.officeGuide(artifact.format as "docx" | "pptx" | "xlsx", proposal ? show(proposal.workingPath) : null, pinnedView ? show(pinnedView) : null));
     if (ref.selection) {
       lines.push(`  · 선택 범위(${ref.selection.label}):`);
       if (ref.selection.objectIds?.length) lines.push(`    페이지 id ${ref.selection.pageId ?? "?"}, 개체 id ${ref.selection.objectIds.join(", ")}`);
@@ -458,6 +564,26 @@ export class Documents {
       if (proposal) lines.push("    요청은 이 범위를 대상으로 합니다. 범위 밖은 바꾸지 마세요.");
     }
     return lines.join("\n");
+  }
+
+  /** How an engine works on a Word/PowerPoint/Excel file: the ieumoffice tool, never unzip and edit XML. */
+  private officeGuide(format: "docx" | "pptx" | "xlsx", working: string | null, textView: string | null) {
+    const cli = this.ieum?.cli;
+    const group = format === "docx" ? "docs" : format === "pptx" ? "slides" : "sheet";
+    const guide = format === "docx" ? "docs" : format === "pptx" ? "slides" : "sheets";
+    const lines = [`  · 이 문서는 ${format.toUpperCase()} 파일입니다. 압축을 풀거나 XML을 직접 고치지 말고 이음오피스 명령줄 도구를 쓰세요.`];
+    if (textView) lines.push(`    글 보기(읽기 전용, 빠른 참고용): ${textView}`);
+    if (!cli) {
+      lines.push("    이 컴퓨터에는 이음오피스가 없어 읽기만 할 수 있습니다.");
+      return lines;
+    }
+    lines.push(`    도구: ${cli}  (사용법: \`${cli} guide ${guide}\`${this.ieum?.skillPath() ? `, 자세한 안내: ${this.ieum.skillPath()}` : ""})`);
+    lines.push(`    읽기: \`${cli} ${group} read <파일>${format === "pptx" ? " --full" : ""}\``);
+    if (working) {
+      lines.push(`    고치기: \`${cli} ${group} apply ${working} ${format === "xlsx" ? "--ops <ops.json>" : "--ops <ops.json>"}\` (먼저 --dry-run 가능), 끝나면 \`${cli} ${format === "pptx" ? "slides audit" : `${group} check`} ${working}\`로 확인하세요.`);
+      lines.push(`    쪽 그림으로 확인: \`${cli} render ${working} --out <폴더>\``);
+    }
+    return lines;
   }
 
   private revisionSha(artifactId: string, revision: number) {

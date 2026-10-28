@@ -3,6 +3,7 @@ import type {
   Artifact,
   ArtifactRevision,
   DocRef,
+  DocumentTools,
   Handoff,
   Proposal,
   Folder,
@@ -72,6 +73,13 @@ export class Api {
     this.request<Handoff>("POST", "/api/handoffs", request);
   openFile = (workId: string, path: string) => this.request<Artifact>("POST", `/api/works/${workId}/artifacts`, { path });
   createDesign = (workId: string, name: string, preset: string) => this.request<Artifact>("POST", `/api/works/${workId}/designs`, { name, preset });
+  officePages = (artifactId: string, revision: number) =>
+    this.request<{ revision: number; pages: { page: number; width: number; height: number }[] }>("GET", `/api/artifacts/${artifactId}/office-pages?revision=${revision}`);
+  proposalOfficePages = (proposalId: string, side: "base" | "proposed") =>
+    this.request<{ side: string; pages: { page: number; width: number; height: number }[] }>("GET", `/api/proposals/${proposalId}/office-pages?side=${side}`);
+  openExternal = (artifactId: string) => this.request<{ app: string }>("POST", `/api/artifacts/${artifactId}/open-external`);
+  refreshTools = () => this.request<DocumentTools>("POST", "/api/tools/refresh");
+  installIeumOffice = () => this.request<DocumentTools>("POST", "/api/tools/ieumoffice/install");
   artifactText = (artifactId: string, revision?: number) =>
     this.request<{ artifact: Artifact; revision: number; text: string; editable: boolean; view: boolean }>(
       "GET",

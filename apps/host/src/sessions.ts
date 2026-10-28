@@ -18,6 +18,7 @@ import {
   formatOf,
   DESIGN_EXTENSION,
   type DocRef,
+  type DocumentTools,
   type Handoff,
   type HandoffRequest,
   type Proposal,
@@ -32,6 +33,8 @@ import type { AdapterSink, LoginStart, ProviderAdapter } from "./providers/types
 import type { Store } from "./store.ts";
 import { adaptTitle, titleFor } from "./titles.ts";
 import { blankDesign, designProblem, type DesignPreset } from "./design.ts";
+import { IeumOffice, installIeumOffice, type InstallProgress } from "./ieumoffice.ts";
+import { findHop, openInHop, openWithDesktop } from "./hop.ts";
 
 export { HttpError };
 
@@ -46,6 +49,8 @@ export type ManagerOptions = {
   dataDir?: string;
   /** Hangul document engine; without it HWPX/HWP are listed but not opened as text. */
   kordoc?: Kordoc | null;
+  /** Word/PowerPoint/Excel engine (the IeumOffice command line tool). */
+  ieum?: IeumOffice | null;
 };
 
 const DEFAULT_PURPOSE = /^대화 \d+$/;
@@ -123,7 +128,7 @@ export class SessionManager {
     this.store = store;
     this.bus = bus;
     this.options = options;
-    this.documents = new Documents(store, bus, options.dataDir ?? dirname(options.managedWorksDir), options.kordoc ?? null);
+    this.documents = new Documents(store, bus, options.dataDir ?? dirname(options.managedWorksDir), options.kordoc ?? null, options.ieum ?? null);
     for (const handoff of store.handoffs()) this.handoffs.set(handoff.id, handoff);
     for (const folder of store.folders()) this.folders.set(folder.id, folder);
     for (const work of store.works()) this.works.set(work.id, { ...work, titleSource: work.titleSource ?? "auto" });
@@ -244,7 +249,61 @@ export class SessionManager {
       artifacts: this.documents.list(),
       proposals: this.documents.listProposals(),
       handoffs: [...this.handoffs.values()],
+      tools: this.tools(),
     };
+  }
+
+  private ieumBusy: InstallProgress | null = null;
+  private ieumVersion: string | null = null;
+
+  /** Document engines on this computer, as the connection screen and onboarding show them. */
+  tools(): DocumentTools {
+    const kordoc = this.documents.kordoc;
+    const ieum = this.documents.ieum;
+    const hop = findHop();
+    const busy = Boolean(this.ieumBusy && this.ieumBusy.stage !== "done" && this.ieumBusy.stage !== "error");
+    return {
+      kordoc: { available: Boolean(kordoc?.available), version: null, path: kordoc?.runner ?? null, busy: false, message: null },
+      ieumoffice: { available: Boolean(ieum?.available), version: this.ieumVersion, path: ieum?.cli ?? null, busy, message: this.ieumBusy?.message ?? null },
+      hop: { available: Boolean(hop), version: hop?.version ?? null, path: hop?.launcher ?? null, busy: false, message: null },
+    };
+  }
+
+  /** Ask each tool for its version once (cheap afterwards), then tell the screens. */
+  async refreshTools() {
+    this.ieumVersion = (await this.documents.ieum?.version()) ?? null;
+    this.bus.publish({ type: "tools.status", tools: this.tools() });
+    return this.tools();
+  }
+
+  /** Download, verify and unpack the latest IeumOffice for this user (never twice at once). */
+  installIeumOffice() {
+    if (this.ieumBusy && this.ieumBusy.stage !== "done" && this.ieumBusy.stage !== "error") return this.tools();
+    const report = (step: InstallProgress) => {
+      this.ieumBusy = step;
+      this.bus.publish({ type: "tools.status", tools: this.tools() });
+    };
+    report({ stage: "download", message: "이음오피스 배포판을 확인하는 중…" });
+    void installIeumOffice(report)
+      .then(async (cli) => {
+        this.documents.ieum = new IeumOffice(cli);
+        await this.refreshTools();
+      })
+      .catch((error: unknown) => report({ stage: "error", message: error instanceof Error ? error.message : String(error) }));
+    return this.tools();
+  }
+
+  /**
+   * Open a document outside Workbench: Hangul files in HOP, everything else in the desktop's
+   * default application. What the other app saves comes back as "changed on disk".
+   */
+  openExternal(artifactId: string) {
+    const artifact = this.documents.check(artifactId);
+    if (artifact.diskState === "missing") throw new HttpError(404, "file_missing", "파일이 없습니다.");
+    const hop = artifact.format === "hwpx" || artifact.format === "hwp" ? findHop() : null;
+    if (hop) openInHop(hop, artifact.path);
+    else openWithDesktop(artifact.path);
+    return { app: hop ? "HOP" : "기본 앱" };
   }
 
   prefs(): UiPrefs {
