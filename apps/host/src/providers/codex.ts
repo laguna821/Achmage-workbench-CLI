@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import type { AccessMode, ApprovalDecision, ModelOption, ProviderStatus, Session, UsageWindow, Work } from "@workbench/contracts";
+import type { AccessMode, ApprovalDecision, EngineCommand, ModelOption, ProviderStatus, Session, UsageWindow, Work } from "@workbench/contracts";
 import { CodexRpc, mapPlanSteps, mapThreadItem, type RpcNotification, type RpcServerRequest } from "@workbench/provider-codex";
 import type { AgentMessageDeltaNotification } from "@workbench/provider-codex/src/generated/v2/AgentMessageDeltaNotification.ts";
 import type { CommandExecutionRequestApprovalParams } from "@workbench/provider-codex/src/generated/v2/CommandExecutionRequestApprovalParams.ts";
@@ -23,6 +23,7 @@ import type { TurnCompletedNotification } from "@workbench/provider-codex/src/ge
 import type { TurnPlanUpdatedNotification } from "@workbench/provider-codex/src/generated/v2/TurnPlanUpdatedNotification.ts";
 import type { TurnStartResponse } from "@workbench/provider-codex/src/generated/v2/TurnStartResponse.ts";
 import type { UserInput } from "@workbench/provider-codex/src/generated/v2/UserInput.ts";
+import type { SkillsListResponse } from "@workbench/provider-codex/src/generated/v2/SkillsListResponse.ts";
 import type { TurnStartedNotification } from "@workbench/provider-codex/src/generated/v2/TurnStartedNotification.ts";
 import type { McpServerElicitationRequestParams } from "@workbench/provider-codex/src/generated/v2/McpServerElicitationRequestParams.ts";
 import type { AskForApproval } from "@workbench/provider-codex/src/generated/v2/AskForApproval.ts";
@@ -141,6 +142,8 @@ export class CodexAdapter implements ProviderAdapter {
   private readonly forced: { approvalPolicy?: string; sandbox?: string };
   /** threadId -> the access its turns run with now */
   private readonly threadAccess = new Map<string, AccessMode | "plan">();
+  /** cwd -> skills Codex found there (name -> path), for "/name" requests */
+  private readonly skills = new Map<string, Map<string, { name: string; description: string; path: string }>>();
   /** sessionId -> the access the user last set (approvals arriving meanwhile follow it) */
   private readonly sessionAccess = new Map<string, AccessMode>();
   /** threads compacting on request (their turn is not a reply) */
@@ -353,9 +356,10 @@ export class CodexAdapter implements ProviderAdapter {
     const policy = session.plan ? { approvalPolicy: "never" as AskForApproval, sandbox: "read-only" as SandboxMode } : this.policyFor(session.access);
     const changed = this.threadAccess.get(threadId) !== effective;
     this.threadAccess.set(threadId, effective);
+    const asked = await this.withSkill(text, work.cwd);
     const response = await rpc.request<TurnStartResponse>("turn/start", {
       threadId,
-      input: codexInput(session.plan ? `${PLAN_FIRST}\n\n${text}` : text, files),
+      input: [...codexInput(session.plan ? `${PLAN_FIRST}\n\n${asked.text}` : asked.text, files), ...(asked.skill ? [asked.skill] : [])],
       ...(model ? { model } : {}),
       ...(effort ? { effort: effort as ReasoningEffort } : {}),
       ...(changed ? { approvalPolicy: policy.approvalPolicy, sandboxPolicy: sandboxPolicy(policy.sandbox) } : {}),
@@ -367,6 +371,38 @@ export class CodexAdapter implements ProviderAdapter {
       .request<ThreadReadResponse>("thread/read", { threadId })
       .then(({ thread }) => this.sink.updateSession(sessionId, { engineModel: thread.model, engineEffort: thread.reasoningEffort }))
       .catch(() => undefined);
+  }
+
+  /** "/" in the input: the skills Codex finds for the work folder (enabled ones), and compact. */
+  async commands(_session: Session, work: Work): Promise<EngineCommand[]> {
+    const skills = await this.skillsFor(work.cwd, true);
+    return [
+      { name: "compact", description: "대화를 압축합니다", hint: null, kind: "command" },
+      ...[...skills.values()].map((skill): EngineCommand => ({ name: skill.name, description: skill.description, hint: null, kind: "skill" })),
+    ];
+  }
+
+  /** Skills by name for a folder (`skills/list`), remembered for turning "/name" into a skill input. */
+  private async skillsFor(cwd: string, fresh = false) {
+    const known = this.skills.get(cwd);
+    if (known && !fresh) return known;
+    await this.ensureRunning();
+    const result = await this.rpc!.request<SkillsListResponse>("skills/list", { cwds: [cwd] });
+    const skills = new Map<string, { name: string; description: string; path: string }>();
+    for (const skill of result.data.flatMap((entry) => entry.skills)) {
+      if (skill.enabled) skills.set(skill.name, { name: skill.name, description: skill.interface?.shortDescription ?? skill.shortDescription ?? skill.description, path: String(skill.path) });
+    }
+    this.skills.set(cwd, skills);
+    return skills;
+  }
+
+  /** A request starting with "/name" of a skill: Codex's own form (`$name` and a skill input). */
+  private async withSkill(text: string, cwd: string): Promise<{ text: string; skill: UserInput | null }> {
+    const match = /^\/([^\s/]+)(?=\s|$)/.exec(text);
+    if (!match) return { text, skill: null };
+    const skill = (await this.skillsFor(cwd).catch(() => new Map<string, { name: string; path: string }>())).get(match[1]!);
+    if (!skill) return { text, skill: null };
+    return { text: `$${skill.name}${text.slice(match[0].length)}`, skill: { type: "skill", name: skill.name, path: skill.path } };
   }
 
   /** Put a request into the running turn (`turn/steer`); false when that turn is already over. */

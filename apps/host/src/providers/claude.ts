@@ -17,7 +17,7 @@ import {
   type SDKMessage,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { AccessMode, ApprovalDecision, ModelOption, ProviderStatus, Session, UsageWindow, Work } from "@workbench/contracts";
+import type { AccessMode, ApprovalDecision, EngineCommand, ModelOption, ProviderStatus, Session, UsageWindow, Work } from "@workbench/contracts";
 import { ClaudeTranscriptMapper, describeTool, type MapperOutput } from "@workbench/provider-claude";
 import { resolveClaude, type ResolvedBinary } from "../binaries.ts";
 import { billingVarsIn, claudeSdkEnv, engineEnv } from "../engine-env.ts";
@@ -631,6 +631,22 @@ export class ClaudeAdapter implements ProviderAdapter {
       uuid,
     });
     return true;
+  }
+
+  /**
+   * "/" in the input: Claude Code's commands and the user's, project's and plugins' commands and
+   * skills, from this session's own process (started now when it is not running; the next
+   * request uses it, and it closes when idle like any other).
+   */
+  async commands(session: Session & { access: AccessMode }, work: Work): Promise<EngineCommand[]> {
+    await this.init();
+    let runtime = this.runtimes.get(session.id);
+    if (!runtime) {
+      runtime = this.startRuntime(session, work);
+      this.scheduleIdle(runtime);
+    }
+    const list = await runtime.query.supportedCommands();
+    return list.map((command) => ({ name: command.name, description: command.description, hint: command.argumentHint || null, kind: command.builtin ? "command" : "skill" }));
   }
 
   /** A new access reaches Claude Code at once; approvals the new mode would not ask for are given. */

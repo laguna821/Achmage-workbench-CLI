@@ -11,6 +11,7 @@
 // Image and PDF blocks in a request are reported at the start of the answer ("받은 그림 1장 · 1234바이트").
 // "스크린샷": like a browsing step, Bash saves a screenshot (Playwright CLI's output names it), then
 // Read opens a second picture, which comes back as an image block.
+// "/정리 …" runs the stand-in's one user skill (it says so); /compact compacts.
 // In plan mode ("계획 먼저") it writes a plan and ends with ExitPlanMode, which asks first; approved
 // (with the mode it is set to) it goes ahead in the same turn, declined it waits.
 
@@ -155,11 +156,13 @@ async function runTurn(text) {
   }
   if (!(text.trim() === "/compact")) {
     const steer = text.startsWith("[steer]") ? `이어서 받은 요청을 반영합니다: ${text.slice(7)}\n\n` : "";
+    const skill = text.match(/^\/정리(?:\s+(.*))?$/s);
     const seen = !steer && text.match(/ \((받은 [^)]*)\)$/);
     const long = text.includes("길게");
     const lines = long ? 160 : 6;
     const chunks = [];
     if (steer) chunks.push({ text: steer, wait: 30 });
+    if (skill) chunks.push({ text: `스킬 /정리를 실행했습니다: ${skill[1] ?? ""}\n\n`, wait: 30 });
     if (seen) chunks.push({ text: `요청을 받았습니다 (${seen[1]}).\n\n`, wait: 30 });
     if (text.includes("도식")) {
       // A Mermaid mind map, sent in pieces like any reply.
@@ -234,7 +237,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     const reply = (response) => send({ type: "control_response", response: { subtype: "success", request_id: id, response } });
     switch (request.subtype) {
       case "initialize":
-        return reply({ commands: [{ name: "compact", description: "대화 압축", argumentHint: "" }], models: [{ value: "default", displayName: "Fake (기본)", description: "가짜 모델", supportedEffortLevels: ["low", "medium", "high"] }], account: { email: "fake@example.com", subscriptionType: "max" }, output_style: "default", available_output_styles: ["default"] });
+        return reply({ commands: [{ name: "compact", description: "대화 압축", argumentHint: "", builtin: true }, { name: "정리", description: "글을 짧게 정리하는 스킬(가짜)", argumentHint: "[주제]" }], models: [{ value: "default", displayName: "Fake (기본)", description: "가짜 모델", supportedEffortLevels: ["low", "medium", "high"] }], account: { email: "fake@example.com", subscriptionType: "max" }, output_style: "default", available_output_styles: ["default"] });
       case "interrupt": {
         if (turn) turn.interrupted = true;
         // Like Claude Code: queued requests survive a plain interrupt (still_queued) and are

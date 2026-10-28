@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { filterMentions, insertMention, mentionTriggerAt, relocateMentions, type MentionItem, type MentionSpan } from "../mention.ts";
 import { pastedFiles } from "./Attachments.tsx";
+import { SlashList, rankCommands, slashQuery, type ComposerSlash } from "./SlashList.tsx";
 import { FormatBadge } from "./DocCards.tsx";
 import { Icon } from "./Icon.tsx";
 
@@ -32,6 +33,7 @@ export function Composer({
   left,
   onFiles,
   attachments = 0,
+  slash,
 }: {
   draftKey: string;
   placeholder: string;
@@ -54,6 +56,8 @@ export function Composer({
   onFiles?: (files: File[]) => void;
   /** Files already with the request: it can go without text. */
   attachments?: number;
+  /** "/" at the start: the engine's commands and skills. */
+  slash?: ComposerSlash;
 }) {
   const [text, setText] = useState(() => localStorage.getItem(DRAFT_PREFIX + draftKey) ?? "");
   const [sending, setSending] = useState(false);
@@ -67,7 +71,22 @@ export function Composer({
   const pendingCaret = useRef<number | null>(null);
   const trigger = mentions ? mentionTriggerAt(text, caret, { spans, composing }) : null;
   const rows = trigger && trigger.start !== dismissed && mentions ? filterMentions(mentions.items, trigger.query).slice(0, 8) : [];
-  const listOpen = rows.length > 0;
+  // "/" at the start of the request: commands and skills (asked for when first needed).
+  const [slashDismissed, setSlashDismissed] = useState<string | null>(null);
+  const typed = slash && !composing ? slashQuery(text, caret) : null;
+  const slashOpen = typed !== null && slashDismissed !== text.slice(0, caret);
+  const slashRows = slashOpen && slash?.items ? rankCommands(slash.items, typed) : [];
+  const wantsCommands = slashOpen && slash?.items === null;
+  useEffect(() => {
+    if (wantsCommands) slash?.onOpen();
+  }, [wantsCommands]);
+  const listOpen = !slashOpen && rows.length > 0;
+  const pickCommand = (name: string) => {
+    const inserted = `/${name} `;
+    pendingCaret.current = inserted.length;
+    setText(inserted + text.slice(caret));
+    setActive(0);
+  };
 
   useLayoutEffect(() => {
     if (pendingCaret.current === null || !ref.current) return;
@@ -146,6 +165,7 @@ export function Composer({
     >
       {dropping ? <div className="composer-drop">놓으면 요청에 붙입니다</div> : null}
       {header ? <div className="composer-header">{header}</div> : null}
+      {slashOpen ? <SlashList rows={slashRows} loading={slash?.items === null} active={Math.min(active, Math.max(0, slashRows.length - 1))} onPick={(item) => pickCommand(item.name)} /> : null}
       {listOpen ? (
         <div className="mention-list" role="listbox" aria-label="문서 멘션">
           <div className="menu-label">문서 붙이기 · 지금 판으로 고정</div>
@@ -202,6 +222,24 @@ export function Composer({
           setCaret(event.currentTarget.selectionStart);
         }}
         onKeyDown={(event) => {
+          if (slashOpen && !event.nativeEvent.isComposing && event.keyCode !== 229) {
+            if ((event.key === "ArrowDown" || event.key === "ArrowUp") && slashRows.length) {
+              event.preventDefault();
+              const step = event.key === "ArrowDown" ? 1 : -1;
+              setActive((current) => (Math.min(current, slashRows.length - 1) + step + slashRows.length) % slashRows.length);
+              return;
+            }
+            if ((event.key === "Enter" || event.key === "Tab") && slashRows.length && !event.shiftKey) {
+              event.preventDefault();
+              pickCommand(slashRows[Math.min(active, slashRows.length - 1)]!.name);
+              return;
+            }
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setSlashDismissed(text.slice(0, caret));
+              return;
+            }
+          }
           if (listOpen && !event.nativeEvent.isComposing && event.keyCode !== 229) {
             if (event.key === "ArrowDown" || event.key === "ArrowUp") {
               event.preventDefault();

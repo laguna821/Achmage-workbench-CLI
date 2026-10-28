@@ -324,6 +324,15 @@ export function App() {
         edit: (session, queuedId, text) => void api?.updateQueued(session.id, queuedId, text).catch(fail),
         cancel: (session, queuedId) => void api?.cancelQueued(session.id, queuedId).catch(fail),
       },
+      commands: async (session: Session) => {
+        if (!api) return [];
+        try {
+          return (await api.commands(session.id)).commands;
+        } catch (error) {
+          fail(error);
+          return [];
+        }
+      },
       upload: async (file: File) => {
         if (!api) return null;
         try {

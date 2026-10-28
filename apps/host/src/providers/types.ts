@@ -1,6 +1,7 @@
 import type {
   AccessMode,
   ApprovalDecision,
+  EngineCommand,
   Provider,
   ProviderStatus,
   Session,
@@ -56,6 +57,8 @@ export interface ProviderAdapter {
   setAccess?(session: Session & { access: AccessMode }): Promise<void>;
   /** Ask the engine to compact the conversation now (it also does so on its own when full). */
   compact?(session: Session, work: Work): Promise<boolean>;
+  /** What a request can start with ("/"): the engine's commands and the skills it finds for the work. */
+  commands?(session: Session & { access: AccessMode }, work: Work): Promise<EngineCommand[]>;
   answerApproval(session: Session, itemId: string, decision: ApprovalDecision): Promise<boolean>;
   shutdown(): Promise<void>;
 }

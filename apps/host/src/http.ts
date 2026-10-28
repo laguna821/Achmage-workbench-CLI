@@ -310,6 +310,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           );
         }
         if (method === "POST" && parts[2] === "compact") return sendJson(res, 202, await manager.compact(sessionId));
+        if (method === "GET" && parts[2] === "commands") return sendJson(res, 200, { commands: await manager.commands(sessionId) });
         if (method === "POST" && parts[2] === "export") {
           const body = await readJson(req);
           const target = body.target === "path" ? "path" : body.target === "text" ? "text" : "work";

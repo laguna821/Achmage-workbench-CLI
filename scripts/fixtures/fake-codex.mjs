@@ -11,6 +11,7 @@
 // Local images in the input are reported at the start of the answer ("받은 그림 1장 · 1234바이트").
 // "스크린샷": like a browsing step, a command saves a screenshot (Playwright CLI's output names it),
 // then Codex looks at a second picture with its image viewer (an imageView item).
+// `skills/list` offers one skill ("review-notes"); a turn given it as a skill input says so.
 // A turn in the read-only sandbox ("계획 먼저") answers with a plan; "계획대로 진행" says which
 // sandbox the going-ahead turn runs in.
 
@@ -156,6 +157,11 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
   const planning = thread.sandbox === "readOnly";
   const lines = planning ? 0 : text.includes("길게") ? 160 : text.includes("도식") ? 14 : 6;
   let full = "";
+  const skill = text.match(/\[스킬 ([^ ]+) · ([^\]]+)\]/);
+  if (skill) {
+    full = `스킬 ${skill[1]}를 받았습니다 (${text.split("\n")[0]}).\n\n`;
+    notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: full });
+  }
   if (planning || text.includes("계획대로 진행")) {
     full = planning ? "살펴보고 계획을 세웠습니다.\n\n## 계획\n\n1. 지금 상태 살펴보기\n2. 고칠 곳 고치기\n3. 결과 확인하기\n" : `계획대로 진행합니다 (샌드박스: ${thread.sandbox}).\n\n`;
     notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: full });
@@ -211,6 +217,8 @@ async function handle(message) {
       return reply({ account: { type: "chatgpt", email: "fake@example.com", planType: "pro" }, requiresOpenaiAuth: true });
     case "account/rateLimits/read":
       return reply({ rateLimits: rateLimits(), rateLimitsByLimitId: null });
+    case "skills/list":
+      return reply({ data: (params.cwds ?? ["/tmp"]).map((cwd) => ({ cwd, skills: [{ name: "review-notes", description: "노트를 검토하는 스킬(가짜)", path: "/fake/skills/review-notes/SKILL.md", scope: "user", enabled: true, pluginId: null }], errors: [] })) });
     case "model/list":
       return reply({ data: [{ id: "fake-model", model: "fake-model", displayName: "Fake", description: "가짜 모델", hidden: false, supportedReasoningEfforts: [{ reasoningEffort: "medium", description: "" }], defaultReasoningEffort: "medium", isDefault: true }], nextCursor: null });
     case "config/read":
@@ -241,7 +249,8 @@ async function handle(message) {
       const turnId = `turn_${++counter}`;
       thread.turn = { id: turnId, steers: [], interrupted: false };
       reply({ turn: { id: turnId, items: [], itemsView: "full", status: "inProgress", error: null, startedAt: now(), completedAt: null, durationMs: null } });
-      const text = params.input.map((input) => input.text ?? "").join("\n");
+      const skill = params.input.find((input) => input.type === "skill");
+      const text = params.input.map((input) => input.text ?? "").join("\n") + (skill ? `\n[스킬 ${skill.name} · ${skill.path}]` : "");
       void runTurn(params.threadId, thread, turnId, text, received(params.input));
       return;
     }

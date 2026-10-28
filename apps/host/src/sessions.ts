@@ -854,6 +854,14 @@ export class SessionManager {
   }
 
   /** Compact the conversation now, as the engine does on its own when the context fills up. */
+  /** "/" in the input: the session's engine commands and skills (none when the engine has no list). */
+  async commands(sessionId: string) {
+    const session = this.requireSession(sessionId);
+    const adapter = this.adapter(session.provider);
+    if (!adapter.commands) return [];
+    return adapter.commands({ ...session, access: this.accessOf(session) }, this.requireWork(session.workId));
+  }
+
   async compact(sessionId: string) {
     const session = this.requireSession(sessionId);
     if (session.status !== "idle" && session.status !== "error") throw new HttpError(409, "session_busy", "응답이 끝난 뒤에 압축할 수 있습니다.");

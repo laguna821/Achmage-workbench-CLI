@@ -2,6 +2,7 @@ import type {
   ApiError,
   Artifact,
   Attachment,
+  EngineCommand,
   ArtifactRevision,
   CreateTarget,
   DocRef,
@@ -87,6 +88,8 @@ export class Api {
   updateSession = (sessionId: string, patch: UpdateSessionRequest) => this.request<Session>("PATCH", `/api/sessions/${sessionId}`, patch);
   /** A new Markdown page in the work folder. */
   createPage = (workId: string, name = "") => this.request<Artifact>("POST", `/api/works/${workId}/pages`, { name });
+  /** "/" in the input: the session engine's commands and skills. */
+  commands = (sessionId: string) => this.request<{ commands: EngineCommand[] }>("GET", `/api/sessions/${sessionId}/commands`);
   /** Compact the conversation now (the engine also does so on its own when the context is full). */
   compact = (sessionId: string) => this.request<{ ok: boolean }>("POST", `/api/sessions/${sessionId}/compact`);
   send = (

@@ -683,3 +683,4 @@ export function applyItemEvent(items: TranscriptItem[], event: WorkbenchEvent): 
   }
   return items;
 }
+export * from "./commands.ts";

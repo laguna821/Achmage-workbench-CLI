@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { EFFORT_LABEL, PROVIDER_LABEL, accessFor, type AccessMode, type Attachment, type CreateTarget, type DocRef, type Provider, type Session, type UiPrefs, type Work } from "@workbench/contracts";
+import { EFFORT_LABEL, PROVIDER_LABEL, accessFor, type AccessMode, type Attachment, type CreateTarget, type DocRef, type EngineCommand, type Provider, type Session, type UiPrefs, type Work } from "@workbench/contracts";
 import type { ReactNode } from "react";
 import type { MentionItem } from "../mention.ts";
 import { CreateChip, CreateTargetButton, stemOf } from "./CreateTarget.tsx";
@@ -25,6 +25,8 @@ export type WorkActions = {
   send: (session: Session, text: string, refs?: DocRef[], create?: CreateTarget | null, mode?: "auto" | "queue", attachments?: Attachment[], plan?: boolean) => Promise<boolean>;
   /** Keep a pasted or dropped file at the gateway for the next request (null: it could not). */
   upload: (file: File) => Promise<Attachment | null>;
+  /** "/" in the input: the engine's commands and skills for this session (empty when unavailable). */
+  commands: (session: Session) => Promise<EngineCommand[]>;
   queued: {
     send: (session: Session, queuedId: string) => void;
     edit: (session: Session, queuedId: string, text: string) => void;
@@ -288,6 +290,14 @@ export function WorkView({
   const [attachOpen, setAttachOpen] = useState(false);
   // Files pasted or dropped into the input go with the request being written for this work.
   const pending = usePendingFiles(actions.upload, work.id);
+  // "/" in the input: the active session's commands and skills, asked for when first typed.
+  const [commandList, setCommandList] = useState<{ sessionId: string; items: EngineCommand[] } | null>(null);
+  const slash = active
+    ? {
+        items: commandList?.sessionId === active.id ? commandList.items : null,
+        onOpen: () => void actions.commands(active).then((items) => setCommandList({ sessionId: active.id, items })),
+      }
+    : undefined;
   // "계획 먼저": on until a plan is accepted (or turned off), for this work.
   const [planFirst, setPlanFirst] = useState(false);
   const [planWork, setPlanWork] = useState(work.id);
@@ -606,6 +616,7 @@ export function WorkView({
           }
           onFiles={pending.add}
           attachments={pending.count}
+          slash={handoffTo ? undefined : slash}
           header={
             handoffTo || attached.length || create || pending.files.length ? (
               <div className="doc-chips">
@@ -657,6 +668,11 @@ export function WorkView({
                 mode: entry.mode === "edit" && !handoffTo && !create ? ("edit" as const) : ("review" as const),
                 selection: null,
               }));
+            // "/compact" is the conversation's own "지금 압축", for either engine.
+            if (active && !handoffTo && /^\/compact\s*$/.test(text)) {
+              actions.compact(active);
+              return true;
+            }
             const { carried, done } = await pending.take();
             if (!text && !carried.length) return false;
             const source: Session | null = active ?? (await actions.newSession(work, engine, draftChoice));
