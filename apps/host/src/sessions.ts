@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, statSync, unwatchFile, watchFile, writeFileSync, type Stats } from "node:fs";
-import { basename, delimiter, dirname, extname, isAbsolute, join, resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unwatchFile, watchFile, writeFileSync, type Stats } from "node:fs";
+import { basename, delimiter, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import {
   PROTOCOL_VERSION,
   applyItemEvent,
@@ -20,6 +20,12 @@ import {
   type DocRef,
   type DocumentTools,
   type CreateTarget,
+  type ExportMarkdownRequest,
+  type ExportMarkdownResult,
+  type SearchHit,
+  type SearchResult,
+  type UpdateFolderRequest,
+  type UpdateWorkRequest,
   type Handoff,
   type HandoffRequest,
   type Proposal,
@@ -38,10 +44,40 @@ import { IeumOffice, installIeumOffice, type InstallProgress } from "./ieumoffic
 import { findHop, openInHop, openWithDesktop } from "./hop.ts";
 import { createGuide, reservePath } from "./create.ts";
 import { copyMcp, copySkill, integrations, type EngineBinaries } from "./integrations.ts";
+import { exportFileName, sessionMarkdown } from "./export-md.ts";
 
 export { HttpError };
 
 const hashText = (text: string) => createHash("sha256").update(text).digest("hex");
+
+/** An order key from the UI: a finite number. */
+function finiteSort(value: unknown) {
+  const sort = Number(value);
+  if (!Number.isFinite(sort)) throw new HttpError(400, "invalid_sort", "순서 값이 올바르지 않습니다.");
+  return sort;
+}
+
+/** Write next to the target, then rename, so a reader never sees half a file. */
+function writeAtomic(path: string, text: string) {
+  const temporary = `${path}.workbench-${process.pid}-${Date.now()}.tmp`;
+  writeFileSync(temporary, text);
+  renameSync(temporary, path);
+}
+
+/** True when `path` is not inside `folder`. */
+function relativeOutside(folder: string, path: string) {
+  const rel = relative(resolve(folder), resolve(path));
+  return !rel || rel.startsWith("..") || isAbsolute(rel);
+}
+
+/** Whether a Markdown file is an export of this conversation (its front matter names the session). */
+function exportedFrom(path: string, sessionId: string) {
+  try {
+    return readFileSync(path, "utf8").slice(0, 2000).includes(`\nsession: ${sessionId}\n`);
+  } catch {
+    return false;
+  }
+}
 
 export type ManagerOptions = {
   hostId: string;
@@ -104,6 +140,33 @@ export function previewOf(text: string) {
   return flat.length > 180 ? `${flat.slice(0, 180).trimEnd()}…` : flat;
 }
 
+/** A short stretch of a message around the first match, with every match marked. */
+export function snippetOf(text: string, terms: string[], width = 120): { snippet: string; ranges: [number, number][] } {
+  const flat = text.replace(/```[a-zA-Z0-9_-]*/g, " ").replace(/\s+/g, " ").trim();
+  const lower = flat.toLowerCase();
+  const needles = terms.map((term) => term.toLowerCase()).filter(Boolean);
+  const first = Math.min(...needles.map((needle) => lower.indexOf(needle)).filter((index) => index >= 0), flat.length);
+  let start = first >= flat.length ? 0 : Math.max(0, first - Math.floor(width / 3));
+  if (start > 0) {
+    const space = flat.lastIndexOf(" ", start);
+    if (space > start - 12) start = space + 1;
+  }
+  let end = Math.min(flat.length, start + width);
+  if (end < flat.length) {
+    const space = flat.indexOf(" ", end);
+    if (space !== -1 && space < end + 12) end = space;
+  }
+  const prefix = start > 0 ? "…" : "";
+  const snippet = `${prefix}${flat.slice(start, end)}${end < flat.length ? "…" : ""}`;
+  const ranges: [number, number][] = [];
+  const lowerSnippet = snippet.toLowerCase();
+  for (const needle of needles) {
+    for (let at = lowerSnippet.indexOf(needle); at !== -1; at = lowerSnippet.indexOf(needle, at + needle.length)) ranges.push([at, at + needle.length]);
+  }
+  ranges.sort((a, b) => a[0] - b[0]);
+  return { snippet, ranges };
+}
+
 function plain(text: string) {
   return text
     .replace(/```[\s\S]*?```/g, " ")
@@ -137,9 +200,18 @@ export class SessionManager {
     this.options = options;
     this.documents = new Documents(store, bus, options.dataDir ?? dirname(options.managedWorksDir), options.kordoc ?? null, options.ieum ?? null);
     for (const handoff of store.handoffs()) this.handoffs.set(handoff.id, handoff);
-    for (const folder of store.folders()) this.folders.set(folder.id, folder);
-    for (const work of store.works()) this.works.set(work.id, { ...work, titleSource: work.titleSource ?? "auto" });
     // Rows written by older versions may lack newer fields.
+    for (const folder of store.folders()) this.folders.set(folder.id, { ...folder, archivedAt: folder.archivedAt ?? null });
+    for (const work of store.works()) {
+      this.works.set(work.id, {
+        ...work,
+        titleSource: work.titleSource ?? "auto",
+        pinned: work.pinned ?? false,
+        // Works had no order of their own: the most recently active first, as they were listed.
+        sort: work.sort ?? -work.updatedAt,
+        archivedAt: work.archivedAt ?? null,
+      });
+    }
     for (const session of store.sessions()) this.sessions.set(session.id, {
         ...session,
         effort: session.effort ?? null,
@@ -148,6 +220,12 @@ export class SessionManager {
         preview: session.preview ?? null,
         previewAt: session.previewAt ?? null,
         purposeSource: session.purposeSource ?? (DEFAULT_PURPOSE.test(session.purpose) ? "auto" : "user"),
+        pinned: session.pinned ?? false,
+        sort: session.sort ?? session.createdAt,
+        archivedAt: session.archivedAt ?? null,
+        // Replies from before the gateway kept "seen" count as seen.
+        seenAt: session.seenAt === undefined ? (session.previewAt ?? null) : session.seenAt,
+        unread: session.unread ?? false,
       });
     this.backfillOverview();
     this.recoverAfterRestart();
@@ -420,11 +498,65 @@ export class SessionManager {
     if (!trimmed) throw new HttpError(400, "invalid_name", "폴더 이름이 비어 있습니다.");
     if (parentId && !this.folders.has(parentId)) throw new HttpError(404, "folder_not_found", "상위 폴더가 없습니다.");
     const siblings = [...this.folders.values()].filter((folder) => folder.parentId === parentId);
-    const folder: Folder = { id: randomUUID(), parentId, name: trimmed, sort: siblings.length };
+    const sort = siblings.length ? Math.max(...siblings.map((folder) => folder.sort)) + 1 : 0;
+    const folder: Folder = { id: randomUUID(), parentId, name: trimmed, sort, archivedAt: null };
+    this.saveFolder(folder);
+    return folder;
+  }
+
+  /** Rename, move (never inside itself), reorder, archive or restore a folder. Files never move. */
+  updateFolder(folderId: string, patch: UpdateFolderRequest): Folder {
+    const folder = this.folders.get(folderId);
+    if (!folder) throw new HttpError(404, "folder_not_found", "폴더가 없습니다.");
+    const next: Folder = { ...folder };
+    if (patch.name !== undefined) {
+      const name = String(patch.name).trim();
+      if (!name) throw new HttpError(400, "invalid_name", "폴더 이름이 비어 있습니다.");
+      next.name = name.slice(0, 80);
+    }
+    if (patch.parentId !== undefined) {
+      const parentId = patch.parentId ?? null;
+      for (let at = parentId; at; at = this.folders.get(at)?.parentId ?? null) {
+        if (!this.folders.has(at)) throw new HttpError(404, "folder_not_found", "옮길 폴더가 없습니다.");
+        if (at === folderId) throw new HttpError(400, "folder_cycle", "폴더를 자기 안으로 옮길 수 없습니다.");
+      }
+      next.parentId = parentId;
+    }
+    if (patch.sort !== undefined) next.sort = finiteSort(patch.sort);
+    if (patch.archived !== undefined) {
+      if (patch.archived && this.busyUnder({ folderId })) throw new HttpError(409, "busy_inside", "이 폴더 안에서 진행 중인 세션이 있습니다. 끝나거나 멈춘 뒤에 보관하세요.");
+      next.archivedAt = patch.archived ? Date.now() : null;
+    }
+    this.saveFolder(next);
+    return next;
+  }
+
+  private saveFolder(folder: Folder) {
     this.folders.set(folder.id, folder);
     this.store.saveFolder(folder);
     this.bus.publish({ type: "folder.upserted", folder });
-    return folder;
+  }
+
+  /** A session still working somewhere under a folder or in a work (archiving waits for it). */
+  private busyUnder(scope: { folderId?: string; workId?: string }) {
+    const inFolder = (folderId: string | null): boolean => {
+      for (let at = folderId; at; at = this.folders.get(at)?.parentId ?? null) if (at === scope.folderId) return true;
+      return false;
+    };
+    return [...this.sessions.values()].some((session) => {
+      if (session.status === "idle" || session.status === "error") return false;
+      if (scope.workId) return session.workId === scope.workId;
+      return inFolder(this.works.get(session.workId)?.folderId ?? null);
+    });
+  }
+
+  /** Hidden: archived itself, in an archived work, or under an archived folder. */
+  private hidden(workId: string, sessionId: string | null = null) {
+    if (sessionId && this.sessions.get(sessionId)?.archivedAt) return true;
+    const work = this.works.get(workId);
+    if (!work || work.archivedAt) return true;
+    for (let at = work.folderId; at; at = this.folders.get(at)?.parentId ?? null) if (this.folders.get(at)?.archivedAt) return true;
+    return false;
   }
 
   createWork(request: CreateWorkRequest): Work {
@@ -439,17 +571,44 @@ export class SessionManager {
       mkdirSync(cwd, { recursive: true });
     }
     const now = Date.now();
-    const work: Work = { id, title, titleSource: request.titleSource ?? "auto", folderId, cwd, cwdManaged, activeSessionId: null, createdAt: now, updatedAt: now };
+    // New works come first in their folder until the user orders them otherwise.
+    const work: Work = {
+      id,
+      title,
+      titleSource: request.titleSource ?? "auto",
+      folderId,
+      cwd,
+      cwdManaged,
+      activeSessionId: null,
+      pinned: false,
+      sort: -now,
+      archivedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
     this.saveWork(work);
     return work;
   }
 
-  updateWork(workId: string, patch: Partial<Pick<Work, "title" | "folderId" | "activeSessionId">>): Work {
+  /**
+   * Rename, move, reorder, pin, archive or note the session last looked at. None of these is
+   * activity: `updatedAt` (and so "최근" order) changes only when the work itself does something.
+   */
+  updateWork(workId: string, patch: UpdateWorkRequest): Work {
     const work = this.requireWork(workId);
     if (patch.activeSessionId && this.sessions.get(patch.activeSessionId)?.workId !== workId) {
       throw new HttpError(400, "invalid_session", "다른 작업의 세션입니다.");
     }
-    const next: Work = { ...work, ...patch, updatedAt: Date.now() };
+    if (patch.folderId && !this.folders.has(patch.folderId)) throw new HttpError(404, "folder_not_found", "폴더가 없습니다.");
+    const next: Work = { ...work };
+    if (patch.activeSessionId !== undefined) next.activeSessionId = patch.activeSessionId;
+    if (patch.folderId !== undefined) next.folderId = patch.folderId ?? null;
+    if (patch.sort !== undefined) next.sort = finiteSort(patch.sort);
+    if (patch.pinned !== undefined) next.pinned = Boolean(patch.pinned);
+    if (patch.archived !== undefined) {
+      if (patch.archived && this.busyUnder({ workId })) throw new HttpError(409, "busy_inside", "이 작업에서 진행 중인 세션이 있습니다. 끝나거나 멈춘 뒤에 보관하세요.");
+      next.archivedAt = patch.archived ? Date.now() : null;
+    }
     if (patch.title !== undefined) {
       // A name typed by hand stays; clearing it hands the title back to the automatic one.
       const title = patch.title.trim();
@@ -485,6 +644,11 @@ export class SessionManager {
       status: "idle",
       activity: null,
       lastError: null,
+      pinned: false,
+      sort: now,
+      archivedAt: null,
+      seenAt: null,
+      unread: false,
       createdAt: now,
       updatedAt: now,
     };
@@ -493,10 +657,29 @@ export class SessionManager {
     return session;
   }
 
-  /** Rename, or pick the model / effort used from the next turn on. */
+  /**
+   * Rename, or pick the model / effort used from the next turn on; pin, reorder, archive and the
+   * read state change only how the session is listed (not its `updatedAt`).
+   */
   updateSession(sessionId: string, patch: UpdateSessionRequest): Session {
     const session = this.requireSession(sessionId);
-    const next = { ...session, updatedAt: Date.now() };
+    const listing = patch.pinned !== undefined || patch.sort !== undefined || patch.archived !== undefined || patch.seen !== undefined;
+    const content = patch.purpose !== undefined || patch.model !== undefined || patch.effort !== undefined;
+    const next = { ...session, updatedAt: content || !listing ? Date.now() : session.updatedAt };
+    if (patch.pinned !== undefined) next.pinned = Boolean(patch.pinned);
+    if (patch.sort !== undefined) next.sort = finiteSort(patch.sort);
+    if (patch.archived !== undefined) {
+      if (patch.archived && session.status !== "idle" && session.status !== "error") {
+        throw new HttpError(409, "session_busy", "응답 중인 세션은 보관할 수 없습니다. 멈춘 뒤에 보관하세요.");
+      }
+      next.archivedAt = patch.archived ? Date.now() : null;
+    }
+    if (patch.seen === true) {
+      next.seenAt = Date.now();
+      next.unread = false;
+    } else if (patch.seen === false) {
+      next.unread = true;
+    }
     if (patch.purpose !== undefined) {
       // A name typed by hand stays; clearing it hands the name back to the automatic title.
       const trimmed = patch.purpose.trim();
@@ -814,6 +997,115 @@ export class SessionManager {
       throw error;
     }
     return this.handoffs.get(handoff.id)!;
+  }
+
+  /**
+   * Search titles' conversations and documents by the words typed (all must appear, any case).
+   * Local index only: no model is asked. Archived things are left out unless asked for.
+   */
+  search(query: string, options: { archived?: boolean; provider?: Provider | null; folderId?: string | null } = {}): SearchResult {
+    const started = performance.now();
+    const terms = query
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 6)
+      .map((term) => term.slice(0, 100));
+    const result: SearchResult = { query, sessions: [], documents: [], tookMs: 0 };
+    if (!terms.length) return result;
+    const inFolder = (workId: string) => {
+      if (!options.folderId) return true;
+      for (let at = this.works.get(workId)?.folderId ?? null; at; at = this.folders.get(at)?.parentId ?? null) if (at === options.folderId) return true;
+      return false;
+    };
+    const bySession = new Map<string, { sessionId: string; workId: string; total: number; hits: SearchHit[] }>();
+    for (const hit of this.store.searchItems(terms, 800)) {
+      const session = this.sessions.get(hit.sessionId);
+      if (!session) continue;
+      if (!options.archived && this.hidden(session.workId, session.id)) continue;
+      if (options.provider && session.provider !== options.provider) continue;
+      if (!inFolder(session.workId)) continue;
+      let entry = bySession.get(session.id);
+      if (!entry) {
+        if (bySession.size >= 40) continue;
+        entry = { sessionId: session.id, workId: session.workId, total: 0, hits: [] };
+        bySession.set(session.id, entry);
+      }
+      entry.total += 1;
+      if (entry.hits.length < 3) entry.hits.push({ sessionId: session.id, itemId: hit.itemId, kind: hit.kind, at: hit.at, ...snippetOf(hit.text, terms) });
+    }
+    result.sessions = [...bySession.values()];
+    for (const hit of this.store.searchDocuments(terms, 60)) {
+      let artifact;
+      try {
+        artifact = this.documents.get(hit.artifactId);
+      } catch {
+        continue;
+      }
+      if (!options.archived && this.hidden(artifact.workId)) continue;
+      if (!inFolder(artifact.workId)) continue;
+      result.documents.push({ artifactId: artifact.id, workId: artifact.workId, ...snippetOf(hit.text, terms) });
+      if (result.documents.length >= 20) break;
+    }
+    result.tookMs = Math.round(performance.now() - started);
+    return result;
+  }
+
+  /**
+   * "마크다운으로 내보내기": the conversation by fixed rules (see export-md.ts). In the work folder it
+   * goes to "세션 기록/" and becomes a document of the work (opened, attached, searched like others);
+   * a later export of the same conversation updates the same file.
+   */
+  exportMarkdown(sessionId: string, request: ExportMarkdownRequest): ExportMarkdownResult {
+    const session = this.requireSession(sessionId);
+    const work = this.requireWork(session.workId);
+    const items = this.loadItems(sessionId);
+    const folders: string[] = [];
+    for (let at = work.folderId; at; at = this.folders.get(at)?.parentId ?? null) folders.unshift(this.folders.get(at)?.name ?? "");
+    const markdown = sessionMarkdown({
+      session,
+      work,
+      folders: folders.filter(Boolean),
+      items,
+      tools: Boolean(request.tools),
+      artifactName: (id) => this.documents.list().find((artifact) => artifact.id === id)?.name ?? null,
+      proposal: (id) => {
+        const proposal = this.documents.listProposals().find((entry) => entry.id === id);
+        if (!proposal) return null;
+        return { ...proposal, name: this.documents.list().find((artifact) => artifact.id === proposal.artifactId)?.name ?? null };
+      },
+      handoff: (id) => this.handoffs.get(id) ?? null,
+      sessionLabel: (id) => {
+        const target = this.sessions.get(id);
+        const targetWork = target ? this.works.get(target.workId) : undefined;
+        return target ? `${targetWork?.title ?? ""} · ${target.purpose} (${target.provider === "claude" ? "Claude" : "Codex"})` : null;
+      },
+    });
+    if (request.target === "text") return { markdown, path: null, artifactId: null };
+    if (request.target === "path") {
+      const path = String(request.path ?? "");
+      if (!isAbsolute(path)) throw new HttpError(400, "invalid_path", "저장할 위치가 올바르지 않습니다.");
+      const target = /\.(md|markdown)$/i.test(path) ? path : `${path}.md`;
+      if (!existsSync(dirname(target))) throw new HttpError(404, "folder_missing", "저장할 폴더가 없습니다.");
+      writeAtomic(target, markdown);
+      const inside = !relativeOutside(work.cwd, target);
+      const tracked = inside ? this.documents.track(work.id, work.cwd, target, "user", null, "세션 기록 내보내기") : null;
+      return { markdown, path: target, artifactId: tracked?.artifact.id ?? (inside ? this.artifactAt(work.id, target) : null) };
+    }
+    const folder = join(work.cwd, "세션 기록");
+    mkdirSync(folder, { recursive: true });
+    const name = exportFileName(session, items[0]?.at ?? session.createdAt);
+    const stem = name.slice(0, -3);
+    let path = join(folder, name);
+    // The same conversation updates its file; a file of another conversation with the name stays.
+    for (let index = 2; existsSync(path) && !exportedFrom(path, session.id); index += 1) path = join(folder, `${stem} ${index}.md`);
+    writeAtomic(path, markdown);
+    const tracked = this.documents.track(work.id, work.cwd, path, "user", null, "세션 기록 내보내기");
+    return { markdown, path, artifactId: tracked?.artifact.id ?? this.artifactAt(work.id, path) };
+  }
+
+  private artifactAt(workId: string, path: string) {
+    return this.documents.list().find((artifact) => artifact.workId === workId && artifact.path === path)?.id ?? null;
   }
 
   async interrupt(sessionId: string) {

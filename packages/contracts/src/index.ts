@@ -14,7 +14,10 @@ export type Folder = {
   id: string;
   parentId: string | null;
   name: string;
+  /** Order among siblings (smaller first); fractional keys let a move land between two rows. */
   sort: number;
+  /** Hidden with everything inside it, restored from the archive. */
+  archivedAt: number | null;
 };
 
 /** "auto": follows what the requests keep coming back to (local, no model call). "user": named by hand. */
@@ -29,7 +32,13 @@ export type Work = {
   cwd: string;
   /** True when the app created `cwd` because the user started without a folder. */
   cwdManaged: boolean;
+  /** The session last looked at (any window or device); selecting one does not change `updatedAt`. */
   activeSessionId: string | null;
+  /** Shown under "고정" at the top of the sidebar. */
+  pinned: boolean;
+  /** Order among the works of its folder (smaller first). */
+  sort: number;
+  archivedAt: number | null;
   createdAt: number;
   updatedAt: number;
 };
@@ -68,9 +77,20 @@ export type Session = {
   /** Short human-readable activity, e.g. "명령 실행 중". */
   activity: string | null;
   lastError: string | null;
+  pinned: boolean;
+  /** Order among the sessions of its work (smaller first). */
+  sort: number;
+  archivedAt: number | null;
+  /** When the user last looked at its replies; a reply after this is "새 답". */
+  seenAt: number | null;
+  /** Marked "읽지 않음" by hand. */
+  unread: boolean;
   createdAt: number;
   updatedAt: number;
 };
+
+/** A reply the user has not looked at yet (or a session marked unread). */
+export const isUnseen = (session: Session) => session.unread || Boolean(session.previewAt && session.previewAt > (session.seenAt ?? 0));
 
 export type ToolKind = "command" | "fileChange" | "search" | "web" | "mcp" | "agent" | "other";
 
@@ -386,7 +406,57 @@ export type UpdateSessionRequest = {
   purpose?: string;
   model?: string | null;
   effort?: string | null;
+  pinned?: boolean;
+  sort?: number;
+  archived?: boolean;
+  /** true: looked at now; false: mark unread. */
+  seen?: boolean;
 };
+
+export type UpdateWorkRequest = {
+  title?: string;
+  folderId?: string | null;
+  activeSessionId?: string | null;
+  pinned?: boolean;
+  sort?: number;
+  archived?: boolean;
+};
+
+export type UpdateFolderRequest = {
+  name?: string;
+  parentId?: string | null;
+  sort?: number;
+  archived?: boolean;
+};
+
+/** One place a search term was found in a conversation. */
+export type SearchHit = {
+  sessionId: string;
+  itemId: string;
+  kind: "user" | "assistant";
+  at: number;
+  /** A short stretch of the message around the first match. */
+  snippet: string;
+  /** Matched character ranges within `snippet`. */
+  ranges: [number, number][];
+};
+
+export type SearchResult = {
+  query: string;
+  /** Conversations with matches, most recent match first. */
+  sessions: { sessionId: string; workId: string; total: number; hits: SearchHit[] }[];
+  /** Documents whose latest text matches. */
+  documents: { artifactId: string; workId: string; snippet: string; ranges: [number, number][] }[];
+  tookMs: number;
+};
+
+/**
+ * "마크다운으로 내보내기": the conversation as a clean Markdown file, made by fixed rules (no model).
+ * work: saved in the work folder ("세션 기록/") and tracked as a document; path: written where the
+ * user chose; text: only returned (copy).
+ */
+export type ExportMarkdownRequest = { target: "work" | "path" | "text"; path?: string; tools?: boolean };
+export type ExportMarkdownResult = { markdown: string; path: string | null; artifactId: string | null };
 
 export type SendMessageRequest = {
   /** Client-generated id; repeating it never sends the message twice. */

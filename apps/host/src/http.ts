@@ -227,6 +227,31 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const body = await readJson(req);
         return sendJson(res, 201, manager.createFolder(String(body.name ?? ""), (body.parentId as string | null) ?? null));
       }
+      if (parts[0] === "folders" && parts[1] && method === "PATCH" && parts.length === 2) {
+        const body = await readJson(req);
+        return sendJson(
+          res,
+          200,
+          manager.updateFolder(parts[1], {
+            name: typeof body.name === "string" ? body.name : undefined,
+            parentId: body.parentId === undefined ? undefined : ((body.parentId as string | null) ?? null),
+            sort: body.sort === undefined ? undefined : Number(body.sort),
+            archived: typeof body.archived === "boolean" ? body.archived : undefined,
+          }),
+        );
+      }
+      if (method === "GET" && path === "/api/search") {
+        const provider = url.searchParams.get("provider");
+        return sendJson(
+          res,
+          200,
+          manager.search(url.searchParams.get("q") ?? "", {
+            archived: url.searchParams.get("archived") === "1",
+            provider: provider === "claude" || provider === "codex" ? provider : null,
+            folderId: url.searchParams.get("folderId"),
+          }),
+        );
+      }
       if (method === "POST" && path === "/api/works") {
         const body = await readJson(req);
         return sendJson(
@@ -237,7 +262,18 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       }
       if (parts[0] === "works" && parts[1] && method === "PATCH" && parts.length === 2) {
         const body = await readJson(req);
-        return sendJson(res, 200, manager.updateWork(parts[1], body as never));
+        return sendJson(
+          res,
+          200,
+          manager.updateWork(parts[1], {
+            title: typeof body.title === "string" ? body.title : undefined,
+            folderId: body.folderId === undefined ? undefined : ((body.folderId as string | null) ?? null),
+            activeSessionId: body.activeSessionId === undefined ? undefined : ((body.activeSessionId as string | null) ?? null),
+            pinned: typeof body.pinned === "boolean" ? body.pinned : undefined,
+            sort: body.sort === undefined ? undefined : Number(body.sort),
+            archived: typeof body.archived === "boolean" ? body.archived : undefined,
+          }),
+        );
       }
       if (parts[0] === "works" && parts[1] && parts[2] === "sessions" && method === "POST") {
         const body = await readJson(req);
@@ -264,8 +300,17 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
               purpose: typeof body.purpose === "string" ? body.purpose : undefined,
               model: body.model === undefined ? undefined : ((body.model as string | null) ?? null),
               effort: body.effort === undefined ? undefined : ((body.effort as string | null) ?? null),
+              pinned: typeof body.pinned === "boolean" ? body.pinned : undefined,
+              sort: body.sort === undefined ? undefined : Number(body.sort),
+              archived: typeof body.archived === "boolean" ? body.archived : undefined,
+              seen: typeof body.seen === "boolean" ? body.seen : undefined,
             }),
           );
+        }
+        if (method === "POST" && parts[2] === "export") {
+          const body = await readJson(req);
+          const target = body.target === "path" ? "path" : body.target === "text" ? "text" : "work";
+          return sendJson(res, 200, manager.exportMarkdown(sessionId, { target, path: typeof body.path === "string" ? body.path : undefined, tools: body.tools === true }));
         }
         if (method === "POST" && parts[2] === "messages") {
           const body = await readJson(req);

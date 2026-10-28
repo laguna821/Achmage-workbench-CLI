@@ -44,6 +44,23 @@ export function isWorkbenchPath(path: string) {
   return path.split(/[\\/]/).includes(WORKBENCH_DIR);
 }
 
+/** Text formats searched as they are (HTML without its tags). */
+const SEARCHED_AS_TEXT = new Set(["markdown", "text", "html"]);
+
+function searchText(format: string, data: Buffer): string | null {
+  if (!SEARCHED_AS_TEXT.has(format)) return null;
+  const text = data.toString("utf8");
+  if (format !== "html") return text;
+  return text
+    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+/** Bumped when what the document index holds changes; documents are then indexed again once. */
+const DOCUMENT_SEARCH_VERSION = "1";
+
 function countChanges(before: string, after: string) {
   let added = 0;
   let removed = 0;
@@ -77,6 +94,29 @@ export class Documents {
       // A turn cut short by a restart never finished its working copy; judge it now.
       this.proposals.set(proposal.id, proposal);
       if (proposal.status === "running") this.finishProposal(proposal.id);
+    }
+    if (store.getMeta("search.documents") !== DOCUMENT_SEARCH_VERSION) {
+      for (const artifact of this.artifacts.values()) this.indexLatest(artifact);
+      store.setMeta("search.documents", DOCUMENT_SEARCH_VERSION);
+    }
+  }
+
+  /**
+   * Keep the search index on a document's latest revision: text formats as they are, Hangul and
+   * Office files through their text view once one was made (opening "글 보기" makes it).
+   */
+  private indexLatest(artifact: Artifact) {
+    if (artifact.revision < 1) return;
+    try {
+      const copy = join(this.root, artifact.id, `r${artifact.revision}${extname(artifact.path)}`);
+      const data = readFileOrNull(copy);
+      let text = data ? searchText(artifact.format, data) : null;
+      if (text === null && (isHangul(artifact.format) || isOfficeFormat(artifact.format))) {
+        text = readFileOrNull(join(this.root, artifact.id, `r${artifact.revision}.view.md`))?.toString("utf8") ?? null;
+      }
+      this.store.indexDocument(artifact.id, text);
+    } catch {
+      // Search is a convenience: a document that cannot be read now is found again after its next change.
     }
   }
 
@@ -134,6 +174,7 @@ export class Documents {
     this.store.saveRevision(entry);
     const updated: Artifact = { ...artifact, revision: next, sha256: entry.sha256, size: entry.size, diskState: "same", updatedAt: entry.at };
     this.save(updated);
+    this.store.indexDocument(updated.id, searchText(updated.format, data));
     return updated;
   }
 
@@ -221,11 +262,13 @@ export class Documents {
       if (!this.ieum?.available) throw new HttpError(501, "ieumoffice_missing", "이음오피스가 없어 이 문서의 글을 볼 수 없습니다. 연결 설정에서 설치하세요.");
       const markdown = await this.ieum.textView(file, artifact.format as "docx" | "pptx" | "xlsx");
       writeFileSync(cached, markdown);
+      if (revision === this.get(artifactId).revision) this.store.indexDocument(artifactId, markdown);
       return markdown;
     }
     if (!this.kordoc?.available) throw new HttpError(501, "kordoc_missing", "한글 문서 엔진(kordoc)이 없어 이 문서를 텍스트로 볼 수 없습니다.");
     const markdown = await this.kordoc.read(file);
     writeFileSync(cached, markdown);
+    if (revision === this.get(artifactId).revision) this.store.indexDocument(artifactId, markdown);
     return markdown;
   }
 

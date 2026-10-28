@@ -135,7 +135,7 @@ describe("SessionManager", () => {
 describe("EventBus", () => {
   it("replays missed events and asks for a resync when the gap is too old", () => {
     const bus = new EventBus(3);
-    for (let index = 0; index < 5; index += 1) bus.publish({ type: "folder.upserted", folder: { id: String(index), parentId: null, name: "f", sort: 0 } });
+    for (let index = 0; index < 5; index += 1) bus.publish({ type: "folder.upserted", folder: { id: String(index), parentId: null, name: "f", sort: 0, archivedAt: null } });
     expect(bus.replay(3)?.map((event) => event.seq)).toEqual([4, 5]);
     expect(bus.replay(0)).toBeNull();
     expect(bus.replay(5)).toEqual([]);
