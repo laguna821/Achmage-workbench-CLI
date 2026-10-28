@@ -5,7 +5,8 @@
   "version": "0.1.0",
   "identifier": "kr.achmage.workbench",
   "build": {
-    "frontendDist": "../../web/dist"
+    "frontendDist": "../../web/dist",
+    "beforeBuildCommand": "node -e \"require('node:fs').rmSync('src-tauri/target/release/web', { recursive: true, force: true })\""
   },
   "app": {
     "windows": [],
