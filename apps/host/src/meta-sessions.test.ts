@@ -128,6 +128,10 @@ describe("search", () => {
     expect(hit.snippet.slice(hit.ranges[0]![0], hit.ranges[0]![1])).toBe("근거");
 
     expect(manager.search("근거").sessions).toHaveLength(2);
+    // Quoted: the words together as typed (the reply of the other session has both, apart).
+    expect(manager.search('"근거 정리"').sessions[0]!.hits[0]!.ranges).toHaveLength(1);
+    expect(manager.search("정리 근거").sessions).toHaveLength(1);
+    expect(manager.search('"정리 근거"').sessions).toHaveLength(0);
     expect(manager.search("citation").sessions.map((entry) => entry.sessionId)).toEqual([other.id]);
 
     manager.updateSession(other.id, { archived: true });

@@ -165,6 +165,12 @@ export const DEFAULT_APPEARANCE: Appearance = {
   },
 };
 
+/**
+ * Achmage's own look, for what belongs to no engine: the sidebar, menus and search keep it, so they
+ * do not change color every time a Claude or Codex session is selected.
+ */
+export const NEUTRAL_LOOK: Record<Theme, Look> = { light: look(ACHMAGE_LIGHT), dark: look(ACHMAGE_DARK) };
+
 /** Quick choices for the right-click menu and the settings sheet. */
 export const ACCENT_SWATCHES: Record<Theme, string[]> = {
   light: ["#005bac", "#c96442", "#0e8a6a", "#6b4fd8", "#c2410c", "#be185d", "#0891b2", "#1f2937"],

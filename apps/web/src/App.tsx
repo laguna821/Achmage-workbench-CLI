@@ -1,21 +1,23 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import type { CreateTarget, DocRef, Proposal, Provider, Session, UiPrefs, Work } from "@workbench/contracts";
+import { PROVIDER_LABEL, isUnseen, type Artifact, type CreateTarget, type DocRef, type Proposal, type Provider, type Session, type UiPrefs, type Work } from "@workbench/contracts";
 import { Api, ApiRequestError, readToken } from "./api.ts";
 import { configureDesign } from "./design.ts";
-import { initialState, reducer, sessionsOf } from "./state.ts";
+import { initialState, isBusy, reducer, sessionsOf } from "./state.ts";
 import { newRequestId, titleFrom } from "./format.ts";
+import { folderChoices, readOpenState, workSessions, type Move, type Row, type SortMode, type TreeOpenState } from "./tree.ts";
 import { Connections } from "./components/Connections.tsx";
 import { EditableText } from "./components/EditableText.tsx";
-import { Finder } from "./components/Finder.tsx";
 import { Icon } from "./components/Icon.tsx";
 import { Popover } from "./components/Popover.tsx";
-import { Sidebar } from "./components/Sidebar.tsx";
-import type { TreeActions } from "./components/WorkTree.tsx";
+import { Sidebar, type SidebarActions } from "./components/Sidebar.tsx";
+import { ContextMenu, type MenuEntry, type MenuRequest } from "./components/ContextMenu.tsx";
+import { SearchPalette, type PaletteCommand } from "./components/SearchPalette.tsx";
+import { ArchiveView } from "./components/ArchiveView.tsx";
 import { StartView, useEngineChoice } from "./components/StartView.tsx";
 import { WorkView, type WorkActions } from "./components/WorkView.tsx";
 import { AppearanceSheet, type SheetTarget } from "./components/AppearanceSheet.tsx";
 import { EngineMenu } from "./components/EngineMenu.tsx";
-import { Overview, Switcher, UnseenContext } from "./components/Overview.tsx";
+import { Switcher, UnseenContext } from "./components/SessionCards.tsx";
 import { DocContext, type DocActions } from "./components/DocCards.tsx";
 import { DocTabs } from "./components/DocTabs.tsx";
 import { IntegrationsSheet } from "./components/IntegrationsSheet.tsx";
@@ -52,9 +54,15 @@ async function pickFileNative(folder: string): Promise<string | null> {
     multiple: false,
     defaultPath: folder,
     title: "문서 열기",
-    filters: [{ name: "문서", extensions: ["md", "markdown", "html", "htm", "pdf", "hwpx", "hwp", "txt"] }],
+    filters: [{ name: "문서", extensions: ["md", "markdown", "html", "htm", "pdf", "hwpx", "hwp", "txt", "docx", "pptx", "xlsx"] }],
   });
   return typeof picked === "string" ? picked : null;
+}
+
+/** Where to save a Markdown export (desktop save dialog); null when cancelled. */
+async function pickSavePath(defaultPath: string): Promise<string | null> {
+  const { save } = await import("@tauri-apps/plugin-dialog");
+  return save({ title: "마크다운으로 내보내기", defaultPath, filters: [{ name: "Markdown", extensions: ["md"] }] });
 }
 
 async function openExternal(url: string) {
@@ -66,14 +74,38 @@ async function openExternal(url: string) {
   }
 }
 
+/** Copy text: the clipboard API, or a hidden text area where it is not allowed. */
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return;
+  } catch {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+  }
+}
+
+/** The command that resumes this conversation in a terminal (the engine's own resume). */
+function resumeCommand(session: Session, work: Work) {
+  if (!session.nativeSessionId) return null;
+  const quoted = `'${work.cwd.replace(/'/g, `'\\''`)}'`;
+  return session.provider === "claude" ? `cd ${quoted} && claude --resume ${session.nativeSessionId}` : `cd ${quoted} && codex resume ${session.nativeSessionId}`;
+}
+
 type View =
   | { kind: "work" }
-  | { kind: "finder" }
   | { kind: "new"; folderId: string | null }
-  | { kind: "overview"; workId: string | null }
+  | { kind: "archive" }
   | { kind: "document"; artifactId: string; proposalId: string | null };
 
-const SEEN_KEY = "workbench.seen";
+type Toast = { text: string; action?: { label: string; run: () => void } };
+
 const OPEN_DOCS_KEY = "workbench.openDocs";
 const MRU_KEY = "workbench.recentSessions";
 const readJson = <T,>(key: string, fallback: T): T => {
@@ -84,6 +116,7 @@ const readJson = <T,>(key: string, fallback: T): T => {
     return fallback;
   }
 };
+const SORT_MODES: SortMode[] = ["manual", "recent", "name"];
 
 export function App() {
   const api = useMemo(() => {
@@ -115,15 +148,23 @@ export function App() {
   const [onboardingAgain, setOnboardingAgain] = useState(false);
   // Documents opened in each work, shown as tabs and offered first by "@".
   const [openDocs, setOpenDocs] = useState<Record<string, string[]>>(() => readJson(OPEN_DOCS_KEY, {}));
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToastState] = useState<Toast | null>(null);
+  const setToast = useCallback((next: string | Toast | null) => setToastState(typeof next === "string" ? { text: next } : next), []);
   const [menuOpen, setMenuOpen] = useState(false);
   const [loginMessage, setLoginMessage] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [engine, setEngine] = useEngineChoice();
   const [engineMenu, setEngineMenu] = useState<{ provider: Provider; x: number; y: number } | null>(null);
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
+  const [contextMenu, setContextMenu] = useState<MenuRequest | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  // A message to bring into view after opening its conversation (from search).
+  const [focusItem, setFocusItem] = useState<{ sessionId: string; itemId: string; nonce: number } | null>(null);
+  // Inline rename or folder creation asked from a menu, handled by the sidebar.
+  const [sidebarPending, setSidebarPending] = useState<{ rename?: string; createIn?: string | null } | null>(null);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   const closeEngineMenu = useCallback(() => setEngineMenu(null), []);
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
   const setWorkId = (id: string | null) => {
     setWorkIdState(id);
@@ -132,11 +173,11 @@ export function App() {
 
   const fail = useCallback((error: unknown) => {
     setToast(error instanceof ApiRequestError || error instanceof Error ? error.message : String(error));
-  }, []);
+  }, [setToast]);
 
   useEffect(() => {
     if (!toast) return;
-    const timer = window.setTimeout(() => setToast(null), 6000);
+    const timer = window.setTimeout(() => setToastState(null), toast.action ? 9000 : 6000);
     return () => window.clearTimeout(timer);
   }, [toast]);
 
@@ -202,13 +243,16 @@ export function App() {
   const themePref: ThemePref = isThemePref(prefs.theme) ? prefs.theme : "system";
   const appTheme = resolveTheme(themePref, systemTheme);
   const appearance = useMemo(() => readAppearance(prefs.appearance), [prefs.appearance]);
-  // Closed by default (PRD 2.1); remembered once the user pins it.
-  const sidebarOpen = prefs.sidebar === true;
+  // The sidebar is where many sessions live: open unless the user closed it (decision 2026-10-28).
+  const sidebarOpen = prefs.sidebar !== false;
   const toggleSidebar = () => savePrefs({ sidebar: !sidebarOpen });
+  const sidebarWidth = typeof prefs.sidebarWidth === "number" ? Math.min(480, Math.max(232, prefs.sidebarWidth)) : 288;
+  const sortMode: SortMode = SORT_MODES.includes(prefs.treeSort as SortMode) ? (prefs.treeSort as SortMode) : "manual";
+  const treeOpen = useMemo(() => readOpenState(prefs.tree), [prefs.tree]);
 
   const work = workId ? state.works[workId] : undefined;
   const activeSession =
-    work && ((work.activeSessionId && state.sessions[work.activeSessionId]) || sessionsOf(state, work.id).at(-1));
+    work && ((work.activeSessionId && state.sessions[work.activeSessionId] && !state.sessions[work.activeSessionId]!.archivedAt && state.sessions[work.activeSessionId]) || workSessions(state, work.id).at(-1) || sessionsOf(state, work.id).at(-1));
 
   // A document shown becomes a tab of its work (at most 8, the oldest goes).
   useEffect(() => {
@@ -227,7 +271,7 @@ export function App() {
     const rest = openDocIds.filter((id) => id !== artifactId);
     setOpenDocs((current) => ({ ...current, [work.id]: rest }));
     if (view.kind === "document" && view.artifactId === artifactId) {
-      setView(rest.length ? { kind: "document", artifactId: rest[rest.length - 1], proposalId: null } : { kind: "work" });
+      setView(rest.length ? { kind: "document", artifactId: rest[rest.length - 1]!, proposalId: null } : { kind: "work" });
     }
   };
 
@@ -309,10 +353,15 @@ export function App() {
       renameSession: (session, purpose) => void api?.updateSession(session.id, { purpose }).catch(fail),
       setModel: (session, choice) => void api?.updateSession(session.id, { model: choice.model, effort: choice.effort }).catch(fail),
       moveWork: (target, folderId) => void api?.updateWork(target.id, { folderId }).catch(fail),
-      openFinder: () => setView({ kind: "finder" }),
-      openOverview: (target) => setView({ kind: "overview", workId: target?.id ?? null }),
+      openSidebar: () => savePrefs({ sidebar: true }),
+      restore: (target) => {
+        if (!api) return;
+        const request =
+          target.kind === "folder" ? api.updateFolder(target.id, { archived: false }) : target.kind === "work" ? api.updateWork(target.id, { archived: false }) : api.updateSession(target.id, { archived: false });
+        void request.then(() => setToast("되돌렸습니다.")).catch(fail);
+      },
     }),
-    [api, fail],
+    [api, fail, savePrefs, setToast, setView],
   );
 
   const docActions: DocActions = useMemo(
@@ -351,7 +400,7 @@ export function App() {
         if (session && target) actions.selectSession(target, session);
       },
     }),
-    [api, fail, state.artifacts, state.sessions, state.works, actions],
+    [api, fail, state.artifacts, state.sessions, state.works, actions, setToast, setView],
   );
 
   const startWork = async (
@@ -375,35 +424,26 @@ export function App() {
     }
   };
 
-  const pendingApprovals = Object.values(state.sessions).filter((session) => session.status === "awaitingApproval");
-  const runningCount = Object.values(state.sessions).filter((session) => session.status === "starting" || session.status === "running").length;
+  const pendingApprovals = Object.values(state.sessions).filter((session) => session.status === "awaitingApproval" && !session.archivedAt);
 
-  // What the user has looked at: replies arriving in sessions not on screen are marked new.
+  // New replies: kept by the gateway, so every window agrees. Looking at a session marks it seen,
+  // except right after the user marked it unread while looking at it.
   const visibleSession = view.kind === "work" && activeSession ? activeSession : null;
-  const [seen, setSeen] = useState<Record<string, number> | null>(() => readJson<Record<string, number> | null>(SEEN_KEY, null));
+  const keptUnread = useRef<string | null>(null);
   useEffect(() => {
-    if (!state.ready) return;
-    if (seen === null) {
-      // First run: everything already there counts as seen.
-      const initial = Object.fromEntries(Object.values(state.sessions).map((session) => [session.id, session.previewAt ?? 0]));
-      setSeen(initial);
-      localStorage.setItem(SEEN_KEY, JSON.stringify(initial));
-      return;
-    }
-    if (visibleSession?.previewAt && visibleSession.previewAt > (seen[visibleSession.id] ?? 0)) {
-      const next = { ...seen, [visibleSession.id]: visibleSession.previewAt };
-      setSeen(next);
-      localStorage.setItem(SEEN_KEY, JSON.stringify(next));
-    }
-  }, [state.ready, state.sessions, seen, visibleSession]);
+    if (keptUnread.current && keptUnread.current !== visibleSession?.id) keptUnread.current = null;
+  }, [visibleSession?.id]);
+  const seenAsked = useRef("");
+  useEffect(() => {
+    if (!api || !visibleSession || !isUnseen(visibleSession) || keptUnread.current === visibleSession.id) return;
+    const key = `${visibleSession.id}:${visibleSession.previewAt}:${visibleSession.unread}`;
+    if (seenAsked.current === key) return;
+    seenAsked.current = key;
+    void api.updateSession(visibleSession.id, { seen: true }).catch(() => undefined);
+  }, [api, visibleSession]);
   const unseen = useMemo(
-    () =>
-      new Set(
-        Object.values(state.sessions)
-          .filter((session) => seen && session.previewAt && session.previewAt > (seen[session.id] ?? 0) && session.id !== visibleSession?.id)
-          .map((session) => session.id),
-      ),
-    [state.sessions, seen, visibleSession],
+    () => new Set(Object.values(state.sessions).filter((session) => isUnseen(session) && session.id !== visibleSession?.id && !session.archivedAt).map((session) => session.id)),
+    [state.sessions, visibleSession?.id],
   );
 
   // Sessions in the order they were last looked at, for Ctrl+Tab.
@@ -417,7 +457,7 @@ export function App() {
       return next;
     });
   }, [visibleSession?.id]);
-  const switchable = recent.map((id) => state.sessions[id]).filter((session): session is Session => Boolean(session)).slice(0, 8);
+  const switchable = recent.map((id) => state.sessions[id]).filter((session): session is Session => Boolean(session && !session.archivedAt)).slice(0, 8);
   const [switcher, setSwitcher] = useState<number | null>(null);
   const switcherRef = useRef<number | null>(null);
   const openSession = useCallback(
@@ -426,6 +466,14 @@ export function App() {
       if (target) actions.selectSession(target, session);
     },
     [state.works, actions],
+  );
+  const startNew = useCallback(
+    (folderId: string | null = null) => {
+      setView({ kind: "new", folderId });
+      // Already on the start screen: make the press visibly do something.
+      window.requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer-input")?.focus());
+    },
+    [setView],
   );
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -438,9 +486,12 @@ export function App() {
         const next = current === null ? (step === 1 ? 1 : count - 1) : (current + step + count) % count;
         switcherRef.current = next;
         setSwitcher(next);
-      } else if (event.ctrlKey && (event.key === "k" || event.key === "K")) {
+      } else if ((event.ctrlKey || event.metaKey) && !event.shiftKey && (event.key === "k" || event.key === "K")) {
         event.preventDefault();
-        setView((current) => (current.kind === "overview" ? { kind: "work" } : { kind: "overview", workId: null }));
+        setPaletteOpen((open) => !open);
+      } else if ((event.ctrlKey || event.metaKey) && !event.shiftKey && (event.key === "n" || event.key === "N")) {
+        event.preventDefault();
+        startNew(null);
       }
     };
     const onKeyUp = (event: KeyboardEvent) => {
@@ -462,10 +513,10 @@ export function App() {
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, [switchable, openSession]);
+  }, [switchable, openSession, startNew]);
 
-  // The engine in focus dresses the window: the visible session's engine, else the engine picked
-  // for a new request. While the appearance sheet is open, the look being edited is shown instead.
+  // The engine in focus dresses the conversation: the visible session's engine, else the engine
+  // picked for a new request. While the appearance sheet is open, the look being edited is shown.
   const startScreen = view.kind === "new" || (view.kind === "work" && !work);
   const focusedProvider: Provider = sheet?.provider ?? (!startScreen && activeSession ? activeSession.provider : engine);
   const focusedTheme = sheet?.theme ?? engineTheme(appearance[focusedProvider], appTheme);
@@ -499,20 +550,266 @@ export function App() {
     },
   };
 
-  const treeActions: TreeActions = {
-    onOpenWork: (target) => {
-      setWorkId(target.id);
-      setView({ kind: "work" });
+  // ── what sidebar rows and menus do ──────────────────────────────────────
+  const archive = useCallback(
+    (target: { kind: "folder" | "work" | "session"; id: string }) => {
+      if (!api) return;
+      const request =
+        target.kind === "folder" ? api.updateFolder(target.id, { archived: true }) : target.kind === "work" ? api.updateWork(target.id, { archived: true }) : api.updateSession(target.id, { archived: true });
+      void request
+        .then(() =>
+          setToast({
+            text: "보관함으로 옮겼습니다.",
+            action: {
+              label: "되돌리기",
+              run: () => actions.restore(target),
+            },
+          }),
+        )
+        .catch(fail);
     },
-    onOpenSession: actions.selectSession,
-    onNewWork: (folderId) => {
-      setView({ kind: "new", folderId });
-      window.requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer-input")?.focus());
+    [api, actions, fail, setToast],
+  );
+
+  const exportSession = useCallback(
+    async (session: Session, target: "work" | "path" | "text") => {
+      if (!api) return;
+      const owner = state.works[session.workId];
+      try {
+        if (target === "text") {
+          const { markdown } = await api.exportMarkdown(session.id, { target: "text" });
+          await copyText(markdown);
+          setToast("대화를 마크다운으로 복사했습니다.");
+          return;
+        }
+        if (target === "path") {
+          if (!inDesktop) {
+            // In a browser: a download of the same text.
+            const { markdown } = await api.exportMarkdown(session.id, { target: "text" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(new Blob([markdown], { type: "text/markdown;charset=utf-8" }));
+            link.download = `${session.purpose.replace(/[\\/:*?"<>|]/g, "_")}.md`;
+            link.click();
+            URL.revokeObjectURL(link.href);
+            return;
+          }
+          const name = `${session.purpose.replace(/[\\/:*?"<>|]/g, "_")}.md`;
+          const path = await pickSavePath(owner ? `${owner.cwd}/${name}` : name);
+          if (!path) return;
+          const saved = await api.exportMarkdown(session.id, { target: "path", path });
+          setToast({
+            text: `저장했습니다: ${saved.path}`,
+            action: saved.artifactId ? { label: "열기", run: () => docActions.openArtifact(saved.artifactId!) } : undefined,
+          });
+          return;
+        }
+        const saved = await api.exportMarkdown(session.id, { target: "work" });
+        const name = saved.path?.split(/[\\/]/).slice(-2).join("/") ?? "";
+        setToast({
+          text: `${name}(으)로 저장했습니다.`,
+          action: saved.artifactId ? { label: "열기", run: () => docActions.openArtifact(saved.artifactId!) } : undefined,
+        });
+      } catch (error) {
+        fail(error);
+      }
     },
-    onCreateFolder: async (name, parentId) => {
+    [api, state.works, docActions, fail, setToast],
+  );
+
+  const openPath = useCallback(
+    async (path: string, reveal = false) => {
+      if (!inDesktop) {
+        await copyText(path);
+        setToast(`경로를 복사했습니다: ${path}`);
+        return;
+      }
+      try {
+        const opener = await import("@tauri-apps/plugin-opener");
+        if (reveal) await opener.revealItemInDir(path);
+        else await opener.openPath(path);
+      } catch (error) {
+        fail(error);
+      }
+    },
+    [fail, setToast],
+  );
+
+  const menuFor = useCallback(
+    (row: Row, x: number, y: number): MenuRequest | null => {
+      if (!api) return null;
+      const copy = (text: string, done: string) => () => void copyText(text).then(() => setToast(done));
+      if (row.type === "session") {
+        const { session, work: owner } = row;
+        const busy = isBusy(session);
+        const resume = resumeCommand(session, owner);
+        const unseenNow = isUnseen(session);
+        const items: MenuEntry[] = [
+          { kind: "item", label: "열기", icon: "chat", hint: "Enter", onSelect: () => openSession(session) },
+          { kind: "item", label: "이름 바꾸기", icon: "edit", hint: "F2", onSelect: () => setSidebarPending({ rename: session.id }) },
+          { kind: "separator" },
+          { kind: "item", label: session.pinned ? "고정 풀기" : "고정", icon: "pin", onSelect: () => void api.updateSession(session.id, { pinned: !session.pinned }).catch(fail) },
+          {
+            kind: "item",
+            label: unseenNow ? "읽음으로 표시" : "읽지 않음으로 표시",
+            icon: unseenNow ? "eye" : "bell",
+            onSelect: () => {
+              if (!unseenNow && session.id === visibleSession?.id) keptUnread.current = session.id;
+              void api.updateSession(session.id, { seen: unseenNow }).catch(fail);
+            },
+          },
+          { kind: "separator" },
+          {
+            kind: "submenu",
+            label: "마크다운으로 내보내기",
+            icon: "markdown",
+            items: [
+              { kind: "item", label: "작업 폴더에 저장", icon: "download", hint: "세션 기록/", onSelect: () => void exportSession(session, "work") },
+              { kind: "item", label: inDesktop ? "다른 곳에 저장…" : "내려받기", icon: "folderOpen", onSelect: () => void exportSession(session, "path") },
+              { kind: "item", label: "마크다운 복사", icon: "copy", onSelect: () => void exportSession(session, "text") },
+            ],
+          },
+          { kind: "separator" },
+          ...(inDesktop ? [{ kind: "item" as const, label: "작업 폴더 열기", icon: "folderOpen" as const, onSelect: () => void openPath(owner.cwd) }] : []),
+          { kind: "item", label: "작업 폴더 경로 복사", icon: "copy", onSelect: copy(owner.cwd, "경로를 복사했습니다.") },
+          ...(resume
+            ? [{ kind: "item" as const, label: "터미널에서 이어 하기 명령 복사", icon: "terminal" as const, onSelect: copy(resume, "명령을 복사했습니다. 터미널에 붙여 넣으면 같은 대화를 이어 갑니다.") }]
+            : []),
+          { kind: "item", label: `${PROVIDER_LABEL[session.provider]} 외형…`, icon: "palette", onSelect: () => appearanceApi.openSettings(session.provider) },
+          { kind: "separator" },
+          ...(busy ? [{ kind: "item" as const, label: "멈추기", icon: "stop" as const, onSelect: () => actions.interrupt(session) }] : []),
+          { kind: "item", label: busy ? "보관 (멈춘 뒤 가능)" : "보관", icon: "archive", hint: "Delete", disabled: busy, onSelect: () => archive({ kind: "session", id: session.id }) },
+        ];
+        return { x, y, title: session.purpose, items };
+      }
+      if (row.type === "work") {
+        const owner = row.work;
+        const busy = row.sessions.some((session) => isBusy(session));
+        const folders = folderChoices(state);
+        const items: MenuEntry[] = [
+          { kind: "item", label: "열기", icon: "project", hint: "Enter", onSelect: () => openWorkNow(owner) },
+          {
+            kind: "submenu",
+            label: "이 작업에 새 세션",
+            icon: "plus",
+            items: (["claude", "codex"] as const).map((provider) => ({
+              kind: "item" as const,
+              label: `${PROVIDER_LABEL[provider]} 새 세션`,
+              onSelect: () =>
+                void actions.newSession(owner, provider).then((created) => {
+                  if (created) actions.selectSession(owner, created);
+                }),
+            })),
+          },
+          { kind: "item", label: "이름 바꾸기", icon: "edit", hint: "F2", onSelect: () => setSidebarPending({ rename: owner.id }) },
+          { kind: "separator" },
+          { kind: "item", label: owner.pinned ? "고정 풀기" : "고정", icon: "pin", onSelect: () => void api.updateWork(owner.id, { pinned: !owner.pinned }).catch(fail) },
+          {
+            kind: "submenu",
+            label: "옮기기",
+            icon: "folder",
+            items: [
+              { kind: "item", label: "분류 없음", checked: !owner.folderId, onSelect: () => actions.moveWork(owner, null) },
+              ...(folders.length ? [{ kind: "separator" as const }] : []),
+              ...folders.map((folder) => ({
+                kind: "item" as const,
+                label: `${" ".repeat(folder.depth)}${folder.name}`,
+                checked: owner.folderId === folder.id,
+                onSelect: () => actions.moveWork(owner, folder.id),
+              })),
+            ],
+          },
+          { kind: "separator" },
+          ...(inDesktop ? [{ kind: "item" as const, label: "작업 폴더 열기", icon: "folderOpen" as const, onSelect: () => void openPath(owner.cwd) }] : []),
+          { kind: "item", label: "작업 폴더 경로 복사", icon: "copy", onSelect: copy(owner.cwd, "경로를 복사했습니다.") },
+          { kind: "separator" },
+          { kind: "item", label: busy ? "보관 (진행 중인 세션이 끝난 뒤)" : "보관", icon: "archive", hint: "Delete", disabled: busy, onSelect: () => archive({ kind: "work", id: owner.id }) },
+        ];
+        return { x, y, title: owner.title, items };
+      }
+      if (row.type === "folder") {
+        const folder = row.folder;
+        const items: MenuEntry[] = [
+          { kind: "item", label: "이 폴더에 새 작업", icon: "plus", onSelect: () => startNew(folder.id) },
+          { kind: "item", label: "하위 폴더 만들기", icon: "folder", onSelect: () => setSidebarPending({ createIn: folder.id }) },
+          { kind: "item", label: "이름 바꾸기", icon: "edit", hint: "F2", onSelect: () => setSidebarPending({ rename: folder.id }) },
+          { kind: "separator" },
+          { kind: "item", label: "보관 (안의 것 포함)", icon: "archive", hint: "Delete", onSelect: () => archive({ kind: "folder", id: folder.id }) },
+        ];
+        return { x, y, title: folder.name, items };
+      }
+      if (row.type === "doc") {
+        const artifact = row.artifact;
+        const items: MenuEntry[] = [
+          { kind: "item", label: "열기", icon: "file", hint: "Enter", onSelect: () => docActions.openArtifact(artifact.id) },
+          { kind: "item", label: "다른 앱으로 열기", icon: "arrowRight", onSelect: () => void api.openExternal(artifact.id).catch(fail) },
+          ...(inDesktop ? [{ kind: "item" as const, label: "파일 위치 열기", icon: "folderOpen" as const, onSelect: () => void openPath(artifact.path, true) }] : []),
+          { kind: "item", label: "경로 복사", icon: "copy", onSelect: copy(artifact.path, "경로를 복사했습니다.") },
+        ];
+        return { x, y, title: artifact.name, items };
+      }
+      return null;
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [api, state, actions, archive, exportSession, openPath, openSession, visibleSession?.id, startNew, docActions, fail, setToast],
+  );
+
+  function openWorkNow(target: Work) {
+    setWorkId(target.id);
+    setView({ kind: "work" });
+  }
+
+  const move = useCallback(
+    (next: Move) => {
+      if (!api) return;
+      const request =
+        next.kind === "folder"
+          ? api.updateFolder(next.id, { parentId: next.parentId, sort: next.sort })
+          : next.kind === "work"
+            ? api.updateWork(next.id, { folderId: next.folderId, sort: next.sort })
+            : api.updateSession(next.id, { sort: next.sort });
+      void request.catch(fail);
+    },
+    [api, fail],
+  );
+
+  const sidebarActions: SidebarActions = {
+    openSession,
+    openWork: openWorkNow,
+    openDoc: (artifact: Artifact) => docActions.openArtifact(artifact.id),
+    newSession: ({ folderId }) => startNew(folderId ?? null),
+    createFolder: async (name, parentId) => {
       await api?.createFolder(name, parentId).catch(fail);
     },
+    rename: (target, name) => {
+      if (!api) return;
+      const request =
+        target.kind === "folder" ? api.updateFolder(target.id, { name }) : target.kind === "work" ? api.updateWork(target.id, { title: name }) : api.updateSession(target.id, { purpose: name });
+      void request.catch(fail);
+    },
+    move,
+    menuFor,
+    openMenu: setContextMenu,
+    archive,
+    openSearch: () => setPaletteOpen(true),
+    openArchive: () => setView({ kind: "archive" }),
   };
+
+  const paletteCommands: PaletteCommand[] = [
+    { id: "new", label: "새 세션", icon: "plus", hint: "Ctrl+N", run: () => startNew(null) },
+    ...(visibleSession
+      ? [
+          { id: "export-work", label: "지금 대화를 마크다운으로 저장 (작업 폴더)", icon: "markdown" as const, run: () => void exportSession(visibleSession, "work") },
+          { id: "export-copy", label: "지금 대화를 마크다운으로 복사", icon: "copy" as const, run: () => void exportSession(visibleSession, "text") },
+        ]
+      : []),
+    { id: "archive", label: "보관함 열기", icon: "archive", run: () => setView({ kind: "archive" }) },
+    { id: "sidebar", label: sidebarOpen ? "사이드바 숨기기" : "사이드바 보이기", icon: "sidebar", run: toggleSidebar },
+    { id: "theme", label: focusedTheme === "dark" ? "라이트 화면으로" : "다크 화면으로", icon: focusedTheme === "dark" ? "sun" : "moon", run: () => savePrefs({ theme: focusedTheme === "dark" ? "light" : "dark" }) },
+    { id: "appearance", label: "엔진 외형 설정", icon: "palette", run: () => appearanceApi.openSettings() },
+    { id: "integrations", label: "MCP·스킬 보기", icon: "tool", run: () => setIntegrationsOpen(true) },
+    { id: "connections", label: "연결과 설정", icon: "dots", run: () => setMenuOpen(true) },
+    { id: "onboarding", label: "처음 안내 다시 보기", icon: "eye", run: () => setOnboardingAgain(true) },
+  ];
 
   if (!api) {
     return (
@@ -534,7 +831,7 @@ export function App() {
       onClose={closeDoc}
     />
   ) : null;
-  const title = view.kind === "finder" ? work?.title ?? "" : showStart ? "새 작업" : work?.title ?? "";
+  const title = view.kind === "archive" ? "보관함" : showStart ? "새 세션" : work?.title ?? "";
 
   return (
     <AppearanceContext.Provider value={appearanceApi}>
@@ -559,36 +856,17 @@ export function App() {
             <Icon name="sidebar" size={18} />
           </button>
           <span className="brand">Achmage</span>
-          <button
-            type="button"
-            className={`ghost-button${view.kind === "finder" ? " pressed" : ""}`}
-            onClick={() => setView(view.kind === "finder" ? { kind: "work" } : { kind: "finder" })}
-            aria-expanded={view.kind === "finder"}
-          >
-            작업 <Icon name={view.kind === "finder" ? "chevronUp" : "chevronDown"} size={14} />
-          </button>
-          <button
-            type="button"
-            className={`ghost-button overview-button${view.kind === "overview" ? " pressed" : ""}`}
-            onClick={() => setView(view.kind === "overview" ? { kind: "work" } : { kind: "overview", workId: null })}
-            title="한눈에 · 모든 세션 (Ctrl+K)"
-          >
-            <Icon name="grid" size={15} /> 한눈에
-            {runningCount ? <span className="count-chip active" title="진행 중">{runningCount}</span> : null}
-            {unseen.size ? <span className="count-chip new" title="새 답">{unseen.size}</span> : null}
-          </button>
-          <button
-            type="button"
-            className={`ghost-button${showStart ? " pressed" : ""}`}
-            onClick={() => {
-              setView({ kind: "new", folderId: null });
-              // Already on the start screen: make the click visibly do something.
-              window.requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer-input")?.focus());
-            }}
-            title="새 작업"
-          >
-            <Icon name="plus" size={15} /> 새 작업
-          </button>
+          {!sidebarOpen ? (
+            <>
+              <button type="button" className="ghost-button" onClick={() => startNew(null)} title="새 세션 (Ctrl+N)">
+                <Icon name="plus" size={15} /> 새 세션
+              </button>
+              <button type="button" className="ghost-button" onClick={() => setPaletteOpen(true)} title="찾기 (Ctrl+K)">
+                <Icon name="search" size={15} /> 찾기
+                {unseen.size ? <span className="count-chip new" title="새 답">{unseen.size}</span> : null}
+              </button>
+            </>
+          ) : null}
         </div>
         {editingTitle && work && view.kind === "work" ? (
           <EditableText
@@ -613,7 +891,7 @@ export function App() {
               type="button"
               className="attention-button"
               onClick={() => {
-                const session = pendingApprovals[0];
+                const session = pendingApprovals[0]!;
                 const target = state.works[session.workId];
                 if (target) actions.selectSession(target, session);
               }}
@@ -675,7 +953,23 @@ export function App() {
       </header>
 
       <div className={`body${sidebarOpen && state.ready ? " with-sidebar" : ""}`}>
-      {sidebarOpen && state.ready ? <Sidebar state={state} currentWorkId={view.kind === "work" ? work?.id ?? null : null} actions={treeActions} /> : null}
+      {sidebarOpen && state.ready ? (
+        <Sidebar
+          state={state}
+          currentWorkId={view.kind === "work" || view.kind === "document" ? work?.id ?? null : null}
+          visibleSessionId={visibleSession?.id ?? null}
+          currentDocId={view.kind === "document" ? view.artifactId : null}
+          open={treeOpen}
+          onOpenChange={(next: TreeOpenState) => savePrefs({ tree: next })}
+          sortMode={sortMode}
+          onSortMode={(mode) => savePrefs({ treeSort: mode })}
+          width={sidebarWidth}
+          onWidth={(width) => savePrefs({ sidebarWidth: width })}
+          actions={sidebarActions}
+          pending={sidebarPending}
+          onPendingDone={() => setSidebarPending(null)}
+        />
+      ) : null}
       {!state.ready ? (
         <main className="loading">불러오는 중…</main>
       ) : view.kind === "document" && work ? (
@@ -704,32 +998,39 @@ export function App() {
             }}
           />
         </Suspense>
-      ) : view.kind === "overview" ? (
-        <Overview
+      ) : view.kind === "archive" ? (
+        <ArchiveView
           state={state}
-          unseen={unseen}
-          workFilter={view.workId ? state.works[view.workId] ?? null : null}
-          onOpen={openSession}
+          onRestore={actions.restore}
+          onOpenSession={openSession}
+          onOpenWork={openWorkNow}
           onClose={() => setView({ kind: "work" })}
         />
-      ) : view.kind === "finder" ? (
-        <Finder state={state} currentWorkId={work?.id ?? null} actions={treeActions} onBack={work ? () => setView({ kind: "work" }) : null} />
       ) : showStart ? (
         <StartView
           state={state}
           folderId={view.kind === "new" ? view.folderId : null}
           onClearFolder={() => setView({ kind: "new", folderId: null })}
           onStart={(text, provider, cwd, choice) => startWork(text, provider, cwd, view.kind === "new" ? view.folderId : null, choice)}
-          onOpenWork={(target) => {
-            setWorkId(target.id);
-            setView({ kind: "work" });
-          }}
+          onOpenWork={openWorkNow}
           pickFolder={inDesktop ? pickFolderNative : null}
           engine={engine}
           setEngine={setEngine}
         />
       ) : work ? (
-        <WorkView state={state} work={work} actions={actions} engine={engine} setEngine={setEngine} pickFile={inDesktop ? pickFileNative : null} tabs={tabs} openDocIds={openDocIds} />
+        <WorkView
+          state={state}
+          work={work}
+          actions={actions}
+          engine={engine}
+          setEngine={setEngine}
+          pickFile={inDesktop ? pickFileNative : null}
+          tabs={tabs}
+          openDocIds={openDocIds}
+          focusItem={focusItem && focusItem.sessionId === activeSession?.id ? focusItem : null}
+          onFocusDone={() => setFocusItem(null)}
+          sidebarOpen={sidebarOpen}
+        />
       ) : null}
       </div>
 
@@ -768,6 +1069,22 @@ export function App() {
         />
       ) : null}
       {engineMenu ? <EngineMenu provider={engineMenu.provider} x={engineMenu.x} y={engineMenu.y} onClose={closeEngineMenu} /> : null}
+      {contextMenu ? <ContextMenu request={contextMenu} onClose={closeContextMenu} /> : null}
+      {paletteOpen ? (
+        <SearchPalette
+          api={api}
+          state={state}
+          commands={paletteCommands}
+          onOpenSession={openSession}
+          onOpenHit={(session, itemId) => {
+            openSession(session);
+            setFocusItem({ sessionId: session.id, itemId, nonce: Date.now() });
+          }}
+          onOpenWork={openWorkNow}
+          onOpenDoc={(artifact) => docActions.openArtifact(artifact.id)}
+          onClose={() => setPaletteOpen(false)}
+        />
+      ) : null}
       {switcher !== null ? <Switcher state={state} sessions={switchable} index={switcher} unseen={unseen} /> : null}
       {picker ? (
         <SessionPicker
@@ -792,8 +1109,21 @@ export function App() {
       ) : null}
 
       {toast ? (
-        <div className="toast" role="status" onClick={() => setToast(null)}>
-          {toast}
+        <div className="toast" role="status" onClick={() => setToastState(null)}>
+          <span>{toast.text}</span>
+          {toast.action ? (
+            <button
+              type="button"
+              className="toast-action"
+              onClick={(event) => {
+                event.stopPropagation();
+                toast.action!.run();
+                setToastState(null);
+              }}
+            >
+              {toast.action.label}
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

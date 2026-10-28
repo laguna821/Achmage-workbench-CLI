@@ -92,6 +92,41 @@ const AssistantText = memo(function AssistantText({ text, streaming }: { text: s
   );
 });
 
+type MdNode = { type: string; value?: string; children?: MdNode[] };
+
+/**
+ * A line break typed in a request stays a line break (chat, not a document: Markdown would join
+ * the lines). Code keeps its own lines anyway.
+ */
+function remarkLineBreaks() {
+  const walk = (node: MdNode) => {
+    if (!node.children) return;
+    const next: MdNode[] = [];
+    for (const child of node.children) {
+      if (child.type === "text" && child.value?.includes("\n")) {
+        child.value.split("\n").forEach((part, index) => {
+          if (index > 0) next.push({ type: "break" });
+          if (part) next.push({ type: "text", value: part });
+        });
+      } else {
+        walk(child);
+        next.push(child);
+      }
+    }
+    node.children = next;
+  };
+  return (tree: MdNode) => walk(tree);
+}
+
+/** What the user typed, read as Markdown (headings, lists, code, tables), line breaks kept. */
+const RequestText = memo(function RequestText({ text }: { text: string }) {
+  return (
+    <div className="user-bubble markdown">
+      <Markdown remarkPlugins={[remarkGfm, remarkLineBreaks]}>{text}</Markdown>
+    </div>
+  );
+});
+
 function workSummary(items: (Item<"tool"> | Item<"reasoning">)[]) {
   const tools = items.filter((item): item is Item<"tool"> => item.kind === "tool");
   const running = tools.find((tool) => tool.status === "running");
@@ -240,6 +275,8 @@ export function Transcript({
   running,
   loading,
   onAnswer,
+  focusItem,
+  onFocusDone,
 }: {
   sessionId: string;
   items: TranscriptItem[];
@@ -247,6 +284,9 @@ export function Transcript({
   running: boolean;
   loading: boolean;
   onAnswer: (itemId: string, decision: "accept" | "decline") => void;
+  /** Bring this message into view and mark it for a moment (a search hit). */
+  focusItem?: { itemId: string; nonce: number } | null;
+  onFocusDone?: () => void;
 }) {
   const { state, actions: docActions } = useDocs();
   const scroller = useRef<HTMLDivElement>(null);
@@ -290,9 +330,24 @@ export function Transcript({
 
   useLayoutEffect(() => {
     const element = scroller.current;
-    if (element && pinned.current) element.scrollTop = element.scrollHeight;
+    if (element && pinned.current && !focusItem) element.scrollTop = element.scrollHeight;
     measure();
   });
+
+  // A search hit: scroll to that message once it is on screen, then mark it briefly.
+  useEffect(() => {
+    if (!focusItem || loading) return;
+    const target = scroller.current?.querySelector<HTMLElement>(`[data-item-id="${CSS.escape(focusItem.itemId)}"]`);
+    if (!target) return;
+    pinned.current = false;
+    target.scrollIntoView({ block: "center" });
+    target.classList.remove("flash");
+    void target.offsetWidth;
+    target.classList.add("flash");
+    const timer = window.setTimeout(() => target.classList.remove("flash"), 2400);
+    onFocusDone?.();
+    return () => window.clearTimeout(timer);
+  }, [focusItem, loading, items.length, onFocusDone]);
 
   useEffect(() => {
     const onResize = () => measure();
@@ -332,7 +387,7 @@ export function Transcript({
         return null;
       case "assistant":
         return (
-          <div key={block.item.id} className="turn-assistant">
+          <div key={block.item.id} className="turn-assistant" data-item-id={block.item.id}>
             {block.speaker ? speaker : null}
             <AssistantText text={block.item.text} streaming={block.item.streaming} />
           </div>
@@ -403,7 +458,7 @@ export function Transcript({
               }}
             >
               {turn.user ? (
-                <header className="turn-request">
+                <header className="turn-request" data-item-id={turn.user.id}>
                   <div className="turn-meta">
                     <span className="turn-no">{turn.index}</span>
                     <span>요청</span>
@@ -415,7 +470,7 @@ export function Transcript({
                       <Icon name="arrowLeft" size={12} /> {turn.user.from.label}에서 온 요청
                     </button>
                   ) : null}
-                  <div className="user-bubble">{turn.user.text}</div>
+                  <RequestText text={turn.user.text} />
                   {turn.user.refs?.length ? <RefChips refs={turn.user.refs} /> : null}
                   {turn.user.create ? (
                     <div className="ref-chips">

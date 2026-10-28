@@ -13,7 +13,8 @@ import { MenuItem, Popover } from "./Popover.tsx";
 import { EngineMark } from "./EngineMark.tsx";
 import { EngineTabs } from "./StartView.tsx";
 import { accentStyle, useAppearance } from "../appearance.ts";
-import { useUnseen } from "./Overview.tsx";
+import { useUnseen } from "./SessionCards.tsx";
+import { workSessions } from "../tree.ts";
 import { Transcript } from "./Transcript.tsx";
 
 export type WorkActions = {
@@ -30,8 +31,8 @@ export type WorkActions = {
   renameSession: (session: Session, purpose: string) => void;
   setModel: (session: Session, choice: ModelChoice) => void;
   moveWork: (work: Work, folderId: string | null) => void;
-  openFinder: () => void;
-  openOverview: (work?: Work) => void;
+  openSidebar: () => void;
+  restore: (target: { kind: "folder" | "work" | "session"; id: string }) => void;
 };
 
 /** Sizes a new design starts with (the gateway knows the same ids). */
@@ -134,6 +135,9 @@ export function WorkView({
   pickFile,
   tabs,
   openDocIds,
+  focusItem,
+  onFocusDone,
+  sidebarOpen,
 }: {
   state: State;
   work: Work;
@@ -144,11 +148,24 @@ export function WorkView({
   /** Open document tabs of this work. */
   tabs?: ReactNode;
   openDocIds?: string[];
+  /** A message to bring into view (a search hit). */
+  focusItem?: { itemId: string; nonce: number } | null;
+  onFocusDone?: () => void;
+  sidebarOpen?: boolean;
 }) {
   const { lookOf, openMenu } = useAppearance();
   const unseen = useUnseen();
-  const sessions = sessionsOf(state, work.id);
-  const active = (work.activeSessionId && state.sessions[work.activeSessionId]) || sessions[sessions.length - 1] || null;
+  // Archived sessions leave the tabs (they stay in the archive), unless one is on screen.
+  const listed = workSessions(state, work.id);
+  const shown = (work.activeSessionId && state.sessions[work.activeSessionId]) || listed[listed.length - 1] || sessionsOf(state, work.id).at(-1) || null;
+  const sessions = shown && shown.archivedAt ? [...listed, shown] : listed;
+  const active = shown;
+  const [moreOpen, setMoreOpen] = useState(false);
+  const closeMore = useCallback(() => setMoreOpen(false), []);
+  const archivedFolder = (() => {
+    for (let at = work.folderId; at; at = state.folders[at]?.parentId ?? null) if (state.folders[at]?.archivedAt) return state.folders[at]!;
+    return null;
+  })();
   const transcript = active ? state.transcripts[active.id] : undefined;
   const path = folderPath(state, work.folderId);
   const busy = isBusy(active ?? undefined);
@@ -378,12 +395,53 @@ export function WorkView({
             ),
           )}
           {hiddenTabs ? (
-            <button type="button" className="session-tab more" onClick={() => actions.openOverview(work)} title="이 작업의 모든 세션">
-              +{hiddenTabs}
-              {sessions.some((session) => unseen.has(session.id) && !tabSessions.includes(session)) ? <span className="new-dot" /> : null}
-            </button>
+            <div className="anchor">
+              <button type="button" className="session-tab more" onClick={() => setMoreOpen(!moreOpen)} title="이 작업의 다른 세션" aria-expanded={moreOpen}>
+                +{hiddenTabs}
+                {sessions.some((session) => unseen.has(session.id) && !tabSessions.includes(session)) ? <span className="new-dot" /> : null}
+              </button>
+              <Popover open={moreOpen} onClose={closeMore} align="left">
+                <div className="menu-label">이 작업의 다른 세션</div>
+                {sessions
+                  .filter((session) => !tabSessions.includes(session))
+                  .map((session) => (
+                    <MenuItem
+                      key={session.id}
+                      hint={statusText(session)}
+                      onSelect={() => {
+                        closeMore();
+                        actions.selectSession(work, session);
+                      }}
+                    >
+                      <span className="menu-engine" style={accentStyle(lookOf(session.provider))}>
+                        <EngineMark provider={session.provider} size={15} />
+                        {sessionLabel(session)}
+                        {unseen.has(session.id) ? <span className="new-dot" /> : null}
+                      </span>
+                    </MenuItem>
+                  ))}
+              </Popover>
+            </div>
           ) : null}
         </nav>
+      ) : null}
+
+      {work.archivedAt || archivedFolder || active?.archivedAt ? (
+        <div className="column archived-banner" role="status">
+          <Icon name="archive" size={15} />
+          <span>
+            {work.archivedAt ? "보관한 작업입니다." : archivedFolder ? `보관한 폴더(${archivedFolder.name}) 안의 작업입니다.` : "보관한 세션입니다."} 사이드바와 목록에는 보이지 않습니다.
+          </span>
+          <button
+            type="button"
+            className="link"
+            onClick={() =>
+              actions.restore(work.archivedAt ? { kind: "work", id: work.id } : archivedFolder ? { kind: "folder", id: archivedFolder.id } : { kind: "session", id: active!.id })
+            }
+          >
+            되돌리기
+          </button>
+        </div>
       ) : null}
 
       {active ? (
@@ -394,6 +452,8 @@ export function WorkView({
           running={working}
           loading={!transcript}
           onAnswer={(itemId, decision) => actions.answer(active, itemId, decision)}
+          focusItem={focusItem ?? null}
+          onFocusDone={onFocusDone}
         />
       ) : (
         <div className="transcript">
@@ -539,11 +599,11 @@ export function WorkView({
           }
         />
         <div className="footer-line">
-          {otherActive ? (
+          {otherActive && !sidebarOpen ? (
             <>
               다른 작업 {otherActive}개 진행 중 ·{" "}
-              <button type="button" className="link" onClick={actions.openFinder}>
-                전체 보기
+              <button type="button" className="link" onClick={actions.openSidebar}>
+                사이드바에서 보기
               </button>
             </>
           ) : null}

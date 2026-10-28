@@ -1005,9 +1005,9 @@ export class SessionManager {
    */
   search(query: string, options: { archived?: boolean; provider?: Provider | null; folderId?: string | null } = {}): SearchResult {
     const started = performance.now();
-    const terms = query
-      .trim()
-      .split(/\s+/)
+    // Words must all appear; "quoted words" must appear together as typed.
+    const terms = [...query.trim().matchAll(/"([^"]+)"|(\S+)/g)]
+      .map((match) => (match[1] ?? match[2] ?? "").trim())
       .filter(Boolean)
       .slice(0, 6)
       .map((term) => term.slice(0, 100));

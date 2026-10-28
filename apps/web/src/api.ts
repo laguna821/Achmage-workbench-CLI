@@ -6,16 +6,22 @@ import type {
   DocRef,
   DocumentTools,
   EditorGrant,
+  ExportMarkdownRequest,
+  ExportMarkdownResult,
   Handoff,
   IntegrationsView,
   Proposal,
   Folder,
   Provider,
+  SearchResult,
   SequencedEvent,
   Session,
   Snapshot,
   TranscriptItem,
   UiPrefs,
+  UpdateFolderRequest,
+  UpdateSessionRequest,
+  UpdateWorkRequest,
   Work,
 } from "@workbench/contracts";
 
@@ -63,13 +69,20 @@ export class Api {
   snapshot = () => this.request<Snapshot>("GET", "/api/snapshot");
   items = (sessionId: string) => this.request<{ seq: number; items: TranscriptItem[] }>("GET", `/api/sessions/${sessionId}/items`);
   createFolder = (name: string, parentId: string | null) => this.request<Folder>("POST", "/api/folders", { name, parentId });
+  updateFolder = (folderId: string, patch: UpdateFolderRequest) => this.request<Folder>("PATCH", `/api/folders/${folderId}`, patch);
+  search = (query: string, options: { provider?: Provider | null; archived?: boolean; folderId?: string | null } = {}) => {
+    const params = new URLSearchParams({ q: query });
+    if (options.provider) params.set("provider", options.provider);
+    if (options.archived) params.set("archived", "1");
+    if (options.folderId) params.set("folderId", options.folderId);
+    return this.request<SearchResult>("GET", `/api/search?${params}`);
+  };
+  exportMarkdown = (sessionId: string, request: ExportMarkdownRequest) => this.request<ExportMarkdownResult>("POST", `/api/sessions/${sessionId}/export`, request);
   createWork = (title: string, folderId: string | null, cwd: string | null) => this.request<Work>("POST", "/api/works", { title, folderId, cwd });
-  updateWork = (workId: string, patch: Partial<Pick<Work, "title" | "folderId" | "activeSessionId">>) =>
-    this.request<Work>("PATCH", `/api/works/${workId}`, patch);
+  updateWork = (workId: string, patch: UpdateWorkRequest) => this.request<Work>("PATCH", `/api/works/${workId}`, patch);
   createSession = (workId: string, provider: Provider, options?: { purpose?: string; model?: string | null; effort?: string | null }) =>
     this.request<Session>("POST", `/api/works/${workId}/sessions`, { provider, ...options });
-  updateSession = (sessionId: string, patch: { purpose?: string; model?: string | null; effort?: string | null }) =>
-    this.request<Session>("PATCH", `/api/sessions/${sessionId}`, patch);
+  updateSession = (sessionId: string, patch: UpdateSessionRequest) => this.request<Session>("PATCH", `/api/sessions/${sessionId}`, patch);
   send = (sessionId: string, requestId: string, text: string, refs: DocRef[] = [], create: CreateTarget | null = null) =>
     this.request<{ duplicate: boolean }>("POST", `/api/sessions/${sessionId}/messages`, { requestId, text, refs, create });
   handoff = (request: { requestId: string; sourceSessionId: string; targetSessionId: string; text: string; refs: DocRef[] }) =>
