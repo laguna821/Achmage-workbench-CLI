@@ -1,0 +1,182 @@
+/* Notion-like organisation with the Obsidian vault mirror (pkm). */
+
+/* ── "볼트" in the sidebar ─────────────────────────────────────────────── */
+.vault-section .vault-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
+.vault-readonly {
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.vault-tree {
+  padding: 0 2px;
+}
+
+.vault-row .vault-icon {
+  display: inline-grid;
+  place-items: center;
+}
+
+.vault-row.colored .side-row-label {
+  font-weight: 600;
+}
+
+.vault-row.vault-root .side-row-label {
+  font-weight: 650;
+}
+
+.vault-count {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.vault-pin {
+  flex: 0 0 auto;
+  color: var(--faint);
+}
+
+.vault-problem {
+  padding: 4px 10px 8px;
+  font-size: 12.5px;
+  color: var(--amber-text);
+}
+
+.vault-connect .side-row-label,
+.vault-pins .side-row-label {
+  color: var(--text-soft);
+}
+
+/*
+ * Group and folder borders, as the user's border add-on draws them: a gradient ring around a block
+ * of rows. The padding box is painted in the sidebar's own colour so only the ring shows.
+ */
+.vault-border {
+  --vb-start: var(--line);
+  --vb-end: var(--vb-start);
+  margin: 3px 0;
+  border: 2px solid transparent;
+  border-radius: var(--vb-radius, 10px);
+  background:
+    linear-gradient(var(--sidebar-bg), var(--sidebar-bg)) padding-box,
+    linear-gradient(135deg, color-mix(in srgb, var(--vb-start) 80%, transparent), color-mix(in srgb, var(--vb-end) 80%, transparent)) border-box;
+}
+
+.vault-border > .vault-border {
+  margin: 2px 1px;
+}
+
+.vault-border .side-row {
+  border-radius: 6px;
+}
+
+/* ── dialogs ───────────────────────────────────────────────────────────── */
+.pkm-dialog {
+  width: min(600px, calc(100vw - 40px));
+  max-height: min(84vh, 760px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 22px 16px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--popover-shadow);
+}
+
+.pkm-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pkm-dialog-head h2 {
+  margin: 0;
+  font-size: 19px;
+}
+
+.pkm-suggest {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pkm-suggest:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.pkm-suggest-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.pkm-suggest-text .mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.pkm-suggest-action {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.pkm-path-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pkm-path-row {
+  display: flex;
+  gap: 8px;
+}
+
+.pkm-path-row .sheet-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.pkm-dialog .sheet-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pkm-dialog {
+    animation: none;
+  }
+}

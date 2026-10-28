@@ -92,6 +92,8 @@ export type HttpOptions = {
   onClientLog?: (message: string) => void;
   /** The office editors' own origin (editors.ts) and the grants that let one page open one document. */
   editors?: { grants: EditorGrants; origin: () => string | null };
+  /** `/api/pkm/*` (pkm-http.ts): the vault mirror, views, rules and pages; true when it answered. */
+  pkm?: (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<boolean>;
 };
 
 function sameToken(given: string | null, expected: string) {
@@ -220,6 +222,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       const method = req.method ?? "GET";
 
       if (method === "GET" && path === "/api/snapshot") return sendJson(res, 200, manager.snapshot());
+      if (path.startsWith("/api/pkm/") && options.pkm && (await options.pkm(req, res, url))) return;
       if (method === "GET" && path === "/api/events") {
         return streamEvents(req, res, bus, Number(url.searchParams.get("since") ?? bus.currentSeq));
       }

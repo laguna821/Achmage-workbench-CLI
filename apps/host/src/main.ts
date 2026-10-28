@@ -11,6 +11,8 @@ import { Store } from "./store.ts";
 import { Kordoc } from "./kordoc.ts";
 import { IeumOffice } from "./ieumoffice.ts";
 import { createEditorsServer, EditorGrants } from "./editors.ts";
+import { Pkm } from "./pkm.ts";
+import { handlePkm } from "./pkm-http.ts";
 
 // Local gateway: owns engine processes and state, serves the UI and an HTTP + SSE API on
 // 127.0.0.1 only. Prints one `WORKBENCH_READY {json}` line once it accepts connections.
@@ -58,6 +60,7 @@ const manager = new SessionManager(store, bus, {
   ieum: new IeumOffice(),
 });
 void manager.refreshTools();
+const pkm = new Pkm(store, bus, manager);
 
 const claudeIdleMs = env.WORKBENCH_CLAUDE_IDLE_MS ? Number(env.WORKBENCH_CLAUDE_IDLE_MS) : undefined;
 manager.registerAdapter(
@@ -81,6 +84,7 @@ const server = createHttpServer(manager, bus, {
   // UI errors stay on this machine, next to the state database.
   onClientLog: (message) => appendFileSync(join(dataDir, "client.log"), `${new Date().toISOString()} ${message}\n`),
   editors: { grants, origin: () => editorsOrigin },
+  pkm: (req, res, url) => handlePkm(pkm, req, res, url),
 });
 
 /** Listen on the port used last time, or on any free one when it is taken; remember the one bound. */
@@ -119,6 +123,7 @@ async function stop() {
   stopping = true;
   server.close();
   editors.close();
+  pkm.close();
   await manager.shutdown().catch(() => undefined);
   store.close();
   process.exit(0);

@@ -9,6 +9,7 @@ import { EngineMark } from "./EngineMark.tsx";
 import { Icon, type IconName } from "./Icon.tsx";
 import type { MenuEntry, MenuRequest } from "./ContextMenu.tsx";
 import { UsageCard } from "./UsageCard.tsx";
+import { VaultSection } from "./pkm/VaultSection.tsx";
 
 // The sidebar: where many sessions live. "지금" (waiting for you, working, new replies) on top,
 // then pinned things, then the folder tree of works with their sessions and documents. Rows move by
@@ -596,6 +597,7 @@ export function Sidebar({
             {!rows.length && creatingIn === undefined ? <div className="empty-hint side-empty">아직 작업이 없습니다. 위의 "새 세션"으로 시작하세요.</div> : null}
           </div>
         </section>
+        <VaultSection theme={appTheme} openMenu={actions.openMenu} />
       </div>
 
       <div className="side-foot">

@@ -56,7 +56,8 @@ export class Api {
     this.token = token;
   }
 
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  /** Any API call (feature clients such as pkm.ts build on it). */
+  async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const response = await fetch(path, {
       method,
       headers: { authorization: `Bearer ${this.token}`, "content-type": "application/json" },

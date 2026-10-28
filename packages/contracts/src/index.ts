@@ -378,7 +378,9 @@ export type WorkbenchEvent =
   | { type: "proposal.upserted"; proposal: Proposal }
   | { type: "handoff.upserted"; handoff: Handoff }
   | { type: "prefs.updated"; prefs: UiPrefs }
-  | { type: "tools.status"; tools: DocumentTools };
+  | { type: "tools.status"; tools: DocumentTools }
+  /** The vault mirror, saved views, rules or pins changed (pkm.ts); the UI fetches that part again. */
+  | { type: "pkm.changed"; scope: "vault" | "views" | "rules" | "pins" | "insights"; version: number };
 
 /**
  * Screen preferences (theme, sidebar, per-engine look). Owned by the UI; the gateway only stores
@@ -661,3 +663,4 @@ export function applyItemEvent(items: TranscriptItem[], event: WorkbenchEvent): 
   }
   return items;
 }
+export * from "./pkm.ts";

@@ -32,6 +32,8 @@ export type State = {
   proposals: Record<string, Proposal>;
   handoffs: Record<string, Handoff>;
   tools: DocumentTools | null;
+  /** Last `pkm.changed` version per scope (vault, views, rules, pins…): screens refetch on change. */
+  pkm: Record<string, number>;
 };
 
 export const initialState: State = {
@@ -49,6 +51,7 @@ export const initialState: State = {
   proposals: {},
   handoffs: {},
   tools: null,
+  pkm: {},
 };
 
 export type Action =
@@ -108,6 +111,8 @@ export function reducer(state: State, action: Action): State {
           return { ...next, tools: event.tools };
         case "handoff.upserted":
           return { ...next, handoffs: { ...state.handoffs, [event.handoff.id]: event.handoff } };
+        case "pkm.changed":
+          return { ...next, pkm: { ...state.pkm, [event.scope]: event.version } };
         case "provider.status":
           return { ...next, providers: { ...state.providers, [event.status.provider]: event.status } };
         case "item.upserted":

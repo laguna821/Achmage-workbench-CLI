@@ -24,6 +24,8 @@ import { DocTabs } from "./components/DocTabs.tsx";
 import { IntegrationsSheet } from "./components/IntegrationsSheet.tsx";
 import { Onboarding } from "./components/Onboarding.tsx";
 import { SessionPicker } from "./components/SessionPicker.tsx";
+import { PkmProvider } from "./components/pkm/PkmContext.tsx";
+import { VaultDialogHost, VaultSettingsRow } from "./components/pkm/VaultDialog.tsx";
 
 // Editors (CodeMirror, PDF.js) load only when a document opens.
 const DocumentView = lazy(() => import("./components/docs/DocumentView.tsx"));
@@ -920,6 +922,7 @@ export function App() {
     <AppearanceContext.Provider value={appearanceApi}>
     <UnseenContext.Provider value={unseen}>
     <DocContext.Provider value={{ state, actions: docActions }}>
+    <PkmProvider api={api} state={state} onToast={setToast}>
     <div
       className="app look-scope"
       data-theme={focusedTheme}
@@ -1038,6 +1041,7 @@ export function App() {
                 onBrandMotion={(next) => savePrefs({ brandMotion: next })}
                 notifications={prefs.notify !== false}
                 onNotifications={(next) => savePrefs({ notify: next })}
+                vault={<VaultSettingsRow onOpen={closeMenu} />}
               />
             </Popover>
           </div>
@@ -1223,7 +1227,9 @@ export function App() {
           ) : null}
         </div>
       ) : null}
+      <VaultDialogHost pickFolder={inDesktop ? pickFolderNative : null} />
     </div>
+    </PkmProvider>
     </DocContext.Provider>
     </UnseenContext.Provider>
     </AppearanceContext.Provider>

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { PROVIDER_LABEL, type DocumentTools, type Provider, type ProviderStatus } from "@workbench/contracts";
 import { usageText } from "../format.ts";
 import type { ThemePref } from "../theme.ts";
@@ -62,7 +63,10 @@ export function Connections({
   onBrandMotion,
   notifications,
   onNotifications,
+  vault,
 }: {
+  /** The Obsidian vault line (pkm). */
+  vault?: ReactNode;
   tools: DocumentTools | null;
   onIntegrations: () => void;
   onOnboarding: () => void;
@@ -154,6 +158,7 @@ export function Connections({
         상태 새로 고침
       </button>
       <ToolsSection tools={tools} onInstallIeum={onInstallIeum} onRefreshTools={onRefreshTools} />
+      {vault}
       <button type="button" className="text-button" onClick={onIntegrations}>
         MCP·스킬 연동 · Claude와 Codex 나란히…
       </button>
