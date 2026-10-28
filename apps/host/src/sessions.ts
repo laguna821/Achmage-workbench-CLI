@@ -976,6 +976,22 @@ export class SessionManager {
     return this.documents.check(existing.id);
   }
 
+  /**
+   * A new page: a Markdown file in the work folder, opened at once (Notion's "+" on a row). Never
+   * overwrites: a number is added to a taken name.
+   */
+  createPage(workId: string, name: string) {
+    const work = this.requireWork(workId);
+    const stem = (name.trim() || "제목 없음").replace(/[\\/:*?"<>|]/g, "_").replace(/\.md$/i, "").slice(0, 80);
+    mkdirSync(work.cwd, { recursive: true });
+    let path = resolve(work.cwd, `${stem}.md`);
+    for (let index = 2; existsSync(path); index += 1) path = resolve(work.cwd, `${stem} ${index}.md`);
+    writeFileSync(path, `# ${stem}\n\n`, { flag: "wx" });
+    const tracked = this.documents.track(work.id, work.cwd, path, "user", null, "새 페이지");
+    if (!tracked) throw new HttpError(500, "page_not_tracked", "페이지를 만들지 못했습니다.");
+    return tracked.artifact;
+  }
+
   /** A new design file in the work folder (never overwrites: a number is added to a taken name). */
   createDesign(workId: string, name: string, preset: DesignPreset, text: string | null = null) {
     const work = this.requireWork(workId);

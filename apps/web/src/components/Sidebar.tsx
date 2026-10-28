@@ -34,6 +34,8 @@ export type SidebarActions = {
   refreshUsage: () => Promise<unknown>;
   /** Home: what is going on across all works, and a new session. */
   openHome: () => void;
+  /** A new Markdown page in a work (the "+" on a work row). */
+  newPage: (work: Work) => void;
 };
 
 const MIN_WIDTH = 232;
@@ -369,6 +371,7 @@ export function Sidebar({
     let title: string | undefined;
     if (row.type === "folder") {
       label = row.folder.name;
+      trailing = <span className="side-row-trail">{rowAdd("이 폴더에 새 작업", () => actions.newSession({ folderId: row.folder.id }))}</span>;
     } else if (row.type === "work") {
       icon = "project";
       label = row.work.title;
@@ -378,6 +381,7 @@ export function Sidebar({
       const only = row.sessions.length === 1 ? row.sessions[0] : null;
       trailing = (
         <span className="side-row-trail">
+          {rowAdd("새 페이지", () => actions.newPage(row.work))}
           {only ? <EngineMark provider={only.provider} size={13} className="side-row-engine" /> : null}
           {attention ? <span className="dot dot-attention" title="확인 필요" /> : busy ? <span className="dot dot-active" title="진행 중" /> : unseen ? <span className="dot dot-new" title="새 답" /> : null}
         </span>
@@ -440,6 +444,25 @@ export function Sidebar({
       </div>
     );
   };
+
+  /** The "+" that shows on a hovered row (Notion-style); it never starts a drag or opens the row. */
+  function rowAdd(label: string, onAdd: () => void) {
+    return (
+      <button
+        type="button"
+        className="row-add"
+        title={label}
+        aria-label={label}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          onAdd();
+        }}
+      >
+        <Icon name="plus" size={12} />
+      </button>
+    );
+  }
 
   const creatingRow = (
     <form

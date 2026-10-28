@@ -84,6 +84,8 @@ export class Api {
   createSession = (workId: string, provider: Provider, options?: { purpose?: string; model?: string | null; effort?: string | null }) =>
     this.request<Session>("POST", `/api/works/${workId}/sessions`, { provider, ...options });
   updateSession = (sessionId: string, patch: UpdateSessionRequest) => this.request<Session>("PATCH", `/api/sessions/${sessionId}`, patch);
+  /** A new Markdown page in the work folder. */
+  createPage = (workId: string, name = "") => this.request<Artifact>("POST", `/api/works/${workId}/pages`, { name });
   /** Compact the conversation now (the engine also does so on its own when the context is full). */
   compact = (sessionId: string) => this.request<{ ok: boolean }>("POST", `/api/sessions/${sessionId}/compact`);
   send = (sessionId: string, requestId: string, text: string, refs: DocRef[] = [], create: CreateTarget | null = null, mode: "auto" | "steer" | "queue" = "auto") =>

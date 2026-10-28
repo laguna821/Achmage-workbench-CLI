@@ -350,6 +350,10 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           return sendJson(res, 200, { ok: true });
         }
       }
+      if (parts[0] === "works" && parts[1] && parts[2] === "pages" && method === "POST") {
+        const body = await readJson(req);
+        return sendJson(res, 201, manager.createPage(parts[1], typeof body.name === "string" ? body.name : ""));
+      }
       if (parts[0] === "works" && parts[1] && parts[2] === "designs" && method === "POST") {
         const body = await readJson(req, 64_000_000);
         const preset = (typeof body.preset === "string" && body.preset in DESIGN_PRESETS ? body.preset : "square") as DesignPreset;

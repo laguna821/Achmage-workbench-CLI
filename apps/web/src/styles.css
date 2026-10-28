@@ -5425,3 +5425,29 @@ kbd {
 .queued-row.held .queued-text {
   color: var(--text-soft);
 }
+
+/* Notion-style "+" on a hovered folder or work row. */
+.row-add {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.side-row:hover .row-add,
+.side-row:focus-within .row-add,
+.side-row.focused .row-add {
+  opacity: 1;
+}
+
+.row-add:hover {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  color: var(--text);
+}

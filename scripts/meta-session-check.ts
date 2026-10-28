@@ -192,7 +192,17 @@ try {
   await shot("09-sort-menu.png");
   check("사이드바 정렬 메뉴가 트리에 가려지지 않음", covered.length === 3 && covered.every(Boolean), covered.join(","));
   await page.keyboard.press("Escape");
-  await shot("10-final.png");
+
+  // Notion's "+": a page in the work folder, opened at once and listed in the tree.
+  await row(page, "w8").hover();
+  await row(page, "w8").locator(".row-add").click();
+  await page.waitForSelector(".document-view, .doc-view, [data-artifact-id]", { timeout: 10_000 }).catch(() => undefined);
+  await page.waitForTimeout(600);
+  const pageFile = join(works[1]!.cwd, "제목 없음.md");
+  const listed = await page.locator(".sidebar .side-row", { hasText: "제목 없음.md" }).count();
+  await shot("10-new-page.png");
+  check("작업 줄의 + 로 새 페이지(.md)를 만들고 바로 엶", existsSync(pageFile) && readFileSync(pageFile, "utf8").startsWith("# 제목 없음") && listed >= 1, `file=${existsSync(pageFile)} listed=${listed}`);
+  await shot("11-final.png");
 } catch (error) {
   check("실행", false, error instanceof Error ? error.message.split("\n")[0]! : String(error));
   await page.screenshot({ path: join(outDir, "99-failure.png") }).catch(() => undefined);

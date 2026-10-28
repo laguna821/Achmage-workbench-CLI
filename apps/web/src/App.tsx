@@ -500,6 +500,24 @@ export function App() {
     },
     [state.works, actions],
   );
+  /** Notion's "+": a Markdown page in the work folder, shown in the tree and opened at once. */
+  const newPage = useCallback(
+    (owner: Work) => {
+      if (!api) return;
+      void api
+        .createPage(owner.id)
+        .then((artifact) => {
+          const open = readOpenState(prefsRef.current.tree);
+          savePrefs({
+            tree: { ...open, openWorks: [...new Set([...open.openWorks, owner.id])], closedWorks: open.closedWorks.filter((id) => id !== owner.id), openDocs: [...new Set([...open.openDocs, owner.id])] },
+          });
+          setWorkId(owner.id);
+          setView({ kind: "document", artifactId: artifact.id, proposalId: null });
+        })
+        .catch(fail);
+    },
+    [api, fail, savePrefs, setView, setWorkId],
+  );
   const startNew = useCallback(
     (folderId: string | null = null) => {
       setView({ kind: "new", folderId });
@@ -760,6 +778,7 @@ export function App() {
                 }),
             })),
           },
+          { kind: "item", label: "새 페이지", icon: "page", onSelect: () => newPage(owner) },
           { kind: "item", label: "이름 바꾸기", icon: "edit", hint: "F2", onSelect: () => setSidebarPending({ rename: owner.id }) },
           { kind: "separator" },
           { kind: "item", label: owner.pinned ? "고정 풀기" : "고정", icon: "pin", onSelect: () => void api.updateWork(owner.id, { pinned: !owner.pinned }).catch(fail) },
@@ -851,6 +870,7 @@ export function App() {
     openMenu: setContextMenu,
     refreshUsage: () => api?.refreshProviders().catch(fail) ?? Promise.resolve(),
     openHome: () => startNew(null),
+    newPage,
     archive,
     openSearch: () => setPaletteOpen(true),
     openArchive: () => setView({ kind: "archive" }),
