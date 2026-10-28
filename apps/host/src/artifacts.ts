@@ -141,7 +141,15 @@ export class Documents {
    * A file an engine (or the user) touched: start tracking it or record a new revision when its
    * content changed. Returns what happened, or null for files that are not documents.
    */
-  track(workId: string, cwd: string, rawPath: string, author: ArtifactRevision["author"], sessionId: string | null, note: string | null) {
+  track(
+    workId: string,
+    cwd: string,
+    rawPath: string,
+    author: ArtifactRevision["author"],
+    sessionId: string | null,
+    note: string | null,
+    derivedFrom: ArtifactRevision["derivedFrom"] = null,
+  ) {
     const path = isAbsolute(rawPath) ? rawPath : resolve(cwd, rawPath);
     const format = formatOf(path);
     if (!format || isWorkbenchPath(path)) return null;
@@ -150,7 +158,7 @@ export class Documents {
     const existing = [...this.artifacts.values()].find((artifact) => artifact.workId === workId && artifact.path === path);
     if (existing) {
       if (sha256(data) === existing.sha256) return null;
-      const updated = this.record(existing, data, { author, sessionId, baseRevision: existing.revision, note });
+      const updated = this.record(existing, data, { author, sessionId, baseRevision: existing.revision, note, ...(derivedFrom?.length ? { derivedFrom } : {}) });
       return { artifact: updated, change: "modified" as const };
     }
     const now = Date.now();
@@ -168,7 +176,7 @@ export class Documents {
       createdAt: now,
       updatedAt: now,
     };
-    const created = this.record(artifact, data, { author, sessionId, baseRevision: null, note });
+    const created = this.record(artifact, data, { author, sessionId, baseRevision: null, note, ...(derivedFrom?.length ? { derivedFrom } : {}) });
     return { artifact: created, change: "created" as const };
   }
 
@@ -444,6 +452,22 @@ export class Documents {
     this.saveProposal(pending);
     if (office) void this.checkOffice(pending.id);
     return pending;
+  }
+
+  /** Why a document an engine just created cannot be opened, or null (Hangul through kordoc, Office through IeumOffice). */
+  async newDocumentProblem(path: string): Promise<string | null> {
+    const format = formatOf(path);
+    if (format === "design") return designProblem(readFileOrNull(path)?.toString("utf8") ?? "");
+    if (format && isOfficeFormat(format)) return this.officeProblem(path);
+    if (format === "hwpx" && this.kordoc?.available) {
+      try {
+        await this.kordoc.read(path);
+        return null;
+      } catch (error) {
+        return `한글 엔진이 이 파일을 읽지 못했습니다: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    }
+    return null;
   }
 
   /** A Word/PowerPoint/Excel working copy must still open; otherwise the proposal says why and is not applied. */

@@ -2,6 +2,7 @@ import type {
   ApiError,
   Artifact,
   ArtifactRevision,
+  CreateTarget,
   DocRef,
   DocumentTools,
   Handoff,
@@ -67,8 +68,8 @@ export class Api {
     this.request<Session>("POST", `/api/works/${workId}/sessions`, { provider, ...options });
   updateSession = (sessionId: string, patch: { purpose?: string; model?: string | null; effort?: string | null }) =>
     this.request<Session>("PATCH", `/api/sessions/${sessionId}`, patch);
-  send = (sessionId: string, requestId: string, text: string, refs: DocRef[] = []) =>
-    this.request<{ duplicate: boolean }>("POST", `/api/sessions/${sessionId}/messages`, { requestId, text, refs });
+  send = (sessionId: string, requestId: string, text: string, refs: DocRef[] = [], create: CreateTarget | null = null) =>
+    this.request<{ duplicate: boolean }>("POST", `/api/sessions/${sessionId}/messages`, { requestId, text, refs, create });
   handoff = (request: { requestId: string; sourceSessionId: string; targetSessionId: string; text: string; refs: DocRef[] }) =>
     this.request<Handoff>("POST", "/api/handoffs", request);
   openFile = (workId: string, path: string) => this.request<Artifact>("POST", `/api/works/${workId}/artifacts`, { path });

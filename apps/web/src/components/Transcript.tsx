@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import { PROVIDER_LABEL, type Provider, type TranscriptItem } from "@workbench/contracts";
 import { EngineMark } from "./EngineMark.tsx";
 import { FileCard, HandoffCard, ProposalCard, RefChips, useDocs } from "./DocCards.tsx";
+import { CREATE_LABEL } from "@workbench/contracts";
 import { Icon, type IconName } from "./Icon.tsx";
 
 type Item<K extends TranscriptItem["kind"]> = Extract<TranscriptItem, { kind: K }>;
@@ -416,6 +417,13 @@ export function Transcript({
                   ) : null}
                   <div className="user-bubble">{turn.user.text}</div>
                   {turn.user.refs?.length ? <RefChips refs={turn.user.refs} /> : null}
+                  {turn.user.create ? (
+                    <div className="ref-chips">
+                      <span className="ref-chip create-chip" title={turn.user.create.path}>
+                        → 새 {CREATE_LABEL[turn.user.create.format]}: {turn.user.create.name}
+                      </span>
+                    </div>
+                  ) : null}
                 </header>
               ) : null}
               <div className="turn-body">

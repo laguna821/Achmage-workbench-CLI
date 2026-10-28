@@ -7,6 +7,7 @@ import type { DocRef, Provider, SequencedEvent } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
 import { HttpError, type SessionManager } from "./sessions.ts";
 import { DESIGN_PRESETS, systemFonts, type DesignPreset } from "./design.ts";
+import { parseCreate } from "./create.ts";
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -251,7 +252,11 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         }
         if (method === "POST" && parts[2] === "messages") {
           const body = await readJson(req);
-          return sendJson(res, 202, await manager.send(sessionId, String(body.requestId ?? ""), String(body.text ?? ""), parseRefs(body.refs)));
+          return sendJson(
+            res,
+            202,
+            await manager.send(sessionId, String(body.requestId ?? ""), String(body.text ?? ""), parseRefs(body.refs), null, parseCreate(body.create)),
+          );
         }
         if (method === "POST" && parts[2] === "interrupt") {
           await manager.interrupt(sessionId);

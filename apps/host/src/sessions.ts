@@ -19,6 +19,7 @@ import {
   DESIGN_EXTENSION,
   type DocRef,
   type DocumentTools,
+  type CreateTarget,
   type Handoff,
   type HandoffRequest,
   type Proposal,
@@ -35,6 +36,7 @@ import { adaptTitle, titleFor } from "./titles.ts";
 import { blankDesign, designProblem, type DesignPreset } from "./design.ts";
 import { IeumOffice, installIeumOffice, type InstallProgress } from "./ieumoffice.ts";
 import { findHop, openInHop, openWithDesktop } from "./hop.ts";
+import { createGuide, reservePath } from "./create.ts";
 
 export { HttpError };
 
@@ -54,6 +56,8 @@ export type ManagerOptions = {
 };
 
 const DEFAULT_PURPOSE = /^대화 \d+$/;
+
+type PendingCreate = { requestId: string; path: string; target: CreateTarget; sources: { artifactId: string; revision: number }[] };
 
 const SKIPPED_DIRS = new Set(["node_modules", ".git", ".venv", "venv", "__pycache__", "dist", "build", "target", ".next", ".cache"]);
 
@@ -119,6 +123,8 @@ export class SessionManager {
   private readonly handoffs = new Map<string, Handoff>();
   /** When each session's current turn began (for the after-turn folder scan). */
   private readonly turnStarted = new Map<string, number>();
+  /** The new document each running request asked for. */
+  private readonly creating = new Map<string, PendingCreate>();
   readonly documents: Documents;
   private readonly store: Store;
   private readonly bus: EventBus;
@@ -432,12 +438,13 @@ export class SessionManager {
     text: string,
     refs: DocRef[] = [],
     from: { sessionId: string; label: string } | null = null,
+    create: CreateTarget | null = null,
   ): Promise<{ duplicate: boolean }> {
     const session = this.requireSession(sessionId);
     const trimmed = text.trim();
     if (!requestId) throw new HttpError(400, "missing_request_id", "requestId가 필요합니다.");
     if (!trimmed) throw new HttpError(400, "empty_message", "보낼 내용이 없습니다.");
-    const fingerprint = hashText(refs.length ? `${trimmed}\u0000${JSON.stringify(refs)}` : trimmed);
+    const fingerprint = hashText(refs.length || create ? `${trimmed}\u0000${JSON.stringify(refs)}\u0000${JSON.stringify(create)}` : trimmed);
     const seen = this.store.findRequest(requestId);
     if (seen) {
       if (seen.sessionId !== sessionId || seen.textHash !== fingerprint) {
@@ -452,8 +459,16 @@ export class SessionManager {
     // Pin each document: the engine reads exactly this revision; edits go to a working copy.
     const prepared: { ref: DocRef; pinned: string; pinnedView: string | null; proposal: Proposal | null }[] = [];
     for (const ref of refs) prepared.push({ ref, ...(await this.documents.prepare(ref, sessionId, requestId, work.cwd)) });
+    // A new document: a free name in the work folder now, tracked with its sources after the turn.
+    let created: PendingCreate | null = null;
+    if (create) {
+      mkdirSync(work.cwd, { recursive: true });
+      const path = reservePath(work.cwd, create);
+      created = { requestId, path, target: create, sources: refs.map((ref) => ({ artifactId: ref.artifactId, revision: ref.revision })) };
+      this.creating.set(sessionId, created);
+    }
     this.store.saveRequest(requestId, sessionId, fingerprint);
-    const engineText = this.engineText(trimmed, prepared, work.cwd, from);
+    const engineText = this.engineText(trimmed, prepared, work.cwd, from, created);
     this.sink.upsertItem(sessionId, {
       kind: "user",
       id: `user:${requestId}`,
@@ -461,6 +476,7 @@ export class SessionManager {
       at: Date.now(),
       ...(refs.length ? { refs: refs.map((ref) => this.documents.summary(ref)) } : {}),
       ...(from ? { from } : {}),
+      ...(created ? { create: { format: created.target.format, name: basename(created.path), path: created.path } } : {}),
     });
     this.turnStarted.set(sessionId, Date.now());
     this.sink.updateSession(sessionId, { status: "starting", activity: "응답 준비 중", lastError: null });
@@ -470,6 +486,7 @@ export class SessionManager {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       for (const entry of prepared) if (entry.proposal) this.documents.discardProposal(entry.proposal.id);
+      if (created) this.creating.delete(sessionId);
       this.sink.upsertItem(sessionId, { kind: "notice", id: `error:${requestId}`, level: "error", text: `보내지 못했습니다: ${message}`, at: Date.now() });
       this.sink.updateSession(sessionId, { status: "error", activity: null, lastError: message });
     }
@@ -482,6 +499,7 @@ export class SessionManager {
     prepared: { ref: DocRef; pinned: string; pinnedView: string | null; proposal: Proposal | null }[],
     cwd: string,
     from: { sessionId: string; label: string } | null,
+    created: PendingCreate | null = null,
   ) {
     const parts: string[] = [];
     if (from) parts.push(`[다른 세션에서 온 요청] 보낸 곳: ${from.label}. 이 대화에 답하면 보낸 곳으로 전달됩니다.`);
@@ -489,6 +507,7 @@ export class SessionManager {
       parts.push("[Achmage Workbench] 이 요청에는 문서가 고정된 판으로 첨부되어 있습니다.");
       for (const entry of prepared) parts.push(this.documents.promptFor(entry.ref, entry.pinned, entry.proposal, cwd, entry.pinnedView));
     }
+    if (created) parts.push(createGuide(created.target, created.path, cwd, { ieum: this.documents.ieum, kordoc: this.documents.kordoc }));
     if (!parts.length) return text;
     return `${parts.join("\n")}\n\n요청:\n${text}`;
   }
@@ -572,6 +591,39 @@ export class SessionManager {
   }
 
   /** Files an engine wrote: documents get a new revision and a card in the conversation. */
+  /** The new document a request asked for: track it with its sources, or say that it is missing or broken. */
+  private finishCreate(sessionId: string, status: "completed" | "interrupted" | "failed") {
+    const created = this.creating.get(sessionId);
+    if (!created) return;
+    this.creating.delete(sessionId);
+    const session = this.sessions.get(sessionId);
+    const work = session ? this.works.get(session.workId) : undefined;
+    if (!work) return;
+    const name = basename(created.path);
+    if (!existsSync(created.path)) {
+      if (status === "completed") {
+        this.sink.upsertItem(sessionId, { kind: "notice", id: `create-missing:${created.requestId}`, level: "error", text: `새 문서 ${name}이(가) 만들어지지 않았습니다.`, at: Date.now() });
+      }
+      return;
+    }
+    const sources = created.sources.map((source) => this.documents.list().find((artifact) => artifact.id === source.artifactId)?.name).filter(Boolean);
+    const note = sources.length ? `새 문서 · ${sources.join(", ")}에서` : "새 문서";
+    const tracked = this.documents.track(work.id, work.cwd, created.path, "engine", sessionId, note, created.sources);
+    if (tracked) {
+      this.sink.upsertItem(sessionId, {
+        kind: "artifact",
+        id: `artifact:create:${created.requestId}`,
+        artifactId: tracked.artifact.id,
+        revision: tracked.artifact.revision,
+        change: "created",
+        at: Date.now(),
+      });
+    }
+    void this.documents.newDocumentProblem(created.path).then((problem) => {
+      if (problem) this.sink.upsertItem(sessionId, { kind: "notice", id: `create-problem:${created.requestId}`, level: "error", text: `${name}: ${problem}`, at: Date.now() });
+    });
+  }
+
   /**
    * Engines also write files through shell commands (a script, `cat >`), which report no paths.
    * After a turn, documents in the work folder that changed since the turn began are tracked too.
@@ -611,6 +663,7 @@ export class SessionManager {
 
   /** A turn ended: working copies become proposals, and answered handoffs go back to their source. */
   private afterTurn(sessionId: string, status: "completed" | "interrupted" | "failed") {
+    this.finishCreate(sessionId, status);
     this.trackChangedFiles(sessionId);
     for (const running of this.documents.runningProposals(sessionId)) {
       const proposal = status === "completed" ? this.documents.finishProposal(running.id) : this.documents.discardProposal(running.id);

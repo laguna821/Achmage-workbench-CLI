@@ -1,5 +1,8 @@
 import { useCallback, useState } from "react";
-import { EFFORT_LABEL, PROVIDER_LABEL, type DocRef, type Provider, type Session, type Work } from "@workbench/contracts";
+import { EFFORT_LABEL, PROVIDER_LABEL, type CreateTarget, type DocRef, type Provider, type Session, type Work } from "@workbench/contracts";
+import type { ReactNode } from "react";
+import type { MentionItem } from "../mention.ts";
+import { CreateChip, CreateTargetButton, stemOf } from "./CreateTarget.tsx";
 import { folderPath, isBusy, sessionsOf, type State } from "../state.ts";
 import { sessionLabel, statusText, statusTone } from "../format.ts";
 import { Composer } from "./Composer.tsx";
@@ -14,7 +17,7 @@ import { useUnseen } from "./Overview.tsx";
 import { Transcript } from "./Transcript.tsx";
 
 export type WorkActions = {
-  send: (session: Session, text: string, refs?: DocRef[]) => Promise<boolean>;
+  send: (session: Session, text: string, refs?: DocRef[], create?: CreateTarget | null) => Promise<boolean>;
   handoff: (source: Session, target: Session, text: string, refs?: DocRef[]) => Promise<boolean>;
   pickSession: (work: Work, exclude: Session | null) => Promise<Session | null>;
   openArtifact: (artifactId: string) => void;
@@ -129,6 +132,8 @@ export function WorkView({
   engine,
   setEngine,
   pickFile,
+  tabs,
+  openDocIds,
 }: {
   state: State;
   work: Work;
@@ -136,6 +141,9 @@ export function WorkView({
   engine: Provider;
   setEngine: (provider: Provider) => void;
   pickFile: ((folder: string) => Promise<string | null>) | null;
+  /** Open document tabs of this work. */
+  tabs?: ReactNode;
+  openDocIds?: string[];
 }) {
   const { lookOf, openMenu } = useAppearance();
   const unseen = useUnseen();
@@ -160,13 +168,21 @@ export function WorkView({
   const [renaming, setRenaming] = useState<string | null>(null);
   // "다른 세션에": the receiving session, and documents pinned to the next request.
   const [handoffTo, setHandoffTo] = useState<Session | null>(null);
-  const [attached, setAttached] = useState<string[]>([]);
+  // Documents pinned to the next request, each read (review) or changed (edit) by it.
+  const [attached, setAttached] = useState<{ id: string; mode: DocRef["mode"] }[]>([]);
+  const [create, setCreate] = useState<CreateTarget | null>(null);
   const [docsOpen, setDocsOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [pathInput, setPathInput] = useState("");
   const artifacts = Object.values(state.artifacts)
     .filter((artifact) => artifact.workId === work.id)
     .sort((a, b) => b.updatedAt - a.updatedAt);
+  // "@" offers the open documents first, then the rest of this work.
+  const open = openDocIds ?? [];
+  const mentionItems: MentionItem[] = [
+    ...open.map((id) => state.artifacts[id]).filter((artifact) => artifact && artifact.workId === work.id),
+    ...artifacts.filter((artifact) => !open.includes(artifact.id)),
+  ].map((artifact) => ({ id: artifact.id, name: artifact.name, format: artifact.format, group: open.includes(artifact.id) ? "open" : "work", hint: `r${artifact.revision}` }));
 
   const recency = (session: Session) => Math.max(session.previewAt ?? 0, session.updatedAt);
   const keep = new Set(
@@ -193,6 +209,7 @@ export function WorkView({
 
   return (
     <main className="work-view" onContextMenu={(event) => openMenu(event, active?.provider ?? engine)}>
+      {tabs}
       <div className="column context-row">
         <div className="anchor breadcrumb-anchor">
           <button type="button" className="breadcrumb" onClick={() => setFolderOpen(!folderOpen)} title="분류 옮기기" aria-expanded={folderOpen}>
@@ -397,13 +414,17 @@ export function WorkView({
           />
         ) : null}
         <Composer
+          mentions={{
+            items: mentionItems,
+            onPick: (item) => setAttached((current) => (current.some((entry) => entry.id === item.id) ? current : [...current, { id: item.id, mode: "review" }])),
+          }}
           draftKey={`work:${work.id}:${active?.id ?? "none"}`}
           placeholder="이 작업에 이어서 요청하기"
           busy={busy}
           waiting={working}
           autoFocus
           header={
-            handoffTo || attached.length ? (
+            handoffTo || attached.length || create ? (
               <div className="doc-chips">
                 {handoffTo ? (
                   <span className="target-chip" style={accentStyle(lookOf(handoffTo.provider))}>
@@ -413,33 +434,52 @@ export function WorkView({
                     </button>
                   </span>
                 ) : null}
-                {attached.map((artifactId) => {
-                  const artifact = state.artifacts[artifactId];
+                {attached.map((entry) => {
+                  const artifact = state.artifacts[entry.id];
+                  const editable = artifact && artifact.format !== "pdf" && artifact.format !== "hwp" && !handoffTo && !create;
                   return artifact ? (
-                    <span key={artifactId} className="ref-chip">
+                    <span key={entry.id} className={`ref-chip${entry.mode === "edit" ? " editing" : ""}`}>
                       <Icon name="file" size={12} /> {artifact.name} · r{artifact.revision}
-                      <button type="button" onClick={() => setAttached(attached.filter((id) => id !== artifactId))} aria-label="문서 빼기">
+                      {editable ? (
+                        <button
+                          type="button"
+                          className="ref-role"
+                          title="읽기: 자료로만 씀 · 고치기: AI가 이 문서의 수정안을 만듦"
+                          onClick={() => setAttached(attached.map((item) => (item.id === entry.id ? { ...item, mode: item.mode === "edit" ? "review" : "edit" } : item)))}
+                        >
+                          {entry.mode === "edit" ? "고치기" : "읽기"}
+                        </button>
+                      ) : null}
+                      <button type="button" onClick={() => setAttached(attached.filter((item) => item.id !== entry.id))} aria-label="문서 빼기">
                         <Icon name="x" size={11} />
                       </button>
                     </span>
                   ) : null;
                 })}
+                {create ? <CreateChip target={create} onChange={setCreate} onClear={() => setCreate(null)} /> : null}
                 {handoffTo ? <span className="muted">회신: 이 작업</span> : null}
               </div>
             ) : null
           }
           onSend={async (text) => {
             // Attached documents travel as the revision they have now; handoffs are read-only.
+            // A new document is made from the attached ones, so they are only read.
             const refs: DocRef[] = attached
-              .map((artifactId) => state.artifacts[artifactId])
-              .filter((artifact): artifact is NonNullable<typeof artifact> => Boolean(artifact))
-              .map((artifact) => ({ artifactId: artifact.id, revision: artifact.revision, mode: "review" as const, selection: null }));
+              .map((entry) => ({ entry, artifact: state.artifacts[entry.id] }))
+              .filter((pair): pair is { entry: (typeof attached)[number]; artifact: NonNullable<typeof pair.artifact> } => Boolean(pair.artifact))
+              .map(({ entry, artifact }) => ({
+                artifactId: artifact.id,
+                revision: artifact.revision,
+                mode: entry.mode === "edit" && !handoffTo && !create ? ("edit" as const) : ("review" as const),
+                selection: null,
+              }));
             const source: Session | null = active ?? (await actions.newSession(work, engine, draftChoice));
             if (!source) return false;
-            const sent = handoffTo ? await actions.handoff(source, handoffTo, text, refs) : await actions.send(source, text, refs);
+            const sent = handoffTo ? await actions.handoff(source, handoffTo, text, refs) : await actions.send(source, text, refs, create);
             if (sent) {
               setHandoffTo(null);
               setAttached([]);
+              setCreate(null);
             }
             return sent;
           }}
@@ -461,6 +501,14 @@ export function WorkView({
                 onHandoff={() => void actions.pickSession(work, active).then((picked) => picked && picked.id !== active.id && setHandoffTo(picked))}
               />
             ) : null}
+            <CreateTargetButton
+              tools={state.tools}
+              onPick={(format) => {
+                const first = attached[0] ? state.artifacts[attached[0].id] : undefined;
+                setCreate({ format, name: first ? stemOf(first.name) : "새 문서" });
+                setAttached((current) => current.map((entry) => ({ ...entry, mode: "review" })));
+              }}
+            />
             <div className="anchor">
               <button type="button" className="icon-button" onClick={() => setAttachOpen(!attachOpen)} title="문서 붙이기" aria-label="문서 붙이기">
                 <Icon name="file" size={17} />
@@ -470,10 +518,14 @@ export function WorkView({
                 {artifacts.map((artifact) => (
                   <MenuItem
                     key={artifact.id}
-                    active={attached.includes(artifact.id)}
+                    active={attached.some((entry) => entry.id === artifact.id)}
                     hint={`r${artifact.revision}`}
                     onSelect={() => {
-                      setAttached(attached.includes(artifact.id) ? attached.filter((id) => id !== artifact.id) : [...attached, artifact.id]);
+                      setAttached(
+                        attached.some((entry) => entry.id === artifact.id)
+                          ? attached.filter((entry) => entry.id !== artifact.id)
+                          : [...attached, { id: artifact.id, mode: "review" }],
+                      );
                       setAttachOpen(false);
                     }}
                   >

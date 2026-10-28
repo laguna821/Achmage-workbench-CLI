@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { FORMAT_LABEL, PROVIDER_LABEL, isOfficeFormat, type Artifact, type ArtifactRevision, type DocRef, type Proposal, type Session, type Work } from "@workbench/contracts";
+import { FORMAT_LABEL, PROVIDER_LABEL, isOfficeFormat, type CreateTarget, type Artifact, type ArtifactRevision, type DocRef, type Proposal, type Session, type Work } from "@workbench/contracts";
 import { ApiRequestError, type Api } from "../../api.ts";
 import { accentStyle, useAppearance } from "../../appearance.ts";
 import { ago } from "../../format.ts";
@@ -20,6 +20,9 @@ import { DesignView, type DesignHandle, type DesignStatus } from "./DesignView.t
 import { DesignCompare } from "./DesignCompare.tsx";
 import type { ThumbSource } from "../../design.ts";
 import { OfficeView } from "./OfficeView.tsx";
+import type { ReactNode } from "react";
+import type { MentionItem } from "../../mention.ts";
+import { CreateChip, CreateTargetButton, stemOf } from "../CreateTarget.tsx";
 import { OfficeCompare } from "./OfficeCompare.tsx";
 
 /** Save operations only; "unsaved" is derived from the text, never stored (no stale overwrite). */
@@ -29,7 +32,7 @@ type Conflict = { code: string; message: string } | null;
 const DRAFT_KEY = (artifactId: string) => `workbench.docDraft.${artifactId}`;
 const TEXT_FORMATS = new Set(["markdown", "text", "html", "hwpx", "hwp"]);
 
-export type DocSend = (target: Session | null, text: string, refs: DocRef[], handoffTo: Session | null) => Promise<boolean>;
+export type DocSend = (target: Session | null, text: string, refs: DocRef[], handoffTo: Session | null, create: CreateTarget | null) => Promise<boolean>;
 
 /**
  * A document in the central area (mockup 03). Saving makes a revision; requests carry the saved
@@ -47,7 +50,12 @@ export default function DocumentView({
   onPickTarget,
   onOpenArtifact,
   onToast,
+  tabs,
+  openDocIds,
 }: {
+  /** Open document tabs of this work. */
+  tabs?: ReactNode;
+  openDocIds?: string[];
   api: Api;
   state: State;
   artifactId: string;
@@ -95,6 +103,9 @@ export default function DocumentView({
   const [includeDoc, setIncludeDoc] = useState(true);
   const [requestMode, setRequestMode] = useState<"edit" | "review">("edit");
   const [handoffTo, setHandoffTo] = useState<Session | null>(null);
+  // Other documents mentioned with "@" (read as material), and a new document as the result.
+  const [others, setOthers] = useState<string[]>([]);
+  const [create, setCreate] = useState<CreateTarget | null>(null);
   const [targetOpen, setTargetOpen] = useState(false);
   const saving = useRef<Promise<number | null> | null>(null);
   // Revisions this view saved itself: their events must not look like someone else's change.
@@ -249,7 +260,15 @@ export default function DocumentView({
   const sendTarget = handoffTo ?? session;
   // PDF and HWP cannot take AI edits (no working copy to patch from); they are always reviewed.
   const editable = artifact.format !== "pdf" && artifact.format !== "hwp";
-  const effectiveMode: DocRef["mode"] = handoffTo || !editable ? "review" : requestMode;
+  const effectiveMode: DocRef["mode"] = handoffTo || !editable || create ? "review" : requestMode;
+  const workDocs = Object.values(state.artifacts)
+    .filter((entry) => entry.workId === work.id && entry.id !== artifactId)
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+  const openIds = openDocIds ?? [];
+  const mentionItems: MentionItem[] = [
+    ...workDocs.filter((entry) => openIds.includes(entry.id)),
+    ...workDocs.filter((entry) => !openIds.includes(entry.id)),
+  ].map((entry) => ({ id: entry.id, name: entry.name, format: entry.format, group: openIds.includes(entry.id) ? "open" : "work", hint: `r${entry.revision}` }));
   const working = Object.values(state.proposals).find((proposal) => proposal.artifactId === artifactId && proposal.status === "running");
   const reviewing = Object.values(state.handoffs).filter(
     (handoff) => handoff.status === "sent" && handoff.refs.some((ref) => ref.artifactId === artifactId),
@@ -452,6 +471,7 @@ export default function DocumentView({
 
   return (
     <main className="document-view">
+      {tabs}
       <header className="doc-header">
         <button type="button" className="ghost-button" onClick={() => void save().then(onBack)}>
           <Icon name="arrowLeft" size={15} /> 대화
@@ -710,7 +730,19 @@ export default function DocumentView({
                   </button>
                 </span>
               ) : null}
-              {!handoffTo && includeDoc && editable ? (
+              {others.map((id) => {
+                const other = state.artifacts[id];
+                return other ? (
+                  <span key={id} className="ref-chip">
+                    <Icon name="file" size={12} /> {other.name} · r{other.revision} · 읽기
+                    <button type="button" onClick={() => setOthers(others.filter((entry) => entry !== id))} aria-label="문서 빼기">
+                      <Icon name="x" size={11} />
+                    </button>
+                  </span>
+                ) : null;
+              })}
+              {create ? <CreateChip target={create} onChange={setCreate} onClear={() => setCreate(null)} /> : null}
+              {!handoffTo && includeDoc && editable && !create ? (
                 <div className="segmented small" role="radiogroup" aria-label="요청 종류">
                   <button type="button" className={requestMode === "edit" ? "active" : ""} onClick={() => setRequestMode("edit")} title="AI가 작업 사본을 고치고 수정안으로 보여 줍니다">
                     수정 요청
@@ -730,11 +762,22 @@ export default function DocumentView({
               return false;
             }
             const refs: DocRef[] = includeDoc ? [{ artifactId, revision, mode: effectiveMode, selection: selection && textual ? selection : selection ? { ...selection } : null }] : [];
-            const sent = await onSend(session, message, refs, handoffTo);
-            if (sent && handoffTo) setHandoffTo(null);
+            for (const id of others) {
+              const other = state.artifacts[id];
+              if (other) refs.push({ artifactId: other.id, revision: other.revision, mode: "review", selection: null });
+            }
+            const sent = await onSend(session, message, refs, handoffTo, handoffTo ? null : create);
+            if (sent) {
+              if (handoffTo) setHandoffTo(null);
+              setOthers([]);
+              setCreate(null);
+            }
             return sent;
           }}
+          mentions={{ items: mentionItems, onPick: (item) => setOthers((current) => (current.includes(item.id) ? current : [...current, item.id])) }}
           target={
+            <>
+            <CreateTargetButton tools={state.tools} onPick={(format) => setCreate({ format, name: stemOf(artifact.name) })} />
             <div className="anchor">
               <button type="button" className="select-button" onClick={() => setTargetOpen(!targetOpen)}>
                 {sendTarget ? <EngineMark provider={sendTarget.provider} size={14} /> : null}
@@ -765,6 +808,7 @@ export default function DocumentView({
                 </MenuItem>
               </Popover>
             </div>
+            </>
           }
         />
         <div className="footer-line">

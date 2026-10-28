@@ -116,8 +116,39 @@ export type ArtifactRevision = {
   sessionId: string | null;
   baseRevision: number | null;
   note: string | null;
+  /** The documents (and their revisions) this one was made from, for a document created by a request. */
+  derivedFrom?: { artifactId: string; revision: number }[] | null;
   at: number;
 };
+
+/** Formats a request can ask a new document in ("새 문서로 만들기"). */
+export type CreatableFormat = "markdown" | "hwpx" | "docx" | "pptx" | "xlsx" | "design" | "html";
+
+export const CREATE_EXTENSION: Record<CreatableFormat, string> = {
+  markdown: ".md",
+  hwpx: ".hwpx",
+  docx: ".docx",
+  pptx: ".pptx",
+  xlsx: ".xlsx",
+  design: ".design.json",
+  html: ".html",
+};
+
+export const CREATE_LABEL: Record<CreatableFormat, string> = {
+  markdown: "마크다운",
+  hwpx: "한글(HWPX)",
+  docx: "워드",
+  pptx: "PPT",
+  xlsx: "엑셀",
+  design: "디자인",
+  html: "HTML",
+};
+
+/**
+ * A new document a request asks for. The gateway reserves a free file name in the work folder,
+ * the engine writes the document there, and it is tracked with the documents it came from.
+ */
+export type CreateTarget = { format: CreatableFormat; name: string };
 
 /** What a request carries about a document: a pinned revision and, optionally, a selection. */
 export type DocRef = {
@@ -180,6 +211,8 @@ export type TranscriptItem =
       refs?: RefSummary[];
       /** Sent from another session ("다른 세션에"). */
       from?: { sessionId: string; label: string } | null;
+      /** The new document this request asked for, at the path the gateway reserved. */
+      create?: { format: CreatableFormat; name: string; path: string } | null;
     }
   | { kind: "assistant"; id: string; text: string; streaming: boolean; at: number }
   | { kind: "reasoning"; id: string; text: string; at: number }
@@ -345,6 +378,7 @@ export type SendMessageRequest = {
   requestId: string;
   text: string;
   refs?: DocRef[];
+  create?: CreateTarget | null;
 };
 
 export type HandoffRequest = {

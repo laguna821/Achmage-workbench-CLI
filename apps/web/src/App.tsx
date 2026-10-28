@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import type { DocRef, Proposal, Provider, Session, UiPrefs, Work } from "@workbench/contracts";
+import type { CreateTarget, DocRef, Proposal, Provider, Session, UiPrefs, Work } from "@workbench/contracts";
 import { Api, ApiRequestError, readToken } from "./api.ts";
 import { configureDesign } from "./design.ts";
 import { initialState, reducer, sessionsOf } from "./state.ts";
@@ -17,6 +17,7 @@ import { AppearanceSheet, type SheetTarget } from "./components/AppearanceSheet.
 import { EngineMenu } from "./components/EngineMenu.tsx";
 import { Overview, Switcher, UnseenContext } from "./components/Overview.tsx";
 import { DocContext, type DocActions } from "./components/DocCards.tsx";
+import { DocTabs } from "./components/DocTabs.tsx";
 import { SessionPicker } from "./components/SessionPicker.tsx";
 
 // Editors (CodeMirror, PDF.js) load only when a document opens.
@@ -71,6 +72,7 @@ type View =
   | { kind: "document"; artifactId: string; proposalId: string | null };
 
 const SEEN_KEY = "workbench.seen";
+const OPEN_DOCS_KEY = "workbench.openDocs";
 const MRU_KEY = "workbench.recentSessions";
 const readJson = <T,>(key: string, fallback: T): T => {
   try {
@@ -90,6 +92,8 @@ export function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [workId, setWorkIdState] = useState<string | null>(() => localStorage.getItem(LAST_WORK_KEY));
   const [view, setView] = useState<View>({ kind: "work" });
+  // Documents opened in each work, shown as tabs and offered first by "@".
+  const [openDocs, setOpenDocs] = useState<Record<string, string[]>>(() => readJson(OPEN_DOCS_KEY, {}));
   const [toast, setToast] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [loginMessage, setLoginMessage] = useState<string | null>(null);
@@ -185,6 +189,27 @@ export function App() {
   const activeSession =
     work && ((work.activeSessionId && state.sessions[work.activeSessionId]) || sessionsOf(state, work.id).at(-1));
 
+  // A document shown becomes a tab of its work (at most 8, the oldest goes).
+  useEffect(() => {
+    if (view.kind !== "document") return;
+    const artifact = state.artifacts[view.artifactId];
+    if (!artifact) return;
+    setOpenDocs((current) => {
+      const list = current[artifact.workId] ?? [];
+      return list.includes(artifact.id) ? current : { ...current, [artifact.workId]: [...list, artifact.id].slice(-8) };
+    });
+  }, [view, state.artifacts]);
+  useEffect(() => localStorage.setItem(OPEN_DOCS_KEY, JSON.stringify(openDocs)), [openDocs]);
+  const openDocIds = work ? (openDocs[work.id] ?? []).filter((id) => state.artifacts[id]) : [];
+  const closeDoc = (artifactId: string) => {
+    if (!work) return;
+    const rest = openDocIds.filter((id) => id !== artifactId);
+    setOpenDocs((current) => ({ ...current, [work.id]: rest }));
+    if (view.kind === "document" && view.artifactId === artifactId) {
+      setView(rest.length ? { kind: "document", artifactId: rest[rest.length - 1], proposalId: null } : { kind: "work" });
+    }
+  };
+
   // Load the transcript of the visible session once.
   useEffect(() => {
     if (!api || !activeSession || state.transcripts[activeSession.id]) return;
@@ -203,10 +228,10 @@ export function App() {
 
   const actions: WorkActions = useMemo(
     () => ({
-      send: async (session: Session, text: string, refs: DocRef[] = []) => {
+      send: async (session: Session, text: string, refs: DocRef[] = [], create: CreateTarget | null = null) => {
         if (!api) return false;
         try {
-          await api.send(session.id, newRequestId(), text, refs);
+          await api.send(session.id, newRequestId(), text, refs, create);
           return true;
         } catch (error) {
           fail(error);
@@ -478,6 +503,16 @@ export function App() {
   }
 
   const showStart = startScreen;
+  const tabs = work ? (
+    <DocTabs
+      state={state}
+      ids={openDocIds}
+      activeId={view.kind === "document" ? view.artifactId : null}
+      onConversation={() => setView({ kind: "work" })}
+      onOpen={(artifactId) => setView({ kind: "document", artifactId, proposalId: null })}
+      onClose={closeDoc}
+    />
+  ) : null;
   const title = view.kind === "finder" ? work?.title ?? "" : showStart ? "새 작업" : work?.title ?? "";
 
   return (
@@ -624,16 +659,18 @@ export function App() {
             focusProposalId={view.proposalId}
             work={work}
             session={activeSession ?? null}
+            tabs={tabs}
+            openDocIds={openDocIds}
             onBack={() => setView({ kind: "work" })}
             onToast={setToast}
             onOpenArtifact={(artifactId) => setView({ kind: "document", artifactId, proposalId: null })}
             onPickTarget={() => actions.pickSession(work, activeSession ?? null)}
-            onSend={async (session, text, refs, handoffTo) => {
+            onSend={async (session, text, refs, handoffTo, create) => {
               let source = session;
               if (!source) source = await actions.newSession(work, engine);
               if (!source) return false;
               if (handoffTo) return actions.handoff(source, handoffTo, text, refs);
-              return actions.send(source, text, refs);
+              return actions.send(source, text, refs, create);
             }}
           />
         </Suspense>
@@ -662,7 +699,7 @@ export function App() {
           setEngine={setEngine}
         />
       ) : work ? (
-        <WorkView state={state} work={work} actions={actions} engine={engine} setEngine={setEngine} pickFile={inDesktop ? pickFileNative : null} />
+        <WorkView state={state} work={work} actions={actions} engine={engine} setEngine={setEngine} pickFile={inDesktop ? pickFileNative : null} tabs={tabs} openDocIds={openDocIds} />
       ) : null}
       </div>
 

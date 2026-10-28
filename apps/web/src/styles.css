@@ -3785,3 +3785,180 @@ kbd {
 .reader-chip .link {
   margin-left: 8px;
 }
+
+/* "@" document mentions, roles and new documents */
+.composer {
+  position: relative;
+}
+
+.mention-list {
+  position: absolute;
+  left: 12px;
+  bottom: calc(100% - 4px);
+  z-index: 30;
+  width: min(440px, calc(100% - 24px));
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-raised, var(--surface));
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--heading) 16%, transparent);
+}
+
+.mention-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.mention-row.active,
+.mention-row:hover {
+  background: var(--accent-soft);
+}
+
+.mention-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mention-hint {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.mention-row .format-badge {
+  min-width: 38px;
+  height: 22px;
+  font-size: 10px;
+}
+
+.ref-chip .ref-role {
+  border: 0;
+  border-radius: 6px;
+  padding: 0 6px;
+  font: inherit;
+  font-size: 11px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.ref-chip.editing .ref-role {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.create-chip {
+  border-style: dashed;
+}
+
+.create-chip .create-name {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  padding: 0 2px;
+  min-width: 4em;
+}
+
+.create-chip .create-name:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+}
+
+/* Open documents of a work, as tabs */
+.doc-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 0 0 auto;
+}
+
+.doc-tab {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  max-width: 240px;
+  border-radius: 8px;
+  color: var(--muted);
+}
+
+.doc-tab.conversation,
+.doc-tab-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.doc-tab .format-badge {
+  min-width: 30px;
+  height: 18px;
+  font-size: 9px;
+  padding: 0 4px;
+}
+
+.doc-tab-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-tab-close {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-right: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.doc-tab:hover .doc-tab-close,
+.doc-tab.active .doc-tab-close {
+  opacity: 1;
+}
+
+.doc-tab:hover,
+.doc-tab.conversation:hover {
+  background: var(--surface-muted);
+  color: var(--text);
+}
+
+.doc-tab.active,
+.doc-tab.conversation.active {
+  background: var(--accent-soft);
+  color: var(--text);
+}
