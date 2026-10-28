@@ -215,6 +215,34 @@ export function CardListView({ target }: { target: Exclude<PkmTarget, { kind: "n
     const items: MenuEntry[] = [{ kind: "item", label: "열기", icon: card.kind === "note" || card.kind === "page" ? "page" : "chat", hint: "Enter", onSelect: () => open(card) }];
     if (card.kind === "note") {
       items.push({ kind: "item", label: "요청에 붙이기", icon: "plus", onSelect: () => attach(card) });
+      // Pinned to a work, a note's path goes into the context card of that work's new sessions.
+      const pins = pkm.pkmState?.pins ?? {};
+      const works = Object.values(pkm.state.works)
+        .filter((work) => !work.archivedAt)
+        .sort((a, b) => Number(b.id === (target.kind === "work" ? target.id : "")) - Number(a.id === (target.kind === "work" ? target.id : "")) || b.updatedAt - a.updatedAt)
+        .slice(0, 8);
+      if (target.kind === "work" && pins[target.id]?.includes(card.id)) {
+        items.push({ kind: "item", label: "이 작업에서 고정 풀기", icon: "pin", onSelect: () => void pkm.client.pin(target.id, card.id, false).catch((reason: Error) => pkm.onToast(reason.message)) });
+      } else if (works.length) {
+        items.push({
+          kind: "submenu",
+          label: "작업에 고정",
+          icon: "pin",
+          items: works.map((work) => {
+            const pinned = pins[work.id]?.includes(card.id) ?? false;
+            return {
+              kind: "item" as const,
+              label: work.title,
+              checked: pinned,
+              onSelect: () =>
+                void pkm.client
+                  .pin(work.id, card.id, !pinned)
+                  .then(() => pkm.onToast(pinned ? `「${work.title}」에서 고정을 풀었습니다.` : `「${work.title}」에 고정했습니다. 그 작업의 새 세션이 이 노트 경로를 받습니다.`))
+                  .catch((reason: Error) => pkm.onToast(reason.message)),
+            };
+          }),
+        });
+      }
       if (vaultPath) items.push({ kind: "item", label: "Obsidian에서 열기", icon: "external", onSelect: () => void openObsidian(obsidianUrl(vaultPath, card.id)).catch(() => undefined) });
     }
     pkm.openMenu({ x, y, title: card.title, items });

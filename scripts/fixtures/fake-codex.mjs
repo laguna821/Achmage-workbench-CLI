@@ -8,7 +8,14 @@
 //   "길게"  a long answer (about 8 s)      "명령"  runs `ls -la` (approval first unless "never")
 //   "압축"  compacts the conversation      "느리게" steered requests wait until line 100
 //   anything else: a short answer
+// Vault notes attached to a request are named back ("받은 노트 사본: …").
+//   "맥락"  answers with the developer instructions the thread started with and its sandbox
+//   "볼트에 써: <path>"  writes only where the sandbox would let Codex (work folder, temporary
+//          folders unless excluded, anything with full access) and only inside the temporary folder.
 
+import { mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname } from "node:path";
 import { createInterface } from "node:readline";
 
 if (process.argv.includes("--version")) {
@@ -117,10 +124,23 @@ async function runTurn(threadId, thread, turnId, text) {
   let full = "";
   // Vault notes attached as read-only references: name the copies, as an engine reading them would.
   const notes = [...text.matchAll(/읽기 전용 사본: ([^\n]+)/g)].map((match) => match[1].trim());
-  if (notes.length) {
-    full = `받은 노트 사본: ${notes.join(" | ")}\n\n`;
-    notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: full });
+  if (notes.length) full += `받은 노트 사본: ${notes.join(" | ")}\n\n`;
+  if (text.includes("맥락")) full += `맥락 카드:\n${thread.instructions ?? "(없음)"}\n샌드박스: ${thread.mode} ${JSON.stringify(thread.policy ?? null)}\n\n`;
+  const target = /볼트에 써: ([^\n]+)/.exec(text)?.[1]?.trim();
+  if (target) {
+    // The sandbox decides, as Codex's would: full access writes anywhere, read-only nowhere,
+    // workspace-write in the work folder and the temporary folders unless they are excluded.
+    const policy = thread.policy ?? { type: thread.mode === "danger-full-access" ? "dangerFullAccess" : thread.mode === "read-only" ? "readOnly" : "workspaceWrite", excludeSlashTmp: false, excludeTmpdirEnvVar: false };
+    const allowed =
+      policy.type === "dangerFullAccess" ||
+      (policy.type === "workspaceWrite" && (target.startsWith(`${thread.cwd}/`) || (!policy.excludeSlashTmp && target.startsWith("/tmp/")) || (!policy.excludeTmpdirEnvVar && target.startsWith(`${tmpdir()}/`))));
+    if (allowed && target.startsWith(`${tmpdir()}/`)) {
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, "테스트");
+    }
+    full += allowed ? `썼습니다: ${target}\n\n` : `쓰기 거부(샌드박스 ${policy.type}): ${target}\n\n`;
   }
+  if (full) notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: full });
   for (let index = 0; index < lines && thread.turn?.id === turnId && !thread.turn.interrupted; index += 1) {
     // Like Codex, a steered request is taken at the next step (here every 10 lines): it is
     // recorded as a user message, this message ends and a new one starts.
@@ -174,7 +194,7 @@ async function handle(message) {
       return reply({ config: { model: null, model_reasoning_effort: null, approval_policy: "on-request", sandbox_mode: "workspace-write", model_auto_compact_token_limit: 232_000 }, origins: {} });
     case "thread/start": {
       const threadId = `thr_${++counter}`;
-      const thread = { approvalPolicy: params.approvalPolicy ?? "on-request", sandbox: params.sandbox ?? "workspace-write", cwd: params.cwd ?? "/tmp", used: 11_000, turn: null };
+      const thread = { approvalPolicy: params.approvalPolicy ?? "on-request", sandbox: params.sandbox ?? "workspace-write", mode: params.sandbox ?? "workspace-write", instructions: params.developerInstructions ?? null, policy: null, cwd: params.cwd ?? "/tmp", used: 11_000, turn: null };
       threads.set(threadId, thread);
       return reply(threadResponse(threadId, thread));
     }
@@ -182,6 +202,7 @@ async function handle(message) {
       const thread = threads.get(params.threadId) ?? { cwd: params.cwd ?? "/tmp", used: 11_000, turn: null };
       thread.approvalPolicy = params.approvalPolicy ?? thread.approvalPolicy ?? "on-request";
       thread.sandbox = params.sandbox ?? thread.sandbox ?? "workspace-write";
+      thread.mode = params.sandbox ?? thread.mode ?? "workspace-write";
       threads.set(params.threadId, thread);
       return reply(threadResponse(params.threadId, thread));
     }
@@ -194,7 +215,10 @@ async function handle(message) {
       const thread = threads.get(params.threadId);
       if (!thread) return fail("no such thread");
       if (params.approvalPolicy) thread.approvalPolicy = params.approvalPolicy;
-      if (params.sandboxPolicy) thread.sandbox = params.sandboxPolicy.type;
+      if (params.sandboxPolicy) {
+        thread.sandbox = params.sandboxPolicy.type;
+        thread.policy = params.sandboxPolicy;
+      }
       const turnId = `turn_${++counter}`;
       thread.turn = { id: turnId, steers: [], interrupted: false };
       reply({ turn: { id: turnId, items: [], itemsView: "full", status: "inProgress", error: null, startedAt: now(), completedAt: null, durationMs: null } });

@@ -802,3 +802,41 @@
 .change-title {
   font-weight: 600;
 }
+
+/* ── the vault guard under the input ───────────────────────────────────── */
+.vault-guard-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.vault-guard-pill:hover {
+  background: var(--surface-muted);
+}
+
+.vault-guard-pill.warn {
+  background: var(--amber-soft);
+  color: var(--amber-text);
+}
+
+.vault-guard-pins {
+  color: var(--faint);
+}
+
+.vault-guard-pop {
+  width: 330px;
+}
+
+.vault-guard-text {
+  margin: 2px 10px 8px;
+  font-size: 13px;
+  line-height: 1.55;
+}

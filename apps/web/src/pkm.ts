@@ -20,6 +20,8 @@ export function pkmClient(api: Api) {
       return api.request<CardList>("GET", `/api/pkm/cards?${params}`);
     },
     note: (path: string) => api.request<VaultNote>("GET", `/api/pkm/vault/note?${new URLSearchParams({ path })}`),
+    pin: (workId: string, path: string, pinned: boolean) => api.request<string[]>("PUT", "/api/pkm/pins", { workId, path, pinned }),
+    contextCard: (workId: string) => api.request<{ card: string; protected: string[] }>("GET", `/api/pkm/context-card?${new URLSearchParams({ workId })}`),
     saveView: (view: Partial<PkmView>) => api.request<PkmView>("PUT", "/api/pkm/views", view),
     deleteView: (id: string) => api.request<{ ok: boolean }>("DELETE", `/api/pkm/views/${encodeURIComponent(id)}`),
     previewView: (query: string, groupBy: string | null) => api.request<CardList>("POST", "/api/pkm/views/preview", { query, groupBy }),

@@ -32,7 +32,7 @@ import type { ThreadTokenUsageUpdatedNotification } from "@workbench/provider-co
 import { resolveCodex } from "../binaries.ts";
 import { billingVarsIn, engineEnv } from "../engine-env.ts";
 import { codexAccountInfo } from "../engine-login.ts";
-import { emptyStatus, type AdapterSink, type LoginStart, type ProviderAdapter } from "./types.ts";
+import { emptyStatus, type AdapterSink, type CodexLaunch, type LoginStart, type ProviderAdapter } from "./types.ts";
 
 const CLIENT_VERSION = "0.1.0";
 
@@ -55,10 +55,11 @@ const ACCESS: Record<AccessMode, { approvalPolicy: AskForApproval; sandbox: Sand
   full: { approvalPolicy: "never", sandbox: "danger-full-access" },
 };
 
-function sandboxPolicy(mode: SandboxMode): SandboxPolicy {
+function sandboxPolicy(mode: SandboxMode, excludeTmp = false): SandboxPolicy {
   if (mode === "danger-full-access") return { type: "dangerFullAccess" };
   if (mode === "read-only") return { type: "readOnly", networkAccess: false };
-  return { type: "workspaceWrite", writableRoots: [], networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false };
+  // A vault in a temporary folder stays out of the writable roots (pkm-guard.ts).
+  return { type: "workspaceWrite", writableRoots: [], networkAccess: false, excludeTmpdirEnvVar: excludeTmp, excludeSlashTmp: excludeTmp };
 }
 
 /** The access the user's own Codex settings give (config.toml approval_policy / sandbox_mode). */
@@ -137,8 +138,8 @@ export class CodexAdapter implements ProviderAdapter {
   private readonly sink: AdapterSink;
   /** Fixed by the environment for tests (WORKBENCH_CODEX_APPROVAL / _SANDBOX); otherwise per session. */
   private readonly forced: { approvalPolicy?: string; sandbox?: string };
-  /** threadId -> the access its turns run with now */
-  private readonly threadAccess = new Map<string, AccessMode>();
+  /** threadId -> the access (and vault guard) its turns run with now */
+  private readonly threadAccess = new Map<string, string>();
   /** sessionId -> the access the user last set (approvals arriving meanwhile follow it) */
   private readonly sessionAccess = new Map<string, AccessMode>();
   /** threads compacting on request (their turn is not a reply) */
@@ -160,11 +161,13 @@ export class CodexAdapter implements ProviderAdapter {
   private readonly approvals = new Map<string, PendingApproval>();
   private idleTimer: NodeJS.Timeout | null = null;
   private readonly idleMs: number;
+  private readonly launch: CodexLaunch | null;
 
-  constructor(sink: AdapterSink, options?: { approvalPolicy?: string; sandbox?: string; idleMs?: number }) {
+  constructor(sink: AdapterSink, options?: { approvalPolicy?: string; sandbox?: string; idleMs?: number; launch?: CodexLaunch }) {
     this.sink = sink;
     this.forced = { approvalPolicy: options?.approvalPolicy, sandbox: options?.sandbox };
     this.idleMs = options?.idleMs ?? 10 * 60_000;
+    this.launch = options?.launch ?? null;
   }
 
   /**
@@ -306,33 +309,44 @@ export class CodexAdapter implements ProviderAdapter {
     return { url: null, message: "로그인을 시작했습니다." };
   }
 
-  /** Approval and sandbox for an access, unless the environment fixes them (tests). */
-  private policyFor(access: AccessMode) {
+  /** Approval and sandbox for an access, unless the environment fixes them (tests); read-only where the work folder overlaps the vault. */
+  private policyFor(access: AccessMode, readOnly = false) {
     return {
       approvalPolicy: (this.forced.approvalPolicy ?? ACCESS[access].approvalPolicy) as AskForApproval,
-      sandbox: (this.forced.sandbox ?? ACCESS[access].sandbox) as SandboxMode,
+      sandbox: (this.forced.sandbox ?? (readOnly && access !== "full" ? "read-only" : ACCESS[access].sandbox)) as SandboxMode,
     };
+  }
+
+  /** The context card and the vault guard of a session (pkm.ts), and the key that says when its turn policy changed. */
+  private guardOf(session: Session & { access: AccessMode }, work: Work) {
+    const extras = this.launch?.(session, work) ?? { instructions: null, readOnly: false, excludeTmp: false };
+    return { ...extras, key: `${session.access}|${extras.readOnly}|${extras.excludeTmp}` };
   }
 
   /** The session's thread, started or resumed in this app-server with the session's access. */
   private async threadFor(session: Session & { access: AccessMode }, work: Work) {
     const rpc = this.rpc!;
     let threadId = session.nativeSessionId;
+    const guard = this.guardOf(session, work);
+    // The thread starts without the temporary-folder exclusion (a mode cannot say it): the first turn passes it.
+    const startKey = `${session.access}|${guard.readOnly}|false`;
     if (!threadId) {
       const started = await rpc.request<ThreadStartResponse>("thread/start", {
         cwd: work.cwd,
         model: session.model,
-        ...this.policyFor(session.access),
+        ...this.policyFor(session.access, guard.readOnly),
         serviceName: "achmage_workbench",
+        // A new session's context card (pkm.ts): its work, the vault rule, its pinned notes.
+        ...(guard.instructions ? { developerInstructions: guard.instructions } : {}),
       });
       threadId = started.thread.id;
       this.sink.updateSession(session.id, { nativeSessionId: threadId, engineModel: started.model, engineEffort: started.reasoningEffort });
       this.loaded.add(threadId);
-      this.threadAccess.set(threadId, session.access);
+      this.threadAccess.set(threadId, startKey);
     } else if (!this.loaded.has(threadId)) {
-      await rpc.request<ThreadStartResponse>("thread/resume", { threadId, cwd: work.cwd, ...this.policyFor(session.access), excludeTurns: true });
+      await rpc.request<ThreadStartResponse>("thread/resume", { threadId, cwd: work.cwd, ...this.policyFor(session.access, guard.readOnly), excludeTurns: true });
       this.loaded.add(threadId);
-      this.threadAccess.set(threadId, session.access);
+      this.threadAccess.set(threadId, startKey);
     }
     this.threads.set(threadId, session.id);
     this.sessionAccess.set(session.id, session.access);
@@ -345,16 +359,17 @@ export class CodexAdapter implements ProviderAdapter {
     const threadId = await this.threadFor(session, work);
     // Model and effort are per turn, so a change in the picker applies to the next message.
     const { model, effort } = turnSettings(session, this.current.models);
-    // So is access: a change since the thread started is passed with the turn (and kept by Codex).
-    const policy = this.policyFor(session.access);
-    const changed = this.threadAccess.get(threadId) !== session.access;
-    this.threadAccess.set(threadId, session.access);
+    // So is access (and the vault guard): a change since the thread started is passed with the turn (and kept by Codex).
+    const guard = this.guardOf(session, work);
+    const policy = this.policyFor(session.access, guard.readOnly);
+    const changed = this.threadAccess.get(threadId) !== guard.key;
+    this.threadAccess.set(threadId, guard.key);
     const response = await rpc.request<TurnStartResponse>("turn/start", {
       threadId,
       input: [{ type: "text", text, text_elements: [] }],
       ...(model ? { model } : {}),
       ...(effort ? { effort: effort as ReasoningEffort } : {}),
-      ...(changed ? { approvalPolicy: policy.approvalPolicy, sandboxPolicy: sandboxPolicy(policy.sandbox) } : {}),
+      ...(changed ? { approvalPolicy: policy.approvalPolicy, sandboxPolicy: sandboxPolicy(policy.sandbox, guard.excludeTmp) } : {}),
     });
     this.activeTurns.set(threadId, response.turn.id);
     // Codex 0.160 sends no settings notification for per-turn overrides; read what the thread now uses.

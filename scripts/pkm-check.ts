@@ -18,6 +18,10 @@
 //   with missing values under "값 없음", an `engine:` view shows that engine's sessions; a rule
 //   "엔진 → 앱 폴더·태그" places a new work by itself (row marked with the rule), and "미리보기 →
 //   적용" moves an existing work; nothing calls a model.
+//   맥락 카드·쓰기 막기 — a note pinned to the work reaches a new session in its context card (Claude
+//   systemPrompt.append, Codex developerInstructions; ≤ 2 KB); a write into the vault is refused
+//   (Claude: the PreToolUse hook, even with full access; Codex: the sandbox keeps the vault out of
+//   the writable roots); the pill under the input warns under full access.
 // Usage: node scripts/pkm-check.ts [outDir] [codex|claude]
 
 import { spawn } from "node:child_process";
@@ -364,6 +368,60 @@ async function flow(provider: Provider) {
     await page.keyboard.press("Escape");
     // The next flow starts without these rules and views.
     await api("PUT", "/api/pkm/rules", { rules: [] });
+
+    // ── a note pinned to the work reaches a new session's context card ───────────────────────
+    await row(page, "20. Information (I)").click();
+    await page.waitForSelector(".pkm-card");
+    await page.locator(".pkm-card", { hasText: "용어 정리" }).click({ button: "right" });
+    await page.locator(".context-menu [role=menuitem]", { hasText: "작업에 고정" }).hover();
+    await page.locator(".context-menu [role=menuitem]", { hasText: work.title }).click();
+    await until(async () => ((await api<{ pins: Record<string, string[]> }>("GET", "/api/pkm/state")).pins[work.id] ?? []).length === 1, 5000);
+    const guarded = await api<Session>("POST", `/api/works/${work.id}/sessions`, { provider, purpose: "맥락", access: provider === "claude" ? "full" : "auto" });
+    const ask = async (text: string) => {
+      const before = (await items(guarded.id)).filter((item) => item.kind === "assistant").length;
+      await api("POST", `/api/sessions/${guarded.id}/messages`, { requestId: `${provider}-${Date.now()}-${Math.random()}`, text });
+      await until(async () => (await items(guarded.id)).filter((item) => item.kind === "assistant" && !item.streaming).length > before && (await snapshot()).sessions.find((entry) => entry.id === guarded.id)?.status === "idle", 15_000);
+      return (await items(guarded.id)).filter((item) => item.kind === "assistant").map((item) => (item.kind === "assistant" ? item.text : "")).at(-1) ?? "";
+    };
+    const cardReply = await ask("맥락 카드에 무엇이 있나요?");
+    const contextText = cardReply.slice(cardReply.indexOf("맥락 카드:"));
+    const cardBlock = contextText.split("\n\n")[0] ?? "";
+    pass(
+      `새 세션이 맥락 카드(작업·볼트·고정 노트, 2KB 이하)를 받음 · ${provider === "claude" ? "systemPrompt.append" : "developerInstructions"}`,
+      contextText.includes(`작업: ${work.title}`) && contextText.includes(`옵시디언 볼트(사람 원본, 읽기 전용): ${vault}`) && contextText.includes(`- ${join(vault, "20. Information (I)/용어 정리.md")}`) && Buffer.byteLength(cardBlock.replace(/^맥락 카드:\n/, ""), "utf8") <= 2048,
+      cardBlock.split("\n").slice(1, 3).join(" ⏎ "),
+    );
+    if (provider === "codex") pass("Codex 샌드박스: workspace-write에서 볼트(임시 폴더)를 쓰기 경로에서 뺌", /샌드박스: workspace-write .*"excludeSlashTmp":true/.test(contextText), /샌드박스: [^\n]+/.exec(contextText)?.[0] ?? "");
+
+    // ── a write into the vault is refused ─────────────────────────────────────────────────────
+    const forbidden = join(vault, "01. Inbox", `${provider}-guard.md`);
+    const refusal = await ask(`볼트에 써: ${forbidden}`);
+    pass(
+      provider === "claude" ? "Claude가 볼트에 쓰려 하면 PreToolUse 훅이 막음(전체 접근에서도)" : "Codex가 볼트에 쓰려 하면 샌드박스가 막음(자동)",
+      refusal.includes("쓰기 거부") && !statSync(join(vault, "01. Inbox")).isFile() && !readdirSafe(join(vault, "01. Inbox")).includes(`${provider}-guard.md`),
+      refusal.split("\n")[0],
+    );
+
+    // ── the pill under the input: guarded, and a warning under full access ─────────────────────
+    await page.locator(`.sidebar [data-row-id="${work.id}"]`).click();
+    await api("PATCH", `/api/works/${work.id}`, { activeSessionId: guarded.id });
+    await page.waitForSelector(".work-view .vault-guard-pill", { timeout: 8000 });
+    await page.locator(".work-view .access-select").click();
+    await page.locator(".access-menu .access-option.access-auto").click();
+    await page.waitForFunction(() => !document.querySelector(".work-view .vault-guard-pill")?.classList.contains("warn"), undefined, { timeout: 5000 });
+    await page.waitForFunction(() => document.querySelector(".work-view .vault-guard-pill")?.textContent?.includes("고정 노트"), undefined, { timeout: 5000 }).catch(async () => console.log("pins seen by the gateway:", JSON.stringify((await api<{ pins: unknown }>("GET", "/api/pkm/state")).pins)));
+    const calm = await page.locator(".work-view .vault-guard-pill").innerText();
+    await page.locator(".work-view .access-select").click();
+    await page.locator(".access-menu .access-option.access-full").click();
+    await page.waitForSelector(".work-view .vault-guard-pill.warn", { timeout: 5000 });
+    const warned = await page.locator(".work-view .vault-guard-pill").innerText();
+    await page.locator(".work-view .vault-guard-pill").click();
+    await page.waitForSelector(".vault-guard-pop");
+    await shot("13-vault-guard.png");
+    await page.keyboard.press("Escape");
+    pass("입력창 아래 볼트 보호 표시, 전체 접근에서는 경고", calm.includes("볼트 읽기 전용") && calm.includes("고정 노트 1") && warned.includes(provider === "codex" ? "볼트 보호 꺼짐" : "볼트 보호 일부"), `${calm} → ${warned}`.replace(/\n/g, " "));
+    await page.locator(".work-view .access-select").click();
+    await page.locator(".access-menu .access-option.access-auto").click();
   } catch (error) {
     pass("실행", false, error instanceof Error ? error.message.split("\n")[0]! : String(error));
     await page.screenshot({ path: join(outDir, `${provider}-99-failure.png`) }).catch(() => undefined);

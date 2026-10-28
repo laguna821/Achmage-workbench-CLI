@@ -64,7 +64,7 @@ const pkm = new Pkm(store, bus, manager, { dataDir });
 
 const claudeIdleMs = env.WORKBENCH_CLAUDE_IDLE_MS ? Number(env.WORKBENCH_CLAUDE_IDLE_MS) : undefined;
 manager.registerAdapter(
-  new ClaudeAdapter(manager.sink, { idleMs: claudeIdleMs, modelCacheFile: join(dataDir, "claude-models.json") }),
+  new ClaudeAdapter(manager.sink, { idleMs: claudeIdleMs, modelCacheFile: join(dataDir, "claude-models.json"), launch: pkm.claudeLaunch }),
 );
 manager.registerAdapter(
   new CodexAdapter(manager.sink, {
@@ -72,6 +72,7 @@ manager.registerAdapter(
     approvalPolicy: env.WORKBENCH_CODEX_APPROVAL,
     sandbox: env.WORKBENCH_CODEX_SANDBOX,
     idleMs: env.WORKBENCH_CODEX_IDLE_MS ? Number(env.WORKBENCH_CODEX_IDLE_MS) : undefined,
+    launch: pkm.codexLaunch,
   }),
 );
 

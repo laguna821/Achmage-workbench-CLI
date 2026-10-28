@@ -22,7 +22,7 @@ import { ClaudeTranscriptMapper, describeTool, type MapperOutput } from "@workbe
 import { resolveClaude, type ResolvedBinary } from "../binaries.ts";
 import { billingVarsIn, claudeSdkEnv, engineEnv } from "../engine-env.ts";
 import { parseClaudeAuthStatus } from "../engine-login.ts";
-import { emptyStatus, type AdapterSink, type LoginStart, type ProviderAdapter } from "./types.ts";
+import { emptyStatus, type AdapterSink, type ClaudeLaunch, type LoginStart, type ProviderAdapter } from "./types.ts";
 
 const run = promisify(execFile);
 
@@ -179,14 +179,16 @@ export class ClaudeAdapter implements ProviderAdapter {
   private initializing: Promise<void> | null = null;
 
   private readonly modelCache: string | null;
+  private readonly launch: ClaudeLaunch | null;
 
   constructor(
     sink: AdapterSink,
-    options?: { idleMs?: number; modelCacheFile?: string },
+    options?: { idleMs?: number; modelCacheFile?: string; launch?: ClaudeLaunch },
   ) {
     this.sink = sink;
     this.idleMs = options?.idleMs ?? 10 * 60_000;
     this.modelCache = options?.modelCacheFile ?? null;
+    this.launch = options?.launch ?? null;
   }
 
   /**
@@ -402,9 +404,12 @@ export class ClaudeAdapter implements ProviderAdapter {
           }
         });
       });
+    // The context card and the vault guard (pkm.ts), for every process this session starts.
+    const extras = this.launch?.(session, work) ?? null;
     runtime.query = query({
       prompt: input,
       options: {
+        ...(extras?.hooks ? { hooks: extras.hooks } : {}),
         cwd: work.cwd,
         resume: session.nativeSessionId ?? undefined,
         model: session.model ?? undefined,
@@ -415,7 +420,7 @@ export class ClaudeAdapter implements ProviderAdapter {
         canUseTool,
         includePartialMessages: true,
         settingSources: ["user", "project", "local"],
-        systemPrompt: { type: "preset", preset: "claude_code" },
+        systemPrompt: { type: "preset", preset: "claude_code", ...(extras?.append ? { append: extras.append } : {}) },
         pathToClaudeCodeExecutable: this.binary.path,
         // Never an API key or cloud route left in the gateway's environment: the user's login.
         env: claudeSdkEnv(this.binary.path),

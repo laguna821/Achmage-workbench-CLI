@@ -112,7 +112,7 @@ export function PkmProvider({
 
   // Views, rules and placements: again when they change, and a moment after sessions change
   // (a view of running sessions counts them).
-  const viewsVersion = `${state.pkm.views ?? 0}:${state.pkm.rules ?? 0}:${vaultVersion}`;
+  const viewsVersion = `${state.pkm.views ?? 0}:${state.pkm.rules ?? 0}:${state.pkm.pins ?? 0}:${vaultVersion}`;
   const sessions = state.sessions;
   useEffect(() => {
     if (!live) return;

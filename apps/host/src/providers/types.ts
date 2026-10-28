@@ -21,6 +21,14 @@ export type AdapterSink = {
 export type LoginStart = { url: string | null; message: string };
 
 /**
+ * What a new engine process is told and kept from (pkm.ts): the context card, and for Claude the
+ * hooks that deny writes into the vault; for Codex whether its sandbox must be read-only (its work
+ * folder overlaps the vault) and leave out the temporary folders (the vault is in one).
+ */
+export type ClaudeLaunch = (session: Session & { access: AccessMode }, work: Work) => { append: string | null; hooks: import("@anthropic-ai/claude-agent-sdk").Options["hooks"] | null };
+export type CodexLaunch = (session: Session & { access: AccessMode }, work: Work) => { instructions: string | null; readOnly: boolean; excludeTmp: boolean };
+
+/**
  * One adapter per engine. Sessions are started lazily on the first message so that
  * archived or idle sessions do not keep engine processes alive.
  */

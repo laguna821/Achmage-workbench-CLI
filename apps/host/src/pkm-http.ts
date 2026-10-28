@@ -75,6 +75,15 @@ export async function handlePkm(pkm: Pkm, req: IncomingMessage, res: ServerRespo
     return (sendJson(res, 200, pkm.saveRules(body.rules)), true);
   }
   if (method === "GET" && path === "/rules/preview") return (sendJson(res, 200, pkm.previewRules()), true);
+  if (method === "PUT" && path === "/pins") {
+    const body = await readJson(req);
+    return (sendJson(res, 200, pkm.setPin(String(body.workId ?? ""), String(body.path ?? ""), body.pinned !== false)), true);
+  }
+  if (method === "GET" && path === "/context-card") {
+    const work = pkm.manager.view.works.get(query("workId"));
+    if (!work) throw new HttpError(404, "work_not_found", "작업을 찾지 못했습니다.");
+    return (sendJson(res, 200, { card: pkm.cardFor(work), protected: pkm.protectedRoots() }), true);
+  }
   if (method === "POST" && path === "/rules/apply") {
     const body = await readJson(req);
     return (sendJson(res, 200, pkm.applyRules(Array.isArray(body.workIds) ? body.workIds.filter((id): id is string => typeof id === "string") : [])), true);

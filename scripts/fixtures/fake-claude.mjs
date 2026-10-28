@@ -9,8 +9,15 @@
 //   "길게"  a long answer (about 8 s)      "명령"  runs `ls -la` (asks first in "default" mode)
 //   "압축" or "/compact"  compacts         anything else: a short answer
 // Vault notes attached to a request are named back ("받은 노트 사본: …").
+//   "맥락"  answers with the appended system prompt it was started with (the context card)
+//   "볼트에 써: <path>"  tries the Write tool on that path; PreToolUse hooks registered by the SDK
+//          are asked first (as Claude Code does) and a denial is reported; it only ever writes
+//          inside the temporary folder.
 
 import { randomUUID } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname } from "node:path";
 import { createInterface } from "node:readline";
 
 const args = process.argv.slice(2);
@@ -39,6 +46,8 @@ let initialized = false;
 let used = 14_000;
 let rateUsed = 0.31;
 let turn = null; // { interrupted }
+let appendSystemPrompt = null; // from initialize: the context card
+let preToolUse = []; // from initialize: [{ matcher, hookCallbackIds }]
 const queue = []; // { text, uuid } user messages waiting to run
 const waiting = new Map(); // control request id -> resolve
 
@@ -110,6 +119,27 @@ async function runTurn(text) {
     }
     send({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolId, content: allowed ? "total 0" : "The user declined this action.", is_error: !allowed }] }, parent_tool_use_id: null, ...base() });
   }
+  let guardNote = "";
+  const target = /볼트에 써: ([^\n]+)/.exec(text)?.[1]?.trim();
+  if (target) {
+    const toolId = `toolu_${randomUUID().slice(0, 8)}`;
+    const input = { file_path: target, content: "테스트" };
+    send({ type: "assistant", message: { id: `msg_${randomUUID().slice(0, 8)}`, type: "message", role: "assistant", model: MODEL, content: [{ type: "tool_use", id: toolId, name: "Write", input }], stop_reason: "tool_use", stop_sequence: null, usage: { input_tokens: 10, output_tokens: 20, cache_creation_input_tokens: 0, cache_read_input_tokens: used } }, parent_tool_use_id: null, ...base() });
+    let denied = null;
+    for (const matcher of preToolUse) {
+      if (matcher.matcher && !new RegExp(`^(?:${matcher.matcher})$`).test("Write")) continue;
+      for (const callbackId of matcher.hookCallbackIds ?? []) {
+        const output = await ask({ subtype: "hook_callback", callback_id: callbackId, input: { session_id: sessionId, transcript_path: "", cwd: process.cwd(), hook_event_name: "PreToolUse", tool_name: "Write", tool_input: input, tool_use_id: toolId }, tool_use_id: toolId });
+        if (output?.hookSpecificOutput?.permissionDecision === "deny") denied = output.hookSpecificOutput.permissionDecisionReason ?? "denied";
+      }
+    }
+    if (!denied && target.startsWith(`${tmpdir()}/`)) {
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, input.content);
+    }
+    send({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolId, content: denied ?? "written", is_error: Boolean(denied) }] }, parent_tool_use_id: null, ...base() });
+    guardNote = denied ? `쓰기 거부: ${denied}\n\n` : `썼습니다: ${target}\n\n`;
+  }
   if (!(text.trim() === "/compact")) {
     const steer = text.startsWith("[steer]") ? `이어서 받은 요청을 반영합니다: ${text.slice(7)}\n\n` : "";
     // Vault notes attached as read-only references: name the copies, as an engine reading them would.
@@ -119,6 +149,8 @@ async function runTurn(text) {
     const chunks = [];
     if (steer) chunks.push({ text: steer, wait: 30 });
     if (notes.length) chunks.push({ text: `받은 노트 사본: ${notes.join(" | ")}\n\n`, wait: 30 });
+    if (guardNote) chunks.push({ text: guardNote, wait: 30 });
+    if (text.includes("맥락")) chunks.push({ text: `맥락 카드:\n${appendSystemPrompt ?? "(없음)"}\n\n`, wait: 30 });
     if (text.includes("도식")) {
       // A Mermaid mind map, sent in pieces like any reply.
       for (const piece of "여기 마인드맵입니다.\n\n```mermaid\nmindmap\n  root((Achmage))\n    대화\n      끼어들기\n      끝나면 보내기\n    문서\n      워드\n      한글\n    도식\n      Pele\n```\n".match(/[^\n]*\n/g)) chunks.push({ text: piece, wait: 30 });
@@ -173,6 +205,8 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     const reply = (response) => send({ type: "control_response", response: { subtype: "success", request_id: id, response } });
     switch (request.subtype) {
       case "initialize":
+        appendSystemPrompt = request.appendSystemPrompt ?? null;
+        preToolUse = request.hooks?.PreToolUse ?? [];
         return reply({ commands: [{ name: "compact", description: "대화 압축", argumentHint: "" }], models: [{ value: "default", displayName: "Fake (기본)", description: "가짜 모델", supportedEffortLevels: ["low", "medium", "high"] }], account: { email: "fake@example.com", subscriptionType: "max" }, output_style: "default", available_output_styles: ["default"] });
       case "interrupt": {
         if (turn) turn.interrupted = true;

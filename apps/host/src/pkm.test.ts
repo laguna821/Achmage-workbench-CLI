@@ -196,3 +196,25 @@ describe("pages phase 2", () => {
     expect(() => pkm.subpage(child.id.replace(/./g, "x"), "x")).toThrow();
   });
 });
+
+describe("context card and write guard", () => {
+  it("gives new sessions the work, the vault and its pinned notes, and guards the vault for both engines", () => {
+    const { pkm, manager, vault } = setup();
+    const work = manager.createWork({ title: "1주차" });
+    pkm.setPin(work.id, "20. Information (I)/수업 설계.md", true);
+    expect(() => pkm.setPin(work.id, "없는 노트.md", true)).toThrow();
+    const session = { ...manager.createSession(work.id, { provider: "claude" }), access: "full" as const };
+    const claude = pkm.claudeLaunch(session, manager.view.works.get(work.id)!);
+    expect(claude.append).toContain("작업: 1주차");
+    expect(claude.append).toContain(`- ${join(vault, "20. Information (I)/수업 설계.md")}`);
+    expect(claude.hooks?.PreToolUse?.[0]?.matcher).toContain("Write");
+    const codex = pkm.codexLaunch({ ...session, provider: "codex", access: "auto" }, manager.view.works.get(work.id)!);
+    expect(codex).toMatchObject({ readOnly: false, excludeTmp: true });
+    expect(codex.instructions).toBe(claude.append);
+    expect(pkm.cards({ kind: "work", id: work.id }).cards.some((card) => card.kind === "note" && card.pinned)).toBe(true);
+    pkm.setPin(work.id, "20. Information (I)/수업 설계.md", false);
+    expect(pkm.claudeLaunch(session, work).append).not.toContain("고정한 노트");
+    pkm.attachVault(null);
+    expect(pkm.claudeLaunch(session, work).hooks).toBeNull();
+  });
+});

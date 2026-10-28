@@ -30,6 +30,8 @@ import { fillTemplate, localStamp, readTemplates, templateChoices, templateFile,
 import { exportFileName, headingOf, tidyMessage } from "./export-md.ts";
 import { filterItems, groupItems, kindsFor, sessionStatuses, workEngines, workStatuses, type ViewItem } from "./pkm-views.ts";
 import { cleanRules, placementFor } from "./pkm-rules.ts";
+import { claudeWriteGuard, codexSandbox, contextCard } from "./pkm-guard.ts";
+import type { ClaudeLaunch, CodexLaunch } from "./providers/types.ts";
 import type { FrontmatterValue } from "./frontmatter.ts";
 
 // The PKM layer of the gateway (design 워크스테이션-다음설계 §4): the read-only vault mirror and,
@@ -76,7 +78,7 @@ export class Pkm {
   readonly notes: VaultNotes;
   protected readonly store: Store;
   protected readonly bus: EventBus;
-  protected readonly manager: SessionManager;
+  readonly manager: SessionManager;
   protected readonly options: PkmOptions;
 
   constructor(store: Store, bus: EventBus, manager: SessionManager, options: PkmOptions = {}) {
@@ -114,7 +116,7 @@ export class Pkm {
   }
 
   state(): PkmState {
-    return { vault: this.vault.status(), views: this.viewsWithCounts(), rules: this.rules(), placements: this.placements() };
+    return { vault: this.vault.status(), views: this.viewsWithCounts(), rules: this.rules(), placements: this.placements(), pins: this.readJson<Record<string, string[]>>("pkm.pins", {}) };
   }
 
   /** Attach a vault folder (or none). Only the path is remembered; the vault itself is never written. */
@@ -128,6 +130,59 @@ export class Pkm {
     this.store.setMeta("pkm.vault", this.vault.root ?? "");
     return this.vault.status();
   }
+
+  // ── notes pinned to a work, the context card and the write guard ─────────────────────────
+
+  pins(workId: string): string[] {
+    return this.readJson<Record<string, string[]>>("pkm.pins", {})[workId] ?? [];
+  }
+
+  /** Pin a vault note to a work (its sessions get the note's path in their context card), or unpin it. */
+  setPin(workId: string, path: string, pinned: boolean) {
+    this.requireWork(workId);
+    if (pinned && !this.vault.current?.notes.has(path)) throw new HttpError(404, "note_missing", "볼트에 그 노트가 없습니다.");
+    const all = this.readJson<Record<string, string[]>>("pkm.pins", {});
+    const list = (all[workId] ?? []).filter((entry) => entry !== path);
+    all[workId] = pinned ? [...list, path] : list;
+    this.writeJson("pkm.pins", all);
+    this.publish("pins");
+    return all[workId];
+  }
+
+  /** Paths the engines must not write: the vault as attached, and where it really is. */
+  protectedRoots(): string[] {
+    const root = this.vault.root;
+    if (!root) return [];
+    try {
+      return [...new Set([root, realpathSync(root)])];
+    } catch {
+      return [root];
+    }
+  }
+
+  /** The context card of a new session of this work (≤ 2 KB): the work, the vault rule, the pinned notes. */
+  cardFor(work: Work) {
+    const root = this.vault.root;
+    return contextCard({
+      title: work.title,
+      folders: this.folderTrail(work.folderId),
+      cwd: work.cwd,
+      vault: root,
+      pinned: root ? this.pins(work.id).map((path) => join(root, path)) : [],
+    });
+  }
+
+  /** What a new Claude process gets: the card as `systemPrompt.append`, and the PreToolUse guard. */
+  readonly claudeLaunch: ClaudeLaunch = (_session, work) => {
+    const roots = this.protectedRoots();
+    return { append: this.cardFor(work), hooks: roots.length ? { PreToolUse: [claudeWriteGuard(roots)] } : null };
+  };
+
+  /** What a new Codex thread gets: the card as `developerInstructions`, and a sandbox that leaves the vault out. */
+  readonly codexLaunch: CodexLaunch = (session, work) => {
+    const sandbox = codexSandbox(session.access, work.cwd, this.protectedRoots());
+    return { instructions: this.cardFor(work), readOnly: sandbox.mode === "read-only", excludeTmp: sandbox.excludeTmp };
+  };
 
   // ── which sessions read which note ─────────────────────────────────────────────────────
 
@@ -281,6 +336,13 @@ export class Pkm {
     if (!work) throw new HttpError(404, "work_not_found", "작업을 찾지 못했습니다.");
     const cards: PkmCard[] = [...sessions.values()].filter((session) => session.workId === workId && !session.archivedAt).map((session) => this.sessionCard(session, work));
     for (const artifact of this.manager.documents.list().filter((entry) => entry.workId === workId)) cards.push(this.pageItem(artifact, work).card);
+    // Notes pinned to the work come first (their paths are in its sessions' context card).
+    const index = this.vault.current;
+    const reads = this.noteReads();
+    for (const path of this.pins(workId)) {
+      const entry = index?.notes.get(path);
+      if (entry) cards.push({ ...this.notes.card(entry, true, reads[path]?.length ?? 0), where: `고정한 노트 · ${entry.path}` });
+    }
     cards.sort((a, b) => Number(b.pinned) - Number(a.pinned) || (b.date ?? 0) - (a.date ?? 0));
     return { title: work.title, crumbs: ["작업 공간", ...this.folderTrail(work.folderId), work.title], cards: cards.slice(0, CARD_LIMIT), total: cards.length };
   }

@@ -279,6 +279,8 @@ export type PkmState = {
   views: (PkmView & { count: number })[];
   rules: PkmRule[];
   placements: Record<string, RulePlacement>;
+  /** Vault notes pinned to each work (vault-relative paths): in its sessions' context card. */
+  pins: Record<string, string[]>;
 };
 
 /** Gateway scopes a `pkm.changed` event names. */
