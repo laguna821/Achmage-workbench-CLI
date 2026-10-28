@@ -12,6 +12,19 @@ import type {
 /** An attachment as the engine gets it: the stored file and what it is. */
 export type AttachedFile = { path: string; name: string; mime: string };
 
+/**
+ * A picture an engine drew (Codex's image tool): where the engine saved it and/or the image data
+ * (base64), the prompt as the image model rewrote it, and why it failed when it did.
+ */
+export type EngineImage = {
+  id: string;
+  status: string;
+  result: string | null;
+  savedPath: string | null;
+  revisedPrompt: string | null;
+  failure: { type: string; resetsAt?: number | null } | null;
+};
+
 /** Callbacks an adapter uses to report what its engine is doing. */
 export type AdapterSink = {
   upsertItem(sessionId: string, item: TranscriptItem): void;
@@ -22,6 +35,9 @@ export type AdapterSink = {
   steerDropped(sessionId: string, turnKeys: string[]): void;
   /** Pictures a step produced or looked at (a file, or image data the engine returned), shown under it. */
   toolImages(sessionId: string, itemId: string, images: ToolImage[]): void;
+
+  /** The engine finished drawing a picture (or failed to). */
+  image?(sessionId: string, image: EngineImage): void;
 };
 
 /** A picture from a step: a file the engine names, or base64 data a tool returned. */

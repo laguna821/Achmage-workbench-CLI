@@ -35,6 +35,7 @@ import {
   type Handoff,
   type HandoffRequest,
   type Proposal,
+  type RequestDraw,
   type UpdateSessionRequest,
   type Work,
 } from "@workbench/contracts";
@@ -53,6 +54,7 @@ import { copyMcp, copySkill, integrations, type EngineBinaries } from "./integra
 import { exportFileName, sessionMarkdown } from "./export-md.ts";
 import { Attachments } from "./attachments.ts";
 import { imagesNamed, keepImage, withImages } from "./tool-images.ts";
+import { ImageGen } from "./imagegen.ts";
 
 export { HttpError };
 
@@ -101,6 +103,17 @@ export type ManagerOptions = {
 };
 
 const DEFAULT_PURPOSE = /^대화 \d+$/;
+
+/**
+ * A request sent with more than its text: a drawing gives the engine its own instructions, marks
+ * the request as "그림", and does not make the drawing session the one its work shows.
+ */
+/**
+ * How a request goes: `attachments` pasted or dropped files; `plan` "계획 먼저"; `engineText` what the
+ * engine gets instead of the built text; `draw` a picture request; `activate: false` keeps the
+ * work's active session as it is (a drawing session working for another conversation).
+ */
+export type SendOptions = { attachments?: Attachment[]; plan?: boolean; engineText?: string; draw?: RequestDraw; activate?: boolean };
 
 type PendingCreate = { requestId: string; path: string; target: CreateTarget; sources: { artifactId: string; revision: number }[] };
 
@@ -201,6 +214,8 @@ export class SessionManager {
   /** The new document each running request asked for. */
   private readonly creating = new Map<string, PendingCreate>();
   readonly documents: Documents;
+  /** "그림": pictures drawn with GPT Image through Codex (imagegen.ts). */
+  readonly images: ImageGen;
   private readonly store: Store;
   private readonly bus: EventBus;
   private readonly options: ManagerOptions;
@@ -211,6 +226,20 @@ export class SessionManager {
     this.options = options;
     this.documents = new Documents(store, bus, options.dataDir ?? dirname(options.managedWorksDir), options.kordoc ?? null, options.ieum ?? null);
     this.attachments = new Attachments(options.dataDir ?? dirname(options.managedWorksDir));
+    this.images = new ImageGen(
+      {
+        session: (id) => this.sessions.get(id),
+        work: (id) => this.works.get(id),
+        sessions: () => [...this.sessions.values()],
+        createSession: (workId, request) => this.createSession(workId, request, false),
+        send: (sessionId, requestId, text, from, options) => this.send(sessionId, requestId, text, [], from, null, "auto", { ...options, activate: false }),
+        upsertItem: (sessionId, item) => this.sink.upsertItem(sessionId, item),
+        markSeen: (sessionId) => this.updateSession(sessionId, { seen: true }),
+        getMeta: (key) => store.getMeta(key),
+        setMeta: (key, value) => store.setMeta(key, value),
+      },
+      options.dataDir ?? dirname(options.managedWorksDir),
+    );
     for (const handoff of store.handoffs()) this.handoffs.set(handoff.id, handoff);
     // Rows written by older versions may lack newer fields.
     for (const folder of store.folders()) this.folders.set(folder.id, { ...folder, archivedAt: folder.archivedAt ?? null });
@@ -244,6 +273,7 @@ export class SessionManager {
       });
     this.backfillOverview();
     this.recoverAfterRestart();
+    this.images.recover();
   }
 
   /** Sessions from before auto titles and previews: derive both once from their stored transcript. */
@@ -320,6 +350,7 @@ export class SessionManager {
       }
       this.requeueDropped(sessionId, lost);
     },
+    image: (sessionId, image) => this.images.onEngineImage(sessionId, image),
   };
 
   /** Sessions whose running turn only plans ("계획 먼저"), by the request that asked for it. */
@@ -412,7 +443,7 @@ export class SessionManager {
       const next = session?.queued.find((entry) => !entry.held);
       if (!session || session.status !== "idle" || !next) return;
       this.saveSession({ ...session, queued: session.queued.filter((entry) => entry !== next) });
-      void this.send(sessionId, next.id, next.text, next.refs, null, next.create, "auto", next.attachments ?? [], next.plan === true).catch((error: unknown) => {
+      void this.send(sessionId, next.id, next.text, next.refs, null, next.create, "auto", { attachments: next.attachments ?? [], plan: next.plan === true }).catch((error: unknown) => {
         this.sink.upsertItem(sessionId, {
           kind: "notice",
           id: `queue-failed:${next.id}`,
@@ -449,7 +480,7 @@ export class SessionManager {
     const entry = session.queued.find((item) => item.id === queuedId);
     if (!entry) throw new HttpError(404, "queued_not_found", "보낼 예정인 요청이 없습니다.");
     this.saveSession({ ...session, queued: session.queued.filter((item) => item.id !== queuedId) });
-    return this.send(sessionId, entry.id, entry.text, entry.refs, null, entry.create, entry.plan ? "queue" : "steer", entry.attachments ?? [], entry.plan === true);
+    return this.send(sessionId, entry.id, entry.text, entry.refs, null, entry.create, entry.plan ? "queue" : "steer", { attachments: entry.attachments ?? [], plan: entry.plan === true });
   }
 
   snapshot(): Snapshot {
@@ -752,7 +783,8 @@ export class SessionManager {
     return this.requireWork(workId);
   }
 
-  createSession(workId: string, request: CreateSessionRequest): Session {
+  /** `activate`: the new session becomes the one its work shows (not for a drawing session made on the side). */
+  createSession(workId: string, request: CreateSessionRequest, activate = true): Session {
     const work = this.requireWork(workId);
     if (request.provider !== "claude" && request.provider !== "codex") {
       throw new HttpError(400, "invalid_provider", "지원하지 않는 엔진입니다.");
@@ -788,7 +820,7 @@ export class SessionManager {
       updatedAt: now,
     };
     this.saveSession(session);
-    this.saveWork({ ...work, activeSessionId: session.id, updatedAt: now });
+    this.saveWork({ ...work, activeSessionId: activate ? session.id : work.activeSessionId, updatedAt: now });
     return session;
   }
 
@@ -881,10 +913,11 @@ export class SessionManager {
     from: { sessionId: string; label: string } | null = null,
     create: CreateTarget | null = null,
     mode: "auto" | "steer" | "queue" = "auto",
-    attachments: Attachment[] = [],
-    plan = false,
+    options: SendOptions = {},
   ): Promise<SendResult> {
     const session = this.requireSession(sessionId);
+    const attachments = options.attachments ?? [];
+    const plan = options.plan === true;
     const trimmed = text.trim() || (attachments.length ? "첨부한 파일을 봐 주세요." : "");
     if (!requestId) throw new HttpError(400, "missing_request_id", "requestId가 필요합니다.");
     if (!trimmed) throw new HttpError(400, "empty_message", "보낼 내용이 없습니다.");
@@ -904,6 +937,8 @@ export class SessionManager {
     }
     if (session.queued.some((entry) => entry.id === requestId)) return { duplicate: true, delivery: "queued" };
     const work = this.requireWork(session.workId);
+    // A drawing is a turn of its own: never steered in or kept for later without its instructions.
+    if (options.engineText && session.status !== "idle" && session.status !== "error") throw new HttpError(409, "session_busy", "이 세션이 일하는 중입니다. 끝난 뒤에 다시 보내 주세요.");
     if (session.status !== "idle" && session.status !== "error") {
       // The engine is working. A request steers into the running turn (the engine takes it at its
       // next step) when it can; otherwise it waits and becomes the next turn ("끝나면 보내기").
@@ -972,7 +1007,7 @@ export class SessionManager {
       this.creating.set(sessionId, created);
     }
     this.store.saveRequest(requestId, sessionId, fingerprint);
-    const engineText = this.engineText(trimmed, prepared, work.cwd, from, created);
+    const engineText = options.engineText ?? this.engineText(trimmed, prepared, work.cwd, from, created);
     this.sink.upsertItem(sessionId, {
       kind: "user",
       id: `user:${requestId}`,
@@ -983,12 +1018,13 @@ export class SessionManager {
       ...(from ? { from } : {}),
       ...(created ? { create: { format: created.target.format, name: basename(created.path), path: created.path } } : {}),
       ...(attachments.length ? { attachments } : {}),
+      ...(options.draw ? { draw: options.draw } : {}),
     });
     this.turnStarted.set(sessionId, Date.now());
     if (plan) this.planning.set(sessionId, requestId);
     else this.planning.delete(sessionId);
     this.sink.updateSession(sessionId, { status: "starting", activity: plan ? "계획 세우는 중" : "응답 준비 중", lastError: null });
-    this.saveWork({ ...work, activeSessionId: sessionId, updatedAt: Date.now() });
+    this.saveWork({ ...work, activeSessionId: options.activate === false ? work.activeSessionId : sessionId, updatedAt: Date.now() });
     try {
       const current = this.requireSession(sessionId);
       await this.adapter(session.provider).send({ ...current, access: this.accessOf(current), plan }, work, engineText, requestId, files);
@@ -1243,6 +1279,7 @@ export class SessionManager {
       });
     }
     this.finishCreate(sessionId, status);
+    this.images.afterTurn(sessionId, status);
     this.trackChangedFiles(sessionId);
     for (const running of this.documents.runningProposals(sessionId)) {
       const proposal = status === "completed" ? this.documents.finishProposal(running.id) : this.documents.discardProposal(running.id);
@@ -1317,7 +1354,7 @@ export class SessionManager {
         },
         null,
         "auto",
-        request.attachments ?? [],
+        { attachments: request.attachments ?? [] },
       );
     } catch (error) {
       this.saveHandoff({ ...handoff, status: "failed", error: error instanceof Error ? error.message : String(error) });

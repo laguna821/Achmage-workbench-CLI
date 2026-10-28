@@ -12,6 +12,7 @@ import type { ItemStartedNotification } from "@workbench/provider-codex/src/gene
 import type { ReasoningEffort } from "@workbench/provider-codex/src/generated/ReasoningEffort.ts";
 import type { ConfigReadResponse } from "@workbench/provider-codex/src/generated/v2/ConfigReadResponse.ts";
 import type { ModelListResponse } from "@workbench/provider-codex/src/generated/v2/ModelListResponse.ts";
+import type { ModelProviderCapabilitiesReadResponse } from "@workbench/provider-codex/src/generated/v2/ModelProviderCapabilitiesReadResponse.ts";
 import type { ThreadReadResponse } from "@workbench/provider-codex/src/generated/v2/ThreadReadResponse.ts";
 import type { ThreadSettingsUpdatedNotification } from "@workbench/provider-codex/src/generated/v2/ThreadSettingsUpdatedNotification.ts";
 import type { LoginAccountResponse } from "@workbench/provider-codex/src/generated/v2/LoginAccountResponse.ts";
@@ -49,6 +50,7 @@ const ACTIVITY: Record<string, string> = {
   mcpToolCall: "도구 사용 중",
   webSearch: "웹 검색 중",
   contextCompaction: "대화를 압축하는 중",
+  imageGeneration: "그림 그리는 중",
 };
 
 /** What each access means to Codex: when to ask, and the sandbox around commands. */
@@ -285,6 +287,9 @@ export class CodexAdapter implements ProviderAdapter {
       const config = await rpc.request<ConfigReadResponse>("config/read", {}).catch(() => null);
       this.compactLimit = config?.config.model_auto_compact_token_limit ? Number(config.config.model_auto_compact_token_limit) : null;
       this.publish({ configuredAccess: configuredAccess(config?.config) });
+      // Whether its built-in image tool can draw here ("그림"); unknown when Codex does not say.
+      const capabilities = await rpc.request<ModelProviderCapabilitiesReadResponse>("modelProvider/capabilities/read", {}).catch(() => null);
+      this.publish({ imageGeneration: capabilities ? capabilities.imageGeneration : null });
       if (loggedIn) {
         const limits = await rpc.request<GetAccountRateLimitsResponse>("account/rateLimits/read", undefined);
         this.publish({ usage: usageFromSnapshot(limits.rateLimits), usageObservedAt: Date.now() });
@@ -663,6 +668,10 @@ export class CodexAdapter implements ProviderAdapter {
       }
       case "item/completed": {
         const { item } = params as ItemCompletedNotification;
+        // A picture from the image tool: the gateway saves it into the work folder (imagegen.ts).
+        if (item.type === "imageGeneration") {
+          this.sink.image?.(sessionId, { id: item.id, status: item.status, result: item.result || null, savedPath: item.savedPath ?? null, revisedPrompt: item.revisedPrompt, failure: item.failure });
+        }
         const mapped = mapThreadItem(item, Date.now(), false);
         if (mapped) {
           this.sink.upsertItem(sessionId, mapped);

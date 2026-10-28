@@ -78,7 +78,7 @@ const plans = (manager: SessionManager, id: string) =>
 describe("plan first", () => {
   it("asks the engine only to plan, and marks the request", async () => {
     const { manager, engine, session } = setup();
-    await manager.send(session.id, "r1", "로그인 화면 고쳐 줘", [], null, null, "auto", [], true);
+    await manager.send(session.id, "r1", "로그인 화면 고쳐 줘", [], null, null, "auto", { attachments: [], plan: true });
     expect(engine.sent[0]).toMatchObject({ plan: true, access: "auto" });
     expect(manager.items(session.id).items.find((item) => item.id === "user:r1")).toMatchObject({ plan: true });
   });
@@ -86,7 +86,7 @@ describe("plan first", () => {
   it("waits for the running turn instead of steering, and keeps planning when it goes", async () => {
     const { manager, engine, session } = setup();
     await manager.send(session.id, "r1", "작업해 줘");
-    expect((await manager.send(session.id, "r2", "다음 일 계획해 줘", [], null, null, "auto", [], true)).delivery).toBe("queued");
+    expect((await manager.send(session.id, "r2", "다음 일 계획해 줘", [], null, null, "auto", { attachments: [], plan: true })).delivery).toBe("queued");
     expect(engine.steered).toHaveLength(0);
     expect(manager.snapshot().sessions.find((entry) => entry.id === session.id)!.queued[0]).toMatchObject({ plan: true });
     engine.finish();
@@ -96,7 +96,7 @@ describe("plan first", () => {
 
   it("puts the plan to the user when the turn ends, and going ahead is the next request", async () => {
     const { manager, engine, session } = setup();
-    await manager.send(session.id, "r1", "계획해 줘", [], null, null, "auto", [], true);
+    await manager.send(session.id, "r1", "계획해 줘", [], null, null, "auto", { attachments: [], plan: true });
     engine.finish();
     const [card] = plans(manager, session.id);
     expect(card).toMatchObject({ id: "plan:r1", decision: null });
@@ -108,19 +108,19 @@ describe("plan first", () => {
 
   it("keeps planning when the user wants to refine it, and a new request passes a waiting plan over", async () => {
     const { manager, engine, session } = setup();
-    await manager.send(session.id, "r1", "계획해 줘", [], null, null, "auto", [], true);
+    await manager.send(session.id, "r1", "계획해 줘", [], null, null, "auto", { attachments: [], plan: true });
     engine.finish();
     await manager.answerApproval(session.id, "plan:r1", "decline");
     expect(engine.sent).toHaveLength(1);
-    await manager.send(session.id, "r2", "2단계를 자세히", [], null, null, "auto", [], true);
+    await manager.send(session.id, "r2", "2단계를 자세히", [], null, null, "auto", { attachments: [], plan: true });
     engine.finish();
-    await manager.send(session.id, "r3", "됐어, 다른 얘기", [], null, null, "auto", [], false);
+    await manager.send(session.id, "r3", "됐어, 다른 얘기", [], null, null, "auto", { attachments: [], plan: false });
     expect(plans(manager, session.id).map((item) => item.decision)).toEqual(["decline", "expired"]);
   });
 
   it("adds no card when the engine asked for the go-ahead itself", async () => {
     const { manager, engine, session } = setup();
-    await manager.send(session.id, "r1", "계획해 줘", [], null, null, "auto", [], true);
+    await manager.send(session.id, "r1", "계획해 줘", [], null, null, "auto", { attachments: [], plan: true });
     engine.finish(true);
     expect(plans(manager, session.id).map((item) => item.id)).toEqual(["approval:r1"]);
   });

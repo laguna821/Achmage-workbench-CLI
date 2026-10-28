@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { EditorState } from "@codemirror/state";
+import { EditorState, type Extension } from "@codemirror/state";
 import { EditorView, keymap, placeholder as placeholderExtension } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
@@ -55,17 +55,25 @@ export function MarkdownEditor({
   onChange,
   onSelection,
   onBlur,
+  extensions,
+  onView,
 }: {
   value: string;
   readOnly?: boolean;
   onChange: (text: string) => void;
   onSelection: (selection: EditorSelection) => void;
   onBlur?: () => void;
+  /** More editor behaviour (drawing at the cursor), taken when the editor is created. */
+  extensions?: Extension[];
+  /** The CodeMirror view while it exists (null once it is gone). */
+  onView?: (view: EditorView | null) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
-  const callbacks = useRef({ onChange, onSelection, onBlur });
-  callbacks.current = { onChange, onSelection, onBlur };
+  const callbacks = useRef({ onChange, onSelection, onBlur, onView });
+  callbacks.current = { onChange, onSelection, onBlur, onView };
+  const more = useRef(extensions);
+  more.current = extensions;
 
   useEffect(() => {
     if (!host.current) return;
@@ -87,11 +95,14 @@ export function MarkdownEditor({
             if (update.selectionSet || update.docChanged) callbacks.current.onSelection(selectionOf(update.state));
             if (update.focusChanged && !update.view.hasFocus) callbacks.current.onBlur?.();
           }),
+          ...(more.current ?? []),
         ],
       }),
     });
     view.current = editor;
+    callbacks.current.onView?.(editor);
     return () => {
+      callbacks.current.onView?.(null);
       editor.destroy();
       view.current = null;
     };

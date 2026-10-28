@@ -7,6 +7,8 @@ import type {
   CreateTarget,
   DocRef,
   DocumentTools,
+  DrawRequest,
+  DrawResult,
   EditorGrant,
   ExportMarkdownRequest,
   ExportMarkdownResult,
@@ -117,6 +119,8 @@ export class Api {
   sendQueued = (sessionId: string, queuedId: string) => this.request<SendResult>("POST", `/api/sessions/${sessionId}/queue/${encodeURIComponent(queuedId)}/send`);
   updateQueued = (sessionId: string, queuedId: string, text: string) => this.request<Session>("PATCH", `/api/sessions/${sessionId}/queue/${encodeURIComponent(queuedId)}`, { text });
   cancelQueued = (sessionId: string, queuedId: string) => this.request<Session>("DELETE", `/api/sessions/${sessionId}/queue/${encodeURIComponent(queuedId)}`);
+  /** "그림": draw with GPT Image through Codex; the picture comes back as a card in this conversation. */
+  draw = (sessionId: string, request: DrawRequest) => this.request<DrawResult>("POST", `/api/sessions/${sessionId}/images`, request);
   handoff = (request: { requestId: string; sourceSessionId: string; targetSessionId: string; text: string; refs: DocRef[]; attachments?: Attachment[] }) =>
     this.request<Handoff>("POST", "/api/handoffs", request);
   openFile = (workId: string, path: string) => this.request<Artifact>("POST", `/api/works/${workId}/artifacts`, { path });

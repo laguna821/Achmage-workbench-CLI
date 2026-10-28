@@ -118,7 +118,7 @@ describe("requests with files", () => {
   it("hands the files to the engine and shows them with the request", async () => {
     const { manager, engine, session } = setup();
     const picture = manager.attachments.save(PNG, "화면.png", "image/png");
-    await manager.send(session.id, "r1", "이 화면 봐 줘", [], null, null, "auto", [picture]);
+    await manager.send(session.id, "r1", "이 화면 봐 줘", [], null, null, "auto", { attachments: [picture] });
     expect(engine.sent[0]!.files).toEqual([expect.objectContaining({ id: picture.id, mime: "image/png", path: manager.attachments.path(picture.id) })]);
     expect(userItems(manager, session.id)[0]!.attachments).toEqual([picture]);
   });
@@ -126,13 +126,13 @@ describe("requests with files", () => {
   it("sends files without text, with a plain request in their place", async () => {
     const { manager, engine, session } = setup();
     const pdf = manager.attachments.save(PDF, "자료.pdf", "application/pdf");
-    await manager.send(session.id, "r1", "  ", [], null, null, "auto", [pdf]);
+    await manager.send(session.id, "r1", "  ", [], null, null, "auto", { attachments: [pdf] });
     expect(engine.sent[0]!.text).toBe("첨부한 파일을 봐 주세요.");
   });
 
   it("sends nothing when a file is gone", async () => {
     const { manager, engine, session } = setup();
-    await expect(manager.send(session.id, "r1", "봐 줘", [], null, null, "auto", [{ id: `${"b".repeat(64)}.png`, name: "x.png", mime: "image/png", size: 1 }])).rejects.toThrow(/없습니다/);
+    await expect(manager.send(session.id, "r1", "봐 줘", [], null, null, "auto", { attachments: [{ id: `${"b".repeat(64)}.png`, name: "x.png", mime: "image/png", size: 1 }] })).rejects.toThrow(/없습니다/);
     expect(engine.sent).toHaveLength(0);
     expect(userItems(manager, session.id)).toHaveLength(0);
   });
@@ -141,11 +141,11 @@ describe("requests with files", () => {
     const { manager, engine, session } = setup();
     const picture = manager.attachments.save(PNG, "화면.png", "image/png");
     await manager.send(session.id, "r1", "작업해 줘");
-    await manager.send(session.id, "r2", "이것도", [], null, null, "auto", [picture]);
+    await manager.send(session.id, "r2", "이것도", [], null, null, "auto", { attachments: [picture] });
     expect(engine.steered[0]!.files.map((file) => file.path)).toEqual([manager.attachments.path(picture.id)]);
     expect(userItems(manager, session.id).find((item) => item.id.includes("r2"))?.attachments).toEqual([picture]);
 
-    await manager.send(session.id, "r3", "끝나면 이거", [], null, null, "queue", [picture]);
+    await manager.send(session.id, "r3", "끝나면 이거", [], null, null, "queue", { attachments: [picture] });
     expect(manager.snapshot().sessions.find((entry) => entry.id === session.id)!.queued[0]!.attachments).toEqual([picture]);
     engine.finish();
     await tick();
