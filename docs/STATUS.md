@@ -809,7 +809,10 @@
 ## 다음
 
 - **2026-10-28~29 밤에 끝낸 것**: 종합 점검의 빠진 것 전부(설계 문서 7장 1~10). 대화 속 그림, 계획 먼저, `/` 명령, 그림 그리기, 세션 잇기, 브라우징, 보기 모드·나란히·세션 창, 문서 그림·R2, 노션식 정리·볼트, 다른 곳의 대화 가져오기, 이 요청 전으로, 알림 마무리, 예약 작업, 격리 사본. 각 절에 검사와 제한을 적었다.
-- **설치 파일**: GitHub Actions `release`(수동 실행 또는 `v*` 태그)로 Windows(NSIS·MSI)·macOS Apple silicon(dmg)·Linux(AppImage·deb)·Arch/CachyOS(pacman)를 빌드한다. Windows·macOS·Linux 묶음은 Node.js 24를 함께 넣고 Arch 패키지는 시스템 nodejs를 쓴다. 태그를 달면 GitHub Release에 올라간다. Windows·macOS는 빌드만 확인했고 실제 기기에서 써 보지는 않았다(서명 없음).
+- **설치 파일**: [v0.1.0 릴리스](https://github.com/laguna821/Achmage-workbench-CLI/releases/tag/v0.1.0)(2026-10-29)에 Windows(NSIS `.exe`·MSI)·macOS Apple silicon(`.dmg`)·Linux(AppImage·`.deb`)·Arch/CachyOS(`.pkg.tar.zst`) 여섯 파일이 있다. GitHub Actions `release`(수동 실행 또는 `v*` 태그)가 만들고, 태그 실행만 Release를 올린다. Windows·macOS·Linux 묶음은 Node.js 24를 함께 넣고 Arch 패키지는 시스템 nodejs(24 이상)를 쓴다. 내려받은 Arch 패키지의 체크섬·내용(실행 파일·`host/`·`web/`·바로가기·의존성)을 확인했다.
+  - Windows는 `bundle.icon`에 `.ico`가 있어야 묶인다(없으면 "Couldn't find a .ico icon"). 설치 파일 이름에 공백이 있어 릴리스 단계는 파일을 배열로 넘기고 여섯 개인지 센다.
+  - macOS arm64 러너가 모자라면 작업이 러너를 못 받고 취소된다("not acquired by Runner"). 코드 문제가 아니므로 그 작업만 다시 돌린다(`gh run rerun <id> --failed`).
+  - Windows·macOS는 빌드만 확인했고 실제 기기에서 써 보지는 않았다. 서명이 없어 처음 열 때 SmartScreen·Gatekeeper 경고가 뜬다.
 - **사람이 설치본에서 확인할 것**: 바탕화면 끌어 놓기·스크린숏 붙여넣기(WebKitGTK), 알림을 눌러 세션 열기, 트레이 "확인 필요 N", 실제 Google 로그인 유지(에이전트 브라우저), 세션 창 떼어 내기(niri).
 - **뒤로 미룬 것**: 음성·모바일·PR/CI 연동·격자 분할·칸반 끌기. 앱 안 편집기 확대(마크다운 WYSIWYG·HTML·마인드맵), HOP급 한글 편집기, 이음 설치 의존 없애기.
 - 설계: [다음 설계](design/워크스테이션-다음설계.md), 지난 계획: [메타 세션·페이지·Pele 도식·이음 마무리](design/메타세션-다음계획.md).
