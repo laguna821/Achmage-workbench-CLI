@@ -66,15 +66,22 @@ function QueuedList({ session, busy, actions }: { session: Session; busy: boolea
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   if (!session.queued.length) return null;
+  const kept = session.queued.filter((entry) => entry.held).length;
+  const waiting = session.queued.length - kept;
   return (
     <div className="queued-list" role="list" aria-label="끝나면 보낼 요청">
       <div className="queued-head">
-        {/* While the engine rests, a waiting request is one kept after a stop: it goes only by hand. */}
+        {/* Requests kept after a stop, a failure or a restart go only by hand; the others follow the turn. */}
         <Icon name="bell" size={13} />{" "}
-        {busy ? `끝나면 보낼 요청 ${session.queued.length}개 · 차례대로 보냅니다` : `멈춘 뒤 남겨 둔 요청 ${session.queued.length}개 · 직접 보내거나 지울 수 있습니다`}
+        {[
+          waiting ? `끝나면 보낼 요청 ${waiting}개 · 차례대로 보냅니다` : null,
+          kept ? `남겨 둔 요청 ${kept}개 · 직접 보내거나 지울 수 있습니다` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
       </div>
       {session.queued.map((entry, index) => (
-        <div key={entry.id} className="queued-row" role="listitem">
+        <div key={entry.id} className={`queued-row${entry.held ? " held" : ""}`} role="listitem">
           <span className="queued-no">{index + 1}</span>
           {editing === entry.id ? (
             <form
@@ -102,6 +109,7 @@ function QueuedList({ session, busy, actions }: { session: Session; busy: boolea
             </form>
           ) : (
             <span className="queued-text" title={entry.text}>
+              {entry.held ? <span className="queued-held">남겨 둠</span> : null}
               {entry.text}
               {entry.refs.length ? <span className="muted"> · 문서 {entry.refs.length}</span> : null}
             </span>

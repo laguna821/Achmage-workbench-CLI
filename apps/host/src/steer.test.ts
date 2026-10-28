@@ -124,6 +124,25 @@ describe("writing while the engine works", () => {
     expect(sessionOf(manager, session.id).queued).toEqual([]);
   });
 
+  it("kept requests stay kept when the user goes on: only requests queued since follow the turn", async () => {
+    const { manager, engine, session } = setup();
+    await manager.send(session.id, "r1", "첫 요청");
+    await manager.send(session.id, "r2", "멈추기 전에 예약", [], null, null, "queue");
+    engine.finish("interrupted");
+    await tick();
+    expect(sessionOf(manager, session.id).queued).toMatchObject([{ id: "r2", held: true }]);
+    // The user goes on with something else and queues one more behind it.
+    await manager.send(session.id, "r3", "다른 요청");
+    await manager.send(session.id, "r4", "이것도 끝나면", [], null, null, "queue");
+    engine.finish();
+    await tick();
+    expect(engine.sent).toEqual(["첫 요청", "다른 요청", "이것도 끝나면"]);
+    engine.finish();
+    await tick();
+    expect(sessionOf(manager, session.id).queued.map((entry) => entry.id)).toEqual(["r2"]);
+    expect(engine.sent).toHaveLength(3);
+  });
+
   it("a stop that drops a steered request marks it and keeps it waiting above the input", async () => {
     const { manager, engine, session } = setup();
     await manager.send(session.id, "r1", "첫 요청");

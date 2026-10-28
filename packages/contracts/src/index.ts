@@ -122,8 +122,11 @@ export function accessFor(provider: Provider, chosen: AccessMode | null | undefi
 /** Context window use: tokens the conversation takes now, the window, and where it compacts itself. */
 export type ContextUsage = { used: number; window: number | null; compactAt: number | null; at: number };
 
-/** A request written while the engine was working, sent as the next turn when this one ends. */
-export type QueuedMessage = { id: string; text: string; refs: DocRef[]; create: CreateTarget | null; at: number };
+/**
+ * A request written while the engine was working, sent as the next turn when this one ends.
+ * `held`: kept after a stop, a failure, a restart or a steer the stop dropped — sent only by hand.
+ */
+export type QueuedMessage = { id: string; text: string; refs: DocRef[]; create: CreateTarget | null; at: number; held?: boolean };
 
 /** A reply the user has not looked at yet (or a session marked unread). */
 export const isUnseen = (session: Session) => session.unread || Boolean(session.previewAt && session.previewAt > (session.seenAt ?? 0));

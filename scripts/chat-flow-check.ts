@@ -205,6 +205,9 @@ async function flow(provider: Provider) {
     }));
     await shot("07-diagram.png");
     pass("답 안의 mermaid 마인드맵을 Pele로 그림", !drawn.failed && drawn.nodes >= 8 && drawn.text.includes("끼어들기"), `nodes=${drawn.nodes}`);
+    // The request kept after the stop did not go out with this turn.
+    const still = await session(engine.id);
+    pass("남겨 둔 요청은 다른 요청을 보낸 뒤에도 남아 있음", still.queued.some((entry) => entry.text === "멈추면 못 갈 요청" && entry.held) && !(await items(engine.id)).some((item) => item.kind === "user" && item.text === "멈추면 못 갈 요청" && !item.undelivered), still.queued.map((entry) => `${entry.text}${entry.held ? "(남김)" : ""}`).join("|"));
     await shot("08-final.png");
   } catch (error) {
     pass("실행", false, error instanceof Error ? error.message.split("\n")[0]! : String(error));

@@ -324,8 +324,7 @@ export class SessionManager {
       this.steering.get(sessionId)?.delete(entry.requestId);
       if (entry.item) this.sink.upsertItem(sessionId, { ...entry.item, undelivered: true });
     }
-    const again: QueuedMessage[] = lost.map((entry) => ({ id: `again-${randomUUID()}`, text: entry.text, refs: entry.refs, create: null, at: Date.now() }));
-    this.heldQueues.add(sessionId);
+    const again: QueuedMessage[] = lost.map((entry) => ({ id: `again-${randomUUID()}`, text: entry.text, refs: entry.refs, create: null, at: Date.now(), held: true }));
     this.saveSession({ ...this.requireSession(sessionId), queued: [...again, ...this.requireSession(sessionId).queued] });
     this.sink.upsertItem(sessionId, {
       kind: "notice",
@@ -369,23 +368,28 @@ export class SessionManager {
       this.saveSession({ ...session, status: "idle", activity: null, updatedAt: Date.now() });
     }
     // Requests left waiting when the app closed are not sent on their own after a restart.
-    for (const session of this.sessions.values()) if (session.queued.length) this.heldQueues.add(session.id);
+    for (const session of this.sessions.values()) this.holdQueued(session.id);
   }
 
-  /** Sessions whose waiting requests are kept until the user sends them (after a stop or a failure). */
-  private readonly heldQueues = new Set<string>();
+  /** Keep every waiting request of a session until the user sends it; the number newly kept. */
+  private holdQueued(sessionId: string) {
+    const session = this.sessions.get(sessionId);
+    const fresh = session?.queued.filter((entry) => !entry.held).length ?? 0;
+    if (session && fresh) this.saveSession({ ...session, queued: session.queued.map((entry) => ({ ...entry, held: true })) });
+    return fresh;
+  }
 
-  /** The turn ended normally: the oldest waiting request becomes the next turn. */
+  /** The turn ended normally: the oldest request not kept back becomes the next turn. */
   private drainSoon(sessionId: string) {
     setTimeout(() => {
       const session = this.sessions.get(sessionId);
-      if (!session || session.status !== "idle" || !session.queued.length || this.heldQueues.has(sessionId)) return;
-      const [next, ...rest] = session.queued;
-      this.saveSession({ ...session, queued: rest });
-      void this.send(sessionId, next!.id, next!.text, next!.refs, null, next!.create).catch((error: unknown) => {
+      const next = session?.queued.find((entry) => !entry.held);
+      if (!session || session.status !== "idle" || !next) return;
+      this.saveSession({ ...session, queued: session.queued.filter((entry) => entry !== next) });
+      void this.send(sessionId, next.id, next.text, next.refs, null, next.create).catch((error: unknown) => {
         this.sink.upsertItem(sessionId, {
           kind: "notice",
-          id: `queue-failed:${next!.id}`,
+          id: `queue-failed:${next.id}`,
           level: "error",
           text: `보낼 예정이던 요청을 보내지 못했습니다: ${error instanceof Error ? error.message : String(error)}`,
           at: Date.now(),
@@ -409,7 +413,6 @@ export class SessionManager {
   cancelQueued(sessionId: string, queuedId: string): Session {
     const session = this.requireSession(sessionId);
     const next = { ...session, queued: session.queued.filter((entry) => entry.id !== queuedId) };
-    if (!next.queued.length) this.heldQueues.delete(sessionId);
     this.saveSession(next);
     return next;
   }
@@ -420,9 +423,7 @@ export class SessionManager {
     const entry = session.queued.find((item) => item.id === queuedId);
     if (!entry) throw new HttpError(404, "queued_not_found", "보낼 예정인 요청이 없습니다.");
     this.saveSession({ ...session, queued: session.queued.filter((item) => item.id !== queuedId) });
-    const result = await this.send(sessionId, entry.id, entry.text, entry.refs, null, entry.create, "steer");
-    if (result.delivery === "turn") this.heldQueues.delete(sessionId);
-    return result;
+    return this.send(sessionId, entry.id, entry.text, entry.refs, null, entry.create, "steer");
   }
 
   snapshot(): Snapshot {
@@ -903,7 +904,6 @@ export class SessionManager {
       }
       // The turn ended meanwhile: this request starts the next one.
     }
-    this.heldQueues.delete(sessionId);
     this.steering.delete(sessionId);
     // Pin each document: the engine reads exactly this revision; edits go to a working copy.
     const prepared: { ref: DocRef; pinned: string; pinnedView: string | null; proposal: Proposal | null }[] = [];
@@ -1114,9 +1114,8 @@ export class SessionManager {
   /** A turn ended: working copies become proposals, and answered handoffs go back to their source. */
   private afterTurn(sessionId: string, status: "completed" | "interrupted" | "failed") {
     // After a stop or a failure the waiting requests stay until the user sends them.
-    const waiting = this.sessions.get(sessionId)?.queued.length ?? 0;
-    if (status !== "completed" && waiting && !this.heldQueues.has(sessionId)) {
-      this.heldQueues.add(sessionId);
+    const waiting = status === "completed" ? 0 : this.holdQueued(sessionId);
+    if (waiting) {
       this.sink.upsertItem(sessionId, {
         kind: "notice",
         id: `queue-held:${Date.now()}`,

@@ -5412,3 +5412,16 @@ kbd {
   color: var(--text-soft);
   white-space: pre-wrap;
 }
+
+.queued-held {
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.queued-row.held .queued-text {
+  color: var(--text-soft);
+}
