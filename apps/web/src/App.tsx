@@ -1082,6 +1082,7 @@ export function App() {
             onToast={setToast}
             onOpenArtifact={(artifactId) => setView({ kind: "document", artifactId, proposalId: null })}
             onPickTarget={() => actions.pickSession(work, activeSession ?? null)}
+            onAnswer={(session, itemId, decision) => actions.answer(session, itemId, decision)}
             onSend={async (session, text, refs, handoffTo, create) => {
               let source = session;
               if (!source) source = await actions.newSession(work, engine);

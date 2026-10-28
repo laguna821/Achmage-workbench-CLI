@@ -28,6 +28,7 @@ import type { ReactNode } from "react";
 import type { MentionItem } from "../../mention.ts";
 import { CreateChip, CreateTargetButton, stemOf } from "../CreateTarget.tsx";
 import { OfficeCompare } from "./OfficeCompare.tsx";
+import { ConversationDrawer, ConversationSheet, type DrawerMode } from "./ConversationDrawer.tsx";
 
 /** Save operations only; "unsaved" is derived from the text, never stored (no stale overwrite). */
 type SaveState = "idle" | "saving" | "failed" | "conflict";
@@ -57,7 +58,10 @@ export default function DocumentView({
   tabs,
   openDocIds,
   onLeaveGuard,
+  onAnswer,
 }: {
+  /** Answer an approval of the session from the drawer, without leaving the document. */
+  onAnswer?: (session: Session, itemId: string, decision: "accept" | "decline") => void;
   /** Register how to save edits only this view holds (the Word editor) before the app leaves it. */
   onLeaveGuard?: (guard: (() => Promise<void>) | null) => void;
   /** Open document tabs of this work. */
@@ -78,6 +82,7 @@ export default function DocumentView({
 }) {
   const { lookOf } = useAppearance();
   const artifact = state.artifacts[artifactId] as Artifact | undefined;
+  const [drawer, setDrawer] = useState<DrawerMode>("closed");
   const textual = artifact ? TEXT_FORMATS.has(artifact.format) : false;
   const [base, setBase] = useState<{ revision: number; text: string } | null>(null);
   const [text, setText] = useState("");
@@ -797,6 +802,19 @@ export default function DocumentView({
       </div>
 
       <div className="column composer-area doc-composer">
+        {session && drawer === "open" ? (
+          <ConversationSheet state={state} session={session} onClose={() => setDrawer("peek")} onAnswer={(itemId, decision) => onAnswer?.(session, itemId, decision)} />
+        ) : null}
+        {session ? (
+          <ConversationDrawer
+            state={state}
+            session={session}
+            mode={drawer}
+            onMode={setDrawer}
+            onAnswer={(itemId, decision) => onAnswer?.(session, itemId, decision)}
+            onOpenConversation={onBack}
+          />
+        ) : null}
         <Composer
           draftKey={`doc:${artifactId}`}
           placeholder={selection ? "이 부분에 요청하기" : "이 문서에 요청하기"}
@@ -870,6 +888,8 @@ export default function DocumentView({
               if (other) refs.push({ artifactId: other.id, revision: other.revision, mode: "review", selection: null });
             }
             const sent = await onSend(session, message, refs, handoffTo, handoffTo ? null : create);
+            // The answer will come up in the drawer, under the document.
+            if (sent && !handoffTo) setDrawer((current) => (current === "open" ? current : "peek"));
             if (sent) {
               if (handoffTo) setHandoffTo(null);
               setOthers([]);
