@@ -317,8 +317,25 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           return sendJson(
             res,
             202,
-            await manager.send(sessionId, String(body.requestId ?? ""), String(body.text ?? ""), parseRefs(body.refs), null, parseCreate(body.create)),
+            await manager.send(
+              sessionId,
+              String(body.requestId ?? ""),
+              String(body.text ?? ""),
+              parseRefs(body.refs),
+              null,
+              parseCreate(body.create),
+              body.mode === "steer" || body.mode === "queue" ? body.mode : "auto",
+            ),
           );
+        }
+        if (parts[2] === "queue" && parts[3]) {
+          const queuedId = decodeURIComponent(parts[3]);
+          if (method === "DELETE" && parts.length === 4) return sendJson(res, 200, manager.cancelQueued(sessionId, queuedId));
+          if (method === "PATCH" && parts.length === 4) {
+            const body = await readJson(req);
+            return sendJson(res, 200, manager.updateQueued(sessionId, queuedId, String(body.text ?? "")));
+          }
+          if (method === "POST" && parts[4] === "send") return sendJson(res, 202, await manager.sendQueued(sessionId, queuedId));
         }
         if (method === "POST" && parts[2] === "interrupt") {
           await manager.interrupt(sessionId);

@@ -85,9 +85,14 @@ export type Session = {
   seenAt: number | null;
   /** Marked "읽지 않음" by hand. */
   unread: boolean;
+  /** Requests waiting to be sent when the current turn ends ("끝나면 보내기"), oldest first. */
+  queued: QueuedMessage[];
   createdAt: number;
   updatedAt: number;
 };
+
+/** A request written while the engine was working, sent as the next turn when this one ends. */
+export type QueuedMessage = { id: string; text: string; refs: DocRef[]; create: CreateTarget | null; at: number };
 
 /** A reply the user has not looked at yet (or a session marked unread). */
 export const isUnseen = (session: Session) => session.unread || Boolean(session.previewAt && session.previewAt > (session.seenAt ?? 0));
@@ -233,6 +238,10 @@ export type TranscriptItem =
       from?: { sessionId: string; label: string } | null;
       /** The new document this request asked for, at the path the gateway reserved. */
       create?: { format: CreatableFormat; name: string; path: string } | null;
+      /** Sent into a turn that was still running ("끼어들기"): the engine takes it at its next step. */
+      steered?: boolean;
+      /** Steered in, then the turn was stopped before the engine took it: it waits again above the input. */
+      undelivered?: boolean;
     }
   | { kind: "assistant"; id: string; text: string; streaming: boolean; at: number }
   | { kind: "reasoning"; id: string; text: string; at: number }
@@ -464,7 +473,15 @@ export type SendMessageRequest = {
   text: string;
   refs?: DocRef[];
   create?: CreateTarget | null;
+  /**
+   * While the engine is working: "steer" puts the request into the running turn (the engine takes
+   * it at its next step), "queue" sends it as the next turn when this one ends, "auto" steers when
+   * the engine can and queues otherwise. An idle session just starts a turn.
+   */
+  mode?: "auto" | "steer" | "queue";
 };
+
+export type SendResult = { duplicate: boolean; delivery: "turn" | "steered" | "queued" };
 
 export type HandoffRequest = {
   requestId: string;

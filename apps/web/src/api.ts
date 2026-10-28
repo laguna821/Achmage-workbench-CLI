@@ -14,6 +14,7 @@ import type {
   Folder,
   Provider,
   SearchResult,
+  SendResult,
   SequencedEvent,
   Session,
   Snapshot,
@@ -83,8 +84,12 @@ export class Api {
   createSession = (workId: string, provider: Provider, options?: { purpose?: string; model?: string | null; effort?: string | null }) =>
     this.request<Session>("POST", `/api/works/${workId}/sessions`, { provider, ...options });
   updateSession = (sessionId: string, patch: UpdateSessionRequest) => this.request<Session>("PATCH", `/api/sessions/${sessionId}`, patch);
-  send = (sessionId: string, requestId: string, text: string, refs: DocRef[] = [], create: CreateTarget | null = null) =>
-    this.request<{ duplicate: boolean }>("POST", `/api/sessions/${sessionId}/messages`, { requestId, text, refs, create });
+  send = (sessionId: string, requestId: string, text: string, refs: DocRef[] = [], create: CreateTarget | null = null, mode: "auto" | "steer" | "queue" = "auto") =>
+    this.request<SendResult>("POST", `/api/sessions/${sessionId}/messages`, { requestId, text, refs, create, mode });
+  /** Requests waiting for the turn to end: send now (steer when possible), change, or drop. */
+  sendQueued = (sessionId: string, queuedId: string) => this.request<SendResult>("POST", `/api/sessions/${sessionId}/queue/${encodeURIComponent(queuedId)}/send`);
+  updateQueued = (sessionId: string, queuedId: string, text: string) => this.request<Session>("PATCH", `/api/sessions/${sessionId}/queue/${encodeURIComponent(queuedId)}`, { text });
+  cancelQueued = (sessionId: string, queuedId: string) => this.request<Session>("DELETE", `/api/sessions/${sessionId}/queue/${encodeURIComponent(queuedId)}`);
   handoff = (request: { requestId: string; sourceSessionId: string; targetSessionId: string; text: string; refs: DocRef[] }) =>
     this.request<Handoff>("POST", "/api/handoffs", request);
   openFile = (workId: string, path: string) => this.request<Artifact>("POST", `/api/works/${workId}/artifacts`, { path });

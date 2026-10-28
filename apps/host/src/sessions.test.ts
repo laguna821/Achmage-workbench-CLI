@@ -61,17 +61,18 @@ describe("SessionManager", () => {
     const session = manager.createSession(work.id, { provider: "claude" });
     await manager.send(session.id, "r1", "hello");
     manager.sink.updateSession(session.id, { status: "idle" });
-    expect(await manager.send(session.id, "r1", "hello")).toEqual({ duplicate: true });
+    expect(await manager.send(session.id, "r1", "hello")).toMatchObject({ duplicate: true });
     await expect(manager.send(session.id, "r1", "different")).rejects.toBeInstanceOf(HttpError);
     expect(adapter.sent).toEqual(["hello"]);
   });
 
-  it("refuses a new message while the session is still answering", async () => {
-    const { manager } = setup();
+  it("keeps a new message for after the turn while the session is still answering (an engine that cannot steer)", async () => {
+    const { manager, adapter } = setup();
     const work = manager.createWork({ title: "w" });
     const session = manager.createSession(work.id, { provider: "claude" });
     await manager.send(session.id, "r1", "first");
-    await expect(manager.send(session.id, "r2", "second")).rejects.toMatchObject({ code: "session_busy" });
+    expect(await manager.send(session.id, "r2", "second")).toEqual({ duplicate: false, delivery: "queued" });
+    expect(adapter.sent).toEqual(["first"]);
   });
 
   it("keeps model and reasoning effort per session and clears them back to the engine default", () => {

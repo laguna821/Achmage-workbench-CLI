@@ -293,15 +293,21 @@ export function App() {
 
   const actions: WorkActions = useMemo(
     () => ({
-      send: async (session: Session, text: string, refs: DocRef[] = [], create: CreateTarget | null = null) => {
+      send: async (session: Session, text: string, refs: DocRef[] = [], create: CreateTarget | null = null, mode: "auto" | "queue" = "auto") => {
         if (!api) return false;
         try {
-          await api.send(session.id, newRequestId(), text, refs, create);
+          const result = await api.send(session.id, newRequestId(), text, refs, create, mode);
+          if (result.delivery === "queued") setToast("작업이 끝나면 이어서 보냅니다. 입력창 위에서 고치거나 지울 수 있습니다.");
           return true;
         } catch (error) {
           fail(error);
           return false;
         }
+      },
+      queued: {
+        send: (session, queuedId) => void api?.sendQueued(session.id, queuedId).catch(fail),
+        edit: (session, queuedId, text) => void api?.updateQueued(session.id, queuedId, text).catch(fail),
+        cancel: (session, queuedId) => void api?.cancelQueued(session.id, queuedId).catch(fail),
       },
       handoff: async (source: Session, target: Session, text: string, refs: DocRef[] = []) => {
         if (!api) return false;

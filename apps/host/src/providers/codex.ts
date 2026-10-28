@@ -106,6 +106,10 @@ export class CodexAdapter implements ProviderAdapter {
   /** threadId -> active turn id */
   private readonly activeTurns = new Map<string, string>();
   private readonly interrupting = new Set<string>();
+  /** threadId -> steered requests (turn keys) Codex has not yet taken into the conversation */
+  private readonly steers = new Map<string, string[]>();
+  /** threadId -> user messages Codex recorded in the running turn (the first is the request itself) */
+  private readonly userMessages = new Map<string, number>();
   /** approval item id -> pending server request */
   private readonly approvals = new Map<string, PendingApproval>();
   private idleTimer: NodeJS.Timeout | null = null;
@@ -299,6 +303,28 @@ export class CodexAdapter implements ProviderAdapter {
       .catch(() => undefined);
   }
 
+  /** Put a request into the running turn (`turn/steer`); false when that turn is already over. */
+  async steer(session: Session, _work: Work, text: string, turnKey: string) {
+    const threadId = session.nativeSessionId;
+    const turnId = threadId ? this.activeTurns.get(threadId) : undefined;
+    if (!threadId || !turnId || !this.rpc || this.interrupting.has(threadId)) return false;
+    // Noted before sending: Codex may record the message before its answer to the request arrives.
+    this.steers.set(threadId, [...(this.steers.get(threadId) ?? []), turnKey]);
+    try {
+      await this.rpc.request("turn/steer", {
+        threadId,
+        expectedTurnId: turnId,
+        input: [{ type: "text", text, text_elements: [] }],
+        clientUserMessageId: turnKey,
+      });
+      return true;
+    } catch {
+      // The turn ended between the check and the request (expectedTurnId no longer matches).
+      this.steers.set(threadId, (this.steers.get(threadId) ?? []).filter((key) => key !== turnKey));
+      return false;
+    }
+  }
+
   async interrupt(session: Session) {
     const threadId = session.nativeSessionId;
     const turnId = threadId ? this.activeTurns.get(threadId) : undefined;
@@ -378,6 +404,20 @@ export class CodexAdapter implements ProviderAdapter {
     };
   }
 
+  /**
+   * Codex recorded a user message in the running turn. A steered request carries the id it was
+   * sent with; when Codex leaves that out, every message after the turn's own request is the
+   * oldest steered one.
+   */
+  private tookSteer(threadId: string, clientId: string | null) {
+    const seen = (this.userMessages.get(threadId) ?? 0) + 1;
+    this.userMessages.set(threadId, seen);
+    const pending = this.steers.get(threadId);
+    if (!pending?.length) return;
+    const index = clientId ? pending.indexOf(clientId) : seen > 1 ? 0 : -1;
+    if (index >= 0) pending.splice(index, 1);
+  }
+
   private onServerRequest(request: RpcServerRequest) {
     const params = (request.params ?? {}) as { threadId?: string };
     const sessionId = params.threadId ? this.threads.get(params.threadId) : undefined;
@@ -426,11 +466,13 @@ export class CodexAdapter implements ProviderAdapter {
       case "turn/started": {
         const { turn } = params as TurnStartedNotification;
         this.activeTurns.set(threadId, turn.id);
+        this.userMessages.set(threadId, 0);
         this.sink.updateSession(sessionId, { status: "running", activity: "응답 준비 중", lastError: null });
         break;
       }
       case "item/started": {
         const { item } = params as ItemStartedNotification;
+        if (item.type === "userMessage") this.tookSteer(threadId, item.clientId);
         const mapped = mapThreadItem(item, Date.now(), true);
         if (mapped) {
           this.sink.upsertItem(sessionId, mapped);
@@ -485,6 +527,11 @@ export class CodexAdapter implements ProviderAdapter {
         const { turn } = params as TurnCompletedNotification;
         this.activeTurns.delete(threadId);
         const interrupted = this.interrupting.delete(threadId) || turn.status === "interrupted";
+        // Steered requests Codex never took into the conversation were dropped with the turn.
+        const dropped = this.steers.get(threadId) ?? [];
+        this.steers.delete(threadId);
+        this.userMessages.delete(threadId);
+        if (dropped.length) this.sink.steerDropped(sessionId, dropped);
         const status = interrupted ? "interrupted" : turn.status === "failed" ? "failed" : "completed";
         for (const [itemId, pending] of this.approvals) {
           if (pending.sessionId === sessionId) {

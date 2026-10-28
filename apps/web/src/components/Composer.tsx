@@ -11,7 +11,9 @@ const DRAFT_PREFIX = "workbench.draft.";
 /**
  * The single input box. Enter sends, Shift+Enter breaks the line, and Enter while a Korean
  * syllable is still being composed never sends. Drafts survive switching work and reloads.
- * While the engine is working, a light trail orbits the box border (CMDS Achmage).
+ * While the engine is working, a light trail orbits the box border (CMDS Achmage), and the box
+ * keeps taking requests: Enter steers into the running turn ("끼어들기"), Alt+Enter keeps the
+ * request for when the turn ends ("끝나면 보내기").
  */
 export function Composer({
   draftKey,
@@ -19,6 +21,7 @@ export function Composer({
   busy,
   waiting,
   disabled,
+  steerable,
   onSend,
   onStop,
   target,
@@ -31,7 +34,9 @@ export function Composer({
   busy: boolean;
   waiting?: boolean;
   disabled?: boolean;
-  onSend: (text: string) => Promise<boolean>;
+  /** While busy: the engine can take a request into the running turn (otherwise requests wait). */
+  steerable?: boolean;
+  onSend: (text: string, mode?: "auto" | "queue") => Promise<boolean>;
   onStop?: () => void;
   target?: ReactNode;
   /** Chips above the text (documents, selection, receiving session). */
@@ -90,13 +95,13 @@ export function Composer({
     if (autoFocus) ref.current?.focus();
   }, [autoFocus, draftKey]);
 
-  const canSend = !busy && !disabled && !sending && text.trim().length > 0;
+  const canSend = !disabled && !sending && text.trim().length > 0;
 
-  const submit = async () => {
+  const submit = async (mode: "auto" | "queue" = "auto") => {
     if (!canSend) return;
     setSending(true);
     try {
-      if (await onSend(text.trim())) {
+      if (await onSend(text.trim(), busy && !steerable ? "queue" : mode)) {
         setText("");
         setSpans([]);
       }
@@ -136,7 +141,15 @@ export function Composer({
         className="composer-input"
         rows={1}
         value={text}
-        placeholder={mentions ? `${placeholder} (@로 문서 붙이기)` : placeholder}
+        placeholder={
+          busy
+            ? steerable
+              ? "작업 중에도 보낼 수 있어요 · Enter 끼어들기 · Alt+Enter 끝나면 보내기"
+              : "끝나면 이어서 보낼 요청 · Enter로 예약"
+            : mentions
+              ? `${placeholder} (@로 문서 붙이기)`
+              : placeholder
+        }
         disabled={disabled}
         onChange={(event) => {
           const next = event.target.value;
@@ -172,14 +185,37 @@ export function Composer({
           if (event.key !== "Enter" || event.shiftKey) return;
           if (event.nativeEvent.isComposing || event.keyCode === 229) return;
           event.preventDefault();
-          void submit();
+          void submit(busy && event.altKey ? "queue" : "auto");
         }}
       />
       <div className="composer-bar">
         <div className="composer-left" />
         <div className="composer-right">
           {target}
-          {busy && onStop ? (
+          {busy && text.trim() ? (
+            <>
+              {steerable ? (
+                <button type="button" className="ghost-button small queue-button" onClick={() => void submit("queue")} disabled={!canSend} title="작업이 끝나면 이어서 보내기 (Alt+Enter)">
+                  끝나면 보내기
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="icon-button primary steer-button"
+                onClick={() => void submit(steerable ? "auto" : "queue")}
+                disabled={!canSend}
+                title={steerable ? "끼어들기: 하던 작업에 지금 전하기 (Enter)" : "끝나면 보내기 (Enter)"}
+                aria-label={steerable ? "끼어들기" : "끝나면 보내기"}
+              >
+                <Icon name={steerable ? "send" : "bell"} size={18} />
+              </button>
+              {onStop ? (
+                <button type="button" className="icon-button stop-secondary" onClick={onStop} title="중단" aria-label="중단">
+                  <Icon name="stop" size={16} />
+                </button>
+              ) : null}
+            </>
+          ) : busy && onStop ? (
             <button type="button" className="icon-button primary" onClick={onStop} title="중단" aria-label="중단">
               <Icon name="stop" size={18} />
             </button>

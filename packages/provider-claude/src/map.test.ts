@@ -77,7 +77,7 @@ describe("ClaudeTranscriptMapper", () => {
   it("ends the turn on result messages", () => {
     const mapper = new ClaudeTranscriptMapper(() => 1);
     const out = mapper.handle(msg({ type: "result", subtype: "error_during_execution", is_error: true, errors: ["boom"], duration_ms: 5 }), "k");
-    expect(out[0]).toEqual({ type: "turnEnd", status: "failed", durationMs: 5, error: "boom" });
+    expect(out[0]).toEqual({ type: "turnEnd", status: "failed", durationMs: 5, error: "boom", queued: 0 });
   });
 });
 

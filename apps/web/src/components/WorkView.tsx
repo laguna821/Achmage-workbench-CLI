@@ -18,7 +18,13 @@ import { workSessions } from "../tree.ts";
 import { Transcript } from "./Transcript.tsx";
 
 export type WorkActions = {
-  send: (session: Session, text: string, refs?: DocRef[], create?: CreateTarget | null) => Promise<boolean>;
+  /** Send a request; while the engine works it steers into the turn or waits ("queue"). */
+  send: (session: Session, text: string, refs?: DocRef[], create?: CreateTarget | null, mode?: "auto" | "queue") => Promise<boolean>;
+  queued: {
+    send: (session: Session, queuedId: string) => void;
+    edit: (session: Session, queuedId: string, text: string) => void;
+    cancel: (session: Session, queuedId: string) => void;
+  };
   handoff: (source: Session, target: Session, text: string, refs?: DocRef[]) => Promise<boolean>;
   pickSession: (work: Work, exclude: Session | null) => Promise<Session | null>;
   openArtifact: (artifactId: string) => void;
@@ -49,6 +55,75 @@ const MAX_TABS = 5;
 
 function StatusDot({ tone }: { tone: string }) {
   return <span className={`dot dot-${tone}`} aria-hidden />;
+}
+
+/** Requests written while the engine worked, waiting for the turn to end ("끝나면 보내기"). */
+function QueuedList({ session, busy, actions }: { session: Session; busy: boolean; actions: WorkActions["queued"] }) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  if (!session.queued.length) return null;
+  return (
+    <div className="queued-list" role="list" aria-label="끝나면 보낼 요청">
+      <div className="queued-head">
+        {/* While the engine rests, a waiting request is one kept after a stop: it goes only by hand. */}
+        <Icon name="bell" size={13} />{" "}
+        {busy ? `끝나면 보낼 요청 ${session.queued.length}개 · 차례대로 보냅니다` : `멈춘 뒤 남겨 둔 요청 ${session.queued.length}개 · 직접 보내거나 지울 수 있습니다`}
+      </div>
+      {session.queued.map((entry, index) => (
+        <div key={entry.id} className="queued-row" role="listitem">
+          <span className="queued-no">{index + 1}</span>
+          {editing === entry.id ? (
+            <form
+              className="queued-edit"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (draft.trim()) actions.edit(session, entry.id, draft);
+                setEditing(null);
+              }}
+            >
+              <textarea
+                autoFocus
+                value={draft}
+                rows={Math.min(6, Math.max(2, draft.split("\n").length))}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") setEditing(null);
+                  if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) {
+                    event.preventDefault();
+                    if (draft.trim()) actions.edit(session, entry.id, draft);
+                    setEditing(null);
+                  }
+                }}
+              />
+            </form>
+          ) : (
+            <span className="queued-text" title={entry.text}>
+              {entry.text}
+              {entry.refs.length ? <span className="muted"> · 문서 {entry.refs.length}</span> : null}
+            </span>
+          )}
+          <span className="queued-actions">
+            <button type="button" className="link" onClick={() => actions.send(session, entry.id)} title={busy ? "하던 작업에 지금 전하기" : "지금 보내기"}>
+              {busy ? "지금 끼어들기" : "지금 보내기"}
+            </button>
+            <button
+              type="button"
+              className="link"
+              onClick={() => {
+                setDraft(entry.text);
+                setEditing(entry.id);
+              }}
+            >
+              고치기
+            </button>
+            <button type="button" className="link danger" onClick={() => actions.cancel(session, entry.id)}>
+              지우기
+            </button>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function TargetPicker({
@@ -464,6 +539,7 @@ export function WorkView({
       )}
 
       <div className="column composer-area">
+        {active ? <QueuedList session={active} busy={busy} actions={actions.queued} /> : null}
         {!active ? (
           <EngineTabs
             value={engine}
@@ -482,6 +558,7 @@ export function WorkView({
           placeholder="이 작업에 이어서 요청하기"
           busy={busy}
           waiting={working}
+          steerable={working && !handoffTo}
           autoFocus
           header={
             handoffTo || attached.length || create ? (
@@ -521,7 +598,7 @@ export function WorkView({
               </div>
             ) : null
           }
-          onSend={async (text) => {
+          onSend={async (text, mode) => {
             // Attached documents travel as the revision they have now; handoffs are read-only.
             // A new document is made from the attached ones, so they are only read.
             const refs: DocRef[] = attached
@@ -535,7 +612,7 @@ export function WorkView({
               }));
             const source: Session | null = active ?? (await actions.newSession(work, engine, draftChoice));
             if (!source) return false;
-            const sent = handoffTo ? await actions.handoff(source, handoffTo, text, refs) : await actions.send(source, text, refs, create);
+            const sent = handoffTo ? await actions.handoff(source, handoffTo, text, refs) : await actions.send(source, text, refs, create, mode ?? "auto");
             if (sent) {
               setHandoffTo(null);
               setAttached([]);

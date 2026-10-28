@@ -464,6 +464,15 @@ export function Transcript({
                     <span>요청</span>
                     <span className="turn-meta-sep">·</span>
                     <span>{clock(turn.user.at)}</span>
+                    {turn.user.undelivered ? (
+                      <span className="steer-tag undelivered" title="멈춰서 엔진에 전해지지 않았습니다. 입력창 위 목록에서 다시 보낼 수 있습니다.">
+                        전해지지 않음
+                      </span>
+                    ) : turn.user.steered ? (
+                      <span className="steer-tag" title="응답하는 중에 보내 하던 작업에 전한 요청">
+                        작업 중 보냄
+                      </span>
+                    ) : null}
                   </div>
                   {turn.user.from ? (
                     <button type="button" className="from-badge" onClick={() => turn.user?.from && docActions.openSession(turn.user.from.sessionId)}>

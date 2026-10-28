@@ -1,4 +1,5 @@
 import { execFile, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -10,6 +11,7 @@ import {
   type ModelInfo,
   type PermissionResult,
   type Query,
+  type SDKControlInterruptResponse,
   type SDKMessage,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
@@ -80,6 +82,8 @@ type Runtime = {
   query: Query;
   mapper: ClaudeTranscriptMapper;
   turnKey: string;
+  /** Requests steered into the running turn, in order (each may become the next turn). */
+  steered: { turnKey: string; uuid: string }[];
   turnActive: boolean;
   interrupting: boolean;
   approvals: Map<string, PendingApproval>;
@@ -259,6 +263,7 @@ export class ClaudeAdapter implements ProviderAdapter {
       query: undefined as unknown as Query,
       mapper: new ClaudeTranscriptMapper(),
       turnKey: "",
+      steered: [],
       turnActive: false,
       interrupting: false,
       approvals: new Map(),
@@ -376,6 +381,21 @@ export class ClaudeAdapter implements ProviderAdapter {
         break;
       case "turnEnd": {
         const status = runtime.interrupting ? "interrupted" : output.status;
+        // A request steered in after the last tool step was not folded into this turn: Claude Code
+        // runs it as the next turn right away, so the session keeps working under that request
+        // (also after a stop, when this Claude Code could not cancel it).
+        const follows = output.queued > 0 && runtime.steered.length > 0;
+        if (follows) {
+          if (status === "failed" && output.error) {
+            this.sink.upsertItem(sessionId, { kind: "notice", id: `error:${runtime.turnKey}`, level: "error", text: output.error, at: Date.now() });
+          }
+          this.sink.upsertItem(sessionId, { kind: "turnEnd", id: `end:${runtime.turnKey}`, status, durationMs: output.durationMs, at: Date.now() });
+          runtime.turnKey = runtime.steered.shift()!.turnKey;
+          runtime.interrupting = false;
+          this.sink.updateSession(sessionId, { status: "running", activity: "이어서 보낸 요청에 답하는 중" });
+          break;
+        }
+        runtime.steered = [];
         runtime.turnActive = false;
         runtime.interrupting = false;
         if (status === "failed" && output.error) {
@@ -435,6 +455,27 @@ export class ClaudeAdapter implements ProviderAdapter {
     });
   }
 
+  /**
+   * Put a request into the running turn: Claude Code folds it in between tool steps ("next"), or
+   * runs it right after the turn when the turn has no further step.
+   */
+  async steer(session: Session, _work: Work, text: string, turnKey: string) {
+    const runtime = this.runtimes.get(session.id);
+    if (!runtime || !runtime.turnActive || runtime.interrupting) return false;
+    // The uuid lets a stop name exactly which of these Claude Code dropped.
+    const uuid = randomUUID();
+    runtime.steered.push({ turnKey, uuid });
+    runtime.input.push({
+      type: "user",
+      message: { role: "user", content: text },
+      parent_tool_use_id: null,
+      origin: { kind: "human" },
+      priority: "next",
+      uuid,
+    });
+    return true;
+  }
+
   async interrupt(session: Session) {
     const runtime = this.runtimes.get(session.id);
     if (!runtime || !runtime.turnActive) {
@@ -448,7 +489,23 @@ export class ClaudeAdapter implements ProviderAdapter {
       pending.resolve({ behavior: "deny", message: "User interrupted", interrupt: true });
       this.sink.upsertItem(session.id, { ...pending.item, decision: "decline" });
     }
-    await runtime.query.interrupt();
+    // Stop means stop: requests steered in but not yet taken would otherwise run right after the
+    // stop as turns of their own. Newer Claude Code cancels them with the interrupt; older ones list
+    // them as still queued and are asked to drop each.
+    const control = runtime.query as unknown as {
+      interrupt(options?: { cancelQueued?: boolean }): Promise<SDKControlInterruptResponse | undefined>;
+      cancelAsyncMessage?(uuid: string): Promise<boolean>;
+    };
+    const receipt = await control.interrupt({ cancelQueued: true });
+    const dropped = new Set(receipt?.cancelled ?? []);
+    for (const uuid of receipt?.still_queued ?? []) {
+      if (await control.cancelAsyncMessage?.(uuid).catch(() => false)) dropped.add(uuid);
+    }
+    const lost = runtime.steered.filter((entry) => dropped.has(entry.uuid));
+    if (lost.length) {
+      runtime.steered = runtime.steered.filter((entry) => !dropped.has(entry.uuid));
+      this.sink.steerDropped(session.id, lost.map((entry) => entry.turnKey));
+    }
   }
 
   async answerApproval(session: Session, itemId: string, decision: ApprovalDecision) {

@@ -13,6 +13,8 @@ export type AdapterSink = {
   delta(sessionId: string, itemId: string, text: string): void;
   updateSession(sessionId: string, patch: Partial<Session>): void;
   providerStatus(status: ProviderStatus): void;
+  /** Requests steered into a turn (by their turn keys) that the engine dropped when the turn stopped. */
+  steerDropped(sessionId: string, turnKeys: string[]): void;
 };
 
 export type LoginStart = { url: string | null; message: string };
@@ -28,6 +30,11 @@ export interface ProviderAdapter {
   refreshStatus(): Promise<ProviderStatus>;
   login(): Promise<LoginStart>;
   send(session: Session, work: Work, text: string, turnKey: string): Promise<void>;
+  /**
+   * Put a request into the turn that is running (the engine reads it at its next step). False when
+   * no turn is running any more, so the caller can start one instead.
+   */
+  steer?(session: Session, work: Work, text: string, turnKey: string): Promise<boolean>;
   interrupt(session: Session): Promise<void>;
   answerApproval(session: Session, itemId: string, decision: ApprovalDecision): Promise<boolean>;
   shutdown(): Promise<void>;

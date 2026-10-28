@@ -12,7 +12,8 @@ export type MapperOutput =
   | { type: "upsert"; item: TranscriptItem }
   | { type: "delta"; itemId: string; text: string }
   | { type: "init"; nativeSessionId: string; model: string }
-  | { type: "turnEnd"; status: "completed" | "failed"; durationMs: number | null; error: string | null }
+  /** `queued`: user sends still waiting in Claude Code's own queue (another turn follows at once). */
+  | { type: "turnEnd"; status: "completed" | "failed"; durationMs: number | null; error: string | null; queued: number }
   | { type: "usage"; window: UsageWindow }
   | { type: "activity"; text: string | null }
   | { type: "authError"; message: string };
@@ -274,7 +275,7 @@ export class ClaudeTranscriptMapper {
               ? message.result
               : null
             : message.errors.join("\n") || message.subtype;
-        out.push({ type: "turnEnd", status: failed ? "failed" : "completed", durationMs: message.duration_ms, error });
+        out.push({ type: "turnEnd", status: failed ? "failed" : "completed", durationMs: message.duration_ms, error, queued: message.queued_turn_count ?? 0 });
         out.push({ type: "activity", text: null });
         break;
       }

@@ -42,6 +42,7 @@ const session = (id: string, workId: string, sort: number, extra: Partial<Sessio
     archivedAt: null,
     seenAt: null,
     unread: false,
+    queued: [],
     createdAt: sort,
     updatedAt: sort,
     ...extra,

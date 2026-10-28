@@ -20,7 +20,25 @@ describe("Composer", () => {
     fireEvent.keyDown(input, { key: "Enter", keyCode: 229 });
     expect(onSend).not.toHaveBeenCalled();
     fireEvent.keyDown(input, { key: "Enter" });
-    await vi.waitFor(() => expect(onSend).toHaveBeenCalledWith("안녕"));
+    await vi.waitFor(() => expect(onSend).toHaveBeenCalledWith("안녕", "auto"));
+  });
+
+  it("keeps taking requests while the engine works: Enter steers, Alt+Enter waits for the end", async () => {
+    const onSend = vi.fn(async () => true);
+    const { rerender } = render(<Composer draftKey="busy" placeholder="입력" busy steerable onSend={onSend} onStop={() => undefined} />);
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "방향 바꿔" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await vi.waitFor(() => expect(onSend).toHaveBeenLastCalledWith("방향 바꿔", "auto"));
+    fireEvent.change(input, { target: { value: "다음에 이것도" } });
+    fireEvent.keyDown(input, { key: "Enter", altKey: true });
+    await vi.waitFor(() => expect(onSend).toHaveBeenLastCalledWith("다음에 이것도", "queue"));
+    // An engine that cannot take a request mid-turn keeps it for the end.
+    rerender(<Composer draftKey="busy" placeholder="입력" busy steerable={false} onSend={onSend} onStop={() => undefined} />);
+    fireEvent.change(input, { target: { value: "끝나면" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await vi.waitFor(() => expect(onSend).toHaveBeenLastCalledWith("끝나면", "queue"));
+    expect(screen.getByRole("button", { name: "중단" })).toBeTruthy();
   });
 
   it("keeps the draft per key", () => {
