@@ -3,7 +3,7 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { dirname, extname, join, normalize, resolve, sep } from "node:path";
 import { timingSafeEqual } from "node:crypto";
-import type { DocRef, Provider, SequencedEvent } from "@workbench/contracts";
+import { isAccessMode, type AccessMode, type DocRef, type Provider, type SequencedEvent } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
 import { HttpError, type SessionManager } from "./sessions.ts";
 import { DESIGN_PRESETS, systemFonts, type DesignPreset } from "./design.ts";
@@ -285,6 +285,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
             purpose: body.purpose as string | undefined,
             model: (body.model as string | null) ?? null,
             effort: (body.effort as string | null) ?? null,
+            access: isAccessMode(body.access) ? body.access : null,
           }),
         );
       }
@@ -304,9 +305,11 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
               sort: body.sort === undefined ? undefined : Number(body.sort),
               archived: typeof body.archived === "boolean" ? body.archived : undefined,
               seen: typeof body.seen === "boolean" ? body.seen : undefined,
+              access: body.access === undefined ? undefined : body.access === null ? null : (body.access as AccessMode),
             }),
           );
         }
+        if (method === "POST" && parts[2] === "compact") return sendJson(res, 202, await manager.compact(sessionId));
         if (method === "POST" && parts[2] === "export") {
           const body = await readJson(req);
           const target = body.target === "path" ? "path" : body.target === "text" ? "text" : "work";

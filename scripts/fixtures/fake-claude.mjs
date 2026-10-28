@@ -184,6 +184,15 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       case "set_permission_mode":
         permissionMode = request.mode;
         return reply({});
+      case "get_usage": {
+        const iso = (hours) => new Date(Date.now() + hours * 3600_000).toISOString();
+        return reply({
+          session: { total_cost_usd: 0.01, total_api_duration_ms: 1, total_duration_ms: 1, total_lines_added: 0, total_lines_removed: 0, model_usage: {} },
+          subscription_type: "max",
+          rate_limits_available: true,
+          rate_limits: { five_hour: { utilization: Math.round(rateUsed * 100), resets_at: iso(3) }, seven_day: { utilization: 12, resets_at: iso(90) } },
+        });
+      }
       case "get_context_usage":
         return reply({ categories: [{ name: "Messages", tokens: used, color: "blue", kind: "used" }], totalTokens: used, maxTokens: CONTEXT_WINDOW, rawMaxTokens: CONTEXT_WINDOW, percentage: Math.round((used / CONTEXT_WINDOW) * 1000) / 10, gridRows: [], model: MODEL, memoryFiles: [], mcpTools: [], agents: [], isAutoCompactEnabled: true, autoCompactThreshold: Math.round(CONTEXT_WINDOW * 0.92) });
       default:

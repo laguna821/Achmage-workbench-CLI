@@ -2,6 +2,7 @@ import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import {
@@ -9,13 +10,14 @@ import {
   type CanUseTool,
   type EffortLevel,
   type ModelInfo,
+  type PermissionMode,
   type PermissionResult,
   type Query,
   type SDKControlInterruptResponse,
   type SDKMessage,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { ApprovalDecision, ModelOption, ProviderStatus, Session, UsageWindow, Work } from "@workbench/contracts";
+import type { AccessMode, ApprovalDecision, ModelOption, ProviderStatus, Session, UsageWindow, Work } from "@workbench/contracts";
 import { ClaudeTranscriptMapper, describeTool, type MapperOutput } from "@workbench/provider-claude";
 import { resolveClaude, type ResolvedBinary } from "../binaries.ts";
 import { billingVarsIn, claudeSdkEnv, engineEnv } from "../engine-env.ts";
@@ -66,6 +68,7 @@ class InputQueue implements AsyncIterable<SDKUserMessage> {
 
 type PendingApproval = {
   toolUseId: string;
+  toolName: string;
   input: Record<string, unknown>;
   resolve: (result: PermissionResult) => void;
   item: { kind: "approval"; id: string; title: string; detail: string | null; reason: string | null; decision: null; at: number };
@@ -73,6 +76,10 @@ type PendingApproval = {
 
 type Runtime = {
   sessionId: string;
+  /** The access Claude Code was last told to use (its permission mode). */
+  access: AccessMode;
+  /** The running turn compacts the conversation on request (not a reply). */
+  compacting: boolean;
   /** Model and effort the running Claude Code process was last told to use. */
   model: string | null;
   effort: string | null;
@@ -89,6 +96,54 @@ type Runtime = {
   approvals: Map<string, PendingApproval>;
   idleTimer: NodeJS.Timeout | null;
 };
+
+/** What each access means to Claude Code. */
+const PERMISSION_MODE: Record<AccessMode, PermissionMode> = { ask: "default", auto: "acceptEdits", full: "bypassPermissions" };
+
+const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
+
+/** Whether an access lets a tool through without asking (as Claude Code's mode would). */
+function allows(access: AccessMode, toolName: string) {
+  return access === "full" || (access === "auto" && EDIT_TOOLS.has(toolName));
+}
+
+/** The access the user's own Claude Code settings give (permissions.defaultMode). */
+export function configuredAccess(settingsJson: string | null): AccessMode | null {
+  try {
+    const mode = (JSON.parse(settingsJson ?? "") as { permissions?: { defaultMode?: unknown } }).permissions?.defaultMode;
+    if (mode === "bypassPermissions") return "full";
+    if (mode === "acceptEdits" || mode === "auto") return "auto";
+    if (mode === "default" || mode === "plan" || mode === "dontAsk") return "ask";
+  } catch {
+    // No settings file, or not JSON.
+  }
+  return null;
+}
+
+function readSettings(): string | null {
+  try {
+    return readFileSync(join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"), "settings.json"), "utf8");
+  } catch {
+    return null;
+  }
+}
+
+/** Plan limits as `usage` (get_usage) reports them: utilization 0–100, reset as an ISO time. */
+export function usageFromPlan(limits: unknown): UsageWindow[] {
+  const windows = (limits && typeof limits === "object" ? limits : {}) as Record<string, { utilization?: unknown; resets_at?: unknown } | null | undefined>;
+  const labels: [string, string][] = [
+    ["five_hour", "5시간"],
+    ["seven_day", "주간"],
+    ["seven_day_opus", "주간 · Opus"],
+    ["seven_day_sonnet", "주간 · Sonnet"],
+  ];
+  return labels.flatMap(([key, label]) => {
+    const window = windows[key];
+    if (!window || typeof window.utilization !== "number") return [];
+    const resets = typeof window.resets_at === "string" ? Date.parse(window.resets_at) : NaN;
+    return [{ label, usedPercent: Math.round(window.utilization * 10) / 10, resetsAt: Number.isFinite(resets) ? resets : null }];
+  });
+}
 
 export function modelsFromInfo(models: ModelInfo[]): ModelOption[] {
   return models.map((model, index) => ({
@@ -120,7 +175,6 @@ export class ClaudeAdapter implements ProviderAdapter {
   private readonly runtimes = new Map<string, Runtime>();
   private readonly sink: AdapterSink;
   private readonly idleMs: number;
-  private readonly permissionMode: "default" | "acceptEdits";
   private readonly usage = new Map<string, UsageWindow>();
   private initializing: Promise<void> | null = null;
 
@@ -128,11 +182,10 @@ export class ClaudeAdapter implements ProviderAdapter {
 
   constructor(
     sink: AdapterSink,
-    options?: { idleMs?: number; permissionMode?: "default" | "acceptEdits"; modelCacheFile?: string },
+    options?: { idleMs?: number; modelCacheFile?: string },
   ) {
     this.sink = sink;
     this.idleMs = options?.idleMs ?? 10 * 60_000;
-    this.permissionMode = options?.permissionMode ?? "default";
     this.modelCache = options?.modelCacheFile ?? null;
   }
 
@@ -211,6 +264,7 @@ export class ClaudeAdapter implements ProviderAdapter {
       stdout = (error as { stdout?: string }).stdout ?? "";
       failure = error;
     }
+    this.publish({ configuredAccess: configuredAccess(readSettings()) });
     const login = parseClaudeAuthStatus(stdout);
     if (!login) {
       this.publish({ error: failure instanceof Error ? failure.message : "로그인 상태를 읽지 못했습니다." });
@@ -218,8 +272,57 @@ export class ClaudeAdapter implements ProviderAdapter {
       this.publish({ loggedIn: false, loginMethod: null, account: null, plan: null, error: null });
     } else {
       this.publish({ loggedIn: true, loginMethod: login.method, account: login.account, plan: login.plan, error: null });
+      void this.readPlanUsage();
     }
     return this.current;
+  }
+
+  /**
+   * Plan limits (5시간 · 주간) without waiting for a reply to carry them: asked of a running
+   * session's Claude Code, or of a short-lived one when none runs. No model is called.
+   */
+  private async readPlanUsage(from?: Runtime) {
+    if (!this.binary) return;
+    const runtime = from ?? [...this.runtimes.values()][0];
+    type UsageQuery = { usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?: () => Promise<{ rate_limits?: unknown }> };
+    let probe: { input: InputQueue; query: Query } | null = null;
+    try {
+      let target = runtime?.query as (Query & UsageQuery) | undefined;
+      if (!target) {
+        const input = new InputQueue();
+        probe = { input, query: query({ prompt: input, options: { pathToClaudeCodeExecutable: this.binary.path, settingSources: [], env: claudeSdkEnv(this.binary.path) } }) };
+        target = probe.query as Query & UsageQuery;
+      }
+      const usage = await target.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?.();
+      const windows = usageFromPlan(usage?.rate_limits);
+      if (windows.length) {
+        for (const window of windows) this.usage.set(window.label, window);
+        this.publish({ usage: [...this.usage.values()], usageObservedAt: Date.now() });
+      }
+    } catch {
+      // Older Claude Code, or no plan limits (API key): the limits arrive with replies instead.
+    } finally {
+      probe?.input.close();
+      probe?.query.close();
+    }
+  }
+
+  /** After a turn: how full the context is (exactly, as /context counts it) and the plan limits. */
+  private async afterTurn(runtime: Runtime) {
+    try {
+      const usage = await runtime.query.getContextUsage();
+      this.sink.updateSession(runtime.sessionId, {
+        context: {
+          used: usage.totalTokens,
+          window: usage.maxTokens || null,
+          compactAt: usage.isAutoCompactEnabled ? (usage.autoCompactThreshold ?? null) : null,
+          at: Date.now(),
+        },
+      });
+    } catch {
+      // Older Claude Code: the figure from the turn's own usage stays.
+    }
+    await this.readPlanUsage(runtime);
   }
 
   async login(): Promise<LoginStart> {
@@ -249,13 +352,15 @@ export class ClaudeAdapter implements ProviderAdapter {
     return { url, message: "브라우저에서 Claude 로그인을 마치면 자동으로 연결됩니다." };
   }
 
-  private startRuntime(session: Session, work: Work): Runtime {
+  private startRuntime(session: Session & { access: AccessMode }, work: Work): Runtime {
     if (!this.binary) {
       throw new Error("claude를 찾지 못했습니다.");
     }
     const input = new InputQueue();
     const runtime: Runtime = {
       sessionId: session.id,
+      access: session.access,
+      compacting: false,
       model: session.model,
       effort: session.effort,
       engineModel: null,
@@ -271,6 +376,11 @@ export class ClaudeAdapter implements ProviderAdapter {
     };
     const canUseTool: CanUseTool = (toolName, toolInput, options) =>
       new Promise<PermissionResult>((resolve) => {
+        // The access was raised while Claude Code was deciding: let it through as the new mode would.
+        if (allows(runtime.access, toolName)) {
+          resolve({ behavior: "allow", updatedInput: toolInput });
+          return;
+        }
         const view = describeTool(toolName, toolInput);
         const itemId = `approval:${options.toolUseID}`;
         const item = {
@@ -282,7 +392,7 @@ export class ClaudeAdapter implements ProviderAdapter {
           decision: null,
           at: Date.now(),
         };
-        runtime.approvals.set(itemId, { toolUseId: options.toolUseID, input: toolInput, resolve, item });
+        runtime.approvals.set(itemId, { toolUseId: options.toolUseID, toolName, input: toolInput, resolve, item });
         this.sink.upsertItem(session.id, item);
         this.sink.updateSession(session.id, { status: "awaitingApproval", activity: "승인 필요" });
         options.signal.addEventListener("abort", () => {
@@ -299,7 +409,9 @@ export class ClaudeAdapter implements ProviderAdapter {
         resume: session.nativeSessionId ?? undefined,
         model: session.model ?? undefined,
         effort: (session.effort as EffortLevel | null) ?? undefined,
-        permissionMode: this.permissionMode,
+        permissionMode: PERMISSION_MODE[session.access],
+        // Lets "전체 접근" be switched on later in the same process (it is not on by itself).
+        allowDangerouslySkipPermissions: true,
         canUseTool,
         includePartialMessages: true,
         settingSources: ["user", "project", "local"],
@@ -376,6 +488,9 @@ export class ClaudeAdapter implements ProviderAdapter {
         this.usage.set(output.window.label, output.window);
         this.publish({ usage: [...this.usage.values()], usageObservedAt: Date.now() });
         break;
+      case "context":
+        this.sink.updateSession(sessionId, { context: { used: output.used, window: output.window, compactAt: null, at: Date.now() } });
+        break;
       case "authError":
         this.publish({ loggedIn: false, error: output.message });
         break;
@@ -401,15 +516,20 @@ export class ClaudeAdapter implements ProviderAdapter {
         if (status === "failed" && output.error) {
           this.sink.upsertItem(sessionId, { kind: "notice", id: `error:${runtime.turnKey}`, level: "error", text: output.error, at: Date.now() });
         }
-        this.sink.upsertItem(sessionId, {
-          kind: "turnEnd",
-          id: `end:${runtime.turnKey}`,
-          status,
-          durationMs: output.durationMs,
-          at: Date.now(),
-        });
+        // A compaction asked for by the user is not a reply: no end line under the last request.
+        if (!runtime.compacting) {
+          this.sink.upsertItem(sessionId, {
+            kind: "turnEnd",
+            id: `end:${runtime.turnKey}`,
+            status,
+            durationMs: output.durationMs,
+            at: Date.now(),
+          });
+        }
+        runtime.compacting = false;
         this.sink.updateSession(sessionId, { status: "idle", activity: null, lastError: status === "failed" ? output.error : null });
         this.scheduleIdle(runtime);
+        void this.afterTurn(runtime);
         break;
       }
     }
@@ -429,9 +549,13 @@ export class ClaudeAdapter implements ProviderAdapter {
     }, this.idleMs);
   }
 
-  async send(session: Session, work: Work, text: string, turnKey: string) {
+  async send(session: Session & { access: AccessMode }, work: Work, text: string, turnKey: string) {
     await this.init();
     const runtime = this.runtimes.get(session.id) ?? this.startRuntime(session, work);
+    if (runtime.access !== session.access) {
+      await runtime.query.setPermissionMode(PERMISSION_MODE[session.access]);
+      runtime.access = session.access;
+    }
     if (runtime.idleTimer) {
       clearTimeout(runtime.idleTimer);
       runtime.idleTimer = null;
@@ -473,6 +597,34 @@ export class ClaudeAdapter implements ProviderAdapter {
       priority: "next",
       uuid,
     });
+    return true;
+  }
+
+  /** A new access reaches Claude Code at once; approvals the new mode would not ask for are given. */
+  async setAccess(session: Session & { access: AccessMode }) {
+    const runtime = this.runtimes.get(session.id);
+    if (!runtime) return;
+    await runtime.query.setPermissionMode(PERMISSION_MODE[session.access]);
+    runtime.access = session.access;
+    for (const [itemId, pending] of runtime.approvals) {
+      if (allows(session.access, pending.toolName)) await this.answerApproval(session, itemId, "accept");
+    }
+  }
+
+  /** Compact now: Claude Code's own /compact, as a turn that is not a reply. */
+  async compact(session: Session & { access: AccessMode }, work: Work) {
+    await this.init();
+    const runtime = this.runtimes.get(session.id) ?? this.startRuntime(session, work);
+    if (runtime.turnActive) return false;
+    if (runtime.idleTimer) {
+      clearTimeout(runtime.idleTimer);
+      runtime.idleTimer = null;
+    }
+    runtime.turnKey = `compact:${Date.now()}`;
+    runtime.turnActive = true;
+    runtime.compacting = true;
+    this.sink.updateSession(session.id, { status: "running", activity: "대화를 압축하는 중", lastError: null });
+    runtime.input.push({ type: "user", message: { role: "user", content: "/compact" }, parent_tool_use_id: null, origin: { kind: "human" } });
     return true;
   }
 

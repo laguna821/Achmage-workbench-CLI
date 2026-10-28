@@ -153,7 +153,7 @@ async function handle(message) {
     case "model/list":
       return reply({ data: [{ id: "fake-model", model: "fake-model", displayName: "Fake", description: "가짜 모델", hidden: false, supportedReasoningEfforts: [{ reasoningEffort: "medium", description: "" }], defaultReasoningEffort: "medium", isDefault: true }], nextCursor: null });
     case "config/read":
-      return reply({ config: { model: null, model_reasoning_effort: null }, origins: {} });
+      return reply({ config: { model: null, model_reasoning_effort: null, approval_policy: "on-request", sandbox_mode: "workspace-write", model_auto_compact_token_limit: 232_000 }, origins: {} });
     case "thread/start": {
       const threadId = `thr_${++counter}`;
       const thread = { approvalPolicy: params.approvalPolicy ?? "on-request", sandbox: params.sandbox ?? "workspace-write", cwd: params.cwd ?? "/tmp", used: 11_000, turn: null };

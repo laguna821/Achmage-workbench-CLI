@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import type { ApprovalDecision, ModelOption, ProviderStatus, Session, UsageWindow, Work } from "@workbench/contracts";
+import type { AccessMode, ApprovalDecision, ModelOption, ProviderStatus, Session, UsageWindow, Work } from "@workbench/contracts";
 import { CodexRpc, mapPlanSteps, mapThreadItem, type RpcNotification, type RpcServerRequest } from "@workbench/provider-codex";
 import type { AgentMessageDeltaNotification } from "@workbench/provider-codex/src/generated/v2/AgentMessageDeltaNotification.ts";
 import type { CommandExecutionRequestApprovalParams } from "@workbench/provider-codex/src/generated/v2/CommandExecutionRequestApprovalParams.ts";
@@ -23,6 +23,11 @@ import type { TurnCompletedNotification } from "@workbench/provider-codex/src/ge
 import type { TurnPlanUpdatedNotification } from "@workbench/provider-codex/src/generated/v2/TurnPlanUpdatedNotification.ts";
 import type { TurnStartResponse } from "@workbench/provider-codex/src/generated/v2/TurnStartResponse.ts";
 import type { TurnStartedNotification } from "@workbench/provider-codex/src/generated/v2/TurnStartedNotification.ts";
+import type { AskForApproval } from "@workbench/provider-codex/src/generated/v2/AskForApproval.ts";
+import type { Config } from "@workbench/provider-codex/src/generated/v2/Config.ts";
+import type { SandboxMode } from "@workbench/provider-codex/src/generated/v2/SandboxMode.ts";
+import type { SandboxPolicy } from "@workbench/provider-codex/src/generated/v2/SandboxPolicy.ts";
+import type { ThreadTokenUsageUpdatedNotification } from "@workbench/provider-codex/src/generated/v2/ThreadTokenUsageUpdatedNotification.ts";
 import { resolveCodex } from "../binaries.ts";
 import { billingVarsIn, engineEnv } from "../engine-env.ts";
 import { codexAccountInfo } from "../engine-login.ts";
@@ -39,7 +44,30 @@ const ACTIVITY: Record<string, string> = {
   fileChange: "파일 수정 중",
   mcpToolCall: "도구 사용 중",
   webSearch: "웹 검색 중",
+  contextCompaction: "대화를 압축하는 중",
 };
+
+/** What each access means to Codex: when to ask, and the sandbox around commands. */
+const ACCESS: Record<AccessMode, { approvalPolicy: AskForApproval; sandbox: SandboxMode }> = {
+  ask: { approvalPolicy: "untrusted", sandbox: "workspace-write" },
+  auto: { approvalPolicy: "on-request", sandbox: "workspace-write" },
+  full: { approvalPolicy: "never", sandbox: "danger-full-access" },
+};
+
+function sandboxPolicy(mode: SandboxMode): SandboxPolicy {
+  if (mode === "danger-full-access") return { type: "dangerFullAccess" };
+  if (mode === "read-only") return { type: "readOnly", networkAccess: false };
+  return { type: "workspaceWrite", writableRoots: [], networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false };
+}
+
+/** The access the user's own Codex settings give (config.toml approval_policy / sandbox_mode). */
+export function configuredAccess(config: Pick<Config, "approval_policy" | "sandbox_mode"> | null | undefined): AccessMode | null {
+  const approval = config?.approval_policy ?? null;
+  const sandbox = config?.sandbox_mode ?? null;
+  if (approval === "never" && sandbox === "danger-full-access") return "full";
+  if (approval === "untrusted" || sandbox === "read-only") return "ask";
+  return approval || sandbox ? "auto" : null;
+}
 
 function windowLabel(minutes: number | null): string {
   if (minutes === 300) return "5시간";
@@ -97,8 +125,16 @@ export class CodexAdapter implements ProviderAdapter {
   private ready: Promise<void> | null = null;
   private current: ProviderStatus = emptyStatus("codex");
   private readonly sink: AdapterSink;
-  private readonly approvalPolicy: string;
-  private readonly sandbox: string;
+  /** Fixed by the environment for tests (WORKBENCH_CODEX_APPROVAL / _SANDBOX); otherwise per session. */
+  private readonly forced: { approvalPolicy?: string; sandbox?: string };
+  /** threadId -> the access its turns run with now */
+  private readonly threadAccess = new Map<string, AccessMode>();
+  /** sessionId -> the access the user last set (approvals arriving meanwhile follow it) */
+  private readonly sessionAccess = new Map<string, AccessMode>();
+  /** threads compacting on request (their turn is not a reply) */
+  private readonly compacting = new Set<string>();
+  /** model_auto_compact_token_limit from the user's settings, when set */
+  private compactLimit: number | null = null;
   /** threadId -> sessionId */
   private readonly threads = new Map<string, string>();
   /** threadIds resumed or started in this app-server process */
@@ -117,8 +153,7 @@ export class CodexAdapter implements ProviderAdapter {
 
   constructor(sink: AdapterSink, options?: { approvalPolicy?: string; sandbox?: string; idleMs?: number }) {
     this.sink = sink;
-    this.approvalPolicy = options?.approvalPolicy ?? "on-request";
-    this.sandbox = options?.sandbox ?? "workspace-write";
+    this.forced = { approvalPolicy: options?.approvalPolicy, sandbox: options?.sandbox };
     this.idleMs = options?.idleMs ?? 10 * 60_000;
   }
 
@@ -231,14 +266,15 @@ export class CodexAdapter implements ProviderAdapter {
           ? { loggedIn, loginMethod: login.method, account: login.account ?? (login.method === "metered" ? "API 키" : null), plan: login.plan }
           : { loggedIn, loginMethod: null, account: null, plan: null },
       );
+      // The user's own settings decide what a session's default access is, and when Codex compacts.
+      const config = await rpc.request<ConfigReadResponse>("config/read", {}).catch(() => null);
+      this.compactLimit = config?.config.model_auto_compact_token_limit ? Number(config.config.model_auto_compact_token_limit) : null;
+      this.publish({ configuredAccess: configuredAccess(config?.config) });
       if (loggedIn) {
         const limits = await rpc.request<GetAccountRateLimitsResponse>("account/rateLimits/read", undefined);
         this.publish({ usage: usageFromSnapshot(limits.rateLimits), usageObservedAt: Date.now() });
         if (!this.current.models.length) {
-          const [models, config] = await Promise.all([
-            rpc.request<ModelListResponse>("model/list", { limit: 100 }),
-            rpc.request<ConfigReadResponse>("config/read", {}).catch(() => null),
-          ]);
+          const models = await rpc.request<ModelListResponse>("model/list", { limit: 100 });
           this.publish({
             models: modelsFromList(models, { model: config?.config.model ?? null, effort: config?.config.model_reasoning_effort ?? null }),
           });
@@ -260,39 +296,55 @@ export class CodexAdapter implements ProviderAdapter {
     return { url: null, message: "로그인을 시작했습니다." };
   }
 
-  async send(session: Session, work: Work, text: string) {
-    await this.ensureRunning();
+  /** Approval and sandbox for an access, unless the environment fixes them (tests). */
+  private policyFor(access: AccessMode) {
+    return {
+      approvalPolicy: (this.forced.approvalPolicy ?? ACCESS[access].approvalPolicy) as AskForApproval,
+      sandbox: (this.forced.sandbox ?? ACCESS[access].sandbox) as SandboxMode,
+    };
+  }
+
+  /** The session's thread, started or resumed in this app-server with the session's access. */
+  private async threadFor(session: Session & { access: AccessMode }, work: Work) {
     const rpc = this.rpc!;
     let threadId = session.nativeSessionId;
     if (!threadId) {
       const started = await rpc.request<ThreadStartResponse>("thread/start", {
         cwd: work.cwd,
         model: session.model,
-        approvalPolicy: this.approvalPolicy,
-        sandbox: this.sandbox,
+        ...this.policyFor(session.access),
         serviceName: "achmage_workbench",
       });
       threadId = started.thread.id;
       this.sink.updateSession(session.id, { nativeSessionId: threadId, engineModel: started.model, engineEffort: started.reasoningEffort });
       this.loaded.add(threadId);
+      this.threadAccess.set(threadId, session.access);
     } else if (!this.loaded.has(threadId)) {
-      await rpc.request<ThreadStartResponse>("thread/resume", {
-        threadId,
-        cwd: work.cwd,
-        approvalPolicy: this.approvalPolicy,
-        sandbox: this.sandbox,
-        excludeTurns: true,
-      });
+      await rpc.request<ThreadStartResponse>("thread/resume", { threadId, cwd: work.cwd, ...this.policyFor(session.access), excludeTurns: true });
       this.loaded.add(threadId);
+      this.threadAccess.set(threadId, session.access);
     }
     this.threads.set(threadId, session.id);
+    this.sessionAccess.set(session.id, session.access);
+    return threadId;
+  }
+
+  async send(session: Session & { access: AccessMode }, work: Work, text: string) {
+    await this.ensureRunning();
+    const rpc = this.rpc!;
+    const threadId = await this.threadFor(session, work);
     // Model and effort are per turn, so a change in the picker applies to the next message.
     const { model, effort } = turnSettings(session, this.current.models);
+    // So is access: a change since the thread started is passed with the turn (and kept by Codex).
+    const policy = this.policyFor(session.access);
+    const changed = this.threadAccess.get(threadId) !== session.access;
+    this.threadAccess.set(threadId, session.access);
     const response = await rpc.request<TurnStartResponse>("turn/start", {
       threadId,
       input: [{ type: "text", text, text_elements: [] }],
       ...(model ? { model } : {}),
       ...(effort ? { effort: effort as ReasoningEffort } : {}),
+      ...(changed ? { approvalPolicy: policy.approvalPolicy, sandboxPolicy: sandboxPolicy(policy.sandbox) } : {}),
     });
     this.activeTurns.set(threadId, response.turn.id);
     // Codex 0.160 sends no settings notification for per-turn overrides; read what the thread now uses.
@@ -342,20 +394,25 @@ export class CodexAdapter implements ProviderAdapter {
     await this.rpc.request("turn/interrupt", { threadId, turnId });
   }
 
+  /** Answer Codex; `shown`: the card is on screen and records the answer. */
+  private respond(itemId: string, pending: PendingApproval, decision: ApprovalDecision, shown = true) {
+    this.approvals.delete(itemId);
+    if (pending.method === "item/permissions/requestApproval") {
+      const params = pending.params as PermissionsRequestApprovalParams;
+      const granted = decision === "accept" ? { ...(params.permissions.network ? { network: params.permissions.network } : {}), ...(params.permissions.fileSystem ? { fileSystem: params.permissions.fileSystem } : {}) } : {};
+      this.rpc?.respond(pending.rpcId, { permissions: granted, scope: "turn" });
+    } else {
+      this.rpc?.respond(pending.rpcId, { decision });
+    }
+    if (shown) this.sink.upsertItem(pending.sessionId, { ...this.approvalItem(itemId, pending), decision });
+  }
+
   async answerApproval(session: Session, itemId: string, decision: ApprovalDecision) {
     const pending = this.approvals.get(itemId);
     if (!pending || pending.sessionId !== session.id || !this.rpc) {
       return false;
     }
-    this.approvals.delete(itemId);
-    if (pending.method === "item/permissions/requestApproval") {
-      const params = pending.params as PermissionsRequestApprovalParams;
-      const granted = decision === "accept" ? { ...(params.permissions.network ? { network: params.permissions.network } : {}), ...(params.permissions.fileSystem ? { fileSystem: params.permissions.fileSystem } : {}) } : {};
-      this.rpc.respond(pending.rpcId, { permissions: granted, scope: "turn" });
-    } else {
-      this.rpc.respond(pending.rpcId, { decision });
-    }
-    this.sink.upsertItem(session.id, { ...this.approvalItem(itemId, pending), decision });
+    this.respond(itemId, pending, decision);
     const stillWaiting = [...this.approvals.values()].some((other) => other.sessionId === session.id);
     this.sink.updateSession(session.id, stillWaiting ? {} : { status: "running", activity: "응답 준비 중" });
     return true;
@@ -433,8 +490,42 @@ export class CodexAdapter implements ProviderAdapter {
     const itemId = `approval:${String(request.id)}`;
     const pending = { rpcId: request.id, method: request.method, params: request.params, sessionId };
     this.approvals.set(itemId, pending);
+    // Switched to full access while this turn ran: the turn keeps its policy, so its remaining
+    // approvals are answered here.
+    if (this.sessionAccess.get(sessionId) === "full") {
+      this.respond(itemId, pending, "accept", false);
+      return;
+    }
     this.sink.upsertItem(sessionId, this.approvalItem(itemId, pending));
     this.sink.updateSession(sessionId, { status: "awaitingApproval", activity: "승인 필요" });
+  }
+
+  /** Full access answers what was waiting; the next turns run with the new policy (see send). */
+  async setAccess(session: Session & { access: AccessMode }) {
+    this.sessionAccess.set(session.id, session.access);
+    if (session.access !== "full") return;
+    for (const [itemId, pending] of this.approvals) {
+      if (pending.sessionId === session.id) this.respond(itemId, pending, "accept");
+    }
+    const stillWaiting = [...this.approvals.values()].some((other) => other.sessionId === session.id);
+    if (!stillWaiting && session.status === "awaitingApproval") this.sink.updateSession(session.id, { status: "running", activity: "응답 준비 중" });
+  }
+
+  /** Compact the thread now (`thread/compact/start`); Codex also does so on its own when full. */
+  async compact(session: Session & { access: AccessMode }, work: Work) {
+    if (!session.nativeSessionId) return false;
+    await this.ensureRunning();
+    const threadId = await this.threadFor(session, work);
+    this.compacting.add(threadId);
+    this.sink.updateSession(session.id, { status: "running", activity: "대화를 압축하는 중", lastError: null });
+    try {
+      await this.rpc!.request("thread/compact/start", { threadId });
+      return true;
+    } catch (error) {
+      this.compacting.delete(threadId);
+      this.sink.updateSession(session.id, { status: "idle", activity: null });
+      throw error;
+    }
   }
 
   private onNotification({ method, params }: RpcNotification) {
@@ -467,7 +558,15 @@ export class CodexAdapter implements ProviderAdapter {
         const { turn } = params as TurnStartedNotification;
         this.activeTurns.set(threadId, turn.id);
         this.userMessages.set(threadId, 0);
-        this.sink.updateSession(sessionId, { status: "running", activity: "응답 준비 중", lastError: null });
+        this.sink.updateSession(sessionId, { status: "running", activity: this.compacting.has(threadId) ? "대화를 압축하는 중" : "응답 준비 중", lastError: null });
+        break;
+      }
+      case "thread/tokenUsage/updated": {
+        // `last` is the latest request to the model: what the conversation takes up now.
+        const { tokenUsage } = params as ThreadTokenUsageUpdatedNotification;
+        this.sink.updateSession(sessionId, {
+          context: { used: tokenUsage.last.totalTokens, window: tokenUsage.modelContextWindow, compactAt: this.compactLimit, at: Date.now() },
+        });
         break;
       }
       case "item/started": {
@@ -539,13 +638,16 @@ export class CodexAdapter implements ProviderAdapter {
             this.sink.upsertItem(sessionId, { ...this.approvalItem(itemId, pending), decision: "expired" });
           }
         }
-        this.sink.upsertItem(sessionId, {
-          kind: "turnEnd",
-          id: `end:${turn.id}`,
-          status,
-          durationMs: turn.durationMs,
-          at: Date.now(),
-        });
+        // A compaction asked for by the user is not a reply: no end line under the last request.
+        if (!this.compacting.delete(threadId)) {
+          this.sink.upsertItem(sessionId, {
+            kind: "turnEnd",
+            id: `end:${turn.id}`,
+            status,
+            durationMs: turn.durationMs,
+            at: Date.now(),
+          });
+        }
         this.sink.updateSession(sessionId, {
           status: "idle",
           activity: null,

@@ -8,6 +8,7 @@ import { EditableText } from "./EditableText.tsx";
 import { EngineMark } from "./EngineMark.tsx";
 import { Icon, type IconName } from "./Icon.tsx";
 import type { MenuEntry, MenuRequest } from "./ContextMenu.tsx";
+import { UsageCard } from "./UsageCard.tsx";
 
 // The sidebar: where many sessions live. "지금" (waiting for you, working, new replies) on top,
 // then pinned things, then the folder tree of works with their sessions and documents. Rows move by
@@ -29,6 +30,8 @@ export type SidebarActions = {
   archive: (target: { kind: "folder" | "work" | "session"; id: string }) => void;
   openSearch: () => void;
   openArchive: () => void;
+  /** Read the engines' plan limits again. */
+  refreshUsage: () => Promise<unknown>;
 };
 
 const MIN_WIDTH = 232;
@@ -579,6 +582,7 @@ export function Sidebar({
       </div>
 
       <div className="side-foot">
+        <UsageCard providers={state.providers} onRefresh={actions.refreshUsage} />
         <button type="button" className="side-row" onClick={actions.openArchive} title="보관한 세션·작업·폴더">
           <Icon name="archive" size={15} className="side-row-icon" />
           <span className="side-row-label">보관함</span>

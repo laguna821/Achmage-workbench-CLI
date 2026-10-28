@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { EFFORT_LABEL, PROVIDER_LABEL, type CreateTarget, type DocRef, type Provider, type Session, type Work } from "@workbench/contracts";
+import { EFFORT_LABEL, PROVIDER_LABEL, accessFor, type AccessMode, type CreateTarget, type DocRef, type Provider, type Session, type UiPrefs, type Work } from "@workbench/contracts";
 import type { ReactNode } from "react";
 import type { MentionItem } from "../mention.ts";
 import { CreateChip, CreateTargetButton, stemOf } from "./CreateTarget.tsx";
@@ -16,6 +16,7 @@ import { accentStyle, useAppearance } from "../appearance.ts";
 import { useUnseen } from "./SessionCards.tsx";
 import { workSessions } from "../tree.ts";
 import { Transcript } from "./Transcript.tsx";
+import { AccessPicker, ContextGauge } from "./SessionControls.tsx";
 
 export type WorkActions = {
   /** Send a request; while the engine works it steers into the turn or waits ("queue"). */
@@ -36,6 +37,9 @@ export type WorkActions = {
   selectSession: (work: Work, session: Session) => void;
   renameSession: (session: Session, purpose: string) => void;
   setModel: (session: Session, choice: ModelChoice) => void;
+  /** Access for a session (or, with none yet, for new sessions of the engine). */
+  setAccess: (session: Session | null, provider: Provider, mode: AccessMode) => void;
+  compact: (session: Session) => void;
   moveWork: (work: Work, folderId: string | null) => void;
   openSidebar: () => void;
   restore: (target: { kind: "folder" | "work" | "session"; id: string }) => void;
@@ -213,6 +217,7 @@ export function WorkView({
   focusItem,
   onFocusDone,
   sidebarOpen,
+  prefs,
 }: {
   state: State;
   work: Work;
@@ -227,6 +232,8 @@ export function WorkView({
   focusItem?: { itemId: string; nonce: number } | null;
   onFocusDone?: () => void;
   sidebarOpen?: boolean;
+  /** UI prefs as they are now (the access last picked for each engine lives there). */
+  prefs: UiPrefs;
 }) {
   const { lookOf, openMenu } = useAppearance();
   const unseen = useUnseen();
@@ -253,6 +260,7 @@ export function WorkView({
   const [draftChoice, setDraftChoice] = useState<ModelChoice>({ model: null, effort: null });
   const pickerProvider = active?.provider ?? engine;
   const models = state.providers[pickerProvider]?.models ?? [];
+  const access = accessFor(pickerProvider, active?.access, prefs, state.providers[pickerProvider]?.configuredAccess);
   const [statusOpen, setStatusOpen] = useState(false);
   const closeStatus = useCallback(() => setStatusOpen(false), []);
   const [folderOpen, setFolderOpen] = useState(false);
@@ -527,6 +535,7 @@ export function WorkView({
           running={working}
           loading={!transcript}
           onAnswer={(itemId, decision) => actions.answer(active, itemId, decision)}
+          onTrust={() => actions.setAccess(active, active.provider, "full")}
           focusItem={focusItem ?? null}
           onFocusDone={onFocusDone}
         />
@@ -560,6 +569,12 @@ export function WorkView({
           waiting={working}
           steerable={working && !handoffTo}
           autoFocus
+          left={
+            <>
+              <AccessPicker provider={pickerProvider} value={access} onChange={(mode) => actions.setAccess(active, pickerProvider, mode)} />
+              {active ? <ContextGauge context={active.context} canCompact={!busy && Boolean(active.nativeSessionId)} onCompact={() => actions.compact(active)} /> : null}
+            </>
+          }
           header={
             handoffTo || attached.length || create ? (
               <div className="doc-chips">

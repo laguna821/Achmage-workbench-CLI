@@ -188,7 +188,7 @@ function WorkBlock({ block }: { block: Extract<Block, { type: "work" }> }) {
   );
 }
 
-function ApprovalCard({ item, onAnswer }: { item: Item<"approval">; onAnswer: (decision: "accept" | "decline") => void }) {
+function ApprovalCard({ item, onAnswer, onTrust }: { item: Item<"approval">; onAnswer: (decision: "accept" | "decline") => void; onTrust?: () => void }) {
   if (item.decision !== null) {
     const label = item.decision === "accept" ? "허용함" : item.decision === "decline" ? "거절함" : "응답 없이 지나감";
     return (
@@ -205,6 +205,11 @@ function ApprovalCard({ item, onAnswer }: { item: Item<"approval">; onAnswer: (d
       {item.detail ? <pre className="approval-detail">{item.detail}</pre> : null}
       {item.reason ? <div className="approval-reason">{item.reason}</div> : null}
       <div className="approval-actions">
+        {onTrust ? (
+          <button type="button" className="text-button approval-trust" onClick={onTrust} title="이 세션은 앞으로 묻지 않고 진행합니다(전체 접근). 입력창 아래 권한에서 다시 바꿀 수 있습니다.">
+            <Icon name="unlock" size={14} /> 앞으로 묻지 않기
+          </button>
+        ) : null}
         <button type="button" className="button" onClick={() => onAnswer("decline")}>
           거절 <kbd>Esc</kbd>
         </button>
@@ -285,6 +290,7 @@ export function Transcript({
   running,
   loading,
   onAnswer,
+  onTrust,
   focusItem,
   onFocusDone,
 }: {
@@ -294,6 +300,8 @@ export function Transcript({
   running: boolean;
   loading: boolean;
   onAnswer: (itemId: string, decision: "accept" | "decline") => void;
+  /** "앞으로 묻지 않기": full access for this session (answers what waits, too). */
+  onTrust?: () => void;
   /** Bring this message into view and mark it for a moment (a search hit). */
   focusItem?: { itemId: string; nonce: number } | null;
   onFocusDone?: () => void;
@@ -439,7 +447,7 @@ export function Transcript({
           </div>
         );
       case "approval":
-        return <ApprovalCard key={block.item.id} item={block.item} onAnswer={(decision) => onAnswer(block.item.id, decision)} />;
+        return <ApprovalCard key={block.item.id} item={block.item} onAnswer={(decision) => onAnswer(block.item.id, decision)} onTrust={onTrust} />;
       case "plan":
         return <PlanCard key={block.item.id} item={block.item} />;
       case "notice":

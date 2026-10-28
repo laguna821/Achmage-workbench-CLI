@@ -37,6 +37,8 @@ export function seedMetaSessions(dataDir: string, worksDir: string, now = Date.n
     seenAt: now,
     unread: false,
     queued: [],
+    access: null,
+    context: null,
     createdAt: now - 7200_000 + sort,
     updatedAt: now - 3600_000,
     ...extra,

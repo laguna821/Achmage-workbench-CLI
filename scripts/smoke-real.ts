@@ -118,7 +118,8 @@ async function step(name: string, fn: () => Promise<string>) {
 
 async function runProvider(provider: Provider) {
   const work = await api<Work>("POST", "/api/works", { title: `smoke ${provider}` });
-  const session = await api<Session>("POST", `/api/works/${work.id}/sessions`, { provider, purpose: "검증" });
+  // "묻기": approvals are exercised whatever the engines' own settings allow.
+  const session = await api<Session>("POST", `/api/works/${work.id}/sessions`, { provider, purpose: "검증", access: "ask" });
   const sid = session.id;
   const fileName = `approval-${provider}.txt`;
   const declinedName = `declined-${provider}.txt`;

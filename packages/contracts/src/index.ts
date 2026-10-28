@@ -87,9 +87,40 @@ export type Session = {
   unread: boolean;
   /** Requests waiting to be sent when the current turn ends ("끝나면 보내기"), oldest first. */
   queued: QueuedMessage[];
+  /** How freely the engine acts here; null follows the default (see `accessFor`). */
+  access: AccessMode | null;
+  /** How full the conversation's context window is, as the engine last reported it. */
+  context: ContextUsage | null;
   createdAt: number;
   updatedAt: number;
 };
+
+/**
+ * How freely an engine acts in a session (the picker under the input):
+ * ask — before running commands or changing files;
+ * auto — on its own inside the work folder (Codex: sandbox) or for file edits (Claude), asking for the rest;
+ * full — never asks, no sandbox (the whole computer and the network).
+ */
+export type AccessMode = "ask" | "auto" | "full";
+
+export const ACCESS_MODES: AccessMode[] = ["ask", "auto", "full"];
+
+export const ACCESS_LABEL: Record<AccessMode, string> = { ask: "묻기", auto: "자동", full: "전체 접근" };
+
+export const isAccessMode = (value: unknown): value is AccessMode => value === "ask" || value === "auto" || value === "full";
+
+/**
+ * The access a session runs with: its own choice, else the one last picked for that engine (kept
+ * in the UI prefs as `access`), else what the engine's own settings say, else "auto".
+ */
+export function accessFor(provider: Provider, chosen: AccessMode | null | undefined, prefs: UiPrefs | null | undefined, configured: AccessMode | null | undefined): AccessMode {
+  if (chosen) return chosen;
+  const remembered = (prefs?.access as Partial<Record<Provider, unknown>> | undefined)?.[provider];
+  return isAccessMode(remembered) ? remembered : (configured ?? "auto");
+}
+
+/** Context window use: tokens the conversation takes now, the window, and where it compacts itself. */
+export type ContextUsage = { used: number; window: number | null; compactAt: number | null; at: number };
 
 /** A request written while the engine was working, sent as the next turn when this one ends. */
 export type QueuedMessage = { id: string; text: string; refs: DocRef[]; create: CreateTarget | null; at: number };
@@ -328,6 +359,8 @@ export type ProviderStatus = {
   usage: UsageWindow[];
   usageObservedAt: number | null;
   models: ModelOption[];
+  /** The access the engine's own settings give (Claude permissions.defaultMode, Codex approval/sandbox). */
+  configuredAccess: AccessMode | null;
   error: string | null;
 };
 
@@ -409,6 +442,7 @@ export type CreateSessionRequest = {
   purpose?: string;
   model?: string | null;
   effort?: string | null;
+  access?: AccessMode | null;
 };
 
 export type UpdateSessionRequest = {
@@ -420,6 +454,8 @@ export type UpdateSessionRequest = {
   archived?: boolean;
   /** true: looked at now; false: mark unread. */
   seen?: boolean;
+  /** Applies at once: to the running turn where the engine allows it, else from the next one. */
+  access?: AccessMode | null;
 };
 
 export type UpdateWorkRequest = {

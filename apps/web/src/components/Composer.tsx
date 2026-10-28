@@ -28,6 +28,7 @@ export function Composer({
   header,
   autoFocus,
   mentions,
+  left,
 }: {
   draftKey: string;
   placeholder: string;
@@ -44,6 +45,8 @@ export function Composer({
   autoFocus?: boolean;
   /** `@` mentions of documents (Workbench documents of this work). */
   mentions?: ComposerMentions;
+  /** Controls at the left of the bar (access, context). */
+  left?: ReactNode;
 }) {
   const [text, setText] = useState(() => localStorage.getItem(DRAFT_PREFIX + draftKey) ?? "");
   const [sending, setSending] = useState(false);
@@ -189,7 +192,7 @@ export function Composer({
         }}
       />
       <div className="composer-bar">
-        <div className="composer-left" />
+        <div className="composer-left">{left}</div>
         <div className="composer-right">
           {target}
           {busy && text.trim() ? (

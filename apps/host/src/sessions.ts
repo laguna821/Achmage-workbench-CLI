@@ -4,7 +4,10 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync,
 import { basename, delimiter, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import {
   PROTOCOL_VERSION,
+  accessFor,
   applyItemEvent,
+  isAccessMode,
+  type AccessMode,
   type ApprovalDecision,
   type CreateSessionRequest,
   type CreateWorkRequest,
@@ -232,6 +235,8 @@ export class SessionManager {
         seenAt: session.seenAt === undefined ? (session.previewAt ?? null) : session.seenAt,
         unread: session.unread ?? false,
         queued: session.queued ?? [],
+        access: session.access ?? null,
+        context: session.context ?? null,
       });
     this.backfillOverview();
     this.recoverAfterRestart();
@@ -750,12 +755,19 @@ export class SessionManager {
       seenAt: null,
       unread: false,
       queued: [],
+      access: isAccessMode(request.access) ? request.access : null,
+      context: null,
       createdAt: now,
       updatedAt: now,
     };
     this.saveSession(session);
     this.saveWork({ ...work, activeSessionId: session.id, updatedAt: now });
     return session;
+  }
+
+  /** The access a session runs with (its own, else the one last picked for its engine, else the engine's). */
+  accessOf(session: Session): AccessMode {
+    return accessFor(session.provider, session.access, this.prefs(), this.adapters.get(session.provider)?.status().configuredAccess);
   }
 
   /**
@@ -789,9 +801,41 @@ export class SessionManager {
     }
     if (patch.model !== undefined) next.model = patch.model || null;
     if (patch.effort !== undefined) next.effort = patch.effort || null;
+    if (patch.access !== undefined) {
+      if (patch.access !== null && !isAccessMode(patch.access)) throw new HttpError(400, "invalid_access", "알 수 없는 권한입니다.");
+      next.access = patch.access;
+    }
     this.saveSession(next);
     if (patch.purpose !== undefined && next.purposeSource === "auto") this.retitle(sessionId, true);
+    if (patch.access !== undefined) this.applyAccess(sessionId);
     return this.requireSession(sessionId);
+  }
+
+  /** A changed access reaches a running engine at once (and settles approvals it no longer needs). */
+  private applyAccess(sessionId: string) {
+    const session = this.requireSession(sessionId);
+    const adapter = this.adapter(session.provider);
+    void adapter.setAccess?.({ ...session, access: this.accessOf(session) }).catch((error: unknown) => {
+      this.sink.upsertItem(sessionId, {
+        kind: "notice",
+        id: `access-failed:${Date.now()}`,
+        level: "error",
+        text: `권한을 바로 바꾸지 못했습니다(다음 요청부터 적용): ${error instanceof Error ? error.message : String(error)}`,
+        at: Date.now(),
+      });
+    });
+  }
+
+  /** Compact the conversation now, as the engine does on its own when the context fills up. */
+  async compact(sessionId: string) {
+    const session = this.requireSession(sessionId);
+    if (session.status !== "idle" && session.status !== "error") throw new HttpError(409, "session_busy", "응답이 끝난 뒤에 압축할 수 있습니다.");
+    const adapter = this.adapter(session.provider);
+    if (!session.nativeSessionId || !adapter.compact) throw new HttpError(409, "nothing_to_compact", "아직 압축할 대화가 없습니다.");
+    const work = this.requireWork(session.workId);
+    const started = await adapter.compact({ ...session, access: this.accessOf(session) }, work);
+    if (!started) throw new HttpError(409, "nothing_to_compact", "지금은 압축할 수 없습니다.");
+    return { ok: true };
   }
 
   async send(
@@ -887,7 +931,8 @@ export class SessionManager {
     this.sink.updateSession(sessionId, { status: "starting", activity: "응답 준비 중", lastError: null });
     this.saveWork({ ...work, activeSessionId: sessionId, updatedAt: Date.now() });
     try {
-      await this.adapter(session.provider).send(this.requireSession(sessionId), work, engineText, requestId);
+      const current = this.requireSession(sessionId);
+      await this.adapter(session.provider).send({ ...current, access: this.accessOf(current) }, work, engineText, requestId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       for (const entry of prepared) if (entry.proposal) this.documents.discardProposal(entry.proposal.id);

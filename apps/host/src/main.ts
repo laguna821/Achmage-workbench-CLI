@@ -65,8 +65,9 @@ manager.registerAdapter(
 );
 manager.registerAdapter(
   new CodexAdapter(manager.sink, {
-    approvalPolicy: env.WORKBENCH_CODEX_APPROVAL ?? "on-request",
-    sandbox: env.WORKBENCH_CODEX_SANDBOX ?? "workspace-write",
+    // Normally each session's access decides; these fix it for every session (tests).
+    approvalPolicy: env.WORKBENCH_CODEX_APPROVAL,
+    sandbox: env.WORKBENCH_CODEX_SANDBOX,
     idleMs: env.WORKBENCH_CODEX_IDLE_MS ? Number(env.WORKBENCH_CODEX_IDLE_MS) : undefined,
   }),
 );

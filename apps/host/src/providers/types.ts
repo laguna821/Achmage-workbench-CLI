@@ -1,4 +1,5 @@
 import type {
+  AccessMode,
   ApprovalDecision,
   Provider,
   ProviderStatus,
@@ -29,13 +30,21 @@ export interface ProviderAdapter {
   status(): ProviderStatus;
   refreshStatus(): Promise<ProviderStatus>;
   login(): Promise<LoginStart>;
-  send(session: Session, work: Work, text: string, turnKey: string): Promise<void>;
+  /** `session.access` is resolved: the access this turn runs with. */
+  send(session: Session & { access: AccessMode }, work: Work, text: string, turnKey: string): Promise<void>;
   /**
    * Put a request into the turn that is running (the engine reads it at its next step). False when
    * no turn is running any more, so the caller can start one instead.
    */
   steer?(session: Session, work: Work, text: string, turnKey: string): Promise<boolean>;
   interrupt(session: Session): Promise<void>;
+  /**
+   * The session's access changed (`session.access` is the new one): apply it to a running engine
+   * and settle the approvals the new access no longer asks for.
+   */
+  setAccess?(session: Session & { access: AccessMode }): Promise<void>;
+  /** Ask the engine to compact the conversation now (it also does so on its own when full). */
+  compact?(session: Session, work: Work): Promise<boolean>;
   answerApproval(session: Session, itemId: string, decision: ApprovalDecision): Promise<boolean>;
   shutdown(): Promise<void>;
 }
@@ -55,6 +64,7 @@ export function emptyStatus(provider: Provider): ProviderStatus {
     usage: [],
     usageObservedAt: null,
     models: [],
+    configuredAccess: null,
     error: null,
   };
 }

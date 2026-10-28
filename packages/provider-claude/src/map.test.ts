@@ -6,6 +6,35 @@ const msg = (value: unknown) => value as SDKMessage;
 const streamEvent = (event: unknown) => msg({ type: "stream_event", event, parent_tool_use_id: null, uuid: "u", session_id: "s" });
 
 describe("ClaudeTranscriptMapper", () => {
+  it("reports how full the context is after a turn, and compaction as a notice", () => {
+    const mapper = new ClaudeTranscriptMapper(() => 1);
+    mapper.handle(
+      msg({
+        type: "assistant",
+        message: { id: "m9", content: [], usage: { input_tokens: 12, cache_creation_input_tokens: 500, cache_read_input_tokens: 41_000, output_tokens: 488 } },
+        parent_tool_use_id: null,
+        uuid: "a9",
+        session_id: "s",
+      }),
+      "t1",
+    );
+    const ended = mapper.handle(
+      msg({ type: "result", subtype: "success", is_error: false, result: "", duration_ms: 5, modelUsage: { "claude-x": { contextWindow: 200_000 } }, uuid: "r", session_id: "s" }),
+      "t1",
+    );
+    expect(ended).toContainEqual({ type: "context", used: 42_000, window: 200_000 });
+
+    expect(mapper.handle(msg({ type: "system", subtype: "status", status: "compacting", uuid: "c0", session_id: "s" }), "t2")).toEqual([{ type: "activity", text: "대화를 압축하는 중" }]);
+    const compacted = mapper.handle(
+      msg({ type: "system", subtype: "compact_boundary", compact_metadata: { trigger: "auto", pre_tokens: 156_400, post_tokens: 23_100 }, uuid: "c1", session_id: "s" }),
+      "t2",
+    );
+    expect(compacted).toContainEqual({ type: "context", used: 23_100, window: null });
+    expect(compacted.find((entry) => entry.type === "upsert")).toMatchObject({
+      item: { kind: "notice", text: "대화가 길어 앞부분을 요약해 압축했습니다 (156k → 23k 토큰)." },
+    });
+  });
+
   it("streams text into one assistant item and finalizes it", () => {
     const mapper = new ClaudeTranscriptMapper(() => 1);
     const out = [

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { PROVIDER_LABEL, isUnseen, type Artifact, type CreateTarget, type DocRef, type Proposal, type Provider, type Session, type UiPrefs, type Work } from "@workbench/contracts";
+import { PROVIDER_LABEL, isUnseen, type AccessMode, type Artifact, type CreateTarget, type DocRef, type Proposal, type Provider, type Session, type UiPrefs, type Work } from "@workbench/contracts";
 import { Api, ApiRequestError, readToken } from "./api.ts";
 import { configureDesign } from "./design.ts";
 import { initialState, isBusy, reducer, sessionsOf } from "./state.ts";
@@ -215,6 +215,8 @@ export function App() {
   const saveTimer = useRef<number | undefined>(undefined);
   const latestSave = useRef<UiPrefs | null>(null);
   const prefs = localPrefs ?? (state.ready ? state.prefs : cachedPrefs());
+  const prefsRef = useRef(prefs);
+  prefsRef.current = prefs;
   useEffect(() => {
     if (state.ready) localStorage.setItem(PREFS_CACHE_KEY, JSON.stringify(state.prefs));
   }, [state.ready, state.prefs]);
@@ -358,6 +360,18 @@ export function App() {
       },
       renameSession: (session, purpose) => void api?.updateSession(session.id, { purpose }).catch(fail),
       setModel: (session, choice) => void api?.updateSession(session.id, { model: choice.model, effort: choice.effort }).catch(fail),
+      setAccess: (session, provider, mode) => {
+        // The pick is also the default for new sessions of the engine (and those left on default).
+        const remembered = (prefsRef.current.access ?? {}) as Partial<Record<Provider, AccessMode>>;
+        savePrefs({ access: { ...remembered, [provider]: mode } });
+        if (session) void api?.updateSession(session.id, { access: mode }).catch(fail);
+        if (mode === "full") setToast(`${PROVIDER_LABEL[provider]}: 이제 묻지 않고 진행합니다(전체 접근). 입력창 아래에서 다시 바꿀 수 있습니다.`);
+      },
+      compact: (session) =>
+        void api
+          ?.compact(session.id)
+          .then(() => setToast("대화를 요약해 압축하는 중입니다."))
+          .catch(fail),
       moveWork: (target, folderId) => void api?.updateWork(target.id, { folderId }).catch(fail),
       openSidebar: () => savePrefs({ sidebar: true }),
       restore: (target) => {
@@ -795,6 +809,7 @@ export function App() {
     move,
     menuFor,
     openMenu: setContextMenu,
+    refreshUsage: () => api?.refreshProviders().catch(fail) ?? Promise.resolve(),
     archive,
     openSearch: () => setPaletteOpen(true),
     openArchive: () => setView({ kind: "archive" }),
@@ -1036,6 +1051,7 @@ export function App() {
           focusItem={focusItem && focusItem.sessionId === activeSession?.id ? focusItem : null}
           onFocusDone={() => setFocusItem(null)}
           sidebarOpen={sidebarOpen}
+          prefs={prefs}
         />
       ) : null}
       </div>

@@ -15,6 +15,8 @@ export type MapperOutput =
   /** `queued`: user sends still waiting in Claude Code's own queue (another turn follows at once). */
   | { type: "turnEnd"; status: "completed" | "failed"; durationMs: number | null; error: string | null; queued: number }
   | { type: "usage"; window: UsageWindow }
+  /** Tokens the conversation takes up now, and the context window (when known). */
+  | { type: "context"; used: number; window: number | null }
   | { type: "activity"; text: string | null }
   | { type: "authError"; message: string };
 
@@ -133,11 +135,18 @@ export function usageFromRateLimit(info: SDKRateLimitInfo): UsageWindow | null {
   return { label: WINDOW_LABEL[info.rateLimitType], usedPercent, resetsAt };
 }
 
+/** 156000 → "156k", 980 → "980". */
+function compactTokens(count: number) {
+  return count >= 1000 ? `${Math.round(count / 1000)}k` : String(count);
+}
+
 export class ClaudeTranscriptMapper {
   private messageId: string | null = null;
   private readonly streamedMessages = new Set<string>();
   private readonly blockItems = new Map<number, { id: string; kind: "assistant" | "reasoning"; text: string }>();
   private readonly toolItems = new Map<string, TranscriptItem & { kind: "tool" }>();
+  /** Input and output of the latest request to the model in the main conversation. */
+  private lastRequestTokens: number | null = null;
   private readonly now: () => number;
 
   constructor(now: () => number = Date.now) {
@@ -155,6 +164,20 @@ export class ClaudeTranscriptMapper {
       case "system": {
         if (message.subtype === "init") {
           out.push({ type: "init", nativeSessionId: message.session_id, model: message.model });
+        } else if (message.subtype === "status") {
+          if (message.status === "compacting") out.push({ type: "activity", text: "대화를 압축하는 중" });
+          else if (message.compact_result === "failed") {
+            out.push({ type: "upsert", item: { kind: "notice", id: `compact-failed:${message.uuid}`, level: "error", text: `대화를 압축하지 못했습니다${message.compact_error ? `: ${message.compact_error}` : "."}`, at: this.now() } });
+          }
+        } else if (message.subtype === "compact_boundary") {
+          const { trigger, pre_tokens: before, post_tokens: after } = message.compact_metadata;
+          const sizes = after ? ` (${compactTokens(before)} → ${compactTokens(after)} 토큰)` : ` (${compactTokens(before)} 토큰이었음)`;
+          out.push({
+            type: "upsert",
+            item: { kind: "notice", id: `compact:${message.uuid}`, level: "info", text: `${trigger === "auto" ? "대화가 길어 앞부분을 요약해 압축했습니다" : "대화를 요약해 압축했습니다"}${sizes}.`, at: this.now() },
+          });
+          if (after) out.push({ type: "context", used: after, window: null });
+          this.lastRequestTokens = null;
         }
         break;
       }
@@ -209,6 +232,10 @@ export class ClaudeTranscriptMapper {
         }
         if (message.error === "authentication_failed" || message.error === "oauth_org_not_allowed") {
           out.push({ type: "authError", message: "Claude 로그인이 필요합니다." });
+        }
+        const usage = message.message.usage as { input_tokens?: number; cache_creation_input_tokens?: number | null; cache_read_input_tokens?: number | null; output_tokens?: number } | undefined;
+        if (usage) {
+          this.lastRequestTokens = (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0) + (usage.output_tokens ?? 0);
         }
         const streamed = this.streamedMessages.has(message.message.id);
         message.message.content.forEach((block, index) => {
@@ -277,6 +304,8 @@ export class ClaudeTranscriptMapper {
             : message.errors.join("\n") || message.subtype;
         out.push({ type: "turnEnd", status: failed ? "failed" : "completed", durationMs: message.duration_ms, error, queued: message.queued_turn_count ?? 0 });
         out.push({ type: "activity", text: null });
+        const windows = Object.values(message.modelUsage ?? {}).map((model) => model.contextWindow).filter((size) => size > 0);
+        if (this.lastRequestTokens !== null) out.push({ type: "context", used: this.lastRequestTokens, window: windows.length ? Math.max(...windows) : null });
         break;
       }
       case "rate_limit_event": {
