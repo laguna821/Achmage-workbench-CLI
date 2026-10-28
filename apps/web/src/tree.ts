@@ -1,5 +1,6 @@
 import { isUnseen, type Artifact, type Folder, type Session, type Work } from "@workbench/contracts";
 import type { State } from "./state.ts";
+import { nestDocs } from "./pages.ts";
 
 // The sidebar tree as plain data: what is visible (archived things and everything under them are
 // not), in which order, and where a dragged row lands. Kept free of React so it can be tested.
@@ -113,7 +114,8 @@ export function treeRows(state: State, open: TreeOpenState, mode: SortMode, curr
     if (docs.length) {
       const docsOpen = openDocs.has(work.id);
       rows.push({ type: "docs", id: `docs:${work.id}`, depth: depth + 1, work, count: docs.length, open: docsOpen });
-      if (docsOpen) for (const artifact of docs) rows.push({ type: "doc", id: artifact.id, depth: depth + 2, artifact, work });
+      // Subpages (`A/` beside `A.md`) sit under their page.
+      if (docsOpen) for (const { artifact, depth: nested } of nestDocs(docs)) rows.push({ type: "doc", id: artifact.id, depth: depth + 2 + nested, artifact, work });
     }
   };
 

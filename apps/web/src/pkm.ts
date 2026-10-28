@@ -1,4 +1,4 @@
-import type { CardList, PkmCard, PkmState, SendResult, VaultFolder, VaultNote, VaultStatus, VaultTree } from "@workbench/contracts";
+import type { Artifact, CardList, PageTemplate, PkmCard, PkmState, SendResult, VaultFolder, VaultNote, VaultStatus, VaultTree } from "@workbench/contracts";
 import { readToken, type Api } from "./api.ts";
 
 // The PKM layer as the UI sees it: calls to `/api/pkm/*` and the vault tree as plain rows (kept
@@ -20,6 +20,12 @@ export function pkmClient(api: Api) {
       return api.request<CardList>("GET", `/api/pkm/cards?${params}`);
     },
     note: (path: string) => api.request<VaultNote>("GET", `/api/pkm/vault/note?${new URLSearchParams({ path })}`),
+    templates: (workId: string) => api.request<PageTemplate[]>("GET", `/api/pkm/templates?${new URLSearchParams({ workId })}`),
+    pageFromTemplate: (request: { workId: string; templateId: string; title: string; choices: Record<string, string[]>; parentId: string | null }) =>
+      api.request<Artifact>("POST", "/api/pkm/pages/from-template", request),
+    subpage: (parentId: string, name: string) => api.request<Artifact>("POST", "/api/pkm/pages/subpage", { parentId, name }),
+    sessionPage: (sessionId: string, workId: string) => api.request<Artifact>("POST", "/api/pkm/pages/from-session", { sessionId, workId }),
+    messagePage: (sessionId: string, itemId: string, selection: string | null) => api.request<Artifact>("POST", "/api/pkm/pages/from-message", { sessionId, itemId, selection }),
     /** A request with vault notes attached as read-only references. */
     send: (sessionId: string, requestId: string, text: string, notes: string[]) =>
       api.request<SendResult>("POST", `/api/sessions/${sessionId}/messages`, { requestId, text, notes }),

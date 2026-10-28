@@ -57,5 +57,19 @@ export async function handlePkm(pkm: Pkm, req: IncomingMessage, res: ServerRespo
   if (method === "GET" && path === "/vault/note") return (sendJson(res, 200, pkm.note(query("path"))), true);
   if (method === "GET" && path === "/vault/image") return (sendImage(res, pkm.vaultImage(query("path"))), true);
   if (method === "GET" && path === "/page-image") return (sendImage(res, pkm.pageImage(query("artifact"), query("src"))), true);
+  if (method === "GET" && path === "/templates") return (sendJson(res, 200, pkm.templates(query("workId"))), true);
+  if (method === "POST" && path.startsWith("/pages/")) {
+    const body = await readJson(req);
+    const text = (name: string) => (typeof body[name] === "string" ? (body[name] as string) : "");
+    if (path === "/pages/from-template") {
+      const choices = Object.fromEntries(
+        Object.entries(body.choices && typeof body.choices === "object" ? (body.choices as Record<string, unknown>) : {}).map(([key, values]) => [key, Array.isArray(values) ? values.filter((value): value is string => typeof value === "string") : []]),
+      );
+      return (sendJson(res, 201, pkm.pageFromTemplate(text("workId"), text("templateId"), text("title"), choices, text("parentId") || null)), true);
+    }
+    if (path === "/pages/subpage") return (sendJson(res, 201, pkm.subpage(text("parentId"), text("name"))), true);
+    if (path === "/pages/from-session") return (sendJson(res, 201, pkm.sessionPage(text("sessionId"), text("workId"))), true);
+    if (path === "/pages/from-message") return (sendJson(res, 201, pkm.messagePage(text("sessionId"), text("itemId"), text("selection") || null)), true);
+  }
   return false;
 }

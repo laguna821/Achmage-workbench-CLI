@@ -524,3 +524,123 @@
   color: var(--link);
   text-decoration: underline dotted;
 }
+
+/* ── pages: "페이지로 만들기" under a reply, the template dialog ──────────── */
+.turn-assistant .message-actions {
+  display: flex;
+  justify-content: flex-end;
+  height: 22px;
+  margin-top: 2px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.turn-assistant:hover .message-actions,
+.turn-assistant:focus-within .message-actions {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .turn-assistant .message-actions {
+    opacity: 1;
+  }
+}
+
+.message-actions .message-page {
+  height: 22px;
+  padding: 0 7px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.template-dialog {
+  width: min(640px, calc(100vw - 40px));
+}
+
+.template-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 34vh;
+  overflow-y: auto;
+}
+
+.template-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  text-align: left;
+}
+
+.template-row:hover {
+  background: var(--surface-muted);
+}
+
+.template-row.active {
+  background: var(--selected);
+  font-weight: 600;
+}
+
+.template-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.template-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.template-choice {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.template-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.template-option {
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.template-option.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* A session dropped on a work row makes a page there. */
+.side-row.drop-page {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 70%, transparent);
+  background: var(--accent-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .turn-assistant .message-actions {
+    transition: none;
+  }
+}

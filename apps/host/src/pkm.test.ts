@@ -79,7 +79,7 @@ export function setup() {
   const codex = new Engine("codex", () => manager.sink);
   manager.registerAdapter(claude);
   manager.registerAdapter(codex);
-  const pkm = new Pkm(store, bus, manager, { vaultDebounceMs: 30 });
+  const pkm = new Pkm(store, bus, manager, { vaultDebounceMs: 30, dataDir: dir });
   pkm.attachVault(vault);
   return { dir, vault, store, bus, manager, pkm, engines: { claude, codex } };
 }
@@ -147,5 +147,52 @@ describe("vault notes", () => {
     const session = manager.createSession(work.id, { provider: "claude" });
     await expect(manager.send(session.id, "r-missing", "x", [], null, null, "auto", ["../outside.md"])).rejects.toThrow();
     expect(existsSync(join(vault, "..", "outside.md"))).toBe(false);
+  });
+});
+
+describe("pages phase 2", () => {
+  const TEMPLATE = ["---", "title: ", '"DIKM_단계:":', "  - 🟢 D", "  - 🔵 I", '"종류:":', "  - 노트", "  - 논문", "tags: ", "date created: ", "source:", "---", "", "> <% tp.file.title %>", ""].join("\n");
+
+  it("offers templates of the app, the work and the vault, and makes pages from them in the work folder only", () => {
+    const { pkm, manager, vault, dir } = setup();
+    const work = manager.createWork({ title: "강의" });
+    put(dir, "templates/앱 메모.md", "# 앱 메모\n");
+    put(work.cwd, ".workbench/templates/작업 노트.md", TEMPLATE);
+    put(vault, "90. Settings/91. Templates/DIKM.md", TEMPLATE);
+    const before = files(vault);
+    const templates = pkm.templates(work.id);
+    expect(templates.map((template) => template.id).sort()).toEqual(["global:앱 메모.md", "vault:DIKM.md", "vault:tpl.md", "work:작업 노트.md"].sort());
+    const dikm = templates.find((template) => template.id === "vault:DIKM.md")!;
+    expect(dikm).toMatchObject({ source: "vault", templater: true, choices: [{ key: "DIKM_단계:", options: ["🟢 D", "🔵 I"] }, { key: "종류:", options: ["노트", "논문"] }] });
+    const page = pkm.pageFromTemplate(work.id, "vault:DIKM.md", "1주차: 오리엔테이션", { "DIKM_단계:": ["🔵 I", "꾸며낸 값"], "종류:": [] }, null);
+    expect(page.path.startsWith(work.cwd)).toBe(true);
+    const text = readFileSync(page.path, "utf8");
+    expect(text).toMatch(/^---\ntitle: "1주차: 오리엔테이션"\n"DIKM_단계:":\n  - 🔵 I\n"종류:":\ntags: \ndate created: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}\nsource:\n---\n\n> <% tp.file.title %>\n$/);
+    expect(files(vault)).toEqual(before);
+    expect(() => pkm.pageFromTemplate(work.id, "vault:../../x.md", "x", {}, null)).toThrow();
+  });
+
+  it("makes subpages beside their page, and pages from a session and from a message", async () => {
+    const { pkm, manager } = setup();
+    const work = manager.createWork({ title: "강의" });
+    const other = manager.createWork({ title: "기록함" });
+    const parent = manager.createPage(work.id, "개요");
+    const child = pkm.subpage(parent.id, "1주차");
+    expect(child.path).toBe(join(work.cwd, "개요", "1주차.md"));
+    expect(readFileSync(parent.path, "utf8")).toBe("# 개요\n\n");
+    const session = manager.createSession(work.id, { provider: "claude", purpose: "수업 설계" });
+    await manager.send(session.id, "r1", "수업 계획을 세워 줘");
+    const page = pkm.sessionPage(session.id, other.id);
+    expect(page.workId).toBe(other.id);
+    expect(page.path.startsWith(join(other.cwd, "세션 기록"))).toBe(true);
+    expect(readFileSync(page.path, "utf8")).toContain(`session: ${session.id}`);
+    const own = pkm.sessionPage(session.id, work.id);
+    expect(own.path.startsWith(join(work.cwd, "세션 기록"))).toBe(true);
+    const reply = manager.items(session.id).items.find((item) => item.kind === "assistant")!;
+    const fromMessage = pkm.messagePage(session.id, reply.id, null);
+    const text = readFileSync(fromMessage.path, "utf8");
+    expect(text).toContain(`source: workbench://session/${session.id}#${encodeURIComponent(reply.id)}`);
+    expect(text).toContain("\n답\n");
+    expect(() => pkm.subpage(child.id.replace(/./g, "x"), "x")).toThrow();
   });
 });

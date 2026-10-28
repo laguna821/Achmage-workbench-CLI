@@ -39,12 +39,12 @@ export function VaultSection({ theme, openMenu }: { theme: Theme; openMenu: (req
       ? [
           { kind: "item", label: "Obsidian에서 열기", icon: "external", onSelect: () => void openObsidian(obsidianUrl(vaultPath)).catch(() => undefined) },
           { kind: "item", label: "다시 읽기", icon: "refresh", onSelect: pkm.rescan },
-          { kind: "item", label: "볼트 바꾸기…", icon: "folderOpen", onSelect: () => pkm.setDialog("vault") },
+          { kind: "item", label: "볼트 바꾸기…", icon: "folderOpen", onSelect: () => pkm.setDialog({ kind: "vault" }) },
           { kind: "item", label: "볼트 경로 복사", icon: "copy", onSelect: () => copy(vaultPath) },
           { kind: "separator" },
           { kind: "item", label: "연결 끊기", icon: "x", onSelect: pkm.detach },
         ]
-      : [{ kind: "item", label: "볼트 연결…", icon: "folderOpen", onSelect: () => pkm.setDialog("vault") }];
+      : [{ kind: "item", label: "볼트 연결…", icon: "folderOpen", onSelect: () => pkm.setDialog({ kind: "vault" }) }];
     openMenu({ x, y, title: status.name ?? "볼트", items });
   };
 
@@ -82,7 +82,7 @@ export function VaultSection({ theme, openMenu }: { theme: Theme; openMenu: (req
     return (
       <section className="side-section vault-section" aria-label="볼트">
         {head}
-        <button type="button" className="side-row vault-connect" onClick={() => pkm.setDialog("vault")} title="옵시디언 볼트를 읽기 전용으로 붙입니다">
+        <button type="button" className="side-row vault-connect" onClick={() => pkm.setDialog({ kind: "vault" })} title="옵시디언 볼트를 읽기 전용으로 붙입니다">
           <Icon name="book" size={15} className="side-row-icon" />
           <span className="side-row-label">옵시디언 볼트 연결{status.suggested ? ` · ${status.suggested.split("/").pop()}` : ""}</span>
         </button>

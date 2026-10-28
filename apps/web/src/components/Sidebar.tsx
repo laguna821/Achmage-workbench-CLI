@@ -37,6 +37,10 @@ export type SidebarActions = {
   openHome: () => void;
   /** A new Markdown page in a work (the "+" on a work row). */
   newPage: (work: Work) => void;
+  /** A subpage of a page (the "+" on a page row): `A/` beside `A.md`. */
+  newSubpage?: (artifact: Artifact) => void;
+  /** A session dropped on a work row: its record as a page of that work ("세션 기록 페이지"). */
+  sessionPage?: (session: Session, work: Work) => void;
 };
 
 const MIN_WIDTH = 232;
@@ -49,7 +53,7 @@ function docIcon(artifact: Artifact): IconName {
   return DOC_ICON[artifact.format] ?? "file";
 }
 
-type Drag = { row: Row; startX: number; startY: number; active: boolean; x: number; y: number; target: { id: string; zone: DropZone; move: Move | null } | null };
+type Drag = { row: Row; startX: number; startY: number; active: boolean; x: number; y: number; target: { id: string; zone: DropZone; move: Move | null; page?: Work } | null };
 
 export function Sidebar({
   state,
@@ -224,7 +228,9 @@ export function Sidebar({
       if (element && row && row.id !== current.row.id) {
         const rect = element.getBoundingClientRect();
         const zone = zoneAt(event.clientY - rect.top, rect.height, holds(row, current.row));
-        target = { id: row.id, zone, move: moveFor(state, current.row, row, zone, sortMode) };
+        // A session dropped on a work makes its record a page there (pages phase 2).
+        if (current.row.type === "session" && row.type === "work" && actions.sessionPage) target = { id: row.id, zone: "inside", move: null, page: row.work };
+        else target = { id: row.id, zone, move: moveFor(state, current.row, row, zone, sortMode) };
       }
       const next = { ...current, active: true, x: event.clientX, y: event.clientY, target };
       dragRef.current = next;
@@ -237,7 +243,8 @@ export function Sidebar({
       if (!current?.active) return;
       suppressClick.current = true;
       window.setTimeout(() => (suppressClick.current = false), 0);
-      if (commit && current.target?.move) actions.move(current.target.move);
+      if (commit && current.target?.page && current.row.type === "session") actions.sessionPage?.(current.row.session, current.target.page);
+      else if (commit && current.target?.move) actions.move(current.target.move);
     };
     const onUp = () => finish(true);
     const onKey = (event: KeyboardEvent) => {
@@ -315,7 +322,7 @@ export function Sidebar({
     if (row.type === "session" && row.id === visibleSessionId) classes.push("current");
     if (row.type === "doc" && row.id === currentDocId) classes.push("current");
     if (drag?.active && drag.row.id === row.id) classes.push("dragging");
-    if (drag?.active && drag.target?.id === row.id) classes.push(drag.target.move ? `drop-${drag.target.zone}` : "drop-refused");
+    if (drag?.active && drag.target?.id === row.id) classes.push(drag.target.page ? "drop-page" : drag.target.move ? `drop-${drag.target.zone}` : "drop-refused");
     return classes.join(" ");
   };
 
@@ -407,7 +414,12 @@ export function Sidebar({
     } else if (row.type === "doc") {
       icon = docIcon(row.artifact);
       label = row.artifact.name;
-      trailing = <span className="side-row-trail muted">r{row.artifact.revision}</span>;
+      const artifact = row.artifact;
+      trailing = (
+        <span className="side-row-trail muted">
+          {artifact.format === "markdown" && actions.newSubpage ? rowAdd("하위 페이지", () => actions.newSubpage!(artifact)) : null}r{artifact.revision}
+        </span>
+      );
       title = `${FORMAT_LABEL[row.artifact.format]} · ${row.artifact.path}`;
     }
     return (
@@ -610,8 +622,9 @@ export function Sidebar({
       </div>
       <div className="side-resize" onPointerDown={startResize} role="separator" aria-orientation="vertical" aria-label="사이드바 너비" />
       {drag?.active ? (
-        <div className={`drag-ghost${drag.target?.move ? "" : " refused"}`} style={{ left: drag.x + 12, top: drag.y + 10 }}>
+        <div className={`drag-ghost${drag.target?.move || drag.target?.page ? "" : " refused"}`} style={{ left: drag.x + 12, top: drag.y + 10 }}>
           {drag.row.type === "folder" ? drag.row.folder.name : drag.row.type === "work" ? drag.row.work.title : drag.row.type === "session" ? drag.row.session.purpose : ""}
+          {drag.target?.page ? ` → 「${drag.target.page.title}」에 세션 기록 페이지` : ""}
         </div>
       ) : null}
     </aside>

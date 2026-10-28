@@ -10,6 +10,10 @@
 //   "Obsidian에서 열기" (obsidian://open?path=); a note card dragged onto the input goes with a new
 //   session's request as a read-only reference (the engine names the copy it got, the copy is
 //   in the work folder, read-only, with the vault's bytes); a work opens as cards too.
+//   페이지 2단계 — "템플릿으로 새 페이지" from the vault template fills only title and date created
+//   (choice picked in the picker, the rest byte for byte, Templater kept as text); "+" on a page
+//   makes a subpage shown under it; a session row dropped on a work row makes a "세션 기록" page
+//   there; "페이지로 만들기" on a reply makes a page with its source.
 // Usage: node scripts/pkm-check.ts [outDir] [codex|claude]
 
 import { spawn } from "node:child_process";
@@ -48,6 +52,13 @@ function listing(root: string) {
   return out;
 }
 const vaultBefore = listing(vault);
+const readdirSafe = (dir: string) => {
+  try {
+    return readdirSync(dir);
+  } catch {
+    return [];
+  }
+};
 /** Files this check itself puts into the fixture vault (to see the watcher follow). */
 const ownWrites = new Set<string>();
 
@@ -220,6 +231,62 @@ async function flow(provider: Provider) {
     await page.locator(".context-menu [role=menuitem]", { hasText: "카드로 보기" }).click();
     await page.waitForSelector(".pkm-card.kind-session", { timeout: 10_000 });
     pass("작업을 카드로 보기(세션 카드)", (await page.locator(".pkm-card.kind-session").count()) >= 1, await page.locator(".pkm-title").innerText());
+
+    // ── a page from the vault's template: only title and date created filled ─────────────────
+    await page.locator(`.sidebar [data-row-id="${work.id}"]`).click({ button: "right" });
+    await page.locator(".context-menu [role=menuitem]", { hasText: "템플릿으로 새 페이지" }).click();
+    await page.waitForSelector(".template-dialog .template-row", { timeout: 8000 });
+    await page.locator(".template-row", { hasText: "New DIKM Note" }).click();
+    await page.locator("#page-title").fill("1주차 계획");
+    await page.locator(".template-choice", { hasText: "DIKM_단계:" }).locator(".template-option", { hasText: "🔵 I" }).click();
+    await shot("07-template.png");
+    await page.locator(".template-form button[type=submit]").click();
+    await page.waitForSelector(".document-view", { timeout: 10_000 });
+    const templated = readFileSync(join(work.cwd, "1주차 계획.md"), "utf8");
+    const expectedHead = ["---", "title: 1주차 계획", "aliases: ", '"DIKM_단계:":', "  - 🔵 I", '"종류:":', "tags: ", '"저자:": ', '"관련문서:": '].join("\n");
+    pass(
+      "볼트 템플릿으로 새 페이지: 제목·date created만 채우고 고른 값만, 나머지 바이트·Templater 그대로",
+      templated.startsWith(expectedHead) && /\ndate created: \d{4}-\d{2}-\d{2}T[\d:]+[+-]\d{2}:\d{2}\nsource:\n---\n/.test(templated) && templated.includes("<% tp.date.now() %>"),
+      templated.split("\n").slice(0, 6).join(" ⏎ "),
+    );
+
+    // ── "+" on a page: a subpage beside it, shown under it ───────────────────────────────────
+    const docOf = async (path: string) => (await api<{ artifacts: { id: string; path: string }[] }>("GET", "/api/snapshot")).artifacts.find((artifact) => artifact.path === path)?.id ?? "";
+    const parentId = await docOf(join(work.cwd, "1주차 계획.md"));
+    const parentRow = page.locator(`.sidebar [data-row-id="${parentId}"]`);
+    await parentRow.hover();
+    await parentRow.locator(".row-add").click();
+    await until(async () => Boolean(await docOf(join(work.cwd, "1주차 계획", "제목 없음.md"))), 8000);
+    const childId = await docOf(join(work.cwd, "1주차 계획", "제목 없음.md"));
+    await page.locator(`.sidebar [data-row-id="${childId}"]`).waitFor({ timeout: 8000 });
+    const indent = async (id: string) => Number.parseFloat(await page.locator(`.sidebar [data-row-id="${id}"]`).evaluate((element) => getComputedStyle(element).paddingLeft));
+    const nested = (await indent(childId)) > (await indent(parentId));
+    pass("페이지의 + 로 하위 페이지(1주차 계획/제목 없음.md)를 만들고 그 아래에 보임", nested && statSync(join(work.cwd, "1주차 계획", "제목 없음.md")).isFile());
+
+    // ── a session row dropped on another work's row: its record as a page there ───────────────
+    const second = await api<Session>("POST", `/api/works/${work.id}/sessions`, { provider, purpose: "둘째" });
+    await page.locator(`.sidebar [data-row-id="${second.id}"]`).waitFor({ timeout: 8000 });
+    const sessionRow = (await page.locator(`.sidebar [data-row-id="${second.id}"]`).boundingBox())!;
+    const targetRow = (await page.locator(`.sidebar [data-row-id="${createdWork.id}"]`).boundingBox())!;
+    await page.mouse.move(sessionRow.x + 30, sessionRow.y + sessionRow.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(sessionRow.x + 40, sessionRow.y + 20, { steps: 3 });
+    await page.mouse.move(targetRow.x + 60, targetRow.y + targetRow.height / 2, { steps: 8 });
+    const accepting = await page.locator(`.sidebar [data-row-id="${createdWork.id}"].drop-page`).count();
+    await shot("08-session-drop.png");
+    await page.mouse.up();
+    const recorded = await until(async () => (await snapshot()).works.length > 0 && readdirSafe(join(createdWork.cwd, "세션 기록")).some((name) => readFileSync(join(createdWork.cwd, "세션 기록", name), "utf8").includes(`session: ${second.id}`)), 8000);
+    pass("세션 줄을 다른 작업 줄에 끌어 놓으면 그 작업에 세션 기록 페이지", accepting === 1 && recorded, readdirSafe(join(createdWork.cwd, "세션 기록")).join(", "));
+
+    // ── "페이지로 만들기" on a reply ─────────────────────────────────────────────────────────
+    await page.locator(".sidebar .row-work", { hasText: createdWork.title }).first().click();
+    await page.waitForSelector(".work-view .turn-assistant .markdown", { timeout: 8000 });
+    await page.locator(".work-view .turn-assistant").first().hover();
+    await page.locator(".work-view .message-page").first().click();
+    await page.waitForSelector(".document-view", { timeout: 10_000 });
+    const madePage = readdirSafe(createdWork.cwd).find((name) => name.endsWith(".md") && readFileSync(join(createdWork.cwd, name), "utf8").includes(`source: workbench://session/${created?.id}#`));
+    await shot("09-message-page.png");
+    pass("답의 '페이지로 만들기'로 출처가 붙은 새 페이지", Boolean(madePage), madePage ?? "");
   } catch (error) {
     pass("실행", false, error instanceof Error ? error.message.split("\n")[0]! : String(error));
     await page.screenshot({ path: join(outDir, `${provider}-99-failure.png`) }).catch(() => undefined);

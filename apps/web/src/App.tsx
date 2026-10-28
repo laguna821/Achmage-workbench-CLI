@@ -24,7 +24,7 @@ import { DocTabs } from "./components/DocTabs.tsx";
 import { IntegrationsSheet } from "./components/IntegrationsSheet.tsx";
 import { Onboarding } from "./components/Onboarding.tsx";
 import { SessionPicker } from "./components/SessionPicker.tsx";
-import { PkmProvider } from "./components/pkm/PkmContext.tsx";
+import { PkmProvider, type PkmApi } from "./components/pkm/PkmContext.tsx";
 import { VaultDialogHost, VaultSettingsRow } from "./components/pkm/VaultDialog.tsx";
 import { PkmCenter, pkmTitle } from "./components/pkm/PkmCenter.tsx";
 import type { PkmTarget } from "./pkm.ts";
@@ -182,6 +182,8 @@ export function App() {
   // Inline rename or folder creation asked from a menu, handled by the sidebar.
   const [sidebarPending, setSidebarPending] = useState<{ rename?: string; createIn?: string | null } | null>(null);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
+  // The PKM layer's dialogs and calls, for the menus built here (pkm/PkmContext.tsx).
+  const pkmHandle = useRef<PkmApi | null>(null);
   const closeEngineMenu = useCallback(() => setEngineMenu(null), []);
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
@@ -506,23 +508,26 @@ export function App() {
     },
     [state.works, actions],
   );
+  /** A page just made: its work's documents unfold in the tree, and it opens. */
+  const revealPage = useCallback(
+    (artifact: Artifact) => {
+      const open = readOpenState(prefsRef.current.tree);
+      const workId = artifact.workId;
+      savePrefs({
+        tree: { ...open, openWorks: [...new Set([...open.openWorks, workId])], closedWorks: open.closedWorks.filter((id) => id !== workId), openDocs: [...new Set([...open.openDocs, workId])] },
+      });
+      setWorkId(workId);
+      setView({ kind: "document", artifactId: artifact.id, proposalId: null });
+    },
+    [savePrefs, setView, setWorkId],
+  );
   /** Notion's "+": a Markdown page in the work folder, shown in the tree and opened at once. */
   const newPage = useCallback(
     (owner: Work) => {
       if (!api) return;
-      void api
-        .createPage(owner.id)
-        .then((artifact) => {
-          const open = readOpenState(prefsRef.current.tree);
-          savePrefs({
-            tree: { ...open, openWorks: [...new Set([...open.openWorks, owner.id])], closedWorks: open.closedWorks.filter((id) => id !== owner.id), openDocs: [...new Set([...open.openDocs, owner.id])] },
-          });
-          setWorkId(owner.id);
-          setView({ kind: "document", artifactId: artifact.id, proposalId: null });
-        })
-        .catch(fail);
+      void api.createPage(owner.id).then(revealPage).catch(fail);
     },
-    [api, fail, savePrefs, setView, setWorkId],
+    [api, fail, revealPage],
   );
   const startNew = useCallback(
     (folderId: string | null = null) => {
@@ -785,6 +790,7 @@ export function App() {
             })),
           },
           { kind: "item", label: "새 페이지", icon: "page", onSelect: () => newPage(owner) },
+          { kind: "item", label: "템플릿으로 새 페이지…", icon: "page", onSelect: () => pkmHandle.current?.setDialog({ kind: "template", workId: owner.id, parentId: null }) },
           { kind: "item", label: "이름 바꾸기", icon: "edit", hint: "F2", onSelect: () => setSidebarPending({ rename: owner.id }) },
           { kind: "separator" },
           { kind: "item", label: owner.pinned ? "고정 풀기" : "고정", icon: "pin", onSelect: () => void api.updateWork(owner.id, { pinned: !owner.pinned }).catch(fail) },
@@ -828,6 +834,12 @@ export function App() {
         const artifact = row.artifact;
         const items: MenuEntry[] = [
           { kind: "item", label: "열기", icon: "file", hint: "Enter", onSelect: () => docActions.openArtifact(artifact.id) },
+          ...(artifact.format === "markdown"
+            ? [
+                { kind: "item" as const, label: "하위 페이지", icon: "plus" as const, onSelect: () => sidebarActions.newSubpage?.(artifact) },
+                { kind: "item" as const, label: "템플릿으로 하위 페이지…", icon: "page" as const, onSelect: () => pkmHandle.current?.setDialog({ kind: "template", workId: artifact.workId, parentId: artifact.id }) },
+              ]
+            : []),
           { kind: "item", label: "다른 앱으로 열기", icon: "arrowRight", onSelect: () => void api.openExternal(artifact.id).catch(fail) },
           ...(inDesktop ? [{ kind: "item" as const, label: "파일 위치 열기", icon: "folderOpen" as const, onSelect: () => void openPath(artifact.path, true) }] : []),
           { kind: "item", label: "경로 복사", icon: "copy", onSelect: copy(artifact.path, "경로를 복사했습니다.") },
@@ -879,6 +891,12 @@ export function App() {
     refreshUsage: () => api?.refreshProviders().catch(fail) ?? Promise.resolve(),
     openHome: () => startNew(null),
     newPage,
+    newSubpage: (artifact) => void pkmHandle.current?.client.subpage(artifact.id, "").then(revealPage).catch(fail),
+    sessionPage: (session, target) =>
+      void pkmHandle.current?.client
+        .sessionPage(session.id, target.id)
+        .then((page) => setToast({ text: `「${target.title}」에 세션 기록 페이지를 만들었습니다: ${page.name}`, action: { label: "열기", run: () => revealPage(page) } }))
+        .catch(fail),
     archive,
     openSearch: () => setPaletteOpen(true),
     openArchive: () => setView({ kind: "archive" }),
@@ -938,6 +956,8 @@ export function App() {
       onShowSession={actions.selectSession}
       onShowWork={openWorkNow}
       onMenu={setContextMenu}
+      handle={pkmHandle}
+      onOpenArtifact={revealPage}
     >
     <div
       className="app look-scope"

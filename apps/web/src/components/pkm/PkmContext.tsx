@@ -1,5 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { Session, VaultTree, Work } from "@workbench/contracts";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
+import type { Artifact, Session, VaultTree, Work } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
 import { pkmClient, type PkmClient, type PkmTarget } from "../../pkm.ts";
 import type { MenuRequest } from "../ContextMenu.tsx";
@@ -11,6 +11,9 @@ import type { State } from "../../state.ts";
 
 const OPEN_KEY = "workbench.vaultOpen";
 
+/** Dialogs of the PKM layer: attaching the vault, a page from a template. */
+export type PkmDialog = { kind: "vault" } | { kind: "template"; workId: string; parentId: string | null };
+
 export type PkmApi = {
   api: Api;
   state: State;
@@ -19,8 +22,8 @@ export type PkmApi = {
   /** Vault folders unfolded in the sidebar. */
   unfolded: ReadonlySet<string>;
   toggle: (path: string) => void;
-  dialog: "vault" | null;
-  setDialog: (dialog: "vault" | null) => void;
+  dialog: PkmDialog | null;
+  setDialog: (dialog: PkmDialog | null) => void;
   attach: (path: string) => Promise<boolean>;
   detach: () => void;
   rescan: () => void;
@@ -35,6 +38,8 @@ export type PkmApi = {
   showWork: (work: Work) => void;
   /** The app menu (right-click on a card). */
   openMenu: (request: MenuRequest) => void;
+  /** Open a page just made, unfolding its work's documents in the tree. */
+  openArtifact: (artifact: Artifact) => void;
 };
 
 const PkmContext = createContext<PkmApi | null>(null);
@@ -57,8 +62,13 @@ export function PkmProvider({
   onShowSession = () => undefined,
   onShowWork = () => undefined,
   onMenu = () => undefined,
+  handle,
+  onOpenArtifact = () => undefined,
   children,
 }: {
+  onOpenArtifact?: (artifact: Artifact) => void;
+  /** Filled with the current context, for the app's menus (which live outside the provider). */
+  handle?: MutableRefObject<PkmApi | null>;
   onShowWork?: (work: Work) => void;
   onMenu?: (request: MenuRequest) => void;
   api: Api;
@@ -71,7 +81,7 @@ export function PkmProvider({
 }) {
   const client = useMemo(() => pkmClient(api), [api]);
   const [tree, setTree] = useState<VaultTree | null>(null);
-  const [dialog, setDialog] = useState<"vault" | null>(null);
+  const [dialog, setDialog] = useState<PkmDialog | null>(null);
   const [unfolded, setUnfolded] = useState<ReadonlySet<string>>(() => {
     try {
       return new Set(JSON.parse(localStorage.getItem(OPEN_KEY) ?? "[]") as string[]);
@@ -138,6 +148,8 @@ export function PkmProvider({
     showSession: onShowSession,
     showWork: onShowWork,
     openMenu: onMenu,
+    openArtifact: onOpenArtifact,
   };
+  if (handle) handle.current = value;
   return <PkmContext.Provider value={value}>{children}</PkmContext.Provider>;
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Icon } from "../Icon.tsx";
 import { usePkm } from "./PkmContext.tsx";
+import { TemplateDialog } from "./TemplateDialog.tsx";
 import "../../styles/pkm.css";
 
 /**
@@ -103,10 +104,12 @@ export function VaultDialog({ pickFolder }: { pickFolder: (() => Promise<string 
   );
 }
 
-/** The dialog when it is asked for (sidebar, settings popover). */
+/** The PKM dialog asked for (vault from the sidebar or settings, a page from a template). */
 export function VaultDialogHost({ pickFolder }: { pickFolder: (() => Promise<string | null>) | null }) {
   const pkm = usePkm();
-  return pkm.dialog === "vault" ? <VaultDialog pickFolder={pickFolder} /> : null;
+  if (pkm.dialog?.kind === "vault") return <VaultDialog pickFolder={pickFolder} />;
+  if (pkm.dialog?.kind === "template") return <TemplateDialog workId={pkm.dialog.workId} parentId={pkm.dialog.parentId} />;
+  return null;
 }
 
 /** The vault line in the settings popover (⋯): which vault is attached, and a way to change it. */
@@ -136,7 +139,7 @@ export function VaultSettingsRow({ onOpen }: { onOpen: () => void }) {
         className="text-button"
         onClick={() => {
           onOpen();
-          pkm.setDialog("vault");
+          pkm.setDialog({ kind: "vault" });
         }}
       >
         {status?.path ? "볼트 바꾸기…" : "볼트 연결…"}

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, writeFileSync } from "node:fs";
-import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
-import { PROVIDER_LABEL, type CardList, type PkmCard, type PkmScope, type PkmState, type Session, type VaultNote, type Work } from "@workbench/contracts";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { PROVIDER_LABEL, type Artifact, type CardList, type PageTemplate, type PkmCard, type PkmScope, type PkmState, type Session, type VaultNote, type Work } from "@workbench/contracts";
 import { WORKBENCH_DIR } from "./artifacts.ts";
 import type { EventBus } from "./bus.ts";
 import { HttpError } from "./errors.ts";
@@ -10,12 +10,24 @@ import type { SessionManager } from "./sessions.ts";
 import type { Store } from "./store.ts";
 import { IMAGE_EXTENSIONS, VaultMirror, noteTitle } from "./vault.ts";
 import { VaultNotes, stageOf } from "./vault-notes.ts";
+import { fillTemplate, localStamp, readTemplates, templateChoices, templateFile, yamlValue, type TemplateSource } from "./pages.ts";
+import { exportFileName, headingOf, tidyMessage } from "./export-md.ts";
 
 // The PKM layer of the gateway (design 워크스테이션-다음설계 §4): the read-only vault mirror and,
 // on top of it, what ties notes to works and sessions. Small state lives in the meta table under
 // `pkm.*` keys; every change is announced as one `pkm.changed` event so screens fetch it again.
 
-export type PkmOptions = { vaultDebounceMs?: number };
+export type PkmOptions = {
+  vaultDebounceMs?: number;
+  /** Gateway data folder: app-wide page templates live in `templates/` under it. */
+  dataDir?: string;
+};
+
+/** The vault's own template folder (read only), as the user's vault keeps it. */
+export const VAULT_TEMPLATES = "90. Settings/91. Templates";
+
+/** A file name from a page title: no path characters, at most 80 characters. */
+const safeStem = (name: string, fallback: string) => (name.trim() || fallback).replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").replace(/\.md$/i, "").replace(/\s+/g, " ").slice(0, 80).trim() || fallback;
 
 /** What the centre can list as cards. */
 export type CardTarget = { kind: "vault"; path: string; descendants: boolean } | { kind: "folder"; id: string } | { kind: "work"; id: string };
@@ -40,11 +52,13 @@ export class Pkm {
   protected readonly store: Store;
   protected readonly bus: EventBus;
   protected readonly manager: SessionManager;
+  protected readonly options: PkmOptions;
 
   constructor(store: Store, bus: EventBus, manager: SessionManager, options: PkmOptions = {}) {
     this.store = store;
     this.bus = bus;
     this.manager = manager;
+    this.options = options;
     this.vault = new VaultMirror((version) => this.publish("vault", version), { debounceMs: options.vaultDebounceMs });
     this.notes = new VaultNotes(this.vault);
     const saved = store.getMeta("pkm.vault");
@@ -297,6 +311,99 @@ export class Pkm {
     const inside = relative(realpathSync(work.cwd), existsSync(file) ? realpathSync(file) : file);
     if (!inside || inside.startsWith("..") || isAbsolute(inside) || !existsSync(file)) throw new HttpError(404, "not_found", "그림이 없습니다.");
     return file;
+  }
+
+  // ── pages: templates, subpages, a session or a message as a page ─────────────────────────
+
+  protected requireWork(workId: string) {
+    const work = this.manager.view.works.get(workId);
+    if (!work) throw new HttpError(404, "work_not_found", "작업을 찾지 못했습니다.");
+    return work;
+  }
+
+  private templateSources(work: Work | null): TemplateSource[] {
+    const sources: TemplateSource[] = [];
+    if (this.options.dataDir) sources.push({ source: "global", dir: join(this.options.dataDir, "templates") });
+    if (work) sources.push({ source: "work", dir: join(work.cwd, WORKBENCH_DIR, "templates") });
+    if (this.vault.root && this.vault.current) sources.push({ source: "vault", dir: join(this.vault.root, VAULT_TEMPLATES) });
+    return sources;
+  }
+
+  /** Templates for a new page of this work: the app's, the work's, and the vault's (read only). */
+  templates(workId: string): PageTemplate[] {
+    return this.templateSources(this.requireWork(workId)).flatMap(readTemplates);
+  }
+
+  /** Write a new page without ever replacing a file (a number is added to a taken name), and track it. */
+  private writePage(work: Work, dir: string, stem: string, text: string, note: string): Artifact {
+    mkdirSync(dir, { recursive: true });
+    let path = join(dir, `${stem}.md`);
+    for (let index = 2; existsSync(path); index += 1) path = join(dir, `${stem} ${index}.md`);
+    writeFileSync(path, text, { flag: "wx" });
+    const tracked = this.manager.documents.track(work.id, work.cwd, path, "user", null, note);
+    if (!tracked) throw new HttpError(500, "page_not_tracked", "페이지를 만들지 못했습니다.");
+    return tracked.artifact;
+  }
+
+  /** The folder a page's subpages live in: `A.md` → `A/` beside it (as Obsidian folder notes do). */
+  private subpageDir(parentId: string) {
+    const parent = this.manager.documents.get(parentId);
+    if (parent.format !== "markdown") throw new HttpError(400, "not_page", "마크다운 페이지에만 하위 페이지를 만들 수 있습니다.");
+    return { parent, dir: join(dirname(parent.path), basename(parent.path).replace(/\.(md|markdown)$/i, "")) };
+  }
+
+  /** A new page from a template, in the work folder or under a page (its subpage). */
+  pageFromTemplate(workId: string, templateId: string, title: string, choices: Record<string, string[]>, parentId: string | null) {
+    const work = this.requireWork(workId);
+    const file = templateFile(templateId, this.templateSources(work));
+    if (!file) throw new HttpError(404, "template_missing", "템플릿을 찾지 못했습니다.");
+    const name = safeStem(title, "제목 없음");
+    const source = readFileSync(file, "utf8");
+    // Only the template's own choice fields, and only options it offers.
+    const allowed = Object.fromEntries(templateChoices(source).map((choice) => [choice.key, (choices[choice.key] ?? []).filter((value) => choice.options.includes(value))]));
+    const text = fillTemplate(source, { title: title.replace(/[\r\n]+/g, " ").trim() || name, date: localStamp(), choices: allowed });
+    const dir = parentId ? this.subpageDir(parentId).dir : work.cwd;
+    return this.writePage(work, dir, name, text, `템플릿 「${templateId.slice(templateId.indexOf(":") + 1).replace(/\.md$/i, "")}」에서`);
+  }
+
+  /** A blank subpage of a page: `A.md` gets `A/<name>.md`; `A.md` itself never moves. */
+  subpage(parentId: string, name: string) {
+    const { parent, dir } = this.subpageDir(parentId);
+    const work = this.requireWork(parent.workId);
+    const stem = safeStem(name, "제목 없음");
+    return this.writePage(work, dir, stem, `# ${stem}\n\n`, `「${parent.name}」의 하위 페이지`);
+  }
+
+  /**
+   * "세션 기록 페이지": a session dropped on a work becomes a page of that work, made by the same
+   * fixed rules as "마크다운으로 내보내기". In its own work it is that export (updated in place).
+   */
+  sessionPage(sessionId: string, workId: string) {
+    const session = this.manager.view.sessions.get(sessionId);
+    if (!session) throw new HttpError(404, "session_not_found", "세션을 찾지 못했습니다.");
+    const work = this.requireWork(workId);
+    if (session.workId === workId) {
+      const result = this.manager.exportMarkdown(sessionId, { target: "work" });
+      if (!result.artifactId) throw new HttpError(500, "page_not_tracked", "세션 기록 페이지를 만들지 못했습니다.");
+      return this.manager.documents.get(result.artifactId);
+    }
+    const { markdown } = this.manager.exportMarkdown(sessionId, { target: "text" });
+    const first = this.manager.items(sessionId).items[0]?.at ?? session.createdAt;
+    const name = exportFileName(session, first).replace(/\.md$/, "");
+    return this.writePage(work, join(work.cwd, "세션 기록"), name, markdown, `「${session.purpose}」 세션 기록`);
+  }
+
+  /** "페이지로 만들기": a message (or the part of it the user selected) as a page of its work. */
+  messagePage(sessionId: string, itemId: string, selection: string | null) {
+    const session = this.manager.view.sessions.get(sessionId);
+    if (!session) throw new HttpError(404, "session_not_found", "세션을 찾지 못했습니다.");
+    const item = this.manager.items(sessionId).items.find((entry) => entry.id === itemId);
+    if (!item || (item.kind !== "assistant" && item.kind !== "user")) throw new HttpError(404, "message_missing", "메시지를 찾지 못했습니다.");
+    // Only text of that message: a selection that is not part of it falls back to the whole message.
+    const picked = selection?.trim() && item.text.includes(selection.trim()) ? selection.trim() : item.text;
+    const title = headingOf(picked);
+    const text = ["---", `title: ${yamlValue(title)}`, `source: workbench://session/${sessionId}#${encodeURIComponent(itemId)}`, `date created: ${localStamp()}`, "---", "", tidyMessage(picked), ""].join("\n");
+    return this.writePage(this.requireWork(session.workId), this.requireWork(session.workId).cwd, safeStem(title, "대화에서"), text, "대화에서 만든 페이지");
   }
 
   close() {

@@ -122,6 +122,21 @@ export type VaultNote = {
   sessions: number;
 };
 
+/**
+ * A page template: app-wide (gateway data folder), of one work (`.workbench/templates/`) or of the
+ * vault (`90. Settings/91. Templates/`, read only). Copied into the work folder as a new page.
+ */
+export type PageTemplate = {
+  /** `<source>:<file name>` */
+  id: string;
+  source: "global" | "work" | "vault";
+  name: string;
+  /** Keys followed by a list of options (and `DIKM_단계:`): asked in the picker, empty by default. */
+  choices: { key: string; options: string[] }[];
+  /** Templater commands (`<% %>`) in it: kept as text, never run. */
+  templater: boolean;
+};
+
 /** What the UI shows of the PKM layer; fetched again when a `pkm.changed` event arrives. */
 export type PkmState = {
   vault: VaultStatus;

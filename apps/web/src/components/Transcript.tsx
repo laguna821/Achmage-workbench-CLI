@@ -8,6 +8,7 @@ import { CREATE_LABEL } from "@workbench/contracts";
 import { Icon, type IconName } from "./Icon.tsx";
 import { diagramComponents } from "./Diagram.tsx";
 import { NoteChips } from "./pkm/NoteChips.tsx";
+import { MessageActions } from "./pkm/MessageActions.tsx";
 
 const DRAWN = diagramComponents();
 const STREAMING = diagramComponents(true);
@@ -446,6 +447,7 @@ export function Transcript({
           <div key={block.item.id} className="turn-assistant" data-item-id={block.item.id}>
             {block.speaker ? speaker : null}
             <AssistantText text={block.item.text} streaming={block.item.streaming} />
+            <MessageActions sessionId={sessionId} itemId={block.item.id} streaming={block.item.streaming} />
           </div>
         );
       case "work":

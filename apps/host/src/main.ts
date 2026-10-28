@@ -60,7 +60,7 @@ const manager = new SessionManager(store, bus, {
   ieum: new IeumOffice(),
 });
 void manager.refreshTools();
-const pkm = new Pkm(store, bus, manager);
+const pkm = new Pkm(store, bus, manager, { dataDir });
 
 const claudeIdleMs = env.WORKBENCH_CLAUDE_IDLE_MS ? Number(env.WORKBENCH_CLAUDE_IDLE_MS) : undefined;
 manager.registerAdapter(
