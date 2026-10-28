@@ -3,7 +3,7 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { dirname, extname, join, normalize, resolve, sep } from "node:path";
 import { timingSafeEqual } from "node:crypto";
-import { isAccessMode, type AccessMode, type DocRef, type Provider, type SequencedEvent } from "@workbench/contracts";
+import { isAccessMode, type AccessMode, type DocRef, type Provider, type SequencedEvent, type Timeline } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
 import { HttpError, type SessionManager } from "./sessions.ts";
 import { DESIGN_PRESETS, systemFonts, type DesignPreset } from "./design.ts";
@@ -92,6 +92,8 @@ export type HttpOptions = {
   onClientLog?: (message: string) => void;
   /** The office editors' own origin (editors.ts) and the grants that let one page open one document. */
   editors?: { grants: EditorGrants; origin: () => string | null };
+  /** Turns and revisions since a time, for home "흐름" (timeline.ts). */
+  timeline?: (since: number) => Timeline;
 };
 
 function sameToken(given: string | null, expected: string) {
@@ -358,6 +360,10 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const body = await readJson(req, 64_000_000);
         const preset = (typeof body.preset === "string" && body.preset in DESIGN_PRESETS ? body.preset : "square") as DesignPreset;
         return sendJson(res, 201, manager.createDesign(parts[1], String(body.name ?? ""), preset, typeof body.text === "string" ? body.text : null));
+      }
+      if (method === "GET" && path === "/api/views/timeline" && options.timeline) {
+        const since = Number(url.searchParams.get("since") ?? 0);
+        return sendJson(res, 200, options.timeline(Number.isFinite(since) ? since : 0));
       }
       if (method === "GET" && path === "/api/fonts") return sendJson(res, 200, { fonts: systemFonts() });
       if (method === "GET" && path === "/api/tools") return sendJson(res, 200, manager.tools());

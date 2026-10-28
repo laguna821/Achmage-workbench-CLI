@@ -1,7 +1,8 @@
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Artifact, ArtifactRevision, Folder, Handoff, Proposal, Session, TranscriptItem, Work } from "@workbench/contracts";
+import type { Artifact, ArtifactRevision, Folder, Handoff, Proposal, Session, TimelineRevision, TranscriptItem, Work } from "@workbench/contracts";
+import type { TurnMark } from "./timeline.ts";
 
 // Local state only: works, folders, sessions, transcript items and request ids.
 // Never place this database in Dropbox (live SQLite must not be synced).
@@ -124,6 +125,46 @@ export class Store {
       .prepare(`SELECT artifact_id, text FROM document_search WHERE ${where} LIMIT ?`)
       .all(...terms.map(likePattern), limit)
       .map((row) => ({ artifactId: String(row.artifact_id), text: String(row.text) }));
+  }
+
+  /** Requests and turn ends since a time, in stored order per session (home "흐름"). */
+  turnMarks(since: number): TurnMark[] {
+    return this.db
+      .prepare(
+        `SELECT i.session_id, s.work_id, json_extract(i.json, '$.kind') AS kind, json_extract(i.json, '$.at') AS at,
+                json_extract(i.json, '$.status') AS status, json_extract(i.json, '$.durationMs') AS duration, json_extract(i.json, '$.steered') AS steered
+           FROM items i JOIN sessions s ON s.id = i.session_id
+          WHERE json_extract(i.json, '$.kind') IN ('user', 'turnEnd') AND json_extract(i.json, '$.at') >= ?
+          ORDER BY i.session_id, i.ord`,
+      )
+      .all(since)
+      .map((row) => ({
+        sessionId: String(row.session_id),
+        workId: String(row.work_id),
+        kind: row.kind === "user" ? "user" : "turnEnd",
+        at: Number(row.at),
+        status: row.status === null ? null : String(row.status),
+        durationMs: row.duration === null ? null : Number(row.duration),
+        steered: Number(row.steered ?? 0) === 1,
+      }));
+  }
+
+  /** Document revisions since a time (home "흐름"). */
+  revisionMarks(since: number): TimelineRevision[] {
+    return this.db
+      .prepare(
+        `SELECT r.artifact_id, a.work_id, r.revision, json_extract(r.json, '$.at') AS at, json_extract(r.json, '$.author') AS author
+           FROM revisions r JOIN artifacts a ON a.id = r.artifact_id
+          WHERE json_extract(r.json, '$.at') >= ?`,
+      )
+      .all(since)
+      .map((row) => ({
+        artifactId: String(row.artifact_id),
+        workId: String(row.work_id),
+        revision: Number(row.revision),
+        at: Number(row.at),
+        author: row.author === "engine" ? "engine" : row.author === "external" ? "external" : "user",
+      }));
   }
 
   close() {

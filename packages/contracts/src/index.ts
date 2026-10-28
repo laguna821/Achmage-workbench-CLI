@@ -661,3 +661,4 @@ export function applyItemEvent(items: TranscriptItem[], event: WorkbenchEvent): 
   }
   return items;
 }
+export * from "./views.ts";

@@ -11,6 +11,7 @@ import { Store } from "./store.ts";
 import { Kordoc } from "./kordoc.ts";
 import { IeumOffice } from "./ieumoffice.ts";
 import { createEditorsServer, EditorGrants } from "./editors.ts";
+import { buildTimeline } from "./timeline.ts";
 
 // Local gateway: owns engine processes and state, serves the UI and an HTTP + SSE API on
 // 127.0.0.1 only. Prints one `WORKBENCH_READY {json}` line once it accepts connections.
@@ -81,6 +82,7 @@ const server = createHttpServer(manager, bus, {
   // UI errors stay on this machine, next to the state database.
   onClientLog: (message) => appendFileSync(join(dataDir, "client.log"), `${new Date().toISOString()} ${message}\n`),
   editors: { grants, origin: () => editorsOrigin },
+  timeline: (since) => buildTimeline(store.turnMarks(since), store.revisionMarks(since), since),
 });
 
 /** Listen on the port used last time, or on any free one when it is taken; remember the one bound. */
