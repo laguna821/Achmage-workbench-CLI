@@ -10,6 +10,7 @@ import { SessionManager } from "./sessions.ts";
 import { Store } from "./store.ts";
 import { Kordoc } from "./kordoc.ts";
 import { IeumOffice } from "./ieumoffice.ts";
+import { createEditorsServer, EditorGrants } from "./editors.ts";
 
 // Local gateway: owns engine processes and state, serves the UI and an HTTP + SSE API on
 // 127.0.0.1 only. Prints one `WORKBENCH_READY {json}` line once it accepts connections.
@@ -20,10 +21,12 @@ const token = env.WORKBENCH_TOKEN ?? randomBytes(24).toString("base64url");
 // The window's storage (drafts, screen choices) belongs to the page origin, so the gateway keeps
 // the same port across launches: reuse the last one, and only fall back to a new one if it is taken.
 const portFile = join(dataDir, "port");
-function preferredPort() {
-  if (env.WORKBENCH_PORT) return Number(env.WORKBENCH_PORT);
+// The office editors run on a second port (editors.ts), kept the same way: their unsaved-edit copies live in its storage.
+const editorsPortFile = join(dataDir, "editors-port");
+function preferredPort(fixed: string | undefined, file: string) {
+  if (fixed) return Number(fixed);
   try {
-    const saved = Number(readFileSync(portFile, "utf8").trim());
+    const saved = Number(readFileSync(file, "utf8").trim());
     return Number.isInteger(saved) && saved > 1024 && saved < 65536 ? saved : 0;
   } catch {
     return 0;
@@ -68,39 +71,53 @@ manager.registerAdapter(
   }),
 );
 
+const grants = new EditorGrants();
+const editors = createEditorsServer(manager.documents, grants, webDir && existsSync(webDir) ? webDir : null);
+let editorsOrigin: string | null = null;
 const server = createHttpServer(manager, bus, {
   token,
   webDir: webDir && existsSync(webDir) ? webDir : null,
   // UI errors stay on this machine, next to the state database.
   onClientLog: (message) => appendFileSync(join(dataDir, "client.log"), `${new Date().toISOString()} ${message}\n`),
+  editors: { grants, origin: () => editorsOrigin },
 });
 
-function onListening() {
-  const address = server.address();
-  const boundPort = typeof address === "object" && address ? address.port : 0;
-  if (!env.WORKBENCH_PORT) {
-    mkdirSync(dataDir, { recursive: true });
-    writeFileSync(portFile, String(boundPort));
-  }
-  process.stdout.write(
-    `WORKBENCH_READY ${JSON.stringify({ url: `http://127.0.0.1:${boundPort}`, port: boundPort, token, dataDir })}\n`,
-  );
-  void manager.initProviders();
+/** Listen on the port used last time, or on any free one when it is taken; remember the one bound. */
+function listen(target: typeof server, fixed: string | undefined, file: string, onBound: (port: number) => void) {
+  const port = preferredPort(fixed, file);
+  target.once("listening", () => {
+    const address = target.address();
+    const bound = typeof address === "object" && address ? address.port : 0;
+    if (!fixed) {
+      mkdirSync(dataDir, { recursive: true });
+      writeFileSync(file, String(bound));
+    }
+    onBound(bound);
+  });
+  target.once("error", (error: NodeJS.ErrnoException) => {
+    if (error.code !== "EADDRINUSE" || fixed || port === 0) throw error;
+    target.listen(0, "127.0.0.1");
+  });
+  target.listen(port, "127.0.0.1");
 }
 
-const port = preferredPort();
-server.once("listening", onListening);
-server.once("error", (error: NodeJS.ErrnoException) => {
-  if (error.code !== "EADDRINUSE" || env.WORKBENCH_PORT || port === 0) throw error;
-  server.listen(0, "127.0.0.1");
+// The editors first, so a document opened right away finds them.
+listen(editors, env.WORKBENCH_EDITORS_PORT, editorsPortFile, (editorsPort) => {
+  editorsOrigin = `http://127.0.0.1:${editorsPort}`;
+  listen(server, env.WORKBENCH_PORT, portFile, (boundPort) => {
+    process.stdout.write(
+      `WORKBENCH_READY ${JSON.stringify({ url: `http://127.0.0.1:${boundPort}`, port: boundPort, token, dataDir, editorsUrl: editorsOrigin })}\n`,
+    );
+    void manager.initProviders();
+  });
 });
-server.listen(port, "127.0.0.1");
 
 let stopping = false;
 async function stop() {
   if (stopping) return;
   stopping = true;
   server.close();
+  editors.close();
   await manager.shutdown().catch(() => undefined);
   store.close();
   process.exit(0);

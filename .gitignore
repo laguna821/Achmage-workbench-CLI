@@ -6,3 +6,6 @@ target/
 coverage/
 apps/desktop/src-tauri/gen/
 apps/desktop/src-tauri/binaries/
+
+# IeumOffice source checkout (scripts/fetch-ieum.sh)
+vendor/ieumoffice/

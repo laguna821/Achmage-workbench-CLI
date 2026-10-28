@@ -8,8 +8,9 @@ import type { EventBus } from "./bus.ts";
 import { HttpError, type SessionManager } from "./sessions.ts";
 import { DESIGN_PRESETS, systemFonts, type DesignPreset } from "./design.ts";
 import { parseCreate } from "./create.ts";
+import { officeEditorKind, type EditorGrants } from "./editors.ts";
 
-const MIME: Record<string, string> = {
+export const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".mjs": "text/javascript; charset=utf-8",
@@ -85,7 +86,13 @@ function parseRefs(value: unknown): DocRef[] {
   });
 }
 
-export type HttpOptions = { token: string; webDir: string | null; onClientLog?: (message: string) => void };
+export type HttpOptions = {
+  token: string;
+  webDir: string | null;
+  onClientLog?: (message: string) => void;
+  /** The office editors' own origin (editors.ts) and the grants that let one page open one document. */
+  editors?: { grants: EditorGrants; origin: () => string | null };
+};
 
 function sameToken(given: string | null, expected: string) {
   if (!given) return false;
@@ -94,12 +101,12 @@ function sameToken(given: string | null, expected: string) {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-function sendJson(res: ServerResponse, status: number, body: unknown) {
+export function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
   res.end(JSON.stringify(body));
 }
 
-async function readBody(req: IncomingMessage, limit: number): Promise<Buffer> {
+export async function readBody(req: IncomingMessage, limit: number): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
@@ -120,17 +127,25 @@ async function readJson(req: IncomingMessage, limit = 1_000_000): Promise<Record
   }
 }
 
-function serveStatic(res: ServerResponse, webDir: string, pathname: string) {
+export function serveStatic(res: ServerResponse, webDir: string, pathname: string, pageHeaders: Record<string, string> = {}) {
   const safe = normalize(decodeURIComponent(pathname)).replace(/^(\.\.[/\\])+/, "");
+  const rel = safe.replace(/^[/\\]+/, "");
   let file = join(webDir, safe);
-  // The design page is its own app under /design/; everything else falls back to the main UI.
-  const app = safe.replace(/^[/\\]+/, "").startsWith("design") ? join(webDir, "design", "index.html") : join(webDir, "index.html");
-  if (!file.startsWith(webDir) || !existsSync(file) || statSync(file).isDirectory()) {
+  const found = file.startsWith(webDir) && existsSync(file) && !statSync(file).isDirectory();
+  if (!found) {
+    // The office editor pages ask for exact files (fonts, workers, pdf.js data): a missing one is an error.
+    if (/^office([/\\]|$)/.test(rel)) return sendJson(res, 404, { code: "not_found", message: "편집기 파일이 없습니다." });
+    // The design page is its own app under /design/; everything else falls back to the main UI.
+    const app = rel.startsWith("design") ? join(webDir, "design", "index.html") : join(webDir, "index.html");
     file = existsSync(app) ? app : join(webDir, "index.html");
   }
+  // Pages are fetched fresh after every update; only content-hashed build files (…/assets/…) are kept for good.
+  const hashed = found && /(^|[/\\])assets[/\\]/.test(rel);
+  const page = extname(file) === ".html";
   res.writeHead(200, {
     "content-type": MIME[extname(file)] ?? "application/octet-stream",
-    "cache-control": file.endsWith("index.html") ? "no-store" : "public, max-age=31536000, immutable",
+    "cache-control": page ? "no-store" : hashed ? "public, max-age=31536000, immutable" : "no-cache",
+    ...(page ? pageHeaders : {}),
   });
   createReadStream(file).pipe(res);
 }
@@ -184,6 +199,8 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         return;
       }
       if (!path.startsWith("/api/")) {
+        // The office editors are served only from their own origin (editors.ts).
+        if (/^\/office(\/|$)/.test(path)) throw new HttpError(404, "not_here", "편집기는 따로 열립니다.");
         if (options.webDir) {
           serveStatic(res, options.webDir, path);
         } else {
@@ -307,6 +324,19 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           res.writeHead(200, { "content-type": MIME[extname(file).toLowerCase()] ?? "application/octet-stream", "cache-control": "no-store" });
           createReadStream(file).pipe(res);
           return;
+        }
+        // A page of the office editors for this document: its own origin, and a token for this document only.
+        if (method === "POST" && parts[2] === "editor") {
+          const artifact = documents.check(artifactId);
+          const kind = officeEditorKind(artifact.format);
+          if (!kind) throw new HttpError(415, "no_editor", "이 형식은 아직 Workbench 안에서 편집하지 못합니다.");
+          const origin = options.editors?.origin();
+          if (!options.editors || !origin) throw new HttpError(503, "editors_not_ready", "편집기를 준비하는 중입니다. 잠시 뒤 다시 열어 주세요.");
+          return sendJson(res, 200, { url: `${origin}/office/${kind}.html`, origin, token: options.editors.grants.issue(artifactId) });
+        }
+        if (method === "PUT" && parts[2] === "bytes") {
+          const data = await readBody(req, 200_000_000);
+          return sendJson(res, 200, documents.saveBytes(artifactId, Number(url.searchParams.get("expectedRevision")), data));
         }
         if (method === "POST" && parts[2] === "assets") {
           const data = await readBody(req, 50_000_000);

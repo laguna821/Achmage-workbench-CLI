@@ -1,0 +1,6 @@
+# IeumOffice source used to build Workbench's office editors (apps/office).
+# Fetched by scripts/fetch-ieum.sh into vendor/ieumoffice (not committed: about 160 MB).
+# Apache-2.0: LICENSE and NOTICE travel with every build (third_party/ieumoffice).
+repository: https://github.com/pblsketch/openoffice
+release: v0.12.7
+commit: 30ff4f051f067fcb2baf1ab416c40718c802ca35

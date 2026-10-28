@@ -20,6 +20,7 @@ import { DesignView, type DesignHandle, type DesignStatus } from "./DesignView.t
 import { DesignCompare } from "./DesignCompare.tsx";
 import type { ThumbSource } from "../../design.ts";
 import { OfficeView } from "./OfficeView.tsx";
+import { OfficeEditor, type OfficeHandle, type OfficeStatus } from "./OfficeEditor.tsx";
 import type { ReactNode } from "react";
 import type { MentionItem } from "../../mention.ts";
 import { CreateChip, CreateTargetButton, stemOf } from "../CreateTarget.tsx";
@@ -52,7 +53,10 @@ export default function DocumentView({
   onToast,
   tabs,
   openDocIds,
+  onLeaveGuard,
 }: {
+  /** Register how to save edits only this view holds (the Word editor) before the app leaves it. */
+  onLeaveGuard?: (guard: (() => Promise<void>) | null) => void;
   /** Open document tabs of this work. */
   tabs?: ReactNode;
   openDocIds?: string[];
@@ -78,9 +82,15 @@ export default function DocumentView({
   const [conflict, setConflict] = useState<Conflict>(null);
   const hangul = artifact?.format === "hwpx" || artifact?.format === "hwp";
   const office = artifact ? isOfficeFormat(artifact.format) : false;
+  // Word documents are edited in the central area with the editor built from IeumOffice.
+  const wordEditor = artifact?.format === "docx";
   const [mode, setMode] = useState<"edit" | "preview" | "split" | "render" | "source" | "pages">(
-    artifact?.format === "html" ? "render" : hangul || office ? "pages" : "edit",
+    artifact?.format === "html" ? "render" : wordEditor ? "edit" : hangul || office ? "pages" : "edit",
   );
+  const officeEditing = wordEditor && mode === "edit";
+  const officeRef = useRef<OfficeHandle>(null);
+  const [officeStatus, setOfficeStatus] = useState<OfficeStatus>({ dirty: false, revision: null, conflict: null });
+  const [confirmDrop, setConfirmDrop] = useState(false);
   const [selection, setSelection] = useState<EditorSelection>(null);
   const [compare, setCompare] = useState<{
     title: string;
@@ -140,8 +150,9 @@ export default function DocumentView({
   }, [artifactId, base, text]);
 
   const save = useCallback(async (): Promise<number | null> => {
-    // The design editor saves by itself; make sure the last edits are in before anything is sent.
+    // The design and Word editors save by themselves; make sure the last edits are in before anything is sent.
     if (design) return designRef.current ? designRef.current.flush() : (artifact?.revision ?? null);
+    if (officeEditing) return officeRef.current ? officeRef.current.flush() : (artifact?.revision ?? null);
     if (!base) return artifact?.revision ?? null;
     if (text === base.text) return base.revision;
     if (saving.current) return saving.current;
@@ -173,7 +184,14 @@ export default function DocumentView({
       });
     saving.current = run;
     return run;
-  }, [api, artifactId, artifact?.revision, base, text, onToast, design]);
+  }, [api, artifactId, artifact?.revision, base, text, onToast, design, officeEditing]);
+
+  // Tabs, the sidebar and other views replace this one at once: the Word editor saves (or keeps) its edits first.
+  useEffect(() => {
+    if (!onLeaveGuard || !officeEditing) return;
+    onLeaveGuard(() => officeRef.current?.leave() ?? Promise.resolve());
+    return () => onLeaveGuard(null);
+  }, [onLeaveGuard, officeEditing]);
 
   // Autosave shortly after typing stops.
   useEffect(() => {
@@ -253,6 +271,27 @@ export default function DocumentView({
     setCompare(null);
   };
 
+  // Leaving the editor view saves first; edits that cannot be saved keep it where it is.
+  const changeMode = async (value: typeof mode) => {
+    if (officeEditing && value !== "edit" && officeRef.current && (await officeRef.current.flush()) === null) {
+      onToast("저장하지 못한 편집이 있어 보기를 바꾸지 않았습니다. 위의 안내를 먼저 확인해 주세요.");
+      return;
+    }
+    setMode(value);
+  };
+  // After a conflict: my edits become the next revision; the other one stays in the history.
+  const keepMine = async () => {
+    const conflictNow = officeStatus.conflict;
+    if (!officeRef.current || !conflictNow) return;
+    try {
+      const latest = conflictNow.code === "disk_changed" ? (await api.adoptDisk(artifactId)).revision : artifact.revision;
+      const saved = await officeRef.current.rebase(latest);
+      onToast(saved === null ? "내 편집을 저장하지 못했습니다. 잠시 뒤 다시 해 보세요." : `내 편집을 새 판 r${saved}로 저장했습니다. 이전 판은 기록에 남아 있습니다.`);
+    } catch (error) {
+      onToast(error instanceof Error ? error.message : String(error));
+    }
+  };
+
   const readers = Object.entries(artifact.readBy)
     .map(([sessionId, revision]) => ({ session: state.sessions[sessionId], revision }))
     .filter((entry): entry is { session: Session; revision: number } => Boolean(entry.session));
@@ -280,6 +319,12 @@ export default function DocumentView({
       : designStatus.state === "error"
         ? "failed"
         : designStatus.state
+    : officeEditing
+      ? officeStatus.conflict
+        ? "conflict"
+        : officeStatus.dirty
+          ? "dirty"
+          : "saved"
     : saveState === "idle"
       ? unsaved
         ? "dirty"
@@ -386,6 +431,7 @@ export default function DocumentView({
         </div>
       );
     }
+    if (officeEditing) return null;
     if (office) return <OfficeView api={api} artifact={artifact} revision={artifact.revision} mode={mode === "pages" ? "pages" : "text"} />;
     if (design) {
       return (
@@ -499,6 +545,14 @@ export default function DocumentView({
                 </button>
               ))}
             </div>
+          ) : wordEditor ? (
+            <div className="segmented small" role="radiogroup" aria-label="보기">
+              {(["edit", "preview"] as const).map((value) => (
+                <button key={value} type="button" role="radio" aria-checked={mode === value} className={mode === value ? "active" : ""} onClick={() => void changeMode(value)}>
+                  {value === "edit" ? "편집" : "글 보기"}
+                </button>
+              ))}
+            </div>
           ) : office ? (
             <div className="segmented small" role="radiogroup" aria-label="보기">
               {(["pages", "preview"] as const).map((value) => (
@@ -571,7 +625,7 @@ export default function DocumentView({
             data-base-revision={base?.revision ?? ""}
             data-unsaved={base ? String(text !== base.text) : ""}
           >
-            {textual ? statusLabel : design ? designLabel : `r${artifact.revision}`}
+            {textual || officeEditing ? statusLabel : design ? designLabel : `r${artifact.revision}`}
           </span>
         </div>
       </header>
@@ -587,7 +641,7 @@ export default function DocumentView({
           {artifact.diskState === "changed" ? (
             <span className="reader-chip warn">
               디스크의 파일이 바뀌었습니다
-              {!unsaved ? (
+              {!unsaved && !(officeEditing && officeStatus.dirty) ? (
                 <button
                   type="button"
                   className="link"
@@ -656,6 +710,43 @@ export default function DocumentView({
         </div>
       ) : null}
 
+      {officeEditing && officeStatus.conflict ? (
+        <div className="doc-conflict" role="alert">
+          <strong>저장하지 않았습니다.</strong> {officeStatus.conflict.message}
+          <span className="doc-conflict-actions">
+            {confirmDrop ? (
+              <>
+                <span>편집기의 저장하지 않은 편집을 버리고 최신 판을 열까요?</span>
+                <button
+                  type="button"
+                  className="button small"
+                  onClick={() => {
+                    setConfirmDrop(false);
+                    officeRef.current?.reload();
+                  }}
+                >
+                  버리고 열기
+                </button>
+                <button type="button" className="button small" onClick={() => setConfirmDrop(false)}>
+                  그대로 두기
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="button small" onClick={() => setConfirmDrop(true)}>
+                  최신 판 열기
+                </button>
+                {officeStatus.dirty ? (
+                  <button type="button" className="button small primary" onClick={() => void keepMine()}>
+                    내 편집을 새 판으로
+                  </button>
+                ) : null}
+              </>
+            )}
+          </span>
+        </div>
+      ) : null}
+
       {proposals.length && !compare ? (
         <div className="doc-proposals">
           {proposals.map((proposal) => {
@@ -691,7 +782,12 @@ export default function DocumentView({
         </div>
       ) : null}
 
-      <div className="doc-body">{body}</div>
+      <div className="doc-body">
+        {officeEditing ? (
+          <OfficeEditor ref={officeRef} api={api} artifact={artifact} hidden={Boolean(compare || viewing)} onStatus={setOfficeStatus} onNotice={onToast} />
+        ) : null}
+        {body}
+      </div>
 
       <div className="column composer-area doc-composer">
         <Composer
@@ -712,7 +808,7 @@ export default function DocumentView({
               {includeDoc ? (
                 <span className="ref-chip">
                   <Icon name="file" size={12} /> 현재 문서 · r{base?.revision ?? artifact.revision}
-                  {unsaved || (design && designStatus.state === "dirty") ? " (보낼 때 저장)" : ""}
+                  {unsaved || (design && designStatus.state === "dirty") || (officeEditing && officeStatus.dirty) ? " (보낼 때 저장)" : ""}
                   <button type="button" onClick={() => setIncludeDoc(false)} aria-label="문서 빼기">
                     <Icon name="x" size={11} />
                   </button>

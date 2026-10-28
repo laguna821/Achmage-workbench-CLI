@@ -1,0 +1,15 @@
+/* Workbench keeps AI in its conversation: the editors' own AI entry points are hidden. */
+
+/* Word: the AI group on the Home tab, the AI buttons elsewhere (proofread, translate, AI comments
+   and revisions are marked with .ai-feature-icon), the AI items of the context menu, and the panel. */
+.ribbon-group:has(> .ribbon-group-items > .ai-entry),
+.rb-big.ai-entry,
+.rb-big:has(.ai-feature-icon),
+.ctx-item:has(.copilot-badge),
+.ai-dock {
+  display: none !important;
+}
+
+.ribbon-group:has(> .ribbon-group-items > .ai-entry) + .ribbon-sep {
+  display: none !important;
+}

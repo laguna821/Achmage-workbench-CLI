@@ -20,5 +20,12 @@ commit and what was changed):
   apps/web/src/mention.ts
       from packages/ui/src/doc-mention-model.ts @ 9052297
 
+The office editor pages (apps/office) are built from IeumOffice's source at
+the commit named in vendor/ieumoffice.PINNED (fetched by scripts/fetch-ieum.sh,
+not stored in this repository), unchanged, with a bridge to the Workbench
+gateway in place of its Electron preload and its AI features hidden. The built
+pages carry THIRD-PARTY-NOTICES.txt with this NOTICE, the LICENSE, the font
+licences and the licences of the npm packages bundled into them.
+
 The `ieumoffice` command line tool that Workbench can call is not part of
 this repository; it ships inside an installed IeumOffice application.

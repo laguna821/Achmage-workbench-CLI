@@ -466,6 +466,47 @@ export type DesignPageMessage =
   | { type: "render:ready" }
   | { type: "render:result"; id: string; dataUrl: string | null; pages: number; error?: string };
 
+/** Office editors built from IeumOffice (apps/office), one page per editor kind. */
+export type OfficeEditorKind = "docs";
+
+/**
+ * Where to open a document's editor page: the editors' own origin (not the Workbench UI's), and a
+ * token that reads and saves this one document only.
+ */
+export type EditorGrant = { url: string; origin: string; token: string };
+
+/** Workbench window → office editor page (iframe at /office/<kind>.html). */
+export type OfficeHostMessage =
+  | {
+      type: "office:init";
+      token: string;
+      artifact: { id: string; name: string; path: string; revision: number; sha256: string };
+      readOnly: boolean;
+      theme: "light" | "dark";
+      /** Reopen unsaved edits kept from an earlier visit (false when the user chose the latest revision). */
+      recover: boolean;
+    }
+  | { type: "office:theme"; theme: "light" | "dark" }
+  /** Save unsaved edits now (before a request is sent, the tab changes or the view switches). */
+  | { type: "office:flush" }
+  /** Keep my edits after a conflict: save them as the revision after this one. */
+  | { type: "office:rebase"; revision: number }
+  /** Leaving with edits that cannot be saved now (a conflict): keep them for the next visit. */
+  | { type: "office:keep" };
+
+/** Office editor page → Workbench window. */
+export type OfficePageMessage =
+  | { type: "office:ready" }
+  /** The editor shows this revision; `recovered` when it reopened unsaved edits made on it. */
+  | { type: "office:opened"; revision: number; recovered: boolean }
+  | { type: "office:saved"; revision: number }
+  | { type: "office:dirty"; dirty: boolean }
+  /** After flush, rebase or keep: the saved revision, or null when the edits were not saved (then they are kept). */
+  | { type: "office:flushed"; revision: number | null }
+  /** A save was refused: the document moved on (`revision_conflict`) or changed on disk (`disk_changed`). */
+  | { type: "office:conflict"; code: string; message: string }
+  | { type: "office:error"; message: string };
+
 export type ApprovalAnswerRequest = { decision: ApprovalDecision };
 
 /** Apply one event to an item list (shared by host replay and UI). */

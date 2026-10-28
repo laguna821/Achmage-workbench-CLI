@@ -5,6 +5,7 @@ import type {
   CreateTarget,
   DocRef,
   DocumentTools,
+  EditorGrant,
   Handoff,
   IntegrationsView,
   Proposal,
@@ -100,6 +101,7 @@ export class Api {
     );
   revisions = (artifactId: string) => this.request<ArtifactRevision[]>("GET", `/api/artifacts/${artifactId}/revisions`);
   adoptDisk = (artifactId: string) => this.request<Artifact>("POST", `/api/artifacts/${artifactId}/adopt-disk`);
+  editorGrant = (artifactId: string) => this.request<EditorGrant>("POST", `/api/artifacts/${artifactId}/editor`);
   revert = (artifactId: string, toRevision: number) => this.request<Artifact>("POST", `/api/artifacts/${artifactId}/revert`, { toRevision });
   previewUrl = (artifactId: string, revision?: number) =>
     this.request<{ url: string; revision: number }>("POST", `/api/artifacts/${artifactId}/preview${revision ? `?revision=${revision}` : ""}`);

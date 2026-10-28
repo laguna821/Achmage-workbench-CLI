@@ -93,7 +93,24 @@ export function App() {
   }, []);
   const [state, dispatch] = useReducer(reducer, initialState);
   const [workId, setWorkIdState] = useState<string | null>(() => localStorage.getItem(LAST_WORK_KEY));
-  const [view, setView] = useState<View>({ kind: "work" });
+  const [view, setViewNow] = useState<View>({ kind: "work" });
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  // A document view holding edits only it can save (the Word editor) saves them before it is replaced.
+  const leaveGuard = useRef<(() => Promise<void>) | null>(null);
+  const setLeaveGuard = useCallback((guard: (() => Promise<void>) | null) => {
+    leaveGuard.current = guard;
+  }, []);
+  const setView = useCallback((next: View | ((current: View) => View)) => {
+    const current = viewRef.current;
+    const resolved = typeof next === "function" ? next(current) : next;
+    const guard = leaveGuard.current;
+    const leaving = current.kind === "document" && !(resolved.kind === "document" && resolved.artifactId === current.artifactId);
+    if (!guard || !leaving) return setViewNow(resolved);
+    void guard()
+      .catch(() => undefined)
+      .finally(() => setViewNow(resolved));
+  }, []);
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const [onboardingAgain, setOnboardingAgain] = useState(false);
   // Documents opened in each work, shown as tabs and offered first by "@".
@@ -673,6 +690,7 @@ export function App() {
             session={activeSession ?? null}
             tabs={tabs}
             openDocIds={openDocIds}
+            onLeaveGuard={setLeaveGuard}
             onBack={() => setView({ kind: "work" })}
             onToast={setToast}
             onOpenArtifact={(artifactId) => setView({ kind: "document", artifactId, proposalId: null })}
