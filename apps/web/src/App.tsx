@@ -1108,6 +1108,10 @@ export function App() {
           onStart={(text, provider, cwd, choice) => startWork(text, provider, cwd, view.kind === "new" ? view.folderId : null, choice)}
           onOpenWork={openWorkNow}
           onOpenSession={openSession}
+          onOpenDoc={(artifactId) => docActions.openArtifact(artifactId)}
+          api={api}
+          homeMode={prefs.homeMode}
+          onHomeMode={(mode) => savePrefs({ homeMode: mode })}
           motion={prefs.brandMotion !== false}
           pickFolder={inDesktop ? pickFolderNative : null}
           engine={engine}
