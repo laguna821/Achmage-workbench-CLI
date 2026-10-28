@@ -115,8 +115,13 @@ async function runTurn(text) {
     const lines = long ? 160 : 6;
     const chunks = [];
     if (steer) chunks.push({ text: steer, wait: 30 });
-    for (let index = 0; index < lines; index += 1) {
-      chunks.push({ text: index % 20 === 0 ? `\n## ${index / 20 + 1}. 단락\n\n` : `${index}번째 줄입니다. 응답이 계속 이어지는 동안 위로 올려 읽을 수 있어야 합니다.\n\n`, wait: long ? 50 : 30 });
+    if (text.includes("도식")) {
+      // A Mermaid mind map, sent in pieces like any reply.
+      for (const piece of "여기 마인드맵입니다.\n\n```mermaid\nmindmap\n  root((Achmage))\n    대화\n      끼어들기\n      끝나면 보내기\n    문서\n      워드\n      한글\n    도식\n      Pele\n```\n".match(/[^\n]*\n/g)) chunks.push({ text: piece, wait: 30 });
+    } else {
+      for (let index = 0; index < lines; index += 1) {
+        chunks.push({ text: index % 20 === 0 ? `\n## ${index / 20 + 1}. 단락\n\n` : `${index}번째 줄입니다. 응답이 계속 이어지는 동안 위로 올려 읽을 수 있어야 합니다.\n\n`, wait: long ? 50 : 30 });
+      }
     }
     answer = await streamText("", chunks);
   }

@@ -103,7 +103,7 @@ async function runTurn(threadId, thread, turnId, text) {
   }
   let itemId = `msg_${++counter}`;
   notify("item/started", { threadId, turnId, item: { type: "agentMessage", id: itemId, text: "", phase: null, memoryCitation: null } });
-  const lines = text.includes("길게") ? 160 : 6;
+  const lines = text.includes("길게") ? 160 : text.includes("도식") ? 14 : 6;
   let full = "";
   for (let index = 0; index < lines && thread.turn?.id === turnId && !thread.turn.interrupted; index += 1) {
     // Like Codex, a steered request is taken at the next step (here every 10 lines): it is
@@ -120,7 +120,9 @@ async function runTurn(threadId, thread, turnId, text) {
       notify("item/started", { threadId, turnId, item: { type: "agentMessage", id: itemId, text: "", phase: null, memoryCitation: null } });
       notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: full });
     }
-    const line = index % 20 === 0 ? `\n## ${index / 20 + 1}. 단락\n\n` : `${index}번째 줄입니다. 응답이 계속 이어지는 동안 위로 올려 읽을 수 있어야 합니다.\n\n`;
+    // "도식": a Mermaid mind map, sent in pieces like any reply.
+    const diagram = text.includes("도식") ? "여기 마인드맵입니다.\n\n```mermaid\nmindmap\n  root((Achmage))\n    대화\n      끼어들기\n      끝나면 보내기\n    문서\n      워드\n      한글\n    도식\n      Pele\n```\n".match(/[^\n]*\n/g) : null;
+    const line = diagram ? (diagram[index] ?? "") : index % 20 === 0 ? `\n## ${index / 20 + 1}. 단락\n\n` : `${index}번째 줄입니다. 응답이 계속 이어지는 동안 위로 올려 읽을 수 있어야 합니다.\n\n`;
     full += line;
     notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: line });
     await sleep(text.includes("길게") ? 50 : 30);

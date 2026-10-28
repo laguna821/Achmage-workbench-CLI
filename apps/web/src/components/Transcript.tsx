@@ -6,6 +6,10 @@ import { EngineMark } from "./EngineMark.tsx";
 import { FileCard, HandoffCard, ProposalCard, RefChips, useDocs } from "./DocCards.tsx";
 import { CREATE_LABEL } from "@workbench/contracts";
 import { Icon, type IconName } from "./Icon.tsx";
+import { diagramComponents } from "./Diagram.tsx";
+
+const DRAWN = diagramComponents();
+const STREAMING = diagramComponents(true);
 
 type Item<K extends TranscriptItem["kind"]> = Extract<TranscriptItem, { kind: K }>;
 
@@ -87,7 +91,9 @@ const TOOL_ICON: Record<string, IconName> = {
 const AssistantText = memo(function AssistantText({ text, streaming }: { text: string; streaming: boolean }) {
   return (
     <div className={`markdown${streaming ? " streaming" : ""}`}>
-      <Markdown remarkPlugins={[remarkGfm]}>{text || " "}</Markdown>
+      <Markdown remarkPlugins={[remarkGfm]} components={streaming ? STREAMING : DRAWN}>
+        {text || " "}
+      </Markdown>
     </div>
   );
 });
@@ -122,7 +128,9 @@ function remarkLineBreaks() {
 const RequestText = memo(function RequestText({ text }: { text: string }) {
   return (
     <div className="user-bubble markdown">
-      <Markdown remarkPlugins={[remarkGfm, remarkLineBreaks]}>{text}</Markdown>
+      <Markdown remarkPlugins={[remarkGfm, remarkLineBreaks]} components={DRAWN}>
+        {text}
+      </Markdown>
     </div>
   );
 });

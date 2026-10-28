@@ -193,7 +193,19 @@ async function flow(provider: Provider) {
     await page.waitForTimeout(1500);
     const quiet = await session(engine.id);
     pass("멈춘 뒤 엔진이 혼자 이어 가지 않음", quiet.status === "idle" && !(await items(engine.id)).some((item) => item.kind === "assistant" && item.text.includes("멈추면 못 갈 요청")), quiet.status);
-    await shot("07-final.png");
+    // ── a Mermaid block in a reply is drawn (Pele), once the reply is complete ───────────────
+    await type("도식 그려줘");
+    await idle();
+    await page.waitForSelector(".diagram .pele svg", { timeout: 10_000 });
+    await page.locator(".diagram").last().scrollIntoViewIfNeeded();
+    const drawn = await page.locator(".diagram").last().evaluate((figure) => ({
+      nodes: figure.querySelectorAll("[data-id]").length,
+      text: figure.textContent ?? "",
+      failed: Boolean(figure.querySelector(".diagram-error")),
+    }));
+    await shot("07-diagram.png");
+    pass("답 안의 mermaid 마인드맵을 Pele로 그림", !drawn.failed && drawn.nodes >= 8 && drawn.text.includes("끼어들기"), `nodes=${drawn.nodes}`);
+    await shot("08-final.png");
   } catch (error) {
     pass("실행", false, error instanceof Error ? error.message.split("\n")[0]! : String(error));
     await page.screenshot({ path: join(outDir, `${provider}-99-failure.png`) }).catch(() => undefined);

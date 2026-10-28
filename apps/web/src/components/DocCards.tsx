@@ -1,6 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { diagramComponents } from "./Diagram.tsx";
+
+const DRAWN = diagramComponents();
 import { FORMAT_LABEL, PROVIDER_LABEL, isOfficeFormat, type Artifact, type DocFormat, type Handoff, type Proposal, type RefSummary } from "@workbench/contracts";
 import { accentStyle, useAppearance } from "../appearance.ts";
 import { ago } from "../format.ts";
@@ -279,7 +282,9 @@ export function HandoffCard({ handoff, viewer }: { handoff: Handoff; viewer: str
       {handoff.reply ? (
         <div className={`handoff-reply${open ? " open" : ""}`}>
           <div className="markdown">
-            <Markdown remarkPlugins={[remarkGfm]}>{open ? handoff.reply : handoff.reply.slice(0, 400) + (handoff.reply.length > 400 ? "…" : "")}</Markdown>
+            <Markdown remarkPlugins={[remarkGfm]} components={open ? DRAWN : undefined}>
+              {open ? handoff.reply : handoff.reply.slice(0, 400) + (handoff.reply.length > 400 ? "…" : "")}
+            </Markdown>
           </div>
         </div>
       ) : null}

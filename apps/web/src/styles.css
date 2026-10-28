@@ -5377,3 +5377,38 @@ kbd {
   font-size: 11.5px;
   line-height: 1.4;
 }
+
+/* ── Diagrams (Pele) ─────────────────────────────────────────────────── */
+.diagram {
+  margin: 10px 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.diagram .pele {
+  --pele-bg: var(--surface);
+  --pele-fg: var(--text);
+  --pele-muted: var(--muted);
+  --pele-line: var(--text-soft);
+  --pele-surface: var(--surface-muted);
+  --pele-surface-alt: var(--surface-raised);
+  --pele-border: var(--line);
+  --pele-accent: var(--accent);
+  --pele-font: var(--e-font);
+  --pele-radius: 8px;
+  min-height: 40px;
+}
+
+.diagram-error {
+  font-size: 13px;
+  color: var(--danger);
+}
+
+.diagram-error pre {
+  margin: 6px 0 0;
+  color: var(--text-soft);
+  white-space: pre-wrap;
+}

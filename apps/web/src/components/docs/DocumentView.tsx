@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { diagramComponents } from "../Diagram.tsx";
+
+const DRAWN = diagramComponents();
 import { FORMAT_LABEL, PROVIDER_LABEL, isOfficeFormat, type CreateTarget, type Artifact, type ArtifactRevision, type DocRef, type Proposal, type Session, type Work } from "@workbench/contracts";
 import { ApiRequestError, type Api } from "../../api.ts";
 import { accentStyle, useAppearance } from "../../appearance.ts";
@@ -495,7 +498,9 @@ export default function DocumentView({
       return (
         <div className="doc-preview">
           <div className="markdown">
-            <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>
+            <Markdown remarkPlugins={[remarkGfm]} components={DRAWN}>
+              {text}
+            </Markdown>
           </div>
         </div>
       );
@@ -506,7 +511,9 @@ export default function DocumentView({
           {editor}
           <div className="doc-preview">
             <div className="markdown">
-              <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>
+              <Markdown remarkPlugins={[remarkGfm]} components={DRAWN}>
+              {text}
+            </Markdown>
             </div>
           </div>
         </div>
