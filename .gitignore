@@ -13,3 +13,11 @@ vendor/ieumoffice/
 # Built from vendor/ieumoffice by apps/office/native/build-xlsx-wasm.sh
 apps/office/native/xlsx-wasm/engine/
 apps/office/src/sheets/xlsx-engine.wasm
+
+# Node.js an installer build brings along (release.yml downloads it)
+apps/desktop/src-tauri/node/
+
+# Arch package builds (packaging/arch)
+packaging/arch/*.pkg.tar.zst
+packaging/arch/pkg/
+packaging/arch/src/
