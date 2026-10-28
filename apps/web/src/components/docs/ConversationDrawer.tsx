@@ -128,13 +128,13 @@ export function ConversationDrawer({
             <div key={approval.id} className="drawer-approval" role="alert">
               <div className="drawer-approval-text">
                 <strong>{approval.title}</strong>
-                {approval.detail ? <code>{approval.detail}</code> : null}
+                {approval.detail && !approval.plan ? <code>{approval.detail}</code> : null}
               </div>
               <button type="button" className="button small" onClick={() => onAnswer(approval.id, "decline")}>
-                거절
+                {approval.plan ? "더 다듬기" : "거절"}
               </button>
               <button type="button" className="button primary small" onClick={() => onAnswer(approval.id, "accept")}>
-                허용
+                {approval.plan ? "계획대로 진행" : "허용"}
               </button>
             </div>
           ))}

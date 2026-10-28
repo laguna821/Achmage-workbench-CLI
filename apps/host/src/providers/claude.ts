@@ -96,6 +96,8 @@ type Runtime = {
   interrupting: boolean;
   approvals: Map<string, PendingApproval>;
   idleTimer: NodeJS.Timeout | null;
+  /** In Claude Code's plan mode ("계획 먼저") until the plan is approved. */
+  planning: boolean;
 };
 
 /** What each access means to Claude Code. */
@@ -356,7 +358,7 @@ export class ClaudeAdapter implements ProviderAdapter {
     return { url, message: "브라우저에서 Claude 로그인을 마치면 자동으로 연결됩니다." };
   }
 
-  private startRuntime(session: Session & { access: AccessMode }, work: Work): Runtime {
+  private startRuntime(session: Session & { access: AccessMode; plan?: boolean }, work: Work): Runtime {
     if (!this.binary) {
       throw new Error("claude를 찾지 못했습니다.");
     }
@@ -377,9 +379,28 @@ export class ClaudeAdapter implements ProviderAdapter {
       interrupting: false,
       approvals: new Map(),
       idleTimer: null,
+      planning: Boolean(session.plan),
     };
     const canUseTool: CanUseTool = (toolName, toolInput, options) =>
       new Promise<PermissionResult>((resolve) => {
+        // The end of plan mode: the plan waits for the user's go-ahead, whatever the access.
+        if (toolName === "ExitPlanMode") {
+          const itemId = `approval:${options.toolUseID}`;
+          const item = {
+            kind: "approval" as const,
+            id: itemId,
+            title: "이 계획대로 진행할까요?",
+            detail: typeof toolInput.plan === "string" ? toolInput.plan : null,
+            reason: null,
+            decision: null,
+            plan: true,
+            at: Date.now(),
+          };
+          runtime.approvals.set(itemId, { toolUseId: options.toolUseID, toolName, input: toolInput, resolve, item });
+          this.sink.upsertItem(session.id, item);
+          this.sink.updateSession(session.id, { status: "awaitingApproval", activity: "계획 확인 필요" });
+          return;
+        }
         // The access was raised while Claude Code was deciding: let it through as the new mode would.
         if (allows(runtime.access, toolName)) {
           resolve({ behavior: "allow", updatedInput: toolInput });
@@ -415,7 +436,7 @@ export class ClaudeAdapter implements ProviderAdapter {
         resume: session.nativeSessionId ?? undefined,
         model: session.model ?? undefined,
         effort: (session.effort as EffortLevel | null) ?? undefined,
-        permissionMode: PERMISSION_MODE[session.access],
+        permissionMode: session.plan ? "plan" : PERMISSION_MODE[session.access],
         // Lets "전체 접근" be switched on later in the same process (it is not on by itself).
         allowDangerouslySkipPermissions: true,
         canUseTool,
@@ -558,12 +579,15 @@ export class ClaudeAdapter implements ProviderAdapter {
     }, this.idleMs);
   }
 
-  async send(session: Session & { access: AccessMode }, work: Work, text: string, turnKey: string, files: AttachedFile[] = []) {
+  async send(session: Session & { access: AccessMode; plan?: boolean }, work: Work, text: string, turnKey: string, files: AttachedFile[] = []) {
     await this.init();
     const runtime = this.runtimes.get(session.id) ?? this.startRuntime(session, work);
-    if (runtime.access !== session.access) {
-      await runtime.query.setPermissionMode(PERMISSION_MODE[session.access]);
+    // "계획 먼저" is Claude Code's own plan mode for this request; otherwise the session's access.
+    const planning = Boolean(session.plan);
+    if (runtime.access !== session.access || runtime.planning !== planning) {
+      await runtime.query.setPermissionMode(planning ? "plan" : PERMISSION_MODE[session.access]);
       runtime.access = session.access;
+      runtime.planning = planning;
     }
     if (runtime.idleTimer) {
       clearTimeout(runtime.idleTimer);
@@ -613,10 +637,11 @@ export class ClaudeAdapter implements ProviderAdapter {
   async setAccess(session: Session & { access: AccessMode }) {
     const runtime = this.runtimes.get(session.id);
     if (!runtime) return;
-    await runtime.query.setPermissionMode(PERMISSION_MODE[session.access]);
+    // While planning, plan mode stays; the new access applies once the plan is approved.
+    if (!runtime.planning) await runtime.query.setPermissionMode(PERMISSION_MODE[session.access]);
     runtime.access = session.access;
     for (const [itemId, pending] of runtime.approvals) {
-      if (allows(session.access, pending.toolName)) await this.answerApproval(session, itemId, "accept");
+      if (pending.toolName !== "ExitPlanMode" && allows(session.access, pending.toolName)) await this.answerApproval(session, itemId, "accept");
     }
   }
 
@@ -676,7 +701,17 @@ export class ClaudeAdapter implements ProviderAdapter {
       return false;
     }
     runtime.approvals.delete(itemId);
-    if (decision === "accept") {
+    if (pending.toolName === "ExitPlanMode") {
+      // Going ahead leaves plan mode for the session's access; otherwise Claude keeps planning.
+      if (decision === "accept") {
+        runtime.planning = false;
+        const mode = PERMISSION_MODE[runtime.access];
+        pending.resolve({ behavior: "allow", updatedInput: pending.input, updatedPermissions: [{ type: "setMode", mode, destination: "session" }] });
+        void runtime.query.setPermissionMode(mode).catch(() => undefined);
+      } else {
+        pending.resolve({ behavior: "deny", message: "The user wants to refine the plan before going ahead. Stop here and wait for their next message." });
+      }
+    } else if (decision === "accept") {
       pending.resolve({ behavior: "allow", updatedInput: pending.input });
     } else {
       pending.resolve({ behavior: "deny", message: "The user declined this action." });

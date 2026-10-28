@@ -38,8 +38,11 @@ export interface ProviderAdapter {
   status(): ProviderStatus;
   refreshStatus(): Promise<ProviderStatus>;
   login(): Promise<LoginStart>;
-  /** `session.access` is resolved: the access this turn runs with. `files`: attachments, with paths. */
-  send(session: Session & { access: AccessMode }, work: Work, text: string, turnKey: string, files?: AttachedFile[]): Promise<void>;
+  /**
+   * `session.access` is resolved: the access this turn runs with. `session.plan`: "계획 먼저", the
+   * engine only plans (reads, no changes) and the plan waits for the go-ahead. `files`: attachments.
+   */
+  send(session: Session & { access: AccessMode; plan?: boolean }, work: Work, text: string, turnKey: string, files?: AttachedFile[]): Promise<void>;
   /**
    * Put a request into the turn that is running (the engine reads it at its next step). False when
    * no turn is running any more, so the caller can start one instead.

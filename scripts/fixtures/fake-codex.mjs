@@ -11,6 +11,8 @@
 // Local images in the input are reported at the start of the answer ("받은 그림 1장 · 1234바이트").
 // "스크린샷": like a browsing step, a command saves a screenshot (Playwright CLI's output names it),
 // then Codex looks at a second picture with its image viewer (an imageView item).
+// A turn in the read-only sandbox ("계획 먼저") answers with a plan; "계획대로 진행" says which
+// sandbox the going-ahead turn runs in.
 
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -151,8 +153,13 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
   }
   let itemId = `msg_${++counter}`;
   notify("item/started", { threadId, turnId, item: { type: "agentMessage", id: itemId, text: "", phase: null, memoryCitation: null } });
-  const lines = text.includes("길게") ? 160 : text.includes("도식") ? 14 : 6;
+  const planning = thread.sandbox === "readOnly";
+  const lines = planning ? 0 : text.includes("길게") ? 160 : text.includes("도식") ? 14 : 6;
   let full = "";
+  if (planning || text.includes("계획대로 진행")) {
+    full = planning ? "살펴보고 계획을 세웠습니다.\n\n## 계획\n\n1. 지금 상태 살펴보기\n2. 고칠 곳 고치기\n3. 결과 확인하기\n" : `계획대로 진행합니다 (샌드박스: ${thread.sandbox}).\n\n`;
+    notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: full });
+  }
   if (images) {
     full = `요청을 받았습니다${images}.\n\n`;
     notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: full });

@@ -11,6 +11,8 @@
 // Image and PDF blocks in a request are reported at the start of the answer ("받은 그림 1장 · 1234바이트").
 // "스크린샷": like a browsing step, Bash saves a screenshot (Playwright CLI's output names it), then
 // Read opens a second picture, which comes back as an image block.
+// In plan mode ("계획 먼저") it writes a plan and ends with ExitPlanMode, which asks first; approved
+// (with the mode it is set to) it goes ahead in the same turn, declined it waits.
 
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
@@ -114,6 +116,26 @@ async function runTurn(text) {
       allowed = answerToTool?.behavior === "allow";
     }
     send({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolId, content: allowed ? "total 0" : "The user declined this action.", is_error: !allowed }] }, parent_tool_use_id: null, ...base() });
+  }
+  if (permissionMode === "plan" && text.trim() !== "/compact") {
+    const plan = "## 계획\n\n1. 지금 상태 살펴보기\n2. 고칠 곳 고치기\n3. 결과 확인하기";
+    await streamText("", [{ text: "살펴보고 계획을 세웠습니다.\n\n", wait: 30 }]);
+    const toolId = `toolu_${randomUUID().slice(0, 8)}`;
+    const input = { plan };
+    send({ type: "assistant", message: { id: `msg_${randomUUID().slice(0, 8)}`, type: "message", role: "assistant", model: MODEL, content: [{ type: "tool_use", id: toolId, name: "ExitPlanMode", input }], stop_reason: "tool_use", stop_sequence: null, usage: { input_tokens: 10, output_tokens: 20, cache_creation_input_tokens: 0, cache_read_input_tokens: used } }, parent_tool_use_id: null, ...base() });
+    const decided = await ask({ subtype: "can_use_tool", tool_name: "ExitPlanMode", input, tool_use_id: toolId, decision_reason: "계획 확인" });
+    const approved = decided?.behavior === "allow";
+    const setMode = (decided?.updatedPermissions ?? []).find((update) => update.type === "setMode");
+    if (approved) permissionMode = setMode?.mode ?? "default";
+    send({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolId, content: approved ? "User has approved your plan." : decided?.message ?? "declined", is_error: !approved }] }, parent_tool_use_id: null, ...base() });
+    const reply = approved ? `계획대로 진행합니다 (권한: ${permissionMode}).\n\n` : "계획을 더 다듬겠습니다. 바꿀 점을 알려 주세요.\n\n";
+    answer = await streamText("", [{ text: reply, wait: 30 }]);
+    used += 3_000;
+    const usage = { input_tokens: 12, cache_creation_input_tokens: 0, cache_read_input_tokens: used, output_tokens: 40, server_tool_use: { web_search_requests: 0, web_fetch_requests: 0 }, service_tier: "standard" };
+    const interrupted = turn.interrupted;
+    turn = null;
+    send({ type: "result", subtype: interrupted ? "error_during_execution" : "success", is_error: interrupted, ...(interrupted ? { errors: ["Request interrupted by user"] } : { result: answer }), stop_reason: interrupted ? null : "end_turn", duration_ms: Date.now() - started, duration_api_ms: 1, num_turns: 1, total_cost_usd: 0.01, usage, modelUsage: {}, permission_denials: [], queued_turn_count: queue.length, ...base() });
+    return;
   }
   if (text.includes("스크린샷")) {
     const step = (name, input, content) => {

@@ -72,6 +72,9 @@ export function describeTool(name: string, input: Record<string, unknown>): Tool
         detail: null,
         activity: "웹 확인 중",
       };
+    case "ExitPlanMode":
+      // The plan itself is shown on the card that asks for the go-ahead.
+      return { tool: "other", title: "계획 보여 주기", detail: null, activity: "계획 확인 기다리는 중" };
     case "Task":
     case "Agent":
       return {

@@ -308,10 +308,10 @@ export function App() {
 
   const actions: WorkActions = useMemo(
     () => ({
-      send: async (session: Session, text: string, refs: DocRef[] = [], create: CreateTarget | null = null, mode: "auto" | "queue" = "auto", attachments: Attachment[] = []) => {
+      send: async (session: Session, text: string, refs: DocRef[] = [], create: CreateTarget | null = null, mode: "auto" | "queue" = "auto", attachments: Attachment[] = [], plan = false) => {
         if (!api) return false;
         try {
-          const result = await api.send(session.id, newRequestId(), text, refs, create, mode, attachments);
+          const result = await api.send(session.id, newRequestId(), text, refs, create, mode, attachments, plan);
           if (result.delivery === "queued") setToast("작업이 끝나면 이어서 보냅니다. 입력창 위에서 고치거나 지울 수 있습니다.");
           return true;
         } catch (error) {

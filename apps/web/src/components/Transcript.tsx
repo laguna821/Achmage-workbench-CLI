@@ -8,6 +8,7 @@ import { CREATE_LABEL } from "@workbench/contracts";
 import { Icon, type IconName } from "./Icon.tsx";
 import { diagramComponents } from "./Diagram.tsx";
 import { AttachmentStrip } from "./Attachments.tsx";
+import { PlanApproval } from "./PlanFirst.tsx";
 
 const DRAWN = diagramComponents();
 const STREAMING = diagramComponents(true);
@@ -205,6 +206,7 @@ function WorkBlock({ block }: { block: Extract<Block, { type: "work" }> }) {
 }
 
 function ApprovalCard({ item, onAnswer, onTrust }: { item: Item<"approval">; onAnswer: (decision: "accept" | "decline") => void; onTrust?: () => void }) {
+  if (item.plan) return <PlanApproval item={item} onAnswer={onAnswer} />;
   if (item.decision !== null) {
     const label = item.decision === "accept" ? "허용함" : item.decision === "decline" ? "거절함" : "응답 없이 지나감";
     return (
@@ -566,6 +568,7 @@ export function Transcript({
                     <span>요청</span>
                     <span className="turn-meta-sep">·</span>
                     <span>{clock(turn.user.at)}</span>
+                    {turn.user.plan ? <span className="plan-tag">계획 먼저</span> : null}
                     {turn.user.undelivered ? (
                       <span className="steer-tag undelivered" title="멈춰서 엔진에 전해지지 않았습니다. 입력창 위 목록에서 다시 보낼 수 있습니다.">
                         전해지지 않음

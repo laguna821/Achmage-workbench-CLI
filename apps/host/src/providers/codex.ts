@@ -140,7 +140,7 @@ export class CodexAdapter implements ProviderAdapter {
   /** Fixed by the environment for tests (WORKBENCH_CODEX_APPROVAL / _SANDBOX); otherwise per session. */
   private readonly forced: { approvalPolicy?: string; sandbox?: string };
   /** threadId -> the access its turns run with now */
-  private readonly threadAccess = new Map<string, AccessMode>();
+  private readonly threadAccess = new Map<string, AccessMode | "plan">();
   /** sessionId -> the access the user last set (approvals arriving meanwhile follow it) */
   private readonly sessionAccess = new Map<string, AccessMode>();
   /** threads compacting on request (their turn is not a reply) */
@@ -341,19 +341,21 @@ export class CodexAdapter implements ProviderAdapter {
     return threadId;
   }
 
-  async send(session: Session & { access: AccessMode }, work: Work, text: string, _turnKey: string, files: AttachedFile[] = []) {
+  async send(session: Session & { access: AccessMode; plan?: boolean }, work: Work, text: string, _turnKey: string, files: AttachedFile[] = []) {
     await this.ensureRunning();
     const rpc = this.rpc!;
     const threadId = await this.threadFor(session, work);
     // Model and effort are per turn, so a change in the picker applies to the next message.
     const { model, effort } = turnSettings(session, this.current.models);
     // So is access: a change since the thread started is passed with the turn (and kept by Codex).
-    const policy = this.policyFor(session.access);
-    const changed = this.threadAccess.get(threadId) !== session.access;
-    this.threadAccess.set(threadId, session.access);
+    // A turn that only plans reads without asking and changes nothing (read-only sandbox).
+    const effective = session.plan ? "plan" : session.access;
+    const policy = session.plan ? { approvalPolicy: "never" as AskForApproval, sandbox: "read-only" as SandboxMode } : this.policyFor(session.access);
+    const changed = this.threadAccess.get(threadId) !== effective;
+    this.threadAccess.set(threadId, effective);
     const response = await rpc.request<TurnStartResponse>("turn/start", {
       threadId,
-      input: codexInput(text, files),
+      input: codexInput(session.plan ? `${PLAN_FIRST}\n\n${text}` : text, files),
       ...(model ? { model } : {}),
       ...(effort ? { effort: effort as ReasoningEffort } : {}),
       ...(changed ? { approvalPolicy: policy.approvalPolicy, sandboxPolicy: sandboxPolicy(policy.sandbox) } : {}),
@@ -705,6 +707,10 @@ export class CodexAdapter implements ProviderAdapter {
     }
   }
 }
+
+/** What a "계획 먼저" turn asks of Codex (the gateway then asks the user for the go-ahead). */
+const PLAN_FIRST =
+  "[계획 먼저] 이번 차례에는 파일을 바꾸거나 무엇을 실행해 고치지 마세요. 필요한 만큼 살펴본 뒤, 할 일을 단계별 계획으로 제시하고 멈추세요. 사용자가 계획을 확인하면 다음 요청에서 진행합니다.";
 
 /** A request with its files: pictures as local images Codex reads itself, anything else named by path. */
 export function codexInput(text: string, files: AttachedFile[]): UserInput[] {

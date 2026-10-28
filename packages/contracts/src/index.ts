@@ -126,7 +126,7 @@ export type ContextUsage = { used: number; window: number | null; compactAt: num
  * A request written while the engine was working, sent as the next turn when this one ends.
  * `held`: kept after a stop, a failure, a restart or a steer the stop dropped — sent only by hand.
  */
-export type QueuedMessage = { id: string; text: string; refs: DocRef[]; create: CreateTarget | null; at: number; held?: boolean; attachments?: Attachment[] };
+export type QueuedMessage = { id: string; text: string; refs: DocRef[]; create: CreateTarget | null; at: number; held?: boolean; attachments?: Attachment[]; plan?: boolean };
 
 /**
  * A file pasted or dropped into the input (a picture, a PDF, any file), kept by the gateway by its
@@ -272,6 +272,8 @@ export type TranscriptItem =
       id: string;
       text: string;
       at: number;
+      /** Sent with "계획 먼저": the engine plans and waits for the go-ahead. */
+      plan?: boolean;
       /** Documents pinned to this request. */
       refs?: RefSummary[];
       /** Sent from another session ("다른 세션에"). */
@@ -311,6 +313,11 @@ export type TranscriptItem =
       reason: string | null;
       decision: ApprovalDecision | "expired" | null;
       at: number;
+      /**
+       * A plan waiting for the go-ahead ("계획 먼저"): accept runs it, decline keeps planning.
+       * `detail` holds the plan when it is not the reply above (Claude's plan mode).
+       */
+      plan?: boolean;
     }
   | { kind: "notice"; id: string; level: "info" | "error"; text: string; at: number }
   /** A document this turn created or changed, opened in the central area. */
@@ -530,6 +537,8 @@ export type SendMessageRequest = {
   mode?: "auto" | "steer" | "queue";
   /** Files pasted or dropped into the input (uploaded first to /api/attachments). */
   attachments?: Attachment[];
+  /** "계획 먼저": the engine only plans this turn and waits for the go-ahead. */
+  plan?: boolean;
 };
 
 export type SendResult = { duplicate: boolean; delivery: "turn" | "steered" | "queued" };

@@ -329,6 +329,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
               parseCreate(body.create),
               body.mode === "steer" || body.mode === "queue" ? body.mode : "auto",
               parseAttachments(body.attachments),
+              body.plan === true,
             ),
           );
         }

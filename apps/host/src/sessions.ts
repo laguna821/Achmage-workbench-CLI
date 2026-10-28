@@ -322,6 +322,9 @@ export class SessionManager {
     },
   };
 
+  /** Sessions whose running turn only plans ("계획 먼저"), by the request that asked for it. */
+  private readonly planning = new Map<string, string>();
+
   /** Pasted and dropped files, kept by content for requests. */
   readonly attachments: Attachments;
 
@@ -409,7 +412,7 @@ export class SessionManager {
       const next = session?.queued.find((entry) => !entry.held);
       if (!session || session.status !== "idle" || !next) return;
       this.saveSession({ ...session, queued: session.queued.filter((entry) => entry !== next) });
-      void this.send(sessionId, next.id, next.text, next.refs, null, next.create, "auto", next.attachments ?? []).catch((error: unknown) => {
+      void this.send(sessionId, next.id, next.text, next.refs, null, next.create, "auto", next.attachments ?? [], next.plan === true).catch((error: unknown) => {
         this.sink.upsertItem(sessionId, {
           kind: "notice",
           id: `queue-failed:${next.id}`,
@@ -446,7 +449,7 @@ export class SessionManager {
     const entry = session.queued.find((item) => item.id === queuedId);
     if (!entry) throw new HttpError(404, "queued_not_found", "보낼 예정인 요청이 없습니다.");
     this.saveSession({ ...session, queued: session.queued.filter((item) => item.id !== queuedId) });
-    return this.send(sessionId, entry.id, entry.text, entry.refs, null, entry.create, "steer", entry.attachments ?? []);
+    return this.send(sessionId, entry.id, entry.text, entry.refs, null, entry.create, entry.plan ? "queue" : "steer", entry.attachments ?? [], entry.plan === true);
   }
 
   snapshot(): Snapshot {
@@ -871,6 +874,7 @@ export class SessionManager {
     create: CreateTarget | null = null,
     mode: "auto" | "steer" | "queue" = "auto",
     attachments: Attachment[] = [],
+    plan = false,
   ): Promise<SendResult> {
     const session = this.requireSession(sessionId);
     const trimmed = text.trim() || (attachments.length ? "첨부한 파일을 봐 주세요." : "");
@@ -896,8 +900,10 @@ export class SessionManager {
       // The engine is working. A request steers into the running turn (the engine takes it at its
       // next step) when it can; otherwise it waits and becomes the next turn ("끝나면 보내기").
       const adapter = this.adapter(session.provider);
+      // A request to plan first is a turn of its own: it waits for the running one.
       const steerable =
         mode !== "queue" &&
+        !plan &&
         Boolean(adapter.steer) &&
         (session.status === "running" || session.status === "starting") &&
         !from &&
@@ -929,13 +935,23 @@ export class SessionManager {
       }
       const current = this.requireSession(sessionId);
       if (current.status !== "idle" && current.status !== "error") {
-        const waiting: QueuedMessage = { id: requestId, text: trimmed, refs, create, at: Date.now(), ...(attachments.length ? { attachments } : {}) };
+        const waiting: QueuedMessage = {
+          id: requestId,
+          text: trimmed,
+          refs,
+          create,
+          at: Date.now(),
+          ...(attachments.length ? { attachments } : {}),
+          ...(plan ? { plan: true } : {}),
+        };
         this.saveSession({ ...current, queued: [...current.queued, waiting] });
         return { duplicate: false, delivery: "queued" };
       }
       // The turn ended meanwhile: this request starts the next one.
     }
     this.steering.delete(sessionId);
+    // A plan still waiting for the go-ahead is passed over by a new request.
+    this.expirePlans(sessionId);
     // Pin each document: the engine reads exactly this revision; edits go to a working copy.
     const prepared: { ref: DocRef; pinned: string; pinnedView: string | null; proposal: Proposal | null }[] = [];
     for (const ref of refs) prepared.push({ ref, ...(await this.documents.prepare(ref, sessionId, requestId, work.cwd)) });
@@ -954,17 +970,20 @@ export class SessionManager {
       id: `user:${requestId}`,
       text: trimmed,
       at: Date.now(),
+      ...(plan ? { plan: true } : {}),
       ...(refs.length ? { refs: refs.map((ref) => this.documents.summary(ref)) } : {}),
       ...(from ? { from } : {}),
       ...(created ? { create: { format: created.target.format, name: basename(created.path), path: created.path } } : {}),
       ...(attachments.length ? { attachments } : {}),
     });
     this.turnStarted.set(sessionId, Date.now());
-    this.sink.updateSession(sessionId, { status: "starting", activity: "응답 준비 중", lastError: null });
+    if (plan) this.planning.set(sessionId, requestId);
+    else this.planning.delete(sessionId);
+    this.sink.updateSession(sessionId, { status: "starting", activity: plan ? "계획 세우는 중" : "응답 준비 중", lastError: null });
     this.saveWork({ ...work, activeSessionId: sessionId, updatedAt: Date.now() });
     try {
       const current = this.requireSession(sessionId);
-      await this.adapter(session.provider).send({ ...current, access: this.accessOf(current) }, work, engineText, requestId, files);
+      await this.adapter(session.provider).send({ ...current, access: this.accessOf(current), plan }, work, engineText, requestId, files);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       for (const entry of prepared) if (entry.proposal) this.documents.discardProposal(entry.proposal.id);
@@ -1181,7 +1200,29 @@ export class SessionManager {
   }
 
   /** A turn ended: working copies become proposals, and answered handoffs go back to their source. */
+  /**
+   * A planning turn ended: unless the engine asked for the go-ahead itself (Claude's plan mode ends
+   * with one), the plan above waits for it here.
+   */
+  private planEnded(sessionId: string, status: "completed" | "interrupted" | "failed") {
+    const requestId = this.planning.get(sessionId);
+    this.planning.delete(sessionId);
+    if (!requestId || status !== "completed") return;
+    const items = this.loadItems(sessionId);
+    const start = items.findIndex((item) => item.id === `user:${requestId}`);
+    if (start < 0 || items.slice(start).some((item) => item.kind === "approval" && item.plan)) return;
+    this.sink.upsertItem(sessionId, { kind: "approval", id: `plan:${requestId}`, title: "이 계획대로 진행할까요?", detail: null, reason: null, decision: null, plan: true, at: Date.now() });
+  }
+
+  /** Plans left waiting when the user writes something else instead. */
+  private expirePlans(sessionId: string) {
+    for (const item of this.loadItems(sessionId)) {
+      if (item.kind === "approval" && item.plan && item.decision === null && item.id.startsWith("plan:")) this.sink.upsertItem(sessionId, { ...item, decision: "expired" });
+    }
+  }
+
   private afterTurn(sessionId: string, status: "completed" | "interrupted" | "failed") {
+    this.planEnded(sessionId, status);
     // After a stop or a failure the waiting requests stay until the user sends them.
     const waiting = status === "completed" ? 0 : this.holdQueued(sessionId);
     if (waiting) {
@@ -1395,6 +1436,14 @@ export class SessionManager {
     const session = this.requireSession(sessionId);
     if (decision !== "accept" && decision !== "decline") {
       throw new HttpError(400, "invalid_decision", "accept 또는 decline만 가능합니다.");
+    }
+    // A plan that waits here (the engine's turn is over): going ahead is the next request.
+    const plan = itemId.startsWith("plan:") ? this.loadItems(sessionId).find((item) => item.id === itemId) : undefined;
+    if (plan?.kind === "approval") {
+      if (plan.decision !== null) throw new HttpError(409, "approval_not_pending", "이미 처리되었거나 만료된 승인 요청입니다.");
+      this.sink.upsertItem(sessionId, { ...plan, decision });
+      if (decision === "accept") await this.send(sessionId, `go-${itemId.slice(5)}`, "계획대로 진행해 주세요.");
+      return;
     }
     const handled = await this.adapter(session.provider).answerApproval(session, itemId, decision);
     if (!handled) {

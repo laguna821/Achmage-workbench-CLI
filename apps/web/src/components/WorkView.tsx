@@ -18,10 +18,11 @@ import { workSessions } from "../tree.ts";
 import { Transcript } from "./Transcript.tsx";
 import { AccessPicker, ContextGauge } from "./SessionControls.tsx";
 import { PendingFiles, usePendingFiles } from "./Attachments.tsx";
+import { PlanToggle } from "./PlanFirst.tsx";
 
 export type WorkActions = {
   /** Send a request; while the engine works it steers into the turn or waits ("queue"). */
-  send: (session: Session, text: string, refs?: DocRef[], create?: CreateTarget | null, mode?: "auto" | "queue", attachments?: Attachment[]) => Promise<boolean>;
+  send: (session: Session, text: string, refs?: DocRef[], create?: CreateTarget | null, mode?: "auto" | "queue", attachments?: Attachment[], plan?: boolean) => Promise<boolean>;
   /** Keep a pasted or dropped file at the gateway for the next request (null: it could not). */
   upload: (file: File) => Promise<Attachment | null>;
   queued: {
@@ -287,6 +288,13 @@ export function WorkView({
   const [attachOpen, setAttachOpen] = useState(false);
   // Files pasted or dropped into the input go with the request being written for this work.
   const pending = usePendingFiles(actions.upload, work.id);
+  // "계획 먼저": on until a plan is accepted (or turned off), for this work.
+  const [planFirst, setPlanFirst] = useState(false);
+  const [planWork, setPlanWork] = useState(work.id);
+  if (planWork !== work.id) {
+    setPlanWork(work.id);
+    setPlanFirst(false);
+  }
   const filePicker = useRef<HTMLInputElement>(null);
   const [pathInput, setPathInput] = useState("");
   const artifacts = Object.values(state.artifacts)
@@ -549,7 +557,12 @@ export function WorkView({
           provider={active.provider}
           running={working}
           loading={!transcript}
-          onAnswer={(itemId, decision) => actions.answer(active, itemId, decision)}
+          onAnswer={(itemId, decision) => {
+            // Going ahead with a plan ends "계획 먼저" for the requests after it.
+            const answered = transcript?.items.find((item) => item.id === itemId);
+            if (decision === "accept" && answered?.kind === "approval" && answered.plan) setPlanFirst(false);
+            actions.answer(active, itemId, decision);
+          }}
           onTrust={() => actions.setAccess(active, active.provider, "full")}
           focusItem={focusItem ?? null}
           onFocusDone={onFocusDone}
@@ -579,7 +592,7 @@ export function WorkView({
             onPick: (item) => setAttached((current) => (current.some((entry) => entry.id === item.id) ? current : [...current, { id: item.id, mode: "review" }])),
           }}
           draftKey={`work:${work.id}:${active?.id ?? "none"}`}
-          placeholder="이 작업에 이어서 요청하기"
+          placeholder={planFirst ? "계획부터 세울 요청 (계획을 보고 진행할지 고릅니다)" : "이 작업에 이어서 요청하기"}
           busy={busy}
           waiting={working}
           steerable={working && !handoffTo}
@@ -588,6 +601,7 @@ export function WorkView({
             <>
               <AccessPicker provider={pickerProvider} value={access} onChange={(mode) => actions.setAccess(active, pickerProvider, mode)} />
               {active ? <ContextGauge context={active.context} canCompact={!busy && Boolean(active.nativeSessionId)} onCompact={() => actions.compact(active)} /> : null}
+              {!handoffTo ? <PlanToggle on={planFirst} onChange={setPlanFirst} /> : null}
             </>
           }
           onFiles={pending.add}
@@ -649,7 +663,7 @@ export function WorkView({
             if (!source) return false;
             const sent = handoffTo
               ? await actions.handoff(source, handoffTo, text, refs, carried)
-              : await actions.send(source, text, refs, create, mode ?? "auto", carried);
+              : await actions.send(source, text, refs, create, mode ?? "auto", carried, planFirst);
             if (sent) {
               setHandoffTo(null);
               setAttached([]);

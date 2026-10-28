@@ -89,8 +89,16 @@ export class Api {
   createPage = (workId: string, name = "") => this.request<Artifact>("POST", `/api/works/${workId}/pages`, { name });
   /** Compact the conversation now (the engine also does so on its own when the context is full). */
   compact = (sessionId: string) => this.request<{ ok: boolean }>("POST", `/api/sessions/${sessionId}/compact`);
-  send = (sessionId: string, requestId: string, text: string, refs: DocRef[] = [], create: CreateTarget | null = null, mode: "auto" | "steer" | "queue" = "auto", attachments: Attachment[] = []) =>
-    this.request<SendResult>("POST", `/api/sessions/${sessionId}/messages`, { requestId, text, refs, create, mode, attachments });
+  send = (
+    sessionId: string,
+    requestId: string,
+    text: string,
+    refs: DocRef[] = [],
+    create: CreateTarget | null = null,
+    mode: "auto" | "steer" | "queue" = "auto",
+    attachments: Attachment[] = [],
+    plan = false,
+  ) => this.request<SendResult>("POST", `/api/sessions/${sessionId}/messages`, { requestId, text, refs, create, mode, attachments, plan });
   /** A pasted or dropped file, kept by the gateway until a request names it. */
   async uploadAttachment(file: File): Promise<Attachment> {
     const response = await fetch("/api/attachments", {
