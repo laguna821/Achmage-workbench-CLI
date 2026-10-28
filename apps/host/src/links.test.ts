@@ -388,6 +388,25 @@ describe("linked sessions", () => {
     expect(linkOf(manager, third.id)).toMatchObject({ state: "ended", reason: "gone" });
   });
 
+  it("ends when an engine stops without ending the turn the link gave it", async () => {
+    const { manager, claude, codex } = setup();
+    const { a, b } = pair(manager);
+    const started = await start(manager, [a.id, b.id]);
+    claude.answer(a.id, "첫 의견");
+    await tick();
+    // Codex's process exits mid-turn: a notice and back to idle, no end line.
+    manager.sink.upsertItem(b.id, { kind: "notice", id: "exit", level: "error", text: "Codex 엔진이 종료되어 응답이 끊겼습니다.", at: Date.now() });
+    manager.sink.updateSession(b.id, { status: "idle", activity: null });
+    await tick();
+    expect(linkOf(manager, started.id)).toMatchObject({ state: "ended", reason: "failed" });
+    expect(codex.sent).toHaveLength(1);
+    // Being looked at (a session update without a status change) changes nothing for a live link.
+    const other = await manager.links.start({ requestId: "other", participants: [a.id, b.id], goal: "다시", maxRounds: 1, maxMinutes: 5 });
+    manager.updateSession(a.id, { seen: true });
+    await tick();
+    expect(linkOf(manager, other.id).state).toBe("active");
+  });
+
   it("after a restart a link is paused and never goes on by itself; going on asks the cut turn again", async () => {
     const { dir, manager, claude } = setup();
     const { a, b } = pair(manager);

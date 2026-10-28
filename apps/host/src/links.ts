@@ -457,6 +457,15 @@ export class SessionLinks {
       this.end(link, "gone");
       return;
     }
+    // The engine stopped without ending the turn the link gave it (it crashed, or its process was
+    // closed): no answer will come to hand over.
+    if (link.state === "active" && link.participants[link.turn] === sessionId && !busy(session)) {
+      const latest = latestTurn(this.host.items(sessionId));
+      if (latest.request?.link?.linkId === link.id && latest.status === null) {
+        this.end(link, "failed");
+        return;
+      }
+    }
     this.syncClock(link.id);
   }
 
