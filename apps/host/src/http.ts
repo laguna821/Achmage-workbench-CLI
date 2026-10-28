@@ -3,7 +3,7 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { dirname, extname, join, normalize, resolve, sep } from "node:path";
 import { timingSafeEqual } from "node:crypto";
-import { isAccessMode, type AccessMode, type DocRef, type Provider, type SequencedEvent } from "@workbench/contracts";
+import { isAccessMode, type AccessMode, type Attachment, type DocRef, type Provider, type SequencedEvent } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
 import { HttpError, type SessionManager } from "./sessions.ts";
 import { DESIGN_PRESETS, systemFonts, type DesignPreset } from "./design.ts";
@@ -328,6 +328,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
               null,
               parseCreate(body.create),
               body.mode === "steer" || body.mode === "queue" ? body.mode : "auto",
+              parseAttachments(body.attachments),
             ),
           );
         }
@@ -358,6 +359,17 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const body = await readJson(req, 64_000_000);
         const preset = (typeof body.preset === "string" && body.preset in DESIGN_PRESETS ? body.preset : "square") as DesignPreset;
         return sendJson(res, 201, manager.createDesign(parts[1], String(body.name ?? ""), preset, typeof body.text === "string" ? body.text : null));
+      }
+      if (method === "POST" && path === "/api/attachments") {
+        const data = await readBody(req, 26 * 1024 * 1024);
+        const name = decodeURIComponent(String(req.headers["x-file-name"] ?? "첨부"));
+        return sendJson(res, 201, manager.attachments.save(data, name, String(req.headers["content-type"] ?? "")));
+      }
+      if (method === "GET" && parts[0] === "attachments" && parts[1] && parts.length === 2) {
+        const file = manager.attachments.path(decodeURIComponent(parts[1]));
+        res.writeHead(200, { "content-type": attachmentType(file), "cache-control": "private, max-age=31536000, immutable", "x-content-type-options": "nosniff" });
+        createReadStream(file).pipe(res);
+        return;
       }
       if (method === "GET" && path === "/api/fonts") return sendJson(res, 200, { fonts: systemFonts() });
       if (method === "GET" && path === "/api/tools") return sendJson(res, 200, manager.tools());
@@ -475,6 +487,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
             targetSessionId: String(body.targetSessionId ?? ""),
             text: String(body.text ?? ""),
             refs: parseRefs(body.refs),
+            attachments: parseAttachments(body.attachments),
           }),
         );
       }
@@ -502,4 +515,20 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       }
     }
   });
+}
+
+/** Attachments named in a message body, shape-checked (the gateway resolves them to its own files). */
+function parseAttachments(value: unknown): Attachment[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
+    .slice(0, 20)
+    .map((entry) => ({ id: String(entry.id ?? ""), name: String(entry.name ?? "첨부"), mime: String(entry.mime ?? "application/octet-stream"), size: Number(entry.size ?? 0) }));
+}
+
+/** Pictures and PDFs show inline; anything else downloads (never rendered as a page of ours). */
+function attachmentType(file: string) {
+  const extension = extname(file).toLowerCase();
+  const known: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif", ".pdf": "application/pdf" };
+  return known[extension] ?? "application/octet-stream";
 }

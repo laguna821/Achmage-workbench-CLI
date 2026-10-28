@@ -1,0 +1,132 @@
+/* Files pasted or dropped into the input, and what a request carried. */
+
+.attach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 260px;
+  height: 30px;
+  padding: 0 4px 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.attach-chip img {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex: none;
+}
+
+.attach-chip .attach-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attach-chip .attach-size {
+  flex: none;
+  color: var(--faint);
+}
+
+.attach-chip.failed {
+  border-color: var(--danger);
+}
+
+.attach-chip.failed .attach-size {
+  color: var(--danger);
+}
+
+.attach-chip button {
+  display: inline-flex;
+  flex: none;
+  padding: 3px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.attach-chip button:hover {
+  background: var(--surface-muted);
+  color: var(--text);
+}
+
+.attach-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.attach-thumb {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-muted);
+  cursor: zoom-in;
+}
+
+/* Never larger than the picture itself (a small one stays sharp). */
+.attach-thumb img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 280px;
+  max-height: 120px;
+}
+
+.attach-thumb-wait {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 72px;
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.attach-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: rgb(0 0 0 / 0.72);
+  cursor: zoom-out;
+}
+
+.attach-lightbox img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 8px;
+  box-shadow: var(--popover-shadow);
+}
+
+/* A file dragged over the input: where it lands. */
+.composer[data-drop] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.composer-drop {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--accent);
+  font-size: 13.5px;
+  font-weight: 600;
+  pointer-events: none;
+}

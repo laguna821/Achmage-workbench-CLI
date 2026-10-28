@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { filterMentions, insertMention, mentionTriggerAt, relocateMentions, type MentionItem, type MentionSpan } from "../mention.ts";
+import { pastedFiles } from "./Attachments.tsx";
 import { FormatBadge } from "./DocCards.tsx";
 import { Icon } from "./Icon.tsx";
 
@@ -29,6 +30,8 @@ export function Composer({
   autoFocus,
   mentions,
   left,
+  onFiles,
+  attachments = 0,
 }: {
   draftKey: string;
   placeholder: string;
@@ -47,6 +50,10 @@ export function Composer({
   mentions?: ComposerMentions;
   /** Controls at the left of the bar (access, context). */
   left?: ReactNode;
+  /** Files pasted (Ctrl+V) or dropped on the box, to go with the next request. */
+  onFiles?: (files: File[]) => void;
+  /** Files already with the request: it can go without text. */
+  attachments?: number;
 }) {
   const [text, setText] = useState(() => localStorage.getItem(DRAFT_PREFIX + draftKey) ?? "");
   const [sending, setSending] = useState(false);
@@ -56,6 +63,7 @@ export function Composer({
   const [composing, setComposing] = useState(false);
   const [active, setActive] = useState(0);
   const [dismissed, setDismissed] = useState<number | null>(null);
+  const [dropping, setDropping] = useState(false);
   const pendingCaret = useRef<number | null>(null);
   const trigger = mentions ? mentionTriggerAt(text, caret, { spans, composing }) : null;
   const rows = trigger && trigger.start !== dismissed && mentions ? filterMentions(mentions.items, trigger.query).slice(0, 8) : [];
@@ -98,7 +106,7 @@ export function Composer({
     if (autoFocus) ref.current?.focus();
   }, [autoFocus, draftKey]);
 
-  const canSend = !disabled && !sending && text.trim().length > 0;
+  const canSend = !disabled && !sending && (text.trim().length > 0 || attachments > 0);
 
   const submit = async (mode: "auto" | "queue" = "auto") => {
     if (!canSend) return;
@@ -115,7 +123,28 @@ export function Composer({
   };
 
   return (
-    <div className="composer" data-phase={waiting ? "waiting" : undefined}>
+    <div
+      className="composer"
+      data-phase={waiting ? "waiting" : undefined}
+      data-drop={dropping ? "" : undefined}
+      onDragOver={(event) => {
+        if (!onFiles || disabled || !event.dataTransfer.types.includes("Files")) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+        setDropping(true);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropping(false);
+      }}
+      onDrop={(event) => {
+        setDropping(false);
+        if (!onFiles || disabled || !event.dataTransfer.files.length) return;
+        event.preventDefault();
+        onFiles(Array.from(event.dataTransfer.files));
+        ref.current?.focus();
+      }}
+    >
+      {dropping ? <div className="composer-drop">놓으면 요청에 붙입니다</div> : null}
       {header ? <div className="composer-header">{header}</div> : null}
       {listOpen ? (
         <div className="mention-list" role="listbox" aria-label="문서 멘션">
@@ -161,6 +190,12 @@ export function Composer({
           setCaret(event.target.selectionStart);
         }}
         onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
+        onPaste={(event) => {
+          const files = onFiles ? pastedFiles(event.clipboardData) : [];
+          if (!files.length) return;
+          event.preventDefault();
+          onFiles!(files);
+        }}
         onCompositionStart={() => setComposing(true)}
         onCompositionEnd={(event) => {
           setComposing(false);
@@ -195,7 +230,7 @@ export function Composer({
         <div className="composer-left">{left}</div>
         <div className="composer-right">
           {target}
-          {busy && text.trim() ? (
+          {busy && (text.trim() || attachments > 0) ? (
             <>
               {steerable ? (
                 <button type="button" className="ghost-button small queue-button" onClick={() => void submit("queue")} disabled={!canSend} title="작업이 끝나면 이어서 보내기 (Alt+Enter)">

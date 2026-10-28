@@ -4,12 +4,13 @@ import remarkGfm from "remark-gfm";
 import { diagramComponents } from "../Diagram.tsx";
 
 const DRAWN = diagramComponents();
-import { FORMAT_LABEL, PROVIDER_LABEL, isOfficeFormat, type CreateTarget, type Artifact, type ArtifactRevision, type DocRef, type Proposal, type Session, type Work } from "@workbench/contracts";
+import { FORMAT_LABEL, PROVIDER_LABEL, isOfficeFormat, type CreateTarget, type Artifact, type ArtifactRevision, type Attachment, type DocRef, type Proposal, type Session, type Work } from "@workbench/contracts";
 import { ApiRequestError, type Api } from "../../api.ts";
 import { accentStyle, useAppearance } from "../../appearance.ts";
 import { ago } from "../../format.ts";
 import { isBusy, type State } from "../../state.ts";
 import { Composer } from "../Composer.tsx";
+import { PendingFiles, usePendingFiles } from "../Attachments.tsx";
 import { FormatBadge } from "../DocCards.tsx";
 import { EngineMark } from "../EngineMark.tsx";
 import { Icon } from "../Icon.tsx";
@@ -37,7 +38,7 @@ type Conflict = { code: string; message: string } | null;
 const DRAFT_KEY = (artifactId: string) => `workbench.docDraft.${artifactId}`;
 const TEXT_FORMATS = new Set(["markdown", "text", "html", "hwpx", "hwp"]);
 
-export type DocSend = (target: Session | null, text: string, refs: DocRef[], handoffTo: Session | null, create: CreateTarget | null) => Promise<boolean>;
+export type DocSend = (target: Session | null, text: string, refs: DocRef[], handoffTo: Session | null, create: CreateTarget | null, attachments: Attachment[]) => Promise<boolean>;
 
 /**
  * A document in the central area (mockup 03). Saving makes a revision; requests carry the saved
@@ -123,6 +124,15 @@ export default function DocumentView({
   const [handoffTo, setHandoffTo] = useState<Session | null>(null);
   // Other documents mentioned with "@" (read as material), and a new document as the result.
   const [others, setOthers] = useState<string[]>([]);
+  // Pictures and files pasted or dropped into the input below the document go with the request.
+  const pending = usePendingFiles(
+    (file) =>
+      api.uploadAttachment(file).catch((error: unknown) => {
+        onToast(error instanceof Error ? error.message : "파일을 올리지 못했습니다.");
+        return null;
+      }),
+    artifactId,
+  );
   const [create, setCreate] = useState<CreateTarget | null>(null);
   const [targetOpen, setTargetOpen] = useState(false);
   const saving = useRef<Promise<number | null> | null>(null);
@@ -816,12 +826,15 @@ export default function DocumentView({
           />
         ) : null}
         <Composer
+          onFiles={pending.add}
+          attachments={pending.count}
           draftKey={`doc:${artifactId}`}
           placeholder={selection ? "이 부분에 요청하기" : "이 문서에 요청하기"}
           busy={Boolean(sendTarget && isBusy(sendTarget))}
           waiting={Boolean(sendTarget && (sendTarget.status === "running" || sendTarget.status === "starting"))}
           header={
             <div className="doc-chips">
+              <PendingFiles files={pending.files} onRemove={(key) => pending.remove([key])} />
               {handoffTo ? (
                 <span className="target-chip" style={accentStyle(lookOf(handoffTo.provider))}>
                   <EngineMark provider={handoffTo.provider} size={13} /> @{handoffTo.purpose}
@@ -887,13 +900,15 @@ export default function DocumentView({
               const other = state.artifacts[id];
               if (other) refs.push({ artifactId: other.id, revision: other.revision, mode: "review", selection: null });
             }
-            const sent = await onSend(session, message, refs, handoffTo, handoffTo ? null : create);
+            const { carried, done } = await pending.take();
+            const sent = await onSend(session, message, refs, handoffTo, handoffTo ? null : create, carried);
             // The answer will come up in the drawer, under the document.
             if (sent && !handoffTo) setDrawer((current) => (current === "open" ? current : "peek"));
             if (sent) {
               if (handoffTo) setHandoffTo(null);
               setOthers([]);
               setCreate(null);
+              done();
             }
             return sent;
           }}

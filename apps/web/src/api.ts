@@ -1,6 +1,7 @@
 import type {
   ApiError,
   Artifact,
+  Attachment,
   ArtifactRevision,
   CreateTarget,
   DocRef,
@@ -88,13 +89,24 @@ export class Api {
   createPage = (workId: string, name = "") => this.request<Artifact>("POST", `/api/works/${workId}/pages`, { name });
   /** Compact the conversation now (the engine also does so on its own when the context is full). */
   compact = (sessionId: string) => this.request<{ ok: boolean }>("POST", `/api/sessions/${sessionId}/compact`);
-  send = (sessionId: string, requestId: string, text: string, refs: DocRef[] = [], create: CreateTarget | null = null, mode: "auto" | "steer" | "queue" = "auto") =>
-    this.request<SendResult>("POST", `/api/sessions/${sessionId}/messages`, { requestId, text, refs, create, mode });
+  send = (sessionId: string, requestId: string, text: string, refs: DocRef[] = [], create: CreateTarget | null = null, mode: "auto" | "steer" | "queue" = "auto", attachments: Attachment[] = []) =>
+    this.request<SendResult>("POST", `/api/sessions/${sessionId}/messages`, { requestId, text, refs, create, mode, attachments });
+  /** A pasted or dropped file, kept by the gateway until a request names it. */
+  async uploadAttachment(file: File): Promise<Attachment> {
+    const response = await fetch("/api/attachments", {
+      method: "POST",
+      headers: { authorization: `Bearer ${this.token}`, "content-type": file.type || "application/octet-stream", "x-file-name": encodeURIComponent(file.name || "붙여넣은 이미지.png") },
+      body: file,
+    });
+    const json = (await response.json().catch(() => ({ code: "invalid_response", message: response.statusText }))) as Attachment & ApiError;
+    if (!response.ok) throw new ApiRequestError(response.status, json);
+    return json;
+  }
   /** Requests waiting for the turn to end: send now (steer when possible), change, or drop. */
   sendQueued = (sessionId: string, queuedId: string) => this.request<SendResult>("POST", `/api/sessions/${sessionId}/queue/${encodeURIComponent(queuedId)}/send`);
   updateQueued = (sessionId: string, queuedId: string, text: string) => this.request<Session>("PATCH", `/api/sessions/${sessionId}/queue/${encodeURIComponent(queuedId)}`, { text });
   cancelQueued = (sessionId: string, queuedId: string) => this.request<Session>("DELETE", `/api/sessions/${sessionId}/queue/${encodeURIComponent(queuedId)}`);
-  handoff = (request: { requestId: string; sourceSessionId: string; targetSessionId: string; text: string; refs: DocRef[] }) =>
+  handoff = (request: { requestId: string; sourceSessionId: string; targetSessionId: string; text: string; refs: DocRef[]; attachments?: Attachment[] }) =>
     this.request<Handoff>("POST", "/api/handoffs", request);
   openFile = (workId: string, path: string) => this.request<Artifact>("POST", `/api/works/${workId}/artifacts`, { path });
   createDesign = (workId: string, name: string, preset: string) => this.request<Artifact>("POST", `/api/works/${workId}/designs`, { name, preset });
@@ -186,4 +198,20 @@ export class Api {
       source?.close();
     };
   }
+}
+
+const attachmentUrls = new Map<string, Promise<string>>();
+
+/** A local URL for an attachment (fetched once with the token; its content never changes). */
+export function attachmentUrl(id: string): Promise<string> {
+  let url = attachmentUrls.get(id);
+  if (!url) {
+    url = fetch(`/api/attachments/${encodeURIComponent(id)}`, { headers: { authorization: `Bearer ${readToken() ?? ""}` } }).then(async (response) => {
+      if (!response.ok) throw new ApiRequestError(response.status, { code: "attachment_failed", message: response.statusText });
+      return URL.createObjectURL(await response.blob());
+    });
+    url.catch(() => attachmentUrls.delete(id));
+    attachmentUrls.set(id, url);
+  }
+  return url;
 }

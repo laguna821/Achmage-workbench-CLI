@@ -126,7 +126,13 @@ export type ContextUsage = { used: number; window: number | null; compactAt: num
  * A request written while the engine was working, sent as the next turn when this one ends.
  * `held`: kept after a stop, a failure, a restart or a steer the stop dropped — sent only by hand.
  */
-export type QueuedMessage = { id: string; text: string; refs: DocRef[]; create: CreateTarget | null; at: number; held?: boolean };
+export type QueuedMessage = { id: string; text: string; refs: DocRef[]; create: CreateTarget | null; at: number; held?: boolean; attachments?: Attachment[] };
+
+/**
+ * A file pasted or dropped into the input (a picture, a PDF, any file), kept by the gateway by its
+ * content and handed to the engine with the request. `id` is `<sha256><ext>`.
+ */
+export type Attachment = { id: string; name: string; mime: string; size: number };
 
 /** A reply the user has not looked at yet (or a session marked unread). */
 export const isUnseen = (session: Session) => session.unread || Boolean(session.previewAt && session.previewAt > (session.seenAt ?? 0));
@@ -276,6 +282,8 @@ export type TranscriptItem =
       steered?: boolean;
       /** Steered in, then the turn was stopped before the engine took it: it waits again above the input. */
       undelivered?: boolean;
+      /** Files that went with the request (pictures are shown). */
+      attachments?: Attachment[];
     }
   | { kind: "assistant"; id: string; text: string; streaming: boolean; at: number }
   | { kind: "reasoning"; id: string; text: string; at: number }
@@ -290,6 +298,8 @@ export type TranscriptItem =
       at: number;
       /** Files this tool wrote (file changes). */
       paths?: string[];
+      /** Pictures the step produced or looked at (screenshots, images read), shown in the conversation. */
+      images?: Attachment[];
     }
   | { kind: "plan"; id: string; steps: PlanStep[]; at: number }
   | {
@@ -518,6 +528,8 @@ export type SendMessageRequest = {
    * the engine can and queues otherwise. An idle session just starts a turn.
    */
   mode?: "auto" | "steer" | "queue";
+  /** Files pasted or dropped into the input (uploaded first to /api/attachments). */
+  attachments?: Attachment[];
 };
 
 export type SendResult = { duplicate: boolean; delivery: "turn" | "steered" | "queued" };
@@ -528,6 +540,7 @@ export type HandoffRequest = {
   targetSessionId: string;
   text: string;
   refs?: DocRef[];
+  attachments?: Attachment[];
 };
 
 export type SaveArtifactRequest = { requestId: string; expectedRevision: number; text: string };

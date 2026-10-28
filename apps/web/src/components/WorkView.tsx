@@ -1,5 +1,5 @@
-import { useCallback, useState } from "react";
-import { EFFORT_LABEL, PROVIDER_LABEL, accessFor, type AccessMode, type CreateTarget, type DocRef, type Provider, type Session, type UiPrefs, type Work } from "@workbench/contracts";
+import { useCallback, useRef, useState } from "react";
+import { EFFORT_LABEL, PROVIDER_LABEL, accessFor, type AccessMode, type Attachment, type CreateTarget, type DocRef, type Provider, type Session, type UiPrefs, type Work } from "@workbench/contracts";
 import type { ReactNode } from "react";
 import type { MentionItem } from "../mention.ts";
 import { CreateChip, CreateTargetButton, stemOf } from "./CreateTarget.tsx";
@@ -17,16 +17,19 @@ import { useUnseen } from "./SessionCards.tsx";
 import { workSessions } from "../tree.ts";
 import { Transcript } from "./Transcript.tsx";
 import { AccessPicker, ContextGauge } from "./SessionControls.tsx";
+import { PendingFiles, usePendingFiles } from "./Attachments.tsx";
 
 export type WorkActions = {
   /** Send a request; while the engine works it steers into the turn or waits ("queue"). */
-  send: (session: Session, text: string, refs?: DocRef[], create?: CreateTarget | null, mode?: "auto" | "queue") => Promise<boolean>;
+  send: (session: Session, text: string, refs?: DocRef[], create?: CreateTarget | null, mode?: "auto" | "queue", attachments?: Attachment[]) => Promise<boolean>;
+  /** Keep a pasted or dropped file at the gateway for the next request (null: it could not). */
+  upload: (file: File) => Promise<Attachment | null>;
   queued: {
     send: (session: Session, queuedId: string) => void;
     edit: (session: Session, queuedId: string, text: string) => void;
     cancel: (session: Session, queuedId: string) => void;
   };
-  handoff: (source: Session, target: Session, text: string, refs?: DocRef[]) => Promise<boolean>;
+  handoff: (source: Session, target: Session, text: string, refs?: DocRef[], attachments?: Attachment[]) => Promise<boolean>;
   pickSession: (work: Work, exclude: Session | null) => Promise<Session | null>;
   openArtifact: (artifactId: string) => void;
   openFile: (work: Work, path: string) => Promise<void>;
@@ -112,6 +115,7 @@ function QueuedList({ session, busy, actions }: { session: Session; busy: boolea
               {entry.held ? <span className="queued-held">남겨 둠</span> : null}
               {entry.text}
               {entry.refs.length ? <span className="muted"> · 문서 {entry.refs.length}</span> : null}
+              {entry.attachments?.length ? <span className="muted"> · 첨부 {entry.attachments.length}</span> : null}
             </span>
           )}
           <span className="queued-actions">
@@ -281,6 +285,9 @@ export function WorkView({
   const [create, setCreate] = useState<CreateTarget | null>(null);
   const [docsOpen, setDocsOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
+  // Files pasted or dropped into the input go with the request being written for this work.
+  const pending = usePendingFiles(actions.upload, work.id);
+  const filePicker = useRef<HTMLInputElement>(null);
   const [pathInput, setPathInput] = useState("");
   const artifacts = Object.values(state.artifacts)
     .filter((artifact) => artifact.workId === work.id)
@@ -583,9 +590,12 @@ export function WorkView({
               {active ? <ContextGauge context={active.context} canCompact={!busy && Boolean(active.nativeSessionId)} onCompact={() => actions.compact(active)} /> : null}
             </>
           }
+          onFiles={pending.add}
+          attachments={pending.count}
           header={
-            handoffTo || attached.length || create ? (
+            handoffTo || attached.length || create || pending.files.length ? (
               <div className="doc-chips">
+                <PendingFiles files={pending.files} onRemove={(key) => pending.remove([key])} />
                 {handoffTo ? (
                   <span className="target-chip" style={accentStyle(lookOf(handoffTo.provider))}>
                     <EngineMark provider={handoffTo.provider} size={13} /> @{handoffTo.purpose}
@@ -633,13 +643,18 @@ export function WorkView({
                 mode: entry.mode === "edit" && !handoffTo && !create ? ("edit" as const) : ("review" as const),
                 selection: null,
               }));
+            const { carried, done } = await pending.take();
+            if (!text && !carried.length) return false;
             const source: Session | null = active ?? (await actions.newSession(work, engine, draftChoice));
             if (!source) return false;
-            const sent = handoffTo ? await actions.handoff(source, handoffTo, text, refs) : await actions.send(source, text, refs, create, mode ?? "auto");
+            const sent = handoffTo
+              ? await actions.handoff(source, handoffTo, text, refs, carried)
+              : await actions.send(source, text, refs, create, mode ?? "auto", carried);
             if (sent) {
               setHandoffTo(null);
               setAttached([]);
               setCreate(null);
+              done();
             }
             return sent;
           }}
@@ -670,10 +685,29 @@ export function WorkView({
               }}
             />
             <div className="anchor">
-              <button type="button" className="icon-button" onClick={() => setAttachOpen(!attachOpen)} title="문서 붙이기" aria-label="문서 붙이기">
+              <button type="button" className="icon-button" onClick={() => setAttachOpen(!attachOpen)} title="문서·파일 붙이기" aria-label="문서·파일 붙이기">
                 <Icon name="file" size={17} />
               </button>
+              <input
+                ref={filePicker}
+                type="file"
+                multiple
+                hidden
+                onChange={(event) => {
+                  if (event.target.files?.length) pending.add(Array.from(event.target.files));
+                  event.target.value = "";
+                }}
+              />
               <Popover open={attachOpen} onClose={() => setAttachOpen(false)} placement="above" align="right">
+                <MenuItem
+                  onSelect={() => {
+                    setAttachOpen(false);
+                    filePicker.current?.click();
+                  }}
+                  hint="붙여넣기·끌어 놓기도 됨"
+                >
+                  파일·그림 고르기…
+                </MenuItem>
                 <div className="menu-label">요청에 붙일 문서 · 지금 판으로 고정</div>
                 {artifacts.map((artifact) => (
                   <MenuItem

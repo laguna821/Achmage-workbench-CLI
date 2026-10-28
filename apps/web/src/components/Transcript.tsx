@@ -7,6 +7,7 @@ import { FileCard, HandoffCard, ProposalCard, RefChips, useDocs } from "./DocCar
 import { CREATE_LABEL } from "@workbench/contracts";
 import { Icon, type IconName } from "./Icon.tsx";
 import { diagramComponents } from "./Diagram.tsx";
+import { AttachmentStrip } from "./Attachments.tsx";
 
 const DRAWN = diagramComponents();
 const STREAMING = diagramComponents(true);
@@ -172,7 +173,12 @@ function ToolRow({ item }: { item: Item<"tool"> }) {
 function WorkBlock({ block }: { block: Extract<Block, { type: "work" }> }) {
   const [open, setOpen] = useState(false);
   const summary = workSummary(block.items);
+  // Pictures the steps made or looked at stay in view while the steps are folded (Codex app).
+  const images = block.items
+    .flatMap((item) => (item.kind === "tool" ? (item.images ?? []) : []))
+    .filter((image, index, all) => all.findIndex((other) => other.id === image.id) === index);
   return (
+    <>
     <div className="work-block">
       <button type="button" className="work-summary" onClick={() => setOpen(!open)} aria-expanded={open}>
         <Icon name={open ? "chevronDown" : "chevronRight"} size={14} />
@@ -193,6 +199,8 @@ function WorkBlock({ block }: { block: Extract<Block, { type: "work" }> }) {
         </ul>
       ) : null}
     </div>
+    {images.length ? <AttachmentStrip attachments={images} /> : null}
+    </>
   );
 }
 
@@ -574,6 +582,7 @@ export function Transcript({
                     </button>
                   ) : null}
                   <RequestText text={turn.user.text} />
+                  {turn.user.attachments?.length ? <AttachmentStrip attachments={turn.user.attachments} /> : null}
                   {turn.user.refs?.length ? <RefChips refs={turn.user.refs} /> : null}
                   {turn.user.create ? (
                     <div className="ref-chips">

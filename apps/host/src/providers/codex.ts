@@ -22,6 +22,7 @@ import type { ThreadStartResponse } from "@workbench/provider-codex/src/generate
 import type { TurnCompletedNotification } from "@workbench/provider-codex/src/generated/v2/TurnCompletedNotification.ts";
 import type { TurnPlanUpdatedNotification } from "@workbench/provider-codex/src/generated/v2/TurnPlanUpdatedNotification.ts";
 import type { TurnStartResponse } from "@workbench/provider-codex/src/generated/v2/TurnStartResponse.ts";
+import type { UserInput } from "@workbench/provider-codex/src/generated/v2/UserInput.ts";
 import type { TurnStartedNotification } from "@workbench/provider-codex/src/generated/v2/TurnStartedNotification.ts";
 import type { McpServerElicitationRequestParams } from "@workbench/provider-codex/src/generated/v2/McpServerElicitationRequestParams.ts";
 import type { AskForApproval } from "@workbench/provider-codex/src/generated/v2/AskForApproval.ts";
@@ -32,7 +33,8 @@ import type { ThreadTokenUsageUpdatedNotification } from "@workbench/provider-co
 import { resolveCodex } from "../binaries.ts";
 import { billingVarsIn, engineEnv } from "../engine-env.ts";
 import { codexAccountInfo } from "../engine-login.ts";
-import { emptyStatus, type AdapterSink, type LoginStart, type ProviderAdapter } from "./types.ts";
+import { emptyStatus, type AdapterSink, type AttachedFile, type LoginStart, type ProviderAdapter, type ToolImage } from "./types.ts";
+import { isImage, mentionFiles } from "../attachments.ts";
 
 const CLIENT_VERSION = "0.1.0";
 
@@ -339,7 +341,7 @@ export class CodexAdapter implements ProviderAdapter {
     return threadId;
   }
 
-  async send(session: Session & { access: AccessMode }, work: Work, text: string) {
+  async send(session: Session & { access: AccessMode }, work: Work, text: string, _turnKey: string, files: AttachedFile[] = []) {
     await this.ensureRunning();
     const rpc = this.rpc!;
     const threadId = await this.threadFor(session, work);
@@ -351,7 +353,7 @@ export class CodexAdapter implements ProviderAdapter {
     this.threadAccess.set(threadId, session.access);
     const response = await rpc.request<TurnStartResponse>("turn/start", {
       threadId,
-      input: [{ type: "text", text, text_elements: [] }],
+      input: codexInput(text, files),
       ...(model ? { model } : {}),
       ...(effort ? { effort: effort as ReasoningEffort } : {}),
       ...(changed ? { approvalPolicy: policy.approvalPolicy, sandboxPolicy: sandboxPolicy(policy.sandbox) } : {}),
@@ -366,7 +368,7 @@ export class CodexAdapter implements ProviderAdapter {
   }
 
   /** Put a request into the running turn (`turn/steer`); false when that turn is already over. */
-  async steer(session: Session, _work: Work, text: string, turnKey: string) {
+  async steer(session: Session, _work: Work, text: string, turnKey: string, files: AttachedFile[] = []) {
     const threadId = session.nativeSessionId;
     const turnId = threadId ? this.activeTurns.get(threadId) : undefined;
     if (!threadId || !turnId || !this.rpc || this.interrupting.has(threadId)) return false;
@@ -376,7 +378,7 @@ export class CodexAdapter implements ProviderAdapter {
       await this.rpc.request("turn/steer", {
         threadId,
         expectedTurnId: turnId,
-        input: [{ type: "text", text, text_elements: [] }],
+        input: codexInput(text, files),
         clientUserMessageId: turnKey,
       });
       return true;
@@ -627,6 +629,9 @@ export class CodexAdapter implements ProviderAdapter {
         if (mapped) {
           this.sink.upsertItem(sessionId, mapped);
         }
+        // Pictures the step looked at or returned are shown under it in the conversation.
+        if (item.type === "imageView") this.sink.toolImages(sessionId, item.id, [{ path: String(item.path) }]);
+        if (item.type === "mcpToolCall" && item.result) this.sink.toolImages(sessionId, item.id, mcpImages(item.result.content));
         break;
       }
       case "item/agentMessage/delta": {
@@ -699,4 +704,19 @@ export class CodexAdapter implements ProviderAdapter {
       }
     }
   }
+}
+
+/** A request with its files: pictures as local images Codex reads itself, anything else named by path. */
+export function codexInput(text: string, files: AttachedFile[]): UserInput[] {
+  const images = files.filter((file) => isImage(file.mime));
+  const others = files.filter((file) => !isImage(file.mime));
+  return [{ type: "text", text: mentionFiles(text, others), text_elements: [] }, ...images.map((file): UserInput => ({ type: "localImage", path: file.path }))];
+}
+
+/** Image content an MCP tool returned (`{ type: "image", data, mimeType }`), as base64 data. */
+export function mcpImages(content: unknown[]): ToolImage[] {
+  return content.flatMap((part) => {
+    const block = (part ?? {}) as Record<string, unknown>;
+    return block.type === "image" && typeof block.data === "string" ? [{ data: block.data }] : [];
+  });
 }

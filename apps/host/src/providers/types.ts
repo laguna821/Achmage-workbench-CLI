@@ -8,6 +8,9 @@ import type {
   Work,
 } from "@workbench/contracts";
 
+/** An attachment as the engine gets it: the stored file and what it is. */
+export type AttachedFile = { path: string; name: string; mime: string };
+
 /** Callbacks an adapter uses to report what its engine is doing. */
 export type AdapterSink = {
   upsertItem(sessionId: string, item: TranscriptItem): void;
@@ -16,7 +19,12 @@ export type AdapterSink = {
   providerStatus(status: ProviderStatus): void;
   /** Requests steered into a turn (by their turn keys) that the engine dropped when the turn stopped. */
   steerDropped(sessionId: string, turnKeys: string[]): void;
+  /** Pictures a step produced or looked at (a file, or image data the engine returned), shown under it. */
+  toolImages(sessionId: string, itemId: string, images: ToolImage[]): void;
 };
+
+/** A picture from a step: a file the engine names, or base64 data a tool returned. */
+export type ToolImage = { path: string } | { data: string; name?: string };
 
 export type LoginStart = { url: string | null; message: string };
 
@@ -30,13 +38,13 @@ export interface ProviderAdapter {
   status(): ProviderStatus;
   refreshStatus(): Promise<ProviderStatus>;
   login(): Promise<LoginStart>;
-  /** `session.access` is resolved: the access this turn runs with. */
-  send(session: Session & { access: AccessMode }, work: Work, text: string, turnKey: string): Promise<void>;
+  /** `session.access` is resolved: the access this turn runs with. `files`: attachments, with paths. */
+  send(session: Session & { access: AccessMode }, work: Work, text: string, turnKey: string, files?: AttachedFile[]): Promise<void>;
   /**
    * Put a request into the turn that is running (the engine reads it at its next step). False when
    * no turn is running any more, so the caller can start one instead.
    */
-  steer?(session: Session, work: Work, text: string, turnKey: string): Promise<boolean>;
+  steer?(session: Session, work: Work, text: string, turnKey: string, files?: AttachedFile[]): Promise<boolean>;
   interrupt(session: Session): Promise<void>;
   /**
    * The session's access changed (`session.access` is the new one): apply it to a running engine

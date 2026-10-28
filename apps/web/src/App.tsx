@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { PROVIDER_LABEL, isUnseen, type AccessMode, type Artifact, type CreateTarget, type DocRef, type Proposal, type Provider, type Session, type SessionStatus, type UiPrefs, type Work } from "@workbench/contracts";
+import { PROVIDER_LABEL, isUnseen, type AccessMode, type Artifact, type Attachment, type CreateTarget, type DocRef, type Proposal, type Provider, type Session, type SessionStatus, type UiPrefs, type Work } from "@workbench/contracts";
 import { Api, ApiRequestError, readToken } from "./api.ts";
 import { configureDesign } from "./design.ts";
 import { initialState, isBusy, reducer, sessionsOf } from "./state.ts";
@@ -308,10 +308,10 @@ export function App() {
 
   const actions: WorkActions = useMemo(
     () => ({
-      send: async (session: Session, text: string, refs: DocRef[] = [], create: CreateTarget | null = null, mode: "auto" | "queue" = "auto") => {
+      send: async (session: Session, text: string, refs: DocRef[] = [], create: CreateTarget | null = null, mode: "auto" | "queue" = "auto", attachments: Attachment[] = []) => {
         if (!api) return false;
         try {
-          const result = await api.send(session.id, newRequestId(), text, refs, create, mode);
+          const result = await api.send(session.id, newRequestId(), text, refs, create, mode, attachments);
           if (result.delivery === "queued") setToast("작업이 끝나면 이어서 보냅니다. 입력창 위에서 고치거나 지울 수 있습니다.");
           return true;
         } catch (error) {
@@ -324,10 +324,19 @@ export function App() {
         edit: (session, queuedId, text) => void api?.updateQueued(session.id, queuedId, text).catch(fail),
         cancel: (session, queuedId) => void api?.cancelQueued(session.id, queuedId).catch(fail),
       },
-      handoff: async (source: Session, target: Session, text: string, refs: DocRef[] = []) => {
+      upload: async (file: File) => {
+        if (!api) return null;
+        try {
+          return await api.uploadAttachment(file);
+        } catch (error) {
+          fail(error);
+          return null;
+        }
+      },
+      handoff: async (source: Session, target: Session, text: string, refs: DocRef[] = [], attachments: Attachment[] = []) => {
         if (!api) return false;
         try {
-          await api.handoff({ requestId: newRequestId(), sourceSessionId: source.id, targetSessionId: target.id, text, refs });
+          await api.handoff({ requestId: newRequestId(), sourceSessionId: source.id, targetSessionId: target.id, text, refs, attachments });
           return true;
         } catch (error) {
           fail(error);
@@ -1083,12 +1092,12 @@ export function App() {
             onOpenArtifact={(artifactId) => setView({ kind: "document", artifactId, proposalId: null })}
             onPickTarget={() => actions.pickSession(work, activeSession ?? null)}
             onAnswer={(session, itemId, decision) => actions.answer(session, itemId, decision)}
-            onSend={async (session, text, refs, handoffTo, create) => {
+            onSend={async (session, text, refs, handoffTo, create, attachments) => {
               let source = session;
               if (!source) source = await actions.newSession(work, engine);
               if (!source) return false;
-              if (handoffTo) return actions.handoff(source, handoffTo, text, refs);
-              return actions.send(source, text, refs, create);
+              if (handoffTo) return actions.handoff(source, handoffTo, text, refs, attachments);
+              return actions.send(source, text, refs, create, "auto", attachments);
             }}
           />
         </Suspense>

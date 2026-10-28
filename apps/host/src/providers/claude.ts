@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -22,7 +22,8 @@ import { ClaudeTranscriptMapper, describeTool, type MapperOutput } from "@workbe
 import { resolveClaude, type ResolvedBinary } from "../binaries.ts";
 import { billingVarsIn, claudeSdkEnv, engineEnv } from "../engine-env.ts";
 import { parseClaudeAuthStatus } from "../engine-login.ts";
-import { emptyStatus, type AdapterSink, type LoginStart, type ProviderAdapter } from "./types.ts";
+import { emptyStatus, type AdapterSink, type AttachedFile, type LoginStart, type ProviderAdapter } from "./types.ts";
+import { isImage, mentionFiles } from "../attachments.ts";
 
 const run = promisify(execFile);
 
@@ -180,13 +181,16 @@ export class ClaudeAdapter implements ProviderAdapter {
 
   private readonly modelCache: string | null;
 
+  private readonly attachmentsDir: string | null;
+
   constructor(
     sink: AdapterSink,
-    options?: { idleMs?: number; modelCacheFile?: string },
+    options?: { idleMs?: number; modelCacheFile?: string; attachmentsDir?: string },
   ) {
     this.sink = sink;
     this.idleMs = options?.idleMs ?? 10 * 60_000;
     this.modelCache = options?.modelCacheFile ?? null;
+    this.attachmentsDir = options?.attachmentsDir ?? null;
   }
 
   /**
@@ -406,6 +410,8 @@ export class ClaudeAdapter implements ProviderAdapter {
       prompt: input,
       options: {
         cwd: work.cwd,
+        // Files attached to requests are read from here without asking.
+        ...(this.attachmentsDir ? { additionalDirectories: [this.attachmentsDir] } : {}),
         resume: session.nativeSessionId ?? undefined,
         model: session.model ?? undefined,
         effort: (session.effort as EffortLevel | null) ?? undefined,
@@ -475,6 +481,9 @@ export class ClaudeAdapter implements ProviderAdapter {
         break;
       case "upsert":
         this.sink.upsertItem(sessionId, output.item);
+        break;
+      case "images":
+        this.sink.toolImages(sessionId, output.itemId, output.images);
         break;
       case "delta":
         this.sink.delta(sessionId, output.itemId, output.text);
@@ -549,7 +558,7 @@ export class ClaudeAdapter implements ProviderAdapter {
     }, this.idleMs);
   }
 
-  async send(session: Session & { access: AccessMode }, work: Work, text: string, turnKey: string) {
+  async send(session: Session & { access: AccessMode }, work: Work, text: string, turnKey: string, files: AttachedFile[] = []) {
     await this.init();
     const runtime = this.runtimes.get(session.id) ?? this.startRuntime(session, work);
     if (runtime.access !== session.access) {
@@ -573,7 +582,7 @@ export class ClaudeAdapter implements ProviderAdapter {
     runtime.turnActive = true;
     runtime.input.push({
       type: "user",
-      message: { role: "user", content: text },
+      message: { role: "user", content: claudeContent(text, files) },
       parent_tool_use_id: null,
       origin: { kind: "human" },
     });
@@ -583,7 +592,7 @@ export class ClaudeAdapter implements ProviderAdapter {
    * Put a request into the running turn: Claude Code folds it in between tool steps ("next"), or
    * runs it right after the turn when the turn has no further step.
    */
-  async steer(session: Session, _work: Work, text: string, turnKey: string) {
+  async steer(session: Session, _work: Work, text: string, turnKey: string, files: AttachedFile[] = []) {
     const runtime = this.runtimes.get(session.id);
     if (!runtime || !runtime.turnActive || runtime.interrupting) return false;
     // The uuid lets a stop name exactly which of these Claude Code dropped.
@@ -591,7 +600,7 @@ export class ClaudeAdapter implements ProviderAdapter {
     runtime.steered.push({ turnKey, uuid });
     runtime.input.push({
       type: "user",
-      message: { role: "user", content: text },
+      message: { role: "user", content: claudeContent(text, files) },
       parent_tool_use_id: null,
       origin: { kind: "human" },
       priority: "next",
@@ -690,4 +699,27 @@ export class ClaudeAdapter implements ProviderAdapter {
     }
     this.runtimes.clear();
   }
+}
+
+/** Base64 limits of the Messages API: larger files go by path, and Claude Code reads them itself. */
+const IMAGE_INLINE = 3_750_000;
+const PDF_INLINE = 20_000_000;
+
+/** A request with its files: pictures and PDFs as content blocks, anything else named by path. */
+export function claudeContent(text: string, files: AttachedFile[]): SDKUserMessage["message"]["content"] {
+  if (!files.length) return text;
+  const blocks: Exclude<SDKUserMessage["message"]["content"], string> = [];
+  const named: AttachedFile[] = [];
+  for (const file of files) {
+    const size = statSync(file.path).size;
+    if (isImage(file.mime) && size <= IMAGE_INLINE) {
+      const media = file.mime as "image/png" | "image/jpeg" | "image/webp" | "image/gif";
+      blocks.push({ type: "image", source: { type: "base64", media_type: media, data: readFileSync(file.path).toString("base64") } });
+    } else if (file.mime === "application/pdf" && size <= PDF_INLINE) {
+      blocks.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: readFileSync(file.path).toString("base64") }, title: file.name });
+    } else {
+      named.push(file);
+    }
+  }
+  return [...blocks, { type: "text", text: mentionFiles(text, named) }];
 }

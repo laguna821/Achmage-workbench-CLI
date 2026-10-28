@@ -8,9 +8,15 @@
 // What a request says decides what the fake does:
 //   "길게"  a long answer (about 8 s)      "명령"  runs `ls -la` (asks first in "default" mode)
 //   "압축" or "/compact"  compacts         anything else: a short answer
+// Image and PDF blocks in a request are reported at the start of the answer ("받은 그림 1장 · 1234바이트").
+// "스크린샷": like a browsing step, Bash saves a screenshot (Playwright CLI's output names it), then
+// Read opens a second picture, which comes back as an image block.
 
 import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { createInterface } from "node:readline";
+import { pagePng } from "./png.mjs";
 
 const args = process.argv.slice(2);
 if (args.includes("--version")) {
@@ -109,12 +115,30 @@ async function runTurn(text) {
     }
     send({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolId, content: allowed ? "total 0" : "The user declined this action.", is_error: !allowed }] }, parent_tool_use_id: null, ...base() });
   }
+  if (text.includes("스크린샷")) {
+    const step = (name, input, content) => {
+      const toolId = `toolu_${randomUUID().slice(0, 8)}`;
+      send({ type: "assistant", message: { id: `msg_${randomUUID().slice(0, 8)}`, type: "message", role: "assistant", model: MODEL, content: [{ type: "tool_use", id: toolId, name, input }], stop_reason: "tool_use", stop_sequence: null, usage: { input_tokens: 10, output_tokens: 20, cache_creation_input_tokens: 0, cache_read_input_tokens: used } }, parent_tool_use_id: null, ...base() });
+      send({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolId, content }] }, parent_tool_use_id: null, ...base() });
+    };
+    const folder = join(process.cwd(), ".playwright-cli");
+    mkdirSync(folder, { recursive: true });
+    const stamp = Date.now();
+    writeFileSync(join(folder, `page-${stamp}.png`), pagePng());
+    step("Bash", { command: "playwright-cli screenshot", description: "화면 찍기" }, `### Result\n- [Screenshot of viewport](.playwright-cli/page-${stamp}.png)\n`);
+    await sleep(60);
+    const full = pagePng(300, 260, [31, 158, 117]);
+    writeFileSync(join(folder, `full-${stamp}.png`), full);
+    step("Read", { file_path: join(folder, `full-${stamp}.png`) }, [{ type: "image", source: { type: "base64", media_type: "image/png", data: full.toString("base64") } }]);
+  }
   if (!(text.trim() === "/compact")) {
     const steer = text.startsWith("[steer]") ? `이어서 받은 요청을 반영합니다: ${text.slice(7)}\n\n` : "";
+    const seen = !steer && text.match(/ \((받은 [^)]*)\)$/);
     const long = text.includes("길게");
     const lines = long ? 160 : 6;
     const chunks = [];
     if (steer) chunks.push({ text: steer, wait: 30 });
+    if (seen) chunks.push({ text: `요청을 받았습니다 (${seen[1]}).\n\n`, wait: 30 });
     if (text.includes("도식")) {
       // A Mermaid mind map, sent in pieces like any reply.
       for (const piece of "여기 마인드맵입니다.\n\n```mermaid\nmindmap\n  root((Achmage))\n    대화\n      끼어들기\n      끝나면 보내기\n    문서\n      워드\n      한글\n    도식\n      Pele\n```\n".match(/[^\n]*\n/g)) chunks.push({ text: piece, wait: 30 });
@@ -153,7 +177,26 @@ async function drain() {
 function textOf(message) {
   const content = message.message?.content;
   if (typeof content === "string") return content;
-  return (content ?? []).map((part) => part.text ?? "").join("\n");
+  return (content ?? []).filter((part) => part.type === "text").map((part) => part.text).join("\n") + received(content ?? []);
+}
+
+/** What the fake saw of the pictures and PDFs it was given (decoded, so a bad block shows). */
+function received(content) {
+  const seen = [];
+  const images = content.filter((part) => part.type === "image");
+  const pdfs = content.filter((part) => part.type === "document");
+  if (images.length) seen.push(`받은 그림 ${images.length}장 · ${images.map((part) => `${Buffer.from(part.source.data, "base64").length}바이트`).join(", ")}`);
+  if (pdfs.length) seen.push(`받은 PDF ${pdfs.length}개 · ${pdfs.map((part) => `${Buffer.from(part.source.data, "base64").length}바이트`).join(", ")}`);
+  const named = namedFiles(content.map((part) => part.text ?? "").join("\n"));
+  if (named.length) seen.push(`받은 파일 경로 ${named.length}개 · ${named.map((path) => (existsSync(path) ? `${statSync(path).size}바이트` : "없는 파일")).join(", ")}`);
+  return seen.length ? ` (${seen.join(" / ")})` : "";
+}
+
+/** Paths listed under "첨부한 파일:" (files the engine is to open itself). */
+function namedFiles(text) {
+  const at = text.indexOf("첨부한 파일:\n");
+  if (at < 0) return [];
+  return text.slice(at).split("\n").slice(1).map((line) => line.match(/^- .+?: (\/.+)$/)?.[1]).filter(Boolean);
 }
 
 createInterface({ input: process.stdin }).on("line", (line) => {

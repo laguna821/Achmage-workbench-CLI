@@ -18,7 +18,9 @@ export type MapperOutput =
   /** Tokens the conversation takes up now, and the context window (when known). */
   | { type: "context"; used: number; window: number | null }
   | { type: "activity"; text: string | null }
-  | { type: "authError"; message: string };
+  | { type: "authError"; message: string }
+  /** Pictures a tool returned (Read of an image, a screenshot from an MCP tool), as base64 data. */
+  | { type: "images"; itemId: string; images: { data: string }[] };
 
 const MAX_OUTPUT = 20_000;
 
@@ -115,6 +117,15 @@ function toolResultText(content: unknown): string {
       .join("\n");
   }
   return "";
+}
+
+/** Base64 pictures in a tool result (`{ type: "image", source: { type: "base64", data } }`). */
+function toolResultImages(content: unknown): { data: string }[] {
+  if (!Array.isArray(content)) return [];
+  return content.flatMap((part) => {
+    const block = (part ?? {}) as { type?: unknown; source?: { type?: unknown; data?: unknown } };
+    return block.type === "image" && block.source?.type === "base64" && typeof block.source.data === "string" ? [{ data: block.source.data }] : [];
+  });
 }
 
 const WINDOW_LABEL: Record<string, string> = {
@@ -290,6 +301,8 @@ export class ClaudeTranscriptMapper {
           };
           this.toolItems.set(tool.id, updated);
           out.push({ type: "upsert", item: updated });
+          const images = toolResultImages(part.content);
+          if (images.length) out.push({ type: "images", itemId: tool.id, images });
         }
         out.push({ type: "activity", text: "응답 준비 중" });
         break;

@@ -8,8 +8,14 @@
 //   "길게"  a long answer (about 8 s)      "명령"  runs `ls -la` (approval first unless "never")
 //   "압축"  compacts the conversation      "느리게" steered requests wait until line 100
 //   anything else: a short answer
+// Local images in the input are reported at the start of the answer ("받은 그림 1장 · 1234바이트").
+// "스크린샷": like a browsing step, a command saves a screenshot (Playwright CLI's output names it),
+// then Codex looks at a second picture with its image viewer (an imageView item).
 
+import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { createInterface } from "node:readline";
+import { pagePng } from "./png.mjs";
 
 if (process.argv.includes("--version")) {
   console.log("codex-cli 0.0.0-fake");
@@ -76,7 +82,24 @@ async function compact(threadId, thread, turnId) {
   notify("thread/tokenUsage/updated", { threadId, turnId, tokenUsage: usage(thread, 0) });
 }
 
-async function runTurn(threadId, thread, turnId, text) {
+/** What the fake saw of the pictures it was given (they must exist where the input says). */
+function received(input) {
+  const seen = [];
+  const images = input.filter((part) => part.type === "localImage");
+  if (images.length) seen.push(`받은 그림 ${images.length}장 · ${images.map((part) => (existsSync(part.path) ? `${statSync(part.path).size}바이트` : "없는 파일")).join(", ")}`);
+  const named = namedFiles(input.map((part) => part.text ?? "").join("\n"));
+  if (named.length) seen.push(`받은 파일 경로 ${named.length}개 · ${named.map((path) => (existsSync(path) ? `${statSync(path).size}바이트` : "없는 파일")).join(", ")}`);
+  return seen.length ? ` (${seen.join(" / ")})` : "";
+}
+
+/** Paths listed under "첨부한 파일:" (files the engine is to open itself). */
+function namedFiles(text) {
+  const at = text.indexOf("첨부한 파일:\n");
+  if (at < 0) return [];
+  return text.slice(at).split("\n").slice(1).map((line) => line.match(/^- .+?: (\/.+)$/)?.[1]).filter(Boolean);
+}
+
+async function runTurn(threadId, thread, turnId, text, images = "") {
   const started = Date.now();
   notify("turn/started", { threadId, turn: { id: turnId, items: [], itemsView: "full", status: "inProgress", error: null, startedAt: now(), completedAt: null, durationMs: null } });
   let status = "completed";
@@ -111,10 +134,29 @@ async function runTurn(threadId, thread, turnId, text) {
     await sleep(150);
     notify("item/completed", { threadId, turnId, item: { ...command, status: decision === "accept" ? "completed" : "declined", aggregatedOutput: decision === "accept" ? "total 0\n" : null, exitCode: decision === "accept" ? 0 : null } });
   }
+  if (text.includes("스크린샷")) {
+    const folder = join(thread.cwd, ".playwright-cli");
+    mkdirSync(folder, { recursive: true });
+    const stamp = Date.now();
+    writeFileSync(join(folder, `page-${stamp}.png`), pagePng());
+    const command = { type: "commandExecution", id: `cmd_${++counter}`, command: "playwright-cli screenshot", cwd: thread.cwd, processId: null, source: "agent", status: "inProgress", commandActions: [], aggregatedOutput: null, exitCode: null, durationMs: null };
+    notify("item/started", { threadId, turnId, item: command });
+    await sleep(80);
+    notify("item/completed", { threadId, turnId, item: { ...command, status: "completed", aggregatedOutput: `### Result\n- [Screenshot of viewport](.playwright-cli/page-${stamp}.png)\n`, exitCode: 0, durationMs: 80 } });
+    const full = join(folder, `full-${stamp}.png`);
+    writeFileSync(full, pagePng(300, 260, [31, 158, 117]));
+    const view = { type: "imageView", id: `img_${++counter}`, path: full };
+    notify("item/started", { threadId, turnId, item: view });
+    notify("item/completed", { threadId, turnId, item: view });
+  }
   let itemId = `msg_${++counter}`;
   notify("item/started", { threadId, turnId, item: { type: "agentMessage", id: itemId, text: "", phase: null, memoryCitation: null } });
   const lines = text.includes("길게") ? 160 : text.includes("도식") ? 14 : 6;
   let full = "";
+  if (images) {
+    full = `요청을 받았습니다${images}.\n\n`;
+    notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: full });
+  }
   for (let index = 0; index < lines && thread.turn?.id === turnId && !thread.turn.interrupted; index += 1) {
     // Like Codex, a steered request is taken at the next step (here every 10 lines): it is
     // recorded as a user message, this message ends and a new one starts.
@@ -193,13 +235,13 @@ async function handle(message) {
       thread.turn = { id: turnId, steers: [], interrupted: false };
       reply({ turn: { id: turnId, items: [], itemsView: "full", status: "inProgress", error: null, startedAt: now(), completedAt: null, durationMs: null } });
       const text = params.input.map((input) => input.text ?? "").join("\n");
-      void runTurn(params.threadId, thread, turnId, text);
+      void runTurn(params.threadId, thread, turnId, text, received(params.input));
       return;
     }
     case "turn/steer": {
       const thread = threads.get(params.threadId);
       if (!thread?.turn || thread.turn.id !== params.expectedTurnId) return fail("expected turn is not active");
-      thread.turn.steers.push({ text: params.input.map((input) => input.text ?? "").join("\n"), clientId: params.clientUserMessageId ?? null });
+      thread.turn.steers.push({ text: `${params.input.map((input) => input.text ?? "").join("\n")}${received(params.input)}`, clientId: params.clientUserMessageId ?? null });
       return reply({ turnId: thread.turn.id });
     }
     case "turn/interrupt": {

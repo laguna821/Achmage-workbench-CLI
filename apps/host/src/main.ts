@@ -7,6 +7,7 @@ import { createHttpServer } from "./http.ts";
 import { ClaudeAdapter } from "./providers/claude.ts";
 import { CodexAdapter } from "./providers/codex.ts";
 import { SessionManager } from "./sessions.ts";
+import { attachmentsDir } from "./attachments.ts";
 import { Store } from "./store.ts";
 import { Kordoc } from "./kordoc.ts";
 import { IeumOffice } from "./ieumoffice.ts";
@@ -61,7 +62,7 @@ void manager.refreshTools();
 
 const claudeIdleMs = env.WORKBENCH_CLAUDE_IDLE_MS ? Number(env.WORKBENCH_CLAUDE_IDLE_MS) : undefined;
 manager.registerAdapter(
-  new ClaudeAdapter(manager.sink, { idleMs: claudeIdleMs, modelCacheFile: join(dataDir, "claude-models.json") }),
+  new ClaudeAdapter(manager.sink, { idleMs: claudeIdleMs, modelCacheFile: join(dataDir, "claude-models.json"), attachmentsDir: attachmentsDir(dataDir) }),
 );
 manager.registerAdapter(
   new CodexAdapter(manager.sink, {

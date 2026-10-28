@@ -89,6 +89,18 @@ export function mapThreadItem(item: ThreadItem, at: number, inProgress: boolean)
       };
     case "contextCompaction":
       return { kind: "notice", id: item.id, level: "info", text: "대화가 길어 앞부분을 압축했습니다.", at };
+    case "imageView":
+      // Codex looked at a picture (its image viewer); the adapter adds the picture itself.
+      return {
+        kind: "tool",
+        id: item.id,
+        tool: "other",
+        title: `그림 보기 · ${String(item.path).split(/[\\/]/).pop()}`,
+        detail: String(item.path),
+        output: null,
+        status: "completed",
+        at,
+      };
     default:
       return null;
   }

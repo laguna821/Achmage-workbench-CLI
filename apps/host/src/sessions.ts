@@ -25,6 +25,7 @@ import {
   type CreateTarget,
   type ExportMarkdownRequest,
   type QueuedMessage,
+  type Attachment,
   type SendResult,
   type ExportMarkdownResult,
   type SearchHit,
@@ -50,6 +51,8 @@ import { findHop, openInHop, openWithDesktop } from "./hop.ts";
 import { createGuide, reservePath } from "./create.ts";
 import { copyMcp, copySkill, integrations, type EngineBinaries } from "./integrations.ts";
 import { exportFileName, sessionMarkdown } from "./export-md.ts";
+import { Attachments } from "./attachments.ts";
+import { imagesNamed, keepImage, withImages } from "./tool-images.ts";
 
 export { HttpError };
 
@@ -182,7 +185,7 @@ function plain(text: string) {
 }
 
 /** A request steered into a running turn, kept until the session's next own turn starts. */
-type Steered = { requestId: string; text: string; refs: DocRef[]; item: Extract<TranscriptItem, { kind: "user" }> | null; dropped: boolean };
+type Steered = { requestId: string; text: string; refs: DocRef[]; attachments: Attachment[]; item: Extract<TranscriptItem, { kind: "user" }> | null; dropped: boolean };
 
 export class SessionManager {
   private readonly folders = new Map<string, Folder>();
@@ -207,6 +210,7 @@ export class SessionManager {
     this.bus = bus;
     this.options = options;
     this.documents = new Documents(store, bus, options.dataDir ?? dirname(options.managedWorksDir), options.kordoc ?? null, options.ieum ?? null);
+    this.attachments = new Attachments(options.dataDir ?? dirname(options.managedWorksDir));
     for (const handoff of store.handoffs()) this.handoffs.set(handoff.id, handoff);
     // Rows written by older versions may lack newer fields.
     for (const folder of store.folders()) this.folders.set(folder.id, { ...folder, archivedAt: folder.archivedAt ?? null });
@@ -264,11 +268,13 @@ export class SessionManager {
 
   /** Adapters report through this sink; every change is persisted and published. */
   readonly sink: AdapterSink = {
-    upsertItem: (sessionId, item) => {
+    upsertItem: (sessionId, incoming) => {
+      let item = incoming;
       if (item.kind === "turnEnd") {
         this.finishStreaming(sessionId);
       }
       const items = this.loadItems(sessionId);
+      if (item.kind === "tool") item = this.withStepImages(sessionId, item, items);
       this.transcripts.set(sessionId, applyItemEvent(items, { type: "item.upserted", sessionId, item }));
       this.store.saveItem(sessionId, item);
       this.bus.publish({ type: "item.upserted", sessionId, item });
@@ -280,6 +286,12 @@ export class SessionManager {
         this.trackFiles(sessionId, item.id, item.paths);
       }
       if (item.kind === "turnEnd") this.afterTurn(sessionId, item.status);
+    },
+    toolImages: (sessionId, itemId, images) => {
+      const kept = images.map((image) => keepImage(this.attachments, image)).filter((image) => image !== null);
+      const item = this.loadItems(sessionId).find((entry) => entry.id === itemId);
+      if (!kept.length || item?.kind !== "tool") return;
+      this.sink.upsertItem(sessionId, { ...item, images: withImages(item.images, kept) });
     },
     delta: (sessionId, itemId, textDelta) => {
       const items = this.loadItems(sessionId);
@@ -310,6 +322,9 @@ export class SessionManager {
     },
   };
 
+  /** Pasted and dropped files, kept by content for requests. */
+  readonly attachments: Attachments;
+
   /** Requests steered into a session's turns since its last own turn started (by request id). */
   private readonly steering = new Map<string, Map<string, Steered>>();
 
@@ -324,7 +339,15 @@ export class SessionManager {
       this.steering.get(sessionId)?.delete(entry.requestId);
       if (entry.item) this.sink.upsertItem(sessionId, { ...entry.item, undelivered: true });
     }
-    const again: QueuedMessage[] = lost.map((entry) => ({ id: `again-${randomUUID()}`, text: entry.text, refs: entry.refs, create: null, at: Date.now(), held: true }));
+    const again: QueuedMessage[] = lost.map((entry) => ({
+      id: `again-${randomUUID()}`,
+      text: entry.text,
+      refs: entry.refs,
+      create: null,
+      at: Date.now(),
+      held: true,
+      ...(entry.attachments.length ? { attachments: entry.attachments } : {}),
+    }));
     this.saveSession({ ...this.requireSession(sessionId), queued: [...again, ...this.requireSession(sessionId).queued] });
     this.sink.upsertItem(sessionId, {
       kind: "notice",
@@ -386,7 +409,7 @@ export class SessionManager {
       const next = session?.queued.find((entry) => !entry.held);
       if (!session || session.status !== "idle" || !next) return;
       this.saveSession({ ...session, queued: session.queued.filter((entry) => entry !== next) });
-      void this.send(sessionId, next.id, next.text, next.refs, null, next.create).catch((error: unknown) => {
+      void this.send(sessionId, next.id, next.text, next.refs, null, next.create, "auto", next.attachments ?? []).catch((error: unknown) => {
         this.sink.upsertItem(sessionId, {
           kind: "notice",
           id: `queue-failed:${next.id}`,
@@ -423,7 +446,7 @@ export class SessionManager {
     const entry = session.queued.find((item) => item.id === queuedId);
     if (!entry) throw new HttpError(404, "queued_not_found", "보낼 예정인 요청이 없습니다.");
     this.saveSession({ ...session, queued: session.queued.filter((item) => item.id !== queuedId) });
-    return this.send(sessionId, entry.id, entry.text, entry.refs, null, entry.create, "steer");
+    return this.send(sessionId, entry.id, entry.text, entry.refs, null, entry.create, "steer", entry.attachments ?? []);
   }
 
   snapshot(): Snapshot {
@@ -847,12 +870,19 @@ export class SessionManager {
     from: { sessionId: string; label: string } | null = null,
     create: CreateTarget | null = null,
     mode: "auto" | "steer" | "queue" = "auto",
+    attachments: Attachment[] = [],
   ): Promise<SendResult> {
     const session = this.requireSession(sessionId);
-    const trimmed = text.trim();
+    const trimmed = text.trim() || (attachments.length ? "첨부한 파일을 봐 주세요." : "");
     if (!requestId) throw new HttpError(400, "missing_request_id", "requestId가 필요합니다.");
     if (!trimmed) throw new HttpError(400, "empty_message", "보낼 내용이 없습니다.");
-    const fingerprint = hashText(refs.length || create ? `${trimmed}\u0000${JSON.stringify(refs)}\u0000${JSON.stringify(create)}` : trimmed);
+    // Checked up front: a request is never half sent because a file went missing.
+    const files = this.attachments.resolve(attachments);
+    const fingerprint = hashText(
+      refs.length || create || attachments.length
+        ? `${trimmed}\u0000${JSON.stringify(refs)}\u0000${JSON.stringify(create)}${attachments.length ? `\u0000${attachments.map((entry) => entry.id).join(",")}` : ""}`
+        : trimmed,
+    );
     const seen = this.store.findRequest(requestId);
     if (seen) {
       if (seen.sessionId !== sessionId || seen.textHash !== fingerprint) {
@@ -876,10 +906,10 @@ export class SessionManager {
       if (steerable) {
         const pinned: { ref: DocRef; pinned: string; pinnedView: string | null; proposal: Proposal | null }[] = [];
         for (const ref of refs) pinned.push({ ref, ...(await this.documents.prepare(ref, sessionId, requestId, work.cwd)) });
-        const entry: Steered = { requestId, text: trimmed, refs, item: null, dropped: false };
+        const entry: Steered = { requestId, text: trimmed, refs, attachments, item: null, dropped: false };
         const steering = this.steering.get(sessionId) ?? new Map<string, Steered>();
         this.steering.set(sessionId, steering.set(requestId, entry));
-        const steered = await adapter.steer!(session, work, this.engineText(trimmed, pinned, work.cwd, null), requestId).catch(() => false);
+        const steered = await adapter.steer!(session, work, this.engineText(trimmed, pinned, work.cwd, null), requestId, files).catch(() => false);
         if (steered) {
           this.store.saveRequest(requestId, sessionId, fingerprint);
           entry.item = {
@@ -889,6 +919,7 @@ export class SessionManager {
             at: Date.now(),
             steered: true,
             ...(refs.length ? { refs: refs.map((ref) => this.documents.summary(ref)) } : {}),
+            ...(attachments.length ? { attachments } : {}),
           };
           this.sink.upsertItem(sessionId, entry.item);
           if (entry.dropped) this.requeueDropped(sessionId, [entry]);
@@ -898,7 +929,7 @@ export class SessionManager {
       }
       const current = this.requireSession(sessionId);
       if (current.status !== "idle" && current.status !== "error") {
-        const waiting: QueuedMessage = { id: requestId, text: trimmed, refs, create, at: Date.now() };
+        const waiting: QueuedMessage = { id: requestId, text: trimmed, refs, create, at: Date.now(), ...(attachments.length ? { attachments } : {}) };
         this.saveSession({ ...current, queued: [...current.queued, waiting] });
         return { duplicate: false, delivery: "queued" };
       }
@@ -926,13 +957,14 @@ export class SessionManager {
       ...(refs.length ? { refs: refs.map((ref) => this.documents.summary(ref)) } : {}),
       ...(from ? { from } : {}),
       ...(created ? { create: { format: created.target.format, name: basename(created.path), path: created.path } } : {}),
+      ...(attachments.length ? { attachments } : {}),
     });
     this.turnStarted.set(sessionId, Date.now());
     this.sink.updateSession(sessionId, { status: "starting", activity: "응답 준비 중", lastError: null });
     this.saveWork({ ...work, activeSessionId: sessionId, updatedAt: Date.now() });
     try {
       const current = this.requireSession(sessionId);
-      await this.adapter(session.provider).send({ ...current, access: this.accessOf(current) }, work, engineText, requestId);
+      await this.adapter(session.provider).send({ ...current, access: this.accessOf(current) }, work, engineText, requestId, files);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       for (const entry of prepared) if (entry.proposal) this.documents.discardProposal(entry.proposal.id);
@@ -1104,6 +1136,27 @@ export class SessionManager {
     if (changed.length) this.trackFiles(sessionId, `scan:${started}`, changed);
   }
 
+  /**
+   * A step keeps the pictures it has when the engine reports it again, and a finished command shows
+   * the pictures it made (image files it names that changed during this turn, e.g. screenshots).
+   */
+  private withStepImages(sessionId: string, item: Extract<TranscriptItem, { kind: "tool" }>, items: TranscriptItem[]) {
+    const before = items.find((entry) => entry.id === item.id);
+    let images = item.images ?? (before?.kind === "tool" ? before.images : undefined);
+    if (item.tool === "command" && item.status === "completed" && !(before?.kind === "tool" && before.status === "completed")) {
+      const session = this.sessions.get(sessionId);
+      const work = session ? this.works.get(session.workId) : undefined;
+      const started = this.turnStarted.get(sessionId);
+      if (work && started) {
+        const found = imagesNamed(`${item.title}\n${item.output ?? ""}`, work.cwd, started - 2000)
+          .map((path) => keepImage(this.attachments, { path }))
+          .filter((image) => image !== null);
+        if (found.length) images = withImages(images, found);
+      }
+    }
+    return images?.length ? { ...item, images } : item;
+  }
+
   private trackFiles(sessionId: string, itemId: string, paths: string[]) {
     const session = this.sessions.get(sessionId);
     const work = session ? this.works.get(session.workId) : undefined;
@@ -1204,10 +1257,19 @@ export class SessionManager {
     this.saveHandoff(handoff);
     this.sink.upsertItem(source.id, { kind: "handoff", id: `handoff:${handoff.id}`, handoffId: handoff.id, at: handoff.createdAt });
     try {
-      await this.send(target.id, request.requestId, request.text, refs, {
-        sessionId: source.id,
-        label: `${sourceWork.title} · ${source.purpose} (${source.provider === "claude" ? "Claude" : "Codex"})`,
-      });
+      await this.send(
+        target.id,
+        request.requestId,
+        request.text,
+        refs,
+        {
+          sessionId: source.id,
+          label: `${sourceWork.title} · ${source.purpose} (${source.provider === "claude" ? "Claude" : "Codex"})`,
+        },
+        null,
+        "auto",
+        request.attachments ?? [],
+      );
     } catch (error) {
       this.saveHandoff({ ...handoff, status: "failed", error: error instanceof Error ? error.message : String(error) });
       throw error;

@@ -115,6 +115,8 @@ fn open_main_window(app: &tauri::AppHandle, ready: &Ready) -> tauri::Result<()> 
         .title("Achmage Workbench")
         .inner_size(1280.0, 860.0)
         .min_inner_size(720.0, 560.0)
+        // Files dropped from the desktop reach the page as ordinary drops (attachments, images).
+        .disable_drag_drop_handler()
         .build()?;
     Ok(())
 }
