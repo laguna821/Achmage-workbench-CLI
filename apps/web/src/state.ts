@@ -37,6 +37,8 @@ export type State = {
   links: Record<string, SessionLink>;
   tools: DocumentTools | null;
   browser: AgentBrowserStatus | null;
+  /** Last `pkm.changed` version per scope (vault, views, rules, pins…): screens refetch on change. */
+  pkm: Record<string, number>;
 };
 
 export const initialState: State = {
@@ -56,6 +58,7 @@ export const initialState: State = {
   links: {},
   tools: null,
   browser: null,
+  pkm: {},
 };
 
 export type Action =
@@ -121,6 +124,8 @@ export function reducer(state: State, action: Action): State {
           return { ...next, handoffs: { ...state.handoffs, [event.handoff.id]: event.handoff } };
         case "link.upserted":
           return { ...next, links: { ...state.links, [event.link.id]: event.link } };
+        case "pkm.changed":
+          return { ...next, pkm: { ...state.pkm, [event.scope]: event.version } };
         case "provider.status":
           return { ...next, providers: { ...state.providers, [event.status.provider]: event.status } };
         case "item.upserted":

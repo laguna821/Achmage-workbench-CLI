@@ -25,6 +25,8 @@ import { readDrawChoice, writeDrawChoice } from "../imagegen.ts";
 import { LinkBar } from "./LinkBar.tsx";
 import { BrowserPill, type BrowserActions } from "./BrowserPill.tsx";
 import type { ModeProps } from "../workmodes.ts";
+import { VaultGuardPill } from "./pkm/VaultGuardPill.tsx";
+import { InsightPill } from "./pkm/InsightDialog.tsx";
 
 export type WorkActions = {
   /** Send a request; while the engine works it steers into the turn or waits ("queue"). */
@@ -655,6 +657,8 @@ export function WorkView({
                 onDraft={setBrowserDraft}
                 ownerLabel={state.browser?.window.kind === "agent" ? (state.sessions[state.browser.window.sessionId]?.purpose ?? null) : null}
               />
+              <VaultGuardPill provider={pickerProvider} access={access} workId={work.id} />
+              <InsightPill sessionId={active?.id ?? null} />
             </>
           }
           onFiles={pending.add}

@@ -43,9 +43,21 @@ const PATHS = {
   image: "M4.5 5h15a1 1 0 011 1v12a1 1 0 01-1 1h-15a1 1 0 01-1-1V6a1 1 0 011-1zM8.75 11a1.75 1.75 0 100-3.5 1.75 1.75 0 000 3.5zM20.5 15l-5-5-11 9",
   link: "M4 8h15M15.5 4.5L19 8l-3.5 3.5M20 16H5M8.5 12.5L5 16l3.5 3.5",
   openNew: "M13.5 4.5h6v6M19.5 4.5l-8 8M17.5 13.5v5a1 1 0 01-1 1h-11a1 1 0 01-1-1v-11a1 1 0 011-1h5",
+  // Folder icons of the vault mirror (Notebook Navigator's icon ids map to these).
+  mail: "M4 6.5h16a1 1 0 011 1v9a1 1 0 01-1 1H4a1 1 0 01-1-1v-9a1 1 0 011-1zM3.5 7.5l8.5 6 8.5-6",
+  info: "M12 21a9 9 0 100-18 9 9 0 000 18zM12 11v5.5M12 7.5v.5",
+  book: "M12 6.5c-1.8-1.4-4.6-2-8-1.8v13c3.4-.2 6.2.4 8 1.8 1.8-1.4 4.6-2 8-1.8v-13c-3.4-.2-6.2.4-8 1.8zM12 6.5v13",
+  star: "M12 3.8l2.5 5.2 5.7.8-4.1 4 1 5.6L12 16.7l-5.1 2.7 1-5.6-4.1-4 5.7-.8z",
+  tag: "M3.5 12.2V4.5a1 1 0 011-1h7.7l8.3 8.3a1.5 1.5 0 010 2.1l-6.2 6.2a1.5 1.5 0 01-2.1 0zM8 8h.01",
+  run: "M13.5 5.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM7 21l3.5-6.5L13 17v4M10.5 14.5L12 9l-3 1.5-1.5 3M12 9l2.5 2.5 3 .5",
+  bulb: "M9 18h6M10 21h4M12 3a6 6 0 00-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0012 3z",
+  external: "M14 4h6v6M20 4l-9 9M18 13.5V19a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5.5",
 } as const;
 
 export type IconName = keyof typeof PATHS | "dots" | "stop";
+
+/** An icon name that came as data (the vault mirror's folder icons), or null when this set lacks it. */
+export const iconName = (name: string | null | undefined): IconName | null => (name && (name in PATHS || name === "dots" || name === "stop") ? (name as IconName) : null);
 
 export function Icon({ name, size = 16, className }: { name: IconName; size?: number; className?: string }) {
   if (name === "dots") {

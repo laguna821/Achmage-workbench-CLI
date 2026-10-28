@@ -4961,7 +4961,8 @@ kbd {
 
 /* Feature pills (계획 먼저 · 그림 · 브라우저) name themselves only while on; off, an icon and a
    tooltip, so the row stays short. The name is still there for screen readers. */
-.composer-left .feature-pill:not(.on) .pill-label {
+.composer-left .feature-pill:not(.on) .pill-label,
+.composer-left .insight-pill .pkm-pill-label {
   position: absolute;
   width: 1px;
   height: 1px;

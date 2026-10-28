@@ -25,7 +25,7 @@ import { ClaudeTranscriptMapper, describeTool, type MapperOutput } from "@workbe
 import { resolveClaude, type ResolvedBinary } from "../binaries.ts";
 import { billingVarsIn, claudeSdkEnv, engineEnv } from "../engine-env.ts";
 import { parseClaudeAuthStatus } from "../engine-login.ts";
-import { emptyStatus, type AdapterSink, type AttachedFile, type LoginStart, type NativeConversation, type ProviderAdapter } from "./types.ts";
+import { emptyStatus, type AdapterSink, type AttachedFile, type ClaudeLaunch, type LoginStart, type NativeConversation, type ProviderAdapter } from "./types.ts";
 import { claudeHistory } from "../imports.ts";
 import { isImage, mentionFiles } from "../attachments.ts";
 import type { BrowserEngineHooks } from "../browse.ts";
@@ -193,15 +193,18 @@ export class ClaudeAdapter implements ProviderAdapter {
 
   private readonly attachmentsDir: string | null;
 
+  private readonly launch: ClaudeLaunch | null;
+
   constructor(
     sink: AdapterSink,
-    options?: { idleMs?: number; modelCacheFile?: string; attachmentsDir?: string; browser?: BrowserEngineHooks | null },
+    options?: { idleMs?: number; modelCacheFile?: string; attachmentsDir?: string; browser?: BrowserEngineHooks | null; launch?: ClaudeLaunch },
   ) {
     this.sink = sink;
     this.idleMs = options?.idleMs ?? 10 * 60_000;
     this.modelCache = options?.modelCacheFile ?? null;
     this.attachmentsDir = options?.attachmentsDir ?? null;
     this.browser = options?.browser ?? null;
+    this.launch = options?.launch ?? null;
   }
 
   /**
@@ -439,9 +442,12 @@ export class ClaudeAdapter implements ProviderAdapter {
           }
         });
       });
+    // The context card and the vault guard (pkm.ts), for every process this session starts.
+    const extras = this.launch?.(session, work) ?? null;
     runtime.query = query({
       prompt: input,
       options: {
+        ...(extras?.hooks ? { hooks: extras.hooks } : {}),
         cwd: work.cwd,
         // Files attached to requests are read from here without asking.
         ...(this.attachmentsDir ? { additionalDirectories: [this.attachmentsDir] } : {}),
@@ -454,7 +460,8 @@ export class ClaudeAdapter implements ProviderAdapter {
         canUseTool,
         includePartialMessages: true,
         settingSources: ["user", "project", "local"],
-        systemPrompt: { type: "preset", preset: "claude_code", ...(browser ? { append: browser } : {}) },
+        // The context card (pkm.ts) and the agent browser's instructions, after Claude Code's own.
+        systemPrompt: { type: "preset", preset: "claude_code", ...(extras?.append || browser ? { append: [extras?.append, browser].filter(Boolean).join("\n\n") } : {}) },
         pathToClaudeCodeExecutable: this.binary.path,
         // Never an API key or cloud route left in the gateway's environment: the user's login.
         // The agent browser's playwright-cli is on PATH, and names this session's browser while on.

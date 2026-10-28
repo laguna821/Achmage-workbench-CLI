@@ -11,6 +11,8 @@ import type { MenuEntry, MenuRequest } from "./ContextMenu.tsx";
 import { UsageCard } from "./UsageCard.tsx";
 import { LinkBadge, LinkLines, linkable } from "./LinkSidebar.tsx";
 import { linkOfSession } from "../links.ts";
+import { VaultSection } from "./pkm/VaultSection.tsx";
+import { PlacementMark, ViewsSection } from "./pkm/ViewsSection.tsx";
 
 // The sidebar: where many sessions live. "지금" (waiting for you, working, new replies) on top,
 // then pinned things, then the folder tree of works with their sessions and documents. Rows move by
@@ -42,6 +44,10 @@ export type SidebarActions = {
   linkSessions: (sessions: [Session, Session]) => void;
   /** "다른 곳의 대화 가져오기": a terminal's or another app's Claude Code / Codex conversation. */
   importConversations: () => void;
+  /** A subpage of a page (the "+" on a page row): `A/` beside `A.md`. */
+  newSubpage?: (artifact: Artifact) => void;
+  /** A session dropped on a work row: its record as a page of that work ("세션 기록 페이지"). */
+  sessionPage?: (session: Session, work: Work) => void;
 };
 
 const MIN_WIDTH = 232;
@@ -61,7 +67,7 @@ type Drag = {
   active: boolean;
   x: number;
   y: number;
-  target: { id: string; zone: DropZone; move: Move | null; link: [Session, Session] | null } | null;
+  target: { id: string; zone: DropZone; move: Move | null; link: [Session, Session] | null; page?: Work } | null;
 };
 
 export function Sidebar({
@@ -240,7 +246,9 @@ export function Sidebar({
         const pair = linkPair(current.row, row);
         const zone = zoneAt(event.clientY - rect.top, rect.height, holds(row, current.row) || Boolean(pair));
         const link = zone === "inside" && pair && linkable(Object.values(state.links), pair.map((session) => session.id)) ? pair : null;
-        target = { id: row.id, zone, move: link || (pair && zone === "inside") ? null : moveFor(state, current.row, row, zone, sortMode), link };
+        // A session dropped on a work makes its record a page there (pages phase 2).
+        if (current.row.type === "session" && row.type === "work" && actions.sessionPage) target = { id: row.id, zone: "inside", move: null, link: null, page: row.work };
+        else target = { id: row.id, zone, move: link || (pair && zone === "inside") ? null : moveFor(state, current.row, row, zone, sortMode), link };
       }
       const next = { ...current, active: true, x: event.clientX, y: event.clientY, target };
       dragRef.current = next;
@@ -254,6 +262,7 @@ export function Sidebar({
       suppressClick.current = true;
       window.setTimeout(() => (suppressClick.current = false), 0);
       if (commit && current.target?.link) actions.linkSessions(current.target.link);
+      if (commit && current.target?.page && current.row.type === "session") actions.sessionPage?.(current.row.session, current.target.page);
       else if (commit && current.target?.move) actions.move(current.target.move);
     };
     const onUp = () => finish(true);
@@ -333,7 +342,7 @@ export function Sidebar({
     if (row.type === "session" && row.id === visibleSessionId) classes.push("current");
     if (row.type === "doc" && row.id === currentDocId) classes.push("current");
     if (drag?.active && drag.row.id === row.id) classes.push("dragging");
-    if (drag?.active && drag.target?.id === row.id) classes.push(drag.target.link ? "drop-link" : drag.target.move ? `drop-${drag.target.zone}` : "drop-refused");
+    if (drag?.active && drag.target?.id === row.id) classes.push(drag.target.link ? "drop-link" : drag.target.page ? "drop-page" : drag.target.move ? `drop-${drag.target.zone}` : "drop-refused");
     return classes.join(" ");
   };
 
@@ -402,6 +411,7 @@ export function Sidebar({
       const linked = only ?? (row.open ? undefined : row.sessions.find((session) => linkOfSession(state, session.id)));
       trailing = (
         <span className="side-row-trail">
+          <PlacementMark workId={row.work.id} />
           {rowAdd("새 페이지", () => actions.newPage(row.work))}
           {linked ? <LinkBadge sessionId={linked.id} /> : null}
           {only ? <EngineMark provider={only.provider} size={13} className="side-row-engine" /> : null}
@@ -429,7 +439,12 @@ export function Sidebar({
     } else if (row.type === "doc") {
       icon = docIcon(row.artifact);
       label = row.artifact.name;
-      trailing = <span className="side-row-trail muted">r{row.artifact.revision}</span>;
+      const artifact = row.artifact;
+      trailing = (
+        <span className="side-row-trail muted">
+          {artifact.format === "markdown" && actions.newSubpage ? rowAdd("하위 페이지", () => actions.newSubpage!(artifact)) : null}r{artifact.revision}
+        </span>
+      );
       title = `${FORMAT_LABEL[row.artifact.format]} · ${row.artifact.path}`;
     }
     return (
@@ -624,6 +639,8 @@ export function Sidebar({
             <LinkLines tree={treeRef} />
           </div>
         </section>
+        <ViewsSection openMenu={actions.openMenu} />
+        <VaultSection theme={appTheme} openMenu={actions.openMenu} />
       </div>
 
       <div className="side-foot">
@@ -636,7 +653,7 @@ export function Sidebar({
       </div>
       <div className="side-resize" onPointerDown={startResize} role="separator" aria-orientation="vertical" aria-label="사이드바 너비" />
       {drag?.active ? (
-        <div className={`drag-ghost${drag.target?.link ? " linking" : drag.target?.move ? "" : " refused"}`} style={{ left: drag.x + 12, top: drag.y + 10 }}>
+        <div className={`drag-ghost${drag.target?.link ? " linking" : drag.target?.move || drag.target?.page ? "" : " refused"}`} style={{ left: drag.x + 12, top: drag.y + 10 }}>
           {drag.target?.link
             ? `⇄ 세션 잇기: ${drag.target.link[0].purpose} · ${drag.target.link[1].purpose}`
             : drag.row.type === "folder"
@@ -646,6 +663,7 @@ export function Sidebar({
                 : drag.row.type === "session"
                   ? drag.row.session.purpose
                   : ""}
+          {drag.target?.page ? ` → 「${drag.target.page.title}」에 세션 기록 페이지` : ""}
         </div>
       ) : null}
     </aside>

@@ -94,7 +94,10 @@ export function Connections({
   notifications,
   onNotifications,
   imageUpload,
+  vault,
 }: {
+  /** The Obsidian vault line (pkm). */
+  vault?: ReactNode;
   tools: DocumentTools | null;
   /** The agent browser (absent from older gateways). */
   browser: AgentBrowserStatus | null;
@@ -192,6 +195,7 @@ export function Connections({
       </button>
       <ToolsSection tools={tools} onInstallIeum={onInstallIeum} onRefreshTools={onRefreshTools} />
       <BrowserSection status={browser} actions={browserActions} />
+      {vault}
       <button type="button" className="text-button" onClick={onIntegrations}>
         MCP·스킬 연동 · Claude와 Codex 나란히…
       </button>

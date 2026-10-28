@@ -11,6 +11,8 @@ import { AttachmentStrip } from "./Attachments.tsx";
 import { PlanApproval } from "./PlanFirst.tsx";
 import { ImageCard } from "./ImageGen.tsx";
 import { LinkEndCard, LinkHopBadge, LinkRequestText } from "./LinkCards.tsx";
+import { NoteChips } from "./pkm/NoteChips.tsx";
+import { MessageActions } from "./pkm/MessageActions.tsx";
 
 const DRAWN = diagramComponents();
 const STREAMING = diagramComponents(true);
@@ -481,6 +483,7 @@ export function Transcript({
           <div key={block.item.id} className="turn-assistant" data-item-id={block.item.id}>
             {block.speaker ? speaker : null}
             <AssistantText text={block.item.text} streaming={block.item.streaming} />
+            <MessageActions sessionId={sessionId} itemId={block.item.id} streaming={block.item.streaming} />
           </div>
         );
       case "work":
@@ -630,6 +633,7 @@ export function Transcript({
                   {turn.user.link?.fromSessionId ? <LinkRequestText text={turn.user.text} /> : <RequestText text={turn.user.text} />}
                   {turn.user.attachments?.length ? <AttachmentStrip attachments={turn.user.attachments} /> : null}
                   {turn.user.refs?.length ? <RefChips refs={turn.user.refs} /> : null}
+                  {turn.user.notes?.length ? <NoteChips notes={turn.user.notes} /> : null}
                   {turn.user.create ? (
                     <div className="ref-chips">
                       <span className="ref-chip create-chip" title={turn.user.create.path}>

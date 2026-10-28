@@ -23,11 +23,17 @@
 //          SDK sends them as `appendSystemPrompt` in initialize) and, when it was, runs
 //          `playwright-cli -s=<name> open <address>` through Bash from its PATH like a model would
 //   "고쳐"  appends to the working copy the request names
+// Vault notes attached to a request are named back ("받은 노트 사본: …").
+//   "맥락"  answers with the appended system prompt it was started with (the context card)
+//   "볼트에 써: <path>"  tries the Write tool on that path; PreToolUse hooks registered by the SDK
+//          are asked first (as Claude Code does) and a denial is reported; it only ever writes
+//          inside the temporary folder.
 
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { pagePng } from "./png.mjs";
 
@@ -57,6 +63,8 @@ let initialized = false;
 let used = 14_000;
 let rateUsed = 0.31;
 let turn = null; // { interrupted }
+let appendSystemPrompt = null; // from initialize: the context card
+let preToolUse = []; // from initialize: [{ matcher, hookCallbackIds }]
 const queue = []; // { text, uuid } user messages waiting to run
 const waiting = new Map(); // control request id -> resolve
 let browser = null; // { name } when started with the agent browser's instructions
@@ -212,15 +220,41 @@ async function runTurn(text) {
   // A document edit: the gateway names the working copy to change; the file itself stays as it is.
   const working = text.match(/작업 사본만 수정하세요: (.+)/);
   if (text.includes("고쳐") && working) appendFileSync(resolve(process.cwd(), working[1].trim()), "\n\n고친 문단입니다. 도입부를 질문 하나로 시작하게 바꿨습니다.\n");
+  let guardNote = "";
+  const target = /볼트에 써: ([^\n]+)/.exec(text)?.[1]?.trim();
+  if (target) {
+    const toolId = `toolu_${randomUUID().slice(0, 8)}`;
+    const input = { file_path: target, content: "테스트" };
+    send({ type: "assistant", message: { id: `msg_${randomUUID().slice(0, 8)}`, type: "message", role: "assistant", model: MODEL, content: [{ type: "tool_use", id: toolId, name: "Write", input }], stop_reason: "tool_use", stop_sequence: null, usage: { input_tokens: 10, output_tokens: 20, cache_creation_input_tokens: 0, cache_read_input_tokens: used } }, parent_tool_use_id: null, ...base() });
+    let denied = null;
+    for (const matcher of preToolUse) {
+      if (matcher.matcher && !new RegExp(`^(?:${matcher.matcher})$`).test("Write")) continue;
+      for (const callbackId of matcher.hookCallbackIds ?? []) {
+        const output = await ask({ subtype: "hook_callback", callback_id: callbackId, input: { session_id: sessionId, transcript_path: "", cwd: process.cwd(), hook_event_name: "PreToolUse", tool_name: "Write", tool_input: input, tool_use_id: toolId }, tool_use_id: toolId });
+        if (output?.hookSpecificOutput?.permissionDecision === "deny") denied = output.hookSpecificOutput.permissionDecisionReason ?? "denied";
+      }
+    }
+    if (!denied && target.startsWith(`${tmpdir()}/`)) {
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, input.content);
+    }
+    send({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolId, content: denied ?? "written", is_error: Boolean(denied) }] }, parent_tool_use_id: null, ...base() });
+    guardNote = denied ? `쓰기 거부: ${denied}\n\n` : `썼습니다: ${target}\n\n`;
+  }
   if (!(text.trim() === "/compact")) {
     const steer = text.startsWith("[steer]") ? `이어서 받은 요청을 반영합니다: ${text.slice(7)}\n\n` : "";
     const skill = text.match(/^\/정리(?:\s+(.*))?$/s);
     const seen = !steer && text.match(/ \((받은 [^)]*)\)$/);
+    // Vault notes attached as read-only references: name the copies, as an engine reading them would.
+    const notes = [...text.matchAll(/읽기 전용 사본: ([^\n]+)/g)].map((match) => match[1].trim());
     const long = text.includes("길게");
     const lines = long ? 160 : 6;
     const chunks = [];
     if (browserLine) chunks.push({ text: `${browserLine}\n\n`, wait: 30 });
     if (steer) chunks.push({ text: steer, wait: 30 });
+    if (notes.length) chunks.push({ text: `받은 노트 사본: ${notes.join(" | ")}\n\n`, wait: 30 });
+    if (guardNote) chunks.push({ text: guardNote, wait: 30 });
+    if (text.includes("맥락")) chunks.push({ text: `맥락 카드:\n${appendSystemPrompt ?? "(없음)"}\n\n`, wait: 30 });
     if (skill) chunks.push({ text: `스킬 /정리를 실행했습니다: ${skill[1] ?? ""}\n\n`, wait: 30 });
     if (seen) chunks.push({ text: `요청을 받았습니다 (${seen[1]}).\n\n`, wait: 30 });
     const linked = linkReply(text, "Claude");
@@ -319,6 +353,8 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     const reply = (response) => send({ type: "control_response", response: { subtype: "success", request_id: id, response } });
     switch (request.subtype) {
       case "initialize":
+        appendSystemPrompt = request.appendSystemPrompt ?? null;
+        preToolUse = request.hooks?.PreToolUse ?? [];
         // The agent browser's instructions arrive appended to the system prompt.
         if (typeof request.appendSystemPrompt === "string" && request.appendSystemPrompt.includes("[Achmage Workbench · 브라우저]")) {
           browser = { name: /-s=(wb-[a-z0-9]+)/.exec(request.appendSystemPrompt)?.[1] ?? "wb-unknown" };

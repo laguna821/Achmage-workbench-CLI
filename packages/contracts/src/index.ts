@@ -45,6 +45,8 @@ export type Work = {
   archivedAt: number | null;
   createdAt: number;
   updatedAt: number;
+  /** Tags a rule (pkm) or the user gave the work; matched by `#tag` in saved views. */
+  tags?: string[];
 };
 
 export type SessionStatus =
@@ -132,7 +134,7 @@ export type ContextUsage = { used: number; window: number | null; compactAt: num
  * A request written while the engine was working, sent as the next turn when this one ends.
  * `held`: kept after a stop, a failure, a restart or a steer the stop dropped — sent only by hand.
  */
-export type QueuedMessage = { id: string; text: string; refs: DocRef[]; create: CreateTarget | null; at: number; held?: boolean; attachments?: Attachment[]; plan?: boolean };
+export type QueuedMessage = { id: string; text: string; refs: DocRef[]; create: CreateTarget | null; at: number; held?: boolean; attachments?: Attachment[]; plan?: boolean; notes?: string[] };
 
 /**
  * A file pasted or dropped into the input (a picture, a PDF, any file), kept by the gateway by its
@@ -298,6 +300,8 @@ export type TranscriptItem =
       peer?: { name: string | null; from: string | null } | null;
       /** Handed over by a linked-session relay ("세션 잇기"): the goal, or another session's reply. */
       link?: LinkHop | null;
+      /** Vault notes given as read-only references (vault-relative paths). */
+      notes?: { path: string; title: string }[];
     }
   | { kind: "assistant"; id: string; text: string; streaming: boolean; at: number }
   | { kind: "reasoning"; id: string; text: string; at: number }
@@ -415,7 +419,9 @@ export type WorkbenchEvent =
   | { type: "link.upserted"; link: SessionLink }
   | { type: "prefs.updated"; prefs: UiPrefs }
   | { type: "tools.status"; tools: DocumentTools }
-  | { type: "browser.status"; status: AgentBrowserStatus };
+  | { type: "browser.status"; status: AgentBrowserStatus }
+  /** The vault mirror, saved views, rules or pins changed (pkm.ts); the UI fetches that part again. */
+  | { type: "pkm.changed"; scope: "vault" | "views" | "rules" | "pins" | "insights"; version: number };
 
 /**
  * Screen preferences (theme, sidebar, per-engine look). Owned by the UI; the gateway only stores
@@ -505,6 +511,7 @@ export type UpdateSessionRequest = {
 };
 
 export type UpdateWorkRequest = {
+  tags?: string[];
   title?: string;
   folderId?: string | null;
   activeSessionId?: string | null;
@@ -565,6 +572,8 @@ export type SendMessageRequest = {
   attachments?: Attachment[];
   /** "계획 먼저": the engine only plans this turn and waits for the go-ahead. */
   plan?: boolean;
+  /** Vault notes to read with this request (vault-relative paths; read-only references). */
+  notes?: string[];
 };
 
 export type SendResult = { duplicate: boolean; delivery: "turn" | "steered" | "queued" };
@@ -722,3 +731,4 @@ export * from "./browse.ts";
 export * from "./views.ts";
 export * from "./imports.ts";
 export * from "./doc-images.ts";
+export * from "./pkm.ts";
