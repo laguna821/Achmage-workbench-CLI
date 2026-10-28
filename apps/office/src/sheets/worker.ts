@@ -54,6 +54,9 @@ async function handle(call: WorkerCall): Promise<{ value: unknown; unhandled?: b
     case "mark-dirty":
       // The spreadsheet editor tracks unsaved edits in the page (its edit journal).
       return { value: null };
+    case "clipboard":
+      // The spreadsheet editor reads pasted pictures and text in the page itself.
+      return { value: null };
   }
 }
 

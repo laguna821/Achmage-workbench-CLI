@@ -15,7 +15,9 @@ export type WorkerRequest =
   | { type: "snapshot" }
   | { type: "dirty" }
   /** A save was not taken as a revision: the deck counts as unsaved again. */
-  | { type: "mark-dirty" };
+  | { type: "mark-dirty" }
+  /** What another app copied (a PNG and/or text), seen by the page in a paste: the editor's clipboard now holds it. */
+  | { type: "clipboard"; text?: string; png?: ArrayBuffer };
 
 export type WorkerCall = WorkerRequest & { id: number };
 

@@ -70,6 +70,8 @@ export class Gateway {
 
   /** Save edited bytes as the next revision; refused (409) when the document moved on. */
   async saveBytes(artifactId: string, expectedRevision: number, data: ArrayBuffer) {
+    // The window may hear of the new revision from the gateway before this answer: it is ours.
+    post({ type: "office:saving" });
     const response = await this.call("PUT", `/api/artifacts/${artifactId}/bytes?expectedRevision=${expectedRevision}`, data, { "content-type": "application/octet-stream" });
     return (await response.json()) as { id: string; revision: number; sha256: string };
   }

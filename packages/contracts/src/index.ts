@@ -625,6 +625,8 @@ export type OfficePageMessage =
   | { type: "office:ready" }
   /** The editor shows this revision; `recovered` when it reopened unsaved edits made on it. */
   | { type: "office:opened"; revision: number; recovered: boolean }
+  /** A save of this page is on its way: the next revision the window hears of is this one (its "office:saved" follows). */
+  | { type: "office:saving" }
   | { type: "office:saved"; revision: number }
   | { type: "office:dirty"; dirty: boolean }
   /** After flush, rebase or keep: the saved revision, or null when the edits were not saved (then they are kept). */

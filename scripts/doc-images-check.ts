@@ -9,18 +9,21 @@
 //     the preview shows it. R2 refusing: a toast and the picture in the work folder's assets/,
 //     linked relatively and shown in the preview. A dropped picture; a text copy that also carries a
 //     picture still pastes the text. The Hangul text view says it cannot take pictures.
+//   - Word, PowerPoint, Excel (in-app editors on their own origin): a pasted and a dropped picture
+//     are embedded in the saved file (word/media, ppt/media, xl/media); a WebP becomes PNG; in
+//     PowerPoint a picture copied inside the editor still pastes as itself.
 // Usage: node scripts/doc-images-check.ts [outDir] [codex|claude]
 
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash, createHmac } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { deflateSync } from "node:zlib";
-import { chromium, type Page } from "playwright-core";
+import { chromium, type Frame, type Page } from "playwright-core";
 import type { Artifact, Provider, Session, Work } from "@workbench/contracts";
 
 const outDir = process.argv[2] ?? join(tmpdir(), "wb-doc-images");
@@ -132,6 +135,27 @@ const fake = createServer(async (req, res) => {
 await new Promise<void>((done) => fake.listen(0, "127.0.0.1", done));
 const r2Url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
 
+// ── documents ──────────────────────────────────────────────────────────
+const ZIP_PY = String.raw`
+import sys, zipfile
+from xml.sax.saxutils import escape
+cmd = sys.argv[1]
+if cmd == 'docx':
+    W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+    para = lambda text: '<w:p><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p>' % escape(text)
+    ct = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>'
+    rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'
+    doc = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document %s><w:body>%s<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>' % (W, ''.join(para(t) for t in sys.argv[3:]))
+    with zipfile.ZipFile(sys.argv[2], 'w', zipfile.ZIP_DEFLATED) as z:
+        z.writestr('[Content_Types].xml', ct)
+        z.writestr('_rels/.rels', rels)
+        z.writestr('word/document.xml', doc)
+elif cmd == 'media':
+    with zipfile.ZipFile(sys.argv[2]) as z:
+        print('\n'.join(n for n in z.namelist() if '/media/' in n and not n.endswith('/')))
+`;
+const zip = (...args: string[]) => execFileSync("python3", ["-I", "-c", ZIP_PY, ...args]).toString().trim();
+
 // A stand-in Hangul engine: the text view of any HWPX is one heading and a line.
 const kordocRunner = join(scratch, "kordoc-runner.mjs");
 writeFileSync(
@@ -183,11 +207,16 @@ await api("PUT", "/api/prefs", { prefs: { onboarding: "done", startScreen: "last
 const browser = await chromium.launch();
 const logs: string[] = [];
 
-/** The text of a revision. */
+/** The text of a revision, and the pictures inside an office revision. */
 const revisionText = async (id: string, revision: number) => (await api<{ text: string }>("GET", `/api/artifacts/${id}/text?revision=${revision}`)).text;
+async function media(id: string, revision: number) {
+  const file = join(scratch, `${id}-r${revision}.zip`);
+  writeFileSync(file, Buffer.from(await (await fetch(`${ready.url}/api/artifacts/${id}/raw?revision=${revision}`, { headers: auth })).arrayBuffer()));
+  return zip("media", file).split("\n").filter(Boolean);
+}
 
 /** Paste or drop files into an element, as the browser hands them to the page. */
-const transfer = (target: Page, selector: string, kind: "paste" | "drop", files: { b64: string; name: string; type: string }[], extra: Record<string, string> = {}, point?: { x: number; y: number }) =>
+const transfer = (target: Page | Frame, selector: string, kind: "paste" | "drop", files: { b64: string; name: string; type: string }[], extra: Record<string, string> = {}, point?: { x: number; y: number }) =>
   target.evaluate(
     ({ selector, kind, files, extra, point }) => {
       const element = (selector === ":focus" ? document.activeElement : document.querySelector(selector)) as HTMLElement | null;
@@ -220,6 +249,7 @@ async function openDoc(page: Page, name: string) {
   await page.locator(".docs-button").click();
   await page.locator(".docs-menu").getByText(name, { exact: true }).click();
 }
+const editorFrame = (page: Page, kind: string) => page.frames().find((frame) => frame.url().includes(`/office/${kind}.html`));
 const saveState = (page: Page) => page.locator(".save-state").innerText().catch(() => "");
 const waitSaved = (page: Page, revision: number, timeout = 25_000) => until(async () => (await saveState(page)).includes(`r${revision} 저장됨`), timeout);
 
@@ -229,9 +259,15 @@ async function flow(provider: Provider, index: number) {
   mkdirSync(join(cwd, "강의"), { recursive: true });
   writeFileSync(join(cwd, "노트.md"), "# 가을 특강 노트\n\n도식은 아래에.\n");
   writeFileSync(join(cwd, "양식.hwpx"), "PK\u0003\u0004 stand-in");
+  zip("docx", join(cwd, "계획.docx"), "가을 특강 계획", "질문에서 시작하는 글쓰기");
+  copyFileSync(join(import.meta.dirname, "fixtures/cover.pptx"), join(cwd, "표지.pptx"));
+  copyFileSync(join(import.meta.dirname, "fixtures/supplies.xlsx"), join(cwd, "비품.xlsx"));
   const work = await api<Work>("POST", "/api/works", { title: `${label} 그림 넣기`, cwd });
   await api<Session>("POST", `/api/works/${work.id}/sessions`, { provider, purpose: "그림" });
   const note = await api<Artifact>("POST", `/api/works/${work.id}/artifacts`, { path: "노트.md" });
+  const docx = await api<Artifact>("POST", `/api/works/${work.id}/artifacts`, { path: "계획.docx" });
+  const pptx = await api<Artifact>("POST", `/api/works/${work.id}/artifacts`, { path: "표지.pptx" });
+  const xlsx = await api<Artifact>("POST", `/api/works/${work.id}/artifacts`, { path: "비품.xlsx" });
 
   const context = await browser.newContext({ viewport: { width: 1360, height: 900 } });
   const page = await context.newPage();
@@ -367,6 +403,102 @@ async function flow(provider: Provider, index: number) {
     pass("작업 폴더 밖 경로는 미리보기 경로에서 거절", outside === 403 || outside === 415, `HTTP ${outside}`);
 
     await page.locator(".document-view .segmented").getByRole("radio", { name: "편집" }).click();
+
+    // ── Word ────────────────────────────────────────────────────────────
+    await openDoc(page, "계획.docx");
+    await until(async () => Boolean(editorFrame(page, "docs")) && (await saveState(page)).includes("r1 저장됨"), 60_000);
+    const docs = editorFrame(page, "docs")!;
+    await docs.locator(".ProseMirror p").first().waitFor({ timeout: 20_000 });
+    await page.waitForTimeout(1200);
+    await docs.locator(".ProseMirror p").first().click();
+    await page.keyboard.press("End");
+    const docsPaste = await transfer(docs, ".ProseMirror", "paste", [png(11)]);
+    await until(async () => (await docs.locator(".ProseMirror img").count()) === 1, 8000);
+    // A WebP (drawn in the browser) dropped on the last paragraph goes in as PNG.
+    const webp = await docs.evaluate(async () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 120;
+      canvas.height = 80;
+      const context = canvas.getContext("2d")!;
+      context.fillStyle = "#0f8b8d";
+      context.fillRect(0, 0, 120, 80);
+      context.fillStyle = "#f4a259";
+      context.fillRect(20, 20, 80, 40);
+      const blob = await new Promise<Blob>((done) => canvas.toBlob((value) => done(value!), "image/webp"));
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      let binary = "";
+      for (const byte of bytes) binary += String.fromCharCode(byte);
+      return { b64: btoa(binary), type: blob.type };
+    });
+    const docsDrop = await transfer(docs, ".ProseMirror p:last-of-type", "drop", [{ b64: webp.b64, name: "도식.webp", type: webp.type }]);
+    await until(async () => (await docs.locator(".ProseMirror img").count()) === 2, 8000);
+    await shot("07-docx.png");
+    await docs.locator(".ProseMirror p").first().click();
+    await page.keyboard.press("Control+s");
+    await waitSaved(page, 2);
+    const docxMedia = await media(docx.id, 2).catch(() => [] as string[]);
+    pass(
+      "워드: 붙여 넣은 PNG와 끌어 놓은 WebP(PNG로)가 docx 안에 들어감",
+      docsPaste === "handled" && webp.type === "image/webp" && (await docs.locator(".ProseMirror img").count()) === 2 && docxMedia.length === 2 && docxMedia.every((name) => name.endsWith(".png")),
+      `drop=${docsDrop} media=${docxMedia.join(",")}`,
+    );
+
+    // ── PowerPoint ──────────────────────────────────────────────────────
+    await openDoc(page, "표지.pptx");
+    await until(async () => Boolean(editorFrame(page, "slides")) && (await saveState(page)).includes("r1 저장됨"), 60_000);
+    const slides = editorFrame(page, "slides")!;
+    await slides.locator(".konvajs-content").first().waitFor({ timeout: 30_000 });
+    await page.waitForTimeout(1500);
+    const pictures = () =>
+      slides.evaluate(() => {
+        type Stage = { width(): number; find(selector: string): unknown[] };
+        const stages = (window as unknown as { Konva?: { stages: Stage[] } }).Konva?.stages ?? [];
+        return stages.length ? stages.reduce((a, b) => (b.width() > a.width() ? b : a)).find("Image").length : -1;
+      });
+    const slideBefore = await pictures();
+    const slidesPaste = await transfer(slides, "body", "paste", [png(21)]);
+    const pastedOnSlide = await until(async () => (await pictures()) === slideBefore + 1, 8000);
+    const slideDrop = await transfer(slides, ".stage-rel", "drop", [{ b64: webp.b64, name: "도식.webp", type: webp.type }], {}, undefined);
+    const droppedOnSlide = await until(async () => (await pictures()) === slideBefore + 2, 8000);
+    // A picture copied inside the editor pastes as itself (its mark is on the clipboard), not as the last outside picture.
+    // (Box in page coordinates, as Playwright gives it for elements in frames.)
+    const stage = (await slides.locator(".stage-rel").boundingBox())!;
+    await page.mouse.click(stage.x + stage.width / 2, stage.y + stage.height / 2);
+    await page.waitForTimeout(300);
+    await page.keyboard.press("Control+c");
+    await page.waitForTimeout(300);
+    await page.keyboard.press("Control+v");
+    const internal = await until(async () => (await pictures()) === slideBefore + 3, 8000);
+    await page.waitForTimeout(500);
+    await shot("08-pptx.png");
+    await page.keyboard.press("Control+s");
+    await waitSaved(page, 2, 40_000);
+    const pptxMedia = await media(pptx.id, 2).catch(() => [] as string[]);
+    pass(
+      "PPT: 다른 앱의 그림 붙여넣기·WebP 끌어 놓기·앱 안 복사 붙여넣기 → pptx 안에",
+      slidesPaste === "handled" && pastedOnSlide && droppedOnSlide && internal && pptxMedia.length >= 2,
+      `${slideBefore}→${await pictures()} drop=${slideDrop} media=${pptxMedia.join(",")}`,
+    );
+
+    // ── Excel ───────────────────────────────────────────────────────────
+    await openDoc(page, "비품.xlsx");
+    await until(async () => Boolean(editorFrame(page, "sheets")) && (await saveState(page)).includes("r1 저장됨"), 60_000);
+    const sheets = editorFrame(page, "sheets")!;
+    // Pictures go in once the workbook is ready (the editor says so in its status line).
+    await until(async () => (await sheets.locator("body").innerText()).includes("통합 문서를 모두 로드했습니다"), 30_000);
+    await page.waitForTimeout(800);
+    const cellInput = "#__editor___INTERNAL_EDITOR__DOCS_NORMAL";
+    await sheets.evaluate((selector) => (document.querySelector(selector) as HTMLElement | null)?.focus(), cellInput);
+    const sheetPaste = await transfer(sheets, cellInput, "paste", [png(31)]);
+    const sheetDrop = await transfer(sheets, "#univer-container", "drop", [{ b64: webp.b64, name: "도식.webp", type: webp.type }], {}, { x: 420, y: 330 });
+    await until(async () => (await saveState(page)).includes("저장 안 됨"), 8000);
+    await page.waitForTimeout(1200);
+    await shot("09-xlsx.png");
+    await sheets.evaluate((selector) => (document.querySelector(selector) as HTMLElement | null)?.focus(), cellInput);
+    await page.keyboard.press("Control+s");
+    await waitSaved(page, 2, 40_000);
+    const xlsxMedia = await media(xlsx.id, 2).catch(() => [] as string[]);
+    pass("엑셀: 붙여 넣은 PNG와 끌어 놓은 WebP(PNG로)가 xlsx 안에 들어감", sheetPaste === "handled" && xlsxMedia.length === 2 && xlsxMedia.every((name) => name.endsWith(".png")), `drop=${sheetDrop} media=${xlsxMedia.join(",")}`);
 
     // ── Hangul: the text view says it cannot take pictures ───────────────
     await api<Artifact>("POST", `/api/works/${work.id}/artifacts`, { path: "양식.hwpx" });
