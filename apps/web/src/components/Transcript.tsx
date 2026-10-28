@@ -573,6 +573,11 @@ export function Transcript({
                       <Icon name="arrowLeft" size={12} /> {turn.user.from.label}에서 온 요청
                     </button>
                   ) : null}
+                  {turn.user.peer ? (
+                    <span className="from-badge peer-badge" title={turn.user.peer.from ? `보낸 세션: ${turn.user.peer.from} (보낸 쪽이 밝힌 이름)` : undefined}>
+                      <Icon name="arrowLeft" size={12} /> 다른 세션에서 온 메시지{turn.user.peer.name ? ` · ${turn.user.peer.name}` : ""}
+                    </span>
+                  ) : null}
                   <RequestText text={turn.user.text} />
                   {turn.user.refs?.length ? <RefChips refs={turn.user.refs} /> : null}
                   {turn.user.create ? (

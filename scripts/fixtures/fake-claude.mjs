@@ -8,6 +8,8 @@
 // What a request says decides what the fake does:
 //   "길게"  a long answer (about 8 s)      "명령"  runs `ls -la` (asks first in "default" mode)
 //   "압축" or "/compact"  compacts         anything else: a short answer
+//   "다른 세션 메시지"  after the answer another Claude Code session writes here (a cross-session
+//                     message with origin "peer") and Claude Code answers it on its own
 
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
@@ -145,7 +147,24 @@ async function drain() {
   running = true;
   while (queue.length) {
     const next = queue.shift();
+    if (next.peer) {
+      // As the harness delivers it: the envelope as the content, the decoded body and sender in origin.
+      const body = next.text;
+      send({
+        type: "user",
+        message: { role: "user", content: `<cross-session-message from="${next.peer.from}" from-name="${next.peer.name}">\n${body}\n</cross-session-message>` },
+        parent_tool_use_id: null,
+        origin: { kind: "peer", from: next.peer.from, name: next.peer.name, body },
+        ...base(),
+      });
+    }
     await runTurn(next.text);
+    if (next.text.includes("다른 세션 메시지") && !next.peer) {
+      setTimeout(() => {
+        queue.push({ text: "표 2의 출처를 확인해 주세요", uuid: null, peer: { from: "local_fake-peer", name: "리서치 세션" } });
+        void drain();
+      }, 300);
+    }
   }
   running = false;
 }

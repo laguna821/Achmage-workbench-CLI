@@ -150,7 +150,12 @@ export function sessionMarkdown(context: ExportContext): string {
         number += 1;
         speakerShown = false;
         lines.push("", `## ${number}. ${headingOf(item.text)}`, "");
-        lines.push(item.from ? `**${item.from.label}에서 온 요청** · ${clock(item.at)}` : `**나** · ${clock(item.at)}`);
+        const who = item.from
+          ? `${item.from.label}에서 온 요청`
+          : item.peer
+            ? `다른 세션에서 온 메시지${item.peer.name ? ` (${item.peer.name})` : ""}`
+            : "나";
+        lines.push(`**${who}** · ${clock(item.at)}`);
         const request = tidyMessage(item.text);
         if (request) lines.push("", request);
         const notes: string[] = [];

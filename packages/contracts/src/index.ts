@@ -276,6 +276,8 @@ export type TranscriptItem =
       steered?: boolean;
       /** Steered in, then the turn was stopped before the engine took it: it waits again above the input. */
       undelivered?: boolean;
+      /** Written by another Claude Code session (its own cross-session messages), not typed here. */
+      peer?: { name: string | null; from: string | null } | null;
     }
   | { kind: "assistant"; id: string; text: string; streaming: boolean; at: number }
   | { kind: "reasoning"; id: string; text: string; at: number }

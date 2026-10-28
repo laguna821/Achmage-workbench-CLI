@@ -1387,10 +1387,10 @@ export class SessionManager {
     if (title && title !== work.title) this.saveWork({ ...this.requireWork(workId), title });
   }
 
-  /** Requests of the given sessions, oldest first. */
+  /** Requests of the given sessions, oldest first (what another session wrote is not the user's request). */
   private requestsOf(sessionIds: string[]) {
     return sessionIds
-      .flatMap((id) => this.loadItems(id).flatMap((item) => (item.kind === "user" ? [{ at: item.at, text: item.text }] : [])))
+      .flatMap((id) => this.loadItems(id).flatMap((item) => (item.kind === "user" && !item.peer ? [{ at: item.at, text: item.text }] : [])))
       .sort((a, b) => a.at - b.at)
       .map((entry) => entry.text);
   }

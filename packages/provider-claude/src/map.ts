@@ -1,5 +1,6 @@
 import type {
   SDKMessage,
+  SDKMessageOrigin,
   SDKRateLimitInfo,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { PlanStep, ToolKind, TranscriptItem, UsageWindow } from "@workbench/contracts";
@@ -18,7 +19,12 @@ export type MapperOutput =
   /** Tokens the conversation takes up now, and the context window (when known). */
   | { type: "context"; used: number; window: number | null }
   | { type: "activity"; text: string | null }
-  | { type: "authError"; message: string };
+  | { type: "authError"; message: string }
+  /**
+   * Another Claude Code session wrote to this one (cross-session messages). `starts`: Claude Code
+   * answers it as a turn of its own, which nobody here sent.
+   */
+  | { type: "peer"; item: TranscriptItem; starts: boolean };
 
 const MAX_OUTPUT = 20_000;
 
@@ -135,6 +141,39 @@ export function usageFromRateLimit(info: SDKRateLimitInfo): UsageWindow | null {
   return { label: WINDOW_LABEL[info.rateLimitType], usedPercent, resetsAt };
 }
 
+function contentText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((part) => {
+      const block = (part ?? {}) as Record<string, unknown>;
+      return block.type === "text" && typeof block.text === "string" ? block.text : "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** The harness's envelope around a cross-session message: `<cross-session-message from="…" from-name="…">body</cross-session-message>`. */
+const ENVELOPE = /^\s*<cross-session-message\b([^>]*)>\n?([\s\S]*?)\n?<\/cross-session-message>\s*$/;
+
+/**
+ * A message another Claude Code session sent this one (SendMessage between the user's sessions),
+ * told by its origin; null for anything else. The sender's name is what the sender asserts: shown
+ * as reported, never trusted for anything.
+ */
+export function peerMessage(message: { message: { content: unknown }; origin?: SDKMessageOrigin; parent_tool_use_id: string | null }) {
+  const origin = message.origin;
+  if (message.parent_tool_use_id || !origin) return null;
+  const peer = origin.kind === "peer" ? origin : null;
+  if (!peer && !(origin.kind === "task-notification" && origin.subkind === "peer-send-message")) return null;
+  const raw = peer?.body ?? contentText(message.message.content);
+  const envelope = ENVELOPE.exec(raw);
+  const attribute = (name: string) => new RegExp(`\\b${name}="([^"]*)"`).exec(envelope?.[1] ?? "")?.[1] || null;
+  const text = (envelope ? envelope[2]! : raw).trim();
+  if (!text) return null;
+  return { text, name: peer?.name || attribute("from-name"), from: peer?.from || attribute("from") };
+}
+
 /** 156000 → "156k", 980 → "980". */
 function compactTokens(count: number) {
   return count >= 1000 ? `${Math.round(count / 1000)}k` : String(count);
@@ -147,6 +186,8 @@ export class ClaudeTranscriptMapper {
   private readonly toolItems = new Map<string, TranscriptItem & { kind: "tool" }>();
   /** Input and output of the latest request to the model in the main conversation. */
   private lastRequestTokens: number | null = null;
+  /** Messages from other sessions seen so far (ids for those without a uuid). */
+  private peers = 0;
   private readonly now: () => number;
 
   constructor(now: () => number = Date.now) {
@@ -270,6 +311,18 @@ export class ClaudeTranscriptMapper {
         break;
       }
       case "user": {
+        // Requests sent from here are not echoed back; a user message from another session is, and
+        // without showing it the turn it starts would come out of nowhere.
+        const peer = peerMessage(message);
+        if (peer) {
+          this.peers += 1;
+          out.push({
+            type: "peer",
+            item: { kind: "user", id: `peer:${message.uuid ?? `${this.now()}-${this.peers}`}`, text: peer.text, at: this.now(), peer: { name: peer.name, from: peer.from } },
+            starts: message.shouldQuery !== false,
+          });
+          break;
+        }
         const content = message.message.content;
         if (!Array.isArray(content)) {
           break;
