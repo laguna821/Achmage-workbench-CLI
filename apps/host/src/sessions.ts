@@ -25,6 +25,8 @@ import {
   type CreateTarget,
   type ExportMarkdownRequest,
   type QueuedMessage,
+  type ImportCandidate,
+  type ImportRequest,
   type Attachment,
   type SendResult,
   type ExportMarkdownResult,
@@ -931,6 +933,56 @@ export class SessionManager {
   }
 
   /** Compact the conversation now, as the engine does on its own when the context fills up. */
+  /** "가져오기": conversations an engine keeps on this computer, with the session continuing each here. */
+  async importCandidates(provider: Provider, query: string): Promise<ImportCandidate[]> {
+    const adapter = this.adapter(provider);
+    if (!adapter.listNative) return [];
+    const here = new Map([...this.sessions.values()].filter((session) => session.provider === provider && session.nativeSessionId).map((session) => [session.nativeSessionId!, session.id]));
+    // A conversation whose folder is gone cannot go on (the engine resumes in it), so it is not offered.
+    return (await adapter.listNative(query))
+      .filter((entry) => entry.cwd && existsSync(entry.cwd))
+      .slice(0, 100)
+      .map((entry) => ({ provider, ...entry, sessionId: here.get(entry.nativeSessionId) ?? null }));
+  }
+
+  /**
+   * Continue such a conversation here: a session bound to it (the next request resumes it), its
+   * record as the transcript, in the work of its folder (a new work when there is none).
+   */
+  async importSession(request: ImportRequest): Promise<Session> {
+    const continuing = [...this.sessions.values()].find((session) => session.provider === request.provider && session.nativeSessionId === request.nativeSessionId);
+    if (continuing) return continuing;
+    const adapter = this.adapter(request.provider);
+    if (!adapter.nativeHistory) throw new HttpError(400, "import_unsupported", "이 엔진의 대화는 가져올 수 없습니다.");
+    const history = await adapter.nativeHistory(request.nativeSessionId).catch((error: unknown) => {
+      throw new HttpError(404, "import_missing", `대화를 읽지 못했습니다: ${error instanceof Error ? error.message : String(error)}`);
+    });
+    // The engine resumes in the folder the conversation ran in, so it has to be there.
+    if (!history.cwd || !existsSync(history.cwd)) throw new HttpError(409, "import_folder_missing", `이 대화의 작업 폴더가 없습니다: ${history.cwd ?? "알 수 없음"}`);
+    const work =
+      [...this.works.values()].filter((entry) => entry.cwd === history.cwd && !entry.archivedAt).sort((a, b) => b.updatedAt - a.updatedAt)[0] ??
+      this.createWork({ title: basename(history.cwd) || history.title, cwd: history.cwd });
+    const created = this.createSession(work.id, { provider: request.provider, purpose: history.title.slice(0, 60) });
+    const engine = request.provider === "claude" ? "Claude Code" : "Codex";
+    const when = new Date(history.updatedAt).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" });
+    const items: TranscriptItem[] = [
+      { kind: "notice", id: "imported", level: "info", text: `${engine}에서 가져온 대화입니다(마지막 ${when}). 여기서 이어 쓰면 같은 대화로 이어집니다.`, at: history.items[0]?.at ?? history.updatedAt },
+      ...history.items,
+    ];
+    for (const item of items) this.store.saveItem(created.id, item);
+    this.transcripts.delete(created.id);
+    const last = [...history.items].reverse().find((item): item is Extract<TranscriptItem, { kind: "assistant" }> => item.kind === "assistant");
+    this.saveSession({
+      ...this.requireSession(created.id),
+      nativeSessionId: request.nativeSessionId,
+      purposeSource: "user",
+      preview: last ? previewOf(last.text) : null,
+      previewAt: last ? history.updatedAt : null,
+      seenAt: Date.now(),
+    });
+    return this.requireSession(created.id);
+  }
+
   /** "/" in the input: the session's engine commands and skills (none when the engine has no list). */
   async commands(sessionId: string) {
     const session = this.requireSession(sessionId);

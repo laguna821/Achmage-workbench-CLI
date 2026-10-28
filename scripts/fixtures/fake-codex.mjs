@@ -23,6 +23,8 @@
 // "스크린샷": like a browsing step, a command saves a screenshot (Playwright CLI's output names it),
 // then Codex looks at a second picture with its image viewer (an imageView item).
 // `skills/list` offers one skill ("review-notes"); a turn given it as a skill input says so.
+// `thread/list` also offers a thread made in a terminal ("thr_cli_1", in $FAKE_CODEX_IMPORT_CWD or the
+// temp folder) whose turns `thread/read` returns; resumed, it goes on like any other.
 // A turn in the read-only sandbox ("계획 먼저") answers with a plan; "계획대로 진행" says which
 // sandbox the going-ahead turn runs in.
 
@@ -140,6 +142,29 @@ async function draw(threadId, thread, turnId, text) {
   writeFileSync(savedPath, data);
   notify("item/completed", { threadId, turnId, item: { ...item, status: "completed", revisedPrompt: `A simple picture. ${prompt.split("\n")[0].slice(0, 160)}`, result: data.toString("base64"), savedPath } });
   return "흰 바탕에 파란 원 하나를 그렸습니다.";
+}
+
+/** A thread made in a terminal before Workbench: one turn with a command and an answer. */
+function terminalThread() {
+  const cwd = process.env.FAKE_CODEX_IMPORT_CWD ?? tmpdir();
+  const at = now() - 3600;
+  return {
+    ...threadResponse("thr_cli_1", { cwd }).thread,
+    preview: "터미널에서 시작한 Codex 대화",
+    source: "cli",
+    createdAt: at,
+    updatedAt: at + 30,
+    turns: [
+      {
+        id: "turn_cli_1", itemsView: "full", status: "completed", error: null, startedAt: at, completedAt: at + 30, durationMs: 30_000,
+        items: [
+          { type: "userMessage", id: "um_cli_1", clientId: null, content: [{ type: "text", text: "터미널에서 시작한 Codex 대화", text_elements: [] }] },
+          { type: "commandExecution", id: "cmd_cli_1", command: "ls", cwd, processId: null, source: "agent", status: "completed", commandActions: [], aggregatedOutput: "notes.md\n", exitCode: 0, durationMs: 12 },
+          { type: "agentMessage", id: "am_cli_1", text: "터미널에서 받은 Codex 답입니다.", phase: null, memoryCitation: null },
+        ],
+      },
+    ],
+  };
 }
 
 /** Lines of a reply to a linked-session hand-over (null for any other request). */
@@ -404,7 +429,13 @@ async function handle(message) {
       threads.set(params.threadId, thread);
       return reply(threadResponse(params.threadId, thread));
     }
+    case "thread/list": {
+      const terminal = terminalThread();
+      const wanted = !params.searchTerm || terminal.preview.includes(params.searchTerm);
+      return reply({ data: wanted ? [{ ...terminal, turns: [] }] : [], nextCursor: null, backwardsCursor: null });
+    }
     case "thread/read": {
+      if (params.threadId === "thr_cli_1" && !threads.has(params.threadId)) return reply({ thread: params.includeTurns ? terminalThread() : { ...terminalThread(), turns: [] } });
       const thread = threads.get(params.threadId);
       if (!thread) return fail("no such thread");
       return reply({ thread: { ...threadResponse(params.threadId, thread).thread, model: "fake-model", reasoningEffort: "medium" } });

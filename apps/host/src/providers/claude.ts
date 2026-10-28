@@ -6,6 +6,9 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import {
+  getSessionInfo,
+  getSessionMessages,
+  listSessions,
   query,
   type CanUseTool,
   type EffortLevel,
@@ -22,7 +25,8 @@ import { ClaudeTranscriptMapper, describeTool, type MapperOutput } from "@workbe
 import { resolveClaude, type ResolvedBinary } from "../binaries.ts";
 import { billingVarsIn, claudeSdkEnv, engineEnv } from "../engine-env.ts";
 import { parseClaudeAuthStatus } from "../engine-login.ts";
-import { emptyStatus, type AdapterSink, type AttachedFile, type LoginStart, type ProviderAdapter } from "./types.ts";
+import { emptyStatus, type AdapterSink, type AttachedFile, type LoginStart, type NativeConversation, type ProviderAdapter } from "./types.ts";
+import { claudeHistory } from "../imports.ts";
 import { isImage, mentionFiles } from "../attachments.ts";
 import type { BrowserEngineHooks } from "../browse.ts";
 
@@ -695,6 +699,31 @@ export class ClaudeAdapter implements ProviderAdapter {
     return list.map((command) => ({ name: command.name, description: command.description, hint: command.argumentHint || null, kind: command.builtin ? "command" : "skill" }));
   }
 
+  /**
+   * "가져오기": Claude Code's conversations on this computer (its own session files). Those run
+   * through the SDK count too: desktop hosts and Workbench itself start Claude Code that way.
+   */
+  async listNative(query: string): Promise<NativeConversation[]> {
+    const q = query.trim().toLowerCase();
+    return (await listSessions({ limit: 1000, includeProgrammatic: true }))
+      .map((info) => ({ nativeSessionId: info.sessionId, title: titleOf(info), cwd: info.cwd ?? null, updatedAt: info.lastModified }))
+      .filter((entry) => !q || entry.title.toLowerCase().includes(q) || (entry.cwd ?? "").toLowerCase().includes(q))
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  async nativeHistory(nativeSessionId: string) {
+    const info = await getSessionInfo(nativeSessionId);
+    if (!info) throw new Error("Claude Code 대화를 찾지 못했습니다.");
+    const records = await getSessionMessages(nativeSessionId, info.cwd ? { dir: info.cwd } : {});
+    return {
+      nativeSessionId,
+      title: titleOf(info),
+      cwd: info.cwd ?? null,
+      updatedAt: info.lastModified,
+      items: claudeHistory(records, info.createdAt ?? info.lastModified, info.lastModified),
+    };
+  }
+
   /** A new access reaches Claude Code at once; approvals the new mode would not ask for are given. */
   async setAccess(session: Session & { access: AccessMode }) {
     const runtime = this.runtimes.get(session.id);
@@ -819,4 +848,9 @@ export function claudeContent(text: string, files: AttachedFile[]): SDKUserMessa
     }
   }
   return [...blocks, { type: "text", text: mentionFiles(text, named) }];
+}
+
+/** What a conversation is called: the user's title, else Claude Code's summary or first request. */
+function titleOf(info: { customTitle?: string; summary: string; firstPrompt?: string }) {
+  return (info.customTitle ?? info.summary ?? info.firstPrompt ?? "").replace(/\s+/g, " ").trim().slice(0, 120) || "제목 없음";
 }

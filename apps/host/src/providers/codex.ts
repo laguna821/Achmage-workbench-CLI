@@ -25,6 +25,8 @@ import type { TurnPlanUpdatedNotification } from "@workbench/provider-codex/src/
 import type { TurnStartResponse } from "@workbench/provider-codex/src/generated/v2/TurnStartResponse.ts";
 import type { UserInput } from "@workbench/provider-codex/src/generated/v2/UserInput.ts";
 import type { SkillsListResponse } from "@workbench/provider-codex/src/generated/v2/SkillsListResponse.ts";
+import type { ThreadListResponse } from "@workbench/provider-codex/src/generated/v2/ThreadListResponse.ts";
+import { codexHistory, type CodexTurn } from "../imports.ts";
 import type { TurnStartedNotification } from "@workbench/provider-codex/src/generated/v2/TurnStartedNotification.ts";
 import type { McpServerElicitationRequestParams } from "@workbench/provider-codex/src/generated/v2/McpServerElicitationRequestParams.ts";
 import type { AskForApproval } from "@workbench/provider-codex/src/generated/v2/AskForApproval.ts";
@@ -35,7 +37,7 @@ import type { ThreadTokenUsageUpdatedNotification } from "@workbench/provider-co
 import { resolveCodex } from "../binaries.ts";
 import { billingVarsIn, engineEnv } from "../engine-env.ts";
 import { codexAccountInfo } from "../engine-login.ts";
-import { emptyStatus, type AdapterSink, type AttachedFile, type LoginStart, type ProviderAdapter, type ToolImage } from "./types.ts";
+import { emptyStatus, type AdapterSink, type AttachedFile, type LoginStart, type NativeConversation, type ProviderAdapter, type ToolImage } from "./types.ts";
 import { isImage, mentionFiles } from "../attachments.ts";
 import type { BrowserEngineHooks } from "../browse.ts";
 
@@ -391,6 +393,25 @@ export class CodexAdapter implements ProviderAdapter {
       .request<ThreadReadResponse>("thread/read", { threadId })
       .then(({ thread }) => this.sink.updateSession(sessionId, { engineModel: thread.model, engineEffort: thread.reasoningEffort }))
       .catch(() => undefined);
+  }
+
+  /** "가져오기": Codex threads on this computer (terminal, IDE and app ones), newest first. */
+  async listNative(query: string): Promise<NativeConversation[]> {
+    await this.ensureRunning();
+    const result = await this.rpc!.request<ThreadListResponse>("thread/list", {
+      limit: 100,
+      sortKey: "updated_at",
+      archived: false,
+      sourceKinds: ["cli", "vscode", "exec", "appServer"],
+      ...(query.trim() ? { searchTerm: query.trim() } : {}),
+    });
+    return result.data.map((thread) => ({ nativeSessionId: thread.id, title: threadTitle(thread), cwd: String(thread.cwd), updatedAt: thread.updatedAt * 1000 }));
+  }
+
+  async nativeHistory(nativeSessionId: string) {
+    await this.ensureRunning();
+    const { thread } = await this.rpc!.request<ThreadReadResponse>("thread/read", { threadId: nativeSessionId, includeTurns: true });
+    return { nativeSessionId, title: threadTitle(thread), cwd: String(thread.cwd), updatedAt: thread.updatedAt * 1000, items: codexHistory(thread.turns as unknown as CodexTurn[]) };
   }
 
   /** "/" in the input: the skills Codex finds for the work folder (enabled ones), and compact. */
@@ -808,4 +829,9 @@ export function mcpImages(content: unknown[]): ToolImage[] {
     const block = (part ?? {}) as Record<string, unknown>;
     return block.type === "image" && typeof block.data === "string" ? [{ data: block.data }] : [];
   });
+}
+
+/** What a thread is called: its name, else the start of its first request. */
+function threadTitle(thread: { name: string | null; preview: string }) {
+  return (thread.name ?? thread.preview ?? "").replace(/\s+/g, " ").trim().slice(0, 120) || "제목 없음";
 }

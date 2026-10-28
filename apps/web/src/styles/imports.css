@@ -1,0 +1,51 @@
+/* "다른 곳의 대화 가져오기". */
+
+.session-picker.import-dialog {
+  height: min(80vh, 720px);
+}
+
+.import-note {
+  margin: -4px 0 0;
+  font-size: 13.5px;
+}
+
+.import-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.import-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.import-tab.active {
+  border-color: var(--accent);
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
+.picker-row.import-row .picker-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.picker-row.import-row .picker-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.import-here {
+  font-weight: 600;
+}

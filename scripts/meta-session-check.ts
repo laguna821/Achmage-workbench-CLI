@@ -190,7 +190,8 @@ try {
     });
   });
   await shot("09-sort-menu.png");
-  check("사이드바 정렬 메뉴가 트리에 가려지지 않음", covered.length === 3 && covered.every(Boolean), covered.join(","));
+  // Three orders, then "다른 곳의 대화 가져오기…".
+  check("사이드바 정렬 메뉴가 트리에 가려지지 않음", covered.length === 4 && covered.every(Boolean), covered.join(","));
   await page.keyboard.press("Escape");
 
   // Notion's "+": a page in the work folder, opened at once and listed in the tree.

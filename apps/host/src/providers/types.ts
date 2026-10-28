@@ -40,6 +40,9 @@ export type AdapterSink = {
   image?(sessionId: string, image: EngineImage): void;
 };
 
+/** A conversation an engine keeps on this computer (its id, title, folder and last change). */
+export type NativeConversation = { nativeSessionId: string; title: string; cwd: string | null; updatedAt: number };
+
 /** A picture from a step: a file the engine names, or base64 data a tool returned. */
 export type ToolImage = { path: string } | { data: string; name?: string };
 
@@ -73,6 +76,10 @@ export interface ProviderAdapter {
   setAccess?(session: Session & { access: AccessMode }): Promise<void>;
   /** Ask the engine to compact the conversation now (it also does so on its own when full). */
   compact?(session: Session, work: Work): Promise<boolean>;
+  /** "가져오기": conversations the engine keeps on this computer (a terminal's, another app's), newest first. */
+  listNative?(query: string): Promise<NativeConversation[]>;
+  /** One such conversation: where it ran, its title, and its record as transcript items. */
+  nativeHistory?(nativeSessionId: string): Promise<NativeConversation & { items: TranscriptItem[] }>;
   /** What a request can start with ("/"): the engine's commands and the skills it finds for the work. */
   commands?(session: Session & { access: AccessMode }, work: Work): Promise<EngineCommand[]>;
   answerApproval(session: Session, itemId: string, decision: ApprovalDecision): Promise<boolean>;

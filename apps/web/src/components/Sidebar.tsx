@@ -40,6 +40,8 @@ export type SidebarActions = {
   newPage: (work: Work) => void;
   /** "세션 잇기" for two sessions (a session row dropped on the middle of another). */
   linkSessions: (sessions: [Session, Session]) => void;
+  /** "다른 곳의 대화 가져오기": a terminal's or another app's Claude Code / Codex conversation. */
+  importConversations: () => void;
 };
 
 const MIN_WIDTH = 232;
@@ -528,7 +530,11 @@ export function Sidebar({
       x: box.left,
       y: box.bottom + 4,
       title: "정렬",
-      items: choices.map(([mode, label]) => ({ kind: "item" as const, label, checked: sortMode === mode, onSelect: () => onSortMode(mode) })),
+      items: [
+        ...choices.map(([mode, label]) => ({ kind: "item" as const, label, checked: sortMode === mode, onSelect: () => onSortMode(mode) })),
+        { kind: "separator" as const },
+        { kind: "item" as const, label: "다른 곳의 대화 가져오기…", icon: "restore" as const, onSelect: actions.importConversations },
+      ],
     });
   };
 

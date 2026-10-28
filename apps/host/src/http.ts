@@ -383,6 +383,16 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const preset = (typeof body.preset === "string" && body.preset in DESIGN_PRESETS ? body.preset : "square") as DesignPreset;
         return sendJson(res, 201, manager.createDesign(parts[1], String(body.name ?? ""), preset, typeof body.text === "string" ? body.text : null));
       }
+      if (method === "GET" && path === "/api/import") {
+        const provider = url.searchParams.get("provider");
+        if (provider !== "claude" && provider !== "codex") throw new HttpError(400, "invalid_provider", "엔진을 골라 주세요.");
+        return sendJson(res, 200, { candidates: await manager.importCandidates(provider, url.searchParams.get("q") ?? "") });
+      }
+      if (method === "POST" && path === "/api/import") {
+        const body = await readJson(req);
+        if (body.provider !== "claude" && body.provider !== "codex") throw new HttpError(400, "invalid_provider", "엔진을 골라 주세요.");
+        return sendJson(res, 201, await manager.importSession({ provider: body.provider, nativeSessionId: String(body.nativeSessionId ?? "") }));
+      }
       if (method === "POST" && path === "/api/attachments") {
         const data = await readBody(req, 26 * 1024 * 1024);
         const name = decodeURIComponent(String(req.headers["x-file-name"] ?? "첨부"));

@@ -27,6 +27,7 @@ import { IntegrationsSheet } from "./components/IntegrationsSheet.tsx";
 import { Onboarding } from "./components/Onboarding.tsx";
 import { SessionPicker } from "./components/SessionPicker.tsx";
 import { LinkLayer } from "./components/LinkCards.tsx";
+import { ImportDialog } from "./components/ImportDialog.tsx";
 import { LinkContext, hopsText, linkOfSession, useLinkApi } from "./links.ts";
 import { SplitView, WorkModeBar, useWorkModeKeys } from "./components/WorkModes.tsx";
 import { keepPosition, keptPosition, modeOf, readingPosition, restorePosition, reviewProposal, viewFor, type ModeProps, type ReadingPosition, type WorkMode } from "./workmodes.ts";
@@ -575,6 +576,16 @@ export function App() {
     },
     [state.works, actions],
   );
+  // "다른 곳의 대화 가져오기": the imported session opens at once (its work may be new, so by id).
+  const [importOpen, setImportOpen] = useState(false);
+  const openImported = useCallback(
+    (session: Session) => {
+      // The gateway made it the work's active session.
+      setWorkId(session.workId);
+      setView({ kind: "work" });
+    },
+    [],
+  );
   /** Notion's "+": a Markdown page in the work folder, shown in the tree and opened at once. */
   const newPage = useCallback(
     (owner: Work) => {
@@ -1033,6 +1044,7 @@ export function App() {
     openSearch: () => setPaletteOpen(true),
     openArchive: () => setView({ kind: "archive" }),
     linkSessions: (pair) => linkApi.openDialog(pair.map((session) => session.id)),
+    importConversations: () => setImportOpen(true),
   };
 
   const visibleLink = visibleSession ? linkOfSession(state, visibleSession.id) : null;
@@ -1056,6 +1068,7 @@ export function App() {
     visibleLink
       ? { id: "link-view", label: `주고받은 내용 보기 (세션 잇기 ${hopsText(visibleLink)})`, icon: "link" as const, run: () => linkApi.openView(visibleLink.id) }
       : { id: "link", label: "세션 잇기… (다른 세션과 주고받기)", icon: "link" as const, run: () => linkApi.openDialog(visibleSession ? [visibleSession.id] : []) },
+    ...(single ? [] : [{ id: "import", label: "다른 곳의 대화 가져오기 (터미널·다른 앱의 Claude Code·Codex)", icon: "restore" as const, run: () => setImportOpen(true) }]),
     { id: "archive", label: "보관함 열기", icon: "archive", run: () => setView({ kind: "archive" }) },
     { id: "sidebar", label: sidebarOpen ? "사이드바 숨기기" : "사이드바 보이기", icon: "sidebar", run: toggleSidebar },
     { id: "theme", label: focusedTheme === "dark" ? "라이트 화면으로" : "다크 화면으로", icon: focusedTheme === "dark" ? "sun" : "moon", run: () => savePrefs({ theme: focusedTheme === "dark" ? "light" : "dark" }) },
@@ -1396,6 +1409,7 @@ export function App() {
       ) : null}
       {switcher !== null ? <Switcher state={state} sessions={switchable} index={switcher} unseen={unseen} /> : null}
       <LinkLayer api={api} inDesktop={inDesktop} />
+      {importOpen ? <ImportDialog api={api} onClose={() => setImportOpen(false)} onOpen={openImported} onError={fail} /> : null}
       {picker ? (
         <SessionPicker
           state={state}
