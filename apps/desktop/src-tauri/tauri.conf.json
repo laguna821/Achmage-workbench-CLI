@@ -6,7 +6,7 @@
   "identifier": "kr.achmage.workbench",
   "build": {
     "frontendDist": "../../web/dist",
-    "beforeBuildCommand": "node -e \"require('node:fs').rmSync('src-tauri/target/release/web', { recursive: true, force: true })\""
+    "beforeBuildCommand": "node scripts/clean-web.mjs"
   },
   "app": {
     "windows": [],
