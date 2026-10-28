@@ -197,6 +197,8 @@ jobs:
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
+        # The installers' names have a space ("Achmage Workbench_…"): kept whole, not split into words.
         run: |
-          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "Achmage Workbench $GITHUB_REF_NAME" --generate-notes \
-            $(find out -type f \( -name '*.AppImage' -o -name '*.deb' -o -name '*.pkg.tar.zst' -o -name '*.exe' -o -name '*.msi' -o -name '*.dmg' \))
+          mapfile -t files < <(find out -type f \( -name '*.AppImage' -o -name '*.deb' -o -name '*.pkg.tar.zst' -o -name '*.exe' -o -name '*.msi' -o -name '*.dmg' \))
+          test "${#files[@]}" -eq 6
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "Achmage Workbench $GITHUB_REF_NAME" --generate-notes "${files[@]}"
