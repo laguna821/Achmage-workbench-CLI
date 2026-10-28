@@ -31,7 +31,7 @@
 
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
@@ -113,6 +113,26 @@ function systemInit() {
   });
 }
 
+// Like Claude Code, the conversation is kept as a session file (JSONL) — only when a check gives a
+// temporary CLAUDE_CONFIG_DIR, never in the user's own ~/.claude. Resumed (a fork, an import), it
+// says how many requests the file it continues already holds.
+const recordDir = process.env.CLAUDE_CONFIG_DIR && process.env.CLAUDE_CONFIG_DIR.startsWith(`${tmpdir()}/`) ? join(process.env.CLAUDE_CONFIG_DIR, "projects", process.cwd().replace(/[^a-zA-Z0-9]/g, "-")) : null;
+const recordFile = recordDir ? join(recordDir, `${sessionId}.jsonl`) : null;
+let lastRecord = null;
+let resumedRequests = null;
+if (recordFile && existsSync(recordFile)) {
+  const lines = readFileSync(recordFile, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
+  resumedRequests = lines.filter((line) => line.type === "user" && (typeof line.message?.content === "string" || (line.message?.content ?? []).some((part) => part.type === "text"))).length;
+  lastRecord = lines.at(-1)?.uuid ?? null;
+}
+function record(type, message) {
+  if (!recordFile) return;
+  mkdirSync(recordDir, { recursive: true });
+  const uuid = randomUUID();
+  appendFileSync(recordFile, `${JSON.stringify({ parentUuid: lastRecord, isSidechain: false, userType: "external", cwd: process.cwd(), sessionId, version: "2.1.999", gitBranch: "", entrypoint: "sdk-ts", type, message, uuid, timestamp: new Date().toISOString() })}\n`);
+  lastRecord = uuid;
+}
+
 async function streamText(text, chunks) {
   const id = `msg_${randomUUID().slice(0, 8)}`;
   event({ type: "message_start", message: { id, type: "message", role: "assistant", model: MODEL, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 10, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: used } } });
@@ -127,7 +147,9 @@ async function streamText(text, chunks) {
   event({ type: "content_block_stop", index: 0 });
   event({ type: "message_delta", delta: { stop_reason: "end_turn", stop_sequence: null }, usage: { output_tokens: full.length } });
   event({ type: "message_stop" });
-  send({ type: "assistant", message: { id, type: "message", role: "assistant", model: MODEL, content: [{ type: "text", text: full || text }], stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 10, output_tokens: full.length, cache_creation_input_tokens: 0, cache_read_input_tokens: used } }, parent_tool_use_id: null, ...base() });
+  const final = { id, type: "message", role: "assistant", model: MODEL, content: [{ type: "text", text: full || text }], stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 10, output_tokens: full.length, cache_creation_input_tokens: 0, cache_read_input_tokens: used } };
+  send({ type: "assistant", message: final, parent_tool_use_id: null, ...base() });
+  record("assistant", final);
   return full;
 }
 
@@ -252,6 +274,10 @@ async function runTurn(text) {
     const chunks = [];
     if (browserLine) chunks.push({ text: `${browserLine}\n\n`, wait: 30 });
     if (steer) chunks.push({ text: steer, wait: 30 });
+    if (resumedRequests !== null) {
+      chunks.push({ text: `이어 받은 기록: 요청 ${resumedRequests}개\n\n`, wait: 30 });
+      resumedRequests = null;
+    }
     if (notes.length) chunks.push({ text: `받은 노트 사본: ${notes.join(" | ")}\n\n`, wait: 30 });
     if (guardNote) chunks.push({ text: guardNote, wait: 30 });
     if (text.includes("맥락")) chunks.push({ text: `맥락 카드:\n${appendSystemPrompt ?? "(없음)"}\n\n`, wait: 30 });
@@ -395,6 +421,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     }
   }
   if (message.type === "user") {
+    record("user", message.message);
     // A request sent while a turn runs waits for the next turn, as Claude Code does when the turn
     // has no further tool step to fold it into.
     queue.push({ text: running && message.priority ? `[steer]${textOf(message)}` : textOf(message), uuid: message.uuid ?? null });

@@ -29,6 +29,7 @@ import { Onboarding } from "./components/Onboarding.tsx";
 import { SessionPicker } from "./components/SessionPicker.tsx";
 import { LinkLayer } from "./components/LinkCards.tsx";
 import { ImportDialog } from "./components/ImportDialog.tsx";
+import { writeDraft } from "./components/Composer.tsx";
 import { LinkContext, hopsText, linkOfSession, useLinkApi } from "./links.ts";
 import { SplitView, WorkModeBar, useWorkModeKeys } from "./components/WorkModes.tsx";
 import { keepPosition, keptPosition, modeOf, readingPosition, restorePosition, reviewProposal, viewFor, type ModeProps, type ReadingPosition, type WorkMode } from "./workmodes.ts";
@@ -374,6 +375,19 @@ export function App() {
         cancel: (session, queuedId) => void api?.cancelQueued(session.id, queuedId).catch(fail),
       },
       clipboardPicture: () => (api ? api.clipboardPicture().catch(() => null) : Promise.resolve(null)),
+      fork: (session: Session, itemId: string) => {
+        if (!api) return;
+        void api
+          .forkBefore(session.id, itemId)
+          .then(({ session: forked, text }) => {
+            // The request goes back into the new session's input, to be edited and sent again.
+            writeDraft(`work:${forked.workId}:${forked.id}`, text);
+            setWorkId(forked.workId);
+            setView({ kind: "work" });
+            setToast("이 요청 앞까지의 대화로 갈래를 만들었습니다. 요청을 고쳐 보내세요.");
+          })
+          .catch(fail);
+      },
       commands: async (session: Session) => {
         if (!api) return [];
         try {

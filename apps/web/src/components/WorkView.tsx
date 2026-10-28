@@ -33,6 +33,8 @@ export type WorkActions = {
   send: (session: Session, text: string, refs?: DocRef[], create?: CreateTarget | null, mode?: "auto" | "queue", attachments?: Attachment[], plan?: boolean) => Promise<boolean>;
   /** Keep a pasted or dropped file at the gateway for the next request (null: it could not). */
   upload: (file: File) => Promise<Attachment | null>;
+  /** "이 요청 전으로": a new session up to that request, opened with the request in its input. */
+  fork: (session: Session, itemId: string) => void;
   /** The desktop clipboard's picture (a screenshot pasted in the desktop app), or null. */
   clipboardPicture: () => Promise<File | null>;
   /** "/" in the input: the engine's commands and skills for this session (empty when unavailable). */
@@ -602,6 +604,7 @@ export function WorkView({
             actions.answer(active, itemId, decision);
           }}
           onTrust={() => actions.setAccess(active, active.provider, "full")}
+          onFork={busy ? undefined : (itemId) => actions.fork(active, itemId)}
           focusItem={focusItem ?? null}
           onFocusDone={onFocusDone}
         />

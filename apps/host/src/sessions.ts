@@ -26,6 +26,7 @@ import {
   type ExportMarkdownRequest,
   type QueuedMessage,
   type ImportCandidate,
+  type ForkResult,
   type ImportRequest,
   type Attachment,
   type SendResult,
@@ -941,6 +942,38 @@ export class SessionManager {
   }
 
   /** Compact the conversation now, as the engine does on its own when the context fills up. */
+  /**
+   * "이 요청 전으로": a new session in the same work with the conversation up to that request (the
+   * engine's own fork, so it remembers exactly that much) and that request back for editing.
+   */
+  async forkBefore(sessionId: string, itemId: string): Promise<ForkResult> {
+    const session = this.requireSession(sessionId);
+    if (session.status !== "idle" && session.status !== "error") throw new HttpError(409, "session_busy", "응답이 끝난 뒤에 갈래를 만들 수 있습니다.");
+    const items = this.loadItems(sessionId);
+    const at = items.findIndex((item) => item.id === itemId);
+    const request = items[at];
+    if (!request || request.kind !== "user") throw new HttpError(404, "request_not_found", "그 요청을 찾지 못했습니다.");
+    const before = items.slice(0, at);
+    const keep = { turns: before.filter((item) => item.kind === "turnEnd").length, requests: before.filter((item) => item.kind === "user").length };
+    const work = this.requireWork(session.workId);
+    const adapter = this.adapter(session.provider);
+    let nativeSessionId: string | null = null;
+    // Before the first request there is nothing to keep: the new session starts empty.
+    if (session.nativeSessionId && keep.requests > 0) {
+      if (!adapter.forkNative) throw new HttpError(400, "fork_unsupported", "이 엔진은 갈래를 만들 수 없습니다.");
+      nativeSessionId = await adapter.forkNative({ ...session, access: this.accessOf(session) }, work, keep).catch((error: unknown) => {
+        throw new HttpError(409, "fork_failed", `갈래를 만들지 못했습니다: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }
+    const created = this.createSession(work.id, { provider: session.provider, purpose: `${session.purpose} · 갈래`.slice(0, 80), model: session.model, effort: session.effort, access: session.access });
+    const kept = before.filter((item) => !(item.kind === "approval" && item.decision === null));
+    const note: TranscriptItem = { kind: "notice", id: `fork:${itemId}`, level: "info", text: `「${session.purpose}」의 ${keep.requests + 1}번째 요청 전에서 갈라졌습니다. 그 요청을 입력창에 되돌려 두었습니다.`, at: Date.now() };
+    for (const item of [...kept, note]) this.store.saveItem(created.id, item);
+    this.transcripts.delete(created.id);
+    this.saveSession({ ...this.requireSession(created.id), nativeSessionId, purposeSource: "user", preview: session.preview, previewAt: session.previewAt, seenAt: Date.now() });
+    return { session: this.requireSession(created.id), text: request.text };
+  }
+
   /** "가져오기": conversations an engine keeps on this computer, with the session continuing each here. */
   async importCandidates(provider: Provider, query: string): Promise<ImportCandidate[]> {
     const adapter = this.adapter(provider);

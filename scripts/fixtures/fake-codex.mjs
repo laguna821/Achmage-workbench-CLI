@@ -324,10 +324,17 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
   }
   let itemId = `msg_${++counter}`;
   notify("item/started", { threadId, turnId, item: { type: "agentMessage", id: itemId, text: "", phase: null, memoryCitation: null } });
+  // A forked thread says so in its first answer (how many turns it brought along).
+  let forkSaid = "";
+  if (thread.forkedFrom && !thread.forkTold) {
+    thread.forkTold = true;
+    forkSaid = `갈래 스레드: 이전 턴 ${(thread.turns?.length ?? 1) - 1}개 (원래 ${thread.forkedFrom})\n\n`;
+    notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: forkSaid });
+  }
   const planning = thread.sandbox === "readOnly";
   const linked = planning ? null : linkReply(text, "Codex");
   const lines = planning ? 0 : linked ? linked.length + (text.includes("길게") ? 150 : text.includes("천천히") ? 30 : 0) : text.includes("길게") ? 160 : text.includes("도식") ? 14 : 6;
-  let full = browserLine ? `${browserLine}\n\n` : "";
+  let full = `${forkSaid}${browserLine ? `${browserLine}\n\n` : ""}`;
   if (browserLine) {
     notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: `${browserLine}\n\n` });
   }
@@ -461,10 +468,22 @@ async function handle(message) {
       const wanted = !params.searchTerm || terminal.preview.includes(params.searchTerm);
       return reply({ data: wanted ? [{ ...terminal, turns: [] }] : [], nextCursor: null, backwardsCursor: null });
     }
+    case "thread/fork": {
+      // Like Codex: a new thread with the turns through lastTurnId (inclusive), the source untouched.
+      const source = threads.get(params.threadId);
+      if (!source) return fail("no such thread");
+      const through = (source.turns ?? []).findIndex((entry) => entry.id === params.lastTurnId);
+      if (params.lastTurnId && through < 0) return fail("no such turn");
+      const threadId = `thr_${++counter}`;
+      const thread = { ...source, turns: params.lastTurnId ? source.turns.slice(0, through + 1) : [...(source.turns ?? [])], forkedFrom: params.threadId, turn: null, used: 11_000 };
+      threads.set(threadId, thread);
+      return reply(threadResponse(threadId, thread));
+    }
     case "thread/read": {
       if (params.threadId === "thr_cli_1" && !threads.has(params.threadId)) return reply({ thread: params.includeTurns ? terminalThread() : { ...terminalThread(), turns: [] } });
       const thread = threads.get(params.threadId);
       if (!thread) return fail("no such thread");
+      if (params.includeTurns) return reply({ thread: { ...threadResponse(params.threadId, thread).thread, model: "fake-model", reasoningEffort: "medium", turns: thread.turns ?? [] } });
       return reply({ thread: { ...threadResponse(params.threadId, thread).thread, model: "fake-model", reasoningEffort: "medium" } });
     }
     case "turn/start": {
@@ -478,6 +497,8 @@ async function handle(message) {
       }
       const turnId = `turn_${++counter}`;
       thread.turn = { id: turnId, steers: [], interrupted: false };
+      // Kept for thread/read and thread/fork: the turn and the request that started it.
+      thread.turns = [...(thread.turns ?? []), { id: turnId, itemsView: "full", status: "completed", error: null, startedAt: now(), completedAt: now(), durationMs: 0, items: [{ type: "userMessage", id: `um_${turnId}`, clientId: null, content: params.input.filter((input) => input.type === "text") }] }];
       reply({ turn: { id: turnId, items: [], itemsView: "full", status: "inProgress", error: null, startedAt: now(), completedAt: null, durationMs: null } });
       const skill = params.input.find((input) => input.type === "skill");
       const text = params.input.map((input) => input.text ?? "").join("\n") + (skill ? `\n[스킬 ${skill.name} · ${skill.path}]` : "");

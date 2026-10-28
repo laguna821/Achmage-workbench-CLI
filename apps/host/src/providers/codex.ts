@@ -26,6 +26,7 @@ import type { TurnStartResponse } from "@workbench/provider-codex/src/generated/
 import type { UserInput } from "@workbench/provider-codex/src/generated/v2/UserInput.ts";
 import type { SkillsListResponse } from "@workbench/provider-codex/src/generated/v2/SkillsListResponse.ts";
 import type { ThreadListResponse } from "@workbench/provider-codex/src/generated/v2/ThreadListResponse.ts";
+import type { ThreadForkResponse } from "@workbench/provider-codex/src/generated/v2/ThreadForkResponse.ts";
 import { codexHistory, type CodexTurn } from "../imports.ts";
 import type { TurnStartedNotification } from "@workbench/provider-codex/src/generated/v2/TurnStartedNotification.ts";
 import type { McpServerElicitationRequestParams } from "@workbench/provider-codex/src/generated/v2/McpServerElicitationRequestParams.ts";
@@ -409,6 +410,23 @@ export class CodexAdapter implements ProviderAdapter {
       .request<ThreadReadResponse>("thread/read", { threadId })
       .then(({ thread }) => this.sink.updateSession(sessionId, { engineModel: thread.model, engineEffort: thread.reasoningEffort }))
       .catch(() => undefined);
+  }
+
+  /** "이 요청 전으로": Codex's own fork of the thread through the turn before that request. */
+  async forkNative(session: Session & { access: AccessMode }, work: Work, keep: { turns: number; requests: number }) {
+    await this.ensureRunning();
+    const { thread } = await this.rpc!.request<ThreadReadResponse>("thread/read", { threadId: session.nativeSessionId!, includeTurns: true });
+    // Counted by requests, not turns: a compaction is a turn of its own with none.
+    let seen = 0;
+    let last: string | null = null;
+    for (const turn of thread.turns) {
+      seen += turn.items.filter((item) => item.type === "userMessage").length;
+      if (seen > keep.requests) break;
+      last = turn.id;
+    }
+    if (!last) throw new Error("Codex 스레드에서 이 지점의 턴을 찾지 못했습니다.");
+    const forked = await this.rpc!.request<ThreadForkResponse>("thread/fork", { threadId: session.nativeSessionId!, lastTurnId: last, cwd: work.cwd, ...this.policyFor(session.access) });
+    return forked.thread.id;
   }
 
   /** "가져오기": Codex threads on this computer (terminal, IDE and app ones), newest first. */

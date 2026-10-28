@@ -325,6 +325,7 @@ export function Transcript({
   loading,
   onAnswer,
   onTrust,
+  onFork,
   focusItem,
   onFocusDone,
 }: {
@@ -336,6 +337,8 @@ export function Transcript({
   onAnswer: (itemId: string, decision: "accept" | "decline") => void;
   /** "앞으로 묻지 않기": full access for this session (answers what waits, too). */
   onTrust?: () => void;
+  /** "이 요청 전으로": a new session with the conversation up to this request, the request to edit. */
+  onFork?: (itemId: string) => void;
   /** Bring this message into view and mark it for a moment (a search hit). */
   focusItem?: { itemId: string; nonce: number } | null;
   onFocusDone?: () => void;
@@ -604,6 +607,11 @@ export function Transcript({
                     <span className="turn-meta-sep">·</span>
                     <span>{clock(turn.user.at)}</span>
                     {turn.user.plan ? <span className="plan-tag">계획 먼저</span> : null}
+                    {onFork && !turn.user.link && !turn.user.peer ? (
+                      <button type="button" className="fork-button" onClick={() => onFork(turn.user!.id)} title="이 요청 앞까지의 대화로 새 갈래를 만들고, 이 요청을 고쳐 다시 묻습니다(이 대화는 그대로)">
+                        <Icon name="restore" size={12} /> 이 요청 전으로
+                      </button>
+                    ) : null}
                     {turn.user.undelivered ? (
                       <span className="steer-tag undelivered" title="멈춰서 엔진에 전해지지 않았습니다. 입력창 위 목록에서 다시 보낼 수 있습니다.">
                         전해지지 않음

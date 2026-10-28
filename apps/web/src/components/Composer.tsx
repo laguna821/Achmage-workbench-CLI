@@ -10,6 +10,13 @@ import { Icon } from "./Icon.tsx";
 export type ComposerMentions = { items: MentionItem[]; onPick: (item: MentionItem) => void };
 
 const DRAFT_PREFIX = "workbench.draft.";
+const DRAFT_EVENT = "workbench:draft";
+
+/** Put text in an input box's draft (by its draft key), shown now if that box is on screen. */
+export function writeDraft(draftKey: string, text: string) {
+  localStorage.setItem(DRAFT_PREFIX + draftKey, text);
+  window.dispatchEvent(new CustomEvent(DRAFT_EVENT, { detail: draftKey }));
+}
 
 /**
  * The single input box. Enter sends, Shift+Enter breaks the line, and Enter while a Korean
@@ -114,6 +121,16 @@ export function Composer({
 
   useEffect(() => {
     setText(localStorage.getItem(DRAFT_PREFIX + draftKey) ?? "");
+  }, [draftKey]);
+
+  // A draft written for this box from elsewhere ("이 요청 전으로" puts the request back), whether
+  // the box shows that draft already or switches to it after.
+  useEffect(() => {
+    const onDraft = (event: Event) => {
+      if ((event as CustomEvent<string>).detail === draftKey) setText(localStorage.getItem(DRAFT_PREFIX + draftKey) ?? "");
+    };
+    window.addEventListener(DRAFT_EVENT, onDraft);
+    return () => window.removeEventListener(DRAFT_EVENT, onDraft);
   }, [draftKey]);
 
   useEffect(() => {

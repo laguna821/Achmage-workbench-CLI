@@ -11,6 +11,9 @@ export type ClaudeRecord = { type: "user" | "assistant" | "system"; uuid: string
 /** Codex's turns (`thread/read` with turns): item lists with start and end times (seconds). */
 export type CodexTurn = { id: string; items: { type: string; [key: string]: unknown }[]; status: string; startedAt: number | null; completedAt: number | null };
 
+/** Whether a Claude Code record is a request someone typed (not a tool result, not Claude Code's own). */
+export const isRequest = (record: ClaudeRecord) => record.type === "user" && !record.parent_tool_use_id && typed((record.message as { content?: unknown } | null)?.content) !== null;
+
 /** Text the user typed, without what Claude Code itself put in user messages (command echoes, caveats). */
 function typed(content: unknown): string | null {
   const text =

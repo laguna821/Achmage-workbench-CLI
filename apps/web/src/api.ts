@@ -5,6 +5,7 @@ import type {
   Attachment,
   EngineCommand,
   ImportCandidate,
+  ForkResult,
   ImportRequest,
   ArtifactRevision,
   CreateTarget,
@@ -106,6 +107,8 @@ export class Api {
   importCandidates = (provider: Provider, query: string) =>
     this.request<{ candidates: ImportCandidate[] }>("GET", `/api/import?${new URLSearchParams({ provider, q: query })}`).then((result) => result.candidates);
   importSession = (request: ImportRequest) => this.request<Session>("POST", "/api/import", request);
+  /** "이 요청 전으로": a new session with the conversation up to that request. */
+  forkBefore = (sessionId: string, itemId: string) => this.request<ForkResult>("POST", `/api/sessions/${sessionId}/fork`, { itemId });
   /** "/" in the input: the session engine's commands and skills. */
   commands = (sessionId: string) => this.request<{ commands: EngineCommand[] }>("GET", `/api/sessions/${sessionId}/commands`);
   /** Compact the conversation now (the engine also does so on its own when the context is full). */

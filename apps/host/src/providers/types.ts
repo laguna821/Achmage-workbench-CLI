@@ -84,6 +84,11 @@ export interface ProviderAdapter {
   setAccess?(session: Session & { access: AccessMode }): Promise<void>;
   /** Ask the engine to compact the conversation now (it also does so on its own when full). */
   compact?(session: Session, work: Work): Promise<boolean>;
+  /**
+   * "이 요청 전으로": a new engine conversation holding this one's first `keep.turns` turns, that is
+   * its first `keep.requests` requests (Codex counts turns, Claude Code requests). Its id.
+   */
+  forkNative?(session: Session & { access: AccessMode }, work: Work, keep: { turns: number; requests: number }): Promise<string>;
   /** "가져오기": conversations the engine keeps on this computer (a terminal's, another app's), newest first. */
   listNative?(query: string): Promise<NativeConversation[]>;
   /** One such conversation: where it ran, its title, and its record as transcript items. */

@@ -6,6 +6,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import {
+  forkSession,
   getSessionInfo,
   getSessionMessages,
   listSessions,
@@ -26,7 +27,7 @@ import { resolveClaude, type ResolvedBinary } from "../binaries.ts";
 import { billingVarsIn, claudeSdkEnv, engineEnv } from "../engine-env.ts";
 import { parseClaudeAuthStatus } from "../engine-login.ts";
 import { emptyStatus, type AdapterSink, type AttachedFile, type ClaudeLaunch, type LoginStart, type NativeConversation, type ProviderAdapter } from "./types.ts";
-import { claudeHistory } from "../imports.ts";
+import { claudeHistory, isRequest } from "../imports.ts";
 import { isImage, mentionFiles } from "../attachments.ts";
 import type { BrowserEngineHooks } from "../browse.ts";
 
@@ -704,6 +705,16 @@ export class ClaudeAdapter implements ProviderAdapter {
     }
     const list = await runtime.query.supportedCommands();
     return list.map((command) => ({ name: command.name, description: command.description, hint: command.argumentHint || null, kind: command.builtin ? "command" : "skill" }));
+  }
+
+  /** "이 요청 전으로": Claude Code's own fork of the session file, cut just before that request. */
+  async forkNative(session: Session, work: Work, keep: { turns: number; requests: number }) {
+    const records = await getSessionMessages(session.nativeSessionId!, { dir: work.cwd });
+    const requests = records.flatMap((record, index) => (isRequest(record) ? [index] : []));
+    const at = requests[keep.requests];
+    if (at === undefined || at === 0) throw new Error("Claude Code 기록에서 이 요청을 찾지 못했습니다.");
+    const { sessionId } = await forkSession(session.nativeSessionId!, { dir: work.cwd, upToMessageId: records[at - 1]!.uuid, title: `${session.purpose} · 갈래` });
+    return sessionId;
   }
 
   /**
