@@ -128,6 +128,17 @@ export const OfficeEditor = forwardRef<
           savingSince.current = 0;
           handlers.current.onNotice(`저장하지 못했습니다: ${message.message}`);
           break;
+        case "office:clipboard-picture":
+          // Only for the editor the user is pasting into; the page cannot read the desktop clipboard itself.
+          if (document.activeElement !== frame.current) return send({ type: "office:clipboard-picture", picture: null });
+          void api
+            .clipboardPicture()
+            .then(async (file) => (file ? { bytes: await file.arrayBuffer(), type: file.type } : null))
+            .catch(() => null)
+            .then((picture) => {
+              if (opened.current) frame.current?.contentWindow?.postMessage({ type: "office:clipboard-picture", picture }, opened.current.origin, picture ? [picture.bytes] : []);
+            });
+          break;
       }
     };
     window.addEventListener("message", onMessage);

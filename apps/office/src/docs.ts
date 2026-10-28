@@ -1,7 +1,7 @@
 import "./docs.css";
 import { Events, Gateway, GatewayError, handshake, listen, post, stubBridge } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
-import { convertForeignPictures } from "./pictures.ts";
+import { convertForeignPictures, pasteDesktopPictures } from "./pictures.ts";
 
 // IeumOffice's Word editor inside Workbench. The editor itself (vendor/ieumoffice/apps/docs,
 // unchanged) reads and writes .docx in the page; this file stands in for its Electron preload:
@@ -244,7 +244,9 @@ Object.assign(window, { desktop });
 // The editor tells about unsaved changes when asked; ask now and then for the Workbench header.
 window.setInterval(() => void askDirty(), 2000);
 
-// Pictures in formats the editor does not take go on to it as PNG.
+// Pictures in formats the editor does not take go on to it as PNG; a paste that shows the page
+// nothing (a screenshot in WebKitGTK) gets the desktop clipboard's picture.
 convertForeignPictures();
+pasteDesktopPictures();
 
 await import("@ieum/apps/docs/src/renderer/main.tsx");

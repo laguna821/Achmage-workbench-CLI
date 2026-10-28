@@ -152,6 +152,17 @@ export class Api {
     if (!response.ok) throw new ApiRequestError(response.status, json);
     return json;
   }
+  /**
+   * The desktop clipboard's picture, for a paste that showed the page nothing (WebKitGTK gives pages
+   * clipboard text and copied files, not picture data). Null when the clipboard holds no picture.
+   */
+  async clipboardPicture(): Promise<File | null> {
+    const response = await fetch("/api/clipboard/picture", { headers: { authorization: `Bearer ${this.token}` } });
+    if (response.status === 204) return null;
+    if (!response.ok) throw new ApiRequestError(response.status, { code: "clipboard_failed", message: response.statusText });
+    const type = response.headers.get("content-type") ?? "image/png";
+    return new File([await response.blob()], `image.${type.split("/")[1] ?? "png"}`, { type });
+  }
   /** An image a Markdown document links relatively (inside its work folder), for the preview. */
   async docImage(artifactId: string, src: string): Promise<Blob> {
     const response = await fetch(`/api/artifacts/${artifactId}/asset?src=${encodeURIComponent(src)}`, { headers: { authorization: `Bearer ${this.token}` } });

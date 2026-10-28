@@ -299,6 +299,7 @@ describe("the gateway's picture routes", () => {
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     const auth = { authorization: "Bearer app-token" };
     expect((await fetch(`${base}/api/image-upload`)).status).toBe(401);
+    expect((await fetch(`${base}/api/clipboard/picture`)).status).toBe(401);
     expect((await fetch(`${base}/api/artifacts/${note.id}/images`, { method: "POST", body: new Uint8Array(PNG) })).status).toBe(401);
     expect(await (await fetch(`${base}/api/image-upload`, { headers: auth })).json()).toMatchObject({ configured: false, secretSet: false });
     const saved = await fetch(`${base}/api/artifacts/${note.id}/images`, { method: "POST", headers: { ...auth, "x-file-name": encodeURIComponent("도식.png") }, body: new Uint8Array(PNG) });

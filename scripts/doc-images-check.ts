@@ -12,6 +12,8 @@
 //   - Word, PowerPoint, Excel (in-app editors on their own origin): a pasted and a dropped picture
 //     are embedded in the saved file (word/media, ppt/media, xl/media); a WebP becomes PNG; in
 //     PowerPoint a picture copied inside the editor still pastes as itself.
+//   - Ctrl+V that shows the page nothing (as a screenshot does in WebKitGTK): the desktop clipboard's
+//     picture comes from the gateway — here a stand-in wl-paste, never the real clipboard.
 // Usage: node scripts/doc-images-check.ts [outDir] [codex|claude]
 
 import { execFileSync, spawn } from "node:child_process";
@@ -168,6 +170,20 @@ process.stdout.write(JSON.stringify({ status: "success", success: true, data: { 
 `,
 );
 
+// A stand-in wl-paste: the desktop clipboard holds one picture (the real clipboard is never read).
+const desktopPng = makePng(150, 90, 7);
+writeFileSync(join(scratch, "desktop.png"), desktopPng);
+const wlPaste = join(scratch, "wl-paste");
+writeFileSync(
+  wlPaste,
+  `#!/bin/sh
+if [ "$1" = "--list-types" ]; then printf 'image/png\\ntext/plain\\n'; exit 0; fi
+if [ "$3" = "image/png" ]; then cat "${join(scratch, "desktop.png")}"; exit 0; fi
+exit 1
+`,
+  { mode: 0o755 },
+);
+
 // ── the gateway ────────────────────────────────────────────────────────
 const child = spawn(process.execPath, ["apps/host/src/main.ts"], {
   env: {
@@ -179,6 +195,8 @@ const child = spawn(process.execPath, ["apps/host/src/main.ts"], {
     WORKBENCH_CLAUDE_BIN: resolve("scripts/fixtures/fake-claude.mjs"),
     WORKBENCH_R2_ENDPOINT: r2Url,
     WORKBENCH_KORDOC_RUNNER: kordocRunner,
+    WAYLAND_DISPLAY: "wayland-check",
+    WORKBENCH_WL_PASTE: wlPaste,
   },
   stdio: ["ignore", "pipe", "inherit"],
 });
@@ -347,6 +365,14 @@ async function flow(provider: Provider, index: number) {
     );
     await shot("04-md-r2-link.png");
 
+    // ── Ctrl+V that shows the page nothing: the desktop clipboard's picture ──
+    const desktopKey = `workbench/${sha256(desktopPng).slice(0, 16)}.png`;
+    await page.locator(".md-editor .cm-content").click();
+    await page.keyboard.press("Control+End");
+    await page.keyboard.press("Control+v");
+    const fromDesktop = await until(async () => (await page.locator(".md-editor .cm-content").innerText()).includes(`${r2Url}/public/${desktopKey}`), 10_000);
+    pass("Ctrl+V로 페이지에 안 보이는 그림(WebKitGTK의 스크린숏): 데스크톱 클립보드 그림 → R2 링크", fromDesktop && r2.objects.has(desktopKey));
+
     // ── R2 refuses: toast, the work folder's assets/, a relative link ────
     r2.refuse = true;
     const second = png(index * 3 + 2);
@@ -380,13 +406,13 @@ async function flow(provider: Provider, index: number) {
     const textPaste = await transfer(page, ".md-editor .cm-content", "paste", [png(9)], { "text/plain": "표에서 복사한 글", "text/html": "<table><tr><td>표에서 복사한 글</td></tr></table>" });
     await page.waitForTimeout(400);
     const afterText = await page.locator(".md-editor .cm-content").innerText();
-    pass("글과 그림이 함께 복사된 경우는 글을 붙임", afterText.includes("표에서 복사한 글") && (afterText.match(/!\[/g) ?? []).length === 3 && (await page.locator(".cm-image-pending").count()) === 0, `paste=${textPaste}`);
+    pass("글과 그림이 함께 복사된 경우는 글을 붙임", afterText.includes("표에서 복사한 글") && (afterText.match(/!\[/g) ?? []).length === 4 && (await page.locator(".cm-image-pending").count()) === 0, `paste=${textPaste}`);
     await waitSaved(page, 4);
 
     // ── the preview shows both kinds of pictures ─────────────────────────
     await page.locator(".document-view .segmented").getByRole("radio", { name: "미리보기" }).click();
     await page.waitForSelector(".doc-preview .markdown img");
-    await until(async () => (await page.locator(".doc-preview .markdown img").count()) === 3, 8000);
+    await until(async () => (await page.locator(".doc-preview .markdown img").count()) === 4, 8000);
     const shown = await page.locator(".doc-preview .markdown img").evaluateAll((images) =>
       (images as HTMLImageElement[]).map((image) => ({ src: image.getAttribute("src") ?? "", local: image.dataset.src ?? "", width: image.naturalWidth, complete: image.complete })),
     );
@@ -396,7 +422,7 @@ async function flow(provider: Provider, index: number) {
     await shot("06-md-preview.png");
     pass(
       "미리보기: R2 그림과 작업 폴더 그림(상대 경로) 모두 보임",
-      loaded.length === 3 && loaded.every((width) => width > 0) && shown.some((image) => image.src.startsWith(r2Url)) && shown.some((image) => image.local === `assets/${secondName}` && image.src.startsWith("blob:")),
+      loaded.length === 4 && loaded.every((width) => width > 0) && shown.some((image) => image.src.startsWith(r2Url)) && shown.some((image) => image.local === `assets/${secondName}` && image.src.startsWith("blob:")),
       shown.map((image) => `${image.local || image.src.slice(0, 40)}:${image.width}`).join(" · "),
     );
     const outside = (await fetch(`${ready.url}/api/artifacts/${note.id}/asset?src=${encodeURIComponent("../../../etc/passwd")}`, { headers: auth })).status;
@@ -432,14 +458,17 @@ async function flow(provider: Provider, index: number) {
     });
     const docsDrop = await transfer(docs, ".ProseMirror p:last-of-type", "drop", [{ b64: webp.b64, name: "도식.webp", type: webp.type }]);
     await until(async () => (await docs.locator(".ProseMirror img").count()) === 2, 8000);
-    await shot("07-docx.png");
     await docs.locator(".ProseMirror p").first().click();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Control+v");
+    await until(async () => (await docs.locator(".ProseMirror img").count()) === 3, 8000);
+    await shot("07-docx.png");
     await page.keyboard.press("Control+s");
     await waitSaved(page, 2);
     const docxMedia = await media(docx.id, 2).catch(() => [] as string[]);
     pass(
-      "워드: 붙여 넣은 PNG와 끌어 놓은 WebP(PNG로)가 docx 안에 들어감",
-      docsPaste === "handled" && webp.type === "image/webp" && (await docs.locator(".ProseMirror img").count()) === 2 && docxMedia.length === 2 && docxMedia.every((name) => name.endsWith(".png")),
+      "워드: 붙여 넣은 PNG, 끌어 놓은 WebP(PNG로), Ctrl+V의 데스크톱 그림이 docx 안에 들어감",
+      docsPaste === "handled" && webp.type === "image/webp" && (await docs.locator(".ProseMirror img").count()) === 3 && docxMedia.length === 3 && docxMedia.every((name) => name.endsWith(".png")),
       `drop=${docsDrop} media=${docxMedia.join(",")}`,
     );
 
@@ -460,23 +489,28 @@ async function flow(provider: Provider, index: number) {
     const pastedOnSlide = await until(async () => (await pictures()) === slideBefore + 1, 8000);
     const slideDrop = await transfer(slides, ".stage-rel", "drop", [{ b64: webp.b64, name: "도식.webp", type: webp.type }], {}, undefined);
     const droppedOnSlide = await until(async () => (await pictures()) === slideBefore + 2, 8000);
-    // A picture copied inside the editor pastes as itself (its mark is on the clipboard), not as the last outside picture.
-    // (Box in page coordinates, as Playwright gives it for elements in frames.)
+    // Ctrl+V on the slide that shows the page nothing: the desktop clipboard's picture.
+    // (Boxes in page coordinates, as Playwright gives them for elements in frames.)
     const stage = (await slides.locator(".stage-rel").boundingBox())!;
+    await page.mouse.click(stage.x + 12, stage.y + stage.height - 12);
+    await page.waitForTimeout(300);
+    await page.keyboard.press("Control+v");
+    const desktopOnSlide = await until(async () => (await pictures()) === slideBefore + 3, 8000);
+    // A picture copied inside the editor pastes as itself (its mark is on the clipboard), not as the desktop's picture.
     await page.mouse.click(stage.x + stage.width / 2, stage.y + stage.height / 2);
     await page.waitForTimeout(300);
     await page.keyboard.press("Control+c");
     await page.waitForTimeout(300);
     await page.keyboard.press("Control+v");
-    const internal = await until(async () => (await pictures()) === slideBefore + 3, 8000);
+    const internal = await until(async () => (await pictures()) === slideBefore + 4, 8000);
     await page.waitForTimeout(500);
     await shot("08-pptx.png");
     await page.keyboard.press("Control+s");
     await waitSaved(page, 2, 40_000);
     const pptxMedia = await media(pptx.id, 2).catch(() => [] as string[]);
     pass(
-      "PPT: 다른 앱의 그림 붙여넣기·WebP 끌어 놓기·앱 안 복사 붙여넣기 → pptx 안에",
-      slidesPaste === "handled" && pastedOnSlide && droppedOnSlide && internal && pptxMedia.length >= 2,
+      "PPT: 다른 앱의 그림 붙여넣기·WebP 끌어 놓기·Ctrl+V의 데스크톱 그림·앱 안 복사 붙여넣기 → pptx 안에",
+      slidesPaste === "handled" && pastedOnSlide && droppedOnSlide && desktopOnSlide && internal && pptxMedia.length >= 3,
       `${slideBefore}→${await pictures()} drop=${slideDrop} media=${pptxMedia.join(",")}`,
     );
 
@@ -492,13 +526,18 @@ async function flow(provider: Provider, index: number) {
     const sheetPaste = await transfer(sheets, cellInput, "paste", [png(31)]);
     const sheetDrop = await transfer(sheets, "#univer-container", "drop", [{ b64: webp.b64, name: "도식.webp", type: webp.type }], {}, { x: 420, y: 330 });
     await until(async () => (await saveState(page)).includes("저장 안 됨"), 8000);
-    await page.waitForTimeout(1200);
+    // Ctrl+V in the grid that shows the page nothing: the desktop clipboard's picture.
+    const grid = (await sheets.locator("#univer-container").boundingBox())!;
+    await page.mouse.click(grid.x + 120, grid.y + grid.height - 80);
+    await page.waitForTimeout(400);
+    await page.keyboard.press("Control+v");
+    await page.waitForTimeout(1500);
     await shot("09-xlsx.png");
     await sheets.evaluate((selector) => (document.querySelector(selector) as HTMLElement | null)?.focus(), cellInput);
     await page.keyboard.press("Control+s");
     await waitSaved(page, 2, 40_000);
     const xlsxMedia = await media(xlsx.id, 2).catch(() => [] as string[]);
-    pass("엑셀: 붙여 넣은 PNG와 끌어 놓은 WebP(PNG로)가 xlsx 안에 들어감", sheetPaste === "handled" && xlsxMedia.length === 2 && xlsxMedia.every((name) => name.endsWith(".png")), `drop=${sheetDrop} media=${xlsxMedia.join(",")}`);
+    pass("엑셀: 붙여 넣은 PNG, 끌어 놓은 WebP(PNG로), Ctrl+V의 데스크톱 그림이 xlsx 안에 들어감", sheetPaste === "handled" && xlsxMedia.length === 3 && xlsxMedia.every((name) => name.endsWith(".png")), `drop=${sheetDrop} media=${xlsxMedia.join(",")}`);
 
     // ── Hangul: the text view says it cannot take pictures ───────────────
     await api<Artifact>("POST", `/api/works/${work.id}/artifacts`, { path: "양식.hwpx" });

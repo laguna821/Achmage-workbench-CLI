@@ -60,10 +60,12 @@ export function useDocImages(api: Api, artifact: Artifact | undefined, onToast: 
   const id = artifact?.id ?? "";
   const format = artifact?.format;
   const handling = useMemo<ImageHandling | null>(() => {
-    if (format === "hwpx" || format === "hwp") return { refuse: REFUSE_HANGUL, notice: onToast };
+    const clipboard = () => api.clipboardPicture();
+    if (format === "hwpx" || format === "hwp") return { refuse: REFUSE_HANGUL, notice: onToast, clipboard };
     if (format !== "markdown") return null;
     return {
       notice: onToast,
+      clipboard,
       insert: async (file) => {
         try {
           const result = await api.uploadDocImage(id, file, file.name || "image.png");

@@ -11,6 +11,8 @@ export type ImageHandling = {
   /** Why pictures cannot go into this document; shown instead of inserting. */
   refuse?: string;
   notice: (message: string) => void;
+  /** The desktop clipboard's picture, for a paste that shows the page nothing (WebKitGTK keeps pictures from pages). */
+  clipboard?: () => Promise<File | null>;
 };
 
 const IMAGE_NAME = /\.(png|jpe?g|gif|webp|avif|bmp|svg)$/i;
@@ -39,6 +41,18 @@ export function pastedImages(data: DataTransfer | null): File[] {
   if (!files.length) return [];
   if (data.getData("text/plain").trim() && !imageOnlyHtml(data.getData("text/html"))) return [];
   return files;
+}
+
+/**
+ * A paste that shows the page nothing: no files and no text. WebKitGTK hands a page the clipboard's
+ * text and copied files but not picture data, so a screenshot arrives like this (an <img>-only
+ * fragment from a browser's "Copy image" is nothing either: its picture was held back).
+ */
+export function showsNothing(data: DataTransfer | null) {
+  if (!data) return true;
+  if ((data.files?.length ?? 0) > 0 || data.getData("text/plain").trim()) return false;
+  const html = data.getData("text/html");
+  return !html || !(new DOMParser().parseFromString(html, "text/html").body.textContent ?? "").trim();
 }
 
 /** Pictures among dropped files (a file manager's drop may also carry their paths as text). */
@@ -167,8 +181,24 @@ export function imagePaste(handling: () => ImageHandling | null): Extension {
     EditorView.domEventHandlers({
       paste(event, view) {
         const current = handling();
-        const files = current ? pastedImages(event.clipboardData) : [];
-        if (!current || !files.length) return false;
+        if (!current) return false;
+        const files = pastedImages(event.clipboardData);
+        if (!files.length) {
+          // Only for the user's own paste: the desktop clipboard is read on that and nothing else.
+          if (!event.isTrusted || !current.clipboard || !showsNothing(event.clipboardData)) return false;
+          event.preventDefault();
+          if (view.state.readOnly) return true;
+          void current.clipboard().then(
+            (file) => {
+              if (!file || gone.has(view)) return;
+              if (current.refuse || !current.insert) return void refuse(current);
+              const { from, to } = view.state.selection.main;
+              void insertImages(view, [file], from, to, current, "input.paste");
+            },
+            () => undefined,
+          );
+          return true;
+        }
         event.preventDefault();
         if (view.state.readOnly) return true;
         if (current.refuse || !current.insert) return refuse(current);

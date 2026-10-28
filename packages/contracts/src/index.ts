@@ -618,7 +618,9 @@ export type OfficeHostMessage =
   /** Keep my edits after a conflict: save them as the revision after this one. */
   | { type: "office:rebase"; revision: number }
   /** Leaving with edits that cannot be saved now (a conflict): keep them for the next visit. */
-  | { type: "office:keep" };
+  | { type: "office:keep" }
+  /** The desktop clipboard's picture the page asked for (null: none), read by the window for the focused editor. */
+  | { type: "office:clipboard-picture"; picture: { bytes: ArrayBuffer; type: string } | null };
 
 /** Office editor page → Workbench window. */
 export type OfficePageMessage =
@@ -633,7 +635,9 @@ export type OfficePageMessage =
   | { type: "office:flushed"; revision: number | null }
   /** A save was refused: the document moved on (`revision_conflict`) or changed on disk (`disk_changed`). */
   | { type: "office:conflict"; code: string; message: string }
-  | { type: "office:error"; message: string };
+  | { type: "office:error"; message: string }
+  /** A paste showed the page nothing (WebKitGTK keeps clipboard pictures from pages): ask for the clipboard's picture. */
+  | { type: "office:clipboard-picture" };
 
 export type ApprovalAnswerRequest = { decision: ApprovalDecision };
 

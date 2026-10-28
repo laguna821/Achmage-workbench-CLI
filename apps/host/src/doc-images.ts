@@ -7,6 +7,7 @@ import type { Artifact, DocImageResult, ImageUploadCheck, ImageUploadInput, Imag
 /** What the settings form sends, as it arrives (each field checked here). */
 type Input = { [K in keyof ImageUploadInput]?: unknown };
 import { WORKBENCH_DIR, type Documents } from "./artifacts.ts";
+import { clipboardPicture } from "./clipboard-picture.ts";
 import { HttpError } from "./errors.ts";
 import { readBody, sendJson } from "./http.ts";
 
@@ -529,13 +530,19 @@ const decodedName = (raw: string) => {
 
 /**
  * The gateway's routes for pictures in documents (after its token check): the R2 settings and
- * "연결 확인", an image pasted into a Markdown document, and the pictures its preview shows. False
- * for any other request.
+ * "연결 확인", an image pasted into a Markdown document, the pictures its preview shows, and the
+ * desktop clipboard's picture for a paste the page cannot see. False for any other request.
  */
 export async function routeDocImages(images: DocImages, req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
   const path = url.pathname;
   const method = req.method ?? "GET";
   const [, scope, id, action] = path.split("/").filter(Boolean);
+  if (path === "/api/clipboard/picture" && method === "GET") {
+    const picture = await clipboardPicture();
+    res.writeHead(picture ? 200 : 204, { "cache-control": "no-store", "x-content-type-options": "nosniff", ...(picture ? { "content-type": picture.type } : {}) });
+    res.end(picture?.data);
+    return true;
+  }
   if (path === "/api/image-upload" || path === "/api/image-upload/check") {
     const answer =
       path.endsWith("/check") && method === "POST"

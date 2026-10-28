@@ -1,5 +1,8 @@
+import { listen, post } from "./bridge.ts";
+
 // Pictures from other apps in the office editors. The editors embed pictures in the document
 // themselves; what they cannot see in a browser page is the system clipboard outside a paste event,
+// picture data on it in WebKitGTK (the Linux app's engine gives a page text and copied files only),
 // and picture formats they do not take (they take PNG, JPEG and GIF).
 
 /** Formats every editor takes as is. */
@@ -126,4 +129,57 @@ export function convertForeignPictures() {
   };
   window.addEventListener("paste", (event) => hold(event, event.clipboardData), true);
   window.addEventListener("drop", (event) => hold(event, event.dataTransfer), true);
+}
+
+/** A paste that shows the page nothing: no files, no text (an <img>-only fragment: its picture was held back). */
+export function showsNothing(data: DataTransfer | null) {
+  if (!data) return true;
+  if ((data.files?.length ?? 0) > 0 || data.getData("text/plain").trim()) return false;
+  const html = data.getData("text/html");
+  return !html || !(new DOMParser().parseFromString(html, "text/html").body.textContent ?? "").trim();
+}
+
+/** The desktop clipboard's picture, read by the Workbench window for this editor (null: none). */
+export function desktopPicture(): Promise<File | null> {
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(() => {
+      stop();
+      resolve(null);
+    }, 12_000);
+    const stop = listen((message) => {
+      if (message.type !== "office:clipboard-picture") return;
+      stop();
+      window.clearTimeout(timer);
+      const picture = message.picture;
+      resolve(picture ? new File([picture.bytes], `image.${picture.type.split("/")[1] ?? "png"}`, { type: picture.type }) : null);
+    });
+    post({ type: "office:clipboard-picture" });
+  });
+}
+
+/**
+ * The user's paste that shows the page nothing (a screenshot in WebKitGTK) goes on to the editor
+ * with the desktop clipboard's picture, as the same paste. Install before the editor.
+ */
+export function pasteDesktopPictures() {
+  window.addEventListener(
+    "paste",
+    (event) => {
+      if (!event.isTrusted || redispatched.has(event) || !showsNothing(event.clipboardData)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const target = event.target ?? window;
+      void desktopPicture()
+        .then(async (file) => {
+          if (!file) return;
+          const transfer = new DataTransfer();
+          transfer.items.add(await takenPicture(file));
+          const again = new ClipboardEvent("paste", { bubbles: true, cancelable: true, composed: true, clipboardData: transfer });
+          redispatched.add(again);
+          target.dispatchEvent(again);
+        })
+        .catch((error: unknown) => console.warn("[workbench office] clipboard picture not pasted", error));
+    },
+    true,
+  );
 }

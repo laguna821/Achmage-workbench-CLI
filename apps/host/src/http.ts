@@ -379,7 +379,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const body = await readJson(req);
         return sendJson(res, 200, manager.openFile(parts[1], String(body.path ?? "")));
       }
-      // Pictures in documents: R2 settings, pasted images, Markdown preview pictures.
+      // Pictures in documents: R2 settings, pasted images, Markdown preview pictures, the desktop clipboard's picture.
       if (options.docImages && (await routeDocImages(options.docImages, req, res, url))) return;
       if (parts[0] === "artifacts" && parts[1]) {
         const documents = manager.documents;

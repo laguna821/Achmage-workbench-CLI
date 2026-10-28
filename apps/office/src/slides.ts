@@ -2,7 +2,7 @@ import "./slides.css";
 import { Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { dispatch, useTransport } from "./platform/electron-renderer.ts";
 import { recovery } from "./recovery.ts";
-import { carriesMark, convertForeignPictures, markClipboard, pastedPicture, pngBytes } from "./pictures.ts";
+import { carriesMark, convertForeignPictures, desktopPicture, markClipboard, pastedPicture, pngBytes, showsNothing } from "./pictures.ts";
 import type { WorkerCall, WorkerMessage, WorkerRequest } from "./slides/protocol.ts";
 
 // IeumOffice's slides editor inside Workbench. Its screen (vendor/ieumoffice/apps/slides renderer)
@@ -196,11 +196,12 @@ const inText = (target: EventTarget | null) =>
 const copied: { mark: string | null; unmarked: boolean } = { mark: null, unmarked: false };
 const pasting = { waiting: false };
 
-async function pasteFrom(data: DataTransfer | null) {
+async function pasteFrom(data: DataTransfer | null, trusted: boolean) {
   const own = Boolean(data && copied.mark && carriesMark(data, copied.mark));
   // A copy whose mark could not be written cannot be told from another app's: the editor's own wins.
   if (data && !own && !copied.unmarked) {
-    const picture = pastedPicture(data);
+    // WebKitGTK shows a page no picture data: the user's paste of nothing visible asks the desktop clipboard.
+    const picture = pastedPicture(data) ?? (trusted && showsNothing(data) ? await desktopPicture() : null);
     const text = picture ? "" : data.getData("text/plain");
     const png = picture ? await pngBytes(picture).catch(() => null) : null;
     if (png || text.trim()) {
@@ -220,7 +221,7 @@ window.addEventListener(
     pasting.waiting = false;
     event.preventDefault();
     event.stopImmediatePropagation();
-    void pasteFrom(event.clipboardData);
+    void pasteFrom(event.clipboardData, event.isTrusted);
   },
   true,
 );

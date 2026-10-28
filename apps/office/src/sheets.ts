@@ -2,7 +2,7 @@ import "./sheets.css";
 import { Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { dispatch, useTransport } from "./platform/electron-renderer.ts";
 import { recovery } from "./recovery.ts";
-import { convertForeignPictures } from "./pictures.ts";
+import { convertForeignPictures, pasteDesktopPictures } from "./pictures.ts";
 import type { WorkerCall, WorkerMessage, WorkerRequest } from "./slides/protocol.ts";
 
 // IeumOffice's spreadsheet editor inside Workbench. Its screen (vendor/ieumoffice/apps/sheets
@@ -374,8 +374,10 @@ await value({ type: "open", name: init.artifact.name, bytes }, [bytes]);
 post({ type: "office:opened", revision: state.revision, recovered: Boolean(kept) });
 reportDirty();
 
-// Pictures in formats the editor does not take go on to it as PNG.
+// Pictures in formats the editor does not take go on to it as PNG; a paste that shows the page
+// nothing (a screenshot in WebKitGTK) gets the desktop clipboard's picture.
 convertForeignPictures();
+pasteDesktopPictures();
 
 await import("@ieum/apps/sheets/src/preload/index.ts");
 await import("@ieum/apps/sheets/src/renderer/main.tsx");
