@@ -6,6 +6,7 @@ import type {
   DocRef,
   DocumentTools,
   Handoff,
+  IntegrationsView,
   Proposal,
   Folder,
   Provider,
@@ -81,6 +82,10 @@ export class Api {
   openExternal = (artifactId: string) => this.request<{ app: string }>("POST", `/api/artifacts/${artifactId}/open-external`);
   refreshTools = () => this.request<DocumentTools>("POST", "/api/tools/refresh");
   installIeumOffice = () => this.request<DocumentTools>("POST", "/api/tools/ieumoffice/install");
+  integrations = () => this.request<IntegrationsView>("GET", "/api/integrations");
+  copyMcp = (name: string, to: "claude" | "codex") => this.request<IntegrationsView>("POST", "/api/integrations/mcp/copy", { name, to });
+  copySkill = (name: string, to: "claude" | "codex") => this.request<IntegrationsView>("POST", "/api/integrations/skills/copy", { name, to });
+  installIeumSkill = (to: "claude" | "codex") => this.request<IntegrationsView>("POST", "/api/integrations/ieum-skill", { to });
   artifactText = (artifactId: string, revision?: number) =>
     this.request<{ artifact: Artifact; revision: number; text: string; editable: boolean; view: boolean }>(
       "GET",

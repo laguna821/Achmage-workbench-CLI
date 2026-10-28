@@ -335,6 +335,21 @@ export type ToolStatus = {
 
 export type DocumentTools = { kordoc: ToolStatus; ieumoffice: ToolStatus; hop: ToolStatus };
 
+/** An MCP server definition as one engine has it (env values shown only as names on screen). */
+export type McpDefinition = { type: "stdio" | "http" | "sse"; command: string | null; args: string[]; env: Record<string, string>; url: string | null; enabled: boolean };
+
+/** One skill and where each engine has it (the folder path), or null. */
+export type SkillEntry = { name: string; description: string | null; claude: string | null; codex: string | null };
+
+/** MCP servers and skills side by side, as the two engines see them. */
+export type IntegrationsView = {
+  mcp: { name: string; claude: McpDefinition | null; codex: McpDefinition | null }[];
+  skills: SkillEntry[];
+  paths: { claudeConfig: string; codexConfig: string; claudeSkills: string; codexSkills: string };
+  /** The agent skill IeumOffice ships for its command line tool, and whether each engine has it. */
+  ieumSkill: { source: string; claude: boolean; codex: boolean } | null;
+};
+
 export type Snapshot = {
   protocolVersion: number;
   seq: number;

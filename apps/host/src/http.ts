@@ -277,6 +277,15 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       if (method === "GET" && path === "/api/tools") return sendJson(res, 200, manager.tools());
       if (method === "POST" && path === "/api/tools/refresh") return sendJson(res, 200, await manager.refreshTools());
       if (method === "POST" && path === "/api/tools/ieumoffice/install") return sendJson(res, 202, manager.installIeumOffice());
+      if (method === "GET" && path === "/api/integrations") return sendJson(res, 200, await manager.integrations());
+      if (method === "POST" && path.startsWith("/api/integrations/")) {
+        const body = await readJson(req);
+        const to = body.to === "claude" ? "claude" : body.to === "codex" ? "codex" : null;
+        if (!to) throw new HttpError(400, "bad_target", "어느 엔진에 넣을지 정해 주세요.");
+        if (path === "/api/integrations/mcp/copy") return sendJson(res, 200, await manager.copyMcp(String(body.name ?? ""), to));
+        if (path === "/api/integrations/skills/copy") return sendJson(res, 200, await manager.copySkill(String(body.name ?? ""), to));
+        if (path === "/api/integrations/ieum-skill") return sendJson(res, 200, await manager.installIeumSkill(to));
+      }
       if (parts[0] === "works" && parts[1] && parts[2] === "artifacts" && method === "POST") {
         const body = await readJson(req);
         return sendJson(res, 200, manager.openFile(parts[1], String(body.path ?? "")));

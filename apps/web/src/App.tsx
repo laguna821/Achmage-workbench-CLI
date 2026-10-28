@@ -18,6 +18,8 @@ import { EngineMenu } from "./components/EngineMenu.tsx";
 import { Overview, Switcher, UnseenContext } from "./components/Overview.tsx";
 import { DocContext, type DocActions } from "./components/DocCards.tsx";
 import { DocTabs } from "./components/DocTabs.tsx";
+import { IntegrationsSheet } from "./components/IntegrationsSheet.tsx";
+import { Onboarding } from "./components/Onboarding.tsx";
 import { SessionPicker } from "./components/SessionPicker.tsx";
 
 // Editors (CodeMirror, PDF.js) load only when a document opens.
@@ -92,6 +94,8 @@ export function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [workId, setWorkIdState] = useState<string | null>(() => localStorage.getItem(LAST_WORK_KEY));
   const [view, setView] = useState<View>({ kind: "work" });
+  const [integrationsOpen, setIntegrationsOpen] = useState(false);
+  const [onboardingAgain, setOnboardingAgain] = useState(false);
   // Documents opened in each work, shown as tabs and offered first by "@".
   const [openDocs, setOpenDocs] = useState<Record<string, string[]>>(() => readJson(OPEN_DOCS_KEY, {}));
   const [toast, setToast] = useState<string | null>(null);
@@ -616,6 +620,14 @@ export function App() {
             </button>
             <Popover open={menuOpen} onClose={closeMenu} align="right">
               <Connections
+                onIntegrations={() => {
+                  closeMenu();
+                  setIntegrationsOpen(true);
+                }}
+                onOnboarding={() => {
+                  closeMenu();
+                  setOnboardingAgain(true);
+                }}
                 tools={state.tools}
                 onInstallIeum={() => void api.installIeumOffice().catch(fail)}
                 onRefreshTools={() => void api.refreshTools().catch(fail)}
@@ -703,6 +715,31 @@ export function App() {
       ) : null}
       </div>
 
+      {integrationsOpen && api ? <IntegrationsSheet api={api} onClose={() => setIntegrationsOpen(false)} onToast={setToast} /> : null}
+      {state.ready && api && (prefs.onboarding !== "done" || onboardingAgain) ? (
+        <Onboarding
+          providers={state.providers}
+          tools={state.tools}
+          onLogin={(provider) =>
+            void api
+              .login(provider)
+              .then((result) => {
+                setLoginMessage(result.message);
+                if (result.url) void openExternal(result.url);
+              })
+              .catch(fail)
+          }
+          onRefresh={() => {
+            void api.refreshProviders().catch(() => undefined);
+            void api.refreshTools().catch(() => undefined);
+          }}
+          onInstallIeum={() => void api.installIeumOffice().catch(fail)}
+          onDone={() => {
+            setOnboardingAgain(false);
+            if (prefs.onboarding !== "done") savePrefs({ onboarding: "done" });
+          }}
+        />
+      ) : null}
       {sheet ? (
         <AppearanceSheet
           target={sheet}

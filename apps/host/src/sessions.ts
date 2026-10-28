@@ -37,6 +37,7 @@ import { blankDesign, designProblem, type DesignPreset } from "./design.ts";
 import { IeumOffice, installIeumOffice, type InstallProgress } from "./ieumoffice.ts";
 import { findHop, openInHop, openWithDesktop } from "./hop.ts";
 import { createGuide, reservePath } from "./create.ts";
+import { copyMcp, copySkill, integrations, type EngineBinaries } from "./integrations.ts";
 
 export { HttpError };
 
@@ -297,6 +298,45 @@ export class SessionManager {
       })
       .catch((error: unknown) => report({ stage: "error", message: error instanceof Error ? error.message : String(error) }));
     return this.tools();
+  }
+
+  private engineBinaries(): EngineBinaries {
+    return { claude: this.adapters.get("claude")?.status().binary ?? null, codex: this.adapters.get("codex")?.status().binary ?? null };
+  }
+
+  /** The folder of the agent skill IeumOffice ships (skills/ieumoffice), when installed. */
+  private ieumSkillDir() {
+    const file = this.documents.ieum?.skillPath();
+    return file ? dirname(file) : null;
+  }
+
+  /** MCP servers and skills as Claude Code and Codex see them (read only). */
+  integrations() {
+    return integrations(this.engineBinaries(), this.ieumSkillDir());
+  }
+
+  /** Give the other engine an MCP server one engine has (its official command, user scope). */
+  async copyMcp(name: string, to: "claude" | "codex") {
+    await copyMcp(this.engineBinaries(), name, to);
+    return this.integrations();
+  }
+
+  /** Copy a skill folder from one engine's skills to the other's. */
+  async copySkill(name: string, to: "claude" | "codex") {
+    const view = await this.integrations();
+    const skill = view.skills.find((entry) => entry.name === name);
+    const from = to === "claude" ? skill?.codex : skill?.claude;
+    if (!from) throw new HttpError(404, "skill_missing", "복사할 스킬을 찾지 못했습니다.");
+    copySkill(name, from, to);
+    return this.integrations();
+  }
+
+  /** Put IeumOffice's own agent skill (how to use the ieumoffice tool) into an engine's skills. */
+  async installIeumSkill(to: "claude" | "codex") {
+    const source = this.ieumSkillDir();
+    if (!source) throw new HttpError(501, "ieumoffice_missing", "이음오피스가 설치되어 있지 않습니다.");
+    copySkill("ieumoffice", source, to);
+    return this.integrations();
   }
 
   /**

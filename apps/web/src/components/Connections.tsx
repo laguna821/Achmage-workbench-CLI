@@ -45,6 +45,8 @@ export function Connections({
   tools,
   onInstallIeum,
   onRefreshTools,
+  onIntegrations,
+  onOnboarding,
   providers,
   connected,
   hostLabel,
@@ -56,6 +58,8 @@ export function Connections({
   onAppearance,
 }: {
   tools: DocumentTools | null;
+  onIntegrations: () => void;
+  onOnboarding: () => void;
   onInstallIeum: () => void;
   onRefreshTools: () => void;
   providers: Partial<Record<Provider, ProviderStatus>>;
@@ -135,6 +139,12 @@ export function Connections({
         상태 새로 고침
       </button>
       <ToolsSection tools={tools} onInstallIeum={onInstallIeum} onRefreshTools={onRefreshTools} />
+      <button type="button" className="text-button" onClick={onIntegrations}>
+        MCP·스킬 연동 · Claude와 Codex 나란히…
+      </button>
+      <button type="button" className="text-button" onClick={onOnboarding}>
+        처음 안내 다시 보기
+      </button>
       <div className="menu-divider" />
       <div className="menu-label">화면</div>
       <div className="segmented theme-choice" role="radiogroup" aria-label="화면">
