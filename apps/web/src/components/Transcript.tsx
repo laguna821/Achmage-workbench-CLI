@@ -270,8 +270,8 @@ function toTurns(blocks: Block[]): Turn[] {
     }
     const turn = turns[turns.length - 1];
     if (block.type === "turnEnd") turn.end = block.item;
-    // A linked-session end card that came after the turn ended stays below its end line.
-    else if (block.type === "link" && turn.end) turn.after.push(block);
+    // A linked-session end card goes below the turn's end line (also when the turn was stopped by it).
+    else if (block.type === "link") turn.after.push(block);
     else turn.blocks.push(block);
     if (block.type === "approval" && block.item.decision === null) turn.attention = true;
   }

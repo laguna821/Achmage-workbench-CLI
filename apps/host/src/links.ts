@@ -527,7 +527,7 @@ export class SessionLinks {
     const sender = last.link.fromSessionId ? sessionName(this.host.session(last.link.fromSessionId)) : null;
     const others = link.participants.filter((id) => id !== speakerId).map((id) => sessionName(this.host.session(id))).join(", ");
     const header = sender ? hopHeader(link, last.link.hop, sender) : openingHeader(link, others);
-    await this.deliver(link, speakerId, `link:${link.id}:${last.link.hop}:${Date.now()}`, last.text, last.link, header);
+    await this.deliver(link, speakerId, `link:${link.id}:${last.link.hop}:${Date.now()}`, last.text, { ...last.link, of: linkMaxHops(link) }, header);
   }
 
   private async deliver(link: SessionLink, sessionId: string, requestId: string, text: string, hop: LinkHop, header: string) {

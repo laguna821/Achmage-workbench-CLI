@@ -615,7 +615,7 @@ export function Sidebar({
               </div>
             ))}
             {!rows.length && creatingIn === undefined ? <div className="empty-hint side-empty">아직 작업이 없습니다. 위의 "새 세션"으로 시작하세요.</div> : null}
-            <LinkLines tree={treeRef} version={rows} />
+            <LinkLines tree={treeRef} />
           </div>
         </section>
       </div>

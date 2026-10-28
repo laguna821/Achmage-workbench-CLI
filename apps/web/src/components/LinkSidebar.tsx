@@ -27,14 +27,18 @@ type Line = { id: string; top: number; height: number; ticks: number[]; dot: { f
  * work row stands for a session folded inside it). On each hand-over a dot runs once along it from
  * the session that answered to the next one (not with reduced motion: see links.css).
  */
-export function LinkLines({ tree, version }: { tree: RefObject<HTMLDivElement | null>; version: unknown }) {
+export function LinkLines({ tree }: { tree: RefObject<HTMLDivElement | null> }) {
   const { state } = useLinks();
   const [lines, setLines] = useState<Line[]>([]);
   const live = Object.values(state.links).filter((link) => link.state !== "ended");
 
+  // Measured after every render of the tree (rows fold, move and appear), only while a link is live.
   useLayoutEffect(() => {
     const element = tree.current;
-    if (!element) return;
+    if (!element || !live.length) {
+      setLines((current) => (current.length ? [] : current));
+      return;
+    }
     const box = element.getBoundingClientRect();
     const centre = (sessionId: string) => {
       const session = state.sessions[sessionId];
@@ -68,7 +72,7 @@ export function LinkLines({ tree, version }: { tree: RefObject<HTMLDivElement | 
     const observer = new ResizeObserver(() => setLines((current) => [...current]));
     observer.observe(element);
     return () => observer.disconnect();
-  }, [tree, version]);
+  }, [tree]);
 
   if (!lines.length) return null;
   return (

@@ -418,10 +418,13 @@ describe("linked sessions", () => {
     await tick();
     expect(after.claude.sent).toHaveLength(0);
     expect(after.codex.sent).toHaveLength(0);
+    // One more round while it stands, then on: the cut turn is asked again, counted against the new total.
+    after.manager.links.extend(started.id);
     await after.manager.links.resume(started.id);
     expect(after.claude.sent).toHaveLength(1);
-    expect(after.claude.sent[0]!.text).toMatch(/^\[세션 잇기 1\/4 · 상대: Codex · 초안\] .*\n\n강의 계획의 약점과 고칠 점$/s);
-    expect(userItems(after.manager, a.id).filter((item) => item.link?.hop === 1)).toHaveLength(2);
+    expect(after.claude.sent[0]!.text).toMatch(/^\[세션 잇기 1\/6 · 상대: Codex · 초안\] .*\n\n강의 계획의 약점과 고칠 점$/s);
+    const asked = userItems(after.manager, a.id).filter((item) => item.link?.hop === 1);
+    expect(asked.map((item) => item.link?.of)).toEqual([4, 6]);
   });
 
   it("what was exchanged reads as one column and saves as Markdown in the first work", async () => {
