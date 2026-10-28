@@ -40,6 +40,8 @@ export type ImageHost = {
   /** A request whose engine text (the drawing instructions) differs from what the conversation shows. */
   send(sessionId: string, requestId: string, text: string, from: { sessionId: string; label: string } | null, options: { engineText: string; draw: RequestDraw }): Promise<SendResult>;
   upsertItem(sessionId: string, item: TranscriptItem): void;
+  /** The session's latest reply counts as looked at. */
+  markSeen(sessionId: string): void;
   getMeta(key: string): string | null;
   setMeta(key: string, value: string): void;
 };
@@ -296,6 +298,7 @@ export class ImageGen {
       status: "drawing",
       brief,
       template: template?.name ?? null,
+      templateId: template?.id ?? null,
       aspect,
       transparent,
       prompt,
@@ -337,10 +340,11 @@ export class ImageGen {
     const codex = this.host.sessions().filter((session) => session.workId === work.id && session.provider === "codex" && !session.archivedAt);
     const free = (session: Session) => session.status === "idle" || session.status === "error";
     if (via === "new") return this.newHelper(work);
+    if (via === "helper") return this.helperOf(work, codex);
     if (via) {
       const chosen = codex.find((session) => session.id === via);
       if (!chosen) throw new HttpError(404, "draw_session_not_found", "그릴 Codex 세션을 찾지 못했습니다.");
-      if (!free(chosen)) throw new HttpError(409, "session_busy", `Codex 세션 「${chosen.purpose}」이(가) 일하는 중입니다. 끝난 뒤에 그리거나 다른 세션을 고르세요.`);
+      if (!free(chosen)) throw new HttpError(409, "session_busy", `「${chosen.purpose}」 Codex 세션이 일하는 중입니다. 끝난 뒤에 그리거나 다른 세션을 고르세요.`);
       return chosen;
     }
     if (origin.provider === "codex") {
@@ -348,9 +352,14 @@ export class ImageGen {
       return origin;
     }
     // Claude cannot draw: the work's drawing session does, apart from Codex conversations about other things.
+    return this.helperOf(work, codex);
+  }
+
+  /** The work's drawing session (made on first use). */
+  private helperOf(work: Work, codex: Session[]) {
     const helper = codex.find((session) => session.id === this.helpers.get(work.id)) ?? codex.findLast((session) => session.purpose === HELPER_PURPOSE);
     if (!helper) return this.newHelper(work);
-    if (!free(helper)) throw new HttpError(409, "session_busy", "Codex가 앞선 그림을 그리는 중입니다. 끝나면 다시 보내거나, 그림 메뉴에서 다른 Codex 세션을 고르세요.");
+    if (helper.status !== "idle" && helper.status !== "error") throw new HttpError(409, "session_busy", "Codex가 앞선 그림을 그리는 중입니다. 끝나면 다시 보내거나, 그림 메뉴에서 다른 Codex 세션을 고르세요.");
     return helper;
   }
 
@@ -425,11 +434,15 @@ export class ImageGen {
     }
   }
 
-  /** The drawing turn ended: without a picture the card says why. */
+  /**
+   * The drawing turn ended: without a picture the card says why. A drawing session's reply is
+   * the picture, already shown in the conversation that asked, so it is not another "새 답".
+   */
   afterTurn(sessionId: string, status: "completed" | "interrupted" | "failed") {
     const jobId = this.turns.get(sessionId);
     this.turns.delete(sessionId);
     const job = jobId ? this.jobs.get(jobId) : undefined;
+    if (job && job.originSessionId !== sessionId) this.host.markSeen(sessionId);
     if (!job || job.status !== "drawing") return;
     this.finish(job.id, {
       status: "failed",

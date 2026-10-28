@@ -6,6 +6,7 @@ import { fold } from "../../../../../third_party/textfold/fold.ts";
 import { statusText } from "../../format.ts";
 import { isBusy, type State } from "../../state.ts";
 import { ProposalCard } from "../DocCards.tsx";
+import { ImageCard } from "../ImageGen.tsx";
 import { diagramComponents } from "../Diagram.tsx";
 import { EngineMark } from "../EngineMark.tsx";
 import { Icon } from "../Icon.tsx";
@@ -28,7 +29,8 @@ export function foldedReply(text: string) {
 
 /** The turn the drawer speaks for: the last request and what came after it. */
 function lastTurn(items: TranscriptItem[]) {
-  let start = items.length;
+  // A conversation with no request yet may still hold pictures drawn for it (by Codex, for Claude).
+  let start = 0;
   for (let index = items.length - 1; index >= 0; index -= 1) {
     if (items[index]!.kind === "user") {
       start = index;
@@ -44,6 +46,7 @@ function lastTurn(items: TranscriptItem[]) {
       .join("\n\n")
       .trim(),
     proposals: turn.filter((item): item is Item<"proposal"> => item.kind === "proposal"),
+    images: turn.filter((item): item is Item<"image"> => item.kind === "image"),
     end: turn.find((item): item is Item<"turnEnd"> => item.kind === "turnEnd") ?? null,
   };
 }
@@ -101,7 +104,9 @@ export function ConversationDrawer({
           : "응답이 끝나지 못했습니다"
       : turn.request
         ? "답을 기다리는 중"
-        : "아직 대화가 없습니다";
+        : turn.images.length
+          ? `그림 ${turn.images.length}장`
+          : "아직 대화가 없습니다";
 
   return (
     <section className={`drawer is-${mode}`} aria-label="대화 서랍">
@@ -163,6 +168,9 @@ export function ConversationDrawer({
             const proposal = state.proposals[item.proposalId] as Proposal | undefined;
             return proposal ? <ProposalCard key={item.id} proposal={proposal} /> : null;
           })}
+          {turn.images.map((item) => (
+            <ImageCard key={item.id} item={item} viewer={session.id} compact />
+          ))}
         </div>
       ) : null}
     </section>

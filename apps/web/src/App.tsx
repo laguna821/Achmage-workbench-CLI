@@ -16,6 +16,7 @@ import { SearchPalette, type PaletteCommand } from "./components/SearchPalette.t
 import { ArchiveView } from "./components/ArchiveView.tsx";
 import { StartView, useEngineChoice } from "./components/StartView.tsx";
 import { WorkView, type WorkActions } from "./components/WorkView.tsx";
+import type { DrawState } from "./components/ImageGen.tsx";
 import { AppearanceSheet, type SheetTarget } from "./components/AppearanceSheet.tsx";
 import { EngineMenu } from "./components/EngineMenu.tsx";
 import { Switcher, UnseenContext } from "./components/SessionCards.tsx";
@@ -328,6 +329,16 @@ export function App() {
         if (!api) return false;
         try {
           await api.handoff({ requestId: newRequestId(), sourceSessionId: source.id, targetSessionId: target.id, text, refs });
+          return true;
+        } catch (error) {
+          fail(error);
+          return false;
+        }
+      },
+      draw: async (session: Session, brief: string, draw: DrawState) => {
+        if (!api) return false;
+        try {
+          await api.draw(session.id, { requestId: newRequestId(), brief, templateId: draw.choice.templateId, aspect: draw.choice.aspect, transparent: draw.choice.transparent, via: draw.via });
           return true;
         } catch (error) {
           fail(error);

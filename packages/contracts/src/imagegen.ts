@@ -73,7 +73,8 @@ export type DrawRequest = {
   transparent?: boolean;
   /**
    * The Codex session of the same work that draws: null picks one (a Codex conversation draws
-   * itself; a Claude conversation uses the work's drawing session), "new" starts a new one.
+   * itself; a Claude conversation uses the work's drawing session), "helper" is the work's
+   * drawing session in any case, "new" starts a new one.
    */
   via?: string | null;
   /** Drawn for this Markdown document: the UI puts the link where the user asked for it. */
@@ -91,8 +92,9 @@ export type ImageInfo = {
   drawSessionId: string;
   status: "drawing" | "done" | "failed";
   brief: string;
-  /** Name of the template used, if any. */
+  /** Name of the template used, if any, and its id (to draw again the same way). */
   template: string | null;
+  templateId?: string | null;
   aspect: ImageAspect;
   transparent: boolean;
   /** What went to the image tool (template + request + rules). */
@@ -200,7 +202,8 @@ export function resolvePath(base: string, relative: string) {
 
 /**
  * Put a block (an image link) at `at` on lines of its own, with a blank line around it unless one
- * is there already. Returns the new text and where the cursor goes (after the block).
+ * is there already. Returns the new text, what was inserted where (for an editor transaction) and
+ * where the cursor goes (after the block).
  */
 export function placeBlock(text: string, at: number, block: string) {
   const position = Math.max(0, Math.min(text.length, at));
@@ -209,5 +212,5 @@ export function placeBlock(text: string, at: number, block: string) {
   const lead = !before || before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
   const trail = after.startsWith("\n\n") ? "" : after.startsWith("\n") ? "\n" : after ? "\n\n" : "\n";
   const inserted = `${lead}${block}${trail}`;
-  return { text: before + inserted + after, cursor: position + lead.length + block.length };
+  return { text: before + inserted + after, at: position, insert: inserted, cursor: position + lead.length + block.length };
 }

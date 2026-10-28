@@ -29,6 +29,9 @@ import type { MentionItem } from "../../mention.ts";
 import { CreateChip, CreateTargetButton, stemOf } from "../CreateTarget.tsx";
 import { OfficeCompare } from "./OfficeCompare.tsx";
 import { ConversationDrawer, ConversationSheet, type DrawerMode } from "./ConversationDrawer.tsx";
+import type { EditorView } from "@codemirror/view";
+import { InlineDraw, drawExtension } from "./InlineDraw.tsx";
+import { docPictureComponents } from "../ImageGen.tsx";
 
 /** Save operations only; "unsaved" is derived from the text, never stored (no stale overwrite). */
 type SaveState = "idle" | "saving" | "failed" | "conflict";
@@ -129,6 +132,12 @@ export default function DocumentView({
   // Revisions this view saved itself: their events must not look like someone else's change.
   const ownRevisions = useRef(new Set<number>());
   const timer = useRef<number | undefined>(undefined);
+  // "그림": drawing at the cursor of a Markdown document, and its pictures in the preview.
+  const markdownDoc = artifact?.format === "markdown";
+  const [editorView, setEditorView] = useState<EditorView | null>(null);
+  const [drawOpen, setDrawOpen] = useState(false);
+  const drawExtensions = useMemo(() => (markdownDoc ? [drawExtension(artifactId)] : undefined), [artifactId, markdownDoc]);
+  const pictures = useMemo(() => (artifact ? docPictureComponents(DRAWN, work.id, artifact.path) : DRAWN), [work.id, artifact?.path]);
 
   // Load the latest revision; recover a draft the app kept if the window closed before saving.
   const load = useCallback(async () => {
@@ -498,12 +507,12 @@ export default function DocumentView({
     if (artifact.format === "html" && mode === "render") {
       return <HtmlView api={api} artifactId={artifactId} revision={base.revision} />;
     }
-    const editor = <MarkdownEditor value={text} onChange={setText} onSelection={setSelection} onBlur={() => void save()} />;
+    const editor = <MarkdownEditor value={text} onChange={setText} onSelection={setSelection} onBlur={() => void save()} extensions={drawExtensions} onView={setEditorView} />;
     if (artifact.format === "markdown" && mode === "preview") {
       return (
         <div className="doc-preview">
           <div className="markdown">
-            <Markdown remarkPlugins={[remarkGfm]} components={DRAWN}>
+            <Markdown remarkPlugins={[remarkGfm]} components={pictures}>
               {text}
             </Markdown>
           </div>
@@ -516,7 +525,7 @@ export default function DocumentView({
           {editor}
           <div className="doc-preview">
             <div className="markdown">
-              <Markdown remarkPlugins={[remarkGfm]} components={DRAWN}>
+              <Markdown remarkPlugins={[remarkGfm]} components={pictures}>
               {text}
             </Markdown>
             </div>
@@ -541,6 +550,11 @@ export default function DocumentView({
           </span>
         </div>
         <div className="doc-header-right">
+          {markdownDoc && (mode === "edit" || mode === "split") && !viewing && !compare && base ? (
+            <button type="button" className="ghost-button draw-here" onClick={() => setDrawOpen(!drawOpen)} aria-expanded={drawOpen} title="여기에 그림 그리기 (Ctrl+Alt+G) · GPT Image (Codex)">
+              <Icon name="image" size={14} /> 그림
+            </button>
+          ) : null}
           {artifact.format === "markdown" ? (
             <div className="segmented small" role="radiogroup" aria-label="보기">
               {(["edit", "split", "preview"] as const).map((value) => (
@@ -800,6 +814,21 @@ export default function DocumentView({
         ) : null}
         {body}
       </div>
+      {markdownDoc ? (
+        <InlineDraw
+          api={api}
+          state={state}
+          work={work}
+          session={session}
+          artifact={artifact}
+          view={editorView}
+          ready={Boolean(base)}
+          open={drawOpen}
+          onOpen={setDrawOpen}
+          onInsertText={setText}
+          onToast={onToast}
+        />
+      ) : null}
 
       <div className="column composer-area doc-composer">
         {session && drawer === "open" ? (

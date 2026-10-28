@@ -7,6 +7,7 @@ import { FileCard, HandoffCard, ProposalCard, RefChips, useDocs } from "./DocCar
 import { CREATE_LABEL } from "@workbench/contracts";
 import { Icon, type IconName } from "./Icon.tsx";
 import { diagramComponents } from "./Diagram.tsx";
+import { ImageCard } from "./ImageGen.tsx";
 
 const DRAWN = diagramComponents();
 const STREAMING = diagramComponents(true);
@@ -23,6 +24,7 @@ type Block =
   | { type: "artifact"; item: Item<"artifact"> }
   | { type: "proposal"; item: Item<"proposal"> }
   | { type: "handoff"; item: Item<"handoff"> }
+  | { type: "image"; item: Item<"image"> }
   | { type: "turnEnd"; item: Item<"turnEnd"> };
 
 /** Group consecutive tool calls and reasoning into one folded block, Codex-style. */
@@ -69,6 +71,9 @@ export function toBlocks(items: TranscriptItem[]): Block[] {
         break;
       case "handoff":
         blocks.push({ type: "handoff", item });
+        break;
+      case "image":
+        blocks.push({ type: "image", item });
         break;
       case "turnEnd":
         blocks.push({ type: "turnEnd", item });
@@ -476,6 +481,8 @@ export function Transcript({
         const handoff = state.handoffs[block.item.handoffId];
         return handoff ? <HandoffCard key={block.item.id} handoff={handoff} viewer={sessionId} /> : null;
       }
+      case "image":
+        return <ImageCard key={block.item.id} item={block.item} viewer={sessionId} />;
       case "turnEnd":
         return null;
     }
@@ -565,6 +572,11 @@ export function Transcript({
                     ) : turn.user.steered ? (
                       <span className="steer-tag" title="응답하는 중에 보내 하던 작업에 전한 요청">
                         작업 중 보냄
+                      </span>
+                    ) : null}
+                    {turn.user.draw ? (
+                      <span className="steer-tag draw-tag" title="GPT Image로 그린 요청">
+                        그림{turn.user.draw.template ? ` · ${turn.user.draw.template}` : ""}
                       </span>
                     ) : null}
                   </div>

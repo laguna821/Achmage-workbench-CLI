@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { EFFORT_LABEL, PROVIDER_LABEL, accessFor, type AccessMode, type CreateTarget, type DocRef, type Provider, type Session, type UiPrefs, type Work } from "@workbench/contracts";
 import type { ReactNode } from "react";
 import type { MentionItem } from "../mention.ts";
@@ -17,6 +17,8 @@ import { useUnseen } from "./SessionCards.tsx";
 import { workSessions } from "../tree.ts";
 import { Transcript } from "./Transcript.tsx";
 import { AccessPicker, ContextGauge } from "./SessionControls.tsx";
+import { DrawChip, DrawPill, type DrawState } from "./ImageGen.tsx";
+import { readDrawChoice, writeDrawChoice } from "../imagegen.ts";
 
 export type WorkActions = {
   /** Send a request; while the engine works it steers into the turn or waits ("queue"). */
@@ -27,6 +29,8 @@ export type WorkActions = {
     cancel: (session: Session, queuedId: string) => void;
   };
   handoff: (source: Session, target: Session, text: string, refs?: DocRef[]) => Promise<boolean>;
+  /** "그림": draw the request with GPT Image through Codex; the picture shows in this conversation. */
+  draw: (session: Session, brief: string, draw: DrawState) => Promise<boolean>;
   pickSession: (work: Work, exclude: Session | null) => Promise<Session | null>;
   openArtifact: (artifactId: string) => void;
   openFile: (work: Work, path: string) => Promise<void>;
@@ -279,6 +283,13 @@ export function WorkView({
   // Documents pinned to the next request, each read (review) or changed (edit) by it.
   const [attached, setAttached] = useState<{ id: string; mode: DocRef["mode"] }[]>([]);
   const [create, setCreate] = useState<CreateTarget | null>(null);
+  // "그림": on for the next request; the template and shape are remembered, the rest is per work.
+  const [draw, setDraw] = useState<DrawState>(() => ({ on: false, choice: readDrawChoice(), via: null }));
+  useEffect(() => setDraw((current) => ({ ...current, on: false, via: null })), [work.id]);
+  const changeDraw = (next: DrawState) => {
+    writeDrawChoice(next.choice);
+    setDraw(next);
+  };
   const [docsOpen, setDocsOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [pathInput, setPathInput] = useState("");
@@ -567,12 +578,17 @@ export function WorkView({
           />
         ) : null}
         <Composer
-          mentions={{
-            items: mentionItems,
-            onPick: (item) => setAttached((current) => (current.some((entry) => entry.id === item.id) ? current : [...current, { id: item.id, mode: "review" }])),
-          }}
+          mentions={
+            // A drawing goes without documents, so "@" is off while drawing is on.
+            draw.on
+              ? undefined
+              : {
+                  items: mentionItems,
+                  onPick: (item) => setAttached((current) => (current.some((entry) => entry.id === item.id) ? current : [...current, { id: item.id, mode: "review" }])),
+                }
+          }
           draftKey={`work:${work.id}:${active?.id ?? "none"}`}
-          placeholder="이 작업에 이어서 요청하기"
+          placeholder={draw.on ? "그릴 그림을 설명하세요" : "이 작업에 이어서 요청하기"}
           busy={busy}
           waiting={working}
           steerable={working && !handoffTo}
@@ -581,11 +597,13 @@ export function WorkView({
             <>
               <AccessPicker provider={pickerProvider} value={access} onChange={(mode) => actions.setAccess(active, pickerProvider, mode)} />
               {active ? <ContextGauge context={active.context} canCompact={!busy && Boolean(active.nativeSessionId)} onCompact={() => actions.compact(active)} /> : null}
+              <DrawPill state={state} work={work} session={active} provider={pickerProvider} value={draw} onChange={changeDraw} />
             </>
           }
           header={
-            handoffTo || attached.length || create ? (
+            handoffTo || attached.length || create || draw.on ? (
               <div className="doc-chips">
+                {draw.on ? <DrawChip state={state} provider={pickerProvider} value={draw} onClear={() => setDraw({ ...draw, on: false })} /> : null}
                 {handoffTo ? (
                   <span className="target-chip" style={accentStyle(lookOf(handoffTo.provider))}>
                     <EngineMark provider={handoffTo.provider} size={13} /> @{handoffTo.purpose}
@@ -622,6 +640,14 @@ export function WorkView({
             ) : null
           }
           onSend={async (text, mode) => {
+            if (draw.on) {
+              // A drawing goes by itself (attached documents wait for the next request).
+              const source: Session | null = active ?? (await actions.newSession(work, engine, draftChoice));
+              if (!source) return false;
+              const drawn = await actions.draw(source, text, draw);
+              if (drawn) setDraw({ ...draw, on: false });
+              return drawn;
+            }
             // Attached documents travel as the revision they have now; handoffs are read-only.
             // A new document is made from the attached ones, so they are only read.
             const refs: DocRef[] = attached

@@ -1,0 +1,601 @@
+/* "그림": the pill under the input and its menu, the chip above the input, picture cards in the
+   conversation, the full-size view, pictures in Markdown previews, and drawing in a document. */
+
+.draw-pill {
+  gap: 5px;
+  font-size: 14px;
+}
+
+.draw-pill.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.draw-pill-template {
+  max-width: 9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+.draw-menu {
+  min-width: 300px;
+  max-width: 340px;
+  max-height: min(72vh, 640px);
+  overflow-y: auto;
+}
+
+.draw-switch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.draw-switch:hover {
+  background: var(--surface-muted);
+}
+
+.draw-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.draw-switch-track {
+  position: relative;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--line);
+  transition: background 0.15s;
+}
+
+.draw-switch-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  transition: transform 0.15s;
+}
+
+.draw-switch.on .draw-switch-track {
+  background: var(--accent);
+}
+
+.draw-switch.on .draw-switch-track::after {
+  transform: translateX(14px);
+}
+
+.draw-switch input:focus-visible + .draw-switch-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.draw-switch:has(input:disabled) {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.draw-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.draw-label .link {
+  font-size: 12.5px;
+}
+
+.draw-templates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 10px 6px;
+}
+
+.draw-template {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 13.5px;
+}
+
+.draw-template:hover {
+  background: var(--surface-muted);
+}
+
+.draw-template.mine {
+  border-style: dashed;
+}
+
+.draw-template.active {
+  border-color: var(--accent);
+  border-style: solid;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.draw-sessions {
+  display: flex;
+  flex-direction: column;
+}
+
+.draw-sessions .menu-item {
+  padding: 7px 10px;
+  font-size: 14.5px;
+}
+
+.draw-sessions .menu-item-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.draw-aspect {
+  margin: 2px 10px 6px;
+}
+
+.draw-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 6px;
+  font-size: 14px;
+  color: var(--text-soft);
+}
+
+.draw-note {
+  margin: 4px 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+
+.draw-note .engine-mark {
+  vertical-align: -2px;
+}
+
+.draw-note.warn {
+  background: var(--amber-soft);
+  color: var(--amber-text);
+}
+
+.draw-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.draw-manager > .text-button {
+  align-self: flex-start;
+  font-weight: 600;
+}
+
+.draw-mine {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  font-size: 14px;
+}
+
+.draw-mine-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.draw-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 10px 8px;
+}
+
+.draw-form input,
+.draw-form textarea {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  resize: vertical;
+}
+
+/* Above the input while drawing is on. */
+.draw-chip {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 9px;
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.draw-chip-via {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+  color: var(--text-soft);
+}
+
+.draw-chip button {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+}
+
+/* On a request that asked for a picture. */
+.steer-tag.draw-tag {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* A picture in the conversation. */
+.image-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(100%, 460px);
+  margin: 0;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--heading) 5%, transparent);
+}
+
+/* In the drawer under a document: the picture small on the left, the rest beside it. */
+.image-card.compact {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 12px;
+  row-gap: 4px;
+  width: min(100%, 520px);
+  padding: 8px 10px;
+}
+
+.image-card.compact > .image-card-picture,
+.image-card.compact > .image-card-wait,
+.image-card.compact > .image-card-error {
+  grid-column: 1;
+  grid-row: 1 / span 4;
+}
+
+.image-card.compact > .image-card-head,
+.image-card.compact > .image-card-brief,
+.image-card.compact > .image-card-via,
+.image-card.compact > .image-card-actions {
+  grid-column: 2;
+}
+
+.image-card.compact .image-card-wait {
+  min-height: 72px;
+}
+
+.image-card.compact .image-card-brief {
+  -webkit-line-clamp: 2;
+}
+
+.image-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  color: var(--text-soft);
+}
+
+.image-card-status {
+  font-weight: 650;
+  color: var(--text);
+}
+
+.image-card.status-failed .image-card-status {
+  color: var(--danger);
+}
+
+.image-card-meta {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* A checkerboard shows through transparent pictures. */
+.image-card-picture {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  overflow: hidden;
+  background: repeating-conic-gradient(var(--surface-muted) 0 25%, var(--surface) 0 50%) 0 0 / 16px 16px;
+  cursor: zoom-in;
+}
+
+.image-card-picture img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 420px;
+  object-fit: contain;
+}
+
+.image-card.compact .image-card-picture img {
+  max-height: 96px;
+}
+
+.image-card-wait {
+  display: grid;
+  place-items: center;
+  min-height: 100px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.image-card-wait.drawing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  max-height: 240px;
+  border-radius: 9px;
+  background: linear-gradient(110deg, var(--surface-muted) 30%, color-mix(in srgb, var(--accent) 9%, var(--surface-muted)) 50%, var(--surface-muted) 70%) 0 0 / 300% 100%;
+  animation: image-card-shimmer 1.8s linear infinite;
+}
+
+@keyframes image-card-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.image-card-error {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.image-card-brief {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  color: var(--text);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.image-card-via {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.image-card-via .link {
+  margin-left: 2px;
+  font-size: 12.5px;
+}
+
+.image-card-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.image-card-actions .text-button {
+  padding: 4px 6px;
+  font-size: 13px;
+}
+
+.image-card-note {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* The picture full size. */
+.image-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 28px;
+  background: rgb(0 0 0 / 0.72);
+}
+
+.image-viewer img {
+  max-width: 100%;
+  max-height: calc(100% - 64px);
+  object-fit: contain;
+  border-radius: 8px;
+  background: repeating-conic-gradient(#ddd 0 25%, #fff 0 50%) 0 0 / 16px 16px;
+  box-shadow: 0 10px 40px rgb(0 0 0 / 0.4);
+}
+
+.image-viewer-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--popover-shadow);
+}
+
+.image-viewer-name {
+  max-width: 50vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Pictures a Markdown document links to, in its preview. */
+.doc-preview .markdown img {
+  max-width: 100%;
+  height: auto;
+}
+
+.doc-picture-missing {
+  display: inline-block;
+  padding: 4px 8px;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* "여기에 그림 그리기" in the Markdown editor. */
+.inline-draw {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 360px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--popover-shadow);
+}
+
+.inline-draw-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.inline-draw-head .icon-button {
+  margin-left: auto;
+}
+
+.inline-draw textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.inline-draw select {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+}
+
+.inline-draw-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--text-soft);
+}
+
+.inline-draw-row .draw-check {
+  padding: 0;
+}
+
+.inline-draw .draw-note {
+  margin: 0;
+}
+
+.inline-draw-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* Where a picture being drawn will go (not part of the text). */
+.cm-draw-pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 4px;
+  padding: 0 8px;
+  border: 1px dashed var(--accent);
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.85em;
+  vertical-align: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .image-card-wait.drawing {
+    animation: none;
+  }
+
+  .draw-switch-track,
+  .draw-switch-track::after {
+    transition: none;
+  }
+}

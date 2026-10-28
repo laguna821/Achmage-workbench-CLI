@@ -225,6 +225,7 @@ export class SessionManager {
         createSession: (workId, request) => this.createSession(workId, request, false),
         send: (sessionId, requestId, text, from, options) => this.send(sessionId, requestId, text, [], from, null, "auto", { ...options, activate: false }),
         upsertItem: (sessionId, item) => this.sink.upsertItem(sessionId, item),
+        markSeen: (sessionId) => this.updateSession(sessionId, { seen: true }),
         getMeta: (key) => store.getMeta(key),
         setMeta: (key, value) => store.setMeta(key, value),
       },

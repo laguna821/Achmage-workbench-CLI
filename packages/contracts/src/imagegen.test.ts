@@ -72,11 +72,11 @@ describe("picture files and links", () => {
   });
 
   it("a picture goes on lines of its own, with blank lines around it", () => {
-    expect(placeBlock("첫 문단", 4, "![a](a.png)")).toEqual({ text: "첫 문단\n\n![a](a.png)\n", cursor: 17 });
+    expect(placeBlock("첫 문단", 4, "![a](a.png)")).toEqual({ text: "첫 문단\n\n![a](a.png)\n", at: 4, insert: "\n\n![a](a.png)\n", cursor: 17 });
     expect(placeBlock("하나\n\n둘", 4, "![a](a.png)").text).toBe("하나\n\n![a](a.png)\n\n둘");
     expect(placeBlock("하나\n둘", 2, "![a](a.png)").text).toBe("하나\n\n![a](a.png)\n\n둘");
     expect(placeBlock("앞뒤", 1, "IMG").text).toBe("앞\n\nIMG\n\n뒤");
-    expect(placeBlock("", 0, "IMG")).toEqual({ text: "IMG\n", cursor: 3 });
+    expect(placeBlock("", 0, "IMG")).toMatchObject({ text: "IMG\n", cursor: 3 });
     expect(placeBlock("끝\n", 99, "IMG").text).toBe("끝\n\nIMG\n");
   });
 });

@@ -155,7 +155,7 @@ describe("drawing", () => {
     const { manager, codex, work, cwd } = setup();
     const session = manager.createSession(work.id, { provider: "codex" });
     const result = await manager.images.draw(session.id, { requestId: "d1", brief: "파란 원 하나", templateId: "infographic", aspect: "landscape" });
-    expect(result.image).toMatchObject({ status: "drawing", drawSessionId: session.id, originSessionId: session.id, template: "인포그래픽" });
+    expect(result.image).toMatchObject({ status: "drawing", drawSessionId: session.id, originSessionId: session.id, template: "인포그래픽", templateId: "infographic" });
     const sent = codex.sent.at(-1)!;
     expect(sent.text.startsWith(DRAW_MARK)).toBe(true);
     expect(sent.text).toContain("Flat infographic");
@@ -199,6 +199,10 @@ describe("drawing", () => {
     codex.end(helper.id);
     expect(images(manager, chat.id)[0]?.image).toMatchObject({ status: "done", width: 64, height: 96 });
     expect(images(manager, helper.id)[0]?.image.status).toBe("done");
+    // Its reply is the picture already shown in the Claude conversation: not another "새 답".
+    const seen = manager.snapshot().sessions.find((session) => session.id === helper.id)!;
+    expect(seen.seenAt).not.toBeNull();
+    expect(seen.unread).toBe(false);
 
     // The next drawing reuses the drawing session.
     await manager.images.draw(chat.id, { requestId: "d3", brief: "두 번째" });
@@ -208,6 +212,12 @@ describe("drawing", () => {
     await expect(manager.images.draw(chat.id, { requestId: "d4", brief: "세 번째" })).rejects.toThrow(/앞선 그림/);
     const parallel = await manager.images.draw(chat.id, { requestId: "d5", brief: "세 번째", via: "new" });
     expect(parallel.image.drawSessionId).not.toBe(helper.id);
+    // The new session is the work's drawing session from now on; a busy Codex conversation can
+    // draw through it too.
+    codex.end(parallel.image.drawSessionId);
+    const coding = manager.createSession(work.id, { provider: "codex", purpose: "코딩" });
+    await manager.send(coding.id, "busy", "일하는 중");
+    expect((await manager.images.draw(coding.id, { requestId: "d6", brief: "네 번째", via: "helper" })).image.drawSessionId).toBe(parallel.image.drawSessionId);
   });
 
   it("a turn that ends without a picture, a usage limit and a restart all say why", async () => {
