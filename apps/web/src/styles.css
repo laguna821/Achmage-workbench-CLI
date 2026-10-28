@@ -812,44 +812,126 @@ textarea {
   gap: 12px;
 }
 
-/* The request being read stays on top while its long answer scrolls by. */
-.turn-sticky-slot {
+/*
+ * The request being read stays on top as an opaque band while its long answer scrolls under it.
+ * The band lives inside the scroller (no layout shift); folded it shows the first line, opened the
+ * whole request.
+ */
+.turn-pin-slot {
   position: sticky;
   top: 0;
   z-index: 6;
   height: 0;
 }
 
-.turn-sticky {
+.turn-pin {
   position: absolute;
-  top: 8px;
+  top: 0;
   left: 0;
   right: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+  box-shadow: 0 8px 14px -12px color-mix(in srgb, var(--heading) 40%, transparent);
+  animation: pending-arrive 140ms ease-out;
+}
+
+.turn-pin-inner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 45px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+.turn-pin.open .turn-pin-inner {
+  align-items: flex-start;
+}
+
+.turn-pin-main {
   display: flex;
   align-items: center;
   gap: 9px;
-  width: calc(100% - 48px);
-  max-width: calc(var(--column) - 48px);
-  height: 38px;
-  margin: 0 auto;
-  padding: 0 14px 0 10px;
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
-  border-radius: 11px;
-  background: color-mix(in srgb, var(--surface) 90%, transparent);
-  backdrop-filter: blur(10px);
-  box-shadow: var(--composer-shadow);
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 8px 0 4px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
   color: var(--text);
   font-family: var(--e-font);
   font-size: 14.5px;
   text-align: left;
-  animation: pending-arrive 140ms ease-out;
+  cursor: pointer;
 }
 
-.turn-sticky-text {
+.turn-pin-main:hover {
+  background: var(--surface-muted);
+}
+
+.turn-pin.open .turn-pin-main {
+  flex: 0 0 auto;
+  padding-right: 4px;
+}
+
+.turn-pin-text {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.turn-pin-full {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-height: min(40vh, 340px);
+  overflow-y: auto;
+  padding: 6px 0 4px;
+}
+
+.turn-pin-full .user-bubble {
+  max-width: none;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--text);
+  font-size: 14.5px;
+}
+
+.turn-pin-toggle {
+  flex: 0 0 auto;
+  margin-top: 5px;
+  margin-bottom: 5px;
+}
+
+/* Back to the newest output after scrolling up. */
+.to-bottom {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  z-index: 7;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--composer-shadow);
+  color: var(--text-soft);
+  font-size: 13.5px;
+  transform: translateX(-50%);
+  animation: pending-arrive 140ms ease-out;
+  cursor: pointer;
+}
+
+.to-bottom:hover {
+  background: var(--surface-raised);
+  color: var(--text);
 }
 
 /* Turn rail: every request as a tick, approvals in amber, the visible range shaded. */

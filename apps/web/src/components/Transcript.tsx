@@ -268,6 +268,16 @@ function duration(ms: number | null) {
 
 type RailMark = { id: string; index: number; top: number; text: string; attention: boolean };
 
+const PIN_OPEN_KEY = "workbench.pinOpen";
+/** Height of the folded request band; the band appears once the request slides under it. */
+const PIN_HEIGHT = 46;
+
+/** The first line of a request, without the Markdown marks that start it. */
+function firstLine(text: string) {
+  const line = text.split("\n").find((entry) => entry.trim()) ?? text;
+  return line.replace(/^\s*(#{1,6}\s+|[-*+]\s+|\d+[.)]\s+|>\s*)/, "").trim();
+}
+
 export function Transcript({
   sessionId,
   items,
@@ -290,7 +300,14 @@ export function Transcript({
 }) {
   const { state, actions: docActions } = useDocs();
   const scroller = useRef<HTMLDivElement>(null);
+  // Follow the newest output only while the reader is at the bottom. Any move up (wheel, keys, the
+  // scroll bar, touch) stops following at once; scrolling back down to the end resumes it.
   const pinned = useRef(true);
+  const ownTop = useRef<number | null>(null);
+  const lastTop = useRef(0);
+  const [atBottom, setAtBottom] = useState(true);
+  const pinRef = useRef<HTMLDivElement>(null);
+  const [pinOpen, setPinOpen] = useState(() => localStorage.getItem(PIN_OPEN_KEY) === "1");
   const sections = useRef(new Map<string, HTMLElement>());
   const blocks = toBlocks(items);
   const turns = toTurns(blocks);
@@ -316,11 +333,14 @@ export function Transcript({
     }
     const header = current ? sections.current.get(current.id)?.querySelector<HTMLElement>(".turn-request") : null;
     const section = current ? sections.current.get(current.id) : null;
-    // Offsets are relative to the scroller (the positioned ancestor of both).
-    const headerGone = header ? header.offsetTop + header.offsetHeight < top + 4 : false;
-    const stillInside = section ? section.offsetTop + section.offsetHeight > top + 80 : false;
+    // Offsets are relative to the scroller (the positioned ancestor of both). The band takes over
+    // once the request has slid under where the band sits, so it never pops up over the answer.
+    const cover = pinRef.current?.offsetHeight ?? PIN_HEIGHT;
+    const headerGone = header ? header.offsetTop + header.offsetHeight < top + cover : false;
+    const stillInside = section ? section.offsetTop + section.offsetHeight > top + cover + 48 : false;
     const nextSticky = current && headerGone && stillInside ? current : null;
     setSticky((previous) => (previous?.id === nextSticky?.id ? previous : nextSticky));
+    setAtBottom(element.scrollHeight - top - element.clientHeight < 24);
     const next = { marks, viewTop: top / height, viewHeight: element.clientHeight / height, current: current?.id ?? null };
     // Measuring runs after every render, so state only changes when something visible moved.
     const key = (value: typeof next) =>
@@ -328,9 +348,19 @@ export function Transcript({
     setRail((previous) => (key(previous) === key(next) ? previous : next));
   };
 
+  // Another session: start at its newest output again.
+  useLayoutEffect(() => {
+    pinned.current = true;
+    lastTop.current = 0;
+  }, [sessionId]);
+
   useLayoutEffect(() => {
     const element = scroller.current;
-    if (element && pinned.current && !focusItem) element.scrollTop = element.scrollHeight;
+    if (element && pinned.current && !focusItem && element.scrollTop + element.clientHeight < element.scrollHeight - 1) {
+      element.scrollTop = element.scrollHeight;
+      // Remember where this put us: the scroll event it raises is ours, not the reader's.
+      ownTop.current = element.scrollTop;
+    }
     measure();
   });
 
@@ -371,7 +401,16 @@ export function Transcript({
   const jumpTo = (turnId: string) => {
     const section = sections.current.get(turnId);
     const element = scroller.current;
-    if (section && element) element.scrollTo({ top: section.offsetTop - 8, behavior: "smooth" });
+    if (!section || !element) return;
+    pinned.current = false;
+    element.scrollTo({ top: section.offsetTop - 8, behavior: "smooth" });
+  };
+
+  const toBottom = () => {
+    const element = scroller.current;
+    if (!element) return;
+    pinned.current = true;
+    element.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
   };
 
   const speaker = (
@@ -431,18 +470,57 @@ export function Transcript({
       <div
         className="transcript"
         ref={scroller}
+        onWheel={(event) => {
+          // Wheel inside the opened band scrolls the band, not the conversation.
+          if (event.deltaY < 0 && !(event.target as HTMLElement).closest(".turn-pin")) pinned.current = false;
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "PageUp" || event.key === "ArrowUp" || event.key === "Home") pinned.current = false;
+        }}
+        onTouchMove={() => {
+          pinned.current = false;
+        }}
         onScroll={(event) => {
           const element = event.currentTarget;
-          pinned.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+          const top = element.scrollTop;
+          const own = ownTop.current !== null && Math.abs(top - ownTop.current) < 1;
+          ownTop.current = null;
+          if (!own) {
+            if (element.scrollHeight - top - element.clientHeight < 4) pinned.current = true;
+            else if (top < lastTop.current - 0.5) pinned.current = false;
+          }
+          lastTop.current = top;
           measure();
         }}
       >
-        <div className="turn-sticky-slot">
+        <div className="turn-pin-slot">
           {sticky?.user ? (
-            <button type="button" className="column turn-sticky" onClick={() => jumpTo(sticky.id)} title="이 요청으로 올라가기">
-              <span className="turn-no">{sticky.index}</span>
-              <span className="turn-sticky-text">{sticky.user.text}</span>
-            </button>
+            <div className={`turn-pin${pinOpen ? " open" : ""}`} ref={pinRef}>
+              <div className="column turn-pin-inner">
+                <button type="button" className="turn-pin-main" onClick={() => jumpTo(sticky.id)} title="이 요청으로 올라가기">
+                  <span className="turn-no">{sticky.index}</span>
+                  {pinOpen ? null : <span className="turn-pin-text">{firstLine(sticky.user.text)}</span>}
+                </button>
+                {pinOpen ? (
+                  <div className="turn-pin-full">
+                    <RequestText text={sticky.user.text} />
+                  </div>
+                ) : null}
+                <button
+                  type="button"
+                  className="icon-button small turn-pin-toggle"
+                  onClick={() => {
+                    setPinOpen(!pinOpen);
+                    localStorage.setItem(PIN_OPEN_KEY, pinOpen ? "0" : "1");
+                  }}
+                  aria-expanded={pinOpen}
+                  title={pinOpen ? "요청 접기" : "요청 전체 보기"}
+                  aria-label={pinOpen ? "요청 접기" : "요청 전체 보기"}
+                >
+                  <Icon name={pinOpen ? "chevronUp" : "chevronDown"} size={15} />
+                </button>
+              </div>
+            </div>
           ) : null}
         </div>
         <div className="column transcript-inner">
@@ -516,6 +594,11 @@ export function Transcript({
           ))}
         </div>
       </div>
+      {!atBottom ? (
+        <button type="button" className="to-bottom" onClick={toBottom} title="맨 아래로">
+          <Icon name="chevronDown" size={15} /> {running ? "새 응답 보기" : "맨 아래로"}
+        </button>
+      ) : null}
       {rail.marks.length >= 3 ? (
         <nav className="turn-rail" aria-label="요청 목록">
           <span className="turn-rail-view" style={{ top: `${rail.viewTop * 100}%`, height: `${Math.min(rail.viewHeight, 1) * 100}%` }} />
