@@ -1,0 +1,48 @@
+# Achmage Workbench for Arch Linux and CachyOS: packages a release build made in this checkout
+# (apps/desktop/src-tauri/target/release: the binary with host/ and web/ beside it). The gateway
+# runs on the system's Node.js (24 or newer). Build: see .github/workflows/release.yml (job arch).
+pkgname=achmage-workbench
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="One screen for Claude Code and Codex sessions, documents and notes (Achmage Workbench)"
+arch=('x86_64')
+url="https://github.com/laguna821/Achmage-workbench-CLI"
+license=('MIT')
+depends=('webkit2gtk-4.1' 'gtk3' 'libayatana-appindicator' 'nodejs>=24')
+optdepends=('wl-clipboard: paste screenshots in the app on Wayland'
+            'xclip: paste screenshots in the app on X11')
+options=('!strip' '!debug')
+
+package() {
+  local repo
+  repo=$(cd "$startdir/../.." && pwd)
+  local release="$repo/apps/desktop/src-tauri/target/release"
+  local icons="$repo/apps/desktop/src-tauri/icons"
+  install -Dm755 "$release/achmage-workbench" "$pkgdir/usr/lib/achmage-workbench/achmage-workbench"
+  cp -r "$release/host" "$release/web" "$pkgdir/usr/lib/achmage-workbench/"
+  install -dm755 "$pkgdir/usr/bin"
+  printf '#!/bin/sh\nexec /usr/lib/achmage-workbench/achmage-workbench "$@"\n' > "$pkgdir/usr/bin/achmage-workbench"
+  chmod 755 "$pkgdir/usr/bin/achmage-workbench"
+  install -Dm644 "$icons/32x32.png" "$pkgdir/usr/share/icons/hicolor/32x32/apps/achmage-workbench.png"
+  install -Dm644 "$icons/128x128.png" "$pkgdir/usr/share/icons/hicolor/128x128/apps/achmage-workbench.png"
+  install -Dm644 "$icons/128x128@2x.png" "$pkgdir/usr/share/icons/hicolor/256x256/apps/achmage-workbench.png"
+  install -Dm644 /dev/stdin "$pkgdir/usr/share/applications/achmage-workbench.desktop" <<DESKTOP
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Achmage Workbench
+Name[ko]=Achmage 작업실
+GenericName=Claude Code & Codex Workbench
+GenericName[ko]=Claude·Codex 작업실
+Comment=One screen for Claude Code and Codex sessions, documents and notes
+Comment[ko]=Claude Code와 Codex 세션을 한 화면에서 쓰는 작업실
+Exec=achmage-workbench %U
+StartupWMClass=achmage-workbench
+Icon=achmage-workbench
+Terminal=false
+Categories=Development;
+Keywords=Achmage;Claude;Codex;AI;작업실;
+StartupNotify=true
+DESKTOP
+  install -Dm644 "$repo/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

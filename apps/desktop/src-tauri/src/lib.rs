@@ -22,36 +22,67 @@ struct Ready {
 }
 
 fn home() -> PathBuf {
-    std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default()
+    std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+        .map(PathBuf::from)
+        .unwrap_or_default()
 }
 
 /// Launchers start apps with a minimal PATH; engines need the user's usual tool locations.
-fn engine_path() -> String {
-    let mut parts: Vec<String> = std::env::var("PATH")
-        .unwrap_or_default()
-        .split(':')
-        .filter(|part| !part.is_empty())
-        .map(str::to_string)
-        .collect();
-    for extra in [home().join(".local/bin"), home().join(".cargo/bin")] {
-        let extra = extra.to_string_lossy().to_string();
+fn engine_path() -> std::ffi::OsString {
+    let mut parts: Vec<PathBuf> = std::env::var_os("PATH")
+        .map(|path| std::env::split_paths(&path).collect())
+        .unwrap_or_default();
+    let mut extras = vec![home().join(".local/bin"), home().join(".cargo/bin")];
+    if cfg!(target_os = "macos") {
+        // Apps opened from Finder get only the system PATH; Homebrew and npm keep tools here.
+        extras.extend([PathBuf::from("/opt/homebrew/bin"), PathBuf::from("/usr/local/bin")]);
+    }
+    if cfg!(windows) {
+        if let Some(appdata) = std::env::var_os("APPDATA") {
+            extras.push(PathBuf::from(appdata).join("npm"));
+        }
+    }
+    for extra in extras {
         if !parts.contains(&extra) {
             parts.push(extra);
         }
     }
-    parts.join(":")
+    std::env::join_paths(parts).unwrap_or_default()
 }
 
-fn gateway_command(app: &tauri::AppHandle) -> Command {
-    let node = std::env::var("WORKBENCH_NODE").unwrap_or_else(|_| "node".into());
-    let mut command = Command::new(node);
-    // Bundles (AppImage) use the resource dir; a plain install keeps host/ and web/ next to the binary.
+/// Where the app's own files sit: the resource dir of a bundle, or next to the binary.
+fn app_dirs(app: &tauri::AppHandle) -> Vec<PathBuf> {
     let exe_dir = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(PathBuf::from));
-    let bundled = [app.path().resource_dir().ok(), exe_dir]
+    [app.path().resource_dir().ok(), exe_dir].into_iter().flatten().collect()
+}
+
+/// The Node.js that runs the gateway: WORKBENCH_NODE, else the one an installer brought along
+/// (node/ beside the app's files), else the system's.
+fn node_binary(app: &tauri::AppHandle) -> PathBuf {
+    if let Some(node) = std::env::var_os("WORKBENCH_NODE") {
+        return PathBuf::from(node);
+    }
+    let name = if cfg!(windows) { "node.exe" } else { "node" };
+    app_dirs(app)
         .into_iter()
-        .flatten()
+        .map(|dir| dir.join("node").join(name))
+        .find(|path| path.exists())
+        .unwrap_or_else(|| PathBuf::from(name))
+}
+
+fn gateway_command(app: &tauri::AppHandle) -> Command {
+    let mut command = Command::new(node_binary(app));
+    #[cfg(windows)]
+    {
+        // No console window for the gateway.
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+    // Bundles (AppImage) use the resource dir; a plain install keeps host/ and web/ next to the binary.
+    let bundled = app_dirs(app)
+        .into_iter()
         .map(|dir| (dir.join("host/host.mjs"), dir.join("web")))
         .find(|(host, _)| host.exists());
     match bundled {
