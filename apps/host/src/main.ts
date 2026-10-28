@@ -12,6 +12,7 @@ import { Store } from "./store.ts";
 import { Kordoc } from "./kordoc.ts";
 import { IeumOffice } from "./ieumoffice.ts";
 import { createEditorsServer, EditorGrants } from "./editors.ts";
+import { AgentBrowser } from "./browse.ts";
 
 // Local gateway: owns engine processes and state, serves the UI and an HTTP + SSE API on
 // 127.0.0.1 only. Prints one `WORKBENCH_READY {json}` line once it accepts connections.
@@ -50,7 +51,15 @@ const hostLabel = env.WORKBENCH_HOST_LABEL ?? defaultHostLabel();
 
 const store = new Store(join(dataDir, "state.sqlite"));
 const bus = new EventBus();
+// The agent browser: a window sessions may use (checks run it headless or with a stand-in CLI).
+const browse = new AgentBrowser({
+  dataDir,
+  headless: env.WORKBENCH_BROWSER_HEADLESS === "1",
+  cli: env.WORKBENCH_BROWSER_CLI ? resolve(env.WORKBENCH_BROWSER_CLI) : null,
+  chrome: env.WORKBENCH_BROWSER_CHROME ? resolve(env.WORKBENCH_BROWSER_CHROME) : null,
+});
 const manager = new SessionManager(store, bus, {
+  browse,
   hostId: env.WORKBENCH_HOST_ID ?? hostname(),
   hostLabel,
   managedWorksDir: join(dataDir, "works"),
@@ -62,7 +71,7 @@ void manager.refreshTools();
 
 const claudeIdleMs = env.WORKBENCH_CLAUDE_IDLE_MS ? Number(env.WORKBENCH_CLAUDE_IDLE_MS) : undefined;
 manager.registerAdapter(
-  new ClaudeAdapter(manager.sink, { idleMs: claudeIdleMs, modelCacheFile: join(dataDir, "claude-models.json"), attachmentsDir: attachmentsDir(dataDir) }),
+  new ClaudeAdapter(manager.sink, { idleMs: claudeIdleMs, modelCacheFile: join(dataDir, "claude-models.json"), attachmentsDir: attachmentsDir(dataDir), browser: browse.engineHooks() }),
 );
 manager.registerAdapter(
   new CodexAdapter(manager.sink, {
@@ -70,6 +79,7 @@ manager.registerAdapter(
     approvalPolicy: env.WORKBENCH_CODEX_APPROVAL,
     sandbox: env.WORKBENCH_CODEX_SANDBOX,
     idleMs: env.WORKBENCH_CODEX_IDLE_MS ? Number(env.WORKBENCH_CODEX_IDLE_MS) : undefined,
+    browser: browse.engineHooks(),
   }),
 );
 
@@ -82,6 +92,7 @@ const server = createHttpServer(manager, bus, {
   // UI errors stay on this machine, next to the state database.
   onClientLog: (message) => appendFileSync(join(dataDir, "client.log"), `${new Date().toISOString()} ${message}\n`),
   editors: { grants, origin: () => editorsOrigin },
+  browse,
 });
 
 /** Listen on the port used last time, or on any free one when it is taken; remember the one bound. */

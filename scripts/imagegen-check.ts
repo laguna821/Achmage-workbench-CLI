@@ -95,7 +95,9 @@ async function flow(provider: Provider) {
 
     // ── the pill: after access and context, in the left slot ──────────────────────────────────
     const order = await page.locator(".work-view .composer-left").evaluate((left) => Array.from(left.querySelectorAll("button.plain-select"), (button) => button.className));
-    pass("'그림' 알약이 입력창 왼쪽 권한(·컨텍스트) 다음에 있음", order.length >= 2 && order[0]!.includes("access-select") && order.at(-1)!.includes("draw-pill"), order.join(" | "));
+    // Other feature pills (계획 먼저, 브라우저) share the slot; "그림" comes after access and context.
+    const drawAt = order.findIndex((name) => name.includes("draw-pill"));
+    pass("'그림' 알약이 입력창 왼쪽 권한(·컨텍스트) 다음에 있음", order.length >= 2 && order[0]!.includes("access-select") && drawAt > 0, order.join(" | "));
 
     // ── pick a template: drawing turns on, the chip says how and by whom ─────────────────────
     await page.locator(".draw-pill").click();

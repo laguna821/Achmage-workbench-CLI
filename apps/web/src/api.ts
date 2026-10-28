@@ -1,4 +1,5 @@
 import type {
+  AgentBrowserStatus,
   ApiError,
   Artifact,
   Attachment,
@@ -88,7 +89,7 @@ export class Api {
   exportMarkdown = (sessionId: string, request: ExportMarkdownRequest) => this.request<ExportMarkdownResult>("POST", `/api/sessions/${sessionId}/export`, request);
   createWork = (title: string, folderId: string | null, cwd: string | null) => this.request<Work>("POST", "/api/works", { title, folderId, cwd });
   updateWork = (workId: string, patch: UpdateWorkRequest) => this.request<Work>("PATCH", `/api/works/${workId}`, patch);
-  createSession = (workId: string, provider: Provider, options?: { purpose?: string; model?: string | null; effort?: string | null }) =>
+  createSession = (workId: string, provider: Provider, options?: { purpose?: string; model?: string | null; effort?: string | null; browser?: boolean }) =>
     this.request<Session>("POST", `/api/works/${workId}/sessions`, { provider, ...options });
   updateSession = (sessionId: string, patch: UpdateSessionRequest) => this.request<Session>("PATCH", `/api/sessions/${sessionId}`, patch);
   /** A new Markdown page in the work folder. */
@@ -142,6 +143,14 @@ export class Api {
     this.request<{ side: string; pages: { page: number; width: number; height: number }[] }>("GET", `/api/proposals/${proposalId}/office-pages?side=${side}`);
   openExternal = (artifactId: string) => this.request<{ app: string }>("POST", `/api/artifacts/${artifactId}/open-external`);
   refreshTools = () => this.request<DocumentTools>("POST", "/api/tools/refresh");
+  /** The agent browser: install, the plain sign-in window, bring the window forward, pause a session. */
+  browser = {
+    install: () => this.request<AgentBrowserStatus>("POST", "/api/agent-browser/install"),
+    login: (url: string | null) => this.request<AgentBrowserStatus>("POST", "/api/agent-browser/login", { url }),
+    closeLogin: () => this.request<AgentBrowserStatus>("POST", "/api/agent-browser/login/close"),
+    focus: () => this.request<{ ok: boolean; message: string }>("POST", "/api/agent-browser/focus"),
+    pause: (sessionId: string, paused: boolean) => this.request<AgentBrowserStatus>("POST", "/api/agent-browser/pause", { sessionId, paused }),
+  };
   installIeumOffice = () => this.request<DocumentTools>("POST", "/api/tools/ieumoffice/install");
   integrations = () => this.request<IntegrationsView>("GET", "/api/integrations");
   copyMcp = (name: string, to: "claude" | "codex") => this.request<IntegrationsView>("POST", "/api/integrations/mcp/copy", { name, to });

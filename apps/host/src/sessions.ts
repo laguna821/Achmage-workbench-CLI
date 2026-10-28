@@ -57,6 +57,7 @@ import { Attachments } from "./attachments.ts";
 import { imagesNamed, keepImage, withImages } from "./tool-images.ts";
 import { ImageGen } from "./imagegen.ts";
 import { SessionLinks } from "./links.ts";
+import type { AgentBrowser } from "./browse.ts";
 
 export { HttpError };
 
@@ -102,6 +103,8 @@ export type ManagerOptions = {
   kordoc?: Kordoc | null;
   /** Word/PowerPoint/Excel engine (the IeumOffice command line tool). */
   ieum?: IeumOffice | null;
+  /** The agent browser (browse.ts): one visible window sessions may use. */
+  browse?: AgentBrowser | null;
 };
 
 const DEFAULT_PURPOSE = /^대화 \d+$/;
@@ -299,6 +302,17 @@ export class SessionManager {
       },
     });
     this.images.recover();
+    options.browse?.bind({
+      lookup: (sessionId) => {
+        const session = this.sessions.get(sessionId);
+        const work = session ? this.works.get(session.workId) : undefined;
+        return session && work ? { session, work, access: this.accessOf(session) } : null;
+      },
+      sessions: () => [...this.sessions.values()],
+      upsertItem: (sessionId, item) => this.sink.upsertItem(sessionId, item),
+      updateSession: (sessionId, patch) => this.sink.updateSession(sessionId, patch),
+      publish: (status) => this.bus.publish({ type: "browser.status", status }),
+    });
   }
 
   /** Sessions from before auto titles and previews: derive both once from their stored transcript. */
@@ -524,6 +538,7 @@ export class SessionManager {
       handoffs: [...this.handoffs.values()],
       links: this.links.list(),
       tools: this.tools(),
+      ...(this.options.browse ? { browser: this.options.browse.status() } : {}),
     };
   }
 
@@ -842,6 +857,7 @@ export class SessionManager {
       queued: [],
       access: isAccessMode(request.access) ? request.access : null,
       context: null,
+      ...(request.browser === true ? { browser: true } : {}),
       createdAt: now,
       updatedAt: now,
     };
@@ -890,6 +906,8 @@ export class SessionManager {
       if (patch.access !== null && !isAccessMode(patch.access)) throw new HttpError(400, "invalid_access", "알 수 없는 권한입니다.");
       next.access = patch.access;
     }
+    // The engine is told from its next turn (browse.ts and the adapters).
+    if (patch.browser !== undefined) next.browser = Boolean(patch.browser);
     this.saveSession(next);
     if (patch.purpose !== undefined && next.purposeSource === "auto") this.retitle(sessionId, true);
     if (patch.access !== undefined) this.applyAccess(sessionId);
@@ -899,6 +917,7 @@ export class SessionManager {
   /** A changed access reaches a running engine at once (and settles approvals it no longer needs). */
   private applyAccess(sessionId: string) {
     const session = this.requireSession(sessionId);
+    this.options.browse?.accessChanged(sessionId, this.accessOf(session));
     const adapter = this.adapter(session.provider);
     void adapter.setAccess?.({ ...session, access: this.accessOf(session) }).catch((error: unknown) => {
       this.sink.upsertItem(sessionId, {
@@ -1508,6 +1527,7 @@ export class SessionManager {
 
   async interrupt(sessionId: string) {
     const session = this.requireSession(sessionId);
+    this.options.browse?.expire(sessionId);
     await this.adapter(session.provider).interrupt(session);
   }
 
@@ -1524,7 +1544,8 @@ export class SessionManager {
       if (decision === "accept") await this.send(sessionId, `go-${itemId.slice(5)}`, "계획대로 진행해 주세요.");
       return;
     }
-    const handled = await this.adapter(session.provider).answerApproval(session, itemId, decision);
+    // The agent browser's own cards are answered there (browse.ts), the rest by the engine.
+    const handled = this.options.browse?.answer(sessionId, itemId, decision) || (await this.adapter(session.provider).answerApproval(session, itemId, decision));
     if (!handled) {
       throw new HttpError(409, "approval_not_pending", "이미 처리되었거나 만료된 승인 요청입니다.");
     }
@@ -1552,6 +1573,7 @@ export class SessionManager {
     this.stopExternalWatches();
     this.flush();
     await Promise.all([...this.adapters.values()].map((adapter) => adapter.shutdown()));
+    await this.options.browse?.shutdown();
   }
 
   /** Automatic titles follow the requests (no model call); see titles.ts. */
@@ -1639,6 +1661,7 @@ export class SessionManager {
     this.sessions.set(session.id, session);
     this.store.saveSession(session);
     this.bus.publish({ type: "session.upserted", session });
+    this.options.browse?.sessionChanged(session);
   }
 
   private requireWork(workId: string) {

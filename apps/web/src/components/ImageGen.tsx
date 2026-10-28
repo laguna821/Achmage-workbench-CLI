@@ -71,13 +71,14 @@ export function DrawPill({
     <div className="anchor">
       <button
         type="button"
-        className={`plain-select draw-pill${value.on ? " on" : ""}`}
+        className={`plain-select feature-pill draw-pill${value.on ? " on" : ""}`}
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         title={value.on ? `다음 요청을 그림으로 그립니다 · ${drawerLabel(state, provider, value.via)}` : "그림 그리기 · GPT Image (Codex 전용)"}
       >
         <Icon name="image" size={14} />
-        그림{value.on && template ? <span className="draw-pill-template"> · {template.name}</span> : null}
+        <span className="pill-label">그림</span>
+        {value.on && template ? <span className="draw-pill-template"> · {template.name}</span> : null}
       </button>
       <Popover open={open} onClose={close} placement="above" align="left" className="draw-menu">
         {managing ? (

@@ -14,13 +14,13 @@ export function PlanToggle({ on, onChange }: { on: boolean; onChange: (on: boole
   return (
     <button
       type="button"
-      className={`plain-select plan-toggle${on ? " on" : ""}`}
+      className={`plain-select feature-pill plan-toggle${on ? " on" : ""}`}
       aria-pressed={on}
       onClick={() => onChange(!on)}
       title={on ? "계획 먼저 끄기: 요청하면 바로 진행합니다" : "계획 먼저: 고치기 전에 계획을 보여 주고, 확인하면 진행합니다"}
     >
       <Icon name="page" size={14} />
-      계획 먼저
+      <span className="pill-label">계획 먼저</span>
     </button>
   );
 }

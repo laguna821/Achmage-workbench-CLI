@@ -38,9 +38,10 @@ export function billingVarsIn(env: NodeJS.ProcessEnv = process.env, platform: No
 /**
  * The environment for an engine process: a copy of `base` without `BILLING_ENV_VARS`. Windows
  * matches variable names without regard to case, as the system does. With an absolute
- * `command`, its folder goes to the front of PATH (engines start helper programs by name).
+ * `command`, its folder goes to the front of PATH (engines start helper programs by name), and
+ * `paths` before it (tools Workbench gives the engines, like the agent browser's playwright-cli).
  */
-export function engineEnv(options: { base?: NodeJS.ProcessEnv; platform?: NodeJS.Platform; command?: string; extra?: Record<string, string> } = {}) {
+export function engineEnv(options: { base?: NodeJS.ProcessEnv; platform?: NodeJS.Platform; command?: string; extra?: Record<string, string>; paths?: string[] } = {}) {
   const platform = options.platform ?? process.platform;
   const env: NodeJS.ProcessEnv = { ...(options.base ?? process.env) };
   const stripped = new Set(BILLING_ENV_VARS);
@@ -48,15 +49,16 @@ export function engineEnv(options: { base?: NodeJS.ProcessEnv; platform?: NodeJS
     if (stripped.has(platform === "win32" ? name.toUpperCase() : name)) delete env[name];
   }
   const command = options.command;
-  if (command && isAbsolute(command)) {
+  const front = [...(options.paths ?? []), ...(command && isAbsolute(command) ? [dirname(command)] : [])];
+  if (front.length) {
     const key = Object.keys(env).find((name) => name.toLowerCase() === "path") ?? "PATH";
-    env[key] = `${dirname(command)}${delimiter}${env[key] ?? ""}`;
+    env[key] = [...front, env[key] ?? ""].join(delimiter);
   }
   return { ...env, ...options.extra };
 }
 
 /** `engineEnv` for the Claude Agent SDK, which wants plain strings and a client tag. */
-export function claudeSdkEnv(command: string): Record<string, string> {
-  const env = engineEnv({ command, extra: { CLAUDE_AGENT_SDK_CLIENT_APP: "achmage-workbench/0.1" } });
+export function claudeSdkEnv(command: string, options: { paths?: string[]; extra?: Record<string, string> } = {}): Record<string, string> {
+  const env = engineEnv({ command, paths: options.paths, extra: { CLAUDE_AGENT_SDK_CLIENT_APP: "achmage-workbench/0.1", ...options.extra } });
   return Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
 }

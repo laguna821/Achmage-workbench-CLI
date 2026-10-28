@@ -19,7 +19,11 @@
 //   "[세션 잇기 k/m"  a linked-session hand-over: a reply of its own each time; with "합의:N" in the
 //                     goal its last line is [[합의]] from message N on, with "되풀이" it repeats itself,
 //                     "천천히" takes about 2 s and "길게" about 8 s
+//   "브라우저" says whether this process was started with the agent browser's instructions (the
+//          SDK sends them as `appendSystemPrompt` in initialize) and, when it was, runs
+//          `playwright-cli -s=<name> open <address>` through Bash from its PATH like a model would
 
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -54,6 +58,18 @@ let rateUsed = 0.31;
 let turn = null; // { interrupted }
 const queue = []; // { text, uuid } user messages waiting to run
 const waiting = new Map(); // control request id -> resolve
+let browser = null; // { name } when started with the agent browser's instructions
+
+function runCommand(line) {
+  return new Promise((resolve) => {
+    const child = spawn("/bin/sh", ["-c", line], { cwd: process.cwd(), env: process.env });
+    let output = "";
+    child.stdout.on("data", (chunk) => (output += chunk));
+    child.stderr.on("data", (chunk) => (output += chunk));
+    child.on("exit", (code) => resolve({ code: code ?? 1, output }));
+    child.on("error", (error) => resolve({ code: 127, output: String(error) }));
+  });
+}
 
 const send = (message) => process.stdout.write(`${JSON.stringify(message)}\n`);
 
@@ -171,6 +187,27 @@ async function runTurn(text) {
     writeFileSync(join(folder, `full-${stamp}.png`), full);
     step("Read", { file_path: join(folder, `full-${stamp}.png`) }, [{ type: "image", source: { type: "base64", media_type: "image/png", data: full.toString("base64") } }]);
   }
+  let browserLine = null;
+  if (text.includes("브라우저")) {
+    if (!browser) {
+      browserLine = "브라우저 지침: 없음";
+    } else {
+      const address = /https?:\/\/\S+/.exec(text)?.[0] ?? "https://example.com";
+      const toolId = `toolu_${randomUUID().slice(0, 8)}`;
+      const input = { command: `playwright-cli -s=${browser.name} open ${address}`, description: "브라우저로 열기" };
+      send({ type: "assistant", message: { id: `msg_${randomUUID().slice(0, 8)}`, type: "message", role: "assistant", model: MODEL, content: [{ type: "tool_use", id: toolId, name: "Bash", input }], stop_reason: "tool_use", stop_sequence: null, usage: { input_tokens: 10, output_tokens: 20, cache_creation_input_tokens: 0, cache_read_input_tokens: used } }, parent_tool_use_id: null, ...base() });
+      let allowed = permissionMode === "bypassPermissions" || permissionMode === "dontAsk";
+      if (!allowed) {
+        const answerToTool = await ask({ subtype: "can_use_tool", tool_name: "Bash", input, tool_use_id: toolId, decision_reason: "명령 실행은 확인이 필요합니다" });
+        allowed = answerToTool?.behavior === "allow";
+      }
+      const result = allowed ? await runCommand(input.command) : { code: 1, output: "The user declined this action." };
+      send({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolId, content: result.output, is_error: result.code !== 0 }] }, parent_tool_use_id: null, ...base() });
+      const title = /Page Title: (.*)/.exec(result.output)?.[1]?.trim();
+      const refusal = result.output.split("\n").find((entry) => entry.startsWith("playwright-cli: "));
+      browserLine = `브라우저 지침: 받음 (${browser.name}) · ${title ? `제목: ${title}` : `실패: ${refusal ?? result.output}`}`;
+    }
+  }
   if (!(text.trim() === "/compact")) {
     const steer = text.startsWith("[steer]") ? `이어서 받은 요청을 반영합니다: ${text.slice(7)}\n\n` : "";
     const skill = text.match(/^\/정리(?:\s+(.*))?$/s);
@@ -178,6 +215,7 @@ async function runTurn(text) {
     const long = text.includes("길게");
     const lines = long ? 160 : 6;
     const chunks = [];
+    if (browserLine) chunks.push({ text: `${browserLine}\n\n`, wait: 30 });
     if (steer) chunks.push({ text: steer, wait: 30 });
     if (skill) chunks.push({ text: `스킬 /정리를 실행했습니다: ${skill[1] ?? ""}\n\n`, wait: 30 });
     if (seen) chunks.push({ text: `요청을 받았습니다 (${seen[1]}).\n\n`, wait: 30 });
@@ -277,6 +315,10 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     const reply = (response) => send({ type: "control_response", response: { subtype: "success", request_id: id, response } });
     switch (request.subtype) {
       case "initialize":
+        // The agent browser's instructions arrive appended to the system prompt.
+        if (typeof request.appendSystemPrompt === "string" && request.appendSystemPrompt.includes("[Achmage Workbench · 브라우저]")) {
+          browser = { name: /-s=(wb-[a-z0-9]+)/.exec(request.appendSystemPrompt)?.[1] ?? "wb-unknown" };
+        }
         return reply({ commands: [{ name: "compact", description: "대화 압축", argumentHint: "", builtin: true }, { name: "정리", description: "글을 짧게 정리하는 스킬(가짜)", argumentHint: "[주제]" }], models: [{ value: "default", displayName: "Fake (기본)", description: "가짜 모델", supportedEffortLevels: ["low", "medium", "high"] }], account: { email: "fake@example.com", subscriptionType: "max" }, output_style: "default", available_output_styles: ["default"] });
       case "interrupt": {
         if (turn) turn.interrupted = true;

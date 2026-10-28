@@ -1,5 +1,6 @@
 import {
   applyItemEvent,
+  type AgentBrowserStatus,
   type Artifact,
   type DocumentTools,
   type Handoff,
@@ -35,6 +36,7 @@ export type State = {
   /** Linked sessions ("세션 잇기"), live and ended. */
   links: Record<string, SessionLink>;
   tools: DocumentTools | null;
+  browser: AgentBrowserStatus | null;
 };
 
 export const initialState: State = {
@@ -53,6 +55,7 @@ export const initialState: State = {
   handoffs: {},
   links: {},
   tools: null,
+  browser: null,
 };
 
 export type Action =
@@ -85,6 +88,7 @@ export function reducer(state: State, action: Action): State {
         handoffs: byId(snapshot.handoffs ?? []),
         links: byId(snapshot.links ?? []),
         tools: snapshot.tools ?? null,
+        browser: snapshot.browser ?? null,
       };
     }
     case "connected":
@@ -111,6 +115,8 @@ export function reducer(state: State, action: Action): State {
           return { ...next, proposals: { ...state.proposals, [event.proposal.id]: event.proposal } };
         case "tools.status":
           return { ...next, tools: event.tools };
+        case "browser.status":
+          return { ...next, browser: event.status };
         case "handoff.upserted":
           return { ...next, handoffs: { ...state.handoffs, [event.handoff.id]: event.handoff } };
         case "link.upserted":

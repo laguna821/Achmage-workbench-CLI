@@ -1,5 +1,6 @@
 // Shared contract between the host gateway and the UI.
 // Provider-specific protocols stay inside the host adapters; the UI only sees these shapes.
+import type { AgentBrowserStatus } from "./browse.ts";
 
 import type { ImageItem, RequestDraw } from "./imagegen.ts";
 import type { LinkHop, SessionLink } from "./links.ts";
@@ -94,6 +95,8 @@ export type Session = {
   access: AccessMode | null;
   /** How full the conversation's context window is, as the engine last reported it. */
   context: ContextUsage | null;
+  /** The session may use the agent browser ("브라우저" under the input); off when absent. */
+  browser?: boolean;
   createdAt: number;
   updatedAt: number;
 };
@@ -411,7 +414,8 @@ export type WorkbenchEvent =
   | { type: "handoff.upserted"; handoff: Handoff }
   | { type: "link.upserted"; link: SessionLink }
   | { type: "prefs.updated"; prefs: UiPrefs }
-  | { type: "tools.status"; tools: DocumentTools };
+  | { type: "tools.status"; tools: DocumentTools }
+  | { type: "browser.status"; status: AgentBrowserStatus };
 
 /**
  * Screen preferences (theme, sidebar, per-engine look). Owned by the UI; the gateway only stores
@@ -463,6 +467,8 @@ export type Snapshot = {
   handoffs: Handoff[];
   links: SessionLink[];
   tools: DocumentTools;
+  /** The agent browser (absent from gateways without it). */
+  browser?: AgentBrowserStatus;
 };
 
 export type ApiError = { code: string; message: string; requestId?: string };
@@ -480,6 +486,7 @@ export type CreateSessionRequest = {
   model?: string | null;
   effort?: string | null;
   access?: AccessMode | null;
+  browser?: boolean;
 };
 
 export type UpdateSessionRequest = {
@@ -493,6 +500,8 @@ export type UpdateSessionRequest = {
   seen?: boolean;
   /** Applies at once: to the running turn where the engine allows it, else from the next one. */
   access?: AccessMode | null;
+  /** Let the session use the agent browser; the engine is told from its next turn. */
+  browser?: boolean;
 };
 
 export type UpdateWorkRequest = {
@@ -703,3 +712,4 @@ export function applyItemEvent(items: TranscriptItem[], event: WorkbenchEvent): 
 export * from "./commands.ts";
 export * from "./imagegen.ts";
 export * from "./links.ts";
+export * from "./browse.ts";

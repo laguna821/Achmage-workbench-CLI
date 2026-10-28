@@ -1700,10 +1700,11 @@ kbd {
 
 .composer-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   margin-top: 10px;
-  gap: 10px;
+  gap: 6px 10px;
 }
 
 .composer-right {
@@ -4952,9 +4953,25 @@ kbd {
 /* ── Access, context, plan limits ────────────────────────────────────── */
 .composer-left {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 2px;
   min-width: 0;
+}
+
+/* Feature pills (계획 먼저 · 그림 · 브라우저) name themselves only while on; off, an icon and a
+   tooltip, so the row stays short. The name is still there for screen readers. */
+.composer-left .feature-pill:not(.on) .pill-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.composer-right {
+  margin-left: auto;
 }
 
 .access-select {

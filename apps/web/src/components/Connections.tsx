@@ -1,6 +1,7 @@
-import { PROVIDER_LABEL, type DocumentTools, type Provider, type ProviderStatus } from "@workbench/contracts";
+import { PROVIDER_LABEL, type AgentBrowserStatus, type DocumentTools, type Provider, type ProviderStatus } from "@workbench/contracts";
 import { usageText } from "../format.ts";
 import type { ThemePref } from "../theme.ts";
+import { BrowserInstall, BrowserLogin, type BrowserActions } from "./BrowserPill.tsx";
 
 const THEME_LABEL: Record<ThemePref, string> = { system: "시스템", light: "라이트", dark: "다크" };
 
@@ -41,10 +42,39 @@ function ToolsSection({ tools, onInstallIeum, onRefreshTools }: { tools: Documen
   );
 }
 
+/** The agent browser: installed or not, and signing in once for every session. */
+function BrowserSection({ status, actions }: { status: AgentBrowserStatus | null; actions: BrowserActions }) {
+  if (!status) return null;
+  const install = status.install;
+  const state =
+    install.state === "ready" ? `준비됨${install.browserVersion ? ` · Chromium ${install.browserVersion.split(".")[0]}` : ""}` : install.state === "installing" ? "설치 중…" : install.state === "error" ? "설치 실패" : "없음";
+  return (
+    <>
+      <div className="menu-divider" />
+      <div className="connection browser-connection">
+        <div className="connection-head">
+          <span className="connection-name">에이전트 브라우저</span>
+          <span className={`connection-state ${install.state === "ready" ? "ok" : "warn"}`}>{state}</span>
+        </div>
+        <div className="connection-meta muted">Claude·Codex 세션이 Playwright CLI로 화면에 보이는 Chromium 창을 씁니다(입력창 아래 '브라우저').</div>
+        <BrowserInstall status={status} actions={actions} />
+        {install.state === "ready" ? (
+          <>
+            <div className="connection-meta">로그인하기 · 에이전트와 같은 프로필에 한 번</div>
+            <BrowserLogin status={status} actions={actions} />
+          </>
+        ) : null}
+      </div>
+    </>
+  );
+}
+
 export function Connections({
   tools,
   onInstallIeum,
   onRefreshTools,
+  browser,
+  browserActions,
   onIntegrations,
   onOnboarding,
   providers,
@@ -64,6 +94,9 @@ export function Connections({
   onNotifications,
 }: {
   tools: DocumentTools | null;
+  /** The agent browser (absent from older gateways). */
+  browser: AgentBrowserStatus | null;
+  browserActions: BrowserActions;
   onIntegrations: () => void;
   onOnboarding: () => void;
   onInstallIeum: () => void;
@@ -154,6 +187,7 @@ export function Connections({
         상태 새로 고침
       </button>
       <ToolsSection tools={tools} onInstallIeum={onInstallIeum} onRefreshTools={onRefreshTools} />
+      <BrowserSection status={browser} actions={browserActions} />
       <button type="button" className="text-button" onClick={onIntegrations}>
         MCP·스킬 연동 · Claude와 Codex 나란히…
       </button>

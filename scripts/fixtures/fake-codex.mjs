@@ -13,6 +13,10 @@
 //   "[세션 잇기 k/m"  a linked-session hand-over: a reply of its own each time; with "합의:N" in the
 //                     goal its last line is [[합의]] from message N on, with "되풀이" it repeats itself,
 //                     "천천히" takes about 2 s and "길게" about 8 s
+//   "브라우저" says whether the thread was told about the agent browser (developer instructions at
+//          the start or a developer item injected later) and, when told, runs `playwright-cli open
+//          <address>` from its PATH like a model would (found by CODEX_THREAD_ID, no -s), asking first
+//          only under "untrusted" as Codex does
 //   anything else: a short answer
 // Local images in the input are reported at the start of the answer ("받은 그림 1장 · 1234바이트").
 // "스크린샷": like a browsing step, a command saves a screenshot (Playwright CLI's output names it),
@@ -24,6 +28,7 @@
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { crc32, deflateSync } from "node:zlib";
 import { pagePng } from "./png.mjs";
@@ -38,7 +43,27 @@ const send = (message) => process.stdout.write(`${JSON.stringify(message)}\n`);
 const notify = (method, params) => send({ method, params });
 const now = () => Math.floor(Date.now() / 1000);
 
-const threads = new Map(); // id -> { approvalPolicy, sandbox, cwd, used, turn }
+const threads = new Map(); // id -> { approvalPolicy, sandbox, cwd, used, turn, browser, roots }
+const BROWSER_MARK = "[Achmage Workbench · 브라우저]";
+
+/** What a developer text says about the browser: on (with the session's name), off, or nothing. */
+function browserNote(text) {
+  if (!text || !text.includes(BROWSER_MARK)) return null;
+  if (text.includes("껐습니다")) return { on: false, name: null };
+  return { on: true, name: /-s=(wb-[a-z0-9]+)/.exec(text)?.[1] ?? null };
+}
+
+/** Run a command line as Codex would: its own environment plus the thread id. */
+function runCommand(line, cwd, threadId) {
+  return new Promise((resolve) => {
+    const child = spawn("/bin/sh", ["-c", line], { cwd, env: { ...process.env, CODEX_THREAD_ID: threadId } });
+    let output = "";
+    child.stdout.on("data", (chunk) => (output += chunk));
+    child.stderr.on("data", (chunk) => (output += chunk));
+    child.on("exit", (code) => resolve({ code: code ?? 1, output }));
+    child.on("error", (error) => resolve({ code: 127, output: String(error) }));
+  });
+}
 const waiting = new Map(); // server request id -> resolve
 let counter = 0;
 let serverRequestId = 1000;
@@ -209,6 +234,28 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
     const id = `mcp_${++counter}`;
     notify("item/completed", { threadId, turnId, item: { type: "mcpToolCall", id, server: "achmage", tool: "search", status: ok ? "completed" : "failed", arguments: { query: "근거" }, result: null, error: null, durationMs: 5 } });
   }
+  let browserLine = null;
+  if (text.includes("브라우저")) {
+    if (!thread.browser?.on) {
+      browserLine = "브라우저 지침: 없음";
+    } else {
+      const address = /https?:\/\/\S+/.exec(text)?.[0] ?? "https://example.com";
+      const line = `playwright-cli open ${address}`;
+      const itemId = `cmd_${++counter}`;
+      let decision = "accept";
+      if (thread.approvalPolicy === "untrusted") {
+        const answer = await ask("item/commandExecution/requestApproval", { kind: "command", threadId, turnId, itemId, startedAtMs: Date.now(), environmentId: null, reason: null, command: line, cwd: thread.cwd });
+        decision = answer?.decision ?? "decline";
+      }
+      const command = { type: "commandExecution", id: itemId, command: line, cwd: thread.cwd, processId: null, source: "agent", status: "inProgress", commandActions: [], aggregatedOutput: null, exitCode: null, durationMs: null };
+      notify("item/started", { threadId, turnId, item: command });
+      const result = decision === "accept" ? await runCommand(line, thread.cwd, threadId) : { code: null, output: null };
+      notify("item/completed", { threadId, turnId, item: { ...command, status: decision !== "accept" ? "declined" : result.code === 0 ? "completed" : "failed", aggregatedOutput: result.output, exitCode: result.code } });
+      const title = /Page Title: (.*)/.exec(result.output ?? "")?.[1]?.trim();
+      const refusal = (result.output ?? "").split("\n").find((entry) => entry.startsWith("playwright-cli: "));
+      browserLine = `브라우저 지침: 받음 (${thread.browser.name ?? "이름 없음"}) · 쓰기 폴더 ${thread.roots.length}개 · ${title ? `제목: ${title}` : `실패: ${refusal ?? result.output ?? decision}`}`;
+    }
+  }
   if (text.includes("명령")) {
     const itemId = `cmd_${++counter}`;
     let decision = "accept";
@@ -244,19 +291,25 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
   const planning = thread.sandbox === "readOnly";
   const linked = planning ? null : linkReply(text, "Codex");
   const lines = planning ? 0 : linked ? linked.length + (text.includes("길게") ? 150 : text.includes("천천히") ? 30 : 0) : text.includes("길게") ? 160 : text.includes("도식") ? 14 : 6;
-  let full = "";
+  let full = browserLine ? `${browserLine}\n\n` : "";
+  if (browserLine) {
+    notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: `${browserLine}\n\n` });
+  }
   const skill = text.match(/\[스킬 ([^ ]+) · ([^\]]+)\]/);
   if (skill) {
-    full = `스킬 ${skill[1]}를 받았습니다 (${text.split("\n")[0]}).\n\n`;
-    notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: full });
+    const said = `스킬 ${skill[1]}를 받았습니다 (${text.split("\n")[0]}).\n\n`;
+    full += said;
+    notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: said });
   }
   if (planning || text.includes("계획대로 진행")) {
-    full = planning ? "살펴보고 계획을 세웠습니다.\n\n## 계획\n\n1. 지금 상태 살펴보기\n2. 고칠 곳 고치기\n3. 결과 확인하기\n" : `계획대로 진행합니다 (샌드박스: ${thread.sandbox}).\n\n`;
-    notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: full });
+    const said = planning ? "살펴보고 계획을 세웠습니다.\n\n## 계획\n\n1. 지금 상태 살펴보기\n2. 고칠 곳 고치기\n3. 결과 확인하기\n" : `계획대로 진행합니다 (샌드박스: ${thread.sandbox}).\n\n`;
+    full += said;
+    notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: said });
   }
   if (images) {
-    full = `요청을 받았습니다${images}.\n\n`;
-    notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: full });
+    const said = `요청을 받았습니다${images}.\n\n`;
+    full += said;
+    notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: said });
   }
   for (let index = 0; index < lines && thread.turn?.id === turnId && !thread.turn.interrupted; index += 1) {
     // Like Codex, a steered request is taken at the next step (here every 10 lines): it is
@@ -323,12 +376,22 @@ async function handle(message) {
       return reply({ config: { model: null, model_reasoning_effort: null, approval_policy: "on-request", sandbox_mode: "workspace-write", model_auto_compact_token_limit: 232_000 }, origins: {} });
     case "thread/start": {
       const threadId = `thr_${++counter}`;
-      const thread = { approvalPolicy: params.approvalPolicy ?? "on-request", sandbox: params.sandbox ?? "workspace-write", cwd: params.cwd ?? "/tmp", used: 11_000, turn: null };
+      const thread = { approvalPolicy: params.approvalPolicy ?? "on-request", sandbox: params.sandbox ?? "workspace-write", cwd: params.cwd ?? "/tmp", used: 11_000, turn: null, browser: browserNote(params.developerInstructions), roots: [] };
       threads.set(threadId, thread);
       return reply(threadResponse(threadId, thread));
     }
+    case "thread/inject_items": {
+      const thread = threads.get(params.threadId);
+      if (!thread) return fail("no such thread");
+      for (const item of params.items ?? []) {
+        const note = item.role === "developer" ? browserNote((item.content ?? []).map((part) => part.text ?? "").join("\n")) : null;
+        if (note) thread.browser = note;
+      }
+      return reply({});
+    }
     case "thread/resume": {
-      const thread = threads.get(params.threadId) ?? { cwd: params.cwd ?? "/tmp", used: 11_000, turn: null };
+      // Like Codex: developer instructions on resume are not added to the thread.
+      const thread = threads.get(params.threadId) ?? { cwd: params.cwd ?? "/tmp", used: 11_000, turn: null, browser: null, roots: [] };
       thread.approvalPolicy = params.approvalPolicy ?? thread.approvalPolicy ?? "on-request";
       thread.sandbox = params.sandbox ?? thread.sandbox ?? "workspace-write";
       threads.set(params.threadId, thread);
@@ -343,7 +406,10 @@ async function handle(message) {
       const thread = threads.get(params.threadId);
       if (!thread) return fail("no such thread");
       if (params.approvalPolicy) thread.approvalPolicy = params.approvalPolicy;
-      if (params.sandboxPolicy) thread.sandbox = params.sandboxPolicy.type;
+      if (params.sandboxPolicy) {
+        thread.sandbox = params.sandboxPolicy.type;
+        thread.roots = params.sandboxPolicy.writableRoots ?? [];
+      }
       const turnId = `turn_${++counter}`;
       thread.turn = { id: turnId, steers: [], interrupted: false };
       reply({ turn: { id: turnId, items: [], itemsView: "full", status: "inProgress", error: null, startedAt: now(), completedAt: null, durationMs: null } });
