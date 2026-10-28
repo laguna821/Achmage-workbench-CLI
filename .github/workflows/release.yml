@@ -101,7 +101,7 @@ jobs:
           name: web
           path: apps
       - run: npm ci --ignore-scripts
-      - name: Build (no bundle: the binary with host/ and web/ beside it)
+      - name: "Build (no bundle: the binary with host/ and web/ beside it)"
         working-directory: apps/desktop
         run: npx tauri build --no-bundle
       - name: Package
