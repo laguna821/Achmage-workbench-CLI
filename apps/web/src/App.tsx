@@ -24,6 +24,7 @@ import { Switcher, UnseenContext } from "./components/SessionCards.tsx";
 import { DocContext, type DocActions } from "./components/DocCards.tsx";
 import { DocTabs } from "./components/DocTabs.tsx";
 import { IntegrationsSheet } from "./components/IntegrationsSheet.tsx";
+import { ImageUploadRow, ImageUploadSheet } from "./components/ImageUploadSheet.tsx";
 import { Onboarding } from "./components/Onboarding.tsx";
 import { SessionPicker } from "./components/SessionPicker.tsx";
 import { LinkLayer } from "./components/LinkCards.tsx";
@@ -173,6 +174,7 @@ export function App() {
       .finally(() => setViewNow(resolved));
   }, []);
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
+  const [imageUploadOpen, setImageUploadOpen] = useState(false);
   const [onboardingAgain, setOnboardingAgain] = useState(false);
   // Documents opened in each work, shown as tabs and offered first by "@".
   const [openDocs, setOpenDocs] = useState<Record<string, string[]>>(() => readJson(OPEN_DOCS_KEY, {}));
@@ -363,6 +365,7 @@ export function App() {
         edit: (session, queuedId, text) => void api?.updateQueued(session.id, queuedId, text).catch(fail),
         cancel: (session, queuedId) => void api?.cancelQueued(session.id, queuedId).catch(fail),
       },
+      clipboardPicture: () => (api ? api.clipboardPicture().catch(() => null) : Promise.resolve(null)),
       commands: async (session: Session) => {
         if (!api) return [];
         try {
@@ -1253,6 +1256,15 @@ export function App() {
                 onBrandMotion={(next) => savePrefs({ brandMotion: next })}
                 notifications={prefs.notify !== false}
                 onNotifications={(next) => savePrefs({ notify: next })}
+                imageUpload={
+                  <ImageUploadRow
+                    api={api}
+                    onOpen={() => {
+                      closeMenu();
+                      setImageUploadOpen(true);
+                    }}
+                  />
+                }
               />
             </Popover>
           </div>
@@ -1357,6 +1369,7 @@ export function App() {
       ) : null}
 
       {integrationsOpen && api ? <IntegrationsSheet api={api} onClose={() => setIntegrationsOpen(false)} onToast={setToast} /> : null}
+      {imageUploadOpen && api ? <ImageUploadSheet api={api} onClose={() => setImageUploadOpen(false)} onToast={setToast} /> : null}
       {state.ready && api && (prefs.onboarding !== "done" || onboardingAgain) ? (
         <Onboarding
           providers={state.providers}

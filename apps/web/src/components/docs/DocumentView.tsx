@@ -35,6 +35,7 @@ import type { EditorView } from "@codemirror/view";
 import { InlineDraw, drawExtension } from "./InlineDraw.tsx";
 import { docPictureComponents } from "../ImageGen.tsx";
 import { useKeptPosition, type ModeProps } from "../../workmodes.ts";
+import { useDocImages } from "./DocImages.tsx";
 
 /** Save operations only; "unsaved" is derived from the text, never stored (no stale overwrite). */
 type SaveState = "idle" | "saving" | "failed" | "conflict";
@@ -91,6 +92,8 @@ export default function DocumentView({
 }) {
   const { lookOf } = useAppearance();
   const artifact = state.artifacts[artifactId] as Artifact | undefined;
+  // Pasted or dropped pictures: a link in Markdown (R2 or the work folder), refused in the Hangul text view.
+  const docImages = useDocImages(api, artifact, onToast);
   const [drawer, setDrawer] = useState<DrawerMode>("closed");
   const textual = artifact ? TEXT_FORMATS.has(artifact.format) : false;
   const [base, setBase] = useState<{ revision: number; text: string } | null>(null);
@@ -535,19 +538,19 @@ export default function DocumentView({
               ? "HWP는 읽기 전용입니다. 고치려면 HWPX로 만든 뒤 여세요."
               : "한글 문서의 글 보기입니다. 문단·표 칸의 글자를 바꾸면 원래 서식을 유지한 채 HWPX에 반영됩니다. 문단을 새로 만들거나 지우는 편집은 반영되지 않고 원본을 유지합니다."}
           </div>
-          <MarkdownEditor value={text} readOnly={artifact.format === "hwp"} onChange={setText} onSelection={setSelection} onBlur={() => void save()} />
+          <MarkdownEditor value={text} readOnly={artifact.format === "hwp"} onChange={setText} onSelection={setSelection} onBlur={() => void save()} images={docImages.handling} />
         </div>
       );
     }
     if (artifact.format === "html" && mode === "render") {
       return <HtmlView api={api} artifactId={artifactId} revision={base.revision} />;
     }
-    const editor = <MarkdownEditor value={text} onChange={setText} onSelection={setSelection} onBlur={() => void save()} extensions={drawExtensions} onView={setEditorView} />;
+    const editor = <MarkdownEditor value={text} onChange={setText} onSelection={setSelection} onBlur={() => void save()} extensions={drawExtensions} onView={setEditorView} images={docImages.handling} />;
     if (artifact.format === "markdown" && mode === "preview") {
       return (
         <div className="doc-preview">
           <div className="markdown">
-            <Markdown remarkPlugins={[remarkGfm]} components={pictures}>
+            <Markdown remarkPlugins={[remarkGfm]} components={{ ...pictures, ...docImages.components }}>
               {text}
             </Markdown>
           </div>
@@ -560,7 +563,7 @@ export default function DocumentView({
           {editor}
           <div className="doc-preview">
             <div className="markdown">
-              <Markdown remarkPlugins={[remarkGfm]} components={pictures}>
+              <Markdown remarkPlugins={[remarkGfm]} components={{ ...pictures, ...docImages.components }}>
               {text}
             </Markdown>
             </div>
@@ -885,6 +888,7 @@ export default function DocumentView({
         {modes?.bar}
         <Composer
           onFiles={pending.add}
+          onDesktopPicture={() => api.clipboardPicture()}
           attachments={pending.count}
           draftKey={modes?.draftKey ?? `doc:${artifactId}`}
           placeholder={selection ? "이 부분에 요청하기" : "이 문서에 요청하기"}

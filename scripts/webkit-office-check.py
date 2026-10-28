@@ -113,7 +113,8 @@ def request(method, path, body=None, raw=False):
         return data if raw else json.loads(data)
 
 
-request("PUT", "/api/prefs", {"prefs": {"onboarding": "done"}})
+# The app opens on home by default; the check starts in the work.
+request("PUT", "/api/prefs", {"prefs": {"onboarding": "done", "startScreen": "last"}})
 work = request("POST", "/api/works", {"title": f"WebKit {kind}", "folderId": None, "cwd": cwd})
 artifact = request("POST", f"/api/works/{work['id']}/artifacts", {"path": DOC_NAME})
 

@@ -31,6 +31,8 @@ export type WorkActions = {
   send: (session: Session, text: string, refs?: DocRef[], create?: CreateTarget | null, mode?: "auto" | "queue", attachments?: Attachment[], plan?: boolean) => Promise<boolean>;
   /** Keep a pasted or dropped file at the gateway for the next request (null: it could not). */
   upload: (file: File) => Promise<Attachment | null>;
+  /** The desktop clipboard's picture (a screenshot pasted in the desktop app), or null. */
+  clipboardPicture: () => Promise<File | null>;
   /** "/" in the input: the engine's commands and skills for this session (empty when unavailable). */
   commands: (session: Session) => Promise<EngineCommand[]>;
   queued: {
@@ -656,6 +658,7 @@ export function WorkView({
             </>
           }
           onFiles={pending.add}
+          onDesktopPicture={actions.clipboardPicture}
           attachments={pending.count}
           slash={handoffTo ? undefined : slash}
           header={

@@ -8,6 +8,7 @@ import type {
   ImportRequest,
   ArtifactRevision,
   CreateTarget,
+  DocImageResult,
   DocRef,
   DocumentTools,
   DrawRequest,
@@ -16,6 +17,9 @@ import type {
   ExportMarkdownRequest,
   ExportMarkdownResult,
   Handoff,
+  ImageUploadCheck,
+  ImageUploadInput,
+  ImageUploadView,
   IntegrationsView,
   LinkTurn,
   Proposal,
@@ -189,6 +193,38 @@ export class Api {
     this.request<{ proposal: Proposal; artifact: Artifact; base: string; proposed: string; current: string }>("GET", `/api/proposals/${proposalId}`);
   applyProposal = (proposalId: string) => this.request<{ proposal: Proposal; artifact: Artifact }>("POST", `/api/proposals/${proposalId}/apply`);
   discardProposal = (proposalId: string) => this.request<Proposal>("POST", `/api/proposals/${proposalId}/discard`);
+  /** Images pasted into Markdown documents: the R2 settings (never the secret), "연결 확인", an upload. */
+  imageUpload = () => this.request<ImageUploadView>("GET", "/api/image-upload");
+  saveImageUpload = (input: ImageUploadInput) => this.request<ImageUploadView>("PUT", "/api/image-upload", input);
+  clearImageUpload = () => this.request<ImageUploadView>("DELETE", "/api/image-upload");
+  checkImageUpload = (input: ImageUploadInput) => this.request<ImageUploadCheck>("POST", "/api/image-upload/check", input);
+  async uploadDocImage(artifactId: string, file: Blob, name: string): Promise<DocImageResult> {
+    const response = await fetch(`/api/artifacts/${artifactId}/images`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${this.token}`, "content-type": file.type || "application/octet-stream", "x-file-name": encodeURIComponent(name) },
+      body: file,
+    });
+    const json = (await response.json().catch(() => ({ code: "invalid_response", message: response.statusText }))) as DocImageResult & ApiError;
+    if (!response.ok) throw new ApiRequestError(response.status, json);
+    return json;
+  }
+  /**
+   * The desktop clipboard's picture, for a paste that showed the page nothing (WebKitGTK gives pages
+   * clipboard text and copied files, not picture data). Null when the clipboard holds no picture.
+   */
+  async clipboardPicture(): Promise<File | null> {
+    const response = await fetch("/api/clipboard/picture", { headers: { authorization: `Bearer ${this.token}` } });
+    if (response.status === 204) return null;
+    if (!response.ok) throw new ApiRequestError(response.status, { code: "clipboard_failed", message: response.statusText });
+    const type = response.headers.get("content-type") ?? "image/png";
+    return new File([await response.blob()], `image.${type.split("/")[1] ?? "png"}`, { type });
+  }
+  /** An image a Markdown document links relatively (inside its work folder), for the preview. */
+  async docImage(artifactId: string, src: string): Promise<Blob> {
+    const response = await fetch(`/api/artifacts/${artifactId}/asset?src=${encodeURIComponent(src)}`, { headers: { authorization: `Bearer ${this.token}` } });
+    if (!response.ok) throw new ApiRequestError(response.status, { code: "image_failed", message: response.statusText });
+    return response.blob();
+  }
   /** Raw bytes of a revision (PDF viewer). */
   async raw(artifactId: string, revision?: number): Promise<ArrayBuffer> {
     const response = await fetch(`/api/artifacts/${artifactId}/raw${revision ? `?revision=${revision}` : ""}`, {

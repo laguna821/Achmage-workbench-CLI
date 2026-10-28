@@ -2,6 +2,7 @@ import "./slides.css";
 import { Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { dispatch, useTransport } from "./platform/electron-renderer.ts";
 import { recovery } from "./recovery.ts";
+import { carriesMark, convertForeignPictures, desktopPicture, markClipboard, pastedPicture, pngBytes, showsNothing } from "./pictures.ts";
 import type { WorkerCall, WorkerMessage, WorkerRequest } from "./slides/protocol.ts";
 
 // IeumOffice's slides editor inside Workbench. Its screen (vendor/ieumoffice/apps/slides renderer)
@@ -49,6 +50,11 @@ const noAi = () => Promise.reject(new Error("Workbench에서는 대화창에서 
 const unhandled = new Set<string>();
 
 async function invoke(channel: string, args: unknown[]): Promise<unknown> {
+  // A copy inside the editor: marked on the system clipboard now, while the key press or click lasts.
+  if (channel === "slides:copy-elements" || channel === "slides:copy-slides") {
+    copied.mark = markClipboard();
+    copied.unmarked = copied.mark === null;
+  }
   switch (channel) {
     case "app:get-language":
       return "ko";
@@ -182,6 +188,45 @@ listen((message) => {
 // Inside a text box, undo and the clipboard stay the text box's own.
 const inText = (target: EventTarget | null) =>
   target instanceof HTMLElement && (target.isContentEditable || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement);
+
+// ── pictures and text from other apps ────────────────────────────────────
+// The editor pastes from its own clipboard (the worker's). What other apps copied reaches the page
+// only in a paste event, so a paste outside a text box hands it over first; a paste that still
+// carries the mark of the editor's last copy pastes that copy.
+const copied: { mark: string | null; unmarked: boolean } = { mark: null, unmarked: false };
+const pasting = { waiting: false };
+
+async function pasteFrom(data: DataTransfer | null, trusted: boolean) {
+  const own = Boolean(data && copied.mark && carriesMark(data, copied.mark));
+  // A copy whose mark could not be written cannot be told from another app's: the editor's own wins.
+  if (data && !own && !copied.unmarked) {
+    // WebKitGTK shows a page no picture data: the user's paste of nothing visible asks the desktop clipboard.
+    const picture = pastedPicture(data) ?? (trusted && showsNothing(data) ? await desktopPicture() : null);
+    const text = picture ? "" : data.getData("text/plain");
+    const png = picture ? await pngBytes(picture).catch(() => null) : null;
+    if (png || text.trim()) {
+      await value({ type: "clipboard", text: text || undefined, png: png ?? undefined }, png ? [png] : []);
+      copied.mark = null;
+    }
+  }
+  dispatch("slides:menu", ["paste"]);
+}
+
+// WebKit pastes outside editable text only when the page asks for it.
+window.addEventListener("beforepaste", (event) => !inText(event.target) && event.preventDefault(), true);
+window.addEventListener(
+  "paste",
+  (event) => {
+    if (inText(event.target)) return;
+    pasting.waiting = false;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    void pasteFrom(event.clipboardData, event.isTrusted);
+  },
+  true,
+);
+// Dropped pictures in formats the editor does not take go on to it as PNG (pastes are handled above).
+convertForeignPictures();
 window.addEventListener(
   "keydown",
   (event) => {
@@ -195,7 +240,17 @@ window.addEventListener(
     else if (!inText(event.target)) {
       if (key === "z") command = event.shiftKey ? "redo" : "undo";
       else if (key === "y") command = "redo";
-      else if (key === "x" || key === "c" || key === "v") command = { x: "cut", c: "copy", v: "paste" }[key];
+      else if (key === "v" && !event.shiftKey) {
+        // The browser's own paste follows with what was copied (above); without one, paste the editor's copy.
+        event.stopPropagation();
+        pasting.waiting = true;
+        window.setTimeout(() => {
+          if (!pasting.waiting) return;
+          pasting.waiting = false;
+          dispatch("slides:menu", ["paste"]);
+        }, 80);
+        return;
+      } else if (key === "x" || key === "c" || key === "v") command = { x: "cut", c: "copy", v: "paste" }[key];
     }
     if (!command) return;
     event.preventDefault();

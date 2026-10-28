@@ -3,6 +3,7 @@
 // handlers registered here, and `send` goes back to the page. There are no windows, menus or
 // native dialogs: a dialog answers its cancel button (an informational one is shown to the user
 // through Workbench instead), the clipboard lives in memory, files live in fs.ts.
+import { Buffer } from "buffer";
 import { EventEmitter } from "./emitter.ts";
 
 type Notice = (message: string) => void;
@@ -386,11 +387,12 @@ class Image {
     const { width, height } = this.getSize();
     return height ? width / height : 1;
   }
+  // A Buffer, as Electron's: the editor turns it into base64 with toString("base64").
   toPNG() {
-    return this.bytes;
+    return Buffer.from(this.bytes);
   }
   toJPEG() {
-    return this.bytes;
+    return Buffer.from(this.bytes);
   }
   toDataURL() {
     let binary = "";
@@ -412,7 +414,9 @@ export const nativeImage = {
   createThumbnailFromPath: () => resolved(new Image()),
 };
 
-// In-app copy and paste between slides works through this; other apps' clipboard is the page's.
+// The editor's clipboard. Its own copies (slides, elements) live here; what other apps copied reaches
+// it when the page sees a paste (slides.ts → `takeExternal`). As with Electron's clipboard, every
+// write replaces what was there.
 const board = new Map<string, Uint8Array | string>();
 export const clipboard = {
   readText: () => String(board.get("text/plain") ?? ""),
@@ -426,22 +430,38 @@ export const clipboard = {
     board.set("text/html", html);
   },
   readRTF: () => "",
-  readImage: () => new Image(),
-  writeImage: noop,
+  readImage: () => {
+    const png = board.get("image/png");
+    return new Image(png instanceof Uint8Array ? png : undefined);
+  },
+  writeImage: (image: Image) => {
+    board.clear();
+    if (!image.isEmpty()) board.set("image/png", image.toPNG());
+  },
   readBuffer: (format: string) => {
     const value = board.get(format);
-    return typeof value === "string" ? new TextEncoder().encode(value) : (value ?? new Uint8Array());
+    return Buffer.from(typeof value === "string" ? new TextEncoder().encode(value) : (value ?? new Uint8Array()));
   },
-  writeBuffer: (format: string, bytes: Uint8Array) => board.set(format, bytes),
-  write: (data: { text?: string; html?: string }) => {
+  writeBuffer: (format: string, bytes: Uint8Array) => {
+    board.clear();
+    board.set(format, bytes);
+  },
+  write: (data: { text?: string; html?: string; image?: Image }) => {
     board.clear();
     if (data.text !== undefined) board.set("text/plain", data.text);
     if (data.html !== undefined) board.set("text/html", data.html);
+    if (data.image && !data.image.isEmpty()) board.set("image/png", data.image.toPNG());
   },
   availableFormats: () => [...board.keys()],
   has: (format: string) => board.has(format),
   read: (format: string) => String(board.get(format) ?? ""),
   clear: () => board.clear(),
+  /** What another app put on the system clipboard (a PNG and/or text), seen by the page in a paste. */
+  takeExternal: (content: { text?: string; png?: Uint8Array }) => {
+    board.clear();
+    if (content.png?.length) board.set("image/png", content.png);
+    if (content.text) board.set("text/plain", content.text);
+  },
 };
 
 export default {

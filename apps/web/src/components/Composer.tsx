@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { filterMentions, insertMention, mentionTriggerAt, relocateMentions, type MentionItem, type MentionSpan } from "../mention.ts";
 import { pastedFiles } from "./Attachments.tsx";
+import { showsNothing } from "./docs/image-paste.ts";
 import { SlashList, rankCommands, slashQuery, type ComposerSlash } from "./SlashList.tsx";
 import { FormatBadge } from "./DocCards.tsx";
 import { Icon } from "./Icon.tsx";
@@ -32,6 +33,7 @@ export function Composer({
   mentions,
   left,
   onFiles,
+  onDesktopPicture,
   attachments = 0,
   slash,
 }: {
@@ -54,6 +56,11 @@ export function Composer({
   left?: ReactNode;
   /** Files pasted (Ctrl+V) or dropped on the box, to go with the next request. */
   onFiles?: (files: File[]) => void;
+  /**
+   * The desktop clipboard's picture, asked for when a paste shows the page nothing (WebKitGTK, the
+   * desktop app's view, keeps picture data from pages: a pasted screenshot arrives empty).
+   */
+  onDesktopPicture?: () => Promise<File | null>;
   /** Files already with the request: it can go without text. */
   attachments?: number;
   /** "/" at the start: the engine's commands and skills. */
@@ -211,10 +218,17 @@ export function Composer({
         }}
         onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
         onPaste={(event) => {
-          const files = onFiles ? pastedFiles(event.clipboardData) : [];
-          if (!files.length) return;
-          event.preventDefault();
-          onFiles!(files);
+          if (!onFiles) return;
+          const files = pastedFiles(event.clipboardData);
+          if (files.length) {
+            event.preventDefault();
+            onFiles(files);
+          } else if (onDesktopPicture && showsNothing(event.clipboardData)) {
+            event.preventDefault();
+            void onDesktopPicture()
+              .then((file) => file && onFiles([file]))
+              .catch(() => undefined);
+          }
         }}
         onCompositionStart={() => setComposing(true)}
         onCompositionEnd={(event) => {

@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { chromium, type Page } from "playwright-core";
+import { pagePng } from "./fixtures/png.mjs";
 import type { Provider, Session, TranscriptItem, Work } from "@workbench/contracts";
 
 const outDir = process.argv[2] ?? join(tmpdir(), "wb-attachments");
@@ -28,9 +29,21 @@ const check = (step: string, ok: boolean, detail = "") => {
   console.log(`${ok ? "PASS" : "FAIL"} ${step}${detail ? ` — ${detail}` : ""}`);
 };
 
+// A stand-in wl-paste: the desktop clipboard holds one picture (the real clipboard is never read).
+const scratch = mkdtempSync(join(tmpdir(), "workbench-attach-clip-"));
+const desktopPicture = pagePng(200, 120, [120, 60, 200]);
+writeFileSync(join(scratch, "desktop.png"), desktopPicture);
+writeFileSync(
+  join(scratch, "wl-paste"),
+  `#!/bin/sh\nif [ "$1" = "--list-types" ]; then printf 'image/png\\n'; exit 0; fi\nif [ "$3" = "image/png" ]; then cat "${join(scratch, "desktop.png")}"; exit 0; fi\nexit 1\n`,
+  { mode: 0o755 },
+);
+
 const child = spawn(process.execPath, ["apps/host/src/main.ts"], {
   env: {
     ...process.env,
+    WAYLAND_DISPLAY: "wayland-check",
+    WORKBENCH_WL_PASTE: join(scratch, "wl-paste"),
     WORKBENCH_DATA_DIR: dataDir,
     WORKBENCH_WEB_DIR: "apps/web/dist",
     WORKBENCH_HOST_LABEL: "노트북",
@@ -189,6 +202,18 @@ async function flow(provider: Provider) {
     await page.waitForTimeout(300);
     pass("글과 그림이 함께 복사된 경우(워드 등)는 글로 붙여넣음", (await page.locator(".composer .attach-chip").count()) === before);
 
+    // ── a paste that shows the page nothing (the desktop app's screenshot) takes the desktop's ──
+    await page.evaluate(() => {
+      const input = document.querySelector<HTMLTextAreaElement>(".composer-input")!;
+      input.focus();
+      input.dispatchEvent(new ClipboardEvent("paste", { clipboardData: new DataTransfer(), bubbles: true, cancelable: true }));
+    });
+    await uploaded(before + 1);
+    const desktop = await page.locator(".composer .attach-chip").last().getAttribute("title");
+    const shown = desktopPicture.length < 1024 ? `${desktopPicture.length}B` : `${Math.round(desktopPicture.length / 1024)}KB`;
+    pass("빈 붙여넣기(설치본의 스크린숏)는 바탕화면 클립보드의 그림을 붙임", Boolean(desktop?.endsWith(shown)), `${desktop} (기대: ${shown})`);
+    await page.locator(".composer .attach-chip").last().locator("button").click();
+
     // ── pictures the engine takes or opens while working show under the folded steps ───────────
     await page.locator(".composer-input").fill("스크린샷 찍어서 보여줘");
     await page.locator(".composer-input").press("Enter");
@@ -232,7 +257,7 @@ try {
   await browser.close();
   child.kill();
   await new Promise((done) => (child.exitCode === null && child.signalCode === null ? child.once("exit", done) : done(null)));
-  for (const dir of [dataDir, worksDir]) rmSync(dir, { recursive: true, force: true });
+  for (const dir of [dataDir, worksDir, scratch]) rmSync(dir, { recursive: true, force: true });
   const failed = results.filter((result) => !result.ok).length;
   console.log(`${results.length - failed}/${results.length} passed · console: ${logs.length ? logs.slice(0, 6).join(" | ") : "clean"}`);
   process.exitCode = failed ? 1 : 0;

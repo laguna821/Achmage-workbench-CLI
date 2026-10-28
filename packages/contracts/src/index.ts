@@ -666,20 +666,26 @@ export type OfficeHostMessage =
   /** Keep my edits after a conflict: save them as the revision after this one. */
   | { type: "office:rebase"; revision: number }
   /** Leaving with edits that cannot be saved now (a conflict): keep them for the next visit. */
-  | { type: "office:keep" };
+  | { type: "office:keep" }
+  /** The desktop clipboard's picture the page asked for (null: none), read by the window for the focused editor. */
+  | { type: "office:clipboard-picture"; picture: { bytes: ArrayBuffer; type: string } | null };
 
 /** Office editor page → Workbench window. */
 export type OfficePageMessage =
   | { type: "office:ready" }
   /** The editor shows this revision; `recovered` when it reopened unsaved edits made on it. */
   | { type: "office:opened"; revision: number; recovered: boolean }
+  /** A save of this page is on its way: the next revision the window hears of is this one (its "office:saved" follows). */
+  | { type: "office:saving" }
   | { type: "office:saved"; revision: number }
   | { type: "office:dirty"; dirty: boolean }
   /** After flush, rebase or keep: the saved revision, or null when the edits were not saved (then they are kept). */
   | { type: "office:flushed"; revision: number | null }
   /** A save was refused: the document moved on (`revision_conflict`) or changed on disk (`disk_changed`). */
   | { type: "office:conflict"; code: string; message: string }
-  | { type: "office:error"; message: string };
+  | { type: "office:error"; message: string }
+  /** A paste showed the page nothing (WebKitGTK keeps clipboard pictures from pages): ask for the clipboard's picture. */
+  | { type: "office:clipboard-picture" };
 
 export type ApprovalAnswerRequest = { decision: ApprovalDecision };
 
@@ -715,3 +721,4 @@ export * from "./links.ts";
 export * from "./browse.ts";
 export * from "./views.ts";
 export * from "./imports.ts";
+export * from "./doc-images.ts";

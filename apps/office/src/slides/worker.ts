@@ -6,7 +6,7 @@ import { savePptx } from "@genoffice/pptx-engine";
 import { setUiLang } from "@genoffice/i18n";
 import { sessions } from "@ieum/apps/slides/src/main/session-state.ts";
 import { createSlidesView, registerSlidesIpc, slidesIsDirty } from "@ieum/apps/slides/src/main/slides-main.ts";
-import { connect, emit, invoke } from "../platform/electron.ts";
+import { clipboard, connect, emit, invoke } from "../platform/electron.ts";
 import { vfs } from "../platform/fs.ts";
 import { setFontToken } from "./fonts.ts";
 import type { WorkerCall, WorkerMessage } from "./protocol.ts";
@@ -66,6 +66,9 @@ async function handle(call: WorkerCall): Promise<{ value: unknown; unhandled?: b
       if (session) session.metaDirty = true;
       return { value: true };
     }
+    case "clipboard":
+      clipboard.takeExternal({ text: call.text, png: call.png ? new Uint8Array(call.png) : undefined });
+      return { value: true };
   }
 }
 

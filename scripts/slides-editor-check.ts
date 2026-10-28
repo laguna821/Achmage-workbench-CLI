@@ -62,7 +62,8 @@ const api = async <T>(method: string, path: string, body?: unknown): Promise<T> 
   return json;
 };
 
-await api("PUT", "/api/prefs", { prefs: { onboarding: "done" } });
+// The app opens on home by default; these checks start in the work.
+await api("PUT", "/api/prefs", { prefs: { onboarding: "done", startScreen: "last" } });
 const work = await api<{ id: string }>("POST", "/api/works", { title: "PPT 편집", folderId: null, cwd });
 const artifact = await api<{ id: string }>("POST", `/api/works/${work.id}/artifacts`, { path: "표지.pptx" });
 const revisions = () => api<{ revision: number }[]>("GET", `/api/artifacts/${artifact.id}/revisions`);

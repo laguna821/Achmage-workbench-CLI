@@ -34,6 +34,8 @@ export const OfficeEditor = forwardRef<
   const opened = useRef<EditorGrant | null>(null);
   const status = useRef<OfficeStatus>({ dirty: false, revision: null, conflict: null });
   const own = useRef(new Set<number>());
+  // When the page last said a save of its own is on its way (0: none).
+  const savingSince = useRef(0);
   const waiters = useRef<((revision: number | null) => void)[]>([]);
   // False only for the reload right after "open the latest revision": kept edits are dropped then.
   const recover = useRef(true);
@@ -104,7 +106,11 @@ export const OfficeEditor = forwardRef<
             if (message.recovered) handlers.current.onNotice("저장하지 않았던 편집을 되살렸습니다.");
           }
           break;
+        case "office:saving":
+          savingSince.current = Date.now();
+          break;
         case "office:saved":
+          savingSince.current = 0;
           own.current.add(message.revision);
           update({ revision: message.revision, dirty: false, conflict: null });
           break;
@@ -115,10 +121,23 @@ export const OfficeEditor = forwardRef<
           for (const resolve of waiters.current.splice(0)) resolve(message.revision);
           break;
         case "office:conflict":
+          savingSince.current = 0;
           update({ conflict: { code: message.code, message: message.message } });
           break;
         case "office:error":
+          savingSince.current = 0;
           handlers.current.onNotice(`저장하지 못했습니다: ${message.message}`);
+          break;
+        case "office:clipboard-picture":
+          // Only for the editor the user is pasting into; the page cannot read the desktop clipboard itself.
+          if (document.activeElement !== frame.current) return send({ type: "office:clipboard-picture", picture: null });
+          void api
+            .clipboardPicture()
+            .then(async (file) => (file ? { bytes: await file.arrayBuffer(), type: file.type } : null))
+            .catch(() => null)
+            .then((picture) => {
+              if (opened.current) frame.current?.contentWindow?.postMessage({ type: "office:clipboard-picture", picture }, opened.current.origin, picture ? [picture.bytes] : []);
+            });
           break;
       }
     };
@@ -141,6 +160,8 @@ export const OfficeEditor = forwardRef<
   useEffect(() => {
     const shown = status.current.revision;
     if (shown === null || artifact.revision <= shown || own.current.has(artifact.revision)) return;
+    // The page's own save, heard of from the gateway before its "office:saved".
+    if (Date.now() - savingSince.current < 15_000) return;
     if (!status.current.dirty && !status.current.conflict) setGeneration((value) => value + 1);
     else if (!status.current.conflict) {
       update({ conflict: { code: "revision_conflict", message: `다른 곳에서 r${artifact.revision}이 생겼습니다. 저장하지 않은 편집은 편집기에 그대로 있습니다.` } });
