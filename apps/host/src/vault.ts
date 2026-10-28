@@ -19,12 +19,38 @@ export const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp
 /** A big vault is still scanned, but never without bound. */
 const MAX_ENTRIES = 60_000;
 
-/** The user's vault, offered when it exists on this computer (tests point this elsewhere). */
+/** Where Obsidian keeps its own list of vaults (Linux, Flatpak, macOS, Windows). */
+function obsidianRegistries() {
+  const home = homedir();
+  return [
+    join(process.env.XDG_CONFIG_HOME || join(home, ".config"), "obsidian", "obsidian.json"),
+    join(home, ".var/app/md.obsidian.Obsidian/config/obsidian/obsidian.json"),
+    join(home, "Library/Application Support/obsidian/obsidian.json"),
+    ...(process.env.APPDATA ? [join(process.env.APPDATA, "obsidian", "obsidian.json")] : []),
+  ];
+}
+
+/**
+ * The vault to offer first: the one Obsidian has open (else last opened) in its own vault list on
+ * this computer. Tests point this elsewhere with WORKBENCH_VAULT_SUGGEST.
+ */
 export function suggestedVault(): string | null {
-  const candidates = process.env.WORKBENCH_VAULT_SUGGEST !== undefined
-    ? [process.env.WORKBENCH_VAULT_SUGGEST].filter(Boolean)
-    : [join(homedir(), "Dropbox/-- ACH_한림대 미디어스쿨/= Ach's Obsidian/Achmage")];
-  return candidates.find((path) => existsSync(join(path, ".obsidian"))) ?? null;
+  if (process.env.WORKBENCH_VAULT_SUGGEST !== undefined) {
+    const path = process.env.WORKBENCH_VAULT_SUGGEST;
+    return path && existsSync(join(path, ".obsidian")) ? path : null;
+  }
+  for (const file of obsidianRegistries()) {
+    try {
+      const vaults = Object.values(record(record(JSON.parse(readFileSync(file, "utf8"))).vaults)).map(record);
+      const best = vaults
+        .filter((vault) => typeof vault.path === "string" && existsSync(join(vault.path, ".obsidian")))
+        .sort((a, b) => Number(Boolean(b.open)) - Number(Boolean(a.open)) || Number(b.ts ?? 0) - Number(a.ts ?? 0))[0];
+      if (best) return best.path as string;
+    } catch {
+      // No vault list here.
+    }
+  }
+  return null;
 }
 
 // ── settings of the two plugins (display keys only) ─────────────────────────────────────────
