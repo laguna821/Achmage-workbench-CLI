@@ -167,14 +167,20 @@ export function browserDecision(access: AccessMode, kind: BrowserCommandKind, ne
 }
 
 /**
- * A shell command line that does nothing but run `playwright-cli` (no chaining, redirection,
- * substitution or expansion), so an engine's own approval of it can be left to the gateway's
- * browser rules. Codex may show the line wrapped in the shell it runs it with.
+ * A shell command line that does nothing but run `playwright-cli` (no redirection, substitution,
+ * expansion, or chaining other than `&&` between playwright-cli commands), so an engine's own
+ * approval of it can be left to the gateway's browser rules. Codex may show the line wrapped in
+ * the shell it runs it with.
  */
 export function isPlainBrowserCommand(line: string): boolean {
   let text = line.trim();
   const wrapped = /^(?:\/(?:usr\/)?bin\/)?(?:ba|z)?sh\s+-l?c\s+(['"])([\s\S]*)\1$/.exec(text);
   if (wrapped) text = wrapped[2]!.trim();
+  // An `&&` inside quotes splits a part's quotes apart, which the check below refuses.
+  return text.split("&&").every((part) => isOneBrowserCommand(part.trim()));
+}
+
+function isOneBrowserCommand(text: string) {
   if (!/^playwright-cli(?:\s|$)/.test(text)) return false;
   // Quoted arguments are fine; inside double quotes `$`, backquote and backslash still expand.
   const unquoted = text.replace(/'[^']*'/g, "''").replace(/"[^"$`\\]*"/g, '""');
@@ -249,6 +255,7 @@ export function browserInstructions(name: string): string {
     `이 세션은 사용자 화면에 보이는 Chromium 창 하나를 Playwright CLI(\`playwright-cli\`)로 쓸 수 있습니다. 이 세션의 브라우저 이름은 \`${name}\`입니다. 명령마다 \`-s=${name}\`을 붙이세요.`,
     `- 예: \`playwright-cli -s=${name} open https://example.com\` → \`playwright-cli -s=${name} snapshot\`(요소 ref가 있는 페이지 구조, 주소·제목 포함) → \`playwright-cli -s=${name} click e15\`.`,
     "- 자주 쓰는 명령: open <주소>(창이 없으면 열고 이동), goto <주소>, snapshot, find \"글자\", click <ref>, fill <ref> \"글\", type \"글\", press Enter, select <ref> <값>, go-back, tab-list, tab-select <번호>, screenshot, close. 나머지는 `playwright-cli --help`.",
+    "- 셸 명령 하나에 playwright-cli 하나씩 실행하세요(파이프·리다이렉트 없이). 그래야 권한에 따라 Workbench가 바로 실행하거나 사용자에게 한 번만 묻습니다. 출력은 그대로 읽으면 됩니다.",
     "- 창은 사용자에게 보이고, Workbench가 창과 프로필을 관리합니다. 한 번에 한 세션만 창을 씁니다. 사용자가 이 프로필에 미리 로그인해 두었을 수 있습니다(예: Gmail).",
     "- 쿠키·localStorage·sessionStorage·state-save/load, run-code, route, requests, tracing·video, attach, list, close-all, kill-all, delete-data, install, show는 막혀 있습니다.",
     "안전 규칙(반드시 지킬 것):",

