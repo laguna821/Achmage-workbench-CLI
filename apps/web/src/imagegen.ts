@@ -27,9 +27,16 @@ let templates: Promise<ImageTemplates> | null = null;
 let templatesNow: ImageTemplates | null = null;
 const templateListeners = new Set<() => void>();
 
+/** What the gateway sent, in the shape the menus can always read. */
+const usable = (value: Partial<ImageTemplates> | null | undefined): ImageTemplates => ({
+  templates: Array.isArray(value?.templates) ? value.templates : [],
+  rules: typeof value?.rules === "string" ? value.rules : "",
+});
+
 function loadTemplates() {
   if (!templates) {
-    templates = call<ImageTemplates>("GET", "/api/image-templates").then((value) => {
+    templates = call<ImageTemplates>("GET", "/api/image-templates").then((raw) => {
+      const value = usable(raw);
       templatesNow = value;
       templateListeners.forEach((listener) => listener());
       return value;
@@ -43,7 +50,7 @@ function loadTemplates() {
 
 /** Replace the user's templates and standing rules (built-ins are not sent back). */
 export async function saveTemplates(value: ImageTemplates) {
-  const saved = await call<ImageTemplates>("PUT", "/api/image-templates", { templates: value.templates.filter((template) => !template.builtIn), rules: value.rules });
+  const saved = usable(await call<ImageTemplates>("PUT", "/api/image-templates", { templates: value.templates.filter((template) => !template.builtIn), rules: value.rules }));
   templatesNow = saved;
   templates = Promise.resolve(saved);
   templateListeners.forEach((listener) => listener());
