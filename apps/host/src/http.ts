@@ -275,6 +275,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
             pinned: typeof body.pinned === "boolean" ? body.pinned : undefined,
             sort: body.sort === undefined ? undefined : Number(body.sort),
             archived: typeof body.archived === "boolean" ? body.archived : undefined,
+            tags: Array.isArray(body.tags) ? body.tags.filter((tag): tag is string => typeof tag === "string") : undefined,
           }),
         );
       }

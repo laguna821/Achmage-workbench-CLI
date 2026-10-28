@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
-import type { Artifact, Session, VaultTree, Work } from "@workbench/contracts";
+import type { Artifact, PkmState, Session, VaultTree, Work } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
 import { pkmClient, type PkmClient, type PkmTarget } from "../../pkm.ts";
 import type { MenuRequest } from "../ContextMenu.tsx";
@@ -12,13 +12,15 @@ import type { State } from "../../state.ts";
 const OPEN_KEY = "workbench.vaultOpen";
 
 /** Dialogs of the PKM layer: attaching the vault, a page from a template. */
-export type PkmDialog = { kind: "vault" } | { kind: "template"; workId: string; parentId: string | null };
+export type PkmDialog = { kind: "vault" } | { kind: "template"; workId: string; parentId: string | null } | { kind: "view"; id: string | null } | { kind: "rules" };
 
 export type PkmApi = {
   api: Api;
   state: State;
   client: PkmClient;
   tree: VaultTree | null;
+  /** Saved views (with counts), rules and where rules put works. */
+  pkmState: PkmState | null;
   /** Vault folders unfolded in the sidebar. */
   unfolded: ReadonlySet<string>;
   toggle: (path: string) => void;
@@ -81,6 +83,7 @@ export function PkmProvider({
 }) {
   const client = useMemo(() => pkmClient(api), [api]);
   const [tree, setTree] = useState<VaultTree | null>(null);
+  const [pkmState, setPkmState] = useState<PkmState | null>(null);
   const [dialog, setDialog] = useState<PkmDialog | null>(null);
   const [unfolded, setUnfolded] = useState<ReadonlySet<string>>(() => {
     try {
@@ -107,6 +110,28 @@ export function PkmProvider({
     };
   }, [client, vaultVersion, live]);
 
+  // Views, rules and placements: again when they change, and a moment after sessions change
+  // (a view of running sessions counts them).
+  const viewsVersion = `${state.pkm.views ?? 0}:${state.pkm.rules ?? 0}:${vaultVersion}`;
+  const sessions = state.sessions;
+  useEffect(() => {
+    if (!live) return;
+    let cancelled = false;
+    const timer = window.setTimeout(
+      () =>
+        void client
+          .state()
+          .then((next) => !cancelled && setPkmState(next))
+          .catch(() => undefined),
+      pkmState ? 400 : 0,
+    );
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, viewsVersion, sessions, live]);
+
   const toggle = useCallback((path: string) => {
     setUnfolded((current) => {
       const next = new Set(current);
@@ -122,6 +147,7 @@ export function PkmProvider({
     state,
     client,
     tree,
+    pkmState,
     unfolded,
     toggle,
     dialog,

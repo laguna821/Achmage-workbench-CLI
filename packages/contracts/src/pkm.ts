@@ -101,6 +101,142 @@ export type CardList = {
   total: number;
   /** Vault folders: notes of subfolders are included. */
   descendants?: boolean;
+  /** A saved view grouped by something other than the date: its groups in order ("값 없음" last). */
+  groups?: { label: string; ids: string[] }[];
+  /** A saved view's query that could not be read. */
+  problems?: string[];
+};
+
+// ── saved views (virtual folders) ───────────────────────────────────────────────────────────
+
+/** A saved query shown as a virtual folder under "보기". No model is ever asked. */
+export type PkmView = {
+  id: string;
+  name: string;
+  /** e.g. `#AI_교육 ."DIKM_단계:"="🔵 I" @last7d`, `engine:codex status:running`. */
+  query: string;
+  /** "date" (default), "engine", "status", "kind", or a front matter key such as `DIKM_단계:`. */
+  groupBy: string | null;
+};
+
+export type ViewTerm = { not: boolean } & (
+  | { kind: "tag"; tag: string }
+  /** value null: the key has a value; "": it has none ("값 없음"). */
+  | { kind: "prop"; key: string; value: string | null }
+  | { kind: "date"; spec: "today" | "yesterday" | "thisweek" | "thismonth" | `last${number}d` }
+  | { kind: "engine"; engine: "claude" | "codex" }
+  | { kind: "status"; status: "running" | "idle" | "error" | "approval" | "unseen" }
+  | { kind: "type"; type: PkmCard["kind"] }
+  | { kind: "text"; text: string }
+);
+
+const STATUS_WORDS: Record<string, Extract<ViewTerm, { kind: "status" }>["status"]> = {
+  running: "running", active: "running", 진행: "running", idle: "idle", 대기: "idle", error: "error", 오류: "error",
+  approval: "approval", attention: "approval", 확인: "approval", unseen: "unseen", new: "unseen", 새답: "unseen",
+};
+const TYPE_WORDS: Record<string, PkmCard["kind"]> = { note: "note", 노트: "note", page: "page", 페이지: "page", session: "session", 세션: "session", work: "work", 작업: "work" };
+
+/** Words of a query: spaces split, double quotes keep spaces (also inside `."key"="value"`). */
+function words(query: string) {
+  const out: string[] = [];
+  let current = "";
+  let quoted = false;
+  for (const character of query) {
+    if (character === '"') quoted = !quoted;
+    if (!quoted && /\s/.test(character)) {
+      if (current) out.push(current);
+      current = "";
+    } else current += character;
+  }
+  if (current) out.push(current);
+  return out;
+}
+
+const unquoteWord = (text: string) => (text.length >= 2 && text.startsWith('"') && text.endsWith('"') ? text.slice(1, -1).replace(/\\"/g, '"') : text);
+
+/**
+ * Read a view query (Notebook Navigator's syntax plus `engine:` and `status:`): `#tag`,
+ * `."key"="value"` (or `."key"` = has a value, `."key"=""` = has none), `@today` `@yesterday`
+ * `@thisweek` `@thismonth` `@last7d`, `engine:codex`, `status:running|idle|error|approval|unseen`,
+ * `kind:note|page|session|work`; other words match titles. `-` in front negates.
+ */
+export function parseViewQuery(query: string): { terms: ViewTerm[]; problems: string[] } {
+  const terms: ViewTerm[] = [];
+  const problems: string[] = [];
+  for (const raw of words(query)) {
+    const not = raw.length > 1 && raw.startsWith("-");
+    const word = not ? raw.slice(1) : raw;
+    if (word.startsWith("#") && word.length > 1) terms.push({ not, kind: "tag", tag: word.slice(1) });
+    else if (word.startsWith(".") && word.length > 1) {
+      const match = /^\.("(?:[^"\\]|\\.)*"|[^=]+)(?:=("(?:[^"\\]|\\.)*"|.*))?$/.exec(word);
+      if (!match) problems.push(word);
+      else terms.push({ not, kind: "prop", key: unquoteWord(match[1]!), value: match[2] === undefined ? null : unquoteWord(match[2]) });
+    } else if (word.startsWith("@")) {
+      const spec = word.slice(1).toLowerCase();
+      if (spec === "today" || spec === "yesterday" || spec === "thisweek" || spec === "thismonth" || /^last\d{1,4}d$/.test(spec)) terms.push({ not, kind: "date", spec: spec as Extract<ViewTerm, { kind: "date" }>["spec"] });
+      else problems.push(word);
+    } else if (/^engine:/i.test(word)) {
+      const engine = word.slice(7).toLowerCase();
+      if (engine === "claude" || engine === "codex") terms.push({ not, kind: "engine", engine });
+      else problems.push(word);
+    } else if (/^status:/i.test(word)) {
+      const status = STATUS_WORDS[word.slice(7).toLowerCase()];
+      if (status) terms.push({ not, kind: "status", status });
+      else problems.push(word);
+    } else if (/^kind:/i.test(word)) {
+      const type = TYPE_WORDS[word.slice(5).toLowerCase()];
+      if (type) terms.push({ not, kind: "type", type });
+      else problems.push(word);
+    } else terms.push({ not, kind: "text", text: unquoteWord(word) });
+  }
+  return { terms, problems };
+}
+
+/** The time range of a date term (`[from, to)`, local days; weeks start on Monday). */
+export function dateRange(spec: Extract<ViewTerm, { kind: "date" }>["spec"], now = Date.now()): [number, number] {
+  const day = new Date(now);
+  day.setHours(0, 0, 0, 0);
+  const today = day.getTime();
+  if (spec === "today") return [today, Infinity];
+  if (spec === "yesterday") return [today - 86_400_000, today];
+  if (spec === "thisweek") return [today - ((day.getDay() + 6) % 7) * 86_400_000, Infinity];
+  if (spec === "thismonth") return [new Date(day.getFullYear(), day.getMonth(), 1).getTime(), Infinity];
+  return [now - Number(spec.slice(4, -1)) * 86_400_000, Infinity];
+}
+
+// ── rules (조건 → 배치) ─────────────────────────────────────────────────────────────────────
+
+/**
+ * One ordered rule for new works; the first that matches places the work. Conditions left empty
+ * match anything. `then.folder` is an app folder path ("강의/2026"); `{disk}` means the name of the
+ * folder the work's folder sits in ("디스크 위치대로").
+ */
+export type PkmRule = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  when: { cwdPrefix: string | null; engine: "claude" | "codex" | null; format: DocFormat | null };
+  then: { folder: string | null; tag: string | null; pin: boolean };
+};
+
+export const DISK_FOLDER = "{disk}";
+
+/** Where a rule put a work (shown on its row: "이 규칙으로 여기 있음"). */
+export type RulePlacement = { ruleId: string; ruleName: string; at: number };
+
+/** One line of "미리보기": what a rule would do to a work. */
+export type RuleChange = {
+  workId: string;
+  title: string;
+  ruleId: string;
+  ruleName: string;
+  /** Folder paths, null = "분류 없음". */
+  from: string | null;
+  to: string | null;
+  tag: string | null;
+  pin: boolean;
+  /** Ticked at first: works not filed yet. */
+  suggested: boolean;
 };
 
 /** A vault note opened read-only. */
@@ -140,6 +276,9 @@ export type PageTemplate = {
 /** What the UI shows of the PKM layer; fetched again when a `pkm.changed` event arrives. */
 export type PkmState = {
   vault: VaultStatus;
+  views: (PkmView & { count: number })[];
+  rules: PkmRule[];
+  placements: Record<string, RulePlacement>;
 };
 
 /** Gateway scopes a `pkm.changed` event names. */

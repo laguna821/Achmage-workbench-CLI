@@ -137,18 +137,19 @@ export function CardListView({ target }: { target: Exclude<PkmTarget, { kind: "n
   const vaultVersion = pkm.state.pkm.vault ?? 0;
   const status = pkm.tree?.status;
 
-  // Cards of app folders and works follow their sessions and documents; a short pause groups changes.
+  // Cards of app folders, works and views follow sessions and documents; a short pause groups changes.
   const { works, sessions, artifacts } = pkm.state;
-  const appVersion = target.kind === "folder" || target.kind === "work" ? `${Object.keys(works).length}:${Object.keys(sessions).length}:${Object.keys(artifacts).length}` : "";
+  const followsApp = target.kind !== "vault";
+  const appVersion = followsApp ? `${Object.keys(works).length}:${Object.keys(sessions).length}:${Object.keys(artifacts).length}` : "";
+  const viewVersion = target.kind === "view" ? `${pkm.state.pkm.views ?? 0}:${pkm.state.pkm.rules ?? 0}` : "";
   const [tick, setTick] = useState(0);
   useEffect(() => {
-    if (target.kind !== "folder" && target.kind !== "work") return;
+    if (!followsApp) return;
     const timer = window.setTimeout(() => setTick((value) => value + 1), 600);
     return () => window.clearTimeout(timer);
-  }, [target.kind, works, sessions, artifacts]);
+  }, [followsApp, works, sessions, artifacts]);
 
   useEffect(() => {
-    if (target.kind === "view") return;
     let cancelled = false;
     setError(null);
     pkm.client
@@ -159,7 +160,7 @@ export function CardListView({ target }: { target: Exclude<PkmTarget, { kind: "n
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, descendants, vaultVersion, tick, appVersion]);
+  }, [key, descendants, vaultVersion, tick, appVersion, viewVersion]);
 
   // Drag a note card with the pointer (HTML drag and drop is unreliable in the desktop webview).
   useEffect(() => {
@@ -219,7 +220,13 @@ export function CardListView({ target }: { target: Exclude<PkmTarget, { kind: "n
     pkm.openMenu({ x, y, title: card.title, items });
   };
 
-  const groups = useMemo(() => groupCards(list?.cards ?? []), [list]);
+  // A view grouped by a key comes with its groups; everything else is grouped by date.
+  const groups = useMemo(() => {
+    if (!list?.groups) return groupCards(list?.cards ?? []);
+    const byKey = new Map(list.cards.map((card) => [`${card.kind}:${card.id}`, card]));
+    return list.groups.map((group) => ({ label: group.label, cards: group.ids.map((id) => byKey.get(id)).filter((card): card is PkmCard => Boolean(card)) }));
+  }, [list]);
+  const view = target.kind === "view" ? pkm.pkmState?.views.find((entry) => entry.id === target.id) : undefined;
   const place: ComposerPlace = target.kind === "work" ? { kind: "work", workId: target.id } : { kind: "new", folderId: target.kind === "folder" ? target.id : null };
   const noun = target.kind === "vault" ? "노트" : target.kind === "folder" ? "작업" : "항목";
 
@@ -233,7 +240,13 @@ export function CardListView({ target }: { target: Exclude<PkmTarget, { kind: "n
             {noun} {list?.total ?? 0}
             {list && list.total > list.cards.length ? ` · 최근 ${list.cards.length}개만` : ""}
           </span>
+          {view ? <code className="pkm-query">{view.query}</code> : null}
           <span className="pkm-head-tools">
+            {view ? (
+              <button type="button" className="ghost-button small" onClick={() => pkm.setDialog({ kind: "view", id: view.id })}>
+                <Icon name="edit" size={14} /> 고치기
+              </button>
+            ) : null}
             {target.kind === "vault" ? (
               <>
                 <label className="check-row pkm-check" title="하위 폴더의 노트도 함께 봅니다">
@@ -253,7 +266,10 @@ export function CardListView({ target }: { target: Exclude<PkmTarget, { kind: "n
       <div className="pkm-scroll">
         <div className="column pkm-cards" role="list" aria-label={`${list?.title ?? ""} 카드`}>
           {error ? <div className="notice notice-error">{error}</div> : null}
-          {list && !list.cards.length ? <div className="empty-hint">{target.kind === "vault" ? "이 폴더에 노트가 없습니다." : target.kind === "folder" ? "이 폴더에 작업이 없습니다." : "아직 세션이나 페이지가 없습니다."}</div> : null}
+          {list?.problems?.length ? <div className="notice notice-info">읽지 못한 조건은 빼고 보입니다: {list.problems.join(" ")}</div> : null}
+          {list && !list.cards.length ? (
+            <div className="empty-hint">{target.kind === "vault" ? "이 폴더에 노트가 없습니다." : target.kind === "folder" ? "이 폴더에 작업이 없습니다." : target.kind === "view" ? "이 보기에 맞는 것이 없습니다." : "아직 세션이나 페이지가 없습니다."}</div>
+          ) : null}
           {groups.map((group) => (
             <section key={group.label} className="pkm-group" aria-label={group.label}>
               <div className="pkm-group-label">{group.label}</div>

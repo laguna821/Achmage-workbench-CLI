@@ -10,6 +10,7 @@ import { Icon, type IconName } from "./Icon.tsx";
 import type { MenuEntry, MenuRequest } from "./ContextMenu.tsx";
 import { UsageCard } from "./UsageCard.tsx";
 import { VaultSection } from "./pkm/VaultSection.tsx";
+import { PlacementMark, ViewsSection } from "./pkm/ViewsSection.tsx";
 
 // The sidebar: where many sessions live. "지금" (waiting for you, working, new replies) on top,
 // then pinned things, then the folder tree of works with their sessions and documents. Rows move by
@@ -389,6 +390,7 @@ export function Sidebar({
       const only = row.sessions.length === 1 ? row.sessions[0] : null;
       trailing = (
         <span className="side-row-trail">
+          <PlacementMark workId={row.work.id} />
           {rowAdd("새 페이지", () => actions.newPage(row.work))}
           {only ? <EngineMark provider={only.provider} size={13} className="side-row-engine" /> : null}
           {attention ? <span className="dot dot-attention" title="확인 필요" /> : busy ? <span className="dot dot-active" title="진행 중" /> : unseen ? <span className="dot dot-new" title="새 답" /> : null}
@@ -609,6 +611,7 @@ export function Sidebar({
             {!rows.length && creatingIn === undefined ? <div className="empty-hint side-empty">아직 작업이 없습니다. 위의 "새 세션"으로 시작하세요.</div> : null}
           </div>
         </section>
+        <ViewsSection openMenu={actions.openMenu} />
         <VaultSection theme={appTheme} openMenu={actions.openMenu} />
       </div>
 

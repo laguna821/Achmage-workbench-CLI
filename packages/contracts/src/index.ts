@@ -41,6 +41,8 @@ export type Work = {
   archivedAt: number | null;
   createdAt: number;
   updatedAt: number;
+  /** Tags a rule (pkm) or the user gave the work; matched by `#tag` in saved views. */
+  tags?: string[];
 };
 
 export type SessionStatus =
@@ -466,6 +468,7 @@ export type UpdateSessionRequest = {
 };
 
 export type UpdateWorkRequest = {
+  tags?: string[];
   title?: string;
   folderId?: string | null;
   activeSessionId?: string | null;

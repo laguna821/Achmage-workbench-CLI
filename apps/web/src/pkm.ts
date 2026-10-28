@@ -1,4 +1,4 @@
-import type { Artifact, CardList, PageTemplate, PkmCard, PkmState, SendResult, VaultFolder, VaultNote, VaultStatus, VaultTree } from "@workbench/contracts";
+import type { Artifact, CardList, PageTemplate, PkmCard, PkmRule, PkmState, PkmView, RuleChange, SendResult, VaultFolder, VaultNote, VaultStatus, VaultTree } from "@workbench/contracts";
 import { readToken, type Api } from "./api.ts";
 
 // The PKM layer as the UI sees it: calls to `/api/pkm/*` and the vault tree as plain rows (kept
@@ -11,7 +11,7 @@ export function pkmClient(api: Api) {
     attach: (path: string) => api.request<VaultStatus>("PUT", "/api/pkm/vault", { path }),
     detach: () => api.request<VaultStatus>("DELETE", "/api/pkm/vault"),
     rescan: () => api.request<VaultStatus>("POST", "/api/pkm/vault/rescan"),
-    cards: (target: Exclude<PkmTarget, { kind: "note" } | { kind: "view" }>, descendants = true) => {
+    cards: (target: Exclude<PkmTarget, { kind: "note" }>, descendants = true) => {
       const params = new URLSearchParams({ kind: target.kind });
       if (target.kind === "vault") {
         params.set("path", target.path);
@@ -20,6 +20,12 @@ export function pkmClient(api: Api) {
       return api.request<CardList>("GET", `/api/pkm/cards?${params}`);
     },
     note: (path: string) => api.request<VaultNote>("GET", `/api/pkm/vault/note?${new URLSearchParams({ path })}`),
+    saveView: (view: Partial<PkmView>) => api.request<PkmView>("PUT", "/api/pkm/views", view),
+    deleteView: (id: string) => api.request<{ ok: boolean }>("DELETE", `/api/pkm/views/${encodeURIComponent(id)}`),
+    previewView: (query: string, groupBy: string | null) => api.request<CardList>("POST", "/api/pkm/views/preview", { query, groupBy }),
+    saveRules: (rules: PkmRule[]) => api.request<PkmRule[]>("PUT", "/api/pkm/rules", { rules }),
+    previewRules: () => api.request<RuleChange[]>("GET", "/api/pkm/rules/preview"),
+    applyRules: (workIds: string[]) => api.request<{ applied: number }>("POST", "/api/pkm/rules/apply", { workIds }),
     templates: (workId: string) => api.request<PageTemplate[]>("GET", `/api/pkm/templates?${new URLSearchParams({ workId })}`),
     pageFromTemplate: (request: { workId: string; templateId: string; title: string; choices: Record<string, string[]>; parentId: string | null }) =>
       api.request<Artifact>("POST", "/api/pkm/pages/from-template", request),

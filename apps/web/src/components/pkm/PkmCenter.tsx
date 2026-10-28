@@ -9,11 +9,11 @@ export function PkmCenter({ target }: { target: PkmTarget }) {
   return <CardListView key={`${target.kind}:${"path" in target ? target.path : target.id}`} target={target} />;
 }
 
-/** The top bar's title for a PKM view. */
-export function pkmTitle(state: State, target: PkmTarget, vaultName: string | null) {
+/** The top bar's title for a PKM view (a saved view's name when it is known). */
+export function pkmTitle(state: State, target: PkmTarget, vaultName: string | null, viewName?: string | null) {
   if (target.kind === "vault") return target.path ? target.path.split("/").pop()! : (vaultName ?? "볼트");
   if (target.kind === "note") return target.path.split("/").pop()!.replace(/\.md$/i, "");
   if (target.kind === "folder") return state.folders[target.id]?.name ?? "폴더";
   if (target.kind === "work") return state.works[target.id]?.title ?? "작업";
-  return "보기";
+  return viewName ?? "보기";
 }

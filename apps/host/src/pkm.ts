@@ -1,7 +1,23 @@
 import { createHash } from "node:crypto";
 import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
-import { PROVIDER_LABEL, type Artifact, type CardList, type PageTemplate, type PkmCard, type PkmScope, type PkmState, type Session, type VaultNote, type Work } from "@workbench/contracts";
+import {
+  PROVIDER_LABEL,
+  parseViewQuery,
+  type Artifact,
+  type CardList,
+  type PageTemplate,
+  type PkmCard,
+  type PkmRule,
+  type PkmScope,
+  type PkmState,
+  type PkmView,
+  type RuleChange,
+  type RulePlacement,
+  type Session,
+  type VaultNote,
+  type Work,
+} from "@workbench/contracts";
 import { WORKBENCH_DIR } from "./artifacts.ts";
 import type { EventBus } from "./bus.ts";
 import { HttpError } from "./errors.ts";
@@ -12,6 +28,9 @@ import { IMAGE_EXTENSIONS, VaultMirror, noteTitle } from "./vault.ts";
 import { VaultNotes, stageOf } from "./vault-notes.ts";
 import { fillTemplate, localStamp, readTemplates, templateChoices, templateFile, yamlValue, type TemplateSource } from "./pages.ts";
 import { exportFileName, headingOf, tidyMessage } from "./export-md.ts";
+import { filterItems, groupItems, kindsFor, sessionStatuses, workEngines, workStatuses, type ViewItem } from "./pkm-views.ts";
+import { cleanRules, placementFor } from "./pkm-rules.ts";
+import type { FrontmatterValue } from "./frontmatter.ts";
 
 // The PKM layer of the gateway (design 워크스테이션-다음설계 §4): the read-only vault mirror and,
 // on top of it, what ties notes to works and sessions. Small state lives in the meta table under
@@ -30,7 +49,13 @@ export const VAULT_TEMPLATES = "90. Settings/91. Templates";
 const safeStem = (name: string, fallback: string) => (name.trim() || fallback).replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").replace(/\.md$/i, "").replace(/\s+/g, " ").slice(0, 80).trim() || fallback;
 
 /** What the centre can list as cards. */
-export type CardTarget = { kind: "vault"; path: string; descendants: boolean } | { kind: "folder"; id: string } | { kind: "work"; id: string };
+export type CardTarget = { kind: "vault"; path: string; descendants: boolean } | { kind: "folder"; id: string } | { kind: "work"; id: string } | { kind: "view"; id: string };
+
+/** Views a first start offers (they can be changed or removed like any other). */
+const DEFAULT_VIEWS: PkmView[] = [
+  { id: "view-notes-week", name: "이번 주 노트", query: "kind:note @last7d", groupBy: "DIKM_단계:" },
+  { id: "view-running", name: "진행 중인 세션", query: "kind:session status:running", groupBy: null },
+];
 
 const CARD_LIMIT = 500;
 
@@ -64,6 +89,11 @@ export class Pkm {
     const saved = store.getMeta("pkm.vault");
     if (saved) this.vault.restore(saved);
     manager.noteHook = (notes, cwd, sessionId) => this.notesForSend(notes, cwd, sessionId);
+    // Rules place new works once their engine or first document is known (never inside the event itself).
+    bus.subscribe((event) => {
+      if (event.type === "session.upserted") this.schedulePlacement(event.session.workId);
+      else if (event.type === "artifact.upserted") this.schedulePlacement(event.artifact.workId);
+    });
   }
 
   protected publish(scope: PkmScope, version = Date.now()) {
@@ -84,7 +114,7 @@ export class Pkm {
   }
 
   state(): PkmState {
-    return { vault: this.vault.status() };
+    return { vault: this.vault.status(), views: this.viewsWithCounts(), rules: this.rules(), placements: this.placements() };
   }
 
   /** Attach a vault folder (or none). Only the path is remembered; the vault itself is never written. */
@@ -147,6 +177,11 @@ export class Pkm {
   cards(target: CardTarget): CardList {
     if (target.kind === "vault") return this.vaultCards(target.path, target.descendants);
     if (target.kind === "folder") return this.folderCards(target.id);
+    if (target.kind === "view") {
+      const view = this.views().find((entry) => entry.id === target.id);
+      if (!view) throw new HttpError(404, "view_missing", "그 보기가 없습니다.");
+      return this.viewCards(view);
+    }
     return this.workCards(target.id);
   }
 
@@ -245,37 +280,240 @@ export class Pkm {
     const work = works.get(workId);
     if (!work) throw new HttpError(404, "work_not_found", "작업을 찾지 못했습니다.");
     const cards: PkmCard[] = [...sessions.values()].filter((session) => session.workId === workId && !session.archivedAt).map((session) => this.sessionCard(session, work));
-    for (const artifact of this.manager.documents.list().filter((entry) => entry.workId === workId)) {
-      let excerpt = "";
-      let tags: string[] = [];
-      let thumb: PkmCard["thumb"] = null;
-      let stage: string | null = null;
-      let title = artifact.name;
-      let date = artifact.updatedAt;
-      let dateKind: PkmCard["dateKind"] = "modified";
-      if (artifact.format === "markdown" || artifact.format === "text") {
-        try {
-          const { yaml, body } = splitFrontmatter(readHead(this.manager.documents.revisionPath(artifact.id, artifact.revision)));
-          const properties = parseFrontmatter(yaml);
-          excerpt = excerptOf(body);
-          tags = noteTags(properties, body);
-          stage = stageOf(properties);
-          title = valuesOf(properties, "title")[0]?.trim() || artifact.name.replace(/\.(md|markdown|txt)$/i, "");
-          const created = noteDate(valuesOf(properties, "date created")[0]);
-          if (created) {
-            date = created;
-            dateKind = "created";
-          }
-          const image = firstImage(body);
-          if (image?.kind === "link") thumb = { page: artifact.id, src: image.target };
-        } catch {
-          // A revision that cannot be read now is listed by its name.
-        }
-      }
-      cards.push({ kind: "page", id: artifact.id, title, excerpt, tags, date, dateKind, thumb, pinned: false, stage, format: artifact.format, workId, where: relative(work.cwd, artifact.path) });
-    }
+    for (const artifact of this.manager.documents.list().filter((entry) => entry.workId === workId)) cards.push(this.pageItem(artifact, work).card);
     cards.sort((a, b) => Number(b.pinned) - Number(a.pinned) || (b.date ?? 0) - (a.date ?? 0));
     return { title: work.title, crumbs: ["작업 공간", ...this.folderTrail(work.folderId), work.title], cards: cards.slice(0, CARD_LIMIT), total: cards.length };
+  }
+
+  private readonly pageCache = new Map<string, { key: string; item: { card: PkmCard; properties: [string, FrontmatterValue][] } }>();
+
+  /** A document of a work as a card, with its front matter (Markdown pages are read once per revision). */
+  private pageItem(artifact: Artifact, work: Work): { card: PkmCard; properties: [string, FrontmatterValue][] } {
+    const key = `${artifact.revision}:${artifact.updatedAt}:${work.cwd}`;
+    const cached = this.pageCache.get(artifact.id);
+    if (cached?.key === key) return cached.item;
+    let excerpt = "";
+    let tags: string[] = [];
+    let thumb: PkmCard["thumb"] = null;
+    let stage: string | null = null;
+    let title = artifact.name;
+    let date = artifact.updatedAt;
+    let dateKind: PkmCard["dateKind"] = "modified";
+    let properties: [string, FrontmatterValue][] = [];
+    if (artifact.format === "markdown" || artifact.format === "text") {
+      try {
+        const { yaml, body } = splitFrontmatter(readHead(this.manager.documents.revisionPath(artifact.id, artifact.revision)));
+        properties = parseFrontmatter(yaml);
+        excerpt = excerptOf(body);
+        tags = noteTags(properties, body);
+        stage = stageOf(properties);
+        title = valuesOf(properties, "title")[0]?.trim() || artifact.name.replace(/\.(md|markdown|txt)$/i, "");
+        const created = noteDate(valuesOf(properties, "date created")[0]);
+        if (created) {
+          date = created;
+          dateKind = "created";
+        }
+        const image = firstImage(body);
+        if (image?.kind === "link") thumb = { page: artifact.id, src: image.target };
+      } catch {
+        // A revision that cannot be read now is listed by its name.
+      }
+    }
+    const item = { card: { kind: "page" as const, id: artifact.id, title, excerpt, tags, date, dateKind, thumb, pinned: false, stage, format: artifact.format, workId: work.id, where: relative(work.cwd, artifact.path) }, properties };
+    this.pageCache.set(artifact.id, { key, item });
+    return item;
+  }
+
+  // ── saved views ──────────────────────────────────────────────────────────────────────────
+
+  views(): PkmView[] {
+    const raw = this.store.getMeta("pkm.views");
+    return raw === null ? DEFAULT_VIEWS : this.readJson<PkmView[]>("pkm.views", []);
+  }
+
+  private viewsWithCounts() {
+    return this.views().map((view) => {
+      try {
+        return { ...view, count: this.viewCards(view).total };
+      } catch {
+        return { ...view, count: 0 };
+      }
+    });
+  }
+
+  /** Add or change a view (by id). */
+  saveView(input: Partial<PkmView>) {
+    const name = String(input.name ?? "").trim().slice(0, 60);
+    const query = String(input.query ?? "").trim().slice(0, 500);
+    if (!name || !query) throw new HttpError(400, "invalid_view", "보기 이름과 조건을 적어 주세요.");
+    const view: PkmView = { id: typeof input.id === "string" && input.id ? input.id : `view-${createHash("sha256").update(`${name}${Date.now()}`).digest("hex").slice(0, 10)}`, name, query, groupBy: typeof input.groupBy === "string" && input.groupBy.trim() ? input.groupBy.trim().slice(0, 80) : null };
+    const views = this.views();
+    const index = views.findIndex((entry) => entry.id === view.id);
+    this.writeJson("pkm.views", index >= 0 ? views.map((entry) => (entry.id === view.id ? view : entry)) : [...views, view]);
+    this.publish("views");
+    return view;
+  }
+
+  deleteView(id: string) {
+    this.writeJson("pkm.views", this.views().filter((view) => view.id !== id));
+    this.publish("views");
+  }
+
+  /** Hidden: archived, in an archived work, or under an archived folder. */
+  private workHidden(work: Work) {
+    if (work.archivedAt) return true;
+    const { folders } = this.manager.view;
+    for (let at = work.folderId; at; at = folders.get(at)?.parentId ?? null) if (folders.get(at)?.archivedAt) return true;
+    return false;
+  }
+
+  /** Everything a view can show, as cards with what its terms look at. */
+  private viewItems(kinds: Set<PkmCard["kind"]>): ViewItem[] {
+    const items: ViewItem[] = [];
+    const { works, sessions } = this.manager.view;
+    const index = this.vault.current;
+    if (kinds.has("note") && index) {
+      const pinned = new Set(this.vault.navigator?.pinned ?? []);
+      const reads = this.noteReads();
+      for (const entry of index.notes.values()) {
+        if (this.vault.isHidden(entry.path)) continue;
+        const meta = this.notes.meta(entry);
+        items.push({ card: this.notes.card(entry, pinned.has(entry.path), reads[entry.path]?.length ?? 0), tags: meta.tags, properties: meta.properties, engines: [], statuses: [] });
+      }
+    }
+    const visible = [...works.values()].filter((work) => !this.workHidden(work));
+    const sessionsOf = (workId: string) => [...sessions.values()].filter((session) => session.workId === workId && !session.archivedAt);
+    if (kinds.has("page")) {
+      const byId = new Map(visible.map((work) => [work.id, work]));
+      for (const artifact of this.manager.documents.list()) {
+        const work = byId.get(artifact.workId);
+        if (!work) continue;
+        const page = this.pageItem(artifact, work);
+        items.push({ card: page.card, tags: [...page.card.tags, ...(work.tags ?? [])], properties: page.properties, engines: [], statuses: [] });
+      }
+    }
+    for (const work of visible) {
+      const own = sessionsOf(work.id);
+      if (kinds.has("session")) for (const session of own) items.push({ card: this.sessionCard(session, work), tags: work.tags ?? [], properties: [], engines: [session.provider], statuses: sessionStatuses(session) });
+      if (kinds.has("work")) items.push({ card: { ...this.workCard(work), tags: work.tags ?? [] }, tags: work.tags ?? [], properties: [], engines: workEngines(own), statuses: workStatuses(own) });
+    }
+    return items;
+  }
+
+  /** A view's cards: newest first; grouped by its key when it has one ("값 없음" for missing values). */
+  viewCards(view: Pick<PkmView, "name" | "query" | "groupBy">): CardList {
+    const { terms, problems } = parseViewQuery(view.query);
+    const matched = filterItems(this.viewItems(kindsFor(terms)), terms);
+    matched.sort((a, b) => (b.card.date ?? 0) - (a.card.date ?? 0) || a.card.title.localeCompare(b.card.title, "ko"));
+    const shown = matched.slice(0, CARD_LIMIT);
+    return {
+      title: view.name,
+      crumbs: ["보기", view.name],
+      cards: shown.map((item) => item.card),
+      total: matched.length,
+      ...(view.groupBy && view.groupBy !== "date" ? { groups: groupItems(shown, view.groupBy) } : {}),
+      ...(problems.length ? { problems } : {}),
+    };
+  }
+
+  // ── rules ────────────────────────────────────────────────────────────────────────────────
+
+  rules(): PkmRule[] {
+    return cleanRules(this.readJson<unknown>("pkm.rules", []));
+  }
+
+  placements(): Record<string, RulePlacement> {
+    return this.readJson<Record<string, RulePlacement>>("pkm.placements", {});
+  }
+
+  /** Save the ordered rules; works made from now on are placed by them. */
+  saveRules(value: unknown) {
+    const rules = cleanRules(value);
+    this.writeJson("pkm.rules", rules);
+    this.store.setMeta("pkm.rules.since", String(Date.now()));
+    this.publish("rules");
+    return rules;
+  }
+
+  private placementInputs(work: Work) {
+    const { sessions } = this.manager.view;
+    return {
+      sessions: [...sessions.values()].filter((session) => session.workId === work.id),
+      documents: this.manager.documents.list().filter((artifact) => artifact.workId === work.id),
+    };
+  }
+
+  /** "미리보기": what the rules would change, work by work (nothing is changed). */
+  previewRules(): RuleChange[] {
+    const rules = this.rules();
+    const changes: RuleChange[] = [];
+    for (const work of this.manager.view.works.values()) {
+      if (this.workHidden(work)) continue;
+      const { sessions, documents } = this.placementInputs(work);
+      const placement = placementFor(rules, work, sessions, documents);
+      if (!placement) continue;
+      const from = this.folderTrail(work.folderId).join("/") || null;
+      const to = placement.folder ?? from;
+      const tag = placement.tag && !(work.tags ?? []).includes(placement.tag) ? placement.tag : null;
+      const pin = placement.pin && !work.pinned;
+      if (to === from && !tag && !pin) continue;
+      changes.push({ workId: work.id, title: work.title, ruleId: placement.rule.id, ruleName: placement.rule.name, from, to, tag, pin, suggested: work.folderId === null });
+    }
+    return changes;
+  }
+
+  /** "적용": place the chosen works by the rules (the user picked them in the preview). */
+  applyRules(workIds: string[]) {
+    let applied = 0;
+    for (const workId of workIds) {
+      const work = this.manager.view.works.get(workId);
+      if (!work || this.workHidden(work)) continue;
+      if (this.place(work)) applied += 1;
+    }
+    return { applied };
+  }
+
+  /** The folder at an app folder path ("강의/2026"), made where missing. */
+  private ensureFolder(path: string) {
+    let parentId: string | null = null;
+    for (const name of path.split("/").map((part) => part.trim()).filter(Boolean)) {
+      const existing = [...this.manager.view.folders.values()].find((folder) => folder.parentId === parentId && folder.name === name && !folder.archivedAt);
+      parentId = existing ? existing.id : this.manager.createFolder(name, parentId).id;
+    }
+    return parentId;
+  }
+
+  /** Put a work where the first matching rule says, and remember which rule did it. */
+  private place(work: Work) {
+    const { sessions, documents } = this.placementInputs(work);
+    const placement = placementFor(this.rules(), work, sessions, documents);
+    if (!placement) return false;
+    const folderId = placement.folder ? this.ensureFolder(placement.folder) : work.folderId;
+    const tags = placement.tag && !(work.tags ?? []).includes(placement.tag) ? [...(work.tags ?? []), placement.tag] : undefined;
+    this.manager.updateWork(work.id, { folderId, ...(placement.pin ? { pinned: true } : {}), ...(tags ? { tags } : {}) });
+    this.writeJson("pkm.placements", { ...this.placements(), [work.id]: { ruleId: placement.rule.id, ruleName: placement.rule.name, at: Date.now() } });
+    this.publish("rules");
+    return true;
+  }
+
+  private readonly pendingPlacement = new Set<string>();
+
+  /** A new work not filed yet: placed once, by the first matching rule, after the event that told us. */
+  private schedulePlacement(workId: string) {
+    if (this.pendingPlacement.has(workId)) return;
+    this.pendingPlacement.add(workId);
+    setTimeout(() => {
+      this.pendingPlacement.delete(workId);
+      const work = this.manager.view.works.get(workId);
+      const since = Number(this.store.getMeta("pkm.rules.since") ?? Infinity);
+      if (!work || work.folderId !== null || this.workHidden(work) || work.createdAt < since || this.placements()[workId]) return;
+      if (!this.rules().some((rule) => rule.enabled)) return;
+      try {
+        this.place(work);
+      } catch {
+        // A rule that cannot be applied now (a folder name the gateway refused) leaves the work where it is.
+      }
+    }, 0);
   }
 
   // ── notes and pictures ───────────────────────────────────────────────────────────────────

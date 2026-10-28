@@ -14,6 +14,10 @@
 //   (choice picked in the picker, the rest byte for byte, Templater kept as text); "+" on a page
 //   makes a subpage shown under it; a session row dropped on a work row makes a "세션 기록" page
 //   there; "페이지로 만들기" on a reply makes a page with its source.
+//   보기·규칙 — a saved view (Notebook Navigator syntax) shows matching notes grouped by DIKM stage
+//   with missing values under "값 없음", an `engine:` view shows that engine's sessions; a rule
+//   "엔진 → 앱 폴더·태그" places a new work by itself (row marked with the rule), and "미리보기 →
+//   적용" moves an existing work; nothing calls a model.
 // Usage: node scripts/pkm-check.ts [outDir] [codex|claude]
 
 import { spawn } from "node:child_process";
@@ -279,7 +283,7 @@ async function flow(provider: Provider) {
     pass("세션 줄을 다른 작업 줄에 끌어 놓으면 그 작업에 세션 기록 페이지", accepting === 1 && recorded, readdirSafe(join(createdWork.cwd, "세션 기록")).join(", "));
 
     // ── "페이지로 만들기" on a reply ─────────────────────────────────────────────────────────
-    await page.locator(".sidebar .row-work", { hasText: createdWork.title }).first().click();
+    await page.locator(`.sidebar [data-row-id="${createdWork.id}"]`).click();
     await page.waitForSelector(".work-view .turn-assistant .markdown", { timeout: 8000 });
     await page.locator(".work-view .turn-assistant").first().hover();
     await page.locator(".work-view .message-page").first().click();
@@ -287,6 +291,79 @@ async function flow(provider: Provider) {
     const madePage = readdirSafe(createdWork.cwd).find((name) => name.endsWith(".md") && readFileSync(join(createdWork.cwd, name), "utf8").includes(`source: workbench://session/${created?.id}#`));
     await shot("09-message-page.png");
     pass("답의 '페이지로 만들기'로 출처가 붙은 새 페이지", Boolean(madePage), madePage ?? "");
+
+    // ── saved views: virtual folders with a query (no model) ─────────────────────────────────
+    await page.waitForSelector(".views-section .view-row");
+    const defaults = await page.locator(".views-section .view-row .side-row-label").allInnerTexts();
+    const makeView = async (name: string, query: string, group: string) => {
+      await page.locator(".views-section .side-tools button[title='새 보기']").click();
+      await page.locator("#view-name").fill(name);
+      await page.locator("#view-query").fill(query);
+      await page.locator("#view-group").selectOption(group);
+      await page.waitForFunction(() => /맞는 것 \d+개/.test(document.querySelector(".view-preview")?.textContent ?? ""), undefined, { timeout: 5000 });
+      const counted = await page.locator(".view-preview").innerText();
+      await page.locator(".view-dialog button[type=submit]").click();
+      // The new view's own cards (not the previous view's, still on screen for a moment).
+      await page.waitForFunction((title) => document.querySelector(".pkm-view .pkm-title")?.textContent === title && Boolean(document.querySelector(".pkm-card")), name, { timeout: 8000 });
+      return counted;
+    };
+    const counted = await makeView(`${label} 정보 단계`, 'kind:note ."DIKM_단계:"="🔵 I"', "");
+    await page.waitForSelector(".pkm-card");
+    const infoTitles = await page.locator(".pkm-card .pkm-card-name").allInnerTexts();
+    pass(
+      `저장한 보기(NN 문법 ."DIKM_단계:"="🔵 I")가 가상 폴더로 맞는 노트를 보임`,
+      defaults.includes("이번 주 노트") && counted.includes("3개") && infoTitles.length === 3 && infoTitles.includes("AI 글쓰기 수업 설계"),
+      `${counted} · ${infoTitles.join(", ")}`,
+    );
+    await makeView(`${label} 단계별`, "kind:note", "DIKM_단계:");
+    await page.waitForSelector(".pkm-group-label");
+    const stageGroups = await page.locator(".pkm-group-label").allInnerTexts();
+    await shot("10-view-groups.png");
+    pass("DIKM 단계로 묶고 값이 없는 노트는 '값 없음'에(추정하지 않음)", stageGroups.at(-1) === "값 없음" && stageGroups.includes("🔵 I") && stageGroups.includes("🟢 D"), stageGroups.join(" · "));
+    await makeView(`${label} 세션`, `engine:${provider} kind:session`, "");
+    await page.waitForSelector(".pkm-card.kind-session");
+    const engines = await page.locator(".pkm-card.kind-session .engine-mark").evaluateAll((marks) => marks.map((mark) => mark.getAttribute("aria-label") ?? mark.getAttribute("data-provider") ?? mark.textContent ?? ""));
+    const sessionCards = await page.locator(".pkm-card.kind-session").count();
+    const expectedSessions = (await snapshot()).sessions.filter((entry) => entry.provider === provider && !entry.archivedAt).length;
+    pass(`engine:${provider} 보기는 그 엔진의 세션만`, sessionCards === expectedSessions && sessionCards > 0, `${sessionCards}/${expectedSessions} ${engines.length}`);
+
+    // ── rules: 조건 → 배치 for new works, and 미리보기 → 적용 for existing ones ─────────────────
+    await page.locator(".views-section .side-tools button[title='보기 메뉴']").click();
+    await page.locator(".context-menu [role=menuitem]", { hasText: "자동 정리 규칙" }).click();
+    await page.waitForSelector(".rules-dialog");
+    await page.locator("#rule-name").fill(`${label} 작업`);
+    await page.locator("#rule-engine").selectOption(provider);
+    await page.locator("#rule-folder").fill(`엔진별/${label}`);
+    await page.locator("#rule-tag").fill(label);
+    await page.locator(".rule-form button", { hasText: "규칙 추가" }).click();
+    await page.locator(".rule-preset").click();
+    await page.waitForFunction(() => document.querySelectorAll(".rule-row").length === 2, undefined, { timeout: 5000 });
+    await shot("11-rules.png");
+    const fresh = await api<Work>("POST", "/api/works", { title: `${label} 새 작업`, cwd: join(worksDir, `${provider}-new`) });
+    await api<Session>("POST", `/api/works/${fresh.id}/sessions`, { provider, purpose: "새" });
+    const placed = await until(async () => {
+      const state = await api<{ works: Work[]; folders: { id: string; name: string; parentId: string | null }[] }>("GET", "/api/snapshot");
+      const moved = state.works.find((entry) => entry.id === fresh.id);
+      const folder = state.folders.find((entry) => entry.id === moved?.folderId);
+      return Boolean(moved?.tags?.includes(label) && folder?.name === label && state.folders.find((entry) => entry.id === folder.parentId)?.name === "엔진별");
+    }, 8000);
+    const mark = await page.locator(`.sidebar [data-row-id="${fresh.id}"] .rule-mark`).getAttribute("title", { timeout: 5000 }).catch(() => "");
+    pass("규칙(엔진 → 앱 폴더·태그)이 새 작업을 스스로 배치하고 줄에 그 규칙을 표시", placed && (mark ?? "").includes(`${label} 작업`), mark ?? "");
+    await page.locator(".rule-preview button", { hasText: "미리보기" }).click();
+    await page.waitForSelector(".change-list li", { timeout: 8000 });
+    const change = page.locator(".change-list li", { hasText: work.title });
+    const listed = await change.count();
+    if (listed) await change.locator("input[type=checkbox]").check();
+    await shot("12-rules-preview.png");
+    await page.locator(".rules-dialog .button.primary", { hasText: "적용" }).click();
+    const applied = await until(async () => {
+      const state = await api<{ works: Work[]; folders: { id: string; name: string }[] }>("GET", "/api/snapshot");
+      return state.folders.find((entry) => entry.id === state.works.find((item) => item.id === work.id)?.folderId)?.name === label;
+    }, 8000);
+    pass("미리보기에서 고른 기존 작업만 '적용'으로 옮김", listed === 1 && applied, `${listed}`);
+    await page.keyboard.press("Escape");
+    // The next flow starts without these rules and views.
+    await api("PUT", "/api/pkm/rules", { rules: [] });
   } catch (error) {
     pass("실행", false, error instanceof Error ? error.message.split("\n")[0]! : String(error));
     await page.screenshot({ path: join(outDir, `${provider}-99-failure.png`) }).catch(() => undefined);

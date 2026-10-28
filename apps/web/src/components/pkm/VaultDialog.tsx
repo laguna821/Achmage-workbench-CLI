@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Icon } from "../Icon.tsx";
 import { usePkm } from "./PkmContext.tsx";
 import { TemplateDialog } from "./TemplateDialog.tsx";
+import { ViewDialog } from "./ViewDialog.tsx";
+import { RulesDialog } from "./RulesDialog.tsx";
 import "../../styles/pkm.css";
 
 /**
@@ -109,6 +111,8 @@ export function VaultDialogHost({ pickFolder }: { pickFolder: (() => Promise<str
   const pkm = usePkm();
   if (pkm.dialog?.kind === "vault") return <VaultDialog pickFolder={pickFolder} />;
   if (pkm.dialog?.kind === "template") return <TemplateDialog workId={pkm.dialog.workId} parentId={pkm.dialog.parentId} />;
+  if (pkm.dialog?.kind === "view") return <ViewDialog id={pkm.dialog.id} />;
+  if (pkm.dialog?.kind === "rules") return <RulesDialog />;
   return null;
 }
 

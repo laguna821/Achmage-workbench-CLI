@@ -716,6 +716,7 @@ export class SessionManager {
     if (patch.folderId !== undefined) next.folderId = patch.folderId ?? null;
     if (patch.sort !== undefined) next.sort = finiteSort(patch.sort);
     if (patch.pinned !== undefined) next.pinned = Boolean(patch.pinned);
+    if (patch.tags !== undefined) next.tags = [...new Set(patch.tags.map((tag) => String(tag).trim().replace(/^#/, "")).filter(Boolean))].slice(0, 20);
     if (patch.archived !== undefined) {
       if (patch.archived && this.busyUnder({ workId })) throw new HttpError(409, "busy_inside", "이 작업에서 진행 중인 세션이 있습니다. 끝나거나 멈춘 뒤에 보관하세요.");
       next.archivedAt = patch.archived ? Date.now() : null;

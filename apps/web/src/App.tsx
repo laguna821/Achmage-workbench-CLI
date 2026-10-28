@@ -941,7 +941,15 @@ export function App() {
     />
   ) : null;
   const title =
-    view.kind === "archive" ? "보관함" : view.kind === "pkm" ? pkmTitle(state, view.target, null) : showStart ? (view.kind === "new" && view.folderId ? "새 작업" : "홈") : work?.title ?? "";
+    view.kind === "archive"
+      ? "보관함"
+      : view.kind === "pkm"
+        ? pkmTitle(state, view.target, pkmHandle.current?.tree?.status.name ?? null, view.target.kind === "view" ? pkmHandle.current?.pkmState?.views.find((entry) => view.target.kind === "view" && entry.id === view.target.id)?.name : null)
+        : showStart
+          ? view.kind === "new" && view.folderId
+            ? "새 작업"
+            : "홈"
+          : (work?.title ?? "");
 
   return (
     <AppearanceContext.Provider value={appearanceApi}>

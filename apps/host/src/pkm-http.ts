@@ -33,7 +33,7 @@ function sendImage(res: ServerResponse, file: string) {
 function cardTarget(url: URL): CardTarget {
   const kind = url.searchParams.get("kind");
   if (kind === "vault") return { kind, path: url.searchParams.get("path") ?? "", descendants: url.searchParams.get("descendants") !== "0" };
-  if (kind === "folder" || kind === "work") return { kind, id: url.searchParams.get("id") ?? "" };
+  if (kind === "folder" || kind === "work" || kind === "view") return { kind, id: url.searchParams.get("id") ?? "" };
   throw new HttpError(400, "bad_target", "무엇의 카드를 볼지 정해 주세요.");
 }
 
@@ -58,6 +58,27 @@ export async function handlePkm(pkm: Pkm, req: IncomingMessage, res: ServerRespo
   if (method === "GET" && path === "/vault/image") return (sendImage(res, pkm.vaultImage(query("path"))), true);
   if (method === "GET" && path === "/page-image") return (sendImage(res, pkm.pageImage(query("artifact"), query("src"))), true);
   if (method === "GET" && path === "/templates") return (sendJson(res, 200, pkm.templates(query("workId"))), true);
+  if (method === "PUT" && path === "/views") {
+    const body = await readJson(req);
+    return (sendJson(res, 200, pkm.saveView(body)), true);
+  }
+  if (method === "DELETE" && path.startsWith("/views/")) {
+    pkm.deleteView(decodeURIComponent(path.slice("/views/".length)));
+    return (sendJson(res, 200, { ok: true }), true);
+  }
+  if (method === "POST" && path === "/views/preview") {
+    const body = await readJson(req);
+    return (sendJson(res, 200, pkm.viewCards({ name: "미리보기", query: String(body.query ?? ""), groupBy: typeof body.groupBy === "string" ? body.groupBy : null })), true);
+  }
+  if (method === "PUT" && path === "/rules") {
+    const body = await readJson(req);
+    return (sendJson(res, 200, pkm.saveRules(body.rules)), true);
+  }
+  if (method === "GET" && path === "/rules/preview") return (sendJson(res, 200, pkm.previewRules()), true);
+  if (method === "POST" && path === "/rules/apply") {
+    const body = await readJson(req);
+    return (sendJson(res, 200, pkm.applyRules(Array.isArray(body.workIds) ? body.workIds.filter((id): id is string => typeof id === "string") : [])), true);
+  }
   if (method === "POST" && path.startsWith("/pages/")) {
     const body = await readJson(req);
     const text = (name: string) => (typeof body[name] === "string" ? (body[name] as string) : "");
