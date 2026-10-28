@@ -1,0 +1,151 @@
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import type { ApprovalDecision, ProviderStatus, Session, Work } from "@workbench/contracts";
+import { EventBus } from "./bus.ts";
+import { Pkm } from "./pkm.ts";
+import { SessionManager } from "./sessions.ts";
+import { Store } from "./store.ts";
+import { emptyStatus, type AdapterSink, type ProviderAdapter } from "./providers/types.ts";
+import { makeFixtureVault, put } from "./vault-fixture.ts";
+
+// The PKM layer on a fixture vault in a temporary folder (the user's vault is never touched).
+
+/** An engine that keeps what it was sent and answers at once. */
+class Engine implements ProviderAdapter {
+  readonly provider: "claude" | "codex";
+  readonly texts: string[] = [];
+  private readonly sink: () => AdapterSink;
+  constructor(provider: "claude" | "codex", sink: () => AdapterSink) {
+    this.provider = provider;
+    this.sink = sink;
+  }
+  async init() {}
+  status(): ProviderStatus {
+    return emptyStatus(this.provider);
+  }
+  async refreshStatus() {
+    return this.status();
+  }
+  async login() {
+    return { url: null, message: "" };
+  }
+  async send(session: Session, _work: Work, text: string, turnKey: string) {
+    this.texts.push(text);
+    const sink = this.sink();
+    sink.upsertItem(session.id, { kind: "assistant", id: `a:${turnKey}`, text: "답", streaming: false, at: Date.now() });
+    sink.upsertItem(session.id, { kind: "turnEnd", id: `end:${turnKey}`, status: "completed", durationMs: 1, at: Date.now() });
+    sink.updateSession(session.id, { status: "idle" });
+  }
+  async interrupt() {}
+  async answerApproval(_session: Session, _itemId: string, _decision: ApprovalDecision) {
+    return false;
+  }
+  async shutdown() {}
+}
+
+const dirs: string[] = [];
+afterEach(() => {
+  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+
+function files(root: string) {
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else out.push(`${full}:${statSync(full).mtimeMs}:${statSync(full).size}`);
+    }
+  };
+  walk(root);
+  return out.sort();
+}
+
+export function setup() {
+  const dir = mkdtempSync(join(tmpdir(), "wb-pkm-"));
+  dirs.push(dir);
+  const vault = makeFixtureVault(join(dir, "vault"));
+  put(
+    vault,
+    "20. Information (I)/수업 설계.md",
+    ["---", "title: 수업 설계", '"DIKM_단계:":', "  - 🔵 I", "tags: [AI_교육]", "date created: 2026-10-01", "---", "", "![[pic.png]]", "첫 문단은 [[a|에이 노트]]와 [[없는 노트]]를 잇는다.", ""].join("\n"),
+  );
+  const store = new Store(join(dir, "state.sqlite"));
+  const bus = new EventBus();
+  const manager = new SessionManager(store, bus, { hostId: "h", hostLabel: "노트북", managedWorksDir: join(dir, "works") });
+  const claude = new Engine("claude", () => manager.sink);
+  const codex = new Engine("codex", () => manager.sink);
+  manager.registerAdapter(claude);
+  manager.registerAdapter(codex);
+  const pkm = new Pkm(store, bus, manager, { vaultDebounceMs: 30 });
+  pkm.attachVault(vault);
+  return { dir, vault, store, bus, manager, pkm, engines: { claude, codex } };
+}
+
+describe("card lists", () => {
+  it("lists a vault folder's notes (and its subfolders') with title, excerpt, tags, date, picture; pinned first", () => {
+    const { pkm } = setup();
+    const list = pkm.cards({ kind: "vault", path: "20. Information (I)", descendants: true });
+    // Newest first: the two notes written just now, then the one created on 2026-10-01.
+    expect(list.cards.map((card) => card.id).sort()).toEqual(["20. Information (I)/201. Topics/t1.md", "20. Information (I)/x.md", "20. Information (I)/수업 설계.md"]);
+    expect(list.cards.at(-1)!.id).toBe("20. Information (I)/수업 설계.md");
+    const card = list.cards.find((entry) => entry.id.endsWith("수업 설계.md"))!;
+    expect(card).toMatchObject({ title: "수업 설계", stage: "🔵 I", tags: ["AI_교육"], dateKind: "created", thumb: { vault: "attachments/pic.png" } });
+    expect(card.excerpt).toBe("첫 문단은 에이 노트와 없는 노트를 잇는다.");
+    expect(pkm.cards({ kind: "vault", path: "20. Information (I)", descendants: false }).cards).toHaveLength(2);
+    const inbox = pkm.cards({ kind: "vault", path: "01. Inbox", descendants: false });
+    expect(inbox.cards[0]!.pinned).toBe(true);
+    expect(() => pkm.cards({ kind: "vault", path: "90. Settings", descendants: true })).toThrow();
+  });
+
+  it("lists a work's sessions and pages, and an app folder's works", () => {
+    const { pkm, manager } = setup();
+    const folder = manager.createFolder("강의", null);
+    const work = manager.createWork({ title: "1주차", folderId: folder.id });
+    manager.createSession(work.id, { provider: "claude", purpose: "수업 계획" });
+    manager.createPage(work.id, "읽을거리");
+    const cards = pkm.cards({ kind: "work", id: work.id }).cards;
+    expect(cards.map((card) => card.kind).sort()).toEqual(["page", "session"]);
+    expect(pkm.cards({ kind: "folder", id: folder.id }).cards.map((card) => card.title)).toEqual(["1주차"]);
+  });
+});
+
+describe("vault notes", () => {
+  it("opens a note read-only with its properties as spelled and its links and pictures resolved", () => {
+    const { pkm } = setup();
+    const note = pkm.note("20. Information (I)/수업 설계.md");
+    expect(note.properties.map(([key]) => key)).toEqual(["title", "DIKM_단계:", "tags", "date created"]);
+    expect(note.links).toEqual({ a: "01. Inbox/a.md", "없는 노트": null });
+    expect(note.embeds).toEqual({ "pic.png": "attachments/pic.png" });
+    expect(() => pkm.note("90. Settings/91. Templates/tpl.md")).toThrow();
+    expect(() => pkm.vaultImage("../state.sqlite")).toThrow();
+    expect(() => pkm.vaultImage("01. Inbox/a.md")).toThrow();
+  });
+
+  it("gives attached notes to the engine as read-only copies in the work folder (both engines), never writing the vault", async () => {
+    const { pkm, manager, vault, engines } = setup();
+    const before = files(vault);
+    for (const provider of ["claude", "codex"] as const) {
+      const work = manager.createWork({ title: provider });
+      const session = manager.createSession(work.id, { provider });
+      await manager.send(session.id, `r-${provider}`, "이 노트를 정리해 줘", [], null, null, "auto", ["20. Information (I)/수업 설계.md"]);
+      const text = engines[provider].texts.at(-1)!;
+      expect(text).toContain("[볼트 노트 · 읽기 전용]");
+      expect(text).toContain("「수업 설계」 (20. Information (I)/수업 설계.md)");
+      const copy = /읽기 전용 사본: ([^\n]+)/.exec(text)![1]!.trim();
+      const full = join(work.cwd, copy);
+      expect(readFileSync(full)).toEqual(readFileSync(join(vault, "20. Information (I)/수업 설계.md")));
+      expect(statSync(full).mode & 0o222).toBe(0);
+      const request = manager.items(session.id).items.find((item) => item.kind === "user");
+      expect(request?.kind === "user" && request.notes).toEqual([{ path: "20. Information (I)/수업 설계.md", title: "수업 설계" }]);
+    }
+    expect(pkm.note("20. Information (I)/수업 설계.md").sessions).toBe(2);
+    expect(files(vault)).toEqual(before);
+    const work = manager.createWork({ title: "없음" });
+    const session = manager.createSession(work.id, { provider: "claude" });
+    await expect(manager.send(session.id, "r-missing", "x", [], null, null, "auto", ["../outside.md"])).rejects.toThrow();
+    expect(existsSync(join(vault, "..", "outside.md"))).toBe(false);
+  });
+});

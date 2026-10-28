@@ -181,6 +181,9 @@ function plain(text: string) {
     .trim();
 }
 
+/** Vault notes a request reads (pkm.ts): the words for the engine and what the conversation shows. */
+export type NoteHook = (notes: string[], cwd: string, sessionId: string) => { prompt: string; refs: { path: string; title: string }[] };
+
 /** A request steered into a running turn, kept until the session's next own turn starts. */
 type Steered = { requestId: string; text: string; refs: DocRef[]; item: Extract<TranscriptItem, { kind: "user" }> | null; dropped: boolean };
 
@@ -198,6 +201,8 @@ export class SessionManager {
   /** The new document each running request asked for. */
   private readonly creating = new Map<string, PendingCreate>();
   readonly documents: Documents;
+  /** Set by the PKM layer: vault notes attached to a request become read-only references. */
+  noteHook: NoteHook | null = null;
   private readonly store: Store;
   private readonly bus: EventBus;
   private readonly options: ManagerOptions;
@@ -386,7 +391,7 @@ export class SessionManager {
       const next = session?.queued.find((entry) => !entry.held);
       if (!session || session.status !== "idle" || !next) return;
       this.saveSession({ ...session, queued: session.queued.filter((entry) => entry !== next) });
-      void this.send(sessionId, next.id, next.text, next.refs, null, next.create).catch((error: unknown) => {
+      void this.send(sessionId, next.id, next.text, next.refs, null, next.create, "auto", next.notes ?? []).catch((error: unknown) => {
         this.sink.upsertItem(sessionId, {
           kind: "notice",
           id: `queue-failed:${next.id}`,
@@ -423,7 +428,7 @@ export class SessionManager {
     const entry = session.queued.find((item) => item.id === queuedId);
     if (!entry) throw new HttpError(404, "queued_not_found", "보낼 예정인 요청이 없습니다.");
     this.saveSession({ ...session, queued: session.queued.filter((item) => item.id !== queuedId) });
-    return this.send(sessionId, entry.id, entry.text, entry.refs, null, entry.create, "steer");
+    return this.send(sessionId, entry.id, entry.text, entry.refs, null, entry.create, "steer", entry.notes ?? []);
   }
 
   snapshot(): Snapshot {
@@ -847,12 +852,15 @@ export class SessionManager {
     from: { sessionId: string; label: string } | null = null,
     create: CreateTarget | null = null,
     mode: "auto" | "steer" | "queue" = "auto",
+    notes: string[] = [],
   ): Promise<SendResult> {
     const session = this.requireSession(sessionId);
     const trimmed = text.trim();
     if (!requestId) throw new HttpError(400, "missing_request_id", "requestId가 필요합니다.");
     if (!trimmed) throw new HttpError(400, "empty_message", "보낼 내용이 없습니다.");
-    const fingerprint = hashText(refs.length || create ? `${trimmed}\u0000${JSON.stringify(refs)}\u0000${JSON.stringify(create)}` : trimmed);
+    const fingerprint = hashText(
+      refs.length || create || notes.length ? `${trimmed}\u0000${JSON.stringify(refs)}\u0000${JSON.stringify(create)}${notes.length ? `\u0000${JSON.stringify(notes)}` : ""}` : trimmed,
+    );
     const seen = this.store.findRequest(requestId);
     if (seen) {
       if (seen.sessionId !== sessionId || seen.textHash !== fingerprint) {
@@ -879,7 +887,8 @@ export class SessionManager {
         const entry: Steered = { requestId, text: trimmed, refs, item: null, dropped: false };
         const steering = this.steering.get(sessionId) ?? new Map<string, Steered>();
         this.steering.set(sessionId, steering.set(requestId, entry));
-        const steered = await adapter.steer!(session, work, this.engineText(trimmed, pinned, work.cwd, null), requestId).catch(() => false);
+        const read = notes.length && this.noteHook ? this.noteHook(notes, work.cwd, sessionId) : null;
+        const steered = await adapter.steer!(session, work, this.engineText(trimmed, pinned, work.cwd, null, null, read?.prompt), requestId).catch(() => false);
         if (steered) {
           this.store.saveRequest(requestId, sessionId, fingerprint);
           entry.item = {
@@ -889,6 +898,7 @@ export class SessionManager {
             at: Date.now(),
             steered: true,
             ...(refs.length ? { refs: refs.map((ref) => this.documents.summary(ref)) } : {}),
+            ...(read?.refs.length ? { notes: read.refs } : {}),
           };
           this.sink.upsertItem(sessionId, entry.item);
           if (entry.dropped) this.requeueDropped(sessionId, [entry]);
@@ -898,7 +908,7 @@ export class SessionManager {
       }
       const current = this.requireSession(sessionId);
       if (current.status !== "idle" && current.status !== "error") {
-        const waiting: QueuedMessage = { id: requestId, text: trimmed, refs, create, at: Date.now() };
+        const waiting: QueuedMessage = { id: requestId, text: trimmed, refs, create, at: Date.now(), ...(notes.length ? { notes } : {}) };
         this.saveSession({ ...current, queued: [...current.queued, waiting] });
         return { duplicate: false, delivery: "queued" };
       }
@@ -916,14 +926,16 @@ export class SessionManager {
       created = { requestId, path, target: create, sources: refs.map((ref) => ({ artifactId: ref.artifactId, revision: ref.revision })) };
       this.creating.set(sessionId, created);
     }
+    const read = notes.length && this.noteHook ? this.noteHook(notes, work.cwd, sessionId) : null;
     this.store.saveRequest(requestId, sessionId, fingerprint);
-    const engineText = this.engineText(trimmed, prepared, work.cwd, from, created);
+    const engineText = this.engineText(trimmed, prepared, work.cwd, from, created, read?.prompt);
     this.sink.upsertItem(sessionId, {
       kind: "user",
       id: `user:${requestId}`,
       text: trimmed,
       at: Date.now(),
       ...(refs.length ? { refs: refs.map((ref) => this.documents.summary(ref)) } : {}),
+      ...(read?.refs.length ? { notes: read.refs } : {}),
       ...(from ? { from } : {}),
       ...(created ? { create: { format: created.target.format, name: basename(created.path), path: created.path } } : {}),
     });
@@ -950,8 +962,10 @@ export class SessionManager {
     cwd: string,
     from: { sessionId: string; label: string } | null,
     created: PendingCreate | null = null,
+    notesPrompt: string | null = null,
   ) {
     const parts: string[] = [];
+    if (notesPrompt) parts.push(notesPrompt);
     if (from) parts.push(`[다른 세션에서 온 요청] 보낸 곳: ${from.label}. 이 대화에 답하면 보낸 곳으로 전달됩니다.`);
     if (prepared.length) {
       parts.push("[Achmage Workbench] 이 요청에는 문서가 고정된 판으로 첨부되어 있습니다.");
@@ -1455,6 +1469,11 @@ export class SessionManager {
     const work = this.works.get(workId);
     if (!work) throw new HttpError(404, "work_not_found", "작업을 찾지 못했습니다.");
     return work;
+  }
+
+  /** Folders, works and sessions as they are now, for feature modules (pkm.ts); not to be changed. */
+  get view(): { folders: ReadonlyMap<string, Folder>; works: ReadonlyMap<string, Work>; sessions: ReadonlyMap<string, Session> } {
+    return { folders: this.folders, works: this.works, sessions: this.sessions };
   }
 
   private requireSession(sessionId: string) {

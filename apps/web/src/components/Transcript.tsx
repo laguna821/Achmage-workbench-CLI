@@ -7,6 +7,7 @@ import { FileCard, HandoffCard, ProposalCard, RefChips, useDocs } from "./DocCar
 import { CREATE_LABEL } from "@workbench/contracts";
 import { Icon, type IconName } from "./Icon.tsx";
 import { diagramComponents } from "./Diagram.tsx";
+import { NoteChips } from "./pkm/NoteChips.tsx";
 
 const DRAWN = diagramComponents();
 const STREAMING = diagramComponents(true);
@@ -575,6 +576,7 @@ export function Transcript({
                   ) : null}
                   <RequestText text={turn.user.text} />
                   {turn.user.refs?.length ? <RefChips refs={turn.user.refs} /> : null}
+                  {turn.user.notes?.length ? <NoteChips notes={turn.user.notes} /> : null}
                   {turn.user.create ? (
                     <div className="ref-chips">
                       <span className="ref-chip create-chip" title={turn.user.create.path}>

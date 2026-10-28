@@ -331,6 +331,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
               null,
               parseCreate(body.create),
               body.mode === "steer" || body.mode === "queue" ? body.mode : "auto",
+              Array.isArray(body.notes) ? body.notes.filter((note): note is string => typeof note === "string").slice(0, 20) : [],
             ),
           );
         }

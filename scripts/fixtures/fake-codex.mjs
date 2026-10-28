@@ -115,6 +115,12 @@ async function runTurn(threadId, thread, turnId, text) {
   notify("item/started", { threadId, turnId, item: { type: "agentMessage", id: itemId, text: "", phase: null, memoryCitation: null } });
   const lines = text.includes("길게") ? 160 : text.includes("도식") ? 14 : 6;
   let full = "";
+  // Vault notes attached as read-only references: name the copies, as an engine reading them would.
+  const notes = [...text.matchAll(/읽기 전용 사본: ([^\n]+)/g)].map((match) => match[1].trim());
+  if (notes.length) {
+    full = `받은 노트 사본: ${notes.join(" | ")}\n\n`;
+    notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: full });
+  }
   for (let index = 0; index < lines && thread.turn?.id === turnId && !thread.turn.interrupted; index += 1) {
     // Like Codex, a steered request is taken at the next step (here every 10 lines): it is
     // recorded as a user message, this message ends and a new one starts.

@@ -8,6 +8,7 @@
 // What a request says decides what the fake does:
 //   "길게"  a long answer (about 8 s)      "명령"  runs `ls -la` (asks first in "default" mode)
 //   "압축" or "/compact"  compacts         anything else: a short answer
+// Vault notes attached to a request are named back ("받은 노트 사본: …").
 
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
@@ -111,10 +112,13 @@ async function runTurn(text) {
   }
   if (!(text.trim() === "/compact")) {
     const steer = text.startsWith("[steer]") ? `이어서 받은 요청을 반영합니다: ${text.slice(7)}\n\n` : "";
+    // Vault notes attached as read-only references: name the copies, as an engine reading them would.
+    const notes = [...text.matchAll(/읽기 전용 사본: ([^\n]+)/g)].map((match) => match[1].trim());
     const long = text.includes("길게");
     const lines = long ? 160 : 6;
     const chunks = [];
     if (steer) chunks.push({ text: steer, wait: 30 });
+    if (notes.length) chunks.push({ text: `받은 노트 사본: ${notes.join(" | ")}\n\n`, wait: 30 });
     if (text.includes("도식")) {
       // A Mermaid mind map, sent in pieces like any reply.
       for (const piece of "여기 마인드맵입니다.\n\n```mermaid\nmindmap\n  root((Achmage))\n    대화\n      끼어들기\n      끝나면 보내기\n    문서\n      워드\n      한글\n    도식\n      Pele\n```\n".match(/[^\n]*\n/g)) chunks.push({ text: piece, wait: 30 });

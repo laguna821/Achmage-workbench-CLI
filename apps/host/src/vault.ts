@@ -181,6 +181,8 @@ export type VaultIndex = {
   notes: Map<string, NoteEntry>;
   /** Image files by lower-case name, for `![[image.png]]` embeds (Obsidian resolves them by name). */
   images: Map<string, string>;
+  /** Every image file (vault-relative), for `![](path)` links. */
+  imagePaths: Set<string>;
   /** Folders hidden by Notebook Navigator (with everything below them). */
   hidden: Set<string>;
   /** A short fingerprint of what was found, to tell a real change from a touch. */
@@ -192,6 +194,7 @@ export function scanVault(root: string, navigator: NavigatorLook | null): VaultI
   const folders = new Map<string, FolderEntry>();
   const notes = new Map<string, NoteEntry>();
   const images = new Map<string, string>();
+  const imagePaths = new Set<string>();
   const hidden = new Set<string>();
   const hiddenNames = navigator?.hiddenFileNames ?? [];
   let seen = 0;
@@ -223,6 +226,7 @@ export function scanVault(root: string, navigator: NavigatorLook | null): VaultI
       const ext = lower.slice(lower.lastIndexOf("."));
       if (IMAGE_EXTENSIONS.has(ext)) {
         if (!images.has(lower)) images.set(lower, rel);
+        imagePaths.add(rel);
         continue;
       }
       if (!NOTE_EXTENSIONS.has(ext) || hiddenBy(hiddenNames, entry.name)) continue;
@@ -239,7 +243,7 @@ export function scanVault(root: string, navigator: NavigatorLook | null): VaultI
     mix(`[${path}]`);
   };
   walk(root, "", null, false);
-  return { root, folders, notes, images, hidden, signature: `${folders.size}:${notes.size}:${signature}` };
+  return { root, folders, notes, images, imagePaths, hidden, signature: `${folders.size}:${notes.size}:${signature}` };
 }
 
 // ── the tree the sidebar draws ─────────────────────────────────────────────────────────────

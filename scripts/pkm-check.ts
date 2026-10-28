@@ -5,6 +5,11 @@
 //   볼트 거울 — the suggested vault attaches from the dialog; folders wear Notebook Navigator colours
 //   and the add-on's group borders; counts read "현재 · 하위"; a note added on disk shows up; the
 //   vault's bytes are the same at the end.
+//   카드 목록 — a vault folder opens as cards (title, excerpt, tag pills in Notebook Navigator colours,
+//   date, thumbnail, pinned first); a card opens the note read-only with its properties and
+//   "Obsidian에서 열기" (obsidian://open?path=); a note card dragged onto the input goes with a new
+//   session's request as a read-only reference (the engine names the copy it got, the copy is
+//   in the work folder, read-only, with the vault's bytes); a work opens as cards too.
 // Usage: node scripts/pkm-check.ts [outDir] [codex|claude]
 
 import { spawn } from "node:child_process";
@@ -13,7 +18,8 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { chromium, type Page } from "playwright-core";
-import type { Provider, Session, VaultTree, Work } from "@workbench/contracts";
+import { readFileSync } from "node:fs";
+import type { Provider, Session, TranscriptItem, VaultTree, Work } from "@workbench/contracts";
 import { makePkmVault } from "./fixtures/pkm-vault.ts";
 
 const outDir = process.argv[2] ?? join(tmpdir(), "wb-pkm-check");
@@ -66,6 +72,8 @@ const api = async <T>(method: string, path: string, body?: unknown): Promise<T> 
   const response = await fetch(`${ready.url}${path}`, { method, headers: { authorization: `Bearer ${ready.token}`, "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   return (await response.json()) as T;
 };
+const snapshot = () => api<{ works: Work[]; sessions: Session[] }>("GET", "/api/snapshot");
+const items = async (id: string) => (await api<{ items: TranscriptItem[] }>("GET", `/api/sessions/${id}/items`)).items;
 const until = async (what: () => Promise<boolean>, timeout = 15_000) => {
   const end = Date.now() + timeout;
   while (Date.now() < end) {
@@ -118,7 +126,16 @@ async function flow(provider: Provider) {
   const shot = (name: string) => page.screenshot({ path: join(outDir, `${provider}-${name}`) });
   const pass = (step: string, ok: boolean, detail = "") => check(`[${label}] ${step}`, ok, detail);
   try {
-    await page.addInitScript((id) => localStorage.setItem("workbench.lastWork", id), work.id);
+    await page.addInitScript((id) => {
+      localStorage.setItem("workbench.lastWork", id);
+      // Record links the app opens (obsidian://) instead of leaving the page.
+      const opened: string[] = [];
+      (window as unknown as { __opened: string[] }).__opened = opened;
+      window.open = ((url?: string | URL) => {
+        opened.push(String(url));
+        return null;
+      }) as typeof window.open;
+    }, work.id);
     await page.goto(`${ready.url}/?token=${ready.token}`);
     await page.waitForSelector(".sidebar .vault-section");
     await vaultSteps(page, pass, shot);
@@ -130,6 +147,79 @@ async function flow(provider: Provider) {
     ownWrites.add(name);
     const followed = await until(async () => (await row(page, "01. Inbox").locator(".vault-count").innerText()).trim() !== before, 8000);
     pass("디스크에 생긴 노트를 지켜보다가 개수에 반영", followed, `${before} → ${(await row(page, "01. Inbox").locator(".vault-count").innerText()).trim()}`);
+
+    // ── a vault folder as cards ─────────────────────────────────────────────────────────────
+    await row(page, "20. Information (I)").click();
+    await page.waitForSelector(".pkm-card", { timeout: 10_000 });
+    const pinnedCard = page.locator(".pkm-card").first();
+    await page.waitForFunction(() => Boolean(document.querySelector<HTMLImageElement>(".pkm-card-thumb img")?.naturalWidth), undefined, { timeout: 8000 });
+    const first = await pinnedCard.innerText();
+    const groupsShown = await page.locator(".pkm-group-label").allInnerTexts();
+    const tagColor = await pinnedCard.locator(".pkm-tag", { hasText: "AI_교육" }).evaluate((element) => getComputedStyle(element).getPropertyValue("--tag-color").trim());
+    await shot("03-cards.png");
+    pass(
+      "볼트 폴더 카드: 제목·발췌·태그 알약(NN 색)·날짜·썸네일, 고정 먼저",
+      (await page.locator(".pkm-card").count()) === 3 && groupsShown[0] === "고정" && first.includes("AI 글쓰기 수업 설계") && first.includes("수업 첫 주에는") && first.includes("🔵 I") && tagColor === "#4a70b7",
+      `${await page.locator(".pkm-card").count()}장 · ${groupsShown.join(",")} · 태그색 ${tagColor}`,
+    );
+
+    // ── a card opens the note read-only, with "Obsidian에서 열기" ───────────────────────────
+    await pinnedCard.click();
+    await page.waitForSelector(".pkm-note-body", { timeout: 10_000 });
+    await page.waitForFunction(() => Boolean(document.querySelector<HTMLImageElement>(".pkm-note-body img")?.naturalWidth), undefined, { timeout: 8000 });
+    const keys = await page.locator(".pkm-prop dt").allInnerTexts();
+    await page.locator(".pkm-obsidian").click();
+    const opened = await page.evaluate(() => (window as unknown as { __opened: string[] }).__opened.at(-1) ?? "");
+    const expected = `obsidian://open?path=${encodeURIComponent(`${vault}/20. Information (I)/201. 주제별/AI 글쓰기 수업 설계.md`)}`;
+    await shot("04-note.png");
+    pass("노트를 읽기 전용으로 열고(속성 키 글자 그대로) Obsidian에서 열기", keys.includes("DIKM_단계:") && (await page.locator(".pkm-note-view .vault-readonly").count()) === 1 && opened === expected, `${keys.join("|")} · ${opened.slice(0, 60)}…`);
+
+    // ── a note card dragged onto the input: a new session reads it as a read-only reference ──
+    await row(page, "20. Information (I)").click();
+    await page.waitForSelector(".pkm-card");
+    const card = page.locator(".pkm-card", { hasText: "용어 정리" });
+    const from = (await card.boundingBox())!;
+    const to = (await page.locator(".pkm-composer .composer").boundingBox())!;
+    await page.mouse.move(from.x + 40, from.y + 20);
+    await page.mouse.down();
+    await page.mouse.move(from.x + 60, from.y + 60, { steps: 4 });
+    await page.mouse.move(to.x + 120, to.y + 30, { steps: 8 });
+    const dropping = await page.locator(".pkm-composer.dropping").count();
+    await shot("05-drag.png");
+    await page.mouse.up();
+    const chip = await page.locator(".pkm-composer .note-chip").innerText().catch(() => "");
+    pass("노트 카드를 입력창으로 끌어 놓으면 읽기 전용으로 붙음", dropping === 1 && chip.includes("용어 정리"), chip);
+    await page.locator(`.pkm-composer .engine-tab:has-text("${label}")`).click();
+    const before2 = new Set((await snapshot()).sessions.map((entry) => entry.id));
+    await page.locator(".pkm-composer .composer-input").fill("이 노트로 용어를 정리해 줘");
+    await page.locator(".pkm-composer .composer-input").press("Enter");
+    await page.waitForSelector(".work-view .turn-request", { timeout: 10_000 });
+    let created: Session | undefined;
+    await until(async () => {
+      created = (await snapshot()).sessions.find((entry) => !before2.has(entry.id));
+      return Boolean(created && created.status === "idle" && created.previewAt);
+    }, 20_000);
+    const createdWork = (await snapshot()).works.find((entry) => entry.id === created?.workId)!;
+    const log = created ? await items(created.id) : [];
+    const request = log.find((item): item is Extract<TranscriptItem, { kind: "user" }> => item.kind === "user");
+    const reply = log.filter((item) => item.kind === "assistant").map((item) => (item.kind === "assistant" ? item.text : "")).join("\n");
+    const copyName = /받은 노트 사본: ([^\n|]+)/.exec(reply)?.[1]?.trim() ?? "";
+    const copy = copyName ? join(createdWork.cwd, copyName) : "";
+    const sameBytes = copy ? readFileSync(copy).equals(readFileSync(join(vault, "20. Information (I)/용어 정리.md"))) : false;
+    const readOnly = copy ? (statSync(copy).mode & 0o222) === 0 : false;
+    await page.waitForSelector(".turn-request .note-chip", { timeout: 5000 });
+    await shot("06-session-with-note.png");
+    pass(
+      "새 세션 요청에 노트가 붙고 엔진은 작업 폴더의 읽기 전용 사본을 받음",
+      created?.provider === provider && request?.notes?.[0]?.path === "20. Information (I)/용어 정리.md" && copyName.startsWith(".workbench/notes/") && sameBytes && readOnly,
+      `${copyName} · 같은 바이트 ${sameBytes} · 읽기 전용 ${readOnly}`,
+    );
+
+    // ── a work as cards (sessions and pages) ───────────────────────────────────────────────
+    await page.locator(`.sidebar [data-row-id="${work.id}"]`).click({ button: "right" });
+    await page.locator(".context-menu [role=menuitem]", { hasText: "카드로 보기" }).click();
+    await page.waitForSelector(".pkm-card.kind-session", { timeout: 10_000 });
+    pass("작업을 카드로 보기(세션 카드)", (await page.locator(".pkm-card.kind-session").count()) >= 1, await page.locator(".pkm-title").innerText());
   } catch (error) {
     pass("실행", false, error instanceof Error ? error.message.split("\n")[0]! : String(error));
     await page.screenshot({ path: join(outDir, `${provider}-99-failure.png`) }).catch(() => undefined);

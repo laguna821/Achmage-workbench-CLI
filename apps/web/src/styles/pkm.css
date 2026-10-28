@@ -1,6 +1,11 @@
 /* Notion-like organisation with the Obsidian vault mirror (pkm). */
 
 /* ── "볼트" in the sidebar ─────────────────────────────────────────────── */
+.vault-section .side-section-title > span:first-child {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .vault-section .vault-name {
   min-width: 0;
   overflow: hidden;
@@ -179,4 +184,343 @@
   .pkm-dialog {
     animation: none;
   }
+}
+
+/* ── card lists and vault notes in the centre ──────────────────────────── */
+.pkm-view {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.pkm-view .pkm-head {
+  flex: 0 0 auto;
+  padding-top: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.pkm-crumbs {
+  min-height: 18px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.pkm-crumbs .link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pkm-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.pkm-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--heading);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pkm-count {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.pkm-head-tools {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pkm-head-tools .ghost-button {
+  height: 30px;
+  font-size: 13.5px;
+}
+
+.pkm-check {
+  font-size: 13px;
+  color: var(--text-soft);
+}
+
+.pkm-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.pkm-view .pkm-cards {
+  display: flex;
+  flex-direction: column;
+  padding-top: 6px;
+  padding-bottom: 24px;
+}
+
+.pkm-group-label {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 12px 4px 6px;
+  background: var(--bg);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--faint);
+}
+
+.pkm-card {
+  display: flex;
+  gap: 14px;
+  padding: 11px 12px;
+  border-radius: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  cursor: default;
+  user-select: none;
+  outline: none;
+}
+
+.pkm-card:hover {
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.pkm-card:focus-visible {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.pkm-card.dragging {
+  opacity: 0.45;
+}
+
+.pkm-card-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pkm-card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.pkm-card-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pkm-card-pin {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.pkm-card-excerpt {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+
+.pkm-card-date {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.pkm-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+}
+
+.pkm-tag {
+  --tag-color: var(--muted);
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tag-color) 14%, transparent);
+  color: color-mix(in srgb, var(--tag-color) 80%, var(--text));
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.pkm-stage {
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 11.5px;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.pkm-card-sessions {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.pkm-card-where {
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+}
+
+.pkm-card-thumb {
+  flex: 0 0 auto;
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface-muted);
+}
+
+.pkm-card-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pkm-composer {
+  position: relative;
+}
+
+.pkm-composer.dropping .composer {
+  outline: 2px dashed var(--accent);
+  outline-offset: 4px;
+}
+
+.pkm-drop-hint {
+  font-size: 12.5px;
+}
+
+.pkm-drag-ghost {
+  position: fixed;
+  z-index: 90;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 280px;
+  padding: 5px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--popover-shadow);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.pkm-drag-ghost.over {
+  border-color: var(--accent);
+  opacity: 1;
+}
+
+.note-chip {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+}
+
+.note-chip .note-chip-open {
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-soft);
+  font-size: 12.5px;
+}
+
+.note-chip .note-chip-open:disabled {
+  cursor: default;
+}
+
+.note-chip-role {
+  font-size: 11px;
+  color: var(--faint);
+}
+
+/* A vault note, read-only */
+.pkm-view .pkm-note {
+  padding-top: 14px;
+  padding-bottom: 32px;
+}
+
+.pkm-note-meta {
+  font-size: 12.5px;
+  margin-bottom: 10px;
+}
+
+.pkm-props {
+  display: grid;
+  grid-template-columns: minmax(110px, max-content) 1fr;
+  gap: 4px 14px;
+  margin: 0 0 18px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.pkm-prop {
+  display: contents;
+}
+
+.pkm-prop dt {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+
+.pkm-prop dd {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.pkm-prop-value {
+  padding: 0 7px;
+  border-radius: 6px;
+  background: var(--surface-muted);
+  color: var(--text-soft);
+  overflow-wrap: anywhere;
+}
+
+.pkm-note-image {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+.pkm-wikilink {
+  color: var(--link);
+  text-decoration: underline dotted;
 }

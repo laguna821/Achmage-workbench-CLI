@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { VaultTree } from "@workbench/contracts";
+import type { Session, VaultTree, Work } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
 import { pkmClient, type PkmClient, type PkmTarget } from "../../pkm.ts";
+import type { MenuRequest } from "../ContextMenu.tsx";
 import type { State } from "../../state.ts";
 
 // What the PKM pieces (sidebar vault section, card lists, dialogs) share: the vault tree, which of
@@ -11,6 +12,8 @@ import type { State } from "../../state.ts";
 const OPEN_KEY = "workbench.vaultOpen";
 
 export type PkmApi = {
+  api: Api;
+  state: State;
   client: PkmClient;
   tree: VaultTree | null;
   /** Vault folders unfolded in the sidebar. */
@@ -26,6 +29,12 @@ export type PkmApi = {
   target: PkmTarget | null;
   /** Show cards or a note in the centre; null where the app cannot (the folder then only folds). */
   open: ((target: PkmTarget) => void) | null;
+  /** Show a session's conversation (after a request was sent from a card list). */
+  showSession: (work: Work, session: Session) => void;
+  /** Show a work's conversation. */
+  showWork: (work: Work) => void;
+  /** The app menu (right-click on a card). */
+  openMenu: (request: MenuRequest) => void;
 };
 
 const PkmContext = createContext<PkmApi | null>(null);
@@ -45,13 +54,19 @@ export function PkmProvider({
   onToast,
   target = null,
   onOpen = null,
+  onShowSession = () => undefined,
+  onShowWork = () => undefined,
+  onMenu = () => undefined,
   children,
 }: {
+  onShowWork?: (work: Work) => void;
+  onMenu?: (request: MenuRequest) => void;
   api: Api;
   state: State;
   onToast: (message: string) => void;
   target?: PkmTarget | null;
   onOpen?: ((target: PkmTarget) => void) | null;
+  onShowSession?: (work: Work, session: Session) => void;
   children: ReactNode;
 }) {
   const client = useMemo(() => pkmClient(api), [api]);
@@ -93,6 +108,8 @@ export function PkmProvider({
   }, []);
 
   const value: PkmApi = {
+    api,
+    state,
     client,
     tree,
     unfolded,
@@ -118,6 +135,9 @@ export function PkmProvider({
     onToast,
     target,
     open: onOpen,
+    showSession: onShowSession,
+    showWork: onShowWork,
+    openMenu: onMenu,
   };
   return <PkmContext.Provider value={value}>{children}</PkmContext.Provider>;
 }

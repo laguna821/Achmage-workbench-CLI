@@ -26,6 +26,8 @@ import { Onboarding } from "./components/Onboarding.tsx";
 import { SessionPicker } from "./components/SessionPicker.tsx";
 import { PkmProvider } from "./components/pkm/PkmContext.tsx";
 import { VaultDialogHost, VaultSettingsRow } from "./components/pkm/VaultDialog.tsx";
+import { PkmCenter, pkmTitle } from "./components/pkm/PkmCenter.tsx";
+import type { PkmTarget } from "./pkm.ts";
 
 // Editors (CodeMirror, PDF.js) load only when a document opens.
 const DocumentView = lazy(() => import("./components/docs/DocumentView.tsx"));
@@ -114,7 +116,9 @@ type View =
   | { kind: "work" }
   | { kind: "new"; folderId: string | null }
   | { kind: "archive" }
-  | { kind: "document"; artifactId: string; proposalId: string | null };
+  | { kind: "document"; artifactId: string; proposalId: string | null }
+  /** Cards of a vault folder, an app folder, a work or a saved view; or one vault note (pkm). */
+  | { kind: "pkm"; target: PkmTarget };
 
 type Toast = { text: string; action?: { label: string; run: () => void } };
 
@@ -805,11 +809,13 @@ export function App() {
           { kind: "separator" },
           { kind: "item", label: busy ? "보관 (진행 중인 세션이 끝난 뒤)" : "보관", icon: "archive", hint: "Delete", disabled: busy, onSelect: () => archive({ kind: "work", id: owner.id }) },
         ];
+        items.splice(1, 0, { kind: "item", label: "카드로 보기", icon: "grid", onSelect: () => setView({ kind: "pkm", target: { kind: "work", id: owner.id } }) });
         return { x, y, title: owner.title, items };
       }
       if (row.type === "folder") {
         const folder = row.folder;
         const items: MenuEntry[] = [
+          { kind: "item", label: "카드로 보기", icon: "grid", onSelect: () => setView({ kind: "pkm", target: { kind: "folder", id: folder.id } }) },
           { kind: "item", label: "이 폴더에 새 작업", icon: "plus", onSelect: () => startNew(folder.id) },
           { kind: "item", label: "하위 폴더 만들기", icon: "folder", onSelect: () => setSidebarPending({ createIn: folder.id }) },
           { kind: "item", label: "이름 바꾸기", icon: "edit", hint: "F2", onSelect: () => setSidebarPending({ rename: folder.id }) },
@@ -916,13 +922,23 @@ export function App() {
       onClose={closeDoc}
     />
   ) : null;
-  const title = view.kind === "archive" ? "보관함" : showStart ? (view.kind === "new" && view.folderId ? "새 작업" : "홈") : work?.title ?? "";
+  const title =
+    view.kind === "archive" ? "보관함" : view.kind === "pkm" ? pkmTitle(state, view.target, null) : showStart ? (view.kind === "new" && view.folderId ? "새 작업" : "홈") : work?.title ?? "";
 
   return (
     <AppearanceContext.Provider value={appearanceApi}>
     <UnseenContext.Provider value={unseen}>
     <DocContext.Provider value={{ state, actions: docActions }}>
-    <PkmProvider api={api} state={state} onToast={setToast}>
+    <PkmProvider
+      api={api}
+      state={state}
+      onToast={setToast}
+      target={view.kind === "pkm" ? view.target : null}
+      onOpen={(target) => setView({ kind: "pkm", target })}
+      onShowSession={actions.selectSession}
+      onShowWork={openWorkNow}
+      onMenu={setContextMenu}
+    >
     <div
       className="app look-scope"
       data-theme={focusedTheme}
@@ -1096,6 +1112,8 @@ export function App() {
             }}
           />
         </Suspense>
+      ) : view.kind === "pkm" ? (
+        <PkmCenter target={view.target} />
       ) : view.kind === "archive" ? (
         <ArchiveView
           state={state}

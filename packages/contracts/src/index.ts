@@ -126,7 +126,7 @@ export type ContextUsage = { used: number; window: number | null; compactAt: num
  * A request written while the engine was working, sent as the next turn when this one ends.
  * `held`: kept after a stop, a failure, a restart or a steer the stop dropped — sent only by hand.
  */
-export type QueuedMessage = { id: string; text: string; refs: DocRef[]; create: CreateTarget | null; at: number; held?: boolean };
+export type QueuedMessage = { id: string; text: string; refs: DocRef[]; create: CreateTarget | null; at: number; held?: boolean; notes?: string[] };
 
 /** A reply the user has not looked at yet (or a session marked unread). */
 export const isUnseen = (session: Session) => session.unread || Boolean(session.previewAt && session.previewAt > (session.seenAt ?? 0));
@@ -276,6 +276,8 @@ export type TranscriptItem =
       steered?: boolean;
       /** Steered in, then the turn was stopped before the engine took it: it waits again above the input. */
       undelivered?: boolean;
+      /** Vault notes given as read-only references (vault-relative paths). */
+      notes?: { path: string; title: string }[];
     }
   | { kind: "assistant"; id: string; text: string; streaming: boolean; at: number }
   | { kind: "reasoning"; id: string; text: string; at: number }
@@ -520,6 +522,8 @@ export type SendMessageRequest = {
    * the engine can and queues otherwise. An idle session just starts a turn.
    */
   mode?: "auto" | "steer" | "queue";
+  /** Vault notes to read with this request (vault-relative paths; read-only references). */
+  notes?: string[];
 };
 
 export type SendResult = { duplicate: boolean; delivery: "turn" | "steered" | "queued" };

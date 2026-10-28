@@ -158,6 +158,7 @@ export function sessionMarkdown(context: ExportContext): string {
           notes.push(`붙인 문서: ${item.refs.map((ref) => `${ref.name} r${ref.revision}(${ref.mode === "edit" ? "고치기" : "읽기"})${ref.selection ? ` — ${ref.selection}` : ""}`).join(", ")}`);
         }
         if (item.create) notes.push(`새 문서 요청: ${item.create.name}`);
+        if (item.notes?.length) notes.push(`붙인 볼트 노트(읽기 전용): ${item.notes.map((note) => `${note.title} (${note.path})`).join(", ")}`);
         if (notes.length) lines.push("", ...notes.map((note) => `> ${note}`));
         break;
       }
