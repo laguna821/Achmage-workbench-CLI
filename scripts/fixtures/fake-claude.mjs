@@ -10,6 +10,9 @@
 //   "압축" or "/compact"  compacts         anything else: a short answer
 //   "다른 세션 메시지"  after the answer another Claude Code session writes here (a cross-session
 //                     message with origin "peer") and Claude Code answers it on its own
+//   "[세션 잇기 k/m"  a linked-session hand-over: a reply of its own each time; with "합의:N" in the
+//                     goal its last line is [[합의]] from message N on, with "되풀이" it repeats itself,
+//                     "천천히" takes about 2 s and "길게" about 8 s
 
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
@@ -44,6 +47,18 @@ const queue = []; // { text, uuid } user messages waiting to run
 const waiting = new Map(); // control request id -> resolve
 
 const send = (message) => process.stdout.write(`${JSON.stringify(message)}\n`);
+
+/** Lines of a reply to a linked-session hand-over (null for any other request). */
+function linkReply(text, engine) {
+  const hop = /\[세션 잇기 (\d+)\/(\d+)/.exec(text);
+  if (!hop) return null;
+  if (text.includes("되풀이")) return ["같은 말을 되풀이합니다. 더 보탤 것이 없습니다."];
+  const k = Number(hop[1]);
+  const lines = [`${engine}의 ${k}번째 의견입니다 (${k}/${hop[2]}).`, "", `- 받은 글 ${text.length}자를 읽었습니다.`, `- 제안 ${k}: ${["2주차와 3주차를 합칩니다", "3주차는 실습으로 바꿉니다", "평가 기준을 4주차로 옮깁니다", "사전 설문을 넣습니다", "토론 시간을 늘립니다", "마지막 주에 발표를 둡니다"][(k - 1) % 6]}.`];
+  const agree = /합의:(\d+)/.exec(text);
+  if (agree && k >= Number(agree[1])) lines.push("", "[[합의]]");
+  return lines;
+}
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 const base = () => ({ session_id: sessionId, uuid: randomUUID() });
 const event = (payload) => send({ type: "stream_event", event: payload, parent_tool_use_id: null, ...base() });
@@ -117,7 +132,13 @@ async function runTurn(text) {
     const lines = long ? 160 : 6;
     const chunks = [];
     if (steer) chunks.push({ text: steer, wait: 30 });
-    if (text.includes("도식")) {
+    const linked = linkReply(text, "Claude");
+    if (linked) {
+      for (const line of linked) chunks.push({ text: `${line}\n`, wait: 40 });
+      // "천천히" / "길게": the same reply, then a tail (about 2 s / 8 s) to have time to act meanwhile.
+      const tail = long ? 150 : text.includes("천천히") ? 30 : 0;
+      for (let index = 0; index < tail; index += 1) chunks.push({ text: `\n덧붙임 ${index + 1}.`, wait: 50 });
+    } else if (text.includes("도식")) {
       // A Mermaid mind map, sent in pieces like any reply.
       for (const piece of "여기 마인드맵입니다.\n\n```mermaid\nmindmap\n  root((Achmage))\n    대화\n      끼어들기\n      끝나면 보내기\n    문서\n      워드\n      한글\n    도식\n      Pele\n```\n".match(/[^\n]*\n/g)) chunks.push({ text: piece, wait: 30 });
     } else {

@@ -7,6 +7,7 @@ import { FileCard, HandoffCard, ProposalCard, RefChips, useDocs } from "./DocCar
 import { CREATE_LABEL } from "@workbench/contracts";
 import { Icon, type IconName } from "./Icon.tsx";
 import { diagramComponents } from "./Diagram.tsx";
+import { LinkEndCard, LinkHopBadge, LinkRequestText } from "./LinkCards.tsx";
 
 const DRAWN = diagramComponents();
 const STREAMING = diagramComponents(true);
@@ -23,6 +24,7 @@ type Block =
   | { type: "artifact"; item: Item<"artifact"> }
   | { type: "proposal"; item: Item<"proposal"> }
   | { type: "handoff"; item: Item<"handoff"> }
+  | { type: "link"; item: Item<"link"> }
   | { type: "turnEnd"; item: Item<"turnEnd"> };
 
 /** Group consecutive tool calls and reasoning into one folded block, Codex-style. */
@@ -69,6 +71,9 @@ export function toBlocks(items: TranscriptItem[]): Block[] {
         break;
       case "handoff":
         blocks.push({ type: "handoff", item });
+        break;
+      case "link":
+        blocks.push({ type: "link", item });
         break;
       case "turnEnd":
         blocks.push({ type: "turnEnd", item });
@@ -251,7 +256,7 @@ function PlanCard({ item }: { item: Item<"plan"> }) {
   );
 }
 
-type Turn = { id: string; index: number; user: Item<"user"> | null; blocks: Block[]; end: Item<"turnEnd"> | null; attention: boolean };
+type Turn = { id: string; index: number; user: Item<"user"> | null; blocks: Block[]; end: Item<"turnEnd"> | null; attention: boolean; after: Block[] };
 
 /** A turn is one request and everything the engine did for it. */
 function toTurns(blocks: Block[]): Turn[] {
@@ -260,11 +265,13 @@ function toTurns(blocks: Block[]): Turn[] {
   for (const block of blocks) {
     if (block.type === "user" || !turns.length) {
       if (block.type === "user") index += 1;
-      turns.push({ id: block.type === "user" ? block.item.id : "start", index, user: block.type === "user" ? block.item : null, blocks: [], end: null, attention: false });
+      turns.push({ id: block.type === "user" ? block.item.id : "start", index, user: block.type === "user" ? block.item : null, blocks: [], end: null, attention: false, after: [] });
       if (block.type === "user") continue;
     }
     const turn = turns[turns.length - 1];
     if (block.type === "turnEnd") turn.end = block.item;
+    // A linked-session end card that came after the turn ended stays below its end line.
+    else if (block.type === "link" && turn.end) turn.after.push(block);
     else turn.blocks.push(block);
     if (block.type === "approval" && block.item.decision === null) turn.attention = true;
   }
@@ -476,6 +483,8 @@ export function Transcript({
         const handoff = state.handoffs[block.item.handoffId];
         return handoff ? <HandoffCard key={block.item.id} handoff={handoff} viewer={sessionId} /> : null;
       }
+      case "link":
+        return <LinkEndCard key={block.item.id} linkId={block.item.linkId} />;
       case "turnEnd":
         return null;
     }
@@ -555,7 +564,7 @@ export function Transcript({
                 <header className="turn-request" data-item-id={turn.user.id}>
                   <div className="turn-meta">
                     <span className="turn-no">{turn.index}</span>
-                    <span>요청</span>
+                    <span>{turn.user.link ? (turn.user.link.fromSessionId ? "받은 답" : "목표") : turn.user.peer ? "받은 메시지" : "요청"}</span>
                     <span className="turn-meta-sep">·</span>
                     <span>{clock(turn.user.at)}</span>
                     {turn.user.undelivered ? (
@@ -578,7 +587,8 @@ export function Transcript({
                       <Icon name="arrowLeft" size={12} /> 다른 세션에서 온 메시지{turn.user.peer.name ? ` · ${turn.user.peer.name}` : ""}
                     </span>
                   ) : null}
-                  <RequestText text={turn.user.text} />
+                  {turn.user.link ? <LinkHopBadge hop={turn.user.link} /> : null}
+                  {turn.user.link?.fromSessionId ? <LinkRequestText text={turn.user.text} /> : <RequestText text={turn.user.text} />}
                   {turn.user.refs?.length ? <RefChips refs={turn.user.refs} /> : null}
                   {turn.user.create ? (
                     <div className="ref-chips">
@@ -611,6 +621,7 @@ export function Transcript({
                   {duration(turn.end.durationMs) ? <span className="muted"> · {duration(turn.end.durationMs)}</span> : null}
                 </div>
               ) : null}
+              {turn.after.map(renderBlock)}
             </section>
           ))}
         </div>

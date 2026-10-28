@@ -17,6 +17,7 @@ import { useUnseen } from "./SessionCards.tsx";
 import { workSessions } from "../tree.ts";
 import { Transcript } from "./Transcript.tsx";
 import { AccessPicker, ContextGauge } from "./SessionControls.tsx";
+import { LinkBar } from "./LinkBar.tsx";
 
 export type WorkActions = {
   /** Send a request; while the engine works it steers into the turn or waits ("queue"). */
@@ -556,6 +557,7 @@ export function WorkView({
       )}
 
       <div className="column composer-area">
+        {active ? <LinkBar session={active} /> : null}
         {active ? <QueuedList session={active} busy={busy} actions={actions.queued} /> : null}
         {!active ? (
           <EngineTabs

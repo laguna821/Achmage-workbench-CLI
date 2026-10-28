@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Artifact, Folder, Session, Work } from "@workbench/contracts";
 import { initialState, type State } from "./state.ts";
-import { EMPTY_OPEN, between, moveFor, nowSessions, nudge, pinnedItems, toggleWork, treeRows, zoneAt, type Row } from "./tree.ts";
+import { EMPTY_OPEN, between, holds, linkPair, moveFor, nowSessions, nudge, pinnedItems, toggleWork, treeRows, zoneAt, type Row } from "./tree.ts";
 
 const folder = (id: string, parentId: string | null, sort: number, archivedAt: number | null = null): Folder => ({ id, parentId, name: id, sort, archivedAt });
 const work = (id: string, folderId: string | null, sort: number, extra: Partial<Work> = {}): Work => ({
@@ -129,6 +129,22 @@ describe("moving rows", () => {
     expect(moveFor(state, rows.s3!, rows.s1!, "before", "manual")).toEqual({ kind: "session", id: "s3", sort: 0 });
     expect(moveFor(state, rows.s1!, rows.s2!, "after", "manual")).toEqual({ kind: "session", id: "s1", sort: 2.5 });
     expect(moveFor(state, rows.s1!, rows.w2!, "before", "manual")).toBeNull();
+  });
+
+  it("links two sessions dropped on a row's middle; every other drop keeps its meaning", () => {
+    // Session on session (also of another work), session on a single-session work and back.
+    expect(linkPair(rows.s1!, rows.s2!)?.map((entry) => entry.id)).toEqual(["s1", "s2"]);
+    expect(linkPair(rows.s3!, rows.w2!)?.map((entry) => entry.id)).toEqual(["s3", "x"]);
+    expect(linkPair(rows.w2!, rows.s1!)?.map((entry) => entry.id)).toEqual(["x", "s1"]);
+    // Work on work only moves; a work of several sessions, a folder or the same session never links.
+    expect(linkPair(rows.w2!, rows.w3!)).toBeNull();
+    expect(linkPair(rows.s1!, rows.w1!)).toBeNull();
+    expect(linkPair(rows.s1!, rows.a!)).toBeNull();
+    expect(linkPair(rows.s1!, rows.s1!)).toBeNull();
+    // The middle of a session row is the link zone; its edges still reorder.
+    const zone = (offset: number) => zoneAt(offset, 32, holds(rows.s2!, rows.s1!) || Boolean(linkPair(rows.s1!, rows.s2!)));
+    expect([zone(4), zone(16), zone(28)]).toEqual(["before", "inside", "after"]);
+    expect(moveFor(state, rows.s1!, rows.s2!, "inside", "manual")).toBeNull();
   });
 
   it("swaps a row with its neighbour from the keyboard", () => {

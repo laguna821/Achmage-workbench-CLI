@@ -40,6 +40,7 @@ const PATHS = {
   restore: "M4.5 12a7.5 7.5 0 107.5-7.5 7.8 7.8 0 00-5.5 2.3L4.5 9M4.5 4.5V9H9",
   palette: "M12 3.5a8.5 8.5 0 000 17c1.2 0 1.8-.9 1.4-1.9-.4-1 .2-2.1 1.3-2.1h2a3.8 3.8 0 003.8-4.5A8.5 8.5 0 0012 3.5zM8 12.5h.01M9.5 8h.01M14.5 8h.01",
   markdown: "M3.5 6.5h17v11h-17zM6.5 14.5v-5l2.5 3 2.5-3v5M15.5 9.5v5M13.5 12.5l2 2 2-2",
+  link: "M4 8h15M15.5 4.5L19 8l-3.5 3.5M20 16H5M8.5 12.5L5 16l3.5 3.5",
 } as const;
 
 export type IconName = keyof typeof PATHS | "dots" | "stop";

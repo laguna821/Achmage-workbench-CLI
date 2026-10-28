@@ -92,9 +92,9 @@ export const LINK_PRESETS = [
 export const LINK_REASON_LABEL: Record<LinkReason, string> = {
   manual: "멈춤",
   typed: "직접 입력해서 멈춤",
-  usage: "5시간 사용량 90% 넘음",
-  restart: "앱이 다시 시작됨",
-  busy: "다음 세션이 다른 일을 하는 중",
+  usage: "5시간 사용량이 90%를 넘어 멈춤",
+  restart: "앱이 다시 시작되어 멈춤",
+  busy: "다음 세션이 다른 일을 하는 중이라 멈춤",
   stopped: "끊음",
   agreed: "합의",
   done: "끝 표시",

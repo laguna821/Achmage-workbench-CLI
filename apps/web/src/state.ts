@@ -9,6 +9,7 @@ import {
   type ProviderStatus,
   type SequencedEvent,
   type Session,
+  type SessionLink,
   type Snapshot,
   type TranscriptItem,
   type UiPrefs,
@@ -31,6 +32,8 @@ export type State = {
   artifacts: Record<string, Artifact>;
   proposals: Record<string, Proposal>;
   handoffs: Record<string, Handoff>;
+  /** Linked sessions ("세션 잇기"), live and ended. */
+  links: Record<string, SessionLink>;
   tools: DocumentTools | null;
 };
 
@@ -48,6 +51,7 @@ export const initialState: State = {
   artifacts: {},
   proposals: {},
   handoffs: {},
+  links: {},
   tools: null,
 };
 
@@ -79,6 +83,7 @@ export function reducer(state: State, action: Action): State {
         artifacts: byId(snapshot.artifacts ?? []),
         proposals: byId(snapshot.proposals ?? []),
         handoffs: byId(snapshot.handoffs ?? []),
+        links: byId(snapshot.links ?? []),
         tools: snapshot.tools ?? null,
       };
     }
@@ -108,6 +113,8 @@ export function reducer(state: State, action: Action): State {
           return { ...next, tools: event.tools };
         case "handoff.upserted":
           return { ...next, handoffs: { ...state.handoffs, [event.handoff.id]: event.handoff } };
+        case "link.upserted":
+          return { ...next, links: { ...state.links, [event.link.id]: event.link } };
         case "provider.status":
           return { ...next, providers: { ...state.providers, [event.status.provider]: event.status } };
         case "item.upserted":

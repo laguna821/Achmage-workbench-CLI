@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { FORMAT_LABEL, PROVIDER_LABEL, isUnseen, type Artifact, type Folder, type Provider, type Session, type Work } from "@workbench/contracts";
 import type { State } from "../state.ts";
-import { holds, moveFor, nowSessions, nudge, pinnedItems, toggleWork, treeRows, zoneAt, type DropZone, type Move, type Row, type SortMode, type TreeOpenState } from "../tree.ts";
+import { holds, linkPair, moveFor, nowSessions, nudge, pinnedItems, toggleWork, treeRows, zoneAt, type DropZone, type Move, type Row, type SortMode, type TreeOpenState } from "../tree.ts";
 import { statusText, statusTone } from "../format.ts";
 import { accentStyle, lookStyle, NEUTRAL_LOOK, useAppearance } from "../appearance.ts";
 import { EditableText } from "./EditableText.tsx";
@@ -9,6 +9,8 @@ import { EngineMark } from "./EngineMark.tsx";
 import { Icon, type IconName } from "./Icon.tsx";
 import type { MenuEntry, MenuRequest } from "./ContextMenu.tsx";
 import { UsageCard } from "./UsageCard.tsx";
+import { LinkBadge, LinkLines, linkable } from "./LinkSidebar.tsx";
+import { linkOfSession } from "../links.ts";
 
 // The sidebar: where many sessions live. "지금" (waiting for you, working, new replies) on top,
 // then pinned things, then the folder tree of works with their sessions and documents. Rows move by
@@ -36,6 +38,8 @@ export type SidebarActions = {
   openHome: () => void;
   /** A new Markdown page in a work (the "+" on a work row). */
   newPage: (work: Work) => void;
+  /** "세션 잇기" for two sessions (a session row dropped on the middle of another). */
+  linkSessions: (sessions: [Session, Session]) => void;
 };
 
 const MIN_WIDTH = 232;
@@ -48,7 +52,15 @@ function docIcon(artifact: Artifact): IconName {
   return DOC_ICON[artifact.format] ?? "file";
 }
 
-type Drag = { row: Row; startX: number; startY: number; active: boolean; x: number; y: number; target: { id: string; zone: DropZone; move: Move | null } | null };
+type Drag = {
+  row: Row;
+  startX: number;
+  startY: number;
+  active: boolean;
+  x: number;
+  y: number;
+  target: { id: string; zone: DropZone; move: Move | null; link: [Session, Session] | null } | null;
+};
 
 export function Sidebar({
   state,
@@ -222,8 +234,11 @@ export function Sidebar({
       const row = element ? rowById.get(element.dataset.rowId!) : undefined;
       if (element && row && row.id !== current.row.id) {
         const rect = element.getBoundingClientRect();
-        const zone = zoneAt(event.clientY - rect.top, rect.height, holds(row, current.row));
-        target = { id: row.id, zone, move: moveFor(state, current.row, row, zone, sortMode) };
+        // A session on the middle of another session links them; the edges keep moving rows.
+        const pair = linkPair(current.row, row);
+        const zone = zoneAt(event.clientY - rect.top, rect.height, holds(row, current.row) || Boolean(pair));
+        const link = zone === "inside" && pair && linkable(Object.values(state.links), pair.map((session) => session.id)) ? pair : null;
+        target = { id: row.id, zone, move: link || (pair && zone === "inside") ? null : moveFor(state, current.row, row, zone, sortMode), link };
       }
       const next = { ...current, active: true, x: event.clientX, y: event.clientY, target };
       dragRef.current = next;
@@ -236,7 +251,8 @@ export function Sidebar({
       if (!current?.active) return;
       suppressClick.current = true;
       window.setTimeout(() => (suppressClick.current = false), 0);
-      if (commit && current.target?.move) actions.move(current.target.move);
+      if (commit && current.target?.link) actions.linkSessions(current.target.link);
+      else if (commit && current.target?.move) actions.move(current.target.move);
     };
     const onUp = () => finish(true);
     const onKey = (event: KeyboardEvent) => {
@@ -295,6 +311,7 @@ export function Sidebar({
       >
         <span className={`dot dot-${tone === "idle" && unseen ? "new" : tone}`} />
         <span className="side-row-label">{label}</span>
+        <LinkBadge sessionId={session.id} />
         <EngineMark provider={session.provider} size={13} className="side-row-engine" />
       </button>
     );
@@ -314,7 +331,7 @@ export function Sidebar({
     if (row.type === "session" && row.id === visibleSessionId) classes.push("current");
     if (row.type === "doc" && row.id === currentDocId) classes.push("current");
     if (drag?.active && drag.row.id === row.id) classes.push("dragging");
-    if (drag?.active && drag.target?.id === row.id) classes.push(drag.target.move ? `drop-${drag.target.zone}` : "drop-refused");
+    if (drag?.active && drag.target?.id === row.id) classes.push(drag.target.link ? "drop-link" : drag.target.move ? `drop-${drag.target.zone}` : "drop-refused");
     return classes.join(" ");
   };
 
@@ -379,9 +396,12 @@ export function Sidebar({
       const busy = row.sessions.some((session) => session.status === "starting" || session.status === "running" || session.status === "interrupting");
       const unseen = row.sessions.some((session) => session.id !== visibleSessionId && isUnseen(session));
       const only = row.sessions.length === 1 ? row.sessions[0] : null;
+      // A folded work shows the link of a session inside it (its row is hidden).
+      const linked = only ?? (row.open ? undefined : row.sessions.find((session) => linkOfSession(state, session.id)));
       trailing = (
         <span className="side-row-trail">
           {rowAdd("새 페이지", () => actions.newPage(row.work))}
+          {linked ? <LinkBadge sessionId={linked.id} /> : null}
           {only ? <EngineMark provider={only.provider} size={13} className="side-row-engine" /> : null}
           {attention ? <span className="dot dot-attention" title="확인 필요" /> : busy ? <span className="dot dot-active" title="진행 중" /> : unseen ? <span className="dot dot-new" title="새 답" /> : null}
         </span>
@@ -395,6 +415,7 @@ export function Sidebar({
       const unseen = row.session.id !== visibleSessionId && isUnseen(row.session);
       trailing = (
         <span className="side-row-trail">
+          <LinkBadge sessionId={row.session.id} />
           <EngineMark provider={row.session.provider} size={13} className="side-row-engine" />
           {tone !== "idle" ? <span className={`dot dot-${tone}`} title={statusText(row.session)} /> : unseen ? <span className="dot dot-new" title="새 답" /> : null}
         </span>
@@ -594,6 +615,7 @@ export function Sidebar({
               </div>
             ))}
             {!rows.length && creatingIn === undefined ? <div className="empty-hint side-empty">아직 작업이 없습니다. 위의 "새 세션"으로 시작하세요.</div> : null}
+            <LinkLines tree={treeRef} version={rows} />
           </div>
         </section>
       </div>
@@ -608,8 +630,16 @@ export function Sidebar({
       </div>
       <div className="side-resize" onPointerDown={startResize} role="separator" aria-orientation="vertical" aria-label="사이드바 너비" />
       {drag?.active ? (
-        <div className={`drag-ghost${drag.target?.move ? "" : " refused"}`} style={{ left: drag.x + 12, top: drag.y + 10 }}>
-          {drag.row.type === "folder" ? drag.row.folder.name : drag.row.type === "work" ? drag.row.work.title : drag.row.type === "session" ? drag.row.session.purpose : ""}
+        <div className={`drag-ghost${drag.target?.link ? " linking" : drag.target?.move ? "" : " refused"}`} style={{ left: drag.x + 12, top: drag.y + 10 }}>
+          {drag.target?.link
+            ? `⇄ 세션 잇기: ${drag.target.link[0].purpose} · ${drag.target.link[1].purpose}`
+            : drag.row.type === "folder"
+              ? drag.row.folder.name
+              : drag.row.type === "work"
+                ? drag.row.work.title
+                : drag.row.type === "session"
+                  ? drag.row.session.purpose
+                  : ""}
         </div>
       ) : null}
     </aside>
