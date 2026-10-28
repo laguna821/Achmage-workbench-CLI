@@ -79,7 +79,8 @@ const api = async <T>(method: string, path: string, body?: unknown): Promise<T> 
   return json;
 };
 
-await api("PUT", "/api/prefs", { prefs: { onboarding: "done" } });
+// The app opens on home by default; these checks start in the work.
+await api("PUT", "/api/prefs", { prefs: { onboarding: "done", startScreen: "last" } });
 const work = await api<{ id: string }>("POST", "/api/works", { title: "워드 편집", folderId: null, cwd });
 const artifact = await api<{ id: string; name: string; path: string; revision: number }>("POST", `/api/works/${work.id}/artifacts`, { path: "계획.docx" });
 const revisions = () => api<{ revision: number }[]>("GET", `/api/artifacts/${artifact.id}/revisions`);
