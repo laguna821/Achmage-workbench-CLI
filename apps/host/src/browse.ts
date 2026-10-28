@@ -200,6 +200,8 @@ export class AgentBrowser {
     this.paths = browserPaths(options.dataDir);
     for (const dir of [this.paths.root, this.paths.bin, this.paths.spool, this.paths.output]) mkdirSync(dir, { recursive: true });
     mkdirSync(this.paths.profile, { recursive: true, mode: 0o700 });
+    // Sign-ins, page snapshots and screenshots (mail, for one) are this user's alone.
+    chmodSync(this.paths.root, 0o700);
     chmodSync(this.paths.profile, 0o700);
     this.writeWrapper();
     try {

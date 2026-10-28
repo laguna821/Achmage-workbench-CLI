@@ -56,9 +56,15 @@ function main() {
   const response = join(dir, id + ".res.json");
   // Touched while this command waits, so an approval given after the engine gave up runs nothing.
   const waiting = join(dir, id + ".wait");
-  writeFileSync(waiting, "");
-  writeFileSync(request + ".tmp", JSON.stringify({ id, args: argv, cwd: process.cwd() }));
-  renameSync(request + ".tmp", request);
+  try {
+    writeFileSync(waiting, "");
+    writeFileSync(request + ".tmp", JSON.stringify({ id, args: argv, cwd: process.cwd() }));
+    renameSync(request + ".tmp", request);
+  } catch {
+    // A sandboxed turn that started before the browser was switched on cannot write here yet.
+    say(2, "playwright-cli: 이 요청에서는 아직 브라우저를 쓸 수 없습니다. 브라우저는 사용자의 다음 요청부터 쓸 수 있습니다.\n");
+    return 1;
+  }
   // Approvals can take a while: the user decides in Workbench.
   const deadline = Date.now() + 15 * 60_000;
   let beat = Date.now();

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -217,6 +217,9 @@ describe("what engines get", () => {
     expect(existsSync(hooks.writableRoots(state.session)[0]!)).toBe(true);
     expect(hooks.allowsCommand(state.session.id, `playwright-cli -s=${name} snapshot`)).toBe(true);
     expect(hooks.allowsCommand(state.session.id, `playwright-cli -s=${name} snapshot; ls`)).toBe(false);
+    // Snapshots, screenshots and the profile are the user's alone.
+    expect(statSync(browser.paths.root).mode & 0o777).toBe(0o700);
+    expect(statSync(browser.paths.profile).mode & 0o777).toBe(0o700);
   });
 
   it("remembers what each Codex thread was told across gateway restarts", async () => {
