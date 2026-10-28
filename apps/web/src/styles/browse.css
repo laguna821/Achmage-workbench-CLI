@@ -1,0 +1,206 @@
+/* ── Agent browser: the pill under the input and its card ─────────────────── */
+.browser-pill {
+  gap: 5px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.browser-pill.on {
+  color: var(--accent);
+}
+
+.browser-pill.paused {
+  color: var(--amber-text);
+}
+
+.browser-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.browser-dot.busy {
+  animation: browser-pulse 1.2s ease-in-out infinite;
+}
+
+.browser-dot.paused {
+  background: var(--amber);
+}
+
+.browser-host {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+@keyframes browser-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* Beats `.popover`'s width whatever order the stylesheets load in. */
+.popover.browser-menu {
+  width: 330px;
+  max-width: calc(100vw - 32px);
+}
+
+.browser-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 6px 10px 8px;
+}
+
+.browser-head .browser-note {
+  grid-column: 1 / -1;
+}
+
+.browser-title {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.browser-note {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.browser-switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: var(--surface-muted);
+  cursor: pointer;
+}
+
+.browser-switch > span {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--faint);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.browser-switch.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+}
+
+.browser-switch.on > span {
+  transform: translateX(14px);
+  background: var(--accent);
+}
+
+.browser-window,
+.browser-install,
+.browser-login {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 10px 8px;
+}
+
+.browser-row,
+.browser-sites {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.browser-row .button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.browser-stop {
+  color: var(--amber-text);
+}
+
+.browser-progress {
+  position: relative;
+  width: 100%;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
+}
+
+.browser-progress > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+.browser-address {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+
+.browser-address input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.browser-login-open {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--amber-soft);
+  color: var(--amber-text);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.browser-access {
+  padding: 4px 10px 6px;
+}
+
+.connections .browser-login,
+.connections .browser-install {
+  padding: 4px 0 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .browser-dot.busy {
+    animation: none;
+  }
+
+  .browser-switch > span,
+  .browser-progress > span {
+    transition: none;
+  }
+}
+
+.browser-row .button:disabled {
+  opacity: 0.45;
+}

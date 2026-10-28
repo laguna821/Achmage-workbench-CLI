@@ -6,6 +6,7 @@ import { initialState, isBusy, reducer, sessionsOf } from "./state.ts";
 import { newRequestId, titleFrom } from "./format.ts";
 import { folderChoices, readOpenState, workSessions, type Move, type Row, type SortMode, type TreeOpenState } from "./tree.ts";
 import { Connections } from "./components/Connections.tsx";
+import type { BrowserActions } from "./components/BrowserPill.tsx";
 import { EditableText } from "./components/EditableText.tsx";
 import { Icon } from "./components/Icon.tsx";
 import { BrandSymbol, Wordmark } from "./components/BrandMark.tsx";
@@ -306,6 +307,28 @@ export function App() {
   // "어느 세션에 보낼까요?" picker, answered through a promise.
   const [picker, setPicker] = useState<{ workId: string; excludeSessionId: string | null; resolve: (session: Session | null) => void } | null>(null);
 
+  // The agent browser: the pill under the input and the connections menu.
+  const browserActions: BrowserActions = useMemo(
+    () => ({
+      setOn: (session, on) => {
+        void api?.updateSession(session.id, { browser: on }).catch(fail);
+        if (on) setToast("브라우저를 켰습니다. 다음 요청부터 엔진이 창을 쓸 수 있습니다.");
+      },
+      install: () => void api?.browser.install().catch(fail),
+      login: (url) => void api?.browser.login(url).catch(fail),
+      closeLogin: () => void api?.browser.closeLogin().catch(fail),
+      focus: () =>
+        void api?.browser
+          .focus()
+          .then((result) => {
+            if (!result.ok) setToast(result.message);
+          })
+          .catch(fail),
+      pause: (session, paused) => void api?.browser.pause(session.id, paused).catch(fail),
+    }),
+    [api, fail, setToast],
+  );
+
   const actions: WorkActions = useMemo(
     () => ({
       send: async (session: Session, text: string, refs: DocRef[] = [], create: CreateTarget | null = null, mode: "auto" | "queue" = "auto") => {
@@ -357,10 +380,10 @@ export function App() {
       },
       interrupt: (session) => void api?.interrupt(session.id).catch(fail),
       answer: (session, itemId, decision) => void api?.answer(session.id, itemId, decision).catch(fail),
-      newSession: async (target: Work, provider: Provider, choice) => {
+      newSession: async (target: Work, provider: Provider, choice, options) => {
         if (!api) return null;
         try {
-          return await api.createSession(target.id, provider, { model: choice?.model ?? null, effort: choice?.effort ?? null });
+          return await api.createSession(target.id, provider, { model: choice?.model ?? null, effort: choice?.effort ?? null, ...(options?.browser ? { browser: true } : {}) });
         } catch (error) {
           fail(error);
           return null;
@@ -393,8 +416,9 @@ export function App() {
           target.kind === "folder" ? api.updateFolder(target.id, { archived: false }) : target.kind === "work" ? api.updateWork(target.id, { archived: false }) : api.updateSession(target.id, { archived: false });
         void request.then(() => setToast("되돌렸습니다.")).catch(fail);
       },
+      browser: browserActions,
     }),
-    [api, fail, savePrefs, setToast, setView],
+    [api, fail, savePrefs, setToast, setView, browserActions],
   );
 
   const docActions: DocActions = useMemo(
@@ -1012,6 +1036,8 @@ export function App() {
                 tools={state.tools}
                 onInstallIeum={() => void api.installIeumOffice().catch(fail)}
                 onRefreshTools={() => void api.refreshTools().catch(fail)}
+                browser={state.browser}
+                browserActions={browserActions}
                 providers={state.providers}
                 connected={state.connected}
                 hostLabel={state.hostLabel}

@@ -17,6 +17,7 @@ import { useUnseen } from "./SessionCards.tsx";
 import { workSessions } from "../tree.ts";
 import { Transcript } from "./Transcript.tsx";
 import { AccessPicker, ContextGauge } from "./SessionControls.tsx";
+import { BrowserPill, type BrowserActions } from "./BrowserPill.tsx";
 
 export type WorkActions = {
   /** Send a request; while the engine works it steers into the turn or waits ("queue"). */
@@ -33,13 +34,15 @@ export type WorkActions = {
   newDesign: (work: Work, preset: string) => Promise<void>;
   interrupt: (session: Session) => void;
   answer: (session: Session, itemId: string, decision: "accept" | "decline") => void;
-  newSession: (work: Work, provider: Provider, choice?: ModelChoice) => Promise<Session | null>;
+  newSession: (work: Work, provider: Provider, choice?: ModelChoice, options?: { browser?: boolean }) => Promise<Session | null>;
   selectSession: (work: Work, session: Session) => void;
   renameSession: (session: Session, purpose: string) => void;
   setModel: (session: Session, choice: ModelChoice) => void;
   /** Access for a session (or, with none yet, for new sessions of the engine). */
   setAccess: (session: Session | null, provider: Provider, mode: AccessMode) => void;
   compact: (session: Session) => void;
+  /** The agent browser (the "브라우저" pill). */
+  browser: BrowserActions;
   moveWork: (work: Work, folderId: string | null) => void;
   openSidebar: () => void;
   restore: (target: { kind: "folder" | "work" | "session"; id: string }) => void;
@@ -266,6 +269,8 @@ export function WorkView({
   ).length;
 
   const [draftChoice, setDraftChoice] = useState<ModelChoice>({ model: null, effort: null });
+  // The browser switch before this work's first session exists.
+  const [browserDraft, setBrowserDraft] = useState(false);
   const pickerProvider = active?.provider ?? engine;
   const models = state.providers[pickerProvider]?.models ?? [];
   const access = accessFor(pickerProvider, active?.access, prefs, state.providers[pickerProvider]?.configuredAccess);
@@ -581,6 +586,15 @@ export function WorkView({
             <>
               <AccessPicker provider={pickerProvider} value={access} onChange={(mode) => actions.setAccess(active, pickerProvider, mode)} />
               {active ? <ContextGauge context={active.context} canCompact={!busy && Boolean(active.nativeSessionId)} onCompact={() => actions.compact(active)} /> : null}
+              <BrowserPill
+                session={active}
+                status={state.browser}
+                access={access}
+                actions={actions.browser}
+                draft={browserDraft}
+                onDraft={setBrowserDraft}
+                ownerLabel={state.browser?.window.kind === "agent" ? (state.sessions[state.browser.window.sessionId]?.purpose ?? null) : null}
+              />
             </>
           }
           header={
@@ -633,7 +647,7 @@ export function WorkView({
                 mode: entry.mode === "edit" && !handoffTo && !create ? ("edit" as const) : ("review" as const),
                 selection: null,
               }));
-            const source: Session | null = active ?? (await actions.newSession(work, engine, draftChoice));
+            const source: Session | null = active ?? (await actions.newSession(work, engine, draftChoice, { browser: browserDraft }));
             if (!source) return false;
             const sent = handoffTo ? await actions.handoff(source, handoffTo, text, refs) : await actions.send(source, text, refs, create, mode ?? "auto");
             if (sent) {

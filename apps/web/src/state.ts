@@ -1,5 +1,6 @@
 import {
   applyItemEvent,
+  type AgentBrowserStatus,
   type Artifact,
   type DocumentTools,
   type Handoff,
@@ -32,6 +33,7 @@ export type State = {
   proposals: Record<string, Proposal>;
   handoffs: Record<string, Handoff>;
   tools: DocumentTools | null;
+  browser: AgentBrowserStatus | null;
 };
 
 export const initialState: State = {
@@ -49,6 +51,7 @@ export const initialState: State = {
   proposals: {},
   handoffs: {},
   tools: null,
+  browser: null,
 };
 
 export type Action =
@@ -80,6 +83,7 @@ export function reducer(state: State, action: Action): State {
         proposals: byId(snapshot.proposals ?? []),
         handoffs: byId(snapshot.handoffs ?? []),
         tools: snapshot.tools ?? null,
+        browser: snapshot.browser ?? null,
       };
     }
     case "connected":
@@ -106,6 +110,8 @@ export function reducer(state: State, action: Action): State {
           return { ...next, proposals: { ...state.proposals, [event.proposal.id]: event.proposal } };
         case "tools.status":
           return { ...next, tools: event.tools };
+        case "browser.status":
+          return { ...next, browser: event.status };
         case "handoff.upserted":
           return { ...next, handoffs: { ...state.handoffs, [event.handoff.id]: event.handoff } };
         case "provider.status":
