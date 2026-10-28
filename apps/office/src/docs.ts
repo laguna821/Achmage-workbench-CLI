@@ -1,4 +1,4 @@
-import "./office.css";
+import "./docs.css";
 import { Events, Gateway, GatewayError, handshake, listen, post, stubBridge } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
 

@@ -5,6 +5,7 @@ import { extname } from "node:path";
 import type { DocFormat, OfficeEditorKind } from "@workbench/contracts";
 import type { Documents } from "./artifacts.ts";
 import { HttpError } from "./errors.ts";
+import { fontFace, matchFont } from "./fonts.ts";
 import { MIME, readBody, sendJson, serveStatic } from "./http.ts";
 
 // The office editors (IeumOffice's editor screens, apps/office) run on their own origin, a second
@@ -14,7 +15,7 @@ import { MIME, readBody, sendJson, serveStatic } from "./http.ts";
 
 /** Which editor page edits a format, if any. */
 export function officeEditorKind(format: DocFormat): OfficeEditorKind | null {
-  return format === "docx" ? "docs" : null;
+  return format === "docx" ? "docs" : format === "pptx" ? "slides" : null;
 }
 
 /** Tokens that open one document each, for as long as the gateway runs (the most recent ones). */
@@ -35,6 +36,11 @@ export class EditorGrants {
   allows(token: string | null, artifactId: string) {
     return Boolean(token && this.grants.get(token) === artifactId);
   }
+
+  /** Any open page (for what is not a document: the system's fonts). */
+  allowsAny(token: string | null) {
+    return Boolean(token && this.grants.has(token));
+  }
 }
 
 /** Pages may be framed by the Workbench window (any local origin: the app, or the dev server). */
@@ -53,10 +59,25 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
         if (!webDir) throw new HttpError(404, "no_web", "편집기 화면이 빌드되지 않았습니다.");
         return serveStatic(res, webDir, path, PAGE_HEADERS);
       }
+      const bearer = req.headers.authorization?.replace(/^Bearer\s+/i, "") ?? null;
+      // System fonts the slides editor measures and draws text with.
+      if (path.startsWith("/api/fonts/") && method === "GET") {
+        if (!grants.allowsAny(bearer)) throw new HttpError(401, "unauthorized", "편집기 권한이 없습니다.");
+        if (path === "/api/fonts/match") {
+          const family = url.searchParams.get("family") ?? "";
+          if (!family || family.length > 200) throw new HttpError(400, "bad_family", "글꼴 이름이 없습니다.");
+          return sendJson(res, 200, matchFont(family, url.searchParams.get("bold") === "1", url.searchParams.get("italic") === "1", url.searchParams.get("lang") ?? undefined));
+        }
+        const face = /^\/api\/fonts\/face\/([a-f0-9]{20})$/.exec(path);
+        const bytes = face ? fontFace(face[1]!) : null;
+        if (!bytes) throw new HttpError(404, "no_font", "글꼴을 찾지 못했습니다.");
+        res.writeHead(200, { "content-type": "font/ttf", "cache-control": "private, max-age=86400", "x-content-type-options": "nosniff" });
+        res.end(bytes);
+        return;
+      }
       const match = /^\/api\/artifacts\/([^/]+)\/(raw|bytes)$/.exec(path);
       if (!match) throw new HttpError(404, "not_found", "없는 주소입니다.");
       const [, artifactId, action] = match as unknown as [string, string, "raw" | "bytes"];
-      const bearer = req.headers.authorization?.replace(/^Bearer\s+/i, "") ?? null;
       if (!grants.allows(bearer, artifactId)) throw new HttpError(401, "unauthorized", "이 문서를 열 권한이 없습니다.");
       if (method === "GET" && action === "raw") {
         const artifact = documents.check(artifactId);

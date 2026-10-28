@@ -1,16 +1,133 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath, URL } from "node:url";
 import react from "@vitejs/plugin-react";
-import { defineConfig, type Plugin } from "vite";
-import { thirdPartyNotices } from "./notices.ts";
+import { defineConfig, type Alias, type Plugin } from "vite";
+import { collectModules, thirdPartyNotices } from "./notices.ts";
 
-// IeumOffice's editor screens, built from vendor/ieumoffice (scripts/fetch-ieum.sh) and served by
-// the gateway at /office/. Each page installs a bridge in place of IeumOffice's Electron preload,
-// then loads the editor unchanged. The editors resolve their own packages from the vendored
-// node_modules, so React and the rest come from IeumOffice's lockfile.
+// IeumOffice's editor screens, built from vendor/ieumoffice (scripts/fetch-ieum.sh) and served on
+// the editors' own origin at /office/. The editors are used unchanged:
+//   docs   — the Word editor runs in the page; a bridge (src/docs.ts) stands in for its preload.
+//   slides — the screen and preload run in the page; the editing code written for Electron's main
+//            process runs in the page's worker, with Workbench's platform (src/platform) wherever
+//            it asks Electron or Node for something (files, windows, dialogs, fonts).
+// The editors resolve their own packages from the vendored node_modules.
 const ieum = fileURLToPath(new URL("../../vendor/ieumoffice", import.meta.url));
 if (!existsSync(`${ieum}/node_modules`)) throw new Error("vendor/ieumoffice is missing: run scripts/fetch-ieum.sh first");
 const packages = `${ieum}/packages`;
+const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
+const slidesMain = `${ieum}/apps/slides/src/main/`;
+
+/** Workspace packages read from source (as IeumOffice's own builds do); subpaths before bare names. */
+const aliases: Alias[] = [
+  { find: /^@ieum\//, replacement: `${ieum}/` },
+  ...[
+    ["@genoffice/docx-engine/lazy-media", "docx-engine/src/lazy-media.ts"],
+    ["@genoffice/docx-engine/zip-splice", "docx-engine/src/zip-splice.ts"],
+    ["@genoffice/docx-engine/metafile", "docx-engine/src/metafile.ts"],
+    ["@genoffice/docx-engine/math", "docx-engine/src/math.ts"],
+    ["@genoffice/docx-engine", "docx-engine/src/index.ts"],
+    ["@genoffice/odt-engine", "odt-engine/src/index.ts"],
+    ["@genoffice/pptx-engine/table-grid", "pptx-engine/src/table-grid.ts"],
+    ["@genoffice/pptx-engine/identity", "pptx-engine/src/identity.ts"],
+    ["@genoffice/pptx-engine/named-action", "pptx-engine/src/named-action.ts"],
+    ["@genoffice/pptx-engine/custgeom", "pptx-engine/src/custgeom.ts"],
+    ["@genoffice/pptx-engine/background-promote", "pptx-engine/src/background-promote.ts"],
+    ["@genoffice/pptx-engine/model3d", "pptx-engine/src/model3d.ts"],
+    ["@genoffice/pptx-engine/chart-workbook", "pptx-engine/src/chart-workbook.ts"],
+    ["@genoffice/pptx-engine", "pptx-engine/src/index.ts"],
+    ["@genoffice/pptx-ops/op-docs", "pptx-ops/src/op-docs.ts"],
+    ["@genoffice/pptx-ops/font-size", "pptx-ops/src/font-size.ts"],
+    ["@genoffice/pptx-ops", "pptx-ops/src/index.ts"],
+    ["@genoffice/pptx-render/preset-geometry", "pptx-render/src/preset-geometry.ts"],
+    ["@genoffice/pptx-render", "pptx-render/src/index.ts"],
+    ["@genoffice/pipelines/slides/layout-audit", "pipelines/src/slides/layout-audit.ts"],
+    ["@genoffice/pipelines/slides/templates", "pipelines/src/slides/templates/index.ts"],
+    ["@genoffice/i18n", "i18n/src/index.ts"],
+  ].map(([find, path]) => ({ find: new RegExp(`^${find!.replace(/[/.]/g, "\\$&")}$`), replacement: `${packages}/${path}` })),
+  // Our own modules use these from the vendored tree too.
+  { find: /^opentype\.js$/, replacement: `${ieum}/node_modules/opentype.js/dist/opentype.mjs` },
+];
+
+/**
+ * Where the slides editing code (written for Electron's main process) asks Electron or Node for
+ * something, Workbench's platform answers; features Workbench does not run (the editor's AI,
+ * templates, presenter windows, PDF export) are left out. Applies to the worker build only.
+ */
+function workbenchPlatform(): Plugin {
+  const platform = (file: string) => here(`./src/platform/${file}`);
+  const BY_NAME: Record<string, string> = {
+    electron: platform("electron.ts"),
+    "node:fs": platform("fs.ts"),
+    fs: platform("fs.ts"),
+    "node:fs/promises": platform("fs-promises.ts"),
+    "fs/promises": platform("fs-promises.ts"),
+    "node:path": platform("node.ts"),
+    path: platform("node.ts"),
+    "node:crypto": platform("node.ts"),
+    crypto: platform("node.ts"),
+    "node:zlib": platform("node.ts"),
+    zlib: platform("node.ts"),
+    "node:os": platform("node.ts"),
+    os: platform("node.ts"),
+    "node:child_process": platform("node.ts"),
+    "node:stream/promises": platform("node.ts"),
+    "node:url": platform("node.ts"),
+    undici: platform("unused.ts"),
+    "@genoffice/ai-provider/subscription": platform("unused.ts"),
+    "@genoffice/project-store": platform("unused.ts"),
+    "@genoffice/pipelines/slides": platform("unused.ts"),
+    "@genoffice/font-metrics": platform("unused.ts"),
+    "@genoffice/electron-utils": platform("electron-utils.ts"),
+    "@genoffice/electron-utils/atomic-write": platform("electron-utils.ts"),
+    "@genoffice/electron-utils/office-encryption": platform("electron-utils.ts"),
+  };
+  // Modules of the slides main code Workbench replaces, by their path relative to it.
+  const LOCAL: Record<string, string> = {
+    "./fonts": here("./src/slides/fonts.ts"),
+    "./tiff-decode": platform("unused.ts"),
+    "./shaped-metrics": platform("unused.ts"),
+    "./font-store": platform("unused.ts"),
+    ...Object.fromEntries(
+      [
+        "ai-ipc",
+        "attachments-ipc",
+        "generate-handoff-ipc",
+        "generated-page-temp",
+        "pdf-export",
+        "presenter-show",
+        "print-window",
+        "seed-deck",
+        "seed-queue",
+        "template-bytes",
+        "template-cover",
+        "template-fonts",
+        "template-selection-ipc",
+      ].map((name) => [`./${name}`, platform("unused.ts")]),
+    ),
+  };
+  return {
+    name: "workbench-platform",
+    enforce: "pre",
+    resolveId(source, importer) {
+      if (BY_NAME[source]) return BY_NAME[source];
+      if (importer?.startsWith(slidesMain) && LOCAL[source]) return LOCAL[source];
+      // The engine's streamed save writes through Node streams; the main code gets one that writes the working copy.
+      if (importer?.startsWith(slidesMain) && source === `${packages}/pptx-engine/src/index.ts`) return here("./src/slides/engine.ts");
+      return null;
+    },
+  };
+}
+
+/** The page side of the slides editor: its preload's Electron imports go to the page's transport. */
+function pagePlatform(): Plugin {
+  return {
+    name: "workbench-page-platform",
+    enforce: "pre",
+    resolveId(source) {
+      return source === "electron" ? here("./src/platform/electron-renderer.ts") : null;
+    },
+  };
+}
 
 /**
  * TipTap's React binding (@tiptap/react 3.31, EditorInstanceManager.scheduleDestroy) destroys an
@@ -34,26 +151,24 @@ function tiptapMountGrace(): Plugin {
 export default defineConfig({
   base: "/office/",
   plugins: [
+    pagePlatform(),
     react(),
     tiptapMountGrace(),
     thirdPartyNotices([
       { title: "IeumOffice / GenOffice (Apache License 2.0)", files: [`${ieum}/NOTICE`, `${ieum}/LICENSE`] },
       { title: "Unicode data used by IeumOffice", files: [`${ieum}/LICENSE-UNICODE.txt`] },
       {
-        title: "Fonts bundled with the Word editor",
+        title: "Fonts bundled with the editors",
         files: [`${ieum}/apps/docs/src/renderer/fonts/README.md`, `${packages}/ui/src/fonts/README.md`, `${ieum}/apps/docs/src/renderer/fonts/LICENSE-OFL.txt`],
       },
     ]),
   ],
-  resolve: {
-    alias: {
-      "@ieum": ieum,
-      // The Word editor reads these workspace packages from source (as its own build does).
-      "@genoffice/docx-engine/lazy-media": `${packages}/docx-engine/src/lazy-media.ts`,
-      "@genoffice/docx-engine/zip-splice": `${packages}/docx-engine/src/zip-splice.ts`,
-      "@genoffice/docx-engine": `${packages}/docx-engine/src/index.ts`,
-      "@genoffice/odt-engine": `${packages}/odt-engine/src/index.ts`,
-    },
+  resolve: { alias: aliases },
+  // The slides main code reads its own location at load time (session-state.ts).
+  define: { __dirname: JSON.stringify("/app/main") },
+  worker: {
+    format: "es",
+    plugins: () => [workbenchPlatform(), collectModules()],
   },
   server: { port: 5175, fs: { allow: [fileURLToPath(new URL("../..", import.meta.url))] } },
   build: {
@@ -61,7 +176,7 @@ export default defineConfig({
     emptyOutDir: true,
     target: "es2022",
     sourcemap: false,
-    chunkSizeWarningLimit: 4000,
-    rollupOptions: { input: { docs: fileURLToPath(new URL("./docs.html", import.meta.url)) } },
+    chunkSizeWarningLimit: 6000,
+    rollupOptions: { input: { docs: here("./docs.html"), slides: here("./slides.html") } },
   },
 });

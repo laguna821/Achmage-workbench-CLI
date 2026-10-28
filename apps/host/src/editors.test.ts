@@ -45,9 +45,10 @@ function setup() {
 }
 
 describe("office editor pages", () => {
-  it("edit Word documents only, for now", () => {
+  it("edit Word and PowerPoint documents, for now", () => {
     expect(officeEditorKind("docx")).toBe("docs");
-    expect(officeEditorKind("pptx")).toBeNull();
+    expect(officeEditorKind("pptx")).toBe("slides");
+    expect(officeEditorKind("xlsx")).toBeNull();
     expect(officeEditorKind("markdown")).toBeNull();
   });
 
@@ -84,6 +85,23 @@ describe("office editor pages", () => {
     const raw = await get(`/api/artifacts/${plan.id}/raw`);
     expect(raw.status).toBe(200);
     expect(Buffer.from(await raw.arrayBuffer()).toString()).toContain("r1");
+  });
+
+  it("give open pages the system's face for a font family, by id only", async () => {
+    const { manager, web, plan } = setup();
+    const grants = new EditorGrants();
+    const origin = await listen(createEditorsServer(manager.documents, grants, web));
+    const token = grants.issue(plan.id);
+    const get = (path: string, auth: string | null = token) => fetch(`${origin}${path}`, { headers: auth ? { authorization: `Bearer ${auth}` } : {} });
+    expect((await get("/api/fonts/match?family=Arial", null)).status).toBe(401);
+    expect((await get("/api/fonts/face/0123456789abcdef0123")).status).toBe(404);
+    expect((await get("/api/fonts/face/../../etc/passwd")).status).toBe(404);
+    const match = (await (await get("/api/fonts/match?family=sans-serif")).json()) as { id: string; family: string } | null;
+    // Without fontconfig (another system) there is no match; with it, the face's bytes are a font.
+    if (match) {
+      const face = Buffer.from(await (await get(`/api/fonts/face/${match.id}`)).arrayBuffer());
+      expect([0x00010000, 0x4f54544f, 0x74727565]).toContain(face.readUInt32BE(0));
+    }
   });
 
   it("save bytes as the next revision, and refuse stale or foreign bytes", async () => {

@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Check the in-app Word editor in WebKitGTK (the engine the Linux app runs on), off screen.
+"""Check the in-app Word or PowerPoint editor in WebKitGTK (the engine the Linux app runs on), off screen.
 
-Starts a gateway on a temporary data folder with a small .docx, loads the real Workbench UI, opens
-the document (the editor page comes from the editors' own origin), types into the editor, saves
-with Ctrl+S and reads revision 2 back from the gateway. The editor page is on another origin, so a
-helper script injected into every frame reports its state to the window and performs the typing.
-Also reports which newer CSS features the editor relies on are available. Writes a snapshot PNG.
-Usage: python3 scripts/webkit-office-check.py [out-dir]
+Starts a gateway on a temporary data folder with a small .docx or .pptx, loads the real Workbench
+UI, opens the document (the editor page comes from the editors' own origin), edits it (Word: types
+into the text; PowerPoint: double-clicks the title on the slide canvas and types), saves with
+Ctrl+S and reads revision 2 back from the gateway. The editor page is on another origin, so a
+helper script injected into every frame reports its state to the window and performs the input.
+Also reports which newer CSS features the editors rely on are available. Writes a snapshot PNG.
+Usage: python3 scripts/webkit-office-check.py [docs|slides] [out-dir]
 """
 import io
 import json
+import shutil
 import os
 import re
 import subprocess
@@ -30,7 +32,9 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("WebKit2", "4.1")
 from gi.repository import GLib, Gtk, WebKit2  # noqa: E402
 
-out_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(tempfile.gettempdir(), "wb-webkit-office")
+args = [a for a in sys.argv[1:]]
+kind = args.pop(0) if args and args[0] in ("docs", "slides") else "docs"
+out_dir = args[0] if args else os.path.join(tempfile.gettempdir(), f"wb-webkit-{kind}")
 os.makedirs(out_dir, exist_ok=True)
 repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 data_dir = tempfile.mkdtemp(prefix="workbench-webkit-office-")
@@ -54,7 +58,18 @@ def docx_text(data):
     return "\n".join("".join(re.findall(r"<w:t(?: [^>]*)?>([^<]*)</w:t>", p)) for p in paras)
 
 
-make_docx(os.path.join(cwd, "계획.docx"), ["가을 특강 계획", "질문에서 시작하는 글쓰기", "10월 28일 오후 3시"])
+def pptx_text(data):
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        names = sorted(n for n in z.namelist() if re.match(r"ppt/slides/slide\d+\.xml$", n))
+        return "\n".join("".join(re.findall(r"<a:t>([^<]*)</a:t>", z.read(n).decode("utf-8"))) for n in names)
+
+
+if kind == "docs":
+    DOC_NAME, FIRST_TEXT, TYPED, read_text = "계획.docx", "질문에서 시작하는 글쓰기", " — 웹킷에서 고침", docx_text
+    make_docx(os.path.join(cwd, DOC_NAME), ["가을 특강 계획", "질문에서 시작하는 글쓰기", "10월 28일 오후 3시"])
+else:
+    DOC_NAME, FIRST_TEXT, TYPED, read_text = "표지.pptx", "질문에서", " 웹킷", pptx_text
+    shutil.copyfile(os.path.join(repo, "scripts", "fixtures", "cover.pptx"), os.path.join(cwd, DOC_NAME))
 
 host = subprocess.Popen(
     ["node", os.environ.get("HOST_ENTRY", "apps/host/src/main.ts")],
@@ -84,8 +99,8 @@ def request(method, path, body=None, raw=False):
 
 
 request("PUT", "/api/prefs", {"prefs": {"onboarding": "done"}})
-work = request("POST", "/api/works", {"title": "WebKit 워드", "folderId": None, "cwd": cwd})
-artifact = request("POST", f"/api/works/{work['id']}/artifacts", {"path": "계획.docx"})
+work = request("POST", "/api/works", {"title": f"WebKit {kind}", "folderId": None, "cwd": cwd})
+artifact = request("POST", f"/api/works/{work['id']}/artifacts", {"path": DOC_NAME})
 
 # In the window: remember the work, and collect what the editor frame reports.
 WINDOW_SCRIPT = """
@@ -115,25 +130,65 @@ FRAME_SCRIPT = """
     autospace: CSS.supports("text-autospace: normal"),
     zoom: CSS.supports("zoom: 1.5"),
   };
+  // The slide being edited: the largest Konva stage (the others are thumbnails).
+  const mainStage = () => {
+    const stages = (window.Konva && window.Konva.stages) || [];
+    return stages.length ? stages.reduce((a, b) => (b.width() > a.width() ? b : a)) : null;
+  };
+  const slideText = () => {
+    const stage = mainStage();
+    return stage ? stage.find("Text").map((node) => node.text()).join("") : null;
+  };
   setInterval(() => {
     const editor = document.querySelector(".ProseMirror");
-    window.parent.postMessage({ __test: "state", text: editor ? editor.textContent : null, support, href: location.href, ready: document.readyState,
+    window.parent.postMessage({ __test: "state", text: editor ? editor.textContent : slideText(), support, href: location.href, ready: document.readyState,
       body: document.body ? document.body.innerHTML.length : -1, errors: window.__errors || [] }, "*");
   }, 400);
+  const typeInto = (element, text) => {
+    element.focus();
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    range.collapse(false);
+    const selection = getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.execCommand("insertText", false, text);
+  };
+  /** Double-click a word on the slide canvas, as a mouse would (Konva's dblclick comes from two mousedown/mouseup pairs). */
+  const doubleClickWord = async (word) => {
+    const stage = mainStage();
+    const node = stage && stage.find("Text").find((candidate) => candidate.text().includes(word));
+    if (!node) return false;
+    const rect = node.getClientRect();
+    const box = stage.container().getBoundingClientRect();
+    const scale = box.width / stage.width();
+    const x = box.left + (rect.x + rect.width / 2) * scale;
+    const y = box.top + (rect.y + rect.height / 2) * scale;
+    const target = document.elementFromPoint(x, y);
+    const base = { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, button: 0, view: window };
+    for (let count = 1; count <= 2; count += 1) {
+      target.dispatchEvent(new MouseEvent("mousedown", { ...base, buttons: 1, detail: count }));
+      target.dispatchEvent(new MouseEvent("mouseup", { ...base, buttons: 0, detail: count }));
+      target.dispatchEvent(new MouseEvent("click", { ...base, buttons: 0, detail: count }));
+      await new Promise((resolve) => setTimeout(resolve, 80));
+    }
+    target.dispatchEvent(new MouseEvent("dblclick", { ...base, buttons: 0, detail: 2 }));
+    return true;
+  };
   window.addEventListener("message", (event) => {
     const data = event.data;
     if (!data || !data.__test || event.source !== window.parent) return;
     if (data.__test === "type") {
       const editor = document.querySelector(".ProseMirror");
-      const paragraph = editor.querySelector("p");
-      editor.focus();
-      const range = document.createRange();
-      range.selectNodeContents(paragraph);
-      range.collapse(false);
-      const selection = getSelection();
-      selection.removeAllRanges();
-      selection.addRange(range);
-      document.execCommand("insertText", false, data.text);
+      if (editor) typeInto(editor.querySelector("p"), data.text);
+      else
+        void doubleClickWord(data.word).then(async () => {
+          for (let tries = 0; tries < 40 && !document.querySelector("[contenteditable]"); tries += 1) await new Promise((resolve) => setTimeout(resolve, 100));
+          const box = document.querySelector("[contenteditable]");
+          if (!box) return;
+          typeInto(box, data.text);
+          box.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true }));
+        });
     }
     if (data.__test === "save") {
       const target = document.activeElement || document.body;
@@ -175,14 +230,13 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + (f" — {detail}" if detail else ""), flush=True)
 
 
-TYPED = " — 웹킷에서 고침"
 state = {"phase": "app", "deadline": time.time() + 60, "started": time.time()}
 
 
 def snapshot_then_quit():
     def saved(source, result):
         surface = source.get_snapshot_finish(result)
-        surface.write_to_png(os.path.join(out_dir, "webkit-office.png"))
+        surface.write_to_png(os.path.join(out_dir, f"webkit-{kind}.png"))
         loop.quit()
 
     view.get_snapshot(WebKit2.SnapshotRegion.VISIBLE, WebKit2.SnapshotOptions.NONE, None, saved)
@@ -212,27 +266,27 @@ def tick():
             evaluate(
                 """document.querySelector('.docs-button').click();
                    setTimeout(() => {
-                     const item = [...document.querySelectorAll('.docs-menu *')].find((el) => el.children.length === 0 && el.textContent.trim() === '계획.docx');
+                     const item = [...document.querySelectorAll('.docs-menu *')].find((el) => el.children.length === 0 && el.textContent.trim() === %s);
                      item && item.click();
                    }, 300);
-                   return { clicked: true };""",
+                   return { clicked: true };""" % json.dumps(DOC_NAME),
                 lambda v: None,
             )
             state["phase"] = "open"
             state["deadline"] = time.time() + 90
-        elif state["phase"] == "open" and "질문에서 시작하는 글쓰기" in text and "r1 저장됨" in status:
-            check("WebKitGTK에서 워드 편집기 열림(다른 출처)", True, f"{time.time() - state['started']:.1f}s")
+        elif state["phase"] == "open" and FIRST_TEXT in text and "r1 저장됨" in status:
+            check(f"WebKitGTK에서 {'워드' if kind == 'docs' else 'PPT'} 편집기 열림(다른 출처)", True, f"{time.time() - state['started']:.1f}s")
             state["support"] = frame.get("support")
             state["phase"] = "type"
             state["deadline"] = time.time() + 30
-            post_to_frame({"__test": "type", "text": TYPED})
+            post_to_frame({"__test": "type", "text": TYPED, "word": "특강"})
         elif state["phase"] == "type" and TYPED.strip() in text and "저장 안 됨" in status:
             check("입력하면 '저장 안 됨' 표시", True)
             state["phase"] = "save"
             state["deadline"] = time.time() + 30
             post_to_frame({"__test": "save"})
         elif state["phase"] == "save" and "r2 저장됨" in status:
-            saved = docx_text(request("GET", f"/api/artifacts/{artifact['id']}/raw?revision=2", raw=True))
+            saved = read_text(request("GET", f"/api/artifacts/{artifact['id']}/raw?revision=2", raw=True))
             check("Ctrl+S → r2, 파일에 반영", TYPED.strip() in saved, saved.split("\n")[0])
             support = state.get("support") or {}
             print("INFO CSS 지원: " + json.dumps(support), flush=True)
@@ -254,7 +308,7 @@ try:
     loop.run()
 finally:
     host.terminate()
-with open(os.path.join(out_dir, "webkit-office-results.json"), "w") as handle:
+with open(os.path.join(out_dir, f"webkit-{kind}-results.json"), "w") as handle:
     json.dump({"results": results, "support": state.get("support")}, handle, ensure_ascii=False, indent=2)
 failed = [r for r in results if not r["ok"]]
 print(f"{len(results) - len(failed)}/{len(results)} passed")

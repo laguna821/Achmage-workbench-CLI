@@ -24,22 +24,39 @@ function licenceText(root: string) {
   return file ? readFileSync(join(root, file), "utf8").trim() : null;
 }
 
+/** Packages found in bundles built so far (workers are built before the pages that start them). */
+const packages = new Map<string, { name: string; version: string; license: string; text: string | null }>();
+
+function record(bundle: Record<string, { type: string; modules?: Record<string, unknown> }>) {
+  for (const output of Object.values(bundle)) {
+    if (output.type !== "chunk") continue;
+    for (const id of Object.keys(output.modules ?? {})) {
+      const root = packageRoot(id);
+      if (!root || packages.has(root) || !existsSync(join(root, "package.json"))) continue;
+      const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { name?: string; version?: string; license?: string | { type?: string } };
+      const license = typeof manifest.license === "string" ? manifest.license : (manifest.license?.type ?? "see the package");
+      packages.set(root, { name: manifest.name ?? root, version: manifest.version ?? "", license, text: licenceText(root) });
+    }
+  }
+}
+
+/** For worker builds: their packages go into the pages' notices. */
+export function collectModules(): Plugin {
+  return {
+    name: "workbench-third-party-modules",
+    apply: "build",
+    generateBundle(_, bundle) {
+      record(bundle as Parameters<typeof record>[0]);
+    },
+  };
+}
+
 export function thirdPartyNotices(sections: Section[]): Plugin {
   return {
     name: "workbench-third-party-notices",
     apply: "build",
     generateBundle(_, bundle) {
-      const packages = new Map<string, { name: string; version: string; license: string; text: string | null }>();
-      for (const output of Object.values(bundle)) {
-        if (output.type !== "chunk") continue;
-        for (const id of Object.keys(output.modules)) {
-          const root = packageRoot(id);
-          if (!root || packages.has(root) || !existsSync(join(root, "package.json"))) continue;
-          const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { name?: string; version?: string; license?: string | { type?: string } };
-          const license = typeof manifest.license === "string" ? manifest.license : (manifest.license?.type ?? "see the package");
-          packages.set(root, { name: manifest.name ?? root, version: manifest.version ?? "", license, text: licenceText(root) });
-        }
-      }
+      record(bundle as Parameters<typeof record>[0]);
       const rule = "=".repeat(78);
       const parts = [
         "Achmage Workbench office editors — third-party notices",

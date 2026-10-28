@@ -18,10 +18,10 @@ export type OfficeConflict = { code: string; message: string };
 export type OfficeStatus = { dirty: boolean; revision: number | null; conflict: OfficeConflict | null };
 
 /**
- * A Word document in the central area, edited with IeumOffice's Word editor built into Workbench
- * (apps/office, /office/docs.html on the editors' own origin). Saves become revisions; a save over a
- * revision made elsewhere is refused and reported, and a revision made elsewhere is opened when
- * nothing here is unsaved.
+ * A Word or PowerPoint document in the central area, edited with IeumOffice's editor built into
+ * Workbench (apps/office: /office/docs.html, /office/slides.html, on the editors' own origin).
+ * Saves become revisions; a save over a revision made elsewhere is refused and reported, and a
+ * revision made elsewhere is opened when nothing here is unsaved.
  */
 export const OfficeEditor = forwardRef<
   OfficeHandle,
@@ -179,14 +179,14 @@ export const OfficeEditor = forwardRef<
   if (current && "error" in current) {
     return (
       <div className="column empty-hint office-frame-error">
-        워드 편집기를 열지 못했습니다: {current.error}{" "}
+        편집기를 열지 못했습니다: {current.error}{" "}
         <button type="button" className="link" onClick={() => setGeneration((value) => value + 1)}>
           다시 열기
         </button>
       </div>
     );
   }
-  if (!opened.current) return hidden ? null : <div className="column empty-hint">워드 편집기를 여는 중…</div>;
+  if (!opened.current) return hidden ? null : <div className="column empty-hint">편집기를 여는 중…</div>;
   return (
     <iframe
       key={`${artifact.id}:${generation}`}
@@ -196,7 +196,7 @@ export const OfficeEditor = forwardRef<
       style={hidden ? { display: "none" } : undefined}
       allow="fullscreen; clipboard-read; clipboard-write"
       src={`${opened.current.url}?a=${artifact.id}&g=${generation}&host=${encodeURIComponent(location.origin)}`}
-      title={`워드 편집기 · ${artifact.name}`}
+      title={`${artifact.format === "pptx" ? "PPT" : "워드"} 편집기 · ${artifact.name}`}
     />
   );
 });
