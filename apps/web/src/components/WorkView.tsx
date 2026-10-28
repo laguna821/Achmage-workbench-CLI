@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { createPortal } from "react-dom";
 import { EFFORT_LABEL, PROVIDER_LABEL, accessFor, type AccessMode, type CreateTarget, type DocRef, type Provider, type Session, type UiPrefs, type Work } from "@workbench/contracts";
 import type { ReactNode } from "react";
 import type { MentionItem } from "../mention.ts";
@@ -17,6 +18,7 @@ import { useUnseen } from "./SessionCards.tsx";
 import { workSessions } from "../tree.ts";
 import { Transcript } from "./Transcript.tsx";
 import { AccessPicker, ContextGauge } from "./SessionControls.tsx";
+import type { ModeProps } from "../workmodes.ts";
 
 export type WorkActions = {
   /** Send a request; while the engine works it steers into the turn or waits ("queue"). */
@@ -226,6 +228,7 @@ export function WorkView({
   onFocusDone,
   sidebarOpen,
   prefs,
+  modes,
 }: {
   state: State;
   work: Work;
@@ -242,6 +245,8 @@ export function WorkView({
   sidebarOpen?: boolean;
   /** UI prefs as they are now (the access last picked for each engine lives there). */
   prefs: UiPrefs;
+  /** The work screen's modes (while a document is open): their bar, and in "나란히" where the input goes. */
+  modes?: ModeProps;
 }) {
   const { lookOf, openMenu } = useAppearance();
   const unseen = useUnseen();
@@ -314,6 +319,8 @@ export function WorkView({
       });
   };
   walk(null, 0);
+  // The input: in its place, or in "나란히" under both sides (or not here: the document has it).
+  const place = (input: ReactNode) => (modes?.slot === undefined ? input : modes.slot ? createPortal(input, modes.slot) : null);
 
   return (
     <main className="work-view" onContextMenu={(event) => openMenu(event, active?.provider ?? engine)}>
@@ -555,8 +562,9 @@ export function WorkView({
         </div>
       )}
 
-      <div className="column composer-area">
+      {place(<div className="column composer-area">
         {active ? <QueuedList session={active} busy={busy} actions={actions.queued} /> : null}
+        {modes?.bar}
         {!active ? (
           <EngineTabs
             value={engine}
@@ -571,12 +579,12 @@ export function WorkView({
             items: mentionItems,
             onPick: (item) => setAttached((current) => (current.some((entry) => entry.id === item.id) ? current : [...current, { id: item.id, mode: "review" }])),
           }}
-          draftKey={`work:${work.id}:${active?.id ?? "none"}`}
+          draftKey={modes?.draftKey ?? `work:${work.id}:${active?.id ?? "none"}`}
           placeholder="이 작업에 이어서 요청하기"
           busy={busy}
           waiting={working}
           steerable={working && !handoffTo}
-          autoFocus
+          autoFocus={modes?.slot === undefined}
           left={
             <>
               <AccessPicker provider={pickerProvider} value={access} onChange={(mode) => actions.setAccess(active, pickerProvider, mode)} />
@@ -708,7 +716,7 @@ export function WorkView({
             </>
           ) : null}
         </div>
-      </div>
+      </div>)}
     </main>
   );
 }

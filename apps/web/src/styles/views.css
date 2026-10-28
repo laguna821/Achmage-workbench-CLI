@@ -731,6 +731,192 @@ button.flow-label:hover .flow-label-title {
   box-shadow: 0 0 0 1px var(--line);
 }
 
+/* ── Work screen ──────────────────────────────────────────────────────── */
+.work-mode-row {
+  display: flex;
+  justify-content: center;
+  margin: 0 0 8px;
+}
+
+.work-mode-bar button {
+  height: 24px;
+  padding: 0 11px;
+  font-size: 13px;
+}
+
+.work-mode-bar .mode-pill {
+  height: 24px;
+}
+
+/* "나란히": conversation | document, one input under both. */
+.split-host {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.split-panes {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+}
+
+.split-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.split-pane > main {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.split .split-pane.focused {
+  box-shadow: inset 0 2px 0 color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.split-divider {
+  cursor: col-resize;
+  background: linear-gradient(var(--line), var(--line)) center / 1px 100% no-repeat;
+}
+
+.split-divider:hover,
+.split-divider:focus-visible {
+  outline: none;
+  background: linear-gradient(var(--accent), var(--accent)) center / 3px 100% no-repeat;
+}
+
+.split-input {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--line);
+}
+
+/* Half a window: the document's name keeps its line, its controls go under it. */
+.split-host.split .doc-header {
+  grid-template-columns: auto minmax(0, 1fr);
+  row-gap: 6px;
+  padding: 8px 16px;
+}
+
+.split-host.split .doc-title {
+  justify-content: flex-start;
+}
+
+.split-host.split .doc-header-right {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+/* ── "읽기": the document filling the window, a page at a time ──────────── */
+.reader {
+  position: fixed;
+  inset: 0;
+  z-index: 58;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.reader-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 52px;
+  padding: 0 14px 0 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.reader-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.reader-spacer {
+  flex: 1 1 auto;
+}
+
+.reader-count {
+  min-width: 64px;
+  text-align: center;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.reader-close kbd {
+  margin-left: 2px;
+}
+
+.reader-stage {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 24px 32px;
+  overflow: hidden;
+}
+
+.reader-stage.kind-frame {
+  padding: 0;
+  align-items: stretch;
+}
+
+.reader-frame {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.reader-frame .html-view {
+  flex: 1 1 auto;
+}
+
+.reader-page {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: #ffffff;
+  box-shadow: 0 2px 16px color-mix(in srgb, #000000 18%, transparent);
+}
+
+.reader-flow {
+  align-self: flex-start;
+  overflow: hidden;
+  column-fill: auto;
+  font-size: var(--e-size);
+  line-height: var(--e-line);
+}
+
+.reader-flow img,
+.reader-flow .diagram {
+  max-width: 100%;
+  break-inside: avoid;
+}
+
+.reader-flow .markdown > :first-child {
+  margin-top: 0;
+}
+
+.reader-plain {
+  white-space: pre-wrap;
+}
+
+.reader-wait {
+  color: var(--muted);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .mode-pill {
     transition: none;
