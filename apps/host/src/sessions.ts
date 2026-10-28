@@ -888,10 +888,11 @@ export class SessionManager {
    */
   updateSession(sessionId: string, patch: UpdateSessionRequest): Session {
     const session = this.requireSession(sessionId);
-    const listing = patch.pinned !== undefined || patch.sort !== undefined || patch.archived !== undefined || patch.seen !== undefined;
+    const listing = patch.pinned !== undefined || patch.sort !== undefined || patch.archived !== undefined || patch.seen !== undefined || patch.muted !== undefined;
     const content = patch.purpose !== undefined || patch.model !== undefined || patch.effort !== undefined;
     const next = { ...session, updatedAt: content || !listing ? Date.now() : session.updatedAt };
     if (patch.pinned !== undefined) next.pinned = Boolean(patch.pinned);
+    if (patch.muted !== undefined) next.muted = Boolean(patch.muted);
     if (patch.sort !== undefined) next.sort = finiteSort(patch.sort);
     if (patch.archived !== undefined) {
       if (patch.archived && session.status !== "idle" && session.status !== "error") {

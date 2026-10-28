@@ -57,8 +57,18 @@ function cachedPrefs(): UiPrefs {
 }
 const inDesktop = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
-/** An OS notification (desktop app); the first one asks for permission where the system wants that. */
-async function notify(title: string, body: string) {
+/**
+ * An OS notification (desktop app). On Linux the shell's own one opens its session when clicked;
+ * elsewhere (or without a notification server that says so) the plugin's, which only shows.
+ */
+async function notify(title: string, body: string, sessionId: string) {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("notify_session", { title, body, sessionId });
+    return;
+  } catch {
+    // Not Linux: the plugin's notification below.
+  }
   const { isPermissionGranted, requestPermission, sendNotification } = await import("@tauri-apps/plugin-notification");
   if (!(await isPermissionGranted()) && (await requestPermission()) !== "granted") return;
   sendNotification({ title, body });
@@ -651,15 +661,49 @@ export function App() {
       const before = seen.get(session.id);
       seen.set(session.id, session.status);
       // Only the main window tells; a detached one would say the same thing twice.
-      if (!before || before === session.status || !inDesktop || !away || prefsRef.current.notify === false || single) continue;
+      if (!before || before === session.status || !inDesktop || !away || prefsRef.current.notify === false || single || session.muted) continue;
       const where = `${state.works[session.workId]?.title ?? ""} — ${session.purpose}`;
-      if (session.status === "awaitingApproval") void notify(`확인이 필요합니다 · ${PROVIDER_LABEL[session.provider]}`, where).catch(() => undefined);
-      else if (session.status === "error") void notify(`응답이 끝나지 못했습니다 · ${PROVIDER_LABEL[session.provider]}`, where).catch(() => undefined);
+      if (session.status === "awaitingApproval") void notify(`확인이 필요합니다 · ${PROVIDER_LABEL[session.provider]}`, where, session.id).catch(() => undefined);
+      else if (session.status === "error") void notify(`응답이 끝나지 못했습니다 · ${PROVIDER_LABEL[session.provider]}`, where, session.id).catch(() => undefined);
       else if (session.status === "idle" && BUSY.includes(before)) {
-        void notify(`답이 왔습니다 · ${PROVIDER_LABEL[session.provider]}`, `${where}${session.preview ? `\n${session.preview.split("\n")[0]}` : ""}`).catch(() => undefined);
+        void notify(`답이 왔습니다 · ${PROVIDER_LABEL[session.provider]}`, `${where}${session.preview ? `\n${session.preview.split("\n")[0]}` : ""}`, session.id).catch(() => undefined);
       }
     }
   }, [state.sessions, state.works]);
+
+  // The tray's "확인 필요 N" follows the sessions waiting for the user (main window only).
+  const attention = useRef(-1);
+  useEffect(() => {
+    if (!inDesktop || single) return;
+    const count = Object.values(state.sessions).filter((session) => session.status === "awaitingApproval" && !session.archivedAt).length;
+    if (count === attention.current) return;
+    attention.current = count;
+    void import("@tauri-apps/api/core").then(({ invoke }) => invoke("set_attention", { count })).catch(() => undefined);
+  }, [state.sessions]);
+
+  // A clicked notification, or the tray's "확인 필요", opens its session.
+  const opener = useRef<{ open: (sessionId: string | null) => void }>({ open: () => undefined });
+  opener.current.open = (sessionId) => {
+    const target = sessionId ? state.sessions[sessionId] : Object.values(state.sessions).find((session) => session.status === "awaitingApproval" && !session.archivedAt);
+    if (target) openSession(target);
+  };
+  useEffect(() => {
+    if (!inDesktop || single) return;
+    let stop = false;
+    const unlisten: (() => void)[] = [];
+    void import("@tauri-apps/api/event").then(async ({ listen }) => {
+      const handlers = [
+        await listen<string>("workbench://open-session", (event) => opener.current.open(event.payload)),
+        await listen("workbench://open-attention", () => opener.current.open(null)),
+      ];
+      if (stop) handlers.forEach((handler) => handler());
+      else unlisten.push(...handlers);
+    });
+    return () => {
+      stop = true;
+      unlisten.forEach((handler) => handler());
+    };
+  }, []);
 
   // "앱을 열면: 마지막 작업" set elsewhere (another window, a cleared cache): honoured once the
   // gateway's prefs arrive, if the user has not moved away from home meanwhile.
@@ -907,6 +951,7 @@ export function App() {
           { kind: "item", label: "이름 바꾸기", icon: "edit", hint: "F2", onSelect: () => setSidebarPending({ rename: session.id }) },
           { kind: "separator" },
           { kind: "item", label: session.pinned ? "고정 풀기" : "고정", icon: "pin", onSelect: () => void api.updateSession(session.id, { pinned: !session.pinned }).catch(fail) },
+          { kind: "item", label: session.muted ? "알림 켜기" : "알림 끄기", icon: "bell", hint: session.muted ? "이 세션은 알리지 않음" : undefined, onSelect: () => void api.updateSession(session.id, { muted: !session.muted }).catch(fail) },
           {
             kind: "item",
             label: unseenNow ? "읽음으로 표시" : "읽지 않음으로 표시",

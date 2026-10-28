@@ -335,6 +335,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
               seen: typeof body.seen === "boolean" ? body.seen : undefined,
               access: body.access === undefined ? undefined : body.access === null ? null : (body.access as AccessMode),
               browser: typeof body.browser === "boolean" ? body.browser : undefined,
+              muted: typeof body.muted === "boolean" ? body.muted : undefined,
             }),
           );
         }

@@ -6,7 +6,7 @@ use std::sync::Mutex;
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::{Emitter, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tauri_plugin_notification::NotificationExt;
 
@@ -165,16 +165,25 @@ fn show_main(app: &tauri::AppHandle) {
     }
 }
 
-/// The tray entry: open the window again, or quit (which stops the gateway and its engines).
-/// Linux trays (AppIndicator) only open the menu, so "열기" is a menu item, not a click.
+/// The tray's first line: how many sessions wait for the user ("확인 필요 N"); it opens the first.
+struct Attention(Mutex<Option<MenuItem<tauri::Wry>>>);
+
+/// The tray entry: what waits, open the window again, or quit (which stops the gateway and its
+/// engines). Linux trays (AppIndicator) only open the menu, so "열기" is a menu item, not a click.
 fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let attention = MenuItem::with_id(app, "attention", "확인할 것 없음", false, None::<&str>)?;
     let open = MenuItem::with_id(app, "open", "Achmage Workbench 열기", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "끝내기 (진행 중인 응답도 멈춤)", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &quit])?;
+    let menu = Menu::with_items(app, &[&attention, &open, &quit])?;
+    app.manage(Attention(Mutex::new(Some(attention))));
     let mut tray = TrayIconBuilder::with_id("main")
         .tooltip("Achmage Workbench")
         .menu(&menu)
         .on_menu_event(|app, event| match event.id.as_ref() {
+            "attention" => {
+                show_main(app);
+                let _ = app.emit_to("main", "workbench://open-attention", ());
+            }
             "open" => show_main(app),
             "quit" => app.exit(0),
             _ => {}
@@ -184,6 +193,57 @@ fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     }
     tray.build(app)?;
     Ok(())
+}
+
+/// The number of sessions waiting for the user, from the main window: the tray's first line and
+/// its tooltip follow it.
+#[tauri::command]
+fn set_attention(app: tauri::AppHandle, count: u32) {
+    if let Some(state) = app.try_state::<Attention>() {
+        if let Some(item) = state.0.lock().unwrap().as_ref() {
+            let _ = item.set_text(if count > 0 { format!("확인 필요 {count} · 열기") } else { "확인할 것 없음".to_string() });
+            let _ = item.set_enabled(count > 0);
+        }
+    }
+    if let Some(tray) = app.tray_by_id("main") {
+        let _ = tray.set_tooltip(Some(if count > 0 { format!("Achmage Workbench · 확인 필요 {count}") } else { "Achmage Workbench".to_string() }));
+    }
+}
+
+/// An OS notification that opens its session when clicked: freedesktop notification servers
+/// report the click as the "default" action. Elsewhere the UI falls back to the notification
+/// plugin (shown, but a click does not say which session).
+#[tauri::command]
+fn notify_session(app: tauri::AppHandle, title: String, body: String, session_id: String) -> Result<(), String> {
+    if !valid_session_id(&session_id) {
+        return Err("세션을 알아볼 수 없습니다.".into());
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let handle = notify_rust::Notification::new()
+            .appname("Achmage Workbench")
+            .summary(&title)
+            .body(&body)
+            .icon("achmage-workbench")
+            .action("default", "열기")
+            .show()
+            .map_err(|error| error.to_string())?;
+        // Waits until the notification is clicked or goes away (one short-lived thread each).
+        std::thread::spawn(move || {
+            handle.wait_for_action(|action| {
+                if action == "default" {
+                    show_main(&app);
+                    let _ = app.emit_to("main", "workbench://open-session", session_id.clone());
+                }
+            });
+        });
+        Ok(())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (app, title, body);
+        Err("unsupported".into())
+    }
 }
 
 fn stop_gateway(app: &tauri::AppHandle) {
@@ -210,7 +270,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .invoke_handler(tauri::generate_handler![open_session_window])
+        .invoke_handler(tauri::generate_handler![open_session_window, notify_session, set_attention])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {

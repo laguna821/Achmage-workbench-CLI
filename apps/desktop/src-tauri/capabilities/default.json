@@ -36,6 +36,8 @@
       ]
     },
     "notification:default",
-    "allow-open-session-window"
+    "allow-open-session-window",
+    "allow-notify-session",
+    "allow-set-attention"
   ]
 }

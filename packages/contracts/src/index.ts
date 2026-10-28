@@ -89,6 +89,8 @@ export type Session = {
   archivedAt: number | null;
   /** When the user last looked at its replies; a reply after this is "새 답". */
   seenAt: number | null;
+  /** No OS notifications for this session ("알림 끄기"). */
+  muted?: boolean;
   /** Marked "읽지 않음" by hand. */
   unread: boolean;
   /** Requests waiting to be sent when the current turn ends ("끝나면 보내기"), oldest first. */
@@ -508,6 +510,8 @@ export type UpdateSessionRequest = {
   access?: AccessMode | null;
   /** Let the session use the agent browser; the engine is told from its next turn. */
   browser?: boolean;
+  /** No OS notifications for this session ("알림 끄기"). */
+  muted?: boolean;
 };
 
 export type UpdateWorkRequest = {
