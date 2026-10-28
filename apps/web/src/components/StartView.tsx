@@ -1,6 +1,9 @@
 import { useCallback, useState } from "react";
-import { PROVIDER_LABEL, type Provider, type Work } from "@workbench/contracts";
+import { PROVIDER_LABEL, isUnseen, type Provider, type Session, type Work } from "@workbench/contracts";
 import { folderPath, type State } from "../state.ts";
+import { nowSessions, sessionHidden, workDocs, workHidden, workSessions } from "../tree.ts";
+import { ago, statusText, statusTone } from "../format.ts";
+import { Wordmark } from "./BrandMark.tsx";
 import { Composer } from "./Composer.tsx";
 import { Icon } from "./Icon.tsx";
 import { MenuItem, Popover } from "./Popover.tsx";
@@ -128,25 +131,126 @@ function FolderChoice({
   );
 }
 
+// The logo comes in once per launch (not each time home is opened again).
+let greeted = false;
+
+/** One session as a line: what it is, where it is, its last reply or what it is doing. */
+function SessionLine({ state, session, onOpen }: { state: State; session: Session; onOpen: (session: Session) => void }) {
+  const work = state.works[session.workId];
+  const busy = session.status !== "idle" && session.status !== "error";
+  const tone = statusTone(session);
+  return (
+    <button type="button" className="home-session" onClick={() => onOpen(session)} title={`${session.purpose} · ${PROVIDER_LABEL[session.provider]}`}>
+      <EngineMark provider={session.provider} size={15} />
+      <span className="home-session-main">
+        <span className="home-session-title">
+          {work ? <span className="home-session-work">{work.title}</span> : null}
+          {session.purpose}
+        </span>
+        <span className="home-session-preview">{busy ? statusText(session) : (session.preview ?? "아직 답이 없습니다")}</span>
+      </span>
+      <span className={`home-session-state tone-${tone}`}>
+        {session.status === "awaitingApproval" ? "확인 필요" : busy ? "진행 중" : isUnseen(session) ? "새 답" : ago(session.previewAt ?? session.updatedAt)}
+      </span>
+    </button>
+  );
+}
+
+/** What is going on across all works: needs you, running, new replies; then where to pick up. */
+function HomeBoard({ state, onOpenSession, onOpenWork }: { state: State; onOpenSession: (session: Session) => void; onOpenWork: (work: Work) => void }) {
+  const now = nowSessions(state, null);
+  const live = [...now.attention, ...now.running, ...now.unseen];
+  const shown = new Set(live.map((session) => session.id));
+  const recent = Object.values(state.sessions)
+    .filter((session) => !shown.has(session.id) && !sessionHidden(state, session) && session.previewAt)
+    .sort((a, b) => (b.previewAt ?? 0) - (a.previewAt ?? 0))
+    .slice(0, 6);
+  const works = Object.values(state.works)
+    .filter((work) => !workHidden(state, work))
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, 6);
+  if (!live.length && !recent.length && !works.length) return null;
+  return (
+    <div className="home-board">
+      {live.length ? (
+        <section className="home-section" aria-label="지금">
+          <h2 className="section-label">지금</h2>
+          {live.map((session) => (
+            <SessionLine key={session.id} state={state} session={session} onOpen={onOpenSession} />
+          ))}
+        </section>
+      ) : null}
+      {recent.length ? (
+        <section className="home-section" aria-label="이어서 하기">
+          <h2 className="section-label">이어서 하기</h2>
+          {recent.map((session) => (
+            <SessionLine key={session.id} state={state} session={session} onOpen={onOpenSession} />
+          ))}
+        </section>
+      ) : null}
+      {works.length ? (
+        <section className="home-section" aria-label="작업">
+          <h2 className="section-label">작업</h2>
+          <div className="home-works">
+            {works.map((work) => {
+              const path = folderPath(state, work.folderId).map((folder) => folder.name).join(" / ");
+              const sessions = workSessions(state, work.id).length;
+              const docs = workDocs(state, work.id).length;
+              return (
+                <button key={work.id} type="button" className="home-work" onClick={() => onOpenWork(work)}>
+                  <span className="home-work-title">
+                    <Icon name="project" size={14} />
+                    {work.title}
+                  </span>
+                  <span className="home-work-path">{path || "분류 없음"}</span>
+                  <span className="home-work-meta">
+                    세션 {sessions}
+                    {docs ? ` · 문서 ${docs}` : ""} · {ago(work.updatedAt)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Home: the brand, a new session right away (the input is ready at once, the logo only greets),
+ * then what is going on across all works. With a folder picked from the sidebar it is just the
+ * start of a new work there.
+ */
 export function StartView({
   state,
   folderId,
   onClearFolder,
   onStart,
   onOpenWork,
+  onOpenSession,
   pickFolder,
   engine,
   setEngine,
+  motion = true,
 }: {
   state: State;
   folderId: string | null;
   onClearFolder: () => void;
   onStart: (text: string, provider: Provider, cwd: string | null, choice: ModelChoice) => Promise<boolean>;
   onOpenWork: (work: Work) => void;
+  onOpenSession: (session: Session) => void;
   pickFolder: (() => Promise<string | null>) | null;
   engine: Provider;
   setEngine: (provider: Provider) => void;
+  /** The logo's short entrance (off in settings or with reduced motion). */
+  motion?: boolean;
 }) {
+  const [greet] = useState(() => {
+    const first = !greeted;
+    greeted = true;
+    return first && motion;
+  });
   const { openMenu } = useAppearance();
   const [cwd, setCwd] = useState<string | null>(null);
   const [choice, setChoice] = useState<ModelChoice>({ model: null, effort: null });
@@ -157,7 +261,9 @@ export function StartView({
   return (
     <main className="start-view" onContextMenu={(event) => openMenu(event, engine)}>
       <div className="column start-inner">
-        <h1 className="start-title">무엇을 할까요?</h1>
+        <h1 className={`home-brand${greet ? " greet" : ""}`}>
+          <Wordmark className="home-wordmark" title="Achmage" />
+        </h1>
         {path.length ? (
           <div className="start-folder">
             <Icon name="folder" size={14} />
@@ -187,18 +293,7 @@ export function StartView({
             </>
           }
         />
-        {works.length ? (
-          <div className="recent-works">
-            <div className="section-label">최근 작업</div>
-            {works.slice(0, 5).map((work) => (
-              <button key={work.id} type="button" className="recent-work" onClick={() => onOpenWork(work)}>
-                <Icon name="file" size={15} />
-                <span>{work.title}</span>
-                <span className="muted">{folderPath(state, work.folderId).map((folder) => folder.name).join(" / ")}</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
+        {path.length ? null : <HomeBoard state={state} onOpenSession={onOpenSession} onOpenWork={onOpenWork} />}
         {/* Attribution Assurance License: shown each time the app starts (the design editor is doory). */}
         <p className="start-credit">
           디자인 편집기: Doory by Siam, creator and maintainer of Doory,{" "}

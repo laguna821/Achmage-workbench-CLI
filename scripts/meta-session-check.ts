@@ -166,6 +166,18 @@ try {
   await page.waitForTimeout(500);
   const order = (await snapshot()).works.filter((entry) => entry.folderId === "f-term").sort((a, b) => a.sort - b.sort).map((entry) => entry.id);
   check("Alt+↓로 순서 바꾸기", order.join(",") === "w8,w7", order.join(","));
+  // Home: the logo opens it; what is going on across works, and a session opens from it.
+  await page.locator(".topbar .brand").click();
+  await page.waitForSelector(".home-board");
+  await page.waitForTimeout(800);
+  await shot("08-home.png");
+  const sections = await page.locator(".home-section .section-label").allInnerTexts();
+  const homeRow = await page.locator(".sidebar .side-home.current").count();
+  check("로고를 누르면 홈(지금·이어서 하기·작업)과 사이드바 '홈' 표시", sections.includes("이어서 하기") && sections.includes("작업") && homeRow === 1, sections.join(", "));
+  await page.locator(".home-session", { hasText: "자료 검토" }).first().click();
+  await page.waitForSelector(".work-view .transcript");
+  check("홈에서 세션을 누르면 그 세션이 열림", (await page.locator(".topbar").innerText()).includes("7주차 강의 자료"));
+
   // The sort menu opens above the tree (it used to be drawn under the rows).
   await page.locator('.sidebar button[title="정렬"]').click();
   await page.waitForSelector(".context-menu");
@@ -180,7 +192,7 @@ try {
   await shot("09-sort-menu.png");
   check("사이드바 정렬 메뉴가 트리에 가려지지 않음", covered.length === 3 && covered.every(Boolean), covered.join(","));
   await page.keyboard.press("Escape");
-  await shot("09-final.png");
+  await shot("10-final.png");
 } catch (error) {
   check("실행", false, error instanceof Error ? error.message.split("\n")[0]! : String(error));
   await page.screenshot({ path: join(outDir, "99-failure.png") }).catch(() => undefined);

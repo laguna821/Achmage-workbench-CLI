@@ -75,7 +75,7 @@ export function seedMetaSessions(dataDir: string, worksDir: string, now = Date.n
   say("s-paper", [["인용 근거를 확인해 줘", "Citation 범위를 확인했습니다."]]);
   say("s-8", [["8주차 활동 아이디어", "조별 토론과 발표 3분을 제안합니다."]]);
   say("s-loose", [["보고서 초안 목차", "1. 배경 2. 방법 3. 결과"]]);
-  store.setMeta("ui.prefs", JSON.stringify({ onboarding: "done" }));
+  store.setMeta("ui.prefs", JSON.stringify({ onboarding: "done", startScreen: "last" }));
   store.close();
 
   return { works };

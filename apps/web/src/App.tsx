@@ -8,6 +8,7 @@ import { folderChoices, readOpenState, workSessions, type Move, type Row, type S
 import { Connections } from "./components/Connections.tsx";
 import { EditableText } from "./components/EditableText.tsx";
 import { Icon } from "./components/Icon.tsx";
+import { BrandSymbol, Wordmark } from "./components/BrandMark.tsx";
 import { Popover } from "./components/Popover.tsx";
 import { Sidebar, type SidebarActions } from "./components/Sidebar.tsx";
 import { ContextMenu, type MenuEntry, type MenuRequest } from "./components/ContextMenu.tsx";
@@ -126,7 +127,10 @@ export function App() {
   }, []);
   const [state, dispatch] = useReducer(reducer, initialState);
   const [workId, setWorkIdState] = useState<string | null>(() => localStorage.getItem(LAST_WORK_KEY));
-  const [view, setViewNow] = useState<View>({ kind: "work" });
+  // Home first, unless the user chose to open the last work straight away (and there is one).
+  const [view, setViewNow] = useState<View>(() =>
+    cachedPrefs().startScreen === "last" && localStorage.getItem(LAST_WORK_KEY) ? { kind: "work" } : { kind: "new", folderId: null },
+  );
   const viewRef = useRef(view);
   viewRef.current = view;
   // A document view holding edits only it can save (the Word editor) saves them before it is replaced.
@@ -495,6 +499,14 @@ export function App() {
     },
     [setView],
   );
+  // "앱을 열면: 마지막 작업" set elsewhere (another window, a cleared cache): honoured once the
+  // gateway's prefs arrive, if the user has not moved away from home meanwhile.
+  const startSettled = useRef(false);
+  useEffect(() => {
+    if (startSettled.current || !state.ready) return;
+    startSettled.current = true;
+    if (state.prefs.startScreen === "last" && view.kind === "new" && view.folderId === null && workId && state.works[workId]) setView({ kind: "work" });
+  }, [state.ready, state.prefs.startScreen, state.works, view, workId, setView]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.key === "Tab") {
@@ -810,6 +822,7 @@ export function App() {
     menuFor,
     openMenu: setContextMenu,
     refreshUsage: () => api?.refreshProviders().catch(fail) ?? Promise.resolve(),
+    openHome: () => startNew(null),
     archive,
     openSearch: () => setPaletteOpen(true),
     openArchive: () => setView({ kind: "archive" }),
@@ -817,6 +830,7 @@ export function App() {
 
   const paletteCommands: PaletteCommand[] = [
     { id: "new", label: "새 세션", icon: "plus", hint: "Ctrl+N", run: () => startNew(null) },
+    { id: "home", label: "홈", icon: "home", run: () => startNew(null) },
     ...(visibleSession
       ? [
           { id: "export-work", label: "지금 대화를 마크다운으로 저장 (작업 폴더)", icon: "markdown" as const, run: () => void exportSession(visibleSession, "work") },
@@ -852,7 +866,7 @@ export function App() {
       onClose={closeDoc}
     />
   ) : null;
-  const title = view.kind === "archive" ? "보관함" : showStart ? "새 세션" : work?.title ?? "";
+  const title = view.kind === "archive" ? "보관함" : showStart ? (view.kind === "new" && view.folderId ? "새 작업" : "홈") : work?.title ?? "";
 
   return (
     <AppearanceContext.Provider value={appearanceApi}>
@@ -876,7 +890,10 @@ export function App() {
           >
             <Icon name="sidebar" size={18} />
           </button>
-          <span className="brand">Achmage</span>
+          <button type="button" className="brand" onClick={() => startNew(null)} title="홈" aria-label="Achmage 홈">
+            <Wordmark className="brand-wordmark" />
+            <BrandSymbol className="brand-compact" size={26} />
+          </button>
           {!sidebarOpen ? (
             <>
               <button type="button" className="ghost-button" onClick={() => startNew(null)} title="새 세션 (Ctrl+N)">
@@ -967,6 +984,10 @@ export function App() {
                     })
                     .catch(fail)
                 }
+                startScreen={prefs.startScreen === "last" ? "last" : "home"}
+                onStartScreen={(next) => savePrefs({ startScreen: next })}
+                brandMotion={prefs.brandMotion !== false}
+                onBrandMotion={(next) => savePrefs({ brandMotion: next })}
               />
             </Popover>
           </div>
@@ -983,6 +1004,7 @@ export function App() {
           open={treeOpen}
           onOpenChange={(next: TreeOpenState) => savePrefs({ tree: next })}
           sortMode={sortMode}
+          homeActive={view.kind === "new" && view.folderId === null}
           onSortMode={(mode) => savePrefs({ treeSort: mode })}
           width={sidebarWidth}
           onWidth={(width) => savePrefs({ sidebarWidth: width })}
@@ -1034,6 +1056,8 @@ export function App() {
           onClearFolder={() => setView({ kind: "new", folderId: null })}
           onStart={(text, provider, cwd, choice) => startWork(text, provider, cwd, view.kind === "new" ? view.folderId : null, choice)}
           onOpenWork={openWorkNow}
+          onOpenSession={openSession}
+          motion={prefs.brandMotion !== false}
           pickFolder={inDesktop ? pickFolderNative : null}
           engine={engine}
           setEngine={setEngine}

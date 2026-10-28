@@ -350,12 +350,43 @@ textarea {
   justify-content: flex-end;
 }
 
+/* The Achmage wordmark: letters in the look's heading colour, the arc in brand teal. */
+:root {
+  --brand-accent: #00b5ad;
+}
+
+.wordmark-ink {
+  fill: currentColor;
+}
+
+.wordmark-arc {
+  fill: var(--brand-accent);
+}
+
 .brand {
-  font-size: 21px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--brand);
-  margin-right: 14px;
+  display: inline-flex;
+  align-items: center;
+  height: 38px;
+  margin-right: 10px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--heading);
+  cursor: pointer;
+}
+
+.brand:hover {
+  background: var(--surface-muted);
+}
+
+.brand-wordmark {
+  height: 27px;
+  width: auto;
+}
+
+.brand-compact {
+  display: none;
 }
 
 .topbar-title-edit {
@@ -1760,19 +1791,15 @@ kbd {
 
 /* Start */
 .start-view {
-  justify-content: center;
+  overflow-y: auto;
 }
 
+/* Centred while there is room; scrolls from the top once home has more to show. */
 .start-inner {
-  padding-bottom: 12vh;
-}
-
-.start-title {
-  font-size: 30px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  margin: 0 0 22px;
-  text-align: center;
+  margin-top: auto;
+  margin-bottom: auto;
+  padding-top: 6vh;
+  padding-bottom: 8vh;
 }
 
 .start-folder {
@@ -1784,38 +1811,11 @@ kbd {
   color: var(--muted);
 }
 
-.recent-works {
-  margin-top: 28px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
 .section-label {
   font-size: 13px;
+  font-weight: 600;
   color: var(--muted);
   margin: 0 0 6px 10px;
-}
-
-.recent-work {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  text-align: left;
-  font-size: 15px;
-}
-
-.recent-work:hover {
-  background: var(--surface-muted);
-}
-
-.recent-work .muted {
-  margin-left: auto;
-  font-size: 13px;
 }
 
 .page-title {
@@ -1962,8 +1962,11 @@ kbd {
   .topbar {
     padding: 0 10px;
   }
-  .brand {
+  .brand-wordmark {
     display: none;
+  }
+  .brand-compact {
+    display: block;
   }
   .column {
     padding: 0 14px;
@@ -5180,5 +5183,187 @@ kbd {
 
 .usage-none {
   min-height: 16px;
+  color: var(--faint);
+}
+
+/* ── Home ────────────────────────────────────────────────────────────── */
+.home-brand {
+  display: flex;
+  justify-content: center;
+  margin: 0 0 26px;
+  color: var(--heading);
+}
+
+.home-wordmark {
+  height: 62px;
+  width: auto;
+}
+
+/* One short entrance per launch; the input works from the first moment. */
+.home-brand.greet .wordmark-ink {
+  transform-box: fill-box;
+  animation: brand-rise 520ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.home-brand.greet .wordmark-flow {
+  animation-delay: 90ms;
+}
+
+.home-brand.greet .wordmark-arc {
+  transform-box: fill-box;
+  transform-origin: left center;
+  animation: brand-sweep 680ms cubic-bezier(0.2, 0.7, 0.2, 1) 140ms both;
+}
+
+@keyframes brand-rise {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes brand-sweep {
+  from {
+    opacity: 0;
+    transform: scaleX(0.15);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-brand.greet .wordmark-ink,
+  .home-brand.greet .wordmark-arc {
+    animation: none;
+  }
+}
+
+.home-board {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  margin-top: 30px;
+}
+
+.home-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.home-session {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.home-session:hover,
+.home-work:hover {
+  background: var(--surface-muted);
+}
+
+.home-session-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.home-session-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.home-session-work {
+  margin-right: 6px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.home-session-work::after {
+  content: " ›";
+}
+
+.home-session-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.home-session-state {
+  flex: 0 0 auto;
+  font-size: 12.5px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.home-session-state.tone-active {
+  color: var(--accent);
+}
+
+.home-session-state.tone-attention {
+  color: var(--amber-text);
+}
+
+.home-works {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.home-work {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+}
+
+.home-work-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.home-work-path,
+.home-work-meta {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.home-work-meta {
   color: var(--faint);
 }

@@ -60,7 +60,8 @@ const until = async (what: () => Promise<boolean>, timeout = 15_000) => {
   }
   return false;
 };
-await api("PUT", "/api/prefs", { prefs: { onboarding: "done" } });
+// Straight into the work (the app opens on home by default).
+await api("PUT", "/api/prefs", { prefs: { onboarding: "done", startScreen: "last" } });
 
 const browser = await chromium.launch();
 const logs: string[] = [];

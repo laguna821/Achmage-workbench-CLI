@@ -56,6 +56,10 @@ export function Connections({
   themePref,
   onTheme,
   onAppearance,
+  startScreen,
+  onStartScreen,
+  brandMotion,
+  onBrandMotion,
 }: {
   tools: DocumentTools | null;
   onIntegrations: () => void;
@@ -71,6 +75,12 @@ export function Connections({
   themePref: ThemePref;
   onTheme: (pref: ThemePref) => void;
   onAppearance: () => void;
+  /** What the app shows when it opens: home, or the last work straight away. */
+  startScreen: "home" | "last";
+  onStartScreen: (next: "home" | "last") => void;
+  /** The logo's short entrance on home. */
+  brandMotion: boolean;
+  onBrandMotion: (next: boolean) => void;
 }) {
   return (
     <div className="connections">
@@ -157,6 +167,23 @@ export function Connections({
       <button type="button" className="text-button" onClick={onAppearance}>
         외형 설정 · 엔진별 색과 글자…
       </button>
+      <div className="menu-label">앱을 열면</div>
+      <div className="segmented theme-choice" role="radiogroup" aria-label="앱을 열면">
+        {(
+          [
+            ["home", "홈"],
+            ["last", "마지막 작업"],
+          ] as const
+        ).map(([value, label]) => (
+          <button key={value} type="button" role="radio" aria-checked={startScreen === value} className={startScreen === value ? "active" : ""} onClick={() => onStartScreen(value)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <label className="check-row">
+        <input type="checkbox" checked={brandMotion} onChange={(event) => onBrandMotion(event.target.checked)} />
+        홈 로고 움직임
+      </label>
     </div>
   );
 }

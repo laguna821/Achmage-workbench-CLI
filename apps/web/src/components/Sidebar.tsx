@@ -32,6 +32,8 @@ export type SidebarActions = {
   openArchive: () => void;
   /** Read the engines' plan limits again. */
   refreshUsage: () => Promise<unknown>;
+  /** Home: what is going on across all works, and a new session. */
+  openHome: () => void;
 };
 
 const MIN_WIDTH = 232;
@@ -60,6 +62,7 @@ export function Sidebar({
   actions,
   pending,
   onPendingDone,
+  homeActive = false,
 }: {
   state: State;
   currentWorkId: string | null;
@@ -75,6 +78,8 @@ export function Sidebar({
   /** A rename or a new folder asked from a menu. */
   pending: { rename?: string; createIn?: string | null } | null;
   onPendingDone: () => void;
+  /** Home is on screen. */
+  homeActive?: boolean;
 }) {
   const { lookOf, appTheme } = useAppearance();
   const rows = useMemo(() => treeRows(state, open, sortMode, currentWorkId), [state, open, sortMode, currentWorkId]);
@@ -497,6 +502,10 @@ export function Sidebar({
       </div>
 
       <div className="side-scroll">
+        <button type="button" className={`side-row side-home${homeActive ? " current" : ""}`} onClick={actions.openHome} title="모든 작업의 지금 상황과 새 세션">
+          <Icon name="home" size={15} className="side-row-icon" />
+          <span className="side-row-label">홈</span>
+        </button>
         {nowGroups.length ? (
           <section className="side-section side-now" aria-label="지금">
             <div className="side-section-title">지금</div>
