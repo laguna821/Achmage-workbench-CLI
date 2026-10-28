@@ -464,7 +464,7 @@ export function WorkView({
         ) : null}
       </div>
 
-      {sessions.length > 1 ? (
+      {sessions.length > 1 && !modes?.single ? (
         <nav className="column session-tabs" aria-label="세션">
           {tabSessions.map((session) =>
             renaming === session.id ? (

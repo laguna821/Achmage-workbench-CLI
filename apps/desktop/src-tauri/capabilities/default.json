@@ -1,9 +1,10 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The workbench UI is served by the local gateway on 127.0.0.1.",
+  "description": "The workbench UI is served by the local gateway on 127.0.0.1; session windows (\"새 창으로 떼어 내기\") show the same UI.",
   "windows": [
-    "main"
+    "main",
+    "session-*"
   ],
   "remote": {
     "urls": [
@@ -31,6 +32,7 @@
         }
       ]
     },
-    "notification:default"
+    "notification:default",
+    "allow-open-session-window"
   ]
 }

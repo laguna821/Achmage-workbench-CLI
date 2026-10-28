@@ -71,6 +71,8 @@ export type ModeProps = {
   split?: boolean;
   /** The proposal the document's compare view shows ("검토"), null when it closes. */
   onReview?: (proposalId: string | null) => void;
+  /** A window of its own for one session: no tabs of the work's other sessions. */
+  single?: boolean;
 };
 
 // ── where the reader was: kept across mode switches (views unmount and come back) ─────────────

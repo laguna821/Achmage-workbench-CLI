@@ -26,6 +26,7 @@ import { Onboarding } from "./components/Onboarding.tsx";
 import { SessionPicker } from "./components/SessionPicker.tsx";
 import { SplitView, WorkModeBar, useWorkModeKeys } from "./components/WorkModes.tsx";
 import { keepPosition, keptPosition, modeOf, readingPosition, restorePosition, reviewProposal, viewFor, type ModeProps, type ReadingPosition, type WorkMode } from "./workmodes.ts";
+import { detachSession, showInWindow, windowSession } from "./windows.ts";
 
 // Editors (CodeMirror, PDF.js) load only when a document opens.
 const DocumentView = lazy(() => import("./components/docs/DocumentView.tsx"));
@@ -140,10 +141,12 @@ export function App() {
     return token ? new Api(token) : null;
   }, []);
   const [state, dispatch] = useReducer(reducer, initialState);
+  // A window of its own for one session (`?session=`, "새 창으로 떼어 내기"): no sidebar, no home.
+  const [single, setSingle] = useState<string | null>(() => windowSession());
   const [workId, setWorkIdState] = useState<string | null>(() => localStorage.getItem(LAST_WORK_KEY));
   // Home first, unless the user chose to open the last work straight away (and there is one).
   const [view, setViewNow] = useState<View>(() =>
-    cachedPrefs().startScreen === "last" && localStorage.getItem(LAST_WORK_KEY) ? { kind: "work" } : { kind: "new", folderId: null },
+    windowSession() || (cachedPrefs().startScreen === "last" && localStorage.getItem(LAST_WORK_KEY)) ? { kind: "work" } : { kind: "new", folderId: null },
   );
   const viewRef = useRef(view);
   viewRef.current = view;
@@ -188,7 +191,7 @@ export function App() {
 
   const setWorkId = (id: string | null) => {
     setWorkIdState(id);
-    if (id) localStorage.setItem(LAST_WORK_KEY, id);
+    if (id && !single) localStorage.setItem(LAST_WORK_KEY, id);
   };
 
   const fail = useCallback((error: unknown) => {
@@ -266,15 +269,17 @@ export function App() {
   const appTheme = resolveTheme(themePref, systemTheme);
   const appearance = useMemo(() => readAppearance(prefs.appearance), [prefs.appearance]);
   // The sidebar is where many sessions live: open unless the user closed it (decision 2026-10-28).
-  const sidebarOpen = prefs.sidebar !== false;
+  const sidebarOpen = !single && prefs.sidebar !== false;
   const toggleSidebar = () => savePrefs({ sidebar: !sidebarOpen });
   const sidebarWidth = typeof prefs.sidebarWidth === "number" ? Math.min(480, Math.max(232, prefs.sidebarWidth)) : 288;
   const sortMode: SortMode = SORT_MODES.includes(prefs.treeSort as SortMode) ? (prefs.treeSort as SortMode) : "manual";
   const treeOpen = useMemo(() => readOpenState(prefs.tree), [prefs.tree]);
 
-  const work = workId ? state.works[workId] : undefined;
+  const singleSession = single ? state.sessions[single] : undefined;
+  const work = singleSession ? state.works[singleSession.workId] : workId ? state.works[workId] : undefined;
   const activeSession =
-    work && ((work.activeSessionId && state.sessions[work.activeSessionId] && !state.sessions[work.activeSessionId]!.archivedAt && state.sessions[work.activeSessionId]) || workSessions(state, work.id).at(-1) || sessionsOf(state, work.id).at(-1));
+    singleSession ??
+    (work && ((work.activeSessionId && state.sessions[work.activeSessionId] && !state.sessions[work.activeSessionId]!.archivedAt && state.sessions[work.activeSessionId]) || workSessions(state, work.id).at(-1) || sessionsOf(state, work.id).at(-1)));
 
   // A document shown becomes a tab of its work (at most 8, the oldest goes).
   useEffect(() => {
@@ -374,6 +379,13 @@ export function App() {
         }
       },
       selectSession: (target, session) => {
+        if (single) {
+          // A detached window stays one window: it switches to the session picked in it.
+          setSingle(session.id);
+          showInWindow(session.id);
+          setView({ kind: "work" });
+          return;
+        }
         setWorkId(target.id);
         setView({ kind: "work" });
         if (target.activeSessionId !== session.id) void api?.updateWork(target.id, { activeSessionId: session.id }).catch(fail);
@@ -401,7 +413,8 @@ export function App() {
         void request.then(() => setToast("되돌렸습니다.")).catch(fail);
       },
     }),
-    [api, fail, savePrefs, setToast, setView],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [api, fail, savePrefs, setToast, setView, single],
   );
 
   const docActions: DocActions = useMemo(
@@ -527,11 +540,12 @@ export function App() {
   );
   const startNew = useCallback(
     (folderId: string | null = null) => {
+      if (single) return;
       setView({ kind: "new", folderId });
       // Already on the start screen: make the press visibly do something.
       window.requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".composer-input")?.focus());
     },
-    [setView],
+    [setView, single],
   );
   // While the window is behind other windows or hidden in the tray: a reply that arrived, an
   // approval that waits, a turn that failed. Only changes are told, never what was already so.
@@ -542,7 +556,8 @@ export function App() {
     for (const session of Object.values(state.sessions)) {
       const before = seen.get(session.id);
       seen.set(session.id, session.status);
-      if (!before || before === session.status || !inDesktop || !away || prefsRef.current.notify === false) continue;
+      // Only the main window tells; a detached one would say the same thing twice.
+      if (!before || before === session.status || !inDesktop || !away || prefsRef.current.notify === false || single) continue;
       const where = `${state.works[session.workId]?.title ?? ""} — ${session.purpose}`;
       if (session.status === "awaitingApproval") void notify(`확인이 필요합니다 · ${PROVIDER_LABEL[session.provider]}`, where).catch(() => undefined);
       else if (session.status === "error") void notify(`응답이 끝나지 못했습니다 · ${PROVIDER_LABEL[session.provider]}`, where).catch(() => undefined);
@@ -607,6 +622,9 @@ export function App() {
   const focusedTheme = sheet?.theme ?? engineTheme(appearance[focusedProvider], appTheme);
   const focusedLook = appearance[focusedProvider][focusedTheme];
   useEffect(() => setRootTheme(focusedTheme), [focusedTheme]);
+  useEffect(() => {
+    if (single) document.title = singleSession ? `${singleSession.purpose} — Achmage Workbench` : "Achmage Workbench";
+  }, [single, singleSession?.purpose]);
 
   // ── work screen modes (design 3.2): 대화 · 문서 · 검토 · 나란히 · 읽기, while a document is open ──
   const lastDoc = useRef<Record<string, string>>({});
@@ -777,6 +795,7 @@ export function App() {
         const unseenNow = isUnseen(session);
         const items: MenuEntry[] = [
           { kind: "item", label: "열기", icon: "chat", hint: "Enter", onSelect: () => openSession(session) },
+          ...(single === session.id ? [] : [{ kind: "item" as const, label: "새 창으로 떼어 내기", icon: "openNew" as const, onSelect: () => void detachSession(session.id, session.purpose, inDesktop).catch(fail) }]),
           { kind: "item", label: "이름 바꾸기", icon: "edit", hint: "F2", onSelect: () => setSidebarPending({ rename: session.id }) },
           { kind: "separator" },
           { kind: "item", label: session.pinned ? "고정 풀기" : "고정", icon: "pin", onSelect: () => void api.updateSession(session.id, { pinned: !session.pinned }).catch(fail) },
@@ -883,7 +902,7 @@ export function App() {
       return null;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [api, state, actions, archive, exportSession, openPath, openSession, visibleSession?.id, startNew, docActions, fail, setToast],
+    [api, state, actions, archive, exportSession, openPath, openSession, visibleSession?.id, startNew, docActions, fail, setToast, single],
   );
 
   function openWorkNow(target: Work) {
@@ -931,12 +950,20 @@ export function App() {
   };
 
   const paletteCommands: PaletteCommand[] = [
-    { id: "new", label: "새 세션", icon: "plus", hint: "Ctrl+N", run: () => startNew(null) },
-    { id: "home", label: "홈", icon: "home", run: () => startNew(null) },
+    // A detached window stays on its session: no home, no new session there.
+    ...(single
+      ? []
+      : [
+          { id: "new", label: "새 세션", icon: "plus" as const, hint: "Ctrl+N", run: () => startNew(null) },
+          { id: "home", label: "홈", icon: "home" as const, run: () => startNew(null) },
+        ]),
     ...(visibleSession
       ? [
           { id: "export-work", label: "지금 대화를 마크다운으로 저장 (작업 폴더)", icon: "markdown" as const, run: () => void exportSession(visibleSession, "work") },
           { id: "export-copy", label: "지금 대화를 마크다운으로 복사", icon: "copy" as const, run: () => void exportSession(visibleSession, "text") },
+          ...(single
+            ? []
+            : [{ id: "detach", label: "지금 세션을 새 창으로 떼어 내기", icon: "openNew" as const, run: () => void detachSession(visibleSession.id, visibleSession.purpose, inDesktop).catch(fail) }]),
         ]
       : []),
     { id: "archive", label: "보관함 열기", icon: "archive", run: () => setView({ kind: "archive" }) },
@@ -968,11 +995,12 @@ export function App() {
       onClose={closeDoc}
     />
   ) : null;
-  // The conversation, alone or beside a document ("나란히").
+  // The conversation, alone or beside a document ("나란히"). A detached window shows its own
+  // session, whichever one the work has in front elsewhere.
   const workView = (shown: Work, modes: ModeProps, withTabs: boolean) => (
     <WorkView
       state={state}
-      work={shown}
+      work={single && activeSession ? { ...shown, activeSessionId: activeSession.id } : shown}
       actions={actions}
       engine={engine}
       setEngine={setEngine}
@@ -986,7 +1014,7 @@ export function App() {
       modes={modes}
     />
   );
-  const title = view.kind === "archive" ? "보관함" : showStart ? (view.kind === "new" && view.folderId ? "새 작업" : "홈") : work?.title ?? "";
+  const title = single && singleSession && work ? `${work.title} · ${singleSession.purpose}` : view.kind === "archive" ? "보관함" : showStart ? (view.kind === "new" && view.folderId ? "새 작업" : "홈") : work?.title ?? "";
 
   return (
     <AppearanceContext.Provider value={appearanceApi}>
@@ -1001,20 +1029,29 @@ export function App() {
     >
       <header className="topbar">
         <div className="topbar-left">
-          <button
-            type="button"
-            className={`icon-button${sidebarOpen ? " pressed" : ""}`}
-            onClick={toggleSidebar}
-            aria-label={sidebarOpen ? "사이드바 닫기" : "사이드바 열기"}
-            title={sidebarOpen ? "사이드바 닫기" : "사이드바 열기"}
-          >
-            <Icon name="sidebar" size={18} />
-          </button>
-          <button type="button" className="brand" onClick={() => startNew(null)} title="홈" aria-label="Achmage 홈">
-            <Wordmark className="brand-wordmark" />
-            <BrandSymbol className="brand-compact" size={26} />
-          </button>
-          {!sidebarOpen ? (
+          {single ? (
+            <span className="brand" aria-label="Achmage">
+              <Wordmark className="brand-wordmark" />
+              <BrandSymbol className="brand-compact" size={26} />
+            </span>
+          ) : (
+            <>
+              <button
+                type="button"
+                className={`icon-button${sidebarOpen ? " pressed" : ""}`}
+                onClick={toggleSidebar}
+                aria-label={sidebarOpen ? "사이드바 닫기" : "사이드바 열기"}
+                title={sidebarOpen ? "사이드바 닫기" : "사이드바 열기"}
+              >
+                <Icon name="sidebar" size={18} />
+              </button>
+              <button type="button" className="brand" onClick={() => startNew(null)} title="홈" aria-label="Achmage 홈">
+                <Wordmark className="brand-wordmark" />
+                <BrandSymbol className="brand-compact" size={26} />
+              </button>
+            </>
+          )}
+          {!sidebarOpen && !single ? (
             <>
               <button type="button" className="ghost-button" onClick={() => startNew(null)} title="새 세션 (Ctrl+N)">
                 <Icon name="plus" size={15} /> 새 세션
@@ -1026,7 +1063,7 @@ export function App() {
             </>
           ) : null}
         </div>
-        {editingTitle && work && view.kind === "work" ? (
+        {editingTitle && work && view.kind === "work" && !single ? (
           <EditableText
             className="topbar-title-edit"
             value={work.title}
@@ -1037,14 +1074,14 @@ export function App() {
           <button
             type="button"
             className="topbar-title"
-            title={work && view.kind === "work" && !showStart ? "눌러서 작업 이름 바꾸기" : title}
-            onClick={() => work && view.kind === "work" && !showStart && setEditingTitle(true)}
+            title={work && view.kind === "work" && !showStart && !single ? "눌러서 작업 이름 바꾸기" : title}
+            onClick={() => work && view.kind === "work" && !showStart && !single && setEditingTitle(true)}
           >
             {title}
           </button>
         )}
         <div className="topbar-right">
-          {pendingApprovals.length ? (
+          {pendingApprovals.length && !single ? (
             <button
               type="button"
               className="attention-button"
@@ -1137,6 +1174,8 @@ export function App() {
       ) : null}
       {!state.ready ? (
         <main className="loading">불러오는 중…</main>
+      ) : single && !singleSession ? (
+        <main className="loading">이 세션을 찾을 수 없습니다. 보관했거나 지운 세션일 수 있습니다.</main>
       ) : (view.kind === "document" || view.kind === "split") && work ? (
         <Suspense fallback={<main className="loading">문서를 여는 중…</main>}>
           <SplitView
@@ -1146,7 +1185,7 @@ export function App() {
             focus={view.kind === "split" ? view.focus : "doc"}
             onFocus={(side) => setView((current) => (current.kind === "split" && current.focus !== side ? { ...current, focus: side } : current))}
             tabs={tabs}
-            left={(slot) => workView(work, { bar: modeBar, slot, draftKey: view.kind === "split" ? view.draftKey : undefined, split: true }, false)}
+            left={(slot) => workView(work, { bar: modeBar, slot, draftKey: view.kind === "split" ? view.draftKey : undefined, split: true, single: Boolean(single) }, false)}
             right={(slot) => (
               <DocumentView
                 key={view.artifactId}
@@ -1202,7 +1241,7 @@ export function App() {
           setEngine={setEngine}
         />
       ) : work ? (
-        workView(work, { bar: modeBar }, true)
+        workView(work, { bar: modeBar, single: Boolean(single) }, true)
       ) : null}
       </div>
       {reading && state.artifacts[reading.artifactId] ? (

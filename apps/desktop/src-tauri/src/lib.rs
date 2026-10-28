@@ -108,6 +108,40 @@ fn start_gateway(app: &tauri::AppHandle) -> Result<(Child, Ready), String> {
     Ok((child, ready))
 }
 
+/// A session id is used as part of a window label and a URL: only the characters ids are made of.
+fn valid_session_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+/// "새 창으로 떼어 내기": the same UI in another window, showing one session (`?session=`). The
+/// window manager places it (niri tiles it next to the others). Asking again brings it forward.
+#[tauri::command]
+async fn open_session_window(app: tauri::AppHandle, session_id: String, title: String) -> Result<(), String> {
+    if !valid_session_id(&session_id) {
+        return Err("세션을 알아볼 수 없습니다.".into());
+    }
+    let label = format!("session-{session_id}");
+    if let Some(window) = app.get_webview_window(&label) {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+        return Ok(());
+    }
+    let ready = app.try_state::<Ready>().ok_or("게이트웨이가 아직 준비되지 않았습니다.")?;
+    let mut url = url::Url::parse(&ready.url).map_err(|error| error.to_string())?;
+    url.query_pairs_mut()
+        .append_pair("token", &ready.token)
+        .append_pair("session", &session_id);
+    let name: String = title.trim().chars().take(60).collect();
+    WebviewWindowBuilder::new(&app, label, WebviewUrl::External(url))
+        .title(if name.is_empty() { "Achmage Workbench".to_string() } else { format!("{name} — Achmage") })
+        .inner_size(760.0, 860.0)
+        .min_inner_size(420.0, 480.0)
+        .build()
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 fn open_main_window(app: &tauri::AppHandle, ready: &Ready) -> tauri::Result<()> {
     let mut url = url::Url::parse(&ready.url).expect("gateway url");
     url.query_pairs_mut().append_pair("token", &ready.token);
@@ -172,6 +206,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .invoke_handler(tauri::generate_handler![open_session_window])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
@@ -196,6 +231,8 @@ pub fn run() {
                 Ok((child, ready)) => {
                     *handle.state::<Gateway>().0.lock().unwrap() = Some(child);
                     open_main_window(&handle, &ready)?;
+                    // Session windows open on the same gateway, with the same token.
+                    handle.manage(ready);
                     // Without a tray (no StatusNotifier host) the app still works; launching it
                     // again shows the hidden window (single instance).
                     if let Err(error) = build_tray(&handle) {
