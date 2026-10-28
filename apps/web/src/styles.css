@@ -4075,24 +4075,11 @@ kbd {
   margin-left: auto;
   display: inline-flex;
   gap: 2px;
+}
+
+/* Faded on the buttons themselves: opacity on a parent would make a stacking context. */
+.side-tools .icon-button {
   opacity: 0.85;
-}
-
-.side-sort {
-  position: relative;
-}
-
-.side-sort-menu {
-  position: absolute;
-  right: 0;
-  top: 26px;
-  z-index: 30;
-  min-width: 170px;
-  padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
-  box-shadow: var(--popover-shadow);
 }
 
 .now-group-label {

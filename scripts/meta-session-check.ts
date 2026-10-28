@@ -166,7 +166,21 @@ try {
   await page.waitForTimeout(500);
   const order = (await snapshot()).works.filter((entry) => entry.folderId === "f-term").sort((a, b) => a.sort - b.sort).map((entry) => entry.id);
   check("Alt+↓로 순서 바꾸기", order.join(",") === "w8,w7", order.join(","));
-  await shot("08-final.png");
+  // The sort menu opens above the tree (it used to be drawn under the rows).
+  await page.locator('.sidebar button[title="정렬"]').click();
+  await page.waitForSelector(".context-menu");
+  const covered = await page.evaluate(() => {
+    const items = Array.from(document.querySelectorAll<HTMLElement>(".context-menu .context-menu-item"));
+    return items.map((item) => {
+      const box = item.getBoundingClientRect();
+      const top = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      return Boolean(top && item.contains(top));
+    });
+  });
+  await shot("09-sort-menu.png");
+  check("사이드바 정렬 메뉴가 트리에 가려지지 않음", covered.length === 3 && covered.every(Boolean), covered.join(","));
+  await page.keyboard.press("Escape");
+  await shot("09-final.png");
 } catch (error) {
   check("실행", false, error instanceof Error ? error.message.split("\n")[0]! : String(error));
   await page.screenshot({ path: join(outDir, "99-failure.png") }).catch(() => undefined);

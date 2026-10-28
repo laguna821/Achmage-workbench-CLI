@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { FORMAT_LABEL, PROVIDER_LABEL, isUnseen, type Artifact, type Folder, type Provider, type Session, type Work } from "@workbench/contracts";
 import type { State } from "../state.ts";
 import { holds, moveFor, nowSessions, nudge, pinnedItems, toggleWork, treeRows, zoneAt, type DropZone, type Move, type Row, type SortMode, type TreeOpenState } from "../tree.ts";
@@ -467,14 +467,21 @@ export function Sidebar({
     </form>
   );
 
-  const [sortOpen, setSortOpen] = useState(false);
-  const closeSort = useCallback(() => setSortOpen(false), []);
-  useEffect(() => {
-    if (!sortOpen) return;
-    const close = (event: PointerEvent) => !(event.target as HTMLElement).closest(".side-sort") && closeSort();
-    document.addEventListener("pointerdown", close);
-    return () => document.removeEventListener("pointerdown", close);
-  }, [sortOpen, closeSort]);
+  // The sort choices open as the app's own menu (drawn above everything, never clipped by the tree).
+  const openSort = (button: HTMLElement) => {
+    const box = button.getBoundingClientRect();
+    const choices: [SortMode, string][] = [
+      ["manual", "직접 정한 순서"],
+      ["recent", "최근 활동 순"],
+      ["name", "이름 순"],
+    ];
+    actions.openMenu({
+      x: box.left,
+      y: box.bottom + 4,
+      title: "정렬",
+      items: choices.map(([mode, label]) => ({ kind: "item" as const, label, checked: sortMode === mode, onSelect: () => onSortMode(mode) })),
+    });
+  };
 
   return (
     <aside className="sidebar look-scope" aria-label="세션과 작업" data-theme={appTheme} style={{ ...lookStyle(NEUTRAL_LOOK[appTheme]), width: liveWidth ?? width }}>
@@ -536,36 +543,9 @@ export function Sidebar({
               <button type="button" className="icon-button small" title="새 폴더" onClick={() => setCreatingIn(null)}>
                 <Icon name="plus" size={13} />
               </button>
-              <span className="side-sort">
-                <button type="button" className="icon-button small" title="정렬" onClick={() => setSortOpen(!sortOpen)} aria-expanded={sortOpen}>
-                  <Icon name="dots" size={13} />
-                </button>
-                {sortOpen ? (
-                  <div className="side-sort-menu" role="menu">
-                    {(
-                      [
-                        ["manual", "직접 정한 순서"],
-                        ["recent", "최근 활동 순"],
-                        ["name", "이름 순"],
-                      ] as const
-                    ).map(([mode, label]) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={sortMode === mode}
-                        className={`menu-item${sortMode === mode ? " active" : ""}`}
-                        onClick={() => {
-                          onSortMode(mode);
-                          closeSort();
-                        }}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </span>
+              <button type="button" className="icon-button small" title="정렬" aria-haspopup="menu" onClick={(event) => openSort(event.currentTarget)}>
+                <Icon name="dots" size={13} />
+              </button>
             </span>
           </div>
           <div className="side-tree" role="tree" aria-label="작업 공간" ref={treeRef}>
