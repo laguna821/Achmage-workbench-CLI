@@ -1,3 +1,8 @@
 fn main() {
-    tauri_build::build()
+    // The UI is served by the gateway (a remote origin to Tauri), so the app's own command needs
+    // a permission that the capability grants explicitly.
+    tauri_build::try_build(
+        tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(&["open_session_window"])),
+    )
+    .expect("failed to run tauri-build");
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { diagramComponents } from "../Diagram.tsx";
@@ -33,6 +34,7 @@ import { ConversationDrawer, ConversationSheet, type DrawerMode } from "./Conver
 import type { EditorView } from "@codemirror/view";
 import { InlineDraw, drawExtension } from "./InlineDraw.tsx";
 import { docPictureComponents } from "../ImageGen.tsx";
+import { useKeptPosition, type ModeProps } from "../../workmodes.ts";
 
 /** Save operations only; "unsaved" is derived from the text, never stored (no stale overwrite). */
 type SaveState = "idle" | "saving" | "failed" | "conflict";
@@ -63,7 +65,10 @@ export default function DocumentView({
   openDocIds,
   onLeaveGuard,
   onAnswer,
+  modes,
 }: {
+  /** The work screen's modes: their bar, and in "나란히" where the input goes. */
+  modes?: ModeProps;
   /** Answer an approval of the session from the drawer, without leaving the document. */
   onAnswer?: (session: Session, itemId: string, decision: "accept" | "decline") => void;
   /** Register how to save edits only this view holds (the Word editor) before the app leaves it. */
@@ -268,10 +273,30 @@ export default function DocumentView({
 
   useEffect(() => {
     const focused = focusProposalId ? state.proposals[focusProposalId] : null;
-    if (focused) void showProposal(focused).catch((error: Error) => onToast(error.message));
+    if (focused && compare?.proposal?.id !== focused.id)
+      void showProposal(focused).catch((error: Error) => {
+        onToast(error.message);
+        modes?.onReview?.(null);
+      });
     // Only when asked to show a specific proposal.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusProposalId]);
+
+  // "검토" in the mode bar follows the proposal compared here (opened from the bar or from a card).
+  const comparing = compare?.proposal?.id ?? null;
+  const reported = useRef<string | null>(null);
+  const onReview = modes?.onReview;
+  useEffect(() => {
+    if (reported.current === comparing) return;
+    reported.current = comparing;
+    onReview?.(comparing);
+    // A comparison needs the room: the drawer's peek folds away (a conversation laid open stays).
+    if (comparing) setDrawer((current) => (current === "peek" ? "closed" : current));
+  }, [comparing, onReview]);
+
+  // Where the document was read comes back when this view returns from another mode.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useKeptPosition(bodyRef, `doc:${artifactId}`);
 
   if (!artifact) {
     return (
@@ -546,6 +571,9 @@ export default function DocumentView({
     return editor;
   })();
 
+  // The input: in its place, or in "나란히" under both sides (or not here: the conversation has it).
+  const place = (input: ReactNode) => (modes?.slot === undefined ? input : modes.slot ? createPortal(input, modes.slot) : null);
+
   return (
     <main className="document-view">
       {tabs}
@@ -569,7 +597,7 @@ export default function DocumentView({
             <div className="segmented small" role="radiogroup" aria-label="보기">
               {(["edit", "split", "preview"] as const).map((value) => (
                 <button key={value} type="button" role="radio" aria-checked={mode === value} className={mode === value ? "active" : ""} onClick={() => setMode(value)}>
-                  {value === "edit" ? "편집" : value === "split" ? "나란히" : "미리보기"}
+                  {value === "edit" ? "편집" : value === "split" ? "둘 다" : "미리보기"}
                 </button>
               ))}
             </div>
@@ -818,7 +846,7 @@ export default function DocumentView({
         </div>
       ) : null}
 
-      <div className="doc-body">
+      <div className="doc-body" ref={bodyRef}>
         {officeEditing ? (
           <OfficeEditor ref={officeRef} api={api} artifact={artifact} hidden={Boolean(compare || viewing)} onStatus={setOfficeStatus} onNotice={onToast} />
         ) : null}
@@ -840,11 +868,11 @@ export default function DocumentView({
         />
       ) : null}
 
-      <div className="column composer-area doc-composer">
-        {session && drawer === "open" ? (
+      {place(<div className="column composer-area doc-composer">
+        {session && drawer === "open" && !modes?.split ? (
           <ConversationSheet state={state} session={session} onClose={() => setDrawer("peek")} onAnswer={(itemId, decision) => onAnswer?.(session, itemId, decision)} />
         ) : null}
-        {session ? (
+        {session && !modes?.split ? (
           <ConversationDrawer
             state={state}
             session={session}
@@ -854,10 +882,11 @@ export default function DocumentView({
             onOpenConversation={onBack}
           />
         ) : null}
+        {modes?.bar}
         <Composer
           onFiles={pending.add}
           attachments={pending.count}
-          draftKey={`doc:${artifactId}`}
+          draftKey={modes?.draftKey ?? `doc:${artifactId}`}
           placeholder={selection ? "이 부분에 요청하기" : "이 문서에 요청하기"}
           busy={Boolean(sendTarget && isBusy(sendTarget))}
           waiting={Boolean(sendTarget && (sendTarget.status === "running" || sendTarget.status === "starting"))}
@@ -995,7 +1024,7 @@ export default function DocumentView({
           })}
           {!working && !reviewing.length ? <span className="muted">{FORMAT_LABEL[artifact.format]} · {work.title}</span> : null}
         </div>
-      </div>
+      </div>)}
     </main>
   );
 }

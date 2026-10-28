@@ -304,6 +304,8 @@ function duration(ms: number | null) {
 type RailMark = { id: string; index: number; top: number; text: string; attention: boolean };
 
 const PIN_OPEN_KEY = "workbench.pinOpen";
+/** Where each conversation was read, while it is shown again after another view (mode switches). */
+const readAt = new Map<string, number>();
 /** Height of the folded request band; the band appears once the request slides under it. */
 const PIN_HEIGHT = 46;
 
@@ -386,10 +388,22 @@ export function Transcript({
     setRail((previous) => (key(previous) === key(next) ? previous : next));
   };
 
-  // Another session: start at its newest output again.
+  // Another session: start at its newest output again — or where the reader left it, when this
+  // conversation comes back after another view.
   useLayoutEffect(() => {
+    const element = scroller.current;
+    const top = readAt.get(sessionId);
+    if (element && top !== undefined && !focusItem && element.scrollHeight - element.clientHeight >= top) {
+      pinned.current = false;
+      element.scrollTop = top;
+      ownTop.current = element.scrollTop;
+      lastTop.current = element.scrollTop;
+      return;
+    }
     pinned.current = true;
     lastTop.current = 0;
+    // Only when the conversation changes (or first shows).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
   useLayoutEffect(() => {
@@ -532,6 +546,8 @@ export function Transcript({
             else if (top < lastTop.current - 0.5) pinned.current = false;
           }
           lastTop.current = top;
+          if (pinned.current) readAt.delete(sessionId);
+          else readAt.set(sessionId, top);
           measure();
         }}
       >

@@ -42,6 +42,7 @@ const PATHS = {
   markdown: "M3.5 6.5h17v11h-17zM6.5 14.5v-5l2.5 3 2.5-3v5M15.5 9.5v5M13.5 12.5l2 2 2-2",
   image: "M4.5 5h15a1 1 0 011 1v12a1 1 0 01-1 1h-15a1 1 0 01-1-1V6a1 1 0 011-1zM8.75 11a1.75 1.75 0 100-3.5 1.75 1.75 0 000 3.5zM20.5 15l-5-5-11 9",
   link: "M4 8h15M15.5 4.5L19 8l-3.5 3.5M20 16H5M8.5 12.5L5 16l3.5 3.5",
+  openNew: "M13.5 4.5h6v6M19.5 4.5l-8 8M17.5 13.5v5a1 1 0 01-1 1h-11a1 1 0 01-1-1v-11a1 1 0 011-1h5",
 } as const;
 
 export type IconName = keyof typeof PATHS | "dots" | "stop";

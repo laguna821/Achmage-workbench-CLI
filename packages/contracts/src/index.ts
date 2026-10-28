@@ -713,3 +713,4 @@ export * from "./commands.ts";
 export * from "./imagegen.ts";
 export * from "./links.ts";
 export * from "./browse.ts";
+export * from "./views.ts";

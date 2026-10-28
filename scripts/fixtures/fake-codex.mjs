@@ -17,6 +17,7 @@
 //          the start or a developer item injected later) and, when told, runs `playwright-cli open
 //          <address>` from its PATH like a model would (found by CODEX_THREAD_ID, no -s), asking first
 //          only under "untrusted" as Codex does
+//   "고쳐"  appends a paragraph to the working copy the request names (a proposal)
 //   anything else: a short answer
 // Local images in the input are reported at the start of the answer ("받은 그림 1장 · 1234바이트").
 // "스크린샷": like a browsing step, a command saves a screenshot (Playwright CLI's output names it),
@@ -25,9 +26,9 @@
 // A turn in the read-only sandbox ("계획 먼저") answers with a plan; "계획대로 진행" says which
 // sandbox the going-ahead turn runs in.
 
-import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { crc32, deflateSync } from "node:zlib";
@@ -223,6 +224,12 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
     thread.turn = null;
     notify("turn/completed", { threadId, turn: { id: turnId, items: [], itemsView: "full", status: interrupted ? "interrupted" : "completed", error: null, startedAt: null, completedAt: now(), durationMs: Date.now() - started } });
     return;
+  }
+  // A document edit: the gateway names the working copy to change; the file itself stays as it is.
+  const working = text.match(/작업 사본만 수정하세요: (.+)/);
+  if (text.includes("고쳐") && working) {
+    const path = resolve(thread.cwd, working[1].trim());
+    appendFileSync(path, "\n\n고친 문단입니다. 도입부를 질문 하나로 시작하게 바꿨습니다.\n");
   }
   if (text.includes("MCP")) {
     // An MCP tool that needs approval: Codex asks through an elicitation it marks as such.

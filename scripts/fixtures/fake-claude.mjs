@@ -22,11 +22,12 @@
 //   "브라우저" says whether this process was started with the agent browser's instructions (the
 //          SDK sends them as `appendSystemPrompt` in initialize) and, when it was, runs
 //          `playwright-cli -s=<name> open <address>` through Bash from its PATH like a model would
+//   "고쳐"  appends to the working copy the request names
 
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { appendFileSync, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { pagePng } from "./png.mjs";
 
@@ -208,6 +209,9 @@ async function runTurn(text) {
       browserLine = `브라우저 지침: 받음 (${browser.name}) · ${title ? `제목: ${title}` : `실패: ${refusal ?? result.output}`}`;
     }
   }
+  // A document edit: the gateway names the working copy to change; the file itself stays as it is.
+  const working = text.match(/작업 사본만 수정하세요: (.+)/);
+  if (text.includes("고쳐") && working) appendFileSync(resolve(process.cwd(), working[1].trim()), "\n\n고친 문단입니다. 도입부를 질문 하나로 시작하게 바꿨습니다.\n");
   if (!(text.trim() === "/compact")) {
     const steer = text.startsWith("[steer]") ? `이어서 받은 요청을 반영합니다: ${text.slice(7)}\n\n` : "";
     const skill = text.match(/^\/정리(?:\s+(.*))?$/s);
