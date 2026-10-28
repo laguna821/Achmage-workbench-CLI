@@ -392,6 +392,19 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const preset = (typeof body.preset === "string" && body.preset in DESIGN_PRESETS ? body.preset : "square") as DesignPreset;
         return sendJson(res, 201, manager.createDesign(parts[1], String(body.name ?? ""), preset, typeof body.text === "string" ? body.text : null));
       }
+      if (path === "/api/schedules" && method === "GET") return sendJson(res, 200, { schedules: manager.schedules.all() });
+      if (path === "/api/schedules" && method === "POST") {
+        const body = await readJson(req);
+        return sendJson(res, 201, manager.schedules.create({ sessionId: String(body.sessionId ?? ""), text: String(body.text ?? ""), when: body.when as never }));
+      }
+      if (parts[0] === "schedules" && parts[1] && parts.length === 2 && method === "PATCH") {
+        const body = await readJson(req);
+        return sendJson(res, 200, manager.schedules.update(decodeURIComponent(parts[1]), { enabled: typeof body.enabled === "boolean" ? body.enabled : undefined }));
+      }
+      if (parts[0] === "schedules" && parts[1] && parts.length === 2 && method === "DELETE") {
+        manager.schedules.remove(decodeURIComponent(parts[1]));
+        return sendJson(res, 200, { ok: true });
+      }
       if (method === "GET" && path === "/api/import") {
         const provider = url.searchParams.get("provider");
         if (provider !== "claude" && provider !== "codex") throw new HttpError(400, "invalid_provider", "엔진을 골라 주세요.");

@@ -607,6 +607,11 @@ export function Transcript({
                     <span className="turn-meta-sep">·</span>
                     <span>{clock(turn.user.at)}</span>
                     {turn.user.plan ? <span className="plan-tag">계획 먼저</span> : null}
+                    {turn.user.scheduled ? (
+                      <span className="scheduled-tag" title="예약 작업으로 보낸 요청">
+                        예약
+                      </span>
+                    ) : null}
                     {onFork && !turn.user.link && !turn.user.peer ? (
                       <button type="button" className="fork-button" onClick={() => onFork(turn.user!.id)} title="이 요청 앞까지의 대화로 새 갈래를 만들고, 이 요청을 고쳐 다시 묻습니다(이 대화는 그대로)">
                         <Icon name="restore" size={12} /> 이 요청 전으로

@@ -60,6 +60,7 @@ import { Attachments } from "./attachments.ts";
 import { imagesNamed, keepImage, withImages } from "./tool-images.ts";
 import { ImageGen } from "./imagegen.ts";
 import { SessionLinks } from "./links.ts";
+import { Schedules } from "./schedules.ts";
 import type { AgentBrowser } from "./browse.ts";
 
 export { HttpError };
@@ -131,6 +132,8 @@ export type SendOptions = {
   relay?: { hop: LinkHop; header: string } | null;
   /** Vault notes to read with the request (vault-relative paths; read-only copies, see pkm.ts). */
   notes?: string[];
+  /** Sent by a schedule ("예약 작업"): marked on the request. */
+  scheduled?: boolean;
 };
 
 type PendingCreate = { requestId: string; path: string; target: CreateTarget; sources: { artifactId: string; revision: number }[] };
@@ -239,6 +242,8 @@ export class SessionManager {
   readonly images: ImageGen;
   /** Linked sessions ("세션 잇기"): replies relayed between sessions in turn (links.ts). */
   readonly links: SessionLinks;
+  /** "예약 작업": requests sessions get at set times (schedules.ts). */
+  readonly schedules: Schedules;
   /** Set by the PKM layer: vault notes attached to a request become read-only references. */
   noteHook: NoteHook | null = null;
   private readonly store: Store;
@@ -312,6 +317,17 @@ export class SessionManager {
       },
     });
     this.images.recover();
+    this.schedules = new Schedules({
+      getMeta: (key) => store.getMeta(key),
+      setMeta: (key, value) => store.setMeta(key, value),
+      sessionExists: (id) => this.sessions.has(id),
+      send: async (schedule, requestId) => {
+        if (this.sessions.get(schedule.sessionId)?.archivedAt) throw new Error("archived");
+        // Waits for a running turn ("끝나면 보내기"); the screen stays where the user is.
+        await this.send(schedule.sessionId, requestId, schedule.text, [], null, null, "queue", { scheduled: true, activate: false });
+      },
+      changed: (schedules) => this.bus.publish({ type: "schedules.changed", schedules }),
+    });
     options.browse?.bind({
       lookup: (sessionId) => {
         const session = this.sessions.get(sessionId);
@@ -549,6 +565,7 @@ export class SessionManager {
       links: this.links.list(),
       tools: this.tools(),
       ...(this.options.browse ? { browser: this.options.browse.status() } : {}),
+      schedules: this.schedules.all(),
     };
   }
 
@@ -1168,6 +1185,7 @@ export class SessionManager {
       ...(attachments.length ? { attachments } : {}),
       ...(options.draw ? { draw: options.draw } : {}),
       ...(relay ? { link: relay.hop } : {}),
+      ...(options.scheduled ? { scheduled: true } : {}),
     });
     this.turnStarted.set(sessionId, Date.now());
     if (plan) this.planning.set(sessionId, requestId);
@@ -1671,6 +1689,7 @@ export class SessionManager {
   }
 
   async shutdown() {
+    this.schedules.stop();
     this.stopExternalWatches();
     this.flush();
     await Promise.all([...this.adapters.values()].map((adapter) => adapter.shutdown()));

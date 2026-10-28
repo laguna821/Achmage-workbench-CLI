@@ -4,6 +4,7 @@ import type { AgentBrowserStatus } from "./browse.ts";
 
 import type { ImageItem, RequestDraw } from "./imagegen.ts";
 import type { LinkHop, SessionLink } from "./links.ts";
+import type { Schedule } from "./schedules.ts";
 
 export const PROTOCOL_VERSION = 1;
 
@@ -292,6 +293,8 @@ export type TranscriptItem =
       create?: { format: CreatableFormat; name: string; path: string } | null;
       /** Sent into a turn that was still running ("끼어들기"): the engine takes it at its next step. */
       steered?: boolean;
+      /** Sent by a schedule ("예약 작업"), not typed just now. */
+      scheduled?: boolean;
       /** Steered in, then the turn was stopped before the engine took it: it waits again above the input. */
       undelivered?: boolean;
       /** Files that went with the request (pictures are shown). */
@@ -422,6 +425,8 @@ export type WorkbenchEvent =
   | { type: "prefs.updated"; prefs: UiPrefs }
   | { type: "tools.status"; tools: DocumentTools }
   | { type: "browser.status"; status: AgentBrowserStatus }
+  /** The schedules changed (added, done, turned off or removed): all of them. */
+  | { type: "schedules.changed"; schedules: Schedule[] }
   /** The vault mirror, saved views, rules or pins changed (pkm.ts); the UI fetches that part again. */
   | { type: "pkm.changed"; scope: "vault" | "views" | "rules" | "pins" | "insights"; version: number };
 
@@ -477,6 +482,8 @@ export type Snapshot = {
   tools: DocumentTools;
   /** The agent browser (absent from gateways without it). */
   browser?: AgentBrowserStatus;
+  /** "예약 작업" of every session. */
+  schedules?: Schedule[];
 };
 
 export type ApiError = { code: string; message: string; requestId?: string };
@@ -736,3 +743,4 @@ export * from "./views.ts";
 export * from "./imports.ts";
 export * from "./doc-images.ts";
 export * from "./pkm.ts";
+export * from "./schedules.ts";

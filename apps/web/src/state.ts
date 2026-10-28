@@ -8,6 +8,7 @@ import {
   type Folder,
   type Provider,
   type ProviderStatus,
+  type Schedule,
   type SequencedEvent,
   type Session,
   type SessionLink,
@@ -35,6 +36,8 @@ export type State = {
   handoffs: Record<string, Handoff>;
   /** Linked sessions ("세션 잇기"), live and ended. */
   links: Record<string, SessionLink>;
+  /** "예약 작업" of every session. */
+  schedules: Schedule[];
   tools: DocumentTools | null;
   browser: AgentBrowserStatus | null;
   /** Last `pkm.changed` version per scope (vault, views, rules, pins…): screens refetch on change. */
@@ -56,6 +59,7 @@ export const initialState: State = {
   proposals: {},
   handoffs: {},
   links: {},
+  schedules: [],
   tools: null,
   browser: null,
   pkm: {},
@@ -90,6 +94,7 @@ export function reducer(state: State, action: Action): State {
         proposals: byId(snapshot.proposals ?? []),
         handoffs: byId(snapshot.handoffs ?? []),
         links: byId(snapshot.links ?? []),
+        schedules: snapshot.schedules ?? [],
         tools: snapshot.tools ?? null,
         browser: snapshot.browser ?? null,
       };
@@ -124,6 +129,8 @@ export function reducer(state: State, action: Action): State {
           return { ...next, handoffs: { ...state.handoffs, [event.handoff.id]: event.handoff } };
         case "link.upserted":
           return { ...next, links: { ...state.links, [event.link.id]: event.link } };
+        case "schedules.changed":
+          return { ...next, schedules: event.schedules };
         case "pkm.changed":
           return { ...next, pkm: { ...state.pkm, [event.scope]: event.version } };
         case "provider.status":

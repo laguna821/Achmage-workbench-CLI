@@ -5,6 +5,8 @@ import type {
   Attachment,
   EngineCommand,
   ImportCandidate,
+  CreateScheduleRequest,
+  Schedule,
   ForkResult,
   ImportRequest,
   ArtifactRevision,
@@ -107,6 +109,10 @@ export class Api {
   importCandidates = (provider: Provider, query: string) =>
     this.request<{ candidates: ImportCandidate[] }>("GET", `/api/import?${new URLSearchParams({ provider, q: query })}`).then((result) => result.candidates);
   importSession = (request: ImportRequest) => this.request<Session>("POST", "/api/import", request);
+  /** "예약 작업": requests a session gets at set times. */
+  createSchedule = (request: CreateScheduleRequest) => this.request<Schedule>("POST", "/api/schedules", request);
+  updateSchedule = (id: string, patch: { enabled: boolean }) => this.request<Schedule>("PATCH", `/api/schedules/${encodeURIComponent(id)}`, patch);
+  removeSchedule = (id: string) => this.request<{ ok: boolean }>("DELETE", `/api/schedules/${encodeURIComponent(id)}`);
   /** "이 요청 전으로": a new session with the conversation up to that request. */
   forkBefore = (sessionId: string, itemId: string) => this.request<ForkResult>("POST", `/api/sessions/${sessionId}/fork`, { itemId });
   /** "/" in the input: the session engine's commands and skills. */

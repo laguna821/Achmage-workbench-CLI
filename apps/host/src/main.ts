@@ -133,6 +133,8 @@ listen(editors, env.WORKBENCH_EDITORS_PORT, editorsPortFile, (editorsPort) => {
       `WORKBENCH_READY ${JSON.stringify({ url: `http://127.0.0.1:${boundPort}`, port: boundPort, token, dataDir, editorsUrl: editorsOrigin })}\n`,
     );
     void manager.initProviders();
+    // "예약 작업": sends what is due every half minute (checks use a shorter tick).
+    manager.schedules.start(Number(env.WORKBENCH_SCHEDULE_TICK_MS) || 30_000);
   });
 });
 

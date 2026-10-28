@@ -29,6 +29,7 @@ import { Onboarding } from "./components/Onboarding.tsx";
 import { SessionPicker } from "./components/SessionPicker.tsx";
 import { LinkLayer } from "./components/LinkCards.tsx";
 import { ImportDialog } from "./components/ImportDialog.tsx";
+import { ScheduleDialog } from "./components/ScheduleDialog.tsx";
 import { writeDraft } from "./components/Composer.tsx";
 import { LinkContext, hopsText, linkOfSession, useLinkApi } from "./links.ts";
 import { SplitView, WorkModeBar, useWorkModeKeys } from "./components/WorkModes.tsx";
@@ -613,6 +614,8 @@ export function App() {
   );
   // "다른 곳의 대화 가져오기": the imported session opens at once (its work may be new, so by id).
   const [importOpen, setImportOpen] = useState(false);
+  // "예약 작업" of the session whose dialog is open.
+  const [scheduling, setScheduling] = useState<string | null>(null);
   const openImported = useCallback(
     (session: Session) => {
       // The gateway made it the work's active session.
@@ -951,6 +954,16 @@ export function App() {
           { kind: "item", label: "이름 바꾸기", icon: "edit", hint: "F2", onSelect: () => setSidebarPending({ rename: session.id }) },
           { kind: "separator" },
           { kind: "item", label: session.pinned ? "고정 풀기" : "고정", icon: "pin", onSelect: () => void api.updateSession(session.id, { pinned: !session.pinned }).catch(fail) },
+          {
+            kind: "item",
+            label: "예약 작업…",
+            icon: "clock",
+            hint: (() => {
+              const count = state.schedules.filter((entry) => entry.sessionId === session.id && entry.enabled).length;
+              return count ? `${count}개` : undefined;
+            })(),
+            onSelect: () => setScheduling(session.id),
+          },
           { kind: "item", label: session.muted ? "알림 켜기" : "알림 끄기", icon: "bell", hint: session.muted ? "이 세션은 알리지 않음" : undefined, onSelect: () => void api.updateSession(session.id, { muted: !session.muted }).catch(fail) },
           {
             kind: "item",
@@ -1535,6 +1548,9 @@ export function App() {
       {switcher !== null ? <Switcher state={state} sessions={switchable} index={switcher} unseen={unseen} /> : null}
       <LinkLayer api={api} inDesktop={inDesktop} />
       {importOpen ? <ImportDialog api={api} onClose={() => setImportOpen(false)} onOpen={openImported} onError={fail} /> : null}
+      {scheduling && state.sessions[scheduling] ? (
+        <ScheduleDialog api={api} session={state.sessions[scheduling]} schedules={state.schedules} onClose={() => setScheduling(null)} onError={fail} />
+      ) : null}
       {picker ? (
         <SessionPicker
           state={state}
