@@ -410,7 +410,7 @@
 - 래퍼는 지침을 따르는 엔진을 위한 안전장치다. 전체 접근의 엔진은 래퍼를 거치지 않고 CLI를 직접 부를 수 있다(Codex 묻기·자동의 샌드박스 안에서는 소켓이 막혀 게이트웨이만 길이다).
 - 지침이 바뀐 뒤(`&&` 허용, 명령 하나씩) 실제 엔진으로 다시 돌리지 않았다. 실제 엔진에서 세션 도중 켜기(Codex 주입·Claude 재시작)는 가짜 엔진과 가짜 Responses API로만 확인했다.
 - 실제 앱 창(Tauri·WebKitGTK)에서 알약을 눌러 보지 않았다(Chromium 검사만). Windows·macOS 미지원(설치기가 Linux x64 Chromium만 고정).
-- 데몬 기록은 Playwright 기본 위치(`~/.cache/ms-playwright/daemon/`)와 `$TMPDIR/pw-…/cli/` 소켓을 쓴다(데이터 폴더 밖, 작은 파일).
+- 데몬 기록은 Playwright 기본 위치(`~/.cache/ms-playwright/daemon/`)와 `$TMPDIR/pw-…/cli/` 소켓을 쓴다. 창을 띄울 때마다 `~/.cache/ms-playwright/b/`에 약 1KB 기록이 남는다(데이터 폴더 밖, 지우지 않음).
 
 ## 다음
 
