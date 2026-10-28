@@ -333,12 +333,12 @@ export class Documents {
   }
 
   /** Keep what is on disk now as a new revision (after an external edit the user chose to keep). */
-  adoptDisk(artifactId: string) {
+  adoptDisk(artifactId: string, note = "외부에서 바뀐 내용") {
     const artifact = this.get(artifactId);
     const data = readFileOrNull(artifact.path);
     if (!data) throw new HttpError(404, "file_missing", "파일이 없습니다.");
     if (sha256(data) === artifact.sha256) return this.check(artifactId);
-    return this.record(artifact, data, { author: "external", sessionId: null, baseRevision: artifact.revision, note: "외부에서 바뀐 내용" });
+    return this.record(artifact, data, { author: "external", sessionId: null, baseRevision: artifact.revision, note });
   }
 
   /** Undo by moving forward: an older revision's content becomes a new revision. */

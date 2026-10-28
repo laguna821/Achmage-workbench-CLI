@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync, unwatchFile, watchFile, writeFileSync, type Stats } from "node:fs";
 import { basename, delimiter, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import {
   PROTOCOL_VERSION,
@@ -349,7 +349,45 @@ export class SessionManager {
     const hop = artifact.format === "hwpx" || artifact.format === "hwp" ? findHop() : null;
     if (hop) openInHop(hop, artifact.path);
     else openWithDesktop(artifact.path);
-    return { app: hop ? "HOP" : "기본 앱" };
+    const app = hop ? "HOP" : "기본 앱";
+    this.watchExternal(artifact.id, artifact.path, app);
+    return { app };
+  }
+
+  private readonly external = new Map<string, () => void>();
+
+  /**
+   * A document the user opened in another app from here: what that app saves becomes the next
+   * revision ("HOP에서 저장"), so the conversation and the AI see it without another step. Watched
+   * for twelve hours; an AI proposal made on the older revision is then not applied automatically.
+   */
+  private watchExternal(artifactId: string, path: string, app: string) {
+    this.external.get(artifactId)?.();
+    let debounce: NodeJS.Timeout | undefined;
+    const onChange = (current: Stats, previous: Stats) => {
+      if (current.mtimeMs === previous.mtimeMs && current.size === previous.size) return;
+      clearTimeout(debounce);
+      // Editors write in steps (temporary file, rename); take the file once it has settled.
+      debounce = setTimeout(() => {
+        try {
+          const before = this.documents.get(artifactId).revision;
+          const after = this.documents.adoptDisk(artifactId, `${app}에서 저장`);
+          if (after.revision !== before) this.bus.publish({ type: "artifact.upserted", artifact: after });
+        } catch {
+          // Gone or unreadable for a moment: the next change tries again.
+        }
+      }, 800);
+    };
+    watchFile(path, { interval: 1500 }, onChange);
+    const stop = () => {
+      unwatchFile(path, onChange);
+      clearTimeout(debounce);
+      clearTimeout(expiry);
+      this.external.delete(artifactId);
+    };
+    const expiry = setTimeout(stop, 12 * 3600_000);
+    expiry.unref();
+    this.external.set(artifactId, stop);
   }
 
   prefs(): UiPrefs {
@@ -807,7 +845,13 @@ export class SessionManager {
     return Promise.all([...this.adapters.values()].map((adapter) => adapter.refreshStatus()));
   }
 
+  /** Stop watching documents opened in other apps. */
+  stopExternalWatches() {
+    for (const stop of [...this.external.values()]) stop();
+  }
+
   async shutdown() {
+    this.stopExternalWatches();
     this.flush();
     await Promise.all([...this.adapters.values()].map((adapter) => adapter.shutdown()));
   }
