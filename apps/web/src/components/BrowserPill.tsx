@@ -96,7 +96,7 @@ export function BrowserInstall({ status, actions }: { status: AgentBrowserStatus
       ) : (
         <>
           <div className="browser-note">
-            {install.state === "error" ? install.message : "에이전트 브라우저가 아직 없습니다. Playwright CLI와 Chromium을 앱 데이터 폴더에 받습니다(내려받기 약 180MB)."}
+            {install.state === "error" ? install.message : "에이전트 브라우저가 아직 없습니다. Playwright CLI와 Chromium을 앱 데이터 폴더에 받습니다(내려받기 약 200MB, 설치 후 약 420MB)."}
           </div>
           <button type="button" className="button small" onClick={actions.install}>
             {install.state === "error" ? "다시 설치" : "설치"}
