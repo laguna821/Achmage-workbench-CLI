@@ -1,4 +1,4 @@
-import type { Artifact, CardList, PageTemplate, PkmCard, PkmRule, PkmState, PkmView, RuleChange, SendResult, VaultFolder, VaultNote, VaultStatus, VaultTree } from "@workbench/contracts";
+import type { Artifact, CardList, InsightDraft, PageTemplate, PkmCard, PkmRule, PkmState, PkmView, RuleChange, SendResult, VaultFolder, VaultNote, VaultStatus, VaultTree } from "@workbench/contracts";
 import { readToken, type Api } from "./api.ts";
 
 // The PKM layer as the UI sees it: calls to `/api/pkm/*` and the vault tree as plain rows (kept
@@ -20,6 +20,10 @@ export function pkmClient(api: Api) {
       return api.request<CardList>("GET", `/api/pkm/cards?${params}`);
     },
     note: (path: string) => api.request<VaultNote>("GET", `/api/pkm/vault/note?${new URLSearchParams({ path })}`),
+    insight: (sessionId: string) => api.request<InsightDraft>("GET", `/api/pkm/insight?${new URLSearchParams({ sessionId })}`),
+    checkInsight: (sessionId: string, text: string) => api.request<{ problems: string[] }>("POST", "/api/pkm/insight/check", { sessionId, text }),
+    publishInsight: (sessionId: string, text: string, requestId: string) =>
+      api.request<SendResult & { requestId: string }>("POST", "/api/pkm/insight/publish", { sessionId, text, requestId }),
     pin: (workId: string, path: string, pinned: boolean) => api.request<string[]>("PUT", "/api/pkm/pins", { workId, path, pinned }),
     contextCard: (workId: string) => api.request<{ card: string; protected: string[] }>("GET", `/api/pkm/context-card?${new URLSearchParams({ workId })}`),
     saveView: (view: Partial<PkmView>) => api.request<PkmView>("PUT", "/api/pkm/views", view),

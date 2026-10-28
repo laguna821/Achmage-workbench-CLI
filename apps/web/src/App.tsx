@@ -747,6 +747,7 @@ export function App() {
             },
           },
           { kind: "separator" },
+          ...(pkmHandle.current?.tree?.status.path && !busy ? [{ kind: "item" as const, label: "인사이트 초안…", icon: "bulb" as const, onSelect: () => pkmHandle.current?.setDialog({ kind: "insight", sessionId: session.id }) }] : []),
           {
             kind: "submenu",
             label: "마크다운으로 내보내기",

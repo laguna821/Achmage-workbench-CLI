@@ -18,6 +18,7 @@ import { workSessions } from "../tree.ts";
 import { Transcript } from "./Transcript.tsx";
 import { AccessPicker, ContextGauge } from "./SessionControls.tsx";
 import { VaultGuardPill } from "./pkm/VaultGuardPill.tsx";
+import { InsightPill } from "./pkm/InsightDialog.tsx";
 
 export type WorkActions = {
   /** Send a request; while the engine works it steers into the turn or waits ("queue"). */
@@ -583,6 +584,7 @@ export function WorkView({
               <AccessPicker provider={pickerProvider} value={access} onChange={(mode) => actions.setAccess(active, pickerProvider, mode)} />
               {active ? <ContextGauge context={active.context} canCompact={!busy && Boolean(active.nativeSessionId)} onCompact={() => actions.compact(active)} /> : null}
               <VaultGuardPill provider={pickerProvider} access={access} workId={work.id} />
+              <InsightPill sessionId={active?.id ?? null} />
             </>
           }
           header={

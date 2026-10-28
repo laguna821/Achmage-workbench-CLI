@@ -22,6 +22,9 @@
 //   systemPrompt.append, Codex developerInstructions; ≤ 2 KB); a write into the vault is refused
 //   (Claude: the PreToolUse hook, even with full access; Codex: the sandbox keeps the vault out of
 //   the writable roots); the pill under the input warns under full access.
+//   인사이트 초안 — a finished session's "인사이트 초안" has the vault template's keys spelled exactly
+//   with DIKM empty; a DIKM stage set by hand is refused; "발행 요청" asks the session's engine to
+//   publish through Achmage MCP (draft_insight → publish_insight); nothing is written into the vault.
 // Usage: node scripts/pkm-check.ts [outDir] [codex|claude]
 
 import { spawn } from "node:child_process";
@@ -409,21 +412,70 @@ async function flow(provider: Provider) {
     await page.locator(".work-view .access-select").click();
     await page.locator(".access-menu .access-option.access-auto").click();
     await page.waitForFunction(() => !document.querySelector(".work-view .vault-guard-pill")?.classList.contains("warn"), undefined, { timeout: 5000 });
-    await page.waitForFunction(() => document.querySelector(".work-view .vault-guard-pill")?.textContent?.includes("고정 노트"), undefined, { timeout: 5000 }).catch(async () => console.log("pins seen by the gateway:", JSON.stringify((await api<{ pins: unknown }>("GET", "/api/pkm/state")).pins)));
-    const calm = await page.locator(".work-view .vault-guard-pill").innerText();
+    await page.waitForFunction(() => document.querySelector(".work-view .vault-guard-pill")?.getAttribute("aria-label")?.includes("고정 노트"), undefined, { timeout: 5000 }).catch(() => undefined);
+    const calmText = await page.locator(".work-view .vault-guard-pill").innerText();
+    const calmAria = (await page.locator(".work-view .vault-guard-pill").getAttribute("aria-label")) ?? "";
     await page.locator(".work-view .access-select").click();
     await page.locator(".access-menu .access-option.access-full").click();
     await page.waitForSelector(".work-view .vault-guard-pill.warn", { timeout: 5000 });
-    const warned = await page.locator(".work-view .vault-guard-pill").innerText();
+    const warned = `${await page.locator(".work-view .vault-guard-pill").getAttribute("aria-label")} / ${await page.locator(".work-view .vault-guard-pill").innerText()}`;
     await page.locator(".work-view .vault-guard-pill").click();
     await page.waitForSelector(".vault-guard-pop");
     await shot("13-vault-guard.png");
     await page.keyboard.press("Escape");
-    pass("입력창 아래 볼트 보호 표시, 전체 접근에서는 경고", calm.includes("볼트 읽기 전용") && calm.includes("고정 노트 1") && warned.includes(provider === "codex" ? "볼트 보호 꺼짐" : "볼트 보호 일부"), `${calm} → ${warned}`.replace(/\n/g, " "));
+    const calmLabel = await page.locator(".work-view .vault-guard-pill").getAttribute("aria-label");
+    pass(
+      "입력창 아래 볼트 보호 표시(방패), 전체 접근에서는 경고",
+      calmText.trim() === "1" && (calmLabel ?? "").length > 0 && calmAria.includes("읽기 전용") && calmAria.includes("고정 노트 1") && warned.includes(provider === "codex" ? "볼트 보호 꺼짐" : "볼트 보호 일부"),
+      `${calmAria} → ${warned}`.replace(/\n/g, " "),
+    );
     await page.locator(".work-view .access-select").click();
     await page.locator(".access-menu .access-option.access-auto").click();
+
+    // ── "인사이트 초안": the vault template's keys, DIKM empty, published only through the engine ──
+    await page.locator(".work-view .insight-pill").click();
+    await page.waitForSelector(".insight-dialog .insight-text", { timeout: 8000 });
+    const draft = await page.locator(".insight-text").inputValue();
+    const draftKeys = [...(/^---\n([\s\S]*?)\n---/.exec(draft)?.[1] ?? "").matchAll(/^("(?:[^"]+)"|[^\s:"][^:]*):/gm)].map((match) => match[1]!.replace(/^"|"$/g, ""));
+    pass(
+      "인사이트 초안: 볼트 템플릿 키 글자·순서 그대로(끝 콜론 포함), DIKM_단계 빈칸",
+      JSON.stringify(draftKeys) === JSON.stringify(["title", "aliases", "DIKM_단계:", "종류:", "tags", "저자:", "관련문서:", "date created", "source"]) && /\n"DIKM_단계:":\n"종류:":\n/.test(draft) && draft.includes(`source: workbench://session/${guarded.id}`),
+      draftKeys.join(" | "),
+    );
+    await page.locator(".insight-text").fill(draft.replace('"DIKM_단계:":\n', '"DIKM_단계:":\n  - 🔵 I\n'));
+    await page.waitForSelector(".insight-problems", { timeout: 5000 });
+    const blocked = await page.locator(".insight-dialog .button.primary").isDisabled();
+    await shot("14-insight-refused.png");
+    await page.locator(".insight-text").fill(draft);
+    await page.waitForSelector(".insight-ok", { timeout: 5000 });
+    pass("DIKM 단계를 채우면 발행 요청을 막음", blocked);
+    await shot("15-insight.png");
+    const requestsBefore = (await items(guarded.id)).filter((item) => item.kind === "user").length;
+    await page.locator(".insight-dialog .button.primary").click();
+    await page.waitForSelector(".insight-dialog", { state: "detached", timeout: 8000 });
+    // The engine may ask before it uses the Achmage MCP tool (the stand-in Codex does, as Codex on "자동" would): allowed here.
+    let mcpAsked = false;
+    await until(async () => {
+      const status = (await snapshot()).sessions.find((entry) => entry.id === guarded.id)?.status;
+      if (status === "awaitingApproval") {
+        const waiting = (await items(guarded.id)).find((item) => item.kind === "approval" && item.decision === null);
+        if (waiting) {
+          mcpAsked = waiting.kind === "approval" && waiting.title.includes("MCP");
+          await api("POST", `/api/sessions/${guarded.id}/approvals/${encodeURIComponent(waiting.id)}`, { decision: "accept" });
+        }
+        return false;
+      }
+      return (await items(guarded.id)).filter((item) => item.kind === "user").length > requestsBefore && status === "idle";
+    }, 15_000);
+    const publishText = (await items(guarded.id)).filter((item): item is Extract<TranscriptItem, { kind: "user" }> => item.kind === "user").at(-1)?.text ?? "";
+    pass(
+      "발행 요청은 이 세션의 엔진에게 Achmage MCP(draft_insight → publish_insight)로, 검토한 글 그대로",
+      publishText.startsWith("[인사이트 발행 요청") && publishText.includes("draft_insight") && publishText.includes("publish_insight") && publishText.includes(draft.trimEnd()),
+      `${publishText.split("\n")[0]}${mcpAsked ? " · MCP 도구 승인 카드 → 허용" : ""}`,
+    );
   } catch (error) {
-    pass("실행", false, error instanceof Error ? error.message.split("\n")[0]! : String(error));
+    const waiting = (await snapshot()).sessions.filter((entry) => entry.status !== "idle").map((entry) => `${entry.purpose}:${entry.status}`);
+    pass("실행", false, `${error instanceof Error ? error.message.split("\n")[0]! : String(error)}${waiting.length ? ` · 진행 중: ${waiting.join(", ")}` : ""}`);
     await page.screenshot({ path: join(outDir, `${provider}-99-failure.png`) }).catch(() => undefined);
   } finally {
     await page.close();

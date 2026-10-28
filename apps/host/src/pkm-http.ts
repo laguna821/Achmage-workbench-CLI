@@ -79,6 +79,14 @@ export async function handlePkm(pkm: Pkm, req: IncomingMessage, res: ServerRespo
     const body = await readJson(req);
     return (sendJson(res, 200, pkm.setPin(String(body.workId ?? ""), String(body.path ?? ""), body.pinned !== false)), true);
   }
+  if (method === "GET" && path === "/insight") return (sendJson(res, 200, pkm.insight(query("sessionId"))), true);
+  if (method === "POST" && (path === "/insight/check" || path === "/insight/publish")) {
+    const body = await readJson(req);
+    const sessionId = String(body.sessionId ?? "");
+    const text = String(body.text ?? "");
+    if (path === "/insight/check") return (sendJson(res, 200, pkm.checkInsight(sessionId, text)), true);
+    return (sendJson(res, 202, await pkm.publishInsight(sessionId, text, String(body.requestId ?? "") || `insight-${Date.now()}`)), true);
+  }
   if (method === "GET" && path === "/context-card") {
     const work = pkm.manager.view.works.get(query("workId"));
     if (!work) throw new HttpError(404, "work_not_found", "작업을 찾지 못했습니다.");

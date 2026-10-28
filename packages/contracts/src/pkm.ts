@@ -273,6 +273,21 @@ export type PageTemplate = {
   templater: boolean;
 };
 
+/** "인사이트 초안": a finished session as a DIKM note draft (no model), checked before it can be published. */
+export type InsightDraft = {
+  sessionId: string;
+  title: string;
+  summary: string;
+  /** The whole draft: the vault template's front matter (keys spelled exactly) and a body. */
+  text: string;
+  /** The template keys every published draft must keep, in order. */
+  keys: string[];
+  /** The vault template the keys came from (vault-relative), or null (built-in DIKM keys). */
+  template: string | null;
+  /** Why it cannot be published as it is (empty when it can). */
+  problems: string[];
+};
+
 /** What the UI shows of the PKM layer; fetched again when a `pkm.changed` event arrives. */
 export type PkmState = {
   vault: VaultStatus;

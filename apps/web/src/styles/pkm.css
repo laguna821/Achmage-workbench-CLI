@@ -179,6 +179,11 @@
   font-size: 13px;
 }
 
+.pkm-dialog .button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .pkm-dialog .sheet-actions {
   display: flex;
   justify-content: flex-end;
@@ -804,7 +809,7 @@
 }
 
 /* ── the vault guard under the input ───────────────────────────────────── */
-.vault-guard-pill {
+.pkm-pill {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -818,8 +823,32 @@
   white-space: nowrap;
 }
 
-.vault-guard-pill:hover {
+.pkm-pill:hover {
   background: var(--surface-muted);
+}
+
+/* The pills give way first when the bar is narrow (labels end in "…", the icon stays). */
+.pkm-pill-anchor {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.pkm-pill {
+  flex: 0 1 auto;
+  min-width: 30px;
+  overflow: hidden;
+}
+
+.pkm-pill > svg,
+.pkm-pill .vault-guard-pins {
+  flex: 0 0 auto;
+}
+
+.pkm-pill-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .vault-guard-pill.warn {
@@ -828,7 +857,11 @@
 }
 
 .vault-guard-pins {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
   color: var(--faint);
+  font-variant-numeric: tabular-nums;
 }
 
 .vault-guard-pop {
@@ -839,4 +872,45 @@
   margin: 2px 10px 8px;
   font-size: 13px;
   line-height: 1.55;
+}
+
+/* ── "인사이트 초안" ────────────────────────────────────────────────────── */
+.insight-dialog {
+  width: min(760px, calc(100vw - 40px));
+}
+
+.insight-text {
+  width: 100%;
+  min-height: 300px;
+  max-height: 46vh;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.insight-problems {
+  margin: 0;
+  padding: 8px 12px 8px 28px;
+  border-radius: 10px;
+  background: var(--amber-soft);
+  color: var(--amber-text);
+  font-size: 13px;
+}
+
+.insight-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ok);
+}
+
+.insight-pill {
+  color: var(--text-soft);
 }

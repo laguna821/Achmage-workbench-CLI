@@ -18,19 +18,27 @@ export function VaultGuardPill({ provider, access, workId }: { provider: Provide
   if (!pkm || !status?.path) return null;
   const pins = workId ? (pkm.pkmState?.pins[workId] ?? []) : [];
   const weak = access === "full";
-  const label = weak ? (provider === "codex" ? "볼트 보호 꺼짐" : "볼트 보호 일부") : "볼트 읽기 전용";
+  // Short on purpose: it shares the bar with access, context, model and engine. Calm, it is only the
+  // shield (the tooltip says the rest); under full access the warning is spelled out.
+  const label = weak ? (provider === "codex" ? "보호 꺼짐" : "보호 일부") : "";
   return (
-    <div className="anchor">
+    <div className="anchor pkm-pill-anchor">
       <button
         type="button"
-        className={`vault-guard-pill${weak ? " warn" : ""}`}
+        className={`pkm-pill vault-guard-pill${weak ? " warn" : ""}`}
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        title={weak ? "전체 접근에서는 볼트 쓰기를 다 막지 못합니다" : "엔진이 볼트에 쓰지 못하게 막고 있습니다"}
+        title={`${weak ? "전체 접근에서는 볼트 쓰기를 다 막지 못합니다" : "볼트 읽기 전용: 엔진이 볼트에 쓰지 못하게 막고 있습니다"}${pins.length ? ` · 이 작업에 고정한 노트 ${pins.length}개` : ""}`}
+        aria-label={`볼트 ${weak ? label : "읽기 전용"}${pins.length ? `, 고정 노트 ${pins.length}` : ""}`}
       >
         <Icon name="shield" size={13} />
-        <span>{label}</span>
-        {pins.length ? <span className="vault-guard-pins">· 고정 노트 {pins.length}</span> : null}
+        {label ? <span className="pkm-pill-label">{label}</span> : null}
+        {pins.length ? (
+          <span className="vault-guard-pins" aria-hidden>
+            <Icon name="pin" size={11} />
+            {pins.length}
+          </span>
+        ) : null}
       </button>
       <Popover open={open} onClose={() => setOpen(false)} placement="above" align="left" className="vault-guard-pop">
         <div className="menu-label">볼트 {status.name} · 사람 원본</div>

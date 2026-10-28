@@ -12,7 +12,7 @@ import type { State } from "../../state.ts";
 const OPEN_KEY = "workbench.vaultOpen";
 
 /** Dialogs of the PKM layer: attaching the vault, a page from a template. */
-export type PkmDialog = { kind: "vault" } | { kind: "template"; workId: string; parentId: string | null } | { kind: "view"; id: string | null } | { kind: "rules" };
+export type PkmDialog = { kind: "vault" } | { kind: "template"; workId: string; parentId: string | null } | { kind: "view"; id: string | null } | { kind: "rules" } | { kind: "insight"; sessionId: string };
 
 export type PkmApi = {
   api: Api;

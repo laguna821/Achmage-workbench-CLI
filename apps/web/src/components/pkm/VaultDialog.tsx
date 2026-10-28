@@ -4,6 +4,7 @@ import { usePkm } from "./PkmContext.tsx";
 import { TemplateDialog } from "./TemplateDialog.tsx";
 import { ViewDialog } from "./ViewDialog.tsx";
 import { RulesDialog } from "./RulesDialog.tsx";
+import { InsightDialog } from "./InsightDialog.tsx";
 import "../../styles/pkm.css";
 
 /**
@@ -113,6 +114,7 @@ export function VaultDialogHost({ pickFolder }: { pickFolder: (() => Promise<str
   if (pkm.dialog?.kind === "template") return <TemplateDialog workId={pkm.dialog.workId} parentId={pkm.dialog.parentId} />;
   if (pkm.dialog?.kind === "view") return <ViewDialog id={pkm.dialog.id} />;
   if (pkm.dialog?.kind === "rules") return <RulesDialog />;
+  if (pkm.dialog?.kind === "insight") return <InsightDialog sessionId={pkm.dialog.sessionId} />;
   return null;
 }
 

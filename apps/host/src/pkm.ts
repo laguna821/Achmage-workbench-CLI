@@ -4,6 +4,7 @@ import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 
 import {
   PROVIDER_LABEL,
   parseViewQuery,
+  type InsightDraft,
   type Artifact,
   type CardList,
   type PageTemplate,
@@ -32,6 +33,7 @@ import { filterItems, groupItems, kindsFor, sessionStatuses, workEngines, workSt
 import { cleanRules, placementFor } from "./pkm-rules.ts";
 import { claudeWriteGuard, codexSandbox, contextCard } from "./pkm-guard.ts";
 import type { ClaudeLaunch, CodexLaunch } from "./providers/types.ts";
+import { checkInsight, insightDraft, insightTemplate, publishRequest } from "./insight.ts";
 import type { FrontmatterValue } from "./frontmatter.ts";
 
 // The PKM layer of the gateway (design 워크스테이션-다음설계 §4): the read-only vault mirror and,
@@ -704,6 +706,56 @@ export class Pkm {
     const title = headingOf(picked);
     const text = ["---", `title: ${yamlValue(title)}`, `source: workbench://session/${sessionId}#${encodeURIComponent(itemId)}`, `date created: ${localStamp()}`, "---", "", tidyMessage(picked), ""].join("\n");
     return this.writePage(this.requireWork(session.workId), this.requireWork(session.workId).cwd, safeStem(title, "대화에서"), text, "대화에서 만든 페이지");
+  }
+
+  // ── insight drafts ───────────────────────────────────────────────────────────────────────
+
+  private insightSource(sessionId: string) {
+    const session = this.manager.view.sessions.get(sessionId);
+    if (!session) throw new HttpError(404, "session_not_found", "세션을 찾지 못했습니다.");
+    const work = this.requireWork(session.workId);
+    const items = this.manager.items(sessionId).items;
+    const ids = [...new Set(items.flatMap((item) => (item.kind === "artifact" ? [item.artifactId] : [])))];
+    const documents = ids.flatMap((id) => {
+      try {
+        const artifact = this.manager.documents.get(id);
+        return [{ name: artifact.name, revision: artifact.revision }];
+      } catch {
+        return [];
+      }
+    });
+    return { session, work, items, documents };
+  }
+
+  /** "인사이트 초안" of a session: built by fixed rules, with the vault template's keys. */
+  insight(sessionId: string): InsightDraft {
+    const source = this.insightSource(sessionId);
+    if (!source.items.some((item) => item.kind === "turnEnd" && item.status === "completed")) throw new HttpError(409, "not_finished", "끝난 응답이 있는 세션에서 초안을 만들 수 있습니다.");
+    const draft = insightDraft(source, insightTemplate(this.vault.root, VAULT_TEMPLATES));
+    return { sessionId, ...draft, problems: checkInsight(draft.text, draft.keys) };
+  }
+
+  /** What keeps a reviewed draft from being published (the same keys as its draft). */
+  checkInsight(sessionId: string, text: string) {
+    const keys = this.insight(sessionId).keys;
+    return { problems: checkInsight(text, keys) };
+  }
+
+  /**
+   * Publish a reviewed draft the approved way: the session's own engine is asked to call its
+   * Achmage MCP tools (draft_insight, then publish_insight) with exactly this text. Workbench
+   * writes nothing into the vault; the answer comes back in the conversation.
+   */
+  async publishInsight(sessionId: string, text: string, requestId: string) {
+    const draft = this.insight(sessionId);
+    const problems = checkInsight(text, draft.keys);
+    if (problems.length) throw new HttpError(400, "insight_invalid", problems.join(" "));
+    const title = /^title\s*:\s*(.*)$/m.exec(splitFrontmatter(text).yaml ?? "")?.[1]?.replace(/^"(.*)"$/, "$1").trim() || draft.title;
+    const result = await this.manager.send(sessionId, requestId, publishRequest({ title, summary: draft.summary, text }), [], null, null, "queue");
+    const sent = this.readJson<{ sessionId: string; title: string; requestId: string; at: number }[]>("pkm.insights", []);
+    this.writeJson("pkm.insights", [...sent.slice(-99), { sessionId, title, requestId, at: Date.now() }]);
+    this.publish("insights");
+    return { ...result, requestId };
   }
 
   close() {
