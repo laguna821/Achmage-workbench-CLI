@@ -6,17 +6,20 @@ import { folderHidden, sessionHidden, workDocs, workHidden, workSessions } from 
 // axes — what waits for me, where things stall, where things are, when they happened, what was
 // made. Plain data here (no React), so the grouping rules can be tested. No model is involved.
 
-export type HomeMode = "now" | "board" | "map" | "flow" | "docs";
+export type HomeMode = "now" | "projects" | "flow" | "docs";
 
+// Four modes (프로젝트 노트 설계 v2 §9): "보드" (sessions by state) is what "지금" already groups,
+// and "지도" (folders › works) became the cards of "프로젝트", next to its table and kanban.
 export const HOME_MODES: { id: HomeMode; label: string; question: string }[] = [
   { id: "now", label: "지금", question: "무엇이 나를 기다리나" },
-  { id: "board", label: "보드", question: "어디서 막히나" },
-  { id: "map", label: "지도", question: "어디에 무엇이 있나" },
+  { id: "projects", label: "프로젝트", question: "프로젝트는 어디쯤인가" },
   { id: "flow", label: "흐름", question: "언제 무엇을 했나" },
   { id: "docs", label: "문서", question: "무엇이 만들어졌나" },
 ];
 
-export const readHomeMode = (value: unknown): HomeMode => (HOME_MODES.some((mode) => mode.id === value) ? (value as HomeMode) : "now");
+/** The saved mode; the old "보드" opens "지금" and the old "지도" opens "프로젝트". */
+export const readHomeMode = (value: unknown): HomeMode =>
+  value === "board" ? "now" : value === "map" ? "projects" : HOME_MODES.some((mode) => mode.id === value) ? (value as HomeMode) : "now";
 
 /** Groups of "지금", in the order they ask for the user. */
 export type Bucket = "attention" | "trouble" | "unseen" | "running" | "queued";

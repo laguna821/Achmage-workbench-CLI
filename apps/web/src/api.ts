@@ -5,6 +5,7 @@ import type {
   ProjectEvent,
   ProjectPage,
   ProjectStage,
+  ProjectSummary,
   ProjectWrite,
   ApiError,
   Artifact,
@@ -142,6 +143,7 @@ export class Api {
     extra: { omitChanges?: string[] } = {},
   ) => this.request<SendResult>("POST", `/api/sessions/${sessionId}/messages`, { requestId, text, refs, create, mode, attachments, plan, ...extra });
   /** A work as a project note (project.ts): the page, writes to the note (each undoable), the stages. */
+  projects = () => this.request<ProjectSummary[]>("GET", "/api/projects/");
   project = (workId: string) => this.request<ProjectPage>("GET", `/api/projects/${encodeURIComponent(workId)}`);
   projectEvents = (workId: string) => this.request<ProjectEvent[]>("GET", `/api/projects/${encodeURIComponent(workId)}/events`);
   setProjectProperty = (workId: string, key: string, values: string[] | null) => this.request<ProjectWrite>("PUT", `/api/projects/${encodeURIComponent(workId)}/property`, { key, values });

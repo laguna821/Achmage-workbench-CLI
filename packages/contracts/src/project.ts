@@ -122,3 +122,15 @@ export type ProjectEntryRequest = {
 
 /** What the next request of a session will be told changed since its last one (알릴 변경). */
 export type ChangeLine = { id: string; text: string };
+
+/** A project in lists (home "프로젝트": cards, table, kanban): what its note says, read only when it changed. */
+export type ProjectSummary = {
+  workId: string;
+  stage: string | null;
+  tags: string[];
+  related: string[];
+  decisions: number;
+  /** Open questions not ticked yet. */
+  questions: number;
+  noteExists: boolean;
+};

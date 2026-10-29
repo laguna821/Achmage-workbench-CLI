@@ -153,6 +153,7 @@ export function StartView({
   onClearFolder,
   onStart,
   onOpenWork,
+  onOpenProject,
   onOpenSession,
   onOpenDoc,
   api,
@@ -169,6 +170,8 @@ export function StartView({
   /** `pick`: where the request goes ("auto": the folder's live work, else a new project). */
   onStart: (text: string, provider: Provider, cwd: string | null, choice: ModelChoice, pick: ProjectPick) => Promise<boolean>;
   onOpenWork: (work: Work) => void;
+  /** A project's page (home "프로젝트"). */
+  onOpenProject?: (work: Work) => void;
   onOpenSession: (session: Session) => void;
   onOpenDoc: (artifactId: string) => void;
   api: Api;
@@ -276,6 +279,7 @@ export function StartView({
           onMode={onHomeMode}
           onOpenSession={onOpenSession}
           onOpenWork={onOpenWork}
+          onOpenProject={onOpenProject}
           onOpenDoc={onOpenDoc}
           footer={<div className="column">{credit}</div>}
         />

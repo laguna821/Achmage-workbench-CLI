@@ -1,0 +1,291 @@
+/* Home "프로젝트": cards, table and kanban of projects by what their notes say. */
+
+.projects-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.projects-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.projects-filter {
+  flex: 0 1 280px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.projects-stage {
+  --stage: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px 0 7px;
+  border: 1px solid color-mix(in srgb, var(--stage) 40%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--stage) 11%, transparent);
+  color: color-mix(in srgb, var(--stage) 75%, var(--text));
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+button.projects-stage {
+  cursor: pointer;
+}
+
+.projects-stage.empty {
+  border-style: dashed;
+  border-color: var(--line);
+  background: none;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.projects-stage-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--stage, var(--line));
+}
+
+/* Table */
+.projects-table-wrap {
+  overflow-x: auto;
+}
+
+.projects-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.projects-table th {
+  padding: 0;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.projects-table th button {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 8px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.projects-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  vertical-align: middle;
+}
+
+.projects-table tr:hover td {
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+}
+
+.projects-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  width: 64px;
+}
+
+.projects-table td.hot {
+  color: var(--amber-text, #8a5a00);
+  font-weight: 650;
+}
+
+.projects-name {
+  max-width: 320px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projects-name:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.projects-tags {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.projects-empty {
+  padding: 18px 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Kanban: columns share the width (narrow windows scroll sideways), empty ones stay drop targets. */
+.projects-kanban {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.kanban-column {
+  --stage: var(--line);
+  flex: 1 1 0;
+  min-width: 168px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+  transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+
+.kanban-column.empty {
+  flex-grow: 0.6;
+}
+
+.kanban-column.over {
+  background: color-mix(in srgb, var(--stage) 12%, transparent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--stage) 55%, transparent);
+}
+
+.kanban-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px 6px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.kanban-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kanban-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 8px 10px;
+}
+
+.kanban-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.kanban-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.kanban-card.lifted {
+  opacity: 0.4;
+}
+
+.kanban-card-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kanban-card-tags {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.kanban-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  font-size: 12px;
+}
+
+.kanban-badge {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  color: color-mix(in srgb, var(--accent) 80%, var(--text));
+}
+
+.kanban-badge.hot {
+  background: var(--amber-soft, color-mix(in srgb, #e2a400 16%, transparent));
+  color: var(--amber-text, #8a5a00);
+}
+
+.kanban-empty {
+  padding: 10px 4px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+.kanban-ghost {
+  position: fixed;
+  z-index: 60;
+  max-width: 220px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: var(--popover-shadow);
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A project's stage on its card in "카드". */
+.work-card .projects-stage {
+  margin-left: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kanban-column {
+    transition: none;
+  }
+}

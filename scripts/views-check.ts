@@ -1,9 +1,10 @@
 /// <reference lib="dom" />
 // Browser check of the view modes, for Codex and Claude alike, against a real gateway driving
 // stand-in engines (no model), on a store seeded with 120 sessions:
-// - home: 지금 · 보드 · 지도 · 흐름 · 문서 by click and by keys 1–5 (not while typing), the FLIP
-//   move (boxes animate, then sit inside their columns and cards), the mode kept in the
-//   preferences, "모두 읽음", how long a switch takes with 100+ sessions;
+// - home: 지금 · 프로젝트 · 흐름 · 문서 by click and by keys 1–4 (not while typing), the FLIP
+//   move (sessions in 지금's rows slide into the chips of the project cards), the mind map, the
+//   projects' table (sorting) and kanban (a card dragged to a stage writes it), the mode kept in
+//   the preferences, "모두 읽음" on 지금's 새 답, how long a switch takes with 100+ sessions;
 // - the work screen while a document is open: 검토 opens the proposal a "고쳐" request made,
 //   대화 ↔ 문서 keep where each was read, 나란히 has one input that follows the clicked side and a
 //   divider that resizes, 읽기 pages through the document and Esc returns; 나란히 is not restored
@@ -195,39 +196,58 @@ async function flow(provider: Provider) {
     await page.locator(".home-modes .home-board").click({ position: { x: 4, y: 4 } });
     await page.keyboard.press("2");
     const moved = await flipping(page);
-    await page.waitForSelector(".home-modes.mode-board");
-    pass("숫자 키: 입력창에서는 글자로 들어가고, 바깥에서 2를 누르면 보드로", typed === "2" && stayed === 1, `typed=${JSON.stringify(typed)} 움직인 상자 ${moved}`);
+    await page.waitForSelector(".home-modes.mode-projects");
+    pass("숫자 키: 입력창에서는 글자로 들어가고, 바깥에서 2를 누르면 프로젝트로", typed === "2" && stayed === 1, `typed=${JSON.stringify(typed)} 움직인 상자 ${moved}`);
 
-    // ── 보드 ─────────────────────────────────────────────────────────────────────────
-    await page.waitForTimeout(450);
-    const board = await settled(page, ".board-card", ".board-column");
-    const columns = await page.locator(".board-column .board-title").allInnerTexts();
-    const askCard = await page.locator(".column-attention .board-card", { hasText: "확인 받기" }).count();
-    await shot("02-home-board.png");
-    pass("보드: 다섯 열, 승인 대기는 '확인 필요' 열, 전환 뒤 상자가 제자리(움직임 끝, 열 안)", columns.join(",") === "확인 필요,진행 중,오류·멈춤,새 답,쉬는 중" && askCard === 1 && moved > 0 && board.moving === 0 && board.outside === 0 && board.transformed === 0, `움직인 상자 ${moved} · ${JSON.stringify(board)}`);
-
-    // ── 지도 (key 3), the mind map ───────────────────────────────────────────────────
-    await blur(page);
-    await page.keyboard.press("3");
-    const toMap = { moving: await flipping(page) };
-    await page.waitForSelector(".home-modes.mode-map .map-section");
+    // ── 프로젝트 (key 2): cards (folders › projects), the mind map, the table, the kanban ────
+    if (!(await page.locator(".projects-layouts button.on", { hasText: "카드" }).count())) await page.locator(".projects-layouts button", { hasText: "카드" }).click();
+    await page.waitForSelector(".home-modes.mode-projects .map-section");
     await page.waitForTimeout(450);
     const map = await settled(page, ".work-chip", ".work-card");
     const sections = await page.locator(".map-section").count();
     const chips = await page.locator(`.work-card:has-text("${work.title}") .work-chip`).count();
-    await shot("03-home-map.png");
-    pass("지도(키 3): 폴더 › 작업 카드, 카드 안에 세션·문서 칩, 보드에서 온 세션이 칩으로 미끄러짐", sections >= 6 && chips === 4 && toMap.moving > 0 && map.moving === 0 && map.outside === 0, `폴더 ${sections} · 칩 ${chips} · 움직임 ${toMap.moving} · ${JSON.stringify(map)}`);
+    const stagePills = await page.locator(".work-card .projects-stage").count();
+    await shot("02-home-projects.png");
+    pass("프로젝트(키 2): 폴더 › 프로젝트 카드(단계 표시), 카드 안에 세션·문서 칩, 지금에서 온 세션이 칩으로 미끄러짐", sections >= 6 && chips === 4 && stagePills > 0 && moved > 0 && map.moving === 0 && map.outside === 0, `폴더 ${sections} · 칩 ${chips} · 단계 ${stagePills} · 움직임 ${moved} · ${JSON.stringify(map)}`);
     await page.locator(".map .segmented button", { hasText: "마인드맵" }).click();
     await page.waitForSelector(".map-mind .pele svg", { timeout: 10_000 });
     await page.waitForTimeout(300);
-    await shot("04-home-mindmap.png");
+    await shot("03-home-mindmap.png");
     const mindNodes = await page.locator(".map-mind .pele svg text").count();
-    pass("지도: 마인드맵(Pele)", mindNodes > 20, `글자 ${mindNodes}개`);
+    pass("프로젝트 카드: 마인드맵(Pele)", mindNodes > 20, `글자 ${mindNodes}개`);
     await page.locator(".map .segmented button", { hasText: "카드" }).click();
+    // The table: one row per project, sorted by a click on a heading.
+    await page.locator(".projects-layouts button", { hasText: "표" }).click();
+    await page.waitForSelector(".projects-table tbody tr");
+    const tableRows = await page.locator(".projects-table tbody tr").count();
+    await page.locator(".projects-table th button", { hasText: "세션" }).click();
+    const counts = (await page.locator(".projects-table tbody tr td.num:nth-of-type(4)").allInnerTexts()).map(Number);
+    const sortedDown = counts.every((value, index) => index === 0 || counts[index - 1]! >= value);
+    await shot("03b-home-projects-table.png");
+    pass("프로젝트 표: 프로젝트마다 한 줄, 머리를 누르면 그 열로 정렬", tableRows >= 6 && sortedDown, `${tableRows}줄 · 세션 ${counts.slice(0, 5).join(",")}…`);
+    // The kanban: a card dragged from "값 없음" to "진행중" writes that stage into its note.
+    await page.locator(".projects-layouts button", { hasText: "칸반" }).click();
+    await page.waitForSelector('.kanban-column[data-stage-column=""] .kanban-card');
+    const card = page.locator('.kanban-column[data-stage-column=""] .kanban-card').first();
+    const movedWork = await card.getAttribute("data-work");
+    const from = (await card.boundingBox())!;
+    const target = (await page.locator('.kanban-column[data-stage-column="진행중"]').boundingBox())!;
+    await page.mouse.move(from.x + 20, from.y + 12);
+    await page.mouse.down();
+    await page.mouse.move(from.x + 60, from.y + 30, { steps: 4 });
+    await page.mouse.move(target.x + target.width / 2, target.y + 40, { steps: 8 });
+    await page.mouse.up();
+    const staged = await until(async () => (await api<{ workId: string; stage: string | null }[]>("GET", "/api/projects/")).some((entry) => entry.workId === movedWork && entry.stage === "진행중"), 8000);
+    const inColumn = await until(async () => (await page.locator(`.kanban-column[data-stage-column="진행중"] .kanban-card[data-work="${movedWork}"]`).count()) === 1, 5000);
+    await shot("03c-home-projects-kanban.png");
+    pass("프로젝트 칸반: 카드를 '진행중'으로 끌면 그 프로젝트 노트에 단계가 써지고 그 열로", staged && inColumn, String(movedWork));
+    await page.locator(".toast button", { hasText: "되돌리기" }).click();
+    await until(async () => (await api<{ workId: string; stage: string | null }[]>("GET", "/api/projects/")).some((entry) => entry.workId === movedWork && entry.stage === null), 8000);
+    await page.locator(".projects-layouts button", { hasText: "카드" }).click();
 
-    // ── 흐름 (key 4) ─────────────────────────────────────────────────────────────────
+    // ── 흐름 (key 3) ─────────────────────────────────────────────────────────────────
     await blur(page);
-    await page.keyboard.press("4");
+    await page.keyboard.press("3");
     await page.waitForSelector(".home-modes.mode-flow .flow-row");
     await page.locator(".flow .segmented button", { hasText: "30일" }).click();
     await until(async () => (await page.locator(".flow-bar").count()) > 20, 8000);
@@ -237,20 +257,21 @@ async function flow(provider: Provider) {
     await page.locator(".flow .segmented button", { hasText: "오늘" }).click();
     await until(async () => (await page.locator(`.flow-row:has-text("${work.title}") .flow-bar`).count()) > 0, 8000);
     const todayBars = await page.locator(`.flow-row:has-text("${work.title}") .flow-bar`).count();
-    pass("흐름(키 4): 30일 턴 막대와 판 눈금, 오늘 이 작업의 진행 중 턴", monthBars > 20 && ticks > 5 && todayBars >= 1, `막대 ${monthBars} · 판 ${ticks} · 오늘 ${todayBars}`);
+    pass("흐름(키 3): 30일 턴 막대와 판 눈금, 오늘 이 작업의 진행 중 턴", monthBars > 20 && ticks > 5 && todayBars >= 1, `막대 ${monthBars} · 판 ${ticks} · 오늘 ${todayBars}`);
     await page.locator(".flow .segmented button", { hasText: "7일" }).click();
 
-    // ── 문서 (key 5) ─────────────────────────────────────────────────────────────────
+    // ── 문서 (key 4) ─────────────────────────────────────────────────────────────────
     await blur(page);
-    await page.keyboard.press("5");
+    await page.keyboard.press("4");
     await page.waitForSelector(".home-modes.mode-docs .doc-tile");
     await until(async () => (await page.locator(".doc-thumb-text").count()) >= 6, 8000);
     const pdfThumb = await until(async () => (await page.locator('.doc-tile:has-text("자료.pdf") .doc-thumb img').count()) > 0, 10_000);
     const tiles = await page.locator(".doc-tile").count();
     const badges = await page.locator(".doc-tile-badge").allInnerTexts();
-    const docs = (await snapshot()).artifacts.length;
+    // Projects' own notes (made by the kanban step) are not documents here.
+    const docs = (await snapshot()).artifacts.filter((artifact) => artifact.role !== "project-note").length;
     await shot("06-home-docs.png");
-    pass("문서(키 5): 문서마다 첫 쪽 썸네일(PDF는 쪽 그림, 글은 첫 줄들), 대기 중인 수정안 수", tiles === docs && pdfThumb && badges.filter((text) => text.startsWith("수정안")).length >= 5, `문서 ${tiles}/${docs} · PDF ${pdfThumb} · ${badges.slice(0, 3).join(", ")}`);
+    pass("문서(키 4): 문서마다 첫 쪽 썸네일(PDF는 쪽 그림, 글은 첫 줄들), 대기 중인 수정안 수", tiles === docs && pdfThumb && badges.filter((text) => text.startsWith("수정안")).length >= 5, `문서 ${tiles}/${docs} · PDF ${pdfThumb} · ${badges.slice(0, 3).join(", ")}`);
 
     // Remembered: the gateway keeps the mode; a reload opens home on it again.
     await until(async () => (await snapshot()).prefs.homeMode === "docs", 3000);
@@ -263,7 +284,7 @@ async function flow(provider: Provider) {
     // Fast with 100+ sessions: each switch to the next painted frame.
     const timings: string[] = [];
     let slowest = 0;
-    for (const name of ["지금", "보드", "지도", "흐름", "문서"]) {
+    for (const name of ["지금", "프로젝트", "흐름", "문서"]) {
       const result = await switchHome(page, name);
       await page.waitForTimeout(400);
       slowest = Math.max(slowest, result.ms);
@@ -273,14 +294,14 @@ async function flow(provider: Provider) {
     numbers.push(`[${label}] 세션 ${sessionCount} · 전환(다음 화면까지/요소 수) ${timings.join(", ")}`);
     pass("세션 100개 넘게: 모드 전환이 다음 화면까지 400ms 안", sessionCount >= 120 && slowest < 400, timings.join(", "));
 
-    // "모두 읽음" on the board's 새 답 column.
+    // "모두 읽음" on 지금's 새 답 (it was on the former board's column).
     await blur(page);
-    await page.keyboard.press("2");
-    await page.waitForSelector(".column-unseen .board-card");
-    const unseenBefore = await page.locator(".column-unseen .board-card").count();
-    await page.locator(".column-unseen .board-action").click();
-    const cleared = await until(async () => (await page.locator(".column-unseen .board-card").count()) === 0, 8000);
-    pass("보드 '새 답' 열의 '모두 읽음'", unseenBefore > 0 && cleared, `${unseenBefore} → ${await page.locator(".column-unseen .board-card").count()}`);
+    await page.keyboard.press("1");
+    await page.waitForSelector(".bucket-unseen .home-row");
+    const unseenBefore = await page.locator(".bucket-unseen .home-row").count();
+    await page.locator(".bucket-unseen .board-action").click();
+    const cleared = await until(async () => (await page.locator(".bucket-unseen .home-row").count()) === 0, 8000);
+    pass("지금 '새 답'의 '모두 읽음'", unseenBefore > 0 && cleared, `${unseenBefore} → ${await page.locator(".bucket-unseen .home-row").count()}`);
     await api("POST", `/api/sessions/${asking.id}/approvals/${encodeURIComponent((await items(asking.id)).find((item) => item.kind === "approval" && item.decision === null)!.id)}`, { decision: "accept" });
     await idle(asking.id);
     await idle(working.id);
@@ -442,8 +463,8 @@ async function reduced() {
     await page.waitForSelector(".topbar .brand");
     await page.locator(".topbar .brand").click();
     await page.waitForSelector(".home-modes");
-    const result = await switchHome(page, "보드");
-    await page.waitForSelector(".home-modes.mode-board");
+    const result = await switchHome(page, "프로젝트");
+    await page.waitForSelector(".home-modes.mode-projects");
     check("움직임 줄이기: 전환은 되고 아무것도 움직이지 않음", result.moving === 0, `animations=${result.moving}`);
   } finally {
     await context.close();

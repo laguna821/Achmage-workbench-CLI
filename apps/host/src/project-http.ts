@@ -33,6 +33,7 @@ export async function handleProject(projects: Projects, req: IncomingMessage, re
     return false;
   }
   if (parts[0] === "changes" && method === "GET") return (sendJson(res, 200, projects.changes(url.searchParams.get("sessionId") ?? "")), true);
+  if (!parts.length && method === "GET") return (sendJson(res, 200, projects.summaries()), true);
   const workId = parts[0];
   if (!workId) return false;
   const action = parts[1] ?? "";

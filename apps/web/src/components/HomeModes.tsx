@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { FORMAT_LABEL, PROVIDER_LABEL, isUnseen, type Artifact, type Session, type Timeline, type TranscriptItem, type Work } from "@workbench/contracts";
+import { FORMAT_LABEL, PROVIDER_LABEL, isUnseen, type Artifact, type ProjectStage, type ProjectSummary, type Session, type Timeline, type TranscriptItem, type Work } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import type { State } from "../state.ts";
 import { accentStyle, useAppearance } from "../appearance.ts";
@@ -10,7 +10,6 @@ import { measure, play, type FlipFirst } from "../flip.ts";
 import {
   FLOW_RANGES,
   HOME_MODES,
-  boardColumns,
   docEntries,
   flowRows,
   flowWindow,
@@ -37,6 +36,8 @@ import { Diagram } from "./Diagram.tsx";
 import { EngineMark } from "./EngineMark.tsx";
 import { Icon } from "./Icon.tsx";
 import { ModeBar } from "./ModeBar.tsx";
+import { ProjectsMode } from "./project/ProjectsMode.tsx";
+import { stageOf } from "../project.ts";
 import { foldedReply } from "./docs/ConversationDrawer.tsx";
 import "../styles/views.css";
 
@@ -167,7 +168,7 @@ function SessionRow({ api, state, session, open }: { api: Api; state: State; ses
 }
 
 /** A work as a card: its name, where it is, and (in "지도") its sessions and documents. */
-function WorkCard({ state, work, open, chips }: { state: State; work: Work; open: Open; chips: boolean }) {
+function WorkCard({ state, work, open, chips, stage }: { state: State; work: Work; open: Open; chips: boolean; stage?: ProjectStage | null }) {
   const { lookOf } = useAppearance();
   const { sessions, docs } = workContents(state, work);
   const pending = new Map<string, number>();
@@ -184,6 +185,12 @@ function WorkCard({ state, work, open, chips }: { state: State; work: Work; open
         <Icon name="project" size={14} />
         <span>{work.title}</span>
       </button>
+      {stage !== undefined ? (
+        <span className={`projects-stage${stage ? "" : " empty"}`} style={stage ? ({ "--stage": stage.color } as CSSProperties) : undefined} title="단계 (프로젝트 노트)">
+          <span className="projects-stage-dot" aria-hidden />
+          {stage ? stage.name : "값 없음"}
+        </span>
+      ) : null}
       {!chips ? <span className="work-card-path">{path || "분류 없음"}</span> : null}
       {chips && sessions.length ? (
         <div className="work-chips">
@@ -236,6 +243,12 @@ function More({ hidden, onMore }: { hidden: number; onMore: () => void }) {
 /** "지금": what waits for the user, by priority; then where to pick up, and the latest works. */
 function NowMode({ api, state, open }: { api: Api; state: State; open: Open }) {
   const groups = nowGroups(state);
+  const [marking, setMarking] = useState(false);
+  // "모두 읽음" (from the former "보드"): every new answer in the group marked read.
+  const markAll = (sessions: Session[]) => {
+    setMarking(true);
+    void Promise.all(sessions.map((session) => api.updateSession(session.id, { seen: true }).catch(() => undefined))).finally(() => setMarking(false));
+  };
   const listed = new Set(groups.flatMap((group) => group.sessions.map((session) => session.id)));
   const resume = resumeSessions(state, listed);
   const works = recentWorks(state);
@@ -249,6 +262,11 @@ function NowMode({ api, state, open }: { api: Api; state: State; open: Open }) {
           <section key={group.bucket} className={`home-section bucket-${group.bucket}`} aria-label={group.label}>
             <h2 className="section-label">
               {group.label} <span className="home-count">{group.sessions.length}</span>
+              {group.bucket === "unseen" && group.sessions.length ? (
+                <button type="button" className="text-button board-action" disabled={marking} onClick={() => markAll(group.sessions)} title="새 답을 모두 읽음으로 표시합니다">
+                  모두 읽음
+                </button>
+              ) : null}
             </h2>
             {shown.map((session) => (
               <SessionRow key={session.id} api={api} state={state} session={session} open={open} />
@@ -280,69 +298,8 @@ function NowMode({ api, state, open }: { api: Api; state: State; open: Open }) {
   );
 }
 
-/** "보드": columns by state. The engine decides the state, so cards are not dragged between columns. */
-function BoardMode({ api, state, open }: { api: Api; state: State; open: Open }) {
-  const { lookOf } = useAppearance();
-  const columns = boardColumns(state);
-  const [wide, setWide] = useState<Set<string>>(new Set());
-  const [marking, setMarking] = useState(false);
-  const CAP = 20;
-  const markAll = (sessions: Session[]) => {
-    setMarking(true);
-    void Promise.all(sessions.map((session) => api.updateSession(session.id, { seen: true }).catch(() => undefined))).finally(() => setMarking(false));
-  };
-  return (
-    <div className="board">
-      {columns.map((column) => {
-        const shown = wide.has(column.id) ? column.sessions : column.sessions.slice(0, CAP);
-        return (
-          <section key={column.id} className={`board-column column-${column.id}`} aria-label={column.label}>
-            <header className="board-head">
-              <span className="board-title">{column.label}</span>
-              <span className="home-count">{column.sessions.length}</span>
-              {column.id === "unseen" && column.sessions.length ? (
-                <button type="button" className="text-button board-action" disabled={marking} onClick={() => markAll(column.sessions)} title="이 열의 답을 모두 읽음으로 표시합니다">
-                  모두 읽음
-                </button>
-              ) : null}
-            </header>
-            <div className="board-cards">
-              {shown.map((session) => {
-                const work = state.works[session.workId];
-                return (
-                  <button
-                    key={session.id}
-                    type="button"
-                    className="board-card"
-                    data-flip={`s:${session.id}`}
-                    data-tone={statusTone(session)}
-                    style={accentStyle(lookOf(session.provider))}
-                    onClick={() => open.session(session)}
-                    title={work?.cwd}
-                  >
-                    <span className="board-card-head">
-                      <EngineMark provider={session.provider} size={13} />
-                      <span className="board-card-work">{work?.title ?? ""}</span>
-                      <span className="board-card-age">{ago(recency(session))}</span>
-                    </span>
-                    <span className="board-card-title">{session.purpose}</span>
-                    <span className="board-card-line">{lineOf(session)}</span>
-                    {session.queued.length ? <span className="board-card-badge">{heldCount(session) ? `남겨 둔 요청 ${heldCount(session)}` : `예약 ${session.queued.length}`}</span> : null}
-                  </button>
-                );
-              })}
-              {!column.sessions.length ? <div className="board-empty">없음</div> : null}
-              <More hidden={column.sessions.length - shown.length} onMore={() => setWide(new Set([...wide, column.id]))} />
-            </div>
-          </section>
-        );
-      })}
-    </div>
-  );
-}
-
 /** "지도": folders › works, each work with its sessions and documents; or the same as a mind map. */
-function MapMode({ state, open }: { state: State; open: Open }) {
+function MapMode({ state, open, summaries, stages }: { state: State; open: Open; summaries?: Map<string, ProjectSummary>; stages?: ProjectStage[] }) {
   const sections = useMemo(() => mapSections(state), [state]);
   const [view, setView] = useState<"cards" | "mindmap">(() => (localStorage.getItem(MAP_KEY) === "mindmap" ? "mindmap" : "cards"));
   const [wide, setWide] = useState<Set<string>>(new Set());
@@ -352,7 +309,7 @@ function MapMode({ state, open }: { state: State; open: Open }) {
   return (
     <div className="map">
       <div className="mode-head">
-        <div className="segmented small" role="radiogroup" aria-label="지도 보기">
+        <div className="segmented small" role="radiogroup" aria-label="카드 보기">
           {(["cards", "mindmap"] as const).map((value) => (
             <button
               key={value}
@@ -388,7 +345,7 @@ function MapMode({ state, open }: { state: State; open: Open }) {
               </h2>
               <div className="map-grid">
                 {shown.map((work) => (
-                  <WorkCard key={work.id} state={state} work={work} open={open} chips />
+                  <WorkCard key={work.id} state={state} work={work} open={open} chips stage={summaries && stages ? stageOf(stages, summaries.get(work.id)?.stage ?? null) : undefined} />
                 ))}
               </div>
               <More hidden={section.works.length - shown.length} onMore={() => setWide(new Set([...wide, key]))} />
@@ -651,6 +608,7 @@ export function HomeModes({
   onOpenSession,
   onOpenWork,
   onOpenDoc,
+  onOpenProject,
   footer,
 }: {
   api: Api;
@@ -660,6 +618,8 @@ export function HomeModes({
   onOpenSession: (session: Session) => void;
   onOpenWork: (work: Work) => void;
   onOpenDoc: (artifactId: string) => void;
+  /** A project's page (from "프로젝트"); its conversation when there is none. */
+  onOpenProject?: (work: Work) => void;
   footer?: ReactNode;
 }) {
   const root = useRef<HTMLDivElement>(null);
@@ -687,7 +647,7 @@ export function HomeModes({
     const onKey = (event: KeyboardEvent) => {
       if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.isComposing || editable(event.target)) return;
       const index = ["1", "2", "3", "4", "5"].indexOf(event.key);
-      if (index < 0) return;
+      if (index < 0 || index >= HOME_MODES.length) return;
       event.preventDefault();
       switchTo(HOME_MODES[index]!.id);
     };
@@ -709,10 +669,8 @@ export function HomeModes({
       >
         {mode === "now" ? (
           <NowMode api={api} state={state} open={open} />
-        ) : mode === "board" ? (
-          <BoardMode api={api} state={state} open={open} />
-        ) : mode === "map" ? (
-          <MapMode state={state} open={open} />
+        ) : mode === "projects" ? (
+          <ProjectsMode api={api} state={state} openProject={onOpenProject ?? onOpenWork} cards={(summaries, stages) => <MapMode state={state} open={open} summaries={summaries} stages={stages} />} />
         ) : mode === "flow" ? (
           <FlowMode api={api} state={state} open={open} />
         ) : (

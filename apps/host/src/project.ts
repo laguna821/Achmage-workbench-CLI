@@ -15,6 +15,7 @@ import {
   type ProjectNote,
   type ProjectPage,
   type ProjectStage,
+  type ProjectSummary,
   type ProjectWrite,
   type Provider,
   type Session,
@@ -90,6 +91,8 @@ export class Projects {
   private readonly pkm: Pkm;
   private readonly writes = new Map<string, Write>();
   private readonly branches = new Map<string, { at: number; branch: string | null }>();
+  /** Notes as last read, by path: read again only when the file's time or size changed. */
+  private readonly summaryCache = new Map<string, { key: string; read: ReturnType<typeof readNote> }>();
   /** Works this module is archiving or restoring itself: the archive listener leaves those alone. */
   private readonly quiet = new Set<string>();
 
@@ -238,6 +241,37 @@ export class Projects {
   /** Everything recorded in the project, newest first (기록 칸 "전체"). */
   allEvents(workId: string) {
     return this.events(this.work(workId), 0, 300);
+  }
+
+  /** Every project as lists show it (archived ones too: the archive stage's column). */
+  summaries(): ProjectSummary[] {
+    const out: ProjectSummary[] = [];
+    for (const work of this.manager.view.works.values()) {
+      const path = this.notePaths()[work.id] ?? null;
+      let read: ReturnType<typeof readNote> | null = null;
+      if (path) {
+        try {
+          const stats = statSync(path);
+          const key = `${stats.mtimeMs}:${stats.size}`;
+          const cached = this.summaryCache.get(path);
+          read = cached?.key === key ? cached.read : readNote(readFileSync(path, "utf8"));
+          if (cached?.key !== key) this.summaryCache.set(path, { key, read });
+        } catch {
+          read = null;
+        }
+      }
+      const archiveStage = this.stages().find((stage) => stage.archive)?.name ?? null;
+      out.push({
+        workId: work.id,
+        stage: work.archivedAt ? (archiveStage ?? read?.stage ?? null) : (read?.stage ?? null),
+        tags: read?.tags ?? work.tags ?? [],
+        related: read?.properties.find(([key]) => key === "관련")?.[1] ?? [],
+        decisions: read?.decisions.length ?? 0,
+        questions: read?.questions.filter((entry) => !entry.done).length ?? 0,
+        noteExists: Boolean(read),
+      });
+    }
+    return out;
   }
 
   // ── counted, not written ────────────────────────────────────────────────────────────────

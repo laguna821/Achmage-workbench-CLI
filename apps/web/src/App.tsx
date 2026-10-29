@@ -1529,6 +1529,7 @@ export function App() {
           onClearFolder={() => setView({ kind: "new", folderId: null })}
           onStart={(text, provider, cwd, choice, pick) => startWork(text, provider, cwd, view.kind === "new" ? view.folderId : null, choice, pick)}
           onOpenWork={openWorkNow}
+          onOpenProject={actions.openProject}
           onOpenSession={openSession}
           onOpenDoc={(artifactId) => docActions.openArtifact(artifactId)}
           api={api}
