@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { PROVIDER_LABEL, isUnseen, type AccessMode, type Artifact, type Attachment, type CreateTarget, type DocRef, type Proposal, type Provider, type Session, type SessionStatus, type UiPrefs, type Work } from "@workbench/contracts";
+import { PROVIDER_LABEL, isUnseen, type AccessMode, type Artifact, type Attachment, type CreateTarget, type DocRef, type ProjectPick, type Proposal, type Provider, type Session, type SessionStatus, type UiPrefs, type Work } from "@workbench/contracts";
 import { Api, ApiRequestError, readToken } from "./api.ts";
 import { configureDesign } from "./design.ts";
 import { initialState, isBusy, reducer, sessionsOf } from "./state.ts";
@@ -40,6 +40,7 @@ import { PkmProvider, type PkmApi } from "./components/pkm/PkmContext.tsx";
 import { VaultDialogHost, VaultSettingsRow } from "./components/pkm/VaultDialog.tsx";
 import { PkmCenter, pkmTitle } from "./components/pkm/PkmCenter.tsx";
 import type { PkmTarget } from "./pkm.ts";
+import { entryClient, homeTarget } from "./entry.ts";
 
 // Editors (CodeMirror, PDF.js) load only when a document opens.
 const DocumentView = lazy(() => import("./components/docs/DocumentView.tsx"));
@@ -556,14 +557,20 @@ export function App() {
     cwd: string | null,
     folderId: string | null,
     choice: { model: string | null; effort: string | null },
+    pick: ProjectPick = { kind: "auto" },
   ) => {
     if (!api) return false;
     try {
-      const created = await api.createWork(titleFrom(text), folderId, cwd);
+      // The project chip: an existing work gets a new session; otherwise a new work (project).
+      const existing = await homeTarget(state, pick, cwd, entryClient(api).workAt);
+      const created = existing ?? (await api.createWork(titleFrom(text), folderId, cwd));
       const session = await api.createSession(created.id, provider, choice);
+      dispatch({ type: "focus", work: created, session });
       setWorkId(created.id);
       setView({ kind: "work" });
       await api.send(session.id, newRequestId(), text);
+      // Home's input is gone from the screen by now and cannot clear itself: the sent text must not come back there.
+      writeDraft(`new:${folderId ?? "root"}`, "");
       return true;
     } catch (error) {
       fail(error);
@@ -1475,7 +1482,7 @@ export function App() {
           state={state}
           folderId={view.kind === "new" ? view.folderId : null}
           onClearFolder={() => setView({ kind: "new", folderId: null })}
-          onStart={(text, provider, cwd, choice) => startWork(text, provider, cwd, view.kind === "new" ? view.folderId : null, choice)}
+          onStart={(text, provider, cwd, choice, pick) => startWork(text, provider, cwd, view.kind === "new" ? view.folderId : null, choice, pick)}
           onOpenWork={openWorkNow}
           onOpenSession={openSession}
           onOpenDoc={(artifactId) => docActions.openArtifact(artifactId)}

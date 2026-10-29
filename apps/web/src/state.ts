@@ -70,7 +70,12 @@ export type Action =
   | { type: "event"; event: SequencedEvent }
   | { type: "transcript"; sessionId: string; transcript: Transcript }
   | { type: "connected"; connected: boolean }
-  | { type: "prefs"; prefs: UiPrefs };
+  | { type: "prefs"; prefs: UiPrefs }
+  /**
+   * Show a session of a work at once (opening a work, a session just started from home); the
+   * gateway's events confirm it. No other session is on screen meanwhile to be marked read.
+   */
+  | { type: "focus"; work: Work; session: Session };
 
 const byId = <T extends { id: string }>(list: T[]) => Object.fromEntries(list.map((entry) => [entry.id, entry]));
 
@@ -103,6 +108,14 @@ export function reducer(state: State, action: Action): State {
       return { ...state, connected: action.connected };
     case "prefs":
       return { ...state, prefs: action.prefs };
+    case "focus": {
+      const work = state.works[action.work.id] ?? action.work;
+      return {
+        ...state,
+        works: { ...state.works, [work.id]: { ...work, activeSessionId: action.session.id } },
+        sessions: state.sessions[action.session.id] ? state.sessions : { ...state.sessions, [action.session.id]: action.session },
+      };
+    }
     case "transcript":
       return { ...state, transcripts: { ...state.transcripts, [action.sessionId]: action.transcript } };
     case "event": {

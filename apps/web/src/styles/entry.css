@@ -1,0 +1,79 @@
+/* ① 들어가는 길: the project chip on home. */
+
+.project-button {
+  max-width: 300px;
+}
+
+.project-button-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-button.existing {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  color: var(--text);
+}
+
+.project-button.existing > svg:first-child {
+  color: var(--accent);
+}
+
+.project-menu {
+  width: 340px;
+}
+
+.project-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 2px 6px;
+  padding: 0 10px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.project-filter:focus-within {
+  border-color: var(--accent);
+}
+
+.project-filter input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14.5px;
+}
+
+.project-list {
+  overflow-y: auto;
+}
+
+.project-list .menu-item-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.project-list .menu-item.keyed:not(.active) {
+  background: var(--surface-muted);
+}
+
+.project-list .menu-item-hint {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-empty {
+  padding: 8px 10px 10px;
+  font-size: 13.5px;
+  color: var(--faint);
+}

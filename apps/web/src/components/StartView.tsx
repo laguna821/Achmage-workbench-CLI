@@ -1,6 +1,7 @@
-import { useCallback, useState } from "react";
-import { PROVIDER_LABEL, type Provider, type Session, type Work } from "@workbench/contracts";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { PROVIDER_LABEL, type ProjectPick, type Provider, type Session, type Work } from "@workbench/contracts";
 import type { Api } from "../api.ts";
+import { entryClient, pickedWork } from "../entry.ts";
 import { folderPath, type State } from "../state.ts";
 import { readHomeMode, type HomeMode } from "../overview.ts";
 import { workHidden } from "../tree.ts";
@@ -11,6 +12,7 @@ import { Icon } from "./Icon.tsx";
 import { MenuItem, Popover } from "./Popover.tsx";
 import { ModelPicker, type ModelChoice } from "./ModelPicker.tsx";
 import { EngineMark } from "./EngineMark.tsx";
+import { ProjectChoice } from "./ProjectChoice.tsx";
 import { accentStyle, fontStack, useAppearance } from "../appearance.ts";
 
 const ENGINE_KEY = "workbench.lastEngine";
@@ -63,26 +65,30 @@ function FolderChoice({
   recent,
   onChange,
   pickFolder,
+  project,
 }: {
   value: string | null;
   recent: string[];
   onChange: (cwd: string | null) => void;
   pickFolder: (() => Promise<string | null>) | null;
+  /** A project picked by hand: its folder is shown (picking a folder here goes back to that folder's default). */
+  project?: Work | null;
 }) {
   const [open, setOpen] = useState(false);
   const [typing, setTyping] = useState("");
   const close = useCallback(() => setOpen(false), []);
-  const label = value ? value.split("/").filter(Boolean).slice(-1)[0] ?? value : "폴더 없이";
+  const shown = project ? (project.cwdManaged ? null : project.cwd) : value;
+  const label = project?.cwdManaged ? "앱 폴더" : shown ? shown.split("/").filter(Boolean).slice(-1)[0] ?? shown : "폴더 없이";
   return (
     <div className="anchor">
-      <button type="button" className="select-button" onClick={() => setOpen(!open)} title={value ?? "앱이 이 작업 전용 폴더를 만듭니다"}>
+      <button type="button" className="select-button" onClick={() => setOpen(!open)} title={project ? project.cwd : (value ?? "앱이 이 작업 전용 폴더를 만듭니다")}>
         <Icon name="folder" size={14} />
         {label}
         <Icon name={open ? "chevronUp" : "chevronDown"} size={14} />
       </button>
       <Popover open={open} onClose={close} placement="above" align="right" className="folder-menu">
         <MenuItem
-          active={value === null}
+          active={!project && value === null}
           hint="앱이 전용 폴더를 만듦"
           onSelect={() => {
             onChange(null);
@@ -105,7 +111,7 @@ function FolderChoice({
         {recent.map((path) => (
           <MenuItem
             key={path}
-            active={value === path}
+            active={shown === path}
             onSelect={() => {
               onChange(path);
               close();
@@ -160,7 +166,8 @@ export function StartView({
   state: State;
   folderId: string | null;
   onClearFolder: () => void;
-  onStart: (text: string, provider: Provider, cwd: string | null, choice: ModelChoice) => Promise<boolean>;
+  /** `pick`: where the request goes ("auto": the folder's live work, else a new project). */
+  onStart: (text: string, provider: Provider, cwd: string | null, choice: ModelChoice, pick: ProjectPick) => Promise<boolean>;
   onOpenWork: (work: Work) => void;
   onOpenSession: (session: Session) => void;
   onOpenDoc: (artifactId: string) => void;
@@ -182,6 +189,23 @@ export function StartView({
   const { openMenu } = useAppearance();
   const [cwd, setCwd] = useState<string | null>(null);
   const [choice, setChoice] = useState<ModelChoice>({ model: null, effort: null });
+  // "같은 폴더 = 같은 프로젝트": a folder that already has a live work sends there unless picked otherwise.
+  const client = useMemo(() => entryClient(api), [api]);
+  const [pick, setPick] = useState<ProjectPick>({ kind: "auto" });
+  const [folderWork, setFolderWork] = useState<Work | null>(null);
+  useEffect(() => {
+    setFolderWork(null);
+    if (!cwd) return;
+    let stale = false;
+    void client
+      .workAt(cwd)
+      .then((found) => !stale && setFolderWork(found))
+      .catch(() => undefined);
+    return () => {
+      stale = true;
+    };
+  }, [client, cwd]);
+  const target = pickedWork(state, pick, folderWork);
   const works = Object.values(state.works).sort((a, b) => b.updatedAt - a.updatedAt);
   const recentFolders = [...new Set(works.filter((work) => !work.cwdManaged).map((work) => work.cwd))].slice(0, 5);
   const path = folderPath(state, folderId);
@@ -221,14 +245,24 @@ export function StartView({
         />
         <Composer
           draftKey={`new:${folderId ?? "root"}`}
-          placeholder="새 작업의 첫 요청을 입력하세요"
+          placeholder={target ? "새 세션의 첫 요청을 입력하세요" : "새 작업의 첫 요청을 입력하세요"}
           busy={false}
           autoFocus
-          onSend={(text) => onStart(text, engine, cwd, choice)}
+          onSend={(text) => onStart(text, engine, cwd, choice, pick)}
           target={
             <>
               <ModelPicker models={state.providers[engine]?.models ?? []} value={choice} onChange={setChoice} />
-              <FolderChoice value={cwd} recent={recentFolders} onChange={setCwd} pickFolder={pickFolder} />
+              <FolderChoice
+                value={cwd}
+                recent={recentFolders}
+                onChange={(next) => {
+                  setCwd(next);
+                  setPick({ kind: "auto" });
+                }}
+                pickFolder={pickFolder}
+                project={pick.kind === "work" ? target : null}
+              />
+              <ProjectChoice state={state} target={target} folderWork={folderWork} hasFolder={Boolean(cwd)} onChange={setPick} />
             </>
           }
         />
