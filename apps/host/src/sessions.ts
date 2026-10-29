@@ -55,6 +55,7 @@ import { Documents, isWorkbenchPath } from "./artifacts.ts";
 import { Workspaces } from "./workspaces.ts";
 import { physicalPath, withinDirectory } from "./directory-operations.ts";
 import { WorktreeWorkspaces } from "./worktree-workspaces.ts";
+import { Terminals } from "./terminals.ts";
 import { WorkspaceLayouts } from "./layouts.ts";
 import type { Kordoc } from "./kordoc.ts";
 import type { AdapterSink, LoginStart, ProviderAdapter } from "./providers/types.ts";
@@ -137,6 +138,7 @@ export type ManagerOptions = {
   browse?: AgentBrowser | null;
   /** Isolated profiles/tests may supply a skill home; native defaults use the person's home. */
   skillHomeDir?: string;
+  ptyBinary?: string;
 };
 
 const DEFAULT_PURPOSE = /^대화 \d+$/;
@@ -269,6 +271,7 @@ export class SessionManager {
   readonly documents: Documents;
   readonly workspaces: Workspaces;
   readonly worktreeWorkspaces: WorktreeWorkspaces;
+  readonly terminals: Terminals;
   readonly layouts: WorkspaceLayouts;
   /** "그림": pictures drawn with GPT Image through Codex (imagegen.ts). */
   readonly images: ImageGen;
@@ -299,6 +302,7 @@ export class SessionManager {
     this.skillLibrary = new SkillLibrary(this.userSkills, options.dataDir ?? dirname(options.managedWorksDir), options.skillHomeDir);
     this.workspaces = new Workspaces(store, options.hostId, bus);
     this.worktreeWorkspaces = new WorktreeWorkspaces(store, this.workspaces, options.dataDir ?? dirname(options.managedWorksDir), (id) => this.requireWork(id));
+    this.terminals = new Terminals(store, this.workspaces, options.ptyBinary);
     this.layouts = new WorkspaceLayouts(store, this.workspaces);
     this.documents = new Documents(store, bus, options.dataDir ?? dirname(options.managedWorksDir), options.kordoc ?? null, options.ieum ?? null, this.workspaces);
     this.engineSetup = new EngineInstaller({
@@ -963,6 +967,7 @@ export class SessionManager {
   }
 
   private assertWorkspaceIdle(workspace: Workspace) {
+    if (this.terminals.busy(workspace.cwd)) throw new HttpError(409, "workspace_busy", "이 작업공간에서 실행 중인 터미널이 있습니다. 터미널에서 실행을 종료한 뒤 진행하세요.");
     if (this.worktreeWorkspaces.busy(workspace.id)) throw new HttpError(409, "workspace_busy", "이 작업공간에서 워크트리를 생성 중입니다. 완료하거나 취소한 뒤 진행하세요.");
     if ([...this.sessions.values()].some((session) => session.workspaceId === workspace.id && session.status !== "idle" && session.status !== "error")) {
       throw new HttpError(409, "workspace_busy", "이 작업공간에서 실행 중인 세션이 있습니다. 모두 끝나거나 멈춘 뒤에 진행하세요.");
@@ -2006,6 +2011,7 @@ export class SessionManager {
     this.stopExternalWatches();
     this.flush();
     await this.worktreeWorkspaces.shutdown();
+    await this.terminals.shutdown();
     await Promise.all([...this.adapters.values()].map((adapter) => adapter.shutdown()));
     await this.options.browse?.shutdown();
     await this.skillLibrary.shutdown();

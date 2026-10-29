@@ -332,6 +332,19 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       if (parts[0] === "workspaces" && parts[1] && parts[2] === "repository" && parts.length === 3 && method === "GET") {
         return sendJson(res, 200, await manager.worktreeWorkspaces.inspect(parts[1]));
       }
+      if (parts[0] === "workspaces" && parts[1] && parts[2] === "terminals" && parts.length === 3) {
+        if (method === "GET") return sendJson(res, 200, manager.terminals.list(parts[1]));
+        if (method === "POST") return sendJson(res, 201, manager.terminals.create(parts[1], await readJson(req) as unknown as import("@workbench/contracts").CreateTerminalRequest));
+      }
+      if (parts[0] === "terminals" && parts[1]) {
+        if (parts.length === 2 && method === "GET") return sendJson(res, 200, manager.terminals.output(parts[1], Number(url.searchParams.get("cursor") ?? 0)));
+        if (parts.length === 2 && method === "DELETE") return sendJson(res, 200, await manager.terminals.close(parts[1]));
+        if (parts.length === 3 && method === "POST") {
+          const body = await readJson(req);
+          if (parts[2] === "input") return sendJson(res, 200, manager.terminals.input(parts[1], body.data));
+          if (parts[2] === "resize") return sendJson(res, 200, manager.terminals.resize(parts[1], body.cols, body.rows));
+        }
+      }
       if (parts[0] === "workspaces" && parts[1] && parts[2] === "worktrees" && parts.length === 3 && method === "POST") {
         const body = await readJson(req);
         return sendJson(res, 201, await manager.worktreeWorkspaces.connect(parts[1], String(body.path ?? ""), String(body.expectedHead ?? "")));

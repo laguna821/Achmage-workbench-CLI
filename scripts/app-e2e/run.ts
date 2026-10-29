@@ -18,6 +18,7 @@ import { templatesScenario } from "./templates.ts";
 import { templateOfficeScenario } from "./template-office.ts";
 import { hwpScenario } from "./hwp.ts";
 import { worktreesScenario } from "./worktrees.ts";
+import { terminalsScenario } from "./terminals.ts";
 import { parseArgs } from "./args.ts";
 
 const { binary, outDir, only, engines } = parseArgs(process.argv.slice(2));
@@ -52,6 +53,7 @@ try {
       if (wants("template-office")) await templateOfficeScenario(ctx);
       if (wants("hwp")) await hwpScenario(ctx);
       if (wants("worktrees")) await worktreesScenario(ctx, { binary, engines, profile: "native" });
+      if (wants("terminals")) await terminalsScenario(ctx, { binary, engines, profile: "native" });
     } catch (error) {
       const screenshot = report.path("failure.png");
       await ctx.app.wd.screenshot(screenshot).catch(() => undefined);

@@ -23,6 +23,11 @@ svg2pdf = "=0.13.0"
 pdf-writer = "=0.12.1"
 roxmltree = "0.20"
 url = "2"
+portable-pty = "=0.9.0"
+base64 = "0.22"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 # Notifications that report a click (the "default" action of freedesktop notification servers),
 # the same crate and version tauri-plugin-notification already uses.

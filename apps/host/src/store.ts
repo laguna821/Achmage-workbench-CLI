@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Workspace, WorktreeCreation } from "@workbench/contracts";
+import type { Workspace, WorktreeCreation, TerminalSession } from "@workbench/contracts";
 import type { Artifact, ArtifactRevision, Folder, Handoff, Proposal, Session, SessionLink, TimelineRevision, TranscriptItem, Work } from "@workbench/contracts";
 import type { TurnMark } from "./timeline.ts";
 import { SearchIndex, documentEntry, documentKey, itemEntries, itemKey, sessionEntry, workEntry, type WorkExtras } from "./search-index.ts";
@@ -39,6 +39,8 @@ export class Store {
       CREATE TABLE IF NOT EXISTS works (id TEXT PRIMARY KEY, json TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, work_id TEXT NOT NULL, json TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS worktree_creations (id TEXT PRIMARY KEY, work_id TEXT NOT NULL, json TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS terminals (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, json TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS terminal_output (terminal_id TEXT NOT NULL, start INTEGER NOT NULL, end INTEGER NOT NULL, data BLOB NOT NULL, PRIMARY KEY(terminal_id, start));
       CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, work_id TEXT NOT NULL, json TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS items (
         session_id TEXT NOT NULL,
@@ -315,6 +317,18 @@ export class Store {
   }
 
   worktreeCreations(): WorktreeCreation[] { return this.all<WorktreeCreation>("SELECT json FROM worktree_creations ORDER BY rowid DESC"); }
+  terminals(): TerminalSession[] { return this.all<TerminalSession>("SELECT json FROM terminals ORDER BY rowid DESC"); }
+  saveTerminal(terminal: TerminalSession) {
+    this.db.prepare("INSERT INTO terminals (id, workspace_id, json) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET json=excluded.json").run(terminal.id, terminal.workspaceId, JSON.stringify(terminal));
+  }
+  appendTerminalOutput(id: string, start: number, data: Buffer, limit: number) {
+    this.db.prepare("INSERT INTO terminal_output (terminal_id, start, end, data) VALUES (?, ?, ?, ?)").run(id, start, start + data.length, data);
+    this.db.prepare("DELETE FROM terminal_output WHERE terminal_id=? AND end<=?").run(id, start + data.length - limit);
+    return Number(this.db.prepare("SELECT MIN(start) AS first FROM terminal_output WHERE terminal_id=?").get(id)?.first ?? start);
+  }
+  readTerminalOutput(id: string, cursor: number): { start: number; end: number; data: Uint8Array }[] {
+    return this.db.prepare("SELECT start,end,data FROM terminal_output WHERE terminal_id=? AND end>? ORDER BY start LIMIT 16").all(id, cursor) as unknown as { start: number; end: number; data: Uint8Array }[];
+  }
   saveWorktreeCreation(job: WorktreeCreation) {
     this.db.prepare("INSERT INTO worktree_creations (id, work_id, json) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET json=excluded.json").run(job.id, job.workId, JSON.stringify(job));
   }

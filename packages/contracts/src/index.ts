@@ -10,6 +10,7 @@ import type { SessionWorktree } from "./worktrees.ts";
 import type { Workspace } from "./workspaces.ts";
 export * from "./workspaces.ts";
 export * from "./layouts.ts";
+export * from "./terminals.ts";
 export * from "./document-registry.ts";
 
 export const PROTOCOL_VERSION = 1;

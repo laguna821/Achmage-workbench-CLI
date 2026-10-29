@@ -2,12 +2,24 @@ import { describe, expect, it } from "vitest";
 import { activeTab, activateTab, closeTab, findTab, moveTab, tabsOf, withTabs } from "./tabs.ts";
 import { closePane, focusPane, focusedPane, restoreLayout, setPane, singleLayout, splitPane } from "./panes.ts";
 
-type View = { kind: "work" } | { kind: "document"; artifactId: string } | { kind: "new" };
+type View = { kind: "work" } | { kind: "document"; artifactId: string } | { kind: "new" } | { kind: "terminal"; terminalId: string; label: string };
 const home = { view: { kind: "new" } as View, workId: null, sessionId: null };
 const document = (id: string) => ({ view: { kind: "document", artifactId: id } as View, workId: "project", sessionId: null });
 const open = (layout: ReturnType<typeof singleLayout<View>>, id: string) => withTabs(setPane(layout, layout.focus, document(id)), layout);
 
 describe("group tabs", () => {
+  it("retains terminal identity and scroll position through title changes, splits and restored layouts", () => {
+    const content = { view: { kind: "terminal", terminalId: "pty-one", label: "셸" } as View, workId: "project", sessionId: null };
+    const original = withTabs(singleLayout(content.view, content.workId));
+    const tab = activeTab(original.panes[0]!); tab.ui = { terminalScroll: { line: 150, follow: false } };
+    const renamed = withTabs(setPane(original, "a", { ...content, view: { kind: "terminal", terminalId: "pty-one", label: "작업 로그" } }), original);
+    expect(activeTab(renamed.panes[0]!).id).toBe(tab.id);
+    const divided = withTabs(splitPane(renamed, "a", "right", home, null), renamed);
+    const moved = moveTab(divided, tab.id, { paneId: divided.focus, side: "center" });
+    const valid = (value: unknown): value is View => !!value && typeof value === "object" && "kind" in value;
+    const restored = restoreLayout(JSON.parse(JSON.stringify({ version: 2, ...moved })), valid, original);
+    expect(findTab(restored, "terminal:pty-one")?.tab).toMatchObject({ id: tab.id, ui: { terminalScroll: { line: 150, follow: false } } });
+  });
   it("keeps a generic conversation's tab and attachments identity while focus moves to a document", () => {
     const start = withTabs(singleLayout<View>({ kind: "work" }, "project"));
     const firstId = activeTab(start.panes[0]!).id;

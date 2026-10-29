@@ -13,7 +13,7 @@ export type PaneTree = { kind: "pane"; id: PaneId } | { kind: "split"; id: strin
  * focus — the session it keeps showing. The focused pane follows its work's active session, so a
  * session started there shows at once; a pane that loses the focus keeps the session it showed.
  */
-export type TabUiState = { cursor?: { anchor: number; head: number }; scroll?: { top: number; left: number }; mode?: string; chatScroll?: { top: number; follow: boolean }; reading?: { page: number | null; fraction: number; top?: number } };
+export type TabUiState = { cursor?: { anchor: number; head: number }; scroll?: { top: number; left: number }; mode?: string; chatScroll?: { top: number; follow: boolean }; terminalScroll?: { line: number; follow: boolean }; reading?: { page: number | null; fraction: number; top?: number } };
 export type PaneTab<V> = { id: string; view: V; workId: string | null; sessionId: string | null; ui?: TabUiState };
 export type Pane<V> = { id: PaneId; view: V; workId: string | null; sessionId: string | null; tabs?: PaneTab<V>[]; activeTabId?: string; recentTabIds?: string[] };
 
@@ -267,6 +267,7 @@ export function restoreLayout<V>(raw: unknown, isView: (value: unknown) => value
         if (tab.ui?.scroll && [tab.ui.scroll.top, tab.ui.scroll.left].every((n) => Number.isFinite(n) && n >= 0)) ui.scroll = { top: tab.ui.scroll.top, left: tab.ui.scroll.left };
         if (typeof tab.ui?.mode === "string" && tab.ui.mode.length < 40) ui.mode = tab.ui.mode;
         if (tab.ui?.chatScroll && Number.isFinite(tab.ui.chatScroll.top) && tab.ui.chatScroll.top >= 0 && typeof tab.ui.chatScroll.follow === "boolean") ui.chatScroll = { top: tab.ui.chatScroll.top, follow: tab.ui.chatScroll.follow };
+        if (tab.ui?.terminalScroll && Number.isSafeInteger(tab.ui.terminalScroll.line) && tab.ui.terminalScroll.line >= 0 && typeof tab.ui.terminalScroll.follow === "boolean") ui.terminalScroll = { line: tab.ui.terminalScroll.line, follow: tab.ui.terminalScroll.follow };
         if (tab.ui?.reading && (tab.ui.reading.page === null || (Number.isSafeInteger(tab.ui.reading.page) && tab.ui.reading.page >= 0)) && Number.isFinite(tab.ui.reading.fraction)) ui.reading = { page: tab.ui.reading.page, fraction: Math.max(0, Math.min(1, tab.ui.reading.fraction)), ...(typeof tab.ui.reading.top === "number" && tab.ui.reading.top >= 0 ? { top: tab.ui.reading.top } : {}) };
         restored.tabs.push({ id: tab.id, view: tab.view, workId: tab.workId, sessionId: tab.sessionId, ...(Object.keys(ui).length ? { ui } : {}) });
       }

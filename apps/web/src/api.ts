@@ -21,6 +21,10 @@ import type {
   CreateWorktreeWorkspaceRequest,
   WorkspaceRepository,
   WorktreeCreation,
+  CreateTerminalRequest,
+  TerminalSession,
+  TerminalList,
+  TerminalOutput,
   Schedule,
   ForkResult,
   ImportRequest,
@@ -188,6 +192,12 @@ export class Api {
   worktreeCreations = (workId: string) => this.request<WorktreeCreation[]>("GET", `/api/works/${workId}/worktree-creations`);
   createWorktreeWorkspace = (workId: string, request: CreateWorktreeWorkspaceRequest) => this.request<WorktreeCreation>("POST", `/api/works/${workId}/worktree-creations`, request);
   cancelWorktreeCreation = (id: string) => this.request<WorktreeCreation>("DELETE", `/api/worktree-creations/${id}`);
+  terminals = (workspaceId: string) => this.request<TerminalList>("GET", `/api/workspaces/${workspaceId}/terminals`);
+  createTerminal = (workspaceId: string, request: CreateTerminalRequest) => this.request<TerminalSession>("POST", `/api/workspaces/${workspaceId}/terminals`, request);
+  terminalOutput = (id: string, cursor = 0) => this.request<TerminalOutput>("GET", `/api/terminals/${id}?cursor=${cursor}`);
+  terminalInput = (id: string, data: string) => this.request<{ ok: boolean }>("POST", `/api/terminals/${id}/input`, { data });
+  resizeTerminal = (id: string, cols: number, rows: number) => this.request<{ ok: boolean }>("POST", `/api/terminals/${id}/resize`, { cols, rows });
+  closeTerminal = (id: string) => this.request<TerminalSession>("DELETE", `/api/terminals/${id}`);
   createSession = (workId: string, provider: Provider, options?: { workspaceId?: string; purpose?: string; model?: string | null; effort?: string | null; browser?: boolean; worktree?: boolean }) =>
     this.request<Session>("POST", `/api/works/${workId}/sessions`, { provider, ...options });
   updateSession = (sessionId: string, patch: UpdateSessionRequest) => this.request<Session>("PATCH", `/api/sessions/${sessionId}`, patch);

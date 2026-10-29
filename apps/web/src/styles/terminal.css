@@ -1,0 +1,24 @@
+.terminal-view { display: flex; flex-direction: column; min-height: 0; height: 100%; background: #101827; color: #e5edf7; }
+.terminal-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 9px 12px; border-bottom: 1px solid #344358; background: #172235; }
+.terminal-toolbar .button, .terminal-find .button, .terminal-ended .button, .terminal-message .button { background: #25344a; color: #e5edf7; border-color: #4a5c75; }
+.terminal-status { font-size: 12px; color: #a4c9ef; }
+.terminal-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.terminal-toolbar .terminal-path { flex: 1 1 100px; }
+.terminal-surface { flex: 1; min-height: 50px; padding: 8px; overflow: hidden; }
+.terminal-surface .xterm { height: 100%; }
+.terminal-find { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; background: #172235; }
+.terminal-find > input { min-width: 100px; width: 220px; background: #101827; color: #e5edf7; border: 1px solid #4a5c75; padding: 5px; }
+.terminal-find label { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+.terminal-message, .terminal-ended { padding: 8px 12px; background: #263650; font-size: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.terminal-message.error { color: #ffc9b8; }
+.terminal-dialog { width: min(700px, calc(100vw - 40px)); max-height: 85vh; overflow: auto; padding: 24px; border-radius: 14px; background: var(--paper, white); box-shadow: 0 14px 60px #0003; }
+.terminal-dialog > header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.terminal-dialog h2 { margin: 0; font-size: 19px; }
+.terminal-dialog form { display: grid; gap: 12px; margin: 18px 0; }
+.terminal-dialog label { display: grid; gap: 5px; font-size: 13px; }
+.terminal-dialog input, .terminal-dialog textarea { width: 100%; padding: 8px; border: 1px solid var(--line, #ccd3dd); border-radius: 6px; background: var(--paper, white); color: inherit; }
+.terminal-dialog details label { margin-top: 10px; }
+.terminal-history { display: grid; gap: 6px; }
+.terminal-history-row { display: flex; flex-wrap: wrap; text-align: left; align-items: center; gap: 12px; border: 1px solid var(--line, #ccd3dd); background: transparent; color: inherit; border-radius: 7px; padding: 12px; }
+.terminal-history-row strong { flex: 1; }
+.terminal-history-row small { opacity: .7; }

@@ -7,6 +7,7 @@ export function contentKey<V>(content: PaneContent<V>): string {
   if (view.kind === "document" || view.kind === "split") return `doc:${view.artifactId}`;
   if (view.kind === "work") return content.sessionId ? `session:${content.sessionId}` : `work:${content.workId ?? ""}`;
   if (view.kind === "project") return `project:${view.workId}`;
+  if (view.kind === "terminal") return `terminal:${view.terminalId}`;
   return JSON.stringify(view);
 }
 export const tabsOf = <V>(pane: Pane<V>): PaneTab<V>[] => pane.tabs ?? [{ id: `tab-${pane.id}`, view: pane.view, workId: pane.workId, sessionId: pane.sessionId }];

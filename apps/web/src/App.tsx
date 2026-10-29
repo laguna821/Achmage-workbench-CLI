@@ -24,6 +24,7 @@ import { EngineMenu } from "./components/EngineMenu.tsx";
 import { Switcher, UnseenContext } from "./components/SessionCards.tsx";
 import { DocContext, FormatBadge, type DocActions } from "./components/DocCards.tsx";
 import { GroupTabs } from "./components/GroupTabs.tsx";
+import { TerminalDialog } from "./components/TerminalDialog.tsx";
 import { IntegrationsSheet } from "./components/IntegrationsSheet.tsx";
 import { ImageUploadRow, ImageUploadSheet } from "./components/ImageUploadSheet.tsx";
 import { Onboarding } from "./components/Onboarding.tsx";
@@ -61,6 +62,7 @@ import { PaneActionsContext, type PaneActions } from "./panedrag.ts";
 // Editors (CodeMirror, PDF.js) load only when a document opens.
 const DocumentView = lazy(() => import("./components/docs/DocumentView.tsx"));
 const Reader = lazy(() => import("./components/Reader.tsx"));
+const TerminalView = lazy(() => import("./components/TerminalView.tsx"));
 import { AppearanceContext, DEFAULT_APPEARANCE, engineTheme, lookStyle, readAppearance, type AppearanceApi } from "./appearance.ts";
 import { isThemePref, resolveTheme, setRootTheme, useSystemTheme, type ThemePref } from "./theme.ts";
 
@@ -156,6 +158,7 @@ type View =
   | { kind: "work" }
   | { kind: "new"; folderId: string | null }
   | { kind: "archive" }
+  | { kind: "terminal"; terminalId: string; workspaceId: string; label: string }
   | { kind: "document"; artifactId: string; proposalId: string | null }
   /** "나란히": chosen only, never where the app opens (views are not kept across launches). */
   | { kind: "split"; artifactId: string; draftKey: string; focus: "chat" | "doc" }
@@ -173,6 +176,7 @@ function isView(value: unknown): value is View {
   if (view.kind === "work" || view.kind === "archive") return true;
   if (view.kind === "new") return view.folderId === null || typeof view.folderId === "string";
   if (view.kind === "project") return typeof view.workId === "string";
+  if (view.kind === "terminal") return typeof view.terminalId === "string" && typeof view.workspaceId === "string" && typeof view.label === "string";
   if (view.kind === "document") return typeof view.artifactId === "string" && (view.proposalId === null || typeof view.proposalId === "string");
   if (view.kind === "split") return typeof view.artifactId === "string" && typeof view.draftKey === "string" && (view.focus === "chat" || view.focus === "doc");
   if (view.kind !== "pkm" || !view.target || typeof view.target !== "object") return false;
@@ -211,6 +215,7 @@ export function App() {
   const layoutSaveTimer = useRef<number | undefined>(undefined);
   const [layoutProblem, setLayoutProblem] = useState<{ key: string; message: string } | null>(null);
   const openWorkspaceRef = useRef<(workspace: Workspace | null) => Promise<boolean>>(async () => false);
+  const [terminalWorkspace, setTerminalWorkspace] = useState<Workspace | null>(null);
   // A window of its own for one session (`?session=`, "새 창으로 떼어 내기"): no sidebar, no home.
   const [single, setSingle] = useState<string | null>(() => windowSession());
   // One pane on a new profile; an existing layout is restored from gateway preferences after
@@ -648,6 +653,7 @@ export function App() {
         try { return await api.updateWorkspace(workspace.id, patch); } catch (error) { fail(error); return null; }
       },
       openWorkspace: (workspace) => openWorkspaceRef.current(workspace),
+      openTerminals: (workspace) => setTerminalWorkspace(workspace),
       workspaceGit: {
         workspaceRepository: async (...args) => { if (!api) throw new Error("연결을 기다려 주세요."); return api.workspaceRepository(...args); },
         connectWorktree: async (...args) => { if (!api) throw new Error("연결을 기다려 주세요."); return api.connectWorktree(...args); },
@@ -1470,6 +1476,7 @@ export function App() {
     }
     if (at.kind === "document") return [`doc:${at.artifactId}`];
     if (at.kind === "project") return [`project:${at.workId}`];
+    if (at.kind === "terminal") return [`terminal:${at.terminalId}`];
     if (at.kind === "pkm") return [pkmKey(at.target)];
     if (at.kind === "archive") return ["archive"];
     return [`home:${at.folderId ?? ""}`];
@@ -1660,6 +1667,13 @@ export function App() {
     if (single) return;
     const current = layoutRef.current;
     if (current.panes.length >= MAX_PANES) return setToast(`한 창에는 최대 ${MAX_PANES}칸을 열 수 있습니다.`);
+    const source = paneById(current, id);
+    if (source?.view.kind === "terminal" && api) {
+      void api.createTerminal(source.view.workspaceId, { requestId: crypto.randomUUID() }).then((entry) => {
+        updateLayout((latest) => paneById(latest, id) ? splitPane(latest, id, side, { view: { kind: "terminal", terminalId: entry.id, workspaceId: entry.workspaceId, label: entry.label }, workId: entry.workId, sessionId: null }, keptOf(focusedPane(latest))) : latest);
+      }).catch(fail);
+      return;
+    }
     updateLayout((latest) => splitPane(latest, id, side, { view: { kind: "new", folderId: null }, workId: null, sessionId: null }, keptOf(focusedPane(current))));
   };
   const closePaneNow = (id: PaneId) => {
@@ -1707,6 +1721,7 @@ export function App() {
       };
     }
     if (at.kind === "project") return { title: `${state.works[at.workId]?.title ?? "프로젝트"} · 프로젝트`, icon: <Icon name="project" size={14} />, item: { kind: "project", id: at.workId } };
+    if (at.kind === "terminal") return { title: at.label, icon: <Icon name="terminal" size={14} />, hint: state.workspaces[at.workspaceId]?.cwd, item: null };
     if (at.kind === "pkm") {
       const target = at.target;
       const viewName = target.kind === "view" ? pkmHandle.current?.pkmState?.views.find((entry) => entry.id === target.id)?.name : null;
@@ -1764,7 +1779,7 @@ export function App() {
     return { theme, bubble: look.bubble, frame: look.frame, glow: look.glow, style: lookStyle(look) };
   };
   /** What a pane shows: the focused one exactly as the main area always has; the other with its own work, session and tabs. */
-  const paneView = (pane: Pane<View>, focused: boolean, split: boolean, tabId: string): ReactNode => {
+  const paneView = (pane: Pane<View>, focused: boolean, split: boolean, tabId: string, tabActive: boolean): ReactNode => {
     const at = pane.view;
     const owner = focused ? work : pane.workId ? state.works[pane.workId] : undefined;
     const session = focused ? activeSession || undefined : sessionIn(pane);
@@ -1774,6 +1789,7 @@ export function App() {
     const pinned = focused ? Boolean(single) : true;
     const tabUi = tabsOf(pane).find((tab) => tab.id === tabId)?.ui;
     const start = at.kind === "new" || (at.kind === "work" && !owner);
+    if (at.kind === "terminal") return <Suspense fallback={<LoadingView label="터미널을 여는 중…" shape="work" />}><TerminalView api={api} id={at.terminalId} focused={focused && tabActive} uiState={tabUi} onUiState={uiOf[tabId]} onList={() => { const space = state.workspaces[at.workspaceId]; if (space) setTerminalWorkspace(space); }} /></Suspense>;
     if ((at.kind === "document" || at.kind === "split") && owner) {
       // Next to its own conversation in the other pane, a document needs no drawer of it.
       const besideChat = split && Boolean(session) && layout.panes.some((other) => other.id !== pane.id && other.view.kind === "work" && sessionIn(other)?.id === session?.id);
@@ -2119,7 +2135,7 @@ export function App() {
           scope={paneScope}
           effectOf={effectOf}
           tabBar={single ? undefined : (pane) => <GroupTabs pane={pane} head={paneHead} onSelect={(tabId) => selectTabNow(pane.id, tabId)} onClose={(tabId) => closeTabNow(pane.id, tabId)} onReorder={(tabId, index) => updateLayout((current) => moveTab(current, tabId, { paneId: pane.id, side: "center" }, index))} onNew={() => setViewOf(pane.id, { kind: "new", folderId: null })} />}
-          render={(pane, info) => paneView(pane, info.focused, info.split, info.tabId)}
+          render={(pane, info) => paneView(pane, info.focused, info.split, info.tabId, info.active)}
           onNarrow={setNarrowPanes}
         />
       )}
@@ -2130,6 +2146,7 @@ export function App() {
         </Suspense>
       ) : null}
 
+      {terminalWorkspace ? <TerminalDialog api={api} workspace={state.workspaces[terminalWorkspace.id] ?? terminalWorkspace} onClose={() => setTerminalWorkspace(null)} onOpen={(entry) => navigateTo({ view: { kind: "terminal", terminalId: entry.id, workspaceId: entry.workspaceId, label: entry.label }, workId: entry.workId, sessionId: null })} /> : null}
       {integrationsOpen && api ? <IntegrationsSheet api={api} onClose={() => setIntegrationsOpen(false)} onToast={setToast} /> : null}
       {imageUploadOpen && api ? <ImageUploadSheet api={api} onClose={() => setImageUploadOpen(false)} onToast={setToast} /> : null}
       {state.ready && api && (prefs.onboarding !== "done" || onboardingAgain) ? (

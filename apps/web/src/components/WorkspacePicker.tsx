@@ -62,6 +62,7 @@ export function WorkspacePicker({ state, work, session, actions }: { state: Stat
       </form>
       <div className="menu-label">보관하면 새 실행을 막습니다. 폴더와 세션 기록은 유지됩니다.</div>
       {current && !current.archivedAt && !current.removedAt ? <button type="button" className="button small workspace-git-open" onClick={() => { close(); setGitOpen(true); }}>Git 워크트리 관리…</button> : null}
+      {current ? <button type="button" className="button small workspace-terminals-open" onClick={() => { close(); actions.openTerminals(current); }}>터미널…</button> : null}
     </Popover>
     {gitOpen && current ? <WorktreeWorkspaceDialog state={state} work={work} source={current} actions={actions} onClose={() => setGitOpen(false)} /> : null}
   </div>;
