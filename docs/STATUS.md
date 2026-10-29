@@ -1414,11 +1414,13 @@
 - `scripts/webkit-groups-check.py` **6/6**(WebKitGTK, 화면 밖 Broadway, 합성 끔): 단계 색 띠·점, WebKit 안의 포인터 이벤트로 끌어 단계와 중요도 쓰기, 날짜 기간 끌기 거절과 까닭, DIKM 색. 300장 보드: 끄는 동안 p95 20ms(평균 13.8, 최대 24, CPU 45%), 홈을 굴리는 동안 p95 19ms(CPU 84% — 합성 없이 화면 전체를 다시 칠함; 홈 모드 막대의 흐린 그림자를 빼 봐도 83–84%라 원인 아님, 카드의 `content-visibility`를 끄면 p95 24ms·최대 44ms).
 - 회귀(이 갈래 위, 모두 console clean): `views-check` 48/48(두 엔진; 칸반 단추가 이제 '단계' 보기라 그 이름으로 누르고, 표의 정렬이 보기에 남으므로 '세션' 머리를 내림차순이 될 때까지 누름 — 같은 고침을 `webkit-project-check`에도), `graph-check` 14/14(300점 움직임·끌기 p95 16.7ms), `flow-check` 36/36, `pkm-check` 51/51, `panes-check` 43/43, `project-check` 27/27(템플릿 칸에 중요도), `meta-session-check` 19/19, `session-controls-check` 13/13, `entry-check` 22/22, `links-check` 19/19, `recovery-check` 22/22, `search-check` 29/29, `chat-flow-check` 32/32, `doc-drawer-check` 8/8, `design-shots` 70/70(Chromium·WebKitGTK, 라이트·다크, 옆줄 없음·틀 글자 사다리·흐림 없음 불변식 포함). WebKitGTK: `webkit-panes` 3/3, `webkit-project` 4/4, `webkit-flow` 7/7, `webkit-graph` 4/4(300점 움직이는 동안 p95 18ms, 끄는 동안 17ms).
 
+- **내비게이터와 합친 뒤(master)**: 두 칸 내비게이터 옆에서는 가운데가 좁아 단계 보드(여섯 열)가 넘친다. 끌던 카드가 보드 왼쪽·오른쪽 끝(또는 페이지 위아래 끝) 56px 안에 오면 보드·페이지가 그쪽으로 넘어가고(끝에 가까울수록 빠름) 놓을 칸을 다시 읽는다(`fc9ac99`). `groups-check` 26/26(새 단계: 화면 밖 '값 없음' 열에 놓기 → 되돌리기), `webkit-groups` 6/6, `views-check`는 쓰인 폭('한 칸' 배치)으로 48/48.
+
 ### 미검증 · 제한
 
 - 실제 설치본 창(Tauri, niri, GPU 합성)에서 손으로 끌어 보지 않았다. 프레임 수치는 headless Chromium과 화면 밖 WebKitGTK다.
 - 묶음 순서를 끌어서 바꾸지는 못한다(노션의 그룹 순서). 순서는 키의 것(단계·폴더 순서, 템플릿 안내의 선택지, 이모지, 이름·숫자·시간)과 "순서 뒤집기"뿐이다.
-- 폴더 색은 내비게이터 갈래가 `Folder.color`를 더하면 읽는다(이 갈래에는 그 칸이 없어 확인 못 함).
+- 폴더 색: 내비게이터를 합친 뒤 `Folder.color`를 그대로 읽는다(`1c57085`).
 - 프로젝트 카드 썸네일(Bases Look의 다른 절반), 보기를 볼트 `.base`로 내보내기·가져오기는 하지 않았다(설계 §4).
 - 표 머리를 눌러 바꾼 정렬도 보기에 남는다(전에는 그 화면에서만).
 - 흐름의 색 기준에서 값이 여럿인 키(태그)는 첫 묶음의 색이다.
@@ -1471,6 +1473,7 @@
   - 첫 실행 클릭만으로(모든 OS, 문서 도구 번들).
   - 앱 전체 디자인 "괘선 노트".
   - 저녁(0.2.2): 프로젝트 속성을 옵시디언처럼(형식·공통 템플릿·MD에서 가져오기), 섹션 제목, 단축키 바꾸기, 두 칸, 흐름 = 실제 달력(하루·주·달, 캘린더 연결), 움직이고 끄는 그래프(종류별 설정).
+  - 밤(master, 릴리스 전): 볼트 한 줄로 접기, 프로젝트 내비게이터(사이드바 두 칸: 프로젝트 폴더 | 목록, 바로가기·고정·태그·정렬), 홈 보기(지금·프로젝트·흐름·문서마다 이름 붙은 보기, 묶기·하위 묶기, Bases Look식 묶음 색, 끌어서 값 바꾸기). 설계: [내비게이터와 그룹 보기](design/프로젝트-내비게이터-그룹보기-설계.md).
   - 각 절에 검사와 제한을 적었다.
 - **설치 파일**: [릴리스](https://github.com/laguna821/Achmage-workbench-CLI/releases)(v0.2.0·0.2.1·0.2.2, 모두 2026-10-29). 0.2.1은 그림 올리기의 Worker 방식, 0.2.2는 위 저녁의 여섯 가지를 더한다.
   - 여섯 파일: Windows(NSIS `.exe`·MSI), macOS Apple silicon(`.dmg`), Linux(AppImage·`.deb`), Arch/CachyOS(`.pkg.tar.zst`).
