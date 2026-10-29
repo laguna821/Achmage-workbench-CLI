@@ -17,6 +17,7 @@ import { buildTimeline } from "./timeline.ts";
 import { DocImages } from "./doc-images.ts";
 import { Pkm } from "./pkm.ts";
 import { handlePkm } from "./pkm-http.ts";
+import { FindTool, withFindTool } from "./find-tool.ts";
 
 // Local gateway: owns engine processes and state, serves the UI and an HTTP + SSE API on
 // 127.0.0.1 only. Prints one `WORKBENCH_READY {json}` line once it accepts connections.
@@ -73,12 +74,14 @@ const manager = new SessionManager(store, bus, {
 });
 void manager.refreshTools();
 const pkm = new Pkm(store, bus, manager, { dataDir });
-// "찾는 길": vault notes join the search index and follow the mirror.
+// "찾는 길": vault notes join the search index (and follow the mirror); engines search it with workbench-find.
 void manager.finder.useVault(pkm.vault, bus);
+const find = new FindTool({ dataDir, finder: manager.finder, sessions: () => manager.view.sessions, bus });
+const engineHooks = withFindTool(browse.engineHooks(), find.engineHooks());
 
 const claudeIdleMs = env.WORKBENCH_CLAUDE_IDLE_MS ? Number(env.WORKBENCH_CLAUDE_IDLE_MS) : undefined;
 manager.registerAdapter(
-  new ClaudeAdapter(manager.sink, { idleMs: claudeIdleMs, modelCacheFile: join(dataDir, "claude-models.json"), attachmentsDir: attachmentsDir(dataDir), browser: browse.engineHooks(), launch: pkm.claudeLaunch }),
+  new ClaudeAdapter(manager.sink, { idleMs: claudeIdleMs, modelCacheFile: join(dataDir, "claude-models.json"), attachmentsDir: attachmentsDir(dataDir), browser: engineHooks, launch: pkm.claudeLaunch }),
 );
 manager.registerAdapter(
   new CodexAdapter(manager.sink, {
@@ -86,7 +89,7 @@ manager.registerAdapter(
     approvalPolicy: env.WORKBENCH_CODEX_APPROVAL,
     sandbox: env.WORKBENCH_CODEX_SANDBOX,
     idleMs: env.WORKBENCH_CODEX_IDLE_MS ? Number(env.WORKBENCH_CODEX_IDLE_MS) : undefined,
-    browser: browse.engineHooks(),
+    browser: engineHooks,
     launch: pkm.codexLaunch,
   }),
 );
@@ -146,6 +149,7 @@ async function stop() {
   stopping = true;
   server.close();
   editors.close();
+  find.close();
   pkm.close();
   await manager.shutdown().catch(() => undefined);
   store.close();

@@ -22,6 +22,8 @@
 //   "브라우저" says whether this process was started with the agent browser's instructions (the
 //          SDK sends them as `appendSystemPrompt` in initialize) and, when it was, runs
 //          `playwright-cli -s=<name> open <address>` through Bash from its PATH like a model would
+//   "찾아 줘: <질의>"  runs `workbench-find "<질의>"` through Bash from its PATH (leading --flags stay
+//          flags), asking first unless the permission mode lets it through, and answers with the output
 //   "고쳐"  appends to the working copy the request names
 // Vault notes attached to a request are named back ("받은 노트 사본: …").
 //   "맥락"  answers with the appended system prompt it was started with (the context card)
@@ -239,6 +241,24 @@ async function runTurn(text) {
       browserLine = `브라우저 지침: 받음 (${browser.name}) · ${title ? `제목: ${title}` : `실패: ${refusal ?? result.output}`}`;
     }
   }
+  let findLine = null;
+  if (text.includes("찾아 줘:")) {
+    const asked = /찾아 줘:\s*([^\n]+)/.exec(text)?.[1]?.trim() ?? "";
+    const words = asked.split(/\s+/);
+    const flags = [];
+    while (words[0]?.startsWith("--")) flags.push(words.shift());
+    const toolId = `toolu_${randomUUID().slice(0, 8)}`;
+    const input = { command: `workbench-find ${flags.length ? `${flags.join(" ")} ` : ""}"${words.join(" ").replace(/"/g, "")}"`, description: "Workbench 기록 찾기" };
+    send({ type: "assistant", message: { id: `msg_${randomUUID().slice(0, 8)}`, type: "message", role: "assistant", model: MODEL, content: [{ type: "tool_use", id: toolId, name: "Bash", input }], stop_reason: "tool_use", stop_sequence: null, usage: { input_tokens: 10, output_tokens: 20, cache_creation_input_tokens: 0, cache_read_input_tokens: used } }, parent_tool_use_id: null, ...base() });
+    let allowed = permissionMode === "bypassPermissions" || permissionMode === "dontAsk";
+    if (!allowed) {
+      const answerToTool = await ask({ subtype: "can_use_tool", tool_name: "Bash", input, tool_use_id: toolId, decision_reason: "명령 실행은 확인이 필요합니다" });
+      allowed = answerToTool?.behavior === "allow";
+    }
+    const result = allowed ? await runCommand(input.command) : { code: 1, output: "The user declined this action." };
+    send({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolId, content: result.output, is_error: result.code !== 0 }] }, parent_tool_use_id: null, ...base() });
+    findLine = allowed ? `workbench-find 결과 (종료 코드 ${result.code}):\n${result.output}` : "workbench-find: 거절됨";
+  }
   // A document edit: the gateway names the working copy to change; the file itself stays as it is.
   const working = text.match(/작업 사본만 수정하세요: (.+)/);
   if (text.includes("고쳐") && working) appendFileSync(resolve(process.cwd(), working[1].trim()), "\n\n고친 문단입니다. 도입부를 질문 하나로 시작하게 바꿨습니다.\n");
@@ -273,6 +293,7 @@ async function runTurn(text) {
     const lines = long ? 160 : 6;
     const chunks = [];
     if (browserLine) chunks.push({ text: `${browserLine}\n\n`, wait: 30 });
+    if (findLine) chunks.push({ text: `${findLine}\n\n`, wait: 30 });
     if (steer) chunks.push({ text: steer, wait: 30 });
     if (text.includes("작업 폴더")) chunks.push({ text: `작업 폴더: ${process.cwd()}\n\n`, wait: 30 });
     if (resumedRequests !== null) {

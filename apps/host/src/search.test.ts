@@ -261,6 +261,11 @@ describe("workbench-find", () => {
     const next = Number(/--offset=(\d+)/.exec(tail)![1]);
     expect(manager.finder.find([`--offset=${next}`, "채점 기준"], { sessionId: session.id }).stdout.split("\n")[1]).toMatch(/^\[안녕 · Codex/);
     expect(findToolInstructions().split("\n")).toHaveLength(2);
+    // Run by the engine during a turn: that turn's own request is not one of the records.
+    say(manager, session.id, ["user", "찾아 줘: 채점 기준"]);
+    expect(manager.finder.find(["찾아 줘"], { sessionId: session.id }).stdout).toContain("총 1건");
+    manager.sink.updateSession(session.id, { status: "running" });
+    expect(manager.finder.find(["찾아 줘"], { sessionId: session.id }).stdout).toContain("찾은 기록이 없습니다");
   });
 
 });

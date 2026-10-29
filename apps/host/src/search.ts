@@ -404,7 +404,12 @@ export class Finder {
     const work = session ? this.host.works().get(session.workId) : undefined;
     const onlyWork = !all && scope !== "vault" && work ? work.id : null;
     const parsed = parseQuery(query);
-    const ranked = this.rank(parsed, { archived, workId: onlyWork, scope }).filter((hit) => scope === "all" || hit.scope === scope);
+    // The turn that runs this command (its request and what it wrote so far) is not a record to find.
+    const working = session && session.status !== "idle" && session.status !== "error";
+    const turnStart = working ? (this.host.items(session.id).findLast((item) => item.kind === "user")?.at ?? Infinity) : Infinity;
+    const ranked = this.rank(parsed, { archived, workId: onlyWork, scope }).filter(
+      (hit) => (scope === "all" || hit.scope === scope) && !(hit.sessionId === session?.id && MESSAGE_KINDS.has(hit.kind) && hit.at >= turnStart),
+    );
     const where = onlyWork && work ? `작업 「${work.title}」` : "모든 작업과 볼트";
     const head = `${FIND_HEAD} · "${query}" · ${where}${scope !== "all" ? ` · ${SCOPE_LABEL[scope]}` : ""}${archived ? " · 보관 포함" : ""} · 총 ${ranked.length}건`;
     const lines = [head];
