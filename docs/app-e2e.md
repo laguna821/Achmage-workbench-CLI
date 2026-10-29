@@ -22,6 +22,8 @@ node scripts/app-e2e/run.ts apps/desktop/src-tauri/target/debug/achmage-workbenc
 
 `tabs`는 세션/문서 공통 탭, 실제 입력과 편집기 DOM 유지, 드래그 분할, 키보드 순서 변경, 새 포트 재시작 후 탭 ID/배치/문서 위치 복원, 다른 API writer와의 충돌 및 사용자의 명시적 해결, 닫기 후 파일/세션 보존을 검사한다. WebKit의 오른쪽 클릭 이후 Pointer 이벤트가 누락되는 경로를 관찰했으며 제품은 mouse 이벤트도 같은 press로 처리한다. 선행 분할이 실패하면 의존하는 후속 검사를 중단한다.
 
+`documents`는 같은 파일의 두 뷰와 독립 API 작성자를 사용한다. 하나의 작성자, 무권한 저장 거절, 읽기 뷰 갱신, 이미 입력한 초안과 DOM의 보존, 권한 재획득과 명시적 충돌 해결, 탭 닫기 인계, 새로고침 후 권한 해제를 검사한다. 초안을 실제 입력한 다음 권한을 회수한다. 권한을 먼저 회수하면 입력 도중 읽기 상태가 되어 이후 키가 차단될 수 있다. 이 검사는 두 OS 창이나 Office 내부 입력 검증을 대신하지 않는다.
+
 웹/호스트 소스만 빌드하면 기존 실행파일 옆의 리소스가 그대로 남는다. **Tauri 빌드까지 수행**하고 `apps/web/dist/index.html`과 `apps/desktop/src-tauri/target/debug/web/index.html`이 같은지 확인한다. 이전 리소스 실행을 최신 UI 검증으로 오인하지 않는다.
 
 Linux에서 Broadway는 파일로 보이지 않는 추상 UNIX 소켓을 사용할 수 있으므로 실제 연결로 준비 상태를 판별한다. 설정 저장은 화면이 닫히는 시점보다 늦을 수 있어 API의 영속 상태를 기다린다.

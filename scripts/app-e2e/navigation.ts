@@ -35,7 +35,7 @@ export async function navigationScenario(ctx: Ctx) {
   await wd.click(await wd.waitFor('.pane:not([hidden]) .work-view .project-link'));
   await wd.waitFor('.pane:not([hidden]) .project-note-body');
   await wd.click(await wd.waitFor('.pane:not([hidden]) .project-note .project-section-head button'));
-  const projectEditor = await wd.waitFor('.pane:not([hidden]) .project-note-editor .cm-content');
+  const projectEditor = await wd.waitFor('.pane:not([hidden]) .project-note-editor .cm-content[contenteditable="true"]');
   await wd.click(projectEditor); await wd.sendKeys(projectEditor, "PROJECT UNSAVED BODY");
   await wd.click(await wd.waitFor(`.nav-project[data-row-id="${one.id}"]`));
   ctx.report.check(S, "프로젝트 노트의 수동 편집 중 이동 보류", !!(await wd.find('.pane:not([hidden]) .project-note-editor')) && await wd.execute<boolean>('return document.querySelector(".project-note-editor .cm-content")?.textContent.includes("PROJECT UNSAVED BODY");'));
@@ -46,8 +46,9 @@ export async function navigationScenario(ctx: Ctx) {
   const retained = await until(async () => !!(await wd.find('.pane:not([hidden]) .project-note-actions button.primary:not([disabled])')));
   ctx.report.check(S, "프로젝트 노트 저장 실패 시 편집창·초안·외부 원문 유지", retained && readFileSync(page.note.path, "utf8") === external && await wd.execute<boolean>('return document.querySelector(".project-note-editor .cm-content")?.textContent.includes("PROJECT UNSAVED BODY");'), undefined, await shot(ctx, "6-project-note-save-conflict.png"));
   // A live page refresh must not silently rebase the already-open body editor onto newer bytes.
-  await api("PUT", `/api/projects/${two.id}/stage`, { stage: "진행중" });
-  await until(async () => await wd.execute<boolean>('return document.querySelector(".pane:not([hidden]) .project-stage")?.textContent.includes("진행중");'));
+  const refreshed = await api<ProjectPage>("GET", `/api/projects/${two.id}`);
+  await api("PUT", "/api/projects/stages", { stages: refreshed.stages });
+  await until(async () => await wd.execute<boolean>('return Number(document.querySelector(".pane:not([hidden]) .project-view")?.dataset.noteRevision) === arguments[0];', refreshed.note.revision));
   const refreshedDisk = readFileSync(page.note.path, "utf8");
   const saveAgain = await wd.waitFor('.pane:not([hidden]) .project-note-actions button.primary');
   await wd.execute('arguments[0].scrollIntoView({ block: "center" });', saveAgain);

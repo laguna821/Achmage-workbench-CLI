@@ -1,4 +1,4 @@
-import type { Artifact } from "@workbench/contracts";
+import type { Artifact, DocumentAccess } from "@workbench/contracts";
 import type { FontFamily } from "@/types/api";
 
 // The Workbench gateway, seen from the design page. Images are fetched with the token and handed to
@@ -19,13 +19,18 @@ export class GatewayError extends Error {
 export class Gateway {
   private readonly token: string;
   private readonly blobs = new Map<string, Promise<string>>();
+  private access?: DocumentAccess;
 
-  constructor(token: string) {
+  constructor(token: string, access?: DocumentAccess) {
     this.token = token;
+    this.access = access;
   }
 
+  setAccess(access: DocumentAccess) { this.access = access; }
+
   private async request<T>(method: string, path: string, body?: BodyInit, headers: Record<string, string> = {}): Promise<T> {
-    const response = await fetch(path, { method, headers: { authorization: `Bearer ${this.token}`, ...headers }, body });
+    const scoped: Record<string, string> = this.access ? { "x-workbench-view": this.access.viewId, "x-workbench-write": this.access.writeToken ?? "" } : {};
+    const response = await fetch(path, { method, headers: { authorization: `Bearer ${this.token}`, ...scoped, ...headers }, body });
     const json = (await response.json().catch(() => ({ code: "invalid_response", message: response.statusText }))) as T & { code?: string; message?: string };
     if (!response.ok) throw new GatewayError(response.status, json.code ?? "error", json.message ?? response.statusText);
     return json;

@@ -1,5 +1,6 @@
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import type { Server } from "node:http";
+import type { DocumentRegistration } from "@workbench/contracts";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -45,6 +46,38 @@ function setup() {
 }
 
 describe("office editor pages", () => {
+  it("enforces scoped writer access through both the main HTTP API and Office grants", async () => {
+    const { manager, web, plan, note } = setup();
+    const grants = new EditorGrants();
+    const editor = await listen(createEditorsServer(manager.documents, grants, web));
+    const app = await listen(createHttpServer(manager, new EventBus(), { token: "test", webDir: web, editors: { grants, origin: () => editor } }));
+    const call = (method: string, path: string, body?: unknown, access?: DocumentRegistration) => fetch(`${app}${path}`, { method, headers: { authorization: "Bearer test", "content-type": "application/json", ...(access ? { "x-workbench-view": access.view.viewId, "x-workbench-write": access.writeToken ?? "" } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
+    const open = async (artifactId: string, viewId: string) => (await (await call("POST", `/api/artifacts/${artifactId}/views`, { viewId, windowId: viewId, claim: true })).json()) as DocumentRegistration;
+    const writer = await open(note.id, "writer"), reader = await open(note.id, "reader");
+    const save = (access?: DocumentRegistration) => call("PUT", `/api/artifacts/${note.id}/text`, { expectedRevision: 1, text: "Saved by the owner" }, access);
+    expect((await save()).status).toBe(423);
+    expect((await save(reader)).status).toBe(423);
+    expect((await save({ ...writer, writeToken: "forged" })).status).toBe(423);
+    expect(readFileSync(note.path, "utf8")).toBe("# 메모\n");
+    expect((await save(writer)).status).toBe(200);
+    writeFileSync(note.path, "External file change\n");
+    expect((await call("POST", `/api/artifacts/${note.id}/adopt-disk`)).status).toBe(200);
+    expect(readFileSync(note.path, "utf8")).toBe("External file change\n");
+    expect((await call("PUT", `/api/artifacts/${note.id}/text`, { expectedRevision: 2, text: "stale writer" }, writer)).status).toBe(409);
+    const officeWriter = await open(plan.id, "office-writer"), officeReader = await open(plan.id, "office-reader");
+    const grant = async (access: DocumentRegistration) => (await (await call("POST", `/api/artifacts/${plan.id}/editor`, undefined, access)).json()) as { token: string };
+    const writerGrant = await grant(officeWriter), readerGrant = await grant(officeReader);
+    const put = (token: string, revision: number) => fetch(`${editor}/api/artifacts/${plan.id}/bytes?expectedRevision=${revision}`, { method: "PUT", headers: { authorization: `Bearer ${token}` }, body: new Uint8Array(pkg("scoped bytes")) });
+    expect((await put(readerGrant.token, 1)).status).toBe(423);
+    expect((await put(writerGrant.token, 1)).status).toBe(200);
+    await call("DELETE", "/api/document-views/office-writer", { windowId: "office-writer" });
+    expect((await put(writerGrant.token, 2)).status).toBe(423);
+    expect((await put(readerGrant.token, 2)).status).toBe(423);
+    const next = await open(plan.id, "office-reader");
+    expect(next.view.mode).toBe("write");
+    expect((await put((await grant(next)).token, 2)).status).toBe(200);
+  });
+
   it("edit Word, PowerPoint and Excel documents", () => {
     expect(officeEditorKind("docx")).toBe("docs");
     expect(officeEditorKind("pptx")).toBe("slides");

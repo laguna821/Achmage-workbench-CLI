@@ -361,7 +361,7 @@ window.addEventListener(
 // ── open the document, then the editor ──────────────────────────────────
 let kept = init.recover && !init.readOnly ? await recovery.get(artifactId).catch(() => undefined) : undefined;
 if (kept && kept.baseRevision > init.artifact.revision) kept = undefined;
-if (!kept) await recovery.drop(artifactId).catch(() => undefined);
+if (!kept && !init.readOnly) await recovery.drop(artifactId).catch(() => undefined);
 if (kept) {
   // A saved workbook that was not taken as a revision: it opens as it was saved, still to be committed.
   state.revision = kept.baseRevision;

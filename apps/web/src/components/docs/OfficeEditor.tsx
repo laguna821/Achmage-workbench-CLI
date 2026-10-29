@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import type { Artifact, EditorGrant, OfficePageMessage } from "@workbench/contracts";
+import type { Artifact, DocumentAccess, EditorGrant, OfficePageMessage } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
 
 export type OfficeHandle = {
@@ -25,8 +25,8 @@ export type OfficeStatus = { dirty: boolean; revision: number | null; conflict: 
  */
 export const OfficeEditor = forwardRef<
   OfficeHandle,
-  { api: Api; artifact: Artifact; hidden?: boolean; onStatus(status: OfficeStatus): void; onNotice(message: string): void }
->(function OfficeEditor({ api, artifact, hidden = false, onStatus, onNotice }, ref) {
+  { api: Api; artifact: Artifact; access?: DocumentAccess; hidden?: boolean; onStatus(status: OfficeStatus): void; onNotice(message: string): void }
+>(function OfficeEditor({ api, artifact, access, hidden = false, onStatus, onNotice }, ref) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [generation, setGeneration] = useState(0);
   // Each opening of the page gets its own grant (a token for this document only).
@@ -74,9 +74,10 @@ export const OfficeEditor = forwardRef<
     };
     // A new grant for each opening of the page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [artifact.id, generation]);
+  }, [artifact.id, generation, access?.writeToken]);
   const current = grant && grant.generation === generation ? grant : null;
   opened.current = current && "value" in current ? current.value : null;
+  useEffect(() => { if (opened.current) send({ type: "office:grant", token: opened.current.token }); }, [current]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {

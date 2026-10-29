@@ -21,6 +21,7 @@ import { StageDialog } from "./StageDialog.tsx";
 import { PropertiesPanel } from "./PropertiesPanel.tsx";
 import { TemplateDialog } from "./TemplateDialog.tsx";
 import "../../styles/project.css";
+import { useDocumentSession } from "../../document-session.ts";
 
 // "프로젝트 = 노트 한 장": a work's page. From the top: what people wrote (stage, tags, related, other
 // properties), one line of what needs attention, the record of this week, decisions and open
@@ -49,7 +50,7 @@ function AddInput({ placeholder, onAdd, onDone, list }: { placeholder: string; o
 }
 
 export function ProjectView({
-  api,
+  api: rootApi,
   state,
   workId,
   onOpenSession,
@@ -95,6 +96,10 @@ export function ProjectView({
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [bodyBase, setBodyBase] = useState<{ body: string; revision: number | null } | null>(null);
+  const editingArtifact = editing === "__body" ? page?.note.artifactId ?? null : null;
+  const lease = useDocumentSession(rootApi, editingArtifact, null);
+  const api = editingArtifact ? lease.api : rootApi;
+  useEffect(() => { if (editingArtifact) lease.report(draft !== bodyBase?.body, bodyBase?.revision ?? undefined); }, [editingArtifact, draft, bodyBase, lease.report]);
   const currentDraft = useRef(draft);
   currentDraft.current = draft;
   const [savingBody, setSavingBody] = useState(false);
@@ -246,7 +251,7 @@ export function ProjectView({
   const events = allEvents ?? page.events;
 
   return (
-    <main className="project-view">
+    <main className="project-view" data-note-revision={page.note.revision}>
       <div className="project-scroll">
         <div className="column project-column">
           <header className="project-head">
@@ -608,7 +613,8 @@ export function ProjectView({
             </div>
             {editing === "__body" ? (
               <div className="project-note-editor">
-                <MarkdownEditor value={draft} onChange={setDraft} onSelection={() => undefined} />
+                {editingArtifact && !lease.canWrite ? <div className="doc-access notice" role="status">{lease.error ?? "다른 창의 편집 여부를 확인하고 있습니다. 편집 권한을 받은 뒤 고칠 수 있습니다."} <button type="button" className="button small" onClick={() => void lease.claim()}>편집 권한 받기</button></div> : null}
+                <MarkdownEditor value={draft} readOnly={Boolean(editingArtifact && !lease.canWrite)} onChange={setDraft} onSelection={() => undefined} />
                 <div className="project-note-actions">
                   <button type="button" className="button" disabled={savingBody} onClick={() => setEditing(null)}>
                     취소
@@ -616,7 +622,7 @@ export function ProjectView({
                   <button
                     type="button"
                     className="button primary"
-                    disabled={savingBody}
+                    disabled={savingBody || Boolean(editingArtifact && !lease.canWrite)}
                     onClick={async () => {
                       setSavingBody(true);
                       try {

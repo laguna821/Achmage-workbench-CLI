@@ -27,7 +27,7 @@ async function start() {
   // Labels are read when the editor's modules load, so the Korean overlay goes in first.
   (await import("./locale")).localizeEditor();
   const [{ createRoot }, { EditorHost }] = await Promise.all([import("react-dom/client"), import("./EditorHost")]);
-  createRoot(document.getElementById("root")!).render(<EditorHost init={{ token: init.token, artifactId: init.artifactId, revision: init.revision, readOnly: init.readOnly }} />);
+  createRoot(document.getElementById("root")!).render(<EditorHost init={{ token: init.token, artifactId: init.artifactId, revision: init.revision, readOnly: init.readOnly, access: init.access }} />);
 }
 
 void start();

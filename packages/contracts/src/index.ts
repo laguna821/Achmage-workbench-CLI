@@ -10,6 +10,7 @@ import type { SessionWorktree } from "./worktrees.ts";
 import type { Workspace } from "./workspaces.ts";
 export * from "./workspaces.ts";
 export * from "./layouts.ts";
+export * from "./document-registry.ts";
 
 export const PROTOCOL_VERSION = 1;
 
@@ -709,7 +710,8 @@ export type DesignSaveState = "idle" | "dirty" | "saving" | "saved" | "conflict"
 
 /** Workbench window → design page (iframe at /design/). */
 export type DesignHostMessage =
-  | { type: "design:init"; token: string; artifactId: string; revision: number | null; readOnly: boolean; theme: "light" | "dark" }
+  | { type: "design:init"; token: string; artifactId: string; revision: number | null; readOnly: boolean; theme: "light" | "dark"; access?: import("./document-registry.ts").DocumentAccess }
+  | { type: "design:access"; access: import("./document-registry.ts").DocumentAccess }
   | { type: "design:theme"; theme: "light" | "dark" }
   | { type: "design:flush" }
   | { type: "render:init"; token: string }
@@ -750,6 +752,8 @@ export type OfficeHostMessage =
       recover: boolean;
     }
   | { type: "office:theme"; theme: "light" | "dark" }
+  /** Refresh a scoped write capability without recreating the editor or dropping its undo state. */
+  | { type: "office:grant"; token: string }
   /** Save unsaved edits now (before a request is sent, the tab changes or the view switches). */
   | { type: "office:flush" }
   /** Keep my edits after a conflict: save them as the revision after this one. */

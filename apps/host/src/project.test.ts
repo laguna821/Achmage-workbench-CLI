@@ -66,6 +66,16 @@ function setup(git = false) {
 }
 
 describe("the project note file", () => {
+  it("shares edit ownership between the project body and the same file opened as a document", () => {
+    const { projects, work, manager } = setup();
+    const original = projects.setBodyText(work.id, "Original\n", null).page.note;
+    const owner = manager.documents.registry.open(original.artifactId!, { viewId: "document", windowId: "other-window", claim: true });
+    expect(() => projects.setBodyText(work.id, "Project stale editor", original.revision)).toThrow(/다른 탭/);
+    expect(() => projects.setProperty(work.id, "stage", ["changed"])).toThrow(/다른 탭/);
+    const access = { viewId: owner.view.viewId, writeToken: owner.writeToken };
+    expect(projects.setBodyText(work.id, "Owned edit\n", original.revision, access).page.note.body).toBe("Owned edit\n");
+  });
+
   it("rejects external changes and deletion even before a watcher has recorded a newer revision", () => {
     const { projects, work } = setup();
     const original = projects.setBodyText(work.id, "Original body\n", null).page.note;

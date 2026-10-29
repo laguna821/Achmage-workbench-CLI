@@ -10,6 +10,7 @@ import {
   type ArtifactRevision,
   type DocFormat,
   type DocRef,
+  type DocumentAccess,
   type Proposal,
   type ProposalCloser,
   type Provenance,
@@ -24,6 +25,7 @@ import type { Kordoc } from "./kordoc.ts";
 import { designAssetPath, designGuide, designProblem, designStem, saveDesignAsset } from "./design.ts";
 import type { IeumOffice, OfficePage } from "./ieumoffice.ts";
 import { BackgroundIndex } from "./doc-text.ts";
+import { DocumentRegistry } from "./document-registry.ts";
 
 // Documents with exact revisions (PRD 3.3). Every recorded revision is an immutable copy under the
 // gateway's data folder; the real file stays where it is in the work folder. AI edits happen in a
@@ -100,6 +102,7 @@ function countChanges(before: string, after: string) {
 }
 
 export class Documents {
+  readonly registry = new DocumentRegistry((id) => this.get(id));
   private readonly artifacts = new Map<string, Artifact>();
   private readonly proposals = new Map<string, Proposal>();
   private readonly store: Store;
@@ -434,7 +437,8 @@ export class Documents {
   }
 
   /** The user's edit. Refuses when someone else wrote first (stale revision) or the disk changed underneath. */
-  async saveText(artifactId: string, expectedRevision: number, text: string) {
+  async saveText(artifactId: string, expectedRevision: number, text: string, access?: DocumentAccess) {
+    this.registry.assertWrite(artifactId, access);
     const artifact = this.check(artifactId);
     if (artifact.revision !== expectedRevision) {
       throw new HttpError(409, "revision_conflict", `문서가 r${artifact.revision}로 바뀌었습니다. 내 수정은 그대로 두고 비교해 주세요.`);
@@ -451,6 +455,7 @@ export class Documents {
     if (sha256(data) === artifact.sha256) return artifact;
     const current = this.check(artifactId);
     if (current.revision !== expectedRevision || current.diskState !== "same") throw new HttpError(409, "revision_conflict", "저장하는 동안 문서가 바뀌었습니다.");
+    this.registry.assertWrite(artifactId, access);
     writeAtomic(artifact.path, data);
     const hangul = isHangul(artifact.format);
     const saved = this.record(current, data, { author: "user", sessionId: null, baseRevision: expectedRevision, note: null }, !hangul);
@@ -466,7 +471,8 @@ export class Documents {
    * Bytes an in-app editor saved (Word/PowerPoint/Excel): the next revision, refused like a text
    * save when the document moved on or the file changed on disk.
    */
-  saveBytes(artifactId: string, expectedRevision: number, data: Buffer) {
+  saveBytes(artifactId: string, expectedRevision: number, data: Buffer, access?: DocumentAccess) {
+    this.registry.assertWrite(artifactId, access);
     const artifact = this.check(artifactId);
     if (!isOfficeFormat(artifact.format)) throw new HttpError(415, "not_office", "워드·PPT·엑셀 문서만 이렇게 저장합니다.");
     if (artifact.revision !== expectedRevision) {
@@ -483,6 +489,8 @@ export class Documents {
 
   /** Keep what is on disk now as a new revision (after an external edit the user chose to keep). */
   adoptDisk(artifactId: string, note = "외부에서 바뀐 내용") {
+    // Observation only: external-file watchers must record changes even while a UI owns editing.
+    // This method never replaces the original; any later write still checks access and revision.
     const artifact = this.get(artifactId);
     const data = readFileOrNull(artifact.path);
     if (!data) throw new HttpError(404, "file_missing", "파일이 없습니다.");
@@ -491,7 +499,8 @@ export class Documents {
   }
 
   /** Undo by moving forward: an older revision's content becomes a new revision. */
-  revert(artifactId: string, toRevision: number) {
+  revert(artifactId: string, toRevision: number, access?: DocumentAccess) {
+    this.registry.assertWrite(artifactId, access);
     const artifact = this.check(artifactId);
     if (artifact.diskState === "changed") throw new HttpError(409, "disk_changed", "다른 프로그램이 이 파일을 바꿨습니다.");
     const data = readFileSync(this.revisionPath(artifactId, toRevision));
@@ -667,8 +676,9 @@ export class Documents {
    * Apply only onto the revision the proposal was made from. A proposal made on r3 is never
    * written over r4: the user compares or asks again on the latest revision.
    */
-  async applyProposal(proposalId: string) {
+  async applyProposal(proposalId: string, access?: DocumentAccess) {
     const proposal = this.proposal(proposalId);
+    this.registry.assertWrite(proposal.artifactId, access);
     if (proposal.status !== "pending") throw new HttpError(409, "proposal_not_pending", "이미 처리된 수정안입니다.");
     const artifact = this.check(proposal.artifactId);
     if (artifact.revision !== proposal.baseRevision) {
@@ -692,6 +702,7 @@ export class Documents {
     const data = isHangul(artifact.format) ? await this.contentFor(artifact, proposal.baseRevision, working.toString("utf8")) : working;
     const latest = this.check(artifact.id);
     if (latest.revision !== proposal.baseRevision || latest.diskState !== "same") throw new HttpError(409, "stale_proposal", "적용하는 동안 문서가 바뀌었습니다.");
+    this.registry.assertWrite(artifact.id, access);
     writeAtomic(artifact.path, data);
     const updated = this.record(artifact, data, {
       author: "engine",

@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { extname } from "node:path";
-import type { DocFormat, OfficeEditorKind } from "@workbench/contracts";
+import type { DocFormat, DocumentAccess, OfficeEditorKind } from "@workbench/contracts";
 import type { Documents } from "./artifacts.ts";
 import { HttpError } from "./errors.ts";
 import { fontFace, matchFont } from "./fonts.ts";
@@ -20,22 +20,24 @@ export function officeEditorKind(format: DocFormat): OfficeEditorKind | null {
 
 /** Tokens that open one document each, for as long as the gateway runs (the most recent ones). */
 export class EditorGrants {
-  private readonly grants = new Map<string, string>();
+  private readonly grants = new Map<string, { artifactId: string; access?: DocumentAccess }>();
   private readonly limit: number;
   constructor(limit = 500) {
     this.limit = limit;
   }
 
-  issue(artifactId: string) {
+  issue(artifactId: string, access?: DocumentAccess) {
     const token = randomBytes(24).toString("base64url");
-    this.grants.set(token, artifactId);
+    this.grants.set(token, { artifactId, ...(access ? { access: { ...access } } : {}) });
     while (this.grants.size > this.limit) this.grants.delete(this.grants.keys().next().value!);
     return token;
   }
 
   allows(token: string | null, artifactId: string) {
-    return Boolean(token && this.grants.get(token) === artifactId);
+    return Boolean(token && this.grants.get(token)?.artifactId === artifactId);
   }
+
+  access(token: string) { return this.grants.get(token)?.access; }
 
   /** Any open page (for what is not a document: the system's fonts). */
   allowsAny(token: string | null) {
@@ -89,7 +91,7 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
       }
       if (method === "PUT" && action === "bytes") {
         const data = await readBody(req, 200_000_000);
-        return sendJson(res, 200, documents.saveBytes(artifactId, Number(url.searchParams.get("expectedRevision")), data));
+        return sendJson(res, 200, documents.saveBytes(artifactId, Number(url.searchParams.get("expectedRevision")), data, grants.access(bearer!)));
       }
       throw new HttpError(405, "method_not_allowed", "허용되지 않은 요청입니다.");
     } catch (error) {

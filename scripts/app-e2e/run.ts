@@ -12,6 +12,7 @@ import { pkmScenario } from "./pkm.ts";
 import { workspacesScenario } from "./workspaces.ts";
 import { navigationScenario } from "./navigation.ts";
 import { tabsScenario } from "./tabs.ts";
+import { documentsScenario } from "./documents.ts";
 import { parseArgs } from "./args.ts";
 
 const { binary, outDir, only, engines } = parseArgs(process.argv.slice(2));
@@ -40,6 +41,7 @@ try {
       if (wants("workspaces")) await workspacesScenario(ctx);
       if (wants("navigation")) await navigationScenario(ctx);
       if (wants("tabs")) await tabsScenario(ctx, { binary, engines, profile: "native" });
+      if (wants("documents")) await documentsScenario(ctx);
     } catch (error) {
       const screenshot = report.path("failure.png");
       await ctx.app.wd.screenshot(screenshot).catch(() => undefined);

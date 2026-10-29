@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { DesignSaveState, DesignSelection } from "@workbench/contracts";
+import type { DesignSaveState, DesignSelection, DocumentAccess } from "@workbench/contracts";
 import { EditorApp } from "@/editor";
 import { useDocument, useSelection } from "@/editor/context";
 import { migrateDocument } from "@/editor/engine/migrations";
@@ -30,7 +30,7 @@ function routeDownloads(gateway: Gateway, artifactId: string) {
   };
 }
 
-export type DesignInit = { token: string; artifactId: string; revision: number | null; readOnly: boolean };
+export type DesignInit = { token: string; artifactId: string; revision: number | null; readOnly: boolean; access?: DocumentAccess };
 
 type Load =
   | { kind: "loading" }
@@ -83,7 +83,8 @@ export function EditorHost({ init }: { init: DesignInit }) {
 
   useEffect(() => {
     let active = true;
-    const gateway = new Gateway(init.token);
+    const gateway = new Gateway(init.token, init.access);
+    const stopAccess = listen((message) => { if (message.type === "design:access") gateway.setAccess(message.access); });
     (async () => {
       const [opened, fonts] = await Promise.all([gateway.text(init.artifactId, init.revision), loadFonts(gateway)]);
       let document: DoryDocument;
@@ -124,6 +125,7 @@ export function EditorHost({ init }: { init: DesignInit }) {
     });
     return () => {
       active = false;
+      stopAccess();
     };
   }, [init]);
 

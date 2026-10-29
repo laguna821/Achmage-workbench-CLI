@@ -3,7 +3,7 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { dirname, extname, join, normalize, resolve, sep } from "node:path";
 import { timingSafeEqual } from "node:crypto";
-import { isAccessMode, parseSearchScope, type AccessMode, type Attachment, type CreateSessionRequest, type DocRef, type Provider, type SequencedEvent, type Timeline } from "@workbench/contracts";
+import { isAccessMode, parseSearchScope, type AccessMode, type Attachment, type CreateSessionRequest, type DocRef, type DocumentViewInput, type Provider, type SequencedEvent, type Timeline } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
 import { HttpError, type SessionManager } from "./sessions.ts";
 import { DESIGN_PRESETS, systemFonts, type DesignPreset } from "./design.ts";
@@ -14,6 +14,7 @@ import { parseStartRequest } from "./links.ts";
 import type { AgentBrowser } from "./browse.ts";
 import { routeDocImages, type DocImages } from "./doc-images.ts";
 import { routeCalendar, type CalendarFeeds } from "./calendar-feeds.ts";
+import { documentAccess } from "./document-registry.ts";
 
 export const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -482,6 +483,12 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         return sendJson(res, 200, options.timeline(from, Number.isFinite(until) && until > from ? until : undefined));
       }
       if (method === "GET" && path === "/api/fonts") return sendJson(res, 200, { fonts: systemFonts() });
+      if (method === "GET" && path === "/api/document-views") return sendJson(res, 200, { views: manager.documents.registry.list() });
+      if (method === "DELETE" && parts[0] === "document-views" && parts[1]) {
+        const body = await readJson(req);
+        manager.documents.registry.close(parts[1], String(body.windowId ?? ""));
+        return sendJson(res, 200, { ok: true });
+      }
       if (method === "GET" && path === "/api/tools") return sendJson(res, 200, manager.tools());
       if (method === "POST" && path === "/api/tools/refresh") return sendJson(res, 200, await manager.refreshTools());
       if (method === "POST" && path === "/api/tools/ieumoffice/install") return sendJson(res, 202, manager.installIeumOffice());
@@ -505,11 +512,12 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const documents = manager.documents;
         const artifactId = parts[1];
         const revision = url.searchParams.get("revision") ? Number(url.searchParams.get("revision")) : undefined;
+        if (method === "POST" && parts[2] === "views") return sendJson(res, 200, documents.registry.open(artifactId, await readJson(req) as DocumentViewInput));
         if (method === "GET" && parts[2] === "text") return sendJson(res, 200, await documents.text(artifactId, revision));
         if (method === "GET" && parts[2] === "pages") return sendJson(res, 200, await documents.pages(artifactId, revision));
         if (method === "PUT" && parts[2] === "text") {
           const body = await readJson(req, 64_000_000);
-          return sendJson(res, 200, await documents.saveText(artifactId, Number(body.expectedRevision), String(body.text ?? "")));
+          return sendJson(res, 200, await documents.saveText(artifactId, Number(body.expectedRevision), String(body.text ?? ""), documentAccess(req)));
         }
         if (method === "GET" && parts[2] === "revisions") return sendJson(res, 200, documents.revisions(artifactId));
         if (method === "GET" && parts[2] === "raw") {
@@ -526,11 +534,11 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           if (!kind) throw new HttpError(415, "no_editor", "이 형식은 아직 Workbench 안에서 편집하지 못합니다.");
           const origin = options.editors?.origin();
           if (!options.editors || !origin) throw new HttpError(503, "editors_not_ready", "편집기를 준비하는 중입니다. 잠시 뒤 다시 열어 주세요.");
-          return sendJson(res, 200, { url: `${origin}/office/${kind}.html`, origin, token: options.editors.grants.issue(artifactId) });
+          return sendJson(res, 200, { url: `${origin}/office/${kind}.html`, origin, token: options.editors.grants.issue(artifactId, documentAccess(req)) });
         }
         if (method === "PUT" && parts[2] === "bytes") {
           const data = await readBody(req, 200_000_000);
-          return sendJson(res, 200, documents.saveBytes(artifactId, Number(url.searchParams.get("expectedRevision")), data));
+          return sendJson(res, 200, documents.saveBytes(artifactId, Number(url.searchParams.get("expectedRevision")), data, documentAccess(req)));
         }
         if (method === "POST" && parts[2] === "assets") {
           const data = await readBody(req, 50_000_000);
@@ -561,7 +569,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         if (method === "POST" && parts[2] === "adopt-disk") return sendJson(res, 200, documents.adoptDisk(artifactId));
         if (method === "POST" && parts[2] === "revert") {
           const body = await readJson(req);
-          return sendJson(res, 200, documents.revert(artifactId, Number(body.toRevision)));
+          return sendJson(res, 200, documents.revert(artifactId, Number(body.toRevision), documentAccess(req)));
         }
         if (method === "POST" && parts[2] === "preview") {
           const artifact = documents.check(artifactId);
@@ -578,7 +586,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       if (parts[0] === "proposals" && parts[1]) {
         const documents = manager.documents;
         if (method === "GET" && parts.length === 2) return sendJson(res, 200, await documents.proposalTexts(parts[1]));
-        if (method === "POST" && parts[2] === "apply") return sendJson(res, 200, await documents.applyProposal(parts[1]));
+        if (method === "POST" && parts[2] === "apply") return sendJson(res, 200, await documents.applyProposal(parts[1], documentAccess(req)));
         if (method === "GET" && (parts[2] === "office-pages" || parts[2] === "office-page")) {
           const side = url.searchParams.get("side") === "base" ? "base" : "proposed";
           const pages = await documents.proposalPages(parts[1], side);

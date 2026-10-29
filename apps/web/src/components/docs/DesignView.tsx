@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import type { Artifact, DesignPageMessage, DesignSaveState, DesignSelection } from "@workbench/contracts";
+import type { Artifact, DocumentAccess, DesignPageMessage, DesignSaveState, DesignSelection } from "@workbench/contracts";
 import { designToken } from "../../design.ts";
 
 export type DesignHandle = {
@@ -20,20 +20,23 @@ export const DesignView = forwardRef<
     artifact: Artifact;
     /** A fixed older revision, shown read only. */
     revision?: number | null;
+    readOnly?: boolean;
+    access?: DocumentAccess;
     onStatus(status: DesignStatus): void;
     onSelection(selection: DesignSelection | null): void;
     onCopied(artifactId: string): void;
     onExported(name: string, artifactId: string | null): void;
     onError(message: string): void;
   }
->(function DesignView({ artifact, revision = null, onStatus, onSelection, onCopied, onExported, onError }, ref) {
+>(function DesignView({ artifact, revision = null, readOnly: requestedReadOnly = false, access, onStatus, onSelection, onCopied, onExported, onError }, ref) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [generation, setGeneration] = useState(0);
   const opened = useRef<number | null>(null);
   const status = useRef<DesignSaveState>("idle");
   const own = useRef(new Set<number>());
   const waiters = useRef<((revision: number | null) => void)[]>([]);
-  const readOnly = revision !== null;
+  const readOnly = requestedReadOnly || revision !== null;
+  const latestAccess = useRef(access); latestAccess.current = access;
   const handlers = useRef({ onStatus, onSelection, onCopied, onExported, onError });
   handlers.current = { onStatus, onSelection, onCopied, onExported, onError };
 
@@ -49,7 +52,7 @@ export const DesignView = forwardRef<
       const post = (value: unknown) => frame.current?.contentWindow?.postMessage(value, location.origin);
       switch (message.type) {
         case "design:ready":
-          post({ type: "design:init", token: designToken() ?? "", artifactId: artifact.id, revision, readOnly, theme: theme() });
+          post({ type: "design:init", token: designToken() ?? "", artifactId: artifact.id, revision, readOnly, theme: theme(), access: latestAccess.current });
           break;
         case "design:opened":
           opened.current = message.revision;
@@ -86,6 +89,7 @@ export const DesignView = forwardRef<
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, [artifact.id, revision, readOnly]);
+  useEffect(() => { if (access) frame.current?.contentWindow?.postMessage({ type: "design:access", access }, location.origin); }, [access?.viewId, access?.writeToken]);
 
   // Follow the app's light/dark switch.
   useEffect(() => {
@@ -114,5 +118,5 @@ export const DesignView = forwardRef<
     },
   }));
 
-  return <iframe key={`${artifact.id}:${revision ?? "latest"}:${generation}`} ref={frame} className="design-frame" src={`/design/?a=${artifact.id}&g=${generation}`} title={`디자인 편집기 · ${artifact.name}`} />;
+  return <iframe key={`${artifact.id}:${revision ?? "latest"}:${readOnly}:${generation}`} ref={frame} className="design-frame" src={`/design/?a=${artifact.id}&g=${generation}`} title={`디자인 편집기 · ${artifact.name}`} />;
 });

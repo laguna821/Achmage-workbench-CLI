@@ -18,6 +18,7 @@ import {
   type ArtifactRevision,
   type ChangeLine,
   type FolderNoteTemplate,
+  type DocumentAccess,
   type ProjectEntryRequest,
   type ProjectEvent,
   type ProjectFacts,
@@ -764,9 +765,10 @@ export class Projects {
 
   // ── writing (one key or one line), with a way back ──────────────────────────────────────
 
-  private write(workId: string, summary: string, change: (text: string) => string, side: { unarchive?: boolean; rearchive?: boolean; baseRevision?: number | null } = {}): ProjectWrite {
+  private write(workId: string, summary: string, change: (text: string) => string, side: { unarchive?: boolean; rearchive?: boolean; baseRevision?: number | null; access?: DocumentAccess } = {}): ProjectWrite {
     const work = this.work(workId);
     const path = this.notePath(work);
+    this.manager.documents.registry.assertPath(path, side.access);
     const before = existsSync(path) ? readFileSync(path) : null;
     if (side.baseRevision !== undefined) {
       const artifact = this.noteArtifact(work, path);
@@ -797,20 +799,20 @@ export class Projects {
   }
 
   /** Write a property in its kind's form (`type`: as the panel knows it; else the kind this name has). */
-  setProperty(workId: string, key: string, values: string[] | null, type: PropertyType | null = null): ProjectWrite {
+  setProperty(workId: string, key: string, values: string[] | null, type: PropertyType | null = null, access?: DocumentAccess): ProjectWrite {
     const name = key.trim();
     if (!name || name === ID_KEY) throw new HttpError(400, "bad_key", "그 이름의 속성은 쓸 수 없습니다.");
-    if (name === STAGE_KEY) return this.setStage(workId, values?.[0] ?? null);
+    if (name === STAGE_KEY) return this.setStage(workId, values?.[0] ?? null, null, access);
     const kind = type ?? this.typeOf(name, values, this.work(workId));
     const clean = values === null ? null : normalizeValues(kind, values);
-    const result = this.write(workId, values === null ? `${name} 지움` : `${name}: ${clean!.join(", ") || "(빈 값)"}`, (text) => setFrontmatterKey(text, name, clean, keyStyle(kind)));
+    const result = this.write(workId, values === null ? `${name} 지움` : `${name}: ${clean!.join(", ") || "(빈 값)"}`, (text) => setFrontmatterKey(text, name, clean, keyStyle(kind)), { access });
     if (name === "tags") this.manager.updateWork(workId, { tags: (clean ?? []).map((tag) => tag.replace(/^#/, "")) });
     return result;
   }
 
   /** Set the stage; the archive stage puts the work in the archive, leaving it takes it out. */
   /** `via`: what set it when not the person's menu (a rule), said in the record. */
-  setStage(workId: string, name: string | null, via: string | null = null): ProjectWrite {
+  setStage(workId: string, name: string | null, via: string | null = null, access?: DocumentAccess): ProjectWrite {
     const work = this.work(workId);
     const stages = this.stages();
     const target = name ? stages.find((stage) => stage.name === name) : null;
@@ -826,7 +828,7 @@ export class Projects {
       this.quiet.delete(workId);
     }
     try {
-      const written = this.write(workId, `단계: ${previous ?? "값 없음"} → ${name ?? "값 없음"}`, (text) => setFrontmatterKey(text, STAGE_KEY, name ? [name] : null), { unarchive: archiving, rearchive: leaving });
+      const written = this.write(workId, `단계: ${previous ?? "값 없음"} → ${name ?? "값 없음"}`, (text) => setFrontmatterKey(text, STAGE_KEY, name ? [name] : null), { unarchive: archiving, rearchive: leaving, access });
       if (written.token) this.logEntry({ workId, section: "stage", text: `단계 ${previous ?? "값 없음"} → ${name ?? "값 없음"}${via ? ` (${via})` : ""}`, sessionId: null, itemId: null }, written.token);
       return written.token ? { ...written, page: this.page(workId) } : written;
     } catch (error) {
@@ -859,7 +861,7 @@ export class Projects {
     }
   }
 
-  addEntry(workId: string, request: ProjectEntryRequest): ProjectWrite {
+  addEntry(workId: string, request: ProjectEntryRequest, access?: DocumentAccess): ProjectWrite {
     const text = String(request.text ?? "").replace(/\s+/g, " ").trim().slice(0, 400);
     if (!text) throw new HttpError(400, "empty_entry", "남길 글이 없습니다.");
     const section = request.section === "question" ? "question" : "decision";
@@ -868,7 +870,7 @@ export class Projects {
     const stamp = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     const source = session ? ` — ${session.provider === "claude" ? "Claude" : "Codex"} · ${session.purpose || "세션"} ([원문](workbench://session/${session.id}${request.itemId ? `#${request.itemId}` : ""}))` : "";
     const line = `${stamp} ${text}${source}`;
-    const result = this.write(workId, section === "decision" ? `결정: ${text}` : `열린 질문: ${text}`, (current) => appendEntry(current, section, line));
+    const result = this.write(workId, section === "decision" ? `결정: ${text}` : `열린 질문: ${text}`, (current) => appendEntry(current, section, line), { access });
     this.logEntry({ workId, section, text, sessionId: session?.id ?? null, itemId: request.itemId ?? null }, result.token);
     return { ...result, page: this.page(workId) };
   }
@@ -883,19 +885,20 @@ export class Projects {
     if (write) write.logged = at;
   }
 
-  setQuestionDone(workId: string, line: number, done: boolean): ProjectWrite {
-    return this.write(workId, done ? "열린 질문 닫음" : "열린 질문 다시 엶", (text) => setEntryDone(text, line, done));
+  setQuestionDone(workId: string, line: number, done: boolean, access?: DocumentAccess): ProjectWrite {
+    return this.write(workId, done ? "열린 질문 닫음" : "열린 질문 다시 엶", (text) => setEntryDone(text, line, done), { access });
   }
 
   /** The body as edited in the app; refused when the note changed since the editor read it. */
-  setBodyText(workId: string, body: string, baseRevision: number | null): ProjectWrite {
-    return this.write(workId, "노트 본문 고침", (text) => setBody(text, body), { baseRevision });
+  setBodyText(workId: string, body: string, baseRevision: number | null, access?: DocumentAccess): ProjectWrite {
+    return this.write(workId, "노트 본문 고침", (text) => setBody(text, body), { baseRevision, access });
   }
 
   /** Put the note back as it was before a write, if nothing changed it since. */
-  undo(workId: string, token: string): ProjectPage {
+  undo(workId: string, token: string, access?: DocumentAccess): ProjectPage {
     const entry = this.writes.get(token);
     if (!entry || entry.workId !== workId) throw new HttpError(404, "write_not_found", "되돌릴 수 있는 기록이 없습니다.");
+    this.manager.documents.registry.assertPath(entry.path, access);
     const current = existsSync(entry.path) ? readFileSync(entry.path) : null;
     if (!current || !current.equals(entry.after)) throw new HttpError(409, "note_changed", "그 뒤에 노트가 바뀌어 되돌리지 않았습니다.");
     const work = this.work(workId);
@@ -924,12 +927,12 @@ export class Projects {
   }
 
   /** An engine changed the note: put back the revision before its change (as a person's write). */
-  revertEngineEdit(workId: string): ProjectWrite {
+  revertEngineEdit(workId: string, access?: DocumentAccess): ProjectWrite {
     const work = this.work(workId);
     const note = this.note(work);
     if (!note.artifactId || note.lastAuthor !== "engine" || !note.revision || note.revision < 2) throw new HttpError(409, "nothing_to_revert", "되돌릴 엔진의 변경이 없습니다.");
     const before = readFileSync(this.manager.documents.revisionPath(note.artifactId, note.revision - 1), "utf8");
-    return this.write(workId, `엔진이 바꾼 노트를 r${note.revision - 1}로 되돌림`, () => before);
+    return this.write(workId, `엔진이 바꾼 노트를 r${note.revision - 1}로 되돌림`, () => before, { access });
   }
 
   // ── what the engines are told ───────────────────────────────────────────────────────────

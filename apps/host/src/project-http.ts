@@ -4,6 +4,7 @@ import { HttpError } from "./errors.ts";
 import { readBody, sendJson } from "./http.ts";
 import type { Projects } from "./project.ts";
 import { sendImage } from "./pkm-http.ts";
+import { documentAccess } from "./document-registry.ts";
 
 // `/api/projects/*`: a work as a project note (project.ts). Mounted by http.ts behind the same token
 // check as every other API route.
@@ -76,11 +77,11 @@ export async function handleProject(projects: Projects, req: IncomingMessage, re
   if (method === "GET" && action === "events") return (sendJson(res, 200, projects.allEvents(workId)), true);
   if (method === "PUT" && action === "property") {
     const body = await readJson(req);
-    return (sendJson(res, 200, projects.setProperty(workId, String(body.key ?? ""), strings(body.values), kindOf(body.type))), true);
+    return (sendJson(res, 200, projects.setProperty(workId, String(body.key ?? ""), strings(body.values), kindOf(body.type), documentAccess(req))), true);
   }
   if (method === "PUT" && action === "stage") {
     const body = await readJson(req);
-    return (sendJson(res, 200, projects.setStage(workId, typeof body.stage === "string" && body.stage ? body.stage : null)), true);
+    return (sendJson(res, 200, projects.setStage(workId, typeof body.stage === "string" && body.stage ? body.stage : null, null, documentAccess(req))), true);
   }
   if (method === "POST" && action === "entries") {
     const body = await readJson(req);
@@ -93,23 +94,23 @@ export async function handleProject(projects: Projects, req: IncomingMessage, re
           text: String(body.text ?? ""),
           sessionId: typeof body.sessionId === "string" ? body.sessionId : null,
           itemId: typeof body.itemId === "string" ? body.itemId : null,
-        }),
+        }, documentAccess(req)),
       ),
       true
     );
   }
   if (method === "PUT" && action === "entries" && parts[2] !== undefined) {
     const body = await readJson(req);
-    return (sendJson(res, 200, projects.setQuestionDone(workId, Number(parts[2]), body.done === true)), true);
+    return (sendJson(res, 200, projects.setQuestionDone(workId, Number(parts[2]), body.done === true, documentAccess(req))), true);
   }
   if (method === "PUT" && action === "body") {
     const body = await readJson(req);
-    return (sendJson(res, 200, projects.setBodyText(workId, String(body.body ?? ""), typeof body.baseRevision === "number" ? body.baseRevision : null)), true);
+    return (sendJson(res, 200, projects.setBodyText(workId, String(body.body ?? ""), typeof body.baseRevision === "number" ? body.baseRevision : null, documentAccess(req))), true);
   }
-  if (method === "POST" && action === "revert") return (sendJson(res, 200, projects.revertEngineEdit(workId)), true);
+  if (method === "POST" && action === "revert") return (sendJson(res, 200, projects.revertEngineEdit(workId, documentAccess(req))), true);
   if (method === "POST" && action === "undo") {
     const body = await readJson(req);
-    return (sendJson(res, 200, projects.undo(workId, String(body.token ?? ""))), true);
+    return (sendJson(res, 200, projects.undo(workId, String(body.token ?? ""), documentAccess(req))), true);
   }
   return false;
 }

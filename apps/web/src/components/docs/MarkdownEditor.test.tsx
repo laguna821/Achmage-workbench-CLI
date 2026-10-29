@@ -3,8 +3,22 @@ import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { EditorView } from "@codemirror/view";
 import { MarkdownEditor } from "./MarkdownEditor.tsx";
+import { undo } from "@codemirror/commands";
 
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
+it("changes edit access without recreating the editor or losing its undo history and selection", () => {
+  vi.stubGlobal("requestAnimationFrame", () => 1); vi.stubGlobal("cancelAnimationFrame", () => {});
+  let editor: EditorView | null = null, value = "original";
+  const view = (readOnly: boolean) => <MarkdownEditor value={value} readOnly={readOnly} onChange={(text) => { value = text; }} onSelection={() => {}} onView={(next) => { editor = next; }} />;
+  const screen = render(view(false)); const original = editor!, dom = original.dom;
+  act(() => { original.dispatch({ changes: { from: 8, insert: " draft" }, selection: { anchor: 14 } }); });
+  screen.rerender(view(true));
+  expect(editor).toBe(original); expect(editor!.dom).toBe(dom);
+  expect(editor!.state.selection.main.anchor).toBe(14); expect(editor!.contentDOM.getAttribute("contenteditable")).toBe("false");
+  screen.rerender(view(false));
+  act(() => { expect(undo(editor!)).toBe(true); });
+  expect(value).toBe("original");
+});
 it("restores the actual CodeMirror selection and captures a last change before the tab becomes hidden", async () => {
   vi.useFakeTimers();
   vi.stubGlobal("requestAnimationFrame", () => 1);

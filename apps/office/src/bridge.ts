@@ -49,9 +49,10 @@ export class GatewayError extends Error {
 }
 
 export class Gateway {
-  private readonly token: string;
+  private token: string;
   constructor(token: string) {
     this.token = token;
+    listen((message) => { if (message.type === "office:grant") this.token = message.token; });
   }
 
   private async call(method: string, path: string, body?: BodyInit, headers: Record<string, string> = {}) {

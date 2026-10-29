@@ -24,7 +24,7 @@ document.documentElement.dataset.workbenchTheme = state.theme;
 async function openResult() {
   let kept = init.recover && !init.readOnly ? await recovery.get(artifactId).catch(() => undefined) : undefined;
   if (kept && kept.baseRevision > init.artifact.revision) kept = undefined;
-  if (!kept) await recovery.drop(artifactId).catch(() => undefined);
+  if (!kept && !init.readOnly) await recovery.drop(artifactId).catch(() => undefined);
   if (kept) {
     state.revision = kept.baseRevision;
     state.kept = true;

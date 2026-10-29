@@ -61,6 +61,10 @@ import type {
   UpdateWorkRequest,
   Work,
   Workspace,
+  DocumentAccess,
+  DocumentPresence,
+  DocumentViewInput,
+  DocumentRegistration,
   UpdateWorkspaceRequest,
 } from "@workbench/contracts";
 
@@ -90,16 +94,25 @@ export class ApiRequestError extends Error {
 
 export class Api {
   private readonly token: string;
-  constructor(token: string) {
+  private readonly documentAccess?: () => DocumentAccess;
+  constructor(token: string, access?: () => DocumentAccess) {
     this.token = token;
+    this.documentAccess = access;
+  }
+
+  forDocument = (access: () => DocumentAccess) => new Api(this.token, access);
+  private editorHeaders(): Record<string, string> {
+    const access = this.documentAccess?.();
+    return access ? { "x-workbench-view": access.viewId, "x-workbench-write": access.writeToken ?? "" } : {};
   }
 
   /** Any API call (feature clients such as pkm.ts build on it). */
-  async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  async request<T>(method: string, path: string, body?: unknown, options: Pick<RequestInit, "keepalive"> = {}): Promise<T> {
     const response = await fetch(path, {
       method,
-      headers: { authorization: `Bearer ${this.token}`, "content-type": "application/json" },
+      headers: { authorization: `Bearer ${this.token}`, "content-type": "application/json", ...this.editorHeaders() },
       body: body === undefined ? undefined : JSON.stringify(body),
+      ...options,
     });
     const json = (await response.json().catch(() => ({ code: "invalid_response", message: response.statusText }))) as T & ApiError;
     if (!response.ok) throw new ApiRequestError(response.status, json);
@@ -107,6 +120,9 @@ export class Api {
   }
 
   snapshot = () => this.request<Snapshot>("GET", "/api/snapshot");
+  documentViews = () => this.request<{ views: DocumentPresence[] }>("GET", "/api/document-views");
+  registerDocument = (artifactId: string, input: DocumentViewInput) => this.request<DocumentRegistration>("POST", `/api/artifacts/${artifactId}/views`, input);
+  closeDocument = (viewId: string, windowId: string) => this.request<{ ok: boolean }>("DELETE", `/api/document-views/${viewId}`, { windowId }, { keepalive: true });
   items = (sessionId: string) => this.request<{ seq: number; items: TranscriptItem[] }>("GET", `/api/sessions/${sessionId}/items`);
   createFolder = (name: string, parentId: string | null) => this.request<Folder>("POST", "/api/folders", { name, parentId });
   updateFolder = (folderId: string, patch: UpdateFolderRequest) => this.request<Folder>("PATCH", `/api/folders/${folderId}`, patch);

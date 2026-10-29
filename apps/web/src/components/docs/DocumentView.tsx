@@ -37,12 +37,13 @@ import { docPictureComponents } from "../ImageGen.tsx";
 import { useKeptPosition, type ModeProps } from "../../workmodes.ts";
 import { useDocImages } from "./DocImages.tsx";
 import type { TabUiState } from "../../panes.ts";
+import { useDocumentSession } from "../../document-session.ts";
+import { clearRecoveredDraft, keepDraft, newestDraft } from "../../document-drafts.ts";
 
 /** Save operations only; "unsaved" is derived from the text, never stored (no stale overwrite). */
 type SaveState = "idle" | "saving" | "failed" | "conflict";
 type Conflict = { code: string; message: string } | null;
 
-const DRAFT_KEY = (artifactId: string) => `workbench.docDraft.${artifactId}`;
 const TEXT_FORMATS = new Set(["markdown", "text", "html", "hwpx", "hwp"]);
 
 export type DocSend = (target: Session | null, text: string, refs: DocRef[], handoffTo: Session | null, create: CreateTarget | null, attachments: Attachment[]) => Promise<boolean>;
@@ -52,7 +53,7 @@ export type DocSend = (target: Session | null, text: string, refs: DocRef[], han
  * revision; AI changes arrive as proposals bound to the revision they were made from.
  */
 export default function DocumentView({
-  api,
+  api: rootApi,
   state,
   artifactId,
   focusProposalId,
@@ -97,6 +98,12 @@ export default function DocumentView({
 }) {
   const { lookOf } = useAppearance();
   const artifact = state.artifacts[artifactId] as Artifact | undefined;
+  const canEditFormat = Boolean(artifact && artifact.format !== "hwp" && artifact.format !== "pdf");
+  const lease = useDocumentSession(rootApi, artifact ? artifactId : null, session?.id ?? null, canEditFormat);
+  const api = lease.api;
+  const everWriter = useRef(false);
+  if (lease.canWrite) everWriter.current = true;
+  const recoveredDraft = useRef<ReturnType<typeof newestDraft>>(null);
   // Pasted or dropped pictures: a link in Markdown (R2 or the work folder), refused in the Hangul text view.
   const docImages = useDocImages(api, artifact, onToast);
   const [drawer, setDrawer] = useState<DrawerMode>("closed");
@@ -168,33 +175,43 @@ export default function DocumentView({
   const previewComponents = useMemo(() => obsidianComponents({ ...pictures, ...docImages.components }), [pictures, docImages.components]);
 
   // Load the latest revision; recover a draft the app kept if the window closed before saving.
-  const load = useCallback(async () => {
+  const load = useCallback(async (recoverDraft = true) => {
     if (!textual) return;
     const result = await api.artifactText(artifactId);
     setBase({ revision: result.revision, text: result.text });
-    const draft = JSON.parse(localStorage.getItem(DRAFT_KEY(artifactId)) ?? "null") as { baseRevision: number; text: string } | null;
-    if (draft && draft.baseRevision === result.revision && draft.text !== result.text) {
+    const draft = recoverDraft && lease.access().writeToken ? newestDraft(artifactId) : null;
+    if (draft && draft.text !== result.text) {
+      recoveredDraft.current = draft;
       setText(draft.text);
+      if (draft.baseRevision !== result.revision) {
+        const old = await api.artifactText(artifactId, draft.baseRevision).catch(() => null);
+        setBase({ revision: draft.baseRevision, text: old?.text ?? result.text });
+        setSaveState("conflict");
+        setConflict({ code: "revision_conflict", message: `r${draft.baseRevision}의 저장되지 않은 편집을 복원했습니다. 현재 판 r${result.revision}과 비교해 주세요.` });
+        return;
+      }
       onToast("저장되지 않았던 편집을 되살렸습니다.");
     } else {
       setText(result.text);
     }
     setSaveState("idle");
     setConflict(null);
-  }, [api, artifactId, textual, onToast]);
+  }, [api, artifactId, textual, onToast, lease.access]);
 
   useEffect(() => {
-    void load().catch((error: Error) => onToast(error.message));
-  }, [load, onToast]);
+    if (lease.ready) void load().catch((error: Error) => onToast(error.message));
+  }, [load, onToast, lease.ready]);
 
   // Keep a local copy of unsaved edits.
   useEffect(() => {
-    if (!base) return;
-    if (text !== base.text) localStorage.setItem(DRAFT_KEY(artifactId), JSON.stringify({ baseRevision: base.revision, text }));
-    else localStorage.removeItem(DRAFT_KEY(artifactId));
-  }, [artifactId, base, text]);
+    if (!base || !everWriter.current) return;
+    keepDraft(artifactId, lease.viewId, text !== base.text ? { baseRevision: base.revision, text, at: Date.now() } : null);
+  }, [artifactId, base, text, lease.viewId]);
 
   const save = useCallback(async (): Promise<number | null> => {
+    if (!lease.access().writeToken) {
+      return (base && text !== base.text) || designStatus.state === "dirty" || designStatus.state === "saving" || officeStatus.dirty ? null : (base?.revision ?? artifact?.revision ?? null);
+    }
     // The design and Word editors save by themselves; make sure the last edits are in before anything is sent.
     if (design) return designRef.current ? designRef.current.flush() : (artifact?.revision ?? null);
     if (officeEditing) return officeRef.current ? officeRef.current.flush() : (artifact?.revision ?? null);
@@ -210,6 +227,7 @@ export default function DocumentView({
         setBase({ revision: saved.revision, text });
         setSaveState("idle");
         setConflict(null);
+        clearRecoveredDraft(recoveredDraft.current); recoveredDraft.current = null;
         return saved.revision;
       })
       .catch((error: unknown) => {
@@ -231,7 +249,7 @@ export default function DocumentView({
       });
     saving.current = run;
     return run;
-  }, [api, artifactId, artifact?.revision, base, text, onToast, design, officeEditing]);
+  }, [api, artifactId, artifact?.revision, base, text, onToast, design, officeEditing, lease.access, designStatus.state, officeStatus.dirty]);
 
   // Switching/closing must wait for a confirmed save, including text and design editors.
   useEffect(() => {
@@ -241,7 +259,7 @@ export default function DocumentView({
         const cursor = editorView.state.selection.main;
         onUiState?.({ cursor: { anchor: cursor.anchor, head: cursor.head }, scroll: { top: editorView.scrollDOM.scrollTop, left: editorView.scrollDOM.scrollLeft } });
       }
-      if (officeEditing) return officeRef.current?.leave();
+      if (officeEditing && officeRef.current) return officeRef.current.leave();
       const submittedText = saving.current ? savingText.current : text;
       if (await save() === null) throw new Error("문서를 저장하지 못해 이동하지 않았습니다. 현재 편집 내용을 확인해 주세요.");
       if (!design && latestText.current !== submittedText) throw new Error("저장하는 동안 편집 내용이 바뀌어 이동을 보류했습니다. 다시 이동해 주세요.");
@@ -251,19 +269,21 @@ export default function DocumentView({
 
   // Autosave shortly after typing stops.
   useEffect(() => {
-    if (!base || text === base.text || saveState === "conflict" || saveState === "saving") return;
+    if (!lease.canWrite || !base || text === base.text || saveState === "conflict" || saveState === "saving") return;
     window.clearTimeout(timer.current);
     // After a failed save, retry slowly instead of hammering the gateway.
     timer.current = window.setTimeout(() => void save(), saveState === "failed" ? 10_000 : 1200);
     return () => window.clearTimeout(timer.current);
-  }, [text, base, saveState, save]);
+  }, [text, base, saveState, save, lease.canWrite]);
   const unsaved = Boolean(base && text !== base.text);
+  const dirty = unsaved || officeStatus.dirty || designStatus.state === "dirty" || designStatus.state === "saving";
+  useEffect(() => { lease.report(dirty, base?.revision ?? officeStatus.revision ?? designStatus.revision ?? artifact?.revision); }, [dirty, base?.revision, officeStatus.revision, designStatus.revision, artifact?.revision, lease.report]);
 
   // A new revision from elsewhere (an applied proposal, a revert): reload when nothing is unsaved here.
   useEffect(() => {
     if (!artifact || !base || artifact.revision <= base.revision || saving.current) return;
     if (ownRevisions.current.has(artifact.revision)) return;
-    if (text === base.text) void load();
+    if (text === base.text) void load(false);
     else {
       setConflict({ code: "revision_conflict", message: `다른 곳에서 r${artifact.revision}이 생겼습니다. 내 편집은 그대로 두었습니다.` });
       setSaveState("conflict");
@@ -420,6 +440,7 @@ export default function DocumentView({
             : "충돌";
 
   const body = (() => {
+    if (!lease.ready) return <div className="column empty-hint">문서를 여는 중…</div>;
     if (compare) {
       return (
         <div className="doc-compare">
@@ -508,13 +529,15 @@ export default function DocumentView({
         </div>
       );
     }
-    if (officeEditing) return null;
+    if (officeEditing && everWriter.current) return null;
     if (office) return <OfficeView api={api} artifact={artifact} revision={artifact.revision} mode={mode === "pages" ? "pages" : "text"} />;
     if (design) {
       return (
         <DesignView
           ref={designRef}
           artifact={artifact}
+          readOnly={!everWriter.current}
+          access={lease.access()}
           onStatus={setDesignStatus}
           onSelection={(picked) => setSelection(picked ? { from: 0, to: 0, text: picked.text, label: picked.label, pageId: picked.pageId, objectIds: picked.objectIds } : null)}
           onCopied={(created) => {
@@ -560,14 +583,14 @@ export default function DocumentView({
               ? "HWP는 읽기 전용입니다. 고치려면 HWPX로 만든 뒤 여세요."
               : "한글 문서의 글 보기입니다. 문단·표 칸의 글자를 바꾸면 원래 서식을 유지한 채 HWPX에 반영됩니다. 문단을 새로 만들거나 지우는 편집은 반영되지 않고 원본을 유지합니다."}
           </div>
-          <MarkdownEditor value={text} readOnly={artifact.format === "hwp"} onChange={setText} onSelection={setSelection} onBlur={() => void save()} images={docImages.handling} position={uiState} onPosition={onUiState} />
+          <MarkdownEditor value={text} readOnly={!lease.canWrite || artifact.format === "hwp"} onChange={setText} onSelection={setSelection} onBlur={() => void save()} images={docImages.handling} position={uiState} onPosition={onUiState} />
         </div>
       );
     }
     if (artifact.format === "html" && mode === "render") {
       return <HtmlView api={api} artifactId={artifactId} revision={base.revision} />;
     }
-    const editor = <MarkdownEditor value={text} onChange={setText} onSelection={setSelection} onBlur={() => void save()} extensions={drawExtensions} onView={setEditorView} images={docImages.handling} position={uiState} onPosition={onUiState} />;
+    const editor = <MarkdownEditor value={text} readOnly={!lease.canWrite} onChange={setText} onSelection={setSelection} onBlur={() => void save()} extensions={drawExtensions} onView={setEditorView} images={docImages.handling} position={uiState} onPosition={onUiState} />;
     if (artifact.format === "markdown" && mode === "preview") {
       return (
         <div className="doc-preview">
@@ -596,7 +619,7 @@ export default function DocumentView({
   const place = (input: ReactNode) => (modes?.slot === undefined ? input : modes.slot ? createPortal(input, modes.slot) : null);
 
   return (
-    <main className="document-view">
+    <main className="document-view" data-editor-view={lease.viewId} data-editor-access={lease.canWrite ? "write" : "read"}>
       {tabs}
       <header className="doc-header">
         <button type="button" className="ghost-button" onClick={() => void save().then((revision) => { if (revision !== null) onBack(); })}>
@@ -765,8 +788,9 @@ export default function DocumentView({
               type="button"
               className="button small"
               onClick={() => {
-                localStorage.setItem(`${DRAFT_KEY(artifactId)}.kept.${Date.now()}`, text);
-                void load();
+                localStorage.setItem(`workbench.docDraft.${artifactId}.kept.${Date.now()}`, text);
+                clearRecoveredDraft(recoveredDraft.current); recoveredDraft.current = null;
+                void load(false);
               }}
             >
               최신 판 받기(내 편집은 보관)
@@ -783,6 +807,7 @@ export default function DocumentView({
                   setBase({ revision: saved.revision, text });
                   setConflict(null);
                   setSaveState("idle");
+                  clearRecoveredDraft(recoveredDraft.current); recoveredDraft.current = null;
                   onToast(`내 편집을 새 판 r${saved.revision}으로 저장했습니다. 이전 판은 기록에 남아 있습니다.`);
                 } catch (error) {
                   onToast(error instanceof Error ? error.message : String(error));
@@ -868,13 +893,18 @@ export default function DocumentView({
         </div>
       ) : null}
 
-      <div className="doc-body" ref={bodyRef}>
-        {officeEditing ? (
-          <OfficeEditor ref={officeRef} api={api} artifact={artifact} hidden={Boolean(compare || viewing)} onStatus={setOfficeStatus} onNotice={onToast} />
+      {canEditFormat && !lease.canWrite ? <div className="doc-access notice" role="status">
+        {lease.error ?? (!lease.ready ? "문서 편집 권한을 확인하는 중…" : lease.registration?.writer ? "다른 탭이나 창에서 편집 중입니다. 이곳에서는 읽기만 할 수 있습니다." : "이 문서를 읽기 전용으로 보고 있습니다.")}
+        {dirty ? " 저장되지 않은 입력은 이 탭에 유지했습니다." : ""}
+        <button type="button" className="button small" onClick={() => void lease.claim()}>편집 권한 받기</button>
+      </div> : null}
+      <div className="doc-body" ref={bodyRef} inert={!lease.canWrite && everWriter.current && Boolean(design || officeEditing)}>
+        {officeEditing && everWriter.current ? (
+          <OfficeEditor ref={officeRef} api={api} artifact={artifact} access={lease.access()} hidden={Boolean(compare || viewing)} onStatus={setOfficeStatus} onNotice={onToast} />
         ) : null}
         {body}
       </div>
-      {markdownDoc ? (
+      {markdownDoc && lease.canWrite ? (
         <InlineDraw
           api={api}
           state={state}

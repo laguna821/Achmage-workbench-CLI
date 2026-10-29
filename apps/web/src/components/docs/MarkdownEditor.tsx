@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { EditorState, type Extension } from "@codemirror/state";
+import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { EditorView, keymap, placeholder as placeholderExtension } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
@@ -79,6 +79,7 @@ export function MarkdownEditor({
 }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
+  const access = useRef(new Compartment());
   const callbacks = useRef({ onChange, onSelection, onBlur, onView, images, onPosition });
   callbacks.current = { onChange, onSelection, onBlur, onView, images, onPosition };
   const savedPosition = useRef(position);
@@ -113,7 +114,7 @@ export function MarkdownEditor({
           EditorView.lineWrapping,
           theme,
           placeholderExtension("내용을 입력하세요"),
-          EditorState.readOnly.of(Boolean(readOnly)),
+          access.current.of([EditorState.readOnly.of(Boolean(readOnly)), EditorView.editable.of(!readOnly)]),
           imagePaste(() => callbacks.current.images ?? null),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) callbacks.current.onChange(update.state.doc.toString());
@@ -145,9 +146,11 @@ export function MarkdownEditor({
       editor.destroy();
       view.current = null;
     };
-    // Recreated only when switching between editable and read-only views.
+    // Access changes reconfigure this instance, keeping the document, undo history and selection.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [readOnly]);
+  }, []);
+
+  useEffect(() => { view.current?.dispatch({ effects: access.current.reconfigure([EditorState.readOnly.of(Boolean(readOnly)), EditorView.editable.of(!readOnly)]) }); }, [readOnly]);
 
   // Outside changes (a new revision loaded) replace the text without resetting history position.
   useEffect(() => {
