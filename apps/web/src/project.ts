@@ -39,6 +39,31 @@ export function eventDays(events: ProjectEvent[], now = Date.now()): { label: st
   });
 }
 
+const SEEN_KEY = "workbench.projectSeen";
+
+/** When the person last left this project's page (null: never), kept on this device. */
+export function projectSeenAt(workId: string): number | null {
+  try {
+    const value = (JSON.parse(localStorage.getItem(SEEN_KEY) ?? "{}") as Record<string, number>)[workId];
+    return typeof value === "number" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Remember leaving a project's page now; the next visit marks what came after ("지난번 본 뒤"). */
+export function markProjectSeen(workId: string, at = Date.now()) {
+  try {
+    const seen = JSON.parse(localStorage.getItem(SEEN_KEY) ?? "{}") as Record<string, number>;
+    seen[workId] = at;
+    // The 300 most recent are enough.
+    const kept = Object.entries(seen).sort((a, b) => b[1] - a[1]).slice(0, 300);
+    localStorage.setItem(SEEN_KEY, JSON.stringify(Object.fromEntries(kept)));
+  } catch {
+    // Storage full or off: the page just shows no "지난번 본 뒤".
+  }
+}
+
 /**
  * The session "이어서" opens: one waiting for approval, else one with an error, else an unread
  * answer, else the one last open — newest first within each.

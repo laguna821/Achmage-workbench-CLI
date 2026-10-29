@@ -4,7 +4,7 @@ import type { Api } from "../../api.ts";
 import { ago, statusText } from "../../format.ts";
 import { ObsidianMarkdown, obsidianComponents, obsidianUrlTransform } from "../../markdown/obsidian.tsx";
 import type { Components } from "react-markdown";
-import { asLink, continueSession, duration, eventDays, linkLabel, sessionOrder, stageOf } from "../../project.ts";
+import { asLink, continueSession, duration, eventDays, linkLabel, markProjectSeen, projectSeenAt, sessionOrder, stageOf } from "../../project.ts";
 import { neighbours } from "../../graph.ts";
 import type { State } from "../../state.ts";
 import type { MenuEntry, MenuRequest } from "../ContextMenu.tsx";
@@ -70,6 +70,17 @@ export function ProjectView({
   const work: Work | undefined = state.works[workId];
   const [page, setPage] = useState<ProjectPage | null>(null);
   const [allEvents, setAllEvents] = useState<ProjectEvent[] | null>(null);
+  // "지난번 본 뒤": what came after the person last left this page (on this device).
+  const [seenBefore, setSeenBefore] = useState<number | null>(null);
+  useEffect(() => {
+    setSeenBefore(projectSeenAt(workId));
+    const leave = () => markProjectSeen(workId);
+    window.addEventListener("beforeunload", leave);
+    return () => {
+      window.removeEventListener("beforeunload", leave);
+      leave();
+    };
+  }, [workId]);
   const [details, setDetails] = useState(false);
   const [adding, setAdding] = useState<null | "tag" | "related" | "property" | "decision" | "question">(null);
   const [newKey, setNewKey] = useState("");
@@ -451,6 +462,11 @@ export function ProjectView({
           <section className="project-section" aria-label="기록">
             <div className="project-section-head">
               <h2>{allEvents ? "전체 기록" : "이번 주 기록"}</h2>
+              {seenBefore && events.some((event) => event.at > seenBefore) ? (
+                <span className="project-fresh-count" title={`${new Date(seenBefore).toLocaleString("ko-KR")}에 본 뒤`}>
+                  지난번 본 뒤 {events.filter((event) => event.at > seenBefore).length}
+                </span>
+              ) : null}
               <button
                 type="button"
                 className="link small"
@@ -468,7 +484,7 @@ export function ProjectView({
                   <div className="project-day-label">{day.label}</div>
                   <ul className="project-events">
                     {day.events.map((event) => (
-                      <li key={event.id} className={`project-event kind-${event.kind}`}>
+                      <li key={event.id} className={`project-event kind-${event.kind}${seenBefore && event.at > seenBefore ? " fresh" : ""}`}>
                         <button type="button" className="project-event-main" onClick={() => openEvent(event)}>
                           <span className="project-event-time">{new Date(event.at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
                           <span className={`project-event-by by-${event.by ?? "none"}`}>{BY_LABEL[event.by ?? ""] ?? ""}</span>
@@ -482,6 +498,16 @@ export function ProjectView({
                             onClick={() => run(api.addProjectEntry(workId, { section: "decision", text: event.text, sessionId: event.sessionId, itemId: event.itemId ?? null }))}
                           >
                             결정으로
+                          </button>
+                        ) : null}
+                        {event.kind === "link" ? (
+                          <button
+                            type="button"
+                            className="project-event-keep"
+                            title="이 줄을 열린 질문으로 남기기"
+                            onClick={() => run(api.addProjectEntry(workId, { section: "question", text: event.text, sessionId: event.sessionId, itemId: event.itemId ?? null }))}
+                          >
+                            질문으로
                           </button>
                         ) : null}
                       </li>

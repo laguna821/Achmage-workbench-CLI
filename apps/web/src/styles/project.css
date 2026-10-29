@@ -419,6 +419,20 @@ button.project-fact {
   color: var(--muted);
 }
 
+/* "지난번 본 뒤": a thin mark before what came after the last visit, and the count by the heading. */
+.project-event.fresh {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.project-fresh-count {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .project-event-keep {
   flex: none;
   visibility: hidden;

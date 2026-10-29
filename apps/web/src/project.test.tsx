@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ProjectEvent, Session, Work } from "@workbench/contracts";
-import { asLink, continueSession, duration, eventDays, linkLabel, sessionOrder, stageOf } from "./project.ts";
+import { asLink, continueSession, duration, eventDays, linkLabel, markProjectSeen, projectSeenAt, sessionOrder, stageOf } from "./project.ts";
 
 const work = { id: "w", activeSessionId: "s-old" } as Work;
 const session = (id: string, patch: Partial<Session> = {}) => ({ id, workId: "w", status: "idle", updatedAt: 1, archivedAt: null, lastError: null, unread: false, previewAt: null, seenAt: null, ...patch }) as Session;
@@ -42,5 +42,27 @@ describe("project page rules", () => {
     expect(asLink("https://x.org")).toBe("https://x.org");
     expect(linkLabel("[[노트|별칭]]")).toBe("별칭");
     expect(linkLabel("[[가을 특강]]")).toBe("가을 특강");
+  });
+});
+
+describe("지난번 본 뒤", () => {
+  it("remembers when the person left each project's page, the 300 most recent", () => {
+    const kept = new Map<string, string>();
+    const storage = { getItem: (key: string) => kept.get(key) ?? null, setItem: (key: string, value: string) => void kept.set(key, value) };
+    const before = (globalThis as { localStorage?: unknown }).localStorage;
+    Object.defineProperty(globalThis, "localStorage", { value: storage, configurable: true });
+    try {
+      expect(projectSeenAt("w1")).toBeNull();
+      markProjectSeen("w1", 1000);
+      markProjectSeen("w2", 2000);
+      expect(projectSeenAt("w1")).toBe(1000);
+      for (let index = 0; index < 310; index += 1) markProjectSeen(`x${index}`, 3000 + index);
+      expect(projectSeenAt("w2")).toBeNull();
+      expect(projectSeenAt("x309")).toBe(3309);
+      kept.set("workbench.projectSeen", "{not json");
+      expect(projectSeenAt("x309")).toBeNull();
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", { value: before, configurable: true });
+    }
   });
 });
