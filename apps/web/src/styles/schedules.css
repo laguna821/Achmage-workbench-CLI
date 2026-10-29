@@ -142,7 +142,7 @@
 
 .scheduled-tag {
   padding: 0 6px;
-  border-radius: var(--r-full);
+  border-radius: var(--r-xs);
   background: var(--surface-muted);
   color: var(--muted);
   font-size: var(--fs-micro);

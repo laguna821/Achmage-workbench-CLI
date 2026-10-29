@@ -98,7 +98,7 @@
 
 .home-count {
   margin-left: 4px;
-  color: var(--faint);
+  color: var(--muted);
   font-weight: 500;
 }
 
@@ -258,7 +258,7 @@
 }
 
 .work-card-meta {
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .work-chips {
@@ -422,7 +422,7 @@
 
 .board-card-age {
   flex: 0 0 auto;
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .board-card-title {
@@ -454,7 +454,7 @@
 
 .board-empty {
   padding: 10px 6px;
-  color: var(--faint);
+  color: var(--muted);
   font-size: var(--fs-micro);
 }
 
@@ -532,7 +532,7 @@ button.flow-label:hover .flow-label-title {
 .flow-label-age {
   flex: 0 0 auto;
   font-size: var(--fs-micro);
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .flow-track {

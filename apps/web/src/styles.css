@@ -2078,7 +2078,7 @@ kbd {
   align-items: center;
   justify-content: space-between;
   margin-top: var(--space-2);
-  gap: 4px var(--space-2);
+  gap: 4px 6px;
 }
 
 .composer-right {
@@ -2089,7 +2089,7 @@ kbd {
 
 /* The input's controls share one height and one quiet weight, and fit on one line. */
 .composer-bar .plain-select {
-  padding: 0 6px;
+  padding: 0 5px;
   gap: 3px;
 }
 
@@ -3080,7 +3080,7 @@ kbd {
   gap: 8px;
   min-width: 0;
   font-size: var(--fs-micro);
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .session-card-new {
@@ -4109,7 +4109,7 @@ kbd {
 .start-credit {
   margin-top: 18px;
   font-size: var(--fs-micro);
-  color: var(--faint);
+  color: var(--muted);
   text-align: center;
 }
 
@@ -4635,7 +4635,7 @@ kbd {
 .integration-note {
   justify-self: end;
   font-size: var(--fs-micro);
-  color: var(--faint);
+  color: var(--muted);
 }
 
 
@@ -5515,8 +5515,8 @@ kbd {
 @keyframes hit-flash {
   0%,
   35% {
-    box-shadow: 0 0 0 3px color-mix(in srgb, #facc15 75%, transparent);
-    background: color-mix(in srgb, #facc15 14%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber) 70%, transparent);
+    background: color-mix(in srgb, var(--amber) 14%, transparent);
   }
   100% {
     box-shadow: 0 0 0 3px transparent;
@@ -5918,7 +5918,7 @@ kbd {
 
 .usage-none {
   min-height: 16px;
-  color: var(--faint);
+  color: var(--muted);
 }
 
 /* ── Home ────────────────────────────────────────────────────────────── */
@@ -6112,7 +6112,7 @@ kbd {
 }
 
 .home-work-meta {
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .now-memory {
@@ -6406,7 +6406,7 @@ kbd {
   margin-left: 4px;
   padding: 1px 7px;
   border: 1px solid var(--line);
-  border-radius: var(--r-full);
+  border-radius: var(--r-sm);
   background: var(--surface);
   color: var(--muted);
   font: inherit;

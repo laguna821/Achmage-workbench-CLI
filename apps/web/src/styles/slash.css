@@ -21,7 +21,7 @@
   flex: 0 0 auto;
   font-family: var(--mono, ui-monospace, monospace);
   font-size: var(--fs-micro);
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .slash-desc {
@@ -37,7 +37,7 @@
 .slash-kind {
   flex: 0 0 auto;
   padding: 0 6px;
-  border-radius: var(--r-full);
+  border-radius: var(--r-xs);
   font-size: var(--fs-micro);
   color: var(--muted);
   background: var(--surface-muted);

@@ -31,7 +31,7 @@
 
 .attach-chip .attach-size {
   flex: none;
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .attach-chip.failed {

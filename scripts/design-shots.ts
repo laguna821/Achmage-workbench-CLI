@@ -10,7 +10,8 @@
 // page (clicks and key events), the same scripts for both browsers, so the two sets match.
 //
 // Usage: node scripts/design-shots.ts [outDir] [--chromium-only|--webkit-only] [--only=a,b] [--themes=light,dark]
-// Writes <browser>-<theme>-<screen>.png and results.json into outDir.
+// Writes <browser>-<theme>-<screen>.png and results.json into outDir. DESIGN_SHOTS_WEB_DIR=<dist>
+// takes the screens of another UI build (for before/after pairs).
 
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -47,7 +48,8 @@ const child = spawn(process.execPath, ["apps/host/src/main.ts"], {
   env: {
     ...process.env,
     WORKBENCH_DATA_DIR: dataDir,
-    WORKBENCH_WEB_DIR: "apps/web/dist",
+    // Another build of the UI to compare against (a "before" pass), or this checkout's.
+    WORKBENCH_WEB_DIR: process.env.DESIGN_SHOTS_WEB_DIR ?? "apps/web/dist",
     WORKBENCH_HOST_LABEL: "노트북",
     WORKBENCH_CODEX_BIN: resolve("scripts/fixtures/fake-codex.mjs"),
     WORKBENCH_CLAUDE_BIN: resolve("scripts/fixtures/fake-claude.mjs"),
@@ -186,7 +188,8 @@ check(
 
 // ── screens ───────────────────────────────────────────────────────────────────────────────────
 // Steps run inside the page (both browsers): `js` acts, `wait` is an expression that must turn true.
-type Step = { js?: string; wait?: string; prefs?: Record<string, unknown>; reload?: boolean; pause?: number };
+// `probe` is an expression whose value is printed (Chromium pass), for measuring a layout.
+type Step = { js?: string; wait?: string; prefs?: Record<string, unknown>; reload?: boolean; pause?: number; probe?: string };
 type Screen = { name: string; steps: Step[]; settle?: number; cleanup?: Step[]; viewport?: { width: number; height: number } };
 
 const PRELUDE = `
@@ -234,6 +237,7 @@ const PRELUDE = `
 `;
 
 const row = (id: string) => `.sidebar [data-row-id="${id}"]`;
+// A session row, or the row of a work with one session (the tree shows no session row for it).
 const openSession = (id: string): Step[] => [{ js: `__wb.click('${row(id)}')`, wait: `__wb.has('.work-view .transcript')` }];
 const SCREENS: Screen[] = [
   { name: "01-home", steps: [{ js: "__wb.click('.topbar .brand')", wait: "__wb.has('.start-view .composer-input')" }, { js: "__wb.blur()" }], settle: 1400 },
@@ -354,6 +358,43 @@ const SCREENS: Screen[] = [
     cleanup: [{ js: "__wb.key('Escape'); document.querySelector('.modal-backdrop') && document.querySelector('.modal-backdrop').dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))", wait: "!__wb.has('.schedule-dialog')" }],
   },
   {
+    name: "21-doc-compare",
+    steps: [
+      ...openSession(codex.id),
+      { js: "__wb.click('.docs-button')", wait: "__wb.has('.docs-menu .menu-item', '강의안.md')" },
+      { js: "__wb.click('.docs-menu .menu-item', '강의안.md')", wait: "__wb.has('.document-view .doc-proposal')" },
+      { js: "__wb.click('.doc-proposal .button', '미리보기')", wait: "__wb.has('.doc-compare')" },
+    ],
+    settle: 900,
+    cleanup: [{ js: "__wb.click('.doc-compare-actions .button', '닫기')", wait: "!__wb.has('.doc-compare')" }],
+  },
+  {
+    name: "22-split",
+    steps: [
+      ...openSession(codex.id),
+      { js: "__wb.click('.docs-button')", wait: "__wb.has('.docs-menu .menu-item', '강의안.md')" },
+      { js: "__wb.click('.docs-menu .menu-item', '강의안.md')", wait: "__wb.has('.work-mode-bar')" },
+      { js: "__wb.click('.work-mode-bar button', '나란히')", wait: "__wb.has('.split-host.split')" },
+    ],
+    settle: 1200,
+    cleanup: [{ js: "__wb.click('.work-mode-bar button', '대화')", wait: "!__wb.has('.split-host.split')" }],
+  },
+  {
+    name: "23-answer-codex",
+    steps: [...openSession(meeting.id), { wait: "__wb.has('.turn-assistant .markdown table')" }, { js: "__wb.blur(); const scroller = document.querySelector('.work-view .transcript'); const answer = document.querySelector('.turn-assistant .markdown'); scroller.scrollTop = answer.offsetTop - 80;" }],
+    settle: 800,
+  },
+  {
+    name: "24-answer-claude",
+    steps: [
+      ...openSession(review.id),
+      { wait: "__wb.has('.turn-assistant .markdown table')" },
+      { js: "__wb.blur(); const scroller = document.querySelector('.work-view .transcript'); const answer = document.querySelector('.turn-assistant .markdown'); scroller.scrollTop = answer.offsetTop - 80;" },
+      { probe: "(() => { const w = (s) => [...document.querySelectorAll(s)].map((e) => Math.round(e.getBoundingClientRect().width)); return { bar: w('.work-view .composer-bar'), left: w('.work-view .composer-left'), right: w('.work-view .composer-right'), leftKids: [...document.querySelectorAll('.work-view .composer-left > *')].map((e) => e.className.split(' ')[0] + ':' + Math.round(e.getBoundingClientRect().width)), rightKids: [...document.querySelectorAll('.work-view .composer-right > *')].map((e) => e.className.split(' ')[0] + ':' + Math.round(e.getBoundingClientRect().width)) }; })()" },
+    ],
+    settle: 800,
+  },
+  {
     name: "20-switcher",
     steps: [...openSession(codex.id), { js: "__wb.blur(); __wb.key('Tab', { ctrlKey: true })", wait: "__wb.has('.switcher')" }],
     settle: 500,
@@ -382,6 +423,7 @@ async function chromiumPass() {
         if (entry.js) await run(entry.js);
         if (entry.wait) await wait(entry.wait);
         if (entry.pause) await page.waitForTimeout(entry.pause);
+        if (entry.probe) console.log(`PROBE ${theme}: ${JSON.stringify(await page.evaluate(`(() => { ${PRELUDE}; return (${entry.probe}); })()`))}`);
       };
       await page.goto(url);
       await wait(appReady, 20_000);

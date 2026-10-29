@@ -63,7 +63,7 @@
   flex: none;
   min-width: 56px;
   padding: 0 6px;
-  border-radius: var(--r-full);
+  border-radius: var(--r-xs);
   text-align: center;
   font-size: var(--fs-micro);
   background: var(--surface-muted);
@@ -71,7 +71,7 @@
 }
 
 .worktree-status.added {
-  color: #1a7f37;
+  color: var(--ok);
 }
 
 .worktree-status.deleted {
@@ -100,8 +100,8 @@
 }
 
 .worktree-diff .diff-add {
-  color: #1a7f37;
-  background: color-mix(in srgb, #1a7f37 8%, transparent);
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
 }
 
 .worktree-diff .diff-del {
