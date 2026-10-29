@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { PROVIDER_LABEL, type ProjectEvent, type ProjectPage, type ProjectWrite, type Session, type Work } from "@workbench/contracts";
+import { PROVIDER_LABEL, type ProjectEvent, type ProjectPage, type ProjectSummary, type ProjectWrite, type Session, type Work } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
 import { ago, statusText } from "../../format.ts";
 import { ObsidianMarkdown, obsidianComponents, obsidianUrlTransform } from "../../markdown/obsidian.tsx";
 import type { Components } from "react-markdown";
 import { asLink, continueSession, duration, eventDays, linkLabel, sessionOrder, stageOf } from "../../project.ts";
+import { neighbours } from "../../graph.ts";
 import type { State } from "../../state.ts";
 import type { MenuEntry, MenuRequest } from "../ContextMenu.tsx";
 import { FormatBadge } from "../DocCards.tsx";
@@ -50,6 +51,7 @@ export function ProjectView({
   workId,
   onOpenSession,
   onOpenDocument,
+  onOpenProject,
   onToast,
   onError,
   openMenu,
@@ -59,6 +61,8 @@ export function ProjectView({
   workId: string;
   onOpenSession: (session: Session, itemId?: string | null) => void;
   onOpenDocument: (artifactId: string, proposalId: string | null) => void;
+  /** Another project's page ("연결"). */
+  onOpenProject?: (work: Work) => void;
   onToast: (toast: Toast) => void;
   onError: (error: unknown) => void;
   openMenu: (request: MenuRequest) => void;
@@ -74,6 +78,11 @@ export function ProjectView({
   const [engine, setEngine] = useEngineChoice();
   const [stagesOpen, setStagesOpen] = useState(false);
   const version = `${state.pkm[`project:${workId}`] ?? 0}:${state.pkm["project:*"] ?? 0}`;
+  // "연결": every project's tags and links, to find this one's neighbours (관련, shared tags).
+  const [summaries, setSummaries] = useState<ProjectSummary[]>([]);
+  useEffect(() => {
+    api.projects().then(setSummaries).catch(() => setSummaries([]));
+  }, [api, version]);
   // What the page shows of sessions and files changes with them; refetched shortly after.
   const sessions = useMemo(() => Object.values(state.sessions).filter((session) => session.workId === workId && !session.archivedAt), [state.sessions, workId]);
   const files = useMemo(() => Object.values(state.artifacts).filter((artifact) => artifact.workId === workId && artifact.role !== "project-note"), [state.artifacts, workId]);
@@ -554,6 +563,39 @@ export function ProjectView({
             </ul>
             {!files.length ? <div className="project-empty">아직 문서가 없습니다.</div> : null}
           </section>
+
+          {(() => {
+            const input = Object.values(state.works)
+              .filter((entry) => !entry.archivedAt)
+              .map((entry) => {
+                const summary = summaries.find((other) => other.workId === entry.id);
+                return { id: entry.id, title: entry.title, tags: summary?.tags ?? entry.tags ?? [], related: summary?.related ?? [], sessions: 0 };
+              });
+            const links = neighbours(input, workId);
+            if (!links.length) return null;
+            return (
+              <section className="project-section" aria-label="연결">
+                <div className="project-section-head">
+                  <h2>연결 {links.length}</h2>
+                </div>
+                <ul className="project-rows">
+                  {links.slice(0, 12).map((link) => {
+                    const other = state.works[link.id];
+                    if (!other) return null;
+                    return (
+                      <li key={link.id}>
+                        <button type="button" className="project-row" onClick={() => onOpenProject?.(other)}>
+                          <Icon name={link.by === "related" ? "link" : "tag"} size={14} />
+                          <span className="project-row-title">{other.title}</span>
+                          <span className="project-row-time muted">{link.by === "related" ? "관련" : link.tags.map((tag) => `#${tag}`).join(" ")}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            );
+          })()}
 
           <section className="project-section project-note" aria-label="노트">
             <div className="project-section-head">

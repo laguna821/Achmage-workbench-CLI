@@ -7,6 +7,7 @@ import type { State } from "../../state.ts";
 import { workHidden } from "../../tree.ts";
 import { Icon } from "../Icon.tsx";
 import { useOptionalPkm } from "../pkm/PkmContext.tsx";
+import { ProjectsGraph } from "./ProjectsGraph.tsx";
 import "../../styles/projects-mode.css";
 
 // Home "프로젝트": every project by what people wrote in its note. Cards (folders › projects, with
@@ -14,7 +15,7 @@ import "../../styles/projects-mode.css";
 // card writes that one line of its note (undoable). The stage is the person's; the session states
 // the engines report stay in "지금".
 
-type Layout = "cards" | "table" | "kanban";
+type Layout = "cards" | "table" | "kanban" | "graph";
 type Sort = { key: "title" | "stage" | "sessions" | "attention" | "proposals" | "last"; dir: 1 | -1 };
 const LAYOUT_KEY = "workbench.projectsLayout";
 const NO_STAGE = "";
@@ -35,7 +36,7 @@ export function ProjectsMode({
   const pkm = useOptionalPkm();
   const [layout, setLayoutState] = useState<Layout>(() => {
     const saved = localStorage.getItem(LAYOUT_KEY);
-    return saved === "table" || saved === "kanban" ? saved : "cards";
+    return saved === "table" || saved === "kanban" || saved === "graph" ? saved : "cards";
   });
   const setLayout = (next: Layout) => {
     localStorage.setItem(LAYOUT_KEY, next);
@@ -133,6 +134,7 @@ export function ProjectsMode({
               ["cards", "카드"],
               ["table", "표"],
               ["kanban", "칸반"],
+              ["graph", "그래프"],
             ] as const
           ).map(([id, label]) => (
             <button key={id} type="button" role="radio" aria-checked={layout === id} className={layout === id ? "on" : ""} onClick={() => setLayout(id)}>
@@ -144,7 +146,21 @@ export function ProjectsMode({
           <input className="projects-filter" value={filter} placeholder="이름 · #태그 · 단계:진행중" aria-label="프로젝트 거르기" onChange={(event) => setFilter(event.target.value)} />
         ) : null}
       </div>
-      {layout === "cards" ? cards(summaries, stages) : layout === "table" ? <ProjectsTable rows={rows.filter((row) => !workHidden(state, row.work) && matches(row))} stages={stages} sort={sort} onSort={setSort} openProject={openProject} stageMenu={stageMenu} /> : <ProjectsKanban rows={rows.filter(matches)} stages={stages} state={state} openProject={openProject} moveTo={moveTo} />}
+      {layout === "cards" ? (
+        cards(summaries, stages)
+      ) : layout === "table" ? (
+        <ProjectsTable rows={rows.filter((row) => !workHidden(state, row.work) && matches(row))} stages={stages} sort={sort} onSort={setSort} openProject={openProject} stageMenu={stageMenu} />
+      ) : layout === "kanban" ? (
+        <ProjectsKanban rows={rows.filter(matches)} stages={stages} state={state} openProject={openProject} moveTo={moveTo} />
+      ) : (
+        <ProjectsGraph
+          items={rows
+            .filter((row) => !row.work.archivedAt && !workHidden(state, row.work) && matches(row))
+            .map((row) => ({ work: row.work, stage: row.summary?.stage ?? null, tags: row.summary?.tags ?? row.work.tags ?? [], related: row.summary?.related ?? [], sessions: row.sessions.length }))}
+          stages={stages}
+          openProject={openProject}
+        />
+      )}
     </div>
   );
 }

@@ -243,6 +243,18 @@ async function flow(provider: Provider) {
     pass("프로젝트 칸반: 카드를 '진행중'으로 끌면 그 프로젝트 노트에 단계가 써지고 그 열로", staged && inColumn, String(movedWork));
     await page.locator(".toast button", { hasText: "되돌리기" }).click();
     await until(async () => (await api<{ workId: string; stage: string | null }[]>("GET", "/api/projects/")).some((entry) => entry.workId === movedWork && entry.stage === null), 8000);
+    // The graph: a point per project; a point opens that project's page.
+    await page.locator(".projects-layouts button", { hasText: "그래프" }).click();
+    await page.waitForSelector(".graph-node.project");
+    const projectNodes = await page.locator(".graph-node.project").count();
+    await shot("03d-home-projects-graph.png");
+    const node = page.locator(".graph-node.project").first();
+    const nodeLabel = await node.getAttribute("aria-label");
+    await node.click();
+    const openedTitle = await page.waitForSelector(".project-view .project-title", { timeout: 8000 }).then(() => page.locator(".project-title").innerText(), () => "");
+    pass("프로젝트 그래프: 프로젝트마다 점, 점을 누르면 그 프로젝트 페이지", projectNodes >= 6 && openedTitle === nodeLabel, `${projectNodes}점 · ${nodeLabel}`);
+    await page.locator(".topbar .brand").click();
+    await page.waitForSelector(".home-modes.mode-projects");
     await page.locator(".projects-layouts button", { hasText: "카드" }).click();
 
     // ── 흐름 (key 3) ─────────────────────────────────────────────────────────────────

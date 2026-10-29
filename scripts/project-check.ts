@@ -186,8 +186,34 @@ async function flow(provider: Provider) {
   }
 }
 
+/** "연결": two projects joined by 관련 show each other; the link opens the other's page. */
+async function connections() {
+  const works = (await snapshot()).works.filter((work) => !work.archivedAt);
+  if (works.length < 2) return;
+  const [first, second] = works as [Work, Work];
+  await api("PUT", `/api/projects/${first.id}/property`, { key: "관련", values: [`[[${second.title}]]`] });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  try {
+    await page.addInitScript((id) => localStorage.setItem("workbench.lastWork", id), second.id);
+    await page.goto(`${ready.url}/?token=${ready.token}`);
+    await page.waitForSelector(".project-link");
+    await page.locator(".project-link").click();
+    await page.waitForSelector('.project-view section[aria-label="연결"] .project-row', { timeout: 10_000 });
+    const listed = await page.locator('.project-view section[aria-label="연결"] .project-row').allInnerTexts();
+    await page.locator('.project-view section[aria-label="연결"] .project-row').first().click();
+    await page.waitForFunction((title) => document.querySelector(".project-view .project-title")?.textContent === title, first.title, { timeout: 8000 });
+    await page.screenshot({ path: join(outDir, "05-connections.png") });
+    check("연결: '관련'으로 이은 프로젝트가 서로의 페이지에 보이고, 누르면 그 페이지로", listed.some((row) => row.includes(first.title) && row.includes("관련")), listed.join(" | ").replace(/\s+/g, " "));
+  } catch (error) {
+    check("연결", false, error instanceof Error ? error.message.split("\n")[0]! : String(error));
+  } finally {
+    await page.close();
+  }
+}
+
 try {
   for (const provider of providers) await flow(provider);
+  await connections();
 } finally {
   writeFileSync(join(outDir, "console.log"), logs.join("\n"));
   writeFileSync(join(outDir, "results.json"), JSON.stringify(results, null, 2));

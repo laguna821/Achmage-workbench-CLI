@@ -1503,6 +1503,7 @@ export function App() {
             openSession(session);
             if (itemId) setFocusItem({ sessionId: session.id, itemId, nonce: Date.now() });
           }}
+          onOpenProject={actions.openProject}
           onOpenDocument={(artifactId, proposalId) => {
             const artifact = state.artifacts[artifactId];
             if (artifact) setWorkId(artifact.workId);
