@@ -33,8 +33,8 @@ const link = (patch: Partial<SessionLink> = {}): SessionLink => ({
 const quiet = { previous: [] as string[], now: 2_000, usedPercent: null as number | null };
 
 describe("relay decisions", () => {
-  it("ends on a failed or stopped turn and on an empty reply", () => {
-    expect(decide(link(), { status: "failed", reply: "반쯤" }, quiet)).toEqual({ action: "end", reason: "failed" });
+  it("pauses on a failed turn (to ask it again); ends on a stopped turn and on an empty reply", () => {
+    expect(decide(link(), { status: "failed", reply: "반쯤" }, quiet)).toEqual({ action: "pause", reason: "cut" });
     expect(decide(link(), { status: "interrupted", reply: "반쯤" }, quiet)).toEqual({ action: "end", reason: "interrupted" });
     expect(decide(link(), { status: "completed", reply: "  \n " }, quiet)).toEqual({ action: "end", reason: "empty" });
   });
@@ -205,12 +205,11 @@ describe("linked sessions", () => {
     expect(manager.snapshot().sessions.find((session) => session.id === b.id)!.purpose).toBe("초안");
   });
 
-  it("ends at once on [[합의]], a repeat, an empty reply or a failed turn", async () => {
+  it("ends at once on [[합의]], a repeat or an empty reply", async () => {
     for (const [reply, status, reason] of [
       ["고칠 점 세 가지로 정리했습니다.\n[[합의]]", "completed", "agreed"],
       ["2주차와 3주차가 겹칩니다.", "completed", "repeat"],
       ["", "completed", "empty"],
-      ["반쯤 쓰다", "failed", "failed"],
     ] as const) {
       const { manager, claude, codex } = setup();
       const { a, b } = pair(manager);
@@ -292,14 +291,75 @@ describe("linked sessions", () => {
     const c = manager.createSession(left.id, { provider: "claude", purpose: "편집" });
     const started = await start(manager, [a.id, b.id, c.id], { maxRounds: 1 });
     expect(claude.sent[0]!.text).toContain("상대: Codex · 초안, Claude · 편집");
-    claude.answer(a.id, "A의 말");
+    claude.answer(a.id, "A의 초안");
     await tick();
+    // B speaks right after A: only A's answer, as before.
+    expect(codex.sent.at(-1)!.text).toMatch(/^\[세션 잇기 2\/3 · 상대: Claude · 검토 .*\n\nA의 초안$/s);
     codex.answer(b.id, "B의 말");
     await tick();
-    expect(claude.sent.at(-1)).toMatchObject({ sessionId: c.id, text: expect.stringMatching(/^\[세션 잇기 3\/3 · 상대: Codex · 초안 .*\n\nB의 말$/s) });
+    // C has not spoken yet: it gets A's draft too, each answer under its speaker, in order.
+    expect(claude.sent.at(-1)).toMatchObject({
+      sessionId: c.id,
+      text: expect.stringMatching(/^\[세션 잇기 3\/3 · 상대: Claude · 검토, Codex · 초안 .*\n\n\[Claude · 검토의 답\]\n\nA의 초안\n\n\[Codex · 초안의 답\]\n\nB의 말$/s),
+    });
+    expect(userItems(manager, c.id).at(-1)!.link).toMatchObject({ hop: 3, fromSessionId: b.id, from: [a.id, b.id] });
     claude.answer(c.id, "C의 말");
     await tick();
     expect(linkOf(manager, started.id)).toMatchObject({ state: "ended", reason: "rounds", hops: 3 });
+  });
+
+  it("asking again after a failed turn repeats exactly what was handed over (every speaker named)", async () => {
+    const { manager, claude, codex } = setup();
+    const { left, a, b } = pair(manager);
+    const c = manager.createSession(left.id, { provider: "claude", purpose: "편집" });
+    const started = await start(manager, [a.id, b.id, c.id], { maxRounds: 1 });
+    claude.answer(a.id, "A의 초안");
+    await tick();
+    codex.answer(b.id, "B의 말");
+    await tick();
+    const first = claude.sent.at(-1)!;
+    claude.answer(c.id, "반쯤", "failed");
+    await tick();
+    expect(linkOf(manager, started.id)).toMatchObject({ state: "paused", reason: "cut", turn: 2 });
+    await manager.links.resume(started.id);
+    expect(claude.sent.at(-1)).toMatchObject({ sessionId: c.id, text: first.text });
+    expect(userItems(manager, c.id).at(-1)!.link).toMatchObject({ hop: 3, from: [a.id, b.id] });
+    claude.answer(c.id, "C의 말");
+    await tick();
+    expect(linkOf(manager, started.id)).toMatchObject({ state: "ended", reason: "rounds", hops: 3 });
+  });
+
+  it("hands each session every answer since its own last turn, the oldest giving way beyond 24,000 characters", async () => {
+    const { manager, claude, codex } = setup();
+    const { left, a, b } = pair(manager);
+    const c = manager.createSession(left.id, { provider: "claude", purpose: "편집" });
+    await start(manager, [a.id, b.id, c.id], { maxRounds: 2 });
+    claude.answer(a.id, "A1");
+    await tick();
+    codex.answer(b.id, "B1");
+    await tick();
+    claude.answer(c.id, "C1");
+    await tick();
+    // A's turn again: what B and C said since A spoke (not A's own words).
+    const toA = claude.sent.at(-1)!;
+    expect(toA.sessionId).toBe(a.id);
+    expect(toA.text).toMatch(/상대: Codex · 초안, Claude · 편집 .*\[Codex · 초안의 답\]\n\nB1\n\n\[Claude · 편집의 답\]\n\nC1$/s);
+    expect(toA.text).not.toContain("A1");
+    // Long answers: the newest stays whole, the oldest is cut first and says so.
+    const long = "가".repeat(20_000);
+    claude.answer(a.id, long);
+    await tick();
+    const toB = userItems(manager, b.id).at(-1)!.text;
+    expect(toB.length).toBeLessThanOrEqual(24_000 + 10);
+    expect(toB).toContain(`[Claude · 검토의 답]\n\n${long}`);
+    expect(toB).toContain("[Claude · 편집의 답]\n\nC1");
+    const longer = "나".repeat(23_990);
+    codex.answer(b.id, longer);
+    await tick();
+    const toC = claude.sent.at(-1)!.text;
+    expect(toC).toContain("(앞선 답 1개는 길어서 넘기지 않았습니다. 원래 대화에 남아 있습니다.)");
+    expect(toC).toContain("[Codex · 초안의 답]");
+    expect(toC).not.toContain(long);
   });
 
   it("allows one live link per session and starts only with idle sessions", async () => {
@@ -358,14 +418,24 @@ describe("linked sessions", () => {
     expect(linkOf(manager, other.id)).toMatchObject({ state: "ended", reason: "stopped", hops: 1 });
   });
 
-  it("a failed hand-over or an archived participant ends the link", async () => {
+  it("a failed hand-over pauses the link to ask again; an archived participant ends it", async () => {
     const { manager, claude, codex } = setup();
     const { a, b } = pair(manager);
     const first = await start(manager, [a.id, b.id]);
     codex.failNext = true;
     claude.answer(a.id, "첫 의견");
     await tick();
-    expect(linkOf(manager, first.id)).toMatchObject({ state: "ended", reason: "failed" });
+    expect(linkOf(manager, first.id)).toMatchObject({ state: "paused", reason: "cut", hops: 2, turn: 1 });
+    // Going on asks Codex again with the same words; this time it answers.
+    await manager.links.resume(first.id);
+    expect(codex.sent).toHaveLength(1);
+    expect(codex.sent[0]!.text).toMatch(/\n\n첫 의견$/);
+    codex.answer(b.id, "둘째 의견");
+    await tick();
+    expect(linkOf(manager, first.id)).toMatchObject({ state: "active", hops: 3 });
+    await manager.links.stop(first.id);
+    claude.answer(a.id, "", "interrupted");
+    await tick();
     manager.sink.updateSession(b.id, { status: "idle" });
     const second = await manager.links.start({ requestId: "second", participants: [b.id, a.id], goal: "다시", maxRounds: 1, maxMinutes: 5 });
     codex.answer(b.id, "답");
@@ -388,18 +458,35 @@ describe("linked sessions", () => {
     expect(linkOf(manager, third.id)).toMatchObject({ state: "ended", reason: "gone" });
   });
 
-  it("ends when an engine stops without ending the turn the link gave it", async () => {
+  it("pauses when an engine dies in the turn the link gave it, and going on asks it again", async () => {
     const { manager, claude, codex } = setup();
     const { a, b } = pair(manager);
     const started = await start(manager, [a.id, b.id]);
     claude.answer(a.id, "첫 의견");
     await tick();
-    // Codex's process exits mid-turn: a notice and back to idle, no end line.
-    manager.sink.upsertItem(b.id, { kind: "notice", id: "exit", level: "error", text: "Codex 엔진이 종료되어 응답이 끊겼습니다.", at: Date.now() });
+    // Codex's process exits mid-turn: the adapter ends the turn with its cause.
+    manager.sink.upsertItem(b.id, { kind: "turnEnd", id: "end:crash", status: "failed", cause: "crash", durationMs: null, at: Date.now() });
+    manager.sink.updateSession(b.id, { status: "idle", activity: null, lastError: "Codex 엔진이 종료되었습니다(코드 1)." });
+    await tick();
+    expect(linkOf(manager, started.id)).toMatchObject({ state: "paused", reason: "cut", hops: 2, turn: 1 });
+    expect(codex.sent).toHaveLength(1);
+    await manager.links.resume(started.id);
+    expect(codex.sent).toHaveLength(2);
+    expect(codex.sent[1]!.text).toBe(codex.sent[0]!.text);
+    codex.answer(b.id, "다시 받은 둘째 의견");
+    await tick();
+    expect(linkOf(manager, started.id)).toMatchObject({ state: "active", hops: 3, turn: 0 });
+    await manager.links.stop(started.id);
+    // An engine that only went idle (no end line) pauses the link the same way.
+    claude.answer(a.id, "", "interrupted");
+    await tick();
+    const quiet = await manager.links.start({ requestId: "quiet", participants: [a.id, b.id], goal: "또", maxRounds: 1, maxMinutes: 5 });
+    claude.answer(a.id, "답");
+    await tick();
     manager.sink.updateSession(b.id, { status: "idle", activity: null });
     await tick();
-    expect(linkOf(manager, started.id)).toMatchObject({ state: "ended", reason: "failed" });
-    expect(codex.sent).toHaveLength(1);
+    expect(linkOf(manager, quiet.id)).toMatchObject({ state: "paused", reason: "cut" });
+    await manager.links.stop(quiet.id);
     // Being looked at (a session update without a status change) changes nothing for a live link.
     const other = await manager.links.start({ requestId: "other", participants: [a.id, b.id], goal: "다시", maxRounds: 1, maxMinutes: 5 });
     manager.updateSession(a.id, { seen: true });

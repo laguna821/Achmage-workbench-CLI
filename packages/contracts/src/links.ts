@@ -7,7 +7,8 @@ export type LinkState = "active" | "paused" | "ended";
 /**
  * Why a link stands still.
  * Paused: manual (멈춤), typed (the user wrote into a participant), usage (the 5-hour limit is nearly
- * used), restart (the app restarted), busy (the next session was doing something else).
+ * used), restart (the app restarted), busy (the next session was doing something else), cut (a
+ * participant's turn failed or its engine died; going on asks it again).
  * Ended: stopped (끊기), agreed (a last line [[합의]]), done ([[끝]]), rounds, time, empty (an empty
  * reply), repeat (a reply saying again what was said), failed, interrupted, gone (a participant left).
  */
@@ -17,6 +18,7 @@ export type LinkReason =
   | "usage"
   | "restart"
   | "busy"
+  | "cut"
   | "stopped"
   | "agreed"
   | "done"
@@ -56,8 +58,11 @@ export type SessionLink = {
   updatedAt: number;
 };
 
-/** On a request a link handed to a session: which link, which message of how many, from whom. */
-export type LinkHop = { linkId: string; hop: number; of: number; fromSessionId: string | null };
+/**
+ * On a request a link handed to a session: which link, which message of how many, from whom (the
+ * latest speaker). `from`: every session whose answer it carries, oldest first, when more than one.
+ */
+export type LinkHop = { linkId: string; hop: number; of: number; fromSessionId: string | null; from?: string[] };
 
 export type StartLinkRequest = {
   /** Client-generated; becomes the link id, so repeating it never starts twice. */
@@ -95,6 +100,7 @@ export const LINK_REASON_LABEL: Record<LinkReason, string> = {
   usage: "5시간 사용량이 90%를 넘어 멈춤",
   restart: "앱이 다시 시작되어 멈춤",
   busy: "다음 세션이 다른 일을 하는 중이라 멈춤",
+  cut: "응답이 끊겨 멈춤",
   stopped: "끊음",
   agreed: "합의",
   done: "끝 표시",
