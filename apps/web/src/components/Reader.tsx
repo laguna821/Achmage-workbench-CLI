@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { isOfficeFormat, type Artifact } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import type { State } from "../state.ts";
 import { designThumb, revisionText } from "../design.ts";
+import { ObsidianMarkdown, obsidianComponents } from "../markdown/obsidian.tsx";
 import { officePageImage, officePages } from "../office.ts";
 import { pdfDocument, pdfPageImage } from "../pdfpages.ts";
 import type { ReadingPosition } from "../workmodes.ts";
@@ -14,7 +13,7 @@ import { Icon } from "./Icon.tsx";
 import { HtmlView } from "./docs/HtmlView.tsx";
 import "../styles/views.css";
 
-const DRAWN = diagramComponents();
+const DRAWN = obsidianComponents(diagramComponents());
 
 // "읽기": the document as its reader sees it, filling the window, a page at a time. Paged formats
 // show their real pages (office page images, kordoc pages, PDF.js, the design renderer); text is
@@ -212,9 +211,7 @@ export default function Reader({ api, state, artifact, start, onClose }: { api: 
           <div ref={flow} className="reader-flow" style={{ width: columnWidth, columnWidth, columnGap: gap, height: Math.max(200, size.height - 56) }}>
             {content.markdown ? (
               <div className="markdown">
-                <Markdown remarkPlugins={[remarkGfm]} components={DRAWN}>
-                  {content.text}
-                </Markdown>
+                <ObsidianMarkdown components={DRAWN}>{content.text}</ObsidianMarkdown>
               </div>
             ) : (
               <div className="reader-plain">{content.text}</div>

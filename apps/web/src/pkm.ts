@@ -112,6 +112,8 @@ const pictures = new Map<string, Promise<string | null>>();
 
 /** An image the gateway serves behind the token, as an object URL (kept for the window's life, at most 300). */
 export function pictureUrl(path: string): Promise<string | null> {
+  // Only the gateway's own pictures are fetched with its token; nothing else gets the token.
+  if (!path.startsWith("/api/")) return Promise.resolve(null);
   const cached = pictures.get(path);
   if (cached) return cached;
   const token = readToken();
@@ -130,7 +132,13 @@ export function pictureUrl(path: string): Promise<string | null> {
 
 export const vaultImagePath = (path: string, version = 0) => `/api/pkm/vault/image?${new URLSearchParams({ path, v: String(version) })}`;
 export const thumbPath = (thumb: PkmCard["thumb"], version = 0) =>
-  !thumb ? null : "vault" in thumb ? vaultImagePath(thumb.vault, version) : `/api/pkm/page-image?${new URLSearchParams({ artifact: thumb.page, src: thumb.src })}`;
+  !thumb
+    ? null
+    : "url" in thumb
+      ? thumb.url
+      : "vault" in thumb
+        ? vaultImagePath(thumb.vault, version)
+        : `/api/pkm/page-image?${new URLSearchParams({ artifact: thumb.page, src: thumb.src })}`;
 
 // ── cards ───────────────────────────────────────────────────────────────────────────────────
 
@@ -175,6 +183,15 @@ export function cardDate(at: number | null, now = Date.now()) {
  * serves, `[[note|alias]]` becomes a link that opens the note in the mirror (plain text when it does
  * not exist), `%% comments %%` disappear and callout markers become a bold label.
  */
+const IMAGE_NAME = /\.(png|jpe?g|gif|webp|avif|svg|bmp)$/i;
+const noteHref = (path: string) => encodeURIComponent(path).replace(/[()]/g, (character) => `%${character.charCodeAt(0).toString(16)}`);
+
+/**
+ * A vault note's text for the Markdown view: pictures (`![[그림.png|300]]`, `![](상대 경로)`,
+ * `<img src>`) point at the gateway (the size stays after `|` in the text), `[[links]]` open notes
+ * here, `![[another note]]` becomes a `vault-embed:` link the view draws in place, and `%%comments%%`
+ * go. Callouts, highlights and tags are left to the Markdown view.
+ */
 export function vaultMarkdown(body: string, note: Pick<VaultNote, "links" | "embeds">, version = 0) {
   const image = (target: string, alt: string) => {
     const path = note.embeds[target.trim()];
@@ -183,13 +200,56 @@ export function vaultMarkdown(body: string, note: Pick<VaultNote, "links" | "emb
   return body
     .replace(/%%[\s\S]*?%%/g, "")
     // Both picture forms in one pass, so a picture already rewritten is never taken up again.
-    .replace(/!\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]|!\[([^\]]*)\]\(\s*<?([^)>\s]+)>?(?:\s+"[^"]*")?\s*\)/g, (all, embed: string | undefined, alt: string | undefined, target: string | undefined) =>
-      embed !== undefined ? image(embed, embed) : /^[a-z]+:/i.test(target ?? "") ? all : image(target ?? "", alt ?? ""),
+    .replace(
+      /!\[\[([^\]|#]+)(#[^\]|]*)?(?:\|([^\]]*))?\]\]|!\[([^\]]*)\]\(\s*<?([^)>\s]+)>?(?:\s+"[^"]*")?\s*\)/g,
+      (all, embed: string | undefined, heading: string | undefined, alias: string | undefined, alt: string | undefined, target: string | undefined) => {
+        if (embed === undefined) return /^[a-z]+:/i.test(target ?? "") ? all : image(target ?? "", alt ?? "");
+        const name = embed.trim();
+        const label = alias?.trim() ?? "";
+        if (IMAGE_NAME.test(name)) return image(name, !label ? name : /^\d+(x\d+)?$/.test(label) ? `${name}|${label}` : label);
+        const path = note.links[name];
+        if (!path) return `*(노트 없음: ${name})*`;
+        return `[${(label || name).replace(/[[\]]/g, "")}](vault-embed:${noteHref(path)}${heading && heading.length > 1 ? `#${encodeURIComponent(heading.slice(1))}` : ""})`;
+      },
     )
+    .replace(/(<img\b[^>]*?\bsrc\s*=\s*)(["'])([^"']+)\2/gi, (all, head: string, quote: string, src: string) => {
+      const path = /^[a-z]+:/i.test(src) ? null : note.embeds[src.trim()];
+      return path ? `${head}${quote}${vaultImagePath(path, version)}${quote}` : all;
+    })
     .replace(/(?<!!)\[\[([^\]|#]+)(#[^\]|]*)?(?:\|([^\]]*))?\]\]/g, (_all, target: string, _heading: string | undefined, alias: string | undefined) => {
       const path = note.links[target.trim()];
       const label = (alias ?? target).trim().replace(/[[\]]/g, "");
-      return path ? `[${label}](vault-note:${encodeURIComponent(path).replace(/[()]/g, (character) => `%${character.charCodeAt(0).toString(16)}`)})` : `${label}`;
-    })
-    .replace(/^(\s*>\s*)\[!([^\]]+)\][+-]?\s*/gm, (_all, quote: string, kind: string) => `${quote}**${kind}** `);
+      return path ? `[${label}](vault-note:${noteHref(path)})` : `${label}`;
+    });
+}
+
+/**
+ * The part of a note `![[note#제목]]` or `![[note#^id]]` points at: the heading with what is under
+ * it (up to the next heading as high), or the line carrying the block id. The whole note otherwise.
+ */
+export function noteSection(body: string, ref: string | null): string {
+  if (!ref) return body;
+  const lines = body.split("\n");
+  if (ref.startsWith("^")) {
+    const id = ref.slice(1);
+    const line = lines.find((entry) => entry.trimEnd().endsWith(` ^${id}`));
+    return line ? line.trimEnd().slice(0, -(id.length + 2)) : "";
+  }
+  const wanted = ref.split("#").pop()!.trim().toLowerCase();
+  let start = -1;
+  let level = 0;
+  let fenced = false;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!;
+    if (/^\s*(```|~~~)/.test(line)) fenced = !fenced;
+    const heading = fenced ? null : /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line);
+    if (!heading) continue;
+    if (start < 0) {
+      if (heading[2]!.trim().toLowerCase() === wanted) {
+        start = index;
+        level = heading[1]!.length;
+      }
+    } else if (heading[1]!.length <= level) return lines.slice(start, index).join("\n");
+  }
+  return start < 0 ? "" : lines.slice(start).join("\n");
 }

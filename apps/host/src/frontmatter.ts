@@ -169,11 +169,14 @@ export function excerptOf(body: string, limit = 240): string {
 }
 
 /** The first image a note shows: `![[name.png]]` or `![](path.png)` (local files only). */
-export function firstImage(body: string): { kind: "embed" | "link"; target: string } | null {
-  const pattern = /!\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]|!\[[^\]]*\]\(\s*<?([^)>\s]+)>?(?:\s+"[^"]*")?\s*\)/g;
+export function firstImage(body: string): { kind: "embed" | "link" | "url"; target: string } | null {
+  const pattern = /!\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]|!\[[^\]]*\]\(\s*<?([^)>\s]+)>?(?:\s+"[^"]*")?\s*\)|<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["']/gi;
   for (const match of body.matchAll(pattern)) {
-    const target = (match[1] ?? match[2] ?? "").trim();
-    if (!/\.(png|jpe?g|gif|webp|avif|svg|bmp)$/i.test(target) || /^[a-z]+:/i.test(target)) continue;
+    const target = (match[1] ?? match[2] ?? match[3] ?? "").trim();
+    if (!/\.(png|jpe?g|gif|webp|avif|svg|bmp)$/i.test(target.split(/[?#]/)[0]!)) continue;
+    // Web pictures (R2, S3 …) are shown from where they are; other schemes are not pictures here.
+    if (/^https?:\/\//i.test(target)) return { kind: "url", target };
+    if (/^[a-z]+:/i.test(target)) continue;
     return { kind: match[1] ? "embed" : "link", target };
   }
   return null;

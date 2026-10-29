@@ -1,0 +1,200 @@
+/* Obsidian pieces in Markdown (vault notes, documents): callouts, highlights, tags, embeds. */
+
+/* Callouts: Obsidian's colours per kind, a light tint and the title in the kind's colour. */
+.markdown .callout {
+  --callout: 8, 109, 221;
+  margin: 14px 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(var(--callout), 0.08);
+  border-left: 2px solid rgba(var(--callout), 0.6);
+}
+
+.markdown .callout-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: rgb(var(--callout));
+}
+
+.markdown .callout-icon {
+  display: inline-flex;
+  flex: none;
+  margin-top: 2px;
+}
+
+.markdown .callout-title-inner {
+  min-width: 0;
+}
+
+.markdown .callout-content {
+  margin-top: 6px;
+  color: var(--text);
+}
+
+.markdown .callout-content > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown details.callout > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.markdown details.callout > summary::-webkit-details-marker {
+  display: none;
+}
+
+.markdown details.callout > summary::after {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin: 6px 4px 0 auto;
+  border-right: 1.75px solid currentColor;
+  border-bottom: 1.75px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+
+.markdown details.callout[open] > summary::after {
+  transform: rotate(45deg);
+}
+
+.markdown .callout[data-kind="abstract"],
+.markdown .callout[data-kind="tip"] {
+  --callout: 0, 168, 166;
+}
+.markdown .callout[data-kind="info"],
+.markdown .callout[data-kind="todo"] {
+  --callout: 8, 109, 221;
+}
+.markdown .callout[data-kind="success"] {
+  --callout: 8, 155, 70;
+}
+.markdown .callout[data-kind="question"] {
+  --callout: 200, 140, 0;
+}
+.markdown .callout[data-kind="warning"] {
+  --callout: 226, 112, 0;
+}
+.markdown .callout[data-kind="failure"],
+.markdown .callout[data-kind="danger"],
+.markdown .callout[data-kind="bug"] {
+  --callout: 223, 46, 66;
+}
+.markdown .callout[data-kind="example"] {
+  --callout: 120, 82, 238;
+}
+.markdown .callout[data-kind="quote"] {
+  --callout: 140, 140, 140;
+}
+
+:root[data-theme="dark"] .markdown .callout[data-kind="note"],
+:root[data-theme="dark"] .markdown .callout[data-kind="info"],
+:root[data-theme="dark"] .markdown .callout[data-kind="todo"] {
+  --callout: 2, 122, 255;
+}
+:root[data-theme="dark"] .markdown .callout[data-kind="abstract"],
+:root[data-theme="dark"] .markdown .callout[data-kind="tip"] {
+  --callout: 83, 223, 221;
+}
+:root[data-theme="dark"] .markdown .callout[data-kind="success"] {
+  --callout: 68, 207, 110;
+}
+:root[data-theme="dark"] .markdown .callout[data-kind="question"] {
+  --callout: 224, 200, 100;
+}
+:root[data-theme="dark"] .markdown .callout[data-kind="warning"] {
+  --callout: 233, 151, 63;
+}
+:root[data-theme="dark"] .markdown .callout[data-kind="failure"],
+:root[data-theme="dark"] .markdown .callout[data-kind="danger"],
+:root[data-theme="dark"] .markdown .callout[data-kind="bug"] {
+  --callout: 251, 70, 76;
+}
+:root[data-theme="dark"] .markdown .callout[data-kind="example"] {
+  --callout: 168, 130, 255;
+}
+:root[data-theme="dark"] .markdown .callout[data-kind="quote"] {
+  --callout: 170, 170, 170;
+}
+
+/* ==highlight== */
+.markdown mark {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: rgba(255, 208, 0, 0.4);
+  color: inherit;
+}
+
+:root[data-theme="dark"] .markdown mark {
+  background: rgba(255, 208, 0, 0.28);
+}
+
+/* #tag in the text, like the tag pills on cards. */
+.markdown .md-tag {
+  --tag-color: var(--accent);
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tag-color) 13%, transparent);
+  color: color-mix(in srgb, var(--tag-color) 80%, var(--text));
+  font-size: 0.9em;
+  white-space: nowrap;
+}
+
+/* HTML the notes carry. */
+.markdown details:not(.callout) {
+  margin: 10px 0;
+}
+
+.markdown details:not(.callout) > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.markdown img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Footnotes (remark-gfm): the heading is for screen readers. */
+.markdown .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.markdown .footnotes {
+  margin-top: 24px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 0.9em;
+  color: var(--muted);
+}
+
+/* ![[another note]]: that note's text in place, with its name to open it. */
+.markdown .note-embed {
+  margin: 12px 0;
+  padding: 8px 14px 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.markdown .note-embed-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.markdown .note-embed-body > :first-child {
+  margin-top: 4px;
+}

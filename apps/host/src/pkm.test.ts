@@ -124,6 +124,17 @@ describe("vault notes", () => {
     expect(() => pkm.vaultImage("01. Inbox/a.md")).toThrow();
   });
 
+  it("resolves notes put into a note and HTML pictures, and shows a web picture as the card's picture", () => {
+    const { pkm, vault } = setup();
+    put(vault, "20. Information (I)/모음.md", ["![표지](https://pub-x.r2.dev/1-cover.png)", "![[a]] ![[a#제목|별칭]] ![[없는 노트]] ![[pic.png|300]]", '<img src="../attachments/pic.png" width="300">', ""].join("\n"));
+    pkm.vault.rescan(true);
+    const note = pkm.note("20. Information (I)/모음.md");
+    expect(note.links).toEqual({ a: "01. Inbox/a.md", "없는 노트": null });
+    expect(note.embeds).toEqual({ "pic.png": "attachments/pic.png", "../attachments/pic.png": "attachments/pic.png" });
+    const card = pkm.cards({ kind: "vault", path: "20. Information (I)", descendants: false }).cards.find((entry) => entry.id.endsWith("모음.md"))!;
+    expect(card.thumb).toEqual({ url: "https://pub-x.r2.dev/1-cover.png" });
+  });
+
   it("gives attached notes to the engine as read-only copies in the work folder (both engines), never writing the vault", async () => {
     const { pkm, manager, vault, engines } = setup();
     const before = files(vault);

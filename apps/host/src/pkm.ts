@@ -379,6 +379,7 @@ export class Pkm {
         }
         const image = firstImage(body);
         if (image?.kind === "link") thumb = { page: artifact.id, src: image.target };
+        else if (image?.kind === "url") thumb = { url: image.target };
       } catch {
         // A revision that cannot be read now is listed by its name.
       }

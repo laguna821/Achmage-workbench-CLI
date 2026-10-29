@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { VaultFolder } from "@workbench/contracts";
-import { countLabel, dateGroup, groupCards, groupRuns, obsidianUrl, vaultMarkdown, vaultRows } from "./pkm.ts";
+import { countLabel, dateGroup, groupCards, groupRuns, noteSection, obsidianUrl, vaultMarkdown, vaultRows } from "./pkm.ts";
 
 const folder = (path: string, children: VaultFolder[] = [], own = 1, below = 0): VaultFolder => ({
   path,
@@ -69,16 +69,32 @@ describe("cards and notes", () => {
 
   it("turns Obsidian links and pictures into links and images the mirror serves", () => {
     const markdown = vaultMarkdown(
-      "![[pic.png|300]] and ![alt](sub/b.jpg) and ![w](https://x.org/c.png)\n[[a|에이]] [[없음]] %%숨김%%\n> [!NOTE] 알림",
-      { links: { a: "01. Inbox/a (1).md", 없음: null }, embeds: { "pic.png": "att/pic.png", "sub/b.jpg": "n/sub/b.jpg" } },
+      "![[pic.png|300]] and ![alt](sub/b.jpg) and ![w](https://x.org/c.png)\n[[a|에이]] [[없음]] %%숨김%%\n> [!NOTE] 알림\n" +
+        '![[a]]\n\n![[a#목표|별칭]]\n\n![[없는 노트]]\n\n<img src="sub/b.jpg" width="300"> <img src="https://x.org/d.png">',
+      { links: { a: "01. Inbox/a (1).md", 없음: null, "없는 노트": null }, embeds: { "pic.png": "att/pic.png", "sub/b.jpg": "n/sub/b.jpg" } },
       3,
     );
-    expect(markdown).toContain("![pic.png](/api/pkm/vault/image?path=att%2Fpic.png&v=3)");
+    expect(markdown).toContain("![pic.png|300](/api/pkm/vault/image?path=att%2Fpic.png&v=3)");
     expect(markdown).toContain("![alt](/api/pkm/vault/image?path=n%2Fsub%2Fb.jpg&v=3)");
     expect(markdown).toContain("![w](https://x.org/c.png)");
     expect(markdown).toContain("[에이](vault-note:01.%20Inbox%2Fa%20%281%29.md)");
     expect(markdown).toContain(" 없음 ");
     expect(markdown).not.toContain("숨김");
-    expect(markdown).toContain("> **NOTE** 알림");
+    // Callouts are drawn by the Markdown view, so the text keeps them as written.
+    expect(markdown).toContain("> [!NOTE] 알림");
+    expect(markdown).toContain("[a](vault-embed:01.%20Inbox%2Fa%20%281%29.md)");
+    expect(markdown).toContain("[별칭](vault-embed:01.%20Inbox%2Fa%20%281%29.md#%EB%AA%A9%ED%91%9C)");
+    expect(markdown).toContain("*(노트 없음: 없는 노트)*");
+    expect(markdown).toContain('<img src="/api/pkm/vault/image?path=n%2Fsub%2Fb.jpg&v=3" width="300">');
+    expect(markdown).toContain('<img src="https://x.org/d.png">');
+  });
+
+  it("finds the part of a note a ![[note#제목]] or ![[note#^id]] points at", () => {
+    const body = ["# 수업", "소개", "## 목표", "목표 하나", "```", "# 코드 속 제목", "```", "### 세부", "세부 내용", "## 평가", "평가 기준 ^grade-1", ""].join("\n");
+    expect(noteSection(body, null)).toBe(body);
+    expect(noteSection(body, "목표")).toBe(["## 목표", "목표 하나", "```", "# 코드 속 제목", "```", "### 세부", "세부 내용"].join("\n"));
+    expect(noteSection(body, "수업#평가")).toBe(["## 평가", "평가 기준 ^grade-1", ""].join("\n"));
+    expect(noteSection(body, "^grade-1")).toBe("평가 기준");
+    expect(noteSection(body, "없는 제목")).toBe("");
   });
 });

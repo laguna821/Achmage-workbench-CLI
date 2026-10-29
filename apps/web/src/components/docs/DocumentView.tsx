@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { diagramComponents } from "../Diagram.tsx";
+import { ObsidianMarkdown, obsidianComponents } from "../../markdown/obsidian.tsx";
 
 const DRAWN = diagramComponents();
 import { FORMAT_LABEL, PROVIDER_LABEL, isOfficeFormat, type CreateTarget, type Artifact, type ArtifactRevision, type Attachment, type DocRef, type Proposal, type Session, type Work } from "@workbench/contracts";
@@ -156,6 +155,7 @@ export default function DocumentView({
   const [drawOpen, setDrawOpen] = useState(false);
   const drawExtensions = useMemo(() => (markdownDoc ? [drawExtension(artifactId)] : undefined), [artifactId, markdownDoc]);
   const pictures = useMemo(() => (artifact ? docPictureComponents(DRAWN, work.id, artifact.path) : DRAWN), [work.id, artifact?.path]);
+  const previewComponents = useMemo(() => obsidianComponents({ ...pictures, ...docImages.components }), [pictures, docImages.components]);
 
   // Load the latest revision; recover a draft the app kept if the window closed before saving.
   const load = useCallback(async () => {
@@ -550,9 +550,7 @@ export default function DocumentView({
       return (
         <div className="doc-preview">
           <div className="markdown">
-            <Markdown remarkPlugins={[remarkGfm]} components={{ ...pictures, ...docImages.components }}>
-              {text}
-            </Markdown>
+            <ObsidianMarkdown components={previewComponents}>{text}</ObsidianMarkdown>
           </div>
         </div>
       );
@@ -563,9 +561,7 @@ export default function DocumentView({
           {editor}
           <div className="doc-preview">
             <div className="markdown">
-              <Markdown remarkPlugins={[remarkGfm]} components={{ ...pictures, ...docImages.components }}>
-              {text}
-            </Markdown>
+              <ObsidianMarkdown components={previewComponents}>{text}</ObsidianMarkdown>
             </div>
           </div>
         </div>

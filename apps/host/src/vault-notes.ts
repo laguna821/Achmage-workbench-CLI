@@ -9,6 +9,9 @@ import { noteTitle, type NoteEntry, type VaultMirror } from "./vault.ts";
 
 const HEAD_BYTES = 48 * 1024;
 const NOTE_LIMIT = 4 * 1024 * 1024;
+/** A picture file by its name (what `![[…]]` and `<img src>` can point at). */
+const IMAGE_NAME = /\.(png|jpe?g|gif|webp|avif|svg|bmp)$/i;
+const vaultThumb = (path: string | null): PkmCard["thumb"] => (path ? { vault: path } : null);
 
 export type NoteMeta = {
   title: string;
@@ -18,7 +21,7 @@ export type NoteMeta = {
   created: number | null;
   properties: [string, FrontmatterValue][];
   stage: string | null;
-  thumb: string | null;
+  thumb: PkmCard["thumb"];
 };
 
 /** The first bytes of a file as text (a cut multi-byte character at the end is dropped). */
@@ -77,7 +80,7 @@ export class VaultNotes {
           created: noteDate(valuesOf(properties, "date created")[0]),
           properties,
           stage: stageOf(properties),
-          thumb: image ? this.resolveImage(entry.path, image) : null,
+          thumb: !image ? null : image.kind === "url" ? { url: image.target } : vaultThumb(this.resolveImage(entry.path, { kind: image.kind, target: image.target })),
         };
       } catch {
         // Unreadable right now: shown by its name until it changes.
@@ -98,7 +101,7 @@ export class VaultNotes {
       tags: meta.tags,
       date: meta.created ?? entry.mtime,
       dateKind: meta.created ? "created" : "modified",
-      thumb: meta.thumb ? { vault: meta.thumb } : null,
+      thumb: meta.thumb,
       pinned,
       stage: meta.stage,
       sessions,
@@ -122,16 +125,24 @@ export class VaultNotes {
       if (!byName.has(name)) byName.set(name, note);
     }
     const links: Record<string, string | null> = {};
-    for (const match of body.matchAll(/(?<!!)\[\[([^\]|#]+)(?:[#|][^\]]*)?\]\]/g)) {
-      const target = match[1]!.trim();
+    // Notes put into this one (`![[note]]`, not pictures) resolve the way links do.
+    for (const match of body.matchAll(/(!?)\[\[([^\]|#]+)(?:[#|][^\]]*)?\]\]/g)) {
+      const target = match[2]!.trim();
+      if (match[1] && IMAGE_NAME.test(target)) continue;
       const direct = index.notes.has(target) ? target : index.notes.has(`${target}.md`) ? `${target}.md` : null;
       links[target] = direct ?? byName.get(target.split("/").pop()!.replace(/\.md$/i, "").toLowerCase()) ?? null;
     }
     const embeds: Record<string, string | null> = {};
     for (const match of body.matchAll(/!\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]|!\[[^\]]*\]\(\s*<?([^)>\s]+)>?(?:\s+"[^"]*")?\s*\)/g)) {
       const target = (match[1] ?? match[2] ?? "").trim();
-      if (!/\.(png|jpe?g|gif|webp|avif|svg|bmp)$/i.test(target) || /^[a-z]+:/i.test(target)) continue;
+      if (!IMAGE_NAME.test(target) || /^[a-z]+:/i.test(target)) continue;
       embeds[target] = this.resolveImage(path, { kind: match[1] ? "embed" : "link", target });
+    }
+    // Pictures written as HTML (`<img src="그림/a.png" width="300">`) sit next to the note too.
+    for (const match of body.matchAll(/<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["']/gi)) {
+      const target = match[1]!.trim();
+      if (!IMAGE_NAME.test(target) || /^[a-z]+:/i.test(target)) continue;
+      embeds[target] = this.resolveImage(path, { kind: "link", target });
     }
     const meta = this.meta(entry);
     return {

@@ -77,8 +77,8 @@ export type PkmCard = {
   date: number | null;
   /** created: the note's "date created"; modified: the file's time; activity: the last reply or change. */
   dateKind: "created" | "modified" | "activity";
-  /** The first picture: a vault image (vault-relative path) or an image next to a page. */
-  thumb: { vault: string } | { page: string; src: string } | null;
+  /** The first picture: a vault image (vault-relative path), an image next to a page, or a web address. */
+  thumb: { vault: string } | { page: string; src: string } | { url: string } | null;
   /** Pinned in Notebook Navigator (notes) or in the sidebar (works, sessions). */
   pinned: boolean;
   /** The DIKM stage written in the note (`DIKM_단계:`), when there is one. */

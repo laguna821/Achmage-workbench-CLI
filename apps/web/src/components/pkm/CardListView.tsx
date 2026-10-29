@@ -20,17 +20,20 @@ type Drag = { card: PkmCard; x0: number; y0: number; x: number; y: number; activ
 const TONE: Partial<Record<NonNullable<PkmCard["status"]>, string>> = { starting: "active", running: "active", interrupting: "active", awaitingApproval: "attention", error: "error" };
 
 /** A picture the gateway serves behind the token. */
-export function Picture({ path, alt, className }: { path: string | null; alt: string; className?: string }) {
+export function Picture({ path, alt, className, width, height }: { path: string | null; alt: string; className?: string; width?: number; height?: number }) {
   const [url, setUrl] = useState<string | null>(null);
+  // A picture on the web (R2, S3 …) is shown from there, without the gateway or its token.
+  const remote = path !== null && /^https?:\/\//i.test(path);
   useEffect(() => {
     let cancelled = false;
     setUrl(null);
-    if (path) void pictureUrl(path).then((next) => !cancelled && setUrl(next));
+    if (path && !remote) void pictureUrl(path).then((next) => !cancelled && setUrl(next));
     return () => {
       cancelled = true;
     };
-  }, [path]);
-  return url ? <img src={url} alt={alt} className={className} draggable={false} /> : null;
+  }, [path, remote]);
+  if (remote) return <img src={path} alt={alt} className={className} width={width} height={height} loading="lazy" referrerPolicy="no-referrer" draggable={false} />;
+  return url ? <img src={url} alt={alt} className={className} width={width} height={height} draggable={false} /> : null;
 }
 
 /** A tag as a pill, in Notebook Navigator's colour for it when there is one. */

@@ -58,7 +58,11 @@ describe("front matter", () => {
     expect(excerpt.startsWith("첫 줄은 강조와 별칭을 지운 글입니다. 둘째 줄 코드 와 링크")).toBe(true);
     expect(excerpt).not.toContain("제목은");
     expect(firstImage(body)).toEqual({ kind: "embed", target: "표지.png" });
-    expect(firstImage("![원격](https://x.org/a.png) 그리고 ![로컬](그림/b.jpg)")).toEqual({ kind: "link", target: "그림/b.jpg" });
+    expect(firstImage("![원격](https://x.org/a.png) 그리고 ![로컬](그림/b.jpg)")).toEqual({ kind: "url", target: "https://x.org/a.png" });
+    expect(firstImage("![링크](https://x.org/글) 그리고 ![로컬](그림/b.jpg)")).toEqual({ kind: "link", target: "그림/b.jpg" });
+    expect(firstImage('글 <img src="https://pub-x.r2.dev/1-a.png?v=2" width="300"> 끝')).toEqual({ kind: "url", target: "https://pub-x.r2.dev/1-a.png?v=2" });
+    expect(firstImage('<img src="그림/c.webp">')).toEqual({ kind: "link", target: "그림/c.webp" });
+    expect(firstImage("![data](data:image/png;base64,AAAA.png)")).toBeNull();
     expect(firstImage("그림 없음")).toBeNull();
   });
 
