@@ -199,7 +199,7 @@ export const DEFAULT_APPEARANCE: Appearance = {
   },
   codex: {
     mode: "follow",
-    light: look(ACHMAGE_LIGHT, { fontSize: 16, lineHeight: 1.7 }),
+    light: look(ACHMAGE_LIGHT, { fontSize: 16, lineHeight: 1.7, bubble: "soft" }),
     dark: look(CODEX_MIDNIGHT, { fontSize: 16, lineHeight: 1.7, bubble: "rail" }),
   },
   v: APPEARANCE_VERSION,
@@ -218,13 +218,14 @@ const isObject = (value: unknown): value is Record<string, unknown> => Boolean(v
  * from then carries these values even where the user chose nothing; such a value takes today's
  * default. A value the user changed stays. Only looks stored before `v` 2 are read this way.
  */
-const LEGACY_DEFAULTS: Record<Provider, Record<Theme, { glow: Glow; radius: number; palette: Partial<Palette> }>> = {
+const LEGACY_DEFAULTS: Record<Provider, Record<Theme, { glow: Glow; radius: number; bubble?: Bubble; palette: Partial<Palette> }>> = {
   claude: {
     light: { glow: "soft", radius: 20, palette: { accent: "#c96442" } },
     dark: { glow: "soft", radius: 16, palette: {} },
   },
   codex: {
-    light: { glow: "soft", radius: 16, palette: { text: "#000000" } },
+    // A filled accent bubble per request read as a chat app; a tinted slip reads as a request.
+    light: { glow: "soft", radius: 16, bubble: "filled", palette: { text: "#000000" } },
     dark: { glow: "soft", radius: 12, palette: {} },
   },
 };
@@ -235,6 +236,7 @@ function upgradeLook(stored: Partial<Look>, base: Look, legacy: (typeof LEGACY_D
   const next: Partial<Look> = { ...stored };
   if (sameValue(stored.glow, legacy.glow)) next.glow = base.glow;
   if (sameValue(stored.radius, legacy.radius)) next.radius = base.radius;
+  if (legacy.bubble && sameValue(stored.bubble, legacy.bubble)) next.bubble = base.bubble;
   if (isObject(stored.palette)) {
     const palette: Partial<Palette> = { ...stored.palette };
     for (const [key, value] of Object.entries(legacy.palette) as [keyof Palette, string][]) {

@@ -44,6 +44,8 @@ describe("readAppearance", () => {
     }
     expect(read.claude.light.palette.accent).toBe(DEFAULT_APPEARANCE.claude.light.palette.accent);
     expect(read.codex.light.palette.text).toBe("#0e1726");
+    expect(read.codex.light.bubble).toBe("soft");
+    expect(read.claude.dark.bubble).toBe("rail");
     expect(read.v).toBe(APPEARANCE_VERSION);
   });
 

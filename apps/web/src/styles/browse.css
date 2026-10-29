@@ -1,7 +1,7 @@
 /* ── Agent browser: the pill under the input and its card ─────────────────── */
 .browser-pill {
   gap: 5px;
-  font-size: 14px;
+  font-size: var(--fs-ui);
   color: var(--muted);
 }
 
@@ -32,7 +32,7 @@
   max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
   color: var(--muted);
 }
 
@@ -66,7 +66,7 @@
 }
 
 .browser-note {
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
   line-height: 1.45;
   color: var(--muted);
 }
@@ -78,7 +78,7 @@
   height: 20px;
   padding: 0;
   border: 1px solid var(--line);
-  border-radius: 99px;
+  border-radius: var(--r-full);
   background: var(--surface-muted);
   cursor: pointer;
 }
@@ -136,7 +136,7 @@
   width: 100%;
   height: 5px;
   overflow: hidden;
-  border-radius: 99px;
+  border-radius: var(--r-full);
   background: color-mix(in srgb, var(--muted) 18%, transparent);
 }
 
@@ -160,11 +160,11 @@
   height: 30px;
   padding: 0 8px;
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--r-sm);
   background: var(--bg);
   color: var(--text);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 
 .browser-login-open {
@@ -174,10 +174,10 @@
   gap: 6px;
   width: 100%;
   padding: 8px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--amber-soft);
   color: var(--amber-text);
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
   line-height: 1.45;
 }
 

@@ -6,19 +6,18 @@
 }
 
 .plan-toggle.on {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--active-text);
+  background: var(--accent-soft);
 }
 
+/* The plan inside the card that asks: plain text on the card, no box in a box. */
 .plan-approval .plan-approval-text {
   max-height: 320px;
-  margin: 6px 0 10px;
-  padding: 10px 14px;
+  margin: 2px 0 var(--space-1);
+  padding: 2px 0 2px var(--space-3);
   overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-  font-size: 14px;
+  border-left: 1px solid color-mix(in srgb, var(--amber) 35%, var(--line));
+  font-size: var(--fs-ui);
 }
 
 .plan-approval .plan-approval-text > :first-child {
@@ -30,9 +29,10 @@
 }
 
 .plan-tag {
-  padding: 0 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
-  font-size: 11.5px;
+  padding: 1px 6px;
+  border-radius: var(--r-xs);
+  background: var(--accent-soft);
+  color: var(--active-text);
+  font-size: var(--fs-micro);
+  font-weight: 600;
 }

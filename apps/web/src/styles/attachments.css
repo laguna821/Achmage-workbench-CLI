@@ -8,16 +8,16 @@
   height: 30px;
   padding: 0 4px 0 4px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--surface);
   color: var(--text);
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
 }
 
 .attach-chip img {
   width: 22px;
   height: 22px;
-  border-radius: 4px;
+  border-radius: var(--r-xs);
   object-fit: cover;
   flex: none;
 }
@@ -47,7 +47,7 @@
   flex: none;
   padding: 3px;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--r-xs);
   background: none;
   color: var(--muted);
   cursor: pointer;
@@ -70,7 +70,7 @@
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--surface-muted);
   cursor: zoom-in;
 }
@@ -90,7 +90,7 @@
   width: 96px;
   height: 72px;
   color: var(--faint);
-  font-size: 12px;
+  font-size: var(--fs-micro);
 }
 
 .attach-lightbox {
@@ -107,7 +107,7 @@
 .attach-lightbox img {
   max-width: 100%;
   max-height: 100%;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   box-shadow: var(--popover-shadow);
 }
 
@@ -126,7 +126,7 @@
   border-radius: inherit;
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   color: var(--accent);
-  font-size: 13.5px;
+  font-size: var(--fs-meta);
   font-weight: 600;
   pointer-events: none;
 }
