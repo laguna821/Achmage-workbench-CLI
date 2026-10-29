@@ -42,6 +42,10 @@ node scripts/app-e2e/run.ts apps/desktop/src-tauri/target/debug/achmage-workbenc
 
 `--only=hwp --engines=real`은 실제 Codex에 HWPX 작업 사본의 문장 한 곳 수정을 요청한다. 실제 바이너리 수정안 생성, 적용 전 원본 불변, UI 적용과 같은 세션의 내부 편집기 갱신을 검사한다. 사람의 입력·기존 복구 문장·메모를 확인하고 transcript·실제 모델/session 식별·수정 파일·화면을 남긴다. 최대 5분 기다리며 임의 승인을 자동 수락하지 않는다.
 
+`hwp`는 실제 파일 메뉴의 PDF·다른 이름 저장도 검사한다. 미저장 키 입력을 PDF와 사본에 포함하고 원본 바이트를 유지해야 한다. `pdfinfo`/`pdftotext`(Poppler)로 A4·한글·현재 내용을 읽는다. 추출 텍스트의 줄바꿈만 정규화한다. 새 사본의 내부 편집기 준비까지 기다린 뒤 화면을 남긴다. 마지막 인쇄는 실제 `GtkPrintUnixDialog`를 전용 GTK 모듈로 캡처하고 Cancel 응답을 보낸 후 정적 벡터 미리보기를 확인한다. 프린터로 인쇄하지 않으며 출력 성공을 흉내 내지 않는다. GTK 프로브는 `--only=hwp`의 하네스 자식 프로세스에서만 활성화한다.
+
+Tauri 패키징 전 `clean-web.mjs`는 Word/Slides/Sheets/HWP/studio/design 진입 파일을 모두 확인한다. 웹 단독 Vite 빌드가 Office 리소스를 지웠다면 전체 `npm run build` 후 Tauri를 빌드해야 한다.
+
 Linux에서 Broadway는 파일로 보이지 않는 추상 UNIX 소켓을 사용할 수 있으므로 실제 연결로 준비 상태를 판별한다. 설정 저장은 화면이 닫히는 시점보다 늦을 수 있어 API의 영속 상태를 기다린다.
 
 종료는 이 하네스가 시작한 자식 프로세스만 정상 종료한다. 종료되지 않으면 임시 폴더를 유지하고 실패를 기록한다. `--engines=real`은 실제 사용자 엔진 설정을 사용하는 별도 선택이며 기본 회귀 검사에 필요하지 않다.

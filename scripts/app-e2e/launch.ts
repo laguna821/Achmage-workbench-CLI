@@ -142,6 +142,7 @@ export type Stage = {
   broadwayPort: number;
   /** Temporary X11 server only for the legacy Electron document renderer. */
   x11?: { display: string; authority: string };
+  printDialog?: boolean;
   tools: Tools;
   /** JSON lines written by the opener stand-ins. */
   openLog: string;
@@ -173,7 +174,7 @@ export type AppRun = {
 };
 
 /** Build the stage: temp root, DPI module, bus config, opener stand-ins, a Broadway display. */
-export async function openStage(outDir: string, options: { legacyOffice?: boolean } = {}): Promise<Stage> {
+export async function openStage(outDir: string, options: { legacyOffice?: boolean; printDialog?: boolean } = {}): Promise<Stage> {
   const tools = findTools();
   const root = mkdtempSync("/tmp/wb-app-e2e-");
   const started: ChildProcess[] = [];
@@ -252,6 +253,7 @@ export async function openStage(outDir: string, options: { legacyOffice?: boolea
     display,
     broadwayPort,
     x11,
+    printDialog: options.printDialog,
     tools,
     openLog,
     async launch(options) {
@@ -307,6 +309,7 @@ async function launchApp(input: { stage: Stage; options: LaunchOptions; dpiModul
     APP_E2E_REAL_XDG_DATA_HOME: process.env.XDG_DATA_HOME ?? "",
   });
   if (stage.x11) Object.assign(env, { DISPLAY: stage.x11.display, XAUTHORITY: stage.x11.authority, XDG_SESSION_TYPE: "x11", ELECTRON_OZONE_PLATFORM_HINT: "x11" });
+  if (stage.printDialog) env.APP_E2E_PRINT_PROBE_DIR = stage.outDir;
   if (options.engines === "stand-in") {
     env.WORKBENCH_CODEX_BIN = join(repo, "scripts/fixtures/fake-codex.mjs");
     env.WORKBENCH_CLAUDE_BIN = join(repo, "scripts/fixtures/fake-claude.mjs");

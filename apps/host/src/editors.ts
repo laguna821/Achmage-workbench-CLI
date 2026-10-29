@@ -75,7 +75,7 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
           res.writeHead(200, { "content-type": "application/octet-stream", "cache-control": "no-store", "x-workbench-tracking-dropped": String(opened.trackingDropped), "x-workbench-save-blocked": String(opened.saveBlocked) });
           res.end(opened.bytes); return;
         }
-        if (operation === "tabs" && method === "POST") return sendJson(res, 200, await hwpTabs(await readBody(req, HWP_MAX_BYTES), format));
+        if (operation === "tabs" && method === "POST") return sendJson(res, 200, await hwpTabs(await readBody(req, HWP_MAX_BYTES), hwpFormat(url.searchParams.get("format") ?? format)));
         if ((operation === "save" || operation === "repair") && method === "POST") {
           if (operation === "save") documents.registry.assertWrite(id!, grants.access(bearer!));
           const { bytes, metadata } = decodeHwpSave(await readBody(req, HWP_MAX_BYTES + 1_000_004));

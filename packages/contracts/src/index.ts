@@ -749,6 +749,7 @@ export type EditorGrant = { url: string; origin: string; token: string };
 
 /** Workbench window → office editor page (iframe at /office/<kind>.html). */
 export type OfficeHostMessage =
+  | import("./office-output.ts").OfficeOutputResult
   | {
       type: "office:init";
       token: string;
@@ -772,6 +773,8 @@ export type OfficeHostMessage =
 
 /** Office editor page → Workbench window. */
 export type OfficePageMessage =
+  | import("./office-output.ts").OfficeOutputRequest
+  | { type: "office:copied"; artifactId: string }
   | { type: "office:ready" }
   /** The editor shows this revision; `recovered` when it reopened unsaved edits made on it. */
   | { type: "office:opened"; revision: number; recovered: boolean }

@@ -97,6 +97,8 @@ export class WebDriver {
   url = () => this.command<string>("GET", "/url");
   refresh = () => this.command<null>("POST", "/refresh", {});
   windowHandles = () => this.command<string[]>("GET", "/window/handles");
+  switchWindow = (handle: string) => this.command<null>("POST", "/window", { handle });
+  closeWindow = () => this.command<string[]>("DELETE", "/window");
   windowRect = () => this.command<Rect>("GET", "/window/rect");
   setWindowRect = (rect: Partial<Rect>) => this.command<Rect>("POST", "/window/rect", rect);
   /** Select an iframe's browsing context (null returns to the top page). */

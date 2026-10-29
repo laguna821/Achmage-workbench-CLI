@@ -1,6 +1,9 @@
 import { Events, Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
 import type { HwpFormat, MeasuredTab, MemoSnapshot } from "../../../packages/contracts/src/hwp.ts";
+import { encodeHwpSave } from "../../../packages/contracts/src/hwp.ts";
+import type { OfficeOutputPlan, SvgJob } from "../../../packages/contracts/src/office-output.ts";
+import { prepareOutput, commitOutput, printOutput } from "./output.ts";
 
 // Ieum's HWP screen owns editing, tables, memos, selection and serialization. This bridge owns
 // the Workbench revision, writer grant and recovery copy. No Electron main process is involved.
@@ -9,7 +12,7 @@ const gateway = new Gateway(init.token), events = new Events();
 const id = init.artifact.id, path = init.artifact.path;
 const format: HwpFormat = /\.hwpx$/i.test(path) ? "hwpx" : "hwp";
 const state = { revision: init.artifact.revision, theme: init.theme, dirty: false, kept: false, recovered: false, trackingDropped: false, saveBlocked: false, password: false, memoOpen: false, epoch: 0 };
-let saveTurn: { revision: number; epoch: number } | null = null;
+let saveTurn: { revision: number; epoch: number; output?: OfficeOutputPlan } | null = null;
 let recoveryTurn: { revision: number; epoch: number } | null = null;
 let opening: Promise<Uint8Array> | null = null;
 let closeAnswer: ((ok: boolean) => void) | null = null;
@@ -90,18 +93,28 @@ const hwpApi = {
     if (init.readOnly) return { ok: false, error: "읽기 전용 문서입니다." };
     if (state.memoOpen) { events.emit("memoBlocked"); return { ok: false, reason: "memo", error: "메모 작성을 마친 뒤 저장하세요." }; }
     if (state.saveBlocked) return { ok: false, reason: "tracked", error: "변경 추적을 보존할 수 없어 저장하지 않았습니다." };
-    if (mode === "saveAs") return { ok: false, error: "다른 이름 저장은 문서 메뉴의 ‘새 문서로’에서 진행하세요." };
-    saveTurn = { revision: state.revision, epoch: ++state.epoch };
-    return { ok: true, path, format };
+    try {
+      const output = mode === "saveAs" ? await prepareOutput(state.revision, format) : null;
+      if (mode === "saveAs" && !output) return { ok: true, canceled: true };
+      saveTurn = { revision: state.revision, epoch: ++state.epoch, ...(output ? { output } : {}) };
+      return { ok: true, path: output?.path ?? path, format: output?.format ?? format };
+    } catch (error) { return reportFailure(error); }
   },
   newTabs: (bytes: Uint8Array, exportedFormat: HwpFormat) => {
-    if (exportedFormat !== format) throw new Error("문서 형식이 바뀌었습니다.");
-    return gateway.hwpTabs(id, saveTurn?.revision ?? state.revision, bytes);
+    if (exportedFormat !== (saveTurn?.output?.format ?? format)) throw new Error("문서 형식이 바뀌었습니다.");
+    return gateway.hwpTabs(id, saveTurn?.revision ?? state.revision, bytes, exportedFormat);
   },
   commitSave: async (bytes: Uint8Array, tabs?: MeasuredTab[], options?: { memos?: MemoSnapshot[] | null }) => {
     const turn = saveTurn;
     if (!turn || init.readOnly) return { ok: false, error: "저장 요청을 다시 시작하세요." };
     try {
+      if (turn.output) {
+        const saved = await commitOutput(turn.output.id, encodeHwpSave({ tabs, memos: options?.memos }, bytes));
+        await recovery.drop(id).catch(() => undefined);
+        state.kept = state.recovered = state.dirty = false;
+        post({ type: "office:copied", artifactId: saved.artifactId });
+        return { ok: true, path: saved.path };
+      }
       const saved = await gateway.saveHwp(id, turn.revision, bytes, { tabs, memos: options?.memos });
       state.revision = saved.revision;
       state.epoch++;
@@ -120,7 +133,10 @@ const hwpApi = {
     if (command === "print" || command === "pdf") events.emit("printRequest", command);
   },
   onPrintRequest: events.on("printRequest"),
-  printPages: async () => ({ ok: false, error: "한글 인쇄·PDF 내보내기 연결을 준비 중입니다." }),
+  printPages: async (job: SvgJob & { mode: "print" | "pdf" }) => {
+    try { const result = await printOutput(state.revision, job, job.mode); return { ok: true, ...(result ?? { canceled: true }) }; }
+    catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
+  },
   onCloseSaveRequest: events.on("closeSaveRequest"),
   sendCloseSaveResult: (ok: boolean) => closeAnswer?.(ok),
   setMemoModalOpen: (open: boolean) => { state.memoOpen = open; },
@@ -169,8 +185,8 @@ const hwpApi = {
   getAiPanelPrefs: async () => panelPrefs,
   setAiPanelPrefs: async () => panelPrefs,
   onAiPanelPrefsChanged: events.on("aiPanelPrefsChanged"),
-  // These explicitly incomplete ports remain in the parity ledger until the shared AI and
-  // output services are connected. Missing methods never silently report success.
+  // These explicitly incomplete ports remain in the parity ledger until shared AI services
+  // are connected. Missing methods never silently report success.
   getAiSettings: async () => ({ provider: "auto", providers: {} }),
   setAiSettings: pendingFeature,
   onAiSettingsChanged: events.on("aiSettingsChanged"),

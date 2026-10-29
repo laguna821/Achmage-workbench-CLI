@@ -83,8 +83,8 @@ export class Gateway {
     return { bytes: await response.arrayBuffer(), trackingDropped: response.headers.get("x-workbench-tracking-dropped") === "true", saveBlocked: response.headers.get("x-workbench-save-blocked") === "true" };
   }
 
-  async hwpTabs(artifactId: string, revision: number, bytes: Uint8Array): Promise<TabSpot[]> {
-    return (await this.call("POST", `/api/artifacts/${artifactId}/hwp/tabs?revision=${revision}`, bytes.slice().buffer)).json();
+  async hwpTabs(artifactId: string, revision: number, bytes: Uint8Array, format?: "hwp" | "hwpx"): Promise<TabSpot[]> {
+    return (await this.call("POST", `/api/artifacts/${artifactId}/hwp/tabs?revision=${revision}${format ? `&format=${format}` : ""}`, bytes.slice().buffer)).json();
   }
 
   async saveHwp(artifactId: string, revision: number, bytes: Uint8Array, metadata: HwpSaveMetadata) {

@@ -127,6 +127,13 @@ export class Api {
   }
 
   snapshot = () => this.request<Snapshot>("GET", "/api/snapshot");
+  prepareOfficeOutput = (artifactId: string, revision: number, path: string) => this.request<{ id: string; path: string; format: "hwp" | "hwpx" | "pdf"; exists: boolean; size: number }>("POST", `/api/artifacts/${artifactId}/outputs`, { revision, path });
+  async commitOfficeOutput(artifactId: string, id: string, bytes: ArrayBuffer, replace: boolean) {
+    const response = await fetch(`/api/artifacts/${artifactId}/outputs/${id}?replace=${replace ? 1 : 0}`, { method: "POST", headers: { authorization: `Bearer ${this.token}`, ...this.editorHeaders(), "content-type": "application/octet-stream" }, body: bytes });
+    const json = await response.json();
+    if (!response.ok) throw new ApiRequestError(response.status, json);
+    return json as { path: string; artifact: Artifact; backupPath?: string };
+  }
   userSkills = (scope: SkillScope = {}) => this.request<WorkbenchSkill[]>("GET", skillUrl("", scope));
   userSkill = (id: string, scope: SkillScope = {}) => this.request<WorkbenchSkillDetail>("GET", skillUrl(`/${encodeURIComponent(id)}`, scope));
   skillState = (id: string, state: WorkbenchSkillState, scope: SkillScope = {}) => this.request<WorkbenchSkill>("PUT", skillUrl(`/${encodeURIComponent(id)}/state`, scope), state);

@@ -1,6 +1,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { Artifact, DocumentAccess, EditorGrant, OfficePageMessage } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
+import type { OfficeOutputPlan, OfficeOutputRequest } from "../../../../../packages/contracts/src/office-output.ts";
+import { OfficeOutputDialog } from "./OfficeOutputDialog.tsx";
 
 export type OfficeHandle = {
   /** Save unsaved edits now; resolves with the saved revision, or null when they could not be saved. */
@@ -25,8 +27,8 @@ export type OfficeStatus = { dirty: boolean; revision: number | null; conflict: 
  */
 export const OfficeEditor = forwardRef<
   OfficeHandle,
-  { api: Api; artifact: Artifact; access?: DocumentAccess; hidden?: boolean; onStatus(status: OfficeStatus): void; onNotice(message: string): void }
->(function OfficeEditor({ api, artifact, access, hidden = false, onStatus, onNotice }, ref) {
+  { api: Api; artifact: Artifact; access?: DocumentAccess; hidden?: boolean; onStatus(status: OfficeStatus): void; onNotice(message: string): void; onCopied?(artifactId: string): void }
+>(function OfficeEditor({ api, artifact, access, hidden = false, onStatus, onNotice, onCopied }, ref) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [generation, setGeneration] = useState(0);
   // Each opening of the page gets its own grant (a token for this document only).
@@ -39,15 +41,29 @@ export const OfficeEditor = forwardRef<
   const waiters = useRef<((revision: number | null) => void)[]>([]);
   // False only for the reload right after "open the latest revision": kept edits are dropped then.
   const recover = useRef(true);
-  const handlers = useRef({ onStatus, onNotice });
-  handlers.current = { onStatus, onNotice };
+  const handlers = useRef({ onStatus, onNotice, onCopied });
+  handlers.current = { onStatus, onNotice, onCopied };
+  const outputBusy = useRef(false);
+  const outputPlans = useRef(new Map<string, OfficeOutputPlan>());
+  const copied = useRef(new Set<string>());
+  const [output, setOutput] = useState<{ revision: number; format: "pdf" | "hwp" | "hwpx"; choose(plan: OfficeOutputPlan | null): void } | null>(null);
   const latest = useRef(artifact);
   latest.current = artifact;
 
   const theme = () => (frame.current?.closest("[data-theme]")?.getAttribute("data-theme") === "dark" ? "dark" : "light");
   const update = (patch: Partial<OfficeStatus>) => {
     status.current = { ...status.current, ...patch };
+    if (frame.current) frame.current.dataset.revision = String(status.current.revision ?? "");
     handlers.current.onStatus(status.current);
+  };
+  const reconcile = () => {
+    const shown = status.current.revision, revision = latest.current.revision;
+    if (shown === null || revision <= shown || own.current.has(revision)) return;
+    if (Date.now() - savingSince.current < 15_000) return;
+    if (!status.current.dirty && !status.current.conflict) {
+      update({ revision: null });
+      setGeneration((value) => value + 1);
+    } else if (!status.current.conflict) update({ conflict: { code: "revision_conflict", message: `다른 곳에서 r${revision}이 생겼습니다. 저장하지 않은 편집은 편집기에 그대로 있습니다.` } });
   };
   const send = (value: unknown) => {
     if (opened.current) frame.current?.contentWindow?.postMessage(value, opened.current.origin);
@@ -62,6 +78,41 @@ export const OfficeEditor = forwardRef<
       const timer = window.setTimeout(() => finish(null), 16_000);
       waiters.current.push(finish);
     });
+
+  const handleOutput = async (message: OfficeOutputRequest) => {
+    const target = frame.current?.contentWindow, origin = opened.current?.origin;
+    if (!target || !origin) return;
+    const reply = (value: unknown, error?: string) => target.postMessage({ type: "office:output-result", requestId: message.requestId, value, error }, origin);
+    if (outputBusy.current) { reply(null, "다른 저장·출력 요청을 처리 중입니다."); return; }
+    outputBusy.current = true;
+    try {
+      if (message.action === "commit") {
+        const plan = outputPlans.current.get(message.planId);
+        if (!plan || !(message.bytes instanceof ArrayBuffer)) throw new Error("저장 위치를 다시 선택하세요.");
+        const result = await api.commitOfficeOutput(latest.current.id, plan.id, message.bytes, plan.replace);
+        outputPlans.current.delete(plan.id); copied.current.add(result.artifact.id);
+        reply({ path: result.path, artifactId: result.artifact.id });
+        if (result.backupPath) handlers.current.onNotice(`이전 파일을 백업했습니다: ${result.backupPath}`);
+        return;
+      }
+      if (message.action === "print") {
+        if (!("__TAURI_INTERNALS__" in window)) throw new Error("인쇄는 데스크톱 앱에서 실행해 주세요.");
+        const { invoke } = await import("@tauri-apps/api/core"); await invoke("print_svg", { job: message.job });
+        handlers.current.onNotice("인쇄 미리보기 창을 열었습니다."); reply({}); return;
+      }
+      const plan = await new Promise<OfficeOutputPlan | null>((resolve) => setOutput({ revision: message.revision, format: message.action === "prepare" ? message.format : "pdf", choose: resolve }));
+      setOutput(null);
+      if (!plan) { reply(null); return; }
+      if (message.action === "prepare") { outputPlans.current.set(plan.id, plan); reply(plan); return; }
+      if (!("__TAURI_INTERNALS__" in window)) throw new Error("PDF 출력은 데스크톱 앱에서 실행해 주세요.");
+      const { invoke } = await import("@tauri-apps/api/core");
+      const bytes = await invoke<ArrayBuffer>("render_svg_pdf", { job: message.job });
+      const result = await api.commitOfficeOutput(latest.current.id, plan.id, bytes, plan.replace);
+      handlers.current.onNotice(`PDF를 저장했습니다: ${result.path}`);
+      reply({ path: result.path, artifactId: result.artifact.id });
+    } catch (error) { reply(null, error instanceof Error ? error.message : String(error)); }
+    finally { outputBusy.current = false; }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -84,6 +135,17 @@ export const OfficeEditor = forwardRef<
       if (!opened.current || event.origin !== opened.current.origin || event.source !== frame.current?.contentWindow) return;
       const message = event.data as OfficePageMessage;
       switch (message.type) {
+        case "office:output": void handleOutput(message); break;
+        case "office:copied":
+          if (copied.current.delete(message.artifactId)) {
+            // The unsaved bytes now belong to the copy. Restore this old tab from its actual
+            // original file, then open the copy in the same session.
+            recover.current = false;
+            update({ dirty: false, revision: null, conflict: null });
+            setGeneration((value) => value + 1);
+            handlers.current.onCopied?.(message.artifactId);
+          }
+          break;
         case "office:ready": {
           const doc = latest.current;
           send({
@@ -111,6 +173,9 @@ export const OfficeEditor = forwardRef<
             update({ revision: message.revision, dirty: message.recovered, conflict: null });
             if (message.recovered) handlers.current.onNotice("저장하지 않았던 편집을 되살렸습니다.");
           }
+          // The artifact may advance while this frame is opening. Its revision effect
+          // already ran with shown=null; reconcile again with the actual opened revision.
+          reconcile();
           break;
         case "office:saving":
           savingSince.current = Date.now();
@@ -119,6 +184,7 @@ export const OfficeEditor = forwardRef<
           savingSince.current = 0;
           own.current.add(message.revision);
           update({ revision: message.revision, dirty: false, conflict: null });
+          reconcile();
           break;
         case "office:dirty":
           if (message.dirty !== status.current.dirty) update({ dirty: message.dirty });
@@ -164,14 +230,7 @@ export const OfficeEditor = forwardRef<
 
   // A revision made elsewhere (an applied AI proposal, a revert): open it when nothing here is unsaved.
   useEffect(() => {
-    const shown = status.current.revision;
-    if (shown === null || artifact.revision <= shown || own.current.has(artifact.revision)) return;
-    // The page's own save, heard of from the gateway before its "office:saved".
-    if (Date.now() - savingSince.current < 15_000) return;
-    if (!status.current.dirty && !status.current.conflict) setGeneration((value) => value + 1);
-    else if (!status.current.conflict) {
-      update({ conflict: { code: "revision_conflict", message: `다른 곳에서 r${artifact.revision}이 생겼습니다. 저장하지 않은 편집은 편집기에 그대로 있습니다.` } });
-    }
+    reconcile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [artifact.revision]);
 
@@ -215,7 +274,8 @@ export const OfficeEditor = forwardRef<
     );
   }
   if (!opened.current) return hidden ? null : <div className="column empty-hint">편집기를 여는 중…</div>;
-  return (
+  return (<>
+    {output ? <OfficeOutputDialog api={api} artifact={artifact} revision={output.revision} format={output.format} onChoose={output.choose} onCancel={() => output.choose(null)} /> : null}
     <iframe
       key={`${artifact.id}:${generation}`}
       ref={frame}
@@ -226,5 +286,5 @@ export const OfficeEditor = forwardRef<
       src={`${opened.current.url}?a=${artifact.id}&g=${generation}&host=${encodeURIComponent(location.origin)}`}
       title={`${artifact.format === "pptx" ? "PPT" : artifact.format === "xlsx" ? "엑셀" : artifact.format === "hwp" || artifact.format === "hwpx" ? "한글" : "워드"} 편집기 · ${artifact.name}`}
     />
-  );
+  </>);
 });

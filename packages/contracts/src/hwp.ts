@@ -9,6 +9,14 @@ export type MemoSnapshot = {
   path: { type: "cell" | "textbox"; controlIndex: number; cellIndex?: number; paraIndex: number }[] | null;
 };
 export type HwpSaveMetadata = { tabs?: MeasuredTab[]; memos?: MemoSnapshot[] | null };
+export type SaveMode = "save" | "saveAs";
+/** The save-flow subset of Ieum's preload contract; excludes Electron and AI provider types. */
+export type HwpSaveApi = {
+  beginSave(mode: SaveMode): Promise<{ ok: true; path: string; format: HwpFormat } | { ok: true; canceled: true } | { ok: false; error: string; reason?: "tracked" | "memo" }>;
+  newTabs(bytes: Uint8Array, format: HwpFormat): Promise<TabSpot[]>;
+  commitSave(bytes: Uint8Array, tabs?: MeasuredTab[], options?: { auto?: boolean; memos?: MemoSnapshot[] | null }): Promise<{ ok: true; path: string; backupPath?: string; tailsLost?: true; memosLost?: number } | { ok: false; error: string }>;
+  abortSave(): void;
+};
 
 /** A bounded JSON prefix plus raw bytes, avoiding a second base64 document in memory. */
 export function encodeHwpSave(metadata: HwpSaveMetadata, bytes: Uint8Array): ArrayBuffer {

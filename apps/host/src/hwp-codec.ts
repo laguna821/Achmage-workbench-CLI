@@ -61,15 +61,15 @@ export function decodeHwpSave(body: Buffer): { metadata: HwpSaveMetadata; bytes:
 }
 
 /** No file is written here. The caller rechecks the writer/revision/disk CAS after these awaits. */
-export async function prepareHwpSave(original: Uint8Array, data: Uint8Array, format: HwpFormat, metadata: HwpSaveMetadata, purpose: "save" | "recovery" = "save") {
+export async function prepareHwpSave(original: Uint8Array, data: Uint8Array, format: HwpFormat, metadata: HwpSaveMetadata, purpose: "save" | "recovery" = "save", originalFormat: HwpFormat = format) {
   await checkContainer(data, format);
-  const opened = await openHwpBytes(original, format);
+  const opened = await openHwpBytes(original, originalFormat);
   if (opened.saveBlocked) throw bad("이 문서의 변경 추적을 보존할 수 없어 저장하지 않았습니다.");
   const fixed = applySaveFixes(data, format, metadata.tabs, opened.base);
   if (fixed.tailsSkipped) throw new HttpError(422, "hwp_content_loss", "마스터 페이지나 메모를 보존할 수 없어 저장하지 않았습니다. 원본과 편집 내용은 유지됩니다.");
   // Validate both the document and memo model before considering the output a new revision.
   await hwpToText(fixed.bytes);
-  if (format === "hwpx" && purpose === "save") {
+  if ((format === "hwpx" || format !== originalFormat) && purpose === "save") {
     await hwpMemosOf(fixed.bytes);
     const originalMemos = await hwpMemosOf(original);
     // If the UI could not list its live memos, preserve every original memo. An intentional

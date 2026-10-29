@@ -1,0 +1,14 @@
+Workbench's Rust desktop output service uses:
+
+svg2pdf 0.13.0 — https://github.com/typst/svg2pdf
+pdf-writer 0.12.1 — https://github.com/typst/pdf-writer
+
+Both are licensed under MIT OR Apache-2.0. Their published license/notice
+files are included here without changes. Exact dependency versions and
+registry checksums are recorded in apps/desktop/src-tauri/Cargo.lock.
+Transitive dependencies remain subject to their own licenses.
+
+Paper-size snapping and the per-page print layout follow IeumOffice's
+apps/hwp/src/main/print-document.ts at commit
+30ff4f051f067fcb2baf1ab416c40718c802ca35 (Apache-2.0).
+See ../ieumoffice/NOTICE and LICENSE for that attribution.

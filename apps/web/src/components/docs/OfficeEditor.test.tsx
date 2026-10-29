@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { createRef } from "react";
-import { act, cleanup, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { Artifact } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
@@ -43,4 +43,44 @@ it("keeps the editor on timeout or a revision conflict", async () => {
   expect(await pending).toBeInstanceOf(Error);
   await message({ type: "office:conflict", code: "revision_conflict", message: "another writer" });
   await expect(ref.current!.leave()).rejects.toThrow("충돌");
+});
+
+it("opens a revision that arrived while the editor was still opening", async () => {
+  const editorGrant = vi.fn(async () => ({ token: "test", origin: "http://office.test", url: "http://office.test/hwp" }));
+  const api = { editorGrant } as unknown as Api;
+  const artifact = { id: "doc", name: "test.hwpx", format: "hwpx", revision: 1, path: "/test.hwpx", sha256: "test" } as Artifact;
+  const onStatus = vi.fn();
+  const screen = render(<OfficeEditor api={api} artifact={artifact} onNotice={() => {}} onStatus={onStatus} />);
+  await act(async () => {});
+  const first = screen.getByTitle("한글 편집기 · test.hwpx") as HTMLIFrameElement;
+  screen.rerender(<OfficeEditor api={api} artifact={{ ...artifact, revision: 2 }} onNotice={() => {}} onStatus={onStatus} />);
+  await act(async () => { window.dispatchEvent(new MessageEvent("message", { origin: "http://office.test", source: first.contentWindow, data: { type: "office:opened", revision: 1, recovered: false } })); });
+  expect(editorGrant).toHaveBeenCalledTimes(2);
+  const second = screen.getByTitle("한글 편집기 · test.hwpx") as HTMLIFrameElement;
+  expect(second).not.toBe(first);
+  await act(async () => { window.dispatchEvent(new MessageEvent("message", { origin: "http://office.test", source: second.contentWindow, data: { type: "office:opened", revision: 2, recovered: false } })); });
+  expect(onStatus).toHaveBeenLastCalledWith({ revision: 2, dirty: false, conflict: null });
+});
+
+it("a committed Save As permits guarded navigation before the original frame reloads", async () => {
+  const ref = createRef<OfficeHandle>();
+  const api = {
+    editorGrant: async () => ({ token: "test", origin: "http://office.test", url: "http://office.test/hwp" }),
+    prepareOfficeOutput: async () => ({ id: "plan", path: "/copy.hwpx", format: "hwpx", exists: false, size: 0 }),
+    commitOfficeOutput: async () => ({ path: "/copy.hwpx", artifact: { id: "copy" } }),
+  } as unknown as Api;
+  const artifact = { id: "doc", name: "test.hwpx", format: "hwpx", revision: 1, path: "/test.hwpx", sha256: "test" } as Artifact;
+  let leaving: Promise<void> | undefined;
+  const onCopied = vi.fn(() => { leaving = ref.current!.leave(); });
+  const screen = render(<OfficeEditor ref={ref} api={api} artifact={artifact} onNotice={() => {}} onStatus={() => {}} onCopied={onCopied} />);
+  await act(async () => {});
+  const frame = screen.getByTitle("한글 편집기 · test.hwpx") as HTMLIFrameElement;
+  const message = async (data: unknown) => act(async () => { window.dispatchEvent(new MessageEvent("message", { origin: "http://office.test", source: frame.contentWindow, data })); });
+  await message({ type: "office:opened", revision: 1, recovered: false });
+  await message({ type: "office:dirty", dirty: true });
+  await message({ type: "office:output", requestId: "one", action: "prepare", revision: 1, format: "hwpx" });
+  await act(async () => fireEvent.submit(screen.getByRole("dialog")));
+  await message({ type: "office:output", requestId: "two", action: "commit", planId: "plan", bytes: new ArrayBuffer(8) });
+  await message({ type: "office:copied", artifactId: "copy" });
+  expect(onCopied).toHaveBeenCalledWith("copy"); await expect(leaving).resolves.toBeUndefined();
 });

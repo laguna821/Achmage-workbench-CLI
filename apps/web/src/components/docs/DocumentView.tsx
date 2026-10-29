@@ -926,7 +926,7 @@ export default function DocumentView({
       </div> : null}
       <div className="doc-body" ref={bodyRef} inert={!lease.canWrite && everWriter.current && Boolean(design || officeEditing)}>
         {officeEditing && everWriter.current ? (
-          <OfficeEditor ref={officeRef} api={api} artifact={artifact} access={lease.access()} hidden={Boolean(compare || viewing)} onStatus={setOfficeStatus} onNotice={onToast} />
+          <OfficeEditor ref={officeRef} api={api} artifact={artifact} access={lease.access()} hidden={Boolean(compare || viewing)} onStatus={setOfficeStatus} onNotice={onToast} onCopied={onOpenArtifact} />
         ) : null}
         {body}
       </div>

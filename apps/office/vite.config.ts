@@ -142,7 +142,8 @@ function pagePlatform(): Plugin {
   return {
     name: "workbench-page-platform",
     enforce: "pre",
-    resolveId(source) {
+    resolveId(source, importer) {
+      if (source === "./save-flow" && importer === `${ieum}/apps/hwp/src/renderer/App.tsx`) return here("./src/hwp-save.ts");
       return source === "electron" ? here("./src/platform/electron-renderer.ts") : null;
     },
   };

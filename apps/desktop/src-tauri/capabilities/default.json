@@ -38,6 +38,8 @@
     "notification:default",
     "allow-open-session-window",
     "allow-notify-session",
-    "allow-set-attention"
+    "allow-set-attention",
+    "allow-render-svg-pdf",
+    "allow-print-svg"
   ]
 }

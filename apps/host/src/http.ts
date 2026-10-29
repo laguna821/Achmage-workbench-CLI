@@ -16,6 +16,7 @@ import { routeDocImages, type DocImages } from "./doc-images.ts";
 import { routeCalendar, type CalendarFeeds } from "./calendar-feeds.ts";
 import { documentAccess } from "./document-registry.ts";
 import { skillRoutes } from "./skills-http.ts";
+import { OfficeOutputs } from "./office-output.ts";
 
 export const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -200,6 +201,7 @@ function streamEvents(req: IncomingMessage, res: ServerResponse, bus: EventBus, 
 export function createHttpServer(manager: SessionManager, bus: EventBus, options: HttpOptions): Server {
   const tickets = new Map<string, PreviewTicket>();
   const userSkills = skillRoutes(manager);
+  const outputs = new OfficeOutputs(manager.documents, (source, path) => manager.openFile(source.workId, path, source.workspaceId));
   return createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const path = url.pathname;
@@ -521,6 +523,11 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const documents = manager.documents;
         const artifactId = parts[1];
         const revision = url.searchParams.get("revision") ? Number(url.searchParams.get("revision")) : undefined;
+        if (method === "POST" && parts[2] === "outputs") {
+          if (parts[3]) return sendJson(res, 201, await outputs.commit(artifactId, parts[3], await readBody(req, 201_000_004), url.searchParams.get("replace") === "1"));
+          const body = await readJson(req);
+          return sendJson(res, 200, outputs.prepare(artifactId, Number(body.revision), String(body.path ?? "")));
+        }
         if (method === "POST" && parts[2] === "views") return sendJson(res, 200, documents.registry.open(artifactId, await readJson(req) as DocumentViewInput));
         if (method === "GET" && parts[2] === "text") return sendJson(res, 200, await documents.text(artifactId, revision));
         if (method === "GET" && parts[2] === "pages") return sendJson(res, 200, await documents.pages(artifactId, revision));

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { copyFileSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import init, { HwpDocument } from "../../vendor/ieumoffice/vendor/rhwp-core/rhwp.js";
 import { hwpMemosOf, hwpToText } from "../../third_party/ieumoffice/file-parse/hwp.ts";
@@ -75,9 +76,10 @@ export async function hwpScenario(ctx: Ctx) {
       await wd.click(buttons[0]!);
       ctx.report.check(S, "이전 복구본을 비교 화면에서 검토", await until(async () => await wd.execute<boolean>('return document.body.innerText.includes("LEGACY RECOVERED") && document.body.innerText.includes("이전 글 편집 복구본");')), undefined, await shot(ctx, "12-legacy-draft-review.png"));
       await wd.click(await wd.waitFor('.doc-legacy-draft button:last-of-type:not(:disabled)'));
-      const recovered = await until(async () => (await snapshot()).artifacts.find((item) => item.id === artifact.id)!.revision > beforeLegacy.revision, 30_000);
-      ctx.report.check(S, "명시적 복구 후 새 HWPX 판 저장·복구 항목만 정리", recovered && (await hwpToText(readFileSync(path))).includes("LEGACY RECOVERED") && await wd.execute<boolean>('return localStorage.getItem(arguments[0]) === null;', key));
+      const recovered = await until(async () => (await snapshot()).artifacts.find((item) => item.id === artifact.id)!.revision > beforeLegacy.revision && await wd.execute<boolean>('return localStorage.getItem(arguments[0]) === null;', key) && !await wd.find('.doc-legacy-draft'), 30_000);
+      ctx.report.check(S, "명시적 복구 후 새 HWPX 판 저장·복구 항목만 정리", recovered && (await hwpToText(readFileSync(path))).includes("LEGACY RECOVERED") && (await hwpMemosOf(readFileSync(path))).some((memo) => memo.text === "원본 메모를 보존"));
       if (!recovered) throw new Error("Legacy HWPX recovery did not save");
+      await wd.waitFor(`.pane:not([hidden]) iframe.office-frame[data-revision="${beforeLegacy.revision + 1}"]`, 60_000);
     }
     if (ctx.app.name === "real" && format === "hwpx") {
       const beforeAi = (await snapshot()).artifacts.find((item) => item.id === artifact.id)!;
@@ -108,5 +110,82 @@ export async function hwpScenario(ctx: Ctx) {
       writeFileSync(join(ctx.stage.outDir, "hwp-real-session.json"), JSON.stringify((await snapshot()).sessions.find((item) => item.id === session.id), null, 2));
       await wd.frame(null);
     }
+    if (format === "hwpx") {
+      const beforeOutput = readFileSync(path);
+      const menu = async (command: string) => {
+        await wd.frame(null); await wd.frame(await wd.waitFor('.pane:not([hidden]) iframe.office-frame', 30_000));
+        await until(async () => !!await wd.find('.hwp-app[data-phase="ready"]'), 60_000);
+        await wd.frame(await wd.waitFor('.hwp-editor-host iframe'));
+        await wd.click(await wd.waitFor('[data-menu="file"] .menu-title'));
+        await wd.click(await wd.waitFor(`[data-cmd="ext:ieum-${command}"]`));
+        await wd.frame(null);
+      };
+      const enterPath = async (value: string) => {
+        const input = await wd.waitFor('.office-output-dialog input[aria-label="저장할 파일 경로"]');
+        await wd.click(input);
+        await wd.keys([{ type: "keyDown", value: KEY.control }, { type: "keyDown", value: "a" }, { type: "keyUp", value: "a" }, { type: "keyUp", value: KEY.control }]);
+        await wd.sendKeys(input, value);
+      };
+      await menu("save-as"); await wd.waitFor('.office-output-dialog');
+      const cancel = (await wd.findAll('.office-output-dialog footer button'))[0]!; await wd.click(cancel);
+      ctx.report.check(S, "다른 이름 저장 취소가 원본 판을 유지", !await wd.find('.office-output-dialog') && hash(readFileSync(path)) === hash(beforeOutput));
+      await wd.frame(await wd.waitFor('.pane:not([hidden]) iframe.office-frame'));
+      await wd.frame(await wd.waitFor('.hwp-editor-host iframe'));
+      await wd.click(await wd.waitFor('.document-page-canvas'));
+      await wd.keys([{ type: "keyDown", value: KEY.control }, { type: "keyDown", value: "" }, { type: "keyUp", value: "" }, { type: "keyUp", value: KEY.control }]);
+      await wd.keys([..."UNSAVED COPY "].flatMap((value) => [{ type: "keyDown" as const, value }, { type: "keyUp" as const, value }]));
+      await wd.frame(null);
+      // Actual upstream File → Export as PDF, with current page SVG and Rust native conversion.
+      await menu("export-pdf");
+      const pdfPath = join(work.cwd, "Native output.pdf"); await enterPath(pdfPath);
+      await wd.click(await wd.waitFor('.office-output-dialog button[type="submit"]'));
+      const madePdf = await until(async () => existsSync(pdfPath), 60_000);
+      let pdfText = "", info = "";
+      if (madePdf) {
+        copyFileSync(pdfPath, join(ctx.stage.outDir, "native-output.pdf"));
+        pdfText = execFileSync("pdftotext", [pdfPath, "-"], { encoding: "utf8" }).replace(/\s+/g, " ");
+        info = execFileSync("pdfinfo", [pdfPath], { encoding: "utf8" });
+        writeFileSync(join(ctx.stage.outDir, "native-output.txt"), pdfText);
+        writeFileSync(join(ctx.stage.outDir, "native-output-info.txt"), info);
+      }
+      ctx.report.check(S, "실제 파일 메뉴의 Rust PDF 출력·미저장 입력·한글 검색·A4 용지", madePdf && /Pages:\s+1/.test(info) && info.includes("(A4)") && pdfText.includes("한글") && pdfText.includes("NATIVE") && pdfText.includes("UNSAVED COPY") && pdfText.includes("LEGACY RECOVERED"), `${info}\n${pdfText}`.slice(0, 1200), await shot(ctx, "12-pdf-output.png"));
+      if (!madePdf) throw new Error("Native PDF output was not saved");
+      ctx.report.check(S, "PDF 출력은 원본 바이트와 편집 판을 바꾸지 않음", hash(readFileSync(path)) === hash(beforeOutput));
+      await menu("save-as");
+      const copyPath = join(work.cwd, "Native copy.hwpx"); await enterPath(copyPath);
+      await wd.click(await wd.waitFor('.office-output-dialog button[type="submit"]'));
+      const copied = await until(async () => (await snapshot()).artifacts.some((item) => item.path === copyPath), 60_000);
+      ctx.report.check(S, "실제 다른 이름 저장으로 새 내부 문서 생성", copied && hash(readFileSync(path)) === hash(beforeOutput));
+      if (!copied) throw new Error("Native Save As did not create the copy");
+      const copy = (await snapshot()).artifacts.find((item) => item.path === copyPath)!;
+      const openedCopy = await until(async () => await wd.execute<boolean>('return Array.from(document.querySelectorAll(".pane:not([hidden]) iframe.office-frame")).some(f=>f.title.includes("Native copy.hwpx"));'), 30_000);
+      let readyCopy = false;
+      if (openedCopy) {
+        await wd.frame(await wd.waitFor('.pane:not([hidden]) iframe.office-frame[title*="Native copy.hwpx"]'));
+        readyCopy = await until(async () => !!await wd.find('.hwp-app[data-phase="ready"]'), 60_000);
+      }
+      const copiedText = await hwpToText(readFileSync(copy.path));
+      ctx.report.check(S, "저장 사본이 같은 세션에서 열리고 미저장 입력·본문·메모 보존", readyCopy && copiedText.includes("UNSAVED COPY") && copiedText.includes("LEGACY RECOVERED") && (await hwpMemosOf(readFileSync(copy.path))).some((memo) => memo.text === "원본 메모를 보존") && (await snapshot()).sessions.filter((item) => item.workId === work.id).length === 1, undefined, await shot(ctx, "12-save-as-copy.png"));
+      await wd.frame(null);
+      copyFileSync(copy.path, join(ctx.stage.outDir, "native-copy.hwpx"));
+    }
   }
+  const originalWindow = (await wd.windowHandles())[0]!;
+  await wd.frame(await wd.waitFor('.pane:not([hidden]) iframe.office-frame'));
+  await wd.frame(await wd.waitFor('.hwp-editor-host iframe'));
+  await wd.click(await wd.waitFor('[data-menu="file"] .menu-title'));
+  await wd.click(await wd.waitFor('[data-cmd="ext:ieum-print"]'));
+  await wd.frame(null);
+  const printing = await until(async () => (await wd.windowHandles()).length > 1, 30_000);
+  ctx.report.check(S, "실제 인쇄 메뉴가 별도 네이티브 인쇄 창을 엶", printing);
+  if (!printing) throw new Error("Native print window did not open");
+  const printWindow = (await wd.windowHandles()).find((handle) => handle !== originalWindow)!;
+  const dialogRecord = join(ctx.stage.outDir, "native-print-dialog.txt");
+  const dialogSeen = await until(async () => existsSync(dialogRecord), 30_000);
+  ctx.report.check(S, "실제 GTK 인쇄 대화상자를 캡처하고 취소", dialogSeen && readFileSync(dialogRecord, "utf8").includes("type=GtkPrintUnixDialog") && readFileSync(dialogRecord, "utf8").includes("response=cancel"), dialogSeen ? readFileSync(dialogRecord, "utf8") : undefined, join(ctx.stage.outDir, "native-print-dialog.png"));
+  if (!dialogSeen) throw new Error("GTK print dialog was not observed by the native harness");
+  await wd.switchWindow(printWindow);
+  await wd.waitFor('.page svg', 30_000);
+  ctx.report.check(S, "인쇄 미리보기의 현재 쪽과 정적 벡터 출력", await wd.execute<boolean>('return document.querySelectorAll(".page").length === 1 && document.querySelectorAll("svg path").length > 0 && !document.querySelector("script,foreignObject,iframe");'), await wd.url(), await shot(ctx, "12-native-print.png"));
+  await wd.closeWindow(); await wd.switchWindow(originalWindow);
 }

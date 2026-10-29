@@ -33,7 +33,7 @@ process.once("SIGINT", () => void stop().then(() => process.exit(130)));
 process.once("SIGTERM", () => void stop().then(() => process.exit(143)));
 
 try {
-  stage = await openStage(outDir, { legacyOffice: wants("template-office") });
+  stage = await openStage(outDir, { legacyOffice: wants("template-office"), printDialog: wants("hwp") });
   console.log(`app ${binary}\nout ${outDir}\nBroadway ${stage.display} (http://127.0.0.1:${stage.broadwayPort}/) · tmp ${stage.root}`);
   if (only.length) {
     const app = await stage.launch({ name: engines, binary, engines, profile: "native" });

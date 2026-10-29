@@ -9,6 +9,7 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{Emitter, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tauri_plugin_notification::NotificationExt;
+mod office_output;
 
 /// Closing the window only hides it (work goes on, PRD "트레이로 이동, 작업 유지"); said once.
 static HIDDEN_ONCE: AtomicBool = AtomicBool::new(false);
@@ -311,8 +312,24 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .invoke_handler(tauri::generate_handler![open_session_window, notify_session, set_attention])
+        .invoke_handler(tauri::generate_handler![open_session_window, notify_session, set_attention, office_output::render_svg_pdf, office_output::print_svg])
+        .manage(office_output::PrintJobs::default())
+        .register_uri_scheme_protocol("workbench-print", |ctx, request| {
+            let id = request.uri().path().trim_start_matches('/');
+            let jobs = ctx.app_handle().state::<office_output::PrintJobs>();
+            let body = jobs.0.lock().unwrap().get(id).cloned();
+            #[cfg(debug_assertions)]
+            eprintln!("[office-output] serve {id}: {}", body.is_some());
+            tauri::http::Response::builder().status(if body.is_some() { 200 } else { 404 })
+                .header("Content-Type", "text/html; charset=utf-8")
+                .header("Cache-Control", "no-store")
+                .header("Content-Security-Policy", "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'")
+                .body(body.unwrap_or_else(|| "인쇄 창이 닫혔습니다.".into()).into_bytes()).unwrap()
+        })
         .on_window_event(|window, event| {
+            if let WindowEvent::Destroyed = event {
+                if window.label().starts_with("print-") { window.app_handle().state::<office_output::PrintJobs>().0.lock().unwrap().remove(window.label()); }
+            }
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
                     api.prevent_close();
