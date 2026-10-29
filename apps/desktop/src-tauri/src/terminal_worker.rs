@@ -4,6 +4,7 @@ use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize}
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Read, Write};
+use std::collections::BTreeMap;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
@@ -15,6 +16,7 @@ struct Start {
     rows: u16,
     shell: Option<String>,
     args: Option<Vec<String>>,
+    env: Option<BTreeMap<String, String>>,
 }
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
@@ -88,6 +90,12 @@ fn worker() -> Result<(), String> {
     command.env("COLORTERM", "truecolor");
     for (key, _) in std::env::vars_os() {
         if key.to_string_lossy().starts_with("WORKBENCH_") { command.env_remove(key); }
+    }
+    if let Some(environment) = start.env {
+        if environment.len() > 32 || environment.iter().any(|(key, value)| key.len() > 128 || !key.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_') || key.starts_with("WORKBENCH_") || value.len() > 8192 || value.contains('\0')) {
+            return Err("터미널 환경 변수가 올바르지 않습니다.".into());
+        }
+        for (key, value) in environment { command.env(key, value); }
     }
     let pair = native_pty_system().openpty(size(start.cols, start.rows)?).map_err(|e| e.to_string())?;
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;

@@ -2,6 +2,7 @@ export type CreateTerminalRequest = { requestId: string; label?: string; shell?:
 export type TerminalSession = {
   id: string; workId: string; workspaceId: string; hostId: string; cwd: string; label: string;
   shell: string | null; args: string[];
+  environment?: Record<string, string>; color?: string;
   status: "starting" | "running" | "stopping" | "exited" | "interrupted" | "error";
   pid: number | null; exitCode: number | null; error: string | null;
   cols: number; rows: number; outputStart: number; outputEnd: number;

@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Workspace, WorktreeCreation, TerminalSession } from "@workbench/contracts";
+import type { Workspace, WorktreeCreation, TerminalSession, PreparationJob } from "@workbench/contracts";
 import type { Artifact, ArtifactRevision, Folder, Handoff, Proposal, Session, SessionLink, TimelineRevision, TranscriptItem, Work } from "@workbench/contracts";
 import type { TurnMark } from "./timeline.ts";
 import { SearchIndex, documentEntry, documentKey, itemEntries, itemKey, sessionEntry, workEntry, type WorkExtras } from "./search-index.ts";
@@ -40,6 +40,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, work_id TEXT NOT NULL, json TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS worktree_creations (id TEXT PRIMARY KEY, work_id TEXT NOT NULL, json TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS terminals (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, json TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS workspace_preparations (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, json TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS terminal_output (terminal_id TEXT NOT NULL, start INTEGER NOT NULL, end INTEGER NOT NULL, data BLOB NOT NULL, PRIMARY KEY(terminal_id, start));
       CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, work_id TEXT NOT NULL, json TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS items (
@@ -318,6 +319,10 @@ export class Store {
 
   worktreeCreations(): WorktreeCreation[] { return this.all<WorktreeCreation>("SELECT json FROM worktree_creations ORDER BY rowid DESC"); }
   terminals(): TerminalSession[] { return this.all<TerminalSession>("SELECT json FROM terminals ORDER BY rowid DESC"); }
+  preparations(): PreparationJob[] { return this.all<PreparationJob>("SELECT json FROM workspace_preparations ORDER BY rowid DESC"); }
+  savePreparation(job: PreparationJob) {
+    this.db.prepare("INSERT INTO workspace_preparations (id, workspace_id, json) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET json=excluded.json").run(job.id, job.workspaceId, JSON.stringify(job));
+  }
   saveTerminal(terminal: TerminalSession) {
     this.db.prepare("INSERT INTO terminals (id, workspace_id, json) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET json=excluded.json").run(terminal.id, terminal.workspaceId, JSON.stringify(terminal));
   }

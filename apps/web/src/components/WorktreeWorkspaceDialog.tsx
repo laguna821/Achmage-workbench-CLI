@@ -75,6 +75,7 @@ export function WorktreeWorkspaceDialog({ state, work, source, actions, onClose 
         {jobs.map((job) => <div className="worktree-row worktree-job" data-creation-id={job.id} data-phase={job.phase} key={job.id}>
           <div><strong>{job.request.label || job.request.branch} · {phaseLabel[job.phase]}</strong><small>{job.request.baseRef}{job.base ? ` → ${job.base.slice(0, 12)}` : ""} · {job.branch ?? job.request.branch}</small>{job.path ? <code>{job.path}</code> : null}{job.error ? <p>{job.error}</p> : null}</div>
           {job.workspaceId && state.workspaces[job.workspaceId] ? <button type="button" className="button small" onClick={() => void open(state.workspaces[job.workspaceId!]!)}>작업공간 열기</button> : null}
+          {job.phase === "ready" && job.workspaceId && state.workspaces[job.workspaceId] ? <button type="button" className="button small" onClick={() => { actions.prepareWorkspace(state.workspaces[job.workspaceId!]!); onClose(); }}>환경 준비…</button> : null}
           {running(job) ? <button type="button" className="button small" onClick={() => { void api.cancelWorktreeCreation(job.id).then(() => api.worktreeCreations(work.id)).then(setJobs).catch(fail); }}>생성 취소</button> : null}
         </div>)}
         <p className="sheet-hint">창을 닫아도 생성은 계속됩니다. 취소·실패 후 남은 폴더와 브랜치는 자동으로 삭제하지 않습니다.</p>

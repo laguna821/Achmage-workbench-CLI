@@ -332,6 +332,19 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       if (parts[0] === "workspaces" && parts[1] && parts[2] === "repository" && parts.length === 3 && method === "GET") {
         return sendJson(res, 200, await manager.worktreeWorkspaces.inspect(parts[1]));
       }
+      if (parts[0] === "works" && parts[1] && parts[2] === "environment" && parts.length === 3) {
+        if (method === "GET") return sendJson(res, 200, manager.preparation.settings(parts[1]));
+        if (method === "PUT") { const body = await readJson(req); return sendJson(res, 200, manager.preparation.saveSettings(parts[1], body.expectedRevision, body.settings)); }
+      }
+      if (parts[0] === "workspaces" && parts[1] && parts[2] === "preparations") {
+        if (parts.length === 3 && method === "GET") return sendJson(res, 200, { jobs: manager.preparation.list(parts[1]) });
+        if (parts.length === 3 && method === "POST") return sendJson(res, 201, await manager.preparation.start(parts[1], await readJson(req) as unknown as import("@workbench/contracts").ApplyPreparationRequest));
+        if (parts.length === 4 && parts[3] === "preview" && method === "POST") return sendJson(res, 200, await manager.preparation.preview(parts[1], await readJson(req) as unknown as import("@workbench/contracts").PreparationOptions));
+      }
+      if (parts[0] === "preparations" && parts[1] && parts.length === 2) {
+        if (method === "GET") return sendJson(res, 200, manager.preparation.get(parts[1]));
+        if (method === "DELETE") return sendJson(res, 200, await manager.preparation.cancel(parts[1]));
+      }
       if (parts[0] === "workspaces" && parts[1] && parts[2] === "terminals" && parts.length === 3) {
         if (method === "GET") return sendJson(res, 200, manager.terminals.list(parts[1]));
         if (method === "POST") return sendJson(res, 201, manager.terminals.create(parts[1], await readJson(req) as unknown as import("@workbench/contracts").CreateTerminalRequest));

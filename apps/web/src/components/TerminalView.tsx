@@ -99,7 +99,7 @@ export default function TerminalView({ api, id, focused, onList, uiState, onUiSt
   const running = entry && ["starting", "running", "stopping"].includes(entry.status);
   return <section className="terminal-view" data-terminal-id={id} data-terminal-status={entry?.status ?? "loading"} data-terminal-ready={ready}>
     <header className="terminal-toolbar">
-      <strong>{entry?.label ?? "터미널"}</strong><span className="terminal-status">{entry ? terminalStatus(entry) : "불러오는 중…"}</span>
+      <strong style={entry?.color ? { borderLeft: `3px solid ${entry.color}`, paddingLeft: 6 } : undefined}>{entry?.label ?? "터미널"}</strong><span className="terminal-status">{entry ? terminalStatus(entry) : "불러오는 중…"}</span>
       <span className="terminal-path" title={entry?.cwd}>{entry?.cwd}</span>
       <button className="button small" onClick={() => setFind(!find)}>찾기</button>
       <button className="button small" onClick={() => {

@@ -56,6 +56,7 @@ import { Workspaces } from "./workspaces.ts";
 import { physicalPath, withinDirectory } from "./directory-operations.ts";
 import { WorktreeWorkspaces } from "./worktree-workspaces.ts";
 import { Terminals } from "./terminals.ts";
+import { WorkspacePreparation } from "./workspace-preparation.ts";
 import { WorkspaceLayouts } from "./layouts.ts";
 import type { Kordoc } from "./kordoc.ts";
 import type { AdapterSink, LoginStart, ProviderAdapter } from "./providers/types.ts";
@@ -272,6 +273,7 @@ export class SessionManager {
   readonly workspaces: Workspaces;
   readonly worktreeWorkspaces: WorktreeWorkspaces;
   readonly terminals: Terminals;
+  readonly preparation: WorkspacePreparation;
   readonly layouts: WorkspaceLayouts;
   /** "그림": pictures drawn with GPT Image through Codex (imagegen.ts). */
   readonly images: ImageGen;
@@ -303,6 +305,7 @@ export class SessionManager {
     this.workspaces = new Workspaces(store, options.hostId, bus);
     this.worktreeWorkspaces = new WorktreeWorkspaces(store, this.workspaces, options.dataDir ?? dirname(options.managedWorksDir), (id) => this.requireWork(id));
     this.terminals = new Terminals(store, this.workspaces, options.ptyBinary);
+    this.preparation = new WorkspacePreparation(store, this.workspaces, this.terminals, options.dataDir ?? dirname(options.managedWorksDir), (id) => this.requireWork(id));
     this.layouts = new WorkspaceLayouts(store, this.workspaces);
     this.documents = new Documents(store, bus, options.dataDir ?? dirname(options.managedWorksDir), options.kordoc ?? null, options.ieum ?? null, this.workspaces);
     this.engineSetup = new EngineInstaller({
@@ -959,7 +962,7 @@ export class SessionManager {
   updateWorkspace(id: string, patch: UpdateWorkspaceRequest) {
     const workspace = this.workspaces.get(id);
     if (workspace.removedAt !== null) throw new HttpError(409, "workspace_removed", "폴더가 제거된 작업공간입니다. 기록은 그대로 보관합니다.");
-    if (patch.archived) this.assertWorkspaceIdle(workspace);
+    if (patch.archived) { this.assertWorkspaceIdle(workspace); this.preparation.assertArchiveReady(workspace); }
     return this.workspaces.update(workspace, {
       ...(typeof patch.label === "string" && patch.label.trim() ? { label: patch.label.trim().slice(0, 80) } : {}),
       ...(typeof patch.archived === "boolean" ? { archivedAt: patch.archived ? Date.now() : null } : {}),
@@ -967,6 +970,7 @@ export class SessionManager {
   }
 
   private assertWorkspaceIdle(workspace: Workspace) {
+    if (this.preparation.busy(workspace.cwd)) throw new HttpError(409, "workspace_busy", "이 작업공간의 환경 준비가 진행 중입니다. 완료하거나 취소한 뒤 진행하세요.");
     if (this.terminals.busy(workspace.cwd)) throw new HttpError(409, "workspace_busy", "이 작업공간에서 실행 중인 터미널이 있습니다. 터미널에서 실행을 종료한 뒤 진행하세요.");
     if (this.worktreeWorkspaces.busy(workspace.id)) throw new HttpError(409, "workspace_busy", "이 작업공간에서 워크트리를 생성 중입니다. 완료하거나 취소한 뒤 진행하세요.");
     if ([...this.sessions.values()].some((session) => session.workspaceId === workspace.id && session.status !== "idle" && session.status !== "error")) {
@@ -1067,7 +1071,7 @@ export class SessionManager {
   async worktreeChanges(sessionId: string) {
     const worktree = this.requireSession(sessionId).worktree;
     if (!worktree) throw new HttpError(409, "no_worktree", "격리 사본에서 일하는 세션이 아닙니다.");
-    return worktreeChanges(worktree);
+    return worktreeChanges(worktree, this.preparation.sharedLinks(worktree.path));
   }
 
   /** Requests sent to other sessions ("다른 세션에 보내기"), as kept (the project record reads them). */
@@ -1081,7 +1085,7 @@ export class SessionManager {
     if (!session.worktree) throw new HttpError(409, "no_worktree", "격리 사본에서 일하는 세션이 아닙니다.");
     if (session.status !== "idle" && session.status !== "error") throw new HttpError(409, "session_busy", "응답이 끝난 뒤에 적용할 수 있습니다.");
     if (session.workspaceId) this.assertWorkspaceIdle(this.workspaces.get(session.workspaceId));
-    await applyWorktree(session.worktree);
+    await applyWorktree(session.worktree, this.preparation.sharedLinks(session.worktree.path));
     this.sink.upsertItem(sessionId, { kind: "notice", id: `worktree-applied:${Date.now()}`, level: "info", text: `격리 사본의 변경을 원래 폴더(${session.worktree.root})에 적용했습니다.`, at: Date.now() });
     return { ok: true };
   }
@@ -1098,7 +1102,7 @@ export class SessionManager {
     const release = this.workspaces.directoryOperations.acquire(root);
     try {
       const affected = this.workspaces.list().filter((entry) => entry.hostId === this.options.hostId && withinDirectory(root, physicalPath(entry.cwd)));
-      for (const entry of affected) this.assertWorkspaceIdle(entry);
+      for (const entry of affected) { this.assertWorkspaceIdle(entry); this.preparation.assertArchiveReady(entry); }
       this.documents.registry.assertDirectoryIdle(root);
       const markRemoved = () => {
         const now = Date.now(), ids = new Set(affected.map((entry) => entry.id));
@@ -1346,6 +1350,7 @@ export class SessionManager {
     const work = this.requireWork(session.workId);
     if (session.workspaceId) this.workspaces.requireActive(session.workspaceId, work.id);
     const execution = this.engineWork(session, work);
+    if (session.workspaceId) this.preparation.assertAgentReady(session.workspaceId);
     // A drawing is a turn of its own: never steered in or kept for later without its instructions.
     if (options.engineText && session.status !== "idle" && session.status !== "error") throw new HttpError(409, "session_busy", "이 세션이 일하는 중입니다. 끝난 뒤에 다시 보내 주세요.");
     if (session.status !== "idle" && session.status !== "error") {
@@ -2011,6 +2016,7 @@ export class SessionManager {
     this.stopExternalWatches();
     this.flush();
     await this.worktreeWorkspaces.shutdown();
+    await this.preparation.shutdown();
     await this.terminals.shutdown();
     await Promise.all([...this.adapters.values()].map((adapter) => adapter.shutdown()));
     await this.options.browse?.shutdown();

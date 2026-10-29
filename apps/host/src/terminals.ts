@@ -35,14 +35,15 @@ export class Terminals {
     const root = physicalPath(cwd);
     return [...this.live.keys()].some((id) => withinDirectory(root, physicalPath(this.get(id).cwd)));
   }
-  create(workspaceId: string, request: CreateTerminalRequest) {
+  has(id: string) { return this.records.has(id); }
+  create(workspaceId: string, request: CreateTerminalRequest, internal: { cwd?: string; environment?: Record<string, string>; color?: string } = {}) {
     if (!request || typeof request.requestId !== "string" || !/^[\w-]{1,100}$/.test(request.requestId)) throw new HttpError(400, "terminal_request", "터미널 요청 ID가 필요합니다.");
     if (request.shell !== undefined && (typeof request.shell !== "string" || !request.shell || request.shell.length > 4096 || request.shell.includes("\0"))) throw new HttpError(400, "terminal_shell", "실행할 셸 경로를 확인해 주세요.");
     if (request.args !== undefined && (!Array.isArray(request.args) || request.args.length > 64 || request.args.some((arg) => typeof arg !== "string" || arg.length > 8192 || arg.includes("\0")) || !request.shell)) throw new HttpError(400, "terminal_args", "사용자 셸의 인자를 확인해 주세요.");
     const shell = request.shell ?? null, args = request.args ?? [], existing = this.records.get(request.requestId);
     if (Buffer.byteLength(JSON.stringify({ shell, args })) > 65_536) throw new HttpError(400, "terminal_args", "셸과 인자의 전체 크기는 64 KiB 이하여야 합니다.");
     if (existing) {
-      if (existing.workspaceId !== workspaceId || existing.shell !== shell || JSON.stringify(existing.args) !== JSON.stringify(args)) throw new HttpError(409, "terminal_request_reused", "다른 터미널에 사용한 요청 ID입니다.");
+      if (existing.workspaceId !== workspaceId || existing.shell !== shell || JSON.stringify(existing.args) !== JSON.stringify(args) || JSON.stringify(existing.environment ?? {}) !== JSON.stringify(internal.environment ?? {}) || (internal.cwd && existing.cwd !== internal.cwd)) throw new HttpError(409, "terminal_request_reused", "다른 터미널에 사용한 요청 ID입니다.");
       return existing;
     }
     if (this.stopping) throw new HttpError(409, "host_stopping", "앱이 종료 중입니다.");
@@ -50,8 +51,8 @@ export class Terminals {
     if (!this.binary || !existsSync(this.binary)) throw new HttpError(503, "terminal_unavailable", "이 실행 환경에는 Rust 터미널 실행기가 없습니다. 데스크톱 앱에서 열어 주세요.");
     if (this.live.size >= 16) throw new HttpError(429, "terminal_limit", "동시에 실행하는 터미널은 최대 16개입니다. 사용하지 않는 터미널을 종료해 주세요.");
     const now = Date.now();
-    const entry = this.save({ id: request.requestId, workspaceId, workId: space.workId, hostId: space.hostId, cwd: space.cwd, label: typeof request.label === "string" && request.label.trim() ? request.label.trim().slice(0, 80) : "터미널", shell, args, status: "starting", pid: null, exitCode: null, error: null, cols: 80, rows: 24, outputStart: 0, outputEnd: 0, createdAt: now, updatedAt: now });
-    const child = spawn(this.binary, ["--pty-worker"], { stdio: "pipe", windowsHide: true, cwd: space.cwd });
+    const entry = this.save({ id: request.requestId, workspaceId, workId: space.workId, hostId: space.hostId, cwd: internal.cwd ?? space.cwd, label: typeof request.label === "string" && request.label.trim() ? request.label.trim().slice(0, 80) : "터미널", shell, args, ...(internal.environment ? { environment: internal.environment } : {}), ...(internal.color ? { color: internal.color } : {}), status: "starting", pid: null, exitCode: null, error: null, cols: 80, rows: 24, outputStart: 0, outputEnd: 0, createdAt: now, updatedAt: now });
+    const child = spawn(this.binary, ["--pty-worker"], { stdio: "pipe", windowsHide: true, cwd: entry.cwd });
     let finish!: () => void;
     const running: Running = { child, done: new Promise<void>((resolve) => { finish = resolve; }) };
     this.live.set(entry.id, running);
@@ -77,7 +78,7 @@ export class Terminals {
       else if (last.pid !== null) this.save({ ...last, pid: null });
       this.live.delete(entry.id); finish();
     });
-    child.stdin.write(JSON.stringify({ cwd: space.cwd, cols: entry.cols, rows: entry.rows, shell, args }) + "\n");
+    child.stdin.write(JSON.stringify({ cwd: entry.cwd, cols: entry.cols, rows: entry.rows, shell, args, env: internal.environment }) + "\n");
     return entry;
   }
   private event(id: string, message: Record<string, unknown>) {
@@ -139,5 +140,6 @@ export class Terminals {
     await running.done;
     return this.get(id);
   }
+  async waitForExit(id: string) { await this.live.get(id)?.done; return this.get(id); }
   async shutdown() { this.stopping = true; await Promise.all([...this.live.keys()].map((id) => this.close(id))); }
 }

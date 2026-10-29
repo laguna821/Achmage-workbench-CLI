@@ -25,6 +25,11 @@ import type {
   TerminalSession,
   TerminalList,
   TerminalOutput,
+  WorkspaceEnvironment,
+  PreparationOptions,
+  PreparationPreview,
+  PreparationJob,
+  ApplyPreparationRequest,
   Schedule,
   ForkResult,
   ImportRequest,
@@ -198,6 +203,12 @@ export class Api {
   terminalInput = (id: string, data: string) => this.request<{ ok: boolean }>("POST", `/api/terminals/${id}/input`, { data });
   resizeTerminal = (id: string, cols: number, rows: number) => this.request<{ ok: boolean }>("POST", `/api/terminals/${id}/resize`, { cols, rows });
   closeTerminal = (id: string) => this.request<TerminalSession>("DELETE", `/api/terminals/${id}`);
+  workspaceEnvironment = (workId: string) => this.request<WorkspaceEnvironment>("GET", `/api/works/${workId}/environment`);
+  saveWorkspaceEnvironment = (workId: string, settings: WorkspaceEnvironment) => this.request<WorkspaceEnvironment>("PUT", `/api/works/${workId}/environment`, { expectedRevision: settings.revision, settings });
+  preparationPreview = (workspaceId: string, options: PreparationOptions) => this.request<PreparationPreview>("POST", `/api/workspaces/${workspaceId}/preparations/preview`, options);
+  preparations = (workspaceId: string) => this.request<{ jobs: PreparationJob[] }>("GET", `/api/workspaces/${workspaceId}/preparations`).then((result) => result.jobs);
+  applyPreparation = (workspaceId: string, request: ApplyPreparationRequest) => this.request<PreparationJob>("POST", `/api/workspaces/${workspaceId}/preparations`, request);
+  cancelPreparation = (id: string) => this.request<PreparationJob>("DELETE", `/api/preparations/${id}`);
   createSession = (workId: string, provider: Provider, options?: { workspaceId?: string; purpose?: string; model?: string | null; effort?: string | null; browser?: boolean; worktree?: boolean }) =>
     this.request<Session>("POST", `/api/works/${workId}/sessions`, { provider, ...options });
   updateSession = (sessionId: string, patch: UpdateSessionRequest) => this.request<Session>("PATCH", `/api/sessions/${sessionId}`, patch);

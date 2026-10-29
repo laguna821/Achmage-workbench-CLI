@@ -58,6 +58,8 @@ G0–G7은 통합 계획의 구현 단계다. 필수 기능은 해당 단계와 
 
 2026-10-30 G3b 갱신: O19/O20의 [실제 PTY·출력 복원](../terminals.md)을 연결했다. Rust worker, 공통 탭/중첩 분할, cwd·크기·입력 순서, 검색/복사/붙여넣기, 명시적 종료와 기록 보존을 제공한다. 실제 Linux 앱 12/12와 최종 호스트/탭/하네스 12/12를 통과했다. Windows/macOS와 고급 터미널 기능은 남았다. 연구 판: `research:rr-fdd3f16d3f14981eddc957e59a4cfcd2:bbbc1e7a1379b7a97614968db4dc2f1005dc71cf303263c12455aa4d5f11ee7e`.
 
+2026-10-30 G3c 갱신: O09의 [명시적 환경 준비](../workspace-preparation.md)를 연결했다. 설정 출처·개인 설정 CAS·복사/공유·미리보기·실제 PTY 훅·기본 탭·보관 보호와 중단 기록을 제공한다. 실제 Linux 앱 준비 14/14, worktree/PTY/준비 연속 32/32를 통과했다. 자동 준비 신뢰 정책·APFS·shebang 세부 옵션·다른 OS·원격 환경은 남았다. 연구 판: `research:rr-bf6f793af6712cc230a66cace31d0482:f19750f03169a9f12b0e61fc6b61d4f388a64c7995c58187c238ed8ccf44a8b6`.
+
 ## 2. 이음오피스 공통 셸·AI·문서 관리
 
 | ID | 원본 기능 묶음 | Workbench 현황·격차 | 이식·검증 범위 | 단계·근거 |

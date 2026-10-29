@@ -108,9 +108,9 @@ async function verifyWorktree(worktree: SessionWorktree) {
 }
 
 /** What the session changed against the commit it started from (new files included). */
-export async function worktreeChanges(worktree: SessionWorktree): Promise<WorktreeChanges> {
+export async function worktreeChanges(worktree: SessionWorktree, sharedLinks: ReadonlySet<string> = new Set()): Promise<WorktreeChanges> {
   await verifyWorktree(worktree);
-  const untracked = await untrackedFiles(worktree.path);
+  const untracked = (await untrackedFiles(worktree.path)).filter((path) => !sharedLinks.has(path));
   const names = await git(worktree.path, ["diff", "--name-status", "-z", "-M", worktree.base, "--"]);
   const files = [...changedFiles(names), ...untracked.map((path): WorktreeFile => ({ path, status: "added" }))];
   const diff = await worktreePatch(worktree, false, untracked);
@@ -121,9 +121,9 @@ export async function worktreeChanges(worktree: SessionWorktree): Promise<Worktr
  * Apply the session's changes to the original checkout's files (not its index), as a patch: when
  * the same lines changed there meanwhile it refuses and changes nothing.
  */
-export async function applyWorktree(worktree: SessionWorktree) {
+export async function applyWorktree(worktree: SessionWorktree, sharedLinks: ReadonlySet<string> = new Set()) {
   await verifyWorktree(worktree);
-  const patch = await worktreePatch(worktree, true, await untrackedFiles(worktree.path));
+  const patch = await worktreePatch(worktree, true, (await untrackedFiles(worktree.path)).filter((path) => !sharedLinks.has(path)));
   if (!patch.trim()) throw new HttpError(409, "nothing_to_apply", "적용할 변경이 없습니다.");
   await git(worktree.root, ["apply", "--check", "--binary", "-"], patch).catch((error: unknown) => {
     throw new HttpError(409, "apply_conflict", `원래 폴더에 그대로 적용할 수 없습니다(같은 곳이 바뀌었을 수 있습니다): ${error instanceof Error ? error.message : String(error)}`);
