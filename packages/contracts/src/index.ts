@@ -286,6 +286,11 @@ export type Handoff = {
   status: "sent" | "answered" | "failed";
   reply: string | null;
   error: string | null;
+  /** Files that went with the request (sent again with it). */
+  attachments?: Attachment[];
+  /** "다시 보내기": the handoff that sent this one again, and the one this one repeats. */
+  resentAs?: string | null;
+  resentFrom?: string | null;
   createdAt: number;
   answeredAt: number | null;
 };

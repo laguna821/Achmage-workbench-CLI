@@ -1583,6 +1583,7 @@ export class SessionManager {
       status: "sent",
       reply: null,
       error: null,
+      ...(request.attachments?.length ? { attachments: request.attachments } : {}),
       createdAt: Date.now(),
       answeredAt: null,
     };
@@ -1607,6 +1608,31 @@ export class SessionManager {
       throw error;
     }
     return this.handoffs.get(handoff.id)!;
+  }
+
+  /**
+   * "다시 보내기": a request the other session did not answer (its turn failed, was stopped, or its
+   * engine died) goes again, the same words, documents and files, as a new request with its own card.
+   */
+  async resendHandoff(handoffId: string, requestId: string): Promise<Handoff> {
+    const old = this.handoffs.get(handoffId);
+    if (!old) throw new HttpError(404, "handoff_not_found", "보낸 요청을 찾지 못했습니다.");
+    if (old.resentAs && this.handoffs.has(old.resentAs)) return this.handoffs.get(old.resentAs)!;
+    if (old.status !== "failed") throw new HttpError(409, "handoff_not_failed", "답을 받지 못한 요청만 다시 보낼 수 있습니다.");
+    let failure: unknown = null;
+    try {
+      await this.handoff({ requestId, sourceSessionId: old.sourceSessionId, targetSessionId: old.targetSessionId, text: old.text, refs: old.refs, attachments: old.attachments ?? [] });
+    } catch (error) {
+      failure = error;
+    }
+    // Sent (or tried): the old card says so, the new one says what it repeats.
+    const resent = this.handoffs.get(requestId);
+    if (resent && resent.id !== old.id) {
+      this.saveHandoff({ ...this.handoffs.get(old.id)!, resentAs: resent.id });
+      this.saveHandoff({ ...resent, resentFrom: old.id });
+    }
+    if (failure) throw failure;
+    return this.handoffs.get(requestId)!;
   }
 
   /**

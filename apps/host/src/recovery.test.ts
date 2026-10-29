@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { turnBreakOf, turnEndText, type ApprovalDecision, type Provider, type ProviderStatus, type Session, type TranscriptItem, type Work } from "@workbench/contracts";
 import { EventBus } from "./bus.ts";
-import { SessionManager } from "./sessions.ts";
+import { HttpError, SessionManager } from "./sessions.ts";
 import { Store } from "./store.ts";
 import { emptyStatus, type AdapterSink, type ProviderAdapter } from "./providers/types.ts";
 import { heldNotice, restartTurnEnd, stampTurnEnd } from "./recovery.ts";
@@ -191,6 +191,32 @@ describe("a turn that does not complete", () => {
     await tick();
     expect(claude.sent).toHaveLength(1);
     expect(sessionOf(manager, session.id).queued).toMatchObject([{ id: "r2", held: true }]);
+  });
+
+  it("a request sent to another session whose engine died fails with why, and is sent again as a new one", async () => {
+    const { manager, codex, work } = setup();
+    const file = join(work.cwd, "강의.md");
+    writeFileSync(file, "인용: 김(2024)\n");
+    const artifact = manager.openFile(work.id, file);
+    const source = manager.createSession(work.id, { provider: "claude" });
+    const target = manager.createSession(work.id, { provider: "codex" });
+    const attachments = [manager.attachments.save(Buffer.from("표 1: 인용 목록"), "표.txt", "text/plain")];
+    await manager.handoff({ requestId: "h1", sourceSessionId: source.id, targetSessionId: target.id, text: "인용 근거 확인", refs: [{ artifactId: artifact.id, revision: 1, mode: "review" }], attachments });
+    await expect(manager.resendHandoff("h1", "h2")).rejects.toMatchObject({ code: "handoff_not_failed" });
+    codex.end(target.id, "failed", "crash");
+    expect(manager.snapshot().handoffs.find((entry) => entry.id === "h1")).toMatchObject({ status: "failed", error: "엔진이 멈춰 응답이 끊겼습니다", attachments });
+    const again = await manager.resendHandoff("h1", "h2");
+    expect(again).toMatchObject({ id: "h2", status: "sent", text: "인용 근거 확인", resentFrom: "h1", attachments });
+    expect(again.refs).toEqual([{ artifactId: artifact.id, revision: 1, mode: "review" }]);
+    expect(codex.sent.at(-1)!.text).toContain("인용 근거 확인");
+    expect(manager.snapshot().handoffs.find((entry) => entry.id === "h1")!.resentAs).toBe("h2");
+    // Asking twice sends once; a new card in the source conversation.
+    expect((await manager.resendHandoff("h1", "h3")).id).toBe("h2");
+    expect(codex.sent).toHaveLength(2);
+    expect(manager.items(source.id).items.filter((item) => item.kind === "handoff").map((item) => (item.kind === "handoff" ? item.handoffId : ""))).toEqual(["h1", "h2"]);
+    codex.end(target.id, "completed");
+    expect(manager.snapshot().handoffs.find((entry) => entry.id === "h2")!.status).toBe("answered");
+    await expect(manager.resendHandoff("nope", "h4")).rejects.toBeInstanceOf(HttpError);
   });
 
   it("after a restart the cut turn ends: proposal kept with a card, requests held, the other session told", async () => {
