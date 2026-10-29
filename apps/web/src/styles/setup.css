@@ -20,7 +20,7 @@
 }
 
 .setup-hint {
-  font-size: 13px;
+  font-size: var(--fs-meta);
   line-height: 1.5;
   color: var(--muted);
   overflow-wrap: anywhere;
@@ -38,7 +38,7 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   color: var(--text);
   min-width: 0;
 }
@@ -47,7 +47,7 @@
   display: block;
   overflow-wrap: anywhere;
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: var(--fs-micro);
   color: var(--faint);
 }
 
@@ -62,7 +62,7 @@
   width: 100%;
   height: 5px;
   overflow: hidden;
-  border-radius: 99px;
+  border-radius: var(--r-full);
   background: color-mix(in srgb, var(--muted) 18%, transparent);
 }
 
@@ -93,7 +93,7 @@
   align-items: flex-start;
   gap: 6px;
   padding: 8px 10px;
-  border-radius: 9px;
+  border-radius: var(--r-md);
   background: var(--surface-muted);
 }
 
@@ -108,13 +108,13 @@
   display: flex;
   align-items: baseline;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   color: var(--muted);
 }
 
 .setup-user-code strong {
   font-family: var(--mono);
-  font-size: 17px;
+  font-size: var(--fs-body);
   letter-spacing: 0.08em;
   color: var(--text);
 }
@@ -137,11 +137,11 @@
   height: 30px;
   padding: 0 8px;
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--r-md);
   background: var(--bg);
   color: var(--text);
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
 }
 
 .setup-cancel,
@@ -149,11 +149,11 @@
   align-self: flex-start;
   /* Text in line with the card's other lines; the hover background still has room. */
   margin-left: -8px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 
 .setup-tool-note {
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
   color: var(--faint);
 }
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { PROVIDER_LABEL, type AchmageBrief, type ProjectEvent, type ProjectPage, type ProjectSummary, type ProjectWrite, type Session, type StoppedPlace, type Work } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
+import { accentStyle, useAppearance } from "../../appearance.ts";
 import { ago, statusText } from "../../format.ts";
 import { ObsidianMarkdown, obsidianComponents, obsidianUrlTransform } from "../../markdown/obsidian.tsx";
 import type { Components } from "react-markdown";
@@ -72,6 +73,7 @@ export function ProjectView({
 }) {
   const work: Work | undefined = state.works[workId];
   const [page, setPage] = useState<ProjectPage | null>(null);
+  const { lookOf } = useAppearance();
   const [allEvents, setAllEvents] = useState<ProjectEvent[] | null>(null);
   // "지난번 본 뒤": what came after the person last left this page (on this device).
   const [seenBefore, setSeenBefore] = useState<number | null>(null);
@@ -547,7 +549,9 @@ export function ProjectView({
                       <li key={event.id} className={`project-event kind-${event.kind}${seenBefore && event.at > seenBefore ? " fresh" : ""}`}>
                         <button type="button" className="project-event-main" onClick={() => openEvent(event)}>
                           <span className="project-event-time">{new Date(event.at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
-                          <span className={`project-event-by by-${event.by ?? "none"}`}>{BY_LABEL[event.by ?? ""] ?? ""}</span>
+                          <span className={`project-event-by by-${event.by ?? "none"}`} style={event.by === "claude" || event.by === "codex" ? accentStyle(lookOf(event.by)) : undefined}>
+                            {BY_LABEL[event.by ?? ""] ?? ""}
+                          </span>
                           <span className="project-event-text">{event.text}</span>
                         </button>
                         {event.kind !== "decision" && event.kind !== "question" && event.kind !== "stage" && event.kind !== "worktree" ? (

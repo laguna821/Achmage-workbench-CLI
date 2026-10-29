@@ -20,7 +20,7 @@
 }
 
 .project-crumbs {
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
   margin-bottom: 4px;
 }
 
@@ -34,8 +34,8 @@
   flex: 1;
   min-width: 0;
   margin: 0;
-  font-size: 26px;
-  font-weight: 650;
+  font-size: var(--fs-display);
+  font-weight: 600;
   letter-spacing: -0.01em;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -71,10 +71,10 @@
   height: 26px;
   padding: 0 10px 0 8px;
   border: 1px solid color-mix(in srgb, var(--stage) 45%, transparent);
-  border-radius: 999px;
+  border-radius: var(--r-xs);
   background: color-mix(in srgb, var(--stage) 12%, transparent);
   color: color-mix(in srgb, var(--stage) 75%, var(--text));
-  font-size: 13px;
+  font-size: var(--fs-meta);
   font-weight: 600;
   cursor: pointer;
 }
@@ -90,7 +90,7 @@
 .project-stage-dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: var(--r-full);
   background: var(--stage);
 }
 
@@ -104,10 +104,10 @@
   gap: 4px;
   height: 24px;
   padding: 0 4px 0 9px;
-  border-radius: 999px;
+  border-radius: var(--r-xs);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: color-mix(in srgb, var(--accent) 70%, var(--text));
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
 }
 
 .project-chip.link {
@@ -122,7 +122,7 @@
   width: 16px;
   height: 16px;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--r-xs);
   background: none;
   color: inherit;
   opacity: 0.45;
@@ -146,10 +146,10 @@
   height: 24px;
   padding: 0 8px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   background: none;
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
   cursor: pointer;
 }
 
@@ -164,11 +164,11 @@
   min-width: 140px;
   padding: 0 8px;
   border: 1px solid var(--accent);
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   background: var(--surface);
   color: var(--text);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 
 .project-other-props {
@@ -176,7 +176,7 @@
   grid-template-columns: max-content 1fr;
   gap: 4px 14px;
   margin: 10px 0 0;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 
 .project-prop {
@@ -197,7 +197,7 @@
 .project-prop-value {
   padding: 0 4px;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--r-xs);
   background: none;
   color: var(--text);
   font: inherit;
@@ -218,14 +218,14 @@
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px solid var(--line);
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
 }
 
 .project-fact {
   height: 24px;
   padding: 0 9px;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   background: none;
   color: var(--text);
   font: inherit;
@@ -239,8 +239,8 @@ button.project-fact {
 }
 
 .project-fact.attention {
-  background: var(--amber-soft, color-mix(in srgb, #e2a400 16%, transparent));
-  color: var(--amber-text, #8a5a00);
+  background: var(--amber-soft);
+  color: var(--amber-text);
 }
 
 .project-fact.error {
@@ -283,9 +283,9 @@ button.project-fact {
   gap: 8px 18px;
   margin: 10px 0 0;
   padding: 12px 14px;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: color-mix(in srgb, var(--text) 4%, transparent);
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
 }
 
 .project-details dt {
@@ -303,9 +303,9 @@ button.project-fact {
   gap: 8px;
   margin-top: 16px;
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: color-mix(in srgb, var(--accent) 9%, transparent);
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 
 /* Sections */
@@ -322,15 +322,15 @@ button.project-fact {
 
 .project-section-head h2 {
   margin: 0;
-  font-size: 14px;
-  font-weight: 650;
+  font-size: var(--fs-ui);
+  font-weight: 600;
   color: var(--text);
 }
 
 .project-empty {
   padding: 6px 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 
 /* The record */
@@ -341,7 +341,7 @@ button.project-fact {
 .project-day-label {
   margin-bottom: 2px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-micro);
   font-weight: 600;
 }
 
@@ -355,7 +355,7 @@ button.project-fact {
   display: flex;
   align-items: center;
   gap: 6px;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
 }
 
 .project-event:hover,
@@ -374,7 +374,7 @@ button.project-fact {
   background: none;
   color: var(--text);
   font: inherit;
-  font-size: 13.5px;
+  font-size: var(--fs-meta);
   text-align: left;
   cursor: pointer;
 }
@@ -384,22 +384,20 @@ button.project-fact {
   width: 44px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
 }
 
 .project-event-by {
   flex: none;
   min-width: 42px;
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
 }
 
-.project-event-by.by-claude {
-  color: #c7633f;
-}
-
+.project-event-by.by-claude,
 .project-event-by.by-codex {
-  color: #3a6fd8;
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .project-event-text {
@@ -419,17 +417,18 @@ button.project-fact {
   color: var(--muted);
 }
 
-/* "지난번 본 뒤": a thin mark before what came after the last visit, and the count by the heading. */
+/* "지난번 본 뒤": what came after the last visit on a faint tint (no side stripe), and its count as a seal. */
 .project-event.fresh {
-  box-shadow: inset 2px 0 0 var(--accent);
+  background: var(--accent-soft);
 }
 
 .project-fresh-count {
   padding: 1px 7px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-radius: var(--r-xs);
+  background: var(--accent-soft);
+  font-variant-numeric: tabular-nums;
   color: var(--accent);
-  font-size: 12px;
+  font-size: var(--fs-micro);
   font-weight: 600;
 }
 
@@ -439,10 +438,10 @@ button.project-fact {
   margin-right: 4px;
   padding: 2px 8px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--r-sm);
   background: var(--surface);
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-micro);
   cursor: pointer;
 }
 
@@ -466,7 +465,7 @@ button.project-fact {
 
 .project-entry {
   padding: 4px 0;
-  font-size: 13.5px;
+  font-size: var(--fs-meta);
 }
 
 .project-entry p {
@@ -499,11 +498,11 @@ button.project-fact {
   gap: 10px;
   padding: 7px 8px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: none;
   color: var(--text);
   font: inherit;
-  font-size: 13.5px;
+  font-size: var(--fs-meta);
   text-align: left;
   cursor: pointer;
 }
@@ -524,11 +523,11 @@ button.project-fact {
 .project-row-status {
   flex: none;
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
 }
 
 .project-row-status.status-awaitingApproval {
-  color: var(--amber-text, #8a5a00);
+  color: var(--amber-text);
   font-weight: 600;
 }
 
@@ -545,7 +544,7 @@ button.project-fact {
   flex: none;
   min-width: 70px;
   text-align: right;
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
 }
 
 /* The note */
@@ -555,7 +554,7 @@ button.project-fact {
 
 .project-note-editor {
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   overflow: hidden;
 }
 
@@ -569,23 +568,23 @@ button.project-fact {
 
 .project-note-path {
   margin-top: 6px;
-  font-size: 12px;
+  font-size: var(--fs-micro);
   word-break: break-all;
 }
 
 .project-card summary {
   cursor: pointer;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 
 .project-card pre {
   margin: 8px 0 0;
   padding: 12px 14px;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: color-mix(in srgb, var(--text) 4%, transparent);
   white-space: pre-wrap;
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
   line-height: 1.55;
 }
 
@@ -608,11 +607,11 @@ button.project-fact {
   height: 24px;
   padding: 0 9px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--r-sm);
   background: var(--surface);
   color: var(--text);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
   cursor: pointer;
 }
 
@@ -620,10 +619,10 @@ button.project-fact {
   margin: 6px 0 0;
   padding: 8px 10px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--surface);
   list-style: none;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 
 .change-list li + li {
@@ -644,19 +643,19 @@ button.project-fact {
   overflow-y: auto;
   padding: 22px 24px 16px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--r-xl);
   background: var(--surface);
-  box-shadow: var(--popover-shadow);
+  box-shadow: var(--elev-3);
 }
 
 .stage-dialog h2 {
   margin: 0 0 6px;
-  font-size: 19px;
+  font-size: var(--fs-lead);
 }
 
 .stage-dialog p {
   margin: 0 0 14px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 
 .stage-rows {
@@ -677,7 +676,7 @@ button.project-fact {
   flex: none;
   width: 12px;
   height: 12px;
-  border-radius: 50%;
+  border-radius: var(--r-full);
 }
 
 .stage-name {
@@ -685,11 +684,11 @@ button.project-fact {
   height: 28px;
   padding: 0 8px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   background: var(--bg);
   color: var(--text);
   font: inherit;
-  font-size: 13.5px;
+  font-size: var(--fs-meta);
 }
 
 .stage-colors {
@@ -704,7 +703,7 @@ button.project-fact {
   height: 16px;
   padding: 0;
   border: 2px solid transparent;
-  border-radius: 50%;
+  border-radius: var(--r-full);
   cursor: pointer;
 }
 
@@ -717,11 +716,11 @@ button.project-fact {
   height: 24px;
   padding: 0 6px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   background: var(--bg);
   color: var(--text);
   font-family: var(--mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: var(--fs-micro);
 }
 
 .stage-archive {
@@ -729,7 +728,7 @@ button.project-fact {
   align-items: center;
   gap: 4px;
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
   white-space: nowrap;
 }
 
@@ -776,31 +775,31 @@ button.project-fact {
 .project-read-notes h3 {
   margin: 12px 0 4px;
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
   font-weight: 600;
 }
 
 .project-read-notes ul {
   margin: 0;
   padding-left: 18px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   line-height: 1.7;
 }
 
 /* The Achmage work the note names: one quiet line, read-only. */
 .project-achmage {
   margin: 4px 0 8px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   line-height: 1.5;
 }
 
 .project-achmage-label {
   margin-right: 8px;
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--r-xs);
   background: color-mix(in srgb, var(--text) 6%, transparent);
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: var(--fs-micro);
   font-weight: 600;
 }
 

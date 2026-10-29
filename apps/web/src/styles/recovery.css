@@ -6,10 +6,10 @@
   gap: 5px;
   align-self: flex-start;
   padding: 2px 9px;
-  border-radius: 999px;
+  border-radius: var(--r-xs);
   background: var(--amber-soft);
   color: var(--amber-text);
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   line-height: 1.6;
 }
@@ -17,7 +17,7 @@
 .partial-note.compact {
   align-self: auto;
   padding: 0 8px;
-  font-size: 12px;
+  font-size: var(--fs-micro);
 }
 
 .partial-note-why {
@@ -32,6 +32,6 @@
 }
 
 .handoff-resent {
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
   color: var(--muted);
 }

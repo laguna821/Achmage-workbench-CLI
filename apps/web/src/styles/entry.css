@@ -31,7 +31,7 @@
   padding: 0 10px;
   height: 36px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--surface);
   color: var(--muted);
 }
@@ -48,7 +48,7 @@
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 14.5px;
+  font-size: var(--fs-ui);
 }
 
 .project-list {
@@ -74,13 +74,13 @@
 
 .project-empty {
   padding: 8px 10px 10px;
-  font-size: 13.5px;
+  font-size: var(--fs-meta);
   color: var(--faint);
 }
 
 /* The setting in "연결과 설정". */
 .works-dir-path {
-  font-size: 13px;
+  font-size: var(--fs-meta);
   color: var(--text);
 }
 
@@ -102,10 +102,10 @@
   width: 100%;
   padding: 7px 9px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--surface);
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 
 .works-dir-form input:focus {
