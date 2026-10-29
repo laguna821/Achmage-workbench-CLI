@@ -113,7 +113,7 @@ async function flow(provider: Provider) {
     await until(() => existsSync(notePath));
     // ── 속성: Obsidian-like, the template's fields from the start, each written in its kind ─────
     const keys = await page.locator(".properties-panel .prop-row .prop-key").allInnerTexts();
-    pass("속성 칸: 템플릿의 단계·태그·종류·시작일·마감일·목표·관련이 처음부터 보임", keys.join("·") === "단계·태그·종류·시작일·마감일·목표·관련", keys.join("·"));
+    pass("속성 칸: 템플릿의 단계·태그·종류·시작일·마감일·중요도·목표·관련이 처음부터 보임", keys.join("·") === "단계·태그·종류·시작일·마감일·중요도·목표·관련", keys.join("·"));
     await page.locator('.prop-row[data-key="tags"] .prop-add-value').click();
     await page.locator('.prop-row[data-key="tags"] .prop-input').fill("강의");
     await page.locator('.prop-row[data-key="tags"] .prop-input').press("Enter");

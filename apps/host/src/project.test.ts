@@ -247,6 +247,7 @@ describe("properties (Obsidian-like)", () => {
       ["종류", "list", false],
       ["시작일", "date", false],
       ["마감일", "date", false],
+      ["중요도", "text", false],
       ["목표", "text", false],
       ["관련", "links", false],
     ]);
@@ -290,7 +291,7 @@ describe("properties (Obsidian-like)", () => {
     expect(projects.page(work.id).rows!.map((row) => row.key)).toEqual(["단계", "학기", "공개"]);
     const imported = projects.importTemplate(["---", "tags: []", "마감: 2026-12-01", "---"].join("\n"));
     expect(imported).toEqual([{ key: "tags", type: "tags" }, { key: "마감", type: "date" }]);
-    expect(projects.setTemplate(null).map((field) => field.key)).toEqual(["단계", "tags", "종류", "시작일", "마감일", "목표", "관련"]);
+    expect(projects.setTemplate(null).map((field) => field.key)).toEqual(["단계", "tags", "종류", "시작일", "마감일", "중요도", "목표", "관련"]);
   });
 });
 

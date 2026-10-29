@@ -173,6 +173,7 @@ export const DEFAULT_PROPERTY_TEMPLATE: PropertyField[] = [
   { key: "종류", type: "list", hint: "예: 강의, 연구, 개발, 행정, 글쓰기" },
   { key: "시작일", type: "date" },
   { key: "마감일", type: "date" },
+  { key: "중요도", type: "text", hint: "높음 · 보통 · 낮음" },
   { key: "목표", type: "text", hint: "이 프로젝트로 얻으려는 것 한 줄" },
   { key: "관련", type: "links", hint: "관련 프로젝트·노트" },
 ];
