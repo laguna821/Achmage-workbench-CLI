@@ -21,6 +21,16 @@ export class Store {
   constructor(path: string) {
     mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
+    // Writes report their rowid as a BigInt. FTS5 keeps the delete markers of the search index at
+    // rowids past 2^53 and SQLite's "last inserted rowid" can be one of them after a search write;
+    // read as a number it threw on the next INSERT, UPDATE or DELETE (of any table) and stopped
+    // the gateway. Reads keep numbers.
+    const prepare = this.db.prepare.bind(this.db);
+    this.db.prepare = (sql: string) => {
+      const statement = prepare(sql);
+      if (/^\s*(INSERT|UPDATE|DELETE|REPLACE)\b/i.test(sql)) statement.setReadBigInts(true);
+      return statement;
+    };
     this.db.exec(`
       PRAGMA journal_mode = WAL;
       PRAGMA busy_timeout = 3000;

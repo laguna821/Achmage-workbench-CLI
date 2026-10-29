@@ -354,3 +354,21 @@ describe("vault notes", () => {
     expect(existsSync(join(pkm.vault.root!, "비밀/일기.md"))).toBe(true);
   });
 });
+
+describe("the index's delete markers", () => {
+  it("never stop the gateway: FTS5 rowids past 2^53 are not read as numbers by later writes", () => {
+    const dir = mkdtempSync(join(tmpdir(), "wb-search-rowid-"));
+    const store = new Store(join(dir, "state.sqlite"));
+    const session = { id: "s1", workId: "w1" } as Session;
+    store.saveSession(session);
+    const item: TranscriptItem = { kind: "user", id: "u1", text: "처음", at: 1 } as TranscriptItem;
+    // Entries put again and taken out leave delete markers; this order threw (RangeError) on the next write.
+    for (let n = 0; n < 40; n += 1) {
+      store.search.put({ key: `work:w${n % 3}`, kind: "work", scope: "project", workId: `w${n % 3}`, at: 1, title: `작업 ${n}`, body: `본문 ${n} ${"가나다".repeat(n)}` });
+      if (n % 5 === 4) store.search.remove(`work:w${n % 3}`);
+      store.saveItem(session.id, { ...item, text: `요청 ${n}` } as TranscriptItem);
+    }
+    expect(store.items(session.id)).toHaveLength(1);
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
