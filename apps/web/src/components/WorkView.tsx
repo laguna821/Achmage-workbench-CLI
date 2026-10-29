@@ -66,6 +66,7 @@ export type WorkActions = {
   openWorkspace: (workspace: Workspace | null) => Promise<boolean>;
   openTerminals: (workspace: Workspace) => void;
   prepareWorkspace: (workspace: Workspace) => void;
+  reviewWorkspace: (workspace: Workspace) => void;
   workspaceGit: Pick<Api, "workspaceRepository" | "connectWorktree" | "worktreeCreations" | "createWorktreeWorkspace" | "cancelWorktreeCreation">;
   /** "변경 검토" of a session working in a git worktree ("격리 사본"). */
   reviewWorktree: (session: Session) => void;

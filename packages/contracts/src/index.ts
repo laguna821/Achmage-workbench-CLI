@@ -12,6 +12,7 @@ export * from "./workspaces.ts";
 export * from "./layouts.ts";
 export * from "./terminals.ts";
 export * from "./preparation.ts";
+export * from "./source-control.ts";
 export * from "./document-registry.ts";
 
 export const PROTOCOL_VERSION = 1;

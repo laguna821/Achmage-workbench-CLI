@@ -240,3 +240,5 @@ G0에서 각 동적 IPC·메뉴의 연결을 이 티켓으로 내려 매핑한�
 - Office 연구: `research:rr-f68ec824271f4b0be9d6e35e8a05f1ab:0a823f026787dacd7e8348c4b8e04b7c03a0c44b8c3e067293cfcc0de7e7adb5`
 - Orca 연구: `research:rr-49835a49e779909b7c38e978e8b81eb7:2299d0531ac6657ce27efbd8420fb40a50f0f5381939a4bfeb34f283acbc7569`
 - 원래 R 번호·기존 연구 판과 관리 자료 위치는 [통합 계획의 근거](업데이트-통합계획-2026-10-29.md#9-근거와-이어가기)를 따른다.
+
+2026-10-30 G3d1 갱신: O14/O16의 [로컬 Git 변경 검토·스테이징·커밋](../source-control.md)을 연결했다. staged/working diff·줄 번호·제한된 이미지 비교, literal 경로·첫 커밋 전 취소·rename, 판 재검사·실제 훅·실행 기록과 중단/재시작을 제공한다. 관련 44/44, 인접 16/16, 실제 Linux 앱 13/13 통과. 원격 Git·충돌 해결·hunk·행 주석·PR/CI 및 다른 OS는 후속이다. 연구 판: `research:rr-50d34ea765b9cb6ae68640d4f4261132:6933612741a6fa4628b74439573698668f2519022bfb74f9caa194a219a8836a`.

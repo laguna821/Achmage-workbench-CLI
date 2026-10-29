@@ -57,6 +57,7 @@ import { physicalPath, withinDirectory } from "./directory-operations.ts";
 import { WorktreeWorkspaces } from "./worktree-workspaces.ts";
 import { Terminals } from "./terminals.ts";
 import { WorkspacePreparation } from "./workspace-preparation.ts";
+import { SourceControl } from "./source-control.ts";
 import { WorkspaceLayouts } from "./layouts.ts";
 import type { Kordoc } from "./kordoc.ts";
 import type { AdapterSink, LoginStart, ProviderAdapter } from "./providers/types.ts";
@@ -274,6 +275,7 @@ export class SessionManager {
   readonly worktreeWorkspaces: WorktreeWorkspaces;
   readonly terminals: Terminals;
   readonly preparation: WorkspacePreparation;
+  readonly sourceControl: SourceControl;
   readonly layouts: WorkspaceLayouts;
   /** "그림": pictures drawn with GPT Image through Codex (imagegen.ts). */
   readonly images: ImageGen;
@@ -306,6 +308,16 @@ export class SessionManager {
     this.worktreeWorkspaces = new WorktreeWorkspaces(store, this.workspaces, options.dataDir ?? dirname(options.managedWorksDir), (id) => this.requireWork(id));
     this.terminals = new Terminals(store, this.workspaces, options.ptyBinary);
     this.preparation = new WorkspacePreparation(store, this.workspaces, this.terminals, options.dataDir ?? dirname(options.managedWorksDir), (id) => this.requireWork(id));
+    this.sourceControl = new SourceControl(store, this.workspaces, {
+      sharedLinks: (root) => this.preparation.sharedLinks(root),
+      assertIdle: (root) => {
+        if (this.preparation.busy(root) || [...this.sessions.values()].some((session) => {
+          if (session.status === "idle" || session.status === "error") return false;
+          const cwd = session.workspaceId ? this.workspaces.get(session.workspaceId).cwd : this.works.get(session.workId)?.cwd;
+          return cwd && withinDirectory(root, physicalPath(cwd));
+        })) throw new HttpError(409, "scm_busy", "이 폴더의 에이전트나 환경 준비가 실행 중입니다. 끝나거나 멈춘 뒤 Git 작업을 진행하세요.");
+      },
+    });
     this.layouts = new WorkspaceLayouts(store, this.workspaces);
     this.documents = new Documents(store, bus, options.dataDir ?? dirname(options.managedWorksDir), options.kordoc ?? null, options.ieum ?? null, this.workspaces);
     this.engineSetup = new EngineInstaller({
@@ -970,6 +982,7 @@ export class SessionManager {
   }
 
   private assertWorkspaceIdle(workspace: Workspace) {
+    if (this.sourceControl.busy(workspace.cwd)) throw new HttpError(409, "workspace_busy", "이 작업공간에서 Git 작업이 진행 중입니다. 결과를 확인한 뒤 진행하세요.");
     if (this.preparation.busy(workspace.cwd)) throw new HttpError(409, "workspace_busy", "이 작업공간의 환경 준비가 진행 중입니다. 완료하거나 취소한 뒤 진행하세요.");
     if (this.terminals.busy(workspace.cwd)) throw new HttpError(409, "workspace_busy", "이 작업공간에서 실행 중인 터미널이 있습니다. 터미널에서 실행을 종료한 뒤 진행하세요.");
     if (this.worktreeWorkspaces.busy(workspace.id)) throw new HttpError(409, "workspace_busy", "이 작업공간에서 워크트리를 생성 중입니다. 완료하거나 취소한 뒤 진행하세요.");
@@ -2017,6 +2030,7 @@ export class SessionManager {
     this.flush();
     await this.worktreeWorkspaces.shutdown();
     await this.preparation.shutdown();
+    await this.sourceControl.shutdown();
     await this.terminals.shutdown();
     await Promise.all([...this.adapters.values()].map((adapter) => adapter.shutdown()));
     await this.options.browse?.shutdown();

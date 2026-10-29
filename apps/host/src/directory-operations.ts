@@ -27,11 +27,11 @@ export class DirectoryOperations {
   private readonly roots = new Set<string>();
   assertAvailable(path: string) {
     const file = physicalPath(path);
-    if ([...this.roots].some((root) => withinDirectory(root, file))) throw new HttpError(409, "workspace_removing", "이 폴더의 워크트리를 제거 중입니다. 작업이 끝난 뒤 다시 확인해 주세요.");
+    if ([...this.roots].some((root) => withinDirectory(root, file))) throw new HttpError(409, "workspace_removing", "이 폴더의 Git 작업이나 파일 준비·정리가 진행 중입니다. 작업이 끝난 뒤 다시 확인해 주세요.");
   }
   acquire(path: string) {
     const root = physicalPath(path);
-    if ([...this.roots].some((entry) => withinDirectory(entry, root) || withinDirectory(root, entry))) throw new HttpError(409, "workspace_removing", "이 폴더의 워크트리를 이미 제거 중입니다.");
+    if ([...this.roots].some((entry) => withinDirectory(entry, root) || withinDirectory(root, entry))) throw new HttpError(409, "workspace_removing", "이 폴더에서 다른 Git 작업이나 파일 준비·정리가 진행 중입니다.");
     this.roots.add(root);
     return () => { this.roots.delete(root); };
   }

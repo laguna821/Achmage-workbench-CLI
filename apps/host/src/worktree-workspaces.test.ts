@@ -128,10 +128,10 @@ it("rejects new session/editor admission and overlapping removal until Git finis
   vi.spyOn(gitModule, "removeWorktree").mockImplementation(async (tree) => { await wait; return realRemove(tree); });
   const removing = manager.discardWorktree(session.id);
   try {
-    expect(() => manager.createSession(otherWork.id, { provider: "claude" })).toThrow("제거 중");
-    expect(() => manager.createWork({ title: "늦은 연결", cwd: space.cwd })).toThrow("제거 중");
-    expect(() => manager.documents.registry.open(artifact.id, { viewId: "late", windowId: "one", claim: true })).toThrow("제거 중");
-    expect(() => manager.documents.registry.assertPath(join(space.cwd, "new.md"))).toThrow("제거 중");
+    expect(() => manager.createSession(otherWork.id, { provider: "claude" })).toThrowError(expect.objectContaining({ code: "workspace_removing" }));
+    expect(() => manager.createWork({ title: "늦은 연결", cwd: space.cwd })).toThrowError(expect.objectContaining({ code: "workspace_removing" }));
+    expect(() => manager.documents.registry.open(artifact.id, { viewId: "late", windowId: "one", claim: true })).toThrowError(expect.objectContaining({ code: "workspace_removing" }));
+    expect(() => manager.documents.registry.assertPath(join(space.cwd, "new.md"))).toThrowError(expect.objectContaining({ code: "workspace_removing" }));
     await expect(manager.discardWorktree(session.id)).rejects.toMatchObject({ code: "workspace_removing" });
   } finally { release(); await removing; }
   expect(() => manager.createSession(otherWork.id, { provider: "claude" })).toThrow("보관되거나 제거");
