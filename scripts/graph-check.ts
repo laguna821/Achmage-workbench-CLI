@@ -50,7 +50,9 @@ const api = async <T>(method: string, path: string, body?: unknown): Promise<T> 
   if (!response.ok) throw new Error(`${method} ${path}: ${response.status} ${await response.text()}`);
   return (await response.json()) as T;
 };
-await api("PUT", "/api/prefs", { prefs: { onboarding: "done", startScreen: "last", homeMode: "projects" } });
+// The drags below were measured beside the single-tree sidebar ("한 칸"); the two-pane navigator is
+// wider and a point dragged 140px left would land on it, outside the graph (navigator-check covers it).
+await api("PUT", "/api/prefs", { prefs: { onboarding: "done", startScreen: "last", homeMode: "projects", navigator: { layout: "tree" } } });
 
 /** A work with its folder, its note's tags and "관련", and sessions of the given engines. */
 async function project(title: string, tags: string[], related: string[], engines: Provider[] = []) {

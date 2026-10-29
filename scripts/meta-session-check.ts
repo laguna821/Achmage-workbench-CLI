@@ -43,6 +43,9 @@ const api = async <T>(method: string, path: string, body?: unknown): Promise<T> 
   return (await response.json()) as T;
 };
 const snapshot = () => api<{ works: Work[]; sessions: Session[]; folders: Folder[] }>("GET", "/api/snapshot");
+// This checks the single tree (folders › works › sessions, manual order, its sort menu), which is now
+// the navigator's "한 칸" layout; navigator-check.ts checks the two-pane default.
+await api("PUT", "/api/prefs", { prefs: { onboarding: "done", startScreen: "last", navigator: { layout: "tree" } } });
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 920 } });

@@ -206,7 +206,8 @@ try:
     pump(0.4)
     after = js("return document.querySelector('.pane.left').getBoundingClientRect().width")
     remembered = until(lambda: request("GET", "/api/snapshot")["prefs"].get("paneRatio", 0) > 0.55, 5)
-    check("WebKitGTK: 가운데 막대를 포인터로 끌어 너비 조절(기억됨)", after > before + 100 and remembered, f"{round(before)} → {round(after)}px")
+    # Beside the two-pane sidebar the right pane reaches its 360px floor after about 100px at 1440px.
+    check("WebKitGTK: 가운데 막대를 포인터로 끌어 너비 조절(기억됨)", after > before + 90 and remembered, f"{round(before)} → {round(after)}px")
 
     # The note pane's header onto the session's input: attached there, no drop zone.
     press("() => document.querySelector('.pane.right .pane-head-title')")
