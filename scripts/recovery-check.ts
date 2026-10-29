@@ -13,7 +13,7 @@
 // Usage: node scripts/recovery-check.ts [outDir] [codex|claude]
 
 import { execFileSync, spawn } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
@@ -43,7 +43,9 @@ const ieumCli = findIeumCli();
 function hwpx(word: string) {
   const request = join(fixtures, `${word}.json`);
   writeFileSync(request, JSON.stringify({ schemaVersion: 1, mode: "generate", markdown: `# 계획서\n\n${word} 일정을 정리합니다.`, outputDir: join(fixtures, word) }));
-  const generated = JSON.parse(execFileSync(process.execPath, [join(dirname(kordocRunner!), "../core/scripts/run.mjs"), request], { encoding: "utf8" })) as { files: { path: string }[] };
+  // The runner shipped with the app generates HWPX itself; an installed skill keeps that in its core.
+  const core = join(dirname(kordocRunner!), "../core/scripts/run.mjs");
+  const generated = JSON.parse(execFileSync(process.execPath, [existsSync(core) ? core : kordocRunner!, request], { encoding: "utf8" })) as { files: { path: string }[] };
   const file = join(fixtures, `${word}.hwpx`);
   copyFileSync(generated.files.find((entry) => entry.path.endsWith(".hwpx"))!.path, file);
   return file;
