@@ -41,6 +41,7 @@ import { VaultDialogHost, VaultSettingsRow } from "./components/pkm/VaultDialog.
 import { PkmCenter, pkmTitle } from "./components/pkm/PkmCenter.tsx";
 import type { PkmTarget } from "./pkm.ts";
 import { entryClient, homeTarget, sessionToOpen, unseenFailure } from "./entry.ts";
+import { WorksDirRow } from "./components/WorksDirRow.tsx";
 
 // Editors (CodeMirror, PDF.js) load only when a document opens.
 const DocumentView = lazy(() => import("./components/docs/DocumentView.tsx"));
@@ -79,9 +80,9 @@ async function notify(title: string, body: string, sessionId: string) {
 
 const BUSY: SessionStatus[] = ["starting", "running", "interrupting", "awaitingApproval"];
 
-async function pickFolderNative(): Promise<string | null> {
+async function pickFolderNative(title = "작업 폴더 선택", defaultPath?: string): Promise<string | null> {
   const { open } = await import("@tauri-apps/plugin-dialog");
-  const picked = await open({ directory: true, multiple: false, title: "작업 폴더 선택" });
+  const picked = await open({ directory: true, multiple: false, title, defaultPath });
   return typeof picked === "string" ? picked : null;
 }
 
@@ -1415,6 +1416,7 @@ export function App() {
                   />
                 }
                 vault={<VaultSettingsRow onOpen={closeMenu} />}
+                worksDir={<WorksDirRow api={api} pickFolder={inDesktop ? (start) => pickFolderNative("새 프로젝트 폴더 위치", start) : null} />}
               />
             </Popover>
           </div>

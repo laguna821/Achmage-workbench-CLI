@@ -1,4 +1,4 @@
-import { isUnseen, type ProjectPick, type Session, type Work, type WorkAtFolder } from "@workbench/contracts";
+import { isUnseen, type ProjectPick, type Session, type Work, type WorkAtFolder, type WorksDirView } from "@workbench/contracts";
 import type { Api } from "./api.ts";
 import { isWorking, recency } from "./overview.ts";
 import { folderPath, sessionsOf, type State } from "./state.ts";
@@ -74,9 +74,12 @@ export async function homeTarget(state: State, pick: ProjectPick, cwd: string | 
   return pickedWork(state, pick, await workAt(cwd));
 }
 
-/** The gateway's side of it: a folder's live work. */
+/** The gateway's side of it: a folder's live work, the location of new project folders. */
 export function entryClient(api: Api) {
   return {
     workAt: (path: string) => api.request<WorkAtFolder>("GET", `/api/entry/work?${new URLSearchParams({ path })}`).then((result) => result.work),
+    worksDir: () => api.request<WorksDirView>("GET", "/api/entry/works-dir"),
+    setWorksDir: (path: string) => api.request<WorksDirView>("PUT", "/api/entry/works-dir", { path }),
+    resetWorksDir: () => api.request<WorksDirView>("DELETE", "/api/entry/works-dir"),
   };
 }

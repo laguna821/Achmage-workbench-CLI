@@ -1,4 +1,4 @@
-/* ① 들어가는 길: the project chip on home. */
+/* ① 들어가는 길: the project chip on home and the "새 프로젝트 폴더 위치" setting. */
 
 .project-button {
   max-width: 300px;
@@ -76,4 +76,47 @@
   padding: 8px 10px 10px;
   font-size: 13.5px;
   color: var(--faint);
+}
+
+/* The setting in "연결과 설정". */
+.works-dir-path {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.works-dir-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.works-dir-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.works-dir-form input {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.works-dir-form input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* The settings popover is taller than a short window: it scrolls inside the window instead of
+   pushing the page (this row made it longer still). */
+.popover:has(> .connections) {
+  max-height: calc(100vh - 72px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
