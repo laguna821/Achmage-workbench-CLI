@@ -39,6 +39,26 @@ export function eventDays(events: ProjectEvent[], now = Date.now()): { label: st
   });
 }
 
+/** A tag as compared for "the same tag": any case, `-`, `_` and spaces alike, without `#`. */
+const tagKey = (tag: string) => tag.replace(/^#/, "").trim().toLowerCase().replace(/[-_\s]+/g, "_");
+
+/**
+ * Tags typed on the project page, each in the spelling already used (vault, other projects) when
+ * there is one, so one tag does not split into several ("workflow-engineering" → "Workflow_Engineering").
+ */
+export function knownTags(typed: string, known: string[]): string[] {
+  const byKey = new Map<string, string>();
+  for (const tag of known) if (!byKey.has(tagKey(tag))) byKey.set(tagKey(tag), tag);
+  const out: string[] = [];
+  for (const raw of typed.split(/[\s,]+/)) {
+    const tag = raw.replace(/^#/, "").trim();
+    if (!tag) continue;
+    const spelled = byKey.get(tagKey(tag)) ?? tag;
+    if (!out.some((entry) => tagKey(entry) === tagKey(spelled))) out.push(spelled);
+  }
+  return out;
+}
+
 const SEEN_KEY = "workbench.projectSeen";
 
 /** When the person last left this project's page (null: never), kept on this device. */

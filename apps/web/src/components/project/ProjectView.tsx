@@ -4,7 +4,7 @@ import type { Api } from "../../api.ts";
 import { ago, statusText } from "../../format.ts";
 import { ObsidianMarkdown, obsidianComponents, obsidianUrlTransform } from "../../markdown/obsidian.tsx";
 import type { Components } from "react-markdown";
-import { asLink, continueSession, duration, eventDays, linkLabel, markProjectSeen, projectSeenAt, sessionOrder, stageOf } from "../../project.ts";
+import { asLink, continueSession, duration, eventDays, knownTags, linkLabel, markProjectSeen, projectSeenAt, sessionOrder, stageOf } from "../../project.ts";
 import { neighbours } from "../../graph.ts";
 import type { State } from "../../state.ts";
 import type { MenuEntry, MenuRequest } from "../ContextMenu.tsx";
@@ -94,6 +94,18 @@ export function ProjectView({
   const version = `${state.pkm[`project:${workId}`] ?? 0}:${state.pkm["project:*"] ?? 0}`;
   // "연결": every project's tags and links, to find this one's neighbours (관련, shared tags).
   const [summaries, setSummaries] = useState<ProjectSummary[]>([]);
+  // Tag completion: the vault's tags (asked for when "+ 태그" opens), then other projects' and works'.
+  const [vaultTags, setVaultTags] = useState<string[] | null>(null);
+  const tagChoices = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const tag of [...(vaultTags ?? []), ...summaries.flatMap((summary) => summary.tags), ...Object.values(state.works).flatMap((entry) => entry.tags ?? [])]) {
+      if (seen.has(tag.toLowerCase())) continue;
+      seen.add(tag.toLowerCase());
+      out.push(tag);
+    }
+    return out;
+  }, [vaultTags, summaries, state.works]);
   useEffect(() => {
     api.projects().then(setSummaries).catch(() => setSummaries([]));
   }, [api, version]);
@@ -279,9 +291,31 @@ export function ProjectView({
                 </span>
               ))}
               {adding === "tag" ? (
-                <AddInput placeholder="태그" onAdd={(value) => run(api.setProjectProperty(workId, "tags", [...note.tags, ...value.split(/[\s,]+/).map((tag) => tag.replace(/^#/, "")).filter(Boolean)]))} onDone={() => setAdding(null)} />
+                <>
+                  <AddInput
+                    placeholder="태그"
+                    list="project-tags"
+                    onAdd={(value) => {
+                      const added = knownTags(value, tagChoices).filter((tag) => !note.tags.some((have) => have.toLowerCase() === tag.toLowerCase()));
+                      if (added.length) run(api.setProjectProperty(workId, "tags", [...note.tags, ...added]));
+                    }}
+                    onDone={() => setAdding(null)}
+                  />
+                  <datalist id="project-tags">
+                    {tagChoices.map((tag) => (
+                      <option key={tag} value={tag} />
+                    ))}
+                  </datalist>
+                </>
               ) : (
-                <button type="button" className="project-add" onClick={() => setAdding("tag")}>
+                <button
+                  type="button"
+                  className="project-add"
+                  onClick={() => {
+                    setAdding("tag");
+                    if (vaultTags === null) api.vaultTags().then((list) => setVaultTags(list.map((entry) => entry.tag)), () => setVaultTags([]));
+                  }}
+                >
                   + 태그
                 </button>
               )}

@@ -251,3 +251,16 @@ describe("notes the engines read by themselves", () => {
     expect(card).toMatchObject({ engineReads: 1 });
   });
 });
+
+describe("the vault's tags", () => {
+  it("are counted from the notes, most used first, never from hidden folders", () => {
+    const { pkm, vault } = setup();
+    put(vault, "01. Inbox/c.md", "---\ntags: [AI_교육, 강의]\n---\nc");
+    put(vault, "90. Settings/hidden.md", "---\ntags: [비밀]\n---\nh");
+    pkm.attachVault(vault);
+    const tags = pkm.vaultTags();
+    expect(tags[0]).toEqual({ tag: "AI_교육", count: 2 });
+    expect(tags.map((entry) => entry.tag)).toContain("강의");
+    expect(tags.map((entry) => entry.tag)).not.toContain("비밀");
+  });
+});

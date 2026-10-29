@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ProjectEvent, Session, Work } from "@workbench/contracts";
-import { asLink, continueSession, duration, eventDays, linkLabel, markProjectSeen, projectSeenAt, sessionOrder, stageOf } from "./project.ts";
+import { asLink, continueSession, duration, eventDays, knownTags, linkLabel, markProjectSeen, projectSeenAt, sessionOrder, stageOf } from "./project.ts";
 
 const work = { id: "w", activeSessionId: "s-old" } as Work;
 const session = (id: string, patch: Partial<Session> = {}) => ({ id, workId: "w", status: "idle", updatedAt: 1, archivedAt: null, lastError: null, unread: false, previewAt: null, seenAt: null, ...patch }) as Session;
@@ -64,5 +64,14 @@ describe("지난번 본 뒤", () => {
     } finally {
       Object.defineProperty(globalThis, "localStorage", { value: before, configurable: true });
     }
+  });
+});
+
+describe("tags typed on the project page", () => {
+  it("take the spelling already used, so one tag does not split into several", () => {
+    const known = ["Workflow_Engineering", "AI_교육", "강의"];
+    expect(knownTags("workflow-engineering, #ai 교육", known)).toEqual(["Workflow_Engineering", "ai", "교육"]);
+    expect(knownTags("#AI_교육 ai-교육 새태그", known)).toEqual(["AI_교육", "새태그"]);
+    expect(knownTags("  ", known)).toEqual([]);
   });
 });

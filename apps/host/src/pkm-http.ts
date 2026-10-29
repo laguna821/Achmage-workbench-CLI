@@ -43,6 +43,7 @@ export async function handlePkm(pkm: Pkm, req: IncomingMessage, res: ServerRespo
   const path = url.pathname.replace(/^\/api\/pkm/, "");
   const query = (name: string) => url.searchParams.get(name) ?? "";
   if (method === "GET" && path === "/state") return (sendJson(res, 200, pkm.state()), true);
+  if (method === "GET" && path === "/tags") return (sendJson(res, 200, pkm.vaultTags()), true);
   if (method === "GET" && path === "/vault/tree") return (sendJson(res, 200, pkm.vault.tree()), true);
   if (method === "PUT" && path === "/vault") {
     const body = await readJson(req);

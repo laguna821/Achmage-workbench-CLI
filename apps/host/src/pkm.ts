@@ -210,6 +210,26 @@ export class Pkm {
     return this.noteReads()[path]?.length ?? 0;
   }
 
+  private tagList: { at: number; signature: string; tags: { tag: string; count: number }[] } | null = null;
+
+  /**
+   * The vault's tags, most used first (tag completion on the project page): from the notes' heads
+   * as already read for cards (kept by time and size), hidden notes left out. Kept a minute.
+   */
+  vaultTags(limit = 300): { tag: string; count: number }[] {
+    const index = this.vault.current;
+    if (!index) return [];
+    if (this.tagList && this.tagList.signature === index.signature && Date.now() - this.tagList.at < 60_000) return this.tagList.tags;
+    const counts = new Map<string, number>();
+    for (const entry of index.notes.values()) {
+      if (entry.ext !== ".md" || this.vault.isHidden(entry.path)) continue;
+      for (const tag of this.notes.meta(entry).tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    }
+    const tags = [...counts].map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, "ko")).slice(0, limit);
+    this.tagList = { at: Date.now(), signature: index.signature, tags };
+    return tags;
+  }
+
   /** Vault notes an engine read by itself (its own Read step or command), by session. */
   private engineReads(): Record<string, string[]> {
     return this.readJson<Record<string, string[]>>("pkm.engineReads", {});
