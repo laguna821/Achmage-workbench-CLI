@@ -51,6 +51,7 @@ import type { PkmTarget } from "./pkm.ts";
 import { entryClient, homeTarget, sessionToOpen, unseenFailure } from "./entry.ts";
 import { WorksDirRow } from "./components/WorksDirRow.tsx";
 import { EngineMark } from "./components/EngineMark.tsx";
+import { LeaveGate } from "./leave-gate.ts";
 import { PaneLayout, type PaneHead, type PaneScope } from "./components/Panes.tsx";
 import { closePane, effectAt, focusPane, focusedPane, movePane, otherPane, paneById, placeAt, resizeSplit, restoreLayout, setPane, shownElsewhere, singleLayout, splitPane, MAX_PANES, type Layout, type Pane, type PaneContent, type PaneId, type PaneItem, type PaneTarget, type Side } from "./panes.ts";
 import { PaneActionsContext, type PaneActions } from "./panedrag.ts";
@@ -198,6 +199,8 @@ export function App() {
     return token ? new Api(token) : null;
   }, []);
   const [state, dispatch] = useReducer(reducer, initialState);
+  const stateRef = useRef(state);
+  stateRef.current = state;
   // A window of its own for one session (`?session=`, "새 창으로 떼어 내기"): no sidebar, no home.
   const [single, setSingle] = useState<string | null>(() => windowSession());
   // One pane on a new profile; an existing layout is restored from gateway preferences after
@@ -219,6 +222,7 @@ export function App() {
   }, []);
   const { view, workId } = focusedPane(layout);
   // A document view holding edits only it can save (the Word editor) saves them before it is replaced (one per pane).
+  const leaveGate = useRef(new LeaveGate());
   const leaveGuards = useRef<Partial<Record<PaneId, () => Promise<void>>>>({});
   const guardOf = useMemo(() => {
     const keep = (id: PaneId) => (guard: (() => Promise<void>) | null) => {
@@ -234,10 +238,7 @@ export function App() {
     // "문서" and "나란히" show the same document view; it is left only when another one replaces it.
     const docOf = (entry: View | null) => (entry && (entry.kind === "document" || entry.kind === "split") ? entry.artifactId : null);
     const leaving = pane !== undefined && docOf(pane.view) !== null && docOf(next) !== docOf(pane.view);
-    if (!guard || !leaving) return then();
-    void guard()
-      .catch(() => undefined)
-      .finally(then);
+    leaveGate.current.run(id, guard && leaving ? guard : null, then, (error) => setToast(error instanceof Error ? error.message : String(error)));
   }, []);
   const setViewOf = useCallback(
     (id: PaneId, next: View | ((current: View) => View)) => {
@@ -277,10 +278,14 @@ export function App() {
   const closeEngineMenu = useCallback(() => setEngineMenu(null), []);
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
-  const setWorkId = (id: string | null) => {
-    updateLayout((current) => setPane(current, current.focus, { workId: id, sessionId: null }));
-    if (id && !single) localStorage.setItem(LAST_WORK_KEY, id);
-  };
+  const navigateTo = useCallback((content: PaneContent<View>, opened?: () => void) => {
+    const id = layoutRef.current.focus;
+    afterLeaving(id, content.view, () => {
+      updateLayout((current) => setPane(current, id, content));
+      if (content.workId) localStorage.setItem(LAST_WORK_KEY, content.workId);
+      opened?.();
+    });
+  }, [afterLeaving, updateLayout]);
 
   const fail = useCallback((error: unknown) => {
     setToast(error instanceof ApiRequestError || error instanceof Error ? error.message : String(error));
@@ -435,11 +440,15 @@ export function App() {
   const openDocIds = docsOf(work);
   const closeDocIn = (id: PaneId, owner: Work, ids: string[], artifactId: string) => {
     const rest = ids.filter((entry) => entry !== artifactId);
-    setOpenDocs((current) => ({ ...current, [owner.id]: rest }));
     const shown = paneById(layoutRef.current, id)?.view;
-    if (shown && (shown.kind === "document" || shown.kind === "split") && shown.artifactId === artifactId) {
-      setViewOf(id, rest.length ? { kind: "document", artifactId: rest[rest.length - 1]!, proposalId: null } : { kind: "work" });
-    }
+    const replacing = shown && (shown.kind === "document" || shown.kind === "split") && shown.artifactId === artifactId;
+    const next: View = rest.length ? { kind: "document", artifactId: rest[rest.length - 1]!, proposalId: null } : { kind: "work" };
+    const close = () => {
+      setOpenDocs((current) => ({ ...current, [owner.id]: rest }));
+      if (replacing) updateLayout((current) => setPane(current, id, { view: next }));
+    };
+    if (replacing) afterLeaving(id, next, close);
+    else close();
   };
 
   // Load the transcript of the visible session once.
@@ -507,8 +516,7 @@ export function App() {
           .then(({ session: forked, text }) => {
             // The request goes back into the new session's input, to be edited and sent again.
             writeDraft(`work:${forked.workId}:${forked.id}`, text);
-            setWorkId(forked.workId);
-            setView({ kind: "work" });
+            navigateTo({ workId: forked.workId, sessionId: forked.id, view: { kind: "work" } });
             setToast("이 요청 앞까지의 대화로 갈래를 만들었습니다. 요청을 고쳐 보내세요.");
           })
           .catch(fail);
@@ -577,7 +585,7 @@ export function App() {
       newSession: async (target: Work, provider: Provider, choice, options) => {
         if (!api) return null;
         try {
-          const workspaceId = options?.workspaceId ?? (target.activeSessionId ? state.sessions[target.activeSessionId]?.workspaceId : undefined);
+          const workspaceId = options?.workspaceId ?? (target.activeSessionId ? stateRef.current.sessions[target.activeSessionId]?.workspaceId : undefined);
           const session = await api.createSession(target.id, provider, { workspaceId, model: choice?.model ?? null, effort: choice?.effort ?? null, ...(options?.browser ? { browser: true } : {}), ...(options?.worktree ? { worktree: true } : {}) });
           dispatch({ type: "focus", work: target, session });
           updateLayout((current) => setPane(current, current.focus, { workId: target.id, sessionId: session.id }));
@@ -598,18 +606,18 @@ export function App() {
       selectSession: (target, session) => {
         if (single) {
           // A detached window stays one window: it switches to the session picked in it.
-          setSingle(session.id);
-          showInWindow(session.id);
-          setView({ kind: "work" });
+          navigateTo({ workId: target.id, sessionId: session.id, view: { kind: "work" } }, () => {
+            setSingle(session.id);
+            showInWindow(session.id);
+          });
           return;
         }
         // Already shown in the other pane: the focus goes there (never the same conversation twice).
         panesRef.current.focusIfShown(`session:${session.id}`);
-        dispatch({ type: "focus", work: target, session });
-        setWorkId(target.id);
-        updateLayout((current) => setPane(current, current.focus, { sessionId: session.id }));
-        setView({ kind: "work" });
-        if (target.activeSessionId !== session.id) void api?.updateWork(target.id, { activeSessionId: session.id }).catch(fail);
+        navigateTo({ workId: target.id, sessionId: session.id, view: { kind: "work" } }, () => {
+          dispatch({ type: "focus", work: target, session });
+          if (target.activeSessionId !== session.id) void api?.updateWork(target.id, { activeSessionId: session.id }).catch(fail);
+        });
       },
       renameSession: (session, purpose) => void api?.updateSession(session.id, { purpose }).catch(fail),
       setModel: (session, choice) => void api?.updateSession(session.id, { model: choice.model, effort: choice.effort }).catch(fail),
@@ -628,8 +636,7 @@ export function App() {
       moveWork: (target, folderId) => void api?.updateWork(target.id, { folderId }).catch(fail),
       openProject: (target) => {
         panesRef.current.focusIfShown(`project:${target.id}`);
-        setWorkId(target.id);
-        setView({ kind: "project", workId: target.id });
+        navigateTo({ workId: target.id, sessionId: null, view: { kind: "project", workId: target.id } });
       },
       openSidebar: () => savePrefs({ sidebar: true }),
       restore: (target) => {
@@ -649,8 +656,7 @@ export function App() {
       openArtifact: (artifactId, proposalId) => {
         panesRef.current.focusIfShown(`doc:${artifactId}`);
         const artifact = state.artifacts[artifactId];
-        if (artifact) setWorkId(artifact.workId);
-        setView({ kind: "document", artifactId, proposalId: proposalId ?? null });
+        if (artifact) navigateTo({ workId: artifact.workId, sessionId: null, view: { kind: "document", artifactId, proposalId: proposalId ?? null } });
       },
       applyProposal: (proposal: Proposal) =>
         void api
@@ -782,8 +788,7 @@ export function App() {
   const openImported = useCallback(
     (session: Session) => {
       // The gateway made it the work's active session.
-      setWorkId(session.workId);
-      setView({ kind: "work" });
+      navigateTo({ workId: session.workId, sessionId: session.id, view: { kind: "work" } });
     },
     [],
   );
@@ -795,10 +800,9 @@ export function App() {
       savePrefs({
         tree: { ...open, openWorks: [...new Set([...open.openWorks, workId])], closedWorks: open.closedWorks.filter((id) => id !== workId), openDocs: [...new Set([...open.openDocs, workId])] },
       });
-      setWorkId(workId);
-      setView({ kind: "document", artifactId: artifact.id, proposalId: null });
+      navigateTo({ workId, sessionId: null, view: { kind: "document", artifactId: artifact.id, proposalId: null } });
     },
-    [savePrefs, setView, setWorkId],
+    [savePrefs, navigateTo],
   );
   /** Notion's "+": a Markdown page in the work folder, shown in the tree and opened at once. */
   const newPage = useCallback(
@@ -1315,12 +1319,12 @@ export function App() {
       return;
     }
     panesRef.current.focusIfShown(chosen ? `session:${chosen.id}` : `work:${latest.id}`);
-    if (chosen && chosen.id !== latest.activeSessionId) {
-      dispatch({ type: "focus", work: latest, session: chosen });
-      void api?.updateWork(latest.id, { activeSessionId: chosen.id }).catch(fail);
-    }
-    setWorkId(target.id);
-    setView({ kind: "work" });
+    navigateTo({ workId: target.id, sessionId: chosen?.id ?? null, view: { kind: "work" } }, () => {
+      if (chosen && chosen.id !== latest.activeSessionId) {
+        dispatch({ type: "focus", work: latest, session: chosen });
+        void api?.updateWork(latest.id, { activeSessionId: chosen.id }).catch(fail);
+      }
+    });
   }
 
   const move = useCallback(
@@ -1689,8 +1693,7 @@ export function App() {
           onOpenNote={(path) => setView({ kind: "pkm", target: { kind: "note", path } })}
           onOpenDocument={(artifactId, proposalId) => {
             const artifact = state.artifacts[artifactId];
-            if (artifact) setWorkId(artifact.workId);
-            setView({ kind: "document", artifactId, proposalId });
+            if (artifact) navigateTo({ workId: artifact.workId, sessionId: null, view: { kind: "document", artifactId, proposalId } });
           }}
           onToast={setToast}
           onError={fail}

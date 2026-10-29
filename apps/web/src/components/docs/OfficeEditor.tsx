@@ -9,7 +9,7 @@ export type OfficeHandle = {
   rebase(revision: number): Promise<number | null>;
   /** Open the latest revision; unsaved edits in the editor are dropped. */
   reload(): void;
-  /** Before the document view goes away: save, or keep the edits for the next visit. Never takes long. */
+  /** Before the view goes away: confirm saving. A failure/conflict keeps this editor mounted. */
   leave(): Promise<void>;
 };
 
@@ -54,8 +54,13 @@ export const OfficeEditor = forwardRef<
   };
   const waitFlushed = () =>
     new Promise<number | null>((resolve) => {
-      waiters.current.push(resolve);
-      window.setTimeout(() => resolve(status.current.dirty ? null : latest.current.revision), 16_000);
+      const finish = (revision: number | null) => {
+        window.clearTimeout(timer);
+        waiters.current = waiters.current.filter((waiter) => waiter !== finish);
+        resolve(revision);
+      };
+      const timer = window.setTimeout(() => finish(null), 16_000);
+      waiters.current.push(finish);
     });
 
   useEffect(() => {
@@ -185,9 +190,10 @@ export const OfficeEditor = forwardRef<
     },
     async leave() {
       if (status.current.revision === null) return;
+      if (status.current.conflict) throw new Error("문서의 저장 충돌을 해결한 뒤 이동해 주세요. 편집 내용은 현재 탭에 있습니다.");
       const done = waitFlushed();
-      send({ type: status.current.conflict ? "office:keep" : "office:flush" });
-      await Promise.race([done, new Promise((resolve) => window.setTimeout(resolve, 4000))]);
+      send({ type: "office:flush" });
+      if (await done === null || status.current.dirty) throw new Error("문서 저장을 확인하지 못해 이동하지 않았습니다. 현재 탭에서 저장을 다시 시도해 주세요.");
     },
     reload() {
       recover.current = false;

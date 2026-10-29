@@ -98,6 +98,8 @@ export default function DocumentView({
   const textual = artifact ? TEXT_FORMATS.has(artifact.format) : false;
   const [base, setBase] = useState<{ revision: number; text: string } | null>(null);
   const [text, setText] = useState("");
+  const latestText = useRef(text);
+  latestText.current = text;
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [conflict, setConflict] = useState<Conflict>(null);
   const hangul = artifact?.format === "hwpx" || artifact?.format === "hwp";
@@ -147,6 +149,7 @@ export default function DocumentView({
   const [create, setCreate] = useState<CreateTarget | null>(null);
   const [targetOpen, setTargetOpen] = useState(false);
   const saving = useRef<Promise<number | null> | null>(null);
+  const savingText = useRef<string | null>(null);
   // Revisions this view saved itself: their events must not look like someone else's change.
   const ownRevisions = useRef(new Set<number>());
   const timer = useRef<number | undefined>(undefined);
@@ -193,6 +196,7 @@ export default function DocumentView({
     if (text === base.text) return base.revision;
     if (saving.current) return saving.current;
     setSaveState("saving");
+    savingText.current = text;
     const run = api
       .saveArtifact(artifactId, base.revision, text)
       .then((saved) => {
@@ -217,17 +221,23 @@ export default function DocumentView({
       })
       .finally(() => {
         saving.current = null;
+        savingText.current = null;
       });
     saving.current = run;
     return run;
   }, [api, artifactId, artifact?.revision, base, text, onToast, design, officeEditing]);
 
-  // Tabs, the sidebar and other views replace this one at once: the Word editor saves (or keeps) its edits first.
+  // Switching/closing must wait for a confirmed save, including text and design editors.
   useEffect(() => {
-    if (!onLeaveGuard || !officeEditing) return;
-    onLeaveGuard(() => officeRef.current?.leave() ?? Promise.resolve());
+    if (!onLeaveGuard) return;
+    onLeaveGuard(async () => {
+      if (officeEditing) return officeRef.current?.leave();
+      const submittedText = saving.current ? savingText.current : text;
+      if (await save() === null) throw new Error("문서를 저장하지 못해 이동하지 않았습니다. 현재 편집 내용을 확인해 주세요.");
+      if (!design && latestText.current !== submittedText) throw new Error("저장하는 동안 편집 내용이 바뀌어 이동을 보류했습니다. 다시 이동해 주세요.");
+    });
     return () => onLeaveGuard(null);
-  }, [onLeaveGuard, officeEditing]);
+  }, [onLeaveGuard, officeEditing, save, text, design]);
 
   // Autosave shortly after typing stops.
   useEffect(() => {
@@ -579,7 +589,7 @@ export default function DocumentView({
     <main className="document-view">
       {tabs}
       <header className="doc-header">
-        <button type="button" className="ghost-button" onClick={() => void save().then(onBack)}>
+        <button type="button" className="ghost-button" onClick={() => void save().then((revision) => { if (revision !== null) onBack(); })}>
           <Icon name="arrowLeft" size={15} /> 대화
         </button>
         <div className="doc-title">
