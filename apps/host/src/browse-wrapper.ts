@@ -34,10 +34,14 @@ function sessionName() {
 }
 
 function elsewhere() {
+  const names = process.platform === "win32" ? ["playwright-cli.cmd", "playwright-cli.exe"] : ["playwright-cli"];
   for (const dir of (process.env.PATH ?? "").split(delimiter)) {
     if (!dir || dir === BIN) continue;
-    const candidate = join(dir, "playwright-cli");
-    if (existsSync(candidate)) return spawnSync(candidate, argv, { stdio: "inherit" }).status ?? 1;
+    for (const name of names) {
+      const candidate = join(dir, name);
+      // A .cmd runs only through the shell on Windows.
+      if (existsSync(candidate)) return spawnSync(candidate, argv, { stdio: "inherit", shell: name.endsWith(".cmd") }).status ?? 1;
+    }
   }
   say(2, "playwright-cli: 이 세션에서는 Workbench 브라우저가 꺼져 있습니다. 사용자에게 입력창 아래 '브라우저'를 켜 달라고 하세요.\n");
   return 127;
@@ -108,5 +112,12 @@ export function wrapperSource(root: string) {
 /** The `playwright-cli` launcher: the gateway's own Node runs the wrapper (no reliance on PATH's node). */
 export function launcherSource(node: string, script: string) {
   const quote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
-  return `#!/bin/sh\nexec ${quote(node)} ${quote(script)} "$@"\n`;
+  // Forward slashes so Git Bash on Windows can run it too.
+  const path = (value: string) => (process.platform === "win32" ? value.replace(/\\/g, "/") : value);
+  return `#!/bin/sh\nexec ${quote(path(node))} ${quote(path(script))} "$@"\n`;
+}
+
+/** The same launcher for Windows shells (PowerShell and cmd run a .cmd by name). */
+export function cmdLauncherSource(node: string, script: string) {
+  return `@"${node}" "${script}" %*\r\n`;
 }

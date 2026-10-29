@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AgentBrowserInstall } from "@workbench/contracts";
-import { BrowserInstaller, PLAYWRIGHT_CLI, browserPaths, installedOnDisk, type InstallStep } from "./browse-install.ts";
+import { BrowserInstaller, PLAYWRIGHT_CLI, browserBuild, browserPaths, installedOnDisk, type InstallStep } from "./browse-install.ts";
 
 // Installing the agent browser as a state machine, with a stand-in installer (no download).
 
@@ -72,5 +72,15 @@ describe("agent browser install", () => {
     expect(installedOnDisk(paths)).toBe(true);
     // Everything lives under the gateway's data folder.
     for (const path of [paths.cli, paths.browsers, paths.profile, paths.bin, paths.spool]) expect(path.startsWith(join(dataDir, "agent-browser"))).toBe(true);
+  });
+});
+
+describe("the agent browser on every OS", () => {
+  it("knows the Chromium executable and its pinned hash for Linux, Windows and both Macs", () => {
+    expect(browserBuild("linux", "x64")?.path).toBe("chrome-linux64/chrome");
+    expect(browserBuild("win32", "x64")?.path).toBe("chrome-win64/chrome.exe");
+    expect(browserBuild("darwin", "arm64")?.path).toContain("Google Chrome for Testing.app/Contents/MacOS/");
+    expect(browserBuild("darwin", "x64")?.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(browserBuild("linux", "arm64")).toBeNull();
   });
 });
