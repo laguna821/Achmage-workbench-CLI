@@ -8,6 +8,7 @@ import { HttpError, SessionManager } from "./sessions.ts";
 import { Store } from "./store.ts";
 import { emptyStatus, type AdapterSink, type ProviderAdapter } from "./providers/types.ts";
 import { heldNotice, restartTurnEnd, stampTurnEnd } from "./recovery.ts";
+import { Kordoc } from "./kordoc.ts";
 import { ClaudeAdapter } from "./providers/claude.ts";
 import { CodexAdapter } from "./providers/codex.ts";
 
@@ -270,6 +271,111 @@ describe("a turn that does not complete", () => {
     const saved = await manager.documents.saveText(byName("새 글.md").id, 1, "# 고친 글\n");
     expect(manager.documents.revisions(saved.id).at(-1)).not.toHaveProperty("model");
   });
+});
+
+describe("Office and Hangul documents in search", () => {
+  /** A text tool the test opens and closes: each read waits until released. */
+  function slowTool() {
+    const waiting: (() => void)[] = [];
+    const reads: string[] = [];
+    const tool = {
+      available: true,
+      runner: "fake",
+      cli: "fake",
+      read: async (path: string) => {
+        reads.push(path);
+        await new Promise<void>((done) => waiting.push(done));
+        return readFileSync(path, "utf8").replace(/^HWPX:/, "");
+      },
+      textView: async (path: string) => {
+        reads.push(path);
+        await new Promise<void>((done) => waiting.push(done));
+        return readFileSync(path, "utf8").replace(/^PK/, "");
+      },
+    };
+    return { tool, reads, release: () => waiting.splice(0).forEach((done) => done()) };
+  }
+
+  it("indexes each new revision's text in the background, keeping the old entry until it is ready", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "wb-recovery-index-"));
+    dirs.push(dir);
+    const hangul = slowTool();
+    const office = slowTool();
+    const manager = new SessionManager(new Store(join(dir, "state.sqlite")), new EventBus(), {
+      hostId: "h",
+      hostLabel: "노트북",
+      managedWorksDir: join(dir, "works"),
+      dataDir: dir,
+      kordoc: hangul.tool as never,
+      ieum: office.tool as never,
+    });
+    const work = manager.createWork({ title: "w", cwd: join(dir, "project") });
+    mkdirSync(work.cwd, { recursive: true });
+    const found = (word: string) => manager.search(word).documents.map((entry) => entry.artifactId);
+    for (const [name, tool, prefix, before, after] of [
+      ["계획서.hwpx", hangul, "HWPX:", "해바라기", "코스모스"],
+      ["발표.pptx", office, "PK", "진달래", "개나리"],
+    ] as const) {
+      const file = join(work.cwd, name);
+      writeFileSync(file, `${prefix}${before} 계획`);
+      const first = manager.documents.track(work.id, work.cwd, file, "engine", null, null)!.artifact;
+      await tick();
+      expect(found(before)).toEqual([]);
+      tool.release();
+      await manager.documents.textIndex.settled();
+      expect(found(before)).toEqual([first.id]);
+      // A new revision: found by the old words until its own text is ready, then by the new ones only.
+      writeFileSync(file, `${prefix}${after} 일정`);
+      manager.documents.track(work.id, work.cwd, file, "engine", null, null);
+      await tick();
+      expect(found(before)).toEqual([first.id]);
+      tool.release();
+      await manager.documents.textIndex.settled();
+      expect(found(after)).toEqual([first.id]);
+      expect(found(before)).toEqual([]);
+      // Kept with the revision: "글 보기" reads it without the tool.
+      expect((await manager.documents.view(first.id, 2)).trim()).toBe(`${after} 일정`);
+    }
+    // Without the tool nothing is lost: the entry stays as it was.
+    office.tool.available = false;
+    const file = join(work.cwd, "발표.pptx");
+    writeFileSync(file, "PK장미 목록");
+    manager.documents.track(work.id, work.cwd, file, "engine", null, null);
+    await manager.documents.textIndex.settled();
+    expect(found("개나리").length).toBe(1);
+    expect(found("장미")).toEqual([]);
+  });
+});
+
+describe("Hangul documents an engine writes, with the installed kordoc", () => {
+  // Uses the installed kordoc engine; skipped where it is not installed.
+  it.runIf(new Kordoc().available)("are found by their text after each new revision", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "wb-recovery-kordoc-"));
+    dirs.push(dir);
+    const { execFileSync } = await import("node:child_process");
+    const coreRunner = join(new Kordoc().runner!, "../../core/scripts/run.mjs");
+    const hwpx = (word: string) => {
+      const request = join(dir, `${word}.json`);
+      writeFileSync(request, JSON.stringify({ schemaVersion: 1, mode: "generate", markdown: `# 계획\n\n${word} 일정을 정리합니다.`, outputDir: join(dir, word) }));
+      const generated = JSON.parse(execFileSync(process.execPath, [coreRunner, request], { encoding: "utf8" })) as { files: { path: string }[] };
+      return readFileSync(generated.files.find((file) => file.path.endsWith(".hwpx"))!.path);
+    };
+    const manager = new SessionManager(new Store(join(dir, "state.sqlite")), new EventBus(), { hostId: "h", hostLabel: "노트북", managedWorksDir: join(dir, "works"), dataDir: dir, kordoc: new Kordoc() });
+    const work = manager.createWork({ title: "w", cwd: join(dir, "project") });
+    mkdirSync(work.cwd, { recursive: true });
+    const file = join(work.cwd, "계획서.hwpx");
+    const found = (word: string) => manager.search(word).documents.map((entry) => entry.artifactId);
+    writeFileSync(file, hwpx("해바라기"));
+    const artifact = manager.documents.track(work.id, work.cwd, file, "engine", null, null)!.artifact;
+    await manager.documents.textIndex.settled();
+    expect(found("해바라기")).toEqual([artifact.id]);
+    writeFileSync(file, hwpx("코스모스"));
+    manager.documents.track(work.id, work.cwd, file, "engine", null, null);
+    expect(found("해바라기")).toEqual([artifact.id]);
+    await manager.documents.textIndex.settled();
+    expect(found("코스모스")).toEqual([artifact.id]);
+    expect(found("해바라기")).toEqual([]);
+  }, 60_000);
 });
 
 describe("adapters when the engine process dies mid-turn (stand-in engines)", () => {

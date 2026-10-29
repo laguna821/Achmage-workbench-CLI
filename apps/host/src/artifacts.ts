@@ -8,6 +8,7 @@ import {
   isOfficeFormat,
   type Artifact,
   type ArtifactRevision,
+  type DocFormat,
   type DocRef,
   type Proposal,
   type ProposalCloser,
@@ -21,6 +22,7 @@ import type { Store } from "./store.ts";
 import type { Kordoc } from "./kordoc.ts";
 import { designAssetPath, designGuide, designProblem, designStem, saveDesignAsset } from "./design.ts";
 import type { IeumOffice, OfficePage } from "./ieumoffice.ts";
+import { BackgroundIndex } from "./doc-text.ts";
 
 // Documents with exact revisions (PRD 3.3). Every recorded revision is an immutable copy under the
 // gateway's data folder; the real file stays where it is in the work folder. AI edits happen in a
@@ -49,6 +51,9 @@ function writeAtomic(path: string, data: Buffer | string) {
 
 const isHangul = (format: string) => format === "hwpx" || format === "hwp";
 
+/** Formats searched through their text view (kordoc, IeumOffice) instead of their bytes. */
+const hasTextView = (format: DocFormat) => isHangul(format) || isOfficeFormat(format);
+
 /** Extension kept on copies of a document (designs keep their two-part `.design.json`). */
 const extensionOf = (artifact: Pick<Artifact, "format" | "name">) => (artifact.format === "design" ? DESIGN_EXTENSION : extname(artifact.name));
 
@@ -70,8 +75,12 @@ function searchText(format: string, data: Buffer): string | null {
     .replace(/\s+/g, " ");
 }
 
-/** Bumped when what the document index holds changes; documents are then indexed again once. */
-const DOCUMENT_SEARCH_VERSION = "1";
+/**
+ * Bumped when what the document index holds changes; documents are then indexed again once.
+ * 2: Hangul and Office documents by their text view, made in the background (they dropped out
+ * before), and no entries left under old row ids (older revisions' text was still found).
+ */
+const DOCUMENT_SEARCH_VERSION = "2";
 
 function countChanges(before: string, after: string) {
   let added = 0;
@@ -94,6 +103,8 @@ export class Documents {
   ieum: IeumOffice | null;
   private readonly pageCache = new Map<string, Promise<import("./kordoc.ts").HangulPage[]>>();
   private readonly officeCache = new Map<string, Promise<OfficePage[]>>();
+  /** Hangul and Office revisions waiting for their text to be indexed (one at a time). */
+  readonly textIndex = new BackgroundIndex((artifactId, revision) => this.indexView(artifactId, revision));
 
   constructor(store: Store, bus: EventBus, dataDir: string, kordoc: Kordoc | null = null, ieum: IeumOffice | null = null) {
     this.store = store;
@@ -105,6 +116,7 @@ export class Documents {
     // Proposals a restart left running are finished by the session manager, with the turn it cut.
     for (const proposal of store.proposals()) this.proposals.set(proposal.id, proposal);
     if (store.getMeta("search.documents") !== DOCUMENT_SEARCH_VERSION) {
+      store.clearDocumentIndex();
       for (const artifact of this.artifacts.values()) this.indexLatest(artifact);
       store.setMeta("search.documents", DOCUMENT_SEARCH_VERSION);
     }
@@ -112,21 +124,45 @@ export class Documents {
 
   /**
    * Keep the search index on a document's latest revision: text formats as they are, Hangul and
-   * Office files through their text view once one was made (opening "글 보기" makes it).
+   * Office files through their text view (made in the background when not kept yet).
    */
   private indexLatest(artifact: Artifact) {
     if (artifact.revision < 1) return;
+    if (hasTextView(artifact.format)) {
+      this.textIndex.add(artifact.id, artifact.revision);
+      return;
+    }
     try {
-      const copy = join(this.root, artifact.id, `r${artifact.revision}${extname(artifact.path)}`);
-      const data = readFileOrNull(copy);
-      let text = data ? searchText(artifact.format, data) : null;
-      if (text === null && (isHangul(artifact.format) || isOfficeFormat(artifact.format))) {
-        text = readFileOrNull(join(this.root, artifact.id, `r${artifact.revision}.view.md`))?.toString("utf8") ?? null;
-      }
-      this.store.indexDocument(artifact.id, text);
+      const data = readFileOrNull(join(this.root, artifact.id, `r${artifact.revision}${extname(artifact.path)}`));
+      this.store.indexDocument(artifact.id, data ? searchText(artifact.format, data) : null);
     } catch {
       // Search is a convenience: a document that cannot be read now is found again after its next change.
     }
+  }
+
+  /**
+   * Index a Hangul or Office revision by its text view, kept with the revision (made now by kordoc or
+   * IeumOffice when it is not). Only while it is still the latest; without the tool nothing changes.
+   */
+  private async indexView(artifactId: string, revision: number) {
+    const latest = () => this.artifacts.get(artifactId)?.revision === revision;
+    const artifact = this.artifacts.get(artifactId);
+    if (!artifact || !latest() || !hasTextView(artifact.format)) return;
+    const kept = join(this.root, artifactId, `r${revision}.view.md`);
+    let text = readFileOrNull(kept)?.toString("utf8") ?? null;
+    if (text === null) {
+      text = await this.extractText(join(this.root, artifactId, `r${revision}${extname(artifact.path)}`), artifact.format);
+      if (text === null) return;
+      if (!existsSync(kept)) writeFileSync(kept, text);
+    }
+    if (latest()) this.store.indexDocument(artifactId, text);
+  }
+
+  /** The text view of a Hangul or Office file: kordoc or IeumOffice, null when neither is here. */
+  private async extractText(file: string, format: DocFormat): Promise<string | null> {
+    if (isHangul(format)) return this.kordoc?.available ? this.kordoc.read(file) : null;
+    if (isOfficeFormat(format)) return this.ieum?.available ? this.ieum.textView(file, format) : null;
+    return null;
   }
 
   list() {
@@ -173,7 +209,8 @@ export class Documents {
     this.bus.publish({ type: "proposal.upserted", proposal });
   }
 
-  private record(artifact: Artifact, data: Buffer, revision: Omit<ArtifactRevision, "artifactId" | "revision" | "sha256" | "size" | "at">) {
+  /** `index`: false when the caller indexes the new revision itself (a Hangul save that reads its view anyway). */
+  private record(artifact: Artifact, data: Buffer, revision: Omit<ArtifactRevision, "artifactId" | "revision" | "sha256" | "size" | "at">, index = true) {
     const next = artifact.revision + 1;
     const copy = join(this.root, artifact.id, `r${next}${extname(artifact.path)}`);
     mkdirSync(dirname(copy), { recursive: true });
@@ -183,7 +220,12 @@ export class Documents {
     this.store.saveRevision(entry);
     const updated: Artifact = { ...artifact, revision: next, sha256: entry.sha256, size: entry.size, diskState: "same", updatedAt: entry.at };
     this.save(updated);
-    this.store.indexDocument(updated.id, searchText(updated.format, data));
+    // Hangul and Office files are read in the background; their previous entry stays meanwhile.
+    if (hasTextView(updated.format)) {
+      if (index) this.textIndex.add(updated.id, updated.revision);
+    } else {
+      this.store.indexDocument(updated.id, searchText(updated.format, data));
+    }
     return updated;
   }
 
@@ -382,8 +424,13 @@ export class Documents {
     const current = this.check(artifactId);
     if (current.revision !== expectedRevision || current.diskState !== "same") throw new HttpError(409, "revision_conflict", "저장하는 동안 문서가 바뀌었습니다.");
     writeAtomic(artifact.path, data);
-    const saved = this.record(current, data, { author: "user", sessionId: null, baseRevision: expectedRevision, note: null });
-    if (isHangul(artifact.format)) writeFileSync(join(this.root, artifactId, `r${saved.revision}.view.md`), await this.kordoc!.read(this.revisionPath(artifactId, saved.revision)));
+    const hangul = isHangul(artifact.format);
+    const saved = this.record(current, data, { author: "user", sessionId: null, baseRevision: expectedRevision, note: null }, !hangul);
+    if (hangul) {
+      const markdown = await this.kordoc!.read(this.revisionPath(artifactId, saved.revision));
+      writeFileSync(join(this.root, artifactId, `r${saved.revision}.view.md`), markdown);
+      if (this.get(artifactId).revision === saved.revision) this.store.indexDocument(artifactId, markdown);
+    }
     return saved;
   }
 
