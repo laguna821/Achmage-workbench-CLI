@@ -6,7 +6,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { FoundHit, SearchPage, Session, TranscriptItem, Work } from "@workbench/contracts";
 import { EventBus } from "./bus.ts";
 import { Pkm } from "./pkm.ts";
-import { FIND_HEAD, FIND_LIMIT, findToolInstructions } from "./search.ts";
+import { contextCard } from "./pkm-guard.ts";
+import { FIND_HEAD, FIND_LIMIT, findToolInstructions, findUsage } from "./search.ts";
 import { parseQuery, snippetOf, wordTokens } from "./search-text.ts";
 import { SessionManager } from "./sessions.ts";
 import { Store } from "./store.ts";
@@ -268,7 +269,11 @@ describe("workbench-find", () => {
     expect(tail).toMatch(/^… 총 63건 중 1–\d+건을 보였습니다\. 나머지: workbench-find --offset=\d+ "채점 기준"$/);
     const next = Number(/--offset=(\d+)/.exec(tail)![1]);
     expect(manager.finder.find([`--offset=${next}`, "채점 기준"], { sessionId: session.id }).stdout.split("\n")[1]).toMatch(/^\[안녕 · Codex/);
-    expect(findToolInstructions().split("\n")).toHaveLength(2);
+    // The card's line: whole within the card's line limit, pointing at the usage.
+    expect(findToolInstructions()).not.toContain("\n");
+    expect(Buffer.byteLength(findToolInstructions())).toBeLessThanOrEqual(240);
+    expect(contextCard({ title: "t", folders: [], cwd: "/w", vault: null, pinned: [], find: findToolInstructions() })).toContain(findToolInstructions());
+    expect(findUsage()).toContain("--scope=");
     // Run by the engine during a turn: that turn's own request is not one of the records.
     say(manager, session.id, ["user", "찾아 줘: 채점 기준"]);
     expect(manager.finder.find(["찾아 줘"], { sessionId: session.id }).stdout).toContain("총 1건");

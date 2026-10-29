@@ -21,6 +21,7 @@ import { Projects } from "./project.ts";
 import { handleProject } from "./project-http.ts";
 import { handleEntry, WorksDir } from "./entry.ts";
 import { FindTool, withFindTool } from "./find-tool.ts";
+import { findToolInstructions } from "./search.ts";
 
 // Local gateway: owns engine processes and state, serves the UI and an HTTP + SSE API on
 // 127.0.0.1 only. Prints one `WORKBENCH_READY {json}` line once it accepts connections.
@@ -95,6 +96,7 @@ const archived = new Map(manager.snapshot().works.map((work) => [work.id, Boolea
 void manager.finder.useVault(pkm.vault, bus);
 const find = new FindTool({ dataDir, finder: manager.finder, sessions: () => manager.view.sessions, bus });
 const engineHooks = withFindTool(browse.engineHooks(), find.engineHooks());
+pkm.findInstructions = findToolInstructions;
 
 const claudeIdleMs = env.WORKBENCH_CLAUDE_IDLE_MS ? Number(env.WORKBENCH_CLAUDE_IDLE_MS) : undefined;
 manager.registerAdapter(
