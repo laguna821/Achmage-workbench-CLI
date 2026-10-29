@@ -17,7 +17,7 @@ describe("home views", () => {
     expect(currentView(views, "flow")).toMatchObject({ layout: "calendar", colorBy: "engine" });
     expect(currentView(views, "docs")).toMatchObject({ layout: "cards", sort: { key: "modified", dir: "desc" } });
     const due = views.modes.projects.views.find((view) => view.id === "d-due")!;
-    expect(due.group).toEqual({ key: "prop:마감일", dates: "period" });
+    expect(due.group).toEqual({ key: "prop:마감일", dates: "period", hideEmpty: true });
     expect(due.subgroup).toEqual({ key: "prop:중요도" });
   });
 

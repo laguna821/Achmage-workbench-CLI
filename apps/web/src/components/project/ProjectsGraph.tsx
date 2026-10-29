@@ -35,7 +35,20 @@ function useReducedMotion() {
  * background pans. A project opens its page, a tag lights its projects. The gear opens the
  * settings (filters, colours, display, forces), kept on this device.
  */
-export function ProjectsGraph({ items, stages, openProject, loading = false }: { items: GraphItem[]; stages: ProjectStage[]; openProject: (work: Work) => void; loading?: boolean }) {
+export function ProjectsGraph({
+  items,
+  stages,
+  openProject,
+  loading = false,
+  groupColor,
+}: {
+  items: GraphItem[];
+  stages: ProjectStage[];
+  openProject: (work: Work) => void;
+  loading?: boolean;
+  /** The view's group colour of a project (home's views): it colours the point before the stage does. */
+  groupColor?: (workId: string) => string | null;
+}) {
   const [settings, setSettings] = useState<GraphSettings>(readGraphSettings);
   const change = useCallback((next: GraphSettings) => {
     setSettings(next);
@@ -115,14 +128,16 @@ export function ProjectsGraph({ items, stages, openProject, loading = false }: {
     else setFocus((current) => (current === id ? null : id));
   };
 
-  // Stage colours by name, so the points only redraw when a colour does.
-  const stageColors = items.map((item) => (color.projectBy === "stage" ? (stageOf(stages, item.stage)?.color ?? "") : "")).join(",");
+  // A point's colour: the view's group, else the stage (or one colour, from the settings).
+  const fillOf = (item: GraphItem) => (color.projectBy === "stage" ? (groupColor?.(item.work.id) ?? stageOf(stages, item.stage)?.color) : undefined);
+  // Colours by name, so the points only redraw when a colour does.
+  const stageColors = items.map((item) => fillOf(item) ?? "").join(",");
   const points = useMemo(() => {
     const byId = new Map<string, GraphItem>(latest.current.map((item) => [`p:${item.work.id}`, item]));
     return graph.nodes.map((node) => {
       const shape = shapes.get(node.id)!;
       const item = byId.get(node.id);
-      const fill = item && color.projectBy === "stage" ? stageOf(stages, item.stage)?.color : undefined;
+      const fill = item ? fillOf(item) : undefined;
       return (
         <g key={node.id} className={`graph-node ${node.kind}${node.archived ? " archived" : ""}`} data-node={node.id} tabIndex={0} role="button" aria-label={node.label}>
           <title>{node.label}</title>

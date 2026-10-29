@@ -107,8 +107,9 @@ export function defaultViews(mode: HomeViewMode): HomeView[] {
         plainView("d-table", "표", "table", { sort: { key: "activity", dir: "desc" } }),
         plainView("d-stage", "단계", "board", { group: { key: "stage" }, look: plainLook({ border: true }) }),
         plainView("d-graph", "그래프", "graph"),
+        // Periods without a deadline in them are left out: a date is not set by dragging anyway.
         plainView("d-due", "마감 × 중요도", "board", {
-          group: { key: "prop:마감일", dates: "period" },
+          group: { key: "prop:마감일", dates: "period", hideEmpty: true },
           subgroup: { key: "prop:중요도" },
           look: plainLook({
             border: true,

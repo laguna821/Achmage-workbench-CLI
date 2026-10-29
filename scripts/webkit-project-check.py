@@ -168,7 +168,8 @@ try:
     js("[...document.querySelectorAll('.projects-layouts button')].find((b) => b.textContent === '표').click(); return true")
     rows = until(lambda: js("return document.querySelectorAll('.projects-table tbody tr').length"), 10) or 0
     check("WebKitGTK: 프로젝트 표에 프로젝트마다 한 줄", rows == 2, f"{rows}줄")
-    js("[...document.querySelectorAll('.projects-layouts button')].find((b) => b.textContent === '칸반').click(); return true")
+    # The kanban is the view "단계" now (a board by stage).
+    js("[...document.querySelectorAll('.projects-layouts button')].find((b) => b.textContent === '단계').click(); return true")
     until(lambda: js("return Boolean(document.querySelector('.kanban-card'))"), 10)
     moved_id = works[0]["id"]
     js("""

@@ -221,12 +221,14 @@ async function flow(provider: Provider) {
     await page.waitForSelector(".projects-table tbody tr");
     const tableRows = await page.locator(".projects-table tbody tr").count();
     await page.locator(".projects-table th button", { hasText: "세션" }).click();
+    // The sort is kept in the view now: a run before may have left it on 세션, so a click turns it round.
+    if ((await page.locator('.projects-table th[aria-sort="descending"] button', { hasText: "세션" }).count()) === 0) await page.locator(".projects-table th button", { hasText: "세션" }).click();
     const counts = (await page.locator(".projects-table tbody tr td.num:nth-of-type(4)").allInnerTexts()).map(Number);
     const sortedDown = counts.every((value, index) => index === 0 || counts[index - 1]! >= value);
     await shot("03b-home-projects-table.png");
     pass("프로젝트 표: 프로젝트마다 한 줄, 머리를 누르면 그 열로 정렬", tableRows >= 6 && sortedDown, `${tableRows}줄 · 세션 ${counts.slice(0, 5).join(",")}…`);
-    // The kanban: a card dragged from "값 없음" to "진행중" writes that stage into its note.
-    await page.locator(".projects-layouts button", { hasText: "칸반" }).click();
+    // The kanban (now the view "단계", a board by stage): a card dragged from "값 없음" to "진행중" writes that stage into its note.
+    await page.locator(".projects-layouts button", { hasText: "단계" }).click();
     await page.waitForSelector('.kanban-column[data-stage-column=""] .kanban-card');
     const card = page.locator('.kanban-column[data-stage-column=""] .kanban-card').first();
     const movedWork = await card.getAttribute("data-work");

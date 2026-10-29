@@ -1,0 +1,986 @@
+/*
+ * Home's views (프로젝트-내비게이터-그룹보기-설계 §3): view tabs, the calm toolbar and its popovers,
+ * groups as sections or boards, and the Bases Look switches — a group's colour (user data, set as
+ * --group inline) as a 1px border (board columns get a band on top), a light tint (--tint) and an
+ * emphasized heading. Depth is rules and planes: no blurred shadow on anything that moves or
+ * scrolls (WebKitGTK repaints those every frame), no side stripes.
+ */
+
+/* ── Head: tabs on the left, tools on the right, one ruled line ─────────────────────────────── */
+.view-head {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0 var(--space-3);
+  margin: 0 0 var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.projects-mode > .view-head {
+  margin-bottom: 0;
+}
+
+.view-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.view-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.view-tab {
+  position: relative;
+  flex: 0 0 auto;
+  height: 34px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--r-sm) var(--r-sm) 0 0;
+  background: none;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  font-weight: 500;
+  white-space: nowrap;
+  transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+}
+
+.view-tab:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.view-tab.on {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* The current tab's underline (a tab mark, not a side stripe). */
+.view-tab.on::after {
+  content: "";
+  position: absolute;
+  left: var(--space-2);
+  right: var(--space-2);
+  bottom: -1px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+.view-tab-input {
+  flex: 0 0 auto;
+  height: 28px;
+  margin: 0 2px 3px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.view-add-anchor {
+  flex: 0 0 auto;
+  margin-bottom: 3px;
+}
+
+.view-add {
+  color: var(--muted);
+}
+
+.view-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-left: auto;
+  padding-bottom: 3px;
+}
+
+.view-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  font-weight: 500;
+  white-space: nowrap;
+  transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+}
+
+.view-tool svg {
+  color: var(--faint);
+}
+
+.view-tool:hover,
+.view-tool[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* A setting that is on reads in the accent, the way Notion marks an active filter or sort. */
+.view-tool.on {
+  color: var(--active-text);
+}
+
+.view-tool-value {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-soft);
+  font-weight: 600;
+}
+
+.view-tool.on .view-tool-value {
+  color: inherit;
+}
+
+.view-tool-value::before {
+  content: "· ";
+  color: var(--faint);
+  font-weight: 400;
+}
+
+.view-filter {
+  width: 240px;
+  max-width: 100%;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-meta);
+}
+
+.view-filter::placeholder {
+  color: var(--muted);
+}
+
+.view-filter:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+/* ── Popovers of the toolbar ───────────────────────────────────────────────────────────────── */
+.popover.view-pop {
+  min-width: 248px;
+  max-width: 320px;
+}
+
+.popover.view-pop.wide {
+  min-width: 300px;
+  max-width: 360px;
+}
+
+.view-pop-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.view-pop-list .menu-item {
+  min-height: 30px;
+  padding: 4px 10px;
+  font-size: var(--fs-meta);
+}
+
+.view-pop-options {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: var(--space-1);
+  padding: var(--space-1) 0;
+  border-top: 1px solid var(--line);
+}
+
+.view-pop-options .link {
+  align-self: flex-start;
+  margin: 4px 10px;
+  font-size: var(--fs-meta);
+}
+
+.view-pop-note {
+  margin: var(--space-1) 10px var(--space-2);
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+
+.view-segments {
+  align-self: flex-start;
+  margin: 4px 10px;
+}
+
+.check-row.switch-row.view-switch {
+  padding: 5px 10px;
+  font-size: var(--fs-meta);
+}
+
+.slider-row.view-range {
+  grid-template-columns: 64px 1fr 40px;
+  padding: 4px 10px;
+  font-size: var(--fs-meta);
+}
+
+.view-colors {
+  margin-top: var(--space-1);
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--line);
+}
+
+.view-colors .view-color-row:last-child {
+  margin-bottom: var(--space-1);
+}
+
+.view-color-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px var(--space-2);
+  padding: 1px 10px;
+}
+
+.view-color-row .color-pick {
+  grid-column: 1 / -1;
+}
+
+.view-color-dot {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--group, var(--line-strong)) 70%, var(--line));
+  border-radius: var(--r-full);
+  background: var(--group, transparent);
+  cursor: pointer;
+}
+
+.view-color-dot.none {
+  border-style: dashed;
+}
+
+.view-color-name {
+  min-width: 0;
+  padding: 5px 0;
+  overflow: hidden;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-meta);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.view-color-own {
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+/* The palette: round swatches and a #rrggbb field (no native picker: WebKitGTK may not have one). */
+.color-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0 6px;
+}
+
+.color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.color-swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--text) 16%, transparent);
+  border-radius: var(--r-full);
+  cursor: pointer;
+}
+
+.color-swatch.on {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.color-swatch.base.none {
+  border-style: dashed;
+  background: var(--surface);
+}
+
+.color-hex {
+  width: 96px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--fs-micro);
+}
+
+.color-hex:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+/* A group's colour from its heading (right click): a small panel at the pointer. */
+.group-paint {
+  position: fixed;
+  z-index: var(--z-popover);
+  width: 276px;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--elev-2);
+}
+
+.group-paint-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: 6px;
+  font-size: var(--fs-meta);
+}
+
+.group-paint-name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-paint-hint {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+/* ── Group headings ────────────────────────────────────────────────────────────────────────── */
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  margin-left: -4px;
+  padding: 2px 4px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.group-toggle:hover {
+  background: var(--hover);
+}
+
+.group-chevron {
+  flex: 0 0 auto;
+  color: var(--faint);
+}
+
+.group-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-full);
+  background: var(--group);
+}
+
+/* "머리 강조": larger, bold, in the group's colour. */
+.look-heading .group-head .group-label {
+  color: var(--text);
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.look-heading .group-head.has-color .group-label {
+  color: color-mix(in srgb, var(--group) 76%, var(--text));
+}
+
+.look-heading .group-head .home-count {
+  font-size: var(--fs-meta);
+}
+
+/* A group inside a group: emphasized one step smaller. */
+.look-heading :is(.group-section.sub, .group-row.sub) .group-head .group-label,
+.look-heading .group-row.sub .group-label {
+  font-size: var(--fs-ui);
+}
+
+/* ── Sections (cards, lists, documents, 지금) ──────────────────────────────────────────────── */
+.group-sections.ungrouped,
+.group-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.group-sections.home-board {
+  gap: var(--space-6);
+}
+
+.group-section > .group-head {
+  margin-bottom: 6px;
+}
+
+.group-section .map-grid,
+.group-section .docs-grid {
+  margin-top: 2px;
+}
+
+.group-subs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-1);
+}
+
+.group-section.sub > .group-head {
+  margin-left: var(--space-2);
+}
+
+.map-section.group-section {
+  margin-bottom: 0;
+}
+
+/* Border and tint: the group's block is outlined in its colour, or shaded with it. */
+:is(.look-border, .look-tint) .group-section.has-color:not(.sub) {
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border-radius: var(--r-lg);
+}
+
+.look-border .group-section.has-color:not(.sub) {
+  border: 1px solid color-mix(in srgb, var(--group) 45%, var(--line));
+}
+
+.look-tint .group-section.has-color:not(.sub) {
+  background: color-mix(in srgb, var(--group) var(--tint), transparent);
+}
+
+.look-border .group-section.sub.has-color {
+  padding: var(--space-1) var(--space-2) var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--group) 35%, var(--line));
+  border-radius: var(--r-md);
+}
+
+.look-tint .group-section.sub.has-color {
+  padding: var(--space-1) var(--space-2) var(--space-2);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--group) var(--tint-soft), transparent);
+}
+
+/* ── Boards ────────────────────────────────────────────────────────────────────────────────── */
+.group-board .kanban-head {
+  padding: 8px 10px 6px;
+}
+
+.group-board .kanban-head .group-toggle {
+  flex: 1 1 auto;
+}
+
+.group-board .kanban-head .group-label {
+  flex: 0 1 auto;
+}
+
+.group-board .kanban-head .home-count {
+  margin-left: auto;
+}
+
+.group-board .kanban-column.folded {
+  flex: 0 0 96px;
+  min-width: 96px;
+}
+
+/* "테두리": a band on top of a column and a thin outline, both in its colour. */
+.look-border .kanban-column.has-color {
+  box-shadow:
+    inset 0 3px 0 var(--group),
+    inset 0 0 0 1px color-mix(in srgb, var(--group) 42%, transparent);
+}
+
+.look-tint .kanban-column.has-color {
+  background: color-mix(in srgb, var(--group) var(--tint), transparent);
+}
+
+.look-heading .kanban-head .group-label {
+  font-size: var(--fs-ui);
+}
+
+/* While a card is dragged: where it would land, or why it would not. */
+.group-board .kanban-column.over,
+.group-board .kanban-cell.over {
+  background: color-mix(in srgb, var(--group, var(--accent)) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--group, var(--accent)) 60%, transparent);
+}
+
+.group-board .kanban-column.refuse,
+.group-board .kanban-cell.refuse {
+  background: color-mix(in srgb, var(--danger) 7%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 45%, transparent);
+}
+
+.group-board.dragging,
+.group-board.dragging .kanban-card {
+  cursor: grabbing;
+}
+
+.group-board .kanban-empty .drop,
+.group-board.dragging .kanban-empty .idle {
+  display: none;
+}
+
+.group-board.dragging .kanban-empty .drop {
+  display: inline;
+}
+
+/* The name that follows the pointer: moved by a transform, ruled, no blurred shadow. */
+.group-board .kanban-ghost {
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: var(--elev-1);
+  will-change: transform;
+}
+
+.group-board .kanban-ghost[hidden] {
+  display: none;
+}
+
+.kanban-ghost-hint {
+  color: var(--danger);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+}
+
+.kanban-ghost-hint:empty {
+  display: none;
+}
+
+/* Rows (swimlanes): one grid template for the heads and every lane, so the columns line up. */
+.group-board.lanes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.group-board.lanes .kanban-row {
+  display: grid;
+  grid-template-columns: var(--board-columns);
+  gap: 10px;
+  min-width: min-content;
+}
+
+.kanban-column-head {
+  min-height: 36px;
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+}
+
+.look-border .kanban-column-head.has-color {
+  box-shadow:
+    inset 0 3px 0 var(--group),
+    inset 0 0 0 1px color-mix(in srgb, var(--group) 42%, transparent);
+}
+
+.look-tint .kanban-column-head.has-color {
+  background: color-mix(in srgb, var(--group) var(--tint), transparent);
+}
+
+.kanban-lane {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line);
+}
+
+.look-border .kanban-lane.has-color {
+  border-top-color: color-mix(in srgb, var(--group) 55%, var(--line));
+}
+
+.kanban-lane-head {
+  position: sticky;
+  left: 0;
+  align-self: flex-start;
+  width: max-content;
+  max-width: min(100%, 480px);
+  margin: 0;
+  padding: 0 6px;
+  font-size: var(--fs-meta);
+  font-weight: 600;
+}
+
+/* Sized by its content (a percentage cap would measure against itself and cut the name short). */
+.kanban-lane-head .group-toggle {
+  max-width: none;
+}
+
+.kanban-cell {
+  min-width: 0;
+  min-height: 52px;
+  padding: 6px;
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+  transition: background var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.kanban-cell .kanban-cards {
+  padding: 0;
+}
+
+/* An empty cell is just its plane; while a card is dragged it says where it would go. */
+.group-board .kanban-cell .kanban-empty {
+  display: none;
+}
+
+.group-board.dragging .kanban-cell .kanban-empty {
+  display: block;
+}
+
+.look-border .kanban-cell.has-color {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--group) 28%, transparent);
+}
+
+.look-tint .kanban-cell.has-color {
+  background: color-mix(in srgb, var(--group) var(--tint-soft), transparent);
+}
+
+.kanban-cell-count {
+  display: block;
+  padding: 4px;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  text-align: center;
+}
+
+/* Cards on a board: a card's details and the ones the view adds. */
+.kanban-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 76px;
+}
+
+.kanban-card .projects-stage {
+  align-self: flex-start;
+}
+
+.kanban-card-preview,
+.work-card-preview {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.now-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+.now-card-head .engine-mark {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.now-card-work {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A property on a card or a line: "마감일 11월 2일 (월)". */
+.view-props {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.view-prop {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  height: 20px;
+  padding: 0 6px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs);
+  color: var(--text-soft);
+  font-size: var(--fs-micro);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.view-prop-key {
+  color: var(--muted);
+}
+
+/* ── Table groups ──────────────────────────────────────────────────────────────────────────── */
+.projects-th {
+  display: inline-block;
+  padding: 6px 8px;
+}
+
+.projects-preview {
+  display: block;
+  max-width: 280px;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projects-table .group-row td {
+  padding: var(--space-4) 4px 4px;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.projects-table .group-body:first-of-type .group-row:first-child td {
+  padding-top: var(--space-2);
+}
+
+.projects-table .group-row.sub td {
+  padding: var(--space-2) 4px 2px var(--space-4);
+}
+
+.projects-table tr.group-row:hover td {
+  background: none;
+}
+
+.look-border .projects-table .group-row.has-color td,
+.look-border .projects-table .group-body.has-color > .group-row:not(.sub) td {
+  border-bottom-color: color-mix(in srgb, var(--group) 55%, var(--line));
+}
+
+.look-tint .projects-table .group-body.has-color td {
+  background: color-mix(in srgb, var(--group) var(--tint-soft), transparent);
+}
+
+.look-tint .projects-table .group-body.has-color > .group-row:not(.sub) td {
+  background: color-mix(in srgb, var(--group) var(--tint), transparent);
+}
+
+/* ── Lists ─────────────────────────────────────────────────────────────────────────────────── */
+.project-lines,
+.doc-lines {
+  display: flex;
+  flex-direction: column;
+}
+
+.project-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: 0 var(--space-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 44px;
+}
+
+.project-line:hover {
+  background: var(--hover);
+}
+
+.project-line-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-width: 0;
+  padding: 6px 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  text-align: left;
+}
+
+.project-line-title {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: var(--fs-ui);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-line-main:hover .project-line-title {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.project-line-preview {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-line-side {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.project-line-date {
+  min-width: 64px;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.doc-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 38px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-meta);
+  text-align: left;
+}
+
+.doc-line:hover {
+  background: var(--hover);
+}
+
+.doc-line-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-line-side {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.docs .group-sections {
+  margin-top: var(--space-1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view-tab,
+  .view-tool,
+  .kanban-cell {
+    transition: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .view-tools {
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+
+  .view-filter {
+    width: 180px;
+  }
+}
+
+/* ── Property values to pick (the project page's properties, Notion's select) ─────────────────── */
+.prop-pick {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(100%, 420px);
+}
+
+.prop-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.prop-choice {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--group, var(--line-strong)) 45%, var(--line));
+  border-radius: var(--r-xs);
+  background: color-mix(in srgb, var(--group, var(--muted)) 8%, var(--surface));
+  color: var(--text-soft);
+  font-size: var(--fs-meta);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.prop-choice:hover {
+  border-color: color-mix(in srgb, var(--group, var(--accent)) 60%, var(--line));
+  color: var(--text);
+}
+
+/* The choices show under the field; the browser's own list arrow would repeat them. */
+.prop-pick .prop-input::-webkit-calendar-picker-indicator {
+  display: none !important;
+}

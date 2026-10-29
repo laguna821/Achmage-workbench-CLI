@@ -1648,6 +1648,8 @@ export function App() {
           api={api}
           homeMode={prefs.homeMode}
           onHomeMode={(mode) => savePrefs({ homeMode: mode })}
+          homeViews={prefs.homeViews}
+          onHomeViews={(views) => savePrefs({ homeViews: views })}
           motion={prefs.brandMotion !== false}
           pickFolder={inDesktop ? pickFolderNative : null}
           engine={engine}

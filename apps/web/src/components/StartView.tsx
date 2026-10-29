@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PROVIDER_LABEL, type ProjectPick, type Provider, type Session, type Work } from "@workbench/contracts";
+import { PROVIDER_LABEL, type HomeViews, type ProjectPick, type Provider, type Session, type Work } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import { entryClient, pickedWork } from "../entry.ts";
 import { folderPath, type State } from "../state.ts";
@@ -159,6 +159,8 @@ export function StartView({
   api,
   homeMode,
   onHomeMode,
+  homeViews,
+  onHomeViews,
   pickFolder,
   engine,
   setEngine,
@@ -179,6 +181,9 @@ export function StartView({
   /** The overview mode kept in the screen preferences (지금 · 보드 · 지도 · 흐름 · 문서). */
   homeMode: unknown;
   onHomeMode: (mode: HomeMode) => void;
+  /** Each mode's views (screen preferences `homeViews`). */
+  homeViews?: unknown;
+  onHomeViews?: (views: HomeViews) => void;
   pickFolder: (() => Promise<string | null>) | null;
   engine: Provider;
   setEngine: (provider: Provider) => void;
@@ -278,6 +283,8 @@ export function StartView({
           state={state}
           mode={readHomeMode(homeMode)}
           onMode={onHomeMode}
+          views={homeViews}
+          onViews={onHomeViews}
           onOpenSession={onOpenSession}
           onOpenWork={onOpenWork}
           onOpenProject={onOpenProject}
