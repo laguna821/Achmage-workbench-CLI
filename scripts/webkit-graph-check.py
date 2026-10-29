@@ -259,9 +259,11 @@ try:
     js("document.querySelector('.graph-gear').click(); return true")
     until(lambda: js("return Boolean(document.querySelector('.graph-panel'))"), 5)
     js("[...document.querySelectorAll('.graph-section-toggle')].find((b) => b.textContent.includes('색')).click(); return true")
-    pump(0.2)
-    js("document.querySelector('[role=\"radiogroup\"][aria-label=\"관련 선 색\"] [aria-label=\"#30a46c\"]').click(); return true")
-    pump(0.3)
+    # Waits for what the step needs rather than a fixed time: a loaded machine draws later.
+    swatch = "document.querySelector('[role=\"radiogroup\"][aria-label=\"관련 선 색\"] [aria-label=\"#30a46c\"]')"
+    until(lambda: js(f"return Boolean({swatch})"), 5)
+    js(f"{swatch}.click(); return true")
+    until(lambda: js("return getComputedStyle(document.querySelector('.graph-edges.related')).stroke") == "rgb(48, 164, 108)", 5)
     stroke = js("return getComputedStyle(document.querySelector('.graph-edges.related')).stroke")
     snapshot("webkit-graph-panel.png")
     saved = js("return JSON.parse(localStorage.getItem('workbench.graphSettings')).color.related")

@@ -398,9 +398,9 @@ async function flow(provider: Provider) {
     await split.fill("나란히에서 보낸 요청");
     await split.press("Enter");
     const answered = await until(async () => (await items(working.id)).filter((item) => item.kind === "turnEnd").length > turnsBefore, 20_000);
-    await page.waitForTimeout(500);
-    const leftShows = await page.locator(".split-chat .turn-request", { hasText: "나란히에서 보낸 요청" }).count();
-    pass("나란히: 대화 쪽으로 보낸 요청의 답이 왼쪽 대화에", answered && leftShows === 1);
+    // The transcript may draw the turn a moment after the gateway records it (a loaded machine).
+    const leftShown = await until(async () => (await page.locator(".split-chat .turn-request", { hasText: "나란히에서 보낸 요청" }).count()) === 1, 5000);
+    pass("나란히: 대화 쪽으로 보낸 요청의 답이 왼쪽 대화에", answered && leftShown, `${answered ? "답 기록됨" : "답 없음(20초)"} · 왼쪽 대화에 ${leftShown ? "보임" : "안 보임"}`);
 
     // 읽기 (Alt+5): the document a page at a time; Esc returns to 나란히.
     await page.keyboard.press("Alt+5");
