@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { AccessMode, ApprovalDecision, ProviderStatus, Session, Work } from "@workbench/contracts";
 import { EventBus } from "./bus.ts";
 import { Pkm } from "./pkm.ts";
-import { Projects, entryGist, lineCounts } from "./project.ts";
+import { Projects, agreedWords, entryGist, lineCounts } from "./project.ts";
 import { SessionManager } from "./sessions.ts";
 import { Store } from "./store.ts";
 import { emptyStatus, type AdapterSink, type ProviderAdapter } from "./providers/types.ts";
@@ -214,6 +214,12 @@ describe("what the engines are told", () => {
     // Said to engines without the date and the source link the note keeps.
     expect(card).toContain("최근 결정(사람이 고른 것, 오래된 것부터):\n- 표지는 B안");
     expect(card).toContain("열린 질문:\n- 마감 연장?");
+  });
+
+  it("says what a linked exchange agreed on: the line with the mark, else the one before it", () => {
+    expect(agreedWords("검토했습니다.\n\n- **루브릭은 3단계로** 합니다. [[합의]]")).toBe("루브릭은 3단계로 합니다.");
+    expect(agreedWords("평가는 루브릭 3단계로 정리합니다.\n\n[[합의]]")).toBe("평가는 루브릭 3단계로 정리합니다.");
+    expect(agreedWords("합의하지 않았습니다.")).toBe("");
   });
 
   it("says a decision to an engine without its date and source link", () => {

@@ -102,6 +102,19 @@ export function noteEntries(workId: string, path: string, read: ReadNote, at: nu
   return out;
 }
 
+/** What an agreeing reply agreed on: the line with the mark, else the last line before it (plain, ≤ 80). */
+export function agreedWords(reply: string) {
+  const lines = reply.split("\n");
+  const at = lines.findIndex((line) => line.includes("[[합의]]"));
+  if (at === -1) return "";
+  const plain = (line: string) => line.replace(/\[\[합의\]\]/g, "").replace(/^\s*(?:[-*+]|\d+\.)\s+/, "").replace(/[*_`#>]/g, "").trim();
+  for (let index = at; index >= 0; index -= 1) {
+    const words = plain(lines[index]!);
+    if (words) return words.length > 80 ? `${words.slice(0, 79)}…` : words;
+  }
+  return "";
+}
+
 /** Is this folder inside a git repository? (Walks up to the root looking for `.git`.) */
 export function inGitRepository(folder: string): boolean {
   for (let at = folder; ; at = dirname(at)) {
@@ -507,7 +520,18 @@ export class Projects {
       const here = link.participants.find((id) => mine.has(id));
       if (!here) continue;
       const reason = link.reason ? ` · ${LINK_REASON_LABEL[link.reason]}` : "";
-      events.push({ id: `link:${link.id}`, at: link.endedAt, kind: "link", text: `세션 잇기 끝 · ${link.participants.map(purpose).join(" ⇄ ")}${reason} · ${link.hops}번 주고받음`, sessionId: here, artifactId: null, by: null });
+      // Agreed: what was agreed, from the reply that said so (its words before the mark).
+      let agreed = "";
+      if (link.reason === "agreed") {
+        try {
+          const last = this.manager.links.turns(link.id).turns.filter((turn) => turn.reply.includes("[[합의]]")).at(-1);
+          const words = last ? agreedWords(last.reply) : "";
+          if (words) agreed = ` "${words}"`;
+        } catch {
+          // The link's turns cannot be read now: the line says only that it was agreed.
+        }
+      }
+      events.push({ id: `link:${link.id}`, at: link.endedAt, kind: "link", text: `세션 잇기 끝 · ${link.participants.map(purpose).join(" ⇄ ")}${reason}${agreed} · ${link.hops}번 주고받음`, sessionId: here, artifactId: null, by: null });
     }
     for (const revision of this.store.workRevisions(work.id, since, limit)) {
       const artifact = names.get(revision.artifactId);
