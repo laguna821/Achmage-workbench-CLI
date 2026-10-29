@@ -153,6 +153,11 @@ async function flow(provider: Provider) {
     await page.waitForSelector(".template-dialog", { state: "detached" });
     const reset = await until(async () => (await page.locator(".properties-panel .prop-row .prop-key").first().innerText()) === "단계" && (await page.locator('.prop-row[data-key="종류"]').count()) === 1);
     pass("속성 템플릿: MD 파일의 YAML로 바꾸면 모든 프로젝트 칸이 따르고, 기본값으로 되돌림", Boolean(after) && reset && imported.join("·") === "단계·tags·학기·마감·공개", imported.join("·"));
+    await page.locator('button[aria-label="연결과 설정"]').click();
+    await page.locator(".text-button", { hasText: "프로젝트 속성 템플릿…" }).click();
+    const fromMenu = await page.waitForSelector(".template-dialog .template-field", { timeout: 5000 }).then(() => true, () => false);
+    await page.locator('.template-dialog button[aria-label="닫기"]').click();
+    pass("⋯ 설정 메뉴에서도 '프로젝트 속성 템플릿…'이 열림", fromMenu);
 
     // ── "결정으로" on a reply ────────────────────────────────────────────────────────────────
     await page.locator(".project-view .project-row", { hasText: "슬라이드" }).click();

@@ -98,6 +98,7 @@ export function Connections({
   onNotifications,
   imageUpload,
   shortcutSettings,
+  onPropertyTemplate,
   vault,
   worksDir,
 }: {
@@ -134,6 +135,8 @@ export function Connections({
   imageUpload?: ReactNode;
   /** ⋯ › 단축키 (ShortcutSettings). */
   shortcutSettings?: ReactNode;
+  /** ⋯ › 프로젝트 속성 템플릿… (the same dialog as the project page's "템플릿…"). */
+  onPropertyTemplate?: () => void;
 }) {
   return (
     <div className="connections">
@@ -210,6 +213,14 @@ export function Connections({
         <input type="checkbox" checked={notifications} onChange={(event) => onNotifications(event.target.checked)} />
         끝나면 알림(OS)
       </label>
+      {onPropertyTemplate ? (
+        <>
+          <div className="menu-label">프로젝트</div>
+          <button type="button" className="text-button" onClick={onPropertyTemplate}>
+            프로젝트 속성 템플릿…
+          </button>
+        </>
+      ) : null}
       {shortcutSettings ? (
         <>
           <div className="menu-label">단축키</div>

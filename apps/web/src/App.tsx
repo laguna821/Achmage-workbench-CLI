@@ -36,6 +36,7 @@ import { LoadingView } from "./components/Skeleton.tsx";
 import { writeDraft } from "./components/Composer.tsx";
 import { comboOf, shortcutsOf } from "./shortcuts.ts";
 import { ShortcutSettings } from "./components/ShortcutSettings.tsx";
+import { TemplateDialog } from "./components/project/TemplateDialog.tsx";
 import { LinkContext, hopsText, linkOfSession, useLinkApi } from "./links.ts";
 import { SplitView, WorkModeBar, useWorkModeKeys } from "./components/WorkModes.tsx";
 import { keepPosition, keptPosition, modeOf, readingPosition, restorePosition, reviewProposal, viewFor, type ModeProps, type ReadingPosition, type WorkMode } from "./workmodes.ts";
@@ -762,6 +763,8 @@ export function App() {
   const shortcuts = useMemo(() => shortcutsOf(state.prefs), [state.prefs]);
   /** True while ⋯ › 단축키 waits for a combination: the app's own shortcuts stand aside. */
   const recordingShortcut = useRef(false);
+  /** ⋯ › 프로젝트 속성 템플릿… */
+  const [propertyTemplateOpen, setPropertyTemplateOpen] = useState(false);
   const setRecordingShortcut = useCallback((on: boolean) => {
     recordingShortcut.current = on;
   }, []);
@@ -1448,6 +1451,10 @@ export function App() {
                 onBrandMotion={(next) => savePrefs({ brandMotion: next })}
                 notifications={prefs.notify !== false}
                 onNotifications={(next) => savePrefs({ notify: next })}
+                onPropertyTemplate={() => {
+                  closeMenu();
+                  setPropertyTemplateOpen(true);
+                }}
                 shortcutSettings={
                   <ShortcutSettings
                     shortcuts={shortcuts}
@@ -1647,6 +1654,7 @@ export function App() {
       ) : null}
       {switcher !== null ? <Switcher state={state} sessions={switchable} index={switcher} unseen={unseen} /> : null}
       <LinkLayer api={api} inDesktop={inDesktop} />
+      {propertyTemplateOpen ? <TemplateDialog api={api} onClose={() => setPropertyTemplateOpen(false)} onSaved={() => setToast("속성 템플릿을 저장했습니다. 모든 프로젝트의 속성 칸이 따릅니다.")} onError={fail} /> : null}
       {importOpen ? <ImportDialog api={api} onClose={() => setImportOpen(false)} onOpen={openImported} onError={fail} /> : null}
       {reviewing && state.sessions[reviewing]?.worktree ? (
         <WorktreeReview api={api} session={state.sessions[reviewing]} onClose={() => setReviewing(null)} onToast={setToast} onError={fail} />
