@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Office editors (Word first) built from the IeumOffice source in vendor/ieumoffice, with a browser bridge to the Workbench gateway instead of Electron.",
   "scripts": {
-    "build": "bash native/build-xlsx-wasm.sh && vite build",
+    "build": "bash native/build-xlsx-wasm.sh && node ../../scripts/build-hwp-studio.mjs && vite build",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {

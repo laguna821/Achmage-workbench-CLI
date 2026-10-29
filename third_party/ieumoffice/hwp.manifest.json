@@ -1,0 +1,61 @@
+{
+  "source": "https://github.com/pblsketch/openoffice",
+  "commit": "30ff4f051f067fcb2baf1ab416c40718c802ca35",
+  "changes": "Attribution headers; explicit .ts imports; local HWP contract/ZIP gate/file parser; pinned shared WASM resource resolver",
+  "files": [
+    {
+      "source": "apps/hwp/src/main/hwp5-file.ts",
+      "output": "hwp/hwp5-file.ts",
+      "sourceSha256": "74fe4042003b32a1fb34bd8a73f528e4368172c541a0f392d38a75d30bf95089",
+      "outputSha256": "4c84230fc4df78ecce8a6ea7d0e2318314dab04d85eb9e414dd9330a1d300076"
+    },
+    {
+      "source": "apps/hwp/src/main/tracked-changes.ts",
+      "output": "hwp/tracked-changes.ts",
+      "sourceSha256": "fb1875646db1624ccb7b53903ce88ddc51a85ef3bb17f549a810f65a96809f87",
+      "outputSha256": "8e55b6cdbffbdce8b76aaaf3558ced05f7dfeb8429b5c5eb33bb8cae8e059cc7"
+    },
+    {
+      "source": "apps/hwp/src/main/field-kinds.ts",
+      "output": "hwp/field-kinds.ts",
+      "sourceSha256": "794a2bd06b26ee63ba9b00100d5a6c9d6b9442d6c7c7a464f2c6b8976eaa3c65",
+      "outputSha256": "4796de84c6898adb29b4394685a7fc266b29c3203c6dce6fe31fa26e9af50f04"
+    },
+    {
+      "source": "apps/hwp/src/main/section-tails.ts",
+      "output": "hwp/section-tails.ts",
+      "sourceSha256": "362c127868cc249ddaf1e432f4e6fbc6e4a025c548f0a9333503e02cd7b66f24",
+      "outputSha256": "e8f60e13c18b2b9a1efac66de4b6037baae90432d32e98d8168e7356f6e2fcaf"
+    },
+    {
+      "source": "apps/hwp/src/main/tab-widths.ts",
+      "output": "hwp/tab-widths.ts",
+      "sourceSha256": "7c28aee59655e95a582e3d3a9c79f811c84b1949814aacdee027caa78b346eaa",
+      "outputSha256": "db5140847773b8faa489c4ea3a43b9c84f16f2e496be1fee0d9eace44810c85b"
+    },
+    {
+      "source": "apps/hwp/src/main/save-plan.ts",
+      "output": "hwp/save-plan.ts",
+      "sourceSha256": "6d0e993410081f79cffe78d036ed1868f35c834614cd14532b2caa4784195195",
+      "outputSha256": "fd409e75b9b5a6ea5c528e3792b2cc4c628ff0c5f8a0baf03b96a78841e4f82a"
+    },
+    {
+      "source": "apps/hwp/src/main/save-fixes.ts",
+      "output": "hwp/save-fixes.ts",
+      "sourceSha256": "2fb987bba9df448c83d105684f6b7b97c240622c93371606fff27162e80208e3",
+      "outputSha256": "3cb204e20c4348e2052e9b396a16e0012c915de9228242ba51ec73350ffe1219"
+    },
+    {
+      "source": "apps/hwp/src/main/memos.ts",
+      "output": "hwp/memos.ts",
+      "sourceSha256": "7a02defead0b0c88eb008e492e6b912e670f6b96f146c59e0d0bd3c1d20ddbb1",
+      "outputSha256": "82dc22b13883ca55f6a89ed2d18a15bbe067a3947744cf611ca3e194d4ce04b0"
+    },
+    {
+      "source": "packages/file-parse/src/hwp.ts",
+      "output": "file-parse/hwp.ts",
+      "sourceSha256": "3d44486239cc95f8abc4d5d8daad025affe855cd6cd04dfa8f624782a745997d",
+      "outputSha256": "ff59d677760424ec2642a6a1e66dce949edb53d4eee197701643357a9f149765"
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { createReadStream, readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { extname } from "node:path";
 import type { DocFormat, DocumentAccess, OfficeEditorKind } from "@workbench/contracts";
@@ -7,6 +7,7 @@ import type { Documents } from "./artifacts.ts";
 import { HttpError } from "./errors.ts";
 import { fontFace, matchFont } from "./fonts.ts";
 import { MIME, readBody, sendJson, serveStatic } from "./http.ts";
+import { decodeHwpSave, hwpFormat, hwpTabs, HWP_MAX_BYTES, openHwpBytes, prepareHwpSave } from "./hwp-codec.ts";
 
 // The office editors (IeumOffice's editor screens, apps/office) run on their own origin, a second
 // port on 127.0.0.1. Their code is third-party and reads documents from anywhere, so it never
@@ -15,7 +16,7 @@ import { MIME, readBody, sendJson, serveStatic } from "./http.ts";
 
 /** Which editor page edits a format, if any. */
 export function officeEditorKind(format: DocFormat): OfficeEditorKind | null {
-  return format === "docx" ? "docs" : format === "pptx" ? "slides" : format === "xlsx" ? "sheets" : null;
+  return format === "docx" ? "docs" : format === "pptx" ? "slides" : format === "xlsx" ? "sheets" : format === "hwp" || format === "hwpx" ? "hwp" : null;
 }
 
 /** Tokens that open one document each, for as long as the gateway runs (the most recent ones). */
@@ -62,6 +63,33 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
         return serveStatic(res, webDir, path, PAGE_HEADERS);
       }
       const bearer = req.headers.authorization?.replace(/^Bearer\s+/i, "") ?? null;
+      const hwp = /^\/api\/artifacts\/([^/]+)\/hwp\/(open|tabs|save|repair)$/.exec(path);
+      if (hwp) {
+        const [, id, operation] = hwp;
+        if (!grants.allows(bearer, id!)) throw new HttpError(401, "unauthorized", "이 문서를 열 권한이 없습니다.");
+        const artifact = documents.check(id!), format = hwpFormat(artifact.format);
+        const revision = Number(url.searchParams.get("revision"));
+        if (!Number.isSafeInteger(revision) || revision < 1 || revision > artifact.revision) throw new HttpError(400, "revision_not_found", "한글 문서 판이 올바르지 않습니다.");
+        if (operation === "open" && method === "GET") {
+          const opened = await openHwpBytes(readFileSync(documents.revisionPath(id!, revision)), format);
+          res.writeHead(200, { "content-type": "application/octet-stream", "cache-control": "no-store", "x-workbench-tracking-dropped": String(opened.trackingDropped), "x-workbench-save-blocked": String(opened.saveBlocked) });
+          res.end(opened.bytes); return;
+        }
+        if (operation === "tabs" && method === "POST") return sendJson(res, 200, await hwpTabs(await readBody(req, HWP_MAX_BYTES), format));
+        if ((operation === "save" || operation === "repair") && method === "POST") {
+          if (operation === "save") documents.registry.assertWrite(id!, grants.access(bearer!));
+          const { bytes, metadata } = decodeHwpSave(await readBody(req, HWP_MAX_BYTES + 1_000_004));
+          const original = readFileSync(documents.revisionPath(id!, revision));
+          const fixed = await prepareHwpSave(original, bytes, format, metadata, operation === "repair" ? "recovery" : "save");
+          if (operation === "repair") {
+            // Repair returns a draft to this document's frame, without writing any file.
+            // A view whose writer lease expired must still be able to keep its unsaved edits.
+            res.writeHead(200, { "content-type": "application/octet-stream", "cache-control": "no-store" }); res.end(fixed); return;
+          }
+          return sendJson(res, 200, documents.saveHwpBytes(id!, revision, fixed, grants.access(bearer!)));
+        }
+        throw new HttpError(405, "method_not_allowed", "허용되지 않은 한글 요청입니다.");
+      }
       // System fonts the slides editor measures and draws text with.
       if (path.startsWith("/api/fonts/") && method === "GET") {
         if (!grants.allowsAny(bearer)) throw new HttpError(401, "unauthorized", "편집기 권한이 없습니다.");

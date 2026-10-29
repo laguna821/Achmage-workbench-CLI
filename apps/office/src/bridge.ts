@@ -1,4 +1,5 @@
 import type { OfficeHostMessage, OfficePageMessage } from "@workbench/contracts";
+import { encodeHwpSave, type HwpSaveMetadata, type TabSpot } from "../../../packages/contracts/src/hwp.ts";
 
 // The office page runs on the editors' own origin (apps/host/src/editors.ts). It talks only to the
 // Workbench window that embeds it (the parent frame, on the app's origin) and to the gateway, with
@@ -75,6 +76,25 @@ export class Gateway {
     post({ type: "office:saving" });
     const response = await this.call("PUT", `/api/artifacts/${artifactId}/bytes?expectedRevision=${expectedRevision}`, data, { "content-type": "application/octet-stream" });
     return (await response.json()) as { id: string; revision: number; sha256: string };
+  }
+
+  async openHwp(artifactId: string, revision: number) {
+    const response = await this.call("GET", `/api/artifacts/${artifactId}/hwp/open?revision=${revision}`);
+    return { bytes: await response.arrayBuffer(), trackingDropped: response.headers.get("x-workbench-tracking-dropped") === "true", saveBlocked: response.headers.get("x-workbench-save-blocked") === "true" };
+  }
+
+  async hwpTabs(artifactId: string, revision: number, bytes: Uint8Array): Promise<TabSpot[]> {
+    return (await this.call("POST", `/api/artifacts/${artifactId}/hwp/tabs?revision=${revision}`, bytes.slice().buffer)).json();
+  }
+
+  async saveHwp(artifactId: string, revision: number, bytes: Uint8Array, metadata: HwpSaveMetadata) {
+    post({ type: "office:saving" });
+    const response = await this.call("POST", `/api/artifacts/${artifactId}/hwp/save?revision=${revision}`, encodeHwpSave(metadata, bytes), { "content-type": "application/octet-stream" });
+    return (await response.json()) as { id: string; revision: number; sha256: string };
+  }
+
+  async repairHwp(artifactId: string, revision: number, bytes: Uint8Array, metadata: HwpSaveMetadata) {
+    return (await this.call("POST", `/api/artifacts/${artifactId}/hwp/repair?revision=${revision}`, encodeHwpSave(metadata, bytes), { "content-type": "application/octet-stream" })).arrayBuffer();
   }
 }
 

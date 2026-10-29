@@ -475,13 +475,25 @@ export class Documents {
     this.registry.assertWrite(artifactId, access);
     const artifact = this.check(artifactId);
     if (!isOfficeFormat(artifact.format)) throw new HttpError(415, "not_office", "워드·PPT·엑셀 문서만 이렇게 저장합니다.");
+    // .docx/.pptx/.xlsx are zip packages; refuse foreign bytes before changing a file.
+    if (data.length < 4 || data.readUInt32LE(0) !== 0x04034b50) throw new HttpError(422, "not_office_package", "워드·PPT·엑셀 파일 형식이 아니어서 저장하지 않았습니다.");
+    return this.saveEditedBytes(artifactId, expectedRevision, data, access);
+  }
+
+  /** Only the HWP codec route calls this after its save-time repairs and container validation. */
+  saveHwpBytes(artifactId: string, expectedRevision: number, data: Buffer, access?: DocumentAccess) {
+    if (!isHangul(this.get(artifactId).format)) throw new HttpError(415, "not_hangul", "한글 문서가 아닙니다.");
+    return this.saveEditedBytes(artifactId, expectedRevision, data, access);
+  }
+
+  private saveEditedBytes(artifactId: string, expectedRevision: number, data: Buffer, access?: DocumentAccess) {
+    this.registry.assertWrite(artifactId, access);
+    const artifact = this.check(artifactId);
     if (artifact.revision !== expectedRevision) {
       throw new HttpError(409, "revision_conflict", `문서가 r${artifact.revision}로 바뀌었습니다(AI 수정안 적용이나 다른 편집). 최신 판을 열어 다시 고쳐 주세요.`);
     }
     if (artifact.diskState === "changed") throw new HttpError(409, "disk_changed", "다른 프로그램이 이 파일을 바꿨습니다. 최신 내용을 받은 뒤 다시 저장해 주세요.");
     if (data.length === 0) throw new HttpError(400, "empty_document", "빈 문서는 저장하지 않습니다.");
-    // .docx/.pptx/.xlsx are zip packages; anything else (a password-protected file, a broken save) is refused.
-    if (data.length < 4 || data.readUInt32LE(0) !== 0x04034b50) throw new HttpError(422, "not_office_package", "워드·PPT·엑셀 파일 형식이 아니어서 저장하지 않았습니다.");
     if (sha256(data) === artifact.sha256) return artifact;
     writeAtomic(artifact.path, data);
     return this.record(artifact, data, { author: "user", sessionId: null, baseRevision: expectedRevision, note: null });

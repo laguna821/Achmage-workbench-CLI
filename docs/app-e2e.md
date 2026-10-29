@@ -38,6 +38,8 @@ node scripts/app-e2e/run.ts apps/desktop/src-tauri/target/debug/achmage-workbenc
 
 웹/호스트 소스만 빌드하면 기존 실행파일 옆의 리소스가 그대로 남는다. **Tauri 빌드까지 수행**하고 `apps/web/dist/index.html`과 `apps/desktop/src-tauri/target/debug/web/index.html`이 같은지 확인한다. 이전 리소스 실행을 최신 UI 검증으로 오인하지 않는다.
 
+`--only=hwp`는 HWP와 HWPX 각각의 synthetic 본문·메모를 내부 한글 탭으로 연다. 실제 페이지 클릭으로 입력부에 초점을 주고 Ctrl+Home·글 입력·Ctrl+S를 WebDriver 키 입력으로 보낸다. 저장한 바이트를 실제 rhwp 엔진으로 읽어 본문·메모·원본 보존을 확인하고 앱을 새로고침해 재열기 화면을 남긴다. Electron/Xvfb나 AI 엔진은 사용하지 않는다. 이 검사는 한글 IME나 전체 표/인쇄 검증을 대신하지 않는다.
+
 Linux에서 Broadway는 파일로 보이지 않는 추상 UNIX 소켓을 사용할 수 있으므로 실제 연결로 준비 상태를 판별한다. 설정 저장은 화면이 닫히는 시점보다 늦을 수 있어 API의 영속 상태를 기다린다.
 
 종료는 이 하네스가 시작한 자식 프로세스만 정상 종료한다. 종료되지 않으면 임시 폴더를 유지하고 실패를 기록한다. `--engines=real`은 실제 사용자 엔진 설정을 사용하는 별도 선택이며 기본 회귀 검사에 필요하지 않다.

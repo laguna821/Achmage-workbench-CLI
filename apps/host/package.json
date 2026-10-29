@@ -12,6 +12,7 @@
     "@workbench/contracts": "0.2.2",
     "@workbench/provider-claude": "0.2.2",
     "@workbench/provider-codex": "0.2.2",
+    "cfb": "1.2.2",
     "diff": "^9.0.0",
     "jszip": "3.10.1",
     "yaml": "^2.9.1"

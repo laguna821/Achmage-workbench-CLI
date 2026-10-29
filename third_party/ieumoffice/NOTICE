@@ -28,9 +28,16 @@ commit and what was changed):
       with scripts/vendor-user-skills.mjs; Workbench policy adapters are kept
       separately in apps/host/src.
 
+  third_party/ieumoffice/hwp/, file-parse/hwp.ts
+      HWP/HWPX save preservation and text/memo reading from pinned Ieum source.
+      hwp.manifest.json records source and output hashes; regenerate with
+      scripts/vendor-hwp-core.mjs. Workbench validation and revision policy
+      remains separately in apps/host/src.
+
 The office editor pages (apps/office) are built from IeumOffice's source at
 the commit named in vendor/ieumoffice.PINNED (fetched by scripts/fetch-ieum.sh,
-not stored in this repository), unchanged, with its AI features hidden. The
+not stored in this repository). Shared AI service ports are being integrated
+separately; the editor screens retain their upstream source. The
 Word editor gets a bridge to the Workbench gateway in place of its Electron
 preload; the slides editor's screen and preload run in the page and its
 editing code, written for Electron's main process, runs in the page's worker
@@ -46,6 +53,11 @@ and apps/office/native/xlsx-wasm/src/lib.rs adapts the engine's request
 dispatch from its src/main.rs. The built pages carry THIRD-PARTY-NOTICES.txt
 with this NOTICE, the LICENSE, the font licences, the licences of the npm
 packages bundled into them and of the Rust crates compiled into the engine.
+The Hangul screen hosts the pinned offline rhwp-studio with Ieum's plugins.
+Workbench supplies file/save/recovery channels without Electron. The host
+and screen share manifest-verified rhwp WASM. The studio includes its rhwp
+licence and third-party notices; scripts/build-hwp-studio.mjs verifies the
+source pin and WASM hash and packages those files together.
 
 The `ieumoffice` command line tool that Workbench can call is not part of
 this repository; it ships inside an installed IeumOffice application.

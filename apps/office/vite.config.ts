@@ -176,6 +176,7 @@ export default defineConfig({
     thirdPartyNotices([
       { title: "IeumOffice / GenOffice (Apache License 2.0)", files: [`${ieum}/NOTICE`, `${ieum}/LICENSE`] },
       { title: "Unicode data used by IeumOffice", files: [`${ieum}/LICENSE-UNICODE.txt`] },
+      { title: "rhwp editor / WASM engine", files: [here("./public/studio/LICENSE-rhwp.txt"), here("./public/studio/THIRD-PARTY-LICENSES-rhwp.md")] },
       {
         title: "Fonts bundled with the editors",
         files: [`${ieum}/apps/docs/src/renderer/fonts/README.md`, `${packages}/ui/src/fonts/README.md`, `${ieum}/apps/docs/src/renderer/fonts/LICENSE-OFL.txt`],
@@ -228,6 +229,6 @@ export default defineConfig({
     target: "es2022",
     sourcemap: false,
     chunkSizeWarningLimit: 6000,
-    rollupOptions: { input: { docs: here("./docs.html"), slides: here("./slides.html"), sheets: here("./sheets.html") } },
+    rollupOptions: { input: { docs: here("./docs.html"), slides: here("./slides.html"), sheets: here("./sheets.html"), hwp: here("./hwp.html") } },
   },
 });

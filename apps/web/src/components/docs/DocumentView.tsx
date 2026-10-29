@@ -100,7 +100,7 @@ export default function DocumentView({
 }) {
   const { lookOf } = useAppearance();
   const artifact = state.artifacts[artifactId] as Artifact | undefined;
-  const canEditFormat = Boolean(artifact && artifact.format !== "hwp" && artifact.format !== "pdf");
+  const canEditFormat = Boolean(artifact && artifact.format !== "pdf");
   const lease = useDocumentSession(rootApi, artifact ? artifactId : null, session?.id ?? null, canEditFormat);
   const api = lease.api;
   const references = useDocumentReferences(rootApi, artifactId, onToast);
@@ -120,10 +120,10 @@ export default function DocumentView({
   const [conflict, setConflict] = useState<Conflict>(null);
   const hangul = artifact?.format === "hwpx" || artifact?.format === "hwp";
   const office = artifact ? isOfficeFormat(artifact.format) : false;
-  // Word, PowerPoint and Excel documents are edited in the central area with the editors built from IeumOffice.
-  const wordEditor = artifact?.format === "docx" || artifact?.format === "pptx" || artifact?.format === "xlsx";
+  // Document screens built from IeumOffice, inside the central Workbench tab.
+  const wordEditor = artifact?.format === "docx" || artifact?.format === "pptx" || artifact?.format === "xlsx" || hangul;
   const [mode, setMode] = useState<"edit" | "preview" | "split" | "render" | "source" | "pages">(
-    uiState?.mode && ["edit", "preview", "split", "render", "source", "pages"].includes(uiState.mode) ? uiState.mode as "edit" | "preview" | "split" | "render" | "source" | "pages" : artifact?.format === "html" ? "render" : wordEditor ? "edit" : hangul || office ? "pages" : "edit",
+    hangul && uiState?.mode === "pages" ? "edit" : uiState?.mode && ["edit", "preview", "split", "render", "source", "pages"].includes(uiState.mode) ? uiState.mode as "edit" | "preview" | "split" | "render" | "source" | "pages" : artifact?.format === "html" ? "render" : wordEditor ? "edit" : office ? "pages" : "edit",
   );
   useEffect(() => { onUiState?.({ mode }); }, [mode, onUiState]);
   const officeEditing = wordEditor && mode === "edit";
@@ -596,11 +596,9 @@ export default function DocumentView({
       return (
         <div className="doc-hangul-text">
           <div className="notice">
-            {artifact.format === "hwp"
-              ? "HWP는 읽기 전용입니다. 고치려면 HWPX로 만든 뒤 여세요."
-              : "한글 문서의 글 보기입니다. 문단·표 칸의 글자를 바꾸면 원래 서식을 유지한 채 HWPX에 반영됩니다. 문단을 새로 만들거나 지우는 편집은 반영되지 않고 원본을 유지합니다."}
+            한글 문서의 글 보기입니다. 쪽 배치·표·메모를 편집하려면 ‘편집’을 누르세요.
           </div>
-          <MarkdownEditor value={text} readOnly={!lease.canWrite || artifact.format === "hwp"} onChange={setText} onSelection={setSelection} onBlur={() => void save()} images={docImages.handling} position={uiState} onPosition={onUiState} />
+          <MarkdownEditor value={text} readOnly onChange={setText} onSelection={setSelection} images={docImages.handling} position={uiState} onPosition={onUiState} />
         </div>
       );
     }
@@ -659,14 +657,6 @@ export default function DocumentView({
               {(["edit", "split", "preview"] as const).map((value) => (
                 <button key={value} type="button" role="radio" aria-checked={mode === value} className={mode === value ? "active" : ""} onClick={() => setMode(value)}>
                   {value === "edit" ? "편집" : value === "split" ? "둘 다" : "미리보기"}
-                </button>
-              ))}
-            </div>
-          ) : hangul ? (
-            <div className="segmented small" role="radiogroup" aria-label="보기">
-              {(["pages", "edit"] as const).map((value) => (
-                <button key={value} type="button" role="radio" aria-checked={mode === value} className={mode === value ? "active" : ""} onClick={() => setMode(value)}>
-                  {value === "pages" ? "쪽 보기" : artifact.format === "hwp" ? "글 보기" : "글 편집"}
                 </button>
               ))}
             </div>

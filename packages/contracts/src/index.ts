@@ -739,7 +739,7 @@ export type DesignPageMessage =
   | { type: "render:result"; id: string; dataUrl: string | null; pages: number; error?: string };
 
 /** Office editors built from IeumOffice (apps/office), one page per editor kind. */
-export type OfficeEditorKind = "docs" | "slides" | "sheets";
+export type OfficeEditorKind = "docs" | "slides" | "sheets" | "hwp";
 
 /**
  * Where to open a document's editor page: the editors' own origin (not the Workbench UI's), and a
