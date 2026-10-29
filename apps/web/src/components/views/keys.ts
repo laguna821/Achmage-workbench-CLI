@@ -80,13 +80,13 @@ export function projectRows(state: State, summaries: Map<string, ProjectSummary>
 export const projectQuery = (row: ProjectRow, folders: State["folders"]): QueryProject => queryProject(row.work, row.summary, folders);
 
 /** A folder's own colour, when the navigator gave it one (an optional field of `Folder`). */
-export const folderColor = (folder: Folder | undefined) => {
+const folderColor = (folder: Folder | undefined) => {
   const value = (folder as { color?: unknown } | undefined)?.color;
   return isHexColor(value) ? value : null;
 };
 
 /** Visible folders in the tree's order, each with its path as its name and its depth. */
-export function folderValues(state: State): KnownValue[] {
+function folderValues(state: State): KnownValue[] {
   const out: KnownValue[] = [];
   const walk = (parentId: string | null, path: string[], depth: number) => {
     const children = Object.values(state.folders)
@@ -107,20 +107,25 @@ const visibleFolder = (state: State, folderId: string | null) => (folderId && st
 /** How a property key reads: Korean names for Obsidian's English ones, without the colon some vault keys end in. */
 export const propLabel = (key: string) => keyLabel(key).replace(/:$/, "");
 
-/** Properties to group, sort and show by: the template's, then every other key the notes have, each with its kind. */
-export function propertyKeys(summaries: Iterable<ProjectSummary>, template: PropertyField[]): { key: string; type: PropertyType; hint?: string }[] {
+/**
+ * Properties to group, sort and show by: the template's, then every other key the notes have, each
+ * with its kind and how it reads ("DIKM_단계:" → "DIKM_단계"; a key keeps its colon when the same
+ * name without one is there too, so "종류" and the vault's "종류:" stay apart).
+ */
+export function propertyKeys(summaries: Iterable<ProjectSummary>, template: PropertyField[]): { key: string; type: PropertyType; label: string; hint?: string }[] {
   const kinds = new Map<string, PropertyType>();
   for (const summary of summaries) for (const property of summary.properties) if (!kinds.has(property.key)) kinds.set(property.key, property.type);
-  const out: { key: string; type: PropertyType; hint?: string }[] = [];
+  const out: { key: string; type: PropertyType; label: string; hint?: string }[] = [];
   const seen = new Set<string>();
   const add = (key: string, type: PropertyType, hint?: string) => {
     // The stage and the tags have keys of their own ("단계", "태그").
     if (seen.has(key) || type === "stage" || key === "tags") return;
     seen.add(key);
-    out.push(hint ? { key, type, hint } : { key, type });
+    out.push({ key, type, label: propLabel(key), ...(hint ? { hint } : {}) });
   };
   for (const field of template) add(field.key, kinds.get(field.key) ?? field.type, field.hint);
   for (const [key, type] of kinds) add(key, type);
+  for (const entry of out) if (entry.key.endsWith(":") && seen.has(entry.key.slice(0, -1))) entry.label = keyLabel(entry.key);
   return out;
 }
 
@@ -137,9 +142,9 @@ export function topicParticle(word: string) {
 const ENGINE = "엔진은 세션이 정하므로 끌어서 바꿀 수 없습니다.";
 
 /** A property as a key; a text or list field whose hint lists options ("높음 · 보통 · 낮음") knows them, in that order. */
-export function propertyKey(key: string, type: PropertyType, hint?: string): KeyDef<ProjectRow> {
+export function propertyKey(key: string, type: PropertyType, hint?: string, label = propLabel(key)): KeyDef<ProjectRow> {
   const options = type === "text" || type === "list" ? hintOptions(hint) : [];
-  const base = { key: `prop:${key}`, label: propLabel(key), values: (row: ProjectRow) => valuesOf(row, key), ...(options.length ? { known: options.map((option) => ({ id: option, label: option })) } : {}) };
+  const base = { key: `prop:${key}`, label, values: (row: ProjectRow) => valuesOf(row, key), ...(options.length ? { known: options.map((option) => ({ id: option, label: option })) } : {}) };
   switch (type) {
     case "number":
       return { ...base, kind: "number", fixed: null };
@@ -159,7 +164,7 @@ export function propertyKey(key: string, type: PropertyType, hint?: string): Key
   }
 }
 
-export const ENGINE_BOTH = "both";
+const ENGINE_BOTH = "both";
 
 /** Keys a project can be grouped by: 단계, 폴더, 태그, every property, 최근 활동, 만든 날, 엔진. */
 export function projectKeys(context: ProjectContext): KeyDef<ProjectRow>[] {
@@ -176,7 +181,7 @@ export function projectKeys(context: ProjectContext): KeyDef<ProjectRow>[] {
     },
     { key: "folder", label: "폴더", kind: "choice", known: folderValues(state), none: "폴더 밖", values: (row) => visibleFolder(state, row.work.folderId), fixed: null },
     { key: "tags", label: "태그", kind: "list", values: (row) => (row.summary?.tags.length ? row.summary.tags : (row.work.tags ?? [])), fixed: MANY, show: (tag) => `#${tag}` },
-    ...propertyKeys(context.summaries.values(), context.template).map((entry) => propertyKey(entry.key, entry.type, entry.hint)),
+    ...propertyKeys(context.summaries.values(), context.template).map((entry) => propertyKey(entry.key, entry.type, entry.hint, entry.label)),
     { key: "activity", label: "최근 활동", kind: "past", values: (row) => [row.last], fixed: "최근 활동은 기록에서 오므로 끌어서 바꿀 수 없습니다." },
     { key: "created", label: "만든 날", kind: "past", values: (row) => [row.work.createdAt], fixed: "만든 날은 끌어서 바꿀 수 없습니다." },
     {
@@ -221,7 +226,7 @@ export function projectSorts(context: Pick<ProjectContext, "stages" | "summaries
     { key: "proposals", label: "수정안", value: (row) => row.proposals },
     ...propertyKeys(context.summaries.values(), context.template).map((entry) => {
       const options = entry.type === "text" || entry.type === "list" ? hintOptions(entry.hint) : [];
-      return { key: `prop:${entry.key}`, label: propLabel(entry.key), value: (row: ProjectRow) => sortValue(valuesOf(row, entry.key), entry.type, options) };
+      return { key: `prop:${entry.key}`, label: entry.label, value: (row: ProjectRow) => sortValue(valuesOf(row, entry.key), entry.type, options) };
     }),
   ];
 }
@@ -239,7 +244,7 @@ export function projectFields(context: Pick<ProjectContext, "summaries" | "templ
     { id: "proposals", label: "수정안" },
     { id: "activity", label: "마지막 활동" },
     { id: "created", label: "만든 날" },
-    ...propertyKeys(context.summaries.values(), context.template).map((entry) => ({ id: `prop:${entry.key}`, label: propLabel(entry.key) })),
+    ...propertyKeys(context.summaries.values(), context.template).map((entry) => ({ id: `prop:${entry.key}`, label: entry.label })),
   ];
 }
 
@@ -252,8 +257,6 @@ export const DEFAULT_PROJECT_FIELDS: Record<"table" | "board" | "cards" | "list"
 };
 
 // ── 지금: sessions ──────────────────────────────────────────────────────────
-
-export const QUIET = "";
 
 export function sessionKeys(state: State, engineColor: (provider: Provider) => string): KeyDef<Session>[] {
   const fixed = "세션은 프로젝트에 딸려 있어 여기서 옮기지 않습니다.";

@@ -262,8 +262,8 @@ function NowMode({ api, state, open, views, onViews }: { api: Api; state: State;
   );
 
   // Today's screen: by state, newest first in each, then "이어서 하기" and the latest works.
-  const today_ = view.layout === "list" && (!view.group || view.group.key === STATUS_KEY) && !view.subgroup;
-  if (today_) {
+  const asToday = view.layout === "list" && (!view.group || view.group.key === STATUS_KEY) && !view.subgroup;
+  if (asToday) {
     const groups = nowGroups(state)
       .map((group) => ({ ...group, sessions: group.sessions.filter(keep) }))
       .filter((group) => group.sessions.length);
