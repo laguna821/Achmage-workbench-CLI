@@ -508,13 +508,36 @@ export class Documents {
     return this.record(artifact, data, { author: "user", sessionId: null, baseRevision: artifact.revision, note: `r${toRevision}로 되돌림` });
   }
 
+  /** Confirm references before submission, without sending a stale saved file as live edits. */
+  resolveReferences(inputs: unknown): DocRef[] {
+    if (!Array.isArray(inputs) || inputs.length > 100) throw new HttpError(400, "invalid_references", "참조 문서는 한 번에 100개까지 붙일 수 있습니다.");
+    return inputs.map((input) => {
+      if (!input || typeof input !== "object" || typeof input.artifactId !== "string" || !["edit", "review"].includes(input.mode) || (input.savedSnapshot !== undefined && typeof input.savedSnapshot !== "boolean") || (input.sha256 !== undefined && (typeof input.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(input.sha256)))) throw new HttpError(400, "invalid_reference", "문서 참조 형식이 올바르지 않습니다.");
+      const selection = input.selection;
+      if (selection != null && (typeof selection !== "object" || typeof selection.text !== "string" || typeof selection.label !== "string" || !Number.isSafeInteger(selection.from) || !Number.isSafeInteger(selection.to) || selection.from < 0 || selection.to < selection.from || (selection.pageId !== undefined && typeof selection.pageId !== "string") || (selection.objectIds !== undefined && (!Array.isArray(selection.objectIds) || selection.objectIds.length > 200 || !selection.objectIds.every((id: unknown) => typeof id === "string"))))) throw new HttpError(400, "invalid_selection", "문서 선택 범위가 올바르지 않습니다.");
+      let artifact = this.get(input.artifactId);
+      if (!input.savedSnapshot) {
+        if (this.registry.forArtifact(artifact.id).some((view) => view.dirty)) throw new HttpError(409, "unsaved_reference", `「${artifact.name}」에 저장하지 않은 편집이 있습니다. 해당 편집기에서 저장하거나 ‘저장된 판만’을 선택해 주세요.`);
+        artifact = this.adoptDisk(artifact.id);
+        if (input.revision !== undefined && input.revision !== artifact.revision) throw new HttpError(409, "reference_changed", `「${artifact.name}」의 판이 바뀌었습니다. 내용을 확인한 뒤 다시 보내 주세요.`);
+      }
+      const revision = input.revision ?? artifact.revision;
+      if (!Number.isSafeInteger(revision) || revision < 1 || revision > artifact.revision) throw new HttpError(400, "revision_not_found", "참조할 문서 판을 찾을 수 없습니다.");
+      const digest = this.revisionSha(artifact.id, revision);
+      if (!digest || (input.sha256 && input.sha256 !== digest)) throw new HttpError(409, "reference_changed", "참조 문서의 해시가 일치하지 않습니다.");
+      return { artifactId: artifact.id, mode: input.mode, revision, sha256: digest, ...(selection ? { selection } : {}), ...(input.savedSnapshot ? { savedSnapshot: true } : {}) };
+    });
+  }
+
   /**
    * Make the pinned revision reachable from the engine's own folder: a read-only copy, and for
    * edit requests a working copy the engine may change.
    */
   async prepare(ref: DocRef, sessionId: string, requestId: string, cwd: string) {
     const artifact = this.get(ref.artifactId);
-    if (ref.revision < 1 || ref.revision > artifact.revision) throw new HttpError(400, "revision_not_found", `r${ref.revision} 판이 없습니다.`);
+    if (!Number.isSafeInteger(ref.revision) || ref.revision < 1 || ref.revision > artifact.revision) throw new HttpError(400, "revision_not_found", `r${ref.revision} 판이 없습니다.`);
+    const digest = this.revisionSha(artifact.id, ref.revision);
+    if (ref.sha256 && ref.sha256 !== digest) throw new HttpError(409, "reference_changed", "참조 문서의 해시가 일치하지 않습니다.");
     if (ref.mode === "edit" && (artifact.format === "hwp" || artifact.format === "pdf")) {
       throw new HttpError(400, "not_editable", `${artifact.format.toUpperCase()}는 AI 수정안을 만들 수 없습니다. 검토 요청으로 보내 주세요.`);
     }
@@ -524,27 +547,31 @@ export class Documents {
     }
     const hangul = isHangul(artifact.format);
     const source = this.revisionPath(artifact.id, ref.revision);
+    if (!digest || sha256(readFileSync(source)) !== digest) throw new HttpError(409, "revision_damaged", "문서 판의 내용과 기록된 해시가 다릅니다. 원본을 확인해 주세요.");
     const extension = extensionOf(artifact);
     const stem = artifact.format === "design" ? designStem(artifact.name) : basename(artifact.name, extension);
     const pinnedDir = join(cwd, WORKBENCH_DIR, "pinned");
     mkdirSync(pinnedDir, { recursive: true });
-    const pinned = join(pinnedDir, `${stem}.r${ref.revision}${extension}`);
+    // Names alone are not identity: two folders can contain different files with the same name.
+    const pinStem = `${Array.from(stem).slice(0, 32).join("")}.${artifact.id}.r${ref.revision}.${digest.slice(0, 16)}`;
+    const pinned = join(pinnedDir, `${pinStem}${extension}`);
     if (!existsSync(pinned)) {
       copyFileSync(source, pinned);
       chmodSync(pinned, 0o444);
     }
+    if (sha256(readFileSync(pinned)) !== digest) throw new HttpError(409, "pinned_copy_changed", "참조 사본이 변경되어 요청을 보내지 않았습니다. 원래 문서 판은 보존되어 있습니다.");
     // Hangul files also get their Markdown view, which is what the engine reads and edits; Office
     // files get a text view to read (edits go through the ieumoffice tool on the working copy).
     let pinnedView: string | null = null;
     if (office && this.ieum?.available) {
-      pinnedView = join(pinnedDir, `${stem}.r${ref.revision}${extension}.md`);
+      pinnedView = join(pinnedDir, `${pinStem}${extension}.md`);
       if (!existsSync(pinnedView)) {
         writeFileSync(pinnedView, await this.view(artifact.id, ref.revision));
         chmodSync(pinnedView, 0o444);
       }
     }
     if (hangul && this.kordoc?.available) {
-      pinnedView = join(pinnedDir, `${stem}.r${ref.revision}${extension}.md`);
+      pinnedView = join(pinnedDir, `${pinStem}${extension}.md`);
       if (!existsSync(pinnedView)) {
         writeFileSync(pinnedView, await this.view(artifact.id, ref.revision));
         chmodSync(pinnedView, 0o444);
@@ -558,7 +585,7 @@ export class Documents {
       if (busy) throw new HttpError(409, "artifact_busy", "다른 세션이 이 문서의 수정안을 만드는 중입니다. 검토 요청으로 보내 주세요.");
       const draftDir = join(cwd, WORKBENCH_DIR, "drafts");
       mkdirSync(draftDir, { recursive: true });
-      const workingPath = join(draftDir, `${stem}.r${ref.revision}.${requestId.slice(0, 8)}${hangul ? `${extension}.md` : extension}`);
+      const workingPath = join(draftDir, `${pinStem}.${sha256(requestId).slice(0, 32)}${hangul ? `${extension}.md` : extension}`);
       if (hangul) writeFileSync(workingPath, await this.view(artifact.id, ref.revision));
       else copyFileSync(source, workingPath);
       chmodSync(workingPath, 0o644);
@@ -585,7 +612,7 @@ export class Documents {
 
   summary(ref: DocRef): RefSummary {
     const artifact = this.get(ref.artifactId);
-    return { artifactId: artifact.id, name: artifact.name, revision: ref.revision, mode: ref.mode, selection: ref.selection?.label ?? null };
+    return { artifactId: artifact.id, name: artifact.name, revision: ref.revision, mode: ref.mode, selection: ref.selection?.label ?? null, sha256: this.revisionSha(artifact.id, ref.revision), ...(ref.savedSnapshot ? { savedSnapshot: true } : {}) };
   }
 
   /**
@@ -734,7 +761,8 @@ export class Documents {
       const inside = relative(cwd, path);
       return inside && !inside.startsWith("..") && !inside.startsWith(sep) ? inside : path;
     };
-    const lines = [`- 「${artifact.name}」 (${artifact.format}) 판 r${ref.revision} · sha256 ${this.revisionSha(artifact.id, ref.revision).slice(0, 12)}`];
+    const lines = [`- 「${artifact.name}」 (${artifact.format}) 판 r${ref.revision} · sha256 ${this.revisionSha(artifact.id, ref.revision)}`];
+    if (ref.savedSnapshot) lines.push("  · 사용자가 고른 저장된 판입니다. 열린 편집기의 미저장 내용은 포함하지 않습니다.");
     lines.push(`  · 이 판의 읽기 전용 사본: ${show(pinned)}`);
     if (pinnedView) lines.push(`  · 같은 판의 Markdown 보기(한글 문서 내용, 읽기 전용): ${show(pinnedView)}`);
     if (proposal && isHangul(artifact.format)) {

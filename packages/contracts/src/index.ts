@@ -255,6 +255,10 @@ export type CreateTarget = { format: CreatableFormat; name: string };
 export type DocRef = {
   artifactId: string;
   revision: number;
+  /** Full digest of the immutable revision confirmed before the request is submitted. */
+  sha256?: string;
+  /** User explicitly chose a saved revision, excluding unsaved editor changes. */
+  savedSnapshot?: boolean;
   /** edit: the session may change it (through a working copy). review: read only. */
   mode: "edit" | "review";
   /**
@@ -263,6 +267,9 @@ export type DocRef = {
    */
   selection?: { from: number; to: number; text: string; label: string; pageId?: string; objectIds?: string[] } | null;
 };
+
+/** Missing revision follows the current saved file after its open editor confirms saving. */
+export type DocRefInput = Omit<DocRef, "revision"> & { revision?: number };
 
 /**
  * A change an engine made in a working copy of a pinned revision. Never written to the real file
@@ -312,7 +319,7 @@ export type Handoff = {
   answeredAt: number | null;
 };
 
-export type RefSummary = { artifactId: string; name: string; revision: number; mode: DocRef["mode"]; selection: string | null };
+export type RefSummary = { artifactId: string; name: string; revision: number; mode: DocRef["mode"]; selection: string | null; sha256?: string; savedSnapshot?: boolean };
 
 export type TranscriptItem =
   | {

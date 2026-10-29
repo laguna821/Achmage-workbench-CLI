@@ -1712,6 +1712,8 @@ export function App() {
   // session, whichever one the work has in front elsewhere; so does a pane without the focus.
   const workView = (shown: Work, session: Session | undefined, pinned: boolean, paneTabs: ReactNode, ids: string[], modes: ModeProps) => (
     <WorkView
+      api={api!}
+      onToast={setToast}
       state={state}
       work={session && (pinned || session.id !== shown.activeSessionId) ? { ...shown, activeSessionId: session.id } : shown}
       actions={actions}

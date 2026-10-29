@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -59,6 +59,53 @@ function setup() {
 const workingPathIn = (prompt: string) => /작업 사본만 수정하세요: (.+)$/m.exec(prompt)?.[1];
 
 describe("documents and revisions", () => {
+  it("keeps same-name documents and request-prefix collisions in distinct immutable copies", async () => {
+    const { manager, work } = setup();
+    for (const folder of ["a", "b"]) mkdirSync(join(work.cwd, folder), { recursive: true });
+    const name = `${"한글".repeat(60)}.md`;
+    // Keep original names below the platform's byte limit while exercising long pinned names.
+    const filename = name.slice(0, 70) + ".md";
+    const files = [join(work.cwd, "a", filename), join(work.cwd, "b", filename)];
+    files.forEach((file, index) => writeFileSync(file, `different ${index}`));
+    const docs = files.map((file) => manager.openFile(work.id, file));
+    const refs = manager.documents.resolveReferences(docs.map((doc) => ({ artifactId: doc.id, mode: "edit" })));
+    const session = manager.createSession(work.id, { provider: "claude" });
+    const first = await manager.documents.prepare(refs[0]!, session.id, "samehead-first", work.cwd);
+    const second = await manager.documents.prepare(refs[1]!, session.id, "samehead-first", work.cwd);
+    const third = await manager.documents.prepare(refs[0]!, session.id, "samehead-second", work.cwd);
+    expect(first.pinned).not.toBe(second.pinned);
+    expect(readFileSync(first.pinned, "utf8")).toBe("different 0");
+    expect(readFileSync(second.pinned, "utf8")).toBe("different 1");
+    expect(first.proposal?.workingPath).not.toBe(third.proposal?.workingPath);
+    await expect(manager.documents.prepare({ ...refs[0]!, sha256: "0".repeat(64) }, session.id, "bad", work.cwd)).rejects.toMatchObject({ code: "reference_changed" });
+    chmodSync(first.pinned, 0o644); writeFileSync(first.pinned, "changed copy");
+    await expect(manager.documents.prepare(refs[0]!, session.id, "bad-copy", work.cwd)).rejects.toMatchObject({ code: "pinned_copy_changed" });
+    expect(readFileSync(files[0]!, "utf8")).toBe("different 0");
+  });
+
+  it("requires dirty-reference acknowledgement, pins saved bytes, and follows later disk changes only when requested", async () => {
+    const { manager, work } = setup();
+    mkdirSync(work.cwd, { recursive: true });
+    const file = join(work.cwd, "reference.md"); writeFileSync(file, "saved one");
+    const doc = manager.openFile(work.id, file);
+    const view = { viewId: "typing", windowId: "window", claim: true, dirty: true };
+    manager.documents.registry.open(doc.id, view);
+    expect(() => manager.documents.resolveReferences([{ artifactId: doc.id, mode: "review" }])).toThrow(/저장하지 않은/);
+    const [pinned] = manager.documents.resolveReferences([{ artifactId: doc.id, mode: "review", savedSnapshot: true }]);
+    expect(pinned).toMatchObject({ revision: 1, sha256: doc.sha256, savedSnapshot: true });
+    manager.documents.registry.open(doc.id, { ...view, dirty: false });
+    writeFileSync(file, "external two");
+    expect(() => manager.documents.resolveReferences([{ artifactId: doc.id, revision: 1, mode: "edit" }])).toThrow(/판이 바뀌/);
+    expect(manager.documents.resolveReferences([pinned!])[0]).toMatchObject({ revision: 1, sha256: doc.sha256 });
+    const [latest] = manager.documents.resolveReferences([{ artifactId: doc.id, mode: "review" }]);
+    expect(latest).toMatchObject({ revision: 2 }); expect(latest?.sha256).not.toBe(doc.sha256);
+    const session = manager.createSession(work.id, { provider: "claude" });
+    await manager.send(session.id, "saved-reference", "read this saved revision", [pinned!]);
+    const user = manager.items(session.id).items.find((item) => item.kind === "user");
+    expect(user).toMatchObject({ refs: [{ artifactId: doc.id, revision: 1, sha256: doc.sha256, savedSnapshot: true }] });
+    expect(readFileSync(file, "utf8")).toBe("external two");
+  });
+
   it("turns an engine's file write into a tracked document with a card", async () => {
     const { manager, claude, work } = setup();
     const session = manager.createSession(work.id, { provider: "claude" });

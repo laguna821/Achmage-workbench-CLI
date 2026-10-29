@@ -75,6 +75,8 @@ function parseRefs(value: unknown): DocRef[] {
       {
         artifactId: ref.artifactId,
         revision: ref.revision,
+        ...(typeof ref.sha256 === "string" ? { sha256: ref.sha256 } : {}),
+        ...(ref.savedSnapshot === true ? { savedSnapshot: true } : {}),
         mode: ref.mode === "edit" ? "edit" : "review",
         selection:
           selection && typeof selection.text === "string"
@@ -484,6 +486,10 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       }
       if (method === "GET" && path === "/api/fonts") return sendJson(res, 200, { fonts: systemFonts() });
       if (method === "GET" && path === "/api/document-views") return sendJson(res, 200, { views: manager.documents.registry.list() });
+      if (method === "POST" && path === "/api/document-references") {
+        const body = await readJson(req);
+        return sendJson(res, 200, { refs: manager.documents.resolveReferences(body.refs) });
+      }
       if (method === "DELETE" && parts[0] === "document-views" && parts[1]) {
         const body = await readJson(req);
         manager.documents.registry.close(parts[1], String(body.windowId ?? ""));

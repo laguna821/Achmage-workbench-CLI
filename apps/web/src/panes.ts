@@ -68,7 +68,8 @@ export function focusPane<V>(layout: Layout<V>, id: PaneId, keep: string | null)
   return {
     ...layout,
     focus: id,
-    panes: layout.panes.map((pane) => (pane.id === layout.focus ? { ...pane, sessionId: keep } : pane.id === id ? { ...pane, sessionId: null } : pane)),
+    // Tabs own their session identity. Legacy focus pins must never create a new tab on blur.
+    panes: layout.panes.map((pane) => pane.tabs ? pane : (pane.id === layout.focus ? { ...pane, sessionId: keep } : pane.id === id ? { ...pane, sessionId: null } : pane)),
   };
 }
 
@@ -123,7 +124,7 @@ export function closePane<V>(layout: Layout<V>, id: PaneId): Layout<V> {
   const tree = removeLeaf(treeOf(layout), id)!;
   const rest = orderedPanes(tree, layout.panes);
   const focus = layout.focus === id ? rest[Math.min(layout.panes.findIndex((pane) => pane.id === id), rest.length - 1)]!.id : layout.focus;
-  return { tree, panes: rest.map((pane) => pane.id === focus ? { ...pane, sessionId: null } : pane), focus };
+  return { tree, panes: rest.map((pane) => pane.id === focus && !pane.tabs ? { ...pane, sessionId: null } : pane), focus };
 }
 
 /** The two panes trade sides; the focus stays with the same pane. */
@@ -176,7 +177,7 @@ export function splitPane<V>(layout: Layout<V>, target: PaneId, side: Side, cont
   const oldTree = treeOf(layout);
   const id = uniqueId(oldTree, "pane-");
   const tree = insertLeaf(oldTree, target, { kind: "pane", id }, side);
-  const panes = [...layout.panes.map((pane) => pane.id === layout.focus ? { ...pane, sessionId: keep } : pane), { ...content, id }];
+  const panes = [...layout.panes.map((pane) => pane.id === layout.focus && !pane.tabs ? { ...pane, sessionId: keep } : pane), { ...content, id }];
   return { tree, panes: orderedPanes(tree, panes), focus: id };
 }
 

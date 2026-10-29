@@ -32,6 +32,8 @@ import { VaultGuardPill } from "./pkm/VaultGuardPill.tsx";
 import { InsightPill } from "./pkm/InsightDialog.tsx";
 import { NoteChips } from "./pkm/NoteChips.tsx";
 import { paneDrag, usePaneActions, useNoteDrop } from "../panedrag.ts";
+import type { Api } from "../api.ts";
+import { useDocumentReferences } from "../document-references.ts";
 
 export type WorkActions = {
   /** Send a request; while the engine works it steers into the turn or waits ("queue"). `notes`: vault notes read with it. */
@@ -264,6 +266,8 @@ function TargetPicker({
 }
 
 export function WorkView({
+  api,
+  onToast,
   state,
   work,
   actions,
@@ -278,6 +282,8 @@ export function WorkView({
   prefs,
   modes,
 }: {
+  api: Api;
+  onToast: (message: string) => void;
   state: State;
   work: Work;
   actions: WorkActions;
@@ -297,6 +303,7 @@ export function WorkView({
   modes?: ModeProps;
 }) {
   const { lookOf, openMenu } = useAppearance();
+  const references = useDocumentReferences(api, work.id, onToast);
   const unseen = useUnseen();
   // Archived sessions leave the tabs (they stay in the archive), unless one is on screen.
   const listed = workSessions(state, work.id);
@@ -391,7 +398,7 @@ export function WorkView({
   const mentionItems: MentionItem[] = [
     ...open.map((id) => state.artifacts[id]).filter((artifact) => artifact && artifact.workId === work.id),
     ...artifacts.filter((artifact) => !open.includes(artifact.id)),
-  ].map((artifact) => ({ id: artifact.id, name: artifact.name, format: artifact.format, group: open.includes(artifact.id) ? "open" : "work", hint: `r${artifact.revision}` }));
+  ].map((artifact) => ({ id: artifact.id, name: artifact.name, format: artifact.format, group: open.includes(artifact.id) ? "open" : "work", hint: references.hint(artifact) }));
 
   const recency = (session: Session) => Math.max(session.previewAt ?? 0, session.updatedAt);
   const keep = new Set(
@@ -760,7 +767,8 @@ export function WorkView({
                   const editable = artifact && artifact.format !== "pdf" && artifact.format !== "hwp" && !handoffTo && !create;
                   return artifact ? (
                     <span key={entry.id} className={`ref-chip${entry.mode === "edit" ? " editing" : ""}`}>
-                      <Icon name="file" size={12} /> {artifact.name} · r{artifact.revision}
+                      <Icon name="file" size={12} /> {artifact.name} · {references.pins[entry.id] ? `r${references.pins[entry.id].revision} 고정 · 미저장 제외` : `${references.hint(artifact)} · 보낼 때 저장`}
+                      <button type="button" className="ref-role" onClick={() => void references.toggleSnapshot(entry.id)}>{references.pins[entry.id] ? "최신으로" : "저장된 판만"}</button>
                       {editable ? (
                         <button
                           type="button"
@@ -771,7 +779,7 @@ export function WorkView({
                           {entry.mode === "edit" ? "고치기" : "읽기"}
                         </button>
                       ) : null}
-                      <button type="button" onClick={() => setAttached(attached.filter((item) => item.id !== entry.id))} aria-label="문서 빼기">
+                      <button type="button" onClick={() => { setAttached(attached.filter((item) => item.id !== entry.id)); references.forget(entry.id); }} aria-label="문서 빼기">
                         <Icon name="x" size={11} />
                       </button>
                     </span>
@@ -793,15 +801,15 @@ export function WorkView({
             }
             // Attached documents travel as the revision they have now; handoffs are read-only.
             // A new document is made from the attached ones, so they are only read.
-            const refs: DocRef[] = attached
+            const refs = await references.resolve(attached
               .map((entry) => ({ entry, artifact: state.artifacts[entry.id] }))
               .filter((pair): pair is { entry: (typeof attached)[number]; artifact: NonNullable<typeof pair.artifact> } => Boolean(pair.artifact))
               .map(({ entry, artifact }) => ({
                 artifactId: artifact.id,
-                revision: artifact.revision,
                 mode: entry.mode === "edit" && !handoffTo && !create ? ("edit" as const) : ("review" as const),
                 selection: null,
-              }));
+              })));
+            if (!refs) return false;
             // "/compact" is the conversation's own "지금 압축", for either engine.
             if (active && !handoffTo && /^\/compact\s*$/.test(text)) {
               actions.compact(active);
@@ -820,6 +828,7 @@ export function WorkView({
               setOmitChanges([]);
               setHandoffTo(null);
               setAttached([]);
+              references.clear();
               setCreate(null);
               done();
             }
@@ -875,12 +884,12 @@ export function WorkView({
                 >
                   파일·그림 고르기…
                 </MenuItem>
-                <div className="menu-label">요청에 붙일 문서 · 지금 판으로 고정</div>
+                <div className="menu-label">요청에 붙일 문서 · 보내기 전에 저장 확인</div>
                 {artifacts.map((artifact) => (
                   <MenuItem
                     key={artifact.id}
                     active={attached.some((entry) => entry.id === artifact.id)}
-                    hint={`r${artifact.revision}`}
+                    hint={references.hint(artifact)}
                     onSelect={() => {
                       setAttached(
                         attached.some((entry) => entry.id === artifact.id)
@@ -888,6 +897,7 @@ export function WorkView({
                           : [...attached, { id: artifact.id, mode: "review" }],
                       );
                       setAttachOpen(false);
+                      references.forget(artifact.id);
                     }}
                   >
                     {artifact.name}

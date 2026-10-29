@@ -164,7 +164,7 @@ export function sessionMarkdown(context: ExportContext): string {
         if (request) lines.push("", request);
         const notes: string[] = [];
         if (item.refs?.length) {
-          notes.push(`붙인 문서: ${item.refs.map((ref) => `${ref.name} r${ref.revision}(${ref.mode === "edit" ? "고치기" : "읽기"})${ref.selection ? ` — ${ref.selection}` : ""}`).join(", ")}`);
+          notes.push(`붙인 문서: ${item.refs.map((ref) => `${ref.name} r${ref.revision}(${ref.mode === "edit" ? "고치기" : "읽기"}${ref.savedSnapshot ? ", 미저장 편집 제외" : ""})${ref.selection ? ` — ${ref.selection}` : ""}${ref.sha256 ? ` · SHA-256 ${ref.sha256}` : ""}`).join(", ")}`);
         }
         if (item.create) notes.push(`새 문서 요청: ${item.create.name}`);
         if (item.draw) notes.push(`그림 요청${item.draw.template ? ` · ${item.draw.template}` : ""}`);

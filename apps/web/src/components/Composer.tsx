@@ -198,7 +198,7 @@ export function Composer({
       {slashOpen ? <SlashList rows={slashRows} loading={slash?.items === null} active={Math.min(active, Math.max(0, slashRows.length - 1))} onPick={(item) => pickCommand(item.name)} /> : null}
       {listOpen ? (
         <div className="mention-list" role="listbox" aria-label="문서 멘션">
-          <div className="menu-label">문서 붙이기 · 지금 판으로 고정</div>
+          <div className="menu-label">문서 붙이기 · 보내기 전에 저장 확인</div>
           {rows.map((item, index) => (
             <button
               key={item.id}

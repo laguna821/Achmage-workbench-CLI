@@ -36,6 +36,11 @@ export class DocumentRegistry {
     this.prune();
     return [...this.views.values()].map(({ presence }) => ({ ...presence }));
   }
+  forArtifact(artifactId: string): DocumentPresence[] {
+    this.prune();
+    const file = this.file(this.artifact(artifactId).path);
+    return [...this.views.values()].filter((entry) => entry.file === file).map(({ presence }) => ({ ...presence }));
+  }
   private writer(file: string) {
     return [...this.views.values()].find((entry) => entry.file === file && entry.presence.mode === "write") ?? null;
   }

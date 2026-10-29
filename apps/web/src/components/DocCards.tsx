@@ -324,8 +324,9 @@ export function RefChips({ refs }: { refs: RefSummary[] }) {
   return (
     <div className="ref-chips">
       {refs.map((ref) => (
-        <button key={`${ref.artifactId}:${ref.revision}`} type="button" className="ref-chip" onClick={() => actions.openArtifact(ref.artifactId)}>
+        <button key={`${ref.artifactId}:${ref.revision}`} type="button" className="ref-chip" title={ref.sha256 ? `참조한 판의 SHA-256: ${ref.sha256}` : undefined} onClick={() => actions.openArtifact(ref.artifactId)}>
           <Icon name="file" size={12} /> {ref.name} · r{ref.revision} · {ref.mode === "edit" ? "수정 요청" : "읽기"}
+          {ref.savedSnapshot ? " · 미저장 편집 제외" : ""}
           {ref.selection ? ` · ${ref.selection}` : ""}
         </button>
       ))}

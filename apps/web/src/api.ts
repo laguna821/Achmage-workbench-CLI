@@ -28,6 +28,7 @@ import type {
   CreateTarget,
   DocImageResult,
   DocRef,
+  DocRefInput,
   DocumentTools,
   DrawRequest,
   DrawResult,
@@ -121,6 +122,7 @@ export class Api {
 
   snapshot = () => this.request<Snapshot>("GET", "/api/snapshot");
   documentViews = () => this.request<{ views: DocumentPresence[] }>("GET", "/api/document-views");
+  resolveReferences = (refs: DocRefInput[]) => this.request<{ refs: DocRef[] }>("POST", "/api/document-references", { refs });
   registerDocument = (artifactId: string, input: DocumentViewInput) => this.request<DocumentRegistration>("POST", `/api/artifacts/${artifactId}/views`, input);
   closeDocument = (viewId: string, windowId: string) => this.request<{ ok: boolean }>("DELETE", `/api/document-views/${viewId}`, { windowId }, { keepalive: true });
   items = (sessionId: string) => this.request<{ seq: number; items: TranscriptItem[] }>("GET", `/api/sessions/${sessionId}/items`);

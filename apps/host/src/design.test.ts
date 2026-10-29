@@ -118,7 +118,8 @@ describe("design documents", () => {
     const prompt = codex.prompts[0];
     expect(prompt).toContain("디자인 파일 규칙");
     expect(prompt).toContain('"봄 특강"');
-    expect(workingPathIn(prompt)).toMatch(/포스터\.r2\.[^./]+\.design\.json$/);
+    expect(workingPathIn(prompt)).toContain(`포스터.${design.id}.r2.`);
+    expect(workingPathIn(prompt)).toMatch(/\.design\.json$/);
     const proposal = manager.documents.listProposals()[0];
     expect(proposal).toMatchObject({ status: "pending", problem: null });
 

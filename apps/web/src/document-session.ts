@@ -62,7 +62,8 @@ export function useDocumentSession(rootApi: Api, artifactId: string | null, sess
   const report = useCallback((dirty: boolean, revision: number | undefined) => {
     const previous = progress.current;
     progress.current = { ...previous, dirty, revision };
-    if (previous.dirty !== dirty || previous.revision !== revision) void update.current();
+    if (previous.dirty !== dirty || previous.revision !== revision) return update.current();
+    return Promise.resolve();
   }, []);
   const claim = useCallback(() => update.current(true), []);
   const access = useCallback(() => ({ viewId, writeToken: token.current }), [viewId]);

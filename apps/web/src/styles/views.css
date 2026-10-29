@@ -8,6 +8,7 @@
 /* The mode bar: a segmented row like the others; the raised cell slides to the chosen mode. */
 .mode-bar {
   position: relative;
+  isolation: isolate;
   display: inline-flex;
   align-items: center;
   gap: 2px;

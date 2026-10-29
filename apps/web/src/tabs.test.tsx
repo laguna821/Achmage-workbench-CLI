@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { activeTab, activateTab, closeTab, findTab, moveTab, tabsOf, withTabs } from "./tabs.ts";
-import { focusedPane, restoreLayout, setPane, singleLayout, splitPane } from "./panes.ts";
+import { closePane, focusPane, focusedPane, restoreLayout, setPane, singleLayout, splitPane } from "./panes.ts";
 
 type View = { kind: "work" } | { kind: "document"; artifactId: string } | { kind: "new" };
 const home = { view: { kind: "new" } as View, workId: null, sessionId: null };
@@ -8,6 +8,19 @@ const document = (id: string) => ({ view: { kind: "document", artifactId: id } a
 const open = (layout: ReturnType<typeof singleLayout<View>>, id: string) => withTabs(setPane(layout, layout.focus, document(id)), layout);
 
 describe("group tabs", () => {
+  it("keeps a generic conversation's tab and attachments identity while focus moves to a document", () => {
+    const start = withTabs(singleLayout<View>({ kind: "work" }, "project"));
+    const firstId = activeTab(start.panes[0]!).id;
+    const divided = withTabs(splitPane(start, "a", "right", { ...document("source"), sessionId: "session-one" }, "session-one"), start);
+    const left = withTabs(focusPane(divided, "a", "session-one"), divided);
+    const back = withTabs(focusPane(left, divided.focus, "session-one"), left);
+    expect(back.panes[0]!.activeTabId).toBe(firstId);
+    expect(back.panes[0]!.tabs).toHaveLength(1);
+    expect(back.panes[0]!.sessionId).toBeNull();
+    expect(back.panes[1]!.sessionId).toBe("session-one");
+    const closed = withTabs(closePane(back, "a"), back);
+    expect(closed.panes[0]!.sessionId).toBe("session-one");
+  });
   it("keeps stable entity IDs and MRU when changing active documents", () => {
     const initial = withTabs(singleLayout<View>(home.view, null));
     const a = open(initial, "a"), aid = activeTab(focusedPane(a)).id;

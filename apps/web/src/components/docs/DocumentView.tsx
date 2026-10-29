@@ -4,7 +4,7 @@ import { diagramComponents } from "../Diagram.tsx";
 import { ObsidianMarkdown, obsidianComponents } from "../../markdown/obsidian.tsx";
 
 const DRAWN = diagramComponents();
-import { FORMAT_LABEL, PROVIDER_LABEL, isOfficeFormat, type CreateTarget, type Artifact, type ArtifactRevision, type Attachment, type DocRef, type Proposal, type Session, type Work } from "@workbench/contracts";
+import { FORMAT_LABEL, PROVIDER_LABEL, isOfficeFormat, type CreateTarget, type Artifact, type ArtifactRevision, type Attachment, type DocRef, type DocRefInput, type Proposal, type Session, type Work } from "@workbench/contracts";
 import { ApiRequestError, type Api } from "../../api.ts";
 import { accentStyle, useAppearance } from "../../appearance.ts";
 import { ago } from "../../format.ts";
@@ -39,6 +39,8 @@ import { useDocImages } from "./DocImages.tsx";
 import type { TabUiState } from "../../panes.ts";
 import { useDocumentSession } from "../../document-session.ts";
 import { clearRecoveredDraft, keepDraft, newestDraft } from "../../document-drafts.ts";
+import { registerDocumentCommands } from "../../document-commands.ts";
+import { useDocumentReferences } from "../../document-references.ts";
 
 /** Save operations only; "unsaved" is derived from the text, never stored (no stale overwrite). */
 type SaveState = "idle" | "saving" | "failed" | "conflict";
@@ -101,6 +103,8 @@ export default function DocumentView({
   const canEditFormat = Boolean(artifact && artifact.format !== "hwp" && artifact.format !== "pdf");
   const lease = useDocumentSession(rootApi, artifact ? artifactId : null, session?.id ?? null, canEditFormat);
   const api = lease.api;
+  const references = useDocumentReferences(rootApi, artifactId, onToast);
+  const [attachOpen, setAttachOpen] = useState(false);
   const everWriter = useRef(false);
   if (lease.canWrite) everWriter.current = true;
   const recoveredDraft = useRef<ReturnType<typeof newestDraft>>(null);
@@ -278,6 +282,19 @@ export default function DocumentView({
   const unsaved = Boolean(base && text !== base.text);
   const dirty = unsaved || officeStatus.dirty || designStatus.state === "dirty" || designStatus.state === "saving";
   useEffect(() => { lease.report(dirty, base?.revision ?? officeStatus.revision ?? designStatus.revision ?? artifact?.revision); }, [dirty, base?.revision, officeStatus.revision, designStatus.revision, artifact?.revision, lease.report]);
+  useEffect(() => registerDocumentCommands(lease.viewId, {
+    artifactId,
+    dirty: () => dirty,
+    save: async () => {
+      const submitted = saving.current ? savingText.current : text;
+      const revision = await save();
+      if (revision === null) return null;
+      if (officeEditing && officeRef.current) await officeRef.current.leave();
+      if (!design && !officeEditing && latestText.current !== submitted) throw new Error("참조 문서가 저장 중 바뀌었습니다. 입력을 마친 뒤 다시 보내 주세요.");
+      await lease.report(false, revision);
+      return revision;
+    },
+  }), [artifactId, lease.viewId, dirty, save, text, design, officeEditing, lease.report]);
 
   // A new revision from elsewhere (an applied proposal, a revert): reload when nothing is unsaved here.
   useEffect(() => {
@@ -403,7 +420,7 @@ export default function DocumentView({
   const mentionItems: MentionItem[] = [
     ...workDocs.filter((entry) => openIds.includes(entry.id)),
     ...workDocs.filter((entry) => !openIds.includes(entry.id)),
-  ].map((entry) => ({ id: entry.id, name: entry.name, format: entry.format, group: openIds.includes(entry.id) ? "open" : "work", hint: `r${entry.revision}` }));
+  ].map((entry) => ({ id: entry.id, name: entry.name, format: entry.format, group: openIds.includes(entry.id) ? "open" : "work", hint: references.hint(entry) }));
   const working = Object.values(state.proposals).find((proposal) => proposal.artifactId === artifactId && proposal.status === "running");
   const reviewing = Object.values(state.handoffs).filter(
     (handoff) => handoff.status === "sent" && handoff.refs.some((ref) => ref.artifactId === artifactId),
@@ -979,8 +996,9 @@ export default function DocumentView({
                 const other = state.artifacts[id];
                 return other ? (
                   <span key={id} className="ref-chip">
-                    <Icon name="file" size={12} /> {other.name} · r{other.revision} · 읽기
-                    <button type="button" onClick={() => setOthers(others.filter((entry) => entry !== id))} aria-label="문서 빼기">
+                    <Icon name="file" size={12} /> {other.name} · {references.pins[id] ? `r${references.pins[id].revision} 고정 · 미저장 제외` : `${references.hint(other)} · 보낼 때 저장`} · 읽기
+                    <button type="button" className="ref-role" onClick={() => void references.toggleSnapshot(id)}>{references.pins[id] ? "최신으로" : "저장된 판만"}</button>
+                    <button type="button" onClick={() => { setOthers(others.filter((entry) => entry !== id)); references.forget(id); }} aria-label="문서 빼기">
                       <Icon name="x" size={11} />
                     </button>
                   </span>
@@ -1001,16 +1019,13 @@ export default function DocumentView({
             </div>
           }
           onSend={async (message) => {
-            const revision = await save();
-            if (revision === null) {
-              onToast("문서를 저장하지 못해 보내지 않았습니다. 충돌이나 저장 오류를 먼저 확인해 주세요.");
-              return false;
-            }
-            const refs: DocRef[] = includeDoc ? [{ artifactId, revision, mode: effectiveMode, selection: selection && textual ? selection : selection ? { ...selection } : null }] : [];
+            const candidates: DocRefInput[] = includeDoc ? [{ artifactId, ...(selection ? { revision: base?.revision ?? artifact.revision } : {}), mode: effectiveMode, selection: selection && textual ? selection : selection ? { ...selection } : null }] : [];
             for (const id of others) {
               const other = state.artifacts[id];
-              if (other) refs.push({ artifactId: other.id, revision: other.revision, mode: "review", selection: null });
+              if (other) candidates.push({ artifactId: other.id, mode: "review", selection: null });
             }
+            const refs = await references.resolve(candidates);
+            if (!refs) return false;
             const { carried, done } = await pending.take();
             const sent = await onSend(session, message, refs, handoffTo, handoffTo ? null : create, carried);
             // The answer will come up in the drawer, under the document.
@@ -1018,6 +1033,7 @@ export default function DocumentView({
             if (sent) {
               if (handoffTo) setHandoffTo(null);
               setOthers([]);
+              references.clear();
               setCreate(null);
               done();
             }
@@ -1027,6 +1043,17 @@ export default function DocumentView({
           target={
             <>
             <CreateTargetButton tools={state.tools} onPick={(format) => setCreate({ format, name: stemOf(artifact.name) })} />
+            <div className="anchor">
+              <button type="button" className="select-button" aria-label="참조 문서 붙이기" onClick={() => setAttachOpen(!attachOpen)}><Icon name="plus" size={14} /> 문서</button>
+              <Popover open={attachOpen} onClose={() => setAttachOpen(false)} placement="above" align="right">
+                <div className="menu-label">참조 문서 · 보내기 전에 저장 확인</div>
+                {mentionItems.map((item) => <MenuItem key={item.id} active={others.includes(item.id)} hint={item.hint} onSelect={() => {
+                  setOthers((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id]);
+                  references.forget(item.id); setAttachOpen(false);
+                }}>{item.name}</MenuItem>)}
+                {!mentionItems.length ? <div className="menu-label">이 작업에 다른 문서가 없습니다.</div> : null}
+              </Popover>
+            </div>
             <div className="anchor">
               <button type="button" className="select-button" onClick={() => setTargetOpen(!targetOpen)}>
                 {sendTarget ? <EngineMark provider={sendTarget.provider} size={14} /> : null}
