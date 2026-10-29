@@ -92,7 +92,7 @@ export function WorktreeReview({ api, session, onClose, onToast, onError }: { ap
           </>
         ) : null}
         <footer className="worktree-foot">
-          <button type="button" className="button danger" onClick={() => void act("discard")} disabled={busy} title="격리 사본과 그 가지를 지우고 세션을 보관합니다">
+          <button type="button" className="button danger" onClick={() => void act("discard")} disabled={busy} title="격리 사본의 파일을 버리고 세션을 보관합니다. 미병합 커밋은 브랜치에 남습니다.">
             <Icon name="x" size={14} /> 버리기
           </button>
           <span className="worktree-spacer" />

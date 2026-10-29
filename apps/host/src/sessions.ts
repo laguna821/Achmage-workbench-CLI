@@ -1020,8 +1020,9 @@ export class SessionManager {
     const session = this.requireSession(sessionId);
     if (!session.worktree) throw new HttpError(409, "no_worktree", "격리 사본에서 일하는 세션이 아닙니다.");
     if (session.status !== "idle" && session.status !== "error") throw new HttpError(409, "session_busy", "응답이 끝난 뒤에 버릴 수 있습니다.");
-    await removeWorktree(session.worktree);
-    this.sink.upsertItem(sessionId, { kind: "notice", id: `worktree-removed:${Date.now()}`, level: "info", text: "격리 사본을 버렸습니다. 이 세션은 보관함으로 옮겼습니다.", at: Date.now() });
+    const { branchRetained } = await removeWorktree(session.worktree);
+    const retained = branchRetained ? ` 원래 폴더에 병합되지 않은 커밋이 있어 ${session.worktree.branch} 브랜치는 보존했습니다.` : "";
+    this.sink.upsertItem(sessionId, { kind: "notice", id: `worktree-removed:${Date.now()}`, level: "info", text: `격리 사본을 버렸습니다. 이 세션은 보관함으로 옮겼습니다.${retained}`, at: Date.now() });
     this.saveSession({ ...this.requireSession(sessionId), archivedAt: Date.now() });
     return { ok: true };
   }

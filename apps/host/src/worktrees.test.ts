@@ -8,6 +8,7 @@ import { EventBus } from "./bus.ts";
 import { SessionManager } from "./sessions.ts";
 import { Store } from "./store.ts";
 import { emptyStatus, type AdapterSink, type ProviderAdapter } from "./providers/types.ts";
+import { removeWorktree } from "./worktrees.ts";
 
 // "격리 사본": a session working in a git worktree, reviewed and applied (or thrown away).
 
@@ -97,6 +98,73 @@ describe("격리 사본", () => {
     writeFileSync(join(repo, "README.md"), "원래 폴더에서 고친 줄\n");
     await expect(manager.applyWorktree(session.id)).rejects.toThrow(/그대로 적용할 수 없습니다/);
     expect(readFileSync(join(repo, "README.md"), "utf8")).toBe("원래 폴더에서 고친 줄\n");
+  });
+
+  it("review and apply preserve both indexes, including a partially staged file", async () => {
+    const { manager, work, repo } = setup();
+    const session = await manager.createIsolatedSession(work.id, { provider: "codex" });
+    const copy = session.worktree!.path;
+    writeFileSync(join(copy, "README.md"), "스테이지한 줄\n");
+    git(copy, "add", "README.md");
+    writeFileSync(join(copy, "README.md"), "최종 작업 줄\n");
+    writeFileSync(join(copy, "새 파일.md"), "새 파일\n");
+    const indexPath = git(copy, "rev-parse", "--path-format=absolute", "--git-path", "index").trim();
+    const originalIndex = git(repo, "rev-parse", "--path-format=absolute", "--git-path", "index").trim();
+    const before = readFileSync(indexPath);
+    const rootBefore = readFileSync(originalIndex);
+    const changes = await manager.worktreeChanges(session.id);
+    expect(changes.files).toContainEqual({ path: "새 파일.md", status: "added" });
+    expect(changes.diff).toContain("+최종 작업 줄");
+    expect(readFileSync(indexPath)).toEqual(before);
+    await manager.applyWorktree(session.id);
+    expect(readFileSync(indexPath)).toEqual(before);
+    expect(readFileSync(originalIndex)).toEqual(rootBefore);
+    expect(readFileSync(join(repo, "새 파일.md"), "utf8")).toBe("새 파일\n");
+  });
+
+  it("keeps literal tab/newline names and applies new empty and binary files", async () => {
+    const { manager, work, repo } = setup();
+    const session = await manager.createIsolatedSession(work.id, { provider: "codex" });
+    const copy = session.worktree!.path;
+    const name = process.platform === "win32" ? "공백 파일.md" : "탭\t줄\n파일.md";
+    writeFileSync(join(copy, name), "이름을 보존\n");
+    writeFileSync(join(copy, "empty.txt"), "");
+    const bytes = Buffer.from([0, 255, 0, 1, 2]);
+    writeFileSync(join(copy, "new.bin"), bytes);
+    const changes = await manager.worktreeChanges(session.id);
+    expect(changes.files).toContainEqual({ path: name, status: "added" });
+    await manager.applyWorktree(session.id);
+    expect(readFileSync(join(repo, name), "utf8")).toBe("이름을 보존\n");
+    expect(readFileSync(join(repo, "empty.txt"))).toHaveLength(0);
+    expect(readFileSync(join(repo, "new.bin"))).toEqual(bytes);
+  });
+
+  it("does not archive a session or report success when a locked worktree cannot be removed", async () => {
+    const { manager, work, repo } = setup();
+    const session = await manager.createIsolatedSession(work.id, { provider: "codex" });
+    git(repo, "worktree", "lock", session.worktree!.path);
+    await expect(manager.discardWorktree(session.id)).rejects.toThrow(/격리 사본/);
+    expect(existsSync(session.worktree!.path)).toBe(true);
+    expect(manager.snapshot().sessions.find((entry) => entry.id === session.id)?.archivedAt).toBeNull();
+  });
+
+  it("keeps a branch with commits that have not been merged into the original", async () => {
+    const { manager, work, repo } = setup();
+    const session = await manager.createIsolatedSession(work.id, { provider: "codex" });
+    writeFileSync(join(session.worktree!.path, "committed.md"), "보존할 커밋\n");
+    git(session.worktree!.path, "add", ".");
+    git(session.worktree!.path, "commit", "-qm", "keep this history");
+    await manager.discardWorktree(session.id);
+    expect(existsSync(session.worktree!.path)).toBe(false);
+    expect(git(repo, "branch", "--list", session.worktree!.branch)).toContain(session.worktree!.branch);
+  });
+
+  it("refuses stale branch metadata before deleting anything", async () => {
+    const { manager, work, repo } = setup();
+    const session = await manager.createIsolatedSession(work.id, { provider: "codex" });
+    await expect(removeWorktree({ ...session.worktree!, branch: "main" })).rejects.toThrow(/브랜치/);
+    expect(existsSync(session.worktree!.path)).toBe(true);
+    expect(git(repo, "branch", "--list", "main")).toContain("main");
   });
 
   it("throws the copy and its branch away and archives the session", async () => {
