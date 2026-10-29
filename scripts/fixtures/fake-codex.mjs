@@ -36,6 +36,7 @@ import { appendFileSync, existsSync, mkdirSync, statSync, writeFileSync } from "
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import { crc32, deflateSync } from "node:zlib";
 import { pagePng } from "./png.mjs";
@@ -367,6 +368,17 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
   };
   if (notes.length) told(`받은 노트 사본: ${notes.join(" | ")}\n\n`);
   if (text.includes("맥락")) told(`맥락 카드:\n${thread.instructions ?? "(없음)"}\n샌드박스: ${thread.mode} ${JSON.stringify(thread.policy ?? null)}\n\n`);
+  // "받은 글": the request exactly as the gateway handed it over (what changed before it, the pins…).
+  if (text.includes("받은 글")) told(`받은 글:\n${text}\n\n`);
+  // "노트에 적어: <path>": a line appended to that file, reported as Codex reports a file change.
+  const noteTarget = /노트에 적어: ([^\n]+)/.exec(text)?.[1]?.trim();
+  if (noteTarget) {
+    appendFileSync(noteTarget, "\n엔진이 적은 줄\n");
+    const changeId = `fc_${randomUUID().slice(0, 8)}`;
+    const change = { type: "fileChange", id: changeId, changes: [{ path: noteTarget, kind: { type: "update", move_path: null }, diff: "+엔진이 적은 줄" }], status: "completed" };
+    notify("item/started", { threadId, turnId, item: { ...change, status: "inProgress" } });
+    notify("item/completed", { threadId, turnId, item: change });
+  }
   const target = /볼트에 써: ([^\n]+)/.exec(text)?.[1]?.trim();
   if (target) {
     // The sandbox decides, as Codex's would: full access writes anywhere, read-only nowhere,

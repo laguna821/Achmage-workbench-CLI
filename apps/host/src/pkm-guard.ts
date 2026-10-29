@@ -15,24 +15,57 @@ export const CARD_LIMIT = 2048;
 
 const bytes = (text: string) => Buffer.byteLength(text, "utf8");
 
+/** The project part of a context card (project.ts `cardInfo`). */
+export type CardProject = { note: string; exists: boolean; stage: string | null; tags: string[]; decisions: string[]; questions: string[] };
+
+/** A line cut to at most this many UTF-8 bytes (on a character boundary). */
+function clip(text: string, limit: number) {
+  let out = text.replace(/\s+/g, " ").trim();
+  if (bytes(out) <= limit) return out;
+  while (bytes(`${out}…`) > limit) out = out.slice(0, -1);
+  return `${out}…`;
+}
+
 /**
- * A new session's context card: the work, and where the vault and the notes pinned to the work are,
- * in at most 2 KB. The general context (decisions, research) already comes from the Achmage hooks.
+ * A new session's context card, in at most 2 KB: the work, its project note (stage, tags, recent
+ * decisions, open questions), where the vault is and which of its folders the user hid, and the
+ * notes pinned to the work. The general context (decisions, research) already comes from the
+ * Achmage hooks.
  */
-export function contextCard(input: { title: string; folders: string[]; cwd: string; vault: string | null; pinned: string[] }) {
+export function contextCard(input: { title: string; folders: string[]; cwd: string; vault: string | null; pinned: string[]; project?: CardProject | null; hidden?: string[]; find?: string | null }) {
   const head = [
     "[Achmage Workbench 맥락 카드]",
     `작업: ${input.title}${input.folders.length ? ` · 분류: ${input.folders.join(" / ")}` : ""}`,
     `작업 폴더: ${input.cwd}`,
   ];
+  const project = input.project ?? null;
+  if (project) {
+    head.push(`프로젝트 노트: ${project.note}${project.exists ? "" : " (아직 없음)"} — 사람이 단계·태그·결정·열린 질문을 정리하는 곳입니다. 고쳐 달라는 요청이 있을 때만 고치세요.`);
+    const facts = [project.stage ? `단계: ${project.stage}` : null, project.tags.length ? `태그: ${project.tags.map((tag) => `#${tag}`).join(" ")}` : null].filter(Boolean);
+    if (facts.length) head.push(clip(facts.join(" · "), 240));
+  }
   if (input.vault) {
     head.push(
       `옵시디언 볼트(사람 원본, 읽기 전용): ${input.vault}`,
       "- 관련 노트는 볼트에서 찾아 읽어도 됩니다. 볼트 안에는 파일을 만들거나 고치거나 지우지 마세요(Workbench가 막습니다).",
       "- 볼트에 남길 인사이트는 Achmage MCP(draft_insight → publish_insight)로만 냅니다.",
     );
+    // The user hid these in Notebook Navigator: hidden from engines too (decision 2026-10-29).
+    if (input.hidden?.length) head.push(clip(`- 사용자가 숨긴 폴더·파일(읽지도 찾지도 마세요): ${input.hidden.join(", ")}`, 360));
   }
+  if (input.find) head.push(clip(input.find, 240));
   const lines = [...head];
+  const fits = (more: string[]) => bytes([...lines, ...more].join("\n")) <= CARD_LIMIT;
+  if (project?.decisions.length) {
+    const block = ["최근 결정(사람이 고른 것, 오래된 것부터):", ...project.decisions.map((entry) => `- ${clip(entry, 160)}`)];
+    while (block.length > 1 && !fits(block)) block.splice(1, 1);
+    if (block.length > 1) lines.push(...block);
+  }
+  if (project?.questions.length) {
+    const block = ["열린 질문:", ...project.questions.map((entry) => `- ${clip(entry, 160)}`)];
+    while (block.length > 1 && !fits(block)) block.splice(1, 1);
+    if (block.length > 1) lines.push(...block);
+  }
   if (input.pinned.length) {
     lines.push("이 작업에 고정한 노트(먼저 읽을 것):");
     for (const [index, path] of input.pinned.entries()) {

@@ -286,7 +286,7 @@ export function docEntries(state: State): DocEntry[] {
   return Object.values(state.artifacts)
     .flatMap((artifact) => {
       const work = state.works[artifact.workId];
-      return work && !workHidden(state, work) ? [{ artifact, work, pending: pending.get(artifact.id) ?? 0, running: running.get(artifact.id) ?? 0 }] : [];
+      return work && !workHidden(state, work) && artifact.role !== "project-note" ? [{ artifact, work, pending: pending.get(artifact.id) ?? 0, running: running.get(artifact.id) ?? 0 }] : [];
     })
     .sort((a, b) => b.artifact.updatedAt - a.artifact.updatedAt);
 }

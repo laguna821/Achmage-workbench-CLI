@@ -1,5 +1,11 @@
 import type {
   AgentBrowserStatus,
+  ChangeLine,
+  ProjectEntryRequest,
+  ProjectEvent,
+  ProjectPage,
+  ProjectStage,
+  ProjectWrite,
   ApiError,
   Artifact,
   Attachment,
@@ -133,7 +139,22 @@ export class Api {
     mode: "auto" | "steer" | "queue" = "auto",
     attachments: Attachment[] = [],
     plan = false,
-  ) => this.request<SendResult>("POST", `/api/sessions/${sessionId}/messages`, { requestId, text, refs, create, mode, attachments, plan });
+    extra: { omitChanges?: string[] } = {},
+  ) => this.request<SendResult>("POST", `/api/sessions/${sessionId}/messages`, { requestId, text, refs, create, mode, attachments, plan, ...extra });
+  /** A work as a project note (project.ts): the page, writes to the note (each undoable), the stages. */
+  project = (workId: string) => this.request<ProjectPage>("GET", `/api/projects/${encodeURIComponent(workId)}`);
+  projectEvents = (workId: string) => this.request<ProjectEvent[]>("GET", `/api/projects/${encodeURIComponent(workId)}/events`);
+  setProjectProperty = (workId: string, key: string, values: string[] | null) => this.request<ProjectWrite>("PUT", `/api/projects/${encodeURIComponent(workId)}/property`, { key, values });
+  setProjectStage = (workId: string, stage: string | null) => this.request<ProjectWrite>("PUT", `/api/projects/${encodeURIComponent(workId)}/stage`, { stage });
+  addProjectEntry = (workId: string, entry: ProjectEntryRequest) => this.request<ProjectWrite>("POST", `/api/projects/${encodeURIComponent(workId)}/entries`, entry);
+  setProjectQuestion = (workId: string, line: number, done: boolean) => this.request<ProjectWrite>("PUT", `/api/projects/${encodeURIComponent(workId)}/entries/${line}`, { done });
+  setProjectBody = (workId: string, body: string, baseRevision: number | null) => this.request<ProjectWrite>("PUT", `/api/projects/${encodeURIComponent(workId)}/body`, { body, baseRevision });
+  undoProject = (workId: string, token: string) => this.request<ProjectPage>("POST", `/api/projects/${encodeURIComponent(workId)}/undo`, { token });
+  revertProjectNote = (workId: string) => this.request<ProjectWrite>("POST", `/api/projects/${encodeURIComponent(workId)}/revert`);
+  projectStages = () => this.request<ProjectStage[]>("GET", "/api/projects/stages");
+  setProjectStages = (stages: ProjectStage[]) => this.request<ProjectStage[]>("PUT", "/api/projects/stages", { stages });
+  /** "알릴 변경": what the next request of a session will be told changed since its last one. */
+  changes = (sessionId: string) => this.request<ChangeLine[]>("GET", `/api/projects/changes?${new URLSearchParams({ sessionId })}`);
   /** A pasted or dropped file, kept by the gateway until a request names it. */
   async uploadAttachment(file: File): Promise<Attachment> {
     const response = await fetch("/api/attachments", {

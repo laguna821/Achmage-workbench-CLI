@@ -133,6 +133,11 @@ export function reducer(state: State, action: Action): State {
           return { ...next, schedules: event.schedules };
         case "pkm.changed":
           return { ...next, pkm: { ...state.pkm, [event.scope]: event.version } };
+        case "project.changed": {
+          // A project's note or the stages changed: a counter per project ("*" for the stages).
+          const key = `project:${event.workId ?? "*"}`;
+          return { ...next, pkm: { ...state.pkm, [key]: (state.pkm[key] ?? 0) + 1 } };
+        }
         case "provider.status":
           return { ...next, providers: { ...state.providers, [event.status.provider]: event.status } };
         case "item.upserted":

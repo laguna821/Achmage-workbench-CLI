@@ -1,0 +1,759 @@
+/* The project page (프로젝트 = 노트 한 장): properties on top, one line of what needs the person,
+   then the record, decisions and questions, sessions, files and the note. */
+
+.project-view {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.project-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.project-column {
+  padding-top: 22px;
+  padding-bottom: 32px;
+}
+
+.project-crumbs {
+  font-size: 12.5px;
+  margin-bottom: 4px;
+}
+
+.project-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.project-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-head-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.project-continue {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Properties */
+.project-props {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.project-stage {
+  --stage: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px 0 8px;
+  border: 1px solid color-mix(in srgb, var(--stage) 45%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--stage) 12%, transparent);
+  color: color-mix(in srgb, var(--stage) 75%, var(--text));
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.project-stage.empty {
+  border-style: dashed;
+  border-color: var(--line);
+  background: none;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.project-stage-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--stage);
+}
+
+.project-stage.empty .project-stage-dot {
+  background: var(--line);
+}
+
+.project-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 4px 0 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: color-mix(in srgb, var(--accent) 70%, var(--text));
+  font-size: 12.5px;
+}
+
+.project-chip.link {
+  background: var(--surface-muted, color-mix(in srgb, var(--text) 6%, transparent));
+  color: var(--text);
+}
+
+.project-chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: inherit;
+  opacity: 0.45;
+  cursor: pointer;
+}
+
+.project-chip-x:hover,
+.project-chip-x:focus-visible {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+.project-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--line);
+}
+
+.project-add {
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.project-add:hover,
+.project-add:focus-visible {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+}
+
+.project-add-input {
+  height: 26px;
+  min-width: 140px;
+  padding: 0 8px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.project-other-props {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 14px;
+  margin: 10px 0 0;
+  font-size: 13px;
+}
+
+.project-prop {
+  display: contents;
+}
+
+.project-prop dt {
+  color: var(--muted);
+}
+
+.project-prop dd {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+}
+
+.project-prop-value {
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: text;
+}
+
+.project-prop-value:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+/* What needs the person */
+.project-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+}
+
+.project-fact {
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+}
+
+button.project-fact {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.project-fact.attention {
+  background: var(--amber-soft, color-mix(in srgb, #e2a400 16%, transparent));
+  color: var(--amber-text, #8a5a00);
+}
+
+.project-fact.error {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+.project-fact.proposal {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: color-mix(in srgb, var(--accent) 80%, var(--text));
+}
+
+.project-fact.quiet {
+  padding: 0 4px;
+  color: var(--muted);
+}
+
+.project-fact.path {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-details-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.project-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px 18px;
+  margin: 10px 0 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  font-size: 12.5px;
+}
+
+.project-details dt {
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+.project-details dd {
+  margin: 0;
+}
+
+.project-engine-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  font-size: 13px;
+}
+
+/* Sections */
+.project-section {
+  margin-top: 28px;
+}
+
+.project-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.project-section-head h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.project-empty {
+  padding: 6px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* The record */
+.project-day + .project-day {
+  margin-top: 10px;
+}
+
+.project-day-label {
+  margin-bottom: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.project-events {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-event {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 6px;
+}
+
+.project-event:hover,
+.project-event:focus-within {
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.project-event-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 6px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-event-time {
+  flex: none;
+  width: 44px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+}
+
+.project-event-by {
+  flex: none;
+  min-width: 42px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.project-event-by.by-claude {
+  color: #c7633f;
+}
+
+.project-event-by.by-codex {
+  color: #3a6fd8;
+}
+
+.project-event-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-event.kind-decision .project-event-text::before {
+  content: "결정 · ";
+  color: var(--muted);
+}
+
+.project-event.kind-question .project-event-text::before {
+  content: "질문 · ";
+  color: var(--muted);
+}
+
+.project-event-keep {
+  flex: none;
+  visibility: hidden;
+  margin-right: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.project-event:hover .project-event-keep,
+.project-event:focus-within .project-event-keep {
+  visibility: visible;
+}
+
+/* Decisions and open questions: two lists side by side when there is room. */
+.project-entries {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px 28px;
+}
+
+.project-entry-list ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-entry {
+  padding: 4px 0;
+  font-size: 13.5px;
+}
+
+.project-entry p {
+  margin: 0;
+}
+
+.project-entry.question label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.project-entry.question.done {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+/* Sessions and files */
+.project-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-row:hover,
+.project-row:focus-visible {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.project-row-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-row-status {
+  flex: none;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.project-row-status.status-awaitingApproval {
+  color: var(--amber-text, #8a5a00);
+  font-weight: 600;
+}
+
+.project-row-status.status-error {
+  color: var(--danger);
+}
+
+.project-row-status.status-running,
+.project-row-status.status-starting {
+  color: var(--accent);
+}
+
+.project-row-time {
+  flex: none;
+  min-width: 70px;
+  text-align: right;
+  font-size: 12.5px;
+}
+
+/* The note */
+.project-note-body {
+  padding: 4px 2px;
+}
+
+.project-note-editor {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.project-note-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.project-note-path {
+  margin-top: 6px;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.project-card summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.project-card pre {
+  margin: 8px 0 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  white-space: pre-wrap;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .project-event-keep,
+  .project-chip-x {
+    transition: opacity 0.12s ease, background 0.12s ease;
+  }
+}
+
+/* "알릴 변경 N" above the input */
+.change-chip-area {
+  margin-bottom: 6px;
+}
+
+.change-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.change-list {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  list-style: none;
+  font-size: 13px;
+}
+
+.change-list li + li {
+  margin-top: 4px;
+}
+
+.change-list label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  cursor: pointer;
+}
+
+/* "단계 이름·색" */
+.stage-dialog {
+  width: min(720px, calc(100vw - 40px));
+  max-height: min(86vh, 760px);
+  overflow-y: auto;
+  padding: 22px 24px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--popover-shadow);
+}
+
+.stage-dialog h2 {
+  margin: 0 0 6px;
+  font-size: 19px;
+}
+
+.stage-dialog p {
+  margin: 0 0 14px;
+  font-size: 13px;
+}
+
+.stage-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stage-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+}
+
+.stage-swatch {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.stage-name {
+  width: 120px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+}
+
+.stage-colors {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.stage-color {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.stage-color.on {
+  border-color: var(--text);
+}
+
+.stage-hex {
+  width: 78px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12px;
+}
+
+.stage-archive {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.stage-tools {
+  margin-left: auto;
+  display: inline-flex;
+}
+
+.stage-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.stage-spacer {
+  flex: 1;
+}
+
+/* The conversation header: "분류 › 프로젝트 이름" on one line, the name opening the project page. */
+.breadcrumb-anchor:has(.project-link) {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.breadcrumb-anchor .breadcrumb-sep {
+  flex: none;
+  margin: 0 2px 0 -4px;
+  color: var(--muted);
+}
+
+.breadcrumb.project-link {
+  margin-left: 0;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-weight: 600;
+}

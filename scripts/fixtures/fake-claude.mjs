@@ -242,6 +242,14 @@ async function runTurn(text) {
   // A document edit: the gateway names the working copy to change; the file itself stays as it is.
   const working = text.match(/작업 사본만 수정하세요: (.+)/);
   if (text.includes("고쳐") && working) appendFileSync(resolve(process.cwd(), working[1].trim()), "\n\n고친 문단입니다. 도입부를 질문 하나로 시작하게 바꿨습니다.\n");
+  // "노트에 적어: <path>": a line appended to that file through the Edit tool, as Claude Code edits.
+  const noteTarget = /노트에 적어: ([^\n]+)/.exec(text)?.[1]?.trim();
+  if (noteTarget) {
+    const editId = `toolu_${randomUUID().slice(0, 8)}`;
+    send({ type: "assistant", message: { id: `msg_${randomUUID().slice(0, 8)}`, type: "message", role: "assistant", model: MODEL, content: [{ type: "tool_use", id: editId, name: "Edit", input: { file_path: noteTarget, old_string: "", new_string: "엔진이 적은 줄" } }], stop_reason: "tool_use", stop_sequence: null, usage: { input_tokens: 10, output_tokens: 20, cache_creation_input_tokens: 0, cache_read_input_tokens: used } }, parent_tool_use_id: null, ...base() });
+    appendFileSync(noteTarget, "\n엔진이 적은 줄\n");
+    send({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: editId, content: "edited", is_error: false }] }, parent_tool_use_id: null, ...base() });
+  }
   let guardNote = "";
   const target = /볼트에 써: ([^\n]+)/.exec(text)?.[1]?.trim();
   if (target) {
@@ -282,6 +290,7 @@ async function runTurn(text) {
     if (notes.length) chunks.push({ text: `받은 노트 사본: ${notes.join(" | ")}\n\n`, wait: 30 });
     if (guardNote) chunks.push({ text: guardNote, wait: 30 });
     if (text.includes("맥락")) chunks.push({ text: `맥락 카드:\n${appendSystemPrompt ?? "(없음)"}\n\n`, wait: 30 });
+    if (text.includes("받은 글")) chunks.push({ text: `받은 글:\n${text}\n\n`, wait: 30 });
     if (skill) chunks.push({ text: `스킬 /정리를 실행했습니다: ${skill[1] ?? ""}\n\n`, wait: 30 });
     if (seen) chunks.push({ text: `요청을 받았습니다 (${seen[1]}).\n\n`, wait: 30 });
     const linked = linkReply(text, "Claude");

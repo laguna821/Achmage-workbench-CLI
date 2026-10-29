@@ -1,0 +1,601 @@
+import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import {
+  DEFAULT_STAGES,
+  STAGE_KEY,
+  isUnseen,
+  type Artifact,
+  type ArtifactRevision,
+  type ChangeLine,
+  type ProjectEntryRequest,
+  type ProjectEvent,
+  type ProjectFacts,
+  type ProjectNote,
+  type ProjectPage,
+  type ProjectStage,
+  type ProjectWrite,
+  type Provider,
+  type Session,
+  type Work,
+} from "@workbench/contracts";
+import { PROJECT_NOTE_IN_GIT, WORKBENCH_DIR } from "./artifacts.ts";
+import type { EventBus } from "./bus.ts";
+import { HttpError } from "./errors.ts";
+import type { Pkm } from "./pkm.ts";
+import { ID_KEY, appendEntry, newNote, noteFileName, readNote, setBody, setEntryDone, setFrontmatterKey } from "./project-note.ts";
+import type { SessionManager } from "./sessions.ts";
+import type { Store } from "./store.ts";
+
+// "프로젝트 = 노트 한 장" (docs/design/프로젝트-노트-설계.md). A work's note is a real Markdown file in
+// its folder — `‹이름›.md`, or `.workbench/project.md` in a git repository so the repository gains no
+// visible file — made the first time a person writes something. What its sessions did is counted
+// when shown (AI 0) and never written into the file. Every write can be undone while the file is
+// still as that write left it.
+
+const NOTES_KEY = "project.notes";
+const STAGES_KEY = "project.stages";
+const TOLD_KEY = "project.told";
+const ENTRIES_KEY = "project.entries";
+const WEEK = 7 * 24 * 3600 * 1000;
+/** How much the change block before a request may take. */
+const CHANGE_LIMIT = 1000;
+
+type Told = { at: number; noteRevision: number };
+type EntryLog = { workId: string; at: number; section: "decision" | "question"; text: string; sessionId: string | null; itemId: string | null };
+type Write = { workId: string; path: string; before: Buffer | null; after: Buffer; at: number; unarchive: boolean; rearchive: boolean };
+
+const bytes = (text: string) => Buffer.byteLength(text, "utf8");
+const firstLine = (text: string, limit = 120) => {
+  const line = text.split("\n").find((entry) => entry.trim())?.trim() ?? "";
+  return line.length > limit ? `${line.slice(0, limit - 1)}…` : line;
+};
+
+/** A decision or question line as said to an engine: without its date and source link. */
+export const entryGist = (text: string) =>
+  text
+    .replace(/\s+—\s+[^—]*\(\[원문\]\([^)]*\)\)\s*$/, "")
+    .replace(/^\d{4}-\d{2}-\d{2}\s+/, "")
+    .trim();
+
+/** Is this folder inside a git repository? (Walks up to the root looking for `.git`.) */
+export function inGitRepository(folder: string): boolean {
+  for (let at = folder; ; at = dirname(at)) {
+    if (existsSync(join(at, ".git"))) return true;
+    if (dirname(at) === at) return false;
+  }
+}
+
+/** Lines added and removed between two texts, counted as multisets of lines (no AI, rough on purpose). */
+export function lineCounts(before: string, after: string) {
+  const count = (text: string) => {
+    const map = new Map<string, number>();
+    for (const line of text.split("\n")) map.set(line, (map.get(line) ?? 0) + 1);
+    return map;
+  };
+  const a = count(before);
+  const b = count(after);
+  let added = 0;
+  let removed = 0;
+  for (const [line, n] of b) added += Math.max(0, n - (a.get(line) ?? 0));
+  for (const [line, n] of a) removed += Math.max(0, n - (b.get(line) ?? 0));
+  return { added, removed };
+}
+
+export class Projects {
+  private readonly store: Store;
+  private readonly bus: EventBus;
+  private readonly manager: SessionManager;
+  private readonly pkm: Pkm;
+  private readonly writes = new Map<string, Write>();
+  private readonly branches = new Map<string, { at: number; branch: string | null }>();
+  /** Works this module is archiving or restoring itself: the archive listener leaves those alone. */
+  private readonly quiet = new Set<string>();
+
+  constructor(store: Store, bus: EventBus, manager: SessionManager, pkm: Pkm) {
+    this.store = store;
+    this.bus = bus;
+    this.manager = manager;
+    this.pkm = pkm;
+    manager.changeHook = (session, work, omit) => this.changeBlock(session, work, omit);
+    manager.toldHook = (session) => this.markTold(session);
+    pkm.projectCard = (work) => this.cardInfo(work);
+  }
+
+  // ── stored small things ─────────────────────────────────────────────────────────────────
+
+  private readJson<T>(key: string, fallback: T): T {
+    try {
+      const raw = this.store.getMeta(key);
+      return raw ? (JSON.parse(raw) as T) : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  private writeJson(key: string, value: unknown) {
+    this.store.setMeta(key, JSON.stringify(value));
+  }
+
+  private publish(workId: string | null) {
+    this.bus.publish({ type: "project.changed", workId });
+  }
+
+  stages(): ProjectStage[] {
+    const saved = this.readJson<ProjectStage[] | null>(STAGES_KEY, null);
+    return saved?.length ? saved : DEFAULT_STAGES;
+  }
+
+  /** The stage names and colours (설정). Notes keep the names they were written with. */
+  setStages(list: ProjectStage[]): ProjectStage[] {
+    const clean: ProjectStage[] = [];
+    for (const stage of list) {
+      const name = String(stage.name ?? "").trim().slice(0, 30);
+      const color = /^#[0-9a-f]{6}$/i.test(String(stage.color ?? "")) ? String(stage.color).toLowerCase() : "#8b8d98";
+      if (!name || clean.some((entry) => entry.name === name)) continue;
+      clean.push({ name, color, ...(stage.archive ? { archive: true } : {}) });
+    }
+    if (!clean.length) throw new HttpError(400, "no_stages", "단계가 하나는 있어야 합니다.");
+    // One archive stage at most: the first one marked.
+    let archive = false;
+    for (const stage of clean) {
+      if (stage.archive && archive) delete stage.archive;
+      if (stage.archive) archive = true;
+    }
+    this.writeJson(STAGES_KEY, clean);
+    this.publish(null);
+    return clean;
+  }
+
+  // ── where the note is ───────────────────────────────────────────────────────────────────
+
+  private work(workId: string): Work {
+    const work = this.manager.view.works.get(workId);
+    if (!work) throw new HttpError(404, "work_not_found", "그 프로젝트가 없습니다.");
+    return work;
+  }
+
+  private notePaths() {
+    return this.readJson<Record<string, string>>(NOTES_KEY, {});
+  }
+
+  /** The note's path: where it was made (even if the work was renamed since), else where it would go. */
+  notePath(work: Work): string {
+    const known = this.notePaths()[work.id];
+    if (known && existsSync(known)) return known;
+    const found = this.findNote(work);
+    if (found) {
+      this.writeJson(NOTES_KEY, { ...this.notePaths(), [work.id]: found });
+      return found;
+    }
+    return this.newPath(work);
+  }
+
+  /** A note of this work the user moved or renamed: found by its `workbench_id` among the folder's notes. */
+  private findNote(work: Work): string | null {
+    const candidates = [join(work.cwd, WORKBENCH_DIR, PROJECT_NOTE_IN_GIT)];
+    try {
+      for (const name of readdirSync(work.cwd).slice(0, 400)) if (name.toLowerCase().endsWith(".md")) candidates.push(join(work.cwd, name));
+    } catch {
+      return null;
+    }
+    for (const path of candidates) {
+      try {
+        if (!statSync(path).isFile()) continue;
+        if (readNote(readFileSync(path, "utf8").slice(0, 4096)).id === work.id) return path;
+      } catch {
+        // Not readable now: not this one.
+      }
+    }
+    return null;
+  }
+
+  private newPath(work: Work): string {
+    if (inGitRepository(work.cwd)) return join(work.cwd, WORKBENCH_DIR, PROJECT_NOTE_IN_GIT);
+    const base = noteFileName(work.title);
+    const taken = (path: string) => existsSync(path);
+    let path = join(work.cwd, base);
+    for (let index = 1; taken(path); index += 1) path = join(work.cwd, base.replace(/\.md$/, ` (프로젝트${index > 1 ? ` ${index}` : ""}).md`));
+    return path;
+  }
+
+  private noteArtifact(work: Work, path: string): Artifact | null {
+    return this.manager.documents.list().find((artifact) => artifact.workId === work.id && artifact.path === path) ?? null;
+  }
+
+  // ── reading ─────────────────────────────────────────────────────────────────────────────
+
+  note(work: Work): ProjectNote {
+    const path = this.notePath(work);
+    const artifact = this.noteArtifact(work, path);
+    const revisions = artifact ? this.manager.documents.revisions(artifact.id) : [];
+    const last = revisions.at(-1) ?? null;
+    const base = { path, revision: artifact?.revision ?? null, lastAuthor: last?.author ?? null, lastSessionId: last?.sessionId ?? null, artifactId: artifact?.id ?? null };
+    if (!existsSync(path)) return { ...base, exists: false, properties: [], stage: null, tags: work.tags ?? [], decisions: [], questions: [], body: "", problem: null };
+    let text: string;
+    try {
+      text = readFileSync(path, "utf8");
+    } catch (error) {
+      return { ...base, exists: true, properties: [], stage: null, tags: [], decisions: [], questions: [], body: "", problem: `노트를 읽지 못했습니다: ${error instanceof Error ? error.message : String(error)}` };
+    }
+    const read = readNote(text);
+    return { ...base, exists: true, properties: read.properties, stage: read.stage, tags: read.tags, decisions: read.decisions, questions: read.questions, body: read.body, problem: read.problem };
+  }
+
+  /** The stage shown: the archive stage for an archived work, else what the note says. */
+  stageOf(work: Work, note: ProjectNote): string | null {
+    if (work.archivedAt) return this.stages().find((stage) => stage.archive)?.name ?? note.stage;
+    return note.stage;
+  }
+
+  page(workId: string): ProjectPage {
+    const work = this.work(workId);
+    const note = this.note(work);
+    return { workId, note: { ...note, stage: this.stageOf(work, note) }, facts: this.facts(work), events: this.events(work, Date.now() - WEEK, 60), card: this.pkm.cardFor(work), stages: this.stages() };
+  }
+
+  /** Everything recorded in the project, newest first (기록 칸 "전체"). */
+  allEvents(workId: string) {
+    return this.events(this.work(workId), 0, 300);
+  }
+
+  // ── counted, not written ────────────────────────────────────────────────────────────────
+
+  private branch(cwd: string): string | null {
+    const cached = this.branches.get(cwd);
+    if (cached && Date.now() - cached.at < 30_000) return cached.branch;
+    let branch: string | null = null;
+    if (inGitRepository(cwd)) {
+      try {
+        branch = execFileSync("git", ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8", timeout: 2000, stdio: ["ignore", "pipe", "ignore"] }).trim() || null;
+      } catch {
+        branch = null;
+      }
+    }
+    this.branches.set(cwd, { at: Date.now(), branch });
+    return branch;
+  }
+
+  facts(work: Work): ProjectFacts {
+    const sessions = [...this.manager.view.sessions.values()].filter((session) => session.workId === work.id && !session.archivedAt);
+    const newest = (list: Session[]) => list.sort((a, b) => b.updatedAt - a.updatedAt)[0]?.id ?? null;
+    const waiting = sessions.filter((session) => session.status === "awaitingApproval");
+    const failed = sessions.filter((session) => session.status === "error" || Boolean(session.lastError));
+    const artifacts = this.manager.documents.list().filter((artifact) => artifact.workId === work.id);
+    const files = artifacts.filter((artifact) => artifact.role !== "project-note");
+    const fileIds = new Set(files.map((artifact) => artifact.id));
+    const pending = this.manager.documents
+      .listProposals()
+      .filter((proposal) => fileIds.has(proposal.artifactId) && proposal.status === "pending")
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+    const engines: Partial<Record<Provider, number>> = {};
+    for (const session of sessions) engines[session.provider] = (engines[session.provider] ?? 0) + 1;
+    const counts = this.store.workCounts(work.id);
+    const revisions = { user: 0, engine: 0, external: 0 };
+    for (const artifact of files) for (const revision of this.manager.documents.revisions(artifact.id)) revisions[revision.author] += 1;
+    const sessionIds = new Set(sessions.map((session) => session.id));
+    return {
+      sessions: sessions.length,
+      running: sessions.filter((session) => session.status === "starting" || session.status === "running" || session.status === "interrupting").length,
+      attention: waiting.length,
+      errors: failed.length,
+      unread: sessions.filter(isUnseen).length,
+      proposals: pending.length,
+      attentionSessionId: newest(waiting),
+      errorSessionId: newest(failed),
+      proposalId: pending[0]?.id ?? null,
+      proposalArtifactId: pending[0]?.artifactId ?? null,
+      lastActivity: Math.max(work.updatedAt, ...sessions.map((session) => session.updatedAt), ...files.map((artifact) => artifact.updatedAt)) || null,
+      createdAt: work.createdAt,
+      engines,
+      models: [...new Set(sessions.map((session) => session.engineModel ?? session.model).filter((model): model is string => Boolean(model)))],
+      requests: counts.requests,
+      turnMs: counts.turnMs,
+      files: files.length,
+      revisions,
+      schedules: this.manager.schedules.all().filter((schedule) => sessionIds.has(schedule.sessionId)).length,
+      worktrees: sessions.filter((session) => session.worktree).length,
+      folder: work.cwd,
+      branch: this.branch(work.cwd),
+    };
+  }
+
+  /** Requests, plan decisions, revisions, applied or dropped proposals, decisions and questions written here. */
+  private events(work: Work, since: number, limit: number): ProjectEvent[] {
+    const sessions = this.manager.view.sessions;
+    const providerOf = (sessionId: string | null | undefined) => (sessionId ? (sessions.get(sessionId)?.provider ?? null) : null);
+    const names = new Map(this.manager.documents.list().filter((artifact) => artifact.workId === work.id).map((artifact) => [artifact.id, artifact] as const));
+    const events: ProjectEvent[] = [];
+    for (const { sessionId, item } of this.store.workItems(work.id, since, limit)) {
+      if (item.kind === "user" && !item.peer && !item.link) {
+        events.push({ id: `request:${item.id}`, at: item.at, kind: "request", text: firstLine(item.text), sessionId, artifactId: null, by: "user", itemId: item.id });
+      } else if (item.kind === "approval" && item.plan && (item.decision === "accept" || item.decision === "decline")) {
+        events.push({ id: `plan:${item.id}`, at: item.at, kind: "plan", text: item.decision === "decline" ? "계획을 고쳐 달라고 함" : "계획대로 진행", sessionId, artifactId: null, by: "user", itemId: item.id });
+      }
+    }
+    for (const revision of this.store.workRevisions(work.id, since, limit)) {
+      const artifact = names.get(revision.artifactId);
+      // The person's own writes to the note show as what they wrote (stage, decisions), not as revisions.
+      if (!artifact || (artifact.role === "project-note" && revision.author !== "engine")) continue;
+      const by = revision.author === "engine" ? providerOf(revision.sessionId) : revision.author;
+      const what = artifact.role === "project-note" ? "프로젝트 노트" : artifact.name;
+      events.push({ id: `revision:${revision.artifactId}:${revision.revision}`, at: revision.at, kind: "revision", text: `${what} r${revision.revision}${revision.note ? ` · ${firstLine(revision.note, 60)}` : ""}`, sessionId: revision.sessionId, artifactId: revision.artifactId, by });
+    }
+    for (const proposal of this.manager.documents.listProposals()) {
+      const artifact = names.get(proposal.artifactId);
+      if (!artifact || proposal.updatedAt < since || (proposal.status !== "applied" && proposal.status !== "discarded")) continue;
+      events.push({ id: `proposal:${proposal.id}`, at: proposal.updatedAt, kind: "proposal", text: `${artifact.name} 수정안 ${proposal.status === "applied" ? "적용" : "버림"}`, sessionId: proposal.sessionId, artifactId: artifact.id, proposalId: proposal.id, by: "user" });
+    }
+    for (const entry of this.readJson<EntryLog[]>(ENTRIES_KEY, [])) {
+      if (entry.workId !== work.id || entry.at < since) continue;
+      events.push({ id: `${entry.section}:${entry.at}`, at: entry.at, kind: entry.section, text: entry.text, sessionId: entry.sessionId, artifactId: null, by: "user", itemId: entry.itemId });
+    }
+    return events.sort((a, b) => b.at - a.at).slice(0, limit);
+  }
+
+  // ── writing (one key or one line), with a way back ──────────────────────────────────────
+
+  private write(workId: string, summary: string, change: (text: string) => string, side: { unarchive?: boolean; rearchive?: boolean } = {}): ProjectWrite {
+    const work = this.work(workId);
+    const path = this.notePath(work);
+    const before = existsSync(path) ? readFileSync(path) : null;
+    const text = before ? before.toString("utf8") : newNote(work.id);
+    if (before && readNote(text).problem) throw new HttpError(409, "note_unreadable", "노트의 속성 부분이 망가져 있어 고치지 않았습니다. 노트를 직접 열어 고쳐 주세요.");
+    const next = change(text);
+    if (before && next === text) return { token: "", created: false, summary, page: this.page(workId) };
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, next);
+    this.writeJson(NOTES_KEY, { ...this.notePaths(), [work.id]: path });
+    this.recordRevision(work, path, null);
+    const token = randomUUID();
+    this.writes.set(token, { workId, path, before, after: Buffer.from(next), at: Date.now(), unarchive: Boolean(side.unarchive), rearchive: Boolean(side.rearchive) });
+    for (const [key, entry] of this.writes) if (Date.now() - entry.at > 3600_000 || this.writes.size > 100) this.writes.delete(key);
+    this.publish(workId);
+    return { token, created: !before, summary, page: this.page(workId) };
+  }
+
+  /** The note as a document: each write is a revision; the note stays out of document lists. */
+  private recordRevision(work: Work, path: string, sessionId: string | null) {
+    const tracked = this.manager.documents.track(work.id, work.cwd, path, sessionId ? "engine" : "user", sessionId, "프로젝트 노트");
+    const artifact = tracked?.artifact ?? this.noteArtifact(work, path);
+    if (artifact) this.manager.documents.setRole(artifact.id, "project-note");
+  }
+
+  setProperty(workId: string, key: string, values: string[] | null): ProjectWrite {
+    const name = key.trim();
+    if (!name || name === ID_KEY) throw new HttpError(400, "bad_key", "그 이름의 속성은 쓸 수 없습니다.");
+    if (name === STAGE_KEY) return this.setStage(workId, values?.[0] ?? null);
+    const clean = values === null ? null : values.map((value) => value.trim()).filter(Boolean);
+    const result = this.write(workId, values === null ? `${name} 지움` : `${name}: ${clean!.join(", ") || "(빈 값)"}`, (text) => setFrontmatterKey(text, name, clean));
+    if (name === "tags") this.manager.updateWork(workId, { tags: (clean ?? []).map((tag) => tag.replace(/^#/, "")) });
+    return result;
+  }
+
+  /** Set the stage; the archive stage puts the work in the archive, leaving it takes it out. */
+  setStage(workId: string, name: string | null): ProjectWrite {
+    const work = this.work(workId);
+    const stages = this.stages();
+    const target = name ? stages.find((stage) => stage.name === name) : null;
+    if (name && !target) throw new HttpError(400, "unknown_stage", "설정에 없는 단계입니다.");
+    const previous = this.stageOf(work, this.note(work));
+    const archiving = Boolean(target?.archive) && !work.archivedAt;
+    const leaving = !target?.archive && Boolean(work.archivedAt);
+    this.quiet.add(workId);
+    try {
+      if (archiving) this.manager.updateWork(workId, { archived: true });
+      if (leaving) this.manager.updateWork(workId, { archived: false });
+    } finally {
+      this.quiet.delete(workId);
+    }
+    try {
+      return this.write(workId, `단계: ${previous ?? "값 없음"} → ${name ?? "값 없음"}`, (text) => setFrontmatterKey(text, STAGE_KEY, name ? [name] : null), { unarchive: archiving, rearchive: leaving });
+    } catch (error) {
+      this.quiet.add(workId);
+      try {
+        if (archiving) this.manager.updateWork(workId, { archived: false });
+        if (leaving) this.manager.updateWork(workId, { archived: true });
+      } finally {
+        this.quiet.delete(workId);
+      }
+      throw error;
+    }
+  }
+
+  addEntry(workId: string, request: ProjectEntryRequest): ProjectWrite {
+    const text = String(request.text ?? "").replace(/\s+/g, " ").trim().slice(0, 400);
+    if (!text) throw new HttpError(400, "empty_entry", "남길 글이 없습니다.");
+    const section = request.section === "question" ? "question" : "decision";
+    const session = request.sessionId ? this.manager.view.sessions.get(request.sessionId) : null;
+    const today = new Date();
+    const stamp = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const source = session ? ` — ${session.provider === "claude" ? "Claude" : "Codex"} · ${session.purpose || "세션"} ([원문](workbench://session/${session.id}${request.itemId ? `#${request.itemId}` : ""}))` : "";
+    const line = `${stamp} ${text}${source}`;
+    const result = this.write(workId, section === "decision" ? `결정: ${text}` : `열린 질문: ${text}`, (current) => appendEntry(current, section, line));
+    const log = this.readJson<EntryLog[]>(ENTRIES_KEY, []);
+    log.push({ workId, at: Date.now(), section, text, sessionId: session?.id ?? null, itemId: request.itemId ?? null });
+    this.writeJson(ENTRIES_KEY, log.slice(-2000));
+    return { ...result, page: this.page(workId) };
+  }
+
+  setQuestionDone(workId: string, line: number, done: boolean): ProjectWrite {
+    return this.write(workId, done ? "열린 질문 닫음" : "열린 질문 다시 엶", (text) => setEntryDone(text, line, done));
+  }
+
+  /** The body as edited in the app; refused when the note changed since the editor read it. */
+  setBodyText(workId: string, body: string, baseRevision: number | null): ProjectWrite {
+    const work = this.work(workId);
+    const current = this.note(work);
+    if ((current.revision ?? null) !== (baseRevision ?? null)) throw new HttpError(409, "note_changed", "그 사이 노트가 바뀌었습니다. 다시 열어 고쳐 주세요.");
+    return this.write(workId, "노트 본문 고침", (text) => setBody(text, body));
+  }
+
+  /** Put the note back as it was before a write, if nothing changed it since. */
+  undo(workId: string, token: string): ProjectPage {
+    const entry = this.writes.get(token);
+    if (!entry || entry.workId !== workId) throw new HttpError(404, "write_not_found", "되돌릴 수 있는 기록이 없습니다.");
+    const current = existsSync(entry.path) ? readFileSync(entry.path) : null;
+    if (!current || !current.equals(entry.after)) throw new HttpError(409, "note_changed", "그 뒤에 노트가 바뀌어 되돌리지 않았습니다.");
+    const work = this.work(workId);
+    if (entry.before === null) {
+      unlinkSync(entry.path);
+      const paths = this.notePaths();
+      delete paths[workId];
+      this.writeJson(NOTES_KEY, paths);
+      const artifact = this.noteArtifact(work, entry.path);
+      if (artifact) this.manager.documents.check(artifact.id);
+    } else {
+      writeFileSync(entry.path, entry.before);
+      this.recordRevision(work, entry.path, null);
+    }
+    this.quiet.add(workId);
+    try {
+      if (entry.unarchive) this.manager.updateWork(workId, { archived: false });
+      if (entry.rearchive) this.manager.updateWork(workId, { archived: true });
+    } finally {
+      this.quiet.delete(workId);
+    }
+    this.writes.delete(token);
+    this.publish(workId);
+    return this.page(workId);
+  }
+
+  /** An engine changed the note: put back the revision before its change (as a person's write). */
+  revertEngineEdit(workId: string): ProjectWrite {
+    const work = this.work(workId);
+    const note = this.note(work);
+    if (!note.artifactId || note.lastAuthor !== "engine" || !note.revision || note.revision < 2) throw new HttpError(409, "nothing_to_revert", "되돌릴 엔진의 변경이 없습니다.");
+    const before = readFileSync(this.manager.documents.revisionPath(note.artifactId, note.revision - 1), "utf8");
+    return this.write(workId, `엔진이 바꾼 노트를 r${note.revision - 1}로 되돌림`, () => before);
+  }
+
+  // ── what the engines are told ───────────────────────────────────────────────────────────
+
+  /** The project part of a new session's context card. */
+  cardInfo(work: Work) {
+    const note = this.note(work);
+    return {
+      note: note.path,
+      exists: note.exists,
+      stage: this.stageOf(work, note),
+      tags: note.tags,
+      decisions: note.decisions.slice(-5).map((entry) => entryGist(entry.text)),
+      questions: note.questions.filter((entry) => !entry.done).slice(-3).map((entry) => entryGist(entry.text)),
+    };
+  }
+
+  private told() {
+    return this.readJson<Record<string, Told>>(TOLD_KEY, {});
+  }
+
+  /** After a request went out: what this session knows is as of now. */
+  markTold(session: Session) {
+    const work = this.manager.view.works.get(session.workId);
+    if (!work) return;
+    const note = this.note(work);
+    this.writeJson(TOLD_KEY, { ...this.told(), [session.id]: { at: Date.now(), noteRevision: note.revision ?? 0 } });
+  }
+
+  private who(revision: ArtifactRevision, sessionId: string) {
+    if (revision.author === "user") return "사람이";
+    if (revision.author === "external") return "앱 밖에서";
+    if (revision.sessionId === sessionId) return "이 세션이";
+    const other = revision.sessionId ? this.manager.view.sessions.get(revision.sessionId) : null;
+    return other ? `다른 세션(${other.provider === "claude" ? "Claude" : "Codex"} · ${firstLine(other.purpose || "세션", 30)})이` : "다른 세션이";
+  }
+
+  private revisionText(artifactId: string, revision: number) {
+    try {
+      return readFileSync(this.manager.documents.revisionPath(artifactId, revision), "utf8");
+    } catch {
+      return null;
+    }
+  }
+
+  /** What changed for this session since its last request (AI 0): documents, its proposals, the note. */
+  changes(sessionId: string): ChangeLine[] {
+    const session = this.manager.view.sessions.get(sessionId);
+    const work = session ? this.manager.view.works.get(session.workId) : undefined;
+    const told = this.told()[sessionId];
+    if (!session || !work || !told) return [];
+    const lines: ChangeLine[] = [];
+    const textual = new Set(["markdown", "text", "html"]);
+    for (const artifact of this.manager.documents.list()) {
+      if (artifact.workId !== work.id || artifact.role === "project-note") continue;
+      const revisions = this.manager.documents.revisions(artifact.id);
+      const later = revisions.filter((revision) => revision.at > told.at && !(revision.author === "engine" && revision.sessionId === sessionId));
+      if (!later.length) continue;
+      const first = later[0]!;
+      const last = later.at(-1)!;
+      const from = first.baseRevision ?? first.revision - 1;
+      let counts = "";
+      if (textual.has(artifact.format) && from >= 1) {
+        const before = this.revisionText(artifact.id, from);
+        const after = this.revisionText(artifact.id, last.revision);
+        if (before !== null && after !== null) {
+          const { added, removed } = lineCounts(before, after);
+          counts = ` (+${added} −${removed})`;
+        }
+      }
+      lines.push({ id: `revision:${artifact.id}:${last.revision}`, text: `${artifact.name} r${from >= 1 ? from : 0}→r${last.revision}: ${this.who(last, sessionId)} 고침${counts}` });
+    }
+    for (const proposal of this.manager.documents.listProposals()) {
+      if (proposal.sessionId !== sessionId || proposal.updatedAt <= told.at || (proposal.status !== "applied" && proposal.status !== "discarded")) continue;
+      const name = this.manager.documents.list().find((artifact) => artifact.id === proposal.artifactId)?.name ?? "문서";
+      lines.push({ id: `proposal:${proposal.id}`, text: `${name}: 이 세션의 수정안을 사람이 ${proposal.status === "applied" ? "적용함" : "버림"}` });
+    }
+    const note = this.note(work);
+    if (note.artifactId && (note.revision ?? 0) > told.noteRevision) {
+      const before = told.noteRevision >= 1 ? this.revisionText(note.artifactId, told.noteRevision) : null;
+      const old = before === null ? null : readNote(before);
+      const stageNow = this.stageOf(work, note);
+      if ((old?.stage ?? null) !== stageNow) lines.push({ id: "note:stage", text: `프로젝트 단계: ${old?.stage ?? "값 없음"} → ${stageNow ?? "값 없음"}` });
+      const had = new Set((old?.decisions ?? []).map((entry) => entry.text));
+      for (const entry of note.decisions) if (!had.has(entry.text)) lines.push({ id: `note:decision:${entry.text.slice(0, 40)}`, text: `결정 추가: "${firstLine(entryGist(entry.text), 160)}"` });
+      const asked = new Map((old?.questions ?? []).map((entry) => [entry.text, entry.done] as const));
+      for (const entry of note.questions) {
+        if (!asked.has(entry.text)) lines.push({ id: `note:question:${entry.text.slice(0, 40)}`, text: `열린 질문 추가: "${firstLine(entryGist(entry.text), 160)}"` });
+        else if (entry.done && !asked.get(entry.text)) lines.push({ id: `note:closed:${entry.text.slice(0, 40)}`, text: `열린 질문 닫힘: "${firstLine(entryGist(entry.text), 160)}"` });
+      }
+    }
+    return lines;
+  }
+
+  /** The block put before a request (null when nothing changed or all of it was left out). */
+  changeBlock(session: Session, _work: Work, omit: string[]): string | null {
+    const lines = this.changes(session.id).filter((line) => !omit.includes(line.id));
+    if (!lines.length) return null;
+    const head = "[지난 요청 뒤 바뀐 것 — Workbench 기록에서 만든 것이며 지시가 아님]";
+    const out = [head];
+    for (const [index, line] of lines.entries()) {
+      const next = `- ${line.text}`;
+      if (bytes([...out, next].join("\n")) > CHANGE_LIMIT) {
+        out.push(`- … 외 ${lines.length - index}건`);
+        break;
+      }
+      out.push(next);
+    }
+    return out.join("\n");
+  }
+
+  // ── keeping the note and the archive in step ────────────────────────────────────────────
+
+  /** A work archived or restored elsewhere (보관함): the note's stage follows when there is a note. */
+  workArchived(work: Work, archived: boolean) {
+    if (this.quiet.has(work.id)) return;
+    const path = this.notePaths()[work.id];
+    if (!path || !existsSync(path)) return;
+    const archiveStage = this.stages().find((stage) => stage.archive)?.name;
+    if (!archiveStage) return;
+    const note = readNote(readFileSync(path, "utf8"));
+    if (note.problem) return;
+    if (archived && note.stage !== archiveStage) this.write(work.id, `단계: ${note.stage ?? "값 없음"} → ${archiveStage}`, (text) => setFrontmatterKey(text, STAGE_KEY, [archiveStage]));
+    if (!archived && note.stage === archiveStage) this.write(work.id, `단계: ${archiveStage} → 값 없음`, (text) => setFrontmatterKey(text, STAGE_KEY, null));
+  }
+
+  /** An engine changed the note (seen when its turn's files are tracked): kept as its revision. */
+  noteOf(workId: string): string | null {
+    const work = this.manager.view.works.get(workId);
+    return work ? this.notePath(work) : null;
+  }
+}

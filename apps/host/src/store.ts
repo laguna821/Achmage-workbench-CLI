@@ -150,6 +150,44 @@ export class Store {
       }));
   }
 
+  /** A work's requests and the time its finished turns took (project facts). */
+  workCounts(workId: string): { requests: number; turnMs: number } {
+    const rows = this.db
+      .prepare(
+        `SELECT json_extract(i.json, '$.kind') AS kind, COUNT(*) AS n, SUM(json_extract(i.json, '$.durationMs')) AS ms
+           FROM items i JOIN sessions s ON s.id = i.session_id
+          WHERE s.work_id = ? AND json_extract(i.json, '$.kind') IN ('user', 'turnEnd')
+          GROUP BY kind`,
+      )
+      .all(workId);
+    const of = (kind: string) => rows.find((row) => row.kind === kind);
+    return { requests: Number(of("user")?.n ?? 0), turnMs: Number(of("turnEnd")?.ms ?? 0) };
+  }
+
+  /** Requests and plan decisions of a work since a time, newest first (project "기록"). */
+  workItems(workId: string, since: number, limit: number): { sessionId: string; item: TranscriptItem }[] {
+    return this.db
+      .prepare(
+        `SELECT i.session_id, i.json FROM items i JOIN sessions s ON s.id = i.session_id
+          WHERE s.work_id = ? AND json_extract(i.json, '$.kind') IN ('user', 'approval') AND json_extract(i.json, '$.at') >= ?
+          ORDER BY json_extract(i.json, '$.at') DESC LIMIT ?`,
+      )
+      .all(workId, since, limit)
+      .map((row) => ({ sessionId: String(row.session_id), item: JSON.parse(String(row.json)) as TranscriptItem }));
+  }
+
+  /** Document revisions of a work since a time, newest first, with who wrote them. */
+  workRevisions(workId: string, since: number, limit: number): ArtifactRevision[] {
+    return this.db
+      .prepare(
+        `SELECT r.json FROM revisions r JOIN artifacts a ON a.id = r.artifact_id
+          WHERE a.work_id = ? AND json_extract(r.json, '$.at') >= ?
+          ORDER BY json_extract(r.json, '$.at') DESC LIMIT ?`,
+      )
+      .all(workId, since, limit)
+      .map((row) => JSON.parse(String(row.json)) as ArtifactRevision);
+  }
+
   /** Document revisions since a time (home "흐름"). */
   revisionMarks(since: number): TimelineRevision[] {
     return this.db

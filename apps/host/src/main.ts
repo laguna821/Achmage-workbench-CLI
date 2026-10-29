@@ -17,6 +17,8 @@ import { buildTimeline } from "./timeline.ts";
 import { DocImages } from "./doc-images.ts";
 import { Pkm } from "./pkm.ts";
 import { handlePkm } from "./pkm-http.ts";
+import { Projects } from "./project.ts";
+import { handleProject } from "./project-http.ts";
 
 // Local gateway: owns engine processes and state, serves the UI and an HTTP + SSE API on
 // 127.0.0.1 only. Prints one `WORKBENCH_READY {json}` line once it accepts connections.
@@ -73,6 +75,16 @@ const manager = new SessionManager(store, bus, {
 });
 void manager.refreshTools();
 const pkm = new Pkm(store, bus, manager, { dataDir });
+// A work as a project note (project.ts): its note file, what its sessions did, what they were told.
+const projects = new Projects(store, bus, manager, pkm);
+bus.subscribe((event) => {
+  if (event.type !== "work.upserted") return;
+  const before = archived.get(event.work.id);
+  const now = Boolean(event.work.archivedAt);
+  archived.set(event.work.id, now);
+  if (before !== undefined && before !== now) projects.workArchived(event.work, now);
+});
+const archived = new Map(manager.snapshot().works.map((work) => [work.id, Boolean(work.archivedAt)] as const));
 
 const claudeIdleMs = env.WORKBENCH_CLAUDE_IDLE_MS ? Number(env.WORKBENCH_CLAUDE_IDLE_MS) : undefined;
 manager.registerAdapter(
@@ -104,6 +116,7 @@ const server = createHttpServer(manager, bus, {
   timeline: (since) => buildTimeline(store.turnMarks(since), store.revisionMarks(since), since),
   docImages,
   pkm: (req, res, url) => handlePkm(pkm, req, res, url),
+  projects: (req, res, url) => handleProject(projects, req, res, url),
 });
 
 /** Listen on the port used last time, or on any free one when it is taken; remember the one bound. */

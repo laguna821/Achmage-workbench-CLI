@@ -7,6 +7,7 @@ import { CreateChip, CreateTargetButton, stemOf } from "./CreateTarget.tsx";
 import { folderPath, isBusy, sessionsOf, type State } from "../state.ts";
 import { sessionLabel, statusText, statusTone } from "../format.ts";
 import { Composer } from "./Composer.tsx";
+import { ChangeChip } from "./project/ChangeChip.tsx";
 import { EditableText } from "./EditableText.tsx";
 import { ModelPicker, type ModelChoice } from "./ModelPicker.tsx";
 import { Icon } from "./Icon.tsx";
@@ -31,7 +32,7 @@ import { InsightPill } from "./pkm/InsightDialog.tsx";
 
 export type WorkActions = {
   /** Send a request; while the engine works it steers into the turn or waits ("queue"). */
-  send: (session: Session, text: string, refs?: DocRef[], create?: CreateTarget | null, mode?: "auto" | "queue", attachments?: Attachment[], plan?: boolean) => Promise<boolean>;
+  send: (session: Session, text: string, refs?: DocRef[], create?: CreateTarget | null, mode?: "auto" | "queue", attachments?: Attachment[], plan?: boolean, omitChanges?: string[]) => Promise<boolean>;
   /** Keep a pasted or dropped file at the gateway for the next request (null: it could not). */
   upload: (file: File) => Promise<Attachment | null>;
   /** "이 요청 전으로": a new session up to that request, opened with the request in its input. */
@@ -66,6 +67,8 @@ export type WorkActions = {
   /** The agent browser (the "브라우저" pill). */
   browser: BrowserActions;
   moveWork: (work: Work, folderId: string | null) => void;
+  /** "프로젝트 = 노트 한 장": the work's project page. */
+  openProject: (work: Work) => void;
   openSidebar: () => void;
   restore: (target: { kind: "folder" | "work" | "session"; id: string }) => void;
 };
@@ -346,6 +349,17 @@ export function WorkView({
     : undefined;
   // "계획 먼저": on until a plan is accepted (or turned off), for this work.
   const [planFirst, setPlanFirst] = useState(false);
+  // "알릴 변경": lines of what changed the user chose not to send with the next request.
+  const [omitChanges, setOmitChanges] = useState<string[]>([]);
+  useEffect(() => setOmitChanges([]), [active?.id]);
+  // What can change what the next request is told: the work's documents and its project note.
+  const changePulse = `${state.pkm[`project:${work.id}`] ?? 0}#${Object.values(state.artifacts)
+    .filter((artifact) => artifact.workId === work.id)
+    .map((artifact) => artifact.revision)
+    .join(",")}#${Object.values(state.proposals)
+    .filter((proposal) => proposal.sessionId === active?.id)
+    .map((proposal) => proposal.status)
+    .join(",")}`;
   const [planWork, setPlanWork] = useState(work.id);
   if (planWork !== work.id) {
     setPlanWork(work.id);
@@ -395,6 +409,12 @@ export function WorkView({
         <div className="anchor breadcrumb-anchor">
           <button type="button" className="breadcrumb" onClick={() => setFolderOpen(!folderOpen)} title="분류 옮기기" aria-expanded={folderOpen}>
             {path.length ? path.map((folder) => folder.name).join(" / ") : <span className="muted">분류 없음</span>}
+          </button>
+          <span className="breadcrumb-sep" aria-hidden>
+            ›
+          </span>
+          <button type="button" className="breadcrumb project-link" onClick={() => actions.openProject(work)} title="프로젝트 페이지: 속성·기록·결정·세션·파일">
+            {work.title}
           </button>
           <Popover open={folderOpen} onClose={closeFolder} align="left">
             <div className="menu-label">분류 옮기기 · 실제 파일 위치는 그대로입니다</div>
@@ -645,6 +665,7 @@ export function WorkView({
       {place(<div className="column composer-area">
         {active ? <LinkBar session={active} /> : null}
         {active ? <QueuedList session={active} busy={busy} actions={actions.queued} /> : null}
+        {active && !handoffTo ? <ChangeChip session={active} omit={omitChanges} onOmit={setOmitChanges} pulse={changePulse} /> : null}
         {modes?.bar}
         {!active ? (
           <EngineTabs
@@ -765,8 +786,9 @@ export function WorkView({
             if (!source) return false;
             const sent = handoffTo
               ? await actions.handoff(source, handoffTo, text, refs, carried)
-              : await actions.send(source, text, refs, create, mode ?? "auto", carried, planFirst);
+              : await actions.send(source, text, refs, create, mode ?? "auto", carried, planFirst, omitChanges);
             if (sent) {
+              setOmitChanges([]);
               setHandoffTo(null);
               setAttached([]);
               setCreate(null);

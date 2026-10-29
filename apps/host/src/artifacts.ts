@@ -41,8 +41,14 @@ const isHangul = (format: string) => format === "hwpx" || format === "hwp";
 const extensionOf = (artifact: Pick<Artifact, "format" | "name">) => (artifact.format === "design" ? DESIGN_EXTENSION : extname(artifact.name));
 
 export function isWorkbenchPath(path: string) {
-  return path.split(/[\\/]/).includes(WORKBENCH_DIR);
+  const parts = path.split(/[\\/]/);
+  const at = parts.lastIndexOf(WORKBENCH_DIR);
+  // The project note of a work in a git repository (project.ts) is a real document of the work.
+  return at !== -1 && !(at === parts.length - 2 && parts[at + 1] === PROJECT_NOTE_IN_GIT);
 }
+
+/** The project note's name inside `.workbench/` when the work folder is a git repository. */
+export const PROJECT_NOTE_IN_GIT = "project.md";
 
 /** Text formats searched as they are (HTML without its tags). */
 const SEARCHED_AS_TEXT = new Set(["markdown", "text", "html"]);
@@ -150,6 +156,17 @@ export class Documents {
     const artifact = this.get(artifactId);
     if (revision < 1 || revision > artifact.revision) throw new HttpError(404, "revision_not_found", `r${revision} 판이 없습니다.`);
     return join(this.root, artifactId, `r${revision}${extname(artifact.path)}`);
+  }
+
+  /** Mark a document as the project's own note (left out of document lists, project.ts). */
+  setRole(artifactId: string, role: Artifact["role"] | null) {
+    const artifact = this.get(artifactId);
+    if ((artifact.role ?? null) === role) return artifact;
+    const updated: Artifact = { ...artifact };
+    if (role) updated.role = role;
+    else delete updated.role;
+    this.save(updated);
+    return updated;
   }
 
   private save(artifact: Artifact) {

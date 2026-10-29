@@ -74,7 +74,8 @@ export function workSessions(state: State, workId: string): Session[] {
 /** Documents of a work, newest change first. */
 export function workDocs(state: State, workId: string): Artifact[] {
   return Object.values(state.artifacts)
-    .filter((artifact) => artifact.workId === workId)
+    // The project's own note is shown on its project page, not among its documents.
+    .filter((artifact) => artifact.workId === workId && artifact.role !== "project-note")
     .sort((a, b) => b.updatedAt - a.updatedAt);
 }
 

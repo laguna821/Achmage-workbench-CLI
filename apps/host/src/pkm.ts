@@ -31,7 +31,7 @@ import { fillTemplate, localStamp, readTemplates, templateChoices, templateFile,
 import { exportFileName, headingOf, tidyMessage } from "./export-md.ts";
 import { filterItems, groupItems, kindsFor, sessionStatuses, workEngines, workStatuses, type ViewItem } from "./pkm-views.ts";
 import { cleanRules, placementFor } from "./pkm-rules.ts";
-import { claudeWriteGuard, codexSandbox, contextCard } from "./pkm-guard.ts";
+import { claudeWriteGuard, codexSandbox, contextCard, type CardProject } from "./pkm-guard.ts";
 import type { ClaudeLaunch, CodexLaunch } from "./providers/types.ts";
 import { checkInsight, insightDraft, insightTemplate, publishRequest } from "./insight.ts";
 import type { FrontmatterValue } from "./frontmatter.ts";
@@ -162,15 +162,24 @@ export class Pkm {
     }
   }
 
-  /** The context card of a new session of this work (≤ 2 KB): the work, the vault rule, the pinned notes. */
+  /** The project part of the card (project.ts sets it). */
+  projectCard: ((work: Work) => CardProject) | null = null;
+  /** The engines' search tool's usage line, once it exists. */
+  findInstructions: (() => string | null) | null = null;
+
+  /** The context card of a new session of this work (≤ 2 KB): the work, its project note, the vault rule, the pinned notes. */
   cardFor(work: Work) {
     const root = this.vault.root;
+    const navigator = root ? this.vault.navigator : null;
     return contextCard({
       title: work.title,
       folders: this.folderTrail(work.folderId),
       cwd: work.cwd,
       vault: root,
       pinned: root ? this.pins(work.id).map((path) => join(root, path)) : [],
+      project: this.projectCard?.(work) ?? null,
+      hidden: navigator ? [...navigator.hiddenFolders, ...navigator.hiddenFileNames] : [],
+      find: this.findInstructions?.() ?? null,
     });
   }
 
@@ -337,7 +346,8 @@ export class Pkm {
     const work = works.get(workId);
     if (!work) throw new HttpError(404, "work_not_found", "작업을 찾지 못했습니다.");
     const cards: PkmCard[] = [...sessions.values()].filter((session) => session.workId === workId && !session.archivedAt).map((session) => this.sessionCard(session, work));
-    for (const artifact of this.manager.documents.list().filter((entry) => entry.workId === workId)) cards.push(this.pageItem(artifact, work).card);
+    // The project's own note belongs to its project page, not among its pages.
+    for (const artifact of this.manager.documents.list().filter((entry) => entry.workId === workId && entry.role !== "project-note")) cards.push(this.pageItem(artifact, work).card);
     // Notes pinned to the work come first (their paths are in its sessions' context card).
     const index = this.vault.current;
     const reads = this.noteReads();
@@ -452,7 +462,7 @@ export class Pkm {
       const byId = new Map(visible.map((work) => [work.id, work]));
       for (const artifact of this.manager.documents.list()) {
         const work = byId.get(artifact.workId);
-        if (!work) continue;
+        if (!work || artifact.role === "project-note") continue;
         const page = this.pageItem(artifact, work);
         items.push({ card: page.card, tags: [...page.card.tags, ...(work.tags ?? [])], properties: page.properties, engines: [], statuses: [] });
       }

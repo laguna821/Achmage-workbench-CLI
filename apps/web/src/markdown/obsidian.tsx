@@ -183,7 +183,7 @@ export const SANITIZE_SCHEMA = {
     ...allowed,
     span: [...(allowed.span ?? []), ["className", "md-tag"], "dataTag"],
   },
-  protocols: { ...defaultSchema.protocols, href: [...(defaultSchema.protocols?.href ?? []), "vault-note", "vault-embed"] },
+  protocols: { ...defaultSchema.protocols, href: [...(defaultSchema.protocols?.href ?? []), "vault-note", "vault-embed", "workbench"] },
   // Gone with what is inside them: what runs, styles the app, or is a page's head.
   strip: ["script", "style", "title", "template", "noscript", "iframe", "object", "embed", "textarea", "select"],
 };

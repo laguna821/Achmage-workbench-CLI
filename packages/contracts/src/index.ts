@@ -182,6 +182,8 @@ export type Artifact = {
   diskState: "same" | "changed" | "missing";
   /** Revision each session last received with a request: what that AI actually read. */
   readBy: Record<string, number>;
+  /** The project's own note (project.ts): tracked like any document, left out of document lists. */
+  role?: "project-note";
   createdAt: number;
   updatedAt: number;
 };
@@ -431,7 +433,9 @@ export type WorkbenchEvent =
   /** The schedules changed (added, done, turned off or removed): all of them. */
   | { type: "schedules.changed"; schedules: Schedule[] }
   /** The vault mirror, saved views, rules or pins changed (pkm.ts); the UI fetches that part again. */
-  | { type: "pkm.changed"; scope: "vault" | "views" | "rules" | "pins" | "insights"; version: number };
+  | { type: "pkm.changed"; scope: "vault" | "views" | "rules" | "pins" | "insights"; version: number }
+  /** A project's note or its stages changed (project.ts); the UI fetches that project page again. */
+  | { type: "project.changed"; workId: string | null };
 
 /**
  * Screen preferences (theme, sidebar, per-engine look). Owned by the UI; the gateway only stores
@@ -750,3 +754,4 @@ export * from "./doc-images.ts";
 export * from "./pkm.ts";
 export * from "./schedules.ts";
 export * from "./worktrees.ts";
+export * from "./project.ts";

@@ -14,6 +14,9 @@ const OPEN_KEY = "workbench.vaultOpen";
 /** Dialogs of the PKM layer: attaching the vault, a page from a template. */
 export type PkmDialog = { kind: "vault" } | { kind: "template"; workId: string; parentId: string | null } | { kind: "view"; id: string | null } | { kind: "rules" } | { kind: "insight"; sessionId: string };
 
+/** A notice, with an action ("되돌리기") when there is one. */
+export type PkmToast = { text: string; action?: { label: string; run: () => void } };
+
 export type PkmApi = {
   api: Api;
   state: State;
@@ -29,7 +32,7 @@ export type PkmApi = {
   attach: (path: string) => Promise<boolean>;
   detach: () => void;
   rescan: () => void;
-  onToast: (message: string) => void;
+  onToast: (message: string | PkmToast) => void;
   /** What the centre shows now (a vault folder's cards, a note…), or null. */
   target: PkmTarget | null;
   /** Show cards or a note in the centre; null where the app cannot (the folder then only folds). */
@@ -75,7 +78,7 @@ export function PkmProvider({
   onMenu?: (request: MenuRequest) => void;
   api: Api;
   state: State;
-  onToast: (message: string) => void;
+  onToast: (message: string | PkmToast) => void;
   target?: PkmTarget | null;
   onOpen?: ((target: PkmTarget) => void) | null;
   onShowSession?: (work: Work, session: Session) => void;

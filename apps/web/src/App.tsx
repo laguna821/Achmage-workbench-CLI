@@ -39,6 +39,7 @@ import { detachSession, showInWindow, windowSession } from "./windows.ts";
 import { PkmProvider, type PkmApi } from "./components/pkm/PkmContext.tsx";
 import { VaultDialogHost, VaultSettingsRow } from "./components/pkm/VaultDialog.tsx";
 import { PkmCenter, pkmTitle } from "./components/pkm/PkmCenter.tsx";
+import { ProjectView } from "./components/project/ProjectView.tsx";
 import type { PkmTarget } from "./pkm.ts";
 
 // Editors (CodeMirror, PDF.js) load only when a document opens.
@@ -143,7 +144,9 @@ type View =
   /** "나란히": chosen only, never where the app opens (views are not kept across launches). */
   | { kind: "split"; artifactId: string; draftKey: string; focus: "chat" | "doc" }
   /** Cards of a vault folder, an app folder, a work or a saved view; or one vault note (pkm). */
-  | { kind: "pkm"; target: PkmTarget };
+  | { kind: "pkm"; target: PkmTarget }
+  /** A work as a project note (project page). */
+  | { kind: "project"; workId: string };
 
 type Toast = { text: string; action?: { label: string; run: () => void } };
 
@@ -370,10 +373,10 @@ export function App() {
 
   const actions: WorkActions = useMemo(
     () => ({
-      send: async (session: Session, text: string, refs: DocRef[] = [], create: CreateTarget | null = null, mode: "auto" | "queue" = "auto", attachments: Attachment[] = [], plan = false) => {
+      send: async (session: Session, text: string, refs: DocRef[] = [], create: CreateTarget | null = null, mode: "auto" | "queue" = "auto", attachments: Attachment[] = [], plan = false, omitChanges: string[] = []) => {
         if (!api) return false;
         try {
-          const result = await api.send(session.id, newRequestId(), text, refs, create, mode, attachments, plan);
+          const result = await api.send(session.id, newRequestId(), text, refs, create, mode, attachments, plan, { omitChanges });
           if (result.delivery === "queued") setToast("작업이 끝나면 이어서 보냅니다. 입력창 위에서 고치거나 지울 수 있습니다.");
           return true;
         } catch (error) {
@@ -498,6 +501,10 @@ export function App() {
           .then(() => setToast("대화를 요약해 압축하는 중입니다."))
           .catch(fail),
       moveWork: (target, folderId) => void api?.updateWork(target.id, { folderId }).catch(fail),
+      openProject: (target) => {
+        setWorkId(target.id);
+        setView({ kind: "project", workId: target.id });
+      },
       openSidebar: () => savePrefs({ sidebar: true }),
       restore: (target) => {
         if (!api) return;
@@ -1064,7 +1071,7 @@ export function App() {
           { kind: "separator" },
           { kind: "item", label: busy ? "보관 (진행 중인 세션이 끝난 뒤)" : "보관", icon: "archive", hint: "Delete", disabled: busy, onSelect: () => archive({ kind: "work", id: owner.id }) },
         ];
-        items.splice(1, 0, { kind: "item", label: "카드로 보기", icon: "grid", onSelect: () => setView({ kind: "pkm", target: { kind: "work", id: owner.id } }) });
+        items.splice(1, 0, { kind: "item", label: "프로젝트 페이지", icon: "project", onSelect: () => actions.openProject(owner) }, { kind: "item", label: "카드로 보기", icon: "grid", onSelect: () => setView({ kind: "pkm", target: { kind: "work", id: owner.id } }) });
         return { x, y, title: owner.title, items };
       }
       if (row.type === "folder") {
@@ -1228,7 +1235,9 @@ export function App() {
       ? `${work.title} · ${singleSession.purpose}`
       : view.kind === "archive"
         ? "보관함"
-        : view.kind === "pkm"
+        : view.kind === "project"
+          ? `${state.works[view.workId]?.title ?? "프로젝트"} · 프로젝트`
+          : view.kind === "pkm"
           ? pkmTitle(state, view.target, pkmHandle.current?.tree?.status.name ?? null, view.target.kind === "view" ? pkmHandle.current?.pkmState?.views.find((entry) => view.target.kind === "view" && entry.id === view.target.id)?.name : null)
           : showStart
             ? view.kind === "new" && view.folderId
@@ -1460,6 +1469,24 @@ export function App() {
             )}
           />
         </Suspense>
+      ) : view.kind === "project" && api ? (
+        <ProjectView
+          api={api}
+          state={state}
+          workId={view.workId}
+          onOpenSession={(session, itemId) => {
+            openSession(session);
+            if (itemId) setFocusItem({ sessionId: session.id, itemId, nonce: Date.now() });
+          }}
+          onOpenDocument={(artifactId, proposalId) => {
+            const artifact = state.artifacts[artifactId];
+            if (artifact) setWorkId(artifact.workId);
+            setView({ kind: "document", artifactId, proposalId });
+          }}
+          onToast={setToast}
+          onError={fail}
+          openMenu={setContextMenu}
+        />
       ) : view.kind === "pkm" ? (
         <PkmCenter target={view.target} />
       ) : view.kind === "archive" ? (

@@ -135,6 +135,8 @@ export type SendOptions = {
   notes?: string[];
   /** Sent by a schedule ("예약 작업"): marked on the request. */
   scheduled?: boolean;
+  /** Lines of "지난 요청 뒤 바뀐 것" the user chose not to send (project.ts `changes`). */
+  omitChanges?: string[];
 };
 
 type PendingCreate = { requestId: string; path: string; target: CreateTarget; sources: { artifactId: string; revision: number }[] };
@@ -247,6 +249,10 @@ export class SessionManager {
   readonly schedules: Schedules;
   /** Set by the PKM layer: vault notes attached to a request become read-only references. */
   noteHook: NoteHook | null = null;
+  /** What changed for a session since its last request (project.ts), put before the request. */
+  changeHook: ((session: Session, work: Work, omit: string[]) => string | null) | null = null;
+  /** A request went out: the session now knows the project as of now (project.ts). */
+  toldHook: ((session: Session) => void) | null = null;
   private readonly store: Store;
   private readonly bus: EventBus;
   private readonly options: ManagerOptions;
@@ -1216,7 +1222,12 @@ export class SessionManager {
     }
     const read = notes.length && this.noteHook ? this.noteHook(notes, work.cwd, sessionId) : null;
     this.store.saveRequest(requestId, sessionId, fingerprint);
-    const engineText = options.engineText ?? (relay ? `${relay.header}\n\n${trimmed}` : this.engineText(trimmed, prepared, work.cwd, from, created, read?.prompt));
+    const baseText = options.engineText ?? (relay ? `${relay.header}\n\n${trimmed}` : this.engineText(trimmed, prepared, work.cwd, from, created, read?.prompt));
+    // What changed in the project since this session's last request (people's edits, other
+    // sessions' revisions, the note), before the request; relays and drawings carry their own.
+    const told = !relay && !options.engineText;
+    const change = told ? (this.changeHook?.(session, work, options.omitChanges ?? []) ?? null) : null;
+    const engineText = change ? `${change}\n\n${baseText}` : baseText;
     this.sink.upsertItem(sessionId, {
       kind: "user",
       id: `user:${requestId}`,
@@ -1242,6 +1253,7 @@ export class SessionManager {
     try {
       const current = this.requireSession(sessionId);
       await this.adapter(session.provider).send({ ...current, access: this.accessOf(current), plan }, this.engineWork(current, work), engineText, requestId, files);
+      if (told) this.toldHook?.(current);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       for (const entry of prepared) if (entry.proposal) this.documents.discardProposal(entry.proposal.id);

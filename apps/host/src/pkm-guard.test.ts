@@ -31,6 +31,13 @@ describe("context card", () => {
     expect(many).toMatch(/… 외 \d+개$/);
     expect(contextCard({ title: "x".repeat(5000), folders: [], cwd: "/w", vault: null, pinned: [] }).length).toBeLessThanOrEqual(CARD_LIMIT);
     expect(contextCard({ title: "t", folders: [], cwd: "/w", vault: null, pinned: [] })).not.toContain("볼트");
+    // The folders the user hid in Notebook Navigator are hidden from the engines too.
+    const hidden = contextCard({ title: "t", folders: [], cwd: "/w", vault: "/v", pinned: [], hidden: ["/90.*", "/Brain*"] });
+    expect(hidden).toContain("- 사용자가 숨긴 폴더·파일(읽지도 찾지도 마세요): /90.*, /Brain*");
+    // A long project still fits: decisions are dropped from the oldest before the limit.
+    const long = contextCard({ title: "t", folders: [], cwd: "/w", vault: null, pinned: [], project: { note: "/w/t.md", exists: true, stage: "할일", tags: [], decisions: Array.from({ length: 5 }, (_, index) => `${index} ${"결정".repeat(200)}`), questions: ["질문"] } });
+    expect(Buffer.byteLength(long, "utf8")).toBeLessThanOrEqual(CARD_LIMIT);
+    expect(long).toContain("열린 질문:\n- 질문");
   });
 });
 

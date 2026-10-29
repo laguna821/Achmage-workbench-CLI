@@ -104,6 +104,8 @@ export type HttpOptions = {
   docImages?: DocImages;
   /** `/api/pkm/*` (pkm-http.ts): the vault mirror, views, rules and pages; true when it answered. */
   pkm?: (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<boolean>;
+  /** `/api/projects/*` (project-http.ts): a work as a project note; true when it answered. */
+  projects?: (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<boolean>;
 };
 
 function sameToken(given: string | null, expected: string) {
@@ -233,6 +235,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
 
       if (method === "GET" && path === "/api/snapshot") return sendJson(res, 200, manager.snapshot());
       if (path.startsWith("/api/pkm/") && options.pkm && (await options.pkm(req, res, url))) return;
+      if (path.startsWith("/api/projects/") && options.projects && (await options.projects(req, res, url))) return;
       if (method === "GET" && path === "/api/events") {
         return streamEvents(req, res, bus, Number(url.searchParams.get("since") ?? bus.currentSeq));
       }
@@ -363,7 +366,12 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
               null,
               parseCreate(body.create),
               body.mode === "steer" || body.mode === "queue" ? body.mode : "auto",
-              { attachments: parseAttachments(body.attachments), plan: body.plan === true, notes: Array.isArray(body.notes) ? body.notes.filter((note): note is string => typeof note === "string").slice(0, 20) : [] },
+              {
+                attachments: parseAttachments(body.attachments),
+                plan: body.plan === true,
+                notes: Array.isArray(body.notes) ? body.notes.filter((note): note is string => typeof note === "string").slice(0, 20) : [],
+                omitChanges: Array.isArray(body.omitChanges) ? body.omitChanges.filter((line): line is string => typeof line === "string").slice(0, 50) : [],
+              },
             ),
           );
         }
