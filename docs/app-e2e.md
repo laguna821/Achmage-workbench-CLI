@@ -32,6 +32,8 @@ node scripts/app-e2e/run.ts apps/desktop/src-tauri/target/debug/achmage-workbenc
 
 현재 페이지 미리보기의 기존 Electron 렌더러를 검사하려면 `Xvfb`, `xauth`도 필요하다. Xvfb 경로는 `APP_E2E_XVFB`로 지정할 수 있다. 하네스가 별도 X11 화면·인증 파일을 만들고 TCP 접속을 닫으며, Tauri는 계속 Broadway에서 실행한다. 사용자 화면·버스·프로필은 사용하지 않는다. Electron을 대체한 제품 렌더 경로가 마련되면 이 추가 검사 도구도 제거한다.
 
+`--only=template-office --engines=real`은 설치된 실제 Codex로 3개 요청을 보낸다. 사람이 고친 PPTX에 Markdown 지시서를 읽기 참조로 붙여 수정안을 만든 뒤 UI에서 적용하고, 기존 내부 편집 탭의 갱신과 원본·서식 보존을 추가 검사한다. 모델 요청은 최대 5분씩 기다리고 임의 승인을 자동 수락하지 않는다. transcript·실제 모델/session 식별·수정 PPTX·렌더 노드를 증거 폴더에 남긴다. 문장 줄바꿈의 생략된 공백은 화면 비교에서 정규화하되 저장된 PPTX XML의 제목 검사는 유지한다.
+
 연속 시나리오의 `seedLayout`은 테스트 전용 초기화다. 실제 400 ms 동안 판이 안정적인지 확인하고 마지막 CAS 경합만 제한적으로 다시 읽는다. 즉시 두 번 읽는 것은 자동 저장 완료 확인이 아니었다. 제품의 충돌 거절이나 사용자의 저장 판을 우회하는 경로로 사용하지 않는다.
 
 웹/호스트 소스만 빌드하면 기존 실행파일 옆의 리소스가 그대로 남는다. **Tauri 빌드까지 수행**하고 `apps/web/dist/index.html`과 `apps/desktop/src-tauri/target/debug/web/index.html`이 같은지 확인한다. 이전 리소스 실행을 최신 UI 검증으로 오인하지 않는다.
