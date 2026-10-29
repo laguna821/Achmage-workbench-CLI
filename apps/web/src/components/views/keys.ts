@@ -79,10 +79,10 @@ export function projectRows(state: State, summaries: Map<string, ProjectSummary>
 /** What the shared query reads of a project. */
 export const projectQuery = (row: ProjectRow, folders: State["folders"]): QueryProject => queryProject(row.work, row.summary, folders);
 
-/** A folder's own colour, when the navigator gave it one (an optional field of `Folder`). */
+/** A folder's own colour, when the person gave it one in the navigator. */
 const folderColor = (folder: Folder | undefined) => {
-  const value = (folder as { color?: unknown } | undefined)?.color;
-  return isHexColor(value) ? value : null;
+  const color = folder?.color;
+  return isHexColor(color) ? color : null;
 };
 
 /** Visible folders in the tree's order, each with its path as its name and its depth. */
