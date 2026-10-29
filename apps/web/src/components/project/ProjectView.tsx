@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { PROVIDER_LABEL, type AchmageBrief, type ProjectEvent, type ProjectPage, type ProjectSummary, type ProjectWrite, type Session, type StoppedPlace, type Work } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
 import { accentStyle, useAppearance } from "../../appearance.ts";
 import { ago, statusText } from "../../format.ts";
 import { ObsidianMarkdown, obsidianComponents, obsidianUrlTransform } from "../../markdown/obsidian.tsx";
 import type { Components } from "react-markdown";
-import { asLink, continueSession, duration, eventDays, knownTags, linkLabel, markProjectSeen, projectSeenAt, sessionOrder, stageOf } from "../../project.ts";
+import { continueSession, duration, eventDays, markProjectSeen, projectSeenAt, sessionOrder } from "../../project.ts";
 import { neighbours } from "../../graph.ts";
 import type { State } from "../../state.ts";
 import type { MenuEntry, MenuRequest } from "../ContextMenu.tsx";
@@ -18,6 +18,8 @@ import { CardComposer } from "../pkm/CardComposer.tsx";
 import { MarkdownEditor } from "../docs/MarkdownEditor.tsx";
 import { useEngineChoice } from "../StartView.tsx";
 import { StageDialog } from "./StageDialog.tsx";
+import { PropertiesPanel } from "./PropertiesPanel.tsx";
+import { TemplateDialog } from "./TemplateDialog.tsx";
 import "../../styles/project.css";
 
 // "프로젝트 = 노트 한 장": a work's page. From the top: what people wrote (stage, tags, related, other
@@ -88,11 +90,11 @@ export function ProjectView({
   }, [workId]);
   const [details, setDetails] = useState(false);
   const [adding, setAdding] = useState<null | "tag" | "related" | "property" | "decision" | "question">(null);
-  const [newKey, setNewKey] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [engine, setEngine] = useEngineChoice();
   const [stagesOpen, setStagesOpen] = useState(false);
+  const [templateOpen, setTemplateOpen] = useState(false);
   const version = `${state.pkm[`project:${workId}`] ?? 0}:${state.pkm["project:*"] ?? 0}`;
   // "연결": every project's tags and links, to find this one's neighbours (관련, shared tags).
   const [summaries, setSummaries] = useState<ProjectSummary[]>([]);
@@ -192,7 +194,6 @@ export function ProjectView({
   if (!page) return <main className="project-view"><div className="empty-hint">불러오는 중…</div></main>;
 
   const { note, facts, stages } = page;
-  const stage = stageOf(stages, note.stage);
   const folders: string[] = [];
   for (let id = work.folderId; id; id = state.folders[id]?.parentId ?? null) {
     const folder = state.folders[id];
@@ -200,8 +201,6 @@ export function ProjectView({
     folders.unshift(folder.name);
   }
   const next = continueSession(work, sessions);
-  const related = note.properties.find(([key]) => key === "관련")?.[1] ?? [];
-  const others = note.properties.filter(([key]) => !["단계", "tags", "tag", "관련"].includes(key));
   const projectNames = Object.values(state.works).filter((entry) => entry.id !== work.id && !entry.archivedAt).map((entry) => entry.title);
 
   const stageMenu = (x: number, y: number) => {
@@ -225,7 +224,6 @@ export function ProjectView({
     const icon = (place: StoppedPlace): IconName => (place.kind === "proposal" ? "file" : place.kind === "link" ? "link" : "alert");
     openMenu({ x: box.left, y: box.bottom + 4, title: "멈춘 곳", items: facts.stopped.map((place) => ({ kind: "item", label: place.text, icon: icon(place), hint: ago(place.at), onSelect: () => goTo(place) })) });
   };
-  const listValues = (values: string[] | null) => (values ?? []).filter(Boolean);
 
   const openEvent = (event: ProjectEvent) => {
     if (event.artifactId && event.proposalId) return onOpenDocument(event.artifactId, event.proposalId);
@@ -270,148 +268,22 @@ export function ProjectView({
             </div>
 
             {/* What people wrote: the note's own keys, as Obsidian shows properties. */}
-            <div className="project-props" aria-label="속성">
-              <button
-                type="button"
-                className={`project-stage${stage ? "" : " empty"}`}
-                style={stage ? ({ "--stage": stage.color } as CSSProperties) : undefined}
-                onClick={(event) => {
-                  const box = event.currentTarget.getBoundingClientRect();
-                  stageMenu(box.left, box.bottom + 4);
-                }}
-                title="단계 바꾸기"
-              >
-                <span className="project-stage-dot" aria-hidden />
-                {stage ? stage.name : "단계 없음"}
-              </button>
-              {note.tags.map((tag) => (
-                <span key={tag} className="project-chip tag">
-                  #{tag}
-                  <button type="button" className="project-chip-x" aria-label={`${tag} 태그 빼기`} onClick={() => run(api.setProjectProperty(workId, "tags", note.tags.filter((entry) => entry !== tag)))}>
-                    <Icon name="x" size={10} />
-                  </button>
-                </span>
-              ))}
-              {adding === "tag" ? (
-                <>
-                  <AddInput
-                    placeholder="태그"
-                    list="project-tags"
-                    onAdd={(value) => {
-                      const added = knownTags(value, tagChoices).filter((tag) => !note.tags.some((have) => have.toLowerCase() === tag.toLowerCase()));
-                      if (added.length) run(api.setProjectProperty(workId, "tags", [...note.tags, ...added]));
-                    }}
-                    onDone={() => setAdding(null)}
-                  />
-                  <datalist id="project-tags">
-                    {tagChoices.map((tag) => (
-                      <option key={tag} value={tag} />
-                    ))}
-                  </datalist>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  className="project-add"
-                  onClick={() => {
-                    setAdding("tag");
-                    if (vaultTags === null) api.vaultTags().then((list) => setVaultTags(list.map((entry) => entry.tag)), () => setVaultTags([]));
-                  }}
-                >
-                  + 태그
-                </button>
-              )}
-              {related.length ? <span className="project-sep" aria-hidden /> : null}
-              {related.map((value) => (
-                <span key={value} className="project-chip link" title={value}>
-                  <Icon name="link" size={11} /> {linkLabel(value)}
-                  <button type="button" className="project-chip-x" aria-label={`${linkLabel(value)} 관련에서 빼기`} onClick={() => run(api.setProjectProperty(workId, "관련", related.filter((entry) => entry !== value)))}>
-                    <Icon name="x" size={10} />
-                  </button>
-                </span>
-              ))}
-              {adding === "related" ? (
-                <>
-                  <AddInput placeholder="관련 프로젝트·노트" list="project-names" onAdd={(value) => run(api.setProjectProperty(workId, "관련", [...related, asLink(value)]))} onDone={() => setAdding(null)} />
-                  <datalist id="project-names">
-                    {projectNames.map((name) => (
-                      <option key={name} value={name} />
-                    ))}
-                  </datalist>
-                </>
-              ) : (
-                <button type="button" className="project-add" onClick={() => setAdding("related")}>
-                  + 관련
-                </button>
-              )}
-              {/* One line with the stage, tags and links (design §9); the new key's form opens below. */}
-              {adding !== "property" ? (
-                <button type="button" className="project-add" onClick={() => setAdding("property")}>
-                  + 속성
-                </button>
-              ) : null}
-            </div>
-            {others.length || adding === "property" ? (
-              <dl className="project-other-props">
-                {others.map(([key, values]) => (
-                  <div key={key} className="project-prop">
-                    <dt>{key}</dt>
-                    <dd>
-                      {editing === key ? (
-                        <input
-                          className="project-add-input"
-                          autoFocus
-                          value={draft}
-                          onChange={(event) => setDraft(event.target.value)}
-                          onKeyDown={(event) => {
-                            if (event.nativeEvent.isComposing) return;
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              const parts = (values?.length ?? 0) > 1 ? draft.split(",").map((part) => part.trim()) : [draft.trim()];
-                              run(api.setProjectProperty(workId, key, parts.filter(Boolean)));
-                              setEditing(null);
-                            } else if (event.key === "Escape") setEditing(null);
-                          }}
-                          onBlur={() => setEditing(null)}
-                        />
-                      ) : (
-                        <button
-                          type="button"
-                          className="project-prop-value"
-                          onClick={() => {
-                            setEditing(key);
-                            setDraft(listValues(values).join(", "));
-                          }}
-                        >
-                          {listValues(values).join(", ") || <span className="muted">값 없음</span>}
-                        </button>
-                      )}
-                      <button type="button" className="project-chip-x" aria-label={`${key} 속성 지우기`} onClick={() => run(api.setProjectProperty(workId, key, null))}>
-                        <Icon name="x" size={10} />
-                      </button>
-                    </dd>
-                  </div>
-                ))}
-                {adding === "property" ? (
-                  <div className="project-prop">
-                    <dt>
-                      <input className="project-add-input" autoFocus placeholder="이름" value={newKey} onChange={(event) => setNewKey(event.target.value)} />
-                    </dt>
-                    <dd>
-                      <AddInput
-                        placeholder="값 (Enter)"
-                        onAdd={(value) => {
-                          if (newKey.trim()) run(api.setProjectProperty(workId, newKey.trim(), [value]));
-                          setNewKey("");
-                          setAdding(null);
-                        }}
-                        onDone={() => undefined}
-                      />
-                    </dd>
-                  </div>
-                ) : null}
-              </dl>
-            ) : null}
+            {/* The properties, as Obsidian shows a note's: always at the top, a row per key with its kind. */}
+            <PropertiesPanel
+              rows={page.rows ?? []}
+              knownKeys={page.knownKeys ?? []}
+              stages={stages}
+              tagChoices={tagChoices}
+              projectNames={projectNames}
+              onWrite={(key, values, type) => run(api.setProjectProperty(workId, key, values, type))}
+              onKind={(key, type) => void api.setPropertyType(key, type).then(() => load(), onError)}
+              onStageMenu={stageMenu}
+              onTemplate={() => setTemplateOpen(true)}
+              onWantTags={() => {
+                if (vaultTags === null) api.vaultTags().then((list) => setVaultTags(list.map((entry) => entry.tag)), () => setVaultTags([]));
+              }}
+              openMenu={openMenu}
+            />
 
             {achmage ? (
               <div className="project-achmage" title="사용자의 Achmage 런타임이 기록한 이 작업(읽기 전용)">
@@ -787,6 +659,7 @@ export function ProjectView({
         hint="새 세션은 이 프로젝트의 노트(단계·결정·열린 질문)를 맥락 카드로 받습니다."
       />
       {stagesOpen ? <StageDialog api={api} stages={stages} onClose={() => setStagesOpen(false)} onSaved={() => load()} onError={onError} /> : null}
+      {templateOpen ? <TemplateDialog api={api} onClose={() => setTemplateOpen(false)} onSaved={() => load()} onError={onError} /> : null}
     </main>
   );
 }

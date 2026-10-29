@@ -8,6 +8,8 @@ import type {
   ProjectStage,
   ProjectSummary,
   ProjectWrite,
+  PropertyField,
+  PropertyType,
   ApiError,
   Artifact,
   Attachment,
@@ -154,7 +156,12 @@ export class Api {
   projects = () => this.request<ProjectSummary[]>("GET", "/api/projects/");
   project = (workId: string) => this.request<ProjectPage>("GET", `/api/projects/${encodeURIComponent(workId)}`);
   projectEvents = (workId: string) => this.request<ProjectEvent[]>("GET", `/api/projects/${encodeURIComponent(workId)}/events`);
-  setProjectProperty = (workId: string, key: string, values: string[] | null) => this.request<ProjectWrite>("PUT", `/api/projects/${encodeURIComponent(workId)}/property`, { key, values });
+  setProjectProperty = (workId: string, key: string, values: string[] | null, type?: PropertyType) =>
+    this.request<ProjectWrite>("PUT", `/api/projects/${encodeURIComponent(workId)}/property`, { key, values, ...(type ? { type } : {}) });
+  propertyTemplate = () => this.request<PropertyField[]>("GET", "/api/projects/template");
+  savePropertyTemplate = (fields: PropertyField[] | null) => this.request<PropertyField[]>("PUT", "/api/projects/template", fields === null ? { reset: true } : { fields });
+  importPropertyTemplate = (markdown: string) => this.request<PropertyField[]>("POST", "/api/projects/template/import", { markdown });
+  setPropertyType = (key: string, type: PropertyType) => this.request<Record<string, PropertyType>>("PUT", "/api/projects/types", { key, type });
   setProjectStage = (workId: string, stage: string | null) => this.request<ProjectWrite>("PUT", `/api/projects/${encodeURIComponent(workId)}/stage`, { stage });
   addProjectEntry = (workId: string, entry: ProjectEntryRequest) => this.request<ProjectWrite>("POST", `/api/projects/${encodeURIComponent(workId)}/entries`, entry);
   setProjectQuestion = (workId: string, line: number, done: boolean) => this.request<ProjectWrite>("PUT", `/api/projects/${encodeURIComponent(workId)}/entries/${line}`, { done });

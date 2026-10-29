@@ -328,6 +328,300 @@ button.project-fact {
   color: var(--text);
 }
 
+/* ── 속성: Obsidian's properties block, at the top of the page ─────────────────────────── */
+.properties-panel {
+  margin-top: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+
+.properties-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.properties-panel.collapsed .properties-head {
+  border-bottom: 0;
+}
+
+.properties-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-ui);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.properties-count {
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.properties-rows {
+  padding: var(--space-1) 0;
+}
+
+.prop-row {
+  display: grid;
+  grid-template-columns: 28px minmax(96px, 160px) 1fr;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 var(--space-3) 0 var(--space-2);
+}
+
+.prop-row:hover,
+.prop-row:focus-within {
+  background: var(--surface-raised);
+}
+
+.prop-kind {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.prop-kind:hover {
+  color: var(--text);
+  background: var(--hover, var(--surface-muted));
+}
+
+.prop-key {
+  overflow: hidden;
+  padding-right: var(--space-3);
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prop-value-cell {
+  min-width: 0;
+  padding: var(--space-1) 0;
+  font-size: var(--fs-ui);
+}
+
+.prop-row.absent .prop-key {
+  color: var(--muted);
+}
+
+.prop-line {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 100%;
+}
+
+.prop-value {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 2px var(--space-1);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+}
+
+.prop-value:hover {
+  background: var(--surface-muted);
+}
+
+.prop-value.empty,
+.prop-add-value.empty {
+  color: var(--muted);
+}
+
+.prop-quick {
+  padding: 1px var(--space-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  cursor: pointer;
+}
+
+.prop-input {
+  width: min(100%, 360px);
+  height: 28px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-ui);
+  outline: none;
+}
+
+.prop-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.prop-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 1px 4px 1px var(--space-2);
+  border-radius: var(--r-xs);
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
+  color: color-mix(in srgb, var(--muted) 75%, var(--text));
+  font-size: var(--fs-meta);
+  white-space: nowrap;
+}
+
+.prop-chip.kind-tags {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--accent);
+}
+
+.prop-chip-x {
+  display: inline-flex;
+  padding: 2px;
+  border: 0;
+  border-radius: var(--r-xs);
+  background: none;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+.prop-chip-x:hover {
+  opacity: 1;
+}
+
+.prop-add-value {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-1);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--fs-ui);
+  cursor: pointer;
+}
+
+.prop-add-value:hover {
+  background: var(--surface-muted);
+  color: var(--text);
+}
+
+.prop-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.prop-add {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-2) var(--space-3);
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--fs-meta);
+  cursor: pointer;
+}
+
+.prop-add:hover {
+  background: var(--surface-muted);
+  color: var(--text);
+}
+
+.prop-new {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+}
+
+.prop-new .prop-input {
+  width: 200px;
+}
+
+.prop-new-kind {
+  height: 28px;
+}
+
+/* ── 속성 템플릿 ─────────────────────────────────────────────────────────────────────── */
+.template-dialog {
+  width: min(720px, calc(100vw - 48px));
+}
+
+.template-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.template-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-lead);
+  font-weight: 600;
+}
+
+.template-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 52vh;
+  margin: var(--space-3) 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.template-field {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) 128px minmax(120px, 1.2fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.template-order {
+  display: inline-flex;
+}
+
+.template-tools {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
 .project-empty {
   padding: 6px 0;
   color: var(--muted);

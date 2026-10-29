@@ -61,6 +61,12 @@ const PATHS = {
   run: "M13.5 5.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM7 21l3.5-6.5L13 17v4M10.5 14.5L12 9l-3 1.5-1.5 3M12 9l2.5 2.5 3 .5",
   bulb: "M9 18h6M10 21h4M12 3a6 6 0 00-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0012 3z",
   external: "M14 4h6v6M20 4l-9 9M18 13.5V19a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5.5",
+  // Property kinds (the project's properties panel).
+  calendar: "M5 5.5h14a1 1 0 011 1V19a1 1 0 01-1 1H5a1 1 0 01-1-1V6.5a1 1 0 011-1zM4 10h16M8.5 3.5v4M15.5 3.5v4",
+  hash: "M9.5 4l-2 16M16.5 4l-2 16M5 9h15M4 15h15",
+  checkSquare: "M5 4h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1zM8 12.5l3 3 5-6",
+  text: "M5 6h14M12 6v13M9 19h6",
+  stage: "M12 21a9 9 0 100-18 9 9 0 000 18zM12 16a4 4 0 100-8 4 4 0 000 8z",
 } as const;
 
 export type IconName = keyof typeof PATHS | "dots" | "stop";

@@ -82,7 +82,8 @@ describe("the project note file", () => {
     const { projects, work, cwd, manager } = setup(true);
     projects.setProperty(work.id, "tags", ["강의", "#2026-2학기"]);
     const path = join(cwd, ".workbench", "project.md");
-    expect(readFileSync(path, "utf8")).toContain("tags:\n  - 강의\n  - \"#2026-2학기\"\n");
+    // Tags are written without '#', as Obsidian keeps them in YAML.
+    expect(readFileSync(path, "utf8")).toContain("tags:\n  - 강의\n  - 2026-2학기\n");
     expect(manager.documents.list().some((entry) => entry.path === path && entry.role === "project-note")).toBe(true);
     expect(manager.view.works.get(work.id)!.tags).toEqual(["강의", "2026-2학기"]);
   });
@@ -161,6 +162,10 @@ describe("the record (기록)", () => {
     expect(of("handoff")).toEqual([{ text: "초안 → 검토: 표지를 검토해 줘 · 답 받음", sessionId: draft.id }]);
     // How many hand-overs happened before the stop depends on timing; who, why and where do not.
     expect(of("link")).toEqual([{ text: expect.stringMatching(/^세션 잇기 끝 · 초안 ⇄ 검토 · 끊음 · \d+번 주고받음$/), sessionId: draft.id }]);
+    // A stage change taken back with "되돌리기" leaves no record line.
+    const undone = projects.setStage(work.id, "보류");
+    projects.undo(work.id, undone.token);
+    expect(projects.page(work.id).events.filter((event) => event.kind === "stage").map((event) => event.text)).toEqual(["단계 값 없음 → 진행중"]);
     // Archiving from the archive (not the stage menu) is a stage change too.
     manager.updateWork(work.id, { archived: true });
     projects.workArchived(manager.view.works.get(work.id)!, true);
@@ -229,6 +234,51 @@ describe("what the engines are told", () => {
 
   it("counts lines added and removed roughly, as a multiset", () => {
     expect(lineCounts("a\nb\nc", "a\nc\nd\ne")).toEqual({ added: 2, removed: 1 });
+  });
+});
+
+describe("properties (Obsidian-like)", () => {
+  it("show the template's fields on every page, empty until filled, written in their kind", () => {
+    const { projects, work, cwd } = setup();
+    const page = projects.page(work.id);
+    expect(page.rows!.map((row) => [row.key, row.type, row.present])).toEqual([
+      ["단계", "stage", false],
+      ["tags", "tags", false],
+      ["종류", "list", false],
+      ["시작일", "date", false],
+      ["마감일", "date", false],
+      ["목표", "text", false],
+      ["관련", "links", false],
+    ]);
+    expect(existsSync(join(cwd, "안녕.md"))).toBe(false);
+    projects.setProperty(work.id, "종류", ["강의"], "list");
+    projects.setProperty(work.id, "시작일", ["10-29-2026"], "date");
+    projects.setProperty(work.id, "회차", ["3"], "number");
+    const text = readFileSync(join(cwd, "안녕.md"), "utf8");
+    expect(text).toContain("종류:\n  - 강의\n");
+    expect(text).toContain("시작일: 2026-10-29\n");
+    expect(text).toContain("회차: 3\n");
+    const rows = projects.page(work.id).rows!;
+    expect(rows.find((row) => row.key === "회차")).toMatchObject({ type: "number", values: ["3"], fromTemplate: false });
+    expect(rows.find((row) => row.key === "시작일")).toMatchObject({ present: true, values: ["2026-10-29"] });
+    expect(() => projects.setProperty(work.id, "마감일", ["언젠가"], "date")).toThrow(/날짜로 읽지 못했습니다/);
+  });
+
+  it("keep the kind the person picks for a name, and the template the person saves (or the default again)", () => {
+    const { projects, work, cwd } = setup();
+    projects.setProperty(work.id, "공개", ["예"]);
+    expect(projects.page(work.id).rows!.find((row) => row.key === "공개")!.type).toBe("text");
+    projects.setPropertyType("공개", "checkbox");
+    projects.setProperty(work.id, "공개", ["예"]);
+    expect(readFileSync(join(cwd, "안녕.md"), "utf8")).toContain("공개: true\n");
+    expect(projects.page(work.id).rows!.find((row) => row.key === "공개")!.type).toBe("checkbox");
+    expect(() => projects.setPropertyType("단계", "text")).toThrow(/형식은 바꿀 수 없습니다/);
+
+    projects.setTemplate([{ key: "단계", type: "stage" }, { key: "학기", type: "text", hint: "예: 2026-2" }]);
+    expect(projects.page(work.id).rows!.map((row) => row.key)).toEqual(["단계", "학기", "공개"]);
+    const imported = projects.importTemplate(["---", "tags: []", "마감: 2026-12-01", "---"].join("\n"));
+    expect(imported).toEqual([{ key: "tags", type: "tags" }, { key: "마감", type: "date" }]);
+    expect(projects.setTemplate(null).map((field) => field.key)).toEqual(["단계", "tags", "종류", "시작일", "마감일", "목표", "관련"]);
   });
 });
 

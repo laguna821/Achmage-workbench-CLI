@@ -127,6 +127,10 @@ export type ProjectPage = {
   stages: ProjectStage[];
   /** Vault notes its sessions' engines read by themselves, most read first ("엔진이 읽은 노트"). */
   readNotes?: EngineReadNote[];
+  /** The properties panel: template fields first, then the note's other keys, each with its kind. */
+  rows?: PropertyRow[];
+  /** Property names to suggest when adding one (the vault's, other projects'), with their kinds. */
+  knownKeys?: { key: string; type: PropertyType }[];
 };
 
 /** The Achmage work a project note names (`achmage_work`), as the user's Achmage runtime describes it (read-only). */
@@ -139,6 +143,50 @@ export type AchmageBrief = {
   devices: string[];
   /** A summary from its context, when the runtime had one to give. */
   summary: string | null;
+};
+
+/**
+ * A property's kind, as Obsidian has them (`.obsidian/types.json`: text, multitext, number,
+ * checkbox, date, datetime, tags, aliases) plus the project's stage and its links ("관련").
+ */
+export type PropertyType = "text" | "list" | "number" | "checkbox" | "date" | "datetime" | "tags" | "links" | "stage";
+
+export const PROPERTY_TYPES: { type: PropertyType; label: string }[] = [
+  { type: "text", label: "텍스트" },
+  { type: "list", label: "목록" },
+  { type: "number", label: "숫자" },
+  { type: "checkbox", label: "체크박스" },
+  { type: "date", label: "날짜" },
+  { type: "datetime", label: "날짜와 시간" },
+  { type: "tags", label: "태그" },
+  { type: "links", label: "링크" },
+  { type: "stage", label: "단계" },
+];
+
+/** One field of the properties template: every project shows it (empty until filled). */
+export type PropertyField = { key: string; type: PropertyType; hint?: string };
+
+/** The template every project starts from (the user can change it, or take one from a Markdown file's front matter). */
+export const DEFAULT_PROPERTY_TEMPLATE: PropertyField[] = [
+  { key: STAGE_KEY, type: "stage" },
+  { key: "tags", type: "tags" },
+  { key: "종류", type: "list", hint: "예: 강의, 연구, 개발, 행정, 글쓰기" },
+  { key: "시작일", type: "date" },
+  { key: "마감일", type: "date" },
+  { key: "목표", type: "text", hint: "이 프로젝트로 얻으려는 것 한 줄" },
+  { key: "관련", type: "links", hint: "관련 프로젝트·노트" },
+];
+
+/** A row of a project's properties panel: the template's fields first, then the note's other keys. */
+export type PropertyRow = {
+  key: string;
+  type: PropertyType;
+  /** As written (null: the key with no value); empty when the note does not have the key yet. */
+  values: string[] | null;
+  /** The note has the key. */
+  present: boolean;
+  fromTemplate: boolean;
+  hint?: string;
 };
 
 /** A write to the note, kept a while so "되돌리기" can put the bytes back. */

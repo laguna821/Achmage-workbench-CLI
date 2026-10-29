@@ -111,11 +111,48 @@ async function flow(provider: Provider) {
     await page.locator(".project-stage").click();
     await menuPick(page, "진행중");
     await until(() => existsSync(notePath));
-    await page.locator(".project-add", { hasText: "+ 태그" }).click();
-    await page.locator(".project-add-input").fill("강의");
-    await page.locator(".project-add-input").press("Enter");
+    // ── 속성: Obsidian-like, the template's fields from the start, each written in its kind ─────
+    const keys = await page.locator(".properties-panel .prop-row .prop-key").allInnerTexts();
+    pass("속성 칸: 템플릿의 단계·태그·종류·시작일·마감일·목표·관련이 처음부터 보임", keys.join("·") === "단계·태그·종류·시작일·마감일·목표·관련", keys.join("·"));
+    await page.locator('.prop-row[data-key="tags"] .prop-add-value').click();
+    await page.locator('.prop-row[data-key="tags"] .prop-input').fill("강의");
+    await page.locator('.prop-row[data-key="tags"] .prop-input').press("Enter");
     const tagged = await until(() => existsSync(notePath) && readFileSync(notePath, "utf8").includes("tags:\n  - 강의"));
     pass("태그는 노트의 tags 목록으로(다른 줄은 그대로)", tagged && readFileSync(notePath, "utf8").includes("단계: 진행중"));
+    await page.locator('.prop-row[data-key="시작일"] .prop-quick', { hasText: "오늘" }).click();
+    const today = new Date();
+    const ymd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const dated = await until(() => readFileSync(notePath, "utf8").includes(`시작일: ${ymd}`));
+    await page.locator(".prop-add", { hasText: "속성 추가" }).click();
+    await page.locator(".prop-new .prop-input").fill("회차");
+    await page.locator(".prop-new .prop-new-kind").selectOption("number");
+    await page.locator(".prop-new .button", { hasText: "추가" }).click();
+    await page.waitForSelector('.prop-row[data-key="회차"]');
+    await page.locator('.prop-row[data-key="회차"] .prop-value').click();
+    await page.locator('.prop-row[data-key="회차"] .prop-input').fill("3");
+    await page.locator('.prop-row[data-key="회차"] .prop-input').press("Enter");
+    const numbered = await until(() => readFileSync(notePath, "utf8").includes("회차: 3\n"));
+    await shot("01b-properties.png");
+    pass("날짜 '오늘'은 YYYY-MM-DD로, 새 속성 '회차'(숫자)는 따옴표 없이", dated && numbered, readFileSync(notePath, "utf8").split("---")[1]?.replace(/\n/g, "⏎") ?? "");
+
+    // ── 속성 템플릿: from a Markdown file's front matter, then back to the default ─────────────
+    const templateFile = join(folder, "내 템플릿.md");
+    writeFileSync(templateFile, ["---", "tags: []", "학기: 2026-2", "마감: 2026-12-01", "공개: true", "---", "본문"].join("\n"));
+    await page.locator(".properties-head .link", { hasText: "템플릿" }).click();
+    await page.waitForSelector(".template-dialog .template-field");
+    await page.locator('.template-dialog input[type="file"]').setInputFiles(templateFile);
+    await page.waitForSelector(".template-dialog .notice");
+    const imported = await page.locator(".template-dialog .template-key").evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).value));
+    await page.locator(".template-dialog .button.primary", { hasText: "저장" }).click();
+    await page.waitForSelector(".template-dialog", { state: "detached" });
+    const after = await until(async () => (await page.locator(".properties-panel .prop-row .prop-key").allInnerTexts()).join("·").startsWith("단계·태그·학기·마감·공개"));
+    await shot("01c-template.png");
+    await page.locator(".properties-head .link", { hasText: "템플릿" }).click();
+    await page.waitForSelector(".template-dialog .template-field");
+    await page.locator(".template-dialog .button", { hasText: "기본값으로" }).click();
+    await page.waitForSelector(".template-dialog", { state: "detached" });
+    const reset = await until(async () => (await page.locator(".properties-panel .prop-row .prop-key").first().innerText()) === "단계" && (await page.locator('.prop-row[data-key="종류"]').count()) === 1);
+    pass("속성 템플릿: MD 파일의 YAML로 바꾸면 모든 프로젝트 칸이 따르고, 기본값으로 되돌림", Boolean(after) && reset && imported.join("·") === "단계·tags·학기·마감·공개", imported.join("·"));
 
     // ── "결정으로" on a reply ────────────────────────────────────────────────────────────────
     await page.locator(".project-view .project-row", { hasText: "슬라이드" }).click();

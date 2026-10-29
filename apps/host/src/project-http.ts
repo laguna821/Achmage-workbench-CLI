@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { ProjectStage } from "@workbench/contracts";
+import { PROPERTY_TYPES, type ProjectStage, type PropertyType } from "@workbench/contracts";
 import { HttpError } from "./errors.ts";
 import { readBody, sendJson } from "./http.ts";
 import type { Projects } from "./project.ts";
@@ -18,6 +18,8 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
   }
 }
 
+const kindOf = (value: unknown): PropertyType | null => (PROPERTY_TYPES.some((entry) => entry.type === value) ? (value as PropertyType) : null);
+
 const strings = (value: unknown): string[] | null => (value === null ? null : Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : typeof value === "string" ? [value] : null);
 
 /** Handle one project request; false when the path is not one of these routes. */
@@ -32,6 +34,23 @@ export async function handleProject(projects: Projects, req: IncomingMessage, re
     }
     return false;
   }
+  // The properties template every project shows, a template from a Markdown file, the kinds of names.
+  if (parts[0] === "template") {
+    if (parts[1] === "import" && method === "POST") {
+      const body = await readJson(req);
+      return (sendJson(res, 200, projects.importTemplate(String(body.markdown ?? ""))), true);
+    }
+    if (method === "GET" && !parts[1]) return (sendJson(res, 200, projects.template()), true);
+    if (method === "PUT" && !parts[1]) {
+      const body = await readJson(req);
+      return (sendJson(res, 200, projects.setTemplate(body.reset === true ? null : body.fields)), true);
+    }
+    return false;
+  }
+  if (parts[0] === "types" && method === "PUT") {
+    const body = await readJson(req);
+    return (sendJson(res, 200, projects.setPropertyType(String(body.key ?? ""), kindOf(body.type) ?? "text")), true);
+  }
   if (parts[0] === "changes" && method === "GET") return (sendJson(res, 200, projects.changes(url.searchParams.get("sessionId") ?? "")), true);
   if (!parts.length && method === "GET") return (sendJson(res, 200, projects.summaries()), true);
   const workId = parts[0];
@@ -42,7 +61,7 @@ export async function handleProject(projects: Projects, req: IncomingMessage, re
   if (method === "GET" && action === "events") return (sendJson(res, 200, projects.allEvents(workId)), true);
   if (method === "PUT" && action === "property") {
     const body = await readJson(req);
-    return (sendJson(res, 200, projects.setProperty(workId, String(body.key ?? ""), strings(body.values))), true);
+    return (sendJson(res, 200, projects.setProperty(workId, String(body.key ?? ""), strings(body.values), kindOf(body.type))), true);
   }
   if (method === "PUT" && action === "stage") {
     const body = await readJson(req);

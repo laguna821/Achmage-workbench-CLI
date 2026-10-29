@@ -24,6 +24,8 @@ import {
   type ProjectStage,
   type ProjectSummary,
   type ProjectWrite,
+  type PropertyField,
+  type PropertyType,
   type Provider,
   type Session,
   type StoppedPlace,
@@ -36,6 +38,7 @@ import type { Pkm } from "./pkm.ts";
 import { ID_KEY, appendEntry, newNote, noteFileName, readNote, setBody, setEntryDone, setFrontmatterKey, type ReadNote } from "./project-note.ts";
 import type { IndexEntry, WorkExtras } from "./search-index.ts";
 import { Achmage } from "./achmage.ts";
+import { DEFAULT_PROPERTY_TEMPLATE, cleanTemplate, inferType, keyStyle, normalizeValues, propertyRows, templateFromMarkdown, vaultPropertyTypes } from "./project-properties.ts";
 import type { SessionManager } from "./sessions.ts";
 import type { Store } from "./store.ts";
 
@@ -49,6 +52,9 @@ const NOTES_KEY = "project.notes";
 const STAGES_KEY = "project.stages";
 const TOLD_KEY = "project.told";
 const ENTRIES_KEY = "project.entries";
+/** The properties template every project shows, and the kinds the user gave property names here. */
+const TEMPLATE_KEY = "project.template";
+const TYPES_KEY = "project.propertyTypes";
 const WEEK = 7 * 24 * 3600 * 1000;
 /** How much the change block before a request may take. */
 const CHANGE_LIMIT = 1000;
@@ -56,7 +62,8 @@ const CHANGE_LIMIT = 1000;
 type Told = { at: number; noteRevision: number };
 /** What the person wrote to the note that the record shows as such: decisions, questions, stage changes. */
 type EntryLog = { workId: string; at: number; section: "decision" | "question" | "stage"; text: string; sessionId: string | null; itemId: string | null };
-type Write = { workId: string; path: string; before: Buffer | null; after: Buffer; at: number; unarchive: boolean; rearchive: boolean };
+/** `logged`: the time of the record line this write added (a stage change, a decision), taken back with it. */
+type Write = { workId: string; path: string; before: Buffer | null; after: Buffer; at: number; unarchive: boolean; rearchive: boolean; logged?: number };
 
 const bytes = (text: string) => Buffer.byteLength(text, "utf8");
 const firstLine = (text: string, limit = 120) => {
@@ -319,7 +326,71 @@ export class Projects {
       card: this.pkm.cardFor(work),
       stages: this.stages(),
       readNotes: this.pkm.notesReadBy(sessionIds),
+      rows: propertyRows(this.template(), note.properties, (key, values) => this.typeOf(key, values)),
+      knownKeys: this.knownKeys(),
     };
+  }
+
+  // ── properties: kinds and the template ──────────────────────────────────────────────────
+
+  /** The properties template (the user's, else the default). */
+  template(): PropertyField[] {
+    const saved = this.readJson<unknown>(TEMPLATE_KEY, null);
+    if (!saved) return DEFAULT_PROPERTY_TEMPLATE.map((field) => ({ ...field }));
+    try {
+      return cleanTemplate(saved);
+    } catch {
+      return DEFAULT_PROPERTY_TEMPLATE.map((field) => ({ ...field }));
+    }
+  }
+
+  /** Save the template (null: back to the default); every project's panel follows. */
+  setTemplate(value: unknown): PropertyField[] {
+    if (value === null) this.store.setMeta(TEMPLATE_KEY, "");
+    else this.writeJson(TEMPLATE_KEY, cleanTemplate(value));
+    this.publish(null);
+    return this.template();
+  }
+
+  /** A template from a Markdown file's front matter (not saved: the dialog shows it first). */
+  importTemplate(markdown: string): PropertyField[] {
+    return templateFromMarkdown(markdown, this.vaultTypes());
+  }
+
+  private vaultTypes() {
+    return vaultPropertyTypes(this.pkm.vault.root);
+  }
+
+  /** A property's kind: the user's choice here, the template's, the vault's Obsidian's, else what its value shows. */
+  typeOf(key: string, values: string[] | null): PropertyType {
+    if (key === STAGE_KEY) return "stage";
+    const chosen = this.readJson<Record<string, PropertyType>>(TYPES_KEY, {})[key];
+    if (chosen) return chosen;
+    const field = this.template().find((entry) => entry.key === key);
+    if (field) return field.type;
+    return this.vaultTypes().get(key) ?? inferType(key, values);
+  }
+
+  /** "형식 바꾸기" on a row: remembered for that name in every project (the value is rewritten in that form when it is next written). */
+  setPropertyType(key: string, type: PropertyType): Record<string, PropertyType> {
+    const name = key.trim();
+    if (!name || name === ID_KEY || name === STAGE_KEY) throw new HttpError(400, "bad_key", "그 속성의 형식은 바꿀 수 없습니다.");
+    const types = { ...this.readJson<Record<string, PropertyType>>(TYPES_KEY, {}), [name]: type };
+    this.writeJson(TYPES_KEY, types);
+    this.publish(null);
+    return types;
+  }
+
+  /** Names to suggest when adding a property: the template's, the vault's, and other projects' notes'. */
+  private knownKeys(): { key: string; type: PropertyType }[] {
+    const keys = new Map<string, PropertyType>();
+    for (const field of this.template()) keys.set(field.key, field.type);
+    for (const [key, type] of this.vaultTypes()) if (!keys.has(key)) keys.set(key, type);
+    for (const path of Object.values(this.notePaths())) {
+      for (const [key, values] of this.readCached(path)?.read.properties ?? []) if (key !== ID_KEY && !keys.has(key)) keys.set(key, this.typeOf(key, values));
+      if (keys.size > 300) break;
+    }
+    return [...keys].map(([key, type]) => ({ key, type }));
   }
 
   /** Everything recorded in the project, newest first (기록 칸 "전체"). */
@@ -599,12 +670,14 @@ export class Projects {
     if (artifact) this.manager.documents.setRole(artifact.id, "project-note");
   }
 
-  setProperty(workId: string, key: string, values: string[] | null): ProjectWrite {
+  /** Write a property in its kind's form (`type`: as the panel knows it; else the kind this name has). */
+  setProperty(workId: string, key: string, values: string[] | null, type: PropertyType | null = null): ProjectWrite {
     const name = key.trim();
     if (!name || name === ID_KEY) throw new HttpError(400, "bad_key", "그 이름의 속성은 쓸 수 없습니다.");
     if (name === STAGE_KEY) return this.setStage(workId, values?.[0] ?? null);
-    const clean = values === null ? null : values.map((value) => value.trim()).filter(Boolean);
-    const result = this.write(workId, values === null ? `${name} 지움` : `${name}: ${clean!.join(", ") || "(빈 값)"}`, (text) => setFrontmatterKey(text, name, clean));
+    const kind = type ?? this.typeOf(name, values);
+    const clean = values === null ? null : normalizeValues(kind, values);
+    const result = this.write(workId, values === null ? `${name} 지움` : `${name}: ${clean!.join(", ") || "(빈 값)"}`, (text) => setFrontmatterKey(text, name, clean, keyStyle(kind)));
     if (name === "tags") this.manager.updateWork(workId, { tags: (clean ?? []).map((tag) => tag.replace(/^#/, "")) });
     return result;
   }
@@ -628,7 +701,7 @@ export class Projects {
     }
     try {
       const written = this.write(workId, `단계: ${previous ?? "값 없음"} → ${name ?? "값 없음"}`, (text) => setFrontmatterKey(text, STAGE_KEY, name ? [name] : null), { unarchive: archiving, rearchive: leaving });
-      if (written.token) this.logEntry({ workId, section: "stage", text: `단계 ${previous ?? "값 없음"} → ${name ?? "값 없음"}${via ? ` (${via})` : ""}`, sessionId: null, itemId: null });
+      if (written.token) this.logEntry({ workId, section: "stage", text: `단계 ${previous ?? "값 없음"} → ${name ?? "값 없음"}${via ? ` (${via})` : ""}`, sessionId: null, itemId: null }, written.token);
       return written.token ? { ...written, page: this.page(workId) } : written;
     } catch (error) {
       this.quiet.add(workId);
@@ -670,14 +743,18 @@ export class Projects {
     const source = session ? ` — ${session.provider === "claude" ? "Claude" : "Codex"} · ${session.purpose || "세션"} ([원문](workbench://session/${session.id}${request.itemId ? `#${request.itemId}` : ""}))` : "";
     const line = `${stamp} ${text}${source}`;
     const result = this.write(workId, section === "decision" ? `결정: ${text}` : `열린 질문: ${text}`, (current) => appendEntry(current, section, line));
-    this.logEntry({ workId, section, text, sessionId: session?.id ?? null, itemId: request.itemId ?? null });
+    this.logEntry({ workId, section, text, sessionId: session?.id ?? null, itemId: request.itemId ?? null }, result.token);
     return { ...result, page: this.page(workId) };
   }
 
-  private logEntry(entry: Omit<EntryLog, "at">) {
+  /** A record line for what the person wrote; `token` ties it to that write, so "되돌리기" takes it back too. */
+  private logEntry(entry: Omit<EntryLog, "at">, token: string | null = null) {
     const log = this.readJson<EntryLog[]>(ENTRIES_KEY, []);
-    log.push({ ...entry, at: Date.now() });
+    const at = Math.max(Date.now(), (log.at(-1)?.at ?? 0) + 1);
+    log.push({ ...entry, at });
     this.writeJson(ENTRIES_KEY, log.slice(-2000));
+    const write = token ? this.writes.get(token) : undefined;
+    if (write) write.logged = at;
   }
 
   setQuestionDone(workId: string, line: number, done: boolean): ProjectWrite {
@@ -718,6 +795,7 @@ export class Projects {
       this.quiet.delete(workId);
     }
     this.writes.delete(token);
+    if (entry.logged !== undefined) this.writeJson(ENTRIES_KEY, this.readJson<EntryLog[]>(ENTRIES_KEY, []).filter((line) => !(line.workId === workId && line.at === entry.logged)));
     this.publish(workId);
     return this.page(workId);
   }

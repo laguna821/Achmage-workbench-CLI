@@ -39,26 +39,30 @@ export function yamlKey(key: string) {
   return /^[^\s#'"\-?:,[\]{}&*!|>%@`][^:#]*$/.test(key) && !/\s$/.test(key) ? key : JSON.stringify(key);
 }
 
-function renderKey(key: string, values: string[], style: "scalar" | "block" | "inline", nl: string): string {
+function renderKey(key: string, values: string[], style: "scalar" | "block" | "inline", nl: string, raw = false): string {
   const head = `${yamlKey(key)}:`;
-  if (style === "scalar") return `${values.length ? `${head} ${yamlValue(values[0]!)}` : head}${nl}`;
-  if (style === "inline") return `${head} [${values.map(yamlValue).join(", ")}]${nl}`;
-  return values.length ? `${head}${nl}${values.map((value) => `  - ${yamlValue(value)}${nl}`).join("")}` : `${head}${nl}`;
+  const value = raw ? (text: string) => text : yamlValue;
+  if (style === "scalar") return `${values.length ? `${head} ${value(values[0]!)}` : head}${nl}`;
+  if (style === "inline") return `${head} [${values.map(value).join(", ")}]${nl}`;
+  return values.length ? `${head}${nl}${values.map((entry) => `  - ${value(entry)}${nl}`).join("")}` : `${head}${nl}`;
 }
+
+/** How a value is written: `list` as a YAML list even with one item (Obsidian's lists, tags, links); `raw` unquoted (numbers, true/false). */
+export type KeyStyle = { list?: boolean; raw?: boolean };
 
 /**
  * Set a front matter key (null removes it). The key keeps its place and, for lists, the shape it
  * had (block or `[inline]`); a new key goes last. A note without front matter gets one.
  */
-export function setFrontmatterKey(text: string, key: string, values: string[] | null): string {
+export function setFrontmatterKey(text: string, key: string, values: string[] | null, how: KeyStyle = {}): string {
   const nl = lineEnding(text);
   const range = frontmatterRange(text);
-  const listy = LIST_KEYS.has(key) || (values?.length ?? 0) > 1;
+  const listy = how.list ?? (LIST_KEYS.has(key) || (values?.length ?? 0) > 1);
   if (!range) {
     if (values === null) return text;
     const bom = text.startsWith("﻿") ? "﻿" : "";
     const body = bom ? text.slice(1) : text;
-    return `${bom}---${nl}${renderKey(key, values, listy ? "block" : "scalar", nl)}---${nl}${body}`;
+    return `${bom}---${nl}${renderKey(key, values, listy ? "block" : "scalar", nl, how.raw)}---${nl}${body}`;
   }
   const lines = linesOf(text.slice(range.start, range.end));
   let at = -1;
@@ -75,7 +79,7 @@ export function setFrontmatterKey(text: string, key: string, values: string[] | 
     else if (length > 1) style = "block";
     break;
   }
-  const rendered = values === null ? "" : renderKey(key, values, style, nl);
+  const rendered = values === null ? "" : renderKey(key, values, style, nl, how.raw);
   const yaml = at === -1 ? `${lines.join("")}${lines.length && !/\n$/.test(lines.at(-1)!) ? nl : ""}${rendered}` : [...lines.slice(0, at), rendered, ...lines.slice(at + length)].join("");
   return text.slice(0, range.start) + yaml + text.slice(range.end);
 }
