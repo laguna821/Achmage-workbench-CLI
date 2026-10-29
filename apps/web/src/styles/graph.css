@@ -1,0 +1,453 @@
+/* Home "프로젝트" → "그래프": the frame, its points and lines (positions are written by graph-view.ts),
+   and the settings panel over the frame's corner. Colours the person picks arrive as inline custom
+   properties (user data); the theme's own are the defaults below. */
+
+.projects-graph {
+  --graph-project-default: color-mix(in srgb, var(--text) 38%, var(--surface));
+  --graph-tag-default: color-mix(in srgb, var(--accent) 72%, var(--surface));
+  --graph-related-default: color-mix(in srgb, var(--accent) 55%, transparent);
+  --graph-tag-line-default: color-mix(in srgb, var(--text) 20%, transparent);
+  --graph-highlight-default: var(--accent);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.graph-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  min-height: 28px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
+.graph-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.graph-bar-gap {
+  flex: 1;
+}
+
+.graph-bar .link {
+  font-size: var(--fs-meta);
+}
+
+.graph-stage {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: color-mix(in srgb, var(--text) 2%, var(--surface));
+}
+
+.graph-canvas {
+  display: block;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.graph-canvas.dragging,
+.graph-canvas.dragging .graph-node {
+  cursor: grabbing;
+}
+
+/* Lines: one path per kind, and the lit ones (around the point under the pointer) on top. */
+.graph-edges {
+  fill: none;
+  stroke-linecap: round;
+}
+
+.graph-edges.tag {
+  stroke: var(--graph-tag-line, var(--graph-tag-line-default));
+  stroke-width: var(--graph-tag-width, 1);
+}
+
+.graph-edges.related {
+  stroke: var(--graph-related, var(--graph-related-default));
+  stroke-width: var(--graph-related-width, 1.6);
+}
+
+.graph-edges.lit {
+  stroke: var(--graph-highlight, var(--graph-highlight-default));
+}
+
+.graph-arrows {
+  fill: var(--graph-related, var(--graph-related-default));
+}
+
+.graph-arrows.lit {
+  fill: var(--graph-highlight, var(--graph-highlight-default));
+}
+
+/* Points: projects filled (their stage's colour inline, or one colour), tags as rings. */
+.graph-node {
+  cursor: pointer;
+  outline: none;
+}
+
+/* Not painted, yet it takes the pointer over its whole disc. */
+.graph-hit {
+  fill: none;
+  stroke: none;
+  pointer-events: all;
+}
+
+.graph-dot {
+  fill: var(--graph-project, var(--graph-project-default));
+  stroke: var(--surface);
+  stroke-width: 1.5;
+}
+
+.graph-node.tag .graph-dot {
+  fill: var(--surface);
+  stroke: var(--graph-tag, var(--graph-tag-default));
+  stroke-width: 1.75;
+}
+
+.graph-node.archived .graph-dot {
+  fill-opacity: 0.45;
+  stroke-opacity: 0.45;
+}
+
+.graph-node text {
+  fill: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--graph-label-size, var(--fs-micro));
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  /* Labels never take the click from a neighbouring point. */
+  pointer-events: none;
+  /* Fading by paint opacity, not `opacity`: WebKit would composite a layer per label each frame. */
+  fill-opacity: var(--graph-label-opacity, 1);
+  stroke-opacity: var(--graph-label-opacity, 1);
+}
+
+.graph-node.tag text {
+  fill: color-mix(in srgb, var(--graph-tag, var(--accent)) 72%, var(--text));
+}
+
+.graph-node.archived text {
+  fill: var(--muted);
+}
+
+/* Zoomed out past the threshold: no labels, except around the point under the pointer. */
+.graph-canvas.labels-off .graph-node:not([data-lit]) text {
+  display: none;
+}
+
+.graph-node[data-lit] text {
+  fill-opacity: 1;
+  stroke-opacity: 1;
+  transform: scale(var(--graph-counter, 1));
+  transform-box: fill-box;
+  transform-origin: 50% 0;
+}
+
+.graph-node[data-centre] .graph-dot {
+  stroke: var(--graph-highlight, var(--graph-highlight-default));
+  stroke-width: 2.5;
+}
+
+.graph-node:focus-visible .graph-dot {
+  stroke: var(--focus);
+  stroke-width: 2.5;
+}
+
+/* Lit: the point under the pointer (or dragged, or a focused tag) and its neighbours; the rest steps
+   back. Paint opacity again (no layer per point), so 300 points stay smooth while one is dragged. */
+.graph-canvas.has-lit .graph-node:not([data-lit]) .graph-dot {
+  fill-opacity: 0.2;
+  stroke-opacity: 0.2;
+}
+
+.graph-canvas.has-lit .graph-node:not([data-lit]) text {
+  fill-opacity: 0.2;
+  stroke-opacity: 0;
+}
+
+.graph-canvas.has-lit .graph-edges:not(.lit) {
+  stroke-opacity: 0.12;
+}
+
+.graph-canvas.has-lit .graph-arrows:not(.lit) {
+  fill-opacity: 0.12;
+}
+
+/* The fade only for a small graph: with hundreds of points, starting that many transitions at once
+   costs a long frame just when a drag begins. */
+@media (prefers-reduced-motion: no-preference) {
+  .graph-canvas.few .graph-dot,
+  .graph-canvas.few .graph-node text,
+  .graph-canvas.few .graph-edges,
+  .graph-canvas.few .graph-arrows {
+    transition:
+      fill-opacity var(--dur-fast) var(--ease-out),
+      stroke-opacity var(--dur-fast) var(--ease-out);
+  }
+}
+
+.graph-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  pointer-events: none;
+}
+
+.graph-gear {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+}
+
+/* The settings panel: a popover-like sheet over the frame's corner; the graph stays live beside it. */
+.graph-panel {
+  position: absolute;
+  z-index: var(--z-float);
+  top: var(--space-2);
+  right: var(--space-2);
+  width: min(296px, calc(100% - var(--space-4)));
+  max-height: calc(100% - var(--space-4));
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--elev-2);
+  animation: graph-panel-in var(--dur-base) var(--ease-out);
+}
+
+@keyframes graph-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.graph-panel-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 44px;
+  padding: 0 var(--space-2) 0 var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.graph-panel-title {
+  flex: 1;
+  font-size: var(--fs-ui);
+  font-weight: 600;
+}
+
+.graph-panel-body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: var(--space-1);
+}
+
+.graph-section + .graph-section {
+  border-top: 1px solid var(--line);
+}
+
+.graph-section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3) 0 var(--space-2);
+}
+
+.graph-section-toggle {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 36px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  text-align: left;
+}
+
+.graph-section-toggle:hover {
+  background: var(--hover);
+}
+
+.graph-section-toggle svg {
+  color: var(--muted);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.graph-section.open .graph-section-toggle svg {
+  transform: rotate(90deg);
+}
+
+.graph-reset {
+  flex: none;
+  height: 24px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  white-space: nowrap;
+}
+
+.graph-reset:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.graph-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-4) var(--space-4);
+}
+
+.graph-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.graph-search,
+.graph-hex {
+  height: 28px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-meta);
+  font-weight: 400;
+}
+
+.graph-hex {
+  width: 84px;
+  font-family: var(--mono);
+  font-size: var(--fs-micro);
+}
+
+.graph-search::placeholder,
+.graph-hex::placeholder {
+  color: var(--muted);
+}
+
+.graph-search:focus,
+.graph-hex:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+/* The app's switch rows, aligned to the panel's text. */
+.check-row.switch-row.graph-switch {
+  margin: calc(var(--space-1) * -1) calc(var(--space-2) * -1);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--fs-meta);
+}
+
+.check-row.switch-row.graph-switch.disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.graph-slider {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  row-gap: var(--space-1);
+  font-size: var(--fs-meta);
+}
+
+.graph-slider-value {
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.graph-slider input[type="range"] {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.graph-color {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.graph-color-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--fs-meta);
+}
+
+.graph-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.graph-swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--text) 16%, transparent);
+  border-radius: var(--r-full);
+  cursor: pointer;
+}
+
+/* "기본": the theme's colour, ringed with a dashed line so it reads as "not a colour of mine". */
+.graph-swatch.default {
+  border: 1px dashed var(--muted);
+}
+
+.graph-swatch.on {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.graph-swatch:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.button.small.graph-unpin {
+  align-self: flex-start;
+  margin-top: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .graph-panel {
+    animation: none;
+  }
+
+  .graph-section-toggle svg {
+    transition: none;
+  }
+}

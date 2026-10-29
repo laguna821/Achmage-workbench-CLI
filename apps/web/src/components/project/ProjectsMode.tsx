@@ -53,13 +53,16 @@ export function ProjectsMode({
   const worksKey = Object.values(state.works)
     .map((work) => `${work.id}:${work.archivedAt ?? 0}`)
     .join(",");
+  // The graph waits for the first summaries (its "관련" lines), so it is laid out once, not twice.
+  const [loaded, setLoaded] = useState(false);
   const load = useCallback(() => {
     void Promise.all([api.projects(), api.projectStages()])
       .then(([list, nextStages]) => {
         setSummaries(new Map(list.map((entry) => [entry.workId, entry])));
         setStages(nextStages);
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => setLoaded(true));
   }, [api]);
   useEffect(load, [load, version, worksKey]);
 
@@ -155,10 +158,12 @@ export function ProjectsMode({
       ) : (
         <ProjectsGraph
           items={rows
-            .filter((row) => !row.work.archivedAt && !workHidden(state, row.work) && matches(row))
-            .map((row) => ({ work: row.work, stage: row.summary?.stage ?? null, tags: row.summary?.tags ?? row.work.tags ?? [], related: row.summary?.related ?? [], sessions: row.sessions.length }))}
+            .filter(matches)
+            // Archived projects come too (the graph's filter shows them when asked).
+            .map((row) => ({ work: row.work, stage: row.summary?.stage ?? null, tags: row.summary?.tags ?? row.work.tags ?? [], related: row.summary?.related ?? [], sessions: row.sessions.length, archived: workHidden(state, row.work) }))}
           stages={stages}
           openProject={openProject}
+          loading={!loaded}
         />
       )}
     </div>
