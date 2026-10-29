@@ -1,7 +1,7 @@
 {
   "name": "@workbench/host",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "scripts": {
     "dev": "node --watch src/main.ts",
@@ -9,9 +9,9 @@
     "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/host.mjs --log-level=warning --banner:js=\"import{createRequire as __cr}from'module';const require=__cr(import.meta.url);\""
   },
   "dependencies": {
-    "@workbench/contracts": "0.2.0",
-    "@workbench/provider-claude": "0.2.0",
-    "@workbench/provider-codex": "0.2.0",
+    "@workbench/contracts": "0.2.1",
+    "@workbench/provider-claude": "0.2.1",
+    "@workbench/provider-codex": "0.2.1",
     "diff": "^9.0.0"
   }
 }
