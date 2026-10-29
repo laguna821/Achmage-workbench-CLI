@@ -794,3 +794,4 @@ export * from "./entry.ts";
 export * from "./recovery.ts";
 export * from "./search.ts";
 export * from "./setup.ts";
+export * from "./calendar.ts";

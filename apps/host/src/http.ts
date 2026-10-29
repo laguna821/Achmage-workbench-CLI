@@ -13,6 +13,7 @@ import { parseDrawRequest } from "./imagegen.ts";
 import { parseStartRequest } from "./links.ts";
 import type { AgentBrowser } from "./browse.ts";
 import { routeDocImages, type DocImages } from "./doc-images.ts";
+import { routeCalendar, type CalendarFeeds } from "./calendar-feeds.ts";
 
 export const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -102,6 +103,8 @@ export type HttpOptions = {
   timeline?: (since: number, until?: number) => Timeline;
   /** Images pasted into Markdown documents (doc-images.ts). */
   docImages?: DocImages;
+  /** Calendar feeds on home "흐름" (calendar-feeds.ts). */
+  calendar?: CalendarFeeds;
   /** `/api/pkm/*` (pkm-http.ts): the vault mirror, views, rules and pages; true when it answered. */
   pkm?: (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<boolean>;
   /** `/api/projects/*` (project-http.ts): a work as a project note; true when it answered. */
@@ -474,6 +477,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       }
       // Pictures in documents: R2 settings, pasted images, Markdown preview pictures, the desktop clipboard's picture.
       if (options.docImages && (await routeDocImages(options.docImages, req, res, url))) return;
+      if (options.calendar && (await routeCalendar(options.calendar, req, res, url))) return;
       if (parts[0] === "artifacts" && parts[1]) {
         const documents = manager.documents;
         const artifactId = parts[1];
