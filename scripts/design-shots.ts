@@ -323,6 +323,42 @@ const SCREENS: Screen[] = [
     steps: [...openSession(codex.id), { wait: "__wb.has('.approval-card')" }, { js: "__wb.blur()" }],
     settle: 900,
   },
+  {
+    name: "17-integrations",
+    steps: [
+      ...openSession(codex.id),
+      { js: "__wb.click('.topbar-right .anchor .icon-button')", wait: "__wb.has('.popover .text-button', 'MCP')" },
+      { js: "__wb.click('.popover .text-button', 'MCP')", wait: "__wb.has('.integrations-sheet')" },
+    ],
+    settle: 1200,
+    cleanup: [{ js: "__wb.click('.integrations-sheet .sheet-head .icon-button')", wait: "!__wb.has('.integrations-sheet')" }],
+  },
+  {
+    name: "18-home-board",
+    steps: [
+      { js: "__wb.click('.topbar .brand')", wait: "__wb.has('.home-mode-bar')" },
+      { js: "__wb.click('.home-mode-bar button', '보드')", wait: "__wb.has('.home-modes.mode-board')" },
+      { js: "__wb.blur()" },
+    ],
+    settle: 900,
+    cleanup: [{ js: "__wb.click('.home-mode-bar button', '지금')", wait: "__wb.has('.home-modes.mode-now')" }],
+  },
+  {
+    name: "19-schedule",
+    steps: [
+      ...openSession(codex.id),
+      { js: `__wb.context('${row(codex.id)}')`, wait: "__wb.has('.context-menu-item', '예약 작업')" },
+      { js: "__wb.click('.context-menu-item', '예약 작업')", wait: "__wb.has('.schedule-dialog')" },
+    ],
+    settle: 600,
+    cleanup: [{ js: "__wb.key('Escape'); document.querySelector('.modal-backdrop') && document.querySelector('.modal-backdrop').dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))", wait: "!__wb.has('.schedule-dialog')" }],
+  },
+  {
+    name: "20-switcher",
+    steps: [...openSession(codex.id), { js: "__wb.blur(); __wb.key('Tab', { ctrlKey: true })", wait: "__wb.has('.switcher')" }],
+    settle: 500,
+    cleanup: [{ js: "window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Control', bubbles: true }))", wait: "!__wb.has('.switcher')" }],
+  },
 ];
 const screens = only ? SCREENS.filter((screen) => only.some((name) => screen.name.includes(name))) : SCREENS;
 const VIEWPORT = { width: 1280, height: 860 };

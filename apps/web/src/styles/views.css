@@ -5,16 +5,16 @@
   transform-origin: 0 0;
 }
 
-/* The mode bar: a quiet segmented row; the pill slides to the chosen mode. */
+/* The mode bar: a segmented row like the others; the raised cell slides to the chosen mode. */
 .mode-bar {
   position: relative;
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  padding: 3px;
+  padding: 2px;
   border: 1px solid var(--line);
-  border-radius: var(--r-full);
-  background: var(--surface);
+  border-radius: var(--r-md);
+  background: var(--segmented-bg);
   font-family: var(--font);
 }
 
@@ -22,13 +22,15 @@
   position: relative;
   z-index: 1;
   height: 28px;
-  padding: 0 13px;
+  padding: 0 var(--space-3);
   border: none;
-  border-radius: var(--r-full);
+  border-radius: var(--r-sm);
   background: transparent;
   color: var(--muted);
   font-size: var(--fs-meta);
+  font-weight: 500;
   white-space: nowrap;
+  transition: color var(--dur-fast) var(--ease-out);
 }
 
 .mode-bar button:hover:not(:disabled):not(.active) {
@@ -36,7 +38,7 @@
 }
 
 .mode-bar button.active {
-  color: var(--active-text);
+  color: var(--text);
   font-weight: 600;
 }
 
@@ -46,14 +48,17 @@
 
 .mode-pill {
   position: absolute;
-  top: 3px;
+  top: 2px;
   left: 0;
   height: 28px;
-  border-radius: var(--r-full);
-  background: var(--active-bg);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  box-shadow:
+    0 0 0 1px var(--line),
+    var(--elev-1);
   transition:
-    transform 260ms cubic-bezier(0.2, 0, 0, 1),
-    width 260ms cubic-bezier(0.2, 0, 0, 1);
+    transform var(--dur-base) var(--ease-out),
+    width var(--dur-base) var(--ease-out);
 }
 
 /* ── Home ─────────────────────────────────────────────────────────────── */
@@ -83,11 +88,12 @@
 /* Sticky at the bottom centre while home scrolls; below the content when it is short. */
 .home-mode-bar {
   position: sticky;
-  bottom: 16px;
+  bottom: var(--space-3);
   z-index: 15;
   align-self: center;
-  margin: auto 0 16px;
-  box-shadow: var(--popover-shadow);
+  margin: auto 0 var(--space-3);
+  background: var(--surface);
+  box-shadow: var(--elev-2);
 }
 
 .home-count {
@@ -735,13 +741,13 @@ button.flow-label:hover .flow-label-title {
 .work-mode-row {
   display: flex;
   justify-content: center;
-  margin: 0 0 8px;
+  margin: 0 0 var(--space-2);
 }
 
 .work-mode-bar button {
   height: 24px;
-  padding: 0 11px;
-  font-size: var(--fs-meta);
+  padding: 0 10px;
+  font-size: var(--fs-micro);
 }
 
 .work-mode-bar .mode-pill {
