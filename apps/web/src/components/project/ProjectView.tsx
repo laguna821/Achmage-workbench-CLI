@@ -196,7 +196,7 @@ export function ProjectView({
     if (event.artifactId && event.proposalId) return onOpenDocument(event.artifactId, event.proposalId);
     if (event.artifactId) return onOpenDocument(event.artifactId, null);
     const session = event.sessionId ? state.sessions[event.sessionId] : null;
-    if (session) onOpenSession(session);
+    if (session) onOpenSession(session, event.itemId ?? null);
   };
   const events = allEvents ?? page.events;
 
@@ -474,7 +474,7 @@ export function ProjectView({
                           <span className={`project-event-by by-${event.by ?? "none"}`}>{BY_LABEL[event.by ?? ""] ?? ""}</span>
                           <span className="project-event-text">{event.text}</span>
                         </button>
-                        {event.kind !== "decision" && event.kind !== "question" ? (
+                        {event.kind !== "decision" && event.kind !== "question" && event.kind !== "stage" && event.kind !== "worktree" ? (
                           <button
                             type="button"
                             className="project-event-keep"

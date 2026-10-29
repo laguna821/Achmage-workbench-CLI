@@ -105,7 +105,7 @@ export type ProjectFacts = {
 export type ProjectEvent = {
   id: string;
   at: number;
-  kind: "request" | "revision" | "proposal" | "plan" | "handoff" | "decision" | "question";
+  kind: "request" | "revision" | "proposal" | "plan" | "handoff" | "link" | "worktree" | "stage" | "decision" | "question";
   text: string;
   sessionId: string | null;
   artifactId: string | null;

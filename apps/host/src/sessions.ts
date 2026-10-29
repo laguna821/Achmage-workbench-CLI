@@ -960,6 +960,11 @@ export class SessionManager {
     return worktreeChanges(worktree);
   }
 
+  /** Requests sent to other sessions ("다른 세션에 보내기"), as kept (the project record reads them). */
+  listHandoffs(): Handoff[] {
+    return [...this.handoffs.values()];
+  }
+
   /** "원래 폴더에 적용": the changes go to the original checkout's files; the copy stays. */
   async applyWorktree(sessionId: string) {
     const session = this.requireSession(sessionId);

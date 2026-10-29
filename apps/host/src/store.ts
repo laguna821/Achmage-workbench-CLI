@@ -215,12 +215,14 @@ export class Store {
     return new Map(rows.map((row) => [String(row.session_id), JSON.parse(String(row.json)) as Extract<TranscriptItem, { kind: "turnEnd" }>] as const));
   }
 
-  /** Requests and plan decisions of a work since a time, newest first (project "기록"). */
+  /** Requests, plan decisions and worktree applies of a work since a time, newest first (project "기록"). */
   workItems(workId: string, since: number, limit: number): { sessionId: string; item: TranscriptItem }[] {
     return this.db
       .prepare(
         `SELECT i.session_id, i.json FROM items i JOIN sessions s ON s.id = i.session_id
-          WHERE s.work_id = ? AND json_extract(i.json, '$.kind') IN ('user', 'approval') AND json_extract(i.json, '$.at') >= ?
+          WHERE s.work_id = ?
+            AND (json_extract(i.json, '$.kind') IN ('user', 'approval') OR (json_extract(i.json, '$.kind') = 'notice' AND i.item_id LIKE 'worktree-applied:%'))
+            AND json_extract(i.json, '$.at') >= ?
           ORDER BY json_extract(i.json, '$.at') DESC LIMIT ?`,
       )
       .all(workId, since, limit)

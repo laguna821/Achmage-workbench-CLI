@@ -141,6 +141,33 @@ describe("decisions and open questions", () => {
   });
 });
 
+describe("the record (기록)", () => {
+  it("shows stage changes, worktree applies, answered hand-overs and ended links, each opening its place", async () => {
+    const { projects, work, manager } = setup();
+    const draft = manager.createSession(work.id, { provider: "codex", purpose: "초안" });
+    const review = manager.createSession(work.id, { provider: "codex", purpose: "검토" });
+    projects.setStage(work.id, "진행중");
+    // The same stage again writes nothing and records nothing.
+    projects.setStage(work.id, "진행중");
+    manager.sink.upsertItem(draft.id, { kind: "notice", id: "worktree-applied:1", level: "info", text: "적용했습니다.", at: Date.now() });
+    await manager.handoff({ requestId: "h1", sourceSessionId: draft.id, targetSessionId: review.id, text: "표지를 검토해 줘" });
+    await new Promise((done) => setTimeout(done, 20));
+    const link = await manager.links.start({ requestId: "l1", participants: [draft.id, review.id], goal: "표지 합의", maxRounds: 2, maxMinutes: 10 });
+    await manager.links.stop(link.id);
+    const events = projects.page(work.id).events;
+    const of = (kind: string) => events.filter((event) => event.kind === kind).map((event) => ({ text: event.text, sessionId: event.sessionId }));
+    expect(of("stage")).toEqual([{ text: "단계 값 없음 → 진행중", sessionId: null }]);
+    expect(of("worktree")).toEqual([{ text: "격리 사본의 변경을 원래 폴더에 적용 · 초안", sessionId: draft.id }]);
+    expect(of("handoff")).toEqual([{ text: "초안 → 검토: 표지를 검토해 줘 · 답 받음", sessionId: draft.id }]);
+    // How many hand-overs happened before the stop depends on timing; who, why and where do not.
+    expect(of("link")).toEqual([{ text: expect.stringMatching(/^세션 잇기 끝 · 초안 ⇄ 검토 · 끊음 · \d+번 주고받음$/), sessionId: draft.id }]);
+    // Archiving from the archive (not the stage menu) is a stage change too.
+    manager.updateWork(work.id, { archived: true });
+    projects.workArchived(manager.view.works.get(work.id)!, true);
+    expect(projects.page(work.id).events.filter((event) => event.kind === "stage").map((event) => event.text)[0]).toBe("단계 진행중 → 아카이브 (보관함에서)");
+  });
+});
+
 describe("what the engines are told", () => {
   it("puts what changed since the last request before the next one, from the records (AI 0)", async () => {
     const { projects, work, manager, engine, cwd } = setup();

@@ -52,7 +52,8 @@ const WEEK = 7 * 24 * 3600 * 1000;
 const CHANGE_LIMIT = 1000;
 
 type Told = { at: number; noteRevision: number };
-type EntryLog = { workId: string; at: number; section: "decision" | "question"; text: string; sessionId: string | null; itemId: string | null };
+/** What the person wrote to the note that the record shows as such: decisions, questions, stage changes. */
+type EntryLog = { workId: string; at: number; section: "decision" | "question" | "stage"; text: string; sessionId: string | null; itemId: string | null };
 type Write = { workId: string; path: string; before: Buffer | null; after: Buffer; at: number; unarchive: boolean; rearchive: boolean };
 
 const bytes = (text: string) => Buffer.byteLength(text, "utf8");
@@ -485,7 +486,28 @@ export class Projects {
         events.push({ id: `request:${item.id}`, at: item.at, kind: "request", text: firstLine(item.text), sessionId, artifactId: null, by: "user", itemId: item.id });
       } else if (item.kind === "approval" && item.plan && (item.decision === "accept" || item.decision === "decline")) {
         events.push({ id: `plan:${item.id}`, at: item.at, kind: "plan", text: item.decision === "decline" ? "계획을 고쳐 달라고 함" : "계획대로 진행", sessionId, artifactId: null, by: "user", itemId: item.id });
+      } else if (item.kind === "notice") {
+        events.push({ id: `worktree:${item.id}`, at: item.at, kind: "worktree", text: `격리 사본의 변경을 원래 폴더에 적용 · ${sessions.get(sessionId)?.purpose ?? "세션"}`, sessionId, artifactId: null, by: "user", itemId: item.id });
       }
+    }
+    const mine = new Set([...sessions.values()].filter((session) => session.workId === work.id).map((session) => session.id));
+    const purpose = (sessionId: string) => sessions.get(sessionId)?.purpose || "세션";
+    // Hand-overs between sessions: answered (or not) as the source session saw it.
+    for (const handoff of this.manager.listHandoffs()) {
+      if (!mine.has(handoff.sourceSessionId) && !mine.has(handoff.targetSessionId)) continue;
+      const at = handoff.answeredAt ?? handoff.createdAt;
+      if (at < since || handoff.status === "sent") continue;
+      const outcome = handoff.status === "answered" ? "답 받음" : "답 받지 못함";
+      const sessionId = mine.has(handoff.sourceSessionId) ? handoff.sourceSessionId : handoff.targetSessionId;
+      events.push({ id: `handoff:${handoff.id}`, at, kind: "handoff", text: `${purpose(handoff.sourceSessionId)} → ${purpose(handoff.targetSessionId)}: ${firstLine(handoff.text, 60)} · ${outcome}`, sessionId, artifactId: null, by: providerOf(handoff.targetSessionId) });
+    }
+    // Linked sessions that ended: who, why, how many hand-overs.
+    for (const link of this.manager.links.list()) {
+      if (link.state !== "ended" || !link.endedAt || link.endedAt < since) continue;
+      const here = link.participants.find((id) => mine.has(id));
+      if (!here) continue;
+      const reason = link.reason ? ` · ${LINK_REASON_LABEL[link.reason]}` : "";
+      events.push({ id: `link:${link.id}`, at: link.endedAt, kind: "link", text: `세션 잇기 끝 · ${link.participants.map(purpose).join(" ⇄ ")}${reason} · ${link.hops}번 주고받음`, sessionId: here, artifactId: null, by: null });
     }
     for (const revision of this.store.workRevisions(work.id, since, limit)) {
       const artifact = names.get(revision.artifactId);
@@ -562,7 +584,9 @@ export class Projects {
       this.quiet.delete(workId);
     }
     try {
-      return this.write(workId, `단계: ${previous ?? "값 없음"} → ${name ?? "값 없음"}`, (text) => setFrontmatterKey(text, STAGE_KEY, name ? [name] : null), { unarchive: archiving, rearchive: leaving });
+      const written = this.write(workId, `단계: ${previous ?? "값 없음"} → ${name ?? "값 없음"}`, (text) => setFrontmatterKey(text, STAGE_KEY, name ? [name] : null), { unarchive: archiving, rearchive: leaving });
+      if (written.token) this.logEntry({ workId, section: "stage", text: `단계 ${previous ?? "값 없음"} → ${name ?? "값 없음"}`, sessionId: null, itemId: null });
+      return written.token ? { ...written, page: this.page(workId) } : written;
     } catch (error) {
       this.quiet.add(workId);
       try {
@@ -585,10 +609,14 @@ export class Projects {
     const source = session ? ` — ${session.provider === "claude" ? "Claude" : "Codex"} · ${session.purpose || "세션"} ([원문](workbench://session/${session.id}${request.itemId ? `#${request.itemId}` : ""}))` : "";
     const line = `${stamp} ${text}${source}`;
     const result = this.write(workId, section === "decision" ? `결정: ${text}` : `열린 질문: ${text}`, (current) => appendEntry(current, section, line));
-    const log = this.readJson<EntryLog[]>(ENTRIES_KEY, []);
-    log.push({ workId, at: Date.now(), section, text, sessionId: session?.id ?? null, itemId: request.itemId ?? null });
-    this.writeJson(ENTRIES_KEY, log.slice(-2000));
+    this.logEntry({ workId, section, text, sessionId: session?.id ?? null, itemId: request.itemId ?? null });
     return { ...result, page: this.page(workId) };
+  }
+
+  private logEntry(entry: Omit<EntryLog, "at">) {
+    const log = this.readJson<EntryLog[]>(ENTRIES_KEY, []);
+    log.push({ ...entry, at: Date.now() });
+    this.writeJson(ENTRIES_KEY, log.slice(-2000));
   }
 
   setQuestionDone(workId: string, line: number, done: boolean): ProjectWrite {
@@ -762,8 +790,12 @@ export class Projects {
     if (!archiveStage) return;
     const note = readNote(readFileSync(path, "utf8"));
     if (note.problem) return;
-    if (archived && note.stage !== archiveStage) this.write(work.id, `단계: ${note.stage ?? "값 없음"} → ${archiveStage}`, (text) => setFrontmatterKey(text, STAGE_KEY, [archiveStage]));
-    if (!archived && note.stage === archiveStage) this.write(work.id, `단계: ${archiveStage} → 값 없음`, (text) => setFrontmatterKey(text, STAGE_KEY, null));
+    const change = (from: string | null, to: string | null) => {
+      this.write(work.id, `단계: ${from ?? "값 없음"} → ${to ?? "값 없음"}`, (text) => setFrontmatterKey(text, STAGE_KEY, to ? [to] : null));
+      this.logEntry({ workId: work.id, section: "stage", text: `단계 ${from ?? "값 없음"} → ${to ?? "값 없음"} (보관함에서)`, sessionId: null, itemId: null });
+    };
+    if (archived && note.stage !== archiveStage) change(note.stage, archiveStage);
+    if (!archived && note.stage === archiveStage) change(archiveStage, null);
   }
 
   /** An engine changed the note (seen when its turn's files are tracked): kept as its revision. */
