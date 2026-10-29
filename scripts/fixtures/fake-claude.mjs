@@ -12,6 +12,8 @@
 // "스크린샷": like a browsing step, Bash saves a screenshot (Playwright CLI's output names it), then
 // Read opens a second picture, which comes back as an image block.
 // "/정리 …" runs the stand-in's one user skill (it says so); /compact compacts.
+// "견본": a realistic turn for design screenshots: thinking, a todo plan, a command with output, a
+// new file, then an answer with a heading, a list, a table, code and a quote (sample-reply.mjs).
 // In plan mode ("계획 먼저") it writes a plan and ends with ExitPlanMode, which asks first; approved
 // (with the mode it is set to) it goes ahead in the same turn, declined it waits.
 //   "다른 세션 메시지"  after the answer another Claude Code session writes here (a cross-session
@@ -28,8 +30,6 @@
 //   "볼트에 써: <path>"  tries the Write tool on that path; PreToolUse hooks registered by the SDK
 //          are asked first (as Claude Code does) and a denial is reported; it only ever writes
 //          inside the temporary folder.
-//   "견본"  a realistic turn for design screenshots: thinking, a todo plan, a command with output, a
-//          new file, then an answer with a heading, a list, a table, code and a quote (sample-reply.mjs)
 
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
