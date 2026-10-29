@@ -119,6 +119,11 @@ export class Store {
     if (text?.trim()) this.db.prepare("INSERT INTO document_search (rowid, text, artifact_id) VALUES (?, ?, ?)").run(rowid, text, artifactId);
   }
 
+  /** Every document entry gone, before all are indexed again (also entries older versions left behind). */
+  clearDocumentIndex() {
+    this.db.exec("DELETE FROM document_search");
+  }
+
   searchDocuments(terms: string[], limit = 50): { artifactId: string; text: string }[] {
     if (!terms.length) return [];
     const where = terms.map(() => "text LIKE ? ESCAPE '\\'").join(" AND ");
@@ -267,8 +272,10 @@ export class Store {
   }
 
   saveArtifact(artifact: Artifact) {
+    // An upsert keeps the row id the document index is keyed by (a replace gave a new one on every
+    // save, leaving the old text found under the document).
     this.db
-      .prepare("INSERT OR REPLACE INTO artifacts (id, work_id, path, json) VALUES (?, ?, ?, ?)")
+      .prepare("INSERT INTO artifacts (id, work_id, path, json) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET work_id = excluded.work_id, path = excluded.path, json = excluded.json")
       .run(artifact.id, artifact.workId, artifact.path, JSON.stringify(artifact));
   }
 

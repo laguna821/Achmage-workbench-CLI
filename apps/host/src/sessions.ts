@@ -39,9 +39,11 @@ import {
   type HandoffRequest,
   type LinkHop,
   type Proposal,
+  type Provenance,
   type RequestDraw,
   type UpdateSessionRequest,
   type Work,
+  turnBreakOf,
 } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
 import { HttpError } from "./errors.ts";
@@ -63,6 +65,7 @@ import { SessionLinks } from "./links.ts";
 import { Schedules } from "./schedules.ts";
 import { applyWorktree, createWorktree, removeWorktree, worktreeChanges } from "./worktrees.ts";
 import type { AgentBrowser } from "./browse.ts";
+import { handoffError, heldNotice, provenanceOf, restartTurnEnd, stampTurnEnd } from "./recovery.ts";
 
 export { HttpError };
 
@@ -240,6 +243,8 @@ export class SessionManager {
   private readonly handoffs = new Map<string, Handoff>();
   /** When each session's current turn began (for the after-turn folder scan). */
   private readonly turnStarted = new Map<string, number>();
+  /** The request each session's current turn answers (what made the documents it writes). */
+  private readonly turnRequest = new Map<string, string>();
   /** The new document each running request asked for. */
   private readonly creating = new Map<string, PendingCreate>();
   readonly documents: Documents;
@@ -376,6 +381,7 @@ export class SessionManager {
       let item = incoming;
       if (item.kind === "turnEnd") {
         this.finishStreaming(sessionId);
+        item = stampTurnEnd(item, this.sessions.get(sessionId), this.turnStarted.get(sessionId), this.turnRequest.get(sessionId));
       }
       const items = this.loadItems(sessionId);
       if (item.kind === "tool") item = this.withStepImages(sessionId, item, items);
@@ -389,7 +395,7 @@ export class SessionManager {
       if (item.kind === "tool" && item.tool === "fileChange" && item.status === "completed" && item.paths?.length) {
         this.trackFiles(sessionId, item.id, item.paths);
       }
-      if (item.kind === "turnEnd") this.afterTurn(sessionId, item.status);
+      if (item.kind === "turnEnd") this.afterTurn(sessionId, item);
     },
     toolImages: (sessionId, itemId, images) => {
       const kept = images.map((image) => keepImage(this.attachments, image)).filter((image) => image !== null);
@@ -408,12 +414,16 @@ export class SessionManager {
       if (!session) return;
       const wasBusy = session.status !== "idle" && session.status !== "error";
       this.saveSession({ ...session, ...patch, updatedAt: Date.now() });
-      if (wasBusy && patch.status === "idle") this.drainSoon(sessionId);
+      if (wasBusy && patch.status === "idle") {
+        // Ended in an error (an engine that died, also between turns): the waiting requests stay.
+        if (patch.lastError) this.holdQueued(sessionId);
+        this.drainSoon(sessionId);
+      }
     },
     providerStatus: (status) => {
       this.bus.publish({ type: "provider.status", status });
     },
-    steerDropped: (sessionId, turnKeys) => {
+    steerDropped: (sessionId, turnKeys, unsure = false) => {
       const lost: Steered[] = [];
       for (const key of turnKeys) {
         const entry = this.steering.get(sessionId)?.get(key);
@@ -422,7 +432,7 @@ export class SessionManager {
         if (!entry.item) entry.dropped = true;
         else lost.push(entry);
       }
-      this.requeueDropped(sessionId, lost);
+      this.requeueDropped(sessionId, lost, unsure);
     },
     image: (sessionId, image) => this.images.onEngineImage(sessionId, image),
   };
@@ -440,12 +450,13 @@ export class SessionManager {
    * A stop dropped requests that were steered in but not yet taken: they are marked on the
    * conversation and wait again above the input, kept until the user sends or deletes them.
    */
-  private requeueDropped(sessionId: string, lost: Steered[]) {
+  private requeueDropped(sessionId: string, lost: Steered[], unsure = false) {
     const session = this.sessions.get(sessionId);
     if (!session || !lost.length) return;
     for (const entry of lost) {
       this.steering.get(sessionId)?.delete(entry.requestId);
-      if (entry.item) this.sink.upsertItem(sessionId, { ...entry.item, undelivered: true });
+      // An engine that died cannot say what it took: those wait again without the mark.
+      if (entry.item && !unsure) this.sink.upsertItem(sessionId, { ...entry.item, undelivered: true });
     }
     const again: QueuedMessage[] = lost.map((entry) => ({
       id: `again-${randomUUID()}`,
@@ -461,7 +472,9 @@ export class SessionManager {
       kind: "notice",
       id: `steer-dropped:${Date.now()}`,
       level: "info",
-      text: `멈췄기 때문에 작업 중에 보낸 요청 ${lost.length}개는 전해지지 않았습니다. 입력창 위 목록에서 다시 보내거나 지울 수 있습니다.`,
+      text: unsure
+        ? `엔진이 멈춰 작업 중에 보낸 요청 ${lost.length}개가 전해졌는지 알 수 없습니다. 입력창 위 목록에 다시 두었으니 보내거나 지울 수 있습니다.`
+        : `멈췄기 때문에 작업 중에 보낸 요청 ${lost.length}개는 전해지지 않았습니다. 입력창 위 목록에서 다시 보내거나 지울 수 있습니다.`,
       at: Date.now(),
     });
   }
@@ -489,6 +502,7 @@ export class SessionManager {
           this.sink.upsertItem(session.id, { ...item, decision: "expired" });
         }
       }
+      const end = restartTurnEnd(this.loadItems(session.id));
       this.sink.upsertItem(session.id, {
         kind: "notice",
         id: `restart:${Date.now()}`,
@@ -496,7 +510,15 @@ export class SessionManager {
         text: "앱이 다시 시작되어 진행 중이던 응답이 멈췄습니다. 이어서 요청하면 같은 세션에서 계속합니다.",
         at: Date.now(),
       });
-      this.saveSession({ ...session, status: "idle", activity: null, updatedAt: Date.now() });
+      // The turn ends here, so what it left is settled as after a stop: the waiting requests stay,
+      // a working copy it changed becomes a proposal, a request from another session gets its answer.
+      if (end) this.sink.upsertItem(session.id, end);
+      this.saveSession({ ...this.requireSession(session.id), status: "idle", activity: null, updatedAt: Date.now() });
+    }
+    // Left open by an older version (an engine that died without a turn end): settled the same way.
+    for (const running of this.documents.runningProposals()) this.proposalReady(running.sessionId, this.documents.finishProposal(running.id, { interruptedBy: "restart" }));
+    for (const handoff of this.handoffs.values()) {
+      if (handoff.status === "sent") this.saveHandoff({ ...handoff, status: "failed", error: handoffError("restart"), answeredAt: Date.now() });
     }
     // Requests left waiting when the app closed are not sent on their own after a restart.
     for (const session of this.sessions.values()) this.holdQueued(session.id);
@@ -1246,6 +1268,7 @@ export class SessionManager {
       ...(options.scheduled ? { scheduled: true } : {}),
     });
     this.turnStarted.set(sessionId, Date.now());
+    this.turnRequest.set(sessionId, requestId);
     if (plan) this.planning.set(sessionId, requestId);
     else this.planning.delete(sessionId);
     this.sink.updateSession(sessionId, { status: "starting", activity: plan ? "계획 세우는 중" : "응답 준비 중", lastError: null });
@@ -1258,7 +1281,7 @@ export class SessionManager {
       if (told) this.toldHook?.(current);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      for (const entry of prepared) if (entry.proposal) this.documents.discardProposal(entry.proposal.id);
+      for (const entry of prepared) if (entry.proposal) this.documents.discardProposal(entry.proposal.id, "failure");
       if (created) this.creating.delete(sessionId);
       this.sink.upsertItem(sessionId, { kind: "notice", id: `error:${requestId}`, level: "error", text: `보내지 못했습니다: ${message}`, at: Date.now() });
       this.sink.updateSession(sessionId, { status: "error", activity: null, lastError: message });
@@ -1383,7 +1406,7 @@ export class SessionManager {
 
   /** Files an engine wrote: documents get a new revision and a card in the conversation. */
   /** The new document a request asked for: track it with its sources, or say that it is missing or broken. */
-  private finishCreate(sessionId: string, status: "completed" | "interrupted" | "failed") {
+  private finishCreate(sessionId: string, status: "completed" | "interrupted" | "failed", made: Provenance) {
     const created = this.creating.get(sessionId);
     if (!created) return;
     this.creating.delete(sessionId);
@@ -1399,7 +1422,7 @@ export class SessionManager {
     }
     const sources = created.sources.map((source) => this.documents.list().find((artifact) => artifact.id === source.artifactId)?.name).filter(Boolean);
     const note = sources.length ? `새 문서 · ${sources.join(", ")}에서` : "새 문서";
-    const tracked = this.documents.track(work.id, work.cwd, created.path, "engine", sessionId, note, created.sources);
+    const tracked = this.documents.track(work.id, work.cwd, created.path, "engine", sessionId, note, created.sources, made);
     if (tracked) {
       this.sink.upsertItem(sessionId, {
         kind: "artifact",
@@ -1419,14 +1442,14 @@ export class SessionManager {
    * Engines also write files through shell commands (a script, `cat >`), which report no paths.
    * After a turn, documents in the work folder that changed since the turn began are tracked too.
    */
-  private trackChangedFiles(sessionId: string) {
+  private trackChangedFiles(sessionId: string, made: Provenance) {
     const started = this.turnStarted.get(sessionId);
     this.turnStarted.delete(sessionId);
     const session = this.sessions.get(sessionId);
     const work = session ? this.works.get(session.workId) : undefined;
     if (!started || !work || !existsSync(work.cwd)) return;
     const changed = recentDocuments(work.cwd, started - 2000);
-    if (changed.length) this.trackFiles(sessionId, `scan:${started}`, changed);
+    if (changed.length) this.trackFiles(sessionId, `scan:${started}`, changed, made);
   }
 
   /**
@@ -1450,14 +1473,16 @@ export class SessionManager {
     return images?.length ? { ...item, images } : item;
   }
 
-  private trackFiles(sessionId: string, itemId: string, paths: string[]) {
+  /** `made`: the turn's provenance (from its end); during the turn, what the engine reported so far. */
+  private trackFiles(sessionId: string, itemId: string, paths: string[], made?: Provenance) {
     const session = this.sessions.get(sessionId);
     const work = session ? this.works.get(session.workId) : undefined;
     if (!session || !work) return;
+    const provenance = made ?? { model: session.engineModel, effort: session.engineEffort, requestId: this.turnRequest.get(sessionId) ?? null };
     for (const path of paths) {
       if (isWorkbenchPath(path)) continue;
       try {
-        const tracked = this.documents.track(work.id, work.cwd, path, "engine", sessionId, null);
+        const tracked = this.documents.track(work.id, work.cwd, path, "engine", sessionId, null, null, provenance);
         if (!tracked) continue;
         this.sink.upsertItem(sessionId, {
           kind: "artifact",
@@ -1495,30 +1520,25 @@ export class SessionManager {
     }
   }
 
-  private afterTurn(sessionId: string, status: "completed" | "interrupted" | "failed") {
+  /**
+   * A turn ended — completed, stopped, failed, its engine died or the app restarted (`end.cause`): the
+   * plan waits for the go-ahead, the waiting requests stay unless it completed, the documents it made
+   * are tracked with what made them, a working copy it changed becomes a proposal (marked when the
+   * turn was cut short), and a request another session sent it gets its answer.
+   */
+  private afterTurn(sessionId: string, end: Extract<TranscriptItem, { kind: "turnEnd" }>) {
+    const { status } = end;
+    const broke = turnBreakOf(status, end.cause);
+    const made = provenanceOf(end);
     this.planEnded(sessionId, status);
-    // After a stop or a failure the waiting requests stay until the user sends them.
-    const waiting = status === "completed" ? 0 : this.holdQueued(sessionId);
-    if (waiting) {
-      this.sink.upsertItem(sessionId, {
-        kind: "notice",
-        id: `queue-held:${Date.now()}`,
-        level: "info",
-        text: `${status === "interrupted" ? "멈췄기 때문에" : "응답이 끝나지 못해서"} 보낼 예정인 요청 ${waiting}개를 보내지 않았습니다. 입력창 위에서 보내거나 지울 수 있습니다.`,
-        at: Date.now(),
-      });
-    }
-    this.finishCreate(sessionId, status);
+    const waiting = broke ? this.holdQueued(sessionId) : 0;
+    if (broke && waiting) this.sink.upsertItem(sessionId, { kind: "notice", id: `queue-held:${Date.now()}`, level: "info", text: heldNotice(broke, waiting), at: Date.now() });
+    this.finishCreate(sessionId, status, made);
     this.images.afterTurn(sessionId, status);
-    this.trackChangedFiles(sessionId);
+    this.trackChangedFiles(sessionId, made);
+    this.turnRequest.delete(sessionId);
     for (const running of this.documents.runningProposals(sessionId)) {
-      const proposal = status === "completed" ? this.documents.finishProposal(running.id) : this.documents.discardProposal(running.id);
-      if (proposal.status === "pending") {
-        this.sink.upsertItem(sessionId, { kind: "proposal", id: `proposal:${proposal.id}`, proposalId: proposal.id, at: Date.now() });
-      } else if (proposal.status === "empty") {
-        const name = this.documents.get(proposal.artifactId).name;
-        this.sink.upsertItem(sessionId, { kind: "notice", id: `proposal-empty:${proposal.id}`, level: "info", text: `${name}: 작업 사본이 바뀌지 않아 수정안이 없습니다.`, at: Date.now() });
-      }
+      this.proposalReady(sessionId, this.documents.finishProposal(running.id, { interruptedBy: broke, model: made.model, effort: made.effort }));
     }
     for (const handoff of this.handoffs.values()) {
       if (handoff.targetSessionId !== sessionId || handoff.status !== "sent") continue;
@@ -1529,11 +1549,21 @@ export class SessionManager {
         .slice(start + 1)
         .flatMap((item) => (item.kind === "assistant" && item.text.trim() ? [item.text.trim()] : []))
         .join("\n\n");
-      const answered: Handoff =
-        status === "completed"
-          ? { ...handoff, status: "answered", reply: reply || null, answeredAt: Date.now() }
-          : { ...handoff, status: "failed", reply: reply || null, error: status === "interrupted" ? "중단됨" : "응답이 끝나지 못했습니다", answeredAt: Date.now() };
+      const answered: Handoff = broke
+        ? { ...handoff, status: "failed", reply: reply || null, error: handoffError(broke), answeredAt: Date.now() }
+        : { ...handoff, status: "answered", reply: reply || null, answeredAt: Date.now() };
       this.saveHandoff(answered);
+    }
+  }
+
+  /** A finished working copy in its conversation: the proposal card, or a word that nothing changed. */
+  private proposalReady(sessionId: string, proposal: Proposal) {
+    if (!this.sessions.has(sessionId)) return;
+    if (proposal.status === "pending") {
+      this.sink.upsertItem(sessionId, { kind: "proposal", id: `proposal:${proposal.id}`, proposalId: proposal.id, at: Date.now() });
+    } else if (proposal.status === "empty") {
+      const name = this.documents.get(proposal.artifactId).name;
+      this.sink.upsertItem(sessionId, { kind: "notice", id: `proposal-empty:${proposal.id}`, level: "info", text: `${name}: 작업 사본이 바뀌지 않아 수정안이 없습니다.`, at: Date.now() });
     }
   }
 
@@ -1567,6 +1597,7 @@ export class SessionManager {
       status: "sent",
       reply: null,
       error: null,
+      ...(request.attachments?.length ? { attachments: request.attachments } : {}),
       createdAt: Date.now(),
       answeredAt: null,
     };
@@ -1591,6 +1622,31 @@ export class SessionManager {
       throw error;
     }
     return this.handoffs.get(handoff.id)!;
+  }
+
+  /**
+   * "다시 보내기": a request the other session did not answer (its turn failed, was stopped, or its
+   * engine died) goes again, the same words, documents and files, as a new request with its own card.
+   */
+  async resendHandoff(handoffId: string, requestId: string): Promise<Handoff> {
+    const old = this.handoffs.get(handoffId);
+    if (!old) throw new HttpError(404, "handoff_not_found", "보낸 요청을 찾지 못했습니다.");
+    if (old.resentAs && this.handoffs.has(old.resentAs)) return this.handoffs.get(old.resentAs)!;
+    if (old.status !== "failed") throw new HttpError(409, "handoff_not_failed", "답을 받지 못한 요청만 다시 보낼 수 있습니다.");
+    let failure: unknown = null;
+    try {
+      await this.handoff({ requestId, sourceSessionId: old.sourceSessionId, targetSessionId: old.targetSessionId, text: old.text, refs: old.refs, attachments: old.attachments ?? [] });
+    } catch (error) {
+      failure = error;
+    }
+    // Sent (or tried): the old card says so, the new one says what it repeats.
+    const resent = this.handoffs.get(requestId);
+    if (resent && resent.id !== old.id) {
+      this.saveHandoff({ ...this.handoffs.get(old.id)!, resentAs: resent.id });
+      this.saveHandoff({ ...resent, resentFrom: old.id });
+    }
+    if (failure) throw failure;
+    return this.handoffs.get(requestId)!;
   }
 
   /**

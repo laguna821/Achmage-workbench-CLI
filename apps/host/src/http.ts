@@ -566,6 +566,13 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           }),
         );
       }
+      // "다시 보내기": a request another session did not answer, sent again as a new one.
+      if (method === "POST" && parts[0] === "handoffs" && parts[1] && parts[2] === "resend") {
+        const body = await readJson(req);
+        const requestId = String(body.requestId ?? "");
+        if (!requestId) throw new HttpError(400, "missing_request_id", "requestId가 필요합니다.");
+        return sendJson(res, 202, await manager.resendHandoff(parts[1], requestId));
+      }
       // "세션 잇기": start, pause, go on, cut, one more round, and what was exchanged.
       if (parts[0] === "links") {
         const links = manager.links;

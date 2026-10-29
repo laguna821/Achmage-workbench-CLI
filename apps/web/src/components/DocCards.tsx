@@ -12,6 +12,7 @@ import { useOfficePage } from "../office.ts";
 import type { State } from "../state.ts";
 import { EngineMark } from "./EngineMark.tsx";
 import { Icon } from "./Icon.tsx";
+import { HandoffResend, PartialNote } from "./Recovery.tsx";
 
 // Cards for documents inside the conversation: files an engine wrote, proposals waiting for a
 // decision, and requests sent to other sessions with their answers.
@@ -23,6 +24,8 @@ export type DocActions = {
   /** Ask again on the latest revision (a proposal made on an older one). */
   retryProposal: (proposal: Proposal) => void;
   openSession: (sessionId: string) => void;
+  /** "다시 보내기": a request the other session did not answer, as a new one. */
+  resendHandoff: (handoff: Handoff) => Promise<void>;
 };
 
 export const DocContext = createContext<{ state: State; actions: DocActions } | null>(null);
@@ -185,6 +188,7 @@ export function ProposalCard({ proposal }: { proposal: Proposal }) {
           )}
         </span>
       </div>
+      <PartialNote proposal={proposal} />
       {artifact.format === "design" && proposal.status !== "running" && proposal.status !== "empty" ? <DesignProposalPreview proposal={proposal} /> : null}
       {isOfficeFormat(artifact.format) && proposal.status !== "running" && proposal.status !== "empty" ? <OfficeProposalPreview proposal={proposal} /> : null}
       {proposal.problem && proposal.status === "pending" ? <div className="proposal-warning">디자인 파일이 올바르지 않아 적용할 수 없습니다: {proposal.problem}</div> : null}
@@ -297,6 +301,7 @@ export function HandoffCard({ handoff, viewer }: { handoff: Handoff; viewer: str
         <button type="button" className="link" onClick={() => actions.openSession(handoff.targetSessionId)}>
           {target ? `${PROVIDER_LABEL[target.provider]} 세션 열기` : "세션 열기"}
         </button>
+        <HandoffResend handoff={handoff} onResend={actions.resendHandoff} />
       </div>
     </div>
   );

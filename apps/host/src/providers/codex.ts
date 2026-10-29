@@ -166,6 +166,10 @@ export class CodexAdapter implements ProviderAdapter {
   private readonly loaded = new Set<string>();
   /** threadId -> active turn id */
   private readonly activeTurns = new Map<string, string>();
+  /** threadId -> the request its running turn answers */
+  private readonly turnRequests = new Map<string, string>();
+  /** The app is closing: an app-server it stops does not end the turns here (the next start does). */
+  private closing = false;
   private readonly interrupting = new Set<string>();
   /** threadId -> steered requests (turn keys) Codex has not yet taken into the conversation */
   private readonly steers = new Map<string, string[]>();
@@ -241,7 +245,7 @@ export class CodexAdapter implements ProviderAdapter {
         env: engineEnv({ command: binary.path, paths: this.browser?.pathDirs() }),
         onNotification: (notification) => this.onNotification(notification),
         onServerRequest: (request) => this.onServerRequest(request),
-        onExit: (code, stderr) => this.onExit(code, stderr),
+        onExit: (code, stderr) => this.onExit(rpc, code, stderr),
       });
       this.rpc = rpc;
       this.loaded.clear();
@@ -259,11 +263,30 @@ export class CodexAdapter implements ProviderAdapter {
     return this.ready;
   }
 
-  private onExit(code: number | null, stderr: string) {
+  /**
+   * The app-server ended. A turn it was running still ends here, with its cause, so the gateway
+   * settles what it left (the waiting requests stay, a changed working copy becomes a proposal) and
+   * the session shows the error; the next request starts Codex again and resumes the thread.
+   */
+  private onExit(rpc: CodexRpc, code: number | null, stderr: string) {
+    // One replaced meanwhile is not the one running the turns.
+    if (this.rpc && this.rpc !== rpc) return;
     this.rpc = null;
     this.ready = null;
+    const tail = stderr.split("\n").map((line) => line.trim()).filter(Boolean).at(-1)?.slice(0, 300);
+    const error = `Codex 엔진이 종료되었습니다(${tail || `코드 ${code}`}).`;
     for (const [threadId, sessionId] of this.threads) {
-      if (this.activeTurns.has(threadId)) {
+      if (!this.activeTurns.has(threadId) || this.closing) continue;
+      const stopping = this.interrupting.has(threadId);
+      for (const [itemId, pending] of this.approvals) {
+        if (pending.sessionId !== sessionId) continue;
+        this.approvals.delete(itemId);
+        this.sink.upsertItem(sessionId, { ...this.approvalItem(itemId, pending), decision: "expired" });
+      }
+      // Steered requests Codex had not taken into the conversation went with it.
+      const dropped = this.steers.get(threadId) ?? [];
+      if (dropped.length) this.sink.steerDropped(sessionId, dropped);
+      if (!stopping) {
         this.sink.upsertItem(sessionId, {
           kind: "notice",
           id: `exit:${Date.now()}`,
@@ -271,11 +294,28 @@ export class CodexAdapter implements ProviderAdapter {
           text: "Codex 엔진이 종료되어 응답이 끊겼습니다. 다시 보내면 이어서 진행합니다.",
           at: Date.now(),
         });
-        this.sink.updateSession(sessionId, { status: "idle", activity: null, lastError: stderr.slice(-500) || `exit ${code}` });
       }
+      // A compaction asked for by the user is not a reply: no end line under the last request.
+      if (!this.compacting.has(threadId)) {
+        this.sink.upsertItem(sessionId, {
+          kind: "turnEnd",
+          id: `end:${this.activeTurns.get(threadId)}`,
+          status: stopping ? "interrupted" : "failed",
+          cause: stopping ? "stop" : "crash",
+          durationMs: null,
+          at: Date.now(),
+          requestId: this.turnRequests.get(threadId) ?? null,
+        });
+      }
+      this.sink.updateSession(sessionId, { status: "idle", activity: null, lastError: stopping ? null : error });
     }
     this.activeTurns.clear();
     this.approvals.clear();
+    this.turnRequests.clear();
+    this.interrupting.clear();
+    this.compacting.clear();
+    this.steers.clear();
+    this.userMessages.clear();
   }
 
   async refreshStatus(): Promise<ProviderStatus> {
@@ -379,7 +419,7 @@ export class CodexAdapter implements ProviderAdapter {
     return threadId;
   }
 
-  async send(session: Session & { access: AccessMode; plan?: boolean }, work: Work, text: string, _turnKey: string, files: AttachedFile[] = []) {
+  async send(session: Session & { access: AccessMode; plan?: boolean }, work: Work, text: string, turnKey: string, files: AttachedFile[] = []) {
     await this.ensureRunning();
     const rpc = this.rpc!;
     const threadId = await this.threadFor(session, work);
@@ -396,13 +436,20 @@ export class CodexAdapter implements ProviderAdapter {
     const changed = this.threadAccess.get(threadId) !== key;
     this.threadAccess.set(threadId, key);
     const asked = await this.withSkill(text, work.cwd);
-    const response = await rpc.request<TurnStartResponse>("turn/start", {
-      threadId,
-      input: [...codexInput(session.plan ? `${PLAN_FIRST}\n\n${asked.text}` : asked.text, files), ...(asked.skill ? [asked.skill] : [])],
-      ...(model ? { model } : {}),
-      ...(effort ? { effort: effort as ReasoningEffort } : {}),
-      ...(changed ? { approvalPolicy: policy.approvalPolicy, sandboxPolicy: sandboxPolicy(policy.sandbox, roots, guard.excludeTmp) } : {}),
-    });
+    // Noted before the turn starts: Codex may report its end before the answer to turn/start is read.
+    this.turnRequests.set(threadId, turnKey);
+    const response = await rpc
+      .request<TurnStartResponse>("turn/start", {
+        threadId,
+        input: [...codexInput(session.plan ? `${PLAN_FIRST}\n\n${asked.text}` : asked.text, files), ...(asked.skill ? [asked.skill] : [])],
+        ...(model ? { model } : {}),
+        ...(effort ? { effort: effort as ReasoningEffort } : {}),
+        ...(changed ? { approvalPolicy: policy.approvalPolicy, sandboxPolicy: sandboxPolicy(policy.sandbox, roots, guard.excludeTmp) } : {}),
+      })
+      .catch((error: unknown) => {
+        this.turnRequests.delete(threadId);
+        throw error;
+      });
     this.activeTurns.set(threadId, response.turn.id);
     // Codex 0.160 sends no settings notification for per-turn overrides; read what the thread now uses.
     const sessionId = session.id;
@@ -561,6 +608,7 @@ export class CodexAdapter implements ProviderAdapter {
   }
 
   async shutdown() {
+    this.closing = true;
     this.cancelIdleStop();
     this.rpc?.stop();
   }
@@ -824,13 +872,17 @@ export class CodexAdapter implements ProviderAdapter {
           }
         }
         // A compaction asked for by the user is not a reply: no end line under the last request.
+        const requestId = this.turnRequests.get(threadId) ?? null;
+        this.turnRequests.delete(threadId);
         if (!this.compacting.delete(threadId)) {
           this.sink.upsertItem(sessionId, {
             kind: "turnEnd",
             id: `end:${turn.id}`,
             status,
+            ...(interrupted ? { cause: "stop" as const } : {}),
             durationMs: turn.durationMs,
             at: Date.now(),
+            requestId,
           });
         }
         this.sink.updateSession(sessionId, {

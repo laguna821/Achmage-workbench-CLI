@@ -1,4 +1,4 @@
-import { LINK_REASON_LABEL, PROVIDER_LABEL, linkElapsedMs, linkMaxHops, type Handoff, type Proposal, type Session, type SessionLink, type TranscriptItem, type Work } from "@workbench/contracts";
+import { LINK_REASON_LABEL, PARTIAL_PROPOSAL, PROVIDER_LABEL, linkElapsedMs, linkMaxHops, turnEndText, type Handoff, type Proposal, type Session, type SessionLink, type TranscriptItem, type Work } from "@workbench/contracts";
 
 // "마크다운으로 내보내기": a conversation as a Markdown file a person reads and other tools reuse.
 // Made by fixed rules from the stored log — no model, no summary — so the same conversation always
@@ -210,7 +210,7 @@ export function sessionMarkdown(context: ExportContext): string {
         if (!proposal) break;
         const state =
           proposal.status === "applied" ? `적용됨 → r${proposal.appliedRevision}` : proposal.status === "discarded" ? "버림" : proposal.status === "empty" ? "바뀐 것 없음" : "적용 전";
-        lines.push("", `> 수정안: ${proposal.name ?? "문서"} r${proposal.baseRevision} 기준 +${proposal.added} −${proposal.removed} (${state})`);
+        lines.push("", `> 수정안: ${proposal.name ?? "문서"} r${proposal.baseRevision} 기준 +${proposal.added} −${proposal.removed}${proposal.interruptedBy ? ` · ${PARTIAL_PROPOSAL}` : ""} (${state})`);
         break;
       }
       case "handoff": {
@@ -235,8 +235,7 @@ export function sessionMarkdown(context: ExportContext): string {
         break;
       }
       case "turnEnd":
-        if (item.status === "interrupted") lines.push("", "_중단됨_");
-        else if (item.status === "failed") lines.push("", "_응답이 끝나지 못했습니다_");
+        if (item.status !== "completed") lines.push("", `_${turnEndText(item)}_`);
         break;
     }
   }

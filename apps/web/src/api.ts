@@ -176,6 +176,8 @@ export class Api {
   draw = (sessionId: string, request: DrawRequest) => this.request<DrawResult>("POST", `/api/sessions/${sessionId}/images`, request);
   handoff = (request: { requestId: string; sourceSessionId: string; targetSessionId: string; text: string; refs: DocRef[]; attachments?: Attachment[] }) =>
     this.request<Handoff>("POST", "/api/handoffs", request);
+  /** "다시 보내기": a request the other session did not answer, sent again as a new one. */
+  resendHandoff = (handoffId: string, requestId: string) => this.request<Handoff>("POST", `/api/handoffs/${encodeURIComponent(handoffId)}/resend`, { requestId });
   /** "세션 잇기": start, pause, go on, cut, one more round; what was exchanged, as turns or Markdown. */
   startLink = (request: StartLinkRequest) => this.request<SessionLink>("POST", "/api/links", request);
   pauseLink = (linkId: string) => this.request<SessionLink>("POST", `/api/links/${linkId}/pause`);

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { PROVIDER_LABEL, type Proposal, type Session, type SessionStatus, type TranscriptItem } from "@workbench/contracts";
+import { PROVIDER_LABEL, turnEndText, type Proposal, type Session, type SessionStatus, type TranscriptItem } from "@workbench/contracts";
 import { fold } from "../../../../../third_party/textfold/fold.ts";
 import { statusText } from "../../format.ts";
 import { isBusy, type State } from "../../state.ts";
@@ -99,9 +99,11 @@ export function ConversationDrawer({
     : turn.end
       ? turn.end.status === "completed"
         ? `끝남${turn.end.durationMs ? ` · ${Math.round(turn.end.durationMs / 1000)}초` : ""}`
-        : turn.end.status === "interrupted"
-          ? "멈춤"
-          : "응답이 끝나지 못했습니다"
+        : turn.end.cause === "crash" || turn.end.cause === "restart"
+          ? turnEndText(turn.end)
+          : turn.end.status === "interrupted"
+            ? "멈춤"
+            : "응답이 끝나지 못했습니다"
       : turn.request
         ? "답을 기다리는 중"
         : turn.images.length

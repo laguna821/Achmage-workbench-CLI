@@ -25,13 +25,19 @@
 //   "고쳐"  appends to the working copy the request names
 //   "실패해"  the turn fails without an answer, as Claude Code reports an API error (is_error result)
 // Vault notes attached to a request are named back ("받은 노트 사본: …").
+//   "[[crash]]"  the process dies in the middle of the turn: it adds part of an edit to the working
+//          copy the request names, streams a few lines (about 2.5 s), then exits without a result.
+//          "[[crash-once]]", or "충돌:N" in a linked-session goal at hand-over N: the same, once per
+//          request text (asked again with the same words, it answers; marks in $FAKE_ENGINE_STATE)
+//   "[[cp <from> <to>]]"  copies a file with a shell command (Bash, asking first in "default" mode),
+//          as an engine writing a document through the shell would
 //   "맥락"  answers with the appended system prompt it was started with (the context card)
 //   "볼트에 써: <path>"  tries the Write tool on that path; PreToolUse hooks registered by the SDK
 //          are asked first (as Claude Code does) and a denial is reported; it only ever writes
 //          inside the temporary folder.
 
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -95,6 +101,20 @@ function linkReply(text, engine) {
   return lines;
 }
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+
+/** Whether this request makes the process die mid-turn ("[[crash]]"; once per text for the others). */
+function crashes(text) {
+  if (text.includes("[[crash]]")) return true;
+  const hop = /\[세션 잇기 (\d+)\//.exec(text)?.[1];
+  const planned = /충돌:(\d+)/.exec(text)?.[1];
+  if (!text.includes("[[crash-once]]") && !(hop && hop === planned)) return false;
+  const dir = process.env.FAKE_ENGINE_STATE || join(tmpdir(), "fake-engine-state");
+  mkdirSync(dir, { recursive: true });
+  const mark = join(dir, `crashed-${createHash("sha1").update(text).digest("hex")}`);
+  if (existsSync(mark)) return false;
+  writeFileSync(mark, "");
+  return true;
+}
 const base = () => ({ session_id: sessionId, uuid: randomUUID() });
 const event = (payload) => send({ type: "stream_event", event: payload, parent_tool_use_id: null, ...base() });
 
@@ -176,8 +196,34 @@ async function runTurn(text) {
     send({ type: "result", subtype: "success", is_error: true, result: "API Error: 가짜 오류로 응답을 끝내지 못했습니다", stop_reason: null, duration_ms: Date.now() - started, duration_api_ms: 1, num_turns: 1, total_cost_usd: 0, usage, modelUsage: {}, permission_denials: [], queued_turn_count: queue.length, ...base() });
     return;
   }
+  if (crashes(text)) {
+    // Part of an edit lands in the working copy, part of an answer streams, then the process dies.
+    const working = text.match(/작업 사본만 수정하세요: (.+)/);
+    if (working) appendFileSync(resolve(process.cwd(), working[1].trim()), "\n\n끊기기 전에 고친 문단입니다.\n");
+    const id = `msg_${randomUUID().slice(0, 8)}`;
+    event({ type: "message_start", message: { id, type: "message", role: "assistant", model: MODEL, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 10, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: used } } });
+    event({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } });
+    for (let index = 0; index < 25 && !turn.interrupted; index += 1) {
+      event({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: `${index}번째 줄을 쓰는 중입니다.\n\n` } });
+      await sleep(100);
+    }
+    process.exit(1);
+  }
   if (text.trim() === "/compact" || text.includes("압축")) {
     await compact(text.trim() === "/compact" ? "manual" : "auto");
+  }
+  const copy = /\[\[cp (\S+) (\S+)\]\]/.exec(text);
+  if (copy) {
+    const toolId = `toolu_${randomUUID().slice(0, 8)}`;
+    const input = { command: `cp '${copy[1]}' '${copy[2]}'`, description: "파일 복사" };
+    send({ type: "assistant", message: { id: `msg_${randomUUID().slice(0, 8)}`, type: "message", role: "assistant", model: MODEL, content: [{ type: "tool_use", id: toolId, name: "Bash", input }], stop_reason: "tool_use", stop_sequence: null, usage: { input_tokens: 10, output_tokens: 20, cache_creation_input_tokens: 0, cache_read_input_tokens: used } }, parent_tool_use_id: null, ...base() });
+    let allowed = permissionMode === "bypassPermissions" || permissionMode === "dontAsk";
+    if (!allowed) {
+      const answerToTool = await ask({ subtype: "can_use_tool", tool_name: "Bash", input, tool_use_id: toolId, decision_reason: "명령 실행은 확인이 필요합니다" });
+      allowed = answerToTool?.behavior === "allow";
+    }
+    const result = allowed ? await runCommand(input.command) : { code: 1, output: "The user declined this action." };
+    send({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolId, content: result.output || "(복사함)", is_error: result.code !== 0 }] }, parent_tool_use_id: null, ...base() });
   }
   if (text.includes("명령")) {
     const toolId = `toolu_${randomUUID().slice(0, 8)}`;

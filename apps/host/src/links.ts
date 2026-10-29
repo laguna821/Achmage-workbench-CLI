@@ -29,9 +29,10 @@ import type { Store } from "./store.ts";
 
 // "세션 잇기": the gateway relays replies between two to six sessions in turn. When a participant's
 // turn ends, fixed rules decide — without asking any model — whether the exchange goes on, pauses
-// or ends; otherwise the reply goes to the next participant (round-robin) with a header saying it
-// is another session's answer, not the user's instruction or approval. The user's own input wins:
-// writing into a participant pauses the link, and after a restart no link goes on by itself.
+// or ends; otherwise the answers given since the next participant last spoke go to it (round-robin)
+// with a header saying they are other sessions' answers, not the user's instruction or approval.
+// The user's own input wins: writing into a participant pauses the link, and after a restart no link
+// goes on by itself. A turn that fails (also an engine that died) pauses it, to be asked again.
 
 /** What the relay needs from the session manager. */
 export type LinkHost = {
@@ -57,8 +58,9 @@ export type Decision = { action: "end"; reason: LinkReason } | { action: "pause"
 
 /** The 5-hour usage from which a link pauses (an explicit "이어 가기" goes on past it). */
 export const USAGE_PAUSE_PERCENT = 90;
-/** A reply handed over is cut beyond this many characters (the rest stays in its conversation). */
+/** What is handed over is cut beyond this many characters (the rest stays in its conversation). */
 const MAX_HANDED = 24_000;
+const CUT_NOTE = "\n\n…(길어서 여기까지만 전함)";
 
 const busy = (session: Session | undefined) => Boolean(session && session.status !== "idle" && session.status !== "error");
 
@@ -103,11 +105,12 @@ export function repeats(reply: string, previous: string[]) {
 
 /**
  * After a participant's turn: end, pause or hand the reply to the next participant. In order: a
- * failed or stopped turn, an empty reply, a closing mark, a repeat, the rounds, the minutes end it;
- * the 5-hour usage pauses it (unless the user went on past it); otherwise the next one speaks.
+ * failed turn (also an engine that died) pauses it; a stopped turn, an empty reply, a closing mark,
+ * a repeat, the rounds, the minutes end it; the 5-hour usage pauses it (unless the user went on past
+ * it); otherwise the next one speaks.
  */
 export function decide(link: SessionLink, outcome: Outcome, context: { previous: string[]; now: number; usedPercent: number | null }): Decision {
-  if (outcome.status === "failed") return { action: "end", reason: "failed" };
+  if (outcome.status === "failed") return { action: "pause", reason: "cut" };
   if (outcome.status === "interrupted") return { action: "end", reason: "interrupted" };
   if (!outcome.reply.trim()) return { action: "end", reason: "empty" };
   const mark = closingMark(outcome.reply);
@@ -156,6 +159,46 @@ export function latestTurn(items: TranscriptItem[]): { request: UserItem | null;
     if (item.kind === "turnEnd") status = item.status;
   }
   return { request: items[start] as UserItem, reply: replies.join("\n\n"), status };
+}
+
+/**
+ * What a session is handed when its turn comes: every answer given in this link since its own last
+ * turn, in order — with three or more sessions not only the one just before it — and the speaker's
+ * latest reply last (whatever it last answered, also a request of the user's own).
+ */
+export function answersSince(turns: LinkTurn[], receiverId: string, latest: { requestId: string | null; sessionId: string; reply: string }) {
+  const own = turns.filter((turn) => turn.sessionId === receiverId).map((turn) => turn.hop);
+  const since = own.length ? Math.max(...own) : 0;
+  const earlier = turns.filter((turn) => turn.hop > since && turn.sessionId !== receiverId && turn.id !== latest.requestId && turn.status === "completed" && turn.reply.trim());
+  return [...earlier.map((turn) => ({ sessionId: turn.sessionId, reply: turn.reply })), { sessionId: latest.sessionId, reply: latest.reply }];
+}
+
+/**
+ * The text handed over: one answer as it is; several each under its speaker's name, oldest first.
+ * Beyond `max` characters the oldest give way first — cut short, or left out with a note.
+ */
+export function handOver(answers: { speaker: string; text: string }[], max = MAX_HANDED): string {
+  if (answers.length === 1) {
+    const only = answers[0]!.text;
+    return only.length > max ? `${only.slice(0, max)}${CUT_NOTE}` : only;
+  }
+  const blocks: string[] = [];
+  let room = max;
+  let left = 0;
+  for (let index = answers.length - 1; index >= 0; index -= 1) {
+    const { speaker, text } = answers[index]!;
+    const label = `[${speaker}의 답]\n\n`;
+    // Not worth a stub: this one and the older ones stay in their conversations.
+    if (blocks.length && room < label.length + 200) {
+      left = index + 1;
+      break;
+    }
+    const fits = room - label.length;
+    const body = text.length > fits ? `${text.slice(0, Math.max(0, fits - CUT_NOTE.length))}${CUT_NOTE}` : text;
+    blocks.unshift(`${label}${body}`);
+    room -= label.length + body.length + 2;
+  }
+  return `${left ? `(앞선 답 ${left}개는 길어서 넘기지 않았습니다. 원래 대화에 남아 있습니다.)\n\n` : ""}${blocks.join("\n\n")}`;
 }
 
 /** Every turn a link handed to its participants, in the order handed over. */
@@ -457,12 +500,12 @@ export class SessionLinks {
       this.end(link, "gone");
       return;
     }
-    // The engine stopped without ending the turn the link gave it (it crashed, or its process was
-    // closed): no answer will come to hand over.
+    // The engine stopped without ending the turn the link gave it (an adapter that could not say):
+    // no answer will come to hand over, so the link waits to ask it again.
     if (link.state === "active" && link.participants[link.turn] === sessionId && !busy(session)) {
       const latest = latestTurn(this.host.items(sessionId));
       if (latest.request?.link?.linkId === link.id && latest.status === null) {
-        this.end(link, "failed");
+        this.pause(link.id, "cut");
         return;
       }
     }
@@ -502,13 +545,14 @@ export class SessionLinks {
       }
       const hop = link.hops + 1;
       const next = this.save({ ...link, hops: hop, turn: decision.to });
-      const reply = latest.reply.length > MAX_HANDED ? `${latest.reply.slice(0, MAX_HANDED)}\n\n…(길어서 여기까지만 전함)` : latest.reply;
-      const sender = sessionName(this.host.session(speakerId));
-      await this.deliver(next, targetId, `link:${link.id}:${hop}`, reply, { linkId: link.id, hop, of: linkMaxHops(next), fromSessionId: speakerId }, hopHeader(next, hop, sender));
+      const answers = answersSince(linkTurns(link, (id) => this.host.items(id)), targetId, { requestId: latest.request?.id ?? null, sessionId: speakerId, reply: latest.reply });
+      const text = handOver(answers.map((answer) => ({ speaker: sessionName(this.host.session(answer.sessionId)), text: answer.reply })));
+      const senders = [...new Set(answers.map((answer) => answer.sessionId))];
+      const hopMark: LinkHop = { linkId: link.id, hop, of: linkMaxHops(next), fromSessionId: speakerId, ...(answers.length > 1 ? { from: answers.map((answer) => answer.sessionId) } : {}) };
+      await this.deliver(next, targetId, `link:${link.id}:${hop}`, text, hopMark, hopHeader(next, hop, senders.map((id) => sessionName(this.host.session(id))).join(", ")));
     } catch {
-      // Never left hanging as "active" with nobody answering.
-      const link = this.links.get(linkId);
-      if (link) this.end(link, "failed");
+      // Never left hanging as "active" with nobody answering: it waits to be gone on or cut.
+      if (this.links.get(linkId)?.state === "active") this.pause(linkId, "cut");
     } finally {
       this.moving.delete(linkId);
     }
@@ -524,7 +568,9 @@ export class SessionLinks {
       this.end(link, "failed");
       return;
     }
-    const sender = last.link.fromSessionId ? sessionName(this.host.session(last.link.fromSessionId)) : null;
+    // The same words as before: every session whose answer it carried, as the first time.
+    const speakers = last.link.from?.length ? [...new Set(last.link.from)] : last.link.fromSessionId ? [last.link.fromSessionId] : [];
+    const sender = speakers.length ? speakers.map((id) => sessionName(this.host.session(id))).join(", ") : null;
     const others = link.participants.filter((id) => id !== speakerId).map((id) => sessionName(this.host.session(id))).join(", ");
     const header = sender ? hopHeader(link, last.link.hop, sender) : openingHeader(link, others);
     await this.deliver(link, speakerId, `link:${link.id}:${last.link.hop}:${Date.now()}`, last.text, { ...last.link, of: linkMaxHops(link) }, header);
@@ -534,11 +580,15 @@ export class SessionLinks {
     try {
       await this.host.send(sessionId, requestId, text, { hop, header });
     } catch {
-      this.end(link, "failed");
+      // It never reached the session: back to the one who spoke, so going on hands it over again.
+      const current = this.links.get(link.id) ?? link;
+      const speaker = hop.fromSessionId ? current.participants.indexOf(hop.fromSessionId) : -1;
+      if (speaker >= 0 && current.hops === hop.hop) this.save({ ...current, hops: hop.hop - 1, turn: speaker });
+      this.pause(link.id, "cut");
       return;
     }
-    // The engine could not take it (the conversation says why).
-    if (this.host.session(sessionId)?.status === "error") this.end(link, "failed");
+    // The engine could not take it (the conversation says why): going on asks it again.
+    if (this.host.session(sessionId)?.status === "error") this.pause(link.id, "cut");
   }
 
   private end(link: SessionLink, reason: LinkReason) {

@@ -2,13 +2,27 @@ import { createHash, randomUUID } from "node:crypto";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { diffLines } from "diff";
-import { DESIGN_EXTENSION, formatOf, isOfficeFormat, type Artifact, type ArtifactRevision, type DocRef, type Proposal, type RefSummary } from "@workbench/contracts";
+import {
+  DESIGN_EXTENSION,
+  formatOf,
+  isOfficeFormat,
+  type Artifact,
+  type ArtifactRevision,
+  type DocFormat,
+  type DocRef,
+  type Proposal,
+  type ProposalCloser,
+  type Provenance,
+  type RefSummary,
+  type TurnBreak,
+} from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
 import { HttpError } from "./errors.ts";
 import type { Store } from "./store.ts";
 import type { Kordoc } from "./kordoc.ts";
 import { designAssetPath, designGuide, designProblem, designStem, saveDesignAsset } from "./design.ts";
 import type { IeumOffice, OfficePage } from "./ieumoffice.ts";
+import { BackgroundIndex } from "./doc-text.ts";
 
 // Documents with exact revisions (PRD 3.3). Every recorded revision is an immutable copy under the
 // gateway's data folder; the real file stays where it is in the work folder. AI edits happen in a
@@ -37,6 +51,9 @@ function writeAtomic(path: string, data: Buffer | string) {
 
 const isHangul = (format: string) => format === "hwpx" || format === "hwp";
 
+/** Formats searched through their text view (kordoc, IeumOffice) instead of their bytes. */
+const hasTextView = (format: DocFormat) => isHangul(format) || isOfficeFormat(format);
+
 /** Extension kept on copies of a document (designs keep their two-part `.design.json`). */
 const extensionOf = (artifact: Pick<Artifact, "format" | "name">) => (artifact.format === "design" ? DESIGN_EXTENSION : extname(artifact.name));
 
@@ -64,8 +81,12 @@ function searchText(format: string, data: Buffer): string | null {
     .replace(/\s+/g, " ");
 }
 
-/** Bumped when what the document index holds changes; documents are then indexed again once. */
-const DOCUMENT_SEARCH_VERSION = "1";
+/**
+ * Bumped when what the document index holds changes; documents are then indexed again once.
+ * 2: Hangul and Office documents by their text view, made in the background (they dropped out
+ * before), and no entries left under old row ids (older revisions' text was still found).
+ */
+const DOCUMENT_SEARCH_VERSION = "2";
 
 function countChanges(before: string, after: string) {
   let added = 0;
@@ -88,6 +109,8 @@ export class Documents {
   ieum: IeumOffice | null;
   private readonly pageCache = new Map<string, Promise<import("./kordoc.ts").HangulPage[]>>();
   private readonly officeCache = new Map<string, Promise<OfficePage[]>>();
+  /** Hangul and Office revisions waiting for their text to be indexed (one at a time). */
+  readonly textIndex = new BackgroundIndex((artifactId, revision) => this.indexView(artifactId, revision));
 
   constructor(store: Store, bus: EventBus, dataDir: string, kordoc: Kordoc | null = null, ieum: IeumOffice | null = null) {
     this.store = store;
@@ -96,12 +119,10 @@ export class Documents {
     this.kordoc = kordoc;
     this.ieum = ieum;
     for (const artifact of store.artifacts()) this.artifacts.set(artifact.id, { ...artifact, readBy: artifact.readBy ?? {} });
-    for (const proposal of store.proposals()) {
-      // A turn cut short by a restart never finished its working copy; judge it now.
-      this.proposals.set(proposal.id, proposal);
-      if (proposal.status === "running") this.finishProposal(proposal.id);
-    }
+    // Proposals a restart left running are finished by the session manager, with the turn it cut.
+    for (const proposal of store.proposals()) this.proposals.set(proposal.id, proposal);
     if (store.getMeta("search.documents") !== DOCUMENT_SEARCH_VERSION) {
+      store.clearDocumentIndex();
       for (const artifact of this.artifacts.values()) this.indexLatest(artifact);
       store.setMeta("search.documents", DOCUMENT_SEARCH_VERSION);
     }
@@ -109,21 +130,45 @@ export class Documents {
 
   /**
    * Keep the search index on a document's latest revision: text formats as they are, Hangul and
-   * Office files through their text view once one was made (opening "글 보기" makes it).
+   * Office files through their text view (made in the background when not kept yet).
    */
   private indexLatest(artifact: Artifact) {
     if (artifact.revision < 1) return;
+    if (hasTextView(artifact.format)) {
+      this.textIndex.add(artifact.id, artifact.revision);
+      return;
+    }
     try {
-      const copy = join(this.root, artifact.id, `r${artifact.revision}${extname(artifact.path)}`);
-      const data = readFileOrNull(copy);
-      let text = data ? searchText(artifact.format, data) : null;
-      if (text === null && (isHangul(artifact.format) || isOfficeFormat(artifact.format))) {
-        text = readFileOrNull(join(this.root, artifact.id, `r${artifact.revision}.view.md`))?.toString("utf8") ?? null;
-      }
-      this.store.indexDocument(artifact.id, text);
+      const data = readFileOrNull(join(this.root, artifact.id, `r${artifact.revision}${extname(artifact.path)}`));
+      this.store.indexDocument(artifact.id, data ? searchText(artifact.format, data) : null);
     } catch {
       // Search is a convenience: a document that cannot be read now is found again after its next change.
     }
+  }
+
+  /**
+   * Index a Hangul or Office revision by its text view, kept with the revision (made now by kordoc or
+   * IeumOffice when it is not). Only while it is still the latest; without the tool nothing changes.
+   */
+  private async indexView(artifactId: string, revision: number) {
+    const latest = () => this.artifacts.get(artifactId)?.revision === revision;
+    const artifact = this.artifacts.get(artifactId);
+    if (!artifact || !latest() || !hasTextView(artifact.format)) return;
+    const kept = join(this.root, artifactId, `r${revision}.view.md`);
+    let text = readFileOrNull(kept)?.toString("utf8") ?? null;
+    if (text === null) {
+      text = await this.extractText(join(this.root, artifactId, `r${revision}${extname(artifact.path)}`), artifact.format);
+      if (text === null) return;
+      if (!existsSync(kept)) writeFileSync(kept, text);
+    }
+    if (latest()) this.store.indexDocument(artifactId, text);
+  }
+
+  /** The text view of a Hangul or Office file: kordoc or IeumOffice, null when neither is here. */
+  private async extractText(file: string, format: DocFormat): Promise<string | null> {
+    if (isHangul(format)) return this.kordoc?.available ? this.kordoc.read(file) : null;
+    if (isOfficeFormat(format)) return this.ieum?.available ? this.ieum.textView(file, format) : null;
+    return null;
   }
 
   list() {
@@ -181,7 +226,8 @@ export class Documents {
     this.bus.publish({ type: "proposal.upserted", proposal });
   }
 
-  private record(artifact: Artifact, data: Buffer, revision: Omit<ArtifactRevision, "artifactId" | "revision" | "sha256" | "size" | "at">) {
+  /** `index`: false when the caller indexes the new revision itself (a Hangul save that reads its view anyway). */
+  private record(artifact: Artifact, data: Buffer, revision: Omit<ArtifactRevision, "artifactId" | "revision" | "sha256" | "size" | "at">, index = true) {
     const next = artifact.revision + 1;
     const copy = join(this.root, artifact.id, `r${next}${extname(artifact.path)}`);
     mkdirSync(dirname(copy), { recursive: true });
@@ -191,7 +237,12 @@ export class Documents {
     this.store.saveRevision(entry);
     const updated: Artifact = { ...artifact, revision: next, sha256: entry.sha256, size: entry.size, diskState: "same", updatedAt: entry.at };
     this.save(updated);
-    this.store.indexDocument(updated.id, searchText(updated.format, data));
+    // Hangul and Office files are read in the background; their previous entry stays meanwhile.
+    if (hasTextView(updated.format)) {
+      if (index) this.textIndex.add(updated.id, updated.revision);
+    } else {
+      this.store.indexDocument(updated.id, searchText(updated.format, data));
+    }
     return updated;
   }
 
@@ -207,8 +258,11 @@ export class Documents {
     sessionId: string | null,
     note: string | null,
     derivedFrom: ArtifactRevision["derivedFrom"] = null,
+    /** An engine's revision: the model, effort and request behind it. */
+    provenance: Provenance | null = null,
   ) {
     const path = isAbsolute(rawPath) ? rawPath : resolve(cwd, rawPath);
+    const made = author === "engine" && provenance ? { model: provenance.model ?? null, effort: provenance.effort ?? null, requestId: provenance.requestId ?? null } : {};
     const format = formatOf(path);
     if (!format || isWorkbenchPath(path)) return null;
     const data = readFileOrNull(path);
@@ -216,7 +270,7 @@ export class Documents {
     const existing = [...this.artifacts.values()].find((artifact) => artifact.workId === workId && artifact.path === path);
     if (existing) {
       if (sha256(data) === existing.sha256) return null;
-      const updated = this.record(existing, data, { author, sessionId, baseRevision: existing.revision, note, ...(derivedFrom?.length ? { derivedFrom } : {}) });
+      const updated = this.record(existing, data, { author, sessionId, baseRevision: existing.revision, note, ...(derivedFrom?.length ? { derivedFrom } : {}), ...made });
       return { artifact: updated, change: "modified" as const };
     }
     const now = Date.now();
@@ -234,7 +288,7 @@ export class Documents {
       createdAt: now,
       updatedAt: now,
     };
-    const created = this.record(artifact, data, { author, sessionId, baseRevision: null, note, ...(derivedFrom?.length ? { derivedFrom } : {}) });
+    const created = this.record(artifact, data, { author, sessionId, baseRevision: null, note, ...(derivedFrom?.length ? { derivedFrom } : {}), ...made });
     return { artifact: created, change: "created" as const };
   }
 
@@ -387,8 +441,13 @@ export class Documents {
     const current = this.check(artifactId);
     if (current.revision !== expectedRevision || current.diskState !== "same") throw new HttpError(409, "revision_conflict", "저장하는 동안 문서가 바뀌었습니다.");
     writeAtomic(artifact.path, data);
-    const saved = this.record(current, data, { author: "user", sessionId: null, baseRevision: expectedRevision, note: null });
-    if (isHangul(artifact.format)) writeFileSync(join(this.root, artifactId, `r${saved.revision}.view.md`), await this.kordoc!.read(this.revisionPath(artifactId, saved.revision)));
+    const hangul = isHangul(artifact.format);
+    const saved = this.record(current, data, { author: "user", sessionId: null, baseRevision: expectedRevision, note: null }, !hangul);
+    if (hangul) {
+      const markdown = await this.kordoc!.read(this.revisionPath(artifactId, saved.revision));
+      writeFileSync(join(this.root, artifactId, `r${saved.revision}.view.md`), markdown);
+      if (this.get(artifactId).revision === saved.revision) this.store.indexDocument(artifactId, markdown);
+    }
     return saved;
   }
 
@@ -509,10 +568,15 @@ export class Documents {
     return { artifactId: artifact.id, name: artifact.name, revision: ref.revision, mode: ref.mode, selection: ref.selection?.label ?? null };
   }
 
-  /** The engine's turn is over: whatever is in the working copy becomes the proposal. */
-  finishProposal(proposalId: string) {
+  /**
+   * The engine's turn is over: whatever is in the working copy becomes the proposal — also when the
+   * turn was cut short (`interruptedBy`: stopped, failed, its engine died, the app restarted), then
+   * marked as part of a turn that did not finish. Reviewed and applied or discarded like any other.
+   */
+  finishProposal(proposalId: string, end: { interruptedBy?: TurnBreak | null; model?: string | null; effort?: string | null } = {}) {
     const proposal = this.proposal(proposalId);
     if (proposal.status !== "running") return proposal;
+    const made = { ...(end.model !== undefined ? { model: end.model } : {}), ...(end.effort !== undefined ? { effort: end.effort } : {}) };
     const artifact = this.get(proposal.artifactId);
     const base = isHangul(artifact.format)
       ? readFileOrNull(join(this.root, artifact.id, `r${proposal.baseRevision}.view.md`))
@@ -520,14 +584,14 @@ export class Documents {
     const working = readFileOrNull(proposal.workingPath);
     const now = Date.now();
     if (!base || !working || sha256(base) === sha256(working)) {
-      const empty: Proposal = { ...proposal, status: "empty", updatedAt: now };
+      const empty: Proposal = { ...proposal, ...made, status: "empty", closedBy: end.interruptedBy ?? "turn", updatedAt: now };
       this.saveProposal(empty);
       return empty;
     }
     const office = isOfficeFormat(artifact.format);
     const counts = office ? { added: 0, removed: 0 } : countChanges(base.toString("utf8"), working.toString("utf8"));
     const problem = artifact.format === "design" ? designProblem(working.toString("utf8")) : null;
-    const pending: Proposal = { ...proposal, ...counts, problem, status: "pending", updatedAt: now };
+    const pending: Proposal = { ...proposal, ...counts, ...made, problem, ...(end.interruptedBy ? { interruptedBy: end.interruptedBy } : {}), status: "pending", updatedAt: now };
     this.saveProposal(pending);
     if (office) void this.checkOffice(pending.id);
     return pending;
@@ -566,8 +630,9 @@ export class Documents {
     }
   }
 
-  runningProposals(sessionId: string) {
-    return [...this.proposals.values()].filter((proposal) => proposal.sessionId === sessionId && proposal.status === "running");
+  /** Proposals whose turn is still running (of one session, or all). */
+  runningProposals(sessionId?: string) {
+    return [...this.proposals.values()].filter((proposal) => proposal.status === "running" && (sessionId === undefined || proposal.sessionId === sessionId));
   }
 
   /** Base, proposal and current text, for the preview. */
@@ -621,17 +686,21 @@ export class Documents {
       author: "engine",
       sessionId: proposal.sessionId,
       baseRevision: proposal.baseRevision,
-      note: "수정안 적용",
+      note: proposal.interruptedBy ? "중단된 턴의 일부 수정안 적용" : "수정안 적용",
+      model: proposal.model ?? null,
+      effort: proposal.effort ?? null,
+      requestId: proposal.requestId,
     });
-    const applied: Proposal = { ...proposal, status: "applied", appliedRevision: updated.revision, updatedAt: Date.now() };
+    const applied: Proposal = { ...proposal, status: "applied", appliedRevision: updated.revision, closedBy: "user", updatedAt: Date.now() };
     this.saveProposal(applied);
     return { proposal: applied, artifact: updated };
   }
 
-  discardProposal(proposalId: string) {
+  /** `closedBy`: the user, unless the request never reached the engine ("failure"). */
+  discardProposal(proposalId: string, closedBy: ProposalCloser = "user") {
     const proposal = this.proposal(proposalId);
     if (proposal.status !== "pending" && proposal.status !== "running") return proposal;
-    const discarded: Proposal = { ...proposal, status: "discarded", updatedAt: Date.now() };
+    const discarded: Proposal = { ...proposal, status: "discarded", closedBy, updatedAt: Date.now() };
     this.saveProposal(discarded);
     return discarded;
   }

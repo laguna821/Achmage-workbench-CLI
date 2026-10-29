@@ -13,6 +13,7 @@ import { Composer } from "../Composer.tsx";
 import { PendingFiles, usePendingFiles } from "../Attachments.tsx";
 import { FormatBadge } from "../DocCards.tsx";
 import { EngineMark } from "../EngineMark.tsx";
+import { PartialNote } from "../Recovery.tsx";
 import { Icon } from "../Icon.tsx";
 import { Popover, MenuItem } from "../Popover.tsx";
 import { DiffView } from "./DiffView.tsx";
@@ -404,6 +405,7 @@ export default function DocumentView({
         <div className="doc-compare">
           <div className="doc-compare-head">
             <strong>{compare.title}</strong>
+            {compare.proposal ? <PartialNote proposal={state.proposals[compare.proposal.id] ?? compare.proposal} compact /> : null}
             {compare.proposal && stale(compare.proposal) ? (
               <span className="proposal-warning">
                 r{compare.proposal.baseRevision} 기준 · 지금 r{artifact.revision} — 자동으로 적용하지 않습니다
@@ -822,6 +824,7 @@ export default function DocumentView({
                   {proposal.status === "running" ? " · 만드는 중…" : design || office ? (proposal.problem ? " · 파일 오류" : "") : ` · +${proposal.added} −${proposal.removed}`}
                   {stale(proposal) ? ` · 지금 r${artifact.revision}, 자동 적용 안 함` : ""}
                 </span>
+                <PartialNote proposal={proposal} compact />
                 {proposal.status === "pending" ? (
                   <span className="doc-proposal-actions">
                     <button type="button" className="button small" onClick={() => void showProposal(proposal)}>

@@ -23,6 +23,8 @@ export function LinkHopBadge({ hop }: { hop: LinkHop }) {
   const { state, openSession, openView } = useLinks();
   const { lookOf } = useAppearance();
   const from = hop.fromSessionId ? state.sessions[hop.fromSessionId] : undefined;
+  // Several answers handed over at once (three or more sessions): every speaker, oldest first.
+  const speakers = (hop.from?.length ?? 0) > 1 ? [...new Set(hop.from)].map((id) => participantName(state.sessions[id])).join(", ") : null;
   return (
     <span className="linked-hop" data-link-id={hop.linkId}>
       <button
@@ -34,7 +36,7 @@ export function LinkHopBadge({ hop }: { hop: LinkHop }) {
       >
         <span aria-hidden>⇄</span>
         {from ? <EngineMark provider={from.provider} size={12} /> : null}
-        {from ? `${participantName(from)}의 답` : "세션 잇기 목표"}
+        {speakers ? `${speakers}의 답` : from ? `${participantName(from)}의 답` : "세션 잇기 목표"}
       </button>
       <span className="linked-hop-count" title="세션 잇기에서 주고받은 순서">
         {hop.hop}/{hop.of}

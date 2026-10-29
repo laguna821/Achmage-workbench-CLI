@@ -555,6 +555,15 @@ export function App() {
         const target = session ? state.works[session.workId] : undefined;
         if (session && target) actions.selectSession(target, session);
       },
+      resendHandoff: async (handoff) => {
+        if (!api) return;
+        try {
+          await api.resendHandoff(handoff.id, newRequestId());
+          setToast("같은 내용을 다시 보냈습니다.");
+        } catch (error) {
+          fail(error);
+        }
+      },
     }),
     [api, fail, state.artifacts, state.sessions, state.works, actions, setToast, setView],
   );

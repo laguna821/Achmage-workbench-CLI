@@ -1,7 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { PROVIDER_LABEL, type Provider, type TranscriptItem } from "@workbench/contracts";
+import { PROVIDER_LABEL, turnEndText, type Provider, type TranscriptItem } from "@workbench/contracts";
 import { EngineMark } from "./EngineMark.tsx";
 import { FileCard, HandoffCard, ProposalCard, RefChips, useDocs } from "./DocCards.tsx";
 import { CREATE_LABEL } from "@workbench/contracts";
@@ -674,7 +674,7 @@ export function Transcript({
               {turn.end ? (
                 <div className={`turn-end turn-end-${turn.end.status}`}>
                   {turn.end.status === "completed" ? <Icon name="check" size={13} /> : null}
-                  {turn.end.status === "completed" ? "끝남" : turn.end.status === "interrupted" ? "중단됨" : "응답이 끝나지 못했습니다"}
+                  {turnEndText(turn.end)}
                   {duration(turn.end.durationMs) ? <span className="muted"> · {duration(turn.end.durationMs)}</span> : null}
                 </div>
               ) : null}

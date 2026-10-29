@@ -4,6 +4,7 @@ import type { AgentBrowserStatus } from "./browse.ts";
 
 import type { ImageItem, RequestDraw } from "./imagegen.ts";
 import type { LinkHop, SessionLink } from "./links.ts";
+import type { ProposalCloser, TurnBreak, TurnCause } from "./recovery.ts";
 import type { Schedule } from "./schedules.ts";
 import type { SessionWorktree } from "./worktrees.ts";
 
@@ -199,6 +200,10 @@ export type ArtifactRevision = {
   note: string | null;
   /** The documents (and their revisions) this one was made from, for a document created by a request. */
   derivedFrom?: { artifactId: string; revision: number }[] | null;
+  /** An engine's revision: the model and effort its engine reported, and the request it answered. */
+  model?: string | null;
+  effort?: string | null;
+  requestId?: string | null;
   at: number;
 };
 
@@ -261,6 +266,13 @@ export type Proposal = {
   appliedRevision: number | null;
   /** Why the working copy cannot be applied as it is (a design that is no longer valid JSON…). */
   problem?: string | null;
+  /** Made by a turn cut short ("중단된 턴의 일부 수정안"): what the working copy held when it ended. */
+  interruptedBy?: TurnBreak | null;
+  /** Who closed it (applied, discarded, or left empty); absent while open and in older records. */
+  closedBy?: ProposalCloser | null;
+  /** What the engine reported for the turn that made it (carried to the revision it becomes). */
+  model?: string | null;
+  effort?: string | null;
   createdAt: number;
   updatedAt: number;
 };
@@ -276,6 +288,11 @@ export type Handoff = {
   status: "sent" | "answered" | "failed";
   reply: string | null;
   error: string | null;
+  /** Files that went with the request (sent again with it). */
+  attachments?: Attachment[];
+  /** "다시 보내기": the handoff that sent this one again, and the one this one repeats. */
+  resentAs?: string | null;
+  resentFrom?: string | null;
   createdAt: number;
   answeredAt: number | null;
 };
@@ -360,6 +377,12 @@ export type TranscriptItem =
       status: "completed" | "interrupted" | "failed";
       durationMs: number | null;
       at: number;
+      /** Why a turn that did not complete ended: stopped, its engine died, the app restarted. */
+      cause?: TurnCause | null;
+      /** The model and effort the engine reported for the turn, and the request that started it. */
+      model?: string | null;
+      effort?: string | null;
+      requestId?: string | null;
     };
 
 export type UsageWindow = {
@@ -756,3 +779,4 @@ export * from "./schedules.ts";
 export * from "./worktrees.ts";
 export * from "./project.ts";
 export * from "./entry.ts";
+export * from "./recovery.ts";
