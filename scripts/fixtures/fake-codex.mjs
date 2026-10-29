@@ -32,6 +32,8 @@
 //          copy the request names, streams a few lines (about 2.5 s), then exits without ending it.
 //          "[[crash-once]]", or "충돌:N" in a linked-session goal at hand-over N: the same, once per
 //          request text (asked again with the same words, it answers; marks in $FAKE_ENGINE_STATE)
+//   "[[cp <from> <to>]]"  copies a file with a command (asking first unless "never"), as Codex
+//          writing a document through the shell would
 //   "맥락"  answers with the developer instructions the thread started with and its sandbox
 //   "볼트에 써: <path>"  writes only where the sandbox would let Codex (work folder, temporary
 //          folders unless excluded, anything with full access) and only inside the temporary folder.
@@ -268,6 +270,20 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
   }
   if (text.includes("압축")) {
     await compact(threadId, thread, turnId);
+  }
+  const copy = /\[\[cp (\S+) (\S+)\]\]/.exec(text);
+  if (copy) {
+    const line = `cp '${copy[1]}' '${copy[2]}'`;
+    const itemId = `cmd_${++counter}`;
+    let decision = "accept";
+    if (thread.approvalPolicy !== "never") {
+      const answer = await ask("item/commandExecution/requestApproval", { kind: "command", threadId, turnId, itemId, startedAtMs: Date.now(), environmentId: null, reason: "파일을 복사합니다", command: line, cwd: thread.cwd });
+      decision = answer?.decision ?? "decline";
+    }
+    const command = { type: "commandExecution", id: itemId, command: line, cwd: thread.cwd, processId: null, source: "agent", status: "inProgress", commandActions: [], aggregatedOutput: null, exitCode: null, durationMs: null };
+    notify("item/started", { threadId, turnId, item: command });
+    const result = decision === "accept" ? await runCommand(line, thread.cwd, threadId) : { code: null, output: null };
+    notify("item/completed", { threadId, turnId, item: { ...command, status: decision !== "accept" ? "declined" : result.code === 0 ? "completed" : "failed", aggregatedOutput: result.output, exitCode: result.code } });
   }
   if (text.startsWith("[Achmage Workbench · 그림]")) {
     // A drawing: the picture, then one sentence about it.

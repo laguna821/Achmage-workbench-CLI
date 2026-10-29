@@ -28,6 +28,8 @@
 //          copy the request names, streams a few lines (about 2.5 s), then exits without a result.
 //          "[[crash-once]]", or "충돌:N" in a linked-session goal at hand-over N: the same, once per
 //          request text (asked again with the same words, it answers; marks in $FAKE_ENGINE_STATE)
+//   "[[cp <from> <to>]]"  copies a file with a shell command (Bash, asking first in "default" mode),
+//          as an engine writing a document through the shell would
 //   "맥락"  answers with the appended system prompt it was started with (the context card)
 //   "볼트에 써: <path>"  tries the Write tool on that path; PreToolUse hooks registered by the SDK
 //          are asked first (as Claude Code does) and a denial is reported; it only ever writes
@@ -201,6 +203,19 @@ async function runTurn(text) {
   }
   if (text.trim() === "/compact" || text.includes("압축")) {
     await compact(text.trim() === "/compact" ? "manual" : "auto");
+  }
+  const copy = /\[\[cp (\S+) (\S+)\]\]/.exec(text);
+  if (copy) {
+    const toolId = `toolu_${randomUUID().slice(0, 8)}`;
+    const input = { command: `cp '${copy[1]}' '${copy[2]}'`, description: "파일 복사" };
+    send({ type: "assistant", message: { id: `msg_${randomUUID().slice(0, 8)}`, type: "message", role: "assistant", model: MODEL, content: [{ type: "tool_use", id: toolId, name: "Bash", input }], stop_reason: "tool_use", stop_sequence: null, usage: { input_tokens: 10, output_tokens: 20, cache_creation_input_tokens: 0, cache_read_input_tokens: used } }, parent_tool_use_id: null, ...base() });
+    let allowed = permissionMode === "bypassPermissions" || permissionMode === "dontAsk";
+    if (!allowed) {
+      const answerToTool = await ask({ subtype: "can_use_tool", tool_name: "Bash", input, tool_use_id: toolId, decision_reason: "명령 실행은 확인이 필요합니다" });
+      allowed = answerToTool?.behavior === "allow";
+    }
+    const result = allowed ? await runCommand(input.command) : { code: 1, output: "The user declined this action." };
+    send({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolId, content: result.output || "(복사함)", is_error: result.code !== 0 }] }, parent_tool_use_id: null, ...base() });
   }
   if (text.includes("명령")) {
     const toolId = `toolu_${randomUUID().slice(0, 8)}`;
