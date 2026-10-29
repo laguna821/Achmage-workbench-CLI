@@ -395,8 +395,16 @@ export type ProviderStatus = {
   provider: Provider;
   installed: boolean;
   binary: string | null;
-  /** installed: the user's own engine; bundled: the copy shipped with the SDK; override: set by env. */
-  binarySource: "installed" | "bundled" | "override" | null;
+  /** installed: the user's own engine; bundled: the copy shipped with the SDK; managed: installed by Workbench; override: set by env. */
+  binarySource: "installed" | "bundled" | "override" | "managed" | null;
+  /** How it was found (shown with the path); absent from older gateways. */
+  origin?: import("./setup.ts").EngineOrigin | null;
+  /** Workbench can install this engine with one click (its npm is there). */
+  canInstall?: boolean;
+  /** "설치" in progress or just finished. */
+  install?: import("./setup.ts").EngineInstallState | null;
+  /** "로그인" in progress or just finished. */
+  login?: import("./setup.ts").EngineLoginState | null;
   version: string | null;
   loggedIn: boolean | null;
   loginMethod: LoginMethod | null;
@@ -750,3 +758,4 @@ export * from "./doc-images.ts";
 export * from "./pkm.ts";
 export * from "./schedules.ts";
 export * from "./worktrees.ts";
+export * from "./setup.ts";

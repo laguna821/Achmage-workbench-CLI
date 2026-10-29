@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
-import { PROVIDER_LABEL, type AgentBrowserStatus, type DocumentTools, type Provider, type ProviderStatus } from "@workbench/contracts";
+import { type AgentBrowserStatus, type DocumentTools, type Provider, type ProviderStatus } from "@workbench/contracts";
 import { usageText } from "../format.ts";
 import type { ThemePref } from "../theme.ts";
 import { BrowserInstall, BrowserLogin, type BrowserActions } from "./BrowserPill.tsx";
+import { EngineCard, type EngineActions } from "./EngineSetup.tsx";
 
 const THEME_LABEL: Record<ThemePref, string> = { system: "시스템", light: "라이트", dark: "다크" };
 
@@ -81,9 +82,8 @@ export function Connections({
   providers,
   connected,
   hostLabel,
-  onLogin,
+  engineActions,
   onRefresh,
-  loginMessage,
   themePref,
   onTheme,
   onAppearance,
@@ -109,9 +109,8 @@ export function Connections({
   providers: Partial<Record<Provider, ProviderStatus>>;
   connected: boolean;
   hostLabel: string;
-  onLogin: (provider: Provider) => void;
+  engineActions: EngineActions;
   onRefresh: () => void;
-  loginMessage: string | null;
   themePref: ThemePref;
   onTheme: (pref: ThemePref) => void;
   onAppearance: () => void;
@@ -133,63 +132,28 @@ export function Connections({
       {!connected ? <div className="notice notice-error compact">앱 내부 연결이 끊겼습니다. 다시 연결하는 중…</div> : null}
       {(["claude", "codex"] as const).map((provider) => {
         const status = providers[provider];
-        const state = !status
-          ? "확인 중"
-          : !status.installed
-            ? "설치되지 않음"
-            : status.loggedIn === null
-              ? "확인 중"
-              : !status.loggedIn
-                ? "로그인 필요"
-                : status.loginMethod === "subscription"
-                  ? "구독 연결됨"
-                  : status.loginMethod === "metered"
-                    ? "종량제 로그인"
-                    : "로그인됨";
-        const tone = status?.loggedIn && status.loginMethod !== "metered" ? "ok" : status?.loggedIn === false || status?.loginMethod === "metered" ? "warn" : "";
         return (
           <div key={provider} className="connection">
-            <div className="connection-head">
-              <span className="connection-name">{PROVIDER_LABEL[provider]}</span>
-              <span className={`connection-state ${tone}`}>{state}</span>
-            </div>
-            {status?.account ? (
-              <div className="connection-meta">
-                {status.account}
-                {status.plan ? ` · ${status.plan}` : ""}
-              </div>
-            ) : null}
-            {status?.usage.length ? (
-              status.usage.map((window) => (
-                <div key={window.label} className="connection-meta">
-                  {usageText(window)}
+            <EngineCard provider={provider} status={status} actions={engineActions}>
+              {status?.account ? (
+                <div className="connection-meta">
+                  {status.account}
+                  {status.plan ? ` · ${status.plan}` : ""}
                 </div>
-              ))
-            ) : status?.loggedIn ? (
-              <div className="connection-meta muted">사용량 확인 불가 (첫 요청 후 표시)</div>
-            ) : null}
-            {status?.loginMethod === "metered" ? (
-              <div className="connection-meta warn">API 키나 클라우드 경로로 로그인되어 있어 쓴 만큼 요금이 나갑니다. 구독으로 쓰려면 구독 계정으로 다시 로그인하세요.</div>
-            ) : null}
-            {status?.billingVars.length ? (
-              <div className="connection-meta muted">
-                {status.billingVars.join(", ")} 환경변수는 엔진에 넘기지 않습니다(구독 로그인으로 실행).
-              </div>
-            ) : null}
-            {status?.binarySource === "bundled" ? (
-              <div className="connection-meta muted">설치된 Claude Code가 없어 SDK에 들어 있는 엔진으로 실행합니다.</div>
-            ) : null}
-            {status?.version ? <div className="connection-meta muted mono">{status.version}</div> : null}
-            {status?.error && !status.loggedIn ? <div className="connection-meta warn">{status.error}</div> : null}
-            {status?.installed && status.loggedIn === false ? (
-              <button type="button" className="button small" onClick={() => onLogin(provider)}>
-                {PROVIDER_LABEL[provider]} 로그인
-              </button>
-            ) : null}
+              ) : null}
+              {status?.usage.length ? (
+                status.usage.map((window) => (
+                  <div key={window.label} className="connection-meta">
+                    {usageText(window)}
+                  </div>
+                ))
+              ) : status?.loggedIn ? (
+                <div className="connection-meta muted">사용량 확인 불가 (첫 요청 후 표시)</div>
+              ) : null}
+            </EngineCard>
           </div>
         );
       })}
-      {loginMessage ? <div className="connection-meta">{loginMessage}</div> : null}
       <button type="button" className="text-button" onClick={onRefresh}>
         상태 새로 고침
       </button>

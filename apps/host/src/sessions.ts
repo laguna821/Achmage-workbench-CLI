@@ -63,6 +63,7 @@ import { SessionLinks } from "./links.ts";
 import { Schedules } from "./schedules.ts";
 import { applyWorktree, createWorktree, removeWorktree, worktreeChanges } from "./worktrees.ts";
 import type { AgentBrowser } from "./browse.ts";
+import { EngineInstaller } from "./engine-install.ts";
 
 export { HttpError };
 
@@ -245,6 +246,8 @@ export class SessionManager {
   readonly links: SessionLinks;
   /** "예약 작업": requests sessions get at set times (schedules.ts). */
   readonly schedules: Schedules;
+  /** "설치": engines installed with one click (engine-install.ts). */
+  readonly engineSetup: EngineInstaller;
   /** Set by the PKM layer: vault notes attached to a request become read-only references. */
   noteHook: NoteHook | null = null;
   private readonly store: Store;
@@ -256,6 +259,16 @@ export class SessionManager {
     this.bus = bus;
     this.options = options;
     this.documents = new Documents(store, bus, options.dataDir ?? dirname(options.managedWorksDir), options.kordoc ?? null, options.ieum ?? null);
+    this.engineSetup = new EngineInstaller({
+      dataDir: options.dataDir ?? dirname(options.managedWorksDir),
+      onChange: (engine, state) => {
+        const adapter = this.adapters.get(engine);
+        if (!adapter) return;
+        // A finished install: the engine is looked for again, then its login is read.
+        if (state?.state === "done") void adapter.locate?.().then(() => this.bus.publish({ type: "provider.status", status: this.engineSetup.decorate(adapter.status()) }));
+        this.bus.publish({ type: "provider.status", status: this.engineSetup.decorate(adapter.status()) });
+      },
+    });
     this.attachments = new Attachments(options.dataDir ?? dirname(options.managedWorksDir));
     this.images = new ImageGen(
       {
@@ -403,7 +416,7 @@ export class SessionManager {
       if (wasBusy && patch.status === "idle") this.drainSoon(sessionId);
     },
     providerStatus: (status) => {
-      this.bus.publish({ type: "provider.status", status });
+      this.bus.publish({ type: "provider.status", status: this.engineSetup.decorate(status) });
     },
     steerDropped: (sessionId, turnKeys) => {
       const lost: Steered[] = [];
@@ -558,7 +571,7 @@ export class SessionManager {
       folders: [...this.folders.values()],
       works: [...this.works.values()],
       sessions: [...this.sessions.values()],
-      providers: [...this.adapters.values()].map((adapter) => adapter.status()),
+      providers: [...this.adapters.values()].map((adapter) => this.engineSetup.decorate(adapter.status())),
       prefs: this.prefs(),
       artifacts: this.documents.list(),
       proposals: this.documents.listProposals(),
@@ -611,7 +624,7 @@ export class SessionManager {
   }
 
   private engineBinaries(): EngineBinaries {
-    return { claude: this.adapters.get("claude")?.status().binary ?? null, codex: this.adapters.get("codex")?.status().binary ?? null };
+    return { claude: this.adapters.get("claude")?.cli?.() ?? null, codex: this.adapters.get("codex")?.cli?.() ?? null };
   }
 
   /** The folder of the agent skill IeumOffice ships (skills/ieumoffice), when installed. */
@@ -1724,8 +1737,33 @@ export class SessionManager {
     return this.adapter(provider).login();
   }
 
+  /** The code a login page showed, for an engine whose login waits for it (Claude Code). */
+  async loginCode(provider: Provider, code: string) {
+    const adapter = this.adapter(provider);
+    if (!adapter.loginCode) throw new HttpError(400, "no_login_code", "이 엔진은 코드를 받지 않습니다.");
+    await adapter.loginCode(code).catch((error: unknown) => {
+      throw new HttpError(409, "login_code", error instanceof Error ? error.message : String(error));
+    });
+    return this.engineSetup.decorate(adapter.status());
+  }
+
+  async cancelLogin(provider: Provider) {
+    const adapter = this.adapter(provider);
+    await adapter.cancelLogin?.();
+    return this.engineSetup.decorate(adapter.status());
+  }
+
+  /** "설치": the latest engine for this user; progress arrives as provider.status events. */
+  installEngine(provider: Provider) {
+    const adapter = this.adapter(provider);
+    if (!this.engineSetup.canInstall()) throw new HttpError(501, "npm_missing", "이 설치본에는 엔진을 설치할 npm이 없습니다.");
+    void this.engineSetup.install(provider);
+    return this.engineSetup.decorate(adapter.status());
+  }
+
   async refreshProviders(): Promise<ProviderStatus[]> {
-    return Promise.all([...this.adapters.values()].map((adapter) => adapter.refreshStatus()));
+    // An engine installed meanwhile (by the user, in a terminal) is found again.
+    return Promise.all([...this.adapters.values()].map(async (adapter) => this.engineSetup.decorate(await adapter.refreshStatus())));
   }
 
   /** Stop watching documents opened in other apps. */

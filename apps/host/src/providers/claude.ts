@@ -1,4 +1,4 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile, spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -20,13 +20,16 @@ import {
   type SDKControlInterruptResponse,
   type SDKMessage,
   type SDKUserMessage,
+  type SpawnedProcess,
+  type SpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { AccessMode, ApprovalDecision, EngineCommand, ModelOption, ProviderStatus, Session, UsageWindow, Work } from "@workbench/contracts";
 import { ClaudeTranscriptMapper, describeTool, type MapperOutput } from "@workbench/provider-claude";
-import { resolveClaude, type ResolvedBinary } from "../binaries.ts";
-import { billingVarsIn, claudeSdkEnv, engineEnv } from "../engine-env.ts";
+import { launchEnv, resolveClaude, type ResolvedBinary } from "../binaries.ts";
+import { billingVarsIn } from "../engine-env.ts";
 import { parseClaudeAuthStatus } from "../engine-login.ts";
-import { emptyStatus, type AdapterSink, type AttachedFile, type ClaudeLaunch, type LoginStart, type NativeConversation, type ProviderAdapter } from "./types.ts";
+import { isWebAddress } from "../open-url.ts";
+import { emptyStatus, type AdapterSink, type AttachedFile, type ClaudeLaunch, type EngineCli, type LoginStart, type NativeConversation, type ProviderAdapter } from "./types.ts";
 import { claudeHistory, isRequest } from "../imports.ts";
 import { isImage, mentionFiles } from "../attachments.ts";
 import type { BrowserEngineHooks } from "../browse.ts";
@@ -227,7 +230,7 @@ export class ClaudeAdapter implements ProviderAdapter {
       return;
     }
     const input = new InputQueue();
-    const probe = query({ prompt: input, options: { pathToClaudeCodeExecutable: this.binary.path, settingSources: [], env: claudeSdkEnv(this.binary.path) } });
+    const probe = query({ prompt: input, options: { ...this.sdkLaunch(), settingSources: [] } });
     try {
       const init = await probe.initializationResult();
       const models = modelsFromInfo(init.models);
@@ -258,26 +261,68 @@ export class ClaudeAdapter implements ProviderAdapter {
   }
 
   private async initOnce() {
-    this.binary = await resolveClaude(sdkBundledBinary());
-    if (!this.binary) {
-      this.publish({ installed: false, error: "claude를 찾지 못했습니다." });
-      return;
-    }
-    this.publish({ installed: true, binary: this.binary.path, binarySource: this.binary.source, version: this.binary.version, billingVars: billingVarsIn(), error: null });
+    await this.resolve();
+    if (!this.binary) return;
     await this.refreshStatus();
     void this.loadModels();
   }
 
+  /** Find the engine (again) and say where it is. */
+  private async resolve() {
+    this.binary = await resolveClaude(sdkBundledBinary());
+    if (!this.binary) {
+      this.publish({ installed: false, binary: null, binarySource: null, origin: null, version: null, error: "claude를 찾지 못했습니다." });
+      return;
+    }
+    this.publish({ installed: true, binary: this.binary.path, binarySource: this.binary.source, origin: this.binary.origin, version: this.binary.version, billingVars: billingVarsIn(), error: null });
+  }
+
+  /** Look again (after an install, or the user installed it meanwhile); running sessions keep theirs. */
+  async locate() {
+    const before = this.binary;
+    await this.resolve();
+    if (this.binary && (this.binary.command !== before?.command || !this.current.loggedIn)) {
+      await this.refreshStatus();
+      void this.loadModels();
+    }
+  }
+
+  /** How the Agent SDK starts this engine: a native binary, or a JavaScript entry on the gateway's Node. */
+  private sdkLaunch(options: { paths?: string[]; extra?: Record<string, string> } = {}) {
+    const binary = this.binary!;
+    const env = launchEnv(binary, { paths: options.paths, extra: { CLAUDE_AGENT_SDK_CLIENT_APP: "achmage-workbench/0.1", ...options.extra } });
+    const strings = Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+    if (binary.kind === "node") {
+      const script = binary.args[0]!;
+      // The SDK runs a .js/.mjs script with `executable`; a GUI app may have no `node` on PATH, so name ours.
+      if (/\.(m?js|jsx?|tsx?)$/i.test(script)) return { pathToClaudeCodeExecutable: script, executable: process.execPath as "node", executableArgs: binary.args.slice(1), env: strings };
+      // Any other script the SDK would start as a program: start it on our Node instead.
+      return {
+        pathToClaudeCodeExecutable: script,
+        env: strings,
+        spawnClaudeCodeProcess: (options: SpawnOptions) =>
+          spawn(process.execPath, [...binary.args, ...options.args], { cwd: options.cwd, env: options.env, signal: options.signal, stdio: ["pipe", "pipe", "pipe"], windowsHide: true }) as unknown as SpawnedProcess,
+      };
+    }
+    return { pathToClaudeCodeExecutable: binary.command, env: strings };
+  }
+
+  cli(): EngineCli | null {
+    const binary = this.binary;
+    return binary ? { command: binary.command, args: binary.args, env: launchEnv(binary) } : null;
+  }
+
   async refreshStatus(): Promise<ProviderStatus> {
+    if (!this.binary) await this.resolve();
     if (!this.binary) {
       return this.current;
     }
     // The same environment the sessions get, so the status names the login they will use.
-    const env = engineEnv({ command: this.binary.path });
+    const env = launchEnv(this.binary);
     let stdout = "";
     let failure: unknown = null;
     try {
-      stdout = (await run(this.binary.path, ["auth", "status", "--json"], { timeout: 20_000, env })).stdout;
+      stdout = (await run(this.binary.command, [...this.binary.args, "auth", "status", "--json"], { timeout: 20_000, env, windowsHide: true })).stdout;
     } catch (error) {
       // `auth status` exits non-zero when logged out, with the JSON still on stdout.
       stdout = (error as { stdout?: string }).stdout ?? "";
@@ -309,7 +354,7 @@ export class ClaudeAdapter implements ProviderAdapter {
       let target = runtime?.query as (Query & UsageQuery) | undefined;
       if (!target) {
         const input = new InputQueue();
-        probe = { input, query: query({ prompt: input, options: { pathToClaudeCodeExecutable: this.binary.path, settingSources: [], env: claudeSdkEnv(this.binary.path) } }) };
+        probe = { input, query: query({ prompt: input, options: { ...this.sdkLaunch(), settingSources: [] } }) };
         target = probe.query as Query & UsageQuery;
       }
       const usage = await target.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?.();
@@ -344,20 +389,36 @@ export class ClaudeAdapter implements ProviderAdapter {
     await this.readPlanUsage(runtime);
   }
 
+  /** The engine's own login (`claude auth login`) while it waits for the browser. */
+  private loginProcess: ChildProcessWithoutNullStreams | null = null;
+
+  /**
+   * Claude Code's own login: it opens the browser itself and listens on this computer for the
+   * page to hand the login back. It also prints an address for when the browser did not open; that
+   * page shows a code, which Claude Code takes on its input ("로그인 코드"). Done when it exits.
+   */
   async login(): Promise<LoginStart> {
-    if (!this.binary) {
+    if (!this.binary) await this.resolve();
+    const binary = this.binary;
+    if (!binary) {
       throw new Error("claude를 찾지 못했습니다.");
     }
-    const child = spawn(this.binary.path, ["auth", "login", "--claudeai"], { stdio: ["ignore", "pipe", "pipe"], env: engineEnv({ command: this.binary.path }) });
-    const url = await new Promise<string | null>((resolve) => {
-      let buffer = "";
+    await this.cancelLogin();
+    const child = spawn(binary.command, [...binary.args, "auth", "login", "--claudeai"], { stdio: ["pipe", "pipe", "pipe"], env: launchEnv(binary), windowsHide: true });
+    this.loginProcess = child;
+    child.stdin.on("error", () => undefined);
+    let output = "";
+    let url: string | null = null;
+    const waiting = (message: string) => this.publish({ login: { state: "waiting", url, userCode: null, acceptsCode: true, opened: true, message, at: Date.now() } });
+    const found = new Promise<string | null>((resolve) => {
       const timer = setTimeout(() => resolve(null), 15_000);
       const onData = (chunk: Buffer) => {
-        buffer += chunk.toString("utf8");
-        const match = buffer.match(/https:\/\/\S+/);
-        if (match) {
+        output = (output + chunk.toString("utf8")).slice(-8000);
+        const address = loginAddress(output);
+        if (address && !url) {
+          url = address;
           clearTimeout(timer);
-          resolve(match[0]);
+          resolve(address);
         }
       };
       child.stdout.on("data", onData);
@@ -367,8 +428,49 @@ export class ClaudeAdapter implements ProviderAdapter {
         resolve(null);
       });
     });
-    child.on("exit", () => void this.refreshStatus());
+    // Ten minutes for the browser; then the login stops and can be started again.
+    const limit = setTimeout(() => {
+      if (this.loginProcess !== child) return;
+      child.kill();
+      this.publish({ login: { state: "failed", url: null, userCode: null, acceptsCode: false, opened: true, message: "로그인을 기다리다 멈췄습니다. 다시 눌러 주세요.", at: Date.now() } });
+    }, 10 * 60_000);
+    child.on("error", () => undefined);
+    child.on("exit", (code) => {
+      clearTimeout(limit);
+      if (this.loginProcess !== child) return;
+      this.loginProcess = null;
+      const reason = loginFailure(output);
+      this.publish({
+        login:
+          code === 0
+            ? { state: "done", url: null, userCode: null, acceptsCode: false, opened: true, message: "로그인했습니다.", at: Date.now() }
+            : { state: "failed", url: null, userCode: null, acceptsCode: false, opened: true, message: `로그인하지 못했습니다${reason ? `: ${reason}` : "."}`, at: Date.now() },
+      });
+      void this.refreshStatus().then(() => {
+        if (this.current.loggedIn) void this.loadModels();
+      });
+    });
+    waiting("브라우저에서 Claude 로그인을 마치면 자동으로 연결됩니다.");
+    await found;
+    if (this.loginProcess === child) waiting("브라우저에서 Claude 로그인을 마치면 자동으로 연결됩니다. 브라우저가 열리지 않았다면 아래 주소를 여세요.");
     return { url, message: "브라우저에서 Claude 로그인을 마치면 자동으로 연결됩니다." };
+  }
+
+  /** The code the login page showed (`코드#상태`), handed to the waiting login. Never logged. */
+  async loginCode(code: string) {
+    const child = this.loginProcess;
+    const value = code.trim();
+    if (!child || child.exitCode !== null) throw new Error("기다리는 로그인이 없습니다. 로그인을 다시 눌러 주세요.");
+    if (!/^[A-Za-z0-9._~+/=-]{4,4096}#[A-Za-z0-9._~+/=-]{4,4096}$/.test(value)) throw new Error("코드 전체를 붙여 넣어 주세요(# 앞뒤 모두).");
+    child.stdin.write(`${value}\n`);
+  }
+
+  async cancelLogin() {
+    const child = this.loginProcess;
+    if (!child) return;
+    this.loginProcess = null;
+    child.kill();
+    if (this.current.login?.state === "waiting") this.publish({ login: null });
   }
 
   private startRuntime(session: Session & { access: AccessMode; plan?: boolean }, work: Work): Runtime {
@@ -463,10 +565,9 @@ export class ClaudeAdapter implements ProviderAdapter {
         settingSources: ["user", "project", "local"],
         // The context card (pkm.ts) and the agent browser's instructions, after Claude Code's own.
         systemPrompt: { type: "preset", preset: "claude_code", ...(extras?.append || browser ? { append: [extras?.append, browser].filter(Boolean).join("\n\n") } : {}) },
-        pathToClaudeCodeExecutable: this.binary.path,
         // Never an API key or cloud route left in the gateway's environment: the user's login.
         // The agent browser's playwright-cli is on PATH, and names this session's browser while on.
-        env: claudeSdkEnv(this.binary.path, { paths: this.browser?.pathDirs(), extra: this.browser?.sessionEnv(session) }),
+        ...this.sdkLaunch({ paths: this.browser?.pathDirs(), extra: this.browser?.sessionEnv(session) }),
       },
     });
     this.runtimes.set(session.id, runtime);
@@ -837,6 +938,8 @@ export class ClaudeAdapter implements ProviderAdapter {
   }
 
   async shutdown() {
+    this.loginProcess?.kill();
+    this.loginProcess = null;
     for (const runtime of this.runtimes.values()) {
       runtime.input.close();
       runtime.query.close();
@@ -871,4 +974,27 @@ export function claudeContent(text: string, files: AttachedFile[]): SDKUserMessa
 /** What a conversation is called: the user's title, else Claude Code's summary or first request. */
 function titleOf(info: { customTitle?: string; summary: string; firstPrompt?: string }) {
   return (info.customTitle ?? info.summary ?? info.firstPrompt ?? "").replace(/\s+/g, " ").trim().slice(0, 120) || "제목 없음";
+}
+
+/** Terminal escapes (colours, OSC 8 links) out of an engine's output. */
+export function plainText(text: string) {
+  return text.replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g, "").replace(/\u001b\[[0-9;?]*[ -\/]*[@-~]/g, "");
+}
+
+/** The address `claude auth login` prints for when the browser did not open. */
+export function loginAddress(output: string): string | null {
+  const text = plainText(output);
+  const line = text.split(/\r?\n/).find((entry) => /https?:\/\//.test(entry));
+  const url = line ? /https?:\/\/\S+/.exec(line)?.[0] ?? null : null;
+  return url && isWebAddress(url) ? url : null;
+}
+
+/** Why the login failed, as the engine said it (one short line). */
+export function loginFailure(output: string): string | null {
+  const lines = plainText(output)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const line = [...lines].reverse().find((entry) => /fail|error|invalid|denied|expired/i.test(entry));
+  return line ? line.slice(0, 200) : null;
 }

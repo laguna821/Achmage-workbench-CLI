@@ -48,6 +48,9 @@ export type ToolImage = { path: string } | { data: string; name?: string };
 
 export type LoginStart = { url: string | null; message: string };
 
+/** How to start an engine's own commands (`mcp add`, …) the way the adapter starts the engine. */
+export type EngineCli = { command: string; args: string[]; env: NodeJS.ProcessEnv };
+
 /**
  * What a new engine process is told and kept from (pkm.ts): the context card, and for Claude the
  * hooks that deny writes into the vault; for Codex whether its sandbox must be read-only (its work
@@ -66,6 +69,14 @@ export interface ProviderAdapter {
   status(): ProviderStatus;
   refreshStatus(): Promise<ProviderStatus>;
   login(): Promise<LoginStart>;
+  /** The code the engine's login page shows, when the page cannot hand it back by itself (Claude Code). */
+  loginCode?(code: string): Promise<void>;
+  /** Stop a login that is waiting for the browser. */
+  cancelLogin?(): Promise<void>;
+  /** Look for the engine again (after an install, or a "다시 확인" after the user installed it). */
+  locate?(): Promise<void>;
+  /** The engine's command line as found (null when none). */
+  cli?(): EngineCli | null;
   /**
    * `session.access` is resolved: the access this turn runs with. `session.plan`: "계획 먼저", the
    * engine only plans (reads, no changes) and the plan waits for the go-ahead. `files`: attachments.

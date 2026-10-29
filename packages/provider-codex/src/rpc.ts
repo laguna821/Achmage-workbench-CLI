@@ -21,6 +21,8 @@ export class RpcError extends Error {
 
 export type CodexRpcOptions = {
   binary: string;
+  /** Arguments before `app-server` (a JavaScript launcher run on Node names its script here). */
+  prefixArgs?: string[];
   args?: string[];
   env?: NodeJS.ProcessEnv;
   cwd?: string;
@@ -46,25 +48,36 @@ export class CodexRpc {
   }
 
   start() {
-    const child = spawn(this.options.binary, ["app-server", ...(this.options.args ?? [])], {
+    const child = spawn(this.options.binary, [...(this.options.prefixArgs ?? []), "app-server", ...(this.options.args ?? [])], {
       env: this.options.env ?? process.env,
       cwd: this.options.cwd,
       stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
     });
     this.child = child;
     createInterface({ input: child.stdout }).on("line", (line) => this.handleLine(line));
     child.stderr.on("data", (chunk: Buffer) => {
       this.stderrTail = (this.stderrTail + chunk.toString("utf8")).slice(-4000);
     });
-    child.on("exit", (code) => {
-      this.child = null;
+    let ended = false;
+    const end = (code: number | null) => {
+      if (ended) return;
+      ended = true;
+      if (this.child === child) this.child = null;
       for (const [, pending] of this.pending) {
         clearTimeout(pending.timer);
         pending.reject(new RpcError("codex app-server exited"));
       }
       this.pending.clear();
       this.options.onExit(code, this.stderrTail);
+    };
+    child.on("exit", (code) => end(code));
+    // A program that cannot be started reports an error instead of exiting.
+    child.on("error", (error) => {
+      this.stderrTail = `${this.stderrTail}\n${error.message}`.slice(-4000);
+      end(null);
     });
+    child.stdin.on("error", () => undefined);
   }
 
   request<T = unknown>(method: string, params: unknown, timeoutMs?: number): Promise<T> {

@@ -17,6 +17,7 @@ import { buildTimeline } from "./timeline.ts";
 import { DocImages } from "./doc-images.ts";
 import { Pkm } from "./pkm.ts";
 import { handlePkm } from "./pkm-http.ts";
+import { adoptLoginShellPath } from "./shell-env.ts";
 
 // Local gateway: owns engine processes and state, serves the UI and an HTTP + SSE API on
 // 127.0.0.1 only. Prints one `WORKBENCH_READY {json}` line once it accepts connections.
@@ -53,6 +54,9 @@ function defaultHostLabel() {
 }
 const hostLabel = env.WORKBENCH_HOST_LABEL ?? defaultHostLabel();
 
+// Apps opened from the desktop get a short PATH: the login shell's folders are added before the
+// engines are looked for (macOS, Linux).
+const shellPath = adoptLoginShellPath();
 const store = new Store(join(dataDir, "state.sqlite"));
 const bus = new EventBus();
 // The agent browser: a window sessions may use (checks run it headless or with a stand-in CLI).
@@ -132,7 +136,7 @@ listen(editors, env.WORKBENCH_EDITORS_PORT, editorsPortFile, (editorsPort) => {
     process.stdout.write(
       `WORKBENCH_READY ${JSON.stringify({ url: `http://127.0.0.1:${boundPort}`, port: boundPort, token, dataDir, editorsUrl: editorsOrigin })}\n`,
     );
-    void manager.initProviders();
+    void shellPath.then(() => manager.initProviders());
     // "예약 작업": sends what is due every half minute (checks use a shorter tick).
     manager.schedules.start(Number(env.WORKBENCH_SCHEDULE_TICK_MS) || 30_000);
   });

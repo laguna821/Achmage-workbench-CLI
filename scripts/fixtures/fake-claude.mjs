@@ -28,12 +28,18 @@
 //   "볼트에 써: <path>"  tries the Write tool on that path; PreToolUse hooks registered by the SDK
 //          are asked first (as Claude Code does) and a denial is reported; it only ever writes
 //          inside the temporary folder.
+// Login (setup checks): with FAKE_ENGINE_AUTH_DIR set, Claude Code is logged in only once
+// <dir>/claude exists. `auth login` prints what Claude Code prints (an address for when the browser
+// did not open, as an OSC 8 link) and serves it on this computer: that page shows a code, which
+// logs in when typed on its input; the "automatic" address logs in when opened. It opens that
+// address with WORKBENCH_OPEN_URL like Claude Code opens the browser, unless FAKE_CLAUDE_NO_BROWSER=1.
 
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { createServer } from "node:http";
 import { createInterface } from "node:readline";
 import { pagePng } from "./png.mjs";
 
@@ -42,9 +48,46 @@ if (args.includes("--version")) {
   console.log("2.1.999 (Claude Code)");
   process.exit(0);
 }
+const authFile = process.env.FAKE_ENGINE_AUTH_DIR ? join(process.env.FAKE_ENGINE_AUTH_DIR, "claude") : null;
 if (args[0] === "auth" && args[1] === "status") {
+  if (authFile && !existsSync(authFile)) {
+    console.log(JSON.stringify({ loggedIn: false, authMethod: "none", apiProvider: "firstParty" }));
+    process.exit(1);
+  }
   console.log(JSON.stringify({ loggedIn: true, authMethod: "claude.ai", apiProvider: "firstParty", email: "fake@example.com", subscriptionType: "max" }));
   process.exit(0);
+}
+const loginMode = args[0] === "auth" && args[1] === "login";
+if (loginMode) {
+  const state = randomUUID().slice(0, 8);
+  const code = `CODE${state.slice(0, 4).toUpperCase()}#${state}`;
+  const done = () => {
+    mkdirSync(dirname(authFile ?? join(tmpdir(), "x")), { recursive: true });
+    if (authFile) writeFileSync(authFile, "signed in");
+    process.stdout.write("Login successful.\n");
+    setTimeout(() => process.exit(0), 50);
+  };
+  const server = createServer((request, response) => {
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    if (request.url?.startsWith("/oauth/manual")) {
+      response.end(`<p>Paste this code into Claude Code:</p><code id="code">${code}</code>`);
+      return;
+    }
+    response.end("<p>Login successful. You can close this window.</p>");
+    if (request.url?.startsWith("/callback")) done();
+  });
+  server.listen(0, "127.0.0.1", () => {
+    const port = server.address().port;
+    const manual = `http://127.0.0.1:${port}/oauth/manual?state=${state}`;
+    const link = `\u001b]8;;${manual}\u0007${manual}\u001b]8;;\u0007`;
+    process.stdout.write(`Opening browser to sign in… \nIf the browser didn't open, visit: ${link} \nPaste code here if prompted > `);
+    const opener = process.env.WORKBENCH_OPEN_URL;
+    if (opener && process.env.FAKE_CLAUDE_NO_BROWSER !== "1") spawn(process.execPath, [opener, `http://127.0.0.1:${port}/callback?code=auto&state=${state}`], { stdio: "ignore", detached: true }).unref();
+  });
+  createInterface({ input: process.stdin }).on("line", (line) => {
+    if (line.trim() === code) done();
+    else process.stderr.write("Invalid code. Please make sure the full code was copied.\n");
+  });
 }
 
 const option = (name) => {
@@ -367,7 +410,7 @@ function namedFiles(text) {
   return text.slice(at).split("\n").slice(1).map((line) => line.match(/^- .+?: (\/.+)$/)?.[1]).filter(Boolean);
 }
 
-createInterface({ input: process.stdin }).on("line", (line) => {
+if (!loginMode) createInterface({ input: process.stdin }).on("line", (line) => {
   if (!line.trim()) return;
   const message = JSON.parse(line);
   if (message.type === "control_response") {
