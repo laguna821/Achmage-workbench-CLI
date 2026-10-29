@@ -2,9 +2,13 @@
 # CachyOS (.pkg.tar.zst). The UI and the gateway are the same everywhere, so they are built once
 # on Linux (with the IeumOffice editors and the xlsx engine's WebAssembly) and every platform
 # then builds only its desktop shell around them. Windows, macOS and the AppImage carry their own
-# Node.js 24 for the gateway; the Arch package uses the system's.
+# Node.js 24 for the gateway and the npm of the same Node release (one-click engine installs);
+# the Arch package uses the system's. Every installer carries the document tools: kordoc
+# (third_party/kordoc) and the official builds of IeumOffice, PDFCraft and HOP for its OS
+# (packaging/bundled-apps.json, scripts/fetch-bundled-apps.ts).
 # Runs by hand (Actions › release › Run workflow) or for a version tag (v*), which also makes a
-# GitHub release with the installers.
+# GitHub release with the installers; the first-run check (job smoke) installs the Windows and
+# macOS builds and runs them with stand-in engines.
 
 name: release
 
@@ -74,10 +78,14 @@ jobs:
           tar -xJf "$file"
           mkdir -p apps/desktop/src-tauri/node
           cp "${file%.tar.xz}/bin/node" apps/desktop/src-tauri/node/node
+          # npm from the same checked release, beside node (node/npm/bin/npm-cli.js).
+          cp -R "${file%.tar.xz}/lib/node_modules/npm" apps/desktop/src-tauri/node/npm
+      - name: IeumOffice, PDFCraft, HOP (official Linux builds, pinned and checked)
+        run: node scripts/fetch-bundled-apps.ts apps/desktop/src-tauri/bundled linux-x64
       - run: npm ci --ignore-scripts
       - name: Build
         working-directory: apps/desktop
-        run: npx tauri build --config src-tauri/tauri.release.conf.json --bundles appimage,deb
+        run: npx tauri build --config src-tauri/tauri.release.conf.json --config src-tauri/tauri.release.apps.conf.json --bundles appimage,deb
       - uses: actions/upload-artifact@v4
         with:
           name: linux
@@ -101,7 +109,9 @@ jobs:
           name: web
           path: apps
       - run: npm ci --ignore-scripts
-      - name: "Build (no bundle: the binary with host/ and web/ beside it)"
+      - name: IeumOffice, PDFCraft, HOP (official Linux builds, pinned and checked)
+        run: node scripts/fetch-bundled-apps.ts apps/desktop/src-tauri/bundled linux-x64
+      - name: "Build (no bundle: the binary with host/, web/ and kordoc/ beside it)"
         working-directory: apps/desktop
         run: npx tauri build --no-bundle
       - name: Package
@@ -140,10 +150,14 @@ jobs:
           unzip -q "$file"
           mkdir -p apps/desktop/src-tauri/node
           cp "${file%.zip}/node.exe" apps/desktop/src-tauri/node/node.exe
+          # npm from the same checked release, beside node.exe (node/npm/bin/npm-cli.js).
+          cp -R "${file%.zip}/node_modules/npm" apps/desktop/src-tauri/node/npm
+      - name: IeumOffice, PDFCraft, HOP (official Windows builds, pinned and checked; 7-Zip opens the installers)
+        run: node scripts/fetch-bundled-apps.ts apps/desktop/src-tauri/bundled win32-x64
       - run: npm ci --ignore-scripts
       - name: Build
         working-directory: apps/desktop
-        run: npx tauri build --config src-tauri/tauri.release.conf.json --bundles nsis,msi
+        run: npx tauri build --config src-tauri/tauri.release.conf.json --config src-tauri/tauri.release.apps.conf.json --bundles nsis,msi
       - uses: actions/upload-artifact@v4
         with:
           name: windows
@@ -175,20 +189,77 @@ jobs:
           tar -xzf "$file"
           mkdir -p apps/desktop/src-tauri/node
           cp "${file%.tar.gz}/bin/node" apps/desktop/src-tauri/node/node
+          # npm from the same checked release, beside node (node/npm/bin/npm-cli.js).
+          cp -R "${file%.tar.gz}/lib/node_modules/npm" apps/desktop/src-tauri/node/npm
+      - name: IeumOffice, PDFCraft, HOP (official Apple silicon builds, pinned and checked)
+        run: node scripts/fetch-bundled-apps.ts apps/desktop/src-tauri/bundled darwin-arm64
       - run: npm ci --ignore-scripts
       - name: Build
         working-directory: apps/desktop
-        run: npx tauri build --config src-tauri/tauri.release.conf.json --bundles app,dmg
+        # IeumOffice.app and Achmage HOP.app go into Contents/Resources with their links kept (macOS.files).
+        run: npx tauri build --config src-tauri/tauri.release.conf.json --config src-tauri/tauri.release.macos.conf.json --bundles app,dmg
       - uses: actions/upload-artifact@v4
         with:
           name: macos
           path: apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg
           if-no-files-found: error
 
+  smoke:
+    name: First run on ${{ matrix.os }} (engines found, bundled document tools)
+    # Only where the workflow runs at all (by hand or for a tag), stated for when triggers change.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+    needs: [windows, macos]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: windows
+          - os: macos-14
+            artifact: macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: installer
+      - name: Install for this user (NSIS, silent)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem installer -Recurse -Filter '*-setup.exe' | Select-Object -First 1
+          Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait
+          $app = Join-Path $env:LOCALAPPDATA 'Achmage Workbench'
+          Get-ChildItem $app | Select-Object Name
+          "APP_DIR=$app" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Install from the disk image
+        if: runner.os == 'macOS'
+        run: |
+          dmg=$(find installer -name '*.dmg' | head -1)
+          hdiutil attach "$dmg" -nobrowse -mountpoint /tmp/wb-dmg
+          mkdir -p "$HOME/Applications"
+          ditto "/tmp/wb-dmg/Achmage Workbench.app" "$HOME/Applications/Achmage Workbench.app"
+          hdiutil detach /tmp/wb-dmg
+          ls "$HOME/Applications/Achmage Workbench.app/Contents/Resources"
+          echo "APP_DIR=$HOME/Applications/Achmage Workbench.app/Contents/Resources" >> "$GITHUB_ENV"
+      - name: First run with stand-in engines (npm's codex.cmd shim on Windows, Homebrew on macOS)
+        shell: bash
+        run: node scripts/setup-smoke.ts "$APP_DIR" smoke-out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-${{ matrix.artifact }}
+          path: smoke-out
+          if-no-files-found: ignore
+
   release:
     name: GitHub release (tags only)
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [linux, arch, windows, macos]
+    needs: [linux, arch, windows, macos, smoke]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4
