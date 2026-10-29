@@ -28,6 +28,8 @@
 //   "볼트에 써: <path>"  tries the Write tool on that path; PreToolUse hooks registered by the SDK
 //          are asked first (as Claude Code does) and a denial is reported; it only ever writes
 //          inside the temporary folder.
+//   "견본"  a realistic turn for design screenshots: thinking, a todo plan, a command with output, a
+//          new file, then an answer with a heading, a list, a table, code and a quote (sample-reply.mjs)
 
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -36,6 +38,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { pagePng } from "./png.mjs";
+import { SAMPLE_COMMAND, SAMPLE_FILE, SAMPLE_FILE_TEXT, SAMPLE_OUTPUT, SAMPLE_PLAN, SAMPLE_REPLY, SAMPLE_THINKING } from "./sample-reply.mjs";
 
 const args = process.argv.slice(2);
 if (args.includes("--version")) {
@@ -263,6 +266,25 @@ async function runTurn(text) {
     send({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolId, content: denied ?? "written", is_error: Boolean(denied) }] }, parent_tool_use_id: null, ...base() });
     guardNote = denied ? `쓰기 거부: ${denied}\n\n` : `썼습니다: ${target}\n\n`;
   }
+  const sample = text.includes("견본");
+  if (sample) {
+    const thinking = `msg_${randomUUID().slice(0, 8)}`;
+    event({ type: "message_start", message: { id: thinking, type: "message", role: "assistant", model: MODEL, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 10, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: used } } });
+    event({ type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "", signature: "" } });
+    event({ type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: SAMPLE_THINKING } });
+    event({ type: "content_block_stop", index: 0 });
+    event({ type: "message_stop" });
+    const tool = (name, input, result) => {
+      const toolId = `toolu_${randomUUID().slice(0, 8)}`;
+      send({ type: "assistant", message: { id: `msg_${randomUUID().slice(0, 8)}`, type: "message", role: "assistant", model: MODEL, content: [{ type: "tool_use", id: toolId, name, input }], stop_reason: "tool_use", stop_sequence: null, usage: { input_tokens: 10, output_tokens: 20, cache_creation_input_tokens: 0, cache_read_input_tokens: used } }, parent_tool_use_id: null, ...base() });
+      send({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolId, content: result }] }, parent_tool_use_id: null, ...base() });
+    };
+    tool("TodoWrite", { todos: SAMPLE_PLAN.map((step) => ({ content: step.step, activeForm: step.step, status: "completed" })) }, "Todos have been modified successfully.");
+    tool("Bash", { command: SAMPLE_COMMAND, description: "평가 기준 찾기" }, SAMPLE_OUTPUT);
+    await sleep(60);
+    writeFileSync(join(process.cwd(), SAMPLE_FILE), SAMPLE_FILE_TEXT);
+    tool("Write", { file_path: join(process.cwd(), SAMPLE_FILE), content: SAMPLE_FILE_TEXT }, `File created successfully at: ${join(process.cwd(), SAMPLE_FILE)}`);
+  }
   if (!(text.trim() === "/compact")) {
     const steer = text.startsWith("[steer]") ? `이어서 받은 요청을 반영합니다: ${text.slice(7)}\n\n` : "";
     const skill = text.match(/^\/정리(?:\s+(.*))?$/s);
@@ -290,6 +312,8 @@ async function runTurn(text) {
       // "천천히" / "길게": the same reply, then a tail (about 2 s / 8 s) to have time to act meanwhile.
       const tail = long ? 150 : text.includes("천천히") ? 30 : 0;
       for (let index = 0; index < tail; index += 1) chunks.push({ text: `\n덧붙임 ${index + 1}.`, wait: 50 });
+    } else if (sample) {
+      for (const paragraph of SAMPLE_REPLY) chunks.push({ text: paragraph, wait: 20 });
     } else if (text.includes("도식")) {
       // A Mermaid mind map, sent in pieces like any reply.
       for (const piece of "여기 마인드맵입니다.\n\n```mermaid\nmindmap\n  root((Achmage))\n    대화\n      끼어들기\n      끝나면 보내기\n    문서\n      워드\n      한글\n    도식\n      Pele\n```\n".match(/[^\n]*\n/g)) chunks.push({ text: piece, wait: 30 });
