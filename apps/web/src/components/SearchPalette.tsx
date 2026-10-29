@@ -530,7 +530,7 @@ export function SearchPalette({
           if (event.key === "Escape") {
             if (group) setGroup(null);
             else onClose();
-          } else if (event.key === "Tab" && !commandMode) switchScope(event.shiftKey ? -1 : 1);
+          } else if (event.key === "Tab" && !commandMode && !event.nativeEvent.isComposing) switchScope(event.shiftKey ? -1 : 1);
           else if (event.key === "ArrowDown") setFocus((value) => Math.min(value + 1, flat.length - 1));
           else if (event.key === "ArrowUp") setFocus((value) => Math.max(value - 1, 0));
           else if (event.key === "Enter" && !event.nativeEvent.isComposing) open(current, event.shiftKey);
