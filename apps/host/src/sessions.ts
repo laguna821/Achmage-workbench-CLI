@@ -53,6 +53,8 @@ import { HttpError } from "./errors.ts";
 import { folderColor, folderIcon, liftOut } from "./folders.ts";
 import { Documents, isWorkbenchPath } from "./artifacts.ts";
 import { Workspaces } from "./workspaces.ts";
+import { physicalPath, withinDirectory } from "./directory-operations.ts";
+import { WorktreeWorkspaces } from "./worktree-workspaces.ts";
 import { WorkspaceLayouts } from "./layouts.ts";
 import type { Kordoc } from "./kordoc.ts";
 import type { AdapterSink, LoginStart, ProviderAdapter } from "./providers/types.ts";
@@ -266,6 +268,7 @@ export class SessionManager {
   readonly skillLibrary: SkillLibrary;
   readonly documents: Documents;
   readonly workspaces: Workspaces;
+  readonly worktreeWorkspaces: WorktreeWorkspaces;
   readonly layouts: WorkspaceLayouts;
   /** "그림": pictures drawn with GPT Image through Codex (imagegen.ts). */
   readonly images: ImageGen;
@@ -295,6 +298,7 @@ export class SessionManager {
     this.userSkills = new UserSkills(store, { dataDir: options.dataDir ?? dirname(options.managedWorksDir), homeDir: options.skillHomeDir });
     this.skillLibrary = new SkillLibrary(this.userSkills, options.dataDir ?? dirname(options.managedWorksDir), options.skillHomeDir);
     this.workspaces = new Workspaces(store, options.hostId, bus);
+    this.worktreeWorkspaces = new WorktreeWorkspaces(store, this.workspaces, options.dataDir ?? dirname(options.managedWorksDir), (id) => this.requireWork(id));
     this.layouts = new WorkspaceLayouts(store, this.workspaces);
     this.documents = new Documents(store, bus, options.dataDir ?? dirname(options.managedWorksDir), options.kordoc ?? null, options.ieum ?? null, this.workspaces);
     this.engineSetup = new EngineInstaller({
@@ -959,6 +963,7 @@ export class SessionManager {
   }
 
   private assertWorkspaceIdle(workspace: Workspace) {
+    if (this.worktreeWorkspaces.busy(workspace.id)) throw new HttpError(409, "workspace_busy", "이 작업공간에서 워크트리를 생성 중입니다. 완료하거나 취소한 뒤 진행하세요.");
     if ([...this.sessions.values()].some((session) => session.workspaceId === workspace.id && session.status !== "idle" && session.status !== "error")) {
       throw new HttpError(409, "workspace_busy", "이 작업공간에서 실행 중인 세션이 있습니다. 모두 끝나거나 멈춘 뒤에 진행하세요.");
     }
@@ -1083,15 +1088,36 @@ export class SessionManager {
     if (session.status !== "idle" && session.status !== "error") throw new HttpError(409, "session_busy", "응답이 끝난 뒤에 버릴 수 있습니다.");
     const workspace = session.workspaceId ? this.workspaces.get(session.workspaceId) : null;
     if (workspace) this.assertWorkspaceIdle(workspace);
-    const { branchRetained } = await removeWorktree(session.worktree);
-    const retained = branchRetained ? ` 원래 폴더에 병합되지 않은 커밋이 있어 ${session.worktree.branch} 브랜치는 보존했습니다.` : "";
-    this.sink.upsertItem(sessionId, { kind: "notice", id: `worktree-removed:${Date.now()}`, level: "info", text: `격리 사본을 버렸습니다. 이 세션은 보관함으로 옮겼습니다.${retained}`, at: Date.now() });
-    const now = Date.now();
-    if (workspace) this.workspaces.update(workspace, { archivedAt: now, removedAt: now });
-    for (const entry of this.sessions.values()) {
-      if (entry.id === sessionId || (workspace && entry.workspaceId === workspace.id)) this.saveSession({ ...entry, archivedAt: now });
-    }
-    return { ok: true };
+    if (workspace && !workspace.managed) throw new HttpError(409, "worktree_external", "연결한 외부 워크트리는 여기서 삭제하지 않습니다. 보관하면 폴더를 유지한 채 실행을 멈출 수 있습니다.");
+    const root = physicalPath(session.worktree.path);
+    const release = this.workspaces.directoryOperations.acquire(root);
+    try {
+      const affected = this.workspaces.list().filter((entry) => entry.hostId === this.options.hostId && withinDirectory(root, physicalPath(entry.cwd)));
+      for (const entry of affected) this.assertWorkspaceIdle(entry);
+      this.documents.registry.assertDirectoryIdle(root);
+      const markRemoved = () => {
+        const now = Date.now(), ids = new Set(affected.map((entry) => entry.id));
+        for (const entry of affected) this.workspaces.update(entry, { archivedAt: now, removedAt: now });
+        for (const entry of this.sessions.values()) {
+          if (entry.id === sessionId || (entry.workspaceId && ids.has(entry.workspaceId))) this.saveSession({ ...entry, archivedAt: now });
+        }
+      };
+      let branchRetained: boolean;
+      try { ({ branchRetained } = await removeWorktree(session.worktree)); }
+      catch (error) {
+        // Git removed the checkout already. Keep the history readable, while reporting the
+        // subsequent branch-cleanup error rather than pretending the whole action succeeded.
+        if (error instanceof HttpError && error.code === "worktree_branch_cleanup_failed") {
+          markRemoved();
+          this.sink.upsertItem(sessionId, { kind: "notice", id: `worktree-removed:${Date.now()}`, level: "error", text: error.message, at: Date.now() });
+        }
+        throw error;
+      }
+      markRemoved();
+      const retained = branchRetained ? ` 원래 폴더에 병합되지 않은 커밋이 있어 ${session.worktree.branch} 브랜치는 보존했습니다.` : "";
+      this.sink.upsertItem(sessionId, { kind: "notice", id: `worktree-removed:${Date.now()}`, level: "info", text: `격리 사본을 버렸습니다. 연결된 작업공간과 세션은 기록을 보존해 보관함으로 옮겼습니다.${retained}`, at: Date.now() });
+      return { ok: true };
+    } finally { release(); }
   }
 
   /** Where the engine works for a session: its worktree, else the work folder. */
@@ -1979,6 +2005,7 @@ export class SessionManager {
     this.schedules.stop();
     this.stopExternalWatches();
     this.flush();
+    await this.worktreeWorkspaces.shutdown();
     await Promise.all([...this.adapters.values()].map((adapter) => adapter.shutdown()));
     await this.options.browse?.shutdown();
     await this.skillLibrary.shutdown();

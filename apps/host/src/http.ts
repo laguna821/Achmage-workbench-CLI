@@ -329,6 +329,20 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const body = await readJson(req);
         return sendJson(res, 200, manager.updateWorkspace(parts[1], { label: typeof body.label === "string" ? body.label : undefined, archived: typeof body.archived === "boolean" ? body.archived : undefined }));
       }
+      if (parts[0] === "workspaces" && parts[1] && parts[2] === "repository" && parts.length === 3 && method === "GET") {
+        return sendJson(res, 200, await manager.worktreeWorkspaces.inspect(parts[1]));
+      }
+      if (parts[0] === "workspaces" && parts[1] && parts[2] === "worktrees" && parts.length === 3 && method === "POST") {
+        const body = await readJson(req);
+        return sendJson(res, 201, await manager.worktreeWorkspaces.connect(parts[1], String(body.path ?? ""), String(body.expectedHead ?? "")));
+      }
+      if (parts[0] === "works" && parts[1] && parts[2] === "worktree-creations" && parts.length === 3) {
+        if (method === "GET") return sendJson(res, 200, manager.worktreeWorkspaces.list(parts[1]));
+        if (method === "POST") return sendJson(res, 202, manager.worktreeWorkspaces.start(parts[1], await readJson(req) as unknown as import("@workbench/contracts").CreateWorktreeWorkspaceRequest));
+      }
+      if (parts[0] === "worktree-creations" && parts[1] && parts.length === 2 && method === "DELETE") {
+        return sendJson(res, 200, manager.worktreeWorkspaces.cancel(parts[1]));
+      }
       if (parts[0] === "layouts" && parts[1] && parts.length === 2) {
         if (method === "GET") return sendJson(res, 200, { record: manager.layouts.read(parts[1]) });
         if (method === "PUT") {

@@ -13,6 +13,7 @@ const run = promisify(execFile);
 /** File names as they are (Korean ones too), not quoted with octal escapes. */
 const PLAIN = ["--no-optional-locks", "-c", "core.quotePath=false"];
 const MAX_DIFF = 400_000;
+const pathLine = (value: string) => value.replace(/\n$/, "");
 
 class GitCommandError extends Error {
   readonly code: string | number | undefined;
@@ -24,7 +25,7 @@ class GitCommandError extends Error {
   }
 }
 
-async function git(cwd: string, args: string[], input?: string) {
+export async function git(cwd: string, args: string[], input?: string, signal?: AbortSignal) {
   if (input !== undefined) {
     return new Promise<string>((resolve, reject) => {
       const child = execFile("git", [...PLAIN, "-C", cwd, ...args], { maxBuffer: 64 * 1024 * 1024 }, (error, stdout, stderr) =>
@@ -33,7 +34,7 @@ async function git(cwd: string, args: string[], input?: string) {
       child.stdin?.end(input);
     });
   }
-  const { stdout } = await run("git", [...PLAIN, "-C", cwd, ...args], { maxBuffer: 64 * 1024 * 1024, windowsHide: true }).catch((error: { stderr?: string; stdout?: string; message: string; code?: string | number }) => {
+  const { stdout } = await run("git", [...PLAIN, "-C", cwd, ...args], { maxBuffer: 64 * 1024 * 1024, windowsHide: true, signal }).catch((error: { stderr?: string; stdout?: string; message: string; code?: string | number }) => {
     throw new GitCommandError(String(error.stderr || error.message).trim(), error.code, String(error.stdout ?? ""));
   });
   return stdout;
@@ -41,9 +42,9 @@ async function git(cwd: string, args: string[], input?: string) {
 
 /** A worktree for a session: same commit as the repository now, a new branch, the same subfolder. */
 export async function createWorktree(workCwd: string, dataDir: string, sessionId: string): Promise<SessionWorktree> {
-  const root = (await git(workCwd, ["rev-parse", "--show-toplevel"]).catch(() => {
+  const root = pathLine(await git(workCwd, ["rev-parse", "--show-toplevel"]).catch(() => {
     throw new HttpError(409, "not_a_repository", "이 작업 폴더는 git 저장소가 아니어서 격리 사본을 만들 수 없습니다.");
-  })).trim();
+  }));
   const base = (await git(root, ["rev-parse", "HEAD"]).catch(() => {
     throw new HttpError(409, "no_commit", "저장소에 커밋이 하나도 없어 격리 사본을 만들 수 없습니다.");
   })).trim();
@@ -95,12 +96,13 @@ async function worktreePatch(worktree: SessionWorktree, binary: boolean, untrack
 
 /** A saved descriptor must still name this checkout, in this repository, on this branch. */
 async function verifyWorktree(worktree: SessionWorktree) {
-  const actualRoot = (await git(worktree.path, ["rev-parse", "--show-toplevel"])).trim();
-  const ownCommon = (await git(worktree.path, ["rev-parse", "--path-format=absolute", "--git-common-dir"])).trim();
-  const originalCommon = (await git(worktree.root, ["rev-parse", "--path-format=absolute", "--git-common-dir"])).trim();
+  const actualRoot = pathLine(await git(worktree.path, ["rev-parse", "--show-toplevel"]));
+  const ownCommon = pathLine(await git(worktree.path, ["rev-parse", "--path-format=absolute", "--git-common-dir"]));
+  const originalCommon = pathLine(await git(worktree.root, ["rev-parse", "--path-format=absolute", "--git-common-dir"]));
   if (realpathSync(actualRoot) !== realpathSync(worktree.path) || realpathSync(worktree.path) === realpathSync(worktree.root) || realpathSync(ownCommon) !== realpathSync(originalCommon)) {
     throw new HttpError(409, "worktree_changed", "격리 사본의 경로나 저장소가 바뀌었습니다. 작업공간을 다시 확인해 주세요.");
   }
+  if (worktree.commonDir && realpathSync(ownCommon) !== worktree.commonDir) throw new HttpError(409, "worktree_changed", "연결한 Git 저장소가 바뀌었습니다. 작업공간을 다시 확인해 주세요.");
   const branch = (await git(worktree.path, ["symbolic-ref", "--quiet", "--short", "HEAD"]).catch(() => "")).trim();
   if (branch !== worktree.branch) throw new HttpError(409, "worktree_branch_changed", "격리 사본의 브랜치가 바뀌었습니다. 작업공간을 다시 확인해 주세요.");
 }

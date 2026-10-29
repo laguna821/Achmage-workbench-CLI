@@ -18,6 +18,9 @@ import type {
   ImportCandidate,
   CreateScheduleRequest,
   WorktreeChanges,
+  CreateWorktreeWorkspaceRequest,
+  WorkspaceRepository,
+  WorktreeCreation,
   Schedule,
   ForkResult,
   ImportRequest,
@@ -180,6 +183,11 @@ export class Api {
   updateWork = (workId: string, patch: UpdateWorkRequest) => this.request<Work>("PATCH", `/api/works/${workId}`, patch);
   createWorkspace = (workId: string, cwd: string, label?: string) => this.request<Workspace>("POST", `/api/works/${workId}/workspaces`, { cwd, label });
   updateWorkspace = (id: string, patch: UpdateWorkspaceRequest) => this.request<Workspace>("PATCH", `/api/workspaces/${id}`, patch);
+  workspaceRepository = (id: string) => this.request<WorkspaceRepository>("GET", `/api/workspaces/${id}/repository`);
+  connectWorktree = (id: string, path: string, expectedHead: string) => this.request<Workspace>("POST", `/api/workspaces/${id}/worktrees`, { path, expectedHead });
+  worktreeCreations = (workId: string) => this.request<WorktreeCreation[]>("GET", `/api/works/${workId}/worktree-creations`);
+  createWorktreeWorkspace = (workId: string, request: CreateWorktreeWorkspaceRequest) => this.request<WorktreeCreation>("POST", `/api/works/${workId}/worktree-creations`, request);
+  cancelWorktreeCreation = (id: string) => this.request<WorktreeCreation>("DELETE", `/api/worktree-creations/${id}`);
   createSession = (workId: string, provider: Provider, options?: { workspaceId?: string; purpose?: string; model?: string | null; effort?: string | null; browser?: boolean; worktree?: boolean }) =>
     this.request<Session>("POST", `/api/works/${workId}/sessions`, { provider, ...options });
   updateSession = (sessionId: string, patch: UpdateSessionRequest) => this.request<Session>("PATCH", `/api/sessions/${sessionId}`, patch);

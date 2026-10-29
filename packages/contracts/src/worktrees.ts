@@ -11,6 +11,20 @@ export type SessionWorktree = {
   base: string;
   /** Where the engine works: the work's subfolder inside the copy. */
   cwd: string;
+  /** Repository identity captured at creation/connection; older descriptors did not have it. */
+  commonDir?: string;
+  detached?: boolean;
+};
+
+export type GitRef = { name: string; commit: string; kind: "branch" | "remote" | "tag" };
+export type DetectedWorktree = { path: string; head: string; branch: string; detached: boolean; bare: boolean; locked: string | null; prunable: string | null; missing: boolean; workspaceId?: string };
+export type WorkspaceRepository = { root: string; commonDir: string; head: string; branch: string; refs: GitRef[]; worktrees: DetectedWorktree[] };
+export type CreateWorktreeWorkspaceRequest = { requestId: string; sourceWorkspaceId: string; label: string; branch: string; baseRef: string; expectedBase?: string; parentWorkspaceId?: string | null };
+export type WorktreeCreation = {
+  id: string; workId: string; request: CreateWorktreeWorkspaceRequest;
+  phase: "checking" | "creating" | "ready" | "failed" | "canceled" | "interrupted";
+  root?: string; path?: string; branch?: string; base?: string; workspaceId?: string;
+  error?: string; createdAt: number; updatedAt: number;
 };
 
 export type WorktreeFile = { path: string; status: "added" | "modified" | "deleted" | "renamed" };

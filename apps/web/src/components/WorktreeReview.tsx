@@ -23,9 +23,10 @@ const lineKind = (line: string) =>
  * started and the diff, then "원래 폴더에 적용" (the original checkout's files change; the copy
  * stays) or "버리기" (the copy and its branch go, the session is archived).
  */
-export function WorktreeReview({ api, session, onClose, onToast, onError }: { api: Api; session: Session; onClose: () => void; onToast: (text: string) => void; onError: (error: unknown) => void }) {
+export function WorktreeReview({ api, session, managed = true, onClose, onToast, onError }: { api: Api; session: Session; managed?: boolean; onClose: () => void; onToast: (text: string) => void; onError: (error: unknown) => void }) {
   const [changes, setChanges] = useState<WorktreeChanges | null>(null);
   const [busy, setBusy] = useState(false);
+  const [discard, setDiscard] = useState(false);
   const load = useCallback(() => {
     api.worktreeChanges(session.id).then(setChanges).catch(onError);
   }, [api, session.id, onError]);
@@ -92,7 +93,7 @@ export function WorktreeReview({ api, session, onClose, onToast, onError }: { ap
           </>
         ) : null}
         <footer className="worktree-foot">
-          <button type="button" className="button danger" onClick={() => void act("discard")} disabled={busy} title="격리 사본의 파일을 버리고 세션을 보관합니다. 미병합 커밋은 브랜치에 남습니다.">
+          <button type="button" className="button danger" onClick={() => setDiscard(true)} disabled={busy || !managed} title={managed ? "격리 사본의 파일을 버리고 세션을 보관합니다. 미병합 커밋은 브랜치에 남습니다." : "연결한 외부 워크트리의 폴더는 삭제하지 않습니다."}>
             <Icon name="x" size={14} /> 버리기
           </button>
           <span className="worktree-spacer" />
@@ -103,6 +104,10 @@ export function WorktreeReview({ api, session, onClose, onToast, onError }: { ap
             원래 폴더에 적용
           </button>
         </footer>
+        {discard ? <div className="worktree-confirm" role="alertdialog" aria-label="워크트리 삭제 확인">
+          <p><code>{worktree.path}</code> 폴더를 삭제합니다. 커밋하지 않은 변경과 새 파일은 사라집니다. 연결된 세션 기록과 미병합 커밋의 브랜치는 보존합니다.</p>
+          <button type="button" className="button" disabled={busy} onClick={() => setDiscard(false)}>취소</button>{" "}<button type="button" className="button danger" disabled={busy} onClick={() => void act("discard")}>폴더 삭제</button>
+        </div> : null}
       </div>
     </div>
   );

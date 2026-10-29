@@ -648,6 +648,13 @@ export function App() {
         try { return await api.updateWorkspace(workspace.id, patch); } catch (error) { fail(error); return null; }
       },
       openWorkspace: (workspace) => openWorkspaceRef.current(workspace),
+      workspaceGit: {
+        workspaceRepository: async (...args) => { if (!api) throw new Error("연결을 기다려 주세요."); return api.workspaceRepository(...args); },
+        connectWorktree: async (...args) => { if (!api) throw new Error("연결을 기다려 주세요."); return api.connectWorktree(...args); },
+        worktreeCreations: async (...args) => { if (!api) throw new Error("연결을 기다려 주세요."); return api.worktreeCreations(...args); },
+        createWorktreeWorkspace: async (...args) => { if (!api) throw new Error("연결을 기다려 주세요."); return api.createWorktreeWorkspace(...args); },
+        cancelWorktreeCreation: async (...args) => { if (!api) throw new Error("연결을 기다려 주세요."); return api.cancelWorktreeCreation(...args); },
+      },
       selectSession: (target, session) => {
         if (single) {
           // A detached window stays one window: it switches to the session picked in it.
@@ -2178,7 +2185,7 @@ export function App() {
       {folderTemplateId && state.folders[folderTemplateId] ? <FolderTemplateDialog api={api} folder={state.folders[folderTemplateId]!} onClose={() => setFolderTemplateId(null)} onSaved={() => setToast("폴더 노트 템플릿을 저장했습니다. 새 노트를 만들 때 적용합니다.")} onError={fail} /> : null}
       {importOpen ? <ImportDialog api={api} onClose={() => setImportOpen(false)} onOpen={openImported} onError={fail} /> : null}
       {reviewing && state.sessions[reviewing]?.worktree ? (
-        <WorktreeReview api={api} session={state.sessions[reviewing]} onClose={() => setReviewing(null)} onToast={setToast} onError={fail} />
+        <WorktreeReview api={api} session={state.sessions[reviewing]} managed={state.workspaces[state.sessions[reviewing].workspaceId ?? ""]?.managed ?? true} onClose={() => setReviewing(null)} onToast={setToast} onError={fail} />
       ) : null}
       {scheduling && state.sessions[scheduling] ? (
         <ScheduleDialog api={api} session={state.sessions[scheduling]} schedules={state.schedules} onClose={() => setScheduling(null)} onError={fail} />

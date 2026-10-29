@@ -11,3 +11,18 @@
 .workspace-form { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px; }
 .workspace-form label { width: 100%; font-size: 12px; }
 .workspace-form input { min-width: 0; flex: 1; width: 200px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; color: inherit; background: var(--paper); }
+.workspace-git-open { margin: 0 10px 10px; }
+.worktree-dialog { width: min(720px, 92vw); max-height: 85vh; overflow: auto; }
+.worktree-tabs { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.worktree-list { display: flex; flex-direction: column; gap: 8px; }
+.worktree-row { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--line); padding: 12px 0; }
+.worktree-row > div { flex: 1; min-width: 0; }
+.worktree-row strong, .worktree-row code, .worktree-row small { display: block; overflow-wrap: anywhere; }
+.worktree-row code, .worktree-row small { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.worktree-row p, .worktree-error { font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.worktree-create { display: flex; flex-direction: column; gap: 12px; }
+.worktree-create > label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.worktree-create input:not([type="checkbox"]) { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: inherit; }
+.worktree-create > .worktree-parent { flex-direction: row; align-items: center; }
+.worktree-create > button { align-self: flex-end; }
+.worktree-confirm { padding: 12px 20px 20px; border-top: 1px solid var(--line); font-size: 13px; }

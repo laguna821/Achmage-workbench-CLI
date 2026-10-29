@@ -1,9 +1,8 @@
 import { randomBytes } from "node:crypto";
-import { realpathSync } from "node:fs";
-import { resolve } from "node:path";
 import type { IncomingMessage } from "node:http";
 import type { Artifact, DocumentAccess, DocumentPresence, DocumentRegistration, DocumentViewInput } from "@workbench/contracts";
 import { HttpError } from "./errors.ts";
+import { DirectoryOperations, physicalPath, withinDirectory } from "./directory-operations.ts";
 
 const TTL = 60_000;
 type LiveView = { presence: DocumentPresence; file: string; token: string | null };
@@ -21,12 +20,11 @@ export class DocumentRegistry {
   private readonly views = new Map<string, LiveView>();
   private readonly artifact: (id: string) => Artifact;
   private readonly now: () => number;
-  constructor(artifact: (id: string) => Artifact, now = Date.now) { this.artifact = artifact; this.now = now; }
+  private readonly directories: DirectoryOperations;
+  constructor(artifact: (id: string) => Artifact, now = Date.now, directories = new DirectoryOperations()) { this.artifact = artifact; this.now = now; this.directories = directories; }
 
   private file(path: string) {
-    let file: string;
-    try { file = realpathSync.native(path); } catch { file = resolve(path); }
-    return process.platform === "win32" ? file.toLowerCase() : file;
+    return physicalPath(path);
   }
   private prune() {
     const now = this.now();
@@ -49,6 +47,7 @@ export class DocumentRegistry {
     if (input.revision !== undefined && (!Number.isSafeInteger(input.revision) || input.revision < 1)) throw new HttpError(400, "invalid_editor_revision", "문서 판 번호가 올바르지 않습니다.");
     this.prune();
     const artifact = this.artifact(artifactId), file = this.file(artifact.path);
+    this.directories.assertAvailable(file);
     let entry = this.views.get(input.viewId);
     if (entry && (entry.presence.artifactId !== artifactId || entry.presence.windowId !== input.windowId || entry.file !== file)) throw new HttpError(409, "editor_identity_changed", "문서의 위치나 창이 바뀌었습니다. 편집 내용을 보존하고 다시 열어 주세요.");
     if (!entry) {
@@ -71,9 +70,19 @@ export class DocumentRegistry {
   assertWrite(artifactId: string, access?: DocumentAccess) {
     this.assertPath(this.artifact(artifactId).path, access);
   }
+  assertDirectoryIdle(path: string) {
+    this.prune();
+    const root = this.file(path);
+    for (const entry of this.views.values()) {
+      if (withinDirectory(root, entry.file) && (entry.presence.mode === "write" || entry.presence.dirty)) {
+        throw new HttpError(423, "editor_busy", "이 폴더의 문서를 편집 중인 탭이나 창이 있습니다. 저장하고 닫은 뒤 삭제해 주세요.");
+      }
+    }
+  }
   assertPath(path: string, access?: DocumentAccess) {
     this.prune();
     const file = this.file(path), writer = this.writer(file);
+    this.directories.assertAvailable(file);
     if (access) {
       const entry = this.views.get(access.viewId);
       if (!entry || entry.file !== file || entry.presence.mode !== "write" || !access.writeToken || entry.token !== access.writeToken) throw new HttpError(423, "editor_access_lost", "이 창의 편집 권한을 확인하지 못했습니다. 편집 내용은 유지했습니다. 편집 권한을 다시 받아 주세요.");

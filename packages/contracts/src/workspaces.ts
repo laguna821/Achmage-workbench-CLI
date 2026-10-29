@@ -10,6 +10,8 @@ export type Workspace = {
   cwd: string;
   managed: boolean;
   worktree: SessionWorktree | null;
+  /** Visual grouping only; never implies Git ancestry or permission to delete children. */
+  parentWorkspaceId?: string | null;
   archivedAt: number | null;
   /** Only set after the underlying app-owned worktree was successfully removed. */
   removedAt: number | null;

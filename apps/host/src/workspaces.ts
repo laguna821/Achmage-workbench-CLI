@@ -5,6 +5,7 @@ import type { Artifact, CreateWorkspaceRequest, SessionWorktree, Work, Workspace
 import type { Store } from "./store.ts";
 import type { EventBus } from "./bus.ts";
 import { HttpError } from "./errors.ts";
+import { DirectoryOperations } from "./directory-operations.ts";
 
 const key = (...parts: string[]) => `workspace-${createHash("sha256").update(JSON.stringify(parts)).digest("hex").slice(0, 32)}`;
 const inside = (cwd: string, path: string) => {
@@ -14,6 +15,7 @@ const inside = (cwd: string, path: string) => {
 
 /** Metadata only. Migration never reads, creates, moves or rewrites the user's files. */
 export class Workspaces {
+  readonly directoryOperations = new DirectoryOperations();
   private readonly store: Store;
   readonly hostId: string;
   private readonly bus: EventBus;
@@ -38,6 +40,7 @@ export class Workspaces {
   }
 
   private ensure(work: Work, cwd: string, worktree: SessionWorktree | null, hostId: string, managed: boolean, publish: boolean) {
+    if (hostId === this.hostId) this.directoryOperations.assertAvailable(cwd);
     const id = key(work.id, hostId, worktree ? "worktree" : "folder", resolve(cwd), worktree?.path ?? "");
     const existing = this.list().find((entry) => entry.id === id);
     if (existing) return existing;
@@ -53,11 +56,21 @@ export class Workspaces {
     return this.ensure(publish ? { ...work, createdAt: Date.now() } : work, worktree.cwd, worktree, hostId, true, publish);
   }
 
+  /** Connecting an external checkout does not grant ownership of its directory. */
+  connectWorktree(work: Work, worktree: SessionWorktree, options: { managed: boolean; label?: string; parentWorkspaceId?: string | null }) {
+    this.directoryOperations.assertAvailable(worktree.cwd);
+    const existing = this.list().find((entry) => entry.workId === work.id && entry.hostId === this.hostId && resolve(entry.cwd) === worktree.cwd && entry.removedAt === null);
+    if (existing?.kind === "worktree") return existing;
+    const workspace = existing ?? this.ensure({ ...work, createdAt: Date.now() }, worktree.cwd, worktree, this.hostId, options.managed, false);
+    return this.persist({ ...workspace, kind: "worktree", worktree, managed: existing ? false : options.managed, parentWorkspaceId: options.parentWorkspaceId ?? null, label: options.label?.trim().slice(0, 80) || worktree.branch || basename(worktree.cwd), updatedAt: Date.now() }, true);
+  }
+
   requireActive(id: string, workId: string) {
     const workspace = this.get(id);
     if (workspace.workId !== workId) throw new HttpError(400, "workspace_project", "다른 프로젝트의 작업공간입니다.");
     if (workspace.archivedAt !== null || workspace.removedAt !== null) throw new HttpError(409, "workspace_archived", "보관되거나 제거된 작업공간입니다.");
     if (workspace.hostId !== this.hostId) throw new HttpError(409, "workspace_host", "이 컴퓨터에서 실행하는 작업공간이 아닙니다.");
+    this.directoryOperations.assertAvailable(workspace.cwd);
     return workspace;
   }
 
@@ -68,6 +81,7 @@ export class Workspaces {
       cwd = realpathSync(request.cwd);
       if (!statSync(cwd).isDirectory()) throw new Error("not a directory");
     } catch { throw new HttpError(400, "workspace_path", "읽을 수 있는 폴더를 선택해 주세요."); }
+    this.directoryOperations.assertAvailable(cwd);
     const existing = this.list().find((entry) => entry.workId === work.id && entry.hostId === this.hostId && resolve(entry.cwd) === cwd);
     if (existing) return existing;
     const workspace = this.ensure(work, cwd, null, this.hostId, false, false);

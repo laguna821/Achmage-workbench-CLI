@@ -107,7 +107,7 @@ function countChanges(before: string, after: string) {
 }
 
 export class Documents {
-  readonly registry = new DocumentRegistry((id) => this.get(id));
+  readonly registry: DocumentRegistry;
   private readonly artifacts = new Map<string, Artifact>();
   private readonly proposals = new Map<string, Proposal>();
   private readonly store: Store;
@@ -124,6 +124,7 @@ export class Documents {
   private readonly workspaces: Workspaces | null;
   constructor(store: Store, bus: EventBus, dataDir: string, kordoc: Kordoc | null = null, ieum: IeumOffice | null = null, workspaces: Workspaces | null = null) {
     this.workspaces = workspaces;
+    this.registry = new DocumentRegistry((id) => this.get(id), Date.now, workspaces?.directoryOperations);
     this.store = store;
     this.bus = bus;
     this.root = join(dataDir, "artifacts");
