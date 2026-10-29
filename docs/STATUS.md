@@ -57,7 +57,7 @@
 - **Windows**: 빌드·실행 미검증(NSIS 미작성). Linux 결과로 대신하지 않는다.
 - **로그아웃 상태에서 로그인 완료**: 로그인 시작 경로만 구현. 실제 로그인 완료는 확인하지 못함(두 계정 모두 로그인된 상태).
 - ~~창 닫기 = 앱 종료~~ → 2026-10-28 창을 닫으면 트레이로 숨고 작업이 이어진다(트레이 메뉴: 열기·끝내기, 다시 실행하면 창이 나타남). 창이 뒤에 있으면 답·확인 필요·실패를 OS 알림으로 알린다(⋯에서 끔). 트레이가 없는 데스크톱에서는 다시 실행해서 연다. 실제 창 닫기·알림은 자동 검사가 없어 사람이 확인한다.
-- **Node 24+ 필요**: 게이트웨이를 시스템 Node로 실행한다(번들하지 않음).
+- ~~**Node 24+ 필요**: 게이트웨이를 시스템 Node로 실행한다(번들하지 않음).~~ → v0.1.0부터 Windows·macOS·AppImage는 Node 24를 함께 넣는다(Arch 패키지만 시스템 Node). 아래 "첫 실행" 참고.
 - 이 노트북 설치는 시스템 WebKit 실행 파일. 배포용 AppImage는 별도로 빌드된다.
 - Claude의 추론 강도는 엔진이 적용 결과를 보고하지 않아 "최근 응답"에는 모델만 표시된다(Codex는 모델·강도 모두).
 - ~~세션별 승인 방식 선택 없음~~ → 2026-10-28 입력창 아래 권한(묻기·자동·전체 접근)으로 해결. 아래 "여러 세션 · 일하는 중 대화 · 권한" 참고.
@@ -186,7 +186,7 @@
   - "HOP로 열기"는 가짜 실행기로만 시험했다. 실제 HOP 창에서 저장해 보는 확인은 남았다.
   - 내장 HOP급 한글 편집기(HOP 패치 엔진·글꼴 공급·선명도 보정을 `/hwp/`에 빌드)는 다음 계획이다.
 - MCP 복사는 화면 확인과 단위 테스트(스킬 복사)만 했다. 실제 엔진 설정을 바꾸는 쓰기는 사용자 클릭 전에는 하지 않았다.
-- Windows·macOS의 이음 설치는 자동 설치를 지원하지 않는다(Linux만).
+- ~~Windows·macOS의 이음 설치는 자동 설치를 지원하지 않는다(Linux만).~~ → 2026-10-29 모든 설치 파일에 이음오피스 공식 빌드를 넣는다(아래 "첫 실행").
 
 ## 앱 안 오피스 편집 — 워드·PPT·엑셀 (2026-10-28)
 
@@ -229,7 +229,7 @@
 ### 미검증 · 제한
 - 한글 입력기(fcitx5·ibus)로 직접 치는 확인은 사람이 해야 한다. 자동 검사는 `insertText`로 넣었다.
 - 아직 안 되는 것: docx 안 큰 그림(지연 로딩 `genoffice-docx-media:`), 암호 문서, 다른 이름으로 저장·내보내기·인쇄.
-- 옛 판 보기와 "글 보기"는 아직 이음 CLI 렌더를 쓴다(이음 설치 필요).
+- 옛 판 보기와 "글 보기"는 아직 이음 CLI 렌더를 쓴다(2026-10-29부터 앱에 들어 있는 이음오피스).
 - 디자인(doory) 편집기는 아직 앱과 같은 출처다.
 - (당시 기록) 슬라이드·엑셀은 문서 처리가 Electron 메인 프로세스에 있었다. 같은 날 아래처럼 웹뷰 안 Worker로 옮겼다.
 
@@ -831,6 +831,56 @@
 - 볼트 CSS 스니펫(사용자 정의 콜아웃 색)은 읽지 않는다. 모르는 종류는 노트 색이다.
 - 실제 사용자 볼트를 붙인 설치본에서의 확인은 사용자가 해야 한다(앱을 다시 시작해야 게이트웨이 변경이 들어감).
 
+## 첫 실행 — 클릭만으로 엔진 설치·로그인, 문서 도구는 앱에 (2026-10-29)
+
+**사용자 보고(Windows v0.1.0)**: 첫 안내가 npm·curl 명령을 치라고 했고(Codex가 깔린 PC인데 못 찾음), 웹 로그인이 안 됐고, kordoc·이음오피스가 "설치되지 않음"이었다. 원인은 셋이었다.
+- 엔진 찾기가 PATH에서 확장자 없는 이름만 보고 `--version`을 바로 실행했다. npm의 `codex.cmd`·`codex.ps1`·sh 셔임은 Windows에서 그대로 실행되지 않는다.
+- Codex 로그인이 `xdg-open`을 불렀다(Windows·macOS에는 없고, 실패가 게이트웨이를 멈출 수 있었다).
+- 문서 도구는 이 노트북의 사용자 설치(`~/.claude/skills/hallym-kordoc`, `~/.local/opt/ieumoffice`)만 찾았다.
+
+### 구현됨
+- **엔진 찾기**(`engine-locate.ts`, 순수 함수 + 파일 보기): PATH(Windows는 PATHEXT, `Path` 대소문자), npm 전역 폴더(`%APPDATA%\npm`, `npm prefix -g`, nvm·volta·pnpm·bun·asdf), Claude Code 설치 프로그램(`~/.local/bin/claude(.exe)`, `~/.claude/local`), Codex 설치 프로그램(`~/.codex/packages/standalone`), Homebrew(`/opt/homebrew`, `/usr/local`, linuxbrew), ChatGPT·Codex 앱, VS Code류 확장, Workbench가 설치한 것.
+  - `.cmd`·`.ps1`·sh 셔임은 읽어서 대상을 찾는다. npm으로 깐 Codex는 플랫폼 패키지의 실행 파일을 직접 띄운다(npm 런처가 하듯 `CODEX_MANAGED_BY_NPM` 등). npm Claude Code는 `bin/claude.exe` 또는 플랫폼 패키지의 실행 파일. JavaScript 진입점은 앱의 Node로 띄운다(Finder·런처의 PATH에는 node가 없을 수 있음). 링크로 찾은 실행 파일은 링크 그대로 띄워 설치 프로그램의 업데이트를 따른다.
+  - Codex app-server(`prefixArgs`)와 Claude Agent SDK(`pathToClaudeCodeExecutable` + `executable`, SDK가 모르는 확장자는 `spawnClaudeCodeProcess`), `auth status`, MCP 복사 명령이 모두 같은 방식으로 실행된다.
+  - macOS·Linux는 시작할 때 로그인 셸의 PATH(`$SHELL -ilc`, 5초)를 한 번 읽어 모자란 폴더를 뒤에 붙인다. 엔진 세션도 터미널과 같은 도구를 찾는다.
+  - 화면에 "찾은 곳"(npm 전역 설치·Claude Code 설치 프로그램·Homebrew·Workbench가 설치…)·버전·경로를 보인다. "다시 확인"하면 그 사이 깐 엔진도 찾는다.
+- **설치**(`engine-install.ts`): 엔진 카드의 "Claude 설치"·"Codex 설치". 앱의 Node가 함께 들어 있는 npm(Node 공식 배포본의 npm, Arch는 시스템 npm)으로 `@openai/codex`·`@anthropic-ai/claude-code` 최신판을 이 사용자 데이터 폴더 `engines/<엔진>/<판>`에 설치한다.
+  - 관리자 권한·시스템 Node·터미널이 필요 없다. npm이 레지스트리 무결성 값을 확인하고, 설치 스크립트는 돌리지 않는다(Claude Code의 실행 파일은 그 스크립트가 복사해 오는 플랫폼 패키지에서 바로 쓴다).
+  - 진행 막대(레지스트리가 알려 준 크기 대비), 끝나면 실행 확인(`--version`) 뒤 한 번에 제자리로 옮기고 기록(`current.json`). 사용자 npm 캐시는 건드리지 않는다.
+  - 실패는 쉬운 말로: 인터넷 연결, 디스크 공간, 폴더 권한(백신), 배포본과 다름, 레지스트리에 없음. "다시 설치".
+  - 사용자가 직접 깐 엔진이 있으면 그것을 쓴다(설치 버튼 없음). Workbench가 깐 엔진에는 "최신판으로 업데이트".
+- **로그인**: 엔진 자신의 로그인을 쓴다. 자격 증명 파일은 읽지 않고, 로그인 여부는 엔진에게만 묻는다.
+  - Codex: app-server `account/login/start` → 게이트웨이가 OS 기본 브라우저로 연다(Windows `rundll32 url.dll`, macOS `open`, Linux `xdg-open`; 셸 없음, http(s)만). `account/login/completed`가 오면 상태를 다시 읽는다. 콜백 포트가 막히면 장치 코드 로그인(주소 + 입력할 코드).
+  - Claude: `claude auth login --claudeai`(브라우저는 Claude Code가 연다). 출력의 주소(터미널 링크 escape 제거)를 "로그인 페이지 열기"·"주소 복사"로 보이고, 페이지에 코드가 나오는 경우를 위해 코드 칸을 둔다(엔진 입력으로 넘김, 기록하지 않음). 끝나면 상태를 다시 읽는다.
+  - 둘 다 10분이 지나면 멈추고, "로그인 그만두기"가 있다.
+- **문서 도구는 앱에 들어 있다**(모든 설치 파일, 사용자가 따로 설치하지 않음).
+  - kordoc: `third_party/kordoc`(kordoc-workbench 0.2.0 core, kordoc 4.18.13, MIT; 파일별 sha256과 뺀 것은 `PROVENANCE.md`). 한림대 층(기관 서식·카탈로그·한림 실행기)은 공개 배포에서 뺐다. 게이트웨이는 앱의 것 → 사용자 스킬 순으로 쓴다.
+  - 이음오피스·PDFCraft·HOP: `packaging/bundled-apps.json`에 고정한 공식 릴리스 빌드(이음 v0.12.7 = 앱 안 편집기와 같은 판, PDFCraft v0.1.0, HOP achmage-v1.2.0-beta.6)를 `scripts/fetch-bundled-apps.ts`가 받아 해시를 확인하고 실행 없이 푼다(AppImage 자체 추출, NSIS는 7-Zip, macOS는 `ditto`, deb는 `ar`). 라이선스 파일은 각 앱 안에 그대로 있다.
+  - 이음 CLI는 앱의 실행 파일로 `genoffice.cjs`를 돌린다(`ELECTRON_RUN_AS_NODE`, 런처 스크립트를 거치지 않아 Windows `.cmd` 문제 없음). Linux에서 사용자 네임스페이스가 막힌 시스템(Ubuntu 24.04 등)은 이음 AppImage 런처와 같은 규칙으로 샌드박스를 끈다.
+  - 엔진은 `kordoc`·`ieumoffice`를 이름으로 부른다(데이터 폴더 `bin/`의 래퍼를 PATH 앞에, Windows는 `.cmd`도). 경로의 공백·셸마다 다른 따옴표 문제가 없다. "새 문서 → 한글"은 앱의 kordoc `generate`로 만든다.
+  - 화면: 문서 도구가 "앱에 포함 · 판"으로 보이고, 설치 버튼과 "설치되지 않음"이 없다. 엔진이 없을 때는 "아직 없음" + 설치 버튼.
+- **설치 파일**(release.yml): Node 배포본의 npm을 node 옆에(`node/npm`), kordoc·세 앱을 Tauri 리소스로(macOS의 `.app`은 링크를 지키는 `macOS.files`). MSI는 한국어(ko-KR, 코드페이지 949; kordoc 서식 파일 이름이 한글). Tauri 셸은 리소스 폴더를 `WORKBENCH_RESOURCES_DIR`로 게이트웨이에 넘긴다. Arch 패키지는 시스템 npm에 의존하고 세 앱을 함께 넣는다.
+- **에이전트 브라우저**: Windows(`chrome-win64/chrome.exe`)·macOS(arm64·x64) Chromium 실행 파일과 SHA-256을 고정했다(같은 Chrome for Testing 빌드에서 계산, Linux 값이 기존 고정값과 같음을 확인). Windows는 `System32\tar.exe`, 엔진용 `playwright-cli.cmd`.
+
+### 실제 검증됨
+- 단위 테스트 +29: 엔진 찾기 20(Windows npm 셔임·PATH 없이 npm 폴더·Claude 설치 프로그램·npm Claude 플랫폼 패키지·셔임 중복·실행 못 하는 배치 파일·편집기 확장 / macOS Homebrew·로그인 셸 nvm·JS 진입점·ChatGPT 앱 / Linux 런처 PATH·사용자 것 우선·sh 셔임), 설치 오류 말, 로그인 주소·실패 이유, 브라우저 열기, 로그인 셸 PATH, 래퍼, 브라우저 빌드. 전체 352.
+- `scripts/setup-check.ts` **28/28 · console: clean**(Linux): 설치본과 같은 폴더 배치(`host/`·`web/`·`kordoc/`·`ieumoffice/`·`pdfcraft/`·`hop/`·`node/`)의 묶음 게이트웨이 + 사람이 까는 방식대로 둔 가짜 엔진(npm 전역 링크, `~/.local/bin`) + AppImage의 짧은 PATH:
+  - 두 엔진을 찾고(찾은 곳 npm·설치 프로그램) 답함, kordoc·이음·PDFCraft·HOP 앱에 포함, docx·pptx 글 보기와 쪽 그림, HWPX 글 보기·쪽 미리보기, PDF 쪽 돌리기·지우기, 엔진용 `kordoc`·`ieumoffice` 실행, 어디에도 "설치되지 않음" 없음.
+  - Chromium 첫 안내(엔진 없는 컴퓨터): 명령 없음, 두 엔진 "설치"(가짜 npm, 진행 막대) → "Workbench가 설치", Codex 로그인(가짜 브라우저가 돌아옴) → 구독 연결됨, Claude 로그인(브라우저가 안 열린 경우: 주소와 코드 칸 → 코드 넣기) → 구독 연결됨, 문서 도구 넷 "앱에 포함", 연결 패널.
+- 회귀(모두 console: clean): `chat-flow-check` 32/32, `office-editor-check` 12/12, `doc-images-check` 28/28, `session-controls-check` 13/13, `doc-drawer-check` 8/8, `meta-session-check` 19/19. `office-ui-check`는 이 변경 전부터 맞지 않는다(시작 화면이 홈이고 docx가 편집기로 먼저 열려 `.docs-button`·`.office-page`를 기다리다 멈춤); 같은 확인(쪽 그림·글 보기)은 `setup-check`가 API로 한다.
+- 이 노트북의 실제 엔진 찾기(실행은 `--version`만): Codex는 ChatGPT 앱의 0.160.0(가장 새 판; `~/.local/bin/codex` → Codex 설치 프로그램 0.153.4, `/usr/bin/codex`도 찾음), Claude는 `~/.local/bin/claude`(설치 프로그램 2.1.292). launcher PATH(`/usr/bin:/bin`)에서도 같다.
+- 실제 공식 빌드 풀기: Linux 세 앱, Windows 세 앱(7-Zip 25.01로 같은 명령) 모두 확인 항목이 있었다. Windows 묶음의 파일 이름은 모두 ASCII(MSI).
+
+### 미검증 · 제한
+- **Windows·macOS 실제 기기**: release.yml의 `smoke` 작업(수동 실행·태그만)이 설치 파일을 깔고(NSIS `/S`, dmg) 묶인 Node로 게이트웨이를 띄워, Windows는 npm `codex.cmd`·`claude.cmd` 셔임, macOS는 Homebrew(`/opt/homebrew/bin/codex`)·`~/.local/bin/claude`의 가짜 엔진으로 같은 API 검사(`scripts/setup-smoke.ts`)를 한다. 아직 돌리지 않았다(리드가 실행).
+- 실제 로그인 완료(로그아웃 상태에서)는 확인하지 못했다(두 계정 모두 로그인 상태, 로그아웃은 사용자 세션을 끊음). 가짜 엔진이 실제 출력 형식(Claude의 OSC 8 링크·코드 `code#state`, Codex의 `account/login/*`)을 따라 한다.
+- 실제 npm 설치(Codex 플랫폼 패키지 약 170MB 내려받기·450MB 풀림, Claude Code 약 270MB)는 돌리지 않았다(가짜 npm). 레지스트리 크기 조회와 설치 뒤 배치 해석은 실제 패키지 구조(0.165.0·2.1.312 tarball)로 맞췄다.
+- Windows의 Microsoft Store Codex 앱 안 `codex.exe`는 위치가 공개되어 있지 않아 찾지 못할 수 있다(앱 별칭이 PATH에 있으면 찾음). 그때는 "Codex 설치"로 깔 수 있다.
+- macOS: 서명 없는 앱 안의 `IeumOffice.app`·`Achmage HOP.app`을 브라우저로 받은 dmg(격리 속성)에서 처음 실행할 때 Gatekeeper가 따로 묻는지는 확인하지 못했다. HOP는 Apple silicon 빌드만 있다(x64 Mac에는 없음).
+- Linux AppImage에 Electron 앱(이음)을 넣으면 linuxdeploy가 그 `.so` 의존성도 다룬다. 빌드가 되는지는 CI에서 확인해야 한다.
+- 설치 크기가 커진다(풀린 크기, Windows 기준): 이음 730MB, PDFCraft 183MB(OCR 모델 포함), HOP 147MB, npm 약 12MB. 크기 때문에 뺀 것은 없다.
+- 이 작업 사본에서는 앱 안 오피스 편집기(`apps/office`)가 링크된 `vendor/ieumoffice` 때문에 빌드되지 않아, 회귀 검사에는 원래 체크아웃의 같은 빌드(`apps/web/dist/office`)를 복사해 썼다(소스는 바꾸지 않음).
+
 ## 다음
 
 - **2026-10-28~29 밤에 끝낸 것**: 종합 점검의 빠진 것 전부(설계 문서 7장 1~10). 대화 속 그림, 계획 먼저, `/` 명령, 그림 그리기, 세션 잇기, 브라우징, 보기 모드·나란히·세션 창, 문서 그림·R2, 노션식 정리·볼트, 다른 곳의 대화 가져오기, 이 요청 전으로, 알림 마무리, 예약 작업, 격리 사본. 각 절에 검사와 제한을 적었다.
@@ -840,5 +890,5 @@
   - Windows·macOS는 빌드만 확인했고 실제 기기에서 써 보지는 않았다. 서명이 없어 처음 열 때 SmartScreen·Gatekeeper 경고가 뜬다.
 - **사람이 설치본에서 확인할 것**: 바탕화면 끌어 놓기·스크린숏 붙여넣기(WebKitGTK), 알림을 눌러 세션 열기, 트레이 "확인 필요 N", 실제 Google 로그인 유지(에이전트 브라우저), 세션 창 떼어 내기(niri).
 - **프로젝트 = 노트 한 장(기획 v2, 2026-10-29)**: 세 층(세션 → 프로젝트 노트 → 모아 보기)과 다섯 길(들어가기 · 되쓰기 · 알리기 · 찾기 · 끊김)로 다시 짰다. 독립 검토 셋(정보 전달·회수·UX)을 코드로 확인해 v1의 가정 A(`.workbench/project.md`)와 B(작업 줄 → 프로젝트 페이지)를 철회했고, 지금 코드의 결함(멈춤·엔진 종료 때 수정안 버림·요청 자동 전송, 셋 이상 잇기, 오피스 색인 삭제)을 P0으로 올렸다. [설계](design/프로젝트-노트-설계.md) P0~P5.
-- **뒤로 미룬 것**: 음성·모바일·PR/CI 연동·격자 분할·칸반 끌기. 앱 안 편집기 확대(마크다운 WYSIWYG·HTML·마인드맵), HOP급 한글 편집기, 이음 설치 의존 없애기.
+- **뒤로 미룬 것**: 음성·모바일·PR/CI 연동·격자 분할·칸반 끌기. 앱 안 편집기 확대(마크다운 WYSIWYG·HTML·마인드맵), HOP급 한글 편집기.
 - 설계: [다음 설계](design/워크스테이션-다음설계.md), 지난 계획: [메타 세션·페이지·Pele 도식·이음 마무리](design/메타세션-다음계획.md).
