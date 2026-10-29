@@ -123,6 +123,8 @@ export type ReadNote = {
   decisions: ProjectEntry[];
   questions: ProjectEntry[];
   body: string;
+  /** The body without the decision and open-question sections: the note's own words. */
+  free: string;
   problem: string | null;
 };
 
@@ -138,19 +140,24 @@ export function readNote(text: string): ReadNote {
   // The line where the body starts.
   let first = 0;
   for (let consumed = 0; first < lines.length && consumed < start; first += 1) consumed += lines[first]!.length;
-  const entriesOf = (title: string): ProjectEntry[] =>
-    (sectionOf(lines, first, title)?.items ?? []).map((line) => {
+  const decisions = sectionOf(lines, first, DECISIONS);
+  const questions = sectionOf(lines, first, QUESTIONS);
+  const entriesOf = (section: ReturnType<typeof sectionOf>): ProjectEntry[] =>
+    (section?.items ?? []).map((line) => {
       const match = ITEM.exec(lines[line]!)!;
       return { line, text: match[2]!.trim(), done: (match[1] ?? " ").toLowerCase() === "x" };
     });
+  const cut = new Set<number>();
+  for (const section of [decisions, questions]) for (let line = section?.heading ?? 0; section && line < section.end; line += 1) cut.add(line);
   return {
     id: valuesOf(entries, ID_KEY)[0]?.trim() || null,
     properties: entries.filter(([key]) => key !== ID_KEY),
     stage: valuesOf(entries, STAGE_KEY)[0]?.trim() || null,
     tags: [...new Set([...valuesOf(entries, "tags"), ...valuesOf(entries, "tag")].flatMap((value) => value.split(/[,\s]+/)).map((tag) => tag.replace(/^#/, "").trim()).filter(Boolean))],
-    decisions: entriesOf(DECISIONS),
-    questions: entriesOf(QUESTIONS),
+    decisions: entriesOf(decisions),
+    questions: entriesOf(questions),
     body: text.slice(start),
+    free: lines.filter((_, line) => line >= first && !cut.has(line)).join(""),
     problem,
   };
 }

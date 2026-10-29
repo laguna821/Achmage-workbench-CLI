@@ -59,6 +59,9 @@ describe("reading a note", () => {
     expect(note.decisions.map((entry) => entry.text)).toEqual(["표지는 B안", "루브릭 3단계"]);
     expect(note.questions).toEqual([{ line: expect.any(Number), text: "과제 마감 연장?", done: false }]);
     expect(note.body.startsWith("\n# 안녕")).toBe(true);
+    // The note's own words: the body without the two sections.
+    expect(note.free).not.toMatch(/## 결정|표지는 B안|## 열린 질문|과제 마감/);
+    expect(note.free).toContain("# 안녕");
     expect(note.problem).toBeNull();
   });
 

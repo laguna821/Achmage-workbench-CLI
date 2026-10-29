@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
@@ -25,7 +25,8 @@ import { PROJECT_NOTE_IN_GIT, WORKBENCH_DIR } from "./artifacts.ts";
 import type { EventBus } from "./bus.ts";
 import { HttpError } from "./errors.ts";
 import type { Pkm } from "./pkm.ts";
-import { ID_KEY, appendEntry, newNote, noteFileName, readNote, setBody, setEntryDone, setFrontmatterKey } from "./project-note.ts";
+import { ID_KEY, appendEntry, newNote, noteFileName, readNote, setBody, setEntryDone, setFrontmatterKey, type ReadNote } from "./project-note.ts";
+import type { IndexEntry, WorkExtras } from "./search-index.ts";
 import type { SessionManager } from "./sessions.ts";
 import type { Store } from "./store.ts";
 
@@ -60,6 +61,39 @@ export const entryGist = (text: string) =>
     .replace(/^\d{4}-\d{2}-\d{2}\s+/, "")
     .trim();
 
+const SOURCE_LINK = /\(\[원문\]\(workbench:\/\/session\/([^#)\s]+)(?:#([^)\s]+))?\)\)/;
+
+/**
+ * A note's decisions and open questions as search entries: the line without its date and source
+ * link is the title; the date (else the note's time) is when; a line from a conversation opens it
+ * at that answer. Keyed by the line's words, so lines moving around keep their entries.
+ */
+export function noteEntries(workId: string, path: string, read: ReadNote, at: number): IndexEntry[] {
+  const out: IndexEntry[] = [];
+  const add = (kind: "decision" | "question", entry: ReadNote["decisions"][number]) => {
+    const title = entryGist(entry.text);
+    if (!title) return;
+    const source = SOURCE_LINK.exec(entry.text);
+    const day = /^(\d{4})-(\d{2})-(\d{2})\b/.exec(entry.text);
+    out.push({
+      key: `decision:${workId}:${kind === "decision" ? "d" : "q"}:${createHash("sha256").update(entry.text).digest("hex").slice(0, 16)}`,
+      kind,
+      scope: "decision",
+      workId,
+      sessionId: source?.[1] ?? null,
+      itemId: source?.[2] ?? null,
+      path,
+      at: day ? new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3])).getTime() : at,
+      title,
+      body: "",
+      extra: kind === "question" ? { done: entry.done } : {},
+    });
+  };
+  for (const entry of read.decisions) add("decision", entry);
+  for (const entry of read.questions) add("question", entry);
+  return out;
+}
+
 /** Is this folder inside a git repository? (Walks up to the root looking for `.git`.) */
 export function inGitRepository(folder: string): boolean {
   for (let at = folder; ; at = dirname(at)) {
@@ -92,7 +126,7 @@ export class Projects {
   private readonly writes = new Map<string, Write>();
   private readonly branches = new Map<string, { at: number; branch: string | null }>();
   /** Notes as last read, by path: read again only when the file's time or size changed. */
-  private readonly summaryCache = new Map<string, { key: string; read: ReturnType<typeof readNote> }>();
+  private readonly summaryCache = new Map<string, { key: string; read: ReadNote; at: number }>();
   /** Works this module is archiving or restoring itself: the archive listener leaves those alone. */
   private readonly quiet = new Set<string>();
 
@@ -104,6 +138,16 @@ export class Projects {
     manager.changeHook = (session, work, omit) => this.changeBlock(session, work, omit);
     manager.toldHook = (session) => this.markTold(session);
     pkm.projectCard = (work) => this.cardInfo(work);
+    // "찾는 길": decisions and open questions are found by search, and a work by its note's aliases,
+    // properties and words. A note written here, by an engine, or (noticed when lists read it)
+    // outside is indexed again.
+    store.workExtras = (workId) => this.workExtras(workId);
+    bus.subscribe((event) => {
+      if (event.type === "artifact.upserted" && event.artifact.role === "project-note") this.indexNote(event.artifact.workId);
+    });
+    this.store.search.transaction(() => {
+      for (const workId of Object.keys(this.notePaths())) this.indexNote(workId);
+    });
   }
 
   // ── stored small things ─────────────────────────────────────────────────────────────────
@@ -122,6 +166,7 @@ export class Projects {
   }
 
   private publish(workId: string | null) {
+    if (workId) this.indexNote(workId);
     this.bus.publish({ type: "project.changed", workId });
   }
 
@@ -248,18 +293,10 @@ export class Projects {
     const out: ProjectSummary[] = [];
     for (const work of this.manager.view.works.values()) {
       const path = this.notePaths()[work.id] ?? null;
-      let read: ReturnType<typeof readNote> | null = null;
-      if (path) {
-        try {
-          const stats = statSync(path);
-          const key = `${stats.mtimeMs}:${stats.size}`;
-          const cached = this.summaryCache.get(path);
-          read = cached?.key === key ? cached.read : readNote(readFileSync(path, "utf8"));
-          if (cached?.key !== key) this.summaryCache.set(path, { key, read });
-        } catch {
-          read = null;
-        }
-      }
+      const known = path ? this.readCached(path) : null;
+      const read = known?.read ?? null;
+      // Changed since it was last read (outside the app too): its search entries follow.
+      if (known?.fresh) this.indexNote(work.id);
       const archiveStage = this.stages().find((stage) => stage.archive)?.name ?? null;
       out.push({
         workId: work.id,
@@ -272,6 +309,60 @@ export class Projects {
       });
     }
     return out;
+  }
+
+  /** A note as last read; read again (`fresh`) only when the file's time or size changed. Null: none. */
+  private readCached(path: string): { read: ReadNote; at: number; fresh: boolean } | null {
+    try {
+      const stats = statSync(path);
+      const key = `${stats.mtimeMs}:${stats.size}`;
+      const cached = this.summaryCache.get(path);
+      if (cached?.key === key) return { read: cached.read, at: cached.at, fresh: false };
+      const read = readNote(readFileSync(path, "utf8"));
+      this.summaryCache.set(path, { key, read, at: stats.mtimeMs });
+      return { read, at: stats.mtimeMs, fresh: true };
+    } catch {
+      return null;
+    }
+  }
+
+  // ── found by search ("찾는 길") ─────────────────────────────────────────────────────────
+
+  /** What a work's own search entry gets from its note: aliases, properties (the stage among them), its own words. */
+  private workExtras(workId: string): WorkExtras | null {
+    const path = this.notePaths()[workId];
+    const read = path ? this.readCached(path)?.read : null;
+    if (!read) return null;
+    const name = (key: string) => key.trim().replace(/:$/, "").toLowerCase();
+    return {
+      aliases: read.properties.filter(([key]) => name(key) === "aliases").flatMap(([, values]) => values ?? []),
+      tags: read.tags,
+      properties: read.properties.filter(([key]) => !/^(aliases|tags?)$/.test(name(key))),
+      text: read.free,
+    };
+  }
+
+  /**
+   * A work's note in the search index: each decision and open question its own entry (scope "결정",
+   * under its work, opening where it came from), and the work's entry again. Search is a
+   * convenience: a failure here changes nothing else, and the next change of the note tries again.
+   */
+  private indexNote(workId: string) {
+    try {
+      const work = this.manager.view.works.get(workId);
+      const path = work ? (this.notePaths()[workId] ?? null) : null;
+      const known = path ? this.readCached(path) : null;
+      const entries = work && path && known ? noteEntries(workId, path, known.read, known.at) : [];
+      const prefix = `decision:${workId}:`;
+      this.store.search.transaction(() => {
+        const keep = new Set(entries.map((entry) => entry.key));
+        for (const key of this.store.search.signatures(prefix).keys()) if (!keep.has(key)) this.store.search.remove(key);
+        for (const entry of entries) this.store.search.put(entry);
+        if (work) this.store.indexWork(workId);
+      });
+    } catch {
+      // Not indexed now; found again after the note's next change.
+    }
   }
 
   // ── counted, not written ────────────────────────────────────────────────────────────────
