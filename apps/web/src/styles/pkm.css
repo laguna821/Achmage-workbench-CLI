@@ -17,12 +17,12 @@
 }
 
 .vault-readonly {
-  padding: 1px 6px;
+  padding: 0 5px;
   border: 1px solid var(--line);
-  border-radius: 999px;
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--faint);
+  border-radius: var(--r-xs);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  color: var(--muted);
   white-space: nowrap;
 }
 
@@ -40,7 +40,7 @@
 }
 
 .vault-row.vault-root .side-row-label {
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .vault-count {
@@ -55,7 +55,7 @@
 
 .vault-problem {
   padding: 4px 10px 8px;
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
   color: var(--amber-text);
 }
 
@@ -84,7 +84,7 @@
 }
 
 .vault-border .side-row {
-  border-radius: 6px;
+  border-radius: var(--r-sm);
 }
 
 /* ── dialogs ───────────────────────────────────────────────────────────── */
@@ -97,7 +97,7 @@
   padding: 18px 22px 16px;
   overflow-y: auto;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--r-xl);
   background: var(--surface);
   color: var(--text);
   box-shadow: var(--popover-shadow);
@@ -117,7 +117,7 @@
 
 .pkm-dialog-head h2 {
   margin: 0;
-  font-size: 19px;
+  font-size: var(--fs-lead);
 }
 
 .pkm-suggest {
@@ -127,7 +127,7 @@
   width: 100%;
   padding: 12px 14px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   background: var(--surface);
   color: var(--text);
   text-align: left;
@@ -151,12 +151,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--fs-micro);
 }
 
 .pkm-suggest-action {
   flex: 0 0 auto;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   font-weight: 600;
   color: var(--accent);
 }
@@ -176,7 +176,7 @@
   flex: 1;
   min-width: 0;
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 
 .pkm-dialog .button:disabled {
@@ -208,14 +208,14 @@
 
 .pkm-view .pkm-head {
   flex: 0 0 auto;
-  padding-top: 14px;
-  padding-bottom: 8px;
+  padding-top: var(--space-5);
+  padding-bottom: var(--space-3);
   border-bottom: 1px solid var(--line);
 }
 
 .pkm-crumbs {
   min-height: 18px;
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
   color: var(--muted);
 }
 
@@ -233,10 +233,14 @@
   margin-top: 2px;
 }
 
+/* Folder and note titles are set in SameTone, like the vault's own. */
 .pkm-title {
   margin: 0;
-  font-size: 22px;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: var(--fs-heading);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
   color: var(--heading);
   min-width: 0;
   overflow: hidden;
@@ -245,8 +249,9 @@
 }
 
 .pkm-count {
-  font-size: 13px;
+  font-size: var(--fs-micro);
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .pkm-head-tools {
@@ -258,11 +263,11 @@
 
 .pkm-head-tools .ghost-button {
   height: 30px;
-  font-size: 13.5px;
+  font-size: var(--fs-meta);
 }
 
 .pkm-check {
-  font-size: 13px;
+  font-size: var(--fs-meta);
   color: var(--text-soft);
 }
 
@@ -283,27 +288,28 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: 12px 4px 6px;
+  padding: var(--space-4) var(--space-1) 6px;
   background: var(--bg);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--faint);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--muted);
 }
 
+/* Notes read as a ruled list (rules between rows), not a deck of cards. */
 .pkm-card {
   display: flex;
-  gap: 14px;
-  padding: 11px 12px;
-  border-radius: 10px;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-3);
+  border-radius: var(--r-md);
   border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
   cursor: default;
   user-select: none;
   outline: none;
+  transition: background-color var(--dur-fast) var(--ease-out);
 }
 
 .pkm-card:hover {
-  background: color-mix(in srgb, var(--text) 4%, transparent);
+  background: var(--hover);
 }
 
 .pkm-card:focus-visible {
@@ -326,8 +332,9 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 15px;
-  font-weight: 650;
+  font-family: var(--font-read);
+  font-size: var(--fs-body);
+  font-weight: 600;
   color: var(--text);
 }
 
@@ -349,14 +356,16 @@
   -webkit-line-clamp: 2;
   line-clamp: 2;
   overflow: hidden;
-  font-size: 13.5px;
+  font-size: var(--fs-meta);
   line-height: 1.5;
   color: var(--text-soft);
 }
 
 .pkm-card-date {
+  font-family: var(--font-ui);
   font-weight: 600;
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .pkm-card-meta {
@@ -364,24 +373,25 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 5px;
-  font-size: 12px;
+  font-size: var(--fs-micro);
 }
 
+/* Tags keep the vault's colors (Notebook Navigator), on square-ish seals. */
 .pkm-tag {
   --tag-color: var(--muted);
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--tag-color) 14%, transparent);
-  color: color-mix(in srgb, var(--tag-color) 80%, var(--text));
-  font-size: 11.5px;
+  padding: 1px 6px;
+  border-radius: var(--r-xs);
+  background: color-mix(in srgb, var(--tag-color) 12%, transparent);
+  color: color-mix(in srgb, var(--tag-color) 75%, var(--text));
+  font-size: var(--fs-micro);
   white-space: nowrap;
 }
 
 .pkm-stage {
-  padding: 1px 7px;
+  padding: 0 6px;
   border: 1px solid var(--line);
-  border-radius: 999px;
-  font-size: 11.5px;
+  border-radius: var(--r-xs);
+  font-size: var(--fs-micro);
   color: var(--text-soft);
   white-space: nowrap;
 }
@@ -392,7 +402,7 @@
 }
 
 .pkm-card-where {
-  color: var(--faint);
+  color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -403,7 +413,7 @@
   flex: 0 0 auto;
   width: 64px;
   height: 64px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   overflow: hidden;
   background: var(--surface-muted);
 }
@@ -425,7 +435,7 @@
 }
 
 .pkm-drop-hint {
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
 }
 
 .pkm-drag-ghost {
@@ -437,10 +447,10 @@
   max-width: 280px;
   padding: 5px 10px;
   border: 1px solid var(--line-strong);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--surface);
   box-shadow: var(--popover-shadow);
-  font-size: 13px;
+  font-size: var(--fs-meta);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -465,7 +475,7 @@
   align-items: center;
   gap: 4px;
   color: var(--text-soft);
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
 }
 
 .note-chip .note-chip-open:disabled {
@@ -473,40 +483,54 @@
 }
 
 .note-chip-role {
-  font-size: 11px;
-  color: var(--faint);
+  font-size: var(--fs-micro);
+  color: var(--muted);
 }
 
 /* A vault note, read-only */
 .pkm-view .pkm-note {
-  padding-top: 14px;
-  padding-bottom: 32px;
+  padding-top: var(--space-4);
+  padding-bottom: var(--space-8);
 }
 
 .pkm-note-meta {
-  font-size: 12.5px;
-  margin-bottom: 10px;
+  font-size: var(--fs-micro);
+  margin-bottom: var(--space-3);
+  font-variant-numeric: tabular-nums;
 }
 
+/* Properties: a ruled key/value ledger. Keys keep their exact characters (colons and all),
+   in the UI type rather than monospace. */
 .pkm-props {
   display: grid;
   grid-template-columns: minmax(110px, max-content) 1fr;
-  gap: 4px 14px;
-  margin: 0 0 18px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  font-size: 13px;
+  gap: 0;
+  margin: 0 0 var(--space-5);
+  padding: 2px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-meta);
 }
 
 .pkm-prop {
   display: contents;
 }
 
+.pkm-prop dt,
+.pkm-prop dd {
+  padding: 6px 0;
+}
+
+.pkm-prop + .pkm-prop dt,
+.pkm-prop + .pkm-prop dd {
+  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+
 .pkm-prop dt {
+  padding-right: var(--space-4);
   color: var(--muted);
-  font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
+  font-weight: 500;
 }
 
 .pkm-prop dd {
@@ -518,16 +542,17 @@
 }
 
 .pkm-prop-value {
-  padding: 0 7px;
-  border-radius: 6px;
+  padding: 0 6px;
+  border-radius: var(--r-xs);
   background: var(--surface-muted);
   color: var(--text-soft);
   overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
 }
 
 .pkm-note-image {
   max-width: 100%;
-  border-radius: 8px;
+  border-radius: var(--r-md);
 }
 
 .pkm-wikilink {
@@ -559,7 +584,7 @@
 .message-actions .message-page {
   height: 22px;
   padding: 0 7px;
-  font-size: 12px;
+  font-size: var(--fs-micro);
   color: var(--muted);
 }
 
@@ -582,10 +607,10 @@
   width: 100%;
   padding: 7px 10px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--text);
-  font-size: 14px;
+  font-size: var(--fs-ui);
   text-align: left;
 }
 
@@ -630,10 +655,10 @@
 .template-option {
   padding: 3px 10px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--r-sm);
   background: var(--surface);
   color: var(--text-soft);
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 
 .template-option.on {
@@ -669,10 +694,10 @@
 .pkm-query {
   max-width: 100%;
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   background: var(--surface-muted);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--fs-micro);
   color: var(--text-soft);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -686,13 +711,13 @@
 
 .view-syntax code {
   padding: 0 4px;
-  border-radius: 4px;
+  border-radius: var(--r-xs);
   background: var(--surface-muted);
-  font-size: 12px;
+  font-size: var(--fs-micro);
 }
 
 .view-preview {
-  font-size: 13px;
+  font-size: var(--fs-meta);
   color: var(--text-soft);
 }
 
@@ -719,7 +744,7 @@
   gap: 10px;
   padding: 7px 10px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
 }
 
 .rule-row.off {
@@ -732,11 +757,11 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
-  font-size: 13.5px;
+  font-size: var(--fs-meta);
 }
 
 .rule-text .muted {
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
 }
 
 .rule-tools {
@@ -746,19 +771,19 @@
 
 .rule-empty {
   padding: 6px 2px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 
 .rule-preset {
   align-self: flex-start;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 
 .rule-form {
   margin: 0;
   padding: 10px 12px 12px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-lg);
 }
 
 .rule-grid {
@@ -766,7 +791,7 @@
   grid-template-columns: 96px 1fr;
   align-items: center;
   gap: 6px 10px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   color: var(--text-soft);
 }
 
@@ -785,7 +810,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 
 .change-list {
@@ -800,7 +825,7 @@
 }
 
 .change-list .check-row {
-  font-size: 13px;
+  font-size: var(--fs-meta);
   padding: 3px 2px;
 }
 
@@ -816,9 +841,9 @@
   height: 30px;
   padding: 0 8px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: transparent;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   color: var(--muted);
   white-space: nowrap;
 }
@@ -870,7 +895,7 @@
 
 .vault-guard-text {
   margin: 2px 10px 8px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   line-height: 1.55;
 }
 
@@ -885,11 +910,11 @@
   max-height: 46vh;
   padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--bg);
   color: var(--text);
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
   line-height: 1.55;
   resize: vertical;
 }
@@ -897,17 +922,17 @@
 .insight-problems {
   margin: 0;
   padding: 8px 12px 8px 28px;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--amber-soft);
   color: var(--amber-text);
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 
 .insight-ok {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   color: var(--ok);
 }
 

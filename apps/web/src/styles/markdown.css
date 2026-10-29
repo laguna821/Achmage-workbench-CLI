@@ -3,11 +3,11 @@
 /* Callouts: Obsidian's colours per kind, a light tint and the title in the kind's colour. */
 .markdown .callout {
   --callout: 8, 109, 221;
-  margin: 14px 0;
+  margin: 0.9em 0;
   padding: 10px 14px;
-  border-radius: 8px;
-  background: rgba(var(--callout), 0.08);
-  border-left: 2px solid rgba(var(--callout), 0.6);
+  border-radius: var(--r-md);
+  background: rgba(var(--callout), 0.07);
+  border: 1px solid rgba(var(--callout), 0.22);
 }
 
 .markdown .callout-title {
@@ -125,7 +125,7 @@
 /* ==highlight== */
 .markdown mark {
   padding: 0 2px;
-  border-radius: 3px;
+  border-radius: var(--r-xs);
   background: rgba(255, 208, 0, 0.4);
   color: inherit;
 }
@@ -138,7 +138,7 @@
 .markdown .md-tag {
   --tag-color: var(--accent);
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: var(--r-full);
   background: color-mix(in srgb, var(--tag-color) 13%, transparent);
   color: color-mix(in srgb, var(--tag-color) 80%, var(--text));
   font-size: 0.9em;
@@ -183,7 +183,7 @@
   margin: 12px 0;
   padding: 8px 14px 4px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
 }
 
 .markdown .note-embed-head {
@@ -191,7 +191,7 @@
   align-items: center;
   gap: 6px;
   margin-bottom: 4px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   color: var(--muted);
 }
 

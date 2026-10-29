@@ -5,12 +5,12 @@
   align-items: center;
   gap: 6px;
   margin-left: 6px;
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
   color: var(--muted);
 }
 
 .worktree-chip code {
-  font-size: 12px;
+  font-size: var(--fs-micro);
 }
 
 .worktree-review {
@@ -21,19 +21,19 @@
   gap: 12px;
   padding: 22px 24px 16px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--r-xl);
   background: var(--surface);
   box-shadow: var(--popover-shadow);
 }
 
 .worktree-head h2 {
   margin: 0 0 6px;
-  font-size: 21px;
+  font-size: var(--fs-title);
 }
 
 .worktree-head p {
   margin: 0;
-  font-size: 13.5px;
+  font-size: var(--fs-meta);
 }
 
 .worktree-empty {
@@ -50,7 +50,7 @@
   padding: 0;
   overflow-y: auto;
   list-style: none;
-  font-size: 13.5px;
+  font-size: var(--fs-meta);
 }
 
 .worktree-files li {
@@ -63,15 +63,15 @@
   flex: none;
   min-width: 56px;
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: var(--r-xs);
   text-align: center;
-  font-size: 11.5px;
+  font-size: var(--fs-micro);
   background: var(--surface-muted);
   color: var(--muted);
 }
 
 .worktree-status.added {
-  color: #1a7f37;
+  color: var(--ok);
 }
 
 .worktree-status.deleted {
@@ -93,15 +93,15 @@
   padding: 10px 12px;
   overflow: auto;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--bg);
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
   line-height: 1.5;
 }
 
 .worktree-diff .diff-add {
-  color: #1a7f37;
-  background: color-mix(in srgb, #1a7f37 8%, transparent);
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
 }
 
 .worktree-diff .diff-del {

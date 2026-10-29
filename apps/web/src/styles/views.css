@@ -5,16 +5,16 @@
   transform-origin: 0 0;
 }
 
-/* The mode bar: a quiet segmented row; the pill slides to the chosen mode. */
+/* The mode bar: a segmented row like the others; the raised cell slides to the chosen mode. */
 .mode-bar {
   position: relative;
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  padding: 3px;
+  padding: 2px;
   border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
+  border-radius: var(--r-md);
+  background: var(--segmented-bg);
   font-family: var(--font);
 }
 
@@ -22,13 +22,15 @@
   position: relative;
   z-index: 1;
   height: 28px;
-  padding: 0 13px;
+  padding: 0 var(--space-3);
   border: none;
-  border-radius: 999px;
+  border-radius: var(--r-sm);
   background: transparent;
   color: var(--muted);
-  font-size: 13.5px;
+  font-size: var(--fs-meta);
+  font-weight: 500;
   white-space: nowrap;
+  transition: color var(--dur-fast) var(--ease-out);
 }
 
 .mode-bar button:hover:not(:disabled):not(.active) {
@@ -36,7 +38,7 @@
 }
 
 .mode-bar button.active {
-  color: var(--active-text);
+  color: var(--text);
   font-weight: 600;
 }
 
@@ -46,14 +48,17 @@
 
 .mode-pill {
   position: absolute;
-  top: 3px;
+  top: 2px;
   left: 0;
   height: 28px;
-  border-radius: 999px;
-  background: var(--active-bg);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  box-shadow:
+    0 0 0 1px var(--line),
+    var(--elev-1);
   transition:
-    transform 260ms cubic-bezier(0.2, 0, 0, 1),
-    width 260ms cubic-bezier(0.2, 0, 0, 1);
+    transform var(--dur-base) var(--ease-out),
+    width var(--dur-base) var(--ease-out);
 }
 
 /* ── Home ─────────────────────────────────────────────────────────────── */
@@ -83,29 +88,30 @@
 /* Sticky at the bottom centre while home scrolls; below the content when it is short. */
 .home-mode-bar {
   position: sticky;
-  bottom: 16px;
+  bottom: var(--space-3);
   z-index: 15;
   align-self: center;
-  margin: auto 0 16px;
-  box-shadow: var(--popover-shadow);
+  margin: auto 0 var(--space-3);
+  background: var(--surface);
+  box-shadow: var(--elev-2);
 }
 
 .home-count {
   margin-left: 4px;
-  color: var(--faint);
+  color: var(--muted);
   font-weight: 500;
 }
 
 .home-quiet {
   margin: 4px 10px 0;
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--fs-ui);
 }
 
 .home-modes .home-more {
   align-self: flex-start;
   margin: 4px 10px 0;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 
 .mode-head {
@@ -113,12 +119,12 @@
   align-items: center;
   gap: 12px;
   margin: 0 0 14px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 
 /* "지금": a row, with its last reply folded open under it. */
 .home-row {
-  border-radius: 9px;
+  border-radius: var(--r-md);
 }
 
 .home-row.expanded {
@@ -156,7 +162,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 2px 14px 12px 35px;
-  font-size: 13.5px;
+  font-size: var(--fs-meta);
 }
 
 .home-reply-request {
@@ -167,7 +173,7 @@
 }
 
 .home-reply-answer .markdown {
-  font-size: 14px;
+  font-size: var(--fs-ui);
   line-height: 1.6;
   max-height: 320px;
   overflow-y: auto;
@@ -175,7 +181,7 @@
 
 .home-reply-answer .markdown :is(h1, h2, h3, h4) {
   margin: 2px 0 6px;
-  font-size: 15px;
+  font-size: var(--fs-ui);
 }
 
 .home-reply-approval {
@@ -184,7 +190,7 @@
   gap: 2px;
   padding: 7px 10px;
   border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--line));
-  border-radius: 9px;
+  border-radius: var(--r-md);
   background: var(--amber-soft);
 }
 
@@ -192,7 +198,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
 }
 
 .bucket-attention .section-label {
@@ -212,7 +218,7 @@
   min-width: 0;
   padding: 11px 12px;
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--r-lg);
   background: var(--surface);
 }
 
@@ -225,7 +231,7 @@
   border: none;
   background: transparent;
   color: var(--text);
-  font-size: 14px;
+  font-size: var(--fs-ui);
   font-weight: 600;
   text-align: left;
 }
@@ -247,12 +253,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
   color: var(--muted);
 }
 
 .work-card-meta {
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .work-chips {
@@ -270,10 +276,10 @@
   height: 24px;
   padding: 0 8px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   background: var(--surface);
   color: var(--text-soft);
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
 }
 
 .work-chip:hover {
@@ -302,10 +308,10 @@
 
 .work-chip-count {
   padding: 0 5px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--amber-soft);
   color: var(--amber-text);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 600;
 }
 
@@ -325,7 +331,7 @@
   gap: 8px;
   min-width: 0;
   padding: 8px;
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   background: color-mix(in srgb, var(--surface-muted) 55%, transparent);
 }
 
@@ -335,7 +341,7 @@
   gap: 2px;
   min-height: 30px;
   padding: 0 4px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   font-weight: 600;
   color: var(--text-soft);
 }
@@ -351,7 +357,7 @@
 .board-head .board-action {
   margin-left: auto;
   padding: 3px 6px;
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
 }
 
 .board-cards {
@@ -367,10 +373,9 @@
   gap: 3px;
   min-width: 0;
   padding: 9px 10px 9px 11px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--tone) 40%, var(--line));
+  border-radius: var(--r-lg);
   background: var(--surface);
-  box-shadow: inset 3px 0 0 var(--tone);
   color: var(--text);
   text-align: left;
   content-visibility: auto;
@@ -398,7 +403,7 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--fs-micro);
   color: var(--muted);
 }
 
@@ -417,14 +422,14 @@
 
 .board-card-age {
   flex: 0 0 auto;
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .board-card-title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
+  font-size: var(--fs-ui);
   font-weight: 600;
 }
 
@@ -433,7 +438,7 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  font-size: 12.5px;
+  font-size: var(--fs-micro);
   line-height: 1.45;
   color: var(--muted);
 }
@@ -441,16 +446,16 @@
 .board-card-badge {
   align-self: flex-start;
   padding: 1px 7px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--amber-soft);
   color: var(--amber-text);
-  font-size: 11.5px;
+  font-size: var(--fs-micro);
 }
 
 .board-empty {
   padding: 10px 6px;
-  color: var(--faint);
-  font-size: 12.5px;
+  color: var(--muted);
+  font-size: var(--fs-micro);
 }
 
 /* "지도": folders › work cards; or one mind map. */
@@ -509,7 +514,7 @@
   border: none;
   background: transparent;
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--fs-meta);
   text-align: left;
 }
 
@@ -526,8 +531,8 @@ button.flow-label:hover .flow-label-title {
 
 .flow-label-age {
   flex: 0 0 auto;
-  font-size: 11.5px;
-  color: var(--faint);
+  font-size: var(--fs-micro);
+  color: var(--muted);
 }
 
 .flow-track {
@@ -543,7 +548,7 @@ button.flow-label:hover .flow-label-title {
   position: absolute;
   bottom: 4px;
   transform: translateX(-50%);
-  font-size: 11.5px;
+  font-size: var(--fs-micro);
   color: var(--muted);
   white-space: nowrap;
 }
@@ -575,7 +580,7 @@ button.flow-label:hover .flow-label-title {
   min-width: 3px;
   padding: 0;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--r-xs);
   background: var(--accent);
   opacity: 0.82;
 }
@@ -627,7 +632,7 @@ button.flow-label:hover .flow-label-title {
   min-width: 0;
   padding: 8px 8px 10px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   background: var(--surface);
   color: var(--text);
   text-align: left;
@@ -645,7 +650,7 @@ button.flow-label:hover .flow-label-title {
   aspect-ratio: 3 / 4;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--surface-muted);
 }
 
@@ -661,6 +666,7 @@ button.flow-label:hover .flow-label-title {
   background: var(--surface);
 }
 
+/* A miniature of the page, not UI text: it keeps its own small sizes. */
 .doc-thumb-text::first-line {
   font-size: 11px;
   font-weight: 700;
@@ -689,7 +695,7 @@ button.flow-label:hover .flow-label-title {
   align-items: center;
   gap: 5px;
   min-width: 0;
-  font-size: 13.5px;
+  font-size: var(--fs-meta);
   font-weight: 600;
 }
 
@@ -703,7 +709,7 @@ button.flow-label:hover .flow-label-title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--fs-micro);
   color: var(--muted);
 }
 
@@ -717,10 +723,10 @@ button.flow-label:hover .flow-label-title {
   right: 6px;
   bottom: 6px;
   padding: 2px 8px;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--amber-soft);
   color: var(--amber-text);
-  font-size: 11.5px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--amber) 35%, transparent);
 }
@@ -735,13 +741,13 @@ button.flow-label:hover .flow-label-title {
 .work-mode-row {
   display: flex;
   justify-content: center;
-  margin: 0 0 8px;
+  margin: 0 0 var(--space-2);
 }
 
 .work-mode-bar button {
   height: 24px;
-  padding: 0 11px;
-  font-size: 13px;
+  padding: 0 10px;
+  font-size: var(--fs-micro);
 }
 
 .work-mode-bar .mode-pill {
@@ -838,7 +844,7 @@ button.flow-label:hover .flow-label-title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 15px;
+  font-size: var(--fs-ui);
   font-weight: 600;
 }
 
@@ -849,7 +855,7 @@ button.flow-label:hover .flow-label-title {
 .reader-count {
   min-width: 64px;
   text-align: center;
-  font-size: 14px;
+  font-size: var(--fs-ui);
   font-variant-numeric: tabular-nums;
 }
 

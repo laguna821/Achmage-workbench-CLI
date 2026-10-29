@@ -46,6 +46,8 @@
 //   "맥락"  answers with the developer instructions the thread started with and its sandbox
 //   "볼트에 써: <path>"  writes only where the sandbox would let Codex (work folder, temporary
 //          folders unless excluded, anything with full access) and only inside the temporary folder.
+//   "견본"  a realistic turn for design screenshots: reasoning, a plan, a command with output, a new
+//          file, then an answer with a heading, a list, a table, code and a quote (sample-reply.mjs)
 
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
@@ -57,6 +59,7 @@ import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import { crc32, deflateSync } from "node:zlib";
 import { pagePng } from "./png.mjs";
+import { SAMPLE_COMMAND, SAMPLE_FILE, SAMPLE_FILE_TEXT, SAMPLE_OUTPUT, SAMPLE_PLAN, SAMPLE_REPLY, SAMPLE_THINKING } from "./sample-reply.mjs";
 
 if (process.argv.includes("--version")) {
   console.log(`codex-cli ${process.env.FAKE_CODEX_VERSION ?? "0.0.0-fake"}`);
@@ -443,6 +446,23 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
     notify("item/started", { threadId, turnId, item: view });
     notify("item/completed", { threadId, turnId, item: view });
   }
+  const sample = text.includes("견본") && thread.sandbox !== "readOnly";
+  if (sample) {
+    const thought = { type: "reasoning", id: `rs_${++counter}`, summary: [SAMPLE_THINKING], content: [] };
+    notify("item/started", { threadId, turnId, item: thought });
+    notify("item/completed", { threadId, turnId, item: thought });
+    notify("turn/plan/updated", { threadId, turnId, explanation: null, plan: SAMPLE_PLAN.map((step, index) => ({ ...step, status: index === 0 ? "inProgress" : "pending" })) });
+    const command = { type: "commandExecution", id: `cmd_${++counter}`, command: SAMPLE_COMMAND, cwd: thread.cwd, processId: null, source: "agent", status: "inProgress", commandActions: [], aggregatedOutput: null, exitCode: null, durationMs: null };
+    notify("item/started", { threadId, turnId, item: command });
+    await sleep(60);
+    notify("item/completed", { threadId, turnId, item: { ...command, status: "completed", aggregatedOutput: SAMPLE_OUTPUT, exitCode: 0, durationMs: 40 } });
+    const file = join(thread.cwd, SAMPLE_FILE);
+    writeFileSync(file, SAMPLE_FILE_TEXT);
+    const change = { type: "fileChange", id: `patch_${++counter}`, changes: [{ path: file, kind: { type: "add" }, diff: SAMPLE_FILE_TEXT.split("\n").filter(Boolean).map((line) => `+${line}`).join("\n") }], status: "completed" };
+    notify("item/started", { threadId, turnId, item: { ...change, status: "inProgress" } });
+    notify("item/completed", { threadId, turnId, item: change });
+    notify("turn/plan/updated", { threadId, turnId, explanation: null, plan: SAMPLE_PLAN });
+  }
   let itemId = `msg_${++counter}`;
   notify("item/started", { threadId, turnId, item: { type: "agentMessage", id: itemId, text: "", phase: null, memoryCitation: null } });
   // A forked thread says so in its first answer (how many turns it brought along).
@@ -454,7 +474,7 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
   }
   const planning = thread.sandbox === "readOnly";
   const linked = planning ? null : linkReply(text, "Codex");
-  const lines = planning ? 0 : linked ? linked.length + (text.includes("길게") ? 150 : text.includes("천천히") ? 30 : 0) : text.includes("길게") ? 160 : text.includes("도식") ? 14 : 6;
+  const lines = planning || sample ? 0 : linked ? linked.length + (text.includes("길게") ? 150 : text.includes("천천히") ? 30 : 0) : text.includes("길게") ? 160 : text.includes("도식") ? 14 : 6;
   let full = `${forkSaid}${browserLine ? `${browserLine}\n\n` : ""}`;
   if (browserLine) {
     notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: `${browserLine}\n\n` });
@@ -491,6 +511,12 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
     notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: said });
   };
   if (notes.length) told(`받은 노트 사본: ${notes.join(" | ")}\n\n`);
+  if (sample) {
+    for (const paragraph of SAMPLE_REPLY) {
+      told(paragraph);
+      await sleep(20);
+    }
+  }
   if (text.includes("맥락")) told(`맥락 카드:\n${thread.instructions ?? "(없음)"}\n샌드박스: ${thread.mode} ${JSON.stringify(thread.policy ?? null)}\n\n`);
   // "받은 글 보여줘": the request exactly as the gateway handed it over (what changed before it, the
   // pins…). Not just "받은 글": every linked-session reply says "받은 글 N자를 읽었습니다".

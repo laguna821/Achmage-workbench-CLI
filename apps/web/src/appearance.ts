@@ -43,7 +43,8 @@ export type Look = {
 };
 
 export type EngineAppearance = { mode: EngineMode; light: Look; dark: Look };
-export type Appearance = Record<Provider, EngineAppearance>;
+/** `v` marks looks stored after the design pass (docs/design/DESIGN.md, 2026-10-29). */
+export type Appearance = Record<Provider, EngineAppearance> & { v?: number };
 
 export const PALETTE_FIELDS: { key: keyof Palette; label: string }[] = [
   { key: "bg", label: "화면 배경" },
@@ -70,11 +71,12 @@ export const FONT_PRESETS: { id: string; label: string; family: string | null; s
   { id: "mono", label: "고정폭", family: null, stack: "var(--mono)" },
 ];
 
-// Achmage vault, Minimal style settings (light). Codex's default light look.
+// Achmage vault, Minimal style settings (light). Codex's default light look. Body text is an ink
+// tinted toward the vault's navy rather than pure black.
 const ACHMAGE_LIGHT: Palette = {
   bg: "#ffffff",
   surface: "#ffffff",
-  text: "#000000",
+  text: "#0e1726",
   muted: "#526174",
   line: "#d7e1ec",
   accent: "#005bac",
@@ -121,14 +123,14 @@ const CODEX_MIDNIGHT: Palette = {
   codeText: "#7fd4cf",
 };
 
-// New: Claude by day. Warm paper and clay.
+// New: Claude by day. Warm paper and clay (a deeper clay, so white on it and it on paper read at AA).
 const CLAUDE_PAPER: Palette = {
   bg: "#faf9f5",
   surface: "#ffffff",
   text: "#1f1e1b",
   muted: "#73705f",
   line: "#e6e1d6",
-  accent: "#c96442",
+  accent: "#b5532f",
   motion: "#d9a05b",
   heading: "#3d2a1e",
   headingAlt: "#a4502f",
@@ -136,6 +138,41 @@ const CLAUDE_PAPER: Palette = {
   link: "#b5532f",
   codeBg: "#f1ede3",
   codeText: "#7a3a1f",
+};
+
+// The app's own frame (sidebar, top bar, menus, search): a cool neutral "desk" under the engine's
+// "paper", tinted toward the Achmage blue. Not a user look; the stylesheet's --chrome-* tokens
+// carry the same values for the top bar (docs/design/DESIGN.md 4.1).
+const DESK_LIGHT: Palette = {
+  bg: "#f3f5f8",
+  surface: "#ffffff",
+  text: "#151b27",
+  muted: "#5a6475",
+  line: "#dce1e8",
+  accent: "#005bac",
+  motion: "#00a3a0",
+  heading: "#0d1b33",
+  headingAlt: "#00328d",
+  strong: "#002870",
+  link: "#005bac",
+  codeBg: "#eef1f5",
+  codeText: "#1b2a44",
+};
+
+const DESK_DARK: Palette = {
+  bg: "#10151c",
+  surface: "#181e27",
+  text: "#e3e7ed",
+  muted: "#97a1b0",
+  line: "#2a323d",
+  accent: "#7db2f0",
+  motion: "#3cc7c0",
+  heading: "#f2f4f7",
+  headingAlt: "#a9cbf5",
+  strong: "#e9eef5",
+  link: "#7db2f0",
+  codeBg: "#1d2430",
+  codeText: "#c9d6ea",
 };
 
 const look = (palette: Palette, rest: Partial<Look> = {}): Look => ({
@@ -146,34 +183,73 @@ const look = (palette: Palette, rest: Partial<Look> = {}): Look => ({
   fontWeight: 400,
   bubble: "filled",
   borderWidth: 1,
-  radius: 16,
-  glow: "soft",
+  radius: 12,
+  glow: "off",
   frame: true,
   ...rest,
 });
 
+export const APPEARANCE_VERSION = 2;
+
 export const DEFAULT_APPEARANCE: Appearance = {
   claude: {
     mode: "follow",
-    light: look(CLAUDE_PAPER, { bubble: "soft", radius: 20 }),
+    light: look(CLAUDE_PAPER, { bubble: "soft" }),
     dark: look(ACHMAGE_DARK, { bubble: "rail" }),
   },
   codex: {
     mode: "follow",
-    light: look(ACHMAGE_LIGHT, { fontSize: 16, lineHeight: 1.7 }),
-    dark: look(CODEX_MIDNIGHT, { fontSize: 16, lineHeight: 1.7, bubble: "rail", radius: 12 }),
+    light: look(ACHMAGE_LIGHT, { fontSize: 16, lineHeight: 1.7, bubble: "soft" }),
+    dark: look(CODEX_MIDNIGHT, { fontSize: 16, lineHeight: 1.7, bubble: "rail" }),
   },
+  v: APPEARANCE_VERSION,
 };
 
 /**
  * Achmage's own look, for what belongs to no engine: the sidebar, menus and search keep it, so they
  * do not change color every time a Claude or Codex session is selected.
  */
-export const NEUTRAL_LOOK: Record<Theme, Look> = { light: look(ACHMAGE_LIGHT), dark: look(ACHMAGE_DARK) };
+export const NEUTRAL_LOOK: Record<Theme, Look> = { light: look(DESK_LIGHT), dark: look(DESK_DARK) };
+
+const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+/**
+ * Defaults before the design pass. Saving any one change stores every look whole, so a stored look
+ * from then carries these values even where the user chose nothing; such a value takes today's
+ * default. A value the user changed stays. Only looks stored before `v` 2 are read this way.
+ */
+const LEGACY_DEFAULTS: Record<Provider, Record<Theme, { glow: Glow; radius: number; bubble?: Bubble; palette: Partial<Palette> }>> = {
+  claude: {
+    light: { glow: "soft", radius: 20, palette: { accent: "#c96442" } },
+    dark: { glow: "soft", radius: 16, palette: {} },
+  },
+  codex: {
+    // A filled accent bubble per request read as a chat app; a tinted slip reads as a request.
+    light: { glow: "soft", radius: 16, bubble: "filled", palette: { text: "#000000" } },
+    dark: { glow: "soft", radius: 12, palette: {} },
+  },
+};
+
+const sameValue = (a: unknown, b: unknown) => (typeof a === "string" && typeof b === "string" ? a.toLowerCase() === b.toLowerCase() : a === b);
+
+function upgradeLook(stored: Partial<Look>, base: Look, legacy: (typeof LEGACY_DEFAULTS)[Provider][Theme]): Partial<Look> {
+  const next: Partial<Look> = { ...stored };
+  if (sameValue(stored.glow, legacy.glow)) next.glow = base.glow;
+  if (sameValue(stored.radius, legacy.radius)) next.radius = base.radius;
+  if (legacy.bubble && sameValue(stored.bubble, legacy.bubble)) next.bubble = base.bubble;
+  if (isObject(stored.palette)) {
+    const palette: Partial<Palette> = { ...stored.palette };
+    for (const [key, value] of Object.entries(legacy.palette) as [keyof Palette, string][]) {
+      if (sameValue(palette[key], value)) palette[key] = base.palette[key];
+    }
+    next.palette = palette as Palette;
+  }
+  return next;
+}
 
 /** Quick choices for the right-click menu and the settings sheet. */
 export const ACCENT_SWATCHES: Record<Theme, string[]> = {
-  light: ["#005bac", "#c96442", "#0e8a6a", "#6b4fd8", "#c2410c", "#be185d", "#0891b2", "#1f2937"],
+  light: ["#005bac", "#b5532f", "#0e8a6a", "#6b4fd8", "#c2410c", "#be185d", "#0891b2", "#1f2937"],
   dark: ["#f27aa4", "#5aa9f0", "#e08a6b", "#2bc48a", "#a78bfa", "#fb923c", "#22d3ee", "#e5e7eb"],
 };
 
@@ -182,22 +258,22 @@ export const BG_SWATCHES: Record<Theme, string[]> = {
   dark: ["#08090a", "#070b14", "#121212", "#09100e", "#100c17", "#14100d"],
 };
 
-const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value);
-
 /** Stored preferences merged over the defaults, so new options get sane values. */
 export function readAppearance(stored: unknown): Appearance {
   const source = isObject(stored) ? stored : {};
-  const mergeLook = (base: Look, value: unknown): Look => {
-    const given = isObject(value) ? (value as Partial<Look>) : {};
+  const legacy = source.v !== APPEARANCE_VERSION;
+  const mergeLook = (provider: Provider, theme: Theme, value: unknown): Look => {
+    const base = DEFAULT_APPEARANCE[provider][theme];
+    let given = isObject(value) ? (value as Partial<Look>) : {};
+    if (legacy) given = upgradeLook(given, base, LEGACY_DEFAULTS[provider][theme]);
     return { ...base, ...given, palette: { ...base.palette, ...(isObject(given.palette) ? given.palette : {}) } };
   };
   const merge = (provider: Provider): EngineAppearance => {
-    const base = DEFAULT_APPEARANCE[provider];
     const value = isObject(source[provider]) ? source[provider] : {};
     const mode = value.mode === "light" || value.mode === "dark" ? value.mode : "follow";
-    return { mode, light: mergeLook(base.light, value.light), dark: mergeLook(base.dark, value.dark) };
+    return { mode, light: mergeLook(provider, "light", value.light), dark: mergeLook(provider, "dark", value.dark) };
   };
-  return { claude: merge("claude"), codex: merge("codex") };
+  return { claude: merge("claude"), codex: merge("codex"), v: APPEARANCE_VERSION };
 }
 
 export const engineTheme = (engine: EngineAppearance, appTheme: Theme): Theme => (engine.mode === "follow" ? appTheme : engine.mode);

@@ -1,0 +1,23 @@
+UI components adapted for Achmage Workbench (apps/web)
+
+Two small components were taken from open-source galleries through the component corpus of the
+user's "component-consulting-v3" skill and rebuilt with this app's design tokens
+(docs/design/DESIGN.md §8). Only the structure that makes each one recognisable was kept; no
+gallery code is copied verbatim.
+
+1. On/off switch for settings
+   Source:  uiverse.io, "friendly-sheep-29" by zjssun
+            https://uiverse.io/zjssun/friendly-sheep-29
+            (uiverse-io/galaxy @ adbd2adde0a299a3956ea288fb444ec01891ca41)
+   License: MIT, Copyright (c) 2023 Uiverse.io — see LICENSE-uiverse
+   Used in: apps/web/src/styles.css (.check-row.switch-row), on the checkboxes of the settings
+            menu and the appearance sheet. Kept: a round knob that travels across a rounded track
+            and fills it when on. Dropped: the icons, sizes and colours.
+
+2. Loading skeleton
+   Source:  smoothui, "skeleton-loader" by Eduardo Calvo (educlopez)
+            https://smoothui.dev/r/skeleton-loader.json
+   License: MIT, Copyright (c) 2024 Eduardo Calvo — see LICENSE-smoothui
+   Used in: apps/web/src/components/Skeleton.tsx, apps/web/src/styles/skeleton.css. Kept: blocks
+            in the shape of the coming content that pulse while it loads, marked aria-busy.
+            Dropped: Tailwind classes (replaced by tokens); the pulse stops with reduced motion.
