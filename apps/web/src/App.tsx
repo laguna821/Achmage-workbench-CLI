@@ -31,6 +31,7 @@ import { LinkLayer } from "./components/LinkCards.tsx";
 import { ImportDialog } from "./components/ImportDialog.tsx";
 import { ScheduleDialog } from "./components/ScheduleDialog.tsx";
 import { WorktreeReview } from "./components/WorktreeReview.tsx";
+import { LoadingView } from "./components/Skeleton.tsx";
 import { writeDraft } from "./components/Composer.tsx";
 import { LinkContext, hopsText, linkOfSession, useLinkApi } from "./links.ts";
 import { SplitView, WorkModeBar, useWorkModeKeys } from "./components/WorkModes.tsx";
@@ -1258,6 +1259,7 @@ export function App() {
       data-theme={focusedTheme}
       data-bubble={focusedLook.bubble}
       data-frame={focusedLook.frame ? "on" : "off"}
+      data-glow={focusedLook.glow}
       style={lookStyle(focusedLook)}
     >
       <header className="topbar">
@@ -1418,11 +1420,11 @@ export function App() {
         />
       ) : null}
       {!state.ready ? (
-        <main className="loading">불러오는 중…</main>
+        <LoadingView label="불러오는 중…" shape="work" />
       ) : single && !singleSession ? (
         <main className="loading">이 세션을 찾을 수 없습니다. 보관했거나 지운 세션일 수 있습니다.</main>
       ) : (view.kind === "document" || view.kind === "split") && work ? (
-        <Suspense fallback={<main className="loading">문서를 여는 중…</main>}>
+        <Suspense fallback={<LoadingView label="문서를 여는 중…" shape="document" />}>
           <SplitView
             split={view.kind === "split"}
             ratio={typeof prefs.splitRatio === "number" ? prefs.splitRatio : 0.5}

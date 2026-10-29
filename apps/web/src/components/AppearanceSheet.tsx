@@ -239,7 +239,7 @@ export function AppearanceSheet({
             <input type="range" min={1} max={3} step={0.5} value={look.borderWidth} onChange={(event) => update({ borderWidth: Number(event.target.value) })} />
             <span className="slider-value">{look.borderWidth}px</span>
           </label>
-          <label className="check-row">
+          <label className="check-row switch-row" data-gallery="uiverse:Toggle-switches/zjssun_friendly-sheep-29" data-component="toggle">
             <input type="checkbox" checked={look.frame} onChange={(event) => update({ frame: event.target.checked })} />
             쉬는 동안에도 입력창 테두리에 엔진 색
           </label>

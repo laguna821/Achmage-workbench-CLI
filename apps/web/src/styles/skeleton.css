@@ -1,0 +1,69 @@
+/* Loading placeholders (components/Skeleton.tsx). */
+.loading.loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-9) var(--space-6);
+}
+
+.skeleton-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: var(--column);
+  margin: 0 auto;
+}
+
+.skeleton-block {
+  display: block;
+  height: 12px;
+  border-radius: var(--r-xs);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  animation: skeleton-breathe 1.6s var(--ease-in-out) infinite;
+}
+
+.skeleton-line {
+  width: 100%;
+}
+
+.skeleton-line.short {
+  width: 58%;
+}
+
+.skeleton-title {
+  width: 42%;
+  height: 22px;
+  margin-bottom: var(--space-3);
+}
+
+.skeleton-slip {
+  align-self: flex-end;
+  width: 46%;
+  height: 40px;
+  margin-bottom: var(--space-4);
+  border-radius: 14px 14px 4px 14px;
+}
+
+.loading-label {
+  max-width: var(--column);
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 var(--space-6);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
+@keyframes skeleton-breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-block {
+    animation: none;
+  }
+}

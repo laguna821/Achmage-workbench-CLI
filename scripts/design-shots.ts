@@ -17,7 +17,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
-import { chromium, type Page } from "playwright-core";
+import { chromium } from "playwright-core";
 import type { Artifact, Folder, Proposal, Session, TranscriptItem, Work } from "@workbench/contracts";
 import { makePkmVault } from "./fixtures/pkm-vault.ts";
 
