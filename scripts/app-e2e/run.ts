@@ -9,6 +9,7 @@ import { Report } from "./report.ts";
 import { startScenario, type Ctx } from "./scenarios.ts";
 import { panesScenario } from "./panes.ts";
 import { pkmScenario } from "./pkm.ts";
+import { workspacesScenario } from "./workspaces.ts";
 import { parseArgs } from "./args.ts";
 
 const { binary, outDir, only, engines } = parseArgs(process.argv.slice(2));
@@ -34,8 +35,11 @@ try {
       await startScenario(ctx);
       if (wants("panes")) await panesScenario(ctx, { binary, engines, profile: "native" });
       if (wants("pkm")) await pkmScenario(ctx);
+      if (wants("workspaces")) await workspacesScenario(ctx);
     } catch (error) {
-      report.check("실행", `${engines}: ${error instanceof Error ? error.message : String(error)}`, false);
+      const screenshot = report.path("failure.png");
+      await ctx.app.wd.screenshot(screenshot).catch(() => undefined);
+      report.check("실행", `${engines}: ${error instanceof Error ? error.message : String(error)}`, false, error instanceof Error ? error.stack : undefined, screenshot);
     } finally {
       await ctx.app.close();
     }

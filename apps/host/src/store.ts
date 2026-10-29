@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import type { Workspace } from "@workbench/contracts";
 import type { Artifact, ArtifactRevision, Folder, Handoff, Proposal, Session, SessionLink, TimelineRevision, TranscriptItem, Work } from "@workbench/contracts";
 import type { TurnMark } from "./timeline.ts";
 import { SearchIndex, documentEntry, documentKey, itemEntries, itemKey, sessionEntry, workEntry, type WorkExtras } from "./search-index.ts";
@@ -36,6 +37,7 @@ export class Store {
       PRAGMA busy_timeout = 3000;
       CREATE TABLE IF NOT EXISTS folders (id TEXT PRIMARY KEY, json TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS works (id TEXT PRIMARY KEY, json TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, work_id TEXT NOT NULL, json TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, work_id TEXT NOT NULL, json TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS items (
         session_id TEXT NOT NULL,
@@ -301,6 +303,27 @@ export class Store {
 
   sessions(): Session[] {
     return this.all<Session>("SELECT json FROM sessions");
+  }
+
+  workspaces(): Workspace[] {
+    return this.all<Workspace>("SELECT json FROM workspaces");
+  }
+
+  saveWorkspace(workspace: Workspace) {
+    this.db.prepare("INSERT OR REPLACE INTO workspaces (id, work_id, json) VALUES (?, ?, ?)").run(workspace.id, workspace.workId, JSON.stringify(workspace));
+  }
+
+  /** Additive data migrations commit together or leave all original rows intact. */
+  transaction<T>(run: () => T): T {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const result = run();
+      this.db.exec("COMMIT");
+      return result;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   saveFolder(folder: Folder) {

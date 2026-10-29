@@ -130,6 +130,14 @@ function setup() {
 }
 
 describe("importing a conversation", () => {
+  it("reuses a connected workspace instead of making another project for the same cwd", async () => {
+    const { manager, dir } = setup();
+    const work = manager.createWork({ title: "기존 프로젝트" });
+    const workspace = manager.createWorkspace(work.id, { cwd: dir });
+    const session = await manager.importSession({ provider: "codex", nativeSessionId: "thr_term" });
+    expect(session).toMatchObject({ workId: work.id, workspaceId: workspace.id, nativeSessionId: "thr_term" });
+    expect(manager.snapshot().works).toHaveLength(1);
+  });
   it("binds a session to it in the work of its folder, with its record and the note where it came from", async () => {
     const { manager, dir } = setup();
     const before = manager.createWork({ title: "같은 폴더", cwd: dir });

@@ -151,6 +151,27 @@ describe("templates", () => {
 });
 
 describe("drawing", () => {
+  it("keeps the drawing helper and image files inside the originating workspace", async () => {
+    const { manager, work, cwd, codex } = setup();
+    const other = join(cwd, "second"); mkdirSync(other);
+    const workspace = manager.createWorkspace(work.id, { cwd: other });
+    const first = manager.createSession(work.id, { provider: "claude" });
+    const second = manager.createSession(work.id, { provider: "claude", workspaceId: workspace.id });
+    const base = await manager.images.draw(first.id, { requestId: "base-draw", brief: "기본 그림" });
+    codex.end(base.image.drawSessionId);
+    const result = await manager.images.draw(second.id, { requestId: "other-draw", brief: "다른 그림" });
+    const helper = manager.snapshot().sessions.find((entry) => entry.id === result.image.drawSessionId)!;
+    expect(helper.workspaceId).toBe(workspace.id);
+    expect(helper.id).not.toBe(base.image.drawSessionId);
+    const path = join(cwd, "native.png"); writeFileSync(path, png(20, 20));
+    manager.sink.image?.(helper.id, { id: "other-image", status: "completed", result: null, savedPath: path, revisedPrompt: null, failure: null });
+    codex.end(helper.id);
+    const done = manager.images.get(result.image.id);
+    expect(done).toMatchObject({ workspaceId: workspace.id, status: "done" });
+    expect(done.path!.startsWith(join(other, "images"))).toBe(true);
+    expect(manager.images.file(work.id, done.relPath!, workspace.id).path).toBe(done.path);
+    expect(() => manager.images.file(work.id, "../native.png", workspace.id)).toThrow(/밖/);
+  });
   it("a Codex conversation draws itself: the engine gets the drawing instructions, the conversation shows the request", async () => {
     const { manager, codex, work, cwd } = setup();
     const session = manager.createSession(work.id, { provider: "codex" });

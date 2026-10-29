@@ -60,6 +60,8 @@ import type {
   UpdateSessionRequest,
   UpdateWorkRequest,
   Work,
+  Workspace,
+  UpdateWorkspaceRequest,
 } from "@workbench/contracts";
 
 const TOKEN_KEY = "workbench.token";
@@ -125,11 +127,13 @@ export class Api {
   exportMarkdown = (sessionId: string, request: ExportMarkdownRequest) => this.request<ExportMarkdownResult>("POST", `/api/sessions/${sessionId}/export`, request);
   createWork = (title: string, folderId: string | null, cwd: string | null) => this.request<Work>("POST", "/api/works", { title, folderId, cwd });
   updateWork = (workId: string, patch: UpdateWorkRequest) => this.request<Work>("PATCH", `/api/works/${workId}`, patch);
-  createSession = (workId: string, provider: Provider, options?: { purpose?: string; model?: string | null; effort?: string | null; browser?: boolean; worktree?: boolean }) =>
+  createWorkspace = (workId: string, cwd: string, label?: string) => this.request<Workspace>("POST", `/api/works/${workId}/workspaces`, { cwd, label });
+  updateWorkspace = (id: string, patch: UpdateWorkspaceRequest) => this.request<Workspace>("PATCH", `/api/workspaces/${id}`, patch);
+  createSession = (workId: string, provider: Provider, options?: { workspaceId?: string; purpose?: string; model?: string | null; effort?: string | null; browser?: boolean; worktree?: boolean }) =>
     this.request<Session>("POST", `/api/works/${workId}/sessions`, { provider, ...options });
   updateSession = (sessionId: string, patch: UpdateSessionRequest) => this.request<Session>("PATCH", `/api/sessions/${sessionId}`, patch);
   /** A new Markdown page in the work folder. */
-  createPage = (workId: string, name = "") => this.request<Artifact>("POST", `/api/works/${workId}/pages`, { name });
+  createPage = (workId: string, name = "", workspaceId?: string) => this.request<Artifact>("POST", `/api/works/${workId}/pages`, { name, workspaceId });
   /** "가져오기": conversations an engine keeps on this computer, and continuing one here. */
   importCandidates = (provider: Provider, query: string) =>
     this.request<{ candidates: ImportCandidate[] }>("GET", `/api/import?${new URLSearchParams({ provider, q: query })}`).then((result) => result.candidates);
@@ -214,8 +218,8 @@ export class Api {
   extendLink = (linkId: string) => this.request<SessionLink>("POST", `/api/links/${linkId}/extend`);
   linkTurns = (linkId: string) => this.request<{ link: SessionLink; turns: LinkTurn[] }>("GET", `/api/links/${linkId}/turns`);
   exportLink = (linkId: string, request: ExportMarkdownRequest) => this.request<ExportMarkdownResult>("POST", `/api/links/${linkId}/export`, request);
-  openFile = (workId: string, path: string) => this.request<Artifact>("POST", `/api/works/${workId}/artifacts`, { path });
-  createDesign = (workId: string, name: string, preset: string) => this.request<Artifact>("POST", `/api/works/${workId}/designs`, { name, preset });
+  openFile = (workId: string, path: string, workspaceId?: string) => this.request<Artifact>("POST", `/api/works/${workId}/artifacts`, { path, workspaceId });
+  createDesign = (workId: string, name: string, preset: string, workspaceId?: string) => this.request<Artifact>("POST", `/api/works/${workId}/designs`, { name, preset, workspaceId });
   officePages = (artifactId: string, revision: number) =>
     this.request<{ revision: number; pages: { page: number; width: number; height: number }[] }>("GET", `/api/artifacts/${artifactId}/office-pages?revision=${revision}`);
   proposalOfficePages = (proposalId: string, side: "base" | "proposed") =>

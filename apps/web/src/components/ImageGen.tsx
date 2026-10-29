@@ -63,7 +63,7 @@ export function DrawPill({
   const template = templates?.templates.find((entry) => entry.id === value.choice.templateId) ?? null;
   const codex = state.providers.codex;
   const unavailable = codex ? codex.installed === false || codex.imageGeneration === false : false;
-  const others = codexSessions(state, work.id).filter((entry) => entry.id !== session?.id);
+  const others = codexSessions(state, work.id).filter((entry) => entry.id !== session?.id && entry.workspaceId === (session?.workspaceId ?? work.defaultWorkspaceId));
   const rows = [{ id: null as string | null, name: "없음", prompt: "", mine: false }, ...(templates?.templates ?? []).map((entry) => ({ id: entry.id as string | null, name: entry.name, prompt: entry.prompt, mine: !entry.builtIn }))];
   const set = (patch: Partial<DrawState>) => onChange({ ...value, ...patch });
   const choose = (patch: Partial<DrawChoice>) => onChange({ ...value, on: true, choice: { ...value.choice, ...patch } });
@@ -290,7 +290,7 @@ export function ImageCard({ item, viewer, compact }: { item: ImageItem; viewer: 
   const { state, actions } = useDocs();
   useDocVersion();
   const info = item.image;
-  const picture = usePicture(info.status === "done" ? info.workId : null, info.relPath ?? info.path);
+  const picture = usePicture(info.status === "done" ? info.workId : null, info.relPath ?? info.path, info.workspaceId);
   const [viewing, setViewing] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const drawer = state.sessions[info.drawSessionId];

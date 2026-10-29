@@ -67,6 +67,22 @@ function setup(repository = true) {
 }
 
 describe("격리 사본", () => {
+  it("shares one workspace across sessions and blocks removal while any of them is running", async () => {
+    const { manager, work } = setup();
+    const first = await manager.createIsolatedSession(work.id, { provider: "codex" });
+    const second = manager.createSession(work.id, { provider: "codex", workspaceId: first.workspaceId });
+    expect(second.worktree).toEqual(first.worktree);
+    manager.sink.updateSession(second.id, { status: "running" });
+    await expect(manager.discardWorktree(first.id)).rejects.toThrow("실행 중");
+    expect(existsSync(first.worktree!.path)).toBe(true);
+    manager.sink.updateSession(second.id, { status: "idle" });
+    await manager.discardWorktree(first.id);
+    expect(existsSync(first.worktree!.path)).toBe(false);
+    expect(manager.snapshot().sessions.filter((entry) => entry.workspaceId === first.workspaceId).every((entry) => entry.archivedAt !== null)).toBe(true);
+    expect(manager.workspaces.get(first.workspaceId!).removedAt).not.toBeNull();
+    expect(() => manager.updateWorkspace(first.workspaceId!, { archived: false })).toThrow("제거된");
+  });
+
   it("works in a worktree on a branch of its own, in the work's subfolder", async () => {
     const { manager, engine, work, repo } = setup();
     const session = await manager.createIsolatedSession(work.id, { provider: "codex" });

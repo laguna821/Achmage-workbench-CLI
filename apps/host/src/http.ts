@@ -310,6 +310,17 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           }),
         );
       }
+      if (parts[0] === "works" && parts[1] && parts[2] === "workspaces" && parts.length === 3) {
+        if (method === "GET") return sendJson(res, 200, { workspaces: manager.workspaces.list().filter((entry) => entry.workId === parts[1]) });
+        if (method === "POST") {
+          const body = await readJson(req);
+          return sendJson(res, 201, manager.createWorkspace(parts[1], { cwd: String(body.cwd ?? ""), label: typeof body.label === "string" ? body.label : undefined }));
+        }
+      }
+      if (parts[0] === "workspaces" && parts[1] && parts.length === 2 && method === "PATCH") {
+        const body = await readJson(req);
+        return sendJson(res, 200, manager.updateWorkspace(parts[1], { label: typeof body.label === "string" ? body.label : undefined, archived: typeof body.archived === "boolean" ? body.archived : undefined }));
+      }
       if (parts[0] === "works" && parts[1] && parts[2] === "sessions" && method === "POST") {
         const body = await readJson(req);
         return sendJson(
@@ -317,6 +328,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           201,
           await (body.worktree === true ? manager.createIsolatedSession.bind(manager) : async (workId: string, request: CreateSessionRequest) => manager.createSession(workId, request))(parts[1], {
             provider: body.provider as Provider,
+            workspaceId: typeof body.workspaceId === "string" ? body.workspaceId : undefined,
             purpose: body.purpose as string | undefined,
             model: (body.model as string | null) ?? null,
             effort: (body.effort as string | null) ?? null,
@@ -333,7 +345,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       if (path === "/api/image-templates" && method === "GET") return sendJson(res, 200, manager.images.templates());
       if (path === "/api/image-templates" && method === "PUT") return sendJson(res, 200, manager.images.saveTemplates(await readJson(req)));
       if (parts[0] === "works" && parts[1] && parts[2] === "image" && method === "GET") {
-        const file = manager.images.file(parts[1], url.searchParams.get("path") ?? "");
+        const file = manager.images.file(parts[1], url.searchParams.get("path") ?? "", url.searchParams.get("workspaceId") ?? undefined);
         res.writeHead(200, { "content-type": file.type, "cache-control": "no-cache", "x-content-type-options": "nosniff" });
         createReadStream(file.path).pipe(res);
         return;
@@ -414,12 +426,12 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       }
       if (parts[0] === "works" && parts[1] && parts[2] === "pages" && method === "POST") {
         const body = await readJson(req);
-        return sendJson(res, 201, manager.createPage(parts[1], typeof body.name === "string" ? body.name : ""));
+        return sendJson(res, 201, manager.createPage(parts[1], typeof body.name === "string" ? body.name : "", typeof body.workspaceId === "string" ? body.workspaceId : undefined));
       }
       if (parts[0] === "works" && parts[1] && parts[2] === "designs" && method === "POST") {
         const body = await readJson(req, 64_000_000);
         const preset = (typeof body.preset === "string" && body.preset in DESIGN_PRESETS ? body.preset : "square") as DesignPreset;
-        return sendJson(res, 201, manager.createDesign(parts[1], String(body.name ?? ""), preset, typeof body.text === "string" ? body.text : null));
+        return sendJson(res, 201, manager.createDesign(parts[1], String(body.name ?? ""), preset, typeof body.text === "string" ? body.text : null, typeof body.workspaceId === "string" ? body.workspaceId : undefined));
       }
       if (path === "/api/schedules" && method === "GET") return sendJson(res, 200, { schedules: manager.schedules.all() });
       if (path === "/api/schedules" && method === "POST") {
@@ -477,7 +489,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       }
       if (parts[0] === "works" && parts[1] && parts[2] === "artifacts" && method === "POST") {
         const body = await readJson(req);
-        return sendJson(res, 200, manager.openFile(parts[1], String(body.path ?? "")));
+        return sendJson(res, 200, manager.openFile(parts[1], String(body.path ?? ""), typeof body.workspaceId === "string" ? body.workspaceId : undefined));
       }
       // Pictures in documents: R2 settings, pasted images, Markdown preview pictures, the desktop clipboard's picture.
       if (options.docImages && (await routeDocImages(options.docImages, req, res, url))) return;

@@ -16,6 +16,7 @@ import {
   type TranscriptItem,
   type UiPrefs,
   type Work,
+  type Workspace,
 } from "@workbench/contracts";
 
 export type Transcript = { items: TranscriptItem[]; seq: number };
@@ -27,6 +28,7 @@ export type State = {
   seq: number;
   folders: Record<string, Folder>;
   works: Record<string, Work>;
+  workspaces: Record<string, Workspace>;
   sessions: Record<string, Session>;
   providers: Partial<Record<Provider, ProviderStatus>>;
   transcripts: Record<string, Transcript>;
@@ -51,6 +53,7 @@ export const initialState: State = {
   seq: 0,
   folders: {},
   works: {},
+  workspaces: {},
   sessions: {},
   providers: {},
   transcripts: {},
@@ -90,6 +93,7 @@ export function reducer(state: State, action: Action): State {
         seq: snapshot.seq,
         folders: byId(snapshot.folders),
         works: byId(snapshot.works),
+        workspaces: byId(snapshot.workspaces ?? []),
         sessions: byId(snapshot.sessions),
         providers: Object.fromEntries(snapshot.providers.map((status) => [status.provider, status])),
         // Loaded transcripts may have missed events; they are refetched on demand.
@@ -130,6 +134,8 @@ export function reducer(state: State, action: Action): State {
         }
         case "work.upserted":
           return { ...next, works: { ...state.works, [event.work.id]: event.work } };
+        case "workspace.upserted":
+          return { ...next, workspaces: { ...state.workspaces, [event.workspace.id]: event.workspace } };
         case "session.upserted":
           return { ...next, sessions: { ...state.sessions, [event.session.id]: event.session } };
         case "prefs.updated":

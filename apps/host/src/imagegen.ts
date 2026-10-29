@@ -33,7 +33,7 @@ import type { EngineImage } from "./providers/types.ts";
 /** What drawing needs from the session manager (sessions.ts wires it). */
 export type ImageHost = {
   session(id: string): Session | undefined;
-  work(id: string): Work | undefined;
+  work(id: string, workspaceId?: string): Work | undefined;
   sessions(): Session[];
   /** A new session that does not become the one the work shows. */
   createSession(workId: string, request: CreateSessionRequest): Session;
@@ -281,7 +281,7 @@ export class ImageGen {
       if (existing.originSessionId !== originId || existing.brief !== brief) throw new HttpError(409, "request_id_conflict", "같은 requestId로 다른 그림을 요청했습니다.");
       return { duplicate: true, image: existing };
     }
-    const work = this.host.work(origin.workId);
+    const work = this.host.work(origin.workId, origin.workspaceId);
     if (!work) throw new HttpError(404, "work_not_found", "작업을 찾지 못했습니다.");
     const { templates, rules } = this.templates();
     const template = request.templateId ? templates.find((entry) => entry.id === request.templateId) : null;
@@ -293,6 +293,7 @@ export class ImageGen {
     const info: ImageInfo = {
       id,
       workId: work.id,
+      workspaceId: origin.workspaceId,
       originSessionId: origin.id,
       drawSessionId: drawer.id,
       status: "drawing",
@@ -337,10 +338,10 @@ export class ImageGen {
   }
 
   private drawerFor(origin: Session, work: Work, via: string | null): Session {
-    const codex = this.host.sessions().filter((session) => session.workId === work.id && session.provider === "codex" && !session.archivedAt);
+    const codex = this.host.sessions().filter((session) => session.workId === work.id && session.workspaceId === origin.workspaceId && session.provider === "codex" && !session.archivedAt);
     const free = (session: Session) => session.status === "idle" || session.status === "error";
-    if (via === "new") return this.newHelper(work);
-    if (via === "helper") return this.helperOf(work, codex);
+    if (via === "new") return this.newHelper(work, origin.workspaceId);
+    if (via === "helper") return this.helperOf(work, codex, origin.workspaceId);
     if (via) {
       const chosen = codex.find((session) => session.id === via);
       if (!chosen) throw new HttpError(404, "draw_session_not_found", "그릴 Codex 세션을 찾지 못했습니다.");
@@ -352,20 +353,20 @@ export class ImageGen {
       return origin;
     }
     // Claude cannot draw: the work's drawing session does, apart from Codex conversations about other things.
-    return this.helperOf(work, codex);
+    return this.helperOf(work, codex, origin.workspaceId);
   }
 
   /** The work's drawing session (made on first use). */
-  private helperOf(work: Work, codex: Session[]) {
-    const helper = codex.find((session) => session.id === this.helpers.get(work.id)) ?? codex.findLast((session) => session.purpose === HELPER_PURPOSE);
-    if (!helper) return this.newHelper(work);
+  private helperOf(work: Work, codex: Session[], workspaceId?: string) {
+    const helper = codex.find((session) => session.id === this.helpers.get(workspaceId ?? work.id)) ?? codex.findLast((session) => session.purpose === HELPER_PURPOSE);
+    if (!helper) return this.newHelper(work, workspaceId);
     if (helper.status !== "idle" && helper.status !== "error") throw new HttpError(409, "session_busy", "Codex가 앞선 그림을 그리는 중입니다. 끝나면 다시 보내거나, 그림 메뉴에서 다른 Codex 세션을 고르세요.");
     return helper;
   }
 
-  private newHelper(work: Work) {
-    const session = this.host.createSession(work.id, { provider: "codex", purpose: HELPER_PURPOSE });
-    this.helpers.set(work.id, session.id);
+  private newHelper(work: Work, workspaceId?: string) {
+    const session = this.host.createSession(work.id, { provider: "codex", purpose: HELPER_PURPOSE, workspaceId });
+    this.helpers.set(workspaceId ?? work.id, session.id);
     this.persist();
     return session;
   }
@@ -373,7 +374,7 @@ export class ImageGen {
   /** Codex finished a picture: copy it into the work folder and show it in both conversations. */
   onEngineImage(sessionId: string, image: EngineImage) {
     const session = this.host.session(sessionId);
-    const work = session ? this.host.work(session.workId) : undefined;
+    const work = session ? this.host.work(session.workId, session.workspaceId) : undefined;
     if (!session || !work || this.handled.has(image.id)) return;
     this.handled.add(image.id);
     const jobId = this.turns.get(sessionId);
@@ -384,6 +385,7 @@ export class ImageGen {
       info = {
         id: `codex:${image.id}`,
         workId: work.id,
+        workspaceId: session.workspaceId,
         originSessionId: job?.originSessionId ?? sessionId,
         drawSessionId: sessionId,
         status: "drawing",
@@ -456,8 +458,8 @@ export class ImageGen {
   }
 
   /** A picture file inside a work folder (only raster images, never outside the folder). */
-  file(workId: string, raw: string) {
-    const work = this.host.work(workId);
+  file(workId: string, raw: string, workspaceId?: string) {
+    const work = this.host.work(workId, workspaceId);
     if (!work) throw new HttpError(404, "work_not_found", "작업을 찾지 못했습니다.");
     if (!raw.trim()) throw new HttpError(400, "missing_path", "그림 경로가 필요합니다.");
     const path = isAbsolute(raw) ? raw : resolve(work.cwd, raw);

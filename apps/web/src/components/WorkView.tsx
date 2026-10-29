@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { EFFORT_LABEL, PROVIDER_LABEL, accessFor, type AccessMode, type Attachment, type CreateTarget, type DocRef, type EngineCommand, type Provider, type Session, type UiPrefs, type Work } from "@workbench/contracts";
+import { EFFORT_LABEL, PROVIDER_LABEL, accessFor, type AccessMode, type Attachment, type CreateTarget, type DocRef, type EngineCommand, type Provider, type Session, type UiPrefs, type Work, type Workspace, type UpdateWorkspaceRequest } from "@workbench/contracts";
 import type { ReactNode } from "react";
 import type { MentionItem } from "../mention.ts";
 import { CreateChip, CreateTargetButton, stemOf } from "./CreateTarget.tsx";
@@ -12,6 +12,7 @@ import { EditableText } from "./EditableText.tsx";
 import { ModelPicker, type ModelChoice } from "./ModelPicker.tsx";
 import { Icon } from "./Icon.tsx";
 import { MenuItem, Popover } from "./Popover.tsx";
+import { WorkspacePicker } from "./WorkspacePicker.tsx";
 import { EngineMark } from "./EngineMark.tsx";
 import { EngineTabs } from "./StartView.tsx";
 import { accentStyle, useAppearance } from "../appearance.ts";
@@ -53,11 +54,13 @@ export type WorkActions = {
   draw: (session: Session, brief: string, draw: DrawState) => Promise<boolean>;
   pickSession: (work: Work, exclude: Session | null) => Promise<Session | null>;
   openArtifact: (artifactId: string) => void;
-  openFile: (work: Work, path: string) => Promise<void>;
-  newDesign: (work: Work, preset: string) => Promise<void>;
+  openFile: (work: Work, path: string, workspaceId?: string) => Promise<void>;
+  newDesign: (work: Work, preset: string, workspaceId?: string) => Promise<void>;
   interrupt: (session: Session) => void;
   answer: (session: Session, itemId: string, decision: "accept" | "decline") => void;
-  newSession: (work: Work, provider: Provider, choice?: ModelChoice, options?: { browser?: boolean; worktree?: boolean }) => Promise<Session | null>;
+  newSession: (work: Work, provider: Provider, choice?: ModelChoice, options?: { browser?: boolean; worktree?: boolean; workspaceId?: string }) => Promise<Session | null>;
+  createWorkspace: (work: Work, cwd: string) => Promise<Workspace | null>;
+  updateWorkspace: (workspace: Workspace, patch: UpdateWorkspaceRequest) => Promise<Workspace | null>;
   /** "변경 검토" of a session working in a git worktree ("격리 사본"). */
   reviewWorktree: (session: Session) => void;
   selectSession: (work: Work, session: Session) => void;
@@ -297,8 +300,11 @@ export function WorkView({
   // Archived sessions leave the tabs (they stay in the archive), unless one is on screen.
   const listed = workSessions(state, work.id);
   const shown = (work.activeSessionId && state.sessions[work.activeSessionId]) || listed[listed.length - 1] || sessionsOf(state, work.id).at(-1) || null;
-  const sessions = shown && shown.archivedAt ? [...listed, shown] : listed;
   const active = shown;
+  const workspace = state.workspaces[active?.workspaceId ?? work.defaultWorkspaceId ?? ""];
+  const cwd = workspace?.cwd ?? active?.worktree?.cwd ?? work.cwd;
+  const members = listed.filter((entry) => !workspace || entry.workspaceId === workspace.id);
+  const sessions = shown && shown.archivedAt ? [...members, shown] : members;
   const [moreOpen, setMoreOpen] = useState(false);
   const closeMore = useCallback(() => setMoreOpen(false), []);
   const archivedFolder = (() => {
@@ -415,6 +421,7 @@ export function WorkView({
     <main className="work-view" onContextMenu={(event) => openMenu(event, active?.provider ?? engine)}>
       {tabs}
       <div className="column context-row">
+        <WorkspacePicker state={state} work={work} session={active} engine={engine} actions={actions} />
         <div className="anchor breadcrumb-anchor">
           <button type="button" className="breadcrumb" onClick={() => setFolderOpen(!folderOpen)} title="분류 옮기기" aria-expanded={folderOpen}>
             {path.length ? path.map((folder) => folder.name).join(" / ") : <span className="muted">분류 없음</span>}
@@ -478,7 +485,7 @@ export function WorkView({
                 hint={preset.size}
                 onSelect={() => {
                   setDocsOpen(false);
-                  void actions.newDesign(work, preset.id);
+                  void actions.newDesign(work, preset.id, workspace?.id);
                 }}
               >
                 {preset.label}
@@ -489,8 +496,8 @@ export function WorkView({
               <MenuItem
                 onSelect={() => {
                   setDocsOpen(false);
-                  void pickFile(work.cwd).then((path) => {
-                    if (path) void actions.openFile(work, path);
+                  void pickFile(cwd).then((path) => {
+                    if (path) void actions.openFile(work, path, workspace?.id);
                   });
                 }}
               >
@@ -503,7 +510,7 @@ export function WorkView({
                   event.preventDefault();
                   if (!pathInput.trim()) return;
                   setDocsOpen(false);
-                  void actions.openFile(work, pathInput.trim());
+                  void actions.openFile(work, pathInput.trim(), workspace?.id);
                   setPathInput("");
                 }}
               >
@@ -554,7 +561,7 @@ export function WorkView({
                 <dt>실행 위치</dt>
                 <dd>{state.hostLabel}</dd>
                 <dt>작업 폴더</dt>
-                <dd className="mono">{work.cwd}</dd>
+                <dd className="mono">{cwd}</dd>
                 {active.lastError ? (
                   <>
                     <dt>마지막 오류</dt>
@@ -692,6 +699,7 @@ export function WorkView({
           />
         ) : null}
         <Composer
+          disabled={Boolean(workspace?.archivedAt || workspace?.removedAt)}
           mentions={
             // A drawing goes without documents, so "@" is off while drawing is on.
             draw.on
@@ -828,7 +836,7 @@ export function WorkView({
                 active={active}
                 hostLabel={state.hostLabel}
                 onSelect={(session) => actions.selectSession(work, session)}
-                onNew={(provider, worktree) => void actions.newSession(work, provider, undefined, worktree ? { worktree: true } : undefined)}
+                onNew={(provider, worktree) => void actions.newSession(work, provider, undefined, { workspaceId: workspace?.id, ...(worktree ? { worktree: true } : {}) })}
                 onHandoff={() => void actions.pickSession(work, active).then((picked) => picked && picked.id !== active.id && setHandoffTo(picked))}
               />
             ) : null}

@@ -11,6 +11,9 @@ import {
   type ApprovalDecision,
   type CreateSessionRequest,
   type CreateWorkRequest,
+  type CreateWorkspaceRequest,
+  type UpdateWorkspaceRequest,
+  type Workspace,
   type Folder,
   type Provider,
   type ProviderStatus,
@@ -49,6 +52,7 @@ import type { EventBus } from "./bus.ts";
 import { HttpError } from "./errors.ts";
 import { folderColor, folderIcon, liftOut } from "./folders.ts";
 import { Documents, isWorkbenchPath } from "./artifacts.ts";
+import { Workspaces } from "./workspaces.ts";
 import type { Kordoc } from "./kordoc.ts";
 import type { AdapterSink, LoginStart, ProviderAdapter } from "./providers/types.ts";
 import type { Store } from "./store.ts";
@@ -246,6 +250,7 @@ export class SessionManager {
   /** The new document each running request asked for. */
   private readonly creating = new Map<string, PendingCreate>();
   readonly documents: Documents;
+  readonly workspaces: Workspaces;
   /** "그림": pictures drawn with GPT Image through Codex (imagegen.ts). */
   readonly images: ImageGen;
   /** Linked sessions ("세션 잇기"): replies relayed between sessions in turn (links.ts). */
@@ -270,7 +275,8 @@ export class SessionManager {
     this.store = store;
     this.bus = bus;
     this.options = options;
-    this.documents = new Documents(store, bus, options.dataDir ?? dirname(options.managedWorksDir), options.kordoc ?? null, options.ieum ?? null);
+    this.workspaces = new Workspaces(store, options.hostId, bus);
+    this.documents = new Documents(store, bus, options.dataDir ?? dirname(options.managedWorksDir), options.kordoc ?? null, options.ieum ?? null, this.workspaces);
     this.engineSetup = new EngineInstaller({
       dataDir: options.dataDir ?? dirname(options.managedWorksDir),
       onChange: (engine, state) => {
@@ -300,7 +306,12 @@ export class SessionManager {
     this.images = new ImageGen(
       {
         session: (id) => this.sessions.get(id),
-        work: (id) => this.works.get(id),
+        work: (id, workspaceId) => {
+          const work = this.works.get(id);
+          if (!work || !workspaceId) return work;
+          const workspace = this.workspaces.list().find((entry) => entry.id === workspaceId && entry.workId === id);
+          return workspace ? { ...work, cwd: workspace.cwd } : undefined;
+        },
         sessions: () => [...this.sessions.values()],
         createSession: (workId, request) => this.createSession(workId, request, false),
         send: (sessionId, requestId, text, from, options) => this.send(sessionId, requestId, text, [], from, null, "auto", { ...options, activate: false }),
@@ -372,7 +383,8 @@ export class SessionManager {
     options.browse?.bind({
       lookup: (sessionId) => {
         const session = this.sessions.get(sessionId);
-        const work = session ? this.works.get(session.workId) : undefined;
+        const project = session ? this.works.get(session.workId) : undefined;
+        const work = session && project ? this.engineWork(session, project) : undefined;
         return session && work ? { session, work, access: this.accessOf(session) } : null;
       },
       sessions: () => [...this.sessions.values()],
@@ -614,6 +626,7 @@ export class SessionManager {
       hostLabel: this.options.hostLabel,
       folders: [...this.folders.values()],
       works: [...this.works.values()],
+      workspaces: this.workspaces.list(),
       sessions: [...this.sessions.values()],
       providers: [...this.adapters.values()].map((adapter) => this.engineSetup.decorate(adapter.status())),
       prefs: this.prefs(),
@@ -905,8 +918,29 @@ export class SessionManager {
       createdAt: now,
       updatedAt: now,
     };
+    work.defaultWorkspaceId = this.workspaces.defaultFor(work).id;
     this.saveWork(work);
     return work;
+  }
+
+  createWorkspace(workId: string, request: CreateWorkspaceRequest) {
+    return this.workspaces.create(this.requireWork(workId), request);
+  }
+
+  updateWorkspace(id: string, patch: UpdateWorkspaceRequest) {
+    const workspace = this.workspaces.get(id);
+    if (workspace.removedAt !== null) throw new HttpError(409, "workspace_removed", "폴더가 제거된 작업공간입니다. 기록은 그대로 보관합니다.");
+    if (patch.archived) this.assertWorkspaceIdle(workspace);
+    return this.workspaces.update(workspace, {
+      ...(typeof patch.label === "string" && patch.label.trim() ? { label: patch.label.trim().slice(0, 80) } : {}),
+      ...(typeof patch.archived === "boolean" ? { archivedAt: patch.archived ? Date.now() : null } : {}),
+    });
+  }
+
+  private assertWorkspaceIdle(workspace: Workspace) {
+    if ([...this.sessions.values()].some((session) => session.workspaceId === workspace.id && session.status !== "idle" && session.status !== "error")) {
+      throw new HttpError(409, "workspace_busy", "이 작업공간에서 실행 중인 세션이 있습니다. 모두 끝나거나 멈춘 뒤에 진행하세요.");
+    }
   }
 
   /**
@@ -943,6 +977,7 @@ export class SessionManager {
   /** `activate`: the new session becomes the one its work shows (not for a drawing session made on the side). */
   createSession(workId: string, request: CreateSessionRequest, activate = true): Session {
     const work = this.requireWork(workId);
+    const workspace = this.workspaces.requireActive(request.workspaceId ?? this.workspaces.defaultFor(work).id, workId);
     if (request.provider !== "claude" && request.provider !== "codex") {
       throw new HttpError(400, "invalid_provider", "지원하지 않는 엔진입니다.");
     }
@@ -951,6 +986,8 @@ export class SessionManager {
     const session: Session = {
       id: randomUUID(),
       workId,
+      workspaceId: workspace.id,
+      ...(workspace.worktree ? { worktree: workspace.worktree } : {}),
       provider: request.provider,
       hostId: this.options.hostId,
       nativeSessionId: null,
@@ -987,9 +1024,11 @@ export class SessionManager {
     const work = this.requireWork(workId);
     if (request.provider !== "claude" && request.provider !== "codex") throw new HttpError(400, "invalid_provider", "지원하지 않는 엔진입니다.");
     // The copy first: a session is made only once it exists.
-    const worktree = await createWorktree(work.cwd, this.options.dataDir ?? dirname(this.options.managedWorksDir), randomUUID());
-    const session = this.createSession(workId, { ...request, worktree: false });
-    this.saveSession({ ...this.requireSession(session.id), worktree, purpose: request.purpose?.trim() || `${session.purpose} · 격리 사본` });
+    const source = this.workspaces.requireActive(request.workspaceId ?? this.workspaces.defaultFor(work).id, workId);
+    const worktree = await createWorktree(source.cwd, this.options.dataDir ?? dirname(this.options.managedWorksDir), randomUUID());
+    const workspace = this.workspaces.fromWorktree(work, worktree);
+    const session = this.createSession(workId, { ...request, workspaceId: workspace.id, worktree: false });
+    this.saveSession({ ...this.requireSession(session.id), purpose: request.purpose?.trim() || `${session.purpose} · 격리 사본` });
     return this.requireSession(session.id);
   }
 
@@ -1010,6 +1049,7 @@ export class SessionManager {
     const session = this.requireSession(sessionId);
     if (!session.worktree) throw new HttpError(409, "no_worktree", "격리 사본에서 일하는 세션이 아닙니다.");
     if (session.status !== "idle" && session.status !== "error") throw new HttpError(409, "session_busy", "응답이 끝난 뒤에 적용할 수 있습니다.");
+    if (session.workspaceId) this.assertWorkspaceIdle(this.workspaces.get(session.workspaceId));
     await applyWorktree(session.worktree);
     this.sink.upsertItem(sessionId, { kind: "notice", id: `worktree-applied:${Date.now()}`, level: "info", text: `격리 사본의 변경을 원래 폴더(${session.worktree.root})에 적용했습니다.`, at: Date.now() });
     return { ok: true };
@@ -1020,15 +1060,22 @@ export class SessionManager {
     const session = this.requireSession(sessionId);
     if (!session.worktree) throw new HttpError(409, "no_worktree", "격리 사본에서 일하는 세션이 아닙니다.");
     if (session.status !== "idle" && session.status !== "error") throw new HttpError(409, "session_busy", "응답이 끝난 뒤에 버릴 수 있습니다.");
+    const workspace = session.workspaceId ? this.workspaces.get(session.workspaceId) : null;
+    if (workspace) this.assertWorkspaceIdle(workspace);
     const { branchRetained } = await removeWorktree(session.worktree);
     const retained = branchRetained ? ` 원래 폴더에 병합되지 않은 커밋이 있어 ${session.worktree.branch} 브랜치는 보존했습니다.` : "";
     this.sink.upsertItem(sessionId, { kind: "notice", id: `worktree-removed:${Date.now()}`, level: "info", text: `격리 사본을 버렸습니다. 이 세션은 보관함으로 옮겼습니다.${retained}`, at: Date.now() });
-    this.saveSession({ ...this.requireSession(sessionId), archivedAt: Date.now() });
+    const now = Date.now();
+    if (workspace) this.workspaces.update(workspace, { archivedAt: now, removedAt: now });
+    for (const entry of this.sessions.values()) {
+      if (entry.id === sessionId || (workspace && entry.workspaceId === workspace.id)) this.saveSession({ ...entry, archivedAt: now });
+    }
     return { ok: true };
   }
 
   /** Where the engine works for a session: its worktree, else the work folder. */
   private engineWork(session: Session, work: Work): Work {
+    if (session.workspaceId) return { ...work, cwd: this.workspaces.get(session.workspaceId).cwd };
     return session.worktree ? { ...work, cwd: session.worktree.cwd } : work;
   }
 
@@ -1121,7 +1168,7 @@ export class SessionManager {
         throw new HttpError(409, "fork_failed", `갈래를 만들지 못했습니다: ${error instanceof Error ? error.message : String(error)}`);
       });
     }
-    const created = this.createSession(work.id, { provider: session.provider, purpose: `${session.purpose} · 갈래`.slice(0, 80), model: session.model, effort: session.effort, access: session.access });
+    const created = this.createSession(work.id, { provider: session.provider, workspaceId: session.workspaceId, purpose: `${session.purpose} · 갈래`.slice(0, 80), model: session.model, effort: session.effort, access: session.access });
     const kept = before.filter((item) => !(item.kind === "approval" && item.decision === null));
     const note: TranscriptItem = { kind: "notice", id: `fork:${itemId}`, level: "info", text: `「${session.purpose}」의 ${keep.requests + 1}번째 요청 전에서 갈라졌습니다. 그 요청을 입력창에 되돌려 두었습니다.`, at: Date.now() };
     for (const item of [...kept, note]) this.store.saveItem(created.id, item);
@@ -1156,10 +1203,11 @@ export class SessionManager {
     });
     // The engine resumes in the folder the conversation ran in, so it has to be there.
     if (!history.cwd || !existsSync(history.cwd)) throw new HttpError(409, "import_folder_missing", `이 대화의 작업 폴더가 없습니다: ${history.cwd ?? "알 수 없음"}`);
-    const work =
+    const workspace = this.workspaces.list().filter((entry) => entry.hostId === this.options.hostId && !entry.archivedAt && !entry.removedAt && resolve(entry.cwd) === resolve(history.cwd!) && !this.works.get(entry.workId)?.archivedAt).sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    const work = (workspace ? this.works.get(workspace.workId) : undefined) ??
       [...this.works.values()].filter((entry) => entry.cwd === history.cwd && !entry.archivedAt).sort((a, b) => b.updatedAt - a.updatedAt)[0] ??
       this.createWork({ title: basename(history.cwd) || history.title, cwd: history.cwd });
-    const created = this.createSession(work.id, { provider: request.provider, purpose: history.title.slice(0, 60) });
+    const created = this.createSession(work.id, { provider: request.provider, workspaceId: workspace?.id, purpose: history.title.slice(0, 60) });
     const engine = request.provider === "claude" ? "Claude Code" : "Codex";
     const when = new Date(history.updatedAt).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" });
     const items: TranscriptItem[] = [
@@ -1234,6 +1282,8 @@ export class SessionManager {
     // Anything else sent to a linked session comes from the user: it pauses the link.
     if (!relay) this.links.userInput(sessionId);
     const work = this.requireWork(session.workId);
+    if (session.workspaceId) this.workspaces.requireActive(session.workspaceId, work.id);
+    const execution = this.engineWork(session, work);
     // A drawing is a turn of its own: never steered in or kept for later without its instructions.
     if (options.engineText && session.status !== "idle" && session.status !== "error") throw new HttpError(409, "session_busy", "이 세션이 일하는 중입니다. 끝난 뒤에 다시 보내 주세요.");
     if (session.status !== "idle" && session.status !== "error") {
@@ -1252,12 +1302,12 @@ export class SessionManager {
         !refs.some((ref) => ref.mode === "edit");
       if (steerable) {
         const pinned: { ref: DocRef; pinned: string; pinnedView: string | null; proposal: Proposal | null }[] = [];
-        for (const ref of refs) pinned.push({ ref, ...(await this.documents.prepare(ref, sessionId, requestId, work.cwd)) });
+        for (const ref of refs) pinned.push({ ref, ...(await this.documents.prepare(ref, sessionId, requestId, execution.cwd)) });
         const entry: Steered = { requestId, text: trimmed, refs, attachments, item: null, dropped: false };
         const steering = this.steering.get(sessionId) ?? new Map<string, Steered>();
         this.steering.set(sessionId, steering.set(requestId, entry));
-        const read = notes.length && this.noteHook ? this.noteHook(notes, work.cwd, sessionId) : null;
-        const steered = await adapter.steer!(session, this.engineWork(session, work), this.engineText(trimmed, pinned, work.cwd, null, null, read?.prompt), requestId, files).catch(() => false);
+        const read = notes.length && this.noteHook ? this.noteHook(notes, execution.cwd, sessionId) : null;
+        const steered = await adapter.steer!(session, this.engineWork(session, work), this.engineText(trimmed, pinned, execution.cwd, null, null, read?.prompt), requestId, files).catch(() => false);
         if (steered) {
           this.store.saveRequest(requestId, sessionId, fingerprint);
           entry.item = {
@@ -1298,18 +1348,18 @@ export class SessionManager {
     this.expirePlans(sessionId);
     // Pin each document: the engine reads exactly this revision; edits go to a working copy.
     const prepared: { ref: DocRef; pinned: string; pinnedView: string | null; proposal: Proposal | null }[] = [];
-    for (const ref of refs) prepared.push({ ref, ...(await this.documents.prepare(ref, sessionId, requestId, work.cwd)) });
+    for (const ref of refs) prepared.push({ ref, ...(await this.documents.prepare(ref, sessionId, requestId, execution.cwd)) });
     // A new document: a free name in the work folder now, tracked with its sources after the turn.
     let created: PendingCreate | null = null;
     if (create) {
-      mkdirSync(work.cwd, { recursive: true });
-      const path = reservePath(work.cwd, create);
+      mkdirSync(execution.cwd, { recursive: true });
+      const path = reservePath(execution.cwd, create);
       created = { requestId, path, target: create, sources: refs.map((ref) => ({ artifactId: ref.artifactId, revision: ref.revision })) };
       this.creating.set(sessionId, created);
     }
-    const read = notes.length && this.noteHook ? this.noteHook(notes, work.cwd, sessionId) : null;
+    const read = notes.length && this.noteHook ? this.noteHook(notes, execution.cwd, sessionId) : null;
     this.store.saveRequest(requestId, sessionId, fingerprint);
-    const baseText = options.engineText ?? (relay ? `${relay.header}\n\n${trimmed}` : this.engineText(trimmed, prepared, work.cwd, from, created, read?.prompt));
+    const baseText = options.engineText ?? (relay ? `${relay.header}\n\n${trimmed}` : this.engineText(trimmed, prepared, execution.cwd, from, created, read?.prompt));
     // What changed in the project since this session's last request (people's edits, other
     // sessions' revisions, the note), before the request; relays and drawings carry their own.
     const told = !relay && !options.engineText;
@@ -1373,9 +1423,14 @@ export class SessionManager {
     return `${parts.join("\n")}\n\n요청:\n${text}`;
   }
 
-  /** Open a file of the work folder (or any path the user picked) as a tracked document. */
-  openFile(workId: string, rawPath: string) {
+  private workIn(workId: string, workspaceId?: string) {
     const work = this.requireWork(workId);
+    return workspaceId ? { ...work, cwd: this.workspaces.requireActive(workspaceId, workId).cwd } : work;
+  }
+
+  /** Open a file of the work folder (or any path the user picked) as a tracked document. */
+  openFile(workId: string, rawPath: string, workspaceId?: string) {
+    const work = this.workIn(workId, workspaceId);
     if (!rawPath.trim()) throw new HttpError(400, "missing_path", "파일 경로가 필요합니다.");
     const path = isAbsolute(rawPath) ? rawPath : resolve(work.cwd, rawPath);
     if (!existsSync(path)) throw new HttpError(404, "file_missing", "파일이 없습니다.");
@@ -1391,8 +1446,8 @@ export class SessionManager {
    * A new page: a Markdown file in the work folder, opened at once (Notion's "+" on a row). Never
    * overwrites: a number is added to a taken name.
    */
-  createPage(workId: string, name: string) {
-    const work = this.requireWork(workId);
+  createPage(workId: string, name: string, workspaceId?: string) {
+    const work = this.workIn(workId, workspaceId);
     const stem = (name.trim() || "제목 없음").replace(/[\\/:*?"<>|]/g, "_").replace(/\.md$/i, "").slice(0, 80);
     mkdirSync(work.cwd, { recursive: true });
     let path = resolve(work.cwd, `${stem}.md`);
@@ -1404,8 +1459,8 @@ export class SessionManager {
   }
 
   /** A new design file in the work folder (never overwrites: a number is added to a taken name). */
-  createDesign(workId: string, name: string, preset: DesignPreset, text: string | null = null) {
-    const work = this.requireWork(workId);
+  createDesign(workId: string, name: string, preset: DesignPreset, text: string | null = null, workspaceId?: string) {
+    const work = this.workIn(workId, workspaceId);
     const problem = text === null ? null : designProblem(text);
     if (problem) throw new HttpError(422, "invalid_design", `디자인을 만들지 않았습니다: ${problem}`);
     const stem = (name.trim() || "새 디자인").replace(/[\\/:*?"<>|]/g, "_").replace(/\.design\.json$/i, "").slice(0, 80);
@@ -1474,7 +1529,8 @@ export class SessionManager {
     if (!created) return;
     this.creating.delete(sessionId);
     const session = this.sessions.get(sessionId);
-    const work = session ? this.works.get(session.workId) : undefined;
+    const project = session ? this.works.get(session.workId) : undefined;
+    const work = session && project ? this.engineWork(session, project) : undefined;
     if (!work) return;
     const name = basename(created.path);
     if (!existsSync(created.path)) {
@@ -1509,7 +1565,8 @@ export class SessionManager {
     const started = this.turnStarted.get(sessionId);
     this.turnStarted.delete(sessionId);
     const session = this.sessions.get(sessionId);
-    const work = session ? this.works.get(session.workId) : undefined;
+    const project = session ? this.works.get(session.workId) : undefined;
+    const work = session && project ? this.engineWork(session, project) : undefined;
     if (!started || !work || !existsSync(work.cwd)) return;
     const changed = recentDocuments(work.cwd, started - 2000);
     if (changed.length) this.trackFiles(sessionId, `scan:${started}`, changed, made);
@@ -1524,7 +1581,8 @@ export class SessionManager {
     let images = item.images ?? (before?.kind === "tool" ? before.images : undefined);
     if (item.tool === "command" && item.status === "completed" && !(before?.kind === "tool" && before.status === "completed")) {
       const session = this.sessions.get(sessionId);
-      const work = session ? this.works.get(session.workId) : undefined;
+      const project = session ? this.works.get(session.workId) : undefined;
+      const work = session && project ? this.engineWork(session, project) : undefined;
       const started = this.turnStarted.get(sessionId);
       if (work && started) {
         const found = imagesNamed(`${item.title}\n${item.output ?? ""}`, work.cwd, started - 2000)
@@ -1539,7 +1597,8 @@ export class SessionManager {
   /** `made`: the turn's provenance (from its end); during the turn, what the engine reported so far. */
   private trackFiles(sessionId: string, itemId: string, paths: string[], made?: Provenance) {
     const session = this.sessions.get(sessionId);
-    const work = session ? this.works.get(session.workId) : undefined;
+    const project = session ? this.works.get(session.workId) : undefined;
+    const work = session && project ? this.engineWork(session, project) : undefined;
     if (!session || !work) return;
     const provenance = made ?? { model: session.engineModel, effort: session.engineEffort, requestId: this.turnRequest.get(sessionId) ?? null };
     for (const path of paths) {
@@ -1728,7 +1787,7 @@ export class SessionManager {
    */
   exportMarkdown(sessionId: string, request: ExportMarkdownRequest): ExportMarkdownResult {
     const session = this.requireSession(sessionId);
-    const work = this.requireWork(session.workId);
+    const work = this.engineWork(session, this.requireWork(session.workId));
     const items = this.loadItems(sessionId);
     const folders: string[] = [];
     for (let at = work.folderId; at; at = this.folders.get(at)?.parentId ?? null) folders.unshift(this.folders.get(at)?.name ?? "");

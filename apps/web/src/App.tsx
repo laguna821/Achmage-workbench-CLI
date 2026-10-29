@@ -554,19 +554,19 @@ export function App() {
       pickSession: (work: Work, exclude: Session | null) =>
         new Promise<Session | null>((resolve) => setPicker({ workId: work.id, excludeSessionId: exclude?.id ?? null, resolve })),
       openArtifact: (artifactId: string) => setView({ kind: "document", artifactId, proposalId: null }),
-      openFile: async (target: Work, path: string) => {
+      openFile: async (target: Work, path: string, workspaceId?: string) => {
         if (!api) return;
         try {
-          const artifact = await api.openFile(target.id, path);
+          const artifact = await api.openFile(target.id, path, workspaceId);
           setView({ kind: "document", artifactId: artifact.id, proposalId: null });
         } catch (error) {
           fail(error);
         }
       },
-      newDesign: async (target: Work, preset: string) => {
+      newDesign: async (target: Work, preset: string, workspaceId?: string) => {
         if (!api) return;
         try {
-          const artifact = await api.createDesign(target.id, "새 디자인", preset);
+          const artifact = await api.createDesign(target.id, "새 디자인", preset, workspaceId);
           setView({ kind: "document", artifactId: artifact.id, proposalId: null });
         } catch (error) {
           fail(error);
@@ -577,11 +577,23 @@ export function App() {
       newSession: async (target: Work, provider: Provider, choice, options) => {
         if (!api) return null;
         try {
-          return await api.createSession(target.id, provider, { model: choice?.model ?? null, effort: choice?.effort ?? null, ...(options?.browser ? { browser: true } : {}), ...(options?.worktree ? { worktree: true } : {}) });
+          const workspaceId = options?.workspaceId ?? (target.activeSessionId ? state.sessions[target.activeSessionId]?.workspaceId : undefined);
+          const session = await api.createSession(target.id, provider, { workspaceId, model: choice?.model ?? null, effort: choice?.effort ?? null, ...(options?.browser ? { browser: true } : {}), ...(options?.worktree ? { worktree: true } : {}) });
+          dispatch({ type: "focus", work: target, session });
+          updateLayout((current) => setPane(current, current.focus, { workId: target.id, sessionId: session.id }));
+          return session;
         } catch (error) {
           fail(error);
           return null;
         }
+      },
+      createWorkspace: async (target, cwd) => {
+        if (!api) return null;
+        try { return await api.createWorkspace(target.id, cwd); } catch (error) { fail(error); return null; }
+      },
+      updateWorkspace: async (workspace, patch) => {
+        if (!api) return null;
+        try { return await api.updateWorkspace(workspace.id, patch); } catch (error) { fail(error); return null; }
       },
       selectSession: (target, session) => {
         if (single) {
@@ -593,7 +605,9 @@ export function App() {
         }
         // Already shown in the other pane: the focus goes there (never the same conversation twice).
         panesRef.current.focusIfShown(`session:${session.id}`);
+        dispatch({ type: "focus", work: target, session });
         setWorkId(target.id);
+        updateLayout((current) => setPane(current, current.focus, { sessionId: session.id }));
         setView({ kind: "work" });
         if (target.activeSessionId !== session.id) void api?.updateWork(target.id, { activeSessionId: session.id }).catch(fail);
       },
@@ -1133,7 +1147,7 @@ export function App() {
       if (row.type === "session") {
         const { session, work: owner } = row;
         const busy = isBusy(session);
-        const resume = resumeCommand(session, owner);
+        const resume = resumeCommand(session, { ...owner, cwd: state.workspaces[session.workspaceId ?? ""]?.cwd ?? session.worktree?.cwd ?? owner.cwd });
         const unseenNow = isUnseen(session);
         const linked = linkOfSession(state, session.id);
         const items: MenuEntry[] = [
@@ -1583,7 +1597,7 @@ export function App() {
   const workView = (shown: Work, session: Session | undefined, pinned: boolean, paneTabs: ReactNode, ids: string[], modes: ModeProps) => (
     <WorkView
       state={state}
-      work={pinned && session ? { ...shown, activeSessionId: session.id } : shown}
+      work={session && (pinned || session.id !== shown.activeSessionId) ? { ...shown, activeSessionId: session.id } : shown}
       actions={actions}
       engine={engine}
       setEngine={setEngine}

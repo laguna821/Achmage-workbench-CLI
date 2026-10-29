@@ -77,11 +77,11 @@ export function useTemplates(): ImageTemplates | null {
 const pictures = new Map<string, Promise<string>>();
 
 /** A picture inside a work folder as a blob: URL (pictures are new files, so the URL is kept). */
-export function pictureUrl(workId: string, path: string): Promise<string> {
-  const key = `${workId}\u0000${path}`;
+export function pictureUrl(workId: string, path: string, workspaceId?: string): Promise<string> {
+  const key = `${workId}\u0000${workspaceId ?? ""}\u0000${path}`;
   let url = pictures.get(key);
   if (!url) {
-    url = fetch(`/api/works/${workId}/image?path=${encodeURIComponent(path)}`, { headers: { authorization: `Bearer ${designToken()}` } }).then(async (response) => {
+    url = fetch(`/api/works/${workId}/image?path=${encodeURIComponent(path)}${workspaceId ? `&workspaceId=${encodeURIComponent(workspaceId)}` : ""}`, { headers: { authorization: `Bearer ${designToken()}` } }).then(async (response) => {
       if (!response.ok) {
         const body = (await response.json().catch(() => null)) as { message?: string } | null;
         throw new Error(body?.message ?? response.statusText);
@@ -95,13 +95,13 @@ export function pictureUrl(workId: string, path: string): Promise<string> {
   return url;
 }
 
-export function usePicture(workId: string | null, path: string | null) {
-  const key = workId && path ? `${workId}\u0000${path}` : "";
+export function usePicture(workId: string | null, path: string | null, workspaceId?: string) {
+  const key = workId && path ? `${workId}\u0000${workspaceId ?? ""}\u0000${path}` : "";
   const [state, setState] = useState<{ key: string; url: string | null; error: string | null }>({ key: "", url: null, error: null });
   useEffect(() => {
     if (!workId || !path) return;
     let active = true;
-    pictureUrl(workId, path).then(
+    pictureUrl(workId, path, workspaceId).then(
       (url) => active && setState({ key, url, error: null }),
       (error: Error) => active && setState({ key, url: null, error: error.message }),
     );

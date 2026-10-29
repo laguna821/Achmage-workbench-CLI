@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { diffLines } from "diff";
 import {
   DESIGN_EXTENSION,
@@ -19,6 +19,7 @@ import {
 import type { EventBus } from "./bus.ts";
 import { HttpError } from "./errors.ts";
 import type { Store } from "./store.ts";
+import type { Workspaces } from "./workspaces.ts";
 import type { Kordoc } from "./kordoc.ts";
 import { designAssetPath, designGuide, designProblem, designStem, saveDesignAsset } from "./design.ts";
 import type { IeumOffice, OfficePage } from "./ieumoffice.ts";
@@ -112,7 +113,9 @@ export class Documents {
   /** Hangul and Office revisions waiting for their text to be indexed (one at a time). */
   readonly textIndex = new BackgroundIndex((artifactId, revision) => this.indexView(artifactId, revision));
 
-  constructor(store: Store, bus: EventBus, dataDir: string, kordoc: Kordoc | null = null, ieum: IeumOffice | null = null) {
+  private readonly workspaces: Workspaces | null;
+  constructor(store: Store, bus: EventBus, dataDir: string, kordoc: Kordoc | null = null, ieum: IeumOffice | null = null, workspaces: Workspaces | null = null) {
+    this.workspaces = workspaces;
     this.store = store;
     this.bus = bus;
     this.root = join(dataDir, "artifacts");
@@ -265,13 +268,16 @@ export class Documents {
     /** An engine's revision: the model, effort and request behind it. */
     provenance: Provenance | null = null,
   ) {
-    const path = isAbsolute(rawPath) ? rawPath : resolve(cwd, rawPath);
+    const path = resolve(cwd, rawPath);
     const made = author === "engine" && provenance ? { model: provenance.model ?? null, effort: provenance.effort ?? null, requestId: provenance.requestId ?? null } : {};
     const format = formatOf(path);
     if (!format || isWorkbenchPath(path)) return null;
     const data = readFileOrNull(path);
     if (!data) return null;
-    const existing = [...this.artifacts.values()].find((artifact) => artifact.workId === workId && artifact.path === path);
+    const identity = this.workspaces?.fileIdentity(workId, cwd, path) ?? {};
+    const existing = [...this.artifacts.values()].find((artifact) => artifact.workId === workId && (
+      artifact.path === path || (identity.workspaceId && artifact.workspaceId === identity.workspaceId && artifact.relativePath === identity.relativePath)
+    ));
     if (existing) {
       if (sha256(data) === existing.sha256) return null;
       const updated = this.record(existing, data, { author, sessionId, baseRevision: existing.revision, note, ...(derivedFrom?.length ? { derivedFrom } : {}), ...made });
@@ -281,6 +287,7 @@ export class Documents {
     const artifact: Artifact = {
       id: randomUUID(),
       workId,
+      ...identity,
       path,
       name: basename(path),
       format,

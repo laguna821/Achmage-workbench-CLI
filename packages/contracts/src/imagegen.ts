@@ -86,6 +86,7 @@ export type ImageInfo = {
   /** The request id of the drawing, or `codex:<item id>` for a picture Codex drew on its own. */
   id: string;
   workId: string;
+  workspaceId?: string;
   /** The conversation that asked (a Claude one when Codex drew for it). */
   originSessionId: string;
   /** The Codex session that drew. */

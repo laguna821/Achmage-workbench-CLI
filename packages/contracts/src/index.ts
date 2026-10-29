@@ -7,6 +7,8 @@ import type { LinkHop, SessionLink } from "./links.ts";
 import type { ProposalCloser, TurnBreak, TurnCause } from "./recovery.ts";
 import type { Schedule } from "./schedules.ts";
 import type { SessionWorktree } from "./worktrees.ts";
+import type { Workspace } from "./workspaces.ts";
+export * from "./workspaces.ts";
 
 export const PROTOCOL_VERSION = 1;
 
@@ -36,6 +38,8 @@ export type TitleSource = "auto" | "user";
 
 export type Work = {
   id: string;
+  /** Absent only in records from older gateways. Project identity is unchanged. */
+  defaultWorkspaceId?: string;
   title: string;
   titleSource: TitleSource;
   folderId: string | null;
@@ -67,6 +71,8 @@ export type SessionStatus =
 export type Session = {
   id: string;
   workId: string;
+  /** Fixed when the session is created; switching tabs never changes its cwd. */
+  workspaceId?: string;
   provider: Provider;
   /** Execution host label shown in the status line, e.g. "노트북". */
   hostId: string;
@@ -175,6 +181,9 @@ export const isOfficeFormat = (format: DocFormat): format is OfficeFormat => (OF
 export type Artifact = {
   id: string;
   workId: string;
+  workspaceId?: string;
+  /** Portable path relative to this workspace, never relative to another worktree. */
+  relativePath?: string;
   /** Absolute path of the real file in the work folder. */
   path: string;
   name: string;
@@ -460,6 +469,7 @@ export type WorkbenchEvent =
   /** A folder deleted ("폴더만 지우기"); what was inside already moved up (navigator.ts). */
   | { type: "folder.removed"; folderId: string }
   | { type: "work.upserted"; work: Work }
+  | { type: "workspace.upserted"; workspace: Workspace }
   | { type: "session.upserted"; session: Session }
   | { type: "item.upserted"; sessionId: string; item: TranscriptItem }
   | { type: "item.delta"; sessionId: string; itemId: string; textDelta: string }
@@ -522,6 +532,7 @@ export type Snapshot = {
   hostLabel: string;
   folders: Folder[];
   works: Work[];
+  workspaces?: Workspace[];
   sessions: Session[];
   providers: ProviderStatus[];
   prefs: UiPrefs;
@@ -547,6 +558,7 @@ export type CreateWorkRequest = {
 
 export type CreateSessionRequest = {
   provider: Provider;
+  workspaceId?: string;
   purpose?: string;
   model?: string | null;
   effort?: string | null;

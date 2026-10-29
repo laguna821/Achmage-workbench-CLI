@@ -7,7 +7,7 @@
 ```bash
 npm run build
 npm run tauri -w @workbench/desktop -- build --debug --no-bundle
-node scripts/app-e2e/run.ts apps/desktop/src-tauri/target/debug/achmage-workbench /tmp/workbench-native-result --only=start,panes,pkm --engines=stand-in
+node scripts/app-e2e/run.ts apps/desktop/src-tauri/target/debug/achmage-workbench /tmp/workbench-native-result --only=start,panes,pkm,workspaces --engines=stand-in
 ```
 
 명시한 출력 폴더에 결과 JSON, 로그, 스크린샷을 남긴다. `start`는 Tauri IPC, 실제 창 크기, 첫 화면, 온보딩 클릭과 저장을 검증한다. 아직 구현하지 않은 시나리오는 오류로 거절한다. 검사가 하나도 실행되지 않은 경우도 실패다.
@@ -15,6 +15,8 @@ node scripts/app-e2e/run.ts apps/desktop/src-tauri/target/debug/achmage-workbenc
 `panes`는 네 칸 생성, 실제 드래그와 화면 노드 유지, 상하 경계선 키보드 조절, 좁은 창 전환, 종료 후 새 포트 복원과 칸 닫기를 검증한다. 재시작은 같은 임시 프로필을 사용하고 stage 종료 시 정리한다. 기본 gateway는 포트를 재사용하지만 이 검사는 `WORKBENCH_PORT=0`으로 새 포트에서도 복원되는지 확인한다.
 
 `pkm`은 폴더 메뉴에서 템플릿 입력/저장, 하위 분류 프로젝트의 노트 생성, 로컬 표지 표시, 기존 노트 원문 보존을 검증한다. 이어 `.base`의 보기별 미리보기/미지원 조건 거절, 필터 적용·새로고침 복원, 내보내기 미리보기·저장 API·실제 파일 재가져오기를 검사한다. OS 저장 대화상자의 위치 선택은 이 검사에 포함되지 않는다. WebKitWebDriver의 일괄 `sendKeys`는 LF/비BMP 문자 입력을 누락하므로 줄별 입력과 실제 Enter 키를 사용한다. 이모지/CRLF 파일 보존은 호스트 회귀에서 검사한다.
+
+`workspaces`는 실제 UI에서 폴더 연결, 새 세션의 공간 고정, 이름 변경, 보관/복원, 공간 왕복과 새로고침 후 같은 세션 복원을 검사한다. `pkm`은 시작 배치를 명시적으로 한 칸으로 만들고 창 크기도 초기화한다. `paneLayout: null`은 로컬 배치를 대체하지 않으므로 이전 분할 검사의 상태를 지우는 용도로 쓰지 않는다. 실패 시 `failure.png`와 오류 stack을 남긴다.
 
 웹/호스트 소스만 빌드하면 기존 실행파일 옆의 리소스가 그대로 남는다. **Tauri 빌드까지 수행**하고 `apps/web/dist/index.html`과 `apps/desktop/src-tauri/target/debug/web/index.html`이 같은지 확인한다. 이전 리소스 실행을 최신 UI 검증으로 오인하지 않는다.
 
