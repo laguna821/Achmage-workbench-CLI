@@ -98,6 +98,14 @@ describe("the project note file", () => {
 });
 
 describe("project thumbnails", () => {
+  it("exports a new .base file without ever replacing an existing human file", () => {
+    const { projects, cwd } = setup();
+    const path = join(cwd, "내 보기.base");
+    projects.exportBase(path, "views: []\n");
+    expect(() => projects.exportBase(path, "replacement")).toThrow(/새 이름/);
+    expect(readFileSync(path, "utf8")).toBe("views: []\n");
+    expect(() => projects.exportBase(join(cwd, "노트.md"), "bad")).toThrow(/base/);
+  });
   it("prefers a cover property, supports encoded local images, and versions changed image bytes without editing the note", () => {
     const { projects, work, cwd } = setup();
     writeFileSync(join(cwd, "표 지.png"), "image fixture");

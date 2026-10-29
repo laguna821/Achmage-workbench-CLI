@@ -4,6 +4,8 @@
 // colour per group, borders, a light tint, emphasized headings) and which groups are folded.
 // Kept in the screen preferences (`homeViews`), so every window shows the same.
 
+import { cleanBaseFilter, type BaseFilter } from "./base-filter.ts";
+
 export type HomeViewMode = "now" | "projects" | "flow" | "docs";
 
 export type ViewLayout = "board" | "table" | "cards" | "list" | "graph" | "calendar";
@@ -65,6 +67,8 @@ export type HomeView = {
   colorBy?: string;
   /** "카드": one mind map of the cards instead. */
   mindmap?: boolean;
+  /** Imported .base criteria, ANDed with the app's editable text filter. */
+  baseFilters?: BaseFilter;
 };
 
 export type ModeViews = { views: HomeView[]; current: string };
@@ -186,6 +190,7 @@ export function cleanView(mode: HomeViewMode, value: unknown): HomeView | null {
   };
   if (mode === "flow") view.colorBy = text(raw.colorBy, VIEW_LIMITS.key) || "engine";
   if (layout === "cards" && raw.mindmap === true) view.mindmap = true;
+  if (mode === "projects" && raw.baseFilters !== undefined) view.baseFilters = cleanBaseFilter(raw.baseFilters) ?? "false";
   return view;
 }
 

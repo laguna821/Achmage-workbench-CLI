@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import type { GroupRule, HomeView, ModeViews, Provider, Session, Work } from "@workbench/contracts";
+import { baseMatcher } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
 import { useAppearance } from "../../appearance.ts";
 import { boardOf, colorOf, foldKey, groupItems, localDay, moveOf, nestGroups, sortItems, type Group, type KeyDef, type NestedGroup } from "../../groups.ts";
@@ -75,8 +76,13 @@ export function ProjectsMode({
   const byStage = groupDef?.key === "stage" || subDef?.key === "stage";
 
   const matcher = useMemo(() => projectMatcher(view.filter), [view.filter]);
+  const base = useMemo(() => {
+    if (view.baseFilters === undefined) return null;
+    try { return { test: baseMatcher(view.baseFilters), error: null }; }
+    catch (error) { return { test: () => false, error: error instanceof Error ? error.message : String(error) }; }
+  }, [view.baseFilters]);
   // Archived projects: in the archive stage's group of a board by stage, and in the graph (its own filter).
-  const visible = rows.filter((row) => (view.layout === "graph" || (view.layout === "board" && byStage) || !row.archived) && matcher(projectQuery(row, state.folders)));
+  const visible = rows.filter((row) => (view.layout === "graph" || (view.layout === "board" && byStage) || !row.archived) && matcher(projectQuery(row, state.folders)) && (!base || (row.summary?.base && base.test(row.summary.base))));
   const sortRule = view.sort ?? (view.layout === "cards" ? null : ({ key: "activity", dir: "desc" } as const));
   const sortDef = sortRule ? (sorts.find((entry) => entry.key === sortRule.key) ?? null) : null;
   const ordered = sortDef ? sortItems(visible, sortDef, sortRule!.dir, (row) => row.work.title) : [...visible].sort(manual);
@@ -191,7 +197,7 @@ export function ProjectsMode({
     />
   );
 
-  const empty = !visible.length ? <div className="projects-empty">{rows.length ? "맞는 프로젝트가 없습니다." : "프로젝트가 없습니다."}</div> : null;
+  const empty = base?.error ? <div role="alert" className="projects-empty">Bases 필터를 적용하지 못했습니다: {base.error}</div> : !visible.length ? <div className="projects-empty">{rows.length ? "맞는 프로젝트가 없습니다." : "프로젝트가 없습니다."}</div> : null;
   let body;
   if (view.layout === "graph") {
     const colorFor = groupDef && view.group ? new Map(ordered.map((row) => [row.work.id, groupColorOf(view, groupDef, row, today)] as const)) : null;

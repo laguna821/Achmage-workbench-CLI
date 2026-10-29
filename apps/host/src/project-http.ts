@@ -27,6 +27,10 @@ const strings = (value: unknown): string[] | null => (value === null ? null : Ar
 export async function handleProject(projects: Projects, req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
   const method = req.method ?? "GET";
   const parts = url.pathname.replace(/^\/api\/projects\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
+  if (method === "POST" && parts.join("/") === "bases/export") {
+    const body = await readJson(req);
+    return (sendJson(res, 200, projects.exportBase(String(body.path ?? ""), String(body.source ?? ""))), true);
+  }
   if (method === "GET" && parts.length === 2 && parts[1] === "image") return (sendImage(res, projects.image(parts[0]!, url.searchParams.get("src") ?? "")), true);
   if (parts[0] === "folder-templates" && parts[1] && !parts[2]) {
     if (method === "GET") return (sendJson(res, 200, projects.folderTemplate(parts[1])), true);

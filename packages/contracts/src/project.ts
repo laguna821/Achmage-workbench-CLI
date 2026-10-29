@@ -1,5 +1,6 @@
 import type { Provider } from "./index.ts";
 import type { EngineReadNote, PkmCard } from "./pkm.ts";
+import type { BaseDocument } from "./base-filter.ts";
 
 // "프로젝트 = 노트 한 장": a work seen as one Markdown note. What people write (stage, tags, related,
 // decisions, open questions, the rest of the text) lives in a real note file in the work folder; what
@@ -219,6 +220,8 @@ export type ProjectSummary = {
   /** Explicit cover/thumbnail property, else the first image in the project note. */
   thumb?: PkmCard["thumb"];
   thumbUpdatedAt?: number;
+  /** Typed read-only note values and physical file metadata; distinct from classification folders. */
+  base?: BaseDocument;
   stage: string | null;
   tags: string[];
   related: string[];

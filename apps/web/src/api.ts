@@ -169,6 +169,7 @@ export class Api {
   savePropertyTemplate = (fields: PropertyField[] | null) => this.request<PropertyField[]>("PUT", "/api/projects/template", fields === null ? { reset: true } : { fields });
   importPropertyTemplate = (markdown: string) => this.request<PropertyField[]>("POST", "/api/projects/template/import", { markdown });
   folderNoteTemplate = (folderId: string) => this.request<FolderNoteTemplate>("GET", `/api/projects/folder-templates/${encodeURIComponent(folderId)}`);
+  exportBase = (path: string, source: string) => this.request<{ path: string }>("POST", "/api/projects/bases/export", { path, source });
   saveFolderNoteTemplate = (folderId: string, markdown: string | null) => this.request<FolderNoteTemplate>("PUT", `/api/projects/folder-templates/${encodeURIComponent(folderId)}`, { markdown });
   initializeProjectNote = (workId: string) => this.request<ProjectWrite>("POST", `/api/projects/${encodeURIComponent(workId)}/initialize-note`, {});
   setPropertyType = (key: string, type: PropertyType) => this.request<Record<string, PropertyType>>("PUT", "/api/projects/types", { key, type });

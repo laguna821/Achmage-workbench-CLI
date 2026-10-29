@@ -611,6 +611,12 @@ button.project-fact {
   list-style: none;
 }
 
+.base-transfer-dialog { width: min(760px, 94vw); max-height: 88vh; overflow-y: auto; }
+.base-source { display: block; width: 100%; margin: 12px 0; min-height: 200px; max-height: 35vh; font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; line-height: 1.5; resize: vertical; }
+.base-issue { color: var(--danger); font-size: var(--fs-meta); }
+.base-import-entries { display: grid; gap: 10px; margin: 12px 0; }
+.base-import-entry { padding: 8px; border: 1px solid var(--border); border-radius: var(--r-md); }
+.base-filter-preview { max-width: 360px; max-height: 240px; overflow: auto; white-space: pre-wrap; font-size: 12px; }
 .project-thumbnail {
   display: block;
   width: 100%;

@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { center, KEY } from "./webdriver.ts";
 import { installProbe, pageErrors, record, recorded, shot, until, type Ctx } from "./scenarios.ts";
+import { basesScenario } from "./bases.ts";
 
 /** Only temporary gateway data and fixture files; all actions under test use native WebDriver input. */
 export async function pkmScenario(ctx: Ctx) {
@@ -66,4 +67,5 @@ export async function pkmScenario(ctx: Ctx) {
   await api("PUT", `/api/projects/folder-templates/${folder.id}`, { markdown: "# 다음 프로젝트부터 적용\n" });
   ctx.report.check(S, "템플릿 변경 후 기존 노트 원문 보존", readFileSync(page.note.path, "utf8") === original);
   ctx.report.check(S, "프로젝트 노트 검사 중 페이지 예외 없음", !(await pageErrors(wd)).length, JSON.stringify(await pageErrors(wd)));
+  await basesScenario(ctx, work.id);
 }

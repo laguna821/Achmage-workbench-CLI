@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, sep } from "node:path";
 import {
   DEFAULT_STAGES,
   LINK_REASON_LABEL,
@@ -13,6 +13,7 @@ import {
   turnBreakOf,
   turnEndText,
   type Artifact,
+  type BaseDocument,
   type AchmageBrief,
   type ArtifactRevision,
   type ChangeLine,
@@ -40,7 +41,8 @@ import { ID_KEY, appendEntry, newNote, noteFileName, notePreview, readNote, setB
 import type { IndexEntry, WorkExtras } from "./search-index.ts";
 import { Achmage } from "./achmage.ts";
 import { DEFAULT_PROPERTY_TEMPLATE, cleanTemplate, inferType, keyStyle, normalizeValues, propertyRows, templateFromMarkdown, vaultPropertyTypes } from "./project-properties.ts";
-import { firstImage, splitFrontmatter } from "./frontmatter.ts";
+import { firstImage, noteTags, parseFrontmatter, splitFrontmatter } from "./frontmatter.ts";
+import { baseProperties } from "./project-base.ts";
 import type { SessionManager } from "./sessions.ts";
 import type { Store } from "./store.ts";
 
@@ -162,7 +164,7 @@ export class Projects {
   private readonly writes = new Map<string, Write>();
   private readonly branches = new Map<string, { at: number; branch: string | null }>();
   /** Notes as last read, by path: read again only when the file's time or size changed. */
-  private readonly summaryCache = new Map<string, { key: string; read: ReadNote; at: number }>();
+  private readonly summaryCache = new Map<string, { key: string; read: ReadNote; at: number; base: BaseDocument | null }>();
   /** Works this module is archiving or restoring itself: the archive listener leaves those alone. */
   private readonly quiet = new Set<string>();
   /** The user's Achmage runtime, if this computer has one (achmage.ts). */
@@ -488,6 +490,7 @@ export class Projects {
         noteUpdatedAt: known?.at ?? null,
         preview: read ? notePreview(read.free) : null,
         ...(read && path ? this.thumbnail(work, path, read, known?.at ?? 0) : {}),
+        ...(known?.base ? { base: known.base } : {}),
       });
     }
     return out;
@@ -519,16 +522,29 @@ export class Projects {
     return this.pkm.workImage(workId, this.notePath(work), src);
   }
 
+  exportBase(path: string, source: string) {
+    if (!isAbsolute(path) || extname(path).toLowerCase() !== ".base" || Buffer.byteLength(source) > 256_000) throw new HttpError(400, "bad_base_export", "256KB 이하의 .base 파일로 저장해 주세요.");
+    try { writeFileSync(path, source, { flag: "wx", encoding: "utf8" }); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new HttpError(409, "file_exists", "같은 이름의 파일이 있습니다. 새 이름으로 저장해 주세요."); throw error; }
+    return { path };
+  }
+
   /** A note as last read; read again (`fresh`) only when the file's time or size changed. Null: none. */
-  private readCached(path: string): { read: ReadNote; at: number; fresh: boolean } | null {
+  private readCached(path: string): { read: ReadNote; at: number; fresh: boolean; base: BaseDocument | null } | null {
     try {
       const stats = statSync(path);
-      const key = `${stats.mtimeMs}:${stats.size}`;
+      const key = `${stats.mtimeMs}:${stats.size}:${this.pkm.vault.root ?? ""}`;
       const cached = this.summaryCache.get(path);
-      if (cached?.key === key) return { read: cached.read, at: cached.at, fresh: false };
-      const read = readNote(readFileSync(path, "utf8"));
-      this.summaryCache.set(path, { key, read, at: stats.mtimeMs });
-      return { read, at: stats.mtimeMs, fresh: true };
+      if (cached?.key === key) return { ...cached, fresh: false };
+      const text = readFileSync(path, "utf8");
+      const read = readNote(text);
+      const note = baseProperties(text);
+      const vaultRelative = this.pkm.vault.root ? relative(this.pkm.vault.root, path) : null;
+      const filePath = (vaultRelative !== null && !isAbsolute(vaultRelative) && !vaultRelative.startsWith(`..${sep}`) ? vaultRelative : path).split(sep).join("/");
+      const { yaml, body } = splitFrontmatter(text);
+      const base: BaseDocument | null = note ? { note, file: { name: basename(path), basename: basename(path, extname(path)), path: filePath, folder: filePath.includes("/") ? filePath.slice(0, filePath.lastIndexOf("/")) : "", ext: extname(path).slice(1), mtime: new Date(stats.mtimeMs).toISOString(), ctime: new Date(stats.birthtimeMs || stats.ctimeMs).toISOString(), size: stats.size, tags: noteTags(parseFrontmatter(yaml), body) } } : null;
+      this.summaryCache.set(path, { key, read, at: stats.mtimeMs, base });
+      return { read, at: stats.mtimeMs, fresh: true, base };
     } catch {
       return null;
     }

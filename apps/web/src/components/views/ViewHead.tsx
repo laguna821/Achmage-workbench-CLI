@@ -17,6 +17,7 @@ import { Icon } from "../Icon.tsx";
 import { MenuItem, Popover } from "../Popover.tsx";
 import { useOptionalPkm } from "../pkm/PkmContext.tsx";
 import { ColorPick, groupStyle, paintGroup } from "./parts.tsx";
+import { BaseTransferDialog } from "./BaseTransferDialog.tsx";
 
 // The head of a home mode: its views as tabs (like the view list of a .base file; "+" adds one,
 // a right click renames, duplicates, deletes or resets it) and a calm row of small popovers for the
@@ -56,6 +57,7 @@ export function ViewTabs({ mode, views, onViews, className = "" }: { mode: HomeV
   const pkm = useOptionalPkm();
   const [renaming, setRenaming] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [transfer, setTransfer] = useState<"import" | "export" | null>(null);
   const closeAdd = useCallback(() => setAdding(false), []);
   const list = views.views;
   const missing = defaultViews(mode).filter((shipped) => !list.some((view) => view.id === shipped.id));
@@ -130,6 +132,7 @@ export function ViewTabs({ mode, views, onViews, className = "" }: { mode: HomeV
         </button>
         <Popover open={adding} onClose={closeAdd} className="view-pop view-add-pop">
           <div className="menu-label">새 보기</div>
+          {mode === "projects" ? <><MenuItem onSelect={() => { setAdding(false); setTransfer("import"); }}>Bases 가져오기…</MenuItem><MenuItem onSelect={() => { setAdding(false); setTransfer("export"); }}>현재 보기 .base로 내보내기…</MenuItem><div className="menu-divider" /></> : null}
           {VIEW_LAYOUTS[mode].map((layout) => (
             <MenuItem key={layout} disabled={full} onSelect={() => add(freshView(mode, layout, uniqueName(list, LAYOUT_LABEL[layout])))}>
               {LAYOUT_LABEL[layout]}
@@ -148,6 +151,7 @@ export function ViewTabs({ mode, views, onViews, className = "" }: { mode: HomeV
           ) : null}
         </Popover>
       </div>
+      {transfer ? <BaseTransferDialog mode={transfer} view={list.find((view) => view.id === views.current) ?? list[0]!} remaining={VIEW_LIMITS.views - list.length} api={pkm?.api} onClose={() => setTransfer(null)} onImport={(imported) => onViews({ views: [...list, ...imported], current: imported[0]?.id ?? views.current })} /> : null}
     </div>
   );
 }
@@ -340,6 +344,7 @@ export function ViewTools({
 
   return (
     <div className="view-tools" role="toolbar" aria-label="보기 설정">
+      {view.baseFilters !== undefined ? <Tool label="Bases 필터" on wide>{() => <><pre className="base-filter-preview">{JSON.stringify(view.baseFilters, null, 2)}</pre><button type="button" className="button small" onClick={() => { const next = { ...view }; delete next.baseFilters; onView(next); }}>가져온 필터 해제</button></>}</Tool> : null}
       {filtering ? (
         <input
           ref={input}

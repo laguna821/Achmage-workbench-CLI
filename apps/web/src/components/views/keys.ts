@@ -1,5 +1,6 @@
 import {
   FORMAT_LABEL,
+  BASE_FILE_LABELS,
   PROVIDER_LABEL,
   isHexColor,
   isUnseen,
@@ -45,6 +46,11 @@ export type ProjectContext = {
   stages: ProjectStage[];
   template: PropertyField[];
   engineColor: (provider: Provider) => string;
+};
+
+export const fileValues = (row: ProjectRow, key: string): string[] => {
+  const value = row.summary?.base?.file[key.slice(5)];
+  return value === null || value === undefined ? [] : (Array.isArray(value) ? value : [value]).map(String);
 };
 
 /** Every project (archived ones too: the archive stage's group and the graph show them). */
@@ -171,6 +177,7 @@ export function projectKeys(context: ProjectContext): KeyDef<ProjectRow>[] {
   const { state, stages, engineColor } = context;
   const archive = stages.find((stage) => stage.archive)?.name ?? null;
   return [
+    ...Object.entries(BASE_FILE_LABELS).map(([key, label]): KeyDef<ProjectRow> => ({ key, label, kind: key === "file.tags" ? "list" : "text", values: (row) => fileValues(row, key), fixed: "노트 파일의 속성은 끌어서 바꾸지 않습니다." })),
     {
       key: "stage",
       label: "단계",
@@ -217,6 +224,7 @@ const sortValue = (values: string[], type: PropertyType, options: string[]): str
 export function projectSorts(context: Pick<ProjectContext, "stages" | "summaries" | "template">): SortDef<ProjectRow>[] {
   const order = new Map(context.stages.map((stage, index) => [stage.name, index] as const));
   return [
+    ...Object.entries(BASE_FILE_LABELS).map(([key, label]): SortDef<ProjectRow> => ({ key, label, value: (row) => key === "file.size" ? Number(fileValues(row, key)[0] ?? 0) : fileValues(row, key)[0] ?? null })),
     { key: "activity", label: "최근 활동", value: (row) => row.last },
     { key: "created", label: "만든 날", value: (row) => row.work.createdAt },
     { key: "title", label: "이름", value: (row) => row.work.title },
@@ -235,6 +243,7 @@ export function projectSorts(context: Pick<ProjectContext, "stages" | "summaries
 export function projectFields(context: Pick<ProjectContext, "summaries" | "template">): { id: string; label: string }[] {
   return [
     { id: "thumbnail", label: "썸네일" },
+    ...Object.entries(BASE_FILE_LABELS).map(([id, label]) => ({ id, label })),
     { id: "stage", label: "단계" },
     { id: "folder", label: "폴더" },
     { id: "tags", label: "태그" },

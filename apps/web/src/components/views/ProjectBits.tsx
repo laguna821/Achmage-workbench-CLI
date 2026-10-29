@@ -1,5 +1,5 @@
 import { useMemo, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
-import { isUnseen, type Artifact, type ProjectStage, type PropertyType, type Session, type SortRule, type Work } from "@workbench/contracts";
+import { BASE_FILE_LABELS, isUnseen, type Artifact, type ProjectStage, type PropertyType, type Session, type SortRule, type Work } from "@workbench/contracts";
 import { accentStyle, useAppearance } from "../../appearance.ts";
 import { ago, statusText, statusTone } from "../../format.ts";
 import { isWorking, recency } from "../../overview.ts";
@@ -12,7 +12,7 @@ import { EngineMark } from "../EngineMark.tsx";
 import { Icon } from "../Icon.tsx";
 import { ProjectThumbnail } from "../project/ProjectThumbnail.tsx";
 import type { ProjectRow } from "./keys.ts";
-import { propLabel } from "./keys.ts";
+import { fileValues, propLabel } from "./keys.ts";
 
 // How a project reads in each layout of home "프로젝트": a card with its sessions and documents
 // (카드), a card on a board, a row of a table and a line of a list. Which details show is the view's
@@ -61,8 +61,9 @@ const property = (row: ProjectRow, key: string) => row.summary?.properties.find(
 /** The property fields chosen (`prop:<key>`), as small "이름 값" chips. */
 function PropChips({ row, fields }: { row: ProjectRow; fields: string[] }) {
   const chips = fields
-    .filter((field) => field.startsWith("prop:"))
+    .filter((field) => field.startsWith("prop:") || Object.hasOwn(BASE_FILE_LABELS, field))
     .flatMap((field) => {
+      if (field.startsWith("file.")) { const values = fileValues(row, field); return values.length ? [{ field, label: BASE_FILE_LABELS[field]!, text: values.join(", ") }] : []; }
       const entry = property(row, field.slice(5));
       const values = (entry?.values ?? []).filter((value) => value.trim());
       return values.length ? [{ field, label: propLabel(field.slice(5)), text: values.map((value) => propText(value, entry?.type)).join(", ") }] : [];
@@ -262,6 +263,7 @@ export function tableColumns(fields: string[], stages: ProjectStage[], state: St
         out.push({ id: field, label: "만든 날", sort: "created", cell: (row) => ago(row.work.createdAt), className: () => "muted" });
         break;
       default:
+        if (Object.hasOwn(BASE_FILE_LABELS, field)) out.push({ id: field, label: BASE_FILE_LABELS[field]!, sort: field, cell: (row) => fileValues(row, field).join(", ") });
         if (field.startsWith("prop:")) {
           const key = field.slice(5);
           const type = kinds.get(key);
