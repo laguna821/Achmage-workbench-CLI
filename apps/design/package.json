@@ -1,7 +1,7 @@
 {
   "name": "@workbench/design",
   "private": true,
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "module",
   "description": "Design documents: the vendored doory editor (vendor/doory) mounted for Workbench.",
   "scripts": {
@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@workbench/contracts": "0.2.1",
+    "@workbench/contracts": "0.2.2",
     "@fontsource-variable/caveat": "5.3.0",
     "@fontsource-variable/fraunces": "5.3.0",
     "@fontsource-variable/inter": "5.3.0",
