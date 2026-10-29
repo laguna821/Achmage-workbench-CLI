@@ -129,6 +129,18 @@ export type ProjectPage = {
   readNotes?: EngineReadNote[];
 };
 
+/** The Achmage work a project note names (`achmage_work`), as the user's Achmage runtime describes it (read-only). */
+export type AchmageBrief = {
+  workId: string;
+  /** False: the runtime does not know that work. */
+  found: boolean;
+  title: string | null;
+  lastCapturedAt: number | null;
+  devices: string[];
+  /** A summary from its context, when the runtime had one to give. */
+  summary: string | null;
+};
+
 /** A write to the note, kept a while so "되돌리기" can put the bytes back. */
 export type ProjectWrite = { token: string; created: boolean; summary: string; page: ProjectPage };
 

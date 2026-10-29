@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { PROVIDER_LABEL, type ProjectEvent, type ProjectPage, type ProjectSummary, type ProjectWrite, type Session, type StoppedPlace, type Work } from "@workbench/contracts";
+import { PROVIDER_LABEL, type AchmageBrief, type ProjectEvent, type ProjectPage, type ProjectSummary, type ProjectWrite, type Session, type StoppedPlace, type Work } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
 import { ago, statusText } from "../../format.ts";
 import { ObsidianMarkdown, obsidianComponents, obsidianUrlTransform } from "../../markdown/obsidian.tsx";
@@ -105,6 +105,13 @@ export function ProjectView({
   const load = useCallback(() => {
     api.project(workId).then(setPage).catch(onError);
   }, [api, workId, onError]);
+  // The Achmage work the note names (achmage_work), read from the user's Achmage runtime when there is one.
+  const achmageId = page?.note.properties.find(([key]) => key.trim().replace(/:$/, "").toLowerCase() === "achmage_work")?.[1]?.[0]?.trim() ?? null;
+  const [achmage, setAchmage] = useState<AchmageBrief | null>(null);
+  useEffect(() => {
+    setAchmage(null);
+    if (achmageId) api.projectAchmage(workId).then(setAchmage, () => setAchmage(null));
+  }, [api, workId, achmageId]);
   useEffect(load, [load, version]);
   const timer = useRef<number | undefined>(undefined);
   useEffect(() => {
@@ -367,6 +374,22 @@ export function ProjectView({
               <button type="button" className="project-add" onClick={() => setAdding("property")}>
                 + 속성
               </button>
+            ) : null}
+
+            {achmage ? (
+              <div className="project-achmage" title="사용자의 Achmage 런타임이 기록한 이 작업(읽기 전용)">
+                <span className="project-achmage-label">Achmage</span>
+                {achmage.found ? (
+                  <>
+                    <span className="project-achmage-title">{achmage.title ?? achmage.workId}</span>
+                    {achmage.lastCapturedAt ? <span className="muted"> · 마지막 기록 {ago(achmage.lastCapturedAt)}</span> : null}
+                    {achmage.devices.length ? <span className="muted"> · {achmage.devices.join(", ")}</span> : null}
+                    {achmage.summary ? <p className="project-achmage-summary">{achmage.summary}</p> : null}
+                  </>
+                ) : (
+                  <span className="muted">{achmage.workId} — Achmage에서 이 작업을 찾지 못했습니다.</span>
+                )}
+              </div>
             ) : null}
 
             {/* What needs the person, in one line; each goes straight there. */}

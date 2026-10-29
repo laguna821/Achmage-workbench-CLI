@@ -786,3 +786,25 @@ button.project-fact {
   font-size: 13px;
   line-height: 1.7;
 }
+
+/* The Achmage work the note names: one quiet line, read-only. */
+.project-achmage {
+  margin: 4px 0 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.project-achmage-label {
+  margin-right: 8px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.project-achmage-summary {
+  margin: 4px 0 0;
+  color: var(--muted);
+}

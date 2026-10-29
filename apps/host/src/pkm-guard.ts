@@ -16,7 +16,7 @@ export const CARD_LIMIT = 2048;
 const bytes = (text: string) => Buffer.byteLength(text, "utf8");
 
 /** The project part of a context card (project.ts `cardInfo`). */
-export type CardProject = { note: string; exists: boolean; stage: string | null; tags: string[]; decisions: string[]; questions: string[] };
+export type CardProject = { note: string; exists: boolean; stage: string | null; tags: string[]; decisions: string[]; questions: string[]; achmage?: string | null };
 
 /** A line cut to at most this many UTF-8 bytes (on a character boundary). */
 function clip(text: string, limit: number) {
@@ -43,6 +43,8 @@ export function contextCard(input: { title: string; folders: string[]; cwd: stri
     head.push(`프로젝트 노트: ${project.note}${project.exists ? "" : " (아직 없음)"} — 사람이 단계·태그·결정·열린 질문을 정리하는 곳입니다. 고쳐 달라는 요청이 있을 때만 고치세요.`);
     const facts = [project.stage ? `단계: ${project.stage}` : null, project.tags.length ? `태그: ${project.tags.map((tag) => `#${tag}`).join(" ")}` : null].filter(Boolean);
     if (facts.length) head.push(clip(facts.join(" · "), 240));
+    // So an engine publishing an insight names this work, not a guess.
+    if (project.achmage) head.push(clip(`Achmage 작업: ${project.achmage} — 인사이트를 낼 때 이 작업 id를 쓰세요.`, 240));
   }
   if (input.vault) {
     head.push(

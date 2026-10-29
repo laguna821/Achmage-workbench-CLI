@@ -1,4 +1,5 @@
 import type {
+  AchmageBrief,
   AgentBrowserStatus,
   ChangeLine,
   ProjectEntryRequest,
@@ -160,6 +161,7 @@ export class Api {
   undoProject = (workId: string, token: string) => this.request<ProjectPage>("POST", `/api/projects/${encodeURIComponent(workId)}/undo`, { token });
   revertProjectNote = (workId: string) => this.request<ProjectWrite>("POST", `/api/projects/${encodeURIComponent(workId)}/revert`);
   projectStages = () => this.request<ProjectStage[]>("GET", "/api/projects/stages");
+  projectAchmage = (workId: string) => this.request<AchmageBrief | null>("GET", `/api/projects/${encodeURIComponent(workId)}/achmage`);
   setProjectStages = (stages: ProjectStage[]) => this.request<ProjectStage[]>("PUT", "/api/projects/stages", { stages });
   /** "알릴 변경": what the next request of a session will be told changed since its last one. */
   changes = (sessionId: string) => this.request<ChangeLine[]>("GET", `/api/projects/changes?${new URLSearchParams({ sessionId })}`);

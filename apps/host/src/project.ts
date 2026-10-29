@@ -13,6 +13,7 @@ import {
   turnBreakOf,
   turnEndText,
   type Artifact,
+  type AchmageBrief,
   type ArtifactRevision,
   type ChangeLine,
   type ProjectEntryRequest,
@@ -34,6 +35,7 @@ import { HttpError } from "./errors.ts";
 import type { Pkm } from "./pkm.ts";
 import { ID_KEY, appendEntry, newNote, noteFileName, readNote, setBody, setEntryDone, setFrontmatterKey, type ReadNote } from "./project-note.ts";
 import type { IndexEntry, WorkExtras } from "./search-index.ts";
+import { Achmage } from "./achmage.ts";
 import type { SessionManager } from "./sessions.ts";
 import type { Store } from "./store.ts";
 
@@ -68,6 +70,9 @@ export const entryGist = (text: string) =>
     .replace(/\s+—\s+[^—]*\(\[원문\]\([^)]*\)\)\s*$/, "")
     .replace(/^\d{4}-\d{2}-\d{2}\s+/, "")
     .trim();
+
+/** The `achmage_work` key of a note's properties (its first value), or null. */
+export const achmageWorkOf = (properties: [string, string[] | null][]) => properties.find(([key]) => key.trim().replace(/:$/, "").toLowerCase() === "achmage_work")?.[1]?.[0]?.trim() || null;
 
 const SOURCE_LINK = /\(\[원문\]\(workbench:\/\/session\/([^#)\s]+)(?:#([^)\s]+))?\)\)/;
 
@@ -150,6 +155,8 @@ export class Projects {
   private readonly summaryCache = new Map<string, { key: string; read: ReadNote; at: number }>();
   /** Works this module is archiving or restoring itself: the archive listener leaves those alone. */
   private readonly quiet = new Set<string>();
+  /** The user's Achmage runtime, if this computer has one (achmage.ts). */
+  achmageRuntime = new Achmage();
 
   constructor(store: Store, bus: EventBus, manager: SessionManager, pkm: Pkm) {
     this.store = store;
@@ -736,7 +743,14 @@ export class Projects {
       tags: note.tags,
       decisions: note.decisions.slice(-5).map((entry) => entryGist(entry.text)),
       questions: note.questions.filter((entry) => !entry.done).slice(-3).map((entry) => entryGist(entry.text)),
+      achmage: achmageWorkOf(note.properties),
     };
+  }
+
+  /** The Achmage work the note names (`achmage_work`), as the user's Achmage runtime describes it; null when none. */
+  async achmage(workId: string): Promise<AchmageBrief | null> {
+    const id = achmageWorkOf(this.note(this.work(workId)).properties);
+    return id ? this.achmageRuntime.brief(id) : null;
   }
 
   private told() {

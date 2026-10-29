@@ -38,6 +38,7 @@ export async function handleProject(projects: Projects, req: IncomingMessage, re
   if (!workId) return false;
   const action = parts[1] ?? "";
   if (method === "GET" && !action) return (sendJson(res, 200, projects.page(workId)), true);
+  if (method === "GET" && action === "achmage") return (sendJson(res, 200, await projects.achmage(workId)), true);
   if (method === "GET" && action === "events") return (sendJson(res, 200, projects.allEvents(workId)), true);
   if (method === "PUT" && action === "property") {
     const body = await readJson(req);
