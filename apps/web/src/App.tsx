@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { PROVIDER_LABEL, isUnseen, type AccessMode, type Artifact, type Attachment, type CreateTarget, type DocRef, type Proposal, type Provider, type Session, type SessionStatus, type UiPrefs, type Work } from "@workbench/contracts";
+import { PROVIDER_LABEL, isUnseen, type AccessMode, type Artifact, type Attachment, type CreateTarget, type DocRef, type ProjectPick, type Proposal, type Provider, type Session, type SessionStatus, type UiPrefs, type Work } from "@workbench/contracts";
 import { Api, ApiRequestError, readToken } from "./api.ts";
 import { configureDesign } from "./design.ts";
 import { initialState, isBusy, reducer, sessionsOf } from "./state.ts";
@@ -41,6 +41,8 @@ import { VaultDialogHost, VaultSettingsRow } from "./components/pkm/VaultDialog.
 import { PkmCenter, pkmTitle } from "./components/pkm/PkmCenter.tsx";
 import { ProjectView } from "./components/project/ProjectView.tsx";
 import type { PkmTarget } from "./pkm.ts";
+import { entryClient, homeTarget, sessionToOpen, unseenFailure } from "./entry.ts";
+import { WorksDirRow } from "./components/WorksDirRow.tsx";
 
 // Editors (CodeMirror, PDF.js) load only when a document opens.
 const DocumentView = lazy(() => import("./components/docs/DocumentView.tsx"));
@@ -79,9 +81,9 @@ async function notify(title: string, body: string, sessionId: string) {
 
 const BUSY: SessionStatus[] = ["starting", "running", "interrupting", "awaitingApproval"];
 
-async function pickFolderNative(): Promise<string | null> {
+async function pickFolderNative(title = "작업 폴더 선택", defaultPath?: string): Promise<string | null> {
   const { open } = await import("@tauri-apps/plugin-dialog");
-  const picked = await open({ directory: true, multiple: false, title: "작업 폴더 선택" });
+  const picked = await open({ directory: true, multiple: false, title, defaultPath });
   return typeof picked === "string" ? picked : null;
 }
 
@@ -563,14 +565,20 @@ export function App() {
     cwd: string | null,
     folderId: string | null,
     choice: { model: string | null; effort: string | null },
+    pick: ProjectPick = { kind: "auto" },
   ) => {
     if (!api) return false;
     try {
-      const created = await api.createWork(titleFrom(text), folderId, cwd);
+      // The project chip: an existing work gets a new session; otherwise a new work (project).
+      const existing = await homeTarget(state, pick, cwd, entryClient(api).workAt);
+      const created = existing ?? (await api.createWork(titleFrom(text), folderId, cwd));
       const session = await api.createSession(created.id, provider, choice);
+      dispatch({ type: "focus", work: created, session });
       setWorkId(created.id);
       setView({ kind: "work" });
       await api.send(session.id, newRequestId(), text);
+      // Home's input is gone from the screen by now and cannot clear itself: the sent text must not come back there.
+      writeDraft(`new:${folderId ?? "root"}`, "");
       return true;
     } catch (error) {
       fail(error);
@@ -589,8 +597,11 @@ export function App() {
   }, [visibleSession?.id]);
   const seenAsked = useRef("");
   useEffect(() => {
-    if (!api || !visibleSession || !isUnseen(visibleSession) || keptUnread.current === visibleSession.id) return;
-    const key = `${visibleSession.id}:${visibleSession.previewAt}:${visibleSession.unread}`;
+    if (!api || !visibleSession) return;
+    // A failure counts as seen too once looked at (opening the work then goes elsewhere, entry.ts).
+    const failed = unseenFailure(visibleSession);
+    if (!(isUnseen(visibleSession) || failed) || keptUnread.current === visibleSession.id) return;
+    const key = `${visibleSession.id}:${visibleSession.previewAt}:${visibleSession.unread}${failed ? `:${visibleSession.updatedAt}` : ""}`;
     if (seenAsked.current === key) return;
     seenAsked.current = key;
     void api.updateSession(visibleSession.id, { seen: true }).catch(() => undefined);
@@ -1109,6 +1120,19 @@ export function App() {
   );
 
   function openWorkNow(target: Work) {
+    // The session that needs the user: 확인 필요 › 오류 › 새 답 › the one looked at last (entry.ts),
+    // shown at once (no other session flashes by and gets marked read).
+    const latest = state.works[target.id] ?? target;
+    const chosen = sessionToOpen(state, latest);
+    // A detached window stays one window: it switches to that session.
+    if (single) {
+      if (chosen) actions.selectSession(latest, chosen);
+      return;
+    }
+    if (chosen && chosen.id !== latest.activeSessionId) {
+      dispatch({ type: "focus", work: latest, session: chosen });
+      void api?.updateWork(latest.id, { activeSessionId: chosen.id }).catch(fail);
+    }
     setWorkId(target.id);
     setView({ kind: "work" });
   }
@@ -1401,6 +1425,7 @@ export function App() {
                   />
                 }
                 vault={<VaultSettingsRow onOpen={closeMenu} />}
+                worksDir={<WorksDirRow api={api} pickFolder={inDesktop ? (start) => pickFolderNative("새 프로젝트 폴더 위치", start) : null} />}
               />
             </Popover>
           </div>
@@ -1502,7 +1527,7 @@ export function App() {
           state={state}
           folderId={view.kind === "new" ? view.folderId : null}
           onClearFolder={() => setView({ kind: "new", folderId: null })}
-          onStart={(text, provider, cwd, choice) => startWork(text, provider, cwd, view.kind === "new" ? view.folderId : null, choice)}
+          onStart={(text, provider, cwd, choice, pick) => startWork(text, provider, cwd, view.kind === "new" ? view.folderId : null, choice, pick)}
           onOpenWork={openWorkNow}
           onOpenSession={openSession}
           onOpenDoc={(artifactId) => docActions.openArtifact(artifactId)}

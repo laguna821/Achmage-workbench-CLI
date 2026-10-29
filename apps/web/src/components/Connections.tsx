@@ -95,9 +95,12 @@ export function Connections({
   onNotifications,
   imageUpload,
   vault,
+  worksDir,
 }: {
   /** The Obsidian vault line (pkm). */
   vault?: ReactNode;
+  /** "새 프로젝트 폴더 위치" (WorksDirRow.tsx). */
+  worksDir?: ReactNode;
   tools: DocumentTools | null;
   /** The agent browser (absent from older gateways). */
   browser: AgentBrowserStatus | null;
@@ -196,6 +199,7 @@ export function Connections({
       <ToolsSection tools={tools} onInstallIeum={onInstallIeum} onRefreshTools={onRefreshTools} />
       <BrowserSection status={browser} actions={browserActions} />
       {vault}
+      {worksDir}
       <button type="button" className="text-button" onClick={onIntegrations}>
         MCP·스킬 연동 · Claude와 Codex 나란히…
       </button>

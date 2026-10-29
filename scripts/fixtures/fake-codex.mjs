@@ -18,6 +18,7 @@
 //          <address>` from its PATH like a model would (found by CODEX_THREAD_ID, no -s), asking first
 //          only under "untrusted" as Codex does
 //   "고쳐"  appends a paragraph to the working copy the request names (a proposal)
+//   "실패해"  the turn fails without an answer (an `error` notification, then a failed turn)
 //   anything else: a short answer
 // Local images in the input are reported at the start of the answer ("받은 그림 1장 · 1234바이트").
 // "스크린샷": like a browsing step, a command saves a screenshot (Playwright CLI's output names it),
@@ -236,6 +237,14 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
   const request = { type: "userMessage", id: `user_${++counter}`, clientId: null, content: [{ type: "text", text, text_elements: [] }] };
   notify("item/started", { threadId, turnId, item: request });
   notify("item/completed", { threadId, turnId, item: request });
+  if (text.includes("실패해")) {
+    await sleep(150);
+    const error = { message: "가짜 오류로 응답을 끝내지 못했습니다", codexErrorInfo: null, additionalDetails: null };
+    notify("error", { error, willRetry: false, threadId, turnId });
+    thread.turn = null;
+    notify("turn/completed", { threadId, turn: { id: turnId, items: [], itemsView: "full", status: "failed", error, startedAt: null, completedAt: now(), durationMs: Date.now() - started } });
+    return;
+  }
   if (text.includes("압축")) {
     await compact(threadId, thread, turnId);
   }

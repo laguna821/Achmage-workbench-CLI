@@ -102,6 +102,8 @@ export type ManagerOptions = {
   hostLabel: string;
   /** Parent directory for works started without a folder. */
   managedWorksDir: string;
+  /** The parent the user chose for new works started without a folder ("새 프로젝트 폴더 위치", entry.ts). */
+  worksDir?: () => string;
   /** Gateway data folder (document revisions live under it). Defaults to the parent of managedWorksDir. */
   dataDir?: string;
   /** Hangul document engine; without it HWPX/HWP are listed but not opened as text. */
@@ -805,7 +807,7 @@ export class SessionManager {
     let cwd = request.cwd?.trim() || null;
     const cwdManaged = !cwd;
     if (!cwd) {
-      cwd = join(this.options.managedWorksDir, id);
+      cwd = join(this.options.worksDir?.() ?? this.options.managedWorksDir, id);
       mkdirSync(cwd, { recursive: true });
     }
     const now = Date.now();

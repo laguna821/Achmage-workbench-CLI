@@ -106,6 +106,8 @@ export type HttpOptions = {
   pkm?: (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<boolean>;
   /** `/api/projects/*` (project-http.ts): a work as a project note; true when it answered. */
   projects?: (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<boolean>;
+  /** `/api/entry/*` (entry.ts): the live work of a folder, the location of new project folders. */
+  entry?: (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<boolean>;
 };
 
 function sameToken(given: string | null, expected: string) {
@@ -236,6 +238,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       if (method === "GET" && path === "/api/snapshot") return sendJson(res, 200, manager.snapshot());
       if (path.startsWith("/api/pkm/") && options.pkm && (await options.pkm(req, res, url))) return;
       if (path.startsWith("/api/projects/") && options.projects && (await options.projects(req, res, url))) return;
+      if (path.startsWith("/api/entry/") && options.entry && (await options.entry(req, res, url))) return;
       if (method === "GET" && path === "/api/events") {
         return streamEvents(req, res, bus, Number(url.searchParams.get("since") ?? bus.currentSeq));
       }

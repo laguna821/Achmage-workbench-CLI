@@ -1,0 +1,122 @@
+/* ① 들어가는 길: the project chip on home and the "새 프로젝트 폴더 위치" setting. */
+
+.project-button {
+  max-width: 300px;
+}
+
+.project-button-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-button.existing {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  color: var(--text);
+}
+
+.project-button.existing > svg:first-child {
+  color: var(--accent);
+}
+
+.project-menu {
+  width: 340px;
+}
+
+.project-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 2px 6px;
+  padding: 0 10px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.project-filter:focus-within {
+  border-color: var(--accent);
+}
+
+.project-filter input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14.5px;
+}
+
+.project-list {
+  overflow-y: auto;
+}
+
+.project-list .menu-item-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.project-list .menu-item.keyed:not(.active) {
+  background: var(--surface-muted);
+}
+
+.project-list .menu-item-hint {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-empty {
+  padding: 8px 10px 10px;
+  font-size: 13.5px;
+  color: var(--faint);
+}
+
+/* The setting in "연결과 설정". */
+.works-dir-path {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.works-dir-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.works-dir-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.works-dir-form input {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.works-dir-form input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* The settings popover is taller than a short window: it scrolls inside the window instead of
+   pushing the page (this row made it longer still). */
+.popover:has(> .connections) {
+  max-height: calc(100vh - 72px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}

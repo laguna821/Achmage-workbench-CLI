@@ -755,3 +755,4 @@ export * from "./pkm.ts";
 export * from "./schedules.ts";
 export * from "./worktrees.ts";
 export * from "./project.ts";
+export * from "./entry.ts";
