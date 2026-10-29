@@ -43,11 +43,13 @@ for (let step = 0; step < 8; step += 1) {
   appendFileSync(join(root, "payload.bin"), Buffer.alloc(512 * 1024, step));
   await sleep(250);
 }
+// The modules the stand-in engines import, copied next to them.
+const HELPERS = ["png.mjs", "sample-reply.mjs"];
 if (name === "@openai/codex") {
   mkdirSync(join(root, "bin"), { recursive: true });
   writeFileSync(join(root, "package.json"), JSON.stringify({ name, version: "0.0.0-fake", type: "module", bin: { codex: "bin/codex.js" } }));
   copyFileSync(join(here, "fake-codex.mjs"), join(root, "bin", "codex.js"));
-  copyFileSync(join(here, "png.mjs"), join(root, "bin", "png.mjs"));
+  for (const helper of HELPERS) copyFileSync(join(here, helper), join(root, "bin", helper));
 } else if (name === "@anthropic-ai/claude-code") {
   mkdirSync(join(root, "bin"), { recursive: true });
   writeFileSync(join(root, "package.json"), JSON.stringify({ name, version: "2.1.999", type: "module", bin: { claude: "bin/claude.exe" } }));
@@ -55,7 +57,7 @@ if (name === "@openai/codex") {
   writeFileSync(join(root, "bin", "claude.exe"), 'echo "Error: claude native binary not installed." >&2\nexit 1\n');
   writeFileSync(join(root, "cli-wrapper.cjs"), '#!/usr/bin/env node\nimport(require("node:url").pathToFileURL(require("node:path").join(__dirname, "fake-claude.mjs")).href);\n');
   copyFileSync(join(here, "fake-claude.mjs"), join(root, "fake-claude.mjs"));
-  copyFileSync(join(here, "png.mjs"), join(root, "png.mjs"));
+  for (const helper of HELPERS) copyFileSync(join(here, helper), join(root, helper));
 } else {
   console.error(`npm error code E404\nnpm error 404 Not Found - GET https://registry.npmjs.org/${name}`);
   process.exit(1);

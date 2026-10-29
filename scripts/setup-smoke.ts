@@ -37,7 +37,8 @@ function standInPackage(dir: string, name: string, entry: string, fake: string) 
   mkdirSync(dirname(join(dir, entry)), { recursive: true });
   writeFileSync(join(dir, "package.json"), JSON.stringify({ name, version: "0.0.0-fake", type: "module" }));
   copyFileSync(join(fixtures, fake), join(dir, entry));
-  copyFileSync(join(fixtures, "png.mjs"), join(dirname(join(dir, entry)), "png.mjs"));
+  // The modules the stand-in engines import, next to them.
+  for (const helper of ["png.mjs", "sample-reply.mjs"]) copyFileSync(join(fixtures, helper), join(dirname(join(dir, entry)), helper));
   return join(dir, entry);
 }
 
