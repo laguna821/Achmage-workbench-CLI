@@ -213,4 +213,10 @@ export type ProjectSummary = {
   /** Open questions not ticked yet. */
   questions: number;
   noteExists: boolean;
+  /** Every property of the note as written (the machine key left out), each with its kind; none without a note. */
+  properties: { key: string; type: PropertyType; values: string[] }[];
+  /** When the note file last changed (ms since 1970); null without a note. */
+  noteUpdatedAt: number | null;
+  /** The first line of the note's own words (not a heading), for lists; null when it has none. */
+  preview: string | null;
 };

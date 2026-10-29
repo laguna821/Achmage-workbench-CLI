@@ -239,7 +239,7 @@ describe("what the engines are told", () => {
 
 describe("properties (Obsidian-like)", () => {
   it("show the template's fields on every page, empty until filled, written in their kind", () => {
-    const { projects, work, cwd } = setup();
+    const { projects, work, cwd, manager } = setup();
     const page = projects.page(work.id);
     expect(page.rows!.map((row) => [row.key, row.type, row.present])).toEqual([
       ["단계", "stage", false],
@@ -262,6 +262,18 @@ describe("properties (Obsidian-like)", () => {
     expect(rows.find((row) => row.key === "회차")).toMatchObject({ type: "number", values: ["3"], fromTemplate: false });
     expect(rows.find((row) => row.key === "시작일")).toMatchObject({ present: true, values: ["2026-10-29"] });
     expect(() => projects.setProperty(work.id, "마감일", ["언젠가"], "date")).toThrow(/날짜로 읽지 못했습니다/);
+    // Lists (the sidebar's and home's groups) get every property with its kind, the note's time and first words.
+    writeFileSync(join(cwd, "안녕.md"), `${text}\n## 목표\n\n- **루브릭**을 [[가을 특강]]에 붙인다\n`);
+    const summary = projects.summaries().find((entry) => entry.workId === work.id)!;
+    expect(summary.properties).toEqual([
+      { key: "종류", type: "list", values: ["강의"] },
+      { key: "시작일", type: "date", values: ["2026-10-29"] },
+      { key: "회차", type: "number", values: ["3"] },
+    ]);
+    expect(summary.preview).toBe("루브릭을 가을 특강에 붙인다");
+    expect(summary.noteUpdatedAt).toBeGreaterThan(Date.now() - 60_000);
+    const bare = manager.createWork({ title: "빈 프로젝트", cwd: join(cwd, "..", "빈") });
+    expect(projects.summaries().find((entry) => entry.workId === bare.id)).toMatchObject({ properties: [], noteUpdatedAt: null, preview: null });
   });
 
   it("keep the kind the person picks for a name, and the template the person saves (or the default again)", () => {

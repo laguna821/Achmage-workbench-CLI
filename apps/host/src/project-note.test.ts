@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appendEntry, newNote, noteFileName, readNote, setBody, setEntryDone, setFrontmatterKey, yamlKey } from "./project-note.ts";
+import { appendEntry, newNote, noteFileName, notePreview, readNote, setBody, setEntryDone, setFrontmatterKey, yamlKey } from "./project-note.ts";
 
 // A project note is changed the way a person would change it: one key or one line, every other byte
 // as it was (other keys, their order and quoting, blank lines, line endings, the body).
@@ -110,5 +110,15 @@ describe("files", () => {
     expect(noteFileName("  ")).toBe("프로젝트.md");
     expect(noteFileName("..숨김")).toBe("숨김.md");
     expect(newNote("w1")).toBe("---\nworkbench_id: w1\n---\n");
+  });
+});
+
+describe("a list's preview line", () => {
+  it("is the note's first own words, without headings, marks or links", () => {
+    expect(notePreview("\n## 목표\n\n- [ ] **형성평가** 루브릭을 [[가을 특강|특강]]에 붙인다\n둘째 줄\n")).toBe("형성평가 루브릭을 특강에 붙인다");
+    expect(notePreview("> [!NOTE] 질문에서 시작하는 [글쓰기](https://example.com) 수업\n")).toBe("질문에서 시작하는 글쓰기 수업");
+    expect(notePreview("---\n| 주차 | 내용 |\n```\ncode\n```\n끝 줄\n")).toBe("끝 줄");
+    expect(notePreview("# 제목만\n\n")).toBeNull();
+    expect(notePreview("가".repeat(200))).toBe(`${"가".repeat(139)}…`);
   });
 });

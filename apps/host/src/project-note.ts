@@ -227,6 +227,32 @@ export function noteFileName(title: string): string {
   return `${clean || "프로젝트"}.md`;
 }
 
+/**
+ * The first line of a note's own words, as a list shows it under the name: headings, rules, code
+ * blocks, tables and comments are passed over, list and quote marks and Markdown links come off.
+ * At most 140 characters; null when the note has no words of its own.
+ */
+export function notePreview(free: string): string | null {
+  let fenced = false;
+  for (const raw of free.split("\n")) {
+    const line = raw.trim();
+    if (/^(```|~~~)/.test(line)) fenced = !fenced;
+    if (fenced || !line || /^(#{1,6}\s|-{3,}$|\*{3,}$|```|~~~|<!--|\|)/.test(line)) continue;
+    const plain = line
+      .replace(/^>\s*(\[![^\]]*\][+-]?\s*)?/, "")
+      .replace(/^([-*+]|\d+[.)])\s+(\[[ xX]\]\s+)?/, "")
+      .replace(/!\[\[[^\]]*\]\]|!\[[^\]]*\]\([^)]*\)/g, "")
+      .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, "$2")
+      .replace(/\[\[([^\]]+)\]\]/g, "$1")
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .replace(/(\*\*|__|\*|_|`|==)(?=\S)([^*_`=]*?\S)\1/g, "$2")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (plain) return plain.length > 140 ? `${plain.slice(0, 139)}…` : plain;
+  }
+  return null;
+}
+
 /** A new note: only the machine key that ties it to the work (the rest is added as people write). */
 export function newNote(workId: string, nl = "\n"): string {
   return `---${nl}${ID_KEY}: ${workId}${nl}---${nl}`;

@@ -35,7 +35,7 @@ import { PROJECT_NOTE_IN_GIT, WORKBENCH_DIR } from "./artifacts.ts";
 import type { EventBus } from "./bus.ts";
 import { HttpError } from "./errors.ts";
 import type { Pkm } from "./pkm.ts";
-import { ID_KEY, appendEntry, newNote, noteFileName, readNote, setBody, setEntryDone, setFrontmatterKey, type ReadNote } from "./project-note.ts";
+import { ID_KEY, appendEntry, newNote, noteFileName, notePreview, readNote, setBody, setEntryDone, setFrontmatterKey, type ReadNote } from "./project-note.ts";
 import type { IndexEntry, WorkExtras } from "./search-index.ts";
 import { Achmage } from "./achmage.ts";
 import { DEFAULT_PROPERTY_TEMPLATE, cleanTemplate, inferType, keyStyle, normalizeValues, propertyRows, templateFromMarkdown, vaultPropertyTypes } from "./project-properties.ts";
@@ -363,12 +363,21 @@ export class Projects {
 
   /** A property's kind: the user's choice here, the template's, the vault's Obsidian's, else what its value shows. */
   typeOf(key: string, values: string[] | null): PropertyType {
-    if (key === STAGE_KEY) return "stage";
-    const chosen = this.readJson<Record<string, PropertyType>>(TYPES_KEY, {})[key];
-    if (chosen) return chosen;
-    const field = this.template().find((entry) => entry.key === key);
-    if (field) return field.type;
-    return this.vaultTypes().get(key) ?? inferType(key, values);
+    return this.typeResolver()(key, values);
+  }
+
+  /** `typeOf` with its sources read once, for the many properties of a list of projects. */
+  private typeResolver(): (key: string, values: string[] | null) => PropertyType {
+    const chosen = this.readJson<Record<string, PropertyType>>(TYPES_KEY, {});
+    const template = new Map(this.template().map((field) => [field.key, field.type] as const));
+    let vault: Map<string, PropertyType> | null = null;
+    return (key, values) => {
+      if (key === STAGE_KEY) return "stage";
+      const kind = chosen[key] ?? template.get(key);
+      if (kind) return kind;
+      vault ??= this.vaultTypes();
+      return vault.get(key) ?? inferType(key, values);
+    };
   }
 
   /** "형식 바꾸기" on a row: remembered for that name in every project (the value is rewritten in that form when it is next written). */
@@ -401,6 +410,7 @@ export class Projects {
   /** Every project as lists show it (archived ones too: the archive stage's column). */
   summaries(): ProjectSummary[] {
     const out: ProjectSummary[] = [];
+    const typeOf = this.typeResolver();
     for (const work of this.manager.view.works.values()) {
       const path = this.notePaths()[work.id] ?? null;
       const known = path ? this.readCached(path) : null;
@@ -416,6 +426,9 @@ export class Projects {
         decisions: read?.decisions.length ?? 0,
         questions: read?.questions.filter((entry) => !entry.done).length ?? 0,
         noteExists: Boolean(read),
+        properties: (read?.properties ?? []).map(([key, values]) => ({ key, type: typeOf(key, values), values: values ?? [] })),
+        noteUpdatedAt: known?.at ?? null,
+        preview: read ? notePreview(read.free) : null,
       });
     }
     return out;
