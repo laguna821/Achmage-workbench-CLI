@@ -257,7 +257,7 @@ async function runTurn(text) {
     }
     const result = allowed ? await runCommand(input.command) : { code: 1, output: "The user declined this action." };
     send({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolId, content: result.output, is_error: result.code !== 0 }] }, parent_tool_use_id: null, ...base() });
-    findLine = allowed ? `workbench-find 결과 (종료 코드 ${result.code}):\n${result.output}` : "workbench-find: 거절됨";
+    findLine = allowed ? `workbench-find 결과 (종료 코드 ${result.code}):\n\n\`\`\`text\n${result.output.trimEnd()}\n\`\`\`` : "workbench-find: 거절됨";
   }
   // A document edit: the gateway names the working copy to change; the file itself stays as it is.
   const working = text.match(/작업 사본만 수정하세요: (.+)/);

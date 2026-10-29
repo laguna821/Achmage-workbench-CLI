@@ -143,8 +143,17 @@ export function parseQuery(query: string): ParsedQuery {
   const words = splitQuery(query);
   const parts = words.map((word) => part(word.raw, word.quoted)).filter((entry): entry is QueryPart => entry !== null);
   const needles = new Set(parts.flatMap((entry) => entry.needles));
-  // Two or more words: the same words together (as typed, or written as one) rank higher.
   const phrase: string[] = [];
+  // A word whose ending was read as a particle is still searched as typed too: where the whole word
+  // stands ("형성평가", not only "형성평") it is marked whole and ranks higher.
+  for (const entry of parts) {
+    const typed = fold(entry.raw).replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+    if (entry.quoted || typed === entry.term || !onlyPaired(typed)) continue;
+    needles.add(typed);
+    const whole = phraseOf(wordTokens(typed));
+    if (whole && !phrase.includes(whole)) phrase.push(whole);
+  }
+  // Two or more words: the same words together (as typed, or written as one) rank higher.
   const plain = words.filter((word) => !word.quoted);
   if (plain.length >= 2 && plain.length === words.length) {
     const typed = phraseOf(wordTokens(plain.map((word) => word.raw).join(" ")));
@@ -175,9 +184,26 @@ export function textExpression(parts: QueryPart[]): string | null {
 /** A LIKE pattern for a needle (`%`, `_` and the escape character taken literally). */
 export const likePattern = (needle: string) => `%${needle.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
 
+/** Markdown as it reads: no heading, list, quote or emphasis marks, links as their text, no pictures or tags. */
+export function plainText(text: string) {
+  return text
+    .replace(/```[a-zA-Z0-9_-]*/g, " ")
+    .replace(/!\[\[[^\]]*\]\]/g, " ")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[\[([^\]|]*)\|([^\]]*)\]\]/g, "$2")
+    .replace(/\[\[([^\]]*)\]\]/g, "$1")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^[ \t]{0,3}#{1,6}[ \t]+/gm, "")
+    .replace(/^[ \t]*>[ \t]?(?:\[![^\]]*\][+-]?[ \t]*)?/gm, "")
+    .replace(/^[ \t]*(?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?/gm, "")
+    .replace(/(\*\*|__|~~|==)/g, "")
+    .replace(/`/g, "")
+    .replace(/<[^>]+>/g, " ");
+}
+
 /** A short stretch of text around the first match, with every match marked (overlaps merged). */
 export function snippetOf(text: string, needles: string[], width = 140): { snippet: string; ranges: [number, number][] } {
-  const flat = text.replace(/```[a-zA-Z0-9_-]*/g, " ").replace(/\s+/g, " ").trim().normalize("NFC");
+  const flat = plainText(text).replace(/\s+/g, " ").trim().normalize("NFC");
   const lower = flat.toLowerCase();
   const wanted = needles.map((needle) => needle.toLowerCase()).filter(Boolean);
   const first = Math.min(...wanted.map((needle) => lower.indexOf(needle)).filter((index) => index >= 0), flat.length);

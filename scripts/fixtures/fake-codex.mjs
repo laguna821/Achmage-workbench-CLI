@@ -345,7 +345,7 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
     const sandbox = decision === "accept" ? sandboxed(line, thread, threadId) : null;
     const result = sandbox ? await sandbox.run : { code: null, output: null };
     notify("item/completed", { threadId, turnId, item: { ...command, status: decision !== "accept" ? "declined" : result.code === 0 ? "completed" : "failed", aggregatedOutput: result.output, exitCode: result.code } });
-    findLine = decision === "accept" ? `workbench-find 결과 (${sandbox.note}, 종료 코드 ${result.code}):\n${result.output}` : "workbench-find: 거절됨";
+    findLine = decision === "accept" ? `workbench-find 결과 (${sandbox.note}, 종료 코드 ${result.code}):\n\n\`\`\`text\n${result.output.trimEnd()}\n\`\`\`` : "workbench-find: 거절됨";
   }
   if (text.includes("명령")) {
     const itemId = `cmd_${++counter}`;
