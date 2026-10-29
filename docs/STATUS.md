@@ -873,7 +873,7 @@
 
 ### 미검증 · 제한
 - **Windows·macOS 실제 기기**: release.yml의 `smoke` 작업(수동 실행·태그만)이 설치 파일을 깔고(NSIS `/S`, dmg) 묶인 Node로 게이트웨이를 띄워, Windows는 npm `codex.cmd`·`claude.cmd` 셔임, macOS는 Homebrew(`/opt/homebrew/bin/codex`)·`~/.local/bin/claude`의 가짜 엔진으로 같은 API 검사(`scripts/setup-smoke.ts`)를 한다. 아직 돌리지 않았다(리드가 실행).
-- 실제 로그인 완료(로그아웃 상태에서)는 확인하지 못했다(두 계정 모두 로그인 상태, 로그아웃은 사용자 세션을 끊음). 가짜 엔진이 실제 출력 형식(Claude의 OSC 8 링크·코드 `code#state`, Codex의 `account/login/*`)을 따라 한다.
+- 실제 로그인 완료(로그아웃 상태에서)는 확인하지 못했다(두 계정 모두 로그인 상태, 로그아웃은 사용자 세션을 끊음). 실제 Claude Code 2.1.312의 `auth login`을 임시 설정 폴더·브라우저 없이 띄워 출력에서 수동 로그인 주소(`claude.com/cai/oauth/authorize`, 코드가 나오는 페이지로 돌아옴)를 읽는 것까지 확인했다. 가짜 엔진이 그 출력 형식(OSC 8 링크, 코드 `code#state`)과 Codex의 `account/login/*`을 따라 한다.
 - 실제 npm 설치는 이 노트북(Linux)에서 임시 데이터 폴더로 확인했다: Codex 0.165.0(425MB, 5초)·Claude Code 2.1.312(280MB, 4초), 진행률·플랫폼 패키지의 실행 파일·`--version` 확인까지. 설치한 Codex의 app-server를 임시 `CODEX_HOME`으로 띄워 `initialize`·`account/read`(로그인 필요)·`account/login/start`(브라우저 주소, 장치 코드)·취소를 확인했다(취소도 `account/login/completed`로 오는 것을 보고 "실패"로 보이지 않게 고침). Windows·macOS의 실제 설치는 확인하지 못했다.
 - Windows의 Microsoft Store Codex 앱 안 `codex.exe`는 위치가 공개되어 있지 않아 찾지 못할 수 있다(앱 별칭이 PATH에 있으면 찾음). 그때는 "Codex 설치"로 깔 수 있다.
 - macOS: 서명 없는 앱 안의 `IeumOffice.app`·`Achmage HOP.app`을 브라우저로 받은 dmg(격리 속성)에서 처음 실행할 때 Gatekeeper가 따로 묻는지는 확인하지 못했다. HOP는 Apple silicon 빌드만 있다(x64 Mac에는 없음).

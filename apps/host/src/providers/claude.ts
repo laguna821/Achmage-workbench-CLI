@@ -451,8 +451,9 @@ export class ClaudeAdapter implements ProviderAdapter {
       });
     });
     waiting("브라우저에서 Claude 로그인을 마치면 자동으로 연결됩니다.");
+    // The address arrives a moment later; the screen then offers it ("브라우저가 열리지 않았다면").
     await found;
-    if (this.loginProcess === child) waiting("브라우저에서 Claude 로그인을 마치면 자동으로 연결됩니다. 브라우저가 열리지 않았다면 아래 주소를 여세요.");
+    if (this.loginProcess === child) waiting("브라우저에서 Claude 로그인을 마치면 자동으로 연결됩니다.");
     return { url, message: "브라우저에서 Claude 로그인을 마치면 자동으로 연결됩니다." };
   }
 
