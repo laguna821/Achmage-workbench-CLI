@@ -16,6 +16,36 @@
   letter-spacing: 0;
 }
 
+/* The heading folds the whole vault to this one line (names and counts stay in it). */
+.vault-fold {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-left: -4px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.vault-fold:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.vault-fold > span:first-of-type {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.vault-section.folded .vault-count {
+  flex: 0 0 auto;
+}
+
 .vault-readonly {
   padding: 0 5px;
   border: 1px solid var(--line);

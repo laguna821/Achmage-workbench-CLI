@@ -1,4 +1,4 @@
-import { Fragment, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { Fragment, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { BorderStyle, VaultFolder } from "@workbench/contracts";
 import { countLabel, groupRuns, obsidianUrl, openObsidian } from "../../pkm.ts";
 import { Icon, iconName } from "../Icon.tsx";
@@ -11,8 +11,18 @@ import "../../styles/pkm.css";
 // "볼트" in the sidebar: the attached Obsidian vault as a read-only mirror. Folders wear the colours
 // and icons the user gave them in Notebook Navigator; blocks of grouped folders get one border, as
 // the user's border add-on draws them; counts read "현재 · 하위". Nothing here writes to the vault.
+// The whole vault folds to its heading line (the heading or the vault's own row), and stays so.
 
 type Theme = "light" | "dark";
+
+const FOLDED_KEY = "workbench.vaultFolded";
+const readFolded = () => {
+  try {
+    return localStorage.getItem(FOLDED_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
 
 /** CSS variables for a gradient border in one theme (a plain border when there is no end colour). */
 function borderVars(style: BorderStyle, theme: Theme): CSSProperties {
@@ -31,6 +41,16 @@ export function VaultSection({ theme, openMenu }: { theme: Theme; openMenu: (req
   const selected = pkm.target?.kind === "vault" || pkm.target?.kind === "note" ? pkm.target.path : null;
   const tree = pkm.tree;
   const [pinsOpen, setPinsOpen] = useState(false);
+  const [folded, setFolded] = useState(readFolded);
+  const headToggle = useRef<HTMLButtonElement>(null);
+  const fold = (next: boolean) => {
+    setFolded(next);
+    try {
+      localStorage.setItem(FOLDED_KEY, next ? "1" : "0");
+    } catch {
+      // The choice only lasts this session.
+    }
+  };
   if (!tree) return null;
   const status = tree.status;
   const root = tree.root;
@@ -87,17 +107,41 @@ export function VaultSection({ theme, openMenu }: { theme: Theme; openMenu: (req
     openMenu({ x, y, title: folder.name, items });
   };
 
+  const foldsWhole = Boolean(status.path && root && !status.problem);
+  const shut = foldsWhole && folded;
   const head = (
     <div className="side-section-title with-tools">
-      <span>볼트</span>
-      {status.name ? <span className="vault-name">{status.name}</span> : null}
+      {foldsWhole ? (
+        <button
+          ref={headToggle}
+          type="button"
+          className="vault-fold"
+          aria-expanded={!folded}
+          title={folded ? "볼트 펼치기" : "볼트를 한 줄로 접기"}
+          onClick={() => fold(!folded)}
+        >
+          <Icon name={folded ? "chevronRight" : "chevronDown"} size={13} />
+          <span>볼트</span>
+          {status.name ? <span className="vault-name">{status.name}</span> : null}
+        </button>
+      ) : (
+        <>
+          <span>볼트</span>
+          {status.name ? <span className="vault-name">{status.name}</span> : null}
+        </>
+      )}
+      {shut && root ? (
+        <span className="vault-count muted" title={`이 폴더 ${root.own}개 · 하위 ${root.below}개`}>
+          {countLabel(root)}
+        </span>
+      ) : null}
       <span className="side-tools">
         {status.path ? (
           <span className="vault-readonly" title="볼트는 읽기만 합니다. Workbench는 볼트에 쓰지 않습니다.">
             읽기 전용
           </span>
         ) : null}
-        {status.path && root ? (
+        {status.path && root && !shut ? (
           <button type="button" className="icon-button small vault-collapse" title="전체 접기" aria-label="볼트 폴더 전체 접기" disabled={!foldable} onClick={collapseAll}>
             <Icon name="collapseAll" size={13} />
           </button>
@@ -133,21 +177,36 @@ export function VaultSection({ theme, openMenu }: { theme: Theme; openMenu: (req
     );
   }
 
+  if (shut) {
+    return (
+      <section className="side-section vault-section folded" aria-label="볼트">
+        {head}
+      </section>
+    );
+  }
+
   const borders = tree.borders;
   const activate = (folder: VaultFolder) => {
     if (onOpenFolder) onOpenFolder(folder.path);
     else if (folder.children.length) pkm.toggle(folder.path);
   };
 
+  // The vault's own row folds the whole vault: what stays is the heading line, which takes the focus.
+  const foldWhole = () => {
+    fold(true);
+    window.requestAnimationFrame(() => headToggle.current?.focus());
+  };
+
   // Rows move focus with the arrow keys (in document order), fold with ←/→ and open with Enter.
-  const onKey = (event: ReactKeyboardEvent<HTMLDivElement>, folder: VaultFolder) => {
+  const onKey = (event: ReactKeyboardEvent<HTMLDivElement>, folder: VaultFolder, isRoot: boolean) => {
     const rows = [...(event.currentTarget.closest(".vault-tree")?.querySelectorAll<HTMLElement>(".vault-row") ?? [])];
     const index = rows.indexOf(event.currentTarget);
     const isOpen = pkm.unfolded.has(folder.path);
     if (event.key === "ArrowDown") rows[index + 1]?.focus();
     else if (event.key === "ArrowUp") rows[index - 1]?.focus();
-    else if (event.key === "ArrowRight" && folder.children.length && !isOpen) pkm.toggle(folder.path);
-    else if (event.key === "ArrowLeft" && isOpen) pkm.toggle(folder.path);
+    else if (event.key === "ArrowLeft" && isRoot) foldWhole();
+    else if (event.key === "ArrowRight" && !isRoot && folder.children.length && !isOpen) pkm.toggle(folder.path);
+    else if (event.key === "ArrowLeft" && !isRoot && isOpen) pkm.toggle(folder.path);
     else if (event.key === "Enter") activate(folder);
     else if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") {
       const box = event.currentTarget.getBoundingClientRect();
@@ -157,8 +216,9 @@ export function VaultSection({ theme, openMenu }: { theme: Theme; openMenu: (req
   };
 
   const row = (folder: VaultFolder, depth: number, isRoot = false) => {
-    const isOpen = !isRoot && pkm.unfolded.has(folder.path);
-    const expandable = !isRoot && folder.children.length > 0;
+    // The root is always open while it shows; its chevron folds the whole vault.
+    const isOpen = isRoot || pkm.unfolded.has(folder.path);
+    const expandable = isRoot || folder.children.length > 0;
     const color = folder.color[theme];
     const background = folder.background[theme];
     const icon = isRoot ? "book" : (iconName(folder.icon) ?? (isOpen ? "folderOpen" : "folder"));
@@ -184,14 +244,17 @@ export function VaultSection({ theme, openMenu }: { theme: Theme; openMenu: (req
           event.stopPropagation();
           folderMenu(folder, event.clientX, event.clientY);
         }}
-        onKeyDown={(event) => onKey(event, folder)}
+        onKeyDown={(event) => onKey(event, folder, isRoot)}
       >
         <span
           className={`row-chevron${expandable ? "" : " blank"}`}
+          title={isRoot ? "볼트를 한 줄로 접기" : undefined}
+          onPointerDown={isRoot ? (event) => event.stopPropagation() : undefined}
           onClick={(event) => {
             if (!expandable) return;
             event.stopPropagation();
-            pkm.toggle(folder.path);
+            if (isRoot) foldWhole();
+            else pkm.toggle(folder.path);
           }}
           aria-hidden
         >

@@ -142,6 +142,29 @@ async function flow(provider: Provider) {
     );
     await page.locator(".vault-collapse").click();
 
+    // ── the whole vault folded to its heading line (the heading, or the vault's own row) ─────────
+    await page.locator(".vault-fold").click();
+    await page.waitForSelector(".vault-section.folded");
+    const oneLine = (await page.locator(".vault-section .vault-row, .vault-section .vault-pins").count()) === 0;
+    const foldedCount = (await page.locator(".vault-section.folded .vault-count").innerText()).trim();
+    await page.locator(".sidebar").screenshot({ path: join(outDir, `${provider}-03-vault-one-line.png`) });
+    await page.reload();
+    await page.waitForSelector(".vault-section.folded", { timeout: 10_000 });
+    const staysFolded = (await page.locator(".vault-section .vault-row").count()) === 0;
+    await page.locator(".vault-fold").click();
+    await page.waitForSelector(".vault-row.vault-root");
+    await page.locator(".vault-row.vault-root .row-chevron").click();
+    await page.waitForSelector(".vault-section.folded");
+    const rootFolds = (await page.locator(".vault-section .vault-row").count()) === 0;
+    const headFocused = await until(() => page.evaluate(() => document.activeElement?.classList.contains("vault-fold") ?? false), 2000);
+    await page.locator(".vault-fold").click();
+    await page.waitForSelector(".vault-row.vault-root");
+    pass(
+      "볼트 한 줄로 접기: 머리나 볼트 맨 위 줄로 접으면 머리 한 줄만(노트 수와 함께), 다시 열어도 접힌 채, 펼치면 돌아옴",
+      oneLine && Boolean(foldedCount) && staysFolded && rootFolds && headFocused,
+      `접힌 머리 ${foldedCount}`,
+    );
+
     // ── the document on screen: its tab dragged to the right half, its conversation stays left ──
     const doc = await api<{ id: string; name: string }>("POST", `/api/works/${work.id}/pages`, { name: "수업 계획" });
     await page.locator(".work-view .docs-button").click();
