@@ -1,0 +1,41 @@
+{
+  "comment": "Apps every installer ships for the document features (scripts/fetch-bundled-apps.ts): the official release build of each for the installer's OS, checked against these hashes (from each release's checksum file), unpacked into <resources>/<app>. IeumOffice is the release the in-app editors are built from (vendor/ieumoffice.PINNED).",
+  "ieumoffice": {
+    "name": "IeumOffice",
+    "repository": "pblsketch/openoffice",
+    "tag": "v0.12.7",
+    "license": "Apache-2.0",
+    "use": "Word, PowerPoint and Excel: text view, page pictures, file checks, the tool engines make and edit Office files with",
+    "assets": {
+      "linux-x64": { "file": "IeumOffice-0.12.7.AppImage", "sha512": "SrwyDDWFkVLjrDUYzmC3gqcoRwRigchu6d/TXXqaOSh5KjYwpc/3mY3f1rHuoZ5za7pxeCulBRFqe6Az+Ml2rA==", "unpack": "appimage", "check": "resources/cli/genoffice.cjs" },
+      "win32-x64": { "file": "IeumOffice-Setup-0.12.7.exe", "sha512": "2lzy1zLYhKim1A+gT9JSQ8jvljnJwcfxiOJXmDQ/quliW0KFojEEhVyNVpR8emSBrf4z8OrveJ8lqT763iNAFQ==", "unpack": "nsis-app-7z", "check": "resources/cli/genoffice.cjs" },
+      "darwin-arm64": { "file": "IeumOffice-0.12.7-arm64-mac.zip", "sha512": "hj9/KZ5eWFzx/MJuEVt1A8/BoNzFCby7WsUpNUj26wIzK87IcdMQU8O7UfO7H+JjTcfmxlUplPq44jk9fJue2A==", "unpack": "app-zip", "check": "IeumOffice.app/Contents/Resources/cli/genoffice.cjs" },
+      "darwin-x64": { "file": "IeumOffice-0.12.7-mac.zip", "sha512": "edJ64DQ07fDaBLfcgpRWVd2uDtxDpe7eAxI1XSnDOM0hpE42wkX9r5JnnHBa1HB/ZYr5G1y3Lxg86UcFnSupEw==", "unpack": "app-zip", "check": "IeumOffice.app/Contents/Resources/cli/genoffice.cjs" }
+    }
+  },
+  "pdfcraft": {
+    "name": "Achmage PDFCraft",
+    "repository": "laguna821/pdfcraft",
+    "tag": "v0.1.0",
+    "license": "MIT OR Apache-2.0",
+    "use": "PDF page edits (rotate, delete, move) into a new file",
+    "assets": {
+      "linux-x64": { "file": "achmage-pdfcraft-cli-0.1.0-linux-x86_64.tar.gz", "sha256": "20a7413e5851960497ac323aa0dc161f985b9ef45a29ec8bcd96c2d51a1d3a6f", "unpack": "archive-strip", "check": "pdfcraft-cli" },
+      "win32-x64": { "file": "achmage-pdfcraft-0.1.0-windows-x64-portable.zip", "sha256": "55ad7e280894bad2d94dd30462501adc0834cf60b0e448743ae3aadb2c9f7508", "unpack": "archive-strip", "check": "pdfcraft-cli.exe" },
+      "darwin-arm64": { "file": "achmage-pdfcraft-cli-0.1.0-macos-universal.zip", "sha256": "f0793fb7b1b7ea5405491e9dfb8ebf9fe1c4454b6023f44110089b703819b319", "unpack": "archive-strip", "check": "pdfcraft-cli" },
+      "darwin-x64": { "file": "achmage-pdfcraft-cli-0.1.0-macos-universal.zip", "sha256": "f0793fb7b1b7ea5405491e9dfb8ebf9fe1c4454b6023f44110089b703819b319", "unpack": "archive-strip", "check": "pdfcraft-cli" }
+    }
+  },
+  "hop": {
+    "name": "Achmage HOP",
+    "repository": "laguna821/Achmage-HOP-public",
+    "tag": "achmage-v1.2.0-beta.6",
+    "license": "MIT",
+    "use": "Hangul (HWP/HWPX) editing by people: \"HOP로 열기\", saved back as the next revision",
+    "assets": {
+      "linux-x64": { "file": "Achmage.HOP_1.2.0-beta.6_amd64.deb", "sha256": "abbd29495e6471b081630be5d57d4dc9564664f11a67b777c09fea45784468c6", "unpack": "deb", "check": "usr/bin/hop-desktop" },
+      "win32-x64": { "file": "Achmage.HOP_1.2.0-beta.6_x64-setup.exe", "sha256": "2952f110464c6e26ae975b306e0a280d900abfe43b58778b47015e41fa51b935", "unpack": "nsis-files", "check": "hop-desktop.exe" },
+      "darwin-arm64": { "file": "Achmage.HOP-macos-arm64.app.zip", "sha256": "21db5b42db711430c98a4edf8262cb974b7afe3409269b2d40c29727732c8ca1", "unpack": "app-zip", "check": "Achmage HOP.app/Contents/MacOS/hop-desktop" }
+    }
+  }
+}

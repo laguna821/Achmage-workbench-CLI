@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unwatchFile, watchFile, writeFileSync, type Stats } from "node:fs";
-import { basename, delimiter, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import {
   PROTOCOL_VERSION,
   accessFor,
@@ -52,8 +52,9 @@ import type { AdapterSink, LoginStart, ProviderAdapter } from "./providers/types
 import type { Store } from "./store.ts";
 import { adaptTitle, titleFor } from "./titles.ts";
 import { blankDesign, designProblem, type DesignPreset } from "./design.ts";
-import { IeumOffice, installIeumOffice, type InstallProgress } from "./ieumoffice.ts";
+import { IeumOffice, ieumFromCliDir, installIeumOffice, type InstallProgress } from "./ieumoffice.ts";
 import { findHop, openInHop, openWithDesktop } from "./hop.ts";
+import { findPdfcraft } from "./pdfcraft.ts";
 import { createGuide, reservePath } from "./create.ts";
 import { copyMcp, copySkill, integrations, type EngineBinaries } from "./integrations.ts";
 import { exportFileName, sessionMarkdown } from "./export-md.ts";
@@ -66,6 +67,8 @@ import { applyWorktree, createWorktree, removeWorktree, worktreeChanges } from "
 import type { AgentBrowser } from "./browse.ts";
 import { handoffError, heldNotice, provenanceOf, restartTurnEnd, stampTurnEnd } from "./recovery.ts";
 import { Finder, type SearchOptions } from "./search.ts";
+import { EngineInstaller } from "./engine-install.ts";
+import { installToolWrappers } from "./tool-bin.ts";
 
 export { HttpError };
 
@@ -177,13 +180,6 @@ export function recentDocuments(root: string, since: number, maxDepth = 3, maxEn
   return found;
 }
 
-function findOnPath(name: string) {
-  for (const dir of (process.env.PATH ?? "").split(delimiter)) {
-    for (const candidate of [join(dir, name), join(dir, `${name}.exe`)]) if (dir && existsSync(candidate)) return candidate;
-  }
-  return null;
-}
-
 /** Plain start of a reply for overview cards. */
 export function previewOf(text: string) {
   const flat = plain(text);
@@ -254,6 +250,8 @@ export class SessionManager {
   readonly links: SessionLinks;
   /** "예약 작업": requests sessions get at set times (schedules.ts). */
   readonly schedules: Schedules;
+  /** "설치": engines installed with one click (engine-install.ts). */
+  readonly engineSetup: EngineInstaller;
   /** Set by the PKM layer: vault notes attached to a request become read-only references. */
   noteHook: NoteHook | null = null;
   /** What changed for a session since its last request (project.ts), put before the request. */
@@ -271,6 +269,16 @@ export class SessionManager {
     this.bus = bus;
     this.options = options;
     this.documents = new Documents(store, bus, options.dataDir ?? dirname(options.managedWorksDir), options.kordoc ?? null, options.ieum ?? null);
+    this.engineSetup = new EngineInstaller({
+      dataDir: options.dataDir ?? dirname(options.managedWorksDir),
+      onChange: (engine, state) => {
+        const adapter = this.adapters.get(engine);
+        if (!adapter) return;
+        // A finished install: the engine is looked for again, then its login is read.
+        if (state?.state === "done") void adapter.locate?.().then(() => this.bus.publish({ type: "provider.status", status: this.engineSetup.decorate(adapter.status()) }));
+        this.bus.publish({ type: "provider.status", status: this.engineSetup.decorate(adapter.status()) });
+      },
+    });
     this.attachments = new Attachments(options.dataDir ?? dirname(options.managedWorksDir));
     this.finder = new Finder(store.search, {
       works: () => this.works,
@@ -438,7 +446,7 @@ export class SessionManager {
       }
     },
     providerStatus: (status) => {
-      this.bus.publish({ type: "provider.status", status });
+      this.bus.publish({ type: "provider.status", status: this.engineSetup.decorate(status) });
     },
     steerDropped: (sessionId, turnKeys, unsure = false) => {
       const lost: Steered[] = [];
@@ -605,7 +613,7 @@ export class SessionManager {
       folders: [...this.folders.values()],
       works: [...this.works.values()],
       sessions: [...this.sessions.values()],
-      providers: [...this.adapters.values()].map((adapter) => adapter.status()),
+      providers: [...this.adapters.values()].map((adapter) => this.engineSetup.decorate(adapter.status())),
       prefs: this.prefs(),
       artifacts: this.documents.list(),
       proposals: this.documents.listProposals(),
@@ -627,9 +635,13 @@ export class SessionManager {
     const hop = findHop();
     const busy = Boolean(this.ieumBusy && this.ieumBusy.stage !== "done" && this.ieumBusy.stage !== "error");
     return {
-      kordoc: { available: Boolean(kordoc?.available), version: null, path: kordoc?.runner ?? null, busy: false, message: null },
-      ieumoffice: { available: Boolean(ieum?.available), version: this.ieumVersion, path: ieum?.cli ?? null, busy, message: this.ieumBusy?.message ?? null },
-      hop: { available: Boolean(hop), version: hop?.version ?? null, path: hop?.launcher ?? null, busy: false, message: null },
+      kordoc: { available: Boolean(kordoc?.available), bundled: Boolean(kordoc?.bundled), version: kordoc?.version ?? null, path: kordoc?.runner ?? null, busy: false, message: null },
+      ieumoffice: { available: Boolean(ieum?.available), bundled: Boolean(ieum?.bundled), version: this.ieumVersion, path: ieum?.cli ?? null, busy, message: this.ieumBusy?.message ?? null },
+      hop: { available: Boolean(hop), bundled: Boolean(hop?.bundled), version: hop?.version ?? null, path: hop ? (hop.args?.at(-1) ?? hop.launcher) : null, busy: false, message: null },
+      pdfcraft: (() => {
+        const cli = findPdfcraft();
+        return { available: Boolean(cli), bundled: Boolean(cli?.bundled), version: cli?.version ?? null, path: cli?.path ?? null, busy: false, message: null };
+      })(),
     };
   }
 
@@ -650,7 +662,10 @@ export class SessionManager {
     report({ stage: "download", message: "이음오피스 배포판을 확인하는 중…" });
     void installIeumOffice(report)
       .then(async (cli) => {
-        this.documents.ieum = new IeumOffice(cli);
+        const dataDir = this.options.dataDir ?? dirname(this.options.managedWorksDir);
+        const ieum = new IeumOffice(ieumFromCliDir(dirname(cli)), { dataDir });
+        if (installToolWrappers(dataDir, { kordoc: this.documents.kordoc?.runner ?? null, ieum: ieum.install, ieumAppWrapper: ieum.appWrapper }).includes("ieumoffice")) ieum.engineCommand = "ieumoffice";
+        this.documents.ieum = ieum;
         await this.refreshTools();
       })
       .catch((error: unknown) => report({ stage: "error", message: error instanceof Error ? error.message : String(error) }));
@@ -658,7 +673,7 @@ export class SessionManager {
   }
 
   private engineBinaries(): EngineBinaries {
-    return { claude: this.adapters.get("claude")?.status().binary ?? null, codex: this.adapters.get("codex")?.status().binary ?? null };
+    return { claude: this.adapters.get("claude")?.cli?.() ?? null, codex: this.adapters.get("codex")?.cli?.() ?? null };
   }
 
   /** The folder of the agent skill IeumOffice ships (skills/ieumoffice), when installed. */
@@ -691,7 +706,7 @@ export class SessionManager {
   /** Put IeumOffice's own agent skill (how to use the ieumoffice tool) into an engine's skills. */
   async installIeumSkill(to: "claude" | "codex") {
     const source = this.ieumSkillDir();
-    if (!source) throw new HttpError(501, "ieumoffice_missing", "이음오피스가 설치되어 있지 않습니다.");
+    if (!source) throw new HttpError(501, "ieumoffice_missing", "이음오피스의 사용법 스킬을 찾지 못했습니다.");
     copySkill("ieumoffice", source, to);
     return this.integrations();
   }
@@ -1402,8 +1417,8 @@ export class SessionManager {
   async editPdf(artifactId: string, edit: { rotate?: { pages: number[]; degrees: number }[]; delete?: number[]; move?: { from: number; to: number }[] }) {
     const artifact = this.documents.check(artifactId);
     if (artifact.format !== "pdf") throw new HttpError(400, "not_pdf", "PDF 문서가 아닙니다.");
-    const cli = findOnPath("pdfcraft-cli");
-    if (!cli) throw new HttpError(501, "pdfcraft_missing", "PDFCraft(pdfcraft-cli)가 설치되어 있지 않아 PDF를 편집할 수 없습니다.");
+    const cli = findPdfcraft()?.path;
+    if (!cli) throw new HttpError(501, "pdfcraft_missing", "PDF 편집 도구(PDFCraft)를 찾지 못했습니다. 앱을 다시 설치해 주세요.");
     const args = ["edit", this.documents.revisionPath(artifactId, artifact.revision)];
     const rotations = (edit.rotate ?? []).filter((entry) => entry.pages.length && [90, 180, 270].includes(entry.degrees));
     for (const entry of rotations) args.push("--rotate", `${entry.pages.join(",")}:${entry.degrees}`);
@@ -1773,8 +1788,33 @@ export class SessionManager {
     return this.adapter(provider).login();
   }
 
+  /** The code a login page showed, for an engine whose login waits for it (Claude Code). */
+  async loginCode(provider: Provider, code: string) {
+    const adapter = this.adapter(provider);
+    if (!adapter.loginCode) throw new HttpError(400, "no_login_code", "이 엔진은 코드를 받지 않습니다.");
+    await adapter.loginCode(code).catch((error: unknown) => {
+      throw new HttpError(409, "login_code", error instanceof Error ? error.message : String(error));
+    });
+    return this.engineSetup.decorate(adapter.status());
+  }
+
+  async cancelLogin(provider: Provider) {
+    const adapter = this.adapter(provider);
+    await adapter.cancelLogin?.();
+    return this.engineSetup.decorate(adapter.status());
+  }
+
+  /** "설치": the latest engine for this user; progress arrives as provider.status events. */
+  installEngine(provider: Provider) {
+    const adapter = this.adapter(provider);
+    if (!this.engineSetup.canInstall()) throw new HttpError(501, "npm_missing", "이 설치본에는 엔진을 설치할 npm이 없습니다.");
+    void this.engineSetup.install(provider);
+    return this.engineSetup.decorate(adapter.status());
+  }
+
   async refreshProviders(): Promise<ProviderStatus[]> {
-    return Promise.all([...this.adapters.values()].map((adapter) => adapter.refreshStatus()));
+    // An engine installed meanwhile (by the user, in a terminal) is found again.
+    return Promise.all([...this.adapters.values()].map(async (adapter) => this.engineSetup.decorate(await adapter.refreshStatus())));
   }
 
   /** Stop watching documents opened in other apps. */

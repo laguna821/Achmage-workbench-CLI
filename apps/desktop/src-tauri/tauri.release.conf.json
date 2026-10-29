@@ -4,7 +4,9 @@
     "resources": {
       "../../host/dist/host.mjs": "host/host.mjs",
       "../../web/dist/": "web/",
+      "../../../third_party/kordoc/": "kordoc/",
       "node/": "node/"
-    }
+    },
+    "windows": { "wix": { "language": "ko-KR" } }
   }
 }

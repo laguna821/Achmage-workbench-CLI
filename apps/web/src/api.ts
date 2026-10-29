@@ -39,6 +39,7 @@ import type {
   Provider,
   SearchPage,
   SearchRequest,
+  ProviderStatus,
   SendResult,
   SequencedEvent,
   Session,
@@ -285,6 +286,11 @@ export class Api {
   answer = (sessionId: string, itemId: string, decision: "accept" | "decline") =>
     this.request("POST", `/api/sessions/${sessionId}/approvals/${encodeURIComponent(itemId)}`, { decision });
   login = (provider: Provider) => this.request<{ url: string | null; message: string }>("POST", `/api/providers/${provider}/login`);
+  /** The code the engine's login page showed (Claude Code), handed to its waiting login. */
+  loginCode = (provider: Provider, code: string) => this.request<ProviderStatus>("POST", `/api/providers/${provider}/login/code`, { code });
+  cancelLogin = (provider: Provider) => this.request<ProviderStatus>("POST", `/api/providers/${provider}/login/cancel`);
+  /** "설치": the engine for this user; progress arrives as provider.status events. */
+  installEngine = (provider: Provider) => this.request<ProviderStatus>("POST", `/api/providers/${provider}/install`);
   refreshProviders = () => this.request("POST", "/api/providers/refresh");
 
   /**

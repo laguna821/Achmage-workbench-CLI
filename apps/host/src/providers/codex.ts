@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import type { AccessMode, ApprovalDecision, EngineCommand, ModelOption, ProviderStatus, Session, UsageWindow, Work } from "@workbench/contracts";
 import { CodexRpc, mapPlanSteps, mapThreadItem, type RpcNotification, type RpcServerRequest } from "@workbench/provider-codex";
 import type { AgentMessageDeltaNotification } from "@workbench/provider-codex/src/generated/v2/AgentMessageDeltaNotification.ts";
@@ -35,10 +34,12 @@ import type { Config } from "@workbench/provider-codex/src/generated/v2/Config.t
 import type { SandboxMode } from "@workbench/provider-codex/src/generated/v2/SandboxMode.ts";
 import type { SandboxPolicy } from "@workbench/provider-codex/src/generated/v2/SandboxPolicy.ts";
 import type { ThreadTokenUsageUpdatedNotification } from "@workbench/provider-codex/src/generated/v2/ThreadTokenUsageUpdatedNotification.ts";
-import { resolveCodex } from "../binaries.ts";
-import { billingVarsIn, engineEnv } from "../engine-env.ts";
+import { launchEnv, resolveCodex, type ResolvedBinary } from "../binaries.ts";
+import { billingVarsIn } from "../engine-env.ts";
 import { codexAccountInfo } from "../engine-login.ts";
-import { emptyStatus, type AdapterSink, type AttachedFile, type CodexLaunch, type LoginStart, type NativeConversation, type ProviderAdapter, type ToolImage } from "./types.ts";
+import { openUrl } from "../open-url.ts";
+import type { AccountLoginCompletedNotification } from "@workbench/provider-codex/src/generated/v2/AccountLoginCompletedNotification.ts";
+import { emptyStatus, type AdapterSink, type AttachedFile, type CodexLaunch, type EngineCli, type LoginStart, type NativeConversation, type ProviderAdapter, type ToolImage } from "./types.ts";
 import { isImage, mentionFiles } from "../attachments.ts";
 import type { BrowserEngineHooks } from "../browse.ts";
 
@@ -179,6 +180,10 @@ export class CodexAdapter implements ProviderAdapter {
   private readonly approvals = new Map<string, PendingApproval>();
   private idleTimer: NodeJS.Timeout | null = null;
   private readonly idleMs: number;
+  /** The engine as last found (how to start it). */
+  private binary: ResolvedBinary | null = null;
+  /** A login waiting for the browser: its id (to cancel it) and when it gives up. */
+  private pendingLogin: { loginId: string; timer: NodeJS.Timeout } | null = null;
   private readonly browser: BrowserEngineHooks | null;
 
   private readonly launch: CodexLaunch | null;
@@ -199,7 +204,8 @@ export class CodexAdapter implements ProviderAdapter {
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null;
-      if (this.activeTurns.size === 0 && this.approvals.size === 0) {
+      // The login's callback server lives in the app-server: keep it while a login waits.
+      if (this.activeTurns.size === 0 && this.approvals.size === 0 && !this.pendingLogin) {
         this.rpc?.stop();
       }
     }, ms);
@@ -234,15 +240,17 @@ export class CodexAdapter implements ProviderAdapter {
     }
     this.ready = (async () => {
       const binary = await resolveCodex();
+      this.binary = binary;
       if (!binary) {
-        this.publish({ installed: false, error: "codex를 찾지 못했습니다." });
+        this.publish({ installed: false, binary: null, binarySource: null, origin: null, version: null, error: "codex를 찾지 못했습니다." });
         throw new Error("codex를 찾지 못했습니다.");
       }
-      this.publish({ installed: true, binary: binary.path, binarySource: binary.source, version: binary.version, billingVars: billingVarsIn(), error: null });
+      this.publish({ installed: true, binary: binary.path, binarySource: binary.source, origin: binary.origin, version: binary.version, billingVars: billingVarsIn(), error: null });
       const rpc = new CodexRpc({
-        binary: binary.path,
+        binary: binary.command,
+        prefixArgs: binary.args,
         // The agent browser's playwright-cli on PATH; commands find their session by CODEX_THREAD_ID.
-        env: engineEnv({ command: binary.path, paths: this.browser?.pathDirs() }),
+        env: launchEnv(binary, { paths: this.browser?.pathDirs() }),
         onNotification: (notification) => this.onNotification(notification),
         onServerRequest: (request) => this.onServerRequest(request),
         onExit: (code, stderr) => this.onExit(rpc, code, stderr),
@@ -275,6 +283,11 @@ export class CodexAdapter implements ProviderAdapter {
     this.ready = null;
     const tail = stderr.split("\n").map((line) => line.trim()).filter(Boolean).at(-1)?.slice(0, 300);
     const error = `Codex 엔진이 종료되었습니다(${tail || `코드 ${code}`}).`;
+    if (this.pendingLogin) {
+      clearTimeout(this.pendingLogin.timer);
+      this.pendingLogin = null;
+      this.publish({ login: { state: "failed", url: null, userCode: null, acceptsCode: false, opened: false, message: "Codex 엔진이 종료되어 로그인을 멈췄습니다. 다시 눌러 주세요.", at: Date.now() } });
+    }
     for (const [threadId, sessionId] of this.threads) {
       if (!this.activeTurns.has(threadId) || this.closing) continue;
       const stopping = this.interrupting.has(threadId);
@@ -360,14 +373,85 @@ export class CodexAdapter implements ProviderAdapter {
     return this.current;
   }
 
+  /**
+   * ChatGPT login through the app-server: it serves the browser's callback on this computer and
+   * says when the login completed (`account/login/completed`). When its callback port is taken,
+   * the device login gives an address and a code to type there instead.
+   */
   async login(): Promise<LoginStart> {
     await this.ensureRunning();
-    const response = await this.rpc!.request<LoginAccountResponse>("account/login/start", { type: "chatgpt" });
-    if (response.type === "chatgpt") {
-      spawn("xdg-open", [response.authUrl], { detached: true, stdio: "ignore" }).unref();
-      return { url: response.authUrl, message: "브라우저에서 ChatGPT 로그인을 마치면 자동으로 연결됩니다." };
+    const rpc = this.rpc!;
+    await this.cancelLogin().catch(() => undefined);
+    let response: LoginAccountResponse;
+    try {
+      response = await rpc.request<LoginAccountResponse>("account/login/start", { type: "chatgpt" });
+    } catch {
+      response = await rpc.request<LoginAccountResponse>("account/login/start", { type: "chatgptDeviceCode" });
     }
-    return { url: null, message: "로그인을 시작했습니다." };
+    const url = response.type === "chatgpt" ? response.authUrl : response.type === "chatgptDeviceCode" ? response.verificationUrl : null;
+    const loginId = response.type === "chatgpt" || response.type === "chatgptDeviceCode" ? response.loginId : null;
+    if (!url || !loginId) {
+      void this.refreshStatus();
+      return { url: null, message: "로그인을 시작했습니다." };
+    }
+    const userCode = response.type === "chatgptDeviceCode" ? response.userCode : null;
+    // Ten minutes for the browser; then the login stops and can be started again.
+    const timer = setTimeout(() => {
+      if (this.pendingLogin?.loginId !== loginId) return;
+      void this.cancelLogin();
+      this.publish({ login: { state: "failed", url: null, userCode: null, acceptsCode: false, opened: false, message: "로그인을 기다리다 멈췄습니다. 다시 눌러 주세요.", at: Date.now() } });
+    }, 10 * 60_000);
+    this.pendingLogin = { loginId, timer };
+    const opened = await openUrl(url);
+    const message = userCode
+      ? `브라우저에서 ChatGPT에 로그인한 뒤 코드 ${userCode}를 입력하세요.`
+      : opened
+        ? "브라우저에서 ChatGPT 로그인을 마치면 자동으로 연결됩니다."
+        : "브라우저가 열리지 않았습니다. 아래 주소를 열어 로그인하세요.";
+    this.publish({ login: { state: "waiting", url, userCode, acceptsCode: false, opened, message, at: Date.now() } });
+    return { url, message };
+  }
+
+  async cancelLogin() {
+    const pending = this.pendingLogin;
+    if (!pending) return;
+    this.pendingLogin = null;
+    clearTimeout(pending.timer);
+    await this.rpc?.request("account/login/cancel", { loginId: pending.loginId }).catch(() => undefined);
+    if (this.current.login?.state === "waiting") this.publish({ login: null });
+    this.scheduleIdleStop(60_000);
+  }
+
+  /** The browser came back: logged in (the status then names the account) or not. */
+  private loginCompleted(params: AccountLoginCompletedNotification) {
+    const pending = this.pendingLogin;
+    // Codex also reports a login that was cancelled (by "로그인 그만두기" or a new login): only
+    // the one waiting here changes what the screen says.
+    if (!pending || (params.loginId && params.loginId !== pending.loginId)) {
+      void this.refreshStatus();
+      return;
+    }
+    clearTimeout(pending.timer);
+    this.pendingLogin = null;
+    this.publish({
+      login: params.success
+        ? { state: "done", url: null, userCode: null, acceptsCode: false, opened: true, message: "로그인했습니다.", at: Date.now() }
+        : { state: "failed", url: null, userCode: null, acceptsCode: false, opened: true, message: `로그인하지 못했습니다${params.error ? `: ${params.error.slice(0, 200)}` : "."}`, at: Date.now() },
+    });
+    void this.refreshStatus().finally(() => this.scheduleIdleStop(60_000));
+  }
+
+  /** Look again after an install: the next start resolves the engine anew. */
+  async locate() {
+    if (!this.rpc?.running) {
+      this.ready = null;
+      await this.refreshStatus();
+    }
+  }
+
+  cli(): EngineCli | null {
+    const binary = this.binary;
+    return binary ? { command: binary.command, args: binary.args, env: launchEnv(binary) } : null;
   }
 
   /** Approval and sandbox for an access, unless the environment fixes them (tests); read-only where the work folder overlaps the vault. */
@@ -610,6 +694,8 @@ export class CodexAdapter implements ProviderAdapter {
   async shutdown() {
     this.closing = true;
     this.cancelIdleStop();
+    if (this.pendingLogin) clearTimeout(this.pendingLogin.timer);
+    this.pendingLogin = null;
     this.rpc?.stop();
   }
 
@@ -766,6 +852,8 @@ export class CodexAdapter implements ProviderAdapter {
         return;
       }
       case "account/login/completed":
+        this.loginCompleted(params as AccountLoginCompletedNotification);
+        return;
       case "account/updated":
         void this.refreshStatus();
         return;

@@ -1,58 +1,32 @@
 import { useEffect, useState } from "react";
-import { PROVIDER_LABEL, type DocumentTools, type Provider, type ProviderStatus } from "@workbench/contracts";
+import type { DocumentTools, Provider, ProviderStatus, ToolStatus } from "@workbench/contracts";
+import { EngineCard, type EngineActions } from "./EngineSetup.tsx";
 import { Icon } from "./Icon.tsx";
 
 // First run: what is on this computer and what is missing, in four short steps. The engines are
-// found and checked by the gateway (their own status commands); Workbench never asks for a
-// password or token. Nothing is installed without a click.
+// found and checked by the gateway (their own status commands); a missing one installs and each
+// logs in with one click. Workbench never asks for a password or token, and shows no command to
+// type. The document tools ship with the app.
 
-const INSTALL: Record<Provider, { command: string; page: string }> = {
-  claude: { command: "curl -fsSL https://claude.ai/install.sh | bash", page: "https://docs.claude.com/en/docs/claude-code/setup" },
-  codex: { command: "npm install -g @openai/codex", page: "https://github.com/openai/codex" },
-};
-
-function engineState(status: ProviderStatus | undefined) {
-  if (!status) return { text: "확인 중…", tone: "" };
-  if (!status.installed) return { text: "설치되지 않음", tone: "warn" };
-  if (status.loggedIn === null) return { text: "확인 중…", tone: "" };
-  if (!status.loggedIn) return { text: "로그인 필요", tone: "warn" };
-  if (status.loginMethod === "metered") return { text: "종량제 로그인(API 키 등)", tone: "warn" };
-  if (status.loginMethod === "subscription") return { text: `구독 연결됨${status.plan ? ` · ${status.plan}` : ""}`, tone: "ok" };
-  return { text: "로그인됨", tone: "ok" };
-}
-
-function Copyable({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <span className="onboarding-command">
-      <code>{text}</code>
-      <button
-        type="button"
-        className="link"
-        onClick={() =>
-          void navigator.clipboard.writeText(text).then(() => {
-            setCopied(true);
-            window.setTimeout(() => setCopied(false), 1500);
-          })
-        }
-      >
-        {copied ? "복사됨" : "복사"}
-      </button>
-    </span>
-  );
+/** A document tool's state: shipped with the app, found on this computer, or not here. */
+export function toolState(status: ToolStatus) {
+  if (status.busy) return { text: "설치 중…", tone: "" };
+  if (status.bundled) return { text: `앱에 포함${status.version ? ` · ${status.version}` : ""}`, tone: "ok" };
+  if (status.available) return { text: `사용 가능${status.version ? ` · ${status.version}` : ""}`, tone: "ok" };
+  return { text: "없음", tone: "warn" };
 }
 
 export function Onboarding({
   providers,
   tools,
-  onLogin,
+  engineActions,
   onRefresh,
   onInstallIeum,
   onDone,
 }: {
   providers: Partial<Record<Provider, ProviderStatus>>;
   tools: DocumentTools | null;
-  onLogin: (provider: Provider) => void;
+  engineActions: EngineActions;
   onRefresh: () => void;
   onInstallIeum: () => void;
   onDone: () => void;
@@ -97,33 +71,12 @@ export function Onboarding({
         {step === 1 ? (
           <section>
             <h2>엔진 연결</h2>
-            <p className="muted">이 컴퓨터의 Claude Code와 Codex를 찾아 각자의 로그인 상태를 확인했습니다. 비밀번호나 토큰은 묻지도 읽지도 않습니다.</p>
-            {(["claude", "codex"] as const).map((provider) => {
-              const status = providers[provider];
-              const state = engineState(status);
-              return (
-                <div key={provider} className="onboarding-card">
-                  <div className="connection-head">
-                    <strong>{PROVIDER_LABEL[provider]}</strong>
-                    <span className={`connection-state ${state.tone}`}>{state.text}</span>
-                  </div>
-                  {status && !status.installed ? (
-                    <div className="connection-meta">
-                      터미널에서 공식 설치 명령을 실행한 뒤 이 창으로 돌아오세요: <Copyable text={INSTALL[provider].command} />
-                    </div>
-                  ) : null}
-                  {status?.installed && status.loggedIn === false ? (
-                    <button type="button" className="button small" onClick={() => onLogin(provider)}>
-                      {PROVIDER_LABEL[provider]} 로그인 (브라우저)
-                    </button>
-                  ) : null}
-                  {status?.loginMethod === "metered" ? <div className="connection-meta warn">구독이 아니라 쓴 만큼 요금이 나가는 로그인입니다.</div> : null}
-                  {status?.billingVars.length ? (
-                    <div className="connection-meta muted">{status.billingVars.join(", ")}는 엔진에 넘기지 않습니다(구독으로 실행).</div>
-                  ) : null}
-                </div>
-              );
-            })}
+            <p className="muted">이 컴퓨터의 Claude Code와 Codex를 찾아 각자의 로그인 상태를 확인했습니다. 없으면 눌러서 설치하고, 로그인도 눌러서 합니다. 비밀번호나 토큰은 묻지도 읽지도 않습니다.</p>
+            {(["claude", "codex"] as const).map((provider) => (
+              <div key={provider} className="onboarding-card">
+                <EngineCard provider={provider} status={providers[provider]} actions={engineActions} />
+              </div>
+            ))}
             <p className="onboarding-notice">
               요청과 붙인 문서는 고른 엔진(Anthropic 또는 OpenAI)으로 보내집니다. 학습에 쓰이는지는 각 계정의 설정을 따르고, Workbench는 따로 보내지 않습니다.
             </p>
@@ -136,31 +89,33 @@ export function Onboarding({
         {step === 2 ? (
           <section>
             <h2>문서 도구</h2>
-            <p className="muted">형식마다 맞는 도구를 씁니다. 없는 도구는 그 형식만 미리보기·수정이 빠질 뿐 나머지는 그대로 씁니다.</p>
+            <p className="muted">형식마다 맞는 도구를 씁니다. 한글·워드·PPT·엑셀·PDF 도구는 앱에 들어 있어 따로 설치하지 않습니다.</p>
             {tools
               ? (
                   [
                     { key: "kordoc", name: "kordoc", role: "한글(HWPX) 만들기·글 보기·쪽 미리보기", status: tools.kordoc },
-                    { key: "hop", name: "Achmage HOP", role: "한글 문서를 사람이 편집", status: tools.hop },
-                    { key: "ieumoffice", name: "이음오피스", role: "워드·PPT·엑셀 미리보기·AI 수정", status: tools.ieumoffice },
+                    { key: "ieumoffice", name: "이음오피스", role: "워드·PPT·엑셀 쪽 미리보기·글 보기·AI 수정", status: tools.ieumoffice },
+                    { key: "hop", name: "Achmage HOP", role: "한글 문서를 사람이 편집(HOP로 열기 → 저장하면 새 판)", status: tools.hop },
+                    ...(tools.pdfcraft ? [{ key: "pdfcraft", name: "PDFCraft", role: "PDF 쪽 돌리기·지우기·옮기기(새 파일로)", status: tools.pdfcraft } as const] : []),
                   ] as const
-                ).map((row) => (
-                  <div key={row.key} className="onboarding-card">
-                    <div className="connection-head">
-                      <strong>{row.name}</strong>
-                      <span className={`connection-state ${row.status.available ? "ok" : "warn"}`}>
-                        {row.status.busy ? "설치 중…" : row.status.available ? `사용 가능${row.status.version ? ` · ${row.status.version}` : ""}` : "없음"}
-                      </span>
+                ).map((row) => {
+                  const state = row.key === "hop" && !row.status.available ? { text: "기본 앱으로 열기", tone: "" } : toolState(row.status);
+                  return (
+                    <div key={row.key} className="onboarding-card">
+                      <div className="connection-head">
+                        <strong>{row.name}</strong>
+                        <span className={`connection-state ${state.tone}`}>{state.text}</span>
+                      </div>
+                      <div className="connection-meta muted">{row.role}</div>
+                      {row.status.message ? <div className="connection-meta">{row.status.message}</div> : null}
+                      {row.key === "ieumoffice" && !row.status.available && !row.status.busy ? (
+                        <button type="button" className="button small" onClick={onInstallIeum}>
+                          이음오피스 받기
+                        </button>
+                      ) : null}
                     </div>
-                    <div className="connection-meta muted">{row.role}</div>
-                    {row.status.message ? <div className="connection-meta">{row.status.message}</div> : null}
-                    {row.key === "ieumoffice" && !row.status.available && !row.status.busy ? (
-                      <button type="button" className="button small" onClick={onInstallIeum}>
-                        이음오피스 설치 (GitHub 배포판, 체크섬 확인)
-                      </button>
-                    ) : null}
-                  </div>
-                ))
+                  );
+                })
               : null}
           </section>
         ) : null}

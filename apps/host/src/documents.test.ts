@@ -170,16 +170,16 @@ describe("documents and revisions", () => {
     expect(manager.items(target.id).items.find((item) => item.kind === "user")).toMatchObject({ from: { sessionId: source.id } });
   });
 
-  // Uses the installed kordoc engine; skipped where it is not installed.
-  it.runIf(new Kordoc().available)("edits HWPX through its Markdown view and applies AI proposals as patches", async () => {
+  // Uses the kordoc engine shipped in third_party/kordoc.
+  it("edits HWPX through its Markdown view and applies AI proposals as patches", async () => {
     const { manager, claude, work, dir } = setup();
     const { mkdirSync, execFileSync } = await import("node:child_process").then(async (child) => ({ ...(await import("node:fs")), execFileSync: child.execFileSync }));
     mkdirSync(work.cwd, { recursive: true });
     // Make a real HWPX with the same engine.
     const request = join(dir, "generate.json");
     writeFileSync(request, JSON.stringify({ schemaVersion: 1, mode: "generate", markdown: "# 강의 개요\n\n우리는 자료를 읽고 질문을 만듭니다.\n\n자료의 결론보다 조건을 살핍니다.", outputDir: join(dir, "gen") }));
-    // The hallym wrapper has no generate mode; its bundled core runner does.
-    const coreRunner = join(new Kordoc().runner!, "../../core/scripts/run.mjs");
+    const coreRunner = new Kordoc().runner!;
+    expect(new Kordoc().bundled).toBe(true);
     const generated = JSON.parse(execFileSync(process.execPath, [coreRunner, request], { encoding: "utf8" })) as { files: { path: string }[] };
     const source = generated.files.find((file) => file.path.endsWith(".hwpx"))!.path;
     const file = join(work.cwd, "강의.hwpx");

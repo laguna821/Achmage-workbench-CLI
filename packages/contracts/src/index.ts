@@ -422,8 +422,16 @@ export type ProviderStatus = {
   provider: Provider;
   installed: boolean;
   binary: string | null;
-  /** installed: the user's own engine; bundled: the copy shipped with the SDK; override: set by env. */
-  binarySource: "installed" | "bundled" | "override" | null;
+  /** installed: the user's own engine; bundled: the copy shipped with the SDK; managed: installed by Workbench; override: set by env. */
+  binarySource: "installed" | "bundled" | "override" | "managed" | null;
+  /** How it was found (shown with the path); absent from older gateways. */
+  origin?: import("./setup.ts").EngineOrigin | null;
+  /** Workbench can install this engine with one click (its npm is there). */
+  canInstall?: boolean;
+  /** "설치" in progress or just finished. */
+  install?: import("./setup.ts").EngineInstallState | null;
+  /** "로그인" in progress or just finished. */
+  login?: import("./setup.ts").EngineLoginState | null;
   version: string | null;
   loggedIn: boolean | null;
   loginMethod: LoginMethod | null;
@@ -473,6 +481,8 @@ export type SequencedEvent = WorkbenchEvent & { seq: number; at: number };
 /** A document engine the gateway can use: kordoc (Hangul), IeumOffice (Office formats), HOP (Hangul editor). */
 export type ToolStatus = {
   available: boolean;
+  /** Ships with the app (the bundled copy is used); absent from older gateways. */
+  bundled?: boolean;
   version: string | null;
   path: string | null;
   /** Install or update running (IeumOffice). */
@@ -480,7 +490,7 @@ export type ToolStatus = {
   message: string | null;
 };
 
-export type DocumentTools = { kordoc: ToolStatus; ieumoffice: ToolStatus; hop: ToolStatus };
+export type DocumentTools = { kordoc: ToolStatus; ieumoffice: ToolStatus; hop: ToolStatus; /** PDF page edits (absent from older gateways). */ pdfcraft?: ToolStatus };
 
 /** An MCP server definition as one engine has it (env values shown only as names on screen). */
 export type McpDefinition = { type: "stdio" | "http" | "sse"; command: string | null; args: string[]; env: Record<string, string>; url: string | null; enabled: boolean };
@@ -783,3 +793,4 @@ export * from "./project.ts";
 export * from "./entry.ts";
 export * from "./recovery.ts";
 export * from "./search.ts";
+export * from "./setup.ts";

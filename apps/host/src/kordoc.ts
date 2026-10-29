@@ -1,11 +1,13 @@
 import { execFile } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { HttpError } from "./errors.ts";
+import { repoRoot, shipped } from "./resources.ts";
 
-// Hangul documents through the user's installed kordoc engine (hallym-kordoc skill runner):
-// read HWPX/HWP into a Markdown view, patch edited Markdown back into the same HWPX (keeping the
+// Hangul documents through the kordoc engine that ships with the app (third_party/kordoc, the
+// generic kordoc-workbench core), or the user's installed skill when running without it: read
+// HWPX/HWP into a Markdown view, patch edited Markdown back into the same HWPX (keeping the
 // original formatting of untouched parts), and render real page previews. HWP is read only.
 // The PRD's HOP editor is the target for full in-place editing; this is the engine available now.
 
@@ -21,18 +23,53 @@ type KordocResult = {
 
 export type HangulPage = { page: number; width: number; height: number; svg: string };
 
-export function findKordocRunner(): string | null {
-  const candidates = [process.env.WORKBENCH_KORDOC_RUNNER, join(homedir(), ".claude/skills/hallym-kordoc/scripts/run.mjs")].filter(
-    (path): path is string => Boolean(path),
-  );
+/** The runner shipped with the app: its resources, or third_party/ of a source checkout. */
+export function bundledKordocRunner(): string | null {
+  const root = repoRoot();
+  const fromSources = root ? join(root, "third_party/kordoc/scripts/run.mjs") : null;
+  return shipped(join("kordoc", "scripts", "run.mjs")) ?? (fromSources && existsSync(fromSources) ? fromSources : null);
+}
+
+/** An override, then the runner shipped with the app, then the user's installed skill. */
+export function findKordocRunner(env: NodeJS.ProcessEnv = process.env): string | null {
+  const home = homedir();
+  const candidates = [
+    env.WORKBENCH_KORDOC_RUNNER,
+    bundledKordocRunner(),
+    join(home, ".claude/skills/hallym-kordoc/scripts/run.mjs"),
+    join(home, ".claude/skills/kordoc-workbench/scripts/run.mjs"),
+    join(env.CODEX_HOME ?? join(home, ".codex"), "skills/kordoc-workbench/scripts/run.mjs"),
+  ].filter((path): path is string => Boolean(path));
   return candidates.find((path) => existsSync(path)) ?? null;
+}
+
+/** kordoc-workbench's version and its engine's, from the manifest next to a runner. */
+export function kordocVersion(runner: string | null): string | null {
+  if (!runner) return null;
+  for (const manifest of [join(dirname(runner), "..", "PACKAGE-MANIFEST.json"), join(dirname(runner), "..", "core", "PACKAGE-MANIFEST.json")]) {
+    try {
+      const data = JSON.parse(readFileSync(manifest, "utf8")) as { version?: string; engine?: { version?: string } };
+      if (data.engine?.version) return `${data.engine.version}${data.version ? ` (workbench ${data.version})` : ""}`;
+    } catch {
+      // Not this layout.
+    }
+  }
+  return null;
 }
 
 export class Kordoc {
   readonly runner: string | null;
+  /** The runner is the one shipped with the app. */
+  readonly bundled: boolean;
+  readonly version: string | null;
+  /** How engines run it: `kordoc` once the wrapper is on their PATH (tool-bin.ts). */
+  engineCommand: string | null;
 
   constructor(runner = findKordocRunner()) {
     this.runner = runner;
+    this.engineCommand = runner ? `node ${runner}` : null;
+    this.bundled = Boolean(runner) && runner === bundledKordocRunner();
+    this.version = kordocVersion(runner);
   }
 
   get available() {
@@ -40,12 +77,12 @@ export class Kordoc {
   }
 
   private async run(job: Record<string, unknown>): Promise<{ result: KordocResult; dir: string }> {
-    if (!this.runner) throw new HttpError(501, "kordoc_missing", "한글 문서 엔진(kordoc)이 설치되어 있지 않아 HWPX를 열 수 없습니다.");
+    if (!this.runner) throw new HttpError(501, "kordoc_missing", "한글 문서 엔진(kordoc)을 찾지 못해 HWPX를 열 수 없습니다. 앱을 다시 설치해 주세요.");
     const dir = mkdtempSync(join(tmpdir(), "workbench-kordoc-"));
     const requestPath = join(dir, "request.json");
     writeFileSync(requestPath, JSON.stringify({ schemaVersion: 1, ...job, outputDir: join(dir, "out") }));
     const stdout = await new Promise<string>((resolve, reject) =>
-      execFile(process.execPath, [this.runner!, requestPath], { cwd: dir, timeout: 120_000, maxBuffer: 64 * 1024 * 1024, env: { ...process.env, KORDOC_OFFLINE: "1" } }, (error, out) =>
+      execFile(process.execPath, [this.runner!, requestPath], { cwd: dir, timeout: 120_000, maxBuffer: 64 * 1024 * 1024, windowsHide: true, env: { ...process.env, KORDOC_OFFLINE: "1" } }, (error, out) =>
         // Exit code 2 means "partial"; the JSON tells what happened.
         error && !out ? reject(new HttpError(500, "kordoc_failed", `한글 엔진 실행 실패: ${error.message}`)) : resolve(out),
       ),

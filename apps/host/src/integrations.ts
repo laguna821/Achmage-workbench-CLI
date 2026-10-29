@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import type { IntegrationsView, McpDefinition, SkillEntry } from "@workbench/contracts";
 import { HttpError } from "./errors.ts";
-import { engineEnv } from "./engine-env.ts";
+import type { EngineCli } from "./providers/types.ts";
 
 // MCP servers and skills as the two engines themselves see them. Workbench keeps no store of its
 // own: it reads the engines' configuration, and writes only on an explicit click, through each
@@ -14,7 +14,11 @@ import { engineEnv } from "./engine-env.ts";
 
 const run = promisify(execFile);
 
-export type EngineBinaries = { claude: string | null; codex: string | null };
+/** How each engine's own command line is started (an npm shim on Windows is resolved first). */
+export type EngineBinaries = { claude: EngineCli | null; codex: EngineCli | null };
+
+/** Run an engine's command line with arguments. */
+const engineRun = (cli: EngineCli, args: string[], options: { timeout: number; maxBuffer?: number }) => run(cli.command, [...cli.args, ...args], { ...options, env: cli.env, windowsHide: true });
 
 const home = () => homedir();
 const claudeSkillDirs = () => [join(home(), ".claude/skills")];
@@ -42,10 +46,10 @@ const envOf = (value: unknown): Record<string, string> =>
   value && typeof value === "object" ? Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, String(entry)])) : {};
 
 /** Codex's servers through its own `codex mcp list --json`. */
-async function codexServers(codex: string | null): Promise<Record<string, McpDefinition>> {
+async function codexServers(codex: EngineCli | null): Promise<Record<string, McpDefinition>> {
   if (!codex) return {};
   try {
-    const { stdout } = await run(codex, ["mcp", "list", "--json"], { timeout: 20_000, env: engineEnv({ command: codex }), maxBuffer: 8 * 1024 * 1024 });
+    const { stdout } = await engineRun(codex, ["mcp", "list", "--json"], { timeout: 20_000, maxBuffer: 8 * 1024 * 1024 });
     const list = JSON.parse(stdout) as { name: string; enabled?: boolean; transport?: { type?: string; command?: string; args?: string[]; env?: Record<string, string> | null; url?: string } }[];
     const out: Record<string, McpDefinition> = {};
     for (const entry of list) {
@@ -125,14 +129,14 @@ export async function copyMcp(binaries: EngineBinaries, name: string, to: "claud
   if (to === "claude") {
     if (!binaries.claude) throw new HttpError(501, "claude_missing", "Claude Code가 없습니다.");
     const json = source.type === "stdio" ? { type: "stdio", command: source.command, args: source.args, env: source.env } : { type: source.type, url: source.url };
-    await run(binaries.claude, ["mcp", "add-json", "--scope", "user", name, JSON.stringify(json)], { timeout: 30_000, env: engineEnv({ command: binaries.claude }) });
+    await engineRun(binaries.claude, ["mcp", "add-json", "--scope", "user", name, JSON.stringify(json)], { timeout: 30_000 });
   } else {
     if (!binaries.codex) throw new HttpError(501, "codex_missing", "Codex가 없습니다.");
     const args =
       source.type === "stdio"
         ? ["mcp", "add", name, ...Object.entries(source.env).flatMap(([key, value]) => ["--env", `${key}=${value}`]), "--", source.command ?? "", ...source.args]
         : ["mcp", "add", name, "--url", source.url ?? ""];
-    await run(binaries.codex, args, { timeout: 30_000, env: engineEnv({ command: binaries.codex }) });
+    await engineRun(binaries.codex, args, { timeout: 30_000 });
   }
   return integrations(binaries, null);
 }

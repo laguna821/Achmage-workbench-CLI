@@ -26,6 +26,7 @@ import { DocTabs } from "./components/DocTabs.tsx";
 import { IntegrationsSheet } from "./components/IntegrationsSheet.tsx";
 import { ImageUploadRow, ImageUploadSheet } from "./components/ImageUploadSheet.tsx";
 import { Onboarding } from "./components/Onboarding.tsx";
+import type { EngineActions } from "./components/EngineSetup.tsx";
 import { SessionPicker } from "./components/SessionPicker.tsx";
 import { LinkLayer } from "./components/LinkCards.tsx";
 import { ImportDialog } from "./components/ImportDialog.tsx";
@@ -205,7 +206,6 @@ export function App() {
   const [toast, setToastState] = useState<Toast | null>(null);
   const setToast = useCallback((next: string | Toast | null) => setToastState(typeof next === "string" ? { text: next } : next), []);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [loginMessage, setLoginMessage] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [engine, setEngine] = useEngineChoice();
   const [engineMenu, setEngineMenu] = useState<{ provider: Provider; x: number; y: number } | null>(null);
@@ -231,6 +231,20 @@ export function App() {
   const fail = useCallback((error: unknown) => {
     setToast(error instanceof ApiRequestError || error instanceof Error ? error.message : String(error));
   }, [setToast]);
+  // "설치" and "로그인" of the engines (onboarding and the connection panel); progress comes as status events.
+  const engineActions = useMemo<EngineActions>(
+    () => ({
+      install: (provider) => void api?.installEngine(provider).catch(fail),
+      login: (provider) => void api?.login(provider).catch(fail),
+      loginCode: async (provider, code) => {
+        await api?.loginCode(provider, code);
+      },
+      cancelLogin: (provider) => void api?.cancelLogin(provider).catch(fail),
+      openUrl: (url) => void openExternal(url).catch(fail),
+      copy: (text) => void copyText(text).then(() => setToast("복사했습니다.")),
+    }),
+    [api, fail, setToast],
+  );
 
   useEffect(() => {
     if (!toast) return;
@@ -1405,7 +1419,6 @@ export function App() {
                 providers={state.providers}
                 connected={state.connected}
                 hostLabel={state.hostLabel}
-                loginMessage={loginMessage}
                 themePref={themePref}
                 onTheme={(pref) => savePrefs({ theme: pref })}
                 onAppearance={() => {
@@ -1413,15 +1426,7 @@ export function App() {
                   appearanceApi.openSettings();
                 }}
                 onRefresh={() => void api.refreshProviders().catch(fail)}
-                onLogin={(provider) =>
-                  void api
-                    .login(provider)
-                    .then((result) => {
-                      setLoginMessage(result.message);
-                      if (result.url) void openExternal(result.url);
-                    })
-                    .catch(fail)
-                }
+                engineActions={engineActions}
                 startScreen={prefs.startScreen === "last" ? "last" : "home"}
                 onStartScreen={(next) => savePrefs({ startScreen: next })}
                 brandMotion={prefs.brandMotion !== false}
@@ -1571,15 +1576,7 @@ export function App() {
         <Onboarding
           providers={state.providers}
           tools={state.tools}
-          onLogin={(provider) =>
-            void api
-              .login(provider)
-              .then((result) => {
-                setLoginMessage(result.message);
-                if (result.url) void openExternal(result.url);
-              })
-              .catch(fail)
-          }
+          engineActions={engineActions}
           onRefresh={() => {
             void api.refreshProviders().catch(() => undefined);
             void api.refreshTools().catch(() => undefined);

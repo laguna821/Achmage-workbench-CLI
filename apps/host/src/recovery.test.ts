@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -353,7 +353,10 @@ describe("Hangul documents an engine writes, with the installed kordoc", () => {
     const dir = mkdtempSync(join(tmpdir(), "wb-recovery-kordoc-"));
     dirs.push(dir);
     const { execFileSync } = await import("node:child_process");
-    const coreRunner = join(new Kordoc().runner!, "../../core/scripts/run.mjs");
+    // The runner shipped with the app generates HWPX itself; an installed skill keeps that in its core.
+    const runner = new Kordoc().runner!;
+    const core = join(runner, "../../core/scripts/run.mjs");
+    const coreRunner = existsSync(core) ? core : runner;
     const hwpx = (word: string) => {
       const request = join(dir, `${word}.json`);
       writeFileSync(request, JSON.stringify({ schemaVersion: 1, mode: "generate", markdown: `# 계획\n\n${word} 일정을 정리합니다.`, outputDir: join(dir, word) }));

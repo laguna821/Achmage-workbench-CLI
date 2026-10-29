@@ -10,7 +10,8 @@ import { SessionManager } from "./sessions.ts";
 import { attachmentsDir } from "./attachments.ts";
 import { Store } from "./store.ts";
 import { Kordoc } from "./kordoc.ts";
-import { IeumOffice } from "./ieumoffice.ts";
+import { IeumOffice, findIeum } from "./ieumoffice.ts";
+import { installToolWrappers } from "./tool-bin.ts";
 import { createEditorsServer, EditorGrants } from "./editors.ts";
 import { AgentBrowser } from "./browse.ts";
 import { buildTimeline } from "./timeline.ts";
@@ -22,6 +23,7 @@ import { handleProject } from "./project-http.ts";
 import { handleEntry, WorksDir } from "./entry.ts";
 import { FindTool, withFindTool } from "./find-tool.ts";
 import { findToolInstructions } from "./search.ts";
+import { adoptLoginShellPath } from "./shell-env.ts";
 
 // Local gateway: owns engine processes and state, serves the UI and an HTTP + SSE API on
 // 127.0.0.1 only. Prints one `WORKBENCH_READY {json}` line once it accepts connections.
@@ -58,7 +60,16 @@ function defaultHostLabel() {
 }
 const hostLabel = env.WORKBENCH_HOST_LABEL ?? defaultHostLabel();
 
+// Apps opened from the desktop get a short PATH: the login shell's folders are added before the
+// engines are looked for (macOS, Linux).
+const shellPath = adoptLoginShellPath();
 const store = new Store(join(dataDir, "state.sqlite"));
+// The document tools shipped with the app (or the user's own), and the names engines run them by.
+const kordoc = new Kordoc();
+const ieum = new IeumOffice(findIeum(), { dataDir });
+const wrapped = installToolWrappers(dataDir, { kordoc: kordoc.runner, ieum: ieum.install, ieumAppWrapper: ieum.appWrapper });
+if (wrapped.includes("kordoc")) kordoc.engineCommand = "kordoc";
+if (wrapped.includes("ieumoffice")) ieum.engineCommand = "ieumoffice";
 const bus = new EventBus();
 // "새 프로젝트 폴더 위치": works started without a folder get theirs under the folder the user chose.
 const worksDir: WorksDir = new WorksDir(store, join(dataDir, "works"), (): string | null => pkm.vault.root);
@@ -76,8 +87,8 @@ const manager = new SessionManager(store, bus, {
   managedWorksDir: join(dataDir, "works"),
   worksDir: (): string => worksDir.root(),
   dataDir,
-  kordoc: new Kordoc(),
-  ieum: new IeumOffice(),
+  kordoc,
+  ieum,
 });
 void manager.refreshTools();
 const pkm = new Pkm(store, bus, manager, { dataDir });
@@ -158,7 +169,7 @@ listen(editors, env.WORKBENCH_EDITORS_PORT, editorsPortFile, (editorsPort) => {
     process.stdout.write(
       `WORKBENCH_READY ${JSON.stringify({ url: `http://127.0.0.1:${boundPort}`, port: boundPort, token, dataDir, editorsUrl: editorsOrigin })}\n`,
     );
-    void manager.initProviders();
+    void shellPath.then(() => manager.initProviders());
     // "예약 작업": sends what is due every half minute (checks use a shorter tick).
     manager.schedules.start(Number(env.WORKBENCH_SCHEDULE_TICK_MS) || 30_000);
   });

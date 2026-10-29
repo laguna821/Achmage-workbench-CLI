@@ -39,12 +39,17 @@
 //          model would, under the thread's sandbox as Codex runs commands: workspace-write lets it write
 //          only into the work folder, the writable roots the turn named and the temporary folders, and
 //          gives it no network (emulated with bubblewrap when it is installed); then answers with the output
+// Login (setup checks): with FAKE_ENGINE_AUTH_DIR set, Codex is logged in only once <dir>/codex
+// exists. `account/login/start` serves a callback on this computer like Codex does; opening its
+// address (a browser, or the stand-in opener) logs in and sends `account/login/completed`.
+// FAKE_CODEX_VERSION changes what `--version` says.
 //   "맥락"  answers with the developer instructions the thread started with and its sandbox
 //   "볼트에 써: <path>"  writes only where the sandbox would let Codex (work folder, temporary
 //          folders unless excluded, anything with full access) and only inside the temporary folder.
 
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
@@ -54,9 +59,13 @@ import { crc32, deflateSync } from "node:zlib";
 import { pagePng } from "./png.mjs";
 
 if (process.argv.includes("--version")) {
-  console.log("codex-cli 0.0.0-fake");
+  console.log(`codex-cli ${process.env.FAKE_CODEX_VERSION ?? "0.0.0-fake"}`);
   process.exit(0);
 }
+
+const authFile = process.env.FAKE_ENGINE_AUTH_DIR ? join(process.env.FAKE_ENGINE_AUTH_DIR, "codex") : null;
+const signedIn = () => !authFile || existsSync(authFile);
+let loginServer = null;
 
 const CONTEXT_WINDOW = 258_400;
 const send = (message) => process.stdout.write(`${JSON.stringify(message)}\n`);
@@ -561,7 +570,31 @@ async function handle(message) {
     case "initialize":
       return reply({ userAgent: "fake-codex/0.0.0", codexHome: "/tmp", platformFamily: "unix", platformOs: "linux" });
     case "account/read":
-      return reply({ account: { type: "chatgpt", email: "fake@example.com", planType: "pro" }, requiresOpenaiAuth: true });
+      return reply(signedIn() ? { account: { type: "chatgpt", email: "fake@example.com", planType: "pro" }, requiresOpenaiAuth: true } : { account: null, requiresOpenaiAuth: true });
+    case "account/login/start": {
+      loginServer?.close();
+      const loginId = `login_${++counter}`;
+      loginServer = createServer((request, response) => {
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        response.end("<p>로그인했습니다. 이 창을 닫아도 됩니다.</p>");
+        if (!request.url?.startsWith("/auth/callback")) return;
+        mkdirSync(dirname(authFile ?? join(tmpdir(), "x")), { recursive: true });
+        if (authFile) writeFileSync(authFile, "signed in");
+        loginServer?.close();
+        loginServer = null;
+        notify("account/login/completed", { loginId, success: true, error: null, onboardingEntrypoint: null });
+        notify("account/updated", { authMode: "chatgpt" });
+      });
+      loginServer.listen(0, "127.0.0.1", () => reply({ type: "chatgpt", loginId, authUrl: `http://127.0.0.1:${loginServer.address().port}/auth/callback?state=${loginId}` }));
+      return;
+    }
+    case "account/login/cancel":
+      loginServer?.close();
+      loginServer = null;
+      reply({ status: "canceled" });
+      // Codex reports the cancelled login as completed without success.
+      notify("account/login/completed", { loginId: params.loginId, success: false, error: "Login was not completed", onboardingEntrypoint: null });
+      return;
     case "account/rateLimits/read":
       return reply({ rateLimits: rateLimits(), rateLimitsByLimitId: null });
     case "skills/list":

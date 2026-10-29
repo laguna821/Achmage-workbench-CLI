@@ -35,14 +35,33 @@ export const PLAYWRIGHT_CLI = {
       integrity: "sha512-pNwaXirhXMRLaRQs4NQ18EpTdtDoFwyPH9FOaaDC7YXG4hpwE2xmwCic/1srbuExVQC7zT9LJSJpDBAru+Vo9A==",
     },
   ],
-  /** The Chromium of playwright-core's browsers.json for this version (Linux x64). */
+  /**
+   * The Chromium of playwright-core's browsers.json for this version: Chrome for Testing, whose
+   * executable for each platform is checked against its SHA-256 (taken from the same builds on
+   * cdn.playwright.dev, builds/cft/155.0.8059.12/<platform>/chrome-<platform>.zip).
+   */
   browser: {
     version: "155.0.8059.12",
     folder: "chromium-1247",
-    executable: "chromium-1247/chrome-linux64/chrome",
-    sha256: "adf078f8f80eb9e980a07b4418af23b0f4008a83bc5756d5588055bc4d76c5a0",
+    executables: {
+      "linux-x64": { path: "chrome-linux64/chrome", sha256: "adf078f8f80eb9e980a07b4418af23b0f4008a83bc5756d5588055bc4d76c5a0" },
+      "win32-x64": { path: "chrome-win64/chrome.exe", sha256: "74222067d9e6a3ab417a6b1ba00688baded1c7807bb6ef8d1fdf8b6e74d725b8" },
+      "darwin-arm64": {
+        path: "chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+        sha256: "48620458518eae4e6a4dc19dd7ca38285d7fe822bf2589efcbcced4a40d6fc71",
+      },
+      "darwin-x64": {
+        path: "chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+        sha256: "417d0692fe65c13602258d78f6c819595e02b18554db240556268f95c8b06775",
+      },
+    } as Record<string, { path: string; sha256: string }>,
   },
 } as const;
+
+/** This computer's Chromium executable and its pinned hash, or null where Playwright has none. */
+export function browserBuild(platform: NodeJS.Platform = process.platform, arch: string = process.arch) {
+  return PLAYWRIGHT_CLI.browser.executables[`${platform}-${arch}`] ?? null;
+}
 
 /** Where everything of the agent browser lives (all under the gateway's data folder). */
 export function browserPaths(dataDir: string) {
@@ -52,7 +71,7 @@ export function browserPaths(dataDir: string) {
     cli: join(root, "cli"),
     cliJs: join(root, "cli/node_modules/@playwright/cli/playwright-cli.js"),
     browsers: join(root, "browsers"),
-    chrome: join(root, "browsers", PLAYWRIGHT_CLI.browser.executable),
+    chrome: join(root, "browsers", PLAYWRIGHT_CLI.browser.folder, ...(browserBuild()?.path ?? "chrome-unsupported/chrome").split("/")),
     profile: join(root, "profile"),
     bin: join(root, "bin"),
     spool: join(root, "spool"),
@@ -145,6 +164,13 @@ export class BrowserInstaller {
   }
 }
 
+/** `tar`: Windows 10 and later ship bsdtar as System32\tar.exe (found even with a short PATH). */
+function tarCommand() {
+  if (process.platform !== "win32") return "tar";
+  const system = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe");
+  return existsSync(system) ? system : "tar";
+}
+
 /** Download a file, checking its bytes against an npm `sha512-…` integrity string on the way. */
 async function download(url: string, file: string, integrity: string) {
   const response = await fetch(url);
@@ -182,7 +208,7 @@ export function installSteps(paths: BrowserPaths, finish: () => void): InstallSt
             const target = join(staging, "node_modules", pkg.name);
             mkdirSync(target, { recursive: true });
             // npm tarballs keep everything under package/; no install scripts run.
-            await run("tar", ["-xzf", archive, "-C", target, "--strip-components=1", "--no-same-owner"], { timeout: 120_000 });
+            await run(tarCommand(), ["-xzf", archive, "-C", target, "--strip-components=1", "--no-same-owner"], { timeout: 120_000, windowsHide: true });
             rmSync(archive, { force: true });
           }
           writeFileSync(join(staging, "package.json"), JSON.stringify({ private: true, dependencies: Object.fromEntries(PLAYWRIGHT_CLI.packages.map((pkg) => [pkg.name, pkg.version])) }, null, 2));
@@ -221,8 +247,10 @@ export function installSteps(paths: BrowserPaths, finish: () => void): InstallSt
       stage: "verify",
       message: "내려받은 브라우저 확인 중…",
       run: async () => {
+        const build = browserBuild();
+        if (!build) throw new Error(`이 컴퓨터(${process.platform} ${process.arch})용 Chromium은 Playwright가 배포하지 않습니다.`);
         if (!existsSync(paths.chrome)) throw new Error("브라우저 실행 파일이 없습니다.");
-        if ((await sha256(paths.chrome)) !== PLAYWRIGHT_CLI.browser.sha256) {
+        if ((await sha256(paths.chrome)) !== build.sha256) {
           rmSync(join(paths.browsers, PLAYWRIGHT_CLI.browser.folder), { recursive: true, force: true });
           throw new Error("브라우저 실행 파일의 체크섬이 고정값과 달라 지웠습니다.");
         }

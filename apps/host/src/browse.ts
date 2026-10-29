@@ -30,7 +30,7 @@ import {
   parseCliArgs,
   targetUrl,
 } from "./browse-policy.ts";
-import { launcherSource, wrapperSource } from "./browse-wrapper.ts";
+import { cmdLauncherSource, launcherSource, wrapperSource } from "./browse-wrapper.ts";
 import { HttpError } from "./errors.ts";
 
 const run = promisify(execFile);
@@ -227,6 +227,8 @@ export class AgentBrowser {
     writeFileSync(script, wrapperSource(this.paths.root));
     writeFileSync(join(this.paths.bin, "playwright-cli"), launcherSource(process.execPath, script), { mode: 0o755 });
     chmodSync(join(this.paths.bin, "playwright-cli"), 0o755);
+    // Windows shells (PowerShell, cmd) run the .cmd; Git Bash runs the sh one.
+    if (process.platform === "win32") writeFileSync(join(this.paths.bin, "playwright-cli.cmd"), cmdLauncherSource(process.execPath, script));
   }
 
   /** The CLI's config: Chromium (the downloaded build), this profile, a window, output kept here. */

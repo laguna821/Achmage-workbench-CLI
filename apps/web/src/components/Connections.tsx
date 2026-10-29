@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
-import { PROVIDER_LABEL, type AgentBrowserStatus, type DocumentTools, type Provider, type ProviderStatus } from "@workbench/contracts";
+import { type AgentBrowserStatus, type DocumentTools, type Provider, type ProviderStatus } from "@workbench/contracts";
 import { usageText } from "../format.ts";
 import type { ThemePref } from "../theme.ts";
 import { BrowserInstall, BrowserLogin, type BrowserActions } from "./BrowserPill.tsx";
+import { EngineCard, type EngineActions } from "./EngineSetup.tsx";
+import { toolState } from "./Onboarding.tsx";
 
 const THEME_LABEL: Record<ThemePref, string> = { system: "시스템", light: "라이트", dark: "다크" };
 
@@ -12,30 +14,32 @@ function ToolsSection({ tools, onInstallIeum, onRefreshTools }: { tools: Documen
   if (!tools) return null;
   const rows = [
     { key: "kordoc", name: "kordoc", role: "한글(HWPX) 만들기·글 보기·쪽 미리보기", status: tools.kordoc },
-    { key: "hop", name: "Achmage HOP", role: "한글 문서를 사람이 편집(HOP로 열기 → 저장하면 새 판)", status: tools.hop },
     { key: "ieumoffice", name: "이음오피스", role: "워드·PPT·엑셀 미리보기·글 보기·AI 수정", status: tools.ieumoffice },
+    { key: "hop", name: "Achmage HOP", role: "한글 문서를 사람이 편집(HOP로 열기 → 저장하면 새 판). 없으면 기본 앱으로 엽니다.", status: tools.hop },
+    ...(tools.pdfcraft ? [{ key: "pdfcraft", name: "PDFCraft", role: "PDF 쪽 돌리기·지우기·옮기기(새 파일로)", status: tools.pdfcraft } as const] : []),
   ] as const;
   return (
     <>
       <div className="menu-divider" />
       <div className="menu-label">문서 도구</div>
-      {rows.map((row) => (
-        <div key={row.key} className="connection">
-          <div className="connection-head">
-            <span className="connection-name">{row.name}</span>
-            <span className={`connection-state ${row.status.available ? "ok" : "warn"}`}>
-              {row.status.busy ? "설치 중…" : row.status.available ? (row.status.version ? `사용 가능 · ${row.status.version}` : "사용 가능") : "없음"}
-            </span>
+      {rows.map((row) => {
+        const state = row.key === "hop" && !row.status.available ? { text: "기본 앱으로 열기", tone: "" } : toolState(row.status);
+        return (
+          <div key={row.key} className="connection">
+            <div className="connection-head">
+              <span className="connection-name">{row.name}</span>
+              <span className={`connection-state ${state.tone}`}>{state.text}</span>
+            </div>
+            <div className="connection-meta muted">{row.role}</div>
+            {row.status.message ? <div className="connection-meta">{row.status.message}</div> : null}
+            {row.key === "ieumoffice" && !row.status.busy && !row.status.bundled ? (
+              <button type="button" className="button small" onClick={onInstallIeum} title="GitHub 배포판을 받아 체크섬을 확인한 뒤 ~/.local/opt/ieumoffice에 풉니다">
+                {row.status.available ? "최신판으로 업데이트" : "이음오피스 받기"}
+              </button>
+            ) : null}
           </div>
-          <div className="connection-meta muted">{row.role}</div>
-          {row.status.message ? <div className="connection-meta">{row.status.message}</div> : null}
-          {row.key === "ieumoffice" && !row.status.busy ? (
-            <button type="button" className="button small" onClick={onInstallIeum} title="GitHub 배포판을 받아 체크섬을 확인한 뒤 ~/.local/opt/ieumoffice에 풉니다">
-              {row.status.available ? "최신판으로 업데이트" : "이음오피스 설치"}
-            </button>
-          ) : null}
-        </div>
-      ))}
+        );
+      })}
       <button type="button" className="text-button" onClick={onRefreshTools}>
         문서 도구 다시 확인
       </button>
@@ -81,9 +85,8 @@ export function Connections({
   providers,
   connected,
   hostLabel,
-  onLogin,
+  engineActions,
   onRefresh,
-  loginMessage,
   themePref,
   onTheme,
   onAppearance,
@@ -112,9 +115,8 @@ export function Connections({
   providers: Partial<Record<Provider, ProviderStatus>>;
   connected: boolean;
   hostLabel: string;
-  onLogin: (provider: Provider) => void;
+  engineActions: EngineActions;
   onRefresh: () => void;
-  loginMessage: string | null;
   themePref: ThemePref;
   onTheme: (pref: ThemePref) => void;
   onAppearance: () => void;
@@ -136,63 +138,28 @@ export function Connections({
       {!connected ? <div className="notice notice-error compact">앱 내부 연결이 끊겼습니다. 다시 연결하는 중…</div> : null}
       {(["claude", "codex"] as const).map((provider) => {
         const status = providers[provider];
-        const state = !status
-          ? "확인 중"
-          : !status.installed
-            ? "설치되지 않음"
-            : status.loggedIn === null
-              ? "확인 중"
-              : !status.loggedIn
-                ? "로그인 필요"
-                : status.loginMethod === "subscription"
-                  ? "구독 연결됨"
-                  : status.loginMethod === "metered"
-                    ? "종량제 로그인"
-                    : "로그인됨";
-        const tone = status?.loggedIn && status.loginMethod !== "metered" ? "ok" : status?.loggedIn === false || status?.loginMethod === "metered" ? "warn" : "";
         return (
           <div key={provider} className="connection">
-            <div className="connection-head">
-              <span className="connection-name">{PROVIDER_LABEL[provider]}</span>
-              <span className={`connection-state ${tone}`}>{state}</span>
-            </div>
-            {status?.account ? (
-              <div className="connection-meta">
-                {status.account}
-                {status.plan ? ` · ${status.plan}` : ""}
-              </div>
-            ) : null}
-            {status?.usage.length ? (
-              status.usage.map((window) => (
-                <div key={window.label} className="connection-meta">
-                  {usageText(window)}
+            <EngineCard provider={provider} status={status} actions={engineActions}>
+              {status?.account ? (
+                <div className="connection-meta">
+                  {status.account}
+                  {status.plan ? ` · ${status.plan}` : ""}
                 </div>
-              ))
-            ) : status?.loggedIn ? (
-              <div className="connection-meta muted">사용량 확인 불가 (첫 요청 후 표시)</div>
-            ) : null}
-            {status?.loginMethod === "metered" ? (
-              <div className="connection-meta warn">API 키나 클라우드 경로로 로그인되어 있어 쓴 만큼 요금이 나갑니다. 구독으로 쓰려면 구독 계정으로 다시 로그인하세요.</div>
-            ) : null}
-            {status?.billingVars.length ? (
-              <div className="connection-meta muted">
-                {status.billingVars.join(", ")} 환경변수는 엔진에 넘기지 않습니다(구독 로그인으로 실행).
-              </div>
-            ) : null}
-            {status?.binarySource === "bundled" ? (
-              <div className="connection-meta muted">설치된 Claude Code가 없어 SDK에 들어 있는 엔진으로 실행합니다.</div>
-            ) : null}
-            {status?.version ? <div className="connection-meta muted mono">{status.version}</div> : null}
-            {status?.error && !status.loggedIn ? <div className="connection-meta warn">{status.error}</div> : null}
-            {status?.installed && status.loggedIn === false ? (
-              <button type="button" className="button small" onClick={() => onLogin(provider)}>
-                {PROVIDER_LABEL[provider]} 로그인
-              </button>
-            ) : null}
+              ) : null}
+              {status?.usage.length ? (
+                status.usage.map((window) => (
+                  <div key={window.label} className="connection-meta">
+                    {usageText(window)}
+                  </div>
+                ))
+              ) : status?.loggedIn ? (
+                <div className="connection-meta muted">사용량 확인 불가 (첫 요청 후 표시)</div>
+              ) : null}
+            </EngineCard>
           </div>
         );
       })}
-      {loginMessage ? <div className="connection-meta">{loginMessage}</div> : null}
       <button type="button" className="text-button" onClick={onRefresh}>
         상태 새로 고침
       </button>

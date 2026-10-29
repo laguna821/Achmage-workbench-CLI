@@ -597,8 +597,16 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           return sendJson(res, 200, links.exportMarkdown(linkId, { target, path: typeof body.path === "string" ? body.path : undefined }));
         }
       }
-      if (method === "POST" && parts[0] === "providers" && parts[2] === "login") {
-        return sendJson(res, 200, await manager.login(parts[1] as Provider));
+      if (method === "POST" && parts[0] === "providers" && (parts[1] === "claude" || parts[1] === "codex")) {
+        const provider = parts[1] as Provider;
+        const action = parts.slice(2).join("/");
+        if (action === "login") return sendJson(res, 200, await manager.login(provider));
+        if (action === "login/code") {
+          const body = await readJson(req);
+          return sendJson(res, 200, await manager.loginCode(provider, String(body.code ?? "")));
+        }
+        if (action === "login/cancel") return sendJson(res, 200, await manager.cancelLogin(provider));
+        if (action === "install") return sendJson(res, 202, manager.installEngine(provider));
       }
       if (method === "PUT" && path === "/api/prefs") {
         const body = await readJson(req);
