@@ -780,3 +780,4 @@ export * from "./worktrees.ts";
 export * from "./project.ts";
 export * from "./entry.ts";
 export * from "./recovery.ts";
+export * from "./search.ts";

@@ -126,7 +126,8 @@ async function flow(provider: Provider) {
     await idle();
     const onAnswer = await lastAnswer();
     const told = onAnswer.includes("브라우저 지침: 받음") && onAnswer.includes("제목: Example Domain");
-    const roots = provider !== "codex" || onAnswer.includes("쓰기 폴더 1개");
+    // Two writable roots: this session's browser spool and its workbench-find spool (search).
+    const roots = provider !== "codex" || onAnswer.includes("쓰기 폴더 2개");
     const command = (await items(engine.id)).find((item) => item.kind === "tool" && item.title.includes("playwright-cli") && item.title.includes("open"));
     pass("켠 뒤 다음 요청부터 지침을 받고, 새 사이트는 카드로 확인한 뒤 제목을 읽음", card.includes("브라우저로 새 사이트를 열까요?") && told && roots && Boolean(command), `${card.replace(/\s+/g, " ").slice(0, 60)} | ${onAnswer.split("\n")[0]}`);
 

@@ -31,8 +31,7 @@ import {
   type Attachment,
   type SendResult,
   type ExportMarkdownResult,
-  type SearchHit,
-  type SearchResult,
+  type SearchPage,
   type UpdateFolderRequest,
   type UpdateWorkRequest,
   type Handoff,
@@ -66,6 +65,7 @@ import { Schedules } from "./schedules.ts";
 import { applyWorktree, createWorktree, removeWorktree, worktreeChanges } from "./worktrees.ts";
 import type { AgentBrowser } from "./browse.ts";
 import { handoffError, heldNotice, provenanceOf, restartTurnEnd, stampTurnEnd } from "./recovery.ts";
+import { Finder, type SearchOptions } from "./search.ts";
 
 export { HttpError };
 
@@ -260,6 +260,8 @@ export class SessionManager {
   changeHook: ((session: Session, work: Work, omit: string[]) => string | null) | null = null;
   /** A request went out: the session now knows the project as of now (project.ts). */
   toldHook: ((session: Session) => void) | null = null;
+  /** "찾는 길": the search over the store's index, for Ctrl+K, saved views and workbench-find (search.ts). */
+  readonly finder: Finder;
   private readonly store: Store;
   private readonly bus: EventBus;
   private readonly options: ManagerOptions;
@@ -270,6 +272,21 @@ export class SessionManager {
     this.options = options;
     this.documents = new Documents(store, bus, options.dataDir ?? dirname(options.managedWorksDir), options.kordoc ?? null, options.ieum ?? null);
     this.attachments = new Attachments(options.dataDir ?? dirname(options.managedWorksDir));
+    this.finder = new Finder(store.search, {
+      works: () => this.works,
+      sessions: () => this.sessions,
+      folders: () => this.folders,
+      artifact: (id) => {
+        try {
+          return this.documents.get(id);
+        } catch {
+          return null;
+        }
+      },
+      proposals: () => this.documents.listProposals(),
+      items: (id) => this.loadItems(id),
+      hidden: (workId, sessionId) => this.hidden(workId, sessionId ?? null),
+    });
     this.images = new ImageGen(
       {
         session: (id) => this.sessions.get(id),
@@ -1650,55 +1667,12 @@ export class SessionManager {
   }
 
   /**
-   * Search titles' conversations and documents by the words typed (all must appear, any case).
-   * Local index only: no model is asked. Archived things are left out unless asked for.
+   * "찾는 길": works, sessions, requests, replies, plans, documents and vault notes by the words
+   * typed, ranked and grouped by work (search.ts). Local index only: no model is asked. Archived
+   * things are left out unless asked for.
    */
-  search(query: string, options: { archived?: boolean; provider?: Provider | null; folderId?: string | null } = {}): SearchResult {
-    const started = performance.now();
-    // Words must all appear; "quoted words" must appear together as typed.
-    const terms = [...query.trim().matchAll(/"([^"]+)"|(\S+)/g)]
-      .map((match) => (match[1] ?? match[2] ?? "").trim())
-      .filter(Boolean)
-      .slice(0, 6)
-      .map((term) => term.slice(0, 100));
-    const result: SearchResult = { query, sessions: [], documents: [], tookMs: 0 };
-    if (!terms.length) return result;
-    const inFolder = (workId: string) => {
-      if (!options.folderId) return true;
-      for (let at = this.works.get(workId)?.folderId ?? null; at; at = this.folders.get(at)?.parentId ?? null) if (at === options.folderId) return true;
-      return false;
-    };
-    const bySession = new Map<string, { sessionId: string; workId: string; total: number; hits: SearchHit[] }>();
-    for (const hit of this.store.searchItems(terms, 800)) {
-      const session = this.sessions.get(hit.sessionId);
-      if (!session) continue;
-      if (!options.archived && this.hidden(session.workId, session.id)) continue;
-      if (options.provider && session.provider !== options.provider) continue;
-      if (!inFolder(session.workId)) continue;
-      let entry = bySession.get(session.id);
-      if (!entry) {
-        if (bySession.size >= 40) continue;
-        entry = { sessionId: session.id, workId: session.workId, total: 0, hits: [] };
-        bySession.set(session.id, entry);
-      }
-      entry.total += 1;
-      if (entry.hits.length < 3) entry.hits.push({ sessionId: session.id, itemId: hit.itemId, kind: hit.kind, at: hit.at, ...snippetOf(hit.text, terms) });
-    }
-    result.sessions = [...bySession.values()];
-    for (const hit of this.store.searchDocuments(terms, 60)) {
-      let artifact;
-      try {
-        artifact = this.documents.get(hit.artifactId);
-      } catch {
-        continue;
-      }
-      if (!options.archived && this.hidden(artifact.workId)) continue;
-      if (!inFolder(artifact.workId)) continue;
-      result.documents.push({ artifactId: artifact.id, workId: artifact.workId, ...snippetOf(hit.text, terms) });
-      if (result.documents.length >= 20) break;
-    }
-    result.tookMs = Math.round(performance.now() - started);
-    return result;
+  search(query: string, options: SearchOptions = {}): SearchPage {
+    return this.finder.search(query, options);
   }
 
   /**

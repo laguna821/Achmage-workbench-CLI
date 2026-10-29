@@ -36,7 +36,8 @@ import type {
   Proposal,
   Folder,
   Provider,
-  SearchResult,
+  SearchPage,
+  SearchRequest,
   SendResult,
   SequencedEvent,
   Session,
@@ -98,12 +99,17 @@ export class Api {
   items = (sessionId: string) => this.request<{ seq: number; items: TranscriptItem[] }>("GET", `/api/sessions/${sessionId}/items`);
   createFolder = (name: string, parentId: string | null) => this.request<Folder>("POST", "/api/folders", { name, parentId });
   updateFolder = (folderId: string, patch: UpdateFolderRequest) => this.request<Folder>("PATCH", `/api/folders/${folderId}`, patch);
-  search = (query: string, options: { provider?: Provider | null; archived?: boolean; folderId?: string | null } = {}) => {
+  /** "찾는 길": grouped by work with totals per scope; `group` pages one work's hits. */
+  search = (query: string, options: Omit<SearchRequest, "q"> & { legacy?: boolean } = {}) => {
     const params = new URLSearchParams({ q: query });
     if (options.provider) params.set("provider", options.provider);
     if (options.archived) params.set("archived", "1");
     if (options.folderId) params.set("folderId", options.folderId);
-    return this.request<SearchResult>("GET", `/api/search?${params}`);
+    if (options.scope && options.scope !== "all") params.set("scope", options.scope);
+    for (const key of ["offset", "limit", "per"] as const) if (options[key] !== undefined) params.set(key, String(options[key]));
+    if (options.group) params.set("group", options.group);
+    if (options.legacy === false) params.set("legacy", "0");
+    return this.request<SearchPage>("GET", `/api/search?${params}`);
   };
   exportMarkdown = (sessionId: string, request: ExportMarkdownRequest) => this.request<ExportMarkdownResult>("POST", `/api/sessions/${sessionId}/export`, request);
   createWork = (title: string, folderId: string | null, cwd: string | null) => this.request<Work>("POST", "/api/works", { title, folderId, cwd });

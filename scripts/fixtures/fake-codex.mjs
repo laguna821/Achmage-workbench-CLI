@@ -35,6 +35,10 @@
 //          request text (asked again with the same words, it answers; marks in $FAKE_ENGINE_STATE)
 //   "[[cp <from> <to>]]"  copies a file with a command (asking first unless "never"), as Codex
 //          writing a document through the shell would
+//   "찾아 줘: <질의>"  runs `workbench-find "<질의>"` from its PATH (leading --flags stay flags) like a
+//          model would, under the thread's sandbox as Codex runs commands: workspace-write lets it write
+//          only into the work folder, the writable roots the turn named and the temporary folders, and
+//          gives it no network (emulated with bubblewrap when it is installed); then answers with the output
 //   "맥락"  answers with the developer instructions the thread started with and its sandbox
 //   "볼트에 써: <path>"  writes only where the sandbox would let Codex (work folder, temporary
 //          folders unless excluded, anything with full access) and only inside the temporary folder.
@@ -80,6 +84,41 @@ function runCommand(line, cwd, threadId) {
     child.on("error", (error) => resolve({ code: 127, output: String(error) }));
   });
 }
+/** bubblewrap, to run a command the way Codex's Linux sandbox would let it (null: not installed). */
+const BWRAP = ["/usr/bin/bwrap", "/bin/bwrap"].find((path) => existsSync(path)) ?? null;
+
+/**
+ * A command under the thread's sandbox: full access runs it as it is; workspace-write mounts the
+ * whole file system read-only except the work folder, the writable roots and (unless excluded) the
+ * temporary folders, and cuts the network; read-only leaves nothing writable.
+ */
+function sandboxed(line, thread, threadId) {
+  const policy = thread.policy ?? { type: thread.mode === "danger-full-access" ? "dangerFullAccess" : thread.mode === "read-only" ? "readOnly" : "workspaceWrite", writableRoots: [] };
+  if (policy.type === "dangerFullAccess" || !BWRAP) return { run: runCommand(line, thread.cwd, threadId), note: policy.type === "dangerFullAccess" ? "샌드박스 없음(전체 접근)" : "샌드박스 흉내 없음(bubblewrap 없음)" };
+  const writable = policy.type === "workspaceWrite" ? [thread.cwd, ...(policy.writableRoots ?? []), ...(policy.excludeSlashTmp ? [] : ["/tmp"]), ...(policy.excludeTmpdirEnvVar ? [] : [tmpdir()])] : [];
+  const binds = [...new Set(writable)].filter((path) => existsSync(path)).flatMap((path) => ["--bind", path, path]);
+  const args = ["--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", ...binds, "--unshare-net", "--chdir", thread.cwd, "--", "/bin/sh", "-c", line];
+  const run = new Promise((done) => {
+    const child = spawn(BWRAP, args, { env: { ...process.env, CODEX_THREAD_ID: threadId } });
+    let output = "";
+    child.stdout.on("data", (chunk) => (output += chunk));
+    child.stderr.on("data", (chunk) => (output += chunk));
+    child.on("exit", (code) => done({ code: code ?? 1, output }));
+    child.on("error", (error) => done({ code: 127, output: String(error) }));
+  });
+  return { run, note: `샌드박스 ${policy.type} · 쓰기 폴더 ${(policy.writableRoots ?? []).length}개 · 네트워크 막힘` };
+}
+
+/** "찾아 줘: --all 채점 기준" → `workbench-find --all "채점 기준"`. */
+function findCommand(text) {
+  const asked = /찾아 줘:\s*([^\n]+)/.exec(text)?.[1]?.trim() ?? "";
+  const words = asked.split(/\s+/);
+  const flags = [];
+  while (words[0]?.startsWith("--")) flags.push(words.shift());
+  const query = words.join(" ").replace(/"/g, "");
+  return `workbench-find ${flags.length ? `${flags.join(" ")} ` : ""}"${query}"`;
+}
+
 const waiting = new Map(); // server request id -> resolve
 let counter = 0;
 let serverRequestId = 1000;
@@ -349,6 +388,22 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
       browserLine = `브라우저 지침: 받음 (${thread.browser.name ?? "이름 없음"}) · 쓰기 폴더 ${thread.roots.length}개 · ${title ? `제목: ${title}` : `실패: ${refusal ?? result.output ?? decision}`}`;
     }
   }
+  let findLine = null;
+  if (text.includes("찾아 줘:")) {
+    const line = findCommand(text);
+    const itemId = `cmd_${++counter}`;
+    let decision = "accept";
+    if (thread.approvalPolicy === "untrusted") {
+      const answer = await ask("item/commandExecution/requestApproval", { kind: "command", threadId, turnId, itemId, startedAtMs: Date.now(), environmentId: null, reason: null, command: line, cwd: thread.cwd });
+      decision = answer?.decision ?? "decline";
+    }
+    const command = { type: "commandExecution", id: itemId, command: line, cwd: thread.cwd, processId: null, source: "agent", status: "inProgress", commandActions: [], aggregatedOutput: null, exitCode: null, durationMs: null };
+    notify("item/started", { threadId, turnId, item: command });
+    const sandbox = decision === "accept" ? sandboxed(line, thread, threadId) : null;
+    const result = sandbox ? await sandbox.run : { code: null, output: null };
+    notify("item/completed", { threadId, turnId, item: { ...command, status: decision !== "accept" ? "declined" : result.code === 0 ? "completed" : "failed", aggregatedOutput: result.output, exitCode: result.code } });
+    findLine = decision === "accept" ? `workbench-find 결과 (${sandbox.note}, 종료 코드 ${result.code}):\n\n\`\`\`text\n${result.output.trimEnd()}\n\`\`\`` : "workbench-find: 거절됨";
+  }
   if (text.includes("명령")) {
     const itemId = `cmd_${++counter}`;
     let decision = "accept";
@@ -394,6 +449,10 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
   let full = `${forkSaid}${browserLine ? `${browserLine}\n\n` : ""}`;
   if (browserLine) {
     notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: `${browserLine}\n\n` });
+  }
+  if (findLine) {
+    full += `${findLine}\n\n`;
+    notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: `${findLine}\n\n` });
   }
   const skill = text.match(/\[스킬 ([^ ]+) · ([^\]]+)\]/);
   if (skill) {

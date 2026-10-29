@@ -135,6 +135,8 @@ export class Documents {
   private indexLatest(artifact: Artifact) {
     if (artifact.revision < 1) return;
     if (hasTextView(artifact.format)) {
+      // Found by its name at once, by its text once the background has read it.
+      this.store.indexDocument(artifact.id, null);
       this.textIndex.add(artifact.id, artifact.revision);
       return;
     }
@@ -237,8 +239,10 @@ export class Documents {
     this.store.saveRevision(entry);
     const updated: Artifact = { ...artifact, revision: next, sha256: entry.sha256, size: entry.size, diskState: "same", updatedAt: entry.at };
     this.save(updated);
-    // Hangul and Office files are read in the background; their previous entry stays meanwhile.
+    // Hangul and Office files are read in the background; their previous entry stays meanwhile (a new
+    // one is found by its name until then, and only by it when no tool can read it).
     if (hasTextView(updated.format)) {
+      if (!this.store.hasDocumentEntry(updated.id)) this.store.indexDocument(updated.id, null);
       if (index) this.textIndex.add(updated.id, updated.revision);
     } else {
       this.store.indexDocument(updated.id, searchText(updated.format, data));

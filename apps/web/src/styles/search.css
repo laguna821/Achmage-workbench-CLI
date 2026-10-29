@@ -1,0 +1,188 @@
+/* ── "찾는 길": scope chips, groups by work, totals and "더 보기" in the Ctrl+K box ─────────── */
+
+/* The filters row holds the scope chips (Tab), then the engine chips and "보관 포함". */
+.search-filters {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+.search-filters-gap {
+  flex: 1;
+}
+
+.search-scopes {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-muted);
+}
+
+.search-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.search-scope:hover:not(.on) {
+  color: var(--text);
+}
+
+.search-scope.on {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 14%, transparent);
+}
+
+.search-scope-count {
+  min-width: 14px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+
+.search-scope.on .search-scope-count {
+  color: var(--accent);
+}
+
+.search-scope.empty:not(.on) {
+  opacity: 0.6;
+}
+
+/* Ctrl+Shift+F: the same box, contents only. */
+.search-mode {
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* The line above the results: how many in all, how the words were read, "보기로 저장". */
+.search-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 4px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.search-total {
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.search-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.search-save:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  color: var(--accent);
+}
+
+.search-save:disabled {
+  color: var(--faint);
+}
+
+.search-notice {
+  margin: 2px 10px 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--amber-soft);
+  color: var(--amber-text);
+  font-size: 12.5px;
+}
+
+/* One group per work: the work (with its folders) and how many were found in it. */
+.search-group + .search-group {
+  margin-top: 4px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+
+.search-group .palette-group-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.search-group-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-trail {
+  font-weight: 400;
+  color: var(--faint);
+}
+
+.search-group-count {
+  margin-left: auto;
+  font-weight: 400;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* "이 작업에서 N건 더", "더 보기", "모든 결과로": quieter than results. */
+.palette-entry.kind-more .search-more-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.palette-entry.kind-more .palette-icon {
+  color: var(--accent);
+}
+
+.palette .palette-title mark {
+  padding: 0;
+}
+
+.search-answer {
+  border-style: dashed;
+}
+
+@media (max-width: 760px) {
+  .search-scope {
+    padding: 0 7px;
+  }
+
+  .search-scope-count {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .search-scope,
+  .search-save {
+    transition: none;
+  }
+}

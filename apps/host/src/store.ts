@@ -3,24 +3,17 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Artifact, ArtifactRevision, Folder, Handoff, Proposal, Session, SessionLink, TimelineRevision, TranscriptItem, Work } from "@workbench/contracts";
 import type { TurnMark } from "./timeline.ts";
+import { SearchIndex, documentEntry, documentKey, itemEntries, itemKey, sessionEntry, workEntry, type WorkExtras } from "./search-index.ts";
 
 // Local state only: works, folders, sessions, transcript items and request ids.
 // Never place this database in Dropbox (live SQLite must not be synced).
 
-/** Bumped when what the search index holds changes; the index is then rebuilt once. */
-const SEARCH_VERSION = "1";
-
-/** Messages the search covers: what the user asked and what the engine answered (not tools or reasoning). */
-export function searchableText(item: TranscriptItem): string | null {
-  if (item.kind === "user") return item.text;
-  if (item.kind === "assistant" && !item.streaming && item.text.trim()) return item.text;
-  return null;
-}
-
-/** A search term as a LIKE pattern (`%`, `_` and the escape character taken literally). */
-const likePattern = (term: string) => `%${term.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
-
-export type ItemHit = { sessionId: string; itemId: string; kind: "user" | "assistant"; at: number; text: string };
+/**
+ * Bumped when what the search index holds changes; the index is then rebuilt once (search-index.ts).
+ * 1: messages and documents in two trigram tables. 2: one ranked index (2-gram and trigram) of
+ * requests, replies, plans, attachment names, documents, works, sessions and vault notes.
+ */
+const SEARCH_VERSION = "2";
 
 export class Store {
   private readonly db: DatabaseSync;
@@ -58,79 +51,119 @@ export class Store {
       CREATE TABLE IF NOT EXISTS proposals (id TEXT PRIMARY KEY, artifact_id TEXT NOT NULL, json TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS handoffs (id TEXT PRIMARY KEY, json TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS links (id TEXT PRIMARY KEY, json TEXT NOT NULL);
-      -- Full-text search over messages and documents. Trigram: matches any part of a word, so Korean
-      -- finds without a morphological analyser; terms shorter than three characters scan instead.
-      -- Row ids follow the items and artifacts tables, so a changed row replaces its entry directly.
-      CREATE VIRTUAL TABLE IF NOT EXISTS item_search USING fts5(text, session_id UNINDEXED, item_id UNINDEXED, kind UNINDEXED, at UNINDEXED, tokenize = 'trigram');
-      CREATE VIRTUAL TABLE IF NOT EXISTS document_search USING fts5(text, artifact_id UNINDEXED, tokenize = 'trigram');
     `);
+    this.search = new SearchIndex(this.db);
     if (this.getMeta("search.version") !== SEARCH_VERSION) this.rebuildSearch();
   }
 
-  /** Index every stored message again (first start with search, or after the index format changed). */
+  /** The search index ("찾는 길"): every request, reply, plan, document, work, session and note. */
+  readonly search: SearchIndex;
+
+  /** What the project layer adds to a work's search entry (aliases, tags, properties); see search-index.ts. */
+  workExtras: ((workId: string) => WorkExtras | null) | null = null;
+
+  /**
+   * Index everything stored again (the first start with this index, or after its format changed).
+   * Documents are indexed again by the documents layer (it reads their revisions), vault notes by
+   * the vault sync (search.ts); both see their entries missing.
+   */
   private rebuildSearch() {
-    this.db.exec("DELETE FROM item_search");
-    const rows = this.db.prepare("SELECT rowid, session_id, json FROM items").all();
-    const insert = this.db.prepare("INSERT INTO item_search (rowid, text, session_id, item_id, kind, at) VALUES (?, ?, ?, ?, ?, ?)");
-    this.db.exec("BEGIN");
-    try {
-      for (const row of rows) {
-        const item = JSON.parse(String(row.json)) as TranscriptItem;
-        const text = searchableText(item);
-        if (text !== null) insert.run(Number(row.rowid), text, String(row.session_id), item.id, item.kind, item.at);
+    this.db.exec("DROP TABLE IF EXISTS item_search; DROP TABLE IF EXISTS document_search;");
+    this.search.clear();
+    this.search.forgetSources();
+    this.search.transaction(() => {
+      const workOf = new Map<string, string>();
+      for (const row of this.db.prepare("SELECT id, work_id, json FROM sessions").all()) {
+        workOf.set(String(row.id), String(row.work_id));
+        this.search.put(sessionEntry(JSON.parse(String(row.json)) as Session));
       }
-      this.db.exec("COMMIT");
-    } catch (error) {
-      this.db.exec("ROLLBACK");
-      throw error;
-    }
+      for (const work of this.works()) this.search.put(workEntry(work, this.workExtras?.(work.id) ?? null));
+      let session: string | null = null;
+      let lastReply: string | null = null;
+      for (const row of this.db.prepare("SELECT session_id, json FROM items ORDER BY session_id, ord").all()) {
+        const sessionId = String(row.session_id);
+        if (sessionId !== session) {
+          session = sessionId;
+          lastReply = null;
+        }
+        const item = JSON.parse(String(row.json)) as TranscriptItem;
+        for (const { entry } of itemEntries(sessionId, workOf.get(sessionId) ?? null, item)) if (entry) this.search.put(entry);
+        if (item.kind === "assistant") lastReply = item.id;
+        else if (item.kind === "user") lastReply = null;
+        else if (item.kind === "approval" && item.plan && !item.detail?.trim() && lastReply) this.search.relabel(itemKey(sessionId, lastReply), "plan");
+      }
+    });
+    this.db.prepare("DELETE FROM meta WHERE key = 'search.documents'").run();
     this.setMeta("search.version", SEARCH_VERSION);
   }
 
+  /** Keep a transcript item's search entries (requests, finished replies, plans, attachment names). */
   private indexItem(sessionId: string, item: TranscriptItem) {
-    const row = this.db.prepare("SELECT rowid FROM items WHERE session_id = ? AND item_id = ?").get(sessionId, item.id);
-    if (!row) return;
-    const rowid = Number(row.rowid);
-    this.db.prepare("DELETE FROM item_search WHERE rowid = ?").run(rowid);
-    const text = searchableText(item);
-    if (text !== null) {
-      this.db
-        .prepare("INSERT INTO item_search (rowid, text, session_id, item_id, kind, at) VALUES (?, ?, ?, ?, ?, ?)")
-        .run(rowid, text, sessionId, item.id, item.kind, item.at);
+    const changes = itemEntries(sessionId, this.workOf(sessionId), item);
+    for (const { key, entry } of changes) {
+      if (!entry) {
+        this.search.remove(key);
+        continue;
+      }
+      // A reply already marked as a plan stays one when it is saved again.
+      if (entry.kind === "assistant" && this.search.kindOf(key) === "plan") entry.kind = "plan";
+      this.search.put(entry);
+    }
+    // A plan waiting for the go-ahead without its own text: the reply above it is the plan.
+    if (item.kind === "approval" && item.plan && !item.detail?.trim()) {
+      const above = this.db
+        .prepare("SELECT json FROM items WHERE session_id = ? AND ord < (SELECT ord FROM items WHERE session_id = ? AND item_id = ?) ORDER BY ord DESC LIMIT 40")
+        .all(sessionId, sessionId, item.id)
+        .map((row) => JSON.parse(String(row.json)) as TranscriptItem);
+      const reply = above.find((entry) => entry.kind === "assistant" || entry.kind === "user");
+      if (reply?.kind === "assistant") this.search.relabel(itemKey(sessionId, reply.id), "plan");
     }
   }
 
-  /** Messages containing every term (case-insensitive), most recent first. */
-  searchItems(terms: string[], limit = 500): ItemHit[] {
-    if (!terms.length) return [];
-    const where = terms.map(() => "text LIKE ? ESCAPE '\\'").join(" AND ");
-    return this.db
-      .prepare(`SELECT session_id, item_id, kind, at, text FROM item_search WHERE ${where} ORDER BY CAST(at AS INTEGER) DESC LIMIT ?`)
-      .all(...terms.map(likePattern), limit)
-      .map((row) => ({ sessionId: String(row.session_id), itemId: String(row.item_id), kind: row.kind === "user" ? "user" : "assistant", at: Number(row.at), text: String(row.text) }));
+  /** Search is a convenience: a record that cannot be indexed now is indexed again after its next change. */
+  private indexSafely(write: () => void) {
+    try {
+      write();
+    } catch {
+      // Left out of the index for now; never in the way of saving the record itself.
+    }
   }
 
-  /** The searchable text of a document's latest revision (or none). */
+  private workOf(sessionId: string): string | null {
+    const row = this.db.prepare("SELECT work_id FROM sessions WHERE id = ?").get(sessionId);
+    return row ? String(row.work_id) : null;
+  }
+
+  /** Put a work into the search index again (its title, tags, or what the project layer adds changed). */
+  indexWork(workId: string) {
+    const row = this.db.prepare("SELECT json FROM works WHERE id = ?").get(workId);
+    if (row) this.search.put(workEntry(JSON.parse(String(row.json)) as Work, this.workExtras?.(workId) ?? null));
+  }
+
+  /**
+   * The searchable text of a document's latest revision (null: none yet — the document is then
+   * found by its name). Conversation records ("세션 기록") are left out: the conversation is there.
+   */
   indexDocument(artifactId: string, text: string | null) {
-    const row = this.db.prepare("SELECT rowid FROM artifacts WHERE id = ?").get(artifactId);
+    const row = this.db.prepare("SELECT json FROM artifacts WHERE id = ?").get(artifactId);
     if (!row) return;
-    const rowid = Number(row.rowid);
-    this.db.prepare("DELETE FROM document_search WHERE rowid = ?").run(rowid);
-    if (text?.trim()) this.db.prepare("INSERT INTO document_search (rowid, text, artifact_id) VALUES (?, ?, ?)").run(rowid, text, artifactId);
+    const artifact = JSON.parse(String(row.json)) as Artifact;
+    const latest = this.db.prepare("SELECT json FROM revisions WHERE artifact_id = ? ORDER BY revision DESC LIMIT 1").get(artifactId);
+    this.indexSafely(() => {
+      const entry = documentEntry(artifact, latest ? (JSON.parse(String(latest.json)) as ArtifactRevision) : null, text);
+      if (entry) this.search.put(entry);
+      else this.search.remove(`doc:${artifactId}`);
+    });
+  }
+
+  /** Whether a document is in the search index yet (by its name at least). */
+  hasDocumentEntry(artifactId: string) {
+    return this.search.signature(documentKey(artifactId)) !== null;
   }
 
   /** Every document entry gone, before all are indexed again (also entries older versions left behind). */
   clearDocumentIndex() {
-    this.db.exec("DELETE FROM document_search");
-  }
-
-  searchDocuments(terms: string[], limit = 50): { artifactId: string; text: string }[] {
-    if (!terms.length) return [];
-    const where = terms.map(() => "text LIKE ? ESCAPE '\\'").join(" AND ");
-    return this.db
-      .prepare(`SELECT artifact_id, text FROM document_search WHERE ${where} LIMIT ?`)
-      .all(...terms.map(likePattern), limit)
-      .map((row) => ({ artifactId: String(row.artifact_id), text: String(row.text) }));
+    this.indexSafely(() => this.search.removePrefix("doc:"));
   }
 
   /** Requests and turn ends since a time, in stored order per session (home "흐름"). */
@@ -233,12 +266,14 @@ export class Store {
 
   saveWork(work: Work) {
     this.db.prepare("INSERT OR REPLACE INTO works (id, json) VALUES (?, ?)").run(work.id, JSON.stringify(work));
+    this.indexSafely(() => this.search.put(workEntry(work, this.workExtras?.(work.id) ?? null)));
   }
 
   saveSession(session: Session) {
     this.db
       .prepare("INSERT OR REPLACE INTO sessions (id, work_id, json) VALUES (?, ?, ?)")
       .run(session.id, session.workId, JSON.stringify(session));
+    this.indexSafely(() => this.search.put(sessionEntry(session)));
   }
 
   items(sessionId: string): TranscriptItem[] {
@@ -264,7 +299,7 @@ export class Store {
         .prepare("INSERT INTO items (session_id, item_id, ord, json) VALUES (?, ?, ?, ?)")
         .run(sessionId, item.id, Number(next?.ord ?? 1), JSON.stringify(item));
     }
-    if (item.kind === "user" || item.kind === "assistant") this.indexItem(sessionId, item);
+    if (item.kind === "user" || item.kind === "assistant" || item.kind === "approval") this.indexSafely(() => this.indexItem(sessionId, item));
   }
 
   artifacts(): Artifact[] {
