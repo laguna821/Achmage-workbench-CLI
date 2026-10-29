@@ -91,6 +91,29 @@ function orderWorks(state: State, works: Work[], mode: SortMode) {
 const orderFolders = (folders: Folder[], mode: SortMode) =>
   [...folders].sort((a, b) => (mode === "name" ? byName(a.name, b.name) : a.sort - b.sort || byName(a.name, b.name)));
 
+/** Whether a work's row is unfolded: unfolded by the user, or the work on screen not folded by them. */
+export const workOpen = (open: TreeOpenState, workId: string, currentWorkId: string | null) =>
+  open.openWorks.includes(workId) || (workId === currentWorkId && !open.closedWorks.includes(workId));
+
+/**
+ * A work's row and, when it is unfolded, its sessions (when it has more than one) and a "문서" row
+ * (when it has documents) that unfolds to the documents, subpages under their page. The tree and
+ * the navigator's list both show a work this way.
+ */
+export function workTreeRows(state: State, work: Work, open: TreeOpenState, currentWorkId: string | null, depth: number, sessions = workSessions(state, work.id), docs = workDocs(state, work.id)): Row[] {
+  const expandable = sessions.length > 1 || docs.length > 0;
+  const isOpen = expandable && workOpen(open, work.id, currentWorkId);
+  const rows: Row[] = [{ type: "work", id: work.id, depth, work, open: isOpen, expandable, sessions, docs }];
+  if (!isOpen) return rows;
+  if (sessions.length > 1) for (const session of sessions) rows.push({ type: "session", id: session.id, depth: depth + 1, session, work });
+  if (docs.length) {
+    const docsOpen = open.openDocs.includes(work.id);
+    rows.push({ type: "docs", id: `docs:${work.id}`, depth: depth + 1, work, count: docs.length, open: docsOpen });
+    if (docsOpen) for (const { artifact, depth: nested } of nestDocs(docs)) rows.push({ type: "doc", id: artifact.id, depth: depth + 2 + nested, artifact, work });
+  }
+  return rows;
+}
+
 /**
  * The rows of the tree in display order. A work unfolds to its sessions (when it has more than
  * one) and a "문서" row (when it has documents), which unfolds to the documents.
@@ -100,25 +123,8 @@ export function treeRows(state: State, open: TreeOpenState, mode: SortMode, curr
   const folders = Object.values(state.folders).filter((folder) => !folder.archivedAt);
   const works = Object.values(state.works).filter((work) => !work.archivedAt);
   const closed = new Set(open.closedFolders);
-  const openWorks = new Set(open.openWorks);
-  const closedWorks = new Set(open.closedWorks);
-  const openDocs = new Set(open.openDocs);
 
-  const workRows = (work: Work, depth: number) => {
-    const sessions = workSessions(state, work.id);
-    const docs = workDocs(state, work.id);
-    const expandable = sessions.length > 1 || docs.length > 0;
-    const isOpen = expandable && (openWorks.has(work.id) || (work.id === currentWorkId && !closedWorks.has(work.id)));
-    rows.push({ type: "work", id: work.id, depth, work, open: isOpen, expandable, sessions, docs });
-    if (!isOpen) return;
-    if (sessions.length > 1) for (const session of sessions) rows.push({ type: "session", id: session.id, depth: depth + 1, session, work });
-    if (docs.length) {
-      const docsOpen = openDocs.has(work.id);
-      rows.push({ type: "docs", id: `docs:${work.id}`, depth: depth + 1, work, count: docs.length, open: docsOpen });
-      // Subpages (`A/` beside `A.md`) sit under their page.
-      if (docsOpen) for (const { artifact, depth: nested } of nestDocs(docs)) rows.push({ type: "doc", id: artifact.id, depth: depth + 2 + nested, artifact, work });
-    }
-  };
+  const workRows = (work: Work, depth: number) => rows.push(...workTreeRows(state, work, open, currentWorkId, depth));
 
   const folderRows = (folder: Folder, depth: number) => {
     const children = orderFolders(folders.filter((child) => child.parentId === folder.id), mode);

@@ -6,7 +6,21 @@ import "../../styles/pkm.css";
 // "보기" in the sidebar: saved queries shown as virtual folders (no model is asked), and the way
 // into the rules that place new works ("자동 정리 규칙").
 
-export function ViewsSection({ openMenu }: { openMenu: (request: MenuRequest) => void }) {
+/**
+ * `onFold`: the head folds the section to its line (the navigator keeps whether it is folded).
+ * `menuExtras`: more items for a view's menu (the navigator's "바로가기에 더하기").
+ */
+export function ViewsSection({
+  openMenu,
+  folded = false,
+  onFold,
+  menuExtras,
+}: {
+  openMenu: (request: MenuRequest) => void;
+  folded?: boolean;
+  onFold?: (folded: boolean) => void;
+  menuExtras?: (view: { id: string; name: string }) => MenuEntry[];
+}) {
   const pkm = usePkm();
   const views = pkm.pkmState?.views;
   if (!views) return null;
@@ -26,7 +40,15 @@ export function ViewsSection({ openMenu }: { openMenu: (request: MenuRequest) =>
   return (
     <section className="side-section views-section" aria-label="보기">
       <div className="side-section-title with-tools">
-        <span>보기</span>
+        {onFold ? (
+          <button type="button" className="nav-fold" aria-expanded={!folded} title={folded ? "보기 펼치기" : "보기 접기"} onClick={() => onFold(!folded)}>
+            <Icon name={folded ? "chevronRight" : "chevronDown"} size={13} />
+            <span>보기</span>
+          </button>
+        ) : (
+          <span>보기</span>
+        )}
+        {folded && views.length ? <span className="nav-fold-count">{views.length}</span> : null}
         <span className="side-tools">
           <button type="button" className="icon-button small" title="새 보기" onClick={() => pkm.setDialog({ kind: "view", id: null })}>
             <Icon name="plus" size={13} />
@@ -45,7 +67,7 @@ export function ViewsSection({ openMenu }: { openMenu: (request: MenuRequest) =>
           </button>
         </span>
       </div>
-      {views.map((view) => (
+      {folded ? null : views.map((view) => (
         <button
           key={view.id}
           type="button"
@@ -58,6 +80,7 @@ export function ViewsSection({ openMenu }: { openMenu: (request: MenuRequest) =>
             const items: MenuEntry[] = [
               { kind: "item", label: "열기", icon: "grid", onSelect: () => pkm.open?.({ kind: "view", id: view.id }) },
               { kind: "item", label: "고치기…", icon: "edit", onSelect: () => pkm.setDialog({ kind: "view", id: view.id }) },
+              ...(menuExtras ? menuExtras(view) : []),
               { kind: "separator" },
               { kind: "item", label: "지우기", icon: "x", danger: true, onSelect: () => void pkm.client.deleteView(view.id).catch((error: Error) => pkm.onToast(error.message)) },
             ];
@@ -69,7 +92,7 @@ export function ViewsSection({ openMenu }: { openMenu: (request: MenuRequest) =>
           <span className="side-row-trail muted">{view.count}</span>
         </button>
       ))}
-      {!views.length ? (
+      {!views.length && !folded ? (
         <button type="button" className="side-row" onClick={() => pkm.setDialog({ kind: "view", id: null })}>
           <Icon name="plus" size={14} className="side-row-icon" />
           <span className="side-row-label muted">보기 만들기</span>

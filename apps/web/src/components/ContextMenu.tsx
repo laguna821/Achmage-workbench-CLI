@@ -60,7 +60,8 @@ function MenuList({
   }, []);
 
   const openSubmenu = (index: number) => {
-    const row = ref.current?.querySelectorAll<HTMLElement>("[data-menu-index]")[index];
+    // By the entry's own index (separators and labels count in `items`, not among the buttons).
+    const row = ref.current?.querySelector<HTMLElement>(`[data-menu-index="${index}"]`);
     const entry = items[index];
     if (!row || !entry || entry.kind !== "submenu" || entry.disabled) return;
     const rect = row.getBoundingClientRect();
@@ -122,7 +123,7 @@ function MenuList({
               key={index}
               type="button"
               role="menuitem"
-              data-menu-index
+              data-menu-index={index}
               aria-haspopup={isSubmenu ? "menu" : undefined}
               aria-expanded={isSubmenu ? open?.index === index : undefined}
               disabled={entry.disabled}

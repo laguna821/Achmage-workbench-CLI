@@ -25,6 +25,10 @@ export type Folder = {
   sort: number;
   /** Hidden with everything inside it, restored from the archive. */
   archivedAt: number | null;
+  /** The colour the person gave it in the navigator (`#rrggbb`); absent or null: none. */
+  color?: string | null;
+  /** One of the app's icon names the person gave it in the navigator; absent or null: the folder icon. */
+  icon?: string | null;
 };
 
 /** "auto": follows what the requests keep coming back to (local, no model call). "user": named by hand. */
@@ -451,6 +455,8 @@ export type ProviderStatus = {
 
 export type WorkbenchEvent =
   | { type: "folder.upserted"; folder: Folder }
+  /** A folder deleted ("폴더만 지우기"); what was inside already moved up (navigator.ts). */
+  | { type: "folder.removed"; folderId: string }
   | { type: "work.upserted"; work: Work }
   | { type: "session.upserted"; session: Session }
   | { type: "item.upserted"; sessionId: string; item: TranscriptItem }
@@ -580,6 +586,10 @@ export type UpdateFolderRequest = {
   parentId?: string | null;
   sort?: number;
   archived?: boolean;
+  /** `#rrggbb`, or null for none. */
+  color?: string | null;
+  /** An icon name, or null for the folder icon. */
+  icon?: string | null;
 };
 
 /** One place a search term was found in a conversation. */
@@ -796,3 +806,4 @@ export * from "./search.ts";
 export * from "./setup.ts";
 export * from "./calendar.ts";
 export * from "./home-views.ts";
+export * from "./navigator.ts";

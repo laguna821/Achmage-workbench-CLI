@@ -33,6 +33,7 @@ import {
   type ExportMarkdownResult,
   type SearchPage,
   type UpdateFolderRequest,
+  type DeleteFolderResult,
   type UpdateWorkRequest,
   type Handoff,
   type HandoffRequest,
@@ -46,6 +47,7 @@ import {
 } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
 import { HttpError } from "./errors.ts";
+import { folderColor, folderIcon, liftOut } from "./folders.ts";
 import { Documents, isWorkbenchPath } from "./artifacts.ts";
 import type { Kordoc } from "./kordoc.ts";
 import type { AdapterSink, LoginStart, ProviderAdapter } from "./providers/types.ts";
@@ -821,8 +823,31 @@ export class SessionManager {
       if (patch.archived && this.busyUnder({ folderId })) throw new HttpError(409, "busy_inside", "이 폴더 안에서 진행 중인 세션이 있습니다. 끝나거나 멈춘 뒤에 보관하세요.");
       next.archivedAt = patch.archived ? Date.now() : null;
     }
+    // The navigator's colour and icon (folders.ts checks what they may be).
+    if (patch.color !== undefined) {
+      const color = folderColor(patch.color);
+      if (color === undefined) throw new HttpError(400, "invalid_color", "색은 #rrggbb로 적어 주세요.");
+      next.color = color;
+    }
+    if (patch.icon !== undefined) {
+      const icon = folderIcon(patch.icon);
+      if (icon === undefined) throw new HttpError(400, "invalid_icon", "알 수 없는 아이콘입니다.");
+      next.icon = icon;
+    }
     this.saveFolder(next);
     return next;
+  }
+
+  /** "폴더만 지우기": the folder goes; its subfolders and projects move up to its parent (folders.ts). */
+  deleteFolder(folderId: string): DeleteFolderResult {
+    if (!this.folders.has(folderId)) throw new HttpError(404, "folder_not_found", "폴더가 없습니다.");
+    const plan = liftOut([...this.folders.values()], [...this.works.values()], folderId);
+    for (const child of plan.folders) this.saveFolder(child);
+    for (const work of plan.works) this.saveWork(work);
+    this.folders.delete(folderId);
+    this.store.deleteFolder(folderId);
+    this.bus.publish({ type: "folder.removed", folderId });
+    return { parentId: plan.parentId, folders: plan.folders.map((folder) => folder.id), works: plan.works.map((work) => work.id) };
   }
 
   private saveFolder(folder: Folder) {

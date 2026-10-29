@@ -12,6 +12,7 @@ import { Icon } from "./components/Icon.tsx";
 import { BrandSymbol, Wordmark } from "./components/BrandMark.tsx";
 import { Popover } from "./components/Popover.tsx";
 import { Sidebar, type SidebarActions } from "./components/Sidebar.tsx";
+import { requestNavigatorFocus } from "./components/nav/focus.ts";
 import { ContextMenu, type MenuEntry, type MenuRequest } from "./components/ContextMenu.tsx";
 import { SearchPalette, type PaletteCommand, type PaletteMode } from "./components/SearchPalette.tsx";
 import { ArchiveView } from "./components/ArchiveView.tsx";
@@ -860,6 +861,11 @@ export function App() {
           startNew(null);
         } else if (combo === shortcuts.otherPane && focusOtherPane.current()) {
           event.preventDefault();
+        } else if (combo === shortcuts.navigator && !single) {
+          // "내비게이터로": the navigator's list takes the focus; a hidden sidebar opens first.
+          event.preventDefault();
+          if (prefsRef.current.sidebar === false) savePrefs({ sidebar: true });
+          requestNavigatorFocus();
         }
       }
     };
@@ -882,7 +888,7 @@ export function App() {
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, [switchable, openSession, startNew, shortcuts]);
+  }, [switchable, openSession, startNew, shortcuts, single, savePrefs]);
 
   // The engine in focus dresses the conversation: the visible session's engine, else the engine
   // picked for a new request. While the appearance sheet is open, the look being edited is shown.
@@ -1866,6 +1872,10 @@ export function App() {
           actions={sidebarActions}
           pending={sidebarPending}
           onPendingDone={() => setSidebarPending(null)}
+          prefs={prefs}
+          onPrefs={savePrefs}
+          api={api}
+          onToast={setToast}
         />
       ) : null}
       {!state.ready ? (

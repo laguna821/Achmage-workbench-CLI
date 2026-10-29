@@ -257,7 +257,8 @@ async function flow(provider: Provider) {
     await page.waitForTimeout(300);
     const leftAfter = await widthOf(page, ".pane.left");
     const saved = await until(async () => Number((await snapshot()).prefs.paneRatio) > 0.55, 3000);
-    pass("가운데 막대를 끌어 너비 조절(기억됨)", leftAfter > leftBefore + 120 && saved, `${Math.round(leftBefore)} → ${Math.round(leftAfter)}px`);
+    // The two-pane sidebar leaves a narrower main area at 1440px: the right pane reaches its 360px floor after about 100px.
+    pass("가운데 막대를 끌어 너비 조절(기억됨)", leftAfter > leftBefore + 90 && saved, `${Math.round(leftBefore)} → ${Math.round(leftAfter)}px`);
     await page.locator(".pane-divider").focus();
     const valueBefore = Number(await page.locator(".pane-divider").getAttribute("aria-valuenow"));
     for (let step = 0; step < 5; step += 1) await page.keyboard.press("ArrowLeft");

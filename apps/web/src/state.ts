@@ -124,6 +124,10 @@ export function reducer(state: State, action: Action): State {
       switch (event.type) {
         case "folder.upserted":
           return { ...next, folders: { ...state.folders, [event.folder.id]: event.folder } };
+        case "folder.removed": {
+          const { [event.folderId]: _removed, ...folders } = state.folders;
+          return { ...next, folders };
+        }
         case "work.upserted":
           return { ...next, works: { ...state.works, [event.work.id]: event.work } };
         case "session.upserted":

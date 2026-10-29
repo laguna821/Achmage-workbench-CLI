@@ -22,8 +22,8 @@ describe("keyboard shortcuts", () => {
   });
 
   it("use the person's combinations, else the app's, and show them as key caps", () => {
-    expect(shortcutsOf({})).toEqual({ palette: "Ctrl+K", content: "Ctrl+Shift+F", newWork: "Ctrl+N", otherPane: "F6" });
-    expect(shortcutsOf({ shortcuts: { palette: "Ctrl+P", content: "K", newWork: 3 } })).toEqual({ palette: "Ctrl+P", content: "Ctrl+Shift+F", newWork: "Ctrl+N", otherPane: "F6" });
+    expect(shortcutsOf({})).toEqual({ palette: "Ctrl+K", content: "Ctrl+Shift+F", newWork: "Ctrl+N", otherPane: "F6", navigator: "Ctrl+Shift+E" });
+    expect(shortcutsOf({ shortcuts: { palette: "Ctrl+P", content: "K", newWork: 3, navigator: "Alt+N" } })).toEqual({ palette: "Ctrl+P", content: "Ctrl+Shift+F", newWork: "Ctrl+N", otherPane: "F6", navigator: "Alt+N" });
     expect(comboLabel("Ctrl+Shift+F")).toBe("Ctrl Shift F");
   });
 });

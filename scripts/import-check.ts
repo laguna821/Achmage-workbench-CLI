@@ -103,7 +103,8 @@ async function flow(provider: Provider) {
   const shot = (name: string) => page.screenshot({ path: join(outDir, `${provider}-${name}`) });
   const pass = (step: string, ok: boolean, detail = "") => check(`[${label}] ${step}`, ok, detail);
   const openDialog = async () => {
-    await page.locator(".sidebar button[title='정렬']").click();
+    // In the two-pane navigator "다른 곳의 대화 가져오기…" is in the sidebar's ⋯ (the single tree keeps it in its 정렬 menu too).
+    await page.locator(".sidebar .side-head [aria-label='사이드바 메뉴']").click();
     await page.locator(".context-menu, [role='menu']").getByText("다른 곳의 대화 가져오기…").click();
     await page.waitForSelector(".import-dialog");
     await page.locator(".import-tab", { hasText: engineName }).click();
