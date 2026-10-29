@@ -13,7 +13,7 @@ import { BrandSymbol, Wordmark } from "./components/BrandMark.tsx";
 import { Popover } from "./components/Popover.tsx";
 import { Sidebar, type SidebarActions } from "./components/Sidebar.tsx";
 import { ContextMenu, type MenuEntry, type MenuRequest } from "./components/ContextMenu.tsx";
-import { SearchPalette, type PaletteCommand } from "./components/SearchPalette.tsx";
+import { SearchPalette, type PaletteCommand, type PaletteMode } from "./components/SearchPalette.tsx";
 import { ArchiveView } from "./components/ArchiveView.tsx";
 import { StartView, useEngineChoice } from "./components/StartView.tsx";
 import { WorkView, type WorkActions } from "./components/WorkView.tsx";
@@ -206,7 +206,8 @@ export function App() {
   const [engineMenu, setEngineMenu] = useState<{ provider: Provider; x: number; y: number } | null>(null);
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
   const [contextMenu, setContextMenu] = useState<MenuRequest | null>(null);
-  const [paletteOpen, setPaletteOpen] = useState(false);
+  // Ctrl+K opens the search box ("palette"); Ctrl+Shift+F opens it for contents only ("content").
+  const [paletteOpen, setPaletteOpen] = useState<PaletteMode | null>(null);
   // A message to bring into view after opening its conversation (from search).
   const [focusItem, setFocusItem] = useState<{ sessionId: string; itemId: string; nonce: number } | null>(null);
   // Inline rename or folder creation asked from a menu, handled by the sidebar.
@@ -733,7 +734,10 @@ export function App() {
         setSwitcher(next);
       } else if ((event.ctrlKey || event.metaKey) && !event.shiftKey && (event.key === "k" || event.key === "K")) {
         event.preventDefault();
-        setPaletteOpen((open) => !open);
+        setPaletteOpen((open) => (open === "palette" ? null : "palette"));
+      } else if ((event.ctrlKey || event.metaKey) && event.shiftKey && (event.key === "f" || event.key === "F")) {
+        event.preventDefault();
+        setPaletteOpen((open) => (open === "content" ? null : "content"));
       } else if ((event.ctrlKey || event.metaKey) && !event.shiftKey && (event.key === "n" || event.key === "N")) {
         event.preventDefault();
         startNew(null);
@@ -1147,7 +1151,7 @@ export function App() {
         .then((page) => setToast({ text: `「${target.title}」에 세션 기록 페이지를 만들었습니다: ${page.name}`, action: { label: "열기", run: () => revealPage(page) } }))
         .catch(fail),
     archive,
-    openSearch: () => setPaletteOpen(true),
+    openSearch: () => setPaletteOpen("palette"),
     openArchive: () => setView({ kind: "archive" }),
     linkSessions: (pair) => linkApi.openDialog(pair.map((session) => session.id)),
     importConversations: () => setImportOpen(true),
@@ -1289,7 +1293,7 @@ export function App() {
               <button type="button" className="ghost-button" onClick={() => startNew(null)} title="새 세션 (Ctrl+N)">
                 <Icon name="plus" size={15} /> 새 세션
               </button>
-              <button type="button" className="ghost-button" onClick={() => setPaletteOpen(true)} title="찾기 (Ctrl+K)">
+              <button type="button" className="ghost-button" onClick={() => setPaletteOpen("palette")} title="찾기 (Ctrl+K)">
                 <Icon name="search" size={15} /> 찾기
                 {unseen.size ? <span className="count-chip new" title="새 답">{unseen.size}</span> : null}
               </button>
@@ -1539,6 +1543,7 @@ export function App() {
           api={api}
           state={state}
           commands={paletteCommands}
+          mode={paletteOpen}
           onOpenSession={openSession}
           onOpenHit={(session, itemId) => {
             openSession(session);
@@ -1546,7 +1551,9 @@ export function App() {
           }}
           onOpenWork={openWorkNow}
           onOpenDoc={(artifact) => docActions.openArtifact(artifact.id)}
-          onClose={() => setPaletteOpen(false)}
+          onOpenNote={single ? undefined : (path) => setView({ kind: "pkm", target: { kind: "note", path } })}
+          onOpenView={single ? undefined : (id) => setView({ kind: "pkm", target: { kind: "view", id } })}
+          onClose={() => setPaletteOpen(null)}
         />
       ) : null}
       {switcher !== null ? <Switcher state={state} sessions={switchable} index={switcher} unseen={unseen} /> : null}
