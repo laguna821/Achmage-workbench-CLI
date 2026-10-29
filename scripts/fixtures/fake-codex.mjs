@@ -463,7 +463,10 @@ async function handle(message) {
     case "account/login/cancel":
       loginServer?.close();
       loginServer = null;
-      return reply({ status: "canceled" });
+      reply({ status: "canceled" });
+      // Codex reports the cancelled login as completed without success.
+      notify("account/login/completed", { loginId: params.loginId, success: false, error: "Login was not completed", onboardingEntrypoint: null });
+      return;
     case "account/rateLimits/read":
       return reply({ rateLimits: rateLimits(), rateLimitsByLimitId: null });
     case "skills/list":

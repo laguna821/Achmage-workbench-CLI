@@ -864,9 +864,9 @@
 
 ### 실제 검증됨
 - 단위 테스트 +29: 엔진 찾기 20(Windows npm 셔임·PATH 없이 npm 폴더·Claude 설치 프로그램·npm Claude 플랫폼 패키지·셔임 중복·실행 못 하는 배치 파일·편집기 확장 / macOS Homebrew·로그인 셸 nvm·JS 진입점·ChatGPT 앱 / Linux 런처 PATH·사용자 것 우선·sh 셔임), 설치 오류 말, 로그인 주소·실패 이유, 브라우저 열기, 로그인 셸 PATH, 래퍼, 브라우저 빌드. 전체 352.
-- `scripts/setup-check.ts` **28/28 · console: clean**(Linux): 설치본과 같은 폴더 배치(`host/`·`web/`·`kordoc/`·`ieumoffice/`·`pdfcraft/`·`hop/`·`node/`)의 묶음 게이트웨이 + 사람이 까는 방식대로 둔 가짜 엔진(npm 전역 링크, `~/.local/bin`) + AppImage의 짧은 PATH:
+- `scripts/setup-check.ts` **29/29 · console: clean**(Linux): 설치본과 같은 폴더 배치(`host/`·`web/`·`kordoc/`·`ieumoffice/`·`pdfcraft/`·`hop/`·`node/`)의 묶음 게이트웨이 + 사람이 까는 방식대로 둔 가짜 엔진(npm 전역 링크, `~/.local/bin`) + AppImage의 짧은 PATH:
   - 두 엔진을 찾고(찾은 곳 npm·설치 프로그램) 답함, kordoc·이음·PDFCraft·HOP 앱에 포함, docx·pptx 글 보기와 쪽 그림, HWPX 글 보기·쪽 미리보기, PDF 쪽 돌리기·지우기, 엔진용 `kordoc`·`ieumoffice` 실행, 어디에도 "설치되지 않음" 없음.
-  - Chromium 첫 안내(엔진 없는 컴퓨터): 명령 없음, 두 엔진 "설치"(가짜 npm, 진행 막대) → "Workbench가 설치", Codex 로그인(가짜 브라우저가 돌아옴) → 구독 연결됨, Claude 로그인(브라우저가 안 열린 경우: 주소와 코드 칸 → 코드 넣기) → 구독 연결됨, 문서 도구 넷 "앱에 포함", 연결 패널.
+  - Chromium 첫 안내(엔진 없는 컴퓨터): 명령 없음, 두 엔진 "설치"(가짜 npm, 진행 막대) → "Workbench가 설치", Codex "로그인 그만두기"(실패라고 하지 않음) → 다시 로그인(가짜 브라우저가 돌아옴) → 구독 연결됨, Claude 로그인(브라우저가 안 열린 경우: 주소와 코드 칸 → 코드 넣기) → 구독 연결됨, 문서 도구 넷 "앱에 포함", 연결 패널.
 - 회귀(모두 console: clean): `chat-flow-check` 32/32, `office-editor-check` 12/12, `doc-images-check` 28/28, `session-controls-check` 13/13, `doc-drawer-check` 8/8, `meta-session-check` 19/19. `office-ui-check`는 이 변경 전부터 맞지 않는다(시작 화면이 홈이고 docx가 편집기로 먼저 열려 `.docs-button`·`.office-page`를 기다리다 멈춤); 같은 확인(쪽 그림·글 보기)은 `setup-check`가 API로 한다.
 - 이 노트북의 실제 엔진 찾기(실행은 `--version`만): Codex는 ChatGPT 앱의 0.160.0(가장 새 판; `~/.local/bin/codex` → Codex 설치 프로그램 0.153.4, `/usr/bin/codex`도 찾음), Claude는 `~/.local/bin/claude`(설치 프로그램 2.1.292). launcher PATH(`/usr/bin:/bin`)에서도 같다.
 - 실제 공식 빌드 풀기: Linux 세 앱, Windows 세 앱(7-Zip 25.01로 같은 명령) 모두 확인 항목이 있었다. Windows 묶음의 파일 이름은 모두 ASCII(MSI).
@@ -874,7 +874,7 @@
 ### 미검증 · 제한
 - **Windows·macOS 실제 기기**: release.yml의 `smoke` 작업(수동 실행·태그만)이 설치 파일을 깔고(NSIS `/S`, dmg) 묶인 Node로 게이트웨이를 띄워, Windows는 npm `codex.cmd`·`claude.cmd` 셔임, macOS는 Homebrew(`/opt/homebrew/bin/codex`)·`~/.local/bin/claude`의 가짜 엔진으로 같은 API 검사(`scripts/setup-smoke.ts`)를 한다. 아직 돌리지 않았다(리드가 실행).
 - 실제 로그인 완료(로그아웃 상태에서)는 확인하지 못했다(두 계정 모두 로그인 상태, 로그아웃은 사용자 세션을 끊음). 가짜 엔진이 실제 출력 형식(Claude의 OSC 8 링크·코드 `code#state`, Codex의 `account/login/*`)을 따라 한다.
-- 실제 npm 설치(Codex 플랫폼 패키지 약 170MB 내려받기·450MB 풀림, Claude Code 약 270MB)는 돌리지 않았다(가짜 npm). 레지스트리 크기 조회와 설치 뒤 배치 해석은 실제 패키지 구조(0.165.0·2.1.312 tarball)로 맞췄다.
+- 실제 npm 설치는 이 노트북(Linux)에서 임시 데이터 폴더로 확인했다: Codex 0.165.0(425MB, 5초)·Claude Code 2.1.312(280MB, 4초), 진행률·플랫폼 패키지의 실행 파일·`--version` 확인까지. 설치한 Codex의 app-server를 임시 `CODEX_HOME`으로 띄워 `initialize`·`account/read`(로그인 필요)·`account/login/start`(브라우저 주소, 장치 코드)·취소를 확인했다(취소도 `account/login/completed`로 오는 것을 보고 "실패"로 보이지 않게 고침). Windows·macOS의 실제 설치는 확인하지 못했다.
 - Windows의 Microsoft Store Codex 앱 안 `codex.exe`는 위치가 공개되어 있지 않아 찾지 못할 수 있다(앱 별칭이 PATH에 있으면 찾음). 그때는 "Codex 설치"로 깔 수 있다.
 - macOS: 서명 없는 앱 안의 `IeumOffice.app`·`Achmage HOP.app`을 브라우저로 받은 dmg(격리 속성)에서 처음 실행할 때 Gatekeeper가 따로 묻는지는 확인하지 못했다. HOP는 Apple silicon 빌드만 있다(x64 Mac에는 없음).
 - Linux AppImage에 Electron 앱(이음)을 넣으면 linuxdeploy가 그 `.so` 의존성도 다룬다. 빌드가 되는지는 CI에서 확인해야 한다.

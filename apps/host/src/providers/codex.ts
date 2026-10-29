@@ -385,8 +385,13 @@ export class CodexAdapter implements ProviderAdapter {
   /** The browser came back: logged in (the status then names the account) or not. */
   private loginCompleted(params: AccountLoginCompletedNotification) {
     const pending = this.pendingLogin;
-    if (pending && params.loginId && params.loginId !== pending.loginId) return;
-    if (pending) clearTimeout(pending.timer);
+    // Codex also reports a login that was cancelled (by "로그인 그만두기" or a new login): only
+    // the one waiting here changes what the screen says.
+    if (!pending || (params.loginId && params.loginId !== pending.loginId)) {
+      void this.refreshStatus();
+      return;
+    }
+    clearTimeout(pending.timer);
     this.pendingLogin = null;
     this.publish({
       login: params.success

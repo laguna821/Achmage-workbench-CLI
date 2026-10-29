@@ -212,7 +212,7 @@ export class EngineInstaller {
       this.set(engine, { state: "failed", stage: null, percent: null, message: error instanceof Error ? error.message : String(error) });
     } finally {
       if (stage) rmSync(stage, { recursive: true, force: true });
-      rmSync(join(this.dir, ".npm-cache"), { recursive: true, force: true });
+      rmSync(join(root, ".npm-cache"), { recursive: true, force: true });
     }
   }
 
@@ -231,9 +231,10 @@ export class EngineInstaller {
         "--ignore-scripts",
         "--no-update-notifier",
         "--loglevel=error",
-        // Its own cache, removed afterwards: the user's npm cache stays as it was.
+        // Its own cache (one per engine: both may install at once), removed afterwards; the
+        // user's npm cache stays as it was.
         "--cache",
-        join(this.dir, ".npm-cache"),
+        join(this.dir, engine, ".npm-cache"),
       ];
       const child = spawn(process.execPath, args, {
         cwd: stage,

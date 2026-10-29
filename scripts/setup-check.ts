@@ -151,13 +151,22 @@ try {
   }
   await shot("03-engines-installed.png");
 
+  // Codex: "로그인 그만두기" while waiting goes back to "로그인 필요" without saying it failed.
+  await card("codex").getByRole("button", { name: "Codex 로그인" }).click();
+  await page.waitForSelector('.setup-engine[data-provider="codex"] .setup-login', { timeout: 5000 });
+  await card("codex").getByRole("button", { name: "로그인 그만두기" }).click();
+  const stopped = await until(async () => (await providerStatus("codex")).login == null && (await card("codex").getByRole("button", { name: "Codex 로그인" }).count()) === 1, 5000);
+  await page.waitForTimeout(800);
+  const stoppedText = await card("codex").innerText();
+  check("[Codex] '로그인 그만두기'는 실패라고 하지 않고 처음으로", stopped && !stoppedText.includes("하지 못했습니다") && (await providerStatus("codex")).loggedIn === false, stoppedText.replace(/\s+/g, " ").slice(0, 100));
+
   // Codex: the browser opens (the stand-in opener) and comes back after a moment.
   await card("codex").getByRole("button", { name: "Codex 로그인" }).click();
   const waiting = await until(async () => (await card("codex").locator(".setup-login").count()) > 0, 5000);
   await page.waitForTimeout(300);
   await shot("04-codex-login-waiting.png");
   const opened = readFileSync(openerLog, "utf8").trim().split("\n").filter(Boolean);
-  check("[Codex] '로그인'은 OS 기본 브라우저로 로그인 주소를 열고 기다림", waiting && opened.some((url) => url.includes("/auth/callback")) && (await card("codex").getByRole("button", { name: "로그인 페이지 열기" }).count()) === 1, opened.join(" "));
+  check("[Codex] '로그인'은 OS 기본 브라우저로 로그인 주소를 열고 기다림", waiting && opened.filter((url) => url.includes("/auth/callback")).length === 2 && (await card("codex").getByRole("button", { name: "로그인 페이지 열기" }).count()) === 1, opened.join(" "));
   const codexIn = await until(async () => (await providerStatus("codex")).loggedIn === true, 15_000);
   await page.waitForTimeout(400);
   const codexText = await card("codex").innerText();
