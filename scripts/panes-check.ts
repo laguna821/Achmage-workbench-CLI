@@ -301,6 +301,27 @@ async function flow(provider: Provider) {
       .catch(() => false);
     pass("찾기에서 Alt+Enter: 고른 결과가 오른쪽 칸에 열림", opened && (await page.locator(".palette").count()) === 0);
 
+    // ── home's number keys (1–4) belong to the pane with the focus ───────────────────────────
+    await page.locator(".pane.left").click({ position: { x: 40, y: 120 } });
+    await page.locator(".sidebar .side-home").click();
+    await page.waitForSelector(".pane.left .home-modes");
+    const homeMode = () => page.evaluate(() => [...(document.querySelector(".pane.left .home-modes")?.classList ?? [])].find((name) => name.startsWith("mode-")) ?? "");
+    const homeBefore = await homeMode();
+    const digit = homeBefore === "mode-flow" ? "4" : "3";
+    await page.locator(".pane.right .pkm-note-body").click();
+    await page.waitForSelector(".pane.right.focused");
+    await page.keyboard.press(digit);
+    await page.waitForTimeout(400);
+    const stayed = (await homeMode()) === homeBefore;
+    await page.locator(".pane.left .pane-head-title").click();
+    await page.waitForSelector(".pane.left.focused");
+    await page.keyboard.press(digit);
+    const homeSwitched = await until(async () => (await homeMode()) !== homeBefore, 3000);
+    pass("두 칸일 때 홈의 숫자 키는 초점 있는 칸만: 노트 칸에서 누르면 홈 그대로, 홈 칸에서 누르면 바뀜", stayed && homeSwitched, `${homeBefore} → ${await homeMode()}`);
+    // The conversation back on the left, as the steps below expect.
+    await page.locator(`.sidebar [data-row-id="${work.id}"]`).click();
+    await page.waitForSelector(".pane.left .work-view .composer-input");
+
     // ── a conversation already in the other pane: the click goes there, not twice ────────────
     await page.locator(".pane.right .pkm-note-body").click();
     const noteFocused = await page.locator(".pane.right.focused").count();

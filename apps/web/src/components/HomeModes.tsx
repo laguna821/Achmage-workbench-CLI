@@ -485,6 +485,8 @@ export function HomeModes({
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.isComposing || editable(event.target)) return;
+      // Two panes may both show home: the keys belong to the one with the focus.
+      if (root.current?.closest('[data-pane-active="false"]')) return;
       const index = ["1", "2", "3", "4", "5"].indexOf(event.key);
       if (index < 0 || index >= HOME_MODES.length) return;
       event.preventDefault();
