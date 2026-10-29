@@ -176,17 +176,33 @@ export class Store {
     this.indexSafely(() => this.search.removePrefix("doc:"));
   }
 
-  /** Requests and turn ends since a time, in stored order per session (home "흐름"). */
-  turnMarks(since: number): TurnMark[] {
+  /**
+   * Requests and turn ends in `[since, until)`, in stored order per session (home "흐름"). Also,
+   * per session, the request still open at `since` (its turn began before) and the first mark at
+   * or after `until` (it ends a turn that runs past the window), so turns crossing an edge keep
+   * their real start and end (timeline.ts keeps only turns that overlap the window).
+   */
+  turnMarks(since: number, until = Number.MAX_SAFE_INTEGER): TurnMark[] {
     return this.db
       .prepare(
-        `SELECT i.session_id, s.work_id, json_extract(i.json, '$.kind') AS kind, json_extract(i.json, '$.at') AS at,
-                json_extract(i.json, '$.status') AS status, json_extract(i.json, '$.durationMs') AS duration, json_extract(i.json, '$.steered') AS steered
-           FROM items i JOIN sessions s ON s.id = i.session_id
-          WHERE json_extract(i.json, '$.kind') IN ('user', 'turnEnd') AND json_extract(i.json, '$.at') >= ?
-          ORDER BY i.session_id, i.ord`,
+        `WITH marks AS (
+           SELECT i.session_id AS session_id, s.work_id AS work_id, i.item_id AS item_id, i.ord AS ord,
+                  json_extract(i.json, '$.kind') AS kind, json_extract(i.json, '$.at') AS at,
+                  json_extract(i.json, '$.status') AS status, json_extract(i.json, '$.durationMs') AS duration, json_extract(i.json, '$.steered') AS steered,
+                  CASE json_extract(i.json, '$.kind') WHEN 'user' THEN substr(json_extract(i.json, '$.text'), 1, 400) END AS text
+             FROM items i JOIN sessions s ON s.id = i.session_id
+            WHERE json_extract(i.json, '$.kind') IN ('user', 'turnEnd')
+         ), around AS (
+           SELECT marks.*, LAG(at) OVER w AS before_at, LEAD(at) OVER w AS after_at
+             FROM marks WINDOW w AS (PARTITION BY session_id ORDER BY ord)
+         )
+         SELECT * FROM around
+          WHERE (at >= ?1 AND at < ?2)
+             OR (at < ?1 AND kind = 'user' AND (after_at IS NULL OR after_at >= ?1))
+             OR (at >= ?2 AND before_at < ?2)
+          ORDER BY session_id, ord`,
       )
-      .all(since)
+      .all(since, until)
       .map((row) => ({
         sessionId: String(row.session_id),
         workId: String(row.work_id),
@@ -195,6 +211,8 @@ export class Store {
         status: row.status === null ? null : String(row.status),
         durationMs: row.duration === null ? null : Number(row.duration),
         steered: Number(row.steered ?? 0) === 1,
+        itemId: String(row.item_id),
+        text: row.text === null || row.text === undefined ? null : String(row.text),
       }));
   }
 
@@ -251,15 +269,15 @@ export class Store {
       .map((row) => JSON.parse(String(row.json)) as ArtifactRevision);
   }
 
-  /** Document revisions since a time (home "흐름"). */
-  revisionMarks(since: number): TimelineRevision[] {
+  /** Document revisions in `[since, until)` (home "흐름"). */
+  revisionMarks(since: number, until = Number.MAX_SAFE_INTEGER): TimelineRevision[] {
     return this.db
       .prepare(
         `SELECT r.artifact_id, a.work_id, r.revision, json_extract(r.json, '$.at') AS at, json_extract(r.json, '$.author') AS author
            FROM revisions r JOIN artifacts a ON a.id = r.artifact_id
-          WHERE json_extract(r.json, '$.at') >= ?`,
+          WHERE json_extract(r.json, '$.at') >= ? AND json_extract(r.json, '$.at') < ?`,
       )
-      .all(since)
+      .all(since, until)
       .map((row) => ({
         artifactId: String(row.artifact_id),
         workId: String(row.work_id),

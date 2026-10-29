@@ -1640,7 +1640,10 @@ export function App() {
           onStart={(text, provider, cwd, choice, pick) => startWork(text, provider, cwd, at.kind === "new" ? at.folderId : null, choice, pick)}
           onOpenWork={openWorkNow}
           onOpenProject={actions.openProject}
-          onOpenSession={openSession}
+          onOpenSession={(session, itemId) => {
+            openSession(session);
+            if (itemId) setFocusItem({ sessionId: session.id, itemId, nonce: Date.now() });
+          }}
           onOpenDoc={(artifactId) => docActions.openArtifact(artifactId)}
           api={api}
           homeMode={prefs.homeMode}

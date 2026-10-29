@@ -8,6 +8,10 @@ export type TimelineTurn = {
   start: number;
   end: number | null;
   status: "completed" | "interrupted" | "failed" | "open";
+  /** The request that opened the turn (a transcript item id), so a calendar mark opens the conversation there. */
+  itemId?: string;
+  /** The request's first line, shortened (for the calendar's labels). */
+  text?: string;
 };
 
 /** A document revision, drawn as a tick on its work's row. */
@@ -19,4 +23,5 @@ export type TimelineRevision = {
   author: "user" | "engine" | "external";
 };
 
-export type Timeline = { since: number; turns: TimelineTurn[]; revisions: TimelineRevision[] };
+/** Turns and revisions in `[since, until)`; without `until`, everything since `since`. */
+export type Timeline = { since: number; until?: number; turns: TimelineTurn[]; revisions: TimelineRevision[] };

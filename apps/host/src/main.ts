@@ -16,6 +16,7 @@ import { createEditorsServer, EditorGrants } from "./editors.ts";
 import { AgentBrowser } from "./browse.ts";
 import { buildTimeline } from "./timeline.ts";
 import { DocImages } from "./doc-images.ts";
+import { CalendarFeeds } from "./calendar-feeds.ts";
 import { Pkm } from "./pkm.ts";
 import { handlePkm } from "./pkm-http.ts";
 import { Projects } from "./project.ts";
@@ -136,8 +137,10 @@ const server = createHttpServer(manager, bus, {
   onClientLog: (message) => appendFileSync(join(dataDir, "client.log"), `${new Date().toISOString()} ${message}\n`),
   editors: { grants, origin: () => editorsOrigin },
   browse,
-  timeline: (since) => buildTimeline(store.turnMarks(since), store.revisionMarks(since), since),
+  timeline: (since, until) => buildTimeline(store.turnMarks(since, until), store.revisionMarks(since, until), since, until),
   docImages,
+  // Calendars subscribed by their iCal address; the address stays in the data folder (0600).
+  calendar: new CalendarFeeds({ dataDir }),
   pkm: (req, res, url) => handlePkm(pkm, req, res, url),
   projects: (req, res, url) => handleProject(projects, req, res, url),
   entry: (req, res, url) => handleEntry({ view: () => manager.view, worksDir }, req, res, url),

@@ -257,20 +257,21 @@ async function flow(provider: Provider) {
     await page.waitForSelector(".home-modes.mode-projects");
     await page.locator(".projects-layouts button", { hasText: "카드" }).click();
 
-    // ── 흐름 (key 3) ─────────────────────────────────────────────────────────────────
+    // ── 흐름 (key 3): a calendar — this month's days with their works, today with this work's turn ──
     await blur(page);
     await page.keyboard.press("3");
-    await page.waitForSelector(".home-modes.mode-flow .flow-row");
-    await page.locator(".flow .segmented button", { hasText: "30일" }).click();
-    await until(async () => (await page.locator(".flow-bar").count()) > 20, 8000);
-    const monthBars = await page.locator(".flow-bar").count();
-    const ticks = await page.locator(".flow-rev").count();
+    await page.waitForSelector(".home-modes.mode-flow .flow-cal");
+    await page.locator(".flow-views button", { hasText: "달" }).click();
+    await until(async () => (await page.locator(".flow-month .flow-line.work").count()) > 20, 8000);
+    const monthLines = await page.locator(".flow-month .flow-line.work").count();
+    const revisionsInMonth = Number(/판 (\d+)/.exec(await page.locator(".flow-sum").innerText())?.[1] ?? 0);
     await shot("05-home-flow.png");
-    await page.locator(".flow .segmented button", { hasText: "오늘" }).click();
-    await until(async () => (await page.locator(`.flow-row:has-text("${work.title}") .flow-bar`).count()) > 0, 8000);
-    const todayBars = await page.locator(`.flow-row:has-text("${work.title}") .flow-bar`).count();
-    pass("흐름(키 3): 30일 턴 막대와 판 눈금, 오늘 이 작업의 진행 중 턴", monthBars > 20 && ticks > 5 && todayBars >= 1, `막대 ${monthBars} · 판 ${ticks} · 오늘 ${todayBars}`);
-    await page.locator(".flow .segmented button", { hasText: "7일" }).click();
+    await page.locator(".flow-views button", { hasText: "하루" }).click();
+    await page.locator(".flow-today").click();
+    await until(async () => (await page.locator(`.flow-col[data-work="${work.id}"] .flow-block`).count()) > 0, 8000);
+    const todayBlocks = await page.locator(`.flow-col[data-work="${work.id}"] .flow-block`).count();
+    pass("흐름(키 3): 달 보기에 날마다 작업 줄과 판 수, 하루 보기에 이 작업의 진행 중 턴", monthLines > 20 && revisionsInMonth > 5 && todayBlocks >= 1, `작업 줄 ${monthLines} · 판 ${revisionsInMonth} · 오늘 ${todayBlocks}`);
+    await page.locator(".flow-views button", { hasText: "주" }).click();
 
     // ── 문서 (key 4) ─────────────────────────────────────────────────────────────────
     await blur(page);

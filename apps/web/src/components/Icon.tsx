@@ -4,6 +4,9 @@ const PATHS = {
   chevronDown: "M6 9l6 6 6-6",
   chevronUp: "M6 15l6-6 6 6",
   chevronRight: "M9 6l6 6-6 6",
+  chevronLeft: "M15 6l-6 6 6 6",
+  chevronsLeft: "M12 6l-6 6 6 6M18 6l-6 6 6 6",
+  chevronsRight: "M6 6l6 6-6 6M12 6l6 6-6 6",
   // Fold or unfold a whole tree: two chevrons closing on a line, or opening away from it.
   collapseAll: "M8 4l4 4 4-4M8 20l4-4 4 4M4.5 12h15",
   expandAll: "M8 8l4-4 4 4M8 16l4 4 4-4M4.5 12h15",

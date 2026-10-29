@@ -1,33 +1,26 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { FORMAT_LABEL, PROVIDER_LABEL, isUnseen, type Artifact, type ProjectStage, type ProjectSummary, type Session, type Timeline, type TranscriptItem, type Work } from "@workbench/contracts";
+import { FORMAT_LABEL, PROVIDER_LABEL, isUnseen, type Artifact, type ProjectStage, type ProjectSummary, type Session, type TranscriptItem, type Work } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import type { State } from "../state.ts";
 import { accentStyle, useAppearance } from "../appearance.ts";
 import { ago, statusText, statusTone } from "../format.ts";
 import { measure, play, type FlipFirst } from "../flip.ts";
 import {
-  FLOW_RANGES,
   HOME_MODES,
   docEntries,
-  flowRows,
-  flowWindow,
   heldCount,
   isWorking,
   lastExchange,
   mapSections,
-  mergeSpans,
   mindmapSource,
   nowGroups,
-  readFlowRange,
   recency,
   recentWorks,
   resumeSessions,
-  spanOf,
   workContents,
   type DocEntry,
-  type FlowRange,
   type HomeMode,
 } from "../overview.ts";
 import { thumbOf, type Thumb } from "../thumbs.ts";
@@ -39,6 +32,7 @@ import { ModeBar } from "./ModeBar.tsx";
 import { ProjectsMode } from "./project/ProjectsMode.tsx";
 import { stageOf } from "../project.ts";
 import { foldedReply } from "./docs/ConversationDrawer.tsx";
+import { FlowMode } from "./FlowMode.tsx";
 import "../styles/views.css";
 
 // Home overview modes (design 3.3): 지금 · 보드 · 지도 · 흐름 · 문서, one bar at the bottom, keys
@@ -47,13 +41,13 @@ import "../styles/views.css";
 // hundred sessions stay quick.
 
 type Open = {
-  session: (session: Session) => void;
+  /** With a request's item id ("흐름"), the conversation opens there. */
+  session: (session: Session, itemId?: string) => void;
   work: (work: Work) => void;
   doc: (artifactId: string) => void;
 };
 
 const MAP_KEY = "workbench.homeMap";
-const FLOW_KEY = "workbench.homeFlow";
 
 /** How a session is doing, in a word or two. */
 function stateLabel(session: Session) {
@@ -357,162 +351,6 @@ function MapMode({ state, open, summaries, stages }: { state: State; open: Open;
   );
 }
 
-// The last timeline of each range, so coming back to "흐름" draws at once.
-const timelines = new Map<FlowRange, Timeline>();
-
-const clock = (at: number) => new Date(at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
-const minutes = (ms: number) => (ms < 60_000 ? `${Math.max(1, Math.round(ms / 1000))}초` : `${Math.round(ms / 60_000)}분`);
-
-/** "흐름": a time axis, a row per work, a bar per turn (engine colour) and a tick per revision. */
-function FlowMode({ api, state, open }: { api: Api; state: State; open: Open }) {
-  const { lookOf } = useAppearance();
-  const [range, setRange] = useState<FlowRange>(() => readFlowRange(localStorage.getItem(FLOW_KEY)));
-  const [now, setNow] = useState(() => Date.now());
-  const window_ = useMemo(() => flowWindow(range, now), [range, now]);
-  const [timeline, setTimeline] = useState<Timeline | null>(() => timelines.get(range) ?? null);
-  const [error, setError] = useState<string | null>(null);
-  const [wide, setWide] = useState(false);
-  // New turns and revisions arrive as the app works: read again shortly after a turn starts or
-  // ends, a reply arrives or a revision is made (not on every streamed word).
-  const changes = useMemo(() => {
-    let working = 0;
-    let last = 0;
-    for (const session of Object.values(state.sessions)) {
-      if (isWorking(session)) working += 1;
-      last = Math.max(last, session.previewAt ?? 0);
-    }
-    for (const artifact of Object.values(state.artifacts)) last = Math.max(last, artifact.updatedAt);
-    return `${working}:${last}`;
-  }, [state.sessions, state.artifacts]);
-  useEffect(() => {
-    let active = true;
-    const timer = window.setTimeout(() => {
-      api
-        .timeline(window_.since)
-        .then((result) => {
-          if (!active) return;
-          timelines.set(range, result);
-          setTimeline(result);
-          setError(null);
-        })
-        .catch((reason: Error) => active && setError(reason.message));
-    }, timeline ? 400 : 0);
-    return () => {
-      active = false;
-      window.clearTimeout(timer);
-    };
-    // `timeline` only decides whether to wait; it must not refetch by itself.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, range, window_.since, changes]);
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
-    return () => window.clearInterval(timer);
-  }, []);
-  const shownTimeline = timeline;
-  const rows = flowRows(state, window_, shownTimeline);
-  const CAP = 30;
-  const shown = wide ? rows : rows.slice(0, CAP);
-  const total = shownTimeline ? shownTimeline.turns.filter((turn) => (turn.end ?? now) >= window_.since).length : 0;
-  const nowAt = spanOf(now, now, window_).left;
-  return (
-    <div className="flow">
-      <div className="mode-head">
-        <div className="segmented small" role="radiogroup" aria-label="기간">
-          {FLOW_RANGES.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              role="radio"
-              aria-checked={range === option.id}
-              className={range === option.id ? "active" : ""}
-              onClick={() => {
-                setRange(option.id);
-                setTimeline(timelines.get(option.id) ?? null);
-                localStorage.setItem(FLOW_KEY, option.id);
-              }}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-        <span className="muted">{shownTimeline ? `요청 ${total} · 작업 ${rows.length}` : error ?? "불러오는 중…"}</span>
-      </div>
-      <div className="flow-grid">
-        <div className="flow-row flow-axis" aria-hidden>
-          <span className="flow-label" />
-          <div className="flow-track">
-            {window_.ticks
-              .filter((tick) => tick.major && tick.at < window_.until)
-              .map((tick) => (
-                <span key={tick.at} className="flow-tick-label" style={{ left: `${spanOf(tick.at, tick.at, window_).left}%` }}>
-                  {tick.label}
-                </span>
-              ))}
-          </div>
-        </div>
-        {shown.map((row) => {
-          const spans = row.turns.map((turn) => {
-            const busy = isWorking(turn.session) || turn.session.status === "awaitingApproval";
-            const end = turn.end ?? (busy ? now : turn.start + 60_000);
-            return { ...spanOf(turn.start, end, window_), item: { ...turn, end } };
-          });
-          const ticks = row.revisions.map((revision) => ({ ...spanOf(revision.at, revision.at, window_), width: 0, item: revision }));
-          return (
-            <div key={row.work.id} className="flow-row" data-flip={`w:${row.work.id}`}>
-              <button type="button" className="flow-label" onClick={() => open.work(row.work)} title={row.work.title}>
-                <span className="flow-label-title">{row.work.title}</span>
-                <span className="flow-label-age">{ago(row.last)}</span>
-              </button>
-              <div className="flow-track">
-                {window_.ticks.map((tick) => (tick.major ? <span key={tick.at} className="flow-gridline" style={{ left: `${spanOf(tick.at, tick.at, window_).left}%` }} /> : null))}
-                {nowAt > 0 && nowAt < 100 ? <span className="flow-now" style={{ left: `${nowAt}%` }} /> : null}
-                {mergeSpans(spans).map((segment) => {
-                  const first = segment.items[0]!;
-                  const running = segment.items.some((item) => item.status === "open" && isWorking(item.session));
-                  const failed = segment.items.some((item) => item.status === "failed");
-                  const title =
-                    segment.items.length > 1
-                      ? `${first.session.purpose} 외 · 요청 ${segment.items.length}개 · ${clock(first.start)}부터`
-                      : `${first.session.purpose} · ${PROVIDER_LABEL[first.session.provider]} · ${clock(first.start)} · ${minutes(first.end - first.start)}${first.status === "interrupted" ? " · 멈춤" : first.status === "failed" ? " · 실패" : ""}`;
-                  return (
-                    <button
-                      key={`${first.sessionId}:${first.start}`}
-                      type="button"
-                      className={`flow-bar${running ? " running" : ""}${failed ? " failed" : ""}`}
-                      style={{ left: `${segment.left}%`, width: `${segment.width}%`, ...accentStyle(lookOf(first.session.provider)) }}
-                      title={title}
-                      aria-label={title}
-                      onClick={() => open.session(first.session)}
-                    />
-                  );
-                })}
-                {mergeSpans(ticks, 0.4).map((segment) => {
-                  const first = segment.items[0]!;
-                  const artifact = state.artifacts[first.artifactId];
-                  const title = `${artifact?.name ?? "문서"} r${first.revision}${segment.items.length > 1 ? ` 외 ${segment.items.length - 1}판` : ""} · ${clock(first.at)}`;
-                  return (
-                    <button
-                      key={`${first.artifactId}:${first.revision}`}
-                      type="button"
-                      className={`flow-rev author-${first.author}`}
-                      style={{ left: `${segment.left}%` }}
-                      title={title}
-                      aria-label={title}
-                      onClick={() => open.doc(first.artifactId)}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-        {!rows.length ? <p className="home-quiet">이 기간에 한 일이 없습니다.</p> : null}
-        <More hidden={rows.length - shown.length} onMore={() => setWide(true)} />
-      </div>
-    </div>
-  );
-}
-
 /** A document's first page (or opening lines), drawn once it scrolls into view. */
 function DocThumb({ api, artifact, tools }: { api: Api; artifact: Artifact; tools: State["tools"] }) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -615,7 +453,8 @@ export function HomeModes({
   state: State;
   mode: HomeMode;
   onMode: (mode: HomeMode) => void;
-  onOpenSession: (session: Session) => void;
+  /** With a request's item id ("흐름"), the conversation opens at that request. */
+  onOpenSession: (session: Session, itemId?: string) => void;
   onOpenWork: (work: Work) => void;
   onOpenDoc: (artifactId: string) => void;
   /** A project's page (from "프로젝트"); its conversation when there is none. */

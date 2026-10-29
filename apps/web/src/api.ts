@@ -21,6 +21,9 @@ import type {
   ForkResult,
   ImportRequest,
   ArtifactRevision,
+  CalendarEventsView,
+  CalendarFeedInput,
+  CalendarFeedView,
   CreateTarget,
   DocImageResult,
   DocRef,
@@ -237,8 +240,17 @@ export class Api {
       `/api/artifacts/${artifactId}/pages${revision ? `?revision=${revision}` : ""}`,
     );
   revisions = (artifactId: string) => this.request<ArtifactRevision[]>("GET", `/api/artifacts/${artifactId}/revisions`);
-  /** Turns and revisions since a time (home "흐름"). */
-  timeline = (since: number) => this.request<Timeline>("GET", `/api/views/timeline?since=${Math.floor(since)}`);
+  /** Turns and revisions in `[since, until)`, or since a time (home "흐름"). */
+  timeline = (since: number, until?: number) =>
+    this.request<Timeline>("GET", `/api/views/timeline?since=${Math.floor(since)}${until === undefined ? "" : `&until=${Math.floor(until)}`}`);
+  /** Calendar feeds on home "흐름" (never their addresses) and the events of a window. */
+  calendarFeeds = () => this.request<{ feeds: CalendarFeedView[] }>("GET", "/api/calendar/feeds");
+  addCalendarFeed = (input: CalendarFeedInput) => this.request<CalendarFeedView>("POST", "/api/calendar/feeds", input);
+  updateCalendarFeed = (id: string, input: CalendarFeedInput) => this.request<CalendarFeedView>("PATCH", `/api/calendar/feeds/${encodeURIComponent(id)}`, input);
+  removeCalendarFeed = (id: string) => this.request<{ feeds: CalendarFeedView[] }>("DELETE", `/api/calendar/feeds/${encodeURIComponent(id)}`);
+  refreshCalendarFeed = (id: string) => this.request<CalendarFeedView>("POST", `/api/calendar/feeds/${encodeURIComponent(id)}/refresh`);
+  calendarEvents = (since: number, until: number, zone: string, refresh = false) =>
+    this.request<CalendarEventsView>("GET", `/api/calendar/events?${new URLSearchParams({ since: String(Math.floor(since)), until: String(Math.floor(until)), tz: zone, ...(refresh ? { refresh: "1" } : {}) })}`);
   adoptDisk = (artifactId: string) => this.request<Artifact>("POST", `/api/artifacts/${artifactId}/adopt-disk`);
   editorGrant = (artifactId: string) => this.request<EditorGrant>("POST", `/api/artifacts/${artifactId}/editor`);
   revert = (artifactId: string, toRevision: number) => this.request<Artifact>("POST", `/api/artifacts/${artifactId}/revert`, { toRevision });

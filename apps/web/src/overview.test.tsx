@@ -1,21 +1,17 @@
 import { describe, expect, it } from "vitest";
-import type { Artifact, Folder, Proposal, Session, Timeline, Work } from "@workbench/contracts";
+import type { Artifact, Folder, Proposal, Session, Work } from "@workbench/contracts";
 import { initialState, type State } from "./state.ts";
 import {
   boardColumns,
   bucketOf,
   docEntries,
-  flowRows,
-  flowWindow,
   lastExchange,
   mapSections,
-  mergeSpans,
   mindmapSource,
   nodeText,
   nowGroups,
   readHomeMode,
   resumeSessions,
-  spanOf,
 } from "./overview.ts";
 import { excerpt } from "./thumbs.ts";
 
@@ -195,64 +191,6 @@ describe("지도", () => {
     expect(source).toContain("        외 2개");
     expect(source).toContain("      작업 2개 더");
     expect(nodeText("  ((  ))  ")).toBe("제목 없음");
-  });
-});
-
-describe("흐름", () => {
-  it("lays out today by hours and the last days by day, in local time", () => {
-    const today = flowWindow("today", NOW);
-    expect(new Date(today.since).getHours()).toBe(0);
-    expect(today.until - today.since).toBe(86_400_000);
-    expect(today.ticks.map((tick) => tick.label)).toEqual(["0시", "3시", "6시", "9시", "12시", "15시", "18시", "21시", "24시"]);
-    const week = flowWindow("week", NOW);
-    expect(new Date(week.since).getDate()).toBe(22);
-    expect(week.ticks).toHaveLength(8);
-    expect(week.ticks[6]!.label).toBe("10/28 수");
-    expect(flowWindow("month", NOW).ticks).toHaveLength(31);
-  });
-
-  it("places spans inside the axis, a short one still visible", () => {
-    const window = { since: 0, until: 1000, ticks: [] };
-    expect(spanOf(250, 500, window)).toEqual({ left: 25, width: 25 });
-    expect(spanOf(-100, 100, window)).toEqual({ left: 0, width: 10 });
-    expect(spanOf(999, 999, window).width).toBeCloseTo(0.35);
-    expect(spanOf(2000, 3000, window).left).toBeCloseTo(99.65);
-  });
-
-  it("joins spans that touch, so a busy row stays a few bars", () => {
-    const merged = mergeSpans([
-      { left: 10, width: 2, item: "a" },
-      { left: 12.1, width: 1, item: "b" },
-      { left: 30, width: 1, item: "c" },
-    ]);
-    expect(merged.map((segment) => [segment.left, Number(segment.width.toFixed(2)), segment.items.join("")])).toEqual([
-      [10, 3.1, "ab"],
-      [30, 1, "c"],
-    ]);
-  });
-
-  it("has a row per work active in the window, the latest first, with its turns and revisions", () => {
-    const window = flowWindow("week", NOW);
-    const state = stateOf({
-      works: [work("a", null), work("b", null), work("quiet", null)],
-      sessions: [session("sa", "a", { previewAt: NOW - 3600_000 }), session("sb", "b", { previewAt: NOW - 600_000 }), session("sq", "quiet", { previewAt: NOW - 40 * 86_400_000, updatedAt: NOW - 40 * 86_400_000 })],
-      artifacts: [artifact("doc", "a", { updatedAt: NOW - 30_000 })],
-    });
-    const timeline: Timeline = {
-      since: window.since,
-      turns: [
-        { sessionId: "sa", workId: "a", start: NOW - 4000_000, end: NOW - 3600_000, status: "completed" },
-        { sessionId: "sq", workId: "quiet", start: NOW - 40 * 86_400_000, end: NOW - 40 * 86_400_000 + 10, status: "completed" },
-      ],
-      revisions: [{ artifactId: "doc", workId: "a", revision: 2, at: NOW - 30_000, author: "engine" }],
-    };
-    const rows = flowRows(state, window, timeline);
-    expect(rows.map((row) => [row.work.id, row.turns.length, row.revisions.length])).toEqual([
-      ["a", 1, 1],
-      ["b", 0, 0],
-    ]);
-    // Before the timeline arrives the rows are already there.
-    expect(flowRows(state, window, null).map((row) => row.work.id)).toEqual(["a", "b"]);
   });
 });
 

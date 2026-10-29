@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Artifact, Session } from "@workbench/contracts";
 import { Store } from "./store.ts";
-import { buildTimeline, type TurnMark } from "./timeline.ts";
+import { buildTimeline, firstLine, type TurnMark } from "./timeline.ts";
 
 // Home "흐름": turns paired from stored requests and turn ends, and revision ticks.
 
@@ -74,8 +74,61 @@ describe("store marks", () => {
       ["turnEnd", 150, false, "w1"],
     ]);
     const timeline = buildTimeline(marks, store.revisionMarks(50), 50);
-    expect(timeline.turns).toEqual([{ sessionId: "s1", workId: "w1", start: 100, end: 150, status: "completed" }]);
+    expect(timeline.turns).toEqual([{ sessionId: "s1", workId: "w1", start: 100, end: 150, status: "completed", itemId: "u1", text: "요청" }]);
     expect(timeline.revisions).toEqual([{ artifactId: "d1", workId: "w1", revision: 2, at: 140, author: "engine" }]);
+    expect(timeline.until).toBeUndefined();
     store.close();
+  });
+
+  it("reads a window with the turns that cross its edges, at their real start and end", () => {
+    const dir = mkdtempSync(join(tmpdir(), "wb-timeline-"));
+    dirs.push(dir);
+    const store = new Store(join(dir, "state.sqlite"));
+    store.saveSession({ id: "a", workId: "w1", provider: "codex" } as Session);
+    store.saveSession({ id: "b", workId: "w2", provider: "claude" } as Session);
+    store.saveSession({ id: "c", workId: "w2", provider: "claude" } as Session);
+    store.saveSession({ id: "old", workId: "w1", provider: "codex" } as Session);
+    // a: begins before the window and ends inside it; then one inside; then one that runs past it; then one after it.
+    store.saveItem("a", { kind: "user", id: "a1", text: "\n\n  밤새 정리해 줘  \n둘째 줄", at: 90 });
+    store.saveItem("a", { kind: "turnEnd", id: "a1e", status: "completed", durationMs: 30, at: 120 });
+    store.saveItem("a", { kind: "user", id: "a2", text: "가운데", at: 130 });
+    store.saveItem("a", { kind: "turnEnd", id: "a2e", status: "failed", durationMs: 10, at: 140 });
+    store.saveItem("a", { kind: "user", id: "a3", text: "늦게", at: 190 });
+    store.saveItem("a", { kind: "turnEnd", id: "a3e", status: "completed", durationMs: 40, at: 230 });
+    store.saveItem("a", { kind: "user", id: "a4", text: "다음 날", at: 300 });
+    store.saveItem("a", { kind: "turnEnd", id: "a4e", status: "completed", durationMs: 5, at: 305 });
+    // b: a request still running across the whole window (no end yet).
+    store.saveItem("b", { kind: "user", id: "b1", text: "길게", at: 50 });
+    // c: a turn that ended just before the window, and a request after it.
+    store.saveItem("c", { kind: "user", id: "c1", text: "전에", at: 60 });
+    store.saveItem("c", { kind: "turnEnd", id: "c1e", status: "completed", durationMs: 30, at: 99 });
+    store.saveItem("c", { kind: "user", id: "c2", text: "뒤에", at: 250 });
+    store.saveItem("c", { kind: "turnEnd", id: "c2e", status: "completed", durationMs: 30, at: 260 });
+    // old: finished long ago.
+    store.saveItem("old", { kind: "user", id: "o1", text: "옛날", at: 1 });
+    store.saveItem("old", { kind: "turnEnd", id: "o1e", status: "completed", durationMs: 1, at: 2 });
+    store.saveArtifact({ id: "d1", workId: "w1", path: "/x/a.md", name: "a.md" } as Artifact);
+    for (const [revision, at] of [[1, 99], [2, 100], [3, 199], [4, 200]] as const) {
+      store.saveRevision({ artifactId: "d1", revision, sha256: "", size: 0, author: "engine", sessionId: "a", baseRevision: null, note: null, at });
+    }
+    const timeline = buildTimeline(store.turnMarks(100, 200), store.revisionMarks(100, 200), 100, 200);
+    expect(timeline.until).toBe(200);
+    expect(timeline.turns.map((turn) => [turn.sessionId, turn.start, turn.end, turn.status, turn.itemId, turn.text])).toEqual([
+      ["b", 50, null, "open", "b1", "길게"],
+      ["a", 90, 120, "completed", "a1", "밤새 정리해 줘"],
+      ["a", 130, 140, "failed", "a2", "가운데"],
+      ["a", 190, 230, "completed", "a3", "늦게"],
+    ]);
+    expect(timeline.revisions.map((revision) => revision.revision)).toEqual([2, 3]);
+    store.close();
+  });
+});
+
+describe("firstLine", () => {
+  it("takes the first written line, shortened for a label", () => {
+    expect(firstLine("\n   \n  강의안을   고쳐 줘 \n두 번째")).toBe("강의안을 고쳐 줘");
+    expect(firstLine("")).toBeUndefined();
+    expect(firstLine(null)).toBeUndefined();
+    expect(firstLine("가".repeat(100), 10)).toBe(`${"가".repeat(9)}…`);
   });
 });
