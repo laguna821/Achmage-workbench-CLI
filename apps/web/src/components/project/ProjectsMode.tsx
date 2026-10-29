@@ -3,6 +3,7 @@ import { isUnseen, type ProjectStage, type ProjectSummary, type Session, type Wo
 import type { Api } from "../../api.ts";
 import { ago } from "../../format.ts";
 import { stageOf } from "../../project.ts";
+import { projectMatcher, queryProject } from "../../project-query.ts";
 import type { State } from "../../state.ts";
 import { workHidden } from "../../tree.ts";
 import { Icon } from "../Icon.tsx";
@@ -86,15 +87,9 @@ export function ProjectsMode({
     });
   }, [state.works, state.sessions, state.proposals, state.artifacts, summaries]);
 
-  /** "#태그" and "단계:값" narrow; any other word matches the name. */
-  const matches = (row: Row) => {
-    const words = filter.trim().split(/\s+/).filter(Boolean);
-    return words.every((word) => {
-      if (word.startsWith("#")) return (row.summary?.tags ?? row.work.tags ?? []).some((tag) => tag.toLowerCase().startsWith(word.slice(1).toLowerCase()));
-      if (word.startsWith("단계:")) return (row.summary?.stage ?? "") === word.slice(3);
-      return row.work.title.toLowerCase().includes(word.toLowerCase());
-    });
-  };
+  /** The filter box's query (`project-query.ts`): words, "#태그", "단계:값", "폴더:이름", any "속성:값". */
+  const matcher = useMemo(() => projectMatcher(filter), [filter]);
+  const matches = (row: Row) => matcher(queryProject(row.work, row.summary, state.folders));
 
   /** Move a project to a stage (or none), with a way back in the notice. */
   const moveTo = useCallback(
@@ -146,7 +141,7 @@ export function ProjectsMode({
           ))}
         </div>
         {layout !== "cards" ? (
-          <input className="projects-filter" value={filter} placeholder="이름 · #태그 · 단계:진행중" aria-label="프로젝트 거르기" onChange={(event) => setFilter(event.target.value)} />
+          <input className="projects-filter" value={filter} placeholder="이름 · #태그 · 단계:진행중" title="이름 · #태그 · 단계:진행중 · 폴더:이름 · 속성:값(마감일:2026-11, 중요도:높음) · 앞에 -는 빼기" aria-label="프로젝트 거르기" onChange={(event) => setFilter(event.target.value)} />
         ) : null}
       </div>
       {layout === "cards" ? (
