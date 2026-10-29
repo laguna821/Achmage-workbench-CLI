@@ -1,4 +1,5 @@
 import type { Provider } from "./index.ts";
+import type { EngineReadNote } from "./pkm.ts";
 
 // "프로젝트 = 노트 한 장": a work seen as one Markdown note. What people write (stage, tags, related,
 // decisions, open questions, the rest of the text) lives in a real note file in the work folder; what
@@ -124,6 +125,8 @@ export type ProjectPage = {
   /** The context card a new session of this project gets: what the engines are told. */
   card: string;
   stages: ProjectStage[];
+  /** Vault notes its sessions' engines read by themselves, most read first ("엔진이 읽은 노트"). */
+  readNotes?: EngineReadNote[];
 };
 
 /** A write to the note, kept a while so "되돌리기" can put the bytes back. */

@@ -1,6 +1,7 @@
 import type { ItemStatus, PlanStep, TranscriptItem } from "@workbench/contracts";
 import type { ThreadItem } from "./generated/v2/ThreadItem.ts";
 import type { TurnPlanStep } from "./generated/v2/TurnPlanStep.ts";
+import { isAbsolute, resolve } from "node:path";
 
 const MAX_OUTPUT = 20_000;
 
@@ -40,6 +41,8 @@ export function mapThreadItem(item: ThreadItem, at: number, inProgress: boolean)
       if (status === "completed" && item.exitCode !== null && item.exitCode !== 0) {
         status = "failed";
       }
+      // Files the command reads, as Codex parsed it (`cat`, `sed -n`, `head`…), made absolute.
+      const reads = (item.commandActions ?? []).flatMap((action) => (action.type === "read" && action.path ? [isAbsolute(String(action.path)) ? String(action.path) : resolve(String(item.cwd ?? "/"), String(action.path))] : []));
       return {
         kind: "tool",
         id: item.id,
@@ -49,6 +52,7 @@ export function mapThreadItem(item: ThreadItem, at: number, inProgress: boolean)
         output: clip(item.aggregatedOutput),
         status,
         at,
+        ...(reads.length ? { reads } : {}),
       };
     }
     case "fileChange": {

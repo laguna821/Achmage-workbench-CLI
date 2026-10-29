@@ -14,6 +14,29 @@ describe("mapThreadItem", () => {
     expect(mapped).toMatchObject({ kind: "tool", tool: "command", title: "false", status: "failed", output: "x" });
   });
 
+  it("says which files a command read, as Codex parsed it, made absolute", () => {
+    const mapped = mapThreadItem(
+      item({
+        type: "commandExecution",
+        id: "c2",
+        command: "sed -n '1,40p' notes/a.md && cat /v/b.md && ls",
+        cwd: "/w",
+        status: "completed",
+        exitCode: 0,
+        aggregatedOutput: "",
+        commandActions: [
+          { type: "read", command: "sed -n '1,40p' notes/a.md", name: "a.md", path: "notes/a.md" },
+          { type: "read", command: "cat /v/b.md", name: "b.md", path: "/v/b.md" },
+          { type: "listFiles", command: "ls", path: null },
+        ],
+      }),
+      1,
+      false,
+    );
+    expect(mapped).toMatchObject({ kind: "tool", tool: "command", reads: ["/w/notes/a.md", "/v/b.md"] });
+    expect(mapThreadItem(item({ type: "commandExecution", id: "c3", command: "ls", cwd: "/w", status: "completed", exitCode: 0, aggregatedOutput: "", commandActions: [] }), 1, false)).not.toHaveProperty("reads");
+  });
+
   it("summarizes multi-file changes", () => {
     const mapped = mapThreadItem(
       item({ type: "fileChange", id: "f1", status: "inProgress", changes: [{ path: "a.md", kind: "add", diff: "+a" }, { path: "b.md", kind: "update", diff: "+b" }] }),

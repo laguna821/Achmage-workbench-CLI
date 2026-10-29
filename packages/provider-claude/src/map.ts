@@ -38,7 +38,7 @@ function str(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
-type ToolView = { tool: ToolKind; title: string; detail: string | null; activity: string; paths?: string[] };
+type ToolView = { tool: ToolKind; title: string; detail: string | null; activity: string; paths?: string[]; reads?: string[] };
 
 export function describeTool(name: string, input: Record<string, unknown>): ToolView {
   switch (name) {
@@ -61,7 +61,7 @@ export function describeTool(name: string, input: Record<string, unknown>): Tool
         paths: [str(input.file_path) ?? str(input.notebook_path)].filter((path): path is string => Boolean(path)),
       };
     case "Read":
-      return { tool: "search", title: `읽기 ${str(input.file_path) ?? ""}`.trim(), detail: null, activity: "파일 읽는 중" };
+      return { tool: "search", title: `읽기 ${str(input.file_path) ?? ""}`.trim(), detail: null, activity: "파일 읽는 중", ...(str(input.file_path) ? { reads: [str(input.file_path)!] } : {}) };
     case "Glob":
     case "Grep":
       return {
@@ -316,6 +316,7 @@ export class ClaudeTranscriptMapper {
               status: "running",
               at: this.now(),
               ...(view.paths?.length ? { paths: view.paths } : {}),
+              ...(view.reads?.length ? { reads: view.reads } : {}),
             };
             this.toolItems.set(block.id, item);
             out.push({ type: "upsert", item });

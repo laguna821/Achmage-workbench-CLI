@@ -92,6 +92,15 @@ describe("ClaudeTranscriptMapper", () => {
     expect(finished[0]).toMatchObject({ type: "upsert", item: { id: "tool1", status: "completed", output: "total 0" } });
   });
 
+  it("says which file a Read step read (the vault layer counts the notes engines read)", () => {
+    const mapper = new ClaudeTranscriptMapper(() => 1);
+    const out = mapper.handle(
+      msg({ type: "assistant", message: { id: "m3", content: [{ type: "tool_use", id: "r1", name: "Read", input: { file_path: "/v/01. Inbox/a.md" } }] }, parent_tool_use_id: null, uuid: "a3", session_id: "s" }),
+      "turn-1",
+    );
+    expect(out).toContainEqual(expect.objectContaining({ type: "upsert", item: expect.objectContaining({ kind: "tool", title: "읽기 /v/01. Inbox/a.md", reads: ["/v/01. Inbox/a.md"] }) }));
+  });
+
   it("keeps a declined tool declined when its error result arrives", () => {
     const mapper = new ClaudeTranscriptMapper(() => 1);
     mapper.handle(

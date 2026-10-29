@@ -343,6 +343,8 @@ export type TranscriptItem =
       at: number;
       /** Files this tool wrote (file changes). */
       paths?: string[];
+      /** Files this step read, as absolute paths (Claude's Read, a Codex command that reads a file). */
+      reads?: string[];
       /** Pictures the step produced or looked at (screenshots, images read), shown in the conversation. */
       images?: Attachment[];
     }

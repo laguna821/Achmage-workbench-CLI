@@ -87,8 +87,10 @@ export type PkmCard = {
   status?: SessionStatus;
   format?: DocFormat;
   workId?: string;
-  /** Sessions given this note (notes); sessions of the work (works). */
+  /** Sessions given this note (notes, "붙인 세션"); sessions of the work (works). */
   sessions?: number;
+  /** Sessions whose engine read this note by itself (notes, "엔진이 읽음"). */
+  engineReads?: number;
   /** Where it is, for the line under the title (a note's folder, a session's work). */
   where?: string;
 };
@@ -257,9 +259,14 @@ export type VaultNote = {
   links: Record<string, string | null>;
   /** `![[embed]]` and `![](path)` images → vault-relative image paths (null when missing). */
   embeds: Record<string, string | null>;
-  /** Sessions this note was given to. */
+  /** Sessions this note was given to ("붙인 세션"). */
   sessions: number;
+  /** Sessions whose engine read this note by itself ("엔진이 읽음"). */
+  engineReads?: number;
 };
+
+/** A vault note the engines of a project read by themselves (project page, "엔진이 읽은 노트"). */
+export type EngineReadNote = { path: string; title: string; sessions: number };
 
 /**
  * A page template: app-wide (gateway data folder), of one work (`.workbench/templates/`) or of the

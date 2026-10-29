@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -227,5 +227,27 @@ describe("context card and write guard", () => {
     expect(pkm.claudeLaunch(session, work).append).not.toContain("고정한 노트");
     pkm.attachVault(null);
     expect(pkm.claudeLaunch(session, work).hooks).toBeNull();
+  });
+});
+
+describe("notes the engines read by themselves", () => {
+  it("counts the sessions whose engine read a vault note (apart from notes attached), never hidden ones, once per session", () => {
+    const { pkm, manager, vault, dir } = setup();
+    mkdirSync(join(dir, "w"), { recursive: true });
+    const work = manager.createWork({ title: "w", cwd: join(dir, "w") });
+    const session = manager.createSession(work.id, { provider: "codex" });
+    const read = (id: string, files: string[]) =>
+      manager.sink.upsertItem(session.id, { kind: "tool", id, tool: "command", title: "cat", detail: null, output: null, status: "completed", at: 1, reads: files });
+    read("t1", [join(vault, "20. Information (I)/수업 설계.md"), join(vault, "90. Settings/91. Templates/tpl.md"), "/etc/hosts", join(dir, "w/a.md")]);
+    read("t2", [join(vault, "20. Information (I)/수업 설계.md"), join(vault, "01. Inbox/a.md")]);
+    expect(pkm.note("20. Information (I)/수업 설계.md")).toMatchObject({ sessions: 0, engineReads: 1 });
+    // Equal counts: by title in Korean order (Hangul before Latin).
+    expect(pkm.notesReadBy(new Set([session.id]))).toEqual([
+      { path: "20. Information (I)/수업 설계.md", title: "수업 설계", sessions: 1 },
+      { path: "01. Inbox/a.md", title: "A", sessions: 1 },
+    ]);
+    expect(pkm.notesReadBy(new Set(["another"]))).toEqual([]);
+    const card = pkm.cards({ kind: "vault", path: "20. Information (I)", descendants: false }).cards.find((entry) => entry.title === "수업 설계");
+    expect(card).toMatchObject({ engineReads: 1 });
   });
 });

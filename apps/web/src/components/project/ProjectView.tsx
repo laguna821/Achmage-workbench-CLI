@@ -52,6 +52,7 @@ export function ProjectView({
   onOpenSession,
   onOpenDocument,
   onOpenProject,
+  onOpenNote,
   onToast,
   onError,
   openMenu,
@@ -63,6 +64,8 @@ export function ProjectView({
   onOpenDocument: (artifactId: string, proposalId: string | null) => void;
   /** Another project's page ("연결"). */
   onOpenProject?: (work: Work) => void;
+  /** A vault note (the notes the engines read). */
+  onOpenNote?: (path: string) => void;
   onToast: (toast: Toast) => void;
   onError: (error: unknown) => void;
   openMenu: (request: MenuRequest) => void;
@@ -686,8 +689,27 @@ export function ProjectView({
           </section>
 
           <details className="project-section project-card">
-            <summary>엔진이 아는 것 (새 세션의 맥락 카드)</summary>
+            <summary>엔진이 아는 것 (새 세션의 맥락 카드{page.readNotes?.length ? ` · 엔진이 읽은 노트 ${page.readNotes.length}` : ""})</summary>
             <pre>{page.card}</pre>
+            {page.readNotes?.length ? (
+              <div className="project-read-notes">
+                <h3>엔진이 스스로 읽은 볼트 노트</h3>
+                <ul>
+                  {page.readNotes.map((read) => (
+                    <li key={read.path}>
+                      {onOpenNote ? (
+                        <button type="button" className="link" title={read.path} onClick={() => onOpenNote(read.path)}>
+                          {read.title}
+                        </button>
+                      ) : (
+                        <span title={read.path}>{read.title}</span>
+                      )}
+                      <span className="muted"> · 세션 {read.sessions}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </details>
         </div>
       </div>

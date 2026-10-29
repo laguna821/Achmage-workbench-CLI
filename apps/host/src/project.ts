@@ -303,7 +303,16 @@ export class Projects {
   page(workId: string): ProjectPage {
     const work = this.work(workId);
     const note = this.note(work);
-    return { workId, note: { ...note, stage: this.stageOf(work, note) }, facts: this.facts(work), events: this.events(work, Date.now() - WEEK, 60), card: this.pkm.cardFor(work), stages: this.stages() };
+    const sessionIds = new Set([...this.manager.view.sessions.values()].filter((session) => session.workId === workId).map((session) => session.id));
+    return {
+      workId,
+      note: { ...note, stage: this.stageOf(work, note) },
+      facts: this.facts(work),
+      events: this.events(work, Date.now() - WEEK, 60),
+      card: this.pkm.cardFor(work),
+      stages: this.stages(),
+      readNotes: this.pkm.notesReadBy(sessionIds),
+    };
   }
 
   /** Everything recorded in the project, newest first (기록 칸 "전체"). */

@@ -101,14 +101,15 @@ function CardView({
           <span className="pkm-card-date">{cardDate(card.date)}</span>
           {card.excerpt ? ` ${card.excerpt}` : card.kind === "note" ? <span className="muted"> 내용 없음</span> : null}
         </div>
-        {card.stage || card.tags.length || card.sessions || card.where || card.format ? (
+        {card.stage || card.tags.length || card.sessions || card.engineReads || card.where || card.format ? (
           <div className="pkm-card-meta">
             {card.stage ? <span className="pkm-stage">{card.stage}</span> : null}
             {card.tags.slice(0, 6).map((tag) => (
               <TagPill key={tag} tag={tag} color={tagColor(tagColors, tag)} />
             ))}
             {card.tags.length > 6 ? <span className="muted">+{card.tags.length - 6}</span> : null}
-            {card.kind === "note" && card.sessions ? <span className="pkm-card-sessions">세션 {card.sessions}</span> : null}
+            {card.kind === "note" && card.sessions ? <span className="pkm-card-sessions" title="이 노트를 붙여 보낸 세션">붙인 세션 {card.sessions}</span> : null}
+            {card.kind === "note" && card.engineReads ? <span className="pkm-card-sessions" title="엔진이 스스로 이 노트를 읽은 세션">엔진이 읽음 {card.engineReads}</span> : null}
             {card.kind === "work" && card.sessions ? <span className="pkm-card-sessions">세션 {card.sessions}</span> : null}
             {card.format && card.kind === "page" ? <span className="pkm-card-where">{FORMAT_LABEL[card.format]}</span> : null}
             {card.where ? <span className="pkm-card-where">{card.where}</span> : null}

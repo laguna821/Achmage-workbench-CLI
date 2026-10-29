@@ -147,7 +147,8 @@ export function VaultNoteView({ path }: { path: string }) {
             읽기 전용
           </span>
           <span className="pkm-head-tools">
-            {note?.sessions ? <span className="pkm-count">세션 {note.sessions}</span> : null}
+            {note?.sessions ? <span className="pkm-count" title="이 노트를 붙여 보낸 세션">붙인 세션 {note.sessions}</span> : null}
+            {note?.engineReads ? <span className="pkm-count" title="엔진이 스스로 이 노트를 읽은 세션">엔진이 읽음 {note.engineReads}</span> : null}
             {vaultPath ? (
               <button type="button" className="ghost-button small pkm-obsidian" onClick={() => void openObsidian(obsidianUrl(vaultPath, path)).catch(() => undefined)}>
                 <Icon name="external" size={14} /> Obsidian에서 열기

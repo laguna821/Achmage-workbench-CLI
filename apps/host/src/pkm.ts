@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, writeFileSync } from "node:fs";
-import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   PROVIDER_LABEL,
   parseViewQuery,
   type InsightDraft,
   type Artifact,
   type CardList,
+  type EngineReadNote,
   type PageTemplate,
   type PkmCard,
   type PkmRule,
@@ -97,6 +98,7 @@ export class Pkm {
     bus.subscribe((event) => {
       if (event.type === "session.upserted") this.schedulePlacement(event.session.workId);
       else if (event.type === "artifact.upserted") this.schedulePlacement(event.artifact.workId);
+      else if (event.type === "item.upserted" && event.item.kind === "tool" && event.item.reads?.length) this.engineRead(event.sessionId, event.item.reads);
     });
   }
 
@@ -208,6 +210,43 @@ export class Pkm {
     return this.noteReads()[path]?.length ?? 0;
   }
 
+  /** Vault notes an engine read by itself (its own Read step or command), by session. */
+  private engineReads(): Record<string, string[]> {
+    return this.readJson<Record<string, string[]>>("pkm.engineReads", {});
+  }
+
+  /** A step read files: those that are notes of the vault (not hidden) are remembered for that session. */
+  private engineRead(sessionId: string, files: string[]) {
+    const index = this.vault.current;
+    const root = this.vault.root;
+    if (!index || !root) return;
+    const reads = this.engineReads();
+    let changed = false;
+    for (const file of files) {
+      const rel = relative(root, resolve(file));
+      if (!rel || rel.startsWith("..") || isAbsolute(rel)) continue;
+      const path = rel.split(sep).join("/");
+      if (!index.notes.has(path) || this.vault.isHidden(path) || reads[path]?.includes(sessionId)) continue;
+      reads[path] = [...(reads[path] ?? []), sessionId];
+      changed = true;
+    }
+    if (changed) this.writeJson("pkm.engineReads", reads);
+  }
+
+  /** The vault notes the engines of these sessions read by themselves, most read first. */
+  notesReadBy(sessionIds: Set<string>, limit = 20): EngineReadNote[] {
+    const index = this.vault.current;
+    if (!index) return [];
+    const out: EngineReadNote[] = [];
+    for (const [path, sessions] of Object.entries(this.engineReads())) {
+      const count = sessions.filter((id) => sessionIds.has(id)).length;
+      const entry = index.notes.get(path);
+      if (!count || !entry || this.vault.isHidden(path)) continue;
+      out.push({ path, title: this.notes.meta(entry).title, sessions: count });
+    }
+    return out.sort((a, b) => b.sessions - a.sessions || a.title.localeCompare(b.title, "ko")).slice(0, limit);
+  }
+
   /**
    * Notes attached to a request: each is copied as it is now into the work folder (read-only,
    * `.workbench/notes/`), and the engine is told where the copy and the original are and that the
@@ -269,7 +308,8 @@ export class Pkm {
     walk(path);
     const pinned = new Set(this.vault.navigator?.pinned ?? []);
     const reads = this.noteReads();
-    const cards = paths.map((note) => this.notes.card(index.notes.get(note)!, pinned.has(note), reads[note]?.length ?? 0));
+    const engine = this.engineReads();
+    const cards = paths.map((note) => ({ ...this.notes.card(index.notes.get(note)!, pinned.has(note), reads[note]?.length ?? 0), engineReads: engine[note]?.length ?? 0 }));
     cards.sort((a, b) => Number(b.pinned) - Number(a.pinned) || (b.date ?? 0) - (a.date ?? 0) || a.title.localeCompare(b.title, "ko"));
     return {
       title: path ? path.split("/").pop()! : (this.vault.status().name ?? "볼트"),
@@ -604,7 +644,7 @@ export class Pkm {
   note(path: string): VaultNote {
     if (this.vault.isHidden(path)) throw new HttpError(404, "note_missing", "숨긴 폴더의 노트입니다.");
     try {
-      return this.notes.note(path, this.sessionsOf(path));
+      return { ...this.notes.note(path, this.sessionsOf(path)), engineReads: this.engineReads()[path]?.length ?? 0 };
     } catch (error) {
       throw new HttpError(404, "note_missing", error instanceof Error ? error.message : String(error));
     }

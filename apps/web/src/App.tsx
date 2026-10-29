@@ -1517,6 +1517,7 @@ export function App() {
             if (itemId) setFocusItem({ sessionId: session.id, itemId, nonce: Date.now() });
           }}
           onOpenProject={actions.openProject}
+          onOpenNote={(path) => setView({ kind: "pkm", target: { kind: "note", path } })}
           onOpenDocument={(artifactId, proposalId) => {
             const artifact = state.artifacts[artifactId];
             if (artifact) setWorkId(artifact.workId);
