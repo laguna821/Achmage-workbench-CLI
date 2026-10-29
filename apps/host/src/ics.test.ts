@@ -161,6 +161,22 @@ describe("recurring events", () => {
     ]);
   });
 
+  it("reads a calendar of years quickly: one-off events far from the window are skipped early", () => {
+    const events: string[] = [];
+    for (let index = 0; index < 20_000; index += 1) {
+      const day = new Date(Date.UTC(2016, 0, 1) + index * 4 * 3600_000);
+      const stamp = `${day.getUTCFullYear()}${String(day.getUTCMonth() + 1).padStart(2, "0")}${String(day.getUTCDate()).padStart(2, "0")}T${String(day.getUTCHours()).padStart(2, "0")}0000`;
+      events.push(event(`UID:e${index}`, `DTSTART;TZID=Asia/Seoul:${stamp}`, "DURATION:PT1H", `SUMMARY:일정 ${index}`));
+    }
+    const parsed = parseIcs(calendar(...events));
+    const started = performance.now();
+    const found = occurrences(parsed, seoul(2018, 3, 5), seoul(2018, 3, 12), SEOUL);
+    expect(performance.now() - started).toBeLessThan(300);
+    // Every 4 hours over the week: 42 of them.
+    expect(found).toHaveLength(42);
+    expect(found[0]!.start).toBe(seoul(2018, 3, 5));
+  });
+
   it("moves or cancels single occurrences (RECURRENCE-ID) and adds RDATE", () => {
     const text = calendar(
       event("UID:s", "DTSTART;TZID=Asia/Seoul:20261005T140000", "DURATION:PT1H", "RRULE:FREQ=WEEKLY;COUNT=4", "RDATE;TZID=Asia/Seoul:20261031T100000", "SUMMARY:세미나"),

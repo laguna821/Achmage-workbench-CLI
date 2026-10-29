@@ -633,6 +633,8 @@ export function occurrences(calendar: IcsCalendar, from: number, to: number, vie
       const ms = "ms" in event.length ? event.length.ms : 0;
       const startOn = (day: number) => wallToEpoch({ ...civilOf(day), h: wall.h, mi: wall.mi, s: wall.s }, zone, viewer);
       const startDay = dayNumber(wall);
+      // A one-off event days away from the window needs no zone arithmetic (zones lie within ±14 hours).
+      if (!event.rule && !event.rdates.length && (startDay > Math.floor(to / DAY_MS) + 2 || startDay + Math.ceil(ms / DAY_MS) < Math.floor(from / DAY_MS) - 2)) continue;
       const instances: number[] = [];
       if (event.rule && !event.recurrenceId) {
         const until = event.rule.until;
