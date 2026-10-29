@@ -619,7 +619,14 @@
   - 글과 그림이 함께 복사된 경우(워드·표·웹 페이지 글)는 글을 붙인다. 브라우저의 "이미지 복사"(그림 + `<img>`만 있는 HTML + 주소 글)는 그림이다.
   - 미리보기: 상대 경로 그림은 앱 토큰으로 받아 보여 준다. 작업 폴더 밖, `.workbench` 아래, 그림이 아닌 파일, 밖을 가리키는 링크는 거절한다.
 - **R2 설정**: ⋯ › "그림 올리기 · Cloudflare R2…" 시트.
-  - 칸: 계정 ID(대시보드의 S3 API 주소를 붙여도 되고, 그 주소의 버킷도 채움), 액세스 키 ID, 비밀 액세스 키, 버킷, 공개 주소(r2.dev나 연결한 도메인; S3 API 주소는 거절), 키 앞부분(선택).
+  - **올리는 방식 둘**(2026-10-29 추가). 사용자 보고: "옵시디언 CMDS Eagle에는 Worker URL·API Key·Public URL을 넣었는데 앱은 설명이 달라 있는 키를 어떻게 쓰는지 헷갈린다."
+    - **Worker (CMDS Eagle과 같은 값)**: 기본이다. 칸은 플러그인과 같은 Worker URL · API Key(Worker의 `UPLOAD_API_KEY`) · Public URL(선택)이다.
+      - 보내는 법은 플러그인과 같다(사용자 노트의 Worker 코드). `POST <worker>/upload`, multipart `file`(+ `filename`·`content_type`), `Authorization: Bearer <키>`.
+      - 링크는 Worker가 돌려준 주소다. "연결 확인"은 `GET /health`(키 포함)이다. `/health`가 없는 Worker면 연결만 확인하고 키는 첫 그림 때 확인한다.
+      - 그림 이름은 Worker가 붙인다. 그래서 같은 그림은 내용 해시로 기억해(`image-upload-sent.json`) 다시 올리지 않는다.
+      - 키는 S3 키와 같은 0600 파일에 있고 화면에 돌아오지 않는다.
+    - **R2 API 토큰**: 아래 S3 방식이다. 방식을 보내지 않는 예전 호출은 보낸 칸으로 방식을 짐작한다.
+  - (S3 방식) 칸: 계정 ID(대시보드의 S3 API 주소를 붙여도 되고, 그 주소의 버킷도 채움), 액세스 키 ID, 비밀 액세스 키, 버킷, 공개 주소(r2.dev나 연결한 도메인; S3 API 주소는 거절), 키 앞부분(선택).
   - 게이트웨이 데이터 폴더 `image-upload.json`(0600, 통째로 쓰기)에만 있다. 화면에는 비밀 키를 돌려주지 않고 액세스 키는 앞뒤 4자만 보인다. 비워 둔 키 칸은 저장된 값을 유지한다. 로그에 남기지 않는다.
   - "연결 확인": 작은 파일을 키로 올리고, 공개 주소에서 같은 바이트를 읽고, 지운다. 실패하면 이유(키·서명·버킷·권한·시계·공개 접근)를 한국어로 보인다. 저장 전 값으로도 확인한다.
 - **워드·PPT·엑셀(앱 안 편집기)**: 붙여넣기·끌어 놓기한 그림이 파일 안에 들어간다(`word/media`, `ppt/media`, `xl/media`). R2는 쓰지 않는다.
@@ -1227,12 +1234,26 @@
 
 ## 다음
 
-- **2026-10-28~29 밤에 끝낸 것**: 종합 점검의 빠진 것 전부(설계 문서 7장 1~10). 대화 속 그림, 계획 먼저, `/` 명령, 그림 그리기, 세션 잇기, 브라우징, 보기 모드·나란히·세션 창, 문서 그림·R2, 노션식 정리·볼트, 다른 곳의 대화 가져오기, 이 요청 전으로, 알림 마무리, 예약 작업, 격리 사본. 각 절에 검사와 제한을 적었다.
-- **설치 파일**: [v0.1.0 릴리스](https://github.com/laguna821/Achmage-workbench-CLI/releases/tag/v0.1.0)(2026-10-29)에 Windows(NSIS `.exe`·MSI)·macOS Apple silicon(`.dmg`)·Linux(AppImage·`.deb`)·Arch/CachyOS(`.pkg.tar.zst`) 여섯 파일이 있다. GitHub Actions `release`(수동 실행 또는 `v*` 태그)가 만들고, 태그 실행만 Release를 올린다. Windows·macOS·Linux 묶음은 Node.js 24를 함께 넣고 Arch 패키지는 시스템 nodejs(24 이상)를 쓴다. 내려받은 Arch 패키지의 체크섬·내용(실행 파일·`host/`·`web/`·바로가기·의존성)을 확인했다.
-  - Windows는 `bundle.icon`에 `.ico`가 있어야 묶인다(없으면 "Couldn't find a .ico icon"). 설치 파일 이름에 공백이 있어 릴리스 단계는 파일을 배열로 넘기고 여섯 개인지 센다.
-  - macOS arm64 러너가 모자라면 작업이 러너를 못 받고 취소된다("not acquired by Runner"). 코드 문제가 아니므로 그 작업만 다시 돌린다(`gh run rerun <id> --failed`).
-  - Windows·macOS는 빌드만 확인했고 실제 기기에서 써 보지는 않았다. 서명이 없어 처음 열 때 SmartScreen·Gatekeeper 경고가 뜬다.
-- **사람이 설치본에서 확인할 것**: 바탕화면 끌어 놓기·스크린숏 붙여넣기(WebKitGTK), 알림을 눌러 세션 열기, 트레이 "확인 필요 N", 실제 Google 로그인 유지(에이전트 브라우저), 세션 창 떼어 내기(niri).
-- **프로젝트 = 노트 한 장(기획 v2, 2026-10-29)**: 세 층(세션 → 프로젝트 노트 → 모아 보기)과 다섯 길(들어가기 · 되쓰기 · 알리기 · 찾기 · 끊김)로 다시 짰다. 독립 검토 셋(정보 전달·회수·UX)을 코드로 확인해 v1의 가정 A(`.workbench/project.md`)와 B(작업 줄 → 프로젝트 페이지)를 철회했고, 지금 코드의 결함(멈춤·엔진 종료 때 수정안 버림·요청 자동 전송, 셋 이상 잇기, 오피스 색인 삭제)을 P0으로 올렸다. [설계](design/프로젝트-노트-설계.md) P0~P5.
-- **뒤로 미룬 것**: 음성·모바일·PR/CI 연동·격자 분할·칸반 끌기. 앱 안 편집기 확대(마크다운 WYSIWYG·HTML·마인드맵), HOP급 한글 편집기.
-- 설계: [다음 설계](design/워크스테이션-다음설계.md), 지난 계획: [메타 세션·페이지·Pele 도식·이음 마무리](design/메타세션-다음계획.md).
+- **2026-10-29에 끝낸 것**:
+  - 프로젝트 = 노트 한 장 P0~P4: 끊김, 노트·기록·알리기, 하나의 찾기, 홈 프로젝트 모드, 그래프.
+  - 설계 §4~§8에 남았던 것.
+  - 첫 실행 클릭만으로(모든 OS, 문서 도구 번들).
+  - 앱 전체 디자인 "괘선 노트".
+  - 각 절에 검사와 제한을 적었다.
+- **설치 파일**: [v0.2.0 릴리스](https://github.com/laguna821/Achmage-workbench-CLI/releases/tag/v0.2.0)(2026-10-29). 0.2.1은 그림 올리기의 Worker 방식과 프로젝트 머리의 "+ 속성" 줄을 더한다.
+  - 여섯 파일: Windows(NSIS `.exe`·MSI), macOS Apple silicon(`.dmg`), Linux(AppImage·`.deb`), Arch/CachyOS(`.pkg.tar.zst`).
+  - 모든 파일에 kordoc·이음오피스(통째)·PDFCraft·HOP와 Node 24(Arch는 시스템 nodejs)가 들어 있다.
+  - 릴리스 작업은 Windows(NSIS 무인 설치)와 macOS(dmg)에서 설치 뒤 첫 실행 검사(`setup-smoke`)가 통과해야 올라간다. 2026-10-29 두 OS 모두 통과했다.
+  - AppImage는 문서 앱을 `usr/share/achmage-workbench`에 둔다. linuxdeploy가 이음오피스 빌드 속 옛 GTK2 트레이 라이브러리를 찾다 멈추기 때문이다. `.deb`·Windows·macOS는 리소스 폴더에 둔다.
+  - Windows는 `bundle.icon`에 `.ico`가 있어야 묶인다. 설치 파일 이름에 공백이 있어 릴리스 단계는 파일을 배열로 넘기고 여섯 개인지 센다.
+  - macOS arm64 러너가 모자라 "not acquired by Runner"로 취소되면 그 작업만 다시 돌린다(`gh run rerun <id> --failed`).
+  - 서명이 없어 처음 열 때 SmartScreen·Gatekeeper 경고가 뜬다.
+  - [v0.1.0](https://github.com/laguna821/Achmage-workbench-CLI/releases/tag/v0.1.0)은 Windows 첫 실행이 막혔다(엔진을 못 찾고 npm·curl을 치라고 함, 문서 도구 "설치되지 않음").
+- **사람이 설치본에서 확인할 것**:
+  - v0.1.0에서 막혔던 그 Windows PC에서 v0.2.0을 깔아 Codex를 찾는지, "설치되지 않음"이 없는지 본다. Microsoft Store판 Codex 앱 안의 실행 파일 위치는 문서가 없어 못 찾을 수 있다. 그때도 "Codex 설치"로 된다.
+  - 로그아웃 상태에서 로그인 끝까지 해 보기(두 엔진).
+  - 바탕화면 끌어 놓기·스크린숏 붙여넣기(WebKitGTK), 알림을 눌러 세션 열기, 트레이 "확인 필요 N", 세션 창 떼어 내기(niri).
+- **세션 잇기의 정한 것**: 사람이 멈추면 잇기는 끝난다. 실패(엔진 종료 포함)만 끝내지 않고 "응답이 끊겨 멈춤"으로 둔다.
+- **남은 설계**: P5. 토큰·비용 기록, 모바일 프로젝트 화면, 누를 때만 AI 요약. [설계](design/프로젝트-노트-설계.md) §11.
+- **뒤로 미룬 것**: 음성·모바일·PR/CI 연동·격자 분할. 앱 안 편집기 확대(마크다운 WYSIWYG·HTML·마인드맵), HOP급 한글 편집기.
+- 설계: [디자인 시스템](design/DESIGN.md), [프로젝트 노트](design/프로젝트-노트-설계.md), [다음 설계](design/워크스테이션-다음설계.md), 지난 계획: [메타 세션·페이지·Pele 도식·이음 마무리](design/메타세션-다음계획.md).
