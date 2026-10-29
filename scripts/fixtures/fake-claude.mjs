@@ -365,7 +365,7 @@ async function runTurn(text) {
     if (notes.length) chunks.push({ text: `받은 노트 사본: ${notes.join(" | ")}\n\n`, wait: 30 });
     if (guardNote) chunks.push({ text: guardNote, wait: 30 });
     if (text.includes("맥락")) chunks.push({ text: `맥락 카드:\n${appendSystemPrompt ?? "(없음)"}\n\n`, wait: 30 });
-    if (text.includes("받은 글")) chunks.push({ text: `받은 글:\n${text}\n\n`, wait: 30 });
+    if (text.includes("받은 글 보여줘")) chunks.push({ text: `받은 글:\n${text}\n\n`, wait: 30 });
     if (skill) chunks.push({ text: `스킬 /정리를 실행했습니다: ${skill[1] ?? ""}\n\n`, wait: 30 });
     if (seen) chunks.push({ text: `요청을 받았습니다 (${seen[1]}).\n\n`, wait: 30 });
     const linked = linkReply(text, "Claude");

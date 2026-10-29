@@ -483,8 +483,9 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
   };
   if (notes.length) told(`받은 노트 사본: ${notes.join(" | ")}\n\n`);
   if (text.includes("맥락")) told(`맥락 카드:\n${thread.instructions ?? "(없음)"}\n샌드박스: ${thread.mode} ${JSON.stringify(thread.policy ?? null)}\n\n`);
-  // "받은 글": the request exactly as the gateway handed it over (what changed before it, the pins…).
-  if (text.includes("받은 글")) told(`받은 글:\n${text}\n\n`);
+  // "받은 글 보여줘": the request exactly as the gateway handed it over (what changed before it, the
+  // pins…). Not just "받은 글": every linked-session reply says "받은 글 N자를 읽었습니다".
+  if (text.includes("받은 글 보여줘")) told(`받은 글:\n${text}\n\n`);
   // "노트에 적어: <path>": a line appended to that file, reported as Codex reports a file change.
   const noteTarget = /노트에 적어: ([^\n]+)/.exec(text)?.[1]?.trim();
   if (noteTarget) {
