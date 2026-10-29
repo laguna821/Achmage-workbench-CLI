@@ -68,7 +68,9 @@ const until = async (what: () => Promise<boolean>, timeout = 15_000) => {
   return false;
 };
 const send = (id: string, text: string) => api("POST", `/api/sessions/${id}/messages`, { requestId: crypto.randomUUID(), text });
-await api("PUT", "/api/prefs", { prefs: { onboarding: "done", startScreen: "last" } });
+// The view modes at the width they were written for: the navigator's "한 칸" layout (navigator-check
+// and groups-check cover the two-pane default and a board wider than the centre).
+await api("PUT", "/api/prefs", { prefs: { onboarding: "done", startScreen: "last", navigator: { layout: "tree" } } });
 
 const browser = await chromium.launch();
 const logs: string[] = [];
