@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
-import { PROVIDER_LABEL, isUnseen, type AccessMode, type Artifact, type Attachment, type CreateTarget, type DocRef, type ProjectPick, type Proposal, type Provider, type Session, type SessionStatus, type UiPrefs, type Work } from "@workbench/contracts";
+import { GLOBAL_LAYOUT, PROVIDER_LABEL, isUnseen, type AccessMode, type Artifact, type Attachment, type CreateTarget, type DocRef, type ProjectPick, type Proposal, type Provider, type Session, type SessionStatus, type UiPrefs, type Work, type Workspace } from "@workbench/contracts";
 import { Api, ApiRequestError, readToken } from "./api.ts";
 import { configureDesign } from "./design.ts";
 import { initialState, isBusy, reducer, sessionsOf } from "./state.ts";
@@ -23,7 +23,7 @@ import { AppearanceSheet, type SheetTarget } from "./components/AppearanceSheet.
 import { EngineMenu } from "./components/EngineMenu.tsx";
 import { Switcher, UnseenContext } from "./components/SessionCards.tsx";
 import { DocContext, FormatBadge, type DocActions } from "./components/DocCards.tsx";
-import { DocTabs } from "./components/DocTabs.tsx";
+import { GroupTabs } from "./components/GroupTabs.tsx";
 import { IntegrationsSheet } from "./components/IntegrationsSheet.tsx";
 import { ImageUploadRow, ImageUploadSheet } from "./components/ImageUploadSheet.tsx";
 import { Onboarding } from "./components/Onboarding.tsx";
@@ -52,8 +52,10 @@ import { entryClient, homeTarget, sessionToOpen, unseenFailure } from "./entry.t
 import { WorksDirRow } from "./components/WorksDirRow.tsx";
 import { EngineMark } from "./components/EngineMark.tsx";
 import { LeaveGate } from "./leave-gate.ts";
+import { LayoutPersistence } from "./layout-persistence.ts";
+import { activeTab, activateTab, addBackgroundTab, closeTab, contentKey, findTab, moveTab, tabsOf, updateTabUi, updateTabView, withTabs } from "./tabs.ts";
 import { PaneLayout, type PaneHead, type PaneScope } from "./components/Panes.tsx";
-import { closePane, effectAt, focusPane, focusedPane, movePane, otherPane, paneById, placeAt, resizeSplit, restoreLayout, setPane, shownElsewhere, singleLayout, splitPane, MAX_PANES, type Layout, type Pane, type PaneContent, type PaneId, type PaneItem, type PaneTarget, type Side } from "./panes.ts";
+import { closePane, effectAt, focusPane, focusedPane, movePane, otherPane, paneById, placeAt, resizeSplit, restoreLayout, setPane, shownElsewhere, singleLayout, splitPane, MAX_PANES, type Layout, type Pane, type PaneContent, type PaneId, type PaneItem, type PaneTarget, type Side, type TabUiState } from "./panes.ts";
 import { PaneActionsContext, type PaneActions } from "./panedrag.ts";
 
 // Editors (CodeMirror, PDF.js) load only when a document opens.
@@ -201,6 +203,14 @@ export function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const stateRef = useRef(state);
   stateRef.current = state;
+  const layoutPersistence = useMemo(() => api ? new LayoutPersistence(api) : null, [api]);
+  const [layoutReady, setLayoutReady] = useState(false);
+  const [layoutScope, setLayoutScope] = useState(GLOBAL_LAYOUT);
+  const layoutScopeRef = useRef(GLOBAL_LAYOUT);
+  const layoutSwitching = useRef(false);
+  const layoutSaveTimer = useRef<number | undefined>(undefined);
+  const [layoutProblem, setLayoutProblem] = useState<{ key: string; message: string } | null>(null);
+  const openWorkspaceRef = useRef<(workspace: Workspace | null) => Promise<boolean>>(async () => false);
   // A window of its own for one session (`?session=`, "새 창으로 떼어 내기"): no sidebar, no home.
   const [single, setSingle] = useState<string | null>(() => windowSession());
   // One pane on a new profile; an existing layout is restored from gateway preferences after
@@ -210,13 +220,14 @@ export function App() {
       windowSession() || (cachedPrefs().startScreen === "last" && localStorage.getItem(LAST_WORK_KEY)) ? { kind: "work" } : { kind: "new", folderId: null },
       localStorage.getItem(LAST_WORK_KEY),
     );
-    return windowSession() ? fallback : restoreLayout(readJson(PANE_LAYOUT_KEY, null), isView, fallback);
+    return withTabs(windowSession() ? fallback : restoreLayout(readJson(PANE_LAYOUT_KEY, null), isView, fallback));
   });
   // The layout as last asked for, so changes made in one handler build on each other.
   const layoutRef = useRef(layout);
   const updateLayout = useCallback((change: (current: Layout<View>) => Layout<View>) => {
-    const next = change(layoutRef.current);
-    if (next === layoutRef.current) return;
+    const changed = change(layoutRef.current);
+    if (changed === layoutRef.current) return;
+    const next = withTabs(changed, layoutRef.current);
     layoutRef.current = next;
     setLayout(next);
   }, []);
@@ -229,16 +240,17 @@ export function App() {
       if (guard) leaveGuards.current[id] = guard;
       else delete leaveGuards.current[id];
     };
-    return Object.fromEntries(layout.panes.map((pane) => [pane.id, keep(pane.id)]));
-  }, [layout.panes.map((pane) => pane.id).sort().join(",")]);
+    return Object.fromEntries(layout.panes.flatMap((pane) => tabsOf(pane).map((tab) => [tab.id, keep(tab.id)])));
+  }, [layout.panes.flatMap((pane) => tabsOf(pane).map((tab) => tab.id)).sort().join(",")]);
+  const uiOf = useMemo(() => Object.fromEntries(layout.panes.flatMap((pane) => tabsOf(pane).map((tab) => [tab.id, (ui: TabUiState) => updateLayout((current) => updateTabUi(current, tab.id, ui))]))), [updateLayout, layout.panes.flatMap((pane) => tabsOf(pane).map((tab) => tab.id)).sort().join(",")]);
   /** `then`, after the pane's document view saved what only it can save, when that view goes away. */
   const afterLeaving = useCallback((id: PaneId, next: View | null, then: () => void) => {
     const pane = paneById(layoutRef.current, id);
-    const guard = leaveGuards.current[id];
+    const guard = pane ? leaveGuards.current[activeTab(pane).id] : null;
     // "문서" and "나란히" show the same document view; it is left only when another one replaces it.
     const docOf = (entry: View | null) => (entry && (entry.kind === "document" || entry.kind === "split") ? entry.artifactId : null);
-    const leaving = pane !== undefined && docOf(pane.view) !== null && docOf(next) !== docOf(pane.view);
-    leaveGate.current.run(id, guard && leaving ? guard : null, then, (error) => setToast(error instanceof Error ? error.message : String(error)));
+    const leaving = pane !== undefined && (docOf(pane.view) !== null ? docOf(next) !== docOf(pane.view) : !next || contentKey({ ...pane, view: next }) !== contentKey(pane));
+    leaveGate.current.run(id, guard && leaving ? guard : null, then, (error) => setToast(error instanceof Error ? error.message : String(error)), pane ? activeTab(pane).id : id);
   }, []);
   const setViewOf = useCallback(
     (id: PaneId, next: View | ((current: View) => View)) => {
@@ -246,7 +258,11 @@ export function App() {
       if (!pane) return;
       const resolved = typeof next === "function" ? next(pane.view) : next;
       if (resolved === pane.view) return;
-      afterLeaving(id, resolved, () => updateLayout((current) => setPane(current, id, { view: resolved })));
+      const artifact = resolved.kind === "document" || resolved.kind === "split" ? stateRef.current.artifacts[resolved.artifactId] : undefined;
+      const content = { view: resolved, workId: artifact?.workId ?? pane.workId, sessionId: artifact && artifact.workId !== pane.workId ? null : pane.sessionId };
+      const existing = resolved.kind === "new" ? null : findTab(layoutRef.current, contentKey(content));
+      const targetId = existing?.pane.id ?? id;
+      afterLeaving(targetId, resolved, () => updateLayout((current) => ({ ...setPane(current, targetId, content), focus: targetId })));
     },
     [afterLeaving, updateLayout],
   );
@@ -279,9 +295,10 @@ export function App() {
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
   const navigateTo = useCallback((content: PaneContent<View>, opened?: () => void) => {
-    const id = layoutRef.current.focus;
+    const existing = findTab(layoutRef.current, contentKey(content));
+    const id = existing?.pane.id ?? layoutRef.current.focus;
     afterLeaving(id, content.view, () => {
-      updateLayout((current) => setPane(current, id, content));
+      updateLayout((current) => ({ ...setPane(current, id, content), focus: id }));
       if (content.workId) localStorage.setItem(LAST_WORK_KEY, content.workId);
       opened?.();
     });
@@ -393,37 +410,59 @@ export function App() {
   const activeSession = singleSession ?? (restoredSession && restoredSession.workId === work?.id && !restoredSession.archivedAt ? restoredSession : work && activeOf(work));
   // ── two panes (panes.ts): the other pane keeps the session it showed when it lost the focus ──
   const sessionIn = (pane: Pane<View>): Session | undefined => {
-    if (pane.id === layout.focus) return activeSession || undefined;
     const owner = pane.workId ? state.works[pane.workId] : undefined;
     if (!owner) return undefined;
     const kept = pane.sessionId ? state.sessions[pane.sessionId] : undefined;
-    return kept && kept.workId === owner.id ? kept : activeOf(owner) || undefined;
+    return kept && kept.workId === owner.id ? kept : pane.id === layout.focus ? activeSession || undefined : activeOf(owner) || undefined;
   };
   const layoutLoaded = useRef(false);
   const layoutSaved = useRef("");
-  useEffect(() => {
-    if (!state.ready || single) return;
-    if (!layoutLoaded.current) {
-      layoutLoaded.current = true;
-      const restored = restoreLayout(state.prefs.paneLayout ?? readJson(PANE_LAYOUT_KEY, null), isView, layoutRef.current);
-      const panes = restored.panes.map((pane) => {
-        const missingWork = pane.workId && (!state.works[pane.workId] || state.works[pane.workId]!.archivedAt);
-        const at = pane.view;
-        const missingDoc = (at.kind === "document" || at.kind === "split") && !state.artifacts[at.artifactId];
-        const missingProject = at.kind === "project" && (!state.works[at.workId] || state.works[at.workId]!.archivedAt);
-        return missingWork || missingDoc || missingProject ? { ...pane, view: { kind: "new" as const, folderId: null }, workId: null, sessionId: null } : pane;
-      });
-      updateLayout(() => ({ ...restored, panes }));
-      return;
+  const restoreWorkspaceLayout = (raw: unknown, fallback: Layout<View>) => {
+    const latest = stateRef.current;
+    const restored = restoreLayout(raw, isView, fallback);
+    const panes = restored.panes.map((pane) => {
+      const missingWork = pane.workId && !latest.works[pane.workId];
+      const at = pane.view;
+      const missingDoc = (at.kind === "document" || at.kind === "split") && !latest.artifacts[at.artifactId];
+      const missingProject = at.kind === "project" && !latest.works[at.workId];
+      return missingWork || missingDoc || missingProject ? { ...pane, view: { kind: "new" as const, folderId: null }, workId: null, sessionId: null } : pane;
+    });
+    let upgraded = withTabs({ ...restored, panes });
+    if (!restored.panes.some((pane) => pane.tabs)) {
+      for (const pane of upgraded.panes) for (const artifactId of openDocs[pane.workId ?? ""] ?? []) {
+        const artifact = latest.artifacts[artifactId];
+        if (artifact) upgraded = addBackgroundTab(upgraded, pane.id, { view: { kind: "document", artifactId, proposalId: null }, workId: artifact.workId, sessionId: null });
+      }
     }
-    const saved = { version: 1, ...layout, panes: layout.panes.map((pane) => ({ ...pane, sessionId: sessionIn(pane)?.id ?? null })) };
+    return upgraded;
+  };
+  useEffect(() => {
+    if (!state.ready || layoutLoaded.current) return;
+    layoutLoaded.current = true;
+    if (single) { setLayoutReady(true); return; }
+    const key = typeof state.prefs.layoutScope === "string" && (state.prefs.layoutScope === GLOBAL_LAYOUT || state.workspaces[state.prefs.layoutScope]) ? state.prefs.layoutScope : GLOBAL_LAYOUT;
+    void layoutPersistence?.read(key).then((record) => {
+      const upgraded = restoreWorkspaceLayout(record?.layout ?? state.prefs.paneLayout ?? readJson(PANE_LAYOUT_KEY, null), layoutRef.current);
+      layoutScopeRef.current = key; setLayoutScope(key);
+      updateLayout(() => upgraded); setLayoutReady(true);
+    }).catch((error: unknown) => setLayoutProblem({ key, message: error instanceof Error ? error.message : String(error) }));
+  }, [state.ready, single, layoutPersistence]);
+  useEffect(() => {
+    if (!layoutReady || single || layoutSwitching.current || !layoutPersistence) return;
+    const saved = { version: 2, ...layout };
     const json = JSON.stringify(saved);
     if (layoutSaved.current === json) return;
     layoutSaved.current = json;
-    // Gateway preferences survive a changed loopback port on the next desktop launch.
-    savePrefs({ paneLayout: saved });
+    const key = layoutScopeRef.current;
+    window.clearTimeout(layoutSaveTimer.current);
+    layoutSaveTimer.current = window.setTimeout(() => {
+      void layoutPersistence.write(key, saved).then(() => {
+        if (layoutScopeRef.current === key && (prefsRef.current.layoutScope !== key || prefsRef.current.paneLayout !== undefined)) savePrefs({ layoutScope: key, paneLayout: undefined });
+      }).catch((error: unknown) => setLayoutProblem({ key, message: error instanceof Error ? error.message : String(error) }));
+    }, 200);
     try { localStorage.setItem(PANE_LAYOUT_KEY, json); } catch { /* Gateway remains authoritative. */ }
-  }, [layout, state.ready, activeSession?.id, single]);
+  }, [layout, layoutReady, layoutScope, single, layoutPersistence]);
+  useEffect(() => () => window.clearTimeout(layoutSaveTimer.current), []);
 
   // A document shown becomes a tab of its work (at most 8, the oldest goes).
   useEffect(() => {
@@ -436,20 +475,8 @@ export function App() {
     });
   }, [view, state.artifacts]);
   useEffect(() => localStorage.setItem(OPEN_DOCS_KEY, JSON.stringify(openDocs)), [openDocs]);
-  const docsOf = (owner: Work | undefined) => (owner ? (openDocs[owner.id] ?? []).filter((id) => state.artifacts[id]) : []);
+  const docsOf = (owner: Work | undefined) => owner ? [...new Set(layout.panes.flatMap(tabsOf).filter((tab) => tab.workId === owner.id).flatMap((tab) => tab.view.kind === "document" || tab.view.kind === "split" ? [tab.view.artifactId] : []).concat(openDocs[owner.id] ?? []))].filter((id) => state.artifacts[id]) : [];
   const openDocIds = docsOf(work);
-  const closeDocIn = (id: PaneId, owner: Work, ids: string[], artifactId: string) => {
-    const rest = ids.filter((entry) => entry !== artifactId);
-    const shown = paneById(layoutRef.current, id)?.view;
-    const replacing = shown && (shown.kind === "document" || shown.kind === "split") && shown.artifactId === artifactId;
-    const next: View = rest.length ? { kind: "document", artifactId: rest[rest.length - 1]!, proposalId: null } : { kind: "work" };
-    const close = () => {
-      setOpenDocs((current) => ({ ...current, [owner.id]: rest }));
-      if (replacing) updateLayout((current) => setPane(current, id, { view: next }));
-    };
-    if (replacing) afterLeaving(id, next, close);
-    else close();
-  };
 
   // Load the transcript of the visible session once.
   useEffect(() => {
@@ -603,6 +630,7 @@ export function App() {
         if (!api) return null;
         try { return await api.updateWorkspace(workspace.id, patch); } catch (error) { fail(error); return null; }
       },
+      openWorkspace: (workspace) => openWorkspaceRef.current(workspace),
       selectSession: (target, session) => {
         if (single) {
           // A detached window stays one window: it switches to the session picked in it.
@@ -1008,10 +1036,10 @@ export function App() {
   }, [reading, workMode, readingWork, work?.id]);
   // The compare view of a proposal is "검토"; closing it is "문서" again (in the pane showing it).
   const reviewOf = useMemo(() => {
-    const review = (id: PaneId) => (proposalId: string | null) =>
-      setViewOf(id, (current) => (current.kind === "document" && current.proposalId !== proposalId ? { ...current, proposalId } : current));
-    return Object.fromEntries(layout.panes.map((pane) => [pane.id, review(pane.id)]));
-  }, [setViewOf, layout.panes.map((pane) => pane.id).sort().join(",")]);
+    const review = (id: string) => (proposalId: string | null) =>
+      updateLayout((current) => updateTabView(current, id, (view) => view.kind === "document" && view.proposalId !== proposalId ? { ...view, proposalId } : view));
+    return Object.fromEntries(layout.panes.flatMap((pane) => tabsOf(pane).map((tab) => [tab.id, review(tab.id)])));
+  }, [updateLayout, layout.panes.flatMap((pane) => tabsOf(pane).map((tab) => tab.id)).sort().join(",")]);
   const modeBar = workMode ? <WorkModeBar mode={workMode} onMode={setWorkMode} canReview={Boolean(reviewTarget)} canSplit={layout.panes.length < 2} /> : null;
   /** The other pane's bar, as it is: a press there gives that pane the focus first, and its bar is then this one. */
   const barFor = (pane: Pane<View>, owner: Work | undefined, ids: string[]) => {
@@ -1465,6 +1493,71 @@ export function App() {
     }
     if (ownerId && !single) localStorage.setItem(LAST_WORK_KEY, ownerId);
   };
+  const flushEditors = async () => { await Promise.all(Object.values(leaveGuards.current).filter((guard) => !!guard).map((guard) => guard())); };
+  const persistCurrentLayout = async () => {
+    if (!layoutPersistence || !layoutReady || single) return;
+    window.clearTimeout(layoutSaveTimer.current);
+    const key = layoutScopeRef.current;
+    try { await layoutPersistence.write(key, { version: 2, ...layoutRef.current }); }
+    catch (error) { setLayoutProblem({ key, message: error instanceof Error ? error.message : String(error) }); throw error; }
+  };
+  openWorkspaceRef.current = async (workspace) => {
+    if (!api || !layoutPersistence || !layoutReady || layoutSwitching.current) return false;
+    const key = workspace?.id ?? GLOBAL_LAYOUT;
+    if (key === layoutScopeRef.current) return true;
+    layoutSwitching.current = true;
+    try {
+      await flushEditors();
+      if (single) {
+        if (!workspace) return false;
+        const owner = stateRef.current.works[workspace.workId];
+        if (!owner || workspace.removedAt || workspace.archivedAt) return false;
+        const chosen = Object.values(stateRef.current.sessions).filter((entry) => entry.workspaceId === workspace.id && !entry.archivedAt).sort((a, b) => b.updatedAt - a.updatedAt)[0]
+          ?? await api.createSession(owner.id, engine, { workspaceId: workspace.id });
+        actions.selectSession(owner, chosen);
+        return true;
+      }
+      await persistCurrentLayout();
+      const record = await layoutPersistence.read(key);
+      let fallback = singleLayout<View>({ kind: "new", folderId: null }, null);
+      if (workspace && !record) {
+        const owner = stateRef.current.works[workspace.workId];
+        if (!owner || workspace.removedAt || workspace.archivedAt) throw new Error("이 작업공간을 열 수 없습니다. 먼저 보관 상태와 폴더를 확인해 주세요.");
+        const candidates = Object.values(stateRef.current.sessions).filter((entry) => entry.workspaceId === workspace.id && !entry.archivedAt).sort((a, b) => b.updatedAt - a.updatedAt);
+        const chosen = candidates[0] ?? await api.createSession(owner.id, engine, { workspaceId: workspace.id });
+        dispatch({ type: "focus", work: owner, session: chosen });
+        fallback = { ...singleLayout<View>({ kind: "work" }, owner.id), panes: [{ id: "a", view: { kind: "work" }, workId: owner.id, sessionId: chosen.id }] };
+      }
+      const restored = restoreWorkspaceLayout(record?.layout, fallback);
+      layoutScopeRef.current = key; setLayoutScope(key); layoutSaved.current = "";
+      updateLayout(() => restored);
+      const focused = focusedPane(restored);
+      showSessionOf(focused.workId, focused.sessionId);
+      savePrefs({ layoutScope: key, paneLayout: undefined });
+      setLayoutProblem(null);
+      return true;
+    } catch (error) { fail(error); return false; }
+    finally { layoutSwitching.current = false; }
+  };
+  const resolveLayoutProblem = async (keepLocal: boolean) => {
+    if (!layoutProblem || !layoutPersistence || layoutSwitching.current) return;
+    layoutSwitching.current = true;
+    window.clearTimeout(layoutSaveTimer.current);
+    try {
+      if (!keepLocal) await flushEditors();
+      const key = layoutProblem.key;
+      const record = await layoutPersistence.read(key);
+      if (keepLocal && layoutReady) await layoutPersistence.write(key, { version: 2, ...layoutRef.current });
+      else {
+        const restored = restoreWorkspaceLayout(record?.layout ?? prefsRef.current.paneLayout, singleLayout<View>({ kind: "new", folderId: null }, null));
+        layoutScopeRef.current = key; setLayoutScope(key); layoutSaved.current = "";
+        updateLayout(() => restored); setLayoutReady(true);
+      }
+      savePrefs({ layoutScope: key, paneLayout: undefined });
+      setLayoutProblem(null);
+    } catch (error) { setLayoutProblem({ key: layoutProblem.key, message: error instanceof Error ? error.message : String(error) }); }
+    finally { layoutSwitching.current = false; }
+  };
   /** The conversation the focused pane keeps showing once it loses the focus. */
   const keptOf = (pane: Pane<View>) => (pane.view.kind === "work" || pane.view.kind === "split" ? (sessionIn(pane)?.id ?? null) : null);
   const focusPaneNow = (id: PaneId) => {
@@ -1483,6 +1576,11 @@ export function App() {
   };
   /** Already shown in the other pane: the focus goes there (true). */
   const focusIfShown = (key: string) => {
+    const existing = findTab(layoutRef.current, key);
+    if (existing) {
+      selectTabNow(existing.pane.id, existing.tab.id);
+      return true;
+    }
     const id = shownElsewhere(layoutRef.current, (pane) => keysOf(pane).includes(key));
     if (id) focusPaneNow(id);
     return id !== null;
@@ -1492,11 +1590,24 @@ export function App() {
     const only = current.panes.length === 1 ? current.panes[0]! : null;
     return Boolean(only && item.kind === "doc" && only.view.kind === "document" && only.view.artifactId === item.id && only.workId);
   };
-  const effectOf = (item: PaneItem, target: PaneTarget) => (target.side !== "center" && movesOut(layoutRef.current, item) ? "split" : effectAt(layoutRef.current, target, showsItem(item)));
+  const effectOf = (item: PaneItem, target: PaneTarget) => item.kind === "tab" ? "swap" : (target.side !== "center" && movesOut(layoutRef.current, item) ? "split" : effectAt(layoutRef.current, target, showsItem(item)));
   const placeItemAt = (item: PaneItem, target: PaneTarget) => {
+    if (item.kind === "tab") {
+      const source = layoutRef.current.panes.flatMap(tabsOf).find((tab) => tab.id === item.id);
+      const run = () => updateLayout((current) => moveTab(current, item.id, target, target.tabIndex));
+      if (source && target.side === "center") afterLeaving(target.paneId, source.view, run);
+      else run();
+      return;
+    }
     const content = single ? null : contentOf(item);
     if (!content) return;
     const current = layoutRef.current;
+    const existingTab = findTab(current, contentKey(content));
+    if (existingTab) {
+      updateLayout((latest) => moveTab(latest, existingTab.tab.id, target, target.tabIndex));
+      showSessionOf(content.workId, content.sessionId);
+      return;
+    }
     const shows = showsItem(item);
     const leaving = focusedPane(current);
     const conversation = target.side !== "center" && movesOut(current, item);
@@ -1533,10 +1644,26 @@ export function App() {
     const next = closePane(current, id);
     const rest = focusedPane(next);
     const previous = paneById(current, rest.id);
-    afterLeaving(id, null, () => {
+    const guards = tabsOf(paneById(current, id)!).map((tab) => leaveGuards.current[tab.id]).filter((guard) => !!guard);
+    leaveGate.current.run(id, async () => { await Promise.all(guards.map((guard) => guard())); }, () => {
       updateLayout((latest) => closePane(latest, id));
       if (rest.id !== current.focus && previous) showSessionOf(previous.workId, previous.sessionId);
+    }, fail, `close-group:${id}`);
+  };
+  const selectTabNow = (paneId: string, tabId: string) => {
+    const group = paneById(layoutRef.current, paneId);
+    const tab = group && tabsOf(group).find((entry) => entry.id === tabId);
+    if (!tab) return;
+    afterLeaving(paneId, tab.view, () => {
+      updateLayout((current) => activateTab(current, paneId, tabId));
+      showSessionOf(tab.workId, tab.sessionId);
     });
+  };
+  const closeTabNow = (paneId: string, tabId: string) => {
+    const guard = leaveGuards.current[tabId];
+    leaveGate.current.run(paneId, guard ?? null, () => {
+      updateLayout((current) => closeTab(current, paneId, tabId, { view: { kind: "new", folderId: null }, workId: null, sessionId: null }));
+    }, fail, tabId);
   };
   panesRef.current = { focusIfShown, placeItem };
   const paneActions = useMemo<PaneActions>(() => ({ openBeside: (item) => panesRef.current.placeItem(item, "right") }), []);
@@ -1581,21 +1708,6 @@ export function App() {
 
   const showStart = startScreen;
   /** A work's open documents as tabs, in a pane. */
-  const tabsIn = (id: PaneId, owner: Work | undefined, ids: string[], at: View) =>
-    owner ? (
-      <DocTabs
-        state={state}
-        ids={ids}
-        activeId={at.kind === "document" || at.kind === "split" ? at.artifactId : null}
-        onConversation={() => setViewOf(id, { kind: "work" })}
-        onOpen={(artifactId) => {
-          if (focusIfShown(`doc:${artifactId}`)) return;
-          setViewOf(id, (current) => (current.kind === "split" ? { ...current, artifactId } : { kind: "document", artifactId, proposalId: null }));
-        }}
-        onClose={(artifactId) => closeDocIn(id, owner, ids, artifactId)}
-      />
-    ) : null;
-  const tabs = tabsIn(layout.focus, work, openDocIds, view);
   // The conversation, alone or beside a document ("나란히"). A detached window shows its own
   // session, whichever one the work has in front elsewhere; so does a pane without the focus.
   const workView = (shown: Work, session: Session | undefined, pinned: boolean, paneTabs: ReactNode, ids: string[], modes: ModeProps) => (
@@ -1612,7 +1724,7 @@ export function App() {
       onFocusDone={() => setFocusItem(null)}
       sidebarOpen={sidebarOpen}
       prefs={prefs}
-      modes={modes}
+      modes={{ ...modes, groupedTabs: !single }}
     />
   );
   /** Each pane wears its own engine's paper; the focused one the look in focus (and the one being edited). */
@@ -1626,14 +1738,15 @@ export function App() {
     return { theme, bubble: look.bubble, frame: look.frame, glow: look.glow, style: lookStyle(look) };
   };
   /** What a pane shows: the focused one exactly as the main area always has; the other with its own work, session and tabs. */
-  const paneView = (pane: Pane<View>, focused: boolean, split: boolean): ReactNode => {
+  const paneView = (pane: Pane<View>, focused: boolean, split: boolean, tabId: string): ReactNode => {
     const at = pane.view;
     const owner = focused ? work : pane.workId ? state.works[pane.workId] : undefined;
     const session = focused ? activeSession || undefined : sessionIn(pane);
     const ids = focused ? openDocIds : docsOf(owner);
-    const paneTabs = focused ? tabs : tabsIn(pane.id, owner, ids, at);
+    const paneTabs = null;
     const bar = focused ? modeBar : barFor(pane, owner, ids);
     const pinned = focused ? Boolean(single) : true;
+    const tabUi = tabsOf(pane).find((tab) => tab.id === tabId)?.ui;
     const start = at.kind === "new" || (at.kind === "work" && !owner);
     if ((at.kind === "document" || at.kind === "split") && owner) {
       // Next to its own conversation in the other pane, a document needs no drawer of it.
@@ -1647,7 +1760,7 @@ export function App() {
             focus={at.kind === "split" ? at.focus : "doc"}
             onFocus={(side) => setViewOf(pane.id, (current) => (current.kind === "split" && current.focus !== side ? { ...current, focus: side } : current))}
             tabs={paneTabs}
-            left={(slot) => workView(owner, session, pinned, null, ids, { bar, slot, draftKey: at.kind === "split" ? at.draftKey : undefined, split: true, single: Boolean(single) })}
+            left={(slot) => workView(owner, session, pinned, null, ids, { bar, slot, draftKey: at.kind === "split" ? at.draftKey : undefined, split: true, single: Boolean(single), uiState: tabUi, onUiState: uiOf[tabId] })}
             right={(slot) => (
               <DocumentView
                 key={at.artifactId}
@@ -1659,7 +1772,9 @@ export function App() {
                 session={session ?? null}
                 tabs={at.kind === "split" ? null : paneTabs}
                 openDocIds={ids}
-                onLeaveGuard={guardOf[pane.id]}
+                onLeaveGuard={guardOf[tabId]}
+                uiState={tabUi}
+                onUiState={uiOf[tabId]}
                 onBack={() => setViewOf(pane.id, { kind: "work" })}
                 onToast={setToast}
                 onOpenArtifact={(artifactId) => setViewOf(pane.id, { kind: "document", artifactId, proposalId: null })}
@@ -1672,7 +1787,7 @@ export function App() {
                   if (handoffTo) return actions.handoff(source, handoffTo, text, refs, attachments);
                   return actions.send(source, text, refs, create, "auto", attachments);
                 }}
-                modes={{ bar, slot, draftKey: at.kind === "split" ? at.draftKey : undefined, split: at.kind === "split" || besideChat, onReview: reviewOf[pane.id] }}
+                modes={{ bar, slot, draftKey: at.kind === "split" ? at.draftKey : undefined, split: at.kind === "split" || besideChat, onReview: reviewOf[tabId] }}
               />
             )}
           />
@@ -1685,6 +1800,7 @@ export function App() {
           api={api}
           state={state}
           workId={at.workId}
+          onLeaveGuard={guardOf[tabId]}
           onOpenSession={(target, itemId) => {
             openSession(target);
             if (itemId) setFocusItem({ sessionId: target.id, itemId, nonce: Date.now() });
@@ -1731,7 +1847,7 @@ export function App() {
         />
       );
     }
-    return owner ? workView(owner, session, pinned, paneTabs, ids, { bar, single: Boolean(single), paned: split }) : null;
+    return owner ? workView(owner, session, pinned, paneTabs, ids, { bar, single: Boolean(single), paned: split || !focused, uiState: tabUi, onUiState: uiOf[tabId] }) : null;
   };
   const title =
     single && singleSession && work
@@ -1831,6 +1947,13 @@ export function App() {
           </button>
         )}
         <div className="topbar-right">
+          {!single ? <button type="button" className="ghost-button small" aria-label="배치 선택" disabled={!layoutReady} onClick={(event) => {
+            const box = event.currentTarget.getBoundingClientRect();
+            setContextMenu({ x: box.left, y: box.bottom, title: "작업공간별 탭과 창 배치", items: [
+              { kind: "item", label: "전체 작업 배치", icon: "columns", onSelect: () => { void openWorkspaceRef.current(null); } },
+              ...Object.values(state.workspaces).filter((space) => !space.archivedAt && !space.removedAt && !state.works[space.workId]?.archivedAt).map((space) => ({ kind: "item" as const, label: `${state.works[space.workId]?.title ?? "프로젝트"} · ${space.label}`, icon: "folder" as const, onSelect: () => { void openWorkspaceRef.current(space); } })),
+            ] });
+          }}><Icon name="folder" size={14} />{layoutScope === GLOBAL_LAYOUT ? "전체 배치" : state.workspaces[layoutScope]?.label ?? "작업공간"}<Icon name="chevronDown" size={12} /></button> : null}
           {!single ? <>
             <button type="button" className="icon-button" aria-label="오른쪽으로 분할" title="오른쪽으로 분할" onClick={() => splitPaneNow(layout.focus, "right")}><Icon name="columns" size={18} /></button>
             <button type="button" className="icon-button" aria-label="아래로 분할" title="아래로 분할" onClick={() => splitPaneNow(layout.focus, "bottom")}><Icon name="rows" size={18} /></button>
@@ -1927,6 +2050,8 @@ export function App() {
         </div>
       </header>
 
+      {layoutProblem ? <div className="layout-problem" role="alert"><span>{layoutProblem.message}</span><button type="button" className="button small" onClick={() => void resolveLayoutProblem(false)}>{layoutReady ? "저장된 배치 불러오기" : "다시 불러오기"}</button>{layoutReady ? <button type="button" className="button small" onClick={() => void resolveLayoutProblem(true)}>현재 배치로 저장</button> : null}</div> : null}
+
       <div className={`body${sidebarOpen && state.ready ? " with-sidebar" : ""}`}>
       {sidebarOpen && state.ready ? (
         <Sidebar
@@ -1950,7 +2075,7 @@ export function App() {
           onToast={setToast}
         />
       ) : null}
-      {!state.ready ? (
+      {!state.ready || !layoutReady ? (
         <LoadingView label="불러오는 중…" shape="work" />
       ) : single && !singleSession ? (
         <main className="loading">이 세션을 찾을 수 없습니다. 보관했거나 지운 세션일 수 있습니다.</main>
@@ -1967,7 +2092,8 @@ export function App() {
           head={paneHead}
           scope={paneScope}
           effectOf={effectOf}
-          render={(pane, info) => paneView(pane, info.focused, info.split)}
+          tabBar={single ? undefined : (pane) => <GroupTabs pane={pane} head={paneHead} onSelect={(tabId) => selectTabNow(pane.id, tabId)} onClose={(tabId) => closeTabNow(pane.id, tabId)} onReorder={(tabId, index) => updateLayout((current) => moveTab(current, tabId, { paneId: pane.id, side: "center" }, index))} onNew={() => setViewOf(pane.id, { kind: "new", folderId: null })} />}
+          render={(pane, info) => paneView(pane, info.focused, info.split, info.tabId)}
           onNarrow={setNarrowPanes}
         />
       )}

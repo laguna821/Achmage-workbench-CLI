@@ -61,6 +61,7 @@ export type WorkActions = {
   newSession: (work: Work, provider: Provider, choice?: ModelChoice, options?: { browser?: boolean; worktree?: boolean; workspaceId?: string }) => Promise<Session | null>;
   createWorkspace: (work: Work, cwd: string) => Promise<Workspace | null>;
   updateWorkspace: (workspace: Workspace, patch: UpdateWorkspaceRequest) => Promise<Workspace | null>;
+  openWorkspace: (workspace: Workspace | null) => Promise<boolean>;
   /** "변경 검토" of a session working in a git worktree ("격리 사본"). */
   reviewWorktree: (session: Session) => void;
   selectSession: (work: Work, session: Session) => void;
@@ -421,7 +422,7 @@ export function WorkView({
     <main className="work-view" onContextMenu={(event) => openMenu(event, active?.provider ?? engine)}>
       {tabs}
       <div className="column context-row">
-        <WorkspacePicker state={state} work={work} session={active} engine={engine} actions={actions} />
+        <WorkspacePicker state={state} work={work} session={active} actions={actions} />
         <div className="anchor breadcrumb-anchor">
           <button type="button" className="breadcrumb" onClick={() => setFolderOpen(!folderOpen)} title="분류 옮기기" aria-expanded={folderOpen}>
             {path.length ? path.map((folder) => folder.name).join(" / ") : <span className="muted">분류 없음</span>}
@@ -574,7 +575,7 @@ export function WorkView({
         ) : null}
       </div>
 
-      {sessions.length > 1 && !modes?.single ? (
+      {sessions.length > 1 && !modes?.single && !modes?.groupedTabs ? (
         <nav className="column session-tabs" aria-label="세션">
           {tabSessions.map((session) =>
             renaming === session.id ? (
@@ -675,6 +676,8 @@ export function WorkView({
           onFork={busy ? undefined : (itemId) => actions.fork(active, itemId)}
           focusItem={focusItem ?? null}
           onFocusDone={onFocusDone}
+          position={modes?.uiState?.chatScroll}
+          onPosition={(chatScroll) => modes?.onUiState?.({ chatScroll })}
         />
       ) : (
         <div className="transcript">

@@ -28,6 +28,7 @@ const listeners = new Set<() => void>();
 let area: DropArea | null = null;
 const noteTargets = new Map<string, NoteTarget>();
 let blockClick = false;
+let pressing = false;
 
 function publish(next: PaneDrag | null) {
   current = next;
@@ -78,11 +79,12 @@ export const paneDrag = {
   /** A press on something that opens in a pane: it becomes a drag once the pointer moves a little. */
   press(source: DragSource, event: { clientX: number; clientY: number; button: number }) {
     // A note can still go to an input where there are no panes to open things in.
-    if (event.button !== 0 || (!area && source.item.kind !== "note")) return;
+    if (pressing || event.button !== 0 || (!area && source.item.kind !== "note")) return;
+    pressing = true;
     const x0 = event.clientX;
     const y0 = event.clientY;
     let active = false;
-    const move = (pointer: PointerEvent) => {
+    const move = (pointer: MouseEvent) => {
       if (!active && Math.hypot(pointer.clientX - x0, pointer.clientY - y0) < 6) return;
       if (!active) {
         active = true;
@@ -92,8 +94,11 @@ export const paneDrag = {
       publish({ ...source, x: pointer.clientX, y: pointer.clientY, over: overAt(source.item, pointer.clientX, pointer.clientY), own: true });
     };
     const end = (commit: boolean) => {
+      pressing = false;
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
       window.removeEventListener("pointercancel", cancel);
       window.removeEventListener("blur", cancel);
       window.removeEventListener("keydown", key, true);
@@ -101,7 +106,7 @@ export const paneDrag = {
       suppressClick();
       finish(commit);
     };
-    const up = () => end(true);
+    const up = (event: MouseEvent) => { if (event.button === 0) end(true); };
     const cancel = () => end(false);
     const key = (keyEvent: KeyboardEvent) => {
       if (keyEvent.key !== "Escape" || !active) return;
@@ -111,6 +116,10 @@ export const paneDrag = {
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    // Some desktop WebKit input sequences deliver mouse events without their Pointer equivalents.
+    // A shared press owns both streams, so normal Pointer + Mouse events never start two drags.
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
     window.addEventListener("pointercancel", cancel);
     // Released outside the window, or the window left: nothing is dropped.
     window.addEventListener("blur", cancel);

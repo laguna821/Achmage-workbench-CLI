@@ -5,7 +5,7 @@
 
 export type PaneId = string;
 export type Side = "left" | "right" | "top" | "bottom";
-export type PaneTarget = { paneId: PaneId; side: Side | "center" };
+export type PaneTarget = { paneId: PaneId; side: Side | "center"; tabIndex?: number };
 export type PaneTree = { kind: "pane"; id: PaneId } | { kind: "split"; id: string; axis: "horizontal" | "vertical"; ratio: number; first: PaneTree; second: PaneTree };
 
 /**
@@ -13,10 +13,12 @@ export type PaneTree = { kind: "pane"; id: PaneId } | { kind: "split"; id: strin
  * focus — the session it keeps showing. The focused pane follows its work's active session, so a
  * session started there shows at once; a pane that loses the focus keeps the session it showed.
  */
-export type Pane<V> = { id: PaneId; view: V; workId: string | null; sessionId: string | null };
+export type TabUiState = { cursor?: { anchor: number; head: number }; scroll?: { top: number; left: number }; mode?: string; chatScroll?: { top: number; follow: boolean }; reading?: { page: number | null; fraction: number; top?: number } };
+export type PaneTab<V> = { id: string; view: V; workId: string | null; sessionId: string | null; ui?: TabUiState };
+export type Pane<V> = { id: PaneId; view: V; workId: string | null; sessionId: string | null; tabs?: PaneTab<V>[]; activeTabId?: string; recentTabIds?: string[] };
 
 /** What a pane shows, without which pane it is. */
-export type PaneContent<V> = Omit<Pane<V>, "id">;
+export type PaneContent<V> = Pick<Pane<V>, "view" | "workId" | "sessionId">;
 
 /** The panes from left to right (one or two) and the focused one. */
 export type Layout<V> = { panes: Pane<V>[]; focus: PaneId; tree?: PaneTree };
@@ -30,7 +32,8 @@ export type PaneItem =
   | { kind: "note"; path: string }
   | { kind: "vault"; path: string }
   | { kind: "folder"; id: string }
-  | { kind: "pane"; id: PaneId };
+  | { kind: "pane"; id: PaneId }
+  | { kind: "tab"; id: string };
 
 /** A pane narrower than this is not usable (the input's controls stop fitting). */
 export const MIN_PANE = 360;
@@ -244,12 +247,34 @@ export function paneGeometry(tree: PaneTree, width: number, height: number) {
 export function restoreLayout<V>(raw: unknown, isView: (value: unknown) => value is V, fallback: Layout<V>): Layout<V> {
   if (!raw || typeof raw !== "object") return fallback;
   const data = raw as Partial<Layout<V>> & { version?: unknown };
-  if (data.version !== undefined && data.version !== 1) return fallback;
+  if (data.version !== undefined && data.version !== 1 && data.version !== 2) return fallback;
   if (!Array.isArray(data.panes) || !data.panes.length || data.panes.length > MAX_PANES) return fallback;
   const panes: Pane<V>[] = [];
+  const tabIds = new Set<string>();
   for (const pane of data.panes) {
     if (!pane || typeof pane.id !== "string" || !/^[\w-]{1,80}$/.test(pane.id) || !isView(pane.view) || !(pane.workId === null || typeof pane.workId === "string") || !(pane.sessionId === null || typeof pane.sessionId === "string")) return fallback;
-    panes.push({ id: pane.id, view: pane.view, workId: pane.workId, sessionId: pane.sessionId });
+    const restored: Pane<V> = { id: pane.id, view: pane.view, workId: pane.workId, sessionId: pane.sessionId };
+    if (pane.tabs !== undefined) {
+      if (!Array.isArray(pane.tabs) || !pane.tabs.length || pane.tabs.length > 128) return fallback;
+      restored.tabs = [];
+      for (const tab of pane.tabs) {
+        if (!tab || typeof tab.id !== "string" || !/^[\w-]{1,100}$/.test(tab.id) || tabIds.has(tab.id) || !isView(tab.view) || !(tab.workId === null || typeof tab.workId === "string") || !(tab.sessionId === null || typeof tab.sessionId === "string")) return fallback;
+        tabIds.add(tab.id);
+        if (tabIds.size > 128) return fallback;
+        const ui: TabUiState = {};
+        if (tab.ui?.cursor && [tab.ui.cursor.anchor, tab.ui.cursor.head].every((n) => Number.isSafeInteger(n) && n >= 0)) ui.cursor = { anchor: tab.ui.cursor.anchor, head: tab.ui.cursor.head };
+        if (tab.ui?.scroll && [tab.ui.scroll.top, tab.ui.scroll.left].every((n) => Number.isFinite(n) && n >= 0)) ui.scroll = { top: tab.ui.scroll.top, left: tab.ui.scroll.left };
+        if (typeof tab.ui?.mode === "string" && tab.ui.mode.length < 40) ui.mode = tab.ui.mode;
+        if (tab.ui?.chatScroll && Number.isFinite(tab.ui.chatScroll.top) && tab.ui.chatScroll.top >= 0 && typeof tab.ui.chatScroll.follow === "boolean") ui.chatScroll = { top: tab.ui.chatScroll.top, follow: tab.ui.chatScroll.follow };
+        if (tab.ui?.reading && (tab.ui.reading.page === null || (Number.isSafeInteger(tab.ui.reading.page) && tab.ui.reading.page >= 0)) && Number.isFinite(tab.ui.reading.fraction)) ui.reading = { page: tab.ui.reading.page, fraction: Math.max(0, Math.min(1, tab.ui.reading.fraction)), ...(typeof tab.ui.reading.top === "number" && tab.ui.reading.top >= 0 ? { top: tab.ui.reading.top } : {}) };
+        restored.tabs.push({ id: tab.id, view: tab.view, workId: tab.workId, sessionId: tab.sessionId, ...(Object.keys(ui).length ? { ui } : {}) });
+      }
+      const active = restored.tabs.find((tab) => tab.id === pane.activeTabId) ?? restored.tabs[0]!;
+      restored.activeTabId = active.id;
+      restored.recentTabIds = [active.id, ...new Set((pane.recentTabIds ?? []).filter((id) => id !== active.id && restored.tabs!.some((tab) => tab.id === id)))];
+      restored.view = active.view; restored.workId = active.workId; restored.sessionId = active.sessionId;
+    } else if (data.version === 2) return fallback;
+    panes.push(restored);
   }
   if (new Set(panes.map((pane) => pane.id)).size !== panes.length) return fallback;
   const focus = panes.some((pane) => pane.id === data.focus) ? data.focus! : panes[0]!.id;

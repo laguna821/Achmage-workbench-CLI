@@ -6,8 +6,24 @@ import type { AppRun, Stage } from "./launch.ts";
 import type { Report } from "./report.ts";
 import type { ElementRef, WebDriver } from "./webdriver.ts";
 import { sleep } from "./webdriver.ts";
+import type { UiPrefs, WorkspaceLayoutRecord } from "@workbench/contracts";
+import { restoreLayout, singleLayout } from "../../apps/web/src/panes.ts";
+import { withTabs } from "../../apps/web/src/tabs.ts";
 
 export type Ctx = { stage: Stage; app: AppRun; report: Report };
+
+export async function savedLayout(ctx: Ctx, key = "global") {
+  return (await ctx.app.api<{ record: WorkspaceLayoutRecord | null }>("GET", `/api/layouts/${key}`)).record;
+}
+/** An explicit fixture reset, separate from the application's saved workspace layouts. */
+export async function seedLayout(ctx: Ctx, prefs: UiPrefs) {
+  const isView = (view: unknown): view is { kind: string } => !!view && typeof view === "object" && "kind" in view && typeof view.kind === "string";
+  const layout = withTabs(restoreLayout(prefs.paneLayout, isView, singleLayout({ kind: "new", folderId: null }, null)));
+  let prior = await savedLayout(ctx);
+  await until(async () => { const next = await savedLayout(ctx); const same = next?.revision === prior?.revision; prior = next; return same; }, 3000, 300);
+  await ctx.app.api("PUT", "/api/layouts/global", { expectedRevision: prior?.revision ?? 0, layout: { version: 2, ...layout } });
+  await ctx.app.api("PUT", "/api/prefs", { prefs: { ...prefs, paneLayout: undefined, layoutScope: "global" } });
+}
 
 export async function shot(ctx: Ctx, name: string, element?: ElementRef) {
   return ctx.app.wd.screenshot(ctx.report.path(name), element);
@@ -54,7 +70,7 @@ return true;`;
 
 export const installProbe = (wd: WebDriver) => wd.execute<boolean>(PROBE);
 
-export type EventSummary = { counts: Record<string, number>; trusted: boolean; order: string[]; dragstart: string | null; cancel: boolean; up: string | null; down: string | null };
+export type EventSummary = { counts: Record<string, number>; trusted: boolean; order: string[]; dragstart: string | null; cancel: boolean; up: string | null; down: string | null; buttons: { type: string; buttons: number | null }[] };
 
 export async function record(wd: WebDriver) {
   await installProbe(wd);
@@ -63,7 +79,7 @@ export async function record(wd: WebDriver) {
 
 /** Stops recording; the counts per type, whether every event was trusted, the order of distinct kinds. */
 export async function recorded(wd: WebDriver): Promise<EventSummary> {
-  const events = await wd.execute<{ type: string; trusted: boolean; target: string }[]>("window.__e2e.recording = false; return window.__e2e.events;");
+  const events = await wd.execute<{ type: string; trusted: boolean; target: string; buttons: number | null }[]>("window.__e2e.recording = false; return window.__e2e.events;");
   const counts: Record<string, number> = {};
   const order: string[] = [];
   for (const event of events) {
@@ -79,6 +95,7 @@ export async function recorded(wd: WebDriver): Promise<EventSummary> {
     cancel: Boolean(counts.pointercancel),
     down: first("pointerdown"),
     up: first("pointerup"),
+    buttons: events.filter((event) => ["pointerdown", "pointerup", "mousedown", "mouseup"].includes(event.type)).map(({ type, buttons }) => ({ type, buttons })),
   };
 }
 

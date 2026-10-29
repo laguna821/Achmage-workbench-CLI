@@ -9,6 +9,7 @@ import type { Schedule } from "./schedules.ts";
 import type { SessionWorktree } from "./worktrees.ts";
 import type { Workspace } from "./workspaces.ts";
 export * from "./workspaces.ts";
+export * from "./layouts.ts";
 
 export const PROTOCOL_VERSION = 1;
 

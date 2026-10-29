@@ -1,6 +1,7 @@
-import { useEffect, useLayoutEffect, type ReactNode, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, type ReactNode, type RefObject } from "react";
 import type { Proposal } from "@workbench/contracts";
 import type { State } from "./state.ts";
+import type { TabUiState } from "./panes.ts";
 
 // Work screen modes (design 3.2), shown while a document of the work is open: 대화 · 문서 · 검토 ·
 // 나란히 · 읽기 (Alt+1–5). The conversation stays the default; "나란히" is only ever chosen and is
@@ -75,6 +76,10 @@ export type ModeProps = {
   single?: boolean;
   /** One of two panes: the input waits to be clicked (taking the focus would pull it from the other pane). */
   paned?: boolean;
+  /** Conversations and documents share the workspace's group tab bar. */
+  groupedTabs?: boolean;
+  uiState?: TabUiState;
+  onUiState?: (ui: TabUiState) => void;
 };
 
 // ── where the reader was: kept across mode switches (views unmount and come back) ─────────────
@@ -144,14 +149,17 @@ const positions = new Map<string, ReadingPosition>();
  * Keep where a document view was read (by `key`) while it is scrolled, and bring it back when the
  * view mounts again — after its content has loaded (editors and pages arrive a moment later).
  */
-export function useKeptPosition(ref: RefObject<HTMLElement | null>, key: string) {
+export function useKeptPosition(ref: RefObject<HTMLElement | null>, key: string, persisted?: { initial?: ReadingPosition; onChange?: (position: ReadingPosition) => void }) {
+  const persistence = useRef(persisted);
+  persistence.current = persisted;
   useLayoutEffect(() => {
     const body = ref.current;
     if (!body) return;
     let frame = 0;
     const record = () => {
+      if (body.closest(".pane[hidden]")) return;
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => positions.set(key, readingPosition(body)));
+      frame = requestAnimationFrame(() => { const position = readingPosition(body); positions.set(key, position); persistence.current?.onChange?.(position); });
     };
     body.addEventListener("scroll", record, true);
     return () => {
@@ -161,8 +169,8 @@ export function useKeptPosition(ref: RefObject<HTMLElement | null>, key: string)
   }, [ref, key]);
   useEffect(() => {
     const body = ref.current;
-    const saved = positions.get(key);
-    if (!body || !saved || (saved.page === null && saved.fraction === 0)) return;
+    const saved = persistence.current?.initial ?? positions.get(key);
+    if (!body || !saved || (saved.page === null && saved.fraction === 0 && !saved.top)) return;
     let tries = 0;
     let timer = 0;
     const attempt = () => {

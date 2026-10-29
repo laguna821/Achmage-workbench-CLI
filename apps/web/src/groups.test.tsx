@@ -249,7 +249,7 @@ describe("project keys", () => {
   const row = (id: string) => rows.find((entry) => entry.work.id === id)!;
 
   it("offer the stage, folders, tags, the template's and the notes' properties, activity, created and engine", () => {
-    expect(keys.map((entry) => entry.key)).toEqual(["stage", "folder", "tags", "prop:마감일", "prop:중요도", "prop:DIKM_단계:", "prop:관련", "activity", "created", "engine"]);
+    expect(keys.map((entry) => entry.key)).toEqual(["file.name", "file.basename", "file.path", "file.folder", "file.ext", "file.mtime", "file.ctime", "file.size", "file.tags", "stage", "folder", "tags", "prop:마감일", "prop:중요도", "prop:DIKM_단계:", "prop:관련", "activity", "created", "engine"]);
     expect(byKey("prop:DIKM_단계:").label).toBe("DIKM_단계");
     expect(propertyKeys(summaries.values(), template).find((entry) => entry.key === "중요도")).toEqual({ key: "중요도", type: "text", label: "중요도", hint: "높음 · 보통 · 낮음" });
     // A vault key with its colon reads without it, unless the same name without one is there too.

@@ -36,6 +36,7 @@ import { InlineDraw, drawExtension } from "./InlineDraw.tsx";
 import { docPictureComponents } from "../ImageGen.tsx";
 import { useKeptPosition, type ModeProps } from "../../workmodes.ts";
 import { useDocImages } from "./DocImages.tsx";
+import type { TabUiState } from "../../panes.ts";
 
 /** Save operations only; "unsaved" is derived from the text, never stored (no stale overwrite). */
 type SaveState = "idle" | "saving" | "failed" | "conflict";
@@ -67,7 +68,11 @@ export default function DocumentView({
   onLeaveGuard,
   onAnswer,
   modes,
+  uiState,
+  onUiState,
 }: {
+  uiState?: TabUiState;
+  onUiState?: (state: TabUiState) => void;
   /** The work screen's modes: their bar, and in "나란히" where the input goes. */
   modes?: ModeProps;
   /** Answer an approval of the session from the drawer, without leaving the document. */
@@ -107,8 +112,9 @@ export default function DocumentView({
   // Word, PowerPoint and Excel documents are edited in the central area with the editors built from IeumOffice.
   const wordEditor = artifact?.format === "docx" || artifact?.format === "pptx" || artifact?.format === "xlsx";
   const [mode, setMode] = useState<"edit" | "preview" | "split" | "render" | "source" | "pages">(
-    artifact?.format === "html" ? "render" : wordEditor ? "edit" : hangul || office ? "pages" : "edit",
+    uiState?.mode && ["edit", "preview", "split", "render", "source", "pages"].includes(uiState.mode) ? uiState.mode as "edit" | "preview" | "split" | "render" | "source" | "pages" : artifact?.format === "html" ? "render" : wordEditor ? "edit" : hangul || office ? "pages" : "edit",
   );
+  useEffect(() => { onUiState?.({ mode }); }, [mode, onUiState]);
   const officeEditing = wordEditor && mode === "edit";
   const officeRef = useRef<OfficeHandle>(null);
   const [officeStatus, setOfficeStatus] = useState<OfficeStatus>({ dirty: false, revision: null, conflict: null });
@@ -231,13 +237,17 @@ export default function DocumentView({
   useEffect(() => {
     if (!onLeaveGuard) return;
     onLeaveGuard(async () => {
+      if (editorView && !editorView.dom.closest(".pane[hidden]")) {
+        const cursor = editorView.state.selection.main;
+        onUiState?.({ cursor: { anchor: cursor.anchor, head: cursor.head }, scroll: { top: editorView.scrollDOM.scrollTop, left: editorView.scrollDOM.scrollLeft } });
+      }
       if (officeEditing) return officeRef.current?.leave();
       const submittedText = saving.current ? savingText.current : text;
       if (await save() === null) throw new Error("문서를 저장하지 못해 이동하지 않았습니다. 현재 편집 내용을 확인해 주세요.");
       if (!design && latestText.current !== submittedText) throw new Error("저장하는 동안 편집 내용이 바뀌어 이동을 보류했습니다. 다시 이동해 주세요.");
     });
     return () => onLeaveGuard(null);
-  }, [onLeaveGuard, officeEditing, save, text, design]);
+  }, [onLeaveGuard, officeEditing, save, text, design, editorView, onUiState]);
 
   // Autosave shortly after typing stops.
   useEffect(() => {
@@ -310,7 +320,7 @@ export default function DocumentView({
 
   // Where the document was read comes back when this view returns from another mode.
   const bodyRef = useRef<HTMLDivElement>(null);
-  useKeptPosition(bodyRef, `doc:${artifactId}`);
+  useKeptPosition(bodyRef, `doc:${artifactId}`, { initial: uiState?.reading, onChange: (reading) => onUiState?.({ reading }) });
 
   if (!artifact) {
     return (
@@ -550,14 +560,14 @@ export default function DocumentView({
               ? "HWP는 읽기 전용입니다. 고치려면 HWPX로 만든 뒤 여세요."
               : "한글 문서의 글 보기입니다. 문단·표 칸의 글자를 바꾸면 원래 서식을 유지한 채 HWPX에 반영됩니다. 문단을 새로 만들거나 지우는 편집은 반영되지 않고 원본을 유지합니다."}
           </div>
-          <MarkdownEditor value={text} readOnly={artifact.format === "hwp"} onChange={setText} onSelection={setSelection} onBlur={() => void save()} images={docImages.handling} />
+          <MarkdownEditor value={text} readOnly={artifact.format === "hwp"} onChange={setText} onSelection={setSelection} onBlur={() => void save()} images={docImages.handling} position={uiState} onPosition={onUiState} />
         </div>
       );
     }
     if (artifact.format === "html" && mode === "render") {
       return <HtmlView api={api} artifactId={artifactId} revision={base.revision} />;
     }
-    const editor = <MarkdownEditor value={text} onChange={setText} onSelection={setSelection} onBlur={() => void save()} extensions={drawExtensions} onView={setEditorView} images={docImages.handling} />;
+    const editor = <MarkdownEditor value={text} onChange={setText} onSelection={setSelection} onBlur={() => void save()} extensions={drawExtensions} onView={setEditorView} images={docImages.handling} position={uiState} onPosition={onUiState} />;
     if (artifact.format === "markdown" && mode === "preview") {
       return (
         <div className="doc-preview">

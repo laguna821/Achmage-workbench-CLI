@@ -328,7 +328,11 @@ export function Transcript({
   onFork,
   focusItem,
   onFocusDone,
+  position,
+  onPosition,
 }: {
+  position?: { top: number; follow: boolean };
+  onPosition?: (position: { top: number; follow: boolean }) => void;
   sessionId: string;
   items: TranscriptItem[];
   provider: Provider;
@@ -347,7 +351,8 @@ export function Transcript({
   const scroller = useRef<HTMLDivElement>(null);
   // Follow the newest output only while the reader is at the bottom. Any move up (wheel, keys, the
   // scroll bar, touch) stops following at once; scrolling back down to the end resumes it.
-  const pinned = useRef(true);
+  const pinned = useRef(position?.follow ?? true);
+  const restorePending = useRef<number | null>(position && !position.follow ? position.top : null);
   const ownTop = useRef<number | null>(null);
   const lastTop = useRef(0);
   const [atBottom, setAtBottom] = useState(true);
@@ -397,7 +402,8 @@ export function Transcript({
   // conversation comes back after another view.
   useLayoutEffect(() => {
     const element = scroller.current;
-    const top = readAt.get(sessionId);
+    const top = position && !position.follow ? position.top : readAt.get(sessionId);
+    restorePending.current = top ?? null;
     if (element && top !== undefined && !focusItem && element.scrollHeight - element.clientHeight >= top) {
       pinned.current = false;
       element.scrollTop = top;
@@ -405,7 +411,7 @@ export function Transcript({
       lastTop.current = element.scrollTop;
       return;
     }
-    pinned.current = true;
+    pinned.current = top === undefined;
     lastTop.current = 0;
     // Only when the conversation changes (or first shows).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -413,6 +419,11 @@ export function Transcript({
 
   useLayoutEffect(() => {
     const element = scroller.current;
+    if (element && restorePending.current !== null && !loading && !focusItem && element.clientHeight > 0) {
+      element.scrollTop = Math.min(restorePending.current, Math.max(0, element.scrollHeight - element.clientHeight));
+      ownTop.current = element.scrollTop; lastTop.current = element.scrollTop;
+      pinned.current = false; restorePending.current = null;
+    }
     if (element && pinned.current && !focusItem && element.scrollTop + element.clientHeight < element.scrollHeight - 1) {
       element.scrollTop = element.scrollHeight;
       // Remember where this put us: the scroll event it raises is ours, not the reader's.
@@ -546,6 +557,7 @@ export function Transcript({
         }}
         onScroll={(event) => {
           const element = event.currentTarget;
+          if (element.closest(".pane[hidden]")) return;
           const top = element.scrollTop;
           const own = ownTop.current !== null && Math.abs(top - ownTop.current) < 1;
           ownTop.current = null;
@@ -556,6 +568,7 @@ export function Transcript({
           lastTop.current = top;
           if (pinned.current) readAt.delete(sessionId);
           else readAt.set(sessionId, top);
+          if (restorePending.current === null) onPosition?.({ top, follow: pinned.current });
           measure();
         }}
       >

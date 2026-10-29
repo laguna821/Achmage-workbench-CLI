@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import { DIVIDER, MAX_PANES, minimumSize, paneGeometry, resizeSplit, treeOf, type DividerRect, type DropEffect, type Layout, type Pane, type PaneId, type PaneItem, type PaneRect, type PaneTarget, type Side } from "../panes.ts";
 import { paneDrag, useDropArea, usePaneDrag, usePaneDragSlice } from "../panedrag.ts";
 import { Icon } from "./Icon.tsx";
+import { activeTab, tabsOf } from "../tabs.ts";
 import "../styles/panes.css";
 
 export type PaneHead = { title: string; icon: ReactNode; hint?: string; item: PaneItem | null };
@@ -9,7 +10,7 @@ export type PaneScope = { theme: string; bubble: string; frame: boolean; glow: s
 const SIDE_LABEL = { left: "왼쪽으로 분할", right: "오른쪽으로 분할", top: "위로 분할", bottom: "아래로 분할", center: "이 칸에 열기" };
 
 /** The tree determines geometry; editors retain the same parent and React key when moved. */
-export function PaneLayout<V>({ layout, enabled, onResize, onFocus, onClose, onMove, onSplit, onDrop, head, scope, effectOf, render, onNarrow }: {
+export function PaneLayout<V>({ layout, enabled, onResize, onFocus, onClose, onMove, onSplit, onDrop, head, scope, effectOf, render, onNarrow, tabBar }: {
   layout: Layout<V>; enabled: boolean;
   onResize: (id: string, ratio: number) => void;
   onFocus: (id: PaneId) => void;
@@ -20,13 +21,16 @@ export function PaneLayout<V>({ layout, enabled, onResize, onFocus, onClose, onM
   head: (pane: Pane<V>) => PaneHead;
   scope: (pane: Pane<V>, focused: boolean) => PaneScope;
   effectOf: (item: PaneItem, target: PaneTarget) => DropEffect;
-  render: (pane: Pane<V>, info: { focused: boolean; split: boolean }) => ReactNode;
+  render: (pane: Pane<V>, info: { focused: boolean; split: boolean; tabId: string; active: boolean }) => ReactNode;
+  tabBar?: (pane: Pane<V>) => ReactNode;
   onNarrow?: (narrow: boolean) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [live, setLive] = useState<{ id: string; ratio: number } | null>(null);
   const cancelResize = useRef<(() => void) | null>(null);
+  const mountedTabs = useRef(new Set<string>());
+  for (const pane of layout.panes) mountedTabs.current.add(activeTab(pane).id);
   const split = layout.panes.length > 1;
   const tree = treeOf(live ? resizeSplit(layout, live.id, live.ratio) : layout);
   const minimum = minimumSize(tree);
@@ -50,6 +54,12 @@ export function PaneLayout<V>({ layout, enabled, onResize, onFocus, onClose, onM
     targetAt: (x, y) => {
       const origin = host.current?.getBoundingClientRect();
       if (!origin) return null;
+      const bar = document.elementFromPoint(x, y)?.closest<HTMLElement>(".group-tabs");
+      if (bar?.dataset.paneId) {
+        const rows = Array.from(bar.querySelectorAll<HTMLElement>("[data-tab-index]"));
+        const before = rows.find((row) => x < row.getBoundingClientRect().left + row.getBoundingClientRect().width / 2);
+        return { paneId: bar.dataset.paneId, side: "center", tabIndex: before ? Number(before.dataset.tabIndex) : rows.length };
+      }
       for (const [paneId, box] of Object.entries(boxes)) {
         const px = (x - origin.left - box.left) / box.width, py = (y - origin.top - box.top) / box.height;
         if (px < 0 || px > 1 || py < 0 || py > 1) continue;
@@ -91,14 +101,18 @@ export function PaneLayout<V>({ layout, enabled, onResize, onFocus, onClose, onM
   };
   const takesFocus = (target: EventTarget | null) => !(target instanceof Element && target.closest(".pane-head-tools,.pane-narrow"));
   return <div ref={host} className={`panes recursive${split && !narrow ? " two" : ""}${narrow ? " narrow" : ""}`}>
-    {[...layout.panes].sort((a, b) => a.id.localeCompare(b.id)).map((pane) => {
-      const focused = pane.id === layout.focus, look = scope(pane, focused), title = head(pane);
-      const next = layout.panes[(layout.panes.indexOf(pane) + 1) % layout.panes.length]!;
-      return <section key={pane.id} className={`pane look-scope${focused ? " focused" : ""}`} data-pane={pane.id} data-pane-active={focused ? "true" : "false"}
+    {layout.panes.flatMap((group) => tabsOf(group).filter((tab) => mountedTabs.current.has(tab.id)).map((tab) => ({ group, tab }))).sort((a, b) => a.tab.id.localeCompare(b.tab.id)).map(({ group, tab }) => {
+      const pane = { ...group, view: tab.view, workId: tab.workId, sessionId: tab.sessionId };
+      const active = activeTab(group).id === tab.id;
+      const focused = active && pane.id === layout.focus, look = scope(pane, focused), title = head(pane);
+      const next = layout.panes[(layout.panes.indexOf(group) + 1) % layout.panes.length]!;
+      return <section key={tab.id} className={`pane look-scope${focused ? " focused" : ""}`} data-pane={pane.id} data-tab={tab.id} data-tab-active={active ? "true" : "false"} data-pane-active={focused ? "true" : "false"}
         data-theme={look.theme} data-bubble={look.bubble} data-frame={look.frame ? "on" : "off"} data-glow={look.glow}
-        style={{ ...look.style, ...(boxes[pane.id] ?? whole) }} hidden={narrow && !focused} aria-label={split ? `${title.title} 칸` : undefined}
+        style={{ ...look.style, ...(boxes[pane.id] ?? whole) }} hidden={!active || (narrow && !focused)} aria-label={split ? `${title.title} 칸` : undefined}
         onPointerDownCapture={(event) => takesFocus(event.target) && onFocus(pane.id)} onFocusCapture={(event) => takesFocus(event.target) && onFocus(pane.id)}>
-        {split ? <header className="pane-head" title={title.hint ?? title.title} onPointerDown={(event) => {
+        {split ? <header className="pane-head" title={title.hint ?? title.title} onMouseDown={(event) => {
+          if (takesFocus(event.target)) paneDrag.press({ item: { kind: "pane", id: pane.id }, label: title.title }, event);
+        }} onPointerDown={(event) => {
           if (takesFocus(event.target)) paneDrag.press({ item: { kind: "pane", id: pane.id }, label: title.title }, event);
         }}>
           <span className="pane-head-icon" aria-hidden>{title.icon}</span><span className="pane-head-title">{title.title}</span>
@@ -114,7 +128,8 @@ export function PaneLayout<V>({ layout, enabled, onResize, onFocus, onClose, onM
             <button type="button" className="icon-button small" title="이 칸 닫기" aria-label={`${title.title} 칸 닫기`} onClick={() => onClose(pane.id)}><Icon name="x" size={14} /></button>
           </span>
         </header> : null}
-        {render(pane, { focused, split })}
+        {tabBar?.(group)}
+        {render(pane, { focused, split, tabId: tab.id, active })}
       </section>;
     })}
     {split && !narrow ? geometry.dividers.map((divider) => {

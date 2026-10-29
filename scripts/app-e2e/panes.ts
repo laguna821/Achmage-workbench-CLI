@@ -1,10 +1,9 @@
 import type { LaunchOptions } from "./launch.ts";
-import { installProbe, pageErrors, record, recorded, shot, until, type Ctx } from "./scenarios.ts";
+import { installProbe, pageErrors, record, recorded, savedLayout, shot, until, type Ctx } from "./scenarios.ts";
 import { center, moveSteps } from "./webdriver.ts";
 
 type SavedLayout = { version: number; focus: string; panes: { id: string }[]; tree: unknown };
-const snapshot = (ctx: Ctx) => ctx.app.api<{ prefs: { paneLayout?: SavedLayout } }>("GET", "/api/snapshot");
-const layoutJSON = async (ctx: Ctx) => JSON.stringify((await snapshot(ctx)).prefs.paneLayout);
+const layoutJSON = async (ctx: Ctx) => JSON.stringify((await savedLayout(ctx))?.layout);
 
 export async function panesScenario(ctx: Ctx, launch: Omit<LaunchOptions, "name">) {
   const S = "2 중첩 분할";
@@ -44,7 +43,7 @@ export async function panesScenario(ctx: Ctx, launch: Omit<LaunchOptions, "name"
   ctx.report.check(S, "좁은 창에서 한 칸만 표시하고 나머지는 보존", narrow && (await wd.findAll('.pane')).length === 4);
   await wd.setWindowRect({ width: 1500, height: 1000 });
   ctx.report.check(S, "창을 넓히면 네 칸 복원", await until(async () => (await wd.findAll('.pane:not([hidden])')).length === 4));
-  await until(async () => (await snapshot(ctx)).prefs.paneLayout?.panes.length === 4);
+  await until(async () => ((await savedLayout(ctx))?.layout as SavedLayout | undefined)?.panes.length === 4);
   // Wait for the final resize/focus preferences to settle before closing the app.
   let saved = await layoutJSON(ctx);
   await until(async () => { const next = await layoutJSON(ctx); const same = saved === next; saved = next; return same; }, 3000, 350);

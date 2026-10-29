@@ -6,6 +6,7 @@ import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { markdown } from "@codemirror/lang-markdown";
 import { tags } from "@lezer/highlight";
 import { imagePaste, type ImageHandling } from "./image-paste.ts";
+import type { TabUiState } from "../../panes.ts";
 
 export type EditorSelection = { from: number; to: number; text: string; label: string; pageId?: string; objectIds?: string[] } | null;
 
@@ -59,6 +60,8 @@ export function MarkdownEditor({
   extensions,
   onView,
   images,
+  position,
+  onPosition,
 }: {
   value: string;
   readOnly?: boolean;
@@ -71,20 +74,37 @@ export function MarkdownEditor({
   onView?: (view: EditorView | null) => void;
   /** What pasted or dropped pictures become (image-paste.ts); none: the editor's own paste. */
   images?: ImageHandling | null;
+  position?: TabUiState;
+  onPosition?: (position: TabUiState) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
-  const callbacks = useRef({ onChange, onSelection, onBlur, onView, images });
-  callbacks.current = { onChange, onSelection, onBlur, onView, images };
+  const callbacks = useRef({ onChange, onSelection, onBlur, onView, images, onPosition });
+  callbacks.current = { onChange, onSelection, onBlur, onView, images, onPosition };
+  const savedPosition = useRef(position);
+  savedPosition.current = position;
   const more = useRef(extensions);
   more.current = extensions;
 
   useEffect(() => {
     if (!host.current) return;
+    let timer: number | undefined;
+    let pendingPosition: TabUiState | undefined;
+    const capturePosition = () => {
+      if (editor.dom.closest(".pane[hidden]")) return;
+      const cursor = editor.state.selection.main;
+      pendingPosition = { cursor: { anchor: cursor.anchor, head: cursor.head }, scroll: { top: editor.scrollDOM.scrollTop, left: editor.scrollDOM.scrollLeft } };
+    };
+    const emitPosition = () => {
+      if (pendingPosition) callbacks.current.onPosition?.(pendingPosition);
+    };
+    const changedPosition = () => { capturePosition(); window.clearTimeout(timer); timer = window.setTimeout(emitPosition, 120); };
+    const initial = savedPosition.current;
     const editor = new EditorView({
       parent: host.current,
       state: EditorState.create({
         doc: value,
+        selection: initial?.cursor ? { anchor: Math.min(value.length, initial.cursor.anchor), head: Math.min(value.length, initial.cursor.head) } : undefined,
         extensions: [
           history(),
           keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
@@ -98,15 +118,29 @@ export function MarkdownEditor({
           EditorView.updateListener.of((update) => {
             if (update.docChanged) callbacks.current.onChange(update.state.doc.toString());
             if (update.selectionSet || update.docChanged) callbacks.current.onSelection(selectionOf(update.state));
-            if (update.focusChanged && !update.view.hasFocus) callbacks.current.onBlur?.();
+            if (update.selectionSet || update.docChanged) changedPosition();
+            if (update.focusChanged && !update.view.hasFocus) { capturePosition(); emitPosition(); callbacks.current.onBlur?.(); }
           }),
           ...(more.current ?? []),
         ],
       }),
     });
     view.current = editor;
+    editor.scrollDOM.addEventListener("scroll", changedPosition);
+    let restored = !initial?.scroll;
+    const restore = () => {
+      if (restored || editor.dom.closest(".pane[hidden]") || !editor.scrollDOM.clientHeight) return;
+      editor.scrollDOM.scrollTop = initial?.scroll?.top ?? 0;
+      editor.scrollDOM.scrollLeft = initial?.scroll?.left ?? 0;
+      restored = true;
+    };
+    const frame = requestAnimationFrame(restore);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(restore);
+    observer?.observe(editor.scrollDOM);
     callbacks.current.onView?.(editor);
     return () => {
+      window.clearTimeout(timer); cancelAnimationFrame(frame); observer?.disconnect();
+      editor.scrollDOM.removeEventListener("scroll", changedPosition);
       callbacks.current.onView?.(null);
       editor.destroy();
       view.current = null;

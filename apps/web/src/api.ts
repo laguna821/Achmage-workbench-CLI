@@ -332,6 +332,8 @@ export class Api {
   savePrefs(prefs: UiPrefs) {
     return this.request<{ prefs: UiPrefs }>("PUT", "/api/prefs", { prefs });
   }
+  layout = (key: string) => this.request<{ record: import("@workbench/contracts").WorkspaceLayoutRecord | null }>("GET", `/api/layouts/${encodeURIComponent(key)}`);
+  saveLayout = (key: string, expectedRevision: number, layout: Record<string, unknown>) => this.request<{ record: import("@workbench/contracts").WorkspaceLayoutRecord }>("PUT", `/api/layouts/${encodeURIComponent(key)}`, { expectedRevision, layout });
 
   events(since: number, onEvent: (event: SequencedEvent) => void, onResync: () => void, onStatus: (connected: boolean) => void) {
     let lastSeq = since;

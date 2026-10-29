@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -66,6 +66,37 @@ function setup(git = false) {
 }
 
 describe("the project note file", () => {
+  it("rejects external changes and deletion even before a watcher has recorded a newer revision", () => {
+    const { projects, work } = setup();
+    const original = projects.setBodyText(work.id, "Original body\n", null).page.note;
+    const external = readFileSync(original.path, "utf8") + "\nExternal edit\n";
+    writeFileSync(original.path, external);
+    expect(() => projects.setBodyText(work.id, "Stale draft\n", original.revision)).toThrow(/바뀌거나 삭제/);
+    expect(readFileSync(original.path, "utf8")).toBe(external);
+    const refreshed = projects.page(work.id).note;
+    expect(refreshed.revision).toBe(original.revision! + 1);
+    expect(refreshed.lastAuthor).toBe("external");
+    expect(refreshed.body).toContain("External edit");
+    expect(() => projects.setBodyText(work.id, "Still stale\n", original.revision)).toThrow(/바뀌거나 삭제/);
+    const saved = projects.setBodyText(work.id, "Reconciled\n", refreshed.revision).page.note;
+    expect(saved.body).toBe("Reconciled\n");
+    unlinkSync(saved.path);
+    expect(() => projects.setBodyText(work.id, "Must not recreate\n", saved.revision)).toThrow(/바뀌거나 삭제/);
+    expect(existsSync(saved.path)).toBe(false);
+  });
+
+  it("does not replace a file created externally while an empty project note is being edited", () => {
+    const { projects, work, cwd } = setup(true);
+    const empty = projects.page(work.id).note;
+    mkdirSync(join(cwd, ".workbench"), { recursive: true });
+    writeFileSync(empty.path, "External new note\n");
+    expect(() => projects.setBodyText(work.id, "My new note\n", empty.revision)).toThrow(/바뀌거나 삭제/);
+    expect(readFileSync(empty.path, "utf8")).toBe("External new note\n");
+    const reloaded = projects.page(work.id).note;
+    expect(reloaded.revision).toBe(1);
+    expect(projects.setBodyText(work.id, "Reviewed new note\n", reloaded.revision).page.note.body).toBe("Reviewed new note\n");
+  });
+
   it("is ‹이름›.md in an ordinary folder, made only when something is written, and kept out of document lists", () => {
     const { projects, work, cwd, manager } = setup();
     const page = projects.page(work.id);

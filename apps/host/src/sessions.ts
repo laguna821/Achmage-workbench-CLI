@@ -53,6 +53,7 @@ import { HttpError } from "./errors.ts";
 import { folderColor, folderIcon, liftOut } from "./folders.ts";
 import { Documents, isWorkbenchPath } from "./artifacts.ts";
 import { Workspaces } from "./workspaces.ts";
+import { WorkspaceLayouts } from "./layouts.ts";
 import type { Kordoc } from "./kordoc.ts";
 import type { AdapterSink, LoginStart, ProviderAdapter } from "./providers/types.ts";
 import type { Store } from "./store.ts";
@@ -251,6 +252,7 @@ export class SessionManager {
   private readonly creating = new Map<string, PendingCreate>();
   readonly documents: Documents;
   readonly workspaces: Workspaces;
+  readonly layouts: WorkspaceLayouts;
   /** "그림": pictures drawn with GPT Image through Codex (imagegen.ts). */
   readonly images: ImageGen;
   /** Linked sessions ("세션 잇기"): replies relayed between sessions in turn (links.ts). */
@@ -276,6 +278,7 @@ export class SessionManager {
     this.bus = bus;
     this.options = options;
     this.workspaces = new Workspaces(store, options.hostId, bus);
+    this.layouts = new WorkspaceLayouts(store, this.workspaces);
     this.documents = new Documents(store, bus, options.dataDir ?? dirname(options.managedWorksDir), options.kordoc ?? null, options.ieum ?? null, this.workspaces);
     this.engineSetup = new EngineInstaller({
       dataDir: options.dataDir ?? dirname(options.managedWorksDir),

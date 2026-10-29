@@ -59,7 +59,9 @@ export function ProjectView({
   onToast,
   onError,
   openMenu,
+  onLeaveGuard,
 }: {
+  onLeaveGuard?: (guard: (() => Promise<void>) | null) => void;
   api: Api;
   state: State;
   workId: string;
@@ -92,6 +94,16 @@ export function ProjectView({
   const [adding, setAdding] = useState<null | "tag" | "related" | "property" | "decision" | "question">(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [bodyBase, setBodyBase] = useState<{ body: string; revision: number | null } | null>(null);
+  const currentDraft = useRef(draft);
+  currentDraft.current = draft;
+  const [savingBody, setSavingBody] = useState(false);
+  useEffect(() => {
+    onLeaveGuard?.(async () => {
+      if (savingBody || (editing === "__body" && draft !== bodyBase?.body)) throw new Error("프로젝트 노트의 편집을 저장하거나 취소한 뒤 이동해 주세요.");
+    });
+    return () => onLeaveGuard?.(null);
+  }, [onLeaveGuard, savingBody, editing, draft, bodyBase]);
   const [engine, setEngine] = useEngineChoice();
   const [stagesOpen, setStagesOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
@@ -586,6 +598,7 @@ export function ProjectView({
                   className="link small"
                   onClick={() => {
                     setDraft(note.body);
+                    setBodyBase({ body: note.body, revision: note.revision });
                     setEditing("__body");
                   }}
                 >
@@ -597,15 +610,23 @@ export function ProjectView({
               <div className="project-note-editor">
                 <MarkdownEditor value={draft} onChange={setDraft} onSelection={() => undefined} />
                 <div className="project-note-actions">
-                  <button type="button" className="button" onClick={() => setEditing(null)}>
+                  <button type="button" className="button" disabled={savingBody} onClick={() => setEditing(null)}>
                     취소
                   </button>
                   <button
                     type="button"
                     className="button primary"
-                    onClick={() => {
-                      run(api.setProjectBody(workId, draft, note.revision));
-                      setEditing(null);
+                    disabled={savingBody}
+                    onClick={async () => {
+                      setSavingBody(true);
+                      try {
+                        const write = await api.setProjectBody(workId, draft, bodyBase?.revision ?? null);
+                        setBodyBase({ body: draft, revision: write.page.note.revision });
+                        wrote(write);
+                        if (currentDraft.current === draft) setEditing(null);
+                      }
+                      catch (error) { onError(error); }
+                      finally { setSavingBody(false); }
                     }}
                   >
                     저장

@@ -1,12 +1,12 @@
 import { useCallback, useState } from "react";
-import type { Provider, Session, Work, Workspace } from "@workbench/contracts";
+import type { Session, Work, Workspace } from "@workbench/contracts";
 import type { State } from "../state.ts";
 import type { WorkActions } from "./WorkView.tsx";
 import { Icon } from "./Icon.tsx";
 import { Popover } from "./Popover.tsx";
 import "../styles/workspaces.css";
 
-export function WorkspacePicker({ state, work, session, engine, actions }: { state: State; work: Work; session: Session | null; engine: Provider; actions: WorkActions }) {
+export function WorkspacePicker({ state, work, session, actions }: { state: State; work: Work; session: Session | null; actions: WorkActions }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   const [path, setPath] = useState("");
@@ -18,9 +18,7 @@ export function WorkspacePicker({ state, work, session, engine, actions }: { sta
   const select = async (workspace: Workspace) => {
     setBusy(true);
     try {
-      const candidates = Object.values(state.sessions).filter((entry) => entry.workspaceId === workspace.id && !entry.archivedAt).sort((a, b) => b.updatedAt - a.updatedAt);
-      const chosen = candidates[0] ?? await actions.newSession(work, session?.provider ?? engine, undefined, { workspaceId: workspace.id });
-      if (chosen) { actions.selectSession(work, chosen); close(); }
+      if (await actions.openWorkspace(workspace)) close();
     } finally { setBusy(false); }
   };
   if (!workspaces.length) return null;

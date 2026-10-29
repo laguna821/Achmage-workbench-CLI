@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { center, KEY } from "./webdriver.ts";
-import { installProbe, pageErrors, record, recorded, shot, until, type Ctx } from "./scenarios.ts";
+import { installProbe, pageErrors, record, recorded, seedLayout, shot, until, type Ctx } from "./scenarios.ts";
 import { basesScenario } from "./bases.ts";
 
 /** Only temporary gateway data and fixture files; all actions under test use native WebDriver input. */
@@ -13,7 +13,7 @@ export async function pkmScenario(ctx: Ctx) {
   const work = await api<{ id: string; cwd: string }>("POST", "/api/works", { title: "표지가 있는 프로젝트", folderId: child.id, cwd: null });
   writeFileSync(join(work.cwd, "cover.svg"), '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#087e8b"/><circle cx="160" cy="90" r="48" fill="#d6f5ee"/></svg>');
   const { prefs } = await api<{ prefs: Record<string, unknown> }>("GET", "/api/snapshot");
-  await api("PUT", "/api/prefs", { prefs: { ...prefs, paneLayout: { version: 1, focus: "a", panes: [{ id: "a", view: { kind: "new", folderId: null }, workId: null, sessionId: null }] }, navigator: { layout: "dual", selected: { kind: "root" }, includeSub: true, density: "standard" } } });
+  await seedLayout(ctx, { ...prefs, paneLayout: { version: 1, focus: "a", panes: [{ id: "a", view: { kind: "new", folderId: null }, workId: null, sessionId: null }] }, navigator: { layout: "dual", selected: { kind: "root" }, includeSub: true, density: "standard" } });
   await wd.setWindowRect({ width: 1280, height: 860 });
   await wd.refresh();
   await wd.waitFor(".sidebar");

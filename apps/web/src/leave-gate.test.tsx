@@ -2,6 +2,14 @@ import { expect, it, vi } from "vitest";
 import { LeaveGate } from "./leave-gate.ts";
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+it("never treats another tab's pending save as confirmation for the current tab", async () => {
+  const gate = new LeaveGate(); let oldSaved!: () => void;
+  const opened = vi.fn(), failed = vi.fn();
+  gate.run("group", () => new Promise<void>((resolve) => { oldSaved = resolve; }), vi.fn(), failed, "hidden-tab");
+  gate.run("group", async () => { throw new Error("current document conflict"); }, opened, failed, "current-tab");
+  await settle(); oldSaved(); await settle();
+  expect(failed).toHaveBeenCalledOnce(); expect(opened).not.toHaveBeenCalled();
+});
 it("keeps the current view after a rejected save and allows a later successful retry", async () => {
   const gate = new LeaveGate(), proceed = vi.fn(), failed = vi.fn();
   gate.run("a", async () => { throw new Error("save conflict"); }, proceed, failed);

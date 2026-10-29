@@ -29,6 +29,17 @@
   display: none !important;
 }
 
+.group-tabs { display: flex; flex: 0 0 auto; min-width: 0; gap: 4px; align-items: center; padding: 4px 6px; border-bottom: 1px solid var(--line); background: var(--chrome-surface); }
+.group-tabs [role="tablist"] { display: flex; flex: 1; min-width: 0; overflow-x: auto; gap: 3px; scrollbar-width: thin; }
+.group-tab { display: inline-flex; flex: 0 0 auto; max-width: 250px; border: 1px solid transparent; border-radius: var(--r-sm); color: var(--muted); }
+.group-tab.active { background: var(--bg); color: var(--text); border-color: var(--line); }
+.group-tab [role="tab"] { display: flex; align-items: center; min-width: 0; gap: 6px; padding: 5px 6px 5px 8px; border: 0; background: none; color: inherit; font: inherit; font-size: var(--fs-meta); cursor: grab; }
+.group-tab-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group-tab-close { display: grid; place-items: center; flex: 0 0 24px; border: 0; background: none; color: var(--faint); border-radius: var(--r-sm); }
+.group-tab-close:hover { color: var(--text); background: var(--surface); }
+.group-tab-new { flex: 0 0 auto; }
+.layout-problem { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; padding: 8px 16px; color: var(--text); background: var(--surface); border-bottom: 1px solid var(--line-strong); font-size: var(--fs-meta); }
+
 /* Flat positioning preserves mounted editors while the split tree changes. */
 .body > .panes.recursive { display: block; min-height: 0; overflow: hidden; }
 .panes.recursive > .pane, .panes.recursive > .pane-divider { position: absolute; }

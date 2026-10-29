@@ -296,8 +296,14 @@ export class Projects {
 
   // ── reading ─────────────────────────────────────────────────────────────────────────────
 
-  note(work: Work): ProjectNote {
+  note(work: Work, snapshot = false): ProjectNote {
     const path = this.notePath(work);
+    // An editable page must pair its body with the exact revision the editor will submit.
+    // Recording external bytes only updates our history; it never writes to the original.
+    if (snapshot) {
+      const tracked = this.manager.documents.track(work.id, work.cwd, path, "external", null, "외부에서 바뀐 프로젝트 노트");
+      if (tracked) this.manager.documents.setRole(tracked.artifact.id, "project-note");
+    }
     const artifact = this.noteArtifact(work, path);
     const revisions = artifact ? this.manager.documents.revisions(artifact.id) : [];
     const last = revisions.at(-1) ?? null;
@@ -305,7 +311,7 @@ export class Projects {
     if (!existsSync(path)) return { ...base, exists: false, properties: [], stage: null, tags: work.tags ?? [], decisions: [], questions: [], body: "", problem: null };
     let text: string;
     try {
-      text = readFileSync(path, "utf8");
+      text = readFileSync(snapshot && artifact ? this.manager.documents.revisionPath(artifact.id, artifact.revision) : path, "utf8");
     } catch (error) {
       return { ...base, exists: true, properties: [], stage: null, tags: [], decisions: [], questions: [], body: "", problem: `노트를 읽지 못했습니다: ${error instanceof Error ? error.message : String(error)}` };
     }
@@ -321,7 +327,7 @@ export class Projects {
 
   page(workId: string): ProjectPage {
     const work = this.work(workId);
-    const note = this.note(work);
+    const note = this.note(work, true);
     const noteTemplate = this.effectiveTemplate(work.folderId);
     const sessionIds = new Set([...this.manager.view.sessions.values()].filter((session) => session.workId === workId).map((session) => session.id));
     return {
@@ -758,10 +764,15 @@ export class Projects {
 
   // ── writing (one key or one line), with a way back ──────────────────────────────────────
 
-  private write(workId: string, summary: string, change: (text: string) => string, side: { unarchive?: boolean; rearchive?: boolean } = {}): ProjectWrite {
+  private write(workId: string, summary: string, change: (text: string) => string, side: { unarchive?: boolean; rearchive?: boolean; baseRevision?: number | null } = {}): ProjectWrite {
     const work = this.work(workId);
     const path = this.notePath(work);
     const before = existsSync(path) ? readFileSync(path) : null;
+    if (side.baseRevision !== undefined) {
+      const artifact = this.noteArtifact(work, path);
+      const sameDisk = before === null ? artifact === null : artifact !== null && createHash("sha256").update(before).digest("hex") === artifact.sha256;
+      if ((artifact?.revision ?? null) !== side.baseRevision || !sameDisk) throw new HttpError(409, "note_changed", "그 사이 노트가 바뀌거나 삭제되었습니다. 내 편집은 유지했습니다. 최신 노트를 확인해 주세요.");
+    }
     const template = before ? null : this.effectiveTemplate(work.folderId);
     const text = before ? before.toString("utf8") : template ? setFrontmatterKey(template.markdown, ID_KEY, [work.id]) : newNote(work.id);
     if (before && readNote(text).problem) throw new HttpError(409, "note_unreadable", "노트의 속성 부분이 망가져 있어 고치지 않았습니다. 노트를 직접 열어 고쳐 주세요.");
@@ -878,10 +889,7 @@ export class Projects {
 
   /** The body as edited in the app; refused when the note changed since the editor read it. */
   setBodyText(workId: string, body: string, baseRevision: number | null): ProjectWrite {
-    const work = this.work(workId);
-    const current = this.note(work);
-    if ((current.revision ?? null) !== (baseRevision ?? null)) throw new HttpError(409, "note_changed", "그 사이 노트가 바뀌었습니다. 다시 열어 고쳐 주세요.");
-    return this.write(workId, "노트 본문 고침", (text) => setBody(text, body));
+    return this.write(workId, "노트 본문 고침", (text) => setBody(text, body), { baseRevision });
   }
 
   /** Put the note back as it was before a write, if nothing changed it since. */

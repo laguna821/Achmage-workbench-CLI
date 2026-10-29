@@ -321,6 +321,13 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const body = await readJson(req);
         return sendJson(res, 200, manager.updateWorkspace(parts[1], { label: typeof body.label === "string" ? body.label : undefined, archived: typeof body.archived === "boolean" ? body.archived : undefined }));
       }
+      if (parts[0] === "layouts" && parts[1] && parts.length === 2) {
+        if (method === "GET") return sendJson(res, 200, { record: manager.layouts.read(parts[1]) });
+        if (method === "PUT") {
+          const body = await readJson(req);
+          return sendJson(res, 200, { record: manager.layouts.write(parts[1], body.expectedRevision, body.layout) });
+        }
+      }
       if (parts[0] === "works" && parts[1] && parts[2] === "sessions" && method === "POST") {
         const body = await readJson(req);
         return sendJson(
