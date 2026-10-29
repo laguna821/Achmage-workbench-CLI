@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { PROVIDER_LABEL, type ProjectEvent, type ProjectPage, type ProjectSummary, type ProjectWrite, type Session, type Work } from "@workbench/contracts";
+import { PROVIDER_LABEL, type ProjectEvent, type ProjectPage, type ProjectSummary, type ProjectWrite, type Session, type StoppedPlace, type Work } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
 import { ago, statusText } from "../../format.ts";
 import { ObsidianMarkdown, obsidianComponents, obsidianUrlTransform } from "../../markdown/obsidian.tsx";
@@ -11,7 +11,7 @@ import type { MenuEntry, MenuRequest } from "../ContextMenu.tsx";
 import { FormatBadge } from "../DocCards.tsx";
 import { diagramComponents } from "../Diagram.tsx";
 import { EngineMark } from "../EngineMark.tsx";
-import { Icon } from "../Icon.tsx";
+import { Icon, type IconName } from "../Icon.tsx";
 import { docPictureComponents } from "../ImageGen.tsx";
 import { CardComposer } from "../pkm/CardComposer.tsx";
 import { MarkdownEditor } from "../docs/MarkdownEditor.tsx";
@@ -178,6 +178,17 @@ export function ProjectView({
       { kind: "item", label: "단계 이름·색 바꾸기…", icon: "palette", onSelect: () => setStagesOpen(true) },
     ];
     openMenu({ x, y, title: "단계", items });
+  };
+  // 멈춘 곳: one place goes straight there; more open a list of them.
+  const goTo = (place: StoppedPlace) => {
+    if (place.kind === "proposal" && place.artifactId) onOpenDocument(place.artifactId, place.proposalId ?? null);
+    else if (place.sessionId && state.sessions[place.sessionId]) onOpenSession(state.sessions[place.sessionId]!);
+  };
+  const stoppedMenu = (anchor: HTMLElement) => {
+    if (facts.stopped.length === 1) return goTo(facts.stopped[0]!);
+    const box = anchor.getBoundingClientRect();
+    const icon = (place: StoppedPlace): IconName => (place.kind === "proposal" ? "file" : place.kind === "link" ? "link" : "alert");
+    openMenu({ x: box.left, y: box.bottom + 4, title: "멈춘 곳", items: facts.stopped.map((place) => ({ kind: "item", label: place.text, icon: icon(place), hint: ago(place.at), onSelect: () => goTo(place) })) });
   };
   const listValues = (values: string[] | null) => (values ?? []).filter(Boolean);
 
@@ -351,9 +362,15 @@ export function ProjectView({
                   확인 필요 {facts.attention}
                 </button>
               ) : null}
-              {facts.errors ? (
-                <button type="button" className="project-fact error" onClick={() => facts.errorSessionId && state.sessions[facts.errorSessionId] && onOpenSession(state.sessions[facts.errorSessionId]!)}>
-                  오류 {facts.errors}
+              {facts.stopped.length ? (
+                <button
+                  type="button"
+                  className="project-fact error"
+                  aria-haspopup={facts.stopped.length > 1 ? "menu" : undefined}
+                  title={facts.stopped.map((place) => place.text).join("\n")}
+                  onClick={(event) => stoppedMenu(event.currentTarget)}
+                >
+                  멈춘 곳 {facts.stopped.length}
                 </button>
               ) : null}
               {facts.proposals ? (

@@ -199,6 +199,26 @@ describe("what the engines are told", () => {
   });
 });
 
+describe("멈춘 곳 (what breaks left for the person)", () => {
+  it("lists a session whose last turn broke off or that keeps unsent requests, not a stop the person made", () => {
+    const { manager, projects, work } = setup();
+    const draft = manager.createSession(work.id, { provider: "codex", purpose: "초안" });
+    const review = manager.createSession(work.id, { provider: "codex", purpose: "검토" });
+    const end = (sessionId: string, id: string, status: "completed" | "interrupted" | "failed", cause: "stop" | "crash" | "restart" | null, at: number) =>
+      manager.sink.upsertItem(sessionId, { kind: "turnEnd", id, status, durationMs: 1, at, cause });
+    end(draft.id, "e1", "interrupted", "crash", 1000);
+    end(review.id, "e2", "interrupted", "stop", 2000);
+    expect(projects.page(work.id).facts.stopped).toEqual([{ kind: "session", text: "Codex · 초안 — 엔진이 멈춰 끊김", sessionId: draft.id, at: 1000 }]);
+    // Kept requests make even the person's own stop a place to come back to.
+    manager.sink.updateSession(review.id, { queued: [{ id: "q1", text: "다음 요청", refs: [], create: null, at: 2500, held: true }] });
+    expect(projects.page(work.id).facts.stopped.map((place) => place.text)).toEqual(["Codex · 검토 — 보내지 않은 요청 1개", "Codex · 초안 — 엔진이 멈춰 끊김"]);
+    // A turn that went on and completed: no longer stopped there.
+    end(draft.id, "e3", "completed", null, 3000);
+    end(review.id, "e4", "failed", null, 4000);
+    expect(projects.page(work.id).facts.stopped.map((place) => place.text)).toEqual(["Codex · 검토 — 응답이 끝나지 못했습니다 · 보내지 않은 요청 1개"]);
+  });
+});
+
 describe("a project in search (찾는 길)", () => {
   const found = (manager: SessionManager, query: string, scope: "decision" | "project") =>
     manager.search(query, { scope }).groups.flatMap((group) => group.hits.map((hit) => ({ kind: hit.kind, title: hit.title, workId: hit.workId, sessionId: hit.sessionId, itemId: hit.itemId })));

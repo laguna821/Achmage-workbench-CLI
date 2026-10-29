@@ -55,12 +55,29 @@ export type ProjectNote = {
 };
 
 /** Counted from the project's sessions and documents when shown (AI 0). */
+/**
+ * A place a break left something for the person (멈춘 곳): a session whose last turn broke off or
+ * that keeps requests it did not send, a proposal a cut turn left, a link a failed turn paused.
+ */
+export type StoppedPlace = {
+  kind: "session" | "proposal" | "link";
+  /** What and why, e.g. "Codex · 초안 — 엔진이 멈춰 끊김 · 보내지 않은 요청 1개". */
+  text: string;
+  /** Where to go: the session (of a link, the one whose answer broke), the document and proposal. */
+  sessionId: string | null;
+  artifactId?: string | null;
+  proposalId?: string | null;
+  at: number;
+};
+
 export type ProjectFacts = {
   sessions: number;
   running: number;
   /** Sessions waiting for an approval (확인 필요). */
   attention: number;
   errors: number;
+  /** What breaks left to do, newest first (멈춘 곳). */
+  stopped: StoppedPlace[];
   unread: number;
   /** Pending proposals on its documents. */
   proposals: number;

@@ -202,6 +202,19 @@ export class Store {
     return { requests: Number(of("user")?.n ?? 0), turnMs: Number(of("turnEnd")?.ms ?? 0) };
   }
 
+  /** The last turn end of each session of a work (project "멈춘 곳"). */
+  lastTurnEnds(workId: string): Map<string, Extract<TranscriptItem, { kind: "turnEnd" }>> {
+    const rows = this.db
+      .prepare(
+        `SELECT i.session_id, i.json FROM items i
+           JOIN (SELECT i.session_id, MAX(i.ord) AS ord FROM items i JOIN sessions s ON s.id = i.session_id
+                  WHERE s.work_id = ? AND json_extract(i.json, '$.kind') = 'turnEnd' GROUP BY i.session_id) last
+             ON last.session_id = i.session_id AND last.ord = i.ord`,
+      )
+      .all(workId);
+    return new Map(rows.map((row) => [String(row.session_id), JSON.parse(String(row.json)) as Extract<TranscriptItem, { kind: "turnEnd" }>] as const));
+  }
+
   /** Requests and plan decisions of a work since a time, newest first (project "기록"). */
   workItems(workId: string, since: number, limit: number): { sessionId: string; item: TranscriptItem }[] {
     return this.db

@@ -4,8 +4,14 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync,
 import { dirname, join } from "node:path";
 import {
   DEFAULT_STAGES,
+  LINK_REASON_LABEL,
+  PARTIAL_PROPOSAL,
+  PROVIDER_LABEL,
   STAGE_KEY,
+  TURN_BREAK_LABEL,
   isUnseen,
+  turnBreakOf,
+  turnEndText,
   type Artifact,
   type ArtifactRevision,
   type ChangeLine,
@@ -19,6 +25,7 @@ import {
   type ProjectWrite,
   type Provider,
   type Session,
+  type StoppedPlace,
   type Work,
 } from "@workbench/contracts";
 import { PROJECT_NOTE_IN_GIT, WORKBENCH_DIR } from "./artifacts.ts";
@@ -367,6 +374,46 @@ export class Projects {
 
   // ── counted, not written ────────────────────────────────────────────────────────────────
 
+  /**
+   * 멈춘 곳: what breaks left for the person, newest first. A session whose last turn broke off (its
+   * engine died, the app restarted, the answer failed) or that reported an error, or that keeps
+   * requests it did not send; a proposal a cut turn left; a link a break paused. A stop the
+   * person made is not one, unless it kept requests or left a partial proposal.
+   */
+  private stopped(work: Work, sessions: Session[], fileIds: Set<string>): StoppedPlace[] {
+    const out: StoppedPlace[] = [];
+    const ends = this.store.lastTurnEnds(work.id);
+    const name = (session: Session) => `${PROVIDER_LABEL[session.provider]} · ${session.purpose}`;
+    for (const session of sessions) {
+      // Going again (or asking for an approval): no longer stopped there.
+      if (session.status === "starting" || session.status === "running" || session.status === "interrupting" || session.status === "awaitingApproval") continue;
+      const end = ends.get(session.id);
+      const broke = end ? turnBreakOf(end.status, end.cause) : null;
+      const held = session.queued.filter((message) => message.held).length;
+      const why = [
+        end && broke && broke !== "stop" ? turnEndText(end) : session.status === "error" || session.lastError ? `오류${session.lastError ? `: ${firstLine(session.lastError, 60)}` : ""}` : null,
+        held ? `보내지 않은 요청 ${held}개` : null,
+      ].filter((part): part is string => Boolean(part));
+      if (why.length) out.push({ kind: "session", text: `${name(session)} — ${why.join(" · ")}`, sessionId: session.id, at: end?.at ?? session.updatedAt });
+    }
+    const names = new Map(this.manager.documents.list().map((artifact) => [artifact.id, artifact.name] as const));
+    for (const proposal of this.manager.documents.listProposals()) {
+      if (proposal.status !== "pending" || !proposal.interruptedBy || !fileIds.has(proposal.artifactId)) continue;
+      const text = `${names.get(proposal.artifactId) ?? "문서"} — ${PARTIAL_PROPOSAL} · ${TURN_BREAK_LABEL[proposal.interruptedBy]}`;
+      out.push({ kind: "proposal", text, sessionId: proposal.sessionId, artifactId: proposal.artifactId, proposalId: proposal.id, at: proposal.updatedAt });
+    }
+    const all = this.manager.view.sessions;
+    for (const link of this.manager.links.list()) {
+      if (link.state !== "paused" || !link.reason || link.reason === "manual" || link.reason === "typed") continue;
+      const mine = link.participants.filter((id) => sessions.some((session) => session.id === id));
+      if (!mine.length) continue;
+      const speaker = link.participants[link.turn];
+      const text = `${link.participants.map((id) => all.get(id)?.purpose ?? "세션").join(" ⇄ ")} — ${LINK_REASON_LABEL[link.reason]}`;
+      out.push({ kind: "link", text, sessionId: speaker && mine.includes(speaker) ? speaker : mine[0]!, at: link.updatedAt });
+    }
+    return out.sort((a, b) => b.at - a.at);
+  }
+
   private branch(cwd: string): string | null {
     const cached = this.branches.get(cwd);
     if (cached && Date.now() - cached.at < 30_000) return cached.branch;
@@ -405,6 +452,7 @@ export class Projects {
       running: sessions.filter((session) => session.status === "starting" || session.status === "running" || session.status === "interrupting").length,
       attention: waiting.length,
       errors: failed.length,
+      stopped: this.stopped(work, sessions, fileIds),
       unread: sessions.filter(isUnseen).length,
       proposals: pending.length,
       attentionSessionId: newest(waiting),
