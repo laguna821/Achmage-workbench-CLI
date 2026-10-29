@@ -172,7 +172,8 @@ export function StartView({
   onOpenWork: (work: Work) => void;
   /** A project's page (home "프로젝트"). */
   onOpenProject?: (work: Work) => void;
-  onOpenSession: (session: Session) => void;
+  /** With a request's item id (home "흐름"), the conversation opens at that request. */
+  onOpenSession: (session: Session, itemId?: string) => void;
   onOpenDoc: (artifactId: string) => void;
   api: Api;
   /** The overview mode kept in the screen preferences (지금 · 보드 · 지도 · 흐름 · 문서). */
