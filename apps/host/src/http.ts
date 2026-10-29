@@ -259,9 +259,13 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
             parentId: body.parentId === undefined ? undefined : ((body.parentId as string | null) ?? null),
             sort: body.sort === undefined ? undefined : Number(body.sort),
             archived: typeof body.archived === "boolean" ? body.archived : undefined,
+            color: body.color === undefined ? undefined : (body.color as string | null),
+            icon: body.icon === undefined ? undefined : (body.icon as string | null),
           }),
         );
       }
+      // "폴더만 지우기": what was inside moves up (folders.ts).
+      if (parts[0] === "folders" && parts[1] && method === "DELETE" && parts.length === 2) return sendJson(res, 200, manager.deleteFolder(parts[1]));
       if (method === "GET" && path === "/api/search") {
         // "찾는 길" (search.ts): scope, paging and totals; q/provider/archived/folderId as before.
         const provider = url.searchParams.get("provider");

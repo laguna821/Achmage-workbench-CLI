@@ -55,6 +55,7 @@ import type {
   TranscriptItem,
   UiPrefs,
   UpdateFolderRequest,
+  DeleteFolderResult,
   UpdateSessionRequest,
   UpdateWorkRequest,
   Work,
@@ -106,6 +107,8 @@ export class Api {
   items = (sessionId: string) => this.request<{ seq: number; items: TranscriptItem[] }>("GET", `/api/sessions/${sessionId}/items`);
   createFolder = (name: string, parentId: string | null) => this.request<Folder>("POST", "/api/folders", { name, parentId });
   updateFolder = (folderId: string, patch: UpdateFolderRequest) => this.request<Folder>("PATCH", `/api/folders/${folderId}`, patch);
+  /** "폴더만 지우기": the folder goes, what was inside moves up to its parent. */
+  deleteFolder = (folderId: string) => this.request<DeleteFolderResult>("DELETE", `/api/folders/${folderId}`);
   /** "찾는 길": grouped by work with totals per scope; `group` pages one work's hits. */
   search = (query: string, options: Omit<SearchRequest, "q"> & { legacy?: boolean } = {}) => {
     const params = new URLSearchParams({ q: query });

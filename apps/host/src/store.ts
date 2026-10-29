@@ -307,6 +307,10 @@ export class Store {
     this.db.prepare("INSERT OR REPLACE INTO folders (id, json) VALUES (?, ?)").run(folder.id, JSON.stringify(folder));
   }
 
+  deleteFolder(id: string) {
+    this.db.prepare("DELETE FROM folders WHERE id = ?").run(id);
+  }
+
   saveWork(work: Work) {
     this.db.prepare("INSERT OR REPLACE INTO works (id, json) VALUES (?, ?)").run(work.id, JSON.stringify(work));
     this.indexSafely(() => this.search.put(workEntry(work, this.workExtras?.(work.id) ?? null)));
