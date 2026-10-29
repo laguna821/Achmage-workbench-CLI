@@ -30,6 +30,13 @@
   padding: 0 2px;
 }
 
+/* "전체 접기" rests when every folder is already folded. */
+.side-tools .vault-collapse:disabled {
+  opacity: 0.35;
+  background: transparent;
+  color: var(--text-soft);
+}
+
 .vault-row .vault-icon {
   display: inline-grid;
   place-items: center;

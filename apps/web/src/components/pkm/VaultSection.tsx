@@ -32,11 +32,24 @@ export function VaultSection({ theme, openMenu }: { theme: Theme; openMenu: (req
   const status = tree.status;
   const root = tree.root;
   const vaultPath = status.path;
+  // "전체 접기" folds the pinned notes too; nothing to fold leaves the button resting.
+  const foldable = pkm.unfolded.size > 0 || pinsOpen;
+  const collapseAll = () => {
+    pkm.foldAll(false);
+    setPinsOpen(false);
+  };
 
   const copy = (text: string) => void navigator.clipboard?.writeText(text).then(() => pkm.onToast("경로를 복사했습니다."));
   const sectionMenu = (x: number, y: number) => {
     const items: MenuEntry[] = vaultPath
       ? [
+          ...(root
+            ? [
+                { kind: "item" as const, label: "전체 펼치기", icon: "expandAll" as const, disabled: !root.children.some((folder) => folder.children.length), onSelect: () => pkm.foldAll(true) },
+                { kind: "item" as const, label: "전체 접기", icon: "collapseAll" as const, disabled: !foldable, onSelect: collapseAll },
+                { kind: "separator" as const },
+              ]
+            : []),
           { kind: "item", label: "Obsidian에서 열기", icon: "external", onSelect: () => void openObsidian(obsidianUrl(vaultPath)).catch(() => undefined) },
           { kind: "item", label: "다시 읽기", icon: "refresh", onSelect: pkm.rescan },
           { kind: "item", label: "볼트 바꾸기…", icon: "folderOpen", onSelect: () => pkm.setDialog({ kind: "vault" }) },
@@ -67,6 +80,11 @@ export function VaultSection({ theme, openMenu }: { theme: Theme; openMenu: (req
           <span className="vault-readonly" title="볼트는 읽기만 합니다. Workbench는 볼트에 쓰지 않습니다.">
             읽기 전용
           </span>
+        ) : null}
+        {status.path && root ? (
+          <button type="button" className="icon-button small vault-collapse" title="전체 접기" aria-label="볼트 폴더 전체 접기" disabled={!foldable} onClick={collapseAll}>
+            <Icon name="collapseAll" size={13} />
+          </button>
         ) : null}
         <button type="button" className="icon-button small" title="볼트 메뉴" aria-haspopup="menu" onClick={(event) => {
           const box = event.currentTarget.getBoundingClientRect();

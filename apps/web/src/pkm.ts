@@ -69,6 +69,18 @@ export function vaultRows(root: VaultFolder | null, open: ReadonlySet<string>): 
   return rows;
 }
 
+/** Every folder that has subfolders ("전체 펼치기" unfolds them all; the root is always open). */
+export function expandablePaths(root: VaultFolder | null): string[] {
+  const paths: string[] = [];
+  const walk = (folder: VaultFolder) => {
+    if (!folder.children.length) return;
+    paths.push(folder.path);
+    folder.children.forEach(walk);
+  };
+  root?.children.forEach(walk);
+  return paths;
+}
+
 /**
  * Consecutive top-level folders of one border group share a single border (as the user's add-on
  * draws them); a folder of no group, or of another group, starts a new block.

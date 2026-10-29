@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { VaultFolder } from "@workbench/contracts";
-import { countLabel, dateGroup, groupCards, groupRuns, noteSection, obsidianUrl, vaultMarkdown, vaultRows } from "./pkm.ts";
+import { countLabel, dateGroup, expandablePaths, groupCards, groupRuns, noteSection, obsidianUrl, vaultMarkdown, vaultRows } from "./pkm.ts";
 
 const folder = (path: string, children: VaultFolder[] = [], own = 1, below = 0): VaultFolder => ({
   path,
@@ -23,6 +23,13 @@ describe("vault rows", () => {
     expect(rows.map((row) => `${row.folder.path}:${row.depth}`)).toEqual(["A:0", "A/a1:1", "A/a2:1", "B:0", "C:0"]);
     expect(rows[0]!.open).toBe(true);
     expect(rows.find((row) => row.folder.path === "C")!.expandable).toBe(true);
+  });
+
+  it("unfolds every folder with subfolders for 전체 펼치기 (leaves and the root are not listed)", () => {
+    const deep = folder("", [folder("A", [folder("A/a1", [folder("A/a1/x")]), folder("A/a2")]), folder("B")]);
+    expect(expandablePaths(deep)).toEqual(["A", "A/a1"]);
+    expect(vaultRows(deep, new Set(expandablePaths(deep))).map((row) => row.folder.path)).toEqual(["A", "A/a1", "A/a1/x", "A/a2", "B"]);
+    expect(expandablePaths(null)).toEqual([]);
   });
 
   it("puts consecutive folders of one border group into one block", () => {
