@@ -309,6 +309,11 @@ async function flow(provider: Provider, index: number) {
     await page.waitForSelector(".image-upload-sheet");
     if (index === 0) {
       pass("⋯ 메뉴에 R2 줄(설정 전: 작업 폴더 저장)", /설정 안 됨/.test(row) && /assets/.test(row), row.slice(row.indexOf("문서에 붙여"), row.indexOf("문서에 붙여") + 90));
+      // First the Worker way, with the CMDS Eagle plugin's three values; the R2 API token is the other way.
+      const labels = (await page.locator(".image-upload-sheet .image-upload-field > span").allInnerTexts()).join(" · ");
+      await shot("00-r2-worker-form.png");
+      pass("처음 연 설정: CMDS Eagle과 같은 세 칸(Worker URL · API Key · Public URL)", labels === "Worker URL · API Key · Public URL (선택)", labels);
+      await page.getByRole("radio", { name: "R2 API 토큰" }).click();
       const fill = (key: string, value: string) => page.locator(`.image-upload-sheet input[name="r2-${key}"]`).fill(value);
       await fill("accountId", `https://${KEYS.accountId}.r2.cloudflarestorage.com/${KEYS.bucket}`);
       await fill("accessKeyId", KEYS.accessKeyId);

@@ -2,7 +2,7 @@ import { createHash, createHmac, randomBytes } from "node:crypto";
 import { chmodSync, createReadStream, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import type { Artifact, DocImageResult, ImageUploadCheck, ImageUploadInput, ImageUploadView } from "@workbench/contracts";
+import type { Artifact, DocImageResult, ImageUploadCheck, ImageUploadInput, ImageUploadMode, ImageUploadView } from "@workbench/contracts";
 
 /** What the settings form sends, as it arrives (each field checked here). */
 type Input = { [K in keyof ImageUploadInput]?: unknown };
@@ -93,6 +93,10 @@ export function signV4(input: SignInput) {
 
 type Settings = {
   version: 1;
+  /** Missing in files saved before the Worker way existed: those are "s3". */
+  mode: ImageUploadMode;
+  workerUrl: string;
+  apiKey: string;
   accountId: string;
   accessKeyId: string;
   secretAccessKey: string;
@@ -141,8 +145,27 @@ export function normalizePublicUrl(value: string) {
   return text;
 }
 
+/** A Worker address as the plugin takes it: https, no path (…/upload is added), no trailing slash. */
+export function normalizeWorkerUrl(value: string) {
+  const text = value.trim().replace(/\/+$/, "").replace(/\/upload$/, "");
+  if (!text) return "";
+  let url: URL;
+  try {
+    url = new URL(/^https?:\/\//i.test(text) ? text : `https://${text}`);
+  } catch {
+    throw new HttpError(400, "invalid_worker_url", "Worker 주소는 https://로 시작하는 주소입니다(예: https://….workers.dev).");
+  }
+  if (url.protocol !== "https:" && !["127.0.0.1", "localhost"].includes(url.hostname)) throw new HttpError(400, "invalid_worker_url", "Worker 주소는 https://로 시작하는 주소입니다(예: https://….workers.dev).");
+  return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+}
+
 /** Settings that are complete and well formed, or the reason they are not. */
 function validate(settings: Omit<Settings, "version" | "updatedAt">): string | null {
+  if (settings.mode === "worker") {
+    if (!settings.workerUrl) return "Worker 주소를 입력해 주세요(Cloudflare › Workers & Pages의 ….workers.dev 주소, 옵시디언 CMDS Eagle의 Worker URL).";
+    if (!/^\S{1,512}$/.test(settings.apiKey)) return "API Key를 입력해 주세요(Worker의 UPLOAD_API_KEY 값, 옵시디언 CMDS Eagle의 API Key).";
+    return null;
+  }
   if (!ACCOUNT.test(settings.accountId)) return "계정 ID는 Cloudflare 대시보드에 있는 32자리 계정 ID(또는 S3 API 주소)입니다.";
   if (!/^[A-Za-z0-9]{8,128}$/.test(settings.accessKeyId)) return "액세스 키 ID를 확인해 주세요(R2 API 토큰을 만들 때 나온 값).";
   if (!/^\S{8,256}$/.test(settings.secretAccessKey)) return "비밀 액세스 키를 입력해 주세요(R2 API 토큰을 만들 때 한 번만 보이는 값).";
@@ -256,6 +279,22 @@ function r2Message(status: number, code: string, bucket: string) {
   return `R2가 거절했습니다(HTTP ${status}${code ? ` ${code}` : ""}).`;
 }
 
+/** A refusal of the upload Worker (CMDS Eagle's), in the user's words. */
+function workerMessage(status: number, message: string) {
+  if (status === 401 || status === 403) return "Worker가 API Key를 받지 않았습니다. Worker의 UPLOAD_API_KEY와 같은 값인지 확인해 주세요.";
+  if (status === 404) return "이 주소에는 그림을 받는 /upload가 없습니다. CMDS Eagle용 Worker의 주소인지 확인해 주세요.";
+  if (status === 413) return "그림이 너무 커서 Worker가 받지 않았습니다.";
+  if (status >= 500) return `Worker가 그림을 저장하지 못했습니다(HTTP ${status}). Worker에 R2 버킷 연결(MY_BUCKET)과 PUBLIC_BASE_URL이 있는지 확인해 주세요.`;
+  return `Worker가 거절했습니다(HTTP ${status}${message ? `: ${message}` : ""}).`;
+}
+
+function workerNetworkMessage(error: unknown) {
+  const cause = (error as { cause?: { code?: string } })?.cause?.code ?? "";
+  if (error instanceof Error && error.name === "TimeoutError") return "Worker가 응답하지 않아 시간이 지났습니다.";
+  if (cause === "ENOTFOUND" || cause === "EAI_AGAIN") return "Worker 주소를 찾지 못했습니다. 주소와 인터넷 연결을 확인해 주세요.";
+  return "Worker에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요.";
+}
+
 function networkMessage(error: unknown) {
   const cause = (error as { cause?: { code?: string } })?.cause?.code ?? "";
   if (error instanceof Error && error.name === "TimeoutError") return "R2가 응답하지 않아 시간이 지났습니다.";
@@ -288,6 +327,9 @@ export class DocImages {
       if (saved.version !== 1) return null;
       return {
         version: 1,
+        mode: saved.mode === "worker" ? "worker" : "s3",
+        workerUrl: String(saved.workerUrl ?? ""),
+        apiKey: String(saved.apiKey ?? ""),
         accountId: String(saved.accountId ?? ""),
         accessKeyId: String(saved.accessKeyId ?? ""),
         secretAccessKey: String(saved.secretAccessKey ?? ""),
@@ -315,6 +357,10 @@ export class DocImages {
     const saved = this.read();
     return {
       configured: Boolean(saved && !validate(saved)),
+      // Nothing saved yet: the Worker way first, the one the user's Obsidian plugin already uses.
+      mode: saved?.mode ?? "worker",
+      workerUrl: saved?.workerUrl ?? "",
+      apiKeySet: Boolean(saved?.apiKey),
       accountId: saved?.accountId ?? "",
       accessKeyHint: saved?.accessKeyId ? hint(saved.accessKeyId) : null,
       secretSet: Boolean(saved?.secretAccessKey),
@@ -330,7 +376,19 @@ export class DocImages {
     const saved = this.read();
     const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
     const account = input.accountId === undefined ? { accountId: saved?.accountId ?? "", bucket: null } : parseAccount(text(input.accountId));
+    // Without a mode (older callers): the fields sent say which way it is, else the saved one.
+    const mode: ImageUploadMode =
+      input.mode === "worker" || input.mode === "s3"
+        ? input.mode
+        : input.workerUrl !== undefined || input.apiKey !== undefined
+          ? "worker"
+          : input.accountId !== undefined || input.accessKeyId !== undefined || input.secretAccessKey !== undefined || input.bucket !== undefined
+            ? "s3"
+            : (saved?.mode ?? "worker");
     return {
+      mode,
+      workerUrl: input.workerUrl === undefined ? (saved?.workerUrl ?? "") : normalizeWorkerUrl(text(input.workerUrl)),
+      apiKey: text(input.apiKey) || saved?.apiKey || "",
       accountId: account.accountId,
       accessKeyId: text(input.accessKeyId) || saved?.accessKeyId || "",
       secretAccessKey: text(input.secretAccessKey) || saved?.secretAccessKey || "",
@@ -395,6 +453,67 @@ export class DocImages {
     return response;
   }
 
+  /**
+   * One picture through the Worker, as the CMDS Eagle plugin sends it: POST <worker>/upload,
+   * multipart "file" (with "filename" and "content_type"), the key as a Bearer token. The Worker
+   * names and stores it and answers with its public address.
+   */
+  private async workerUpload(settings: Omit<Settings, "version" | "updatedAt">, data: Buffer, file: string, mime: string): Promise<string> {
+    const form = new FormData();
+    form.append("file", new Blob([new Uint8Array(data)], { type: mime }), file);
+    form.append("filename", file);
+    form.append("content_type", mime);
+    let response: Response;
+    try {
+      response = await fetch(`${settings.workerUrl}/upload`, { method: "POST", headers: { authorization: `Bearer ${settings.apiKey}` }, body: form, signal: AbortSignal.timeout(60_000) });
+    } catch (error) {
+      throw new R2Error(0, "network", workerNetworkMessage(error));
+    }
+    const answer = (await response.json().catch(() => null)) as { success?: boolean; url?: string; publicUrl?: string; key?: string; message?: string } | null;
+    if (!response.ok || answer?.success === false) throw new R2Error(response.status, "worker", workerMessage(response.status, String(answer?.message ?? "")));
+    const url = answer?.publicUrl || answer?.url || (answer?.key && settings.publicBaseUrl ? this.publicUrl(settings, answer.key) : "");
+    if (!/^https?:\/\//.test(url)) throw new R2Error(response.status, "worker", "Worker가 그림의 주소를 돌려주지 않았습니다. Worker의 PUBLIC_BASE_URL을 확인해 주세요.");
+    return url;
+  }
+
+  /** Pictures already put through the Worker, by content: the same picture is not sent twice. */
+  private get uploadedFile() {
+    return join(this.options.dataDir, "image-upload-sent.json");
+  }
+
+  private uploaded(): Record<string, string> {
+    try {
+      return JSON.parse(readFileSync(this.uploadedFile, "utf8")) as Record<string, string>;
+    } catch {
+      return {};
+    }
+  }
+
+  private remember(hash: string, url: string) {
+    const entries = Object.entries({ ...this.uploaded(), [hash]: url }).slice(-5000);
+    try {
+      mkdirSync(this.options.dataDir, { recursive: true });
+      writeFileSync(this.uploadedFile, `${JSON.stringify(Object.fromEntries(entries))}\n`);
+    } catch {
+      // Only a convenience: the next paste of the same picture uploads it again.
+    }
+  }
+
+  /** "연결 확인" of the Worker way: its address answers and takes the key (GET /health, as the plugin's Worker has it). */
+  private async checkWorker(settings: Omit<Settings, "version" | "updatedAt">): Promise<ImageUploadCheck> {
+    let response: Response;
+    try {
+      response = await fetch(`${settings.workerUrl}/health`, { headers: { authorization: `Bearer ${settings.apiKey}` }, signal: AbortSignal.timeout(20_000) });
+    } catch (error) {
+      return { ok: false, steps: [{ step: "worker", ok: false, message: workerNetworkMessage(error) }] };
+    }
+    await response.arrayBuffer().catch(() => undefined);
+    if (response.ok) return { ok: true, steps: [{ step: "worker", ok: true, message: `Worker가 API Key를 받았습니다(${new URL(settings.workerUrl).host}).` }] };
+    // An older Worker without /health: reached, the key is tried with the first picture.
+    if (response.status === 404) return { ok: true, steps: [{ step: "worker", ok: true, message: "Worker에 연결했습니다. 이 Worker에는 /health가 없어 API Key는 첫 그림을 올릴 때 확인됩니다." }] };
+    return { ok: false, steps: [{ step: "worker", ok: false, message: workerMessage(response.status, "") }] };
+  }
+
   /** "연결 확인": the keys can write, the public address shows what was written, and it is removed again. */
   async check(input: Input = {}): Promise<ImageUploadCheck> {
     let settings: Omit<Settings, "version" | "updatedAt">;
@@ -405,6 +524,7 @@ export class DocImages {
     }
     const problem = validate(settings);
     if (problem) return { ok: false, steps: [{ step: "settings", ok: false, message: problem }] };
+    if (settings.mode === "worker") return this.checkWorker(settings);
     const steps: ImageUploadCheck["steps"] = [];
     const key = `${settings.keyPrefix}.workbench-check-${randomBytes(6).toString("hex")}.txt`;
     const body = Buffer.from(`Achmage Workbench 연결 확인 ${new Date().toISOString()}\n`);
@@ -484,7 +604,18 @@ export class DocImages {
     const alt = altText(name);
     const settings = this.read();
     let fallback: string | undefined;
-    if (settings && !validate(settings)) {
+    if (settings && !validate(settings) && settings.mode === "worker") {
+      const hash = sha256Hex(data);
+      const known = this.uploaded()[hash];
+      if (known) return { markdown: `![${alt}](${known})`, url: known, alt, stored: "r2" };
+      try {
+        const url = await this.workerUpload(settings, data, file, type.mime);
+        this.remember(hash, url);
+        return { markdown: `![${alt}](${url})`, url, alt, stored: "r2" };
+      } catch (error) {
+        fallback = error instanceof Error ? error.message : String(error);
+      }
+    } else if (settings && !validate(settings)) {
       const key = `${settings.keyPrefix}${file}`;
       try {
         // Named by content, so the object never changes: it may be cached for good.

@@ -290,6 +290,74 @@ describe("images in Markdown documents", () => {
   });
 });
 
+/** A stand-in for the CMDS Eagle Worker of the user's note: POST /upload (Bearer key, multipart "file"), GET /health. */
+async function fakeWorker(key = "k-secret") {
+  const stored = new Map<string, { body: Buffer; type: string; filename: string }>();
+  const seen: string[] = [];
+  const server: Server = createServer(async (req, res) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(chunk as Buffer);
+    const url = new URL(req.url ?? "/", "http://x");
+    seen.push(`${req.method} ${url.pathname}`);
+    const reply = (status: number, data: unknown) => {
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end(JSON.stringify(data));
+    };
+    const authorized = String(req.headers.authorization ?? "") === `Bearer ${key}`;
+    if (url.pathname === "/health") return authorized ? reply(200, { success: true, message: "OK" }) : reply(401, { success: false, message: "Unauthorized" });
+    if (url.pathname !== "/upload" || req.method !== "POST") return reply(404, { success: false, message: "Not Found" });
+    if (!authorized) return reply(401, { success: false, message: "Unauthorized" });
+    const form = await new Request("http://x/upload", { method: "POST", headers: { "content-type": String(req.headers["content-type"]) }, body: Buffer.concat(chunks) }).formData();
+    const file = form.get("file") as File;
+    const name = `images/${stored.size + 1}-${String(form.get("filename"))}`;
+    stored.set(name, { body: Buffer.from(await file.arrayBuffer()), type: String(form.get("content_type")), filename: String(form.get("filename")) });
+    reply(200, { success: true, key: name, url: `https://pub-test.r2.dev/${name}`, publicUrl: `https://pub-test.r2.dev/${name}` });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  servers.push(server);
+  return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, stored, seen };
+}
+
+describe("pictures through the CMDS Eagle Worker", () => {
+  it("take the plugin's three values, keep the key on this computer only, and never send it back", () => {
+    const { dir, images } = setup();
+    expect(images.view()).toMatchObject({ configured: false, mode: "worker", apiKeySet: false });
+    const view = images.save({ mode: "worker", workerUrl: "https://obsidian-eagle-uploader.me.workers.dev/upload/", apiKey: "k-secret", publicBaseUrl: "https://pub-test.r2.dev/" });
+    expect(view).toMatchObject({ configured: true, mode: "worker", workerUrl: "https://obsidian-eagle-uploader.me.workers.dev", apiKeySet: true, publicBaseUrl: "https://pub-test.r2.dev" });
+    expect(JSON.stringify(view)).not.toContain("k-secret");
+    expect(statSync(join(dir, "image-upload.json")).mode & 0o777).toBe(0o600);
+    // Other fields change without typing the key again.
+    expect(images.save({ mode: "worker", workerUrl: "obsidian-eagle-uploader.me.workers.dev", apiKey: "" })).toMatchObject({ configured: true, apiKeySet: true });
+    expect(() => images.save({ mode: "worker", workerUrl: "", apiKey: "x" })).toThrow(/Worker 주소/);
+    expect(() => images.clear() && images.save({ mode: "worker", workerUrl: "https://a.workers.dev", apiKey: "" })).toThrow(/API Key/);
+  });
+
+  it("upload as the plugin does, link the Worker's address, send the same picture once, and fall back when refused", async () => {
+    const worker = await fakeWorker();
+    const { images, note } = setup();
+    images.save({ mode: "worker", workerUrl: worker.url, apiKey: "k-secret" });
+    const result = await images.upload(note.id, PNG, "도식.png");
+    const name = `${sha256(PNG).slice(0, 16)}.png`;
+    expect(result).toEqual({ markdown: `![도식](https://pub-test.r2.dev/images/1-${name})`, url: `https://pub-test.r2.dev/images/1-${name}`, alt: "도식", stored: "r2" });
+    expect(worker.stored.get(`images/1-${name}`)).toEqual({ body: PNG, type: "image/png", filename: name });
+    // The same picture again: linked to what was sent, nothing uploaded.
+    expect((await images.upload(note.id, PNG, "다시.png")).url).toBe(result.url);
+    expect(worker.seen.filter((line) => line === "POST /upload")).toHaveLength(1);
+    // A wrong key: kept in the work folder, with the reason.
+    images.save({ mode: "worker", apiKey: "wrong" });
+    const other = Buffer.concat([PNG, Buffer.from([0])]);
+    expect(await images.upload(note.id, other, "또.png")).toMatchObject({ stored: "local", fallback: expect.stringMatching(/API Key/) });
+  });
+
+  it("check the Worker by its /health with the key", async () => {
+    const worker = await fakeWorker();
+    const { images } = setup();
+    expect(await images.check({ mode: "worker", workerUrl: worker.url, apiKey: "k-secret" })).toEqual({ ok: true, steps: [{ step: "worker", ok: true, message: expect.stringMatching(/API Key를 받았습니다/) }] });
+    expect(await images.check({ mode: "worker", workerUrl: worker.url, apiKey: "nope" })).toMatchObject({ ok: false, steps: [{ step: "worker", ok: false, message: expect.stringMatching(/UPLOAD_API_KEY/) }] });
+    expect(await images.check({ mode: "worker", workerUrl: "http://127.0.0.1:9", apiKey: "k" })).toMatchObject({ ok: false });
+  });
+});
+
 describe("the gateway's picture routes", () => {
   it("answer only with the app's token, and serve no file outside the work folder", async () => {
     const { manager, images, note } = setup();
