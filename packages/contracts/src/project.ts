@@ -1,5 +1,5 @@
 import type { Provider } from "./index.ts";
-import type { EngineReadNote } from "./pkm.ts";
+import type { EngineReadNote, PkmCard } from "./pkm.ts";
 
 // "프로젝트 = 노트 한 장": a work seen as one Markdown note. What people write (stage, tags, related,
 // decisions, open questions, the rest of the text) lives in a real note file in the work folder; what
@@ -131,6 +131,15 @@ export type ProjectPage = {
   rows?: PropertyRow[];
   /** Property names to suggest when adding one (the vault's, other projects'), with their kinds. */
   knownKeys?: { key: string; type: PropertyType }[];
+  noteTemplate?: { folderId: string; folderName: string } | null;
+};
+
+/** Classification-folder templates seed new notes only; ancestors supply the fallback. */
+export type FolderNoteTemplate = {
+  folderId: string;
+  own: string | null;
+  effective: { folderId: string; folderName: string; markdown: string } | null;
+  fields: PropertyField[];
 };
 
 /** The Achmage work a project note names (`achmage_work`), as the user's Achmage runtime describes it (read-only). */
@@ -207,6 +216,9 @@ export type ChangeLine = { id: string; text: string };
 /** A project in lists (home "프로젝트": cards, table, kanban): what its note says, read only when it changed. */
 export type ProjectSummary = {
   workId: string;
+  /** Explicit cover/thumbnail property, else the first image in the project note. */
+  thumb?: PkmCard["thumb"];
+  thumbUpdatedAt?: number;
   stage: string | null;
   tags: string[];
   related: string[];

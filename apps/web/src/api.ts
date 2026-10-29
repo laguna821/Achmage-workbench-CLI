@@ -2,6 +2,7 @@ import type {
   AchmageBrief,
   AgentBrowserStatus,
   ChangeLine,
+  FolderNoteTemplate,
   ProjectEntryRequest,
   ProjectEvent,
   ProjectPage,
@@ -167,6 +168,9 @@ export class Api {
   propertyTemplate = () => this.request<PropertyField[]>("GET", "/api/projects/template");
   savePropertyTemplate = (fields: PropertyField[] | null) => this.request<PropertyField[]>("PUT", "/api/projects/template", fields === null ? { reset: true } : { fields });
   importPropertyTemplate = (markdown: string) => this.request<PropertyField[]>("POST", "/api/projects/template/import", { markdown });
+  folderNoteTemplate = (folderId: string) => this.request<FolderNoteTemplate>("GET", `/api/projects/folder-templates/${encodeURIComponent(folderId)}`);
+  saveFolderNoteTemplate = (folderId: string, markdown: string | null) => this.request<FolderNoteTemplate>("PUT", `/api/projects/folder-templates/${encodeURIComponent(folderId)}`, { markdown });
+  initializeProjectNote = (workId: string) => this.request<ProjectWrite>("POST", `/api/projects/${encodeURIComponent(workId)}/initialize-note`, {});
   setPropertyType = (key: string, type: PropertyType) => this.request<Record<string, PropertyType>>("PUT", "/api/projects/types", { key, type });
   setProjectStage = (workId: string, stage: string | null) => this.request<ProjectWrite>("PUT", `/api/projects/${encodeURIComponent(workId)}/stage`, { stage });
   addProjectEntry = (workId: string, entry: ProjectEntryRequest) => this.request<ProjectWrite>("POST", `/api/projects/${encodeURIComponent(workId)}/entries`, entry);

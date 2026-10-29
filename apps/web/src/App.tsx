@@ -38,6 +38,7 @@ import { writeDraft } from "./components/Composer.tsx";
 import { comboOf, shortcutsOf } from "./shortcuts.ts";
 import { ShortcutSettings } from "./components/ShortcutSettings.tsx";
 import { TemplateDialog } from "./components/project/TemplateDialog.tsx";
+import { FolderTemplateDialog } from "./components/project/FolderTemplateDialog.tsx";
 import { LinkContext, hopsText, linkOfSession, useLinkApi } from "./links.ts";
 import { SplitView, WorkModeBar, useWorkModeKeys } from "./components/WorkModes.tsx";
 import { keepPosition, keptPosition, modeOf, readingPosition, restorePosition, reviewProposal, viewFor, type ModeProps, type ReadingPosition, type WorkMode } from "./workmodes.ts";
@@ -865,6 +866,7 @@ export function App() {
   const recordingShortcut = useRef(false);
   /** ⋯ › 프로젝트 속성 템플릿… */
   const [propertyTemplateOpen, setPropertyTemplateOpen] = useState(false);
+  const [folderTemplateId, setFolderTemplateId] = useState<string | null>(null);
   const setRecordingShortcut = useCallback((on: boolean) => {
     recordingShortcut.current = on;
   }, []);
@@ -1257,6 +1259,7 @@ export function App() {
           { kind: "item", label: "카드로 보기", icon: "grid", onSelect: () => setView({ kind: "pkm", target: { kind: "folder", id: folder.id } }) },
           ...(single ? [] : [{ kind: "item" as const, label: "오른쪽에 카드로 보기", icon: "columns" as const, hint: "Ctrl+클릭", onSelect: () => panesRef.current.placeItem({ kind: "folder", id: folder.id }, "right") }]),
           { kind: "item", label: "이 폴더에 새 작업", icon: "plus", onSelect: () => startNew(folder.id) },
+          { kind: "item", label: "폴더 노트 템플릿…", icon: "page", onSelect: () => setFolderTemplateId(folder.id) },
           { kind: "item", label: "하위 폴더 만들기", icon: "folder", onSelect: () => setSidebarPending({ createIn: folder.id }) },
           { kind: "item", label: "이름 바꾸기", icon: "edit", hint: "F2", onSelect: () => setSidebarPending({ rename: folder.id }) },
           { kind: "separator" },
@@ -2010,6 +2013,7 @@ export function App() {
       {switcher !== null ? <Switcher state={state} sessions={switchable} index={switcher} unseen={unseen} /> : null}
       <LinkLayer api={api} inDesktop={inDesktop} />
       {propertyTemplateOpen ? <TemplateDialog api={api} onClose={() => setPropertyTemplateOpen(false)} onSaved={() => setToast("속성 템플릿을 저장했습니다. 모든 프로젝트의 속성 칸이 따릅니다.")} onError={fail} /> : null}
+      {folderTemplateId && state.folders[folderTemplateId] ? <FolderTemplateDialog api={api} folder={state.folders[folderTemplateId]!} onClose={() => setFolderTemplateId(null)} onSaved={() => setToast("폴더 노트 템플릿을 저장했습니다. 새 노트를 만들 때 적용합니다.")} onError={fail} /> : null}
       {importOpen ? <ImportDialog api={api} onClose={() => setImportOpen(false)} onOpen={openImported} onError={fail} /> : null}
       {reviewing && state.sessions[reviewing]?.worktree ? (
         <WorktreeReview api={api} session={state.sessions[reviewing]} onClose={() => setReviewing(null)} onToast={setToast} onError={fail} />

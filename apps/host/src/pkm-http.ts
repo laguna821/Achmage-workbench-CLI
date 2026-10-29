@@ -20,7 +20,7 @@ async function readJson(req: IncomingMessage, limit = 2_000_000): Promise<Record
 }
 
 /** A picture, kept by the browser for a while (vault files change rarely; the URL changes with the vault version). */
-function sendImage(res: ServerResponse, file: string) {
+export function sendImage(res: ServerResponse, file: string) {
   res.writeHead(200, {
     "content-type": MIME[extname(file).toLowerCase()] ?? "application/octet-stream",
     "cache-control": "private, max-age=300",

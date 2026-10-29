@@ -3,6 +3,7 @@ import { PROPERTY_TYPES, type ProjectStage, type PropertyType } from "@workbench
 import { HttpError } from "./errors.ts";
 import { readBody, sendJson } from "./http.ts";
 import type { Projects } from "./project.ts";
+import { sendImage } from "./pkm-http.ts";
 
 // `/api/projects/*`: a work as a project note (project.ts). Mounted by http.ts behind the same token
 // check as every other API route.
@@ -26,6 +27,15 @@ const strings = (value: unknown): string[] | null => (value === null ? null : Ar
 export async function handleProject(projects: Projects, req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
   const method = req.method ?? "GET";
   const parts = url.pathname.replace(/^\/api\/projects\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
+  if (method === "GET" && parts.length === 2 && parts[1] === "image") return (sendImage(res, projects.image(parts[0]!, url.searchParams.get("src") ?? "")), true);
+  if (parts[0] === "folder-templates" && parts[1] && !parts[2]) {
+    if (method === "GET") return (sendJson(res, 200, projects.folderTemplate(parts[1])), true);
+    if (method === "PUT") {
+      const body = await readJson(req);
+      return (sendJson(res, 200, projects.setFolderTemplate(parts[1], body.markdown)), true);
+    }
+    return false;
+  }
   if (parts[0] === "stages") {
     if (method === "GET") return (sendJson(res, 200, projects.stages()), true);
     if (method === "PUT") {
@@ -56,6 +66,7 @@ export async function handleProject(projects: Projects, req: IncomingMessage, re
   const workId = parts[0];
   if (!workId) return false;
   const action = parts[1] ?? "";
+  if (method === "POST" && action === "initialize-note") return (sendJson(res, 200, projects.initializeNote(workId)), true);
   if (method === "GET" && !action) return (sendJson(res, 200, projects.page(workId)), true);
   if (method === "GET" && action === "achmage") return (sendJson(res, 200, await projects.achmage(workId)), true);
   if (method === "GET" && action === "events") return (sendJson(res, 200, projects.allEvents(workId)), true);

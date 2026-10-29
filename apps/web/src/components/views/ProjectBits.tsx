@@ -10,6 +10,7 @@ import { workDocs } from "../../tree.ts";
 import { FormatBadge } from "../DocCards.tsx";
 import { EngineMark } from "../EngineMark.tsx";
 import { Icon } from "../Icon.tsx";
+import { ProjectThumbnail } from "../project/ProjectThumbnail.tsx";
 import type { ProjectRow } from "./keys.ts";
 import { propLabel } from "./keys.ts";
 
@@ -131,6 +132,7 @@ export function WorkCard({
   const path = fields.includes("folder") ? folderPath(state.folders, work.folderId)?.replaceAll("/", " / ") : null;
   return (
     <div className={`work-card${chips ? " with-chips" : ""}`} data-flip={`w:${work.id}`} data-work={work.id}>
+      {fields.includes("thumbnail") ? <ProjectThumbnail summary={row?.summary} /> : null}
       <button type="button" className="work-card-title" onClick={() => open.project(work)} title={work.cwd}>
         <Icon name="project" size={14} />
         <span>{work.title}</span>
@@ -188,6 +190,7 @@ export function BoardCardBody({ row, fields, stages, showStage, folders }: { row
   return (
     <>
       <span className="kanban-card-title">{row.work.title}</span>
+      {fields.includes("thumbnail") ? <ProjectThumbnail summary={row.summary} /> : null}
       {showStage && fields.includes("stage") ? <StagePill stages={stages} name={row.summary?.stage ?? null} /> : null}
       {path ? <span className="kanban-card-tags">{path.replaceAll("/", " / ")}</span> : null}
       {fields.includes("preview") && row.summary?.preview ? <span className="kanban-card-preview">{row.summary.preview}</span> : null}
@@ -214,6 +217,9 @@ export function tableColumns(fields: string[], stages: ProjectStage[], state: St
   const out: Column[] = [];
   for (const field of fields) {
     switch (field) {
+      case "thumbnail":
+        out.push({ id: field, label: "썸네일", sort: null, cell: (row) => <ProjectThumbnail summary={row.summary} small /> });
+        break;
       case "stage":
         out.push({
           id: field,
@@ -322,6 +328,7 @@ export function ListRow({ row, fields, stages, openProject }: { row: ProjectRow;
   const tags = tagsOf(row);
   return (
     <div className="project-line" data-work={row.work.id} data-flip={`w:${row.work.id}`}>
+      {fields.includes("thumbnail") ? <ProjectThumbnail summary={row.summary} small /> : null}
       <button type="button" className="project-line-main" onClick={() => openProject(row.work)} title={row.work.cwd}>
         <span className="project-line-title">{row.work.title}</span>
         {fields.includes("preview") && row.summary?.preview ? <span className="project-line-preview">{row.summary.preview}</span> : null}

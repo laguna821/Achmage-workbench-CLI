@@ -150,7 +150,9 @@ export const thumbPath = (thumb: PkmCard["thumb"], version = 0) =>
       ? thumb.url
       : "vault" in thumb
         ? vaultImagePath(thumb.vault, version)
-        : `/api/pkm/page-image?${new URLSearchParams({ artifact: thumb.page, src: thumb.src })}`;
+        : "project" in thumb
+          ? `/api/projects/${encodeURIComponent(thumb.project)}/image?${new URLSearchParams({ src: thumb.src, v: String(version) })}`
+          : `/api/pkm/page-image?${new URLSearchParams({ artifact: thumb.page, src: thumb.src, v: String(version) })}`;
 
 // ── cards ───────────────────────────────────────────────────────────────────────────────────
 

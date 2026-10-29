@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -9,6 +9,7 @@ import { Projects, agreedWords, entryGist, lineCounts } from "./project.ts";
 import { SessionManager } from "./sessions.ts";
 import { Store } from "./store.ts";
 import { emptyStatus, type AdapterSink, type ProviderAdapter } from "./providers/types.ts";
+import { makeFixtureVault, put } from "./vault-fixture.ts";
 
 // A work as a project note: the file, its stage and the archive, decisions and questions, what the
 // engines are told before the next request, and undoing a write.
@@ -93,6 +94,61 @@ describe("the project note file", () => {
     projects.setStage(work.id, "할일");
     manager.updateWork(work.id, { title: "새 이름" });
     expect(projects.page(work.id).note.path).toBe(join(cwd, "안녕.md"));
+  });
+});
+
+describe("project thumbnails", () => {
+  it("prefers a cover property, supports encoded local images, and versions changed image bytes without editing the note", () => {
+    const { projects, work, cwd } = setup();
+    writeFileSync(join(cwd, "표 지.png"), "image fixture");
+    projects.setBodyText(work.id, "![표지](%ED%91%9C%20%EC%A7%80.png)", null);
+    const before = projects.summaries()[0]!;
+    expect(before.thumb).toEqual({ project: work.id, src: "%ED%91%9C%20%EC%A7%80.png" });
+    expect(projects.image(work.id, "%ED%91%9C%20%EC%A7%80.png")).toBe(join(cwd, "표 지.png"));
+    const stamp = new Date(Date.now() + 2000);
+    utimesSync(join(cwd, "표 지.png"), stamp, stamp);
+    expect(projects.summaries()[0]!.thumbUpdatedAt).toBeGreaterThan(before.thumbUpdatedAt!);
+    projects.setProperty(work.id, "cover", ["https://example.test/signed-image?token=x"]);
+    expect(projects.summaries()[0]!.thumb).toEqual({ url: "https://example.test/signed-image?token=x" });
+    projects.setProperty(work.id, "thumbnail", ["javascript:alert(1)"]);
+    expect(projects.summaries()[0]!.thumb).toBeNull();
+  });
+
+  it("rejects traversal, absolute paths, bad encoding and symlinks outside a work", () => {
+    const { projects, work, cwd, dir } = setup();
+    projects.initializeNote(work.id);
+    writeFileSync(join(dir, "secret.png"), "private");
+    symlinkSync(join(dir, "secret.png"), join(cwd, "escape.png"));
+    for (const src of ["../secret.png", "%2e%2e/secret.png", join(dir, "secret.png"), "escape.png", "%ZZ.png", "file:///tmp/secret.png"]) {
+      expect(() => projects.image(work.id, src)).toThrow(/그림/);
+    }
+  });
+
+  it("resolves vault embeds while excluding hidden folders and filenames from both thumbnails and direct reads", () => {
+    const { projects, work, pkm, dir, manager } = setup();
+    const vault = join(dir, "vault");
+    makeFixtureVault(vault);
+    put(vault, "00. Inbox/cover.png", "visible image");
+    put(vault, "Secret/hidden.png", "hidden image");
+    put(vault, "00. Inbox/omit.png", "hidden name");
+    put(vault, ".obsidian/plugins/notebook-navigator/data.json", JSON.stringify({ vaultProfiles: [{ id: "default", hiddenFolders: ["Secret"], hiddenFileNames: ["omit.png"] }], vaultProfile: "default" }));
+    pkm.vault.attach(vault);
+    try {
+      projects.setProperty(work.id, "cover", ["[[cover.png]]"]);
+      expect(projects.summaries()[0]!.thumb).toEqual({ vault: "00. Inbox/cover.png" });
+      for (const name of ["hidden.png", "omit.png"]) {
+        projects.setProperty(work.id, "cover", [`[[${name}]]`]);
+        expect(projects.summaries()[0]!.thumb).toBeNull();
+      }
+      expect(() => pkm.vaultImage("Secret/hidden.png")).toThrow();
+      expect(() => pkm.vaultImage("00. Inbox/omit.png")).toThrow();
+      expect(() => pkm.workImage(work.id, projects.notePath(work), "../vault/Secret/hidden.png")).toThrow();
+      const inside = manager.createWork({ title: "보관함 프로젝트", cwd: vault });
+      projects.initializeNote(inside.id);
+      expect(projects.image(inside.id, "00.%20Inbox/cover.png")).toBe(join(vault, "00. Inbox/cover.png"));
+      expect(() => projects.image(inside.id, "Secret/hidden.png")).toThrow();
+      expect(() => projects.image(inside.id, "00.%20Inbox/omit.png")).toThrow();
+    } finally { pkm.close(); }
   });
 });
 
@@ -238,6 +294,53 @@ describe("what the engines are told", () => {
 });
 
 describe("properties (Obsidian-like)", () => {
+  it("inherits folder note templates, preserves their original bytes and never overwrites an existing note", () => {
+    const { projects, manager, work, cwd } = setup();
+    const parent = manager.createFolder("강의", null);
+    const child = manager.createFolder("2026", parent.id);
+    manager.updateWork(work.id, { folderId: child.id });
+    const markdown = '---\r\n"DIKM_단계:": "🔵 I"\r\ntags: [Workflow_Engineering]\r\n마감일:\r\n종류:\r\n  - 강의\r\n---\r\n# 목표\r\n\r\n원문  공백\r\n';
+    projects.setFolderTemplate(parent.id, markdown);
+    expect(projects.folderTemplate(child.id)).toMatchObject({ own: null, effective: { folderId: parent.id, markdown } });
+    expect(projects.page(work.id).rows!.find((field) => field.key === "DIKM_단계:")).toMatchObject({ fromTemplate: true, present: false });
+    expect(existsSync(join(cwd, "안녕.md"))).toBe(false);
+    const result = projects.initializeNote(work.id);
+    const written = readFileSync(result.page.note.path, "utf8");
+    expect(written.replace(`workbench_id: ${work.id}\r\n`, "")).toBe(markdown);
+    expect(result.page.note.tags).toEqual(["Workflow_Engineering"]);
+    projects.setFolderTemplate(parent.id, "# 새 템플릿\n");
+    expect(() => projects.initializeNote(work.id)).toThrow(/덮어쓰지/);
+    expect(readFileSync(result.page.note.path, "utf8")).toBe(written);
+  });
+
+  it("lets a child override or opt out, resets to its ancestor, and applies only when a note is first written", () => {
+    const { projects, manager, work } = setup();
+    const parent = manager.createFolder("상위", null), child = manager.createFolder("하위", parent.id);
+    manager.updateWork(work.id, { folderId: child.id });
+    projects.setFolderTemplate(parent.id, "---\n종류: 연구\n---\n# 연구 계획\n");
+    projects.setFolderTemplate(child.id, "");
+    expect(projects.folderTemplate(child.id).effective?.markdown).toBe("");
+    projects.setFolderTemplate(child.id, "# 하위 계획\n");
+    expect(projects.folderTemplate(child.id).effective?.folderId).toBe(child.id);
+    projects.setFolderTemplate(child.id, null);
+    expect(projects.folderTemplate(child.id).effective?.folderId).toBe(parent.id);
+    const write = projects.setProperty(work.id, "목표", ["발표"]);
+    expect(write.page.note.body).toBe("# 연구 계획\n");
+    expect(write.page.note.properties).toContainEqual(["종류", ["연구"]]);
+    projects.setFolderTemplate(child.id, "# 다른 내용\n");
+    projects.setProperty(work.id, "목표", ["논문"]);
+    expect(projects.page(work.id).note.body).toBe("# 연구 계획\n");
+  });
+
+  it("rejects unknown folders and incomplete front matter without changing the saved template", () => {
+    const { projects, manager } = setup();
+    const folder = manager.createFolder("분류", null);
+    projects.setFolderTemplate(folder.id, "# 안전한 본문\n");
+    expect(() => projects.setFolderTemplate(folder.id, "---\n종류: 강의")).toThrow(/닫히지/);
+    expect(() => projects.setFolderTemplate("missing", "")).toThrow(/폴더가 없습니다/);
+    expect(projects.folderTemplate(folder.id).own).toBe("# 안전한 본문\n");
+  });
+
   it("show the template's fields on every page, empty until filled, written in their kind", () => {
     const { projects, work, cwd, manager } = setup();
     const page = projects.page(work.id);

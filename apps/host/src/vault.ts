@@ -251,6 +251,7 @@ export function scanVault(root: string, navigator: NavigatorLook | null): VaultI
       const lower = entry.name.toLowerCase();
       const ext = lower.slice(lower.lastIndexOf("."));
       if (IMAGE_EXTENSIONS.has(ext)) {
+        if (hiddenAbove || hiddenBy(hiddenNames, entry.name)) continue;
         if (!images.has(lower)) images.set(lower, rel);
         imagePaths.add(rel);
         continue;
@@ -405,8 +406,9 @@ export class VaultMirror {
 
   /** A note or folder path inside a hidden folder (Notebook Navigator). */
   isHidden(path: string) {
-    const folder = parentOf(path);
-    return folder !== null && folder !== "" && Boolean(this.index?.hidden.has(folder));
+    const clean = path.replace(/\\/g, "/");
+    const folder = parentOf(clean);
+    return clean.split("/").some((part) => part.startsWith(".")) || hiddenBy(this.navigatorLook?.hiddenFileNames ?? [], basename(clean)) || (folder !== null && folder !== "" && Boolean(this.index?.hidden.has(folder)));
   }
 
   tree(): VaultTree {
@@ -435,7 +437,7 @@ export class VaultMirror {
   resolve(relativePath: string): string {
     if (!this.rootPath) throw new Error("연결된 볼트가 없습니다.");
     const clean = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
-    if (!clean || clean.split("/").some((part) => part === ".." || part.startsWith("."))) throw new Error("볼트 밖이나 숨은 폴더의 경로입니다.");
+    if (!clean || this.isHidden(clean)) throw new Error("볼트 밖이나 숨은 폴더의 경로입니다.");
     const full = resolve(this.rootPath, clean);
     const inside = relative(this.rootPath, full);
     if (!inside || inside.startsWith("..") || isAbsolute(inside)) throw new Error("볼트 밖의 경로입니다.");

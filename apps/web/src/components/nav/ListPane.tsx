@@ -8,6 +8,7 @@ import { Icon, iconName } from "../Icon.tsx";
 import type { MenuEntry } from "../ContextMenu.tsx";
 import { LinkBadge, LinkLines } from "../LinkSidebar.tsx";
 import { PlacementMark } from "../pkm/ViewsSection.tsx";
+import { ProjectThumbnail } from "../project/ProjectThumbnail.tsx";
 import { linkOfSession } from "../../links.ts";
 import { DEFAULT_SORT, SORT_LABEL, addShortcuts, dateFor, sameShortcut, selectionKey, shortDate, sortFor, type ListProject } from "./model.ts";
 import { RowAdd, TreeRow, type RowContext } from "./rows.tsx";
@@ -130,6 +131,7 @@ const ProjectRow = memo(function ProjectRow({ project, folder, row, stage, sortK
       onKeyDown={(event) => handlers.key(event, project, row)}
       onFocus={() => handlers.focus(work.id)}
     >
+      {density === "standard" ? <ProjectThumbnail summary={project.summary} small /> : null}
       <div className="nav-project-line">
         {chevron}
         <span className="nav-project-title">{work.title}</span>

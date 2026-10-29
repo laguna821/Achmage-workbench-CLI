@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   PROVIDER_LABEL,
@@ -673,6 +673,7 @@ export class Pkm {
   /** A picture of the vault (only image files, only inside the vault). */
   vaultImage(path: string) {
     if (!IMAGE_EXTENSIONS.has(extname(path).toLowerCase())) throw new HttpError(415, "not_image", "그림 파일만 보여 줍니다.");
+    if (this.vault.isHidden(path)) throw new HttpError(404, "not_found", "그림이 없습니다.");
     let file: string;
     try {
       file = this.vault.resolve(path);
@@ -686,12 +687,29 @@ export class Pkm {
   /** A picture next to a page of a work (inside the work folder only). */
   pageImage(artifactId: string, src: string) {
     const artifact = this.manager.documents.get(artifactId);
-    const work = this.manager.view.works.get(artifact.workId);
-    if (!work || !IMAGE_EXTENSIONS.has(extname(src).toLowerCase()) || /^[a-z]+:/i.test(src) || isAbsolute(src)) throw new HttpError(404, "not_found", "그림이 없습니다.");
-    const file = resolve(dirname(artifact.path), decodeURIComponent(src));
-    const inside = relative(realpathSync(work.cwd), existsSync(file) ? realpathSync(file) : file);
-    if (!inside || inside.startsWith("..") || isAbsolute(inside) || !existsSync(file)) throw new HttpError(404, "not_found", "그림이 없습니다.");
-    return file;
+    return this.workImage(artifact.workId, artifact.path, src);
+  }
+
+  /** Resolve only an image inside this work; encoded paths and symlinks obey the same boundary. */
+  workImage(workId: string, notePath: string, src: string) {
+    try {
+      const work = this.requireWork(workId);
+      const decoded = decodeURIComponent(src.split(/[?#]/)[0]!).replace(/\\/g, "/");
+      if (!IMAGE_EXTENSIONS.has(extname(decoded).toLowerCase()) || /^[a-z]+:/i.test(decoded) || isAbsolute(decoded)) throw new Error("not an image");
+      const file = realpathSync(resolve(dirname(notePath), decoded));
+      const inside = relative(realpathSync(work.cwd), file);
+      if (!inside || inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute(inside) || !statSync(file).isFile()) throw new Error("outside work");
+      if (this.vault.root) {
+        const vaultPath = relative(realpathSync(this.vault.root), file).split(sep).join("/");
+        if (!vaultPath.startsWith("../") && !isAbsolute(vaultPath)) {
+          if (this.vault.isHidden(vaultPath)) throw new Error("hidden image");
+          this.vault.resolve(vaultPath);
+        }
+      }
+      return file;
+    } catch {
+      throw new HttpError(404, "not_found", "그림이 없습니다.");
+    }
   }
 
   // ── pages: templates, subpages, a session or a message as a page ─────────────────────────

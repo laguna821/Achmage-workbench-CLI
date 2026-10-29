@@ -31,6 +31,7 @@ const TONE: Partial<Record<NonNullable<PkmCard["status"]>, string>> = { starting
 /** A picture the gateway serves behind the token. */
 export function Picture({ path, alt, className, width, height }: { path: string | null; alt: string; className?: string; width?: number; height?: number }) {
   const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
   // A picture on the web (R2, S3 …) is shown from there, without the gateway or its token.
   const remote = path !== null && /^https?:\/\//i.test(path);
   useEffect(() => {
@@ -41,8 +42,9 @@ export function Picture({ path, alt, className, width, height }: { path: string 
       cancelled = true;
     };
   }, [path, remote]);
-  if (remote) return <img src={path} alt={alt} className={className} width={width} height={height} loading="lazy" referrerPolicy="no-referrer" draggable={false} />;
-  return url ? <img src={url} alt={alt} className={className} width={width} height={height} draggable={false} /> : null;
+  if (failed === path) return null;
+  if (remote) return <img src={path} alt={alt} className={className} width={width} height={height} loading="lazy" referrerPolicy="no-referrer" draggable={false} onError={() => setFailed(path)} />;
+  return url ? <img src={url} alt={alt} className={className} width={width} height={height} loading="lazy" draggable={false} onError={() => setFailed(path)} /> : null;
 }
 
 /** A tag as a pill, in Notebook Navigator's colour for it when there is one. */

@@ -617,7 +617,10 @@ export function ProjectView({
                 <ObsidianMarkdown components={pictures} urlTransform={keepSources}>{note.body}</ObsidianMarkdown>
               </div>
             ) : (
-              <div className="project-empty">{note.exists ? "노트 본문이 비어 있습니다." : "아직 노트 파일이 없습니다. 속성이나 결정을 남기면 이 폴더에 만들어집니다."}</div>
+              <div className="project-empty">{note.exists ? "노트 본문이 비어 있습니다." : page.noteTemplate ? <>
+                「{page.noteTemplate.folderName}」의 템플릿으로 시작할 수 있습니다.
+                <button type="button" className="button small" onClick={() => void api.initializeProjectNote(workId).then(wrote).catch(onError)}>템플릿으로 노트 만들기</button>
+              </> : "아직 노트 파일이 없습니다. 속성이나 결정을 남기면 이 폴더에 만들어집니다."}</div>
             )}
             <div className="project-note-path muted">{note.path}</div>
           </section>

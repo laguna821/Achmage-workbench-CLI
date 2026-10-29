@@ -234,6 +234,7 @@ export function projectSorts(context: Pick<ProjectContext, "stages" | "summaries
 /** Fields a project shows, beside its name. */
 export function projectFields(context: Pick<ProjectContext, "summaries" | "template">): { id: string; label: string }[] {
   return [
+    { id: "thumbnail", label: "썸네일" },
     { id: "stage", label: "단계" },
     { id: "folder", label: "폴더" },
     { id: "tags", label: "태그" },
@@ -251,9 +252,9 @@ export function projectFields(context: Pick<ProjectContext, "summaries" | "templ
 /** What each layout shows when the view has not chosen (today's table, kanban cards, cards and rows). */
 export const DEFAULT_PROJECT_FIELDS: Record<"table" | "board" | "cards" | "list", string[]> = {
   table: ["stage", "tags", "sessions", "attention", "proposals", "activity"],
-  board: ["tags", "attention", "proposals", "sessions", "activity"],
-  cards: ["stage", "chips", "sessions", "activity"],
-  list: ["stage", "preview", "tags", "activity"],
+  board: ["thumbnail", "tags", "attention", "proposals", "sessions", "activity"],
+  cards: ["thumbnail", "stage", "chips", "sessions", "activity"],
+  list: ["thumbnail", "stage", "preview", "tags", "activity"],
 };
 
 // ── 지금: sessions ──────────────────────────────────────────────────────────

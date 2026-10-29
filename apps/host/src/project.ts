@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import {
   DEFAULT_STAGES,
   LINK_REASON_LABEL,
@@ -16,6 +16,7 @@ import {
   type AchmageBrief,
   type ArtifactRevision,
   type ChangeLine,
+  type FolderNoteTemplate,
   type ProjectEntryRequest,
   type ProjectEvent,
   type ProjectFacts,
@@ -39,6 +40,7 @@ import { ID_KEY, appendEntry, newNote, noteFileName, notePreview, readNote, setB
 import type { IndexEntry, WorkExtras } from "./search-index.ts";
 import { Achmage } from "./achmage.ts";
 import { DEFAULT_PROPERTY_TEMPLATE, cleanTemplate, inferType, keyStyle, normalizeValues, propertyRows, templateFromMarkdown, vaultPropertyTypes } from "./project-properties.ts";
+import { firstImage, splitFrontmatter } from "./frontmatter.ts";
 import type { SessionManager } from "./sessions.ts";
 import type { Store } from "./store.ts";
 
@@ -54,6 +56,7 @@ const TOLD_KEY = "project.told";
 const ENTRIES_KEY = "project.entries";
 /** The properties template every project shows, and the kinds the user gave property names here. */
 const TEMPLATE_KEY = "project.template";
+const FOLDER_TEMPLATES_KEY = "project.folderTemplates";
 const TYPES_KEY = "project.propertyTypes";
 const WEEK = 7 * 24 * 3600 * 1000;
 /** How much the change block before a request may take. */
@@ -317,6 +320,7 @@ export class Projects {
   page(workId: string): ProjectPage {
     const work = this.work(workId);
     const note = this.note(work);
+    const noteTemplate = this.effectiveTemplate(work.folderId);
     const sessionIds = new Set([...this.manager.view.sessions.values()].filter((session) => session.workId === workId).map((session) => session.id));
     return {
       workId,
@@ -326,8 +330,9 @@ export class Projects {
       card: this.pkm.cardFor(work),
       stages: this.stages(),
       readNotes: this.pkm.notesReadBy(sessionIds),
-      rows: propertyRows(this.template(), note.properties, (key, values) => this.typeOf(key, values)),
+      rows: propertyRows(this.fieldsFor(work), note.properties, this.typeResolver(work)),
       knownKeys: this.knownKeys(),
+      noteTemplate: noteTemplate ? { folderId: noteTemplate.folderId, folderName: noteTemplate.folderName } : null,
     };
   }
 
@@ -357,19 +362,72 @@ export class Projects {
     return templateFromMarkdown(markdown, this.vaultTypes());
   }
 
+  private effectiveTemplate(folderId: string | null): FolderNoteTemplate["effective"] {
+    const saved = this.readJson<Record<string, string>>(FOLDER_TEMPLATES_KEY, {});
+    const seen = new Set<string>();
+    for (let id = folderId; id && !seen.has(id); ) {
+      seen.add(id);
+      const folder = this.manager.view.folders.get(id);
+      if (!folder) break;
+      if (typeof saved[id] === "string") return { folderId: id, folderName: folder.name, markdown: saved[id]! };
+      id = folder.parentId;
+    }
+    return null;
+  }
+
+  folderTemplate(folderId: string): FolderNoteTemplate {
+    if (!this.manager.view.folders.has(folderId)) throw new HttpError(404, "folder_not_found", "그 분류 폴더가 없습니다.");
+    const own = this.readJson<Record<string, string>>(FOLDER_TEMPLATES_KEY, {})[folderId] ?? null;
+    const effective = this.effectiveTemplate(folderId);
+    return { folderId, own, effective, fields: effective ? this.noteTemplateFields(effective.markdown) : [] };
+  }
+
+  private noteTemplateFields(markdown: string): PropertyField[] {
+    return splitFrontmatter(markdown).yaml === null ? [] : this.importTemplate(markdown);
+  }
+
+  setFolderTemplate(folderId: string, markdown: unknown): FolderNoteTemplate {
+    this.folderTemplate(folderId);
+    const saved = this.readJson<Record<string, string>>(FOLDER_TEMPLATES_KEY, {});
+    if (markdown === null) delete saved[folderId];
+    else {
+      if (typeof markdown !== "string" || Buffer.byteLength(markdown) > 256_000) throw new HttpError(400, "bad_template", "노트 템플릿은 256KB 이하의 마크다운이어야 합니다.");
+      const problem = readNote(markdown).problem;
+      if (problem) throw new HttpError(400, "bad_template", problem);
+      saved[folderId] = markdown;
+    }
+    this.writeJson(FOLDER_TEMPLATES_KEY, saved);
+    this.publish(null);
+    return this.folderTemplate(folderId);
+  }
+
+  private fieldsFor(work?: Work): PropertyField[] {
+    const template = work ? this.effectiveTemplate(work.folderId) : null;
+    if (!template) return this.template();
+    const fields = this.noteTemplateFields(template.markdown);
+    const keys = new Set(fields.map((field) => field.key));
+    return [...fields, ...this.template().filter((field) => !keys.has(field.key))];
+  }
+
+  /** Explicit create, or the first property/entry write, copies the template without touching it. */
+  initializeNote(workId: string): ProjectWrite {
+    if (this.note(this.work(workId)).exists) throw new HttpError(409, "note_exists", "프로젝트 노트가 이미 있어 템플릿으로 덮어쓰지 않았습니다.");
+    return this.write(workId, "폴더 템플릿 적용", (text) => text);
+  }
+
   private vaultTypes() {
     return vaultPropertyTypes(this.pkm.vault.root);
   }
 
   /** A property's kind: the user's choice here, the template's, the vault's Obsidian's, else what its value shows. */
-  typeOf(key: string, values: string[] | null): PropertyType {
-    return this.typeResolver()(key, values);
+  typeOf(key: string, values: string[] | null, work?: Work): PropertyType {
+    return this.typeResolver(work)(key, values);
   }
 
   /** `typeOf` with its sources read once, for the many properties of a list of projects. */
-  private typeResolver(): (key: string, values: string[] | null) => PropertyType {
+  private typeResolver(work?: Work): (key: string, values: string[] | null) => PropertyType {
     const chosen = this.readJson<Record<string, PropertyType>>(TYPES_KEY, {});
-    const template = new Map(this.template().map((field) => [field.key, field.type] as const));
+    const template = new Map(this.fieldsFor(work).map((field) => [field.key, field.type] as const));
     let vault: Map<string, PropertyType> | null = null;
     return (key, values) => {
       if (key === STAGE_KEY) return "stage";
@@ -410,8 +468,8 @@ export class Projects {
   /** Every project as lists show it (archived ones too: the archive stage's column). */
   summaries(): ProjectSummary[] {
     const out: ProjectSummary[] = [];
-    const typeOf = this.typeResolver();
     for (const work of this.manager.view.works.values()) {
+      const typeOf = this.typeResolver(work);
       const path = this.notePaths()[work.id] ?? null;
       const known = path ? this.readCached(path) : null;
       const read = known?.read ?? null;
@@ -429,9 +487,36 @@ export class Projects {
         properties: (read?.properties ?? []).map(([key, values]) => ({ key, type: typeOf(key, values), values: values ?? [] })),
         noteUpdatedAt: known?.at ?? null,
         preview: read ? notePreview(read.free) : null,
+        ...(read && path ? this.thumbnail(work, path, read, known?.at ?? 0) : {}),
       });
     }
     return out;
+  }
+
+  private thumbnail(work: Work, path: string, read: ReadNote, at: number): Pick<ProjectSummary, "thumb" | "thumbUpdatedAt"> {
+    const cover = ["thumbnail", "cover", "썸네일", "표지"].map((key) => read.properties.find(([name]) => name.toLowerCase() === key)?.[1]?.[0]?.trim()).find(Boolean);
+    const image = cover ? (firstImage(cover.startsWith("[[") ? `!${cover}` : cover) ?? { kind: /^https?:\/\//i.test(cover) ? "url" as const : "link" as const, target: cover }) : firstImage(read.body);
+    if (!image) return { thumb: null };
+    if (image.kind === "url") return { thumb: { url: image.target }, thumbUpdatedAt: at };
+    try {
+      const file = this.pkm.workImage(work.id, path, image.target);
+      return { thumb: { project: work.id, src: image.target }, thumbUpdatedAt: Math.max(at, statSync(file).mtimeMs) };
+    } catch {
+      // Obsidian embeds can refer to a visible image elsewhere in the connected vault.
+      if (image.kind !== "embed") return { thumb: null };
+    }
+    try {
+      const from = this.pkm.vault.root ? relative(this.pkm.vault.root, path).split(sep).join("/") : "";
+      const vault = this.pkm.notes.resolveImage(from, { kind: "embed", target: image.target });
+      if (!vault) return { thumb: null };
+      const file = this.pkm.vaultImage(vault);
+      return { thumb: { vault }, thumbUpdatedAt: Math.max(at, statSync(file).mtimeMs) };
+    } catch { return { thumb: null }; }
+  }
+
+  image(workId: string, src: string) {
+    const work = this.work(workId);
+    return this.pkm.workImage(workId, this.notePath(work), src);
   }
 
   /** A note as last read; read again (`fresh`) only when the file's time or size changed. Null: none. */
@@ -661,7 +746,8 @@ export class Projects {
     const work = this.work(workId);
     const path = this.notePath(work);
     const before = existsSync(path) ? readFileSync(path) : null;
-    const text = before ? before.toString("utf8") : newNote(work.id);
+    const template = before ? null : this.effectiveTemplate(work.folderId);
+    const text = before ? before.toString("utf8") : template ? setFrontmatterKey(template.markdown, ID_KEY, [work.id]) : newNote(work.id);
     if (before && readNote(text).problem) throw new HttpError(409, "note_unreadable", "노트의 속성 부분이 망가져 있어 고치지 않았습니다. 노트를 직접 열어 고쳐 주세요.");
     const next = change(text);
     if (before && next === text) return { token: "", created: false, summary, page: this.page(workId) };
@@ -688,7 +774,7 @@ export class Projects {
     const name = key.trim();
     if (!name || name === ID_KEY) throw new HttpError(400, "bad_key", "그 이름의 속성은 쓸 수 없습니다.");
     if (name === STAGE_KEY) return this.setStage(workId, values?.[0] ?? null);
-    const kind = type ?? this.typeOf(name, values);
+    const kind = type ?? this.typeOf(name, values, this.work(workId));
     const clean = values === null ? null : normalizeValues(kind, values);
     const result = this.write(workId, values === null ? `${name} 지움` : `${name}: ${clean!.join(", ") || "(빈 값)"}`, (text) => setFrontmatterKey(text, name, clean, keyStyle(kind)));
     if (name === "tags") this.manager.updateWork(workId, { tags: (clean ?? []).map((tag) => tag.replace(/^#/, "")) });
