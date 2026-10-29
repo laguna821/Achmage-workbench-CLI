@@ -402,6 +402,8 @@ export type ModelOption = {
   id: string;
   label: string;
   description: string | null;
+  /** Engine-reported resolved name of an alias; the requested id stays unchanged. */
+  resolvedModel?: string | null;
   /** Effort ids this model accepts, in the engine's order. Empty when the model has no effort control. */
   efforts: string[];
   defaultEffort: string | null;

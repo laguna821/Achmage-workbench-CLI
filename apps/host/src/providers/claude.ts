@@ -33,6 +33,7 @@ import { emptyStatus, type AdapterSink, type AttachedFile, type ClaudeLaunch, ty
 import { claudeHistory, isRequest } from "../imports.ts";
 import { isImage, mentionFiles } from "../attachments.ts";
 import type { BrowserEngineHooks } from "../browse.ts";
+import { MODEL_CACHE_TTL, modelCacheKey, readModelCache } from "./model-cache.ts";
 
 const run = promisify(execFile);
 
@@ -163,17 +164,17 @@ export function usageFromPlan(limits: unknown): UsageWindow[] {
 }
 
 export function modelsFromInfo(models: ModelInfo[]): ModelOption[] {
+  const hasDefault = models.some((model) => model.value === "default");
   return models.map((model, index) => ({
     id: model.value,
     label: model.displayName || model.value,
     description: model.description || null,
+    resolvedModel: model.resolvedModel ?? null,
     efforts: model.supportedEffortLevels ?? [],
     defaultEffort: null,
-    isDefault: model.value === "default" || index === 0,
+    isDefault: hasDefault ? model.value === "default" : index === 0,
   }));
 }
-
-const MODEL_CACHE_TTL = 24 * 60 * 60_000;
 
 function sdkBundledBinary(): string | null {
   try {
@@ -198,6 +199,9 @@ export class ClaudeAdapter implements ProviderAdapter {
   private closing = false;
 
   private readonly modelCache: string | null;
+  private modelScope: string | null = null;
+  private modelsLoadedAt = 0;
+  private modelsLoading: Promise<void> | null = null;
   private readonly browser: BrowserEngineHooks | null;
 
   private readonly attachmentsDir: string | null;
@@ -220,28 +224,55 @@ export class ClaudeAdapter implements ProviderAdapter {
    * The model list comes from Claude Code itself (initialize response). It is cached so the picker
    * works before the first message, and refreshed in the background at most once a day.
    */
-  private async loadModels() {
-    let cachedAt = 0;
+  private async loadModels(): Promise<void> {
+    if (!this.binary || !this.current.loggedIn) {
+      this.modelScope = null;
+      this.modelsLoadedAt = 0;
+      this.publish({ models: [] });
+      return;
+    }
+    const key = this.currentModelScope();
+    if (this.modelsLoading) {
+      await this.modelsLoading;
+      if (key !== this.modelScope) return this.loadModels();
+      return;
+    }
+    if (key !== this.modelScope) {
+      this.modelScope = key;
+      this.modelsLoadedAt = 0;
+      this.publish({ models: [] });
+    }
+    if (Date.now() - this.modelsLoadedAt < MODEL_CACHE_TTL) return;
+    this.modelsLoading = this.fetchModels(key);
+    try { await this.modelsLoading; } finally { this.modelsLoading = null; }
+  }
+
+  private currentModelScope() {
+    return modelCacheKey([this.binary?.path, this.binary?.args, this.binary?.version, process.env.CLAUDE_CONFIG_DIR ?? null, this.current.loggedIn, this.current.loginMethod, this.current.account, this.current.plan]);
+  }
+
+  private async fetchModels(key: string) {
     if (this.modelCache) {
       try {
-        const cached = JSON.parse(readFileSync(this.modelCache, "utf8")) as { at: number; models: ModelOption[] };
-        cachedAt = cached.at;
-        this.publish({ models: cached.models });
+        const models = readModelCache(JSON.parse(readFileSync(this.modelCache, "utf8")), key);
+        if (models) {
+          this.publish({ models });
+          this.modelsLoadedAt = Date.now();
+          return;
+        }
       } catch {
         // No cache yet.
       }
-    }
-    if (Date.now() - cachedAt < MODEL_CACHE_TTL || !this.binary || !this.current.loggedIn) {
-      return;
     }
     const input = new InputQueue();
     const probe = query({ prompt: input, options: { ...this.sdkLaunch(), settingSources: [] } });
     try {
       const init = await probe.initializationResult();
       const models = modelsFromInfo(init.models);
-      if (models.length) {
+      if (models.length && key === this.currentModelScope()) {
         this.publish({ models });
-        if (this.modelCache) writeFileSync(this.modelCache, JSON.stringify({ at: Date.now(), models }));
+        this.modelsLoadedAt = Date.now();
+        if (this.modelCache) writeFileSync(this.modelCache, JSON.stringify({ key, at: this.modelsLoadedAt, models }));
       }
     } catch {
       // Keep whatever list we had; the picker falls back to the engine default.
@@ -286,7 +317,7 @@ export class ClaudeAdapter implements ProviderAdapter {
   async locate() {
     const before = this.binary;
     await this.resolve();
-    if (this.binary && (this.binary.command !== before?.command || !this.current.loggedIn)) {
+    if (this.binary && (this.binary.command !== before?.command || this.binary.version !== before?.version || !this.current.loggedIn)) {
       await this.refreshStatus();
       void this.loadModels();
     }
@@ -343,6 +374,7 @@ export class ClaudeAdapter implements ProviderAdapter {
       this.publish({ loggedIn: true, loginMethod: login.method, account: login.account, plan: login.plan, error: null });
       void this.readPlanUsage();
     }
+    void this.loadModels();
     return this.current;
   }
 
