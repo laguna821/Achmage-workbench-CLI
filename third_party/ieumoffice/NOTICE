@@ -59,5 +59,11 @@ and screen share manifest-verified rhwp WASM. The studio includes its rhwp
 licence and third-party notices; scripts/build-hwp-studio.mjs verifies the
 source pin and WASM hash and packages those files together.
 
+The bundled `workbench-hwp` tool (apps/host/src/hwp-cli.ts) reuses the pinned
+Ieum CLI's HWP operation catalog and headless editing session, including the
+HWP renderer's skill, studio agent plugin and preservation modules. The
+adapter lives in hwp-ops.mjs; scripts/build-host.mjs verifies the Ieum source
+pin. It shares the same rhwp WASM with the internal editor.
+
 The `ieumoffice` command line tool that Workbench can call is not part of
 this repository; it ships inside an installed IeumOffice application.

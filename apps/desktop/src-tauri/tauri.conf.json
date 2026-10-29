@@ -20,6 +20,7 @@
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.png", "icons/icon.icns", "icons/icon.ico"],
     "resources": {
       "../../host/dist/host.mjs": "host/host.mjs",
+      "../../host/dist/hwp-cli.mjs": "host/hwp-cli.mjs",
       "../../web/dist/": "web/",
       "../../../third_party/kordoc/": "kordoc/"
     },

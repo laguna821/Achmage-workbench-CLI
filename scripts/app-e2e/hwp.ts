@@ -3,7 +3,8 @@ import { copyFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import init, { HwpDocument } from "../../vendor/ieumoffice/vendor/rhwp-core/rhwp.js";
 import { hwpMemosOf, hwpToText } from "../../third_party/ieumoffice/file-parse/hwp.ts";
-import type { Artifact, Session, Snapshot, Work } from "@workbench/contracts";
+import type { Artifact, Session, Snapshot, TranscriptItem, Work } from "@workbench/contracts";
+import { Kordoc } from "../../apps/host/src/kordoc.ts";
 import { installProbe, pageErrors, seedLayout, shot, until, type Ctx } from "./scenarios.ts";
 import { KEY } from "./webdriver.ts";
 
@@ -60,5 +61,52 @@ export async function hwpScenario(ctx: Ctx) {
     ctx.report.check(S, `${format.toUpperCase()} 저장한 판 재열기와 바이트 유지`, reopened && hash(readFileSync(path)) === hash(bytes), undefined, await shot(ctx, `12-${format}-reopened.png`));
     ctx.report.check(S, `${format.toUpperCase()} 편집 화면에서 페이지 예외 없음`, !errors.length && !(await pageErrors(wd)).length, errors.join("\n") || undefined);
     await wd.frame(null);
+    if (format === "hwpx") {
+      // A v0.22 draft is kept as Markdown. Upgrade must expose it, leave the binary editor
+      // untouched, and require an explicit user action before applying its old patch.
+      const beforeLegacy = (await snapshot()).artifacts.find((item) => item.id === artifact.id)!;
+      const legacy = (await new Kordoc().read(path)).replace("보존합니다.", "보존합니다. LEGACY RECOVERED");
+      const key = `workbench.docDraft.${artifact.id}.older-version`;
+      await wd.execute('localStorage.setItem(arguments[0], JSON.stringify(arguments[1]));', key, { baseRevision: beforeLegacy.revision, text: legacy, at: Date.now() });
+      await wd.refresh(); await installProbe(wd);
+      const banner = await wd.waitFor('.pane:not([hidden]) .doc-legacy-draft', 30_000);
+      ctx.report.check(S, "이전 글 편집 복구본을 원본 자동 변경 없이 안내", !!banner && hash(readFileSync(path)) === beforeLegacy.sha256, undefined, await shot(ctx, "12-legacy-draft-offered.png"));
+      const buttons = await wd.findAll('.doc-legacy-draft button');
+      await wd.click(buttons[0]!);
+      ctx.report.check(S, "이전 복구본을 비교 화면에서 검토", await until(async () => await wd.execute<boolean>('return document.body.innerText.includes("LEGACY RECOVERED") && document.body.innerText.includes("이전 글 편집 복구본");')), undefined, await shot(ctx, "12-legacy-draft-review.png"));
+      await wd.click(await wd.waitFor('.doc-legacy-draft button:last-of-type:not(:disabled)'));
+      const recovered = await until(async () => (await snapshot()).artifacts.find((item) => item.id === artifact.id)!.revision > beforeLegacy.revision, 30_000);
+      ctx.report.check(S, "명시적 복구 후 새 HWPX 판 저장·복구 항목만 정리", recovered && (await hwpToText(readFileSync(path))).includes("LEGACY RECOVERED") && await wd.execute<boolean>('return localStorage.getItem(arguments[0]) === null;', key));
+      if (!recovered) throw new Error("Legacy HWPX recovery did not save");
+    }
+    if (ctx.app.name === "real" && format === "hwpx") {
+      const beforeAi = (await snapshot()).artifacts.find((item) => item.id === artifact.id)!;
+      const prompt = "Use workbench-hwp catalog/read/apply to edit the current HWPX working copy. Replace only the exact text '보존합니다.' with '안전하게 보존합니다.'. Preserve the NATIVE HWPX EDIT prefix, LEGACY RECOVERED suffix, every memo, and all formatting. Produce the actual HWPX proposal and do not modify the original file.";
+      await wd.sendKeys(await wd.waitFor('.pane:not([hidden]) .composer-input'), prompt);
+      await wd.click(await wd.waitFor('.pane:not([hidden]) [aria-label="보내기"]'));
+      const messages = async () => (await api<{ items: TranscriptItem[] }>("GET", `/api/sessions/${session.id}/items`)).items;
+      const done = await until(async () => {
+        const items = await messages();
+        if (items.some((item) => item.kind === "approval" && item.decision === null)) return false;
+        return items.some((item) => item.kind === "user" && item.text === prompt) && (await snapshot()).sessions.find((item) => item.id === session.id)?.status === "idle";
+      }, 300_000, 1000);
+      writeFileSync(join(ctx.stage.outDir, "hwp-real-transcript.json"), JSON.stringify(await messages(), null, 2));
+      const proposal = (await snapshot()).proposals.find((item) => item.artifactId === artifact.id && item.status === "pending");
+      ctx.report.check(S, "실제 Codex가 사람의 저장 판을 읽고 HWPX 수정안 생성", done && !!proposal && !proposal.problem && proposal.baseRevision === beforeAi.revision, proposal?.problem ?? undefined);
+      if (!done || !proposal || proposal.problem) throw new Error("Real HWPX proposal was not produced; see transcript");
+      ctx.report.check(S, "한글 수정안 검토 전 원본 판 유지", hash(readFileSync(path)) === beforeAi.sha256);
+      let applied = false;
+      for (const button of await wd.findAll('.doc-proposal-actions button')) if ((await wd.execute<string>('return arguments[0].textContent.trim();', button)) === "적용") { await wd.click(button); applied = true; break; }
+      if (!applied) throw new Error("HWPX apply button was not found");
+      await until(async () => (await snapshot()).artifacts.find((item) => item.id === artifact.id)!.revision > beforeAi.revision, 30_000);
+      const changed = await hwpToText(readFileSync(path));
+      ctx.report.check(S, "실제 한글 수정안 UI 적용과 메모·이전 입력 보존", changed.includes("안전하게 보존합니다.") && changed.includes("NATIVE HWPX EDIT") && changed.includes("LEGACY RECOVERED") && (await hwpMemosOf(readFileSync(path))).some((memo) => memo.text === "원본 메모를 보존"));
+      await wd.frame(await wd.waitFor('.pane:not([hidden]) iframe.office-frame'));
+      const updated = await until(async () => !!await wd.find('.hwp-app[data-phase="ready"]'), 60_000);
+      ctx.report.check(S, "적용한 한글 판이 같은 세션의 내부 편집기로 갱신", updated && (await snapshot()).sessions.filter((item) => item.workId === work.id).length === 1, undefined, await shot(ctx, "12-real-hwpx-applied.png"));
+      copyFileSync(path, join(ctx.stage.outDir, "ai-edited.hwpx"));
+      writeFileSync(join(ctx.stage.outDir, "hwp-real-session.json"), JSON.stringify((await snapshot()).sessions.find((item) => item.id === session.id), null, 2));
+      await wd.frame(null);
+    }
   }
 }

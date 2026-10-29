@@ -1,5 +1,5 @@
 // Search over Hangul and Office documents (design §7, P0): the index reads them through their text
-// view — kordoc for Hangul, IeumOffice for Word, PowerPoint and Excel, the same "글 보기" text — made
+// view — the embedded rhwp WASM for Hangul, IeumOffice for Word, PowerPoint and Excel — made
 // in the background after a revision is recorded, one document at a time. Until the new text is
 // ready the previous entry stays (and for good when no tool can read the file here). No AI.
 

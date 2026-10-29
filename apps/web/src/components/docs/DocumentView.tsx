@@ -108,6 +108,7 @@ export default function DocumentView({
   const everWriter = useRef(false);
   if (lease.canWrite) everWriter.current = true;
   const recoveredDraft = useRef<ReturnType<typeof newestDraft>>(null);
+  const [legacyHangulDraft, setLegacyHangulDraft] = useState<ReturnType<typeof newestDraft>>(null);
   // Pasted or dropped pictures: a link in Markdown (R2 or the work folder), refused in the Hangul text view.
   const docImages = useDocImages(api, artifact, onToast);
   const [drawer, setDrawer] = useState<DrawerMode>("closed");
@@ -184,6 +185,12 @@ export default function DocumentView({
     const result = await api.artifactText(artifactId);
     setBase({ revision: result.revision, text: result.text });
     const draft = recoverDraft && lease.access().writeToken ? newestDraft(artifactId) : null;
+    if (hangul) {
+      // Earlier versions kept a Markdown patch, not an editor document. Keep it separate
+      // from the live binary editor until the user explicitly reviews/applies that draft.
+      if (recoverDraft) setLegacyHangulDraft(draft);
+      setText(result.text); setSaveState("idle"); setConflict(null); return;
+    }
     if (draft && draft.text !== result.text) {
       recoveredDraft.current = draft;
       setText(draft.text);
@@ -200,7 +207,7 @@ export default function DocumentView({
     }
     setSaveState("idle");
     setConflict(null);
-  }, [api, artifactId, textual, onToast, lease.access]);
+  }, [api, artifactId, textual, hangul, onToast, lease.access]);
 
   useEffect(() => {
     if (lease.ready) void load().catch((error: Error) => onToast(error.message));
@@ -208,9 +215,9 @@ export default function DocumentView({
 
   // Keep a local copy of unsaved edits.
   useEffect(() => {
-    if (!base || !everWriter.current) return;
+    if (!base || !everWriter.current || hangul) return;
     keepDraft(artifactId, lease.viewId, text !== base.text ? { baseRevision: base.revision, text, at: Date.now() } : null);
-  }, [artifactId, base, text, lease.viewId]);
+  }, [artifactId, base, text, lease.viewId, hangul]);
 
   const save = useCallback(async (): Promise<number | null> => {
     if (!lease.access().writeToken) {
@@ -411,7 +418,7 @@ export default function DocumentView({
 
   const sendTarget = handoffTo ?? session;
   // PDF and HWP cannot take AI edits (no working copy to patch from); they are always reviewed.
-  const editable = artifact.format !== "pdf" && artifact.format !== "hwp";
+  const editable = artifact.format !== "pdf";
   const effectiveMode: DocRef["mode"] = handoffTo || !editable || create ? "review" : requestMode;
   const workDocs = Object.values(state.artifacts)
     .filter((entry) => entry.workId === work.id && entry.id !== artifactId)
@@ -744,6 +751,18 @@ export default function DocumentView({
           </span>
         </div>
       </header>
+
+      {legacyHangulDraft ? <div className="notice doc-legacy-draft" role="status">
+        이전 버전에서 저장하지 않은 글 편집이 남아 있습니다(r{legacyHangulDraft.baseRevision}).
+        <button type="button" className="button small" onClick={() => setCompare({ title: "이전 글 편집 복구본", before: base?.text ?? "", after: legacyHangulDraft.text, beforeLabel: `현재 r${artifact.revision}`, afterLabel: "복구본" })}>복구본 검토</button>
+        <button type="button" className="button small" disabled={!lease.canWrite || artifact.revision !== legacyHangulDraft.baseRevision || officeStatus.dirty} onClick={() => {
+          const draft = legacyHangulDraft;
+          void api.saveArtifact(artifactId, draft.baseRevision, draft.text).then(() => {
+            clearRecoveredDraft(draft); setLegacyHangulDraft(null); setCompare(null); onToast("이전 글 편집을 새 판으로 복구했습니다.");
+          }).catch((error: Error) => onToast(error.message));
+        }}>복구본을 새 판으로 저장</button>
+        {artifact.revision !== legacyHangulDraft.baseRevision ? <span>문서가 바뀌어 자동 적용하지 않습니다. 복구본은 보관됩니다.</span> : null}
+      </div> : null}
 
       {readers.length || artifact.diskState !== "same" ? (
         <div className="doc-readers">

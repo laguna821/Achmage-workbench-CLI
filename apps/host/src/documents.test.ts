@@ -8,12 +8,14 @@ import { Kordoc } from "./kordoc.ts";
 import { HttpError, SessionManager } from "./sessions.ts";
 import { Store } from "./store.ts";
 import { emptyStatus, type AdapterSink, type ProviderAdapter } from "./providers/types.ts";
+import { editHwp } from "./hwp-ops.mjs";
+import { Documents } from "./artifacts.ts";
 
 /** Engine stand-in: records prompts and runs a per-test action, then ends the turn. */
 class ScriptedAdapter implements ProviderAdapter {
   readonly provider: "claude" | "codex";
   prompts: string[] = [];
-  action: (prompt: string, sessionId: string, turnKey: string) => void = () => {};
+  action: (prompt: string, sessionId: string, turnKey: string) => void | Promise<void> = () => {};
   private readonly sink: () => AdapterSink;
   constructor(provider: "claude" | "codex", sink: () => AdapterSink) {
     this.provider = provider;
@@ -32,7 +34,7 @@ class ScriptedAdapter implements ProviderAdapter {
   async send(session: Session, _work: Work, text: string, turnKey: string) {
     this.prompts.push(text);
     this.sink().updateSession(session.id, { status: "running" });
-    this.action(text, session.id, turnKey);
+    await this.action(text, session.id, turnKey);
     this.sink().upsertItem(session.id, { kind: "turnEnd", id: `end:${turnKey}`, status: "completed", durationMs: 5, at: Date.now() });
     this.sink().updateSession(session.id, { status: "idle" });
   }
@@ -53,7 +55,7 @@ function setup() {
   manager.registerAdapter(codex);
   const work = manager.createWork({ title: "강의", cwd: join(dir, "project") });
   writeFileSync(join(dir, ".keep"), "");
-  return { dir, manager, claude, codex, work };
+  return { dir, manager, claude, codex, work, store };
 }
 
 const workingPathIn = (prompt: string) => /작업 사본만 수정하세요: (.+)$/m.exec(prompt)?.[1];
@@ -218,8 +220,8 @@ describe("documents and revisions", () => {
   });
 
   // Uses the kordoc engine shipped in third_party/kordoc.
-  it("edits HWPX through its Markdown view and applies AI proposals as patches", async () => {
-    const { manager, claude, work, dir } = setup();
+  it("recovers legacy Markdown edits and creates new HWPX proposals as binary editor documents", async () => {
+    const { manager, claude, work, dir, store } = setup();
     const { mkdirSync, execFileSync } = await import("node:child_process").then(async (child) => ({ ...(await import("node:fs")), execFileSync: child.execFileSync }));
     mkdirSync(work.cwd, { recursive: true });
     // Make a real HWPX with the same engine.
@@ -237,21 +239,40 @@ describe("documents and revisions", () => {
     const view = await manager.documents.text(artifact.id);
     expect(view.view).toBe(true);
     expect(view.text).toContain("우리는 자료를 읽고 질문을 만듭니다.");
-    const saved = await manager.documents.saveText(artifact.id, 1, view.text.replace("질문을 만듭니다.", "질문을 함께 만듭니다."));
+    expect(view.editable).toBe(false);
+    const legacyText = await new Kordoc().read(file);
+    const saved = await manager.documents.saveText(artifact.id, 1, legacyText.replace("질문을 만듭니다.", "질문을 함께 만듭니다."));
     expect(saved.revision).toBe(2);
     expect((await manager.documents.text(artifact.id)).text).toContain("질문을 함께 만듭니다.");
 
     const writer = manager.createSession(work.id, { provider: "claude" });
-    claude.action = (prompt) => {
-      expect(prompt).toContain("Markdown 작업 사본만 수정하세요");
-      const working = join(work.cwd, /Markdown 작업 사본만 수정하세요: (.+)$/m.exec(prompt)![1]);
-      writeFileSync(working, readFileSync(working, "utf8").replace("조건을 살핍니다.", "성립 조건부터 살핍니다."));
+    claude.action = async (prompt) => {
+      expect(prompt).toContain("workbench-hwp catalog");
+      const working = join(work.cwd, workingPathIn(prompt)!);
+      expect(working).toMatch(/\.hwpx$/);
+      const edited = await editHwp(readFileSync(working), "hwpx", [{ op: "replace_text", find: "조건을 살핍니다.", replace: "성립 조건부터 살핍니다." }]);
+      writeFileSync(working, edited.bytes);
     };
     await manager.send(writer.id, "hwpx-edit", "둘째 문단을 고쳐줘", [{ artifactId: artifact.id, revision: 2, mode: "edit", selection: null }]);
     const proposal = manager.snapshot().proposals.find((entry) => entry.requestId === "hwpx-edit")!;
     expect(proposal.status).toBe("pending");
+    expect((await manager.documents.text(artifact.id)).text).not.toContain("성립 조건부터");
+    expect((await manager.documents.proposalTexts(proposal.id)).proposed).toContain("성립 조건부터");
     const applied = await manager.documents.applyProposal(proposal.id);
     expect(applied.artifact.revision).toBe(3);
     expect((await manager.documents.text(artifact.id)).text).toContain("성립 조건부터 살핍니다.");
+    // A proposal saved by v0.22 remains a Markdown patch after restart. Its old cache is
+    // separate from the new WASM text view and must not be reinterpreted as a binary.
+    const oldView = await new Kordoc().read(file);
+    writeFileSync(join(dir, "artifacts", artifact.id, "r3.view.md"), oldView);
+    const oldWorking = join(work.cwd, ".workbench", "drafts", "legacy.hwpx.md");
+    writeFileSync(oldWorking, oldView.replace("질문을 함께 만듭니다.", "질문을 서로 나눕니다."));
+    const legacy = { ...proposal, id: "legacy-proposal", workingPath: oldWorking, baseRevision: 3, status: "running" as const, appliedRevision: null };
+    store.saveProposal(legacy);
+    const resumed = new Documents(store, new EventBus(), dir, new Kordoc());
+    expect(resumed.finishProposal(legacy.id).status).toBe("pending");
+    expect((await resumed.proposalTexts(legacy.id)).base).toBe(oldView);
+    expect((await resumed.applyProposal(legacy.id)).artifact.revision).toBe(4);
+    expect((await resumed.text(artifact.id)).text).toContain("질문을 서로 나눕니다.");
   }, 60_000);
 });

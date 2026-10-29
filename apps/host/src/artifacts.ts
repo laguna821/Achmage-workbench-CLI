@@ -26,6 +26,8 @@ import { designAssetPath, designGuide, designProblem, designStem, saveDesignAsse
 import type { IeumOffice, OfficePage } from "./ieumoffice.ts";
 import { BackgroundIndex } from "./doc-text.ts";
 import { DocumentRegistry } from "./document-registry.ts";
+import { hwpToText } from "../../../third_party/ieumoffice/file-parse/hwp.ts";
+import { hwpFormat, openHwpBytes, prepareHwpSave } from "./hwp-codec.ts";
 
 // Documents with exact revisions (PRD 3.3). Every recorded revision is an immutable copy under the
 // gateway's data folder; the real file stays where it is in the work folder. AI edits happen in a
@@ -53,8 +55,10 @@ function writeAtomic(path: string, data: Buffer | string) {
 }
 
 const isHangul = (format: string) => format === "hwpx" || format === "hwp";
+/** Pre-native proposals contain Markdown, identified by their persisted path, never by a new default. */
+const legacyHangulProposal = (artifact: Artifact, proposal: Proposal) => isHangul(artifact.format) && /\.hwpx?\.md$/i.test(proposal.workingPath);
 
-/** Formats searched through their text view (kordoc, IeumOffice) instead of their bytes. */
+/** Formats searched through their editor engine's text view instead of binary bytes. */
 const hasTextView = (format: DocFormat) => isHangul(format) || isOfficeFormat(format);
 
 /** Extension kept on copies of a document (designs keep their two-part `.design.json`). */
@@ -86,10 +90,11 @@ function searchText(format: string, data: Buffer): string | null {
 
 /**
  * Bumped when what the document index holds changes; documents are then indexed again once.
+ * 3: Hangul text is read by the same pinned rhwp WASM as its editor; old patch views stay intact.
  * 2: Hangul and Office documents by their text view, made in the background (they dropped out
  * before), and no entries left under old row ids (older revisions' text was still found).
  */
-const DOCUMENT_SEARCH_VERSION = "2";
+const DOCUMENT_SEARCH_VERSION = "3";
 
 function countChanges(before: string, after: string) {
   let added = 0;
@@ -128,8 +133,12 @@ export class Documents {
     // Proposals a restart left running are finished by the session manager, with the turn it cut.
     for (const proposal of store.proposals()) this.proposals.set(proposal.id, proposal);
     if (store.getMeta("search.documents") !== DOCUMENT_SEARCH_VERSION) {
-      store.clearDocumentIndex();
-      for (const artifact of this.artifacts.values()) this.indexLatest(artifact);
+      // v3 changes the Hangul reader. Keep a v2 entry until the new engine has read its file.
+      if (store.getMeta("search.documents") !== "2") store.clearDocumentIndex();
+      for (const artifact of this.artifacts.values()) {
+        if (hasTextView(artifact.format)) this.textIndex.add(artifact.id, artifact.revision);
+        else this.indexLatest(artifact);
+      }
       store.setMeta("search.documents", DOCUMENT_SEARCH_VERSION);
     }
   }
@@ -155,14 +164,14 @@ export class Documents {
   }
 
   /**
-   * Index a Hangul or Office revision by its text view, kept with the revision (made now by kordoc or
-   * IeumOffice when it is not). Only while it is still the latest; without the tool nothing changes.
+   * Index a Hangul or Office revision by its text view, kept with the revision (made by its
+   * editor engine when absent). Only while it is still latest; a failed read changes no entry.
    */
   private async indexView(artifactId: string, revision: number) {
     const latest = () => this.artifacts.get(artifactId)?.revision === revision;
     const artifact = this.artifacts.get(artifactId);
     if (!artifact || !latest() || !hasTextView(artifact.format)) return;
-    const kept = join(this.root, artifactId, `r${revision}.view.md`);
+    const kept = this.viewCachePath(artifact, revision);
     let text = readFileOrNull(kept)?.toString("utf8") ?? null;
     if (text === null) {
       text = await this.extractText(join(this.root, artifactId, `r${revision}${extname(artifact.path)}`), artifact.format);
@@ -172,9 +181,9 @@ export class Documents {
     if (latest()) this.store.indexDocument(artifactId, text);
   }
 
-  /** The text view of a Hangul or Office file: kordoc or IeumOffice, null when neither is here. */
+  /** The text view from the native Hangul WASM or Office reader. */
   private async extractText(file: string, format: DocFormat): Promise<string | null> {
-    if (isHangul(format)) return this.kordoc?.available ? this.kordoc.read(file) : null;
+    if (isHangul(format)) return hwpToText(readFileSync(file));
     if (isOfficeFormat(format)) return this.ieum?.available ? this.ieum.textView(file, format) : null;
     return null;
   }
@@ -320,18 +329,31 @@ export class Documents {
   }
 
   /**
-   * Editable text of a revision (latest by default). Hangul documents are shown as their Markdown
-   * view from the kordoc engine; HWP stays read only.
+   * Text of a revision (latest by default). Binary documents expose a read-only text view;
+   * the internal editor owns their edits and saves.
    */
   async text(artifactId: string, revision?: number) {
     const artifact = this.check(artifactId);
     const target = revision ?? artifact.revision;
     const text = await this.view(artifactId, target);
     const office = isOfficeFormat(artifact.format);
-    return { artifact, revision: target, text, editable: artifact.format !== "hwp" && artifact.format !== "pdf" && !office, view: isHangul(artifact.format) || office };
+    return { artifact, revision: target, text, editable: !isHangul(artifact.format) && artifact.format !== "pdf" && !office, view: isHangul(artifact.format) || office };
   }
 
-  /** Text form of a revision: the file itself, or the cached kordoc Markdown view for Hangul files. */
+  private viewCachePath(artifact: Artifact, revision: number) {
+    return join(this.root, artifact.id, `r${revision}.${isHangul(artifact.format) ? "rhwp-view-v1" : "view"}.md`);
+  }
+
+  /** The old text patcher's view remains available only for existing Markdown drafts/proposals. */
+  private async legacyHangulView(artifact: Artifact, revision: number) {
+    const cached = join(this.root, artifact.id, `r${revision}.view.md`), existing = readFileOrNull(cached);
+    if (existing) return existing.toString("utf8");
+    if (!this.kordoc?.available) throw new HttpError(501, "legacy_hangul_unavailable", "이전 글 편집 수정안을 복구할 도구가 없습니다. 원본과 수정안은 보존되어 있습니다.");
+    const text = await this.kordoc.read(this.revisionPath(artifact.id, revision));
+    writeFileSync(cached, text); return text;
+  }
+
+  /** Text form of a revision, using a separate cache identity for the native Hangul reader. */
   async view(artifactId: string, revision: number): Promise<string> {
     const artifact = this.get(artifactId);
     const file = this.revisionPath(artifactId, revision);
@@ -340,7 +362,7 @@ export class Documents {
       if (artifact.format === "pdf") throw new HttpError(415, "binary_document", "PDF는 텍스트로 열지 않습니다.");
       return readFileSync(file, "utf8");
     }
-    const cached = join(this.root, artifactId, `r${revision}.view.md`);
+    const cached = this.viewCachePath(artifact, revision);
     const existing = readFileOrNull(cached);
     if (existing) return existing.toString("utf8");
     if (office) {
@@ -350,8 +372,7 @@ export class Documents {
       if (revision === this.get(artifactId).revision) this.store.indexDocument(artifactId, markdown);
       return markdown;
     }
-    if (!this.kordoc?.available) throw new HttpError(501, "kordoc_missing", "한글 문서 엔진(kordoc)이 없어 이 문서를 텍스트로 볼 수 없습니다.");
-    const markdown = await this.kordoc.read(file);
+    const markdown = await hwpToText(readFileSync(file));
     writeFileSync(cached, markdown);
     if (revision === this.get(artifactId).revision) this.store.indexDocument(artifactId, markdown);
     return markdown;
@@ -446,7 +467,7 @@ export class Documents {
     if (artifact.diskState === "changed") {
       throw new HttpError(409, "disk_changed", "다른 프로그램이 이 파일을 바꿨습니다. 내 수정은 그대로 두고 비교해 주세요.");
     }
-    if (isHangul(artifact.format) && text === (await this.view(artifactId, expectedRevision))) return artifact;
+    if (isHangul(artifact.format) && text === (await this.legacyHangulView(artifact, expectedRevision))) return artifact;
     if (artifact.format === "design") {
       const problem = designProblem(text);
       if (problem) throw new HttpError(422, "invalid_design", `디자인을 저장하지 않았습니다: ${problem}`);
@@ -462,7 +483,9 @@ export class Documents {
     if (hangul) {
       const markdown = await this.kordoc!.read(this.revisionPath(artifactId, saved.revision));
       writeFileSync(join(this.root, artifactId, `r${saved.revision}.view.md`), markdown);
-      if (this.get(artifactId).revision === saved.revision) this.store.indexDocument(artifactId, markdown);
+      const plain = await hwpToText(readFileSync(this.revisionPath(artifactId, saved.revision)));
+      writeFileSync(this.viewCachePath(saved, saved.revision), plain);
+      if (this.get(artifactId).revision === saved.revision) this.store.indexDocument(artifactId, plain);
     }
     return saved;
   }
@@ -550,7 +573,7 @@ export class Documents {
     if (!Number.isSafeInteger(ref.revision) || ref.revision < 1 || ref.revision > artifact.revision) throw new HttpError(400, "revision_not_found", `r${ref.revision} 판이 없습니다.`);
     const digest = this.revisionSha(artifact.id, ref.revision);
     if (ref.sha256 && ref.sha256 !== digest) throw new HttpError(409, "reference_changed", "참조 문서의 해시가 일치하지 않습니다.");
-    if (ref.mode === "edit" && (artifact.format === "hwp" || artifact.format === "pdf")) {
+    if (ref.mode === "edit" && artifact.format === "pdf") {
       throw new HttpError(400, "not_editable", `${artifact.format.toUpperCase()}는 AI 수정안을 만들 수 없습니다. 검토 요청으로 보내 주세요.`);
     }
     const office = isOfficeFormat(artifact.format);
@@ -572,8 +595,7 @@ export class Documents {
       chmodSync(pinned, 0o444);
     }
     if (sha256(readFileSync(pinned)) !== digest) throw new HttpError(409, "pinned_copy_changed", "참조 사본이 변경되어 요청을 보내지 않았습니다. 원래 문서 판은 보존되어 있습니다.");
-    // Hangul files also get their Markdown view, which is what the engine reads and edits; Office
-    // files get a text view to read (edits go through the ieumoffice tool on the working copy).
+    // Readable text is a separate immutable reference. Edits always target the binary copy.
     let pinnedView: string | null = null;
     if (office && this.ieum?.available) {
       pinnedView = join(pinnedDir, `${pinStem}${extension}.md`);
@@ -582,7 +604,7 @@ export class Documents {
         chmodSync(pinnedView, 0o444);
       }
     }
-    if (hangul && this.kordoc?.available) {
+    if (hangul) {
       pinnedView = join(pinnedDir, `${pinStem}${extension}.md`);
       if (!existsSync(pinnedView)) {
         writeFileSync(pinnedView, await this.view(artifact.id, ref.revision));
@@ -597,9 +619,8 @@ export class Documents {
       if (busy) throw new HttpError(409, "artifact_busy", "다른 세션이 이 문서의 수정안을 만드는 중입니다. 검토 요청으로 보내 주세요.");
       const draftDir = join(cwd, WORKBENCH_DIR, "drafts");
       mkdirSync(draftDir, { recursive: true });
-      const workingPath = join(draftDir, `${pinStem}.${sha256(requestId).slice(0, 32)}${hangul ? `${extension}.md` : extension}`);
-      if (hangul) writeFileSync(workingPath, await this.view(artifact.id, ref.revision));
-      else copyFileSync(source, workingPath);
+      const workingPath = join(draftDir, `${pinStem}.${sha256(requestId).slice(0, 32)}${extension}`);
+      copyFileSync(source, workingPath);
       chmodSync(workingPath, 0o644);
       const now = Date.now();
       proposal = {
@@ -637,7 +658,7 @@ export class Documents {
     if (proposal.status !== "running") return proposal;
     const made = { ...(end.model !== undefined ? { model: end.model } : {}), ...(end.effort !== undefined ? { effort: end.effort } : {}) };
     const artifact = this.get(proposal.artifactId);
-    const base = isHangul(artifact.format)
+    const base = legacyHangulProposal(artifact, proposal)
       ? readFileOrNull(join(this.root, artifact.id, `r${proposal.baseRevision}.view.md`))
       : readFileOrNull(this.revisionPath(proposal.artifactId, proposal.baseRevision));
     const working = readFileOrNull(proposal.workingPath);
@@ -648,22 +669,26 @@ export class Documents {
       return empty;
     }
     const office = isOfficeFormat(artifact.format);
-    const counts = office ? { added: 0, removed: 0 } : countChanges(base.toString("utf8"), working.toString("utf8"));
+    const binaryHangul = isHangul(artifact.format) && !legacyHangulProposal(artifact, proposal);
+    const counts = office || binaryHangul ? { added: 0, removed: 0 } : countChanges(base.toString("utf8"), working.toString("utf8"));
     const problem = artifact.format === "design" ? designProblem(working.toString("utf8")) : null;
     const pending: Proposal = { ...proposal, ...counts, ...made, problem, ...(end.interruptedBy ? { interruptedBy: end.interruptedBy } : {}), status: "pending", updatedAt: now };
     this.saveProposal(pending);
     if (office) void this.checkOffice(pending.id);
+    if (binaryHangul) void this.checkHangul(pending.id);
     return pending;
   }
 
-  /** Why a document an engine just created cannot be opened, or null (Hangul through kordoc, Office through IeumOffice). */
+  /** Why a new document cannot be opened by its editor engine, or null. */
   async newDocumentProblem(path: string): Promise<string | null> {
     const format = formatOf(path);
     if (format === "design") return designProblem(readFileOrNull(path)?.toString("utf8") ?? "");
     if (format && isOfficeFormat(format)) return this.officeProblem(path);
-    if (format === "hwpx" && this.kordoc?.available) {
+    if (format && isHangul(format)) {
       try {
-        await this.kordoc.read(path);
+        const bytes = readFileSync(path);
+        await openHwpBytes(bytes, hwpFormat(format));
+        await hwpToText(bytes);
         return null;
       } catch (error) {
         return `한글 엔진이 이 파일을 읽지 못했습니다: ${error instanceof Error ? error.message : String(error)}`;
@@ -677,6 +702,19 @@ export class Documents {
     const proposal = this.proposal(proposalId);
     const problem = await this.officeProblem(proposal.workingPath);
     if (problem && this.proposal(proposalId).status === "pending") this.saveProposal({ ...this.proposal(proposalId), problem, updatedAt: Date.now() });
+  }
+
+  private async checkHangul(proposalId: string) {
+    const proposal = this.proposal(proposalId), artifact = this.get(proposal.artifactId);
+    const original = readFileOrNull(this.revisionPath(artifact.id, proposal.baseRevision)), working = readFileOrNull(proposal.workingPath);
+    let problem: string | null = null, counts = { added: 0, removed: 0 };
+    try {
+      if (!original || !working) throw new Error("수정안 사본이 없습니다.");
+      await prepareHwpSave(original, working, hwpFormat(artifact.format), {});
+      counts = countChanges(await hwpToText(original), await hwpToText(working));
+    } catch (error) { problem = `한글 수정안을 적용할 수 없습니다: ${error instanceof Error ? error.message : String(error)}`; }
+    const latest = this.proposal(proposalId), nowBytes = readFileOrNull(proposal.workingPath);
+    if (latest.status === "pending" && working && nowBytes && sha256(working) === sha256(nowBytes)) this.saveProposal({ ...latest, ...counts, problem, updatedAt: Date.now() });
   }
 
   private async officeProblem(path: string): Promise<string | null> {
@@ -701,13 +739,15 @@ export class Documents {
     return {
       proposal,
       artifact,
-      base: await this.view(artifact.id, proposal.baseRevision),
+      base: legacyHangulProposal(artifact, proposal) ? await this.legacyHangulView(artifact, proposal.baseRevision) : await this.view(artifact.id, proposal.baseRevision),
       proposed: isOfficeFormat(artifact.format)
         ? existsSync(proposal.workingPath) && this.ieum?.available
           ? await this.ieum.textView(proposal.workingPath, artifact.format as "docx" | "pptx" | "xlsx")
           : ""
-        : (readFileOrNull(proposal.workingPath)?.toString("utf8") ?? ""),
-      current: await this.view(artifact.id, artifact.revision),
+        : isHangul(artifact.format) && !legacyHangulProposal(artifact, proposal)
+          ? await hwpToText(readFileSync(proposal.workingPath))
+          : (readFileOrNull(proposal.workingPath)?.toString("utf8") ?? ""),
+      current: legacyHangulProposal(artifact, proposal) ? await this.legacyHangulView(artifact, artifact.revision) : await this.view(artifact.id, artifact.revision),
     };
   }
 
@@ -738,7 +778,11 @@ export class Documents {
       const problem = await this.officeProblem(proposal.workingPath);
       if (problem) throw new HttpError(422, "invalid_document", `이 수정안은 적용하지 않습니다. ${problem}`);
     }
-    const data = isHangul(artifact.format) ? await this.contentFor(artifact, proposal.baseRevision, working.toString("utf8")) : working;
+    const data = legacyHangulProposal(artifact, proposal)
+      ? await this.contentFor(artifact, proposal.baseRevision, working.toString("utf8"))
+      : isHangul(artifact.format)
+        ? await prepareHwpSave(readFileSync(this.revisionPath(artifact.id, proposal.baseRevision)), working, hwpFormat(artifact.format), {})
+        : working;
     const latest = this.check(artifact.id);
     if (latest.revision !== proposal.baseRevision || latest.diskState !== "same") throw new HttpError(409, "stale_proposal", "적용하는 동안 문서가 바뀌었습니다.");
     this.registry.assertWrite(artifact.id, access);
@@ -777,7 +821,7 @@ export class Documents {
     if (ref.savedSnapshot) lines.push("  · 사용자가 고른 저장된 판입니다. 열린 편집기의 미저장 내용은 포함하지 않습니다.");
     lines.push(`  · 이 판의 읽기 전용 사본: ${show(pinned)}`);
     if (pinnedView) lines.push(`  · 같은 판의 Markdown 보기(한글 문서 내용, 읽기 전용): ${show(pinnedView)}`);
-    if (proposal && isHangul(artifact.format)) {
+    if (proposal && legacyHangulProposal(artifact, proposal)) {
       lines.push(`  · 고칠 때는 이 Markdown 작업 사본만 수정하세요: ${show(proposal.workingPath)}`);
       lines.push("    문단·표 칸의 글자만 바꾸세요. 문단을 새로 만들거나 지우거나 순서를 바꾸면 HWPX에 반영되지 않습니다. 원본 HWPX는 직접 고치지 마세요.");
     } else if (proposal) {
@@ -791,6 +835,11 @@ export class Documents {
       lines.push(...designGuide(readFileOrNull(source)?.toString("utf8") ?? null, artifact.path));
     }
     if (isOfficeFormat(artifact.format)) lines.push(...this.officeGuide(artifact.format as "docx" | "pptx" | "xlsx", proposal ? show(proposal.workingPath) : null, pinnedView ? show(pinnedView) : null));
+    if (isHangul(artifact.format) && !(proposal && legacyHangulProposal(artifact, proposal))) {
+      lines.push("  · 한글 도구: `workbench-hwp catalog`로 원본 편집기의 본문·표·서식·필드·각주 명령과 정확한 JSON schema를 확인하세요.");
+      lines.push("    읽기: `workbench-hwp read <파일> --full`. 압축/XML을 직접 고치거나 전체 문서를 텍스트로 다시 만들지 마세요.");
+      if (proposal) lines.push(`    수정 명령: workbench-hwp apply ${JSON.stringify(show(proposal.workingPath))} --ops <ops.json> (먼저 --dry-run 가능). 명령은 작업 사본만 저장합니다. 원본은 사용자가 수정안을 적용할 때만 바뀝니다.`);
+    }
     if (ref.selection) {
       lines.push(`  · 선택 범위(${ref.selection.label}):`);
       if (ref.selection.objectIds?.length) lines.push(`    페이지 id ${ref.selection.pageId ?? "?"}, 개체 id ${ref.selection.objectIds.join(", ")}`);

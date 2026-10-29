@@ -38,7 +38,9 @@ node scripts/app-e2e/run.ts apps/desktop/src-tauri/target/debug/achmage-workbenc
 
 웹/호스트 소스만 빌드하면 기존 실행파일 옆의 리소스가 그대로 남는다. **Tauri 빌드까지 수행**하고 `apps/web/dist/index.html`과 `apps/desktop/src-tauri/target/debug/web/index.html`이 같은지 확인한다. 이전 리소스 실행을 최신 UI 검증으로 오인하지 않는다.
 
-`--only=hwp`는 HWP와 HWPX 각각의 synthetic 본문·메모를 내부 한글 탭으로 연다. 실제 페이지 클릭으로 입력부에 초점을 주고 Ctrl+Home·글 입력·Ctrl+S를 WebDriver 키 입력으로 보낸다. 저장한 바이트를 실제 rhwp 엔진으로 읽어 본문·메모·원본 보존을 확인하고 앱을 새로고침해 재열기 화면을 남긴다. Electron/Xvfb나 AI 엔진은 사용하지 않는다. 이 검사는 한글 IME나 전체 표/인쇄 검증을 대신하지 않는다.
+`--only=hwp`는 HWP와 HWPX 각각의 synthetic 본문·메모를 내부 한글 탭으로 연다. 실제 페이지 클릭으로 입력부에 초점을 주고 Ctrl+Home·글 입력·Ctrl+S를 WebDriver 키 입력으로 보낸다. 저장한 바이트를 실제 rhwp 엔진으로 읽어 본문·메모·원본 보존을 확인하고 앱을 새로고침해 재열기 화면을 남긴다. 이전 버전의 HWPX Markdown 복구본도 안내 → 비교 → 명시적 복구로 검사한다. Electron/Xvfb는 사용하지 않으며 기본 검사는 모델을 호출하지 않는다. 이 검사는 한글 IME나 전체 표/인쇄 검증을 대신하지 않는다.
+
+`--only=hwp --engines=real`은 실제 Codex에 HWPX 작업 사본의 문장 한 곳 수정을 요청한다. 실제 바이너리 수정안 생성, 적용 전 원본 불변, UI 적용과 같은 세션의 내부 편집기 갱신을 검사한다. 사람의 입력·기존 복구 문장·메모를 확인하고 transcript·실제 모델/session 식별·수정 파일·화면을 남긴다. 최대 5분 기다리며 임의 승인을 자동 수락하지 않는다.
 
 Linux에서 Broadway는 파일로 보이지 않는 추상 UNIX 소켓을 사용할 수 있으므로 실제 연결로 준비 상태를 판별한다. 설정 저장은 화면이 닫히는 시점보다 늦을 수 있어 API의 영속 상태를 기다린다.
 

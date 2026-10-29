@@ -273,7 +273,7 @@ describe("a turn that does not complete", () => {
   });
 });
 
-describe("Office and Hangul documents in search", () => {
+describe("Office documents in search (Hangul uses the bundled WASM reader below)", () => {
   /** A text tool the test opens and closes: each read waits until released. */
   function slowTool() {
     const waiting: (() => void)[] = [];
@@ -299,21 +299,18 @@ describe("Office and Hangul documents in search", () => {
   it("indexes each new revision's text in the background, keeping the old entry until it is ready", async () => {
     const dir = mkdtempSync(join(tmpdir(), "wb-recovery-index-"));
     dirs.push(dir);
-    const hangul = slowTool();
     const office = slowTool();
     const manager = new SessionManager(new Store(join(dir, "state.sqlite")), new EventBus(), {
       hostId: "h",
       hostLabel: "노트북",
       managedWorksDir: join(dir, "works"),
       dataDir: dir,
-      kordoc: hangul.tool as never,
       ieum: office.tool as never,
     });
     const work = manager.createWork({ title: "w", cwd: join(dir, "project") });
     mkdirSync(work.cwd, { recursive: true });
     const found = (word: string) => manager.search(word).documents.map((entry) => entry.artifactId);
     for (const [name, tool, prefix, before, after] of [
-      ["계획서.hwpx", hangul, "HWPX:", "해바라기", "코스모스"],
       ["발표.pptx", office, "PK", "진달래", "개나리"],
     ] as const) {
       const file = join(work.cwd, name);
