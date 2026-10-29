@@ -1613,6 +1613,7 @@ export function App() {
             setFocusItem({ sessionId: session.id, itemId, nonce: Date.now() });
           }}
           onOpenWork={openWorkNow}
+          onOpenProject={single ? undefined : actions.openProject}
           onOpenDoc={(artifact) => docActions.openArtifact(artifact.id)}
           onOpenNote={single ? undefined : (path) => setView({ kind: "pkm", target: { kind: "note", path } })}
           onOpenView={single ? undefined : (id) => setView({ kind: "pkm", target: { kind: "view", id } })}
