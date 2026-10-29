@@ -99,6 +99,9 @@ type Drag<T> = { item: T; from: Cell; x0: number; y0: number; active: boolean; o
 
 /** Cards drawn per cell before "더 보기" (a few hundred projects still show whole columns). */
 const CELL_CAP = 120;
+/** While a card is carried: how near an edge (px) starts scrolling, and the fastest step per frame there. */
+const EDGE = 56;
+const EDGE_SPEED = 18;
 
 /**
  * A board: a column per group and, with a subgroup, a row (swimlane) per subgroup across them.
@@ -159,21 +162,45 @@ export function GroupBoard<T>({
   const start = (event: ReactPointerEvent<HTMLElement>, item: T, from: Cell) => {
     if (event.button !== 0) return;
     drag.current = { item, from, x0: event.clientX, y0: event.clientY, active: false, over: null, card: event.currentTarget, title: itemTitle(item) };
-    const move = (moved: PointerEvent) => {
-      const current = drag.current;
-      if (!current) return;
-      if (!current.active) {
-        if (Math.hypot(moved.clientX - current.x0, moved.clientY - current.y0) <= 5) return;
-        current.active = true;
-        current.card.classList.add("lifted");
-        root.current?.classList.add("dragging");
-        if (ghost.current) {
-          ghost.current.hidden = false;
-          ghost.current.firstChild!.textContent = current.title;
+    // Near an edge of the board (wider than the centre beside the navigator) or of the page, what is
+    // out of sight scrolls under the card being carried, and the cell under the pointer is read again.
+    const pointer = { x: event.clientX, y: event.clientY };
+    let frame = 0;
+    const page = root.current?.closest<HTMLElement>(".start-view") ?? null;
+    const step = (distance: number) => Math.ceil(((EDGE - distance) / EDGE) * EDGE_SPEED);
+    const edgeScroll = () => {
+      frame = 0;
+      const board = root.current;
+      if (!drag.current?.active || !board) return;
+      let scrolled = false;
+      const box = board.getBoundingClientRect();
+      if (board.scrollWidth > board.clientWidth) {
+        if (pointer.x < box.left + EDGE && board.scrollLeft > 0) {
+          board.scrollLeft -= step(Math.max(0, pointer.x - box.left));
+          scrolled = true;
+        } else if (pointer.x > box.right - EDGE && board.scrollLeft + board.clientWidth < board.scrollWidth - 1) {
+          board.scrollLeft += step(Math.max(0, box.right - pointer.x));
+          scrolled = true;
         }
       }
-      if (ghost.current) ghost.current.style.transform = `translate(${Math.round(moved.clientX + 12)}px, ${Math.round(moved.clientY + 8)}px)`;
-      const target = (document.elementFromPoint(moved.clientX, moved.clientY) as HTMLElement | null)?.closest<HTMLElement>("[data-drop]") ?? null;
+      if (page && page.scrollHeight > page.clientHeight) {
+        const area = page.getBoundingClientRect();
+        if (pointer.y < area.top + EDGE && page.scrollTop > 0) {
+          page.scrollTop -= step(Math.max(0, pointer.y - area.top));
+          scrolled = true;
+        } else if (pointer.y > area.bottom - EDGE && page.scrollTop + page.clientHeight < page.scrollHeight - 1) {
+          page.scrollTop += step(Math.max(0, area.bottom - pointer.y));
+          scrolled = true;
+        }
+      }
+      if (!scrolled) return;
+      hover(pointer.x, pointer.y);
+      frame = window.requestAnimationFrame(edgeScroll);
+    };
+    const hover = (x: number, y: number) => {
+      const current = drag.current;
+      if (!current) return;
+      const target = (document.elementFromPoint(x, y) as HTMLElement | null)?.closest<HTMLElement>("[data-drop]") ?? null;
       const inside = target && root.current?.contains(target) ? target : null;
       if (inside === current.over) return;
       current.over?.classList.remove("over", "refuse");
@@ -188,7 +215,28 @@ export function GroupBoard<T>({
       }
       if (hint.current) hint.current.textContent = reason ? "옮길 수 없음" : "";
     };
+    const move = (moved: PointerEvent) => {
+      const current = drag.current;
+      if (!current) return;
+      if (!current.active) {
+        if (Math.hypot(moved.clientX - current.x0, moved.clientY - current.y0) <= 5) return;
+        current.active = true;
+        current.card.classList.add("lifted");
+        root.current?.classList.add("dragging");
+        if (ghost.current) {
+          ghost.current.hidden = false;
+          ghost.current.firstChild!.textContent = current.title;
+        }
+      }
+      pointer.x = moved.clientX;
+      pointer.y = moved.clientY;
+      if (ghost.current) ghost.current.style.transform = `translate(${Math.round(moved.clientX + 12)}px, ${Math.round(moved.clientY + 8)}px)`;
+      hover(moved.clientX, moved.clientY);
+      if (!frame) frame = window.requestAnimationFrame(edgeScroll);
+    };
     const end = (ended: PointerEvent) => {
+      if (frame) window.cancelAnimationFrame(frame);
+      frame = 0;
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", end);
       window.removeEventListener("pointercancel", end);

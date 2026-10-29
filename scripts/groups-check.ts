@@ -337,6 +337,43 @@ try {
     `${stageColumns.join(" · ")} · ${band.slice(0, 60)}`,
   );
 
+  // ── a board wider than the centre (the navigator's two panes beside it): carried to the edge,
+  //    the board scrolls on, so a column out of sight still takes the card ─────────────────────
+  {
+    const board = page.locator(".group-board");
+    await board.evaluate((element) => (element.scrollLeft = 0));
+    const overflows = await board.evaluate((element) => element.scrollWidth > element.clientWidth + 4);
+    const last = page.locator('.kanban-column[data-stage-column=""]');
+    const inSight = () => last.evaluate((column) => {
+      const own = column.getBoundingClientRect();
+      const frame = column.closest(".group-board")!.getBoundingClientRect();
+      return own.left + own.width / 2 < frame.right - 8;
+    });
+    const hiddenBefore = !(await inSight());
+    const source = page.locator(`.kanban-column[data-stage-column="할일"] .kanban-card[data-work="${works.draft.id}"]`);
+    await source.scrollIntoViewIfNeeded();
+    const a = (await source.boundingBox())!;
+    const frame = (await board.boundingBox())!;
+    await page.mouse.move(a.x + 20, a.y + 12);
+    await page.mouse.down();
+    await page.mouse.move(a.x + 40, a.y + 26, { steps: 3 });
+    await page.mouse.move(frame.x + frame.width - 12, a.y + 26, { steps: 10 });
+    const reached = await until(inSight, 6000);
+    const target = (await last.boundingBox())!;
+    await page.mouse.move(target.x + target.width / 2, a.y + 26, { steps: 6 });
+    await page.waitForTimeout(80);
+    await page.mouse.up();
+    const cleared = await until(async () => (await stageOf(works.draft.id)) === null, 8000);
+    await shot("07b-board-edge-scroll.png");
+    await page.locator(".toast button", { hasText: "되돌리기" }).click();
+    const restored = await until(async () => (await stageOf(works.draft.id)) === "할일", 8000);
+    check(
+      "가운데보다 넓은 보드(두 칸 내비게이터 옆): 카드를 가장자리로 가져가면 보드가 넘어가 화면 밖 열('값 없음')에 놓임 → 되돌리기",
+      overflows && hiddenBefore && Boolean(reached) && cleared && restored,
+      `넘침 ${overflows} · 처음엔 안 보임 ${hiddenBefore} · 닿음 ${Boolean(reached)}`,
+    );
+  }
+
   // ── 마감 × 중요도: periods × importance; a date period refuses a drag and says why ─────────
   await view(page, "마감 × 중요도");
   await page.waitForSelector(".group-board.lanes .kanban-lane");
