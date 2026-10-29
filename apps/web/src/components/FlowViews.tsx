@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
-import { PROVIDER_LABEL, type CalendarEvent, type Session, type Work } from "@workbench/contracts";
-import { accentStyle, useAppearance } from "../appearance.ts";
+import { PROVIDER_LABEL, type CalendarEvent, type Provider, type Session, type Work } from "@workbench/contracts";
+import { accentStyle, onColor, useAppearance } from "../appearance.ts";
 import {
   WEEKDAYS,
   WEEK_ORDER,
@@ -35,7 +35,25 @@ import { useOptionalPkm } from "./pkm/PkmContext.tsx";
 
 export type FlowOpen = { session: (session: Session, itemId?: string) => void; work: (work: Work) => void; doc: (artifactId: string) => void };
 
-type GridProps = { period: Period; activity: Activity; events: CalendarEvent[]; colors: Map<string, string>; names: Map<string, string>; now: number };
+type GridProps = {
+  period: Period;
+  activity: Activity;
+  events: CalendarEvent[];
+  colors: Map<string, string>;
+  names: Map<string, string>;
+  now: number;
+  /** A work's colour by the view's "색 기준" (null or absent: its engine's, as before). */
+  paint?: (work: Work) => string | null;
+};
+
+/** The colour a work's marks are drawn in: the view's colour for it, else the engine's. */
+function useInk(paint: GridProps["paint"]) {
+  const { lookOf } = useAppearance();
+  return (work: Work, provider: Provider): CSSProperties => {
+    const color = paint?.(work);
+    return color ? ({ "--accent": color, "--on-accent": onColor(color) } as CSSProperties) : accentStyle(lookOf(provider));
+  };
+}
 
 const DAY_HOUR = 44;
 const WEEK_HOUR = 36;
@@ -159,9 +177,10 @@ function blockTitle(block: DayBlock) {
 }
 
 /** "하루": hours down the side, a column per work (blocks of turns, revision marks), calendar events beside them. */
-export function DayGrid({ period, activity, events, colors, names, now, open }: GridProps & { open: FlowOpen }) {
+export function DayGrid({ period, activity, events, colors, names, now, open, paint }: GridProps & { open: FlowOpen }) {
   const day = period.days[0]!;
   const { lookOf } = useAppearance();
+  const ink = useInk(paint);
   const pick = usePick(open);
   const [all, setAll] = useState(false);
   const minHours = MIN_BLOCK / DAY_HOUR;
@@ -236,7 +255,7 @@ export function DayGrid({ period, activity, events, colors, names, now, open }: 
                     key={`${first.session.id}:${first.start}`}
                     type="button"
                     className={`flow-block${block.running ? " running" : ""}${block.failed ? " failed" : ""}`}
-                    style={{ ...accentStyle(lookOf(block.provider)), top: y(block.top), height: Math.max((block.bottom - block.top) * DAY_HOUR, MIN_BLOCK) }}
+                    style={{ ...ink(column.work, block.provider), top: y(block.top), height: Math.max((block.bottom - block.top) * DAY_HOUR, MIN_BLOCK) }}
                     title={title}
                     aria-label={title}
                     data-session={first.session.id}
@@ -299,8 +318,8 @@ function cellTitle(cell: WeekCell) {
 }
 
 /** "주": weekdays (Monday first) × hours; per hour, who worked, how much, and when turns ran. */
-export function WeekGrid({ period, activity, events, colors, names, now, open, onDay }: GridProps & { open: FlowOpen; onDay: (day: Day) => void }) {
-  const { lookOf } = useAppearance();
+export function WeekGrid({ period, activity, events, colors, names, now, open, onDay, paint }: GridProps & { open: FlowOpen; onDay: (day: Day) => void }) {
+  const ink = useInk(paint);
   const pick = usePick(open);
   const [all, setAll] = useState(false);
   const minHours = MIN_BLOCK / WEEK_HOUR;
@@ -380,12 +399,12 @@ export function WeekGrid({ period, activity, events, colors, names, now, open, o
                         <span
                           key={at}
                           className={`flow-run${run.running ? " running" : ""}`}
-                          style={{ ...accentStyle(lookOf(run.provider)), top: `${run.from * 100}%`, height: `${Math.max((run.to - run.from) * 100, 5)}%` }}
+                          style={{ ...ink(run.work, run.provider), top: `${run.from * 100}%`, height: `${Math.max((run.to - run.from) * 100, 5)}%` }}
                         />
                       ))}
                       <span className="flow-cell-lines">
                         {cell.works.slice(0, 2).map((entry, line) => (
-                          <span key={entry.work.id} className="flow-cell-line" style={accentStyle(lookOf(entry.provider))}>
+                          <span key={entry.work.id} className="flow-cell-line" style={ink(entry.work, entry.provider)}>
                             <span className="flow-dot" />
                             <span className="flow-cell-name">{entry.work.title}</span>
                             {entry.requests + entry.revisions ? <span className="flow-cell-n">{entry.requests + entry.revisions}</span> : null}
@@ -429,8 +448,8 @@ export function WeekGrid({ period, activity, events, colors, names, now, open, o
 // ── 달 ───────────────────────────────────────────────────────────────────
 
 /** "달": the month's whole weeks; each day lists its events and the works active on it. */
-export function MonthGrid({ period, activity, events, colors, now, onDay }: GridProps & { onDay: (day: Day) => void }) {
-  const { lookOf } = useAppearance();
+export function MonthGrid({ period, activity, events, colors, now, onDay, paint }: GridProps & { onDay: (day: Day) => void }) {
+  const ink = useInk(paint);
   const days = useMemo(() => monthDays(period.days, activity, events), [period, activity, events]);
   const weeks = weeksOf(period);
   const today = localDay(now);
@@ -474,7 +493,7 @@ export function MonthGrid({ period, activity, events, colors, now, onDay }: Grid
                     <span className="flow-line-text">{line.event.title}</span>
                   </span>
                 ) : (
-                  <span key={line.work.work.id} className="flow-line work" style={accentStyle(lookOf(line.work.provider))}>
+                  <span key={line.work.work.id} className="flow-line work" style={ink(line.work.work, line.work.provider)}>
                     <span className="flow-dot" />
                     <span className="flow-line-text">{line.work.work.title}</span>
                     <span className="flow-line-n">{line.work.requests + line.work.revisions}</span>

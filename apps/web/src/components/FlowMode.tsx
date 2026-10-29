@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CalendarEventsView, CalendarFeedView, Timeline } from "@workbench/contracts";
+import type { CalendarEventsView, CalendarFeedView, Timeline, Work } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import type { State } from "../state.ts";
 import { isWorking } from "../overview.ts";
@@ -51,7 +51,10 @@ const editable = (target: EventTarget | null) => target instanceof HTMLElement &
 const busyKeys = (target: EventTarget | null) =>
   target instanceof HTMLElement && Boolean(target.closest(".sidebar, [role=menu], [role=menuitem], [role=dialog], [role=listbox], [role=tree], [role=slider], [role=separator], .context-menu, .appearance-sheet"));
 
-export function FlowMode({ api, state, open }: { api: Api; state: State; open: FlowOpen }) {
+/** What a view of "흐름" asks: only the works its filter keeps, and its colour for each ("색 기준"). `key` changes when the answer does. */
+export type FlowLens = { key: string; keep?: (work: Work) => boolean; paint?: (work: Work) => string | null };
+
+export function FlowMode({ api, state, open, lens }: { api: Api; state: State; open: FlowOpen; lens?: FlowLens }) {
   const pkm = useOptionalPkm();
   const [now, setNow] = useState(() => Date.now());
   const today = localDay(now);
@@ -177,8 +180,14 @@ export function FlowMode({ api, state, open }: { api: Api; state: State; open: F
   const events = calendar?.events ?? [];
   const feeds = calendar?.feeds ?? knownFeeds ?? [];
   // Only what activityOf reads: a reply streaming in elsewhere does not lay the calendar out again.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const activity = useMemo(() => activityOf(state, timeline, now), [state.sessions, state.works, state.artifacts, state.folders, timeline, now]);
+  // A view's filter keeps the turns and revisions of the works it lets through.
+  const activity = useMemo(() => {
+    const all = activityOf(state, timeline, now);
+    const keep = lens?.keep;
+    return keep ? { turns: all.turns.filter((turn) => keep(turn.work)), revisions: all.revisions.filter((revision) => keep(revision.work)) } : all;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.sessions, state.works, state.artifacts, state.folders, timeline, now, lens?.key]);
+  const paint = lens?.paint;
   const totals = periodTotals(activity, period.since, period.until);
   const failing = feeds.filter((feed) => feed.error);
   const colors = useMemo(() => new Map(feeds.map((feed) => [feed.id, feed.color])), [feeds]);
@@ -264,11 +273,11 @@ export function FlowMode({ api, state, open }: { api: Api; state: State; open: F
         </div>
       ) : null}
       {view === "day" ? (
-        <DayGrid period={period} activity={activity} events={events} colors={colors} names={names} now={now} open={open} />
+        <DayGrid period={period} activity={activity} events={events} colors={colors} names={names} now={now} open={open} paint={paint} />
       ) : view === "week" ? (
-        <WeekGrid period={period} activity={activity} events={events} colors={colors} names={names} now={now} open={open} onDay={(day) => go({ view: "day", anchor: day })} />
+        <WeekGrid period={period} activity={activity} events={events} colors={colors} names={names} now={now} open={open} paint={paint} onDay={(day) => go({ view: "day", anchor: day })} />
       ) : (
-        <MonthGrid period={period} activity={activity} events={events} colors={colors} names={names} now={now} onDay={(day) => go({ view: "day", anchor: day })} />
+        <MonthGrid period={period} activity={activity} events={events} colors={colors} names={names} now={now} paint={paint} onDay={(day) => go({ view: "day", anchor: day })} />
       )}
       {sheet ? (
         <CalendarFeedsSheet

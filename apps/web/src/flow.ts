@@ -137,7 +137,8 @@ export type WeekCell = {
   turns: Turn[];
   revisionList: Revision[];
   /** When turns ran inside the hour, as fractions, with their engine. */
-  runs: { from: number; to: number; provider: Provider; running: boolean }[];
+  /** When turns ran in the hour (fractions), and whose they were (the colour by view). */
+  runs: { from: number; to: number; provider: Provider; running: boolean; work: Work }[];
 };
 
 export const cellKey = (day: Day, hour: number) => `${dayKey(day)}@${hour}`;
@@ -175,7 +176,7 @@ export function weekCells(days: Day[], activity: Activity): Map<string, WeekCell
       const lastHour = to > from ? Math.ceil(to) - 1 : Math.floor(from);
       for (let hour = Math.floor(from); hour <= Math.min(23, lastHour); hour += 1) {
         const entry = cell(day, hour);
-        entry.runs.push({ from: Math.max(from, hour) - hour, to: Math.min(to, hour + 1) - hour, provider: turn.session.provider, running: turn.running });
+        entry.runs.push({ from: Math.max(from, hour) - hour, to: Math.min(to, hour + 1) - hour, provider: turn.session.provider, running: turn.running, work: turn.work });
         const counted = tally(entry.key, turn.work);
         if (turn.session.provider === "claude") counted.claude += 1;
         else counted.codex += 1;
