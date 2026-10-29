@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import type { Artifact, PkmState, Session, VaultTree, Work } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
-import { pkmClient, type PkmClient, type PkmTarget } from "../../pkm.ts";
+import { expandablePaths, pkmClient, type PkmClient, type PkmTarget } from "../../pkm.ts";
 import type { MenuRequest } from "../ContextMenu.tsx";
 import type { State } from "../../state.ts";
 
@@ -27,6 +27,8 @@ export type PkmApi = {
   /** Vault folders unfolded in the sidebar. */
   unfolded: ReadonlySet<string>;
   toggle: (path: string) => void;
+  /** "전체 펼치기" (true) or "전체 접기" (false): every vault folder at once, remembered like a toggle. */
+  foldAll: (open: boolean) => void;
   dialog: PkmDialog | null;
   setDialog: (dialog: PkmDialog | null) => void;
   attach: (path: string) => Promise<boolean>;
@@ -144,6 +146,15 @@ export function PkmProvider({
       return next;
     });
   }, []);
+  const root = tree?.root ?? null;
+  const foldAll = useCallback(
+    (open: boolean) => {
+      const next = new Set(open ? expandablePaths(root) : []);
+      localStorage.setItem(OPEN_KEY, JSON.stringify([...next]));
+      setUnfolded(next);
+    },
+    [root],
+  );
 
   const value: PkmApi = {
     api,
@@ -153,6 +164,7 @@ export function PkmProvider({
     pkmState,
     unfolded,
     toggle,
+    foldAll,
     dialog,
     setDialog,
     attach: async (path) => {

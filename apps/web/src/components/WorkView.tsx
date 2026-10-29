@@ -29,10 +29,12 @@ import { BrowserPill, type BrowserActions } from "./BrowserPill.tsx";
 import type { ModeProps } from "../workmodes.ts";
 import { VaultGuardPill } from "./pkm/VaultGuardPill.tsx";
 import { InsightPill } from "./pkm/InsightDialog.tsx";
+import { NoteChips } from "./pkm/NoteChips.tsx";
+import { paneDrag, usePaneActions, useNoteDrop } from "../panedrag.ts";
 
 export type WorkActions = {
-  /** Send a request; while the engine works it steers into the turn or waits ("queue"). */
-  send: (session: Session, text: string, refs?: DocRef[], create?: CreateTarget | null, mode?: "auto" | "queue", attachments?: Attachment[], plan?: boolean, omitChanges?: string[]) => Promise<boolean>;
+  /** Send a request; while the engine works it steers into the turn or waits ("queue"). `notes`: vault notes read with it. */
+  send: (session: Session, text: string, refs?: DocRef[], create?: CreateTarget | null, mode?: "auto" | "queue", attachments?: Attachment[], plan?: boolean, omitChanges?: string[], notes?: string[]) => Promise<boolean>;
   /** Keep a pasted or dropped file at the gateway for the next request (null: it could not). */
   upload: (file: File) => Promise<Attachment | null>;
   /** "이 요청 전으로": a new session up to that request, opened with the request in its input. */
@@ -337,6 +339,13 @@ export function WorkView({
   };
   const [docsOpen, setDocsOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
+  // Vault notes dropped on the input (from a note beside it): read-only references of the next request.
+  const [notes, setNotes] = useState<{ path: string; title: string }[]>([]);
+  useEffect(() => setNotes([]), [work.id]);
+  const noteDrop = useNoteDrop((note) => {
+    if (note.path.endsWith(".md")) setNotes((current) => (current.some((entry) => entry.path === note.path) ? current : [...current, note]));
+  });
+  const panes = usePaneActions();
   // Files pasted or dropped into the input go with the request being written for this work.
   const pending = usePendingFiles(actions.upload, work.id);
   // "/" in the input: the active session's commands and skills, asked for when first typed.
@@ -575,7 +584,13 @@ export function WorkView({
                 type="button"
                 className={`session-tab${session.id === active?.id ? " active" : ""}`}
                 style={accentStyle(lookOf(session.provider))}
-                onClick={() => actions.selectSession(work, session)}
+                onPointerDown={(event) => paneDrag.press({ item: { kind: "session", id: session.id }, label: sessionLabel(session) }, event)}
+                onClick={(event) => {
+                  if (paneDrag.justDragged()) return;
+                  if (panes && (event.ctrlKey || event.metaKey)) panes.openBeside({ kind: "session", id: session.id });
+                  else actions.selectSession(work, session);
+                }}
+                onAuxClick={(event) => event.button === 1 && panes?.openBeside({ kind: "session", id: session.id })}
                 onDoubleClick={() => setRenaming(session.id)}
                 onContextMenu={(event) => openMenu(event, session.provider)}
                 title="두 번 눌러 이름 바꾸기 · 오른쪽 클릭으로 외형"
@@ -662,7 +677,7 @@ export function WorkView({
         </div>
       )}
 
-      {place(<div className="column composer-area">
+      {place(<div className={`column composer-area${noteDrop.over ? " note-over" : ""}`} {...noteDrop.props}>
         {active ? <LinkBar session={active} /> : null}
         {active ? <QueuedList session={active} busy={busy} actions={actions.queued} /> : null}
         {active && !handoffTo ? <ChangeChip session={active} omit={omitChanges} onOmit={setOmitChanges} pulse={changePulse} /> : null}
@@ -691,7 +706,7 @@ export function WorkView({
           busy={busy}
           waiting={working}
           steerable={working && !handoffTo}
-          autoFocus={modes?.slot === undefined}
+          autoFocus={modes?.slot === undefined && !modes?.paned}
           left={
             <>
               <AccessPicker provider={pickerProvider} value={access} onChange={(mode) => actions.setAccess(active, pickerProvider, mode)} />
@@ -716,9 +731,10 @@ export function WorkView({
           attachments={pending.count}
           slash={handoffTo ? undefined : slash}
           header={
-            handoffTo || attached.length || create || pending.files.length || draw.on ? (
+            handoffTo || attached.length || create || pending.files.length || draw.on || notes.length ? (
               <div className="doc-chips">
                 {draw.on ? <DrawChip state={state} provider={pickerProvider} value={draw} onClear={() => setDraw({ ...draw, on: false })} /> : null}
+                <NoteChips notes={notes} onRemove={(path) => setNotes((current) => current.filter((note) => note.path !== path))} />
                 <PendingFiles files={pending.files} onRemove={(key) => pending.remove([key])} />
                 {handoffTo ? (
                   <span className="target-chip" style={accentStyle(lookOf(handoffTo.provider))}>
@@ -786,8 +802,10 @@ export function WorkView({
             if (!source) return false;
             const sent = handoffTo
               ? await actions.handoff(source, handoffTo, text, refs, carried)
-              : await actions.send(source, text, refs, create, mode ?? "auto", carried, planFirst, omitChanges);
+              : await actions.send(source, text, refs, create, mode ?? "auto", carried, planFirst, omitChanges, notes.map((note) => note.path));
             if (sent) {
+              // Notes do not go to another session ("다른 세션에"); they wait for this one's next request.
+              if (!handoffTo) setNotes([]);
               setOmitChanges([]);
               setHandoffTo(null);
               setAttached([]);
@@ -871,7 +889,9 @@ export function WorkView({
           }
         />
         <div className="footer-line">
-          {otherActive && !sidebarOpen ? (
+          {noteDrop.over ? (
+            "놓으면 이 요청에 노트가 읽기 전용으로 붙습니다."
+          ) : otherActive && !sidebarOpen ? (
             <>
               다른 작업 {otherActive}개 진행 중 ·{" "}
               <button type="button" className="link" onClick={actions.openSidebar}>

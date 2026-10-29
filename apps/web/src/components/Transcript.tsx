@@ -448,6 +448,8 @@ export function Transcript({
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
       if (target.closest("textarea, input, [contenteditable=true]")) return;
+      // With two panes, only the conversation in the focused one answers from the keyboard.
+      if (scroller.current?.closest('[data-pane-active="false"]')) return;
       if (event.key === "Enter") onAnswer(pending.id, "accept");
       else if (event.key === "Escape") onAnswer(pending.id, "decline");
     };

@@ -4,6 +4,12 @@ const PATHS = {
   chevronDown: "M6 9l6 6 6-6",
   chevronUp: "M6 15l6-6 6 6",
   chevronRight: "M9 6l6 6-6 6",
+  // Fold or unfold a whole tree: two chevrons closing on a line, or opening away from it.
+  collapseAll: "M8 4l4 4 4-4M8 20l4-4 4 4M4.5 12h15",
+  expandAll: "M8 8l4-4 4 4M8 16l4 4 4-4M4.5 12h15",
+  // Two panes: a page split down the middle ("오른쪽에 열기"), and the two trading places.
+  columns: "M4.5 5h15a1 1 0 011 1v12a1 1 0 01-1 1h-15a1 1 0 01-1-1V6a1 1 0 011-1zM12 5v14M15 12h3M16.5 10.5v3",
+  swap: "M19.5 8.5H5M8.5 5L5 8.5 8.5 12M4.5 15.5H19M15.5 12l3.5 3.5-3.5 3.5",
   arrowLeft: "M19 12H5M11 18l-6-6 6-6",
   arrowRight: "M5 12h14M13 6l6 6-6 6",
   send: "M4 12l16-8-6 16-2.5-6.5L4 12z",

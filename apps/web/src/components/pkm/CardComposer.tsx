@@ -5,6 +5,7 @@ import { Composer } from "../Composer.tsx";
 import { EngineTabs } from "../StartView.tsx";
 import { NoteChips } from "./NoteChips.tsx";
 import { usePkm } from "./PkmContext.tsx";
+import { useNoteDrop } from "../../panedrag.ts";
 import "../../styles/pkm.css";
 
 /** Where a request sent under a card list goes: a new work (in an app folder), or a new session of a work. */
@@ -24,14 +25,20 @@ export const CardComposer = forwardRef<
     onNotes: (notes: { path: string; title: string }[]) => void;
     engine: Provider;
     setEngine: (provider: Provider) => void;
-    /** A note is being dragged over the input. */
+    /** A note is being dragged over the input (it also notices notes held over it by itself). */
     dropping: boolean;
     placeholder?: string;
     /** The line under the input (what dropping a card does, by default). */
     hint?: string;
   }
->(function CardComposer({ draftKey, place, notes, onNotes, engine, setEngine, dropping, placeholder, hint }, ref) {
+>(function CardComposer({ draftKey, place, notes, onNotes, engine, setEngine, dropping: held, placeholder, hint }, ref) {
   const pkm = usePkm();
+  // A note card or a note's pane header dropped here goes with the request (only Markdown notes).
+  const drop = useNoteDrop((note) => {
+    if (!note.path.endsWith(".md")) return pkm.onToast("마크다운 노트만 요청에 붙일 수 있습니다.");
+    if (!notes.some((entry) => entry.path === note.path)) onNotes([...notes, note]);
+  });
+  const dropping = held || drop.over;
   const send = async (text: string) => {
     try {
       const work = place.kind === "work" ? pkm.state.works[place.workId] : await pkm.api.createWork(titleFrom(text), place.folderId, null);
@@ -47,7 +54,7 @@ export const CardComposer = forwardRef<
     }
   };
   return (
-    <div ref={ref} className={`column composer-area pkm-composer pkm-drop${dropping ? " dropping" : ""}`}>
+    <div ref={ref} {...drop.props} className={`column composer-area pkm-composer pkm-drop${dropping ? " dropping" : ""}`}>
       <EngineTabs value={engine} onChange={setEngine} />
       <Composer
         draftKey={`pkm:${draftKey}`}

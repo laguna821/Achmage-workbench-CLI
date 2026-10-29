@@ -1,0 +1,302 @@
+/* Two panes side by side (Panes.tsx). One pane is the paper beside the sidebar as before; two are
+   two sheets on the desk with the desk showing between them. The focused sheet's header is ruled
+   underneath like the current tab (no side stripes). */
+
+.body > .panes {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  background: var(--bg);
+  border-top: 1px solid var(--chrome-line);
+}
+
+.body.with-sidebar > .panes {
+  border-left: 1px solid var(--chrome-line);
+  border-top-left-radius: var(--r-lg);
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pane[hidden] {
+  display: none !important;
+}
+
+/* One pane is the host's paper (its rounded corner beside the sidebar shows through). */
+.panes:not(.two) > .pane {
+  background: transparent;
+}
+
+.pane > main,
+.pane > .split-host {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Two sheets: the desk between them, each with its own edge and engine paper. */
+.body > .panes.two {
+  background: var(--chrome-bg);
+  border-top: none;
+  border-left: none;
+  border-radius: 0;
+}
+
+.panes.two > .pane {
+  border-top: 1px solid var(--chrome-line);
+  background: var(--bg);
+}
+
+.panes.two > .pane.left {
+  border-right: 1px solid var(--chrome-line);
+  border-top-right-radius: var(--r-lg);
+}
+
+.body.with-sidebar > .panes.two > .pane.left {
+  border-left: 1px solid var(--chrome-line);
+  border-top-left-radius: var(--r-lg);
+}
+
+.panes.two > .pane.right {
+  border-left: 1px solid var(--chrome-line);
+  border-top-left-radius: var(--r-lg);
+}
+
+/* Half a window: a document's name keeps its line, its controls go under it (as in "나란히"). */
+.panes.two .document-view .doc-header {
+  grid-template-columns: auto minmax(0, 1fr);
+  row-gap: 6px;
+  padding: 8px 16px;
+}
+
+.panes.two .document-view .doc-title {
+  justify-content: flex-start;
+}
+
+.panes.two .document-view .doc-header-right {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+/* ── a pane's header: its name, swap, close ─────────────────────────────── */
+.pane-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  padding: 0 var(--space-1) 0 var(--space-3);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+  cursor: grab;
+  user-select: none;
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.pane.focused > .pane-head {
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--chrome-accent);
+}
+
+.pane-head-icon {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  color: var(--faint);
+}
+
+.pane.focused .pane-head-icon {
+  color: var(--text-soft);
+}
+
+.pane-head-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.pane.focused .pane-head-title {
+  font-weight: 600;
+}
+
+.pane-head-tools {
+  margin-left: auto;
+  flex: 0 0 auto;
+  display: inline-flex;
+  gap: 2px;
+  cursor: default;
+}
+
+.pane-head-tools .icon-button {
+  color: var(--muted);
+}
+
+.pane-head-tools .icon-button:hover {
+  color: var(--text);
+}
+
+.pane-narrow {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+}
+
+.pane-narrow .link {
+  font-size: var(--fs-micro);
+}
+
+/* ── the divider ────────────────────────────────────────────────────────── */
+.pane-divider {
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.pane-divider::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: transparent;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.pane-divider:hover::after,
+.pane-divider.moving::after,
+.pane-divider:focus-visible::after {
+  background: var(--chrome-accent);
+}
+
+.pane-divider:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+  border-radius: var(--r-xs);
+}
+
+:root.pane-resizing,
+:root.pane-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+/* ── where a held item lands ────────────────────────────────────────────── */
+.pane-drop {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-float);
+  pointer-events: none;
+}
+
+.pane-drop-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--chrome-accent) 60%, transparent);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--chrome-accent) 10%, transparent);
+  animation: pane-drop-in var(--dur-fast) var(--ease-out);
+}
+
+.pane-drop-zone.left {
+  margin: var(--space-2) var(--space-1) var(--space-2) var(--space-2);
+}
+
+.pane-drop-zone.right {
+  margin: var(--space-2) var(--space-2) var(--space-2) var(--space-1);
+}
+
+.pane-drop-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid color-mix(in srgb, var(--chrome-accent) 45%, var(--chrome-line));
+  border-radius: var(--r-md);
+  background: var(--chrome-surface);
+  box-shadow: var(--elev-2);
+  color: var(--chrome-accent);
+  font-family: var(--font);
+  font-size: var(--fs-ui);
+  font-weight: 500;
+}
+
+@keyframes pane-drop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.pane-drag-ghost {
+  position: fixed;
+  z-index: var(--z-modal);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 280px;
+  padding: 5px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--elev-2);
+  font-family: var(--font);
+  font-size: var(--fs-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+.pane-drag-ghost.over {
+  border-color: var(--accent);
+  opacity: 1;
+}
+
+:root.pane-dragging,
+:root.pane-dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane-drop-zone {
+    animation: none;
+  }
+}
+
+/* A vault note held over a conversation's input: it goes with the next request (read-only). */
+.composer-area.note-over .composer {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.composer-area.note-over .footer-line {
+  color: var(--accent);
+  font-weight: 500;
+}
