@@ -819,6 +819,8 @@ export function App() {
   // "앱을 열면: 마지막 작업" set elsewhere (another window, a cleared cache): honoured once the
   // gateway's prefs arrive, if the user has not moved away from home meanwhile.
   const shortcuts = useMemo(() => shortcutsOf(state.prefs), [state.prefs]);
+  /** Moves the focus to the other pane (set where the panes are; false with one pane). */
+  const focusOtherPane = useRef<() => boolean>(() => false);
   /** True while ⋯ › 단축키 waits for a combination: the app's own shortcuts stand aside. */
   const recordingShortcut = useRef(false);
   /** ⋯ › 프로젝트 속성 템플릿… */
@@ -856,6 +858,8 @@ export function App() {
         } else if (combo === shortcuts.newWork) {
           event.preventDefault();
           startNew(null);
+        } else if (combo === shortcuts.otherPane && focusOtherPane.current()) {
+          event.preventDefault();
         }
       }
     };
@@ -1403,6 +1407,13 @@ export function App() {
     updateLayout((latest) => focusPane(latest, id, keptOf(focusedPane(current))));
     showSessionOf(target.workId, target.sessionId);
   };
+  // ⋯ › 단축키 "다른 칸으로": the keyboard handler above calls the current one (false: one pane).
+  focusOtherPane.current = () => {
+    const other = otherPane(layoutRef.current);
+    if (!other) return false;
+    focusPaneNow(other.id);
+    return true;
+  };
   /** Already shown in the other pane: the focus goes there (true). */
   const focusIfShown = (key: string) => {
     const id = shownElsewhere(layoutRef.current, (pane) => keysOf(pane).includes(key));
@@ -1922,6 +1933,7 @@ export function App() {
           }}
           onOpenWork={openWorkNow}
           onOpenProject={single ? undefined : actions.openProject}
+          onOpenRight={single ? undefined : (item) => placeItem(item, "right")}
           onOpenDoc={(artifact) => docActions.openArtifact(artifact.id)}
           onOpenNote={single ? undefined : (path) => setView({ kind: "pkm", target: { kind: "note", path } })}
           onOpenView={single ? undefined : (id) => setView({ kind: "pkm", target: { kind: "view", id } })}

@@ -281,6 +281,26 @@ async function flow(provider: Provider) {
     await page.waitForSelector(".pane.right .pkm-note-view");
     pass("자리 바꾸기: 두 칸이 좌우를 바꾸고 다시 돌아옴", swapped);
 
+    // ── ⋯ › 단축키 "다른 칸으로" (F6) and Alt+Enter in the search box ─────────────────────────
+    const focusedSide = () => page.evaluate(() => (document.querySelector(".pane.focused")?.classList.contains("right") ? "right" : "left"));
+    const sideBefore = await focusedSide();
+    await page.locator("body").press("F6");
+    const moved = await until(async () => (await focusedSide()) !== sideBefore, 3000);
+    await page.locator("body").press("F6");
+    const back = await until(async () => (await focusedSide()) === sideBefore, 3000);
+    pass("F6(다른 칸으로): 초점이 다른 칸으로 갔다가 돌아옴", moved && back, `${sideBefore} → ${moved ? (sideBefore === "left" ? "right" : "left") : sideBefore}`);
+    await page.locator(".pane.left").click({ position: { x: 40, y: 120 } });
+    await page.keyboard.press("Control+K");
+    await page.waitForSelector(".palette-input input");
+    await page.locator(".palette-input input").fill("연구 질문");
+    await page.waitForFunction(() => document.querySelector(".palette .search-summary") !== null && !document.querySelector(".palette .spinner"), undefined, { timeout: 8000 }).catch(() => undefined);
+    await page.locator(".palette-input input").press("Alt+Enter");
+    const opened = await page
+      .waitForFunction(() => document.querySelector(".pane.right .pkm-title")?.textContent?.includes("연구 질문"), undefined, { timeout: 6000 })
+      .then(() => true)
+      .catch(() => false);
+    pass("찾기에서 Alt+Enter: 고른 결과가 오른쪽 칸에 열림", opened && (await page.locator(".palette").count()) === 0);
+
     // ── a conversation already in the other pane: the click goes there, not twice ────────────
     await page.locator(".pane.right .pkm-note-body").click();
     const noteFocused = await page.locator(".pane.right.focused").count();

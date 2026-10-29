@@ -17,6 +17,7 @@ import {
 } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import type { State } from "../state.ts";
+import type { PaneItem } from "../panes.ts";
 import { ago } from "../format.ts";
 import { sessionHidden } from "../tree.ts";
 import { EngineMark } from "./EngineMark.tsx";
@@ -101,6 +102,7 @@ export function SearchPalette({
   onOpenNote,
   onOpenView,
   onOpenProject,
+  onOpenRight,
   onClose,
 }: {
   api: Api;
@@ -117,6 +119,8 @@ export function SearchPalette({
   onOpenView?: (viewId: string) => void;
   /** Shift+Enter on a work: its project page (absent: the work opens as with Enter). */
   onOpenProject?: (work: Work) => void;
+  /** Alt+Enter: the hit opens in the right pane (two panes; absent in a session window). */
+  onOpenRight?: (item: PaneItem) => void;
   onClose: () => void;
 }) {
   const { appTheme } = useAppearance();
@@ -287,6 +291,23 @@ export function SearchPalette({
       if (onOpenProject) onOpenProject(work);
       else onOpenWork(work);
     }
+  };
+
+  /** What a hit is as something a pane shows: its session, document, note, work or project. */
+  const paneItemOf = (hit: FoundHit): PaneItem | null => {
+    if (hit.kind === "document" && hit.artifactId) return { kind: "doc", id: hit.artifactId };
+    if (hit.kind === "note" && hit.path) return { kind: "note", path: hit.path };
+    if (hit.kind === "work" && hit.workId) return { kind: "work", id: hit.workId };
+    if (hit.sessionId && state.sessions[hit.sessionId]) return { kind: "session", id: hit.sessionId };
+    if (hit.workId) return { kind: "project", id: hit.workId };
+    return null;
+  };
+
+  const openRight = (entry: Entry | undefined) => {
+    const item = entry?.kind === "hit" ? paneItemOf(entry.hit) : null;
+    if (!item || !onOpenRight) return open(entry);
+    onClose();
+    onOpenRight(item);
   };
 
   const open = (entry: Entry | undefined, shift = false) => {
@@ -533,6 +554,7 @@ export function SearchPalette({
           } else if (event.key === "Tab" && !commandMode && !event.nativeEvent.isComposing) switchScope(event.shiftKey ? -1 : 1);
           else if (event.key === "ArrowDown") setFocus((value) => Math.min(value + 1, flat.length - 1));
           else if (event.key === "ArrowUp") setFocus((value) => Math.max(value - 1, 0));
+          else if (event.key === "Enter" && !event.nativeEvent.isComposing && event.altKey) openRight(current);
           else if (event.key === "Enter" && !event.nativeEvent.isComposing) open(current, event.shiftKey);
           else return;
           event.preventDefault();

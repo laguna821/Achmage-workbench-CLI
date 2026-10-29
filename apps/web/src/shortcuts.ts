@@ -2,12 +2,14 @@
 // the app's prefs (`shortcuts`). "Ctrl" also means Cmd on macOS, as the app's shortcuts always did.
 // Letters and digits are read by their physical key, so a Korean input mode does not break them.
 
-export type ShortcutId = "palette" | "content" | "newWork";
+export type ShortcutId = "palette" | "content" | "newWork" | "otherPane";
 
 export const SHORTCUTS: { id: ShortcutId; label: string; fallback: string }[] = [
   { id: "palette", label: "찾기·명령 상자", fallback: "Ctrl+K" },
   { id: "content", label: "내용으로 찾기", fallback: "Ctrl+Shift+F" },
   { id: "newWork", label: "새 작업", fallback: "Ctrl+N" },
+  // F6 moves between panes in many apps; two panes are optional, so a key that types nothing.
+  { id: "otherPane", label: "다른 칸으로 (두 칸일 때)", fallback: "F6" },
 ];
 
 type KeyPress = { key: string; code?: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean };
