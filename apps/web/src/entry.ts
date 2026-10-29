@@ -1,11 +1,42 @@
-import type { ProjectPick, Work, WorkAtFolder } from "@workbench/contracts";
+import { isUnseen, type ProjectPick, type Session, type Work, type WorkAtFolder } from "@workbench/contracts";
 import type { Api } from "./api.ts";
-import { recency } from "./overview.ts";
-import { folderPath, type State } from "./state.ts";
-import { workHidden } from "./tree.ts";
+import { isWorking, recency } from "./overview.ts";
+import { folderPath, sessionsOf, type State } from "./state.ts";
+import { workHidden, workSessions } from "./tree.ts";
 
-// ① 들어가는 길 (design §3): the projects the home input offers and where its request goes. Plain
-// data here (no React), so the rules can be tested.
+// ① 들어가는 길 (design §3): which session opening a work lands on, and the projects the home input
+// offers. Plain data here (no React), so the rules can be tested.
+
+/** A failed turn (or a request that could not be sent) the user has not looked at since. */
+export const unseenFailure = (session: Session) =>
+  !isWorking(session) && session.status !== "awaitingApproval" && (session.status === "error" || Boolean(session.lastError)) && session.updatedAt > (session.seenAt ?? 0);
+
+/** Why a session asks for the user, strongest first; null when nothing waits. */
+export function needOf(session: Session): "approval" | "failure" | "unseen" | null {
+  if (session.status === "awaitingApproval") return "approval";
+  if (unseenFailure(session)) return "failure";
+  if (!isWorking(session) && isUnseen(session)) return "unseen";
+  return null;
+}
+
+const NEEDS = ["approval", "failure", "unseen"] as const;
+
+/**
+ * The session opening a work shows: one waiting for an approval (확인 필요), else one that failed,
+ * else one with a reply not seen yet, else the one looked at last. Within a kind the one looked at
+ * last stays, otherwise the latest. Null when the work has no session.
+ */
+export function sessionToOpen(state: State, work: Work): Session | null {
+  const live = workSessions(state, work.id);
+  for (const need of NEEDS) {
+    const waiting = live.filter((session) => needOf(session) === need);
+    if (!waiting.length) continue;
+    return waiting.find((session) => session.id === work.activeSessionId) ?? [...waiting].sort((a, b) => recency(b) - recency(a))[0]!;
+  }
+  const last = work.activeSessionId ? state.sessions[work.activeSessionId] : undefined;
+  if (last && !last.archivedAt && last.workId === work.id) return last;
+  return live.at(-1) ?? sessionsOf(state, work.id).at(-1) ?? null;
+}
 
 /**
  * Projects the home input offers: live works, most recently active (its own change or any reply

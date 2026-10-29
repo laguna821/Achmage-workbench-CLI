@@ -23,6 +23,7 @@
 //          SDK sends them as `appendSystemPrompt` in initialize) and, when it was, runs
 //          `playwright-cli -s=<name> open <address>` through Bash from its PATH like a model would
 //   "고쳐"  appends to the working copy the request names
+//   "실패해"  the turn fails without an answer, as Claude Code reports an API error (is_error result)
 // Vault notes attached to a request are named back ("받은 노트 사본: …").
 //   "맥락"  answers with the appended system prompt it was started with (the context card)
 //   "볼트에 써: <path>"  tries the Write tool on that path; PreToolUse hooks registered by the SDK
@@ -168,6 +169,13 @@ async function runTurn(text) {
   systemInit();
   send({ type: "rate_limit_event", rate_limit_info: { status: "allowed", resetsAt: Math.floor(Date.now() / 1000) + 3 * 3600, rateLimitType: "five_hour", utilization: rateUsed }, ...base() });
   let answer = "";
+  if (text.includes("실패해")) {
+    await sleep(150);
+    turn = null;
+    const usage = { input_tokens: 12, cache_creation_input_tokens: 0, cache_read_input_tokens: used, output_tokens: 0, server_tool_use: { web_search_requests: 0, web_fetch_requests: 0 }, service_tier: "standard" };
+    send({ type: "result", subtype: "success", is_error: true, result: "API Error: 가짜 오류로 응답을 끝내지 못했습니다", stop_reason: null, duration_ms: Date.now() - started, duration_api_ms: 1, num_turns: 1, total_cost_usd: 0, usage, modelUsage: {}, permission_denials: [], queued_turn_count: queue.length, ...base() });
+    return;
+  }
   if (text.trim() === "/compact" || text.includes("압축")) {
     await compact(text.trim() === "/compact" ? "manual" : "auto");
   }

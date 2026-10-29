@@ -40,7 +40,7 @@ import { PkmProvider, type PkmApi } from "./components/pkm/PkmContext.tsx";
 import { VaultDialogHost, VaultSettingsRow } from "./components/pkm/VaultDialog.tsx";
 import { PkmCenter, pkmTitle } from "./components/pkm/PkmCenter.tsx";
 import type { PkmTarget } from "./pkm.ts";
-import { entryClient, homeTarget } from "./entry.ts";
+import { entryClient, homeTarget, sessionToOpen, unseenFailure } from "./entry.ts";
 
 // Editors (CodeMirror, PDF.js) load only when a document opens.
 const DocumentView = lazy(() => import("./components/docs/DocumentView.tsx"));
@@ -589,8 +589,11 @@ export function App() {
   }, [visibleSession?.id]);
   const seenAsked = useRef("");
   useEffect(() => {
-    if (!api || !visibleSession || !isUnseen(visibleSession) || keptUnread.current === visibleSession.id) return;
-    const key = `${visibleSession.id}:${visibleSession.previewAt}:${visibleSession.unread}`;
+    if (!api || !visibleSession) return;
+    // A failure counts as seen too once looked at (opening the work then goes elsewhere, entry.ts).
+    const failed = unseenFailure(visibleSession);
+    if (!(isUnseen(visibleSession) || failed) || keptUnread.current === visibleSession.id) return;
+    const key = `${visibleSession.id}:${visibleSession.previewAt}:${visibleSession.unread}${failed ? `:${visibleSession.updatedAt}` : ""}`;
     if (seenAsked.current === key) return;
     seenAsked.current = key;
     void api.updateSession(visibleSession.id, { seen: true }).catch(() => undefined);
@@ -1109,6 +1112,19 @@ export function App() {
   );
 
   function openWorkNow(target: Work) {
+    // The session that needs the user: 확인 필요 › 오류 › 새 답 › the one looked at last (entry.ts),
+    // shown at once (no other session flashes by and gets marked read).
+    const latest = state.works[target.id] ?? target;
+    const chosen = sessionToOpen(state, latest);
+    // A detached window stays one window: it switches to that session.
+    if (single) {
+      if (chosen) actions.selectSession(latest, chosen);
+      return;
+    }
+    if (chosen && chosen.id !== latest.activeSessionId) {
+      dispatch({ type: "focus", work: latest, session: chosen });
+      void api?.updateWork(latest.id, { activeSessionId: chosen.id }).catch(fail);
+    }
     setWorkId(target.id);
     setView({ kind: "work" });
   }
