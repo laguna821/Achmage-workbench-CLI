@@ -305,7 +305,7 @@ async function flow(provider: Provider) {
     await page.locator(".pane.left").click({ position: { x: 40, y: 120 } });
     await page.locator(".sidebar .side-home").click();
     await page.waitForSelector(".pane.left .home-modes");
-    const homeMode = () => page.evaluate(() => [...(document.querySelector(".pane.left .home-modes")?.classList ?? [])].find((name) => name.startsWith("mode-")) ?? "");
+    const homeMode = () => page.evaluate(() => document.querySelector(".pane.left .home-modes")?.className.match(/\bmode-[a-z]+/)?.[0] ?? "");
     const homeBefore = await homeMode();
     const digit = homeBefore === "mode-flow" ? "4" : "3";
     await page.locator(".pane.right .pkm-note-body").click();
