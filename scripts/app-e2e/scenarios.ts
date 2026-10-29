@@ -19,9 +19,22 @@ export async function savedLayout(ctx: Ctx, key = "global") {
 export async function seedLayout(ctx: Ctx, prefs: UiPrefs) {
   const isView = (view: unknown): view is { kind: string } => !!view && typeof view === "object" && "kind" in view && typeof view.kind === "string";
   const layout = withTabs(restoreLayout(prefs.paneLayout, isView, singleLayout({ kind: "new", folderId: null }, null)));
-  let prior = await savedLayout(ctx);
-  await until(async () => { const next = await savedLayout(ctx); const same = next?.revision === prior?.revision; prior = next; return same; }, 3000, 300);
-  await ctx.app.api("PUT", "/api/layouts/global", { expectedRevision: prior?.revision ?? 0, layout: { version: 2, ...layout } });
+  // `until` polls immediately: two back-to-back reads did not actually wait for the UI's 200 ms
+  // autosave. This test-only replacement waits for a quiet interval, then handles a final CAS race.
+  let written = false;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const prior = await savedLayout(ctx);
+    await sleep(400);
+    const current = await savedLayout(ctx);
+    if (current?.revision !== prior?.revision) continue;
+    try {
+      await ctx.app.api("PUT", "/api/layouts/global", { expectedRevision: current?.revision ?? 0, layout: { version: 2, ...layout } });
+      written = true; break;
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes('"code":"layout_conflict"')) throw error;
+    }
+  }
+  if (!written) throw new Error("Fixture layout kept changing during explicit reset");
   await ctx.app.api("PUT", "/api/prefs", { prefs: { ...prefs, paneLayout: undefined, layoutScope: "global" } });
 }
 

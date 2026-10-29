@@ -16,11 +16,15 @@ export function parseCreate(value: unknown): CreateTarget | null {
   if (!value || typeof value !== "object") return null;
   const target = value as Record<string, unknown>;
   if (typeof target.format !== "string" || !FORMATS.has(target.format)) return null;
-  return { format: target.format as CreatableFormat, name: typeof target.name === "string" ? target.name : "" };
+  const template = target.template as Record<string, unknown> | undefined;
+  if (template !== undefined && (!template || typeof template.skillId !== "string" || typeof template.title !== "string" || !/^[a-f0-9]{64}$/.test(String(template.sha256)) || !/^[a-f0-9]{64}$/.test(String(template.skillSha256)))) {
+    throw new HttpError(400, "invalid_template", "양식 판을 확인할 수 없습니다. 목록에서 다시 선택해 주세요.");
+  }
+  return { format: target.format as CreatableFormat, name: typeof target.name === "string" ? target.name : "", ...(template ? { template: { skillId: template.skillId as string, title: template.title as string, sha256: template.sha256 as string, skillSha256: template.skillSha256 as string } } : {}) };
 }
 
 /** A file name in `cwd` that does not exist yet: `<name><ext>`, then `<name> 2<ext>`, … */
-export function reservePath(cwd: string, target: CreateTarget) {
+export function reservePath(cwd: string, target: CreateTarget, reserved: ReadonlySet<string> = new Set()) {
   const extension = CREATE_EXTENSION[target.format];
   const stem =
     target.name
@@ -29,7 +33,7 @@ export function reservePath(cwd: string, target: CreateTarget) {
       .replace(/\.(md|hwpx|docx|pptx|xlsx|html?|design\.json)$/i, "")
       .slice(0, 80) || "새 문서";
   let path = join(cwd, `${stem}${extension}`);
-  for (let index = 2; existsSync(path); index += 1) {
+  for (let index = 2; existsSync(path) || reserved.has(path); index += 1) {
     if (index > 999) throw new HttpError(409, "name_taken", "같은 이름의 파일이 너무 많습니다.");
     path = join(cwd, `${stem} ${index}${extension}`);
   }
@@ -46,6 +50,11 @@ export function createGuide(target: CreateTarget, path: string, cwd: string, too
     `[새 문서] 이 요청의 결과는 새 ${CREATE_LABEL[target.format]} 문서로 만드세요: ${shown}`,
     "  · 정확히 이 경로에 만드세요. 이미 있는 다른 파일은 덮어쓰지 말고, 첨부된 원본 문서는 고치지 마세요.",
   ];
+  if (target.template) {
+    lines.push(`  · 선택한 양식 «${target.template.title}»의 사본이 이 경로에 이미 준비되어 있습니다 (SHA-256 ${target.template.sha256}). 이 사본을 편집하세요. 원본 양식 파일은 고치지 마세요.`,
+      "  · 양식의 기존 서식·쪽 크기·테마·개체를 유지하며 요청한 내용만 반영하세요. 빈 문서로 다시 만들지 마세요.");
+    return lines.join("\n");
+  }
   const cli = tools.ieum?.available ? tools.ieum.engineCommand : null;
   switch (target.format) {
     case "markdown":

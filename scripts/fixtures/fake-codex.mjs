@@ -363,6 +363,13 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
     return;
   }
   // A document edit: the gateway names the working copy to change; the file itself stays as it is.
+  if (text.includes("[[template-fill]]")) {
+    const name = /\[새 문서\] .*?: (.+)$/m.exec(text)?.[1];
+    if (name && name.endsWith(".md")) {
+      const target = resolve(thread.cwd, name);
+      if (target.startsWith(resolve(thread.cwd) + "/") && existsSync(target)) appendFileSync(target, "\nNATIVE TEMPLATE FILLED\n");
+    }
+  }
   const working = text.match(/작업 사본만 수정하세요: (.+)/);
   if (text.includes("고쳐") && working) {
     const path = resolve(thread.cwd, working[1].trim());

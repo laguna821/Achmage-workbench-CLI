@@ -105,5 +105,6 @@ export function updateTabView<V>(layout: Layout<V>, tabId: string, change: (view
 /** Old project document lists become inactive tabs; no document is opened twice. */
 export function addBackgroundTab<V>(layout: Layout<V>, paneId: string, content: PaneContent<V>): Layout<V> {
   if (findTab(layout, contentKey(content))) return layout;
+  if (layout.panes.reduce((sum, pane) => sum + tabsOf(pane).length, 0) >= MAX_TABS) return layout;
   return { ...layout, panes: layout.panes.map((pane) => pane.id === paneId ? { ...pane, tabs: [...tabsOf(pane), { id: `tab-${crypto.randomUUID()}`, ...content }] } : pane) };
 }

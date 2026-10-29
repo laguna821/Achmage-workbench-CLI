@@ -20,6 +20,14 @@ commit and what was changed):
   apps/web/src/mention.ts
       from packages/ui/src/doc-mention-model.ts @ 9052297
 
+  third_party/ieumoffice/user-skills/, zip-gate/, agent-core/user-skill-names.ts
+      Node-only skill import/export/template core, metered ZIP inflation and
+      reserved names. Exact source commit and SHA-256 values are recorded in
+      user-skills.manifest.json. Changes are explicit .ts relative imports,
+      local package import paths and source attribution headers. Regenerate
+      with scripts/vendor-user-skills.mjs; Workbench policy adapters are kept
+      separately in apps/host/src.
+
 The office editor pages (apps/office) are built from IeumOffice's source at
 the commit named in vendor/ieumoffice.PINNED (fetched by scripts/fetch-ieum.sh,
 not stored in this repository), unchanged, with its AI features hidden. The

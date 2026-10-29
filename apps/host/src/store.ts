@@ -444,6 +444,11 @@ export class Store {
     this.db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run(key, value);
   }
 
+  metaEntries(prefix: string): { key: string; value: string }[] {
+    return this.db.prepare("SELECT key, value FROM meta WHERE substr(key, 1, ?) = ? ORDER BY key").all(prefix.length, prefix)
+      .map((row) => ({ key: String(row.key), value: String(row.value) }));
+  }
+
   private all<T>(sql: string): T[] {
     return this.db
       .prepare(sql)

@@ -1,0 +1,115 @@
+{
+  "source": "https://github.com/pblsketch/openoffice",
+  "commit": "30ff4f051f067fcb2baf1ab416c40718c802ca35",
+  "changes": "Apache-2.0 source headers, explicit .ts relative imports, local paths for zip-gate and user-skill-names",
+  "files": [
+    {
+      "source": "packages/ai-provider/src/user-skills/archive.ts",
+      "output": "user-skills/archive.ts",
+      "sourceSha256": "d7108c3a11344e2936720ae66fac6808a757e8fd9871a9153c4d3d0ae8d23595",
+      "outputSha256": "c78b22faa2b3b2c5790bf6b8945de87d3ac6e5f210086b3839007136170e1885"
+    },
+    {
+      "source": "packages/ai-provider/src/user-skills/constants.ts",
+      "output": "user-skills/constants.ts",
+      "sourceSha256": "cbbfea0a6cd9701e2326f7dd16e644feb9734ec6d589940550487f20bdd97196",
+      "outputSha256": "3094a3eddb2ee0090cb6391e1dc3aad454df7f8762013b62d2ad2cd5f0ba0e69"
+    },
+    {
+      "source": "packages/ai-provider/src/user-skills/errors.ts",
+      "output": "user-skills/errors.ts",
+      "sourceSha256": "e6bd3b2d636d96344e56cdf657f9f3190a2997ac155fe2b7c83b95930bc709c2",
+      "outputSha256": "b5f4dea796b0fd49bbef56cc09803cb2e44748acde883020fd0a5e8649af1bfd"
+    },
+    {
+      "source": "packages/ai-provider/src/user-skills/export.ts",
+      "output": "user-skills/export.ts",
+      "sourceSha256": "4d8522c140c3aa2fbcc69b6336a3fb4ecd16a1889cef75c6634c293ca7bf5f0b",
+      "outputSha256": "c11dbefee137d9793f24483a2c2133098547575bbd30b1127a02f31ffc9b05ef"
+    },
+    {
+      "source": "packages/ai-provider/src/user-skills/folder.ts",
+      "output": "user-skills/folder.ts",
+      "sourceSha256": "25dd1ec8e892bf9798a855ddcc535012404c849cc3ddda875daa7173288fdd30",
+      "outputSha256": "cab3e71f58131592e20ade0ce72a27821612fa58a91fba01a338a9f4ba73b406"
+    },
+    {
+      "source": "packages/ai-provider/src/user-skills/frontmatter.ts",
+      "output": "user-skills/frontmatter.ts",
+      "sourceSha256": "992881a5091f02db0a0439251916e4ace33a6d4c92176072a812068866efb977",
+      "outputSha256": "63b41230ccc13ff15eddab1f3db88073c89851453ecab18b3b7be0711528c5b0"
+    },
+    {
+      "source": "packages/ai-provider/src/user-skills/github.ts",
+      "output": "user-skills/github.ts",
+      "sourceSha256": "fd8c832f7cede1e860c1b542e95ccef5f24a2c78a293f9f3678b6017ddf079b4",
+      "outputSha256": "61c41b96472d56de00e7730d38f91b983d12460e8c9a9c0a6af71e7168f2d0c3"
+    },
+    {
+      "source": "packages/ai-provider/src/user-skills/import.ts",
+      "output": "user-skills/import.ts",
+      "sourceSha256": "1abafe9b883110a9eb6d557e060886f5e833ae0aa83f4f99655ec6487ea47d44",
+      "outputSha256": "5e2c36b31e4242f2905a5878769d87e3dfad93e911d95a7e6f859d5eeb184860"
+    },
+    {
+      "source": "packages/ai-provider/src/user-skills/index.ts",
+      "output": "user-skills/index.ts",
+      "sourceSha256": "1c2818db97ca12fb5f53e9ad827a3f448c162d53882ba8b023ccb556a7dd370c",
+      "outputSha256": "47911d17aa72ee56ec54a69b09a3219e36ba9c47c16f61df46d3c91ee4a4fbfb"
+    },
+    {
+      "source": "packages/ai-provider/src/user-skills/names.ts",
+      "output": "user-skills/names.ts",
+      "sourceSha256": "b8407d028f09dc254ebc651e9bcca17b32035306ff3bb8cb615441ef326498a7",
+      "outputSha256": "c501790e94ff51255c550d9ec27c64db9e540710159c5282c659a42b8ac97a88"
+    },
+    {
+      "source": "packages/ai-provider/src/user-skills/source-record.ts",
+      "output": "user-skills/source-record.ts",
+      "sourceSha256": "6d6a422f17d8e5960bbc0f462fdd127165eb1195c4df64ddb7598f41c391231b",
+      "outputSha256": "b09f3bf963e3b0f5a5af7f03ef9cfcf53dea529bb85edf8434a4c3a01b7aaf11"
+    },
+    {
+      "source": "packages/ai-provider/src/user-skills/sources.ts",
+      "output": "user-skills/sources.ts",
+      "sourceSha256": "4d91a900f77c21dfb4b42e4988d698d4c4732bc3ca8c86fa346c84ef86c70d7d",
+      "outputSha256": "821e086fe10fa41789cfe10c3cfbd0ab99eb8be31f15e0d2b34f22e09f5d9c91"
+    },
+    {
+      "source": "packages/ai-provider/src/user-skills/states.ts",
+      "output": "user-skills/states.ts",
+      "sourceSha256": "77ee715780d9bf125d51a7f64c523400c2aa79b2674b3f3d7ce0941bc13ffc9d",
+      "outputSha256": "38c8fb4f3d48eb20b3900e808159e7f4c1bd2c1be9990406d0ba7a0748a12446"
+    },
+    {
+      "source": "packages/ai-provider/src/user-skills/types.ts",
+      "output": "user-skills/types.ts",
+      "sourceSha256": "17557bb18fc5522261176ebdcb2f406b59d825611d2826671c2616da0a015294",
+      "outputSha256": "29f5bdd086c7c6f312a2e88a6d8849c3d687237d7d9dddafa64f5607b3d95227"
+    },
+    {
+      "source": "packages/ai-provider/src/user-skills/update.ts",
+      "output": "user-skills/update.ts",
+      "sourceSha256": "65cb7bff65bc927933539822f7ea76c5ed4119d900d02918711795b0df6be507",
+      "outputSha256": "d14a3570641c80286548f8949a6ef9f9640bf4949a67f2f25bc07d76310f8e49"
+    },
+    {
+      "source": "packages/zip-gate/src/byte-stream.ts",
+      "output": "zip-gate/byte-stream.ts",
+      "sourceSha256": "6904c15a55a602308168d084f1ebb6f3aa0d924286ddb366c3fd0a637eec16f8",
+      "outputSha256": "0d6721a1b4d9211105cc2bf1005d8e2750a128ef7ca491b24da5abdbda950d3d"
+    },
+    {
+      "source": "packages/zip-gate/src/index.ts",
+      "output": "zip-gate/index.ts",
+      "sourceSha256": "2ea37fc1a9c556499317fa5fa401ca09fd874ee4c3e2fed12018a1c0a279c048",
+      "outputSha256": "117a91d9adaf92c2cc531f00decdb656a3b5e828dd77e8ef9d64227884d6ec05"
+    },
+    {
+      "source": "packages/agent-core/src/user-skill-names.ts",
+      "output": "agent-core/user-skill-names.ts",
+      "sourceSha256": "35882a32ff76f8fe6a2022f66ea61d0fae658d6cc8647933054b8fc6a1c82c69",
+      "outputSha256": "b4b6ea8a9c38957a2024fa68ffa1abeea9dc857bdeac1f97d3b164ec322fa735"
+    }
+  ]
+}

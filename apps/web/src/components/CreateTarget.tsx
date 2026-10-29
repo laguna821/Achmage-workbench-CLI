@@ -2,6 +2,8 @@ import { useState } from "react";
 import { CREATE_LABEL, type CreatableFormat, type CreateTarget, type DocumentTools } from "@workbench/contracts";
 import { Icon } from "./Icon.tsx";
 import { MenuItem, Popover } from "./Popover.tsx";
+import type { Api, SkillScope } from "../api.ts";
+import { SkillLibraryDialog } from "./SkillLibraryDialog.tsx";
 
 const ORDER: CreatableFormat[] = ["hwpx", "docx", "pptx", "xlsx", "markdown", "design", "html"];
 
@@ -13,8 +15,9 @@ function availability(format: CreatableFormat, tools: DocumentTools | null): str
 }
 
 /** "새 문서로": the request's result becomes a new document in the chosen format. */
-export function CreateTargetButton({ tools, onPick }: { tools: DocumentTools | null; onPick: (format: CreatableFormat) => void }) {
+export function CreateTargetButton({ tools, onPick, api, scope, onTemplate }: { tools: DocumentTools | null; onPick: (format: CreatableFormat) => void; api?: Api; scope?: SkillScope; onTemplate?: (target: CreateTarget) => void }) {
   const [open, setOpen] = useState(false);
+  const [library, setLibrary] = useState(false);
   return (
     <div className="anchor">
       <button type="button" className="icon-button" onClick={() => setOpen(!open)} title="결과를 새 문서로 만들기" aria-label="새 문서로 만들기">
@@ -22,6 +25,7 @@ export function CreateTargetButton({ tools, onPick }: { tools: DocumentTools | n
       </button>
       <Popover open={open} onClose={() => setOpen(false)} placement="above" align="right">
         <div className="menu-label">결과를 새 문서로 · 기존 파일은 덮어쓰지 않음</div>
+        {api && onTemplate ? <MenuItem onSelect={() => { setOpen(false); setLibrary(true); }}>내 양식·스킬에서 만들기</MenuItem> : null}
         {ORDER.map((format) => {
           const missing = availability(format, tools);
           return (
@@ -38,6 +42,7 @@ export function CreateTargetButton({ tools, onPick }: { tools: DocumentTools | n
           );
         })}
       </Popover>
+      {library && api ? <SkillLibraryDialog api={api} scope={scope} onClose={() => setLibrary(false)} onPick={onTemplate} /> : null}
     </div>
   );
 }
@@ -47,6 +52,7 @@ export function CreateChip({ target, onChange, onClear }: { target: CreateTarget
   return (
     <span className="ref-chip create-chip">
       <Icon name="plus" size={12} /> 새 {CREATE_LABEL[target.format]}:
+      {target.template ? <span title={`양식 SHA-256: ${target.template.sha256}`}>「{target.template.title}」</span> : null}
       <input
         className="create-name"
         value={target.name}

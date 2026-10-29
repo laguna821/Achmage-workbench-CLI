@@ -167,6 +167,7 @@ export function sessionMarkdown(context: ExportContext): string {
           notes.push(`붙인 문서: ${item.refs.map((ref) => `${ref.name} r${ref.revision}(${ref.mode === "edit" ? "고치기" : "읽기"}${ref.savedSnapshot ? ", 미저장 편집 제외" : ""})${ref.selection ? ` — ${ref.selection}` : ""}${ref.sha256 ? ` · SHA-256 ${ref.sha256}` : ""}`).join(", ")}`);
         }
         if (item.create) notes.push(`새 문서 요청: ${item.create.name}`);
+        if (item.create?.template) notes.push(`사용자 양식: ${item.create.template.title} · SHA-256 ${item.create.template.sha256} · 스킬 판 ${item.create.template.skillSha256}`);
         if (item.draw) notes.push(`그림 요청${item.draw.template ? ` · ${item.draw.template}` : ""}`);
         if (item.notes?.length) notes.push(`붙인 볼트 노트(읽기 전용): ${item.notes.map((note) => `${note.title} (${note.path})`).join(", ")}`);
         if (notes.length) lines.push("", ...notes.map((note) => `> ${note}`));

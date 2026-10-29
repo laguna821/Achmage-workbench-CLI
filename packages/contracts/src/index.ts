@@ -249,7 +249,7 @@ export const CREATE_LABEL: Record<CreatableFormat, string> = {
  * A new document a request asks for. The gateway reserves a free file name in the work folder,
  * the engine writes the document there, and it is tracked with the documents it came from.
  */
-export type CreateTarget = { format: CreatableFormat; name: string };
+export type CreateTarget = { format: CreatableFormat; name: string; template?: import("./user-skills.ts").TemplateSelection };
 
 /** What a request carries about a document: a pinned revision and, optionally, a selection. */
 export type DocRef = {
@@ -334,7 +334,7 @@ export type TranscriptItem =
       /** Sent from another session ("다른 세션에"). */
       from?: { sessionId: string; label: string } | null;
       /** The new document this request asked for, at the path the gateway reserved. */
-      create?: { format: CreatableFormat; name: string; path: string } | null;
+      create?: (CreateTarget & { path: string }) | null;
       /** Sent into a turn that was still running ("끼어들기"): the engine takes it at its next step. */
       steered?: boolean;
       /** Sent by a schedule ("예약 작업"), not typed just now. */
@@ -834,3 +834,4 @@ export * from "./calendar.ts";
 export * from "./home-views.ts";
 export * from "./navigator.ts";
 export * from "./base-filter.ts";
+export * from "./user-skills.ts";

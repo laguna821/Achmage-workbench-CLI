@@ -15,6 +15,7 @@ import type { AgentBrowser } from "./browse.ts";
 import { routeDocImages, type DocImages } from "./doc-images.ts";
 import { routeCalendar, type CalendarFeeds } from "./calendar-feeds.ts";
 import { documentAccess } from "./document-registry.ts";
+import { skillRoutes } from "./skills-http.ts";
 
 export const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -198,6 +199,7 @@ function streamEvents(req: IncomingMessage, res: ServerResponse, bus: EventBus, 
 
 export function createHttpServer(manager: SessionManager, bus: EventBus, options: HttpOptions): Server {
   const tickets = new Map<string, PreviewTicket>();
+  const userSkills = skillRoutes(manager);
   return createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const path = url.pathname;
@@ -242,6 +244,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       const method = req.method ?? "GET";
 
       if (method === "GET" && path === "/api/snapshot") return sendJson(res, 200, manager.snapshot());
+      if (await userSkills(req, res, url)) return;
       if (path.startsWith("/api/pkm/") && options.pkm && (await options.pkm(req, res, url))) return;
       if (path.startsWith("/api/projects/") && options.projects && (await options.projects(req, res, url))) return;
       if (path.startsWith("/api/entry/") && options.entry && (await options.entry(req, res, url))) return;

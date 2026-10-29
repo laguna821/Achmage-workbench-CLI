@@ -307,6 +307,8 @@ export function App() {
   const fail = useCallback((error: unknown) => {
     setToast(error instanceof ApiRequestError || error instanceof Error ? error.message : String(error));
   }, [setToast]);
+  // Only this window's explicit creation requests open result tabs. Replayed events open once.
+  const creatingRequests = useRef(new Map<string, { workId: string; sessionId: string; tabId: string }>());
   // "설치" and "로그인" of the engines (onboarding and the connection panel); progress comes as status events.
   const engineActions = useMemo<EngineActions>(
     () => ({
@@ -341,7 +343,19 @@ export function App() {
         stop();
         stop = api.events(
           snapshot.seq,
-          (event) => dispatch({ type: "event", event }),
+          (event) => {
+            dispatch({ type: "event", event });
+            if (event.type === "item.upserted" && event.item.kind === "artifact" && event.item.id.startsWith("artifact:create:")) {
+              const requestId = event.item.id.slice("artifact:create:".length), origin = creatingRequests.current.get(requestId);
+              if (origin && event.sessionId === origin.sessionId) {
+                creatingRequests.current.delete(requestId);
+                const content: PaneContent<View> = { workId: origin.workId, sessionId: origin.sessionId, view: { kind: "document", artifactId: event.item.artifactId, proposalId: null } };
+                const source = layoutRef.current.panes.find((pane) => tabsOf(pane).some((tab) => tab.id === origin.tabId));
+                if (source && layoutRef.current.focus === source.id && activeTab(source).id === origin.tabId) navigateTo(content);
+                else if (source) updateLayout((current) => addBackgroundTab(current, source.id, content));
+              }
+            }
+          },
           () => void load(),
           (connected) => dispatch({ type: "connected", connected }),
         );
@@ -355,7 +369,7 @@ export function App() {
       cancelled = true;
       stop();
     };
-  }, [api, fail]);
+  }, [api, fail, navigateTo, updateLayout]);
 
   // Screen preferences: kept by the gateway, edited optimistically, cached for the first frame.
   const [localPrefs, setLocalPrefs] = useState<UiPrefs | null>(null);
@@ -520,11 +534,14 @@ export function App() {
     () => ({
       send: async (session: Session, text: string, refs: DocRef[] = [], create: CreateTarget | null = null, mode: "auto" | "queue" = "auto", attachments: Attachment[] = [], plan = false, omitChanges: string[] = [], notes: string[] = []) => {
         if (!api) return false;
+        const requestId = newRequestId();
+        if (create) creatingRequests.current.set(requestId, { workId: session.workId, sessionId: session.id, tabId: activeTab(focusedPane(layoutRef.current)).id });
         try {
-          const result = await api.send(session.id, newRequestId(), text, refs, create, mode, attachments, plan, { omitChanges, ...(notes.length ? { notes } : {}) });
+          const result = await api.send(session.id, requestId, text, refs, create, mode, attachments, plan, { omitChanges, ...(notes.length ? { notes } : {}) });
           if (result.delivery === "queued") setToast("작업이 끝나면 이어서 보냅니다. 입력창 위에서 고치거나 지울 수 있습니다.");
           return true;
         } catch (error) {
+          creatingRequests.current.delete(requestId);
           fail(error);
           return false;
         }
@@ -532,7 +549,7 @@ export function App() {
       queued: {
         send: (session, queuedId) => void api?.sendQueued(session.id, queuedId).catch(fail),
         edit: (session, queuedId, text) => void api?.updateQueued(session.id, queuedId, text).catch(fail),
-        cancel: (session, queuedId) => void api?.cancelQueued(session.id, queuedId).catch(fail),
+        cancel: (session, queuedId) => { creatingRequests.current.delete(queuedId); void api?.cancelQueued(session.id, queuedId).catch(fail); },
       },
       clipboardPicture: () => (api ? api.clipboardPicture().catch(() => null) : Promise.resolve(null)),
       reviewWorktree: (session: Session) => setReviewing(session.id),

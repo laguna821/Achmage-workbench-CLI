@@ -67,9 +67,15 @@ import type {
   DocumentViewInput,
   DocumentRegistration,
   UpdateWorkspaceRequest,
+  WorkbenchSkill, WorkbenchSkillDetail, WorkbenchSkillState, TemplatePreview, SkillImportPreview, SkillUpdatePreview,
 } from "@workbench/contracts";
 
 const TOKEN_KEY = "workbench.token";
+export type SkillScope = { sessionId?: string; workId?: string; workspaceId?: string };
+function skillUrl(path: string, scope: SkillScope = {}) {
+  const query = new URLSearchParams(Object.entries(scope).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+  return `/api/user-skills${path}${query.size ? `?${query}` : ""}`;
+}
 
 /** The desktop shell opens the UI with `?token=`; keep it for this window and drop it from the URL. */
 export function readToken(): string | null {
@@ -121,6 +127,26 @@ export class Api {
   }
 
   snapshot = () => this.request<Snapshot>("GET", "/api/snapshot");
+  userSkills = (scope: SkillScope = {}) => this.request<WorkbenchSkill[]>("GET", skillUrl("", scope));
+  userSkill = (id: string, scope: SkillScope = {}) => this.request<WorkbenchSkillDetail>("GET", skillUrl(`/${encodeURIComponent(id)}`, scope));
+  skillState = (id: string, state: WorkbenchSkillState, scope: SkillScope = {}) => this.request<WorkbenchSkill>("PUT", skillUrl(`/${encodeURIComponent(id)}/state`, scope), state);
+  saveSkill = (id: string, value: { sha256: string; title: string; description: string; body: string }, scope: SkillScope = {}) => this.request<WorkbenchSkillDetail>("PUT", skillUrl(`/${encodeURIComponent(id)}`, scope), value);
+  templatePreview = (id: string, scope: SkillScope = {}) => this.request<TemplatePreview>("GET", skillUrl(`/${encodeURIComponent(id)}/template`, scope));
+  prepareSkillImport = (kind: "folder" | "zip" | "github", source: string) => this.request<SkillImportPreview>("POST", skillUrl("/imports"), { kind, source });
+  cloneSkill = (id: string, scope: SkillScope = {}) => this.request<SkillImportPreview>("POST", skillUrl(`/${encodeURIComponent(id)}/clone`, scope), {});
+  registerSkill = (value: { title: string; name?: string; description: string; body: string; file?: string }, scope: SkillScope = {}) => this.request<SkillImportPreview>("POST", skillUrl("/register", scope), value);
+  installSkills = (id: string, selected: string[], collisions: Record<string, "replace" | "skip">) => this.request("POST", skillUrl(`/imports/${encodeURIComponent(id)}/install`), { selected, collisions });
+  discardSkillImport = (id: string) => this.request("DELETE", skillUrl(`/imports/${encodeURIComponent(id)}`));
+  skillUpdate = (id: string, scope: SkillScope = {}) => this.request<SkillUpdatePreview>("POST", skillUrl(`/${encodeURIComponent(id)}/check-update`, scope), {});
+  applySkillUpdate = (id: string, allowLocalChanges: boolean, scope: SkillScope = {}) => this.request("POST", skillUrl(`/updates/${encodeURIComponent(id)}`, scope), { allowLocalChanges });
+  removeSkill = (id: string, sha256: string, scope: SkillScope = {}) => this.request("DELETE", skillUrl(`/${encodeURIComponent(id)}`, scope), { sha256 });
+  async skillBlob(path: string): Promise<Blob> {
+    if (!path.startsWith("/api/user-skills/")) throw new Error("양식 파일 주소가 올바르지 않습니다.");
+    const response = await fetch(path, { headers: { authorization: `Bearer ${this.token}` } });
+    if (!response.ok) throw new Error((await response.json().catch(() => null))?.message ?? response.statusText);
+    return response.blob();
+  }
+  exportSkill = (id: string, scope: SkillScope = {}) => this.skillBlob(skillUrl(`/${encodeURIComponent(id)}/export`, scope));
   documentViews = () => this.request<{ views: DocumentPresence[] }>("GET", "/api/document-views");
   resolveReferences = (refs: DocRefInput[]) => this.request<{ refs: DocRef[] }>("POST", "/api/document-references", { refs });
   registerDocument = (artifactId: string, input: DocumentViewInput) => this.request<DocumentRegistration>("POST", `/api/artifacts/${artifactId}/views`, input);

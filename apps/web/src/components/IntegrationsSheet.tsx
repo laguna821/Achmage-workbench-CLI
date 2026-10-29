@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { IntegrationsView, McpDefinition } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import { Icon } from "./Icon.tsx";
+import { SkillLibraryDialog } from "./SkillLibraryDialog.tsx";
 
 type Engine = "claude" | "codex";
 const ENGINE_LABEL: Record<Engine, string> = { claude: "Claude", codex: "Codex" };
@@ -32,6 +33,7 @@ export function IntegrationsSheet({ api, onClose, onToast }: { api: Api; onClose
   const [view, setView] = useState<IntegrationsView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [library, setLibrary] = useState(false);
   // What a click would write, shown before anything is written.
   const [pending, setPending] = useState<{ key: string; text: string; action: () => Promise<IntegrationsView>; done: string } | null>(null);
 
@@ -73,6 +75,8 @@ export function IntegrationsSheet({ api, onClose, onToast }: { api: Api; onClose
         </button>
       </div>
       <div className="sheet-body">
+        <button className="button small" onClick={() => setLibrary(true)}>양식·스킬 보관함</button>
+        {library ? <SkillLibraryDialog api={api} onClose={() => setLibrary(false)} /> : null}
         <p className="sheet-hint">
           터미널의 Claude Code·Codex와 같은 설정입니다. Workbench는 따로 목록을 두지 않고, 누를 때만 각 엔진의 공식 명령으로 추가합니다.
         </p>

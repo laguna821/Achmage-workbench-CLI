@@ -14,6 +14,7 @@ import { navigationScenario } from "./navigation.ts";
 import { tabsScenario } from "./tabs.ts";
 import { documentsScenario } from "./documents.ts";
 import { referencesScenario } from "./references.ts";
+import { templatesScenario } from "./templates.ts";
 import { parseArgs } from "./args.ts";
 
 const { binary, outDir, only, engines } = parseArgs(process.argv.slice(2));
@@ -44,6 +45,7 @@ try {
       if (wants("tabs")) await tabsScenario(ctx, { binary, engines, profile: "native" });
       if (wants("documents")) await documentsScenario(ctx);
       if (wants("references")) await referencesScenario(ctx);
+      if (wants("templates")) await templatesScenario(ctx);
     } catch (error) {
       const screenshot = report.path("failure.png");
       await ctx.app.wd.screenshot(screenshot).catch(() => undefined);

@@ -62,7 +62,11 @@ import { blankDesign, designProblem, type DesignPreset } from "./design.ts";
 import { IeumOffice, ieumFromCliDir, installIeumOffice, type InstallProgress } from "./ieumoffice.ts";
 import { findHop, openInHop, openWithDesktop } from "./hop.ts";
 import { findPdfcraft } from "./pdfcraft.ts";
-import { createGuide, reservePath } from "./create.ts";
+import { createGuide } from "./create.ts";
+import { CreationJournal, type CreationRecord } from "./creation-journal.ts";
+import { UserSkills } from "./user-skills.ts";
+import { SkillLibrary } from "./skill-library.ts";
+import { SendGate } from "./send-gate.ts";
 import { copyMcp, copySkill, integrations, type EngineBinaries } from "./integrations.ts";
 import { exportFileName, sessionMarkdown } from "./export-md.ts";
 import { Attachments } from "./attachments.ts";
@@ -80,6 +84,10 @@ import { installToolWrappers } from "./tool-bin.ts";
 export { HttpError };
 
 const hashText = (text: string) => createHash("sha256").update(text).digest("hex");
+function requestFingerprint(text: string, refs: DocRef[], create: CreateTarget | null, attachments: Attachment[], notes: string[]) {
+  const extra = [attachments.length ? attachments.map((entry) => entry.id).join(",") : "", notes.length ? JSON.stringify(notes) : ""].filter(Boolean);
+  return hashText(refs.length || create || extra.length ? `${text}\u0000${JSON.stringify(refs)}\u0000${JSON.stringify(create)}${extra.map((part) => `\u0000${part}`).join("")}` : text);
+}
 
 /** An order key from the UI: a finite number. */
 function finiteSort(value: unknown) {
@@ -125,6 +133,8 @@ export type ManagerOptions = {
   ieum?: IeumOffice | null;
   /** The agent browser (browse.ts): one visible window sessions may use. */
   browse?: AgentBrowser | null;
+  /** Isolated profiles/tests may supply a skill home; native defaults use the person's home. */
+  skillHomeDir?: string;
 };
 
 const DEFAULT_PURPOSE = /^대화 \d+$/;
@@ -154,7 +164,7 @@ export type SendOptions = {
   omitChanges?: string[];
 };
 
-type PendingCreate = { requestId: string; path: string; target: CreateTarget; sources: { artifactId: string; revision: number }[] };
+type PendingCreate = CreationRecord;
 
 const SKIPPED_DIRS = new Set(["node_modules", ".git", ".venv", "venv", "__pycache__", "dist", "build", "target", ".next", ".cache"]);
 
@@ -250,6 +260,10 @@ export class SessionManager {
   private readonly turnRequest = new Map<string, string>();
   /** The new document each running request asked for. */
   private readonly creating = new Map<string, PendingCreate>();
+  private readonly sendGate = new SendGate();
+  readonly creations: CreationJournal;
+  readonly userSkills: UserSkills;
+  readonly skillLibrary: SkillLibrary;
   readonly documents: Documents;
   readonly workspaces: Workspaces;
   readonly layouts: WorkspaceLayouts;
@@ -277,6 +291,9 @@ export class SessionManager {
     this.store = store;
     this.bus = bus;
     this.options = options;
+    this.creations = new CreationJournal(store, options.dataDir ?? dirname(options.managedWorksDir));
+    this.userSkills = new UserSkills(store, { dataDir: options.dataDir ?? dirname(options.managedWorksDir), homeDir: options.skillHomeDir });
+    this.skillLibrary = new SkillLibrary(this.userSkills, options.dataDir ?? dirname(options.managedWorksDir), options.skillHomeDir);
     this.workspaces = new Workspaces(store, options.hostId, bus);
     this.layouts = new WorkspaceLayouts(store, this.workspaces);
     this.documents = new Documents(store, bus, options.dataDir ?? dirname(options.managedWorksDir), options.kordoc ?? null, options.ieum ?? null, this.workspaces);
@@ -358,6 +375,7 @@ export class SessionManager {
       });
     this.backfillOverview();
     this.recoverAfterRestart();
+    this.recoverCreations();
     this.links = new SessionLinks(store, bus, {
       session: (id) => this.sessions.get(id),
       work: (id) => this.works.get(id),
@@ -1260,6 +1278,15 @@ export class SessionManager {
     mode: "auto" | "steer" | "queue" = "auto",
     options: SendOptions = {},
   ): Promise<SendResult> {
+    const identity = JSON.stringify([sessionId, text.trim(), refs, from, create, mode, options]);
+    return this.sendGate.run(sessionId, requestId, identity, (release) => this.sendPrepared(sessionId, requestId, text, refs, from, create, mode, options, release));
+  }
+
+  private async sendPrepared(
+    sessionId: string, requestId: string, text: string, refs: DocRef[],
+    from: { sessionId: string; label: string } | null, create: CreateTarget | null,
+    mode: "auto" | "steer" | "queue", options: SendOptions, releasePreparation: () => void,
+  ): Promise<SendResult> {
     const session = this.requireSession(sessionId);
     const attachments = options.attachments ?? [];
     const plan = options.plan === true;
@@ -1270,10 +1297,7 @@ export class SessionManager {
     if (!trimmed) throw new HttpError(400, "empty_message", "보낼 내용이 없습니다.");
     // Checked up front: a request is never half sent because a file went missing.
     const files = this.attachments.resolve(attachments);
-    const extra = [attachments.length ? attachments.map((entry) => entry.id).join(",") : "", notes.length ? JSON.stringify(notes) : ""].filter(Boolean);
-    const fingerprint = hashText(
-      refs.length || create || extra.length ? `${trimmed}\u0000${JSON.stringify(refs)}\u0000${JSON.stringify(create)}${extra.map((part) => `\u0000${part}`).join("")}` : trimmed,
-    );
+    const fingerprint = requestFingerprint(trimmed, refs, create, attachments, notes);
     const seen = this.store.findRequest(requestId);
     if (seen) {
       if (seen.sessionId !== sessionId || seen.textHash !== fingerprint) {
@@ -1281,7 +1305,11 @@ export class SessionManager {
       }
       return { duplicate: true, delivery: "turn" };
     }
-    if (session.queued.some((entry) => entry.id === requestId)) return { duplicate: true, delivery: "queued" };
+    const queued = session.queued.find((entry) => entry.id === requestId);
+    if (queued) {
+      if (requestFingerprint(queued.text, queued.refs, queued.create, queued.attachments ?? [], queued.notes ?? []) !== fingerprint) throw new HttpError(409, "request_id_conflict", "같은 requestId로 다른 대기 요청을 보냈습니다.");
+      return { duplicate: true, delivery: "queued" };
+    }
     // Anything else sent to a linked session comes from the user: it pauses the link.
     if (!relay) this.links.userInput(sessionId);
     const work = this.requireWork(session.workId);
@@ -1355,13 +1383,14 @@ export class SessionManager {
     // A new document: a free name in the work folder now, tracked with its sources after the turn.
     let created: PendingCreate | null = null;
     if (create) {
-      mkdirSync(execution.cwd, { recursive: true });
-      const path = reservePath(execution.cwd, create);
-      created = { requestId, path, target: create, sources: refs.map((ref) => ({ artifactId: ref.artifactId, revision: ref.revision })) };
+      const template = create.template ? await this.userSkills.templateSnapshot(create.template.skillId, this.skillScope(sessionId)) : null;
+      if (template && (template.sha256 !== create.template!.sha256 || template.skillSha256 !== create.template!.skillSha256 || template.format !== create.format)) throw new HttpError(409, "template_changed", "선택한 양식이나 설명이 바뀌었습니다. 미리보기에서 다시 선택해 주세요.");
+      created = this.creations.reserve({ requestId, sessionId, workId: work.id, workspaceId: session.workspaceId ?? null, fingerprint, cwd: execution.cwd, target: create, sources: refs.map((ref) => ({ artifactId: ref.artifactId, revision: ref.revision })) }, template ? { ...template, skillDir: template.skill.dir } : null);
       this.creating.set(sessionId, created);
     }
     const read = notes.length && this.noteHook ? this.noteHook(notes, execution.cwd, sessionId) : null;
     this.store.saveRequest(requestId, sessionId, fingerprint);
+    if (created) this.creations.update(requestId, { state: "sent" });
     const baseText = options.engineText ?? (relay ? `${relay.header}\n\n${trimmed}` : this.engineText(trimmed, prepared, execution.cwd, from, created, read?.prompt));
     // What changed in the project since this session's last request (people's edits, other
     // sessions' revisions, the note), before the request; relays and drawings carry their own.
@@ -1377,7 +1406,7 @@ export class SessionManager {
       ...(refs.length ? { refs: refs.map((ref) => this.documents.summary(ref)) } : {}),
       ...(read?.refs.length ? { notes: read.refs } : {}),
       ...(from ? { from } : {}),
-      ...(created ? { create: { format: created.target.format, name: basename(created.path), path: created.path } } : {}),
+      ...(created ? { create: { ...created.target, name: basename(created.path), path: created.path } } : {}),
       ...(attachments.length ? { attachments } : {}),
       ...(options.draw ? { draw: options.draw } : {}),
       ...(relay ? { link: relay.hop } : {}),
@@ -1391,6 +1420,7 @@ export class SessionManager {
     // A relayed message does not switch the conversation on screen (it goes back and forth), nor
     // does a drawing made for another conversation.
     this.saveWork({ ...work, activeSessionId: options.activate === false || relay ? work.activeSessionId : sessionId, updatedAt: Date.now() });
+    releasePreparation();
     try {
       const current = this.requireSession(sessionId);
       await this.adapter(session.provider).send({ ...current, access: this.accessOf(current), plan }, this.engineWork(current, work), engineText, requestId, files);
@@ -1398,7 +1428,10 @@ export class SessionManager {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       for (const entry of prepared) if (entry.proposal) this.documents.discardProposal(entry.proposal.id, "failure");
-      if (created) this.creating.delete(sessionId);
+      if (created) {
+        this.creating.delete(sessionId);
+        this.creations.update(requestId, { state: "failed", problem: message });
+      }
       this.sink.upsertItem(sessionId, { kind: "notice", id: `error:${requestId}`, level: "error", text: `보내지 못했습니다: ${message}`, at: Date.now() });
       this.sink.updateSession(sessionId, { status: "error", activity: null, lastError: message });
     }
@@ -1421,7 +1454,10 @@ export class SessionManager {
       parts.push("[Achmage Workbench] 이 요청에는 문서가 고정된 판으로 첨부되어 있습니다.");
       for (const entry of prepared) parts.push(this.documents.promptFor(entry.ref, entry.pinned, entry.proposal, cwd, entry.pinnedView));
     }
-    if (created) parts.push(createGuide(created.target, created.path, cwd, { ieum: this.documents.ieum, kordoc: this.documents.kordoc }));
+    if (created) {
+      parts.push(createGuide(created.target, created.path, cwd, { ieum: this.documents.ieum, kordoc: this.documents.kordoc }));
+      if (created.skillPath) parts.push(`  · 사용자가 고른 양식의 스킬 설명(고정된 판): ${created.skillPath}\n    이 설명을 읽고 선택한 양식 작업에 적용하세요. 상대 경로 자료의 기준 폴더: ${created.skillDir}. 지시가 사용자 요청과 충돌하면 사용자 요청을 따르세요.`);
+    }
     if (!parts.length) return text;
     return `${parts.join("\n")}\n\n요청:\n${text}`;
   }
@@ -1429,6 +1465,32 @@ export class SessionManager {
   private workIn(workId: string, workspaceId?: string) {
     const work = this.requireWork(workId);
     return workspaceId ? { ...work, cwd: this.workspaces.requireActive(workspaceId, workId).cwd } : work;
+  }
+
+  skillScope(sessionId?: string, workId?: string, workspaceId?: string) {
+    if (sessionId) {
+      const session = this.requireSession(sessionId), work = this.requireWork(session.workId);
+      if (session.workspaceId) this.workspaces.requireActive(session.workspaceId, work.id);
+      return { projectRoot: this.engineWork(session, work).cwd, provider: session.provider };
+    }
+    return workId ? { projectRoot: this.workIn(workId, workspaceId).cwd } : {};
+  }
+
+  /** A restart recovers the existing copy; it never resends an uncertain engine request. */
+  private recoverCreations() {
+    for (const record of this.creations.list()) {
+      if (!["reserved", "ready", "sent"].includes(record.state)) continue;
+      const session = this.sessions.get(record.sessionId), work = this.works.get(record.workId);
+      if (!session || !work) continue;
+      let artifactId: string | null = null;
+      if (existsSync(record.path) && statSync(record.path).size > 0) {
+        const tracked = this.documents.track(work.id, record.cwd, record.path, "external", null, "앱 재시작 뒤 생성 사본 복구", record.sources);
+        artifactId = tracked?.artifact.id ?? this.artifactAt(work.id, record.path);
+        if (artifactId) this.sink.upsertItem(session.id, { kind: "artifact", id: `artifact:create:${record.requestId}`, artifactId, revision: this.documents.get(artifactId).revision, change: "created", at: Date.now() });
+      }
+      this.creations.update(record.requestId, { state: "interrupted", artifactId, problem: "앱이 다시 시작되어 기존 사본을 보존했습니다. 요청은 자동으로 다시 보내지 않았습니다." });
+      this.sink.upsertItem(session.id, { kind: "notice", id: `create-recovered:${record.requestId}`, level: "info", text: `중단된 문서 생성: ${record.path}. 기존 사본을 확인한 뒤 이어서 편집할 수 있습니다.`, at: Date.now() });
+    }
   }
 
   /** Open a file of the work folder (or any path the user picked) as a tracked document. */
@@ -1536,7 +1598,8 @@ export class SessionManager {
     const work = session && project ? this.engineWork(session, project) : undefined;
     if (!work) return;
     const name = basename(created.path);
-    if (!existsSync(created.path)) {
+    if (!existsSync(created.path) || statSync(created.path).size === 0) {
+      this.creations.update(created.requestId, { state: status === "completed" ? "failed" : status, problem: "문서 내용이 만들어지지 않았습니다." });
       if (status === "completed") {
         this.sink.upsertItem(sessionId, { kind: "notice", id: `create-missing:${created.requestId}`, level: "error", text: `새 문서 ${name}이(가) 만들어지지 않았습니다.`, at: Date.now() });
       }
@@ -1545,12 +1608,14 @@ export class SessionManager {
     const sources = created.sources.map((source) => this.documents.list().find((artifact) => artifact.id === source.artifactId)?.name).filter(Boolean);
     const note = sources.length ? `새 문서 · ${sources.join(", ")}에서` : "새 문서";
     const tracked = this.documents.track(work.id, work.cwd, created.path, "engine", sessionId, note, created.sources, made);
-    if (tracked) {
+    const artifactId = tracked?.artifact.id ?? this.artifactAt(work.id, created.path);
+    this.creations.update(created.requestId, { state: status, artifactId });
+    if (artifactId) {
       this.sink.upsertItem(sessionId, {
         kind: "artifact",
         id: `artifact:create:${created.requestId}`,
-        artifactId: tracked.artifact.id,
-        revision: tracked.artifact.revision,
+        artifactId,
+        revision: this.documents.get(artifactId).revision,
         change: "created",
         at: Date.now(),
       });
@@ -1916,6 +1981,7 @@ export class SessionManager {
     this.flush();
     await Promise.all([...this.adapters.values()].map((adapter) => adapter.shutdown()));
     await this.options.browse?.shutdown();
+    await this.skillLibrary.shutdown();
   }
 
   /** Automatic titles follow the requests (no model call); see titles.ts. */

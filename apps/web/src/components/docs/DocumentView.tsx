@@ -1042,7 +1042,7 @@ export default function DocumentView({
           mentions={{ items: mentionItems, onPick: (item) => setOthers((current) => (current.includes(item.id) ? current : [...current, item.id])) }}
           target={
             <>
-            <CreateTargetButton tools={state.tools} onPick={(format) => setCreate({ format, name: stemOf(artifact.name) })} />
+            <CreateTargetButton api={api} scope={{ sessionId: session?.id, workId: work.id, workspaceId: artifact.workspaceId }} onTemplate={setCreate} tools={state.tools} onPick={(format) => setCreate({ format, name: stemOf(artifact.name) })} />
             <div className="anchor">
               <button type="button" className="select-button" aria-label="참조 문서 붙이기" onClick={() => setAttachOpen(!attachOpen)}><Icon name="plus" size={14} /> 문서</button>
               <Popover open={attachOpen} onClose={() => setAttachOpen(false)} placement="above" align="right">

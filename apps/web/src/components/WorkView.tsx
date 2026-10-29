@@ -854,6 +854,9 @@ export function WorkView({
             ) : null}
             <CreateTargetButton
               tools={state.tools}
+              api={api}
+              scope={{ sessionId: active?.id, workId: work.id, workspaceId: workspace?.id }}
+              onTemplate={(target) => { setCreate(target); setAttached((current) => current.map((entry) => ({ ...entry, mode: "review" }))); }}
               onPick={(format) => {
                 const first = attached[0] ? state.artifacts[attached[0].id] : undefined;
                 setCreate({ format, name: first ? stemOf(first.name) : "새 문서" });
