@@ -1,8 +1,11 @@
-import { useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { PROPERTY_TYPES, type ProjectStage, type PropertyRow, type PropertyType } from "@workbench/contracts";
+import { useEffect, useMemo, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { PROPERTY_TYPES, type ProjectStage, type ProjectSummary, type PropertyRow, type PropertyType } from "@workbench/contracts";
 import type { MenuEntry, MenuRequest } from "../ContextMenu.tsx";
 import { Icon, type IconName } from "../Icon.tsx";
+import { useOptionalPkm } from "../pkm/PkmContext.tsx";
+import { emojiColor, hintOptions } from "../../groups.ts";
 import { asLink, knownTags, linkLabel } from "../../project.ts";
+import "../../styles/groups.css";
 
 // The project's properties, as Obsidian shows a note's: one block at the top, a row per key with
 // its kind's icon, the key and an editor made for that kind. The template's fields are always
@@ -51,14 +54,105 @@ type Props = {
   openMenu: (request: MenuRequest) => void;
 };
 
+/**
+ * Values to pick for each text or list property, as Notion's select offers its options: the
+ * template hint's options first ("높음 · 보통 · 낮음"), then what other projects wrote, most used
+ * first. Read from the projects' summaries (no other request), again when a project changes.
+ */
+function useValueChoices(rows: PropertyRow[]): Map<string, string[]> {
+  const pkm = useOptionalPkm();
+  const [summaries, setSummaries] = useState<ProjectSummary[]>([]);
+  const version = pkm
+    ? Object.entries(pkm.state.pkm)
+        .filter(([key]) => key.startsWith("project:"))
+        .map(([key, value]) => `${key}=${value}`)
+        .join(",")
+    : "";
+  const api = pkm?.api;
+  useEffect(() => {
+    if (!api) return;
+    let active = true;
+    api
+      .projects()
+      .then((list) => active && setSummaries(list))
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [api, version]);
+  return useMemo(() => {
+    const counts = new Map<string, Map<string, number>>();
+    for (const summary of summaries) {
+      for (const property of summary.properties) {
+        if (property.type !== "text" && property.type !== "list") continue;
+        let values = counts.get(property.key);
+        if (!values) counts.set(property.key, (values = new Map()));
+        for (const value of property.values) if (value.trim()) values.set(value.trim(), (values.get(value.trim()) ?? 0) + 1);
+      }
+    }
+    const out = new Map<string, string[]>();
+    for (const row of rows) {
+      if (row.type !== "text" && row.type !== "list") continue;
+      const used = [...(counts.get(row.key) ?? new Map<string, number>())].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ko")).map(([value]) => value);
+      const choices = [...new Set([...hintOptions(row.hint), ...used])].slice(0, 24);
+      if (choices.length) out.set(row.key, choices);
+    }
+    return out;
+  }, [summaries, rows]);
+}
+
+/** Choices under an open editor: press one to write it (the field keeps the focus until then). */
+function Choices({ choices, typed, onPick }: { choices: string[]; typed: string; onPick: (value: string) => void }) {
+  const text = typed.trim().toLocaleLowerCase("ko");
+  const shown = (text ? choices.filter((choice) => choice.toLocaleLowerCase("ko").includes(text)) : choices).slice(0, 12);
+  if (!shown.length) return null;
+  return (
+    <div className="prop-choices" role="listbox" aria-label="다른 프로젝트가 쓴 값">
+      {shown.map((choice) => {
+        const color = emojiColor(choice);
+        return (
+          <button
+            key={choice}
+            type="button"
+            role="option"
+            aria-selected={false}
+            className="prop-choice"
+            style={color ? ({ "--group": color } as CSSProperties) : undefined}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => onPick(choice)}
+          >
+            {choice}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /** A one-line editor that commits on Enter or leaving it, cancels on Esc, and ignores Enter while Hangul is composed. */
-function LineInput({ initial, placeholder, list, onCommit, onCancel }: { initial: string; placeholder?: string; list?: string; onCommit: (value: string) => void; onCancel: () => void }) {
+function LineInput({
+  initial,
+  placeholder,
+  list,
+  choices,
+  onCommit,
+  onCancel,
+}: {
+  initial: string;
+  placeholder?: string;
+  list?: string;
+  /** Values to pick from below the field (other projects' values, the template's options). */
+  choices?: string[];
+  onCommit: (value: string) => void;
+  onCancel: () => void;
+}) {
   const [value, setValue] = useState(initial);
   const [done, setDone] = useState(false);
-  const finish = (commit: boolean) => {
+  const finish = (commit: boolean, picked?: string) => {
     if (done) return;
     setDone(true);
-    if (commit) onCommit(value);
+    if (picked !== undefined) onCommit(picked);
+    else if (commit) onCommit(value);
     else onCancel();
   };
   const onKey = (event: ReactKeyboardEvent<HTMLInputElement>) => {
@@ -71,11 +165,19 @@ function LineInput({ initial, placeholder, list, onCommit, onCancel }: { initial
       finish(false);
     }
   };
-  return <input className="prop-input" autoFocus value={value} placeholder={placeholder} list={list} onChange={(event) => setValue(event.target.value)} onKeyDown={onKey} onBlur={() => finish(value !== initial)} />;
+  const input = <input className="prop-input" autoFocus value={value} placeholder={placeholder} list={list} onChange={(event) => setValue(event.target.value)} onKeyDown={onKey} onBlur={() => finish(value !== initial)} />;
+  if (!choices?.length) return input;
+  const offered = choices.filter((choice) => choice !== initial);
+  return (
+    <span className="prop-pick">
+      {input}
+      <Choices choices={offered} typed={value === initial ? "" : value} onPick={(choice) => finish(true, choice)} />
+    </span>
+  );
 }
 
 /** Chips for a list kind (list, tags, links) with a field to add more. */
-function Chips({ row, values, adding, setAdding, onWrite, tagChoices, projectNames, onWantTags }: {
+function Chips({ row, values, adding, setAdding, onWrite, tagChoices, projectNames, onWantTags, choices }: {
   row: PropertyRow;
   values: string[];
   adding: boolean;
@@ -84,6 +186,8 @@ function Chips({ row, values, adding, setAdding, onWrite, tagChoices, projectNam
   tagChoices: string[];
   projectNames: string[];
   onWantTags: () => void;
+  /** A list's values used elsewhere, to pick (Notion's multi-select). */
+  choices?: string[];
 }) {
   const label = (value: string) => (row.type === "tags" ? `#${value}` : row.type === "links" ? linkLabel(value) : value);
   const listId = row.type === "tags" ? "prop-tags" : row.type === "links" ? "prop-links" : undefined;
@@ -111,7 +215,14 @@ function Chips({ row, values, adding, setAdding, onWrite, tagChoices, projectNam
         </span>
       ))}
       {adding ? (
-        <LineInput initial="" placeholder={row.type === "tags" ? "태그 (쉼표로 여럿)" : row.type === "links" ? "프로젝트·노트 이름" : "값 (쉼표로 여럿)"} list={listId} onCommit={add} onCancel={() => setAdding(false)} />
+        <LineInput
+          initial=""
+          placeholder={row.type === "tags" ? "태그 (쉼표로 여럿)" : row.type === "links" ? "프로젝트·노트 이름" : "값 (쉼표로 여럿)"}
+          list={listId ?? (choices?.length ? `prop-choices-${row.key}` : undefined)}
+          choices={choices?.filter((choice) => !values.includes(choice))}
+          onCommit={add}
+          onCancel={() => setAdding(false)}
+        />
       ) : (
         <button
           type="button"
@@ -152,6 +263,7 @@ export function PropertiesPanel(props: Props) {
     setCollapsed(!collapsed);
   };
   const filled = rows.filter((row) => row.present && (row.values?.length ?? 0) > 0).length;
+  const choices = useValueChoices(rows);
 
   const rowMenu = (row: PropertyRow, x: number, y: number) => {
     const kinds: MenuEntry[] = PROPERTY_TYPES.filter((entry) => entry.type !== "stage").map((entry) => ({
@@ -201,7 +313,19 @@ export function PropertiesPanel(props: Props) {
       case "list":
       case "tags":
       case "links":
-        return <Chips row={row} values={values} adding={isEditing} setAdding={(on) => setEditing(on ? row.key : null)} onWrite={onWrite} tagChoices={props.tagChoices} projectNames={props.projectNames} onWantTags={props.onWantTags} />;
+        return (
+          <Chips
+            row={row}
+            values={values}
+            adding={isEditing}
+            setAdding={(on) => setEditing(on ? row.key : null)}
+            onWrite={onWrite}
+            tagChoices={props.tagChoices}
+            projectNames={props.projectNames}
+            onWantTags={props.onWantTags}
+            choices={choices.get(row.key)}
+          />
+        );
       default: {
         if (isEditing) {
           const placeholder = row.type === "date" ? "2026-10-29, 10-29, 오늘" : row.type === "datetime" ? "2026-10-29 14:30, 지금" : row.type === "number" ? "숫자" : (row.hint ?? "");
@@ -209,6 +333,8 @@ export function PropertiesPanel(props: Props) {
             <LineInput
               initial={first}
               placeholder={placeholder}
+              list={row.type === "text" && choices.get(row.key) ? `prop-choices-${row.key}` : undefined}
+              choices={row.type === "text" ? choices.get(row.key) : undefined}
               onCommit={(value) => {
                 setEditing(null);
                 onWrite(row.key, value.trim() ? [value] : [], row.type);
@@ -283,6 +409,14 @@ export function PropertiesPanel(props: Props) {
               </div>
             ))}
           </div>
+          {/* The same choices for the keyboard: the field completes from them. */}
+          {[...choices].map(([key, list]) => (
+            <datalist key={key} id={`prop-choices-${key}`}>
+              {list.map((choice) => (
+                <option key={choice} value={choice} />
+              ))}
+            </datalist>
+          ))}
           {newKey !== null ? (
             <div className="prop-new">
               <input
