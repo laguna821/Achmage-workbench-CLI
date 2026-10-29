@@ -28,6 +28,10 @@ node scripts/app-e2e/run.ts apps/desktop/src-tauri/target/debug/achmage-workbenc
 
 `templates`는 개인 Markdown 양식을 실제 보관함 UI로 등록하고 꺼짐 기본값, 원본·해시 미리보기, 같은 세션의 새 사본 요청, 재전송 중복 없음, 결과 새 내부 탭과 재열기를 검사한다. 대역 엔진은 예약된 사본에만 시험 내용을 쓴다. PPTX/HWPX 렌더링과 실제 모델 품질 검증을 대신하지 않는다.
 
+`template-office`는 Ieum의 synthetic PPTX fixture를 개인 양식으로 등록하고 실제 페이지 미리보기, 전체 바이트 사본, 내부 Slides의 실제 더블클릭·키 입력·Ctrl+S, 재열기, 같은 세션의 저장 판·해시 참조를 검사한다. 원본과 수정하지 않은 테마·마스터·레이아웃의 SHA도 비교한다. 렌더러는 재열기한 문장을 여러 단어 노드로 그리므로 한 stage의 텍스트를 결합해 비교한다. 저장 PPTX와 재열기 상태를 증거 폴더에 남긴다. 실제 모델의 생성 품질은 이 대역 검사 범위에 포함하지 않는다.
+
+현재 페이지 미리보기의 기존 Electron 렌더러를 검사하려면 `Xvfb`, `xauth`도 필요하다. Xvfb 경로는 `APP_E2E_XVFB`로 지정할 수 있다. 하네스가 별도 X11 화면·인증 파일을 만들고 TCP 접속을 닫으며, Tauri는 계속 Broadway에서 실행한다. 사용자 화면·버스·프로필은 사용하지 않는다. Electron을 대체한 제품 렌더 경로가 마련되면 이 추가 검사 도구도 제거한다.
+
 연속 시나리오의 `seedLayout`은 테스트 전용 초기화다. 실제 400 ms 동안 판이 안정적인지 확인하고 마지막 CAS 경합만 제한적으로 다시 읽는다. 즉시 두 번 읽는 것은 자동 저장 완료 확인이 아니었다. 제품의 충돌 거절이나 사용자의 저장 판을 우회하는 경로로 사용하지 않는다.
 
 웹/호스트 소스만 빌드하면 기존 실행파일 옆의 리소스가 그대로 남는다. **Tauri 빌드까지 수행**하고 `apps/web/dist/index.html`과 `apps/desktop/src-tauri/target/debug/web/index.html`이 같은지 확인한다. 이전 리소스 실행을 최신 UI 검증으로 오인하지 않는다.

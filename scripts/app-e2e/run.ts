@@ -15,6 +15,7 @@ import { tabsScenario } from "./tabs.ts";
 import { documentsScenario } from "./documents.ts";
 import { referencesScenario } from "./references.ts";
 import { templatesScenario } from "./templates.ts";
+import { templateOfficeScenario } from "./template-office.ts";
 import { parseArgs } from "./args.ts";
 
 const { binary, outDir, only, engines } = parseArgs(process.argv.slice(2));
@@ -31,7 +32,7 @@ process.once("SIGINT", () => void stop().then(() => process.exit(130)));
 process.once("SIGTERM", () => void stop().then(() => process.exit(143)));
 
 try {
-  stage = await openStage(outDir);
+  stage = await openStage(outDir, { legacyOffice: wants("template-office") });
   console.log(`app ${binary}\nout ${outDir}\nBroadway ${stage.display} (http://127.0.0.1:${stage.broadwayPort}/) · tmp ${stage.root}`);
   if (only.length) {
     const app = await stage.launch({ name: engines, binary, engines, profile: "native" });
@@ -46,6 +47,7 @@ try {
       if (wants("documents")) await documentsScenario(ctx);
       if (wants("references")) await referencesScenario(ctx);
       if (wants("templates")) await templatesScenario(ctx);
+      if (wants("template-office")) await templateOfficeScenario(ctx);
     } catch (error) {
       const screenshot = report.path("failure.png");
       await ctx.app.wd.screenshot(screenshot).catch(() => undefined);

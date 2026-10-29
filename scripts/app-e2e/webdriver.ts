@@ -99,6 +99,8 @@ export class WebDriver {
   windowHandles = () => this.command<string[]>("GET", "/window/handles");
   windowRect = () => this.command<Rect>("GET", "/window/rect");
   setWindowRect = (rect: Partial<Rect>) => this.command<Rect>("POST", "/window/rect", rect);
+  /** Select an iframe's browsing context (null returns to the top page). */
+  frame = (element: ElementRef | null) => this.command<null>("POST", "/frame", { id: element });
 
   /** The first element matching `css` (inside `from`), or null. */
   async find(css: string, from?: ElementRef): Promise<ElementRef | null> {

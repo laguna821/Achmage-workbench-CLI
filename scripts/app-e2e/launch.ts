@@ -140,6 +140,8 @@ export type Stage = {
   outDir: string;
   display: string;
   broadwayPort: number;
+  /** Temporary X11 server only for the legacy Electron document renderer. */
+  x11?: { display: string; authority: string };
   tools: Tools;
   /** JSON lines written by the opener stand-ins. */
   openLog: string;
@@ -171,7 +173,7 @@ export type AppRun = {
 };
 
 /** Build the stage: temp root, DPI module, bus config, opener stand-ins, a Broadway display. */
-export async function openStage(outDir: string): Promise<Stage> {
+export async function openStage(outDir: string, options: { legacyOffice?: boolean } = {}): Promise<Stage> {
   const tools = findTools();
   const root = mkdtempSync("/tmp/wb-app-e2e-");
   const started: ChildProcess[] = [];
@@ -219,12 +221,37 @@ export async function openStage(outDir: string): Promise<Stage> {
   }
 
   const runs: AppRun[] = [];
+  let x11: Stage["x11"];
+  if (options.legacyOffice) {
+    const xvfb = process.env.APP_E2E_XVFB ?? "Xvfb";
+    let xNumber = 0;
+    for (let attempt = 0; attempt < 200 && !xNumber; attempt += 1) {
+      const candidate = 2200 + Math.floor(Math.random() * 800);
+      if (!existsSync(`/tmp/.X11-unix/X${candidate}`) && !existsSync(`/tmp/.X${candidate}-lock`)) xNumber = candidate;
+    }
+    if (!xNumber) throw new Error("no free private X11 display number");
+    const authority = join(runtimeDir, "Xauthority"), display = `:${xNumber}`;
+    writeFileSync(authority, "", { mode: 0o600 });
+    const auth = spawnSync("xauth", ["-f", authority, "add", display, ".", randomBytes(16).toString("hex")], { encoding: "utf8" });
+    if (auth.status !== 0) throw new Error(`private Xauthority setup failed: ${auth.stderr}`);
+    const log = openSync(join(outDir, "xvfb.log"), "w");
+    const server = spawn(xvfb, [display, "-screen", "0", "1920x1200x24", "-nolisten", "tcp", "-noreset", "-auth", authority], { stdio: ["ignore", log, log] });
+    let launchError: Error | null = null;
+    server.on("error", (error) => { launchError = error; });
+    closeSync(log); started.push(server);
+    for (let waited = 0; !await acceptsConnection(`/tmp/.X11-unix/X${xNumber}`); waited += 50) {
+      if (launchError || waited > 8000 || server.exitCode !== null) throw new Error(`Private Xvfb did not start (set APP_E2E_XVFB; see xvfb.log): ${launchError ?? ""}`);
+      await sleep(50);
+    }
+    x11 = { display, authority };
+  }
   const stage: Stage = {
     root,
     runtimeDir,
     outDir,
     display,
     broadwayPort,
+    x11,
     tools,
     openLog,
     async launch(options) {
@@ -258,7 +285,7 @@ async function launchApp(input: { stage: Stage; options: LaunchOptions; dpiModul
   const token = randomBytes(18).toString("base64url");
   const env: NodeJS.ProcessEnv = { ...process.env };
   // Nothing started under the harness can reach the user's compositor or session bus.
-  for (const key of ["WAYLAND_DISPLAY", "WAYLAND_SOCKET", "DISPLAY", "DBUS_SESSION_BUS_ADDRESS"]) delete env[key];
+  for (const key of ["WAYLAND_DISPLAY", "WAYLAND_SOCKET", "DISPLAY", "XAUTHORITY", "DBUS_SESSION_BUS_ADDRESS"]) delete env[key];
   Object.assign(env, {
     GDK_BACKEND: "broadway",
     XDG_RUNTIME_DIR: stage.runtimeDir,
@@ -279,6 +306,7 @@ async function launchApp(input: { stage: Stage; options: LaunchOptions; dpiModul
     APP_E2E_REAL_PATH: process.env.PATH ?? "",
     APP_E2E_REAL_XDG_DATA_HOME: process.env.XDG_DATA_HOME ?? "",
   });
+  if (stage.x11) Object.assign(env, { DISPLAY: stage.x11.display, XAUTHORITY: stage.x11.authority, XDG_SESSION_TYPE: "x11", ELECTRON_OZONE_PLATFORM_HINT: "x11" });
   if (options.engines === "stand-in") {
     env.WORKBENCH_CODEX_BIN = join(repo, "scripts/fixtures/fake-codex.mjs");
     env.WORKBENCH_CLAUDE_BIN = join(repo, "scripts/fixtures/fake-claude.mjs");
