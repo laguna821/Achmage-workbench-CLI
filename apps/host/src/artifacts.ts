@@ -259,7 +259,7 @@ export class Documents {
     const existing = readFileOrNull(cached);
     if (existing) return existing.toString("utf8");
     if (office) {
-      if (!this.ieum?.available) throw new HttpError(501, "ieumoffice_missing", "이음오피스가 없어 이 문서의 글을 볼 수 없습니다. 연결 설정에서 설치하세요.");
+      if (!this.ieum?.available) throw new HttpError(501, "ieumoffice_missing", "이음오피스를 찾지 못해 이 문서의 글을 볼 수 없습니다. 앱을 다시 설치해 주세요.");
       const markdown = await this.ieum.textView(file, artifact.format as "docx" | "pptx" | "xlsx");
       writeFileSync(cached, markdown);
       if (revision === this.get(artifactId).revision) this.store.indexDocument(artifactId, markdown);
@@ -329,7 +329,7 @@ export class Documents {
       pages = kept
         ? Promise.resolve(JSON.parse(kept.toString("utf8")) as OfficePage[])
         : (async () => {
-            if (!this.ieum?.available) throw new HttpError(501, "ieumoffice_missing", "이음오피스가 없어 미리보기를 만들 수 없습니다. 연결 설정에서 설치하세요.");
+            if (!this.ieum?.available) throw new HttpError(501, "ieumoffice_missing", "이음오피스를 찾지 못해 미리보기를 만들 수 없습니다. 앱을 다시 설치해 주세요.");
             const rendered = await this.ieum.render(input, folder);
             writeFileSync(manifest, JSON.stringify(rendered));
             return rendered;
@@ -424,7 +424,7 @@ export class Documents {
     }
     const office = isOfficeFormat(artifact.format);
     if (ref.mode === "edit" && office && !this.ieum?.available) {
-      throw new HttpError(400, "ieumoffice_missing", "워드·PPT·엑셀 수정 요청에는 이음오피스가 필요합니다. 연결 설정에서 설치하세요.");
+      throw new HttpError(400, "ieumoffice_missing", "이음오피스를 찾지 못해 워드·PPT·엑셀 수정 요청을 보낼 수 없습니다. 앱을 다시 설치해 주세요.");
     }
     const hangul = isHangul(artifact.format);
     const source = this.revisionPath(artifact.id, ref.revision);
@@ -654,13 +654,13 @@ export class Documents {
 
   /** How an engine works on a Word/PowerPoint/Excel file: the ieumoffice tool, never unzip and edit XML. */
   private officeGuide(format: "docx" | "pptx" | "xlsx", working: string | null, textView: string | null) {
-    const cli = this.ieum?.cli;
+    const cli = this.ieum?.available ? this.ieum.engineCommand : null;
     const group = format === "docx" ? "docs" : format === "pptx" ? "slides" : "sheet";
     const guide = format === "docx" ? "docs" : format === "pptx" ? "slides" : "sheets";
     const lines = [`  · 이 문서는 ${format.toUpperCase()} 파일입니다. 압축을 풀거나 XML을 직접 고치지 말고 이음오피스 명령줄 도구를 쓰세요.`];
     if (textView) lines.push(`    글 보기(읽기 전용, 빠른 참고용): ${textView}`);
     if (!cli) {
-      lines.push("    이 컴퓨터에는 이음오피스가 없어 읽기만 할 수 있습니다.");
+      lines.push("    이음오피스를 찾지 못해 이번에는 읽기만 할 수 있습니다.");
       return lines;
     }
     lines.push(`    도구: ${cli}  (사용법: \`${cli} guide ${guide}\`${this.ieum?.skillPath() ? `, 자세한 안내: ${this.ieum.skillPath()}` : ""})`);

@@ -1,55 +1,160 @@
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { HttpError } from "./errors.ts";
+import { shipped } from "./resources.ts";
 
-// Word, PowerPoint and Excel documents through the `ieumoffice` command line tool that ships
-// inside an installed IeumOffice (https://github.com/pblsketch/openoffice, Apache-2.0). The tool
-// is called, never vendored: page previews, a text view for reading, and the checks engines run.
-// Engines edit a working copy with the same tool; the gateway only reads and renders.
+// Word, PowerPoint and Excel documents through the `ieumoffice` command line tool of IeumOffice
+// (https://github.com/pblsketch/openoffice, Apache-2.0). Release builds ship the whole official
+// IeumOffice app for their OS (release.yml); the tool is called, never changed: page previews, a
+// text view for reading, file checks, and the commands engines run to make and edit Office files.
+// The tool is IeumOffice's own Node script (resources/cli/genoffice.cjs) run on the app's runtime
+// (ELECTRON_RUN_AS_NODE), as its launcher does; pictures of pages come from a hidden app window.
 
 const run = promisify(execFile);
 
 export type OfficePage = { page: number; width: number; height: number; file: string };
 type CliResult = { status: "ok" | "error" | "partial"; command?: string; summary?: string; output_path?: string; detail?: Record<string, unknown>; code?: number; error?: string; message?: string };
 
-/** Where Workbench installs IeumOffice for the current user (one folder per version, `current` points at one). */
+/** Where Workbench installs IeumOffice for the current user on Linux (one folder per version, `current` points at one). */
 export const IEUM_HOME = join(homedir(), ".local/opt/ieumoffice");
 
-/** The `ieumoffice` launcher: an override, the app's own record, Workbench's install, a system install, PATH. */
-export function findIeumCli(env: NodeJS.ProcessEnv = process.env): string | null {
-  const candidates: string[] = [];
-  if (env.WORKBENCH_IEUM_CLI) candidates.push(env.WORKBENCH_IEUM_CLI);
+/**
+ * An IeumOffice to run: its CLI script, the app that runs it (null for the CLI-only build, which
+ * runs on Node and cannot draw pages), the launcher it ships (shown on screen; engines get a
+ * wrapper), and whether it is the copy shipped with Workbench.
+ */
+export type IeumInstall = { script: string; app: string | null; launcher: string; bundled: boolean };
+
+/**
+ * The parts of an IeumOffice found by its CLI folder (`…/resources/cli` or `…/Contents/Resources/cli`):
+ * the app binary sits two folders up (Linux `ieumoffice`, Windows `IeumOffice.exe`) or in
+ * Contents/MacOS on macOS.
+ */
+export function ieumFromCliDir(cliDir: string, bundled = false, platform: NodeJS.Platform = process.platform): IeumInstall | null {
+  const script = join(cliDir, "genoffice.cjs");
+  if (!existsSync(script)) return null;
+  const root = join(cliDir, "..", "..");
+  const apps = platform === "darwin" ? [join(root, "MacOS", "IeumOffice")] : platform === "win32" ? [join(root, "IeumOffice.exe")] : [join(root, "ieumoffice"), join(root, "IeumOffice")];
+  const app = apps.find((path) => existsSync(path)) ?? null;
+  const launcher = [join(cliDir, platform === "win32" ? "ieumoffice.cmd" : "ieumoffice"), join(cliDir, "ieumoffice")].find((path) => existsSync(path)) ?? script;
+  return { script, app, launcher, bundled };
+}
+
+/** The IeumOffice shipped with the app: <resources>/ieumoffice (Linux, Windows), or its .app inside (macOS). */
+export function bundledIeum(platform: NodeJS.Platform = process.platform): IeumInstall | null {
+  const root = shipped(join("ieumoffice", "IeumOffice.app"), "ieumoffice");
+  if (!root) return null;
+  const cliDir = root.endsWith(".app") ? join(root, "Contents", "Resources", "cli") : join(root, "resources", "cli");
+  return ieumFromCliDir(cliDir, true, platform);
+}
+
+/** IeumOffice: an override, the copy shipped with the app, then the user's own install (its record, Workbench's Linux install, the usual places, PATH). */
+export function findIeum(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): IeumInstall | null {
+  const fromLauncher = (launcher: string) => {
+    let real = launcher;
+    try {
+      real = realpathSync(launcher);
+    } catch {
+      return null;
+    }
+    return ieumFromCliDir(dirname(real), false, platform);
+  };
+  if (env.WORKBENCH_IEUM_CLI) return fromLauncher(env.WORKBENCH_IEUM_CLI);
+  const bundled = bundledIeum(platform);
+  if (bundled) return bundled;
+  const cliDirs: string[] = [];
   try {
     // Every IeumOffice launch writes the folder of its launcher here.
     const recorded = readFileSync(join(homedir(), ".ieumoffice/launcher"), "utf8").trim();
-    if (recorded) candidates.push(join(recorded, "ieumoffice"));
+    if (recorded) cliDirs.push(recorded);
   } catch {
     // Not launched on this account yet.
   }
-  candidates.push(join(IEUM_HOME, "current/resources/cli/ieumoffice"), "/opt/IeumOffice/resources/cli/ieumoffice", "/usr/lib/ieumoffice/resources/cli/ieumoffice");
-  for (const dir of (env.PATH ?? "").split(delimiter).filter(Boolean)) candidates.push(join(dir, "ieumoffice"));
-  return candidates.find((path) => existsSync(path)) ?? null;
+  if (platform === "darwin") {
+    for (const root of ["/Applications", join(homedir(), "Applications")]) cliDirs.push(join(root, "IeumOffice.app", "Contents", "Resources", "cli"));
+  } else if (platform === "win32") {
+    const local = env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local");
+    cliDirs.push(join(local, "Programs", "IeumOffice", "resources", "cli"), join(env.ProgramFiles ?? "C:\\Program Files", "IeumOffice", "resources", "cli"));
+  } else {
+    cliDirs.push(join(IEUM_HOME, "current/resources/cli"), "/opt/IeumOffice/resources/cli", "/usr/lib/ieumoffice/resources/cli");
+  }
+  for (const dir of cliDirs) {
+    const found = ieumFromCliDir(dir, false, platform);
+    if (found) return found;
+  }
+  for (const dir of (env.PATH ?? "").split(delimiter).filter(Boolean)) {
+    const launcher = join(dir, "ieumoffice");
+    if (existsSync(launcher)) {
+      const found = fromLauncher(launcher);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/** The launcher path of what `findIeum` finds (older callers). */
+export function findIeumCli(env: NodeJS.ProcessEnv = process.env): string | null {
+  return findIeum(env)?.launcher ?? null;
+}
+
+/**
+ * On Linux, the app runs without Chromium's sandbox when this system does not allow the user
+ * namespaces it needs (Ubuntu 24.04 and later), as IeumOffice's own AppImage launcher decides.
+ */
+function sandboxWrapper(app: string, dataDir: string): string | null {
+  if (process.platform !== "linux") return null;
+  const file = join(dataDir, "ieumoffice-app.sh");
+  const quote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
+  const text = `#!/bin/sh\n# Written by Achmage Workbench (ieumoffice.ts): IeumOffice's app with its AppImage's sandbox rule.\nif unshare -Ur true 2>/dev/null; then exec ${quote(app)} "$@"; fi\nexec ${quote(app)} --no-sandbox "$@"\n`;
+  try {
+    mkdirSync(dataDir, { recursive: true });
+    if (!existsSync(file) || readFileSync(file, "utf8") !== text) writeFileSync(file, text, { mode: 0o755 });
+    chmodSync(file, 0o755);
+    return file;
+  } catch {
+    return null;
+  }
 }
 
 export class IeumOffice {
+  readonly install: IeumInstall | null;
+  /** The launcher path (shown on screen). */
   readonly cli: string | null;
+  /** How engines run the tool: `ieumoffice` once the wrapper is on their PATH (tool-bin.ts), else the launcher. */
+  engineCommand: string | null;
   private versionCache: Promise<string | null> | null = null;
+  /** Linux: the app with the sandbox rule of IeumOffice's AppImage (GENOFFICE_APP_BIN). */
+  readonly appWrapper: string | null;
 
-  constructor(cli = findIeumCli()) {
-    this.cli = cli;
+  constructor(install: IeumInstall | null = findIeum(), options: { dataDir?: string } = {}) {
+    this.install = install;
+    this.cli = install?.launcher ?? null;
+    this.engineCommand = this.cli;
+    this.appWrapper = install?.app && options.dataDir ? sandboxWrapper(install.app, options.dataDir) : null;
   }
 
   get available() {
-    return Boolean(this.cli);
+    return Boolean(this.install);
+  }
+
+  get bundled() {
+    return Boolean(this.install?.bundled);
+  }
+
+  /** The program and the arguments before the tool's own: the app as Node, or Node itself. */
+  private command(): { file: string; args: string[] } {
+    const install = this.install!;
+    return { file: install.app ?? process.execPath, args: [install.script] };
   }
 
   version(): Promise<string | null> {
-    if (!this.cli) return Promise.resolve(null);
-    this.versionCache ??= run(this.cli, ["--version"], { timeout: 30_000, env: this.env([]) })
+    if (!this.install) return Promise.resolve(null);
+    const { file, args } = this.command();
+    this.versionCache ??= run(file, [...args, "--version"], { timeout: 30_000, env: this.env([]), windowsHide: true })
       .then(({ stdout }) => stdout.trim().split(/\s+/).pop() ?? null)
       .catch(() => null);
     return this.versionCache;
@@ -57,14 +162,21 @@ export class IeumOffice {
 
   /** The tool may read and write only inside `roots`; its own command log is off (Workbench keeps revisions). */
   private env(roots: string[]): NodeJS.ProcessEnv {
-    return { ...process.env, GENOFFICE_ALLOWED_ROOTS: roots.join(delimiter), GENOFFICE_AUDIT_LOG: "off" };
+    return {
+      ...process.env,
+      ...(this.install?.app ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
+      ...(this.appWrapper ? { GENOFFICE_APP_BIN: this.appWrapper } : {}),
+      GENOFFICE_ALLOWED_ROOTS: roots.join(delimiter),
+      GENOFFICE_AUDIT_LOG: "off",
+    };
   }
 
   /** One command with `--json`; refusals become HTTP errors with the tool's own message. */
   async run(args: string[], roots: string[], timeoutMs = 180_000): Promise<CliResult> {
-    if (!this.cli) throw new HttpError(501, "ieumoffice_missing", "이음오피스가 설치되어 있지 않아 이 문서를 열 수 없습니다. 연결 설정에서 설치하세요.");
+    if (!this.install) throw new HttpError(501, "ieumoffice_missing", "이음오피스를 찾지 못해 이 문서를 열 수 없습니다. 앱을 다시 설치해 주세요.");
+    const { file, args: prefix } = this.command();
     const stdout = await new Promise<string>((resolve, reject) =>
-      execFile(this.cli!, [...args, "--json"], { timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, env: this.env(roots) }, (error, out, err) =>
+      execFile(file, [...prefix, ...args, "--json"], { timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, env: this.env(roots), windowsHide: true }, (error, out, err) =>
         // A failed command still prints its JSON on stdout.
         out?.trim() ? resolve(out) : reject(new HttpError(500, "ieumoffice_failed", `이음오피스 실행 실패: ${(err || error?.message || "").toString().slice(0, 300)}`)),
       ),
@@ -135,8 +247,8 @@ export class IeumOffice {
 
   /** The agent instructions IeumOffice ships for its tool (SKILL.md), when present. */
   skillPath(): string | null {
-    if (!this.cli) return null;
-    const path = join(dirname(this.cli), "skills/ieumoffice/SKILL.md");
+    if (!this.install) return null;
+    const path = join(dirname(this.install.script), "skills/ieumoffice/SKILL.md");
     return existsSync(path) ? path : null;
   }
 }

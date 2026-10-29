@@ -4,6 +4,7 @@ import { engineCandidates, type FsView } from "./engine-locate.ts";
 import { isWebAddress, openerFor } from "./open-url.ts";
 import { loginAddress, loginFailure, plainText } from "./providers/claude.ts";
 import { missingDirs, parseShellPath } from "./shell-env.ts";
+import { wrapperFiles } from "./tool-bin.ts";
 
 describe("one-click install", () => {
   it("says in plain Korean what went wrong, from npm's output", () => {
@@ -63,5 +64,18 @@ describe("a desktop launcher's PATH", () => {
     const base = { platform: "linux" as const, arch: "x64", env: { PATH: "" }, home: "/home/u", fs, node: "/n" };
     expect(engineCandidates("codex", base).map((entry) => entry.path)).toEqual(["/home/u/.local/bin/codex", "/usr/bin/codex"]);
     expect(engineCandidates("codex", { ...base, systemWide: false }).map((entry) => entry.path)).toEqual(["/home/u/.local/bin/codex"]);
+  });
+});
+
+describe("tools engines run by name", () => {
+  it("writes an sh wrapper everywhere and a .cmd one on Windows, quoting paths with spaces", () => {
+    const posix = wrapperFiles("ieumoffice", { file: "/Applications/Achmage Workbench.app/x/IeumOffice", args: ["/a b/genoffice.cjs"], env: { ELECTRON_RUN_AS_NODE: "1" } }, "darwin");
+    expect(Object.keys(posix)).toEqual(["ieumoffice"]);
+    expect(posix.ieumoffice).toContain("export ELECTRON_RUN_AS_NODE='1'");
+    expect(posix.ieumoffice).toContain("exec '/Applications/Achmage Workbench.app/x/IeumOffice' '/a b/genoffice.cjs' \"$@\"");
+    const windows = wrapperFiles("kordoc", { file: "C:\\Program Files\\Achmage Workbench\\node\\node.exe", args: ["C:\\Program Files\\Achmage Workbench\\kordoc\\scripts\\run.mjs"] }, "win32");
+    expect(Object.keys(windows).sort()).toEqual(["kordoc", "kordoc.cmd"]);
+    expect(windows["kordoc.cmd"]).toContain('"C:\\Program Files\\Achmage Workbench\\node\\node.exe" "C:\\Program Files\\Achmage Workbench\\kordoc\\scripts\\run.mjs" %*');
+    expect(windows.kordoc).toContain("exec 'C:/Program Files/Achmage Workbench/node/node.exe'");
   });
 });

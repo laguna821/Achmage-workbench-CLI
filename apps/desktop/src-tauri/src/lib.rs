@@ -101,6 +101,10 @@ fn gateway_command(app: &tauri::AppHandle) -> Command {
             command.arg("host/host.mjs");
         }
     }
+    // The tools shipped with the app (kordoc, IeumOffice, npm) sit in the resource folder.
+    if let Ok(dirs) = std::env::join_paths(app_dirs(app)) {
+        command.env("WORKBENCH_RESOURCES_DIR", dirs);
+    }
     command
         .env("PATH", engine_path())
         .env("WORKBENCH_EXIT_ON_STDIN_CLOSE", "1")

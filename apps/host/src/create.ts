@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import { CREATE_EXTENSION, CREATE_LABEL, type CreatableFormat, type CreateTarget } from "@workbench/contracts";
 import { HttpError } from "./errors.ts";
 import type { IeumOffice } from "./ieumoffice.ts";
@@ -46,19 +46,27 @@ export function createGuide(target: CreateTarget, path: string, cwd: string, too
     `[새 문서] 이 요청의 결과는 새 ${CREATE_LABEL[target.format]} 문서로 만드세요: ${shown}`,
     "  · 정확히 이 경로에 만드세요. 이미 있는 다른 파일은 덮어쓰지 말고, 첨부된 원본 문서는 고치지 마세요.",
   ];
-  const cli = tools.ieum?.available ? tools.ieum.cli : null;
+  const cli = tools.ieum?.available ? tools.ieum.engineCommand : null;
   switch (target.format) {
     case "markdown":
     case "html":
       lines.push("  · 파일을 직접 쓰면 됩니다.");
       break;
-    case "hwpx":
+    case "hwpx": {
+      const kordoc = tools.kordoc?.available ? tools.kordoc.engineCommand : null;
+      if (!kordoc) {
+        lines.push("  · 한글 문서 엔진(kordoc)을 찾지 못해 HWPX를 만들 수 없습니다. 만들 수 없다고 알려 주세요.");
+        break;
+      }
+      const manual = tools.kordoc?.runner ? join(dirname(dirname(tools.kordoc.runner)), "references", "operations.md") : null;
       lines.push(
-        "  · 한글(HWPX)은 hallym-kordoc 스킬(설치된 SKILL.md와 실행기)로 만드세요. 내용을 Markdown으로 쓰고 실행기가 HWPX로 조판합니다.",
-        "    일반 문서는 공용 초안 서식으로 만들고, 요청에 없는 기관(한림대 등) 소속을 지어내지 마세요. HWP는 만들지 않습니다.",
+        `  · 한글(HWPX)은 앱에 들어 있는 kordoc으로 만드세요. 내용을 Markdown 초안으로 쓰고, 요청 JSON을 파일로 써서 \`${kordoc} <요청.json>\`을 실행하면 HWPX로 조판합니다.`,
+        `    요청 예: {"schemaVersion":1,"mode":"generate","markdownFile":"<초안.md의 절대 경로>","options":{"gongmun":{"preset":"report"}},"outputDir":"<새 폴더의 절대 경로>"} → 결과의 document.hwpx를 위 경로로 옮기세요. 출력 JSON의 status가 failed면 이유를 알려 주세요.`,
+        "    일반 문서는 공용 초안 서식으로 만들고, 요청에 없는 기관(한림대 등) 소속을 지어내지 마세요. 한림대 문서를 요청받았고 hallym-kordoc 스킬이 있으면 그 스킬을 쓰세요. HWP는 만들지 않습니다.",
       );
-      if (tools.kordoc?.runner) lines.push(`    실행기: ${tools.kordoc.runner}`);
+      if (manual) lines.push(`    모드와 옵션: ${manual}`);
       break;
+    }
     case "docx":
       lines.push(
         cli

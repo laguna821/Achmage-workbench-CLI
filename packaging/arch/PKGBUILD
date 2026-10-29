@@ -1,6 +1,9 @@
 # Achmage Workbench for Arch Linux and CachyOS: packages a release build made in this checkout
-# (apps/desktop/src-tauri/target/release: the binary with host/ and web/ beside it). The gateway
-# runs on the system's Node.js (24 or newer). Build: see .github/workflows/release.yml (job arch).
+# (apps/desktop/src-tauri/target/release: the binary with host/, web/ and kordoc/ beside it) and
+# the official Linux builds of IeumOffice, PDFCraft and HOP (apps/desktop/src-tauri/bundled,
+# scripts/fetch-bundled-apps.ts). The gateway runs on the system's Node.js (24 or newer) and
+# installs engines with the system's npm.
+# Build: see .github/workflows/release.yml (job arch).
 pkgname=achmage-workbench
 pkgver=0.1.0
 pkgrel=1
@@ -8,7 +11,7 @@ pkgdesc="One screen for Claude Code and Codex sessions, documents and notes (Ach
 arch=('x86_64')
 url="https://github.com/laguna821/Achmage-workbench-CLI"
 license=('MIT')
-depends=('webkit2gtk-4.1' 'gtk3' 'libayatana-appindicator' 'nodejs>=24')
+depends=('webkit2gtk-4.1' 'gtk3' 'libayatana-appindicator' 'nodejs>=24' 'npm' 'nss' 'alsa-lib')
 optdepends=('wl-clipboard: paste screenshots in the app on Wayland'
             'xclip: paste screenshots in the app on X11')
 options=('!strip' '!debug')
@@ -19,7 +22,10 @@ package() {
   local release="$repo/apps/desktop/src-tauri/target/release"
   local icons="$repo/apps/desktop/src-tauri/icons"
   install -Dm755 "$release/achmage-workbench" "$pkgdir/usr/lib/achmage-workbench/achmage-workbench"
-  cp -r "$release/host" "$release/web" "$pkgdir/usr/lib/achmage-workbench/"
+  cp -r "$release/host" "$release/web" "$release/kordoc" "$pkgdir/usr/lib/achmage-workbench/"
+  # The document apps as their releases ship them (IeumOffice: Word, PowerPoint, Excel; PDFCraft:
+  # PDF page edits; HOP: Hangul editing).
+  cp -a "$repo/apps/desktop/src-tauri/bundled/." "$pkgdir/usr/lib/achmage-workbench/"
   install -dm755 "$pkgdir/usr/bin"
   printf '#!/bin/sh\nexec /usr/lib/achmage-workbench/achmage-workbench "$@"\n' > "$pkgdir/usr/bin/achmage-workbench"
   chmod 755 "$pkgdir/usr/bin/achmage-workbench"

@@ -14,8 +14,11 @@ vendor/ieumoffice/
 apps/office/native/xlsx-wasm/engine/
 apps/office/src/sheets/xlsx-engine.wasm
 
-# Node.js an installer build brings along (release.yml downloads it)
+# Node.js and npm an installer build brings along (release.yml downloads them)
 apps/desktop/src-tauri/node/
+
+# The official app builds an installer ships (scripts/fetch-bundled-apps.ts)
+apps/desktop/src-tauri/bundled/
 
 # Arch package builds (packaging/arch)
 packaging/arch/*.pkg.tar.zst

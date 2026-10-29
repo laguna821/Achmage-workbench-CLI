@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unwatchFile, watchFile, writeFileSync, type Stats } from "node:fs";
-import { basename, delimiter, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import {
   PROTOCOL_VERSION,
   accessFor,
@@ -51,8 +51,9 @@ import type { AdapterSink, LoginStart, ProviderAdapter } from "./providers/types
 import type { Store } from "./store.ts";
 import { adaptTitle, titleFor } from "./titles.ts";
 import { blankDesign, designProblem, type DesignPreset } from "./design.ts";
-import { IeumOffice, installIeumOffice, type InstallProgress } from "./ieumoffice.ts";
+import { IeumOffice, ieumFromCliDir, installIeumOffice, type InstallProgress } from "./ieumoffice.ts";
 import { findHop, openInHop, openWithDesktop } from "./hop.ts";
+import { findPdfcraft } from "./pdfcraft.ts";
 import { createGuide, reservePath } from "./create.ts";
 import { copyMcp, copySkill, integrations, type EngineBinaries } from "./integrations.ts";
 import { exportFileName, sessionMarkdown } from "./export-md.ts";
@@ -64,6 +65,7 @@ import { Schedules } from "./schedules.ts";
 import { applyWorktree, createWorktree, removeWorktree, worktreeChanges } from "./worktrees.ts";
 import type { AgentBrowser } from "./browse.ts";
 import { EngineInstaller } from "./engine-install.ts";
+import { installToolWrappers } from "./tool-bin.ts";
 
 export { HttpError };
 
@@ -169,13 +171,6 @@ export function recentDocuments(root: string, since: number, maxDepth = 3, maxEn
   };
   walk(root, 0);
   return found;
-}
-
-function findOnPath(name: string) {
-  for (const dir of (process.env.PATH ?? "").split(delimiter)) {
-    for (const candidate of [join(dir, name), join(dir, `${name}.exe`)]) if (dir && existsSync(candidate)) return candidate;
-  }
-  return null;
 }
 
 /** Plain start of a reply for overview cards. */
@@ -593,9 +588,13 @@ export class SessionManager {
     const hop = findHop();
     const busy = Boolean(this.ieumBusy && this.ieumBusy.stage !== "done" && this.ieumBusy.stage !== "error");
     return {
-      kordoc: { available: Boolean(kordoc?.available), version: null, path: kordoc?.runner ?? null, busy: false, message: null },
-      ieumoffice: { available: Boolean(ieum?.available), version: this.ieumVersion, path: ieum?.cli ?? null, busy, message: this.ieumBusy?.message ?? null },
-      hop: { available: Boolean(hop), version: hop?.version ?? null, path: hop?.launcher ?? null, busy: false, message: null },
+      kordoc: { available: Boolean(kordoc?.available), bundled: Boolean(kordoc?.bundled), version: kordoc?.version ?? null, path: kordoc?.runner ?? null, busy: false, message: null },
+      ieumoffice: { available: Boolean(ieum?.available), bundled: Boolean(ieum?.bundled), version: this.ieumVersion, path: ieum?.cli ?? null, busy, message: this.ieumBusy?.message ?? null },
+      hop: { available: Boolean(hop), bundled: Boolean(hop?.bundled), version: hop?.version ?? null, path: hop ? (hop.args?.at(-1) ?? hop.launcher) : null, busy: false, message: null },
+      pdfcraft: (() => {
+        const cli = findPdfcraft();
+        return { available: Boolean(cli), bundled: Boolean(cli?.bundled), version: cli?.version ?? null, path: cli?.path ?? null, busy: false, message: null };
+      })(),
     };
   }
 
@@ -616,7 +615,10 @@ export class SessionManager {
     report({ stage: "download", message: "이음오피스 배포판을 확인하는 중…" });
     void installIeumOffice(report)
       .then(async (cli) => {
-        this.documents.ieum = new IeumOffice(cli);
+        const dataDir = this.options.dataDir ?? dirname(this.options.managedWorksDir);
+        const ieum = new IeumOffice(ieumFromCliDir(dirname(cli)), { dataDir });
+        if (installToolWrappers(dataDir, { kordoc: this.documents.kordoc?.runner ?? null, ieum: ieum.install, ieumAppWrapper: ieum.appWrapper }).includes("ieumoffice")) ieum.engineCommand = "ieumoffice";
+        this.documents.ieum = ieum;
         await this.refreshTools();
       })
       .catch((error: unknown) => report({ stage: "error", message: error instanceof Error ? error.message : String(error) }));
@@ -657,7 +659,7 @@ export class SessionManager {
   /** Put IeumOffice's own agent skill (how to use the ieumoffice tool) into an engine's skills. */
   async installIeumSkill(to: "claude" | "codex") {
     const source = this.ieumSkillDir();
-    if (!source) throw new HttpError(501, "ieumoffice_missing", "이음오피스가 설치되어 있지 않습니다.");
+    if (!source) throw new HttpError(501, "ieumoffice_missing", "이음오피스의 사용법 스킬을 찾지 못했습니다.");
     copySkill("ieumoffice", source, to);
     return this.integrations();
   }
@@ -1356,8 +1358,8 @@ export class SessionManager {
   async editPdf(artifactId: string, edit: { rotate?: { pages: number[]; degrees: number }[]; delete?: number[]; move?: { from: number; to: number }[] }) {
     const artifact = this.documents.check(artifactId);
     if (artifact.format !== "pdf") throw new HttpError(400, "not_pdf", "PDF 문서가 아닙니다.");
-    const cli = findOnPath("pdfcraft-cli");
-    if (!cli) throw new HttpError(501, "pdfcraft_missing", "PDFCraft(pdfcraft-cli)가 설치되어 있지 않아 PDF를 편집할 수 없습니다.");
+    const cli = findPdfcraft()?.path;
+    if (!cli) throw new HttpError(501, "pdfcraft_missing", "PDF 편집 도구(PDFCraft)를 찾지 못했습니다. 앱을 다시 설치해 주세요.");
     const args = ["edit", this.documents.revisionPath(artifactId, artifact.revision)];
     const rotations = (edit.rotate ?? []).filter((entry) => entry.pages.length && [90, 180, 270].includes(entry.degrees));
     for (const entry of rotations) args.push("--rotate", `${entry.pages.join(",")}:${entry.degrees}`);

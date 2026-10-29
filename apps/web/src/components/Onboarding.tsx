@@ -1,12 +1,20 @@
 import { useEffect, useState } from "react";
-import type { DocumentTools, Provider, ProviderStatus } from "@workbench/contracts";
+import type { DocumentTools, Provider, ProviderStatus, ToolStatus } from "@workbench/contracts";
 import { EngineCard, type EngineActions } from "./EngineSetup.tsx";
 import { Icon } from "./Icon.tsx";
 
 // First run: what is on this computer and what is missing, in four short steps. The engines are
 // found and checked by the gateway (their own status commands); a missing one installs and each
 // logs in with one click. Workbench never asks for a password or token, and shows no command to
-// type.
+// type. The document tools ship with the app.
+
+/** A document tool's state: shipped with the app, found on this computer, or not here. */
+export function toolState(status: ToolStatus) {
+  if (status.busy) return { text: "설치 중…", tone: "" };
+  if (status.bundled) return { text: `앱에 포함${status.version ? ` · ${status.version}` : ""}`, tone: "ok" };
+  if (status.available) return { text: `사용 가능${status.version ? ` · ${status.version}` : ""}`, tone: "ok" };
+  return { text: "없음", tone: "warn" };
+}
 
 export function Onboarding({
   providers,
@@ -81,31 +89,33 @@ export function Onboarding({
         {step === 2 ? (
           <section>
             <h2>문서 도구</h2>
-            <p className="muted">형식마다 맞는 도구를 씁니다. 없는 도구는 그 형식만 미리보기·수정이 빠질 뿐 나머지는 그대로 씁니다.</p>
+            <p className="muted">형식마다 맞는 도구를 씁니다. 한글·워드·PPT·엑셀·PDF 도구는 앱에 들어 있어 따로 설치하지 않습니다.</p>
             {tools
               ? (
                   [
                     { key: "kordoc", name: "kordoc", role: "한글(HWPX) 만들기·글 보기·쪽 미리보기", status: tools.kordoc },
-                    { key: "hop", name: "Achmage HOP", role: "한글 문서를 사람이 편집", status: tools.hop },
-                    { key: "ieumoffice", name: "이음오피스", role: "워드·PPT·엑셀 미리보기·AI 수정", status: tools.ieumoffice },
+                    { key: "ieumoffice", name: "이음오피스", role: "워드·PPT·엑셀 쪽 미리보기·글 보기·AI 수정", status: tools.ieumoffice },
+                    { key: "hop", name: "Achmage HOP", role: "한글 문서를 사람이 편집(HOP로 열기 → 저장하면 새 판)", status: tools.hop },
+                    ...(tools.pdfcraft ? [{ key: "pdfcraft", name: "PDFCraft", role: "PDF 쪽 돌리기·지우기·옮기기(새 파일로)", status: tools.pdfcraft } as const] : []),
                   ] as const
-                ).map((row) => (
-                  <div key={row.key} className="onboarding-card">
-                    <div className="connection-head">
-                      <strong>{row.name}</strong>
-                      <span className={`connection-state ${row.status.available ? "ok" : "warn"}`}>
-                        {row.status.busy ? "설치 중…" : row.status.available ? `사용 가능${row.status.version ? ` · ${row.status.version}` : ""}` : "없음"}
-                      </span>
+                ).map((row) => {
+                  const state = row.key === "hop" && !row.status.available ? { text: "기본 앱으로 열기", tone: "" } : toolState(row.status);
+                  return (
+                    <div key={row.key} className="onboarding-card">
+                      <div className="connection-head">
+                        <strong>{row.name}</strong>
+                        <span className={`connection-state ${state.tone}`}>{state.text}</span>
+                      </div>
+                      <div className="connection-meta muted">{row.role}</div>
+                      {row.status.message ? <div className="connection-meta">{row.status.message}</div> : null}
+                      {row.key === "ieumoffice" && !row.status.available && !row.status.busy ? (
+                        <button type="button" className="button small" onClick={onInstallIeum}>
+                          이음오피스 받기
+                        </button>
+                      ) : null}
                     </div>
-                    <div className="connection-meta muted">{row.role}</div>
-                    {row.status.message ? <div className="connection-meta">{row.status.message}</div> : null}
-                    {row.key === "ieumoffice" && !row.status.available && !row.status.busy ? (
-                      <button type="button" className="button small" onClick={onInstallIeum}>
-                        이음오피스 설치 (GitHub 배포판, 체크섬 확인)
-                      </button>
-                    ) : null}
-                  </div>
-                ))
+                  );
+                })
               : null}
           </section>
         ) : null}

@@ -10,7 +10,8 @@ import { SessionManager } from "./sessions.ts";
 import { attachmentsDir } from "./attachments.ts";
 import { Store } from "./store.ts";
 import { Kordoc } from "./kordoc.ts";
-import { IeumOffice } from "./ieumoffice.ts";
+import { IeumOffice, findIeum } from "./ieumoffice.ts";
+import { installToolWrappers } from "./tool-bin.ts";
 import { createEditorsServer, EditorGrants } from "./editors.ts";
 import { AgentBrowser } from "./browse.ts";
 import { buildTimeline } from "./timeline.ts";
@@ -58,6 +59,12 @@ const hostLabel = env.WORKBENCH_HOST_LABEL ?? defaultHostLabel();
 // engines are looked for (macOS, Linux).
 const shellPath = adoptLoginShellPath();
 const store = new Store(join(dataDir, "state.sqlite"));
+// The document tools shipped with the app (or the user's own), and the names engines run them by.
+const kordoc = new Kordoc();
+const ieum = new IeumOffice(findIeum(), { dataDir });
+const wrapped = installToolWrappers(dataDir, { kordoc: kordoc.runner, ieum: ieum.install, ieumAppWrapper: ieum.appWrapper });
+if (wrapped.includes("kordoc")) kordoc.engineCommand = "kordoc";
+if (wrapped.includes("ieumoffice")) ieum.engineCommand = "ieumoffice";
 const bus = new EventBus();
 // The agent browser: a window sessions may use (checks run it headless or with a stand-in CLI).
 const browse = new AgentBrowser({
@@ -72,8 +79,8 @@ const manager = new SessionManager(store, bus, {
   hostLabel,
   managedWorksDir: join(dataDir, "works"),
   dataDir,
-  kordoc: new Kordoc(),
-  ieum: new IeumOffice(),
+  kordoc,
+  ieum,
 });
 void manager.refreshTools();
 const pkm = new Pkm(store, bus, manager, { dataDir });
