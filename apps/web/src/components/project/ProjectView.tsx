@@ -344,6 +344,12 @@ export function ProjectView({
                   + 관련
                 </button>
               )}
+              {/* One line with the stage, tags and links (design §9); the new key's form opens below. */}
+              {adding !== "property" ? (
+                <button type="button" className="project-add" onClick={() => setAdding("property")}>
+                  + 속성
+                </button>
+              ) : null}
             </div>
             {others.length || adding === "property" ? (
               <dl className="project-other-props">
@@ -405,11 +411,6 @@ export function ProjectView({
                   </div>
                 ) : null}
               </dl>
-            ) : null}
-            {adding !== "property" ? (
-              <button type="button" className="project-add" onClick={() => setAdding("property")}>
-                + 속성
-              </button>
             ) : null}
 
             {achmage ? (
