@@ -90,14 +90,17 @@ type Runtime = {
   /** Model and effort the running Claude Code process was last told to use. */
   model: string | null;
   effort: string | null;
-  /** Model Claude Code last reported answering with. */
+  /** Model Claude Code last reported answering with, and the effort when it names one (its init frame). */
   engineModel: string | null;
+  engineEffort: string | null;
   /** Started with the agent browser's instructions in its system prompt. */
   browser: boolean;
   input: InputQueue;
   query: Query;
   mapper: ClaudeTranscriptMapper;
   turnKey: string;
+  /** The request the running turn answers (null for a turn nobody here sent, or a compaction). */
+  requestId: string | null;
   /** Requests steered into the running turn, in order (each may become the next turn). */
   steered: { turnKey: string; uuid: string }[];
   turnActive: boolean;
@@ -188,6 +191,8 @@ export class ClaudeAdapter implements ProviderAdapter {
   private readonly idleMs: number;
   private readonly usage = new Map<string, UsageWindow>();
   private initializing: Promise<void> | null = null;
+  /** The app is closing: processes it closes do not end their turns here (the next start does). */
+  private closing = false;
 
   private readonly modelCache: string | null;
   private readonly browser: BrowserEngineHooks | null;
@@ -384,11 +389,13 @@ export class ClaudeAdapter implements ProviderAdapter {
       model: session.model,
       effort: session.effort,
       engineModel: null,
+      engineEffort: null,
       browser: Boolean(browser),
       input,
       query: undefined as unknown as Query,
       mapper: new ClaudeTranscriptMapper(),
       turnKey: "",
+      requestId: null,
       steered: [],
       turnActive: false,
       interrupting: false,
@@ -476,6 +483,11 @@ export class ClaudeAdapter implements ProviderAdapter {
 
   /** Record the model that actually answers, so a picker change can be checked against the engine. */
   private noteModel(runtime: Runtime, message: SDKMessage) {
+    // Newer Claude Code also names the effort it sends on its init frame.
+    if (message.type === "system" && message.subtype === "init" && message.effort !== undefined && (message.effort ?? null) !== runtime.engineEffort) {
+      runtime.engineEffort = message.effort ?? null;
+      this.sink.updateSession(runtime.sessionId, { engineEffort: runtime.engineEffort });
+    }
     const model =
       message.type === "assistant" ? message.message.model : message.type === "system" && message.subtype === "init" ? message.model : null;
     if (!model || model === runtime.engineModel) return;
@@ -485,6 +497,7 @@ export class ClaudeAdapter implements ProviderAdapter {
 
   private async consume(runtime: Runtime) {
     const sessionId = runtime.sessionId;
+    let failure: string | null = null;
     try {
       for await (const message of runtime.query) {
         this.noteModel(runtime, message);
@@ -493,15 +506,7 @@ export class ClaudeAdapter implements ProviderAdapter {
         }
       }
     } catch (error) {
-      if (runtime.turnActive) {
-        this.sink.upsertItem(sessionId, {
-          kind: "notice",
-          id: `error:${Date.now()}`,
-          level: "error",
-          text: `Claude 실행이 중단되었습니다: ${error instanceof Error ? error.message : String(error)}`,
-          at: Date.now(),
-        });
-      }
+      failure = error instanceof Error ? error.message : String(error);
     } finally {
       if (this.runtimes.get(sessionId) === runtime) {
         this.runtimes.delete(sessionId);
@@ -509,10 +514,44 @@ export class ClaudeAdapter implements ProviderAdapter {
       if (runtime.idleTimer) {
         clearTimeout(runtime.idleTimer);
       }
-      if (runtime.turnActive) {
-        this.sink.updateSession(sessionId, { status: "idle", activity: null });
-      }
+      if (runtime.turnActive && !this.closing) this.lost(runtime, failure);
     }
+  }
+
+  /**
+   * Claude Code ended in the middle of a turn (its process died): the turn still ends, with its cause,
+   * so the gateway settles what it left — the waiting requests stay, a changed working copy becomes a
+   * proposal — and the session shows the error under '오류·멈춤'.
+   */
+  private lost(runtime: Runtime, failure: string | null) {
+    const sessionId = runtime.sessionId;
+    const stopping = runtime.interrupting;
+    runtime.turnActive = false;
+    runtime.interrupting = false;
+    // Nobody waits for these answers any more (the process is gone): the cards only expire.
+    for (const [itemId, pending] of runtime.approvals) {
+      runtime.approvals.delete(itemId);
+      this.sink.upsertItem(sessionId, { ...pending.item, decision: "expired" });
+    }
+    // Requests steered in may or may not have reached it: they wait again above the input.
+    if (runtime.steered.length) this.sink.steerDropped(sessionId, runtime.steered.map((entry) => entry.turnKey), true);
+    runtime.steered = [];
+    const error = failure ? `Claude 실행이 중단되었습니다: ${failure}` : "Claude Code가 응답을 마치지 못하고 끝났습니다.";
+    if (!stopping) this.sink.upsertItem(sessionId, { kind: "notice", id: `error:${Date.now()}`, level: "error", text: error, at: Date.now() });
+    // A compaction asked for by the user is not a reply: no end line under the last request.
+    if (!runtime.compacting) {
+      this.sink.upsertItem(sessionId, {
+        kind: "turnEnd",
+        id: `end:${runtime.turnKey}`,
+        status: stopping ? "interrupted" : "failed",
+        cause: stopping ? "stop" : "crash",
+        durationMs: null,
+        at: Date.now(),
+        requestId: runtime.requestId,
+      });
+    }
+    runtime.compacting = false;
+    this.sink.updateSession(sessionId, { status: "idle", activity: null, lastError: stopping ? null : error });
   }
 
   /**
@@ -521,6 +560,7 @@ export class ClaudeAdapter implements ProviderAdapter {
    */
   private beginOwnTurn(runtime: Runtime, turnKey: string, activity: string) {
     runtime.turnKey = turnKey;
+    runtime.requestId = null;
     runtime.turnActive = true;
     if (runtime.idleTimer) {
       clearTimeout(runtime.idleTimer);
@@ -578,8 +618,9 @@ export class ClaudeAdapter implements ProviderAdapter {
           if (status === "failed" && output.error) {
             this.sink.upsertItem(sessionId, { kind: "notice", id: `error:${runtime.turnKey}`, level: "error", text: output.error, at: Date.now() });
           }
-          this.sink.upsertItem(sessionId, { kind: "turnEnd", id: `end:${runtime.turnKey}`, status, durationMs: output.durationMs, at: Date.now() });
+          this.sink.upsertItem(sessionId, { kind: "turnEnd", id: `end:${runtime.turnKey}`, status, ...(status === "interrupted" ? { cause: "stop" as const } : {}), durationMs: output.durationMs, at: Date.now(), requestId: runtime.requestId });
           runtime.turnKey = runtime.steered.shift()!.turnKey;
+          runtime.requestId = runtime.turnKey;
           runtime.interrupting = false;
           this.sink.updateSession(sessionId, { status: "running", activity: "이어서 보낸 요청에 답하는 중" });
           break;
@@ -596,8 +637,10 @@ export class ClaudeAdapter implements ProviderAdapter {
             kind: "turnEnd",
             id: `end:${runtime.turnKey}`,
             status,
+            ...(status === "interrupted" ? { cause: "stop" as const } : {}),
             durationMs: output.durationMs,
             at: Date.now(),
+            requestId: runtime.requestId,
           });
         }
         runtime.compacting = false;
@@ -661,6 +704,7 @@ export class ClaudeAdapter implements ProviderAdapter {
       runtime.effort = session.effort;
     }
     runtime.turnKey = turnKey;
+    runtime.requestId = turnKey;
     runtime.turnActive = true;
     runtime.input.push({
       type: "user",
@@ -764,6 +808,7 @@ export class ClaudeAdapter implements ProviderAdapter {
       runtime.idleTimer = null;
     }
     runtime.turnKey = `compact:${Date.now()}`;
+    runtime.requestId = null;
     runtime.turnActive = true;
     runtime.compacting = true;
     this.sink.updateSession(session.id, { status: "running", activity: "대화를 압축하는 중", lastError: null });
@@ -837,6 +882,7 @@ export class ClaudeAdapter implements ProviderAdapter {
   }
 
   async shutdown() {
+    this.closing = true;
     for (const runtime of this.runtimes.values()) {
       runtime.input.close();
       runtime.query.close();

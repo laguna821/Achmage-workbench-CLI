@@ -31,8 +31,11 @@ export type AdapterSink = {
   delta(sessionId: string, itemId: string, text: string): void;
   updateSession(sessionId: string, patch: Partial<Session>): void;
   providerStatus(status: ProviderStatus): void;
-  /** Requests steered into a turn (by their turn keys) that the engine dropped when the turn stopped. */
-  steerDropped(sessionId: string, turnKeys: string[]): void;
+  /**
+   * Requests steered into a turn (by their turn keys) that the engine dropped when the turn stopped.
+   * `unsure`: the engine died, so it cannot say which it had taken (they wait again, unmarked).
+   */
+  steerDropped(sessionId: string, turnKeys: string[], unsure?: boolean): void;
   /** Pictures a step produced or looked at (a file, or image data the engine returned), shown under it. */
   toolImages(sessionId: string, itemId: string, images: ToolImage[]): void;
 

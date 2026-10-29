@@ -28,10 +28,15 @@
 // A turn in the read-only sandbox ("계획 먼저") answers with a plan; "계획대로 진행" says which
 // sandbox the going-ahead turn runs in.
 // Vault notes attached to a request are named back ("받은 노트 사본: …").
+//   "[[crash]]"  the app-server dies in the middle of the turn: it adds part of an edit to the working
+//          copy the request names, streams a few lines (about 2.5 s), then exits without ending it.
+//          "[[crash-once]]", or "충돌:N" in a linked-session goal at hand-over N: the same, once per
+//          request text (asked again with the same words, it answers; marks in $FAKE_ENGINE_STATE)
 //   "맥락"  answers with the developer instructions the thread started with and its sandbox
 //   "볼트에 써: <path>"  writes only where the sandbox would let Codex (work folder, temporary
 //          folders unless excluded, anything with full access) and only inside the temporary folder.
 
+import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -96,6 +101,20 @@ const usage = (thread, last) => ({
 });
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Whether this request makes the app-server die mid-turn ("[[crash]]"; once per text for the others). */
+function crashes(text) {
+  if (text.includes("[[crash]]")) return true;
+  const hop = /\[세션 잇기 (\d+)\//.exec(text)?.[1];
+  const planned = /충돌:(\d+)/.exec(text)?.[1];
+  if (!text.includes("[[crash-once]]") && !(hop && hop === planned)) return false;
+  const dir = process.env.FAKE_ENGINE_STATE || join(tmpdir(), "fake-engine-state");
+  mkdirSync(dir, { recursive: true });
+  const mark = join(dir, `crashed-${createHash("sha1").update(text).digest("hex")}`);
+  if (existsSync(mark)) return false;
+  writeFileSync(mark, "");
+  return true;
+}
 
 /** A real PNG: a filled circle of `rgb` on white. */
 function png(width, height, [r, g, b]) {
@@ -235,6 +254,18 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
   const request = { type: "userMessage", id: `user_${++counter}`, clientId: null, content: [{ type: "text", text, text_elements: [] }] };
   notify("item/started", { threadId, turnId, item: request });
   notify("item/completed", { threadId, turnId, item: request });
+  if (crashes(text)) {
+    // Part of an edit lands in the working copy, part of an answer streams, then the process dies.
+    const working = text.match(/작업 사본만 수정하세요: (.+)/);
+    if (working) appendFileSync(resolve(thread.cwd, working[1].trim()), "\n\n끊기기 전에 고친 문단입니다.\n");
+    const itemId = `msg_${++counter}`;
+    notify("item/started", { threadId, turnId, item: { type: "agentMessage", id: itemId, text: "", phase: null, memoryCitation: null } });
+    for (let index = 0; index < 25 && !thread.turn?.interrupted; index += 1) {
+      notify("item/agentMessage/delta", { threadId, turnId, itemId, delta: `${index}번째 줄을 쓰는 중입니다.\n\n` });
+      await sleep(100);
+    }
+    process.exit(1);
+  }
   if (text.includes("압축")) {
     await compact(threadId, thread, turnId);
   }

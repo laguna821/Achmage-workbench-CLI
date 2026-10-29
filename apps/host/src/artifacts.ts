@@ -2,7 +2,19 @@ import { createHash, randomUUID } from "node:crypto";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { diffLines } from "diff";
-import { DESIGN_EXTENSION, formatOf, isOfficeFormat, type Artifact, type ArtifactRevision, type DocRef, type Proposal, type RefSummary } from "@workbench/contracts";
+import {
+  DESIGN_EXTENSION,
+  formatOf,
+  isOfficeFormat,
+  type Artifact,
+  type ArtifactRevision,
+  type DocRef,
+  type Proposal,
+  type ProposalCloser,
+  type Provenance,
+  type RefSummary,
+  type TurnBreak,
+} from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
 import { HttpError } from "./errors.ts";
 import type { Store } from "./store.ts";
@@ -90,11 +102,8 @@ export class Documents {
     this.kordoc = kordoc;
     this.ieum = ieum;
     for (const artifact of store.artifacts()) this.artifacts.set(artifact.id, { ...artifact, readBy: artifact.readBy ?? {} });
-    for (const proposal of store.proposals()) {
-      // A turn cut short by a restart never finished its working copy; judge it now.
-      this.proposals.set(proposal.id, proposal);
-      if (proposal.status === "running") this.finishProposal(proposal.id);
-    }
+    // Proposals a restart left running are finished by the session manager, with the turn it cut.
+    for (const proposal of store.proposals()) this.proposals.set(proposal.id, proposal);
     if (store.getMeta("search.documents") !== DOCUMENT_SEARCH_VERSION) {
       for (const artifact of this.artifacts.values()) this.indexLatest(artifact);
       store.setMeta("search.documents", DOCUMENT_SEARCH_VERSION);
@@ -190,8 +199,11 @@ export class Documents {
     sessionId: string | null,
     note: string | null,
     derivedFrom: ArtifactRevision["derivedFrom"] = null,
+    /** An engine's revision: the model, effort and request behind it. */
+    provenance: Provenance | null = null,
   ) {
     const path = isAbsolute(rawPath) ? rawPath : resolve(cwd, rawPath);
+    const made = author === "engine" && provenance ? { model: provenance.model ?? null, effort: provenance.effort ?? null, requestId: provenance.requestId ?? null } : {};
     const format = formatOf(path);
     if (!format || isWorkbenchPath(path)) return null;
     const data = readFileOrNull(path);
@@ -199,7 +211,7 @@ export class Documents {
     const existing = [...this.artifacts.values()].find((artifact) => artifact.workId === workId && artifact.path === path);
     if (existing) {
       if (sha256(data) === existing.sha256) return null;
-      const updated = this.record(existing, data, { author, sessionId, baseRevision: existing.revision, note, ...(derivedFrom?.length ? { derivedFrom } : {}) });
+      const updated = this.record(existing, data, { author, sessionId, baseRevision: existing.revision, note, ...(derivedFrom?.length ? { derivedFrom } : {}), ...made });
       return { artifact: updated, change: "modified" as const };
     }
     const now = Date.now();
@@ -217,7 +229,7 @@ export class Documents {
       createdAt: now,
       updatedAt: now,
     };
-    const created = this.record(artifact, data, { author, sessionId, baseRevision: null, note, ...(derivedFrom?.length ? { derivedFrom } : {}) });
+    const created = this.record(artifact, data, { author, sessionId, baseRevision: null, note, ...(derivedFrom?.length ? { derivedFrom } : {}), ...made });
     return { artifact: created, change: "created" as const };
   }
 
@@ -492,10 +504,15 @@ export class Documents {
     return { artifactId: artifact.id, name: artifact.name, revision: ref.revision, mode: ref.mode, selection: ref.selection?.label ?? null };
   }
 
-  /** The engine's turn is over: whatever is in the working copy becomes the proposal. */
-  finishProposal(proposalId: string) {
+  /**
+   * The engine's turn is over: whatever is in the working copy becomes the proposal — also when the
+   * turn was cut short (`interruptedBy`: stopped, failed, its engine died, the app restarted), then
+   * marked as part of a turn that did not finish. Reviewed and applied or discarded like any other.
+   */
+  finishProposal(proposalId: string, end: { interruptedBy?: TurnBreak | null; model?: string | null; effort?: string | null } = {}) {
     const proposal = this.proposal(proposalId);
     if (proposal.status !== "running") return proposal;
+    const made = { ...(end.model !== undefined ? { model: end.model } : {}), ...(end.effort !== undefined ? { effort: end.effort } : {}) };
     const artifact = this.get(proposal.artifactId);
     const base = isHangul(artifact.format)
       ? readFileOrNull(join(this.root, artifact.id, `r${proposal.baseRevision}.view.md`))
@@ -503,14 +520,14 @@ export class Documents {
     const working = readFileOrNull(proposal.workingPath);
     const now = Date.now();
     if (!base || !working || sha256(base) === sha256(working)) {
-      const empty: Proposal = { ...proposal, status: "empty", updatedAt: now };
+      const empty: Proposal = { ...proposal, ...made, status: "empty", closedBy: end.interruptedBy ?? "turn", updatedAt: now };
       this.saveProposal(empty);
       return empty;
     }
     const office = isOfficeFormat(artifact.format);
     const counts = office ? { added: 0, removed: 0 } : countChanges(base.toString("utf8"), working.toString("utf8"));
     const problem = artifact.format === "design" ? designProblem(working.toString("utf8")) : null;
-    const pending: Proposal = { ...proposal, ...counts, problem, status: "pending", updatedAt: now };
+    const pending: Proposal = { ...proposal, ...counts, ...made, problem, ...(end.interruptedBy ? { interruptedBy: end.interruptedBy } : {}), status: "pending", updatedAt: now };
     this.saveProposal(pending);
     if (office) void this.checkOffice(pending.id);
     return pending;
@@ -549,8 +566,9 @@ export class Documents {
     }
   }
 
-  runningProposals(sessionId: string) {
-    return [...this.proposals.values()].filter((proposal) => proposal.sessionId === sessionId && proposal.status === "running");
+  /** Proposals whose turn is still running (of one session, or all). */
+  runningProposals(sessionId?: string) {
+    return [...this.proposals.values()].filter((proposal) => proposal.status === "running" && (sessionId === undefined || proposal.sessionId === sessionId));
   }
 
   /** Base, proposal and current text, for the preview. */
@@ -604,17 +622,21 @@ export class Documents {
       author: "engine",
       sessionId: proposal.sessionId,
       baseRevision: proposal.baseRevision,
-      note: "수정안 적용",
+      note: proposal.interruptedBy ? "중단된 턴의 일부 수정안 적용" : "수정안 적용",
+      model: proposal.model ?? null,
+      effort: proposal.effort ?? null,
+      requestId: proposal.requestId,
     });
-    const applied: Proposal = { ...proposal, status: "applied", appliedRevision: updated.revision, updatedAt: Date.now() };
+    const applied: Proposal = { ...proposal, status: "applied", appliedRevision: updated.revision, closedBy: "user", updatedAt: Date.now() };
     this.saveProposal(applied);
     return { proposal: applied, artifact: updated };
   }
 
-  discardProposal(proposalId: string) {
+  /** `closedBy`: the user, unless the request never reached the engine ("failure"). */
+  discardProposal(proposalId: string, closedBy: ProposalCloser = "user") {
     const proposal = this.proposal(proposalId);
     if (proposal.status !== "pending" && proposal.status !== "running") return proposal;
-    const discarded: Proposal = { ...proposal, status: "discarded", updatedAt: Date.now() };
+    const discarded: Proposal = { ...proposal, status: "discarded", closedBy, updatedAt: Date.now() };
     this.saveProposal(discarded);
     return discarded;
   }

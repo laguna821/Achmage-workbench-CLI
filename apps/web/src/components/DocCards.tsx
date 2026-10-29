@@ -12,6 +12,7 @@ import { useOfficePage } from "../office.ts";
 import type { State } from "../state.ts";
 import { EngineMark } from "./EngineMark.tsx";
 import { Icon } from "./Icon.tsx";
+import { PartialNote } from "./Recovery.tsx";
 
 // Cards for documents inside the conversation: files an engine wrote, proposals waiting for a
 // decision, and requests sent to other sessions with their answers.
@@ -185,6 +186,7 @@ export function ProposalCard({ proposal }: { proposal: Proposal }) {
           )}
         </span>
       </div>
+      <PartialNote proposal={proposal} />
       {artifact.format === "design" && proposal.status !== "running" && proposal.status !== "empty" ? <DesignProposalPreview proposal={proposal} /> : null}
       {isOfficeFormat(artifact.format) && proposal.status !== "running" && proposal.status !== "empty" ? <OfficeProposalPreview proposal={proposal} /> : null}
       {proposal.problem && proposal.status === "pending" ? <div className="proposal-warning">디자인 파일이 올바르지 않아 적용할 수 없습니다: {proposal.problem}</div> : null}

@@ -128,8 +128,10 @@ describe("SessionManager", () => {
     expect(restored.status).toBe("idle");
     expect(restored.nativeSessionId).toBe("native-1");
     const items = second.manager.items(session.id).items;
-    expect(items.find((item) => item.id === "a:r1")).toMatchObject({ text: "ok" });
-    expect(items.at(-1)).toMatchObject({ kind: "notice", level: "info" });
+    expect(items.find((item) => item.id === "a:r1")).toMatchObject({ text: "ok", streaming: false });
+    expect(items.at(-2)).toMatchObject({ kind: "notice", level: "info" });
+    // The cut turn ends with its cause (after the last thing it recorded), closing request r1.
+    expect(items.at(-1)).toMatchObject({ kind: "turnEnd", status: "interrupted", cause: "restart", requestId: "r1" });
   });
 });
 
