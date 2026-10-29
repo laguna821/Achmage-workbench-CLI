@@ -445,31 +445,6 @@
   font-size: var(--fs-micro);
 }
 
-.pkm-drag-ghost {
-  position: fixed;
-  z-index: 90;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 280px;
-  padding: 5px 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
-  background: var(--surface);
-  box-shadow: var(--popover-shadow);
-  font-size: var(--fs-meta);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  pointer-events: none;
-  opacity: 0.85;
-}
-
-.pkm-drag-ghost.over {
-  border-color: var(--accent);
-  opacity: 1;
-}
-
 .note-chip {
   border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
 }

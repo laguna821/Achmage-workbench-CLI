@@ -148,7 +148,7 @@ export class Api {
     mode: "auto" | "steer" | "queue" = "auto",
     attachments: Attachment[] = [],
     plan = false,
-    extra: { omitChanges?: string[] } = {},
+    extra: { omitChanges?: string[]; notes?: string[] } = {},
   ) => this.request<SendResult>("POST", `/api/sessions/${sessionId}/messages`, { requestId, text, refs, create, mode, attachments, plan, ...extra });
   /** A work as a project note (project.ts): the page, writes to the note (each undoable), the stages. */
   projects = () => this.request<ProjectSummary[]>("GET", "/api/projects/");

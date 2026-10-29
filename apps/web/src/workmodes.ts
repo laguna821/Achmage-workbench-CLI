@@ -73,6 +73,8 @@ export type ModeProps = {
   onReview?: (proposalId: string | null) => void;
   /** A window of its own for one session: no tabs of the work's other sessions. */
   single?: boolean;
+  /** One of two panes: the input waits to be clicked (taking the focus would pull it from the other pane). */
+  paned?: boolean;
 };
 
 // ── where the reader was: kept across mode switches (views unmount and come back) ─────────────

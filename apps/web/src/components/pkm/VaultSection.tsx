@@ -1,9 +1,11 @@
-import { Fragment, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { Fragment, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { BorderStyle, VaultFolder } from "@workbench/contracts";
 import { countLabel, groupRuns, obsidianUrl, openObsidian } from "../../pkm.ts";
 import { Icon, iconName } from "../Icon.tsx";
 import type { MenuEntry, MenuRequest } from "../ContextMenu.tsx";
 import { usePkm } from "./PkmContext.tsx";
+import { paneDrag, usePaneActions } from "../../panedrag.ts";
+import type { PaneItem } from "../../panes.ts";
 import "../../styles/pkm.css";
 
 // "볼트" in the sidebar: the attached Obsidian vault as a read-only mirror. Folders wear the colours
@@ -21,6 +23,7 @@ function borderVars(style: BorderStyle, theme: Theme): CSSProperties {
 
 export function VaultSection({ theme, openMenu }: { theme: Theme; openMenu: (request: MenuRequest) => void }) {
   const pkm = usePkm();
+  const panes = usePaneActions();
   // A folder picked shows its notes as cards in the centre; where the app cannot, it only folds.
   const show = pkm.open;
   const onOpenFolder = show ? (path: string) => show({ kind: "vault", path }) : undefined;
@@ -40,6 +43,18 @@ export function VaultSection({ theme, openMenu }: { theme: Theme; openMenu: (req
   };
 
   const copy = (text: string) => void navigator.clipboard?.writeText(text).then(() => pkm.onToast("경로를 복사했습니다."));
+  // Folders (as cards) and pinned notes open in a pane: dragged onto the main area, Ctrl+clicked, or from the menu.
+  const paneable = Boolean(panes && show);
+  const press = (item: PaneItem, label: string) => (event: ReactPointerEvent) => {
+    if (event.button === 1 && paneable) event.preventDefault();
+    if (paneable) paneDrag.press({ item, label }, event);
+  };
+  const beside = (item: PaneItem) => (event: ReactMouseEvent) => {
+    if (!paneable || !(event.button === 1 || event.ctrlKey || event.metaKey)) return false;
+    event.preventDefault();
+    panes!.openBeside(item);
+    return true;
+  };
   const sectionMenu = (x: number, y: number) => {
     const items: MenuEntry[] = vaultPath
       ? [
@@ -65,6 +80,7 @@ export function VaultSection({ theme, openMenu }: { theme: Theme; openMenu: (req
     if (!vaultPath) return;
     const items: MenuEntry[] = [
       ...(onOpenFolder ? [{ kind: "item" as const, label: "카드로 보기", icon: "grid" as const, onSelect: () => onOpenFolder(folder.path) }] : []),
+      ...(paneable ? [{ kind: "item" as const, label: "오른쪽에 열기", icon: "columns" as const, hint: "Ctrl+클릭", onSelect: () => panes!.openBeside({ kind: "vault", path: folder.path }) }] : []),
       { kind: "item", label: "Obsidian에서 열기", icon: "external", onSelect: () => void openObsidian(obsidianUrl(vaultPath, folder.path)).catch(() => undefined) },
       { kind: "item", label: "경로 복사", icon: "copy", onSelect: () => copy(folder.path ? `${vaultPath}/${folder.path}` : vaultPath) },
     ];
@@ -157,7 +173,12 @@ export function VaultSection({ theme, openMenu }: { theme: Theme; openMenu: (req
         style={{ paddingLeft: 8 + depth * 14, ...(background ? { background: `color-mix(in srgb, ${background} 22%, transparent)` } : {}) }}
         data-vault-path={folder.path}
         title={`${folder.path || folder.name} · 이 폴더 ${folder.own}개${folder.below ? ` · 하위 ${folder.below}개` : ""}`}
-        onClick={() => activate(folder)}
+        onPointerDown={press({ kind: "vault", path: folder.path }, folder.name)}
+        onClick={(event) => {
+          if (paneDrag.justDragged() || beside({ kind: "vault", path: folder.path })(event)) return;
+          activate(folder);
+        }}
+        onAuxClick={beside({ kind: "vault", path: folder.path })}
         onContextMenu={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -251,7 +272,12 @@ export function VaultSection({ theme, openMenu }: { theme: Theme; openMenu: (req
                   className={`side-row vault-note${selected === pin.path ? " current" : ""}`}
                   style={{ paddingLeft: 30 }}
                   title={pin.path}
-                  onClick={() => onOpenNote?.(pin.path)}
+                  onPointerDown={press({ kind: "note", path: pin.path }, pin.title)}
+                  onClick={(event) => {
+                    if (paneDrag.justDragged() || beside({ kind: "note", path: pin.path })(event)) return;
+                    onOpenNote?.(pin.path);
+                  }}
+                  onAuxClick={beside({ kind: "note", path: pin.path })}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     openMenu({
@@ -260,6 +286,7 @@ export function VaultSection({ theme, openMenu }: { theme: Theme; openMenu: (req
                       title: pin.title,
                       items: [
                         ...(onOpenNote ? [{ kind: "item" as const, label: "열기", icon: "page" as const, onSelect: () => onOpenNote(pin.path) }] : []),
+                        ...(paneable ? [{ kind: "item" as const, label: "오른쪽에 열기", icon: "columns" as const, hint: "Ctrl+클릭", onSelect: () => panes!.openBeside({ kind: "note", path: pin.path }) }] : []),
                         { kind: "item", label: "Obsidian에서 열기", icon: "external", onSelect: () => void openObsidian(obsidianUrl(vaultPath, pin.path)).catch(() => undefined) },
                       ],
                     });

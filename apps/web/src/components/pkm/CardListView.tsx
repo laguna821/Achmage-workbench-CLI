@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { FORMAT_LABEL, type CardList, type PkmCard } from "@workbench/contracts";
 import { cardDate, groupCards, obsidianUrl, openObsidian, pictureUrl, thumbPath, type PkmTarget } from "../../pkm.ts";
 import { useDocs } from "../DocCards.tsx";
@@ -8,13 +8,22 @@ import { useEngineChoice } from "../StartView.tsx";
 import type { MenuEntry } from "../ContextMenu.tsx";
 import { CardComposer, type ComposerPlace } from "./CardComposer.tsx";
 import { usePkm } from "./PkmContext.tsx";
+import { paneDrag, usePaneActions, usePaneDragSlice } from "../../panedrag.ts";
+import type { PaneItem } from "../../panes.ts";
 import "../../styles/pkm.css";
 
-// The card list in the centre (Notebook Navigator style, not a split): the notes of a vault folder,
-// the works of an app folder, or the sessions and pages of a work. A card opens with a click; a
-// note card dragged onto the input below goes with the next request as a read-only reference.
+// The card list in the centre (Notebook Navigator style): the notes of a vault folder, the works of
+// an app folder, or the sessions and pages of a work. A card opens with a click (Ctrl+click or a
+// middle click: in the right pane); a note card dragged onto an input goes with its next request as
+// a read-only reference, and any card dragged onto the main area's left or right half opens there.
 
-type Drag = { card: PkmCard; x0: number; y0: number; x: number; y: number; active: boolean; over: boolean };
+/** What a card opens in a pane. */
+export function cardItem(card: PkmCard): PaneItem {
+  if (card.kind === "note") return { kind: "note", path: card.id };
+  if (card.kind === "page") return { kind: "doc", id: card.id };
+  if (card.kind === "session") return { kind: "session", id: card.id };
+  return { kind: "work", id: card.id };
+}
 
 /** Status dots as the sidebar draws them. */
 const TONE: Partial<Record<NonNullable<PkmCard["status"]>, string>> = { starting: "active", running: "active", interrupting: "active", awaitingApproval: "attention", error: "error" };
@@ -63,7 +72,7 @@ function CardView({
   card: PkmCard;
   vaultVersion: number;
   tagColors: Record<string, string>;
-  onOpen: () => void;
+  onOpen: (event?: ReactMouseEvent) => void;
   onMenu: (x: number, y: number) => void;
   onPointerDown?: (event: ReactPointerEvent) => void;
   dragging: boolean;
@@ -76,6 +85,7 @@ function CardView({
       className={`pkm-card kind-${card.kind}${dragging ? " dragging" : ""}`}
       data-card-id={card.id}
       onClick={onOpen}
+      onAuxClick={(event) => event.button === 1 && onOpen(event)}
       onKeyDown={(event) => {
         if (event.key === "Enter") onOpen();
         else if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") {
@@ -133,10 +143,9 @@ export function CardListView({ target }: { target: Exclude<PkmTarget, { kind: "n
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState<{ path: string; title: string }[]>([]);
   const [engine, setEngine] = useEngineChoice();
-  const [drag, setDrag] = useState<Drag | null>(null);
-  const dragRef = useRef<Drag | null>(null);
-  const suppressClick = useRef(false);
-  const composer = useRef<HTMLDivElement>(null);
+  const panes = usePaneActions();
+  // The card being dragged (with the pointer: the desktop webview's HTML drag and drop is unreliable).
+  const dragging = usePaneDragSlice((drag) => (drag?.own ? JSON.stringify(drag.item) : ""));
   const key = target.kind === "vault" ? `vault:${target.path}` : target.kind === "view" ? `view:${target.id}` : `${target.kind}:${target.id}`;
   const vaultVersion = pkm.state.pkm.vault ?? 0;
   const status = pkm.tree?.status;
@@ -166,34 +175,6 @@ export function CardListView({ target }: { target: Exclude<PkmTarget, { kind: "n
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, descendants, vaultVersion, tick, appVersion, viewVersion]);
 
-  // Drag a note card with the pointer (HTML drag and drop is unreliable in the desktop webview).
-  useEffect(() => {
-    const onMove = (event: PointerEvent) => {
-      const current = dragRef.current;
-      if (!current) return;
-      if (!current.active && Math.hypot(event.clientX - current.x0, event.clientY - current.y0) < 6) return;
-      const over = Boolean(composer.current?.contains(document.elementFromPoint(event.clientX, event.clientY)));
-      const next = { ...current, active: true, x: event.clientX, y: event.clientY, over };
-      dragRef.current = next;
-      setDrag(next);
-    };
-    const onUp = () => {
-      const current = dragRef.current;
-      dragRef.current = null;
-      setDrag(null);
-      if (!current?.active) return;
-      suppressClick.current = true;
-      window.setTimeout(() => (suppressClick.current = false), 0);
-      if (current.over) attach(current.card);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-  });
-
   const attach = (card: PkmCard) => {
     if (card.kind !== "note") return;
     if (!card.id.endsWith(".md")) {
@@ -203,8 +184,9 @@ export function CardListView({ target }: { target: Exclude<PkmTarget, { kind: "n
     setNotes((current) => (current.some((note) => note.path === card.id) ? current : [...current, { path: card.id, title: card.title }]));
   };
 
-  const open = (card: PkmCard) => {
-    if (suppressClick.current) return;
+  const open = (card: PkmCard, event?: ReactMouseEvent) => {
+    if (paneDrag.justDragged()) return;
+    if (event && panes && (event.button === 1 || event.ctrlKey || event.metaKey)) return panes.openBeside(cardItem(card));
     if (card.kind === "note") pkm.open?.({ kind: "note", path: card.id });
     else if (card.kind === "page") docs.actions.openArtifact(card.id);
     else if (card.kind === "session") docs.actions.openSession(card.id);
@@ -216,7 +198,10 @@ export function CardListView({ target }: { target: Exclude<PkmTarget, { kind: "n
 
   const menu = (card: PkmCard, x: number, y: number) => {
     const vaultPath = status?.path;
-    const items: MenuEntry[] = [{ kind: "item", label: "열기", icon: card.kind === "note" || card.kind === "page" ? "page" : "chat", hint: "Enter", onSelect: () => open(card) }];
+    const items: MenuEntry[] = [
+      { kind: "item", label: "열기", icon: card.kind === "note" || card.kind === "page" ? "page" : "chat", hint: "Enter", onSelect: () => open(card) },
+      ...(panes ? [{ kind: "item" as const, label: "오른쪽에 열기", icon: "columns" as const, hint: "Ctrl+클릭", onSelect: () => panes.openBeside(cardItem(card)) }] : []),
+    ];
     if (card.kind === "note") {
       items.push({ kind: "item", label: "요청에 붙이기", icon: "plus", onSelect: () => attach(card) });
       // Pinned to a work, a note's path goes into the context card of that work's new sessions.
@@ -311,29 +296,20 @@ export function CardListView({ target }: { target: Exclude<PkmTarget, { kind: "n
                   card={card}
                   vaultVersion={vaultVersion}
                   tagColors={pkm.tree?.tagColors ?? {}}
-                  dragging={Boolean(drag?.active && drag.card.id === card.id)}
-                  onOpen={() => open(card)}
+                  dragging={dragging === JSON.stringify(cardItem(card))}
+                  onOpen={(event) => open(card, event)}
                   onMenu={(x, y) => menu(card, x, y)}
-                  onPointerDown={
-                    card.kind === "note"
-                      ? (event) => {
-                          if (event.button !== 0) return;
-                          dragRef.current = { card, x0: event.clientX, y0: event.clientY, x: event.clientX, y: event.clientY, active: false, over: false };
-                        }
-                      : undefined
-                  }
+                  onPointerDown={(event) => {
+                    if (event.button === 1 && panes) event.preventDefault();
+                    paneDrag.press({ item: cardItem(card), label: card.title }, event);
+                  }}
                 />
               ))}
             </section>
           ))}
         </div>
       </div>
-      <CardComposer ref={composer} draftKey={key} place={place} notes={notes} onNotes={setNotes} engine={engine} setEngine={setEngine} dropping={Boolean(drag?.active && drag.over)} />
-      {drag?.active ? (
-        <div className={`pkm-drag-ghost${drag.over ? " over" : ""}`} style={{ left: drag.x + 12, top: drag.y + 10 }}>
-          <Icon name="book" size={13} /> {drag.card.title}
-        </div>
-      ) : null}
+      <CardComposer draftKey={key} place={place} notes={notes} onNotes={setNotes} engine={engine} setEngine={setEngine} dropping={false} />
     </main>
   );
 }

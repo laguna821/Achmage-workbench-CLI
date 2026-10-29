@@ -13,6 +13,8 @@ import { LinkBadge, LinkLines, linkable } from "./LinkSidebar.tsx";
 import { linkOfSession } from "../links.ts";
 import { VaultSection } from "./pkm/VaultSection.tsx";
 import { PlacementMark, ViewsSection } from "./pkm/ViewsSection.tsx";
+import { paneDrag } from "../panedrag.ts";
+import type { PaneItem } from "../panes.ts";
 
 // The sidebar: where many sessions live. "지금" (waiting for you, working, new replies) on top,
 // then pinned things, then the folder tree of works with their sessions and documents. Rows move by
@@ -48,7 +50,23 @@ export type SidebarActions = {
   newSubpage?: (artifact: Artifact) => void;
   /** A session dropped on a work row: its record as a page of that work ("세션 기록 페이지"). */
   sessionPage?: (session: Session, work: Work) => void;
+  /** "오른쪽에 열기" (Ctrl+click, middle click): the row in the right pane. Absent where there are no panes. */
+  openRight?: (item: PaneItem) => void;
 };
+
+/** What a row opens in a pane (dragged onto the main area, or Ctrl+clicked). */
+export function rowItem(row: Row): PaneItem | null {
+  if (row.type === "session") return { kind: "session", id: row.session.id };
+  if (row.type === "work") return { kind: "work", id: row.work.id };
+  if (row.type === "doc") return { kind: "doc", id: row.artifact.id };
+  if (row.type === "folder") return { kind: "folder", id: row.folder.id };
+  return null;
+}
+
+const rowLabel = (row: Row) => (row.type === "folder" ? row.folder.name : row.type === "work" ? row.work.title : row.type === "session" ? row.session.purpose : row.type === "doc" ? row.artifact.name : "");
+
+/** Ctrl/Cmd+click or a middle click asks for the right pane. */
+const sideClick = (event: { ctrlKey: boolean; metaKey: boolean; button: number }) => event.button === 1 || ((event.ctrlKey || event.metaKey) && event.button === 0);
 
 const MIN_WIDTH = 232;
 const MAX_WIDTH = 480;
@@ -68,6 +86,8 @@ type Drag = {
   x: number;
   y: number;
   target: { id: string; zone: DropZone; move: Move | null; link: [Session, Session] | null; page?: Work } | null;
+  /** Over the main area: the row opens in a pane there (the panes show where). */
+  outside?: boolean;
 };
 
 export function Sidebar({
@@ -225,8 +245,9 @@ export function Sidebar({
 
   // Dragging with the pointer (works in every webview, unlike HTML drag and drop under Tauri).
   const onPointerDown = (event: ReactPointerEvent, row: Row) => {
+    if (event.button === 1 && actions.openRight && rowItem(row)) event.preventDefault();
     if (event.button !== 0 || renaming) return;
-    if (row.type !== "folder" && row.type !== "work" && row.type !== "session") return;
+    if (row.type !== "folder" && row.type !== "work" && row.type !== "session" && row.type !== "doc") return;
     const target = event.target as HTMLElement;
     if (target.closest("input, .row-chevron")) return;
     dragRef.current = { row, startX: event.clientX, startY: event.clientY, active: false, x: event.clientX, y: event.clientY, target: null };
@@ -238,7 +259,10 @@ export function Sidebar({
       if (!current) return;
       if (!current.active && Math.hypot(event.clientX - current.startX, event.clientY - current.startY) < 6) return;
       let target: Drag["target"] = null;
-      const element = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-row-id]");
+      // Out over the main area the row opens in a pane; inside the sidebar it moves as before.
+      const item = rowItem(current.row);
+      const outside = item ? paneDrag.track({ item, label: rowLabel(current.row) }, event.clientX, event.clientY) : false;
+      const element = outside ? null : document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-row-id]");
       const row = element ? rowById.get(element.dataset.rowId!) : undefined;
       if (element && row && row.id !== current.row.id) {
         const rect = element.getBoundingClientRect();
@@ -250,7 +274,7 @@ export function Sidebar({
         if (current.row.type === "session" && row.type === "work" && actions.sessionPage) target = { id: row.id, zone: "inside", move: null, link: null, page: row.work };
         else target = { id: row.id, zone, move: link || (pair && zone === "inside") ? null : moveFor(state, current.row, row, zone, sortMode), link };
       }
-      const next = { ...current, active: true, x: event.clientX, y: event.clientY, target };
+      const next = { ...current, active: true, x: event.clientX, y: event.clientY, target, outside };
       dragRef.current = next;
       setDrag(next);
     };
@@ -261,6 +285,7 @@ export function Sidebar({
       if (!current?.active) return;
       suppressClick.current = true;
       window.setTimeout(() => (suppressClick.current = false), 0);
+      if (paneDrag.release(commit)) return;
       if (commit && current.target?.link) actions.linkSessions(current.target.link);
       if (commit && current.target?.page && current.row.type === "session") actions.sessionPage?.(current.row.session, current.target.page);
       else if (commit && current.target?.move) actions.move(current.target.move);
@@ -311,7 +336,16 @@ export function Sidebar({
         type="button"
         className={`side-row now-row${session.id === visibleSessionId ? " current" : ""}${extraClass}`}
         style={accentStyle(lookOf(session.provider))}
-        onClick={onOpen}
+        onPointerDown={(event) => {
+          if (event.button === 1 && actions.openRight) event.preventDefault();
+          paneDrag.press({ item: { kind: "session", id: session.id }, label: session.purpose }, event);
+        }}
+        onClick={(event) => {
+          if (paneDrag.justDragged()) return;
+          if (sideClick(event) && actions.openRight) actions.openRight({ kind: "session", id: session.id });
+          else onOpen();
+        }}
+        onAuxClick={(event) => event.button === 1 && actions.openRight?.({ kind: "session", id: session.id })}
         onContextMenu={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -460,10 +494,16 @@ export function Sidebar({
         data-row-id={row.id}
         title={title}
         onPointerDown={(event) => onPointerDown(event, row)}
-        onClick={() => {
+        onClick={(event) => {
           if (suppressClick.current) return;
           setFocusId(row.id);
-          activate(row);
+          const item = rowItem(row);
+          if (sideClick(event) && item && actions.openRight) actions.openRight(item);
+          else activate(row);
+        }}
+        onAuxClick={(event) => {
+          const item = rowItem(row);
+          if (event.button === 1 && item && actions.openRight) actions.openRight(item);
         }}
         onDoubleClick={() => (row.type === "folder" || row.type === "work" || row.type === "session") && setRenaming(row.id)}
         onContextMenu={(event) => {
@@ -600,7 +640,16 @@ export function Sidebar({
                 key={work.id}
                 type="button"
                 className={`side-row pinned-row${work.id === currentWorkId ? " current" : ""}`}
-                onClick={() => actions.openWork(work)}
+                onPointerDown={(event) => {
+                  if (event.button === 1 && actions.openRight) event.preventDefault();
+                  paneDrag.press({ item: { kind: "work", id: work.id }, label: work.title }, event);
+                }}
+                onClick={(event) => {
+                  if (paneDrag.justDragged()) return;
+                  if (sideClick(event) && actions.openRight) actions.openRight({ kind: "work", id: work.id });
+                  else actions.openWork(work);
+                }}
+                onAuxClick={(event) => event.button === 1 && actions.openRight?.({ kind: "work", id: work.id })}
                 onContextMenu={(event) => {
                   event.preventDefault();
                   const row = rowById.get(work.id) ?? { type: "work" as const, id: work.id, depth: 0, work, open: false, expandable: false, sessions: [], docs: [] };
@@ -653,7 +702,7 @@ export function Sidebar({
       </div>
       <div className="side-resize" onPointerDown={startResize} role="separator" aria-orientation="vertical" aria-label="사이드바 너비" />
       {drag?.active ? (
-        <div className={`drag-ghost${drag.target?.link ? " linking" : drag.target?.move || drag.target?.page ? "" : " refused"}`} style={{ left: drag.x + 12, top: drag.y + 10 }}>
+        <div className={`drag-ghost${drag.outside ? "" : drag.target?.link ? " linking" : drag.target?.move || drag.target?.page ? "" : " refused"}`} style={{ left: drag.x + 12, top: drag.y + 10 }}>
           {drag.target?.link
             ? `⇄ 세션 잇기: ${drag.target.link[0].purpose} · ${drag.target.link[1].purpose}`
             : drag.row.type === "folder"
@@ -662,7 +711,9 @@ export function Sidebar({
                 ? drag.row.work.title
                 : drag.row.type === "session"
                   ? drag.row.session.purpose
-                  : ""}
+                  : drag.row.type === "doc"
+                    ? drag.row.artifact.name
+                    : ""}
           {drag.target?.page ? ` → 「${drag.target.page.title}」에 세션 기록 페이지` : ""}
         </div>
       ) : null}

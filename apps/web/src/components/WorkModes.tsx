@@ -3,8 +3,11 @@ import { WORK_MODES, workModeKey, type WorkMode } from "../workmodes.ts";
 import { ModeBar } from "./ModeBar.tsx";
 import "../styles/views.css";
 
-/** The work screen's mode bar, above the input while a document of the work is open. */
-export function WorkModeBar({ mode, onMode, canReview }: { mode: WorkMode; onMode: (mode: WorkMode) => void; canReview: boolean }) {
+/**
+ * The work screen's mode bar, above the input while a document of the work is open. With two panes
+ * "나란히" rests: the panes already put things side by side (drag the document to the other side).
+ */
+export function WorkModeBar({ mode, onMode, canReview, canSplit = true }: { mode: WorkMode; onMode: (mode: WorkMode) => void; canReview: boolean; canSplit?: boolean }) {
   return (
     <div className="work-mode-row">
       <ModeBar
@@ -16,8 +19,8 @@ export function WorkModeBar({ mode, onMode, canReview }: { mode: WorkMode; onMod
         modes={WORK_MODES.map((entry) => ({
           id: entry.id,
           label: entry.label,
-          title: entry.id === "review" && !canReview ? "검토할 수정안이 없습니다" : entry.title,
-          disabled: entry.id === "review" && !canReview && mode !== "review",
+          title: entry.id === "review" && !canReview ? "검토할 수정안이 없습니다" : entry.id === "split" && !canSplit ? "두 칸으로 볼 때는 쓰지 않습니다 · 문서를 다른 칸으로 끌어 놓으세요" : entry.title,
+          disabled: (entry.id === "review" && !canReview && mode !== "review") || (entry.id === "split" && !canSplit && mode !== "split"),
         }))}
       />
     </div>
