@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { DISK_FOLDER, FORMAT_LABEL, PROVIDER_LABEL, type DocFormat, type PkmRule, type RuleChange } from "@workbench/contracts";
+import { DISK_FOLDER, FORMAT_LABEL, PROVIDER_LABEL, type DocFormat, type PkmRule, type ProjectStage, type RuleChange } from "@workbench/contracts";
 import { Icon } from "../Icon.tsx";
 import { usePkm } from "./PkmContext.tsx";
 import "../../styles/pkm.css";
@@ -22,6 +22,7 @@ export function ruleText(rule: PkmRule) {
     rule.then.folder === DISK_FOLDER ? "디스크 위치대로 폴더" : rule.then.folder ? `폴더 「${rule.then.folder}」` : null,
     rule.then.tag ? `#${rule.then.tag}` : null,
     rule.then.pin ? "고정" : null,
+    rule.then.stage ? `단계 「${rule.then.stage}」` : null,
   ].filter(Boolean);
   return `${when.length ? when.join(" · ") : "모든 새 작업"} → ${then.length ? then.join(" · ") : "그대로"}`;
 }
@@ -38,6 +39,11 @@ export function RulesDialog() {
   const [changes, setChanges] = useState<RuleChange[] | null>(null);
   const [ticked, setTicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  // The projects' stages a rule can fill (the archive stage is not one: it would archive new works).
+  const [stages, setStages] = useState<ProjectStage[]>([]);
+  useEffect(() => {
+    pkm.api.projectStages().then((list) => setStages(list.filter((stage) => !stage.archive)), () => undefined);
+  }, [pkm.api]);
   const close = () => pkm.setDialog(null);
   const fail = (error: unknown) => pkm.onToast(error instanceof Error ? error.message : String(error));
 
@@ -173,6 +179,15 @@ export function RulesDialog() {
             </span>
             <label htmlFor="rule-tag">→ 태그</label>
             <input id="rule-tag" className="sheet-input" value={draft.then.tag ?? ""} onChange={(event) => setThen({ tag: event.target.value || null })} placeholder="수업" />
+            <label htmlFor="rule-stage">→ 단계</label>
+            <select id="rule-stage" className="sheet-select" value={draft.then.stage ?? ""} onChange={(event) => setThen({ stage: event.target.value || null })} title="프로젝트에 단계가 없을 때만 채웁니다">
+              <option value="">그대로</option>
+              {stages.map((stage) => (
+                <option key={stage.name} value={stage.name}>
+                  {stage.name} (비어 있을 때)
+                </option>
+              ))}
+            </select>
             <span />
             <label className="check-row">
               <input type="checkbox" checked={draft.then.pin} onChange={(event) => setThen({ pin: event.target.checked })} />
@@ -185,7 +200,7 @@ export function RulesDialog() {
                 그만두기
               </button>
             ) : null}
-            <button type="button" className="button small" disabled={!draft.then.folder && !draft.then.tag && !draft.then.pin} onClick={addDraft}>
+            <button type="button" className="button small" disabled={!draft.then.folder && !draft.then.tag && !draft.then.pin && !draft.then.stage} onClick={addDraft}>
               {draft.id ? "규칙 바꾸기" : "규칙 추가"}
             </button>
           </div>
@@ -216,7 +231,8 @@ export function RulesDialog() {
                     <span className="muted">
                       {change.from ?? "분류 없음"} → {change.to ?? "분류 없음"}
                       {change.tag ? ` · #${change.tag}` : ""}
-                      {change.pin ? " · 고정" : ""} · 「{change.ruleName}」
+                      {change.pin ? " · 고정" : ""}
+                      {change.stage ? ` · 단계 ${change.stage}` : ""} · 「{change.ruleName}」
                     </span>
                   </label>
                 </li>

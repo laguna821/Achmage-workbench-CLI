@@ -164,6 +164,9 @@ export class Pkm {
 
   /** The project part of the card (project.ts sets it). */
   projectCard: ((work: Work) => CardProject) | null = null;
+  /** A project's stage now (null: none), and what a rule fills in its note (project.ts sets them). */
+  projectStage: ((work: Work) => string | null) | null = null;
+  projectRule: ((workId: string, fill: { stage: string | null; tag: string | null; rule: string }) => void) | null = null;
   /** The engines' search tool's usage line, once it exists. */
   findInstructions: (() => string | null) | null = null;
 
@@ -532,8 +535,10 @@ export class Pkm {
       const to = placement.folder ?? from;
       const tag = placement.tag && !(work.tags ?? []).includes(placement.tag) ? placement.tag : null;
       const pin = placement.pin && !work.pinned;
-      if (to === from && !tag && !pin) continue;
-      changes.push({ workId: work.id, title: work.title, ruleId: placement.rule.id, ruleName: placement.rule.name, from, to, tag, pin, suggested: work.folderId === null });
+      // A stage only where the project has none: a rule never replaces the person's choice.
+      const stage = placement.stage && this.projectStage && !this.projectStage(work) ? placement.stage : null;
+      if (to === from && !tag && !pin && !stage) continue;
+      changes.push({ workId: work.id, title: work.title, ruleId: placement.rule.id, ruleName: placement.rule.name, from, to, tag, pin, stage, suggested: work.folderId === null });
     }
     return changes;
   }
@@ -567,6 +572,8 @@ export class Pkm {
     const folderId = placement.folder ? this.ensureFolder(placement.folder) : work.folderId;
     const tags = placement.tag && !(work.tags ?? []).includes(placement.tag) ? [...(work.tags ?? []), placement.tag] : undefined;
     this.manager.updateWork(work.id, { folderId, ...(placement.pin ? { pinned: true } : {}), ...(tags ? { tags } : {}) });
+    // The project note follows: the stage while it has none, the tag where a note exists.
+    if (placement.stage || placement.tag) this.projectRule?.(work.id, { stage: placement.stage, tag: placement.tag, rule: placement.rule.name });
     this.writeJson("pkm.placements", { ...this.placements(), [work.id]: { ruleId: placement.rule.id, ruleName: placement.rule.name, at: Date.now() } });
     this.publish("rules");
     return true;

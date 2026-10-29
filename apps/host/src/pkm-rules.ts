@@ -41,7 +41,7 @@ export function placementFor(rules: PkmRule[], work: Work, sessions: Session[], 
     const folder = rule.then.folder?.trim() === DISK_FOLDER ? diskFolder(work) : rule.then.folder?.trim() || null;
     // "디스크 위치대로" says nothing about a work without such a folder: the next rule may.
     if (rule.then.folder?.trim() === DISK_FOLDER && !folder) continue;
-    return { rule, folder: folder ? folder.split("/").map((part) => part.trim()).filter(Boolean).join("/") : null, tag: rule.then.tag?.trim().replace(/^#/, "") || null, pin: rule.then.pin };
+    return { rule, folder: folder ? folder.split("/").map((part) => part.trim()).filter(Boolean).join("/") : null, tag: rule.then.tag?.trim().replace(/^#/, "") || null, pin: rule.then.pin, stage: rule.then.stage?.trim() || null };
   }
   return null;
 }
@@ -62,7 +62,7 @@ export function cleanRules(value: unknown): PkmRule[] {
         name: text(entry.name, 60) ?? "규칙",
         enabled: entry.enabled !== false,
         when: { cwdPrefix: text(when.cwdPrefix, 500), engine, format: (text(when.format, 20) as PkmRule["when"]["format"]) ?? null },
-        then: { folder: text(then.folder, 200), tag: text(then.tag, 60), pin: then.pin === true },
+        then: { folder: text(then.folder, 200), tag: text(then.tag, 60), pin: then.pin === true, stage: text(then.stage, 30) },
       },
     ];
   });

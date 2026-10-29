@@ -232,6 +232,23 @@ describe("what the engines are told", () => {
   });
 });
 
+describe("rules fill a project (P3)", () => {
+  it("fill the stage only while a project has none, say so in the record, and keep the note's tags with the work's", () => {
+    const { pkm, manager, projects, work, dir } = setup();
+    mkdirSync(join(dir, "논문"), { recursive: true });
+    const other = manager.createWork({ title: "논문", cwd: join(dir, "논문") });
+    projects.setStage(other.id, "보류");
+    pkm.saveRules([{ id: "r", name: "모두", enabled: true, when: { cwdPrefix: null, engine: null, format: null }, then: { folder: null, tag: "수업", pin: false, stage: "진행중" } }]);
+    const preview = pkm.previewRules();
+    expect(preview.find((change) => change.workId === work.id)).toMatchObject({ stage: "진행중", tag: "수업" });
+    expect(preview.find((change) => change.workId === other.id)).toMatchObject({ stage: null, tag: "수업" });
+    expect(pkm.applyRules([work.id, other.id])).toEqual({ applied: 2 });
+    expect(projects.page(work.id).note).toMatchObject({ exists: true, stage: "진행중", tags: ["수업"] });
+    expect(projects.page(other.id).note).toMatchObject({ stage: "보류", tags: ["수업"] });
+    expect(projects.page(work.id).events.find((event) => event.kind === "stage")?.text).toBe("단계 값 없음 → 진행중 (규칙 「모두」)");
+  });
+});
+
 describe("멈춘 곳 (what breaks left for the person)", () => {
   it("lists a session whose last turn broke off or that keeps unsent requests, not a stop the person made", () => {
     const { manager, projects, work } = setup();

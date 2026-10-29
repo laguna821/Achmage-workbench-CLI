@@ -209,14 +209,15 @@ export function dateRange(spec: Extract<ViewTerm, { kind: "date" }>["spec"], now
 /**
  * One ordered rule for new works; the first that matches places the work. Conditions left empty
  * match anything. `then.folder` is an app folder path ("강의/2026"); `{disk}` means the name of the
- * folder the work's folder sits in ("디스크 위치대로").
+ * folder the work's folder sits in ("디스크 위치대로"). `then.stage` fills a project's stage while it
+ * has none (never replaces one the person chose).
  */
 export type PkmRule = {
   id: string;
   name: string;
   enabled: boolean;
   when: { cwdPrefix: string | null; engine: "claude" | "codex" | null; format: DocFormat | null };
-  then: { folder: string | null; tag: string | null; pin: boolean };
+  then: { folder: string | null; tag: string | null; pin: boolean; stage?: string | null };
 };
 
 export const DISK_FOLDER = "{disk}";
@@ -235,6 +236,8 @@ export type RuleChange = {
   to: string | null;
   tag: string | null;
   pin: boolean;
+  /** The stage the rule fills (the project has none yet). */
+  stage?: string | null;
   /** Ticked at first: works not filed yet. */
   suggested: boolean;
 };

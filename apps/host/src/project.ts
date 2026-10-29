@@ -159,6 +159,8 @@ export class Projects {
     manager.changeHook = (session, work, omit) => this.changeBlock(session, work, omit);
     manager.toldHook = (session) => this.markTold(session);
     pkm.projectCard = (work) => this.cardInfo(work);
+    pkm.projectStage = (work) => this.stageOf(work, this.note(work));
+    pkm.projectRule = (workId, fill) => this.ruleFill(workId, fill);
     // "찾는 길": decisions and open questions are found by search, and a work by its note's aliases,
     // properties and words. A note written here, by an engine, or (noticed when lists read it)
     // outside is indexed again.
@@ -592,7 +594,8 @@ export class Projects {
   }
 
   /** Set the stage; the archive stage puts the work in the archive, leaving it takes it out. */
-  setStage(workId: string, name: string | null): ProjectWrite {
+  /** `via`: what set it when not the person's menu (a rule), said in the record. */
+  setStage(workId: string, name: string | null, via: string | null = null): ProjectWrite {
     const work = this.work(workId);
     const stages = this.stages();
     const target = name ? stages.find((stage) => stage.name === name) : null;
@@ -609,7 +612,7 @@ export class Projects {
     }
     try {
       const written = this.write(workId, `단계: ${previous ?? "값 없음"} → ${name ?? "값 없음"}`, (text) => setFrontmatterKey(text, STAGE_KEY, name ? [name] : null), { unarchive: archiving, rearchive: leaving });
-      if (written.token) this.logEntry({ workId, section: "stage", text: `단계 ${previous ?? "값 없음"} → ${name ?? "값 없음"}`, sessionId: null, itemId: null });
+      if (written.token) this.logEntry({ workId, section: "stage", text: `단계 ${previous ?? "값 없음"} → ${name ?? "값 없음"}${via ? ` (${via})` : ""}`, sessionId: null, itemId: null });
       return written.token ? { ...written, page: this.page(workId) } : written;
     } catch (error) {
       this.quiet.add(workId);
@@ -620,6 +623,24 @@ export class Projects {
         this.quiet.delete(workId);
       }
       throw error;
+    }
+  }
+
+  /**
+   * What a placement rule fills (pkm-rules.ts): the stage while the project has none (not the
+   * archive stage), and its tag into a note that exists, so the work's tags and its note's agree.
+   * Never in the way of the rule's placing itself.
+   */
+  private ruleFill(workId: string, fill: { stage: string | null; tag: string | null; rule: string }) {
+    try {
+      const work = this.work(workId);
+      if (fill.stage && !this.stageOf(work, this.note(work)) && this.stages().some((stage) => stage.name === fill.stage && !stage.archive)) {
+        this.setStage(workId, fill.stage, `규칙 「${fill.rule}」`);
+      }
+      const note = this.note(work);
+      if (fill.tag && note.exists && !note.problem && !note.tags.includes(fill.tag)) this.setProperty(workId, "tags", [...note.tags, fill.tag]);
+    } catch {
+      // The rule placed the work; its note is left as it was.
     }
   }
 
