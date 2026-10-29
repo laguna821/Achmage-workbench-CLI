@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DIVIDER, MIN_PANE, clampRatio, closePane, dropEffect, fitsTwo, focusPane, focusedPane, nudgeRatio, otherPane, placeOnSide, readRatio, setPane, shownElsewhere, sideAt, sideOf, singleLayout, swapPanes, type Layout, type Pane } from "./panes.ts";
+import { leafIds, minimumSize, movePane, paneGeometry, placeAt, resizeSplit, restoreLayout, splitPane, treeOf } from "./panes.ts";
 
 // Two panes: where something opened on a side lands, closing, swapping, which pane sidebar clicks go
 // to (the focused one), what a pane that loses the focus keeps showing, and the divider's ratio.
@@ -129,5 +130,62 @@ describe("two panes", () => {
     // Two panes at 30/70: the line is the divider, not the middle.
     expect(sideAt(300, 100, 1000, 2, 0.3)).toBe("left");
     expect(sideAt(500, 100, 1000, 2, 0.3)).toBe("right");
+  });
+});
+
+describe("recursive panes", () => {
+  const content = (view: string) => ({ view, workId: view.startsWith("chat") ? "w1" : null, sessionId: null });
+  const four = () => {
+    const two = splitPane(singleLayout("chat:a", "w1"), "a", "right", content("doc:b"), "s1");
+    const three = splitPane(two, "a", "bottom", content("terminal:c"), null);
+    return splitPane(three, two.focus, "bottom", content("diff:d"), null);
+  };
+  it("creates 2×2 rectangles and collapses only the closed branch", () => {
+    const layout = four();
+    const { panes, dividers } = paneGeometry(treeOf(layout), 1007, 807);
+    expect(Object.values(panes)).toEqual(expect.arrayContaining([
+      { left: 0, top: 0, width: 500, height: 400 }, { left: 0, top: 407, width: 500, height: 400 },
+      { left: 507, top: 0, width: 500, height: 400 }, { left: 507, top: 407, width: 500, height: 400 },
+    ]));
+    expect(dividers).toHaveLength(3);
+    const closed = closePane(layout, "a");
+    expect(closed.panes).toHaveLength(3);
+    expect(closed.focus).toBe(layout.focus);
+    expect(leafIds(treeOf(closed))).toEqual(closed.panes.map((pane) => pane.id));
+  });
+  it("moves existing panes without duplicating their views or losing session pins", () => {
+    const layout = four();
+    const before = layout.panes.map((pane) => [pane.id, pane.view, pane.sessionId]).sort();
+    const moved = movePane(layout, "a", { paneId: layout.focus, side: "bottom" });
+    expect(moved.panes.map((pane) => [pane.id, pane.view, pane.sessionId]).sort()).toEqual(before);
+    expect(moved.focus).toBe(layout.focus);
+    const again = placeAt(moved, content("doc:b"), { paneId: "a", side: "center" }, null, showing("doc:b"));
+    expect(again.panes).toHaveLength(4);
+    expect(focusedPane(again).view).toBe("doc:b");
+    expect(new Set(again.panes.map((pane) => pane.view)).size).toBe(4);
+  });
+  it("round-trips content, focus, ratios and legacy two-pane data; rejects corrupt trees", () => {
+    const layout = four();
+    const root = treeOf(layout);
+    const changed = resizeSplit(layout, root.id, 0.6);
+    const fallback = singleLayout("home", null);
+    const isString = (value: unknown): value is string => typeof value === "string";
+    expect(restoreLayout(JSON.parse(JSON.stringify({ version: 1, ...changed })), isString, fallback)).toEqual(changed);
+    expect(restoreLayout({ ...changed, tree: { kind: "pane", id: "a" } }, isString, fallback)).toBe(fallback);
+    expect(restoreLayout({ ...changed, panes: [changed.panes[0], changed.panes[0]] }, isString, fallback)).toBe(fallback);
+    const legacy = { panes: layout.panes.slice(0, 2), focus: "a" };
+    expect(restoreLayout(legacy, isString, fallback).panes).toEqual(legacy.panes);
+    expect(minimumSize(root)).toEqual({ width: MIN_PANE * 2 + DIVIDER, height: 447 });
+  });
+  it("cycles focus through every pane, preserving all other sessions", () => {
+    const layout = four();
+    const visited = new Set<string>();
+    let next = layout;
+    for (let index = 0; index < layout.panes.length; index++) {
+      next = focusPane(next, otherPane(next)!.id, `s${index}`);
+      visited.add(next.focus);
+      expect(treeOf(next)).toEqual(treeOf(layout));
+    }
+    expect(visited.size).toBe(4);
   });
 });

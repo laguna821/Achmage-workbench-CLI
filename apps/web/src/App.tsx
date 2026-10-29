@@ -51,7 +51,7 @@ import { entryClient, homeTarget, sessionToOpen, unseenFailure } from "./entry.t
 import { WorksDirRow } from "./components/WorksDirRow.tsx";
 import { EngineMark } from "./components/EngineMark.tsx";
 import { PaneLayout, type PaneHead, type PaneScope } from "./components/Panes.tsx";
-import { closePane, dropEffect, focusPane, focusedPane, otherPane, paneById, placeOnSide, readRatio, setPane, shownElsewhere, singleLayout, swapPanes, type Layout, type Pane, type PaneContent, type PaneId, type PaneItem, type Side } from "./panes.ts";
+import { closePane, effectAt, focusPane, focusedPane, movePane, otherPane, paneById, placeAt, resizeSplit, restoreLayout, setPane, shownElsewhere, singleLayout, splitPane, MAX_PANES, type Layout, type Pane, type PaneContent, type PaneId, type PaneItem, type PaneTarget, type Side } from "./panes.ts";
 import { PaneActionsContext, type PaneActions } from "./panedrag.ts";
 
 // Editors (CodeMirror, PDF.js) load only when a document opens.
@@ -162,6 +162,20 @@ type View =
 
 type Toast = { text: string; action?: { label: string; run: () => void } };
 
+const PANE_LAYOUT_KEY = "workbench.paneLayout.v1";
+function isView(value: unknown): value is View {
+  if (!value || typeof value !== "object") return false;
+  const view = value as View;
+  if (view.kind === "work" || view.kind === "archive") return true;
+  if (view.kind === "new") return view.folderId === null || typeof view.folderId === "string";
+  if (view.kind === "project") return typeof view.workId === "string";
+  if (view.kind === "document") return typeof view.artifactId === "string" && (view.proposalId === null || typeof view.proposalId === "string");
+  if (view.kind === "split") return typeof view.artifactId === "string" && typeof view.draftKey === "string" && (view.focus === "chat" || view.focus === "doc");
+  if (view.kind !== "pkm" || !view.target || typeof view.target !== "object") return false;
+  const target = view.target;
+  return target.kind === "note" || target.kind === "vault" ? typeof target.path === "string" : ["folder", "work", "view"].includes(target.kind) && "id" in target && typeof target.id === "string";
+}
+
 const OPEN_DOCS_KEY = "workbench.openDocs";
 /** The document body in the focused pane (with two panes, the other may show a document too). */
 const FOCUSED_DOC = '.pane[data-pane-active="true"] .document-view .doc-body';
@@ -185,16 +199,15 @@ export function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
   // A window of its own for one session (`?session=`, "새 창으로 떼어 내기"): no sidebar, no home.
   const [single, setSingle] = useState<string | null>(() => windowSession());
-  // The main area: one pane, or two side by side (panes.ts). `view` and `workId` are the focused
-  // pane's, so whatever opens something (sidebar, search, cards) opens it there. Home first, unless
-  // the user chose to open the last work straight away (and there is one). Like the views
-  // themselves, a second pane is not brought back when the app opens again; its width is.
-  const [layout, setLayout] = useState<Layout<View>>(() =>
-    singleLayout<View>(
+  // One pane on a new profile; an existing layout is restored from gateway preferences after
+  // the snapshot. Sidebar/search actions route into the focused pane.
+  const [layout, setLayout] = useState<Layout<View>>(() => {
+    const fallback = singleLayout<View>(
       windowSession() || (cachedPrefs().startScreen === "last" && localStorage.getItem(LAST_WORK_KEY)) ? { kind: "work" } : { kind: "new", folderId: null },
       localStorage.getItem(LAST_WORK_KEY),
-    ),
-  );
+    );
+    return windowSession() ? fallback : restoreLayout(readJson(PANE_LAYOUT_KEY, null), isView, fallback);
+  });
   // The layout as last asked for, so changes made in one handler build on each other.
   const layoutRef = useRef(layout);
   const updateLayout = useCallback((change: (current: Layout<View>) => Layout<View>) => {
@@ -211,8 +224,8 @@ export function App() {
       if (guard) leaveGuards.current[id] = guard;
       else delete leaveGuards.current[id];
     };
-    return { a: keep("a"), b: keep("b") };
-  }, []);
+    return Object.fromEntries(layout.panes.map((pane) => [pane.id, keep(pane.id)]));
+  }, [layout.panes.map((pane) => pane.id).sort().join(",")]);
   /** `then`, after the pane's document view saved what only it can save, when that view goes away. */
   const afterLeaving = useCallback((id: PaneId, next: View | null, then: () => void) => {
     const pane = paneById(layoutRef.current, id);
@@ -264,7 +277,7 @@ export function App() {
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
   const setWorkId = (id: string | null) => {
-    updateLayout((current) => setPane(current, current.focus, { workId: id }));
+    updateLayout((current) => setPane(current, current.focus, { workId: id, sessionId: null }));
     if (id && !single) localStorage.setItem(LAST_WORK_KEY, id);
   };
 
@@ -370,9 +383,9 @@ export function App() {
     (owner.activeSessionId && state.sessions[owner.activeSessionId] && !state.sessions[owner.activeSessionId]!.archivedAt && state.sessions[owner.activeSessionId]) ||
     workSessions(state, owner.id).at(-1) ||
     sessionsOf(state, owner.id).at(-1);
-  const activeSession = singleSession ?? (work && activeOf(work));
+  const restoredSession = focusedPane(layout).sessionId ? state.sessions[focusedPane(layout).sessionId!] : null;
+  const activeSession = singleSession ?? (restoredSession && restoredSession.workId === work?.id && !restoredSession.archivedAt ? restoredSession : work && activeOf(work));
   // ── two panes (panes.ts): the other pane keeps the session it showed when it lost the focus ──
-  const second = otherPane(layout);
   const sessionIn = (pane: Pane<View>): Session | undefined => {
     if (pane.id === layout.focus) return activeSession || undefined;
     const owner = pane.workId ? state.works[pane.workId] : undefined;
@@ -380,6 +393,31 @@ export function App() {
     const kept = pane.sessionId ? state.sessions[pane.sessionId] : undefined;
     return kept && kept.workId === owner.id ? kept : activeOf(owner) || undefined;
   };
+  const layoutLoaded = useRef(false);
+  const layoutSaved = useRef("");
+  useEffect(() => {
+    if (!state.ready || single) return;
+    if (!layoutLoaded.current) {
+      layoutLoaded.current = true;
+      const restored = restoreLayout(state.prefs.paneLayout ?? readJson(PANE_LAYOUT_KEY, null), isView, layoutRef.current);
+      const panes = restored.panes.map((pane) => {
+        const missingWork = pane.workId && (!state.works[pane.workId] || state.works[pane.workId]!.archivedAt);
+        const at = pane.view;
+        const missingDoc = (at.kind === "document" || at.kind === "split") && !state.artifacts[at.artifactId];
+        const missingProject = at.kind === "project" && (!state.works[at.workId] || state.works[at.workId]!.archivedAt);
+        return missingWork || missingDoc || missingProject ? { ...pane, view: { kind: "new" as const, folderId: null }, workId: null, sessionId: null } : pane;
+      });
+      updateLayout(() => ({ ...restored, panes }));
+      return;
+    }
+    const saved = { version: 1, ...layout, panes: layout.panes.map((pane) => ({ ...pane, sessionId: sessionIn(pane)?.id ?? null })) };
+    const json = JSON.stringify(saved);
+    if (layoutSaved.current === json) return;
+    layoutSaved.current = json;
+    // Gateway preferences survive a changed loopback port on the next desktop launch.
+    savePrefs({ paneLayout: saved });
+    try { localStorage.setItem(PANE_LAYOUT_KEY, json); } catch { /* Gateway remains authoritative. */ }
+  }, [layout, state.ready, activeSession?.id, single]);
 
   // A document shown becomes a tab of its work (at most 8, the oldest goes).
   useEffect(() => {
@@ -647,6 +685,7 @@ export function App() {
     folderId: string | null,
     choice: { model: string | null; effort: string | null },
     pick: ProjectPick = { kind: "auto" },
+    originPane = layoutRef.current.focus,
   ) => {
     if (!api) return false;
     try {
@@ -655,11 +694,10 @@ export function App() {
       const created = existing ?? (await api.createWork(titleFrom(text), folderId, cwd));
       const session = await api.createSession(created.id, provider, choice);
       dispatch({ type: "focus", work: created, session });
-      setWorkId(created.id);
-      setView({ kind: "work" });
+      updateLayout((current) => setPane(current, originPane, { workId: created.id, view: { kind: "work" }, sessionId: session.id }));
       await api.send(session.id, newRequestId(), text);
       // Home's input is gone from the screen by now and cannot clear itself: the sent text must not come back there.
-      writeDraft(`new:${folderId ?? "root"}`, "");
+      writeDraft(originPane === "a" ? `new:${folderId ?? "root"}` : `new:${originPane}:${folderId ?? "root"}`, "");
       return true;
     } catch (error) {
       fail(error);
@@ -674,15 +712,16 @@ export function App() {
   const visibleSession = (view.kind === "work" || view.kind === "split") && activeSession ? activeSession : null;
   // The other pane's conversation is on screen too (unless the window is too narrow to show it).
   const [narrowPanes, setNarrowPanes] = useState(false);
-  const besideSession = second && !narrowPanes && (second.view.kind === "work" || second.view.kind === "split") ? (sessionIn(second) ?? null) : null;
+  const visibleSessions = layout.panes.filter((pane) => (!narrowPanes || pane.id === layout.focus) && (pane.view.kind === "work" || pane.view.kind === "split")).map(sessionIn).filter((session): session is Session => Boolean(session));
+  const visibleIds = visibleSessions.map((session) => session.id).join(",");
   const keptUnread = useRef<string | null>(null);
   useEffect(() => {
-    if (keptUnread.current && keptUnread.current !== visibleSession?.id && keptUnread.current !== besideSession?.id) keptUnread.current = null;
-  }, [visibleSession?.id, besideSession?.id]);
+    if (keptUnread.current && !visibleSessions.some((session) => session.id === keptUnread.current)) keptUnread.current = null;
+  }, [visibleIds]);
   const seenAsked = useRef(new Map<string, string>());
   useEffect(() => {
     if (!api) return;
-    for (const shown of [visibleSession, besideSession]) {
+    for (const shown of visibleSessions) {
       if (!shown) continue;
       // A failure counts as seen too once looked at (opening the work then goes elsewhere, entry.ts).
       const failed = unseenFailure(shown);
@@ -692,10 +731,10 @@ export function App() {
       seenAsked.current.set(shown.id, key);
       void api.updateSession(shown.id, { seen: true }).catch(() => undefined);
     }
-  }, [api, visibleSession, besideSession]);
+  }, [api, visibleIds, state.sessions]);
   const unseen = useMemo(
-    () => new Set(Object.values(state.sessions).filter((session) => isUnseen(session) && session.id !== visibleSession?.id && session.id !== besideSession?.id && !session.archivedAt).map((session) => session.id)),
-    [state.sessions, visibleSession?.id, besideSession?.id],
+    () => new Set(Object.values(state.sessions).filter((session) => isUnseen(session) && !visibleSessions.some((shown) => shown.id === session.id) && !session.archivedAt).map((session) => session.id)),
+    [state.sessions, visibleIds],
   );
 
   // Sessions in the order they were last looked at, for Ctrl+Tab.
@@ -833,6 +872,7 @@ export function App() {
   useEffect(() => {
     if (startSettled.current || !state.ready) return;
     startSettled.current = true;
+    if (state.prefs.paneLayout) return;
     if (state.prefs.startScreen === "last" && view.kind === "new" && view.folderId === null && workId && state.works[workId]) setView({ kind: "work" });
   }, [state.ready, state.prefs.startScreen, state.works, view, workId, setView]);
   useEffect(() => {
@@ -950,8 +990,8 @@ export function App() {
   const reviewOf = useMemo(() => {
     const review = (id: PaneId) => (proposalId: string | null) =>
       setViewOf(id, (current) => (current.kind === "document" && current.proposalId !== proposalId ? { ...current, proposalId } : current));
-    return { a: review("a"), b: review("b") };
-  }, [setViewOf]);
+    return Object.fromEntries(layout.panes.map((pane) => [pane.id, review(pane.id)]));
+  }, [setViewOf, layout.panes.map((pane) => pane.id).sort().join(",")]);
   const modeBar = workMode ? <WorkModeBar mode={workMode} onMode={setWorkMode} canReview={Boolean(reviewTarget)} canSplit={layout.panes.length < 2} /> : null;
   /** The other pane's bar, as it is: a press there gives that pane the focus first, and its bar is then this one. */
   const barFor = (pane: Pane<View>, owner: Work | undefined, ids: string[]) => {
@@ -1117,7 +1157,7 @@ export function App() {
             label: unseenNow ? "읽음으로 표시" : "읽지 않음으로 표시",
             icon: unseenNow ? "eye" : "bell",
             onSelect: () => {
-              if (!unseenNow && (session.id === visibleSession?.id || session.id === besideSession?.id)) keptUnread.current = session.id;
+              if (!unseenNow && visibleSessions.some((shown) => shown.id === session.id)) keptUnread.current = session.id;
               void api.updateSession(session.id, { seen: unseenNow }).catch(fail);
             },
           },
@@ -1244,7 +1284,7 @@ export function App() {
       return null;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [api, state, actions, archive, exportSession, openPath, openSession, visibleSession?.id, besideSession?.id, startNew, docActions, fail, setToast, linkApi, single],
+    [api, state, actions, archive, exportSession, openPath, openSession, visibleIds, startNew, docActions, fail, setToast, linkApi, single],
   );
 
   function openWorkNow(target: Work) {
@@ -1431,20 +1471,17 @@ export function App() {
     const only = current.panes.length === 1 ? current.panes[0]! : null;
     return Boolean(only && item.kind === "doc" && only.view.kind === "document" && only.view.artifactId === item.id && only.workId);
   };
-  const effectOf = (item: PaneItem, side: Side) => (movesOut(layoutRef.current, item) ? "split" : dropEffect(layoutRef.current, side, showsItem(item)));
-  /** Open something on a side: dropped on a half of the main area, or "오른쪽에 열기". */
-  const placeItem = (item: PaneItem, side: Side) => {
+  const effectOf = (item: PaneItem, target: PaneTarget) => (target.side !== "center" && movesOut(layoutRef.current, item) ? "split" : effectAt(layoutRef.current, target, showsItem(item)));
+  const placeItemAt = (item: PaneItem, target: PaneTarget) => {
     const content = single ? null : contentOf(item);
     if (!content) return;
     const current = layoutRef.current;
     const shows = showsItem(item);
     const leaving = focusedPane(current);
-    const conversation = movesOut(current, item);
-    const effect = conversation ? "split" : dropEffect(current, side, shows);
-    const target = current.panes.length === 2 ? current.panes[side === "left" ? 0 : 1]! : null;
-    // The pane the item ends up in takes the focus, with its session.
-    const holder = effect === "swap" ? current.panes.find((pane) => pane !== target) : effect === "none" ? target : null;
-    const shown = holder ? { workId: holder.workId, sessionId: holder.id === current.focus ? null : holder.sessionId } : effect === "none" ? null : content;
+    const conversation = target.side !== "center" && movesOut(current, item);
+    const effect = conversation ? "split" : effectAt(current, target, shows);
+    const holder = current.panes.find(shows);
+    const shown = holder ? { workId: holder.workId, sessionId: sessionIn(holder)?.id ?? holder.sessionId } : content;
     // "나란히" is one pane's mode: a second pane keeps the side of it the user was on.
     const unsplit: View | null = conversation
       ? { kind: "work" }
@@ -1455,20 +1492,29 @@ export function App() {
         : null;
     const keep = conversation ? (sessionIn(leaving)?.id ?? null) : keptOf(leaving);
     const run = () => {
-      updateLayout((latest) => placeOnSide(unsplit ? setPane(latest, leaving.id, { view: unsplit }) : latest, content, side, keep, shows));
+      updateLayout((latest) => placeAt(unsplit ? setPane(latest, leaving.id, { view: unsplit }) : latest, content, target, keep, shows));
       if (shown) showSessionOf(shown.workId, shown.sessionId);
     };
-    if (effect === "replace" && target) afterLeaving(target.id, content.view, run);
+    if (effect === "replace") afterLeaving(target.paneId, content.view, run);
     else if (unsplit) afterLeaving(leaving.id, unsplit, run);
     else run();
   };
+  const placeItem = (item: PaneItem, side: Side) => placeItemAt(item, { paneId: layoutRef.current.focus, side });
+  const splitPaneNow = (id: PaneId, side: Side) => {
+    if (single) return;
+    const current = layoutRef.current;
+    if (current.panes.length >= MAX_PANES) return setToast(`한 창에는 최대 ${MAX_PANES}칸을 열 수 있습니다.`);
+    updateLayout((latest) => splitPane(latest, id, side, { view: { kind: "new", folderId: null }, workId: null, sessionId: null }, keptOf(focusedPane(current))));
+  };
   const closePaneNow = (id: PaneId) => {
     const current = layoutRef.current;
-    const rest = current.panes.find((pane) => pane.id !== id);
-    if (!rest || current.panes.length < 2) return;
+    if (current.panes.length < 2) return;
+    const next = closePane(current, id);
+    const rest = focusedPane(next);
+    const previous = paneById(current, rest.id);
     afterLeaving(id, null, () => {
       updateLayout((latest) => closePane(latest, id));
-      if (rest.id !== current.focus) showSessionOf(rest.workId, rest.sessionId);
+      if (rest.id !== current.focus && previous) showSessionOf(previous.workId, previous.sessionId);
     });
   };
   panesRef.current = { focusIfShown, placeItem };
@@ -1641,9 +1687,11 @@ export function App() {
       return (
         <StartView
           state={state}
+          autoFocus={focused}
           folderId={at.kind === "new" ? at.folderId : null}
+          draftKey={pane.id === "a" ? `new:${at.kind === "new" ? at.folderId ?? "root" : "root"}` : `new:${pane.id}:${at.kind === "new" ? at.folderId ?? "root" : "root"}`}
           onClearFolder={() => setView({ kind: "new", folderId: null })}
-          onStart={(text, provider, cwd, choice, pick) => startWork(text, provider, cwd, at.kind === "new" ? at.folderId : null, choice, pick)}
+          onStart={(text, provider, cwd, choice, pick) => startWork(text, provider, cwd, at.kind === "new" ? at.folderId : null, choice, pick, pane.id)}
           onOpenWork={openWorkNow}
           onOpenProject={actions.openProject}
           onOpenSession={(session, itemId) => {
@@ -1763,6 +1811,10 @@ export function App() {
           </button>
         )}
         <div className="topbar-right">
+          {!single ? <>
+            <button type="button" className="icon-button" aria-label="오른쪽으로 분할" title="오른쪽으로 분할" onClick={() => splitPaneNow(layout.focus, "right")}><Icon name="columns" size={18} /></button>
+            <button type="button" className="icon-button" aria-label="아래로 분할" title="아래로 분할" onClick={() => splitPaneNow(layout.focus, "bottom")}><Icon name="rows" size={18} /></button>
+          </> : null}
           {pendingApprovals.length && !single ? (
             <button
               type="button"
@@ -1886,12 +1938,12 @@ export function App() {
         <PaneLayout
           layout={layout}
           enabled={!single}
-          ratio={readRatio(prefs.paneRatio)}
-          onRatio={(ratio) => savePrefs({ paneRatio: ratio })}
+          onResize={(id, ratio) => updateLayout((current) => resizeSplit(current, id, ratio))}
           onFocus={focusPaneNow}
           onClose={closePaneNow}
-          onSwap={() => updateLayout(swapPanes)}
-          onDrop={placeItem}
+          onMove={(id, target) => updateLayout((current) => movePane(current, id, target))}
+          onSplit={splitPaneNow}
+          onDrop={placeItemAt}
           head={paneHead}
           scope={paneScope}
           effectOf={effectOf}

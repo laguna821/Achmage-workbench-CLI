@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useSyncExternalStore } from "react";
-import type { PaneItem, Side } from "./panes.ts";
+import type { PaneItem, PaneTarget } from "./panes.ts";
 
 // Dragging things into the panes with pointer events (HTML drag and drop is unreliable in the
 // desktop app's WebKitGTK, as the sidebar and the card list already found). Sources press here and
@@ -9,7 +9,7 @@ import type { PaneItem, Side } from "./panes.ts";
 
 export type DragSource = { item: PaneItem; label: string };
 
-type Over = { kind: "zone"; side: Side } | { kind: "note"; id: string } | null;
+type Over = { kind: "zone"; target: PaneTarget } | { kind: "note"; id: string } | null;
 
 /** The drag in progress: `own` when followed here (its ghost is drawn here, not by the source). */
 export type PaneDrag = DragSource & { x: number; y: number; over: Over; own: boolean };
@@ -17,8 +17,8 @@ export type PaneDrag = DragSource & { x: number; y: number; over: Over; own: boo
 /** Where pane drops land: the pane layout registers itself. */
 export type DropArea = {
   element: () => HTMLElement | null;
-  sideAt: (x: number, y: number) => Side | null;
-  drop: (item: PaneItem, side: Side) => void;
+  targetAt: (x: number, y: number) => PaneTarget | null;
+  drop: (item: PaneItem, target: PaneTarget) => void;
 };
 
 type NoteTarget = { take: (note: { path: string; title: string }) => void };
@@ -50,8 +50,8 @@ function overAt(item: PaneItem, x: number, y: number): Over {
   }
   const host = area?.element();
   if (!area || !host || !host.contains(element)) return null;
-  const side = area.sideAt(x, y);
-  return side ? { kind: "zone", side } : null;
+  const target = area.targetAt(x, y);
+  return target ? { kind: "zone", target } : null;
 }
 
 function finish(commit: boolean): boolean {
@@ -65,7 +65,7 @@ function finish(commit: boolean): boolean {
     target.take({ path: ended.item.path, title: ended.label });
     return true;
   }
-  area?.drop(ended.item, ended.over.side);
+  area?.drop(ended.item, ended.over.target);
   return true;
 }
 
@@ -155,8 +155,8 @@ export function useDropArea(next: DropArea | null) {
     if (!enabled) return;
     const registered: DropArea = {
       element: () => latest.current?.element() ?? null,
-      sideAt: (x, y) => latest.current?.sideAt(x, y) ?? null,
-      drop: (item, side) => latest.current?.drop(item, side),
+      targetAt: (x, y) => latest.current?.targetAt(x, y) ?? null,
+      drop: (item, target) => latest.current?.drop(item, target),
     };
     area = registered;
     return () => {

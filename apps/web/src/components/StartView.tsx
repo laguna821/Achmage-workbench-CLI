@@ -150,6 +150,8 @@ let greeted = false;
 export function StartView({
   state,
   folderId,
+  draftKey,
+  autoFocus = true,
   onClearFolder,
   onStart,
   onOpenWork,
@@ -168,6 +170,8 @@ export function StartView({
 }: {
   state: State;
   folderId: string | null;
+  draftKey?: string;
+  autoFocus?: boolean;
   onClearFolder: () => void;
   /** `pick`: where the request goes ("auto": the folder's live work, else a new project). */
   onStart: (text: string, provider: Provider, cwd: string | null, choice: ModelChoice, pick: ProjectPick) => Promise<boolean>;
@@ -253,10 +257,10 @@ export function StartView({
           }}
         />
         <Composer
-          draftKey={`new:${folderId ?? "root"}`}
+          draftKey={draftKey ?? `new:${folderId ?? "root"}`}
           placeholder={target ? "새 세션의 첫 요청을 입력하세요" : "새 작업의 첫 요청을 입력하세요"}
           busy={false}
-          autoFocus
+          autoFocus={autoFocus}
           onSend={(text) => onStart(text, engine, cwd, choice, pick)}
           target={
             <>

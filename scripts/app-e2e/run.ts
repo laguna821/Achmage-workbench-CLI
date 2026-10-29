@@ -7,6 +7,7 @@ import { mkdirSync } from "node:fs";
 import { openStage, type Stage } from "./launch.ts";
 import { Report } from "./report.ts";
 import { startScenario, type Ctx } from "./scenarios.ts";
+import { panesScenario } from "./panes.ts";
 import { parseArgs } from "./args.ts";
 
 const { binary, outDir, only, engines } = parseArgs(process.argv.slice(2));
@@ -25,15 +26,16 @@ process.once("SIGTERM", () => void stop().then(() => process.exit(143)));
 try {
   stage = await openStage(outDir);
   console.log(`app ${binary}\nout ${outDir}\nBroadway ${stage.display} (http://127.0.0.1:${stage.broadwayPort}/) · tmp ${stage.root}`);
-  if (wants("start")) {
-    const app = await stage.launch({ name: engines, binary, engines });
+  if (wants("start") || wants("panes")) {
+    const app = await stage.launch({ name: engines, binary, engines, profile: "native" });
     const ctx: Ctx = { stage, app, report };
     try {
-      if (wants("start")) await startScenario(ctx);
+      await startScenario(ctx);
+      if (wants("panes")) await panesScenario(ctx, { binary, engines, profile: "native" });
     } catch (error) {
       report.check("실행", `${engines}: ${error instanceof Error ? error.message : String(error)}`, false);
     } finally {
-      await app.close();
+      await ctx.app.close();
     }
   }
 } catch (error) {

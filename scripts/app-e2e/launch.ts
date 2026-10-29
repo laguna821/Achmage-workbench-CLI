@@ -151,6 +151,9 @@ export type LaunchOptions = {
   name: string;
   binary: string;
   engines: Engines;
+  /** Named temporary profile shared across app restarts within this stage only. */
+  profile?: string;
+  freshPort?: boolean;
   /** A vault to offer (a temporary fixture); otherwise none is suggested, never the user's. */
   vault?: string | null;
   window?: { width: number; height: number };
@@ -247,9 +250,11 @@ export async function openStage(outDir: string): Promise<Stage> {
 
 async function launchApp(input: { stage: Stage; options: LaunchOptions; dpiModule: string; busConfig: string; shimDir: string; started: ChildProcess[] }): Promise<AppRun> {
   const { stage, options, dpiModule, busConfig, shimDir, started } = input;
-  const dir = mkdtempSync(join(stage.root, `${options.name}-`));
+  if (options.profile && !/^[a-z0-9-]{1,40}$/.test(options.profile)) throw new Error("Invalid temporary profile name");
+  const dir = options.profile ? join(stage.root, `profile-${options.profile}`) : mkdtempSync(join(stage.root, `${options.name}-`));
+  mkdirSync(dir, { recursive: true });
   const dataDir = join(dir, "data");
-  mkdirSync(dataDir);
+  mkdirSync(dataDir, { recursive: true });
   const token = randomBytes(18).toString("base64url");
   const env: NodeJS.ProcessEnv = { ...process.env };
   // Nothing started under the harness can reach the user's compositor or session bus.
@@ -278,6 +283,7 @@ async function launchApp(input: { stage: Stage; options: LaunchOptions; dpiModul
     env.WORKBENCH_CODEX_BIN = join(repo, "scripts/fixtures/fake-codex.mjs");
     env.WORKBENCH_CLAUDE_BIN = join(repo, "scripts/fixtures/fake-claude.mjs");
   }
+  if (options.freshPort) env.WORKBENCH_PORT = "0";
 
   const driverPort = await freePort();
   const nativePort = await freePort();
@@ -339,7 +345,7 @@ async function launchApp(input: { stage: Stage; options: LaunchOptions; dpiModul
       await stopTree(driver);
       const index = started.indexOf(driver);
       if (index >= 0) started.splice(index, 1);
-      rmSync(dir, { recursive: true, force: true });
+      if (!options.profile) rmSync(dir, { recursive: true, force: true });
     },
   };
 }

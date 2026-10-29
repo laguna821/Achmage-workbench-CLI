@@ -135,8 +135,20 @@ export function Composer({
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element) return;
-    element.style.height = "auto";
-    element.style.height = `${Math.min(element.scrollHeight, 280)}px`;
+    const fit = () => {
+      element.style.height = "auto";
+      element.style.height = `${Math.min(element.scrollHeight, 280)}px`;
+    };
+    let width = element.getBoundingClientRect().width;
+    fit();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => {
+      const next = element.getBoundingClientRect().width;
+      if (next === width) return;
+      width = next;
+      fit();
+    });
+    observer?.observe(element);
+    return () => observer?.disconnect();
   }, [text]);
 
   useEffect(() => {
