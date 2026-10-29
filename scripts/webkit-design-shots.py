@@ -141,6 +141,13 @@ def step(entry):
         until(entry["wait"])
     if entry.get("pause"):
         pump(entry["pause"] / 1000)
+    if entry.get("assert"):
+        name = entry["assert"]
+        result = js(f"return {scenario['invariants'][name]}") or {}
+        passed = bool(result.get("ok"))
+        print(f"{'PASS' if passed else 'FAIL'} WebKitGTK {current_theme[0]} {name}" + (f" — {result.get('detail')}" if result.get("detail") else ""), flush=True)
+        if not passed:
+            failures.append(f"{current_theme[0]} {name}: {result.get('detail')}")
 
 
 def load():
@@ -148,8 +155,11 @@ def load():
     until(scenario["appReady"], 25)
 
 
+current_theme = [None]
+
 try:
     for theme in scenario["themes"]:
+        current_theme[0] = theme
         set_prefs({"theme": theme})
         load()
         for screen in scenario["screens"]:

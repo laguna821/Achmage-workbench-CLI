@@ -189,7 +189,8 @@ check(
 // ── screens ───────────────────────────────────────────────────────────────────────────────────
 // Steps run inside the page (both browsers): `js` acts, `wait` is an expression that must turn true.
 // `probe` is an expression whose value is printed (Chromium pass), for measuring a layout.
-type Step = { js?: string; wait?: string; prefs?: Record<string, unknown>; reload?: boolean; pause?: number; probe?: string };
+// `assert` names one of the design invariants below; it is checked in both browsers.
+type Step = { js?: string; wait?: string; prefs?: Record<string, unknown>; reload?: boolean; pause?: number; probe?: string; assert?: keyof typeof INVARIANTS };
 type Screen = { name: string; steps: Step[]; settle?: number; cleanup?: Step[]; viewport?: { width: number; height: number } };
 
 const PRELUDE = `
@@ -236,18 +237,70 @@ const PRELUDE = `
   };
 `;
 
+// Design invariants (docs/design/DESIGN.md): each is an expression giving { ok, detail }.
+const INVARIANTS = {
+  // No side stripes: a left or right border thicker than the top one, or an inset stripe shadow.
+  "옆줄 없음": `(() => {
+    const bad = [...document.querySelectorAll("body *")].filter((element) => {
+      const style = getComputedStyle(element);
+      if (style.display === "none" || !element.getClientRects().length) return false;
+      const top = parseFloat(style.borderTopWidth);
+      const side = (width, kind) => parseFloat(width) > 1.5 && parseFloat(width) > top + 0.5 && kind !== "none";
+      const stripe = /inset\\s+[2-9](\\.\\d+)?px\\s+0px\\s+0px/.test(style.boxShadow) || /rgba?\\([^)]*\\)\\s+[2-9](\\.\\d+)?px\\s+0px\\s+0px\\s+0px\\s+inset/.test(style.boxShadow);
+      return side(style.borderLeftWidth, style.borderLeftStyle) || side(style.borderRightWidth, style.borderRightStyle) || stripe;
+    });
+    return { ok: bad.length === 0, detail: bad.slice(0, 3).map((element) => element.className || element.tagName).join(" | ") };
+  })()`,
+  // The frame's text sits on the type ladder (12 13 14 16 18 20 23 26).
+  "틀 글자는 사다리 위": `(() => {
+    const ladder = new Set([12, 13, 14, 16, 18, 20, 23, 26]);
+    const off = [];
+    for (const element of document.querySelectorAll(".sidebar *, .topbar *, .context-menu *, .popover *, .palette *")) {
+      const own = [...element.childNodes].some((node) => node.nodeType === 3 && node.textContent.trim());
+      if (!own || !element.getClientRects().length) continue;
+      const size = Math.round(parseFloat(getComputedStyle(element).fontSize) * 10) / 10;
+      if (!ladder.has(size)) off.push((element.className || element.tagName) + ":" + size);
+    }
+    return { ok: off.length === 0, detail: [...new Set(off)].slice(0, 4).join(" | ") };
+  })()`,
+  // No glass: nothing blurs what is behind it.
+  "흐림 없음": `(() => {
+    const blurred = [...document.querySelectorAll("body *")].filter((element) => {
+      const style = getComputedStyle(element);
+      return (style.backdropFilter && style.backdropFilter !== "none") || (style.webkitBackdropFilter && style.webkitBackdropFilter !== "none");
+    });
+    return { ok: blurred.length === 0, detail: blurred.slice(0, 3).map((element) => element.className).join(" | ") };
+  })()`,
+  // One desk: the sidebar and the top bar share the frame color.
+  "틀 색 하나": `(() => {
+    const side = document.querySelector(".sidebar");
+    const top = document.querySelector(".topbar");
+    const a = side && getComputedStyle(side).backgroundColor;
+    const b = top && getComputedStyle(top).backgroundColor;
+    return { ok: Boolean(a) && a === b, detail: a + " / " + b };
+  })()`,
+};
+
 const row = (id: string) => `.sidebar [data-row-id="${id}"]`;
 // A session row, or the row of a work with one session (the tree shows no session row for it).
 const openSession = (id: string): Step[] => [{ js: `__wb.click('${row(id)}')`, wait: `__wb.has('.work-view .transcript')` }];
 const SCREENS: Screen[] = [
-  { name: "01-home", steps: [{ js: "__wb.click('.topbar .brand')", wait: "__wb.has('.start-view .composer-input')" }, { js: "__wb.blur()" }], settle: 1400 },
+  {
+    name: "01-home",
+    steps: [{ js: "__wb.click('.topbar .brand')", wait: "__wb.has('.start-view .composer-input')" }, { js: "__wb.blur()" }, { assert: "옆줄 없음" }, { assert: "틀 글자는 사다리 위" }, { assert: "틀 색 하나" }],
+    settle: 1400,
+  },
   {
     name: "02-home-no-sidebar",
     steps: [{ js: "__wb.click('.topbar .brand')", wait: "__wb.has('.start-view')" }, { js: "__wb.click('.topbar-left .icon-button')", wait: "!__wb.has('.sidebar')" }, { js: "__wb.blur()" }],
     settle: 900,
     cleanup: [{ js: "__wb.click('.topbar-left .icon-button')", wait: "__wb.has('.sidebar')" }],
   },
-  { name: "03-work-codex", steps: [...openSession(codex.id), { wait: "__wb.has('.approval-card')" }, { js: "__wb.blur()" }], settle: 900 },
+  {
+    name: "03-work-codex",
+    steps: [...openSession(codex.id), { wait: "__wb.has('.approval-card')" }, { js: "__wb.blur()" }, { assert: "옆줄 없음" }, { assert: "틀 글자는 사다리 위" }, { assert: "흐림 없음" }, { assert: "틀 색 하나" }],
+    settle: 900,
+  },
   {
     name: "04-work-codex-steps",
     steps: [
@@ -266,7 +319,12 @@ const SCREENS: Screen[] = [
   },
   {
     name: "07-search",
-    steps: [{ js: "__wb.blur(); __wb.key('k', { ctrlKey: true })", wait: "__wb.has('.palette input')" }, { js: "__wb.type('.palette input', '루브릭')", wait: "__wb.has('.palette-entry')", pause: 600 }],
+    steps: [
+      { js: "__wb.blur(); __wb.key('k', { ctrlKey: true })", wait: "__wb.has('.palette input')" },
+      { js: "__wb.type('.palette input', '루브릭')", wait: "__wb.has('.palette-entry')", pause: 600 },
+      { assert: "흐림 없음" },
+      { assert: "틀 글자는 사다리 위" },
+    ],
     settle: 600,
     cleanup: [{ js: "__wb.key('Escape')", wait: "!__wb.has('.palette')" }],
   },
@@ -424,6 +482,10 @@ async function chromiumPass() {
         if (entry.wait) await wait(entry.wait);
         if (entry.pause) await page.waitForTimeout(entry.pause);
         if (entry.probe) console.log(`PROBE ${theme}: ${JSON.stringify(await page.evaluate(`(() => { ${PRELUDE}; return (${entry.probe}); })()`))}`);
+        if (entry.assert) {
+          const result = (await page.evaluate(INVARIANTS[entry.assert])) as { ok: boolean; detail: string };
+          check(`Chromium ${theme} ${entry.assert}`, result.ok, result.detail);
+        }
       };
       await page.goto(url);
       await wait(appReady, 20_000);
@@ -450,9 +512,43 @@ async function chromiumPass() {
   check("Chromium 콘솔 오류 없음", logs.length === 0, logs.slice(0, 3).join(" | "));
 }
 
+/**
+ * Reduced motion (after the screenshots, since it adds a turn): while an engine writes a long
+ * answer, the page shows that it works but no animation keeps looping. Then, without the setting,
+ * the same moment does loop (the working segment), so the check can fail.
+ */
+async function motionCheck() {
+  const browser = await chromium.launch();
+  try {
+    const looping = async (reducedMotion: "reduce" | "no-preference") => {
+      const page = await browser.newPage({ viewport: VIEWPORT, reducedMotion });
+      await page.goto(url);
+      await page.waitForFunction(`(() => { ${PRELUDE}; return Boolean(${appReady}); })()`, null, { timeout: 20_000 });
+      for (const entry of openSession(meeting.id)) {
+        await page.evaluate(`(() => { ${PRELUDE}; ${entry.js}; return true; })()`);
+        await page.waitForFunction(`(() => { ${PRELUDE}; return Boolean(${entry.wait}); })()`, null, { timeout: 12_000 });
+      }
+      await send(minutes.id, "길게 설명해 줘.");
+      await page.waitForSelector('.work-view .composer[data-phase="waiting"]', { timeout: 10_000 });
+      await page.waitForTimeout(600);
+      const names = (await page.evaluate(
+        `document.getAnimations().filter((animation) => animation.playState === "running" && animation.effect && animation.effect.getComputedTiming().iterations === Infinity).map((animation) => animation.animationName || "waapi")`,
+      )) as string[];
+      await idle(minutes.id);
+      await page.close();
+      return names;
+    };
+    const still = await looping("reduce");
+    const moving = await looping("no-preference");
+    check("Chromium 움직임 줄이기: 엔진이 일하는 동안에도 반복 애니메이션 0", still.length === 0 && moving.length > 0, `줄이기 ${still.join(", ") || "없음"} · 보통 ${moving.join(", ")}`);
+  } finally {
+    await browser.close();
+  }
+}
+
 function webkitPass() {
   const scenario = join(outDir, "scenario.json");
-  writeFileSync(scenario, JSON.stringify({ url, token: ready.token, base: ready.url, outDir, viewport: VIEWPORT, themes, prelude: PRELUDE, appReady, screens }, null, 2));
+  writeFileSync(scenario, JSON.stringify({ url, token: ready.token, base: ready.url, outDir, viewport: VIEWPORT, themes, prelude: PRELUDE, appReady, screens, invariants: INVARIANTS }, null, 2));
   const result = spawnSync("python3", ["scripts/webkit-design-shots.py", scenario], { stdio: "inherit", timeout: 15 * 60_000 });
   check("WebKitGTK 실행", result.status === 0, `exit ${result.status}`);
 }
@@ -460,6 +556,7 @@ function webkitPass() {
 try {
   if (runChromium) await chromiumPass();
   if (runWebkit) webkitPass();
+  if (runChromium && !only) await motionCheck();
 } finally {
   child.kill();
   for (const folder of [dataDir, worksDir, vaultDir, claudeConfig]) rmSync(folder, { recursive: true, force: true });
