@@ -3,7 +3,7 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { dirname, extname, join, normalize, resolve, sep } from "node:path";
 import { timingSafeEqual } from "node:crypto";
-import { isAccessMode, type AccessMode, type Attachment, type CreateSessionRequest, type DocRef, type Provider, type SequencedEvent, type Timeline } from "@workbench/contracts";
+import { isAccessMode, parseSearchScope, type AccessMode, type Attachment, type CreateSessionRequest, type DocRef, type Provider, type SequencedEvent, type Timeline } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
 import { HttpError, type SessionManager } from "./sessions.ts";
 import { DESIGN_PRESETS, systemFonts, type DesignPreset } from "./design.ts";
@@ -254,7 +254,9 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         );
       }
       if (method === "GET" && path === "/api/search") {
+        // "찾는 길" (search.ts): scope, paging and totals; q/provider/archived/folderId as before.
         const provider = url.searchParams.get("provider");
+        const number = (name: string) => (url.searchParams.has(name) ? Number(url.searchParams.get(name)) || 0 : undefined);
         return sendJson(
           res,
           200,
@@ -262,6 +264,12 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
             archived: url.searchParams.get("archived") === "1",
             provider: provider === "claude" || provider === "codex" ? provider : null,
             folderId: url.searchParams.get("folderId"),
+            scope: parseSearchScope(url.searchParams.get("scope")),
+            offset: number("offset"),
+            limit: number("limit"),
+            per: number("per"),
+            group: url.searchParams.get("group"),
+            legacy: url.searchParams.get("legacy") !== "0",
           }),
         );
       }

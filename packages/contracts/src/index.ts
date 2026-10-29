@@ -750,3 +750,4 @@ export * from "./doc-images.ts";
 export * from "./pkm.ts";
 export * from "./schedules.ts";
 export * from "./worktrees.ts";
+export * from "./search.ts";

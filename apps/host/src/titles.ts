@@ -41,7 +41,8 @@ type Token = { word: string; display: string; action: boolean };
 
 const hasFinal = (syllable: string) => (syllable.charCodeAt(0) - 0xac00) % 28 !== 0;
 
-function stripJosa(word: string) {
+/** A Korean word without its particle ("기준을" → "기준"); nouns that only look like they end in one stay. */
+export function stripJosa(word: string) {
   if (KEEP_WORDS.has(word)) return word;
   for (const josa of JOSA) {
     if (!word.endsWith(josa)) continue;

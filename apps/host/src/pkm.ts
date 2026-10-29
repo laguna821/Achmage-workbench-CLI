@@ -468,7 +468,8 @@ export class Pkm {
   /** A view's cards: newest first; grouped by its key when it has one ("값 없음" for missing values). */
   viewCards(view: Pick<PkmView, "name" | "query" | "groupBy">): CardList {
     const { terms, problems } = parseViewQuery(view.query);
-    const matched = filterItems(this.viewItems(kindsFor(terms)), terms);
+    // Plain words use the search index ("찾는 길"): a session matches by what was said in it.
+    const matched = filterItems(this.viewItems(kindsFor(terms)), terms, Date.now(), (text) => this.manager.finder.cardMatches(text));
     matched.sort((a, b) => (b.card.date ?? 0) - (a.card.date ?? 0) || a.card.title.localeCompare(b.card.title, "ko"));
     const shown = matched.slice(0, CARD_LIMIT);
     return {

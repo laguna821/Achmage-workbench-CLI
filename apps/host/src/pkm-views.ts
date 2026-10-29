@@ -34,7 +34,13 @@ export function propertyValues(item: Pick<ViewItem, "properties">, key: string):
   return entry ? (entry[1] ?? []) : null;
 }
 
-function matches(item: ViewItem, term: ViewTerm, now: number): boolean {
+/**
+ * Cards a plain text term matches, from the search index (search.ts `cardMatches`: keys
+ * `<kind>:<id>`); without one, the term is looked for in titles and excerpts.
+ */
+export type TextMatcher = (text: string) => ReadonlySet<string>;
+
+function matches(item: ViewItem, term: ViewTerm, now: number, text: TextMatcher | null): boolean {
   switch (term.kind) {
     case "tag": {
       const wanted = term.tag.replace(/^#/, "").toLowerCase();
@@ -60,15 +66,28 @@ function matches(item: ViewItem, term: ViewTerm, now: number): boolean {
     case "type":
       return item.card.kind === term.type;
     case "text": {
-      const text = term.text.toLowerCase();
-      return item.card.title.toLowerCase().includes(text) || item.card.excerpt.toLowerCase().includes(text);
+      if (text) return text(term.text).has(`${item.card.kind}:${item.card.id}`);
+      const lower = term.text.toLowerCase();
+      return item.card.title.toLowerCase().includes(lower) || item.card.excerpt.toLowerCase().includes(lower);
     }
   }
 }
 
-/** Items that meet every term (negated terms must not hold). */
-export function filterItems(items: ViewItem[], terms: ViewTerm[], now = Date.now()) {
-  return items.filter((item) => terms.every((term) => matches(item, term, now) !== term.not));
+/** Items that meet every term (negated terms must not hold). Text terms use `text` (the search index) when given. */
+export function filterItems(items: ViewItem[], terms: ViewTerm[], now = Date.now(), text: TextMatcher | null = null) {
+  // One index lookup per text term, not per item.
+  const cache = new Map<string, ReadonlySet<string>>();
+  const lookup: TextMatcher | null = text
+    ? (value) => {
+        let found = cache.get(value);
+        if (!found) {
+          found = text(value);
+          cache.set(value, found);
+        }
+        return found;
+      }
+    : null;
+  return items.filter((item) => terms.every((term) => matches(item, term, now, lookup) !== term.not));
 }
 
 /** The kinds a query can return (a positive `kind:` narrows them; reading fewer sources is cheaper). */

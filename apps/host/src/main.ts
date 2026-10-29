@@ -73,6 +73,8 @@ const manager = new SessionManager(store, bus, {
 });
 void manager.refreshTools();
 const pkm = new Pkm(store, bus, manager, { dataDir });
+// "찾는 길": vault notes join the search index and follow the mirror.
+void manager.finder.useVault(pkm.vault, bus);
 
 const claudeIdleMs = env.WORKBENCH_CLAUDE_IDLE_MS ? Number(env.WORKBENCH_CLAUDE_IDLE_MS) : undefined;
 manager.registerAdapter(
