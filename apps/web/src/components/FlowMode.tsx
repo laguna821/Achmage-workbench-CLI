@@ -84,10 +84,13 @@ export function FlowMode({ api, state, open }: { api: Api; state: State; open: F
     return () => window.clearInterval(timer);
   }, []);
 
-  // ← → by the view's period, T for today; not while typing, nor where arrows move something else.
+  // ← → by the view's period, T for today; not while typing, nor where arrows move something else,
+  // nor from a pane without the focus (two panes may both show home).
+  const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.isComposing || editable(event.target) || busyKeys(event.target)) return;
+      if (root.current?.closest('[data-pane-active="false"]')) return;
       if ((event.key === "ArrowLeft" || event.key === "ArrowRight") && !event.shiftKey) {
         event.preventDefault();
         step(event.key === "ArrowLeft" ? -1 : 1);
@@ -201,7 +204,7 @@ export function FlowMode({ api, state, open }: { api: Api; state: State; open: F
   };
 
   return (
-    <div className="flow-cal" data-view={view}>
+    <div ref={root} className="flow-cal" data-view={view}>
       <div className="mode-head flow-head">
         <div className="flow-nav" role="group" aria-label="기간 이동">
           {view === "month" ? (
