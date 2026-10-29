@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "linux": {
+      "appimage": {
+        "files": {
+          "/usr/share/achmage-workbench/ieumoffice": "bundled/ieumoffice",
+          "/usr/share/achmage-workbench/pdfcraft": "bundled/pdfcraft",
+          "/usr/share/achmage-workbench/hop": "bundled/hop"
+        }
+      }
+    }
+  }
+}

@@ -55,7 +55,13 @@ fn app_dirs(app: &tauri::AppHandle) -> Vec<PathBuf> {
     let exe_dir = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(PathBuf::from));
-    [app.path().resource_dir().ok(), exe_dir].into_iter().flatten().collect()
+    // The AppImage keeps the shipped document apps in usr/share/achmage-workbench (beside
+    // usr/bin): linuxdeploy does not walk that folder, so their own old libraries are left alone.
+    let share = exe_dir
+        .as_ref()
+        .map(|dir| dir.join("..").join("share").join("achmage-workbench"))
+        .filter(|dir| dir.is_dir());
+    [app.path().resource_dir().ok(), exe_dir, share].into_iter().flatten().collect()
 }
 
 /// The Node.js that runs the gateway: WORKBENCH_NODE, else the one an installer brought along

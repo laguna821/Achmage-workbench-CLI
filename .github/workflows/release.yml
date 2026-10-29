@@ -83,9 +83,15 @@ jobs:
       - name: IeumOffice, PDFCraft, HOP (official Linux builds, pinned and checked)
         run: node scripts/fetch-bundled-apps.ts apps/desktop/src-tauri/bundled linux-x64
       - run: npm ci --ignore-scripts
-      - name: Build
+      # The AppImage keeps the document apps in usr/share/achmage-workbench, where linuxdeploy does
+      # not walk: it would otherwise try to resolve the old GTK2 tray libraries inside IeumOffice's
+      # own build and stop. Built first, from a clean bundle folder; the .deb keeps them as resources.
+      - name: Build (AppImage)
         working-directory: apps/desktop
-        run: npx tauri build --config src-tauri/tauri.release.conf.json --config src-tauri/tauri.release.apps.conf.json --bundles appimage,deb
+        run: npx tauri build --verbose --config src-tauri/tauri.release.conf.json --config src-tauri/tauri.release.appimage.conf.json --bundles appimage
+      - name: Build (deb)
+        working-directory: apps/desktop
+        run: npx tauri build --config src-tauri/tauri.release.conf.json --config src-tauri/tauri.release.apps.conf.json --bundles deb
       - uses: actions/upload-artifact@v4
         with:
           name: linux
