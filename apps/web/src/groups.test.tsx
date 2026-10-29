@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_STAGES, type ProjectSummary, type PropertyField, type Work } from "@workbench/contracts";
 import { aheadPeriod, boardOf, byLabel, colorOf, dayOf, emojiColor, groupItems, hintOptions, idsOf, moveOf, nestGroups, pastPeriod, sortItems, type KeyDef } from "./groups.ts";
-import { projectKeys, projectRows, projectSorts, propertyKeys, type ProjectRow } from "./components/views/keys.ts";
+import { projectKeys, projectRows, projectSorts, propertyKeys, topicParticle, type ProjectRow } from "./components/views/keys.ts";
 import { initialState, type State } from "./state.ts";
 
 const day = (text: string) => dayOf(text)!;
@@ -275,7 +275,8 @@ describe("project keys", () => {
     expect(moveOf(byKey("folder"), row("a"), "")).toEqual({ ok: true, value: null });
     expect(moveOf(byKey("prop:중요도"), row("a"), "높음")).toEqual({ ok: true, value: "높음" });
     for (const name of ["prop:마감일", "tags", "prop:관련", "engine", "activity", "created"]) expect(moveOf(byKey(name), row("a"), "x")).toMatchObject({ ok: false });
-    expect((moveOf(byKey("prop:마감일"), row("a"), "today") as { reason: string }).reason).toContain("마감일");
+    expect((moveOf(byKey("prop:마감일"), row("a"), "today") as { reason: string }).reason).toBe("'마감일'은 기간으로 묶여 있어 끌어서 정할 수 없습니다. 날짜는 프로젝트 속성에서 고칩니다.");
+    expect([topicParticle("마감일"), topicParticle("시작 날짜"), topicParticle("due")]).toEqual(["은", "는", "은(는)"]);
   });
 
   it("sort by a property, in its kind (a hint's options in their order, not by name)", () => {

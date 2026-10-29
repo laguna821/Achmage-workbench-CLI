@@ -88,37 +88,42 @@ export function ViewTabs({ mode, views, onViews, className = "" }: { mode: HomeV
     });
 
   return (
-    <div className={`view-tabs ${className}`} role="tablist" aria-label="보기">
-      {list.map((view) =>
-        renaming === view.id ? (
-          <RenameField
-            key={view.id}
-            name={view.name}
-            onDone={(name) => {
-              setRenaming(null);
-              if (name && name !== view.name) update(view.id, (current) => ({ ...current, name: name.slice(0, VIEW_LIMITS.name) }));
-            }}
-          />
-        ) : (
-          <button
-            key={view.id}
-            type="button"
-            role="tab"
-            aria-selected={views.current === view.id}
-            className={`view-tab${views.current === view.id ? " on" : ""}`}
-            data-view={view.id}
-            title={`${LAYOUT_LABEL[view.layout]} · 두 번 누르면 이름 바꾸기 · 오른쪽 클릭: 복제·지우기·기본값으로`}
-            onClick={() => views.current !== view.id && onViews({ ...views, current: view.id })}
-            onDoubleClick={() => setRenaming(view.id)}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              menu(view, event.clientX, event.clientY);
-            }}
-          >
-            {view.name}
-          </button>
-        ),
-      )}
+    <div className={`view-tabs ${className}`}>
+      {/* The tabs scroll sideways when there are many; "+" and its menu stay outside (not clipped). */}
+      <div className="view-tab-list" role="tablist" aria-label="보기">
+        {list.map((view) =>
+          renaming === view.id ? (
+            <RenameField
+              key={view.id}
+              name={view.name}
+              onDone={(name) => {
+                setRenaming(null);
+                if (name && name !== view.name) update(view.id, (current) => ({ ...current, name: name.slice(0, VIEW_LIMITS.name) }));
+              }}
+            />
+          ) : (
+            <button
+              key={view.id}
+              type="button"
+              role="tab"
+              aria-selected={views.current === view.id}
+              className={`view-tab${views.current === view.id ? " on" : ""}`}
+              data-view={view.id}
+              title={`${LAYOUT_LABEL[view.layout]} · 두 번 누르면 이름 바꾸기 · 오른쪽 클릭: 복제·지우기·기본값으로`}
+              onClick={() => views.current !== view.id && onViews({ ...views, current: view.id })}
+              onDoubleClick={() => setRenaming(view.id)}
+              onContextMenu={(event) => {
+                // Home's own right click (the engine's look) is not this one.
+                event.preventDefault();
+                event.stopPropagation();
+                menu(view, event.clientX, event.clientY);
+              }}
+            >
+              {view.name}
+            </button>
+          ),
+        )}
+      </div>
       <div className="anchor view-add-anchor">
         <button type="button" className="icon-button small view-add" aria-label="보기 더하기" title="보기 더하기" aria-expanded={adding} onClick={() => setAdding(!adding)}>
           <Icon name="plus" size={14} />

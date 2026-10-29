@@ -69,7 +69,9 @@ export function GroupHead({
         onClick={onToggle}
         onContextMenu={(event) => {
           if (!onPaint) return;
+          // Home's own right click (the engine's look) is not this one.
           event.preventDefault();
+          event.stopPropagation();
           onPaint(event.clientX, event.clientY);
         }}
       >

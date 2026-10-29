@@ -127,7 +127,13 @@ export function propertyKeys(summaries: Iterable<ProjectSummary>, template: Prop
 const valuesOf = (row: ProjectRow, key: string) => row.summary?.properties.find((property) => property.key === key)?.values ?? [];
 
 const MANY = "태그처럼 값이 여럿인 속성은 끌어서 바꾸지 않습니다. 프로젝트 속성에서 고칩니다.";
-const DATED = "기간으로 묶인 날짜는 끌어서 정할 수 없습니다. 날짜는 프로젝트 속성에서 고칩니다.";
+
+/** The topic particle after a word: "은" after a final consonant (마감일은), "는" after a vowel (날짜는), "은(는)" after anything else. */
+export function topicParticle(word: string) {
+  const code = word.trim().slice(-1).charCodeAt(0) - 0xac00;
+  if (Number.isNaN(code) || code < 0 || code > 11171) return "은(는)";
+  return code % 28 ? "은" : "는";
+}
 const ENGINE = "엔진은 세션이 정하므로 끌어서 바꿀 수 없습니다.";
 
 /** A property as a key; a text or list field whose hint lists options ("높음 · 보통 · 낮음") knows them, in that order. */
@@ -141,7 +147,7 @@ export function propertyKey(key: string, type: PropertyType, hint?: string): Key
       return { ...base, kind: "checkbox", fixed: null };
     case "date":
     case "datetime":
-      return { ...base, kind: "date", fixed: `'${base.label}'은(는) ${DATED}` };
+      return { ...base, kind: "date", fixed: `'${base.label}'${topicParticle(base.label)} 기간으로 묶여 있어 끌어서 정할 수 없습니다. 날짜는 프로젝트 속성에서 고칩니다.` };
     case "tags":
       return { ...base, kind: "list", fixed: MANY };
     case "links":
