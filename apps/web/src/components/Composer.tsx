@@ -5,18 +5,12 @@ import { showsNothing } from "./docs/image-paste.ts";
 import { SlashList, rankCommands, slashQuery, type ComposerSlash } from "./SlashList.tsx";
 import { FormatBadge } from "./DocCards.tsx";
 import { Icon } from "./Icon.tsx";
+import { DRAFT_EVENT, DRAFT_PREFIX } from "../draft.ts";
+
+export { writeDraft } from "../draft.ts";
 
 /** Documents the `@` list offers, and what to do with a picked one (attach it to the request). */
 export type ComposerMentions = { items: MentionItem[]; onPick: (item: MentionItem) => void };
-
-const DRAFT_PREFIX = "workbench.draft.";
-const DRAFT_EVENT = "workbench:draft";
-
-/** Put text in an input box's draft (by its draft key), shown now if that box is on screen. */
-export function writeDraft(draftKey: string, text: string) {
-  localStorage.setItem(DRAFT_PREFIX + draftKey, text);
-  window.dispatchEvent(new CustomEvent(DRAFT_EVENT, { detail: draftKey }));
-}
 
 /**
  * The single input box. Enter sends, Shift+Enter breaks the line, and Enter while a Korean

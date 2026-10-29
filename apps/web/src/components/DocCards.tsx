@@ -13,6 +13,7 @@ import type { State } from "../state.ts";
 import { EngineMark } from "./EngineMark.tsx";
 import { Icon } from "./Icon.tsx";
 import { HandoffResend, PartialNote } from "./Recovery.tsx";
+import { appendDraft, quotedAnswer } from "../draft.ts";
 
 // Cards for documents inside the conversation: files an engine wrote, proposals waiting for a
 // decision, and requests sent to other sessions with their answers.
@@ -248,6 +249,7 @@ export function HandoffCard({ handoff, viewer }: { handoff: Handoff; viewer: str
   const { lookOf } = useAppearance();
   const [open, setOpen] = useState(false);
   const target = state.sessions[handoff.targetSessionId];
+  const source = state.sessions[handoff.sourceSessionId];
   const outgoing = viewer === handoff.sourceSessionId;
   if (!outgoing) return null;
   const targetWork = target ? state.works[target.workId] : undefined;
@@ -296,6 +298,16 @@ export function HandoffCard({ handoff, viewer }: { handoff: Handoff; viewer: str
         {handoff.reply && handoff.reply.length > 400 ? (
           <button type="button" className="link" onClick={() => setOpen(!open)}>
             {open ? "접기" : "답 전체 보기"}
+          </button>
+        ) : null}
+        {handoff.reply && source ? (
+          <button
+            type="button"
+            className="link"
+            title="이 답을 입력창에 인용으로 넣습니다. 다음 요청과 함께 이 세션의 엔진에 갑니다."
+            onClick={() => appendDraft(`work:${source.workId}:${source.id}`, quotedAnswer(target ? `${PROVIDER_LABEL[target.provider]} · ${target.purpose}` : "다른 세션", handoff.reply!))}
+          >
+            대화에 넣기
           </button>
         ) : null}
         <button type="button" className="link" onClick={() => actions.openSession(handoff.targetSessionId)}>
