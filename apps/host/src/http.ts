@@ -104,6 +104,8 @@ export type HttpOptions = {
   docImages?: DocImages;
   /** `/api/pkm/*` (pkm-http.ts): the vault mirror, views, rules and pages; true when it answered. */
   pkm?: (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<boolean>;
+  /** `/api/entry/*` (entry.ts): the live work of a folder, the location of new project folders. */
+  entry?: (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<boolean>;
 };
 
 function sameToken(given: string | null, expected: string) {
@@ -233,6 +235,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
 
       if (method === "GET" && path === "/api/snapshot") return sendJson(res, 200, manager.snapshot());
       if (path.startsWith("/api/pkm/") && options.pkm && (await options.pkm(req, res, url))) return;
+      if (path.startsWith("/api/entry/") && options.entry && (await options.entry(req, res, url))) return;
       if (method === "GET" && path === "/api/events") {
         return streamEvents(req, res, bus, Number(url.searchParams.get("since") ?? bus.currentSeq));
       }

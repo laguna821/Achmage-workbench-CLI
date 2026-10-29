@@ -17,6 +17,7 @@ import { buildTimeline } from "./timeline.ts";
 import { DocImages } from "./doc-images.ts";
 import { Pkm } from "./pkm.ts";
 import { handlePkm } from "./pkm-http.ts";
+import { handleEntry, WorksDir } from "./entry.ts";
 
 // Local gateway: owns engine processes and state, serves the UI and an HTTP + SSE API on
 // 127.0.0.1 only. Prints one `WORKBENCH_READY {json}` line once it accepts connections.
@@ -55,6 +56,8 @@ const hostLabel = env.WORKBENCH_HOST_LABEL ?? defaultHostLabel();
 
 const store = new Store(join(dataDir, "state.sqlite"));
 const bus = new EventBus();
+// "새 프로젝트 폴더 위치": works started without a folder get theirs under the folder the user chose.
+const worksDir: WorksDir = new WorksDir(store, join(dataDir, "works"), (): string | null => pkm.vault.root);
 // The agent browser: a window sessions may use (checks run it headless or with a stand-in CLI).
 const browse = new AgentBrowser({
   dataDir,
@@ -67,6 +70,7 @@ const manager = new SessionManager(store, bus, {
   hostId: env.WORKBENCH_HOST_ID ?? hostname(),
   hostLabel,
   managedWorksDir: join(dataDir, "works"),
+  worksDir: (): string => worksDir.root(),
   dataDir,
   kordoc: new Kordoc(),
   ieum: new IeumOffice(),
@@ -104,6 +108,7 @@ const server = createHttpServer(manager, bus, {
   timeline: (since) => buildTimeline(store.turnMarks(since), store.revisionMarks(since), since),
   docImages,
   pkm: (req, res, url) => handlePkm(pkm, req, res, url),
+  entry: (req, res, url) => handleEntry({ view: () => manager.view, worksDir }, req, res, url),
 });
 
 /** Listen on the port used last time, or on any free one when it is taken; remember the one bound. */
