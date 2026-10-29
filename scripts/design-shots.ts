@@ -396,10 +396,11 @@ const SCREENS: Screen[] = [
     cleanup: [{ js: "__wb.click('.integrations-sheet .sheet-head .icon-button')", wait: "!__wb.has('.integrations-sheet')" }],
   },
   {
-    name: "18-home-board",
+    // "보드" became part of "지금" (P3); the projects mode is the home's other view of works.
+    name: "18-home-projects",
     steps: [
       { js: "__wb.click('.topbar .brand')", wait: "__wb.has('.home-mode-bar')" },
-      { js: "__wb.click('.home-mode-bar button', '보드')", wait: "__wb.has('.home-modes.mode-board')" },
+      { js: "__wb.click('.home-mode-bar button', '프로젝트')", wait: "__wb.has('.home-modes.mode-projects')" },
       { js: "__wb.blur()" },
     ],
     settle: 900,
