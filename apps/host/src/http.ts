@@ -98,8 +98,8 @@ export type HttpOptions = {
   editors?: { grants: EditorGrants; origin: () => string | null };
   /** The agent browser (browse.ts). */
   browse?: AgentBrowser | null;
-  /** Turns and revisions since a time, for home "흐름" (timeline.ts). */
-  timeline?: (since: number) => Timeline;
+  /** Turns and revisions in `[since, until)` (or since a time), for home "흐름" (timeline.ts). */
+  timeline?: (since: number, until?: number) => Timeline;
   /** Images pasted into Markdown documents (doc-images.ts). */
   docImages?: DocImages;
   /** `/api/pkm/*` (pkm-http.ts): the vault mirror, views, rules and pages; true when it answered. */
@@ -450,7 +450,10 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       }
       if (method === "GET" && path === "/api/views/timeline" && options.timeline) {
         const since = Number(url.searchParams.get("since") ?? 0);
-        return sendJson(res, 200, options.timeline(Number.isFinite(since) ? since : 0));
+        // An explicit window (a past week or month); without `until`, everything since `since` as before.
+        const until = url.searchParams.has("until") ? Number(url.searchParams.get("until")) : NaN;
+        const from = Number.isFinite(since) ? since : 0;
+        return sendJson(res, 200, options.timeline(from, Number.isFinite(until) && until > from ? until : undefined));
       }
       if (method === "GET" && path === "/api/fonts") return sendJson(res, 200, { fonts: systemFonts() });
       if (method === "GET" && path === "/api/tools") return sendJson(res, 200, manager.tools());

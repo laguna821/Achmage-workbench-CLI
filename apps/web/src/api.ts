@@ -237,8 +237,9 @@ export class Api {
       `/api/artifacts/${artifactId}/pages${revision ? `?revision=${revision}` : ""}`,
     );
   revisions = (artifactId: string) => this.request<ArtifactRevision[]>("GET", `/api/artifacts/${artifactId}/revisions`);
-  /** Turns and revisions since a time (home "흐름"). */
-  timeline = (since: number) => this.request<Timeline>("GET", `/api/views/timeline?since=${Math.floor(since)}`);
+  /** Turns and revisions in `[since, until)`, or since a time (home "흐름"). */
+  timeline = (since: number, until?: number) =>
+    this.request<Timeline>("GET", `/api/views/timeline?since=${Math.floor(since)}${until === undefined ? "" : `&until=${Math.floor(until)}`}`);
   adoptDisk = (artifactId: string) => this.request<Artifact>("POST", `/api/artifacts/${artifactId}/adopt-disk`);
   editorGrant = (artifactId: string) => this.request<EditorGrant>("POST", `/api/artifacts/${artifactId}/editor`);
   revert = (artifactId: string, toRevision: number) => this.request<Artifact>("POST", `/api/artifacts/${artifactId}/revert`, { toRevision });

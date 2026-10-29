@@ -136,7 +136,7 @@ const server = createHttpServer(manager, bus, {
   onClientLog: (message) => appendFileSync(join(dataDir, "client.log"), `${new Date().toISOString()} ${message}\n`),
   editors: { grants, origin: () => editorsOrigin },
   browse,
-  timeline: (since) => buildTimeline(store.turnMarks(since), store.revisionMarks(since), since),
+  timeline: (since, until) => buildTimeline(store.turnMarks(since, until), store.revisionMarks(since, until), since, until),
   docImages,
   pkm: (req, res, url) => handlePkm(pkm, req, res, url),
   projects: (req, res, url) => handleProject(projects, req, res, url),
