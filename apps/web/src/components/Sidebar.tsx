@@ -6,6 +6,7 @@ import { statusText, statusTone } from "../format.ts";
 import { accentStyle, lookStyle, NEUTRAL_LOOK, useAppearance } from "../appearance.ts";
 import { EditableText } from "./EditableText.tsx";
 import { EngineMark } from "./EngineMark.tsx";
+import { comboLabel, shortcutsOf } from "../shortcuts.ts";
 import { Icon, type IconName } from "./Icon.tsx";
 import type { MenuEntry, MenuRequest } from "./ContextMenu.tsx";
 import { UsageCard } from "./UsageCard.tsx";
@@ -553,16 +554,18 @@ export function Sidebar({
     });
   };
 
+  // The combinations set in ⋯ › 단축키, as the buttons' hints.
+  const keys = shortcutsOf(state.prefs);
   return (
     <aside className="sidebar look-scope" aria-label="세션과 작업" data-theme={appTheme} style={{ ...lookStyle(NEUTRAL_LOOK[appTheme]), width: liveWidth ?? width }}>
       <div className="side-head">
-        <button type="button" className="side-new" onClick={() => actions.newSession({})} title="새 세션 (Ctrl+N)">
+        <button type="button" className="side-new" onClick={() => actions.newSession({})} title={`새 세션 (${comboLabel(keys.newWork)})`}>
           <Icon name="plus" size={15} /> 새 세션
         </button>
-        <button type="button" className="side-search" onClick={actions.openSearch} title="찾기 (Ctrl+K)">
+        <button type="button" className="side-search" onClick={actions.openSearch} title={`찾기 (${comboLabel(keys.palette)})`}>
           <Icon name="search" size={15} />
           <span>찾기</span>
-          <kbd>Ctrl K</kbd>
+          <kbd>{comboLabel(keys.palette)}</kbd>
         </button>
       </div>
 

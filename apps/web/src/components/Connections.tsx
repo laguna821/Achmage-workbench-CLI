@@ -97,6 +97,7 @@ export function Connections({
   notifications,
   onNotifications,
   imageUpload,
+  shortcutSettings,
   vault,
   worksDir,
 }: {
@@ -131,6 +132,8 @@ export function Connections({
   onNotifications: (next: boolean) => void;
   /** Where pictures pasted into documents go (ImageUploadSheet.tsx). */
   imageUpload?: ReactNode;
+  /** ⋯ › 단축키 (ShortcutSettings). */
+  shortcutSettings?: ReactNode;
 }) {
   return (
     <div className="connections">
@@ -207,6 +210,12 @@ export function Connections({
         <input type="checkbox" checked={notifications} onChange={(event) => onNotifications(event.target.checked)} />
         끝나면 알림(OS)
       </label>
+      {shortcutSettings ? (
+        <>
+          <div className="menu-label">단축키</div>
+          {shortcutSettings}
+        </>
+      ) : null}
     </div>
   );
 }

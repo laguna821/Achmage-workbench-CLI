@@ -1,0 +1,43 @@
+/* ⋯ › 단축키: an action and its key cap per row; the cap waits for a combination when pressed. */
+.shortcut-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: 0 var(--space-2) var(--space-2);
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--fs-ui);
+}
+
+.shortcut-key {
+  min-width: 112px;
+  height: 28px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-meta);
+  cursor: pointer;
+}
+
+.shortcut-key.recording {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.shortcut-key kbd {
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.shortcut-hint {
+  font-size: var(--fs-micro);
+}

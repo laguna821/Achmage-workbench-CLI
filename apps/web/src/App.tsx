@@ -34,6 +34,8 @@ import { ScheduleDialog } from "./components/ScheduleDialog.tsx";
 import { WorktreeReview } from "./components/WorktreeReview.tsx";
 import { LoadingView } from "./components/Skeleton.tsx";
 import { writeDraft } from "./components/Composer.tsx";
+import { comboOf, shortcutsOf } from "./shortcuts.ts";
+import { ShortcutSettings } from "./components/ShortcutSettings.tsx";
 import { LinkContext, hopsText, linkOfSession, useLinkApi } from "./links.ts";
 import { SplitView, WorkModeBar, useWorkModeKeys } from "./components/WorkModes.tsx";
 import { keepPosition, keptPosition, modeOf, readingPosition, restorePosition, reviewProposal, viewFor, type ModeProps, type ReadingPosition, type WorkMode } from "./workmodes.ts";
@@ -757,6 +759,12 @@ export function App() {
 
   // "앱을 열면: 마지막 작업" set elsewhere (another window, a cleared cache): honoured once the
   // gateway's prefs arrive, if the user has not moved away from home meanwhile.
+  const shortcuts = useMemo(() => shortcutsOf(state.prefs), [state.prefs]);
+  /** True while ⋯ › 단축키 waits for a combination: the app's own shortcuts stand aside. */
+  const recordingShortcut = useRef(false);
+  const setRecordingShortcut = useCallback((on: boolean) => {
+    recordingShortcut.current = on;
+  }, []);
   const startSettled = useRef(false);
   useEffect(() => {
     if (startSettled.current || !state.ready) return;
@@ -774,15 +782,20 @@ export function App() {
         const next = current === null ? (step === 1 ? 1 : count - 1) : (current + step + count) % count;
         switcherRef.current = next;
         setSwitcher(next);
-      } else if ((event.ctrlKey || event.metaKey) && !event.shiftKey && (event.key === "k" || event.key === "K")) {
-        event.preventDefault();
-        setPaletteOpen((open) => (open === "palette" ? null : "palette"));
-      } else if ((event.ctrlKey || event.metaKey) && event.shiftKey && (event.key === "f" || event.key === "F")) {
-        event.preventDefault();
-        setPaletteOpen((open) => (open === "content" ? null : "content"));
-      } else if ((event.ctrlKey || event.metaKey) && !event.shiftKey && (event.key === "n" || event.key === "N")) {
-        event.preventDefault();
-        startNew(null);
+      } else {
+        // The person's combinations (⋯ › 단축키), else Ctrl+K, Ctrl+Shift+F, Ctrl+N.
+        const combo = comboOf(event);
+        if (!combo || recordingShortcut.current) return;
+        if (combo === shortcuts.palette) {
+          event.preventDefault();
+          setPaletteOpen((open) => (open === "palette" ? null : "palette"));
+        } else if (combo === shortcuts.content) {
+          event.preventDefault();
+          setPaletteOpen((open) => (open === "content" ? null : "content"));
+        } else if (combo === shortcuts.newWork) {
+          event.preventDefault();
+          startNew(null);
+        }
       }
     };
     const onKeyUp = (event: KeyboardEvent) => {
@@ -804,7 +817,7 @@ export function App() {
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, [switchable, openSession, startNew]);
+  }, [switchable, openSession, startNew, shortcuts]);
 
   // The engine in focus dresses the conversation: the visible session's engine, else the engine
   // picked for a new request. While the appearance sheet is open, the look being edited is shown.
@@ -1435,6 +1448,18 @@ export function App() {
                 onBrandMotion={(next) => savePrefs({ brandMotion: next })}
                 notifications={prefs.notify !== false}
                 onNotifications={(next) => savePrefs({ notify: next })}
+                shortcutSettings={
+                  <ShortcutSettings
+                    shortcuts={shortcuts}
+                    onChange={(id, combo) => {
+                      const saved = { ...((prefs.shortcuts as Record<string, string> | undefined) ?? {}) };
+                      if (combo) saved[id] = combo;
+                      else delete saved[id];
+                      savePrefs({ shortcuts: saved });
+                    }}
+                    onRecording={setRecordingShortcut}
+                  />
+                }
                 imageUpload={
                   <ImageUploadRow
                     api={api}
