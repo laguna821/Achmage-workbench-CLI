@@ -60,6 +60,7 @@ import { WorkspacePreparation } from "./workspace-preparation.ts";
 import { SourceControl } from "./source-control.ts";
 import { ScmReviews } from "./scm-review.ts";
 import { GitHubReviews } from "./github.ts";
+import { GitHubActions } from "./github-actions.ts";
 import { WorkspaceLayouts } from "./layouts.ts";
 import type { Kordoc } from "./kordoc.ts";
 import type { AdapterSink, LoginStart, ProviderAdapter } from "./providers/types.ts";
@@ -280,6 +281,7 @@ export class SessionManager {
   readonly sourceControl: SourceControl;
   readonly scmReviews: ScmReviews;
   readonly github: GitHubReviews;
+  readonly githubActions: GitHubActions;
   readonly layouts: WorkspaceLayouts;
   /** "그림": pictures drawn with GPT Image through Codex (imagegen.ts). */
   readonly images: ImageGen;
@@ -324,6 +326,10 @@ export class SessionManager {
       },
     }, options.dataDir ?? dirname(options.managedWorksDir));
     this.github = new GitHubReviews(this.sourceControl);
+    this.githubActions = new GitHubActions(store, this.github, (workspaceId) => {
+      const space = this.workspaces.get(workspaceId); this.workspaces.requireActive(workspaceId, space.workId);
+      if (space.hostId !== options.hostId || this.hidden(space.workId)) throw new HttpError(409, "github_workspace", "활성 로컬 작업공간에서 GitHub 작업을 진행하세요.");
+    });
     this.layouts = new WorkspaceLayouts(store, this.workspaces);
     this.scmReviews = new ScmReviews(store, this.workspaces, this.sourceControl.reviewSnapshots, {
       targets: (workspaceId) => {
@@ -2044,7 +2050,9 @@ export class SessionManager {
 
   async shutdown() {
     this.scmReviews.stop();
+    this.githubActions.stop();
     await this.github.close();
+    await this.githubActions.drain();
     this.schedules.stop();
     this.stopExternalWatches();
     this.flush();

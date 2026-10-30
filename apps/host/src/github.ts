@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { statSync } from "node:fs";
-import { scmPatchRows, type GitHubBinding, type GitHubCheckDetails, type GitHubJob, type GitHubLog, type GitHubSelection, type GitHubTarget, type GitHubView } from "@workbench/contracts";
+import { scmPatchRows, type GitHubBinding, type GitHubCheckDetails, type GitHubJob, type GitHubLog, type GitHubSelection, type GitHubTarget, type GitHubTemplate, type GitHubView } from "@workbench/contracts";
 import { HttpError } from "./errors.ts";
 import { array, checkData, checksQuery, githubRemote, integer, object, pullData, repoName, sameRepo, string, type CheckIdentity } from "./github-data.ts";
 import { GhReader, githubLogText, githubRedact, type GitHubReader } from "./github-reader.ts";
 import { readRemotes } from "./scm-remote.ts";
 import { scmHash } from "./scm-status.ts";
+import { scmGit } from "./scm-git.ts";
 import type { SourceControl } from "./source-control.ts";
 
 type Binding = { data: GitHubBinding; stamp: string; at: number };
@@ -18,7 +19,7 @@ const segment = encodeURIComponent;
 const target = (repo: string, remote: string, branch?: string): GitHubTarget => ({ id: scmHash(JSON.stringify([repo.toLowerCase(), branch ?? ""])).slice(0, 24), repo, remote, ...(branch ? { branch } : {}) });
 
 export class GitHubReviews {
-  private readonly scm: SourceControl; private readonly reader: GitHubReader;
+  private readonly scm: SourceControl; readonly reader: GitHubReader;
   private stopped = false;
   private readonly bindings = new Map<string, Binding>(); private readonly views = new Map<string, View>();
   private readonly jobs = new Map<string, JobIdentity>(); private readonly loading = new Map<string, Promise<GitHubView>>();
@@ -140,6 +141,20 @@ export class GitHubReviews {
   private async view(workspaceId: string, id: string, revision: string) {
     const view = this.views.get(id); if (!view || view.data.workspaceId !== workspaceId || view.data.revision !== revision || Date.now() - view.at > 30 * 60000) throw expired();
     await this.bound(workspaceId, view.data.binding); return view;
+  }
+  async actionScope(workspaceId: string, id: string, revision: string) {
+    const view = await this.view(workspaceId, id, revision);
+    return { view: view.data, checks: [...view.checks.entries()], mergeOid: view.mergeOid };
+  }
+  async templates(workspaceId: string, id: string, revision: string): Promise<GitHubTemplate[]> {
+    const view = await this.view(workspaceId, id, revision), state = await this.scm.status(workspaceId), commit = view.data.localHead;
+    if (!commit || commit !== state.head) throw changed();
+    const rows = (await scmGit(state.root, ["ls-tree", "-r", "-z", commit, "--", ".github", "docs", "PULL_REQUEST_TEMPLATE.md", "pull_request_template.md"], { noLazyFetch: true, limit: 1024 * 1024 })).toString("utf8").split("\0");
+    const candidates = rows.map((row) => /^(100644|100755) blob ([a-f0-9]{40,64})\t(.+)$/.exec(row)).filter((row) => row && /^(?:(?:\.github|docs)\/)?pull_request_template(?:\.md|\/[^/]+\.md)$/i.test(row[3]!));
+    if (candidates.length > 20) throw new HttpError(413, "github_templates", "PR 템플릿이 20개를 넘습니다. 저장소에서 사용할 템플릿을 정리하세요.");
+    const result: GitHubTemplate[] = []; let bytes = 0;
+    for (const item of candidates) { const content = await scmGit(state.root, ["cat-file", "blob", item![2]!], { noLazyFetch: true, limit: 65536 }); bytes += content.length; if (bytes > 256 * 1024) throw new HttpError(413, "github_templates", "PR 템플릿 합계가 256 KiB를 넘습니다."); if (content.includes(0)) continue; result.push({ path: item![3]!, body: content.toString("utf8"), commit }); }
+    await this.view(workspaceId, id, revision); return result;
   }
   async details(workspaceId: string, id: string, revision: string, checkId: string): Promise<GitHubCheckDetails> {
     const view = await this.view(workspaceId, id, revision), check = view.checks.get(checkId), label = view.data.checks.find((item) => item.id === checkId);

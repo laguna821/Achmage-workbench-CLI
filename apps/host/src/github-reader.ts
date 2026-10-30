@@ -3,7 +3,17 @@ import { stripVTControlCharacters } from "node:util";
 import { HttpError } from "./errors.ts";
 
 export type GitHubReader = { json(endpoint: string, body?: object, fresh?: boolean): Promise<unknown>; log(endpoint: string): Promise<string>; close(): Promise<void> };
+export type GitHubWrite = { method: "POST" | "PATCH" | "PUT" | "DELETE"; endpoint: string; body?: object };
+export type GitHubWriter = { write(request: GitHubWrite): Promise<{ status: number; value: unknown }> };
+export class GitHubWriteError extends Error {
+  readonly certain: boolean;
+  constructor(message: string, certain: boolean) { super(message); this.certain = certain; }
+}
 type Raw = { status: number; headers: Record<string, string>; text: string };
+class ResponseError extends HttpError {
+  readonly response: Raw;
+  constructor(status: number, code: string, message: string, response: Raw) { super(status, code, message); this.response = response; }
+}
 type Runner = (args: string[], input: string | undefined, signal: AbortSignal) => Promise<{ code: number | null; stdout: string; stderr: string }>;
 export function githubRedact(text: string) {
   let value = text.replace(/(?:gh[pousr]_[\w]+|github_pat_[\w]+)\b/g, "[인증 정보 가림]").replace(/(authorization\s*[:=]\s*)(?:bearer|token)\s+\S+/gi, "$1[가림]").replace(/https?:\/\/[^\s]+/g, (raw) => { try { const url = new URL(raw); if (url.username || url.password) { url.username = "[가림]"; url.password = ""; } if (url.search) url.search = "?[가림]"; return url.toString(); } catch { return "[주소 가림]"; } });
@@ -39,35 +49,39 @@ const execute: Runner = (args, input, signal) => new Promise((resolve, reject) =
   child.stdin.end(input);
 });
 
-/** Read-only gh API boundary, shared request cache and rate-limit breaker. Credentials stay in gh. */
-export class GhReader implements GitHubReader {
+/** Separate read/cache and explicit write paths. A write is never retried or coalesced here. */
+export class GhReader implements GitHubReader, GitHubWriter {
   private readonly run: Runner; private readonly now: () => number;
   private stopped = false; private blockedUntil = 0;
   private readonly cache = new Map<string, { at: number; value: unknown; bytes: number }>();
   private readonly pending = new Map<string, Promise<unknown>>();
   private readonly running = new Map<AbortController, Promise<unknown>>();
   constructor(run: Runner = execute, now: () => number = Date.now) { this.run = run; this.now = now; }
-  private async request(endpoint: string, body?: object, rawLog = false): Promise<Raw> {
+  private async request(endpoint: string, body?: object, rawLog = false, writeMethod?: GitHubWrite["method"], started?: () => void): Promise<Raw> {
     if (this.stopped) throw new HttpError(409, "github_stopped", "GitHub 연결을 종료했습니다.");
     if (this.blockedUntil > this.now()) throw new HttpError(429, "github_rate_limit", `GitHub 요청 제한으로 ${new Date(this.blockedUntil).toLocaleTimeString()} 이후 다시 확인할 수 있습니다.`);
-    if (body ? endpoint !== "graphql" || !/^query[\s({]/.test(String((body as { query?: unknown }).query)) : !/^repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\/|\?|$)/.test(endpoint)) throw new Error("허용되지 않은 GitHub 읽기 경로입니다.");
+    if (writeMethod) {
+      const graphql = endpoint === "graphql" && writeMethod === "POST" && /^mutation[\s({]/.test(String((body as { query?: unknown } | undefined)?.query));
+      const rest = writeMethod === "PUT" && /^repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pulls\/\d+\/merge-async$/.test(endpoint) || writeMethod === "POST" && /^repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/(?:actions\/runs\/\d+\/rerun(?:-failed-jobs)?|check-runs\/\d+\/rerequest)$/.test(endpoint);
+      if (!graphql && !rest) throw new Error("허용되지 않은 GitHub 변경 경로입니다.");
+    } else if (body ? endpoint !== "graphql" || !/^query[\s({]/.test(String((body as { query?: unknown }).query)) : !/^repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\/|\?|$)/.test(endpoint)) throw new Error("허용되지 않은 GitHub 읽기 경로입니다.");
     if (/[\r\n\0{}]/.test(endpoint) || endpoint.split("?")[0]!.split("/").some((part) => part === "." || part === "..")) throw new Error("잘못된 GitHub 읽기 경로입니다.");
     if (rawLog && !/^repos\/[^/]+\/[^/]+\/actions\/jobs\/\d+\/logs$/.test(endpoint)) throw new Error("연결된 Actions 작업 로그만 읽을 수 있습니다.");
-    const args = ["api", "--hostname", "github.com", "--method", body ? "POST" : "GET", "--include", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2026-03-10", endpoint, ...(body ? ["--input", "-"] : []), ...(rawLog ? ["--allow-escape-sequences"] : [])];
+    const args = ["api", "--hostname", "github.com", "--method", writeMethod ?? (body ? "POST" : "GET"), "--include", "-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2026-03-10", endpoint, ...(body ? ["--input", "-"] : []), ...(rawLog ? ["--allow-escape-sequences"] : [])];
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 30000); timer.unref();
-    const running = this.run(args, body ? JSON.stringify(body) : undefined, controller.signal); this.running.set(controller, running);
+    started?.(); const running = this.run(args, body ? JSON.stringify(body) : undefined, controller.signal); this.running.set(controller, running);
     try {
       const result = await running, response = githubResponse(result.stdout), h = response.headers;
       const rateLimited = response.status === 429 || (response.status === 403 && (h["x-ratelimit-remaining"] === "0" || h["retry-after"] || /rate limit|secondary rate/i.test(response.text + result.stderr)));
       if (rateLimited) {
         const retry = Number(h["retry-after"]), reset = Number(h["x-ratelimit-reset"]);
         this.blockedUntil = Math.max(this.now() + 60000, Number.isFinite(retry) && retry > 0 ? this.now() + retry * 1000 : 0, Number.isFinite(reset) ? reset * 1000 : 0);
-        throw new HttpError(429, "github_rate_limit", `GitHub 요청 제한입니다. ${new Date(this.blockedUntil).toLocaleTimeString()} 이후 다시 확인하세요.`);
+        throw new ResponseError(429, "github_rate_limit", `GitHub 요청 제한입니다. ${new Date(this.blockedUntil).toLocaleTimeString()} 이후 다시 확인하세요.`, response);
       }
       if (result.code !== 0 || response.status < 200 || response.status >= 300) {
         if (rawLog && /unknown flag.*allow-escape-sequences/i.test(result.stderr)) throw new HttpError(409, "github_version", "CI 로그 읽기에는 GitHub CLI 2.97 이상이 필요합니다. gh를 업데이트한 뒤 다시 확인하세요.");
         const note = githubRedact(result.stderr || response.text || "GitHub 응답을 읽지 못했습니다.").slice(0, 2000);
-        throw new HttpError(response.status === 401 ? 401 : 502, response.status === 401 ? "github_auth" : "github_read", `${response.status === 401 ? "GitHub 인증을 확인하세요. gh auth login" : "GitHub 읽기 실패"} · ${note}`);
+        throw new ResponseError(response.status === 401 ? 401 : 502, response.status === 401 ? "github_auth" : "github_read", `${response.status === 401 ? "GitHub 인증을 확인하세요. gh auth login" : "GitHub 요청 실패"} · ${note}`, response);
       }
       return response;
     } finally { clearTimeout(timer); this.running.delete(controller); }
@@ -87,5 +101,20 @@ export class GhReader implements GitHubReader {
     this.pending.set(key, done); try { return await done; } finally { this.pending.delete(key); }
   }
   async log(endpoint: string) { return githubLogText((await this.request(endpoint, undefined, true)).text); }
+  async write(request: GitHubWrite) {
+    let attempted = false;
+    const parse = (response: Raw) => { try { return response.text.trim() ? JSON.parse(response.text) as unknown : null; } catch { throw new GitHubWriteError("GitHub 변경 응답을 읽지 못했습니다. 원격 결과를 확인하세요.", false); } };
+    try {
+      const response = await this.request(request.endpoint, request.body, false, request.method, () => { attempted = true; });
+      const value = parse(response);
+      if (request.endpoint === "graphql" && value && typeof value === "object" && "errors" in value) throw new GitHubWriteError(`GitHub 변경 응답에 오류가 있습니다. ${githubRedact(JSON.stringify((value as { errors: unknown }).errors)).slice(0, 1800)}`, false);
+      return { status: response.status, value };
+    } catch (error) {
+      if (error instanceof ResponseError && error.response.status === 409 && request.endpoint.endsWith("/merge-async")) return { status: 409, value: parse(error.response) };
+      if (error instanceof GitHubWriteError) throw error;
+      const status = error instanceof ResponseError ? error.response.status : 0;
+      throw new GitHubWriteError(githubRedact(error instanceof Error ? error.message : String(error)), !attempted || (status >= 400 && status < 500 && status !== 408));
+    } finally { if (attempted) this.cache.clear(); }
+  }
   async close() { this.stopped = true; for (const controller of this.running.keys()) controller.abort(); await Promise.allSettled([...this.running.values()]); this.cache.clear(); }
 }

@@ -346,6 +346,16 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         if (method === "DELETE") return sendJson(res, 200, await manager.preparation.cancel(parts[1]));
       }
       if (parts[0] === "workspaces" && parts[1] && parts[2] === "scm") {
+        if (parts[3] === "github-actions") {
+          if (parts.length === 4 && method === "GET") return sendJson(res, 200, manager.githubActions.list(parts[1]));
+          if (parts.length === 4 && method === "POST") { const body = await readJson(req, 4096); return sendJson(res, 201, manager.githubActions.start(parts[1], String(body.previewId ?? ""), String(body.requestId ?? ""))); }
+          if (parts.length === 5 && parts[4] === "context" && method === "POST") { const body = await readJson(req, 4096); return sendJson(res, 200, await manager.githubActions.inspect(parts[1], String(body.id ?? ""), String(body.revision ?? ""))); }
+          if (parts.length === 5 && parts[4] === "templates" && method === "POST") { const body = await readJson(req, 4096); return sendJson(res, 200, await manager.github.templates(parts[1], String(body.id ?? ""), String(body.revision ?? ""))); }
+          if (parts.length === 5 && parts[4] === "preview" && method === "POST") { const body = await readJson(req, 80 * 1024); return sendJson(res, 200, await manager.githubActions.prepare(parts[1], String(body.contextId ?? ""), body.action)); }
+          if (parts.length === 5 && parts[4] === "draft" && method === "POST") { const body = await readJson(req, 4096); return sendJson(res, 200, manager.githubActions.draft(parts[1], String(body.contextId ?? ""))); }
+          if (parts.length === 5 && parts[4] === "draft" && method === "PUT") { const body = await readJson(req, 80 * 1024); return sendJson(res, 200, manager.githubActions.saveDraft(parts[1], String(body.contextId ?? ""), body.draft as import("@workbench/contracts").GitHubDraft)); }
+          if (parts.length === 5 && method === "GET") return sendJson(res, 200, await manager.githubActions.get(parts[1], parts[4]!, url.searchParams.get("reconcile") === "true"));
+        }
         if (parts.length === 4 && parts[3] === "github" && method === "GET") return sendJson(res, 200, await manager.github.binding(parts[1]));
         if (parts.length === 4 && parts[3] === "github" && method === "POST") return sendJson(res, 200, await manager.github.load(parts[1], await readJson(req, 16 * 1024) as unknown as import("@workbench/contracts").GitHubSelection));
         if (parts.length === 5 && parts[3] === "github" && ["check", "log"].includes(parts[4]!) && method === "POST") {

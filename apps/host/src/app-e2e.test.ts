@@ -17,7 +17,7 @@ const fixture = () => {
 
 it("uses the default executable for an empty argument and isolates engines by default", () => {
   const { dir, binary } = fixture();
-  expect(parseArgs(["", dir], binary)).toMatchObject({ binary, outDir: dir, only: ["start", "panes", "pkm", "workspaces", "navigation", "tabs", "documents", "references", "templates", "template-office", "hwp", "worktrees", "terminals", "preparation", "scm", "scm-remote", "scm-conflict", "scm-hunks", "scm-comparison", "scm-review", "github"], engines: "stand-in" });
+  expect(parseArgs(["", dir], binary)).toMatchObject({ binary, outDir: dir, only: ["start", "panes", "pkm", "workspaces", "navigation", "tabs", "documents", "references", "templates", "template-office", "hwp", "worktrees", "terminals", "preparation", "scm", "scm-remote", "scm-conflict", "scm-hunks", "scm-comparison", "scm-review", "github", "github-actions"], engines: "stand-in" });
 });
 
 it("refuses directories and unimplemented scenarios before starting any process", () => {

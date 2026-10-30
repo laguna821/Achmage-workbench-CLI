@@ -6431,3 +6431,18 @@ kbd {
     transition: none;
   }
 }
+
+.scm-gh-write { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 12px; margin: 10px 0; }
+.scm-gh-composer { display: grid; gap: 10px; margin: 12px 0; }
+.scm-gh-composer > label { display: grid; gap: 4px; }
+.scm-gh-composer > label:has(input[type="checkbox"]) { display: flex; gap: 8px; align-items: center; }
+.scm-gh-composer input:not([type="checkbox"]), .scm-gh-composer textarea { width: 100%; box-sizing: border-box; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 8px; }
+.scm-gh-merge { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 10px 0; border: 1px solid var(--line); }
+.scm-gh-reruns > label { display: block; margin: 8px 0; }
+.scm-gh-actor, .scm-gh-draft-state, .scm-gh-action-job > small { color: var(--muted); font-size: var(--fs-small); overflow-wrap: anywhere; }
+.scm-gh-action-preview { border: 1px solid var(--accent); padding: 12px; margin: 12px 0; border-radius: var(--r-sm); }
+.scm-gh-action-preview pre { max-height: 180px; overflow: auto; white-space: pre-wrap; }
+.scm-gh-action-preview .button, .scm-gh-action-job .button { margin: 4px 8px 4px 0; }
+.scm-gh-action-job { padding: 12px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+.scm-gh-action-job > small { display: block; margin-top: 5px; }
+.scm-gh-action-job[data-phase="uncertain"], .scm-gh-action-job[data-phase="partial"], .scm-gh-action-job[data-phase="changed"] { border-left: 3px solid var(--accent); padding-left: 12px; }

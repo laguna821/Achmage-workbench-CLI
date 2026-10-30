@@ -1,5 +1,6 @@
 import type {
   GitHubBinding, GitHubSelection, GitHubView, GitHubCheckDetails, GitHubLog,
+  GitHubActionContext, GitHubActionPreview, GitHubActionInput, GitHubActionJob, GitHubDraft, GitHubTemplate,
   ScmReviewList, ScmReviewCreate, ScmReviewEdit, ScmReviewNote, ScmReviewBatchRequest, ScmReviewBatch,
   AchmageBrief,
   AgentBrowserStatus,
@@ -215,6 +216,14 @@ export class Api {
   cancelPreparation = (id: string) => this.request<PreparationJob>("DELETE", `/api/preparations/${id}`);
   scmStatus = (id: string) => this.request<ScmStatus>("GET", `/api/workspaces/${id}/scm`);
   githubBinding = (id: string) => this.request<GitHubBinding>("GET", `/api/workspaces/${id}/scm/github`);
+  githubActionContext = (id: string, view: Pick<GitHubView, "id" | "revision">) => this.request<GitHubActionContext>("POST", `/api/workspaces/${id}/scm/github-actions/context`, { id: view.id, revision: view.revision });
+  githubTemplates = (id: string, view: Pick<GitHubView, "id" | "revision">) => this.request<GitHubTemplate[]>("POST", `/api/workspaces/${id}/scm/github-actions/templates`, { id: view.id, revision: view.revision });
+  githubActionPreview = (id: string, contextId: string, action: GitHubActionInput) => this.request<GitHubActionPreview>("POST", `/api/workspaces/${id}/scm/github-actions/preview`, { contextId, action });
+  githubActionStart = (id: string, previewId: string, requestId: string) => this.request<GitHubActionJob>("POST", `/api/workspaces/${id}/scm/github-actions`, { previewId, requestId });
+  githubActionJobs = (id: string) => this.request<GitHubActionJob[]>("GET", `/api/workspaces/${id}/scm/github-actions`);
+  githubActionJob = (id: string, jobId: string, reconcile = false) => this.request<GitHubActionJob>("GET", `/api/workspaces/${id}/scm/github-actions/${jobId}${reconcile ? "?reconcile=true" : ""}`);
+  githubDraft = (id: string, contextId: string) => this.request<GitHubDraft>("POST", `/api/workspaces/${id}/scm/github-actions/draft`, { contextId });
+  githubDraftSave = (id: string, contextId: string, draft: GitHubDraft) => this.request<GitHubDraft>("PUT", `/api/workspaces/${id}/scm/github-actions/draft`, { contextId, draft });
   githubLoad = (id: string, selection: GitHubSelection) => this.request<GitHubView>("POST", `/api/workspaces/${id}/scm/github`, selection);
   githubCheck = (id: string, view: Pick<GitHubView, "id" | "revision">, item: string) => this.request<GitHubCheckDetails>("POST", `/api/workspaces/${id}/scm/github/check`, { id: view.id, revision: view.revision, item });
   githubLog = (id: string, view: Pick<GitHubView, "id" | "revision">, item: string) => this.request<GitHubLog>("POST", `/api/workspaces/${id}/scm/github/log`, { id: view.id, revision: view.revision, item });
