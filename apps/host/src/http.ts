@@ -346,6 +346,12 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         if (method === "DELETE") return sendJson(res, 200, await manager.preparation.cancel(parts[1]));
       }
       if (parts[0] === "workspaces" && parts[1] && parts[2] === "scm") {
+        if (parts.length === 4 && parts[3] === "github" && method === "GET") return sendJson(res, 200, await manager.github.binding(parts[1]));
+        if (parts.length === 4 && parts[3] === "github" && method === "POST") return sendJson(res, 200, await manager.github.load(parts[1], await readJson(req, 16 * 1024) as unknown as import("@workbench/contracts").GitHubSelection));
+        if (parts.length === 5 && parts[3] === "github" && ["check", "log"].includes(parts[4]!) && method === "POST") {
+          const body = await readJson(req, 16 * 1024), args = [parts[1], String(body.id ?? ""), String(body.revision ?? ""), String(body.item ?? "")] as const;
+          return sendJson(res, 200, await (parts[4] === "check" ? manager.github.details(...args) : manager.github.log(...args)));
+        }
         if (parts.length === 4 && parts[3] === "reviews" && method === "GET") return sendJson(res, 200, manager.scmReviews.list(parts[1], url.searchParams.get("snapshot") ?? undefined));
         if (parts.length === 4 && parts[3] === "reviews" && method === "POST") return sendJson(res, 201, manager.scmReviews.create(parts[1], await readJson(req, 96 * 1024) as unknown as import("@workbench/contracts").ScmReviewCreate));
         if (parts.length === 5 && parts[3] === "reviews" && method === "PATCH") return sendJson(res, 200, manager.scmReviews.edit(parts[1], parts[4]!, await readJson(req, 96 * 1024) as unknown as import("@workbench/contracts").ScmReviewEdit));

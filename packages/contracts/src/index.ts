@@ -842,3 +842,4 @@ export * from "./home-views.ts";
 export * from "./navigator.ts";
 export * from "./base-filter.ts";
 export * from "./user-skills.ts";
+export * from "./github.ts";

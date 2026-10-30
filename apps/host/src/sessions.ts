@@ -59,6 +59,7 @@ import { Terminals } from "./terminals.ts";
 import { WorkspacePreparation } from "./workspace-preparation.ts";
 import { SourceControl } from "./source-control.ts";
 import { ScmReviews } from "./scm-review.ts";
+import { GitHubReviews } from "./github.ts";
 import { WorkspaceLayouts } from "./layouts.ts";
 import type { Kordoc } from "./kordoc.ts";
 import type { AdapterSink, LoginStart, ProviderAdapter } from "./providers/types.ts";
@@ -278,6 +279,7 @@ export class SessionManager {
   readonly preparation: WorkspacePreparation;
   readonly sourceControl: SourceControl;
   readonly scmReviews: ScmReviews;
+  readonly github: GitHubReviews;
   readonly layouts: WorkspaceLayouts;
   /** "그림": pictures drawn with GPT Image through Codex (imagegen.ts). */
   readonly images: ImageGen;
@@ -321,6 +323,7 @@ export class SessionManager {
         })) throw new HttpError(409, "scm_busy", "이 폴더의 에이전트나 환경 준비가 실행 중입니다. 끝나거나 멈춘 뒤 Git 작업을 진행하세요.");
       },
     }, options.dataDir ?? dirname(options.managedWorksDir));
+    this.github = new GitHubReviews(this.sourceControl);
     this.layouts = new WorkspaceLayouts(store, this.workspaces);
     this.scmReviews = new ScmReviews(store, this.workspaces, this.sourceControl.reviewSnapshots, {
       targets: (workspaceId) => {
@@ -2041,6 +2044,7 @@ export class SessionManager {
 
   async shutdown() {
     this.scmReviews.stop();
+    await this.github.close();
     this.schedules.stop();
     this.stopExternalWatches();
     this.flush();
