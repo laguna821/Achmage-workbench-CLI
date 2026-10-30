@@ -1,5 +1,7 @@
 # Orca·이음오피스 기능 대조표
 
+2026-10-31 G2/G4 스킬 갱신: I16/I17의 원본9종 다중 선택·읽기·이력/판 보존·양식 사본의 같은 대화 인계는 Linux86/86 및 인접84/84로 검증했다. 기존 Workbench 보관함과 생성 기록을 재사용한다. 제안 카드 저장·현재 문서 양식 미리보기와 I18 디자인 갤러리는 여전히 부분이며 전체 행의 완료 기준을 유지한다. [상세 범위](../office-integration.md), 검증 판 `research:rr-23b6877f1f5f065e3f98bd3a61ee42a4:b55ba6f1df5fb74aeef5bf9d69cae5a628ffaf0fac302c488c9168d0f6876646`.
+
 2026-10-30 G4 갱신: M01/M03/W01의 원본 Markdown·HTML renderer, 저장·보기 전환·충돌·복구를 연결했다. Linux 실제 앱25/25, 인접22/22 통과. 이미지·내보내기·내부 AI 등은 여전히 부분이며 여섯 화면을 전 기능 완료로 세지 않는다. 현재 우선순위는 Office 전체와 Electron 실행 경로 대체다. [구현·검증·잔여 범위](../office-integration.md), 연구 판 `research:rr-b5508ffc0997569185acfe1f63b30318:a54a11aca8b345099bdeeda5f61bbd477196973d83281b699e399f4af03f9b7c`.
 
 후속 갱신: Markdown·HTML의 로컬 그림 삽입/읽기·소유 자산과 HTML 상대 경로 CSS/일반 스크립트를 연결했다. Linux 실제 앱30/30, host/경로 검사13/13 통과. 클라우드 이미지·출력·AI 등은 계속 부분이며 아래 전체 기능 완료 기준은 유지한다. 연구 판 `research:rr-8304c87c1ea63f23530f55605bd002f7:68995e88a4c2037d47eb31d190bb3d8612c78e80473a9636b9eeb7ef2bdb7b9b`.

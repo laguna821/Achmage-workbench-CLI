@@ -413,7 +413,7 @@ export type TranscriptItem = (
       requestId?: string | null;
     }
 ) & { /** An original Office tool loop, owned by this same Workbench conversation. */
-  office?: { turnId: string; artifactId: string; attachments?: import("./office-references.ts").OfficeStoredAttachment[] };
+  office?: { turnId: string; artifactId: string; attachments?: import("./office-references.ts").OfficeStoredAttachment[]; skills?: import("./office-skills.ts").OfficeStoredSkill[]; skillReads?: import("./office-skills.ts").OfficeStoredSkill[] };
 };
 
 export type UsageWindow = {
@@ -775,6 +775,8 @@ export type OfficeHostMessage =
   | { type: "office:theme"; theme: "light" | "dark" }
   /** Refresh a scoped write capability without recreating the editor or dropping its undo state. */
   | { type: "office:grant"; token: string; sessionId: string | null }
+  | { type: "office:skills-changed" }
+  | { type: "office:skills-result"; requestId: string; value?: unknown; error?: string }
   | { type: "office:ai-result"; requestId: string; value?: { revision: number; token: string; sessionId: string | null; createdSession?: boolean; referenceSnapshot?: string }; error?: string }
   /** Save unsaved edits now (before a request is sent, the tab changes or the view switches). */
   | { type: "office:flush" }
@@ -787,9 +789,10 @@ export type OfficeHostMessage =
 
 /** Office editor page → Workbench window. */
 export type OfficePageMessage =
+  | import("./office-skills.ts").OfficeSkillRequest
   | import("./office-output.ts").OfficeOutputRequest
   | import("./office-references.ts").OfficeReferenceRequest
-  | { type: "office:ai-request"; requestId: string; action: "prepare" | "new-session" | "settings"; sessionId: string | null; freezeReferences?: string[] }
+  | { type: "office:ai-request"; requestId: string; action: "prepare" | "new-session" | "settings" | "skills"; sessionId: string | null; freezeReferences?: string[] }
   | { type: "office:copied"; artifactId: string }
   | { type: "office:ready" }
   /** The editor shows this revision; `recovered` when it reopened unsaved edits made on it. */

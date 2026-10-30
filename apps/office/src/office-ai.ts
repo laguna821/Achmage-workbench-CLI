@@ -6,17 +6,19 @@ import { Events, Gateway, listen, post, type Init } from "./bridge.ts";
 import { installOfficeConversation, type OfficeConversationPort, type OfficeRun, type WorkbenchAgentLoop } from "./office-agent.ts";
 import { createOfficeReferences } from "./office-references.ts";
 import type { OfficeAttachment } from "../../../packages/contracts/src/office-references.ts";
+import { createOfficeSkills } from "./office-skills.ts";
+import type { OfficeSkillChip } from "../../../packages/contracts/src/office-skills.ts";
 
 type Prepared = NonNullable<Extract<OfficeHostMessage, { type: "office:ai-result" }>["value"]>;
 type History = { workId: string; sessionId: string; items: TranscriptItem[]; attachments?: OfficeAttachment[]; before: string | null; hasMore: boolean };
-type Chat = { role: "user" | "assistant"; text: string; seq: number; ts: string; attachments?: OfficeAttachment[]; tools?: { name: string; summary: string; input?: string; output?: string; isError?: boolean }[] };
+type Chat = { role: "user" | "assistant"; text: string; seq: number; ts: string; attachments?: OfficeAttachment[]; skills?: OfficeSkillChip[]; tools?: { name: string; summary: string; input?: string; output?: string; isError?: boolean }[] };
 
 /** A view of the one Workbench transcript for the original panel's history reader. */
 export function officeChat(items: TranscriptItem[]): Chat[] {
   const chat: Chat[] = [];
   for (const item of items) {
     const base = { seq: chat.length + 1, ts: new Date(item.at).toISOString() };
-    if (item.kind === "user" || item.kind === "assistant") chat.push({ ...base, role: item.kind, text: item.text, ...(item.kind === "user" && item.office?.attachments ? { attachments: item.office.attachments } : {}) });
+    if (item.kind === "user" || item.kind === "assistant") chat.push({ ...base, role: item.kind, text: item.text, ...(item.kind === "user" && item.office?.attachments ? { attachments: item.office.attachments } : {}), ...(item.kind === "user" && item.office?.skills ? { skills: item.office.skills.map(({ id, source, title }) => ({ id, source, title })) } : {}) });
     else if (item.kind === "tool") {
       const detail = item.detail ?? "", split = detail.indexOf("\n");
       const tool = { name: split < 0 ? item.tool : detail.slice(0, split), summary: item.title, input: split < 0 ? detail : detail.slice(split + 1), output: item.output ?? undefined, isError: item.status === "failed" };
@@ -29,8 +31,9 @@ export function officeChat(items: TranscriptItem[]): Chat[] {
   }
   return chat;
 }
-export function officeModelHistory(items: TranscriptItem[]): AgentMessage[] {
-  return officeChat(items).map((item) => ({ role: item.role, text: [item.text, ...(item.tools ?? []).map((tool) => `이전 도구 실행 기록 (자료):\n${JSON.stringify(tool)}`)].filter(Boolean).join("\n\n") }));
+export function officeModelHistory(items: TranscriptItem[], liveInstructions?: ReadonlyMap<string, string>): AgentMessage[] {
+  const modelItems = items.map((item) => item.kind === "user" && item.office && liveInstructions?.has(item.office.turnId) ? { ...item, text: liveInstructions.get(item.office.turnId)! } : item);
+  return officeChat(modelItems).map((item) => ({ role: item.role, text: [item.text, ...(item.tools ?? []).map((tool) => `이전 도구 실행 기록 (자료):\n${JSON.stringify(tool)}`)].filter(Boolean).join("\n\n") }));
 }
 
 export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
@@ -39,6 +42,9 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
   let active: WorkbenchAgentLoop<unknown> | null = null;
   let run: { turnId: string; api: ReturnType<Gateway["aiSession"]> } | null = null;
   const subscribers = new Set<() => void>();
+  // Preserve the original loop's in-memory request context across live follow-ups.
+  // Reopening starts empty: the original history hook re-reads the saved chips.
+  const liveInstructions = new Map<string, string>();
   const requests = new Map<string, { resolve(value: Prepared | undefined): void; reject(error: Error): void }>();
   // Grant notifications may arrive before the response to the first prepare.
   // Defer only this unbound handoff until the parent identifies the session it
@@ -50,11 +56,14 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
     sessionId = next;
     if (keepPanel) return;
     references.reset();
+    liveInstructions.clear();
+    skills.changed();
     sessionKey = next ?? "unbound";
     active?.reset();
     for (const listener of subscribers) listener();
   };
   listen((message) => {
+    if (message.type === "office:skills-changed") skills.refresh();
     if (message.type === "office:grant") {
       if (binding) binding.grants.push(message.sessionId);
       else changed(message.sessionId);
@@ -76,7 +85,7 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
     if (message.value) { gateway.setToken(message.value.token); changed(message.value.sessionId, Boolean(initial)); }
     pending.resolve(message.value);
   });
-  const parent = (action: "prepare" | "new-session" | "settings", freezeReferences?: string[]) => new Promise<Prepared | undefined>((resolve, reject) => {
+  const parent = (action: "prepare" | "new-session" | "settings" | "skills", freezeReferences?: string[]) => new Promise<Prepared | undefined>((resolve, reject) => {
     const requestId = crypto.randomUUID();
     const timer = window.setTimeout(() => {
       requests.delete(requestId);
@@ -90,6 +99,8 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
     if (action === "prepare" && sessionId === null) binding = { requestId, grants: [] };
     post({ type: "office:ai-request", requestId, action, sessionId, ...(freezeReferences ? { freezeReferences } : {}) });
   });
+  const skills = createOfficeSkills(init, gateway, events, async () => { await parent("skills"); }, async () => { await prepare(); });
+  Object.assign(window, { aiOfficeUserSkills: skills.bridge });
   const prepare = async (freeze = false) => {
     const value = await parent("prepare", freeze ? references.pin() : undefined);
     if (!value?.sessionId) throw new Error("이 문서와 함께 사용할 Workbench 세션을 선택해 주세요.");
@@ -107,7 +118,7 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
       if (active) throw new Error("이 문서에서 진행 중인 AI 요청을 먼저 마쳐 주세요.");
       active = loop; return () => { if (active === loop) active = null; };
     },
-    begin: async (instruction, signal, originalImages): Promise<OfficeRun> => {
+    begin: async (instruction, signal, originalImages, skillContext): Promise<OfficeRun> => {
       try {
         if (sessionId) await history();
         const prepared = await prepare(true), api = gateway.aiSession(init.artifact.id);
@@ -117,11 +128,13 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
         const images = await references.imagesForTurn(originalImages);
         if (signal.aborted || page.sessionId !== sessionId) throw new Error("요청을 취소했거나 선택한 세션이 바뀌었습니다.");
         const turnId = crypto.randomUUID();
-        const receipt = await api.json<OfficeTurnReceipt>("turn-start", { turnId, instruction, revision: prepared.revision, ...(prepared.referenceSnapshot ? { referenceSnapshot: prepared.referenceSnapshot } : {}) });
+        const receipt = await api.json<OfficeTurnReceipt>("turn-start", { turnId, instruction, revision: prepared.revision, ...(skillContext ? { skillContext } : {}), ...(prepared.referenceSnapshot ? { referenceSnapshot: prepared.referenceSnapshot } : {}) });
         if (receipt.duplicate || receipt.status !== "running") throw new Error("이미 처리된 요청입니다. 중복 실행하지 않았습니다.");
+        liveInstructions.set(turnId, instruction);
+        while (liveInstructions.size > 64 || [...liveInstructions.values()].reduce((sum, text) => sum + text.length, 0) > 8_000_000) liveInstructions.delete(liveInstructions.keys().next().value!);
         run = { turnId, api }; let seq = 0;
         return {
-          history: officeModelHistory(page.items),
+          history: officeModelHistory(page.items, liveInstructions),
           images,
           append: async (events) => { await api.json("turn-events", { turnId, seq: ++seq, events }); },
           save: async () => {
@@ -182,13 +195,14 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
       aiToolCapabilities: async () => ({ imageGeneration: { available: false }, imageAnalysis: { available: false }, videoAnalysis: { available: false } }),
       setAiSettings: async (settings: unknown) => { const saved = await gateway.aiSession(init.artifact.id).json("selection", settings); events.emit("aiSettingsChanged", saved); return saved; } },
     projectApi,
+    templates: skills.bridge,
     docs: references.docs,
     subscription: { statuses: () => statuses(), recheck: () => statuses(true), onChanged: events.on("aiSubscriptionChanged"), openSettings,
       install: openSettings, update: openSettings, login: openSettings, cancelLogin: openSettings, setMeteredAccepted: openSettings, openInstallHelp: openSettings, openConnectHelp: openSettings },
     subscribe: (listener: () => void) => { subscribers.add(listener); return () => { subscribers.delete(listener); }; },
     snapshot: () => sessionKey,
     newSession: async () => { if (active) { active.cancel(); await active.settled; } await parent("new-session"); },
-    refresh: async () => { events.emit("aiSettingsChanged", await getSettings()); },
+    refresh: async () => { skills.refresh(); events.emit("aiSettingsChanged", await getSettings()); },
   };
 }
 export type OfficeAiBridge = ReturnType<typeof createOfficeAi>;

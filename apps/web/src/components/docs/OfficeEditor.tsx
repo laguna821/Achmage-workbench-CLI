@@ -7,6 +7,8 @@ import { OfficeReferencePicker } from "./OfficeReferencePicker.tsx";
 import type { OfficeDocumentChoice, OfficeReferenceRequest, OfficeReferenceSnapshot } from "../../../../../packages/contracts/src/office-references.ts";
 import { saveReferencedDocument } from "../../document-commands.ts";
 import { pickOfficeFiles } from "./office-file-picker.ts";
+import { SkillLibraryDialog } from "../SkillLibraryDialog.tsx";
+import type { OfficeSkillRequest } from "../../../../../packages/contracts/src/office-skills.ts";
 
 export type OfficeHandle = {
   /** Save unsaved edits now; resolves with the saved revision, or null when they could not be saved. */
@@ -52,6 +54,7 @@ export const OfficeEditor = forwardRef<
   const referenceSession = useRef<string | null>(null);
   const referencePickerClose = useRef<(() => void) | null>(null);
   const [referencePicker, setReferencePicker] = useState<{ items: OfficeDocumentChoice[]; choose(paths: string[] | null): void } | null>(null);
+  const [skillsOpen, setSkillsOpen] = useState(false);
   const outputBusy = useRef(false);
   const outputPlans = useRef(new Map<string, OfficeOutputPlan>());
   const copied = useRef(new Set<string>());
@@ -194,6 +197,10 @@ export const OfficeEditor = forwardRef<
     if (!target || !origin) return;
     const reply = (value?: unknown, error?: string) => target.postMessage({ type: "office:ai-result", requestId: message.requestId, value, error }, origin);
     if (message.action === "settings") { handlers.current.onAiSettings(); reply(); return; }
+    if (message.action === "skills") {
+      if (message.sessionId !== opened.current?.sessionId) { reply(undefined, "선택한 세션이 바뀌었습니다."); return; }
+      setSkillsOpen(true); reply(); return;
+    }
     if (aiBusy.current) { reply(undefined, "문서 저장과 세션 연결을 확인 중입니다."); return; }
     aiBusy.current = true;
     try {
@@ -235,6 +242,18 @@ export const OfficeEditor = forwardRef<
     finally { aiBusy.current = false; }
   };
 
+  const handleSkills = async (message: OfficeSkillRequest) => {
+    const target = frame.current?.contentWindow, opening = opened.current;
+    if (!target || !opening) return;
+    const reply = (value?: unknown, error?: string) => target.postMessage({ type: "office:skills-result", requestId: message.requestId, value, error }, opening.origin);
+    try {
+      const result = await api.officeSkills<{ ok: boolean; tabId?: string }>(latest.current.id, opening.token, message.action, message.input);
+      if (target !== frame.current?.contentWindow || opening.sessionId !== opened.current?.sessionId) throw new Error("양식을 준비하는 동안 문서 창이나 세션이 바뀌었습니다. 준비된 사본은 문서 목록에 보존했습니다.");
+      reply(result);
+      if (result.ok && result.tabId) handlers.current.onCopied?.(result.tabId);
+    } catch (error) { reply(undefined, error instanceof Error ? error.message : String(error)); }
+  };
+
   useEffect(() => {
     let cancelled = false;
     api
@@ -252,12 +271,14 @@ export const OfficeEditor = forwardRef<
   useEffect(() => { if (opened.current) send({ type: "office:grant", token: opened.current.token, sessionId: opened.current.sessionId }); }, [current]);
   const aiHandler = useRef(handleAi); aiHandler.current = handleAi;
   const referenceHandler = useRef(handleReference); referenceHandler.current = handleReference;
+  const skillsHandler = useRef(handleSkills); skillsHandler.current = handleSkills;
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (!opened.current || event.origin !== opened.current.origin || event.source !== frame.current?.contentWindow) return;
       const message = event.data as OfficePageMessage;
       switch (message.type) {
+        case "office:skills": void skillsHandler.current(message); break;
         case "office:references": void referenceHandler.current(message); break;
         case "office:ai-request": void aiHandler.current(message); break;
         case "office:output": void handleOutput(message); break;
@@ -401,6 +422,7 @@ export const OfficeEditor = forwardRef<
   }
   if (!opened.current) return hidden ? null : <div className="column empty-hint">편집기를 여는 중…</div>;
   return (<>
+    {skillsOpen ? <SkillLibraryDialog api={api} scope={{ workId: artifact.workId, ...(artifact.workspaceId ? { workspaceId: artifact.workspaceId } : {}), ...(sessionId ? { sessionId } : {}) }} onClose={() => { setSkillsOpen(false); send({ type: "office:skills-changed" }); }} /> : null}
     {referencePicker ? <OfficeReferencePicker {...referencePicker} /> : null}
     {output ? <OfficeOutputDialog api={api} artifact={artifact} revision={output.revision} format={output.format} onChoose={output.choose} onCancel={() => output.choose(null)} /> : null}
     <iframe

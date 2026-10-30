@@ -5,6 +5,7 @@ import type { Documents } from "./artifacts.ts";
 import type { Store } from "./store.ts";
 import { HttpError } from "./errors.ts";
 import type { OfficeStoredAttachment } from "../../../packages/contracts/src/office-references.ts";
+import type { OfficeStoredSkill } from "../../../packages/contracts/src/office-skills.ts";
 
 type Binding = { artifactId: string; sessionId: string; owner: string; access?: DocumentAccess };
 type Running = Binding & { turnId: string; controller: AbortController; started: number; seq: number; bytes: number; timer: NodeJS.Timeout };
@@ -68,8 +69,8 @@ export class OfficeSessions {
     const end = this.hooks.items(binding.sessionId).findLast((item) => item.kind === "turnEnd" && item.requestId === requestId(turnId));
     return { turnId, sessionId: binding.sessionId, duplicate, status: end?.kind === "turnEnd" ? end.status : this.runs.has(turnId) ? "running" : "interrupted" };
   }
-  async start(binding: Binding, raw: unknown, references: DocRef[] = [], attachments: OfficeStoredAttachment[] = []): Promise<OfficeTurnReceipt> {
-    const input = startOf(raw), key = requestId(input.turnId), identity = hash([binding.sessionId, binding.artifactId, input, ...(references.length ? [references] : []), ...(attachments.length ? [attachments] : [])]);
+  async start(binding: Binding, raw: unknown, references: DocRef[] = [], attachments: OfficeStoredAttachment[] = [], skillContext?: { text: string; skills: OfficeStoredSkill[]; skillReads: OfficeStoredSkill[] }): Promise<OfficeTurnReceipt> {
+    const input = startOf(raw), key = requestId(input.turnId), identity = hash([binding.sessionId, binding.artifactId, input, ...(references.length ? [references] : []), ...(attachments.length ? [attachments] : []), ...(skillContext ? [skillContext] : [])]);
     let duplicate = false;
     const result = await this.hooks.lock(binding.sessionId, key, identity, async () => {
       if (this.closed) throw new HttpError(503, "office_closed", "앱을 종료하고 있습니다.");
@@ -87,8 +88,8 @@ export class OfficeSessions {
       const artifact = this.documents.check(binding.artifactId);
       if (this.documents.registry.list().find((view) => view.viewId === binding.access?.viewId)?.dirty) throw new HttpError(409, "office_unsaved_target", "현재 문서의 편집 내용을 먼저 저장한 뒤 AI 작업을 시작해 주세요.");
       if (artifact.revision !== input.revision || artifact.diskState !== "same") throw new HttpError(409, "revision_conflict", "문서의 판이 바뀌었습니다. 현재 편집 내용을 확인한 뒤 다시 요청해 주세요.");
-      const at = Date.now(), office = { ...source({ ...binding, turnId: input.turnId }), ...(attachments.length ? { attachments } : {}) };
-      const user: TranscriptItem = { kind: "user", id: `user:${key}`, text: input.instruction, at, office, refs: [{ artifactId: artifact.id, name: artifact.name, revision: artifact.revision, sha256: artifact.sha256, mode: "edit", selection: input.selection ?? null }, ...references.map((ref) => ({ artifactId: ref.artifactId, name: this.documents.get(ref.artifactId).name, revision: ref.revision, sha256: ref.sha256!, mode: "review" as const, selection: null }))] };
+      const at = Date.now(), office = { ...source({ ...binding, turnId: input.turnId }), ...(attachments.length ? { attachments } : {}), ...(skillContext?.skillReads.length ? { skills: skillContext.skills, skillReads: skillContext.skillReads } : {}) };
+      const user: TranscriptItem = { kind: "user", id: `user:${key}`, text: skillContext?.text ?? input.instruction, at, office, refs: [{ artifactId: artifact.id, name: artifact.name, revision: artifact.revision, sha256: artifact.sha256, mode: "edit", selection: input.selection ?? null }, ...references.map((ref) => ({ artifactId: ref.artifactId, name: this.documents.get(ref.artifactId).name, revision: ref.revision, sha256: ref.sha256!, mode: "review" as const, selection: null }))] };
       const patch = { status: "running" as const, activity: "문서 AI 작업 중", lastError: null, updatedAt: at };
       this.store.transaction(() => { this.store.saveRequest(key, session.id, identity); this.store.saveItem(session.id, user); this.store.saveSession({ ...session, ...patch }); });
       const timer = setInterval(() => {

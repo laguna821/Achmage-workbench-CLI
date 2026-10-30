@@ -1,5 +1,9 @@
 # Linux 실제 앱 검사
 
+`--only=office-skills --engines=stand-in`은 원본9종의 실제 `/`·`$` 선택 메뉴, 두 스킬의 본문/칩/해시, 원본 `read_skill_file`, live 후속 문맥, 앱/문서 재열기 후 최신 스킬 재읽기, 양식 원본 보존과 같은 세션의 새 내부 편집기 인계를 검사한다. PPT는 실제 앱/호스트를 재시작하고 Word 양식 사본을 직접 수정·저장한 뒤 후속 모델 입력까지 확인한다. `APP_E2E_OFFICE_SKILL_FORMATS=pptx,md,pdf`로 범위를 좁힐 수 있다. 제공자는 사설 로컬 SSE 대역이며 유료 모델은 호출하지 않는다.
+
+2026-10-31 최종 **86/86**, 인접 회귀 **84/84**, 전체 타입·빌드 통과. 초기 native00의55/59 실패를 보존하고 비동기 이력 적용과 EPUB 양식 훅을 보완한 후9종 전체를 재검사했다. 제안 카드 저장·현재 문서 양식 미리보기·자동 호출의 별도 인수·다른 OS를 완료한 것은 아니다. 근거 `office-skills-native-01/verification.json`; 검증 판 `research:rr-23b6877f1f5f065e3f98bd3a61ee42a4:b55ba6f1df5fb74aeef5bf9d69cae5a628ffaf0fac302c488c9168d0f6876646`.
+
 2026-10-30 CLI Node 전환 뒤 `--only=template-office` **12/12** 통과. 원본 CLI 실도구 검사는 `scripts/smoke-office-node.ts` **9/9**다. 문서 명령의 Electron 실행은 제거했지만 이 template 검사의 페이지 렌더링은 아직 기존 Electron 서비스와 전용 Xvfb를 사용한다. 연구 판: `research:rr-3064a5d54d6d8552880b86ec45668fce:8b00b7d29a2c71aa67089fc389e40b847e57d5a22406cf332f71888c75f98ab5`.
 
 2026-10-30 `--only=text-office` **30/30**: 원본 Markdown·HTML 편집기의 실제 입력·저장·원문 보존·보기 전환·재열기·충돌 거절·초안 복구·명시적 충돌 해결을 검사한다. 기존 상대 경로 그림, Markdown 원본 붙여넣기 처리→소유 자산/상대 경로 저장→재열기, HTML 원래 `base`와 로컬 CSS/일반 스크립트도 확인한다. 클립보드 입력만 synthetic File 이벤트이며 브리지·호스트·파일·표시는 실제 경로다. 물리 클립보드와 OS 파일 선택/취소 검증을 대신하지 않는다. 테스트 환경에는 Electron Office를 설치하지 않는다. [현재 통합 범위와 미완료 항목](office-integration.md)을 함께 읽는다.

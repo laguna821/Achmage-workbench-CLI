@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { OfficeHostMessage, OfficePageMessage } from "@workbench/contracts";
+import type { OfficeHostMessage, OfficePageMessage, TranscriptItem } from "@workbench/contracts";
+import type { OfficeTurnEvent } from "../../../packages/contracts/src/office-ai.ts";
 import type { AgentStreamCallbacks, AgentStreamRequest } from "../../../vendor/ieumoffice/packages/agent-core/src/types.ts";
 import { Events, type Gateway, type Init } from "../../office/src/bridge.ts";
 import { createOfficeAi } from "../../office/src/office-ai.ts";
@@ -17,15 +18,31 @@ afterEach(() => vi.useRealTimers());
 
 function fixture(initial: string | null = null, hold = false) {
   let selected = initial, token = "initial";
+  const transcripts = new Map<string, TranscriptItem[]>();
   const calls: { operation: string; token: string; body?: unknown }[] = [];
   const gateway = {
     setToken: (value: string) => { token = value; },
     aiSession: () => {
-      const captured = token;
+      const captured = token, capturedSession = selected;
       return { json: async (operation: string, body?: unknown) => {
         calls.push({ operation, token: captured, body });
-        if (operation === "history") return { workId: "work", sessionId: selected, items: [] };
-        if (operation === "turn-start") return { status: "running", duplicate: false };
+        if (operation === "history") return { workId: "work", sessionId: capturedSession, items: [...transcripts.get(capturedSession!) ?? []] };
+        if (operation === "turn-start") {
+          const input = body as { turnId: string; instruction: string; skillContext?: { text: string } };
+          const items = transcripts.get(capturedSession!) ?? [];
+          items.push({ kind: "user", id: input.turnId, at: Date.now(), text: input.skillContext?.text ?? input.instruction, office: { artifactId: "doc", turnId: input.turnId } });
+          transcripts.set(capturedSession!, items);
+          return { status: "running", duplicate: false };
+        }
+        if (operation === "turn-events") {
+          const { events } = body as { events: OfficeTurnEvent[] };
+          const items = transcripts.get(capturedSession!)!;
+          for (const event of events) if (event.kind === "assistant") {
+            const item: TranscriptItem = { kind: "assistant", id: event.id, at: Date.now(), text: event.text, streaming: event.streaming };
+            const index = items.findIndex((old) => old.id === item.id);
+            if (index >= 0) items[index] = item; else items.push(item);
+          }
+        }
         return {};
       } };
     },
@@ -99,4 +116,21 @@ it("clears an expired binding before accepting a late unrelated grant", async ()
   f.receive({ type: "office:ai-result", requestId, value: { revision: 2, token: "late", sessionId: "created", createdSession: true } });
   expect(f.failed).toHaveBeenCalledWith(expect.stringContaining("초과")); expect(f.ai.snapshot()).toBe("other");
   expect(f.model).not.toHaveBeenCalled(); expect(f.calls).toHaveLength(0);
+});
+it("keeps skill context in live model follow-ups while displaying only the request, then clears it for a new conversation", async () => {
+  const f = fixture("existing");
+  f.loop.run("짧은 요청\nCURRENT_SKILL_BODY", undefined, { text: "짧은 요청", chips: [] });
+  await vi.waitFor(() => expect(f.request()).toMatchObject({ action: "prepare" }));
+  f.reply("existing", false); await f.loop.settled;
+  expect((await f.ai.projectApi.loadChat({ projectId: "work", chatId: "existing" })).filter((item) => item.role === "user")).toEqual([expect.objectContaining({ role: "user", text: "짧은 요청" })]);
+  const previous = f.request().requestId;
+  f.loop.run("같은 대화의 후속 요청");
+  await vi.waitFor(() => expect(f.request().requestId).not.toBe(previous));
+  f.reply("existing", false); await f.loop.settled;
+  expect(JSON.stringify(f.model.mock.calls.at(-1)![0])).toContain("CURRENT_SKILL_BODY");
+  f.grant("different"); f.loop.run("새 대화");
+  await vi.waitFor(() => expect(f.request()).toMatchObject({ action: "prepare", sessionId: "different" }));
+  f.reply("different", false); await f.loop.settled;
+  expect(f.failed).not.toHaveBeenCalled(); expect(f.model).toHaveBeenCalledTimes(3);
+  expect(JSON.stringify(f.model.mock.calls.at(-1)![0])).not.toContain("CURRENT_SKILL_BODY");
 });

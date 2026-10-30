@@ -175,7 +175,7 @@ export type SendOptions = {
   omitChanges?: string[];
 };
 
-type PendingCreate = CreationRecord;
+type PendingCreate = CreationRecord<CreateTarget>;
 
 const SKIPPED_DIRS = new Set(["node_modules", ".git", ".venv", "venv", "__pycache__", "dist", "build", "target", ".next", ".cache"]);
 

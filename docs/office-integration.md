@@ -214,6 +214,18 @@ Word/PPT/Sheets/HTML/한글/XMind/EPUB의 원본 파일 버튼은 신뢰하는 �
 
 근거 `implementation-20261030/office-local-files-native-06/verification.json`; 계획 판 `research:rr-b31c38482d609cd7a58ccd2c895f8d3a:20904765e2408fe7b7a5fc13f3032ee83b50aa143d2ee86b97f4cb2b20436453`, 검증 판 `research:rr-b31c38482d609cd7a58ccd2c895f8d3a:db02746f1499818e05c808d4b0546cf18fcd6b226845afb237c13467e524dac9`. 선택기 반환값만 정확한 Tauri dialog IPC 응답으로 주입하고, 붙여넣기/드롭은 합성 File 이벤트를 사용했다. 물리 OS 선택창·클립보드·끌기, 모든 바이너리 첨부 형식, Markdown/PDF 채팅 확장, Windows/macOS 인수를 완료한 것은 아니다. 템플릿·스킬·doory와 전체 릴리스 목표는 유지한다.
 
+## 원본9종 스킬 선택과 양식 사본
+
+원본 Word·PPT·Sheets·HWPX·HTML·XMind·EPUB·Markdown·PDF의 `/`·`$` 메뉴를 기존 Workbench 스킬 보관함에 연결했다. 설치 판 우선순위·프로젝트 범위·꺼짐/수동 상태를 유지하며 스킬 본문과 허용된 UTF-8 자료만 읽는다. 파일 경로를 노출하거나 스크립트를 실행하지 않는다. 관리 버튼은 같은 Workbench 보관함을 연다.
+
+요청의 표시 문구와 스킬 칩·본문 해시를 기존 대화에 보관한다. 같은 창의 후속 모델 요청은 읽었던 본문을 유지하고, 재열기 후에는 저장된 칩으로 현재 본문을 다시 읽는다. 선택한 대화가 바뀌면 이전 문맥을 비운다. HTML·XMind·EPUB·Markdown의 비동기 이력 적용 순서를 고정 판 Vite 어댑터로 보완했다. 원본 EPUB에 빠져 있던 공통 양식 훅도 연결했다.
+
+양식 요청은 기존 CreationJournal로 원본 바이트를 고정하고 현재 작업공간에 사본을 만든다. 새 내부 탭과 같은 Workbench 대화에 선택한 스킬을 모두 인계하며, 해당 사본의 작성 창만 한 번 가져간다. 중복 요청은 같은 사본을 반환한다. 재시작 전 실행 여부가 불확실한 요청은 사본과 안내를 보존하고 자동 재전송하지 않는다. 사본 생성과 제안 카드 미리보기의 기능 감지를 분리하여 미구현 카드 저장을 성공으로 응답하지 않는다.
+
+최종 **Linux Tauri86/86**, **호스트46/46 + 프런트38/38**, 전체4프로젝트 타입 및 host/web/design/Office/native 빌드 통과. 9종의 실제 메뉴·두 스킬·읽기 도구·live 후속·재열기·최신 본문/자료·원본 보존·같은 대화의 새 사본을 확인했다. 첫 PPT는 앱과 호스트를 재시작했고 Word 양식으로 이동하여 직접 편집·저장·AI의 최신 문서 읽기까지 검사했다. 나머지8종은 문서 재열기다. 모델 제공자만 로컬 SSE 대역이며 실제 모델 품질 검사가 아니다.
+
+근거 `implementation-20261030/office-skills-native-01/verification.json`; 계획 판 `research:rr-23b6877f1f5f065e3f98bd3a61ee42a4:1aa10bd41b9d4113f5b5adc2f34e52d79a0e5c55ecd0cdf74a601b070bb3fd69`, 검증 판 `research:rr-23b6877f1f5f065e3f98bd3a61ee42a4:b55ba6f1df5fb74aeef5bf9d69cae5a628ffaf0fac302c488c9168d0f6876646`. 초기 native00의55/59 및 검사/빌드 보완 기록을 보존했다. 제안 카드 저장·현재 문서의 양식 미리보기, 자동 `use_skill`의 별도 인수, 전체 스킬/템플릿 동등성과 Windows/macOS 검증은 남는다.
+
 ## 아직 완료되지 않은 범위
 
 현재 아홉 renderer 진입점이 있다는 것은 아홉 편집기의 전 기능이 끝났다는 뜻이 아니다. Markdown·HTML의 클라우드 이미지 호스트/원격 그림 읽기, 다른 이름으로 저장, 내보내기, 루프 밖 직접 AI·검색·위키 서비스와 Markdown/PDF 채팅의 첨부 확장은 연결 중이며 미구현 동작을 성공 처리하지 않는다. 기존 Word·PPT·Sheets에도 직접 생성/교정·템플릿·출력 미연결 항목이 있다. PDF의 영구 가림 사본·다른 이름 저장·추출/합치기 파일 선택·변환/출력·서명 보관/인증서 서명·직접 AI/번역/결과 보관/노트·Windows/macOS OCR과 전체 기능 인수 검증이 남았다. 인증서 서명 읽기 코드는 연결했지만 실제 서명 검증 fixture는 아직 수행하지 않았다. XMind의 다른 이름 저장·내보내기·출력·링크 열기·문서 만들기, EPUB의 책 전체 번역/결과 보관·다른 이름 저장·외부 링크·이름 변경 동기화와 기존 설정 이행도 남았다. 공통 제공자·세션·Drive·검색·doory와 출력 서비스를 계속 연결한다.

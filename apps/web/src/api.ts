@@ -394,6 +394,7 @@ export class Api {
   adoptDisk = (artifactId: string) => this.request<Artifact>("POST", `/api/artifacts/${artifactId}/adopt-disk`);
   editorGrant = (artifactId: string) => this.request<EditorGrant>("POST", `/api/artifacts/${artifactId}/editor`);
   officeReferences = <T>(artifactId: string, token: string, action: string, input: Record<string, unknown> = {}) => this.request<T>("POST", `/api/artifacts/${artifactId}/office-references`, { ...input, token, action });
+  officeSkills = <T>(artifactId: string, token: string, action: string, input: Record<string, unknown>) => this.request<T>("POST", `/api/artifacts/${artifactId}/office-skills`, { token, action, input });
   async uploadOfficeReference(artifactId: string, token: string, file: File) {
     const response = await fetch(`/api/artifacts/${artifactId}/office-reference-upload`, {
       method: "POST", headers: { authorization: `Bearer ${this.token}`, ...this.editorHeaders(), "x-office-token": token, "x-file-name": encodeURIComponent(file.name), "content-type": "application/octet-stream" }, body: file,

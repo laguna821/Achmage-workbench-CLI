@@ -15,6 +15,7 @@ import { installToolWrappers } from "./tool-bin.ts";
 import { createEditorsServer, EditorGrants } from "./editors.ts";
 import { createOfficeSettingsServer } from "./office-settings-server.ts";
 import { OfficeAi } from "./office-ai.ts";
+import { OfficeSkills } from "./office-skills.ts";
 import { AgentBrowser } from "./browse.ts";
 import { buildTimeline } from "./timeline.ts";
 import { DocImages } from "./doc-images.ts";
@@ -128,9 +129,10 @@ manager.registerAdapter(
 );
 
 const grants = new EditorGrants();
+const officeSkills = new OfficeSkills(manager);
 const officeAi = new OfficeAi(dataDir, undefined, manager.office, {
   install: (provider) => manager.installEngineAndWait(provider === "claude-code" ? "claude" : "codex"),
-});
+}, officeSkills);
 const editors = createEditorsServer(manager.documents, grants, webDir && existsSync(webDir) ? webDir : null, officeAi);
 let editorsOrigin: string | null = null;
 let officeSettingsOrigin: string | null = null, applicationOrigin: string | null = null;
@@ -140,6 +142,7 @@ const docImages = new DocImages({ dataDir, documents: manager.documents, workCwd
 const server = createHttpServer(manager, bus, {
   token,
   officeAi,
+  officeSkills,
   officeSettingsOrigin: () => officeSettingsOrigin,
   webDir: webDir && existsSync(webDir) ? webDir : null,
   // UI errors stay on this machine, next to the state database.

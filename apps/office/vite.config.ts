@@ -4,6 +4,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig, type Alias, type Plugin } from "vite";
 import { collectModules, thirdPartyNotices } from "./notices.ts";
 import { patchPdfHistory } from "./pdf-history-patch.ts";
+import { patchOfficeSkillConversation } from "./skill-conversation-patch.ts";
 
 // IeumOffice's editor screens, built from vendor/ieumoffice (scripts/fetch-ieum.sh) and served on
 // the editors' own origin at /office/. The editors are used unchanged:
@@ -178,6 +179,9 @@ function originalOfficeConversation(): Plugin {
   return {
     name: "workbench-office-conversation", enforce: "pre",
     transform(code, id) {
+      const adapted = patchOfficeSkillConversation(code, id, ieum);
+      const skillChanged = adapted !== code;
+      code = adapted;
       if (["docs", "slides", "sheets", "hwp", "html", "mindmap", "epub"].some((app) => id === `${ieum}/apps/${app}/src/renderer/ai/files-skill.ts`)) {
         const boundary = /(export function createFilesSkill\([\s\S]*?\): AgentSkill \{)/;
         if (!boundary.test(code)) this.error("Original attachment factory changed: review the Workbench reference adapter");
@@ -209,7 +213,7 @@ function originalOfficeConversation(): Plugin {
         return `import { WorkbenchAgentLoop } from ${JSON.stringify(here("./src/office-agent.ts"))};\nimport { useSyncExternalStore as wbUseStore } from 'react';\n${code}`;
       }
       const app = ["docs", "slides", "hwp", "pdf", "markdown", "html", "mindmap", "epub"].find((name) => id === `${ieum}/apps/${name}/src/renderer/ai/AiPanel.tsx`);
-      if (!app) return null;
+      if (!app) return skillChanged ? code : null;
       if (app === "hwp") {
         // The original HWP history mapper omits attachment cards. Restore the
         // authoritative metadata just as the other original panels do.

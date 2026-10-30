@@ -18,6 +18,7 @@ import { documentAccess } from "./document-registry.ts";
 import { skillRoutes } from "./skills-http.ts";
 import { OfficeOutputs } from "./office-output.ts";
 import type { OfficeAi } from "./office-ai.ts";
+import type { OfficeSkills } from "./office-skills.ts";
 
 export const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -100,6 +101,7 @@ function parseRefs(value: unknown): DocRef[] {
 }
 
 export type HttpOptions = {
+  officeSkills?: OfficeSkills;
   officeAi?: OfficeAi;
   officeSettingsOrigin?: () => string | null;
   token: string;
@@ -649,6 +651,11 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           if (!grants || typeof token !== "string" || typeof name !== "string") throw new HttpError(401, "unauthorized", "문서 창의 첨부 권한이 없습니다.");
           const bytes = await readBody(req, 50 * 1024 * 1024);
           return sendJson(res, 200, grants.references.upload({ documents, grants, artifactId, token, access: documentAccess(req) }, bytes, decodeURIComponent(name)));
+        }
+        if (method === "POST" && parts[2] === "office-skills") {
+          const body = await readJson(req, 256_000), grants = options.editors?.grants;
+          if (!grants || !options.officeSkills || typeof body.token !== "string") throw new HttpError(401, "unauthorized", "문서 창의 양식 권한이 없습니다.");
+          return sendJson(res, 200, await options.officeSkills.action({ artifactId, token: body.token, grants }, body.action, body.input));
         }
         // Only the trusted parent can select/freeze/read references for a particular editor.
         // This route is deliberately absent from the third-party editor origin.

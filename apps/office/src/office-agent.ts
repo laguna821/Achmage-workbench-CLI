@@ -1,6 +1,7 @@
 import { AgentLoop as OriginalAgentLoop, type AgentLoopOptions, type AgentRunResult } from "../../../vendor/ieumoffice/packages/agent-core/src/loop.ts";
 import type { AgentImage, AgentMessage, AgentToolCall } from "../../../vendor/ieumoffice/packages/agent-core/src/types.ts";
 import type { OfficeTurnEvent, OfficeTurnFinish } from "../../../packages/contracts/src/office-ai.ts";
+import type { OfficeSkillContext } from "../../../packages/contracts/src/office-skills.ts";
 
 /** The renderer owns no conversation database. Every run borrows the selected Workbench session. */
 export type OfficeRun = {
@@ -11,7 +12,7 @@ export type OfficeRun = {
   finish(status: OfficeTurnFinish["status"], error?: string): Promise<void>;
 };
 export type OfficeConversationPort = {
-  begin(instruction: string, signal: AbortSignal, images?: AgentImage[]): Promise<OfficeRun>;
+  begin(instruction: string, signal: AbortSignal, images?: AgentImage[], skills?: OfficeSkillContext): Promise<OfficeRun>;
   attach(loop: WorkbenchAgentLoop<unknown>): () => void;
 };
 let conversation: OfficeConversationPort | null = null;
@@ -108,7 +109,7 @@ export class WorkbenchAgentLoop<TSnapshot = unknown> {
   get busy() { return this.pending || this.original.busy; }
   get messages() { return this.original.messages; }
   restore(messages: AgentMessage[]) { if (!this.busy) this.original.restore(messages); }
-  run(instruction: string, images?: AgentImage[]): void {
+  run(instruction: string, images?: AgentImage[], skills?: OfficeSkillContext): void {
     if (this.busy || !instruction.trim()) return;
     if (!this.port) { this.options.events?.onError?.("Workbench 문서 세션을 먼저 연결해 주세요."); return; }
     this.pending = true; this.ending = false; this.detached = false; this.fault = null;
@@ -117,7 +118,7 @@ export class WorkbenchAgentLoop<TSnapshot = unknown> {
     this.settled = new Promise((resolve) => { this.resolveSettled = resolve; });
     try { this.release = this.port.attach(this as WorkbenchAgentLoop<unknown>); }
     catch (error) { void this.finish(undefined, messageOf(error)); return; }
-    void this.port.begin(instruction, this.abort.signal, images).then((run) => {
+    void this.port.begin(instruction, this.abort.signal, images, skills).then((run) => {
       this.runState = run;
       if (this.abort.signal.aborted) { void this.finish({ text: "", cancelled: true, turnLimit: false }); return; }
       this.original.reset(); this.original.restore(run.history);

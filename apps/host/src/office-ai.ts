@@ -7,6 +7,7 @@ import { readBody, sendJson } from "./http.ts";
 import type { OfficeAiChat, OfficeAiEngine, OfficeAiStream } from "./office-ai-engine.mjs";
 import type { OfficeSessions } from "./office-sessions.ts";
 import type { OfficeAiHostActions } from "./office-settings-controls.mjs";
+import type { OfficeSkills } from "./office-skills.ts";
 
 // Original Office accepts 20 pictures of up to 5 MiB, encoded as base64, plus text.
 export const OFFICE_AI_INPUT_LIMIT = 160_000_000;
@@ -50,7 +51,9 @@ export class OfficeAi {
   private closed = false;
   private readonly sessions: OfficeSessions | undefined;
   private readonly requireSession: boolean;
-  constructor(dataDir: string, engine?: OfficeAiEngine, sessions?: OfficeSessions, hostActions?: OfficeAiHostActions) {
+  private readonly skills?: OfficeSkills;
+  constructor(dataDir: string, engine?: OfficeAiEngine, sessions?: OfficeSessions, hostActions?: OfficeAiHostActions, skills?: OfficeSkills) {
+    this.skills = skills;
     this.sessions = sessions;
     // Only explicitly injected provider fixtures can exercise the lower layer in isolation.
     // A default/production engine must never fall back to an unowned model request.
@@ -118,6 +121,7 @@ export class OfficeAi {
     return { signal: controller.signal, abort, finish: () => { response.off("close", abort); this.active.delete(key); } };
   }
   async handle(req: IncomingMessage, res: ServerResponse, url: URL, bearer: string | null, documents: Documents, grants: EditorGrants): Promise<boolean> {
+    if (await this.skills?.handle(req, res, url, bearer, grants)) return true;
     const match = /^\/api\/artifacts\/([^/]+)\/ai\/(settings|selection|statuses|stream|chat|cancel|history|turn-start|turn-events|turn-finish)$/.exec(url.pathname);
     if (!match) return false;
     const [, artifactId, operation] = match;
@@ -149,7 +153,10 @@ export class OfficeAi {
       const references = operation === "turn-start" && record(raw) && raw.referenceSnapshot !== undefined
         ? grants.references.references({ documents, grants, artifactId: artifactId!, token: bearer! }, raw.referenceSnapshot) : [];
       const attachments = operation === "turn-start" && record(raw) && raw.referenceSnapshot !== undefined ? grants.references.attachments(referenceContext, raw.referenceSnapshot) : [];
-      const value = operation === "turn-start" ? await this.sessions!.start(bound, raw, references, attachments) : operation === "turn-events" ? this.sessions!.events(bound, raw) : this.sessions!.finish(bound, raw);
+      const skillContext = operation === "turn-start" && record(raw) ? raw.skillContext : undefined;
+      if (skillContext !== undefined && !this.skills) throw new HttpError(503, "office_skills_unavailable", "스킬 보관함을 연결하지 못했습니다.");
+      const skills = skillContext === undefined ? undefined : await this.skills!.prepare({ artifactId: artifactId!, token: bearer!, grants }, skillContext);
+      const value = operation === "turn-start" ? await this.sessions!.start(bound, raw, references, attachments, skills) : operation === "turn-events" ? this.sessions!.events(bound, raw) : this.sessions!.finish(bound, raw);
       sendJson(res, 200, value); return true;
     }
     // No startup status probing, CLI process, model invocation or settings write before a request.
