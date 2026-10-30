@@ -3,7 +3,7 @@ import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Engines } from "./launch.ts";
 
-export const SCENARIOS = ["start", "panes", "pkm", "workspaces", "navigation", "tabs", "documents", "references", "templates", "template-office", "hwp", "worktrees", "terminals", "preparation", "scm", "scm-remote", "scm-conflict", "scm-hunks"] as const;
+export const SCENARIOS = ["start", "panes", "pkm", "workspaces", "navigation", "tabs", "documents", "references", "templates", "template-office", "hwp", "worktrees", "terminals", "preparation", "scm", "scm-remote", "scm-conflict", "scm-hunks", "scm-comparison"] as const;
 
 export function parseArgs(argv: string[], defaultBinary = join(homedir(), ".local/opt/achmage-workbench/achmage-workbench")) {
   const positional: string[] = [];

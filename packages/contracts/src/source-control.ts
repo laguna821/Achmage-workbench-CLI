@@ -37,6 +37,49 @@ export type ScmDiff = {
   /** Raster images only. SVG remains escaped text, never executable markup. */
   images?: { before: string | null; after: string | null };
 };
+/** Review endpoints are resolved once by the host; file requests cannot substitute OIDs. */
+export type ScmComparisonRequest = {
+  mode: "combined" | "branch" | "commit";
+  baseRef?: string;
+  headRef?: string;
+  mergeBase?: boolean;
+  parent?: number;
+};
+export type ScmComparisonPreferences = {
+  mode: ScmComparisonRequest["mode"];
+  base: string;
+  head: string;
+  merge: boolean;
+  parent: number;
+  wrap: boolean;
+};
+export type ScmComparisonFile = {
+  path: string;
+  oldPath?: string;
+  change: string;
+  conflicted: boolean;
+  untracked: boolean;
+  intermediateOnly: boolean;
+};
+export type ScmComparison = {
+  id: string;
+  workspaceId: string;
+  request: ScmComparisonRequest;
+  revision: string;
+  baseOid: string | null;
+  beforeOid: string | null;
+  headOid: string | null;
+  after: "commit" | "working";
+  parents: string[];
+  files: ScmComparisonFile[];
+  createdAt: number;
+  expiresAt: number;
+};
+export type ScmComparisonDiff = Omit<ScmDiff, "area" | "hunks" | "partialReason"> & {
+  comparisonId: string;
+  comparisonRevision: string;
+  notice?: string;
+};
 export type ScmConflictVersion = {
   kind: "missing" | "text" | "binary" | "large" | "symlink" | "gitlink" | "directory";
   oid: string | null;

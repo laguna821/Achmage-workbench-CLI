@@ -3,9 +3,13 @@ import { existsSync, lstatSync, readFileSync, readlinkSync, realpathSync } from 
 import { isAbsolute, join, relative, sep } from "node:path";
 import type { ScmFile, ScmOperation, ScmStatus, Workspace } from "@workbench/contracts";
 import { HttpError } from "./errors.ts";
-import { scmText } from "./scm-git.ts";
+import { scmGit, scmText } from "./scm-git.ts";
 
 export const scmHash = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
+export function scmPathText(raw: Buffer) {
+  try { return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(raw); }
+  catch { throw new HttpError(409, "scm_path_encoding", "UTF-8로 표현할 수 없는 파일 이름이 있습니다. 터미널에서 이름을 확인한 뒤 다시 여세요."); }
+}
 const line = (value: string) => value.replace(/\n$/, "");
 export function scmPath(path: string) {
   if (!path || path.includes("\0") || isAbsolute(path) || /^[a-z]:/i.test(path) || path.split(process.platform === "win32" ? /[\\/]/ : /\//).some((part) => part === ".." || part === "." || part.toLowerCase() === ".git")) throw new HttpError(400, "scm_path", "저장소 안의 파일 경로가 필요합니다.");
@@ -69,7 +73,7 @@ export async function readScmStatus(workspace: Workspace, sharedLinks: ReadonlyS
   const commonDir = realpathSync(line(await scmText(root, ["rev-parse", "--path-format=absolute", "--git-common-dir"])));
   const rel = relative(root, realpathSync(workspace.cwd));
   if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel) || workspace.worktree && (realpathSync(workspace.worktree.path) !== root || workspace.worktree.commonDir && realpathSync(workspace.worktree.commonDir) !== commonDir)) throw new HttpError(409, "scm_repository_changed", "작업공간의 Git 저장소가 바뀌었습니다.");
-  const before = indexStamp(gitDir), operationBefore = JSON.stringify(operationStamp(gitDir)), raw = await scmText(root, ["-c", "status.renames=true", "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"]);
+  const before = indexStamp(gitDir), operationBefore = JSON.stringify(operationStamp(gitDir)), raw = scmPathText(await scmGit(root, ["-c", "status.renames=true", "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"], { noLazyFetch: true }));
   const parsed = parseScmStatus(raw);
   if (parsed.files.length > 20_000) throw new HttpError(413, "scm_too_many_files", "변경 파일이 20,000개를 넘습니다. 불필요한 생성 파일의 Git 제외 설정을 먼저 확인하세요.");
   const stamps = [...new Set(parsed.files.flatMap((file) => file.oldPath ? [file.path, file.oldPath] : [file.path]))].sort().map((path) => scmFileStamp(root, path));

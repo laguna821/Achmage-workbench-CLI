@@ -5,12 +5,13 @@ export class ScmGitError extends Error {
   readonly code: number | null; readonly stdout: Buffer;
   constructor(code: number | null, message: string, stdout: Buffer) { super(message); this.code = code; this.stdout = stdout; }
 }
-export type GitOptions = { input?: string | Buffer; signal?: AbortSignal; accepted?: number[]; limit?: number; onOutput?: (text: string) => void };
+export type GitOptions = { input?: string | Buffer; signal?: AbortSignal; accepted?: number[]; limit?: number; onOutput?: (text: string) => void; noLazyFetch?: boolean };
 
 /** No shell, optional index refresh, textconv, pager or inherited alternate repository. */
 export function scmGit(cwd: string, args: string[], options: GitOptions = {}): Promise<Buffer> {
   const env = { ...process.env, GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never", GIT_EDITOR: "true", GIT_SEQUENCE_EDITOR: "true", GIT_MERGE_AUTOEDIT: "no" };
   for (const key of ["GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_PREFIX", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS", "GIT_LITERAL_PATHSPECS", "GIT_GLOB_PATHSPECS", "GIT_NOGLOB_PATHSPECS", "GIT_ICASE_PATHSPECS"]) delete (env as NodeJS.ProcessEnv)[key];
+  if (options.noLazyFetch) { (env as NodeJS.ProcessEnv).GIT_NO_LAZY_FETCH = "1"; (env as NodeJS.ProcessEnv).GIT_ALLOW_PROTOCOL = ""; }
   return new Promise((resolve, reject) => {
     if (options.signal?.aborted) { reject(new Error("Git 작업을 중단했습니다.")); return; }
     const child = spawn("git", ["--no-pager", "--no-optional-locks", "--literal-pathspecs", "-c", "core.quotePath=false", "-c", "core.fsmonitor=false", "-C", cwd, ...args], { env, windowsHide: true, detached: process.platform !== "win32", stdio: ["pipe", "pipe", "pipe"] });

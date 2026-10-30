@@ -30,7 +30,7 @@ import type {
   PreparationPreview,
   PreparationJob,
   ApplyPreparationRequest,
-  ScmStatus, ScmDiff, ScmArea, ScmJob, ScmRequest, ScmRemoteInventory, ScmPushPreview, ScmRemoteRequest, ScmConflict,
+  ScmStatus, ScmDiff, ScmArea, ScmJob, ScmRequest, ScmRemoteInventory, ScmPushPreview, ScmRemoteRequest, ScmConflict, ScmComparison, ScmComparisonRequest, ScmComparisonDiff, ScmComparisonPreferences,
   Schedule,
   ForkResult,
   ImportRequest,
@@ -113,6 +113,7 @@ export class ApiRequestError extends Error {
 }
 
 export class Api {
+  private readonly scmPreferenceWrites = new Map<string, Promise<ScmComparisonPreferences>>();
   private readonly token: string;
   private readonly documentAccess?: () => DocumentAccess;
   constructor(token: string, access?: () => DocumentAccess) {
@@ -211,6 +212,17 @@ export class Api {
   applyPreparation = (workspaceId: string, request: ApplyPreparationRequest) => this.request<PreparationJob>("POST", `/api/workspaces/${workspaceId}/preparations`, request);
   cancelPreparation = (id: string) => this.request<PreparationJob>("DELETE", `/api/preparations/${id}`);
   scmStatus = (id: string) => this.request<ScmStatus>("GET", `/api/workspaces/${id}/scm`);
+  scmCompare = (id: string, request: ScmComparisonRequest) => this.request<ScmComparison>("POST", `/api/workspaces/${id}/scm/compare`, request);
+  scmCompareDiff = (id: string, comparison: Pick<ScmComparison, "id" | "revision">, path: string) => this.request<ScmComparisonDiff>("POST", `/api/workspaces/${id}/scm/compare-diff`, { ...comparison, path });
+  scmComparisonPreferences = async (id: string) => {
+    // Reopening a view waits for its preceding saves, even when the old component unmounted.
+    await this.scmPreferenceWrites.get(id)?.catch(() => undefined);
+    return this.request<{ preferences: ScmComparisonPreferences | null }>("GET", `/api/workspaces/${id}/scm/compare-preferences`).then((value) => value.preferences);
+  };
+  saveScmComparisonPreferences = (id: string, preferences: ScmComparisonPreferences) => {
+    const done = (this.scmPreferenceWrites.get(id) ?? Promise.resolve()).catch(() => undefined).then(() => this.request<{ preferences: ScmComparisonPreferences }>("PUT", `/api/workspaces/${id}/scm/compare-preferences`, preferences)).then((value) => value.preferences).finally(() => { if (this.scmPreferenceWrites.get(id) === done) this.scmPreferenceWrites.delete(id); });
+    this.scmPreferenceWrites.set(id, done); return done;
+  };
   scmDiff = (id: string, path: string, area: ScmArea, expectedRevision: string) => this.request<ScmDiff>("POST", `/api/workspaces/${id}/scm/diff`, { path, area, expectedRevision });
   scmConflict = (id: string, path: string, expectedRevision: string) => this.request<ScmConflict>("POST", `/api/workspaces/${id}/scm/conflict`, { path, expectedRevision });
   scmJobs = (id: string) => this.request<{ jobs: ScmJob[] }>("GET", `/api/workspaces/${id}/scm/jobs`).then((result) => result.jobs);

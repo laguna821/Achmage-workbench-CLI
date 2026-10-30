@@ -346,6 +346,10 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         if (method === "DELETE") return sendJson(res, 200, await manager.preparation.cancel(parts[1]));
       }
       if (parts[0] === "workspaces" && parts[1] && parts[2] === "scm") {
+        if (parts.length === 4 && parts[3] === "compare-preferences" && method === "GET") return sendJson(res, 200, { preferences: manager.sourceControl.comparisonPreferences(parts[1]) });
+        if (parts.length === 4 && parts[3] === "compare-preferences" && method === "PUT") return sendJson(res, 200, { preferences: manager.sourceControl.saveComparisonPreferences(parts[1], await readJson(req, 12 * 1024) as unknown as import("@workbench/contracts").ScmComparisonPreferences) });
+        if (parts.length === 4 && parts[3] === "compare" && method === "POST") return sendJson(res, 200, await manager.sourceControl.compare(parts[1], await readJson(req) as unknown as import("@workbench/contracts").ScmComparisonRequest));
+        if (parts.length === 4 && parts[3] === "compare-diff" && method === "POST") { const body = await readJson(req); return sendJson(res, 200, await manager.sourceControl.compareDiff(parts[1], String(body.id ?? ""), String(body.revision ?? ""), String(body.path ?? ""))); }
         if (parts.length === 4 && parts[3] === "remotes" && method === "GET") return sendJson(res, 200, await manager.sourceControl.remoteInventory(parts[1]));
         if (parts.length === 4 && parts[3] === "push-preview" && method === "POST") return sendJson(res, 200, await manager.sourceControl.pushPreview(parts[1], await readJson(req) as unknown as import("@workbench/contracts").ScmRemoteRequest));
         if (parts.length === 3 && method === "GET") return sendJson(res, 200, await manager.sourceControl.status(parts[1]));
