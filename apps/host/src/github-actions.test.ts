@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -159,4 +159,88 @@ it("does not mistake an unrelated pending merge option set for the reviewed requ
   const f = fixture(); f.data.pull.draft = false;
   f.intercept(async (request) => { githubActionsWrite(request, f.data); return { status: 409, value: { status: "pending", details: { uuid: "another-merge-uuid", expected_head_sha: "c".repeat(40), merge_action: "direct_merge", merge_method: "merge", bypass_rules: true } } }; });
   const job = await f.run({ kind: "merge", method: "squash" }); expect(job.phase).toBe("uncertain"); expect(job.detail).toContain("요청과 다릅니다"); expect(f.data.action.requests).toHaveLength(1);
+});
+
+async function unknownReady(f: ReturnType<typeof fixture>) {
+  f.intercept(async (request) => { githubActionsWrite(request, f.data); throw new GitHubWriteError("lost response", false); });
+  const job = await f.run({ kind: "ready" }); f.data.pull.draft = true; f.intercept(null); return job;
+}
+it("preserves request aliases and the unknown audit while releasing the PR scope across workspaces", async () => {
+  const f = fixture(), job = await unknownReady(f), other = f.manager.createWork({ title: "other window", cwd: f.dir }).defaultWorkspaceId!;
+  const close = await f.prepare({ kind: "close" }, other); expect(() => f.actions.start(other, close.id, "other-window-before")).toThrow("이전 요청");
+  await expect(f.actions.prepareRecovery(other, job.id, (await f.context(other)).id)).rejects.toMatchObject({ status: 404 });
+  const preview = await f.actions.prepareRecovery(f.id, job.id, (await f.context()).id), acknowledged = await f.actions.acknowledgeRecovery(f.id, job.id, preview.id);
+  expect(acknowledged.effects).toEqual(preview.job.effects); expect(acknowledged.phase).toBe("uncertain");
+  await f.restart(); expect(f.actions.start(f.id, job.preview.id, job.requestId).id).toBe(job.id);
+  expect(await f.actions.acknowledgeRecovery(f.id, job.id, preview.id)).toEqual(acknowledged);
+  const repeat = await f.prepare({ kind: "ready" }, other);
+  expect(() => f.actions.start(other, repeat.id, "other-window-replay")).toThrow("같은 작업");
+  const different = await f.prepare({ kind: "close" }, other), next = f.actions.start(other, different.id, "other-window-after"); await f.actions.drain();
+  expect((await f.actions.get(other, next.id)).phase).toBe("complete"); expect(f.data.action.requests).toHaveLength(2);
+  expect((await f.actions.get(f.id, job.id)).recovery).toEqual(acknowledged.recovery);
+});
+it.each(["actor", "head", "branch", "journal", "expiry"])("rejects recovery when the reviewed %s changes", async (change) => {
+  const f = fixture(), job = await unknownReady(f), p = await f.actions.prepareRecovery(f.id, job.id, (await f.context()).id);
+  let clock: ReturnType<typeof vi.spyOn> | undefined;
+  try {
+    if (change === "actor") f.data.action.actorId = "another-account";
+    if (change === "head") f.data.pull.head.sha = "f".repeat(40);
+    if (change === "branch") git(f.dir, "switch", "-qc", "other-branch");
+    if (change === "journal") { f.data.pull.draft = false; expect((await f.actions.get(f.id, job.id, true)).phase).toBe("complete"); }
+    if (change === "expiry") clock = vi.spyOn(Date, "now").mockReturnValue(p.expiresAt + 1);
+    await expect(f.actions.acknowledgeRecovery(f.id, job.id, p.id)).rejects.toThrow();
+    expect((await f.actions.get(f.id, job.id)).recovery).toBeUndefined(); expect(f.data.action.requests).toHaveLength(1);
+  } finally { clock?.mockRestore(); }
+});
+it("refuses running and pending requests and never acknowledges during a concurrent remote check", async () => {
+  const f = fixture(), job = await unknownReady(f), p = await f.actions.prepareRecovery(f.id, job.id, (await f.context()).id);
+  const original = f.reader.json; let entered: () => void = () => {}, release: () => void = () => {};
+  const started = new Promise<void>((resolve) => { entered = resolve; }), gate = new Promise<void>((resolve) => { release = resolve; });
+  f.reader.json = async (endpoint, body) => { entered(); await gate; return original(endpoint, body); };
+  const checking = f.actions.get(f.id, job.id, true); await started;
+  try { await expect(f.actions.acknowledgeRecovery(f.id, job.id, p.id)).rejects.toMatchObject({ code: "github_recovery_busy" }); }
+  finally { release(); await checking; f.reader.json = original; }
+  const g = fixture(); g.data.pull.draft = false; const merge = await g.run({ kind: "merge", method: "squash" });
+  await expect(g.actions.prepareRecovery(g.id, merge.id, (await g.context()).id)).rejects.toMatchObject({ code: "github_recovery_busy" });
+  let sending: () => void = () => {}, finish: () => void = () => {};
+  const sent = new Promise<void>((resolve) => { sending = resolve; }), writeGate = new Promise<void>((resolve) => { finish = resolve; });
+  const h = fixture(), ctx = await h.context(), ready = await h.actions.prepare(h.id, ctx.id, { kind: "ready" });
+  h.intercept(async (request) => { sending(); await writeGate; return githubActionsWrite(request, h.data); });
+  const running = h.actions.start(h.id, ready.id, "still-sending-request"); await sent;
+  try { await expect(h.actions.prepareRecovery(h.id, running.id, ctx.id)).rejects.toMatchObject({ code: "github_recovery_busy" }); }
+  finally { finish(); await h.actions.drain(); }
+});
+it("keeps partial CI results and cross-workspace attempt leases after explicit acknowledgement", async () => {
+  const f = fixture(), extra = structuredClone(f.data.commit.statusCheckRollup.contexts.nodes[0]!); extra.databaseId = 102; extra.checkSuite!.workflowRun.databaseId = 202; f.data.commit.statusCheckRollup.contexts.nodes.push(extra);
+  f.data.action.extraChecks[102] = { id: 102, head_sha: f.data.pull.head.sha, status: "completed", conclusion: "failure" };
+  f.data.action.extraRuns[202] = { id: 202, run_attempt: 3, head_sha: f.data.pull.head.sha, repository: f.data.repo, status: "completed", conclusion: "failure" };
+  f.intercept(async (request) => { if (request.endpoint.includes("/202/")) { f.data.action.requests.push(request); throw new GitHubWriteError("lost response", false); } return githubActionsWrite(request, f.data); });
+  const job = await f.run({ kind: "rerun", failedOnly: true, checks: [] }); expect(job.phase).toBe("partial");
+  const preview = await f.actions.prepareRecovery(f.id, job.id, (await f.context()).id), result = await f.actions.acknowledgeRecovery(f.id, job.id, preview.id);
+  expect(result.effects.map((e) => e.phase)).toEqual(["complete", "uncertain"]); expect(result.recovery?.effects).toEqual(result.effects);
+  await f.restart(); const other = f.manager.createWork({ title: "same CI", cwd: f.dir }).defaultWorkspaceId!, duplicate = await f.prepare({ kind: "rerun", failedOnly: false, checks: [] }, other);
+  expect(() => f.actions.start(other, duplicate.id, "no-ci-replay")).toThrow("같은 검사 회차");
+  f.intercept(null); expect((await f.run({ kind: "ready" })).phase).toBe("complete"); expect(f.data.action.requests).toHaveLength(3);
+});
+it("does not replay an unknown merge by changing its method or scheduling mode", async () => {
+  const f = fixture(); f.data.pull.draft = false;
+  f.intercept(async (request) => { f.data.action.requests.push(request); throw new GitHubWriteError("lost response", false); });
+  const job = await f.run({ kind: "merge", method: "squash" }), preview = await f.actions.prepareRecovery(f.id, job.id, (await f.context()).id);
+  await f.actions.acknowledgeRecovery(f.id, job.id, preview.id);
+  for (const action of [{ kind: "merge", method: "merge" }, { kind: "auto-enable", method: "squash" }] as const) {
+    const other = await f.prepare(action); expect(() => f.actions.start(f.id, other.id, `no-merge-replay-${action.kind}`)).toThrow("같은 작업");
+  }
+  expect(f.data.action.requests).toHaveLength(1);
+});
+it("can retain an old unknown CI attempt after the PR head advances without relaxing preview freshness", async () => {
+  const f = fixture(), oldHead = f.data.pull.head.sha, original = f.reader.json;
+  const check = await original("repos/fixture/project/check-runs/101"), run = await original("repos/fixture/project/actions/runs/201");
+  f.intercept(async (request) => { f.data.action.requests.push(request); throw new GitHubWriteError("lost response", false); });
+  const job = await f.run({ kind: "rerun", failedOnly: true, checks: [] });
+  f.reader.json = async (endpoint, body) => endpoint.endsWith("/check-runs/101") ? structuredClone(check) : endpoint.endsWith("/actions/runs/201") ? structuredClone(run) : original(endpoint, body);
+  const newHead = "e".repeat(40); f.data.pull.head.sha = newHead; f.data.action.remoteHead = newHead; f.data.commit.oid = newHead; f.data.commit.statusCheckRollup.contexts.nodes = [];
+  const preview = await f.actions.prepareRecovery(f.id, job.id, (await f.context()).id);
+  expect(preview.headOid).toBe(newHead); expect(preview.job.preview.headOid).toBe(oldHead);
+  const saved = await f.actions.acknowledgeRecovery(f.id, job.id, preview.id);
+  expect(saved.phase).toBe("uncertain"); expect(saved.recovery?.headOid).toBe(newHead); expect(saved.preview.headOid).toBe(oldHead); expect(f.data.action.requests).toHaveLength(1);
 });

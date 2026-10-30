@@ -49,10 +49,42 @@ it("posts an exact conversation body, deduplicates requests and recovers a lost 
   await f.actions.drain(); expect((await f.actions.get(f.id, job.id)).phase).toBe("uncertain"); await f.restart();
   const recovered = await f.actions.get(f.id, job.id, true); expect(recovered.phase).toBe("complete"); expect(f.data.action.requests).toHaveLength(1); expect(f.data.discussion.comments.at(-1)?.body).toBe("한글\n$(literal) @file"); expect(recovered.detail).toContain("다른 게시일 가능성");
 });
+it.each(["edited", "deleted"])("acknowledges an unmatched %s comment without replay and permits different later work", async (change) => {
+  const f = fixture();
+  f.intercept(async (r) => { githubDiscussionWrite(r, f.data); throw new GitHubWriteError("response lost", false); });
+  const job = await f.run({ kind: "comment", body: "원래 보낸 의견" });
+  if (change === "edited") f.data.discussion.comments.at(-1)!.body = "외부에서 바꾼 의견";
+  else f.data.discussion.comments.pop();
+  await f.restart();
+  expect((await f.actions.get(f.id, job.id, true)).phase).toBe("uncertain");
+  const next = await f.prepare({ kind: "comment", body: "다른 후속 의견" });
+  expect(() => f.actions.start(f.id, next.id, "follow-up-after-unknown")).toThrow("이 PR의 이전 요청 결과");
+  expect(f.data.action.requests).toHaveLength(1);
+  const { context } = await f.load(), preview = await f.actions.prepareRecovery(f.id, job.id, context.id);
+  expect(preview.job.preview.action).toMatchObject({ operation: { kind: "comment", body: "원래 보낸 의견" } });
+  const acknowledged = await f.actions.acknowledgeRecovery(f.id, job.id, preview.id);
+  expect(acknowledged.phase).toBe("uncertain"); expect(acknowledged.effects).toEqual(preview.job.effects);
+  expect(acknowledged.recovery).toMatchObject({ previewId: preview.id, actor: "worker", effects: preview.job.effects });
+  await f.restart(); expect(await f.actions.acknowledgeRecovery(f.id, job.id, preview.id)).toEqual(acknowledged);
+  const retry = await f.prepare({ kind: "comment", body: "원래 보낸 의견" });
+  try { expect(f.actions.start(f.id, retry.id, "do-not-replay-original").id).toBe(job.id); } catch (error) { expect(error).toMatchObject({ code: "github_unknown_replay" }); }
+  expect(f.data.action.requests).toHaveLength(1);
+  f.intercept(null); expect((await f.run({ kind: "comment", body: "다른 후속 의견" })).phase).toBe("complete");
+  expect(f.data.action.requests).toHaveLength(2); expect((await f.actions.get(f.id, job.id)).recovery).toEqual(acknowledged.recovery);
+});
 it("binds successful acknowledgements and replies from a child to the real thread root", async () => {
   const f = fixture(), s = await f.load(), child = s.discussion.comments.find((c) => c.body.includes("이 답글"))!;
   const index = readFileSync(join(f.dir, ".git/index")), job = await f.run({ kind: "reply", target: child.id, body: "답변입니다." }, s);
   expect(job.phase).toBe("complete"); expect(f.data.action.requests[0]!.endpoint).toBe("repos/fixture/project/pulls/7/comments/501/replies"); expect(job.detail).not.toContain("다른 게시일 가능성"); expect(readFileSync(join(f.dir, ".git/index"))).toEqual(index); expect(readFileSync(join(f.dir, "code.txt"), "utf8")).toBe("local\n");
+});
+it("does not replay an unknown reply through a different comment in the same thread", async () => {
+  const f = fixture(), s = await f.load(), child = s.discussion.comments.find((c) => c.body.includes("이 답글"))!, root = s.discussion.comments.find((c) => c.kind === "inline" && c.id !== child.id)!;
+  f.intercept(async (r) => { githubDiscussionWrite(r, f.data); throw new GitHubWriteError("response lost", false); });
+  const job = await f.run({ kind: "reply", target: child.id, body: "같은 스레드 답변" }, s);
+  f.data.discussion.threads[0]!.comments.at(-1).body = "외부에서 고친 답변";
+  const p = await f.actions.prepareRecovery(f.id, job.id, (await f.load()).context.id); await f.actions.acknowledgeRecovery(f.id, job.id, p.id);
+  const retry = await f.prepare({ kind: "reply", target: root.id, body: "같은 스레드 답변" });
+  expect(() => f.actions.start(f.id, retry.id, "same-root-reply-again")).toThrow("같은 작업"); expect(f.data.action.requests).toHaveLength(1);
 });
 it("rejects changed comments, cross-PR IDs, changed actors and lost permissions before transmission", async () => {
   const f = fixture(), s = await f.load(), own = s.discussion.comments.find((c) => c.kind === "conversation")!;

@@ -38,4 +38,8 @@
 .scm-gh-inline-range input { width: 85px; }
 .scm-gh-inline-editor .scm-lines { min-width: 0; max-height: 380px; overflow: auto; margin-top: 8px; }
 .scm-gh-discussion-preview { border-color: var(--accent); }
+.scm-gh-recovery-preview { border: 1px solid var(--accent); border-radius: 6px; padding: 12px; margin: 10px 0; }
+.scm-gh-recovery-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow: auto; }
+.scm-gh-recovery-preview label { display: block; margin: 12px 0; }
+.scm-gh-recovery-record { color: var(--muted); }
 .scm-gh-reactions [aria-pressed="true"] { background: var(--hover); outline: 1px solid var(--accent); }

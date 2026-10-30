@@ -29,6 +29,8 @@ node scripts/app-e2e/run.ts apps/desktop/src-tauri/target/debug/achmage-workbenc
 `github-discussion`은 실제 입력으로 댓글·자식 답글 회신·반응·해결 표시, 이전 행 범위의 묶음 리뷰, 사용자/팀 검토 요청·선택 취소, 기존 작성 중인 리뷰 제출을 검증한다. 같은 작업공간에 새 에이전트 대화를 만들고 선택한 댓글·실패 검사·고정 SHA가 실제 transcript 요청과 일치하는지 확인한다. SQLite 초안과 전달 기록을 새 포트에서 복원하고, 원격 게시 직후 응답 유실을 주입해 재시작 후 읽기만으로 복구하며 중복 게시를 검사한다. Git 파일·인덱스·브랜치와 페이지 예외도 확인한다. 초기 검증은 `pending` 중간 단계를 완료로 기다리지 않아 14/19였고, 최종 상태와 렌더링을 기다리도록 고쳤다. 2026-10-30 최종 Markdown 빌드의 `--only=github-actions,github-discussion`은 **32/32** 통과. 실제 Git/SQLite/gh 프로세스를 쓰되 외부 API 쓰기만 격리된 상태형 fixture이며 공개 게시 성공으로 해석하지 않는다. 확정 연구 판: `research:rr-bed06bf2c4e723d4ba17aed6afb23f6f:de171b50adee72d39e2d44bc070878772919a074463355cfb33aaf5af687f2e8`.
 
 
+G3e4에서 `github-discussion`에 응답 유실 뒤 댓글 외부 수정 → 새 포트 재시작 → 미확정 원문 확인 → 명시적 후속 작업 허용 → 동일 댓글 재게시 거절 → 다른 댓글 게시 → 재시작 후 미확정 이력/원래 요청 ID 보존을 추가했다. PR 작업의 공통 실행 기록에서도 같은 이력이 보여야 한다. 2026-10-30 `--only=github-actions,github-discussion` **38/38** 통과. 실제 화면 `24-github-unknown-preview.png`, `24-github-unknown-retained.png`도 검토했다. 확정 연구 판: `research:rr-f80fe48d657e0cffeec0937f3a24bcc0:449b450f93d071587fc7c0eab73567145e1a106298c7a518651039e1fb6acb9c`.
+
 `panes`는 네 칸 생성, 실제 드래그와 화면 노드 유지, 상하 경계선 키보드 조절, 좁은 창 전환, 종료 후 새 포트 복원과 칸 닫기를 검증한다. 재시작은 같은 임시 프로필을 사용하고 stage 종료 시 정리한다. 기본 gateway는 포트를 재사용하지만 이 검사는 `WORKBENCH_PORT=0`으로 새 포트에서도 복원되는지 확인한다.
 
 `pkm`은 폴더 메뉴에서 템플릿 입력/저장, 하위 분류 프로젝트의 노트 생성, 로컬 표지 표시, 기존 노트 원문 보존을 검증한다. 이어 `.base`의 보기별 미리보기/미지원 조건 거절, 필터 적용·새로고침 복원, 내보내기 미리보기·저장 API·실제 파일 재가져오기를 검사한다. OS 저장 대화상자의 위치 선택은 이 검사에 포함되지 않는다. WebKitWebDriver의 일괄 `sendKeys`는 LF/비BMP 문자 입력을 누락하므로 줄별 입력과 실제 Enter 키를 사용한다. 이모지/CRLF 파일 보존은 호스트 회귀에서 검사한다.

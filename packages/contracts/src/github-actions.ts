@@ -33,4 +33,9 @@ export type GitHubActionJob = {
   id: string; requestId: string; workspaceId: string; preview: GitHubActionPreview;
   phase: "running" | "pending" | "complete" | "partial" | "failed" | "uncertain" | "changed";
   effects: GitHubEffect[]; detail: string; createdAt: number; updatedAt: number;
+  recovery?: { previewId: string; acknowledgedAt: number; actor: string; headOid: string; effects: GitHubEffect[] };
+};
+export type GitHubRecoveryPreview = {
+  id: string; expiresAt: number; job: GitHubActionJob; actor: string;
+  repo: string; number: number | null; headOid: string; baseBranch: string; notices: string[];
 };

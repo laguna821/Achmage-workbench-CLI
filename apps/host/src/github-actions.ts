@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { GitHubActionContext, GitHubActionJob, GitHubActionPreview, GitHubDraft, GitHubEffect, GitHubMergeMethod, GitHubView } from "@workbench/contracts";
+import type { GitHubActionContext, GitHubActionInput, GitHubActionJob, GitHubActionPreview, GitHubDraft, GitHubEffect, GitHubMergeMethod, GitHubRecoveryPreview, GitHubView } from "@workbench/contracts";
 import type { Store } from "./store.ts";
 import type { GitHubReviews } from "./github.ts";
 import { GitHubWriteError, githubRedact, type GitHubWrite, type GitHubWriter } from "./github-reader.ts";
@@ -20,12 +20,20 @@ const fail = (message: string, code = "github_action_changed") => new HttpError(
 const errorText = (reason: unknown) => githubRedact(reason instanceof Error ? reason.message : String(reason)).slice(0, 2000);
 const failedConclusions = new Set(["failure", "cancelled", "timed_out", "startup_failure"]);
 const writable = new Set(["WRITE", "MAINTAIN", "ADMIN"]);
+const inFlight = new Set<GitHubEffect["phase"]>(["prepared", "sending", "accepted", "pending"]);
+// A new view/baseline must not turn acknowledgement of an unknown result into a replay.
+const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
+  : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, canonical(item)])) : value;
+const replayAction = (action: GitHubActionInput, discussion?: DiscussionPlan): unknown => action.kind === "discussion" ? discussion ? canonical({ kind: action.operation.kind, method: discussion.request.method, endpoint: discussion.request.endpoint, input: discussion.request.endpoint === "graphql" ? object(object(discussion.request.body).variables).input : discussion.request.body }) : action.operation
+  : ["merge", "enqueue", "auto-enable"].includes(action.kind) ? { kind: "merge-or-schedule" }
+  : action.kind === "create" ? { kind: "create", baseBranch: action.baseBranch } : action;
 
 /** All externally visible effects are journaled before transmission. Recovery only reads. */
 export class GitHubActions {
   readonly discussions: GitHubDiscussions;
   private store: Store; private reviews: GitHubReviews; private writer: GitHubWriter; private assertActive: (workspaceId: string) => void;
   private contexts = new Map<string, Snapshot>(); private previews = new Map<string, Prepared>();
+  private recoveries = new Map<string, { data: GitHubRecoveryPreview; snapshot: Snapshot; journal: string }>();
   private running = new Map<string, Promise<void>>(); private reconciling = new Map<string, Promise<GitHubActionJob>>();
   private stopped = false;
   constructor(store: Store, reviews: GitHubReviews, assertActive: (workspaceId: string) => void, writer = reviews.reader as typeof reviews.reader & GitHubWriter) {
@@ -54,6 +62,46 @@ export class GitHubActions {
     this.store.setMeta(prefix + record.job.id, JSON.stringify(record)); return copy(record.job);
   }
   list(workspaceId: string) { this.active(workspaceId); return this.records().filter((item) => item.job.workspaceId === workspaceId).sort((a, b) => b.job.createdAt - a.job.createdAt).slice(0, 100).map((item) => item.job); }
+  private blocks(record: Record) { return record.job.effects.some((effect) => inFlight.has(effect.phase) || effect.phase === "uncertain" && !record.job.recovery?.effects.some((old) => old.id === effect.id && old.phase === "uncertain")); }
+  private recoverable(record: Record) {
+    if (this.running.has(record.job.id) || this.reconciling.has(record.job.id) || record.job.effects.some((effect) => inFlight.has(effect.phase))) throw fail("전송 중이거나 원격 처리 중인 요청은 해제할 수 없습니다.", "github_recovery_busy");
+    if (record.job.recovery || !record.job.effects.some((effect) => effect.phase === "uncertain")) throw fail("아직 확인되지 않은 요청만 검토할 수 있습니다. 실행 기록을 다시 확인하세요.", "github_recovery_changed");
+  }
+  private recoveryScope(record: Record, current: Snapshot) {
+    const old = record.snapshot, a = old.data, b = current.data;
+    if (old.actorId !== current.actorId || old.repoId !== current.repoId || old.headRepoId !== current.headRepoId || old.pullId !== current.pullId || a.number !== b.number || a.headBranch !== b.headBranch) throw fail("미확정 요청의 계정·저장소·PR·브랜치와 현재 화면이 다릅니다. 원래 대상을 선택하고 원격 결과를 확인하세요.", "github_recovery_changed");
+  }
+  async prepareRecovery(workspaceId: string, id: string, contextId: string) {
+    const snapshot = this.context(workspaceId, contextId);
+    this.recoverable(this.record(workspaceId, id));
+    await this.get(workspaceId, id, true);
+    await this.current(snapshot);
+    const record = this.record(workspaceId, id); this.recoverable(record); this.recoveryScope(record, snapshot);
+    const data: GitHubRecoveryPreview = {
+      id: randomUUID(), expiresAt: Date.now() + 5 * 60000, job: copy(record.job), actor: snapshot.data.actor,
+      repo: snapshot.data.repo, number: snapshot.data.number, headOid: snapshot.data.headOid, baseBranch: snapshot.data.baseBranch,
+      notices: ["이 요청의 성공·실패는 확정되지 않았으며 나중에 원격에 반영될 수 있습니다.", "원래 요청·미확정 결과를 보존하고 다른 작업만 허용합니다. 같은 요청과 같은 CI 회차를 다시 보내지 않습니다.", "이 확인은 앱의 실행 기록만 바꿉니다. GitHub 요청을 취소하거나 다시 실행하지 않습니다."],
+    };
+    this.remember(this.recoveries, data.id, { data, snapshot: copy(snapshot), journal: hash(record.job) }); return copy(data);
+  }
+  async acknowledgeRecovery(workspaceId: string, id: string, previewId: string) {
+    this.active(workspaceId); const before = this.record(workspaceId, id);
+    if (before.job.recovery?.previewId === previewId) return copy(before.job);
+    const preview = this.recoveries.get(previewId);
+    if (!preview || preview.data.job.id !== id || preview.data.job.workspaceId !== workspaceId || preview.data.expiresAt < Date.now()) throw fail("미확정 기록의 검토가 만료되었습니다. 다시 확인하세요.", "github_recovery_changed");
+    this.recoverable(before);
+    await this.current(preview.snapshot);
+    await this.reviews.actionScope(workspaceId, preview.snapshot.data.viewId, preview.snapshot.data.viewRevision);
+    this.active(workspaceId);
+    return this.store.transaction(() => {
+      const record = this.record(workspaceId, id);
+      if (record.job.recovery?.previewId === previewId) return copy(record.job);
+      this.recoverable(record); this.recoveryScope(record, preview.snapshot);
+      if (hash(record.job) !== preview.journal || preview.data.expiresAt < Date.now()) throw fail("검토 중 실행 기록이 바뀌었습니다. 원격 결과와 미확정 내용을 다시 확인하세요.", "github_recovery_changed");
+      record.job.recovery = { previewId, acknowledgedAt: Date.now(), actor: preview.data.actor, headOid: preview.data.headOid, effects: copy(record.job.effects) };
+      return this.save(record);
+    });
+  }
   private remember<T>(map: Map<string, T>, id: string, value: T) { map.set(id, value); while (map.size > 64) map.delete(map.keys().next().value!); }
   private context(workspaceId: string, id: string) {
     this.active(workspaceId); const snapshot = this.contexts.get(id);
@@ -179,7 +227,8 @@ export class GitHubActions {
     const record = this.store.transaction(() => {
       const records = this.records(), same = records.find((item) => item.fingerprint === fingerprint && !["failed", "changed"].includes(item.job.phase));
       if (same) { if (same.job.workspaceId !== workspaceId) throw fail("다른 작업공간에서 같은 요청을 이미 전송했습니다. 원격 결과를 확인하세요.", "github_duplicate"); this.store.setMeta(requestKey, JSON.stringify({ workspaceId, previewId, id: same.job.id })); return same; }
-      if (records.some((item) => item.scope === scope && item.job.effects.some((effect) => ["prepared", "sending", "pending", "uncertain"].includes(effect.phase)))) throw fail("이 PR의 이전 요청 결과를 먼저 확인하세요.", "github_action_busy");
+      if (records.some((item) => item.scope === scope && this.blocks(item))) throw fail("이 PR의 이전 요청 결과를 먼저 확인하세요. 대조할 수 없는 미확정 요청은 실행 기록에서 검토할 수 있습니다.", "github_action_busy");
+      if (records.some((item) => item.scope === scope && item.snapshot.data.headOid === d.headOid && item.job.effects.some((effect) => effect.phase === "uncertain") && hash(replayAction(item.job.preview.action, item.discussion)) === hash(replayAction(p.data.action, p.discussion)))) throw fail("미확정 요청과 같은 작업은 다시 보내지 않습니다. 원격 결과를 먼저 확인하세요.", "github_unknown_replay");
       for (const item of p.ci) if (records.some((record) => record.ci.some((old) => old.lease === item.lease && !["failed", "changed"].includes(record.job.effects.find((effect) => effect.id === old.id)?.phase ?? "uncertain")))) throw fail("같은 검사 회차의 재실행을 이미 요청했습니다. 새 회차를 확인한 뒤 진행하세요.", "github_ci_duplicate");
       const now = Date.now(), job: GitHubActionJob = { id: randomUUID(), requestId, workspaceId, preview: copy(p.data), phase: "running", effects: p.data.effects.map((label, i) => ({ id: p.ci[i]?.id ?? randomUUID(), label, phase: "prepared", detail: "전송 준비" })), detail: "", createdAt: now, updatedAt: now };
       const next: Record = { job, snapshot: copy(p.snapshot), ci: copy(p.ci), scope, fingerprint, asyncIds: {}, existingNumbers: p.existingNumbers, createdNumber: null, ...(p.discussion ? { discussion: copy(p.discussion) } : {}) }; this.save(next); this.store.setMeta(requestKey, JSON.stringify({ workspaceId, previewId, id: job.id })); return next;
@@ -310,7 +359,7 @@ export class GitHubActions {
   stop() {
     this.stopped = true;
     for (const id of this.running.keys()) { const raw = this.store.getMeta(prefix + id); if (!raw) continue; const record: Record = JSON.parse(raw); for (const effect of record.job.effects) if (["prepared", "sending", "accepted"].includes(effect.phase)) { effect.phase = effect.phase === "prepared" ? "failed" : "uncertain"; effect.detail = "앱을 종료했습니다. 전송한 요청은 원격 상태 확인으로 복구합니다."; } this.save(record); }
-    this.contexts.clear(); this.previews.clear();
+    this.contexts.clear(); this.previews.clear(); this.recoveries.clear();
   }
   async drain() { await Promise.allSettled([...this.running.values(), ...this.reconciling.values()]); }
 }

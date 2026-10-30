@@ -1,6 +1,6 @@
 import type {
   GitHubBinding, GitHubSelection, GitHubView, GitHubCheckDetails, GitHubLog,
-  GitHubActionContext, GitHubActionPreview, GitHubActionInput, GitHubActionJob, GitHubDraft, GitHubTemplate,
+  GitHubActionContext, GitHubActionPreview, GitHubActionInput, GitHubActionJob, GitHubDraft, GitHubTemplate, GitHubRecoveryPreview,
   GitHubDiscussionView, GitHubDiscussionDraft, GitHubFeedbackList, GitHubFeedbackRequest, GitHubFeedbackBatch,
   ScmReviewList, ScmReviewCreate, ScmReviewEdit, ScmReviewNote, ScmReviewBatchRequest, ScmReviewBatch,
   AchmageBrief,
@@ -223,6 +223,8 @@ export class Api {
   githubActionStart = (id: string, previewId: string, requestId: string) => this.request<GitHubActionJob>("POST", `/api/workspaces/${id}/scm/github-actions`, { previewId, requestId });
   githubActionJobs = (id: string) => this.request<GitHubActionJob[]>("GET", `/api/workspaces/${id}/scm/github-actions`);
   githubActionJob = (id: string, jobId: string, reconcile = false) => this.request<GitHubActionJob>("GET", `/api/workspaces/${id}/scm/github-actions/${jobId}${reconcile ? "?reconcile=true" : ""}`);
+  githubRecoveryPreview = (id: string, jobId: string, contextId: string) => this.request<GitHubRecoveryPreview>("POST", `/api/workspaces/${id}/scm/github-actions/${jobId}/recovery-preview`, { contextId });
+  githubRecoveryAcknowledge = (id: string, jobId: string, previewId: string) => this.request<GitHubActionJob>("POST", `/api/workspaces/${id}/scm/github-actions/${jobId}/recovery`, { previewId });
   githubDraft = (id: string, contextId: string) => this.request<GitHubDraft>("POST", `/api/workspaces/${id}/scm/github-actions/draft`, { contextId });
   githubDraftSave = (id: string, contextId: string, draft: GitHubDraft) => this.request<GitHubDraft>("PUT", `/api/workspaces/${id}/scm/github-actions/draft`, { contextId, draft });
   githubDiscussion = (id: string, view: Pick<GitHubView, "id" | "revision">) => this.request<GitHubDiscussionView>("POST", `/api/workspaces/${id}/scm/github-discussion`, { id: view.id, revision: view.revision });

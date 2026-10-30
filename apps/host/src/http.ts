@@ -354,6 +354,8 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           if (parts.length === 5 && parts[4] === "preview" && method === "POST") { const body = await readJson(req, 512 * 1024); return sendJson(res, 200, await manager.githubActions.prepare(parts[1], String(body.contextId ?? ""), body.action)); }
           if (parts.length === 5 && parts[4] === "draft" && method === "POST") { const body = await readJson(req, 4096); return sendJson(res, 200, manager.githubActions.draft(parts[1], String(body.contextId ?? ""))); }
           if (parts.length === 5 && parts[4] === "draft" && method === "PUT") { const body = await readJson(req, 80 * 1024); return sendJson(res, 200, manager.githubActions.saveDraft(parts[1], String(body.contextId ?? ""), body.draft as import("@workbench/contracts").GitHubDraft)); }
+          if (parts.length === 6 && parts[5] === "recovery-preview" && method === "POST") { const body = await readJson(req, 4096); return sendJson(res, 200, await manager.githubActions.prepareRecovery(parts[1], parts[4]!, String(body.contextId ?? ""))); }
+          if (parts.length === 6 && parts[5] === "recovery" && method === "POST") { const body = await readJson(req, 4096); return sendJson(res, 200, await manager.githubActions.acknowledgeRecovery(parts[1], parts[4]!, String(body.previewId ?? ""))); }
           if (parts.length === 5 && method === "GET") return sendJson(res, 200, await manager.githubActions.get(parts[1], parts[4]!, url.searchParams.get("reconcile") === "true"));
         }
         if (parts[3] === "github-discussion") {

@@ -62,7 +62,28 @@ export async function githubDiscussionScenario(ctx: Ctx, launch: Omit<LaunchOpti
     const count = remote().action.requests.length, errors = await pageErrors(wd); await click(".scm-close"); await ctx.app.close(); ctx.app = await ctx.stage.launch({ ...launch, name: "github-discussion-recovery", freshPort: true, window: { width: 1500, height: 1100 } }); wd = ctx.app.wd; await wd.waitFor(".workspace-trigger"); await installProbe(wd); await open(); await click('.scm-gh-discussion-job[data-phase="uncertain"] .scm-gh-discussion-reconcile');
     const recovered = await until(async () => (await jobs()).find((j) => j.id === uncertain.id)?.phase === "complete");
     ctx.report.check(S, "재시작 후 게시 결과만 조회·중복 댓글 없음·전달 이력 보존", recovered && remote().action.requests.length === count && (await feedback()).batches[0]?.text === batch.text, undefined, await shot(ctx, "24-github-discussion-recovered.png"));
+    await refresh(); await click(".scm-gh-new-comment"); await replace(".scm-gh-discussion-body", "외부 수정 뒤 미확정으로 보존할 의견"); await click(".scm-gh-discussion-prepare"); await wd.waitFor(".scm-gh-discussion-preview");
+    const loseAgain = remote(); loseAgain.discussion.loseNext = true; writeFileSync(path, JSON.stringify(loseAgain)); const unmatched = await execute();
+    const changed = remote(); changed.discussion.comments.at(-1)!.body = "GitHub에서 외부 수정된 의견"; writeFileSync(path, JSON.stringify(changed)); const beforeRecovery = changed.action.requests.length;
+    const recoveryErrors = await pageErrors(wd); await click(".scm-close"); await ctx.app.close(); ctx.app = await ctx.stage.launch({ ...launch, name: "github-unknown-review", freshPort: true, window: { width: 1500, height: 1100 } }); wd = ctx.app.wd; await wd.waitFor(".workspace-trigger"); await installProbe(wd); await open();
+    await click('.scm-gh-discussion-job[data-phase="uncertain"] .scm-gh-recovery-open'); await wd.waitFor(".scm-gh-recovery-preview");
+    ctx.report.check(S, "대조 불가 미확정 요청의 원문·대상·후속 반영 가능성을 실제 화면에서 확인", await wd.execute<boolean>('const p=document.querySelector(".scm-gh-recovery-preview"); return p.textContent.includes("외부 수정 뒤 미확정으로 보존할 의견") && p.textContent.includes("fixture/project #7") && p.textContent.includes("나중에 원격에 반영") && p.querySelector(".scm-gh-recovery-confirm").disabled;'), undefined, await shot(ctx, "24-github-unknown-preview.png"));
+    await click(".scm-gh-recovery-check"); await click(".scm-gh-recovery-confirm");
+    const acknowledged = await until(async () => !!(await jobs()).find((j) => j.id === unmatched.id)?.recovery); await wd.waitFor(".scm-gh-recovery-record");
+    const original = (await jobs()).find((j) => j.id === unmatched.id)!;
+    ctx.report.check(S, "명시적 확인은 미확정 결과를 보존하고 원격 재전송 없음", acknowledged && original.phase === "uncertain" && original.recovery?.effects[0]?.phase === "uncertain" && remote().action.requests.length === beforeRecovery);
+    await refresh(); await click(".scm-gh-new-comment"); await replace(".scm-gh-discussion-body", "외부 수정 뒤 미확정으로 보존할 의견"); await click(".scm-gh-discussion-prepare"); await wd.waitFor(".scm-gh-discussion-preview"); await click(".scm-gh-discussion-execute");
+    const duplicateBlocked = await until(async () => wd.execute<boolean>('return document.querySelector(".scm-gh-discussion")?.textContent.includes("미확정 요청과 같은 작업") ?? false;'));
+    ctx.report.check(S, "확인 뒤에도 같은 미확정 댓글 재게시 차단", duplicateBlocked && remote().action.requests.length === beforeRecovery);
+    await click(".scm-gh-new-comment"); await replace(".scm-gh-discussion-body", "미확정 기록을 보존한 다른 후속 의견"); await click(".scm-gh-discussion-prepare"); const followUp = await execute();
+    ctx.report.check(S, "다른 후속 댓글은 원래 기록과 분리해 정상 게시", followUp.phase === "complete" && followUp.id !== unmatched.id && remote().action.requests.length === beforeRecovery + 1);
+    const afterRecoveryErrors = await pageErrors(wd); await click(".scm-close"); await ctx.app.close(); ctx.app = await ctx.stage.launch({ ...launch, name: "github-unknown-ack-restart", freshPort: true, window: { width: 1500, height: 1100 } }); wd = ctx.app.wd; await wd.waitFor(".workspace-trigger"); await installProbe(wd); await open(); await wd.waitFor(".scm-gh-recovery-record");
+    const restored = (await jobs()).find((j) => j.id === unmatched.id)!, alias = await ctx.app.api<GitHubActionJob>("POST", `/api/workspaces/${id}/scm/github-actions`, { previewId: unmatched.preview.id, requestId: unmatched.requestId });
+    await wd.execute('document.querySelector(".scm-gh-recovery-record").scrollIntoView({block:"center"});');
+    ctx.report.check(S, "다시 시작해도 원문·미확정 확인 이력·원래 요청 ID 보존", restored.phase === "uncertain" && JSON.stringify(restored.recovery) === JSON.stringify(original.recovery) && alias.id === unmatched.id && remote().action.requests.length === beforeRecovery + 1, undefined, await shot(ctx, "24-github-unknown-retained.png"));
+    await click(".scm-gh-history"); await wd.waitFor('.scm-gh-action-job[data-phase="uncertain"] .scm-gh-recovery-record');
+    ctx.report.check(S, "PR 작업의 공통 실행 기록에서도 같은 미확정 확인 이력 표시", await wd.execute<boolean>('return document.querySelector(".scm-gh-action-job[data-phase=uncertain]")?.textContent.includes("미확정 당시 기록을 보존") ?? false;'));
     ctx.report.check(S, "리뷰 작업이 로컬 파일·인덱스·브랜치를 보존", readFileSync(join(root, ".git/index")).equals(index) && readFileSync(join(root, "code.txt")).equals(bytes) && git("rev-parse", "HEAD") === head && git("branch", "--show-current") === "feature");
-    ctx.report.check(S, "리뷰 대화 UI 페이지 예외 없음", initialErrors.length === 0 && errors.length === 0 && (await pageErrors(wd)).length === 0);
+    ctx.report.check(S, "리뷰 대화 UI 페이지 예외 없음", initialErrors.length === 0 && errors.length === 0 && recoveryErrors.length === 0 && afterRecoveryErrors.length === 0 && (await pageErrors(wd)).length === 0);
   } finally { rmSync(shim, { force: true }); }
 }
