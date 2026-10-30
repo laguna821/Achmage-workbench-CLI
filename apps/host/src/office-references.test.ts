@@ -109,3 +109,68 @@ it("checks view ownership again after an asynchronous parser returns", async () 
     await expect(pending).rejects.toThrow(/문서 창/);
   } finally { await f.close(); }
 });
+
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8mcAAAAASUVORK5CYII=', 'base64');
+it("imports only trusted native selections, tracks documents and freezes other supported files by content", async () => {
+  const f = fixture();
+  try {
+    const csv = join(f.work.cwd, "수치.csv"), md = join(f.work.cwd, "새 자료.md"), image = join(f.work.cwd, "그림.png");
+    writeFileSync(csv, "수치,값\nA,0007"); writeFileSync(md, "로컬 문서"); writeFileSync(image, png);
+    expect(f.refs.add(f.context, [csv, image]).accepted).toHaveLength(0);
+    const added = f.refs.importPaths(f.context, [csv, md, image]);
+    expect(added.rejected).toEqual([]); expect(added.accepted).toHaveLength(3);
+    const paths = added.accepted.map((a) => a.path), snap = f.refs.freeze(f.context, paths, [null, null, null]);
+    expect(snap.refs).toHaveLength(1); expect(f.refs.readImage(f.context, null, image)).toMatchObject({ ok: true, base64: png.toString("base64"), mime: "image/png" });
+    writeFileSync(csv, "다음 판"); writeFileSync(image, "damaged");
+    expect(await f.refs.read(f.context, snap.id, csv)).toMatchObject({ ok: true, text: "수치,값\nA,0007" });
+    expect(f.refs.readImage(f.context, snap.id, image).base64).toBe(png.toString("base64"));
+    expect(() => f.refs.readImage(f.context, null, image)).toThrow(/이미지/);
+    const next = f.refs.freeze(f.context, [csv], [null]);
+    expect(await f.refs.read(f.context, next.id, csv)).toMatchObject({ text: "다음 판" });
+    expect(f.refs.attachments(f.context, snap.id)[0]!.fileId).not.toBe(f.refs.attachments(f.context, next.id)[0]!.fileId);
+  } finally { await f.close(); }
+});
+
+it("preserves uploaded names, original type checks, withholding and the original file/image caps", async () => {
+  const f = fixture();
+  try {
+    const meta = f.refs.upload(f.context, Buffer.from('열린 값 <span data-redaction="" data-label="이름">UPLOAD_SECRET</span>'), "자료.md").accepted[0]!;
+    expect(meta.name).toBe("자료.md");
+    const snap = f.refs.freeze(f.context, [meta.path], [null]);
+    expect(await f.refs.read(f.context, snap.id, meta.path)).toMatchObject({ ok: true, text: "열린 값 {{이름}}" });
+    expect(() => f.refs.upload(f.context, Buffer.from("not png"), "가짜.png")).toThrow(/이미지/);
+    expect(() => f.refs.upload(f.context, Buffer.alloc(5 * 1024 * 1024 + 1), "큰.png")).toThrow(/5MB/);
+    expect(() => f.refs.upload(f.context, Buffer.alloc(50 * 1024 * 1024 + 1), "큰.txt")).toThrow(/50MB/);
+    const text = f.refs.upload(f.context, Buffer.alloc(26 * 1024 * 1024, 65), "일반 첨부 상한보다 큰.txt");
+    expect(text.accepted[0]!.sizeBytes).toBe(26 * 1024 * 1024);
+    expect(() => f.refs.upload(f.context, Buffer.from("binary"), "실행파일.exe")).toThrow(/형식/);
+    const fake = f.refs.upload(f.context, Buffer.from("%PDF-1.7\nwrong kind"), "가짜.docx").accepted[0]!;
+    expect(fake.path.endsWith(".docx")).toBe(true);
+    expect((await f.refs.read(f.context, f.refs.freeze(f.context, [fake.path], [null]).id, fake.path)).ok).toBe(false);
+    const long = f.refs.upload(f.context, Buffer.from("%PDF-1.7\nlong name wrong kind"), "긴".repeat(130) + ".docx").accepted[0]!;
+    expect(long.name.length).toBeLessThanOrEqual(120); expect(long.path.endsWith(".docx")).toBe(true);
+    expect((await f.refs.read(f.context, f.refs.freeze(f.context, [long.path], [null]).id, long.path)).ok).toBe(false);
+  } finally { await f.close(); }
+});
+
+it("restores authoritative attachment metadata into a fresh grant and keeps another conversation separate", async () => {
+  const f = fixture();
+  try {
+    f.select(); const meta = f.refs.upload(f.context, png, "복원 그림.png").accepted[0]!;
+    const paths = [f.source.path, meta.path], snap = f.refs.freeze(f.context, paths, [null, null]);
+    const binding = { artifactId: f.own.id, sessionId: f.session.id, owner: "run-owner", access: f.context.access };
+    await f.manager.office.start(binding, { turnId: "restore-files", instruction: "첨부 확인", revision: 1 }, snap.refs, f.refs.attachments(f.context, snap.id));
+    f.manager.office.finish(binding, { turnId: "restore-files", status: "completed" });
+    const saved = JSON.parse(JSON.stringify(f.manager.office.attachmentHistory(binding)));
+    const grants = new EditorGrants(), token = grants.issue(f.own.id, f.context.access, f.session.id), context = { ...f.context, grants, token };
+    expect(() => grants.references.freeze(context, paths, [null, null])).toThrow(/선택한 파일/);
+    expect(grants.references.restore(context, saved).map((a) => a.name)).toEqual(["자료.md", "복원 그림.png"]);
+    const restored = grants.references.freeze(context, paths, [null, null]);
+    expect(grants.references.readImage(context, restored.id, meta.path).base64).toBe(png.toString("base64"));
+    const next = f.manager.createSession(f.work.id, { provider: "claude" });
+    f.documents.registry.open(f.own.id, { viewId: "owner", windowId: "window", sessionId: next.id });
+    const nextContext = { ...context, token: grants.issue(f.own.id, f.context.access, next.id) };
+    expect(() => grants.references.freeze(nextContext, paths, [null, null])).toThrow(/선택한 파일/);
+    expect(grants.references.restore(nextContext, [])).toEqual([]);
+  } finally { await f.close(); }
+});

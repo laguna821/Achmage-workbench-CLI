@@ -38,6 +38,7 @@ import { officeSettingsScenario } from "./office-settings.ts";
 import { officeSuiteScenario } from "./office-suite.ts";
 import { officeConversationScenario } from "./office-conversation.ts";
 import { officeReferencesScenario } from "./office-references.ts";
+import { officeFilesScenario } from "./office-files.ts";
 
 const { binary, outDir, only, engines } = parseArgs(process.argv.slice(2));
 mkdirSync(outDir, { recursive: true });
@@ -77,6 +78,7 @@ try {
       if (wants("office-suite")) await officeSuiteScenario(ctx);
       if (wants("office-conversation")) await officeConversationScenario(ctx);
       if (wants("office-references")) await officeReferencesScenario(ctx);
+      if (wants("office-files")) await officeFilesScenario(ctx, { binary, engines, profile: "native" });
       if (wants("hwp")) await hwpScenario(ctx);
       if (wants("worktrees")) await worktreesScenario(ctx, { binary, engines, profile: "native" });
       if (wants("terminals")) await terminalsScenario(ctx, { binary, engines, profile: "native" });

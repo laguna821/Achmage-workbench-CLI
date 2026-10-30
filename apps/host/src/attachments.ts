@@ -47,16 +47,19 @@ export class Attachments {
     mkdirSync(this.dir, { recursive: true, mode: 0o700 });
   }
 
-  save(data: Buffer, rawName: string, rawMime: string): Attachment {
+  save(data: Buffer, rawName: string, rawMime: string, maxBytes = MAX_ATTACHMENT, preserveExtension = false): Attachment {
     if (!data.length) throw new HttpError(400, "attachment_empty", "빈 파일입니다.");
-    if (data.length > MAX_ATTACHMENT) throw new HttpError(413, "attachment_too_large", "첨부는 25MB까지입니다.");
-    const name = cleanName(rawName);
+    if (data.length > maxBytes) throw new HttpError(413, "attachment_too_large", `첨부는 ${Math.floor(maxBytes / 1024 / 1024)}MB까지입니다.`);
+    const cleaned = cleanName(rawName), selectedExtension = preserveExtension ? extname(rawName).toLowerCase() : "";
+    // Office parsing must see the selected type even when its display name is shortened.
+    const name = /^\.[a-z0-9]{1,10}$/.test(selectedExtension) && extname(cleaned).toLowerCase() !== selectedExtension
+      ? cleaned.slice(0, 120 - selectedExtension.length) + selectedExtension : cleaned;
     // The bytes decide for pictures and PDFs (an engine rejects an image that is not one).
     const claimed = /^[\w.+-]+\/[\w.+-]+$/.test(rawMime) ? rawMime.toLowerCase() : "application/octet-stream";
     const mime = sniff(data) ?? (isImage(claimed) || claimed === "application/pdf" ? "application/octet-stream" : claimed);
     const id = createHash("sha256").update(data).digest("hex");
     const own = extname(name).toLowerCase();
-    const extension = EXTENSION[mime] ?? (/^\.[a-z0-9]{1,10}$/.test(own) ? own : ".bin");
+    const extension = preserveExtension && /^\.[a-z0-9]{1,10}$/.test(own) ? own : EXTENSION[mime] ?? (/^\.[a-z0-9]{1,10}$/.test(own) ? own : ".bin");
     mkdirSync(this.dir, { recursive: true, mode: 0o700 });
     const path = join(this.dir, id + extension);
     if (!existsSync(path)) writeFileSync(path, data, { mode: 0o600 });

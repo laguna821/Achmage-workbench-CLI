@@ -644,6 +644,12 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           createReadStream(file).pipe(res);
           return;
         }
+        if (method === "POST" && parts[2] === "office-reference-upload") {
+          const grants = options.editors?.grants, token = req.headers["x-office-token"], name = req.headers["x-file-name"];
+          if (!grants || typeof token !== "string" || typeof name !== "string") throw new HttpError(401, "unauthorized", "문서 창의 첨부 권한이 없습니다.");
+          const bytes = await readBody(req, 50 * 1024 * 1024);
+          return sendJson(res, 200, grants.references.upload({ documents, grants, artifactId, token, access: documentAccess(req) }, bytes, decodeURIComponent(name)));
+        }
         // Only the trusted parent can select/freeze/read references for a particular editor.
         // This route is deliberately absent from the third-party editor origin.
         if (method === "POST" && parts[2] === "office-references") {
@@ -653,9 +659,11 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           const refs = grants.references;
           const value = body.action === "list" ? refs.list(context)
             : body.action === "add" ? refs.add(context, body.paths)
+            : body.action === "import" ? refs.importPaths(context, body.paths)
             : body.action === "describe" ? refs.describe(context, body.paths)
             : body.action === "freeze" ? refs.freeze(context, body.paths, body.revisions)
             : body.action === "read" ? await refs.read(context, body.snapshot, body.path, body.offset as number | undefined, body.length as number | undefined)
+            : body.action === "read-image" ? refs.readImage(context, body.snapshot, body.path)
             : null;
           if (value === null) throw new HttpError(400, "office_reference", "문서 참조 요청을 확인해 주세요.");
           return sendJson(res, 200, value);

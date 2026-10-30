@@ -61,7 +61,7 @@ it.each(["grant-first", "reply-first"])("keeps the first instruction and origina
   expect(f.failed).not.toHaveBeenCalled(); expect(f.done).toHaveBeenCalledOnce(); expect(f.model).toHaveBeenCalledOnce();
   expect(f.calls.find((call) => call.operation === "turn-start")).toMatchObject({ token: "token-created", body: { instruction: "처음 요청", revision: 2 } });
   expect(await f.ai.projectApi.resolveChat()).toEqual({ projectId: "work", chatId: "created" });
-  f.loop.run("두 번째 요청"); expect(f.request()).toMatchObject({ action: "prepare", sessionId: "created" });
+  f.loop.run("두 번째 요청"); await vi.waitFor(() => expect(f.request()).toMatchObject({ action: "prepare", sessionId: "created" }));
   f.reply("created", false); await f.loop.settled;
   expect(f.model).toHaveBeenCalledTimes(2); expect(f.calls.filter((call) => call.operation === "turn-start")).toHaveLength(2);
 });

@@ -8,7 +8,8 @@ import type { OfficeAiChat, OfficeAiEngine, OfficeAiStream } from "./office-ai-e
 import type { OfficeSessions } from "./office-sessions.ts";
 import type { OfficeAiHostActions } from "./office-settings-controls.mjs";
 
-export const OFFICE_AI_INPUT_LIMIT = 20_000_000;
+// Original Office accepts 20 pictures of up to 5 MiB, encoded as base64, plus text.
+export const OFFICE_AI_INPUT_LIMIT = 160_000_000;
 const OUTPUT_LIMIT = 32_000_000;
 const record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const text = (value: unknown, limit = 8_000_000): value is string => typeof value === "string" && value.length <= limit;
@@ -136,13 +137,19 @@ export class OfficeAi {
     };
     if (operation === "history" || operation!.startsWith("turn-")) {
       const bound = binding();
-      if (operation === "history") { sendJson(res, 200, this.sessions!.history(bound, url.searchParams.get("before"))); return true; }
+      const referenceContext = { documents, grants, artifactId: artifactId!, token: bearer! };
+      if (operation === "history") {
+        const page = this.sessions!.history(bound, url.searchParams.get("before"));
+        const attachments = grants.references.restore(referenceContext, this.sessions!.attachmentHistory(bound));
+        sendJson(res, 200, { ...page, attachments }); return true;
+      }
       let raw: unknown;
       try { raw = JSON.parse((await readBody(req, OFFICE_AI_INPUT_LIMIT)).toString("utf8")); } catch (error) { if (error instanceof HttpError) throw error; return invalid(); }
       authorize();
       const references = operation === "turn-start" && record(raw) && raw.referenceSnapshot !== undefined
         ? grants.references.references({ documents, grants, artifactId: artifactId!, token: bearer! }, raw.referenceSnapshot) : [];
-      const value = operation === "turn-start" ? await this.sessions!.start(bound, raw, references) : operation === "turn-events" ? this.sessions!.events(bound, raw) : this.sessions!.finish(bound, raw);
+      const attachments = operation === "turn-start" && record(raw) && raw.referenceSnapshot !== undefined ? grants.references.attachments(referenceContext, raw.referenceSnapshot) : [];
+      const value = operation === "turn-start" ? await this.sessions!.start(bound, raw, references, attachments) : operation === "turn-events" ? this.sessions!.events(bound, raw) : this.sessions!.finish(bound, raw);
       sendJson(res, 200, value); return true;
     }
     // No startup status probing, CLI process, model invocation or settings write before a request.

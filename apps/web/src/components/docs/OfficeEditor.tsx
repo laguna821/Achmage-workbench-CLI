@@ -6,6 +6,7 @@ import { OfficeOutputDialog } from "./OfficeOutputDialog.tsx";
 import { OfficeReferencePicker } from "./OfficeReferencePicker.tsx";
 import type { OfficeDocumentChoice, OfficeReferenceRequest, OfficeReferenceSnapshot } from "../../../../../packages/contracts/src/office-references.ts";
 import { saveReferencedDocument } from "../../document-commands.ts";
+import { pickOfficeFiles } from "./office-file-picker.ts";
 
 export type OfficeHandle = {
   /** Save unsaved edits now; resolves with the saved revision, or null when they could not be saved. */
@@ -94,16 +95,43 @@ export const OfficeEditor = forwardRef<
   const handleReference = async (message: OfficeReferenceRequest) => {
     const target = frame.current?.contentWindow, origin = opened.current?.origin;
     if (!target || !origin) return;
+    const owner = latest.current.id, selectionSession = opened.current?.sessionId;
+    const checkSelection = () => { if (target !== frame.current?.contentWindow || owner !== latest.current.id || selectionSession !== opened.current?.sessionId) throw new Error("첨부 중 문서 창이나 세션이 바뀌었습니다."); };
+    const upload = async (file: File) => {
+      checkSelection();
+      if (!(file instanceof File) || file.size > 50 * 1024 * 1024) throw new Error("첨부는 파일당 50MB까지입니다.");
+      return api.uploadOfficeReference(owner, opened.current!.token, file);
+    };
     try {
       let value: unknown;
       if (message.action === "list") value = await referenceCall("list");
       else if (message.action === "add") value = await referenceCall("add", { paths: message.paths });
       else if (message.action === "read") value = await referenceCall("read", { snapshot: referenceSnapshot.current, path: message.path, offset: message.offset, length: message.length });
+      else if (message.action === "read-image") {
+        if (message.frozen && !referenceSnapshot.current) throw new Error("이번 요청의 첨부 판을 먼저 확인해 주세요.");
+        value = await referenceCall("read-image", { snapshot: message.frozen ? referenceSnapshot.current : null, path: message.path });
+      }
+      else if (message.action === "upload") value = await upload(message.file);
+      else if (message.action === "pick-files") {
+        const picked = await pickOfficeFiles(); checkSelection();
+        if (!picked) value = null;
+        else if ("paths" in picked) value = await referenceCall("import", { paths: picked.paths });
+        else {
+          if (picked.files.length > 20) throw new Error("한 번에 20개까지 첨부해 주세요.");
+          const combined: { accepted: unknown[]; rejected: string[] } = { accepted: [], rejected: [] };
+          for (const file of picked.files) {
+            try { const added = await upload(file); combined.accepted.push(...added.accepted); combined.rejected.push(...added.rejected); }
+            catch (error) { combined.rejected.push(error instanceof Error ? error.message : String(error)); }
+          }
+          value = combined;
+        }
+      }
       else {
         if (referencePickerClose.current) value = { ok: false, reason: "busy" };
         else {
           const { items } = await referenceCall<{ items: OfficeDocumentChoice[] }>("list");
-          if (target !== frame.current?.contentWindow || referencePickerClose.current) throw new Error("문서 창이 바뀌었거나 다른 선택창이 열려 있습니다.");
+          checkSelection();
+          if (referencePickerClose.current) throw new Error("다른 선택창이 열려 있습니다.");
           const paths = await new Promise<string[] | null>((resolve) => {
             const choose = (paths: string[] | null) => { referencePickerClose.current = null; setReferencePicker(null); resolve(paths); };
             referencePickerClose.current = () => choose(null);
@@ -112,6 +140,7 @@ export const OfficeEditor = forwardRef<
           value = paths ? { ok: true, paths } : { ok: false, reason: "cancelled" };
         }
       }
+      checkSelection();
       target.postMessage({ type: "office:references-result", requestId: message.requestId, value }, origin);
     } catch (error) { target.postMessage({ type: "office:references-result", requestId: message.requestId, error: error instanceof Error ? error.message : String(error) }, origin); }
   };
@@ -180,8 +209,8 @@ export const OfficeEditor = forwardRef<
       const paths = message.freezeReferences;
       const revisions: (number | null)[] = [];
       if (paths?.length) {
-        const selected = await referenceCall<{ path: string; artifactId: string }[]>("describe", { paths });
-        for (const item of selected) { checkSession(); revisions.push(await saveReferencedDocument(item.artifactId) ?? null); }
+        const selected = await referenceCall<{ path: string; artifactId: string | null }[]>("describe", { paths });
+        for (const item of selected) { checkSession(); revisions.push(item.artifactId ? await saveReferencedDocument(item.artifactId) ?? null : null); }
         checkSession();
       }
       // Opening a document never creates a conversation. Its first admitted AI

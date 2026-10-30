@@ -413,7 +413,7 @@ export type TranscriptItem = (
       requestId?: string | null;
     }
 ) & { /** An original Office tool loop, owned by this same Workbench conversation. */
-  office?: { turnId: string; artifactId: string };
+  office?: { turnId: string; artifactId: string; attachments?: import("./office-references.ts").OfficeStoredAttachment[] };
 };
 
 export type UsageWindow = {

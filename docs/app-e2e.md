@@ -96,3 +96,9 @@ PDF 후속 검사는 `APP_E2E_OFFICE_UNDO=1 APP_E2E_OFFICE_FORMATS=pdf`와 `--on
 `--only=office-references --engines=stand-in`은 원본7종의 실제 `@` 선택→원본 `read_attachment`→동일 세션의 판/해시 기록→재첨부 없는 후속 최신 판→문서 선택창/취소를 검사한다. PPT에서는 두 칸을 열어 원본 Markdown에 실제 미저장 편집을 하고, 나머지는 선택 이후 파일의 외부 변경을 확인한다. 가린 값이 모델 요청에 없는지 확인한다. `APP_E2E_OFFICE_REFERENCE_FORMATS=pptx`로 범위를 좁힐 수 있다. 정확한 파일 title의 행과 Sheets의 로딩 완료/표시된 입력창을 기다리며 Markdown marker는 원본 직렬화에 맞춘다.
 
 2026-10-31 최종 단일 **47/47**, 회귀 **63/63**, 전체 타입/빌드 통과. 원본 Slides의 파일 전용 preload 누락을 수정했다. 초기 실패 실행과 원인 변경은 그대로 보존했다. 근거 `office-document-references-native-06/verification.json`; 연구 판 `research:rr-e6e9abfeeec587137aae8e9d2f47aef0:a300e80dade495efb053fd3f867510fb4988576bcabae28ece610741303e5df5`. 로컬 합성 제공자를 사용하며 입력 참조는 Markdown이다. 로컬 이미지/첨부 복원·모든 바이너리 입력·다른 OS를 검증했다는 뜻은 아니다.
+
+`--only=office-references,office-files --engines=stand-in`은 기존 문서 참조와 원본7종의 로컬 첨부를 함께 검사한다. `office-files`는 Markdown File 드롭·CSV 선택·PNG 붙여넣기·선택 취소·두 파일 읽기/가림·실제 이미지 요청·첨부 기록·재열기/후속 최신 파일·새 대화 분리를 확인한다. 첫 형식은 앱과 호스트를 실제 재시작한다. `APP_E2E_OFFICE_FILE_FORMATS=pptx`로 범위를 좁힐 수 있다.
+
+Tauri `invoke`는 쓰기 불가능하므로 원본 호출을 유지하고 정확한 dialog IPC fetch 응답만 주입한다. 합성 File 이벤트는 원본 drop/paste 처리기를 거치며 부모/호스트/파서/보관 경로는 실제다. 이미지는 파일명이 본문에 없을 수 있어 img의 alt·data URL·실제 디코딩으로 확인한다. 물리 OS 선택창·클립보드·끌기 검사를 대신하지 않는다.
+
+2026-10-31 최종 단일 **117/117**(시작4·문서 참조43·로컬 첨부70), 회귀 **85/85**, 전체 타입 및 최종 빌드 통과. HWP 이력 매핑의 첨부 누락을 수정했다. 실패 실행00–04와 긴 파일명 보완 전 성공05도 보존했다. 근거 `office-local-files-native-06/verification.json`; 검증 판 `research:rr-b31c38482d609cd7a58ccd2c895f8d3a:db02746f1499818e05c808d4b0546cf18fcd6b226845afb237c13467e524dac9`. 모든 바이너리 입력·Windows/macOS·전체 Office/릴리스 완료를 뜻하지 않는다.

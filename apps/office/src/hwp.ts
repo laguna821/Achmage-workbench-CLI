@@ -192,9 +192,6 @@ const hwpApi = {
   ...ai.desktop,
   aiSubscription: ai.subscription,
   readUrl: pendingFeature, imageSearch: pendingFeature, generateImage: pendingFeature, fetchImage: pendingFeature,
-  pickAttachments: pendingFeature, addPastedImage: pendingFeature,
-  readAttachmentImage: pendingFeature,
-  getPathForFile: (file: File) => file.name,
   openDroppedDocuments: () => false,
 };
 Object.assign(window, { hwpApi });

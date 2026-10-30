@@ -6,6 +6,8 @@ import type { Artifact } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
 import { registerDocumentCommands } from "../../document-commands.ts";
 import { OfficeEditor } from "./OfficeEditor.tsx";
+import { pickOfficeFiles } from "./office-file-picker.ts";
+vi.mock("./office-file-picker.ts", () => ({ pickOfficeFiles: vi.fn() }));
 
 afterEach(cleanup);
 async function fixture(initial: string | null = "session", fails = false) {
@@ -21,7 +23,8 @@ async function fixture(initial: string | null = "session", fails = false) {
     if (action === "list") return { ok: true, items: [{ path: "/reference.md", name: "reference.md", dir: "/folder", group: "open", state: "ok" }] };
     return { accepted: [], rejected: [] };
   });
-  const api = { officeReferences, editorGrant: async () => ({ token: `token-${selected}`, sessionId: selected, origin: "http://office.test", url: "http://office.test/slides" }) } as unknown as Api;
+  const uploadOfficeReference = vi.fn(async () => ({ accepted: [], rejected: [] }));
+  const api = { officeReferences, uploadOfficeReference, editorGrant: async () => ({ token: `token-${selected}`, sessionId: selected, origin: "http://office.test", url: "http://office.test/slides" }) } as unknown as Api;
   const artifact = { id: "target", name: "slides.pptx", format: "pptx", revision: 1 } as Artifact;
   function App() {
     const [sessionId, setSessionId] = useState(initial);
@@ -35,7 +38,7 @@ async function fixture(initial: string | null = "session", fails = false) {
     await message({ type: "office:ai-request", action: "prepare", requestId: "send", sessionId: selected, freezeReferences: ["/reference.md"] });
     expect(save).not.toHaveBeenCalled(); await message({ type: "office:flushed", revision: 2 });
   };
-  return { screen, frame, sent, steps, save, officeReferences, message, prepare, unregister, switchSession: (id: string) => switchSession(id) };
+  return { screen, frame, sent, steps, save, officeReferences, uploadOfficeReference, message, prepare, unregister, switchSession: (id: string) => switchSession(id) };
 }
 
 it.each(["session", null])("saves the other editor before freezing its latest revision and keeps the snapshot after session binding (%s)", async (initial) => {
@@ -79,5 +82,41 @@ it("rejects a late reference snapshot after the user selects another session", a
     await act(async () => { finish({ id: "old-snapshot", refs: [] }); });
     expect(f.sent).toHaveBeenCalledWith(expect.objectContaining({ type: "office:ai-result", error: expect.stringContaining("세션이 바뀌") }), "http://office.test");
     expect(f.sent.mock.calls.some(([value]) => value.type === "office:ai-result" && value.value?.referenceSnapshot)).toBe(false);
+  } finally { f.unregister(); }
+});
+
+
+it("uses only native chooser results for new path authority and keeps cancellation empty", async () => {
+  const f = await fixture();
+  try {
+    vi.mocked(pickOfficeFiles).mockResolvedValueOnce({ paths: ["/chosen.csv"] });
+    await f.message({ type: "office:references", action: "pick-files", requestId: "native" });
+    expect(f.officeReferences).toHaveBeenCalledWith("target", "token-session", "import", { paths: ["/chosen.csv"] });
+    vi.mocked(pickOfficeFiles).mockResolvedValueOnce(null);
+    await f.message({ type: "office:references", action: "pick-files", requestId: "cancel" });
+    expect(f.sent).toHaveBeenCalledWith({ type: "office:references-result", requestId: "cancel", value: null }, "http://office.test");
+  } finally { f.unregister(); }
+});
+
+it("rejects a late native picker result after session selection changes", async () => {
+  const f = await fixture(); let choose!: (value: { paths: string[] }) => void;
+  vi.mocked(pickOfficeFiles).mockImplementationOnce(() => new Promise((resolve) => { choose = resolve; }));
+  try {
+    await f.message({ type: "office:references", action: "pick-files", requestId: "late" });
+    await act(async () => { f.switchSession("different"); });
+    await act(async () => { choose({ paths: ["/old-choice.csv"] }); });
+    expect(f.officeReferences).not.toHaveBeenCalled();
+    expect(f.sent).toHaveBeenCalledWith(expect.objectContaining({ type: "office:references-result", error: expect.stringContaining("세션이 바뀌") }), "http://office.test");
+  } finally { f.unregister(); }
+});
+
+it("uploads only a File from the bound frame and rejects invented objects", async () => {
+  const f = await fixture();
+  try {
+    const file = new File(["rows"], "자료.csv");
+    await f.message({ type: "office:references", action: "upload", requestId: "file", file });
+    expect(f.uploadOfficeReference).toHaveBeenCalledWith("target", "token-session", file);
+    await f.message({ type: "office:references", action: "upload", requestId: "forged", file: { name: "/etc/passwd", size: 0 } });
+    expect(f.uploadOfficeReference).toHaveBeenCalledTimes(1);
   } finally { f.unregister(); }
 });

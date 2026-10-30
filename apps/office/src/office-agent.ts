@@ -5,12 +5,13 @@ import type { OfficeTurnEvent, OfficeTurnFinish } from "../../../packages/contra
 /** The renderer owns no conversation database. Every run borrows the selected Workbench session. */
 export type OfficeRun = {
   history: AgentMessage[];
+  images?: AgentImage[];
   append(events: OfficeTurnEvent[]): Promise<void>;
   save(): Promise<void>;
   finish(status: OfficeTurnFinish["status"], error?: string): Promise<void>;
 };
 export type OfficeConversationPort = {
-  begin(instruction: string, signal: AbortSignal): Promise<OfficeRun>;
+  begin(instruction: string, signal: AbortSignal, images?: AgentImage[]): Promise<OfficeRun>;
   attach(loop: WorkbenchAgentLoop<unknown>): () => void;
 };
 let conversation: OfficeConversationPort | null = null;
@@ -116,11 +117,11 @@ export class WorkbenchAgentLoop<TSnapshot = unknown> {
     this.settled = new Promise((resolve) => { this.resolveSettled = resolve; });
     try { this.release = this.port.attach(this as WorkbenchAgentLoop<unknown>); }
     catch (error) { void this.finish(undefined, messageOf(error)); return; }
-    void this.port.begin(instruction, this.abort.signal).then((run) => {
+    void this.port.begin(instruction, this.abort.signal, images).then((run) => {
       this.runState = run;
       if (this.abort.signal.aborted) { void this.finish({ text: "", cancelled: true, turnLimit: false }); return; }
       this.original.reset(); this.original.restore(run.history);
-      this.original.run(instruction, images);
+      this.original.run(instruction, run.images ?? images);
     }).catch((error) => { void this.finish(undefined, messageOf(error)); });
   }
   cancel(): void { this.abort.abort(); this.original.cancel(); }

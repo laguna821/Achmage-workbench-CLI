@@ -210,6 +210,13 @@ function originalOfficeConversation(): Plugin {
       }
       const app = ["docs", "slides", "hwp", "pdf", "markdown", "html", "mindmap", "epub"].find((name) => id === `${ieum}/apps/${name}/src/renderer/ai/AiPanel.tsx`);
       if (!app) return null;
+      if (app === "hwp") {
+        // The original HWP history mapper omits attachment cards. Restore the
+        // authoritative metadata just as the other original panels do.
+        const marker = "            text: message.text,\n            ...(message.tools";
+        if (code.split(marker).length !== 2) this.error("Original HWP attachment history changed: review the Workbench history adapter");
+        code = code.replace(marker, "            text: message.text,\n            attachments: message.attachments?.filter((a) => a.path).map((a) => ({ path: a.path, name: a.name, ext: a.ext ?? '', sizeBytes: a.sizeBytes ?? 0 })),\n            ...(message.tools");
+      }
       const named = app === "docs" || app === "slides";
       const boundary = named ? "  const newChat = () => {" : "                loopRef.current?.reset()";
       for (const marker of ["export function AiPanel(", "new AgentLoop", boundary]) {

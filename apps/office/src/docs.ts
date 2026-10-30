@@ -197,7 +197,6 @@ const desktop = stubBridge(
       closeSaveAnswer?.(ok);
       closeSaveAnswer = null;
     },
-    getPathForFile: (file: File) => file.name,
     pickImage: () =>
       new Promise((resolve) => {
         const input = document.createElement("input");

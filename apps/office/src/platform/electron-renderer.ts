@@ -2,6 +2,7 @@
 // editor page: its IPC goes to the page's own transport (the editor's worker, plus answers the page
 // gives itself), and only the editor's own bridge is exposed — not its AI, project or file bridges.
 
+import { officeFileIdentity } from "../office-references.ts";
 type Listener = (event: { sender: unknown }, ...args: unknown[]) => void;
 export type Transport = {
   invoke(channel: string, args: unknown[]): Promise<unknown>;
@@ -85,6 +86,6 @@ export const contextBridge = {
   },
 };
 
-export const webUtils = { getPathForFile: () => "" };
+export const webUtils = { getPathForFile: officeFileIdentity };
 
 export default { ipcRenderer, contextBridge, webUtils };

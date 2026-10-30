@@ -17,3 +17,9 @@
 2026-10-31 Word/PPT/Sheets/HTML/한글/XMind/EPUB의 `@`와 문서 첨부 버튼을 연결했다. 같은 프로젝트의 열린/최근 문서를 선택하고, 선택 이후 사람의 편집은 보낼 때 저장한다. dirty 표시가 늦는 원본 Office도 쓰기 권한이 있는 편집기를 직접 확인한다. 요청별 판/해시를 고정하고 원본 파일 파서의 가림을 유지한다. 같은 창의 후속 요청은 다시 첨부하지 않아도 최신 판을 읽는다.
 
 최종 실제 Linux **47/47**, 회귀 **63/63**. PPT 옆 칸에서 Markdown을 실제 편집한 흐름과7종 수신 편집기를 확인했으며 native 입력 참조는 Markdown이다. 로컬/이미지 첨부·재열기 후 첨부 복원·바이너리 입력 전체·Markdown/PDF 채팅의 첨부 확장·Windows/macOS는 후속이다. 근거 `office-document-references-native-06/verification.json`; 연구 판 `research:rr-e6e9abfeeec587137aae8e9d2f47aef0:a300e80dade495efb053fd3f867510fb4988576bcabae28ece610741303e5df5`.
+
+## 로컬 첨부와 대화 복원
+
+이어서 같은 7종의 파일 선택·드롭·이미지 붙여넣기와 재열기 복원을 연결했다. 파일 50MiB·이미지 5MiB까지 기존 해시 보관소에 저장한다. 로컬 경로는 부모 선택창에서 고르고, 브라우저 File은 바이트로 전달한다. 요청 동안 파일을 고정하고 다음 요청은 로컬 원본의 최신 내용을 읽는다. 첨부 이력은 같은 Workbench 대화에 보관하며 새 대화에는 이전 읽기 권한을 넘기지 않는다.
+
+최종 문서 참조와 함께 **Linux117/117**, 회귀 **85/85** 통과. 입력은 Markdown/CSV/PNG이고 첫 형식은 실제 앱/호스트 재시작을 포함한다. 합성 File 이벤트와 OS 선택기 응답 대역을 사용했으므로 물리 입력·전체 바이너리 형식·다른 OS는 별도 인수 대상이다. [동작과 한계](office-integration.md#로컬-파일이미지와-첨부-복원), 근거 `office-local-files-native-06/verification.json`; 검증 판 `research:rr-b31c38482d609cd7a58ccd2c895f8d3a:db02746f1499818e05c808d4b0546cf18fcd6b226845afb237c13467e524dac9`.

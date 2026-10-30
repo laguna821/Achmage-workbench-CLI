@@ -5,17 +5,18 @@ import type { IpcStreamChunk } from "../../../vendor/ieumoffice/packages/agent-c
 import { Events, Gateway, listen, post, type Init } from "./bridge.ts";
 import { installOfficeConversation, type OfficeConversationPort, type OfficeRun, type WorkbenchAgentLoop } from "./office-agent.ts";
 import { createOfficeReferences } from "./office-references.ts";
+import type { OfficeAttachment } from "../../../packages/contracts/src/office-references.ts";
 
 type Prepared = NonNullable<Extract<OfficeHostMessage, { type: "office:ai-result" }>["value"]>;
-type History = { workId: string; sessionId: string; items: TranscriptItem[]; before: string | null; hasMore: boolean };
-type Chat = { role: "user" | "assistant"; text: string; seq: number; ts: string; tools?: { name: string; summary: string; input?: string; output?: string; isError?: boolean }[] };
+type History = { workId: string; sessionId: string; items: TranscriptItem[]; attachments?: OfficeAttachment[]; before: string | null; hasMore: boolean };
+type Chat = { role: "user" | "assistant"; text: string; seq: number; ts: string; attachments?: OfficeAttachment[]; tools?: { name: string; summary: string; input?: string; output?: string; isError?: boolean }[] };
 
 /** A view of the one Workbench transcript for the original panel's history reader. */
 export function officeChat(items: TranscriptItem[]): Chat[] {
   const chat: Chat[] = [];
   for (const item of items) {
     const base = { seq: chat.length + 1, ts: new Date(item.at).toISOString() };
-    if (item.kind === "user" || item.kind === "assistant") chat.push({ ...base, role: item.kind, text: item.text });
+    if (item.kind === "user" || item.kind === "assistant") chat.push({ ...base, role: item.kind, text: item.text, ...(item.kind === "user" && item.office?.attachments ? { attachments: item.office.attachments } : {}) });
     else if (item.kind === "tool") {
       const detail = item.detail ?? "", split = detail.indexOf("\n");
       const tool = { name: split < 0 ? item.tool : detail.slice(0, split), summary: item.title, input: split < 0 ? detail : detail.slice(split + 1), output: item.output ?? undefined, isError: item.status === "failed" };
@@ -48,6 +49,7 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
     if (sessionId === next) return;
     sessionId = next;
     if (keepPanel) return;
+    references.reset();
     sessionKey = next ?? "unbound";
     active?.reset();
     for (const listener of subscribers) listener();
@@ -97,6 +99,7 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
     const api = gateway.aiSession(init.artifact.id);
     const page = await api.json<History>("history");
     if (page.sessionId !== sessionId) throw new Error("선택한 세션이 바뀌었습니다. 새 세션의 대화를 불러와 주세요.");
+    references.restore(page.attachments ?? []);
     return page;
   };
   const port: OfficeConversationPort = {
@@ -104,18 +107,22 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
       if (active) throw new Error("이 문서에서 진행 중인 AI 요청을 먼저 마쳐 주세요.");
       active = loop; return () => { if (active === loop) active = null; };
     },
-    begin: async (instruction, signal): Promise<OfficeRun> => {
+    begin: async (instruction, signal, originalImages): Promise<OfficeRun> => {
       try {
+        if (sessionId) await history();
         const prepared = await prepare(true), api = gateway.aiSession(init.artifact.id);
         const page = await api.json<History>("history");
         if (signal.aborted) throw new Error("요청을 취소했습니다.");
         if (page.sessionId !== prepared.sessionId || page.sessionId !== sessionId) throw new Error("선택한 세션이 바뀌었습니다.");
+        const images = await references.imagesForTurn(originalImages);
+        if (signal.aborted || page.sessionId !== sessionId) throw new Error("요청을 취소했거나 선택한 세션이 바뀌었습니다.");
         const turnId = crypto.randomUUID();
         const receipt = await api.json<OfficeTurnReceipt>("turn-start", { turnId, instruction, revision: prepared.revision, ...(prepared.referenceSnapshot ? { referenceSnapshot: prepared.referenceSnapshot } : {}) });
         if (receipt.duplicate || receipt.status !== "running") throw new Error("이미 처리된 요청입니다. 중복 실행하지 않았습니다.");
         run = { turnId, api }; let seq = 0;
         return {
           history: officeModelHistory(page.items),
+          images,
           append: async (events) => { await api.json("turn-events", { turnId, seq: ++seq, events }); },
           save: async () => {
             const saved = await prepare();
@@ -200,6 +207,9 @@ export function officeAiTransport(ai: OfficeAiBridge, dispatch: (channel: string
   ai.desktop.onAiSettingsChanged(() => dispatch("ai:settings-changed", []));
   ai.subscription.onChanged((statuses) => dispatch("ai:subscription-changed", [statuses]));
   return async (channel: string, args: unknown[]): Promise<unknown> => {
+    if (/^(?:files:pick|(?:slides|sheets|mindmap|epub):files-pick)$/.test(channel)) return ai.desktop.pickAttachments();
+    if (/^(?:files:add-pasted-image|(?:slides|sheets|mindmap|epub):files-add-pasted-image)$/.test(channel)) return ai.desktop.addPastedImage(args[0] as ArrayBuffer, String(args[1]));
+    if (/^(?:files:read-image|(?:slides|sheets|mindmap|epub):files-read-image)$/.test(channel)) return ai.desktop.readAttachmentImage(String(args[0]));
     if (/^(?:files:add|(?:slides|sheets|mindmap|epub):files-add)$/.test(channel)) return ai.desktop.addAttachmentPaths(args[0] as string[]);
     if (/^(?:files:read|(?:slides|sheets|mindmap|epub):files-read)$/.test(channel)) return ai.desktop.readAttachment(String(args[0]), args[1] as number | undefined, args[2] as number | undefined);
     switch (channel) {
