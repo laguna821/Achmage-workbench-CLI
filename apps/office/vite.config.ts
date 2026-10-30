@@ -177,12 +177,45 @@ function originalOfficeConversation(): Plugin {
   return {
     name: "workbench-office-conversation", enforce: "pre",
     transform(code, id) {
-      if (id !== `${ieum}/apps/docs/src/renderer/ai/AiPanel.tsx`) return null;
-      const markers = ["export function AiPanel(", "new AgentLoop<", "  const newChat = () => {"];
-      for (const marker of markers) if (code.split(marker).length !== 2) this.error("Original Docs AI panel changed: review the Workbench conversation adapter");
-      code = code.replace("export function AiPanel(", "function OriginalAiPanel(")
-        .replace("new AgentLoop<", "new WorkbenchAgentLoop<")
-        .replace("  const newChat = () => {", "  const newChat = () => {\n    void window.workbenchOfficeAi.newSession().catch((error) => window.alert(error.message));\n    return;");
+      if (id.endsWith("/@univerjs/sheets-ui/lib/es/index.js")) {
+        // A selection update defaults focus to the cell editor. In WebKit this
+        // also runs while the AI textarea is receiving input, sending the rest
+        // of the instruction into a cell. Keep the selection/layout update, but
+        // leave an active original composer in control of its keyboard input.
+        const marker = "if (!this._editorService.getFocusEditor()) {";
+        if (code.split(marker).length !== 2) this.error("Univer cell-focus boundary changed: review the Office input adapter");
+        return code.replace(marker, "if (!this._editorService.getFocusEditor() && !document.activeElement?.closest('.copilot textarea, .copilot input, .copilot [contenteditable=true]')) {");
+      }
+      if (id === `${ieum}/apps/sheets/src/renderer/App.tsx`) {
+        // Sheets keeps the AI state next to Univer. Changing a conversation must
+        // reset that state and re-read history without replacing the workbook.
+        for (const marker of ["new AgentLoop({", "  function handleNewChat(): void {", "  }, [workbookFile?.sessionId])", "  // Split panes: fallback focus reporting", "  // ── project-store: resolve chatId and load history", "    const raw = localStorage.getItem(CHAT_STORAGE_KEY)"]) {
+          if (code.split(marker).length !== 2) this.error("Original Sheets AI owner changed: review the Workbench conversation adapter");
+        }
+        code = code.replace("new AgentLoop({", "new WorkbenchAgentLoop({")
+          .replace("  // Split panes: fallback focus reporting", "  const wbConversation = wbUseStore(window.workbenchOfficeAi.subscribe, window.workbenchOfficeAi.snapshot);\n  // Split panes: fallback focus reporting")
+          .replace("  function handleNewChat(): void {", "  function handleNewChat(): void {\n    void window.workbenchOfficeAi.newSession().catch((error) => window.alert(error.message));\n  }\n\n  function resetWorkbenchChat(): void {")
+          .replace("  // ── project-store: resolve chatId and load history", "  useEffect(() => {\n    resetWorkbenchChat();\n    chatContinuesRef.current = false;\n    return () => agentLoopRef.current?.reset();\n  }, [wbConversation]);\n\n  // ── project-store: resolve chatId and load history")
+          .replace("  }, [workbookFile?.sessionId])", "  }, [workbookFile?.sessionId, wbConversation])")
+          // An old local transcript needs the explicit migration path. The
+          // original fire-and-forget mirror must not delete it after a no-op.
+          .replace("    const raw = localStorage.getItem(CHAT_STORAGE_KEY)", "    return; // Preserve legacy storage until Workbench's migration records it.\n    const raw = localStorage.getItem(CHAT_STORAGE_KEY)");
+        return `import { WorkbenchAgentLoop } from ${JSON.stringify(here("./src/office-agent.ts"))};\nimport { useSyncExternalStore as wbUseStore } from 'react';\n${code}`;
+      }
+      const app = ["docs", "slides", "hwp", "pdf", "markdown", "html", "mindmap", "epub"].find((name) => id === `${ieum}/apps/${name}/src/renderer/ai/AiPanel.tsx`);
+      if (!app) return null;
+      const named = app === "docs" || app === "slides";
+      const boundary = named ? "  const newChat = () => {" : "                loopRef.current?.reset()";
+      for (const marker of ["export function AiPanel(", "new AgentLoop", boundary]) {
+        if (code.split(marker).length !== 2) this.error(`Original ${app} AI panel changed: review the Workbench conversation adapter`);
+      }
+      // Intercept before the original handler clears UI/queues. The authoritative
+      // session switch cancels and awaits the old turn, then remounts only its panel.
+      const handler = named ? code.indexOf(boundary) : code.lastIndexOf("onClick={() => {", code.indexOf(boundary));
+      if (handler < 0) this.error(`Original ${app} new-chat handler changed`);
+      const start = handler + (named ? boundary.length : "onClick={() => {".length);
+      code = code.slice(0, start) + "\n    void window.workbenchOfficeAi.newSession().catch((error) => window.alert(error.message));\n    return;" + code.slice(start);
+      code = code.replace("export function AiPanel(", "function OriginalAiPanel(").replace("new AgentLoop", "new WorkbenchAgentLoop");
       return `import { WorkbenchAgentLoop } from ${JSON.stringify(here("./src/office-agent.ts"))};\nimport { createElement as wbCreateElement, useSyncExternalStore as wbUseStore } from 'react';\n${code}\nexport function AiPanel(props) {\n  const bridge = window.workbenchOfficeAi;\n  const key = wbUseStore(bridge.subscribe, bridge.snapshot);\n  return wbCreateElement(OriginalAiPanel, { ...props, key });\n}\n`;
     },
   };

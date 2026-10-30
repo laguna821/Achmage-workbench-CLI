@@ -1,9 +1,1 @@
-/* Workbench keeps AI in its conversation: the spreadsheet editor's own AI entry points are hidden —
-   the Home tab's AI group, the AI panel and its rail, the selection's "ask AI" popover. */
-.ribbon-group:has(> .ribbon-group-content > .ai-entry),
-.ai-entry,
-.copilot,
-.ai-ask-trigger,
-.ai-ask-pop {
-  display: none !important;
-}
+/* Original AI sidebar and selection prompts share the Workbench session. */

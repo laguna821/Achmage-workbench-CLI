@@ -233,7 +233,6 @@ const desktop = stubBridge(
     spellLanguages: async () => ({ available: [], enabled: [] }),
     // Direct proofreading/translation still needs its separate lifecycle adapter.
     aiChat: noAi,
-    aiToolCapabilities: async () => ({ imageGeneration: { available: false }, imageAnalysis: { available: false }, videoAnalysis: { available: false } }),
     ...ai.desktop,
   },
   { listDocsTabs: [], kbList: [] },

@@ -1,3 +1,5 @@
+import { mountOfficeAi, officeAiTransport } from "./office-ai.ts";
+import { DEFAULT_AI_PANEL_PREFS, normalizeAiPanelPrefs } from "../../../vendor/ieumoffice/packages/ui/src/ai-panel-prefs.ts";
 import "./sheets.css";
 import { Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { dispatch, useTransport } from "./platform/electron-renderer.ts";
@@ -13,6 +15,7 @@ import type { WorkerCall, WorkerMessage, WorkerRequest } from "./slides/protocol
 
 const init = await handshake();
 const gateway = new Gateway(init.token);
+const ai = mountOfficeAi(init, gateway);
 const artifactId = init.artifact.id;
 /**
  * `revision`: what the editor's workbook is based on (a save must name it). `pending`: edits the
@@ -49,8 +52,9 @@ function call(request: WorkerRequest, transfer: Transferable[] = []) {
 const value = async <T>(request: WorkerRequest, transfer: Transferable[] = []) => (await call(request, transfer)).value as T;
 
 // ── what the page answers itself ─────────────────────────────────────────
-const AI_OFF = { side: "left", fontSize: "default", customFontSize: 14, spellcheck: true, openInNewDocs: false, showAiSidebar: false };
-const noAi = () => Promise.reject(new Error("Workbench에서는 대화창에서 AI에게 요청하세요."));
+let aiPrefs = DEFAULT_AI_PANEL_PREFS;
+try { aiPrefs = normalizeAiPanelPrefs(JSON.parse(localStorage.getItem("workbench.office.sheets.ai-prefs") ?? "null")); } catch { /* UI preferences only. */ }
+const noAi = () => Promise.reject(new Error("이 AI 도구는 아직 지원하지 않습니다."));
 const notHere = (what: string) => Promise.reject(new Error(`${what}은(는) Workbench에서 아직 지원하지 않습니다.`));
 const unhandled = new Set<string>();
 
@@ -65,11 +69,11 @@ async function invoke(channel: string, args: unknown[]): Promise<unknown> {
     case "app:get-auto-save-default":
       // Every save is a revision: saved on Ctrl+S, before a request, when the tab or view changes.
       return { on: false, updatedAt: 1 };
-    case "app:get-ai-panel-prefs":
-    case "app:set-ai-panel-prefs":
-      return AI_OFF;
-    case "ai:get-settings":
-      return new Promise(() => {});
+    case "app:get-ai-panel-prefs": return aiPrefs;
+    case "app:set-ai-panel-prefs": {
+      aiPrefs = normalizeAiPanelPrefs({ ...aiPrefs, ...(args[0] as object) });
+      localStorage.setItem("workbench.office.sheets.ai-prefs", JSON.stringify(aiPrefs)); dispatch("app:ai-panel-prefs-changed", [aiPrefs]); return aiPrefs;
+    }
     case "user:display-name":
       return "";
     case "workbook:select-for-merge":
@@ -110,7 +114,7 @@ function send(channel: string, args: unknown[]) {
   void call({ type: "send", channel, args }).catch(() => undefined);
 }
 
-useTransport({ invoke, send });
+useTransport({ invoke: officeAiTransport(ai, dispatch, invoke), send });
 
 // ── saving ───────────────────────────────────────────────────────────────
 const dirty = () => state.pending > 0 || state.uncommitted;

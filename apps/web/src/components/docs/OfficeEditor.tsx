@@ -126,7 +126,7 @@ export const OfficeEditor = forwardRef<
       if (status.current.conflict) throw new Error(status.current.conflict.message);
       const flushed = waitFlushed(); send({ type: "office:flush" });
       const revision = await flushed;
-      if (revision === null) throw new Error("문서를 저장하지 못해 AI 요청을 시작하지 않았습니다.");
+      if (revision === null) throw new Error("문서를 저장하지 못했습니다. 편집 내용은 문서에 유지됩니다.");
       if (message.action === "new-session") await handlers.current.onNewSession(revision);
       else await handlers.current.onPrepareAi(revision);
       const value = await api.editorGrant(latest.current.id);

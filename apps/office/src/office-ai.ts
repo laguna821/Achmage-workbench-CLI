@@ -142,10 +142,11 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
   };
   return {
     desktop: { getAiSettings: getSettings, openAiModelSettings: openSettings, aiStream, aiStreamCancel, onAiStream: events.on("aiStream"), onAiSettingsChanged: events.on("aiSettingsChanged"),
+      aiToolCapabilities: async () => ({ imageGeneration: { available: false }, imageAnalysis: { available: false }, videoAnalysis: { available: false } }),
       setAiSettings: async (settings: unknown) => { const saved = await gateway.aiSession(init.artifact.id).json("selection", settings); events.emit("aiSettingsChanged", saved); return saved; } },
     projectApi,
     subscription: { statuses: () => statuses(), recheck: () => statuses(true), onChanged: events.on("aiSubscriptionChanged"), openSettings,
-      install: openSettings, update: openSettings, login: openSettings, cancelLogin: openSettings, setMeteredAccepted: openSettings },
+      install: openSettings, update: openSettings, login: openSettings, cancelLogin: openSettings, setMeteredAccepted: openSettings, openInstallHelp: openSettings, openConnectHelp: openSettings },
     subscribe: (listener: () => void) => { subscribers.add(listener); return () => { subscribers.delete(listener); }; },
     snapshot: () => sessionKey,
     newSession: async () => { if (active) { active.cancel(); await active.settled; } await parent("new-session"); },
@@ -153,3 +154,40 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
   };
 }
 export type OfficeAiBridge = ReturnType<typeof createOfficeAi>;
+
+/** Expose the shared conversation before mounting any original renderer/preload. */
+export function mountOfficeAi(init: Init, gateway: Gateway, events = new Events()) {
+  const ai = createOfficeAi(init, gateway, events);
+  Object.assign(window, { projectApi: ai.projectApi, aiOfficeSubscription: ai.subscription, workbenchOfficeAi: ai });
+  window.addEventListener("focus", () => { void ai.refresh().catch(() => {}); });
+  return ai;
+}
+
+/** Original Electron channel names, backed by the same scoped document capability. */
+export function officeAiTransport(ai: OfficeAiBridge, dispatch: (channel: string, args: unknown[]) => void, fallback: (channel: string, args: unknown[]) => Promise<unknown>) {
+  ai.desktop.onAiStream((chunk) => dispatch("ai:stream-chunk", [chunk]));
+  ai.desktop.onAiSettingsChanged(() => dispatch("ai:settings-changed", []));
+  ai.subscription.onChanged((statuses) => dispatch("ai:subscription-changed", [statuses]));
+  return async (channel: string, args: unknown[]): Promise<unknown> => {
+    switch (channel) {
+      case "ai:get-settings": return ai.desktop.getAiSettings();
+      case "ai:set-settings": return ai.desktop.setAiSettings(args[0]);
+      case "ai:open-model-settings": return ai.desktop.openAiModelSettings();
+      case "ai:stream": return ai.desktop.aiStream(args[0] as Parameters<typeof ai.desktop.aiStream>[0]);
+      case "ai:stream-cancel": return ai.desktop.aiStreamCancel(String(args[0]));
+      case "ai:tool-capabilities": return ai.desktop.aiToolCapabilities();
+      case "ai:subscription-statuses": return ai.subscription.statuses();
+      case "ai:subscription-recheck": return ai.subscription.recheck();
+      case "home:open-subscription-install-help": case "home:open-connect-help": return ai.desktop.openAiModelSettings();
+      case "ai:subscription-install": case "ai:subscription-update": case "ai:subscription-login":
+      case "ai:subscription-cancel-login": case "ai:subscription-metered": {
+        await ai.desktop.openAiModelSettings();
+        // The original settings dialog owns installation/login and its progress.
+        // Do not report a successful action merely because that dialog was opened.
+        return { ok: false, error: "열린 AI 설정 창에서 연결을 계속해 주세요." };
+      }
+      case "ai:subscription-codex-image": return false;
+      default: return fallback(channel, args);
+    }
+  };
+}

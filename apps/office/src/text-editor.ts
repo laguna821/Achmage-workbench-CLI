@@ -1,3 +1,4 @@
+import { mountOfficeAi } from "./office-ai.ts";
 import { Events, Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
 import { configureTextAssets, unresolveTextImage } from "./text-assets.ts";
@@ -5,6 +6,7 @@ import { configureTextAssets, unresolveTextImage } from "./text-assets.ts";
 /** The original Markdown/HTML renderers serialize their own source; never normalize it here. */
 export async function createTextEditor(kind: "markdown" | "html") {
   const init = await handshake(), gateway = new Gateway(init.token), events = new Events();
+  const ai = mountOfficeAi(init, gateway, events);
   const id = init.artifact.id, path = init.artifact.path;
   configureTextAssets((await gateway.textAssets(id)).baseUrl, path);
   const decode = (bytes: ArrayBuffer) => new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
@@ -154,11 +156,8 @@ export async function createTextEditor(kind: "markdown" | "html") {
     onViewImage: events.on("image"),
     onExportRequest: events.on("export"),
     onPrintRequest: events.on("print"),
-    onAiSettingsChanged: events.on("aiSettings"),
-    onAiStream: events.on("aiStream"),
-    getAiSettings: unavailable("AI 설정"), setAiSettings: unavailable("AI 설정"),
-    openAiModelSettings: unavailable("AI 모델 설정"),
-    aiToolCapabilities: unavailable("AI 도구"), aiStream: unavailable("AI 실행"), aiStreamCancel: unavailable("AI 실행"),
+    ...ai.desktop,
+    aiSubscription: ai.subscription, subscription: ai.subscription,
     webSearch: unavailable("웹 검색"), readUrl: rejected("웹 읽기"), imageSearch: unavailable("이미지 검색"),
     fetchImage: unavailable("이미지 다운로드"), aiGenerateImage: rejected("이미지 생성"),
     openSourcePath: unavailable("참조 문서 열기"), resolveWikiLinks: unavailable("위키 링크"),

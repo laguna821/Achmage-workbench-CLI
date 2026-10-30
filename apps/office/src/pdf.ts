@@ -1,9 +1,11 @@
+import { mountOfficeAi, officeAiTransport } from "./office-ai.ts";
 import { Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
 import { dispatch, useTransport } from "./platform/electron-renderer.ts";
 import type { PdfRequest } from "../../../packages/contracts/src/pdf.ts";
 
 const init = await handshake(), gateway = new Gateway(init.token);
+const ai = mountOfficeAi(init, gateway);
 const id = init.artifact.id, path = init.artifact.path;
 let revision = init.artifact.revision, contentRevision = revision, theme = init.theme;
 let source = await gateway.raw(id, revision), restored = false, dirty = false, epoch = 0, opened = false;
@@ -45,6 +47,13 @@ async function flush() {
   if (flushing) return flushing;
   flushing = (async () => {
     try {
+      // AI tools update React state before the next close-save subscription is
+      // installed. Capture that committed state, not the previous render's empty
+      // snapshot. A hidden window still makes progress via the bounded timer.
+      await new Promise<void>((resolve) => {
+        const timer = window.setTimeout(resolve, 100);
+        requestAnimationFrame(() => requestAnimationFrame(() => { clearTimeout(timer); resolve(); }));
+      });
       const ok = await new Promise<boolean>((resolve) => {
         const timer = window.setTimeout(() => { closeAnswer = null; resolve(false); }, 12000);
         closeAnswer = (value) => { clearTimeout(timer); closeAnswer = null; resolve(value); };
@@ -85,7 +94,7 @@ const persistResult = async (next: number) => {
   await queueRecovery(() => recovery.drop(id)).catch(report);
 };
 useTransport({
-  async invoke(channel, args) {
+  invoke: officeAiTransport(ai, dispatch, async (channel, args) => {
     if (queries[channel]) return gateway.pdf(id, revision, queries[channel], requestOf(args[0]), workingSource());
     if (pathQueries[channel]) { checkPath(args[0]); return gateway.pdf(id, revision, pathQueries[channel], { path }, workingSource()); }
     if (transforms[channel]) {
@@ -139,7 +148,7 @@ useTransport({
       // contracts. No generic null/empty-success proxy, and no implicit model invocation.
       default: return fail(channel);
     }
-  },
+  }),
   send(channel, args) {
     if (channel === "pdf:dirty-changed") { dirty = args[0] === true; post({ type: "office:dirty", dirty }); }
     else if (channel === "pdf:close-save-result") closeAnswer?.(args[0] === true);

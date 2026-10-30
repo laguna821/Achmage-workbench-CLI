@@ -1,3 +1,5 @@
+import { mountOfficeAi } from "./office-ai.ts";
+import { DEFAULT_AI_PANEL_PREFS, normalizeAiPanelPrefs } from "../../../vendor/ieumoffice/packages/ui/src/ai-panel-prefs.ts";
 import { Events, Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
 import type { HwpFormat, MeasuredTab, MemoSnapshot } from "../../../packages/contracts/src/hwp.ts";
@@ -9,6 +11,7 @@ import { prepareOutput, commitOutput, printOutput } from "./output.ts";
 // the Workbench revision, writer grant and recovery copy. No Electron main process is involved.
 const init = await handshake();
 const gateway = new Gateway(init.token), events = new Events();
+const ai = mountOfficeAi(init, gateway, events);
 const id = init.artifact.id, path = init.artifact.path;
 const format: HwpFormat = /\.hwpx$/i.test(path) ? "hwpx" : "hwp";
 const state = { revision: init.artifact.revision, theme: init.theme, dirty: false, kept: false, recovered: false, trackingDropped: false, saveBlocked: false, password: false, memoOpen: false, epoch: 0 };
@@ -80,7 +83,8 @@ listen((message) => {
 });
 
 const pendingFeature = async (): Promise<never> => { throw new Error("이 메뉴의 Workbench 연결을 준비 중입니다. 현재 문서와 편집 내용은 그대로 유지됩니다."); };
-const panelPrefs = { side: "left", fontSize: "default", customFontSize: 14, spellcheck: true, openInNewDocs: false, showAiSidebar: false };
+let panelPrefs = DEFAULT_AI_PANEL_PREFS;
+try { panelPrefs = normalizeAiPanelPrefs(JSON.parse(localStorage.getItem("workbench.office.hwp.ai-prefs") ?? "null")); } catch { /* UI preferences only. */ }
 const hwpApi = {
   consumePending: async () => path,
   untitledCopy: async () => null,
@@ -183,22 +187,11 @@ const hwpApi = {
   getAutoSaveDefault: async () => ({ on: false, updatedAt: 1 }),
   onAutoSaveDefaultChanged: events.on("autoSaveDefaultChanged"),
   getAiPanelPrefs: async () => panelPrefs,
-  setAiPanelPrefs: async () => panelPrefs,
+  setAiPanelPrefs: async (patch: object) => { panelPrefs = normalizeAiPanelPrefs({ ...panelPrefs, ...patch }); localStorage.setItem("workbench.office.hwp.ai-prefs", JSON.stringify(panelPrefs)); events.emit("aiPanelPrefsChanged", panelPrefs); return panelPrefs; },
   onAiPanelPrefsChanged: events.on("aiPanelPrefsChanged"),
-  // These explicitly incomplete ports remain in the parity ledger until shared AI services
-  // are connected. Missing methods never silently report success.
-  getAiSettings: async () => ({ provider: "auto", providers: {} }),
-  setAiSettings: pendingFeature,
-  onAiSettingsChanged: events.on("aiSettingsChanged"),
-  openAiModelSettings: pendingFeature,
-  aiSubscription: {
-    statuses: async () => ({}), recheck: pendingFeature, login: pendingFeature, install: pendingFeature,
-    update: pendingFeature, cancelLogin: pendingFeature, setMeteredAccepted: pendingFeature,
-    onChanged: events.on("subscriptionChanged"), openInstallHelp: pendingFeature, openConnectHelp: pendingFeature,
-  },
-  aiStream: pendingFeature, aiStreamCancel: pendingFeature, onAiStream: events.on("aiStream"),
+  ...ai.desktop,
+  aiSubscription: ai.subscription,
   readUrl: pendingFeature, imageSearch: pendingFeature, generateImage: pendingFeature, fetchImage: pendingFeature,
-  aiToolCapabilities: async () => null,
   pickAttachments: pendingFeature, addAttachmentPaths: pendingFeature, addPastedImage: pendingFeature,
   readAttachment: pendingFeature, readAttachmentImage: pendingFeature,
   getPathForFile: (file: File) => file.name,

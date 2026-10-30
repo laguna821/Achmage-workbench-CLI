@@ -1,8 +1,10 @@
+import { mountOfficeAi, officeAiTransport } from "./office-ai.ts";
 import { Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
 import { dispatch, useTransport } from "./platform/electron-renderer.ts";
 
 const init = await handshake(), gateway = new Gateway(init.token);
+const ai = mountOfficeAi(init, gateway);
 const id = init.artifact.id, path = init.artifact.path;
 let revision = init.artifact.revision, theme = init.theme, restored = false, opened = false, dirty = false, epoch = 0;
 let file = await gateway.openMindmap(id, revision);
@@ -69,7 +71,7 @@ let prefs: Record<string, unknown> = {};
 try { prefs = JSON.parse(localStorage.getItem("workbench.office.mindmap.prefs") ?? "{}"); } catch { /* UI preferences are not document data. */ }
 const fail = (channel: string) => { throw new Error(`마인드맵의 이 서비스를 아직 연결하지 못했습니다: ${channel}`); };
 useTransport({
-  async invoke(channel, args) {
+  invoke: officeAiTransport(ai, dispatch, async (channel, args) => {
     switch (channel) {
       case "mindmap:consume-pending": return path;
       case "mindmap:open-file": {
@@ -116,7 +118,7 @@ useTransport({
       }
       default: return fail(channel);
     }
-  },
+  }),
   send(channel, args) {
     if (channel === "mindmap:dirty-changed") { dirty = args[0] === true; post({ type: "office:dirty", dirty }); }
     else if (channel === "mindmap:close-save-result") closeAnswer?.(args[0] === true);

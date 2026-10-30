@@ -1,16 +1,1 @@
-/* Workbench keeps AI in its conversation: the slides editor's own AI entry points are hidden —
-   the Home tab's AI group, the AI dock and rail, the stage's AI bar and ask popover.
-   (Not by .ai-feature-icon: the picture tools' crop and transparency buttons carry it too.) */
-.ribbon-group:has(> .ribbon-group-items > .ai-entry),
-.ai-entry,
-.ai-dock,
-.ai-rail,
-.ai-ask-trigger,
-.ai-ask-pop,
-.stage-ai-bar {
-  display: none !important;
-}
-
-.ribbon-group:has(> .ribbon-group-items > .ai-entry) + .ribbon-sep {
-  display: none !important;
-}
+/* Original AI sidebar, selection prompts and editor controls share the Workbench session. */

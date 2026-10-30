@@ -1,3 +1,4 @@
+import { mountOfficeAi, officeAiTransport } from "./office-ai.ts";
 import { Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
 import { dispatch, useTransport } from "./platform/electron-renderer.ts";
@@ -6,6 +7,7 @@ type OpenBook = { status: string; sessionId?: string; assetBase?: string; restor
 type EditResult = { ok: boolean; dirty?: boolean; workbenchGeneration?: number; [key: string]: unknown };
 type Saved = { ok: true; revision: number; path: string; written: boolean; docHash: string; workbenchGeneration: number };
 const init = await handshake(), gateway = new Gateway(init.token), id = init.artifact.id, path = init.artifact.path;
+const ai = mountOfficeAi(init, gateway);
 let revision = init.artifact.revision, theme = init.theme, session = "", restored = false, pending = false, backendDirty = false, generation = -1, epoch = 0, rebase = false;
 let openPromise: Promise<OpenBook> | null = null, recoveryQueue = Promise.resolve();
 const report = (error: unknown) => post({ type: "office:error", message: error instanceof Error ? error.message : String(error) });
@@ -80,7 +82,7 @@ prefsBus.onmessage = (event) => dispatch("epub:view-prefs-changed", [event.data]
 let aiPrefs: Record<string, unknown> = {};
 try { aiPrefs = JSON.parse(localStorage.getItem("workbench.office.epub.ai-prefs") ?? "{}"); } catch { /* preferences only */ }
 useTransport({
-  async invoke(channel, args) {
+  invoke: officeAiTransport(ai, dispatch, async (channel, args) => {
     switch (channel) {
       case "epub:consume-pending": return path;
       case "epub:open-file": {
@@ -137,7 +139,7 @@ useTransport({
       }
       default: throw new Error(`전자책의 이 서비스를 아직 연결하지 못했습니다: ${channel}`);
     }
-  },
+  }),
   send(channel, args) {
     if (channel === "epub:dirty-changed") { pending = args[0] === true; changed(); if (pending) scheduleKeep(); }
     if (channel === "epub:close-save-result") closeAnswer?.(args[0] === true);
