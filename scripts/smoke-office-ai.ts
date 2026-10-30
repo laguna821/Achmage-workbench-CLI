@@ -1,6 +1,6 @@
 // Built host + actual Ieum HTTP protocol, with a local fixture endpoint and fake CLI discovery.
 // No real model, credential, existing profile or native window is used.
-// Usage: node scripts/smoke-office-ai.ts <evidence-directory>
+// Usage: node scripts/smoke-office-ai.ts <evidence-directory> [native-vault-binary] [--managed-cli]
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
@@ -13,12 +13,16 @@ import type { AddressInfo } from "node:net";
 
 const repo = fileURLToPath(new URL("../", import.meta.url));
 const outDir = resolve(process.argv[2] ?? join(tmpdir(), "wb-office-ai-bundle"));
-const vaultBinary = process.argv[3] ? resolve(process.argv[3]) : null;
+const managedCli = process.argv.includes("--managed-cli");
+const vaultBinary = process.argv[3] && process.argv[3] !== "--managed-cli" ? resolve(process.argv[3]) : null;
 mkdirSync(outDir, { recursive: true });
 const profile = mkdtempSync(join(tmpdir(), "wb-office-ai-bundle-"));
 const checks: string[] = [];
 const requests: { authorized: boolean; model: unknown }[] = [];
 const provider = createServer(async (req, res) => {
+  if (managedCli && req.method === "GET" && req.url?.startsWith("/registry/")) {
+    res.setHeader("content-type", "application/json"); res.end(JSON.stringify({ version: "0.0.0-fake", dist: { unpackedSize: 4_194_304 } })); return;
+  }
   let input = ""; for await (const part of req) input += String(part);
   const request = JSON.parse(input) as { model?: unknown };
   requests.push({ authorized: req.headers.authorization === "Bearer fixture-only-key", model: request.model });
@@ -31,9 +35,13 @@ const settingsPath = join(profile, "office", "ai-settings.json");
 writeFileSync(settingsPath, JSON.stringify({ provider: "custom", providers: { custom: { model: "fixture-model", apiKey: "fixture-only-key", baseUrl: `http://127.0.0.1:${(provider.address() as AddressInfo).port}/v1` } } }), { mode: 0o600 });
 let originalSettings = readFileSync(settingsPath);
 const file = join(profile, "project", "문서.md"); writeFileSync(file, "원본은 유지합니다.\n");
+const installedCli = join(profile, "engines/codex/0.0.0-fake/node_modules/@openai/codex/bin/codex.js");
+const npmLog = join(profile, "npm.log"), npmFailure = join(profile, "npm-failure");
 const child = spawn(process.execPath, [join(repo, "apps/host/dist/host.mjs")], {
   cwd: repo,
-  env: { ...process.env, ...(vaultBinary ? { WORKBENCH_SECRET_BIN: vaultBinary } : {}), WORKBENCH_DATA_DIR: profile, WORKBENCH_PORT: "0", WORKBENCH_EDITORS_PORT: "0", WORKBENCH_EXIT_ON_STDIN_CLOSE: "1", WORKBENCH_CODEX_BIN: join(repo, "scripts/fixtures/fake-codex.mjs"), WORKBENCH_CLAUDE_BIN: join(repo, "scripts/fixtures/fake-claude.mjs") },
+  env: { ...process.env, ...(vaultBinary ? { WORKBENCH_SECRET_BIN: vaultBinary } : {}), WORKBENCH_DATA_DIR: profile, WORKBENCH_PORT: "0", WORKBENCH_EDITORS_PORT: "0", WORKBENCH_EXIT_ON_STDIN_CLOSE: "1", WORKBENCH_CODEX_BIN: managedCli ? installedCli : join(repo, "scripts/fixtures/fake-codex.mjs"), WORKBENCH_CLAUDE_BIN: join(repo, "scripts/fixtures/fake-claude.mjs"),
+    ...(managedCli ? { WORKBENCH_NPM_CLI: join(repo, "scripts/fixtures/fake-npm-cli.mjs"), FAKE_NPM_FAIL: "", FAKE_NPM_FAIL_FILE: npmFailure, FAKE_NPM_LOG: npmLog, FAKE_CODEX_VERSION: "0.0.0-fake", npm_config_registry: `http://127.0.0.1:${(provider.address() as AddressInfo).port}/registry/` } : {}),
+  },
   stdio: ["pipe", "pipe", "pipe"],
 });
 let stderr = ""; child.stderr.on("data", (data: Buffer) => { stderr += data.toString(); });
@@ -54,6 +62,34 @@ try {
   assert.equal((await fetch(`${host.url}/api/office-ai/settings`)).status, 401); checks.push("settings require full host authentication");
   const settingsSnapshot = await (await fetch(`${host.url}/api/office-ai/settings`, { headers: mainHeaders })).json();
   assert.ok(!JSON.stringify(settingsSnapshot).includes("fixture-only-key")); checks.push("settings screen receives opaque saved-key references");
+  if (managedCli) {
+    const statuses = async () => (await fetch(`${host.url}/api/office-ai/statuses?refresh=1`, { headers: mainHeaders })).json();
+    const invoke = async (channel: string, args: unknown[] = []) => {
+      const res = await fetch(`${host.url}/api/office-ai/invoke`, { method: "POST", headers: mainHeaders, body: JSON.stringify({ channel, args, owner: "cli-smoke" }) });
+      assert.equal(res.status, 200); return res.json();
+    };
+    assert.equal((await statuses()).codex.state, "not-installed"); checks.push("automatic Office lookup honors missing Workbench override without fallback");
+    const began = Date.now();
+    const installed = await Promise.all([invoke("ai:subscription-install", [{ provider: "codex" }]), invoke("ai:subscription-install", [{ provider: "codex" }])]);
+    assert.deepEqual(installed, [{ ok: true }, { ok: true }]); assert.ok(Date.now() - began >= 1800);
+    assert.equal(readFileSync(npmLog, "utf8").trim().split("\n").filter((line) => JSON.parse(line)[0] === "install").length, 1);
+    checks.push("two settings callers wait for one real shared installer fixture to finish");
+    const status = await statuses(); assert.equal(status.codex.state, "ready");
+    assert.ok(!settingsSnapshot.settings.providers.codex.cliPath);
+    const snapshot = await (await fetch(`${host.url}/api/snapshot`, { headers: mainHeaders })).json();
+    assert.equal(snapshot.providers.find((p: { provider: string }) => p.provider === "codex").binary, installedCli);
+    checks.push("Workbench and original Office status use the just-installed CLI without saving its path");
+    assert.deepEqual((await invoke("ai:codex-models")).models, ["fake-model"]);
+    const draft = structuredClone(settingsSnapshot.settings); draft.provider = "codex";
+    const ping = await invoke("ai:chat", [{ settings: draft }]); assert.equal(ping.ok, true, JSON.stringify(ping)); assert.equal(ping.content, "OK");
+    assert.deepEqual(readFileSync(settingsPath), originalSettings);
+    checks.push("original catalogue and structured fixed ping use the same CLI without changing settings");
+    writeFileSync(npmFailure, "ENOTFOUND");
+    const failed = await invoke("ai:subscription-update", [{ provider: "codex" }]);
+    assert.equal(failed.ok, false); assert.equal(failed.reason, "failed"); assert.match(failed.error, /인터넷/);
+    assert.equal((await statuses()).codex.state, "ready");
+    checks.push("failed update is reported and leaves the previously installed CLI usable");
+  }
   if (vaultBinary) {
     const write = (body: unknown) => fetch(`${host.url}/api/office-ai/settings`, { method: "PUT", headers: mainHeaders, body: JSON.stringify(body) });
     assert.equal((await write({ settings: settingsSnapshot.settings, expectedRevision: settingsSnapshot.revision })).status, 200);

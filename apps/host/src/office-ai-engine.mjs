@@ -18,10 +18,10 @@ const canonicalSettings = (settings) => JSON.stringify(normalizeAiSettings(sanit
   value && typeof value === "object" && !Array.isArray(value)
     ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, value[key]])) : value);
 
-export function createOfficeAiEngine(dataDir, injected = {}) {
+export function createOfficeAiEngine(dataDir, injected = {}, hostActions = {}) {
   const store = injected.settingsStore ?? new OfficeSettings(dataDir);
   const getSettings = () => store.publicSettings();
-  const controls = createOfficeSettingsControls(dataDir, store, injected), service = controls.service;
+  const controls = createOfficeSettingsControls(dataDir, store, injected, hostActions), service = controls.service;
   const statuses = (trusted = false) => Object.fromEntries(Object.entries(service.getStatuses()).map(([id, value]) => {
     const { account: _account, ...status } = value;
     return [id, trusted ? value : status];
@@ -33,17 +33,20 @@ export function createOfficeAiEngine(dataDir, injected = {}) {
     const supplied = sanitizeAiSettings(requestSettings);
     // sanitize removes empty cliPath while normalize's defaults retain it. Canonicalize both
     // snapshots identically; otherwise a valid settings round trip looks like a changed target.
-    if (!supplied || canonicalSettings(supplied) !== canonicalSettings(stored)) {
-      return { ok: false, refusal: { error: "AI 설정이 바뀌었습니다. 현재 설정을 다시 읽은 뒤 요청해 주세요." } };
+    const changed = () => ({ ok: false, refusal: { error: "AI 설정이 바뀌었습니다. 현재 설정을 다시 읽은 뒤 요청해 주세요." } });
+    if (!supplied || canonicalSettings(supplied) !== canonicalSettings(stored)) return changed();
+    try {
+      const settings = await store.executionSettings();
+      const target = resolveAiRun(settings, await controls.prepareRun(settings), texts);
+      return target.ok && canonicalSettings(getSettings()) !== canonicalSettings(stored) ? changed() : target;
     }
-    try { return resolveAiRun(await store.executionSettings(), statuses(), texts); }
     catch (error) { return { ok: false, refusal: { error: error instanceof Error ? error.message : "보관된 AI 키를 읽지 못했습니다." } }; }
   };
   return {
     settings: getSettings,
     configuration: store,
     settingsInvoke: controls.invoke,
-    setMeteredAccepted: (provider, accepted) => service.setMeteredAccepted(provider, accepted),
+    setMeteredAccepted: controls.setMeteredAccepted,
     close: () => { controls.close(); store.close(); },
     statuses: async (recheck = false, trusted = false) => {
       if (recheck || Object.values(statuses()).some((value) => value.state === "checking")) await service.check();

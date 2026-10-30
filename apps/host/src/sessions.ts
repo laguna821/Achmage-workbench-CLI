@@ -2062,6 +2062,16 @@ export class SessionManager {
     return this.engineSetup.decorate(adapter.status());
   }
 
+  /** Document settings stay busy until the shared installer actually finishes. */
+  async installEngineAndWait(provider: Provider) {
+    this.installEngine(provider);
+    await this.engineSetup.install(provider);
+    const state = this.engineSetup.state(provider);
+    if (state?.state !== "done") return { ok: false, reason: "failed" as const, error: state?.message ?? "엔진 설치를 완료하지 못했습니다." };
+    await this.adapter(provider).locate?.();
+    return { ok: true };
+  }
+
   async refreshProviders(): Promise<ProviderStatus[]> {
     // An engine installed meanwhile (by the user, in a terminal) is found again.
     return Promise.all([...this.adapters.values()].map(async (adapter) => this.engineSetup.decorate(await adapter.refreshStatus())));

@@ -128,7 +128,9 @@ manager.registerAdapter(
 );
 
 const grants = new EditorGrants();
-const officeAi = new OfficeAi(dataDir, undefined, manager.office);
+const officeAi = new OfficeAi(dataDir, undefined, manager.office, {
+  install: (provider) => manager.installEngineAndWait(provider === "claude-code" ? "claude" : "codex"),
+});
 const editors = createEditorsServer(manager.documents, grants, webDir && existsSync(webDir) ? webDir : null, officeAi);
 let editorsOrigin: string | null = null;
 let officeSettingsOrigin: string | null = null, applicationOrigin: string | null = null;

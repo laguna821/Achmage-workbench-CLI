@@ -120,9 +120,21 @@ Workbench의 연결과 설정 메뉴와 명령 팔레트에서 **문서 AI 설�
 
 **호스트·설정 프레임·문서/세션 회귀51/51, 전체 타입·전체 앱/호스트 빌드, 실제 Linux Tauri16/16** 통과. 원본 메뉴·모델 목록·저장 전 연결 시험·키 암호화·연속 저장·한글 띄어쓰기·미디어/검색 키·다크 모드·별도 origin·앱/키링 재시작·오래된 저장 거절을 확인했다. 독립 프로필·D-Bus·키링과 로컬 모의 제공자를 사용했고, 실제 사용자 계정 로그인·설치·유료 요청은 실행하지 않았다. 전용 프로세스는 정상 종료했다.
 
-파일 검색 설정 저장소·색인과 9종 AI 패널/도구는 아직 후속이다. 설치·업데이트 버튼은 Workbench 설치 요청에 연결했으며, 완료 뒤 원본 제공자가 관리된 CLI 경로와 상태를 인식하는 경로는 이어 보완해야 한다. 원본 전체 기능 동등성이나 Windows/macOS 검증 완료를 뜻하지 않는다.
+파일 검색 설정 저장소·색인과 9종 AI 패널/도구는 아직 후속이다. 관리 CLI 검색과 설치 완료 연결은 다음 절에서 보완했다. 원본 전체 기능 동등성이나 Windows/macOS 검증 완료를 뜻하지 않는다.
 
 설계 수정 판: `research:rr-eaec27a51bbbc49c61a971dcdbc19b80:8511d074afb2055a73f3c975029eec31ef80558832748891d55b95aed91b0afb`. 검증 판: `research:rr-eaec27a51bbbc49c61a971dcdbc19b80:e43eee3623c7db964501a2314e30e31bada46ba9982a589eba87eaeedbe6ba7d`. 증거: `implementation-20261030/office-settings-native-02/results.json`과 같은 폴더의 최종 로그. 재현: `scripts/app-e2e/run.ts ... --only=office-settings --engines=stand-in`. 빌드 PATH·검사 인자·원본 이름 입력·검사 프로필 초기화의 실패와 수정도 같은 연구에 보존했다.
+
+## Workbench CLI와 문서 AI 연결
+
+문서 설정에서 CLI 경로를 비워 두면 상태 확인·모델 목록·로그인·원본 제공자 요청이 Workbench와 같은 Claude/Codex를 사용한다. 호스트 빌드의 좁은 모듈 어댑터로 기존 실행파일 검색기를 재사용하며, 실행 인자·환경·도구 PATH와 Claude SDK 내장 경로를 보존한다. 검색 결과를 설정 파일에 자동 저장하거나 provider/model을 바꾸지 않는다. 직접 입력한 Office 경로는 원본 검색 규칙을 따른다.
+
+원본 설치·업데이트 요청은 Workbench의 공유 설치 작업이 끝날 때까지 기다린다. 완료 뒤 실제 CLI를 다시 확인하고 실패하면 원인을 반환한다. 두 창에서 누르면 같은 설치를 기다리며, 창을 닫아도 이미 시작한 전역 설치는 계속한다. 명시한 Office 경로는 다른 곳의 관리 설치로 교체하지 않는다. 그 경로에서 업데이트하거나 경로를 자동 검색으로 저장하도록 안내한다. 기존 Workbench의 자동 선택 우선순위는 유지한다.
+
+연결 시험·실행 전 실제 로그인 상태를 확인한다. 미저장 경로의 시험은 기존 CLI의 종량제 동의를 사용하지 않고 저장 파일도 바꾸지 않는다. 다른 경로를 저장하면 해당 동의를 해제하며, 상태 확인 도중 경로/설정이 바뀌면 실행·동의를 거절한다.
+
+**국소·인접76/76, 전체4프로젝트 타입·최종 host/harness 타입, 전체 앱/호스트와 native 빌드** 통과. **빌드된 호스트18/18**에서 중복 설치 대기·완료 후 같은 CLI 인식·원본 모델 목록/구조화 응답·업데이트 실패 후 기존 설치 보존을 확인했다. **실제 Linux Tauri18/18**에서 경로 입력 없이 두 원본 구독 카드가 연결 상태를 표시하고, 설정 저장·격리·앱/키링 재시작 회귀를 통과했다. 임시 프로필·독립 키링·가짜 CLI/npm·로컬 레지스트리만 사용했으며 전용 프로세스는 정상 종료했다.
+
+검증 판: `research:rr-dcc9a15cf00dde565b07d62b40279b38:d3183f2e666ac5b446a19a77e7f7a5215a4c62a022302d10b01b5f4ed81d5f57`. 증거: `implementation-20261030/office-cli-bundle-00/results.json`, `implementation-20261030/office-cli-native-00/`의 결과·화면·최종 로그. 재현: `node scripts/smoke-office-ai.ts <evidence-directory> --managed-cli`와 기존 native `--only=office-settings --engines=stand-in`. 원본 소스와 기존 vendor 잠금 파일 변경은 보존했다. Windows/macOS 실제 설치·CLI·설정 화면은 후속 검증 대상이다.
 
 ## 아직 완료되지 않은 범위
 

@@ -185,4 +185,20 @@ describe("Office settings persistence", () => {
       expect(JSON.parse(readFileSync(join(f.dir, "office/subscription-metered.json"), "utf8")).codex).toBeUndefined();
     } finally { restarted?.close?.(); engine.close?.(); f.close(); }
   });
+  it("does not run a provider if saved settings change during its fresh connection check", async () => {
+    const f = fixture(); let entered!: () => void, release!: () => void, calls = 0;
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    const waiting = new Promise<void>((resolve) => { release = resolve; });
+    const engine = createOfficeAiEngine(f.dir, { settingsStore: f.store, listModels: async () => [],
+      detect: async (provider) => { entered(); await waiting; return { provider, state: "ready" }; },
+      chat: async () => { calls++; return { ok: true, content: "should not run" }; },
+    });
+    try {
+      const initial = f.store.snapshot(); initial.settings.provider = "codex"; await f.store.write(initial.settings, initial.revision);
+      const pending = engine.chat({ settings: engine.settings(), system: "fixture", user: "ping" }, new AbortController().signal);
+      await started;
+      const changed = f.store.snapshot(); changed.settings.providers.codex.cliPath = "new-cli"; await f.store.write(changed.settings, changed.revision);
+      release(); expect(await pending).toMatchObject({ ok: false, error: expect.stringContaining("설정이 바뀌었습니다") }); expect(calls).toBe(0);
+    } finally { release(); engine.close?.(); f.close(); }
+  });
 });

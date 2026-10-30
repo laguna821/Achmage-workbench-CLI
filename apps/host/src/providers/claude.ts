@@ -1,9 +1,8 @@
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync, statSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import {
   forkSession,
@@ -25,7 +24,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import type { AccessMode, ApprovalDecision, EngineCommand, ModelOption, ProviderStatus, Session, UsageWindow, Work } from "@workbench/contracts";
 import { ClaudeTranscriptMapper, describeTool, type MapperOutput } from "@workbench/provider-claude";
-import { launchEnv, resolveClaude, type ResolvedBinary } from "../binaries.ts";
+import { launchEnv, resolveClaude, sdkBundledBinary, type ResolvedBinary } from "../binaries.ts";
 import { billingVarsIn } from "../engine-env.ts";
 import { parseClaudeAuthStatus } from "../engine-login.ts";
 import { isWebAddress } from "../open-url.ts";
@@ -174,16 +173,6 @@ export function modelsFromInfo(models: ModelInfo[]): ModelOption[] {
     defaultEffort: null,
     isDefault: hasDefault ? model.value === "default" : index === 0,
   }));
-}
-
-function sdkBundledBinary(): string | null {
-  try {
-    const require = createRequire(import.meta.url);
-    const pkg = require.resolve(`@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}/package.json`);
-    return join(dirname(pkg), process.platform === "win32" ? "claude.exe" : "claude");
-  } catch {
-    return null;
-  }
 }
 
 export class ClaudeAdapter implements ProviderAdapter {

@@ -4,12 +4,13 @@
 // engines inside, over about two seconds (so progress shows); `prefix -g` names a folder.
 // FAKE_NPM_FAIL=<code> fails like npm does (e.g. ENOTFOUND when offline).
 
-import { copyFileSync, mkdirSync, writeFileSync, appendFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, writeFileSync, appendFileSync, existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
+if (process.env.FAKE_NPM_LOG) appendFileSync(process.env.FAKE_NPM_LOG, `${JSON.stringify(args)}\n`);
 const option = (name) => {
   const index = args.indexOf(name);
   return index >= 0 ? args[index + 1] : undefined;
@@ -30,9 +31,10 @@ if (!prefix) {
   console.error("npm error --prefix is required here");
   process.exit(1);
 }
-if (process.env.FAKE_NPM_FAIL) {
+const failure = process.env.FAKE_NPM_FAIL || (process.env.FAKE_NPM_FAIL_FILE && existsSync(process.env.FAKE_NPM_FAIL_FILE) ? readFileSync(process.env.FAKE_NPM_FAIL_FILE, "utf8").trim() : "");
+if (failure) {
   await sleep(500);
-  console.error(`npm error code ${process.env.FAKE_NPM_FAIL}\nnpm error network request to https://registry.npmjs.org/ failed`);
+  console.error(`npm error code ${failure}\nnpm error network request to https://registry.npmjs.org/ failed`);
   process.exit(1);
 }
 const name = spec.replace(/@[^@/]*$/, "");

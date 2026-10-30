@@ -1,6 +1,8 @@
 import { execFile } from "node:child_process";
 import { statSync } from "node:fs";
+import { createRequire } from "node:module";
 import { arch, homedir, platform } from "node:os";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { engineEnv } from "./engine-env.ts";
 import { engineCandidates, envValue, launchFor, realFs, type EngineLaunch, type EngineName, type LocateContext } from "./engine-locate.ts";
@@ -8,6 +10,17 @@ import { npmCli } from "./npm.ts";
 import { shellAdded } from "./shell-env.ts";
 
 const run = promisify(execFile);
+
+/** The SDK's own fallback CLI, shared by Workbench sessions and document AI. */
+export function sdkBundledBinary(): string | null {
+  try {
+    const require = createRequire(import.meta.url);
+    const pkg = require.resolve(`@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}/package.json`);
+    return join(dirname(pkg), process.platform === "win32" ? "claude.exe" : "claude");
+  } catch {
+    return null;
+  }
+}
 
 /**
  * An engine found on this computer and how to start it. `path` is what was found (shown on

@@ -1,5 +1,6 @@
 import type { AgentMessage, AgentToolDef } from "../../../vendor/ieumoffice/packages/agent-core/src/types.ts";
 import type { OfficeSettings } from "./office-settings.mjs";
+import type { OfficeAiHostActions } from "./office-settings-controls.mjs";
 export const OFFICE_SECRET_PLACEHOLDER: string;
 export type OfficeAiChunk = { requestId: string; type: string; text?: string; [key: string]: unknown };
 export type OfficeAiStream = { requestId: string; sessionId?: string; settings: unknown; system: string; messages: AgentMessage[]; tools?: AgentToolDef[]; maxTokens?: number };
@@ -22,5 +23,5 @@ export type OfficeAiTestDeps = {
   stream?: (provider: string, config: Record<string, unknown>, system: string, messages: AgentMessage[], tools: AgentToolDef[], maxTokens: number, callbacks: Record<string, unknown>, options?: { timeoutMs?: number }) => Promise<void>;
   chat?: (...args: unknown[]) => Promise<{ ok: boolean; content?: string; error?: string }>;
 };
-export function createOfficeAiEngine(dataDir: string, injected?: OfficeAiTestDeps): OfficeAiEngine;
+export function createOfficeAiEngine(dataDir: string, injected?: OfficeAiTestDeps, hostActions?: OfficeAiHostActions): OfficeAiEngine;
 export function shutdownOfficeAiProviders(): void;

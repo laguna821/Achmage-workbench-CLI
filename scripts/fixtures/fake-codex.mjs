@@ -68,6 +68,10 @@ if (process.argv.includes("--version")) {
 
 const authFile = process.env.FAKE_ENGINE_AUTH_DIR ? join(process.env.FAKE_ENGINE_AUTH_DIR, "codex") : null;
 const signedIn = () => !authFile || existsSync(authFile);
+if (process.argv[2] === "login" && process.argv[3] === "status") {
+  console.error(signedIn() ? "Logged in using ChatGPT" : "Not logged in");
+  process.exit(signedIn() ? 0 : 1);
+}
 let loginServer = null;
 
 const CONTEXT_WINDOW = 258_400;
@@ -636,6 +640,8 @@ async function handle(message) {
       return reply({ data: [{ id: "fake-model", model: "fake-model", displayName: "Fake", description: "가짜 모델", hidden: false, supportedReasoningEfforts: [{ reasoningEffort: "medium", description: "" }], defaultReasoningEffort: "medium", isDefault: true }], nextCursor: null });
     case "modelProvider/capabilities/read":
       return reply({ namespaceTools: true, imageGeneration: true, webSearch: true });
+    case "mcpServerStatus/list":
+      return reply({ data: [], nextCursor: null });
     case "config/read":
       return reply({ config: { model: null, model_reasoning_effort: null, approval_policy: "on-request", sandbox_mode: "workspace-write", model_auto_compact_token_limit: 232_000 }, origins: {} });
     case "thread/start": {
@@ -699,6 +705,15 @@ async function handle(message) {
       // Kept for thread/read and thread/fork: the turn and the request that started it.
       thread.turns = [...(thread.turns ?? []), { id: turnId, itemsView: "full", status: "completed", error: null, startedAt: now(), completedAt: now(), durationMs: 0, items: [{ type: "userMessage", id: `um_${turnId}`, clientId: null, content: params.input.filter((input) => input.type === "text") }] }];
       reply({ turn: { id: turnId, items: [], itemsView: "full", status: "inProgress", error: null, startedAt: now(), completedAt: null, durationMs: null } });
+      if (params.outputSchema?.properties?.text && params.outputSchema?.properties?.toolCalls) {
+        // Ieum's document backend requests one structured response, never native tools.
+        const item = { type: "agentMessage", id: `am_${turnId}`, text: JSON.stringify({ text: "OK", toolCalls: [] }) };
+        notify("turn/started", { threadId: params.threadId, turn: { id: turnId, status: "inProgress", items: [] } });
+        notify("item/completed", { threadId: params.threadId, turnId, item });
+        notify("turn/completed", { threadId: params.threadId, turn: { id: turnId, status: "completed", items: [item], error: null } });
+        thread.turn = null;
+        return;
+      }
       const skill = params.input.find((input) => input.type === "skill");
       const text = params.input.map((input) => input.text ?? "").join("\n") + (skill ? `\n[스킬 ${skill.name} · ${skill.path}]` : "");
       void runTurn(params.threadId, thread, turnId, text, received(params.input));

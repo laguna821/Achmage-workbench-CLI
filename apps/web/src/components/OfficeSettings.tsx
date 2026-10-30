@@ -33,12 +33,6 @@ export function OfficeSettings({ api, theme, onClose }: { api: Api; theme: "ligh
         const options = { signal: controller.signal };
         if (message.channel === "ai:get-settings") return api.request("GET", "/api/office-ai/settings", undefined, options);
         if (message.channel === "ai:set-settings") return api.request("PUT", "/api/office-ai/settings", { settings: message.args[0], expectedRevision: message.revision }, options);
-        // Workbench's installer supports all target OSes; the original launcher's installer is Windows-only.
-        if (message.channel === "ai:subscription-install" || message.channel === "ai:subscription-update") {
-          const provider = (message.args[0] as { provider?: unknown } | undefined)?.provider;
-          if (provider !== "claude-code" && provider !== "codex") throw new Error("설치할 프로그램을 확인해 주세요.");
-          await api.installEngine(provider === "claude-code" ? "claude" : "codex"); return { ok: true };
-        }
         return api.request("POST", "/api/office-ai/invoke", { channel: message.channel, args: message.args, owner: owner.current }, options);
       };
       void call().then((value) => reply(value), (reason: Error) => { if (!controller.signal.aborted) reply(undefined, reason.message); }).finally(() => calls.current.delete(message.requestId));

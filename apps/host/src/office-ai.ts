@@ -6,6 +6,7 @@ import { HttpError } from "./errors.ts";
 import { readBody, sendJson } from "./http.ts";
 import type { OfficeAiChat, OfficeAiEngine, OfficeAiStream } from "./office-ai-engine.mjs";
 import type { OfficeSessions } from "./office-sessions.ts";
+import type { OfficeAiHostActions } from "./office-settings-controls.mjs";
 
 export const OFFICE_AI_INPUT_LIMIT = 20_000_000;
 const OUTPUT_LIMIT = 32_000_000;
@@ -48,12 +49,12 @@ export class OfficeAi {
   private closed = false;
   private readonly sessions: OfficeSessions | undefined;
   private readonly requireSession: boolean;
-  constructor(dataDir: string, engine?: OfficeAiEngine, sessions?: OfficeSessions) {
+  constructor(dataDir: string, engine?: OfficeAiEngine, sessions?: OfficeSessions, hostActions?: OfficeAiHostActions) {
     this.sessions = sessions;
     // Only explicitly injected provider fixtures can exercise the lower layer in isolation.
     // A default/production engine must never fall back to an unowned model request.
     this.requireSession = !engine || Boolean(sessions);
-    this.load = engine ? () => Promise.resolve(engine) : async () => (await import("./office-ai-engine.mjs")).createOfficeAiEngine(dataDir);
+    this.load = engine ? () => Promise.resolve(engine) : async () => (await import("./office-ai-engine.mjs")).createOfficeAiEngine(dataDir, undefined, hostActions);
   }
   get activeCount() { return this.active.size; }
   close() {

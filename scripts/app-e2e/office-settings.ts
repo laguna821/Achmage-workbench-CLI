@@ -1,7 +1,6 @@
 import { createServer } from "node:http";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { installProbe, pageErrors, shot, until, type Ctx } from "./scenarios.ts";
 import { KEY } from "./webdriver.ts";
 import type { LaunchOptions } from "./launch.ts";
@@ -43,9 +42,8 @@ export async function officeSettingsScenario(ctx: Ctx, launch: Omit<LaunchOption
   const close = async () => { await wd.frame(null); await click('button[aria-label="문서 AI 설정 닫기"]'); };
   try {
     const initial = (await snapshot()).settings;
-    const fixtures = fileURLToPath(new URL("../fixtures/", import.meta.url));
-    initial.providers.codex.cliPath = join(fixtures, "fake-codex.mjs");
-    initial.providers["claude-code"].cliPath = join(fixtures, "fake-claude.mjs");
+    initial.providers.codex.cliPath = "";
+    initial.providers["claude-code"].cliPath = "";
     initial.provider = "custom"; initial.customEndpoint = "settings-fixture";
     initial.customEndpoints = [{ id: "settings-fixture", name: "로컬 검사", kind: "api", baseUrl, apiKey: "", model: "fixture-settings-model" }];
     initial.search.provider = "tavily";
@@ -53,6 +51,10 @@ export async function officeSettingsScenario(ctx: Ctx, launch: Omit<LaunchOption
     const untouched = readFileSync(path);
     await open();
     ctx.report.check(S, "메뉴에서 원본 구독·무료 연결·고급 설정 화면 열기", await wd.execute<boolean>('return !!document.querySelector("#set-free-ai") && !!window.aiOffice && !!window.aiOfficeSubscription && !window.homeApi;'), undefined, await shot(ctx, "office-settings-open.png"));
+    const subscriptions = await ctx.app.api<Record<string, { state: string }>>("GET", "/api/office-ai/statuses?refresh=1");
+    ctx.report.check(S, "경로 입력 없이 Workbench가 선택한 두 CLI의 원본 로그인 상태 확인", subscriptions.codex?.state === "ready" && subscriptions["claude-code"]?.state === "ready");
+    await until(() => wd.execute<boolean>('return [...document.querySelectorAll(".ai-sub-card")].filter(card => card.textContent.includes("fake@example.com")).length === 2;'), 10000);
+    ctx.report.check(S, "원본 구독 카드 두 곳에 자동 검색한 계정 상태 표시", true, undefined, await shot(ctx, "office-settings-auto-cli.png"));
     ctx.report.check(S, "설정 열기는 저장 파일과 키를 변경하지 않음", readFileSync(path).equals(untouched));
     await wd.frame(null);
     const settingsFrame = await wd.waitFor('iframe[title="문서 AI 설정 화면"]');

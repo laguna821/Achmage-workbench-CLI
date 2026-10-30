@@ -103,6 +103,11 @@ export class OfficeSettings {
     let next = normalizeAiSettings(sanitized);
     // Only the original subscription service may record consent and its login fingerprint.
     if (!metered) next.meteredAccepted = copy(current.settings.meteredAccepted ?? {});
+    for (const provider of ["codex", "claude-code"]) {
+      if ((next.providers[provider]?.cliPath?.trim() ?? "") !== (current.settings.providers[provider]?.cliPath?.trim() ?? "")) {
+        next.meteredAccepted[provider] = false;
+      }
+    }
     const resolved = new Map();
     mapAiSecrets(next, (v) => {
       if (v.startsWith(REFERENCE)) {

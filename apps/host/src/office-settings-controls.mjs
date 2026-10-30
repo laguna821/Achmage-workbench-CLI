@@ -1,6 +1,7 @@
 // Original Electron-free settings operations, only behind the full host's settings RPC.
 import { AI_MEDIA_PROVIDERS, AI_SEARCH_PROVIDERS, sanitizeAiSettings, sanitizeCliPath, testMediaProvider, chatForProvider } from "../../../vendor/ieumoffice/packages/ai-provider/src/index.ts";
 import { createSubscriptionIpcDeps, registerSubscriptionIpc } from "../../../vendor/ieumoffice/packages/ai-provider/src/subscription/ipc.ts";
+import { createSubscriptionStatusService } from "../../../vendor/ieumoffice/packages/ai-provider/src/subscription/service.ts";
 import { SUBSCRIPTION_INSTALL_URLS } from "../../../vendor/ieumoffice/packages/ai-provider/src/subscription/contract.ts";
 import { subscriptionConnectHelpUrl } from "../../../vendor/ieumoffice/packages/ai-provider/src/connect-help.ts";
 import { listCodexModels } from "../../../vendor/ieumoffice/packages/ai-provider/src/codex-app-server.ts";
@@ -21,8 +22,18 @@ const object = (v) => v && typeof v === "object" && !Array.isArray(v);
 const invalid = () => { throw new HttpError(400, "office_settings_request", "설정 요청 형식이 올바르지 않습니다."); };
 const texts = { noApiKey: () => "AI 제공자의 키를 설정해 주세요.", noModel: () => "사용할 AI 모델을 선택해 주세요." };
 
-export function createOfficeSettingsControls(dataDir, store, injected = {}) {
+export function createOfficeSettingsControls(dataDir, store, injected = {}, hostActions = {}) {
   const deps = createSubscriptionIpcDeps({ getSettings: () => store.publicSettings(), setMeteredAccepted: (p, a) => store.setMeteredAccepted(p, a), dataDir: join(dataDir, "office"), detect: injected.detect, listModels: injected.listModels });
+  if (hostActions.install) {
+    const install = async (provider) => {
+      if (sanitizeCliPath(store.publicSettings().providers[provider]?.cliPath)) return {
+        ok: false, reason: "unsupported", error: "직접 지정한 CLI는 해당 설치 경로에서 업데이트해 주세요. Workbench 설치를 사용하려면 CLI 경로를 자동 검색으로 저장해 주세요.",
+      };
+      try { return await hostActions.install(provider); }
+      finally { await deps.service.check([provider], { fresh: true }); }
+    };
+    deps.launchInstall = install; deps.launchUpdate = install;
+  }
   Object.assign(deps, injected.subscriptionActions ?? {});
   const handlers = new Map(), free = new Map();
   const unregister = registerSubscriptionIpc({ handle: (name, handler) => handlers.set(name, handler), removeHandler: (name) => handlers.delete(name) }, deps);
@@ -33,15 +44,47 @@ export function createOfficeSettingsControls(dataDir, store, injected = {}) {
     await store.write(withFreeAiConnection(initial.settings, provider, result), initial.revision, { signal });
     return { ok: true, provider, model: result.model };
   };
+  const prepareRun = async (settings) => {
+    const providers = settings.provider === "auto" ? ["codex", "claude-code"]
+      : ["codex", "claude-code"].filter((provider) => provider === settings.provider);
+    if (!providers.length) return deps.service.getStatuses();
+    const stored = store.publicSettings();
+    const changed = providers.filter((p) => sanitizeCliPath(settings.providers[p]?.cliPath) !== sanitizeCliPath(stored.providers[p]?.cliPath));
+    const saved = providers.filter((p) => !changed.includes(p));
+    if (saved.length) await deps.service.check(saved, { fresh: true });
+    const statuses = deps.service.getStatuses();
+    if (changed.length) {
+      // An unsaved path may be tested, but cannot borrow the saved CLI's consent or
+      // mutate its status/acceptance record. The original service applies the rules.
+      const draft = createSubscriptionStatusService({ getSettings: () => settings,
+        setMeteredAccepted: () => {}, acceptanceStore: { read: async () => ({}), write: async () => {} },
+        detect: injected.detect });
+      const checked = await draft.check(changed);
+      for (const p of changed) statuses[p] = checked[p];
+    }
+    return statuses;
+  };
+  const setMeteredAccepted = async (provider, accepted) => {
+    const path = store.publicSettings().providers[provider]?.cliPath;
+    if (accepted && deps.service.getStatuses()[provider]?.state === "metered") await deps.service.check([provider], { fresh: true });
+    if (path !== store.publicSettings().providers[provider]?.cliPath) throw new HttpError(409, "office_settings_changed", "CLI 경로가 바뀌었습니다. 현재 연결을 다시 확인해 주세요.");
+    return deps.service.setMeteredAccepted(provider, accepted);
+  };
   return {
     service: deps.service,
+    prepareRun,
+    setMeteredAccepted,
     close() {
       unregister(); for (const controller of free.values()) controller.abort(); free.clear();
       for (const provider of ["codex", "claude-code"]) void deps.cancelLogin(provider).catch(() => {});
     },
     async invoke(channel, args, owner, signal) {
       if (!OFFICE_SETTINGS_CHANNELS.has(channel) || !Array.isArray(args) || args.length > 4) return invalid();
-      if (handlers.has(channel)) return handlers.get(channel)(undefined, ...args);
+      if (handlers.has(channel)) {
+        if (signal.aborted) return { ok: false, reason: "cancelled" };
+        if (channel === "ai:subscription-metered" && typeof args[0]?.accepted === "boolean" && ["codex", "claude-code"].includes(args[0]?.provider)) return setMeteredAccepted(args[0].provider, args[0].accepted);
+        return handlers.get(channel)(undefined, ...args);
+      }
       const input = args[0];
       switch (channel) {
         case "ai:codex-models": return (injected.codexModels ?? listCodexModels)(sanitizeCliPath(input));
@@ -53,8 +96,9 @@ export function createOfficeSettingsControls(dataDir, store, injected = {}) {
         case "ai:chat": {
           // This is the original settings pane's explicit connection test, never a general chat.
           const settings = await store.draftSettings(input?.settings);
-          const target = resolveAiRun(settings, deps.service.getStatuses(), texts);
+          const target = resolveAiRun(settings, await prepareRun(settings), texts);
           if (!target.ok) return { ok: false, ...target.refusal };
+          if (signal.aborted) return { ok: false, error: "요청을 취소했습니다." };
           try { return await (injected.chat ?? chatForProvider)(target.provider, target.config, "You are a connectivity test. Reply with the single word OK.", "ping", signal); }
           catch (error) { return aiChatFailure(error, () => "AI 제공자가 혼잡합니다. 잠시 후 다시 시도해 주세요."); }
         }
