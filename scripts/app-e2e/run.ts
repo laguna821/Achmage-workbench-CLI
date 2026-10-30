@@ -22,6 +22,7 @@ import { terminalsScenario } from "./terminals.ts";
 import { preparationScenario } from "./preparation.ts";
 import { sourceControlScenario } from "./source-control.ts";
 import { scmRemoteScenario } from "./scm-remote.ts";
+import { scmConflictScenario } from "./scm-conflict.ts";
 import { parseArgs } from "./args.ts";
 
 const { binary, outDir, only, engines } = parseArgs(process.argv.slice(2));
@@ -60,6 +61,7 @@ try {
       if (wants("preparation")) await preparationScenario(ctx, { binary, engines, profile: "native" });
       if (wants("scm")) await sourceControlScenario(ctx, { binary, engines, profile: "native" });
       if (wants("scm-remote")) await scmRemoteScenario(ctx, { binary, engines, profile: "native" });
+      if (wants("scm-conflict")) await scmConflictScenario(ctx, { binary, engines, profile: "native" });
     } catch (error) {
       const screenshot = report.path("failure.png");
       await ctx.app.wd.screenshot(screenshot).catch(() => undefined);

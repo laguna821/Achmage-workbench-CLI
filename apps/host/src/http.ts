@@ -350,8 +350,9 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         if (parts.length === 4 && parts[3] === "push-preview" && method === "POST") return sendJson(res, 200, await manager.sourceControl.pushPreview(parts[1], await readJson(req) as unknown as import("@workbench/contracts").ScmRemoteRequest));
         if (parts.length === 3 && method === "GET") return sendJson(res, 200, await manager.sourceControl.status(parts[1]));
         if (parts.length === 4 && parts[3] === "diff" && method === "POST") { const body = await readJson(req); return sendJson(res, 200, await manager.sourceControl.diff(parts[1], String(body.path ?? ""), body.area as import("@workbench/contracts").ScmArea, String(body.expectedRevision ?? ""))); }
+        if (parts.length === 4 && parts[3] === "conflict" && method === "POST") { const body = await readJson(req); return sendJson(res, 200, await manager.sourceControl.conflict(parts[1], String(body.path ?? ""), String(body.expectedRevision ?? ""))); }
         if (parts.length === 4 && parts[3] === "jobs" && method === "GET") return sendJson(res, 200, { jobs: manager.sourceControl.list(parts[1]) });
-        if (parts.length === 4 && parts[3] === "jobs" && method === "POST") return sendJson(res, 201, await manager.sourceControl.start(parts[1], await readJson(req) as unknown as import("@workbench/contracts").ScmRequest));
+        if (parts.length === 4 && parts[3] === "jobs" && method === "POST") return sendJson(res, 201, await manager.sourceControl.start(parts[1], await readJson(req, 16 * 1024 * 1024) as unknown as import("@workbench/contracts").ScmRequest));
       }
       if (parts[0] === "scm-jobs" && parts[1] && parts.length === 2 && method === "GET") return sendJson(res, 200, manager.sourceControl.get(parts[1]));
       if (parts[0] === "scm-jobs" && parts[1] && parts.length === 2 && method === "DELETE") return sendJson(res, 200, await manager.sourceControl.interrupt(parts[1]));

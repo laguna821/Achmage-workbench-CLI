@@ -8,7 +8,7 @@ import { scmText } from "./scm-git.ts";
 export const scmHash = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 const line = (value: string) => value.replace(/\n$/, "");
 export function scmPath(path: string) {
-  if (!path || path.includes("\0") || isAbsolute(path) || /^[a-z]:/i.test(path) || path.split("/").some((part) => part === ".." || part === ".git")) throw new HttpError(400, "scm_path", "저장소 안의 파일 경로가 필요합니다.");
+  if (!path || path.includes("\0") || isAbsolute(path) || /^[a-z]:/i.test(path) || path.split(process.platform === "win32" ? /[\\/]/ : /\//).some((part) => part === ".." || part === "." || part.toLowerCase() === ".git")) throw new HttpError(400, "scm_path", "저장소 안의 파일 경로가 필요합니다.");
   return path;
 }
 
@@ -54,7 +54,14 @@ function indexStamp(gitDir: string) {
 function operation(gitDir: string): ScmOperation {
   if (existsSync(join(gitDir, "rebase-merge")) || existsSync(join(gitDir, "rebase-apply"))) return "rebase";
   for (const [file, kind] of [["MERGE_HEAD", "merge"], ["CHERRY_PICK_HEAD", "cherry-pick"], ["REVERT_HEAD", "revert"]] as const) if (existsSync(join(gitDir, file))) return kind;
+  try { const todo = readFileSync(join(gitDir, "sequencer", "todo"), "utf8"); if (/^pick /m.test(todo)) return "cherry-pick"; if (/^revert /m.test(todo)) return "revert"; } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
   return null;
+}
+/** Pin operation contents, not just its kind: another rebase step may have the same HEAD/index. */
+function operationStamp(gitDir: string) {
+  return ["HEAD", "ORIG_HEAD", "MERGE_HEAD", "MERGE_MSG", "MERGE_MODE", "MERGE_AUTOSTASH", "CHERRY_PICK_HEAD", "REVERT_HEAD", "REBASE_HEAD",
+    ...["rebase-merge", "rebase-apply", "sequencer"].flatMap((dir) => ["head", "head-name", "orig-head", "onto", "stopped-sha", "msgnum", "end", "next", "last", "done", "git-rebase-todo", "todo", "opts", "message", "message-squash", "message-fixup", "autostash"].map((file) => `${dir}/${file}`))]
+    .map((path) => { try { const stat = lstatSync(join(gitDir, path)); if (!stat.isFile() || stat.size > 8 * 1024 * 1024) throw new HttpError(409, "scm_operation_state", "진행 중인 Git 작업의 상태 파일을 확인할 수 없습니다."); return [path, scmHash(readFileSync(join(gitDir, path)))]; } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return [path, "missing"]; throw error; } });
 }
 export async function readScmStatus(workspace: Workspace, sharedLinks: ReadonlySet<string> = new Set()): Promise<ScmStatus> {
   const root = realpathSync(line(await scmText(workspace.cwd, ["rev-parse", "--show-toplevel"])));
@@ -62,14 +69,15 @@ export async function readScmStatus(workspace: Workspace, sharedLinks: ReadonlyS
   const commonDir = realpathSync(line(await scmText(root, ["rev-parse", "--path-format=absolute", "--git-common-dir"])));
   const rel = relative(root, realpathSync(workspace.cwd));
   if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel) || workspace.worktree && (realpathSync(workspace.worktree.path) !== root || workspace.worktree.commonDir && realpathSync(workspace.worktree.commonDir) !== commonDir)) throw new HttpError(409, "scm_repository_changed", "작업공간의 Git 저장소가 바뀌었습니다.");
-  const before = indexStamp(gitDir), raw = await scmText(root, ["-c", "status.renames=true", "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"]);
+  const before = indexStamp(gitDir), operationBefore = JSON.stringify(operationStamp(gitDir)), raw = await scmText(root, ["-c", "status.renames=true", "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"]);
   const parsed = parseScmStatus(raw);
   if (parsed.files.length > 20_000) throw new HttpError(413, "scm_too_many_files", "변경 파일이 20,000개를 넘습니다. 불필요한 생성 파일의 Git 제외 설정을 먼저 확인하세요.");
   const stamps = [...new Set(parsed.files.flatMap((file) => file.oldPath ? [file.path, file.oldPath] : [file.path]))].sort().map((path) => scmFileStamp(root, path));
   const op = operation(gitDir), after = indexStamp(gitDir);
-  if (before !== after) throw new HttpError(409, "scm_changed", "Git 상태를 읽는 동안 인덱스가 바뀌었습니다. 새로고침해 주세요.");
+  const operationAfter = JSON.stringify(operationStamp(gitDir));
+  if (before !== after || operationBefore !== operationAfter) throw new HttpError(409, "scm_changed", "Git 상태를 읽는 동안 인덱스나 진행 중인 작업이 바뀌었습니다. 새로고침해 주세요.");
   const identity = lstatSync(root, { bigint: true });
-  const revision = scmHash(JSON.stringify([root, commonDir, String(identity.dev), String(identity.ino), raw, after, op, stamps]));
-  const localRevision = scmHash(JSON.stringify([root, commonDir, String(identity.dev), String(identity.ino), parsed.head, parsed.branch, parsed.files, after, op, stamps]));
+  const revision = scmHash(JSON.stringify([root, commonDir, String(identity.dev), String(identity.ino), raw, after, op, operationAfter, stamps]));
+  const localRevision = scmHash(JSON.stringify([root, commonDir, String(identity.dev), String(identity.ino), parsed.head, parsed.branch, parsed.files, after, op, operationAfter, stamps]));
   return { ...parsed, files: parsed.files.filter((file) => file.index !== "?" || !sharedLinks.has(file.path)), workspaceId: workspace.id, root, commonDir, operation: op, revision, localRevision };
 }

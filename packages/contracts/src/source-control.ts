@@ -33,7 +33,34 @@ export type ScmDiff = {
   /** Raster images only. SVG remains escaped text, never executable markup. */
   images?: { before: string | null; after: string | null };
 };
-export type ScmAction = "stage" | "unstage" | "commit" | "fetch" | "pull" | "push";
+export type ScmConflictVersion = {
+  kind: "missing" | "text" | "binary" | "large" | "symlink" | "gitlink" | "directory";
+  oid: string | null;
+  mode: string | null;
+  bytes: number;
+  text: string | null;
+  image?: string;
+};
+export type ScmConflict = {
+  path: string;
+  revision: string;
+  statusRevision: string;
+  operation: ScmOperation;
+  base: ScmConflictVersion;
+  markerSize: number;
+  ours: ScmConflictVersion;
+  theirs: ScmConflictVersion;
+  working: ScmConflictVersion;
+};
+export type ScmResolution = {
+  path: string;
+  expectedRevision: string;
+  choice: "edited" | "ours" | "theirs" | "working" | "delete";
+  content?: string;
+  stage: boolean;
+  allowMarkers?: boolean;
+};
+export type ScmAction = "stage" | "unstage" | "commit" | "fetch" | "pull" | "push" | "resolve" | "continue" | "abort";
 export type ScmRemote = { name: string; fetchUrls: string[]; pushUrls: string[] };
 export type ScmRemoteInventory = {
   revision: string;
@@ -67,13 +94,17 @@ export type ScmRequest = {
   paths?: string[];
   message?: string;
   remote?: ScmRemoteRequest;
+  resolution?: ScmResolution;
+  operation?: Exclude<ScmOperation, null>;
+  confirmAbort?: boolean;
 };
+export type ScmRecordedRequest = Omit<ScmRequest, "resolution"> & { resolution?: Omit<ScmResolution, "content"> & { contentHash?: string } };
 export type ScmJob = {
   id: string;
   workspaceId: string;
   root: string;
   commonDir: string;
-  request: ScmRequest;
+  request: ScmRecordedRequest;
   branch: string | null;
   headBefore: string | null;
   headAfter: string | null;
@@ -82,6 +113,7 @@ export type ScmJob = {
   outputTruncated: boolean;
   error: string | null;
   remoteResults?: ScmRemoteResult[];
+  recoveryPath?: string;
   createdAt: number;
   updatedAt: number;
 };

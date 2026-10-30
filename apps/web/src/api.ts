@@ -30,7 +30,7 @@ import type {
   PreparationPreview,
   PreparationJob,
   ApplyPreparationRequest,
-  ScmStatus, ScmDiff, ScmArea, ScmJob, ScmRequest, ScmRemoteInventory, ScmPushPreview, ScmRemoteRequest,
+  ScmStatus, ScmDiff, ScmArea, ScmJob, ScmRequest, ScmRemoteInventory, ScmPushPreview, ScmRemoteRequest, ScmConflict,
   Schedule,
   ForkResult,
   ImportRequest,
@@ -212,6 +212,7 @@ export class Api {
   cancelPreparation = (id: string) => this.request<PreparationJob>("DELETE", `/api/preparations/${id}`);
   scmStatus = (id: string) => this.request<ScmStatus>("GET", `/api/workspaces/${id}/scm`);
   scmDiff = (id: string, path: string, area: ScmArea, expectedRevision: string) => this.request<ScmDiff>("POST", `/api/workspaces/${id}/scm/diff`, { path, area, expectedRevision });
+  scmConflict = (id: string, path: string, expectedRevision: string) => this.request<ScmConflict>("POST", `/api/workspaces/${id}/scm/conflict`, { path, expectedRevision });
   scmJobs = (id: string) => this.request<{ jobs: ScmJob[] }>("GET", `/api/workspaces/${id}/scm/jobs`).then((result) => result.jobs);
   startScm = (id: string, request: ScmRequest) => this.request<ScmJob>("POST", `/api/workspaces/${id}/scm/jobs`, request);
   interruptScm = (id: string) => this.request<ScmJob>("DELETE", `/api/scm-jobs/${id}`);

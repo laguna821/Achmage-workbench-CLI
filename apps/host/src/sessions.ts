@@ -318,7 +318,7 @@ export class SessionManager {
           return cwd && withinDirectory(root, physicalPath(cwd));
         })) throw new HttpError(409, "scm_busy", "이 폴더의 에이전트나 환경 준비가 실행 중입니다. 끝나거나 멈춘 뒤 Git 작업을 진행하세요.");
       },
-    });
+    }, options.dataDir ?? dirname(options.managedWorksDir));
     this.layouts = new WorkspaceLayouts(store, this.workspaces);
     this.documents = new Documents(store, bus, options.dataDir ?? dirname(options.managedWorksDir), options.kordoc ?? null, options.ieum ?? null, this.workspaces);
     this.engineSetup = new EngineInstaller({

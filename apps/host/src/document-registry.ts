@@ -75,7 +75,7 @@ export class DocumentRegistry {
     const root = this.file(path);
     for (const entry of this.views.values()) {
       if (withinDirectory(root, entry.file) && (entry.presence.mode === "write" || entry.presence.dirty)) {
-        throw new HttpError(423, "editor_busy", "이 폴더의 문서를 편집 중인 탭이나 창이 있습니다. 저장하고 닫은 뒤 삭제해 주세요.");
+        throw new HttpError(423, "editor_busy", "이 폴더의 문서를 편집 중인 탭이나 창이 있습니다. 저장하고 닫은 뒤 파일 변경 작업을 진행해 주세요.");
       }
     }
   }
