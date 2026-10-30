@@ -111,6 +111,21 @@ export class Gateway {
     return { bytes: await response.arrayBuffer(), trackingDropped: response.headers.get("x-workbench-tracking-dropped") === "true", saveBlocked: response.headers.get("x-workbench-save-blocked") === "true" };
   }
 
+  async openMindmap(artifactId: string, revision: number): Promise<{ status: string; bytes?: Uint8Array }> {
+    const response = await this.call("GET", `/api/artifacts/${artifactId}/mindmap/open?revision=${revision}`);
+    if (response.headers.get("content-type")?.includes("application/json")) return response.json();
+    return { status: "ok", bytes: new Uint8Array(await response.arrayBuffer()) };
+  }
+
+  async checkMindmap(artifactId: string, revision: number, bytes: Uint8Array): Promise<{ status: string }> {
+    return (await this.call("POST", `/api/artifacts/${artifactId}/mindmap/check?revision=${revision}`, bytes.slice().buffer)).json();
+  }
+
+  async saveMindmap(artifactId: string, revision: number, bytes: Uint8Array): Promise<{ revision: number }> {
+    post({ type: "office:saving" });
+    return (await this.call("POST", `/api/artifacts/${artifactId}/mindmap/save?revision=${revision}`, bytes.slice().buffer)).json();
+  }
+
   async pdf<T = unknown>(artifactId: string, revision: number, operation: string, request: PdfRequest, source?: ArrayBuffer): Promise<T> {
     if (["save", "blank-page", "page-size", "crop"].includes(operation)) post({ type: "office:saving" });
     const response = await this.call("POST", `/api/artifacts/${artifactId}/pdf/${operation}?revision=${revision}`, encodePdfRequest(request, source), { "content-type": "application/octet-stream" });

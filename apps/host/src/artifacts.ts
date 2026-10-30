@@ -59,7 +59,7 @@ const isHangul = (format: string) => format === "hwpx" || format === "hwp";
 const legacyHangulProposal = (artifact: Artifact, proposal: Proposal) => isHangul(artifact.format) && /\.hwpx?\.md$/i.test(proposal.workingPath);
 
 /** Formats searched through their editor engine's text view instead of binary bytes. */
-const hasTextView = (format: DocFormat) => isHangul(format) || isOfficeFormat(format);
+const hasTextView = (format: DocFormat) => isHangul(format) || isOfficeFormat(format) || format === "xmind";
 
 /** Extension kept on copies of a document (designs keep their two-part `.design.json`). */
 const extensionOf = (artifact: Pick<Artifact, "format" | "name">) => (artifact.format === "design" ? DESIGN_EXTENSION : extname(artifact.name));
@@ -184,6 +184,7 @@ export class Documents {
 
   /** The text view from the native Hangul WASM or Office reader. */
   private async extractText(file: string, format: DocFormat): Promise<string | null> {
+    if (format === "xmind") return (await import("./mindmap-ops.mjs")).mindmapText(readFileSync(file));
     if (isHangul(format)) return hwpToText(readFileSync(file));
     if (isOfficeFormat(format)) return this.ieum?.available ? this.ieum.textView(file, format) : null;
     return null;
@@ -337,8 +338,7 @@ export class Documents {
     const artifact = this.check(artifactId);
     const target = revision ?? artifact.revision;
     const text = await this.view(artifactId, target);
-    const office = isOfficeFormat(artifact.format);
-    return { artifact, revision: target, text, editable: !isHangul(artifact.format) && artifact.format !== "pdf" && !office, view: isHangul(artifact.format) || office };
+    return { artifact, revision: target, text, editable: !hasTextView(artifact.format) && artifact.format !== "pdf", view: hasTextView(artifact.format) };
   }
 
   private viewCachePath(artifact: Artifact, revision: number) {
@@ -359,13 +359,19 @@ export class Documents {
     const artifact = this.get(artifactId);
     const file = this.revisionPath(artifactId, revision);
     const office = isOfficeFormat(artifact.format);
-    if (!isHangul(artifact.format) && !office) {
+    if (!hasTextView(artifact.format)) {
       if (artifact.format === "pdf") throw new HttpError(415, "binary_document", "PDF는 텍스트로 열지 않습니다.");
       return readFileSync(file, "utf8");
     }
     const cached = this.viewCachePath(artifact, revision);
     const existing = readFileOrNull(cached);
     if (existing) return existing.toString("utf8");
+    if (artifact.format === "xmind") {
+      const markdown = (await this.extractText(file, artifact.format))!;
+      writeFileSync(cached, markdown);
+      if (revision === this.get(artifactId).revision) this.store.indexDocument(artifactId, markdown);
+      return markdown;
+    }
     if (office) {
       if (!this.ieum?.available) throw new HttpError(501, "ieumoffice_missing", "이음오피스를 찾지 못해 이 문서의 글을 볼 수 없습니다. 앱을 다시 설치해 주세요.");
       const markdown = await this.ieum.textView(file, artifact.format as "docx" | "pptx" | "xlsx");
@@ -462,6 +468,7 @@ export class Documents {
   async saveText(artifactId: string, expectedRevision: number, text: string, access?: DocumentAccess) {
     this.registry.assertWrite(artifactId, access);
     const artifact = this.check(artifactId);
+    if (artifact.format === "xmind") throw new HttpError(415, "binary_document", "마인드맵은 원본 편집기에서 저장해 주세요.");
     if (artifact.revision !== expectedRevision) {
       throw new HttpError(409, "revision_conflict", `문서가 r${artifact.revision}로 바뀌었습니다. 내 수정은 그대로 두고 비교해 주세요.`);
     }
@@ -513,6 +520,12 @@ export class Documents {
   /** Only the PDF codec route calls this, after the original engine verifies the result. */
   savePdfBytes(artifactId: string, expectedRevision: number, data: Buffer, access?: DocumentAccess) {
     if (this.get(artifactId).format !== "pdf") throw new HttpError(415, "not_pdf", "PDF 문서가 아닙니다.");
+    return this.saveEditedBytes(artifactId, expectedRevision, data, access);
+  }
+
+  /** The mindmap route validates both the source and submitted archive before calling this. */
+  saveMindmapBytes(artifactId: string, expectedRevision: number, data: Buffer, access?: DocumentAccess) {
+    if (this.get(artifactId).format !== "xmind") throw new HttpError(415, "not_mindmap", "마인드맵 문서가 아닙니다.");
     return this.saveEditedBytes(artifactId, expectedRevision, data, access);
   }
 
@@ -580,7 +593,7 @@ export class Documents {
     if (!Number.isSafeInteger(ref.revision) || ref.revision < 1 || ref.revision > artifact.revision) throw new HttpError(400, "revision_not_found", `r${ref.revision} 판이 없습니다.`);
     const digest = this.revisionSha(artifact.id, ref.revision);
     if (ref.sha256 && ref.sha256 !== digest) throw new HttpError(409, "reference_changed", "참조 문서의 해시가 일치하지 않습니다.");
-    if (ref.mode === "edit" && artifact.format === "pdf") {
+    if (ref.mode === "edit" && (artifact.format === "pdf" || artifact.format === "xmind")) {
       throw new HttpError(400, "not_editable", `${artifact.format.toUpperCase()}는 AI 수정안을 만들 수 없습니다. 검토 요청으로 보내 주세요.`);
     }
     const office = isOfficeFormat(artifact.format);
@@ -611,7 +624,7 @@ export class Documents {
         chmodSync(pinnedView, 0o444);
       }
     }
-    if (hangul) {
+    if (hangul || artifact.format === "xmind") {
       pinnedView = join(pinnedDir, `${pinStem}${extension}.md`);
       if (!existsSync(pinnedView)) {
         writeFileSync(pinnedView, await this.view(artifact.id, ref.revision));
@@ -827,7 +840,7 @@ export class Documents {
     const lines = [`- 「${artifact.name}」 (${artifact.format}) 판 r${ref.revision} · sha256 ${this.revisionSha(artifact.id, ref.revision)}`];
     if (ref.savedSnapshot) lines.push("  · 사용자가 고른 저장된 판입니다. 열린 편집기의 미저장 내용은 포함하지 않습니다.");
     lines.push(`  · 이 판의 읽기 전용 사본: ${show(pinned)}`);
-    if (pinnedView) lines.push(`  · 같은 판의 Markdown 보기(한글 문서 내용, 읽기 전용): ${show(pinnedView)}`);
+    if (pinnedView) lines.push(`  · 같은 판의 Markdown 보기(문서 내용, 읽기 전용): ${show(pinnedView)}`);
     if (proposal && legacyHangulProposal(artifact, proposal)) {
       lines.push(`  · 고칠 때는 이 Markdown 작업 사본만 수정하세요: ${show(proposal.workingPath)}`);
       lines.push("    문단·표 칸의 글자만 바꾸세요. 문단을 새로 만들거나 지우거나 순서를 바꾸면 HWPX에 반영되지 않습니다. 원본 HWPX는 직접 고치지 마세요.");

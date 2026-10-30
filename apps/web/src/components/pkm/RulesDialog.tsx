@@ -4,7 +4,7 @@ import { Icon } from "../Icon.tsx";
 import { usePkm } from "./PkmContext.tsx";
 import "../../styles/pkm.css";
 
-const FORMATS: DocFormat[] = ["markdown", "hwpx", "docx", "pptx", "xlsx", "pdf", "html", "design"];
+const FORMATS: DocFormat[] = ["markdown", "hwpx", "docx", "pptx", "xlsx", "pdf", "html", "design", "xmind"];
 
 const BLANK: PkmRule = { id: "", name: "", enabled: true, when: { cwdPrefix: null, engine: null, format: null }, then: { folder: null, tag: null, pin: false } };
 

@@ -20,6 +20,7 @@ import { decodePdfRequest } from "./pdf-codec.ts";
 
 /** Which editor page edits a format, if any. */
 export function officeEditorKind(format: DocFormat): OfficeEditorKind | null {
+  if (format === "xmind") return "mindmap";
   return format === "docx" ? "docs" : format === "pptx" ? "slides" : format === "xlsx" ? "sheets" : format === "hwp" || format === "hwpx" ? "hwp" : format === "markdown" || format === "html" || format === "pdf" ? format : null;
 }
 
@@ -152,6 +153,34 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
           }
         }
         throw new HttpError(405, "method_not_allowed", "허용되지 않은 편집기 요청입니다.");
+      }
+      const mindmap = /^\/api\/artifacts\/([^/]+)\/mindmap\/(open|check|save)$/.exec(path);
+      if (mindmap) {
+        const [, id, operation] = mindmap;
+        if (!grants.allows(bearer, id!)) throw new HttpError(401, "unauthorized", "이 문서를 열 권한이 없습니다.");
+        const artifact = documents.check(id!);
+        if (artifact.format !== "xmind") throw new HttpError(415, "not_mindmap", "마인드맵 문서가 아닙니다.");
+        if (method !== (operation === "open" ? "GET" : "POST")) throw new HttpError(405, "method_not_allowed", "허용되지 않은 요청입니다.");
+        const revision = Number(url.searchParams.get("revision"));
+        if (!Number.isSafeInteger(revision) || revision < 1 || revision > artifact.revision) throw new HttpError(400, "revision_not_found", "마인드맵 문서 판이 올바르지 않습니다.");
+        if (operation === "save") {
+          documents.registry.assertWrite(id!, grants.access(bearer!));
+          if (revision !== artifact.revision) throw new HttpError(409, "revision_conflict", "마인드맵의 판이 바뀌었습니다. 작성 중인 내용을 보관한 뒤 새 판을 확인해 주세요.");
+          if (artifact.diskState === "changed") throw new HttpError(409, "disk_changed", "마인드맵 파일이 외부에서 바뀌었습니다.");
+        }
+        const engine = await import("./mindmap-ops.mjs");
+        const original = readFileSync(documents.revisionPath(id!, revision));
+        const status = await engine.inspectMindmap(original);
+        if (operation === "open") {
+          if (status !== "ok") return sendJson(res, 200, { status });
+          res.writeHead(200, { "content-type": "application/octet-stream", "cache-control": "no-store" }); res.end(original); return;
+        }
+        if (status !== "ok") throw new HttpError(422, "mindmap_not_open", "열지 못한 마인드맵에는 저장할 수 없습니다.");
+        const bytes = await readBody(req, engine.MINDMAP_MAX_BYTES);
+        const submitted = await engine.inspectMindmap(bytes);
+        if (operation === "check") return sendJson(res, 200, { status: submitted });
+        if (submitted !== "ok") throw new HttpError(422, "invalid_mindmap", `저장할 마인드맵을 검증하지 못했습니다: ${submitted}`);
+        return sendJson(res, 200, documents.saveMindmapBytes(id!, revision, bytes, grants.access(bearer!)));
       }
       const pdf = /^\/api\/artifacts\/([^/]+)\/pdf\/([a-z-]+)$/.exec(path);
       if (pdf) {

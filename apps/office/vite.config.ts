@@ -155,6 +155,20 @@ function textEditorPlatform(): Plugin {
     name: "workbench-text-editors",
     enforce: "pre",
     transform(code, id) {
+      if (id === `${ieum}/node_modules/mind-elixir/dist/MindElixir.js`) {
+        // Chromium focuses a contenteditable when a Range is selected. WebKit does not.
+        // Focus explicitly for topic, summary and relationship-label keyboard editing.
+        const before = "function Ze(e) {\n  const t = document.createRange();";
+        if (!code.includes(before) || (code.match(/Ze\(/g) ?? []).length !== 3) this.error("mind-elixir changed: review the input focus adapter");
+        return code.replace(before, "function Ze(e) {\n  e.focus();\n  const t = document.createRange();");
+      }
+      if (id === `${ieum}/apps/mindmap/src/renderer/App.tsx`) {
+        const before = "flush: (commit) =>\n      controllers.current.forEach((each) => {";
+        const after = "each.flush()\n      }),\n    saving:";
+        if (!code.includes(before) || !code.includes(after)) this.error("Mindmap recovery changed: review the pending note flush adapter");
+        return code.replace(before, "flush: (commit) =>\n      (commit && noteRef.current?.commit(), controllers.current.forEach((each) => {")
+          .replace(after, "each.flush()\n      })),\n    saving:");
+      }
       if (id === `${ieum}/apps/markdown/src/renderer/editor/localImage.ts`) {
         for (const [name, adapter] of [["resolveImageSrc", "resolveTextImage"], ["unresolveImageSrc", "unresolveTextImage"]]) {
           const pattern = new RegExp(`export function ${name}\\(src: string, baseDir: string \\| null = imageBaseDir\\): string \\{[\\s\\S]*?\\n\\}`);
@@ -254,6 +268,6 @@ export default defineConfig({
     target: "es2022",
     sourcemap: false,
     chunkSizeWarningLimit: 6000,
-    rollupOptions: { input: { docs: here("./docs.html"), slides: here("./slides.html"), sheets: here("./sheets.html"), hwp: here("./hwp.html"), markdown: here("./markdown.html"), html: here("./html.html"), pdf: here("./pdf.html") } },
+    rollupOptions: { input: { docs: here("./docs.html"), slides: here("./slides.html"), sheets: here("./sheets.html"), hwp: here("./hwp.html"), markdown: here("./markdown.html"), html: here("./html.html"), pdf: here("./pdf.html"), mindmap: here("./mindmap.html") } },
   },
 });

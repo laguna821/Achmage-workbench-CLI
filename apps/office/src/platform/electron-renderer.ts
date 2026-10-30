@@ -66,7 +66,7 @@ export const ipcRenderer = {
 };
 
 /** The editor's own API only (`slidesApi`, `desktopApi`); its AI, Drive, skills, project and file bridges stay out. */
-const EXPOSED = new Set(["slidesApi", "desktopApi", "pdfApi"]);
+const EXPOSED = new Set(["slidesApi", "desktopApi", "pdfApi", "mindmapApi"]);
 export const contextBridge = {
   exposeInMainWorld(key: string, api: unknown) {
     if (EXPOSED.has(key)) (window as unknown as Record<string, unknown>)[key] = api;

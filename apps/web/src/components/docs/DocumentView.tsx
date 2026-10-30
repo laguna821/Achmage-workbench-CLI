@@ -46,7 +46,7 @@ import { useDocumentReferences } from "../../document-references.ts";
 type SaveState = "idle" | "saving" | "failed" | "conflict";
 type Conflict = { code: string; message: string } | null;
 
-const TEXT_FORMATS = new Set(["markdown", "text", "html", "hwpx", "hwp"]);
+const TEXT_FORMATS = new Set(["markdown", "text", "html", "hwpx", "hwp", "xmind"]);
 
 export type DocSend = (target: Session | null, text: string, refs: DocRef[], handoffTo: Session | null, create: CreateTarget | null, attachments: Attachment[]) => Promise<boolean>;
 
@@ -122,7 +122,7 @@ export default function DocumentView({
   const hangul = artifact?.format === "hwpx" || artifact?.format === "hwp";
   const office = artifact ? isOfficeFormat(artifact.format) : false;
   // Document screens built from IeumOffice, inside the central Workbench tab.
-  const wordEditor = artifact?.format === "docx" || artifact?.format === "pptx" || artifact?.format === "xlsx" || artifact?.format === "pdf" || hangul;
+  const wordEditor = artifact?.format === "docx" || artifact?.format === "pptx" || artifact?.format === "xlsx" || artifact?.format === "pdf" || artifact?.format === "xmind" || hangul;
   const richTextEditor = artifact?.format === "markdown" || artifact?.format === "html";
   const [mode, setMode] = useState<"edit" | "preview" | "split" | "render" | "source" | "pages" | "rich">(
     hangul && uiState?.mode === "pages" ? "edit" : uiState?.mode && ["edit", "preview", "split", "render", "source", "pages", "rich"].includes(uiState.mode) ? uiState.mode as "edit" | "preview" | "split" | "render" | "source" | "pages" | "rich" : richTextEditor ? "rich" : wordEditor ? "edit" : office ? "pages" : "edit",
@@ -185,6 +185,9 @@ export default function DocumentView({
     if (!textual) return;
     const result = await api.artifactText(artifactId);
     setBase({ revision: result.revision, text: result.text });
+    if (artifact?.format === "xmind") {
+      setText(result.text); setSaveState("idle"); setConflict(null); return;
+    }
     const draft = recoverDraft && lease.access().writeToken ? newestDraft(artifactId) : null;
     if (hangul) {
       // Earlier versions kept a Markdown patch, not an editor document. Keep it separate
@@ -219,9 +222,9 @@ export default function DocumentView({
 
   // Keep a local copy of unsaved edits.
   useEffect(() => {
-    if (!base || !everWriter.current || hangul) return;
+    if (!base || !everWriter.current || hangul || artifact?.format === "xmind") return;
     keepDraft(artifactId, lease.viewId, text !== base.text ? { baseRevision: base.revision, text, at: Date.now() } : null);
-  }, [artifactId, base, text, lease.viewId, hangul]);
+  }, [artifactId, base, text, lease.viewId, hangul, artifact?.format]);
 
   const save = useCallback(async (): Promise<number | null> => {
     if (!lease.access().writeToken) {
@@ -423,7 +426,7 @@ export default function DocumentView({
 
   const sendTarget = handoffTo ?? session;
   // PDF and HWP cannot take AI edits (no working copy to patch from); they are always reviewed.
-  const editable = artifact.format !== "pdf";
+  const editable = artifact.format !== "pdf" && artifact.format !== "xmind";
   const effectiveMode: DocRef["mode"] = handoffTo || !editable || create ? "review" : requestMode;
   const workDocs = Object.values(state.artifacts)
     .filter((entry) => entry.workId === work.id && entry.id !== artifactId)
@@ -604,6 +607,7 @@ export default function DocumentView({
       return <HwpxView api={api} artifact={artifact} revision={base?.revision ?? artifact.revision} />;
     }
     if (!base) return <div className="column empty-hint">불러오는 중…</div>;
+    if (artifact.format === "xmind") return <MarkdownEditor value={text} readOnly onChange={() => undefined} onSelection={setSelection} position={uiState} onPosition={onUiState} />;
     if (hangul) {
       return (
         <div className="doc-hangul-text">

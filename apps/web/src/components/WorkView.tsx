@@ -768,7 +768,7 @@ export function WorkView({
                 ) : null}
                 {attached.map((entry) => {
                   const artifact = state.artifacts[entry.id];
-                  const editable = artifact && artifact.format !== "pdf" && artifact.format !== "hwp" && !handoffTo && !create;
+                  const editable = artifact && artifact.format !== "pdf" && artifact.format !== "hwp" && artifact.format !== "xmind" && !handoffTo && !create;
                   return artifact ? (
                     <span key={entry.id} className={`ref-chip${entry.mode === "edit" ? " editing" : ""}`}>
                       <Icon name="file" size={12} /> {artifact.name} · {references.pins[entry.id] ? `r${references.pins[entry.id].revision} 고정 · 미저장 제외` : `${references.hint(artifact)} · 보낼 때 저장`}
