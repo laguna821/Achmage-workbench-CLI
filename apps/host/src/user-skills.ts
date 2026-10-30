@@ -65,6 +65,29 @@ export class UserSkills {
     if (value?.version !== 1 || !value.states || typeof value.states !== "object" || Array.isArray(value.states)) throw new HttpError(409, "unknown_skill_state", "이 버전에서 읽을 수 없는 스킬 설정입니다. 저장된 설정은 보존했습니다.");
     return value.states;
   }
+  private copyKey(scope: Scope) { return `user-skills:selected-copies:${hash(scope.projectRoot ?? "global")}`; }
+  private selectedCopies(scope: Scope): Record<string, { id: string; sourceId: string }> {
+    const raw = this.store.getMeta(this.copyKey(scope));
+    if (!raw) return {};
+    let value: unknown;
+    try { value = JSON.parse(raw); } catch { throw new HttpError(409, "unknown_skill_state", "선택한 스킬 사본 설정을 읽지 못했습니다."); }
+    if (!value || typeof value !== "object" || Array.isArray(value) || Object.entries(value).some(([name, choice]) => !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(name) || !choice || typeof choice !== "object" || typeof choice.id !== "string" || typeof choice.sourceId !== "string")) throw new HttpError(409, "unknown_skill_state", "선택한 스킬 사본 설정을 보존했습니다.");
+    return value as Record<string, { id: string; sourceId: string }>;
+  }
+  /** A person explicitly saved an installed skill as their selected local copy.
+   * This changes only Workbench's choice for this project; default source order stays intact. */
+  async selectCopy(id: string, sourceId: string, scope: Scope = {}) {
+    const all = await this.list(scope), copy = all.find((s) => s.id === id), source = all.find((s) => s.id === sourceId);
+    if (!copy?.editable || !source || source.source === "project") throw new HttpError(409, "skill_copy_selection", "보관함 사본을 확인할 수 없습니다.");
+    const selected = this.selectedCopies(scope); selected[source.name.toLowerCase()] = { id, sourceId };
+    this.store.setMeta(this.copyKey(scope), JSON.stringify(selected));
+  }
+  /** Keep an explicit copy selection through a rename, without reviving its original. */
+  moveSelectedCopy(before: string, after: string, scope: Scope = {}) {
+    const selected = this.selectedCopies(scope);
+    for (const choice of Object.values(selected)) if (choice.id === before) choice.id = after;
+    this.store.setMeta(this.copyKey(scope), JSON.stringify(selected));
+  }
   private async sources(scope: Scope): Promise<Source[]> {
     const native = await userSkillSources({ homeDir: this.home, appSkillsDir: this.appDir, projectRoot: scope.projectRoot, builtinDir: this.builtinDir });
     const sources: Source[] = native.map((entry) => ({ ...entry, core: entry.source, source: ({ user: "claude", codex: "shared", app: "imported" } as Partial<Record<string, WorkbenchSkillSource>>)[entry.source] ?? entry.source as WorkbenchSkillSource }));
@@ -104,10 +127,16 @@ export class UserSkills {
         });
       }
     }
+    const selected = this.selectedCopies(scope);
     const names = new Map<string, string>();
+    for (const [name, choice] of Object.entries(selected)) {
+      // A disabled, removed or unreadable selected copy cannot silently activate
+      // the old installation. The person can explicitly enable that installation.
+      if (!entries.some((s) => s.source === "project" && s.name.toLowerCase() === name)) names.set(name, choice.id);
+    }
     for (const entry of entries) {
       const name = entry.name.toLowerCase();
-      entry.shadowedBy = names.get(name) ?? null;
+      entry.shadowedBy = names.get(name) === entry.id ? null : names.get(name) ?? null;
       // An explicitly disabled installed skill still wins over a bundled same-name fallback.
       if (!entry.shadowedBy && !entry.problem) names.set(name, entry.id);
     }
@@ -126,6 +155,11 @@ export class UserSkills {
     if (typeof state?.enabled !== "boolean" || !["manual", "auto"].includes(state.invoke)) throw new HttpError(400, "invalid_skill_state", "스킬 선택 상태가 올바르지 않습니다.");
     const states = this.states(); states[id] = { enabled: state.enabled, invoke: state.invoke };
     this.store.setMeta("user-skills:states", JSON.stringify({ version: 1, states }));
+    const selected = this.selectedCopies(scope), key = skill.name.toLowerCase();
+    if (selected[key] && state.enabled && selected[key]!.id !== id) {
+      delete selected[key]; this.store.setMeta(this.copyKey(scope), JSON.stringify(selected));
+      return (await this.list(scope)).find((entry) => entry.id === id) ?? { ...skill, state: states[id]! };
+    }
     return { ...skill, state: states[id]! };
   }
   async update(id: string, expectedSha256: string, input: { title: string; description: string; body: string }, scope: Scope = {}) {

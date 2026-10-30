@@ -106,3 +106,8 @@ PDF 후속 검사는 `APP_E2E_OFFICE_UNDO=1 APP_E2E_OFFICE_FORMATS=pdf`와 `--on
 Tauri `invoke`는 쓰기 불가능하므로 원본 호출을 유지하고 정확한 dialog IPC fetch 응답만 주입한다. 합성 File 이벤트는 원본 drop/paste 처리기를 거치며 부모/호스트/파서/보관 경로는 실제다. 이미지는 파일명이 본문에 없을 수 있어 img의 alt·data URL·실제 디코딩으로 확인한다. 물리 OS 선택창·클립보드·끌기 검사를 대신하지 않는다.
 
 2026-10-31 최종 단일 **117/117**(시작4·문서 참조43·로컬 첨부70), 회귀 **85/85**, 전체 타입 및 최종 빌드 통과. HWP 이력 매핑의 첨부 누락을 수정했다. 실패 실행00–04와 긴 파일명 보완 전 성공05도 보존했다. 근거 `office-local-files-native-06/verification.json`; 검증 판 `research:rr-b31c38482d609cd7a58ccd2c895f8d3a:db02746f1499818e05c808d4b0546cf18fcd6b226845afb237c13467e524dac9`. 모든 바이너리 입력·Windows/macOS·전체 Office/릴리스 완료를 뜻하지 않는다.
+
+
+### 원본 스킬 제안 카드
+
+`--only=office-cards`는 9종 원본 `propose_skill` 카드에 실제 입력/저장을 하고, 같은 보관함의 자동 `use_skill`과 저장 표시 복원을 검사한다. 첫 PPT는 내 스킬 수정·수동 선택·취소와 앱/host 재시작도 확인한다. 제공자만 로컬 SSE 대역이며 원본 파일과 저장 전/취소의 미작성 여부를 검사한다. `APP_E2E_OFFICE_CARD_FORMATS=pptx`처럼 표적 실행할 수 있다. 이동 중 라디오를 다른 위치에서 클릭하지 않도록 화면 위치 안정과 실제 checked 상태를 확인한다. 현재문서 양식 미리보기 시나리오는 별도 후속이다. 근거는 `office-cards-native-03/verification.json`이며 앞선9종 실행과 표적 실패/수정을 모두 포함한다.

@@ -21,6 +21,6 @@ export type OfficeSkillHandoff = {
   text: string; chips: OfficeSkillChip[]; createdAt: number;
 };
 export type OfficeSkillRequest = {
-  type: "office:skills"; requestId: string; action: "open-template" | "take-handoff" | "focus-tab";
+  type: "office:skills"; requestId: string; action: "open-template" | "take-handoff" | "focus-tab" | "save-card";
   input: Record<string, unknown>;
 };

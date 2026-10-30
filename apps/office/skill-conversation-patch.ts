@@ -5,6 +5,14 @@ export function patchOfficeSkillConversation(code: string, id: string, root: str
     if (code.split(before).length !== 2) throw new Error(`Original Office skill boundary changed: ${id}: ${before.slice(0, 90)}`);
     code = code.replace(before, after);
   };
+  if (id === `${root}/packages/ui/src/SkillProposalCard.tsx`) {
+    replace("  const ids = useId()", "  const ids = useId()\n  const wbCardRef = useRef(crypto.randomUUID())\n  const wbCard = { id: wbCardRef.current, label: proposal.name || proposal.title, ...(proposal.target ? { targetId: proposal.target.id } : {}) }");
+    replace(".checkName(name, forId)", ".checkName(name, forId, wbCard)");
+    replace("bridge.saveFromCard(input).catch(() => null)", "bridge.saveFromCard({ ...input, card: wbCard }).catch((error) => { setWbSaveError(error instanceof Error ? error.message : String(error)); return null })");
+    replace("  const [busy, setBusy] = useState(false)", "  const [busy, setBusy] = useState(false)\n  const [wbSaveError, setWbSaveError] = useState<string | null>(null)");
+    replace("    setBusy(true)\n    setFailure(null)", "    setBusy(true)\n    setFailure(null)\n    setWbSaveError(null)");
+    replace("{failure ? t(failure) : blocked}", "{wbSaveError || (failure ? t(failure) : blocked)}");
+  }
   if (id === `${root}/packages/ui/src/skill-send.ts`) {
     replace("  id: string\n  title: string", "  id: string\n  sha256?: string\n  title: string");
     replace("    id: s.id,\n    title:", "    id: s.id,\n    sha256: typeof s.sha256 === 'string' ? s.sha256 : undefined,\n    title:");

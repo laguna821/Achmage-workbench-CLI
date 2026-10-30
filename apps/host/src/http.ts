@@ -653,7 +653,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           return sendJson(res, 200, grants.references.upload({ documents, grants, artifactId, token, access: documentAccess(req) }, bytes, decodeURIComponent(name)));
         }
         if (method === "POST" && parts[2] === "office-skills") {
-          const body = await readJson(req, 256_000), grants = options.editors?.grants;
+          const body = await readJson(req, 90 * 1024 * 1024), grants = options.editors?.grants;
           if (!grants || !options.officeSkills || typeof body.token !== "string") throw new HttpError(401, "unauthorized", "문서 창의 양식 권한이 없습니다.");
           return sendJson(res, 200, await options.officeSkills.action({ artifactId, token: body.token, grants }, body.action, body.input));
         }

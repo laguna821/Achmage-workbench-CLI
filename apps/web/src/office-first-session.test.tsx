@@ -134,3 +134,20 @@ it("keeps skill context in live model follow-ups while displaying only the reque
   expect(f.failed).not.toHaveBeenCalled(); expect(f.model).toHaveBeenCalledTimes(3);
   expect(JSON.stringify(f.model.mock.calls.at(-1)![0])).not.toContain("CURRENT_SKILL_BODY");
 });
+
+it("restores a saved proposal as its own metadata row while excluding it from the next model turn", async () => {
+  const { officeChat, officeModelHistory } = await import("../../office/src/office-ai.ts");
+  const items: TranscriptItem[] = [
+    { kind: "assistant", id: "a", text: "스킬을 제안합니다.", at: 1, streaming: false },
+    { kind: "tool", id: "proposal", tool: "mcp", title: "card-name", detail: 'propose_skill\n{"name":"card-name"}', output: "PROPOSAL_BODY", status: "completed", at: 2 },
+    { kind: "tool", id: "saved", tool: "mcp", title: "card-name", detail: "propose_skill\n{}", output: "skill-card-saved:app:skill", status: "completed", at: 3, office: { artifactId: "doc", turnId: "saved-card", cardSaved: { skillId: "app:skill", label: "card-name" } } },
+    { kind: "tool", id: "after", tool: "mcp", title: "문서 확인", detail: "read_document\n{}", output: "DOCUMENT_CONTENT", status: "completed", at: 4 },
+  ];
+  const projected = officeChat(items);
+  expect(projected).toHaveLength(3);
+  expect(projected[0]).toMatchObject({ text: "스킬을 제안합니다.", tools: [{ output: "PROPOSAL_BODY" }] });
+  expect(projected[1]).toMatchObject({ role: "assistant", text: "", tools: [{ name: "propose_skill", summary: "card-name", output: "skill-card-saved:app:skill" }] });
+  expect(projected[2]?.tools).toEqual([expect.objectContaining({ name: "read_document", output: "DOCUMENT_CONTENT" })]);
+  const model = JSON.stringify(officeModelHistory(items));
+  expect(model).toContain("PROPOSAL_BODY"); expect(model).toContain("DOCUMENT_CONTENT"); expect(model).not.toContain("skill-card-saved:");
+});

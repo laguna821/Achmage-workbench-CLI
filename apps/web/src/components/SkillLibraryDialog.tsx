@@ -66,6 +66,8 @@ export function SkillLibraryDialog({ api, scope = {}, onClose, onPick }: { api: 
   };
   const filtered = skills.filter((skill) => `${skill.title} ${skill.name} ${skill.description} ${SOURCE[skill.source]}`.toLowerCase().includes(query.toLowerCase()));
   const skill = detail?.skill;
+  const preferred = skills.find((item) => item.id === skill?.shadowedBy);
+  const canRestoreInstalled = skill && !skill.editable && skill.shadowedBy && (!preferred || preferred.editable);
   const canPick = preview && Object.hasOwn(CREATE_LABEL, preview.format) && skill?.state.enabled && !skill.shadowedBy;
   return createPortal(<div className="modal-backdrop skill-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) leave(onClose); }}>
     <section className="skill-library" role="dialog" aria-modal="true" aria-label="양식·스킬 보관함">
@@ -74,7 +76,7 @@ export function SkillLibraryDialog({ api, scope = {}, onClose, onPick }: { api: 
       {pending ? <div className="skill-confirm" role="alertdialog"><p>{pending.text}</p><button className="button small" onClick={() => setPending(null)}>계속 작성</button><button className="button small" onClick={() => { const action = pending.action; setPending(null); action(); }}>확인</button></div> : null}
       <div className="skill-toolbar"><input className="sheet-input" aria-label="양식·스킬 검색" placeholder="이름·설명으로 찾기" value={query} onChange={(event) => setQuery(event.target.value)} /><button className="button small" disabled={busy} onClick={() => leave(() => { setMode("new"); setDetail(null); setPreview(null); setForm(emptyForm); })}>내 양식 등록</button><button className="button small" disabled={busy} onClick={() => leave(() => { setMode("import"); setDetail(null); setPreview(null); })}>가져오기</button><button className="button small" disabled={busy} onClick={() => void run(async () => { await reload(); })}>새로고침</button></div>
       <div className="skill-columns">
-        <nav className="skill-list" aria-label="설치된 양식·스킬">{filtered.map((item) => <button key={item.id} className={`skill-row${skill?.id === item.id ? " active" : ""}`} disabled={busy} onClick={() => select(item.id)}><strong>{item.title}</strong><span>{SOURCE[item.source]} · {item.template ? "양식 포함" : "스킬"} · {item.shadowedBy ? "같은 이름의 우선 판 있음" : item.state.enabled ? "사용" : "꺼짐"}</span><small>{item.description || item.problem}</small></button>)}{!filtered.length ? <p className="sheet-hint">찾은 스킬이 없습니다. 양식 파일을 등록하거나 스킬 폴더를 가져오세요.</p> : null}</nav>
+        <nav className="skill-list" aria-label="설치된 양식·스킬">{filtered.map((item) => <button key={item.id} className={`skill-row${skill?.id === item.id ? " active" : ""}`} disabled={busy} onClick={() => select(item.id)}><strong>{item.title}</strong><span>{SOURCE[item.source]} · {item.template ? "양식 포함" : "스킬"} · {item.shadowedBy ? "선택된 다른 판 있음" : item.state.enabled ? "사용" : "꺼짐"}</span><small>{item.description || item.problem}</small></button>)}{!filtered.length ? <p className="sheet-hint">찾은 스킬이 없습니다. 양식 파일을 등록하거나 스킬 폴더를 가져오세요.</p> : null}</nav>
         <main className="skill-detail">
           {mode === "new" ? <div className="skill-form"><h3>내 양식 등록</h3><p className="sheet-hint">선택한 문서를 보관함에 복사합니다. 원본 파일은 유지합니다.</p>
             <label>양식 이름<input className="sheet-input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></label>
@@ -86,7 +88,8 @@ export function SkillLibraryDialog({ api, scope = {}, onClose, onPick }: { api: 
           : detail && skill ? <>
             <div className="skill-detail-head"><h3>{skill.title}</h3><span>{SOURCE[skill.source]}</span></div>
             <p className="sheet-hint skill-location">{skill.dir}</p>
-            {skill.shadowedBy ? <p className="sheet-hint">같은 이름의 프로젝트·설치 스킬이 우선합니다.</p> : null}
+            {skill.shadowedBy ? <p className="sheet-hint">현재 선택된 다른 판이 우선합니다.</p> : null}
+            {canRestoreInstalled ? <button className="button small" disabled={busy} onClick={() => void run(async () => { const updated = await api.skillState(skill.id, { ...skill.state, enabled: true }, currentScope); setDetail({ ...detail, skill: updated }); await reload(); })}>설치 판 선택으로 돌아가기</button> : null}
             <label className="skill-toggle"><input type="checkbox" checked={skill.state.enabled} disabled={busy || !!skill.problem} onChange={(e) => void run(async () => { const updated = await api.skillState(skill.id, { ...skill.state, enabled: e.target.checked }, currentScope); setDetail({ ...detail, skill: updated }); await reload(); })} />Workbench에서 선택해 사용</label>
             <p className="sheet-hint">엔진 자체의 설치 설정은 해당 엔진에서 관리합니다.</p>
             <div className="skill-actions">

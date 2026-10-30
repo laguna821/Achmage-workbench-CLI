@@ -129,7 +129,7 @@ manager.registerAdapter(
 );
 
 const grants = new EditorGrants();
-const officeSkills = new OfficeSkills(manager);
+const officeSkills = new OfficeSkills(manager, store);
 const officeAi = new OfficeAi(dataDir, undefined, manager.office, {
   install: (provider) => manager.installEngineAndWait(provider === "claude-code" ? "claude" : "codex"),
 }, officeSkills);

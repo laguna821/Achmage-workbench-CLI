@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { AddressInfo } from "node:net";
@@ -26,7 +26,7 @@ function fixture() {
   const view = manager.documents.registry.open(artifact.id, { viewId: "source", windowId: "window", sessionId: session.id, claim: true });
   const token = grant.issue(artifact.id, { viewId: "source", writeToken: view.writeToken }, session.id);
   const context = { artifactId: artifact.id, token, grants: grant };
-  const service = new OfficeSkills(manager), root = join(work.cwd, ".claude/skills");
+  const service = new OfficeSkills(manager, store), root = join(work.cwd, ".claude/skills");
   const list = () => service.read(context, "list") as Promise<OfficeSkillView[]>;
   const read = (id: string) => service.read(context, "ai-read", { id }) as Promise<{ ok: true; skill: OfficeSkillRead }>;
   return { dir, home, store, manager, work, session, artifact, grant, context, service, root, list, read,
@@ -123,7 +123,7 @@ it("keeps a queued copy after restart without automatically replaying the handed
   try {
     skill(f.root, "template", "TEMPLATE", "copy.docx"); const chosen = (await f.list())[0]!;
     const created = await f.service.action(f.context, "open-template", { requestId: "restart", skillId: chosen.id, text: "DO_NOT_AUTO_RUN", chips: [chosen] }) as { tabId: string };
-    const service = new OfficeSkills(f.manager), entry = f.manager.creations.get("office-template:restart")!;
+    const service = new OfficeSkills(f.manager, f.store), entry = f.manager.creations.get("office-template:restart")!;
     expect(entry.office?.state).toBe("interrupted"); expect(readFileSync(f.manager.documents.get(created.tabId).path, "utf8")).toBe("ORIGINAL_TEMPLATE_BYTES");
     expect(f.manager.items(f.session.id).items).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "notice", text: expect.stringContaining("DO_NOT_AUTO_RUN") })]));
     expect(await service.action(f.context, "focus-tab", { tabId: created.tabId })).toEqual({ ok: true, tabId: created.tabId });
@@ -143,4 +143,143 @@ it("serves reads through a document grant while keeping writes off the editor or
     expect((await fetch(`${base}/list`, { headers, method: "POST" })).status).toBe(405);
     expect((await fetch(`${base}/open-template`, { headers, method: "POST", body: "{}" })).status).toBe(404);
   } finally { await new Promise<void>((done) => server.close(() => done())); await f.close(); }
+});
+
+const proposed = (id: string, name = "saved-card", targetId?: string) => ({
+  card: { id, label: name, ...(targetId ? { targetId } : {}) }, name, title: "사용자 스킬",
+  description: "Only when preparing a report", body: "CARD_BODY", invoke: "auto" as const,
+  ...(targetId ? { targetId } : {}),
+});
+async function checkCard(f: ReturnType<typeof fixture>, input: Pick<ReturnType<typeof proposed>, "name" | "card">) {
+  return f.service.read(f.context, "check-name", { name: input.name, card: input.card });
+}
+it("writes nothing before the original card's explicit Save, then keeps one saved row across restart and duplicate delivery", async () => {
+  const f = fixture();
+  try {
+    const input = proposed("new-card");
+    expect(await checkCard(f, input)).toEqual({ ok: true });
+    expect(existsSync(f.manager.userSkills.appDir)).toBe(false);
+    expect(f.store.items(f.session.id)).toHaveLength(0);
+    const result = await f.service.action(f.context, "save-card", input);
+    expect(result).toMatchObject({ ok: true });
+    expect(await f.list()).toEqual([expect.objectContaining({ name: input.name, enabled: true, invoke: "auto", owned: true })]);
+    expect(f.store.items(f.session.id)).toEqual([expect.objectContaining({ title: input.name, output: expect.stringContaining("skill-card-saved:"), office: expect.objectContaining({ cardSaved: { skillId: (result as { id: string }).id, label: input.name } }) })]);
+    expect(f.manager.office.nativeContext(f.session.id).text).toBe("");
+    const restarted = new OfficeSkills(f.manager, f.store);
+    expect(await restarted.action(f.context, "save-card", input)).toEqual(result);
+    expect(f.store.items(f.session.id)).toHaveLength(1);
+    await expect(restarted.action(f.context, "save-card", { ...input, body: "DIFFERENT" })).rejects.toThrow(/다른 요청/);
+    expect(readFileSync(join(f.manager.userSkills.appDir, input.name, "SKILL.md"), "utf8")).toContain("CARD_BODY");
+  } finally { await f.close(); }
+});
+it("copies an installed folder only on Save and keeps explicit selection scoped to this project even when the copy is disabled or removed", async () => {
+  const f = fixture();
+  try {
+    const source = skill(join(f.home, ".claude/skills"), "installed", "ORIGINAL", "model.md");
+    writeFileSync(join(source, "guide.md"), "KEPT_ASSET");
+    const original = readFileSync(join(source, "SKILL.md")), id = (await f.list())[0]!.id;
+    const input = proposed("copy-card", "installed", id); await checkCard(f, input);
+    const result = await f.service.action(f.context, "save-card", input) as { id: string };
+    const all = await f.manager.userSkills.list({ projectRoot: f.work.cwd, provider: "claude" }), copy = all.find((s) => officeSkillId(s) === result.id)!;
+    expect(copy).toMatchObject({ shadowedBy: null, state: { enabled: true, invoke: "auto" } });
+    expect((await f.list()).find((s) => s.id === id)?.shadowedBy).toBe(result.id);
+    expect((await f.manager.userSkills.list({ projectRoot: join(f.dir, "other-project"), provider: "claude" })).find((s) => s.source === "claude")?.shadowedBy).toBeNull();
+    expect(readFileSync(join(copy.dir, "guide.md"), "utf8")).toBe("KEPT_ASSET");
+    expect(readFileSync(join(copy.dir, "assets/model.md"), "utf8")).toBe("ORIGINAL_TEMPLATE_BYTES");
+    await f.manager.userSkills.setState(copy.id, { enabled: false, invoke: "manual" }, { projectRoot: f.work.cwd, provider: "claude" });
+    expect(await f.read(id)).toEqual({ ok: false, reason: "disabled" });
+    rmSync(copy.dir, { recursive: true });
+    expect(await f.read(id)).toEqual({ ok: false, reason: "disabled" });
+    expect(await f.manager.userSkills.setState(all.find((s) => s.source === "claude")!.id, { enabled: true, invoke: "manual" }, { projectRoot: f.work.cwd, provider: "claude" })).toMatchObject({ shadowedBy: null, state: { enabled: true } });
+    expect((await f.read(id)).ok).toBe(true);
+    expect(readFileSync(join(source, "SKILL.md"))).toEqual(original);
+  } finally { await f.close(); }
+});
+it("keeps a renamed installed copy selected, preserves own assets, and retains replaced folders", async () => {
+  const f = fixture();
+  try {
+    skill(join(f.home, ".claude/skills"), "source-card", "ORIGINAL", "model.md");
+    const nativeId = (await f.list())[0]!.id, first = proposed("copy-renamed", "my-copy", nativeId); await checkCard(f, first);
+    const own = await f.service.action(f.context, "save-card", first) as { id: string };
+    expect((await f.list()).find((s) => s.id === nativeId)?.shadowedBy).toBe(own.id);
+    const rename = { ...proposed("edit-renamed", "my-renamed-copy", own.id), body: "OWN_RENAMED", invoke: "manual" as const };
+    await checkCard(f, rename);
+    const result = await f.service.action(f.context, "save-card", rename) as { id: string };
+    expect((await f.list()).find((s) => s.id === nativeId)?.shadowedBy).toBe(result.id);
+    expect(existsSync(join(f.manager.userSkills.appDir, "my-copy"))).toBe(false);
+    expect(readFileSync(join(f.manager.userSkills.appDir, "my-renamed-copy/assets/model.md"), "utf8")).toBe("ORIGINAL_TEMPLATE_BYTES");
+    const backups = join(f.dir, "skill-backups"), folder = readdirSync(backups)[0]!;
+    expect(readFileSync(join(backups, folder, "my-copy/SKILL.md"), "utf8")).toContain("CARD_BODY");
+    expect((await f.list()).find((s) => s.id === result.id)?.invoke).toBe("manual");
+  } finally { await f.close(); }
+});
+for (const changed of ["SKILL.md", "guide.md"]) it(`rejects a card whose source ${changed} changed after review, without rewriting either folder`, async () => {
+  const f = fixture();
+  try {
+    const dir = skill(join(f.home, ".claude/skills"), "stale-card"); writeFileSync(join(dir, "guide.md"), "OLD");
+    const input = proposed("stale", "stale-card", (await f.list())[0]!.id); await checkCard(f, input);
+    const before = readFileSync(join(dir, changed), "utf8"); writeFileSync(join(dir, changed), before + "\nUSER_CHANGED");
+    await expect(f.service.action(f.context, "save-card", input)).rejects.toThrow(/바뀌/);
+    expect(readFileSync(join(dir, changed), "utf8")).toContain("USER_CHANGED");
+    expect(existsSync(join(f.manager.userSkills.appDir, "stale-card"))).toBe(false);
+    expect(f.store.items(f.session.id)).toHaveLength(0);
+  } finally { await f.close(); }
+});
+it("requires the checked own collision and explicit overwrite before copying over it", async () => {
+  const f = fixture();
+  try {
+    const ownDir = skill(f.manager.userSkills.appDir, "mine", "OLD_MINE"); skill(join(f.home, ".claude/skills"), "installed-other", "NATIVE");
+    const input = proposed("replace", "mine", (await f.list()).find((s) => s.name === "installed-other")!.id);
+    expect(await checkCard(f, input)).toEqual({ ok: false, problem: "taken" });
+    await expect(f.service.action(f.context, "save-card", input)).rejects.toThrow(/이미 있는/);
+    expect(readFileSync(join(ownDir, "SKILL.md"), "utf8")).toContain("OLD_MINE");
+    expect(await f.service.action(f.context, "save-card", { ...input, overwrite: true })).toMatchObject({ ok: true });
+    expect(readFileSync(join(ownDir, "SKILL.md"), "utf8")).toContain("CARD_BODY");
+    const backups = join(f.dir, "skill-backups"), folder = readdirSync(backups)[0]!;
+    expect(readFileSync(join(backups, folder, "mine/SKILL.md"), "utf8")).toContain("OLD_MINE");
+  } finally { await f.close(); }
+});
+it("does not save an unchecked card, a different target, a traversal template, or a stale document grant", async () => {
+  const f = fixture();
+  try {
+    const input = proposed("boundary");
+    await expect(f.service.action(f.context, "save-card", input)).rejects.toThrow(/다시 확인/);
+    await checkCard(f, input);
+    await expect(f.service.action(f.context, "save-card", { ...input, targetId: "unexpected" })).rejects.toThrow(/대상/);
+    await expect(f.service.action(f.context, "save-card", { ...input, template: { fileName: "../escape.md", base64: Buffer.from("ESCAPE").toString("base64") } })).rejects.toThrow(/이름과 크기/);
+    f.manager.documents.registry.close("source", "window");
+    await expect(f.service.action(f.context, "save-card", input)).rejects.toThrow(/바뀌/);
+    expect(existsSync(join(f.manager.userSkills.appDir, input.name))).toBe(false);
+  } finally { await f.close(); }
+});
+it("rechecks the document/session after asynchronous staging, before committing a card", async () => {
+  const f = fixture();
+  try {
+    const input = proposed("during-save"); await checkCard(f, input);
+    const original = f.manager.userSkills.mutate.bind(f.manager.userSkills);
+    vi.spyOn(f.manager.userSkills, "mutate").mockImplementationOnce((run) => original(async () => { f.manager.documents.registry.close("source", "window"); return run(); }));
+    await expect(f.service.action(f.context, "save-card", input)).rejects.toThrow(/바뀌/);
+    expect(existsSync(join(f.manager.userSkills.appDir, input.name))).toBe(false);
+  } finally { await f.close(); }
+});
+it("leaves an interrupted save for inspection rather than repeating it after a host restart", async () => {
+  const f = fixture();
+  try {
+    const input = proposed("interrupted"); await checkCard(f, input); await f.service.action(f.context, "save-card", input);
+    const stored = f.store.metaEntries("office-skill-card:")[0]!, value = JSON.parse(stored.value);
+    f.store.setMeta(stored.key, JSON.stringify({ ...value, status: "saving", item: undefined, result: undefined }));
+    const restarted = new OfficeSkills(f.manager, f.store);
+    await expect(restarted.action(f.context, "save-card", input)).rejects.toThrow(/보관함/);
+    expect(JSON.parse(f.store.getMeta(stored.key)!).status).toBe("interrupted");
+    expect(f.store.items(f.session.id)).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "notice", text: expect.stringContaining("자동 반복하지") })]));
+    expect(readdirSync(f.manager.userSkills.appDir).filter((name) => !name.startsWith("."))).toEqual([input.name]);
+  } finally { await f.close(); }
+});
+it("keeps a project-owned skill authoritative and refuses copying it from an Office card", async () => {
+  const f = fixture();
+  try {
+    skill(f.root, "project-card");
+    await expect(checkCard(f, proposed("project", "project-card", (await f.list())[0]!.id))).rejects.toThrow(/다시 확인/);
+    expect(existsSync(f.manager.userSkills.appDir)).toBe(false);
+  } finally { await f.close(); }
 });

@@ -11,8 +11,12 @@ import { readSkillFile } from "./user-skills.ts";
 import { HttpError } from "./errors.ts";
 import { readBody, sendJson } from "./http.ts";
 import { officeEditorKind } from "./editors.ts";
+import { OfficeSkillCards } from "./office-skill-cards.ts";
+import type { Store } from "./store.ts";
 
-type Context = { artifactId: string; token: string; grants: EditorGrants };
+export type OfficeSkillContext = { artifactId: string; token: string; grants: EditorGrants };
+type Context = OfficeSkillContext;
+export type OfficeSkillAccess = ReturnType<OfficeSkills["writable"]>;
 const sources: Record<WorkbenchSkill["source"], OfficeSkillSource> = { claude: "user", shared: "codex", codex: "codex", imported: "app", ieum: "app", builtin: "builtin", project: "project", plugin: "plugin" };
 const sourceOf = (skill: WorkbenchSkill): OfficeSkillSource => sources[skill.source];
 export const officeSkillId = (skill: WorkbenchSkill) => `${sourceOf(skill)}:${skill.id}`;
@@ -20,13 +24,15 @@ const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v ===
 const string = (v: unknown, max: number): v is string => typeof v === "string" && v.length <= max;
 const fail = (reason: string) => ({ ok: false as const, reason });
 
-/** Document-scoped access to the existing library. No filesystem paths, installation,
- * state changes, script execution or independent Office skill store cross this origin. */
+/** Document-scoped access to the existing library. Reads expose no local paths or
+ * scripts; explicit card saves and copies require the authenticated parent. */
 export class OfficeSkills {
   private readonly manager: SessionManager;
   private readonly opening = new Set<string>();
-  constructor(manager: SessionManager) {
+  private readonly cards: OfficeSkillCards;
+  constructor(manager: SessionManager, store: Store) {
     this.manager = manager;
+    this.cards = new OfficeSkillCards(manager, store, (context) => this.writable(context));
     // An uncertain handoff never silently starts a model after an app restart.
     for (const record of manager.creations.list()) {
       if (record.office?.state !== "queued") continue;
@@ -51,7 +57,7 @@ export class OfficeSkills {
       enabled: skill.state.enabled, invoke: skill.state.invoke, hidden: false, hasScripts: skill.hasScripts,
       ...(skill.template ? { template: skill.template.relativePath } : {}), templateExists: Boolean(skill.template?.exists),
       agentOnly: false, ...(skill.problem ? { unreadable: skill.problem } : {}), files: skill.files, bytes: skill.bytes,
-      owned: skill.editable, ...(shadowed ? { shadowedBy: officeSkillId(shadowed) } : {}),
+      owned: skill.editable, ...(skill.shadowedBy ? { shadowedBy: shadowed ? officeSkillId(shadowed) : `app:${skill.shadowedBy}` } : {}),
       // Management stays in the authenticated Workbench library dialog.
       can: { edit: false, copyToMine: false, export: false, checkUpdate: false, openFolder: false, remove: false, hide: false },
     };
@@ -70,6 +76,7 @@ export class OfficeSkills {
   async read(context: Context, operation: string, input: unknown = {}) {
     const scope = this.scope(context), identity = JSON.stringify(scope);
     if (operation === "take-handoff") return this.take(context, input);
+    if (operation === "suggest-name" || operation === "check-name") return this.cards.read(context, operation, input);
     const stillHere = () => { if (identity !== JSON.stringify(this.scope(context))) throw new HttpError(409, "office_skill_scope", "스킬을 읽는 동안 작업공간 또는 엔진 선택이 바뀌었습니다."); };
     if (operation === "list") {
       const all = await this.manager.userSkills.list(scope); stillHere();
@@ -98,7 +105,7 @@ export class OfficeSkills {
       ...(skill.template?.exists ? { template: skill.template.relativePath } : {}), hasScripts: skill.hasScripts };
     return { ok: true, skill: { ...value, files: operation === "read" ? listed.files.map(({ rel, size }) => ({ rel, size })) : listed.files.map((file) => file.rel).filter((rel) => rel !== "SKILL.md" && rel !== IEUM_SOURCE_FILE && SKILL_TEXT_EXTENSIONS.has(extname(rel).toLowerCase())) } };
   }
-  private writable(context: Context) {
+  writable(context: Context) {
     const scope = this.scope(context), sessionId = context.grants.session(context.token), access = context.grants.access(context.token);
     if (!sessionId || !scope.projectRoot) throw new HttpError(409, "office_session_required", "양식과 함께 사용할 대화를 먼저 연결해 주세요.");
     this.manager.documents.registry.assertWrite(context.artifactId, access);
@@ -108,6 +115,7 @@ export class OfficeSkills {
   async action(context: Context, action: unknown, input: unknown) {
     const before = this.writable(context);
     if (!record(input)) throw new HttpError(400, "office_template_input", "양식 요청 형식이 올바르지 않습니다.");
+    if (action === "save-card") return this.cards.save(context, input);
     if (action === "focus-tab") {
       const entry = this.manager.creations.list().find((item) => item.artifactId === input.tabId && item.sessionId === before.sessionId && item.office?.sourceArtifactId === context.artifactId && item.office.sourceViewId === before.access.viewId);
       if (!entry?.artifactId) return fail("not-found");
@@ -182,7 +190,7 @@ export class OfficeSkills {
     return { text: raw.text, skills: selected, skillReads: reads };
   }
   async handle(req: IncomingMessage, res: ServerResponse, url: URL, token: string | null, grants: EditorGrants) {
-    const match = /^\/api\/artifacts\/([^/]+)\/ai\/skills\/(list|read|ai-read|ai-read-file|take-handoff)$/.exec(url.pathname);
+    const match = /^\/api\/artifacts\/([^/]+)\/ai\/skills\/(list|read|ai-read|ai-read-file|take-handoff|suggest-name|check-name)$/.exec(url.pathname);
     if (!match) return false;
     const [, artifactId, operation] = match;
     if (req.method !== (operation === "list" ? "GET" : "POST")) throw new HttpError(405, "method_not_allowed", "허용되지 않은 스킬 요청입니다.");

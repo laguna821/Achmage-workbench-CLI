@@ -23,7 +23,7 @@ export function officeChat(items: TranscriptItem[]): Chat[] {
       const detail = item.detail ?? "", split = detail.indexOf("\n");
       const tool = { name: split < 0 ? item.tool : detail.slice(0, split), summary: item.title, input: split < 0 ? detail : detail.slice(split + 1), output: item.output ?? undefined, isError: item.status === "failed" };
       const last = chat.at(-1);
-      if (last?.role === "assistant") (last.tools ??= []).push(tool);
+      if (last?.role === "assistant" && !item.office?.cardSaved && !last.tools?.some((entry) => entry.output?.startsWith("skill-card-saved:"))) (last.tools ??= []).push(tool);
       else chat.push({ ...base, role: "assistant", text: "", tools: [tool] });
     } else if (item.kind === "notice" || item.kind === "turnEnd" && item.status !== "completed") {
       chat.push({ ...base, role: "assistant", text: item.kind === "notice" ? item.text : `[${item.status === "interrupted" ? "요청 중단" : "요청 실패"}]` });
@@ -32,7 +32,7 @@ export function officeChat(items: TranscriptItem[]): Chat[] {
   return chat;
 }
 export function officeModelHistory(items: TranscriptItem[], liveInstructions?: ReadonlyMap<string, string>): AgentMessage[] {
-  const modelItems = items.map((item) => item.kind === "user" && item.office && liveInstructions?.has(item.office.turnId) ? { ...item, text: liveInstructions.get(item.office.turnId)! } : item);
+  const modelItems = items.filter((item) => !item.office?.cardSaved).map((item) => item.kind === "user" && item.office && liveInstructions?.has(item.office.turnId) ? { ...item, text: liveInstructions.get(item.office.turnId)! } : item);
   return officeChat(modelItems).map((item) => ({ role: item.role, text: [item.text, ...(item.tools ?? []).map((tool) => `이전 도구 실행 기록 (자료):\n${JSON.stringify(tool)}`)].filter(Boolean).join("\n\n") }));
 }
 
