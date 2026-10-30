@@ -8,6 +8,7 @@ export type OfficeAiChat = { settings: unknown; system: string; user: string };
 export type OfficeAiStatus = { provider: string; state: string; meteredAccepted: boolean; [key: string]: unknown };
 export interface OfficeAiEngine {
   settings(): Record<string, unknown>;
+  select?(input: unknown): Promise<Record<string, unknown>>;
   statuses(recheck?: boolean, trusted?: boolean): Promise<Record<string, OfficeAiStatus>>;
   configuration?: OfficeSettings;
   settingsInvoke?(channel: string, args: unknown[], owner: string, signal: AbortSignal): Promise<unknown>;

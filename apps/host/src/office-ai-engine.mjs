@@ -4,7 +4,7 @@ import { OfficeSettings, OFFICE_SECRET_PLACEHOLDER } from "./office-settings.mjs
 import { createOfficeSettingsControls } from "./office-settings-controls.mjs";
 import {
   activeCustomEndpoint, localEndpointTimeoutMs, maxOutputTokensOf,
-  normalizeAiSettings, sanitizeAiSettings, streamForProvider, chatForProvider,
+  normalizeAiSettings, sanitizeAiSettings, resolveCustomEndpoints, streamForProvider, chatForProvider,
 } from "../../../vendor/ieumoffice/packages/ai-provider/src/index.ts";
 import { shutdownSubscriptionChildren } from "../../../vendor/ieumoffice/packages/ai-provider/src/subscription/process.ts";
 import { shutdownCodexAppServers } from "../../../vendor/ieumoffice/packages/ai-provider/src/codex-app-server.ts";
@@ -44,6 +44,24 @@ export function createOfficeAiEngine(dataDir, injected = {}, hostActions = {}) {
   };
   return {
     settings: getSettings,
+    async select(input) {
+      const snapshot = store.snapshot(), current = getSettings();
+      const desired = normalizeAiSettings(sanitizeAiSettings(input));
+      const select = (base) => resolveCustomEndpoints({
+        ...base, provider: desired.provider,
+        subscriptionNoticeSeen: desired.subscriptionNoticeSeen,
+        customEndpoint: desired.customEndpoint,
+        providers: Object.fromEntries(Object.entries(base.providers).map(([id, config]) => [id, { ...config, model: desired.providers[id]?.model ?? config.model }])),
+        ...(base.customEndpoints ? { customEndpoints: base.customEndpoints.map((endpoint) => ({ ...endpoint, model: desired.customEndpoints?.find((item) => item.id === endpoint.id)?.model ?? endpoint.model })) } : {}),
+      });
+      // A document may choose an existing model and acknowledge the original notice.
+      // It cannot add a URL/key, change a CLI path or grant metered/headless consent.
+      if (canonicalSettings(select(current)) !== canonicalSettings(desired)) {
+        throw Object.assign(new Error("연결 주소·키·실행 파일·동의 설정은 문서 AI 설정 창에서 변경해 주세요."), { status: 403, code: "office_selection_scope" });
+      }
+      await store.write(select(snapshot.settings), snapshot.revision);
+      return getSettings();
+    },
     configuration: store,
     settingsInvoke: controls.invoke,
     setMeteredAccepted: controls.setMeteredAccepted,

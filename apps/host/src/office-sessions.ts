@@ -163,6 +163,12 @@ export class OfficeSessions {
     this.hooks.update(run.sessionId, { status: "idle", activity: null, lastError: status === "failed" ? error ?? "문서 AI 작업을 마치지 못했습니다." : null });
   }
   busy(sessionId: string) { return [...this.runs.values()].some((run) => run.sessionId === sessionId); }
+  reconcileViews() {
+    for (const run of this.runs.values()) {
+      try { this.live(run); }
+      catch { this.stop(run.turnId, "interrupted", "문서 창의 세션 또는 편집 권한이 바뀌어 AI 작업을 멈췄습니다."); }
+    }
+  }
   interrupt(sessionId: string) {
     const run = [...this.runs.values()].find((entry) => entry.sessionId === sessionId);
     if (!run) return false;
@@ -177,7 +183,7 @@ export class OfficeSessions {
     const items = this.hooks.items(binding.sessionId), index = before ? items.findIndex((item) => item.id === before) : items.length;
     if (index < 0) throw new HttpError(400, "office_history_cursor", "대화 기록의 위치를 다시 확인해 주세요.");
     const page = items.slice(Math.max(0, index - 200), index);
-    return { sessionId: binding.sessionId, items: page, hasMore: index > page.length, before: page[0]?.id ?? null };
+    return { sessionId: binding.sessionId, workId: this.hooks.session(binding.sessionId).workId, items: page, hasMore: index > page.length, before: page[0]?.id ?? null };
   }
   /** Give the regular CLI turns the Office work they have not seen. A failed dispatch never advances the cursor. */
   nativeContext(sessionId: string) {

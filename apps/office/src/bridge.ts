@@ -57,13 +57,43 @@ export class Gateway {
     listen((message) => { if (message.type === "office:grant") this.token = message.token; });
   }
 
-  private async call(method: string, path: string, body?: BodyInit, headers: Record<string, string> = {}) {
-    const response = await fetch(path, { method, headers: { authorization: `Bearer ${this.token}`, ...headers }, body });
+  private async call(method: string, path: string, body?: BodyInit, headers: Record<string, string> = {}, signal?: AbortSignal) {
+    const response = await fetch(path, { method, headers: { authorization: `Bearer ${this.token}`, ...headers }, body, signal });
     if (!response.ok) {
       const json = (await response.json().catch(() => ({}))) as { code?: string; message?: string };
       throw new GatewayError(response.status, json.code ?? "error", json.message ?? response.statusText);
     }
     return response;
+  }
+
+  setToken(token: string) { this.token = token; }
+  /** Capture the capability for one run; switching panes must not retarget its requests. */
+  aiSession(artifactId: string) {
+    const token = this.token, base = `/api/artifacts/${artifactId}/ai/`;
+    const call = (operation: string, body?: unknown, signal?: AbortSignal) => this.call(body === undefined ? "GET" : "POST", `${base}${operation}`, body === undefined ? undefined : JSON.stringify(body), { authorization: `Bearer ${token}`, "content-type": "application/json" }, signal);
+    return {
+      json: async <T = unknown>(operation: string, body?: unknown, signal?: AbortSignal): Promise<T> => (await call(operation, body, signal)).json(),
+      stream: async (body: unknown, chunk: (value: unknown) => void, signal?: AbortSignal) => {
+        const response = await call("stream", body, signal);
+        if (!response.body) throw new Error("AI 응답 스트림을 열지 못했습니다.");
+        const reader = response.body.getReader(), decoder = new TextDecoder();
+        let buffer = "", bytes = 0;
+        try {
+          while (true) {
+            const next = await reader.read();
+            buffer += decoder.decode(next.value, { stream: !next.done });
+            bytes += next.value?.byteLength ?? 0;
+            if (buffer.length > 4_000_000 || bytes > 64_000_000) throw new Error("AI 응답의 크기 한도를 넘었습니다.");
+            let end: number;
+            while ((end = buffer.indexOf("\n")) !== -1) {
+              const line = buffer.slice(0, end); buffer = buffer.slice(end + 1);
+              if (line.trim()) chunk(JSON.parse(line));
+            }
+            if (next.done) { if (buffer.trim()) chunk(JSON.parse(buffer)); break; }
+          }
+        } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+      },
+    };
   }
 
   /** The bytes of one revision of a document. */

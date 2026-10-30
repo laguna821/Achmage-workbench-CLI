@@ -178,6 +178,20 @@ describe("Office runs belong to the existing Workbench session", () => {
       expect(warning).toHaveBeenCalledOnce();
     } finally { f.store.setMeta = original; warning.mockRestore(); await f.close(); }
   });
+  it("immediately interrupts the owned document run when its view selects another session", async () => {
+    const f = fixture();
+    try {
+      await f.start();
+      const signal = f.manager.office.requireRun(f.binding, "run").controller.signal;
+      const next = f.manager.createSession(f.work.id, { provider: "claude" });
+      f.manager.documents.registry.open(f.artifact.id, { viewId: "view", windowId: "window", sessionId: next.id });
+      f.manager.office.reconcileViews();
+      expect(signal.aborted).toBe(true); expect(f.manager.office.busy(f.session.id)).toBe(false);
+      expect(f.items().find((item) => item.kind === "turnEnd")).toMatchObject({ status: "interrupted" });
+      expect(f.manager.items(next.id).items).toHaveLength(0);
+      expect(f.interrupted()).toBe(0);
+    } finally { await f.close(); }
+  });
   it("serializes an earlier CLI dispatch before Office and counts only native requests when forking", async () => {
     const f = fixture(); let kept: { turns: number; requests: number } | undefined;
     try {

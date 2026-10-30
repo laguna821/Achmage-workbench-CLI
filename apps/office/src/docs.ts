@@ -2,17 +2,22 @@ import "./docs.css";
 import { Events, Gateway, GatewayError, handshake, listen, post, stubBridge } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
 import { convertForeignPictures, pasteDesktopPictures } from "./pictures.ts";
+import { createOfficeAi } from "./office-ai.ts";
+import { DEFAULT_AI_PANEL_PREFS, normalizeAiPanelPrefs } from "../../../vendor/ieumoffice/packages/ui/src/ai-panel-prefs.ts";
 
 // IeumOffice's Word editor inside Workbench. The editor itself (vendor/ieumoffice/apps/docs,
 // unchanged) reads and writes .docx in the page; this file stands in for its Electron preload:
-// the document comes from a Workbench revision, a save becomes the next revision, and AI stays
-// in Workbench's conversation (the editor's own AI panel, ribbon buttons and menu items are off).
+// the document comes from a Workbench revision, a save becomes the next revision, and the
+// original AI sidebar uses the same Workbench conversation as the surrounding window.
 
 const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 const init = await handshake();
 const gateway = new Gateway(init.token);
 const events = new Events();
+const ai = createOfficeAi(init, gateway, events);
+let aiPrefs = DEFAULT_AI_PANEL_PREFS;
+try { aiPrefs = normalizeAiPanelPrefs(JSON.parse(localStorage.getItem("workbench.office.ai-panel") ?? "null")); } catch { /* Original defaults. */ }
 const artifactId = init.artifact.id;
 /** `revision`: the revision the editor's content is based on (a save must name it). `kept`: a recovery copy exists. */
 const state = { revision: init.artifact.revision, theme: init.theme, dirty: false, kept: false };
@@ -152,10 +157,9 @@ const desktop = stubBridge(
     onAutoSaveDefaultChanged: events.on("autoSaveDefaultChanged"),
     getAuthorName: async () => "",
     onAuthorNameChanged: events.on("authorNameChanged"),
-    getAiPanelPrefs: async () => ({ side: "left", fontSize: "default", customFontSize: 14, spellcheck: true, openInNewDocs: false, showAiSidebar: false }),
-    setAiPanelPrefs: async (patch: object) => ({ side: "left", fontSize: "default", customFontSize: 14, spellcheck: true, openInNewDocs: false, ...patch, showAiSidebar: false }),
+    getAiPanelPrefs: async () => aiPrefs,
+    setAiPanelPrefs: async (patch: object) => { aiPrefs = normalizeAiPanelPrefs({ ...aiPrefs, ...patch }); localStorage.setItem("workbench.office.ai-panel", JSON.stringify(aiPrefs)); events.emit("aiPanelPrefsChanged", aiPrefs); return aiPrefs; },
     onAiPanelPrefsChanged: events.on("aiPanelPrefsChanged"),
-    getAiSettings: async () => ({ provider: "auto", providers: {} }),
     getRecentFiles: async () => [],
     consumePendingOpenDocx: async () => (pendingOpen ??= openResult()),
     consumeNewBlankDoc: async () => false,
@@ -227,19 +231,20 @@ const desktop = stubBridge(
     fontFamilyInfo: async () => [],
     fontMetrics: async () => null,
     spellLanguages: async () => ({ available: [], enabled: [] }),
-    // AI belongs to Workbench's conversation, not to the editor.
+    // Direct proofreading/translation still needs its separate lifecycle adapter.
     aiChat: noAi,
-    aiStream: noAi,
-    aiToolCapabilities: async () => ({}),
+    aiToolCapabilities: async () => ({ imageGeneration: { available: false }, imageAnalysis: { available: false }, videoAnalysis: { available: false } }),
+    ...ai.desktop,
   },
   { listDocsTabs: [], kbList: [] },
   // HTML pieces inside a .docx are converted by a hidden Electron window; without one they are left as they are.
   ["convertAltChunkHtml"],
 );
 
-// Only the editor's own bridge: the side bridges (AI drive, outbound, skills, split panes,
-// document attach, projects) are all optional in the editor and are AI or shell features.
-Object.assign(window, { desktop });
+// The original project API is a projection of Workbench history. Other optional side
+// bridges (Drive, outbound, user skills and document attachments) are connected separately.
+Object.assign(window, { desktop, projectApi: ai.projectApi, aiOfficeSubscription: ai.subscription, workbenchOfficeAi: ai });
+window.addEventListener("focus", () => { void ai.refresh().catch(() => {}); });
 
 // The editor tells about unsaved changes when asked; ask now and then for the Workbench header.
 window.setInterval(() => void askDirty(), 2000);

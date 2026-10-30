@@ -35,6 +35,7 @@ import { pdfOfficeScenario } from "./pdf-office.ts";
 import { epubOfficeScenario } from "./epub-office.ts";
 import { mindmapOfficeScenario } from "./mindmap-office.ts";
 import { officeSettingsScenario } from "./office-settings.ts";
+import { officeConversationScenario } from "./office-conversation.ts";
 
 const { binary, outDir, only, engines } = parseArgs(process.argv.slice(2));
 mkdirSync(outDir, { recursive: true });
@@ -71,6 +72,7 @@ try {
       if (wants("mindmap-office")) await mindmapOfficeScenario(ctx);
       if (wants("epub-office")) await epubOfficeScenario(ctx);
       if (wants("office-settings")) await officeSettingsScenario(ctx, { binary, engines, profile: "native" });
+      if (wants("office-conversation")) await officeConversationScenario(ctx);
       if (wants("hwp")) await hwpScenario(ctx);
       if (wants("worktrees")) await worktreesScenario(ctx, { binary, engines, profile: "native" });
       if (wants("terminals")) await terminalsScenario(ctx, { binary, engines, profile: "native" });

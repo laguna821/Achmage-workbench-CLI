@@ -64,6 +64,8 @@ export default function DocumentView({
   onBack,
   onSend,
   onPickTarget,
+  onNewSession,
+  onAiSettings,
   onOpenArtifact,
   onToast,
   tabs,
@@ -95,6 +97,8 @@ export default function DocumentView({
   onSend: DocSend;
   /** Opens the "어느 세션에 보낼까요?" picker; resolves with the chosen session. */
   onPickTarget: () => Promise<Session | null>;
+  onNewSession: () => Promise<Session | null>;
+  onAiSettings: () => void;
   onOpenArtifact: (artifactId: string) => void;
   onToast: (message: string) => void;
 }) {
@@ -935,7 +939,14 @@ export default function DocumentView({
       </div> : null}
       <div className="doc-body" ref={bodyRef} inert={!lease.canWrite && everWriter.current && Boolean(design || officeEditing)}>
         {officeEditing && everWriter.current ? (
-          <OfficeEditor ref={officeRef} api={api} artifact={artifact} access={lease.access()} hidden={Boolean(compare || viewing)} onStatus={setOfficeStatus} onNotice={onToast} onCopied={onOpenArtifact} />
+          <OfficeEditor ref={officeRef} api={api} artifact={artifact} access={lease.access()} sessionId={lease.registration?.view.sessionId ?? null} hidden={Boolean(compare || viewing)} onStatus={setOfficeStatus} onNotice={onToast} onCopied={onOpenArtifact}
+            onPrepareAi={(revision) => lease.sync(false, revision)} onAiSettings={onAiSettings}
+            onNewSession={async (revision) => {
+              await lease.sync(false, revision);
+              const next = await onNewSession();
+              if (!next) throw new Error("새 세션을 만들지 못했습니다.");
+              await lease.sync(false, revision, next.id);
+            }} />
         ) : null}
         {body}
       </div>

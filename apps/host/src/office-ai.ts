@@ -117,7 +117,7 @@ export class OfficeAi {
     return { signal: controller.signal, abort, finish: () => { response.off("close", abort); this.active.delete(key); } };
   }
   async handle(req: IncomingMessage, res: ServerResponse, url: URL, bearer: string | null, documents: Documents, grants: EditorGrants): Promise<boolean> {
-    const match = /^\/api\/artifacts\/([^/]+)\/ai\/(settings|statuses|stream|chat|cancel|history|turn-start|turn-events|turn-finish)$/.exec(url.pathname);
+    const match = /^\/api\/artifacts\/([^/]+)\/ai\/(settings|selection|statuses|stream|chat|cancel|history|turn-start|turn-events|turn-finish)$/.exec(url.pathname);
     if (!match) return false;
     const [, artifactId, operation] = match;
     const authorize = () => {
@@ -156,6 +156,10 @@ export class OfficeAi {
       return invalid();
     }
     authorize();
+    if (operation === "selection") {
+      if (!record(raw) || !engine.select) return invalid();
+      sendJson(res, 200, await engine.select(raw)); return true;
+    }
     if (operation === "cancel") {
       if (!record(raw) || !identifier(raw.requestId)) return invalid();
       this.active.get(`${owner}/${raw.requestId}`)?.controller.abort();

@@ -1830,6 +1830,13 @@ export function App() {
                 onToast={setToast}
                 onOpenArtifact={(artifactId) => setViewOf(pane.id, { kind: "document", artifactId, proposalId: null })}
                 onPickTarget={() => actions.pickSession(owner, session ?? null)}
+                onAiSettings={() => setOfficeSettingsOpen(true)}
+                onNewSession={async () => {
+                  const next = await api.createSession(owner.id, session?.provider ?? engine, { workspaceId: session?.workspaceId, model: session?.model ?? null, effort: session?.effort ?? null });
+                  dispatch({ type: "focus", work: owner, session: next });
+                  updateLayout((current) => setPane(current, pane.id, { workId: owner.id, sessionId: next.id }));
+                  return next;
+                }}
                 onAnswer={(answered, itemId, decision) => actions.answer(answered, itemId, decision)}
                 onSend={async (target, text, refs, handoffTo, create, attachments) => {
                   let source = target;

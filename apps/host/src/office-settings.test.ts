@@ -17,6 +17,27 @@ function fixture(raw?: unknown) {
 }
 const configure = (settings: Record<string, any>, key = "fixture-chat-key"): Record<string, any> => ({ ...settings, provider: "openai", providers: { ...settings.providers, openai: { ...settings.providers.openai, apiKey: key } } });
 
+it("document model selection preserves credentials and refuses connection or consent changes", async () => {
+  const f = fixture();
+  const engine = createOfficeAiEngine(f.dir, { settingsStore: f.store, detect: async (provider) => ({ provider, state: "signed-out" }), listModels: async () => [] });
+  try {
+    const current = f.store.snapshot();
+    await f.store.write(configure(current.settings), current.revision);
+    const masked = engine.settings() as Record<string, any>;
+    const chosen = { ...masked, provider: "codex", subscriptionNoticeSeen: true, providers: { ...masked.providers, codex: { ...masked.providers.codex, model: "fixture-model" } } };
+    await expect(engine.select!(chosen)).resolves.toMatchObject({ provider: "codex", subscriptionNoticeSeen: true, providers: { codex: { model: "fixture-model" } } });
+    expect(await f.store.openSecret(f.store.snapshot().settings.providers.openai.apiKey)).toBe("fixture-chat-key");
+    const saved = readFileSync(f.store.path);
+    for (const forbidden of [
+      { ...chosen, providers: { ...chosen.providers, codex: { ...chosen.providers.codex, cliPath: process.execPath } } },
+      { ...chosen, providers: { ...chosen.providers, openai: { ...chosen.providers.openai, apiKey: "injected" } } },
+      { ...chosen, meteredAccepted: { codex: true } },
+      { ...chosen, customEndpoints: [{ id: "injected", name: "evil", apiKey: "", model: "m", baseUrl: "https://untrusted.invalid/v1" }] },
+    ]) await expect(engine.select!(forbidden)).rejects.toMatchObject({ code: "office_selection_scope" });
+    expect(readFileSync(f.store.path)).toEqual(saved);
+  } finally { engine.close?.(); f.close(); }
+});
+
 describe("Office native secret vault", () => {
   it("uses randomized authenticated envelopes that survive a host restart and refuse tampering", async () => {
     const f = fixture();

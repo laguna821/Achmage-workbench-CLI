@@ -27,8 +27,8 @@ export type OfficeStatus = { dirty: boolean; revision: number | null; conflict: 
  */
 export const OfficeEditor = forwardRef<
   OfficeHandle,
-  { api: Api; artifact: Artifact; access?: DocumentAccess; hidden?: boolean; onStatus(status: OfficeStatus): void; onNotice(message: string): void; onCopied?(artifactId: string): void }
->(function OfficeEditor({ api, artifact, access, hidden = false, onStatus, onNotice, onCopied }, ref) {
+  { api: Api; artifact: Artifact; access?: DocumentAccess; sessionId: string | null; hidden?: boolean; onStatus(status: OfficeStatus): void; onNotice(message: string): void; onCopied?(artifactId: string): void; onPrepareAi(revision: number): Promise<void>; onNewSession(revision: number): Promise<void>; onAiSettings(): void }
+>(function OfficeEditor({ api, artifact, access, sessionId, hidden = false, onStatus, onNotice, onCopied, onPrepareAi, onNewSession, onAiSettings }, ref) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [generation, setGeneration] = useState(0);
   // Each opening of the page gets its own grant (a token for this document only).
@@ -41,8 +41,9 @@ export const OfficeEditor = forwardRef<
   const waiters = useRef<((revision: number | null) => void)[]>([]);
   // False only for the reload right after "open the latest revision": kept edits are dropped then.
   const recover = useRef(true);
-  const handlers = useRef({ onStatus, onNotice, onCopied });
-  handlers.current = { onStatus, onNotice, onCopied };
+  const handlers = useRef({ onStatus, onNotice, onCopied, onPrepareAi, onNewSession, onAiSettings });
+  handlers.current = { onStatus, onNotice, onCopied, onPrepareAi, onNewSession, onAiSettings };
+  const aiBusy = useRef(false);
   const outputBusy = useRef(false);
   const outputPlans = useRef(new Map<string, OfficeOutputPlan>());
   const copied = useRef(new Set<string>());
@@ -114,6 +115,28 @@ export const OfficeEditor = forwardRef<
     finally { outputBusy.current = false; }
   };
 
+  const handleAi = async (message: Extract<OfficePageMessage, { type: "office:ai-request" }>) => {
+    const target = frame.current?.contentWindow, origin = opened.current?.origin;
+    if (!target || !origin) return;
+    const reply = (value?: unknown, error?: string) => target.postMessage({ type: "office:ai-result", requestId: message.requestId, value, error }, origin);
+    if (message.action === "settings") { handlers.current.onAiSettings(); reply(); return; }
+    if (aiBusy.current) { reply(undefined, "문서 저장과 세션 연결을 확인 중입니다."); return; }
+    aiBusy.current = true;
+    try {
+      if (status.current.conflict) throw new Error(status.current.conflict.message);
+      const flushed = waitFlushed(); send({ type: "office:flush" });
+      const revision = await flushed;
+      if (revision === null) throw new Error("문서를 저장하지 못해 AI 요청을 시작하지 않았습니다.");
+      if (message.action === "new-session") await handlers.current.onNewSession(revision);
+      else await handlers.current.onPrepareAi(revision);
+      const value = await api.editorGrant(latest.current.id);
+      opened.current = value;
+      setGrant({ generation, value });
+      reply({ revision, token: value.token, sessionId: value.sessionId });
+    } catch (error) { reply(undefined, error instanceof Error ? error.message : String(error)); }
+    finally { aiBusy.current = false; }
+  };
+
   useEffect(() => {
     let cancelled = false;
     api
@@ -125,16 +148,18 @@ export const OfficeEditor = forwardRef<
     };
     // A new grant for each opening of the page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [artifact.id, generation, access?.writeToken]);
+  }, [artifact.id, generation, access?.writeToken, sessionId]);
   const current = grant && grant.generation === generation ? grant : null;
   opened.current = current && "value" in current ? current.value : null;
-  useEffect(() => { if (opened.current) send({ type: "office:grant", token: opened.current.token }); }, [current]);
+  useEffect(() => { if (opened.current) send({ type: "office:grant", token: opened.current.token, sessionId: opened.current.sessionId }); }, [current]);
+  const aiHandler = useRef(handleAi); aiHandler.current = handleAi;
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (!opened.current || event.origin !== opened.current.origin || event.source !== frame.current?.contentWindow) return;
       const message = event.data as OfficePageMessage;
       switch (message.type) {
+        case "office:ai-request": void aiHandler.current(message); break;
         case "office:output": void handleOutput(message); break;
         case "office:copied":
           if (copied.current.delete(message.artifactId)) {
@@ -151,6 +176,7 @@ export const OfficeEditor = forwardRef<
           send({
             type: "office:init",
             token: opened.current.token,
+            sessionId: opened.current.sessionId,
             artifact: { id: doc.id, name: doc.name, path: doc.path, revision: doc.revision, sha256: doc.sha256 },
             readOnly: false,
             theme: theme(),

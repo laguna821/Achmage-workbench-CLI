@@ -172,6 +172,22 @@ function originalSettingsPanes(): Plugin {
   };
 }
 
+/** Keep the pinned original panel/editor. Replace only its session boundaries. */
+function originalOfficeConversation(): Plugin {
+  return {
+    name: "workbench-office-conversation", enforce: "pre",
+    transform(code, id) {
+      if (id !== `${ieum}/apps/docs/src/renderer/ai/AiPanel.tsx`) return null;
+      const markers = ["export function AiPanel(", "new AgentLoop<", "  const newChat = () => {"];
+      for (const marker of markers) if (code.split(marker).length !== 2) this.error("Original Docs AI panel changed: review the Workbench conversation adapter");
+      code = code.replace("export function AiPanel(", "function OriginalAiPanel(")
+        .replace("new AgentLoop<", "new WorkbenchAgentLoop<")
+        .replace("  const newChat = () => {", "  const newChat = () => {\n    void window.workbenchOfficeAi.newSession().catch((error) => window.alert(error.message));\n    return;");
+      return `import { WorkbenchAgentLoop } from ${JSON.stringify(here("./src/office-agent.ts"))};\nimport { createElement as wbCreateElement, useSyncExternalStore as wbUseStore } from 'react';\n${code}\nexport function AiPanel(props) {\n  const bridge = window.workbenchOfficeAi;\n  const key = wbUseStore(bridge.subscribe, bridge.snapshot);\n  return wbCreateElement(OriginalAiPanel, { ...props, key });\n}\n`;
+    },
+  };
+}
+
 /** Electron's preview push was synchronous IPC. HTTP must finish before a frame reload. */
 function textEditorPlatform(): Plugin {
   return {
@@ -258,6 +274,7 @@ export default defineConfig({
   plugins: [
     pagePlatform(),
     originalSettingsPanes(),
+    originalOfficeConversation(),
     textEditorPlatform(),
     react(),
     tiptapMountGrace(),

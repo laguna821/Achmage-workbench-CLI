@@ -594,6 +594,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       if (method === "DELETE" && parts[0] === "document-views" && parts[1]) {
         const body = await readJson(req);
         manager.documents.registry.close(parts[1], String(body.windowId ?? ""));
+        manager.office.reconcileViews();
         return sendJson(res, 200, { ok: true });
       }
       if (method === "GET" && path === "/api/tools") return sendJson(res, 200, manager.tools());
@@ -624,7 +625,11 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           const body = await readJson(req);
           return sendJson(res, 200, outputs.prepare(artifactId, Number(body.revision), String(body.path ?? "")));
         }
-        if (method === "POST" && parts[2] === "views") return sendJson(res, 200, documents.registry.open(artifactId, await readJson(req) as DocumentViewInput));
+        if (method === "POST" && parts[2] === "views") {
+          const registration = documents.registry.open(artifactId, await readJson(req) as DocumentViewInput);
+          manager.office.reconcileViews();
+          return sendJson(res, 200, registration);
+        }
         if (method === "GET" && parts[2] === "text") return sendJson(res, 200, await documents.text(artifactId, revision));
         if (method === "GET" && parts[2] === "pages") return sendJson(res, 200, await documents.pages(artifactId, revision));
         if (method === "PUT" && parts[2] === "text") {
@@ -649,7 +654,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           const access = documentAccess(req);
           const sessionId = documents.registry.forArtifact(artifactId).find((view) => view.viewId === access?.viewId && view.artifactId === artifactId)?.sessionId ?? null;
           if (sessionId) manager.office.scope(artifactId, sessionId);
-          return sendJson(res, 200, { url: `${origin}/office/${kind}.html`, origin, token: options.editors.grants.issue(artifactId, access, sessionId) });
+          return sendJson(res, 200, { url: `${origin}/office/${kind}.html`, origin, token: options.editors.grants.issue(artifactId, access, sessionId), sessionId });
         }
         if (method === "PUT" && parts[2] === "bytes") {
           const data = await readBody(req, 200_000_000);

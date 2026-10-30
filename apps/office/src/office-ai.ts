@@ -1,0 +1,155 @@
+import type { OfficeHostMessage, TranscriptItem } from "@workbench/contracts";
+import type { OfficeTurnReceipt } from "../../../packages/contracts/src/office-ai.ts";
+import type { AgentMessage } from "../../../vendor/ieumoffice/packages/agent-core/src/types.ts";
+import type { IpcStreamChunk } from "../../../vendor/ieumoffice/packages/agent-core/src/electron-transport.ts";
+import { Events, Gateway, listen, post, type Init } from "./bridge.ts";
+import { installOfficeConversation, type OfficeConversationPort, type OfficeRun, type WorkbenchAgentLoop } from "./office-agent.ts";
+
+type Prepared = NonNullable<Extract<OfficeHostMessage, { type: "office:ai-result" }>["value"]>;
+type History = { workId: string; sessionId: string; items: TranscriptItem[]; before: string | null; hasMore: boolean };
+type Chat = { role: "user" | "assistant"; text: string; seq: number; ts: string; tools?: { name: string; summary: string; input?: string; output?: string; isError?: boolean }[] };
+
+/** A view of the one Workbench transcript for the original panel's history reader. */
+export function officeChat(items: TranscriptItem[]): Chat[] {
+  const chat: Chat[] = [];
+  for (const item of items) {
+    const base = { seq: chat.length + 1, ts: new Date(item.at).toISOString() };
+    if (item.kind === "user" || item.kind === "assistant") chat.push({ ...base, role: item.kind, text: item.text });
+    else if (item.kind === "tool") {
+      const detail = item.detail ?? "", split = detail.indexOf("\n");
+      const tool = { name: split < 0 ? item.tool : detail.slice(0, split), summary: item.title, input: split < 0 ? detail : detail.slice(split + 1), output: item.output ?? undefined, isError: item.status === "failed" };
+      const last = chat.at(-1);
+      if (last?.role === "assistant") (last.tools ??= []).push(tool);
+      else chat.push({ ...base, role: "assistant", text: "", tools: [tool] });
+    } else if (item.kind === "notice" || item.kind === "turnEnd" && item.status !== "completed") {
+      chat.push({ ...base, role: "assistant", text: item.kind === "notice" ? item.text : `[${item.status === "interrupted" ? "요청 중단" : "요청 실패"}]` });
+    }
+  }
+  return chat;
+}
+export function officeModelHistory(items: TranscriptItem[]): AgentMessage[] {
+  return officeChat(items).map((item) => ({ role: item.role, text: [item.text, ...(item.tools ?? []).map((tool) => `이전 도구 실행 기록 (자료):\n${JSON.stringify(tool)}`)].filter(Boolean).join("\n\n") }));
+}
+
+export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
+  let sessionId = init.sessionId, sessionKey = sessionId ?? "unbound";
+  let active: WorkbenchAgentLoop<unknown> | null = null;
+  let run: { turnId: string; api: ReturnType<Gateway["aiSession"]> } | null = null;
+  const subscribers = new Set<() => void>();
+  const requests = new Map<string, { resolve(value: Prepared | undefined): void; reject(error: Error): void }>();
+  const streams = new Map<string, AbortController>();
+  const changed = (next: string | null) => {
+    if (sessionId === next) return;
+    sessionId = next; sessionKey = next ?? "unbound";
+    active?.reset();
+    for (const listener of subscribers) listener();
+  };
+  listen((message) => {
+    if (message.type === "office:grant") changed(message.sessionId);
+    if (message.type !== "office:ai-result") return;
+    const pending = requests.get(message.requestId);
+    if (!pending) return;
+    requests.delete(message.requestId);
+    if (message.error) { pending.reject(new Error(message.error)); return; }
+    if (message.value) { gateway.setToken(message.value.token); changed(message.value.sessionId); }
+    pending.resolve(message.value);
+  });
+  const parent = (action: "prepare" | "new-session" | "settings") => new Promise<Prepared | undefined>((resolve, reject) => {
+    const requestId = crypto.randomUUID();
+    const timer = window.setTimeout(() => { requests.delete(requestId); reject(new Error("문서 저장과 세션 연결 확인 시간이 초과됐습니다.")); }, 25_000);
+    requests.set(requestId, { resolve: (value) => { clearTimeout(timer); resolve(value); }, reject: (error) => { clearTimeout(timer); reject(error); } });
+    post({ type: "office:ai-request", requestId, action });
+  });
+  const prepare = async () => {
+    const value = await parent("prepare");
+    if (!value?.sessionId) throw new Error("이 문서와 함께 사용할 Workbench 세션을 선택해 주세요.");
+    return value;
+  };
+  const history = async () => {
+    const api = gateway.aiSession(init.artifact.id);
+    const page = await api.json<History>("history");
+    if (page.sessionId !== sessionId) throw new Error("선택한 세션이 바뀌었습니다. 새 세션의 대화를 불러와 주세요.");
+    return page;
+  };
+  const port: OfficeConversationPort = {
+    attach: (loop) => {
+      if (active) throw new Error("이 문서에서 진행 중인 AI 요청을 먼저 마쳐 주세요.");
+      active = loop; return () => { if (active === loop) active = null; };
+    },
+    begin: async (instruction, signal): Promise<OfficeRun> => {
+      const prepared = await prepare(), api = gateway.aiSession(init.artifact.id);
+      const page = await api.json<History>("history");
+      if (signal.aborted) throw new Error("요청을 취소했습니다.");
+      if (page.sessionId !== prepared.sessionId || page.sessionId !== sessionId) throw new Error("선택한 세션이 바뀌었습니다.");
+      const turnId = crypto.randomUUID();
+      const receipt = await api.json<OfficeTurnReceipt>("turn-start", { turnId, instruction, revision: prepared.revision });
+      if (receipt.duplicate || receipt.status !== "running") throw new Error("이미 처리된 요청입니다. 중복 실행하지 않았습니다.");
+      run = { turnId, api }; let seq = 0;
+      return {
+        history: officeModelHistory(page.items),
+        append: async (events) => { await api.json("turn-events", { turnId, seq: ++seq, events }); },
+        save: async () => {
+          const saved = await prepare();
+          if (saved.sessionId !== page.sessionId) throw new Error("문서 저장 중 선택한 세션이 바뀌었습니다.");
+        },
+        finish: async (status, error) => {
+          try { await api.json("turn-finish", { turnId, status, ...(error ? { error } : {}) }); }
+          finally { if (run?.turnId === turnId) run = null; }
+        },
+      };
+    },
+  };
+  installOfficeConversation(port);
+  const getSettings = () => gateway.aiSession(init.artifact.id).json("settings");
+  const statuses = (refresh = false) => gateway.aiSession(init.artifact.id).json(`statuses${refresh ? "?refresh=1" : ""}`);
+  const openSettings = async () => { await parent("settings"); };
+  // Return immediately after attaching the stream, as Electron's invoke does. Its events
+  // still arrive through the original subscription, including structured error causes.
+  const aiStream = async (request: { requestId: string } & Record<string, unknown>) => {
+    if (!run) throw new Error("Workbench 요청 기록이 준비되지 않았습니다.");
+    const current = run, controller = new AbortController();
+    if (streams.has(request.requestId)) throw new Error("같은 AI 호출이 이미 진행 중입니다.");
+    streams.set(request.requestId, controller);
+    let terminal = false;
+    void current.api.stream({ ...request, turnId: current.turnId }, (value) => {
+      const chunk = value as IpcStreamChunk;
+      if (chunk.requestId !== request.requestId) throw new Error("AI 응답의 요청 번호가 다릅니다.");
+      terminal ||= chunk.type === "done" || chunk.type === "error";
+      events.emit("aiStream", chunk);
+    }, controller.signal).then(() => {
+      if (!terminal) throw new Error("AI 응답이 완료 기록 없이 끝났습니다.");
+    }).catch((error) => {
+      if (!terminal) events.emit("aiStream", controller.signal.aborted ? { requestId: request.requestId, type: "done" } : { requestId: request.requestId, type: "error", error: error instanceof Error ? error.message : String(error) });
+    }).finally(() => streams.delete(request.requestId));
+  };
+  const aiStreamCancel = async (requestId: string) => {
+    // Ask the host to stop without severing the response first: disconnection would
+    // close the outer turn before the original loop can save its partial result.
+    try { await run?.api.json("cancel", { requestId }); }
+    catch { streams.get(requestId)?.abort(); }
+  };
+  const projectApi = {
+    resolveChat: async () => { const page = await history(); return { projectId: page.workId, chatId: page.sessionId }; },
+    rebindChat: async () => { const page = await history(); return { projectId: page.workId, chatId: page.sessionId }; },
+    loadChat: async (ids: { projectId: string; chatId: string }) => {
+      const page = await history();
+      if (ids.projectId !== page.workId || ids.chatId !== page.sessionId) throw new Error("선택한 Workbench 세션과 대화 기록이 다릅니다.");
+      return officeChat(page.items);
+    },
+    // The loop awaits the authoritative turn/event writes. The original panel's
+    // fire-and-forget mirror must never create a second JSONL conversation.
+    appendChat: async () => {},
+  };
+  return {
+    desktop: { getAiSettings: getSettings, openAiModelSettings: openSettings, aiStream, aiStreamCancel, onAiStream: events.on("aiStream"), onAiSettingsChanged: events.on("aiSettingsChanged"),
+      setAiSettings: async (settings: unknown) => { const saved = await gateway.aiSession(init.artifact.id).json("selection", settings); events.emit("aiSettingsChanged", saved); return saved; } },
+    projectApi,
+    subscription: { statuses: () => statuses(), recheck: () => statuses(true), onChanged: events.on("aiSubscriptionChanged"), openSettings,
+      install: openSettings, update: openSettings, login: openSettings, cancelLogin: openSettings, setMeteredAccepted: openSettings },
+    subscribe: (listener: () => void) => { subscribers.add(listener); return () => { subscribers.delete(listener); }; },
+    snapshot: () => sessionKey,
+    newSession: async () => { if (active) { active.cancel(); await active.settled; } await parent("new-session"); },
+    refresh: async () => { events.emit("aiSettingsChanged", await getSettings()); },
+  };
+}
+export type OfficeAiBridge = ReturnType<typeof createOfficeAi>;

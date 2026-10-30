@@ -10,6 +10,7 @@ export function useDocumentSession(rootApi: Api, artifactId: string | null, sess
   const [registration, setRegistration] = useState<DocumentRegistration | null>(null);
   const [error, setError] = useState<string | null>(null);
   const token = useRef<string | null>(null);
+  const confirmed = useRef<DocumentRegistration | null>(null);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const progress = useRef({ dirty: false, revision: undefined as number | undefined, sessionId });
   progress.current.sessionId = sessionId;
@@ -29,10 +30,11 @@ export function useDocumentSession(rootApi: Api, artifactId: string | null, sess
           // Close it again when its response arrives; unmount has its own queued cleanup.
           if (hiddenPage) { await rootApi.closeDocument(viewId, windowId); return; }
           if (stopped) return;
-          token.current = result.writeToken; setRegistration(result); setError(null);
+          token.current = result.writeToken; confirmed.current = result; setRegistration(result); setError(null);
         } catch (error) {
           if (stopped) return;
           token.current = null;
+          confirmed.current = null;
           setError(error instanceof Error ? error.message : String(error));
         }
       });
@@ -54,6 +56,9 @@ export function useDocumentSession(rootApi: Api, artifactId: string | null, sess
       queue.current = queue.current.catch(() => undefined).then(() => rootApi.closeDocument(viewId, windowId)).catch(() => undefined);
     };
   }, [rootApi, artifactId, viewId, wantsWrite]);
+  // Switching conversations changes the editor's AI capability immediately, even if
+  // the document is clean. Waiting for the heartbeat leaves the old session bound.
+  useEffect(() => { void update.current(); }, [sessionId]);
   useEffect(() => {
     if (!registration) return;
     const timer = window.setTimeout(() => { token.current = null; setError("편집 권한 확인이 만료되었습니다. 입력은 유지했습니다."); }, Math.max(0, registration.view.expiresAt - Date.now()));
@@ -66,6 +71,15 @@ export function useDocumentSession(rootApi: Api, artifactId: string | null, sess
     return Promise.resolve();
   }, []);
   const claim = useCallback(() => update.current(true), []);
+  const sync = useCallback(async (dirty: boolean, revision: number, expectedSession?: string | null) => {
+    progress.current = { ...progress.current, dirty, revision, ...(expectedSession !== undefined ? { sessionId: expectedSession } : {}) };
+    const expected = { ...progress.current };
+    await update.current();
+    const actual = confirmed.current?.view;
+    if (!token.current || !actual || actual.sessionId !== expected.sessionId || actual.revision !== revision || actual.dirty !== dirty) {
+      throw new Error("문서와 선택한 세션의 연결을 확인하지 못했습니다. 다시 시도해 주세요.");
+    }
+  }, []);
   const access = useCallback(() => ({ viewId, writeToken: token.current }), [viewId]);
-  return { api, viewId, registration, error, ready: Boolean(registration), canWrite: !error && registration?.view.mode === "write", claim, report, access };
+  return { api, viewId, registration, error, ready: Boolean(registration), canWrite: !error && registration?.view.mode === "write", claim, report, sync, access };
 }

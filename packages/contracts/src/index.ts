@@ -756,7 +756,7 @@ export type OfficeEditorKind = "docs" | "slides" | "sheets" | "hwp" | "markdown"
  * Where to open a document's editor page: the editors' own origin (not the Workbench UI's), and a
  * token that reads and saves this one document only.
  */
-export type EditorGrant = { url: string; origin: string; token: string };
+export type EditorGrant = { url: string; origin: string; token: string; sessionId: string | null };
 
 /** Workbench window → office editor page (iframe at /office/<kind>.html). */
 export type OfficeHostMessage =
@@ -764,6 +764,7 @@ export type OfficeHostMessage =
   | {
       type: "office:init";
       token: string;
+      sessionId: string | null;
       artifact: { id: string; name: string; path: string; revision: number; sha256: string };
       readOnly: boolean;
       theme: "light" | "dark";
@@ -772,7 +773,8 @@ export type OfficeHostMessage =
     }
   | { type: "office:theme"; theme: "light" | "dark" }
   /** Refresh a scoped write capability without recreating the editor or dropping its undo state. */
-  | { type: "office:grant"; token: string }
+  | { type: "office:grant"; token: string; sessionId: string | null }
+  | { type: "office:ai-result"; requestId: string; value?: { revision: number; token: string; sessionId: string | null }; error?: string }
   /** Save unsaved edits now (before a request is sent, the tab changes or the view switches). */
   | { type: "office:flush" }
   /** Keep my edits after a conflict: save them as the revision after this one. */
@@ -785,6 +787,7 @@ export type OfficeHostMessage =
 /** Office editor page → Workbench window. */
 export type OfficePageMessage =
   | import("./office-output.ts").OfficeOutputRequest
+  | { type: "office:ai-request"; requestId: string; action: "prepare" | "new-session" | "settings" }
   | { type: "office:copied"; artifactId: string }
   | { type: "office:ready" }
   /** The editor shows this revision; `recovered` when it reopened unsaved edits made on it. */
