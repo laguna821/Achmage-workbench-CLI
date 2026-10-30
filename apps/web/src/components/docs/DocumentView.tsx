@@ -123,11 +123,12 @@ export default function DocumentView({
   const office = artifact ? isOfficeFormat(artifact.format) : false;
   // Document screens built from IeumOffice, inside the central Workbench tab.
   const wordEditor = artifact?.format === "docx" || artifact?.format === "pptx" || artifact?.format === "xlsx" || hangul;
-  const [mode, setMode] = useState<"edit" | "preview" | "split" | "render" | "source" | "pages">(
-    hangul && uiState?.mode === "pages" ? "edit" : uiState?.mode && ["edit", "preview", "split", "render", "source", "pages"].includes(uiState.mode) ? uiState.mode as "edit" | "preview" | "split" | "render" | "source" | "pages" : artifact?.format === "html" ? "render" : wordEditor ? "edit" : office ? "pages" : "edit",
+  const richTextEditor = artifact?.format === "markdown" || artifact?.format === "html";
+  const [mode, setMode] = useState<"edit" | "preview" | "split" | "render" | "source" | "pages" | "rich">(
+    hangul && uiState?.mode === "pages" ? "edit" : uiState?.mode && ["edit", "preview", "split", "render", "source", "pages", "rich"].includes(uiState.mode) ? uiState.mode as "edit" | "preview" | "split" | "render" | "source" | "pages" | "rich" : richTextEditor ? "rich" : wordEditor ? "edit" : office ? "pages" : "edit",
   );
   useEffect(() => { onUiState?.({ mode }); }, [mode, onUiState]);
-  const officeEditing = wordEditor && mode === "edit";
+  const officeEditing = (wordEditor && mode === "edit") || (richTextEditor && mode === "rich");
   const officeRef = useRef<OfficeHandle>(null);
   const [officeStatus, setOfficeStatus] = useState<OfficeStatus>({ dirty: false, revision: null, conflict: null });
   const [confirmDrop, setConfirmDrop] = useState(false);
@@ -192,6 +193,9 @@ export default function DocumentView({
       setText(result.text); setSaveState("idle"); setConflict(null); return;
     }
     if (draft && draft.text !== result.text) {
+      // Earlier Workbench drafts belong to its source editor. Recover there before changing
+      // editors, rather than silently hiding those unsaved bytes behind a rich editor iframe.
+      if (richTextEditor) setMode(artifact?.format === "html" ? "source" : "edit");
       recoveredDraft.current = draft;
       setText(draft.text);
       if (draft.baseRevision !== result.revision) {
@@ -207,7 +211,7 @@ export default function DocumentView({
     }
     setSaveState("idle");
     setConflict(null);
-  }, [api, artifactId, textual, hangul, onToast, lease.access]);
+  }, [api, artifactId, textual, hangul, richTextEditor, artifact?.format, onToast, lease.access]);
 
   useEffect(() => {
     if (lease.ready) void load().catch((error: Error) => onToast(error.message));
@@ -280,15 +284,15 @@ export default function DocumentView({
 
   // Autosave shortly after typing stops.
   useEffect(() => {
-    if (!lease.canWrite || !base || text === base.text || saveState === "conflict" || saveState === "saving") return;
+    if (officeEditing || !lease.canWrite || !base || text === base.text || saveState === "conflict" || saveState === "saving") return;
     window.clearTimeout(timer.current);
     // After a failed save, retry slowly instead of hammering the gateway.
     timer.current = window.setTimeout(() => void save(), saveState === "failed" ? 10_000 : 1200);
     return () => window.clearTimeout(timer.current);
-  }, [text, base, saveState, save, lease.canWrite]);
+  }, [text, base, saveState, save, lease.canWrite, officeEditing]);
   const unsaved = Boolean(base && text !== base.text);
   const dirty = unsaved || officeStatus.dirty || designStatus.state === "dirty" || designStatus.state === "saving";
-  useEffect(() => { lease.report(dirty, base?.revision ?? officeStatus.revision ?? designStatus.revision ?? artifact?.revision); }, [dirty, base?.revision, officeStatus.revision, designStatus.revision, artifact?.revision, lease.report]);
+  useEffect(() => { lease.report(dirty, (officeEditing ? officeStatus.revision : base?.revision) ?? designStatus.revision ?? artifact?.revision); }, [dirty, officeEditing, base?.revision, officeStatus.revision, designStatus.revision, artifact?.revision, lease.report]);
   useEffect(() => registerDocumentCommands(lease.viewId, {
     artifactId,
     dirty: () => dirty,
@@ -393,7 +397,8 @@ export default function DocumentView({
 
   // Leaving the editor view saves first; edits that cannot be saved keep it where it is.
   const changeMode = async (value: typeof mode) => {
-    if (officeEditing && value !== "edit" && officeRef.current && (await officeRef.current.flush()) === null) {
+    if (value === mode) return;
+    if ((officeEditing || unsaved) && (await save()) === null) {
       onToast("저장하지 못한 편집이 있어 보기를 바꾸지 않았습니다. 위의 안내를 먼저 확인해 주세요.");
       return;
     }
@@ -661,9 +666,9 @@ export default function DocumentView({
           ) : null}
           {artifact.format === "markdown" ? (
             <div className="segmented small" role="radiogroup" aria-label="보기">
-              {(["edit", "split", "preview"] as const).map((value) => (
-                <button key={value} type="button" role="radio" aria-checked={mode === value} className={mode === value ? "active" : ""} onClick={() => setMode(value)}>
-                  {value === "edit" ? "편집" : value === "split" ? "둘 다" : "미리보기"}
+              {(["rich", "edit", "split", "preview"] as const).map((value) => (
+                <button key={value} type="button" role="radio" aria-checked={mode === value} className={mode === value ? "active" : ""} onClick={() => void changeMode(value)}>
+                  {value === "rich" ? "편집" : value === "edit" ? "원문" : value === "split" ? "둘 다" : "미리보기"}
                 </button>
               ))}
             </div>
@@ -685,9 +690,9 @@ export default function DocumentView({
             </div>
           ) : artifact.format === "html" ? (
             <div className="segmented small" role="radiogroup" aria-label="보기">
-              {(["render", "source"] as const).map((value) => (
-                <button key={value} type="button" role="radio" aria-checked={mode === value} className={mode === value ? "active" : ""} onClick={() => setMode(value)}>
-                  {value === "render" ? "화면" : "원문"}
+              {(["rich", "render", "source"] as const).map((value) => (
+                <button key={value} type="button" role="radio" aria-checked={mode === value} className={mode === value ? "active" : ""} onClick={() => void changeMode(value)}>
+                  {value === "rich" ? "편집" : value === "render" ? "화면" : "원문"}
                 </button>
               ))}
             </div>

@@ -149,6 +149,21 @@ function pagePlatform(): Plugin {
   };
 }
 
+/** Electron's preview push was synchronous IPC. HTTP must finish before a frame reload. */
+function textEditorPlatform(): Plugin {
+  return {
+    name: "workbench-text-editors",
+    enforce: "pre",
+    transform(code, id) {
+      if (id !== `${ieum}/apps/html/src/renderer/App.tsx`) return null;
+      const calls = code.match(/window\.htmlApi\.updatePreview\(/g) ?? [];
+      if (calls.length !== 2 || !code.includes("(nextText: string, reload = true) => {")) this.error("HTML preview changed: review the HTTP synchronization adapter");
+      return code.replaceAll("window.htmlApi.updatePreview(", "await window.htmlApi.updatePreview(")
+        .replace("(nextText: string, reload = true) => {", "async (nextText: string, reload = true) => {");
+    },
+  };
+}
+
 /**
  * TipTap's React binding (@tiptap/react 3.31, EditorInstanceManager.scheduleDestroy) destroys an
  * editor that is not mounted 1 ms after it was made. WebKit runs that timer before React's first
@@ -172,6 +187,7 @@ export default defineConfig({
   base: "/office/",
   plugins: [
     pagePlatform(),
+    textEditorPlatform(),
     react(),
     tiptapMountGrace(),
     thirdPartyNotices([
@@ -230,6 +246,6 @@ export default defineConfig({
     target: "es2022",
     sourcemap: false,
     chunkSizeWarningLimit: 6000,
-    rollupOptions: { input: { docs: here("./docs.html"), slides: here("./slides.html"), sheets: here("./sheets.html"), hwp: here("./hwp.html") } },
+    rollupOptions: { input: { docs: here("./docs.html"), slides: here("./slides.html"), sheets: here("./sheets.html"), hwp: here("./hwp.html"), markdown: here("./markdown.html"), html: here("./html.html") } },
   },
 });

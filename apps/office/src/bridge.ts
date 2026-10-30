@@ -78,6 +78,20 @@ export class Gateway {
     return (await response.json()) as { id: string; revision: number; sha256: string };
   }
 
+  async saveText(artifactId: string, expectedRevision: number, text: string) {
+    post({ type: "office:saving" });
+    const response = await this.call("PUT", `/api/artifacts/${artifactId}/text?expectedRevision=${expectedRevision}`, text, { "content-type": "text/plain; charset=utf-8" });
+    return (await response.json()) as { id: string; revision: number; sha256: string };
+  }
+
+  async previewInfo(artifactId: string): Promise<{ url: string }> {
+    return (await this.call("GET", `/api/artifacts/${artifactId}/html-preview`)).json();
+  }
+
+  async updatePreview(artifactId: string, text: string) {
+    await this.call("PUT", `/api/artifacts/${artifactId}/html-preview`, text, { "content-type": "text/html; charset=utf-8" });
+  }
+
   async openHwp(artifactId: string, revision: number) {
     const response = await this.call("GET", `/api/artifacts/${artifactId}/hwp/open?revision=${revision}`);
     return { bytes: await response.arrayBuffer(), trackingDropped: response.headers.get("x-workbench-tracking-dropped") === "true", saveBlocked: response.headers.get("x-workbench-save-blocked") === "true" };

@@ -3,7 +3,7 @@ import type { Server } from "node:http";
 import type { DocumentRegistration } from "@workbench/contracts";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { EventBus } from "./bus.ts";
 import { createEditorsServer, EditorGrants, officeEditorKind } from "./editors.ts";
@@ -64,6 +64,14 @@ describe("office editor pages", () => {
     expect((await call("POST", `/api/artifacts/${note.id}/adopt-disk`)).status).toBe(200);
     expect(readFileSync(note.path, "utf8")).toBe("External file change\n");
     expect((await call("PUT", `/api/artifacts/${note.id}/text`, { expectedRevision: 2, text: "stale writer" }, writer)).status).toBe(409);
+    const textGrant = async (access: DocumentRegistration) => (await (await call("POST", `/api/artifacts/${note.id}/editor`, undefined, access)).json()) as { token: string };
+    const textWriter = await textGrant(writer), textReader = await textGrant(reader);
+    const putText = (token: string, revision: number) => fetch(`${editor}/api/artifacts/${note.id}/text?expectedRevision=${revision}`, { method: "PUT", headers: { authorization: `Bearer ${token}` }, body: "Scoped rich text\r\n" });
+    expect((await putText(textReader.token, 3)).status).toBe(423);
+    expect((await putText(textWriter.token, 3)).status).toBe(200);
+    await call("DELETE", "/api/document-views/writer", { windowId: "writer" });
+    expect((await putText(textWriter.token, 4)).status).toBe(423);
+    expect(readFileSync(note.path, "utf8")).toBe("Scoped rich text\r\n");
     const officeWriter = await open(plan.id, "office-writer"), officeReader = await open(plan.id, "office-reader");
     const grant = async (access: DocumentRegistration) => (await (await call("POST", `/api/artifacts/${plan.id}/editor`, undefined, access)).json()) as { token: string };
     const writerGrant = await grant(officeWriter), readerGrant = await grant(officeReader);
@@ -82,7 +90,8 @@ describe("office editor pages", () => {
     expect(officeEditorKind("docx")).toBe("docs");
     expect(officeEditorKind("pptx")).toBe("slides");
     expect(officeEditorKind("xlsx")).toBe("sheets");
-    expect(officeEditorKind("markdown")).toBeNull();
+    expect(officeEditorKind("markdown")).toBe("markdown");
+    expect(officeEditorKind("html")).toBe("html");
   });
 
   it("grant one document per token, and forget the oldest", () => {
@@ -167,8 +176,56 @@ describe("office editor pages", () => {
     const granted = (await (await call(plan.id)).json()) as { url: string; origin: string; token: string };
     expect(granted.url).toBe("http://127.0.0.1:4999/office/docs.html");
     expect(grants.allows(granted.token, plan.id)).toBe(true);
-    expect((await call(note.id)).status).toBe(415);
+    expect(((await (await call(note.id)).json()) as { url: string }).url).toBe("http://127.0.0.1:4999/office/markdown.html");
     // The grant is not the app's token.
     expect((await fetch(`${app}/api/snapshot`, { headers: { authorization: `Bearer ${granted.token}` } })).status).toBe(401);
+  });
+
+  it("preserves Markdown source bytes and rejects stale, foreign and invalid text saves", async () => {
+    const { manager, web, note, plan } = setup();
+    const grants = new EditorGrants(), origin = await listen(createEditorsServer(manager.documents, grants, web));
+    const token = grants.issue(note.id);
+    const put = (id: string, revision: number, body: string | Uint8Array, auth = token) => fetch(`${origin}/api/artifacts/${id}/text?expectedRevision=${revision}`, { method: "PUT", headers: { authorization: `Bearer ${auth}` }, body: typeof body === "string" ? body : new Uint8Array(body).buffer });
+    const source = '\ufeff# 메모\r\n\r\n[x][ref]\r\n\r\n[^1]: note\r\n[ref]: https://example.com\r\n<div data-test="keep">raw</div>';
+    expect((await put(note.id, 1, source)).status).toBe(200);
+    expect(readFileSync(note.path)).toEqual(Buffer.from(source));
+    expect((await put(note.id, 2, source)).status).toBe(200);
+    expect(manager.documents.get(note.id).revision).toBe(2);
+    expect((await put(note.id, 1, "stale")).status).toBe(409);
+    expect((await put(plan.id, 1, "foreign")).status).toBe(401);
+    expect((await put(plan.id, 1, "not an Office package", grants.issue(plan.id))).status).toBe(415);
+    expect((await put(note.id, 2, new Uint8Array([0xff]))).status).toBe(422);
+    writeFileSync(note.path, "external\r\n");
+    expect((await put(note.id, 2, "overwrite")).status).toBe(409);
+    expect(readFileSync(note.path, "utf8")).toBe("external\r\n");
+  });
+
+  it("isolates HTML previews from editor credentials and preserves them across grant refresh", async () => {
+    const { manager, web, note } = setup();
+    const file = join(dirname(note.path), "page.html");
+    writeFileSync(file, "<!doctype html><p>Original</p>");
+    const page = manager.openFile(note.workId, file);
+    const grants = new EditorGrants(3), origin = await listen(createEditorsServer(manager.documents, grants, web));
+    const token = grants.issue(page.id, { viewId: "html-view", writeToken: null });
+    const request = (method: string, target: string, auth: string, body?: string) => fetch(`${origin}${target}`, { method, headers: { authorization: `Bearer ${auth}` }, body });
+    const route = `/api/artifacts/${page.id}/html-preview`;
+    const info = await (await request("GET", route, token)).json() as { url: string };
+    expect(info.url).not.toContain(token);
+    expect((await fetch(`${origin}${info.url}`)).status).toBe(404);
+    const preview = '<html><script>parent.postMessage("page", "*")</script><p>Live unsaved</p></html>';
+    expect((await request("PUT", route, token, preview)).status).toBe(200);
+    const response = await fetch(`${origin}${info.url}?v=1`);
+    expect(await response.text()).toBe(preview);
+    expect(response.headers.get("content-security-policy")).toContain("sandbox allow-scripts");
+    expect(response.headers.get("content-security-policy")).not.toContain("allow-same-origin");
+    expect((await request("PUT", route, info.url.split("/")[2]!, "forged")).status).toBe(401);
+    expect((await request("PUT", `/api/artifacts/${note.id}/html-preview`, token, "foreign")).status).toBe(401);
+    const renewed = grants.issue(page.id, { viewId: "html-view", writeToken: "renewed" });
+    expect(await (await request("GET", route, renewed)).json()).toEqual(info);
+    await request("PUT", route, renewed, "new preview");
+    expect(await (await fetch(`${origin}${info.url}`)).text()).toBe("new preview");
+    expect(readFileSync(file, "utf8")).toBe("<!doctype html><p>Original</p>");
+    grants.issue("other-1"); grants.issue("other-2"); grants.issue("other-3");
+    expect((await fetch(`${origin}${info.url}`)).status).toBe(404);
   });
 });

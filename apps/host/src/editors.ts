@@ -16,12 +16,12 @@ import { decodeHwpSave, hwpFormat, hwpTabs, HWP_MAX_BYTES, openHwpBytes, prepare
 
 /** Which editor page edits a format, if any. */
 export function officeEditorKind(format: DocFormat): OfficeEditorKind | null {
-  return format === "docx" ? "docs" : format === "pptx" ? "slides" : format === "xlsx" ? "sheets" : format === "hwp" || format === "hwpx" ? "hwp" : null;
+  return format === "docx" ? "docs" : format === "pptx" ? "slides" : format === "xlsx" ? "sheets" : format === "hwp" || format === "hwpx" ? "hwp" : format === "markdown" || format === "html" ? format : null;
 }
 
 /** Tokens that open one document each, for as long as the gateway runs (the most recent ones). */
 export class EditorGrants {
-  private readonly grants = new Map<string, { artifactId: string; access?: DocumentAccess }>();
+  private readonly grants = new Map<string, { artifactId: string; access?: DocumentAccess; preview: { id?: string; text?: string } }>();
   private readonly limit: number;
   constructor(limit = 500) {
     this.limit = limit;
@@ -29,7 +29,9 @@ export class EditorGrants {
 
   issue(artifactId: string, access?: DocumentAccess) {
     const token = randomBytes(24).toString("base64url");
-    this.grants.set(token, { artifactId, ...(access ? { access: { ...access } } : {}) });
+    // Refreshing a view's writer lease must preserve the live preview URL already in its DOM.
+    const prior = access ? [...this.grants.values()].find((grant) => grant.artifactId === artifactId && grant.access?.viewId === access.viewId) : undefined;
+    this.grants.set(token, { artifactId, ...(access ? { access: { ...access } } : {}), preview: prior?.preview ?? {} });
     while (this.grants.size > this.limit) this.grants.delete(this.grants.keys().next().value!);
     return token;
   }
@@ -39,6 +41,26 @@ export class EditorGrants {
   }
 
   access(token: string) { return this.grants.get(token)?.access; }
+
+  previewInfo(token: string) {
+    const grant = this.grants.get(token);
+    if (!grant) throw new HttpError(401, "unauthorized", "편집기 권한이 없습니다.");
+    grant.preview.id ??= randomBytes(24).toString("base64url");
+    return { url: `/preview/${grant.preview.id}/document.html` };
+  }
+
+  updatePreview(token: string, text: string) {
+    const grant = this.grants.get(token);
+    if (!grant) throw new HttpError(401, "unauthorized", "편집기 권한이 없습니다.");
+    const previews = new Set([...this.grants.values()].map((entry) => entry.preview));
+    const total = [...previews].reduce((sum, entry) => sum + (entry === grant.preview ? 0 : (entry.text?.length ?? 0)), text.length);
+    if (total > 16_000_000) throw new HttpError(413, "preview_limit", "열린 HTML 미리보기의 용량 한도를 넘었습니다.");
+    grant.preview.text = text;
+  }
+
+  preview(id: string) {
+    return [...this.grants.values()].find((grant) => grant.preview.id === id)?.preview.text;
+  }
 
   /** Any open page (for what is not a document: the system's fonts). */
   allowsAny(token: string | null) {
@@ -63,6 +85,37 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
         return serveStatic(res, webDir, path, PAGE_HEADERS);
       }
       const bearer = req.headers.authorization?.replace(/^Bearer\s+/i, "") ?? null;
+      // Document scripts receive only this read-only preview URL, never the editor grant.
+      // Enforce an opaque origin at the response as well as the renderer's iframe sandbox.
+      const preview = /^\/preview\/([A-Za-z0-9_-]{32})\/document\.html$/.exec(path);
+      if (preview && method === "GET") {
+        const html = grants.preview(preview[1]!);
+        if (html === undefined) throw new HttpError(404, "preview_missing", "미리보기가 아직 준비되지 않았습니다.");
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": "sandbox allow-scripts allow-forms allow-popups allow-modals; frame-ancestors 'self' http://127.0.0.1:* http://localhost:*", "referrer-policy": "no-referrer", "x-content-type-options": "nosniff" });
+        res.end(html); return;
+      }
+      const textEditor = /^\/api\/artifacts\/([^/]+)\/(text|html-preview)$/.exec(path);
+      if (textEditor) {
+        const [, id, operation] = textEditor;
+        if (!grants.allows(bearer, id!)) throw new HttpError(401, "unauthorized", "이 문서를 열 권한이 없습니다.");
+        const artifact = documents.check(id!);
+        if (artifact.format !== "markdown" && artifact.format !== "html") throw new HttpError(415, "not_text_editor", "Markdown·HTML 편집기 요청이 아닙니다.");
+        if (operation === "text" && method === "PUT") {
+          const bytes = await readBody(req, 16_000_000);
+          let text: string;
+          try { text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes); }
+          catch { throw new HttpError(422, "invalid_utf8", "UTF-8 원문이 아니어서 저장하지 않았습니다."); }
+          return sendJson(res, 200, await documents.saveText(id!, Number(url.searchParams.get("expectedRevision")), text, grants.access(bearer!)));
+        }
+        if (operation === "html-preview" && artifact.format === "html") {
+          if (method === "GET") return sendJson(res, 200, grants.previewInfo(bearer!));
+          if (method === "PUT") {
+            grants.updatePreview(bearer!, (await readBody(req, 8_000_000)).toString("utf8"));
+            return sendJson(res, 200, { ok: true });
+          }
+        }
+        throw new HttpError(405, "method_not_allowed", "허용되지 않은 편집기 요청입니다.");
+      }
       const hwp = /^\/api\/artifacts\/([^/]+)\/hwp\/(open|tabs|save|repair)$/.exec(path);
       if (hwp) {
         const [, id, operation] = hwp;

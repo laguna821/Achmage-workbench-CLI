@@ -1,0 +1,159 @@
+import { Events, Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
+import { recovery } from "./recovery.ts";
+
+/** The original Markdown/HTML renderers serialize their own source; never normalize it here. */
+export async function createTextEditor(kind: "markdown" | "html") {
+  const init = await handshake(), gateway = new Gateway(init.token), events = new Events();
+  const id = init.artifact.id, path = init.artifact.path;
+  const decode = (bytes: ArrayBuffer) => new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+  const encode = (text: string) => new TextEncoder().encode(text).buffer;
+  const savedSource = decode(await gateway.raw(id, init.artifact.revision));
+  let revision = init.artifact.revision, theme = init.theme, dirty = false, savedText = savedSource;
+  let kept = init.recover && !init.readOnly ? await recovery.get(id) : undefined;
+  if (kept && kept.baseRevision > revision) kept = undefined;
+  if (!init.recover && !init.readOnly) await recovery.drop(id);
+  if (kept) revision = kept.baseRevision;
+  const recovered = kept ? { text: decode(kept.bytes), originalPath: path } : null;
+  let recoveryQueue = Promise.resolve();
+  const queueRecovery = (task: () => Promise<void>) => (recoveryQueue = recoveryQueue.catch(() => {}).then(task));
+  const report = (error: unknown) => post({ type: "office:error", message: error instanceof Error ? error.message : String(error) });
+  const setDirty = (value: boolean) => { dirty = value; post({ type: "office:dirty", dirty }); };
+  let opened = false;
+  function reportOpen() {
+    if (opened) return;
+    opened = true;
+    post({ type: "office:opened", revision, recovered: Boolean(recovered) });
+    if (recovered) setDirty(true);
+  }
+
+  let textAnswer: ((result: { text: string } | { error: string }) => void) | null = null;
+  async function liveText(): Promise<string> {
+    if (!events.has("readText")) throw new Error("편집기가 아직 문서를 여는 중입니다.");
+    return new Promise((resolve, reject) => {
+      const timer = window.setTimeout(() => { textAnswer = null; reject(new Error("편집기에서 원문을 받지 못했습니다.")); }, 5000);
+      textAnswer = (value) => { window.clearTimeout(timer); textAnswer = null; "text" in value ? resolve(value.text) : reject(new Error(value.error)); };
+      events.emit("readText");
+    });
+  }
+  async function keep(text?: string) {
+    if (init.readOnly) return;
+    const source = text ?? await liveText(), baseRevision = revision;
+    await queueRecovery(() => recovery.put(id, { baseRevision, bytes: encode(source), at: Date.now() }));
+  }
+
+  let closeAnswer: ((ok: boolean) => void) | null = null;
+  let flushing: Promise<void> | null = null;
+  async function flush() {
+    if (flushing) return flushing;
+    flushing = (async () => {
+      try {
+        if (init.readOnly) { post({ type: "office:flushed", revision }); return; }
+        const before = await liveText();
+        if (!dirty && before === savedText) { post({ type: "office:flushed", revision }); return; }
+        const ok = await new Promise<boolean>((resolve) => {
+          const timer = window.setTimeout(() => { closeAnswer = null; resolve(false); }, 10_000);
+          closeAnswer = (value) => { window.clearTimeout(timer); closeAnswer = null; resolve(value); };
+          events.emit("closeSave");
+        });
+        // A save can finish while typing continues. Never acknowledge that newer buffer as saved.
+        const after = await liveText();
+        if (!ok || after !== savedText) { await keep(after); setDirty(true); post({ type: "office:flushed", revision: null }); }
+        else { setDirty(false); post({ type: "office:flushed", revision }); }
+      } catch (error) { report(error); post({ type: "office:flushed", revision: null }); }
+    })().finally(() => { flushing = null; });
+    return flushing;
+  }
+
+  listen((message) => {
+    if (message.type === "office:theme") { theme = message.theme; events.emit("theme", theme); }
+    if (message.type === "office:flush") void flush();
+    if (message.type === "office:rebase") { revision = message.revision; void flush(); }
+    if (message.type === "office:keep") void keep().catch(report).finally(() => post({ type: "office:flushed", revision: null }));
+  });
+
+  // Explicitly rejected integrations remain visible work. An absent service must not look like
+  // an empty successful search, export, or model request, as the old generic null proxy did.
+  const unavailable = (feature: string) => async () => { throw new Error(`${feature} 서비스를 연결하지 못했습니다.`); };
+  const rejected = (feature: string) => async () => ({ ok: false, error: `${feature} 서비스를 연결하지 못했습니다.` });
+  const prefsKey = `workbench.office.${kind}.prefs`;
+  let prefs: Record<string, unknown> = {};
+  try { prefs = JSON.parse(localStorage.getItem(prefsKey) ?? "{}"); } catch { /* Ignore a damaged UI preference, never document data. */ }
+  const remember = (key: string, value: unknown) => { prefs[key] = value; localStorage.setItem(prefsKey, JSON.stringify(prefs)); return value; };
+  let previewQueue = Promise.resolve();
+  const api = {
+    consumePending: async () => path,
+    takeSeed: async () => null,
+    takeNoteAppend: async () => [],
+    onNoteAppendReady: events.on("noteAppend"),
+    consumeHeadlessExport: async () => null,
+    headlessExportDone: () => {},
+    readFile: async (requested: string) => { if (requested !== path) throw new Error("열린 문서만 읽을 수 있습니다."); reportOpen(); return savedSource; },
+    recoveryOpen: async () => { if (recovered) reportOpen(); return recovered; },
+    writeRecoveryCopy: async (text: string | null) => { if (text !== null) await keep(text); return id; },
+    onRecoveryFlushRequest: events.on("recoveryFlush"),
+    save: async (request: { text: string; mode: "save" | "saveAs" }) => {
+      if (init.readOnly) return { ok: false, error: "이 판은 읽기 전용입니다." };
+      if (request.mode === "saveAs") return { ok: false, error: "다른 이름으로 저장 서비스를 연결하지 못했습니다." };
+      try {
+        const saved = await gateway.saveText(id, revision, request.text);
+        revision = saved.revision; savedText = request.text;
+        await queueRecovery(() => recovery.drop(id));
+        post({ type: "office:saved", revision });
+        return { ok: true, path, writtenText: request.text };
+      } catch (error) {
+        await keep(request.text).catch(report);
+        if (error instanceof GatewayError && error.status === 409) { post({ type: "office:conflict", code: error.code, message: error.message }); return { ok: false, error: "external-modified" }; }
+        report(error); return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    setDirty,
+    onSaveRequest: events.on("save"),
+    sendSaveRequestAck: () => {},
+    onReadTextRequest: events.on("readText"),
+    sendReadTextResult: (value: { text: string } | { error: string }) => textAnswer?.(value),
+    onCloseSaveRequest: events.on("closeSave"),
+    sendCloseSaveResult: (ok: boolean) => closeAnswer?.(ok),
+    onFileRenamed: events.on("renamed"),
+    setProvisionalTitle: (title: string) => { document.title = title; },
+    getLanguage: async () => "ko",
+    onLanguageChanged: events.on("language"),
+    getTheme: async () => theme,
+    onThemeChanged: events.on("theme"),
+    getDocumentTheme: async () => "follow",
+    onDocumentThemeChanged: events.on("documentTheme"),
+    getMarkdownTheme: async () => prefs.markdownTheme ?? "default",
+    setMarkdownTheme: async (value: string) => remember("markdownTheme", value),
+    getAutoSaveDefault: async () => ({ on: false, updatedAt: 0 }),
+    onAutoSaveDefaultChanged: events.on("autoSave"),
+    getAiPanelPrefs: async () => prefs.aiPanel ?? {},
+    setAiPanelPrefs: async (patch: Record<string, unknown>) => { const value = { ...(prefs.aiPanel as object ?? {}), ...patch }; remember("aiPanel", value); events.emit("aiPanel", value); return value; },
+    onAiPanelPrefsChanged: events.on("aiPanel"),
+    onChromePressed: events.on("chrome"),
+    onViewImage: events.on("image"),
+    onExportRequest: events.on("export"),
+    onPrintRequest: events.on("print"),
+    onAiSettingsChanged: events.on("aiSettings"),
+    onAiStream: events.on("aiStream"),
+    getAiSettings: unavailable("AI 설정"), setAiSettings: unavailable("AI 설정"),
+    openAiModelSettings: unavailable("AI 모델 설정"),
+    aiToolCapabilities: unavailable("AI 도구"), aiStream: unavailable("AI 실행"), aiStreamCancel: unavailable("AI 실행"),
+    webSearch: unavailable("웹 검색"), readUrl: rejected("웹 읽기"), imageSearch: unavailable("이미지 검색"),
+    fetchImage: unavailable("이미지 다운로드"), aiGenerateImage: rejected("이미지 생성"),
+    openSourcePath: unavailable("참조 문서 열기"), resolveWikiLinks: unavailable("위키 링크"),
+    rememberWikiFragment: unavailable("위키 링크"), takeWikiFragment: async () => "",
+    wikiBacklinks: unavailable("백링크"), wikiGraph: unavailable("그래프"),
+    getImageHost: async () => null, setImageHost: unavailable("이미지 호스트"), uploadImage: rejected("이미지 업로드"),
+    pickImage: unavailable("그림 삽입"), saveImage: unavailable("그림 저장"), readImage: unavailable("그림 읽기"), saveImageAs: rejected("그림 저장"),
+    exportDocx: rejected("Word 내보내기"), exportOdt: rejected("ODT 내보내기"), exportPdf: rejected("PDF 내보내기"), exportHtml: rejected("HTML 내보내기"),
+    prepareImageExport: rejected("그림 내보내기"), writeExportImage: rejected("그림 내보내기"), finishImageExport: rejected("그림 내보내기"),
+    printHtml: rejected("HTML 인쇄"), renderPrintPreview: async () => null,
+    pickAttachments: unavailable("첨부"), addAttachmentPaths: unavailable("첨부"), addPastedImage: unavailable("첨부"),
+    readAttachment: unavailable("첨부 읽기"), readAttachmentImage: unavailable("첨부 읽기"), getPathForFile: () => "",
+    takeGenerateHandoff: async () => null, reportGenerateRunStarted: () => {},
+    getPreviewInfo: () => gateway.previewInfo(id),
+    updatePreview: (text: string) => (previewQueue = previewQueue.catch(() => {}).then(() => gateway.updatePreview(id, text))),
+    setPresentFullScreen: async (on: boolean) => { if (on) await document.documentElement.requestFullscreen(); else if (document.fullscreenElement) await document.exitFullscreen(); },
+    presentInNewTab: unavailable("새 탭 발표"),
+  };
+  return api;
+}
