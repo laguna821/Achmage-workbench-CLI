@@ -30,7 +30,7 @@ import type {
   PreparationPreview,
   PreparationJob,
   ApplyPreparationRequest,
-  ScmStatus, ScmDiff, ScmArea, ScmJob, ScmRequest,
+  ScmStatus, ScmDiff, ScmArea, ScmJob, ScmRequest, ScmRemoteInventory, ScmPushPreview, ScmRemoteRequest,
   Schedule,
   ForkResult,
   ImportRequest,
@@ -215,6 +215,8 @@ export class Api {
   scmJobs = (id: string) => this.request<{ jobs: ScmJob[] }>("GET", `/api/workspaces/${id}/scm/jobs`).then((result) => result.jobs);
   startScm = (id: string, request: ScmRequest) => this.request<ScmJob>("POST", `/api/workspaces/${id}/scm/jobs`, request);
   interruptScm = (id: string) => this.request<ScmJob>("DELETE", `/api/scm-jobs/${id}`);
+  scmRemotes = (id: string) => this.request<ScmRemoteInventory>("GET", `/api/workspaces/${id}/scm/remotes`);
+  scmPushPreview = (id: string, request: ScmRemoteRequest) => this.request<ScmPushPreview>("POST", `/api/workspaces/${id}/scm/push-preview`, request);
   createSession = (workId: string, provider: Provider, options?: { workspaceId?: string; purpose?: string; model?: string | null; effort?: string | null; browser?: boolean; worktree?: boolean }) =>
     this.request<Session>("POST", `/api/works/${workId}/sessions`, { provider, ...options });
   updateSession = (sessionId: string, patch: UpdateSessionRequest) => this.request<Session>("PATCH", `/api/sessions/${sessionId}`, patch);

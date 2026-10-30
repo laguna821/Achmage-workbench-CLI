@@ -310,6 +310,7 @@ export class SessionManager {
     this.preparation = new WorkspacePreparation(store, this.workspaces, this.terminals, options.dataDir ?? dirname(options.managedWorksDir), (id) => this.requireWork(id));
     this.sourceControl = new SourceControl(store, this.workspaces, {
       sharedLinks: (root) => this.preparation.sharedLinks(root),
+      assertWorkingIdle: (root) => this.documents.registry.assertDirectoryIdle(root),
       assertIdle: (root) => {
         if (this.preparation.busy(root) || [...this.sessions.values()].some((session) => {
           if (session.status === "idle" || session.status === "error") return false;

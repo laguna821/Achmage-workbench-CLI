@@ -19,6 +19,8 @@ export type ScmStatus = {
   operation: ScmOperation;
   files: ScmFile[];
   revision: string;
+  /** Ignores remote tracking counts; used to recheck files after a fetch. */
+  localRevision: string;
 };
 export type ScmArea = "staged" | "working";
 export type ScmDiff = {
@@ -31,13 +33,40 @@ export type ScmDiff = {
   /** Raster images only. SVG remains escaped text, never executable markup. */
   images?: { before: string | null; after: string | null };
 };
-export type ScmAction = "stage" | "unstage" | "commit";
+export type ScmAction = "stage" | "unstage" | "commit" | "fetch" | "pull" | "push";
+export type ScmRemote = { name: string; fetchUrls: string[]; pushUrls: string[] };
+export type ScmRemoteInventory = {
+  revision: string;
+  remotes: ScmRemote[];
+  pullTarget: { remote: string; branch: string } | null;
+  pushTarget: { remote: string; branch: string } | null;
+};
+export type ScmRemoteRequest = {
+  remote: string;
+  branch: string;
+  expectedRevision: string;
+  strategy?: "ff-only" | "merge" | "rebase";
+  setUpstream?: boolean;
+  forcePreviewId?: string;
+};
+export type ScmPushPreview = {
+  id: string;
+  workspaceId: string;
+  remote: string;
+  branch: string;
+  head: string;
+  remoteRevision: string;
+  destinations: { url: string; head: string | null }[];
+  expiresAt: number;
+};
+export type ScmRemoteResult = { url: string; phase: "pending" | "complete" | "failed"; head?: string; error?: string };
 export type ScmRequest = {
   requestId: string;
   expectedRevision: string;
   action: ScmAction;
   paths?: string[];
   message?: string;
+  remote?: ScmRemoteRequest;
 };
 export type ScmJob = {
   id: string;
@@ -52,6 +81,7 @@ export type ScmJob = {
   output: string;
   outputTruncated: boolean;
   error: string | null;
+  remoteResults?: ScmRemoteResult[];
   createdAt: number;
   updatedAt: number;
 };

@@ -2154,7 +2154,7 @@ export function App() {
 
       {terminalWorkspace ? <TerminalDialog api={api} workspace={state.workspaces[terminalWorkspace.id] ?? terminalWorkspace} onClose={() => setTerminalWorkspace(null)} onOpen={(entry) => navigateTo({ view: { kind: "terminal", terminalId: entry.id, workspaceId: entry.workspaceId, label: entry.label }, workId: entry.workId, sessionId: null })} /> : null}
       {preparationWorkspace ? <WorkspacePreparationDialog api={api} workspace={state.workspaces[preparationWorkspace.id] ?? preparationWorkspace} onClose={() => setPreparationWorkspace(null)} onOpen={(entry) => navigateTo({ view: { kind: "terminal", terminalId: entry.id, workspaceId: entry.workspaceId, label: entry.label }, workId: entry.workId, sessionId: null })} /> : null}
-      {scmWorkspace ? <SourceControlDialog key={scmWorkspace.id} api={api} workspace={state.workspaces[scmWorkspace.id] ?? scmWorkspace} onClose={() => setScmWorkspace(null)} /> : null}
+      {scmWorkspace ? <SourceControlDialog key={scmWorkspace.id} api={api} workspace={state.workspaces[scmWorkspace.id] ?? scmWorkspace} onClose={() => setScmWorkspace(null)} onTerminal={() => { setTerminalWorkspace(scmWorkspace); setScmWorkspace(null); }} /> : null}
       {integrationsOpen && api ? <IntegrationsSheet api={api} onClose={() => setIntegrationsOpen(false)} onToast={setToast} /> : null}
       {imageUploadOpen && api ? <ImageUploadSheet api={api} onClose={() => setImageUploadOpen(false)} onToast={setToast} /> : null}
       {state.ready && api && (prefs.onboarding !== "done" || onboardingAgain) ? (

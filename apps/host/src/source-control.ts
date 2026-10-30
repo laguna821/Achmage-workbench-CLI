@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ScmArea, ScmJob, ScmRequest, ScmStatus } from "@workbench/contracts";
+import type { ScmArea, ScmJob, ScmRequest, ScmStatus, ScmRemoteRequest } from "@workbench/contracts";
 import type { Store } from "./store.ts";
 import type { Workspaces } from "./workspaces.ts";
 import { physicalPath, withinDirectory } from "./directory-operations.ts";
@@ -7,11 +7,13 @@ import { HttpError } from "./errors.ts";
 import { scmText } from "./scm-git.ts";
 import { readScmStatus, scmPath } from "./scm-status.ts";
 import { readScmDiff } from "./scm-diff.ts";
+import { ScmRemotes, redactGit, remoteAction, validateRemoteRequest } from "./scm-remote.ts";
 
 const PREFIX = "scm-job:";
-type Hooks = { sharedLinks: (root: string) => ReadonlySet<string>; assertIdle: (root: string) => void };
+type Hooks = { sharedLinks: (root: string) => ReadonlySet<string>; assertIdle: (root: string) => void; assertWorkingIdle?: (root: string) => void };
 function validateRequest(value: ScmRequest): ScmRequest {
-  if (!value || typeof value.requestId !== "string" || !/^[a-zA-Z0-9_-]{8,100}$/.test(value.requestId) || typeof value.expectedRevision !== "string" || !/^[a-f0-9]{64}$/.test(value.expectedRevision) || !["stage", "unstage", "commit"].includes(value.action)) throw new HttpError(400, "scm_request", "유효한 Git 작업과 최신 변경 상태가 필요합니다.");
+  if (!value || typeof value.requestId !== "string" || !/^[a-zA-Z0-9_-]{8,100}$/.test(value.requestId) || typeof value.expectedRevision !== "string" || !/^[a-f0-9]{64}$/.test(value.expectedRevision) || !["stage", "unstage", "commit", "fetch", "pull", "push"].includes(value.action)) throw new HttpError(400, "scm_request", "유효한 Git 작업과 최신 변경 상태가 필요합니다.");
+  if (remoteAction(value.action)) return { requestId: value.requestId, expectedRevision: value.expectedRevision, action: value.action, remote: validateRemoteRequest(value.remote) };
   if (value.action === "commit") {
     if (typeof value.message !== "string" || !value.message.trim() || value.message.includes("\0") || Buffer.byteLength(value.message) > 32 * 1024) throw new HttpError(400, "scm_message", "커밋 내용을 32 KiB 이내로 입력하세요.");
     return { requestId: value.requestId, expectedRevision: value.expectedRevision, action: value.action, message: value.message.trim() };
@@ -23,6 +25,7 @@ function validateRequest(value: ScmRequest): ScmRequest {
 }
 
 export class SourceControl {
+  private readonly remotes = new ScmRemotes();
   private readonly store: Store; private readonly spaces: Workspaces; private readonly hooks: Hooks;
   private readonly running = new Map<string, { root: string; commonDir: string; done: Promise<void>; abort: AbortController }>();
   private readonly admitting = new Set<string>(); private stopped = false;
@@ -46,6 +49,11 @@ export class SourceControl {
     const result = await readScmDiff(state, path, area);
     this.assertRevision(await this.status(workspaceId), expectedRevision);
     return result;
+  }
+  async remoteInventory(workspaceId: string) { return this.remotes.inspect(await this.status(workspaceId)); }
+  async pushPreview(workspaceId: string, request: ScmRemoteRequest) {
+    const state = await this.status(workspaceId), result = await this.remotes.preview(state, request);
+    this.assertRevision(await this.status(workspaceId), state.revision); return result;
   }
   private assertRevision(state: ScmStatus, expected: string) {
     if (state.revision !== expected) throw new HttpError(409, "scm_changed", "검토한 뒤 Git 상태나 파일이 바뀌었습니다. 새로고침한 뒤 다시 확인하세요.");
@@ -75,7 +83,10 @@ export class SourceControl {
       release = this.spaces.directoryOperations.acquire(state.root);
       this.assertRevision(await this.status(workspaceId), request.expectedRevision);
       if (this.stopped) throw new HttpError(503, "scm_stopped", "앱이 종료 중입니다.");
-      if (request.action === "commit") {
+      if (remoteAction(request.action)) {
+        await this.remotes.validate(state, { request });
+        if (request.action === "pull") this.hooks.assertWorkingIdle?.(state.root);
+      } else if (request.action === "commit") {
         if (state.files.some((file) => file.conflicted)) throw new HttpError(409, "scm_conflicts", "충돌을 해결하고 스테이징한 뒤 커밋하세요.");
         if (state.operation && state.operation !== "merge") throw new HttpError(409, "scm_operation", "진행 중인 Git 작업을 해당 계속 명령으로 마무리하세요.");
         if (!state.files.some((file) => file.index !== "." && file.index !== "?") && state.operation !== "merge") throw new HttpError(409, "scm_no_staged", "먼저 커밋할 파일을 스테이징하세요.");
@@ -93,10 +104,16 @@ export class SourceControl {
     } finally { release?.(); this.admitting.delete(state.commonDir); }
   }
   private async run(initial: ScmJob, state: ScmStatus, signal: AbortSignal) {
-    let job = initial;
-    const append = (text: string) => { if (!text) return; const output = job.output + text; job = this.save({ ...job, output: output.slice(-128 * 1024), outputTruncated: job.outputTruncated || output.length > 128 * 1024 }); };
+    let job = initial, pendingOutput = "";
+    const persistOutput = (text: string) => { if (!text) return; const output = job.output + redactGit(text); job = this.save({ ...job, output: output.slice(-128 * 1024), outputTruncated: job.outputTruncated || output.length > 128 * 1024 }); };
+    // Do not persist a credential URL split across subprocess chunks before its line is complete.
+    const append = (text: string) => { pendingOutput += text; const at = Math.max(pendingOutput.lastIndexOf("\n"), pendingOutput.lastIndexOf("\r")); if (at >= 0) { persistOutput(pendingOutput.slice(0, at + 1)); pendingOutput = pendingOutput.slice(at + 1); } if (pendingOutput.length > 128 * 1024) { persistOutput("\n… (너무 긴 출력 행은 생략했습니다)\n"); pendingOutput = ""; } };
     try {
       const request = job.request; let args: string[], input: string;
+      if (remoteAction(request.action)) {
+        await this.remotes.run(job, state, { signal, onOutput: append }, () => this.status(job.workspaceId), (remoteResults) => { job = this.save({ ...job, remoteResults }); });
+        job = { ...job, phase: "complete" }; return;
+      }
       if (request.action === "commit") { args = ["commit", "--file=-"]; input = request.message! + "\n"; }
       else {
         const selected = state.files.filter((file) => request.paths!.includes(file.path));
@@ -106,12 +123,12 @@ export class SourceControl {
       }
       await scmText(job.root, args, { input, signal, onOutput: append });
       job = { ...job, phase: "complete" };
-    } catch (error) { job = { ...job, phase: signal.aborted ? "interrupted" : "failed", error: error instanceof Error ? error.message : String(error) }; }
-    finally { const headAfter = (await scmText(job.root, ["rev-parse", "--verify", "HEAD"]).catch(() => "")).trim() || null; this.save({ ...job, headAfter }); }
+    } catch (error) { job = { ...job, phase: signal.aborted ? "interrupted" : "failed", error: redactGit(error instanceof Error ? error.message : String(error)) }; }
+    finally { const phase = job.phase; job = { ...job, phase: "running" }; persistOutput(pendingOutput); const headAfter = (await scmText(job.root, ["rev-parse", "--verify", "HEAD"]).catch(() => "")).trim() || null; this.save({ ...job, phase, headAfter }); }
   }
   async interrupt(id: string) {
     const entry = this.running.get(id); if (entry) { entry.abort.abort(); await entry.done; }
     return this.get(id);
   }
-  async shutdown() { this.stopped = true; await Promise.allSettled([...this.pending.values()].map((entry) => entry.done)); for (const entry of this.running.values()) entry.abort.abort(); await Promise.allSettled([...this.running.values()].map((entry) => entry.done)); }
+  async shutdown() { this.stopped = true; await this.remotes.shutdown(); await Promise.allSettled([...this.pending.values()].map((entry) => entry.done)); for (const entry of this.running.values()) entry.abort.abort(); await Promise.allSettled([...this.running.values()].map((entry) => entry.done)); }
 }

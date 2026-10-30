@@ -70,5 +70,6 @@ export async function readScmStatus(workspace: Workspace, sharedLinks: ReadonlyS
   if (before !== after) throw new HttpError(409, "scm_changed", "Git 상태를 읽는 동안 인덱스가 바뀌었습니다. 새로고침해 주세요.");
   const identity = lstatSync(root, { bigint: true });
   const revision = scmHash(JSON.stringify([root, commonDir, String(identity.dev), String(identity.ino), raw, after, op, stamps]));
-  return { ...parsed, files: parsed.files.filter((file) => file.index !== "?" || !sharedLinks.has(file.path)), workspaceId: workspace.id, root, commonDir, operation: op, revision };
+  const localRevision = scmHash(JSON.stringify([root, commonDir, String(identity.dev), String(identity.ino), parsed.head, parsed.branch, parsed.files, after, op, stamps]));
+  return { ...parsed, files: parsed.files.filter((file) => file.index !== "?" || !sharedLinks.has(file.path)), workspaceId: workspace.id, root, commonDir, operation: op, revision, localRevision };
 }
