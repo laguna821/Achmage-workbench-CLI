@@ -16,7 +16,7 @@
 | G1 | Workspace 계약·이행, 재귀 분할·탭·복원 | 공간별 탭·배치/CAS·문서/대화 위치 검증, PKM 목록 위치 등 후속 보완 |
 | G2 | 내부 문서 셸, 같은 세션의 사이드 채팅, +/@, 사용자 템플릿·스킬 | 문서 레지스트리·편집 권한·참조 완료, 템플릿 연결 진행 |
 | G3 | Orca worktree·PTY·Git/PR 검토·내장 브라우저/Design Mode | worktree·PTY·명시적 환경 준비·로컬/원격 Git·충돌 해결·구간 스테이징·기준 비교·행 의견/전달 Linux 검증, PR/CI·브라우저와 나머지 동등성 후속 |
-| G4 | 이음 편집기 9종과 공통 기능, doory | 9종 원본 화면 연결, PDF·MD/HTML·XMind·EPUB 저장·복구 Linux 검증. 공통 AI·원본 설정·Rust 키링·Workbench CLI 연결, 9종 원본 AI 패널의 대표 편집/저장/복원/새 대화/취소 Linux 검증. 루프 밖 AI·공통 기능·Undo 전체·doory와 전체 동등성 진행 |
+| G4 | 이음 편집기 9종과 공통 기능, doory | 9종 원본 화면·공통 AI·설정·Rust 키링·Workbench CLI 연결. 대표 편집/저장/복원/새 대화/취소 및 8종 되돌림 Linux 검증. Sheets 저장 경쟁·응답 전달 지연 수정. PDF 저장 후 Undo·루프 밖 AI·공통 기능·doory와 전체 동등성 진행 |
 | G5 | HOP 개선 패치·hallym-kordoc 생성 스킬·중복 패키지 제거 | 대기 |
 | PKM | 내비게이터/프로젝트 노트/Bases 보존, 썸네일·폴더 템플릿·.base 교환 | 템플릿·썸네일·지원 범위의 .base 완료, OS 검증 G6 |
 | G6 | 기능 회귀·데이터 이행·설치본·용량 측정·릴리스 | 대기 |
@@ -232,3 +232,5 @@ GitHub 저장소 쓰기 권한과 기존 릴리스 워크플로를 확인했다.
 - 문서 참조: `research:rr-41cb044523e6e4e9963902d12d5e75ec:0a384d69047d8b568e813d0695d26e94f7740030289ff0a9d719f82d7828c4a9`
 
 - 2026-10-31 원본 AI 패널 추가8종: MD/HTML/XMind/EPUB/HWPX/PDF/PPTX/XLSX의 같은 세션 흐름을 연결했다. 대표9종 **64개 흐름**의 순차 근거는 `office-suite-native-06/verification.json`(원본 전체 실행 실패도 보존)에 있다. PDF 저장 상태 경쟁, Sheets의 AI 입력 중 셀 포커스 탈취를 실제 앱에서 찾아 수정했다. 전체 타입·빌드·인접62/62, 최종 Sheets11/11 통과. 직접 AI/첨부/검색/Drive/템플릿·세션 없는 문서 첫 요청·Undo/선택/큐 전체·기존 기록 이행·Electron 제거·OS 설치/용량/릴리스는 계속 진행한다. 검증 판: `research:rr-743f8783d3831764b58ba96ea2ccf045:58af427fbce70df749069c265a97fdc1be88572bef1bfbf06c5ed4d91778377a`.
+
+- 2026-10-31 저장 후 되돌림: 7종 원본 Undo/Redo와 Word AI 복원/그 복원 취소 16개를 실제 파일로 검증했다. Sheets의 React 변경 개수 알림보다 먼저 도착한 저장 요청이 누락되던 문제와 Linux WebKit의 부분 답변 전달 지연을 수정했다. 수정 후 9종 대표 80개 순차 검증, 별도 reader 지연 13/13, 인접 회귀 63/63 및 타입·Office/호스트/native 빌드 통과. PDF 저장 후 Undo와 Sheets 구조/일부 시각 요소 예외는 남겨 둔다. 근거: `office-undo-native-10/verification.json`; 되돌림 판 `research:rr-83a38898aec2e7a79a888b89fae470e8:19663864966b7299f716a7f7b19c165fb156f40c3a3908395b656958820bdeba`, 스트림 판 `research:rr-e519c6a82db02e257c792a3eaed0f9e6:eb478c2f4251bef5ca14548a6ad0d19cb9c8b723f68cf1e0e486e699fb467afc`.

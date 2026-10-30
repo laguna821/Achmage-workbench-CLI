@@ -320,7 +320,9 @@ async function flush() {
     await keepNow();
     return post({ type: "office:flushed", revision: null });
   }
-  if (state.pending === 0) return post({ type: "office:flushed", revision: state.revision });
+  // The React pending-count notification can lag behind an AI tool's committed
+  // journal. Ask the original close-save handler even when the mirror says zero;
+  // it reads the live journal and also commits an active cell editor.
   const ok = await new Promise<boolean>((resolve) => {
     closeSaveAnswer = resolve;
     dispatch("workbook:close-save-request", []);

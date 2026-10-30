@@ -144,6 +144,24 @@ describe("common Office AI", () => {
     } finally { await oversized.close(); }
   });
 
+  it("delivers a lone real provider delta before completion on successive cancelled streams", async () => {
+    const f = await fixture();
+    try {
+      for (let i = 0; i < 6; i++) {
+        const requestId = `partial-${i}`;
+        const response = await f.request("stream", turn(f.engine.settings(), requestId, "wait"));
+        const received: string[] = [], reader = response.body!.getReader();
+        const reading = (async () => { while (true) { const chunk = await reader.read(); if (chunk.done) break; received.push(new TextDecoder().decode(chunk.value)); } })();
+        try {
+          await expect.poll(() => received.join(""), { timeout: 2500 }).toContain('"type":"delta"');
+          expect(received.join("")).toContain("안녕");
+          if (i === 0) await expect.poll(() => received.join(""), { timeout: 2000 }).toContain("\n\n");
+        } finally { await f.request("cancel", { requestId }); await reading; reader.releaseLock(); }
+        expect(f.ai.activeCount).toBe(0);
+      }
+    } finally { await f.close(); }
+  });
+
   it("scopes cancellation to the view, retains ownership on grant refresh and ends the real HTTP request", async () => {
     const f = await fixture();
     try {

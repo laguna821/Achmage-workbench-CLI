@@ -164,6 +164,18 @@ Markdown·HTML·XMind·EPUB·한글(HWPX)·PDF·Slides(PPTX)·Sheets(XLSX)가 �
 
 검증 판: `research:rr-743f8783d3831764b58ba96ea2ccf045:58af427fbce70df749069c265a97fdc1be88572bef1bfbf06c5ed4d91778377a`. 재현: `scripts/app-e2e/run.ts ... --only=office-suite --engines=stand-in`; 한 형식만 확인할 때 `APP_E2E_OFFICE_FORMATS=xlsx`를 지정한다. Word는 기존 `office-conversation` 시나리오다.
 
+### 저장 뒤 되돌림과 응답 스트림
+
+Sheets에서 원본 도구의 변경 저널은 갱신됐지만 React의 변경 개수 알림이 아직 오지 않은 사이, 저장 확인이 기존 판을 반환하는 경쟁 상태를 실제 앱에서 발견했다. 저장 요청은 이제 원본 close-save 처리기가 현재 저널과 입력 중인 셀을 직접 확인한다. 복사한 변경 개수가 0이라는 이유로 저장을 생략하지 않는다.
+
+Markdown·HTML·XMind·EPUB·HWPX·PPTX·XLSX의 대표 수정은 원본 Undo → 저장(r3) → Redo → 저장(r4)을 확인했다. Word는 원본 AI 패널의 ‘이전 상태로’ → 저장, 그 복원을 원본 Undo로 취소 → 재저장을 검사했다. 일반 Undo 버튼과 AI 전체 차례 복원은 같은 기능으로 취급하지 않는다. 이 8종의 16개 검사는 실제 파일 내용을 읽어 판정한다.
+
+PDF는 저장 시 원본 `loadDoc`가 Undo/redo 이력을 비우므로 **자동 저장 뒤 되돌림이 아직 해결되지 않았다**. 저장된 PDF의 바탕 데이터와 편집 스냅샷을 함께 복원하는 경계를 후속 구현한다. Sheets도 시트 추가/삭제/이름 변경, 일부 시각 요소와 2단계 저장은 원본 이력 전달의 예외이며 이번 셀 검사로 완료 처리하지 않는다.
+
+호스트가 보낸 부분 답변이 WebKit reader에서 다음 전송까지 대기하는 현상도 계측했다. [WebKit 322545](https://bugs.webkit.org/show_bug.cgi?id=322545)의 보고와 증상이 일치한다. Office NDJSON 응답이 조용해지면 공백행을 보내 대기한 바이트가 전달되게 했다. 이 공백은 모델 활동·대화 기록에 포함되지 않으며 완료/취소 시 타이머를 정리한다. 정확한 Linux WebKit 내부 원인과 다른 OS 검증을 혼동하지 않는다.
+
+최종 근거는 `office-undo-native-10/verification.json`이다. 9종의 **80개 대표 검사**(위 되돌림 16개 포함)는 수정 후 순차 실행에서 형식별로 모았으며 원본 실행의 실패와 SHA도 보존했다. 별도의 UI reader 200ms 지연 검사는 **13/13**, 부분 답변 전달은 제공자 전송 후 1,003ms였고 호스트 추적기는 사용하지 않았다. 인접 회귀 **63/63**, 타입 검사 4개 프로젝트와 검사 스크립트, Office·호스트·native 빌드가 통과했다. 검증 판: 되돌림 `research:rr-83a38898aec2e7a79a888b89fae470e8:19663864966b7299f716a7f7b19c165fb156f40c3a3908395b656958820bdeba`, 스트림 `research:rr-e519c6a82db02e257c792a3eaed0f9e6:eb478c2f4251bef5ca14548a6ad0d19cb9c8b723f68cf1e0e486e699fb467afc`.
+
 ## 아직 완료되지 않은 범위
 
 현재 아홉 renderer 진입점이 있다는 것은 아홉 편집기의 전 기능이 끝났다는 뜻이 아니다. Markdown·HTML의 클라우드 이미지 호스트/원격 그림 읽기, 다른 이름으로 저장, 내보내기, 루프 밖 직접 AI·검색·첨부·위키 서비스는 연결 중이며 미구현 동작을 성공 처리하지 않는다. 기존 Word·PPT·Sheets에도 직접 생성/교정·템플릿·출력 미연결 항목이 있다. PDF의 영구 가림 사본·다른 이름 저장·추출/합치기 파일 선택·변환/출력·서명 보관/인증서 서명·직접 AI/번역/결과 보관/노트·Windows/macOS OCR과 전체 기능 인수 검증이 남았다. 인증서 서명 읽기 코드는 연결했지만 실제 서명 검증 fixture는 아직 수행하지 않았다. XMind의 다른 이름 저장·내보내기·출력·링크 열기·문서 만들기, EPUB의 책 전체 번역/결과 보관·첨부·다른 이름 저장·외부 링크·이름 변경 동기화와 기존 설정 이행도 남았다. 공통 제공자·세션·Drive·검색·doory와 출력 서비스를 계속 연결한다.

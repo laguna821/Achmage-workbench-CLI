@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import JSZip from "jszip";
 import type { Artifact, Session, Snapshot, TranscriptItem, Work } from "@workbench/contracts";
 import { installProbe, pageErrors, seedLayout, shot, until, type Ctx } from "./scenarios.ts";
+import { officeUndo } from "./office-undo.ts";
 
 /** A synthetic model supplies one original Docs tool call. All UI, editing, saving,
  * ownership and history paths are the real shipped app, with no paid model calls. */
@@ -67,13 +68,12 @@ export async function officeConversationScenario(ctx: Ctx) {
     const xml = await (await JSZip.loadAsync(readFileSync(file))).file("word/document.xml")!.async("string");
     ctx.report.check(S, "원본 편집 도구가 실제 DOCX를 수정하고 새 판으로 저장", tool?.kind === "tool" && tool.status === "completed" && xml.includes(marker) && (await snapshot()).artifacts.find((item) => item.id === artifact.id)!.revision > 1);
     ctx.report.check(S, "요청·편집 도구·응답·완료가 선택한 Workbench 세션에 함께 기록", transcript.some((item) => item.kind === "user" && item.office?.artifactId === artifact.id) && transcript.some((item) => item.kind === "assistant" && item.text.includes("수정 완료") && item.office?.artifactId === artifact.id) && requests.length === 2, undefined, await shot(ctx, "office-conversation-completed.png"));
+    if (process.env.APP_E2E_OFFICE_UNDO === "1") await officeUndo(ctx, "docx", artifact.id, marker, async () => (await JSZip.loadAsync(readFileSync(file))).file("word/document.xml")!.async("string"));
     const firstErrors = await pageErrors(wd); await wd.frame(null); await wd.refresh(); await installProbe(wd);
     await wd.frame(await wd.waitFor("iframe.office-frame", 30000)); await installProbe(wd);
     ctx.report.check(S, "문서 재열기에서 같은 세션의 대화와 편집 결과 복원", await until(() => wd.execute<boolean>('return document.querySelector(".ai-panel")?.textContent.includes("수정 완료") === true && document.querySelector(".tiptap")?.textContent.includes(arguments[0]) === true;', marker), 30000));
     await wd.execute('document.querySelector(".tiptap").dataset.sessionKept = "yes";');
-    const fresh = await wd.execute<Record<string, string>>('return [...document.querySelectorAll(".ai-header-btn")].find(el => (el.getAttribute("aria-label") || "").includes("새 대화"));');
-    if (!fresh) throw new Error("Original new conversation button missing");
-    await wd.click(fresh);
+    await wd.click(await wd.waitFor('.ai-header-btn[aria-label*="새 대화"]', 15000));
     const created = await until(async () => (await snapshot()).sessions.filter((item) => item.workId === work.id).length === 2, 10000);
     const next = (await snapshot()).sessions.find((item) => item.workId === work.id && item.id !== session.id)!;
     ctx.report.check(S, "원본 새 대화가 Workbench 새 세션을 만들고 문서 편집기 유지", created && !!next && await until(() => wd.execute<boolean>('return window.workbenchOfficeAi.snapshot() === arguments[0] && document.querySelector(".tiptap")?.dataset.sessionKept === "yes";', next.id)));

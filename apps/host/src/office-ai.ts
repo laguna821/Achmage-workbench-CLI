@@ -194,6 +194,15 @@ export class OfficeAi {
     res.writeHead(200, { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" });
     res.flushHeaders();
     let size = 0, overflow = false;
+    let lastWrite = Date.now();
+    // Some WebKit fetch readers strand a chunk received while the consumer is
+    // busy until another network chunk arrives (WebKit bug 322545). A blank
+    // NDJSON line releases a final delta on an otherwise idle model stream.
+    // It is transport traffic, not model activity or a transcript event.
+    const heartbeat = setInterval(() => {
+      if (!res.destroyed && !res.writableEnded && Date.now() - lastWrite >= 500) res.write("\n");
+    }, 500);
+    heartbeat.unref();
     try {
       await engine.stream(request, sessionId, run.signal, (chunk) => {
         if (res.destroyed || res.writableEnded || overflow) return;
@@ -202,11 +211,11 @@ export class OfficeAi {
         if (size > OUTPUT_LIMIT || res.writableLength > 4_000_000) {
           overflow = true; run.abort();
           res.end(`${JSON.stringify({ requestId: request.requestId, type: "error", error: "AI 응답의 전송 한도를 넘었습니다. 요청을 나눠 다시 시도해 주세요." })}\n`);
-        } else res.write(line);
+        } else { lastWrite = Date.now(); res.write(line); }
       });
     } catch {
       if (!res.destroyed && !res.writableEnded) res.write(`${JSON.stringify({ requestId: request.requestId, type: "error", error: "Office AI 요청을 완료하지 못했습니다. 설정과 연결을 확인해 주세요." })}\n`);
-    } finally { disconnect(); run.finish(); if (!res.destroyed && !res.writableEnded) res.end(); }
+    } finally { clearInterval(heartbeat); disconnect(); run.finish(); if (!res.destroyed && !res.writableEnded) res.end(); }
     return true;
   }
 }

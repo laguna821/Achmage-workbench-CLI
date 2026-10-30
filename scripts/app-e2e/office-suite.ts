@@ -7,6 +7,7 @@ import initHwp, { HwpDocument } from "../../vendor/ieumoffice/vendor/rhwp-core/r
 import { hwpToText } from "../../third_party/ieumoffice/file-parse/hwp.ts";
 import { mindmapFixture } from "./mindmap-fixture.ts";
 import { epubFixture } from "./epub-fixture.ts";
+import { officeUndo } from "./office-undo.ts";
 import type { Artifact, Session, Snapshot, TranscriptItem, Work } from "@workbench/contracts";
 import { installProbe, pageErrors, seedLayout, shot, until, type Ctx } from "./scenarios.ts";
 const require = createRequire(new URL("../../vendor/ieumoffice/package.json", import.meta.url));
@@ -165,18 +166,19 @@ export async function officeSuiteScenario(ctx: Ctx) {
           if (!focus.some((event) => event.kind === "key")) throw new Error("No initial input focus observation");
           if (focus.some((event) => event.kind === "call" && event.from?.startsWith("<textarea") && event.to?.startsWith("<div contenteditable"))) throw new Error("Univer took focus from the original AI composer");
         }
+        if (process.env.APP_E2E_OFFICE_UNDO === "1") await officeUndo(ctx, format, artifact.id, marker(format), () => savedText(file, format));
         const firstErrors = await pageErrors(wd);
         await wd.frame(null); await wd.refresh(); await installProbe(wd); await wd.frame(await wd.waitFor("iframe.office-frame", 30000)); await installProbe(wd);
         ctx.report.check(S, "다시 열면 같은 세션의 대화 복원", await until(() => wd.execute<boolean>('return [...document.querySelectorAll(".ai-panel,.copilot")].some(el=>el.textContent.includes("수정 완료"));'), 30000));
-        await wd.execute('document.querySelector("#root").firstElementChild.dataset.suiteKept="yes";window.__suiteChunks=[];const api=window.desktopApi||window.desktop||window.pdfApi||window.hwpApi||window.epubApi||window.mindmapApi||window.markdownApi||window.htmlApi;api.onAiStream(c=>window.__suiteChunks.push({at:Date.now(),...c}));');
-        const fresh = await wd.execute<Record<string, string>>('return [...document.querySelectorAll(".ai-header-btn")].find(el=>(el.getAttribute("aria-label")||"").includes("새 대화"));');
-        if (!fresh) throw new Error("New conversation button missing"); await wd.click(fresh);
+        await wd.execute('document.querySelector("#root").firstElementChild.dataset.suiteKept="yes";window.__suiteChunks=[];window.workbenchOfficeAi.desktop.onAiStream(c=>window.__suiteChunks.push({at:Date.now(),...c}));window.__suiteNetwork=[];const fetch=window.fetch;window.fetch=async(...args)=>{const res=await fetch(...args);if(String(args[0]).includes("/ai/stream")&&res.body){const get=res.body.getReader.bind(res.body);res.body.getReader=(...params)=>{const reader=get(...params),read=reader.read.bind(reader),decoder=new TextDecoder();reader.read=async()=>{const next=await read();window.__suiteNetwork.push({at:Date.now(),done:next.done,text:decoder.decode(next.value,{stream:!next.done})});return next};return reader}}return res};');
+        await wd.click(await wd.waitFor('.ai-header-btn[aria-label*="새 대화"]', 15000));
         if (!await until(async () => (await snapshot()).sessions.filter((item) => item.workId === work.id).length === 2, 15000)) throw new Error("Workbench new session was not created");
         const next = (await snapshot()).sessions.find((item) => item.workId === work.id && item.id !== session.id)!;
         currentSession = next.id;
         ctx.report.check(S, "새 대화는 Workbench 세션을 만들고 편집 화면 유지", await until(() => wd.execute<boolean>('return window.workbenchOfficeAi.snapshot()===arguments[0] && document.querySelector("#root").firstElementChild.dataset.suiteKept==="yes";', next.id)));
         await send("__suite_fresh__ 새 세션 확인");
         ctx.report.check(S, "다음 요청이 새 세션에만 기록", await until(async () => (await items(next.id)).some((item) => item.kind === "turnEnd" && item.status === "completed"), 30000) && (await items(session.id)).length === transcript.length);
+        if (process.env.APP_E2E_OFFICE_STREAM_STRESS === "1") await wd.execute('let blocked=false;window.workbenchOfficeAi.desktop.onAiStream(c=>{if(c.type!=="ping"||blocked)return;blocked=true;const start=performance.now();while(performance.now()-start<200){};window.__suiteReaderBlock=performance.now()-start;});');
         await send("__suite_cancel__ 중지 검사");
         if (!await until(async () => (await items(next.id)).some((item) => item.kind === "assistant" && item.text.includes("부분 답변")), 15000)) throw new Error("No partial response");
         await wd.click(await wd.waitFor(".ai-stop-btn"));
@@ -188,7 +190,7 @@ export async function officeSuiteScenario(ctx: Ctx) {
         ctx.report.check(S, "전체 편집기 시나리오 완료", false, String(error), await shot(ctx, `suite-${format}-failure.png`).catch(() => null));
       } finally {
         writeFileSync(ctx.report.path(`suite-${format}-requests.json`), JSON.stringify(requests, null, 2));
-        writeFileSync(ctx.report.path(`suite-${format}-stream-debug.json`), JSON.stringify({focus:await wd.execute('return window.__suiteFocus||[]').catch(()=>[]),fixtureWrites,chunks:await wd.execute('return window.__suiteChunks||[]').catch(()=>[]),items:currentSession ? await items(currentSession) : []},null,2));
+        writeFileSync(ctx.report.path(`suite-${format}-stream-debug.json`), JSON.stringify({readerBlockMs:await wd.execute('return window.__suiteReaderBlock||0').catch(()=>0),focus:await wd.execute('return window.__suiteFocus||[]').catch(()=>[]),network:await wd.execute('return window.__suiteNetwork||[]').catch(()=>[]),fixtureWrites,chunks:await wd.execute('return window.__suiteChunks||[]').catch(()=>[]),items:currentSession ? await items(currentSession) : []},null,2));
       }
     }
   } finally { await wd.frame(null).catch(() => {}); server.closeAllConnections(); await new Promise<void>((done) => server.close(() => done())); }

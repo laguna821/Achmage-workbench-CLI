@@ -82,3 +82,9 @@ Linux에서 Broadway는 파일로 보이지 않는 추상 UNIX 소켓을 사용�
 종료는 이 하네스가 시작한 자식 프로세스만 정상 종료한다. 종료되지 않으면 임시 폴더를 유지하고 실패를 기록한다. `--engines=real`은 실제 사용자 엔진 설정을 사용하는 별도 선택이며 기본 회귀 검사에 필요하지 않다.
 
 `office-suite`는 추가8종 원본 AI 패널의 실제 입력→로컬 SSE 제공자→원본 수정 도구→파일의 새 판, 같은 세션의 이력·재열기·새 세션·부분 답변 취소를 검사한다. `APP_E2E_OFFICE_FORMATS=xlsx`처럼 한 형식만 선택할 수 있다. Markdown/HTML은 rich 모드, EPUB 도구 장 번호는1부터이며 Sheets는 원본 로딩 완료까지 기다린다. 입력란의 전체 문자열을 전송 전에 확인하고 XLSX 도구는 원래 A1 expectedValue를 요구한다. UI가 답변을 내놓아도 입력 일부가 셀로 흘러든 회귀를 성공으로 보지 않는다. PDF save 호출, 합성 모델 요청, 이력, 포커스/스트림 관찰을 근거 폴더에 남긴다. 원본9종 대표 흐름의 순차 합산 근거와 한계는 `office-suite-native-06/verification.json`, 연구 판 `research:rr-743f8783d3831764b58ba96ea2ccf045:58af427fbce70df749069c265a97fdc1be88572bef1bfbf06c5ed4d91778377a`다.
+
+`APP_E2E_OFFICE_UNDO=1`은 `office-suite`와 `office-conversation`에 실제 원본 되돌리기·재저장 검사를 추가한다. 한글은 원본 Studio 메뉴, Sheets는 AI inline Undo, Word는 AI 이전 상태로/그 복원 취소를 사용한다. 8종 대표 동작은 검증됐으며 PDF 저장 후 Undo는 아직 실패 항목이므로 전체 형식 실행이 녹색이라고 보고하지 않는다. `APP_E2E_OFFICE_FORMATS=md,html,xmind,epub,hwpx,pptx,xlsx`와 `--only=office-suite,office-conversation`으로 검증된 범위를 재현할 수 있다.
+
+`APP_E2E_OFFICE_STREAM_STRESS=1`은 취소 검사 직전 첫 ping 처리에 200ms의 UI 작업을 넣어, 다음 응답을 읽기 전에 데이터가 도착하는 WebKit 경계를 검사한다. 모델 fixture는 부분 답변 한 번만 보낸 뒤 기다리며 데이터를 추가해 성공을 유도하지 않는다. `suite-*-stream-debug.json`에 실제 지연 시간과 수신한 NDJSON을 기록한다. 필요할 때만 `NODE_OPTIONS=--import=<repo>/scripts/fixtures/office-http-trace.mjs` 및 `OFFICE_HTTP_TRACE=<private evidence path>`로 이 하네스의 합성 모델 응답을 호스트 쪽에서도 관찰할 수 있다. 기본 실행에는 이 추적기를 사용하지 않는다.
+
+수정 후 순차 실행에서 모은 9종 대표 80개와 별도 reader 지연 13/13의 출처·원본 실행 상태·한계는 `office-undo-native-10/verification.json`에 있다. [저장 뒤 되돌림과 응답 스트림](office-integration.md#저장-뒤-되돌림과-응답-스트림)에 정확한 연구 판을 기록한다. native 실행이 읽는 `apps/desktop/src-tauri/target/debug/host/host.mjs`와 `apps/host/dist/host.mjs`의 SHA가 같은지 확인해야 한다. 호스트 소스만 바꾼 채 기존 native 리소스로 실행하면 수정 전 코드를 검사하게 된다.
