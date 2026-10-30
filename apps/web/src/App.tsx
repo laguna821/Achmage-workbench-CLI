@@ -112,7 +112,7 @@ async function pickFileNative(folder: string): Promise<string | null> {
     multiple: false,
     defaultPath: folder,
     title: "문서 열기",
-    filters: [{ name: "문서", extensions: ["md", "markdown", "html", "htm", "pdf", "hwpx", "hwp", "txt", "docx", "pptx", "xlsx", "xmind"] }],
+    filters: [{ name: "문서", extensions: ["md", "markdown", "html", "htm", "pdf", "hwpx", "hwp", "txt", "docx", "pptx", "xlsx", "xmind", "epub"] }],
   });
   return typeof picked === "string" ? picked : null;
 }

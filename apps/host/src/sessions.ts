@@ -1576,7 +1576,7 @@ export class SessionManager {
     if (!rawPath.trim()) throw new HttpError(400, "missing_path", "파일 경로가 필요합니다.");
     const path = isAbsolute(rawPath) ? rawPath : resolve(work.cwd, rawPath);
     if (!existsSync(path)) throw new HttpError(404, "file_missing", "파일이 없습니다.");
-    if (!formatOf(path)) throw new HttpError(415, "unsupported_format", "Markdown·HTML·PDF·한글(HWPX·HWP)·워드·PPT·엑셀·마인드맵(.xmind)·텍스트·디자인(.design.json)만 열 수 있습니다.");
+    if (!formatOf(path)) throw new HttpError(415, "unsupported_format", "Markdown·HTML·PDF·한글(HWPX·HWP)·워드·PPT·엑셀·마인드맵(.xmind)·전자책(.epub)·텍스트·디자인(.design.json)만 열 수 있습니다.");
     const tracked = this.documents.track(work.id, work.cwd, path, "external", null, "작업 폴더에서 열기");
     if (tracked) return tracked.artifact;
     const existing = this.documents.list().find((artifact) => artifact.workId === work.id && artifact.path === path);

@@ -117,6 +117,24 @@ export class Gateway {
     return { status: "ok", bytes: new Uint8Array(await response.arrayBuffer()) };
   }
 
+  async openEpub<T>(artifactId: string, revision: number, restored?: ArrayBuffer): Promise<T> {
+    return (await this.call("POST", `/api/artifacts/${artifactId}/epub/open?revision=${revision}${restored ? "&restore=1" : ""}`, restored)).json();
+  }
+
+  async epub<T = unknown>(artifactId: string, session: string, operation: string, args: unknown = {}): Promise<T> {
+    if (operation === "save") post({ type: "office:saving" });
+    return (await this.call("POST", `/api/artifacts/${artifactId}/epub/${operation}?session=${session}`, JSON.stringify(args), { "content-type": "application/json" })).json();
+  }
+
+  async epubCheckpoint(artifactId: string, session: string) {
+    const response = await this.call("POST", `/api/artifacts/${artifactId}/epub/checkpoint?session=${session}`);
+    return { bytes: await response.arrayBuffer(), baseRevision: Number(response.headers.get("x-epub-revision")), checkpoint: response.headers.get("x-epub-checkpoint") };
+  }
+
+  closeEpub(artifactId: string, session: string) {
+    return fetch(`/api/artifacts/${artifactId}/epub/close?session=${session}`, { method: "POST", headers: { authorization: `Bearer ${this.token}` }, keepalive: true });
+  }
+
   async checkMindmap(artifactId: string, revision: number, bytes: Uint8Array): Promise<{ status: string }> {
     return (await this.call("POST", `/api/artifacts/${artifactId}/mindmap/check?revision=${revision}`, bytes.slice().buffer)).json();
   }

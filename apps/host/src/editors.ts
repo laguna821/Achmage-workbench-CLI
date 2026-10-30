@@ -1,3 +1,4 @@
+import { EpubEditors } from "./epub-editor.ts";
 import { randomBytes } from "node:crypto";
 import { createReadStream, readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
@@ -20,6 +21,7 @@ import { decodePdfRequest } from "./pdf-codec.ts";
 
 /** Which editor page edits a format, if any. */
 export function officeEditorKind(format: DocFormat): OfficeEditorKind | null {
+  if (format === "epub") return "epub";
   if (format === "xmind") return "mindmap";
   return format === "docx" ? "docs" : format === "pptx" ? "slides" : format === "xlsx" ? "sheets" : format === "hwp" || format === "hwpx" ? "hwp" : format === "markdown" || format === "html" || format === "pdf" ? format : null;
 }
@@ -80,6 +82,7 @@ const PAGE_HEADERS = {
 };
 
 export function createEditorsServer(documents: Documents, grants: EditorGrants, webDir: string | null): Server {
+  const epub = new EpubEditors(documents, grants);
   return createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const path = url.pathname;
@@ -90,6 +93,7 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
         return serveStatic(res, webDir, path, PAGE_HEADERS);
       }
       const bearer = req.headers.authorization?.replace(/^Bearer\s+/i, "") ?? null;
+      if (await epub.handle(req, res, url, bearer)) return;
       // Document scripts receive only this read-only preview URL, never the editor grant.
       // Enforce an opaque origin at the response as well as the renderer's iframe sandbox.
       const preview = /^\/preview\/([A-Za-z0-9_-]{32})\/(.+)$/.exec(path);

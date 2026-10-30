@@ -49,6 +49,7 @@ export const MIME: Record<string, string> = {
   ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".epub": "application/epub+zip",
   ".xmind": "application/octet-stream",
   ".xlsm": "application/vnd.ms-excel.sheet.macroEnabled.12",
 };

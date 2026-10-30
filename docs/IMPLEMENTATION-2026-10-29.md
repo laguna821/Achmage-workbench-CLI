@@ -16,7 +16,7 @@
 | G1 | Workspace 계약·이행, 재귀 분할·탭·복원 | 공간별 탭·배치/CAS·문서/대화 위치 검증, PKM 목록 위치 등 후속 보완 |
 | G2 | 내부 문서 셸, 같은 세션의 사이드 채팅, +/@, 사용자 템플릿·스킬 | 문서 레지스트리·편집 권한·참조 완료, 템플릿 연결 진행 |
 | G3 | Orca worktree·PTY·Git/PR 검토·내장 브라우저/Design Mode | worktree·PTY·명시적 환경 준비·로컬/원격 Git·충돌 해결·구간 스테이징·기준 비교·행 의견/전달 Linux 검증, PR/CI·브라우저와 나머지 동등성 후속 |
-| G4 | 이음 편집기 9종과 공통 기능, doory | 8종 원본 화면 연결, PDF·MD/HTML·XMind 저장·복구 Linux 검증. EPUB·공통 기능·doory와 전체 동등성 진행 |
+| G4 | 이음 편집기 9종과 공통 기능, doory | 9종 원본 화면 연결, PDF·MD/HTML·XMind·EPUB 저장·복구 Linux 검증. 공통 기능·doory와 전체 동등성 진행 |
 | G5 | HOP 개선 패치·hallym-kordoc 생성 스킬·중복 패키지 제거 | 대기 |
 | PKM | 내비게이터/프로젝트 노트/Bases 보존, 썸네일·폴더 템플릿·.base 교환 | 템플릿·썸네일·지원 범위의 .base 완료, OS 검증 G6 |
 | G6 | 기능 회귀·데이터 이행·설치본·용량 측정·릴리스 | 대기 |
@@ -40,6 +40,8 @@ GitHub 저장소 쓰기 권한과 기존 릴리스 워크플로를 확인했다.
 기존 다른 작업트리와 미커밋 E2E 파일은 보존한다. 이전 Broadway 실패를 같은 조건으로 재시도하지 않는다. 실행 파일 인자와 display/socket 조건을 수정·기록한 뒤 새 검증을 한다.
 
 ## 작업별 결과
+
+- 2026-10-31 후속: [EPUB 원본 읽기·편집·복구](office-integration.md)는 Linux 실제 앱24/24, 호스트/인접17/17·전체 타입/빌드를 통과했다. 원본 회귀164개도 환경 보정 후 완료했다. WebKit의 부모 입력 이벤트 차단을 호환 처리했고 책 스크립트의 CSP 차단은 별도 검증했다. 이제 원본9종 화면이 연결됐으며 공통 서비스·출력·Electron 제거와 전체 기능/OS별 릴리스 검증을 이어 진행한다. 검증 판: `research:rr-3492c2c2a180a313cf65edeb5feed33a:1fbd261f2a6622b13a52d39f230119a2b1110cd900f605a143141db0d4623c58`.
 
 - 2026-10-31: [Office 통합](office-integration.md)의 PDF 원본 편집·복구 **16/16**, XMind 원본 편집·복구 **22/22**를 실제 Linux 앱에서 검증했다. XMind의 WebKit 입력 포커스와 입력 중인 메모의 긴급 보관도 수정했다. 여덟 원본 화면 연결은 전체 기능 완료가 아니며, EPUB·공통 AI/Drive/검색/doory·출력·Electron 제거를 우선 계속한다. XMind 검증 판: `research:rr-3492c2c2a180a313cf65edeb5feed33a:b6a6e97597fe3bd0fc2772c42406db559cdd323a62234c0b21751c2c9c5861ab`. OS별 설치·용량 실측과 GitHub 릴리스는 아직 하지 않았다.
 

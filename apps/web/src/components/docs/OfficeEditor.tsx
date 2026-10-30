@@ -284,7 +284,7 @@ export const OfficeEditor = forwardRef<
       style={hidden ? { display: "none" } : undefined}
       allow="fullscreen; clipboard-read; clipboard-write"
       src={`${opened.current.url}?a=${artifact.id}&g=${generation}&host=${encodeURIComponent(location.origin)}`}
-      title={`${artifact.format === "pptx" ? "PPT" : artifact.format === "xlsx" ? "엑셀" : artifact.format === "hwp" || artifact.format === "hwpx" ? "한글" : artifact.format === "xmind" ? "마인드맵" : artifact.format === "pdf" ? "PDF" : artifact.format === "markdown" ? "Markdown" : artifact.format === "html" ? "HTML" : "워드"} 편집기 · ${artifact.name}`}
+      title={`${artifact.format === "pptx" ? "PPT" : artifact.format === "xlsx" ? "엑셀" : artifact.format === "hwp" || artifact.format === "hwpx" ? "한글" : artifact.format === "epub" ? "전자책" : artifact.format === "xmind" ? "마인드맵" : artifact.format === "pdf" ? "PDF" : artifact.format === "markdown" ? "Markdown" : artifact.format === "html" ? "HTML" : "워드"} 편집기 · ${artifact.name}`}
     />
   </>);
 });

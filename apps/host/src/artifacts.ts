@@ -59,7 +59,7 @@ const isHangul = (format: string) => format === "hwpx" || format === "hwp";
 const legacyHangulProposal = (artifact: Artifact, proposal: Proposal) => isHangul(artifact.format) && /\.hwpx?\.md$/i.test(proposal.workingPath);
 
 /** Formats searched through their editor engine's text view instead of binary bytes. */
-const hasTextView = (format: DocFormat) => isHangul(format) || isOfficeFormat(format) || format === "xmind";
+const hasTextView = (format: DocFormat) => isHangul(format) || isOfficeFormat(format) || format === "xmind" || format === "epub";
 
 /** Extension kept on copies of a document (designs keep their two-part `.design.json`). */
 const extensionOf = (artifact: Pick<Artifact, "format" | "name">) => (artifact.format === "design" ? DESIGN_EXTENSION : extname(artifact.name));
@@ -122,7 +122,9 @@ export class Documents {
   readonly textIndex = new BackgroundIndex((artifactId, revision) => this.indexView(artifactId, revision));
 
   private readonly workspaces: Workspaces | null;
+  readonly dataDir: string;
   constructor(store: Store, bus: EventBus, dataDir: string, kordoc: Kordoc | null = null, ieum: IeumOffice | null = null, workspaces: Workspaces | null = null) {
+    this.dataDir = dataDir;
     this.workspaces = workspaces;
     this.registry = new DocumentRegistry((id) => this.get(id), Date.now, workspaces?.directoryOperations);
     this.store = store;
@@ -184,6 +186,7 @@ export class Documents {
 
   /** The text view from the native Hangul WASM or Office reader. */
   private async extractText(file: string, format: DocFormat): Promise<string | null> {
+    if (format === "epub") return (await import("./epub-ops.mjs")).epubText(readFileSync(file));
     if (format === "xmind") return (await import("./mindmap-ops.mjs")).mindmapText(readFileSync(file));
     if (isHangul(format)) return hwpToText(readFileSync(file));
     if (isOfficeFormat(format)) return this.ieum?.available ? this.ieum.textView(file, format) : null;
@@ -366,7 +369,7 @@ export class Documents {
     const cached = this.viewCachePath(artifact, revision);
     const existing = readFileOrNull(cached);
     if (existing) return existing.toString("utf8");
-    if (artifact.format === "xmind") {
+    if (artifact.format === "xmind" || artifact.format === "epub") {
       const markdown = (await this.extractText(file, artifact.format))!;
       writeFileSync(cached, markdown);
       if (revision === this.get(artifactId).revision) this.store.indexDocument(artifactId, markdown);
@@ -468,7 +471,7 @@ export class Documents {
   async saveText(artifactId: string, expectedRevision: number, text: string, access?: DocumentAccess) {
     this.registry.assertWrite(artifactId, access);
     const artifact = this.check(artifactId);
-    if (artifact.format === "xmind") throw new HttpError(415, "binary_document", "마인드맵은 원본 편집기에서 저장해 주세요.");
+    if (artifact.format === "xmind" || artifact.format === "epub") throw new HttpError(415, "binary_document", "이 문서는 원본 편집기에서 저장해 주세요.");
     if (artifact.revision !== expectedRevision) {
       throw new HttpError(409, "revision_conflict", `문서가 r${artifact.revision}로 바뀌었습니다. 내 수정은 그대로 두고 비교해 주세요.`);
     }
@@ -526,6 +529,12 @@ export class Documents {
   /** The mindmap route validates both the source and submitted archive before calling this. */
   saveMindmapBytes(artifactId: string, expectedRevision: number, data: Buffer, access?: DocumentAccess) {
     if (this.get(artifactId).format !== "xmind") throw new HttpError(415, "not_mindmap", "마인드맵 문서가 아닙니다.");
+    return this.saveEditedBytes(artifactId, expectedRevision, data, access);
+  }
+
+  /** The EPUB session prepares and validates range-saved bytes before the final CAS write. */
+  saveEpubBytes(artifactId: string, expectedRevision: number, data: Buffer, access?: DocumentAccess) {
+    if (this.get(artifactId).format !== "epub") throw new HttpError(415, "not_epub", "전자책 문서가 아닙니다.");
     return this.saveEditedBytes(artifactId, expectedRevision, data, access);
   }
 
@@ -593,7 +602,7 @@ export class Documents {
     if (!Number.isSafeInteger(ref.revision) || ref.revision < 1 || ref.revision > artifact.revision) throw new HttpError(400, "revision_not_found", `r${ref.revision} 판이 없습니다.`);
     const digest = this.revisionSha(artifact.id, ref.revision);
     if (ref.sha256 && ref.sha256 !== digest) throw new HttpError(409, "reference_changed", "참조 문서의 해시가 일치하지 않습니다.");
-    if (ref.mode === "edit" && (artifact.format === "pdf" || artifact.format === "xmind")) {
+    if (ref.mode === "edit" && (artifact.format === "pdf" || artifact.format === "xmind" || artifact.format === "epub")) {
       throw new HttpError(400, "not_editable", `${artifact.format.toUpperCase()}는 AI 수정안을 만들 수 없습니다. 검토 요청으로 보내 주세요.`);
     }
     const office = isOfficeFormat(artifact.format);
@@ -624,7 +633,7 @@ export class Documents {
         chmodSync(pinnedView, 0o444);
       }
     }
-    if (hangul || artifact.format === "xmind") {
+    if (hangul || artifact.format === "xmind" || artifact.format === "epub") {
       pinnedView = join(pinnedDir, `${pinStem}${extension}.md`);
       if (!existsSync(pinnedView)) {
         writeFileSync(pinnedView, await this.view(artifact.id, ref.revision));

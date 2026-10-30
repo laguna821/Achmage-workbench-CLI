@@ -177,7 +177,7 @@ export type PlanStep = { text: string; status: "pending" | "inProgress" | "compl
 export type ApprovalDecision = "accept" | "decline";
 
 /** Documents the app tracks with exact revisions (PRD 3.3). */
-export type DocFormat = "markdown" | "html" | "pdf" | "hwpx" | "hwp" | "text" | "design" | "docx" | "pptx" | "xlsx" | "xmind";
+export type DocFormat = "markdown" | "html" | "pdf" | "hwpx" | "hwp" | "text" | "design" | "docx" | "pptx" | "xlsx" | "xmind" | "epub";
 
 /** Word, PowerPoint and Excel: previewed and edited through the IeumOffice command line tool. */
 export const OFFICE_FORMATS = ["docx", "pptx", "xlsx"] as const;
@@ -693,6 +693,7 @@ export const FORMAT_LABEL: Record<DocFormat, string> = {
   pptx: "PPT(PPTX)",
   xlsx: "엑셀(XLSX)",
   xmind: "마인드맵",
+  epub: "전자책(EPUB)",
 };
 
 /** Formats the app opens as documents, by file extension. */
@@ -709,6 +710,7 @@ export function formatOf(path: string): DocFormat | null {
   if (extension === "docx") return "docx";
   if (extension === "pptx") return "pptx";
   if (extension === "xlsx" || extension === "xlsm") return "xlsx";
+  if (extension === "epub") return "epub";
   if (extension === "xmind") return "xmind";
   return null;
 }
@@ -745,7 +747,7 @@ export type DesignPageMessage =
   | { type: "render:result"; id: string; dataUrl: string | null; pages: number; error?: string };
 
 /** Office editors built from IeumOffice (apps/office), one page per editor kind. */
-export type OfficeEditorKind = "docs" | "slides" | "sheets" | "hwp" | "markdown" | "html" | "pdf" | "mindmap";
+export type OfficeEditorKind = "docs" | "slides" | "sheets" | "hwp" | "markdown" | "html" | "pdf" | "mindmap" | "epub";
 
 /**
  * Where to open a document's editor page: the editors' own origin (not the Workbench UI's), and a

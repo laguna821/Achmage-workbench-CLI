@@ -60,8 +60,22 @@ PNG/JPEG/GIF 선택·붙여넣기 저장과 로컬 그림 읽기 브리지를 �
 
 계획 판: `research:rr-3492c2c2a180a313cf65edeb5feed33a:2b5baf296a5961e72796e85e7ab09d7a628d2042e9ed25c7b475b7708da28227`. 검증 판: `research:rr-3492c2c2a180a313cf65edeb5feed33a:b6a6e97597fe3bd0fc2772c42406db559cdd323a62234c0b21751c2c9c5861ab`. 증거: `implementation-20261030/native-mindmap-focus/results.json`, `/tmp/wb-mindmap-host-first.log`, `/tmp/wb-mindmap-types-final.log`.
 
+## EPUB 원본 읽기·편집·복구
+
+원본 EPUB renderer·preload를 `/office/epub.html`로 빌드하고 `EpubBookSession`을 호스트에 연결했다. 장마다 원본 범위 편집을 유지하며 전체 DOM을 저장하지 않는다. 변경 없는 저장과 Undo 뒤 저장은 원본 바이트와 같다. 다른 장·BOM·CRLF·모르는 부속 파일을 보존한다. DRM·손상 파일은 거절하고 고정 배치·깨진 장·번역 잠금·오래된 장 판의 편집도 원본 엔진이 거절한다.
+
+보기별 책 세션을 별도 토큰과 직렬 요청으로 관리한다. 편집권을 잃은 뒤에도 입력 중인 내용을 메모리에 반영해 복구본으로 남길 수 있다. 디스크 저장은 현재 writer·문서 판·외부 변경을 다시 검사한다. 복구본은 범위 편집을 반영한 실제 EPUB이다. IndexedDB 저장 확인 전에는 미저장 호스트 세션을 버리지 않으며, 명시적 충돌 해결에서 외부 판을 이력에 남긴다. 열린 책은 32개·보관 바이트 합계400MB·책 하나200MB로 제한하고 원본 zip 관문도 유지한다.
+
+책의 이미지·CSS·글꼴은 해당 책에만 접근하는 주소로 제공한다. 디스크·원격 경로·스크립트 자산을 열지 않는다. 책 내부 링크와 목차, 원본 텍스트 보기, 읽던 위치·글자 크기·어두운 읽기 설정을 연결했다. 설정은 앱의 `office/epub-reading.json`에 저장하며 책 파일을 바꾸지 않는다. 기존 독립 이음 앱 설정의 이행은 공통 서비스 단계에서 수행한다.
+
+WebKit에서는 원본의 `sandbox="allow-same-origin"`이 부모 편집기의 입력 이벤트도 막아 글이 저장되지 않았다([WebKit 218086](https://bugs.webkit.org/show_bug.cgi?id=218086)). Workbench 빌드 어댑터는 WebKit에서만 신뢰하는 부모 콜백이 동작하도록 sandbox 플래그를 조정한다. 이는 원본 Chromium 모듈의 플래그와 다른 호환 처리다. 원본 sanitizer와 문서 첫머리의 `script-src 'none'`, 책 주소에 한정한 CSP를 유지한다. 직접 제공하는 자산에는 별도 sandbox CSP도 적용한다. 원본 vendor 파일은 변경하지 않았다.
+
+**호스트/인접 편집기17/17, 실제 Linux Tauri `epub-office`24/24**, 전체 타입·루트/Office/Tauri 빌드 통과. 실제 문단 입력·Undo·저장·내부 링크·다른 장 보존·읽기 설정·외부 판 충돌·새로고침/긴급 입력 복구를 확인했다. sanitizer를 거친 뒤 별도로 삽입한 스크립트와 인라인 클릭 코드도 CSP가 거절했다. 원본 회귀14파일의164개도 검증했다. Node26의 전역 WebStorage 때문에 처음 실패한 두 App 파일은 해당 Node 기능을 끈 jsdom 환경에서18/18 통과했다. 물리 IME·다른 OS·실제 구독 모델·기존 독립 앱의 데이터 이행을 이 결과에 포함하지 않는다.
+
+계획 판: `research:rr-3492c2c2a180a313cf65edeb5feed33a:db3c579ba3bf918c68910a1fe022bb9b2bf3edcf9c3dd0490a2dbbfb7782c774`. 검증 판: `research:rr-3492c2c2a180a313cf65edeb5feed33a:1fbd261f2a6622b13a52d39f230119a2b1110cd900f605a143141db0d4623c58`. 증거: `implementation-20261030/native-epub-frame/results.json`, `/tmp/wb-epub-host-final.log`, `/tmp/wb-epub-types-final.log`, `/tmp/wb-epub-original-tests.log`, `/tmp/wb-epub-original-app-tests.log`. 최초 native 실패·검사 문자열 오류·빌드 어댑터의 주석 오매칭과 WebKit 호환 판단도 같은 연구에 보존했다.
+
 ## 아직 완료되지 않은 범위
 
-현재 여덟 renderer 진입점이 있다는 것은 여덟 편집기의 전 기능이 끝났다는 뜻이 아니다. Markdown·HTML의 클라우드 이미지 호스트/원격 그림 읽기, 다른 이름으로 저장, 내보내기, 내부 AI·검색·첨부·위키 서비스는 연결 중이며 미구현 동작을 성공 처리하지 않는다. 기존 Word·PPT·Sheets에도 AI·템플릿·출력 미연결 항목이 있다. PDF의 영구 가림 사본·다른 이름 저장·추출/합치기 파일 선택·변환/출력·서명 보관/인증서 서명·AI/번역/결과 보관/노트·Windows/macOS OCR과 전체 기능 인수 검증이 남았다. 인증서 서명 읽기 코드는 연결했지만 실제 서명 검증 fixture는 아직 수행하지 않았다. XMind의 다른 이름 저장·내보내기·출력·링크 열기·문서 만들기 및 공통 AI 서비스도 남았다. EPUB의 원본 화면과 공통 제공자·세션·Drive·검색·doory를 계속 연결한다.
+현재 아홉 renderer 진입점이 있다는 것은 아홉 편집기의 전 기능이 끝났다는 뜻이 아니다. Markdown·HTML의 클라우드 이미지 호스트/원격 그림 읽기, 다른 이름으로 저장, 내보내기, 내부 AI·검색·첨부·위키 서비스는 연결 중이며 미구현 동작을 성공 처리하지 않는다. 기존 Word·PPT·Sheets에도 AI·템플릿·출력 미연결 항목이 있다. PDF의 영구 가림 사본·다른 이름 저장·추출/합치기 파일 선택·변환/출력·서명 보관/인증서 서명·AI/번역/결과 보관/노트·Windows/macOS OCR과 전체 기능 인수 검증이 남았다. 인증서 서명 읽기 코드는 연결했지만 실제 서명 검증 fixture는 아직 수행하지 않았다. XMind의 다른 이름 저장·내보내기·출력·링크 열기·문서 만들기, EPUB의 AI/번역/결과 보관·첨부·다른 이름 저장·외부 링크·이름 변경 동기화와 기존 설정 이행도 남았다. 공통 제공자·세션·Drive·검색·doory와 출력 서비스를 계속 연결한다.
 
 CLI의 실행파일은 Node로 전환했지만, 숨은 렌더링·일부 변환·기존 암호화 설정 해제/앱 제어와 Electron 배포 파일은 아직 남아 있다. 다음 구현에서 이 경로를 Rust/Tauri/WASM 서비스로 대체한다. 실제 대체 결과를 검증한 뒤 중복 번들을 제거한다. 현재 변경만으로 설치 용량이 줄었다고 주장하지 않는다. 모든 OS의 설치·기존 데이터 이행·용량 실측과 최종 GitHub 릴리스도 미완료다.

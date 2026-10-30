@@ -144,6 +144,7 @@ function pagePlatform(): Plugin {
     enforce: "pre",
     resolveId(source, importer) {
       if (source === "./save-flow" && importer === `${ieum}/apps/hwp/src/renderer/App.tsx`) return here("./src/hwp-save.ts");
+      if (source === "@genoffice/pdf-structure" && (importer?.includes("/apps/epub/") || importer?.includes("/packages/epub-engine/"))) return `${ieum}/apps/epub/src/renderer/translate/pdf-structure-browser.ts`;
       return source === "electron" ? here("./src/platform/electron-renderer.ts") : null;
     },
   };
@@ -155,6 +156,31 @@ function textEditorPlatform(): Plugin {
     name: "workbench-text-editors",
     enforce: "pre",
     transform(code, id) {
+      if (id === `${ieum}/apps/epub/src/renderer/components/ChapterFrame.tsx`) {
+        const before = '      sandbox="allow-same-origin"';
+        if (code.split(before).length !== 2 || !code.includes("srcDoc={props.html}")) this.error("EPUB frame changed: review WebKit event compatibility and mandatory chapter CSP");
+        return `import { epubFrameSandbox } from ${JSON.stringify(here("../../packages/contracts/src/epub.ts"))};\n` + code.replace(before, "      sandbox={epubFrameSandbox(navigator.userAgent)}");
+      }
+      if (id === `${ieum}/apps/epub/src/renderer/reader/chapter-html.ts`) {
+        const before = "csp.setAttribute('content', FRAME_CSP)";
+        if (!code.includes(before)) this.error("EPUB chapter policy changed: review the scoped HTTP asset adapter");
+        return `import { epubBookCsp } from ${JSON.stringify(here("../../packages/contracts/src/epub.ts"))};\n` + code.replace(before, "csp.setAttribute('content', epubBookCsp(input.baseUrl))");
+      }
+      if (id === `${ieum}/apps/epub/src/renderer/App.tsx`) {
+        const marker = "  // ---- saving (the editing screen sends its pending edits before these) ----";
+        const readOnly = "editor.setBookReadOnly(opened.readOnly !== null)";
+        if (!code.includes(marker) || !code.includes(readOnly)) this.error("EPUB editor changed: review recovery and read-only adapters");
+        return code.replace(readOnly, "editor.setBookReadOnly(opened.readOnly !== null || opened.workbenchReadOnly === true)")
+          .replace(marker, `  useEffect(() => {
+    const flush = () => {
+      const done = (ok) => window.dispatchEvent(new CustomEvent('workbench:epub:flushed', { detail: ok }));
+      if (editor.composing) { done(false); return; }
+      void editor.flush().then(() => done(true), () => done(false));
+    };
+    window.addEventListener('workbench:epub:flush', flush);
+    return () => window.removeEventListener('workbench:epub:flush', flush);
+  }, [editor]);\n\n${marker}`);
+      }
       if (id === `${ieum}/node_modules/mind-elixir/dist/MindElixir.js`) {
         // Chromium focuses a contenteditable when a Range is selected. WebKit does not.
         // Focus explicitly for topic, summary and relationship-label keyboard editing.
@@ -268,6 +294,6 @@ export default defineConfig({
     target: "es2022",
     sourcemap: false,
     chunkSizeWarningLimit: 6000,
-    rollupOptions: { input: { docs: here("./docs.html"), slides: here("./slides.html"), sheets: here("./sheets.html"), hwp: here("./hwp.html"), markdown: here("./markdown.html"), html: here("./html.html"), pdf: here("./pdf.html"), mindmap: here("./mindmap.html") } },
+    rollupOptions: { input: { docs: here("./docs.html"), slides: here("./slides.html"), sheets: here("./sheets.html"), hwp: here("./hwp.html"), markdown: here("./markdown.html"), html: here("./html.html"), pdf: here("./pdf.html"), mindmap: here("./mindmap.html"), epub: here("./epub.html") } },
   },
 });
