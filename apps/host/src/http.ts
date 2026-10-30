@@ -644,6 +644,22 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           createReadStream(file).pipe(res);
           return;
         }
+        // Only the trusted parent can select/freeze/read references for a particular editor.
+        // This route is deliberately absent from the third-party editor origin.
+        if (method === "POST" && parts[2] === "office-references") {
+          const body = await readJson(req, 256_000), grants = options.editors?.grants;
+          if (!grants || typeof body.token !== "string") throw new HttpError(401, "unauthorized", "문서 창의 참조 권한이 없습니다.");
+          const context = { documents, grants, artifactId, token: body.token, access: documentAccess(req) };
+          const refs = grants.references;
+          const value = body.action === "list" ? refs.list(context)
+            : body.action === "add" ? refs.add(context, body.paths)
+            : body.action === "describe" ? refs.describe(context, body.paths)
+            : body.action === "freeze" ? refs.freeze(context, body.paths, body.revisions)
+            : body.action === "read" ? await refs.read(context, body.snapshot, body.path, body.offset as number | undefined, body.length as number | undefined)
+            : null;
+          if (value === null) throw new HttpError(400, "office_reference", "문서 참조 요청을 확인해 주세요.");
+          return sendJson(res, 200, value);
+        }
         // A page of the office editors for this document: its own origin, and a token for this document only.
         if (method === "POST" && parts[2] === "editor") {
           const artifact = documents.check(artifactId);

@@ -178,6 +178,11 @@ function originalOfficeConversation(): Plugin {
   return {
     name: "workbench-office-conversation", enforce: "pre",
     transform(code, id) {
+      if (["docs", "slides", "sheets", "hwp", "html", "mindmap", "epub"].some((app) => id === `${ieum}/apps/${app}/src/renderer/ai/files-skill.ts`)) {
+        const boundary = /(export function createFilesSkill\([\s\S]*?\): AgentSkill \{)/;
+        if (!boundary.test(code)) this.error("Original attachment factory changed: review the Workbench reference adapter");
+        return `import { bindOfficeFiles } from ${JSON.stringify(here("./src/office-references.ts"))};\n` + code.replace(boundary, "$1\n  getAttachments = bindOfficeFiles(getAttachments);");
+      }
       if (id.endsWith("/@univerjs/sheets-ui/lib/es/index.js")) {
         // A selection update defaults focus to the cell editor. In WebKit this
         // also runs while the AI textarea is receiving input, sending the rest

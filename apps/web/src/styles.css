@@ -6446,3 +6446,10 @@ kbd {
 .scm-gh-action-job { padding: 12px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
 .scm-gh-action-job > small { display: block; margin-top: 5px; }
 .scm-gh-action-job[data-phase="uncertain"], .scm-gh-action-job[data-phase="partial"], .scm-gh-action-job[data-phase="changed"] { border-left: 3px solid var(--accent); padding-left: 12px; }
+/* The trusted parent's picker preserves full folder labels for same-name documents. */
+.office-reference-picker { width: min(640px, 90vw); }
+.office-reference-options { max-height: 48vh; overflow-y: auto; }
+.office-reference-option { display: flex; gap: 10px; padding: 8px; align-items: center; }
+.office-reference-option span { min-width: 0; }
+.office-reference-option strong, .office-reference-option small { display: block; overflow-wrap: anywhere; }
+.office-reference-option small { opacity: .7; }

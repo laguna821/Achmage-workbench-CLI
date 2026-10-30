@@ -190,6 +190,18 @@ PDF 후속 검증은 `pdf-undo-native-02/verification.json`의 단일 실행 **3
 
 검증 판: `research:rr-e6e9abfeeec587137aae8e9d2f47aef0:ac5be7ecc611e84d24411cb7109bc255dbe9bfcabafe7a2e4f524d2539f63b3f`. 증거: `implementation-20261030/office-first-session-native-00/verification.json`. 재현은 `APP_E2E_OFFICE_UNBOUND=1`과 `--only=office-suite,office-conversation --engines=stand-in`이다. 원본 `@`/`+` 첨부와 보내는 순간의 최신 참조 연결은 다음 단계이며, 전체 도구·다른 OS·릴리스 완료를 뜻하지 않는다.
 
+## 원본 문서 참조 연결 (2026-10-31)
+
+Word/PPT/Sheets/HTML/한글/XMind/EPUB의 원본 `@` 입력과 `read_attachment`를 재사용한다. 문서 첨부 버튼은 Workbench 부모 창의 선택창을 연다. 같은 프로젝트에 등록한 열린/최근 문서를 보여 주며 자기 문서·같은 실제 경로를 제외하고, 저장하지 않은 문서는 먼저 저장하도록 표시한다. 한 요청에20개, 문서당50MB까지다.
+
+선택 이후 사람이 편집한 내용은 요청 직전에 기존 문서 저장 조정으로 저장한다. Word/PPT처럼 dirty 알림이 늦는 원본 Office writer도 직접 flush하며 clean reader를 저장하지 않는다. 호스트는 실제 판과 SHA-256을 확인해 요청 동안 고정한다. 다음 요청은 같은 첨부의 최신 판을 다시 확정한다. 대화의 사용자 요청에는 현재 문서(edit)와 참조 문서(review)의 판·해시가 함께 남는다.
+
+읽기는 원본 `parseFileToText`와 가림 규칙을 사용한다. 실패한 파싱/가림을 원문 읽기로 대체하지 않는다. 편집기에는 임의 파일 읽기 권한을 주지 않으며, 선택하지 않은 경로·다른 프로젝트/문서 창/세션·손상된 판을 거절한다. 참조 확인 중 세션이 바뀌면 늦은 응답을 적용하지 않는다. 선택 거절은 원본 첨부 오류 목록에 표시한다. Slides가 쓰는 `window.desktop`은 파일 전용6개 메서드만 노출한다.
+
+최종 **Linux Tauri 단일47/47, 회귀63/63, 전체4프로젝트 타입 및 host/web/design/Office/native 빌드** 통과. PPT 두 칸의 실제 미저장 Markdown 편집→첫 참조 r2→재첨부 없는 후속 r3, 나머지6종의 외부 변경/후속 판 갱신, 가린 값의 모델 요청 제외, 원본 문서 버튼/선택창/취소를 확인했다. 이번 native의 입력 참조는 Markdown이며 한글 수신은 HWPX다. PPT·Sheets 화면과 선택창도 검토했다. 초기 실패 결과는 보존했고 전용 앱/로컬 합성 제공자를 정상 종료했다.
+
+근거 `implementation-20261030/office-document-references-native-06/verification.json`; 검증 판 `research:rr-e6e9abfeeec587137aae8e9d2f47aef0:a300e80dade495efb053fd3f867510fb4988576bcabae28ece610741303e5df5`. 로컬 파일·이미지·붙여넣기/드래그, 재열기 후 첨부 메타데이터 복원, 모든 바이너리 입력 참조의 native 인수, 옆 칸 우선 분류·분리 창 전체 동등성은 후속이다. Markdown/PDF 원본 패널에는 이 파일 스킬이 없어 이번7종 지원에 포함하지 않는다.
+
 ## 아직 완료되지 않은 범위
 
 현재 아홉 renderer 진입점이 있다는 것은 아홉 편집기의 전 기능이 끝났다는 뜻이 아니다. Markdown·HTML의 클라우드 이미지 호스트/원격 그림 읽기, 다른 이름으로 저장, 내보내기, 루프 밖 직접 AI·검색·첨부·위키 서비스는 연결 중이며 미구현 동작을 성공 처리하지 않는다. 기존 Word·PPT·Sheets에도 직접 생성/교정·템플릿·출력 미연결 항목이 있다. PDF의 영구 가림 사본·다른 이름 저장·추출/합치기 파일 선택·변환/출력·서명 보관/인증서 서명·직접 AI/번역/결과 보관/노트·Windows/macOS OCR과 전체 기능 인수 검증이 남았다. 인증서 서명 읽기 코드는 연결했지만 실제 서명 검증 fixture는 아직 수행하지 않았다. XMind의 다른 이름 저장·내보내기·출력·링크 열기·문서 만들기, EPUB의 책 전체 번역/결과 보관·첨부·다른 이름 저장·외부 링크·이름 변경 동기화와 기존 설정 이행도 남았다. 공통 제공자·세션·Drive·검색·doory와 출력 서비스를 계속 연결한다.

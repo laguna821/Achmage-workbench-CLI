@@ -303,6 +303,7 @@ export default function DocumentView({
   useEffect(() => registerDocumentCommands(lease.viewId, {
     artifactId,
     dirty: () => dirty,
+    flushBeforeReference: () => officeEditing && Boolean(lease.access().writeToken),
     save: async () => {
       const submitted = saving.current ? savingText.current : text;
       const revision = await save();

@@ -393,6 +393,7 @@ export class Api {
     this.request<CalendarEventsView>("GET", `/api/calendar/events?${new URLSearchParams({ since: String(Math.floor(since)), until: String(Math.floor(until)), tz: zone, ...(refresh ? { refresh: "1" } : {}) })}`);
   adoptDisk = (artifactId: string) => this.request<Artifact>("POST", `/api/artifacts/${artifactId}/adopt-disk`);
   editorGrant = (artifactId: string) => this.request<EditorGrant>("POST", `/api/artifacts/${artifactId}/editor`);
+  officeReferences = <T>(artifactId: string, token: string, action: string, input: Record<string, unknown> = {}) => this.request<T>("POST", `/api/artifacts/${artifactId}/office-references`, { ...input, token, action });
   revert = (artifactId: string, toRevision: number) => this.request<Artifact>("POST", `/api/artifacts/${artifactId}/revert`, { toRevision });
   previewUrl = (artifactId: string, revision?: number) =>
     this.request<{ url: string; revision: number }>("POST", `/api/artifacts/${artifactId}/preview${revision ? `?revision=${revision}` : ""}`);

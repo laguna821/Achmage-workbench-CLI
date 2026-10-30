@@ -761,6 +761,7 @@ export type EditorGrant = { url: string; origin: string; token: string; sessionI
 /** Workbench window → office editor page (iframe at /office/<kind>.html). */
 export type OfficeHostMessage =
   | import("./office-output.ts").OfficeOutputResult
+  | import("./office-references.ts").OfficeReferenceResult
   | {
       type: "office:init";
       token: string;
@@ -774,7 +775,7 @@ export type OfficeHostMessage =
   | { type: "office:theme"; theme: "light" | "dark" }
   /** Refresh a scoped write capability without recreating the editor or dropping its undo state. */
   | { type: "office:grant"; token: string; sessionId: string | null }
-  | { type: "office:ai-result"; requestId: string; value?: { revision: number; token: string; sessionId: string | null; createdSession?: boolean }; error?: string }
+  | { type: "office:ai-result"; requestId: string; value?: { revision: number; token: string; sessionId: string | null; createdSession?: boolean; referenceSnapshot?: string }; error?: string }
   /** Save unsaved edits now (before a request is sent, the tab changes or the view switches). */
   | { type: "office:flush" }
   /** Keep my edits after a conflict: save them as the revision after this one. */
@@ -787,7 +788,8 @@ export type OfficeHostMessage =
 /** Office editor page → Workbench window. */
 export type OfficePageMessage =
   | import("./office-output.ts").OfficeOutputRequest
-  | { type: "office:ai-request"; requestId: string; action: "prepare" | "new-session" | "settings"; sessionId: string | null }
+  | import("./office-references.ts").OfficeReferenceRequest
+  | { type: "office:ai-request"; requestId: string; action: "prepare" | "new-session" | "settings"; sessionId: string | null; freezeReferences?: string[] }
   | { type: "office:copied"; artifactId: string }
   | { type: "office:ready" }
   /** The editor shows this revision; `recovered` when it reopened unsaved edits made on it. */

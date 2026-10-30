@@ -3,6 +3,9 @@ import type { Artifact, DocumentAccess, EditorGrant, OfficePageMessage } from "@
 import type { Api } from "../../api.ts";
 import type { OfficeOutputPlan, OfficeOutputRequest } from "../../../../../packages/contracts/src/office-output.ts";
 import { OfficeOutputDialog } from "./OfficeOutputDialog.tsx";
+import { OfficeReferencePicker } from "./OfficeReferencePicker.tsx";
+import type { OfficeDocumentChoice, OfficeReferenceRequest, OfficeReferenceSnapshot } from "../../../../../packages/contracts/src/office-references.ts";
+import { saveReferencedDocument } from "../../document-commands.ts";
 
 export type OfficeHandle = {
   /** Save unsaved edits now; resolves with the saved revision, or null when they could not be saved. */
@@ -44,6 +47,10 @@ export const OfficeEditor = forwardRef<
   const handlers = useRef({ onStatus, onNotice, onCopied, onPrepareAi, onNewSession, onAiSettings });
   handlers.current = { onStatus, onNotice, onCopied, onPrepareAi, onNewSession, onAiSettings };
   const aiBusy = useRef(false);
+  const referenceSnapshot = useRef<string | null>(null);
+  const referenceSession = useRef<string | null>(null);
+  const referencePickerClose = useRef<(() => void) | null>(null);
+  const [referencePicker, setReferencePicker] = useState<{ items: OfficeDocumentChoice[]; choose(paths: string[] | null): void } | null>(null);
   const outputBusy = useRef(false);
   const outputPlans = useRef(new Map<string, OfficeOutputPlan>());
   const copied = useRef(new Set<string>());
@@ -79,6 +86,44 @@ export const OfficeEditor = forwardRef<
       const timer = window.setTimeout(() => finish(null), 16_000);
       waiters.current.push(finish);
     });
+
+  const referenceCall = <T,>(action: string, input: Record<string, unknown> = {}) => {
+    if (!opened.current) throw new Error("문서 창을 먼저 열어 주세요.");
+    return api.officeReferences<T>(latest.current.id, opened.current.token, action, input);
+  };
+  const handleReference = async (message: OfficeReferenceRequest) => {
+    const target = frame.current?.contentWindow, origin = opened.current?.origin;
+    if (!target || !origin) return;
+    try {
+      let value: unknown;
+      if (message.action === "list") value = await referenceCall("list");
+      else if (message.action === "add") value = await referenceCall("add", { paths: message.paths });
+      else if (message.action === "read") value = await referenceCall("read", { snapshot: referenceSnapshot.current, path: message.path, offset: message.offset, length: message.length });
+      else {
+        if (referencePickerClose.current) value = { ok: false, reason: "busy" };
+        else {
+          const { items } = await referenceCall<{ items: OfficeDocumentChoice[] }>("list");
+          if (target !== frame.current?.contentWindow || referencePickerClose.current) throw new Error("문서 창이 바뀌었거나 다른 선택창이 열려 있습니다.");
+          const paths = await new Promise<string[] | null>((resolve) => {
+            const choose = (paths: string[] | null) => { referencePickerClose.current = null; setReferencePicker(null); resolve(paths); };
+            referencePickerClose.current = () => choose(null);
+            setReferencePicker({ items, choose });
+          });
+          value = paths ? { ok: true, paths } : { ok: false, reason: "cancelled" };
+        }
+      }
+      target.postMessage({ type: "office:references-result", requestId: message.requestId, value }, origin);
+    } catch (error) { target.postMessage({ type: "office:references-result", requestId: message.requestId, error: error instanceof Error ? error.message : String(error) }, origin); }
+  };
+  useEffect(() => {
+    referenceSnapshot.current = null;
+    referencePickerClose.current?.();
+    return () => { referenceSnapshot.current = null; referencePickerClose.current?.(); };
+  }, [artifact.id, generation]);
+  useEffect(() => {
+    if (referenceSession.current !== sessionId) referenceSnapshot.current = null;
+    referencePickerClose.current?.();
+  }, [sessionId]);
 
   const handleOutput = async (message: OfficeOutputRequest) => {
     const target = frame.current?.contentWindow, origin = opened.current?.origin;
@@ -124,7 +169,7 @@ export const OfficeEditor = forwardRef<
     aiBusy.current = true;
     try {
       const checkSession = () => {
-        if (message.sessionId !== opened.current?.sessionId) throw new Error("선택한 세션이 바뀌었습니다. 새 대화에서 다시 요청해 주세요.");
+        if (target !== frame.current?.contentWindow || message.sessionId !== opened.current?.sessionId) throw new Error("선택한 세션이 바뀌었습니다. 새 대화에서 다시 요청해 주세요.");
       };
       checkSession();
       if (status.current.conflict) throw new Error(status.current.conflict.message);
@@ -132,6 +177,13 @@ export const OfficeEditor = forwardRef<
       const revision = await flushed;
       if (revision === null) throw new Error("문서를 저장하지 못했습니다. 편집 내용은 문서에 유지됩니다.");
       checkSession();
+      const paths = message.freezeReferences;
+      const revisions: (number | null)[] = [];
+      if (paths?.length) {
+        const selected = await referenceCall<{ path: string; artifactId: string }[]>("describe", { paths });
+        for (const item of selected) { checkSession(); revisions.push(await saveReferencedDocument(item.artifactId) ?? null); }
+        checkSession();
+      }
       // Opening a document never creates a conversation. Its first admitted AI
       // request does, after saving, through the same Workbench session route.
       const createdSession = message.action === "new-session" || message.sessionId === null;
@@ -142,7 +194,14 @@ export const OfficeEditor = forwardRef<
       if (!value.sessionId || value.sessionId !== expectedSession) throw new Error("문서와 선택한 세션의 연결을 확인하지 못했습니다. 다시 요청해 주세요.");
       opened.current = value;
       setGrant({ generation, value });
-      reply({ revision, token: value.token, sessionId: value.sessionId, ...(createdSession ? { createdSession: true } : {}) });
+      let snapshot: OfficeReferenceSnapshot | null = null;
+      if (paths !== undefined) {
+        if (paths.length) snapshot = await referenceCall<OfficeReferenceSnapshot>("freeze", { paths, revisions });
+        if (target !== frame.current?.contentWindow || opened.current?.sessionId !== value.sessionId) throw new Error("참조 문서를 확인하는 동안 문서 창이나 세션이 바뀌었습니다.");
+        referenceSnapshot.current = snapshot?.id ?? null;
+        referenceSession.current = value.sessionId;
+      }
+      reply({ revision, token: value.token, sessionId: value.sessionId, ...(createdSession ? { createdSession: true } : {}), ...(snapshot ? { referenceSnapshot: snapshot.id } : {}) });
     } catch (error) { reply(undefined, error instanceof Error ? error.message : String(error)); }
     finally { aiBusy.current = false; }
   };
@@ -163,12 +222,14 @@ export const OfficeEditor = forwardRef<
   opened.current = current && "value" in current ? current.value : null;
   useEffect(() => { if (opened.current) send({ type: "office:grant", token: opened.current.token, sessionId: opened.current.sessionId }); }, [current]);
   const aiHandler = useRef(handleAi); aiHandler.current = handleAi;
+  const referenceHandler = useRef(handleReference); referenceHandler.current = handleReference;
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (!opened.current || event.origin !== opened.current.origin || event.source !== frame.current?.contentWindow) return;
       const message = event.data as OfficePageMessage;
       switch (message.type) {
+        case "office:references": void referenceHandler.current(message); break;
         case "office:ai-request": void aiHandler.current(message); break;
         case "office:output": void handleOutput(message); break;
         case "office:copied":
@@ -311,6 +372,7 @@ export const OfficeEditor = forwardRef<
   }
   if (!opened.current) return hidden ? null : <div className="column empty-hint">편집기를 여는 중…</div>;
   return (<>
+    {referencePicker ? <OfficeReferencePicker {...referencePicker} /> : null}
     {output ? <OfficeOutputDialog api={api} artifact={artifact} revision={output.revision} format={output.format} onChoose={output.choose} onCancel={() => output.choose(null)} /> : null}
     <iframe
       key={`${artifact.id}:${generation}`}

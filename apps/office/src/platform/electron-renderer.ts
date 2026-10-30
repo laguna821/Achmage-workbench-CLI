@@ -65,12 +65,22 @@ export const ipcRenderer = {
   postMessage() {},
 };
 
-/** The editor's own API only (`slidesApi`, `desktopApi`); its AI, Drive, skills, project and file bridges stay out. */
+/** The editor APIs; conversation/settings/document selection use Workbench's own scoped bridges. */
 const EXPOSED = new Set(["slidesApi", "desktopApi", "pdfApi", "mindmapApi", "epubApi"]);
+const FILE_METHODS = ["pickAttachments", "addAttachmentPaths", "addPastedImage", "readAttachment", "readAttachmentImage", "getPathForFile"] as const;
 /** Only the dedicated settings entrypoint opts into these original shell bridges. */
 export function exposeSettingsBridges() { EXPOSED.add("aiOffice"); EXPOSED.add("aiOfficeSubscription"); }
 export const contextBridge = {
   exposeInMainWorld(key: string, api: unknown) {
+    // Slides keeps its original attachment API under `desktop`. Expose that
+    // exact subset, never a future preload's unrelated filesystem/app methods.
+    if (key === "desktop" && api && typeof api === "object") {
+      const source = api as Record<string, unknown>;
+      if (FILE_METHODS.every((name) => typeof source[name] === "function")) {
+        (window as unknown as Record<string, unknown>).desktop = Object.fromEntries(FILE_METHODS.map((name) => [name, source[name]]));
+      }
+      return;
+    }
     if (EXPOSED.has(key)) (window as unknown as Record<string, unknown>)[key] = api;
   },
 };

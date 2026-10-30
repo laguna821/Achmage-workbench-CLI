@@ -140,7 +140,9 @@ export class OfficeAi {
       let raw: unknown;
       try { raw = JSON.parse((await readBody(req, OFFICE_AI_INPUT_LIMIT)).toString("utf8")); } catch (error) { if (error instanceof HttpError) throw error; return invalid(); }
       authorize();
-      const value = operation === "turn-start" ? await this.sessions!.start(bound, raw) : operation === "turn-events" ? this.sessions!.events(bound, raw) : this.sessions!.finish(bound, raw);
+      const references = operation === "turn-start" && record(raw) && raw.referenceSnapshot !== undefined
+        ? grants.references.references({ documents, grants, artifactId: artifactId!, token: bearer! }, raw.referenceSnapshot) : [];
+      const value = operation === "turn-start" ? await this.sessions!.start(bound, raw, references) : operation === "turn-events" ? this.sessions!.events(bound, raw) : this.sessions!.finish(bound, raw);
       sendJson(res, 200, value); return true;
     }
     // No startup status probing, CLI process, model invocation or settings write before a request.

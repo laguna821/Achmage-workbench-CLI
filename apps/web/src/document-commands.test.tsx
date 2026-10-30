@@ -17,3 +17,11 @@ it("refuses to send when a dirty editor loses permission or cannot save", async 
   await expect(saveReferencedDocument("doc")).rejects.toThrow(/저장하지 못해/);
   remove(); expect(await saveReferencedDocument("doc")).toBeUndefined();
 });
+
+it("flushes an original Office writer before its delayed dirty notification while leaving clean readers alone", async () => {
+  let saves = 0, readers = 0;
+  const writer = registerDocumentCommands("office", { artifactId: "doc", dirty: () => false, flushBeforeReference: () => true, save: async () => { saves++; return 3; } });
+  const reader = registerDocumentCommands("reader", { artifactId: "doc", dirty: () => false, flushBeforeReference: () => false, save: async () => { readers++; return 1; } });
+  try { expect(await saveReferencedDocument("doc")).toBe(3); expect(saves).toBe(1); expect(readers).toBe(0); }
+  finally { writer(); reader(); }
+});

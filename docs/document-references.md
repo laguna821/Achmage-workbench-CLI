@@ -11,3 +11,9 @@
 참조의 전체 해시와 저장된 판 선택 여부는 세션 요청 기록·프롬프트·Markdown 내보내기에 남긴다. 문서 패널과 일반 대화창은 같은 기존 세션을 사용한다. 읽기 참조의 원문은 AI 작업 사본으로 바꾸지 않는다.
 
 검증 범위는 Markdown 두 문서와 대역 엔진을 사용한 실제 Linux 앱, 호스트의 같은 이름/긴 이름/요청 접두어 충돌·해시 검증·수정안과 복구 회귀다. PPTX·사용자 양식까지 이어지는 실제 엔진 흐름과 Windows/macOS는 후속 검증이다.
+
+## 원본 Office 채팅의 참조
+
+2026-10-31 Word/PPT/Sheets/HTML/한글/XMind/EPUB의 `@`와 문서 첨부 버튼을 연결했다. 같은 프로젝트의 열린/최근 문서를 선택하고, 선택 이후 사람의 편집은 보낼 때 저장한다. dirty 표시가 늦는 원본 Office도 쓰기 권한이 있는 편집기를 직접 확인한다. 요청별 판/해시를 고정하고 원본 파일 파서의 가림을 유지한다. 같은 창의 후속 요청은 다시 첨부하지 않아도 최신 판을 읽는다.
+
+최종 실제 Linux **47/47**, 회귀 **63/63**. PPT 옆 칸에서 Markdown을 실제 편집한 흐름과7종 수신 편집기를 확인했으며 native 입력 참조는 Markdown이다. 로컬/이미지 첨부·재열기 후 첨부 복원·바이너리 입력 전체·Markdown/PDF 채팅의 첨부 확장·Windows/macOS는 후속이다. 근거 `office-document-references-native-06/verification.json`; 연구 판 `research:rr-e6e9abfeeec587137aae8e9d2f47aef0:a300e80dade495efb053fd3f867510fb4988576bcabae28ece610741303e5df5`.

@@ -14,6 +14,7 @@ import { buildPreviewDocument } from "../../../third_party/ieumoffice/text-asset
 import { PDF_MAX_BYTES, PDF_REQUEST_MAX_BYTES } from "../../../packages/contracts/src/pdf.ts";
 import { decodePdfRequest } from "./pdf-codec.ts";
 import { OfficeAi } from "./office-ai.ts";
+import { OfficeReferences } from "./office-references.ts";
 
 // The office editors (IeumOffice's editor screens, apps/office) run on their own origin, a second
 // port on 127.0.0.1. Their code is third-party and reads documents from anywhere, so it never
@@ -30,6 +31,7 @@ export function officeEditorKind(format: DocFormat): OfficeEditorKind | null {
 
 /** Tokens that open one document each, for as long as the gateway runs (the most recent ones). */
 export class EditorGrants {
+  readonly references = new OfficeReferences();
   private readonly grants = new Map<string, { artifactId: string; access?: DocumentAccess; sessionId: string | null; preview: { id?: string; text?: string } }>();
   private readonly limit: number;
   constructor(limit = 500) {

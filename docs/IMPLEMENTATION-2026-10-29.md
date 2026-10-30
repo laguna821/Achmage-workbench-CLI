@@ -14,7 +14,7 @@
 |---|---|---|
 | G0 | 기준 환경, Git 무변이/삭제 오류, 모델 표시, 실제 앱 하네스 | 로컬 기준 완료, OS 설치본 검증은 G6 |
 | G1 | Workspace 계약·이행, 재귀 분할·탭·복원 | 공간별 탭·배치/CAS·문서/대화 위치 검증, PKM 목록 위치 등 후속 보완 |
-| G2 | 내부 문서 셸, 같은 세션의 사이드 채팅, +/@, 사용자 템플릿·스킬 | 문서 레지스트리·편집 권한·일반 채팅 참조 검증, 원본 Office 첨부·템플릿 연결 진행 |
+| G2 | 내부 문서 셸, 같은 세션의 사이드 채팅, +/@, 사용자 템플릿·스킬 | 일반 채팅·원본7종 @/문서 선택·후속 최신 참조 검증, 로컬/이미지 첨부·이력 복원·템플릿 연결 진행 |
 | G3 | Orca worktree·PTY·Git/PR 검토·내장 브라우저/Design Mode | worktree·PTY·명시적 환경 준비·로컬/원격 Git·충돌 해결·구간 스테이징·기준 비교·행 의견/전달 Linux 검증, PR/CI·브라우저와 나머지 동등성 후속 |
 | G4 | 이음 편집기 9종과 공통 기능, doory | 9종 원본 화면·공통 AI·설정·Rust 키링·Workbench CLI 연결. 대표 편집/저장/복원/첫 세션 자동 연결/새 대화/취소 및 9종 되돌림 Linux 검증. Sheets 저장 경쟁·응답 전달 지연·PDF 저장 후 Undo 수정. 루프 밖 AI·공통 기능·doory와 전체 동등성 진행 |
 | G5 | HOP 개선 패치·hallym-kordoc 생성 스킬·중복 패키지 제거 | 대기 |
@@ -40,6 +40,8 @@ GitHub 저장소 쓰기 권한과 기존 릴리스 워크플로를 확인했다.
 기존 다른 작업트리와 미커밋 E2E 파일은 보존한다. 이전 Broadway 실패를 같은 조건으로 재시도하지 않는다. 실행 파일 인자와 display/socket 조건을 수정·기록한 뒤 새 검증을 한다.
 
 ## 작업별 결과
+
+- 2026-10-31 원본7종 문서 참조: Word/PPT/Sheets/HTML/한글/XMind/EPUB의 원본 `@`와 문서 첨부 버튼을 같은 프로젝트의 열린/최근 문서에 연결했다. 다른 칸의 최신 편집을 저장하고 판/해시를 고정해 원본 가림 파서로 읽는다. 재첨부 없이 후속 요청에서 최신 판을 갱신하고, 다른 창/세션·저장 실패·늦은 응답은 거절한다. **최종 실제 Linux 단일47/47, 인접63/63, 전체 타입·host/web/design/Office/native 빌드** 통과. native 입력 참조는 Markdown이며 한글 수신은 HWPX다. 로컬/이미지 첨부·재열기 후 첨부 복원·템플릿/doory와 G6는 계속 남는다. [범위와 한계](office-integration.md), 근거 `office-document-references-native-06/verification.json`; 검증 판 `research:rr-e6e9abfeeec587137aae8e9d2f47aef0:a300e80dade495efb053fd3f867510fb4988576bcabae28ece610741303e5df5`.
 
 - 2026-10-31 원본9종 첫 세션 연결: 세션 없이 연 문서도 첫 AI 요청에서 저장을 확인하고 실제 Workbench 대화를 생성한다. 입력창·편집기를 유지하며 첫 요청을 정확히 한 번 기록하고, 다른 세션 선택·저장 실패·중복·취소·시간 초과를 구분한다. **인접47/47, 전체 타입·web/design/Office/native 빌드, 실제 Linux 단일 실행86/86** 통과. 원본 `@`/`+` 첨부·최신 참조가 다음 단계다. [범위와 한계](office-integration.md), 검증 판 `research:rr-e6e9abfeeec587137aae8e9d2f47aef0:ac5be7ecc611e84d24411cb7109bc255dbe9bfcabafe7a2e4f524d2539f63b3f`.
 

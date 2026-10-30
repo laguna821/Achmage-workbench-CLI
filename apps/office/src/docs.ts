@@ -242,7 +242,7 @@ const desktop = stubBridge(
 
 // The original project API is a projection of Workbench history. Other optional side
 // bridges (Drive, outbound, user skills and document attachments) are connected separately.
-Object.assign(window, { desktop, projectApi: ai.projectApi, aiOfficeSubscription: ai.subscription, workbenchOfficeAi: ai });
+Object.assign(window, { desktop, projectApi: ai.projectApi, aiOfficeSubscription: ai.subscription, aiOfficeDocs: ai.docs, workbenchOfficeAi: ai });
 window.addEventListener("focus", () => { void ai.refresh().catch(() => {}); });
 
 // The editor tells about unsaved changes when asked; ask now and then for the Workbench header.

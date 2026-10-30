@@ -24,7 +24,7 @@ async function xlsxFixture() {
   zip.file("xl/worksheets/sheet1.xml", '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:A2"/><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Original text.</t></is></c></row><row r="2"><c r="A2"><v>2</v></c></row></sheetData></worksheet>');
   return zip.generateAsync({ type: "nodebuffer" });
 }
-async function fixture(file: string, format: Format) {
+export async function fixture(file: string, format: Format) {
   if (format === "md") writeFileSync(file, "# Native document\n\nOriginal text.\n");
   else if (format === "html") writeFileSync(file, '<!DOCTYPE html><html><head><title>Native document</title></head><body><h1>Native document</h1><p>Original text.</p></body></html>');
   else if (format === "xmind") writeFileSync(file, await mindmapFixture());

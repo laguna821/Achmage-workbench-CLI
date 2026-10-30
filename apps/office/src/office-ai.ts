@@ -4,6 +4,7 @@ import type { AgentMessage } from "../../../vendor/ieumoffice/packages/agent-cor
 import type { IpcStreamChunk } from "../../../vendor/ieumoffice/packages/agent-core/src/electron-transport.ts";
 import { Events, Gateway, listen, post, type Init } from "./bridge.ts";
 import { installOfficeConversation, type OfficeConversationPort, type OfficeRun, type WorkbenchAgentLoop } from "./office-agent.ts";
+import { createOfficeReferences } from "./office-references.ts";
 
 type Prepared = NonNullable<Extract<OfficeHostMessage, { type: "office:ai-result" }>["value"]>;
 type History = { workId: string; sessionId: string; items: TranscriptItem[]; before: string | null; hasMore: boolean };
@@ -32,6 +33,7 @@ export function officeModelHistory(items: TranscriptItem[]): AgentMessage[] {
 }
 
 export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
+  const references = createOfficeReferences();
   let sessionId = init.sessionId, sessionKey = sessionId ?? "unbound";
   let active: WorkbenchAgentLoop<unknown> | null = null;
   let run: { turnId: string; api: ReturnType<Gateway["aiSession"]> } | null = null;
@@ -72,7 +74,7 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
     if (message.value) { gateway.setToken(message.value.token); changed(message.value.sessionId, Boolean(initial)); }
     pending.resolve(message.value);
   });
-  const parent = (action: "prepare" | "new-session" | "settings") => new Promise<Prepared | undefined>((resolve, reject) => {
+  const parent = (action: "prepare" | "new-session" | "settings", freezeReferences?: string[]) => new Promise<Prepared | undefined>((resolve, reject) => {
     const requestId = crypto.randomUUID();
     const timer = window.setTimeout(() => {
       requests.delete(requestId);
@@ -84,10 +86,10 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
     }, 25_000);
     requests.set(requestId, { resolve: (value) => { clearTimeout(timer); resolve(value); }, reject: (error) => { clearTimeout(timer); reject(error); } });
     if (action === "prepare" && sessionId === null) binding = { requestId, grants: [] };
-    post({ type: "office:ai-request", requestId, action, sessionId });
+    post({ type: "office:ai-request", requestId, action, sessionId, ...(freezeReferences ? { freezeReferences } : {}) });
   });
-  const prepare = async () => {
-    const value = await parent("prepare");
+  const prepare = async (freeze = false) => {
+    const value = await parent("prepare", freeze ? references.pin() : undefined);
     if (!value?.sessionId) throw new Error("이 문서와 함께 사용할 Workbench 세션을 선택해 주세요.");
     return value;
   };
@@ -103,26 +105,28 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
       active = loop; return () => { if (active === loop) active = null; };
     },
     begin: async (instruction, signal): Promise<OfficeRun> => {
-      const prepared = await prepare(), api = gateway.aiSession(init.artifact.id);
-      const page = await api.json<History>("history");
-      if (signal.aborted) throw new Error("요청을 취소했습니다.");
-      if (page.sessionId !== prepared.sessionId || page.sessionId !== sessionId) throw new Error("선택한 세션이 바뀌었습니다.");
-      const turnId = crypto.randomUUID();
-      const receipt = await api.json<OfficeTurnReceipt>("turn-start", { turnId, instruction, revision: prepared.revision });
-      if (receipt.duplicate || receipt.status !== "running") throw new Error("이미 처리된 요청입니다. 중복 실행하지 않았습니다.");
-      run = { turnId, api }; let seq = 0;
-      return {
-        history: officeModelHistory(page.items),
-        append: async (events) => { await api.json("turn-events", { turnId, seq: ++seq, events }); },
-        save: async () => {
-          const saved = await prepare();
-          if (saved.sessionId !== page.sessionId) throw new Error("문서 저장 중 선택한 세션이 바뀌었습니다.");
-        },
-        finish: async (status, error) => {
-          try { await api.json("turn-finish", { turnId, status, ...(error ? { error } : {}) }); }
-          finally { if (run?.turnId === turnId) run = null; }
-        },
-      };
+      try {
+        const prepared = await prepare(true), api = gateway.aiSession(init.artifact.id);
+        const page = await api.json<History>("history");
+        if (signal.aborted) throw new Error("요청을 취소했습니다.");
+        if (page.sessionId !== prepared.sessionId || page.sessionId !== sessionId) throw new Error("선택한 세션이 바뀌었습니다.");
+        const turnId = crypto.randomUUID();
+        const receipt = await api.json<OfficeTurnReceipt>("turn-start", { turnId, instruction, revision: prepared.revision, ...(prepared.referenceSnapshot ? { referenceSnapshot: prepared.referenceSnapshot } : {}) });
+        if (receipt.duplicate || receipt.status !== "running") throw new Error("이미 처리된 요청입니다. 중복 실행하지 않았습니다.");
+        run = { turnId, api }; let seq = 0;
+        return {
+          history: officeModelHistory(page.items),
+          append: async (events) => { await api.json("turn-events", { turnId, seq: ++seq, events }); },
+          save: async () => {
+            const saved = await prepare();
+            if (saved.sessionId !== page.sessionId) throw new Error("문서 저장 중 선택한 세션이 바뀌었습니다.");
+          },
+          finish: async (status, error) => {
+            try { await api.json("turn-finish", { turnId, status, ...(error ? { error } : {}) }); }
+            finally { if (run?.turnId === turnId) run = null; references.release(); }
+          },
+        };
+      } catch (error) { references.release(); throw error; }
     },
   };
   installOfficeConversation(port);
@@ -167,10 +171,11 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
     appendChat: async () => {},
   };
   return {
-    desktop: { getAiSettings: getSettings, openAiModelSettings: openSettings, aiStream, aiStreamCancel, onAiStream: events.on("aiStream"), onAiSettingsChanged: events.on("aiSettingsChanged"),
+    desktop: { ...references.desktop, getAiSettings: getSettings, openAiModelSettings: openSettings, aiStream, aiStreamCancel, onAiStream: events.on("aiStream"), onAiSettingsChanged: events.on("aiSettingsChanged"),
       aiToolCapabilities: async () => ({ imageGeneration: { available: false }, imageAnalysis: { available: false }, videoAnalysis: { available: false } }),
       setAiSettings: async (settings: unknown) => { const saved = await gateway.aiSession(init.artifact.id).json("selection", settings); events.emit("aiSettingsChanged", saved); return saved; } },
     projectApi,
+    docs: references.docs,
     subscription: { statuses: () => statuses(), recheck: () => statuses(true), onChanged: events.on("aiSubscriptionChanged"), openSettings,
       install: openSettings, update: openSettings, login: openSettings, cancelLogin: openSettings, setMeteredAccepted: openSettings, openInstallHelp: openSettings, openConnectHelp: openSettings },
     subscribe: (listener: () => void) => { subscribers.add(listener); return () => { subscribers.delete(listener); }; },
@@ -184,7 +189,7 @@ export type OfficeAiBridge = ReturnType<typeof createOfficeAi>;
 /** Expose the shared conversation before mounting any original renderer/preload. */
 export function mountOfficeAi(init: Init, gateway: Gateway, events = new Events()) {
   const ai = createOfficeAi(init, gateway, events);
-  Object.assign(window, { projectApi: ai.projectApi, aiOfficeSubscription: ai.subscription, workbenchOfficeAi: ai });
+  Object.assign(window, { projectApi: ai.projectApi, aiOfficeSubscription: ai.subscription, aiOfficeDocs: ai.docs, workbenchOfficeAi: ai });
   window.addEventListener("focus", () => { void ai.refresh().catch(() => {}); });
   return ai;
 }
@@ -195,7 +200,12 @@ export function officeAiTransport(ai: OfficeAiBridge, dispatch: (channel: string
   ai.desktop.onAiSettingsChanged(() => dispatch("ai:settings-changed", []));
   ai.subscription.onChanged((statuses) => dispatch("ai:subscription-changed", [statuses]));
   return async (channel: string, args: unknown[]): Promise<unknown> => {
+    if (/^(?:files:add|(?:slides|sheets|mindmap|epub):files-add)$/.test(channel)) return ai.desktop.addAttachmentPaths(args[0] as string[]);
+    if (/^(?:files:read|(?:slides|sheets|mindmap|epub):files-read)$/.test(channel)) return ai.desktop.readAttachment(String(args[0]), args[1] as number | undefined, args[2] as number | undefined);
     switch (channel) {
+      case "doc:attach-available": return ai.docs.available();
+      case "doc:attach-list": return ai.docs.list();
+      case "doc:pick-attachments": return ai.docs.pick();
       case "ai:get-settings": return ai.desktop.getAiSettings();
       case "ai:set-settings": return ai.desktop.setAiSettings(args[0]);
       case "ai:open-model-settings": return ai.desktop.openAiModelSettings();
