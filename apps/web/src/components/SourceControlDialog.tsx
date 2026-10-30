@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ScmAction, ScmArea, ScmDiff, ScmFile, ScmJob, ScmStatus, ScmRemoteInventory, ScmRemoteRequest, ScmRequest, Workspace } from "@workbench/contracts";
 import type { Api } from "../api.ts";
+import { ScmReviewsProvider } from "./ScmReviewNotes.tsx";
 import { ScmDiffText } from "./ScmDiffText.tsx";
 import { ScmRemoteControls } from "./ScmRemoteControls.tsx";
 import { ScmComparisonReview } from "./ScmComparisonReview.tsx";
@@ -31,7 +32,7 @@ export function SourceControlDialog({ api, workspace, onClose, onTerminal }: { a
   }, [api, workspace.id]);
   useEffect(() => { alive.current = true; void refresh(); return () => { alive.current = false; }; }, [refresh]);
   useEffect(() => {
-    const key = (event: KeyboardEvent) => { if (event.key === "Escape") { event.stopPropagation(); onClose(); } };
+    const key = (event: KeyboardEvent) => { if (event.key === "Escape" && !(event.target instanceof Element && event.target.closest(".scm-note-editor"))) { event.stopPropagation(); onClose(); } };
     window.addEventListener("keydown", key, true); return () => window.removeEventListener("keydown", key, true);
   }, [onClose]);
   useEffect(() => {
@@ -78,7 +79,7 @@ export function SourceControlDialog({ api, workspace, onClose, onTerminal }: { a
   const staged = status?.files.filter((file) => file.index !== "." && file.index !== "?" && !file.conflicted) ?? [];
   const working = status?.files.filter((file) => file.working !== "." && !file.conflicted) ?? [];
   const conflicts = status?.files.filter((file) => file.conflicted) ?? [];
-  return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="scm-dialog" role="dialog" aria-modal="true" aria-label="Git 변경 검토">
+  return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="scm-dialog" role="dialog" aria-modal="true" aria-label="Git 변경 검토"><ScmReviewsProvider api={api} workspace={workspace}>
     <header className="scm-header"><div><h2>Git 변경 검토</h2><p><strong>{status?.branch ?? (status?.head ? "분리된 HEAD" : workspace.label)}</strong>{status?.head ? ` · ${status.head.slice(0, 8)}` : " · 첫 커밋 전"}{status?.operation ? ` · ${status.operation} 진행 중` : ""}</p><small title={status?.root}>{status?.root ?? workspace.cwd}</small>{status?.upstream ? <small>{status.upstream} · 보낼 커밋 {status.ahead} · 받을 커밋 {status.behind}</small> : null}</div><button className="button scm-refresh" disabled={busy} onClick={() => { void refresh(); if (tab === "compare") setCompareEpoch((value) => value + 1); }}>새로고침</button><button className="button scm-close" onClick={onClose}>닫기</button></header>
     <nav className="scm-review-tabs" aria-label="Git 검토 보기"><button className={`button scm-tab-changes${tab === "changes" ? " primary" : ""}`} aria-pressed={tab === "changes"} onClick={() => setTab("changes")}>스테이징·커밋</button><button className={`button scm-tab-compare${tab === "compare" ? " primary" : ""}`} aria-pressed={tab === "compare"} onClick={() => setTab("compare")}>기준·커밋 비교</button>{tab === "compare" ? <button className="text-button scm-compare-refresh" onClick={() => setCompareEpoch((value) => value + 1)}>비교 새로고침</button> : null}</nav>
     {tab === "compare" && status ? <ScmComparisonReview api={api} workspace={workspace} defaultBase={workspace.worktree?.base ?? (status.head ? "HEAD" : "")} refreshEpoch={compareEpoch} /> : <>
@@ -90,5 +91,5 @@ export function SourceControlDialog({ api, workspace, onClose, onTerminal }: { a
     </main></div>
     <footer className="scm-history"><h3>Git 작업 기록</h3>{jobs.slice(0, 12).map((job, index) => <details key={job.id} open={index === 0}><summary><strong>{actionLabels[job.request.action]}</strong> · <span className={`scm-phase ${job.phase}`}>{phaseLabels[job.phase]}</span> · {job.branch ?? "분리된 HEAD"} · {new Date(job.createdAt).toLocaleTimeString()}{job.headAfter && job.headAfter !== job.headBefore ? ` · ${job.headAfter.slice(0, 8)}` : ""}</summary>{job.phase === "running" ? <button className="button small scm-interrupt" onClick={() => void api.interruptScm(job.id).then(() => refresh()).catch((reason) => setError(messageOf(reason)))}>중단 · 변경은 현재 상태 유지</button> : null}{job.error ? <p className="scm-error">{job.error}</p> : null}{job.request.remote ? <p>{job.request.remote.remote}/{job.request.remote.branch}{job.request.remote.strategy ? ` · ${job.request.remote.strategy}` : ""}{job.request.remote.forcePreviewId ? " · 확인한 커밋에 lease 적용" : ""}</p> : null}{job.remoteResults?.map((result, n) => <p className="scm-remote-results" key={n}>{result.url} · {result.phase === "complete" ? "보내기 완료" : result.phase === "failed" ? "실패" : "미실행"}{result.error ? ` · ${result.error}` : ""}</p>)}{job.request.selection ? <p>{job.request.selection.path} · {job.request.selection.hunks.length}개 구간</p> : null}{job.request.resolution ? <p>{job.request.resolution.path} · {job.request.resolution.choice} · {job.request.resolution.stage ? "스테이징 포함" : "파일 저장"}</p> : null}{job.recoveryPath ? <p className="scm-recovery-path">변경 전 복구 파일: <code>{job.recoveryPath}</code></p> : null}{job.request.message ? <p>{job.request.message}</p> : null}{job.outputTruncated ? <small>최근 출력만 표시합니다.</small> : null}{job.output ? <pre>{job.output}</pre> : <small>{job.phase === "running" ? "Git 응답을 기다리는 중…" : "추가 출력 없음"}</small>}</details>)}{!jobs.length ? <small>아직 실행한 Git 작업이 없습니다.</small> : null}</footer>
     </>}
-  </div></div>;
+  </ScmReviewsProvider></div></div>;
 }

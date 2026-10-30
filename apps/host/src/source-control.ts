@@ -11,6 +11,7 @@ import { ScmRemotes, redactGit, remoteAction, validateRemoteRequest } from "./sc
 import { applyResolution, createScmRecovery, prepareResolution, readScmConflict, validateResolution } from "./scm-conflict.ts";
 import { hunkAction, selectedHunkPatch, validateHunkSelection } from "./scm-hunks.ts";
 import { ScmComparisons } from "./scm-comparison.ts";
+import { ScmReviewSnapshots } from "./scm-review-snapshots.ts";
 
 const PREFIX = "scm-job:";
 type Hooks = { sharedLinks: (root: string) => ReadonlySet<string>; assertIdle: (root: string) => void; assertWorkingIdle?: (root: string) => void };
@@ -39,6 +40,7 @@ function recordedRequest(request: ScmRequest): ScmRecordedRequest {
 }
 
 export class SourceControl {
+  readonly reviewSnapshots = new ScmReviewSnapshots();
   private readonly comparisons = new ScmComparisons();
   private readonly remotes = new ScmRemotes();
   private readonly store: Store; private readonly spaces: Workspaces; private readonly hooks: Hooks;
@@ -63,6 +65,7 @@ export class SourceControl {
   async diff(workspaceId: string, path: string, area: ScmArea, expectedRevision: string) {
     const state = await this.status(workspaceId); this.assertRevision(state, expectedRevision);
     const result = await readScmDiff(state, path, area);
+    result.review = await this.reviewSnapshots.capture(state, result, { kind: "local", area, head: state.head, statusRevision: state.revision }, area === "staged" ? state.files.find((f) => f.path === path)?.oldPath : undefined, state.files.some((f) => f.path === path && (f.conflicted || f.submodule)));
     this.assertRevision(await this.status(workspaceId), expectedRevision);
     return result;
   }
@@ -83,7 +86,9 @@ export class SourceControl {
     this.comparisons.assertCurrent(await this.status(workspaceId), result); return result;
   }
   async compareDiff(workspaceId: string, id: string, revision: string, path: string) {
-    const result = await this.comparisons.diff(await this.status(workspaceId), id, revision, path);
+    const state = await this.status(workspaceId), view = this.comparisons.view(state, id, revision), file = view.files.find((f) => f.path === path);
+    const result = await this.comparisons.diff(state, id, revision, path);
+    result.review = await this.reviewSnapshots.capture(state, result, { kind: "comparison", request: view.request, beforeOid: view.beforeOid, headOid: view.headOid, after: view.after }, file?.oldPath, file?.conflicted);
     // Revalidate mutable endpoints after the patch and image reads as well.
     this.comparisons.assertCurrent(await this.status(workspaceId), { id, revision }); return result;
   }
@@ -209,5 +214,5 @@ export class SourceControl {
     const entry = this.running.get(id); if (entry) { entry.abort.abort(); await entry.done; }
     return this.get(id);
   }
-  async shutdown() { this.stopped = true; this.comparisons.clear(); await this.remotes.shutdown(); await Promise.allSettled([...this.pending.values()].map((entry) => entry.done)); for (const entry of this.running.values()) entry.abort.abort(); await Promise.allSettled([...this.running.values()].map((entry) => entry.done)); }
+  async shutdown() { this.stopped = true; this.comparisons.clear(); this.reviewSnapshots.clear(); await this.remotes.shutdown(); await Promise.allSettled([...this.pending.values()].map((entry) => entry.done)); for (const entry of this.running.values()) entry.abort.abort(); await Promise.allSettled([...this.running.values()].map((entry) => entry.done)); }
 }

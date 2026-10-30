@@ -51,8 +51,8 @@ function treeArgs(before: string | null, after: string) { return before ? ["diff
 const identity = (root: string, commonDir: string) => { const s = lstatSync(root, { bigint: true }); return JSON.stringify([root, commonDir, String(s.dev), String(s.ino)]); };
 const fileStamps = (state: ScmStatus, file: ScmComparisonFile) => JSON.stringify([scmFileStamp(state.root, file.path), ...(file.oldPath ? [scmFileStamp(state.root, file.oldPath)] : [])]);
 type Snapshot = { view: ScmComparison; identity: string; localRevision: string; stamps: Map<string, string> };
-type Blob = { kind: "missing" | "file" | "link" | "gitlink" | "directory" | "large"; data: Buffer | null; mode: string | null };
-async function commitBlob(root: string, oid: string | null, path: string): Promise<Blob> {
+export type ScmBlob = { kind: "missing" | "file" | "link" | "gitlink" | "directory" | "large"; data: Buffer | null; mode: string | null };
+export async function commitBlob(root: string, oid: string | null, path: string): Promise<ScmBlob> {
   if (!oid) return { kind: "missing", data: null, mode: null };
   const raw = scmPathText(await git(root, ["ls-tree", "-z", oid, "--", path]));
   const entry = raw.split("\0").find((line) => line.slice(line.indexOf("\t") + 1) === path);
@@ -67,7 +67,7 @@ async function commitBlob(root: string, oid: string | null, path: string): Promi
   if (size > MAX_BLOB) return { kind: "large", mode: mode!, data: null };
   return { kind: mode === "120000" ? "link" : "file", mode: mode!, data: await git(root, ["cat-file", "blob", object!], { limit: MAX_BLOB }) };
 }
-function workingBlob(root: string, path: string): Blob {
+export function workingBlob(root: string, path: string): ScmBlob {
   const parts = scmPath(path).replace(/\/$/, "").split("/"); let at = root;
   try {
     for (let i = 0; i < parts.length; i++) {
@@ -81,8 +81,8 @@ function workingBlob(root: string, path: string): Blob {
   } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
   return { kind: "missing", data: null, mode: null };
 }
-function raster(blob: Blob, path: string) { const mime = imageTypes[extname(path).toLowerCase()]; return mime && blob.kind === "file" && blob.data ? `data:${mime};base64,${blob.data.toString("base64")}` : null; }
-function fallbackPatch(before: Blob, after: Blob, file: ScmComparisonFile) {
+function raster(blob: ScmBlob, path: string) { const mime = imageTypes[extname(path).toLowerCase()]; return mime && blob.kind === "file" && blob.data ? `data:${mime};base64,${blob.data.toString("base64")}` : null; }
+function fallbackPatch(before: ScmBlob, after: ScmBlob, file: ScmComparisonFile) {
   if ([before, after].some((b) => ["large", "directory", "gitlink"].includes(b.kind))) return { raw: Buffer.alloc(0), notice: "크기가 8 MiB를 넘거나 폴더·서브모듈인 항목입니다. 해당 파일 또는 작업공간에서 확인하세요." };
   const a = before.data ?? Buffer.alloc(0), b = after.data ?? Buffer.alloc(0);
   if (a.equals(b) && before.kind === after.kind && before.mode === after.mode) return { raw: Buffer.alloc(0) };
@@ -143,6 +143,7 @@ export class ScmComparisons {
     if (entry.view.after === "working" && entry.localRevision !== state.localRevision) throw new HttpError(409, "scm_compare_changed", "작업 파일이나 Git 상태가 바뀌었습니다. 비교를 새로고침하세요.");
     return entry;
   }
+  view(state: ScmStatus, id: string, revision: string) { return this.snapshot(state, id, revision).view; }
   assertCurrent(state: ScmStatus, view: Pick<ScmComparison, "id" | "revision">) { this.snapshot(state, view.id, view.revision); }
   async diff(state: ScmStatus, id: string, revision: string, path: string): Promise<ScmComparisonDiff> {
     const snapshot = this.snapshot(state, id, revision), view = snapshot.view, file = view.files.find((file) => file.path === path);

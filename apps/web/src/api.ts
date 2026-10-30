@@ -1,4 +1,5 @@
 import type {
+  ScmReviewList, ScmReviewCreate, ScmReviewEdit, ScmReviewNote, ScmReviewBatchRequest, ScmReviewBatch,
   AchmageBrief,
   AgentBrowserStatus,
   ChangeLine,
@@ -212,6 +213,10 @@ export class Api {
   applyPreparation = (workspaceId: string, request: ApplyPreparationRequest) => this.request<PreparationJob>("POST", `/api/workspaces/${workspaceId}/preparations`, request);
   cancelPreparation = (id: string) => this.request<PreparationJob>("DELETE", `/api/preparations/${id}`);
   scmStatus = (id: string) => this.request<ScmStatus>("GET", `/api/workspaces/${id}/scm`);
+  scmReviews = (id: string, snapshot?: string) => this.request<ScmReviewList>("GET", `/api/workspaces/${id}/scm/reviews${snapshot ? `?snapshot=${encodeURIComponent(snapshot)}` : ""}`);
+  createScmReview = (id: string, value: ScmReviewCreate) => this.request<ScmReviewNote>("POST", `/api/workspaces/${id}/scm/reviews`, value);
+  editScmReview = (id: string, noteId: string, value: ScmReviewEdit) => this.request<ScmReviewNote>("PATCH", `/api/workspaces/${id}/scm/reviews/${noteId}`, value);
+  sendScmReviews = (id: string, value: ScmReviewBatchRequest) => this.request<ScmReviewBatch>("POST", `/api/workspaces/${id}/scm/review-batches`, value);
   scmCompare = (id: string, request: ScmComparisonRequest) => this.request<ScmComparison>("POST", `/api/workspaces/${id}/scm/compare`, request);
   scmCompareDiff = (id: string, comparison: Pick<ScmComparison, "id" | "revision">, path: string) => this.request<ScmComparisonDiff>("POST", `/api/workspaces/${id}/scm/compare-diff`, { ...comparison, path });
   scmComparisonPreferences = async (id: string) => {

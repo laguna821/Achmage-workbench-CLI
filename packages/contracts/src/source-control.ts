@@ -34,6 +34,7 @@ export type ScmDiff = {
   binary: boolean;
   hunks?: ScmHunk[];
   partialReason?: string;
+  review?: import("./scm-review.ts").ScmReviewSnapshot;
   /** Raster images only. SVG remains escaped text, never executable markup. */
   images?: { before: string | null; after: string | null };
 };

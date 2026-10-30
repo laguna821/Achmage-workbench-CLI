@@ -24,6 +24,7 @@ import { sourceControlScenario } from "./source-control.ts";
 import { scmRemoteScenario } from "./scm-remote.ts";
 import { scmConflictScenario } from "./scm-conflict.ts";
 import { scmHunksScenario } from "./scm-hunks.ts";
+import { scmReviewScenario } from "./scm-review.ts";
 import { scmComparisonScenario } from "./scm-comparison.ts";
 import { parseArgs } from "./args.ts";
 
@@ -65,6 +66,7 @@ try {
       if (wants("scm-remote")) await scmRemoteScenario(ctx, { binary, engines, profile: "native" });
       if (wants("scm-conflict")) await scmConflictScenario(ctx, { binary, engines, profile: "native" });
       if (wants("scm-hunks")) await scmHunksScenario(ctx, { binary, engines, profile: "native" });
+      if (wants("scm-review")) await scmReviewScenario(ctx, { binary, engines, profile: "native" });
       if (wants("scm-comparison")) await scmComparisonScenario(ctx, { binary, engines, profile: "native" });
     } catch (error) {
       const screenshot = report.path("failure.png");

@@ -346,6 +346,10 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         if (method === "DELETE") return sendJson(res, 200, await manager.preparation.cancel(parts[1]));
       }
       if (parts[0] === "workspaces" && parts[1] && parts[2] === "scm") {
+        if (parts.length === 4 && parts[3] === "reviews" && method === "GET") return sendJson(res, 200, manager.scmReviews.list(parts[1], url.searchParams.get("snapshot") ?? undefined));
+        if (parts.length === 4 && parts[3] === "reviews" && method === "POST") return sendJson(res, 201, manager.scmReviews.create(parts[1], await readJson(req, 96 * 1024) as unknown as import("@workbench/contracts").ScmReviewCreate));
+        if (parts.length === 5 && parts[3] === "reviews" && method === "PATCH") return sendJson(res, 200, manager.scmReviews.edit(parts[1], parts[4]!, await readJson(req, 96 * 1024) as unknown as import("@workbench/contracts").ScmReviewEdit));
+        if (parts.length === 4 && parts[3] === "review-batches" && method === "POST") return sendJson(res, 201, await manager.scmReviews.send(parts[1], await readJson(req, 16 * 1024) as unknown as import("@workbench/contracts").ScmReviewBatchRequest));
         if (parts.length === 4 && parts[3] === "compare-preferences" && method === "GET") return sendJson(res, 200, { preferences: manager.sourceControl.comparisonPreferences(parts[1]) });
         if (parts.length === 4 && parts[3] === "compare-preferences" && method === "PUT") return sendJson(res, 200, { preferences: manager.sourceControl.saveComparisonPreferences(parts[1], await readJson(req, 12 * 1024) as unknown as import("@workbench/contracts").ScmComparisonPreferences) });
         if (parts.length === 4 && parts[3] === "compare" && method === "POST") return sendJson(res, 200, await manager.sourceControl.compare(parts[1], await readJson(req) as unknown as import("@workbench/contracts").ScmComparisonRequest));

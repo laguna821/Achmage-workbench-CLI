@@ -58,6 +58,7 @@ import { WorktreeWorkspaces } from "./worktree-workspaces.ts";
 import { Terminals } from "./terminals.ts";
 import { WorkspacePreparation } from "./workspace-preparation.ts";
 import { SourceControl } from "./source-control.ts";
+import { ScmReviews } from "./scm-review.ts";
 import { WorkspaceLayouts } from "./layouts.ts";
 import type { Kordoc } from "./kordoc.ts";
 import type { AdapterSink, LoginStart, ProviderAdapter } from "./providers/types.ts";
@@ -276,6 +277,7 @@ export class SessionManager {
   readonly terminals: Terminals;
   readonly preparation: WorkspacePreparation;
   readonly sourceControl: SourceControl;
+  readonly scmReviews: ScmReviews;
   readonly layouts: WorkspaceLayouts;
   /** "그림": pictures drawn with GPT Image through Codex (imagegen.ts). */
   readonly images: ImageGen;
@@ -320,6 +322,18 @@ export class SessionManager {
       },
     }, options.dataDir ?? dirname(options.managedWorksDir));
     this.layouts = new WorkspaceLayouts(store, this.workspaces);
+    this.scmReviews = new ScmReviews(store, this.workspaces, this.sourceControl.reviewSnapshots, {
+      targets: (workspaceId) => {
+        const space = this.workspaces.get(workspaceId);
+        if (space.hostId !== options.hostId || space.archivedAt || space.removedAt || this.hidden(space.workId)) return [];
+        return [...this.sessions.values()].filter((session) => session.workspaceId === workspaceId && session.hostId === options.hostId && !this.hidden(session.workId, session.id)).map(({ id, purpose, provider, status }) => ({ id, purpose, provider, status }));
+      },
+      send: (id, requestId, text) => this.send(id, requestId, text, [], null, null, "queue", { activate: false }),
+      evidence: (id, requestId) => {
+        const items = this.loadItems(id), failure = items.find((item) => item.id === `error:${requestId}` || item.id === `queue-failed:${requestId}`), sent = items.find((item) => item.id === `user:${requestId}`);
+        return { receipt: store.findRequest(requestId)?.sessionId === id, queued: this.sessions.get(id)?.queued.find((q) => q.id === requestId)?.text ?? null, sent: sent?.kind === "user" ? sent.text : null, failure: failure?.kind === "notice" ? failure.text : null };
+      },
+    });
     this.documents = new Documents(store, bus, options.dataDir ?? dirname(options.managedWorksDir), options.kordoc ?? null, options.ieum ?? null, this.workspaces);
     this.engineSetup = new EngineInstaller({
       dataDir: options.dataDir ?? dirname(options.managedWorksDir),
@@ -2026,6 +2040,7 @@ export class SessionManager {
   }
 
   async shutdown() {
+    this.scmReviews.stop();
     this.schedules.stop();
     this.stopExternalWatches();
     this.flush();

@@ -30,7 +30,7 @@
 
 ## 이어서 구현할 범위
 
-이 단계는 O14/O16의 로컬 기초다. [원격 동기화](git-remote.md)에 명시적 fetch/pull/push·대상 확인·force-with-lease를, [충돌 해결](git-conflicts.md)에 실제 세 단계와 저장·스테이징·계속/취소를 연결했다. amend, 개별 행 선택·비교 기준 선택, 행 주석과 같은 작업공간 에이전트 전달, PR/CI와 기타 hosted provider를 이어서 구현한다. O14–O18 전체 또는 OS 릴리스가 완료된 것은 아니다.
+이 단계는 O14/O16의 로컬 기초다. [원격 동기화](git-remote.md)에 명시적 fetch/pull/push·대상 확인·force-with-lease를, [충돌 해결](git-conflicts.md)에 실제 세 단계와 저장·스테이징·계속/취소를 연결했다. [기준 비교](git-comparison.md)와 [행 의견·같은 작업공간 에이전트 전달](git-review-notes.md)을 연결했다. amend, 개별 행 선택, PR/CI와 기타 hosted provider를 이어서 구현한다. O14–O18 전체 또는 OS 릴리스가 완료된 것은 아니다.
 
 연구 판: `research:rr-50d34ea765b9cb6ae68640d4f4261132:6933612741a6fa4628b74439573698668f2519022bfb74f9caa194a219a8836a`.
 
