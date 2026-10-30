@@ -28,6 +28,7 @@ import { scmReviewScenario } from "./scm-review.ts";
 import { scmComparisonScenario } from "./scm-comparison.ts";
 import { githubScenario } from "./github.ts";
 import { githubActionsScenario } from "./github-actions.ts";
+import { githubDiscussionScenario } from "./github-discussion.ts";
 import { parseArgs } from "./args.ts";
 
 const { binary, outDir, only, engines } = parseArgs(process.argv.slice(2));
@@ -72,6 +73,7 @@ try {
       if (wants("scm-comparison")) await scmComparisonScenario(ctx, { binary, engines, profile: "native" });
       if (wants("github")) await githubScenario(ctx, { binary, engines, profile: "native" });
       if (wants("github-actions")) await githubActionsScenario(ctx, { binary, engines, profile: "native" });
+      if (wants("github-discussion")) await githubDiscussionScenario(ctx, { binary, engines, profile: "native" });
     } catch (error) {
       const screenshot = report.path("failure.png");
       await ctx.app.wd.screenshot(screenshot).catch(() => undefined);

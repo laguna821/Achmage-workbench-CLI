@@ -58,7 +58,8 @@ import { WorktreeWorkspaces } from "./worktree-workspaces.ts";
 import { Terminals } from "./terminals.ts";
 import { WorkspacePreparation } from "./workspace-preparation.ts";
 import { SourceControl } from "./source-control.ts";
-import { ScmReviews } from "./scm-review.ts";
+import { ScmReviews, type ScmReviewHooks } from "./scm-review.ts";
+import { GitHubFeedback } from "./github-feedback.ts";
 import { GitHubReviews } from "./github.ts";
 import { GitHubActions } from "./github-actions.ts";
 import { WorkspaceLayouts } from "./layouts.ts";
@@ -280,6 +281,7 @@ export class SessionManager {
   readonly preparation: WorkspacePreparation;
   readonly sourceControl: SourceControl;
   readonly scmReviews: ScmReviews;
+  readonly githubFeedback: GitHubFeedback;
   readonly github: GitHubReviews;
   readonly githubActions: GitHubActions;
   readonly layouts: WorkspaceLayouts;
@@ -331,7 +333,7 @@ export class SessionManager {
       if (space.hostId !== options.hostId || this.hidden(space.workId)) throw new HttpError(409, "github_workspace", "활성 로컬 작업공간에서 GitHub 작업을 진행하세요.");
     });
     this.layouts = new WorkspaceLayouts(store, this.workspaces);
-    this.scmReviews = new ScmReviews(store, this.workspaces, this.sourceControl.reviewSnapshots, {
+    const reviewHooks: ScmReviewHooks = {
       targets: (workspaceId) => {
         const space = this.workspaces.get(workspaceId);
         if (space.hostId !== options.hostId || space.archivedAt || space.removedAt || this.hidden(space.workId)) return [];
@@ -342,7 +344,9 @@ export class SessionManager {
         const items = this.loadItems(id), failure = items.find((item) => item.id === `error:${requestId}` || item.id === `queue-failed:${requestId}`), sent = items.find((item) => item.id === `user:${requestId}`);
         return { receipt: store.findRequest(requestId)?.sessionId === id, queued: this.sessions.get(id)?.queued.find((q) => q.id === requestId)?.text ?? null, sent: sent?.kind === "user" ? sent.text : null, failure: failure?.kind === "notice" ? failure.text : null };
       },
-    });
+    };
+    this.scmReviews = new ScmReviews(store, this.workspaces, this.sourceControl.reviewSnapshots, reviewHooks);
+    this.githubFeedback = new GitHubFeedback(store, this.github, this.githubActions.discussions, reviewHooks);
     this.documents = new Documents(store, bus, options.dataDir ?? dirname(options.managedWorksDir), options.kordoc ?? null, options.ieum ?? null, this.workspaces);
     this.engineSetup = new EngineInstaller({
       dataDir: options.dataDir ?? dirname(options.managedWorksDir),
@@ -2050,6 +2054,7 @@ export class SessionManager {
 
   async shutdown() {
     this.scmReviews.stop();
+    this.githubFeedback.stop();
     this.githubActions.stop();
     await this.github.close();
     await this.githubActions.drain();

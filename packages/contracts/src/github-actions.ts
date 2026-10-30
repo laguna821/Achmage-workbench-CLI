@@ -1,3 +1,4 @@
+import type { GitHubDiscussionOperation } from "./github-discussion.ts";
 export type GitHubMergeMethod = "merge" | "squash" | "rebase";
 export type GitHubActionInput =
   | { kind: "create"; title: string; body: string; baseBranch: string; draft: boolean; maintainerCanModify: boolean }
@@ -5,7 +6,8 @@ export type GitHubActionInput =
   | { kind: "close" | "reopen" | "draft" | "ready" | "auto-disable" }
   | { kind: "enqueue" }
   | { kind: "merge" | "auto-enable"; method: GitHubMergeMethod }
-  | { kind: "rerun"; failedOnly: boolean; checks: string[] };
+  | { kind: "rerun"; failedOnly: boolean; checks: string[] }
+  | { kind: "discussion"; discussionId: string; revision: string; operation: GitHubDiscussionOperation };
 export type GitHubDraft = { version: number; title: string; body: string; baseBranch: string; draft: boolean; maintainerCanModify: boolean };
 export type GitHubTemplate = { path: string; body: string; commit: string };
 export type GitHubStackLayer = { number: number; title: string; position: number; oid: string; state: string; draft: boolean; checks: string; review: string };
@@ -20,7 +22,7 @@ export type GitHubActionContext = {
 export type GitHubActionPreview = {
   id: string; contextId: string; expiresAt: number; action: GitHubActionInput; actor: string; repo: string;
   number: number | null; headRepo: string; headBranch: string; headOid: string; baseBranch: string;
-  effects: string[]; notices: string[];
+  effects: string[]; notices: string[]; evidence?: string[];
 };
 export type GitHubEffect = {
   id: string; label: string; phase: "prepared" | "sending" | "accepted" | "pending" | "complete" | "failed" | "uncertain" | "changed";

@@ -1,6 +1,7 @@
 import type { GitHubActionInput, GitHubMergeMethod } from "@workbench/contracts";
 import { HttpError } from "./errors.ts";
 import { object } from "./github-data.ts";
+import { discussionId, discussionOperation } from "./github-discussion-data.ts";
 
 export const actionQuery = `query WorkbenchActions($owner:String!,$repo:String!,$headOwner:String!,$headRepo:String!,$ref:String!,$number:Int!,$hasPull:Boolean!) {
   viewer { id login }
@@ -30,6 +31,7 @@ export function branchName(value: unknown) {
 }
 export function actionInput(raw: unknown): GitHubActionInput {
   const value = object(raw), kind = value.kind;
+  if (kind === "discussion") return { kind, discussionId: discussionId(value.discussionId), revision: discussionId(value.revision), operation: discussionOperation(value.operation) };
   if (kind === "create" || kind === "edit") {
     const text = { title: actionText(value.title, 1024, "제목", true), body: actionText(value.body, 65536, "설명"), baseBranch: branchName(value.baseBranch) };
     if (kind === "edit") return { kind, ...text };
@@ -47,7 +49,7 @@ export function actionInput(raw: unknown): GitHubActionInput {
   }
   throw bad("지원하지 않는 PR 작업입니다.");
 }
-export const actionLabels: Record<GitHubActionInput["kind"], string> = { create: "PR 만들기", edit: "PR 제목·설명·기준 수정", close: "PR 닫기", reopen: "PR 다시 열기", draft: "초안으로 전환", ready: "검토 준비 완료", "auto-disable": "자동 병합 끄기", "auto-enable": "자동 병합 켜기", merge: "PR 병합", enqueue: "병합 대기열에 등록", rerun: "검사 재실행" };
+export const actionLabels: Record<GitHubActionInput["kind"], string> = { create: "PR 만들기", edit: "PR 제목·설명·기준 수정", close: "PR 닫기", reopen: "PR 다시 열기", draft: "초안으로 전환", ready: "검토 준비 완료", "auto-disable": "자동 병합 끄기", "auto-enable": "자동 병합 켜기", merge: "PR 병합", enqueue: "병합 대기열에 등록", rerun: "검사 재실행", discussion: "리뷰 대화 변경" };
 export function mutation(name: string, input: object) {
   const type = name[0]!.toUpperCase() + name.slice(1) + "Input";
   // Fixed operation names from the host, never an interpolated user string.

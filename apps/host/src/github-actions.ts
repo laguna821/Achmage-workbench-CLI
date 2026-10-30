@@ -7,11 +7,12 @@ import { array, integer, object, oid, sameRepo, string } from "./github-data.ts"
 import { actionInput, actionLabels, actionQuery, actionText, branchName, mutation } from "./github-action-data.ts";
 import { HttpError } from "./errors.ts";
 import { scmHash } from "./scm-status.ts";
+import { GitHubDiscussions, type DiscussionPlan } from "./github-discussions.ts";
 
 type Snapshot = { data: GitHubActionContext; actorId: string; repoId: string; headRepoId: string; pullId: string; updatedAt: string; baseOid: string; remoteHead: string; enableAuto: boolean; disableAuto: boolean; mergeState: string; stamp: string };
 type CI = { id: string; label: string; repo: string; check: number; run: number | null; attempt: number; oid: string; allowedOids: string[]; signature: string; lease: string };
-type Prepared = { data: GitHubActionPreview; snapshot: Snapshot; ci: CI[]; existingNumbers: number[] };
-type Record = { job: GitHubActionJob; snapshot: Snapshot; ci: CI[]; scope: string; fingerprint: string; asyncIds: { [effect: string]: string }; existingNumbers: number[]; createdNumber: number | null };
+type Prepared = { data: GitHubActionPreview; snapshot: Snapshot; ci: CI[]; existingNumbers: number[]; discussion?: DiscussionPlan };
+type Record = { job: GitHubActionJob; snapshot: Snapshot; ci: CI[]; scope: string; fingerprint: string; asyncIds: { [effect: string]: string }; existingNumbers: number[]; createdNumber: number | null; discussion?: DiscussionPlan };
 const prefix = "github-action:v1:";
 const hash = (value: unknown) => scmHash(JSON.stringify(value));
 const copy = <T>(value: T): T => JSON.parse(JSON.stringify(value));
@@ -22,12 +23,14 @@ const writable = new Set(["WRITE", "MAINTAIN", "ADMIN"]);
 
 /** All externally visible effects are journaled before transmission. Recovery only reads. */
 export class GitHubActions {
+  readonly discussions: GitHubDiscussions;
   private store: Store; private reviews: GitHubReviews; private writer: GitHubWriter; private assertActive: (workspaceId: string) => void;
   private contexts = new Map<string, Snapshot>(); private previews = new Map<string, Prepared>();
   private running = new Map<string, Promise<void>>(); private reconciling = new Map<string, Promise<GitHubActionJob>>();
   private stopped = false;
   constructor(store: Store, reviews: GitHubReviews, assertActive: (workspaceId: string) => void, writer = reviews.reader as typeof reviews.reader & GitHubWriter) {
     this.store = store; this.reviews = reviews; this.writer = writer; this.assertActive = assertActive;
+    this.discussions = new GitHubDiscussions(store, reviews, (id) => this.active(id));
     for (const record of this.records()) {
       let changed = false;
       for (const effect of record.job.effects) {
@@ -119,7 +122,11 @@ export class GitHubActions {
   async prepare(workspaceId: string, contextId: string, raw: unknown) {
     const s = this.context(workspaceId, contextId), action = actionInput(raw), d = s.data, ci: CI[] = [], existingNumbers: number[] = [];
     await this.current(s);
-    if (action.kind === "create") {
+    let discussion: DiscussionPlan | undefined;
+    if (action.kind === "discussion") {
+      if (!d.number) throw fail("리뷰할 PR을 선택하세요.");
+      discussion = await this.discussions.prepare(workspaceId, d, action.discussionId, action.revision, action.operation);
+    } else if (action.kind === "create") {
       if (d.number) throw fail("이미 연결된 PR이 있습니다."); await this.ref(d.repo, action.baseBranch); if (sameRepo(d.repo, d.headRepo) && action.baseBranch === d.headBranch) throw fail("작업 브랜치와 기준 브랜치는 달라야 합니다.");
       const previous = array(await this.reviews.reader.json(this.creationLookup(d, action.baseBranch), undefined, true));
       if (previous.length >= 100) throw fail("같은 브랜치의 이전 PR이 너무 많아 생성 복구 기준을 확정하지 못했습니다.");
@@ -151,12 +158,13 @@ export class GitHubActions {
         if (!ci.length) throw fail("완료된 재실행 대상이 없습니다. 검사 상태를 새로고침하세요.");
       }
     }
-    const effects = ci.length ? ci.map((item) => `${item.label} · ${item.run ? `${item.attempt}회차 다음 실행` : "검사 다시 요청"}`) : [actionLabels[action.kind]];
+    const effects = ci.length ? ci.map((item) => `${item.label} · ${item.run ? `${item.attempt}회차 다음 실행` : "검사 다시 요청"}`) : [discussion?.label ?? actionLabels[action.kind]];
     if ((action.kind === "merge" || action.kind === "enqueue") && d.stack) { const selected = d.stack.layers.find((layer) => layer.number === d.number)!; effects[0] += ` · 스택: ${d.stack.layers.filter((layer) => layer.position <= selected.position && layer.state === "OPEN").map((layer) => `#${layer.number} ${layer.oid.slice(0, 12)}`).join(", ")}`; }
     const notices = [...d.notices];
-    if (["create", "edit", "close", "reopen", "draft", "ready", "auto-disable"].includes(action.kind)) notices.push("GitHub의 이 작업에는 커밋 조건부 쓰기가 없습니다. 전송 전후 상태를 확인하고, 도중에 바뀌면 별도로 표시합니다.");
+    if (["create", "edit", "close", "reopen", "draft", "ready", "auto-disable", "discussion"].includes(action.kind)) notices.push("GitHub의 이 작업에는 커밋 조건부 쓰기가 없습니다. 전송 전후 상태를 확인하고, 도중에 바뀌면 별도로 표시합니다.");
     const data: GitHubActionPreview = { id: randomUUID(), contextId, expiresAt: Date.now() + 5 * 60000, action, actor: d.actor, repo: d.repo, number: d.number, headRepo: d.headRepo, headBranch: d.headBranch, headOid: d.headOid, baseBranch: action.kind === "create" || action.kind === "edit" ? action.baseBranch : d.baseBranch, effects, notices };
-    this.remember(this.previews, data.id, { data, snapshot: s, ci, existingNumbers }); return copy(data);
+    if (discussion) data.evidence = discussion.evidence;
+    this.remember(this.previews, data.id, { data, snapshot: s, ci, existingNumbers, discussion }); return copy(data);
   }
   start(workspaceId: string, previewId: string, requestId: string) {
     this.active(workspaceId); if (!/^[\w-]{8,100}$/.test(requestId)) throw new HttpError(400, "github_request", "요청 ID를 확인하세요.");
@@ -166,7 +174,7 @@ export class GitHubActions {
     if (existing) { if (existing.job.workspaceId !== workspaceId || existing.job.preview.id !== previewId) throw fail("다른 작업에 사용한 요청 ID입니다."); return copy(existing.job); }
     const p = this.previews.get(previewId); if (!p || p.snapshot.data.workspaceId !== workspaceId || p.data.expiresAt < Date.now()) throw fail("실행할 작업을 다시 확인하세요.");
     const d = p.snapshot.data, scope = hash([p.snapshot.repoId, d.number ?? [p.snapshot.headRepoId, d.headBranch, p.data.baseBranch]]);
-    const action = p.data.action.kind === "rerun" ? { kind: "rerun", failedOnly: p.data.action.failedOnly } : p.data.action;
+    const action = p.data.action.kind === "rerun" ? { kind: "rerun", failedOnly: p.data.action.failedOnly } : p.data.action.kind === "discussion" ? { kind: "discussion", operation: p.data.action.operation, baseline: p.discussion?.baseline, before: p.discussion?.before } : p.data.action;
     const fingerprint = hash([scope, p.snapshot.stamp, action, p.ci.map((item) => item.lease).sort()]);
     const record = this.store.transaction(() => {
       const records = this.records(), same = records.find((item) => item.fingerprint === fingerprint && !["failed", "changed"].includes(item.job.phase));
@@ -174,13 +182,14 @@ export class GitHubActions {
       if (records.some((item) => item.scope === scope && item.job.effects.some((effect) => ["prepared", "sending", "pending", "uncertain"].includes(effect.phase)))) throw fail("이 PR의 이전 요청 결과를 먼저 확인하세요.", "github_action_busy");
       for (const item of p.ci) if (records.some((record) => record.ci.some((old) => old.lease === item.lease && !["failed", "changed"].includes(record.job.effects.find((effect) => effect.id === old.id)?.phase ?? "uncertain")))) throw fail("같은 검사 회차의 재실행을 이미 요청했습니다. 새 회차를 확인한 뒤 진행하세요.", "github_ci_duplicate");
       const now = Date.now(), job: GitHubActionJob = { id: randomUUID(), requestId, workspaceId, preview: copy(p.data), phase: "running", effects: p.data.effects.map((label, i) => ({ id: p.ci[i]?.id ?? randomUUID(), label, phase: "prepared", detail: "전송 준비" })), detail: "", createdAt: now, updatedAt: now };
-      const next: Record = { job, snapshot: copy(p.snapshot), ci: copy(p.ci), scope, fingerprint, asyncIds: {}, existingNumbers: p.existingNumbers, createdNumber: null }; this.save(next); this.store.setMeta(requestKey, JSON.stringify({ workspaceId, previewId, id: job.id })); return next;
+      const next: Record = { job, snapshot: copy(p.snapshot), ci: copy(p.ci), scope, fingerprint, asyncIds: {}, existingNumbers: p.existingNumbers, createdNumber: null, ...(p.discussion ? { discussion: copy(p.discussion) } : {}) }; this.save(next); this.store.setMeta(requestKey, JSON.stringify({ workspaceId, previewId, id: job.id })); return next;
     });
     if (record.job.phase === "running" && !this.running.has(record.job.id)) { const promise = this.run(record).finally(() => this.running.delete(record.job.id)); this.running.set(record.job.id, promise); }
     return copy(record.job);
   }
   private request(record: Record, effect: GitHubEffect): GitHubWrite {
     const action = record.job.preview.action, s = record.snapshot, d = s.data, baseInput = { pullRequestId: s.pullId, clientMutationId: `${record.job.id}:${effect.id}` };
+    if (action.kind === "discussion") { if (!record.discussion) throw fail("리뷰 실행 근거가 없습니다."); return this.discussions.request(record.discussion, baseInput.clientMutationId); }
     if (action.kind === "rerun") { const ci = record.ci.find((item) => item.id === effect.id)!; return { method: "POST", endpoint: ci.run ? `repos/${ci.repo}/actions/runs/${ci.run}/${action.failedOnly ? "rerun-failed-jobs" : "rerun"}` : `repos/${ci.repo}/check-runs/${ci.check}/rerequest` }; }
     if (action.kind === "merge" || action.kind === "enqueue") return { method: "PUT", endpoint: `repos/${d.repo}/pulls/${d.number}/merge-async`, body: { sha: d.headOid, merge_action: action.kind === "enqueue" ? "merge_queue" : "direct_merge", ...(action.kind === "merge" ? { merge_method: action.method } : {}) } };
     let name: string, input: object;
@@ -203,6 +212,7 @@ export class GitHubActions {
         try {
           await this.current(record.snapshot);
           const action = record.job.preview.action;
+          if (record.discussion) await this.discussions.current(record.discussion);
           if (action.kind === "create" || action.kind === "edit") await this.ref(record.snapshot.data.repo, action.baseBranch);
           const ci = record.ci.find((item) => item.id === effect.id);
           if (ci) { const state = await this.ciState(ci); if (state.signature !== ci.signature) throw fail("검사 실행 회차·상태가 바뀌었습니다. 전송하지 않았습니다."); }
@@ -218,6 +228,7 @@ export class GitHubActions {
             if (!payload) throw new GitHubWriteError("GitHub 변경 응답의 요청 식별자를 확인하지 못했습니다.", false);
             if (action.kind === "create") { record.createdNumber = integer(object(payload.pullRequest).number); if (!record.createdNumber) throw new GitHubWriteError("생성 응답의 PR 번호를 확인하지 못했습니다.", false); }
           }
+          if (record.discussion) this.discussions.acknowledge(record.discussion, response.value);
           effect.phase = "accepted"; effect.detail = "GitHub 응답을 받았습니다. 실제 상태를 확인합니다."; this.save(record);
           if (action.kind === "merge" || action.kind === "enqueue") { this.mergeResult(record, effect, response.value); if ((effect as GitHubEffect).phase === "complete") await this.reconcileEffect(record, effect); }
           else if (action.kind === "rerun") { effect.phase = "complete"; effect.outcome = "rerun"; effect.detail = "GitHub가 재실행 요청을 수락했습니다. 새 실행의 성공 여부는 검사 화면에서 확인하세요."; }
@@ -261,6 +272,7 @@ export class GitHubActions {
   }
   private async reconcileEffect(record: Record, effect: GitHubEffect) {
     const action = record.job.preview.action, old = record.snapshot, d = old.data, ci = record.ci.find((item) => item.id === effect.id);
+    if (record.discussion) { await this.discussions.reconcile(record.discussion, effect); return; }
     if (ci) {
       const state = await this.ciState(ci);
       if (ci.run ? state.attempt > ci.attempt : state.signature !== ci.signature && ["queued", "in_progress"].includes(state.status)) { effect.phase = "complete"; effect.outcome = "rerun"; effect.detail = "원격에서 새 실행을 확인했습니다. 다른 사용자의 실행일 수도 있어 요청의 인과관계까지 보장하지 않습니다."; }

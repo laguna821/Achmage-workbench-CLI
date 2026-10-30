@@ -62,8 +62,9 @@ export class GhReader implements GitHubReader, GitHubWriter {
     if (this.blockedUntil > this.now()) throw new HttpError(429, "github_rate_limit", `GitHub 요청 제한으로 ${new Date(this.blockedUntil).toLocaleTimeString()} 이후 다시 확인할 수 있습니다.`);
     if (writeMethod) {
       const graphql = endpoint === "graphql" && writeMethod === "POST" && /^mutation[\s({]/.test(String((body as { query?: unknown } | undefined)?.query));
-      const rest = writeMethod === "PUT" && /^repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pulls\/\d+\/merge-async$/.test(endpoint) || writeMethod === "POST" && /^repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/(?:actions\/runs\/\d+\/rerun(?:-failed-jobs)?|check-runs\/\d+\/rerequest)$/.test(endpoint);
-      if (!graphql && !rest) throw new Error("허용되지 않은 GitHub 변경 경로입니다.");
+      const rest = writeMethod === "PUT" && /^repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pulls\/\d+\/merge-async$/.test(endpoint) || writeMethod === "POST" && /^repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/(?:actions\/runs\/\d+\/rerun(?:-failed-jobs)?|check-runs\/\d+\/rerequest|pulls\/\d+\/comments(?:\/\d+\/replies)?)$/.test(endpoint);
+      const removeReviewer = writeMethod === "DELETE" && /^repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pulls\/\d+\/requested_reviewers$/.test(endpoint);
+      if (!graphql && !rest && !removeReviewer) throw new Error("허용되지 않은 GitHub 변경 경로입니다.");
     } else if (body ? endpoint !== "graphql" || !/^query[\s({]/.test(String((body as { query?: unknown }).query)) : !/^repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\/|\?|$)/.test(endpoint)) throw new Error("허용되지 않은 GitHub 읽기 경로입니다.");
     if (/[\r\n\0{}]/.test(endpoint) || endpoint.split("?")[0]!.split("/").some((part) => part === "." || part === "..")) throw new Error("잘못된 GitHub 읽기 경로입니다.");
     if (rawLog && !/^repos\/[^/]+\/[^/]+\/actions\/jobs\/\d+\/logs$/.test(endpoint)) throw new Error("연결된 Actions 작업 로그만 읽을 수 있습니다.");

@@ -23,3 +23,19 @@
 .scm-gh-binding { padding: 8px 16px; border-bottom: 1px solid var(--line); flex-shrink: 0; font-size: 12px; }.scm-gh-binding summary { cursor: pointer; overflow-wrap: anywhere; }.scm-gh-targets { display: flex; gap: 12px; flex-wrap: wrap; padding: 10px 0; }.scm-gh-targets fieldset { flex: 1; min-width: 220px; display: grid; gap: 7px; border: 1px solid var(--line); }.scm-gh-targets label { overflow-wrap: anywhere; }
 .scm-gh-actions { display: flex; gap: 12px; padding: 10px 16px; flex-wrap: wrap; align-items: center; flex-shrink: 0; }.scm-gh-actions input { width: 150px; padding: 5px; color: inherit; background: var(--bg); border: 1px solid var(--line); }.scm-gh-actions small { color: var(--muted); }.scm-gh-pull { padding: 0 16px 10px; flex-shrink: 0; }.scm-gh-pull h3 { margin: 4px 0; overflow-wrap: anywhere; }.scm-gh-pull p { margin: 5px 0; font-size: 12px; }.scm-gh-pull small { color: var(--muted); }.scm-gh-markdown { max-height: 230px; overflow: auto; overflow-wrap: anywhere; font-size: 13px; }.scm-gh-markdown pre { overflow: auto; }.scm-gh-empty { padding: 16px; }.scm-gh-empty button { margin: 5px; }.scm-github > .scm-body { flex: 1 0 280px; }.scm-gh-file { width: 100%; display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; text-align: left; color: inherit; background: transparent; border: 0; border-bottom: 1px solid var(--line); cursor: pointer; font: inherit; font-size: 12px; }.scm-gh-file:hover,.scm-gh-file.selected { background: var(--hover); }.scm-gh-file small { color: var(--muted); font-size: 11px; }.scm-gh-file span { overflow-wrap: anywhere; }
 .scm-gh-checks { overflow: auto; padding: 12px 16px; }.scm-gh-check-list { display: grid; gap: 8px; }.scm-gh-check { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; border: 1px solid var(--line); padding: 10px; border-radius: 6px; font-size: 12px; }.scm-gh-check strong { flex: 1; min-width: 160px; overflow-wrap: anywhere; }.scm-gh-outcome.failure,.scm-gh-outcome.error,.scm-gh-outcome.action_required,.scm-gh-outcome.timed_out { color: #c65039; }.scm-gh-outcome.success { color: #238c51; }.scm-gh-details { padding: 12px 0; border-bottom: 1px solid var(--line); }.scm-gh-log pre { max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); padding: 12px; font: 12px/1.5 monospace; }
+.scm-gh-discussion { padding: 12px; min-width: 0; }
+.scm-gh-discussion[hidden] { display: none; }
+.scm-gh-discussion pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; }
+.scm-gh-discussion header, .scm-gh-comment-actions, .scm-gh-reactions, .scm-gh-inline-files { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.scm-gh-discussion header time { color: var(--muted); font-size: 11px; }
+.scm-gh-comment, .scm-gh-thread, .scm-gh-discussion-composer, .scm-gh-reviewers, .scm-gh-feedback, .scm-gh-discussion-job, .scm-gh-discussion-preview, .scm-gh-inline-editor { border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin: 10px 0; min-width: 0; }
+.scm-gh-thread > header { margin-bottom: 8px; }
+.scm-gh-thread .scm-gh-comment { border: 0; border-top: 1px solid var(--line); border-radius: 0; }
+.scm-gh-discussion-composer > label, .scm-gh-reviewers > label { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.scm-gh-discussion textarea { box-sizing: border-box; width: 100%; resize: vertical; min-height: 100px; }
+.scm-gh-discussion fieldset { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+.scm-gh-inline-range { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.scm-gh-inline-range input { width: 85px; }
+.scm-gh-inline-editor .scm-lines { min-width: 0; max-height: 380px; overflow: auto; margin-top: 8px; }
+.scm-gh-discussion-preview { border-color: var(--accent); }
+.scm-gh-reactions [aria-pressed="true"] { background: var(--hover); outline: 1px solid var(--accent); }
