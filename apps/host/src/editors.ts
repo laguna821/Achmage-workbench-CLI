@@ -10,6 +10,8 @@ import { MIME, readBody, sendJson, serveStatic } from "./http.ts";
 import { decodeHwpSave, hwpFormat, hwpTabs, HWP_MAX_BYTES, openHwpBytes, prepareHwpSave } from "./hwp-codec.ts";
 import { OFFICE_IMAGE_MAX_BYTES, readOfficeAsset, saveOfficeImage } from "./office-assets.ts";
 import { buildPreviewDocument } from "../../../third_party/ieumoffice/text-assets/preview-document.ts";
+import { PDF_MAX_BYTES, PDF_REQUEST_MAX_BYTES } from "../../../packages/contracts/src/pdf.ts";
+import { decodePdfRequest } from "./pdf-codec.ts";
 
 // The office editors (IeumOffice's editor screens, apps/office) run on their own origin, a second
 // port on 127.0.0.1. Their code is third-party and reads documents from anywhere, so it never
@@ -18,7 +20,7 @@ import { buildPreviewDocument } from "../../../third_party/ieumoffice/text-asset
 
 /** Which editor page edits a format, if any. */
 export function officeEditorKind(format: DocFormat): OfficeEditorKind | null {
-  return format === "docx" ? "docs" : format === "pptx" ? "slides" : format === "xlsx" ? "sheets" : format === "hwp" || format === "hwpx" ? "hwp" : format === "markdown" || format === "html" ? format : null;
+  return format === "docx" ? "docs" : format === "pptx" ? "slides" : format === "xlsx" ? "sheets" : format === "hwp" || format === "hwpx" ? "hwp" : format === "markdown" || format === "html" || format === "pdf" ? format : null;
 }
 
 /** Tokens that open one document each, for as long as the gateway runs (the most recent ones). */
@@ -150,6 +152,51 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
           }
         }
         throw new HttpError(405, "method_not_allowed", "허용되지 않은 편집기 요청입니다.");
+      }
+      const pdf = /^\/api\/artifacts\/([^/]+)\/pdf\/([a-z-]+)$/.exec(path);
+      if (pdf) {
+        const [, id, operation] = pdf;
+        if (!grants.allows(bearer, id!)) throw new HttpError(401, "unauthorized", "이 문서를 열 권한이 없습니다.");
+        const artifact = documents.check(id!);
+        if (artifact.format !== "pdf") throw new HttpError(415, "not_pdf", "PDF 문서가 아닙니다.");
+        if (method !== "POST") throw new HttpError(405, "method_not_allowed", "허용되지 않은 PDF 요청입니다.");
+        const revision = Number(url.searchParams.get("revision"));
+        if (!Number.isSafeInteger(revision) || revision < 1 || revision > artifact.revision) throw new HttpError(400, "revision_not_found", "PDF 문서 판이 올바르지 않습니다.");
+        const writing = ["save", "blank-page", "page-size", "crop"].includes(operation!);
+        if (writing) {
+          documents.registry.assertWrite(id!, grants.access(bearer!));
+          if (revision !== artifact.revision) throw new HttpError(409, "revision_conflict", "PDF 문서의 판이 바뀌었습니다. 편집을 보관한 뒤 새 판을 확인해 주세요.");
+          if (artifact.diskState === "changed") throw new HttpError(409, "disk_changed", "PDF 파일이 외부에서 바뀌었습니다. 편집을 보관한 뒤 원문을 확인해 주세요.");
+        }
+        const { request, source } = decodePdfRequest(await readBody(req, PDF_MAX_BYTES + PDF_REQUEST_MAX_BYTES + 4));
+        if (request.path !== undefined && request.path !== artifact.path) throw new HttpError(403, "pdf_path", "열린 PDF만 처리할 수 있습니다.");
+        const engine = await import("./pdf-ops.mjs");
+        if (operation === "fonts") return sendJson(res, 200, engine.listEditFonts());
+        if (operation === "can-draw") {
+          if (typeof request.text !== "string" || request.text.length > 100000 || (request.font !== undefined && (typeof request.font !== "string" || request.font.length > 200))) throw new HttpError(422, "invalid_pdf_request", "글꼴 확인 요청이 올바르지 않습니다.");
+          return sendJson(res, 200, engine.canDrawText(request.text, request.font as string | undefined, request.bold === true, request.italic === true));
+        }
+        // A restored draft is already a complete PDF. Never apply its old edits to a newly
+        // adopted revision: the caller sends these bytes until a successful save/reload.
+        const original = readFileSync(documents.revisionPath(id!, revision));
+        if (source || writing || operation === "recover") await engine.inspectPdf(original);
+        const bytes = source ?? original;
+        if (operation === "save" || operation === "recover") {
+          const { bytes: edited, ...skips } = await engine.editPdf(bytes, request);
+          if (operation === "recover") {
+            if (Object.values(skips).some((items) => items.length)) throw new HttpError(422, "pdf_recovery_incomplete", "일부 편집을 복구본에 담지 못했습니다. 이 탭을 열어 둔 채 저장 결과를 확인해 주세요.");
+            res.writeHead(200, { "content-type": "application/pdf", "cache-control": "no-store" }); res.end(edited); return;
+          }
+          const saved = documents.savePdfBytes(id!, revision, edited, grants.access(bearer!));
+          return sendJson(res, 200, { revision: saved.revision, ...skips });
+        }
+        if (writing) {
+          const edited = await engine.transformPdf(bytes, operation!, request);
+          await engine.inspectPdf(edited);
+          const saved = documents.savePdfBytes(id!, revision, edited, grants.access(bearer!));
+          return sendJson(res, 200, { revision: saved.revision });
+        }
+        return sendJson(res, 200, await engine.queryPdf(bytes, operation!, request));
       }
       const hwp = /^\/api\/artifacts\/([^/]+)\/hwp\/(open|tabs|save|repair)$/.exec(path);
       if (hwp) {

@@ -100,7 +100,7 @@ export default function DocumentView({
 }) {
   const { lookOf } = useAppearance();
   const artifact = state.artifacts[artifactId] as Artifact | undefined;
-  const canEditFormat = Boolean(artifact && artifact.format !== "pdf");
+  const canEditFormat = Boolean(artifact);
   const lease = useDocumentSession(rootApi, artifact ? artifactId : null, session?.id ?? null, canEditFormat);
   const api = lease.api;
   const references = useDocumentReferences(rootApi, artifactId, onToast);
@@ -122,7 +122,7 @@ export default function DocumentView({
   const hangul = artifact?.format === "hwpx" || artifact?.format === "hwp";
   const office = artifact ? isOfficeFormat(artifact.format) : false;
   // Document screens built from IeumOffice, inside the central Workbench tab.
-  const wordEditor = artifact?.format === "docx" || artifact?.format === "pptx" || artifact?.format === "xlsx" || hangul;
+  const wordEditor = artifact?.format === "docx" || artifact?.format === "pptx" || artifact?.format === "xlsx" || artifact?.format === "pdf" || hangul;
   const richTextEditor = artifact?.format === "markdown" || artifact?.format === "html";
   const [mode, setMode] = useState<"edit" | "preview" | "split" | "render" | "source" | "pages" | "rich">(
     hangul && uiState?.mode === "pages" ? "edit" : uiState?.mode && ["edit", "preview", "split", "render", "source", "pages", "rich"].includes(uiState.mode) ? uiState.mode as "edit" | "preview" | "split" | "render" | "source" | "pages" | "rich" : richTextEditor ? "rich" : wordEditor ? "edit" : office ? "pages" : "edit",
@@ -676,7 +676,7 @@ export default function DocumentView({
             <div className="segmented small" role="radiogroup" aria-label="보기">
               {(["edit", "preview"] as const).map((value) => (
                 <button key={value} type="button" role="radio" aria-checked={mode === value} className={mode === value ? "active" : ""} onClick={() => void changeMode(value)}>
-                  {value === "edit" ? "편집" : "글 보기"}
+                  {value === "edit" ? "편집" : artifact.format === "pdf" ? "미리보기" : "글 보기"}
                 </button>
               ))}
             </div>

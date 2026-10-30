@@ -510,6 +510,12 @@ export class Documents {
     return this.saveEditedBytes(artifactId, expectedRevision, data, access);
   }
 
+  /** Only the PDF codec route calls this, after the original engine verifies the result. */
+  savePdfBytes(artifactId: string, expectedRevision: number, data: Buffer, access?: DocumentAccess) {
+    if (this.get(artifactId).format !== "pdf") throw new HttpError(415, "not_pdf", "PDF 문서가 아닙니다.");
+    return this.saveEditedBytes(artifactId, expectedRevision, data, access);
+  }
+
   private saveEditedBytes(artifactId: string, expectedRevision: number, data: Buffer, access?: DocumentAccess) {
     this.registry.assertWrite(artifactId, access);
     const artifact = this.check(artifactId);

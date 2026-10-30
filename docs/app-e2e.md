@@ -73,7 +73,9 @@ G3e4에서 `github-discussion`에 응답 유실 뒤 댓글 외부 수정 → 새
 
 `hwp`는 실제 파일 메뉴의 PDF·다른 이름 저장도 검사한다. 미저장 키 입력을 PDF와 사본에 포함하고 원본 바이트를 유지해야 한다. `pdfinfo`/`pdftotext`(Poppler)로 A4·한글·현재 내용을 읽는다. 추출 텍스트의 줄바꿈만 정규화한다. 새 사본의 내부 편집기 준비까지 기다린 뒤 화면을 남긴다. 마지막 인쇄는 실제 `GtkPrintUnixDialog`를 전용 GTK 모듈로 캡처하고 Cancel 응답을 보낸 후 정적 벡터 미리보기를 확인한다. 프린터로 인쇄하지 않으며 출력 성공을 흉내 내지 않는다. GTK 프로브는 `--only=hwp`의 하네스 자식 프로세스에서만 활성화한다.
 
-Tauri 패키징 전 `clean-web.mjs`는 Word/Slides/Sheets/HWP/studio/design 진입 파일을 모두 확인한다. 웹 단독 Vite 빌드가 Office 리소스를 지웠다면 전체 `npm run build` 후 Tauri를 빌드해야 한다.
+`--only=pdf-office`는 원본 PDF.js 화면과 텍스트 레이어, 실제 글자 삽입 UI/글꼴 확인/저장, 페이지 회전·빈 페이지 추가, 미리보기 전환과 재열기를 검사한다. 다른 구조의 외부 PDF와 충돌시킨 뒤 새로고침으로 실제 PDF 복구본을 열고, 명시적 충돌 해결이 외부 판을 보존하면서 복구본 전체를 새 판으로 저장하는지 확인한다. 모델·Electron·PDFCraft 명령을 실행하지 않는다. 현재 Linux **16/16**이며 서명/영구 가림/출력/전체 공유 서비스나 다른 OS 인수 검증을 대신하지 않는다.
+
+Tauri 패키징 전 `clean-web.mjs`는 Word/Slides/Sheets/HWP/Markdown/HTML/PDF/studio/design 진입 파일과 PDF 런타임 manifest를 모두 확인한다. 웹 단독 Vite 빌드가 Office 리소스를 지웠다면 전체 `npm run build` 후 Tauri를 빌드해야 한다.
 
 Linux에서 Broadway는 파일로 보이지 않는 추상 UNIX 소켓을 사용할 수 있으므로 실제 연결로 준비 상태를 판별한다. 설정 저장은 화면이 닫히는 시점보다 늦을 수 있어 API의 영속 상태를 기다린다.
 

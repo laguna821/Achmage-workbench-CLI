@@ -14,7 +14,9 @@
     "@workbench/provider-codex": "0.2.2",
     "cfb": "1.2.2",
     "diff": "^9.0.0",
+    "jpeg-js": "0.4.4",
     "jszip": "3.10.1",
+    "pngjs": "7.0.0",
     "yaml": "^2.9.1"
   }
 }

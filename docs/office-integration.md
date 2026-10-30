@@ -36,8 +36,20 @@ PNG/JPEG/GIF 선택·붙여넣기 저장과 로컬 그림 읽기 브리지를 �
 
 연구 판: `research:rr-8304c87c1ea63f23530f55605bd002f7:68995e88a4c2037d47eb31d190bb3d8612c78e80473a9636b9eeb7ef2bdb7b9b`. 증거: `implementation-20261030/native-text-assets-first/results.json`, `/tmp/wb-office-assets-tests-fixed.log`, `/tmp/wb-office-assets-types-final.log`. 원본 순수 모듈은 `scripts/vendor-text-assets.mjs --check`로 출처와 내용 해시를 검증한다.
 
+## PDF 원본 화면·편집 엔진·문서 판 연결
+
+원본 이음 PDF renderer와 preload를 `/office/pdf.html`로 빌드해 문서의 `편집`에서 연다. PDF.js 화면·검색·주석·양식 UI를 사용하고, 저장은 원본 pdf-lib/PDFium 코드가 처리한다. Electron `nativeImage`가 맡던 PNG/JPEG와 bitmap 처리는 Node 코덱으로 교체했다. PDFium/HarfBuzz WASM의 실제 버전·SHA를 `third_party/ieumoffice/pdf-runtime.json`에 고정하고 호스트에서 검증한다. PDF.js의 CMap·표준 글꼴·WASM과 엔진 라이선스를 함께 배포한다.
+
+저장은 원본 엔진의 저장 후 글자·그림 재검증, 적용하지 못한 편집 보고까지 재사용한다. 엔진은 전용 임시 파일만 쓰며 최종 문서 경로는 Workbench가 writer lease·기준 판·디스크 변경을 다시 검사한 뒤 쓴다. 변경 없는 사본은 바이트 그대로 유지한다. 주석 작성자 `/T` 등 기존 파일 데이터를 브랜드 이름으로 바꾸지 않는다. 페이지 크기·자르기·빈 페이지의 즉시 저장도 같은 문서 이력을 거친다.
+
+복구본은 미저장 편집을 반영한 실제 PDF와 기준 판이다. 원본을 쓰지 않고 IndexedDB에 보관한다. 암호화된 PDF의 편집·복구본 작성은 서버에서도 거절한다. 명시적 충돌 해결에서는 복구 PDF 전체를 새 판으로 저장하며, 구조가 달라진 외부 PDF에 이전 페이지 번호의 편집 명령을 다시 적용하지 않는다. 기존 외부 판은 이력에 남는다. 영구 가림·주석 제거·임의 `targetPath`는 일반 저장 경로에서 거절한다.
+
+**엔진/HTTP/기존 편집기 검사 17/17, 실제 Linux Tauri `pdf-office` 16/16**. 실제 검색 가능한 글자 삽입·폰트 확인, PNG 반투명과 JPEG 처리, 주석 작성자·양식 값, 회전/재정렬/삭제/빈 페이지/자르기/크기 변경, 읽기 권한·만료한 편집권·외부 판 충돌을 검사했다. native 검사는 원본 UI의 글자 삽입, 회전, 빈 페이지, 미리보기 전환, 재열기, 외부 변경 거절, 새로고침 뒤 복구, 명시적 충돌 해결을 확인했다. 모든 엔진 검사를 native UI로 반복한 것은 아니다. 원본 앱의 Electron 설치나 모델 호출은 사용하지 않았다.
+
+계획 연구 판: `research:rr-d481a2d10a87d38a067298796d75fb69:b7f2c1e1f77814c0846ff74b8d68c99a73be210d63500e87629f4fafd47cdf0c`. 검증 판: `research:rr-d481a2d10a87d38a067298796d75fb69:5ad01b38e1b48667273678480a3dcc7d1b55bf7d8d34e8fd06c1ae19e94213c9`. 증거: `implementation-20261030/native-pdf-pinned/results.json`, `/tmp/wb-pdf-host-pinned.log`, `/tmp/wb-pdf-types-final.log`. 최종 검사는 원본 PDF 앱의 HarfBuzz 0.10.3과 PDFium 2.15.1을 사용했다. 처음 native 검사에서 보기 전환 완료 전에 iframe을 조회한 실패와 루트/중첩 HarfBuzz 경로 정정은 같은 연구에 남겨 두었다.
+
 ## 아직 완료되지 않은 범위
 
-현재 여섯 renderer 진입점이 있다는 것은 여섯 편집기의 전 기능이 끝났다는 뜻이 아니다. Markdown·HTML의 클라우드 이미지 호스트/원격 그림 읽기, 다른 이름으로 저장, 내보내기, 내부 AI·검색·첨부·위키 서비스는 연결 중이며 미구현 동작을 성공 처리하지 않는다. 기존 Word·PPT·Sheets에도 AI·템플릿·출력 미연결 항목이 있다. PDF·EPUB·XMind의 원본 화면과 공통 제공자·세션·Drive·검색·doory도 남아 있다.
+현재 일곱 renderer 진입점이 있다는 것은 일곱 편집기의 전 기능이 끝났다는 뜻이 아니다. Markdown·HTML의 클라우드 이미지 호스트/원격 그림 읽기, 다른 이름으로 저장, 내보내기, 내부 AI·검색·첨부·위키 서비스는 연결 중이며 미구현 동작을 성공 처리하지 않는다. 기존 Word·PPT·Sheets에도 AI·템플릿·출력 미연결 항목이 있다. PDF의 영구 가림 사본·다른 이름 저장·추출/합치기 파일 선택·변환/출력·서명 보관/인증서 서명·AI/번역/결과 보관/노트·Windows/macOS OCR과 전체 기능 인수 검증이 남았다. 인증서 서명 읽기 코드는 연결했지만 실제 서명 검증 fixture는 아직 수행하지 않았다. EPUB·XMind의 원본 화면과 공통 제공자·세션·Drive·검색·doory도 남아 있다.
 
 CLI의 실행파일은 Node로 전환했지만, 숨은 렌더링·일부 변환·기존 암호화 설정 해제/앱 제어와 Electron 배포 파일은 아직 남아 있다. 다음 구현에서 이 경로를 Rust/Tauri/WASM 서비스로 대체한다. 실제 대체 결과를 검증한 뒤 중복 번들을 제거한다. 현재 변경만으로 설치 용량이 줄었다고 주장하지 않는다. 모든 OS의 설치·기존 데이터 이행·용량 실측과 최종 GitHub 릴리스도 미완료다.

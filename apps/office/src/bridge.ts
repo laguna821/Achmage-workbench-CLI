@@ -1,5 +1,6 @@
 import type { OfficeHostMessage, OfficePageMessage } from "@workbench/contracts";
 import { encodeHwpSave, type HwpSaveMetadata, type TabSpot } from "../../../packages/contracts/src/hwp.ts";
+import { encodePdfRequest, type PdfRequest, type PdfSaveResult } from "../../../packages/contracts/src/pdf.ts";
 
 // The office page runs on the editors' own origin (apps/host/src/editors.ts). It talks only to the
 // Workbench window that embeds it (the parent frame, on the app's origin) and to the gateway, with
@@ -108,6 +109,16 @@ export class Gateway {
   async openHwp(artifactId: string, revision: number) {
     const response = await this.call("GET", `/api/artifacts/${artifactId}/hwp/open?revision=${revision}`);
     return { bytes: await response.arrayBuffer(), trackingDropped: response.headers.get("x-workbench-tracking-dropped") === "true", saveBlocked: response.headers.get("x-workbench-save-blocked") === "true" };
+  }
+
+  async pdf<T = unknown>(artifactId: string, revision: number, operation: string, request: PdfRequest, source?: ArrayBuffer): Promise<T> {
+    if (["save", "blank-page", "page-size", "crop"].includes(operation)) post({ type: "office:saving" });
+    const response = await this.call("POST", `/api/artifacts/${artifactId}/pdf/${operation}?revision=${revision}`, encodePdfRequest(request, source), { "content-type": "application/octet-stream" });
+    return (operation === "recover" ? response.arrayBuffer() : response.json()) as Promise<T>;
+  }
+
+  savePdf(artifactId: string, revision: number, request: PdfRequest, source?: ArrayBuffer) {
+    return this.pdf<PdfSaveResult>(artifactId, revision, "save", request, source);
   }
 
   async hwpTabs(artifactId: string, revision: number, bytes: Uint8Array, format?: "hwp" | "hwpx"): Promise<TabSpot[]> {

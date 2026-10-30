@@ -31,6 +31,7 @@ import { githubActionsScenario } from "./github-actions.ts";
 import { githubDiscussionScenario } from "./github-discussion.ts";
 import { parseArgs } from "./args.ts";
 import { textOfficeScenario } from "./text-office.ts";
+import { pdfOfficeScenario } from "./pdf-office.ts";
 
 const { binary, outDir, only, engines } = parseArgs(process.argv.slice(2));
 mkdirSync(outDir, { recursive: true });
@@ -63,6 +64,7 @@ try {
       if (wants("templates")) await templatesScenario(ctx);
       if (wants("template-office")) await templateOfficeScenario(ctx);
       if (wants("text-office")) await textOfficeScenario(ctx);
+      if (wants("pdf-office")) await pdfOfficeScenario(ctx);
       if (wants("hwp")) await hwpScenario(ctx);
       if (wants("worktrees")) await worktreesScenario(ctx, { binary, engines, profile: "native" });
       if (wants("terminals")) await terminalsScenario(ctx, { binary, engines, profile: "native" });

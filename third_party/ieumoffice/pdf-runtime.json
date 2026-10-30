@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "ieumCommit": "30ff4f051f067fcb2baf1ab416c40718c802ca35",
+  "files": {
+    "pdfium.wasm": { "source": "node_modules/@embedpdf/pdfium/dist/pdfium.wasm", "packageJson": "node_modules/@embedpdf/pdfium/package.json", "package": "@embedpdf/pdfium", "version": "2.15.1", "sha256": "5e4cd023c3dad4a895b3571ca573d3fc51bac6de48360d95283134385b954eaa" },
+    "hb-subset.wasm": { "source": "apps/pdf/node_modules/harfbuzzjs/hb-subset.wasm", "packageJson": "apps/pdf/node_modules/harfbuzzjs/package.json", "package": "harfbuzzjs", "version": "0.10.3", "sha256": "3a5d246b0e4c0017084775e9f2c7fce96e45d09b1a354fd9e2e440c88fb9890d" }
+  }
+}

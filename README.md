@@ -61,7 +61,7 @@ WORKBENCH_WEB_DIR=apps/web/dist node apps/host/src/main.ts   # WORKBENCH_READY �
 | `apps/desktop` | Tauri 2 셸. 게이트웨이를 띄우고 창·트레이·알림을 맡습니다. |
 | `apps/host` | Node 게이트웨이. HTTP와 SSE, SQLite, Claude·Codex 어댑터, 문서·수정안을 다룹니다. |
 | `apps/web` | React UI |
-| `apps/office` | 워드·PPT·엑셀 편집기. IeumOffice 소스로 빌드합니다. |
+| `apps/office` | 워드·PPT·엑셀·한글·Markdown·HTML·PDF의 원본 Ieum 화면. [연결된 기능과 남은 통합 범위](docs/office-integration.md). |
 | `apps/design` | 디자인 편집기. doory로 빌드합니다. |
 | `packages/contracts` | UI와 게이트웨이가 함께 쓰는 타입 |
 | `packages/provider-codex` | `codex app-server` JSON-RPC 클라이언트와 생성된 프로토콜 타입 |

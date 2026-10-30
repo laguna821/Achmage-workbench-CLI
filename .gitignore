@@ -14,6 +14,8 @@ vendor/ieumoffice/
 apps/office/native/xlsx-wasm/engine/
 apps/office/src/sheets/xlsx-engine.wasm
 apps/office/public/studio/
+apps/office/public/pdf-runtime/
+apps/office/public/pdfjs/
 
 # Node.js and npm an installer build brings along (release.yml downloads them)
 apps/desktop/src-tauri/node/

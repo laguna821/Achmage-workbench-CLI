@@ -254,6 +254,6 @@ export default defineConfig({
     target: "es2022",
     sourcemap: false,
     chunkSizeWarningLimit: 6000,
-    rollupOptions: { input: { docs: here("./docs.html"), slides: here("./slides.html"), sheets: here("./sheets.html"), hwp: here("./hwp.html"), markdown: here("./markdown.html"), html: here("./html.html") } },
+    rollupOptions: { input: { docs: here("./docs.html"), slides: here("./slides.html"), sheets: here("./sheets.html"), hwp: here("./hwp.html"), markdown: here("./markdown.html"), html: here("./html.html"), pdf: here("./pdf.html") } },
   },
 });
