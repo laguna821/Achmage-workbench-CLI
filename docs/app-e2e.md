@@ -1,5 +1,7 @@
 # Linux 실제 앱 검사
 
+2026-10-30 CLI Node 전환 뒤 `--only=template-office` **12/12** 통과. 원본 CLI 실도구 검사는 `scripts/smoke-office-node.ts` **9/9**다. 문서 명령의 Electron 실행은 제거했지만 이 template 검사의 페이지 렌더링은 아직 기존 Electron 서비스와 전용 Xvfb를 사용한다. 연구 판: `research:rr-3064a5d54d6d8552880b86ec45668fce:8b00b7d29a2c71aa67089fc389e40b847e57d5a22406cf332f71888c75f98ab5`.
+
 2026-10-30 `--only=text-office` **25/25**: 원본 Markdown·HTML 편집기의 실제 입력·저장·원문 보존·보기 전환·재열기·충돌 거절·초안 복구·명시적 충돌 해결을 검사한다. 테스트 환경에는 Electron Office를 설치하지 않는다. [현재 통합 범위와 미완료 항목](office-integration.md)을 함께 읽는다.
 
 `scripts/app-e2e/run.ts`는 실제 Tauri 실행파일을 전용 Broadway 화면과 D-Bus 세션에서 WebDriver로 조작한다. WebKit 저장소와 gateway 데이터는 임시 폴더를 사용한다. 기본 엔진은 저장소의 대역이며 실제 모델 요청을 보내지 않는다.

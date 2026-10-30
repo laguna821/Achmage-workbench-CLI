@@ -13,17 +13,18 @@ const posixQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 /** The wrapper files for one tool: an sh script (also for Git Bash on Windows) and, on Windows, a .cmd. */
 export function wrapperFiles(
   name: string,
-  command: { file: string; args: string[]; env?: Record<string, string> },
+  command: { file: string; args: string[]; env?: Record<string, string>; unsetEnv?: string[] },
   platform: NodeJS.Platform = process.platform,
 ): Record<string, string> {
   const shPath = (value: string) => (platform === "win32" ? value.replace(/\\/g, "/") : value);
   const exports = Object.entries(command.env ?? {})
     .map(([key, value]) => `export ${key}=${posixQuote(shPath(value))}\n`)
     .join("");
-  const sh = `#!/bin/sh\n# Written by Achmage Workbench (tool-bin.ts).\n${exports}exec ${[command.file, ...command.args].map((part) => posixQuote(shPath(part))).join(" ")} "$@"\n`;
+  const unsets = (command.unsetEnv ?? []).map((key) => `unset ${key}\n`).join("");
+  const sh = `#!/bin/sh\n# Written by Achmage Workbench (tool-bin.ts).\n${unsets}${exports}exec ${[command.file, ...command.args].map((part) => posixQuote(shPath(part))).join(" ")} "$@"\n`;
   const files: Record<string, string> = { [name]: sh };
   if (platform === "win32") {
-    const sets = Object.entries(command.env ?? {}).map(([key, value]) => `set "${key}=${value}"\r\n`).join("");
+    const sets = (command.unsetEnv ?? []).map((key) => `set "${key}="\r\n`).join("") + Object.entries(command.env ?? {}).map(([key, value]) => `set "${key}=${value}"\r\n`).join("");
     files[`${name}.cmd`] = `@echo off\r\nrem Written by Achmage Workbench (tool-bin.ts).\r\nsetlocal\r\n${sets}${[command.file, ...command.args].map((part) => `"${part}"`).join(" ")} %*\r\n`;
   }
   return files;
@@ -37,7 +38,7 @@ export function installToolWrappers(dataDir: string, tools: { kordoc: string | n
   const dir = join(dataDir, "bin");
   mkdirSync(dir, { recursive: true });
   const written: string[] = [];
-  const write = (name: string, command: { file: string; args: string[]; env?: Record<string, string> } | null) => {
+  const write = (name: string, command: { file: string; args: string[]; env?: Record<string, string>; unsetEnv?: string[] } | null) => {
     for (const file of [name, `${name}.cmd`]) rmSync(join(dir, file), { force: true });
     if (!command) return;
     for (const [file, text] of Object.entries(wrapperFiles(name, command))) {
@@ -60,9 +61,7 @@ export function installToolWrappers(dataDir: string, tools: { kordoc: string | n
   write(
     "ieumoffice",
     ieum
-      ? ieum.app
-        ? { file: ieum.app, args: [ieum.script], env: { ELECTRON_RUN_AS_NODE: "1", ...(tools.ieumAppWrapper ? { GENOFFICE_APP_BIN: tools.ieumAppWrapper } : {}) } }
-        : { file: process.execPath, args: [ieum.script] }
+      ? { file: process.execPath, args: [ieum.script], unsetEnv: ["ELECTRON_RUN_AS_NODE"], env: { ...((tools.ieumAppWrapper ?? ieum.app) ? { GENOFFICE_APP_BIN: (tools.ieumAppWrapper ?? ieum.app)! } : {}) } }
       : null,
   );
   const key = Object.keys(process.env).find((entry) => entry.toLowerCase() === "path") ?? "PATH";

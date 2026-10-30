@@ -11,8 +11,8 @@ import { shipped } from "./resources.ts";
 // (https://github.com/pblsketch/openoffice, Apache-2.0). Release builds ship the whole official
 // IeumOffice app for their OS (release.yml); the tool is called, never changed: page previews, a
 // text view for reading, file checks, and the commands engines run to make and edit Office files.
-// The tool is IeumOffice's own Node script (resources/cli/genoffice.cjs) run on the app's runtime
-// (ELECTRON_RUN_AS_NODE), as its launcher does; pictures of pages come from a hidden app window.
+// Its original CLI script runs on Workbench's shared Node runtime. Page rendering still calls
+// the explicitly bound legacy app until native export replaces it; this is not full removal.
 
 const run = promisify(execFile);
 
@@ -23,8 +23,8 @@ type CliResult = { status: "ok" | "error" | "partial"; command?: string; summary
 export const IEUM_HOME = join(homedir(), ".local/opt/ieumoffice");
 
 /**
- * An IeumOffice to run: its CLI script, the app that runs it (null for the CLI-only build, which
- * runs on Node and cannot draw pages), the launcher it ships (shown on screen; engines get a
+ * An IeumOffice to run: its CLI script, the legacy app used for layout/export (null for a
+ * CLI-only build), the launcher it ships (shown on screen; engines get a
  * wrapper), and whether it is the copy shipped with Workbench.
  */
 export type IeumInstall = { script: string; app: string | null; launcher: string; bundled: boolean };
@@ -145,10 +145,10 @@ export class IeumOffice {
     return Boolean(this.install?.bundled);
   }
 
-  /** The program and the arguments before the tool's own: the app as Node, or Node itself. */
+  /** All document commands share Workbench's Node; the legacy app is only an export service. */
   private command(): { file: string; args: string[] } {
     const install = this.install!;
-    return { file: install.app ?? process.execPath, args: [install.script] };
+    return { file: process.execPath, args: [install.script] };
   }
 
   version(): Promise<string | null> {
@@ -162,10 +162,12 @@ export class IeumOffice {
 
   /** The tool may read and write only inside `roots`; its own command log is off (Workbench keeps revisions). */
   private env(roots: string[]): NodeJS.ProcessEnv {
+    const inherited = { ...process.env };
+    delete inherited.ELECTRON_RUN_AS_NODE;
+    const exportApp = this.appWrapper ?? this.install?.app;
     return {
-      ...process.env,
-      ...(this.install?.app ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
-      ...(this.appWrapper ? { GENOFFICE_APP_BIN: this.appWrapper } : {}),
+      ...inherited,
+      ...(exportApp ? { GENOFFICE_APP_BIN: exportApp } : {}),
       GENOFFICE_ALLOWED_ROOTS: roots.join(delimiter),
       GENOFFICE_AUDIT_LOG: "off",
     };

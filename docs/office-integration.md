@@ -16,8 +16,16 @@
 
 검증 연구 판: `research:rr-b5508ffc0997569185acfe1f63b30318:a54a11aca8b345099bdeeda5f61bbd477196973d83281b699e399f4af03f9b7c`. 증거: `implementation-20261030/native-text-office-recovery/results.json`, `/tmp/wb-office-text-adjacent.log`. 초기 fixture와 빌드 어댑터 실패는 같은 연구 기록에 남아 있다.
 
+## 문서 CLI의 Node 실행 전환
+
+`IeumOffice` 게이트웨이와 에이전트용 `ieumoffice` 실행기는 이제 Workbench의 공통 Node로 원본 CLI를 실행한다. 상속된 `ELECTRON_RUN_AS_NODE`는 제거한다. 기존 앱은 아직 필요한 출력 서비스로만 별도 지정한다. POSIX와 Windows 실행기의 경로 인용·환경 변수 해제를 검사했다.
+
+원본 고정판 CLI를 빌드한 뒤 실제 DOCX 생성·편집·텍스트 추출, PPTX 생성·읽기, XLSX 생성·수식 계산·읽기를 확인했다. 허용 폴더 밖 출력은 거절됐으며, 이 문서 명령들이 Electron 앱을 실행하지 않았음을 별도 실행 감시 파일로 확인했다. **실도구 9/9, 실행기 검사 10/10**. Node로 바꾼 뒤에도 기존 PPTX 양식 미리보기·사람 편집·저장·재열기·같은 세션의 후속 참조가 **실제 Linux 앱 12/12**를 통과했다. 전체 타입 검사와 host/Tauri 빌드도 통과했다.
+
+연구 판: `research:rr-3064a5d54d6d8552880b86ec45668fce:8b00b7d29a2c71aa67089fc389e40b847e57d5a22406cf332f71888c75f98ab5`. 실제 실행은 Linux Node26.8.1이다. 다른 OS와 배포용 Node24의 검증은 남아 있다. 재현 도구는 `scripts/smoke-office-node.ts`; 증거는 `implementation-20261030/node-office-first/results.json`, `native-node-office-render-xvfb/results.json`이다.
+
 ## 아직 완료되지 않은 범위
 
 현재 여섯 renderer 진입점이 있다는 것은 여섯 편집기의 전 기능이 끝났다는 뜻이 아니다. Markdown·HTML의 이미지/자산, 다른 이름으로 저장, 내보내기, 내부 AI·검색·첨부·위키 서비스는 연결 중이며 해당 브리지 메서드는 명시적으로 실패한다. 기존 Word·PPT·Sheets에도 AI·템플릿·출력 미연결 항목이 있다. PDF·EPUB·XMind의 원본 화면과 공통 제공자·세션·Drive·검색·doory도 남아 있다.
 
-`apps/host/src/ieumoffice.ts`의 기존 CLI·숨은 렌더링 경로와 Electron 배포 파일은 아직 제거하지 않았다. 다음 구현에서 문서 처리 CLI를 Node 실행으로 옮기고, Electron으로 넘어가는 변환·렌더링은 Rust/Tauri/WASM 경로로 대체한다. 실제 대체 결과를 검증한 뒤 중복 번들을 제거한다. 모든 OS의 설치·기존 데이터 이행·용량 실측과 최종 GitHub 릴리스도 미완료다.
+CLI의 실행파일은 Node로 전환했지만, 숨은 렌더링·일부 변환·기존 암호화 설정 해제/앱 제어와 Electron 배포 파일은 아직 남아 있다. 다음 구현에서 이 경로를 Rust/Tauri/WASM 서비스로 대체한다. 실제 대체 결과를 검증한 뒤 중복 번들을 제거한다. 현재 변경만으로 설치 용량이 줄었다고 주장하지 않는다. 모든 OS의 설치·기존 데이터 이행·용량 실측과 최종 GitHub 릴리스도 미완료다.

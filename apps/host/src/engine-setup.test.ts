@@ -69,13 +69,15 @@ describe("a desktop launcher's PATH", () => {
 
 describe("tools engines run by name", () => {
   it("writes an sh wrapper everywhere and a .cmd one on Windows, quoting paths with spaces", () => {
-    const posix = wrapperFiles("ieumoffice", { file: "/Applications/Achmage Workbench.app/x/IeumOffice", args: ["/a b/genoffice.cjs"], env: { ELECTRON_RUN_AS_NODE: "1" } }, "darwin");
+    const posix = wrapperFiles("ieumoffice", { file: "/Applications/Achmage Workbench.app/node/node", args: ["/a b/genoffice.cjs"], unsetEnv: ["ELECTRON_RUN_AS_NODE"], env: { GENOFFICE_APP_BIN: "/a b/render" } }, "darwin");
     expect(Object.keys(posix)).toEqual(["ieumoffice"]);
-    expect(posix.ieumoffice).toContain("export ELECTRON_RUN_AS_NODE='1'");
-    expect(posix.ieumoffice).toContain("exec '/Applications/Achmage Workbench.app/x/IeumOffice' '/a b/genoffice.cjs' \"$@\"");
-    const windows = wrapperFiles("kordoc", { file: "C:\\Program Files\\Achmage Workbench\\node\\node.exe", args: ["C:\\Program Files\\Achmage Workbench\\kordoc\\scripts\\run.mjs"] }, "win32");
+    expect(posix.ieumoffice).toContain("unset ELECTRON_RUN_AS_NODE");
+    expect(posix.ieumoffice).toContain("export GENOFFICE_APP_BIN='/a b/render'");
+    expect(posix.ieumoffice).toContain("exec '/Applications/Achmage Workbench.app/node/node' '/a b/genoffice.cjs' \"$@\"");
+    const windows = wrapperFiles("kordoc", { file: "C:\\Program Files\\Achmage Workbench\\node\\node.exe", args: ["C:\\Program Files\\Achmage Workbench\\kordoc\\scripts\\run.mjs"], unsetEnv: ["ELECTRON_RUN_AS_NODE"] }, "win32");
     expect(Object.keys(windows).sort()).toEqual(["kordoc", "kordoc.cmd"]);
     expect(windows["kordoc.cmd"]).toContain('"C:\\Program Files\\Achmage Workbench\\node\\node.exe" "C:\\Program Files\\Achmage Workbench\\kordoc\\scripts\\run.mjs" %*');
     expect(windows.kordoc).toContain("exec 'C:/Program Files/Achmage Workbench/node/node.exe'");
+    expect(windows["kordoc.cmd"]).toContain('set "ELECTRON_RUN_AS_NODE="');
   });
 });
