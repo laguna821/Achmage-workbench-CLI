@@ -96,6 +96,20 @@ Office 요청은 신뢰하는 호스트가 문서 뷰의 기존 Workbench 세션
 
 계획 판: `research:rr-9ea5b25fba78bdf457ec7b3505053d84:d5af36a220e22125d23038b9cacb6d6fa824ed7963d743c62cfc2d9257cd2889`. 검증 판: `research:rr-9ea5b25fba78bdf457ec7b3505053d84:36e728834971b42346058dfc945eafc7c54abb7eae099970820e4ddc9203a711`. 증거와 로그: `implementation-20261030/office-session-bundle-final/`. 초기 TypeScript 문법 검사 실패와 수정도 같은 연구 기록에 남겼다. 재현 도구: `scripts/smoke-office-ai.ts`.
 
+## AI 설정·Rust 보안 저장 기반
+
+Electron `safeStorage`를 대체할 네이티브 경로를 연결했다. 앱 실행파일의 headless 모드가 OS 보안 저장소에 프로필별 마스터 키를 보관하고, 호스트가 각 API 키를 AES-256-GCM으로 봉인한다. 프로필에는 비밀이 아닌 키 ID만 남는다. 키링 실패·손상된 ID·기존 키 분실을 새 키나 평문 저장으로 우회하지 않는다. Linux Secret Service, Windows Credential Store, macOS Keychain 기능을 명시해 기본 mock 저장소가 사용되지 않도록 했다. 실제 검증은 Linux에서 수행했다.
+
+원본 설정 정규화·검사·비밀 필드 맵을 재사용한다. 화면에는 보관된 키에 대한 불투명 참조를, 문서 편집기에는 고정 마스크를 전달한다. 제공자 요청 때 호스트에서 실제 키를 연다. 이전 Electron 봉인값은 관련 없는 설정을 편집해도 그대로 보존하고 API 헤더로 전달하지 않는다. 기존 평문 설정은 읽을 때 바꾸지 않으며 명시적으로 저장할 때 봉인한다. 원본 파일 바이트의 판 번호를 비교하고 임시 파일에서 원자적으로 교체하여, 다른 창이나 키링 잠금 대기 중 생긴 외부 변경을 덮어쓰지 않는다.
+
+`/api/office-ai/settings`의 읽기·쓰기는 Workbench 전체 인증이 필요하다. 문서 grant와 편집기 origin에서는 접근할 수 없다. 일반 설정 저장은 종량제 동의를 켜지 못하며, 별도 동의 요청도 원본 서비스의 감지 상태와 로그인 유형 지문을 거친다. 동의는 재시작 뒤 복원하고 로그인 유형이 바뀌면 철회한다. 계정 표시는 신뢰하는 설정 화면용 상태 응답에만 포함한다.
+
+**Rust2/2, 호스트·인접43/43, 전체4프로젝트 타입 검사, 호스트/네이티브 바이너리 빌드** 통과. 새 D-Bus와 테스트 키링의 **Linux 실제 검사7/7**, 그 안에서 Rust 키링을 사용하는 **빌드된 호스트15/15**, 최종 일반 호스트 **13/13**을 확인했다. 동시 Rust 프로세스6개가 같은 키를 사용하고, 키링·호스트 재시작 뒤 복호화하며, 설정 충돌·문서 권한 우회·키링 불통을 거절했다. 사용자 키링·실제 모델은 사용하지 않았다. 전용 프로세스는 정상 종료했다.
+
+원본 설정/AI 화면은 아직 연결 전이다. 기존 Electron 봉인값의 OS별 해제·이행, 마스터 키 없는 다른 기기로의 이동, Windows/macOS 실제 저장소와 설치본은 후속 검증 대상이다. 이 단계만으로 Electron 배포 파일을 제거하거나 용량 감소를 주장하지 않는다.
+
+계획 판: `research:rr-eaec27a51bbbc49c61a971dcdbc19b80:27360c4166a699ada754b69d2626d363fbe9bd07aa29f5bfb428015c7ff3c66c`. 기반 검증 판: `research:rr-eaec27a51bbbc49c61a971dcdbc19b80:7535433bce05d13744960d8a28aef346e5949dccea8158a3c0412e86956461d7`. 증거: `implementation-20261030/office-vault-native-00/`, `implementation-20261030/office-settings-bundle-final/`. 초기 Rust 문법·오류 상태 계약·테스트 타입 오류와 수정은 같은 연구에 보존했다. 재현 도구: `scripts/smoke-office-vault.ts`, `scripts/smoke-office-ai.ts`.
+
 ## 아직 완료되지 않은 범위
 
 현재 아홉 renderer 진입점이 있다는 것은 아홉 편집기의 전 기능이 끝났다는 뜻이 아니다. Markdown·HTML의 클라우드 이미지 호스트/원격 그림 읽기, 다른 이름으로 저장, 내보내기, 내부 AI·검색·첨부·위키 서비스는 연결 중이며 미구현 동작을 성공 처리하지 않는다. 기존 Word·PPT·Sheets에도 AI·템플릿·출력 미연결 항목이 있다. PDF의 영구 가림 사본·다른 이름 저장·추출/합치기 파일 선택·변환/출력·서명 보관/인증서 서명·AI/번역/결과 보관/노트·Windows/macOS OCR과 전체 기능 인수 검증이 남았다. 인증서 서명 읽기 코드는 연결했지만 실제 서명 검증 fixture는 아직 수행하지 않았다. XMind의 다른 이름 저장·내보내기·출력·링크 열기·문서 만들기, EPUB의 AI/번역/결과 보관·첨부·다른 이름 저장·외부 링크·이름 변경 동기화와 기존 설정 이행도 남았다. 공통 제공자·세션·Drive·검색·doory와 출력 서비스를 계속 연결한다.

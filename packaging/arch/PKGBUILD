@@ -11,9 +11,10 @@ pkgdesc="One screen for Claude Code and Codex sessions, documents and notes (Ach
 arch=('x86_64')
 url="https://github.com/laguna821/Achmage-workbench-CLI"
 license=('MIT')
-depends=('webkit2gtk-4.1' 'gtk3' 'libayatana-appindicator' 'nodejs>=24' 'npm' 'nss' 'alsa-lib')
+depends=('webkit2gtk-4.1' 'gtk3' 'libayatana-appindicator' 'nodejs>=24' 'npm' 'nss' 'alsa-lib' 'dbus')
 optdepends=('wl-clipboard: paste screenshots in the app on Wayland'
-            'xclip: paste screenshots in the app on X11')
+            'xclip: paste screenshots in the app on X11'
+            'gnome-keyring: Secret Service storage for Office API keys (or another Secret Service provider)')
 options=('!strip' '!debug')
 
 package() {

@@ -10,6 +10,7 @@ use tauri::{Emitter, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, Window
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tauri_plugin_notification::NotificationExt;
 mod office_output;
+pub mod office_secrets;
 pub mod terminal_worker;
 
 /// Closing the window only hides it (work goes on, PRD "트레이로 이동, 작업 유지"); said once.
@@ -116,6 +117,7 @@ fn gateway_command(app: &tauri::AppHandle) -> Command {
     command
         .env("PATH", engine_path())
         .env("WORKBENCH_PTY_BIN", std::env::current_exe().unwrap_or_default())
+        .env("WORKBENCH_SECRET_BIN", std::env::current_exe().unwrap_or_default())
         .env("WORKBENCH_EXIT_ON_STDIN_CLOSE", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

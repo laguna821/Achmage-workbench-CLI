@@ -17,6 +17,7 @@ import { routeCalendar, type CalendarFeeds } from "./calendar-feeds.ts";
 import { documentAccess } from "./document-registry.ts";
 import { skillRoutes } from "./skills-http.ts";
 import { OfficeOutputs } from "./office-output.ts";
+import type { OfficeAi } from "./office-ai.ts";
 
 export const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -99,6 +100,7 @@ function parseRefs(value: unknown): DocRef[] {
 }
 
 export type HttpOptions = {
+  officeAi?: OfficeAi;
   token: string;
   webDir: string | null;
   onClientLog?: (message: string) => void;
@@ -248,6 +250,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       const method = req.method ?? "GET";
 
       if (method === "GET" && path === "/api/snapshot") return sendJson(res, 200, manager.snapshot());
+      if (path.startsWith("/api/office-ai/") && options.officeAi && await options.officeAi.handleSettings(req, res, url)) return;
       if (await userSkills(req, res, url)) return;
       if (path.startsWith("/api/pkm/") && options.pkm && (await options.pkm(req, res, url))) return;
       if (path.startsWith("/api/projects/") && options.projects && (await options.projects(req, res, url))) return;

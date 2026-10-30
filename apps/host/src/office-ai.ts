@@ -60,9 +60,42 @@ export class OfficeAi {
     this.closed = true;
     this.sessions?.close();
     for (const run of this.active.values()) run.controller.abort();
+    void this.engine?.then((engine) => engine.close?.()).catch(() => {});
   }
   async shutdownProviders() {
     if (this.engine) (await import("./office-ai-engine.mjs")).shutdownOfficeAiProviders();
+  }
+  private async getEngine() {
+    if (this.closed) throw new HttpError(503, "office_ai_closed", "앱을 종료하고 있습니다.");
+    const engine = await (this.engine ??= this.load().catch((error) => { this.engine = null; throw error; }));
+    if (this.closed) { engine.close?.(); throw new HttpError(503, "office_ai_closed", "앱을 종료하고 있습니다."); }
+    return engine;
+  }
+  /** Called only after the main gateway authenticates its full application token.
+   * The editor origin never routes here and its document grants cannot write settings. */
+  async handleSettings(req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
+    const match = /^\/api\/office-ai\/(settings|statuses|metered)$/.exec(url.pathname);
+    if (!match) return false;
+    const operation = match[1], engine = await this.getEngine();
+    if (!engine.configuration) throw new HttpError(503, "office_settings_unavailable", "AI 설정을 사용할 수 없습니다.");
+    res.setHeader("cache-control", "no-store");
+    if (operation === "statuses" && req.method === "GET") {
+      sendJson(res, 200, await engine.statuses(url.searchParams.get("refresh") === "1", true)); return true;
+    }
+    if (operation === "settings" && req.method === "GET") { sendJson(res, 200, engine.configuration.snapshot()); return true; }
+    if ((operation === "settings" && req.method === "PUT") || (operation === "metered" && req.method === "POST")) {
+      let body: unknown;
+      try { body = JSON.parse((await readBody(req, 2_000_000)).toString("utf8")); }
+      catch (error) { if (error instanceof HttpError) throw error; return invalid(); }
+      if (!record(body)) return invalid();
+      if (operation === "metered") {
+        if (!engine.setMeteredAccepted || !["codex", "claude-code"].includes(String(body.provider)) || typeof body.accepted !== "boolean") return invalid();
+        sendJson(res, 200, await engine.setMeteredAccepted(String(body.provider), body.accepted)); return true;
+      }
+      if (typeof body.expectedRevision !== "string") return invalid();
+      sendJson(res, 200, await engine.configuration.write(body.settings, body.expectedRevision)); return true;
+    }
+    throw new HttpError(405, "method_not_allowed", "허용되지 않은 AI 설정 요청입니다.");
   }
   private begin(owner: string, id: string, response: ServerResponse) {
     if (this.closed) throw new HttpError(503, "office_ai_closed", "앱을 종료하고 있습니다.");
@@ -103,7 +136,7 @@ export class OfficeAi {
       sendJson(res, 200, value); return true;
     }
     // No startup status probing, CLI process, model invocation or settings write before a request.
-    const engine = await (this.engine ??= this.load().catch((error) => { this.engine = null; throw error; }));
+    const engine = await this.getEngine();
     authorize();
     if (get) {
       const value = operation === "settings" ? engine.settings() : await engine.statuses(url.searchParams.get("refresh") === "1");

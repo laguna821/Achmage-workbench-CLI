@@ -1,9 +1,9 @@
 // Node-only, original Ieum provider implementation. Keep its Electron-facing type graph out
 // of the host project; the implementation is bundled from the reviewed vendor pin, unchanged.
-import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { OfficeSettings, OFFICE_SECRET_PLACEHOLDER } from "./office-settings.mjs";
 import {
-  activeCustomEndpoint, localEndpointTimeoutMs, mapAiSecrets, maxOutputTokensOf,
+  activeCustomEndpoint, localEndpointTimeoutMs, maxOutputTokensOf,
   normalizeAiSettings, sanitizeAiSettings, streamForProvider, chatForProvider,
 } from "../../../vendor/ieumoffice/packages/ai-provider/src/index.ts";
 import { createSubscriptionStatusService } from "../../../vendor/ieumoffice/packages/ai-provider/src/subscription/service.ts";
@@ -15,77 +15,50 @@ import { resolveAiRun, aiStreamErrorChunk, aiChatFailure, subscriptionStreamCall
 import { createChunkCoalescer } from "../../../vendor/ieumoffice/apps/docs/src/main/stream-coalesce.ts";
 import { startFirstChunkKeepalive } from "../../../vendor/ieumoffice/apps/docs/src/main/ai-keepalive.ts";
 
-export const OFFICE_SECRET_PLACEHOLDER = "__workbench_saved_secret__";
+export { OFFICE_SECRET_PLACEHOLDER };
 const texts = { noApiKey: () => "AI 제공자의 키를 설정해 주세요.", noModel: () => "사용할 AI 모델을 선택해 주세요." };
-const publicSettings = (settings) => mapAiSecrets(settings, (value) => value ? OFFICE_SECRET_PLACEHOLDER : "");
 const canonicalSettings = (settings) => JSON.stringify(normalizeAiSettings(sanitizeAiSettings(settings)), (_key, value) =>
   value && typeof value === "object" && !Array.isArray(value)
     ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, value[key]])) : value);
 
 export function createOfficeAiEngine(dataDir, injected = {}) {
-  const settingsPath = join(dataDir, "office", "ai-settings.json");
-  let cachedText, cachedSettings;
-  // Reading never migrates or rewrites either the original standalone settings or this file.
-  // In particular, an unopened sealed:v1 key stays on disk and cannot become an API header.
-  const readSettings = () => {
-    if (!existsSync(settingsPath)) return normalizeAiSettings({});
-    if (statSync(settingsPath).size > 2_000_000) throw new Error("Office AI 설정 파일이 너무 큽니다.");
-    let raw;
-    try { raw = readFileSync(settingsPath, "utf8"); }
-    catch { throw new Error("Office AI 설정 파일을 읽지 못했습니다. 파일은 변경하지 않았습니다."); }
-    if (Buffer.byteLength(raw) > 2_000_000) throw new Error("Office AI 설정 파일이 너무 큽니다.");
-    if (raw !== cachedText) {
-      let parsed;
-      try { parsed = JSON.parse(raw); }
-      catch { throw new Error("Office AI 설정 파일을 읽지 못했습니다. 파일은 변경하지 않았습니다."); }
-      // Legacy custom settings get a random endpoint id when normalized. Re-reading unchanged
-      // bytes must keep that id, without rewriting the user's file just to stabilize a read.
-      cachedSettings = normalizeAiSettings(parsed); cachedText = raw;
-    }
-    return JSON.parse(JSON.stringify(cachedSettings));
-  };
-  // Until the trusted settings/OS-secret migration is connected, this service never records
-  // new metered consent. A stored flag alone is insufficient without the original fingerprint.
-  const withdrawn = new Set();
-  const getSettings = () => {
-    const settings = readSettings();
-    for (const provider of withdrawn) settings.meteredAccepted = { ...settings.meteredAccepted, [provider]: false };
-    return settings;
-  };
+  const store = injected.settingsStore ?? new OfficeSettings(dataDir);
+  const getSettings = () => store.publicSettings();
   const service = createSubscriptionStatusService({
     getSettings,
-    setMeteredAccepted: (provider, accepted) => {
-      if (accepted) throw new Error("종량제 사용 동의는 설정 화면에서 해 주세요.");
-      withdrawn.add(provider);
-    },
+    setMeteredAccepted: (provider, accepted) => store.setMeteredAccepted(provider, accepted),
     acceptanceStore: createMeteredAcceptanceFileStore(join(dataDir, "office")),
     detect: injected.detect,
     listModels: injected.listModels ?? listSubscriptionModels,
   });
-  const statuses = () => Object.fromEntries(Object.entries(service.getStatuses()).map(([id, value]) => {
+  const statuses = (trusted = false) => Object.fromEntries(Object.entries(service.getStatuses()).map(([id, value]) => {
     const { account: _account, ...status } = value;
-    return [id, status];
+    return [id, trusted ? value : status];
   }));
-  const targetFor = (requestSettings) => {
+  const targetFor = async (requestSettings) => {
     const stored = getSettings();
     // This origin can read documents. It cannot choose a different executable/endpoint or
     // copy a saved credential into a renderer-supplied URL, even with an otherwise valid grant.
     const supplied = sanitizeAiSettings(requestSettings);
     // sanitize removes empty cliPath while normalize's defaults retain it. Canonicalize both
     // snapshots identically; otherwise a valid settings round trip looks like a changed target.
-    if (!supplied || canonicalSettings(supplied) !== canonicalSettings(publicSettings(stored))) {
+    if (!supplied || canonicalSettings(supplied) !== canonicalSettings(stored)) {
       return { ok: false, refusal: { error: "AI 설정이 바뀌었습니다. 현재 설정을 다시 읽은 뒤 요청해 주세요." } };
     }
-    return resolveAiRun(stored, statuses(), texts);
+    try { return resolveAiRun(await store.executionSettings(), statuses(), texts); }
+    catch (error) { return { ok: false, refusal: { error: error instanceof Error ? error.message : "보관된 AI 키를 읽지 못했습니다." } }; }
   };
   return {
-    settings: () => publicSettings(getSettings()),
-    statuses: async (recheck = false) => {
+    settings: getSettings,
+    configuration: store,
+    setMeteredAccepted: (provider, accepted) => service.setMeteredAccepted(provider, accepted),
+    close: () => store.close(),
+    statuses: async (recheck = false, trusted = false) => {
       if (recheck || Object.values(statuses()).some((value) => value.state === "checking")) await service.check();
-      return statuses();
+      return statuses(trusted);
     },
     async stream(request, sessionId, signal, send) {
-      const target = targetFor(request.settings);
+      const target = await targetFor(request.settings);
       if (!target.ok) { send({ requestId: request.requestId, type: "error", ...target.refusal }); return; }
       if (signal.aborted) { send({ requestId: request.requestId, type: "done" }); return; }
       const { settings, provider, config } = target;
@@ -116,7 +89,7 @@ export function createOfficeAiEngine(dataDir, injected = {}) {
       } finally { keepalive?.stop(); out.flush(); }
     },
     async chat(request, signal) {
-      const target = targetFor(request.settings);
+      const target = await targetFor(request.settings);
       if (!target.ok) return { ok: false, ...target.refusal };
       if (signal.aborted) return { ok: false, error: "요청을 취소했습니다." };
       try { return await (injected.chat ?? chatForProvider)(target.provider, target.config, request.system, request.user, signal); }

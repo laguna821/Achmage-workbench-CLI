@@ -13,6 +13,7 @@ import type { AddressInfo } from "node:net";
 
 const repo = fileURLToPath(new URL("../", import.meta.url));
 const outDir = resolve(process.argv[2] ?? join(tmpdir(), "wb-office-ai-bundle"));
+const vaultBinary = process.argv[3] ? resolve(process.argv[3]) : null;
 mkdirSync(outDir, { recursive: true });
 const profile = mkdtempSync(join(tmpdir(), "wb-office-ai-bundle-"));
 const checks: string[] = [];
@@ -28,11 +29,11 @@ await new Promise<void>((done) => provider.listen(0, "127.0.0.1", done));
 mkdirSync(join(profile, "office")); mkdirSync(join(profile, "project"));
 const settingsPath = join(profile, "office", "ai-settings.json");
 writeFileSync(settingsPath, JSON.stringify({ provider: "custom", providers: { custom: { model: "fixture-model", apiKey: "fixture-only-key", baseUrl: `http://127.0.0.1:${(provider.address() as AddressInfo).port}/v1` } } }), { mode: 0o600 });
-const originalSettings = readFileSync(settingsPath);
+let originalSettings = readFileSync(settingsPath);
 const file = join(profile, "project", "문서.md"); writeFileSync(file, "원본은 유지합니다.\n");
 const child = spawn(process.execPath, [join(repo, "apps/host/dist/host.mjs")], {
   cwd: repo,
-  env: { ...process.env, WORKBENCH_DATA_DIR: profile, WORKBENCH_PORT: "0", WORKBENCH_EDITORS_PORT: "0", WORKBENCH_EXIT_ON_STDIN_CLOSE: "1", WORKBENCH_CODEX_BIN: join(repo, "scripts/fixtures/fake-codex.mjs"), WORKBENCH_CLAUDE_BIN: join(repo, "scripts/fixtures/fake-claude.mjs") },
+  env: { ...process.env, ...(vaultBinary ? { WORKBENCH_SECRET_BIN: vaultBinary } : {}), WORKBENCH_DATA_DIR: profile, WORKBENCH_PORT: "0", WORKBENCH_EDITORS_PORT: "0", WORKBENCH_EXIT_ON_STDIN_CLOSE: "1", WORKBENCH_CODEX_BIN: join(repo, "scripts/fixtures/fake-codex.mjs"), WORKBENCH_CLAUDE_BIN: join(repo, "scripts/fixtures/fake-claude.mjs") },
   stdio: ["pipe", "pipe", "pipe"],
 });
 let stderr = ""; child.stderr.on("data", (data: Buffer) => { stderr += data.toString(); });
@@ -49,6 +50,19 @@ const ready = new Promise<{ url: string; token: string }>((done, reject) => {
 let failure: unknown;
 try {
   const host = await ready;
+  const mainHeaders = { authorization: `Bearer ${host.token}`, "content-type": "application/json" };
+  assert.equal((await fetch(`${host.url}/api/office-ai/settings`)).status, 401); checks.push("settings require full host authentication");
+  const settingsSnapshot = await (await fetch(`${host.url}/api/office-ai/settings`, { headers: mainHeaders })).json();
+  assert.ok(!JSON.stringify(settingsSnapshot).includes("fixture-only-key")); checks.push("settings screen receives opaque saved-key references");
+  if (vaultBinary) {
+    const write = (body: unknown) => fetch(`${host.url}/api/office-ai/settings`, { method: "PUT", headers: mainHeaders, body: JSON.stringify(body) });
+    assert.equal((await write({ settings: settingsSnapshot.settings, expectedRevision: settingsSnapshot.revision })).status, 200);
+    originalSettings = readFileSync(settingsPath);
+    assert.ok(originalSettings.includes("sealed:v1:workbench:")); assert.ok(!originalSettings.includes("fixture-only-key"));
+    checks.push("trusted settings save seals keys through the actual Rust OS vault");
+    assert.equal((await write({ settings: settingsSnapshot.settings, expectedRevision: settingsSnapshot.revision })).status, 409);
+    assert.ok(readFileSync(settingsPath).equals(originalSettings)); checks.push("stale trusted save cannot overwrite newer settings");
+  }
   const api = async (path: string, body: unknown, extra: Record<string, string> = {}) => {
     const response = await fetch(`${host.url}${path}`, { method: "POST", headers: { authorization: `Bearer ${host.token}`, "content-type": "application/json", ...extra }, body: JSON.stringify(body) });
     assert.equal(response.ok, true, `API ${path}: ${response.status}`); return response.json();
@@ -59,6 +73,9 @@ try {
   const view = await api(`/api/artifacts/${artifact.id}/views`, { viewId: "bundle-view", windowId: "bundle-window", sessionId: session.id, claim: true });
   const editor = await api(`/api/artifacts/${artifact.id}/editor`, {}, { "x-workbench-view": "bundle-view", "x-workbench-write": view.writeToken });
   const endpoint = `${editor.origin}/api/artifacts/${artifact.id}/ai`;
+  assert.equal((await fetch(`${host.url}/api/office-ai/settings`, { headers: { authorization: `Bearer ${editor.token}` } })).status, 401);
+  assert.equal((await fetch(`${editor.origin}/api/office-ai/settings`, { headers: { authorization: `Bearer ${editor.token}` } })).status, 404);
+  checks.push("document grant cannot read or write trusted settings");
   assert.equal((await fetch(`${endpoint}/settings`)).status, 401); checks.push("document grant required");
   const headers = { authorization: `Bearer ${editor.token}` };
   const settings = await (await fetch(`${endpoint}/settings`, { headers })).json();
@@ -100,4 +117,4 @@ finally {
   rmSync(profile, { recursive: true, force: true });
 }
 if (failure) throw failure;
-console.log(`${checks.length}/10 Office AI bundle checks passed`);
+console.log(`${checks.length} Office AI bundle checks passed${vaultBinary ? " (native OS vault)" : ""}`);

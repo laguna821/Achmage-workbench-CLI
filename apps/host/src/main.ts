@@ -134,6 +134,7 @@ let editorsOrigin: string | null = null;
 const docImages = new DocImages({ dataDir, documents: manager.documents, workCwd: (workId) => manager.workCwd(workId), endpoint: env.WORKBENCH_R2_ENDPOINT ?? null });
 const server = createHttpServer(manager, bus, {
   token,
+  officeAi,
   webDir: webDir && existsSync(webDir) ? webDir : null,
   // UI errors stay on this machine, next to the state database.
   onClientLog: (message) => appendFileSync(join(dataDir, "client.log"), `${new Date().toISOString()} ${message}\n`),

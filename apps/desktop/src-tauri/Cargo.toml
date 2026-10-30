@@ -25,6 +25,8 @@ roxmltree = "0.20"
 url = "2"
 portable-pty = "=0.9.0"
 base64 = "0.22"
+getrandom = "=0.3.4"
+keyring = { version = "=3.6.3", default-features = false, features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
