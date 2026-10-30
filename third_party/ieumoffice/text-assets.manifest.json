@@ -1,0 +1,31 @@
+{
+  "source": "https://github.com/pblsketch/openoffice",
+  "commit": "30ff4f051f067fcb2baf1ab416c40718c802ca35",
+  "changes": "Attribution headers; explicit .ts import; inline image MIME type to avoid unrelated editor contracts. Host only calls create/read helpers, never destructive lifecycle cleanup.",
+  "files": [
+    {
+      "source": "apps/markdown/src/main/asset-lifecycle.ts",
+      "output": "text-assets/asset-lifecycle.ts",
+      "sourceSha256": "cc329316e54d76df697569aaf77e9847e25dd1f9f65fb5bc89c18b62c5483c03",
+      "outputSha256": "516325355ebfe588e56adcfa94f1ab903334a2fb21090da4bf7c6f9f5323c5ba"
+    },
+    {
+      "source": "packages/electron-utils/src/atomic-write.ts",
+      "output": "text-assets/atomic-write.ts",
+      "sourceSha256": "23bc0fd9544c3ba3db22bac52a7d83a0a435d03dbd4f1351e26738fe7598acbd",
+      "outputSha256": "7726443402d45d282daf2ee7b4cd859c81a615d8d643e81fc4ecc973fd62ac52"
+    },
+    {
+      "source": "apps/html/src/main/preview-document.ts",
+      "output": "text-assets/preview-document.ts",
+      "sourceSha256": "c59e0b19088b01c35812355bc48a9a52c4b740877e2d055f4589d1c6d2f06fb0",
+      "outputSha256": "7d01da2dbee0d97716ba74867d085b105fbc8fef2ae974f0b895e57a1893abd7"
+    },
+    {
+      "source": "apps/html/src/main/asset-mime.ts",
+      "output": "text-assets/asset-mime.ts",
+      "sourceSha256": "d681e3130fe049c8c9222f1f6a22c1db7969a8b79378ecdc016dc33e4e5bd4d0",
+      "outputSha256": "154f14eafee6999be4827db35da37e4a807f514fe47d73a23f031fa5df92156b"
+    }
+  ]
+}

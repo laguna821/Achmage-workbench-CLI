@@ -20,6 +20,6 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json && tsc -p apps/web/tsconfig.json && tsc -p apps/design/tsconfig.json && tsc -p apps/office/tsconfig.json",
-    "build": "bash scripts/fetch-ieum.sh && node scripts/vendor-user-skills.mjs --check && node scripts/vendor-hwp-core.mjs --check && npm run build -w @workbench/web && npm run build -w @workbench/design && npm run build -w @workbench/office && npm run build -w @workbench/host"
+    "build": "bash scripts/fetch-ieum.sh && node scripts/vendor-user-skills.mjs --check && node scripts/vendor-hwp-core.mjs --check && node scripts/vendor-text-assets.mjs --check && npm run build -w @workbench/web && npm run build -w @workbench/design && npm run build -w @workbench/office && npm run build -w @workbench/host"
   }
 }

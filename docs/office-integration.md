@@ -24,8 +24,20 @@
 
 연구 판: `research:rr-3064a5d54d6d8552880b86ec45668fce:8b00b7d29a2c71aa67089fc389e40b847e57d5a22406cf332f71888c75f98ab5`. 실제 실행은 Linux Node26.8.1이다. 다른 OS와 배포용 Node24의 검증은 남아 있다. 재현 도구는 `scripts/smoke-office-node.ts`; 증거는 `implementation-20261030/node-office-first/results.json`, `native-node-office-render-xvfb/results.json`이다.
 
+## Markdown·HTML 로컬 그림과 미리보기 자산
+
+Electron의 `md-asset://`·`html-asset://` 대신 열린 문서 폴더에 한정한 읽기 주소를 사용한다. Markdown은 원문에 적힌 경로를 그대로 보존하고 표시할 때만 주소를 바꾼다. 복사한 그림의 주소도 원래 경로로 되돌리므로 이전 권한 토큰이 문서에 저장되지 않는다. HTML은 원래 `base`가 있으면 그대로 쓰고, 없으면 미리보기 사본에만 기준 주소를 넣는다. 상대 경로의 그림·CSS·일반 스크립트와 확장자가 없는 웹 저장 자산을 읽는다.
+
+PNG/JPEG/GIF 선택·붙여넣기 저장과 로컬 그림 읽기 브리지를 연결했다. 실제 바이트 형식·크기를 검사하고 현재 writer/판/디스크 상태가 맞을 때만 새 파일을 만든다. 원본 이음의 배타적 생성 및 `.genoffice-assets.json` 소유/대기 기록을 재사용한다. 기존 그림을 덮어쓰지 않으며 이전 판·Undo가 필요로 할 수 있는 자산은 삭제하지 않는다. 원본의 자산 정리 기능은 아직 호출하지 않는다.
+
+별도 읽기 토큰으로 편집 권한을 대신할 수 없다. 문서 폴더 밖·숨김 경로·외부 심볼릭 링크·일반 JSON/텍스트 이웃 파일은 읽지 않는다. HTML은 계속 opaque-origin sandbox에서 실행되고 일반 자산의 CORS 읽기는 열지 않는다. 글꼴에만 표시를 위한 CORS를 허용한다.
+
+**host/클립보드 경로 검사 13/13, 실제 Linux Tauri `text-office` 30/30**. 기존 한글/공백 그림 경로, 원본 붙여넣기 처리, 상대 경로 저장·소유 기록·재열기, HTML 원래 `base`와 CSS/스크립트 표시, 이전 원문 보존/충돌/복구 검사를 통과했다. 붙여넣기 입력은 synthetic `File` 이벤트이며 원본 renderer와 실제 호스트가 처리했다. OS 파일 선택/취소·물리 클립보드·드롭과 Windows/macOS, 모듈 스크립트·대용량 미디어 Range는 별도 인수 검증이 남아 있다. 전체 타입 검사와 Office/host/Tauri 빌드도 통과했다.
+
+연구 판: `research:rr-8304c87c1ea63f23530f55605bd002f7:68995e88a4c2037d47eb31d190bb3d8612c78e80473a9636b9eeb7ef2bdb7b9b`. 증거: `implementation-20261030/native-text-assets-first/results.json`, `/tmp/wb-office-assets-tests-fixed.log`, `/tmp/wb-office-assets-types-final.log`. 원본 순수 모듈은 `scripts/vendor-text-assets.mjs --check`로 출처와 내용 해시를 검증한다.
+
 ## 아직 완료되지 않은 범위
 
-현재 여섯 renderer 진입점이 있다는 것은 여섯 편집기의 전 기능이 끝났다는 뜻이 아니다. Markdown·HTML의 이미지/자산, 다른 이름으로 저장, 내보내기, 내부 AI·검색·첨부·위키 서비스는 연결 중이며 해당 브리지 메서드는 명시적으로 실패한다. 기존 Word·PPT·Sheets에도 AI·템플릿·출력 미연결 항목이 있다. PDF·EPUB·XMind의 원본 화면과 공통 제공자·세션·Drive·검색·doory도 남아 있다.
+현재 여섯 renderer 진입점이 있다는 것은 여섯 편집기의 전 기능이 끝났다는 뜻이 아니다. Markdown·HTML의 클라우드 이미지 호스트/원격 그림 읽기, 다른 이름으로 저장, 내보내기, 내부 AI·검색·첨부·위키 서비스는 연결 중이며 미구현 동작을 성공 처리하지 않는다. 기존 Word·PPT·Sheets에도 AI·템플릿·출력 미연결 항목이 있다. PDF·EPUB·XMind의 원본 화면과 공통 제공자·세션·Drive·검색·doory도 남아 있다.
 
 CLI의 실행파일은 Node로 전환했지만, 숨은 렌더링·일부 변환·기존 암호화 설정 해제/앱 제어와 Electron 배포 파일은 아직 남아 있다. 다음 구현에서 이 경로를 Rust/Tauri/WASM 서비스로 대체한다. 실제 대체 결과를 검증한 뒤 중복 번들을 제거한다. 현재 변경만으로 설치 용량이 줄었다고 주장하지 않는다. 모든 OS의 설치·기존 데이터 이행·용량 실측과 최종 GitHub 릴리스도 미완료다.

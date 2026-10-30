@@ -8,6 +8,8 @@ import { HttpError } from "./errors.ts";
 import { fontFace, matchFont } from "./fonts.ts";
 import { MIME, readBody, sendJson, serveStatic } from "./http.ts";
 import { decodeHwpSave, hwpFormat, hwpTabs, HWP_MAX_BYTES, openHwpBytes, prepareHwpSave } from "./hwp-codec.ts";
+import { OFFICE_IMAGE_MAX_BYTES, readOfficeAsset, saveOfficeImage } from "./office-assets.ts";
+import { buildPreviewDocument } from "../../../third_party/ieumoffice/text-assets/preview-document.ts";
 
 // The office editors (IeumOffice's editor screens, apps/office) run on their own origin, a second
 // port on 127.0.0.1. Their code is third-party and reads documents from anywhere, so it never
@@ -46,7 +48,7 @@ export class EditorGrants {
     const grant = this.grants.get(token);
     if (!grant) throw new HttpError(401, "unauthorized", "편집기 권한이 없습니다.");
     grant.preview.id ??= randomBytes(24).toString("base64url");
-    return { url: `/preview/${grant.preview.id}/document.html` };
+    return { url: `/preview/${grant.preview.id}/document.html`, baseUrl: `/preview/${grant.preview.id}/` };
   }
 
   updatePreview(token: string, text: string) {
@@ -59,7 +61,7 @@ export class EditorGrants {
   }
 
   preview(id: string) {
-    return [...this.grants.values()].find((grant) => grant.preview.id === id)?.preview.text;
+    return [...this.grants.values()].find((grant) => grant.preview.id === id);
   }
 
   /** Any open page (for what is not a document: the system's fonts). */
@@ -87,19 +89,52 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
       const bearer = req.headers.authorization?.replace(/^Bearer\s+/i, "") ?? null;
       // Document scripts receive only this read-only preview URL, never the editor grant.
       // Enforce an opaque origin at the response as well as the renderer's iframe sandbox.
-      const preview = /^\/preview\/([A-Za-z0-9_-]{32})\/document\.html$/.exec(path);
+      const preview = /^\/preview\/([A-Za-z0-9_-]{32})\/(.+)$/.exec(path);
       if (preview && method === "GET") {
-        const html = grants.preview(preview[1]!);
-        if (html === undefined) throw new HttpError(404, "preview_missing", "미리보기가 아직 준비되지 않았습니다.");
-        res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": "sandbox allow-scripts allow-forms allow-popups allow-modals; frame-ancestors 'self' http://127.0.0.1:* http://localhost:*", "referrer-policy": "no-referrer", "x-content-type-options": "nosniff" });
-        res.end(html); return;
+        const grant = grants.preview(preview[1]!);
+        if (!grant) throw new HttpError(404, "preview_missing", "미리보기가 아직 준비되지 않았습니다.");
+        const artifact = documents.get(grant.artifactId);
+        const headers = { "cache-control": "no-store", "content-security-policy": "sandbox allow-scripts allow-forms allow-popups allow-modals; frame-ancestors 'self' http://127.0.0.1:* http://localhost:*", "referrer-policy": "no-referrer", "x-content-type-options": "nosniff" };
+        if (preview[2] === "document.html" && artifact.format === "html") {
+          if (grant.preview.text === undefined) throw new HttpError(404, "preview_missing", "미리보기가 아직 준비되지 않았습니다.");
+          res.writeHead(200, { ...headers, "content-type": "text/html; charset=utf-8" });
+          res.end(buildPreviewDocument(grant.preview.text, `/preview/${preview[1]}/`)); return;
+        }
+        let source: string;
+        try { source = decodeURIComponent(preview[2] === "__image" ? url.searchParams.get("src") ?? "" : preview[2]!); }
+        catch { if (preview[2] === "__image") source = url.searchParams.get("src") ?? ""; else throw new HttpError(400, "asset_path", "문서 자산 경로를 읽지 못했습니다."); }
+        const asset = await readOfficeAsset(artifact.path, source, artifact.format === "markdown" || preview[2] === "__image", req.headers.accept ?? null);
+        // Fonts need CORS in the opaque preview. Text assets stay unreadable to page fetch().
+        res.writeHead(200, { ...headers, "content-type": asset.type, "content-length": asset.data.length, ...(asset.type.startsWith("font/") ? { "access-control-allow-origin": "*" } : {}) });
+        res.end(asset.data); return;
       }
-      const textEditor = /^\/api\/artifacts\/([^/]+)\/(text|html-preview)$/.exec(path);
+      const textEditor = /^\/api\/artifacts\/([^/]+)\/(text|html-preview|assets|image)$/.exec(path);
       if (textEditor) {
         const [, id, operation] = textEditor;
         if (!grants.allows(bearer, id!)) throw new HttpError(401, "unauthorized", "이 문서를 열 권한이 없습니다.");
         const artifact = documents.check(id!);
         if (artifact.format !== "markdown" && artifact.format !== "html") throw new HttpError(415, "not_text_editor", "Markdown·HTML 편집기 요청이 아닙니다.");
+        if (operation === "assets" && method === "GET") return sendJson(res, 200, grants.previewInfo(bearer!));
+        if (operation === "image") {
+          if (method === "GET") {
+            let source: string;
+            try { source = decodeURIComponent(url.searchParams.get("src") ?? ""); }
+            catch { source = url.searchParams.get("src") ?? ""; }
+            const asset = await readOfficeAsset(artifact.path, source, true, "image/*");
+            if (!["image/png", "image/jpeg", "image/gif"].includes(asset.type)) throw new HttpError(415, "image_type", "이 그림 형식은 문서 변환에 사용할 수 없습니다.");
+            return sendJson(res, 200, { base64: asset.data.toString("base64"), mime: asset.type });
+          }
+          if (method === "POST") {
+            documents.registry.assertWrite(id!, grants.access(bearer!));
+            const bytes = await readBody(req, OFFICE_IMAGE_MAX_BYTES);
+            // Recheck after receiving the body: an expired writer or changed document cannot add assets.
+            documents.registry.assertWrite(id!, grants.access(bearer!));
+            const latest = documents.check(id!);
+            if (latest.revision !== Number(url.searchParams.get("expectedRevision"))) throw new HttpError(409, "revision_conflict", "문서가 바뀌었습니다. 최신 판에서 그림을 넣어 주세요.");
+            if (latest.diskState !== "same") throw new HttpError(409, "disk_conflict", "파일이 외부에서 바뀌었습니다. 원문을 확인한 뒤 그림을 넣어 주세요.");
+            return sendJson(res, 200, { path: await saveOfficeImage(latest.path, bytes, url.searchParams.get("name")) });
+          }
+        }
         if (operation === "text" && method === "PUT") {
           const bytes = await readBody(req, 16_000_000);
           let text: string;

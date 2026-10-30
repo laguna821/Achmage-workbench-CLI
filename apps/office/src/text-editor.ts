@@ -1,10 +1,12 @@
 import { Events, Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
+import { configureTextAssets, unresolveTextImage } from "./text-assets.ts";
 
 /** The original Markdown/HTML renderers serialize their own source; never normalize it here. */
 export async function createTextEditor(kind: "markdown" | "html") {
   const init = await handshake(), gateway = new Gateway(init.token), events = new Events();
   const id = init.artifact.id, path = init.artifact.path;
+  configureTextAssets((await gateway.textAssets(id)).baseUrl, path);
   const decode = (bytes: ArrayBuffer) => new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
   const encode = (text: string) => new TextEncoder().encode(text).buffer;
   const savedSource = decode(await gateway.raw(id, init.artifact.revision));
@@ -80,6 +82,26 @@ export async function createTextEditor(kind: "markdown" | "html") {
   try { prefs = JSON.parse(localStorage.getItem(prefsKey) ?? "{}"); } catch { /* Ignore a damaged UI preference, never document data. */ }
   const remember = (key: string, value: unknown) => { prefs[key] = value; localStorage.setItem(prefsKey, JSON.stringify(prefs)); return value; };
   let previewQueue = Promise.resolve();
+  const saveImage = async (data: { base64: string; ext: string }) => {
+    if (init.readOnly) throw new Error("이 판은 읽기 전용입니다.");
+    if (typeof data?.base64 !== "string" || data.base64.length > 70_000_000) throw new Error("그림 데이터의 크기 한도를 넘었습니다.");
+    const binary = atob(data.base64), bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+    return gateway.saveImage(id, revision, bytes.buffer, `image.${data.ext}`);
+  };
+  const pickImage = () => new Promise<string | null>((resolve, reject) => {
+    if (init.readOnly) { reject(new Error("이 판은 읽기 전용입니다.")); return; }
+    const input = document.createElement("input");
+    input.type = "file"; input.accept = "image/png,image/jpeg,image/gif";
+    input.oncancel = () => resolve(null);
+    input.onchange = async () => {
+      const file = input.files?.[0]; if (!file) { resolve(null); return; }
+      try {
+        if (file.size > 50 * 1024 * 1024) throw new Error("그림이 50MB를 넘습니다.");
+        resolve(await gateway.saveImage(id, revision, await file.arrayBuffer(), file.name));
+      } catch (error) { reject(error); }
+    };
+    input.click();
+  });
   const api = {
     consumePending: async () => path,
     takeSeed: async () => null,
@@ -143,7 +165,12 @@ export async function createTextEditor(kind: "markdown" | "html") {
     rememberWikiFragment: unavailable("위키 링크"), takeWikiFragment: async () => "",
     wikiBacklinks: unavailable("백링크"), wikiGraph: unavailable("그래프"),
     getImageHost: async () => null, setImageHost: unavailable("이미지 호스트"), uploadImage: rejected("이미지 업로드"),
-    pickImage: unavailable("그림 삽입"), saveImage: unavailable("그림 저장"), readImage: unavailable("그림 읽기"), saveImageAs: rejected("그림 저장"),
+    pickImage, saveImage,
+    readImage: async (src: string) => {
+      try { return await gateway.readImage(id, unresolveTextImage(src)); }
+      catch (error) { if (error instanceof GatewayError && [400, 403, 404, 415].includes(error.status)) return null; throw error; }
+    },
+    saveImageAs: rejected("그림 저장"),
     exportDocx: rejected("Word 내보내기"), exportOdt: rejected("ODT 내보내기"), exportPdf: rejected("PDF 내보내기"), exportHtml: rejected("HTML 내보내기"),
     prepareImageExport: rejected("그림 내보내기"), writeExportImage: rejected("그림 내보내기"), finishImageExport: rejected("그림 내보내기"),
     printHtml: rejected("HTML 인쇄"), renderPrintPreview: async () => null,

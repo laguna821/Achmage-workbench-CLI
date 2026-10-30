@@ -34,6 +34,12 @@ commit and what was changed):
       scripts/vendor-hwp-core.mjs. Workbench validation and revision policy
       remains separately in apps/host/src.
 
+  third_party/ieumoffice/text-assets/
+      Pure Node owned-image writer/atomic file helpers and HTML preview/MIME
+      helpers. text-assets.manifest.json records source and output hashes;
+      regenerate with scripts/vendor-text-assets.mjs. Workbench uses creation
+      and reading, not destructive cleanup, to retain assets for document history.
+
 The office editor pages (apps/office) are built from IeumOffice's source at
 the commit named in vendor/ieumoffice.PINNED (fetched by scripts/fetch-ieum.sh,
 not stored in this repository). Shared AI service ports are being integrated

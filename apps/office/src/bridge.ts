@@ -88,6 +88,19 @@ export class Gateway {
     return (await this.call("GET", `/api/artifacts/${artifactId}/html-preview`)).json();
   }
 
+  async textAssets(artifactId: string): Promise<{ baseUrl: string }> {
+    return (await this.call("GET", `/api/artifacts/${artifactId}/assets`)).json();
+  }
+
+  async saveImage(artifactId: string, revision: number, bytes: ArrayBuffer, name?: string): Promise<string> {
+    const response = await this.call("POST", `/api/artifacts/${artifactId}/image?expectedRevision=${revision}&name=${encodeURIComponent(name ?? "image")}`, bytes, { "content-type": "application/octet-stream" });
+    return (await response.json() as { path: string }).path;
+  }
+
+  async readImage(artifactId: string, src: string): Promise<{ base64: string; mime: string }> {
+    return (await this.call("GET", `/api/artifacts/${artifactId}/image?src=${encodeURIComponent(src)}`)).json();
+  }
+
   async updatePreview(artifactId: string, text: string) {
     await this.call("PUT", `/api/artifacts/${artifactId}/html-preview`, text, { "content-type": "text/html; charset=utf-8" });
   }

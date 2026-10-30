@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Artifact, Snapshot, Work } from "@workbench/contracts";
 import { installProbe, pageErrors, seedLayout, shot, until, type Ctx } from "./scenarios.ts";
@@ -8,9 +8,15 @@ import { KEY } from "./webdriver.ts";
 export async function textOfficeScenario(ctx: Ctx) {
   const S = "26 Markdown·HTML 편집기", { wd, api } = ctx.app;
   const work = await api<Work>("POST", "/api/works", { title: "이음 원문 편집 검사", cwd: null });
+  const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+  mkdirSync(join(work.cwd, "images")); mkdirSync(join(work.cwd, "assets"));
+  writeFileSync(join(work.cwd, "images/원래 그림.png"), Buffer.from(png, "base64"));
+  writeFileSync(join(work.cwd, "assets/original.png"), Buffer.from(png, "base64"));
+  writeFileSync(join(work.cwd, "assets/style.css"), "h1 { color: rgb(23, 89, 123) !important; }");
+  writeFileSync(join(work.cwd, "assets/behavior.js"), "document.body.dataset.assetScript = 'loaded';");
   const sources = {
-    markdown: '\ufeff# Original heading\r\n\r\nOriginal paragraph.\r\n\r\n[link][ref]\r\n\r\n[ref]: https://example.com\r\n\r\n[^1]: Keep this footnote\r\n\r\n<div data-keep="yes">Raw HTML stays</div>\r\n',
-    html: '<!doctype html>\r\n<html><head><title>Original page</title></head><body><h1>Original HTML</h1><p data-keep="yes">Keep exact spacing.</p></body></html>\r\n',
+    markdown: '\ufeff# Original heading\r\n\r\nOriginal paragraph.\r\n\r\n[link][ref]\r\n\r\n[ref]: https://example.com\r\n\r\n[^1]: Keep this footnote\r\n\r\n<div data-keep="yes">Raw HTML stays</div>\r\n\r\n![Original image](<images/원래 그림.png>)\r\n',
+    html: '<!doctype html>\r\n<html><head><title>Original page</title><base href="assets/"><link rel="stylesheet" href="style.css"></head><body><h1>Original HTML</h1><p data-keep="yes">Keep exact spacing.</p><img src="original.png"><script src="behavior.js"></script></body></html>\r\n',
   };
   const snapshot = () => api<Snapshot>("GET", "/api/snapshot");
   const saveKey = () => wd.keys([{ type: "keyDown", value: KEY.control }, { type: "keyDown", value: "s" }, { type: "keyUp", value: "s" }, { type: "keyUp", value: KEY.control }]);
@@ -38,6 +44,20 @@ export async function textOfficeScenario(ctx: Ctx) {
     // A no-op save must preserve BOM/CRLF/reference definitions/raw HTML, not just visible prose.
     const unchanged = await until(async () => await wd.execute<boolean>('return !!window.__textSave?.result.ok;'), 10_000) && readFileSync(file, "utf8") === sources[kind];
     ctx.report.check(S, `${kind}: 변경 없는 저장이 원문 바이트를 보존`, unchanged);
+    if (kind === "markdown") {
+      ctx.report.check(S, "Markdown: 원래 상대 경로·공백·한글 그림 표시", await until(async () => await wd.execute<boolean>('return [...document.querySelectorAll(".tiptap img")].some(image => image.complete && image.naturalWidth > 0);'), 10_000));
+      await wd.click(await wd.waitFor(".tiptap p"));
+      // Exercise the original paste handler and real scoped host; only the clipboard input is synthetic.
+      await wd.execute('const bytes=Uint8Array.from(atob(arguments[0]), c=>c.charCodeAt(0)); const data=new DataTransfer(); data.items.add(new File([bytes], "붙인 그림.png", {type:"image/png"})); document.querySelector(".tiptap").dispatchEvent(new ClipboardEvent("paste", {clipboardData:data, bubbles:true,cancelable:true}));', png);
+      const pasted = await until(async () => await wd.execute<boolean>('return [...document.querySelectorAll(".tiptap img")].filter(image => image.complete && image.naturalWidth > 0).length >= 2;'), 10_000);
+      await saveKey();
+      const persisted = await until(async () => readFileSync(file, "utf8").includes("assets/image.png"), 10_000);
+      ctx.report.check(S, "Markdown: 붙여넣기 처리·소유 자산 저장·원문 상대 경로", pasted && persisted && !readFileSync(file, "utf8").includes("/preview/"));
+      if (persisted) {
+        const manifest = JSON.parse(readFileSync(join(work.cwd, "assets/.genoffice-assets.json"), "utf8"));
+        ctx.report.check(S, "Markdown: 기존 그림 보존·새 그림 소유 기록", readFileSync(join(work.cwd, "assets/original.png")).equals(Buffer.from(png, "base64")) && manifest.pending["원문 보존.md"].includes("image.png"));
+      }
+    }
     await wd.click(kind === "markdown" ? await wd.waitFor(".tiptap h1") : editor);
     if (kind === "html") await wd.keys([{ type: "keyDown", value: KEY.control }, { type: "keyDown", value: "" }, { type: "keyUp", value: "" }, { type: "keyUp", value: KEY.control }]);
     const marker = kind === "markdown" ? " NATIVE MARKDOWN EDIT" : "<!--NATIVE HTML EDIT-->";
@@ -55,6 +75,7 @@ export async function textOfficeScenario(ctx: Ctx) {
       const rendered = await until(async () => await wd.execute<boolean>('return document.body.textContent.includes("Original HTML");'), 15_000);
       const isolated = await wd.execute<boolean>('try { return !parent.htmlApi; } catch { return true; }');
       ctx.report.check(S, "HTML 실제 미리보기·편집기 권한 격리", rendered && isolated);
+      ctx.report.check(S, "HTML: 원본 base 상대 그림·CSS·스크립트 표시", await until(async () => await wd.execute<boolean>('return document.querySelector("img")?.naturalWidth > 0 && getComputedStyle(document.querySelector("h1")).color === "rgb(23, 89, 123)" && document.body.dataset.assetScript === "loaded";'), 10_000));
     }
     await wd.frame(null);
     await clickLabel('.doc-header [role="radio"]', kind === "markdown" ? "원문" : "원문");
@@ -63,6 +84,7 @@ export async function textOfficeScenario(ctx: Ctx) {
     await clickLabel('.doc-header [role="radio"]', "편집");
     await wd.frame(await wd.waitFor("iframe.office-frame", 15_000));
     ctx.report.check(S, `${kind}: 편집기 재열기`, await until(async () => await wd.execute<boolean>('return document.body.textContent.includes(arguments[0]);', marker), 20_000));
+    if (kind === "markdown") ctx.report.check(S, "Markdown: 새 판 재열기 뒤 두 그림 유지", await until(async () => await wd.execute<boolean>('return [...document.querySelectorAll(".tiptap img")].filter(image => image.complete && image.naturalWidth > 0).length >= 2;'), 10_000));
     // A conflicting disk update must survive; this editor's unsaved source survives a reload.
     if (kind === "html") await clickLabel("button", "분할");
     const reopenedEditor = await wd.waitFor(selector, 15_000);

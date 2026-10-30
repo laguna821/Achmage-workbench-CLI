@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import type { Server } from "node:http";
 import type { DocumentRegistration } from "@workbench/contracts";
 import type { AddressInfo } from "node:net";
@@ -209,13 +209,13 @@ describe("office editor pages", () => {
     const token = grants.issue(page.id, { viewId: "html-view", writeToken: null });
     const request = (method: string, target: string, auth: string, body?: string) => fetch(`${origin}${target}`, { method, headers: { authorization: `Bearer ${auth}` }, body });
     const route = `/api/artifacts/${page.id}/html-preview`;
-    const info = await (await request("GET", route, token)).json() as { url: string };
+    const info = await (await request("GET", route, token)).json() as { url: string; baseUrl: string };
     expect(info.url).not.toContain(token);
     expect((await fetch(`${origin}${info.url}`)).status).toBe(404);
     const preview = '<html><script>parent.postMessage("page", "*")</script><p>Live unsaved</p></html>';
     expect((await request("PUT", route, token, preview)).status).toBe(200);
     const response = await fetch(`${origin}${info.url}?v=1`);
-    expect(await response.text()).toBe(preview);
+    expect(await response.text()).toBe(preview.replace("<html>", `<html><base href="${info.baseUrl}">`));
     expect(response.headers.get("content-security-policy")).toContain("sandbox allow-scripts");
     expect(response.headers.get("content-security-policy")).not.toContain("allow-same-origin");
     expect((await request("PUT", route, info.url.split("/")[2]!, "forged")).status).toBe(401);
@@ -223,9 +223,77 @@ describe("office editor pages", () => {
     const renewed = grants.issue(page.id, { viewId: "html-view", writeToken: "renewed" });
     expect(await (await request("GET", route, renewed)).json()).toEqual(info);
     await request("PUT", route, renewed, "new preview");
-    expect(await (await fetch(`${origin}${info.url}`)).text()).toBe("new preview");
+    expect(await (await fetch(`${origin}${info.url}`)).text()).toBe(`<base href="${info.baseUrl}">new preview`);
     expect(readFileSync(file, "utf8")).toBe("<!doctype html><p>Original</p>");
     grants.issue("other-1"); grants.issue("other-2"); grants.issue("other-3");
     expect((await fetch(`${origin}${info.url}`)).status).toBe(404);
+  });
+
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
+  it("serves only document-scoped assets, including saved-web-page extensionless assets", async () => {
+    const { manager, web, note } = setup(), root = dirname(note.path);
+    writeFileSync(join(root, "page.html"), '<!doctype html><base href="files/"><img src="pic.png">');
+    const page = manager.openFile(note.workId, "page.html");
+    mkdirSync(join(root, "files")); mkdirSync(join(root, ".private"));
+    for (const name of ["그림 100%.png", "files/pic.png", "files/without-extension", ".private/hidden.png"]) writeFileSync(join(root, name), png);
+    writeFileSync(join(root, "files/style.css"), "body { color: red }");
+    writeFileSync(join(root, "files/script.js"), "document.body.dataset.loaded='yes'");
+    writeFileSync(join(root, "files/style-without-extension"), "body { color: blue }");
+    writeFileSync(join(root, "secret.json"), '{"secret":"no"}'); writeFileSync(join(root, ".env"), "SECRET=no");
+    writeFileSync(join(dirname(root), "outside.png"), png); symlinkSync(join(dirname(root), "outside.png"), join(root, "escape.png"));
+    const grants = new EditorGrants(2), origin = await listen(createEditorsServer(manager.documents, grants, web));
+    const token = grants.issue(page.id), auth = { authorization: `Bearer ${token}` };
+    const info = await (await fetch(`${origin}/api/artifacts/${page.id}/assets`, { headers: auth })).json() as { baseUrl: string; url: string };
+    const get = (path: string, accept = "image/*") => fetch(`${origin}${info.baseUrl}${path}`, { headers: { accept } });
+    expect(info.baseUrl).not.toContain(token);
+    expect(Buffer.from(await (await get(encodeURIComponent("그림 100%.png"))).arrayBuffer())).toEqual(png);
+    expect((await get("files/style.css", "text/css")).headers.get("content-type")).toContain("text/css");
+    expect((await get("files/script.js", "*/*")).headers.get("access-control-allow-origin")).toBeNull();
+    expect((await get("files/without-extension")).headers.get("content-type")).toBe("image/png");
+    expect((await get("files/style-without-extension", "text/css")).headers.get("content-type")).toContain("text/css");
+    for (const path of ["secret.json", ".env", ".private/hidden.png", "escape.png", "%2E%2E%2Foutside.png", "__image?src=%2Fetc%2Fpasswd"]) expect((await get(path)).status).toBeGreaterThanOrEqual(400);
+    expect((await fetch(`${origin}/api/artifacts/${note.id}/image?src=files/pic.png`, { headers: auth })).status).toBe(401);
+    await fetch(`${origin}/api/artifacts/${page.id}/html-preview`, { method: "PUT", headers: auth, body: readFileSync(page.path, "utf8") });
+    expect(await (await fetch(`${origin}${info.url}`)).text()).toBe(readFileSync(page.path, "utf8")); // authored base untouched
+    grants.issue("foreign-1"); grants.issue("foreign-2");
+    expect((await get("files/pic.png")).status).toBe(404);
+  });
+
+  it("writes exclusive owned images with writer/CAS checks and keeps prior and unowned assets", async () => {
+    const { manager, web, note } = setup(), root = dirname(note.path);
+    mkdirSync(join(root, "assets")); writeFileSync(join(root, "assets/image.png"), png);
+    const original = readFileSync(note.path);
+    const grants = new EditorGrants(), origin = await listen(createEditorsServer(manager.documents, grants, web));
+    const open = (viewId: string) => { const view = manager.documents.registry.open(note.id, { viewId, windowId: viewId, claim: true }); return grants.issue(note.id, { viewId, writeToken: view.writeToken }); };
+    const writer = open("image-writer"), reader = open("image-reader");
+    const put = (token: string, revision = 1, bytes = png) => fetch(`${origin}/api/artifacts/${note.id}/image?expectedRevision=${revision}&name=image.png`, { method: "POST", headers: { authorization: `Bearer ${token}` }, body: new Uint8Array(bytes).buffer });
+    expect((await put("invalid")).status).toBe(401); expect((await put(reader)).status).toBe(423);
+    expect((await put(writer, 2)).status).toBe(409); expect((await put(writer, 1, Buffer.from("not a png"))).status).toBe(415);
+    const saved = await (await put(writer)).json() as { path: string };
+    expect(saved.path).toBe("assets/image-1.png"); expect(readFileSync(join(root, saved.path))).toEqual(png);
+    expect(readFileSync(note.path)).toEqual(original); expect(readFileSync(join(root, "assets/image.png"))).toEqual(png);
+    const manifest = JSON.parse(readFileSync(join(root, "assets/.genoffice-assets.json"), "utf8"));
+    expect(manifest.files.map((entry: { name: string }) => entry.name)).toEqual(["image-1.png"]);
+    expect(manifest.pending["메모.md"]).toEqual(["image-1.png"]);
+    const image = await (await fetch(`${origin}/api/artifacts/${note.id}/image?src=${encodeURIComponent(saved.path)}`, { headers: { authorization: `Bearer ${writer}` } })).json();
+    expect(image).toEqual({ base64: png.toString("base64"), mime: "image/png" });
+    const save = await fetch(`${origin}/api/artifacts/${note.id}/text?expectedRevision=1`, { method: "PUT", headers: { authorization: `Bearer ${writer}` }, body: "# No current picture\n" });
+    expect(save.status).toBe(200); expect(readFileSync(join(root, saved.path))).toEqual(png); // history/Undo may still need it
+    writeFileSync(note.path, "outside edit"); expect((await put(writer, 2)).status).toBe(409);
+    manager.documents.registry.close("image-writer", "image-writer"); expect((await put(writer, 2)).status).toBe(423);
+    expect(readdirSync(join(root, "assets")).sort()).toEqual([".genoffice-assets.json", "image-1.png", "image.png"]);
+  });
+
+  it("does not follow a linked asset folder or overwrite a broken ownership manifest", async () => {
+    for (const mode of ["symlink", "manifest"] as const) {
+      const { manager, web, note } = setup(), root = dirname(note.path), target = join(dirname(root), "elsewhere");
+      mkdirSync(target);
+      if (mode === "symlink") symlinkSync(target, join(root, "assets"), "dir");
+      else { mkdirSync(join(root, "assets")); writeFileSync(join(root, "assets/.genoffice-assets.json"), "broken manifest"); }
+      const grants = new EditorGrants(), origin = await listen(createEditorsServer(manager.documents, grants, web)), token = grants.issue(note.id);
+      const result = await fetch(`${origin}/api/artifacts/${note.id}/image?expectedRevision=1`, { method: "POST", headers: { authorization: `Bearer ${token}` }, body: new Uint8Array(png).buffer });
+      expect(result.status).toBe(500); expect(readdirSync(target)).toEqual([]);
+      if (mode === "manifest") { expect(readFileSync(join(root, "assets/.genoffice-assets.json"), "utf8")).toBe("broken manifest"); expect(readdirSync(join(root, "assets"))).toEqual([".genoffice-assets.json"]); }
+    }
   });
 });

@@ -155,6 +155,14 @@ function textEditorPlatform(): Plugin {
     name: "workbench-text-editors",
     enforce: "pre",
     transform(code, id) {
+      if (id === `${ieum}/apps/markdown/src/renderer/editor/localImage.ts`) {
+        for (const [name, adapter] of [["resolveImageSrc", "resolveTextImage"], ["unresolveImageSrc", "unresolveTextImage"]]) {
+          const pattern = new RegExp(`export function ${name}\\(src: string, baseDir: string \\| null = imageBaseDir\\): string \\{[\\s\\S]*?\\n\\}`);
+          if (!pattern.test(code)) this.error("Markdown image resolver changed: review the scoped asset adapter");
+          code = code.replace(pattern, `export function ${name}(src: string): string { return ${adapter}(src); }`);
+        }
+        return `import { resolveTextImage, unresolveTextImage } from ${JSON.stringify(here("./src/text-assets.ts"))};\n${code}`;
+      }
       if (id !== `${ieum}/apps/html/src/renderer/App.tsx`) return null;
       const calls = code.match(/window\.htmlApi\.updatePreview\(/g) ?? [];
       if (calls.length !== 2 || !code.includes("(nextText: string, reload = true) => {")) this.error("HTML preview changed: review the HTTP synchronization adapter");
