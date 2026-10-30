@@ -101,11 +101,13 @@ export function Connections({
   onPropertyTemplate,
   vault,
   worksDir,
+  onOfficeSettings,
 }: {
   /** The Obsidian vault line (pkm). */
   vault?: ReactNode;
   /** "새 프로젝트 폴더 위치" (WorksDirRow.tsx). */
   worksDir?: ReactNode;
+  onOfficeSettings?: () => void;
   tools: DocumentTools | null;
   /** The agent browser (absent from older gateways). */
   browser: AgentBrowserStatus | null;
@@ -170,6 +172,7 @@ export function Connections({
         상태 새로 고침
       </button>
       <ToolsSection tools={tools} onInstallIeum={onInstallIeum} onRefreshTools={onRefreshTools} />
+      {onOfficeSettings && <button type="button" className="text-button" onClick={onOfficeSettings}>문서 AI 설정…</button>}
       <BrowserSection status={browser} actions={browserActions} />
       {vault}
       {worksDir}

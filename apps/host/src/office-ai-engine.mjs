@@ -1,14 +1,11 @@
 // Node-only, original Ieum provider implementation. Keep its Electron-facing type graph out
 // of the host project; the implementation is bundled from the reviewed vendor pin, unchanged.
-import { join } from "node:path";
 import { OfficeSettings, OFFICE_SECRET_PLACEHOLDER } from "./office-settings.mjs";
+import { createOfficeSettingsControls } from "./office-settings-controls.mjs";
 import {
   activeCustomEndpoint, localEndpointTimeoutMs, maxOutputTokensOf,
   normalizeAiSettings, sanitizeAiSettings, streamForProvider, chatForProvider,
 } from "../../../vendor/ieumoffice/packages/ai-provider/src/index.ts";
-import { createSubscriptionStatusService } from "../../../vendor/ieumoffice/packages/ai-provider/src/subscription/service.ts";
-import { createMeteredAcceptanceFileStore } from "../../../vendor/ieumoffice/packages/ai-provider/src/subscription/metered.ts";
-import { listSubscriptionModels } from "../../../vendor/ieumoffice/packages/ai-provider/src/subscription/models.ts";
 import { shutdownSubscriptionChildren } from "../../../vendor/ieumoffice/packages/ai-provider/src/subscription/process.ts";
 import { shutdownCodexAppServers } from "../../../vendor/ieumoffice/packages/ai-provider/src/codex-app-server.ts";
 import { resolveAiRun, aiStreamErrorChunk, aiChatFailure, subscriptionStreamCallbacks } from "../../../vendor/ieumoffice/apps/docs/src/main/ai-run.ts";
@@ -24,13 +21,7 @@ const canonicalSettings = (settings) => JSON.stringify(normalizeAiSettings(sanit
 export function createOfficeAiEngine(dataDir, injected = {}) {
   const store = injected.settingsStore ?? new OfficeSettings(dataDir);
   const getSettings = () => store.publicSettings();
-  const service = createSubscriptionStatusService({
-    getSettings,
-    setMeteredAccepted: (provider, accepted) => store.setMeteredAccepted(provider, accepted),
-    acceptanceStore: createMeteredAcceptanceFileStore(join(dataDir, "office")),
-    detect: injected.detect,
-    listModels: injected.listModels ?? listSubscriptionModels,
-  });
+  const controls = createOfficeSettingsControls(dataDir, store, injected), service = controls.service;
   const statuses = (trusted = false) => Object.fromEntries(Object.entries(service.getStatuses()).map(([id, value]) => {
     const { account: _account, ...status } = value;
     return [id, trusted ? value : status];
@@ -51,8 +42,9 @@ export function createOfficeAiEngine(dataDir, injected = {}) {
   return {
     settings: getSettings,
     configuration: store,
+    settingsInvoke: controls.invoke,
     setMeteredAccepted: (provider, accepted) => service.setMeteredAccepted(provider, accepted),
-    close: () => store.close(),
+    close: () => { controls.close(); store.close(); },
     statuses: async (recheck = false, trusted = false) => {
       if (recheck || Object.values(statuses()).some((value) => value.state === "checking")) await service.check();
       return statuses(trusted);

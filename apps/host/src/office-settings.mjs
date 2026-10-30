@@ -55,6 +55,33 @@ export class OfficeSettings {
     return { revision: current.revision, settings: copy(current.settings), legacySecrets: [...current.refs.values()].filter((v) => v.startsWith("sealed:v1:") && !v.startsWith(OFFICE_SEALED_PREFIX)).length };
   }
   publicSettings() { return mapAiSecrets(this.snapshot().settings, (v) => v ? OFFICE_SECRET_PLACEHOLDER : ""); }
+  async openSecret(value) {
+    if (typeof value !== "string" || value.length > 200_000) throw error("office_settings_secret_invalid", "키 형식이 올바르지 않습니다.");
+    if (value.startsWith(REFERENCE)) {
+      const raw = this.current().refs.get(value);
+      if (raw === undefined) throw error("office_settings_secret_changed", "보관된 키가 변경되었습니다. 설정을 다시 읽어 주세요.", 409);
+      return raw.startsWith("sealed:v1:") ? this.vault.open(raw) : raw;
+    }
+    if (value.startsWith("sealed:v1:") || value === OFFICE_SECRET_PLACEHOLDER) throw error("office_settings_secret_invalid", "설정을 다시 읽어 주세요.");
+    return value;
+  }
+  /** A trusted settings connection test may use its unsaved draft; never writes it. */
+  async draftSettings(draft) {
+    const safe = sanitizeAiSettings(draft);
+    if (!safe) throw error("office_settings_invalid", "AI 설정 형식이 올바르지 않습니다.");
+    const normalized = normalizeAiSettings(safe), values = new Map();
+    mapAiSecrets(normalized, (value) => { values.set(value, undefined); return value; });
+    for (const value of values.keys()) {
+      try { values.set(value, await this.openSecret(value)); }
+      catch (error) {
+        // An unrelated legacy key must not prevent testing a new provider. Like
+        // executionSettings, leave unavailable legacy credentials empty in memory.
+        if (error.code !== "office_legacy_secret") throw error;
+        values.set(value, "");
+      }
+    }
+    return mapAiSecrets(normalized, (value) => values.get(value));
+  }
   async executionSettings() {
     const current = this.current(), opened = new Map();
     for (const [ref, raw] of current.refs) {
@@ -67,7 +94,7 @@ export class OfficeSettings {
     const job = this.queue.then(() => this.save(settings, expectedRevision, options));
     this.queue = job.catch(() => {}); return job;
   }
-  async save(settings, expectedRevision, { metered = false } = {}) {
+  async save(settings, expectedRevision, { metered = false, signal } = {}) {
     if (this.closed) throw error("office_settings_closed", "앱을 종료하고 있습니다.", 503);
     const current = this.current();
     if (expectedRevision !== current.revision) throw error("office_settings_changed", "다른 창에서 AI 설정을 변경했습니다. 현재 설정을 다시 읽어 주세요.", 409);
@@ -94,6 +121,7 @@ export class OfficeSettings {
     if (Buffer.byteLength(output) > LIMIT) throw error("office_settings_large", "AI 설정이 너무 큽니다.");
     // Keyring access can wait for an unlock. Re-check after it, immediately before atomic replace.
     if (revisionOf(this.raw()) !== expectedRevision) throw error("office_settings_changed", "저장하는 동안 AI 설정이 변경되었습니다. 현재 설정을 다시 읽어 주세요.", 409);
+    if (signal?.aborted) throw error("office_settings_cancelled", "설정 연결을 취소했습니다.", 499);
     if (this.closed) throw error("office_settings_closed", "앱을 종료하고 있습니다.", 503);
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });
     const temporary = join(this.directory, `.ai-settings-${randomUUID()}.tmp`);

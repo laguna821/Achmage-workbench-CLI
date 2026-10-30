@@ -13,6 +13,7 @@ import { Kordoc } from "./kordoc.ts";
 import { IeumOffice, findIeum } from "./ieumoffice.ts";
 import { installToolWrappers } from "./tool-bin.ts";
 import { createEditorsServer, EditorGrants } from "./editors.ts";
+import { createOfficeSettingsServer } from "./office-settings-server.ts";
 import { OfficeAi } from "./office-ai.ts";
 import { AgentBrowser } from "./browse.ts";
 import { buildTimeline } from "./timeline.ts";
@@ -130,11 +131,14 @@ const grants = new EditorGrants();
 const officeAi = new OfficeAi(dataDir, undefined, manager.office);
 const editors = createEditorsServer(manager.documents, grants, webDir && existsSync(webDir) ? webDir : null, officeAi);
 let editorsOrigin: string | null = null;
+let officeSettingsOrigin: string | null = null, applicationOrigin: string | null = null;
+const officeSettingsServer = createOfficeSettingsServer(webDir && existsSync(webDir) ? webDir : null, () => applicationOrigin);
 // Images pasted into Markdown documents: the user's R2 bucket, or the work folder (doc-images.ts).
 const docImages = new DocImages({ dataDir, documents: manager.documents, workCwd: (workId) => manager.workCwd(workId), endpoint: env.WORKBENCH_R2_ENDPOINT ?? null });
 const server = createHttpServer(manager, bus, {
   token,
   officeAi,
+  officeSettingsOrigin: () => officeSettingsOrigin,
   webDir: webDir && existsSync(webDir) ? webDir : null,
   // UI errors stay on this machine, next to the state database.
   onClientLog: (message) => appendFileSync(join(dataDir, "client.log"), `${new Date().toISOString()} ${message}\n`),
@@ -171,13 +175,19 @@ function listen(target: typeof server, fixed: string | undefined, file: string, 
 // The editors first, so a document opened right away finds them.
 listen(editors, env.WORKBENCH_EDITORS_PORT, editorsPortFile, (editorsPort) => {
   editorsOrigin = `http://127.0.0.1:${editorsPort}`;
-  listen(server, env.WORKBENCH_PORT, portFile, (boundPort) => {
-    process.stdout.write(
-      `WORKBENCH_READY ${JSON.stringify({ url: `http://127.0.0.1:${boundPort}`, port: boundPort, token, dataDir, editorsUrl: editorsOrigin })}\n`,
-    );
-    void shellPath.then(() => manager.initProviders());
-    // "예약 작업": sends what is due every half minute (checks use a shorter tick).
-    manager.schedules.start(Number(env.WORKBENCH_SCHEDULE_TICK_MS) || 30_000);
+  officeSettingsServer.listen(0, "127.0.0.1", () => {
+    const address = officeSettingsServer.address();
+    if (!address || typeof address === "string") throw new Error("Office settings server has no address");
+    officeSettingsOrigin = `http://127.0.0.1:${address.port}`;
+    listen(server, env.WORKBENCH_PORT, portFile, (boundPort) => {
+      applicationOrigin = `http://127.0.0.1:${boundPort}`;
+      process.stdout.write(
+        `WORKBENCH_READY ${JSON.stringify({ url: applicationOrigin, port: boundPort, token, dataDir, editorsUrl: editorsOrigin })}\n`,
+      );
+      void shellPath.then(() => manager.initProviders());
+      // "예약 작업": sends what is due every half minute (checks use a shorter tick).
+      manager.schedules.start(Number(env.WORKBENCH_SCHEDULE_TICK_MS) || 30_000);
+    });
   });
 });
 
@@ -188,6 +198,7 @@ async function stop() {
   server.close();
   officeAi.close();
   editors.close();
+  officeSettingsServer.close();
   find.close();
   pkm.close();
   await manager.shutdown().catch(() => undefined);

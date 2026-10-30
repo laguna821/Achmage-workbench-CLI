@@ -132,7 +132,7 @@ export class Api {
   }
 
   /** Any API call (feature clients such as pkm.ts build on it). */
-  async request<T>(method: string, path: string, body?: unknown, options: Pick<RequestInit, "keepalive"> = {}): Promise<T> {
+  async request<T>(method: string, path: string, body?: unknown, options: Pick<RequestInit, "keepalive" | "signal"> = {}): Promise<T> {
     const response = await fetch(path, {
       method,
       headers: { authorization: `Bearer ${this.token}`, "content-type": "application/json", ...this.editorHeaders() },

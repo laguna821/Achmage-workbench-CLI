@@ -29,6 +29,7 @@ import { WorkspacePreparationDialog } from "./components/WorkspacePreparationDia
 import { SourceControlDialog } from "./components/SourceControlDialog.tsx";
 import { IntegrationsSheet } from "./components/IntegrationsSheet.tsx";
 import { ImageUploadRow, ImageUploadSheet } from "./components/ImageUploadSheet.tsx";
+import { OfficeSettings } from "./components/OfficeSettings.tsx";
 import { Onboarding } from "./components/Onboarding.tsx";
 import type { EngineActions } from "./components/EngineSetup.tsx";
 import { SessionPicker } from "./components/SessionPicker.tsx";
@@ -280,6 +281,7 @@ export function App() {
   const panesRef = useRef<{ focusIfShown: (key: string) => boolean; placeItem: (item: PaneItem, side: Side) => void }>({ focusIfShown: () => false, placeItem: () => undefined });
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const [imageUploadOpen, setImageUploadOpen] = useState(false);
+  const [officeSettingsOpen, setOfficeSettingsOpen] = useState(false);
   const [onboardingAgain, setOnboardingAgain] = useState(false);
   // Documents opened in each work, shown as tabs and offered first by "@".
   const [openDocs, setOpenDocs] = useState<Record<string, string[]>>(() => readJson(OPEN_DOCS_KEY, {}));
@@ -1466,6 +1468,7 @@ export function App() {
     { id: "theme", label: focusedTheme === "dark" ? "라이트 화면으로" : "다크 화면으로", icon: focusedTheme === "dark" ? "sun" : "moon", run: () => savePrefs({ theme: focusedTheme === "dark" ? "light" : "dark" }) },
     { id: "appearance", label: "엔진 외형 설정", icon: "palette", run: () => appearanceApi.openSettings() },
     { id: "integrations", label: "MCP·스킬 보기", icon: "tool", run: () => setIntegrationsOpen(true) },
+    { id: "office-settings", label: "문서 AI 설정", icon: "tool", run: () => setOfficeSettingsOpen(true) },
     { id: "connections", label: "연결과 설정", icon: "dots", run: () => setMenuOpen(true) },
     { id: "onboarding", label: "처음 안내 다시 보기", icon: "eye", run: () => setOnboardingAgain(true) },
   ];
@@ -2035,6 +2038,7 @@ export function App() {
             </button>
             <Popover open={menuOpen} onClose={closeMenu} align="right">
               <Connections
+                onOfficeSettings={() => { closeMenu(); setOfficeSettingsOpen(true); }}
                 onIntegrations={() => {
                   closeMenu();
                   setIntegrationsOpen(true);
@@ -2157,6 +2161,7 @@ export function App() {
       {scmWorkspace ? <SourceControlDialog key={scmWorkspace.id} api={api} workspace={state.workspaces[scmWorkspace.id] ?? scmWorkspace} onClose={() => setScmWorkspace(null)} onTerminal={() => { setTerminalWorkspace(scmWorkspace); setScmWorkspace(null); }} /> : null}
       {integrationsOpen && api ? <IntegrationsSheet api={api} onClose={() => setIntegrationsOpen(false)} onToast={setToast} /> : null}
       {imageUploadOpen && api ? <ImageUploadSheet api={api} onClose={() => setImageUploadOpen(false)} onToast={setToast} /> : null}
+      {officeSettingsOpen && api ? <OfficeSettings api={api} theme={appTheme} onClose={() => setOfficeSettingsOpen(false)} /> : null}
       {state.ready && api && (prefs.onboarding !== "done" || onboardingAgain) ? (
         <Onboarding
           providers={state.providers}

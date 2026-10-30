@@ -150,6 +150,28 @@ function pagePlatform(): Plugin {
   };
 }
 
+/** Reuse the original advanced panes without mounting the unrelated shell settings dialog. */
+function originalSettingsPanes(): Plugin {
+  return {
+    name: "workbench-original-settings-panes", enforce: "pre",
+    transform(code, id) {
+      if (id !== `${ieum}/apps/shell/src/renderer/src/SettingsModal.tsx`) return null;
+      for (const name of ["AiModelPane", "AiMediaPane"]) {
+        const marker = `function ${name}(`;
+        if (code.split(marker).length !== 2) this.error("Original AI settings panes changed; review their export adapter");
+        code = code.replace(marker, `export ${marker}`);
+      }
+      // The original normalizer trims every name keystroke, eating an internal
+      // space before the next character is typed. Keep the input draft intact;
+      // writeAiSettings still performs the original normalization on save.
+      const rename = "setSettings(upsertCustomEndpoint(settings, { ...endpoint, name }))";
+      if (code.split(rename).length !== 2) this.error("Original endpoint naming changed; review its draft adapter");
+      code = code.replace(rename, "setSettings({ ...settings, customEndpoints: (settings.customEndpoints ?? []).map((item) => item.id === endpoint.id ? { ...item, name } : item) })");
+      return code;
+    },
+  };
+}
+
 /** Electron's preview push was synchronous IPC. HTTP must finish before a frame reload. */
 function textEditorPlatform(): Plugin {
   return {
@@ -235,6 +257,7 @@ export default defineConfig({
   base: "/office/",
   plugins: [
     pagePlatform(),
+    originalSettingsPanes(),
     textEditorPlatform(),
     react(),
     tiptapMountGrace(),
@@ -294,6 +317,6 @@ export default defineConfig({
     target: "es2022",
     sourcemap: false,
     chunkSizeWarningLimit: 6000,
-    rollupOptions: { input: { docs: here("./docs.html"), slides: here("./slides.html"), sheets: here("./sheets.html"), hwp: here("./hwp.html"), markdown: here("./markdown.html"), html: here("./html.html"), pdf: here("./pdf.html"), mindmap: here("./mindmap.html"), epub: here("./epub.html") } },
+    rollupOptions: { input: { settings: here("./settings.html"), docs: here("./docs.html"), slides: here("./slides.html"), sheets: here("./sheets.html"), hwp: here("./hwp.html"), markdown: here("./markdown.html"), html: here("./html.html"), pdf: here("./pdf.html"), mindmap: here("./mindmap.html"), epub: here("./epub.html") } },
   },
 });

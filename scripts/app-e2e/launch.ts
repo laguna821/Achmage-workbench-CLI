@@ -143,6 +143,7 @@ export type Stage = {
   /** Temporary X11 server only for the legacy Electron document renderer. */
   x11?: { display: string; authority: string };
   printDialog?: boolean;
+  privateKeyring?: boolean;
   tools: Tools;
   /** JSON lines written by the opener stand-ins. */
   openLog: string;
@@ -174,10 +175,11 @@ export type AppRun = {
 };
 
 /** Build the stage: temp root, DPI module, bus config, opener stand-ins, a Broadway display. */
-export async function openStage(outDir: string, options: { legacyOffice?: boolean; printDialog?: boolean } = {}): Promise<Stage> {
+export async function openStage(outDir: string, options: { legacyOffice?: boolean; printDialog?: boolean; privateKeyring?: boolean } = {}): Promise<Stage> {
   const tools = findTools();
   const root = mkdtempSync("/tmp/wb-app-e2e-");
   const started: ChildProcess[] = [];
+  const keyringPassword = options.privateKeyring ? randomBytes(32).toString("base64") : undefined;
   const runtimeDir = join(root, "runtime");
   mkdirSync(runtimeDir, { mode: 0o700 });
   try {
@@ -254,10 +256,11 @@ export async function openStage(outDir: string, options: { legacyOffice?: boolea
     broadwayPort,
     x11,
     printDialog: options.printDialog,
+    privateKeyring: options.privateKeyring,
     tools,
     openLog,
     async launch(options) {
-      const run = await launchApp({ stage, options, dpiModule, busConfig, shimDir, started });
+      const run = await launchApp({ stage, options, dpiModule, busConfig, shimDir, started, keyringPassword });
       runs.push(run);
       return run;
     },
@@ -277,7 +280,7 @@ export async function openStage(outDir: string, options: { legacyOffice?: boolea
   }
 }
 
-async function launchApp(input: { stage: Stage; options: LaunchOptions; dpiModule: string; busConfig: string; shimDir: string; started: ChildProcess[] }): Promise<AppRun> {
+async function launchApp(input: { stage: Stage; options: LaunchOptions; dpiModule: string; busConfig: string; shimDir: string; started: ChildProcess[]; keyringPassword?: string | undefined }): Promise<AppRun> {
   const { stage, options, dpiModule, busConfig, shimDir, started } = input;
   if (options.profile && !/^[a-z0-9-]{1,40}$/.test(options.profile)) throw new Error("Invalid temporary profile name");
   const dir = options.profile ? join(stage.root, `profile-${options.profile}`) : mkdtempSync(join(stage.root, `${options.name}-`));
@@ -287,7 +290,7 @@ async function launchApp(input: { stage: Stage; options: LaunchOptions; dpiModul
   const token = randomBytes(18).toString("base64url");
   const env: NodeJS.ProcessEnv = { ...process.env };
   // Nothing started under the harness can reach the user's compositor or session bus.
-  for (const key of ["WAYLAND_DISPLAY", "WAYLAND_SOCKET", "DISPLAY", "XAUTHORITY", "DBUS_SESSION_BUS_ADDRESS"]) delete env[key];
+  for (const key of ["WAYLAND_DISPLAY", "WAYLAND_SOCKET", "DISPLAY", "XAUTHORITY", "DBUS_SESSION_BUS_ADDRESS", "DBUS_STARTER_ADDRESS", "DBUS_STARTER_BUS_TYPE", "GNOME_KEYRING_CONTROL", "GNOME_KEYRING_PID"]) delete env[key];
   Object.assign(env, {
     GDK_BACKEND: "broadway",
     XDG_RUNTIME_DIR: stage.runtimeDir,
@@ -296,6 +299,7 @@ async function launchApp(input: { stage: Stage; options: LaunchOptions; dpiModul
     NO_AT_BRIDGE: "1",
     // The shell's WebKit storage ($XDG_DATA_HOME/kr.achmage.workbench) and caches: temporary.
     XDG_DATA_HOME: join(dir, "xdg-data"),
+    XDG_CONFIG_HOME: join(dir, "xdg-config"),
     XDG_CACHE_HOME: join(dir, "xdg-cache"),
     WORKBENCH_DATA_DIR: dataDir,
     WORKBENCH_TOKEN: token,
@@ -320,11 +324,19 @@ async function launchApp(input: { stage: Stage; options: LaunchOptions; dpiModul
   const nativePort = await freePort();
   const driverLog = join(stage.outDir, `${options.name}-driver.log`);
   const log = openSync(driverLog, "w");
+  const driverArgs = [stage.tools.tauriDriver, "--port", String(driverPort), "--native-port", String(nativePort), "--native-driver", stage.tools.webkitDriver];
+  if (stage.privateKeyring) {
+    // GNOME falls back to a real HOME keyring unless this directory already exists.
+    mkdirSync(join(env.XDG_DATA_HOME!, "keyrings"), { recursive: true, mode: 0o700 });
+    mkdirSync(env.XDG_CONFIG_HOME!, { recursive: true, mode: 0o700 });
+    driverArgs.unshift(process.execPath, join(here, "keyring-driver.ts"));
+  }
   const driver = spawn(
     "dbus-run-session",
-    ["--config-file", busConfig, "--", stage.tools.tauriDriver, "--port", String(driverPort), "--native-port", String(nativePort), "--native-driver", stage.tools.webkitDriver],
-    { env, stdio: ["ignore", log, log] },
+    ["--config-file", busConfig, "--", ...driverArgs],
+    { env, stdio: [stage.privateKeyring ? "pipe" : "ignore", log, log] },
   );
+  if (stage.privateKeyring) driver.stdin!.end(input.keyringPassword);
   closeSync(log);
   started.push(driver);
   const wd = new WebDriver(`http://127.0.0.1:${driverPort}`);

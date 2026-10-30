@@ -9,6 +9,7 @@ export interface OfficeAiEngine {
   settings(): Record<string, unknown>;
   statuses(recheck?: boolean, trusted?: boolean): Promise<Record<string, OfficeAiStatus>>;
   configuration?: OfficeSettings;
+  settingsInvoke?(channel: string, args: unknown[], owner: string, signal: AbortSignal): Promise<unknown>;
   setMeteredAccepted?(provider: string, accepted: boolean): Promise<unknown>;
   close?(): void;
   stream(request: OfficeAiStream, sessionId: string, signal: AbortSignal, send: (chunk: OfficeAiChunk) => void): Promise<void>;

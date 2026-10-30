@@ -44,6 +44,24 @@ describe("Office native secret vault", () => {
 });
 
 describe("Office settings persistence", () => {
+  it("tests an unsaved provider without opening an unrelated legacy Electron key", async () => {
+    const f = fixture({ providers: { gemini: { apiKey: "sealed:v1:legacy-fixture" } } });
+    try {
+      const before = readFileSync(f.store.path), initial = f.store.snapshot();
+      const draft = await f.store.draftSettings(configure(initial.settings, "unsaved-key"));
+      expect(draft.providers.openai.apiKey).toBe("unsaved-key"); expect(draft.providers.gemini.apiKey).toBe("");
+      expect(readFileSync(f.store.path)).toEqual(before);
+    } finally { f.close(); }
+  });
+  it("does not persist a cancelled browser connection after waiting for the native vault", async () => {
+    const f = fixture(), abort = new AbortController();
+    const store = new OfficeSettings(f.dir, new OfficeVault(f.dir, async () => { abort.abort(); return { id: f.id, key: Buffer.from(f.key) }; }));
+    try {
+      const initial = store.snapshot();
+      await expect(store.write(configure(initial.settings), initial.revision, { signal: abort.signal })).rejects.toMatchObject({ code: "office_settings_cancelled" });
+      expect(existsSync(store.path)).toBe(false);
+    } finally { store.close(); f.close(); }
+  });
   it("seals all original secret fields, preserves non-secret settings and reopens after restart", async () => {
     const f = fixture(); let restarted: OfficeSettings | undefined;
     try {

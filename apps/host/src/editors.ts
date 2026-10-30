@@ -92,6 +92,7 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
     const method = req.method ?? "GET";
     try {
       if (/^\/office\//.test(path) && method === "GET") {
+        if (decodeURIComponent(path).toLowerCase() === "/office/settings.html") throw new HttpError(404, "not_here", "설정은 전용 화면에서 열립니다.");
         if (!webDir) throw new HttpError(404, "no_web", "편집기 화면이 빌드되지 않았습니다.");
         return serveStatic(res, webDir, path, PAGE_HEADERS);
       }

@@ -74,7 +74,7 @@ export class OfficeAi {
   /** Called only after the main gateway authenticates its full application token.
    * The editor origin never routes here and its document grants cannot write settings. */
   async handleSettings(req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
-    const match = /^\/api\/office-ai\/(settings|statuses|metered)$/.exec(url.pathname);
+    const match = /^\/api\/office-ai\/(settings|statuses|metered|invoke)$/.exec(url.pathname);
     if (!match) return false;
     const operation = match[1], engine = await this.getEngine();
     if (!engine.configuration) throw new HttpError(503, "office_settings_unavailable", "AI 설정을 사용할 수 없습니다.");
@@ -83,11 +83,18 @@ export class OfficeAi {
       sendJson(res, 200, await engine.statuses(url.searchParams.get("refresh") === "1", true)); return true;
     }
     if (operation === "settings" && req.method === "GET") { sendJson(res, 200, engine.configuration.snapshot()); return true; }
-    if ((operation === "settings" && req.method === "PUT") || (operation === "metered" && req.method === "POST")) {
+    if ((operation === "settings" && req.method === "PUT") || ((operation === "metered" || operation === "invoke") && req.method === "POST")) {
       let body: unknown;
       try { body = JSON.parse((await readBody(req, 2_000_000)).toString("utf8")); }
       catch (error) { if (error instanceof HttpError) throw error; return invalid(); }
       if (!record(body)) return invalid();
+      if (operation === "invoke") {
+        if (!engine.settingsInvoke || typeof body.channel !== "string" || !Array.isArray(body.args) || !identifier(body.owner)) return invalid();
+        const run = this.begin(`settings:${body.owner}`, randomUUID(), res, 16);
+        try { const value = await engine.settingsInvoke(body.channel, body.args, body.owner, run.signal); if (!res.destroyed) sendJson(res, 200, value ?? null); }
+        finally { run.finish(); }
+        return true;
+      }
       if (operation === "metered") {
         if (!engine.setMeteredAccepted || !["codex", "claude-code"].includes(String(body.provider)) || typeof body.accepted !== "boolean") return invalid();
         sendJson(res, 200, await engine.setMeteredAccepted(String(body.provider), body.accepted)); return true;
@@ -97,11 +104,11 @@ export class OfficeAi {
     }
     throw new HttpError(405, "method_not_allowed", "허용되지 않은 AI 설정 요청입니다.");
   }
-  private begin(owner: string, id: string, response: ServerResponse) {
+  private begin(owner: string, id: string, response: ServerResponse, ownerLimit = 2) {
     if (this.closed) throw new HttpError(503, "office_ai_closed", "앱을 종료하고 있습니다.");
     const key = `${owner}/${id}`;
     if (this.active.has(key)) throw new HttpError(409, "office_ai_duplicate", "같은 AI 요청이 이미 진행 중입니다.");
-    if (this.active.size >= 16 || [...this.active.values()].filter((run) => run.owner === owner).length >= 2) throw new HttpError(429, "office_ai_busy", "진행 중인 AI 요청을 마친 뒤 다시 요청해 주세요.");
+    if (this.active.size >= 16 || [...this.active.values()].filter((run) => run.owner === owner).length >= ownerLimit) throw new HttpError(429, "office_ai_busy", "진행 중인 AI 요청을 마친 뒤 다시 요청해 주세요.");
     const controller = new AbortController(), abort = () => controller.abort();
     if (response.destroyed || response.writableEnded) abort();
     else response.once("close", abort);

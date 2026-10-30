@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { EventBus } from "./bus.ts";
 import { createEditorsServer, EditorGrants, officeEditorKind } from "./editors.ts";
 import { createHttpServer } from "./http.ts";
+import { createOfficeSettingsServer } from "./office-settings-server.ts";
 import { SessionManager } from "./sessions.ts";
 import { Store } from "./store.ts";
 
@@ -26,6 +27,21 @@ async function listen(server: Server) {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
+
+it("separates privileged settings from both the document and application origins", async () => {
+  const { manager, web } = setup();
+  writeFileSync(join(web, "office/settings.html"), "<!doctype html><title>settings</title>");
+  mkdirSync(join(web, "office/assets")); writeFileSync(join(web, "office/assets/settings-abc.js"), "export {};\n");
+  const parent = "http://127.0.0.1:12345";
+  const settings = await listen(createOfficeSettingsServer(web, () => parent));
+  const editors = await listen(createEditorsServer(manager.documents, new EditorGrants(), web));
+  const page = await fetch(`${settings}/office/settings.html`);
+  expect(page.status).toBe(200); expect(page.headers.get("content-security-policy")).toBe(`frame-ancestors ${parent}`);
+  expect((await fetch(`${settings}/office/assets/settings-abc.js`)).status).toBe(200);
+  for (const path of ["/office/docs.html", "/index.html", "/api/office-ai/settings", "/api/artifacts/any/bytes"]) expect((await fetch(`${settings}${path}`)).status).toBe(404);
+  expect((await fetch(`${editors}/office/settings.html`)).status).toBe(404);
+  expect((await fetch(`${editors}/office/%73ettings.html`)).status).toBe(404);
+});
 
 function setup() {
   const dir = mkdtempSync(join(tmpdir(), "wb-editors-"));

@@ -101,6 +101,7 @@ function parseRefs(value: unknown): DocRef[] {
 
 export type HttpOptions = {
   officeAi?: OfficeAi;
+  officeSettingsOrigin?: () => string | null;
   token: string;
   webDir: string | null;
   onClientLog?: (message: string) => void;
@@ -250,6 +251,11 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       const method = req.method ?? "GET";
 
       if (method === "GET" && path === "/api/snapshot") return sendJson(res, 200, manager.snapshot());
+      if (method === "GET" && path === "/api/office-ai/page") {
+        const origin = options.officeSettingsOrigin?.();
+        if (!origin) throw new HttpError(503, "editors_unavailable", "설정 화면을 준비하고 있습니다.");
+        return sendJson(res, 200, { origin, url: `${origin}/office/settings.html` });
+      }
       if (path.startsWith("/api/office-ai/") && options.officeAi && await options.officeAi.handleSettings(req, res, url)) return;
       if (await userSkills(req, res, url)) return;
       if (path.startsWith("/api/pkm/") && options.pkm && (await options.pkm(req, res, url))) return;

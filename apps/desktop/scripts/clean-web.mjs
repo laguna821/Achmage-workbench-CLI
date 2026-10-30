@@ -4,7 +4,7 @@ import { existsSync, rmSync } from "node:fs";
 
 // A web-only Vite build clears dist, including Office/design pages. Never package an
 // apparently successful desktop build with those editors missing (or old debug copies).
-for (const path of ["index.html", "office/docs.html", "office/slides.html", "office/sheets.html", "office/hwp.html", "office/markdown.html", "office/html.html", "office/pdf.html", "office/mindmap.html", "office/epub.html", "office/pdf-runtime/build.json", "office/studio/build.json", "design/index.html"]) {
+for (const path of ["index.html", "office/docs.html", "office/slides.html", "office/sheets.html", "office/hwp.html", "office/markdown.html", "office/html.html", "office/pdf.html", "office/mindmap.html", "office/epub.html", "office/settings.html", "office/pdf-runtime/build.json", "office/studio/build.json", "design/index.html"]) {
   if (!existsSync(new URL(`../../web/dist/${path}`, import.meta.url))) throw new Error(`Missing built editor: ${path}. Run npm run build from the repository root first.`);
 }
 

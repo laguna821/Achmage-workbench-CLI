@@ -67,6 +67,8 @@ export const ipcRenderer = {
 
 /** The editor's own API only (`slidesApi`, `desktopApi`); its AI, Drive, skills, project and file bridges stay out. */
 const EXPOSED = new Set(["slidesApi", "desktopApi", "pdfApi", "mindmapApi", "epubApi"]);
+/** Only the dedicated settings entrypoint opts into these original shell bridges. */
+export function exposeSettingsBridges() { EXPOSED.add("aiOffice"); EXPOSED.add("aiOfficeSubscription"); }
 export const contextBridge = {
   exposeInMainWorld(key: string, api: unknown) {
     if (EXPOSED.has(key)) (window as unknown as Record<string, unknown>)[key] = api;

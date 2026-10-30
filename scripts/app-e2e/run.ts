@@ -34,6 +34,7 @@ import { textOfficeScenario } from "./text-office.ts";
 import { pdfOfficeScenario } from "./pdf-office.ts";
 import { epubOfficeScenario } from "./epub-office.ts";
 import { mindmapOfficeScenario } from "./mindmap-office.ts";
+import { officeSettingsScenario } from "./office-settings.ts";
 
 const { binary, outDir, only, engines } = parseArgs(process.argv.slice(2));
 mkdirSync(outDir, { recursive: true });
@@ -49,7 +50,7 @@ process.once("SIGINT", () => void stop().then(() => process.exit(130)));
 process.once("SIGTERM", () => void stop().then(() => process.exit(143)));
 
 try {
-  stage = await openStage(outDir, { legacyOffice: wants("template-office"), printDialog: wants("hwp") });
+  stage = await openStage(outDir, { legacyOffice: wants("template-office"), printDialog: wants("hwp"), privateKeyring: wants("office-settings") });
   console.log(`app ${binary}\nout ${outDir}\nBroadway ${stage.display} (http://127.0.0.1:${stage.broadwayPort}/) · tmp ${stage.root}`);
   if (only.length) {
     const app = await stage.launch({ name: engines, binary, engines, profile: "native" });
@@ -69,6 +70,7 @@ try {
       if (wants("pdf-office")) await pdfOfficeScenario(ctx);
       if (wants("mindmap-office")) await mindmapOfficeScenario(ctx);
       if (wants("epub-office")) await epubOfficeScenario(ctx);
+      if (wants("office-settings")) await officeSettingsScenario(ctx, { binary, engines, profile: "native" });
       if (wants("hwp")) await hwpScenario(ctx);
       if (wants("worktrees")) await worktreesScenario(ctx, { binary, engines, profile: "native" });
       if (wants("terminals")) await terminalsScenario(ctx, { binary, engines, profile: "native" });
