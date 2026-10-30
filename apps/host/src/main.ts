@@ -13,6 +13,7 @@ import { Kordoc } from "./kordoc.ts";
 import { IeumOffice, findIeum } from "./ieumoffice.ts";
 import { installToolWrappers } from "./tool-bin.ts";
 import { createEditorsServer, EditorGrants } from "./editors.ts";
+import { OfficeAi } from "./office-ai.ts";
 import { AgentBrowser } from "./browse.ts";
 import { buildTimeline } from "./timeline.ts";
 import { DocImages } from "./doc-images.ts";
@@ -126,7 +127,8 @@ manager.registerAdapter(
 );
 
 const grants = new EditorGrants();
-const editors = createEditorsServer(manager.documents, grants, webDir && existsSync(webDir) ? webDir : null);
+const officeAi = new OfficeAi(dataDir);
+const editors = createEditorsServer(manager.documents, grants, webDir && existsSync(webDir) ? webDir : null, officeAi);
 let editorsOrigin: string | null = null;
 // Images pasted into Markdown documents: the user's R2 bucket, or the work folder (doc-images.ts).
 const docImages = new DocImages({ dataDir, documents: manager.documents, workCwd: (workId) => manager.workCwd(workId), endpoint: env.WORKBENCH_R2_ENDPOINT ?? null });
@@ -183,10 +185,12 @@ async function stop() {
   if (stopping) return;
   stopping = true;
   server.close();
+  officeAi.close();
   editors.close();
   find.close();
   pkm.close();
   await manager.shutdown().catch(() => undefined);
+  await officeAi.shutdownProviders();
   store.close();
   process.exit(0);
 }

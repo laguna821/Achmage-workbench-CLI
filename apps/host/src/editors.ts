@@ -13,11 +13,13 @@ import { OFFICE_IMAGE_MAX_BYTES, readOfficeAsset, saveOfficeImage } from "./offi
 import { buildPreviewDocument } from "../../../third_party/ieumoffice/text-assets/preview-document.ts";
 import { PDF_MAX_BYTES, PDF_REQUEST_MAX_BYTES } from "../../../packages/contracts/src/pdf.ts";
 import { decodePdfRequest } from "./pdf-codec.ts";
+import { OfficeAi } from "./office-ai.ts";
 
 // The office editors (IeumOffice's editor screens, apps/office) run on their own origin, a second
 // port on 127.0.0.1. Their code is third-party and reads documents from anywhere, so it never
 // shares a window, storage or the gateway token with the Workbench UI: each page gets a grant that
-// reads and saves the one document it shows, and nothing else is served there.
+// reads and saves the one document it shows. The common AI service also uses that document/view
+// scope; this origin cannot write global settings, reveal saved keys or request filesystem tools.
 
 /** Which editor page edits a format, if any. */
 export function officeEditorKind(format: DocFormat): OfficeEditorKind | null {
@@ -81,9 +83,9 @@ const PAGE_HEADERS = {
   "x-content-type-options": "nosniff",
 };
 
-export function createEditorsServer(documents: Documents, grants: EditorGrants, webDir: string | null): Server {
+export function createEditorsServer(documents: Documents, grants: EditorGrants, webDir: string | null, ai = new OfficeAi(documents.dataDir)): Server {
   const epub = new EpubEditors(documents, grants);
-  return createServer(async (req, res) => {
+  const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const path = url.pathname;
     const method = req.method ?? "GET";
@@ -93,6 +95,7 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
         return serveStatic(res, webDir, path, PAGE_HEADERS);
       }
       const bearer = req.headers.authorization?.replace(/^Bearer\s+/i, "") ?? null;
+      if (await ai.handle(req, res, url, bearer, documents, grants)) return;
       if (await epub.handle(req, res, url, bearer)) return;
       // Document scripts receive only this read-only preview URL, never the editor grant.
       // Enforce an opaque origin at the response as well as the renderer's iframe sandbox.
@@ -291,8 +294,11 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
       }
       throw new HttpError(405, "method_not_allowed", "허용되지 않은 요청입니다.");
     } catch (error) {
+      if (res.headersSent) { res.destroy(); return; }
       if (error instanceof HttpError) sendJson(res, error.status, { code: error.code, message: error.message });
       else sendJson(res, 500, { code: "internal", message: error instanceof Error ? error.message : String(error) });
     }
   });
+  server.once("close", () => ai.close());
+  return server;
 }

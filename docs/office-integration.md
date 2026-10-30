@@ -74,6 +74,16 @@ WebKit에서는 원본의 `sandbox="allow-same-origin"`이 부모 편집기의 �
 
 계획 판: `research:rr-3492c2c2a180a313cf65edeb5feed33a:db3c579ba3bf918c68910a1fe022bb9b2bf3edcf9c3dd0490a2dbbfb7782c774`. 검증 판: `research:rr-3492c2c2a180a313cf65edeb5feed33a:1fbd261f2a6622b13a52d39f230119a2b1110cd900f605a143141db0d4623c58`. 증거: `implementation-20261030/native-epub-frame/results.json`, `/tmp/wb-epub-host-final.log`, `/tmp/wb-epub-types-final.log`, `/tmp/wb-epub-original-tests.log`, `/tmp/wb-epub-original-app-tests.log`. 최초 native 실패·검사 문자열 오류·빌드 어댑터의 주석 오매칭과 WebKit 호환 판단도 같은 연구에 보존했다.
 
+## 공통 AI 호스트 기반
+
+원본 `ai-provider`와 Docs의 제공자 선택·오류·스트림 병합·keepalive 코드를 Node 호스트에 연결했다. 화면에 돌려주는 설정에서는 키를 가리고, 실행에는 호스트에 저장된 설정을 사용한다. 오래된 제공자 선택이나 바뀐 접속 주소·키를 담은 요청은 실행 전에 거절한다. 봉인된 기존 키를 열지 못하면 연결 실패로 처리하며 키 문자열을 제공자에게 보내지 않는다. 읽기 과정에서 설정 파일을 고쳐 쓰지 않는다. 구형 custom 설정의 endpoint ID가 읽을 때마다 바뀌던 문제는 동일 파일 바이트의 정규화 결과를 메모리에 유지해 해결했다.
+
+요청·취소·유지되는 제공자 세션은 문서와 뷰별로 분리한다. grant 갱신은 같은 뷰의 소유권을 유지하고, 다른 뷰의 취소 요청은 실행을 끝내지 못한다. 연결 단절과 앱 종료는 해당 실행을 취소한다. 원본 답변·추론·도구 호출·사용량·입력 축소 이벤트 순서를 유지하고, 입력·동시 실행·응답 및 전송 대기량에 한도를 둔다. 문서 grant로 전역 설정·CLI 경로·키·종량 동의를 변경할 수 없다.
+
+**공통 AI/인접 편집기 검사22/22, 빌드된 실제 호스트6/6**, 전체 타입 검사와 host 빌드 통과. 원본 OpenAI 호환 프로토콜이 로컬 시험 서버에 요청하고 한국어 답변을 받는 경로, 취소·단절·정상 종료, 원본 파일 불변성과 설정 변조 거절을 확인했다. 실제 Claude/Codex나 사용자 자격증명은 사용하지 않았다. 원본 AI 패널·모델 선택/비밀키 보안 저장 화면·대화 기록·첨부·검색·Drive·결과 보관 연결은 다음 단계다. 이 결과에 네이티브 AI 화면과 다른 OS 검증은 포함되지 않는다.
+
+계획 판: `research:rr-e71ed06ec7d8536f6d79b978226befd7:5bccddab66b6bb7ce2df99eae46e8b496d0cc2cb44738ec26b94f0a38a8173b2`. 검증 판: `research:rr-e71ed06ec7d8536f6d79b978226befd7:48fbf9949e6e280938692f4e48bcdc2697ae1bdcffdd89a8fba9f784c6d8fb81`. 증거: `/tmp/wb-office-ai-host-guarded.log`, `/tmp/wb-office-ai-types-all.log`, `implementation-20261030/office-ai-bundle/results.json`. 초기 설정 비교 실패, 원인 가설 정정과 음성 검사 fixture 보완도 같은 연구에 남겼다. 재현 도구: `scripts/smoke-office-ai.ts`.
+
 ## 아직 완료되지 않은 범위
 
 현재 아홉 renderer 진입점이 있다는 것은 아홉 편집기의 전 기능이 끝났다는 뜻이 아니다. Markdown·HTML의 클라우드 이미지 호스트/원격 그림 읽기, 다른 이름으로 저장, 내보내기, 내부 AI·검색·첨부·위키 서비스는 연결 중이며 미구현 동작을 성공 처리하지 않는다. 기존 Word·PPT·Sheets에도 AI·템플릿·출력 미연결 항목이 있다. PDF의 영구 가림 사본·다른 이름 저장·추출/합치기 파일 선택·변환/출력·서명 보관/인증서 서명·AI/번역/결과 보관/노트·Windows/macOS OCR과 전체 기능 인수 검증이 남았다. 인증서 서명 읽기 코드는 연결했지만 실제 서명 검증 fixture는 아직 수행하지 않았다. XMind의 다른 이름 저장·내보내기·출력·링크 열기·문서 만들기, EPUB의 AI/번역/결과 보관·첨부·다른 이름 저장·외부 링크·이름 변경 동기화와 기존 설정 이행도 남았다. 공통 제공자·세션·Drive·검색·doory와 출력 서비스를 계속 연결한다.
