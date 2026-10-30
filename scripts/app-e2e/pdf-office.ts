@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
-import type { Artifact, Snapshot, Work } from "@workbench/contracts";
+import type { Artifact, DocumentPresence, Snapshot, Work } from "@workbench/contracts";
 import { installProbe, pageErrors, seedLayout, shot, until, type Ctx } from "./scenarios.ts";
 import { KEY } from "./webdriver.ts";
 const require = createRequire(new URL("../../vendor/ieumoffice/package.json", import.meta.url));
@@ -49,6 +49,69 @@ export async function pdfOfficeScenario(ctx: Ctx) {
   await clickLabel(".ribbon .rb-big", ["빈 페이지 삽입"]);
   await saveKey();
   ctx.report.check(S, "빈 페이지 삽입 저장", await until(async () => (await PDFDocument.load(readFileSync(file))).getPageCount() === 3, 15000));
+  // Cross three independently saved PDF bases, not merely the pending overlays.
+  // Each undo/redo is a real original control and a new on-disk document revision.
+  const revision = async () => (await snapshot()).artifacts.find((a) => a.id === artifact.id)!.revision;
+  for (const fault of ["unavailable", "corrupt"]) {
+    await wd.waitFor('button[aria-label^="실행 취소"]:not(:disabled)', 15000);
+    const before = await revision(), bytes = readFileSync(file);
+    await wd.execute(`window.__pdfUndoFetch = window.fetch; window.__pdfUndoFault = false;
+      window.fetch = async (...args) => {
+        if (!window.__pdfUndoFault && String(args[0]).includes('/raw?revision=')) {
+          window.__pdfUndoFault = true;
+          return new Response('synthetic invalid PDF', {status: arguments[0] === 'corrupt' ? 200 : 503});
+        }
+        return window.__pdfUndoFetch(...args);
+      };`, fault);
+    try {
+      await wd.click(await wd.waitFor('button[aria-label^="실행 취소"]:not(:disabled)'));
+      const settled = await until(() => wd.execute<boolean>('return window.__pdfUndoFault && document.querySelector(".app")?.getAttribute("aria-busy") === "false" && !!document.querySelector("button[aria-label^=\\"실행 취소\\"]:not(:disabled)");'), 15000);
+      const intact = settled && await revision() === before && readFileSync(file).equals(bytes) && await wd.execute<boolean>('return !!document.querySelector("button[aria-label^=\\"다시 실행\\"]:disabled") && [...document.querySelectorAll(".textLayer")].some(layer=>layer.textContent.includes("NATIVE PDF TEXT"));');
+      ctx.report.check(S, `과거 PDF ${fault} 실패에도 파일·화면·되돌림 위치 보존`, intact, undefined, await shot(ctx, `27-pdf-history-${fault}.png`));
+      if (!intact) throw new Error(`PDF history ${fault} failure changed the current document`);
+    } finally { await wd.execute('window.fetch = window.__pdfUndoFetch;'); }
+  }
+  for (const step of [
+    { action: "undo", pages: 2, rotation: 90, text: true, label: "빈 페이지" },
+    { action: "undo", pages: 2, rotation: 0, text: true, label: "회전" },
+    { action: "undo", pages: 2, rotation: 0, text: false, label: "글자 삽입" },
+    { action: "redo", pages: 2, rotation: 0, text: true, label: "글자 삽입" },
+    { action: "redo", pages: 2, rotation: 90, text: true, label: "회전" },
+    { action: "redo", pages: 3, rotation: 90, text: true, label: "빈 페이지" },
+  ]) {
+    const before = await revision();
+    const delayRead = step.action === "undo" && step.label === "빈 페이지";
+    if (delayRead) await wd.execute(`window.__pdfUndoFetch = window.fetch; window.__pdfUndoReadWaiting = false;
+      window.fetch = async (...args) => {
+        if (!window.__pdfUndoReadWaiting && String(args[0]).includes('/raw?revision=')) {
+          window.__pdfUndoReadWaiting = true;
+          await new Promise(resolve => { window.__pdfUndoReadRelease = resolve; });
+        }
+        return window.__pdfUndoFetch(...args);
+      };`);
+    await wd.click(await wd.waitFor(`button[aria-label^="${step.action === "undo" ? "실행 취소" : "다시 실행"}"]:not(:disabled)`, 15000));
+    if (delayRead) {
+      try {
+        const dirty = await until(async () => {
+          const waiting = await wd.execute<boolean>('return window.__pdfUndoReadWaiting && document.querySelector(".app")?.getAttribute("aria-busy") === "true";');
+          const { views } = await api<{ views: DocumentPresence[] }>("GET", "/api/document-views");
+          return waiting && views.some((view) => view.artifactId === artifact.id && view.dirty);
+        }, 10000);
+        ctx.report.check(S, "과거 판을 읽는 동안 상위 문서 등록도 저장 전 상태로 유지", dirty && await revision() === before);
+        if (!dirty) throw new Error("PDF history restore was incorrectly advertised as clean");
+      } finally { await wd.execute('window.__pdfUndoReadRelease?.(); window.fetch = window.__pdfUndoFetch;'); }
+    }
+    await wd.waitFor(`button[aria-label^="${step.action === "undo" ? "다시 실행" : "실행 취소"}"]:not(:disabled)`, 15000);
+    await saveKey();
+    const ok = await until(async () => {
+      if (await revision() <= before) return false;
+      const bytes = readFileSync(file), saved = await PDFDocument.load(bytes);
+      const text = await wd.execute<boolean>('return [...document.querySelectorAll(".textLayer")].some(layer=>layer.textContent.includes("NATIVE PDF TEXT"));');
+      return saved.getPageCount() === step.pages && saved.getPage(0).getRotation().angle === step.rotation && text === step.text && (step.text || bytes.equals(original));
+    }, 20000);
+    ctx.report.check(S, `${step.label} 저장 후 ${step.action}·실제 PDF 재저장`, ok, `r${before} → r${await revision()}`, await shot(ctx, `27-pdf-${step.action}-${before}.png`));
+    if (!ok) throw new Error(`PDF history ${step.action} ${step.label} failed`);
+  }
   const firstErrors = await pageErrors(wd);
   await wd.frame(null);
   await clickLabel('.doc-header [role="radio"]', ["미리보기"]);

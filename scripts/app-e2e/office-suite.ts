@@ -106,11 +106,12 @@ export async function officeSuiteScenario(ctx: Ctx) {
         const timer = setTimeout(() => res.end("data: [DONE]\n\n"), 30000);
         res.once("close", () => { clearTimeout(timer); if (!res.writableEnded) cancelled++; }); return;
       }
-      const tool = raw.includes("__suite_fresh__") ? null : toolCall(active, count, body);
+      const undoRead = active === "pdf" && String(body.messages.findLast((item: any) => item.role === "user")?.content).includes("__suite_undo_read__");
+      const tool = undoRead ? (body.messages.at(-1)?.role === "tool" ? null : { name: "read_annotations", input: { start: 1, end: 1 } }) : raw.includes("__suite_fresh__") ? null : toolCall(active, count, body);
       if (tool) {
         if (!body.tools?.some((item: any) => item.function?.name === tool.name)) throw new Error(`Original tool ${tool.name} missing for ${active}`);
         send({ role: "assistant", tool_calls: [{ index: 0, id: `suite-${active}-${count}`, type: "function", function: { name: tool.name, arguments: JSON.stringify(tool.input) } }] }); send({}, "tool_calls");
-      } else { send({ role: "assistant", content: "Workbench 같은 세션에 수정 완료" }); send({}, "stop"); }
+      } else { send({ role: "assistant", content: undoRead ? "UNDO_READ_COMPLETE" : "Workbench 같은 세션에 수정 완료" }); send({}, "stop"); }
       res.end("data: [DONE]\n\n");
     } catch (error) { res.statusCode = 500; res.end(String(error)); }
   });
@@ -152,7 +153,7 @@ export async function officeSuiteScenario(ctx: Ctx) {
         if (format === "pdf") await wd.execute('window.__suitePdfSaves=[];const api=window.pdfApi,save=api.save;api.save=async(...args)=>{const entry={args};window.__suitePdfSaves.push(entry);try{return entry.result=await save(...args)}catch(error){entry.error=String(error);throw error}};');
         await send(`원본 도구로 이 문서를 수정해 줘. __suite_${format}__`);
         if (!await until(async () => (await items(session.id)).some((item) => item.kind === "turnEnd"), 60000)) throw new Error(`Run did not finish: ${await wd.execute('return document.body.innerText.slice(-3500)')}`);
-        const transcript = await items(session.id);
+        let transcript = await items(session.id);
         if (format === "pdf") writeFileSync(ctx.report.path("suite-pdf-saves.json"), JSON.stringify(await wd.execute('return window.__suitePdfSaves'), null, 2));
         writeFileSync(ctx.report.path(`suite-${format}-transcript.json`), JSON.stringify(transcript, null, 2));
         const completed = transcript.some((item) => item.kind === "turnEnd" && item.status === "completed");
@@ -166,7 +167,19 @@ export async function officeSuiteScenario(ctx: Ctx) {
           if (!focus.some((event) => event.kind === "key")) throw new Error("No initial input focus observation");
           if (focus.some((event) => event.kind === "call" && event.from?.startsWith("<textarea") && event.to?.startsWith("<div contenteditable"))) throw new Error("Univer took focus from the original AI composer");
         }
-        if (process.env.APP_E2E_OFFICE_UNDO === "1") await officeUndo(ctx, format, artifact.id, marker(format), () => savedText(file, format));
+        if (process.env.APP_E2E_OFFICE_UNDO === "1") await officeUndo(ctx, format, artifact.id, marker(format), () => savedText(file, format), format === "pdf" ? async () => {
+          const before = (await items(session.id)).length;
+          await send("__suite_undo_read__ 되돌린 문서의 주석을 읽어 줘.");
+          const done = await until(async () => (await items(session.id)).slice(before).some((item) => item.kind === "turnEnd" && item.status === "completed"), 30000);
+          const fresh = (await items(session.id)).slice(before);
+          const read = fresh.find((item) => item.kind === "tool" && item.detail?.startsWith("read_annotations"));
+          const output = read?.kind === "tool" ? read.output ?? "" : "";
+          const ok = done && read?.kind === "tool" && read.status === "completed" && output === "No notes or markups on pages 1-1.";
+          writeFileSync(ctx.report.path("suite-pdf-undone-read.json"), JSON.stringify(fresh, null, 2));
+          ctx.report.check(S, "되돌린 판을 다음 AI 원본 주석 읽기 도구에 반영", ok, output);
+          if (!ok) throw new Error("PDF AI read did not observe the undone document");
+          transcript = await items(session.id);
+        } : undefined);
         const firstErrors = await pageErrors(wd);
         await wd.frame(null); await wd.refresh(); await installProbe(wd); await wd.frame(await wd.waitFor("iframe.office-frame", 30000)); await installProbe(wd);
         ctx.report.check(S, "다시 열면 같은 세션의 대화 복원", await until(() => wd.execute<boolean>('return [...document.querySelectorAll(".ai-panel,.copilot")].some(el=>el.textContent.includes("수정 완료"));'), 30000));

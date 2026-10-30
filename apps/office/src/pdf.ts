@@ -3,6 +3,7 @@ import { Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
 import { dispatch, useTransport } from "./platform/electron-renderer.ts";
 import type { PdfRequest } from "../../../packages/contracts/src/pdf.ts";
+import { bindPdfHistory, pdfHistory, type PdfHistoryBase } from "./pdf-history.ts";
 
 const init = await handshake(), gateway = new Gateway(init.token);
 const ai = mountOfficeAi(init, gateway);
@@ -13,6 +14,27 @@ if (init.recover && !init.readOnly) {
   const kept = await recovery.get(id);
   if (kept && kept.baseRevision <= revision) { source = kept.bytes; revision = contentRevision = kept.baseRevision; restored = true; }
 } else if (!init.readOnly) await recovery.drop(id);
+let historyBase: PdfHistoryBase = { revision: contentRevision, ...(restored ? { recovery: source } : {}) };
+bindPdfHistory({
+  writable: !init.readOnly,
+  capture: () => historyBase,
+  unsaved: () => restored || revision !== contentRevision,
+  busyChanged: (busy) => post({ type: "office:dirty", dirty: busy || dirty }),
+  async restore(base, load) {
+    if (init.readOnly) throw new Error("이 판은 읽기 전용입니다.");
+    // Fetch before touching the active base. The save target remains the latest
+    // revision; an old snapshot never rolls back the CAS or writes by itself.
+    const bytes = base.recovery ?? await gateway.raw(id, base.revision);
+    const before = { source, contentRevision, restored, historyBase };
+    source = bytes; contentRevision = base.revision; historyBase = base;
+    restored = !!base.recovery || revision !== contentRevision; epoch++;
+    try { return await load(); }
+    catch (error) {
+      ({ source, contentRevision, restored, historyBase } = before); epoch++;
+      throw error;
+    }
+  },
+});
 const workingSource = () => restored || revision !== contentRevision ? source : undefined;
 const currentBytes = async () => { if (!source.byteLength) source = await gateway.raw(id, contentRevision); return source; };
 const report = (error: unknown) => post({ type: "office:error", message: error instanceof Error ? error.message : String(error) });
@@ -24,6 +46,7 @@ const checkPath = (value: unknown) => { if (value !== path) throw new Error("열
 const requestOf = (value: unknown) => { if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("PDF 요청이 올바르지 않습니다."); const request = value as PdfRequest; checkPath(request.path); return request; };
 async function keepRequest(request: PdfRequest) {
   if (init.readOnly) return "skipped";
+  if (pdfHistory.busy()) return "superseded";
   const before = epoch, baseRevision = revision;
   try {
     const bytes = await gateway.pdf<ArrayBuffer>(id, baseRevision, "recover", request, workingSource());
@@ -33,6 +56,7 @@ async function keepRequest(request: PdfRequest) {
   } catch (error) { recoveryFailure = true; report(error); return "failed"; }
 }
 async function keep() {
+  await pdfHistory.idle();
   recoveryFailure = false;
   await new Promise<void>((resolve, reject) => {
     const timer = window.setTimeout(() => { recoveryAnswer = null; reject(new Error("PDF 복구본을 받지 못했습니다. 편집 탭을 열어 두세요.")); }, 10000);
@@ -47,6 +71,7 @@ async function flush() {
   if (flushing) return flushing;
   flushing = (async () => {
     try {
+      await pdfHistory.idle();
       // AI tools update React state before the next close-save subscription is
       // installed. Capture that committed state, not the previous render's empty
       // snapshot. A hidden window still makes progress via the bounded timer.
@@ -87,6 +112,7 @@ try { prefs = JSON.parse(localStorage.getItem("workbench.office.pdf.prefs") ?? "
 const fail = (channel: string) => { throw new Error(`PDF의 이 서비스를 아직 연결하지 못했습니다: ${channel}`); };
 const persistResult = async (next: number) => {
   revision = contentRevision = next; restored = false; epoch++;
+  historyBase = { revision: next };
   source = new ArrayBuffer(0);
   post({ type: "office:saved", revision });
   // The original file is saved already. A recovery-store failure must not replay those
@@ -99,6 +125,7 @@ useTransport({
     if (pathQueries[channel]) { checkPath(args[0]); return gateway.pdf(id, revision, pathQueries[channel], { path }, workingSource()); }
     if (transforms[channel]) {
       if (init.readOnly) return { ok: false, error: "이 판은 읽기 전용입니다." };
+      if (pdfHistory.busy()) return { ok: false, error: "PDF를 불러오는 중입니다." };
       try {
         const result = await gateway.pdf<{ revision: number }>(id, revision, transforms[channel], requestOf(args[0]), workingSource());
         await persistResult(result.revision); return { ok: true };
@@ -118,6 +145,7 @@ useTransport({
       case "pdf:template-bytes": return new Uint8Array(await gateway.pdf<ArrayBuffer>(id, revision, "recover", requestOf(args[0]), workingSource()));
       case "pdf:save": {
         if (init.readOnly) return { ok: false, error: "이 판은 읽기 전용입니다." };
+        if (pdfHistory.busy()) return { ok: false, error: "PDF를 불러오는 중입니다." };
         const request = requestOf(args[0]);
         try {
           const result = await gateway.savePdf(id, revision, request, workingSource());
@@ -150,7 +178,7 @@ useTransport({
     }
   }),
   send(channel, args) {
-    if (channel === "pdf:dirty-changed") { dirty = args[0] === true; post({ type: "office:dirty", dirty }); }
+    if (channel === "pdf:dirty-changed") { dirty = args[0] === true; post({ type: "office:dirty", dirty: dirty || pdfHistory.busy() }); }
     else if (channel === "pdf:close-save-result") closeAnswer?.(args[0] === true);
     else if (channel === "pdf:recovery-flush-done") recoveryAnswer?.();
   },

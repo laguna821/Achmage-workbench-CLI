@@ -52,9 +52,20 @@ describe("scoped PDF editor", () => {
       const final = await PDFDocument.load(readFileSync(file));
       expect(final.getPageCount()).toBe(2); expect(final.getPage(0).getRotation().angle).toBe(90);
       expect(readFileSync(documents.revisionPath(artifact.id, 3))).toEqual(externalBytes);
+      // A renderer Undo may restore an older base with no pending operations.
+      // It still saves against the latest CAS and preserves every intervening file.
+      const undone = await call("save", 4, {}, writerToken, Uint8Array.from(original).buffer);
+      expect(undone.status).toBe(200); expect((await undone.json()).revision).toBe(5);
+      expect(readFileSync(file)).toEqual(original);
+      expect((await PDFDocument.load(readFileSync(documents.revisionPath(artifact.id, 4)))).getPage(0).getRotation().angle).toBe(90);
+      expect((await call("save", 4, {}, writerToken, draft)).status).toBe(409);
+      expect(readFileSync(file)).toEqual(original);
+      const redone = await call("save", 5, {}, writerToken, draft);
+      expect(redone.status).toBe(200); expect((await redone.json()).revision).toBe(6);
+      expect(Buffer.from(draft)).toEqual(readFileSync(file));
       documents.registry.close("writer", "writer");
-      expect((await call("save", 4, {})).status).toBe(423);
-      expect((await call("recover", 4, {}, readerToken)).status).toBe(200);
+      expect((await call("save", 6, {})).status).toBe(423);
+      expect((await call("recover", 6, {}, readerToken)).status).toBe(200);
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       store.close(); rmSync(dir, { recursive: true, force: true });

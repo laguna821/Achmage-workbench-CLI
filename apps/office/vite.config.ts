@@ -3,6 +3,7 @@ import { fileURLToPath, URL } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Alias, type Plugin } from "vite";
 import { collectModules, thirdPartyNotices } from "./notices.ts";
+import { patchPdfHistory } from "./pdf-history-patch.ts";
 
 // IeumOffice's editor screens, built from vendor/ieumoffice (scripts/fetch-ieum.sh) and served on
 // the editors' own origin at /office/. The editors are used unchanged:
@@ -308,6 +309,9 @@ export default defineConfig({
     pagePlatform(),
     originalSettingsPanes(),
     originalOfficeConversation(),
+    { name: "workbench-pdf-history", enforce: "pre", transform(code, id) {
+      return id === `${ieum}/apps/pdf/src/renderer/App.tsx` ? patchPdfHistory(code, here("./src/pdf-history.ts")) : null;
+    } },
     textEditorPlatform(),
     react(),
     tiptapMountGrace(),
