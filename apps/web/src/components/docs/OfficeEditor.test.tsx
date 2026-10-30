@@ -6,7 +6,7 @@ import type { Artifact } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
 import { OfficeEditor, type OfficeHandle } from "./OfficeEditor.tsx";
 
-const aiProps = { sessionId: "session", onPrepareAi: async () => {}, onNewSession: async () => {}, onAiSettings: () => {} };
+const aiProps = { sessionId: "session", onPrepareAi: async () => {}, onNewSession: async () => "session", onAiSettings: () => {} };
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 async function setup() {
@@ -111,11 +111,46 @@ it("answers an AI prepare only after the editor flush and the registered documen
   const frame = screen.getByTitle("워드 편집기 · test.docx") as HTMLIFrameElement;
   const sent = vi.spyOn(frame.contentWindow!, "postMessage");
   const message = async (data: unknown) => act(async () => { window.dispatchEvent(new MessageEvent("message", { origin: "http://office.test", source: frame.contentWindow, data })); });
-  await message({ type: "office:ai-request", action: "prepare", requestId: "start" });
+  await message({ type: "office:ai-request", action: "prepare", requestId: "start", sessionId: "session" });
   expect(onPrepareAi).not.toHaveBeenCalled();
   await message({ type: "office:flushed", revision: 2 });
   expect(onPrepareAi).toHaveBeenCalledWith(2);
   expect(sent.mock.calls.some(([data]) => (data as { type: string }).type === "office:ai-result")).toBe(false);
   await act(async () => { registered(); });
   expect(sent).toHaveBeenCalledWith(expect.objectContaining({ type: "office:ai-result", requestId: "start", value: { revision: 2, token: "test", sessionId: "session" } }), "http://office.test");
+});
+
+async function unbound() {
+  let sessionId: string | null = null;
+  const api = { editorGrant: async () => ({ token: `token-${sessionId}`, sessionId, origin: "http://office.test", url: "http://office.test/docs" }) } as unknown as Api;
+  const artifact = { id: "doc", name: "test.docx", format: "docx", revision: 1 } as Artifact;
+  const onNewSession = vi.fn(async () => { sessionId = "created"; return sessionId; });
+  const onPrepareAi = vi.fn(async () => {});
+  const screen = render(<OfficeEditor {...aiProps} api={api} artifact={artifact} sessionId={null} onPrepareAi={onPrepareAi} onNewSession={onNewSession} onStatus={() => {}} onNotice={() => {}} />);
+  await act(async () => {});
+  const frame = screen.getByTitle("워드 편집기 · test.docx") as HTMLIFrameElement;
+  const sent = vi.spyOn(frame.contentWindow!, "postMessage");
+  const message = async (data: unknown) => act(async () => { window.dispatchEvent(new MessageEvent("message", { origin: "http://office.test", source: frame.contentWindow, data })); });
+  return { screen, frame, sent, message, onNewSession, onPrepareAi };
+}
+it("creates the first conversation only on a request after saving and rejects a second prepare while waiting", async () => {
+  const f = await unbound();
+  expect(f.onNewSession).not.toHaveBeenCalled();
+  await f.message({ type: "office:ai-request", action: "prepare", requestId: "first", sessionId: null });
+  expect(f.onNewSession).not.toHaveBeenCalled();
+  await f.message({ type: "office:ai-request", action: "prepare", requestId: "duplicate", sessionId: null });
+  expect(f.sent).toHaveBeenCalledWith(expect.objectContaining({ type: "office:ai-result", requestId: "duplicate", error: expect.any(String) }), "http://office.test");
+  await f.message({ type: "office:flushed", revision: 3 });
+  expect(f.onNewSession).toHaveBeenCalledExactlyOnceWith(3); expect(f.onPrepareAi).not.toHaveBeenCalled();
+  expect(f.sent).toHaveBeenCalledWith(expect.objectContaining({ type: "office:ai-result", requestId: "first", value: { revision: 3, token: "token-created", sessionId: "created", createdSession: true } }), "http://office.test");
+  expect(f.screen.getByTitle("워드 편집기 · test.docx")).toBe(f.frame);
+});
+it("does not create a conversation when the first save fails or the request targets another session", async () => {
+  const f = await unbound();
+  await f.message({ type: "office:ai-request", action: "prepare", requestId: "stale", sessionId: "other" });
+  expect(f.sent).toHaveBeenCalledWith(expect.objectContaining({ requestId: "stale", error: expect.stringContaining("세션이 바뀌") }), "http://office.test");
+  await f.message({ type: "office:ai-request", action: "prepare", requestId: "first", sessionId: null });
+  await f.message({ type: "office:flushed", revision: null });
+  expect(f.onNewSession).not.toHaveBeenCalled();
+  expect(f.sent).toHaveBeenCalledWith(expect.objectContaining({ requestId: "first", error: expect.stringContaining("저장하지 못") }), "http://office.test");
 });

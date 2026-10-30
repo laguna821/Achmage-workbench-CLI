@@ -37,28 +37,54 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
   let run: { turnId: string; api: ReturnType<Gateway["aiSession"]> } | null = null;
   const subscribers = new Set<() => void>();
   const requests = new Map<string, { resolve(value: Prepared | undefined): void; reject(error: Error): void }>();
+  // Grant notifications may arrive before the response to the first prepare.
+  // Defer only this unbound handoff until the parent identifies the session it
+  // created. A different selection must still cancel the original request.
+  let binding: { requestId: string; grants: (string | null)[] } | null = null;
   const streams = new Map<string, AbortController>();
-  const changed = (next: string | null) => {
+  const changed = (next: string | null, keepPanel = false) => {
     if (sessionId === next) return;
-    sessionId = next; sessionKey = next ?? "unbound";
+    sessionId = next;
+    if (keepPanel) return;
+    sessionKey = next ?? "unbound";
     active?.reset();
     for (const listener of subscribers) listener();
   };
   listen((message) => {
-    if (message.type === "office:grant") changed(message.sessionId);
+    if (message.type === "office:grant") {
+      if (binding) binding.grants.push(message.sessionId);
+      else changed(message.sessionId);
+    }
     if (message.type !== "office:ai-result") return;
     const pending = requests.get(message.requestId);
     if (!pending) return;
     requests.delete(message.requestId);
-    if (message.error) { pending.reject(new Error(message.error)); return; }
-    if (message.value) { gateway.setToken(message.value.token); changed(message.value.sessionId); }
+    const initial = binding?.requestId === message.requestId ? binding : null;
+    if (initial) binding = null;
+    if (message.error) {
+      if (initial?.grants.length) changed(initial.grants.at(-1)!);
+      pending.reject(new Error(message.error)); return;
+    }
+    if (initial && (!message.value?.createdSession || !message.value.sessionId || sessionId !== null || initial.grants.some((id) => id !== null && id !== message.value!.sessionId))) {
+      if (initial.grants.length) changed(initial.grants.at(-1)!);
+      pending.reject(new Error("선택한 세션이 바뀌었습니다. 새 대화에서 다시 요청해 주세요.")); return;
+    }
+    if (message.value) { gateway.setToken(message.value.token); changed(message.value.sessionId, Boolean(initial)); }
     pending.resolve(message.value);
   });
   const parent = (action: "prepare" | "new-session" | "settings") => new Promise<Prepared | undefined>((resolve, reject) => {
     const requestId = crypto.randomUUID();
-    const timer = window.setTimeout(() => { requests.delete(requestId); reject(new Error("문서 저장과 세션 연결 확인 시간이 초과됐습니다.")); }, 25_000);
+    const timer = window.setTimeout(() => {
+      requests.delete(requestId);
+      if (binding?.requestId === requestId) {
+        const latest = binding.grants.at(-1); binding = null;
+        if (latest !== undefined) changed(latest);
+      }
+      reject(new Error("문서 저장과 세션 연결 확인 시간이 초과됐습니다."));
+    }, 25_000);
     requests.set(requestId, { resolve: (value) => { clearTimeout(timer); resolve(value); }, reject: (error) => { clearTimeout(timer); reject(error); } });
-    post({ type: "office:ai-request", requestId, action });
+    if (action === "prepare" && sessionId === null) binding = { requestId, grants: [] };
+    post({ type: "office:ai-request", requestId, action, sessionId });
   });
   const prepare = async () => {
     const value = await parent("prepare");

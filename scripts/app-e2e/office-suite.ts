@@ -88,6 +88,7 @@ function toolCall(format: Format, count: number, body: any): { name: string; inp
 /** Actual original panels/tools in Linux Tauri; only the remote model is synthetic. */
 export async function officeSuiteScenario(ctx: Ctx) {
   const { wd, api } = ctx.app;
+  const unbound = process.env.APP_E2E_OFFICE_UNBOUND === "1";
   const selected = process.env.APP_E2E_OFFICE_FORMATS?.split(",") ?? formats;
   if (selected.some((format) => !formats.includes(format as Format))) throw new Error("Unknown Office suite format");
   let active: Format = "md", count = 0, cancelled = 0, phase = "setup";
@@ -127,6 +128,7 @@ export async function officeSuiteScenario(ctx: Ctx) {
     const selector = ".ai-panel textarea:not(:disabled), .copilot textarea:not(:disabled)";
     if (!await until(async () => { const input = await wd.find(selector); return !!input && await wd.displayed(input); }, 45000)) throw new Error("Original composer did not become ready");
     const input = await wd.waitFor(selector);
+    if (unbound) await wd.execute('window.__firstOfficeComposer ??= arguments[0];', input);
     phase = "click composer"; await wd.click(input);
     phase = "type prompt"; await wd.sendKeys(input, text);
     phase = "verify prompt";
@@ -139,11 +141,11 @@ export async function officeSuiteScenario(ctx: Ctx) {
       const S = `Office AI ${format}`; phase = "open editor"; active = format; count = 0; requests = []; fixtureWrites = []; cancelled = 0;
       try {
         const work = await api<Work>("POST", "/api/works", { title: `Native AI ${format}`, cwd: null });
-        const session = await api<Session>("POST", `/api/works/${work.id}/sessions`, { provider: "codex" });
-        currentSession = session.id;
+        let session = unbound ? undefined : await api<Session>("POST", `/api/works/${work.id}/sessions`, { provider: "codex" });
+        currentSession = session?.id ?? "";
         const file = join(work.cwd, `Native AI.${format}`); await fixture(file, format);
         const artifact = await api<Artifact>("POST", `/api/works/${work.id}/artifacts`, { path: file });
-        const tab = { id: "suite-tab", workId: work.id, sessionId: session.id, view: { kind: "document", artifactId: artifact.id, proposalId: null }, ui: { mode: format === "md" || format === "html" ? "rich" : "edit" } };
+        const tab = { id: "suite-tab", workId: work.id, sessionId: session?.id ?? null, view: { kind: "document", artifactId: artifact.id, proposalId: null }, ui: { mode: format === "md" || format === "html" ? "rich" : "edit" } };
         await wd.frame(null);
         await seedLayout(ctx, { ...(await snapshot()).prefs, paneLayout: { version: 2, focus: "suite-pane", panes: [{ ...tab, id: "suite-pane", tabs: [tab], activeTabId: tab.id, recentTabIds: [tab.id] }] } });
         await wd.setWindowRect({ width: 1900, height: 1200 }); await wd.refresh(); await installProbe(wd);
@@ -151,12 +153,20 @@ export async function officeSuiteScenario(ctx: Ctx) {
         if (format === "xlsx" && !await until(() => wd.execute<boolean>('return !!document.querySelector("#univer-container canvas") && !document.body.innerText.includes("통합 문서를 여는 중");'), 45000)) throw new Error("Original workbook did not finish loading");
         if (format === "xlsx") await wd.execute('window.__suiteFocus=[];const f=HTMLElement.prototype.focus;HTMLElement.prototype.focus=function(...args){window.__suiteFocus.push({kind:"call",from:document.activeElement?.outerHTML.slice(0,250),to:this.outerHTML.slice(0,250),stack:new Error().stack});return f.apply(this,args)};document.addEventListener("keydown",e=>window.__suiteFocus.push({kind:"key",key:e.key,target:e.target.outerHTML.slice(0,250)}),true);document.addEventListener("focusin",e=>window.__suiteFocus.push({kind:"focus",target:e.target.outerHTML.slice(0,250)}),true);');
         if (format === "pdf") await wd.execute('window.__suitePdfSaves=[];const api=window.pdfApi,save=api.save;api.save=async(...args)=>{const entry={args};window.__suitePdfSaves.push(entry);try{return entry.result=await save(...args)}catch(error){entry.error=String(error);throw error}};');
+        if (unbound) ctx.report.check(S, "세션 없이 문서를 열어도 불필요한 대화를 만들지 않음", (await snapshot()).sessions.every((item) => item.workId !== work.id));
         await send(`원본 도구로 이 문서를 수정해 줘. __suite_${format}__`);
+        if (unbound) {
+          if (!await until(async () => (await snapshot()).sessions.some((item) => item.workId === work.id), 15000)) throw new Error(`First Office session was not created: ${await wd.execute('return document.body.innerText.slice(-3500)')}`);
+          session = (await snapshot()).sessions.find((item) => item.workId === work.id);
+        }
+        if (!session) throw new Error("No Office conversation session");
+        currentSession = session.id;
         if (!await until(async () => (await items(session.id)).some((item) => item.kind === "turnEnd"), 60000)) throw new Error(`Run did not finish: ${await wd.execute('return document.body.innerText.slice(-3500)')}`);
         let transcript = await items(session.id);
         if (format === "pdf") writeFileSync(ctx.report.path("suite-pdf-saves.json"), JSON.stringify(await wd.execute('return window.__suitePdfSaves'), null, 2));
         writeFileSync(ctx.report.path(`suite-${format}-transcript.json`), JSON.stringify(transcript, null, 2));
         const completed = transcript.some((item) => item.kind === "turnEnd" && item.status === "completed");
+        if (unbound) ctx.report.check(S, "첫 요청이 만든 한 세션에 정확히 한 번 기록·원본 입력창 유지", completed && (await snapshot()).sessions.filter((item) => item.workId === work.id).length === 1 && transcript.filter((item) => item.kind === "user" && item.text === `원본 도구로 이 문서를 수정해 줘. __suite_${format}__`).length === 1 && await wd.execute<boolean>('return window.__firstOfficeComposer === document.querySelector(".ai-panel textarea, .copilot textarea");'));
         const saved = (await savedText(file, format)).includes(marker(format));
         ctx.report.check(S, "원본 도구로 실제 파일 수정·저장", completed && saved && (await snapshot()).artifacts.find((item) => item.id === artifact.id)!.revision > 1, JSON.stringify(transcript.filter((item) => item.kind === "tool")).slice(-1000), await shot(ctx, `suite-${format}-edit.png`));
         if (!completed || !saved) throw new Error("Original tool did not save the expected content");

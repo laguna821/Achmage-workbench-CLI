@@ -946,6 +946,7 @@ export default function DocumentView({
               const next = await onNewSession();
               if (!next) throw new Error("새 세션을 만들지 못했습니다.");
               await lease.sync(false, revision, next.id);
+              return next.id;
             }} />
         ) : null}
         {body}

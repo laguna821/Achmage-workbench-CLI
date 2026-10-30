@@ -27,7 +27,7 @@ export type OfficeStatus = { dirty: boolean; revision: number | null; conflict: 
  */
 export const OfficeEditor = forwardRef<
   OfficeHandle,
-  { api: Api; artifact: Artifact; access?: DocumentAccess; sessionId: string | null; hidden?: boolean; onStatus(status: OfficeStatus): void; onNotice(message: string): void; onCopied?(artifactId: string): void; onPrepareAi(revision: number): Promise<void>; onNewSession(revision: number): Promise<void>; onAiSettings(): void }
+  { api: Api; artifact: Artifact; access?: DocumentAccess; sessionId: string | null; hidden?: boolean; onStatus(status: OfficeStatus): void; onNotice(message: string): void; onCopied?(artifactId: string): void; onPrepareAi(revision: number): Promise<void>; onNewSession(revision: number): Promise<string>; onAiSettings(): void }
 >(function OfficeEditor({ api, artifact, access, sessionId, hidden = false, onStatus, onNotice, onCopied, onPrepareAi, onNewSession, onAiSettings }, ref) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [generation, setGeneration] = useState(0);
@@ -123,16 +123,26 @@ export const OfficeEditor = forwardRef<
     if (aiBusy.current) { reply(undefined, "문서 저장과 세션 연결을 확인 중입니다."); return; }
     aiBusy.current = true;
     try {
+      const checkSession = () => {
+        if (message.sessionId !== opened.current?.sessionId) throw new Error("선택한 세션이 바뀌었습니다. 새 대화에서 다시 요청해 주세요.");
+      };
+      checkSession();
       if (status.current.conflict) throw new Error(status.current.conflict.message);
       const flushed = waitFlushed(); send({ type: "office:flush" });
       const revision = await flushed;
       if (revision === null) throw new Error("문서를 저장하지 못했습니다. 편집 내용은 문서에 유지됩니다.");
-      if (message.action === "new-session") await handlers.current.onNewSession(revision);
+      checkSession();
+      // Opening a document never creates a conversation. Its first admitted AI
+      // request does, after saving, through the same Workbench session route.
+      const createdSession = message.action === "new-session" || message.sessionId === null;
+      let expectedSession = message.sessionId;
+      if (createdSession) expectedSession = await handlers.current.onNewSession(revision);
       else await handlers.current.onPrepareAi(revision);
       const value = await api.editorGrant(latest.current.id);
+      if (!value.sessionId || value.sessionId !== expectedSession) throw new Error("문서와 선택한 세션의 연결을 확인하지 못했습니다. 다시 요청해 주세요.");
       opened.current = value;
       setGrant({ generation, value });
-      reply({ revision, token: value.token, sessionId: value.sessionId });
+      reply({ revision, token: value.token, sessionId: value.sessionId, ...(createdSession ? { createdSession: true } : {}) });
     } catch (error) { reply(undefined, error instanceof Error ? error.message : String(error)); }
     finally { aiBusy.current = false; }
   };

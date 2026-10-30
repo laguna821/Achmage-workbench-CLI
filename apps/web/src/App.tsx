@@ -1832,7 +1832,14 @@ export function App() {
                 onPickTarget={() => actions.pickSession(owner, session ?? null)}
                 onAiSettings={() => setOfficeSettingsOpen(true)}
                 onNewSession={async () => {
+                  const source = paneById(layoutRef.current, pane.id);
+                  const stillHere = () => {
+                    const current = paneById(layoutRef.current, pane.id);
+                    return source && current && activeTab(current).id === tabId && current.workId === owner.id && current.sessionId === source.sessionId && contentKey(current) === `doc:${at.artifactId}`;
+                  };
+                  if (!stillHere()) throw new Error("문서 탭이나 선택한 세션이 바뀌었습니다. 현재 문서에서 다시 요청해 주세요.");
                   const next = await api.createSession(owner.id, session?.provider ?? engine, { workspaceId: session?.workspaceId, model: session?.model ?? null, effort: session?.effort ?? null });
+                  if (!stillHere()) throw new Error("문서 탭이나 선택한 세션이 바뀌었습니다. 만든 새 세션은 프로젝트에 보관했습니다.");
                   dispatch({ type: "focus", work: owner, session: next });
                   updateLayout((current) => setPane(current, pane.id, { workId: owner.id, sessionId: next.id }));
                   return next;

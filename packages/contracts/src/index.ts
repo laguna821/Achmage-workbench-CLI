@@ -774,7 +774,7 @@ export type OfficeHostMessage =
   | { type: "office:theme"; theme: "light" | "dark" }
   /** Refresh a scoped write capability without recreating the editor or dropping its undo state. */
   | { type: "office:grant"; token: string; sessionId: string | null }
-  | { type: "office:ai-result"; requestId: string; value?: { revision: number; token: string; sessionId: string | null }; error?: string }
+  | { type: "office:ai-result"; requestId: string; value?: { revision: number; token: string; sessionId: string | null; createdSession?: boolean }; error?: string }
   /** Save unsaved edits now (before a request is sent, the tab changes or the view switches). */
   | { type: "office:flush" }
   /** Keep my edits after a conflict: save them as the revision after this one. */
@@ -787,7 +787,7 @@ export type OfficeHostMessage =
 /** Office editor page → Workbench window. */
 export type OfficePageMessage =
   | import("./office-output.ts").OfficeOutputRequest
-  | { type: "office:ai-request"; requestId: string; action: "prepare" | "new-session" | "settings" }
+  | { type: "office:ai-request"; requestId: string; action: "prepare" | "new-session" | "settings"; sessionId: string | null }
   | { type: "office:copied"; artifactId: string }
   | { type: "office:ready" }
   /** The editor shows this revision; `recovered` when it reopened unsaved edits made on it. */
