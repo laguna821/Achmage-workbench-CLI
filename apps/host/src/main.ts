@@ -127,7 +127,7 @@ manager.registerAdapter(
 );
 
 const grants = new EditorGrants();
-const officeAi = new OfficeAi(dataDir);
+const officeAi = new OfficeAi(dataDir, undefined, manager.office);
 const editors = createEditorsServer(manager.documents, grants, webDir && existsSync(webDir) ? webDir : null, officeAi);
 let editorsOrigin: string | null = null;
 // Images pasted into Markdown documents: the user's R2 bucket, or the work folder (doc-images.ts).

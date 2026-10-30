@@ -325,7 +325,7 @@ export type Handoff = {
 
 export type RefSummary = { artifactId: string; name: string; revision: number; mode: DocRef["mode"]; selection: string | null; sha256?: string; savedSnapshot?: boolean };
 
-export type TranscriptItem =
+export type TranscriptItem = (
   | {
       kind: "user";
       id: string;
@@ -411,7 +411,10 @@ export type TranscriptItem =
       model?: string | null;
       effort?: string | null;
       requestId?: string | null;
-    };
+    }
+) & { /** An original Office tool loop, owned by this same Workbench conversation. */
+  office?: { turnId: string; artifactId: string };
+};
 
 export type UsageWindow = {
   /** e.g. "5시간", "주간" */

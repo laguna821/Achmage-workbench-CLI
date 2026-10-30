@@ -30,17 +30,17 @@ export function officeEditorKind(format: DocFormat): OfficeEditorKind | null {
 
 /** Tokens that open one document each, for as long as the gateway runs (the most recent ones). */
 export class EditorGrants {
-  private readonly grants = new Map<string, { artifactId: string; access?: DocumentAccess; preview: { id?: string; text?: string } }>();
+  private readonly grants = new Map<string, { artifactId: string; access?: DocumentAccess; sessionId: string | null; preview: { id?: string; text?: string } }>();
   private readonly limit: number;
   constructor(limit = 500) {
     this.limit = limit;
   }
 
-  issue(artifactId: string, access?: DocumentAccess) {
+  issue(artifactId: string, access?: DocumentAccess, sessionId: string | null = null) {
     const token = randomBytes(24).toString("base64url");
     // Refreshing a view's writer lease must preserve the live preview URL already in its DOM.
     const prior = access ? [...this.grants.values()].find((grant) => grant.artifactId === artifactId && grant.access?.viewId === access.viewId) : undefined;
-    this.grants.set(token, { artifactId, ...(access ? { access: { ...access } } : {}), preview: prior?.preview ?? {} });
+    this.grants.set(token, { artifactId, ...(access ? { access: { ...access } } : {}), sessionId, preview: prior?.preview ?? {} });
     while (this.grants.size > this.limit) this.grants.delete(this.grants.keys().next().value!);
     return token;
   }
@@ -50,6 +50,7 @@ export class EditorGrants {
   }
 
   access(token: string) { return this.grants.get(token)?.access; }
+  session(token: string) { return this.grants.get(token)?.sessionId ?? null; }
 
   previewInfo(token: string) {
     const grant = this.grants.get(token);

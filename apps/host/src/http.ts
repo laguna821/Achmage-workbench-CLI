@@ -637,7 +637,10 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           if (!kind) throw new HttpError(415, "no_editor", "이 형식은 아직 Workbench 안에서 편집하지 못합니다.");
           const origin = options.editors?.origin();
           if (!options.editors || !origin) throw new HttpError(503, "editors_not_ready", "편집기를 준비하는 중입니다. 잠시 뒤 다시 열어 주세요.");
-          return sendJson(res, 200, { url: `${origin}/office/${kind}.html`, origin, token: options.editors.grants.issue(artifactId, documentAccess(req)) });
+          const access = documentAccess(req);
+          const sessionId = documents.registry.forArtifact(artifactId).find((view) => view.viewId === access?.viewId && view.artifactId === artifactId)?.sessionId ?? null;
+          if (sessionId) manager.office.scope(artifactId, sessionId);
+          return sendJson(res, 200, { url: `${origin}/office/${kind}.html`, origin, token: options.editors.grants.issue(artifactId, access, sessionId) });
         }
         if (method === "PUT" && parts[2] === "bytes") {
           const data = await readBody(req, 200_000_000);

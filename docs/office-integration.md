@@ -84,6 +84,18 @@ WebKit에서는 원본의 `sandbox="allow-same-origin"`이 부모 편집기의 �
 
 계획 판: `research:rr-e71ed06ec7d8536f6d79b978226befd7:5bccddab66b6bb7ce2df99eae46e8b496d0cc2cb44738ec26b94f0a38a8173b2`. 검증 판: `research:rr-e71ed06ec7d8536f6d79b978226befd7:48fbf9949e6e280938692f4e48bcdc2697ae1bdcffdd89a8fba9f784c6d8fb81`. 증거: `/tmp/wb-office-ai-host-guarded.log`, `/tmp/wb-office-ai-types-all.log`, `implementation-20261030/office-ai-bundle/results.json`. 초기 설정 비교 실패, 원인 가설 정정과 음성 검사 fixture 보완도 같은 연구에 남겼다. 재현 도구: `scripts/smoke-office-ai.ts`.
 
+## 기존 Workbench 세션과 Office AI 실행 연결
+
+Office 요청은 신뢰하는 호스트가 문서 뷰의 기존 Workbench 세션에 연결한다. 같은 프로젝트·작업공간, 편집 권한과 저장된 판을 검사하고 요청에 판·해시·선택을 남긴다. 미저장 편집이 있으면 먼저 저장하도록 거절한다. 별도 Office 프로젝트나 대화 DB를 만들지 않는다. 요청·도구·답변·종료는 기존 SQLite 대화와 UI 이벤트에 저장한다.
+
+같은 요청·이벤트의 재전송은 중복 저장하지 않고, 같은 제공자 호출을 다시 실행하지 않는다. 다른 창의 실행, 어긋난 이벤트 순서, 이미 마친 기록 변경을 거절한다. Office가 실행 중이면 같은 세션의 일반 CLI 요청은 대기한다. Workbench의 멈춤, 응답 연결 단절, 뷰 만료와 앱 종료가 해당 Office 실행을 중단한다. 재시작 뒤에는 부분 답과 중단 원인을 보존하며 자동 재실행하지 않는다.
+
+후속 CLI 요청에는 아직 전달하지 않은 Office 기록을 자료로 제공한다. 전송 실패 시 그 기록을 남겨 두며, 전달 커서 저장 실패 때문에 이미 실행 중인 CLI를 실패로 바꾸지 않는다. 원래 CLI의 native session ID를 유지하고, 갈래를 만들 때 Office 실행을 CLI의 원본 요청 수로 세지 않는다.
+
+**세션 연계/인접 검사57/57, 빌드된 호스트10/10**, 전체 타입 검사와 최종 host 타입·빌드 통과. 로컬 시험 제공자를 통한 원본 HTTP 요청, 같은 대화 기록, 중복 호출 거절과 정상 종료를 확인했다. 실제 구독 호출·네이티브 AI 화면 검증은 포함하지 않는다. 원본 패널의 실행 전 저장, 실제 편집 도구, 설정/보안 키 저장, 첨부·검색·Drive와 이력 복원은 다음 연결 단계다.
+
+계획 판: `research:rr-9ea5b25fba78bdf457ec7b3505053d84:d5af36a220e22125d23038b9cacb6d6fa824ed7963d743c62cfc2d9257cd2889`. 검증 판: `research:rr-9ea5b25fba78bdf457ec7b3505053d84:36e728834971b42346058dfc945eafc7c54abb7eae099970820e4ddc9203a711`. 증거와 로그: `implementation-20261030/office-session-bundle-final/`. 초기 TypeScript 문법 검사 실패와 수정도 같은 연구 기록에 남겼다. 재현 도구: `scripts/smoke-office-ai.ts`.
+
 ## 아직 완료되지 않은 범위
 
 현재 아홉 renderer 진입점이 있다는 것은 아홉 편집기의 전 기능이 끝났다는 뜻이 아니다. Markdown·HTML의 클라우드 이미지 호스트/원격 그림 읽기, 다른 이름으로 저장, 내보내기, 내부 AI·검색·첨부·위키 서비스는 연결 중이며 미구현 동작을 성공 처리하지 않는다. 기존 Word·PPT·Sheets에도 AI·템플릿·출력 미연결 항목이 있다. PDF의 영구 가림 사본·다른 이름 저장·추출/합치기 파일 선택·변환/출력·서명 보관/인증서 서명·AI/번역/결과 보관/노트·Windows/macOS OCR과 전체 기능 인수 검증이 남았다. 인증서 서명 읽기 코드는 연결했지만 실제 서명 검증 fixture는 아직 수행하지 않았다. XMind의 다른 이름 저장·내보내기·출력·링크 열기·문서 만들기, EPUB의 AI/번역/결과 보관·첨부·다른 이름 저장·외부 링크·이름 변경 동기화와 기존 설정 이행도 남았다. 공통 제공자·세션·Drive·검색·doory와 출력 서비스를 계속 연결한다.

@@ -76,6 +76,7 @@ import { CreationJournal, type CreationRecord } from "./creation-journal.ts";
 import { UserSkills } from "./user-skills.ts";
 import { SkillLibrary } from "./skill-library.ts";
 import { SendGate } from "./send-gate.ts";
+import { OfficeSessions } from "./office-sessions.ts";
 import { copyMcp, copySkill, integrations, type EngineBinaries } from "./integrations.ts";
 import { exportFileName, sessionMarkdown } from "./export-md.ts";
 import { Attachments } from "./attachments.ts";
@@ -275,6 +276,7 @@ export class SessionManager {
   readonly userSkills: UserSkills;
   readonly skillLibrary: SkillLibrary;
   readonly documents: Documents;
+  readonly office: OfficeSessions;
   readonly workspaces: Workspaces;
   readonly worktreeWorkspaces: WorktreeWorkspaces;
   readonly terminals: Terminals;
@@ -348,6 +350,17 @@ export class SessionManager {
     this.scmReviews = new ScmReviews(store, this.workspaces, this.sourceControl.reviewSnapshots, reviewHooks);
     this.githubFeedback = new GitHubFeedback(store, this.github, this.githubActions.discussions, reviewHooks);
     this.documents = new Documents(store, bus, options.dataDir ?? dirname(options.managedWorksDir), options.kordoc ?? null, options.ieum ?? null, this.workspaces);
+    this.office = new OfficeSessions(store, this.documents, {
+      session: (id) => this.requireSession(id),
+      active: (session) => {
+        if (session.hostId !== options.hostId || this.hidden(session.workId, session.id)) throw new HttpError(409, "office_session_inactive", "활성 로컬 세션을 선택해 주세요.");
+        if (session.workspaceId) this.workspaces.requireActive(session.workspaceId, session.workId);
+      },
+      items: (id) => this.loadItems(id),
+      item: (id, item) => this.sink.upsertItem(id, item),
+      update: (id, patch) => this.sink.updateSession(id, patch),
+      lock: (id, key, identity, action) => this.sendGate.run(id, key, identity, action),
+    });
     this.engineSetup = new EngineInstaller({
       dataDir: options.dataDir ?? dirname(options.managedWorksDir),
       onChange: (engine, state) => {
@@ -623,7 +636,10 @@ export class SessionManager {
       });
       // The turn ends here, so what it left is settled as after a stop: the waiting requests stay,
       // a working copy it changed becomes a proposal, a request from another session gets its answer.
-      if (end) this.sink.upsertItem(session.id, end);
+      if (end) {
+        const owner = items.find((item) => item.kind === "user" && item.id === `user:${end.requestId}`)?.office;
+        this.sink.upsertItem(session.id, { ...end, ...(owner ? { office: owner, model: null, effort: null } : {}) });
+      }
       this.saveSession({ ...this.requireSession(session.id), status: "idle", activity: null, updatedAt: Date.now() });
     }
     // Left open by an older version (an engine that died without a turn end): settled the same way.
@@ -1254,7 +1270,7 @@ export class SessionManager {
     const request = items[at];
     if (!request || request.kind !== "user") throw new HttpError(404, "request_not_found", "그 요청을 찾지 못했습니다.");
     const before = items.slice(0, at);
-    const keep = { turns: before.filter((item) => item.kind === "turnEnd").length, requests: before.filter((item) => item.kind === "user").length };
+    const keep = { turns: before.filter((item) => item.kind === "turnEnd" && !item.office).length, requests: before.filter((item) => item.kind === "user" && !item.office).length };
     const work = this.requireWork(session.workId);
     const adapter = this.adapter(session.provider);
     let nativeSessionId: string | null = null;
@@ -1401,6 +1417,7 @@ export class SessionManager {
       const adapter = this.adapter(session.provider);
       // A request to plan first is a turn of its own: it waits for the running one.
       const steerable =
+        !this.office.busy(sessionId) &&
         mode !== "queue" &&
         !plan &&
         Boolean(adapter.steer) &&
@@ -1451,6 +1468,7 @@ export class SessionManager {
       }
       // The turn ended meanwhile: this request starts the next one.
     }
+    const officeContext = this.office.nativeContext(sessionId);
     this.steering.delete(sessionId);
     // A plan still waiting for the go-ahead is passed over by a new request.
     this.expirePlans(sessionId);
@@ -1473,7 +1491,7 @@ export class SessionManager {
     // sessions' revisions, the note), before the request; relays and drawings carry their own.
     const told = !relay && !options.engineText;
     const change = told ? (this.changeHook?.(session, work, options.omitChanges ?? []) ?? null) : null;
-    const engineText = change ? `${change}\n\n${baseText}` : baseText;
+    const engineText = officeContext.text + (change ? `${change}\n\n${baseText}` : baseText);
     this.sink.upsertItem(sessionId, {
       kind: "user",
       id: `user:${requestId}`,
@@ -1501,6 +1519,7 @@ export class SessionManager {
     try {
       const current = this.requireSession(sessionId);
       await this.adapter(session.provider).send({ ...current, access: this.accessOf(current), plan }, this.engineWork(current, work), engineText, requestId, files);
+      officeContext.accept();
       if (told) this.toldHook?.(current);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -1985,6 +2004,7 @@ export class SessionManager {
 
   async interrupt(sessionId: string) {
     const session = this.requireSession(sessionId);
+    if (this.office.interrupt(sessionId)) return;
     this.options.browse?.expire(sessionId);
     await this.adapter(session.provider).interrupt(session);
   }
@@ -2053,6 +2073,7 @@ export class SessionManager {
   }
 
   async shutdown() {
+    this.office.close();
     this.scmReviews.stop();
     this.githubFeedback.stop();
     this.githubActions.stop();

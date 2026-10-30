@@ -5,6 +5,7 @@ import type { EditorGrants } from "./editors.ts";
 import { HttpError } from "./errors.ts";
 import { readBody, sendJson } from "./http.ts";
 import type { OfficeAiChat, OfficeAiEngine, OfficeAiStream } from "./office-ai-engine.mjs";
+import type { OfficeSessions } from "./office-sessions.ts";
 
 export const OFFICE_AI_INPUT_LIMIT = 20_000_000;
 const OUTPUT_LIMIT = 32_000_000;
@@ -45,12 +46,19 @@ export class OfficeAi {
   private readonly active = new Map<string, { owner: string; controller: AbortController }>();
   private readonly load: () => Promise<OfficeAiEngine>;
   private closed = false;
-  constructor(dataDir: string, engine?: OfficeAiEngine) {
+  private readonly sessions: OfficeSessions | undefined;
+  private readonly requireSession: boolean;
+  constructor(dataDir: string, engine?: OfficeAiEngine, sessions?: OfficeSessions) {
+    this.sessions = sessions;
+    // Only explicitly injected provider fixtures can exercise the lower layer in isolation.
+    // A default/production engine must never fall back to an unowned model request.
+    this.requireSession = !engine || Boolean(sessions);
     this.load = engine ? () => Promise.resolve(engine) : async () => (await import("./office-ai-engine.mjs")).createOfficeAiEngine(dataDir);
   }
   get activeCount() { return this.active.size; }
   close() {
     this.closed = true;
+    this.sessions?.close();
     for (const run of this.active.values()) run.controller.abort();
   }
   async shutdownProviders() {
@@ -68,7 +76,7 @@ export class OfficeAi {
     return { signal: controller.signal, abort, finish: () => { response.off("close", abort); this.active.delete(key); } };
   }
   async handle(req: IncomingMessage, res: ServerResponse, url: URL, bearer: string | null, documents: Documents, grants: EditorGrants): Promise<boolean> {
-    const match = /^\/api\/artifacts\/([^/]+)\/ai\/(settings|statuses|stream|chat|cancel)$/.exec(url.pathname);
+    const match = /^\/api\/artifacts\/([^/]+)\/ai\/(settings|statuses|stream|chat|cancel|history|turn-start|turn-events|turn-finish)$/.exec(url.pathname);
     if (!match) return false;
     const [, artifactId, operation] = match;
     const authorize = () => {
@@ -78,8 +86,22 @@ export class OfficeAi {
       return `${artifactId}:${grants.previewInfo(bearer!).baseUrl}`;
     };
     const owner = authorize();
-    const get = operation === "settings" || operation === "statuses";
+    const get = operation === "settings" || operation === "statuses" || operation === "history";
     if (req.method !== (get ? "GET" : "POST")) throw new HttpError(405, "method_not_allowed", "허용되지 않은 AI 요청입니다.");
+    const binding = () => {
+      const sessionId = grants.session(bearer!);
+      if (!sessionId || !this.sessions) throw new HttpError(409, "office_session_required", "이 문서와 함께 사용할 Workbench 세션을 먼저 선택해 주세요.");
+      return { artifactId: artifactId!, sessionId, owner, access: grants.access(bearer!) };
+    };
+    if (operation === "history" || operation!.startsWith("turn-")) {
+      const bound = binding();
+      if (operation === "history") { sendJson(res, 200, this.sessions!.history(bound, url.searchParams.get("before"))); return true; }
+      let raw: unknown;
+      try { raw = JSON.parse((await readBody(req, OFFICE_AI_INPUT_LIMIT)).toString("utf8")); } catch (error) { if (error instanceof HttpError) throw error; return invalid(); }
+      authorize();
+      const value = operation === "turn-start" ? await this.sessions!.start(bound, raw) : operation === "turn-events" ? this.sessions!.events(bound, raw) : this.sessions!.finish(bound, raw);
+      sendJson(res, 200, value); return true;
+    }
     // No startup status probing, CLI process, model invocation or settings write before a request.
     const engine = await (this.engine ??= this.load().catch((error) => { this.engine = null; throw error; }));
     authorize();
@@ -98,15 +120,32 @@ export class OfficeAi {
       this.active.get(`${owner}/${raw.requestId}`)?.controller.abort();
       sendJson(res, 200, { ok: true }); return true;
     }
+    const bound = this.requireSession ? binding() : null;
+    const outer = bound ? this.sessions!.requireRun(bound, record(raw) ? raw.turnId : null) : null;
+    const connect = (run: ReturnType<OfficeAi["begin"]>) => {
+      if (!outer) return () => {};
+      const abort = () => run.abort();
+      outer.controller.signal.addEventListener("abort", abort, { once: true });
+      const disconnected = () => { if (!res.writableEnded) this.sessions!.disconnected(bound!, outer.turnId); };
+      res.once("close", disconnected);
+      if (outer.controller.signal.aborted) abort();
+      return () => { outer.controller.signal.removeEventListener("abort", abort); res.off("close", disconnected); };
+    };
     if (operation === "chat") {
-      const request = officeAiRequest(raw, false), run = this.begin(owner, randomUUID(), res);
+      const request = officeAiRequest(raw, false);
+      if (outer) this.sessions!.claimCall(bound!, outer.turnId, (raw as Record<string, unknown>).requestId, raw);
+      const run = this.begin(owner, randomUUID(), res);
+      const disconnect = connect(run);
       try { const result = await engine.chat(request, run.signal); if (!res.destroyed) sendJson(res, 200, result); }
-      finally { run.finish(); }
+      finally { disconnect(); run.finish(); }
       return true;
     }
-    const request = officeAiRequest(raw, true), run = this.begin(owner, request.requestId, res);
+    const request = officeAiRequest(raw, true);
+    if (outer) this.sessions!.claimCall(bound!, outer.turnId, request.requestId, raw);
+    const run = this.begin(owner, request.requestId, res);
+    const disconnect = connect(run);
     // The original Codex session pool must not join two documents that chose the same id.
-    const sessionId = createHash("sha256").update(`${owner}/${request.sessionId ?? request.requestId}`).digest("hex");
+    const sessionId = createHash("sha256").update(bound ? `${bound.sessionId}/${bound.artifactId}` : `${owner}/${request.sessionId ?? request.requestId}`).digest("hex");
     res.writeHead(200, { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" });
     res.flushHeaders();
     let size = 0, overflow = false;
@@ -122,7 +161,7 @@ export class OfficeAi {
       });
     } catch {
       if (!res.destroyed && !res.writableEnded) res.write(`${JSON.stringify({ requestId: request.requestId, type: "error", error: "Office AI 요청을 완료하지 못했습니다. 설정과 연결을 확인해 주세요." })}\n`);
-    } finally { run.finish(); if (!res.destroyed && !res.writableEnded) res.end(); }
+    } finally { disconnect(); run.finish(); if (!res.destroyed && !res.writableEnded) res.end(); }
     return true;
   }
 }
