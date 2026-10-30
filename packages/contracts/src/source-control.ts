@@ -23,6 +23,8 @@ export type ScmStatus = {
   localRevision: string;
 };
 export type ScmArea = "staged" | "working";
+export type ScmHunk = { id: string; patchLine: number; lineCount: number; oldStart: number; oldCount: number; newStart: number; newCount: number };
+export type ScmHunkSelection = { path: string; expectedRevision: string; hunks: string[] };
 export type ScmDiff = {
   path: string;
   area: ScmArea;
@@ -30,6 +32,8 @@ export type ScmDiff = {
   patch: string;
   truncated: boolean;
   binary: boolean;
+  hunks?: ScmHunk[];
+  partialReason?: string;
   /** Raster images only. SVG remains escaped text, never executable markup. */
   images?: { before: string | null; after: string | null };
 };
@@ -60,7 +64,7 @@ export type ScmResolution = {
   stage: boolean;
   allowMarkers?: boolean;
 };
-export type ScmAction = "stage" | "unstage" | "commit" | "fetch" | "pull" | "push" | "resolve" | "continue" | "abort";
+export type ScmAction = "stage" | "unstage" | "commit" | "fetch" | "pull" | "push" | "resolve" | "continue" | "abort" | "stage-hunks" | "unstage-hunks";
 export type ScmRemote = { name: string; fetchUrls: string[]; pushUrls: string[] };
 export type ScmRemoteInventory = {
   revision: string;
@@ -97,6 +101,7 @@ export type ScmRequest = {
   resolution?: ScmResolution;
   operation?: Exclude<ScmOperation, null>;
   confirmAbort?: boolean;
+  selection?: ScmHunkSelection;
 };
 export type ScmRecordedRequest = Omit<ScmRequest, "resolution"> & { resolution?: Omit<ScmResolution, "content"> & { contentHash?: string } };
 export type ScmJob = {

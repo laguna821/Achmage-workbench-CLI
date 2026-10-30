@@ -9,11 +9,13 @@ import { readScmStatus, scmHash, scmPath } from "./scm-status.ts";
 import { readScmDiff } from "./scm-diff.ts";
 import { ScmRemotes, redactGit, remoteAction, validateRemoteRequest } from "./scm-remote.ts";
 import { applyResolution, createScmRecovery, prepareResolution, readScmConflict, validateResolution } from "./scm-conflict.ts";
+import { hunkAction, selectedHunkPatch, validateHunkSelection } from "./scm-hunks.ts";
 
 const PREFIX = "scm-job:";
 type Hooks = { sharedLinks: (root: string) => ReadonlySet<string>; assertIdle: (root: string) => void; assertWorkingIdle?: (root: string) => void };
 function validateRequest(value: ScmRequest): ScmRequest {
-  if (!value || typeof value.requestId !== "string" || !/^[a-zA-Z0-9_-]{8,100}$/.test(value.requestId) || typeof value.expectedRevision !== "string" || !/^[a-f0-9]{64}$/.test(value.expectedRevision) || !["stage", "unstage", "commit", "fetch", "pull", "push", "resolve", "continue", "abort"].includes(value.action)) throw new HttpError(400, "scm_request", "유효한 Git 작업과 최신 변경 상태가 필요합니다.");
+  if (!value || typeof value.requestId !== "string" || !/^[a-zA-Z0-9_-]{8,100}$/.test(value.requestId) || typeof value.expectedRevision !== "string" || !/^[a-f0-9]{64}$/.test(value.expectedRevision) || !["stage", "unstage", "commit", "fetch", "pull", "push", "resolve", "continue", "abort", "stage-hunks", "unstage-hunks"].includes(value.action)) throw new HttpError(400, "scm_request", "유효한 Git 작업과 최신 변경 상태가 필요합니다.");
+  if (hunkAction(value.action)) return { requestId: value.requestId, expectedRevision: value.expectedRevision, action: value.action, selection: validateHunkSelection(value.selection) };
   if (value.action === "resolve") return { requestId: value.requestId, expectedRevision: value.expectedRevision, action: value.action, resolution: validateResolution(value.resolution) };
   if (value.action === "continue" || value.action === "abort") {
     if (!value.operation || !["merge", "rebase", "cherry-pick", "revert"].includes(value.operation) || value.action === "abort" && value.confirmAbort !== true) throw new HttpError(400, "scm_operation", "진행 중인 작업을 확인하고 취소할 때에는 파일 복구 영향을 확인하세요.");
@@ -100,7 +102,10 @@ export class SourceControl {
       release = this.spaces.directoryOperations.acquire(state.root);
       this.assertRevision(await this.status(workspaceId), request.expectedRevision);
       if (this.stopped) throw new HttpError(503, "scm_stopped", "앱이 종료 중입니다.");
-      if (["resolve", "continue", "abort"].includes(request.action)) {
+      if (hunkAction(request.action)) {
+        const selection = request.selection!, diff = await readScmDiff(state, selection.path, request.action === "stage-hunks" ? "working" : "staged");
+        selectedHunkPatch(diff, selection); this.assertRevision(await this.status(workspaceId), request.expectedRevision);
+      } else if (["resolve", "continue", "abort"].includes(request.action)) {
         this.hooks.assertWorkingIdle?.(state.root);
         if ((request.action === "resolve" || request.action === "abort") && !this.recoveryDir) throw new HttpError(503, "scm_recovery", "복구 파일을 보관할 앱 데이터 폴더가 필요합니다.");
         if (request.action === "resolve") await prepareResolution(state, request.resolution!);
@@ -138,6 +143,16 @@ export class SourceControl {
     try {
       let args: string[], input: string;
       const assertCurrent = async () => this.assertRevision(await this.status(job.workspaceId), state.revision);
+      if (hunkAction(request.action)) {
+        const selection = request.selection!, diff = await readScmDiff(state, selection.path, request.action === "stage-hunks" ? "working" : "staged");
+        const patch = selectedHunkPatch(diff, selection), args = ["apply", "--cached", "--whitespace=nowarn", ...(request.action === "unstage-hunks" ? ["--reverse"] : [])];
+        await assertCurrent();
+        await scmText(job.root, [...args, "--check", "-"], { input: patch, signal, onOutput: append });
+        await assertCurrent();
+        await scmText(job.root, [...args, "-"], { input: patch, signal, onOutput: append });
+        append(`${selection.path}: ${selection.hunks.length}개 구간 ${request.action === "stage-hunks" ? "스테이징" : "스테이징 취소"}. 작업 파일은 그대로 유지했습니다.\n`);
+        job = { ...job, phase: "complete" }; return;
+      }
       if (request.action === "resolve" || request.action === "abort") {
         const view = request.action === "resolve" ? await prepareResolution(state, request.resolution!) : null;
         const paths = request.action === "resolve" ? [request.resolution!.path] : state.files.filter((file) => file.index !== "?").flatMap((file) => file.oldPath ? [file.path, file.oldPath] : [file.path]);

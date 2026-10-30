@@ -4,6 +4,7 @@ import type { ScmArea, ScmDiff, ScmStatus } from "@workbench/contracts";
 import { HttpError } from "./errors.ts";
 import { scmGit, scmText } from "./scm-git.ts";
 import { scmFileStamp, scmHash } from "./scm-status.ts";
+import { describeHunks } from "./scm-hunks.ts";
 
 const MAX_PATCH = 512 * 1024, MAX_IMAGE = 8 * 1024 * 1024;
 const imageTypes: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp" };
@@ -28,13 +29,16 @@ export async function readScmDiff(status: ScmStatus, path: string, area: ScmArea
   const file = status.files.find((entry) => entry.path === path);
   if (!file || !["staged", "working"].includes(area)) throw new HttpError(404, "scm_file", "현재 변경 목록에 없는 파일입니다.");
   const stamps = JSON.stringify(scmFileStamp(status.root, path));
-  let patch: string;
+  let raw: Buffer;
+  const flags = ["--no-ext-diff", "--no-textconv", "--no-color", "--full-index", "--unified=3", "--inter-hunk-context=0", "--src-prefix=a/", "--dst-prefix=b/", "--line-prefix="];
   if (file.index === "?" && area === "working") {
-    if (path.endsWith("/")) patch = "중첩 저장소입니다. 해당 저장소를 작업공간으로 열어 변경을 검토하세요.\n";
-    else patch = await scmText(status.root, ["diff", "--no-index", "--no-ext-diff", "--no-textconv", "--no-color", "--", "/dev/null", path], { accepted: [0, 1] });
+    if (path.endsWith("/")) raw = Buffer.from("중첩 저장소입니다. 해당 저장소를 작업공간으로 열어 변경을 검토하세요.\n");
+    else raw = await scmGit(status.root, ["diff", "--no-index", ...flags, "--", "/dev/null", path], { accepted: [0, 1] });
   } else {
-    patch = await scmText(status.root, ["diff", "--no-ext-diff", "--no-textconv", "--no-color", "--full-index", "--unified=3", ...(area === "staged" ? ["--cached"] : []), "--", ...(file.oldPath ? [file.oldPath, path] : [path])]);
+    raw = await scmGit(status.root, ["diff", ...flags, ...(area === "staged" ? ["--cached"] : []), "--", ...(file.oldPath ? [file.oldPath, path] : [path])]);
   }
+  const patch = raw.toString("utf8"); let validUtf8 = true;
+  try { new TextDecoder("utf-8", { fatal: true }).decode(raw); } catch { validUtf8 = false; }
   const mime = !file.submodule && !file.conflicted && imageTypes[extname(path).toLowerCase()];
   let images: ScmDiff["images"];
   if (mime) {
@@ -47,5 +51,6 @@ export async function readScmDiff(status: ScmStatus, path: string, area: ScmArea
   if (stamps !== JSON.stringify(scmFileStamp(status.root, path))) throw new HttpError(409, "scm_changed", "차이를 읽는 동안 파일이 바뀌었습니다. 새로고침해 주세요.");
   const lines = patch.split("\n"), truncated = Buffer.byteLength(patch) > MAX_PATCH || lines.length > 6000;
   const displayed = truncated ? Buffer.from(lines.slice(0, 6000).join("\n")).subarray(0, MAX_PATCH).toString("utf8") : patch;
-  return { path, area, revision: scmHash(JSON.stringify([status.revision, area, path, patch])), patch: displayed, truncated, binary: /^Binary files /m.test(patch), ...(images ? { images } : {}) };
+  const result: ScmDiff = { path, area, revision: scmHash(JSON.stringify([status.revision, area, path, scmHash(raw)])), patch: displayed, truncated, binary: /^Binary files |^GIT binary patch/m.test(patch) || raw.includes(0), ...(images ? { images } : {}) };
+  return { ...result, ...describeHunks(result, file, validUtf8) };
 }
