@@ -16,7 +16,13 @@ PPT도 원본 `addPicture`·`replacePictureBytes`·중앙 crop·durable ID·hist
 
 실제 Linux PPT **22/22**: 생성→삽입→다른 비율 그림으로 교체→원본 crop/ID·프레임 보존→화면 표시·PPTX 바이트 저장→Undo/Redo·카드/대화 재열기·새 대화·취소. PNG로 위장한 HTML 거절도 확인했다. 전체 타입 검사와 Office/native 빌드 통과. 근거 `office-media-ppt-native-02/results.json`, `suite-pptx-generated-preview-reopened.png`; 최신 판 `research:rr-04aed54aee742d3282df82b4df7a940c:431caac71b8dcffb37191c424b4501e160ff0e1450d4ba19b12903af193a286e`.
 
-기타 편집기별 미디어 표시·삽입과 Windows/macOS 실제 흐름은 후속 작업이다. 생성 파일의 수명은 원본 캐시 정책을 따른다. 원본 미디어 참조의 초기 원격 다운로드는 AbortSignal을 받지 않으므로 취소 시 결과/공급자 호출은 막지만 이미 시작한 다운로드는 원본 제한 시간까지 남을 수 있다.
+MD/HTML/HWPX/PDF/XMind/XLSX도 원본 생성·삽입 경로를 재사용한다. Sheets의 원본 renderer는 생성 파일 URL을 지원하지만 preload가 막던 검사를 좁게 연결했다. 파일 접근은 기존 호스트 생성 캐시 검사에 맡긴다. XMind는 실제 저장이 성공해도 React의 늦은 dirty 통지로 실패 판정을 받던 경합을 수정했다. 원본 세션의 현재 dirty 상태를 완료 응답 전에 전달하므로 저장 중 새 편집을 무조건 깨끗한 상태로 처리하지 않는다.
+
+실제 Linux 형식별 검사는 MD **13/13**, HTML **13/13**, HWPX **13/13**, PDF **14/14**, XMind **13/13**, XLSX **11/11**이다. 앱 시작 중복을 제외한 합계 **77/77**이며 제공자는 로컬 fixture다. 생성 이미지의 원본 바이트(PDF는 해제한 RGB), 실제 화면, 저장 후 재열기 및 세션·취소를 확인했다. 타입·Office/native 빌드도 통과. 근거 `office-media-six-format-results.json`, 정확한 판 `research:rr-04aed54aee742d3282df82b4df7a940c:6c86a5452336d113f5375ecc70b685105c32fdc9a7e2a8d0acc62eb1ce6f7bd4`.
+
+**Sheets의 저장 후 그림 편집 Undo/Redo는 이 원본 판의 제한이다.** `undo-carry.ts`는 이전 workbook 상태를 캡처한 visual-edit closure 이하의 history를 저장 시 버린다. `office-media-other-native-02`의 실패를 보존하며 이후 XLSX 생성/저장/재열기 인수에서는 이 항목을 INFO 제한으로 명시하고 통과로 세지 않는다. 기존 셀 편집 Undo와 다른 형식의 Undo/Redo는 별도로 확인한 범위다.
+
+추가 미디어 도구와 Windows/macOS 전체 흐름은 후속 작업이다. 생성 파일의 수명은 원본 캐시 정책을 따른다. 원본 미디어 참조의 초기 원격 다운로드는 AbortSignal을 받지 않으므로 취소 시 결과/공급자 호출은 막지만 이미 시작한 다운로드는 원본 제한 시간까지 남을 수 있다.
 
 ## 기본 한글 스킬과 이음 한글 표시
 

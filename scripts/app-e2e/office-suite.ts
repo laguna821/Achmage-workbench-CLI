@@ -9,6 +9,7 @@ import { mindmapFixture } from "./mindmap-fixture.ts";
 import { epubFixture } from "./epub-fixture.ts";
 import { officeUndo } from "./office-undo.ts";
 import { slidesMediaFixture } from "./office-slides-media.ts";
+import { otherMediaFixture } from "./office-other-media.ts";
 import type { Artifact, Session, Snapshot, TranscriptItem, Work } from "@workbench/contracts";
 import { installProbe, pageErrors, seedLayout, shot, until, type Ctx } from "./scenarios.ts";
 const require = createRequire(new URL("../../vendor/ieumoffice/package.json", import.meta.url));
@@ -91,8 +92,10 @@ export async function officeSuiteScenario(ctx: Ctx) {
   const unbound = process.env.APP_E2E_OFFICE_UNBOUND === "1";
   const selected = process.env.APP_E2E_OFFICE_FORMATS?.split(",") ?? formats;
   if (selected.some((format) => !formats.includes(format as Format))) throw new Error("Unknown Office suite format");
-  const media = process.env.APP_E2E_OFFICE_MEDIA === "1" ? slidesMediaFixture() : null;
-  if (media && (selected.length !== 1 || selected[0] !== "pptx")) throw new Error("Slides media experiment requires APP_E2E_OFFICE_FORMATS=pptx");
+  const mediaEnabled = process.env.APP_E2E_OFFICE_MEDIA === "1";
+  if (mediaEnabled && selected.includes("epub")) throw new Error("EPUB has no original generate_image tool; select the other formats explicitly");
+  const makeMedia = (format: Format) => format === "epub" ? null : format === "pptx" ? slidesMediaFixture() : otherMediaFixture(format, (body, text) => toolCall(format, 1, body, text));
+  let media = mediaEnabled ? makeMedia(selected[0] as Format) : null;
   let active: Format = "md", count = 0, cancelled = 0, phase = "setup";
   let requests: any[] = [], fixtureWrites: unknown[] = [];
   let currentSession = "";
@@ -143,6 +146,7 @@ export async function officeSuiteScenario(ctx: Ctx) {
   try {
     for (const format of selected as Format[]) {
       const S = `Office AI ${format}`; phase = "open editor"; active = format; count = 0; requests = []; fixtureWrites = []; cancelled = 0;
+      media = mediaEnabled ? makeMedia(format) : null;
       try {
         const work = await api<Work>("POST", "/api/works", { title: `Native AI ${format}`, cwd: null });
         let session = unbound ? undefined : await api<Session>("POST", `/api/works/${work.id}/sessions`, { provider: "codex" });
@@ -158,7 +162,7 @@ export async function officeSuiteScenario(ctx: Ctx) {
         if (format === "xlsx") await wd.execute('window.__suiteFocus=[];const f=HTMLElement.prototype.focus;HTMLElement.prototype.focus=function(...args){window.__suiteFocus.push({kind:"call",from:document.activeElement?.outerHTML.slice(0,250),to:this.outerHTML.slice(0,250),stack:new Error().stack});return f.apply(this,args)};document.addEventListener("keydown",e=>window.__suiteFocus.push({kind:"key",key:e.key,target:e.target.outerHTML.slice(0,250)}),true);document.addEventListener("focusin",e=>window.__suiteFocus.push({kind:"focus",target:e.target.outerHTML.slice(0,250)}),true);');
         if (format === "pdf") await wd.execute('window.__suitePdfSaves=[];const api=window.pdfApi,save=api.save;api.save=async(...args)=>{const entry={args};window.__suitePdfSaves.push(entry);try{return entry.result=await save(...args)}catch(error){entry.error=String(error);throw error}};');
         if (unbound) ctx.report.check(S, "세션 없이 문서를 열어도 불필요한 대화를 만들지 않음", (await snapshot()).sessions.every((item) => item.workId !== work.id));
-        if (media) { await wd.waitFor(".ai-panel textarea", 30000); await media.observe(ctx); }
+        if (media) { await wd.waitFor(".ai-panel textarea, .copilot textarea", 30000); await media.observe(ctx); }
         await send(`원본 도구로 이 문서를 수정해 줘. __suite_${format}__`);
         if (unbound) {
           if (!await until(async () => (await snapshot()).sessions.some((item) => item.workId === work.id), 15000)) throw new Error(`First Office session was not created: ${await wd.execute('return document.body.innerText.slice(-3500)')}`);
@@ -183,7 +187,9 @@ export async function officeSuiteScenario(ctx: Ctx) {
           if (!focus.some((event) => event.kind === "key")) throw new Error("No initial input focus observation");
           if (focus.some((event) => event.kind === "call" && event.from?.startsWith("<textarea") && event.to?.startsWith("<div contenteditable"))) throw new Error("Univer took focus from the original AI composer");
         }
-        if (process.env.APP_E2E_OFFICE_UNDO === "1") await officeUndo(ctx, format, artifact.id, marker(format), () => savedText(file, format), format === "pdf" ? async () => {
+        const savedVisualUndoUnsupported = media !== null && format === "xlsx";
+        if (savedVisualUndoUnsupported) ctx.report.note(S, "원본 제한: 저장 후 visual-edit Undo/Redo는 undo-carry.ts가 보존하지 않음. 이미지 저장·재열기 검사와 구분하며 통과로 세지 않음.");
+        if (process.env.APP_E2E_OFFICE_UNDO === "1" && !savedVisualUndoUnsupported) await officeUndo(ctx, format, artifact.id, marker(format), () => savedText(file, format), format === "pdf" ? async () => {
           const before = (await items(session.id)).length;
           await send("__suite_undo_read__ 되돌린 문서의 주석을 읽어 줘.");
           const done = await until(async () => (await items(session.id)).slice(before).some((item) => item.kind === "turnEnd" && item.status === "completed"), 30000);
@@ -216,6 +222,7 @@ export async function officeSuiteScenario(ctx: Ctx) {
         ctx.report.check(S, "페이지 예외 없음", firstErrors.length === 0 && (await pageErrors(wd)).length === 0, JSON.stringify([...firstErrors, ...await pageErrors(wd)]));
         writeFileSync(ctx.report.path(`suite-${format}-next-transcript.json`), JSON.stringify(await items(next.id), null, 2));
       } catch (error) {
+        if (media) writeFileSync(ctx.report.path(`suite-${format}-media-diagnostics.json`), JSON.stringify(await wd.execute('return window.__officeMediaDiagnostics||[];').catch(() => []), null, 2));
         writeFileSync(ctx.report.path(`suite-${format}-failure.json`), JSON.stringify({ error: String(error), phase, composer: await wd.execute('return [...document.querySelectorAll(".copilot textarea,.ai-panel textarea")].map(el=>({html:el.outerHTML,rect:el.getBoundingClientRect().toJSON(),active:document.activeElement===el,disabled:el.disabled,inert:!!el.closest("[inert]")}));').catch(() => []), page: await wd.execute('return document.body.innerText').catch(() => null), errors: await pageErrors(wd).catch(() => []) }, null, 2));
         ctx.report.check(S, "전체 편집기 시나리오 완료", false, String(error), await shot(ctx, `suite-${format}-failure.png`).catch(() => null));
       } finally {

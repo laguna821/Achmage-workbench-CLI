@@ -296,9 +296,15 @@ function textEditorPlatform(): Plugin {
       if (id === `${ieum}/apps/mindmap/src/renderer/App.tsx`) {
         const before = "flush: (commit) =>\n      controllers.current.forEach((each) => {";
         const after = "each.flush()\n      }),\n    saving:";
-        if (!code.includes(before) || !code.includes(after)) this.error("Mindmap recovery changed: review the pending note flush adapter");
+        const clean = "if (!sessionRef.current?.dirty) {\n          api.sendCloseSaveResult(true)";
+        const saved = "api.sendCloseSaveResult(await doSave('save'))";
+        if (![before, after, clean, saved].every(marker => code.includes(marker))) this.error("Mindmap recovery changed: review the pending note and save acknowledgement adapters");
+        // React's dirty effect can lag a successful save. Publish the current session state
+        // before its acknowledgement; edits made during the save must still stay dirty.
         return code.replace(before, "flush: (commit) =>\n      (commit && noteRef.current?.commit(), controllers.current.forEach((each) => {")
-          .replace(after, "each.flush()\n      })),\n    saving:");
+          .replace(after, "each.flush()\n      })),\n    saving:")
+          .replace(clean, "if (!sessionRef.current?.dirty) {\n          api.setDirty(false)\n          api.sendCloseSaveResult(true)")
+          .replace(saved, "const saved = await doSave('save')\n        api.setDirty(sessionRef.current?.dirty === true)\n        api.sendCloseSaveResult(saved)");
       }
       if (id === `${ieum}/apps/markdown/src/renderer/editor/localImage.ts`) {
         for (const [name, adapter] of [["resolveImageSrc", "resolveTextImage"], ["unresolveImageSrc", "unresolveTextImage"]]) {
@@ -339,6 +345,14 @@ function tiptapMountGrace(): Plugin {
 export default defineConfig({
   base: "/office/",
   plugins: [
+    { name: "workbench-sheets-generated-images", enforce: "pre", transform(code, id) {
+      if (id !== `${ieum}/apps/sheets/src/preload/index.ts`) return;
+      // The original renderer accepts generated file URLs. Its older preload still rejects
+      // them before IPC; the shared host only reads its own generated-image cache.
+      const before = "!/^https?:\\/\\//i.test(url)";
+      if (!code.includes(before)) this.error("Sheets image URL gate changed: review the generated-image adapter");
+      return code.replace(before, "!/^(https?|file):\\/\\//i.test(url)");
+    } },
     { name: "workbench-docs-copy-lifecycle", enforce: "pre", transform(code, id) {
       if (id !== `${ieum}/apps/docs/src/renderer/file-actions.ts`) return null;
       const marker = "export function save(\n  ctx: FileActionContext,";

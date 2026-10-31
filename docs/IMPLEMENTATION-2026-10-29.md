@@ -2,7 +2,7 @@
 
 ## 현재 상태 — 2026-10-31
 
-공개 최신은 **v0.2.2**다. `817bf97`의 [설치본 시험](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41197087159)은 공통 검사와 Windows/macOS/Linux/Arch 패키징, Windows/macOS 설치본 첫 실행을 모두 통과했다. 이전 Mac 16/18 실패는 동기 AppKit 인쇄 단계였다. Wry·WebKit 원본의 비동기 인쇄와 완료 callback으로 바꾼 뒤 **macOS 18/18**, 실제 DOCX/PPTX 쪽 그림도 각각 약9.4초/5.8초로 완료했다. native 로그에 인쇄 dispatch→return→completed→출력 저장→export-done을 확인했다. 이 시료의 정체 해결과 전체 기능 동등성은 구분한다. 최신 근거 판 `research:rr-a1113b1710d6df910256d23a2c711f5f:3ad6973a90a736ccc3a3079a551ab9fc22936e1a438c8eed9698ac5cbaec7f98`. Actions의 수동 실행은 `Test installers`이며 아직 공개 릴리스는 게시하지 않았다. 이후 PPT 미디어/F7 변경은 다음 설치본에 포함된다.
+공개 최신은 **v0.2.2**다. Lightpanda·PPT 미디어·Word F7을 포함한 `f36afbb`의 [설치본 시험](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41199033710)은 공통 검사와 Windows/macOS/Linux/Arch 패키징, Windows/macOS 설치본 첫 실행 **각각18/18**을 모두 통과했다. 이전 Mac 인쇄 정체도 비동기 완료 방식으로 해결됐다. 이 Windows 시험본의 설치 디렉터리 파일 합계는 **435,413,288 bytes(약415MiB)**이며 압축 설치파일 크기는 아니다. Mac 측 472,728,164 bytes는 `Contents/Resources`만의 크기다. 근거 판 `research:rr-a1113b1710d6df910256d23a2c711f5f:6c8e63da37647a2568c0082e03b7e36a31394265945b046733dd2cc28aa6ac80`. 태그 없는 시험이므로 공개 릴리스는 게시하지 않았다. 이후 Sheets 생성 URL·XMind 저장 완료 수정은 이 실행에 포함되지 않는다.
 
 | 사용자 요구 | 구현·확인한 범위 | 남은 범위 |
 |---|---|---|
@@ -13,7 +13,7 @@
 | SSH·모바일·원격·확장 | 전체 목표에 유지 | 구현·인증·재연결 검증 |
 | 이음 편집기 9종 | Word/PPT/Sheets/HWP/PDF/Markdown/HTML/EPUB/XMind 내부 편집, 대표 AI·저장·복구·되돌림 | 전체 메뉴/형식/OS 동등성 |
 | 공통 문서 흐름 | 같은 대화, +/@ 참조, 첨부, 스킬·양식 사본, 디자인 갤러리, 새 문서·사본·주요 출력/CLI | 남은 공통 메뉴·일부 변환·인쇄/발표 흐름 |
-| 이음 전체 공통 서비스 | 직접 제공자·설정·키링·문서 AI, 원본 웹/이미지 검색·URL 읽기, 공통 미디어 엔진·Word 생성/분석·PPT 생성/교체/미리보기 | 기타 편집기 미디어·OS 인수, wiki/지식, Drive, 장기 AI 작업·내부 MCP 전체 |
+| 이음 전체 공통 서비스 | 직접 제공자·설정·키링·문서 AI, 원본 웹/이미지 검색·URL 읽기, Word/PPT 및 추가6형식 생성 이미지 저장·재열기 | 추가 미디어·OS 인수, wiki/지식, Drive, 장기 AI 작업·내부 MCP 전체. 원본 Sheets 저장 후 그림 Undo 제한 |
 | HOP 개선분·한글 기본 스킬 | HOP 별도 앱 제거; hallym-kordoc 기본 제공, 사용자 설치/비활성 우선, 생성 HWPX는 이음으로 표시 | HOP 개선분 전체 대조·다른 OS |
 | doory | 생성·편집·저장·복구·이미지/PDF 출력의 Linux 흐름 | 전체 메뉴·OS 인수 |
 | 옵시디언식 PKM | 내비게이터·프로젝트 노트·Bases식 보기, 썸네일·폴더 템플릿, 지원 범위의 .base 교환 | 전체 통합·OS 인수 |
@@ -23,7 +23,7 @@ Lightpanda 1.0.2 공식 엔진의 제품 다운로드·해시/버전 확인과 �
 
 공통 웹 도구는 원본 `ai-search`와 원격 이미지 엔진을 재사용한다. 봉인 키는 요청별 호스트 메모리에서만 열며 문서/세션 권한과 취소를 연결했다. 집중 회귀 **51/51**, 타입·host/Office 빌드, 실제 Linux 원본 Word 패널의 공개 URL 읽기 → 같은 AI 대화 → DOCX 수정·저장·재열기·중지 **13/13** 통과. 모든 문서/OS나 미디어 전체 완료 판정은 아니다. 검증 판: `research:rr-2488fbbaceca1e6b5aa58aad0c10cf34:d942dce7b67211ba5978055009b8e9db6f7fc59ad66cbe5857187002ef6f8c4c`.
 
-공통 미디어 도구는 원본 `generateImageTool`·`analyzeMediaTool`·Codex 구독 생성기를 재사용한다. 문서 경로·선택 첨부·봉인 키·취소를 연결하고, 구독 요청 실패 후 유료 키 재시도를 하지 않는다. 집중 회귀 **38/38**, 타입·host/Office/native 빌드, 실제 Linux Word 생성→표시→그림 분석→DOCX 저장/재열기·세션/취소 **15/15** 통과. PPT도 원본 worker 엔진으로 생성→삽입/교체→중앙 crop·durable ID·프레임 보존→화면/PPTX 저장→Undo/Redo 및 생성 카드 미리보기/재열기까지 **22/22** 통과했다. 실제 모델 대신 로컬 제공자 fixture를 사용했으며 기타 편집기 미디어와 다른 OS는 남아 있다. 검증 판: `research:rr-04aed54aee742d3282df82b4df7a940c:431caac71b8dcffb37191c424b4501e160ff0e1450d4ba19b12903af193a286e`.
+공통 미디어 도구는 원본 `generateImageTool`·`analyzeMediaTool`·Codex 구독 생성기를 재사용한다. 문서 경로·선택 첨부·봉인 키·취소를 연결하고, 구독 요청 실패 후 유료 키 재시도를 하지 않는다. 집중 회귀 **38/38**, 실제 Linux Word 생성→표시→분석→저장·세션/취소 **15/15**, PPT 생성→삽입/교체→crop·ID 보존→저장·Undo/Redo·생성 카드 재열기 **22/22** 통과. 추가 MD/HTML/HWPX/PDF/XMind/XLSX도 생성→실제 이미지 바이트 저장→화면·재열기·세션/취소를 **77/77** 확인했다(앱 시작 중복 제외). **Sheets 원본의 저장 후 그림 Undo/Redo 제한은 제외하며 실패 근거를 보존한다.** Sheets 생성 URL 검사와 XMind의 늦은 dirty 통지로 발생한 잘못된 저장 실패 판정을 수정했다. 타입·Office/native 빌드 통과. 로컬 제공자 fixture이며 실제 모델 품질·추가 미디어·다른 OS는 남는다. 검증 판: `research:rr-04aed54aee742d3282df82b4df7a940c:6c86a5452336d113f5375ecc70b685105c32fdc9a7e2a8d0acc62eb1ce6f7bd4`.
 
 Word F7은 별도 AI 엔진이 필요하지 않았다. 원본의 교정 preset이 이미 연결한 원본 패널을 사용하므로 초기 키 차단을 제거했다. 실제 Linux trusted F7→원본 교정 요청→같은 세션→DOCX 수정/저장·재열기·새 세션·취소 **13/13**, 타입·Office/native 빌드 통과. 원본 한 번 동의를 마친 fixture이며 최초 확인 창 조작·실제 교정 품질은 별도다. 판 `research:rr-10e6b38c6209b718dcdddc2e3677daeb:a04befececd9405879d066e6c596a759634869fae241c17b1d049fc07670bb54`.
 
