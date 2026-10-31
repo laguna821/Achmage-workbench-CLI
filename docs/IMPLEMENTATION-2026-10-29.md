@@ -2,7 +2,7 @@
 
 ## 현재 상태 — 2026-10-31
 
-공개 최신은 **v0.2.2**다. `d41747a`의 [Electron 제거 설치본 시험](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41189645913)은 모든 OS 패키징과 Windows 첫 실행을 통과했지만 macOS 첫 실행은 **16/18**이다. DOCX/PPTX 텍스트 읽기는 성공했고 새 Tauri PDF 변환을 통한 쪽 그림이 시간 초과했다. 이전 `7fb65a4` macOS 검사에는 네이티브 앱 지정이 없어 별도 이음 앱 경로를 사용했으므로, 그 통과를 Tauri 변환 검증으로 보지 않는다. 숨은 WebView의 작업 중단 방지 설정과 내용·키를 담지 않는 단계 로그를 추가했으며 Linux 실제 DOCX/PPTX 변환 **12/12**, 타입·빌드를 확인했다. macOS 수정 효과는 후속 OS 실행으로 확인한다. 근거 판 `research:rr-a1113b1710d6df910256d23a2c711f5f:1d0fdf7562b836ad7b46870b5031389f4b75d82b6f4f456e066caaaf32e84eba`. Actions를 `Installers`, 수동 실행 제목을 `Test installers`로 구분했으며 아직 공개 릴리스는 게시하지 않았다.
+공개 최신은 **v0.2.2**다. `b4d2682`의 [설치본 시험](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41192217792)은 모든 OS 패키징과 Windows 첫 실행을 통과했지만 macOS 첫 실행은 **16/18**이다. DOCX/PPTX 텍스트 읽기는 성공했고 Tauri PDF 변환을 통한 쪽 그림이 시간 초과했다. 숨은 WebView의 background throttling 비활성화로는 해결되지 않았다. 단계 로그는 부모 페이지 로드와 `job-requested`까지 도달하며, 렌더러 진단 명령의 manifest/capability 누락을 발견해 다음 실험에서 바로잡는다. 원인은 아직 확정하지 않는다. 이전 `7fb65a4`의 통과는 별도 이음 앱 경로였으므로 Tauri 변환 검증으로 세지 않는다. 최신 근거 판 `research:rr-a1113b1710d6df910256d23a2c711f5f:b929ff0c2ca80004e2f3c9439a181501e36c2abbf9c48a611000fcf0141d1a81`. Actions의 수동 실행은 `Test installers`이며 아직 공개 릴리스는 게시하지 않았다.
 
 | 사용자 요구 | 구현·확인한 범위 | 남은 범위 |
 |---|---|---|
