@@ -1,0 +1,13 @@
+.knowledge-overlay { position: fixed; inset: 0; z-index: 160; background: #0005; display: grid; place-items: center; padding: 24px; }
+.knowledge-library { width: min(900px, 95vw); max-height: 90vh; overflow: auto; padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); color: var(--text); box-shadow: 0 20px 60px #0004; }
+.knowledge-library header, .knowledge-actions, .knowledge-row { display: flex; align-items: center; gap: 10px; }
+.knowledge-library header { justify-content: space-between; }
+.knowledge-library h2 { margin: 0; }
+.knowledge-library textarea { display: block; width: 100%; margin: 6px 0; }
+.knowledge-actions { margin: 12px 0; flex-wrap: wrap; }
+.knowledge-actions input { min-width: 160px; }
+.knowledge-list { border-top: 1px solid var(--line); }
+.knowledge-list article, .knowledge-row { padding: 12px 4px; border-bottom: 1px solid var(--line); }
+.knowledge-row > span:first-of-type { flex: 1; min-width: 0; }
+.knowledge-library small { display: block; overflow-wrap: anywhere; color: var(--muted); margin-top: 3px; }
+.knowledge-library [role=alert] { color: var(--danger, #c53d47); }

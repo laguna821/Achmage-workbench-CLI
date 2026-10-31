@@ -38,6 +38,7 @@ import { mindmapOfficeScenario } from "./mindmap-office.ts";
 import { officeSettingsScenario } from "./office-settings.ts";
 import { officeSuiteScenario } from "./office-suite.ts";
 import { officeWikiScenario } from "./office-wiki.ts";
+import { officeKnowledgeScenario } from "./office-knowledge.ts";
 import { officeConversationScenario } from "./office-conversation.ts";
 import { officeReferencesScenario } from "./office-references.ts";
 import { officeFilesScenario } from "./office-files.ts";
@@ -89,6 +90,7 @@ try {
       if (wants("office-settings")) await officeSettingsScenario(ctx, { binary, engines, profile: "native" });
       if (wants("office-suite")) await officeSuiteScenario(ctx);
       if (wants("office-wiki")) await officeWikiScenario(ctx);
+      if (wants("office-knowledge")) await officeKnowledgeScenario(ctx);
       if (wants("office-conversation")) await officeConversationScenario(ctx);
       if (wants("office-references")) await officeReferencesScenario(ctx);
       if (wants("office-files")) await officeFilesScenario(ctx, { binary, engines, profile: "native" });

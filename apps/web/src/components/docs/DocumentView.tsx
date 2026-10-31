@@ -101,7 +101,7 @@ export default function DocumentView({
   onPickTarget: () => Promise<Session | null>;
   onNewSession: () => Promise<Session | null>;
   onAiSettings: () => void;
-  onOpenArtifact: (artifactId: string) => void;
+  onOpenArtifact: (artifactId: string, scope?: Pick<Artifact, "workId" | "workspaceId">) => void;
   pickFile?: ((folder: string) => Promise<string | null>) | null;
   onToast: (message: string) => void;
 }) {

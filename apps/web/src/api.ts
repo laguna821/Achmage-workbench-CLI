@@ -1,4 +1,5 @@
 import type { OfficeOutputFormat } from "../../../packages/contracts/src/office-output.ts";
+import type { KnowledgeLibrary } from "../../../packages/contracts/src/office-knowledge.ts";
 import type { NewOfficeDocument } from "@workbench/contracts";
 import type {
   GitHubBinding, GitHubSelection, GitHubView, GitHubCheckDetails, GitHubLog,
@@ -404,6 +405,9 @@ export class Api {
   officeReferences = <T>(artifactId: string, token: string, action: string, input: Record<string, unknown> = {}) => this.request<T>("POST", `/api/artifacts/${artifactId}/office-references`, { ...input, token, action });
   officeSkills = <T>(artifactId: string, token: string, action: string, input: Record<string, unknown>) => this.request<T>("POST", `/api/artifacts/${artifactId}/office-skills`, { token, action, input });
   officeWiki = <T>(artifactId: string, token: string, action: string, input: Record<string, unknown>) => this.request<T>("POST", `/api/artifacts/${artifactId}/office-wiki`, { token, action, input });
+  knowledgeLibrary = () => this.request<KnowledgeLibrary>("GET", "/api/office-knowledge");
+  knowledgeAction = <T>(action: string, input: Record<string, unknown>) => this.request<T>("POST", "/api/office-knowledge", { action, input });
+  openKnowledge = (artifactId: string, token: string, path: string) => this.request<{ artifactId: string } & Pick<Artifact, "workId" | "workspaceId">>("POST", `/api/artifacts/${artifactId}/office-knowledge-open`, { token, path });
   closeOfficePreview = (artifactId: string) => this.request<{ ok: boolean }>("POST", `/api/artifacts/${artifactId}/office-preview-close`);
   async uploadOfficeReference(artifactId: string, token: string, file: File) {
     const response = await fetch(`/api/artifacts/${artifactId}/office-reference-upload`, {

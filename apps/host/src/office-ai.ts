@@ -7,6 +7,7 @@ import { readBody, sendJson } from "./http.ts";
 import type { OfficeAiChat, OfficeAiEngine, OfficeAiStream } from "./office-ai-engine.mjs";
 import type { OfficeSessions } from "./office-sessions.ts";
 import type { OfficeAiHostActions } from "./office-settings-controls.mjs";
+import type { OfficeKnowledge } from "./office-knowledge.mjs";
 import type { OfficeSkills } from "./office-skills.ts";
 
 // Original Office accepts 20 pictures of up to 5 MiB, encoded as base64, plus text.
@@ -52,7 +53,9 @@ export class OfficeAi {
   private readonly sessions: OfficeSessions | undefined;
   private readonly requireSession: boolean;
   private readonly skills?: OfficeSkills;
-  constructor(dataDir: string, engine?: OfficeAiEngine, sessions?: OfficeSessions, hostActions?: OfficeAiHostActions, skills?: OfficeSkills) {
+  private readonly knowledge?: OfficeKnowledge;
+  constructor(dataDir: string, engine?: OfficeAiEngine, sessions?: OfficeSessions, hostActions?: OfficeAiHostActions, skills?: OfficeSkills, knowledge?: OfficeKnowledge) {
+    this.knowledge = knowledge;
     this.skills = skills;
     this.sessions = sessions;
     // Only explicitly injected provider fixtures can exercise the lower layer in isolation.
@@ -190,7 +193,9 @@ export class OfficeAi {
       outer?.controller.signal.addEventListener("abort", abort, { once: true });
       if (outer?.controller.signal.aborted) abort();
       try {
-        const value = await engine.webTools.invoke(raw.name, raw.args, run.signal, { path: documents.get(artifactId!).path });
+        const value = raw.name.startsWith("knowledge-") && this.knowledge
+          ? await this.knowledge.tool(raw.name, raw.args, run.signal)
+          : await engine.webTools.invoke(raw.name, raw.args, run.signal, { path: documents.get(artifactId!).path });
         authorize(); run.signal.throwIfAborted();
         if (!res.destroyed) sendJson(res, 200, value);
       } finally { outer?.controller.signal.removeEventListener("abort", abort); run.finish(); }

@@ -6,6 +6,7 @@ import { createOfficeAi } from "./office-ai.ts";
 import { beginOfficeCopy, copyOfficeBytes, officeCopyBusy, type OfficeCopy } from "./copy.ts";
 import { DEFAULT_AI_PANEL_PREFS, normalizeAiPanelPrefs } from "../../../vendor/ieumoffice/packages/ui/src/ai-panel-prefs.ts";
 import { createDocsOutput } from "./docs-output.ts";
+import { knowledgeNavigation } from "./knowledge.ts";
 
 // IeumOffice's Word editor inside Workbench. The editor itself (vendor/ieumoffice/apps/docs,
 // unchanged) reads and writes .docx in the page; this file stands in for its Electron preload:
@@ -242,8 +243,9 @@ const desktop = stubBridge(
     // Legacy one-shot interface; current proofreading uses the original AI panel.
     aiChat: noAi,
     ...ai.desktop,
+    openSourcePath: knowledgeNavigation(init.sessionId),
   },
-  { listDocsTabs: [], kbList: [] },
+  { listDocsTabs: [] },
   // HTML pieces inside a .docx are converted by a hidden Electron window; without one they are left as they are.
   ["convertAltChunkHtml"],
 );

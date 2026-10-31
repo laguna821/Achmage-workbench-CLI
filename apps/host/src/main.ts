@@ -17,6 +17,7 @@ import { installToolWrappers } from "./tool-bin.ts";
 import { createEditorsServer, EditorGrants } from "./editors.ts";
 import { createOfficeSettingsServer } from "./office-settings-server.ts";
 import { OfficeAi } from "./office-ai.ts";
+import { OfficeKnowledge } from "./office-knowledge.mjs";
 import { OfficeSkills } from "./office-skills.ts";
 import { AgentBrowser } from "./browse.ts";
 import { buildTimeline } from "./timeline.ts";
@@ -132,9 +133,10 @@ manager.registerAdapter(
 
 const grants = new EditorGrants();
 const officeSkills = new OfficeSkills(manager, store);
+const officeKnowledge = new OfficeKnowledge(dataDir, manager);
 const officeAi = new OfficeAi(dataDir, undefined, manager.office, {
   install: (provider) => manager.installEngineAndWait(provider === "claude-code" ? "claude" : "codex"),
-}, officeSkills);
+}, officeSkills, officeKnowledge);
 const editors = createEditorsServer(manager.documents, grants, webDir && existsSync(webDir) ? webDir : null, officeAi);
 let editorsOrigin: string | null = null;
 let officeSettingsOrigin: string | null = null, applicationOrigin: string | null = null;
@@ -143,6 +145,7 @@ const officeSettingsServer = createOfficeSettingsServer(webDir && existsSync(web
 const docImages = new DocImages({ dataDir, documents: manager.documents, workCwd: (workId) => manager.workCwd(workId), endpoint: env.WORKBENCH_R2_ENDPOINT ?? null });
 const officeControl = env.WORKBENCH_CLI_INPUT ? undefined : new OfficeControl(manager, bus, dataDir);
 const server = createHttpServer(manager, bus, {
+  officeKnowledge,
   officeControl,
   ...(env.WORKBENCH_CLI_INPUT ? { officeCliInput: new OfficeCliInput(env.WORKBENCH_CLI_INPUT, dataDir, ieum).prepare } : {}),
   token,
@@ -209,6 +212,7 @@ async function stop() {
   officeControl?.close();
   server.close();
   officeAi.close();
+  officeKnowledge.close();
   editors.close();
   officeSettingsServer.close();
   find.close();

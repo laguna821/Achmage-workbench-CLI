@@ -107,6 +107,7 @@ export type HttpOptions = {
   officeCliInput?: () => Promise<{ path: string }>;
   officeSkills?: OfficeSkills;
   officeAi?: OfficeAi;
+  officeKnowledge?: import("./office-knowledge.mjs").OfficeKnowledge;
   officeSettingsOrigin?: () => string | null;
   token: string;
   webDir: string | null;
@@ -258,6 +259,14 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       const method = req.method ?? "GET";
 
       if (method === "GET" && path === "/api/snapshot") return sendJson(res, 200, manager.snapshot());
+      if (path === "/api/office-knowledge" && options.officeKnowledge) {
+        if (method === "GET") return sendJson(res, 200, options.officeKnowledge.library());
+        if (method === "POST") {
+          const body = await readJson(req, 256_000), controller = new AbortController();
+          res.once("close", () => controller.abort());
+          return sendJson(res, 200, await options.officeKnowledge.manage(body.action, body.input as Record<string, unknown> | undefined, controller.signal));
+        }
+      }
       if (method === "GET" && path === "/api/office-ai/page") {
         const origin = options.officeSettingsOrigin?.();
         if (!origin) throw new HttpError(503, "editors_unavailable", "설정 화면을 준비하고 있습니다.");
@@ -682,6 +691,11 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           const body = await readJson(req, 256_000), grants = options.editors?.grants;
           if (!grants || typeof body.token !== "string" || !body.input || typeof body.input !== "object" || Array.isArray(body.input)) throw new HttpError(400, "office_wiki", "위키 문서 요청을 확인해 주세요.");
           return sendJson(res, 200, await wiki.action(artifactId, body.token, grants, body.action, body.input as Record<string, unknown>));
+        }
+        if (method === "POST" && parts[2] === "office-knowledge-open" && options.officeKnowledge) {
+          const body = await readJson(req, 16_000), grants = options.editors?.grants;
+          if (!grants || typeof body.token !== "string") throw new HttpError(403, "office_knowledge_scope", "문서 권한을 확인해 주세요.");
+          return sendJson(res, 200, options.officeKnowledge.open(artifactId, body.token, grants, body.path));
         }
         if (method === "POST" && parts[2] === "office-skills") {
           const body = await readJson(req, 90 * 1024 * 1024), grants = options.editors?.grants;

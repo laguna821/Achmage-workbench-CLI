@@ -31,6 +31,7 @@ import { SourceControlDialog } from "./components/SourceControlDialog.tsx";
 import { IntegrationsSheet } from "./components/IntegrationsSheet.tsx";
 import { ImageUploadRow, ImageUploadSheet } from "./components/ImageUploadSheet.tsx";
 import { OfficeSettings } from "./components/OfficeSettings.tsx";
+import { KnowledgeLibrary } from "./components/KnowledgeLibrary.tsx";
 import { Onboarding } from "./components/Onboarding.tsx";
 import type { EngineActions } from "./components/EngineSetup.tsx";
 import { SessionPicker } from "./components/SessionPicker.tsx";
@@ -264,13 +265,15 @@ export function App() {
     leaveGate.current.run(id, guard && leaving ? guard : null, then, (error) => setToast(error instanceof Error ? error.message : String(error)), pane ? activeTab(pane).id : id);
   }, []);
   const setViewOf = useCallback(
-    (id: PaneId, next: View | ((current: View) => View)) => {
+    (id: PaneId, next: View | ((current: View) => View), openedScope?: Pick<Artifact, "workId" | "workspaceId">) => {
       const pane = paneById(layoutRef.current, id);
       if (!pane) return;
       const resolved = typeof next === "function" ? next(pane.view) : next;
       if (resolved === pane.view) return;
-      const artifact = resolved.kind === "document" || resolved.kind === "split" ? stateRef.current.artifacts[resolved.artifactId] : undefined;
-      const content = { view: resolved, workId: artifact?.workId ?? pane.workId, sessionId: artifact && artifact.workId !== pane.workId ? null : pane.sessionId };
+      const artifact = resolved.kind === "document" || resolved.kind === "split" ? stateRef.current.artifacts[resolved.artifactId] ?? openedScope : undefined;
+      const currentSession = pane.sessionId ? stateRef.current.sessions[pane.sessionId] : undefined;
+      const changedScope = artifact && (artifact.workId !== pane.workId || artifact.workspaceId && artifact.workspaceId !== currentSession?.workspaceId);
+      const content = { view: resolved, workId: artifact?.workId ?? pane.workId, sessionId: changedScope ? null : pane.sessionId };
       const existing = resolved.kind === "new" ? null : findTab(layoutRef.current, contentKey(content));
       const targetId = existing?.pane.id ?? id;
       afterLeaving(targetId, resolved, () => updateLayout((current) => ({ ...setPane(current, targetId, content), focus: targetId })));
@@ -283,6 +286,7 @@ export function App() {
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const [imageUploadOpen, setImageUploadOpen] = useState(false);
   const [officeSettingsOpen, setOfficeSettingsOpen] = useState(false);
+  const [knowledgeOpen, setKnowledgeOpen] = useState(false);
   const [onboardingAgain, setOnboardingAgain] = useState(false);
   // Documents opened in each work, shown as tabs and offered first by "@".
   const [openDocs, setOpenDocs] = useState<Record<string, string[]>>(() => readJson(OPEN_DOCS_KEY, {}));
@@ -444,7 +448,14 @@ export function App() {
     const owner = pane.workId ? state.works[pane.workId] : undefined;
     if (!owner) return undefined;
     const kept = pane.sessionId ? state.sessions[pane.sessionId] : undefined;
-    return kept && kept.workId === owner.id ? kept : pane.id === layout.focus ? activeSession || undefined : activeOf(owner) || undefined;
+    const candidate = kept && kept.workId === owner.id ? kept : pane.id === layout.focus ? activeSession || undefined : activeOf(owner) || undefined;
+    if (pane.view.kind === "document" || pane.view.kind === "split") {
+      const document = state.artifacts[pane.view.artifactId];
+      // An external citation has its own workspace. Null must not silently
+      // reattach the project conversation from a different workspace.
+      if (!document || candidate?.workId !== document.workId || candidate?.workspaceId !== document.workspaceId) return undefined;
+    }
+    return candidate;
   };
   const layoutLoaded = useRef(false);
   const layoutSaved = useRef("");
@@ -1476,6 +1487,7 @@ export function App() {
     { id: "appearance", label: "엔진 외형 설정", icon: "palette", run: () => appearanceApi.openSettings() },
     { id: "integrations", label: "MCP·스킬 보기", icon: "tool", run: () => setIntegrationsOpen(true) },
     { id: "office-settings", label: "문서 AI 설정", icon: "tool", run: () => setOfficeSettingsOpen(true) },
+    { id: "office-knowledge", label: "지식베이스", icon: "tool", run: () => setKnowledgeOpen(true) },
     { id: "connections", label: "연결과 설정", icon: "dots", run: () => setMenuOpen(true) },
     { id: "onboarding", label: "처음 안내 다시 보기", icon: "eye", run: () => setOnboardingAgain(true) },
   ];
@@ -1798,7 +1810,7 @@ export function App() {
   const paneView = (pane: Pane<View>, focused: boolean, split: boolean, tabId: string, tabActive: boolean): ReactNode => {
     const at = pane.view;
     const owner = focused ? work : pane.workId ? state.works[pane.workId] : undefined;
-    const session = focused ? activeSession || undefined : sessionIn(pane);
+    const session = sessionIn(pane);
     const ids = focused ? openDocIds : docsOf(owner);
     const paneTabs = null;
     const bar = focused ? modeBar : barFor(pane, owner, ids);
@@ -1835,7 +1847,7 @@ export function App() {
                 onUiState={uiOf[tabId]}
                 onBack={() => setViewOf(pane.id, { kind: "work" })}
                 onToast={setToast}
-                onOpenArtifact={(artifactId) => setViewOf(pane.id, { kind: "document", artifactId, proposalId: null })}
+                onOpenArtifact={(artifactId, scope) => setViewOf(pane.id, { kind: "document", artifactId, proposalId: null }, scope)}
                 pickFile={inDesktop ? pickFileNative : null}
                 onPickTarget={() => actions.pickSession(owner, session ?? null)}
                 onAiSettings={() => setOfficeSettingsOpen(true)}
@@ -1846,7 +1858,7 @@ export function App() {
                     return source && current && activeTab(current).id === tabId && current.workId === owner.id && current.sessionId === source.sessionId && contentKey(current) === `doc:${at.artifactId}`;
                   };
                   if (!stillHere()) throw new Error("문서 탭이나 선택한 세션이 바뀌었습니다. 현재 문서에서 다시 요청해 주세요.");
-                  const next = await api.createSession(owner.id, session?.provider ?? engine, { workspaceId: session?.workspaceId, model: session?.model ?? null, effort: session?.effort ?? null });
+                  const next = await api.createSession(owner.id, session?.provider ?? engine, { workspaceId: stateRef.current.artifacts[at.artifactId]?.workspaceId ?? session?.workspaceId, model: session?.model ?? null, effort: session?.effort ?? null });
                   if (!stillHere()) throw new Error("문서 탭이나 선택한 세션이 바뀌었습니다. 만든 새 세션은 프로젝트에 보관했습니다.");
                   dispatch({ type: "focus", work: owner, session: next });
                   updateLayout((current) => setPane(current, pane.id, { workId: owner.id, sessionId: next.id }));
@@ -2061,6 +2073,7 @@ export function App() {
             <Popover open={menuOpen} onClose={closeMenu} align="right">
               <Connections
                 onOfficeSettings={() => { closeMenu(); setOfficeSettingsOpen(true); }}
+                onKnowledge={() => { closeMenu(); setKnowledgeOpen(true); }}
                 onIntegrations={() => {
                   closeMenu();
                   setIntegrationsOpen(true);
@@ -2184,6 +2197,7 @@ export function App() {
       {integrationsOpen && api ? <IntegrationsSheet api={api} onClose={() => setIntegrationsOpen(false)} onToast={setToast} /> : null}
       {imageUploadOpen && api ? <ImageUploadSheet api={api} onClose={() => setImageUploadOpen(false)} onToast={setToast} /> : null}
       {officeSettingsOpen && api ? <OfficeSettings api={api} theme={appTheme} onClose={() => setOfficeSettingsOpen(false)} /> : null}
+      {knowledgeOpen && api ? <KnowledgeLibrary api={api} onClose={() => setKnowledgeOpen(false)} /> : null}
       {state.ready && api && (prefs.onboarding !== "done" || onboardingAgain) ? (
         <Onboarding
           providers={state.providers}

@@ -11,6 +11,7 @@ import { pickOfficeFiles } from "./office-file-picker.ts";
 import { SkillLibraryDialog } from "../SkillLibraryDialog.tsx";
 import type { OfficeSkillRequest } from "../../../../../packages/contracts/src/office-skills.ts";
 import type { OfficeWikiRequest } from "../../../../../packages/contracts/src/office-wiki.ts";
+import type { KnowledgeOpenRequest } from "../../../../../packages/contracts/src/office-knowledge.ts";
 
 export type OfficeHandle = {
   control(request: RendererControlRequest): Promise<RendererControlReply>;
@@ -39,7 +40,7 @@ export type OfficeStatus = { dirty: boolean; revision: number | null; conflict: 
  */
 export const OfficeEditor = forwardRef<
   OfficeHandle,
-  { api: Api; artifact: Artifact; access?: DocumentAccess; sessionId: string | null; hidden?: boolean; onStatus(status: OfficeStatus): void; onNotice(message: string): void; onCopied?(artifactId: string): void; onPrepareAi(revision: number): Promise<void>; onNewSession(revision: number): Promise<string>; onAiSettings(): void }
+  { api: Api; artifact: Artifact; access?: DocumentAccess; sessionId: string | null; hidden?: boolean; onStatus(status: OfficeStatus): void; onNotice(message: string): void; onCopied?(artifactId: string, scope?: Pick<Artifact, "workId" | "workspaceId">): void; onPrepareAi(revision: number): Promise<void>; onNewSession(revision: number): Promise<string>; onAiSettings(): void }
 >(function OfficeEditor({ api, artifact, access, sessionId, hidden = false, onStatus, onNotice, onCopied, onPrepareAi, onNewSession, onAiSettings }, ref) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [generation, setGeneration] = useState(0);
@@ -334,6 +335,21 @@ export const OfficeEditor = forwardRef<
   const wikiHandler = useRef(handleWiki);
   wikiHandler.current = handleWiki;
 
+  const handleKnowledge = async (message: KnowledgeOpenRequest) => {
+    const target = frame.current?.contentWindow, opening = opened.current, owner = latest.current.id;
+    if (!target || !opening) return;
+    const reply = (error?: string) => target.postMessage({ type: "office:knowledge-result", requestId: message.requestId, error }, opening.origin);
+    const check = () => { if (target !== frame.current?.contentWindow || latest.current.id !== owner || opened.current?.sessionId !== opening.sessionId) throw new Error("인용 문서를 여는 동안 문서 창이나 대화가 바뀌었습니다."); };
+    try {
+      if (!handlers.current.onCopied) throw new Error("이 화면에서 인용 문서를 열 수 없습니다.");
+      const pending = waitFlushed(); send({ type: "office:flush" });
+      if (await pending === null) throw new Error("현재 편집을 저장한 뒤 인용 문서를 열어 주세요.");
+      check(); const result = await api.openKnowledge(owner, opening.token, message.path); check();
+      reply(); handlers.current.onCopied(result.artifactId, result);
+    } catch (error) { reply(error instanceof Error ? error.message : String(error)); }
+  };
+  const knowledgeHandler = useRef(handleKnowledge); knowledgeHandler.current = handleKnowledge;
+
   useEffect(() => {
     const activate = (event: Event) => {
       const target = (event as CustomEvent<{ artifactId: string; sessionId: string | null }>).detail;
@@ -370,6 +386,7 @@ export const OfficeEditor = forwardRef<
       switch (message.type) {
         case "office:skills": void skillsHandler.current(message); break;
         case "office:wiki": void wikiHandler.current(message); break;
+        case "office:knowledge-open": void knowledgeHandler.current(message); break;
         case "office:references": void referenceHandler.current(message); break;
         case "office:ai-request": void aiHandler.current(message); break;
         case "office:output": void outputHandler.current(message); break;
