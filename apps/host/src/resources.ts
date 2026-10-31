@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// Files that ship with the app (the bundled kordoc, IeumOffice, npm): the desktop shell names its
+// Files that ship with the app (the default skills, IeumOffice, npm): the desktop shell names its
 // resource folders in WORKBENCH_RESOURCES_DIR; the gateway bundle sits in <resources>/host/, and a
 // source checkout keeps them under third_party/ and apps/desktop/src-tauri/.
 

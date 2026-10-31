@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 // First run on Linux, as release.yml's smoke job checks it on Windows and macOS, plus the screen:
-//  A. The app as installed (a folder laid out like the bundle: host/, web/, kordoc/, ieumoffice/,
+//  A. The app as installed (a folder laid out like the bundle: host/, web/, skills/, ieumoffice/,
 //     node/) with stand-in engines where people install them and an AppImage's PATH: both engines
 //     found and answering, kordoc and IeumOffice shipped and working (scripts/setup-smoke.ts).
 //  B. The first-run guide in Chromium with no engine on the computer: no command to type, a
@@ -46,7 +46,7 @@ mkdirSync(join(app, "host"), { recursive: true });
 mkdirSync(join(app, "node"), { recursive: true });
 copyFileSync("apps/host/dist/host.mjs", join(app, "host", "host.mjs"));
 symlinkSync(resolve("apps/web/dist"), join(app, "web"));
-symlinkSync(resolve("third_party/kordoc"), join(app, "kordoc"));
+symlinkSync(resolve("third_party/skills"), join(app, "skills"));
 symlinkSync(join(bundledDir, "ieumoffice"), join(app, "ieumoffice"));
 symlinkSync(process.execPath, join(app, "node", "node"));
 

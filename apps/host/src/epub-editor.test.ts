@@ -44,7 +44,7 @@ describe("original EPUB editor", () => {
     const server = createEditorsServer(documents, grants, null); await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     const call = (op: string, args: unknown = {}, session = "", grant = token) => fetch(`${origin}/api/artifacts/${artifact.id}/epub/${op}?session=${session}`, { method: "POST", headers: { authorization: `Bearer ${grant}` }, body: JSON.stringify(args) });
-    const open = (revision: number, bytes?: Uint8Array, grant = token) => fetch(`${origin}/api/artifacts/${artifact.id}/epub/open?revision=${revision}${bytes ? "&restore=1" : ""}`, { method: "POST", headers: { authorization: `Bearer ${grant}` }, body: bytes ? bytes.slice().buffer : undefined });
+    const open = (revision: number, bytes?: Uint8Array, grant = token) => fetch(`${origin}/api/artifacts/${artifact.id}/epub/open?revision=${revision}${bytes ? "&restore=1" : ""}`, { method: "POST", headers: { authorization: `Bearer ${grant}` }, body: bytes ? Uint8Array.from(bytes).buffer : undefined });
     try {
       expect((await open(1, undefined, "forged")).status).toBe(401);
       const initial = await (await open(1)).json(), sid = initial.sessionId as string;

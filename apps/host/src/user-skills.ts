@@ -11,6 +11,7 @@ import { parseSkillMd, renderSkillMd } from "../../../third_party/ieumoffice/use
 import type { UserSkillSourceDir } from "../../../third_party/ieumoffice/user-skills/types.ts";
 import { HttpError } from "./errors.ts";
 import type { Store } from "./store.ts";
+import { bundledHallymSkill } from "./hallym-kordoc.ts";
 
 const MAX_MARKDOWN = 256 * 1024;
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
@@ -49,7 +50,9 @@ export class UserSkills {
 
   constructor(store: Pick<Store, "getMeta" | "setMeta">, options: { dataDir: string; homeDir?: string; builtinDir?: string }) {
     this.store = store; this.dataDir = resolve(options.dataDir); this.home = resolve(options.homeDir ?? homedir());
-    this.appDir = join(this.dataDir, "user-skills"); this.builtinDir = options.builtinDir;
+    this.appDir = join(this.dataDir, "user-skills");
+    const bundled = bundledHallymSkill();
+    this.builtinDir = options.builtinDir ?? (bundled ? dirname(bundled) : undefined);
   }
   /** Serialize our writes without changing any installed engine's skill settings. */
   mutate<T>(run: () => Promise<T>): Promise<T> {
@@ -121,7 +124,7 @@ export class UserSkills {
         entries.push({
           id, name: skill.name, title: skill.title, description: skill.description, source: source.source, dir, plugin: skill.plugin ?? null,
           template: skill.template ? { relativePath: skill.template, name: basename(skill.template), format: formatOf(skill.template), exists: skill.templateExists } : null,
-          state: { enabled: typeof saved?.enabled === "boolean" ? saved.enabled : source.source !== "imported" && source.source !== "builtin", invoke: saved?.invoke === "auto" ? "auto" : "manual" },
+          state: { enabled: typeof saved?.enabled === "boolean" ? saved.enabled : source.source !== "imported" && (source.source !== "builtin" || skill.name === "hallym-kordoc"), invoke: saved?.invoke ?? (source.source === "builtin" && skill.name === "hallym-kordoc" ? "auto" : "manual") },
           shadowedBy: null, editable: source.source === "imported" && isInsideDir(dir, appRoot), hasScripts: skill.hasScripts, github: skill.github,
           files: skill.files, bytes: skill.bytes, problem: skill.unreadable ?? null,
         });

@@ -100,7 +100,7 @@ it.each(["docx", "pptx", "xlsx", "hwp", "hwpx", "pdf", "xmind", "epub", "html", 
   const f = fixture();
   try {
     const template = skill(f.root, "template", "TEMPLATE", `source.${extension}`); skill(f.root, "style", "STYLE");
-    const list = await f.list(), chosen = list.find((s) => s.name === "template")!, chips = list.map(({ id, source, title }) => ({ id, source, title }));
+    const list = await f.list(), chosen = list.find((s) => s.name === "template")!, chips = list.filter(s => s.name === "template" || s.name === "style").map(({ id, source, title }) => ({ id, source, title }));
     const input = { requestId: "once", skillId: chosen.id, text: "새 양식 문서를 작성해 줘", chips };
     const created = await f.service.action(f.context, "open-template", input) as { ok: true; tabId: string };
     expect(await f.service.action(f.context, "open-template", input)).toEqual(created);
@@ -139,7 +139,9 @@ it("serves reads through a document grant while keeping writes off the editor or
     expect((await fetch(`${base}/list`)).status).toBe(401);
     const headers = { authorization: `Bearer ${f.context.token}` };
     const response = await fetch(`${base}/list`, { headers }); expect(response.status).toBe(200); expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(await response.json()).toHaveLength(1);
+    const listed = await response.json();
+    expect(listed).toHaveLength(2);
+    expect(listed).toEqual(expect.arrayContaining([expect.objectContaining({ name: "hallym-kordoc", source: "builtin", enabled: true })]));
     expect((await fetch(`${base}/list`, { headers, method: "POST" })).status).toBe(405);
     expect((await fetch(`${base}/open-template`, { headers, method: "POST", body: "{}" })).status).toBe(404);
   } finally { await new Promise<void>((done) => server.close(() => done())); await f.close(); }
@@ -162,7 +164,7 @@ it("writes nothing before the original card's explicit Save, then keeps one save
     expect(f.store.items(f.session.id)).toHaveLength(0);
     const result = await f.service.action(f.context, "save-card", input);
     expect(result).toMatchObject({ ok: true });
-    expect(await f.list()).toEqual([expect.objectContaining({ name: input.name, enabled: true, invoke: "auto", owned: true })]);
+    expect(await f.list()).toEqual([expect.objectContaining({ name: input.name, enabled: true, invoke: "auto", owned: true }), expect.objectContaining({ name: "hallym-kordoc", source: "builtin", enabled: true, owned: false })]);
     expect(f.store.items(f.session.id)).toEqual([expect.objectContaining({ title: input.name, output: expect.stringContaining("skill-card-saved:"), office: expect.objectContaining({ cardSaved: { skillId: (result as { id: string }).id, label: input.name } }) })]);
     expect(f.manager.office.nativeContext(f.session.id).text).toBe("");
     const restarted = new OfficeSkills(f.manager, f.store);

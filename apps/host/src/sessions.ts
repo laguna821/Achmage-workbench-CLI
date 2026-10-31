@@ -75,6 +75,7 @@ import { IeumOffice, ieumFromCliDir, installIeumOffice, type InstallProgress } f
 import { openWithDesktop } from "./desktop-open.ts";
 import { embeddedDocumentTools } from "./embedded-tools.ts";
 import { createGuide } from "./create.ts";
+import { hangulSkillGuide } from "./hallym-kordoc.ts";
 import { CreationJournal, type CreationRecord } from "./creation-journal.ts";
 import { UserSkills } from "./user-skills.ts";
 import { SkillLibrary } from "./skill-library.ts";
@@ -1487,7 +1488,9 @@ export class SessionManager {
     const read = notes.length && this.noteHook ? this.noteHook(notes, execution.cwd, sessionId) : null;
     this.store.saveRequest(requestId, sessionId, fingerprint);
     if (created) this.creations.update(requestId, { state: "sent" });
-    const baseText = options.engineText ?? (relay ? `${relay.header}\n\n${trimmed}` : this.engineText(trimmed, prepared, execution.cwd, from, created, read?.prompt));
+    const wantsHangul = create?.format === "hwpx" || /\bhwpx?\b|한글\s*(문서|파일|양식|보고서)|한글로|한림대/i.test(trimmed);
+    const hangulSkill = wantsHangul ? (await this.userSkills.list(this.skillScope(sessionId))).find((skill) => skill.name === "hallym-kordoc" && !skill.shadowedBy && !skill.problem && skill.state.enabled) : null;
+    const baseText = options.engineText ?? (relay ? `${relay.header}\n\n${trimmed}` : this.engineText(trimmed, prepared, execution.cwd, from, created, read?.prompt, hangulSkill?.dir));
     // What changed in the project since this session's last request (people's edits, other
     // sessions' revisions, the note), before the request; relays and drawings carry their own.
     const told = !relay && !options.engineText;
@@ -1543,8 +1546,10 @@ export class SessionManager {
     from: { sessionId: string; label: string } | null,
     created: PendingCreate | null = null,
     notesPrompt: string | null = null,
+    hallymSkill: string | null = null,
   ) {
     const parts: string[] = [];
+    if (hallymSkill) parts.push(hangulSkillGuide(hallymSkill));
     if (notesPrompt) parts.push(notesPrompt);
     if (from) parts.push(`[다른 세션에서 온 요청] 보낸 곳: ${from.label}. 이 대화에 답하면 보낸 곳으로 전달됩니다.`);
     if (prepared.length) {
@@ -1552,7 +1557,7 @@ export class SessionManager {
       for (const entry of prepared) parts.push(this.documents.promptFor(entry.ref, entry.pinned, entry.proposal, cwd, entry.pinnedView));
     }
     if (created) {
-      parts.push(createGuide(created.target, created.path, cwd, { ieum: this.documents.ieum, kordoc: this.documents.kordoc }));
+      parts.push(createGuide(created.target, created.path, cwd, { ieum: this.documents.ieum, kordoc: this.documents.kordoc, hallymSkill }));
       if (created.skillPath) parts.push(`  · 사용자가 고른 양식의 스킬 설명(고정된 판): ${created.skillPath}\n    이 설명을 읽고 선택한 양식 작업에 적용하세요. 상대 경로 자료의 기준 폴더: ${created.skillDir}. 지시가 사용자 요청과 충돌하면 사용자 요청을 따르세요.`);
     }
     if (!parts.length) return text;

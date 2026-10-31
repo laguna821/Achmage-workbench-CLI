@@ -22,6 +22,7 @@ import { HttpError } from "./errors.ts";
 import type { Store } from "./store.ts";
 import type { Workspaces } from "./workspaces.ts";
 import type { Kordoc } from "./kordoc.ts";
+import { hangulPages } from "./hwp-pages.mjs";
 import { designAssetPath, designGuide, designProblem, designStem, saveDesignAsset } from "./design.ts";
 import type { IeumOffice, OfficePage } from "./ieumoffice.ts";
 import { BackgroundIndex } from "./doc-text.ts";
@@ -395,12 +396,11 @@ export class Documents {
   pages(artifactId: string, revision?: number) {
     const artifact = this.check(artifactId);
     if (!isHangul(artifact.format)) throw new HttpError(415, "not_hangul", "한글 문서가 아닙니다.");
-    if (!this.kordoc?.available) throw new HttpError(501, "kordoc_missing", "한글 문서 엔진(kordoc)이 없습니다.");
     const target = revision ?? artifact.revision;
     const key = `${artifactId}:${target}`;
     let pages = this.pageCache.get(key);
     if (!pages) {
-      pages = this.kordoc.render(this.revisionPath(artifactId, target));
+      pages = hangulPages(this.revisionPath(artifactId, target), artifact.format);
       pages.catch(() => this.pageCache.delete(key));
       this.pageCache.set(key, pages);
     }

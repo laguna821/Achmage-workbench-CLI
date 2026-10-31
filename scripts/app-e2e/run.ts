@@ -64,7 +64,7 @@ process.once("SIGINT", () => void stop().then(() => process.exit(130)));
 process.once("SIGTERM", () => void stop().then(() => process.exit(143)));
 
 try {
-  stage = await openStage(outDir, { legacyOffice: wants("template-office"), printDialog: wants("hwp") || wants("office-output"), privateKeyring: wants("office-settings"), nativeX11: wants("office-control") });
+  stage = await openStage(outDir, { legacyOffice: wants("template-office"), printDialog: wants("hwp") || wants("office-output"), privateKeyring: wants("office-settings"), nativeX11: wants("office-control") || wants("hwp") });
   console.log(`app ${binary}\nout ${outDir}\n${stage.nativeX11 ? `X11 ${stage.x11?.display}` : `Broadway ${stage.display} (http://127.0.0.1:${stage.broadwayPort}/)`} · tmp ${stage.root}`);
   if (only.length) {
     const app = await stage.launch({ name: engines, binary, engines, profile: "native" });

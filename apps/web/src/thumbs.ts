@@ -5,7 +5,7 @@ import { officePageImage } from "./office.ts";
 import { pdfDocument, pdfPageImage } from "./pdfpages.ts";
 
 // Home "문서": the first page of each document, drawn the way its own view draws it (page images
-// of office files, kordoc pages of Hangul files, the design renderer, PDF.js) or, for text, its
+// of office files, Ieum Hangul pages of Hangul files, the design renderer, PDF.js) or, for text, its
 // opening lines. Drawn two at a time and only when asked (cards ask when they come into view):
 // a first page image may start the office renderer on the gateway.
 
@@ -68,7 +68,7 @@ async function draw(api: Api, artifact: Artifact, tools: DocumentTools | null): 
     return { kind: "image", url: await officePageImage({ artifactId: artifact.id, revision }, 1) };
   }
   if (artifact.format === "hwpx" || artifact.format === "hwp") {
-    if (!tools?.kordoc.available) return { kind: "none" };
+    if (!tools?.hwp?.available) return { kind: "none" };
     const first = (await api.pages(artifact.id, revision)).pages[0];
     return first ? { kind: "image", url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(first.svg)}` } : { kind: "none" };
   }

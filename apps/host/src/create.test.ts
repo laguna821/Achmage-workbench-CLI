@@ -71,6 +71,21 @@ async function template(manager: SessionManager) {
 const reservedIn = (prompt: string, cwd: string) => resolve(cwd, /\[새 문서\] .*?: (.+)$/m.exec(prompt)![1]);
 
 describe("new documents from a request", () => {
+  it("hands Hangul requests the default skill and preserves an explicitly disabled installed choice", async () => {
+    const { manager, claude, work, options } = setup();
+    const session = manager.createSession(work.id, { provider: "claude" });
+    await manager.send(session.id, "hangul-default", "이 내용을 한글 문서로 만들어 줘", [], null, { format: "hwpx", name: "한글 초안" });
+    expect(claude.prompts[0]).toContain("[한글 문서 기본 스킬]");
+    expect(claude.prompts[0]).toContain("skills/hallym-kordoc/SKILL.md");
+    const dir = join(options.skillHomeDir, ".claude/skills/hallym-kordoc"); mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "SKILL.md"), "---\nname: hallym-kordoc\ndescription: My Hangul workflow\n---\nCUSTOM\n");
+    const installed = (await manager.userSkills.list(manager.skillScope(session.id))).find(skill => skill.source === "claude")!;
+    await manager.userSkills.setState(installed.id, { enabled: false, invoke: "manual" }, manager.skillScope(session.id));
+    await manager.send(session.id, "hangul-disabled", "한글 문서로 만들어 줘", [], null, { format: "hwpx", name: "다음 초안" });
+    expect(claude.prompts[1]).not.toContain("[한글 문서 기본 스킬]");
+    expect(claude.prompts[1]).toContain("활성화된 한글 생성 스킬(hallym-kordoc)이 없습니다");
+  });
+
   it("reserves a free name and accepts only known formats", () => {
     const { work } = setup();
     writeFileSync(join(work.cwd, "요약.md"), "x");

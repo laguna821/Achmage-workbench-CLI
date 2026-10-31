@@ -5,7 +5,7 @@ import type { Api } from "../../api.ts";
 type Page = { page: number; width: number; height: number; svg: string };
 
 /**
- * Real page previews of a Hangul document, rendered on this computer by the kordoc engine.
+ * Saved Hangul pages rendered by the same Ieum rhwp engine as the document editor.
  * Shown as images (never inline SVG), so document content cannot run anything in the app.
  */
 export function HwpxView({ api, artifact, revision }: { api: Api; artifact: Artifact; revision: number }) {
@@ -32,7 +32,7 @@ export function HwpxView({ api, artifact, revision }: { api: Api; artifact: Arti
     <div className="hwpx-view">
       <div className="doc-tools">
         <span className="muted">
-          {pages ? `${pages.length}쪽 · r${revision}` : error ? "미리보기 없음" : "쪽 그리는 중…"} · 이 컴퓨터의 한글 엔진(kordoc)으로 그린 화면
+          {pages ? `${pages.length}쪽 · r${revision}` : error ? "미리보기 없음" : "쪽 그리는 중…"} · 이음 한글
         </span>
       </div>
       <div className="hwpx-stage">

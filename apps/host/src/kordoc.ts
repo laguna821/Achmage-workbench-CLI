@@ -1,15 +1,12 @@
 import { execFile } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { HttpError } from "./errors.ts";
-import { repoRoot, shipped } from "./resources.ts";
+import { bundledHallymSkill } from "./hallym-kordoc.ts";
 
-// Hangul documents through the kordoc engine that ships with the app (third_party/kordoc, the
-// generic kordoc-workbench core), or the user's installed skill when running without it: read
-// HWPX/HWP into a Markdown view, patch edited Markdown back into the same HWPX (keeping the
-// original formatting of untouched parts), and render real page previews. HWP is read only.
-// The PRD's HOP editor is the target for full in-place editing; this is the engine available now.
+// Compatibility for pre-Ieum Markdown drafts/proposals only. Use the core inside the public
+// hallym-kordoc skill; current editing, text extraction and page views belong to Ieum rhwp.
 
 type KordocResult = {
   status: "success" | "partial" | "failed";
@@ -25,20 +22,15 @@ export type HangulPage = { page: number; width: number; height: number; svg: str
 
 /** The runner shipped with the app: its resources, or third_party/ of a source checkout. */
 export function bundledKordocRunner(): string | null {
-  const root = repoRoot();
-  const fromSources = root ? join(root, "third_party/kordoc/scripts/run.mjs") : null;
-  return shipped(join("kordoc", "scripts", "run.mjs")) ?? (fromSources && existsSync(fromSources) ? fromSources : null);
+  const skill = bundledHallymSkill();
+  return skill ? join(skill, "core/scripts/run.mjs") : null;
 }
 
 /** An override, then the runner shipped with the app, then the user's installed skill. */
 export function findKordocRunner(env: NodeJS.ProcessEnv = process.env): string | null {
-  const home = homedir();
   const candidates = [
     env.WORKBENCH_KORDOC_RUNNER,
     bundledKordocRunner(),
-    join(home, ".claude/skills/hallym-kordoc/scripts/run.mjs"),
-    join(home, ".claude/skills/kordoc-workbench/scripts/run.mjs"),
-    join(env.CODEX_HOME ?? join(home, ".codex"), "skills/kordoc-workbench/scripts/run.mjs"),
   ].filter((path): path is string => Boolean(path));
   return candidates.find((path) => existsSync(path)) ?? null;
 }
@@ -77,7 +69,7 @@ export class Kordoc {
   }
 
   private async run(job: Record<string, unknown>): Promise<{ result: KordocResult; dir: string }> {
-    if (!this.runner) throw new HttpError(501, "kordoc_missing", "한글 문서 엔진(kordoc)을 찾지 못해 HWPX를 열 수 없습니다. 앱을 다시 설치해 주세요.");
+    if (!this.runner) throw new HttpError(501, "legacy_hangul_unavailable", "이전 한글 글 편집 수정안을 복구할 호환 도구를 찾지 못했습니다. 원본과 수정안은 보존되어 있습니다.");
     const dir = mkdtempSync(join(tmpdir(), "workbench-kordoc-"));
     const requestPath = join(dir, "request.json");
     writeFileSync(requestPath, JSON.stringify({ schemaVersion: 1, ...job, outputDir: join(dir, "out") }));

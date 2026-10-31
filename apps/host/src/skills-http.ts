@@ -6,6 +6,7 @@ import { SkillImportError } from "../../../third_party/ieumoffice/user-skills/er
 import { HttpError } from "./errors.ts";
 import { readBody, sendJson } from "./http.ts";
 import type { SessionManager } from "./sessions.ts";
+import { hangulPages } from "./hwp-pages.mjs";
 
 async function json(req: IncomingMessage): Promise<Record<string, unknown>> {
   const bytes = await readBody(req, 1_000_000);
@@ -33,8 +34,7 @@ export function skillRoutes(manager: SessionManager) {
       if (!task) {
         task = (async (): Promise<Page[]> => {
           if (snap.format === "hwp" || snap.format === "hwpx") {
-            if (!manager.documents.kordoc?.available) throw new Error("한글 미리보기에 필요한 kordoc을 찾지 못했습니다.");
-            return manager.documents.kordoc.render(snap.path);
+            return hangulPages(snap.path, snap.format);
           }
           if (["docx", "pptx", "xlsx"].includes(snap.format)) {
             if (!manager.documents.ieum?.available) throw new Error("문서 미리보기에 필요한 이음오피스를 찾지 못했습니다.");

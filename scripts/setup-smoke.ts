@@ -242,7 +242,7 @@ export async function apiChecks(gateway: Gateway, app: string, expect: ReturnTyp
   });
 
   mkdirSync(work, { recursive: true });
-  const kordocForm = join(app, "kordoc", "templates", "간이기안문_서식.hwpx");
+  const kordocForm = join(app, "skills", "hallym-kordoc", "core", "templates", "간이기안문_서식.hwpx");
   copyFileSync(join(fixtures, "hello.docx"), join(work, "hello.docx"));
   copyFileSync(join(fixtures, "cover.pptx"), join(work, "cover.pptx"));
   if (existsSync(kordocForm)) copyFileSync(kordocForm, join(work, "form.hwpx"));
@@ -275,7 +275,7 @@ export async function apiChecks(gateway: Gateway, app: string, expect: ReturnTyp
     return [bytes.subarray(0, 5).toString() === "%PDF-" && bytes.includes("/Rotate"), `${edited.name} ${bytes.length} bytes`];
   });
 
-  await step("kordoc: HWPX 글 보기와 쪽 미리보기", async () => {
+  await step("이음 한글: HWPX 글 보기와 쪽 미리보기", async () => {
     if (!existsSync(kordocForm)) return [false, `${kordocForm} 없음`];
     const artifact = await open("form.hwpx");
     const view = await call<{ text: string }>("GET", `/api/artifacts/${artifact.id}/text`);
@@ -298,7 +298,7 @@ export async function apiChecks(gateway: Gateway, app: string, expect: ReturnTyp
     });
   }
 
-  await step("엔진이 쓰는 이름: kordoc·ieumoffice 실행", async () => {
+  await step("기본 한글 스킬·ieumoffice 실행", async () => {
     const bin = join(gateway.dataDir, "bin");
     const run = (name: string, args: string[]) =>
       process.platform === "win32"
@@ -307,8 +307,8 @@ export async function apiChecks(gateway: Gateway, app: string, expect: ReturnTyp
     const version = run("ieumoffice", ["--version"]).trim();
     const request = join(work, "kordoc-capabilities.json");
     writeFileSync(request, JSON.stringify({ schemaVersion: 1, mode: "capabilities" }));
-    const capabilities = JSON.parse(run("kordoc", [request])) as { status?: string };
-    return [/\d+\.\d+/.test(version) && capabilities.status !== "failed", `ieumoffice ${version} · kordoc ${capabilities.status}`];
+    const capabilities = JSON.parse(run("hallym-kordoc", [request])) as { status?: string };
+    return [/\d+\.\d+/.test(version) && capabilities.status !== "failed" && !existsSync(join(app, "kordoc")), `ieumoffice ${version} · hallym-kordoc ${capabilities.status}`];
   });
 }
 

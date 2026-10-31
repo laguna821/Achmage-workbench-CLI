@@ -1,5 +1,13 @@
 # 이음오피스 통합 진행
 
+## 기본 한글 스킬과 이음 한글 표시
+
+2026-10-31: 공개 `hallym-kordoc` 1.0.0-rc.1을 `skills/hallym-kordoc`으로 기본 제공한다. 공개 manifest 77파일의 원본 해시·라이선스를 보존하고 개인 양식은 포함하지 않는다. 기존 사용자/프로젝트 설치와 명시적인 비활성 상태가 우선한다. 일반 문서에는 한림대 소속·기관 양식을 강제하지 않으며 사용자가 고른 양식을 우선한다.
+
+생성한 HWPX는 다른 한글 파일과 같은 이음 편집기로 열린다. 쪽 보기·썸네일·양식 미리보기도 편집기의 rhwp를 재사용한다. 독립 `third_party/kordoc` 및 `resources/kordoc` 배포와 `kordoc` 실행 래퍼는 제거했다. 스킬의 동봉 core는 스킬 작성과 기존 Markdown 수정안 복구에 사용한다. 사용자 홈에 스킬을 덮어쓰거나 개인 라이브러리를 이동하지 않는다.
+
+전체 회귀1135/1135, 마지막 CLI 생성 안내/비활성 우선 검사8/8, 실제 Linux29/29 및 타입·host/web/design/Office 빌드 통과. 설치형 스킬 경로·실제 Markdown 생성·이음 열기/입력/저장/재열기·원본/메모·구형 복구·사본/PDF/인쇄 창을 확인했다. 근거 `hallym-native-02/results.json`, `hallym-tests-03.log`; 정확한 검증 판 `research:rr-1302d222a29d0be4c6b817eefdff127e:cb824b30750da64544ad5a108caa7bb17b7d98d5e645d97c9e4260a6065b35a1`. 다른 OS 설치/업그레이드와 HOP 개선분 전체 대조는 남는다.
+
 ## 별도 Electron 앱 제거와 CLI 자원 배포
 
 2026-10-31: 해시로 확인한 원본 이음 릴리스에서 CLI·의존 패키지·WASM·스프레드시트 엔진·OS OCR·라이선스만 추출한다. Workbench에 이미 있는 편집기·글꼴의 중복 사본과 Electron 실행 환경은 설치본에서 제외한다. macOS도 같은 CLI 자원 구조를 사용한다. 원본 CLI 코드는 유지하고 터미널용 실행기만 bundled Node와 Workbench 앱·설정 경로에 연결했다.

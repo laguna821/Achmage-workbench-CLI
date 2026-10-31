@@ -1,5 +1,28 @@
 # 통합 업데이트 실행 기록
 
+## 현재 상태 — 2026-10-31
+
+공개 최신은 **v0.2.2**다. `7fb65a4`의 [시험 실행 41187505231](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41187505231)은 Windows/macOS/Linux/Arch 패키징과 Windows/macOS 첫 실행 검사를 통과했지만, 태그 실행이 아니어서 Releases 게시를 건너뛰었다. `d41747a`의 [Electron 제거 설치본 시험](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41189645913)은 별도 진행 중이다. Actions를 `Installers`, 수동 실행 제목을 `Test installers`로 구분했다.
+
+| 사용자 요구 | 구현·확인한 범위 | 남은 범위 |
+|---|---|---|
+| Rust/Tauri 경량 앱 | 원본 편집기 재사용, native 출력·문서 제어·키 저장, 별도 Electron/HOP/PDFCraft 배포 제거 | 최신 OS 설치·용량 실측 |
+| Orca 창 분할·탭·작업공간 | 중첩 분할, 탭 이동·복원, 일반 폴더/Git 작업공간 | OS별 전체 인수 |
+| Orca worktree·PTY·개발 흐름 | worktree 발견/생성·환경 준비·터미널, 주요 Git/PR/CI 검토 | 전체 Orca 동등성 인수 |
+| 내장 브라우저·Design Mode | 기존 외부 Playwright 브라우저 사용 가능 | Orca식 앱 내부 통합 |
+| SSH·모바일·원격·확장 | 전체 목표에 유지 | 구현·인증·재연결 검증 |
+| 이음 편집기 9종 | Word/PPT/Sheets/HWP/PDF/Markdown/HTML/EPUB/XMind 내부 편집, 대표 AI·저장·복구·되돌림 | 전체 메뉴/형식/OS 동등성 |
+| 공통 문서 흐름 | 같은 대화, +/@ 참조, 첨부, 스킬·양식 사본, 디자인 갤러리, 새 문서·사본·주요 출력/CLI | 남은 공통 메뉴·일부 변환·인쇄/발표 흐름 |
+| 이음 전체 공통 서비스 | 직접 제공자·설정·키링 및 문서 AI 핵심 | wiki/지식, Drive·웹/이미지/미디어, 장기 AI 작업·내부 MCP 전체 |
+| HOP 개선분·한글 기본 스킬 | HOP 별도 앱 제거; hallym-kordoc 기본 제공, 사용자 설치/비활성 우선, 생성 HWPX는 이음으로 표시 | HOP 개선분 전체 대조·다른 OS |
+| doory | 생성·편집·저장·복구·이미지/PDF 출력의 Linux 흐름 | 전체 메뉴·OS 인수 |
+| 옵시디언식 PKM | 내비게이터·프로젝트 노트·Bases식 보기, 썸네일·폴더 템플릿, 지원 범위의 .base 교환 | 전체 통합·OS 인수 |
+| 자료 보존·설치·릴리스 | 원본/판/구형 복구본 표본 검증, 다중 OS 시험 설치본 | 실제 v0.2.2 업그레이드·최종 용량/성능·정식 태그/설치본 게시 |
+
+한글 전환은 전체 회귀 **1135/1135**, 마지막 CLI 생성/비활성 우선 검사 **8/8**, 실제 Linux **29/29**, 타입·host/web/design/Office 빌드 통과. 공개 스킬 manifest의 77파일만 복사했고 개인 양식은 포함하지 않았다. 독립 `third_party/kordoc` 대신 `skills/hallym-kordoc`을 배포한다. 현재 문서 페이지/썸네일은 이음 rhwp를 쓰며 구형 Markdown 수정안 복구는 동봉 core로 보존한다. 검증 판: `research:rr-1302d222a29d0be4c6b817eefdff127e:cb824b30750da64544ad5a108caa7bb17b7d98d5e645d97c9e4260a6065b35a1`.
+
+Electron 경량화 판: `research:rr-a1113b1710d6df910256d23a2c711f5f:ac3d174ffd9d56a6b1324fec1d60f4a3f2b136b17f8e579c9b09c53f3f54a752`. 원래 Linux 이음 번들 약680MiB가 CLI 자원 약72MiB로 줄었다. 이는 부품 크기이며 Windows 설치파일이나 전체 설치 용량이 아니다. 아래는 이전 시점의 이력이며 현재 판정은 위 표를 우선한다.
+
 2026-10-31 CLI 출력 연결: 원본 CLI→Tauri의 주요 문서 변환 **43/43**, 수동 나눔·빈 쪽·Sheets 글꼴 **20/20**, 기존 GUI 출력/인쇄 **17/17**을 Linux에서 확인했다. Word는 원본 페이지 조판을 재사용하며 12쪽 분할·병합을 검증했다. [구현과 남은 범위](office-integration.md#원본-cli의-tauri-출력-연결), 검증 판 `research:rr-f6971ea29725560b8f14d540e8674644:ae7ebf5fd8457e89a2c32a0ca8d4b7a696f714f7952a0fde84761cc9f15b72a8`. 전체 Electron 제거와 OS 설치·릴리스는 미완료다.
 
 OS 빌드 후속 결과: `ba44e4f`의 [run 41173726945](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41173726945)는 공통 검사, Windows/macOS/Linux/Arch 패키징과 Windows/macOS first-run 작업이 모두 성공했다. 태그 없는 실행이므로 릴리스 게시 작업은 건너뛰었고 공개 최신은 v0.2.2다. 위 CLI 변경은 이 실행에 포함되지 않는다. 근거 판 `research:rr-f20dda89520345beccf09fb5ddd30bed:ac4b9a4997b93f3505ee27558182ca5da6d18ba53924a8fe7e37a8cacb9d5053`.

@@ -2,6 +2,7 @@ import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:
 import { delimiter, join } from "node:path";
 import { ieumAppEnvironment, type IeumInstall } from "./ieumoffice.ts";
 import { repoRoot, shipped } from "./resources.ts";
+import { bundledHallymSkill } from "./hallym-kordoc.ts";
 
 // The document tools engines run by name: `kordoc` and `ieumoffice`, small wrappers in the gateway's
 // data folder, on the PATH of everything the gateway starts. A path inside the app would need
@@ -54,7 +55,10 @@ export function installToolWrappers(dataDir: string, tools: { kordoc: string | n
     }
     written.push(name);
   };
-  write("kordoc", tools.kordoc ? { file: process.execPath, args: [tools.kordoc] } : null);
+  // Remove our obsolete wrapper; the public skill is the supported creation interface.
+  write("kordoc", null);
+  const hangulSkill = bundledHallymSkill();
+  write("hallym-kordoc", hangulSkill ? { file: process.execPath, args: [join(hangulSkill, "scripts/run.mjs")] } : null);
   const hwp = shipped("host/hwp-cli.mjs") ?? (repoRoot() ? join(repoRoot()!, "apps/host/dist/hwp-cli.mjs") : null);
   write("workbench-hwp", hwp ? { file: process.execPath, args: [hwp] } : null);
   const ieum = tools.ieum;

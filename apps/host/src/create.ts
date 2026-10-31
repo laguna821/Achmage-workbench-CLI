@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { dirname, join, relative, sep } from "node:path";
+import { join, relative, sep } from "node:path";
 import { CREATE_EXTENSION, CREATE_LABEL, formatOf, type CreatableFormat, type CreateTarget, type DocFormat } from "@workbench/contracts";
 import { HttpError } from "./errors.ts";
 import type { IeumOffice } from "./ieumoffice.ts";
@@ -43,7 +43,7 @@ export function reservePath(cwd: string, target: { format: DocFormat; name: stri
 }
 
 /** Engine instructions for writing the new document, by format, with the tools on this computer. */
-export function createGuide(target: CreateTarget, path: string, cwd: string, tools: { ieum: IeumOffice | null; kordoc: Kordoc | null }) {
+export function createGuide(target: CreateTarget, path: string, cwd: string, tools: { ieum: IeumOffice | null; kordoc: Kordoc | null; hallymSkill?: string | null }) {
   const shown = (() => {
     const inside = relative(cwd, path);
     return inside && !inside.startsWith("..") && !inside.startsWith(sep) ? inside : path;
@@ -64,18 +64,16 @@ export function createGuide(target: CreateTarget, path: string, cwd: string, too
       lines.push("  · 파일을 직접 쓰면 됩니다.");
       break;
     case "hwpx": {
-      const kordoc = tools.kordoc?.available ? tools.kordoc.engineCommand : null;
-      if (!kordoc) {
-        lines.push("  · 한글 문서 엔진(kordoc)을 찾지 못해 HWPX를 만들 수 없습니다. 만들 수 없다고 알려 주세요.");
+      const skill = tools.hallymSkill;
+      if (!skill) {
+        lines.push("  · 활성화된 한글 생성 스킬(hallym-kordoc)이 없습니다. 사용자가 지정한 생성 도구가 없다면 스킬 설정을 확인하도록 알려 주세요.");
         break;
       }
-      const manual = tools.kordoc?.runner ? join(dirname(dirname(tools.kordoc.runner)), "references", "operations.md") : null;
       lines.push(
-        `  · 한글(HWPX)은 앱에 들어 있는 kordoc으로 만드세요. 내용을 Markdown 초안으로 쓰고, 요청 JSON을 파일로 써서 \`${kordoc} <요청.json>\`을 실행하면 HWPX로 조판합니다.`,
-        `    요청 예: {"schemaVersion":1,"mode":"generate","markdownFile":"<초안.md의 절대 경로>","options":{"gongmun":{"preset":"report"}},"outputDir":"<새 폴더의 절대 경로>"} → 결과의 document.hwpx를 위 경로로 옮기세요. 출력 JSON의 status가 failed면 이유를 알려 주세요.`,
-        "    일반 문서는 공용 초안 서식으로 만들고, 요청에 없는 기관(한림대 등) 소속을 지어내지 마세요. 한림대 문서를 요청받았고 hallym-kordoc 스킬이 있으면 그 스킬을 쓰세요. HWP는 만들지 않습니다.",
+        `  · ${join(skill, "SKILL.md")}를 읽고 이 hallym-kordoc 스킬로 만드세요. 실행기는 ${join(skill, "scripts/run.mjs")}입니다. 한림대 업무·양식은 resolve → compose 계약을 따르세요.`,
+        `    일반 Markdown → HWPX는 동봉 core/SKILL.md와 core/references/operations.md의 generate 계약을 사용하세요. 예: {"schemaVersion":1,"mode":"generate","markdownFile":"<초안.md의 절대 경로>","outputDir":"<새 폴더의 절대 경로>"}를 ${join(skill, "core/scripts/run.mjs")}에 전달합니다.`,
+        "    결과 document.hwpx를 위 예약 경로로 옮기세요. 실패·부분 처리·누락 필드는 그대로 알리세요. 일반 문서에 한림대 소속이나 기관 양식을 강제하지 마세요. HWP는 읽기 참고만 하고 새 결과는 HWPX로 만드세요.",
       );
-      if (manual) lines.push(`    모드와 옵션: ${manual}`);
       break;
     }
     case "docx":

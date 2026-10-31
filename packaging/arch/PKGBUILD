@@ -1,5 +1,5 @@
 # Achmage Workbench for Arch Linux and CachyOS: packages a release build made in this checkout
-# (apps/desktop/src-tauri/target/release: the binary with host/, web/ and kordoc/ beside it) and
+# (apps/desktop/src-tauri/target/release: the binary with host/, web/ and skills/ beside it) and
 # the original IeumOffice CLI engines (apps/desktop/src-tauri/bundled,
 # scripts/fetch-bundled-apps.ts). The gateway runs on the system's Node.js (24 or newer) and
 # installs engines with the system's npm.
@@ -23,7 +23,7 @@ package() {
   local release="$repo/apps/desktop/src-tauri/target/release"
   local icons="$repo/apps/desktop/src-tauri/icons"
   install -Dm755 "$release/achmage-workbench" "$pkgdir/usr/lib/achmage-workbench/achmage-workbench"
-  cp -r "$release/host" "$release/web" "$release/kordoc" "$pkgdir/usr/lib/achmage-workbench/"
+  cp -r "$release/host" "$release/web" "$release/skills" "$pkgdir/usr/lib/achmage-workbench/"
   # Original CLI resources; no separate Electron application.
   cp -a "$repo/apps/desktop/src-tauri/bundled/ieumoffice" "$pkgdir/usr/lib/achmage-workbench/"
   install -dm755 "$pkgdir/usr/bin"

@@ -9,7 +9,7 @@ const ORDER: CreatableFormat[] = ["hwpx", "docx", "pptx", "xlsx", "markdown", "d
 
 /** Which tool a new document of each format needs on this computer, and whether it is there. */
 function availability(format: CreatableFormat, tools: DocumentTools | null): string | null {
-  if (format === "hwpx") return tools?.kordoc.available ? null : "kordoc 필요";
+  if (format === "hwpx") return tools?.kordoc.available ? null : "한글 생성 스킬 필요";
   if (format === "docx" || format === "pptx" || format === "xlsx") return tools?.ieumoffice.available ? null : "이음오피스 필요";
   return null;
 }

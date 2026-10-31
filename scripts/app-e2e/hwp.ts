@@ -6,6 +6,7 @@ import init, { HwpDocument } from "../../vendor/ieumoffice/vendor/rhwp-core/rhwp
 import { hwpMemosOf, hwpToText } from "../../third_party/ieumoffice/file-parse/hwp.ts";
 import type { Artifact, Session, Snapshot, TranscriptItem, Work } from "@workbench/contracts";
 import { Kordoc } from "../../apps/host/src/kordoc.ts";
+import { bundledHallymSkill } from "../../apps/host/src/hallym-kordoc.ts";
 import { installProbe, pageErrors, seedLayout, shot, until, type Ctx } from "./scenarios.ts";
 import { KEY } from "./webdriver.ts";
 
@@ -16,9 +17,22 @@ export async function hwpScenario(ctx: Ctx) {
   const work = await api<Work>("POST", "/api/works", { title: "한글 내부 편집 검사", cwd: null });
   const session = await api<Session>("POST", `/api/works/${work.id}/sessions`, { provider: "codex" });
   const snapshot = () => api<Snapshot>("GET", "/api/snapshot");
+  if (process.env.APP_E2E_EXPECT_HALLYM_ROOT) {
+    const tools = (await snapshot()).tools;
+    ctx.report.check(S, "설치 리소스의 기본 한글 스킬 사용", tools.kordoc.bundled === true && !!tools.kordoc.path?.startsWith(process.env.APP_E2E_EXPECT_HALLYM_ROOT), tools.kordoc.path ?? "missing");
+  }
   for (const format of ["hwpx", "hwp"] as const) {
-    const doc = HwpDocument.createEmpty(); doc.createBlankDocument();
-    doc.insertText(0, 0, 0, "한글 본문과 검토 메모를 보존합니다.");
+    let doc;
+    if (format === "hwpx") {
+      const outputDir = join(ctx.stage.outDir, "hallym-created"), request = join(ctx.stage.outDir, "hallym-create.json");
+      writeFileSync(request, JSON.stringify({ schemaVersion: 1, mode: "generate", markdown: "한글 본문과 검토 메모를 보존합니다.", outputDir }));
+      const generated = JSON.parse(execFileSync(process.execPath, [join(bundledHallymSkill()!, "core/scripts/run.mjs"), request], { encoding: "utf8", env: { ...process.env, KORDOC_OFFLINE: "1" } }));
+      ctx.report.check(S, "기본 hallym-kordoc 스킬의 Markdown → HWPX 생성", generated.status === "success");
+      doc = new HwpDocument(readFileSync(join(outputDir, "document.hwpx")));
+    } else {
+      doc = HwpDocument.createEmpty(); doc.createBlankDocument();
+      doc.insertText(0, 0, 0, "한글 본문과 검토 메모를 보존합니다.");
+    }
     doc.insertMemo(0, 0, 0, 2, JSON.stringify({ author: "검토자", text: "원본 메모를 보존" }));
     const original = Buffer.from(format === "hwpx" ? doc.exportHwpx() : doc.exportHwp()); doc.free();
     const path = join(work.cwd, `Native Hangul.${format}`); writeFileSync(path, original);

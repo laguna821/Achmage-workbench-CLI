@@ -7,7 +7,7 @@
       "../../host/dist/office-reveal.mjs": "host/office-reveal.mjs",
       "../../web/dist/": "web/",
       "../../../third_party/office-output/": "licenses/office-output/",
-      "../../../third_party/kordoc/": "kordoc/",
+      "../../../third_party/skills/": "skills/",
       "node/": "node/"
     },
     "windows": { "wix": { "language": "ko-KR" } }

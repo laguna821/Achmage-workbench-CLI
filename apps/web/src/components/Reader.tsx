@@ -16,7 +16,7 @@ import "../styles/views.css";
 const DRAWN = obsidianComponents(diagramComponents());
 
 // "읽기": the document as its reader sees it, filling the window, a page at a time. Paged formats
-// show their real pages (office page images, kordoc pages, PDF.js, the design renderer); text is
+// show their real pages (office page images, Ieum Hangul pages, PDF.js, the design renderer); text is
 // laid out in pages of the window's size. Esc returns to the mode before, at the same page.
 
 type Content =
@@ -42,7 +42,7 @@ async function load(api: Api, state: State, artifact: Artifact): Promise<Content
     const pages = await officePages(source);
     return { kind: "pages", count: pages.length, image: (index) => officePageImage(source, pages[index]!.page) };
   }
-  if ((artifact.format === "hwpx" || artifact.format === "hwp") && state.tools?.kordoc.available) {
+  if ((artifact.format === "hwpx" || artifact.format === "hwp") && state.tools?.hwp?.available) {
     const { pages } = await api.pages(artifact.id, revision);
     return { kind: "pages", count: pages.length, image: async (index) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(pages[index]!.svg)}` };
   }
