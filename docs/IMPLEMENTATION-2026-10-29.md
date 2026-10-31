@@ -13,7 +13,7 @@
 | SSH·모바일·원격·확장 | 전체 목표에 유지 | 구현·인증·재연결 검증 |
 | 이음 편집기 9종 | Word/PPT/Sheets/HWP/PDF/Markdown/HTML/EPUB/XMind 내부 편집, 대표 AI·저장·복구·되돌림 | 전체 메뉴/형식/OS 동등성 |
 | 공통 문서 흐름 | 같은 대화, +/@ 참조, 첨부, 스킬·양식 사본, 디자인 갤러리, 새 문서·사본·주요 출력/CLI | 남은 공통 메뉴·일부 변환·인쇄/발표 흐름 |
-| 이음 전체 공통 서비스 | 직접 제공자·설정·키링·문서 AI, 원본 웹/이미지 검색·URL 읽기, 공통 미디어 엔진과 Word 생성·분석 | 편집기별 미디어 삽입/미리보기·OS 인수, wiki/지식, Drive, 장기 AI 작업·내부 MCP 전체 |
+| 이음 전체 공통 서비스 | 직접 제공자·설정·키링·문서 AI, 원본 웹/이미지 검색·URL 읽기, 공통 미디어 엔진·Word 생성/분석·PPT 생성/교체/미리보기 | 기타 편집기 미디어·OS 인수, wiki/지식, Drive, 장기 AI 작업·내부 MCP 전체 |
 | HOP 개선분·한글 기본 스킬 | HOP 별도 앱 제거; hallym-kordoc 기본 제공, 사용자 설치/비활성 우선, 생성 HWPX는 이음으로 표시 | HOP 개선분 전체 대조·다른 OS |
 | doory | 생성·편집·저장·복구·이미지/PDF 출력의 Linux 흐름 | 전체 메뉴·OS 인수 |
 | 옵시디언식 PKM | 내비게이터·프로젝트 노트·Bases식 보기, 썸네일·폴더 템플릿, 지원 범위의 .base 교환 | 전체 통합·OS 인수 |
@@ -23,7 +23,7 @@ Lightpanda 1.0.2 공식 엔진의 실제 Linux 게이트웨이 경로 **14/14**,
 
 공통 웹 도구는 원본 `ai-search`와 원격 이미지 엔진을 재사용한다. 봉인 키는 요청별 호스트 메모리에서만 열며 문서/세션 권한과 취소를 연결했다. 집중 회귀 **51/51**, 타입·host/Office 빌드, 실제 Linux 원본 Word 패널의 공개 URL 읽기 → 같은 AI 대화 → DOCX 수정·저장·재열기·중지 **13/13** 통과. 모든 문서/OS나 미디어 전체 완료 판정은 아니다. 검증 판: `research:rr-2488fbbaceca1e6b5aa58aad0c10cf34:d942dce7b67211ba5978055009b8e9db6f7fc59ad66cbe5857187002ef6f8c4c`.
 
-공통 미디어 도구는 원본 `generateImageTool`·`analyzeMediaTool`·Codex 구독 생성기를 재사용한다. 문서 경로·선택 첨부·봉인 키·취소를 연결하고, 구독 요청 실패 후 유료 키 재시도를 하지 않는다. 집중 회귀 **38/38**, 전체 타입·host/Office/native 빌드, 실제 Linux Word 생성 → 화면 표시 → 문서 그림 분석 → 같은 모델 후속 → DOCX 저장/재열기·세션/취소 **15/15** 통과. 실제 모델 대신 로컬 제공자 fixture를 사용했으며 PPT worker의 이미지 삽입, 기타 편집기별 미디어 미리보기와 다른 OS는 남아 있다. 검증 판: `research:rr-04aed54aee742d3282df82b4df7a940c:24e96805180acb8bdbf5fcdfce36c0ad6e2dd4d2d8ecccc0461ac4aaaaa6756f`.
+공통 미디어 도구는 원본 `generateImageTool`·`analyzeMediaTool`·Codex 구독 생성기를 재사용한다. 문서 경로·선택 첨부·봉인 키·취소를 연결하고, 구독 요청 실패 후 유료 키 재시도를 하지 않는다. 집중 회귀 **38/38**, 타입·host/Office/native 빌드, 실제 Linux Word 생성→표시→그림 분석→DOCX 저장/재열기·세션/취소 **15/15** 통과. PPT도 원본 worker 엔진으로 생성→삽입/교체→중앙 crop·durable ID·프레임 보존→화면/PPTX 저장→Undo/Redo 및 생성 카드 미리보기/재열기까지 **22/22** 통과했다. 실제 모델 대신 로컬 제공자 fixture를 사용했으며 기타 편집기 미디어와 다른 OS는 남아 있다. 검증 판: `research:rr-04aed54aee742d3282df82b4df7a940c:431caac71b8dcffb37191c424b4501e160ff0e1450d4ba19b12903af193a286e`.
 
 한글 전환은 전체 회귀 **1135/1135**, 마지막 CLI 생성/비활성 우선 검사 **8/8**, 실제 Linux **29/29**, 타입·host/web/design/Office 빌드 통과. 공개 스킬 manifest의 77파일만 복사했고 개인 양식은 포함하지 않았다. 독립 `third_party/kordoc` 대신 `skills/hallym-kordoc`을 배포한다. 현재 문서 페이지/썸네일은 이음 rhwp를 쓰며 구형 Markdown 수정안 복구는 동봉 core로 보존한다. 검증 판: `research:rr-1302d222a29d0be4c6b817eefdff127e:cb824b30750da64544ad5a108caa7bb17b7d98d5e645d97c9e4260a6065b35a1`.
 

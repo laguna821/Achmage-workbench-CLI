@@ -8,6 +8,7 @@ import { hwpToText } from "../../third_party/ieumoffice/file-parse/hwp.ts";
 import { mindmapFixture } from "./mindmap-fixture.ts";
 import { epubFixture } from "./epub-fixture.ts";
 import { officeUndo } from "./office-undo.ts";
+import { slidesMediaFixture } from "./office-slides-media.ts";
 import type { Artifact, Session, Snapshot, TranscriptItem, Work } from "@workbench/contracts";
 import { installProbe, pageErrors, seedLayout, shot, until, type Ctx } from "./scenarios.ts";
 const require = createRequire(new URL("../../vendor/ieumoffice/package.json", import.meta.url));
@@ -90,12 +91,15 @@ export async function officeSuiteScenario(ctx: Ctx) {
   const unbound = process.env.APP_E2E_OFFICE_UNBOUND === "1";
   const selected = process.env.APP_E2E_OFFICE_FORMATS?.split(",") ?? formats;
   if (selected.some((format) => !formats.includes(format as Format))) throw new Error("Unknown Office suite format");
+  const media = process.env.APP_E2E_OFFICE_MEDIA === "1" ? slidesMediaFixture() : null;
+  if (media && (selected.length !== 1 || selected[0] !== "pptx")) throw new Error("Slides media experiment requires APP_E2E_OFFICE_FORMATS=pptx");
   let active: Format = "md", count = 0, cancelled = 0, phase = "setup";
   let requests: any[] = [], fixtureWrites: unknown[] = [];
   let currentSession = "";
   const server = createServer(async (req, res) => {
     try {
       let raw = ""; for await (const part of req) raw += String(part);
+      if (media && req.url?.startsWith("/media/v1/")) { media.respond(req.url, req.headers.authorization === "Bearer media-fixture-key", JSON.parse(raw), res); return; }
       if (req.url !== "/v1/chat/completions") { res.statusCode = 404; res.end(); return; }
       const body = JSON.parse(raw); requests.push(body); count++;
       res.setHeader("content-type", "text/event-stream");
@@ -107,7 +111,7 @@ export async function officeSuiteScenario(ctx: Ctx) {
         res.once("close", () => { clearTimeout(timer); if (!res.writableEnded) cancelled++; }); return;
       }
       const undoRead = active === "pdf" && String(body.messages.findLast((item: any) => item.role === "user")?.content).includes("__suite_undo_read__");
-      const tool = undoRead ? (body.messages.at(-1)?.role === "tool" ? null : { name: "read_annotations", input: { start: 1, end: 1 } }) : raw.includes("__suite_fresh__") ? null : toolCall(active, count, body);
+      const tool = undoRead ? (body.messages.at(-1)?.role === "tool" ? null : { name: "read_annotations", input: { start: 1, end: 1 } }) : raw.includes("__suite_fresh__") ? null : media ? media.tool(count, body, marker(active)) : toolCall(active, count, body);
       if (tool) {
         if (!body.tools?.some((item: any) => item.function?.name === tool.name)) throw new Error(`Original tool ${tool.name} missing for ${active}`);
         send({ role: "assistant", tool_calls: [{ index: 0, id: `suite-${active}-${count}`, type: "function", function: { name: tool.name, arguments: JSON.stringify(tool.input) } }] }); send({}, "tool_calls");
@@ -120,6 +124,7 @@ export async function officeSuiteScenario(ctx: Ctx) {
   const settings = (await api<{ settings: any }>("GET", "/api/office-ai/settings")).settings;
   settings.provider = "custom"; settings.subscriptionNoticeSeen = true; settings.customEndpoint = "suite-fixture";
   settings.customEndpoints = [{ id: "suite-fixture", name: "Local suite fixture", baseUrl: `http://127.0.0.1:${address.port}/v1`, apiKey: "", model: "suite-model", kind: "local", modelProfiles: { "suite-model": { tools: true, toolsSource: "user", contextLength: 1000000, contextSource: "user" } } }];
+  if (media) settings.media = media.settings(address.port);
   mkdirSync(join(ctx.app.dataDir, "office"), { recursive: true }); writeFileSync(join(ctx.app.dataDir, "office/ai-settings.json"), JSON.stringify(settings));
   const snapshot = () => api<Snapshot>("GET", "/api/snapshot");
   const items = async (id: string) => (await api<{ items: TranscriptItem[] }>("GET", `/api/sessions/${id}/items`)).items;
@@ -153,6 +158,7 @@ export async function officeSuiteScenario(ctx: Ctx) {
         if (format === "xlsx") await wd.execute('window.__suiteFocus=[];const f=HTMLElement.prototype.focus;HTMLElement.prototype.focus=function(...args){window.__suiteFocus.push({kind:"call",from:document.activeElement?.outerHTML.slice(0,250),to:this.outerHTML.slice(0,250),stack:new Error().stack});return f.apply(this,args)};document.addEventListener("keydown",e=>window.__suiteFocus.push({kind:"key",key:e.key,target:e.target.outerHTML.slice(0,250)}),true);document.addEventListener("focusin",e=>window.__suiteFocus.push({kind:"focus",target:e.target.outerHTML.slice(0,250)}),true);');
         if (format === "pdf") await wd.execute('window.__suitePdfSaves=[];const api=window.pdfApi,save=api.save;api.save=async(...args)=>{const entry={args};window.__suitePdfSaves.push(entry);try{return entry.result=await save(...args)}catch(error){entry.error=String(error);throw error}};');
         if (unbound) ctx.report.check(S, "세션 없이 문서를 열어도 불필요한 대화를 만들지 않음", (await snapshot()).sessions.every((item) => item.workId !== work.id));
+        if (media) { await wd.waitFor(".ai-panel textarea", 30000); await media.observe(ctx); }
         await send(`원본 도구로 이 문서를 수정해 줘. __suite_${format}__`);
         if (unbound) {
           if (!await until(async () => (await snapshot()).sessions.some((item) => item.workId === work.id), 15000)) throw new Error(`First Office session was not created: ${await wd.execute('return document.body.innerText.slice(-3500)')}`);
@@ -170,6 +176,7 @@ export async function officeSuiteScenario(ctx: Ctx) {
         ctx.report.check(S, "원본 도구로 실제 파일 수정·저장", completed && saved && (await snapshot()).artifacts.find((item) => item.id === artifact.id)!.revision > 1, JSON.stringify(transcript.filter((item) => item.kind === "tool")).slice(-1000), await shot(ctx, `suite-${format}-edit.png`));
         if (!completed || !saved) throw new Error("Original tool did not save the expected content");
         ctx.report.check(S, "선택한 Workbench 세션에 요청·도구·응답·완료 함께 기록", transcript.some((item) => item.kind === "user" && item.office?.artifactId === artifact.id) && transcript.some((item) => item.kind === "tool" && item.status === "completed") && transcript.some((item) => item.kind === "assistant" && item.text.includes("수정 완료")));
+        if (media) { await media.check(ctx, file); await media.preview(ctx); }
         if (format === "xlsx") {
           const focus = await wd.execute<any[]>('return window.__suiteFocus||[]');
           writeFileSync(ctx.report.path("suite-xlsx-initial-focus.json"), JSON.stringify(focus, null, 2));
@@ -192,6 +199,7 @@ export async function officeSuiteScenario(ctx: Ctx) {
         const firstErrors = await pageErrors(wd);
         await wd.frame(null); await wd.refresh(); await installProbe(wd); await wd.frame(await wd.waitFor("iframe.office-frame", 30000)); await installProbe(wd);
         ctx.report.check(S, "다시 열면 같은 세션의 대화 복원", await until(() => wd.execute<boolean>('return [...document.querySelectorAll(".ai-panel,.copilot")].some(el=>el.textContent.includes("수정 완료"));'), 30000));
+        if (media) await media.preview(ctx, true);
         await wd.execute('document.querySelector("#root").firstElementChild.dataset.suiteKept="yes";window.__suiteChunks=[];window.workbenchOfficeAi.desktop.onAiStream(c=>window.__suiteChunks.push({at:Date.now(),...c}));window.__suiteNetwork=[];const fetch=window.fetch;window.fetch=async(...args)=>{const res=await fetch(...args);if(String(args[0]).includes("/ai/stream")&&res.body){const get=res.body.getReader.bind(res.body);res.body.getReader=(...params)=>{const reader=get(...params),read=reader.read.bind(reader),decoder=new TextDecoder();reader.read=async()=>{const next=await read();window.__suiteNetwork.push({at:Date.now(),done:next.done,text:decoder.decode(next.value,{stream:!next.done})});return next};return reader}}return res};');
         await wd.click(await wd.waitFor('.ai-header-btn[aria-label*="새 대화"]', 15000));
         if (!await until(async () => (await snapshot()).sessions.filter((item) => item.workId === work.id).length === 2, 15000)) throw new Error("Workbench new session was not created");

@@ -1,1 +1,6 @@
 /* Original AI sidebar, selection prompts and editor controls share the Workbench session. */
+/* Generated images stay inside the document's WebView; no file:// access or browser window. */
+.workbench-generated-image { max-width: 90vw; max-height: 90vh; padding: 12px; border: 1px solid #8886; border-radius: 10px; }
+.workbench-generated-image::backdrop { background: #0008; }
+.workbench-generated-image > button { display: block; margin: 0 0 8px auto; }
+.workbench-generated-image > img { display: block; max-width: 85vw; max-height: 80vh; object-fit: contain; }

@@ -6,7 +6,11 @@
 
 집중 회귀 **38/38**, 전체 타입 및 host/Office/native 빌드, 실제 Linux Word **15/15** 통과. 생성 그림이 실제 화면에 표시되고 원본 도구가 그 문서 그림을 분석하며 DOCX 이미지 바이트로 저장되는 것까지 확인했다. 제공자는 로컬 fixture여서 실제 모델 과금·품질 검사는 아니다. `office-media-native-05/results.json` 및 `office-media-visible.png`, 정확한 판 `research:rr-04aed54aee742d3282df82b4df7a940c:24e96805180acb8bdbf5fcdfce36c0ad6e2dd4d2d8ecccc0461ac4aaaaa6756f`.
 
-PPT worker의 원격/생성 그림 삽입과 기타 편집기별 미디어 표시·삽입, Windows/macOS 실제 흐름은 후속 작업이다. 원본 미디어 참조의 초기 원격 다운로드는 AbortSignal을 받지 않으므로 취소 시 결과/공급자 호출은 막지만 이미 시작한 다운로드는 원본 제한 시간까지 남을 수 있다.
+PPT도 원본 `addPicture`·`replacePictureBytes`·중앙 crop·durable ID·history를 worker에 연결했다. URL은 기존 문서 호스트를 통해 가져오며 이미지의 실제 바이트를 확인한다. 생성 결과 카드는 같은 권한 경로로 썸네일과 문서 내부 미리보기를 표시하고, 저장된 대화를 다시 열 때도 복원한다. 원본 React 인스턴스를 함께 사용한다.
+
+실제 Linux PPT **22/22**: 생성→삽입→다른 비율 그림으로 교체→원본 crop/ID·프레임 보존→화면 표시·PPTX 바이트 저장→Undo/Redo·카드/대화 재열기·새 대화·취소. PNG로 위장한 HTML 거절도 확인했다. 전체 타입 검사와 Office/native 빌드 통과. 근거 `office-media-ppt-native-02/results.json`, `suite-pptx-generated-preview-reopened.png`; 최신 판 `research:rr-04aed54aee742d3282df82b4df7a940c:431caac71b8dcffb37191c424b4501e160ff0e1450d4ba19b12903af193a286e`.
+
+기타 편집기별 미디어 표시·삽입과 Windows/macOS 실제 흐름은 후속 작업이다. 생성 파일의 수명은 원본 캐시 정책을 따른다. 원본 미디어 참조의 초기 원격 다운로드는 AbortSignal을 받지 않으므로 취소 시 결과/공급자 호출은 막지만 이미 시작한 다운로드는 원본 제한 시간까지 남을 수 있다.
 
 ## 기본 한글 스킬과 이음 한글 표시
 

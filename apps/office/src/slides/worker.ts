@@ -9,6 +9,7 @@ import { createSlidesView, registerSlidesIpc, slidesIsDirty } from "@ieum/apps/s
 import { clipboard, connect, emit, invoke } from "../platform/electron.ts";
 import { vfs } from "../platform/fs.ts";
 import { setFontToken } from "./fonts.ts";
+import { registerSlideImageIpc } from "./media-ipc.ts";
 import type { WorkerCall, WorkerMessage } from "./protocol.ts";
 
 const scope = self as unknown as { postMessage(message: WorkerMessage, transfer?: Transferable[]): void; onmessage: ((event: MessageEvent<WorkerCall>) => void) | null };
@@ -33,6 +34,7 @@ async function handle(call: WorkerCall): Promise<{ value: unknown; unhandled?: b
       setFontToken(call.token);
       setUiLang("ko");
       registerSlidesIpc();
+      registerSlideImageIpc();
       return { value: true };
     case "open": {
       path = `/document/${call.name.replace(/[\\/]/g, "_")}`;

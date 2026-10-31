@@ -87,6 +87,27 @@ async function invoke(channel: string, args: unknown[]): Promise<unknown> {
     }
     case "slides:recent":
       return [];
+    case "ai:insert-image-url":
+    case "ai:replace-picture-url": {
+      const op = args[0] as { base64?: string; ext?: string; url?: string };
+      let base64 = op.base64;
+      if (base64 == null) {
+        // The host alone fetches public URLs and its generated-image cache. The
+        // worker checks magic bytes, as the original image URL handlers do.
+        const fetched = await ai.desktop.fetchImage(String(op.url));
+        if (!fetched) return null;
+        base64 = fetched.base64;
+      } else if (!/^(png|jpe?g|gif)$/i.test(op.ext ?? "")) {
+        // Original user attachments may be WebP/BMP/etc. Browser decoding replaces
+        // Electron nativeImage's PNG conversion before the unchanged engine runs.
+        const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+        const png = new Uint8Array(await pngBytes(new Blob([bytes], { type: `image/${op.ext ?? ""}` })));
+        let binary = "";
+        for (let i = 0; i < png.length; i += 0x8000) binary += String.fromCharCode(...png.subarray(i, i + 0x8000));
+        base64 = btoa(binary);
+      }
+      return value({ type: "invoke", channel, args: [{ ...op, base64 }] });
+    }
     case "slides:open":
     case "slides:open-path":
       return null;

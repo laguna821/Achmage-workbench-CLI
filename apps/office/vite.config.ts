@@ -27,6 +27,8 @@ const sheetsMain = `${ieum}/apps/sheets/src/main/`;
 /** Workspace packages read from source (as IeumOffice's own builds do); subpaths before bare names. */
 const aliases: Alias[] = [
   { find: /^@ieum\//, replacement: `${ieum}/` },
+  // Workbench-owned React components must share the pinned editors' React instance.
+  { find: "react", replacement: `${ieum}/node_modules/react` },
   ...[
     ["@genoffice/docx-engine/lazy-media", "docx-engine/src/lazy-media.ts"],
     ["@genoffice/docx-engine/zip-splice", "docx-engine/src/zip-splice.ts"],
@@ -219,6 +221,16 @@ function originalOfficeConversation(): Plugin {
       }
       const app = ["docs", "slides", "hwp", "pdf", "markdown", "html", "mindmap", "epub"].find((name) => id === `${ieum}/apps/${name}/src/renderer/ai/AiPanel.tsx`);
       if (!app) return skillChanged ? code : null;
+      if (app === "slides") {
+        const thumb = "function ImageThumb({ url, title }: { url: string; title?: string }) {";
+        const search = "const isImageSearch = /image_search|";
+        const urls = "const IMAGE_URL_RE = /https?:";
+        for (const marker of [thumb, search, urls]) if (code.split(marker).length !== 2) this.error("Original Slides image previews changed: review the generated-image adapter");
+        code = code.replace(thumb, thumb.replace("ImageThumb", "OriginalImageThumb"))
+          .replace(search, "const isImageSearch = /generate_image|image_search|")
+          .replace(urls, "const IMAGE_URL_RE = /(?:https?|file):");
+        code = `import { GeneratedImageThumb } from ${JSON.stringify(here("./src/slides/generated-image.tsx"))};\n${code}\nfunction ImageThumb(props) { return wbCreateElement(/^file:/.test(props.url) ? GeneratedImageThumb : OriginalImageThumb, props); }\n`;
+      }
       if (app === "hwp") {
         // The original HWP history mapper omits attachment cards. Restore the
         // authoritative metadata just as the other original panels do.
