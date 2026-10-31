@@ -4,6 +4,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig, type Alias, type Plugin } from "vite";
 import { collectModules, thirdPartyNotices } from "./notices.ts";
 import { patchPdfHistory } from "./pdf-history-patch.ts";
+import { patchPdfCopy } from "./pdf-copy-patch.ts";
 import { patchOfficeSkillConversation } from "./skill-conversation-patch.ts";
 import { templateFonts } from "./template-fonts-build.ts";
 
@@ -338,7 +339,7 @@ export default defineConfig({
     originalSettingsPanes(),
     originalOfficeConversation(),
     { name: "workbench-pdf-history", enforce: "pre", transform(code, id) {
-      return id === `${ieum}/apps/pdf/src/renderer/App.tsx` ? patchPdfHistory(code, here("./src/pdf-history.ts")) : null;
+      return id === `${ieum}/apps/pdf/src/renderer/App.tsx` ? patchPdfCopy(patchPdfHistory(code, here("./src/pdf-history.ts"))) : null;
     } },
     textEditorPlatform(),
     react(),

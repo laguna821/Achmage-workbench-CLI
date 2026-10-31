@@ -224,6 +224,12 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
         const original = readFileSync(documents.revisionPath(id!, revision));
         if (source || writing || operation === "recover") await engine.inspectPdf(original);
         const bytes = source ?? original;
+        if (operation === "copy" || operation === "redact-copy") {
+          if (operation === "redact-copy" && source) throw new HttpError(422, "pdf_redaction_unsaved", "복원한 편집을 먼저 저장한 뒤 영구 가림 사본을 만들어 주세요.");
+          const { bytes: copied, ...skips } = await engine.copyPdf(bytes, request, operation === "redact-copy");
+          if (Object.values(skips).some((items) => items.length)) throw new HttpError(422, "pdf_copy_incomplete", "일부 편집을 사본에 담지 못했습니다. 원본 탭에서 편집 내용을 확인해 주세요.");
+          res.writeHead(200, { "content-type": "application/pdf", "cache-control": "no-store" }); res.end(copied); return;
+        }
         if (operation === "save" || operation === "recover") {
           const { bytes: edited, ...skips } = await engine.editPdf(bytes, request);
           if (operation === "recover") {

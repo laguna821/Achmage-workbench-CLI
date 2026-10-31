@@ -314,11 +314,22 @@ export const OfficeEditor = forwardRef<
           if (copied.current.has(message.artifactId)) {
             const expectedSession = copied.current.get(message.artifactId); copied.current.delete(message.artifactId);
             if (expectedSession !== (opened.current.sessionId ?? null)) {
+              if (message.keepSource && latest.current.format === "pdf") {
+                send({ type: "office:copy-rejected", artifactId: message.artifactId });
+                break;
+              }
               // The receipt belongs to the previous conversation. Reopen this source's
               // retained draft instead of leaving its renderer bound to the copy's path.
               recover.current = true; update({ dirty: true, revision: null, conflict: null });
               setGeneration((value) => value + 1);
               handlers.current.onNotice("사본을 저장한 뒤 대화가 바뀌었습니다. 현재 탭의 편집 내용을 복원합니다. 사본은 문서 목록에 있습니다.");
+              break;
+            }
+            if (message.keepSource && latest.current.format === "pdf") {
+              // The original PDF Save As keeps its pending annotations/redaction
+              // selections in this tab. The copy is available in the document list.
+              send({ type: "office:copy-accepted", artifactId: message.artifactId });
+              handlers.current.onNotice("PDF 사본을 문서 목록에 저장했습니다. 원본 탭의 편집 내용은 유지합니다.");
               break;
             }
             // The unsaved bytes now belong to the copy. Restore this old tab from its actual

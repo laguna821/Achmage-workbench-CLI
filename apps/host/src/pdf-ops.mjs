@@ -8,7 +8,9 @@ import { listPageImages, renderImagePng, renderPagePreviewPng } from '../../../v
 import { readAnnotSubjects } from '../../../vendor/ieumoffice/apps/pdf/src/main/annot-subjects.ts';
 import { readPdfSignatures } from '../../../vendor/ieumoffice/apps/pdf/src/main/pdf-signatures.ts';
 import { readPdfText } from '../../../vendor/ieumoffice/apps/pdf/src/main/read-text.ts';
+import { validateRedactionRegions } from '../../../vendor/ieumoffice/apps/pdf/src/main/redaction.ts';
 import { HttpError } from './errors.ts';
+import { flattenPdfCopy } from './pdf-flatten.mjs';
 
 export { listEditFonts, canDrawText };
 const bad = (message) => { throw new HttpError(422, 'invalid_pdf_request', message); };
@@ -56,6 +58,40 @@ function saveRequest(input, pages) {
  * atomic writer targets only a private temporary file; Documents owns the final CAS write. */
 export async function editPdf(bytes, input) {
   const { pages } = await inspectPdf(bytes), request = saveRequest(input, pages);
+  return renderPdf(bytes, request);
+}
+/** A copy renderer has no authority to write either the source or a chosen target.
+ * The prepared-output service alone publishes these bytes. Redaction is a separate
+ * operation so normal Save/Save As cannot accidentally apply pending regions. */
+export async function copyPdf(bytes, input, redaction = false) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) bad('PDF 사본 요청이 없습니다.');
+  if (input.targetPath !== undefined) bad('PDF 출력 경로는 준비된 사본 저장만 사용할 수 있습니다.');
+  if (input.copyOnly !== undefined && typeof input.copyOnly !== 'boolean') bad('PDF 사본 옵션이 올바르지 않습니다.');
+  const annotations = input.annotations ?? 'keep';
+  if (!['keep', 'flatten', 'strip'].includes(annotations)) bad('PDF 주석 처리 방식이 올바르지 않습니다.');
+  if (!redaction && input.redactions !== undefined) bad('영구 가림은 확인된 별도 사본으로만 처리합니다.');
+  const clean = input.copyOnly === true && annotations === 'keep' && !redaction;
+  const { pages } = await inspectPdf(bytes, !clean);
+  const request = saveRequest({ ...input, copyOnly: false, annotations: 'keep', redactions: undefined }, pages);
+  const edited = lists.some((name) => name !== 'staticFormFills' && request[name]?.length) || request.metadata !== undefined;
+  if (input.copyOnly && (!clean || edited)) bad('깨끗한 PDF 사본에 편집 작업을 섞을 수 없습니다.');
+  if (redaction) {
+    if (edited || input.copyOnly || annotations !== 'keep') bad('영구 가림 전에 다른 편집을 먼저 저장해 주세요.');
+    try { request.redactions = validateRedactionRegions(input.redactions); }
+    catch (error) { bad(error instanceof Error ? error.message : String(error)); }
+    for (const region of request.redactions) page(region.pageIndex, pages);
+  }
+  request.annotations = annotations;
+  if (clean) return { bytes: Buffer.from(bytes), skippedTextEdits: [], skippedTextInserts: [], skippedImageEdits: [] };
+  if (annotations === 'flatten') {
+    const { bytes: editedBytes, ...skips } = await renderPdf(bytes, { ...request, annotations: 'keep' });
+    if (Object.values(skips).some((items) => items.length)) return { bytes: editedBytes, ...skips };
+    const flattened = Buffer.from(await flattenPdfCopy(editedBytes)); await inspectPdf(flattened);
+    return { bytes: flattened, ...skips };
+  }
+  return renderPdf(bytes, request);
+}
+async function renderPdf(bytes, request) {
   const dir = await mkdtemp(join(tmpdir(), 'wb-pdf-'));
   try {
     const output = join(dir, 'edited.pdf');

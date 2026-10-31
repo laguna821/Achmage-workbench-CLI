@@ -36,6 +36,7 @@ export class OfficeCopy {
   constructor(init: Init, revision: number) {
     this.source = init; this.revision = revision;
     this.stop = listen((message) => {
+      if (message.type === "office:copy-accepted" && message.artifactId === this.committed) this.release();
       if (message.type === "office:copy-rejected" && message.artifactId === this.committed) {
         this.release();
         post({ type: "office:error", message: "사본은 문서 목록에 저장했습니다. 현재 탭의 편집 내용은 그대로 유지합니다." });
@@ -63,16 +64,16 @@ export class OfficeCopy {
     if (active !== this || this.committing || this.committed) return;
     void cancelOutput(this.plan?.id, this.preparationId).catch(() => {}); this.release();
   }
-  async commit(bytes: ArrayBuffer, recoveryBytes = bytes) {
+  async commit(bytes: ArrayBuffer, recoveryBytes: ArrayBuffer | null = bytes, options: { keepSource?: boolean } = {}) {
     if (active !== this || !this.plan) throw new Error("사본 저장을 취소했습니다.");
     this.lock(); this.committing = true; if (this.button) this.button.disabled = true;
     try {
-      if (!(bytes instanceof ArrayBuffer) || !(recoveryBytes instanceof ArrayBuffer)) throw new Error("현재 문서 내용을 아직 받지 못했습니다. 문서를 연 뒤 다시 저장해 주세요.");
+      if (!(bytes instanceof ArrayBuffer) || recoveryBytes !== null && !(recoveryBytes instanceof ArrayBuffer)) throw new Error("현재 문서 내용을 아직 받지 못했습니다. 문서를 연 뒤 다시 저장해 주세요.");
       // If the source view changes before the parent accepts this handoff, its draft survives.
-      await recovery.put(this.source.artifact.id, { baseRevision: this.revision, bytes: recoveryBytes, at: Date.now() });
+      if (recoveryBytes !== null) await recovery.put(this.source.artifact.id, { baseRevision: this.revision, bytes: recoveryBytes, at: Date.now() });
       const saved = await commitOutput(this.plan.id, bytes);
       this.committed = saved.artifactId;
-      post({ type: "office:copied", artifactId: saved.artifactId });
+      post({ type: "office:copied", artifactId: saved.artifactId, ...(options.keepSource ? { keepSource: true } : {}) });
       // Keep input locked until the old frame is replaced. A rejected handoff unlocks it.
       return saved;
     } catch (error) { void cancelOutput(this.plan.id, this.preparationId).catch(() => {}); this.release(); throw error; }

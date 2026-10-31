@@ -32,6 +32,7 @@ import { githubDiscussionScenario } from "./github-discussion.ts";
 import { parseArgs } from "./args.ts";
 import { textOfficeScenario } from "./text-office.ts";
 import { pdfOfficeScenario } from "./pdf-office.ts";
+import { pdfCopiesScenario } from "./pdf-copies.ts";
 import { epubOfficeScenario } from "./epub-office.ts";
 import { mindmapOfficeScenario } from "./mindmap-office.ts";
 import { officeSettingsScenario } from "./office-settings.ts";
@@ -78,6 +79,7 @@ try {
       if (wants("template-office")) await templateOfficeScenario(ctx);
       if (wants("text-office")) await textOfficeScenario(ctx);
       if (wants("pdf-office")) await pdfOfficeScenario(ctx);
+      if (wants("pdf-copies")) await pdfCopiesScenario(ctx);
       if (wants("mindmap-office")) await mindmapOfficeScenario(ctx);
       if (wants("epub-office")) await epubOfficeScenario(ctx);
       if (wants("office-settings")) await officeSettingsScenario(ctx, { binary, engines, profile: "native" });

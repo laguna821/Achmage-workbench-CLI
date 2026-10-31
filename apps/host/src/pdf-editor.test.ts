@@ -32,6 +32,18 @@ describe("scoped PDF editor", () => {
       expect((await call("save", 1, {}, readerToken)).status).toBe(423);
       expect((await call("save", 1, { path: join(dir, "secret.pdf") })).status).toBe(403);
       expect((await call("save", 1, { targetPath: join(dir, "secret.pdf") })).status).toBe(422);
+      expect((await call("copy", 1, {}, "forged")).status).toBe(401);
+      expect((await call("copy", 1, { path: join(dir, "secret.pdf") })).status).toBe(403);
+      expect((await call("copy", 1, { targetPath: join(dir, "secret.pdf") })).status).toBe(422);
+      const incomplete = await call("copy", 1, { textEdits: [{ pageIndex: 0, rect: [20, 200, 300, 230], oldText: "Never present", newText: "Must not silently disappear", fontSize: 18 }] });
+      expect(incomplete.status).toBe(422); expect((await incomplete.json()).code).toBe("pdf_copy_incomplete");
+      const copy = await call("copy", 1, { copyOnly: true }, readerToken);
+      expect(copy.status).toBe(200); expect(Buffer.from(await copy.arrayBuffer())).toEqual(original);
+      const redactions = [{ pageIndex: 0, rect: [20, 20, 40, 40] }];
+      expect((await call("copy", 1, { redactions })).status).toBe(422);
+      expect((await call("redact-copy", 1, { redactions }, writerToken, Uint8Array.from(original).buffer)).status).toBe(422);
+      expect((await call("redact-copy", 1, { redactions })).status).toBe(200);
+      expect(readFileSync(file)).toEqual(original); expect(documents.get(artifact.id).revision).toBe(1);
       const kept = await call("recover", 1, { rotations: [{ pageIndex: 0, delta: 90 }] });
       expect(kept.status).toBe(200); const draft = await kept.arrayBuffer();
       expect(readFileSync(file)).toEqual(original); expect(documents.get(artifact.id).revision).toBe(1);

@@ -4,12 +4,16 @@ import { recovery } from "./recovery.ts";
 import { dispatch, useTransport } from "./platform/electron-renderer.ts";
 import type { PdfRequest } from "../../../packages/contracts/src/pdf.ts";
 import { bindPdfHistory, pdfHistory, type PdfHistoryBase } from "./pdf-history.ts";
+import { beginOfficeCopy, officeCopyBusy, type OfficeCopy } from "./copy.ts";
 
 const init = await handshake(), gateway = new Gateway(init.token);
 const ai = mountOfficeAi(init, gateway);
 const id = init.artifact.id, path = init.artifact.path;
 let revision = init.artifact.revision, contentRevision = revision, theme = init.theme;
 let source = await gateway.raw(id, revision), restored = false, dirty = false, epoch = 0, opened = false;
+let writing = 0, copyOpening = false;
+let copyState: { turn: OfficeCopy; redaction: boolean; finish(ok: boolean): void } | null = null;
+const copying = () => copyOpening || copyState !== null || officeCopyBusy();
 if (init.recover && !init.readOnly) {
   const kept = await recovery.get(id);
   if (kept && kept.baseRevision <= revision) { source = kept.bytes; revision = contentRevision = kept.baseRevision; restored = true; }
@@ -21,6 +25,7 @@ bindPdfHistory({
   unsaved: () => restored || revision !== contentRevision,
   busyChanged: (busy) => post({ type: "office:dirty", dirty: busy || dirty }),
   async restore(base, load) {
+    if (copying()) throw new Error("사본 저장을 마치거나 취소한 뒤 실행해 주세요.");
     if (init.readOnly) throw new Error("이 판은 읽기 전용입니다.");
     // Fetch before touching the active base. The save target remains the latest
     // revision; an old snapshot never rolls back the CAS or writes by itself.
@@ -46,7 +51,7 @@ const checkPath = (value: unknown) => { if (value !== path) throw new Error("열
 const requestOf = (value: unknown) => { if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("PDF 요청이 올바르지 않습니다."); const request = value as PdfRequest; checkPath(request.path); return request; };
 async function keepRequest(request: PdfRequest) {
   if (init.readOnly) return "skipped";
-  if (pdfHistory.busy()) return "superseded";
+  if (pdfHistory.busy() || copying()) return "superseded";
   const before = epoch, baseRevision = revision;
   try {
     const bytes = await gateway.pdf<ArrayBuffer>(id, baseRevision, "recover", request, workingSource());
@@ -68,6 +73,7 @@ async function keep() {
 }
 let flushing: Promise<void> | null = null;
 async function flush() {
+  if (copying()) { post({ type: "office:flushed", revision: null }); return; }
   if (flushing) return flushing;
   flushing = (async () => {
     try {
@@ -96,9 +102,60 @@ async function flush() {
 listen((message) => {
   if (message.type === "office:theme") { theme = message.theme; dispatch("app:theme-changed", [theme]); }
   if (message.type === "office:flush") void flush();
-  if (message.type === "office:rebase") void currentBytes().then(() => { revision = message.revision; return flush(); }).catch((error) => { report(error); post({ type: "office:flushed", revision: null }); });
+  if (message.type === "office:rebase") {
+    if (copying()) post({ type: "office:flushed", revision: null });
+    else void currentBytes().then(() => { revision = message.revision; return flush(); }).catch((error) => { report(error); post({ type: "office:flushed", revision: null }); });
+  }
   if (message.type === "office:keep") void keep().catch(report).finally(() => post({ type: "office:flushed", revision: null }));
 });
+
+async function saveCopy(redaction = false) {
+  if (copying()) throw new Error("이미 PDF 사본을 저장하고 있습니다.");
+  if (pdfHistory.busy() || writing || flushing) throw new Error("PDF를 불러오거나 저장한 뒤 다시 시도해 주세요.");
+  if (redaction && (init.readOnly || workingSource())) throw new Error("복원한 편집을 먼저 저장한 뒤 영구 가림 사본을 만들어 주세요.");
+  copyOpening = true; epoch++;
+  dispatch("pdf:save-as-flow", [true]);
+  let turn: OfficeCopy | null = null;
+  try {
+    turn = await beginOfficeCopy(init, revision, "pdf");
+    if (!turn) return false;
+    const ready = turn;
+    return await new Promise<boolean>((resolve) => {
+      copyState = { turn: ready, redaction, finish: resolve };
+      if (!redaction) ready.unlock(); // The original annotation-choice modal owns focus.
+      dispatch("pdf:save-as-request", [ready.plan!.path]);
+    });
+  } finally {
+    copyState = null; copyOpening = false;
+    dispatch("pdf:save-as-flow", [false]); turn?.cancel();
+  }
+}
+window.addEventListener("workbench:pdf-save-as", () => { void saveCopy().catch(report); });
+window.addEventListener("keydown", (event) => {
+  if (copying()) {
+    // The original window shortcuts also run when a modal's radio/button has
+    // focus. Keep native modal navigation, but never edit/save the source here.
+    event.stopImmediatePropagation();
+    if (event.key === "Tab" && copyState && !copyState.turn.locked) {
+      const modal = document.querySelector('input[name="save-copy-annotations"]')?.closest(".pdf-modal");
+      const controls = [...(modal?.querySelectorAll<HTMLElement>("input, button") ?? [])];
+      if (controls.length) {
+        event.preventDefault();
+        const index = controls.indexOf(document.activeElement as HTMLElement);
+        controls[(index + (event.shiftKey ? -1 : 1) + controls.length) % controls.length]?.focus();
+      }
+      return;
+    }
+    if (event.key === "Escape" && copyState && !copyState.turn.locked) {
+      event.preventDefault();
+      document.querySelector<HTMLInputElement>('input[name="save-copy-annotations"]')?.closest(".pdf-modal")?.querySelector<HTMLButtonElement>(".pdf-modal-actions button")?.click();
+    } else if (event.ctrlKey || event.metaKey || !["Tab", "Enter", " ", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) event.preventDefault();
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "s") {
+    event.preventDefault(); event.stopImmediatePropagation(); void saveCopy().catch(report);
+  }
+}, true);
 
 const queries: Record<string, string> = {
   "pdf:validate-text-edits": "validate-text", "pdf:page-image-png": "image-png", "pdf:page-preview-png": "preview-png",
@@ -126,10 +183,13 @@ useTransport({
     if (transforms[channel]) {
       if (init.readOnly) return { ok: false, error: "이 판은 읽기 전용입니다." };
       if (pdfHistory.busy()) return { ok: false, error: "PDF를 불러오는 중입니다." };
+      if (copying()) return { ok: false, error: "사본 저장을 마치거나 취소한 뒤 실행해 주세요." };
+      writing++;
       try {
         const result = await gateway.pdf<{ revision: number }>(id, revision, transforms[channel], requestOf(args[0]), workingSource());
         await persistResult(result.revision); return { ok: true };
       } catch (error) { report(error); return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
+      finally { writing--; }
     }
     switch (channel) {
       case "pdf:consume-pending": return path;
@@ -143,10 +203,36 @@ useTransport({
       case "pdf:recovery-unprotectable": return args[0] ? "암호화된 PDF는 복구본을 보관하지 않습니다." : null;
       case "pdf:recovery-resume": return;
       case "pdf:template-bytes": return new Uint8Array(await gateway.pdf<ArrayBuffer>(id, revision, "recover", requestOf(args[0]), workingSource()));
+      case "pdf:request-redaction-copy": checkPath(args[0]); return saveCopy(true);
       case "pdf:save": {
+        const request = requestOf(args[0]);
+        if (request.targetPath !== undefined) {
+          const current = copyState;
+          try {
+            if (!current || request.targetPath !== current.turn.plan?.path) throw new Error("먼저 PDF 사본 저장 위치를 선택해 주세요.");
+            current.turn.lock();
+            const { targetPath: _target, ...payload } = request;
+            const bytes = await gateway.pdf<ArrayBuffer>(id, revision, current.redaction ? "redact-copy" : "copy", payload, workingSource());
+            let originalRecovery: ArrayBuffer | null = null;
+            if (!current.redaction && !(request.copyOnly === true && !workingSource()) && (dirty || workingSource())) {
+              const { annotations: _annotations, copyOnly: _copyOnly, redactions: _redactions, ...edits } = payload;
+              originalRecovery = await gateway.pdf<ArrayBuffer>(id, revision, "recover", edits, workingSource());
+            }
+            await recoveryQueue;
+            // A redacted copy starts clean. Neither its artifact nor this clean
+            // source receives an unredacted recovery payload from the copy flow.
+            if (current.redaction) await recovery.drop(id);
+            await current.turn.commit(bytes, originalRecovery, { keepSource: !current.redaction });
+            return { ok: true, workbenchCopy: true };
+          } catch (error) {
+            current?.turn.cancel(); report(error);
+            return { ok: false, error: error instanceof Error ? error.message : String(error) };
+          }
+        }
         if (init.readOnly) return { ok: false, error: "이 판은 읽기 전용입니다." };
         if (pdfHistory.busy()) return { ok: false, error: "PDF를 불러오는 중입니다." };
-        const request = requestOf(args[0]);
+        if (copying()) return { ok: false, error: "사본 저장을 마치거나 취소한 뒤 실행해 주세요." };
+        writing++;
         try {
           const result = await gateway.savePdf(id, revision, request, workingSource());
           await persistResult(result.revision);
@@ -155,7 +241,7 @@ useTransport({
           await keepRequest(request);
           if (error instanceof GatewayError && error.status === 409) { post({ type: "office:conflict", code: error.code, message: error.message }); return { ok: false, error: "external-modified" }; }
           report(error); return { ok: false, error: error instanceof Error ? error.message : String(error) };
-        }
+        } finally { writing--; }
       }
       case "pdf:list-edit-fonts": return gateway.pdf(id, revision, "fonts", {});
       case "pdf:can-draw-text": return gateway.pdf(id, revision, "can-draw", { text: args[0], font: args[1], bold: args[2], italic: args[3] });
@@ -181,6 +267,7 @@ useTransport({
     if (channel === "pdf:dirty-changed") { dirty = args[0] === true; post({ type: "office:dirty", dirty: dirty || pdfHistory.busy() }); }
     else if (channel === "pdf:close-save-result") closeAnswer?.(args[0] === true);
     else if (channel === "pdf:recovery-flush-done") recoveryAnswer?.();
+    else if (channel === "pdf:save-as-result") copyState?.finish(args[0] === true);
   },
 });
 await import("@ieum/apps/pdf/src/preload/index.ts");

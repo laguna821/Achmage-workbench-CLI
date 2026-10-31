@@ -87,23 +87,23 @@ it("a committed Save As permits guarded navigation before the original frame rel
   expect(onCopied).toHaveBeenCalledWith("copy"); await expect(leaving).resolves.toBeUndefined();
 });
 
-async function copyFlow(fail = false) {
+async function copyFlow(fail = false, format: "docx" | "pdf" = "docx") {
   let sessionId = "one";
   const ref = createRef<OfficeHandle>(), onCopied = vi.fn(), onNotice = vi.fn();
   const editorGrant = vi.fn(async () => ({ token: `token-${sessionId}`, sessionId, origin: "http://office.test", url: "http://office.test/docs" }));
   const api = {
     editorGrant,
-    prepareOfficeOutput: async () => ({ id: "plan", path: "/copy.docx", format: "docx", exists: false, size: 0 }),
-    commitOfficeOutput: async () => { if (fail) throw new Error("storage unavailable"); return { path: "/copy.docx", artifact: { id: "copy" } }; },
+    prepareOfficeOutput: async () => ({ id: "plan", path: `/copy.${format}`, format, exists: false, size: 0 }),
+    commitOfficeOutput: async () => { if (fail) throw new Error("storage unavailable"); return { path: `/copy.${format}`, artifact: { id: "copy" } }; },
   } as unknown as Api;
-  const artifact = { id: "doc", name: "test.docx", format: "docx", revision: 1, path: "/test.docx", sha256: "test" } as Artifact;
+  const artifact = { id: "doc", name: `test.${format}`, format, revision: 1, path: `/test.${format}`, sha256: "test" } as Artifact;
   const props = { ...aiProps, ref, api, artifact, onCopied, onNotice, onStatus: () => {} };
   const screen = render(<OfficeEditor {...props} sessionId={sessionId} />); await act(async () => {});
-  const frame = screen.getByTitle("워드 편집기 · test.docx") as HTMLIFrameElement, sent = vi.spyOn(frame.contentWindow!, "postMessage");
+  const frame = screen.container.querySelector("iframe")!, sent = vi.spyOn(frame.contentWindow!, "postMessage");
   const message = async (data: unknown) => act(async () => { window.dispatchEvent(new MessageEvent("message", { origin: "http://office.test", source: frame.contentWindow, data })); });
   await message({ type: "office:opened", revision: 1, recovered: false }); await message({ type: "office:dirty", dirty: true });
   const prepare = async (requestId = "prepare", submit = true) => {
-    await message({ type: "office:output", requestId, action: "prepare", revision: 1, format: "docx" });
+    await message({ type: "office:output", requestId, action: "prepare", revision: 1, format });
     if (submit) await act(async () => fireEvent.submit(screen.getByRole("dialog")));
   };
   const changeSession = async () => { sessionId = "two"; screen.rerender(<OfficeEditor {...props} sessionId={sessionId} />); await act(async () => {}); };
@@ -117,6 +117,28 @@ it("does not let a previous copy cancellation close the next save dialog", async
   expect(f.screen.queryByRole("dialog")).not.toBeNull();
   await f.message({ type: "office:output", requestId: "cancel-new", action: "cancel", preparationId: "new" });
   expect(f.screen.queryByRole("dialog")).toBeNull();
+});
+
+it("acknowledges a PDF copy without replacing the original pending-edit iframe or navigating away", async () => {
+  const f = await copyFlow(false, "pdf"); await f.prepare();
+  await f.message({ type: "office:output", requestId: "write", action: "commit", planId: "plan", bytes: new ArrayBuffer(8) });
+  await f.message({ type: "office:copied", artifactId: "copy", keepSource: true });
+  expect(f.screen.container.querySelector("iframe")).toBe(f.frame);
+  expect(f.onCopied).not.toHaveBeenCalled();
+  expect(f.sent).toHaveBeenCalledWith({ type: "office:copy-accepted", artifactId: "copy" }, "http://office.test");
+  // A later deliberate navigation still flushes the original pending edits.
+  const leaving = f.ref.current!.leave();
+  expect(f.sent).toHaveBeenCalledWith({ type: "office:flush" }, "http://office.test");
+  await f.message({ type: "office:saved", revision: 2 }); await f.message({ type: "office:flushed", revision: 2 });
+  await expect(leaving).resolves.toBeUndefined();
+});
+
+it("keeps the PDF source buffer when its copy receipt arrives after a conversation switch", async () => {
+  const f = await copyFlow(false, "pdf"); await f.prepare();
+  await f.message({ type: "office:output", requestId: "write", action: "commit", planId: "plan", bytes: new ArrayBuffer(8) });
+  await f.changeSession(); await f.message({ type: "office:copied", artifactId: "copy", keepSource: true });
+  expect(f.screen.container.querySelector("iframe")).toBe(f.frame); expect(f.onCopied).not.toHaveBeenCalled();
+  expect(f.sent).toHaveBeenCalledWith({ type: "office:copy-rejected", artifactId: "copy" }, "http://office.test");
 });
 it("blocks navigation during a copy but releases it after a failed write without a copy handoff", async () => {
   const f = await copyFlow(true); await f.prepare();

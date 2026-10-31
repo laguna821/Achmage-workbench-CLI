@@ -177,7 +177,7 @@ export class Gateway {
   async pdf<T = unknown>(artifactId: string, revision: number, operation: string, request: PdfRequest, source?: ArrayBuffer): Promise<T> {
     if (["save", "blank-page", "page-size", "crop"].includes(operation)) post({ type: "office:saving" });
     const response = await this.call("POST", `/api/artifacts/${artifactId}/pdf/${operation}?revision=${revision}`, encodePdfRequest(request, source), { "content-type": "application/octet-stream" });
-    return (operation === "recover" ? response.arrayBuffer() : response.json()) as Promise<T>;
+    return (["recover", "copy", "redact-copy"].includes(operation) ? response.arrayBuffer() : response.json()) as Promise<T>;
   }
 
   savePdf(artifactId: string, revision: number, request: PdfRequest, source?: ArrayBuffer) {

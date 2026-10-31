@@ -120,6 +120,12 @@ Tauri `invoke`는 쓰기 불가능하므로 원본 호출을 유지하고 정확
 
 ### 공통 사본 저장 서비스 회귀
 
+`--only=pdf-office,pdf-copies,office-copies --engines=stand-in`은 기존 PDF 편집/이력과 새 PDF 사본, 다른7종 사본을 함께 검사한다. `pdf-copies`는 실제 리본·단축키·원본 주석 선택창·영구 제거 확인을 조작한다. 깨끗한 사본의 바이트 일치, 미저장 내용, 위치/주석/가림 취소, 503 오류 복귀, 원본 초안 유지, 세 가지 주석 처리와 사본 재열기, 원본/가림 사본의 이력·복구 격리를 검사한다. 영구 제거 확인은 WebDriver의 실제 alert accept/dismiss이며 대역 confirm을 사용하지 않는다.
+
+PDF 표시는 `pdftoppm`(Poppler)으로 저장된 파일을 독립 렌더하여 형광펜 픽셀을 비교한다. 파일 파싱 성공·주석 객체 부재·본문 존재만으로 평탄화 표시 보존을 판정하지 않는다. `pdftotext`는 새 가림 사본에서 원문이 추출되지 않는지 검사한다. 호스트 단위 검사는 원본 PDFium 픽셀과 searchable text, 링크/폼/주석 작성자 보존, 표시 스트림 생성 불가 시 거절을 함께 확인한다. [PDF 기능 범위와 연구 판](office-integration.md#pdf-사본주석-처리영구-가림).
+
+2026-10-31 최종 **90/90**, 인접 **53/53**, 전체 타입/빌드 통과. 근거 `pdf-copy-native-06/verification.json`. 실제 출력의 keep/flatten은 노란색 `(255,255,0,255)`, strip은 흰색 `(255,255,255,255)`이며 원본 주석 표시 소실을 수정한 뒤 재검증했다. 03/05의 87검사 통과는 표시 스트림 없는 외부 주석의 시각 보존을 입증하지 못했으므로 최종 실행으로 대체한다. debug 웹 폴더의 이전 hash JS 90개만 정리한 뒤 현재 **1004/1004** 파일과 호스트 번들이 일치함을 확인했다. 일반 사본은 원본 탭을 유지하며, 가림 확정은 부모에서 새 artifact와 이름이 일치하는 iframe을 기다린다.
+
 `--only=office-copies,hwp`는 Word/PPT/Sheets/Markdown/HTML/XMind/EPUB에서 실제 미저장 입력→원본 Save As→취소→사본 생성→실제 콘텐츠 재열기와 기존 한글 저장/출력을 검사한다. `APP_E2E_OFFICE_COPY_FORMATS=pptx,xlsx`로 좁힐 수 있다. PPT는 본문과 노트, Sheets는 Go To 입력과 실제 셀 키 입력을 쓴다. Univer의 숨김 입력 호스트는 원본 코드처럼 focus한 뒤 WebDriver 키를 전달한다. Markdown은 Escape 직후 재시도, 503 주입 후 버퍼 복귀, 지연된 저장 중 CtrlS/입력 차단도 검사한다. 사본의 실제 파일·원본 해시·출처/대화/작업공간과 표시된 콘텐츠를 함께 확인한다.
 
 최종 **58/58**, 인접 **41/41**, 근거 `office-copy-ui-native-08/verification.json`; [현재 내용 사본의 범위와 연구 판](office-integration.md#원본-편집기의-현재-내용-사본). 앞선 실행05의 로딩 화면 판정은 후속 콘텐츠 검사로 보완했고,06의 PPT glyph run 조건과07의 실제 Sheets 포커스 실패를 수정했다. PDF Save As·텍스트 자산 복사·실제 매크로·다른 OS를 검증한 것은 아니다.

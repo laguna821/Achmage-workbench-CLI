@@ -766,6 +766,7 @@ export type EditorGrant = { url: string; origin: string; token: string; sessionI
 /** Workbench window → office editor page (iframe at /office/<kind>.html). */
 export type OfficeHostMessage =
   | { type: "office:copy-rejected"; artifactId: string }
+  | { type: "office:copy-accepted"; artifactId: string }
   | import("./office-output.ts").OfficeOutputResult
   | import("./office-references.ts").OfficeReferenceResult
   | {
@@ -799,7 +800,7 @@ export type OfficePageMessage =
   | import("./office-output.ts").OfficeOutputRequest
   | import("./office-references.ts").OfficeReferenceRequest
   | { type: "office:ai-request"; requestId: string; action: "prepare" | "new-session" | "settings" | "skills"; sessionId: string | null; freezeReferences?: string[] }
-  | { type: "office:copied"; artifactId: string }
+  | { type: "office:copied"; artifactId: string; keepSource?: boolean }
   | { type: "office:ready" }
   /** The editor shows this revision; `recovered` when it reopened unsaved edits made on it. */
   | { type: "office:opened"; revision: number; recovered: boolean }
