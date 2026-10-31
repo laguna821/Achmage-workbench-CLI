@@ -10,6 +10,7 @@ import carlitoBold from "@ieum/packages/ui/src/fonts/Carlito-Bold.ttf?url";
 import carlitoBoldItalic from "@ieum/packages/ui/src/fonts/Carlito-BoldItalic.ttf?url";
 import carlitoItalic from "@ieum/packages/ui/src/fonts/Carlito-Italic.ttf?url";
 import carlitoRegular from "@ieum/packages/ui/src/fonts/Carlito-Regular.ttf?url";
+import { templateFaces } from "./template-fonts.ts";
 
 type Face = { font: OpentypeFontLike; family: string; substituted: boolean };
 type Match = { id: string; family: string; installed: boolean } | null;
@@ -114,10 +115,15 @@ export function registerEmbeddedFonts(faces: EmbeddedFontFace[]): boolean {
 
 /** Faces the page must register to draw what was measured (a deck's embedded fonts). */
 export function listPrivateFontFaces() {
-  return [...embedded.values()].map(({ id, family, bold, italic }) => ({ id, family, bold, italic }));
+  return [
+    ...templateFaces.map(({ id, family, bold, italic, weight }) => ({ id, family, bold, italic, weight })),
+    ...[...embedded.values()].map(({ id, family, bold, italic }) => ({ id, family, bold, italic })),
+  ];
 }
 
 export function getPrivateFontData(id: string): ArrayBuffer | null {
+  const template = templateFaces.find((face) => face.id === id);
+  if (template) return get(template.url, true);
   const face = [...embedded.values()].find((entry) => entry.id === id);
   return face ? (face.bytes.buffer.slice(face.bytes.byteOffset, face.bytes.byteOffset + face.bytes.byteLength) as ArrayBuffer) : null;
 }
@@ -149,10 +155,15 @@ function resolve(style: RunStyle, langOverride?: string): Face | undefined {
   if (resolved.has(key)) return resolved.get(key);
   let face: Face | undefined;
   const wanted = norm(style.fontFamily);
+  const bundled = templateFaces.filter((face) => norm(face.family) === wanted);
   const own = embedded.get(`${wanted}|${style.bold ? 1 : 0}${style.italic ? 1 : 0}`) ?? embedded.get(`${wanted}|00`);
   if (own) {
     const font = faceFrom(own.id, () => own.bytes.buffer.slice(own.bytes.byteOffset, own.bytes.byteOffset + own.bytes.byteLength) as ArrayBuffer);
     if (font) face = { font, family: own.family, substituted: false };
+  } else if (bundled.length) {
+    const selected = bundled.find((face) => face.bold === Boolean(style.bold)) ?? bundled[0]!;
+    const font = faceFrom(selected.id, () => get(selected.url, true));
+    if (font) face = { font, family: selected.family, substituted: false };
   } else if (CARLITO.has(wanted)) {
     const file = CARLITO_FILES[(style.bold ? 1 : 0) + (style.italic ? 2 : 0)]!;
     const font = faceFrom(file, () => get(file, true), true);

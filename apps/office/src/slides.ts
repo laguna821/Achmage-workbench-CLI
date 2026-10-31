@@ -6,6 +6,7 @@ import { dispatch, useTransport } from "./platform/electron-renderer.ts";
 import { recovery } from "./recovery.ts";
 import { carriesMark, convertForeignPictures, desktopPicture, markClipboard, pastedPicture, pngBytes, showsNothing } from "./pictures.ts";
 import type { WorkerCall, WorkerMessage, WorkerRequest } from "./slides/protocol.ts";
+import { createSlideStyles } from "./slides/styles.ts";
 
 // IeumOffice's slides editor inside Workbench. Its screen (vendor/ieumoffice/apps/slides renderer)
 // and its window API (the preload) are used unchanged; its editing code — pptx parsing, layout,
@@ -17,6 +18,7 @@ const init = await handshake();
 const gateway = new Gateway(init.token);
 const ai = mountOfficeAi(init, gateway);
 const artifactId = init.artifact.id;
+const styles = createSlideStyles(gateway, artifactId);
 /** `revision`: what the editor's deck is based on (a save must name it). */
 const state = { revision: init.artifact.revision, theme: init.theme, conflict: false, kept: false };
 
@@ -112,7 +114,7 @@ function send(channel: string, args: unknown[]) {
   void call({ type: "send", channel, args }).catch(() => undefined);
 }
 
-useTransport({ invoke: officeAiTransport(ai, dispatch, invoke), send });
+useTransport({ invoke: officeAiTransport(ai, dispatch, (channel, args) => styles(channel, args, () => invoke(channel, args))), send });
 
 // ── saving ───────────────────────────────────────────────────────────────
 async function save(auto: boolean) {

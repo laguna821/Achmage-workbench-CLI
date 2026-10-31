@@ -42,7 +42,16 @@ async function handle(call: WorkerCall): Promise<{ value: unknown; unhandled?: b
     }
     case "invoke": {
       const { handled, result } = invoke(viewId, call.channel, call.args);
-      return handled ? { value: await result } : { value: null, unhandled: true };
+      if (!handled) return { value: null, unhandled: true };
+      const value = await result;
+      // Original replacement generation creates an untitled Electron document. In Workbench
+      // this is the already registered document: keep its save destination and writer contract.
+      if (call.channel === "slides:land-generated-pages" && value && !(value as { error?: string }).error) {
+        const session = sessions.get(viewId);
+        if (session) { session.path = path; delete session.askPathOnFirstSave; delete session.firstSaveName; session.metaDirty = true; }
+        (value as { path: string }).path = path;
+      }
+      return { value };
     }
     case "send":
       emit(viewId, call.channel, call.args);

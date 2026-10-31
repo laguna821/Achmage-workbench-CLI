@@ -15,6 +15,7 @@ import { PDF_MAX_BYTES, PDF_REQUEST_MAX_BYTES } from "../../../packages/contract
 import { decodePdfRequest } from "./pdf-codec.ts";
 import { OfficeAi } from "./office-ai.ts";
 import { OfficeReferences } from "./office-references.ts";
+import { OfficeStyles } from "./office-styles.ts";
 
 // The office editors (IeumOffice's editor screens, apps/office) run on their own origin, a second
 // port on 127.0.0.1. Their code is third-party and reads documents from anywhere, so it never
@@ -88,6 +89,7 @@ const PAGE_HEADERS = {
 
 export function createEditorsServer(documents: Documents, grants: EditorGrants, webDir: string | null, ai = new OfficeAi(documents.dataDir)): Server {
   const epub = new EpubEditors(documents, grants);
+  const styles = new OfficeStyles(documents, webDir);
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const path = url.pathname;
@@ -99,6 +101,7 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
         return serveStatic(res, webDir, path, PAGE_HEADERS);
       }
       const bearer = req.headers.authorization?.replace(/^Bearer\s+/i, "") ?? null;
+      if (await styles.handle(req, res, url, bearer, grants)) return;
       if (await ai.handle(req, res, url, bearer, documents, grants)) return;
       if (await epub.handle(req, res, url, bearer)) return;
       // Document scripts receive only this read-only preview URL, never the editor grant.

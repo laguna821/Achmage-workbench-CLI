@@ -5,6 +5,7 @@ import { defineConfig, type Alias, type Plugin } from "vite";
 import { collectModules, thirdPartyNotices } from "./notices.ts";
 import { patchPdfHistory } from "./pdf-history-patch.ts";
 import { patchOfficeSkillConversation } from "./skill-conversation-patch.ts";
+import { templateFonts } from "./template-fonts-build.ts";
 
 // IeumOffice's editor screens, built from vendor/ieumoffice (scripts/fetch-ieum.sh) and served on
 // the editors' own origin at /office/. The editors are used unchanged:
@@ -55,8 +56,8 @@ const aliases: Alias[] = [
 
 /**
  * Where the slides editing code (written for Electron's main process) asks Electron or Node for
- * something, Workbench's platform answers; features Workbench does not run (the editor's AI,
- * templates, presenter windows, PDF export) are left out. Applies to the worker build only.
+ * something, Workbench's platform answers. AI and persistent selection/style data live in the
+ * document-scoped host bridge; editing and template covers stay here in the worker.
  */
 function workbenchPlatform(): Plugin {
   const platform = (file: string) => here(`./src/platform/${file}`);
@@ -86,7 +87,7 @@ function workbenchPlatform(): Plugin {
     "@genoffice/file-parse": platform("unused.ts"),
     "@genoffice/ui/ai-subscription-login-window": platform("unused.ts"),
     "@genoffice/project-store": platform("unused.ts"),
-    "@genoffice/pipelines/slides": platform("unused.ts"),
+    "@genoffice/pipelines/slides": `${packages}/pipelines/src/slides/page-spec.ts`,
     "@genoffice/font-metrics": platform("unused.ts"),
     "@genoffice/electron-utils": platform("electron-utils.ts"),
     "@genoffice/electron-utils/atomic-write": platform("electron-utils.ts"),
@@ -109,7 +110,6 @@ function workbenchPlatform(): Plugin {
         "print-window",
         "seed-deck",
         "seed-queue",
-        "template-cover",
         "template-fonts",
         "template-selection-ipc",
       ].map((name) => [`./${name}`, platform("unused.ts")]),
@@ -322,6 +322,7 @@ export default defineConfig({
   base: "/office/",
   plugins: [
     pagePlatform(),
+    templateFonts(`${packages}/ui/template-fonts`),
     originalSettingsPanes(),
     originalOfficeConversation(),
     { name: "workbench-pdf-history", enforce: "pre", transform(code, id) {

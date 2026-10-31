@@ -1,5 +1,7 @@
 # Linux 실제 앱 검사
 
+`--only=office-gallery --engines=stand-in`은 원본12종 디자인의 한국어/영어 표지24개, 번들 글꼴과 가변 굵기, 선택 시 원본 불변성, 실제 `generate_deck`/`save_style_template`, PPTX/sidecar 저장, 갤러리 선택, 앱·호스트 재시작, 같은 대화에서 저장 스타일 재사용/추가를 검사한다. 모델 응답은 로컬 SSE 대역이며 편집기·생성 엔진·파일은 실제 코드다. **19/19**, 인접40/40, 전체 타입·빌드 통과. async 저장 스타일 목록을 기다리며 고정 sleep을 쓰지 않는다. 증거 `gallery-native-04/verification.json`; 검증 판 `research:rr-97a130d83927682d768c9f16a54c4442:72d3c0ae57af32b8a711f88a234090be6f5ded287a3c6e4b04f8cb85d287b2a9`. 다른 OS/실제 글꼴 설치와 기존 독립 이음 데이터 이행은 별도다.
+
 `--only=design --engines=stand-in`은 실제 새 디자인 메뉴·별도 작업공간·글자/도형/이미지·같은 대화의 최신 편집 수정안·명시 적용·확정 PNG/PDF·출처 영수증·외부 충돌·새 포트 앱 재시작·복구 사본/독립 자산·편집 권한 상실/재획득을 검사한다. 모델은 로컬 JSON-RPC 대역이고 그림 드롭만 합성 File 입력이며 실제 편집기/호스트/파일은 배포 코드다. 재시작 후 같은 창 크기를 복원하고, 판 전환 때 iframe을 다시 찾아 준비된 판을 확인한다. 2026-10-31 **23/23**, 관련 **24/24**, 전체 타입/빌드 통과. 근거 `doory-native-05/verification.json`; 검증 판 `research:rr-d1c95d98944421a7b93c5d23e80ab6db:cde914ab22bc9325008622d6004c54abda3947a977128de58715d6e9b9e04628`. 전체 메뉴/영상 출력·다른 OS·물리 파일 선택기는 별도 인수다.
 
 `--only=office-previews --engines=stand-in`은 9종 원본 카드의 현재 문서 바이트 → 별도 양식 사본 → 원본 AI 도구 편집 → 명시적 저장과 원본 파일 보존을 검사한다. `APP_E2E_OFFICE_PREVIEW_FORMATS=md,hwpx`로 대상을 선택할 수 있다. 첫 형식은 실제 앱/host 재시작, 원본 탭의 진행 중 링크 복원, 사본으로 돌아올 때 AI 요청 중복 방지, 원본 그대로 저장, 취소와 실제 탭 닫기를 추가한다. Markdown에는 사람의 직접 문서 편집과 가림 표시가 있는 원본의 저장 차단·모델 입력 제외 검사가 있다. 이름/가림 판정과 표시된 iframe을 기다리며, 탭 전환이 gateway에 저장된 것을 확인한 뒤 새로고침한다.
