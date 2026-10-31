@@ -112,6 +112,7 @@ fn ready_script(id: &str) -> String {
 
 async fn output(app: tauri::AppHandle, mut job: HtmlJob, print: bool) -> Result<Vec<u8>, String> {
     job.validate()?;
+    crate::office_cli::trace("html-output-start");
     let mut random = [0_u8; 16]; getrandom::fill(&mut random).map_err(|e| e.to_string())?;
     let id = format!("html-output-{}", random.iter().map(|b| format!("{b:02x}")).collect::<String>());
     #[cfg(debug_assertions)]
@@ -149,6 +150,7 @@ async fn output(app: tauri::AppHandle, mut job: HtmlJob, print: bool) -> Result<
         })
         .on_page_load(move |view, payload| {
             if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                crate::office_cli::trace("html-output-loaded");
                 trace(&load_id, "load finished");
                 if let Err(error) = view.eval(&ready) { load_completion.finish(Err(error.to_string())); }
             }
@@ -158,6 +160,7 @@ async fn output(app: tauri::AppHandle, mut job: HtmlJob, print: bool) -> Result<
     // protocol registration by data_directory, breaking the next print chunk.
     let builder = if let Some(root) = crate::office_cli::data_dir(&app) { builder.data_directory(root.join("output-webview")) } else { builder };
     let view = builder.build();
+    crate::office_cli::trace(if view.is_ok() { "html-output-created" } else { "html-output-create-error" });
     let result = match view {
         Err(error) => Err(error.to_string()),
         Ok(view) => {
@@ -173,6 +176,7 @@ async fn output(app: tauri::AppHandle, mut job: HtmlJob, print: bool) -> Result<
                 .await.map_err(|e| e.to_string()).and_then(|r| r);
             if let Err(error) = ready { completion.finish(Err(error)); }
             else {
+                crate::office_cli::trace("html-output-ready");
                 trace(&id, "print started");
                 // Printing starts after readiness, without navigating away from
                 // the document or re-entering a WebView load callback.
@@ -185,6 +189,7 @@ async fn output(app: tauri::AppHandle, mut job: HtmlJob, print: bool) -> Result<
                 .map_err(|_| "출력 응답 시간이 지났습니다. 문서를 확인한 뒤 다시 실행해 주세요.".to_string())?)
                 .await.map_err(|e| e.to_string()).and_then(|r| r);
             trace(&id, &format!("completed {result:?}"));
+            crate::office_cli::trace(if result.is_ok() { "html-output-complete" } else { "html-output-error" });
             // WebView2's ShowPrintUI returns while the system UI is open. Keep
             // its preview alive until the user closes it; PDF exports are hidden.
             if !cfg!(target_os = "windows") || !print || result.is_err() { let _ = view.destroy(); }
@@ -262,12 +267,43 @@ fn platform_output(webview: tauri::webview::PlatformWebview, job: HtmlJob, path:
 
 #[cfg(target_os = "macos")]
 fn platform_output(webview: tauri::webview::PlatformWebview, job: HtmlJob, path: PathBuf, print: bool, done: Completion) {
+    macos_print::run(webview, job, path, print, done);
+}
+
+#[cfg(target_os = "macos")]
+mod macos_print {
+    use super::*;
+    use std::ffi::c_void;
+    use objc2::{define_class, msg_send, sel, DefinedClass, rc::Retained};
     use objc2::{AnyThread, runtime::{AnyObject, ProtocolObject}};
     use objc2_app_kit::{NSPrintInfo, NSPrintJobSavingURL, NSPrintSaveJob};
-    use objc2_foundation::{NSSize, NSString, NSURL};
+    use objc2_foundation::{NSObject, NSObjectProtocol, NSSize, NSString, NSURL};
     use objc2_web_kit::WKWebView;
-    unsafe {
+
+    struct PrintIvars { done: Completion, print: bool }
+    define_class!(
+        // NSObject has no subclass requirements. The callback may arrive on
+        // AppKit's printing thread; these ivars contain only Send + Sync data.
+        #[unsafe(super = NSObject)]
+        #[ivars = PrintIvars]
+        struct PrintDelegate;
+        unsafe impl NSObjectProtocol for PrintDelegate {}
+        impl PrintDelegate {
+            #[unsafe(method(printOperationDidRun:success:contextInfo:))]
+            fn completed(&self, _operation: &AnyObject, success: bool, context: *mut c_void) {
+                // AppKit calls the documented completion selector once. The
+                // retained delegate is its own context, released only here.
+                let _owned = unsafe { Retained::<Self>::from_raw(context.cast()) };
+                crate::office_cli::trace("html-print-completed");
+                self.ivars().done.finish(if success || self.ivars().print { Ok(()) }
+                    else { Err("시스템 PDF 출력을 완료하지 못했습니다.".into()) });
+            }
+        }
+    );
+
+    pub(super) fn run(webview: tauri::webview::PlatformWebview, job: HtmlJob, path: PathBuf, print: bool, done: Completion) { unsafe {
         let view = &*(webview.inner() as *const WKWebView);
+        let Some(window) = view.window() else { done.finish(Err("출력 창을 찾을 수 없습니다.".into())); return; };
         let info = NSPrintInfo::init(NSPrintInfo::alloc());
         info.setPaperSize(NSSize::new(job.width_in * 72.0, job.height_in * 72.0));
         info.setTopMargin(job.margins.top * 72.0); info.setRightMargin(job.margins.right * 72.0);
@@ -280,7 +316,17 @@ fn platform_output(webview: tauri::webview::PlatformWebview, job: HtmlJob, path:
         }
         let operation = view.printOperationWithPrintInfo(&info);
         operation.setShowsPrintPanel(print); operation.setShowsProgressPanel(false);
-        let ok = operation.runOperation();
-        done.finish(if ok || print { Ok(()) } else { Err("시스템 PDF 출력을 완료하지 못했습니다.".into()) });
-    }
+        // Match Wry's WKWebView printing: runOperation() blocks the main loop
+        // that WebKit needs to prepare pages. Keep completion asynchronous even
+        // for a hidden PDF-save operation, then return its actual result.
+        operation.setCanSpawnSeparateThread(true);
+        let allocated = PrintDelegate::alloc().set_ivars(PrintIvars { done, print });
+        let delegate: Retained<PrintDelegate> = msg_send![super(allocated), init];
+        let retained = Retained::into_raw(delegate);
+        crate::office_cli::trace("html-print-dispatch");
+        operation.runOperationModalForWindow_delegate_didRunSelector_contextInfo(
+            &window, Some(&*retained), Some(sel!(printOperationDidRun:success:contextInfo:)), retained.cast(),
+        );
+        crate::office_cli::trace("html-print-returned");
+    } }
 }

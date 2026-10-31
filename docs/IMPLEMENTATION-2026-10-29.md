@@ -2,7 +2,7 @@
 
 ## 현재 상태 — 2026-10-31
 
-공개 최신은 **v0.2.2**다. `b4d2682`의 [설치본 시험](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41192217792)은 모든 OS 패키징과 Windows 첫 실행을 통과했지만 macOS 첫 실행은 **16/18**이다. DOCX/PPTX 텍스트 읽기는 성공했고 Tauri PDF 변환을 통한 쪽 그림이 시간 초과했다. 숨은 WebView의 background throttling 비활성화로는 해결되지 않았다. 단계 로그는 부모 페이지 로드와 `job-requested`까지 도달하며, 렌더러 진단 명령의 manifest/capability 누락을 발견해 다음 실험에서 바로잡는다. 원인은 아직 확정하지 않는다. 이전 `7fb65a4`의 통과는 별도 이음 앱 경로였으므로 Tauri 변환 검증으로 세지 않는다. 최신 근거 판 `research:rr-a1113b1710d6df910256d23a2c711f5f:b929ff0c2ca80004e2f3c9439a181501e36c2abbf9c48a611000fcf0141d1a81`. Actions의 수동 실행은 `Test installers`이며 아직 공개 릴리스는 게시하지 않았다.
+공개 최신은 **v0.2.2**다. `b0ad548`의 [설치본 시험](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41194840515)은 모든 OS 패키징과 Windows 첫 실행을 통과했지만 macOS 첫 실행은 **16/18**이다. 진단 IPC 권한을 고친 로그에서 문서 열기·편집기 준비까지 성공하고 `output-html-render` 뒤 멈춤을 확인했다. 동기 `NSPrintOperation.runOperation()`을 Wry·WebKit 원본의 비동기 인쇄와 완료 callback으로 바꿨다. Linux 실제 변환 14/14와 Mac arm64 대상 모듈 타입 검사(실행 아님)를 통과하여 새 설치본 검사를 진행한다. 실제 macOS 성공 전에는 해결로 판정하지 않는다. 이전 `7fb65a4`의 통과는 별도 이음 앱 경로였으므로 Tauri 변환 검증으로 세지 않는다. 최신 근거 판 `research:rr-a1113b1710d6df910256d23a2c711f5f:1a8f2e02322f402583bef3c04c1324513fcf69920717687b2c5d57a354804844`. Actions의 수동 실행은 `Test installers`이며 아직 공개 릴리스는 게시하지 않았다.
 
 | 사용자 요구 | 구현·확인한 범위 | 남은 범위 |
 |---|---|---|
@@ -13,7 +13,7 @@
 | SSH·모바일·원격·확장 | 전체 목표에 유지 | 구현·인증·재연결 검증 |
 | 이음 편집기 9종 | Word/PPT/Sheets/HWP/PDF/Markdown/HTML/EPUB/XMind 내부 편집, 대표 AI·저장·복구·되돌림 | 전체 메뉴/형식/OS 동등성 |
 | 공통 문서 흐름 | 같은 대화, +/@ 참조, 첨부, 스킬·양식 사본, 디자인 갤러리, 새 문서·사본·주요 출력/CLI | 남은 공통 메뉴·일부 변환·인쇄/발표 흐름 |
-| 이음 전체 공통 서비스 | 직접 제공자·설정·키링·문서 AI, 원본 웹/이미지 검색·URL/원격 이미지 읽기 | wiki/지식, Drive·미디어 생성/분석, 장기 AI 작업·내부 MCP 전체 |
+| 이음 전체 공통 서비스 | 직접 제공자·설정·키링·문서 AI, 원본 웹/이미지 검색·URL 읽기, 공통 미디어 엔진과 Word 생성·분석 | 편집기별 미디어 삽입/미리보기·OS 인수, wiki/지식, Drive, 장기 AI 작업·내부 MCP 전체 |
 | HOP 개선분·한글 기본 스킬 | HOP 별도 앱 제거; hallym-kordoc 기본 제공, 사용자 설치/비활성 우선, 생성 HWPX는 이음으로 표시 | HOP 개선분 전체 대조·다른 OS |
 | doory | 생성·편집·저장·복구·이미지/PDF 출력의 Linux 흐름 | 전체 메뉴·OS 인수 |
 | 옵시디언식 PKM | 내비게이터·프로젝트 노트·Bases식 보기, 썸네일·폴더 템플릿, 지원 범위의 .base 교환 | 전체 통합·OS 인수 |
@@ -22,6 +22,8 @@
 Lightpanda 1.0.2 공식 엔진의 실제 Linux 게이트웨이 경로 **14/14**, Tauri 화면 선택·저장 **9/9**, 기존 Chromium 회귀 **30/30**, 타입·빌드·실제 다운로드/해시 검증 통과. 기본 수집에는 Chromium 창이 필요 없고 원래 프로필은 호환 모드에 보존한다. 1.0.2의 정상 종료는 진행 중 네트워크 처리를 기다릴 수 있으며 느린 요청 검사에서는 약10초가 걸렸다. 토큰·속도 배수 및 Windows/macOS 실동작은 아직 검증 전이다. [범위와 사용법](agent-browser.md), 검증 판 `research:rr-a5815367a9ae4eec88f280a96eee6f7d:b0891a866aeb5c4cb18b061f19e59c930d2a9f2b5cd4f4ddbf1e8872e1324d12`.
 
 공통 웹 도구는 원본 `ai-search`와 원격 이미지 엔진을 재사용한다. 봉인 키는 요청별 호스트 메모리에서만 열며 문서/세션 권한과 취소를 연결했다. 집중 회귀 **51/51**, 타입·host/Office 빌드, 실제 Linux 원본 Word 패널의 공개 URL 읽기 → 같은 AI 대화 → DOCX 수정·저장·재열기·중지 **13/13** 통과. 모든 문서/OS나 미디어 전체 완료 판정은 아니다. 검증 판: `research:rr-2488fbbaceca1e6b5aa58aad0c10cf34:d942dce7b67211ba5978055009b8e9db6f7fc59ad66cbe5857187002ef6f8c4c`.
+
+공통 미디어 도구는 원본 `generateImageTool`·`analyzeMediaTool`·Codex 구독 생성기를 재사용한다. 문서 경로·선택 첨부·봉인 키·취소를 연결하고, 구독 요청 실패 후 유료 키 재시도를 하지 않는다. 집중 회귀 **38/38**, 전체 타입·host/Office/native 빌드, 실제 Linux Word 생성 → 화면 표시 → 문서 그림 분석 → 같은 모델 후속 → DOCX 저장/재열기·세션/취소 **15/15** 통과. 실제 모델 대신 로컬 제공자 fixture를 사용했으며 PPT worker의 이미지 삽입, 기타 편집기별 미디어 미리보기와 다른 OS는 남아 있다. 검증 판: `research:rr-04aed54aee742d3282df82b4df7a940c:24e96805180acb8bdbf5fcdfce36c0ad6e2dd4d2d8ecccc0461ac4aaaaa6756f`.
 
 한글 전환은 전체 회귀 **1135/1135**, 마지막 CLI 생성/비활성 우선 검사 **8/8**, 실제 Linux **29/29**, 타입·host/web/design/Office 빌드 통과. 공개 스킬 manifest의 77파일만 복사했고 개인 양식은 포함하지 않았다. 독립 `third_party/kordoc` 대신 `skills/hallym-kordoc`을 배포한다. 현재 문서 페이지/썸네일은 이음 rhwp를 쓰며 구형 Markdown 수정안 복구는 동봉 core로 보존한다. 검증 판: `research:rr-1302d222a29d0be4c6b817eefdff127e:cb824b30750da64544ad5a108caa7bb17b7d98d5e645d97c9e4260a6065b35a1`.
 
