@@ -2,7 +2,7 @@
 
 ## 현재 상태 — 2026-10-31
 
-공개 최신은 **v0.2.2**다. `7fb65a4`의 [시험 실행 41187505231](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41187505231)은 Windows/macOS/Linux/Arch 패키징과 Windows/macOS 첫 실행 검사를 통과했지만, 태그 실행이 아니어서 Releases 게시를 건너뛰었다. `d41747a`의 [Electron 제거 설치본 시험](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41189645913)은 별도 진행 중이다. Actions를 `Installers`, 수동 실행 제목을 `Test installers`로 구분했다.
+공개 최신은 **v0.2.2**다. `d41747a`의 [Electron 제거 설치본 시험](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41189645913)은 모든 OS 패키징과 Windows 첫 실행을 통과했지만 macOS 첫 실행은 **16/18**이다. DOCX/PPTX 텍스트 읽기는 성공했고 새 Tauri PDF 변환을 통한 쪽 그림이 시간 초과했다. 이전 `7fb65a4` macOS 검사에는 네이티브 앱 지정이 없어 별도 이음 앱 경로를 사용했으므로, 그 통과를 Tauri 변환 검증으로 보지 않는다. 숨은 WebView의 작업 중단 방지 설정과 내용·키를 담지 않는 단계 로그를 추가했으며 Linux 실제 DOCX/PPTX 변환 **12/12**, 타입·빌드를 확인했다. macOS 수정 효과는 후속 OS 실행으로 확인한다. 근거 판 `research:rr-a1113b1710d6df910256d23a2c711f5f:1d0fdf7562b836ad7b46870b5031389f4b75d82b6f4f456e066caaaf32e84eba`. Actions를 `Installers`, 수동 실행 제목을 `Test installers`로 구분했으며 아직 공개 릴리스는 게시하지 않았다.
 
 | 사용자 요구 | 구현·확인한 범위 | 남은 범위 |
 |---|---|---|

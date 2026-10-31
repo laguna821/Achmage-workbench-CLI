@@ -142,6 +142,7 @@ async fn output(app: tauri::AppHandle, mut job: HtmlJob, print: bool) -> Result<
     let destroyed = completion.clone(); let cleanup_app = app.clone(); let cleanup_id = id.clone();
     let builder = WebviewWindowBuilder::new(&app, &id, WebviewUrl::External(load_url.clone()))
         .title("문서 출력 · Achmage Workbench").inner_size(900.0, 900.0).visible(print)
+        .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
         .on_navigation(move |url| {
             let own_protocol = url.scheme() == "workbench-output" || (url.scheme() == "http" && url.host_str() == Some("workbench-output.localhost"));
             own_protocol && url.path() == load_path

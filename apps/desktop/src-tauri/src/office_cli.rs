@@ -4,6 +4,17 @@ use std::sync::{Arc, Mutex};
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State, WebviewWindow};
 
+/// Opt-in CI diagnostics: fixed stage names only, never document content or tokens.
+pub fn trace(stage: &str) {
+    if stage.len() > 80 || !stage.bytes().all(|c| c.is_ascii_alphanumeric() || b"-_:./".contains(&c)) { return; }
+    let Some(root) = std::env::var_os("WORKBENCH_CLI_TRACE_DIR") else { return; };
+    let root = PathBuf::from(root);
+    if std::fs::create_dir_all(&root).is_err() { return; }
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(root.join(format!("export-{}.log", std::process::id()))) {
+        let _ = writeln!(file, "{stage}");
+    }
+}
+
 pub struct InputError { pub message: String, pub code: i32 }
 impl From<&str> for InputError {
     fn from(message: &str) -> Self { Self { message: message.into(), code: 1 } }
@@ -101,7 +112,12 @@ fn owner(window: &WebviewWindow) -> Result<(), String> {
 
 #[tauri::command]
 pub fn office_cli_job(window: WebviewWindow, state: State<'_, Arc<ExportJob>>) -> Result<ExportRequest, String> {
-    owner(&window)?; Ok(state.request.clone())
+    owner(&window)?; trace("job-requested"); Ok(state.request.clone())
+}
+
+#[tauri::command]
+pub fn office_cli_trace(window: WebviewWindow, _state: State<'_, Arc<ExportJob>>, stage: String) -> Result<(), String> {
+    owner(&window)?; trace(&stage); Ok(())
 }
 
 #[tauri::command]
@@ -117,6 +133,7 @@ pub fn office_cli_write(window: WebviewWindow, state: State<'_, Arc<ExportJob>>,
     file.as_file().sync_all().map_err(|e| e.to_string())?;
     file.persist(&path).map_err(|e| e.to_string())?;
     *written = true;
+    trace("output-written");
     Ok(state.request.out_path.clone())
 }
 
@@ -125,6 +142,7 @@ pub fn office_cli_done(window: WebviewWindow, app: AppHandle, state: State<'_, A
     owner(&window)?;
     let success = ok && *state.written.lock().unwrap();
     state.complete(if success { Ok(()) } else { Err(error.unwrap_or_else(|| "원본 편집기가 내보내기를 완료하지 못했습니다.".into())) });
+    trace(if success { "export-done" } else { "export-error" });
     app.exit(if success { 0 } else { 3 });
     Ok(())
 }

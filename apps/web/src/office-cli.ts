@@ -8,6 +8,8 @@ type ExportRequest = { input: string; outPath: string; cwd: string; format: "pdf
 /** Hidden parent for the original Office renderer. The native process fixes the
  * input/output paths and owns an isolated gateway and ephemeral browser profile. */
 export async function runOfficeCli() {
+  const trace = (stage: string) => void invoke("office_cli_trace", { stage }).catch(() => undefined);
+  trace("parent-script");
   let finished = false;
   let outputError: string | undefined;
   let closeDocument: (() => Promise<void>) | undefined;
@@ -25,6 +27,7 @@ export async function runOfficeCli() {
     const work = await rootApi.createWork("문서 내보내기", null, job.cwd);
     const input = await rootApi.officeCliInput();
     const artifact = await rootApi.openFile(work.id, input.path);
+    trace("document-opened");
     const viewId = `view-${crypto.randomUUID()}`, windowId = `window-${crypto.randomUUID()}`;
     let heartbeat: number | undefined;
     let pending: Promise<unknown> = Promise.resolve();
@@ -40,12 +43,14 @@ export async function runOfficeCli() {
     heartbeat = window.setInterval(() => void register().catch(error => void done(false, String(error))), 10_000);
     const api = rootApi.forDocument(() => ({ viewId, writeToken: null }));
     const grant = await api.editorGrant(artifact.id);
+    trace("editor-granted");
     const frame = document.createElement("iframe");
     frame.style.cssText = "position:fixed;inset:0;width:100%;height:100%;border:0;background:white";
     const plans = new Set<string>();
     const send = (message: OfficeHostMessage) => frame.contentWindow?.postMessage(message, grant.origin);
     const write = async (bytes: ArrayBuffer) => ({ path: await invoke<string>("office_cli_write", new Uint8Array(bytes)), artifactId: artifact.id });
     const output = async (message: OfficeOutputRequest): Promise<OfficeOutputResult["value"]> => {
+      trace(`output-${message.action}`);
       if (message.action === "cancel") { if (message.planId) plans.delete(message.planId); return null; }
       if (message.action === "html-render") return invoke<ArrayBuffer>("render_html_pdf", { job: message.job });
       if (message.action === "browser") return invoke("office_browser", { command: message.command });
@@ -68,6 +73,7 @@ export async function runOfficeCli() {
       if (event.source !== frame.contentWindow || event.origin !== grant.origin || finished) return;
       const message = event.data;
       if (message?.type === "office:ready") {
+        trace("editor-ready");
         send({ type: "office:init", token: grant.token, sessionId: null,
           artifact: { id: artifact.id, name: artifact.name, path: artifact.path, revision: artifact.revision, sha256: artifact.sha256 },
           readOnly: true, theme: "light", recover: false, headlessExport: { outPath: job.outPath, format: job.format } });
@@ -75,6 +81,7 @@ export async function runOfficeCli() {
         void output(message).then(value => send({ type: "office:output-result", requestId: message.requestId, value }),
           error => { outputError = String(error); send({ type: "office:output-result", requestId: message.requestId, error: outputError }); });
       } else if (message?.type === "office:headless-result") {
+        trace(message.ok ? "editor-done" : "editor-error");
         void done(message.ok, message.ok ? undefined : outputError ?? message.error);
       } else if (message?.type === "office:error") {
         void done(false, message.message);

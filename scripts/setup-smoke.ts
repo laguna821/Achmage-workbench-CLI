@@ -333,7 +333,7 @@ async function main() {
   const standIns = installStandIns(root);
   let gateway: Gateway | null = null;
   try {
-    gateway = await startGateway(app, standIns.env, join(root, "data"));
+    gateway = await startGateway(app, { ...standIns.env, WORKBENCH_CLI_TRACE_DIR: join(outDir, "native-export") }, join(root, "data"));
     await apiChecks(gateway, app, standIns.expect, join(root, "work"), check);
   } finally {
     await gateway?.stop();

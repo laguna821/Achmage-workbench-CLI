@@ -192,6 +192,7 @@ fn gateway_command(app: &tauri::AppHandle) -> Command {
 }
 
 fn start_gateway(app: &tauri::AppHandle) -> Result<(Child, Ready), String> {
+    if office_cli::data_dir(app).is_some() { office_cli::trace("gateway-spawn"); }
     let mut child = gateway_command(app)
         .spawn()
         .map_err(|error| format!("Node.js를 실행하지 못했습니다 ({error}). Node 24 이상이 필요합니다."))?;
@@ -201,6 +202,7 @@ fn start_gateway(app: &tauri::AppHandle) -> Result<(Child, Ready), String> {
         match lines.next() {
             Some(Ok(line)) => {
                 if let Some(json) = line.strip_prefix("WORKBENCH_READY ") {
+                    if office_cli::data_dir(app).is_some() { office_cli::trace("gateway-ready"); }
                     let value: serde_json::Value =
                         serde_json::from_str(json).map_err(|error| error.to_string())?;
                     break Ready {
@@ -268,9 +270,13 @@ fn open_main_window(app: &tauri::AppHandle, ready: &Ready) -> tauri::Result<()> 
         // Files dropped from the desktop reach the page as ordinary drops (attachments, images).
         .disable_drag_drop_handler();
     if let Some(root) = cli_dir {
-        window = window.visible(false).skip_taskbar(true).incognito(true).data_directory(root.join("webview"));
+        window = window.visible(false).skip_taskbar(true).incognito(true).data_directory(root.join("webview"))
+            // macOS WKWebView must keep the hidden original editor running during export.
+            .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
+            .on_page_load(|_, payload| office_cli::trace(if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) { "parent-loaded" } else { "parent-loading" }));
     }
     window.build()?;
+    if office_cli::data_dir(app).is_some() { office_cli::trace("parent-created"); }
     Ok(())
 }
 
@@ -385,7 +391,7 @@ pub fn run() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let cli = if args.first().map(String::as_str) == Some("--headless-export") {
         match office_cli::ExportJob::parse(&args[1..]) {
-            Ok(job) => Some(job),
+            Ok(job) => { office_cli::trace("native-start"); Some(job) },
             Err(error) => { office_cli::print_error(&error.message); std::process::exit(error.code); }
         }
     } else { None };
@@ -400,7 +406,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .invoke_handler(tauri::generate_handler![open_session_window, notify_session, set_attention, take_open_files, office_output::render_svg_pdf, office_output::print_svg, office_html_output::render_html_pdf, office_html_output::print_html, office_cli::office_cli_job, office_cli::office_cli_write, office_cli::office_cli_done, office_browser::office_browser])
+        .invoke_handler(tauri::generate_handler![open_session_window, notify_session, set_attention, take_open_files, office_output::render_svg_pdf, office_output::print_svg, office_html_output::render_html_pdf, office_html_output::print_html, office_cli::office_cli_job, office_cli::office_cli_write, office_cli::office_cli_done, office_cli::office_cli_trace, office_browser::office_browser])
         .manage(office_browser::BrowserJobs::default())
         .register_uri_scheme_protocol("workbench-browser", |ctx, request| office_browser::serve(ctx.app_handle(), request.uri().path()))
         .manage(office_html_output::HtmlJobs::default())
@@ -441,6 +447,7 @@ pub fn run() {
         .manage(Gateway(Mutex::new(None)))
         .setup(|app| {
             let handle = app.handle().clone();
+            if office_cli::data_dir(&handle).is_some() { office_cli::trace("native-setup"); }
             #[cfg(target_os = "macos")]
             if office_cli::data_dir(&handle).is_some() { handle.set_activation_policy(tauri::ActivationPolicy::Accessory)?; }
             match start_gateway(&handle) {
