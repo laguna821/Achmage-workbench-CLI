@@ -45,6 +45,7 @@ import { officeCardsScenario } from "./office-cards.ts";
 import { officePreviewsScenario } from "./office-previews.ts";
 import { officeGalleryScenario } from "./office-gallery.ts";
 import { officeCopiesScenario } from "./office-copies.ts";
+import { officeNewScenario } from "./office-new.ts";
 import { designScenario } from "./design.ts";
 
 const { binary, outDir, only, engines } = parseArgs(process.argv.slice(2));
@@ -92,6 +93,7 @@ try {
       if (wants("office-previews")) await officePreviewsScenario(ctx, { binary, engines, profile: "native" });
       if (wants("office-gallery")) await officeGalleryScenario(ctx, { binary, engines, profile: "native" });
       if (wants("office-copies")) await officeCopiesScenario(ctx);
+      if (wants("office-new")) await officeNewScenario(ctx);
       if (wants("design")) await designScenario(ctx, { binary, engines, profile: "native" });
       if (wants("hwp")) await hwpScenario(ctx);
       if (wants("worktrees")) await worktreesScenario(ctx, { binary, engines, profile: "native" });

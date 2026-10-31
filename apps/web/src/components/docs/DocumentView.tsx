@@ -41,6 +41,7 @@ import { useDocumentSession } from "../../document-session.ts";
 import { clearRecoveredDraft, keepDraft, newestDraft } from "../../document-drafts.ts";
 import { registerDocumentCommands } from "../../document-commands.ts";
 import { useDocumentReferences } from "../../document-references.ts";
+import { OfficeFileMenu } from "../OfficeFileMenu.tsx";
 
 /** Save operations only; "unsaved" is derived from the text, never stored (no stale overwrite). */
 type SaveState = "idle" | "saving" | "failed" | "conflict";
@@ -67,6 +68,7 @@ export default function DocumentView({
   onNewSession,
   onAiSettings,
   onOpenArtifact,
+  pickFile,
   onToast,
   tabs,
   openDocIds,
@@ -100,6 +102,7 @@ export default function DocumentView({
   onNewSession: () => Promise<Session | null>;
   onAiSettings: () => void;
   onOpenArtifact: (artifactId: string) => void;
+  pickFile?: ((folder: string) => Promise<string | null>) | null;
   onToast: (message: string) => void;
 }) {
   const { lookOf } = useAppearance();
@@ -671,6 +674,10 @@ export default function DocumentView({
           </span>
         </div>
         <div className="doc-header-right">
+          <OfficeFileMenu api={rootApi} workId={work.id} workspaceId={artifact.workspaceId}
+            sessionId={session?.workspaceId === artifact.workspaceId ? session?.id : undefined}
+            cwd={state.workspaces[artifact.workspaceId ?? ""]?.cwd ?? work.cwd} sourceKey={artifact.id} pickFile={pickFile}
+            beforeOpen={async () => await save() !== null} onOpenArtifact={onOpenArtifact} onToast={onToast} />
           {markdownDoc && (mode === "edit" || mode === "split") && !viewing && !compare && base ? (
             <button type="button" className="ghost-button draw-here" onClick={() => setDrawOpen(!drawOpen)} aria-expanded={drawOpen} title="여기에 그림 그리기 (Ctrl+Alt+G) · GPT Image (Codex)">
               <Icon name="image" size={14} /> 그림

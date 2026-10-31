@@ -33,6 +33,7 @@ import { InsightPill } from "./pkm/InsightDialog.tsx";
 import { NoteChips } from "./pkm/NoteChips.tsx";
 import { paneDrag, usePaneActions, useNoteDrop } from "../panedrag.ts";
 import type { Api } from "../api.ts";
+import { OfficeFileMenu } from "./OfficeFileMenu.tsx";
 import { useDocumentReferences } from "../document-references.ts";
 
 export type WorkActions = {
@@ -393,7 +394,6 @@ export function WorkView({
     setPlanFirst(false);
   }
   const filePicker = useRef<HTMLInputElement>(null);
-  const [pathInput, setPathInput] = useState("");
   const artifacts = Object.values(state.artifacts)
     .filter((artifact) => artifact.workId === work.id)
     .sort((a, b) => b.updatedAt - a.updatedAt);
@@ -504,33 +504,10 @@ export function WorkView({
               </MenuItem>
             ))}
             <div className="menu-divider" />
-            {pickFile ? (
-              <MenuItem
-                onSelect={() => {
-                  setDocsOpen(false);
-                  void pickFile(cwd).then((path) => {
-                    if (path) void actions.openFile(work, path, workspace?.id);
-                  });
-                }}
-              >
-                파일 열기…
-              </MenuItem>
-            ) : (
-              <form
-                className="menu-form"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  if (!pathInput.trim()) return;
-                  setDocsOpen(false);
-                  void actions.openFile(work, pathInput.trim(), workspace?.id);
-                  setPathInput("");
-                }}
-              >
-                <input value={pathInput} onChange={(event) => setPathInput(event.target.value)} placeholder="작업 폴더 기준 경로 (예: 강의.md)" />
-              </form>
-            )}
           </Popover>
         </div>
+        <OfficeFileMenu api={api} workId={work.id} workspaceId={workspace?.id} sessionId={active?.id} cwd={cwd}
+          sourceKey={work.id} pickFile={pickFile} onOpenArtifact={actions.openArtifact} onToast={onToast} />
         {active ? (
           <div className="anchor">
             <button type="button" className="status-pill" onClick={() => setStatusOpen(!statusOpen)} aria-expanded={statusOpen}>

@@ -1,4 +1,5 @@
 import type { OfficeOutputFormat } from "../../../packages/contracts/src/office-output.ts";
+import type { NewOfficeDocument } from "@workbench/contracts";
 import type {
   GitHubBinding, GitHubSelection, GitHubView, GitHubCheckDetails, GitHubLog,
   GitHubActionContext, GitHubActionPreview, GitHubActionInput, GitHubActionJob, GitHubDraft, GitHubTemplate, GitHubRecoveryPreview,
@@ -347,7 +348,8 @@ export class Api {
   extendLink = (linkId: string) => this.request<SessionLink>("POST", `/api/links/${linkId}/extend`);
   linkTurns = (linkId: string) => this.request<{ link: SessionLink; turns: LinkTurn[] }>("GET", `/api/links/${linkId}/turns`);
   exportLink = (linkId: string, request: ExportMarkdownRequest) => this.request<ExportMarkdownResult>("POST", `/api/links/${linkId}/export`, request);
-  openFile = (workId: string, path: string, workspaceId?: string) => this.request<Artifact>("POST", `/api/works/${workId}/artifacts`, { path, workspaceId });
+  openFile = (workId: string, path: string, workspaceId?: string, sessionId?: string) => this.request<Artifact>("POST", `/api/works/${workId}/artifacts`, { path, workspaceId, sessionId });
+  createOfficeDocument = (workId: string, request: NewOfficeDocument) => this.request<Artifact>("POST", `/api/works/${workId}/office-documents`, request);
   createDesign = (workId: string, name: string, preset: string, workspaceId?: string) => this.request<Artifact>("POST", `/api/works/${workId}/designs`, { name, preset, workspaceId });
   officePages = (artifactId: string, revision: number) =>
     this.request<{ revision: number; pages: { page: number; width: number; height: number }[] }>("GET", `/api/artifacts/${artifactId}/office-pages?revision=${revision}`);

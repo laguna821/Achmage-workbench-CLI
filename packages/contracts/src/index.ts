@@ -15,6 +15,7 @@ export * from "./preparation.ts";
 export * from "./source-control.ts";
 export * from "./scm-review.ts";
 export * from "./document-registry.ts";
+export * from "./office-new.ts";
 
 export const PROTOCOL_VERSION = 1;
 

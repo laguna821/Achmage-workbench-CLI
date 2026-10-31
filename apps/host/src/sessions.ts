@@ -1,5 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { copyOfficeStyleSelection } from "./office-styles.ts";
+import { blankOfficeBytes } from "./office-new.mjs";
+import { BLANK_OFFICE_DOCUMENTS, type NewOfficeDocument } from "@workbench/contracts";
 import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unwatchFile, watchFile, writeFileSync, type Stats } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
@@ -1591,14 +1593,44 @@ export class SessionManager {
     }
   }
 
+  private officeFileScope(workId: string, workspaceId?: string, sessionId?: string) {
+    const session = sessionId ? this.requireSession(sessionId) : null;
+    const id = workspaceId ?? session?.workspaceId ?? this.requireWork(workId).defaultWorkspaceId;
+    if (session && (session.workId !== workId || session.workspaceId !== id)) throw new HttpError(400, "document_session_scope", "문서와 대화의 작업공간이 다릅니다.");
+    return this.workIn(workId, id);
+  }
+
+  /** A direct blank document, without starting an AI request or an Electron process. */
+  async createOfficeDocument(workId: string, request: NewOfficeDocument) {
+    const kind = BLANK_OFFICE_DOCUMENTS.find((entry) => entry.format === request.format);
+    if (!kind) throw new HttpError(400, "invalid_document_format", "지원하지 않는 새 문서 형식입니다.");
+    const work = this.officeFileScope(workId, request.workspaceId, request.sessionId);
+    const bytes = await blankOfficeBytes(kind.format);
+    // The workspace may have been archived or removed while its engine was loading.
+    if (this.officeFileScope(workId, request.workspaceId, request.sessionId).cwd !== work.cwd) throw new HttpError(409, "workspace_changed", "작업공간이 바뀌었습니다. 다시 만들어 주세요.");
+    let stem = (request.name?.trim() || kind.name).replace(/[\\/:*?"<>|\x00-\x1f]/g, "_");
+    if (stem.toLowerCase().endsWith(`.${kind.extension}`)) stem = stem.slice(0, -kind.extension.length - 1);
+    stem = stem.slice(0, 80).replace(/[. ]+$/, "") || kind.name;
+    if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(stem)) stem = `_${stem}`;
+    let path = "";
+    for (let index = 1; ; index++) {
+      path = resolve(work.cwd, `${stem}${index === 1 ? "" : ` ${index}`}.${kind.extension}`);
+      try { writeFileSync(path, bytes, { flag: "wx" }); break; }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+    }
+    const tracked = this.documents.track(work.id, work.cwd, path, "user", request.sessionId ?? null, `새 ${kind.label}`);
+    if (!tracked) throw new HttpError(500, "document_not_tracked", `파일은 만들었지만 문서 목록에 등록하지 못했습니다: ${path}`);
+    return tracked.artifact;
+  }
+
   /** Open a file of the work folder (or any path the user picked) as a tracked document. */
-  openFile(workId: string, rawPath: string, workspaceId?: string) {
-    const work = this.workIn(workId, workspaceId);
+  openFile(workId: string, rawPath: string, workspaceId?: string, sessionId?: string) {
+    const work = this.officeFileScope(workId, workspaceId, sessionId);
     if (!rawPath.trim()) throw new HttpError(400, "missing_path", "파일 경로가 필요합니다.");
     const path = isAbsolute(rawPath) ? rawPath : resolve(work.cwd, rawPath);
     if (!existsSync(path)) throw new HttpError(404, "file_missing", "파일이 없습니다.");
     if (!formatOf(path)) throw new HttpError(415, "unsupported_format", "Markdown·HTML·PDF·한글(HWPX·HWP)·워드·PPT·엑셀·마인드맵(.xmind)·전자책(.epub)·텍스트·디자인(.design.json)만 열 수 있습니다.");
-    const tracked = this.documents.track(work.id, work.cwd, path, "external", null, "작업 폴더에서 열기");
+    const tracked = this.documents.track(work.id, work.cwd, path, "external", sessionId ?? null, "작업 폴더에서 열기");
     if (tracked) return tracked.artifact;
     const existing = this.documents.list().find((artifact) => artifact.workId === work.id && artifact.path === path);
     if (!existing) throw new HttpError(415, "unsupported_format", "문서로 열 수 없는 파일입니다.");

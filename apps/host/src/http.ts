@@ -541,6 +541,15 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const body = await readJson(req);
         return sendJson(res, 201, manager.createPage(parts[1], typeof body.name === "string" ? body.name : "", typeof body.workspaceId === "string" ? body.workspaceId : undefined));
       }
+      if (parts[0] === "works" && parts[1] && parts[2] === "office-documents" && method === "POST") {
+        const body = await readJson(req);
+        return sendJson(res, 201, await manager.createOfficeDocument(parts[1], {
+          format: body.format as never,
+          name: typeof body.name === "string" ? body.name : undefined,
+          workspaceId: typeof body.workspaceId === "string" ? body.workspaceId : undefined,
+          sessionId: typeof body.sessionId === "string" ? body.sessionId : undefined,
+        }));
+      }
       if (parts[0] === "works" && parts[1] && parts[2] === "designs" && method === "POST") {
         const body = await readJson(req, 64_000_000);
         const preset = (typeof body.preset === "string" && body.preset in DESIGN_PRESETS ? body.preset : "square") as DesignPreset;
@@ -613,7 +622,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       }
       if (parts[0] === "works" && parts[1] && parts[2] === "artifacts" && method === "POST") {
         const body = await readJson(req);
-        return sendJson(res, 200, manager.openFile(parts[1], String(body.path ?? ""), typeof body.workspaceId === "string" ? body.workspaceId : undefined));
+        return sendJson(res, 200, manager.openFile(parts[1], String(body.path ?? ""), typeof body.workspaceId === "string" ? body.workspaceId : undefined, typeof body.sessionId === "string" ? body.sessionId : undefined));
       }
       // Pictures in documents: R2 settings, pasted images, Markdown preview pictures, the desktop clipboard's picture.
       if (options.docImages && (await routeDocImages(options.docImages, req, res, url))) return;
