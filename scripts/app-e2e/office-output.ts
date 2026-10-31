@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
+import JSZip from "jszip";
 import { installProbe, pageErrors, seedLayout, shot, until, type Ctx } from "./scenarios.ts";
 import { KEY } from "./webdriver.ts";
 import type { Artifact, Session, Snapshot, Work } from "@workbench/contracts";
@@ -125,6 +126,18 @@ export async function officeOutputScenario(ctx: Ctx) {
     ctx.report.check(S, `${format}: 원본 파일·판 보존`, readFileSync(artifact.path).equals(original) && (await snapshot()).artifacts.find(a => a.id === artifact.id)?.revision === artifact.revision);
     if (format === "docx") ctx.report.check(S, "docx: 추가 빈 쪽 없이 한 쪽 출력", /Pages:\s+1\b/.test(pdfInfo));
     ctx.report.note(S, `${format}: 출력 용지·쪽수`, pdfInfo.match(/Pages:.*|Page size:.*/g));
+    if (format === "html") {
+      await wd.click(await wd.waitFor('.doc-header-right .office-file-menu button[aria-label="문서 파일 메뉴"]'));
+      await click("Word로 내보내기", '.office-file-menu [role="menuitem"]');
+      const wordPath = join(work.cwd, "Exported-html.docx"), wordField = await wd.waitFor('.office-output-dialog input[aria-label="저장할 파일 경로"]');
+      await wd.click(wordField); await key("a"); await wd.sendKeys(wordField, wordPath);
+      await wd.click(await wd.waitFor('.office-output-dialog button[type="submit"]'));
+      if (!await until(async () => existsSync(wordPath) && (await snapshot()).artifacts.some(a => a.path === wordPath), 120000)) throw new Error("HTML Word output did not create a document");
+      const word = await JSZip.loadAsync(readFileSync(wordPath)), xml = await word.file("word/document.xml")!.async("string");
+      ctx.report.check(S, "html: 파일 메뉴 → 원본 Word 변환 → 미저장 편집 내용", xml.includes(marker), xml.slice(0, 500));
+      ctx.report.check(S, "html: Word 내보내기 후 원본 파일·판 보존", readFileSync(artifact.path).equals(original) && (await snapshot()).artifacts.find(a => a.id === artifact.id)?.revision === artifact.revision);
+      copyFileSync(wordPath, ctx.report.path("exported-html.docx"));
+    }
     await enter(); const errors = await pageErrors(wd); ctx.report.note(S, `${format}: 편집기 관측 오류`, errors); await wd.frame(null);
   }
 }

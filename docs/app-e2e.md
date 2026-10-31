@@ -1,5 +1,7 @@
 # Linux 실제 앱 검사
 
+`node scripts/office-cli-check.ts <evidence-directory> --only=html-docx --cli=<genoffice.cjs>`는 원본 HTML→Word의 한글·표·스크립트·상대 base/CSS/JS/SVG, 초기 viewport, 실제 PNG 색·긴 그림의 원본 분할 높이, 원본/설정 보존과 정리를 검사한다. `html-docx-assets-07`은12/12 통과했다. `APP_E2E_OUTPUT_FORMATS=html --only=start,office-output`은 새 **Word로 내보내기** 메뉴와 미저장 내용·원본 판 보존을 포함하며 `html-docx-gui-02/results.json`에서12/12 통과했다. [구현·검증 판과 남은 범위](office-integration.md#원본-cli의-tauri-출력-연결)를 따른다.
+
 CLI 검사는 UTF-8/EUC-KR CSV와 HTML .xls도 포함한다. 실제 BIFF5 자료는 `--only=xls --xls-fixture=<calamine-biff5_write.xls> --ieum-cli=<genoffice.cjs>`로 검사한다. 원본 Rust 변환 엔진은 CLI의 `XLSX_SIDECAR_PATH` 또는 패키지 리소스에서 읽는다. `cli-source-native-01`은 고정 원본 CLI와 실제 Rust sidecar를 사용해 변환30/30을 통과했으며 fixture 출처·해시는 연구 판에 보존했다.
 
 `node scripts/office-cli-check.ts <evidence-directory>`는 실제 Tauri 숨김 실행으로 DOCX 1/2/중간 빈 쪽/12쪽, PPTX, XLSX, MD, HTML의 PDF와 DOCX HTML을 검사한다. `--only=docx-12,xlsx`로 선택하고 `--cli=<genoffice.cjs>`로 고정 원본 CLI의 `convert` 경로를 검사할 수 있다. 파일·설정 보존, 전용 임시 폴더 정리, 정확한 쪽 수·본문·빈 쪽·글꼴과 원본 분할 병합을 확인한다. 실제 변환에는 Electron 앱을 사용하지 않는다. 최종 원본 CLI43/43과 빈 쪽/글꼴20/20, 기존 GUI `--only=start,office-output`17/17의 [범위와 근거](office-integration.md#원본-cli의-tauri-출력-연결)를 따른다.

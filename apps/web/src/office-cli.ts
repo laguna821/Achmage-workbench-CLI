@@ -48,6 +48,7 @@ export async function runOfficeCli() {
     const output = async (message: OfficeOutputRequest): Promise<OfficeOutputResult["value"]> => {
       if (message.action === "cancel") { if (message.planId) plans.delete(message.planId); return null; }
       if (message.action === "html-render") return invoke<ArrayBuffer>("render_html_pdf", { job: message.job });
+      if (message.action === "browser") return invoke("office_browser", { command: message.command });
       if (message.action === "prepare") {
         if (message.format !== job.format) throw new Error("CLI에서 요청한 내보내기 형식과 다릅니다.");
         const id = crypto.randomUUID(); plans.add(id);

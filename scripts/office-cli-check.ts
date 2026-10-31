@@ -4,11 +4,13 @@ import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, read
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import JSZip from "jszip";
+import { createRequire } from "node:module";
 import { openStage } from "./app-e2e/launch.ts";
 
 const run = promisify(execFile), repo = resolve(import.meta.dirname, "..");
+const { PNG } = createRequire(import.meta.url)("pngjs") as { PNG: { sync: { read(bytes: Buffer): { width: number; height: number; data: Buffer } } } };
 const out = resolve(process.argv[2] ?? "/tmp/workbench-cli-check"); mkdirSync(out, { recursive: true });
-const only = process.argv.find(arg => arg.startsWith("--only="))?.slice(7).split(",") ?? ["docx", "docx-2", "docx-blank", "docx-12", "pptx", "xlsx", "csv", "csv-legacy", "xls-html", "md", "html", "docx-html"];
+const only = process.argv.find(arg => arg.startsWith("--only="))?.slice(7).split(",") ?? ["docx", "docx-2", "docx-blank", "docx-12", "pptx", "xlsx", "csv", "csv-legacy", "xls-html", "md", "html", "docx-html", "html-docx"];
 const binary = join(repo, "apps/desktop/src-tauri/target/debug/achmage-workbench");
 const cli = process.argv.find(arg => arg.startsWith("--cli="))?.slice(6);
 const ieumCli = process.argv.find(arg => arg.startsWith("--ieum-cli="))?.slice(11);
@@ -53,10 +55,17 @@ try {
   copyFileSync(join(repo, "vendor/ieumoffice/packages/pptx-engine/tests/fixtures/05_unicode_cjk_emoji.pptx"), join(dir, "pptx.pptx"));
   writeFileSync(join(dir, "md.md"), "# CLI 문서 출력\n\nNATIVE CLI MARKDOWN 한글 본문\n");
   writeFileSync(join(dir, "html.html"), '<!doctype html><html><meta charset="utf-8"><style>body{font-family:sans-serif}h1{color:#176d88}</style><h1>CLI 문서 출력</h1><p>NATIVE CLI HTML 한글 본문</p></html>');
+  writeFileSync(join(dir, "html-docx.html"), '<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:sans-serif}table{border-collapse:collapse}td{border:1px solid #333;padding:8px}</style></head><body><h1>HTML 원본 변환</h1><p>NATIVE HTML DOCX 한글 본문</p><table><tr><td>이름</td><td>번호</td></tr><tr><td>가나다</td><td>0007</td></tr></table><p id="script"></p><canvas id="chart" width="240" height="80"></canvas><svg xmlns="http://www.w3.org/2000/svg" width="120" height="1600"><rect width="120" height="800" fill="#e03030"/><rect y="800" width="120" height="800" fill="#30b060"/></svg><script>document.getElementById("script").textContent="스크립트 생성 내용";const c=document.getElementById("chart").getContext("2d");c.fillStyle="#176d88";c.fillRect(0,0,240,80);</script></body></html>');
+  writeFileSync(join(dir, "linked.css"), '#linked{color:#123456}');
+  writeFileSync(join(dir, "linked.js"), 'document.getElementById("linked").textContent="외부 파일 내용";');
+  writeFileSync(join(dir, "linked.svg"), '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="#0055ff"/></svg>');
+  const htmlDocx = join(dir, "html-docx.html");
+  writeFileSync(htmlDocx, readFileSync(htmlDocx, "utf8").replace("</head>", '<base href="./"><link rel="stylesheet" href="linked.css"><script defer src="linked.js"></script></head>').replace("</body>", '<p id="linked"></p><img src="linked.svg" width="40" height="40"></body>'));
+  writeFileSync(htmlDocx, readFileSync(htmlDocx, "utf8").replace("</body>", '<p id="initial"></p><script>document.getElementById("initial").textContent="INITIAL VIEWPORT "+innerWidth+"x"+innerHeight;</script></body>'));
   for (const name of only) {
     const format = name.split("-")[0]!;
     const input = join(dir, name === "docx-html" ? "docx.docx" : `${name}.${format}`);
-    const target = name === "docx-html" ? "html" : "pdf", output = join(out, `${name}.${target}`), before = hash(input);
+    const target = name === "docx-html" ? "html" : name === "html-docx" ? "docx" : "pdf", output = join(out, `${name}.${target}`), before = hash(input);
     let result: { stdout: string; stderr: string; code: number | string | undefined };
     const stdoutPath = join(out, `${name}.stdout.log`), stderrPath = join(out, `${name}.stderr.log`);
     writeFileSync(stdoutPath, ""); writeFileSync(stderrPath, "");
@@ -89,6 +98,35 @@ try {
       if (name === "docx-12") check(`${name}: original chunk merge and final page`, text.split("\f")[11]?.includes("원본 보존 확인") === true);
       if (format === "xlsx") check(`${name}: original bundled font embedded`, (await run("pdffonts", [output])).stdout.includes("Pretendard"));
       await run("pdftoppm", ["-f", "1", "-singlefile", "-scale-to", "1200", "-png", output, join(out, `${name}-page`)]);
+    } else if (target === "docx") {
+      const doc = await JSZip.loadAsync(readFileSync(output)), body = await doc.file("word/document.xml")!.async("string");
+      check(`${name}: editable text and script-generated content`, ["NATIVE HTML DOCX", "한글 본문", "스크립트 생성 내용"].every(text => body.includes(text)), body.slice(0, 500));
+      check(`${name}: native Word table`, body.includes("<w:tbl>") && body.includes("가나다") && body.includes("0007"));
+      check(`${name}: authored scripts see the original viewport`, body.includes("INITIAL VIEWPORT 794x1123"));
+      check(`${name}: relative script and stylesheet retained`, body.includes("외부 파일 내용") && body.includes('val="123456"'));
+      const media = await Promise.all(Object.values(doc.files).filter(file => /^word\/media\/.*\.png$/.test(file.name)).map(async file => ({ name: file.name, bytes: await file.async("nodebuffer") })));
+      check(`${name}: real graphics captured`, media.length >= 2, media.map(file => file.name));
+      let tallHeight = 0, red = false, green = false, canvasColor = false, linkedImage = false;
+      for (const file of media) {
+        const png = PNG.sync.read(file.bytes); writeFileSync(join(out, file.name.split("/").at(-1)!), file.bytes);
+        if (png.width === 240) {
+          const pixel = (ratio: number) => [...png.data.subarray((Math.floor(png.height * ratio) * png.width + Math.floor(png.width / 2)) * 4, (Math.floor(png.height * ratio) * png.width + Math.floor(png.width / 2)) * 4 + 4)];
+          for (const p of [pixel(0.1), pixel(0.9)]) {
+            red ||= p[0]! > 180 && p[1]! < 100 && p[3] === 255;
+            green ||= p[0]! < 100 && p[1]! > 120 && p[3] === 255;
+          }
+          tallHeight += png.height;
+        } else if (png.width === 480 && png.height === 160) {
+          const offset = (80 * png.width + 240) * 4;
+          canvasColor = png.data[offset] === 23 && png.data[offset + 1] === 109 && png.data[offset + 2] === 136 && png.data[offset + 3] === 255;
+        } else if (png.width === 80 && png.height === 80) {
+          const offset = (40 * png.width + 40) * 4;
+          linkedImage = png.data[offset] === 0 && png.data[offset + 1] === 85 && png.data[offset + 2] === 255 && png.data[offset + 3] === 255;
+        }
+      }
+      check(`${name}: script-painted canvas pixels retained`, canvasColor);
+      check(`${name}: relative image pixels retained`, linkedImage);
+      check(`${name}: original graphic slices retain total height and both colors`, tallHeight === 3200 && red && green, { tallHeight, red, green });
     } else check(`${name}: standalone original HTML`, readFileSync(output, "utf8").includes("NATIVE CLI DOCX") && !readFileSync(output, "utf8").includes("blob:"));
     console.log(`${name}: passed`);
   }

@@ -12,6 +12,7 @@ use tauri_plugin_notification::NotificationExt;
 mod office_output;
 mod office_html_output;
 mod office_cli;
+mod office_browser;
 pub mod office_secrets;
 pub mod terminal_worker;
 
@@ -339,7 +340,9 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .invoke_handler(tauri::generate_handler![open_session_window, notify_session, set_attention, office_output::render_svg_pdf, office_output::print_svg, office_html_output::render_html_pdf, office_html_output::print_html, office_cli::office_cli_job, office_cli::office_cli_write, office_cli::office_cli_done])
+        .invoke_handler(tauri::generate_handler![open_session_window, notify_session, set_attention, office_output::render_svg_pdf, office_output::print_svg, office_html_output::render_html_pdf, office_html_output::print_html, office_cli::office_cli_job, office_cli::office_cli_write, office_cli::office_cli_done, office_browser::office_browser])
+        .manage(office_browser::BrowserJobs::default())
+        .register_uri_scheme_protocol("workbench-browser", |ctx, request| office_browser::serve(ctx.app_handle(), request.uri().path()))
         .manage(office_html_output::HtmlJobs::default())
         .register_uri_scheme_protocol("workbench-output", |ctx, request| office_html_output::serve(ctx.app_handle(), request.uri().path(), request.uri().query()))
         .manage(office_output::PrintJobs::default())

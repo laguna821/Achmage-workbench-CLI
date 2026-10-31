@@ -45,6 +45,7 @@
     "allow-print-html",
     "allow-office-cli-job",
     "allow-office-cli-write",
-    "allow-office-cli-done"
+    "allow-office-cli-done",
+    "allow-office-browser"
   ]
 }

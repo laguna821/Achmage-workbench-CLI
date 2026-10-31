@@ -10,7 +10,11 @@ Linux 실제 원본 CLI **43/43**: DOCX 12쪽 분할·병합과 마지막 본문
 
 CSV/XLS→PDF도 연결했다. native가 고정한 입력만 전용 임시 gateway에서 준비하며, 원본 CSV 가져오기·legacy-import와 CLI 변환으로 만든 임시 XLSX를 원본 Sheets에서 출력한다. 원본 형식과 바이트는 유지한다. UTF-8/EUC-KR CSV의 한글·앞자리 0, HTML 표 형태의 .xls, 실제 BIFF5 .xls와 DOCX 회귀를 원본 CLI로 **30/30** 확인했다. 관련 **6/6**, GUI 시작 **4/4**, 타입·web/host/native 빌드 통과. 근거 `cli-source-native-01/verification.json`, 판 `research:rr-f6971ea29725560b8f14d540e8674644:30068a7136eb34d3a01e6e274b578d27074f8bd00bde4275566dcb6eb356d1bb`.
 
-HTML→DOCX, Sheets 시스템 인쇄, 기존 암호화 설정·앱 제어 연결은 남았다. `GENOFFICE_APP_BIN`의 제품 기본값과 전체 Ieum Electron 배포는 아직 전환하지 않았다. 이 변경의 Windows/macOS 실제 실행·설치·업데이트·용량과 최종 릴리스도 별도 검증한다.
+HTML→DOCX도 원본 `html2docx`의 추출·OOXML 생성·그림 분할을 그대로 사용하고 Electron BrowserDriver만 시스템 WebView로 교체했다. HTML 파일 메뉴의 **Word로 내보내기**와 원본 CLI에서 새 사본을 저장한다. 변환용 문서의 상대 base·CSS·스크립트·그림은 원래 폴더에서 해석하며 원본은 바꾸지 않는다. Linux의 숨김 GTK child에 실제 크기를 배정하고 문서 스크립트 실행 전에 viewport를 적용한다. 소유한 창과 임시 프로필은 종료·문서 이동·시간 제한에 정리한다.
+
+Linux 원본 CLI **12/12**: 한글·표·스크립트·상대 CSS/JS/SVG·초기 viewport·실제 PNG 픽셀·긴 그림 분할 높이·원본/설정 보존. GUI **12/12**: 새 Word 메뉴·미저장 내용·원본 판 보존과 기존 PDF/인쇄. 호스트 **9/9**, 전체 타입과 web/host/office/native 빌드 통과. 근거 `implementation-20261030/html-docx-assets-07/verification.json`, `html-docx-gui-02/results.json`; native SHA256 `b63aeca98500ff3e5e44886a29ff1389cf3533f853195278c2aa25536cbc5524`, 검증 판 `research:rr-dda052c06d0a4578ef39f617755d0c62:054c73a39923fde3726d5c7399ca8376b7b8c86cf6fbc69bec0df6e97c874e7f`. Windows/macOS의 DOM 실행·캡처 코드는 연결했지만 Linux 결과로 해당 OS의 동작을 인증하지 않는다.
+
+Sheets 시스템 인쇄, 기존 암호화 설정·앱 제어 연결은 남았다. `GENOFFICE_APP_BIN`의 제품 기본값과 전체 Ieum Electron 배포는 아직 전환하지 않았다. Windows/macOS 실제 실행·설치·업데이트·용량과 최종 릴리스도 별도 검증한다.
 
 ## 별도 HOP·PDFCraft 배포 제거
 

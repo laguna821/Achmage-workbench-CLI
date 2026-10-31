@@ -55,6 +55,20 @@ for (const from of ["hwp", "hwpx"] as const) for (const to of ["hwp", "hwpx"] as
     expect(await outputs.commit(artifact.id, plan.id, body, false)).toEqual(result);
   } finally { doc.free(); }
 });
+it("saves HTML as Word while preserving the original text and revision", async () => {
+  const { manager, work, outputs, doc } = setup();
+  try {
+    const path = join(work.cwd, "page.html"), html = '<!doctype html><h1>한글 원본</h1>';
+    writeFileSync(path, html); const source = manager.openFile(work.id, path);
+    const plan = outputs.prepare(source.id, source.revision, "page.docx");
+    await expect(outputs.commit(source.id, plan.id, Buffer.from("bad DOCX"), false)).rejects.toMatchObject({ status: 422 });
+    const bytes = readFileSync(new URL("../../../vendor/ieumoffice/fixtures/generated/simple.docx", import.meta.url));
+    const result = await outputs.commit(source.id, plan.id, bytes, false);
+    expect(result.artifact.format).toBe("docx"); expect(result.artifact.id).not.toBe(source.id);
+    expect(readFileSync(result.path)).toEqual(bytes); expect(readFileSync(path, "utf8")).toBe(html);
+    expect(manager.documents.get(source.id).revision).toBe(source.revision);
+  } finally { doc.free(); }
+});
 it("Save As carries an intentional memo deletion into HWP while refusing an unlisted loss", async () => {
   const { outputs, artifact, doc, path, bytes } = setup("hwpx");
   try {

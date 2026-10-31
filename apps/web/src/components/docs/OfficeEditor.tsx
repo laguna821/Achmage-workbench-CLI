@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { Artifact, DocumentAccess, EditorGrant, OfficePageMessage } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
-import type { OfficeOutputFormat, OfficeOutputPlan, OfficeOutputRequest } from "../../../../../packages/contracts/src/office-output.ts";
+import type { BrowserResult, OfficeOutputFormat, OfficeOutputPlan, OfficeOutputRequest } from "../../../../../packages/contracts/src/office-output.ts";
 import { OfficeOutputDialog } from "./OfficeOutputDialog.tsx";
 import { OfficeReferencePicker } from "./OfficeReferencePicker.tsx";
 import type { OfficeDocumentChoice, OfficeReferenceRequest, OfficeReferenceSnapshot } from "../../../../../packages/contracts/src/office-references.ts";
@@ -13,6 +13,7 @@ import type { OfficeSkillRequest } from "../../../../../packages/contracts/src/o
 export type OfficeHandle = {
   /** Run the original renderer's PDF action on current, possibly unsaved content. */
   exportPdf(): void;
+  exportDocx(): void;
   /** Save unsaved edits now; resolves with the saved revision, or null when they could not be saved. */
   flush(): Promise<number | null>;
   /** After a conflict: save my edits as the revision after `revision`; null when there was nothing to keep or it failed. */
@@ -61,6 +62,7 @@ export const OfficeEditor = forwardRef<
   const outputClose = useRef<(() => void) | null>(null);
   const outputRequest = useRef<string | null>(null);
   const outputPlans = useRef(new Map<string, OfficeOutputPlan & { preparationId: string }>());
+  const browserJobs = useRef(new Set<string>());
   const copied = useRef(new Map<string, string | null>());
   const [output, setOutput] = useState<{ revision: number; format: OfficeOutputFormat; choose(plan: OfficeOutputPlan | null): void } | null>(null);
   const latest = useRef(artifact);
@@ -191,6 +193,18 @@ export const OfficeEditor = forwardRef<
         } finally { outputPlans.current.delete(plan.id); }
         return;
       }
+      if (message.action === "browser") {
+        if (!("__TAURI_INTERNALS__" in window)) throw new Error("문서 변환은 데스크톱 앱에서 실행해 주세요.");
+        const { invoke } = await import("@tauri-apps/api/core");
+        if (message.command.kind !== "create" && !browserJobs.current.has(message.command.id)) throw new Error("이 문서의 변환 창이 아닙니다.");
+        const result = await invoke<BrowserResult | null>("office_browser", { command: message.command });
+        if (result && "id" in result) {
+          try { check(); } catch (error) { await invoke("office_browser", { command: { kind: "close", id: result.id } }).catch(() => {}); throw error; }
+          browserJobs.current.add(result.id);
+        }
+        if (message.command.kind === "close") browserJobs.current.delete(message.command.id);
+        check(); reply(result); return;
+      }
       if (message.action === "html-render") {
         if (!("__TAURI_INTERNALS__" in window)) throw new Error("PDF 출력은 데스크톱 앱에서 실행해 주세요.");
         const { invoke } = await import("@tauri-apps/api/core");
@@ -223,7 +237,11 @@ export const OfficeEditor = forwardRef<
     finally { outputBusy.current = false; }
   };
   useEffect(() => {
-    return () => { outputClose.current?.(); setOutput(null); outputPlans.current.clear(); };
+    return () => {
+      outputClose.current?.(); setOutput(null); outputPlans.current.clear();
+      const jobs = [...browserJobs.current]; browserJobs.current.clear();
+      if (jobs.length) void import("@tauri-apps/api/core").then(({ invoke }) => Promise.all(jobs.map(id => invoke("office_browser", { command: { kind: "close", id } }).catch(() => {}))));
+    };
   }, [artifact.id, generation, sessionId]);
   useEffect(() => () => { copied.current.clear(); }, [artifact.id, generation]);
 
@@ -443,6 +461,12 @@ export const OfficeEditor = forwardRef<
         handlers.current.onNotice("문서를 여는 중이거나 다른 출력을 처리 중입니다."); return;
       }
       send({ type: "office:export-pdf" });
+    },
+    exportDocx() {
+      if (status.current.revision === null || outputBusy.current || outputPlans.current.size) {
+        handlers.current.onNotice("문서를 여는 중이거나 다른 출력을 처리 중입니다."); return;
+      }
+      send({ type: "office:export-docx" });
     },
     flush() {
       if (outputBusy.current || outputPlans.current.size || copied.current.size) return Promise.resolve(null);

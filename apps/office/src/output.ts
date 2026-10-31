@@ -1,4 +1,4 @@
-import type { HtmlJob, OfficeOutputFormat, OfficeOutputPlan, OfficeOutputRequest, SvgJob } from "../../../packages/contracts/src/office-output.ts";
+import type { BrowserCommand, BrowserResult, HtmlJob, OfficeOutputFormat, OfficeOutputPlan, OfficeOutputRequest, SvgJob } from "../../../packages/contracts/src/office-output.ts";
 import { listen, post } from "./bridge.ts";
 const pending = new Map<string, { resolve(value: unknown): void; reject(error: Error): void }>();
 listen((message) => {
@@ -16,3 +16,4 @@ export const cancelOutput = (planId?: string, preparationId?: string) => request
 export const printOutput = (revision: number, job: SvgJob, action: "pdf" | "print") => request<{ path?: string } | null>({ type: "office:output", requestId: crypto.randomUUID(), action, revision, job });
 export const htmlOutput = (revision: number, job: HtmlJob, action: "html-pdf" | "html-print") => request<{ path?: string } | null>({ type: "office:output", requestId: crypto.randomUUID(), action, revision, job });
 export const renderHtmlPdf = (revision: number, job: HtmlJob) => request<ArrayBuffer>({ type: "office:output", requestId: crypto.randomUUID(), action: "html-render", revision, job });
+export const browserOperation = <T extends BrowserResult | null>(revision: number, command: BrowserCommand) => request<T>({ type: "office:output", requestId: crypto.randomUUID(), action: "browser", revision, command });

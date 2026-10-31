@@ -38,16 +38,18 @@ libc = "0.2"
 notify-rust = "4.18"
 gtk = { version = "0.18", features = ["v3_24"] }
 webkit2gtk = { version = "2", features = ["v2_40"] }
+cairo-rs = { version = "0.18", features = ["png"] }
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39"
 windows = { version = "0.62", features = ["Win32_Foundation"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSPrintInfo", "NSPrintOperation", "NSView"] }
-objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSDictionary", "NSURL", "NSString", "NSGeometry"] }
-objc2-web-kit = { version = "0.3.2", default-features = false, features = ["std", "WKWebView", "objc2-app-kit"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSPrintInfo", "NSPrintOperation", "NSView", "NSImage", "NSImageRep", "NSBitmapImageRep"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSDictionary", "NSURL", "NSString", "NSGeometry", "NSData", "NSError"] }
+objc2-web-kit = { version = "0.3.2", default-features = false, features = ["std", "WKWebView", "WKContentWorld", "WKFrameInfo", "WKSnapshotConfiguration", "block2", "objc2-core-foundation", "objc2-app-kit"] }
 
 [profile.release]
 codegen-units = 4
