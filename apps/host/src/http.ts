@@ -19,6 +19,7 @@ import { skillRoutes } from "./skills-http.ts";
 import { OfficeOutputs } from "./office-output.ts";
 import type { OfficeAi } from "./office-ai.ts";
 import type { OfficeSkills } from "./office-skills.ts";
+import { OfficeWiki } from "./office-wiki.ts";
 
 export const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -212,6 +213,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
   const tickets = new Map<string, PreviewTicket>();
   const userSkills = skillRoutes(manager);
   const outputs = new OfficeOutputs(manager.documents, (source, path, revision, sessionId) => manager.registerOfficeCopy(source, path, revision, sessionId));
+  const wiki = new OfficeWiki(manager);
   return createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const path = url.pathname;
@@ -675,6 +677,11 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         }
         if (method === "POST" && parts[2] === "office-preview-close" && options.officeSkills) {
           return sendJson(res, 200, options.officeSkills.previews.close(artifactId, documentAccess(req)));
+        }
+        if (method === "POST" && parts[2] === "office-wiki") {
+          const body = await readJson(req, 256_000), grants = options.editors?.grants;
+          if (!grants || typeof body.token !== "string" || !body.input || typeof body.input !== "object" || Array.isArray(body.input)) throw new HttpError(400, "office_wiki", "위키 문서 요청을 확인해 주세요.");
+          return sendJson(res, 200, await wiki.action(artifactId, body.token, grants, body.action, body.input as Record<string, unknown>));
         }
         if (method === "POST" && parts[2] === "office-skills") {
           const body = await readJson(req, 90 * 1024 * 1024), grants = options.editors?.grants;

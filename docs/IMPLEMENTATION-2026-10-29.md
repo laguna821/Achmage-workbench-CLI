@@ -2,7 +2,9 @@
 
 ## 현재 상태 — 2026-10-31
 
-공개 최신은 **v0.2.2**다. Lightpanda·PPT 미디어·Word F7을 포함한 `f36afbb`의 [설치본 시험](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41199033710)은 공통 검사와 Windows/macOS/Linux/Arch 패키징, Windows/macOS 설치본 첫 실행 **각각18/18**을 모두 통과했다. 이전 Mac 인쇄 정체도 비동기 완료 방식으로 해결됐다. 이 Windows 시험본의 설치 디렉터리 파일 합계는 **435,413,288 bytes(약415MiB)**이며 압축 설치파일 크기는 아니다. Mac 측 472,728,164 bytes는 `Contents/Resources`만의 크기다. 근거 판 `research:rr-a1113b1710d6df910256d23a2c711f5f:6c8e63da37647a2568c0082e03b7e36a31394265945b046733dd2cc28aa6ac80`. 태그 없는 시험이므로 공개 릴리스는 게시하지 않았다. 이후 Sheets 생성 URL·XMind 저장 완료 수정은 이 실행에 포함되지 않는다.
+2026-10-31 Markdown 위키: 원본 해석·백링크·그래프를 현재 작업공간과 같은 문서 대화에 연결하고, 보존된 탭의 제목 이동 및 문단 끝 `^id` 이동을 보완했다. 실제 Linux **15/15**(위키11·시작4), 관련 **22/22**, 전체 타입·빌드 통과. 원문 YAML/CRLF 불변과 미저장 편집 후 이동을 확인했다. [범위](office-integration.md#markdown-위키백링크그래프), 판 `research:rr-592b13360d60b4228c7b222d4c2e80a1:1dd127a3e11d8df5b9c0da4776030290af7360c58224142e6125805e2860a0d4`. 전역 지식/Drive 및 이번 변경의 다른 OS 인수는 남았다.
+
+공개 최신은 **v0.2.2**다. Lightpanda·PPT 미디어·Word F7을 포함한 `f36afbb`의 [설치본 시험](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41199033710)은 공통 검사와 Windows/macOS/Linux/Arch 패키징, Windows/macOS 설치본 첫 실행 **각각18/18**을 모두 통과했다. 이전 Mac 인쇄 정체도 비동기 완료 방식으로 해결됐다. 이 Windows 시험본의 설치 디렉터리 파일 합계는 **435,413,288 bytes(약415MiB)**이며 압축 설치파일 크기는 아니다. Mac 측 472,728,164 bytes는 `Contents/Resources`만의 크기다. 근거 판 `research:rr-a1113b1710d6df910256d23a2c711f5f:6c8e63da37647a2568c0082e03b7e36a31394265945b046733dd2cc28aa6ac80`. 태그 없는 시험이므로 공개 릴리스는 게시하지 않았다. 이후 Sheets 생성 URL·XMind 저장 완료 수정과 Markdown 위키 연결은 이 실행에 포함되지 않는다.
 
 | 사용자 요구 | 구현·확인한 범위 | 남은 범위 |
 |---|---|---|
@@ -13,7 +15,7 @@
 | SSH·모바일·원격·확장 | 전체 목표에 유지 | 구현·인증·재연결 검증 |
 | 이음 편집기 9종 | Word/PPT/Sheets/HWP/PDF/Markdown/HTML/EPUB/XMind 내부 편집, 대표 AI·저장·복구·되돌림 | 전체 메뉴/형식/OS 동등성 |
 | 공통 문서 흐름 | 같은 대화, +/@ 참조, 첨부, 스킬·양식 사본, 디자인 갤러리, 새 문서·사본·주요 출력/CLI | 남은 공통 메뉴·일부 변환·인쇄/발표 흐름 |
-| 이음 전체 공통 서비스 | 직접 제공자·설정·키링·문서 AI, 원본 웹/이미지 검색·URL 읽기, Word/PPT 및 추가6형식 생성 이미지 저장·재열기 | 추가 미디어·OS 인수, wiki/지식, Drive, 장기 AI 작업·내부 MCP 전체. 원본 Sheets 저장 후 그림 Undo 제한 |
+| 이음 전체 공통 서비스 | 직접 제공자·설정·키링·문서 AI, 원본 웹/이미지 검색·URL 읽기, Word/PPT 및 추가6형식 생성 이미지 저장·재열기, Markdown 위키·백링크·그래프 | 추가 미디어·OS 인수, 전역 지식, Drive, 장기 AI 작업·내부 MCP 전체. 원본 Sheets 저장 후 그림 Undo 제한 |
 | HOP 개선분·한글 기본 스킬 | HOP 별도 앱 제거; hallym-kordoc 기본 제공, 사용자 설치/비활성 우선, 생성 HWPX는 이음으로 표시 | HOP 개선분 전체 대조·다른 OS |
 | doory | 생성·편집·저장·복구·이미지/PDF 출력의 Linux 흐름 | 전체 메뉴·OS 인수 |
 | 옵시디언식 PKM | 내비게이터·프로젝트 노트·Bases식 보기, 썸네일·폴더 템플릿, 지원 범위의 .base 교환 | 전체 통합·OS 인수 |

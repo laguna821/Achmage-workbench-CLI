@@ -10,6 +10,7 @@ import { saveReferencedDocument } from "../../document-commands.ts";
 import { pickOfficeFiles } from "./office-file-picker.ts";
 import { SkillLibraryDialog } from "../SkillLibraryDialog.tsx";
 import type { OfficeSkillRequest } from "../../../../../packages/contracts/src/office-skills.ts";
+import type { OfficeWikiRequest } from "../../../../../packages/contracts/src/office-wiki.ts";
 
 export type OfficeHandle = {
   control(request: RendererControlRequest): Promise<RendererControlReply>;
@@ -310,6 +311,38 @@ export const OfficeEditor = forwardRef<
     } catch (error) { reply(undefined, error instanceof Error ? error.message : String(error)); }
   };
 
+  const handleWiki = async (message: OfficeWikiRequest) => {
+    const target = frame.current?.contentWindow, opening = opened.current, owner = latest.current.id;
+    if (!target || !opening) return;
+    const reply = (value?: unknown, error?: string) => target.postMessage({ type: "office:wiki-result", requestId: message.requestId, value, error }, opening.origin);
+    const check = () => { if (target !== frame.current?.contentWindow || latest.current.id !== owner || opened.current?.sessionId !== opening.sessionId) throw new Error("위키를 읽는 동안 문서 창이나 대화가 바뀌었습니다."); };
+    try {
+      if (message.action === "open") {
+        if (!handlers.current.onCopied) throw new Error("연결된 문서를 열 수 있는 화면이 아닙니다.");
+        const pending = waitFlushed(); send({ type: "office:flush" });
+        if (await pending === null) throw new Error("현재 문서를 저장하지 못했습니다. 편집 내용을 보존한 뒤 링크를 다시 열어 주세요.");
+      }
+      check();
+      const value = await api.officeWiki<{ artifactId?: string }>(owner, opening.token, message.action, message.input);
+      check(); reply(value);
+      if (message.action === "open" && value.artifactId) {
+        handlers.current.onCopied?.(value.artifactId);
+        window.dispatchEvent(new CustomEvent("workbench:wiki-open", { detail: { artifactId: value.artifactId, sessionId: opening.sessionId } }));
+      }
+    } catch (error) { reply(undefined, error instanceof Error ? error.message : String(error)); }
+  };
+  const wikiHandler = useRef(handleWiki);
+  wikiHandler.current = handleWiki;
+
+  useEffect(() => {
+    const activate = (event: Event) => {
+      const target = (event as CustomEvent<{ artifactId: string; sessionId: string | null }>).detail;
+      if (target.artifactId === latest.current.id && target.sessionId === opened.current?.sessionId) send({ type: "office:wiki-activate" });
+    };
+    window.addEventListener("workbench:wiki-open", activate);
+    return () => window.removeEventListener("workbench:wiki-open", activate);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     api
@@ -336,6 +369,7 @@ export const OfficeEditor = forwardRef<
       const message = event.data as OfficePageMessage;
       switch (message.type) {
         case "office:skills": void skillsHandler.current(message); break;
+        case "office:wiki": void wikiHandler.current(message); break;
         case "office:references": void referenceHandler.current(message); break;
         case "office:ai-request": void aiHandler.current(message); break;
         case "office:output": void outputHandler.current(message); break;

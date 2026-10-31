@@ -6,6 +6,7 @@ import { copyOfficeBytes, officeCopyBusy } from "./copy.ts";
 import type { OfficeOutputFormat } from "../../../packages/contracts/src/office-output.ts";
 import { htmlOutput } from "./output.ts";
 import { preparePrintHtml } from "./print-html.ts";
+import { createOfficeWiki } from "./wiki.ts";
 
 /** The original Markdown/HTML renderers serialize their own source; never normalize it here. */
 export async function createTextEditor(kind: "markdown" | "html") {
@@ -171,9 +172,7 @@ export async function createTextEditor(kind: "markdown" | "html") {
     onPrintRequest: events.on("print"),
     ...ai.desktop,
     aiSubscription: ai.subscription, subscription: ai.subscription,
-    openSourcePath: unavailable("참조 문서 열기"), resolveWikiLinks: unavailable("위키 링크"),
-    rememberWikiFragment: unavailable("위키 링크"), takeWikiFragment: async () => "",
-    wikiBacklinks: unavailable("백링크"), wikiGraph: unavailable("그래프"),
+    ...createOfficeWiki(init),
     getImageHost: async () => null, setImageHost: unavailable("이미지 호스트"), uploadImage: rejected("이미지 업로드"),
     pickImage, saveImage,
     readImage: async (src: string) => {

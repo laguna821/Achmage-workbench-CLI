@@ -9,6 +9,40 @@ import { OfficeEditor, type OfficeHandle } from "./OfficeEditor.tsx";
 const aiProps = { sessionId: "session", onPrepareAi: async () => {}, onNewSession: async () => "session", onAiSettings: () => {} };
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
+
+async function wikiFlow(deferred = false) {
+  let sessionId = "session", complete: ((value: { artifactId: string }) => void) | undefined;
+  const officeWiki = vi.fn(() => deferred ? new Promise<{ artifactId: string }>(resolve => { complete = resolve; }) : Promise.resolve({ artifactId: "target" }));
+  const api = { editorGrant: async () => ({ token: sessionId, sessionId, origin: "http://office.test", url: "http://office.test/markdown" }), officeWiki } as unknown as Api;
+  const artifact = { id: "source", name: "A.md", format: "markdown", revision: 1, path: "/A.md", sha256: "test" } as Artifact;
+  const onCopied = vi.fn(), props = { ...aiProps, api, artifact, onCopied, onNotice: () => {}, onStatus: () => {} };
+  const screen = render(<OfficeEditor {...props} />); await act(async () => {});
+  const frame = screen.container.querySelector("iframe")!, sent = vi.spyOn(frame.contentWindow!, "postMessage");
+  const message = async (data: unknown) => act(async () => { window.dispatchEvent(new MessageEvent("message", { origin: "http://office.test", source: frame.contentWindow, data })); });
+  await message({ type: "office:opened", revision: 1, recovered: false });
+  await message({ type: "office:wiki", requestId: "wiki", action: "open", input: { path: "/B.md", fragment: "Heading" } });
+  const changeSession = async () => { sessionId = "other"; screen.rerender(<OfficeEditor {...props} sessionId={sessionId} />); await act(async () => {}); };
+  return { officeWiki, onCopied, sent, message, changeSession, complete: () => complete!({ artifactId: "target" }) };
+}
+it("flushes the source before navigating a wiki link with the document grant", async () => {
+  const f = await wikiFlow();
+  expect(f.sent).toHaveBeenCalledWith({ type: "office:flush" }, "http://office.test"); expect(f.officeWiki).not.toHaveBeenCalled();
+  await f.message({ type: "office:flushed", revision: 1 });
+  expect(f.officeWiki).toHaveBeenCalledWith("source", "session", "open", { path: "/B.md", fragment: "Heading" });
+  expect(f.onCopied).toHaveBeenCalledWith("target");
+});
+it("keeps the source open when a wiki navigation cannot save it", async () => {
+  const f = await wikiFlow(); await f.message({ type: "office:flushed", revision: null });
+  expect(f.officeWiki).not.toHaveBeenCalled(); expect(f.onCopied).not.toHaveBeenCalled();
+  expect(f.sent).toHaveBeenCalledWith(expect.objectContaining({ type: "office:wiki-result", error: expect.stringContaining("저장하지 못했습니다") }), "http://office.test");
+});
+it("does not navigate when a wiki result arrives after the conversation changes", async () => {
+  const f = await wikiFlow(true); await f.message({ type: "office:flushed", revision: 1 });
+  await f.changeSession(); await act(async () => f.complete());
+  expect(f.onCopied).not.toHaveBeenCalled();
+  expect(f.sent).toHaveBeenCalledWith(expect.objectContaining({ type: "office:wiki-result", error: expect.stringContaining("바뀌었습니다") }), "http://office.test");
+});
+
 async function setup() {
   vi.useFakeTimers();
   const ref = createRef<OfficeHandle>();

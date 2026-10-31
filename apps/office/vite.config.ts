@@ -261,6 +261,17 @@ function textEditorPlatform(): Plugin {
     name: "workbench-text-editors",
     enforce: "pre",
     transform(code, id) {
+      if (id === `${ieum}/apps/markdown/src/renderer/App.tsx`) {
+        const marker = "  const extensions = useMemo(() => {";
+        if (!code.includes(marker) || !code.includes("const jumpToWikiFragment = useCallback")) this.error("Markdown wiki lifecycle changed: review retained-tab navigation");
+        return `import { onWikiActivation } from ${JSON.stringify(here("./src/wiki.ts"))};\n` + code.replace(marker,
+          "  useEffect(() => onWikiActivation(() => { const path = filePathRef.current; if (path) jumpToWikiFragment(path); }), [jumpToWikiFragment]);\n\n" + marker);
+      }
+      if (id === `${ieum}/apps/markdown/src/renderer/editor/wikilink.ts`) {
+        const marker = "export function wikiFragmentPosition(doc: PmNode, fragment: string): number | null {";
+        if (!code.includes(marker)) this.error("Markdown wiki fragment parser changed: review block navigation");
+        return `import { wikiBlockPosition } from ${JSON.stringify(here("./src/wiki.ts"))};\n` + code.replace(marker, marker + "\n  if (fragment.trim().startsWith('^')) return wikiBlockPosition(doc, fragment);");
+      }
       if (id === `${ieum}/apps/epub/src/renderer/components/ChapterFrame.tsx`) {
         const before = '      sandbox="allow-same-origin"';
         if (code.split(before).length !== 2 || !code.includes("srcDoc={props.html}")) this.error("EPUB frame changed: review WebKit event compatibility and mandatory chapter CSP");

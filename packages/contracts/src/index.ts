@@ -767,6 +767,8 @@ export type EditorGrant = { url: string; origin: string; token: string; sessionI
 
 /** Workbench window → office editor page (iframe at /office/<kind>.html). */
 export type OfficeHostMessage =
+  | { type: "office:wiki-activate" }
+  | import("./office-wiki.ts").OfficeWikiResult
   | { type: "office:control"; requestId: string; request: import("./office-control.ts").RendererControlRequest }
   | { type: "office:export-pdf" }
   | { type: "office:export-docx" }
@@ -803,6 +805,7 @@ export type OfficeHostMessage =
 
 /** Office editor page → Workbench window. */
 export type OfficePageMessage =
+  | import("./office-wiki.ts").OfficeWikiRequest
   | { type: "office:control-result"; requestId: string; reply: import("./office-control.ts").RendererControlReply }
   | { type: "office:headless-result"; ok: boolean; error?: string }
   | import("./office-skills.ts").OfficeSkillRequest

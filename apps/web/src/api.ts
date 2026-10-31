@@ -403,6 +403,7 @@ export class Api {
   editorGrant = (artifactId: string) => this.request<EditorGrant>("POST", `/api/artifacts/${artifactId}/editor`);
   officeReferences = <T>(artifactId: string, token: string, action: string, input: Record<string, unknown> = {}) => this.request<T>("POST", `/api/artifacts/${artifactId}/office-references`, { ...input, token, action });
   officeSkills = <T>(artifactId: string, token: string, action: string, input: Record<string, unknown>) => this.request<T>("POST", `/api/artifacts/${artifactId}/office-skills`, { token, action, input });
+  officeWiki = <T>(artifactId: string, token: string, action: string, input: Record<string, unknown>) => this.request<T>("POST", `/api/artifacts/${artifactId}/office-wiki`, { token, action, input });
   closeOfficePreview = (artifactId: string) => this.request<{ ok: boolean }>("POST", `/api/artifacts/${artifactId}/office-preview-close`);
   async uploadOfficeReference(artifactId: string, token: string, file: File) {
     const response = await fetch(`/api/artifacts/${artifactId}/office-reference-upload`, {
