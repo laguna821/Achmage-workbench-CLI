@@ -73,3 +73,6 @@ pin. It shares the same rhwp WASM with the internal editor.
 
 The `ieumoffice` command line tool that Workbench can call is not part of
 this repository; it ships inside an installed IeumOffice application.
+
+  slides-print.ts: pure PDF HTML and page geometry helpers from apps/slides/src/main/pdf-export.ts
+  pdf-links.ts: internal PDF links from apps/docs/src/main/pdf-links.ts

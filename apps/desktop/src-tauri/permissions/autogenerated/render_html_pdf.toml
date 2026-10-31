@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-render-html-pdf"
+description = "Enables the render_html_pdf command without any pre-configured scope."
+commands.allow = ["render_html_pdf"]
+
+[[permission]]
+identifier = "deny-render-html-pdf"
+description = "Denies the render_html_pdf command without any pre-configured scope."
+commands.deny = ["render_html_pdf"]

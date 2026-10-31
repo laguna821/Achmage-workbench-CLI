@@ -40,6 +40,8 @@
     "allow-notify-session",
     "allow-set-attention",
     "allow-render-svg-pdf",
-    "allow-print-svg"
+    "allow-print-svg",
+    "allow-render-html-pdf",
+    "allow-print-html"
   ]
 }

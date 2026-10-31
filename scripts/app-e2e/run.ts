@@ -46,6 +46,7 @@ import { officePreviewsScenario } from "./office-previews.ts";
 import { officeGalleryScenario } from "./office-gallery.ts";
 import { officeCopiesScenario } from "./office-copies.ts";
 import { officeNewScenario } from "./office-new.ts";
+import { officeOutputScenario } from "./office-output.ts";
 import { designScenario } from "./design.ts";
 
 const { binary, outDir, only, engines } = parseArgs(process.argv.slice(2));
@@ -62,7 +63,7 @@ process.once("SIGINT", () => void stop().then(() => process.exit(130)));
 process.once("SIGTERM", () => void stop().then(() => process.exit(143)));
 
 try {
-  stage = await openStage(outDir, { legacyOffice: wants("template-office"), printDialog: wants("hwp"), privateKeyring: wants("office-settings") });
+  stage = await openStage(outDir, { legacyOffice: wants("template-office"), printDialog: wants("hwp") || wants("office-output"), privateKeyring: wants("office-settings") });
   console.log(`app ${binary}\nout ${outDir}\nBroadway ${stage.display} (http://127.0.0.1:${stage.broadwayPort}/) · tmp ${stage.root}`);
   if (only.length) {
     const app = await stage.launch({ name: engines, binary, engines, profile: "native" });
@@ -94,6 +95,7 @@ try {
       if (wants("office-gallery")) await officeGalleryScenario(ctx, { binary, engines, profile: "native" });
       if (wants("office-copies")) await officeCopiesScenario(ctx);
       if (wants("office-new")) await officeNewScenario(ctx);
+      if (wants("office-output")) await officeOutputScenario(ctx);
       if (wants("design")) await designScenario(ctx, { binary, engines, profile: "native" });
       if (wants("hwp")) await hwpScenario(ctx);
       if (wants("worktrees")) await worktreesScenario(ctx, { binary, engines, profile: "native" });

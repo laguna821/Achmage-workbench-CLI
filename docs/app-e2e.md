@@ -1,5 +1,7 @@
 # Linux 실제 앱 검사
 
+`--only=office-output --engines=stand-in`은 시스템 WebView의 두 쪽 PDF·한글·스크립트 차단과 실제 GTK 인쇄 창/취소를 확인한 뒤 원본 MD/HTML/PPT/Word 메뉴의 미저장 내용 PDF·원본 파일/판 보존을 검사한다. `APP_E2E_OUTPUT_FORMATS=docx`로 편집기를 선택하고 빈 문자열로 공통 출력/인쇄만 실행한다. 문서 처리·Tauri IPC·PDF는 실제 코드이며 인쇄 대화상자에서 Cancel만 자동으로 누른다. 네 편집기15/15와 공통 출력/인쇄8/8의 근거는 `html-output-native-07/verification.json`. [동작과 한계](office-integration.md#원본-pdf-출력과-시스템-인쇄).
+
 `--only=office-new --engines=stand-in`은 프로젝트/문서 공통 파일 메뉴로 8종 빈 문서를 만들고 원본 편집기에서 직접 편집·저장·재열기한다(PDF는 빈 1쪽과 무변경 저장). EPUB는 기존 책 열기로 확인하며 파일 선택기의 IPC 응답만 대역이다. `APP_E2E_OFFICE_NEW_FORMATS=xlsx`처럼 형식을 고르면 해당 형식과 공통 열기만 실행한다. Sheets의 빈 contenteditable은 키보드 호스트이므로 내용 판정에 쓰지 않고, 재열기 후 A1과 원본 Canvas가 그린 문자열을 확인한다. 8종 근거 및 최종 선택 **9/9**는 `office-new-native-05/verification.json`에 연결했다. [동작과 남은 범위](office-integration.md#공통-파일-메뉴와-원본-빈-문서), 검증 판 `research:rr-1e68303c93030a564b197df31c201474:0956ccf443555135e1081d202f0f717aecc1b32f27de0c2ba1c17a8b975c0350`. 실제 OS 선택창·다른 OS 및 원본 untitled 동작을 이 검사로 인증하지 않는다.
 
 `APP_E2E_OFFICE_COPY_FORMATS=md,html --only=office-copies --engines=stand-in`은 원본 Save As와 취소/오류/미저장 입력 보존에 더해 다른 폴더 자산 사본을 확인한다. 원본 assets를 이동한 뒤 사본을 새로 열어 Markdown 실제 그림과 HTML 상대 base·CSS import·배경 그림·스크립트를 확인한다. ProseMirror의 src 없는 구분자 img를 실제 그림으로 세지 않는다. 최종 **20/20**, 인접58/58. 근거 `text-copy-native-03/verification.json`; 검증 판 `research:rr-ce4fc09f87e588394157a3dee48de123:aeae8d8ca5b6f02c2e10a93a292ca3c966ac27fa78a53ae7b4f070337dfd5038`. 다른 OS/물리 파일 선택기는 이 검사의 범위가 아니다.

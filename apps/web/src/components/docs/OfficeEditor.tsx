@@ -11,6 +11,8 @@ import { SkillLibraryDialog } from "../SkillLibraryDialog.tsx";
 import type { OfficeSkillRequest } from "../../../../../packages/contracts/src/office-skills.ts";
 
 export type OfficeHandle = {
+  /** Run the original renderer's PDF action on current, possibly unsaved content. */
+  exportPdf(): void;
   /** Save unsaved edits now; resolves with the saved revision, or null when they could not be saved. */
   flush(): Promise<number | null>;
   /** After a conflict: save my edits as the revision after `revision`; null when there was nothing to keep or it failed. */
@@ -189,10 +191,16 @@ export const OfficeEditor = forwardRef<
         } finally { outputPlans.current.delete(plan.id); }
         return;
       }
-      if (message.action === "print") {
+      if (message.action === "html-render") {
+        if (!("__TAURI_INTERNALS__" in window)) throw new Error("PDF 출력은 데스크톱 앱에서 실행해 주세요.");
+        const { invoke } = await import("@tauri-apps/api/core");
+        const bytes = await invoke<ArrayBuffer>("render_html_pdf", { job: message.job });
+        check(); reply(bytes); return;
+      }
+      if (message.action === "print" || message.action === "html-print") {
         if (!("__TAURI_INTERNALS__" in window)) throw new Error("인쇄는 데스크톱 앱에서 실행해 주세요.");
-        const { invoke } = await import("@tauri-apps/api/core"); await invoke("print_svg", { job: message.job });
-        handlers.current.onNotice("인쇄 미리보기 창을 열었습니다."); reply({}); return;
+        const { invoke } = await import("@tauri-apps/api/core"); await invoke(message.action === "print" ? "print_svg" : "print_html", { job: message.job });
+        handlers.current.onNotice(message.action === "print" ? "인쇄 미리보기 창을 열었습니다." : "시스템 인쇄 창을 열었습니다."); reply({}); return;
       }
       const plan = await new Promise<OfficeOutputPlan | null>((resolve) => {
         const choose = (value: OfficeOutputPlan | null) => { outputClose.current = null; outputRequest.current = null; resolve(value); };
@@ -206,7 +214,7 @@ export const OfficeEditor = forwardRef<
       if (message.action === "prepare") { outputPlans.current.set(plan.id, { ...plan, preparationId: message.requestId }); reply(plan); return; }
       if (!("__TAURI_INTERNALS__" in window)) throw new Error("PDF 출력은 데스크톱 앱에서 실행해 주세요.");
       const { invoke } = await import("@tauri-apps/api/core");
-      const bytes = await invoke<ArrayBuffer>("render_svg_pdf", { job: message.job });
+      const bytes = await invoke<ArrayBuffer>(message.action === "html-pdf" ? "render_html_pdf" : "render_svg_pdf", { job: message.job });
       check();
       const result = await api.commitOfficeOutput(owner, plan.id, bytes, plan.replace);
       handlers.current.onNotice(`PDF를 저장했습니다: ${result.path}`);
@@ -430,6 +438,12 @@ export const OfficeEditor = forwardRef<
   }, [artifact.revision]);
 
   useImperativeHandle(ref, () => ({
+    exportPdf() {
+      if (status.current.revision === null || outputBusy.current || outputPlans.current.size) {
+        handlers.current.onNotice("문서를 여는 중이거나 다른 출력을 처리 중입니다."); return;
+      }
+      send({ type: "office:export-pdf" });
+    },
     flush() {
       if (outputBusy.current || outputPlans.current.size || copied.current.size) return Promise.resolve(null);
       if (status.current.conflict) return Promise.resolve(null);

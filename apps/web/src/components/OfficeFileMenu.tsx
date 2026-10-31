@@ -5,7 +5,7 @@ import { Icon } from "./Icon.tsx";
 import { MenuItem, Popover } from "./Popover.tsx";
 
 /** Common shell file actions, outside the original editors' independent ribbons. */
-export function OfficeFileMenu({ api, workId, workspaceId, sessionId, cwd, sourceKey, pickFile, beforeOpen, onOpenArtifact, onToast }: {
+export function OfficeFileMenu({ api, workId, workspaceId, sessionId, cwd, sourceKey, pickFile, beforeOpen, onOpenArtifact, onToast, onExportPdf }: {
   api: Api;
   workId: string;
   workspaceId?: string;
@@ -16,6 +16,7 @@ export function OfficeFileMenu({ api, workId, workspaceId, sessionId, cwd, sourc
   beforeOpen?: () => Promise<boolean>;
   onOpenArtifact: (id: string) => void;
   onToast: (message: string) => void;
+  onExportPdf?: () => void;
 }) {
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [path, setPath] = useState("");
   const anchor = useRef<HTMLDivElement>(null), pending = useRef(false);
@@ -47,6 +48,7 @@ export function OfficeFileMenu({ api, workId, workspaceId, sessionId, cwd, sourc
       <Icon name="file" size={15} /> {busy ? "준비 중…" : "파일"}
     </button>
     <Popover open={open} onClose={() => setOpen(false)} align="left">
+      {onExportPdf ? <><MenuItem onSelect={() => { setOpen(false); onExportPdf(); }}>PDF로 내보내기</MenuItem><div className="menu-sep" /></> : null}
       <div className="menu-label">새 문서</div>
       {BLANK_OFFICE_DOCUMENTS.map((kind) => <MenuItem key={kind.format} hint={`.${kind.extension}`} onSelect={() => create(kind.format)}>{kind.label}</MenuItem>)}
       <div className="menu-divider" />

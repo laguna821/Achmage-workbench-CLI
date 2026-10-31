@@ -8,6 +8,13 @@ import { carriesMark, convertForeignPictures, desktopPicture, markClipboard, pas
 import type { WorkerCall, WorkerMessage, WorkerRequest } from "./slides/protocol.ts";
 import { createSlideStyles } from "./slides/styles.ts";
 import { copyOfficeBytes, officeCopyBusy } from "./copy.ts";
+import { prepareOutput, commitOutput, cancelOutput, renderHtmlPdf, htmlOutput } from "./output.ts";
+import { preparePrintHtml } from "./print-html.ts";
+import { buildPdfExportHtml, exportPageWidthIn, PDF_EXPORT_HEIGHT_IN } from "../../../third_party/ieumoffice/slides-print.ts";
+import { buildPrintDocumentHtml } from "../../../vendor/ieumoffice/apps/slides/src/shared/print-html.ts";
+import type { ExportPdfOp, PrintSlidesOp } from "../../../third_party/ieumoffice/slides-print.ts";
+import type { OfficeOutputPlan } from "../../../packages/contracts/src/office-output.ts";
+import { stampPdfLinks } from "./pdf-output-links.ts";
 
 // IeumOffice's slides editor inside Workbench. Its screen (vendor/ieumoffice/apps/slides renderer)
 // and its window API (the preload) are used unchanged; its editing code — pptx parsing, layout,
@@ -55,6 +62,7 @@ let aiPrefs = DEFAULT_AI_PANEL_PREFS;
 try { aiPrefs = normalizeAiPanelPrefs(JSON.parse(localStorage.getItem("workbench.office.slides.ai-prefs") ?? "null")); } catch { /* UI preferences only. */ }
 const noAi = () => Promise.reject(new Error("이 AI 도구는 아직 지원하지 않습니다."));
 const unhandled = new Set<string>();
+let pdfPlan: OfficeOutputPlan | null = null;
 
 async function invoke(channel: string, args: unknown[]): Promise<unknown> {
   // A copy inside the editor: marked on the system clipboard now, while the key press or click lasts.
@@ -82,6 +90,32 @@ async function invoke(channel: string, args: unknown[]): Promise<unknown> {
       return null;
     case "slides:save":
       return save(args[0] === true);
+    case "slides:pick-export-pdf-path":
+      if (pdfPlan) await cancelOutput(pdfPlan.id);
+      pdfPlan = await prepareOutput(state.revision, "pdf");
+      return pdfPlan?.path ?? null;
+    case "slides:export-pdf": {
+      const op = args[0] as ExportPdfOp, plan = pdfPlan; pdfPlan = null;
+      if (!plan || op.filePath !== plan.path) return { ok: false, error: "PDF 저장 위치를 다시 선택해 주세요." };
+      try {
+        const widthIn = exportPageWidthIn(op.widthPx, op.heightPx), heightIn = PDF_EXPORT_HEIGHT_IN;
+        const job = await preparePrintHtml(buildPdfExportHtml(op.pages, widthIn, heightIn, op.links, op.fontCss), { widthIn, heightIn, margin: 0 });
+        const bytes = await stampPdfLinks(await renderHtmlPdf(state.revision, job), op.links ?? []);
+        const result = await commitOutput(plan.id, bytes);
+        return { ok: true, path: result.path };
+      } catch (error) { await cancelOutput(plan.id); return { ok: false, error: String(error) }; }
+    }
+    case "slides:print": {
+      try {
+        const op = args[0] as PrintSlidesOp, layout = op.layout ?? "full", orientation = op.orientation ?? "portrait";
+        const fullWidth = exportPageWidthIn(op.widthPx, op.heightPx);
+        const html = buildPrintDocumentHtml({ srcs: op.pngsBase64.map(png => `data:image/png;base64,${png}`), ratio: fullWidth / PDF_EXPORT_HEIGHT_IN, layout, orientation, frame: op.frame, notes: op.notes });
+        const widthIn = layout === "full" ? fullWidth : (orientation === "portrait" ? 210 : 297) / 25.4;
+        const heightIn = layout === "full" ? PDF_EXPORT_HEIGHT_IN : (orientation === "portrait" ? 297 : 210) / 25.4;
+        await htmlOutput(state.revision, await preparePrintHtml(html, { widthIn, heightIn, margin: 0 }), "html-print");
+        return { ok: true };
+      } catch (error) { return { ok: false, error: String(error) }; }
+    }
     case "slides:save-as":
       try {
         const saved = await copyOfficeBytes(init, state.revision, "pptx", () => value<ArrayBuffer>({ type: "snapshot" }));
@@ -173,6 +207,7 @@ async function flush() {
 }
 
 listen((message) => {
+  if (message.type === "office:export-pdf") dispatch("slides:menu", ["export-pdf"]);
   if (message.type === "office:theme") {
     state.theme = message.theme;
     document.documentElement.dataset.workbenchTheme = message.theme;

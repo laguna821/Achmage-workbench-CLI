@@ -1,0 +1,13 @@
+{
+  "upstream": "https://github.com/pblsketch/openoffice",
+  "revision": "30ff4f051f067fcb2baf1ab416c40718c802ca35",
+  "source": "vendor/ieumoffice/apps/slides/src/main/pdf-export.ts",
+  "sourceSha256": "f5f59e51df862770c855abe95e768bff93e15e61bcd7782de5dbd8bcf9203283",
+  "adapted": "third_party/ieumoffice/slides-print.ts",
+  "changes": "Pure HTML and page geometry helpers retained verbatim; narrow IPC data types; Node/Electron orchestration removed.",
+  "additionalSource": {
+    "path": "vendor/ieumoffice/apps/docs/src/main/pdf-links.ts",
+    "sha256": "95cc8dcb1b48532bddc9707a0ed5ec7d840e1fe9d1b6af30537bb2fb83659c3c",
+    "adapted": "third_party/ieumoffice/pdf-links.ts"
+  }
+}

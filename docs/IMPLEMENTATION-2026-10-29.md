@@ -1,5 +1,7 @@
 # 통합 업데이트 실행 기록
 
+2026-10-31 출력 연결: 원본 Word/PPT/Markdown/HTML → 시스템 WebView PDF·공통 저장을 Linux 실제 앱 **15/15**, 공통 PDF·시스템 인쇄 창/취소를 **8/8**로 검증했다. 출력 준비/링크4/4, 인접 회귀34/34, 타입·web/Office/native 빌드 통과. Word의 중복 글꼴 약144MB 요청을 작업별 자산으로 줄였다. 실행 web1008/1008과 host/hwp-cli 일치. [범위와 한계](office-integration.md#원본-pdf-출력과-시스템-인쇄), 근거 `html-output-native-07/verification.json`, 검증 판 `research:rr-46296b7e11f6692905e32ef10c674a75:87ff5413de0dfd3168107e18f2d5e52c5e3a6e219edbf716fabd55bb1be63903`. 전체 G4/G5/G6는 계속 진행하며 배포 번들·설치본·용량은 미완료다.
+
 목표: 기존 통합 계획과 PKM의 남은 기능을 구현·검증하고 GitHub에 OS별 새 버전을 릴리스한다. 다음 버전은 잠정 `0.3.0`이며, 버전 번호는 실제 릴리스 준비 시 확정한다.
 
 - 시작 기준: 로컬 `b3bceab5`, 공개 v0.2.2 `0cfc9443`

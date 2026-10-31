@@ -1,16 +1,19 @@
 import { mountOfficeAi } from "./office-ai.ts";
 import { Events, Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
-import { configureTextAssets, unresolveTextImage } from "./text-assets.ts";
+import { configureTextAssets, resolveTextImage, unresolveTextImage } from "./text-assets.ts";
 import { copyOfficeBytes, officeCopyBusy } from "./copy.ts";
 import type { OfficeOutputFormat } from "../../../packages/contracts/src/office-output.ts";
+import { htmlOutput } from "./output.ts";
+import { preparePrintHtml } from "./print-html.ts";
 
 /** The original Markdown/HTML renderers serialize their own source; never normalize it here. */
 export async function createTextEditor(kind: "markdown" | "html") {
   const init = await handshake(), gateway = new Gateway(init.token), events = new Events();
   const ai = mountOfficeAi(init, gateway, events);
   const id = init.artifact.id, path = init.artifact.path;
-  configureTextAssets((await gateway.textAssets(id)).baseUrl, path);
+  const assetBase = (await gateway.textAssets(id)).baseUrl;
+  configureTextAssets(assetBase, path);
   const decode = (bytes: ArrayBuffer) => new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
   const encode = (text: string) => new TextEncoder().encode(text).buffer;
   const savedSource = decode(await gateway.raw(id, init.artifact.revision));
@@ -71,6 +74,7 @@ export async function createTextEditor(kind: "markdown" | "html") {
   }
 
   listen((message) => {
+    if (message.type === "office:export-pdf") events.emit("export", "pdf");
     if (message.type === "office:theme") { theme = message.theme; events.emit("theme", theme); }
     if (message.type === "office:flush") void flush();
     if (message.type === "office:rebase") { revision = message.revision; void flush(); }
@@ -177,9 +181,20 @@ export async function createTextEditor(kind: "markdown" | "html") {
       catch (error) { if (error instanceof GatewayError && [400, 403, 404, 415].includes(error.status)) return null; throw error; }
     },
     saveImageAs: rejected("그림 저장"),
-    exportDocx: rejected("Word 내보내기"), exportOdt: rejected("ODT 내보내기"), exportPdf: rejected("PDF 내보내기"), exportHtml: rejected("HTML 내보내기"),
+    exportDocx: rejected("Word 내보내기"), exportOdt: rejected("ODT 내보내기"), exportHtml: rejected("HTML 내보내기"),
+    exportPdf: async (request: { html: string }) => {
+      try {
+        const job = await preparePrintHtml(request.html, { baseUrl: assetBase, ...(kind === "markdown" ? { imageUrl: resolveTextImage } : {}) });
+        const result = await htmlOutput(revision, job, "html-pdf");
+        return result?.path ? { ok: true, path: result.path } : { ok: true, canceled: true };
+      } catch (error) { report(error); return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
+    },
     prepareImageExport: rejected("그림 내보내기"), writeExportImage: rejected("그림 내보내기"), finishImageExport: rejected("그림 내보내기"),
-    printHtml: rejected("HTML 인쇄"), renderPrintPreview: async () => null,
+    printHtml: async (request: { html: string }) => {
+      try { await htmlOutput(revision, await preparePrintHtml(request.html, { baseUrl: assetBase }), "html-print"); return { ok: true }; }
+      catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
+    },
+    renderPrintPreview: async () => null,
     takeGenerateHandoff: async () => null, reportGenerateRunStarted: () => {},
     getPreviewInfo: () => gateway.previewInfo(id),
     updatePreview: (text: string) => (previewQueue = previewQueue.catch(() => {}).then(() => gateway.updatePreview(id, text))),

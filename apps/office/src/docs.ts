@@ -5,6 +5,7 @@ import { convertForeignPictures, pasteDesktopPictures } from "./pictures.ts";
 import { createOfficeAi } from "./office-ai.ts";
 import { beginOfficeCopy, copyOfficeBytes, officeCopyBusy, type OfficeCopy } from "./copy.ts";
 import { DEFAULT_AI_PANEL_PREFS, normalizeAiPanelPrefs } from "../../../vendor/ieumoffice/packages/ui/src/ai-panel-prefs.ts";
+import { createDocsOutput } from "./docs-output.ts";
 
 // IeumOffice's Word editor inside Workbench. The editor itself (vendor/ieumoffice/apps/docs,
 // unchanged) reads and writes .docx in the page; this file stands in for its Electron preload:
@@ -115,6 +116,7 @@ async function rebase(revision: number) {
 }
 
 listen((message) => {
+  if (message.type === "office:export-pdf") events.emit("menuCommand", "export-pdf");
   if (message.type === "office:theme") {
     state.theme = message.theme;
     document.documentElement.dataset.workbenchTheme = message.theme;
@@ -227,6 +229,8 @@ const desktop = stubBridge(
         };
         input.click();
       }),
+    onMenuCommand: events.on("menuCommand"),
+    ...createDocsOutput(() => state.revision),
     print: async () => {
       window.print();
       return { ok: true };

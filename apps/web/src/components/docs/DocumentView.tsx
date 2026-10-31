@@ -675,6 +675,7 @@ export default function DocumentView({
         </div>
         <div className="doc-header-right">
           <OfficeFileMenu api={rootApi} workId={work.id} workspaceId={artifact.workspaceId}
+            onExportPdf={officeEditing && ["docx", "pptx", "markdown", "html"].includes(artifact.format) ? () => officeRef.current?.exportPdf() : undefined}
             sessionId={session?.workspaceId === artifact.workspaceId ? session?.id : undefined}
             cwd={state.workspaces[artifact.workspaceId ?? ""]?.cwd ?? work.cwd} sourceKey={artifact.id} pickFile={pickFile}
             beforeOpen={async () => await save() !== null} onOpenArtifact={onOpenArtifact} onToast={onToast} />

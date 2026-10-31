@@ -1,4 +1,4 @@
-import type { OfficeOutputFormat, OfficeOutputPlan, OfficeOutputRequest, SvgJob } from "../../../packages/contracts/src/office-output.ts";
+import type { HtmlJob, OfficeOutputFormat, OfficeOutputPlan, OfficeOutputRequest, SvgJob } from "../../../packages/contracts/src/office-output.ts";
 import { listen, post } from "./bridge.ts";
 const pending = new Map<string, { resolve(value: unknown): void; reject(error: Error): void }>();
 listen((message) => {
@@ -14,3 +14,5 @@ export const prepareOutput = (revision: number, format: OfficeOutputFormat, requ
 export const commitOutput = (planId: string, bytes: ArrayBuffer) => request<{ path: string; artifactId: string }>({ type: "office:output", requestId: crypto.randomUUID(), action: "commit", planId, bytes });
 export const cancelOutput = (planId?: string, preparationId?: string) => request<null>({ type: "office:output", requestId: crypto.randomUUID(), action: "cancel", ...(planId ? { planId } : {}), ...(preparationId ? { preparationId } : {}) });
 export const printOutput = (revision: number, job: SvgJob, action: "pdf" | "print") => request<{ path?: string } | null>({ type: "office:output", requestId: crypto.randomUUID(), action, revision, job });
+export const htmlOutput = (revision: number, job: HtmlJob, action: "html-pdf" | "html-print") => request<{ path?: string } | null>({ type: "office:output", requestId: crypto.randomUUID(), action, revision, job });
+export const renderHtmlPdf = (revision: number, job: HtmlJob) => request<ArrayBuffer>({ type: "office:output", requestId: crypto.randomUUID(), action: "html-render", revision, job });

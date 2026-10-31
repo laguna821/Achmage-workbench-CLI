@@ -766,6 +766,7 @@ export type EditorGrant = { url: string; origin: string; token: string; sessionI
 
 /** Workbench window → office editor page (iframe at /office/<kind>.html). */
 export type OfficeHostMessage =
+  | { type: "office:export-pdf" }
   | { type: "office:copy-rejected"; artifactId: string }
   | { type: "office:copy-accepted"; artifactId: string }
   | import("./office-output.ts").OfficeOutputResult

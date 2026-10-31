@@ -10,6 +10,7 @@ use tauri::{Emitter, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, Window
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tauri_plugin_notification::NotificationExt;
 mod office_output;
+mod office_html_output;
 pub mod office_secrets;
 pub mod terminal_worker;
 
@@ -316,7 +317,9 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .invoke_handler(tauri::generate_handler![open_session_window, notify_session, set_attention, office_output::render_svg_pdf, office_output::print_svg])
+        .invoke_handler(tauri::generate_handler![open_session_window, notify_session, set_attention, office_output::render_svg_pdf, office_output::print_svg, office_html_output::render_html_pdf, office_html_output::print_html])
+        .manage(office_html_output::HtmlJobs::default())
+        .register_uri_scheme_protocol("workbench-output", |ctx, request| office_html_output::serve(ctx.app_handle(), request.uri().path()))
         .manage(office_output::PrintJobs::default())
         .register_uri_scheme_protocol("workbench-print", |ctx, request| {
             let id = request.uri().path().trim_start_matches('/');
