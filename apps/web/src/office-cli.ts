@@ -23,7 +23,8 @@ export async function runOfficeCli() {
     const token = readToken(); if (!token) throw new Error("내보내기 게이트웨이 인증이 없습니다.");
     const rootApi = new Api(token);
     const work = await rootApi.createWork("문서 내보내기", null, job.cwd);
-    const artifact = await rootApi.openFile(work.id, job.input);
+    const input = await rootApi.officeCliInput();
+    const artifact = await rootApi.openFile(work.id, input.path);
     const viewId = `view-${crypto.randomUUID()}`, windowId = `window-${crypto.randomUUID()}`;
     let heartbeat: number | undefined;
     let pending: Promise<unknown> = Promise.resolve();

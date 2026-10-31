@@ -65,7 +65,7 @@ impl ExportJob {
         let allowed = match extension.as_str() {
             "docx" => ["pdf", "html"].contains(&format.as_str()),
             "html" | "htm" => ["pdf", "docx"].contains(&format.as_str()),
-            "pptx" | "xlsx" | "xlsm" | "md" | "markdown" => format == "pdf",
+            "pptx" | "xlsx" | "xlsm" | "csv" | "xls" | "md" | "markdown" => format == "pdf",
             _ => false,
         };
         if !allowed { return Err(format!("이 입력의 내보내기 형식을 지원하지 않습니다: {extension} → {format}").into()); }

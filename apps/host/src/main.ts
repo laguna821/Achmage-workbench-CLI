@@ -11,6 +11,7 @@ import { attachmentsDir } from "./attachments.ts";
 import { Store } from "./store.ts";
 import { Kordoc } from "./kordoc.ts";
 import { IeumOffice, findIeum } from "./ieumoffice.ts";
+import { OfficeCliInput } from "./office-cli-input.ts";
 import { installToolWrappers } from "./tool-bin.ts";
 import { createEditorsServer, EditorGrants } from "./editors.ts";
 import { createOfficeSettingsServer } from "./office-settings-server.ts";
@@ -140,6 +141,7 @@ const officeSettingsServer = createOfficeSettingsServer(webDir && existsSync(web
 // Images pasted into Markdown documents: the user's R2 bucket, or the work folder (doc-images.ts).
 const docImages = new DocImages({ dataDir, documents: manager.documents, workCwd: (workId) => manager.workCwd(workId), endpoint: env.WORKBENCH_R2_ENDPOINT ?? null });
 const server = createHttpServer(manager, bus, {
+  ...(env.WORKBENCH_CLI_INPUT ? { officeCliInput: new OfficeCliInput(env.WORKBENCH_CLI_INPUT, dataDir, ieum).prepare } : {}),
   token,
   officeAi,
   officeSkills,

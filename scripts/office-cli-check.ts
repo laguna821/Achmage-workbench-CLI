@@ -8,9 +8,11 @@ import { openStage } from "./app-e2e/launch.ts";
 
 const run = promisify(execFile), repo = resolve(import.meta.dirname, "..");
 const out = resolve(process.argv[2] ?? "/tmp/workbench-cli-check"); mkdirSync(out, { recursive: true });
-const only = process.argv.find(arg => arg.startsWith("--only="))?.slice(7).split(",") ?? ["docx", "docx-2", "docx-blank", "docx-12", "pptx", "xlsx", "md", "html", "docx-html"];
+const only = process.argv.find(arg => arg.startsWith("--only="))?.slice(7).split(",") ?? ["docx", "docx-2", "docx-blank", "docx-12", "pptx", "xlsx", "csv", "csv-legacy", "xls-html", "md", "html", "docx-html"];
 const binary = join(repo, "apps/desktop/src-tauri/target/debug/achmage-workbench");
 const cli = process.argv.find(arg => arg.startsWith("--cli="))?.slice(6);
+const ieumCli = process.argv.find(arg => arg.startsWith("--ieum-cli="))?.slice(11);
+const xlsFixture = process.argv.find(arg => arg.startsWith("--xls-fixture="))?.slice(14);
 const hash = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 const binarySha256 = hash(binary);
 const checks: { name: string; passed: boolean; detail?: unknown }[] = [];
@@ -26,7 +28,7 @@ Object.assign(env, {
   GTK_MODULES: join(stage.root, "libwb-dpi.so"), NO_AT_BRIDGE: "1",
   XDG_DATA_HOME: join(stage.root, "xdg-data"), XDG_CONFIG_HOME: join(stage.root, "xdg-config"), XDG_CACHE_HOME: join(stage.root, "xdg-cache"), TMPDIR: temp,
   WORKBENCH_DATA_DIR: profile, WORKBENCH_PORT: "1", WORKBENCH_EDITORS_PORT: "1", WORKBENCH_TOKEN: "must-not-be-used",
-  WORKBENCH_IEUM_CLI: join(stage.root, "no-legacy-ieum"),
+  WORKBENCH_IEUM_CLI: ieumCli ?? join(stage.root, "no-legacy-ieum"),
   GENOFFICE_APP_BIN: binary,
   WORKBENCH_CODEX_BIN: join(repo, "scripts/fixtures/fake-codex.mjs"), WORKBENCH_CLAUDE_BIN: join(repo, "scripts/fixtures/fake-claude.mjs"),
 });
@@ -44,6 +46,10 @@ try {
   sheet.file("xl/styles.xml", (await sheet.file("xl/styles.xml")!.async("string")).replaceAll('val="Calibri"', 'val="Pretendard"'));
   sheet.file("xl/worksheets/sheet1.xml", (await sheet.file("xl/worksheets/sheet1.xml")!.async("string")).replace('<sheetData></sheetData>', '<cols><col min="1" max="1" width="70" customWidth="1"/></cols><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>NATIVE CLI XLSX 한글 본문</t></is></c></row></sheetData>'));
   writeFileSync(join(dir, "xlsx.xlsx"), await sheet.generateAsync({ type: "nodebuffer" }));
+  writeFileSync(join(dir, "csv.csv"), "이름,번호\r\n가나다,0007\r\nCSV,42\r\n");
+  writeFileSync(join(dir, "csv-legacy.csv"), Buffer.concat([Buffer.from("name,code\r\n"), Buffer.from([0xb0,0xa1,0xb3,0xaa,0xb4,0xd9]), Buffer.from(",0007\r\n")]));
+  writeFileSync(join(dir, "xls-html.xls"), '<html><meta charset="utf-8"><table><tr><td colspan="2">성적표</td></tr><tr><td>가나다</td><td>95</td></tr></table></html>');
+  if (xlsFixture) copyFileSync(xlsFixture, join(dir, "xls.xls"));
   copyFileSync(join(repo, "vendor/ieumoffice/packages/pptx-engine/tests/fixtures/05_unicode_cjk_emoji.pptx"), join(dir, "pptx.pptx"));
   writeFileSync(join(dir, "md.md"), "# CLI 문서 출력\n\nNATIVE CLI MARKDOWN 한글 본문\n");
   writeFileSync(join(dir, "html.html"), '<!doctype html><html><meta charset="utf-8"><style>body{font-family:sans-serif}h1{color:#176d88}</style><h1>CLI 문서 출력</h1><p>NATIVE CLI HTML 한글 본문</p></html>');
@@ -71,7 +77,8 @@ try {
     if (target === "pdf") {
       const textPath = join(out, `${name}.txt`); await run("pdftotext", [output, textPath]);
       const text = readFileSync(textPath, "utf8");
-      check(`${name}: real document text`, name === "pptx" ? text.trim().length > 10 : text.includes(`NATIVE CLI ${format === "md" ? "MARKDOWN" : format.toUpperCase()}`), text.slice(0, 400));
+      const expectedText = format === "csv" ? ["가나다", "0007"] : name === "xls-html" ? ["성적표", "가나다", "95"] : name === "xls" ? ["sheetjs", "foo", "bar", "baz", "qux"] : [`NATIVE CLI ${format === "md" ? "MARKDOWN" : format.toUpperCase()}`];
+      check(`${name}: real document text`, name === "pptx" ? text.trim().length > 10 : expectedText.every(value => text.includes(value)), text.slice(0, 400));
       const info = (await run("pdfinfo", [output])).stdout;
       const expectedPages = name === "docx-2" ? 2 : name === "docx-blank" ? 3 : name === "docx-12" ? 12 : 1;
       check(`${name}: original page count`, Number(info.match(/^Pages:\s+(\d+)/m)?.[1]) === expectedPages, info);
@@ -87,5 +94,5 @@ try {
   }
 } finally {
   await stage.close();
-  writeFileSync(join(out, "verification.json"), JSON.stringify({ binary, binarySha256, cli, checks }, null, 2));
+  writeFileSync(join(out, "verification.json"), JSON.stringify({ binary, binarySha256, cli, ieumCli, xlsFixture, xlsFixtureSha256: xlsFixture ? hash(xlsFixture) : undefined, checks }, null, 2));
 }

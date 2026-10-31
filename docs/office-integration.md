@@ -8,7 +8,9 @@ Word PDF는 원본 페이지 미리보기의 조판·용지 그룹·분할 출�
 
 Linux 실제 원본 CLI **43/43**: DOCX 12쪽 분할·병합과 마지막 본문, DOCX/PPTX/XLSX/MD/HTML→PDF, DOCX→HTML, 원본·설정·임시 폴더 정리. 별도 **20/20**은 수동 2쪽·중간 빈 쪽 보존·Pretendard Sheets PDF다. 기존 GUI 출력/인쇄 **17/17**, 관련 호스트 **31/31**, CLI 인자/입력 오류 **3/3**, 전체 타입과 native 빌드도 통과했다. 근거는 `implementation-20261030/cli-original-check-02/verification.json`, `cli-native-check-11/verification.json`, `cli-gui-regression-01/verification.json`; 검증 판 `research:rr-f6971ea29725560b8f14d540e8674644:ae7ebf5fd8457e89a2c32a0ca8d4b7a696f714f7952a0fde84761cc9f15b72a8`이다.
 
-CSV/XLS→PDF, HTML→DOCX, Sheets 시스템 인쇄, 기존 암호화 설정·앱 제어 연결은 남았다. `GENOFFICE_APP_BIN`의 제품 기본값과 전체 Ieum Electron 배포는 아직 전환하지 않았다. 이 변경의 Windows/macOS 실제 실행·설치·업데이트·용량과 최종 릴리스도 별도 검증한다.
+CSV/XLS→PDF도 연결했다. native가 고정한 입력만 전용 임시 gateway에서 준비하며, 원본 CSV 가져오기·legacy-import와 CLI 변환으로 만든 임시 XLSX를 원본 Sheets에서 출력한다. 원본 형식과 바이트는 유지한다. UTF-8/EUC-KR CSV의 한글·앞자리 0, HTML 표 형태의 .xls, 실제 BIFF5 .xls와 DOCX 회귀를 원본 CLI로 **30/30** 확인했다. 관련 **6/6**, GUI 시작 **4/4**, 타입·web/host/native 빌드 통과. 근거 `cli-source-native-01/verification.json`, 판 `research:rr-f6971ea29725560b8f14d540e8674644:30068a7136eb34d3a01e6e274b578d27074f8bd00bde4275566dcb6eb356d1bb`.
+
+HTML→DOCX, Sheets 시스템 인쇄, 기존 암호화 설정·앱 제어 연결은 남았다. `GENOFFICE_APP_BIN`의 제품 기본값과 전체 Ieum Electron 배포는 아직 전환하지 않았다. 이 변경의 Windows/macOS 실제 실행·설치·업데이트·용량과 최종 릴리스도 별도 검증한다.
 
 ## 별도 HOP·PDFCraft 배포 제거
 

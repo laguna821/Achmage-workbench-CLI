@@ -85,8 +85,10 @@ fn node_binary(app: &tauri::AppHandle) -> PathBuf {
 
 fn gateway_command(app: &tauri::AppHandle) -> Command {
     let mut command = Command::new(node_binary(app));
+    command.env_remove("WORKBENCH_CLI_INPUT");
     if let Some(root) = office_cli::data_dir(app) {
         command.env("WORKBENCH_DATA_DIR", root.join("gateway"))
+            .env("WORKBENCH_CLI_INPUT", &app.state::<std::sync::Arc<office_cli::ExportJob>>().request.input)
             .env("WORKBENCH_PORT", "0").env("WORKBENCH_EDITORS_PORT", "0")
             .env_remove("WORKBENCH_TOKEN");
     }

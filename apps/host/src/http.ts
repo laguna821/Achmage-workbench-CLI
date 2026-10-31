@@ -101,6 +101,8 @@ function parseRefs(value: unknown): DocRef[] {
 }
 
 export type HttpOptions = {
+  /** Fixed native CLI input, available only in its disposable gateway. */
+  officeCliInput?: () => Promise<{ path: string }>;
   officeSkills?: OfficeSkills;
   officeAi?: OfficeAi;
   officeSettingsOrigin?: () => string | null;
@@ -609,6 +611,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         return sendJson(res, 200, { ok: true });
       }
       if (method === "GET" && path === "/api/tools") return sendJson(res, 200, manager.tools());
+      if (method === "POST" && path === "/api/office-cli/input" && options.officeCliInput) return sendJson(res, 200, await options.officeCliInput());
       if (method === "POST" && path === "/api/tools/refresh") return sendJson(res, 200, await manager.refreshTools());
       if (method === "POST" && path === "/api/tools/ieumoffice/install") return sendJson(res, 202, manager.installIeumOffice());
       if (method === "GET" && path === "/api/integrations") return sendJson(res, 200, await manager.integrations());

@@ -1,5 +1,7 @@
 # Linux 실제 앱 검사
 
+CLI 검사는 UTF-8/EUC-KR CSV와 HTML .xls도 포함한다. 실제 BIFF5 자료는 `--only=xls --xls-fixture=<calamine-biff5_write.xls> --ieum-cli=<genoffice.cjs>`로 검사한다. 원본 Rust 변환 엔진은 CLI의 `XLSX_SIDECAR_PATH` 또는 패키지 리소스에서 읽는다. `cli-source-native-01`은 고정 원본 CLI와 실제 Rust sidecar를 사용해 변환30/30을 통과했으며 fixture 출처·해시는 연구 판에 보존했다.
+
 `node scripts/office-cli-check.ts <evidence-directory>`는 실제 Tauri 숨김 실행으로 DOCX 1/2/중간 빈 쪽/12쪽, PPTX, XLSX, MD, HTML의 PDF와 DOCX HTML을 검사한다. `--only=docx-12,xlsx`로 선택하고 `--cli=<genoffice.cjs>`로 고정 원본 CLI의 `convert` 경로를 검사할 수 있다. 파일·설정 보존, 전용 임시 폴더 정리, 정확한 쪽 수·본문·빈 쪽·글꼴과 원본 분할 병합을 확인한다. 실제 변환에는 Electron 앱을 사용하지 않는다. 최종 원본 CLI43/43과 빈 쪽/글꼴20/20, 기존 GUI `--only=start,office-output`17/17의 [범위와 근거](office-integration.md#원본-cli의-tauri-출력-연결)를 따른다.
 
 `--only=pdf-office,hwp`는 HOP/PDFCraft 제거 뒤 내장 리소스 준비 상태와 PDF 쪽 사본 API를 포함한다. 기존 원본 PDF/HWP/HWPX 편집·저장·재열기·복구·사본·출력·시스템 인쇄까지 Linux **50/50** 확인했으며 `bundle-removal-native-01/verification.json`에 실행 파일·리소스·배포 설정 근거를 연결했다. OS 설치본 검증은 별도다.
