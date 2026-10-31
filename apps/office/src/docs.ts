@@ -132,18 +132,6 @@ listen((message) => {
   }
 });
 
-// F7 runs the editor's AI proofreading; AI requests go through Workbench's conversation instead.
-window.addEventListener(
-  "keydown",
-  (event) => {
-    if (event.key === "F7") {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    }
-  },
-  true,
-);
-
 const notInWorkbench = async () => ({ ok: false, error: "Workbench에서는 대화창에서 요청하거나 문서 메뉴의 '새 문서로'를 써 주세요." });
 const noAi = async () => {
   throw new Error("Workbench에서는 대화창에서 AI에게 요청하세요.");
@@ -251,7 +239,7 @@ const desktop = stubBridge(
     fontFamilyInfo: async () => [],
     fontMetrics: async () => null,
     spellLanguages: async () => ({ available: [], enabled: [] }),
-    // Direct proofreading/translation still needs its separate lifecycle adapter.
+    // Legacy one-shot interface; current proofreading uses the original AI panel.
     aiChat: noAi,
     ...ai.desktop,
   },

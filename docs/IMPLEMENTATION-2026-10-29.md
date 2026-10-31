@@ -2,7 +2,7 @@
 
 ## 현재 상태 — 2026-10-31
 
-공개 최신은 **v0.2.2**다. `b0ad548`의 [설치본 시험](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41194840515)은 모든 OS 패키징과 Windows 첫 실행을 통과했지만 macOS 첫 실행은 **16/18**이다. 진단 IPC 권한을 고친 로그에서 문서 열기·편집기 준비까지 성공하고 `output-html-render` 뒤 멈춤을 확인했다. 동기 `NSPrintOperation.runOperation()`을 Wry·WebKit 원본의 비동기 인쇄와 완료 callback으로 바꿨다. Linux 실제 변환 14/14와 Mac arm64 대상 모듈 타입 검사(실행 아님)를 통과하여 새 설치본 검사를 진행한다. 실제 macOS 성공 전에는 해결로 판정하지 않는다. 이전 `7fb65a4`의 통과는 별도 이음 앱 경로였으므로 Tauri 변환 검증으로 세지 않는다. 최신 근거 판 `research:rr-a1113b1710d6df910256d23a2c711f5f:1a8f2e02322f402583bef3c04c1324513fcf69920717687b2c5d57a354804844`. Actions의 수동 실행은 `Test installers`이며 아직 공개 릴리스는 게시하지 않았다.
+공개 최신은 **v0.2.2**다. `817bf97`의 [설치본 시험](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41197087159)은 공통 검사와 Windows/macOS/Linux/Arch 패키징, Windows/macOS 설치본 첫 실행을 모두 통과했다. 이전 Mac 16/18 실패는 동기 AppKit 인쇄 단계였다. Wry·WebKit 원본의 비동기 인쇄와 완료 callback으로 바꾼 뒤 **macOS 18/18**, 실제 DOCX/PPTX 쪽 그림도 각각 약9.4초/5.8초로 완료했다. native 로그에 인쇄 dispatch→return→completed→출력 저장→export-done을 확인했다. 이 시료의 정체 해결과 전체 기능 동등성은 구분한다. 최신 근거 판 `research:rr-a1113b1710d6df910256d23a2c711f5f:3ad6973a90a736ccc3a3079a551ab9fc22936e1a438c8eed9698ac5cbaec7f98`. Actions의 수동 실행은 `Test installers`이며 아직 공개 릴리스는 게시하지 않았다. 이후 PPT 미디어/F7 변경은 다음 설치본에 포함된다.
 
 | 사용자 요구 | 구현·확인한 범위 | 남은 범위 |
 |---|---|---|
@@ -24,6 +24,8 @@ Lightpanda 1.0.2 공식 엔진의 실제 Linux 게이트웨이 경로 **14/14**,
 공통 웹 도구는 원본 `ai-search`와 원격 이미지 엔진을 재사용한다. 봉인 키는 요청별 호스트 메모리에서만 열며 문서/세션 권한과 취소를 연결했다. 집중 회귀 **51/51**, 타입·host/Office 빌드, 실제 Linux 원본 Word 패널의 공개 URL 읽기 → 같은 AI 대화 → DOCX 수정·저장·재열기·중지 **13/13** 통과. 모든 문서/OS나 미디어 전체 완료 판정은 아니다. 검증 판: `research:rr-2488fbbaceca1e6b5aa58aad0c10cf34:d942dce7b67211ba5978055009b8e9db6f7fc59ad66cbe5857187002ef6f8c4c`.
 
 공통 미디어 도구는 원본 `generateImageTool`·`analyzeMediaTool`·Codex 구독 생성기를 재사용한다. 문서 경로·선택 첨부·봉인 키·취소를 연결하고, 구독 요청 실패 후 유료 키 재시도를 하지 않는다. 집중 회귀 **38/38**, 타입·host/Office/native 빌드, 실제 Linux Word 생성→표시→그림 분석→DOCX 저장/재열기·세션/취소 **15/15** 통과. PPT도 원본 worker 엔진으로 생성→삽입/교체→중앙 crop·durable ID·프레임 보존→화면/PPTX 저장→Undo/Redo 및 생성 카드 미리보기/재열기까지 **22/22** 통과했다. 실제 모델 대신 로컬 제공자 fixture를 사용했으며 기타 편집기 미디어와 다른 OS는 남아 있다. 검증 판: `research:rr-04aed54aee742d3282df82b4df7a940c:431caac71b8dcffb37191c424b4501e160ff0e1450d4ba19b12903af193a286e`.
+
+Word F7은 별도 AI 엔진이 필요하지 않았다. 원본의 교정 preset이 이미 연결한 원본 패널을 사용하므로 초기 키 차단을 제거했다. 실제 Linux trusted F7→원본 교정 요청→같은 세션→DOCX 수정/저장·재열기·새 세션·취소 **13/13**, 타입·Office/native 빌드 통과. 원본 한 번 동의를 마친 fixture이며 최초 확인 창 조작·실제 교정 품질은 별도다. 판 `research:rr-10e6b38c6209b718dcdddc2e3677daeb:a04befececd9405879d066e6c596a759634869fae241c17b1d049fc07670bb54`.
 
 한글 전환은 전체 회귀 **1135/1135**, 마지막 CLI 생성/비활성 우선 검사 **8/8**, 실제 Linux **29/29**, 타입·host/web/design/Office 빌드 통과. 공개 스킬 manifest의 77파일만 복사했고 개인 양식은 포함하지 않았다. 독립 `third_party/kordoc` 대신 `skills/hallym-kordoc`을 배포한다. 현재 문서 페이지/썸네일은 이음 rhwp를 쓰며 구형 Markdown 수정안 복구는 동봉 core로 보존한다. 검증 판: `research:rr-1302d222a29d0be4c6b817eefdff127e:cb824b30750da64544ad5a108caa7bb17b7d98d5e645d97c9e4260a6065b35a1`.
 

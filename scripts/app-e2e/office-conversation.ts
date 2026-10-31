@@ -14,7 +14,9 @@ export async function officeConversationScenario(ctx: Ctx) {
   const unbound = process.env.APP_E2E_OFFICE_UNBOUND === "1";
   const web = process.env.APP_E2E_OFFICE_WEB === "1";
   const media = process.env.APP_E2E_OFFICE_MEDIA === "1";
+  const proofread = process.env.APP_E2E_OFFICE_F7 === "1";
   if (web && media) throw new Error("Choose either the web or media conversation experiment");
+  if (proofread && (web || media || unbound)) throw new Error("F7 is a separate bound-conversation experiment");
   const { PNG } = createRequire(import.meta.url)("pngjs");
   const png = PNG.sync.write({ width: 96, height: 64, data: Buffer.alloc(96 * 64 * 4, Buffer.from([0, 120, 135, 255])) }).toString("base64");
   const mediaRequests: { url: string; authorized: boolean; body: any }[] = [];
@@ -82,8 +84,16 @@ export async function officeConversationScenario(ctx: Ctx) {
     }
     await wd.click(input);
     writeFileSync(join(ctx.stage.outDir, "office-conversation-input.json"), JSON.stringify(await wd.execute('return {inputs: [...document.querySelectorAll(".ai-panel textarea")].map(el => ({disabled:el.disabled,hidden:el.hidden,rect:el.getBoundingClientRect().toJSON(),style:getComputedStyle(el).display,inert:!!el.closest("[inert]"),active:document.activeElement === el})),active:document.activeElement?.outerHTML};')));
-    await wd.sendKeys(input, "문서 처음에 검사 문단을 넣어 줘");
-    await wd.click(await wd.waitFor(".ai-panel .ai-send-btn:not(.ai-stop-btn)"));
+    if (proofread) {
+      // Fixture has already acknowledged the original whole-document rewrite notice.
+      // The product's original acknowledgement dialog and policy are unchanged.
+      await wd.execute("localStorage.setItem('docs-ai-rewrite-ack','1');window.__proofreadKeys=[];document.addEventListener('keydown',e=>{if(e.key==='F7')window.__proofreadKeys.push({key:e.key,trusted:e.isTrusted})},true);");
+      await wd.click(await wd.waitFor('.tiptap[contenteditable="true"]'));
+      await wd.keys([{ type: "keyDown", value: "\uE037" }, { type: "keyUp", value: "\uE037" }]);
+    } else {
+      await wd.sendKeys(input, "문서 처음에 검사 문단을 넣어 줘");
+      await wd.click(await wd.waitFor(".ai-panel .ai-send-btn:not(.ai-stop-btn)"));
+    }
     if (unbound) {
       if (!await until(async () => (await snapshot()).sessions.some((item) => item.workId === work.id), 15000)) throw new Error(`First Office session was not created: ${await wd.execute('return document.body.innerText.slice(-3500)')}`);
       session = (await snapshot()).sessions.find((item) => item.workId === work.id);
@@ -98,6 +108,11 @@ export async function officeConversationScenario(ctx: Ctx) {
     const body = await wd.execute<string>("return document.body.innerText;");
     if (!finished) { await shot(ctx, "office-conversation-failed.png"); throw new Error(`Original panel did not finish: ${body.slice(-5000)}`); }
     const tool = transcript.find((item) => item.kind === "tool");
+    if (proofread) {
+      const keys = await wd.execute<{ key: string; trusted: boolean }[]>("return window.__proofreadKeys;");
+      const request = transcript.find(item => item.kind === "user");
+      ctx.report.check(S, "실제 F7로 원본 교정 요청이 같은 대화에서 자동 실행", keys.length === 1 && keys[0]?.trusted && request?.kind === "user" && /맞춤법|교정/.test(request.text), request?.kind === "user" ? request.text : JSON.stringify(keys));
+    }
     const xml = await (await JSZip.loadAsync(readFileSync(file))).file("word/document.xml")!.async("string");
     ctx.report.check(S, "원본 편집 도구가 실제 DOCX를 수정하고 새 판으로 저장", tool?.kind === "tool" && tool.status === "completed" && xml.includes(marker) && (await snapshot()).artifacts.find((item) => item.id === artifact.id)!.revision > 1);
     ctx.report.check(S, "요청·편집 도구·응답·완료가 선택한 Workbench 세션에 함께 기록", transcript.some((item) => item.kind === "user" && item.office?.artifactId === artifact.id) && transcript.some((item) => item.kind === "assistant" && item.text.includes("수정 완료") && item.office?.artifactId === artifact.id) && requests.length === (media ? 5 : web ? 3 : 2), undefined, await shot(ctx, "office-conversation-completed.png"));
