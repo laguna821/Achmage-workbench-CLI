@@ -349,7 +349,8 @@ jobs:
           for p in files:
               with p.open('rb') as f:
                   digest = hashlib.file_digest(f, 'sha256').hexdigest()
-              assets.append({'name': p.name, 'bytes': p.stat().st_size, 'sha256': digest})
+              # GitHub normalizes the spaces in these installer names to dots on upload.
+              assets.append({'name': p.name.replace(' ', '.'), 'artifactName': p.name, 'bytes': p.stat().st_size, 'sha256': digest})
           Path('SHA256SUMS.txt').write_text(''.join(f"{a['sha256']}  {a['name']}\n" for a in assets))
           proof = {'sourceRun': os.environ['SOURCE_RUN'], 'sourceSha': os.environ['SOURCE_SHA'], 'installedFirstRunChecks': checks, 'assets': assets}
           Path('installer-provenance.json').write_text(json.dumps(proof, ensure_ascii=False, indent=2) + '\n')

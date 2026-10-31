@@ -2,11 +2,13 @@
 
 ## 현재 상태 — 2026-10-31
 
+**지금 설치 가능:** [통합 시험 릴리스](https://github.com/laguna821/Achmage-workbench-CLI/releases/tag/preview-2026-10-31)에 Windows EXE/MSI, macOS arm64 DMG, Linux AppImage/deb, Arch 패키지 **6개를 공개했다**. 기준 코드는 `f36afbb`이며 기존 성공 설치본을 변경 없이 올렸다. 여섯 공개 다운로드의 HTTP200·크기·SHA256 일치 확인을 마쳤다. Windows EXE는 **142,734,307 bytes(약143MB)**, 설치 후 파일 합계는 **435,413,288 bytes(약435MB)**다. 앱 내부의 이전 `0.2.2` 표기는 남아 있으므로 이 태그/커밋으로 구분한다. 이후 위키·지식베이스·Sheets/XMind 수정을 포함하는 다음 시험본은 **0.2.3**으로 준비한다. 중간 설치본 공개를 전체 통합 완료까지 미루지 않는다. 공개 근거 판: `research:rr-7465d477f742f451ab8543df4d138c36:27e46dee21662d4bf09f7029992b6ed7fdbb540e783064a724d471412c15aa1f`.
+
 2026-10-31 지식베이스: 전역 별표 파일·그룹 보관함과 원본 한글 FTS·Word 지식 검색/페이지 읽기/인용을 연결했다. 실제 Linux **15/15**(기능11·시작4), 관련 **35/35**, 전체 타입·빌드 통과. 외부 인용은 자체 작업공간에서 열리고 원래 Word 대화와 원문 바이트를 보존한다. [범위](office-integration.md#별표-지식베이스와-word-인용), 판 `research:rr-495780e562ef2dea1fee52e81695d0b1:62bcc41b32862cf2ae3e9de4d49b443d2818757eae5909f37c0ec5fe8e0822df`. 원본 home의 그룹 질문·생성, Drive와 다른 OS 인수는 남았다.
 
 2026-10-31 Markdown 위키: 원본 해석·백링크·그래프를 현재 작업공간과 같은 문서 대화에 연결하고, 보존된 탭의 제목 이동 및 문단 끝 `^id` 이동을 보완했다. 실제 Linux **15/15**(위키11·시작4), 관련 **22/22**, 전체 타입·빌드 통과. 원문 YAML/CRLF 불변과 미저장 편집 후 이동을 확인했다. [범위](office-integration.md#markdown-위키백링크그래프), 판 `research:rr-592b13360d60b4228c7b222d4c2e80a1:1dd127a3e11d8df5b9c0da4776030290af7360c58224142e6125805e2860a0d4`. 지식베이스 홈의 그룹 질문·생성/Drive 및 이번 변경의 다른 OS 인수는 남았다.
 
-공개 최신은 **v0.2.2**다. Lightpanda·PPT 미디어·Word F7을 포함한 `f36afbb`의 [설치본 시험](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41199033710)은 공통 검사와 Windows/macOS/Linux/Arch 패키징, Windows/macOS 설치본 첫 실행 **각각18/18**을 모두 통과했다. 이전 Mac 인쇄 정체도 비동기 완료 방식으로 해결됐다. 이 Windows 시험본의 설치 디렉터리 파일 합계는 **435,413,288 bytes(약415MiB)**이며 압축 설치파일 크기는 아니다. Mac 측 472,728,164 bytes는 `Contents/Resources`만의 크기다. 근거 판 `research:rr-a1113b1710d6df910256d23a2c711f5f:6c8e63da37647a2568c0082e03b7e36a31394265945b046733dd2cc28aa6ac80`. 태그 없는 시험이므로 공개 릴리스는 게시하지 않았다. 이후 Sheets 생성 URL·XMind 저장 완료 수정, Markdown 위키와 별표 지식베이스 연결은 이 실행에 포함되지 않는다.
+정식 최신은 **v0.2.2**, 사용 가능한 새 시험판은 위 **preview-2026-10-31**이다. Lightpanda·PPT 미디어·Word F7을 포함한 `f36afbb`의 [설치본 시험](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41199033710)은 공통 검사와 Windows/macOS/Linux/Arch 패키징, Windows/macOS 설치본 첫 실행 **각각18/18**을 모두 통과했다. 이전 Mac 인쇄 정체도 비동기 완료 방식으로 해결됐다. 이 Windows 시험본의 설치 디렉터리 파일 합계는 **435,413,288 bytes(약415MiB)**이며 압축 설치파일 크기는 아니다. Mac 측 472,728,164 bytes는 `Contents/Resources`만의 크기다. 근거 판 `research:rr-a1113b1710d6df910256d23a2c711f5f:6c8e63da37647a2568c0082e03b7e36a31394265945b046733dd2cc28aa6ac80`. 이 성공 산출물을 별도 시험 릴리스로 공개했다. 이후 Sheets 생성 URL·XMind 저장 완료 수정, Markdown 위키와 별표 지식베이스 연결은 이 실행에 포함되지 않는다.
 
 | 사용자 요구 | 구현·확인한 범위 | 남은 범위 |
 |---|---|---|
@@ -21,7 +23,7 @@
 | HOP 개선분·한글 기본 스킬 | HOP 별도 앱 제거; hallym-kordoc 기본 제공, 사용자 설치/비활성 우선, 생성 HWPX는 이음으로 표시 | HOP 개선분 전체 대조·다른 OS |
 | doory | 생성·편집·저장·복구·이미지/PDF 출력의 Linux 흐름 | 전체 메뉴·OS 인수 |
 | 옵시디언식 PKM | 내비게이터·프로젝트 노트·Bases식 보기, 썸네일·폴더 템플릿, 지원 범위의 .base 교환 | 전체 통합·OS 인수 |
-| 자료 보존·설치·릴리스 | 원본/판/구형 복구본 표본 검증, 다중 OS 시험 설치본 | 실제 v0.2.2 업그레이드·최종 용량/성능·정식 태그/설치본 게시 |
+| 자료 보존·설치·릴리스 | 원본/판/구형 복구본 표본 검증, f36afbb 다중 OS 시험 설치본 6종 공개·해시/용량 확인 | 최신 0.2.3 설치본, 실제 v0.2.2 업그레이드·최종 용량/성능·정식 릴리스 |
 
 Lightpanda 1.0.2 공식 엔진의 제품 다운로드·해시/버전 확인과 원본 MCP→Workbench 게이트웨이 경로는 [Actions 41199033710](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41199033710)에서 **Linux x64·macOS arm64 각각 15/15** 통과했다. Linux Tauri 화면 선택·저장 **9/9**, 기존 Chromium 회귀 **30/30**, 타입·빌드도 통과. 기본 수집에는 Chromium 창이 필요 없고 원래 프로필은 호환 모드에 보존한다. 1.0.2의 정상 종료는 진행 중 네트워크 처리를 기다릴 수 있으며 느린 요청 검사에서는 두 OS 모두 약10초가 걸렸다. 실제 토큰·속도 배수 및 Windows WSL2 실동작은 아직 검증 전이다. [범위와 사용법](agent-browser.md), 검증 판 `research:rr-a5815367a9ae4eec88f280a96eee6f7d:4fc1843db37ac87ebbade4456fa58826f1857840c1de65ae2b4120f91564b418`.
 
@@ -64,7 +66,7 @@ OS 빌드 후속 결과: `ba44e4f`의 [run 41173726945](https://github.com/lagun
 | G4 | 이음 편집기 9종과 공통 기능, doory | 9종 원본 화면·공통 AI·설정·Rust 키링·Workbench CLI 연결. 대표 편집/저장/복원/첫 세션 자동 연결/새 대화/취소 및 9종 되돌림 Linux 검증. Sheets 저장 경쟁·응답 전달 지연·PDF 저장 후 Undo 수정. 루프 밖 AI·공통 기능·doory와 전체 동등성 진행 |
 | G5 | HOP 개선 패치·hallym-kordoc 생성 스킬·중복 패키지 제거 | 별도 HOP/PDFCraft 실행·배포 제거, 내장 한글/PDF Linux50/50. HOP 개선 패치·hallym-kordoc/별도 kordoc 엔진 전환과 Ieum Electron 제거 진행 |
 | PKM | 내비게이터/프로젝트 노트/Bases 보존, 썸네일·폴더 템플릿·.base 교환 | 템플릿·썸네일·지원 범위의 .base 완료, OS 검증 G6 |
-| G6 | 기능 회귀·데이터 이행·설치본·용량 측정·릴리스 | 대기 |
+| G6 | 기능 회귀·데이터 이행·설치본·용량 측정·릴리스 | f36afbb 설치본 6종 공개, Windows/macOS 첫 실행18/18 및 용량 확인. 최신0.2.3 설치본·실제 구형 업그레이드·정식 릴리스 후속 |
 | G7 | Orca 원격·확장 기능의 개별 구현/검증 | 대기 |
 
 ## 검증·릴리스 순서
@@ -74,7 +76,7 @@ OS 빌드 후속 결과: `ba44e4f`의 [run 41173726945](https://github.com/lagun
 3. 실제 Linux 앱에서 창·입력·문서·세션·종료/복구를 확인한다.
 4. 준비된 변경을 한 묶음으로 GitHub에 올리고 OS별 빌드/설치 검사를 수행한다. 같은 실패를 수정 근거 없이 반복 push하지 않는다.
 5. Windows NSIS/MSI, macOS Apple silicon DMG, Linux AppImage/deb/Arch 패키지의 결과·해시·용량을 확인하고 릴리스 노트에 검증 범위를 명시한다.
-6. 기능/설치 검증이 끝난 버전만 공개 릴리스로 게시한다.
+6. 설치·첫 실행 검사를 통과한 중간판은 실제 포함 기능과 제한을 적어 시험 릴리스로 즉시 공개한다. 전체 기능 동등성 검증을 기다리며 사용 가능한 설치본을 보류하지 않는다. 정식 릴리스 완료 판정은 전체 목표와 별도로 확인한다.
 
 ## 시작 환경
 
