@@ -6,6 +6,22 @@ export const OFFICE_SEALED_PREFIX = "sealed:v1:workbench:";
 export type OfficeVaultKey = { id: string; key: Buffer };
 export type OfficeVaultLoader = (create: boolean) => Promise<OfficeVaultKey | null>;
 const unavailable = () => new HttpError(503, "office_vault_unavailable", "운영체제의 보안 저장소를 사용할 수 없습니다. 저장소 잠금을 해제한 뒤 다시 시도해 주세요. 키를 평문으로 저장하지 않았습니다.");
+const legacy = () => new HttpError(409, "office_legacy_secret", "이전 Electron 앱에서 봉인한 키입니다. 기존 값은 보존했으며 키를 다시 입력하거나 이행 절차를 사용해야 합니다.");
+
+/** The same codec serves the gateway and the original CLI's synchronous reveal contract. */
+export function openOfficeSecret(sealed: string, entry: OfficeVaultKey | null) {
+  if (!sealed.startsWith(OFFICE_SEALED_PREFIX)) throw legacy();
+  const match = /^([a-f0-9]{32}):([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/.exec(sealed.slice(OFFICE_SEALED_PREFIX.length));
+  if (!match || sealed.length > 200_000) throw new HttpError(422, "office_secret_invalid", "보관된 키의 형식이 올바르지 않습니다. 기존 값은 변경하지 않았습니다.");
+  if (!entry || entry.id !== match[1]) throw unavailable();
+  try {
+    const nonce = Buffer.from(match[2]!, "base64url"), body = Buffer.from(match[3]!, "base64url"), tag = Buffer.from(match[4]!, "base64url");
+    if (nonce.length !== 12 || tag.length !== 16) throw new Error("invalid envelope");
+    const decipher = createDecipheriv("aes-256-gcm", entry.key, nonce);
+    decipher.setAAD(Buffer.from(`${OFFICE_SEALED_PREFIX}${entry.id}`)); decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(body), decipher.final()]).toString("utf8");
+  } catch { throw new HttpError(422, "office_secret_invalid", "보관된 키를 확인하지 못했습니다. 기존 값은 변경하지 않았습니다."); }
+}
 
 /** One bounded request to our own Rust executable; no keys in arguments, environment or logs. */
 export function nativeOfficeVault(dataDir: string, binary = process.env.WORKBENCH_SECRET_BIN): OfficeVaultLoader {
@@ -65,17 +81,8 @@ export class OfficeVault {
     return `${OFFICE_SEALED_PREFIX}${entry.id}:${nonce.toString("base64url")}.${bytes.toString("base64url")}.${cipher.getAuthTag().toString("base64url")}`;
   }
   async open(sealed: string) {
-    if (!sealed.startsWith(OFFICE_SEALED_PREFIX)) throw new HttpError(409, "office_legacy_secret", "이전 Electron 앱에서 봉인한 키입니다. 기존 값은 보존했으며 키를 다시 입력하거나 이행 절차를 사용해야 합니다.");
-    const match = /^([a-f0-9]{32}):([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/.exec(sealed.slice(OFFICE_SEALED_PREFIX.length));
-    if (!match || sealed.length > 200_000) throw new HttpError(422, "office_secret_invalid", "보관된 키의 형식이 올바르지 않습니다. 기존 값은 변경하지 않았습니다.");
-    const entry = await this.key(false); if (!entry || entry.id !== match[1]) throw unavailable();
-    try {
-      const nonce = Buffer.from(match[2]!, "base64url"), body = Buffer.from(match[3]!, "base64url"), tag = Buffer.from(match[4]!, "base64url");
-      if (nonce.length !== 12 || tag.length !== 16) throw new Error("invalid envelope");
-      const decipher = createDecipheriv("aes-256-gcm", entry.key, nonce);
-      decipher.setAAD(Buffer.from(`${OFFICE_SEALED_PREFIX}${entry.id}`)); decipher.setAuthTag(tag);
-      return Buffer.concat([decipher.update(body), decipher.final()]).toString("utf8");
-    } catch { throw new HttpError(422, "office_secret_invalid", "보관된 키를 확인하지 못했습니다. 기존 값은 변경하지 않았습니다."); }
+    if (!sealed.startsWith(OFFICE_SEALED_PREFIX)) throw legacy();
+    return openOfficeSecret(sealed, await this.key(false));
   }
   close() { this.closed = true; this.cached?.key.fill(0); this.cached = null; }
 }

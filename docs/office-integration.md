@@ -1,5 +1,11 @@
 # 이음오피스 통합 진행
 
+## 원본 CLI의 보관 키 읽기
+
+2026-10-31: Workbench native `--reveal-ai-secrets`가 창이나 gateway 없이 bundled Node worker를 실행한다. 원본 이음 CLI의 stdin 배열 제한·응답 JSON과 기존 Workbench OS vault 복호화를 재사용한다. 키는 인자·환경 변수·파일에 평문으로 전달하지 않는다. 설치 리소스에도 worker를 포함했다.
+
+Linux 독립 D-Bus/키링 **13/13**, 기존 host **26/26**, host/scripts 타입과 host/native 빌드 통과. 원본 CLI가 실제 native 실행 파일을 호출하며, 변조·다른 프로필·기존 Electron 봉인값·키링 불통은 키를 반환하지 않고 저장된 설정 바이트를 보존한다. 근거 `implementation-20261030/cli-secret-native-02/results.json`, 판 `research:rr-f1455ead49dbb03e1e57d6f499c866fd:aa42d685496fba96180d1992da468ea46afe6207ce97a3d1cae5f14c66a8f097`. **기본 CLI 앱 지정은 app-control 연결 후 전환할 예정이며, 기존 Electron 키 이행·다른 OS 실제 실행은 아직 미완료다.**
+
 ## 원본 CLI의 Tauri 출력 연결
 
 2026-10-31: 원본 `genoffice.cjs convert`가 호출하는 `--headless-export`를 Workbench에 연결했다. 입력·출력 경로를 고정하고 전용 임시 게이트웨이/문서 뷰/브라우저 저장소를 사용한다. 기존 앱의 설정·세션을 변경하지 않으며 저장·게이트웨이 종료·임시 폴더 정리 후 원본 JSON/종료 코드 계약으로 반환한다. 원본 Word/PPT/Sheets/Markdown/HTML의 내보내기를 그대로 호출한다. Sheets는 원본 인쇄 HTML과 글꼴을 사용해 용지별 출력 후 병합한다. Word HTML 내보내기도 새 사본으로 저장한다.

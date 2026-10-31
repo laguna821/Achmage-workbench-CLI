@@ -10,7 +10,7 @@ const pin = readFileSync(new URL('../vendor/ieumoffice.PINNED', import.meta.url)
 if (execFileSync('git', ['-C', `${root}vendor/ieumoffice`, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() !== pin) throw new Error('Ieum source differs from the reviewed pin');
 await build({
   absWorkingDir: root,
-  entryPoints: { host: 'apps/host/src/main.ts', 'hwp-cli': 'apps/host/src/hwp-cli.ts' },
+  entryPoints: { host: 'apps/host/src/main.ts', 'hwp-cli': 'apps/host/src/hwp-cli.ts', 'office-reveal': 'apps/host/src/office-reveal.mjs' },
   outdir: 'apps/host/dist', outExtension: { '.js': '.mjs' },
   bundle: true, platform: 'node', format: 'esm', target: 'node24', logLevel: 'warning',
   plugins: [pdfHostPlugin(), officeProviderHostPlugin(), officeFileParsePlugin()],

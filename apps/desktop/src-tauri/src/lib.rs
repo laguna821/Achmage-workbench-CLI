@@ -58,6 +58,10 @@ fn engine_path() -> std::ffi::OsString {
 
 /// Where the app's own files sit: the resource dir of a bundle, or next to the binary.
 fn app_dirs(app: &tauri::AppHandle) -> Vec<PathBuf> {
+    resource_dirs(app.path().resource_dir().ok())
+}
+
+fn resource_dirs(resource_dir: Option<PathBuf>) -> Vec<PathBuf> {
     let exe_dir = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(PathBuf::from));
@@ -67,21 +71,48 @@ fn app_dirs(app: &tauri::AppHandle) -> Vec<PathBuf> {
         .as_ref()
         .map(|dir| dir.join("..").join("share").join("achmage-workbench"))
         .filter(|dir| dir.is_dir());
-    [app.path().resource_dir().ok(), exe_dir, share].into_iter().flatten().collect()
+    [resource_dir, exe_dir, share].into_iter().flatten().collect()
 }
 
 /// The Node.js that runs the gateway: WORKBENCH_NODE, else the one an installer brought along
 /// (node/ beside the app's files), else the system's.
 fn node_binary(app: &tauri::AppHandle) -> PathBuf {
+    node_in(&app_dirs(app))
+}
+
+fn node_in(dirs: &[PathBuf]) -> PathBuf {
     if let Some(node) = std::env::var_os("WORKBENCH_NODE") {
         return PathBuf::from(node);
     }
     let name = if cfg!(windows) { "node.exe" } else { "node" };
-    app_dirs(app)
-        .into_iter()
+    dirs.iter()
         .map(|dir| dir.join("node").join(name))
         .find(|path| path.exists())
         .unwrap_or_else(|| PathBuf::from(name))
+}
+
+/// Original Office CLI credential protocol. Never starts a window or writes settings.
+pub fn reveal_ai_secrets() -> i32 {
+    let context: tauri::Context<tauri::Wry> = tauri::generate_context!();
+    let dirs = resource_dirs(tauri::utils::platform::resource_dir(context.package_info(), &Default::default()).ok());
+    let worker = dirs.iter().map(|dir| dir.join("host/office-reveal.mjs"))
+        .find(|path| path.is_file())
+        .or_else(|| if cfg!(debug_assertions) {
+            let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../host/dist/office-reveal.mjs");
+            path.is_file().then_some(path)
+        } else { None });
+    let Some(worker) = worker else { return 1; };
+    let Ok(exe) = std::env::current_exe() else { return 1; };
+    let mut command = Command::new(node_in(&dirs));
+    command.arg(worker).env("WORKBENCH_SECRET_BIN", exe)
+        .env_remove("ELECTRON_RUN_AS_NODE")
+        .stdin(Stdio::inherit()).stdout(Stdio::inherit()).stderr(Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+    command.status().ok().and_then(|status| status.code()).unwrap_or(1)
 }
 
 fn gateway_command(app: &tauri::AppHandle) -> Command {

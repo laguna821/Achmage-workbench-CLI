@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { build } from "esbuild";
 import { OfficeVault, nativeOfficeVault } from "../apps/host/src/office-vault.ts";
 
 const self = fileURLToPath(import.meta.url), repo = fileURLToPath(new URL("../", import.meta.url));
@@ -81,6 +82,43 @@ if (!process.argv.includes("--private-bus")) {
     const restored = new OfficeVault(profile, load);
     assert.ok((await restored.open(sealed)) === plain, "Restarted daemon/helper must decrypt the existing key"); restored.close();
     checks.push("encrypted setting survives keyring daemon and host-vault restart");
+    const revealEnv = { ...process.env, WORKBENCH_DATA_DIR: profile, GENOFFICE_APP_BIN: binary, GENOFFICE_AI_SETTINGS: join(profile, "office/ai-settings.json") };
+    const settings = JSON.stringify({ providers: { openai: { apiKey: sealed } } });
+    writeFileSync(revealEnv.GENOFFICE_AI_SETTINGS, settings, { mode: 0o600 });
+    const legacy = "sealed:v1:legacy-fixture", tag = sealed.lastIndexOf(".") + 1;
+    const tampered = sealed.slice(0, tag) + (sealed[tag] === "A" ? "B" : "A") + sealed.slice(tag + 1);
+    const reveal = await childRun(binary, ["--reveal-ai-secrets"], JSON.stringify([sealed, legacy, tampered]), revealEnv);
+    assert.equal(reveal.code, 0);
+    const answer = JSON.parse(reveal.stdout);
+    assert.ok(answer.status === "ok" && answer.secrets[sealed] === plain && Object.keys(answer.secrets).length === 1);
+    assert.ok(!reveal.stderr.includes(plain));
+    checks.push("native reveal opens the Workbench envelope and omits legacy or tampered values without a GUI");
+    for (const request of ["{}", JSON.stringify(Array(65).fill(sealed))]) {
+      const bad = await childRun(binary, ["--reveal-ai-secrets"], request, revealEnv);
+      assert.equal(bad.code, 1); assert.equal(JSON.parse(bad.stdout).status, "error");
+    }
+    checks.push("original reveal validator rejects malformed and oversized batches");
+    const otherProfile = join(root, "other-profile");
+    const other = await childRun(binary, ["--reveal-ai-secrets"], JSON.stringify([sealed]), { ...revealEnv, WORKBENCH_DATA_DIR: otherProfile });
+    assert.equal(other.code, 0); assert.deepEqual(JSON.parse(other.stdout).secrets, {});
+    assert.ok(!existsSync(join(otherProfile, "office")));
+    checks.push("another profile cannot reveal the key and a read creates no vault");
+    const fixture = join(root, "original-cli-secret.mjs");
+    await build({
+      stdin: { contents: `import { cliSecretCodec } from './vendor/ieumoffice/packages/cli/src/secrets.ts';
+        import { readFileSync } from 'node:fs';
+        const request = JSON.parse(readFileSync(0, 'utf8'));
+        const codec = cliSecretCodec(process.env);
+        if (codec.open(request.sealed) !== request.plain || codec.open(request.sealed) !== request.plain) process.exit(1);
+        console.log('original CLI native secret lookup passed');`, resolveDir: repo },
+      bundle: true, platform: "node", format: "esm", target: "node24", outfile: fixture, logLevel: "silent",
+      banner: { js: "import{createRequire as __cr}from'module';const require=__cr(import.meta.url);" },
+    });
+    const cli = await childRun(process.execPath, [fixture], JSON.stringify({ sealed, plain }), revealEnv);
+    assert.equal(cli.code, 0); assert.ok(cli.stdout.includes("original CLI native secret lookup passed"));
+    checks.push("pinned original CLI codec starts native reveal and caches the decrypted key");
+    assert.ok(readFileSync(revealEnv.GENOFFICE_AI_SETTINGS, "utf8") === settings);
+    checks.push("native and original CLI reveal leave the saved settings bytes unchanged");
     simultaneous.forEach((entry) => entry?.key.fill(0));
     const built = await childRun(process.execPath, [join(repo, "scripts/smoke-office-ai.ts"), join(outDir, "gateway"), binary]);
     assert.equal(built.code, 0, "Built host settings/provider validation failed; inspect gateway results");
@@ -90,6 +128,10 @@ if (!process.argv.includes("--private-bus")) {
     const failed = await childRun(binary, ["--office-secret-key"], JSON.stringify({ directory: profile, create: true }), brokenEnv);
     assert.equal(failed.code, 1); assert.deepEqual(JSON.parse(failed.stdout), { ok: false, error: "vault_unavailable" });
     assert.ok(readFileSync(join(profile, "office/vault-id")).equals(before)); checks.push("unavailable OS vault refuses writes without replacing the existing id");
+    const locked = await childRun(binary, ["--reveal-ai-secrets"], JSON.stringify([sealed]), { ...revealEnv, DBUS_SESSION_BUS_ADDRESS: brokenEnv.DBUS_SESSION_BUS_ADDRESS });
+    assert.equal(locked.code, 0); assert.deepEqual(JSON.parse(locked.stdout).secrets, {});
+    assert.ok(readFileSync(revealEnv.GENOFFICE_AI_SETTINGS, "utf8") === settings);
+    checks.push("unavailable OS vault returns no CLI key and preserves saved settings");
     await stop(); checks.push("owned keyring stops normally");
   } catch (error) { failure = error; }
   finally {
