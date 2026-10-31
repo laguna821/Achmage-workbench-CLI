@@ -268,7 +268,7 @@ async fn evaluate(view: &WebviewWindow, expression: String) -> Result<Value, Str
                 else { serde_json::from_str::<Value>(&(&*(value as *mut NSString)).to_string()).map_err(|e| e.to_string()).map(|v| v.get("value").cloned().unwrap_or(Value::Null)) };
             let _ = tx.send(result);
         });
-        webview.callAsyncJavaScript_arguments_inFrame_inContentWorld_completionHandler(&NSString::from_str(&format!("return JSON.stringify({{value:await ({expression})}});")), None, None, &WKContentWorld::pageWorld(), Some(&done));
+        webview.callAsyncJavaScript_arguments_inFrame_inContentWorld_completionHandler(&NSString::from_str(&format!("return JSON.stringify({{value:await ({expression})}});")), None, None, &WKContentWorld::pageWorld(objc2::MainThreadMarker::new().unwrap()), Some(&done));
     }}).map_err(|e| e.to_string())?;
     wait(rx).await
 }
