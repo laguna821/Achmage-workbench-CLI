@@ -1,7 +1,7 @@
 {
   "name": "@workbench/office",
   "private": true,
-  "version": "0.2.3",
+  "version": "0.2.4",
   "type": "module",
   "description": "Office editors (Word first) built from the IeumOffice source in vendor/ieumoffice, with a browser bridge to the Workbench gateway instead of Electron.",
   "scripts": {
@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@noble/hashes": "^2.4.0",
-    "@workbench/contracts": "0.2.3",
+    "@workbench/contracts": "0.2.4",
     "buffer": "^6.0.3",
     "pako": "^2.2.0",
     "path-browserify": "^1.0.1"

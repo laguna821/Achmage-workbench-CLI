@@ -1,7 +1,7 @@
 {
   "name": "@workbench/host",
   "private": true,
-  "version": "0.2.3",
+  "version": "0.2.4",
   "type": "module",
   "scripts": {
     "dev": "node --watch src/main.ts",
@@ -9,9 +9,9 @@
     "build": "node ../../scripts/build-host.mjs"
   },
   "dependencies": {
-    "@workbench/contracts": "0.2.3",
-    "@workbench/provider-claude": "0.2.3",
-    "@workbench/provider-codex": "0.2.3",
+    "@workbench/contracts": "0.2.4",
+    "@workbench/provider-claude": "0.2.4",
+    "@workbench/provider-codex": "0.2.4",
     "cfb": "1.2.2",
     "diff": "^9.0.0",
     "jpeg-js": "0.4.4",
