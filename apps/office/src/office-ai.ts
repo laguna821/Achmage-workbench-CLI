@@ -52,6 +52,9 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
   // created. A different selection must still cancel the original request.
   let binding: { requestId: string; grants: (string | null)[] } | null = null;
   const streams = new Map<string, AbortController>();
+  const webRequests = new Set<AbortController>();
+  const abortWeb = () => { for (const controller of webRequests) controller.abort(); };
+  window.addEventListener("pagehide", abortWeb);
   setCopyAiBusy(() => active !== null || streams.size > 0);
   const changed = (next: string | null, keepPanel = false) => {
     if (sessionId === next) return;
@@ -62,6 +65,7 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
     skills.changed();
     sessionKey = next ?? "unbound";
     active?.reset();
+    abortWeb();
     for (const listener of subscribers) listener();
   };
   listen((message) => {
@@ -156,6 +160,12 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
   const getSettings = () => gateway.aiSession(init.artifact.id).json("settings");
   const statuses = (refresh = false) => gateway.aiSession(init.artifact.id).json(`statuses${refresh ? "?refresh=1" : ""}`);
   const openSettings = async () => { await parent("settings"); };
+  const webTool = async (name: string, ...args: unknown[]) => {
+    const current = run, api = current?.api ?? gateway.aiSession(init.artifact.id);
+    const controller = new AbortController(); webRequests.add(controller);
+    try { return await api.json<any>("tool", { requestId: crypto.randomUUID(), name, args, ...(current ? { turnId: current.turnId } : {}) }, controller.signal); }
+    finally { webRequests.delete(controller); }
+  };
   // Return immediately after attaching the stream, as Electron's invoke does. Its events
   // still arrive through the original subscription, including structured error causes.
   const aiStream = async (request: { requestId: string } & Record<string, unknown>) => {
@@ -176,6 +186,7 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
     }).finally(() => streams.delete(request.requestId));
   };
   const aiStreamCancel = async (requestId: string) => {
+    abortWeb();
     // Ask the host to stop without severing the response first: disconnection would
     // close the outer turn before the original loop can save its partial result.
     try { await run?.api.json("cancel", { requestId }); }
@@ -195,7 +206,11 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
   };
   return {
     desktop: { ...references.desktop, getAiSettings: getSettings, openAiModelSettings: openSettings, aiStream, aiStreamCancel, onAiStream: events.on("aiStream"), onAiSettingsChanged: events.on("aiSettingsChanged"),
-      aiToolCapabilities: async () => ({ imageGeneration: { available: false }, imageAnalysis: { available: false }, videoAnalysis: { available: false } }),
+      aiToolCapabilities: () => gateway.aiSession(init.artifact.id).json<any>("tool-capabilities"),
+      webSearch: (query: string, limit?: number) => webTool("web-search", query, ...(limit === undefined ? [] : [limit])),
+      imageSearch: (query: string, limit?: number) => webTool("image-search", query, ...(limit === undefined ? [] : [limit])),
+      readUrl: (url: string, offset?: number) => webTool("read-url", url, ...(offset === undefined ? [] : [offset])),
+      fetchImage: (url: string) => webTool("fetch-image", url),
       setAiSettings: async (settings: unknown) => { const saved = await gateway.aiSession(init.artifact.id).json("selection", settings); events.emit("aiSettingsChanged", saved); return saved; } },
     projectApi,
     templates: skills.bridge,
@@ -239,6 +254,11 @@ export function officeAiTransport(ai: OfficeAiBridge, dispatch: (channel: string
       case "ai:stream": return ai.desktop.aiStream(args[0] as Parameters<typeof ai.desktop.aiStream>[0]);
       case "ai:stream-cancel": return ai.desktop.aiStreamCancel(String(args[0]));
       case "ai:tool-capabilities": return ai.desktop.aiToolCapabilities();
+      case "slides:ai-tool-capabilities": case "sheets:ai-tool-capabilities": return ai.desktop.aiToolCapabilities();
+      case "ai:web-search": return ai.desktop.webSearch(String(args[0]), args[1] as number | undefined);
+      case "ai:image-search": return ai.desktop.imageSearch(String(args[0]), args[1] as number | undefined);
+      case "ai:read-url": return ai.desktop.readUrl(String(args[0]), args[1] as number | undefined);
+      case "ai:fetch-image": case "html:fetch-image": case "hwp:fetch-image": case "mindmap:fetch-image": case "sheets:ai-fetch-image": return ai.desktop.fetchImage(String(args[0]));
       case "ai:subscription-statuses": return ai.subscription.statuses();
       case "ai:subscription-recheck": return ai.subscription.recheck();
       case "home:open-subscription-install-help": case "home:open-connect-help": return ai.desktop.openAiModelSettings();

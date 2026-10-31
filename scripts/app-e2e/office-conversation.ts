@@ -11,6 +11,7 @@ import { officeUndo } from "./office-undo.ts";
 export async function officeConversationScenario(ctx: Ctx) {
   const S = "Office 같은 세션", { wd, api } = ctx.app;
   const unbound = process.env.APP_E2E_OFFICE_UNBOUND === "1";
+  const web = process.env.APP_E2E_OFFICE_WEB === "1";
   const requests: any[] = [];
   let cancelledStreams = 0;
   const marker = "WORKBENCH OFFICE NATIVE TOOL EDIT";
@@ -27,7 +28,10 @@ export async function officeConversationScenario(ctx: Ctx) {
       res.once("close", () => { clearTimeout(timer); if (!res.writableEnded) cancelledStreams++; });
       return;
     }
-    if (requests.length === 1) {
+    if (web && requests.length === 1) {
+      send({ role: "assistant", tool_calls: [{ index: 0, id: "native-web-read", type: "function", function: { name: "read_url", arguments: JSON.stringify({ url: "https://example.com" }) } }] });
+      send({}, "tool_calls");
+    } else if (requests.length === (web ? 2 : 1)) {
       send({ role: "assistant", tool_calls: [{ index: 0, id: "native-docs-edit", type: "function", function: { name: "insert_content", arguments: JSON.stringify({ html: `<p>${marker}</p>`, afterBlockIndex: -1 }) } }] });
       send({}, "tool_calls");
     } else { send({ role: "assistant", content: "같은 세션에 문서 수정 완료" }); send({}, "stop"); }
@@ -78,7 +82,8 @@ export async function officeConversationScenario(ctx: Ctx) {
     const tool = transcript.find((item) => item.kind === "tool");
     const xml = await (await JSZip.loadAsync(readFileSync(file))).file("word/document.xml")!.async("string");
     ctx.report.check(S, "원본 편집 도구가 실제 DOCX를 수정하고 새 판으로 저장", tool?.kind === "tool" && tool.status === "completed" && xml.includes(marker) && (await snapshot()).artifacts.find((item) => item.id === artifact.id)!.revision > 1);
-    ctx.report.check(S, "요청·편집 도구·응답·완료가 선택한 Workbench 세션에 함께 기록", transcript.some((item) => item.kind === "user" && item.office?.artifactId === artifact.id) && transcript.some((item) => item.kind === "assistant" && item.text.includes("수정 완료") && item.office?.artifactId === artifact.id) && requests.length === 2, undefined, await shot(ctx, "office-conversation-completed.png"));
+    ctx.report.check(S, "요청·편집 도구·응답·완료가 선택한 Workbench 세션에 함께 기록", transcript.some((item) => item.kind === "user" && item.office?.artifactId === artifact.id) && transcript.some((item) => item.kind === "assistant" && item.text.includes("수정 완료") && item.office?.artifactId === artifact.id) && requests.length === (web ? 3 : 2), undefined, await shot(ctx, "office-conversation-completed.png"));
+    if (web) ctx.report.check(S, "원본 웹 읽기 도구가 실제 공개 페이지 본문을 같은 세션과 모델 후속에 전달", transcript.some(item => item.kind === "tool" && item.status === "completed" && item.output?.includes("Example Domain")) && JSON.stringify(requests[1]).includes("Example Domain"));
     if (process.env.APP_E2E_OFFICE_UNDO === "1") await officeUndo(ctx, "docx", artifact.id, marker, async () => (await JSZip.loadAsync(readFileSync(file))).file("word/document.xml")!.async("string"));
     const firstErrors = await pageErrors(wd); await wd.frame(null); await wd.refresh(); await installProbe(wd);
     await wd.frame(await wd.waitFor("iframe.office-frame", 30000)); await installProbe(wd);

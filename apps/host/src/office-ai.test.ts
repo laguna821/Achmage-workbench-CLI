@@ -69,6 +69,25 @@ async function fixture(deps: OfficeAiTestDeps = {}) {
 const chunks = async (response: Response) => (await response.text()).trim().split("\n").filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>);
 
 describe("common Office AI", () => {
+  it("routes web tools through the document grant and cancels only the same view's calls", async () => {
+    let searches = 0, finish!: (value: unknown) => void;
+    const f = await fixture({ webTools: { webSearch: async () => { searches++; return new Promise(resolve => { finish = resolve; }); } } });
+    try {
+      const input = { requestId: "web-1", name: "web-search", args: ["문서"] };
+      expect((await f.request("tool", input, f.otherToken)).status).toBe(401);
+      expect(searches).toBe(0);
+      expect((await f.request("tool-capabilities")).status).toBe(200);
+      const pending = f.request("tool", input);
+      while (!searches) await new Promise(resolve => setTimeout(resolve, 10));
+      await f.request("cancel", { requestId: "web-1" }, f.sameDocumentToken);
+      expect(f.ai.activeCount).toBe(1);
+      await f.request("cancel", { requestId: "last-model-request" });
+      expect((await pending).ok).toBe(false);
+      expect(f.ai.activeCount).toBe(0); finish({ results: [] });
+      expect((await f.request("tool", { ...input, turnId: "unknown" })).status).toBe(409);
+      expect(searches).toBe(1);
+    } finally { await f.close(); }
+  });
   it("uses the original provider protocol for text, reasoning, tools, usage and chat without exposing keys", async () => {
     const f = await fixture();
     try {

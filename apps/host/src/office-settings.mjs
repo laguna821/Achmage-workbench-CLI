@@ -83,12 +83,20 @@ export class OfficeSettings {
     return mapAiSecrets(normalized, (value) => values.get(value));
   }
   async executionSettings() {
+    return (await this.executionContext()).settings;
+  }
+  /** Original file-based Office tools use their codec synchronously. Open only in
+   * the host, and keep this map scoped to the one request; never write plaintext. */
+  async executionContext() {
     const current = this.current(), opened = new Map();
+    const secrets = new Map();
     for (const [ref, raw] of current.refs) {
       // An old Electron envelope remains on disk, but cannot become an HTTP header.
-      opened.set(ref, raw.startsWith(OFFICE_SEALED_PREFIX) ? await this.vault.open(raw) : raw.startsWith("sealed:v1:") ? "" : raw);
+      const value = raw.startsWith(OFFICE_SEALED_PREFIX) ? await this.vault.open(raw) : raw.startsWith("sealed:v1:") ? "" : raw;
+      opened.set(ref, value); secrets.set(raw, value);
     }
-    return mapAiSecrets(copy(current.settings), (v) => opened.get(v) ?? v);
+    if (this.current().revision !== current.revision) throw error("office_settings_changed", "AI 설정이 바뀌었습니다. 다시 요청해 주세요.", 409);
+    return { settings: mapAiSecrets(copy(current.settings), (v) => opened.get(v) ?? v), secrets };
   }
   write(settings, expectedRevision, options = {}) {
     const job = this.queue.then(() => this.save(settings, expectedRevision, options));

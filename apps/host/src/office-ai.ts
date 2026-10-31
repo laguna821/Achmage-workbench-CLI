@@ -46,7 +46,7 @@ export function officeAiRequest(value: unknown, stream: boolean): OfficeAiStream
  * Original editor tools still execute in their own renderer and save through document CAS. */
 export class OfficeAi {
   private engine: Promise<OfficeAiEngine> | null = null;
-  private readonly active = new Map<string, { owner: string; controller: AbortController }>();
+  private readonly active = new Map<string, { owner: string; controller: AbortController; tool: boolean }>();
   private readonly load: () => Promise<OfficeAiEngine>;
   private closed = false;
   private readonly sessions: OfficeSessions | undefined;
@@ -109,7 +109,7 @@ export class OfficeAi {
     }
     throw new HttpError(405, "method_not_allowed", "허용되지 않은 AI 설정 요청입니다.");
   }
-  private begin(owner: string, id: string, response: ServerResponse, ownerLimit = 2) {
+  private begin(owner: string, id: string, response: ServerResponse, ownerLimit = 2, tool = false) {
     if (this.closed) throw new HttpError(503, "office_ai_closed", "앱을 종료하고 있습니다.");
     const key = `${owner}/${id}`;
     if (this.active.has(key)) throw new HttpError(409, "office_ai_duplicate", "같은 AI 요청이 이미 진행 중입니다.");
@@ -117,12 +117,12 @@ export class OfficeAi {
     const controller = new AbortController(), abort = () => controller.abort();
     if (response.destroyed || response.writableEnded) abort();
     else response.once("close", abort);
-    this.active.set(key, { owner, controller });
+    this.active.set(key, { owner, controller, tool });
     return { signal: controller.signal, abort, finish: () => { response.off("close", abort); this.active.delete(key); } };
   }
   async handle(req: IncomingMessage, res: ServerResponse, url: URL, bearer: string | null, documents: Documents, grants: EditorGrants): Promise<boolean> {
     if (await this.skills?.handle(req, res, url, bearer, grants)) return true;
-    const match = /^\/api\/artifacts\/([^/]+)\/ai\/(settings|selection|statuses|stream|chat|cancel|history|turn-start|turn-events|turn-finish)$/.exec(url.pathname);
+    const match = /^\/api\/artifacts\/([^/]+)\/ai\/(settings|selection|statuses|stream|chat|cancel|history|turn-start|turn-events|turn-finish|tool-capabilities|tool)$/.exec(url.pathname);
     if (!match) return false;
     const [, artifactId, operation] = match;
     const authorize = () => {
@@ -132,7 +132,7 @@ export class OfficeAi {
       return `${artifactId}:${grants.previewInfo(bearer!).baseUrl}`;
     };
     const owner = authorize();
-    const get = operation === "settings" || operation === "statuses" || operation === "history";
+    const get = operation === "settings" || operation === "statuses" || operation === "history" || operation === "tool-capabilities";
     if (req.method !== (get ? "GET" : "POST")) throw new HttpError(405, "method_not_allowed", "허용되지 않은 AI 요청입니다.");
     const binding = () => {
       const sessionId = grants.session(bearer!);
@@ -163,7 +163,7 @@ export class OfficeAi {
     const engine = await this.getEngine();
     authorize();
     if (get) {
-      const value = operation === "settings" ? engine.settings() : await engine.statuses(url.searchParams.get("refresh") === "1");
+      const value = operation === "settings" ? engine.settings() : operation === "tool-capabilities" ? await engine.webTools?.capabilities() : await engine.statuses(url.searchParams.get("refresh") === "1");
       authorize(); sendJson(res, 200, value); return true;
     }
     let raw: unknown;
@@ -179,7 +179,22 @@ export class OfficeAi {
     if (operation === "cancel") {
       if (!record(raw) || !identifier(raw.requestId)) return invalid();
       this.active.get(`${owner}/${raw.requestId}`)?.controller.abort();
+      for (const call of this.active.values()) if (call.owner === owner && call.tool) call.controller.abort();
       sendJson(res, 200, { ok: true }); return true;
+    }
+    if (operation === "tool") {
+      if (!record(raw) || !identifier(raw.requestId) || !identifier(raw.name) || !Array.isArray(raw.args) || !engine.webTools) return invalid();
+      const bound = raw.turnId === undefined ? null : binding();
+      const outer = bound ? this.sessions!.requireRun(bound, raw.turnId) : null;
+      const run = this.begin(owner, raw.requestId, res, 8, true), abort = () => run.abort();
+      outer?.controller.signal.addEventListener("abort", abort, { once: true });
+      if (outer?.controller.signal.aborted) abort();
+      try {
+        const value = await engine.webTools.invoke(raw.name, raw.args, run.signal);
+        authorize(); run.signal.throwIfAborted();
+        if (!res.destroyed) sendJson(res, 200, value);
+      } finally { outer?.controller.signal.removeEventListener("abort", abort); run.finish(); }
+      return true;
     }
     const bound = this.requireSession ? binding() : null;
     const outer = bound ? this.sessions!.requireRun(bound, record(raw) ? raw.turnId : null) : null;

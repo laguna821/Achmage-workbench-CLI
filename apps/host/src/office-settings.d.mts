@@ -9,6 +9,7 @@ export class OfficeSettings {
   openSecret(value: unknown): Promise<string>;
   draftSettings(draft: unknown): Promise<Record<string, any>>;
   executionSettings(): Promise<Record<string, any>>;
+  executionContext(): Promise<{ settings: Record<string, any>; secrets: Map<string, string> }>;
   write(settings: unknown, expectedRevision: string, options?: { signal?: AbortSignal }): Promise<OfficeSettingsSnapshot>;
   setMeteredAccepted(provider: string, accepted: boolean): Promise<void>;
   close(): void;

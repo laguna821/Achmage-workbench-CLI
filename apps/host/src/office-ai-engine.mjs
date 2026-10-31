@@ -2,6 +2,7 @@
 // of the host project; the implementation is bundled from the reviewed vendor pin, unchanged.
 import { OfficeSettings, OFFICE_SECRET_PLACEHOLDER } from "./office-settings.mjs";
 import { createOfficeSettingsControls } from "./office-settings-controls.mjs";
+import { createOfficeWebTools } from "./office-web-tools.mjs";
 import {
   activeCustomEndpoint, localEndpointTimeoutMs, maxOutputTokensOf,
   normalizeAiSettings, sanitizeAiSettings, resolveCustomEndpoints, streamForProvider, chatForProvider,
@@ -63,6 +64,7 @@ export function createOfficeAiEngine(dataDir, injected = {}, hostActions = {}) {
       return getSettings();
     },
     configuration: store,
+    webTools: createOfficeWebTools(store, injected.webTools),
     settingsInvoke: controls.invoke,
     setMeteredAccepted: controls.setMeteredAccepted,
     close: () => { controls.close(); store.close(); },

@@ -191,7 +191,7 @@ const hwpApi = {
   onAiPanelPrefsChanged: events.on("aiPanelPrefsChanged"),
   ...ai.desktop,
   aiSubscription: ai.subscription,
-  readUrl: pendingFeature, imageSearch: pendingFeature, generateImage: pendingFeature, fetchImage: pendingFeature,
+  generateImage: pendingFeature,
   openDroppedDocuments: () => false,
 };
 Object.assign(window, { hwpApi });
