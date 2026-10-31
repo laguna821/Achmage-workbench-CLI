@@ -79,7 +79,7 @@ if (wrapped.includes("ieumoffice")) ieum.engineCommand = "ieumoffice";
 const bus = new EventBus();
 // "새 프로젝트 폴더 위치": works started without a folder get theirs under the folder the user chose.
 const worksDir: WorksDir = new WorksDir(store, join(dataDir, "works"), (): string | null => pkm.vault.root);
-// The agent browser: a window sessions may use (checks run it headless or with a stand-in CLI).
+// Lightpanda background sessions by default; Chromium remains an explicit compatibility mode.
 const browse = new AgentBrowser({
   dataDir,
   headless: env.WORKBENCH_BROWSER_HEADLESS === "1",

@@ -6,6 +6,7 @@ import "../styles/browse.css";
 
 /** What the browser controls do (the app calls the gateway). */
 export type BrowserActions = {
+  engine?: (engine: "lightpanda" | "chromium") => void;
   setOn: (session: Session, on: boolean) => void;
   install: () => void;
   login: (url: string | null) => void;
@@ -96,7 +97,7 @@ export function BrowserInstall({ status, actions }: { status: AgentBrowserStatus
       ) : (
         <>
           <div className="browser-note">
-            {install.state === "error" ? install.message : "에이전트 브라우저가 아직 없습니다. Playwright CLI와 Chromium을 앱 데이터 폴더에 받습니다(내려받기 약 200MB, 설치 후 약 420MB)."}
+            {install.state === "error" ? install.message : status.engine === "lightpanda" ? "AI가 화면 없이 탐색할 Lightpanda를 앱 데이터 폴더에 받습니다(약 74–98MB). Windows에서는 WSL2가 필요합니다." : "호환 브라우저용 Playwright CLI와 Chromium을 앱 데이터 폴더에 받습니다(내려받기 약 200MB, 설치 후 약 420MB)."}
           </div>
           <button type="button" className="button small" onClick={actions.install}>
             {install.state === "error" ? "다시 설치" : "설치"}
@@ -105,6 +106,14 @@ export function BrowserInstall({ status, actions }: { status: AgentBrowserStatus
       )}
     </div>
   );
+}
+
+export function BrowserEngine({ status, actions }: { status: AgentBrowserStatus; actions: BrowserActions }) {
+  if (!actions.engine) return null;
+  return <label className="browser-note">탐색 방식 <select aria-label="탐색 방식" value={status.engine ?? "chromium"} disabled={status.install.state === "installing" || status.window.kind === "login" || (status.window.kind === "agent" && status.window.busy)} onChange={event => actions.engine?.(event.target.value as "lightpanda" | "chromium")}>
+    <option value="lightpanda">Lightpanda · 백그라운드 수집</option>
+    <option value="chromium">Chromium · 로그인·화면·호환</option>
+  </select></label>;
 }
 
 /**
@@ -147,7 +156,7 @@ export function BrowserPill({
         ? mine
           ? `이 세션이 쓰는 중${win.title || host ? ` · ${win.title || host}` : ""}`
           : `다른 세션${ownerLabel ? `('${ownerLabel}')` : ""}이 쓰는 중`
-        : "닫혀 있습니다. 엔진이 처음 쓸 때 열립니다.";
+        : status.engine === "lightpanda" ? "대기 중입니다. AI가 필요할 때 탐색을 시작합니다." : "닫혀 있습니다. 엔진이 처음 쓸 때 열립니다.";
   const toggle = () => (session ? actions.setOn(session, !on) : onDraft(!on));
   return (
     <div className="anchor">
@@ -169,32 +178,31 @@ export function BrowserPill({
           <button type="button" role="switch" aria-checked={on} aria-label="이 세션에서 브라우저 쓰기" className={`browser-switch${on ? " on" : ""}`} onClick={toggle} title={on ? "이 세션에서 끄기" : "이 세션에서 켜기"}>
             <span />
           </button>
-          <div className="browser-note">이 세션의 엔진이 Playwright CLI로 화면에 보이는 Chromium 창을 다룹니다.</div>
+          <div className="browser-note">{status.engine === "lightpanda" ? "AI가 Lightpanda로 백그라운드에서 탐색합니다. 브라우저 창은 열리지 않습니다." : "AI가 화면에 보이는 Chromium 창을 다룹니다."}</div>
+          <BrowserEngine status={status} actions={actions} />
         </div>
         <BrowserInstall status={status} actions={actions} />
         {status.install.state === "ready" ? (
           <>
             <div className="browser-window">
-              <span className="browser-note">창: {windowLine}</span>
+              <span className="browser-note">{status.engine === "lightpanda" ? "탐색" : "창"}: {windowLine}</span>
               <div className="browser-row">
-                <button type="button" className="button small" disabled={win.kind === "closed"} onClick={actions.focus}>
+                {status.engine !== "lightpanda" ? <button type="button" className="button small" disabled={win.kind === "closed"} onClick={actions.focus}>
                   <Icon name="eye" size={13} /> 창 보기
-                </button>
+                </button> : null}
                 {session && on ? (
                   <button
                     type="button"
                     className={`button small${paused ? "" : " browser-stop"}`}
                     onClick={() => actions.pause(session, !paused)}
-                    title={paused ? "엔진이 다시 브라우저를 쓰게 합니다" : "엔진의 브라우저 명령을 막습니다. 창은 그대로 두어 직접 다룰 수 있습니다"}
+                    title={paused ? "엔진이 다시 브라우저를 쓰게 합니다" : status.engine === "lightpanda" ? "현재 백그라운드 탐색을 종료하고 추가 명령을 막습니다" : "엔진의 브라우저 명령을 막습니다. 창은 그대로 두어 직접 다룰 수 있습니다"}
                   >
                     <Icon name={paused ? "refresh" : "stop"} size={12} /> {paused ? "다시 쓰게 하기" : "멈춤"}
                   </button>
                 ) : null}
               </div>
             </div>
-            <div className="menu-divider" />
-            <div className="menu-label">로그인 · 에이전트와 같은 프로필</div>
-            <BrowserLogin status={status} actions={actions} />
+            {status.engine !== "lightpanda" ? <><div className="menu-divider" /><div className="menu-label">로그인 · 에이전트와 같은 프로필</div><BrowserLogin status={status} actions={actions} /></> : null}
           </>
         ) : null}
         <div className="menu-divider" />

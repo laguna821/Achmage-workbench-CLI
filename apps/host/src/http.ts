@@ -847,6 +847,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const action = parts.slice(1).join("/");
         if (method === "GET" && !action) return sendJson(res, 200, browse.status());
         if (method === "POST" && action === "install") return sendJson(res, 202, browse.install());
+        if (method === "POST" && action === "engine") return sendJson(res, 200, await browse.selectEngine(String((await readJson(req)).engine)));
         if (method === "POST" && action === "login") {
           const body = await readJson(req);
           return sendJson(res, 200, await browse.openLogin(typeof body.url === "string" ? body.url : null));

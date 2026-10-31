@@ -109,10 +109,12 @@ export class BrowserInstaller {
   private readonly steps: () => InstallStep[];
   private readonly ready: () => boolean;
 
-  constructor(options: { ready: () => boolean; steps: () => InstallStep[]; onChange: (state: AgentBrowserInstall) => void }) {
+  private readonly versions: { cli: string; browser: string };
+  constructor(options: { ready: () => boolean; steps: () => InstallStep[]; onChange: (state: AgentBrowserInstall) => void; versions?: { cli: string; browser: string } }) {
     this.ready = options.ready;
     this.steps = options.steps;
     this.onChange = options.onChange;
+    this.versions = options.versions ?? { cli: PLAYWRIGHT_CLI.version, browser: PLAYWRIGHT_CLI.browser.version };
     this.current = this.resting();
   }
 
@@ -123,8 +125,8 @@ export class BrowserInstaller {
       stage: null,
       message: null,
       percent: null,
-      cliVersion: ready ? PLAYWRIGHT_CLI.version : null,
-      browserVersion: ready ? PLAYWRIGHT_CLI.browser.version : null,
+      cliVersion: ready ? this.versions.cli : null,
+      browserVersion: ready ? this.versions.browser : null,
     };
   }
 

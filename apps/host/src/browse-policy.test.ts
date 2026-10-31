@@ -73,6 +73,9 @@ describe("when a browser command waits for the user", () => {
 
 describe("engine approvals left to the gateway", () => {
   it("only a bare playwright-cli command, also inside the shell wrapper Codex shows", () => {
+    expect(isPlainBrowserCommand('workbench-browser -s=wb-1 extract \'{"title":"h1"}\'')).toBe(true);
+    expect(isPlainBrowserCommand("workbench-browser -s=wb-1 read; cat secret")).toBe(false);
+    expect(browserInstructions("wb-1", "lightpanda")).toContain("화면 없는 Lightpanda");
     expect(isPlainBrowserCommand("playwright-cli -s=wb-1 snapshot")).toBe(true);
     expect(isPlainBrowserCommand('playwright-cli -s=wb-1 fill e5 "안녕하세요 반갑습니다"')).toBe(true);
     expect(isPlainBrowserCommand("playwright-cli -s=wb-1 find 'Sign (in|up)'")).toBe(true);

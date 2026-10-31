@@ -1,8 +1,8 @@
-// Agentic browsing: one visible Chromium window on a persistent profile in the app data folder,
-// driven through Microsoft's Playwright CLI by Claude and Codex sessions alike. The gateway owns
-// the window; engines talk to it with `playwright-cli` commands, one session at a time.
+// Agentic browsing: isolated Lightpanda background sessions by default, with an explicit
+// Chromium compatibility mode and its preserved persistent profile. Both use the gateway's
+// existing session spool and access rules through workbench-browser/playwright-cli.
 
-/** Install state of the agent browser: the pinned Playwright CLI and the Chromium it downloads. */
+/** Install state of the selected, pinned browser engine and its controller. */
 export type AgentBrowserInstall = {
   state: "missing" | "installing" | "ready" | "error";
   /** While installing: the step running now. */
@@ -22,6 +22,8 @@ export type AgentBrowserWindow =
   | { kind: "login"; url: string | null };
 
 export type AgentBrowserStatus = {
+  /** Missing only for older gateways. AI research defaults to Lightpanda. */
+  engine?: "lightpanda" | "chromium";
   install: AgentBrowserInstall;
   window: AgentBrowserWindow;
   /** Sessions whose browser use the user paused ("멈춤"); their commands are refused. */

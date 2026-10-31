@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { type AgentBrowserStatus, type DocumentTools, type Provider, type ProviderStatus } from "@workbench/contracts";
 import { usageText } from "../format.ts";
 import type { ThemePref } from "../theme.ts";
-import { BrowserInstall, BrowserLogin, type BrowserActions } from "./BrowserPill.tsx";
+import { BrowserEngine, BrowserInstall, BrowserLogin, type BrowserActions } from "./BrowserPill.tsx";
 import { EngineCard, type EngineActions } from "./EngineSetup.tsx";
 import { toolState } from "./Onboarding.tsx";
 
@@ -52,7 +52,7 @@ function BrowserSection({ status, actions }: { status: AgentBrowserStatus | null
   if (!status) return null;
   const install = status.install;
   const state =
-    install.state === "ready" ? `준비됨${install.browserVersion ? ` · Chromium ${install.browserVersion.split(".")[0]}` : ""}` : install.state === "installing" ? "설치 중…" : install.state === "error" ? "설치 실패" : "없음";
+    install.state === "ready" ? `준비됨 · ${status.engine === "lightpanda" ? "Lightpanda" : "Chromium"} ${install.browserVersion ?? ""}` : install.state === "installing" ? "설치 중…" : install.state === "error" ? "설치 실패" : "없음";
   return (
     <>
       <div className="menu-divider" />
@@ -61,9 +61,10 @@ function BrowserSection({ status, actions }: { status: AgentBrowserStatus | null
           <span className="connection-name">에이전트 브라우저</span>
           <span className={`connection-state ${install.state === "ready" ? "ok" : "warn"}`}>{state}</span>
         </div>
-        <div className="connection-meta muted">Claude·Codex 세션이 Playwright CLI로 화면에 보이는 Chromium 창을 씁니다(입력창 아래 '브라우저').</div>
+        <div className="connection-meta muted">{status.engine === "lightpanda" ? "Lightpanda가 화면 없이 AI의 웹 탐색과 정보 수집을 처리합니다." : "로그인·화면 검증·사이트 호환을 위해 Chromium을 사용합니다."}</div>
+        <BrowserEngine status={status} actions={actions} />
         <BrowserInstall status={status} actions={actions} />
-        {install.state === "ready" ? (
+        {install.state === "ready" && status.engine !== "lightpanda" ? (
           <>
             <div className="connection-meta">로그인하기 · 에이전트와 같은 프로필에 한 번</div>
             <BrowserLogin status={status} actions={actions} />

@@ -32,6 +32,7 @@ import {
 } from "./browse-policy.ts";
 import { cmdLauncherSource, launcherSource, wrapperSource } from "./browse-wrapper.ts";
 import { HttpError } from "./errors.ts";
+import { LightpandaBrowser, LightpandaInstall, LIGHTPANDA_VERSION, LIGHTPANDA_HELP } from "./browse-lightpanda.ts";
 
 const run = promisify(execFile);
 
@@ -119,6 +120,9 @@ export type BrowserEngineHooks = {
 
 export type AgentBrowserOptions = {
   dataDir: string;
+  engine?: "lightpanda" | "chromium";
+  /** Explicit test executable; production uses the verified app-local release. */
+  lightpanda?: string;
   /** No window (checks and tests): the same Chromium, headless. */
   headless?: boolean;
   /** A stand-in for the Playwright CLI script (checks): used as if installed. */
@@ -174,7 +178,11 @@ function childrenOf(pid: number): number[] {
 export class AgentBrowser {
   readonly paths: BrowserPaths;
   private readonly options: AgentBrowserOptions;
-  private readonly installer: BrowserInstaller;
+  private readonly chromiumInstaller: BrowserInstaller;
+  private readonly pandaInstaller: BrowserInstaller;
+  private readonly panda: LightpandaBrowser;
+  private engine: "lightpanda" | "chromium";
+  private get installer() { return this.engine === "lightpanda" ? this.pandaInstaller : this.chromiumInstaller; }
   private host: BrowseHost | null = null;
   private window: AgentBrowserWindow = { kind: "closed" };
   private agent: Agent | null = null;
@@ -198,6 +206,12 @@ export class AgentBrowser {
   constructor(options: AgentBrowserOptions) {
     this.options = options;
     this.paths = browserPaths(options.dataDir);
+    let saved: unknown;
+    try { saved = JSON.parse(readFileSync(join(this.paths.root, "engine.json"), "utf8")).engine; } catch { /* first launch */ }
+    this.engine = options.engine ?? (options.cli ? "chromium" : saved === "chromium" ? "chromium" : "lightpanda");
+    const pandaInstall = new LightpandaInstall(this.paths.root);
+    this.panda = new LightpandaBrowser(options.lightpanda ?? pandaInstall.binary, options.idleCloseMs);
+    this.pandaInstaller = new BrowserInstaller({ ready: () => Boolean(options.lightpanda) || pandaInstall.ready(), steps: () => pandaInstall.steps(), onChange: () => this.publish(), versions: { cli: "MCP", browser: LIGHTPANDA_VERSION } });
     for (const dir of [this.paths.root, this.paths.bin, this.paths.spool, this.paths.output]) mkdirSync(dir, { recursive: true });
     mkdirSync(this.paths.profile, { recursive: true, mode: 0o700 });
     // Sign-ins, page snapshots and screenshots (mail, for one) are this user's alone.
@@ -209,7 +223,11 @@ export class AgentBrowser {
     } catch {
       this.told = {};
     }
-    this.installer = new BrowserInstaller({
+    if (saved !== this.engine) {
+      this.told = {}; writeFileSync(this.paths.told, "{}");
+      writeFileSync(join(this.paths.root, "engine.json"), JSON.stringify({ engine: this.engine }), { mode: 0o600 });
+    }
+    this.chromiumInstaller = new BrowserInstaller({
       ready: () => Boolean(options.cli) || installedOnDisk(this.paths),
       steps: () => (options.steps ?? installSteps)(this.paths, () => this.writeConfig()),
       onChange: () => this.publish(),
@@ -229,6 +247,9 @@ export class AgentBrowser {
     chmodSync(join(this.paths.bin, "playwright-cli"), 0o755);
     // Windows shells (PowerShell, cmd) run the .cmd; Git Bash runs the sh one.
     if (process.platform === "win32") writeFileSync(join(this.paths.bin, "playwright-cli.cmd"), cmdLauncherSource(process.execPath, script));
+    writeFileSync(join(this.paths.bin, "workbench-browser"), launcherSource(process.execPath, script), { mode: 0o755 });
+    chmodSync(join(this.paths.bin, "workbench-browser"), 0o755);
+    if (process.platform === "win32") writeFileSync(join(this.paths.bin, "workbench-browser.cmd"), cmdLauncherSource(process.execPath, script));
   }
 
   /** The CLI's config: Chromium (the downloaded build), this profile, a window, output kept here. */
@@ -253,11 +274,25 @@ export class AgentBrowser {
     // Watchers can miss a file (or a folder made before them): a slow look as well.
     this.poll = setInterval(() => this.tick(), 1000);
     this.poll.unref();
-    void this.adoptRunning().finally(() => this.refreshSignedIn());
+    if (this.engine === "chromium") void this.adoptRunning().finally(() => this.refreshSignedIn());
   }
 
   status(): AgentBrowserStatus {
-    return { install: this.installer.state, window: this.window, paused: [...this.paused], signedIn: this.signedIn };
+    return { engine: this.engine, install: this.installer.state, window: this.window, paused: [...this.paused], signedIn: this.engine === "chromium" ? this.signedIn : [] };
+  }
+
+  async selectEngine(engine: string) {
+    if (engine !== "lightpanda" && engine !== "chromium") throw new HttpError(400, "browser_engine", "알 수 없는 브라우저입니다.");
+    if (engine === this.engine) return this.status();
+    if (this.panda.busy || (this.window.kind === "agent" && this.window.busy)) throw new HttpError(409, "browser_busy", "진행 중인 탐색이 끝나거나 중지된 뒤 전환하세요.");
+    if (this.window.kind === "login") throw new HttpError(409, "browser_login", "열린 로그인 창을 닫은 뒤 전환하세요.");
+    for (const sessionId of this.known.keys()) this.expire(sessionId);
+    await this.closeAgent(); await this.panda.closeAll();
+    this.engine = engine;
+    writeFileSync(join(this.paths.root, "engine.json"), JSON.stringify({ engine }), { mode: 0o600 });
+    this.told = {}; writeFileSync(this.paths.told, "{}");
+    this.setWindow({ kind: "closed" });
+    return this.status();
   }
 
   private publish() {
@@ -297,6 +332,7 @@ export class AgentBrowser {
       this.expire(session.id);
       this.paused.delete(session.id);
       if (this.agent?.sessionId === session.id) void this.closeAgent();
+      this.panda.stop(name);
       this.publish();
     }
     if (before?.thread !== thread || before?.on !== on) this.writeThreads();
@@ -382,15 +418,15 @@ export class AgentBrowser {
     if (!sessionId || !entry || !entry.session.browser) throw new Refusal(`세션 ${name}의 Workbench 브라우저가 꺼져 있습니다. 사용자에게 입력창 아래 '브라우저'를 켜 달라고 하세요.`);
     const parsed = parseCliArgs(request.args);
     // Help and the version change nothing.
-    if (!parsed.command || parsed.help || request.args.includes("--version")) return this.cli(name, request.args.filter((arg) => !/^(?:-s|--session)(=|$)/.test(arg)), this.paths.root);
+    if (!parsed.command || parsed.help || request.args.includes("--version")) return this.engine === "lightpanda" ? { code: 0, stdout: LIGHTPANDA_HELP, stderr: "" } : this.cli(name, request.args.filter((arg) => !/^(?:-s|--session)(=|$)/.test(arg)), this.paths.root);
     const kind = browserCommandKind(parsed.command);
     if (kind === "blocked") throw new Refusal(`'${parsed.command}' 명령은 Workbench 브라우저에서 쓸 수 없습니다(쿠키·저장소·네트워크 기록·창 관리는 막혀 있습니다).`);
     if (this.installer.state.state !== "ready") throw new Refusal("에이전트 브라우저가 아직 설치되지 않았습니다. 사용자에게 '브라우저 › 설치'를 부탁하세요.");
     this.blocker(sessionId);
     if (parsed.command === "close") return this.closeOwn(sessionId);
-    const url = kind === "navigate" ? targetUrl(parsed.args) : null;
+    const url = kind === "navigate" && parsed.command !== "search" ? targetUrl(parsed.args) : null;
     const sites = this.sites.get(sessionId) ?? new Set<string>();
-    const newSite = Boolean(url && !sites.has(url.host));
+    const newSite = parsed.command === "search" || Boolean(url && !sites.has(url.host));
     if (browserDecision(entry.access, kind, newSite) === "ask") {
       const ref = parsed.args.find((arg) => /^e\d+$/.test(arg));
       const element = ref ? describeRef(this.lastSnapshot(name), ref) : null;
@@ -403,6 +439,18 @@ export class AgentBrowser {
       if (!this.waiting(name, request.id)) throw new Refusal("명령이 이미 끝나 실행하지 않았습니다.");
     }
     if (url) this.sites.set(sessionId, sites.add(url.host));
+    if (this.engine === "lightpanda") {
+      this.setWindow({ kind: "agent", sessionId, url: url?.href ?? null, title: null, busy: true, at: Date.now() });
+      try {
+        const stdout = await this.panda.command(name, [parsed.command, ...parsed.args]);
+        const result = { code: 0, stdout, stderr: "" };
+        this.noteOutput(name, sessionId, result, entry.work.cwd);
+        return result;
+      } catch (error) {
+        if (this.engine === "lightpanda") this.setWindow({ kind: "closed" });
+        throw error;
+      }
+    }
     const fresh = this.host?.lookup(sessionId) ?? entry;
     await this.ensureWindow(fresh.session, fresh.work);
     const agent = this.agent!;
@@ -546,6 +594,11 @@ export class AgentBrowser {
 
   /** `close` from the session's own engine: its window, if it holds it. */
   private async closeOwn(sessionId: string): Promise<CliResult> {
+    if (this.engine === "lightpanda") {
+      await this.panda.close(browserSessionName(sessionId));
+      if (this.window.kind === "agent" && this.window.sessionId === sessionId) this.setWindow({ kind: "closed" });
+      return { code: 0, stdout: "백그라운드 브라우저 세션을 닫았습니다.\n", stderr: "" };
+    }
     if (this.agent?.sessionId !== sessionId) return { code: 0, stdout: "브라우저 창이 이미 닫혀 있습니다.\n", stderr: "" };
     await this.closeAgent();
     return { code: 0, stdout: "브라우저 창을 닫았습니다. 로그인 상태는 프로필에 남아 있습니다.\n", stderr: "" };
@@ -570,6 +623,7 @@ export class AgentBrowser {
    * per profile); with the sign-in window already open the address opens as a new tab in it.
    */
   async openLogin(rawUrl: string | null) {
+    if (this.engine === "lightpanda") throw new HttpError(409, "browser_login", "직접 로그인하려면 호환 브라우저를 선택하세요. 프로필은 별도로 유지됩니다.");
     if (this.installer.state.state !== "ready") throw new HttpError(409, "browser_missing", "에이전트 브라우저를 먼저 설치하세요.");
     const url = this.loginUrl(rawUrl);
     const chrome = this.options.chrome ?? this.paths.chrome;
@@ -691,6 +745,7 @@ export class AgentBrowser {
 
   /** Bring the window to the front: niri's IPC when present, by the browser's process. */
   async focus(): Promise<{ ok: boolean; message: string }> {
+    if (this.engine === "lightpanda") return { ok: false, message: "Lightpanda는 백그라운드에서 탐색하므로 표시할 창이 없습니다." };
     const roots = this.login ? [this.login.pid] : this.agent?.daemonPid ? childrenOf(this.agent.daemonPid) : [];
     if (!roots.length) return { ok: false, message: "열린 브라우저 창이 없습니다." };
     const pids = new Set(roots.flatMap((pid) => [pid, ...childrenOf(pid)]));
@@ -712,6 +767,7 @@ export class AgentBrowser {
     if (paused) {
       this.paused.add(sessionId);
       this.expire(sessionId, "decline");
+      if (this.engine === "lightpanda") this.panda.stop(browserSessionName(sessionId));
     } else {
       this.paused.delete(sessionId);
     }
@@ -762,7 +818,7 @@ export class AgentBrowser {
     return {
       pathDirs: () => [this.paths.bin],
       sessionEnv: (session): Record<string, string> => (session.browser ? { PLAYWRIGHT_CLI_SESSION: browserSessionName(session.id) } : {}),
-      instructions: (session) => (session.browser ? browserInstructions(browserSessionName(session.id)) : null),
+      instructions: (session) => (session.browser ? browserInstructions(browserSessionName(session.id), this.engine) : null),
       offNote: (session) => browserOffNote(browserSessionName(session.id)),
       allowsCommand: (sessionId, command) => Boolean(this.host?.lookup(sessionId)?.session.browser) && isPlainBrowserCommand(command),
       writableRoots: (session) => (session.browser ? [join(this.paths.spool, browserSessionName(session.id))] : []),
@@ -783,5 +839,6 @@ export class AgentBrowser {
     for (const sessionId of new Set([...this.approvals.values()].map((pending) => pending.sessionId))) this.expire(sessionId);
     // The agent's window goes with the app; a sign-in window is the user's and stays.
     await this.closeAgent().catch(() => undefined);
+    await this.panda.shutdown();
   }
 }

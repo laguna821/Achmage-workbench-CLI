@@ -9,7 +9,7 @@
 | Rust/Tauri 경량 앱 | 원본 편집기 재사용, native 출력·문서 제어·키 저장, 별도 Electron/HOP/PDFCraft 배포 제거 | 최신 OS 설치·용량 실측 |
 | Orca 창 분할·탭·작업공간 | 중첩 분할, 탭 이동·복원, 일반 폴더/Git 작업공간 | OS별 전체 인수 |
 | Orca worktree·PTY·개발 흐름 | worktree 발견/생성·환경 준비·터미널, 주요 Git/PR/CI 검토 | 전체 Orca 동등성 인수 |
-| AI 브라우저·Design Mode | 기존 Playwright 경로, Lightpanda 기본 백그라운드 탐색 계획 반영 | Lightpanda 연결·OS 실행, 호환 브라우저/Design Mode |
+| AI 브라우저·Design Mode | Lightpanda 기본 백그라운드 탐색·세션 격리·본문 제한, Chromium 호환 선택 | Windows WSL2/macOS 실행·사이트/성능 비교, 전체 Design Mode |
 | SSH·모바일·원격·확장 | 전체 목표에 유지 | 구현·인증·재연결 검증 |
 | 이음 편집기 9종 | Word/PPT/Sheets/HWP/PDF/Markdown/HTML/EPUB/XMind 내부 편집, 대표 AI·저장·복구·되돌림 | 전체 메뉴/형식/OS 동등성 |
 | 공통 문서 흐름 | 같은 대화, +/@ 참조, 첨부, 스킬·양식 사본, 디자인 갤러리, 새 문서·사본·주요 출력/CLI | 남은 공통 메뉴·일부 변환·인쇄/발표 흐름 |
@@ -18,6 +18,8 @@
 | doory | 생성·편집·저장·복구·이미지/PDF 출력의 Linux 흐름 | 전체 메뉴·OS 인수 |
 | 옵시디언식 PKM | 내비게이터·프로젝트 노트·Bases식 보기, 썸네일·폴더 템플릿, 지원 범위의 .base 교환 | 전체 통합·OS 인수 |
 | 자료 보존·설치·릴리스 | 원본/판/구형 복구본 표본 검증, 다중 OS 시험 설치본 | 실제 v0.2.2 업그레이드·최종 용량/성능·정식 태그/설치본 게시 |
+
+Lightpanda 1.0.2 공식 엔진의 실제 Linux 게이트웨이 경로 **14/14**, Tauri 화면 선택·저장 **9/9**, 기존 Chromium 회귀 **30/30**, 타입·빌드·실제 다운로드/해시 검증 통과. 기본 수집에는 Chromium 창이 필요 없고 원래 프로필은 호환 모드에 보존한다. 1.0.2의 정상 종료는 진행 중 네트워크 처리를 기다릴 수 있으며 느린 요청 검사에서는 약10초가 걸렸다. 토큰·속도 배수 및 Windows/macOS 실동작은 아직 검증 전이다. [범위와 사용법](agent-browser.md), 검증 판 `research:rr-a5815367a9ae4eec88f280a96eee6f7d:b0891a866aeb5c4cb18b061f19e59c930d2a9f2b5cd4f4ddbf1e8872e1324d12`.
 
 공통 웹 도구는 원본 `ai-search`와 원격 이미지 엔진을 재사용한다. 봉인 키는 요청별 호스트 메모리에서만 열며 문서/세션 권한과 취소를 연결했다. 집중 회귀 **51/51**, 타입·host/Office 빌드, 실제 Linux 원본 Word 패널의 공개 URL 읽기 → 같은 AI 대화 → DOCX 수정·저장·재열기·중지 **13/13** 통과. 모든 문서/OS나 미디어 전체 완료 판정은 아니다. 검증 판: `research:rr-2488fbbaceca1e6b5aa58aad0c10cf34:d942dce7b67211ba5978055009b8e9db6f7fc59ad66cbe5857187002ef6f8c4c`.
 

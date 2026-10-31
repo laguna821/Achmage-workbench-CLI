@@ -363,6 +363,7 @@ export class Api {
   refreshTools = () => this.request<DocumentTools>("POST", "/api/tools/refresh");
   /** The agent browser: install, the plain sign-in window, bring the window forward, pause a session. */
   browser = {
+    engine: (engine: "lightpanda" | "chromium") => this.request<AgentBrowserStatus>("POST", "/api/agent-browser/engine", { engine }),
     install: () => this.request<AgentBrowserStatus>("POST", "/api/agent-browser/install"),
     login: (url: string | null) => this.request<AgentBrowserStatus>("POST", "/api/agent-browser/login", { url }),
     closeLogin: () => this.request<AgentBrowserStatus>("POST", "/api/agent-browser/login/close"),

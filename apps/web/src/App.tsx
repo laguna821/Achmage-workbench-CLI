@@ -528,9 +528,10 @@ export function App() {
   // The agent browser: the pill under the input and the connections menu.
   const browserActions: BrowserActions = useMemo(
     () => ({
+      engine: (engine) => void api?.browser.engine(engine).catch(fail),
       setOn: (session, on) => {
         void api?.updateSession(session.id, { browser: on }).catch(fail);
-        if (on) setToast("브라우저를 켰습니다. 다음 요청부터 엔진이 창을 쓸 수 있습니다.");
+        if (on) setToast("브라우저를 켰습니다. 다음 요청부터 AI가 웹을 탐색할 수 있습니다.");
       },
       install: () => void api?.browser.install().catch(fail),
       login: (url) => void api?.browser.login(url).catch(fail),
