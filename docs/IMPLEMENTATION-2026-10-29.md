@@ -1,5 +1,24 @@
 # 통합 업데이트 실행 기록
 
+## 남은 로드맵 — 2026-11-01
+
+사용자가 공개 시험 설치본의 Windows 실행을 직접 확인했다. 이는 Windows 실행에 대한 사용자 확인이며 전체 기능 인수를 대신하지 않는다. 현재 공개본은 `preview-0.2.3`이다. 아래는 과거 단계별 기록의 “다음” 문장보다 우선하는 현재 잔여 목록이다.
+
+| 묶음 | 현재 위치 | 구체적으로 남은 일 |
+|---|---|---|
+| 이음 공통 서비스 | 원본9종 편집기·문서 AI·참조/첨부·스킬/양식·검색/이미지·위키·별표 KB 연결 | 지식베이스 홈의 그룹 질문/문서 생성, Drive 계정·파일 연결, 장기 AI 작업, 내부 MCP 전체, 기존 standalone 설정/키/스타일 이행 |
+| 편집기·출력·doory | 대표 편집/저장/복원/사본/주요 출력 구현 | 원본 전체 메뉴·추가 변환/미디어·인쇄/발표 동작 대조와 OS별 연결. Sheets 저장 후 그림 Undo 제한은 별도 해결 대상 |
+| Orca 기본 작업 흐름 | 중첩분할·탭·worktree·PTY·주요 Git/PR/CI 구현 | 생성→개발→검토→보관 전체 동선과 OS별 동등성 인수 |
+| 브라우저·Design Mode | Lightpanda 기본 백그라운드 탐색과 Chromium 호환 선택 구현, Linux/macOS 실제 실행 확인 | Windows WSL2 실제 실행, 사이트 호환/속도·메모리·토큰 비교, 전체 Design Mode의 요소/CSS/화면 선택과 에이전트 전달 |
+| 원격·모바일·확장 | 전체 목표에 유지, G7 대기 | SSH·원격 호스트·모바일·확장 기능 구현 및 인증/재연결 |
+| 한글 개선 | hallym-kordoc 기본 스킬·이음 HWPX 표시, 별도 HOP 앱 배포 제거 | HOP의 글꼴/조판/탭/여백/선명도 개선분을 원본과 대조·반영하고 OS별 확인 |
+| 옵시디언식 관리 | 내비게이터·프로젝트 노트·Bases 보기·썸네일·폴더 템플릿·지원 범위 .base 교환 구현 | 문서/작업공간을 함께 쓰는 전체 동선 및 OS별 마무리 |
+| 업데이트·정식 릴리스 | 6종 시험 설치본 공개, Windows/macOS first-run 및 사용자 Windows 실행 확인 | 구형 번들 잔존 수정, OS별 기존 설치/자료 이행, 최종 설치/실행 성능 실측, 정식 릴리스 |
+
+실제 Windows NSIS `v0.2.2 → preview-0.2.3` 덮어쓰기에서 기존 프로젝트·두 엔진 대화·설정·문서 원문·판/복원 등14검사는 통과했다. 다만 예전 Electron/HOP/PDFCraft/kordoc 파일이 남아 경량화 인수가 실패했다([실행41211872906](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41211872906)). 신규 설치435MB를 업데이트 설치 크기로 해석하면 안 된다. 정확한 실패/재시험 조건: `research:rr-29d622510b747c29fdc27bb5ceab0692:e132c92daa2f12b2d7feb4c85c981ca5b0129111b1940f8abcc4d7d900005c04`.
+
+현재 순서: **구형 설치 잔존 수정 → Office 지식베이스 홈·Drive/공통 서비스 → Design Mode·원격 등 잔여 기능 → 전체 인수·정식 릴리스**. 검증한 중간 설치본은 이 과정 내내 공개한다. 테스트 개수를 완성률로 환산하지 않는다.
+
 ## 현재 상태 — 2026-10-31
 
 **최신 0.2.3 설치 가능:** [통합 시험 릴리스](https://github.com/laguna821/Achmage-workbench-CLI/releases/tag/preview-0.2.3)에 Windows EXE/MSI, macOS arm64 DMG, Linux AppImage/deb, Arch 패키지 **6개를 공개했다**. 기준 코드는 `2972690`이며 위키·별표 지식베이스·Sheets/XMind 수정까지 포함한다. [새 빌드](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41208381045)는 공통 타입·자동 검사 **1151통과/8건너뜀**, Windows/macOS 설치 후 실행 **각18/18**, 실제 Lightpanda Linux/macOS **각15/15**를 통과했다. 여섯 공개 다운로드의 HTTP200·크기·SHA256 일치도 확인했다. Windows EXE는 **142,831,654 bytes(약143MB)**, 설치 후 파일 합계는 **435,488,111 bytes(약435MB)**다. GitHub의 macos-14 예정 중단은 macos-15 전환으로 해결했다. 전체 통합 목표는 계속하며 중간 설치본 공개를 전체 완성까지 미루지 않는다. 공개 근거 판: `research:rr-7465d477f742f451ab8543df4d138c36:2cc08f8c0dda0b2499a7a9b8dce65f9965199d3abf27c15f7075a9718ec10f35`.
