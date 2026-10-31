@@ -11,7 +11,7 @@
 # macOS builds and runs them with stand-in engines.
 
 name: Installers
-run-name: ${{ inputs.publish_run && format('Publish tested installers · {0}', inputs.publish_run) || (startsWith(github.ref, 'refs/tags/v') && format('Release {0}', github.ref_name) || format('Test installers · {0}', github.ref_name)) }}
+run-name: ${{ inputs.upgrade_to && format('Upgrade {0} → {1}', inputs.upgrade_from, inputs.upgrade_to) || (inputs.publish_run && format('Publish tested installers · {0}', inputs.publish_run) || (startsWith(github.ref, 'refs/tags/v') && format('Release {0}', github.ref_name) || format('Test installers · {0}', github.ref_name))) }}
 
 on:
   workflow_dispatch:
@@ -28,6 +28,14 @@ on:
         description: 'Exact commit of the existing successful run'
         type: string
         default: ''
+      upgrade_from:
+        description: 'Published release to install before the upgrade check'
+        type: string
+        default: 'v0.2.2'
+      upgrade_to:
+        description: 'Published release to install over the old version (empty: normal build/publish)'
+        type: string
+        default: ''
   push:
     tags: ["v*"]
 
@@ -40,7 +48,7 @@ env:
 
 jobs:
   browser:
-    if: ${{ !inputs.publish_run }}
+    if: ${{ !inputs.publish_run && !inputs.upgrade_to }}
     name: Lightpanda background browsing (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -65,7 +73,7 @@ jobs:
           if-no-files-found: ignore
 
   web:
-    if: ${{ !inputs.publish_run }}
+    if: ${{ !inputs.publish_run && !inputs.upgrade_to }}
     name: UI and gateway (once)
     runs-on: ubuntu-24.04
     steps:
@@ -301,6 +309,65 @@ jobs:
         with:
           name: smoke-${{ matrix.artifact }}
           path: smoke-out
+          if-no-files-found: ignore
+
+  upgrade:
+    name: Published Windows installer upgrade and data preservation
+    if: github.event_name == 'workflow_dispatch' && inputs.upgrade_to != '' && inputs.publish_run == ''
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      UPGRADE_FROM: ${{ inputs.upgrade_from }}
+      UPGRADE_TO: ${{ inputs.upgrade_to }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install the published old version and create real application data
+        shell: pwsh
+        run: |
+          if ($env:UPGRADE_FROM -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$' -or $env:UPGRADE_TO -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { throw 'Invalid release tag' }
+          gh release download $env:UPGRADE_FROM --repo $env:GITHUB_REPOSITORY --pattern '*-setup.exe' --dir old-installer
+          if ($LASTEXITCODE -ne 0) { throw 'Old installer download failed' }
+          $files = @(Get-ChildItem old-installer -Filter '*-setup.exe')
+          if ($files.Count -ne 1) { throw 'Expected one old NSIS installer' }
+          $release = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:UPGRADE_FROM" | ConvertFrom-Json
+          $asset = @($release.assets | Where-Object name -eq $files[0].Name)
+          $hash = 'sha256:' + (Get-FileHash $files[0].FullName -Algorithm SHA256).Hash.ToLower()
+          if ($release.draft -or $asset.Count -ne 1 -or $asset[0].digest -ne $hash) { throw 'Old published asset digest mismatch' }
+          $installer = Start-Process -FilePath $files[0].FullName -ArgumentList '/S' -Wait -PassThru
+          if ($installer.ExitCode -ne 0) { throw "Old installation failed: $($installer.ExitCode)" }
+          $app = Join-Path $env:LOCALAPPDATA 'Achmage Workbench'
+          $fixture = Join-Path $env:RUNNER_TEMP "wb-upgrade-$env:GITHUB_RUN_ID"
+          New-Item -ItemType Directory -Force upgrade-out | Out-Null
+          @{tag=$env:UPGRADE_FROM;sha256=$hash;version=(Get-Item (Join-Path $app 'achmage-workbench.exe')).VersionInfo.ProductVersion} | ConvertTo-Json | Set-Content upgrade-out/old-installer.json
+          "APP_DIR=$app" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "UPGRADE_FIXTURE=$fixture" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          node scripts/upgrade-smoke.ts seed "$app" "$fixture" upgrade-out
+          if ($LASTEXITCODE -ne 0) { throw 'Old application data preparation failed' }
+      - name: Install the published new version over the same installation and verify
+        shell: pwsh
+        run: |
+          gh release download $env:UPGRADE_TO --repo $env:GITHUB_REPOSITORY --pattern '*-setup.exe' --dir new-installer
+          if ($LASTEXITCODE -ne 0) { throw 'New installer download failed' }
+          $files = @(Get-ChildItem new-installer -Filter '*-setup.exe')
+          if ($files.Count -ne 1) { throw 'Expected one new NSIS installer' }
+          $release = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:UPGRADE_TO" | ConvertFrom-Json
+          $asset = @($release.assets | Where-Object name -eq $files[0].Name)
+          $hash = 'sha256:' + (Get-FileHash $files[0].FullName -Algorithm SHA256).Hash.ToLower()
+          if ($release.draft -or $asset.Count -ne 1 -or $asset[0].digest -ne $hash) { throw 'New published asset digest mismatch' }
+          $installer = Start-Process -FilePath $files[0].FullName -ArgumentList '/S' -Wait -PassThru
+          if ($installer.ExitCode -ne 0) { throw "New installation failed: $($installer.ExitCode)" }
+          @{tag=$env:UPGRADE_TO;sha256=$hash;version=(Get-Item (Join-Path $env:APP_DIR 'achmage-workbench.exe')).VersionInfo.ProductVersion} | ConvertTo-Json | Set-Content upgrade-out/new-installer.json
+          node scripts/upgrade-smoke.ts verify "$env:APP_DIR" "$env:UPGRADE_FIXTURE" upgrade-out
+          if ($LASTEXITCODE -ne 0) { throw 'Upgraded application verification failed' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: upgrade-windows
+          path: upgrade-out
           if-no-files-found: ignore
 
   publish-tested:
