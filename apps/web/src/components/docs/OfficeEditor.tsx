@@ -57,8 +57,9 @@ export const OfficeEditor = forwardRef<
   const [skillsOpen, setSkillsOpen] = useState(false);
   const outputBusy = useRef(false);
   const outputClose = useRef<(() => void) | null>(null);
-  const outputPlans = useRef(new Map<string, OfficeOutputPlan>());
-  const copied = useRef(new Set<string>());
+  const outputRequest = useRef<string | null>(null);
+  const outputPlans = useRef(new Map<string, OfficeOutputPlan & { preparationId: string }>());
+  const copied = useRef(new Map<string, string | null>());
   const [output, setOutput] = useState<{ revision: number; format: OfficeOutputFormat; choose(plan: OfficeOutputPlan | null): void } | null>(null);
   const latest = useRef(artifact);
   latest.current = artifact;
@@ -166,18 +167,26 @@ export const OfficeEditor = forwardRef<
       if (target !== frame.current?.contentWindow || owner !== latest.current.id || ownerSession !== opened.current?.sessionId) throw new Error("저장 중 문서 창이나 연결된 대화가 바뀌었습니다. 저장한 사본은 문서 목록에서 확인해 주세요.");
     };
     const reply = (value: unknown, error?: string) => target.postMessage({ type: "office:output-result", requestId: message.requestId, value, error }, origin);
+    if (message.action === "cancel") {
+      if (message.preparationId && outputRequest.current === message.preparationId) outputClose.current?.();
+      if (message.planId) outputPlans.current.delete(message.planId);
+      if (message.preparationId) for (const [id, plan] of outputPlans.current) if (plan.preparationId === message.preparationId) outputPlans.current.delete(id);
+      reply(null); return;
+    }
     if (outputBusy.current) { reply(null, "다른 저장·출력 요청을 처리 중입니다."); return; }
     outputBusy.current = true;
     try {
       if (message.action === "commit") {
         const plan = outputPlans.current.get(message.planId);
         if (!plan || !(message.bytes instanceof ArrayBuffer)) throw new Error("저장 위치를 다시 선택하세요.");
-        check();
-        const result = await api.commitOfficeOutput(owner, plan.id, message.bytes, plan.replace);
-        check();
-        outputPlans.current.delete(plan.id); copied.current.add(result.artifact.id);
-        reply({ path: result.path, artifactId: result.artifact.id });
-        if (result.backupPath) handlers.current.onNotice(`이전 파일을 백업했습니다: ${result.backupPath}`);
+        try {
+          check();
+          const result = await api.commitOfficeOutput(owner, plan.id, message.bytes, plan.replace);
+          check();
+          copied.current.set(result.artifact.id, ownerSession ?? null);
+          reply({ path: result.path, artifactId: result.artifact.id });
+          if (result.backupPath) handlers.current.onNotice(`이전 파일을 백업했습니다: ${result.backupPath}`);
+        } finally { outputPlans.current.delete(plan.id); }
         return;
       }
       if (message.action === "print") {
@@ -186,14 +195,15 @@ export const OfficeEditor = forwardRef<
         handlers.current.onNotice("인쇄 미리보기 창을 열었습니다."); reply({}); return;
       }
       const plan = await new Promise<OfficeOutputPlan | null>((resolve) => {
-        const choose = (value: OfficeOutputPlan | null) => { outputClose.current = null; resolve(value); };
+        const choose = (value: OfficeOutputPlan | null) => { outputClose.current = null; outputRequest.current = null; resolve(value); };
+        outputRequest.current = message.requestId;
         outputClose.current = () => choose(null);
         setOutput({ revision: message.revision, format: message.action === "prepare" ? message.format : "pdf", choose });
       });
       setOutput(null);
       if (!plan) { reply(null); return; }
       check();
-      if (message.action === "prepare") { outputPlans.current.set(plan.id, plan); reply(plan); return; }
+      if (message.action === "prepare") { outputPlans.current.set(plan.id, { ...plan, preparationId: message.requestId }); reply(plan); return; }
       if (!("__TAURI_INTERNALS__" in window)) throw new Error("PDF 출력은 데스크톱 앱에서 실행해 주세요.");
       const { invoke } = await import("@tauri-apps/api/core");
       const bytes = await invoke<ArrayBuffer>("render_svg_pdf", { job: message.job });
@@ -205,8 +215,9 @@ export const OfficeEditor = forwardRef<
     finally { outputBusy.current = false; }
   };
   useEffect(() => {
-    return () => { outputClose.current?.(); setOutput(null); outputPlans.current.clear(); copied.current.clear(); };
+    return () => { outputClose.current?.(); setOutput(null); outputPlans.current.clear(); };
   }, [artifact.id, generation, sessionId]);
+  useEffect(() => () => { copied.current.clear(); }, [artifact.id, generation]);
 
   const handleAi = async (message: Extract<OfficePageMessage, { type: "office:ai-request" }>) => {
     const target = frame.current?.contentWindow, origin = opened.current?.origin;
@@ -300,14 +311,23 @@ export const OfficeEditor = forwardRef<
         case "office:ai-request": void aiHandler.current(message); break;
         case "office:output": void outputHandler.current(message); break;
         case "office:copied":
-          if (copied.current.delete(message.artifactId)) {
+          if (copied.current.has(message.artifactId)) {
+            const expectedSession = copied.current.get(message.artifactId); copied.current.delete(message.artifactId);
+            if (expectedSession !== (opened.current.sessionId ?? null)) {
+              // The receipt belongs to the previous conversation. Reopen this source's
+              // retained draft instead of leaving its renderer bound to the copy's path.
+              recover.current = true; update({ dirty: true, revision: null, conflict: null });
+              setGeneration((value) => value + 1);
+              handlers.current.onNotice("사본을 저장한 뒤 대화가 바뀌었습니다. 현재 탭의 편집 내용을 복원합니다. 사본은 문서 목록에 있습니다.");
+              break;
+            }
             // The unsaved bytes now belong to the copy. Restore this old tab from its actual
             // original file, then open the copy in the same session.
             recover.current = false;
             update({ dirty: false, revision: null, conflict: null });
             setGeneration((value) => value + 1);
             handlers.current.onCopied?.(message.artifactId);
-          }
+          } else send({ type: "office:copy-rejected", artifactId: message.artifactId });
           break;
         case "office:ready": {
           const doc = latest.current;
@@ -400,6 +420,7 @@ export const OfficeEditor = forwardRef<
 
   useImperativeHandle(ref, () => ({
     flush() {
+      if (outputBusy.current || outputPlans.current.size || copied.current.size) return Promise.resolve(null);
       if (status.current.conflict) return Promise.resolve(null);
       // Not opened yet: nothing can have been edited.
       if (status.current.revision === null) return Promise.resolve(latest.current.revision);
@@ -408,11 +429,13 @@ export const OfficeEditor = forwardRef<
       return flushed;
     },
     rebase(revision) {
+      if (outputBusy.current || outputPlans.current.size || copied.current.size) return Promise.resolve(null);
       const flushed = waitFlushed();
       send({ type: "office:rebase", revision });
       return flushed;
     },
     async leave() {
+      if (outputBusy.current || outputPlans.current.size || copied.current.size) throw new Error("사본 저장을 마치거나 취소한 뒤 이동해 주세요.");
       if (status.current.revision === null) return;
       if (status.current.conflict) throw new Error("문서의 저장 충돌을 해결한 뒤 이동해 주세요. 편집 내용은 현재 탭에 있습니다.");
       const done = waitFlushed();

@@ -2,6 +2,8 @@ import { mountOfficeAi } from "./office-ai.ts";
 import { Events, Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
 import { configureTextAssets, unresolveTextImage } from "./text-assets.ts";
+import { copyOfficeBytes, officeCopyBusy } from "./copy.ts";
+import type { OfficeOutputFormat } from "../../../packages/contracts/src/office-output.ts";
 
 /** The original Markdown/HTML renderers serialize their own source; never normalize it here. */
 export async function createTextEditor(kind: "markdown" | "html") {
@@ -116,9 +118,14 @@ export async function createTextEditor(kind: "markdown" | "html") {
     writeRecoveryCopy: async (text: string | null) => { if (text !== null) await keep(text); return id; },
     onRecoveryFlushRequest: events.on("recoveryFlush"),
     save: async (request: { text: string; mode: "save" | "saveAs" }) => {
+      if (request.mode === "save" && officeCopyBusy()) return { ok: false, error: "사본 저장을 마친 뒤 저장해 주세요." };
       if (init.readOnly) return { ok: false, error: "이 판은 읽기 전용입니다." };
-      if (request.mode === "saveAs") return { ok: false, error: "다른 이름으로 저장 서비스를 연결하지 못했습니다." };
       try {
+        if (request.mode === "saveAs") {
+          const format = path.split(".").at(-1)!.toLowerCase() as OfficeOutputFormat;
+          const saved = await copyOfficeBytes(init, revision, format, async () => encode(request.text));
+          return saved ? { ok: true, path: saved.path, writtenText: request.text } : { ok: false };
+        }
         const saved = await gateway.saveText(id, revision, request.text);
         revision = saved.revision; savedText = request.text;
         await queueRecovery(() => recovery.drop(id));

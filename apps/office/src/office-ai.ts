@@ -3,6 +3,7 @@ import type { OfficeTurnReceipt } from "../../../packages/contracts/src/office-a
 import type { AgentMessage } from "../../../vendor/ieumoffice/packages/agent-core/src/types.ts";
 import type { IpcStreamChunk } from "../../../vendor/ieumoffice/packages/agent-core/src/electron-transport.ts";
 import { Events, Gateway, listen, post, type Init } from "./bridge.ts";
+import { officeCopyBusy, setCopyAiBusy } from "./copy.ts";
 import { installOfficeConversation, type OfficeConversationPort, type OfficeRun, type WorkbenchAgentLoop } from "./office-agent.ts";
 import { createOfficeReferences } from "./office-references.ts";
 import type { OfficeAttachment } from "../../../packages/contracts/src/office-references.ts";
@@ -51,6 +52,7 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
   // created. A different selection must still cancel the original request.
   let binding: { requestId: string; grants: (string | null)[] } | null = null;
   const streams = new Map<string, AbortController>();
+  setCopyAiBusy(() => active !== null || streams.size > 0);
   const changed = (next: string | null, keepPanel = false) => {
     if (sessionId === next) return;
     sessionId = next;
@@ -115,6 +117,7 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
   };
   const port: OfficeConversationPort = {
     attach: (loop) => {
+      if (officeCopyBusy()) throw new Error("사본 저장이 끝난 뒤 AI 편집을 시작해 주세요.");
       if (active) throw new Error("이 문서에서 진행 중인 AI 요청을 먼저 마쳐 주세요.");
       active = loop; return () => { if (active === loop) active = null; };
     },

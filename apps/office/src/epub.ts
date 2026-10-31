@@ -2,6 +2,7 @@ import { mountOfficeAi, officeAiTransport } from "./office-ai.ts";
 import { Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
 import { dispatch, useTransport } from "./platform/electron-renderer.ts";
+import { copyOfficeBytes, officeCopyBusy } from "./copy.ts";
 
 type OpenBook = { status: string; sessionId?: string; assetBase?: string; restored?: boolean; [key: string]: unknown };
 type EditResult = { ok: boolean; dirty?: boolean; workbenchGeneration?: number; [key: string]: unknown };
@@ -115,8 +116,13 @@ useTransport({
       case "epub:set-translation-lock": return call("lock", { locked: args[0] });
       case "epub:save": {
         const request = args[0] as { mode?: string } | null;
-        if (init.readOnly || request?.mode !== "save") return { ok: false, error: "이 저장 경로는 아직 연결하지 못했습니다." };
+        if (request?.mode === "save" && officeCopyBusy()) return { ok: false, error: "사본 저장을 마친 뒤 저장해 주세요." };
+        if (init.readOnly || !["save", "saveAs"].includes(request?.mode ?? "")) return { ok: false, error: "저장 요청을 확인해 주세요." };
         try {
+          if (request?.mode === "saveAs") {
+            const saved = await copyOfficeBytes(init, revision, "epub", async () => { await keep(); return (await gateway.epubCheckpoint(id, session)).bytes; });
+            return saved ? { ok: true, path: saved.path } : { ok: false };
+          }
           const saved = await call<Saved>("save", { expectedRevision: revision, rebase });
           revision = saved.revision; restored = false; rebase = false; epoch++;
           takeState({ ok: true, dirty: false, workbenchGeneration: saved.workbenchGeneration });

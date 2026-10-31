@@ -120,6 +120,10 @@ Tauri `invoke`는 쓰기 불가능하므로 원본 호출을 유지하고 정확
 
 ### 공통 사본 저장 서비스 회귀
 
+`--only=office-copies,hwp`는 Word/PPT/Sheets/Markdown/HTML/XMind/EPUB에서 실제 미저장 입력→원본 Save As→취소→사본 생성→실제 콘텐츠 재열기와 기존 한글 저장/출력을 검사한다. `APP_E2E_OFFICE_COPY_FORMATS=pptx,xlsx`로 좁힐 수 있다. PPT는 본문과 노트, Sheets는 Go To 입력과 실제 셀 키 입력을 쓴다. Univer의 숨김 입력 호스트는 원본 코드처럼 focus한 뒤 WebDriver 키를 전달한다. Markdown은 Escape 직후 재시도, 503 주입 후 버퍼 복귀, 지연된 저장 중 CtrlS/입력 차단도 검사한다. 사본의 실제 파일·원본 해시·출처/대화/작업공간과 표시된 콘텐츠를 함께 확인한다.
+
+최종 **58/58**, 인접 **41/41**, 근거 `office-copy-ui-native-08/verification.json`; [현재 내용 사본의 범위와 연구 판](office-integration.md#원본-편집기의-현재-내용-사본). 앞선 실행05의 로딩 화면 판정은 후속 콘텐츠 검사로 보완했고,06의 PPT glyph run 조건과07의 실제 Sheets 포커스 실패를 수정했다. PDF Save As·텍스트 자산 복사·실제 매크로·다른 OS를 검증한 것은 아니다.
+
 `--only=hwp`는 공통 출력 계약을 확장한 뒤에도 원본 한글 메뉴의 취소·미저장 사본·메모·원본 불변·같은 대화 재열기·Rust PDF·네이티브 인쇄를 검사한다. 2026-10-31 **27/27**, 근거 `office-copy-hwp-native-01/verification.json`. 별도 호스트 검사 `office-output.test.ts`, `office-copy.test.ts`, `office-styles.test.ts`는 **29/29**로 등록된 뷰/대화, 형식 게이트, 출처·작업공간, PPT 선택, 동일 요청 재생과 파일 게시 후 등록 중단을 검사한다. 다른 편집기의 Save As 메뉴 연결·자산 이행·늦은 편집·다른 OS 검사는 아직 남아 있다. 정확한 연구 판과 한계는 [공통 사본 저장 서비스](office-integration.md#공통-사본-저장-서비스)에 기록한다.
 
 ### 원본 스킬 제안 카드

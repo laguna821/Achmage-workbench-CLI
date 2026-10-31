@@ -5,7 +5,7 @@ import { recovery } from "./recovery.ts";
 import type { HwpFormat, MeasuredTab, MemoSnapshot } from "../../../packages/contracts/src/hwp.ts";
 import { encodeHwpSave } from "../../../packages/contracts/src/hwp.ts";
 import type { OfficeOutputPlan, SvgJob } from "../../../packages/contracts/src/office-output.ts";
-import { prepareOutput, commitOutput, printOutput } from "./output.ts";
+import { prepareOutput, commitOutput, cancelOutput, printOutput } from "./output.ts";
 
 // Ieum's HWP screen owns editing, tables, memos, selection and serialization. This bridge owns
 // the Workbench revision, writer grant and recovery copy. No Electron main process is involved.
@@ -129,7 +129,7 @@ const hwpApi = {
     } catch (error) { return reportFailure(error); }
     finally { if (saveTurn === turn) saveTurn = null; }
   },
-  abortSave: () => { saveTurn = null; },
+  abortSave: () => { if (saveTurn?.output) void cancelOutput(saveTurn.output.id).catch(() => {}); saveTurn = null; },
   setDirty: (dirty: boolean) => { state.dirty = dirty; post({ type: "office:dirty", dirty }); },
   onSaveRequest: events.on("saveRequest"),
   requestFileCommand: (command: string) => {

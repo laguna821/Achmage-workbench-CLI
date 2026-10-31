@@ -2,6 +2,7 @@ import { mountOfficeAi, officeAiTransport } from "./office-ai.ts";
 import { Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
 import { dispatch, useTransport } from "./platform/electron-renderer.ts";
+import { copyOfficeBytes, officeCopyBusy } from "./copy.ts";
 
 const init = await handshake(), gateway = new Gateway(init.token);
 const ai = mountOfficeAi(init, gateway);
@@ -83,9 +84,15 @@ useTransport({
       case "mindmap:save": {
         if (init.readOnly || !opened) return { ok: false, error: "이 마인드맵에는 저장할 수 없습니다." };
         const request = args[0] as { bytes?: unknown; mode?: unknown } | null;
-        if (!request || request.mode !== "save") return { ok: false, error: "다른 이름으로 저장은 출력 경로 연결 후 사용할 수 있습니다." };
+        if (request?.mode === "save" && officeCopyBusy()) return { ok: false, error: "사본 저장을 마친 뒤 저장해 주세요." };
+        if (!request || !["save", "saveAs"].includes(String(request.mode))) return { ok: false, error: "저장 요청을 확인해 주세요." };
         if (!(request.bytes instanceof Uint8Array)) return { ok: false, error: "마인드맵 파일 바이트가 올바르지 않습니다." };
         try {
+          if (request.mode === "saveAs") {
+            const bytes = request.bytes;
+            const saved = await copyOfficeBytes(init, revision, "xmind", async () => bytes.slice().buffer);
+            return saved ? { ok: true, path: saved.path } : { ok: false };
+          }
           const saved = await gateway.saveMindmap(id, revision, request.bytes);
           revision = saved.revision; restored = false; epoch++;
           // The renderer owns its working tree. Retain no second full archive here after open.

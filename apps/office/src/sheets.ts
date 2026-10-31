@@ -4,6 +4,7 @@ import "./sheets.css";
 import { Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { dispatch, useTransport } from "./platform/electron-renderer.ts";
 import { recovery } from "./recovery.ts";
+import { copyOfficeBytes, officeCopyBusy } from "./copy.ts";
 import { convertForeignPictures, pasteDesktopPictures } from "./pictures.ts";
 import type { WorkerCall, WorkerMessage, WorkerRequest } from "./slides/protocol.ts";
 
@@ -151,6 +152,19 @@ async function commit(): Promise<boolean> {
 }
 
 async function save(args: unknown[]) {
+  const input = args[0] as SaveRequest;
+  if (input.mode === "save-as") {
+    await copyOfficeBytes(init, state.revision, /\.xlsm$/i.test(init.artifact.path) ? "xlsm" : "xlsx", async () => {
+      const request = await withFormulaResults({ ...input, mode: "save", targetPath: undefined });
+      const snapshot = await value<{ ok: boolean; bytes?: Uint8Array }>({ type: "invoke", channel: "workbook:template-bytes", args: [request] });
+      if (!snapshot.ok || !snapshot.bytes) throw new Error("현재 통합 문서의 사본을 만들지 못했습니다.");
+      return snapshot.bytes.slice().buffer;
+    });
+    // The parent opens the independently registered copy. The original workbook session
+    // is never rebound or rebased to a file it did not save.
+    return { canceled: true };
+  }
+  if (officeCopyBusy()) throw new Error("사본 저장을 마친 뒤 저장해 주세요.");
   const request = await withFormulaResults(args[0] as SaveRequest);
   const result = await value<{ canceled?: boolean } | null>({ type: "invoke", channel: "workbook:save", args: [request, ...args.slice(1)] });
   noteSession(result);
@@ -355,7 +369,7 @@ window.addEventListener(
   (event) => {
     if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
     const key = event.key.toLowerCase();
-    const action = key === "s" && !event.shiftKey ? "save" : key === "z" ? (event.shiftKey ? "redo" : "undo") : key === "y" ? "redo" : null;
+    const action = key === "s" ? (event.shiftKey ? "save-as" : "save") : key === "z" ? (event.shiftKey ? "redo" : "undo") : key === "y" ? "redo" : null;
     if (!action) return;
     event.preventDefault();
     event.stopPropagation();

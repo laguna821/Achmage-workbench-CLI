@@ -87,6 +87,57 @@ it("a committed Save As permits guarded navigation before the original frame rel
   expect(onCopied).toHaveBeenCalledWith("copy"); await expect(leaving).resolves.toBeUndefined();
 });
 
+async function copyFlow(fail = false) {
+  let sessionId = "one";
+  const ref = createRef<OfficeHandle>(), onCopied = vi.fn(), onNotice = vi.fn();
+  const editorGrant = vi.fn(async () => ({ token: `token-${sessionId}`, sessionId, origin: "http://office.test", url: "http://office.test/docs" }));
+  const api = {
+    editorGrant,
+    prepareOfficeOutput: async () => ({ id: "plan", path: "/copy.docx", format: "docx", exists: false, size: 0 }),
+    commitOfficeOutput: async () => { if (fail) throw new Error("storage unavailable"); return { path: "/copy.docx", artifact: { id: "copy" } }; },
+  } as unknown as Api;
+  const artifact = { id: "doc", name: "test.docx", format: "docx", revision: 1, path: "/test.docx", sha256: "test" } as Artifact;
+  const props = { ...aiProps, ref, api, artifact, onCopied, onNotice, onStatus: () => {} };
+  const screen = render(<OfficeEditor {...props} sessionId={sessionId} />); await act(async () => {});
+  const frame = screen.getByTitle("워드 편집기 · test.docx") as HTMLIFrameElement, sent = vi.spyOn(frame.contentWindow!, "postMessage");
+  const message = async (data: unknown) => act(async () => { window.dispatchEvent(new MessageEvent("message", { origin: "http://office.test", source: frame.contentWindow, data })); });
+  await message({ type: "office:opened", revision: 1, recovered: false }); await message({ type: "office:dirty", dirty: true });
+  const prepare = async (requestId = "prepare", submit = true) => {
+    await message({ type: "office:output", requestId, action: "prepare", revision: 1, format: "docx" });
+    if (submit) await act(async () => fireEvent.submit(screen.getByRole("dialog")));
+  };
+  const changeSession = async () => { sessionId = "two"; screen.rerender(<OfficeEditor {...props} sessionId={sessionId} />); await act(async () => {}); };
+  return { ref, frame, screen, message, sent, onCopied, onNotice, prepare, changeSession };
+}
+it("does not let a previous copy cancellation close the next save dialog", async () => {
+  const f = await copyFlow(); await f.prepare("old");
+  await f.message({ type: "office:output", requestId: "cancel-old", action: "cancel", preparationId: "old" });
+  await f.prepare("new", false);
+  await f.message({ type: "office:output", requestId: "late-cancel", action: "cancel", preparationId: "old" });
+  expect(f.screen.queryByRole("dialog")).not.toBeNull();
+  await f.message({ type: "office:output", requestId: "cancel-new", action: "cancel", preparationId: "new" });
+  expect(f.screen.queryByRole("dialog")).toBeNull();
+});
+it("blocks navigation during a copy but releases it after a failed write without a copy handoff", async () => {
+  const f = await copyFlow(true); await f.prepare();
+  await expect(f.ref.current!.flush()).resolves.toBeNull(); await expect(f.ref.current!.leave()).rejects.toThrow("사본 저장");
+  await f.message({ type: "office:output", requestId: "write", action: "commit", planId: "plan", bytes: new ArrayBuffer(8) });
+  expect(f.sent).toHaveBeenCalledWith(expect.objectContaining({ requestId: "write", error: "storage unavailable" }), "http://office.test");
+  const leaving = f.ref.current!.leave();
+  await f.message({ type: "office:saved", revision: 2 }); await f.message({ type: "office:flushed", revision: 2 });
+  await expect(leaving).resolves.toBeUndefined(); expect(f.onCopied).not.toHaveBeenCalled();
+});
+it("restores the original draft when the conversation changes between receipt and copy handoff", async () => {
+  const f = await copyFlow(); await f.prepare();
+  await f.message({ type: "office:output", requestId: "write", action: "commit", planId: "plan", bytes: new ArrayBuffer(8) });
+  await f.changeSession(); await f.message({ type: "office:copied", artifactId: "copy" });
+  expect(f.onCopied).not.toHaveBeenCalled(); expect(f.screen.getByTitle("워드 편집기 · test.docx")).not.toBe(f.frame);
+  expect(f.onNotice).toHaveBeenCalledWith(expect.stringContaining("편집 내용을 복원"));
+  const next = f.screen.getByTitle("워드 편집기 · test.docx") as HTMLIFrameElement, sent = vi.spyOn(next.contentWindow!, "postMessage");
+  await act(async () => { window.dispatchEvent(new MessageEvent("message", { origin: "http://office.test", source: next.contentWindow, data: { type: "office:ready" } })); });
+  expect(sent).toHaveBeenCalledWith(expect.objectContaining({ type: "office:init", recover: true, sessionId: "two" }), "http://office.test");
+});
+
 it("refreshes the selected session grant without replacing the document iframe", async () => {
   let sessionId = "one";
   const editorGrant = vi.fn(async () => ({ token: `token-${sessionId}`, sessionId, origin: "http://office.test", url: "http://office.test/docs" }));

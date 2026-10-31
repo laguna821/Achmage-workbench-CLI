@@ -765,6 +765,7 @@ export type EditorGrant = { url: string; origin: string; token: string; sessionI
 
 /** Workbench window → office editor page (iframe at /office/<kind>.html). */
 export type OfficeHostMessage =
+  | { type: "office:copy-rejected"; artifactId: string }
   | import("./office-output.ts").OfficeOutputResult
   | import("./office-references.ts").OfficeReferenceResult
   | {

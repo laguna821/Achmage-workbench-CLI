@@ -7,6 +7,7 @@ import { recovery } from "./recovery.ts";
 import { carriesMark, convertForeignPictures, desktopPicture, markClipboard, pastedPicture, pngBytes, showsNothing } from "./pictures.ts";
 import type { WorkerCall, WorkerMessage, WorkerRequest } from "./slides/protocol.ts";
 import { createSlideStyles } from "./slides/styles.ts";
+import { copyOfficeBytes, officeCopyBusy } from "./copy.ts";
 
 // IeumOffice's slides editor inside Workbench. Its screen (vendor/ieumoffice/apps/slides renderer)
 // and its window API (the preload) are used unchanged; its editing code — pptx parsing, layout,
@@ -82,7 +83,10 @@ async function invoke(channel: string, args: unknown[]): Promise<unknown> {
     case "slides:save":
       return save(args[0] === true);
     case "slides:save-as":
-      return { ok: false, error: "Workbench에서는 대화창에서 요청하거나 '새 문서로'를 써 주세요." };
+      try {
+        const saved = await copyOfficeBytes(init, state.revision, "pptx", () => value<ArrayBuffer>({ type: "snapshot" }));
+        return saved ? { ok: true, path: saved.path } : { ok: false };
+      } catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
     case "slides:native-clipboard":
       // Cut, copy and paste inside a text box are the page's own editing commands.
       document.execCommand(String(args[0]));
@@ -118,6 +122,7 @@ useTransport({ invoke: officeAiTransport(ai, dispatch, (channel, args) => styles
 
 // ── saving ───────────────────────────────────────────────────────────────
 async function save(auto: boolean) {
+  if (officeCopyBusy()) return { ok: false, error: "사본 저장을 마친 뒤 저장해 주세요." };
   if (state.conflict) return { ok: false, reason: "external-modified" };
   const result = await value<{ ok?: boolean; error?: string } | null>({ type: "invoke", channel: "slides:save", args: [auto] });
   if (!result?.ok) return result;
@@ -238,7 +243,7 @@ window.addEventListener(
     if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
     const key = event.key.toLowerCase();
     let command: string | null = null;
-    if (key === "s" && !event.shiftKey) command = "save";
+    if (key === "s") command = event.shiftKey ? "save-as" : "save";
     else if (key === "=" || key === "+") command = "zoom-in";
     else if (key === "-") command = "zoom-out";
     else if (key === "0") command = "zoom-reset";

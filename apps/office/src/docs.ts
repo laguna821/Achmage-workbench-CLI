@@ -3,6 +3,7 @@ import { Events, Gateway, GatewayError, handshake, listen, post, stubBridge } fr
 import { recovery } from "./recovery.ts";
 import { convertForeignPictures, pasteDesktopPictures } from "./pictures.ts";
 import { createOfficeAi } from "./office-ai.ts";
+import { beginOfficeCopy, copyOfficeBytes, officeCopyBusy, type OfficeCopy } from "./copy.ts";
 import { DEFAULT_AI_PANEL_PREFS, normalizeAiPanelPrefs } from "../../../vendor/ieumoffice/packages/ui/src/ai-panel-prefs.ts";
 
 // IeumOffice's Word editor inside Workbench. The editor itself (vendor/ieumoffice/apps/docs,
@@ -22,6 +23,7 @@ const artifactId = init.artifact.id;
 /** `revision`: the revision the editor's content is based on (a save must name it). `kept`: a recovery copy exists. */
 const state = { revision: init.artifact.revision, theme: init.theme, dirty: false, kept: false };
 let pendingOpen: Promise<unknown> | null = null;
+let copyTurn: OfficeCopy | null = null;
 
 document.documentElement.dataset.workbenchTheme = state.theme;
 
@@ -46,6 +48,7 @@ async function openResult() {
 }
 
 async function save(data: ArrayBuffer) {
+  if (officeCopyBusy()) return { ok: false, error: "사본 저장을 마친 뒤 저장해 주세요." };
   if (init.readOnly) return { ok: false, error: "이 판은 읽기 전용입니다." };
   try {
     const saved = await gateway.saveBytes(artifactId, state.revision, data);
@@ -166,9 +169,21 @@ const desktop = stubBridge(
     confirmDocumentReplace: async () => true,
     onOpenDocx: events.on("openDocx"),
     saveDocx: async (_path: string, data: ArrayBuffer) => save(data),
-    saveDocxAs: notInWorkbench,
-    saveDocxNew: notInWorkbench,
-    pickSaveAsPath: async () => null,
+    saveDocxAs: async (target: string, bytes: ArrayBuffer) => {
+      const turn = copyTurn; copyTurn = null;
+      if (!turn || turn.plan?.path !== target) return { ok: false, error: "저장 위치를 다시 선택해 주세요." };
+      try { const saved = await turn.commit(bytes); return { ok: true, path: saved.path }; }
+      catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
+      finally { turn.cancel(); }
+    },
+    saveDocxNew: async (_name: string, bytes: ArrayBuffer) => {
+      try { const saved = await copyOfficeBytes(init, state.revision, "docx", async () => bytes); return saved ? { ok: true, path: saved.path } : { ok: false }; }
+      catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
+    },
+    pickSaveAsPath: async () => {
+      copyTurn = await beginOfficeCopy(init, state.revision, "docx");
+      return copyTurn?.plan ? { path: copyTurn.plan.path } : null;
+    },
     // The editor's crash-recovery copy (every 30 s while dirty): kept in the browser until saved.
     writeRecoveryCopy: async (_path: string | null, data: ArrayBuffer) => {
       if (init.readOnly) return { ok: false };

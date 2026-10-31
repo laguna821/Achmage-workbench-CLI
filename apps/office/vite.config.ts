@@ -188,12 +188,17 @@ function originalOfficeConversation(): Plugin {
       }
       if (id.endsWith("/@univerjs/sheets-ui/lib/es/index.js")) {
         // A selection update defaults focus to the cell editor. In WebKit this
-        // also runs while the AI textarea is receiving input, sending the rest
-        // of the instruction into a cell. Keep the selection/layout update, but
-        // leave an active original composer in control of its keyboard input.
+        // also runs while the AI composer or an original dialog receives input,
+        // sending the rest into a cell. Keep selection/layout updates without
+        // taking keyboard input away from a dialog or an editable outside the grid.
         const marker = "if (!this._editorService.getFocusEditor()) {";
         if (code.split(marker).length !== 2) this.error("Univer cell-focus boundary changed: review the Office input adapter");
-        return code.replace(marker, "if (!this._editorService.getFocusEditor() && !document.activeElement?.closest('.copilot textarea, .copilot input, .copilot [contenteditable=true]')) {");
+        return code.replace(marker, `const workbenchFocused = document.activeElement;
+        const workbenchKeepsFocus = workbenchFocused instanceof HTMLElement && (
+          workbenchFocused.closest('[role="dialog"], .dialog-backdrop') ||
+          !workbenchFocused.closest('#univer-container') && workbenchFocused.matches('input, textarea, select, [contenteditable="true"]')
+        );
+        if (!this._editorService.getFocusEditor() && !workbenchKeepsFocus) {`);
       }
       if (id === `${ieum}/apps/sheets/src/renderer/App.tsx`) {
         // Sheets keeps the AI state next to Univer. Changing a conversation must
@@ -321,6 +326,13 @@ function tiptapMountGrace(): Plugin {
 export default defineConfig({
   base: "/office/",
   plugins: [
+    { name: "workbench-docs-copy-lifecycle", enforce: "pre", transform(code, id) {
+      if (id !== `${ieum}/apps/docs/src/renderer/file-actions.ts`) return null;
+      const marker = "export function save(\n  ctx: FileActionContext,";
+      if (!code.includes(marker)) this.error("Docs save boundary changed: review copy lifecycle cleanup");
+      return `import { cancelOfficeCopy } from ${JSON.stringify(here("./src/copy.ts"))};\n` + code.replace(marker, "function originalWorkbenchSave(\n  ctx: FileActionContext,")
+        + "\nexport async function save(...args: Parameters<typeof originalWorkbenchSave>): Promise<boolean> { try { return await originalWorkbenchSave(...args); } finally { if (args[1]) cancelOfficeCopy(); } }\n";
+    } },
     pagePlatform(),
     templateFonts(`${packages}/ui/template-fonts`),
     originalSettingsPanes(),
