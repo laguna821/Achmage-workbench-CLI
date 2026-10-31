@@ -1,6 +1,6 @@
 import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
-import type { IeumInstall } from "./ieumoffice.ts";
+import { ieumAppEnvironment, type IeumInstall } from "./ieumoffice.ts";
 import { repoRoot, shipped } from "./resources.ts";
 
 // The document tools engines run by name: `kordoc` and `ieumoffice`, small wrappers in the gateway's
@@ -61,7 +61,7 @@ export function installToolWrappers(dataDir: string, tools: { kordoc: string | n
   write(
     "ieumoffice",
     ieum
-      ? { file: process.execPath, args: [ieum.script], unsetEnv: ["ELECTRON_RUN_AS_NODE"], env: { ...((tools.ieumAppWrapper ?? ieum.app) ? { GENOFFICE_APP_BIN: (tools.ieumAppWrapper ?? ieum.app)! } : {}) } }
+      ? { file: process.execPath, args: [ieum.script], unsetEnv: ["ELECTRON_RUN_AS_NODE"], env: ieumAppEnvironment(dataDir, tools.ieumAppWrapper ?? ieum.app) }
       : null,
   );
   const key = Object.keys(process.env).find((entry) => entry.toLowerCase() === "path") ?? "PATH";

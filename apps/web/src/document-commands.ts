@@ -1,6 +1,11 @@
 /** Saves in mounted editors; another window must confirm saving in its own editor. */
-type Editor = { artifactId: string; dirty(): boolean; save(): Promise<number | null>; flushBeforeReference?(): boolean };
+import type { RendererControlRequest, RendererControlReply } from "../../../packages/contracts/src/office-control.ts";
+type Editor = { artifactId: string; dirty(): boolean; save(): Promise<number | null>; flushBeforeReference?(): boolean; control?(request: RendererControlRequest): Promise<RendererControlReply> };
 const editors = new Map<string, Editor>();
+
+export function controlDocument(viewId: string, request: RendererControlRequest): Promise<RendererControlReply> {
+  return editors.get(viewId)?.control?.(request) ?? Promise.resolve({ status: "not_ready" });
+}
 
 export function registerDocumentCommands(viewId: string, editor: Editor) {
   editors.set(viewId, editor);

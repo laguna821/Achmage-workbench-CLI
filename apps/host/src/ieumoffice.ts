@@ -120,6 +120,13 @@ function sandboxWrapper(app: string, dataDir: string): string | null {
   }
 }
 
+/** The native app and its CLI use the same settings and control endpoint. */
+export function ieumAppEnvironment(dataDir: string | undefined, app: string | null | undefined): Record<string, string> {
+  return { ...(app ? { GENOFFICE_APP_BIN: app } : {}),
+    ...(dataDir && app === process.env.WORKBENCH_APP_BIN ? { WORKBENCH_DATA_DIR: dataDir, GENOFFICE_USER_DATA: join(dataDir, "office"), GENOFFICE_AI_SETTINGS: join(dataDir, "office", "ai-settings.json") } : {}),
+  };
+}
+
 export class IeumOffice {
   readonly install: IeumInstall | null;
   /** The launcher path (shown on screen). */
@@ -127,14 +134,16 @@ export class IeumOffice {
   /** How engines run the tool: `ieumoffice` once the wrapper is on their PATH (tool-bin.ts), else the launcher. */
   engineCommand: string | null;
   private versionCache: Promise<string | null> | null = null;
-  /** Linux: the app with the sandbox rule of IeumOffice's AppImage (GENOFFICE_APP_BIN). */
+  /** Native Workbench when supplied by the desktop; legacy app fallback for standalone hosts. */
   readonly appWrapper: string | null;
+  private readonly dataDir: string | undefined;
 
   constructor(install: IeumInstall | null = findIeum(), options: { dataDir?: string } = {}) {
     this.install = install;
+    this.dataDir = options.dataDir;
     this.cli = install?.launcher ?? null;
     this.engineCommand = this.cli;
-    this.appWrapper = install?.app && options.dataDir ? sandboxWrapper(install.app, options.dataDir) : null;
+    this.appWrapper = process.env.WORKBENCH_APP_BIN ?? (install?.app && options.dataDir ? sandboxWrapper(install.app, options.dataDir) : null);
   }
 
   get available() {
@@ -145,7 +154,7 @@ export class IeumOffice {
     return Boolean(this.install?.bundled);
   }
 
-  /** All document commands share Workbench's Node; the legacy app is only an export service. */
+  /** All document commands share Workbench's Node. The app handles export, control and secrets. */
   private command(): { file: string; args: string[] } {
     const install = this.install!;
     return { file: process.execPath, args: [install.script] };
@@ -167,7 +176,7 @@ export class IeumOffice {
     const exportApp = this.appWrapper ?? this.install?.app;
     return {
       ...inherited,
-      ...(exportApp ? { GENOFFICE_APP_BIN: exportApp } : {}),
+      ...ieumAppEnvironment(this.dataDir, exportApp),
       GENOFFICE_ALLOWED_ROOTS: roots.join(delimiter),
       GENOFFICE_AUDIT_LOG: "off",
     };

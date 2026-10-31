@@ -175,6 +175,9 @@ export class Api {
   }
   exportSkill = (id: string, scope: SkillScope = {}) => this.skillBlob(skillUrl(`/${encodeURIComponent(id)}/export`, scope));
   documentViews = () => this.request<{ views: DocumentPresence[] }>("GET", "/api/document-views");
+  officeControl = (windowId: string, main: boolean) => this.request<{ commands: import("../../../packages/contracts/src/office-control.ts").OfficeControlCommand[] }>("GET", `/api/office-control?windowId=${encodeURIComponent(windowId)}&main=${main ? "1" : "0"}`);
+  officeControlReply = (id: string, windowId: string, reply: import("../../../packages/contracts/src/office-control.ts").RendererControlReply) => this.request("POST", `/api/office-control/${id}`, { windowId, reply });
+  openOfficePath = (path: string) => this.request<import("../../../packages/contracts/src/office-control.ts").ControlReply>("POST", "/api/office-control/open", { path });
   resolveReferences = (refs: DocRefInput[]) => this.request<{ refs: DocRef[] }>("POST", "/api/document-references", { refs });
   registerDocument = (artifactId: string, input: DocumentViewInput) => this.request<DocumentRegistration>("POST", `/api/artifacts/${artifactId}/views`, input);
   closeDocument = (viewId: string, windowId: string) => this.request<{ ok: boolean }>("DELETE", `/api/document-views/${viewId}`, { windowId }, { keepalive: true });

@@ -21,6 +21,30 @@ static HIDDEN_ONCE: AtomicBool = AtomicBool::new(false);
 
 /// The local gateway (Node) owns engine processes and state; the window only shows its UI.
 struct Gateway(Mutex<Option<Child>>);
+struct OpenFiles(Mutex<Vec<String>>);
+
+fn file_arguments(args: &[String], cwd: &std::path::Path) -> Vec<String> {
+    if args.iter().any(|arg| arg.starts_with('-')) { return Vec::new(); }
+    args.iter().take(32).filter_map(|arg| {
+        let path = cwd.join(arg);
+        path.is_file().then(|| path.to_string_lossy().into_owned())
+    }).collect()
+}
+
+fn enqueue_files(app: &tauri::AppHandle, paths: Vec<String>) {
+    if paths.is_empty() { return; }
+    let state = app.state::<OpenFiles>();
+    let mut pending = state.0.lock().unwrap();
+    for path in paths { if pending.len() < 64 && !pending.contains(&path) { pending.push(path); } }
+    drop(pending);
+    let _ = app.emit_to("main", "office-open-files", ());
+}
+
+#[tauri::command]
+fn take_open_files(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Result<Vec<String>, String> {
+    if window.label() != "main" { return Err("기본 창에서만 파일을 열 수 있습니다.".into()); }
+    Ok(std::mem::take(&mut *app.state::<OpenFiles>().0.lock().unwrap()))
+}
 
 struct Ready {
     url: String,
@@ -159,6 +183,7 @@ fn gateway_command(app: &tauri::AppHandle) -> Command {
         .env("PATH", engine_path())
         .env("WORKBENCH_PTY_BIN", std::env::current_exe().unwrap_or_default())
         .env("WORKBENCH_SECRET_BIN", std::env::current_exe().unwrap_or_default())
+        .env("WORKBENCH_APP_BIN", std::env::current_exe().unwrap_or_default())
         .env("WORKBENCH_EXIT_ON_STDIN_CLOSE", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -364,14 +389,18 @@ pub fn run() {
             Err(error) => { office_cli::print_error(&error.message); std::process::exit(error.code); }
         }
     } else { None };
-    let mut builder = tauri::Builder::default();
+    let initial_files = if cli.is_none() { file_arguments(&args, &std::env::current_dir().unwrap_or_default()) } else { Vec::new() };
+    let mut builder = tauri::Builder::default().manage(OpenFiles(Mutex::new(initial_files)));
     if let Some(job) = &cli { builder = builder.manage(job.clone()); }
-    else { builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app))); }
+    else { builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+        enqueue_files(app, file_arguments(args.get(1..).unwrap_or_default(), std::path::Path::new(&cwd)));
+        show_main(app);
+    })); }
     let app = builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .invoke_handler(tauri::generate_handler![open_session_window, notify_session, set_attention, office_output::render_svg_pdf, office_output::print_svg, office_html_output::render_html_pdf, office_html_output::print_html, office_cli::office_cli_job, office_cli::office_cli_write, office_cli::office_cli_done, office_browser::office_browser])
+        .invoke_handler(tauri::generate_handler![open_session_window, notify_session, set_attention, take_open_files, office_output::render_svg_pdf, office_output::print_svg, office_html_output::render_html_pdf, office_html_output::print_html, office_cli::office_cli_job, office_cli::office_cli_write, office_cli::office_cli_done, office_browser::office_browser])
         .manage(office_browser::BrowserJobs::default())
         .register_uri_scheme_protocol("workbench-browser", |ctx, request| office_browser::serve(ctx.app_handle(), request.uri().path()))
         .manage(office_html_output::HtmlJobs::default())
@@ -451,8 +480,14 @@ pub fn run() {
         .expect("error while building Achmage Workbench");
 
     let on_event = |handle: &tauri::AppHandle, event| {
-        if let RunEvent::Exit = event {
-            stop_gateway(handle);
+        match event {
+            RunEvent::Exit => stop_gateway(handle),
+            #[cfg(target_os = "macos")]
+            RunEvent::Opened { urls } => {
+                enqueue_files(handle, urls.into_iter().filter_map(|url| url.to_file_path().ok().map(|path| path.to_string_lossy().into_owned())).collect());
+                show_main(handle);
+            }
+            _ => {}
         }
     };
     if let Some(job) = cli {

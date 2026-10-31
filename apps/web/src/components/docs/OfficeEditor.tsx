@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { Artifact, DocumentAccess, EditorGrant, OfficePageMessage } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
+import type { RendererControlRequest, RendererControlReply } from "../../../../../packages/contracts/src/office-control.ts";
 import type { BrowserResult, OfficeOutputFormat, OfficeOutputPlan, OfficeOutputRequest } from "../../../../../packages/contracts/src/office-output.ts";
 import { OfficeOutputDialog } from "./OfficeOutputDialog.tsx";
 import { OfficeReferencePicker } from "./OfficeReferencePicker.tsx";
@@ -11,6 +12,7 @@ import { SkillLibraryDialog } from "../SkillLibraryDialog.tsx";
 import type { OfficeSkillRequest } from "../../../../../packages/contracts/src/office-skills.ts";
 
 export type OfficeHandle = {
+  control(request: RendererControlRequest): Promise<RendererControlReply>;
   /** Run the original renderer's PDF action on current, possibly unsaved content. */
   exportPdf(): void;
   exportDocx(): void;
@@ -63,6 +65,7 @@ export const OfficeEditor = forwardRef<
   const outputRequest = useRef<string | null>(null);
   const outputPlans = useRef(new Map<string, OfficeOutputPlan & { preparationId: string }>());
   const browserJobs = useRef(new Set<string>());
+  const controlWaiters = useRef(new Map<string, (reply: RendererControlReply) => void>());
   const copied = useRef(new Map<string, string | null>());
   const [output, setOutput] = useState<{ revision: number; format: OfficeOutputFormat; choose(plan: OfficeOutputPlan | null): void } | null>(null);
   const latest = useRef(artifact);
@@ -366,6 +369,9 @@ export const OfficeEditor = forwardRef<
             handlers.current.onCopied?.(message.artifactId);
           } else send({ type: "office:copy-rejected", artifactId: message.artifactId });
           break;
+        case "office:control-result":
+          controlWaiters.current.get(message.requestId)?.(message.reply);
+          break;
         case "office:ready": {
           const doc = latest.current;
           send({
@@ -455,7 +461,21 @@ export const OfficeEditor = forwardRef<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [artifact.revision]);
 
+  useEffect(() => () => {
+    for (const resolve of [...controlWaiters.current.values()]) resolve({ status: "not_ready" });
+  }, [artifact.id, generation]);
+
   useImperativeHandle(ref, () => ({
+    control(request) {
+      if (status.current.revision === null) return Promise.resolve({ status: "not_ready" });
+      return new Promise(resolve => {
+        const requestId = crypto.randomUUID();
+        const timer = window.setTimeout(() => finish({ status: "not_ready" }), 1500);
+        const finish = (reply: RendererControlReply) => { window.clearTimeout(timer); controlWaiters.current.delete(requestId); resolve(reply); };
+        controlWaiters.current.set(requestId, finish);
+        send({ type: "office:control", requestId, request });
+      });
+    },
     exportPdf() {
       if (status.current.revision === null || outputBusy.current || outputPlans.current.size) {
         handlers.current.onNotice("문서를 여는 중이거나 다른 출력을 처리 중입니다."); return;

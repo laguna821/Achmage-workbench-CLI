@@ -308,6 +308,13 @@ export default function DocumentView({
   useEffect(() => { lease.report(dirty, (officeEditing ? officeStatus.revision : base?.revision) ?? designStatus.revision ?? artifact?.revision); }, [dirty, officeEditing, base?.revision, officeStatus.revision, designStatus.revision, artifact?.revision, lease.report]);
   useEffect(() => registerDocumentCommands(lease.viewId, {
     artifactId,
+    control: async (request) => {
+      if (!officeEditing) {
+        if (request.cmd === "goto" && wordEditor) { setMode("edit"); return { status: "not_ready" }; }
+        return { status: "error", error: { reason: "unsupported", message: "현재 문서 보기는 Office 선택 읽기를 제공하지 않습니다. 편집 보기에서 다시 시도해 주세요." } };
+      }
+      return officeRef.current?.control(request) ?? { status: "not_ready" };
+    },
     dirty: () => dirty,
     flushBeforeReference: () => officeEditing && Boolean(lease.access().writeToken),
     save: async () => {
@@ -319,7 +326,7 @@ export default function DocumentView({
       await lease.report(false, revision);
       return revision;
     },
-  }), [artifactId, lease.viewId, dirty, save, text, design, officeEditing, lease.report]);
+  }), [artifactId, lease.viewId, dirty, save, text, design, officeEditing, wordEditor, lease.report]);
 
   // A new revision from elsewhere (an applied proposal, a revert): reload when nothing is unsaved here.
   useEffect(() => {

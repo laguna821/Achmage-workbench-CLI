@@ -12,6 +12,7 @@ import { Store } from "./store.ts";
 import { Kordoc } from "./kordoc.ts";
 import { IeumOffice, findIeum } from "./ieumoffice.ts";
 import { OfficeCliInput } from "./office-cli-input.ts";
+import { OfficeControl } from "./office-control.mjs";
 import { installToolWrappers } from "./tool-bin.ts";
 import { createEditorsServer, EditorGrants } from "./editors.ts";
 import { createOfficeSettingsServer } from "./office-settings-server.ts";
@@ -140,7 +141,9 @@ let officeSettingsOrigin: string | null = null, applicationOrigin: string | null
 const officeSettingsServer = createOfficeSettingsServer(webDir && existsSync(webDir) ? webDir : null, () => applicationOrigin);
 // Images pasted into Markdown documents: the user's R2 bucket, or the work folder (doc-images.ts).
 const docImages = new DocImages({ dataDir, documents: manager.documents, workCwd: (workId) => manager.workCwd(workId), endpoint: env.WORKBENCH_R2_ENDPOINT ?? null });
+const officeControl = env.WORKBENCH_CLI_INPUT ? undefined : new OfficeControl(manager, bus, dataDir);
 const server = createHttpServer(manager, bus, {
+  officeControl,
   ...(env.WORKBENCH_CLI_INPUT ? { officeCliInput: new OfficeCliInput(env.WORKBENCH_CLI_INPUT, dataDir, ieum).prepare } : {}),
   token,
   officeAi,
@@ -180,6 +183,7 @@ function listen(target: typeof server, fixed: string | undefined, file: string, 
 }
 
 // The editors first, so a document opened right away finds them.
+await officeControl?.start();
 listen(editors, env.WORKBENCH_EDITORS_PORT, editorsPortFile, (editorsPort) => {
   editorsOrigin = `http://127.0.0.1:${editorsPort}`;
   officeSettingsServer.listen(0, "127.0.0.1", () => {
@@ -202,6 +206,7 @@ let stopping = false;
 async function stop() {
   if (stopping) return;
   stopping = true;
+  officeControl?.close();
   server.close();
   officeAi.close();
   editors.close();

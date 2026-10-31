@@ -482,6 +482,7 @@ export type ProviderStatus = {
 };
 
 export type WorkbenchEvent =
+  | { type: "office.control" }
   | { type: "folder.upserted"; folder: Folder }
   /** A folder deleted ("폴더만 지우기"); what was inside already moved up (navigator.ts). */
   | { type: "folder.removed"; folderId: string }
@@ -766,6 +767,7 @@ export type EditorGrant = { url: string; origin: string; token: string; sessionI
 
 /** Workbench window → office editor page (iframe at /office/<kind>.html). */
 export type OfficeHostMessage =
+  | { type: "office:control"; requestId: string; request: import("./office-control.ts").RendererControlRequest }
   | { type: "office:export-pdf" }
   | { type: "office:export-docx" }
   | { type: "office:copy-rejected"; artifactId: string }
@@ -801,6 +803,7 @@ export type OfficeHostMessage =
 
 /** Office editor page → Workbench window. */
 export type OfficePageMessage =
+  | { type: "office:control-result"; requestId: string; reply: import("./office-control.ts").RendererControlReply }
   | { type: "office:headless-result"; ok: boolean; error?: string }
   | import("./office-skills.ts").OfficeSkillRequest
   | import("./office-output.ts").OfficeOutputRequest

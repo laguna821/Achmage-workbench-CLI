@@ -101,6 +101,7 @@ function parseRefs(value: unknown): DocRef[] {
 }
 
 export type HttpOptions = {
+  officeControl?: import("./office-control.mjs").OfficeControl;
   /** Fixed native CLI input, available only in its disposable gateway. */
   officeCliInput?: () => Promise<{ path: string }>;
   officeSkills?: OfficeSkills;
@@ -599,6 +600,14 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         return sendJson(res, 200, options.timeline(from, Number.isFinite(until) && until > from ? until : undefined));
       }
       if (method === "GET" && path === "/api/fonts") return sendJson(res, 200, { fonts: systemFonts() });
+      if (options.officeControl && parts[0] === "office-control") {
+        if (method === "GET" && !parts[1]) return sendJson(res, 200, options.officeControl.list(url.searchParams.get("windowId") ?? "", url.searchParams.get("main") === "1"));
+        if (method === "POST" && parts[1] === "open") return sendJson(res, 200, await options.officeControl.handle({ cmd: "open", path: String((await readJson(req)).path ?? "") }));
+        if (method === "POST" && parts[1]) {
+          const body = await readJson(req);
+          return sendJson(res, 200, options.officeControl.reply(parts[1], String(body.windowId ?? ""), body.reply));
+        }
+      }
       if (method === "GET" && path === "/api/document-views") return sendJson(res, 200, { views: manager.documents.registry.list() });
       if (method === "POST" && path === "/api/document-references") {
         const body = await readJson(req);

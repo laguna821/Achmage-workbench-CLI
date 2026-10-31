@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { IeumOffice, type IeumInstall } from "./ieumoffice.ts";
+import { IeumOffice, ieumAppEnvironment, type IeumInstall } from "./ieumoffice.ts";
 import { installToolWrappers } from "./tool-bin.ts";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -18,6 +18,18 @@ function fixture() {
 }
 
 describe("Ieum CLI shared Node execution", () => {
+  it("binds native app, settings and control to the same profile", async () => {
+    const { root, install } = fixture(), app = join(root, "Workbench native");
+    vi.stubEnv("WORKBENCH_APP_BIN", app);
+    const office = new IeumOffice(install, { dataDir: root });
+    expect(office.appWrapper).toBe(app);
+    expect(ieumAppEnvironment(root, office.appWrapper)).toEqual({ GENOFFICE_APP_BIN: app, WORKBENCH_DATA_DIR: root, GENOFFICE_USER_DATA: join(root, "office"), GENOFFICE_AI_SETTINGS: join(root, "office/ai-settings.json") });
+    expect((await office.run(["info", "synthetic.docx"], [root])).detail).toMatchObject({ exportApp: app, runtime: process.execPath, electron: null });
+    vi.stubEnv("PATH", process.env.PATH ?? "");
+    installToolWrappers(root, { kordoc: null, ieum: install, ieumAppWrapper: office.appWrapper });
+    const wrapper = readFileSync(join(root, "bin/ieumoffice"), "utf8");
+    expect(wrapper).toContain("GENOFFICE_AI_SETTINGS="); expect(wrapper).toContain("WORKBENCH_DATA_DIR=");
+  });
   it("runs gateway version and commands on Node while keeping legacy export separate", async () => {
     const { root, install } = fixture();
     vi.stubEnv("ELECTRON_RUN_AS_NODE", "1");

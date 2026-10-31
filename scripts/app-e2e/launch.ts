@@ -6,7 +6,8 @@
 // HOME stays, so the installed engines are found and signed in as usual. Only processes started
 // here are stopped, and the temporary folders are removed at the end.
 
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { execFile, spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { promisify } from "node:util";
 import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, rmSync, writeFileSync, closeSync } from "node:fs";
 import { createConnection, createServer } from "node:net";
@@ -140,10 +141,11 @@ export type Stage = {
   outDir: string;
   display: string;
   broadwayPort: number;
-  /** Temporary X11 server only for the legacy Electron document renderer. */
+  /** Private X11 server for legacy rendering or native multi-process/restart checks. */
   x11?: { display: string; authority: string };
   printDialog?: boolean;
   privateKeyring?: boolean;
+  nativeX11?: boolean;
   tools: Tools;
   /** JSON lines written by the opener stand-ins. */
   openLog: string;
@@ -154,6 +156,7 @@ export type Stage = {
 export type LaunchOptions = {
   name: string;
   binary: string;
+  args?: string[];
   engines: Engines;
   /** Named temporary profile shared across app restarts within this stage only. */
   profile?: string;
@@ -167,6 +170,8 @@ export type AppRun = {
   name: string;
   wd: WebDriver;
   dataDir: string;
+  /** Child commands share only this test's display/bus/profile, never the desktop bus. */
+  command: (file: string, args: string[]) => Promise<{ stdout: string; stderr: string }>;
   gateway: { url: string; token: string };
   capabilities: Record<string, unknown>;
   driverLog: string;
@@ -175,7 +180,7 @@ export type AppRun = {
 };
 
 /** Build the stage: temp root, DPI module, bus config, opener stand-ins, a Broadway display. */
-export async function openStage(outDir: string, options: { legacyOffice?: boolean; printDialog?: boolean; privateKeyring?: boolean } = {}): Promise<Stage> {
+export async function openStage(outDir: string, options: { legacyOffice?: boolean; printDialog?: boolean; privateKeyring?: boolean; nativeX11?: boolean } = {}): Promise<Stage> {
   const tools = findTools();
   const root = mkdtempSync("/tmp/wb-app-e2e-");
   const started: ChildProcess[] = [];
@@ -225,7 +230,7 @@ export async function openStage(outDir: string, options: { legacyOffice?: boolea
 
   const runs: AppRun[] = [];
   let x11: Stage["x11"];
-  if (options.legacyOffice) {
+  if (options.legacyOffice || options.nativeX11) {
     const xvfb = process.env.APP_E2E_XVFB ?? "Xvfb";
     let xNumber = 0;
     for (let attempt = 0; attempt < 200 && !xNumber; attempt += 1) {
@@ -257,6 +262,7 @@ export async function openStage(outDir: string, options: { legacyOffice?: boolea
     x11,
     printDialog: options.printDialog,
     privateKeyring: options.privateKeyring,
+    nativeX11: options.nativeX11,
     tools,
     openLog,
     async launch(options) {
@@ -292,7 +298,7 @@ async function launchApp(input: { stage: Stage; options: LaunchOptions; dpiModul
   // Nothing started under the harness can reach the user's compositor or session bus.
   for (const key of ["WAYLAND_DISPLAY", "WAYLAND_SOCKET", "DISPLAY", "XAUTHORITY", "DBUS_SESSION_BUS_ADDRESS", "DBUS_STARTER_ADDRESS", "DBUS_STARTER_BUS_TYPE", "GNOME_KEYRING_CONTROL", "GNOME_KEYRING_PID"]) delete env[key];
   Object.assign(env, {
-    GDK_BACKEND: "broadway",
+    GDK_BACKEND: stage.nativeX11 ? "x11" : "broadway",
     XDG_RUNTIME_DIR: stage.runtimeDir,
     BROADWAY_DISPLAY: stage.display,
     GTK_MODULES: [dpiModule, process.env.GTK_MODULES].filter(Boolean).join(":"),
@@ -325,6 +331,7 @@ async function launchApp(input: { stage: Stage; options: LaunchOptions; dpiModul
   const driverLog = join(stage.outDir, `${options.name}-driver.log`);
   const log = openSync(driverLog, "w");
   const driverArgs = [stage.tools.tauriDriver, "--port", String(driverPort), "--native-port", String(nativePort), "--native-driver", stage.tools.webkitDriver];
+  const busAddressFile = join(dir, "private-bus-address");
   if (stage.privateKeyring) {
     // GNOME falls back to a real HOME keyring unless this directory already exists.
     mkdirSync(join(env.XDG_DATA_HOME!, "keyrings"), { recursive: true, mode: 0o700 });
@@ -333,7 +340,7 @@ async function launchApp(input: { stage: Stage; options: LaunchOptions; dpiModul
   }
   const driver = spawn(
     "dbus-run-session",
-    ["--config-file", busConfig, "--", ...driverArgs],
+    ["--config-file", busConfig, "--", "sh", "-c", 'umask 077; printf "%s" "$DBUS_SESSION_BUS_ADDRESS" > "$1"; shift; exec "$@"', "workbench-test-bus", busAddressFile, ...driverArgs],
     { env, stdio: [stage.privateKeyring ? "pipe" : "ignore", log, log] },
   );
   if (stage.privateKeyring) driver.stdin!.end(input.keyringPassword);
@@ -349,7 +356,7 @@ async function launchApp(input: { stage: Stage; options: LaunchOptions; dpiModul
     if (waited > 15_000 || driver.exitCode !== null) throw new Error(`tauri-driver did not start (see ${driverLog})`);
     await sleep(100);
   }
-  const capabilities = await wd.start({ "tauri:options": { application: options.binary } });
+  const capabilities = await wd.start({ "tauri:options": { application: options.binary, args: options.args ?? [] } });
   // The window opens on the gateway's address (its token is taken off the address by the page).
   let origin = "";
   for (let waited = 0; !origin; waited += 200) {
@@ -374,6 +381,7 @@ async function launchApp(input: { stage: Stage; options: LaunchOptions; dpiModul
     name: options.name,
     wd,
     dataDir,
+    command: (file, args) => promisify(execFile)(file, args, { env: { ...env, DBUS_SESSION_BUS_ADDRESS: readFileSync(busAddressFile, "utf8") }, encoding: "utf8", timeout: 60_000, maxBuffer: 2_000_000 }),
     gateway: { url: origin, token },
     capabilities,
     driverLog,

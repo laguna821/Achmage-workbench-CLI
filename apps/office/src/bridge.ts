@@ -62,6 +62,17 @@ export function listen(handler: (message: OfficeHostMessage) => void) {
   return () => window.removeEventListener("message", onMessage);
 }
 
+// All original editor kinds share this bridge; the four original control handlers
+// remain responsible for caret/slide/range/page selection and validation.
+listen(message => {
+  if (message.type !== "office:control") return;
+  const handler = (window as unknown as { __genofficeControl?: (request: import("../../../packages/contracts/src/office-control.ts").RendererControlRequest) => unknown }).__genofficeControl;
+  void Promise.resolve().then(() => handler ? handler(message.request) : { status: "not_ready" }).then(
+    reply => post({ type: "office:control-result", requestId: message.requestId, reply: reply as import("../../../packages/contracts/src/office-control.ts").RendererControlReply }),
+    error => post({ type: "office:control-result", requestId: message.requestId, reply: { status: "error", error: { reason: "app_unavailable", message: String(error) } } }),
+  );
+});
+
 /** Say hello and wait for the document this page edits. */
 export function handshake(): Promise<Init> {
   return new Promise((resolve) => {

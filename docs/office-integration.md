@@ -1,10 +1,20 @@
 # 이음오피스 통합 진행
 
+## 원본 CLI 문서 제어와 기본 앱 전환
+
+2026-10-31: 원본 `control-server`·`controlHandler`와 Word/PPT/Sheets/PDF의 `__genofficeControl`을 재사용해 `ieumoffice open --block/--slide/--range/--page` 및 `selection`을 연결했다. Workbench의 기존 문서·창 등록부로 실제 편집기를 찾으며 같은 파일이 여러 프로젝트에 등록돼도 열린 writer의 탭을 우선한다. 창별 요청·응답만 전달하고 요청에 담긴 JavaScript는 실행하지 않는다. 이미 열린 탭의 대화·편집기·저장 전 내용을 유지한다.
+
+첫 실행 파일 인자, 두 번째 프로세스의 인자와 macOS 파일 열기 이벤트는 기본 창의 준비까지 큐에 보존한다. 새 파일은 기존 작업공간이나 실제 상위 폴더의 프로젝트로 연다. desktop이 제공하는 native 실행 파일을 CLI의 기본 앱으로 지정하고 CLI·GUI가 같은 설정/제어 프로필을 사용한다.
+
+Linux 실제 원본 CLI **29/29**: 네 편집기의 위치 이동·선택·원본 무변경·같은 편집기 유지, 저장 전 Word 선택 텍스트, 기본 래퍼의 native Word PDF/HTML DOCX 출력, 실행 중 endpoint 보존, 실제 두 번째 프로세스와 첫 실행 파일 열기. 별도 **8/8**은 시작 문서의 원본 Markdown 본문까지 표시됨을 확인했다. 관련 host/frame **32/32**, 전체 타입·web/Office/host/native 빌드 통과. GTK Broadway가 다중 프로세스 종료 때 자체 assert로 중단해 이 검사는 기존 격리 Xvfb에서 검증했다. 사용자 화면/버스/프로필은 사용하지 않았다.
+
+근거 `implementation-20261030/cli-control-native-04/results.json`, `cli-control-native-05/results.json`, 판 `research:rr-17f607de47f149f2e19fb0d56a85f767:66bbd69305c5c445d7b15d5f98be37bb212ff32e70bb64d966e76efbeac8ab84`. **설치본의 남은 Electron 리소스 정리와 다른 OS 실제 실행·전체 Office·릴리스는 아직 미완료다.**
+
 ## 원본 CLI의 보관 키 읽기
 
 2026-10-31: Workbench native `--reveal-ai-secrets`가 창이나 gateway 없이 bundled Node worker를 실행한다. 원본 이음 CLI의 stdin 배열 제한·응답 JSON과 기존 Workbench OS vault 복호화를 재사용한다. 키는 인자·환경 변수·파일에 평문으로 전달하지 않는다. 설치 리소스에도 worker를 포함했다.
 
-Linux 독립 D-Bus/키링 **13/13**, 기존 host **26/26**, host/scripts 타입과 host/native 빌드 통과. 원본 CLI가 실제 native 실행 파일을 호출하며, 변조·다른 프로필·기존 Electron 봉인값·키링 불통은 키를 반환하지 않고 저장된 설정 바이트를 보존한다. 근거 `implementation-20261030/cli-secret-native-02/results.json`, 판 `research:rr-f1455ead49dbb03e1e57d6f499c866fd:aa42d685496fba96180d1992da468ea46afe6207ce97a3d1cae5f14c66a8f097`. **기본 CLI 앱 지정은 app-control 연결 후 전환할 예정이며, 기존 Electron 키 이행·다른 OS 실제 실행은 아직 미완료다.**
+Linux 독립 D-Bus/키링 **13/13**, 기존 host **26/26**, host/scripts 타입과 host/native 빌드 통과. 원본 CLI가 실제 native 실행 파일을 호출하며, 변조·다른 프로필·기존 Electron 봉인값·키링 불통은 키를 반환하지 않고 저장된 설정 바이트를 보존한다. 근거 `implementation-20261030/cli-secret-native-02/results.json`, 판 `research:rr-f1455ead49dbb03e1e57d6f499c866fd:aa42d685496fba96180d1992da468ea46afe6207ce97a3d1cae5f14c66a8f097`. **기본 CLI 앱 지정은 위 제어 연결과 함께 native로 전환했다. 기존 Electron 키 이행·다른 OS 실제 실행은 아직 미완료다.**
 
 ## 원본 CLI의 Tauri 출력 연결
 

@@ -3,7 +3,7 @@ import type { DocumentRegistration } from "@workbench/contracts";
 import type { Api } from "./api.ts";
 
 // Each webview gets a fresh identity. A copied sessionStorage must not clone edit ownership.
-const windowId = `window-${crypto.randomUUID()}`;
+export const windowId = `window-${crypto.randomUUID()}`;
 
 export function useDocumentSession(rootApi: Api, artifactId: string | null, sessionId: string | null, wantsWrite = true) {
   const [viewId] = useState(() => `view-${crypto.randomUUID()}`);

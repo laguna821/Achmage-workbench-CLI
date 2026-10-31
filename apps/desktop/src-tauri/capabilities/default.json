@@ -13,6 +13,8 @@
   },
   "permissions": [
     "core:default",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
     "dialog:allow-open",
     "dialog:allow-save",
     {
@@ -39,6 +41,7 @@
     "allow-open-session-window",
     "allow-notify-session",
     "allow-set-attention",
+    "allow-take-open-files",
     "allow-render-svg-pdf",
     "allow-print-svg",
     "allow-render-html-pdf",

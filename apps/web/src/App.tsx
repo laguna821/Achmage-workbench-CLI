@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { GLOBAL_LAYOUT, PROVIDER_LABEL, isUnseen, type AccessMode, type Artifact, type Attachment, type CreateTarget, type DocRef, type ProjectPick, type Proposal, type Provider, type Session, type SessionStatus, type UiPrefs, type Work, type Workspace } from "@workbench/contracts";
 import { Api, ApiRequestError, readToken } from "./api.ts";
+import { useOfficeControl } from "./office-control.ts";
 import { configureDesign } from "./design.ts";
 import { initialState, isBusy, reducer, sessionsOf } from "./state.ts";
 import { newRequestId, titleFrom } from "./format.ts";
@@ -318,6 +319,10 @@ export function App() {
   const fail = useCallback((error: unknown) => {
     setToast(error instanceof ApiRequestError || error instanceof Error ? error.message : String(error));
   }, [setToast]);
+  const notifyOfficeControl = useOfficeControl(api, !single, artifact => new Promise(resolve => {
+    if (panesRef.current.focusIfShown(`doc:${artifact.id}`)) { resolve(); return; }
+    navigateTo({ workId: artifact.workId, sessionId: null, view: { kind: "document", artifactId: artifact.id, proposalId: null } }, resolve);
+  }), fail);
   // Only this window's explicit creation requests open result tabs. Replayed events open once.
   const creatingRequests = useRef(new Map<string, { workId: string; sessionId: string; tabId: string }>());
   // "설치" and "로그인" of the engines (onboarding and the connection panel); progress comes as status events.
@@ -356,6 +361,7 @@ export function App() {
           snapshot.seq,
           (event) => {
             dispatch({ type: "event", event });
+            if (event.type === "office.control") notifyOfficeControl();
             if (event.type === "item.upserted" && event.item.kind === "artifact" && event.item.id.startsWith("artifact:create:")) {
               const requestId = event.item.id.slice("artifact:create:".length), origin = creatingRequests.current.get(requestId);
               if (origin && event.sessionId === origin.sessionId) {
@@ -368,7 +374,7 @@ export function App() {
             }
           },
           () => void load(),
-          (connected) => dispatch({ type: "connected", connected }),
+          (connected) => { dispatch({ type: "connected", connected }); if (connected) notifyOfficeControl(); },
         );
       } catch (error) {
         fail(error);
