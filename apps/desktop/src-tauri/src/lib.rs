@@ -459,9 +459,18 @@ pub fn run() {
                     // Without a tray (no StatusNotifier host) the app still works; launching it
                     // again shows the hidden window (single instance).
                     if let Some(job) = handle.try_state::<std::sync::Arc<office_cli::ExportJob>>() {
+                        if std::env::var_os("WORKBENCH_CLI_TRACE_DIR").is_some() {
+                            let probe_app = handle.clone();
+                            std::thread::spawn(move || {
+                                std::thread::sleep(std::time::Duration::from_secs(5));
+                                office_cli::trace("main-probe-request");
+                                let _ = probe_app.run_on_main_thread(|| office_cli::trace("main-responsive"));
+                            });
+                        }
                         let job = job.inner().clone(); let timeout_app = handle.clone();
                         std::thread::spawn(move || {
                             std::thread::sleep(std::time::Duration::from_secs(170));
+                            office_cli::trace("native-timeout");
                             job.complete(Err("문서 내보내기가 제한 시간 안에 완료되지 않았습니다.".into()));
                             timeout_app.exit(3);
                         });

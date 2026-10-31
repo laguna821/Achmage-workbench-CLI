@@ -32,8 +32,10 @@ Object.assign(env, {
   WORKBENCH_DATA_DIR: profile, WORKBENCH_PORT: "1", WORKBENCH_EDITORS_PORT: "1", WORKBENCH_TOKEN: "must-not-be-used",
   WORKBENCH_IEUM_CLI: ieumCli ?? join(stage.root, "no-legacy-ieum"),
   GENOFFICE_APP_BIN: binary,
+  WORKBENCH_CLI_TRACE_DIR: join(out, "native-export"),
   WORKBENCH_CODEX_BIN: join(repo, "scripts/fixtures/fake-codex.mjs"), WORKBENCH_CLAUDE_BIN: join(repo, "scripts/fixtures/fake-claude.mjs"),
 });
+mkdirSync(env.WORKBENCH_CLI_TRACE_DIR!, { recursive: true });
 try {
   const dir = join(out, "documents"); mkdirSync(dir, { recursive: true });
   const zip = await JSZip.loadAsync(readFileSync(join(repo, "vendor/ieumoffice/fixtures/generated/simple.docx")));
@@ -69,6 +71,7 @@ try {
     let result: { stdout: string; stderr: string; code: number | string | undefined };
     const stdoutPath = join(out, `${name}.stdout.log`), stderrPath = join(out, `${name}.stderr.log`);
     writeFileSync(stdoutPath, ""); writeFileSync(stderrPath, "");
+    const previousTraces = new Set(readdirSync(env.WORKBENCH_CLI_TRACE_DIR!));
     try {
       const command = cli ? [process.execPath, cli, "convert"] : [binary, "--headless-export"];
       const running = run("dbus-run-session", ["--config-file", join(stage.root, "bus.conf"), "--", ...command, input, "--to", target, "--out", output, "--json"], { env, encoding: "utf8", timeout: 190_000, maxBuffer: 4_000_000 });
@@ -80,6 +83,8 @@ try {
     writeFileSync(stdoutPath, result.stdout); writeFileSync(stderrPath, result.stderr);
     const envelope = result.stdout.trim().split("\n").flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } }).at(-1);
     check(`${name}: native JSON and exit`, result.code === 0 && envelope?.status === "ok" && existsSync(output), { code: result.code, envelope });
+    const traces = readdirSync(env.WORKBENCH_CLI_TRACE_DIR!).filter(file => !previousTraces.has(file)).map(file => readFileSync(join(env.WORKBENCH_CLI_TRACE_DIR!, file), "utf8"));
+    check(`${name}: renderer diagnostic IPC actually authorized`, traces.some(text => ["parent-script", "job-received", "document-opened", "editor-granted", "export-done"].every(stage => text.split("\n").includes(stage))));
     check(`${name}: source preserved`, hash(input) === before);
     check(`${name}: user data preserved`, readdirSync(profile).join() === "sentinel.json" && hash(join(profile, "sentinel.json")) === sentinel);
     check(`${name}: owned temporary profile removed`, !readdirSync(temp).some(name => name.startsWith("workbench-export-")));

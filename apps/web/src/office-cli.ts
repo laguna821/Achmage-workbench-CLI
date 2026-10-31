@@ -22,10 +22,15 @@ export async function runOfficeCli() {
   };
   try {
     const job = await invoke<ExportRequest>("office_cli_job");
+    trace("job-received");
     const token = readToken(); if (!token) throw new Error("내보내기 게이트웨이 인증이 없습니다.");
+    trace("token-ready");
     const rootApi = new Api(token);
+    trace("work-request");
     const work = await rootApi.createWork("문서 내보내기", null, job.cwd);
+    trace("work-created");
     const input = await rootApi.officeCliInput();
+    trace("input-received");
     const artifact = await rootApi.openFile(work.id, input.path);
     trace("document-opened");
     const viewId = `view-${crypto.randomUUID()}`, windowId = `window-${crypto.randomUUID()}`;
