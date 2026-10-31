@@ -351,9 +351,9 @@ export function ProjectsSection({ shared }: { shared: NavShared }) {
     <section className="side-section nav-projects" aria-label="프로젝트">
       <SectionHead
         id="projects"
-        label="프로젝트"
+        label="프로젝트 탐색"
         shared={shared}
-        count={countText(root)}
+        count={`전체 ${root.own + root.below}개`}
         tools={
           <button type="button" className="icon-button small" title="새 폴더" aria-label="새 폴더" onClick={() => shared.setCreatingIn(null)}>
             <Icon name="plus" size={13} />
@@ -382,10 +382,10 @@ export function ProjectsSection({ shared }: { shared: NavShared }) {
             onKeyDown={(event) => onKey(event, null, true, false)}
           >
             <span className="row-chevron blank" />
-            <Icon name="project" size={15} className="side-row-icon" />
-            <span className="side-row-label">프로젝트</span>
-            <span className="side-row-trail muted nav-count">{countText(root)}</span>
+            <Icon name="grid" size={15} className="side-row-icon" />
+            <span className="side-row-label">{nav.includeSub ? "전체 프로젝트 보기" : "폴더 밖 프로젝트 보기"}</span>
           </div>
+          <div className="nav-folder-heading" role="presentation">정리 폴더</div>
           {shared.creatingIn === null ? creatingRow(0) : null}
           {visible.map(({ folder, depth, open: isOpen, children }) => {
             const count = counts.folders.get(folder.id);

@@ -653,3 +653,10 @@ html.nav-dragging * {
     transition-duration: 1ms;
   }
 }
+
+/* Project notes, conversations, and files have distinct, stable visual identities. */
+.nav-kind { flex: 0 0 auto; font-size: 10px; line-height: 1.5; padding: 1px 5px; border-radius: 4px; color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.nav-folder-heading { margin: 12px 8px 5px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 11px; font-weight: 600; color: var(--muted); }
+.nav-root { margin-bottom: 8px; border: 1px solid var(--line); border-radius: 6px; }
+.row-work .side-row-icon, .nav-project-line > svg { color: var(--accent); }
+.row-docs { margin-top: 6px; font-size: 11px; font-weight: 600; color: var(--muted); }

@@ -61,6 +61,8 @@ import { LeaveGate } from "./leave-gate.ts";
 import { LayoutPersistence } from "./layout-persistence.ts";
 import { activeTab, activateTab, addBackgroundTab, closeTab, contentKey, findTab, moveTab, tabsOf, updateTabUi, updateTabView, withTabs } from "./tabs.ts";
 import { PaneLayout, type PaneHead, type PaneScope } from "./components/Panes.tsx";
+import { NewDocumentButton } from "./components/NewDocumentButton.tsx";
+import { IeumAppDialog } from "./components/IeumAppDialog.tsx";
 import { closePane, effectAt, focusPane, focusedPane, movePane, otherPane, paneById, placeAt, resizeSplit, restoreLayout, setPane, shownElsewhere, singleLayout, splitPane, MAX_PANES, type Layout, type Pane, type PaneContent, type PaneId, type PaneItem, type PaneTarget, type Side, type TabUiState } from "./panes.ts";
 import { PaneActionsContext, type PaneActions } from "./panedrag.ts";
 
@@ -286,6 +288,7 @@ export function App() {
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const [imageUploadOpen, setImageUploadOpen] = useState(false);
   const [officeSettingsOpen, setOfficeSettingsOpen] = useState(false);
+  const [ieumAppOpen, setIeumAppOpen] = useState(false);
   const [knowledgeOpen, setKnowledgeOpen] = useState(false);
   const [onboardingAgain, setOnboardingAgain] = useState(false);
   // Documents opened in each work, shown as tabs and offered first by "@".
@@ -428,7 +431,10 @@ export function App() {
   const appTheme = resolveTheme(themePref, systemTheme);
   const appearance = useMemo(() => readAppearance(prefs.appearance), [prefs.appearance]);
   // The sidebar is where many sessions live: open unless the user closed it (decision 2026-10-28).
-  const sidebarOpen = !single && prefs.sidebar !== false;
+  const [expandedEditorTab, setExpandedEditorTab] = useState<string | null>(null);
+  const focusedTabId = activeTab(focusedPane(layout)).id;
+  const editorFocus = view.kind === "document" && expandedEditorTab !== focusedTabId;
+  const sidebarOpen = !single && !editorFocus && prefs.sidebar !== false;
   const toggleSidebar = () => savePrefs({ sidebar: !sidebarOpen });
   const sidebarWidth = typeof prefs.sidebarWidth === "number" ? Math.min(480, Math.max(232, prefs.sidebarWidth)) : 288;
   const sortMode: SortMode = SORT_MODES.includes(prefs.treeSort as SortMode) ? (prefs.treeSort as SortMode) : "manual";
@@ -439,8 +445,8 @@ export function App() {
   /** The session a work shows: its active one (unless archived), else its latest. */
   const activeOf = (owner: Work) =>
     (owner.activeSessionId && state.sessions[owner.activeSessionId] && !state.sessions[owner.activeSessionId]!.archivedAt && state.sessions[owner.activeSessionId]) ||
-    workSessions(state, owner.id).at(-1) ||
-    sessionsOf(state, owner.id).at(-1);
+    workSessions(state, owner.id).filter((entry) => !entry.documentAgent).at(-1) ||
+    sessionsOf(state, owner.id).filter((entry) => !entry.documentAgent).at(-1);
   const restoredSession = focusedPane(layout).sessionId ? state.sessions[focusedPane(layout).sessionId!] : null;
   const activeSession = singleSession ?? (restoredSession && restoredSession.workId === work?.id && !restoredSession.archivedAt ? restoredSession : work && activeOf(work));
   // ── two panes (panes.ts): the other pane keeps the session it showed when it lost the focus ──
@@ -858,6 +864,10 @@ export function App() {
   const switcherRef = useRef<number | null>(null);
   const openSession = useCallback(
     (session: Session) => {
+      if (session.documentAgent) {
+        navigateTo({ workId: session.workId, sessionId: session.id, view: { kind: "document", artifactId: session.documentAgent.artifactId, proposalId: null } });
+        return;
+      }
       const target = state.works[session.workId];
       if (target) actions.selectSession(target, session);
     },
@@ -1427,7 +1437,7 @@ export function App() {
 
   const sidebarActions: SidebarActions = {
     openSession,
-    openWork: openWorkNow,
+    openWork: (target) => actions.openProject(target),
     openDoc: (artifact: Artifact) => docActions.openArtifact(artifact.id),
     newSession: ({ folderId }) => startNew(folderId ?? null),
     createFolder: async (name, parentId) => {
@@ -1845,25 +1855,16 @@ export function App() {
                 onLeaveGuard={guardOf[tabId]}
                 uiState={tabUi}
                 onUiState={uiOf[tabId]}
-                onBack={() => setViewOf(pane.id, { kind: "work" })}
+                onBack={() => {
+                  if (session?.documentAgent) navigateTo({ workId: owner.id, sessionId: session.documentAgent.parentSessionId, view: { kind: "work" } });
+                  else setViewOf(pane.id, { kind: "work" });
+                }}
                 onToast={setToast}
                 onOpenArtifact={(artifactId, scope) => setViewOf(pane.id, { kind: "document", artifactId, proposalId: null }, scope)}
                 pickFile={inDesktop ? pickFileNative : null}
                 onPickTarget={() => actions.pickSession(owner, session ?? null)}
                 onAiSettings={() => setOfficeSettingsOpen(true)}
-                onNewSession={async () => {
-                  const source = paneById(layoutRef.current, pane.id);
-                  const stillHere = () => {
-                    const current = paneById(layoutRef.current, pane.id);
-                    return source && current && activeTab(current).id === tabId && current.workId === owner.id && current.sessionId === source.sessionId && contentKey(current) === `doc:${at.artifactId}`;
-                  };
-                  if (!stillHere()) throw new Error("문서 탭이나 선택한 세션이 바뀌었습니다. 현재 문서에서 다시 요청해 주세요.");
-                  const next = await api.createSession(owner.id, session?.provider ?? engine, { workspaceId: stateRef.current.artifacts[at.artifactId]?.workspaceId ?? session?.workspaceId, model: session?.model ?? null, effort: session?.effort ?? null });
-                  if (!stillHere()) throw new Error("문서 탭이나 선택한 세션이 바뀌었습니다. 만든 새 세션은 프로젝트에 보관했습니다.");
-                  dispatch({ type: "focus", work: owner, session: next });
-                  updateLayout((current) => setPane(current, pane.id, { workId: owner.id, sessionId: next.id }));
-                  return next;
-                }}
+                onExternalSetup={() => setIeumAppOpen(true)}
                 onAnswer={(answered, itemId, decision) => actions.answer(answered, itemId, decision)}
                 onSend={async (target, text, refs, handoffTo, create, attachments) => {
                   let source = target;
@@ -1990,7 +1991,7 @@ export function App() {
               <button
                 type="button"
                 className={`icon-button${sidebarOpen ? " pressed" : ""}`}
-                onClick={toggleSidebar}
+                onClick={() => editorFocus ? setExpandedEditorTab(focusedTabId) : toggleSidebar()}
                 aria-label={sidebarOpen ? "사이드바 닫기" : "사이드바 열기"}
                 title={sidebarOpen ? "사이드바 닫기" : "사이드바 열기"}
               >
@@ -2002,7 +2003,7 @@ export function App() {
               </button>
             </>
           )}
-          {!sidebarOpen && !single ? (
+          {!sidebarOpen && !single && !editorFocus ? (
             <>
               <button type="button" className="ghost-button" onClick={() => startNew(null)} title="새 세션 (Ctrl+N)">
                 <Icon name="plus" size={15} /> 새 세션
@@ -2032,6 +2033,8 @@ export function App() {
           </button>
         )}
         <div className="topbar-right">
+          <NewDocumentButton api={api} state={state} workId={view.kind === "project" ? view.workId : work?.id} workspaceId={visibleSession?.workspaceId} onOpen={(artifact) => navigateTo({ workId: artifact.workId, sessionId: null, view: { kind: "document", artifactId: artifact.id, proposalId: null } })} />
+          {view.kind === "document" ? <button type="button" className="ghost-button small" onClick={() => setExpandedEditorTab(editorFocus ? focusedTabId : null)}><Icon name={editorFocus ? "columns" : "expandAll"} size={14} />{editorFocus ? "작업공간 보기" : "편집기에 집중"}</button> : null}
           {!single ? <button type="button" className="ghost-button small" aria-label="배치 선택" disabled={!layoutReady} onClick={(event) => {
             const box = event.currentTarget.getBoundingClientRect();
             setContextMenu({ x: box.left, y: box.bottom, title: "작업공간별 탭과 창 배치", items: [
@@ -2083,7 +2086,7 @@ export function App() {
                   setOnboardingAgain(true);
                 }}
                 tools={state.tools}
-                onInstallIeum={() => void api.installIeumOffice().catch(fail)}
+                onInstallIeum={() => setIeumAppOpen(true)}
                 onRefreshTools={() => void api.refreshTools().catch(fail)}
                 browser={state.browser}
                 browserActions={browserActions}
@@ -2143,8 +2146,8 @@ export function App() {
       {sidebarOpen && state.ready ? (
         <Sidebar
           state={state}
-          currentWorkId={view.kind === "work" || view.kind === "document" || view.kind === "split" ? work?.id ?? null : null}
-          visibleSessionId={visibleSession?.id ?? null}
+          currentWorkId={view.kind === "project" ? view.workId : view.kind === "work" || view.kind === "document" || view.kind === "split" ? work?.id ?? null : null}
+          visibleSessionId={view.kind === "project" ? null : visibleSession?.id ?? null}
           currentDocId={view.kind === "document" || view.kind === "split" ? view.artifactId : null}
           open={treeOpen}
           onOpenChange={(next: TreeOpenState) => savePrefs({ tree: next })}
@@ -2169,6 +2172,7 @@ export function App() {
       ) : (
         <PaneLayout
           layout={layout}
+          maximized={editorFocus}
           enabled={!single}
           onResize={(id, ratio) => updateLayout((current) => resizeSplit(current, id, ratio))}
           onFocus={focusPaneNow}
@@ -2197,6 +2201,7 @@ export function App() {
       {integrationsOpen && api ? <IntegrationsSheet api={api} onClose={() => setIntegrationsOpen(false)} onToast={setToast} /> : null}
       {imageUploadOpen && api ? <ImageUploadSheet api={api} onClose={() => setImageUploadOpen(false)} onToast={setToast} /> : null}
       {officeSettingsOpen && api ? <OfficeSettings api={api} theme={appTheme} onClose={() => setOfficeSettingsOpen(false)} /> : null}
+      {ieumAppOpen ? <IeumAppDialog api={api} status={state.tools?.ieumApp} onClose={() => setIeumAppOpen(false)} /> : null}
       {knowledgeOpen && api ? <KnowledgeLibrary api={api} onClose={() => setKnowledgeOpen(false)} /> : null}
       {state.ready && api && (prefs.onboarding !== "done" || onboardingAgain) ? (
         <Onboarding
@@ -2207,7 +2212,7 @@ export function App() {
             void api.refreshProviders().catch(() => undefined);
             void api.refreshTools().catch(() => undefined);
           }}
-          onInstallIeum={() => void api.installIeumOffice().catch(fail)}
+          onInstallIeum={() => setIeumAppOpen(true)}
           onDone={() => {
             setOnboardingAgain(false);
             if (prefs.onboarding !== "done") savePrefs({ onboarding: "done" });

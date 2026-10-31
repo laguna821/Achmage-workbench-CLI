@@ -51,6 +51,7 @@ import { officeNewScenario } from "./office-new.ts";
 import { officeOutputScenario } from "./office-output.ts";
 import { officeControlScenario } from "./office-control.ts";
 import { designScenario } from "./design.ts";
+import { usabilityScenario } from "./usability.ts";
 
 const { binary, outDir, only, engines } = parseArgs(process.argv.slice(2));
 mkdirSync(outDir, { recursive: true });
@@ -73,6 +74,7 @@ try {
     const ctx: Ctx = { stage, app, report };
     try {
       await startScenario(ctx);
+      if (wants("usability")) await usabilityScenario(ctx);
       if (wants("panes")) await panesScenario(ctx, { binary, engines, profile: "native" });
       if (wants("pkm")) await pkmScenario(ctx);
       if (wants("workspaces")) await workspacesScenario(ctx);

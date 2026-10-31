@@ -61,12 +61,12 @@ export default function DocumentView({
   artifactId,
   focusProposalId,
   work,
-  session,
+  session: mainSession,
   onBack,
   onSend,
   onPickTarget,
-  onNewSession,
   onAiSettings,
+  onExternalSetup,
   onOpenArtifact,
   pickFile,
   onToast,
@@ -99,16 +99,29 @@ export default function DocumentView({
   onSend: DocSend;
   /** Opens the "어느 세션에 보낼까요?" picker; resolves with the chosen session. */
   onPickTarget: () => Promise<Session | null>;
-  onNewSession: () => Promise<Session | null>;
   onAiSettings: () => void;
+  onExternalSetup: () => void;
   onOpenArtifact: (artifactId: string, scope?: Pick<Artifact, "workId" | "workspaceId">) => void;
   pickFile?: ((folder: string) => Promise<string | null>) | null;
   onToast: (message: string) => void;
 }) {
   const { lookOf } = useAppearance();
   const artifact = state.artifacts[artifactId] as Artifact | undefined;
+  const [agent, setAgent] = useState<Session | null>(null);
+  const [agentError, setAgentError] = useState("");
+  const [agentRetry, setAgentRetry] = useState(0);
+  const parentId = mainSession?.id ?? null;
+  const agentScope = useRef({ artifactId, parentId });
+  agentScope.current = { artifactId, parentId };
+  useEffect(() => {
+    let cancelled = false;
+    setAgent(null); setAgentError("");
+    void rootApi.documentSession(artifactId, parentId).then((next) => { if (!cancelled) setAgent(next); }, (error) => { if (!cancelled) setAgentError(error instanceof Error ? error.message : String(error)); });
+    return () => { cancelled = true; };
+  }, [rootApi, artifactId, parentId, agentRetry]);
+  const session = agent ? state.sessions[agent.id] ?? agent : null;
   const canEditFormat = Boolean(artifact);
-  const lease = useDocumentSession(rootApi, artifact ? artifactId : null, session?.id ?? null, canEditFormat);
+  const lease = useDocumentSession(rootApi, artifact && agent ? artifactId : null, session?.id ?? null, canEditFormat);
   const api = lease.api;
   const references = useDocumentReferences(rootApi, artifactId, onToast);
   const [attachOpen, setAttachOpen] = useState(false);
@@ -119,6 +132,7 @@ export default function DocumentView({
   // Pasted or dropped pictures: a link in Markdown (R2 or the work folder), refused in the Hangul text view.
   const docImages = useDocImages(api, artifact, onToast);
   const [drawer, setDrawer] = useState<DrawerMode>("closed");
+  const [documentChatOpen, setDocumentChatOpen] = useState(false);
   const textual = artifact ? TEXT_FORMATS.has(artifact.format) : false;
   const [base, setBase] = useState<{ revision: number; text: string } | null>(null);
   const [text, setText] = useState("");
@@ -681,6 +695,8 @@ export default function DocumentView({
           </span>
         </div>
         <div className="doc-header-right">
+          {session ? <span className="muted" title="이 문서의 AI는 메인 채팅과 다른 문서의 AI와 독립적으로 실행됩니다.">문서별 AI</span> : null}
+          {!officeEditing ? <button type="button" className="ghost-button" aria-expanded={documentChatOpen} onClick={() => setDocumentChatOpen(!documentChatOpen)}><Icon name="chat" size={14} /> 문서 AI</button> : null}
           <OfficeFileMenu api={rootApi} workId={work.id} workspaceId={artifact.workspaceId}
             onExportPdf={officeEditing && ["docx", "pptx", "markdown", "html"].includes(artifact.format) ? () => officeRef.current?.exportPdf() : undefined}
             onExportDocx={officeEditing && artifact.format === "html" ? () => officeRef.current?.exportDocx() : undefined}
@@ -725,19 +741,23 @@ export default function DocumentView({
               ))}
             </div>
           ) : null}
-          {office || hangul || artifact.format === "pdf" ? (
+          {wordEditor || richTextEditor ? (
             <button
               type="button"
               className="ghost-button"
-              title="이 컴퓨터의 기본 앱에서 엽니다"
-              onClick={() =>
-                void api
-                  .openExternal(artifactId)
-                  .then((opened) => onToast(`${opened.app}에서 열었습니다. 저장하면 여기서 새 판으로 받을 수 있습니다.`))
-                  .catch((error: Error) => onToast(error.message))
-              }
+              title="저장한 뒤 이음오피스 앱에서 같은 파일을 엽니다"
+              onClick={() => {
+                if (!state.tools?.ieumApp?.available) { onExternalSetup(); return; }
+                void (async () => {
+                  const revision = await save();
+                  if (revision === null) return;
+                  await lease.sync(false, revision);
+                  const opened = await api.openExternal(artifactId);
+                  onToast(`${opened.app}에서 같은 파일을 열었습니다. 저장 내용은 여기에도 자동으로 반영됩니다.`);
+                })().catch((error: Error) => onToast(error.message));
+              }}
             >
-              <Icon name="file" size={14} /> 다른 앱으로 열기
+              <Icon name="file" size={14} /> 앱으로 열기
             </button>
           ) : null}
           <div className="anchor">
@@ -952,6 +972,7 @@ export default function DocumentView({
         </div>
       ) : null}
 
+      {agentError ? <div className="notice" role="alert">{agentError}<button type="button" className="button small" onClick={() => setAgentRetry((value) => value + 1)}>다시 연결</button></div> : null}
       {canEditFormat && !lease.canWrite ? <div className="doc-access notice" role="status">
         {lease.error ?? (!lease.ready ? "문서 편집 권한을 확인하는 중…" : lease.registration?.writer ? "다른 탭이나 창에서 편집 중입니다. 이곳에서는 읽기만 할 수 있습니다." : "이 문서를 읽기 전용으로 보고 있습니다.")}
         {dirty ? " 저장되지 않은 입력은 이 탭에 유지했습니다." : ""}
@@ -963,8 +984,10 @@ export default function DocumentView({
             onPrepareAi={(revision) => lease.sync(false, revision)} onAiSettings={onAiSettings}
             onNewSession={async (revision) => {
               await lease.sync(false, revision);
-              const next = await onNewSession();
-              if (!next) throw new Error("새 세션을 만들지 못했습니다.");
+              const scope = agentScope.current;
+              const next = await rootApi.documentSession(artifactId, parentId, true);
+              if (agentScope.current.artifactId !== scope.artifactId || agentScope.current.parentId !== scope.parentId) throw new Error("문서나 메인 대화가 바뀌었습니다. 현재 문서에서 다시 요청해 주세요.");
+              setAgent(next);
               await lease.sync(false, revision, next.id);
               return next.id;
             }} />
@@ -987,7 +1010,7 @@ export default function DocumentView({
         />
       ) : null}
 
-      {place(<div className="column composer-area doc-composer">
+      {!officeEditing && documentChatOpen ? place(<div className="column composer-area doc-composer">
         {session && drawer === "open" && !modes?.split ? (
           <ConversationSheet state={state} session={session} onClose={() => setDrawer("peek")} onAnswer={(itemId, decision) => onAnswer?.(session, itemId, decision)} />
         ) : null}
@@ -1154,7 +1177,7 @@ export default function DocumentView({
           })}
           {!working && !reviewing.length ? <span className="muted">{FORMAT_LABEL[artifact.format]} · {work.title}</span> : null}
         </div>
-      </div>)}
+      </div>) : null}
     </main>
   );
 }

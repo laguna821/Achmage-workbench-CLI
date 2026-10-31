@@ -1,1 +1,1 @@
-{ "name": "@workbench/contracts", "private": true, "version": "0.2.4", "type": "module", "main": "src/index.ts" }
+{ "name": "@workbench/contracts", "private": true, "version": "0.2.5", "type": "module", "main": "src/index.ts" }

@@ -303,6 +303,8 @@ jobs:
           echo "APP_DIR=$HOME/Applications/Achmage Workbench.app/Contents/Resources" >> "$GITHUB_ENV"
       - name: First run with stand-in engines (npm's codex.cmd shim on Windows, Homebrew on macOS)
         shell: bash
+        env:
+          WORKBENCH_TEST_IEUM_INSTALL: '1'
         run: node scripts/setup-smoke.ts "$APP_DIR" smoke-out
       - uses: actions/upload-artifact@v4
         if: always()
@@ -422,7 +424,7 @@ jobs:
           checks = {}
           for platform in ('windows', 'macos'):
               rows = json.loads(Path(f'out/smoke-{platform}/setup-smoke.json').read_text())
-              assert len(rows) >= 18 and all(r.get('ok') is True for r in rows), platform
+              assert len(rows) >= 20 and all(r.get('ok') is True for r in rows), platform
               checks[platform] = len(rows)
           upgrade = json.loads(Path('out/upgrade-windows/verify-results.json').read_text())
           assert len(upgrade) >= 17 and all(r.get('ok') is True for r in upgrade), 'Windows upgrade has not passed'

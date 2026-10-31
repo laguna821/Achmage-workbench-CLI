@@ -101,11 +101,15 @@ export const workOpen = (open: TreeOpenState, workId: string, currentWorkId: str
  * the navigator's list both show a work this way.
  */
 export function workTreeRows(state: State, work: Work, open: TreeOpenState, currentWorkId: string | null, depth: number, sessions = workSessions(state, work.id), docs = workDocs(state, work.id)): Row[] {
-  const expandable = sessions.length > 1 || docs.length > 0;
+  const expandable = sessions.length > 0 || docs.length > 0;
   const isOpen = expandable && workOpen(open, work.id, currentWorkId);
   const rows: Row[] = [{ type: "work", id: work.id, depth, work, open: isOpen, expandable, sessions, docs }];
   if (!isOpen) return rows;
-  if (sessions.length > 1) for (const session of sessions) rows.push({ type: "session", id: session.id, depth: depth + 1, session, work });
+  const chats = sessions.filter((session) => !session.documentAgent), agents = sessions.filter((session) => session.documentAgent);
+  for (const [key, label, members] of [["chats", "채팅", chats], ["agents", "문서 AI", agents]] as const) if (members.length) {
+    rows.push({ type: "section", id: `${key}:${work.id}`, depth: depth + 1, label: `${label} · ${members.length}` });
+    for (const session of members) rows.push({ type: "session", id: session.id, depth: depth + 2, session, work });
+  }
   if (docs.length) {
     const docsOpen = open.openDocs.includes(work.id);
     rows.push({ type: "docs", id: `docs:${work.id}`, depth: depth + 1, work, count: docs.length, open: docsOpen });

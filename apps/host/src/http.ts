@@ -634,6 +634,11 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       if (method === "POST" && path === "/api/office-cli/input" && options.officeCliInput) return sendJson(res, 200, await options.officeCliInput());
       if (method === "POST" && path === "/api/tools/refresh") return sendJson(res, 200, await manager.refreshTools());
       if (method === "POST" && path === "/api/tools/ieumoffice/install") return sendJson(res, 202, manager.installIeumOffice());
+      if (method === "POST" && path === "/api/tools/ieumoffice/link") {
+        const body = await readJson(req);
+        if (typeof body.path !== "string" || !body.path.trim()) throw new HttpError(400, "ieum_app_path", "설치한 이음오피스 앱 위치를 선택해 주세요.");
+        return sendJson(res, 200, manager.ieumDesktop.link(body.path));
+      }
       if (method === "GET" && path === "/api/integrations") return sendJson(res, 200, await manager.integrations());
       if (method === "POST" && path.startsWith("/api/integrations/")) {
         const body = await readJson(req);
@@ -772,7 +777,16 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           const artifact = documents.get(artifactId);
           return sendPng(res, await documents.officePagePath(artifactId, revision ?? artifact.revision, Number(url.searchParams.get("page") ?? 1)));
         }
-        if (method === "POST" && parts[2] === "open-external") return sendJson(res, 200, manager.openExternal(artifactId));
+        if (method === "POST" && parts[2] === "document-session") {
+          const body = await readJson(req);
+          if ((body.parentSessionId !== null && body.parentSessionId !== undefined && typeof body.parentSessionId !== "string") || (body.fresh !== undefined && typeof body.fresh !== "boolean")) throw new HttpError(400, "invalid_document_session", "문서 대화 요청 형식이 올바르지 않습니다.");
+          return sendJson(res, 200, manager.documentSession(artifactId, typeof body.parentSessionId === "string" ? body.parentSessionId : null, body.fresh === true));
+        }
+        if (method === "POST" && parts[2] === "open-external") {
+          const body = await readJson(req);
+          if (body.target !== undefined && body.target !== "ieum" && body.target !== "default") throw new HttpError(400, "external_target", "열 앱을 다시 선택해 주세요.");
+          return sendJson(res, 200, await manager.openExternal(artifactId, body.target === "default" ? "default" : "ieum"));
+        }
         if (method === "POST" && parts[2] === "adopt-disk") return sendJson(res, 200, documents.adoptDisk(artifactId));
         if (method === "POST" && parts[2] === "revert") {
           const body = await readJson(req);

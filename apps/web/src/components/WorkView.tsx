@@ -311,8 +311,8 @@ export function WorkView({
   const references = useDocumentReferences(api, work.id, onToast);
   const unseen = useUnseen();
   // Archived sessions leave the tabs (they stay in the archive), unless one is on screen.
-  const listed = workSessions(state, work.id);
-  const shown = (work.activeSessionId && state.sessions[work.activeSessionId]) || listed[listed.length - 1] || sessionsOf(state, work.id).at(-1) || null;
+  const listed = workSessions(state, work.id).filter((session) => !session.documentAgent);
+  const shown = (work.activeSessionId && !state.sessions[work.activeSessionId]?.documentAgent && state.sessions[work.activeSessionId]) || listed[listed.length - 1] || sessionsOf(state, work.id).filter((session) => !session.documentAgent).at(-1) || null;
   const active = shown;
   const workspace = state.workspaces[active?.workspaceId ?? work.defaultWorkspaceId ?? ""];
   const cwd = workspace?.cwd ?? active?.worktree?.cwd ?? work.cwd;

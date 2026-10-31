@@ -14,7 +14,8 @@ function ToolsSection({ tools, onInstallIeum, onRefreshTools }: { tools: Documen
   if (!tools) return null;
   const rows = [
     { key: "kordoc", name: "hallym-kordoc 스킬", role: "Markdown·양식으로 HWPX 만들기 · 사용자 설치 스킬 우선", status: tools.kordoc },
-    { key: "ieumoffice", name: "이음오피스", role: "워드·PPT·엑셀 미리보기·글 보기·AI 수정", status: tools.ieumoffice },
+    { key: "ieumoffice", name: "내장 이음오피스 편집기", role: "워드·PPT·엑셀 편집·저장·문서별 AI", status: tools.ieumoffice },
+    ...(tools.ieumApp ? [{ key: "ieumApp", name: "이음오피스 앱 연결", role: "같은 파일을 앱으로 열고 저장 내용을 이어받기", status: tools.ieumApp } as const] : []),
     ...(tools.hwp ? [{ key: "hwp", name: "이음 한글", role: "앱 안에서 HWP·HWPX 편집·저장·출력", status: tools.hwp } as const] : []),
     ...(tools.pdf ? [{ key: "pdf", name: "이음 PDF", role: "앱 안에서 PDF 편집·쪽 정리·사본 저장", status: tools.pdf } as const] : []),
   ] as const;
@@ -32,9 +33,9 @@ function ToolsSection({ tools, onInstallIeum, onRefreshTools }: { tools: Documen
             </div>
             <div className="connection-meta muted">{row.role}</div>
             {row.status.message ? <div className="connection-meta">{row.status.message}</div> : null}
-            {row.key === "ieumoffice" && !row.status.busy && !row.status.bundled ? (
-              <button type="button" className="button small" onClick={onInstallIeum} title="GitHub 배포판을 받아 체크섬을 확인한 뒤 ~/.local/opt/ieumoffice에 풉니다">
-                {row.status.available ? "최신판으로 업데이트" : "이음오피스 받기"}
+            {row.key === "ieumApp" && !row.status.busy ? (
+              <button type="button" className="button small" onClick={onInstallIeum}>
+                {row.status.available ? "연결 설정·업데이트" : "최신 이음오피스 설치·연결"}
               </button>
             ) : null}
           </div>

@@ -10,7 +10,7 @@ import { officeUndo } from "./office-undo.ts";
 /** A synthetic model supplies one original Docs tool call. All UI, editing, saving,
  * ownership and history paths are the real shipped app, with no paid model calls. */
 export async function officeConversationScenario(ctx: Ctx) {
-  const S = "Office 같은 세션", { wd, api } = ctx.app;
+  const S = "Office 독립 문서 AI", { wd, api } = ctx.app;
   const unbound = process.env.APP_E2E_OFFICE_UNBOUND === "1";
   const web = process.env.APP_E2E_OFFICE_WEB === "1";
   const media = process.env.APP_E2E_OFFICE_MEDIA === "1";
@@ -60,6 +60,7 @@ export async function officeConversationScenario(ctx: Ctx) {
   try {
     const work = await api<Work>("POST", "/api/works", { title: "문서와 같은 AI 세션", cwd: null });
     let session = unbound ? undefined : await api<Session>("POST", `/api/works/${work.id}/sessions`, { provider: "codex" });
+    const mainSession = session;
     const file = join(work.cwd, "같은 세션.docx");
     copyFileSync(resolve("vendor/ieumoffice/apps/docs/tests/pagination-corpus/docx/simple.docx"), file);
     const artifact = await api<Artifact>("POST", `/api/works/${work.id}/artifacts`, { path: file });
@@ -70,16 +71,19 @@ export async function officeConversationScenario(ctx: Ctx) {
     mkdirSync(join(ctx.app.dataDir, "office"), { recursive: true }); writeFileSync(join(ctx.app.dataDir, "office/ai-settings.json"), JSON.stringify(settings));
     const snapshot = () => api<Snapshot>("GET", "/api/snapshot");
     const items = async (id = session?.id) => id ? (await api<{ items: TranscriptItem[] }>("GET", `/api/sessions/${id}/items`)).items : [];
+    const mainTab = { id: "office-main-tab", workId: work.id, sessionId: session?.id ?? null, view: { kind: "work" } };
     const tab = { id: "office-conversation-tab", workId: work.id, sessionId: session?.id ?? null, view: { kind: "document", artifactId: artifact.id, proposalId: null } };
-    await seedLayout(ctx, { ...(await snapshot()).prefs, paneLayout: { version: 2, focus: "office-conversation-pane", panes: [{ ...tab, id: "office-conversation-pane", tabs: [tab], activeTabId: tab.id, recentTabIds: [tab.id] }] } });
+    await seedLayout(ctx, { ...(await snapshot()).prefs, paneLayout: { version: 2, focus: "office-conversation-pane", panes: [{ ...tab, id: "office-conversation-pane", tabs: mainSession ? [mainTab, tab] : [tab], activeTabId: tab.id, recentTabIds: [tab.id] }] } });
     await wd.setWindowRect({ width: 1800, height: 1100 }); await wd.refresh(); await installProbe(wd);
     const frame = await wd.waitFor("iframe.office-frame", 30000); await wd.frame(frame); await installProbe(wd);
     await wd.waitFor('.tiptap[contenteditable="true"]', 60000);
     const input = await wd.waitFor(".ai-panel textarea", 15000);
+    session = (await snapshot()).sessions.find((entry) => entry.documentAgent?.artifactId === artifact.id);
+    ctx.report.check(S, "문서 전용 대화와 메인 대화의 ID 분리", !!session && session.id !== mainSession?.id && session.documentAgent?.parentSessionId === (mainSession?.id ?? null));
     if (media) await wd.execute('window.__mediaCapabilityProbe = {started:Date.now()}; window.desktop.aiToolCapabilities().then(value => Object.assign(window.__mediaCapabilityProbe,{value,done:Date.now()}), error => Object.assign(window.__mediaCapabilityProbe,{error:String(error),done:Date.now()}));');
     ctx.report.check(S, "Electron 없이 원본 Word AI 패널·모델 선택기 열기", !!input && !!await wd.find(".ai-panel .ai-send-btn"), undefined, await shot(ctx, "office-conversation-open.png"));
     if (unbound) {
-      ctx.report.check(S, "세션 없이 문서를 열어도 불필요한 대화를 만들지 않음", (await snapshot()).sessions.every((item) => item.workId !== work.id));
+      ctx.report.check(S, "문서만 열면 빈 문서 대화만 만들고 메인 CLI는 시작하지 않음", (await snapshot()).sessions.filter((item) => item.workId === work.id).length === 1 && (await items()).length === 0);
       await wd.execute('window.__firstOfficeComposer = arguments[0]; window.__firstOfficeEditor = document.querySelector(".tiptap");', input);
     }
     await wd.click(input);
@@ -94,10 +98,7 @@ export async function officeConversationScenario(ctx: Ctx) {
       await wd.sendKeys(input, "문서 처음에 검사 문단을 넣어 줘");
       await wd.click(await wd.waitFor(".ai-panel .ai-send-btn:not(.ai-stop-btn)"));
     }
-    if (unbound) {
-      if (!await until(async () => (await snapshot()).sessions.some((item) => item.workId === work.id), 15000)) throw new Error(`First Office session was not created: ${await wd.execute('return document.body.innerText.slice(-3500)')}`);
-      session = (await snapshot()).sessions.find((item) => item.workId === work.id);
-    }
+
     if (!session) throw new Error("No Office conversation session");
     await until(async () => (await items()).some((item) => item.kind === "turnEnd"), 45000);
     const transcript = await items();
@@ -130,13 +131,14 @@ export async function officeConversationScenario(ctx: Ctx) {
     }
     if (web) ctx.report.check(S, "원본 웹 읽기 도구가 실제 공개 페이지 본문을 같은 세션과 모델 후속에 전달", transcript.some(item => item.kind === "tool" && item.status === "completed" && item.output?.includes("Example Domain")) && JSON.stringify(requests[1]).includes("Example Domain"));
     if (process.env.APP_E2E_OFFICE_UNDO === "1") await officeUndo(ctx, "docx", artifact.id, marker, async () => (await JSZip.loadAsync(readFileSync(file))).file("word/document.xml")!.async("string"));
+    if (mainSession) ctx.report.check(S, "메인에는 문서 완료 결과만 전달하고 요청·실행 상태는 분리", (await items(mainSession.id)).some(item => item.kind === "notice" && item.text.includes("수정 완료")) && !(await items(mainSession.id)).some(item => item.kind === "user") && (await snapshot()).sessions.find(entry => entry.id === mainSession.id)?.status === "idle");
     const firstErrors = await pageErrors(wd); await wd.frame(null); await wd.refresh(); await installProbe(wd);
     await wd.frame(await wd.waitFor("iframe.office-frame", 30000)); await installProbe(wd);
     ctx.report.check(S, "문서 재열기에서 같은 세션의 대화와 편집 결과 복원", await until(() => wd.execute<boolean>('return document.querySelector(".ai-panel")?.textContent.includes("수정 완료") === true && document.querySelector(".tiptap")?.textContent.includes(arguments[0]) === true;', marker), 30000));
     await wd.execute('document.querySelector(".tiptap").dataset.sessionKept = "yes";');
     await wd.click(await wd.waitFor('.ai-header-btn[aria-label*="새 대화"]', 15000));
-    const created = await until(async () => (await snapshot()).sessions.filter((item) => item.workId === work.id).length === 2, 10000);
-    const next = (await snapshot()).sessions.find((item) => item.workId === work.id && item.id !== session.id)!;
+    const created = await until(async () => (await snapshot()).sessions.filter((item) => item.documentAgent?.artifactId === artifact.id).length === 2, 10000);
+    const next = (await snapshot()).sessions.find((item) => item.documentAgent?.artifactId === artifact.id && item.id !== session.id)!;
     ctx.report.check(S, "원본 새 대화가 Workbench 새 세션을 만들고 문서 편집기 유지", created && !!next && await until(() => wd.execute<boolean>('return window.workbenchOfficeAi.snapshot() === arguments[0] && document.querySelector(".tiptap")?.dataset.sessionKept === "yes";', next.id)));
     const nextInput = await wd.waitFor(".ai-panel textarea"); await wd.click(nextInput);
     await wd.sendKeys(nextInput, "새 세션 확인"); await wd.click(await wd.waitFor(".ai-panel .ai-send-btn:not(.ai-stop-btn)"));
@@ -144,6 +146,12 @@ export async function officeConversationScenario(ctx: Ctx) {
     const cancelInput = await wd.waitFor(".ai-panel textarea"); await wd.click(cancelInput);
     await wd.sendKeys(cancelInput, "__native_cancel__ 취소 검사"); await wd.click(await wd.waitFor(".ai-panel .ai-send-btn:not(.ai-stop-btn)"));
     if (!await until(async () => (await items(next.id)).some((item) => item.kind === "assistant" && item.text.includes("부분 답변")), 10000)) throw new Error("Partial response did not reach the same Workbench session");
+    if (mainSession) {
+      await wd.frame(null); await wd.click(await wd.waitFor('.pane[data-pane-active="true"] .group-tab[data-tab-id="office-main-tab"] [role="tab"]'));
+      ctx.report.check(S, "메인 탭으로 전환해도 문서 AI 스트림 유지", (await snapshot()).sessions.find(entry => entry.id === next.id)?.status === "running" && cancelledStreams === 0 && !!await wd.find(".sidebar"));
+      await wd.click(await wd.waitFor('.pane[data-pane-active="true"] .group-tab[data-tab-id="office-conversation-tab"] [role="tab"]'));
+      await wd.frame(await wd.waitFor('.pane[data-pane-active="true"] iframe.office-frame'));
+    }
     await wd.click(await wd.waitFor(".ai-panel .ai-stop-btn"));
     ctx.report.check(S, "원본 중지 버튼이 실제 제공자 요청을 취소하고 같은 세션에 부분 답변 보존", await until(async () => cancelledStreams === 1 && (await items(next.id)).some((item) => item.kind === "turnEnd" && item.status === "interrupted"), 10000) && (await items(next.id)).some((item) => item.kind === "assistant" && item.text.includes("부분 답변")), undefined, await shot(ctx, "office-conversation-cancelled.png"));
     writeFileSync(join(ctx.stage.outDir, "office-conversation-new-transcript.json"), JSON.stringify(await items(next.id), null, 2));

@@ -71,7 +71,8 @@ import type { AdapterSink, LoginStart, ProviderAdapter } from "./providers/types
 import type { Store } from "./store.ts";
 import { adaptTitle, titleFor } from "./titles.ts";
 import { blankDesign, copyDesignAssets, designProblem, designStem, type DesignPreset } from "./design.ts";
-import { IeumOffice, ieumFromCliDir, installIeumOffice, type InstallProgress } from "./ieumoffice.ts";
+import { IeumOffice } from "./ieumoffice.ts";
+import { IeumDesktop } from "./ieum-desktop.ts";
 import { openWithDesktop } from "./desktop-open.ts";
 import { embeddedDocumentTools } from "./embedded-tools.ts";
 import { createGuide } from "./create.ts";
@@ -93,7 +94,6 @@ import type { AgentBrowser } from "./browse.ts";
 import { handoffError, heldNotice, provenanceOf, restartTurnEnd, stampTurnEnd } from "./recovery.ts";
 import { Finder, type SearchOptions } from "./search.ts";
 import { EngineInstaller } from "./engine-install.ts";
-import { installToolWrappers } from "./tool-bin.ts";
 
 export { HttpError };
 
@@ -281,6 +281,7 @@ export class SessionManager {
   readonly skillLibrary: SkillLibrary;
   readonly documents: Documents;
   readonly office: OfficeSessions;
+  readonly ieumDesktop: IeumDesktop;
   readonly workspaces: Workspaces;
   readonly worktreeWorkspaces: WorktreeWorkspaces;
   readonly terminals: Terminals;
@@ -354,6 +355,7 @@ export class SessionManager {
     this.scmReviews = new ScmReviews(store, this.workspaces, this.sourceControl.reviewSnapshots, reviewHooks);
     this.githubFeedback = new GitHubFeedback(store, this.github, this.githubActions.discussions, reviewHooks);
     this.documents = new Documents(store, bus, options.dataDir ?? dirname(options.managedWorksDir), options.kordoc ?? null, options.ieum ?? null, this.workspaces);
+    this.ieumDesktop = new IeumDesktop(options.dataDir ?? dirname(options.managedWorksDir), () => this.bus.publish({ type: "tools.status", tools: this.tools() }));
     this.office = new OfficeSessions(store, this.documents, {
       session: (id) => this.requireSession(id),
       active: (session) => {
@@ -364,6 +366,10 @@ export class SessionManager {
       item: (id, item) => this.sink.upsertItem(id, item),
       update: (id, patch) => this.sink.updateSession(id, patch),
       lock: (id, key, identity, action) => this.sendGate.run(id, key, identity, action),
+      related: (id) => {
+        const parent = this.requireSession(id);
+        return [...this.sessions.values()].filter((entry) => entry.documentAgent && !entry.archivedAt && entry.workId === parent.workId && entry.workspaceId === parent.workspaceId && (entry.documentAgent.parentSessionId === id || entry.documentAgent.parentSessionId === null));
+      },
     });
     this.engineSetup = new EngineInstaller({
       dataDir: options.dataDir ?? dirname(options.managedWorksDir),
@@ -732,7 +738,6 @@ export class SessionManager {
     };
   }
 
-  private ieumBusy: InstallProgress | null = null;
   private ieumVersion: string | null = null;
   private embeddedTools: ReturnType<typeof embeddedDocumentTools> | null = null;
 
@@ -741,10 +746,10 @@ export class SessionManager {
     const kordoc = this.documents.kordoc;
     const ieum = this.documents.ieum;
     const embedded = this.embeddedTools ??= embeddedDocumentTools();
-    const busy = Boolean(this.ieumBusy && this.ieumBusy.stage !== "done" && this.ieumBusy.stage !== "error");
     return {
       kordoc: { available: Boolean(kordoc?.available), bundled: Boolean(kordoc?.bundled), version: kordoc?.version ?? null, path: kordoc?.runner ?? null, busy: false, message: null },
-      ieumoffice: { available: Boolean(ieum?.available), bundled: Boolean(ieum?.bundled), version: this.ieumVersion, path: ieum?.cli ?? null, busy, message: this.ieumBusy?.message ?? null },
+      ieumoffice: { available: Boolean(ieum?.available), bundled: Boolean(ieum?.bundled), version: this.ieumVersion, path: ieum?.cli ?? null, busy: false, message: null },
+      ieumApp: this.ieumDesktop.status(),
       ...embedded,
       // Older clients may still read these names. Neither separate app is used.
       hop: { available: false, bundled: false, version: null, path: null, busy: false, message: "앱 안의 한글 편집기를 사용합니다." },
@@ -761,21 +766,7 @@ export class SessionManager {
 
   /** Download, verify and unpack the latest IeumOffice for this user (never twice at once). */
   installIeumOffice() {
-    if (this.ieumBusy && this.ieumBusy.stage !== "done" && this.ieumBusy.stage !== "error") return this.tools();
-    const report = (step: InstallProgress) => {
-      this.ieumBusy = step;
-      this.bus.publish({ type: "tools.status", tools: this.tools() });
-    };
-    report({ stage: "download", message: "이음오피스 배포판을 확인하는 중…" });
-    void installIeumOffice(report)
-      .then(async (cli) => {
-        const dataDir = this.options.dataDir ?? dirname(this.options.managedWorksDir);
-        const ieum = new IeumOffice(ieumFromCliDir(dirname(cli)), { dataDir });
-        if (installToolWrappers(dataDir, { kordoc: this.documents.kordoc?.runner ?? null, ieum: ieum.install, ieumAppWrapper: ieum.appWrapper }).includes("ieumoffice")) ieum.engineCommand = "ieumoffice";
-        this.documents.ieum = ieum;
-        await this.refreshTools();
-      })
-      .catch((error: unknown) => report({ stage: "error", message: error instanceof Error ? error.message : String(error) }));
+    this.ieumDesktop.install();
     return this.tools();
   }
 
@@ -822,11 +813,13 @@ export class SessionManager {
    * Explicitly open a document in the desktop's default application. What the
    * other app saves comes back as "changed on disk".
    */
-  openExternal(artifactId: string) {
+  async openExternal(artifactId: string, target: "ieum" | "default" = "ieum") {
     const artifact = this.documents.check(artifactId);
     if (artifact.diskState === "missing") throw new HttpError(404, "file_missing", "파일이 없습니다.");
-    openWithDesktop(artifact.path);
-    const app = "기본 앱";
+    if (this.documents.registry.list().some((view) => view.artifactId === artifactId && view.dirty)) throw new HttpError(409, "external_unsaved", "문서의 편집 내용을 저장한 뒤 앱으로 열어 주세요.");
+    if (target === "default") openWithDesktop(artifact.path);
+    else await this.ieumDesktop.open(artifact.path);
+    const app = target === "default" ? "기본 앱" : "이음오피스";
     this.watchExternal(artifact.id, artifact.path, app);
     return { app };
   }
@@ -849,7 +842,13 @@ export class SessionManager {
         try {
           const before = this.documents.get(artifactId).revision;
           const after = this.documents.adoptDisk(artifactId, `${app}에서 저장`);
-          if (after.revision !== before) this.bus.publish({ type: "artifact.upserted", artifact: after });
+          if (after.revision !== before) {
+            this.bus.publish({ type: "artifact.upserted", artifact: after });
+            const parents = new Set([...this.sessions.values()].filter((entry) => entry.documentAgent?.artifactId === artifactId).map((entry) => entry.documentAgent!.parentSessionId).filter((id): id is string => Boolean(id)));
+            const main = this.works.get(after.workId)?.activeSessionId;
+            if (main && !this.sessions.get(main)?.documentAgent) parents.add(main);
+            for (const id of parents) if (this.sessions.has(id)) this.sink.upsertItem(id, { kind: "notice", id: `external:${artifactId}:${after.revision}`, level: "info", text: `${app}에서 저장 · ${after.name} · r${after.revision}\n${after.path}\n최신 파일을 이 프로젝트에서 이어서 사용합니다.`, at: Date.now(), office: { artifactId, turnId: `external-${after.revision}` } });
+          }
         } catch {
           // Gone or unreadable for a moment: the next change tries again.
         }
@@ -1111,6 +1110,24 @@ export class SessionManager {
     this.saveSession(session);
     this.saveWork({ ...work, activeSessionId: activate ? session.id : work.activeSessionId, updatedAt: now });
     return session;
+  }
+
+  /** Reuse a durable document child. Creating it never activates or interrupts the parent. */
+  documentSession(artifactId: string, parentSessionId: string | null, fresh = false): Session {
+    const artifact = this.documents.get(artifactId), work = this.requireWork(artifact.workId);
+    const workspace = this.workspaces.requireActive(artifact.workspaceId ?? this.workspaces.defaultFor(work).id, work.id);
+    let parent = parentSessionId ? this.requireSession(parentSessionId) : null;
+    if (parent?.documentAgent?.artifactId === artifactId && !fresh && parent.workId === work.id && parent.workspaceId === workspace.id && !this.hidden(work.id, parent.id)) return parent;
+    if (parent?.documentAgent) parent = parent.documentAgent.parentSessionId ? this.requireSession(parent.documentAgent.parentSessionId) : null;
+    if (parent && (parent.workId !== work.id || parent.workspaceId !== workspace.id || parent.hostId !== this.options.hostId || this.hidden(parent.workId, parent.id))) throw new HttpError(403, "document_session_scope", "문서와 같은 프로젝트·작업공간의 메인 대화를 선택해 주세요.");
+    if (!parent) parent = [...this.sessions.values()].find((entry) => !entry.documentAgent && entry.id === work.activeSessionId && entry.workspaceId === workspace.id && !this.hidden(work.id, entry.id)) ?? null;
+    const prior = [...this.sessions.values()].reverse().find((entry) => entry.documentAgent?.artifactId === artifactId && entry.workspaceId === workspace.id && !this.hidden(work.id, entry.id));
+    if (prior && !fresh) return prior;
+    if (prior && this.office.busy(prior.id)) throw new HttpError(409, "document_agent_busy", "진행 중인 문서 AI를 마치거나 멈춘 뒤 새 대화를 시작해 주세요.");
+    const session = this.createSession(work.id, { provider: parent?.provider ?? (this.prefs().engine === "codex" ? "codex" : "claude"), workspaceId: workspace.id, purpose: `${artifact.name} · 문서 AI`, model: parent?.model ?? null, effort: parent?.effort ?? null, access: parent?.access ?? null }, false);
+    const child = { ...session, documentAgent: { artifactId, parentSessionId: parent?.id ?? null, ...(!prior && parent ? { legacySessionId: parent.id } : {}) } };
+    this.saveSession(child);
+    return child;
   }
 
   /** "격리 사본에서": a new session working in a git worktree of the work's repository. */
@@ -2178,13 +2195,13 @@ export class SessionManager {
       const purpose = adaptTitle(requests, current);
       if (purpose && purpose !== session.purpose) this.saveSession({ ...session, purpose, updatedAt: Date.now() });
     }
-    this.retitleWork(session.workId);
+    if (!session.documentAgent) this.retitleWork(session.workId);
   }
 
   private retitleWork(workId: string, fresh = false) {
     const work = this.works.get(workId);
     if (!work || work.titleSource !== "auto") return;
-    const sessionIds = [...this.sessions.values()].filter((session) => session.workId === workId).map((session) => session.id);
+    const sessionIds = [...this.sessions.values()].filter((session) => session.workId === workId && !session.documentAgent).map((session) => session.id);
     const requests = this.requestsOf(sessionIds);
     if (!requests.length) return;
     const title = adaptTitle(requests, fresh || requests.length <= 1 ? null : work.title);

@@ -78,6 +78,8 @@ export type SessionStatus =
 export type Session = {
   id: string;
   workId: string;
+  /** Independent document conversation, linked to its main conversation without sharing its run. */
+  documentAgent?: { artifactId: string; parentSessionId: string | null; legacySessionId?: string };
   /** Fixed when the session is created; switching tabs never changes its cwd. */
   workspaceId?: string;
   provider: Provider;
@@ -526,7 +528,7 @@ export type ToolStatus = {
   message: string | null;
 };
 
-export type DocumentTools = { kordoc: ToolStatus; ieumoffice: ToolStatus; hwp?: ToolStatus; pdf?: ToolStatus; /** Retired separate apps; kept for older clients. */ hop: ToolStatus; pdfcraft?: ToolStatus };
+export type DocumentTools = { kordoc: ToolStatus; ieumoffice: ToolStatus; /** Optional standalone app, separate from the bundled editor. */ ieumApp?: ToolStatus; hwp?: ToolStatus; pdf?: ToolStatus; /** Retired separate apps; kept for older clients. */ hop: ToolStatus; pdfcraft?: ToolStatus };
 
 /** An MCP server definition as one engine has it (env values shown only as names on screen). */
 export type McpDefinition = { type: "stdio" | "http" | "sse"; command: string | null; args: string[]; env: Record<string, string>; url: string | null; enabled: boolean };

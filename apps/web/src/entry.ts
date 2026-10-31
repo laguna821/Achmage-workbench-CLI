@@ -27,15 +27,15 @@ const NEEDS = ["approval", "failure", "unseen"] as const;
  * last stays, otherwise the latest. Null when the work has no session.
  */
 export function sessionToOpen(state: State, work: Work): Session | null {
-  const live = workSessions(state, work.id);
+  const live = workSessions(state, work.id).filter((session) => !session.documentAgent);
   for (const need of NEEDS) {
     const waiting = live.filter((session) => needOf(session) === need);
     if (!waiting.length) continue;
     return waiting.find((session) => session.id === work.activeSessionId) ?? [...waiting].sort((a, b) => recency(b) - recency(a))[0]!;
   }
   const last = work.activeSessionId ? state.sessions[work.activeSessionId] : undefined;
-  if (last && !last.archivedAt && last.workId === work.id) return last;
-  return live.at(-1) ?? sessionsOf(state, work.id).at(-1) ?? null;
+  if (last && !last.documentAgent && !last.archivedAt && last.workId === work.id) return last;
+  return live.at(-1) ?? sessionsOf(state, work.id).filter((session) => !session.documentAgent).at(-1) ?? null;
 }
 
 /**

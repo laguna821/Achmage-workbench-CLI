@@ -20,7 +20,7 @@ describe("explicit external document editing", () => {
     mkdirSync(work.cwd, { recursive: true });
     const path = join(work.cwd, "보고서.hwpx"); writeFileSync(path, "first version");
     const artifact = manager.openFile(work.id, "보고서.hwpx");
-    expect(manager.openExternal(artifact.id)).toEqual({ app: "기본 앱" });
+    expect(await manager.openExternal(artifact.id, "default")).toEqual({ app: "기본 앱" });
     expect(openWithDesktop).toHaveBeenCalledWith(path);
     writeFileSync(path, "edited externally");
     await vi.waitFor(() => expect(manager.documents.get(artifact.id).revision).toBe(2), { timeout: 5000 });

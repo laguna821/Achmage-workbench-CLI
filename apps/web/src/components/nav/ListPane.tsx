@@ -134,7 +134,7 @@ const ProjectRow = memo(function ProjectRow({ project, folder, row, stage, sortK
       {density === "standard" ? <ProjectThumbnail summary={project.summary} small /> : null}
       <div className="nav-project-line">
         {chevron}
-        <span className="nav-project-title">{work.title}</span>
+        <Icon name="project" size={14} /><span className="nav-project-title">{work.title}</span><span className="nav-kind">프로젝트</span>
         {stamp}
         <span className="side-row-trail">
           <PlacementMark workId={work.id} />
@@ -382,7 +382,7 @@ export function ListPane({
       actions.openWork(project.work);
     },
     aux: (event, project) => {
-      if (event.button === 1) actions.openRight?.({ kind: "work", id: project.work.id });
+      if (event.button === 1) actions.openRight?.({ kind: "project", id: project.work.id });
     },
     menu: (event, project) => {
       event.preventDefault();

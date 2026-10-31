@@ -360,7 +360,8 @@ export class Api {
     this.request<{ revision: number; pages: { page: number; width: number; height: number }[] }>("GET", `/api/artifacts/${artifactId}/office-pages?revision=${revision}`);
   proposalOfficePages = (proposalId: string, side: "base" | "proposed") =>
     this.request<{ side: string; pages: { page: number; width: number; height: number }[] }>("GET", `/api/proposals/${proposalId}/office-pages?side=${side}`);
-  openExternal = (artifactId: string) => this.request<{ app: string }>("POST", `/api/artifacts/${artifactId}/open-external`);
+  openExternal = (artifactId: string, target: "ieum" | "default" = "ieum") => this.request<{ app: string }>("POST", `/api/artifacts/${artifactId}/open-external`, { target });
+  documentSession = (artifactId: string, parentSessionId: string | null, fresh = false) => this.request<Session>("POST", `/api/artifacts/${artifactId}/document-session`, { parentSessionId, fresh });
   refreshTools = () => this.request<DocumentTools>("POST", "/api/tools/refresh");
   /** The agent browser: install, the plain sign-in window, bring the window forward, pause a session. */
   browser = {

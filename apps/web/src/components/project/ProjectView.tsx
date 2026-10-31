@@ -255,7 +255,7 @@ export function ProjectView({
       <div className="project-scroll">
         <div className="column project-column">
           <header className="project-head">
-            <div className="project-crumbs muted">{folders.length ? folders.join(" / ") : "분류 없음"}</div>
+            <div className="project-crumbs muted"><Icon name="project" size={14} /> 프로젝트 노트 · 오버뷰{folders.length ? ` · ${folders.join(" / ")}` : ""}</div>
             <div className="project-title-row">
               <h1 className="project-title">{work.title}</h1>
               <span className="project-head-tools">

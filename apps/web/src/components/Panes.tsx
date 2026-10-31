@@ -10,8 +10,9 @@ export type PaneScope = { theme: string; bubble: string; frame: boolean; glow: s
 const SIDE_LABEL = { left: "왼쪽으로 분할", right: "오른쪽으로 분할", top: "위로 분할", bottom: "아래로 분할", center: "이 칸에 열기" };
 
 /** The tree determines geometry; editors retain the same parent and React key when moved. */
-export function PaneLayout<V>({ layout, enabled, onResize, onFocus, onClose, onMove, onSplit, onDrop, head, scope, effectOf, render, onNarrow, tabBar }: {
+export function PaneLayout<V>({ layout, enabled, maximized = false, onResize, onFocus, onClose, onMove, onSplit, onDrop, head, scope, effectOf, render, onNarrow, tabBar }: {
   layout: Layout<V>; enabled: boolean;
+  maximized?: boolean;
   onResize: (id: string, ratio: number) => void;
   onFocus: (id: PaneId) => void;
   onClose: (id: PaneId) => void;
@@ -37,7 +38,8 @@ export function PaneLayout<V>({ layout, enabled, onResize, onFocus, onClose, onM
   const narrow = split && size.width > 0 && (size.width < minimum.width || size.height < minimum.height);
   const geometry = paneGeometry(tree, size.width, size.height);
   const whole = { left: 0, top: 0, ...size };
-  const boxes = narrow ? { [layout.focus]: whole } : geometry.panes;
+  const collapsed = narrow || maximized;
+  const boxes = collapsed ? { [layout.focus]: whole } : geometry.panes;
   useLayoutEffect(() => {
     const element = host.current;
     if (!element) return;
@@ -108,7 +110,7 @@ export function PaneLayout<V>({ layout, enabled, onResize, onFocus, onClose, onM
       const next = layout.panes[(layout.panes.indexOf(group) + 1) % layout.panes.length]!;
       return <section key={tab.id} className={`pane look-scope${focused ? " focused" : ""}`} data-pane={pane.id} data-tab={tab.id} data-tab-active={active ? "true" : "false"} data-pane-active={focused ? "true" : "false"}
         data-theme={look.theme} data-bubble={look.bubble} data-frame={look.frame ? "on" : "off"} data-glow={look.glow}
-        style={{ ...look.style, ...(boxes[pane.id] ?? whole) }} hidden={!active || (narrow && !focused)} aria-label={split ? `${title.title} 칸` : undefined}
+        style={{ ...look.style, ...(boxes[pane.id] ?? whole) }} hidden={!active || (collapsed && !focused)} aria-label={split ? `${title.title} 칸` : undefined}
         onPointerDownCapture={(event) => takesFocus(event.target) && onFocus(pane.id)} onFocusCapture={(event) => takesFocus(event.target) && onFocus(pane.id)}>
         {split ? <header className="pane-head" title={title.hint ?? title.title} onMouseDown={(event) => {
           if (takesFocus(event.target)) paneDrag.press({ item: { kind: "pane", id: pane.id }, label: title.title }, event);
@@ -116,7 +118,7 @@ export function PaneLayout<V>({ layout, enabled, onResize, onFocus, onClose, onM
           if (takesFocus(event.target)) paneDrag.press({ item: { kind: "pane", id: pane.id }, label: title.title }, event);
         }}>
           <span className="pane-head-icon" aria-hidden>{title.icon}</span><span className="pane-head-title">{title.title}</span>
-          {narrow ? <span className="pane-narrow"><select aria-label="표시할 칸" value={layout.focus} onChange={(event) => onFocus(event.target.value)}>
+          {collapsed ? <span className="pane-narrow"><select aria-label="표시할 칸" value={layout.focus} onChange={(event) => onFocus(event.target.value)}>
             {layout.panes.map((entry, index) => <option key={entry.id} value={entry.id}>{index + 1}. {head(entry).title}</option>)}
           </select></span> : null}
           <span className="pane-head-tools">
@@ -132,7 +134,7 @@ export function PaneLayout<V>({ layout, enabled, onResize, onFocus, onClose, onM
         {render(pane, { focused, split, tabId: tab.id, active })}
       </section>;
     })}
-    {split && !narrow ? geometry.dividers.map((divider) => {
+    {split && !collapsed ? geometry.dividers.map((divider) => {
       const vertical = divider.axis === "vertical", { left, top, width, height } = divider;
       return <div key={divider.id} className={`pane-divider${vertical ? " vertical" : ""}${live?.id === divider.id ? " moving" : ""}`} style={{ left, top, width, height }}
         role="separator" aria-orientation={vertical ? "horizontal" : "vertical"} aria-label={`칸 사이 · ${vertical ? "↑↓로 높이" : "←→로 너비"} 조절`}

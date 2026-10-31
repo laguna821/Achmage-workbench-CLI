@@ -69,15 +69,17 @@ describe("tree rows", () => {
     expect(ids(treeRows(state, EMPTY_OPEN, "manual", null))).toEqual(["folder:강의", "  folder:2026-2", "    work:8주차", "    work:7주차", "section:section:loose", "work:메모"]);
   });
 
-  it("unfolds the work on screen to its sessions and documents; a single-session work stays one row", () => {
+  it("separates project, chat and document rows and exposes even a single conversation", () => {
     const rows = treeRows(state, EMPTY_OPEN, "manual", "7주차");
-    expect(ids(rows)).toContain("      session:s2");
+    expect(ids(rows)).toContain("        session:s2");
     expect(ids(rows)).toContain("      docs:docs:7주차");
-    expect(ids(rows)).not.toContain("      session:s3");
-    expect(rows.find((row) => row.id === "8주차")).toMatchObject({ expandable: false });
+    expect(ids(rows)).not.toContain("        session:s3");
+    expect(rows.find((row) => row.id === "8주차")).toMatchObject({ expandable: true });
+    expect(treeRows(state, EMPTY_OPEN, "manual", "8주차").some((row) => row.type === "session" && row.id === "solo")).toBe(true);
+    expect(rows.find((row) => row.id === "chats:7주차")).toMatchObject({ type: "section", label: "채팅 · 2" });
     const folded = toggleWork(EMPTY_OPEN, "7주차", true);
-    expect(ids(treeRows(state, folded, "manual", "7주차"))).not.toContain("      session:s1");
-    expect(ids(treeRows(state, toggleWork(folded, "7주차", false), "manual", "7주차"))).toContain("      session:s1");
+    expect(ids(treeRows(state, folded, "manual", "7주차"))).not.toContain("        session:s1");
+    expect(ids(treeRows(state, toggleWork(folded, "7주차", false), "manual", "7주차"))).toContain("        session:s1");
   });
 
   it("sorts by name or recent activity when asked", () => {

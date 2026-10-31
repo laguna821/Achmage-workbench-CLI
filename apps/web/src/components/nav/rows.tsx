@@ -20,7 +20,7 @@ import type { PaneItem } from "../../panes.ts";
 /** What a row opens in a pane (dragged onto the main area, or Ctrl+clicked). */
 export function rowItem(row: Row): PaneItem | null {
   if (row.type === "session") return { kind: "session", id: row.session.id };
-  if (row.type === "work") return { kind: "work", id: row.work.id };
+  if (row.type === "work") return { kind: "project", id: row.work.id };
   if (row.type === "doc") return { kind: "doc", id: row.artifact.id };
   if (row.type === "folder") return { kind: "folder", id: row.folder.id };
   return null;
@@ -90,7 +90,7 @@ export function TreeRow({ row, ctx }: { row: Row; ctx: RowContext }) {
   const { state, visibleSessionId, currentWorkId, currentDocId } = ctx;
   if (row.type === "section") {
     return (
-      <div className="side-section-label" data-row-id={row.id}>
+      <div className="side-section-label" style={{ paddingLeft: 8 + row.depth * 14 }} data-row-id={row.id}>
         {row.label}
       </div>
     );
@@ -155,9 +155,9 @@ export function TreeRow({ row, ctx }: { row: Row; ctx: RowContext }) {
         {attention ? <span className="dot dot-attention" title="확인 필요" /> : busy ? <span className="dot dot-active" title="진행 중" /> : unseen ? <span className="dot dot-new" title="새 답" /> : null}
       </span>
     );
-    title = row.work.cwd;
+    title = `프로젝트 · ${row.work.title}\n오버뷰와 속성 열기\n${row.work.cwd}`;
   } else if (row.type === "session") {
-    icon = "chat";
+    icon = row.session.documentAgent ? "file" : "chat";
     label = row.session.purpose;
     style = { ...indent, ...accentStyle(ctx.lookOf(row.session.provider)) };
     const tone = statusTone(row.session);
@@ -196,7 +196,7 @@ export function TreeRow({ row, ctx }: { row: Row; ctx: RowContext }) {
       role="treeitem"
       aria-level={row.depth + 1}
       aria-expanded={expandable ? isOpen : undefined}
-      aria-selected={row.id === visibleSessionId || row.id === currentDocId}
+      aria-selected={row.type === "work" ? row.id === currentWorkId && !visibleSessionId && !currentDocId : row.id === visibleSessionId || row.id === currentDocId}
       tabIndex={row.id === ctx.tabId ? 0 : -1}
       className={classes.join(" ")}
       style={style}
@@ -232,6 +232,7 @@ export function TreeRow({ row, ctx }: { row: Row; ctx: RowContext }) {
         <Icon name={icon} size={15} className="side-row-icon" />
       )}
       <span className="side-row-label">{label}</span>
+      {row.type === "work" ? <span className="nav-kind">프로젝트</span> : null}
       {trailing}
     </div>
   );

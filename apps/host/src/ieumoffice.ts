@@ -53,7 +53,7 @@ export function bundledIeum(platform: NodeJS.Platform = process.platform): IeumI
 }
 
 /** IeumOffice: an override, the copy shipped with the app, then the user's own install (its record, Workbench's Linux install, the usual places, PATH). */
-export function findIeum(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): IeumInstall | null {
+export function findIeum(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform, standalone = false): IeumInstall | null {
   const fromLauncher = (launcher: string) => {
     let real = launcher;
     try {
@@ -63,9 +63,12 @@ export function findIeum(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.
     }
     return ieumFromCliDir(dirname(real), false, platform);
   };
-  if (env.WORKBENCH_IEUM_CLI) return fromLauncher(env.WORKBENCH_IEUM_CLI);
+  if (env.WORKBENCH_IEUM_CLI) {
+    const selected = fromLauncher(env.WORKBENCH_IEUM_CLI);
+    if (!standalone || selected?.app) return selected;
+  }
   const bundled = bundledIeum(platform);
-  if (bundled) return bundled;
+  if (bundled && !standalone) return bundled;
   const cliDirs: string[] = [];
   try {
     // Every IeumOffice launch writes the folder of its launcher here.
@@ -84,13 +87,13 @@ export function findIeum(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.
   }
   for (const dir of cliDirs) {
     const found = ieumFromCliDir(dir, false, platform);
-    if (found) return found;
+    if (found && (!standalone || found.app)) return found;
   }
   for (const dir of (env.PATH ?? "").split(delimiter).filter(Boolean)) {
     const launcher = join(dir, "ieumoffice");
     if (existsSync(launcher)) {
       const found = fromLauncher(launcher);
-      if (found) return found;
+      if (found && (!standalone || found.app)) return found;
     }
   }
   return null;
@@ -105,7 +108,7 @@ export function findIeumCli(env: NodeJS.ProcessEnv = process.env): string | null
  * On Linux, the app runs without Chromium's sandbox when this system does not allow the user
  * namespaces it needs (Ubuntu 24.04 and later), as IeumOffice's own AppImage launcher decides.
  */
-function sandboxWrapper(app: string, dataDir: string): string | null {
+export function sandboxWrapper(app: string, dataDir: string): string | null {
   if (process.platform !== "linux") return null;
   const file = join(dataDir, "ieumoffice-app.sh");
   const quote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
