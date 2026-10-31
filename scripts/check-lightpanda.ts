@@ -3,14 +3,17 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, delimiter, resolve } from "node:path";
 import { AgentBrowser } from "../apps/host/src/browse.ts";
+import { LightpandaInstall } from "../apps/host/src/browse-lightpanda.ts";
 import { browserSessionName, type Session, type Work } from "@workbench/contracts";
 
-const binary = resolve(process.argv[2] ?? ""), out = resolve(process.argv[3] ?? "lightpanda-check.json");
+const out = resolve(process.argv[3] ?? "lightpanda-check.json");
 const root = mkdtempSync(join(tmpdir(), "wb-panda-check-"));
+const installer = process.argv[2] === "--install" ? new LightpandaInstall(root) : null;
+const binary = installer?.binary ?? resolve(process.argv[2] ?? "");
 const checks: string[] = []; const results: Record<string, unknown> = {};
 const check = (name: string, value: unknown) => { assert.ok(value, name); checks.push(name); console.log(`PASS ${name}`); };
 const html = `<!doctype html><html lang="ko"><head><title>AI 수집 검증</title></head><body><h1>동적 페이지</h1><input id="query" aria-label="검색어"><button id="apply">적용</button><div id="result">초기 값</div><div id="ready"></div><article id="long">${"검증 본문 ".repeat(10000)}</article><script>fetch('/data').then(r=>r.json()).then(v=>{document.querySelector('#ready').textContent=v.text;document.querySelector('#ready').dataset.loaded='yes'});document.querySelector('#apply').onclick=()=>document.querySelector('#result').textContent=document.querySelector('#query').value;</script></body></html>`;
@@ -39,6 +42,11 @@ const cli = (id: string, args: string[]) => new Promise<{ code: number | null; s
 const run = async (id: string, args: string[]) => { const result = await cli(id, args); assert.equal(result.code, 0, result.stderr); return result.stdout; };
 const until = async (predicate: () => boolean, timeout = 2000) => { const deadline = Date.now() + timeout; while (!predicate() && Date.now() < deadline) await new Promise(done => setTimeout(done, 20)); assert.ok(predicate()); };
 try {
+  if (installer) {
+    for (const step of installer.steps()) { console.log(step.message); await step.run(() => {}); }
+    check("제품 설치 경로의 공식 바이너리 해시·실행 버전 확인", installer.ready());
+    results.install = { ...JSON.parse(readFileSync(installer.record, "utf8")), bytes: statSync(binary).size, platform: process.platform, arch: process.arch };
+  }
   check("기본 Lightpanda, Chromium 설치·창 없이 시작", browser.status().engine === "lightpanda" && browser.status().install.state === "ready" && browser.status().window.kind === "closed");
   await run("one", ["open", url]); await run("one", ["wait", '#ready[data-loaded="yes"]']);
   check("실제 JavaScript·fetch 렌더링 본문 수집", (await run("one", ["read", "#ready"])).includes("비동기 서버 데이터"));
@@ -66,6 +74,6 @@ try {
   await browser.selectEngine("lightpanda"); check("Lightpanda 재선택·실행", (await run("two", ["open", url])).includes("Lightpanda"));
 } finally {
   await browser.shutdown(); server.closeAllConnections(); await new Promise<void>(done => server.close(() => done()));
-  writeFileSync(out, JSON.stringify({ checks, results, binary, graphicalBrowser: false, paidModelCalls: 0 }, null, 2));
+  writeFileSync(out, JSON.stringify({ checks, results, binary, platform: process.platform, arch: process.arch, graphicalBrowser: false, paidModelCalls: 0 }, null, 2));
   rmSync(root, { recursive: true, force: true });
 }

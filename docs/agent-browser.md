@@ -14,4 +14,6 @@ Claude/Codex는 `workbench-browser -s=<세션> ...`로 같은 권한 게이트�
 
 검증은 공식 Linux x64 바이너리로 `node scripts/check-lightpanda.ts <binary> <report.json>`을 실행한다. 실제 JavaScript/fetch, 입력·클릭·추출, 두 세션 분리, 이어 읽기, 권한 거절·중지·정상 종료·프로필 보존 **14/14**, 기존 브라우저 회귀 **30/30**, 실제 Linux Tauri 기본 모드/화면 선택·저장 **9/9**를 확인했다. Windows WSL2/macOS 실행과 대규모 실제 사이트 비교는 남아 있다.
 
+`--install`을 바이너리 인자 대신 주면 제품 설치 코드를 그대로 사용해 공식 파일의 해시와 실행 버전까지 확인한다. Linux 로컬은 설치 확인을 포함해 **15/15**를 통과했다. 설치본 Actions에도 Linux/macOS의 같은 검사를 추가했으며, 해당 OS에서 통과하기 전에는 실행 검증 완료로 계산하지 않는다.
+
 원본: [Lightpanda 1.0.2](https://github.com/lightpanda-io/browser/releases/tag/1.0.2), [해당 판 소스·AGPL-3.0](https://github.com/lightpanda-io/browser/tree/1.0.2). 바이너리는 변경하지 않고 공식 배포를 내려받는다. 조사 판과 후속 검증은 통합 실행 기록에 연결한다.
