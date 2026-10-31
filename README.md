@@ -2,7 +2,7 @@
 
 Claude Code와 Codex를 한 화면에서 쓰는 데스크톱 작업실입니다. 여러 세션과 문서(워드·PPT·엑셀·한글·PDF·마크다운·디자인)를 한곳에서 다루고, AI가 고친 내용은 수정안으로 받아 확인한 뒤 반영합니다.
 
-**통합 시험본 다운로드:** [Windows 설치 파일](https://github.com/laguna821/Achmage-workbench-CLI/releases/download/preview-2026-10-31/Achmage.Workbench_0.2.2_x64-setup.exe) · [모든 OS와 검증 범위](https://github.com/laguna821/Achmage-workbench-CLI/releases/tag/preview-2026-10-31). 공개 시험본은 `f36afbb` 코드이며 파일명의 `0.2.2`는 이전 표기입니다. 최신 위키·지식베이스 변경은 다음 `0.2.3` 시험본에 포함합니다.
+**통합 시험판 0.2.3 다운로드:** [Windows 설치 파일](https://github.com/laguna821/Achmage-workbench-CLI/releases/download/preview-0.2.3/Achmage.Workbench_0.2.3_x64-setup.exe) · [모든 OS와 검증 범위](https://github.com/laguna821/Achmage-workbench-CLI/releases/tag/preview-0.2.3). 위키·별표 지식베이스·문서 이미지 수정까지 포함한 `2972690` 코드입니다. Windows 다운로드 약143MB, 설치 후 파일 합계 약435MB입니다.
 
 - 요구사항: [docs/PRD-v1.0.md](docs/PRD-v1.0.md) · 시안: [assets/ui](assets/ui) · 설계: [docs/design](docs/design)
 - 진행 기록: [docs/STATUS.md](docs/STATUS.md)
