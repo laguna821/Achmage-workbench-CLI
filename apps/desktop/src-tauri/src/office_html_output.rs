@@ -221,8 +221,8 @@ fn platform_output(webview: tauri::webview::PlatformWebview, job: HtmlJob, path:
         settings.SetScaleFactor(job.scale)?; settings.SetShouldPrintBackgrounds(true)?; settings.SetShouldPrintHeaderAndFooter(false)?;
         let finished = done.clone(); let path = HSTRING::from(path.as_os_str());
         view.cast::<ICoreWebView2_7>()?.PrintToPdf(PCWSTR(path.as_ptr()), &settings,
-            &PrintToPdfCompletedHandler::create(Box::new(move |error, success| {
-                finished.finish(error.ok().map_err(|e| e.to_string()).and_then(|_| if success.as_bool() { Ok(()) } else { Err("시스템 PDF 출력을 완료하지 못했습니다.".into()) })); Ok(())
+            &PrintToPdfCompletedHandler::create(Box::new(move |status, success| {
+                finished.finish(status.map_err(|e| e.to_string()).and_then(|_| if success { Ok(()) } else { Err("시스템 PDF 출력을 완료하지 못했습니다.".into()) })); Ok(())
             })))
     }})();
     if let Err(error) = result { done.finish(Err(error.to_string())); }

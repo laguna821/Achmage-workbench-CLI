@@ -94,14 +94,20 @@ it("rejects changed comments, cross-PR IDs, changed actors and lost permissions 
   const current = await f.load(), p2 = await f.prepare({ kind: "comment", body: "x" }, current); f.data.action.actorId = "another-actor"; const j2 = f.actions.start(f.id, p2.id, "changed-actor-request"); await f.actions.drain(); expect((await f.actions.get(f.id, j2.id)).phase).toBe("changed");
   f.data.action.actorId = "U1"; f.data.discussion.comments[0]!.viewerCanUpdate = false; const newer = await f.load(); await expect(f.prepare({ kind: "edit-comment", target: own.id, body: "x" }, newer)).rejects.toThrow("권한"); expect(f.data.action.requests).toEqual([]);
 });
-it("supports body edits, deletion, all reaction types and resolving/reopening threads", async () => {
-  const f = fixture(); let s = await f.load(); const own = s.discussion.comments.find((c) => c.kind === "conversation")!;
+it("supports body edits and deletion", async () => {
+  const f = fixture(), s = await f.load(), own = s.discussion.comments.find((c) => c.kind === "conversation")!;
   expect((await f.run({ kind: "edit-comment", target: own.id, body: "수정한 댓글" }, s)).phase).toBe("complete");
-  for (const content of ["THUMBS_UP", "THUMBS_DOWN", "LAUGH", "CONFUSED", "HEART", "HOORAY", "ROCKET", "EYES"] as const) expect((await f.run({ kind: "reaction", target: own.id, content, add: true })).phase).toBe("complete");
-  expect((await f.run({ kind: "reaction", target: own.id, content: "HEART", add: false })).phase).toBe("complete");
-  s = await f.load(); expect((await f.run({ kind: "resolve", target: s.discussion.threads[0]!.id, resolved: true }, s)).phase).toBe("complete");
-  expect((await f.run({ kind: "resolve", target: s.discussion.threads[0]!.id, resolved: false })).phase).toBe("complete");
   expect((await f.run({ kind: "delete-comment", target: own.id })).phase).toBe("complete"); expect(f.data.discussion.comments).toEqual([]);
+});
+it.each(["THUMBS_UP", "THUMBS_DOWN", "LAUGH", "CONFUSED", "HEART", "HOORAY", "ROCKET", "EYES"] as const)("adds and removes the %s reaction", async (content) => {
+  const f = fixture(), s = await f.load(), own = s.discussion.comments.find((c) => c.kind === "conversation")!;
+  expect((await f.run({ kind: "reaction", target: own.id, content, add: true }, s)).phase).toBe("complete");
+  expect((await f.run({ kind: "reaction", target: own.id, content, add: false })).phase).toBe("complete");
+});
+it("resolves and reopens threads", async () => {
+  const f = fixture(), s = await f.load(), thread = s.discussion.threads[0]!;
+  expect((await f.run({ kind: "resolve", target: thread.id, resolved: true }, s)).phase).toBe("complete");
+  expect((await f.run({ kind: "resolve", target: thread.id, resolved: false })).phase).toBe("complete");
 });
 it("allows non-author reviewers to comment without PR edit permission", async () => {
   const f = fixture(); f.data.action.permission = "READ";

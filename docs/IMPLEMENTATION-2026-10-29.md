@@ -1,5 +1,7 @@
 # 통합 업데이트 실행 기록
 
+2026-10-31 OS 빌드 차단 수정: 첫 원격 실행 `41171992011`은 공통 검사 7개 실패로 OS 빌드 전에 종료됐다. Git 2.56의 URL push 후 자동 추적 참조 갱신을 명령 한정 remote로 분리하고, 오래된 native 시나리오 기대값과 하나에 몰린 GitHub 검사를 정리했다. Windows PDF 출력 콜백도 라이브러리의 실제 `Result<()>/bool` 형식에 맞췄다. CI와 같은 Git 2.56·Node 24.22.1에서 **153파일·1121/1121**, 전체 타입 통과; Git 2.55/2.56의 원격 검사 각각 **11/11**. 동시 실행 중 한글 검사 한 건의 5초 초과는 부하 없는 단독·전체 실행에서 시간 제한 변경 없이 통과했다. Windows/macOS 컴파일·설치본은 후속 원격 실행에서 검증한다. 근거 판 `research:rr-f20dda89520345beccf09fb5ddd30bed:d793ddd8e5f870a1b1400991fffd5d8b164858da4f48ef368a4f84d471c5ae2e`.
+
 2026-10-31 번들 정리: 별도 HOP/PDFCraft 실행·배포를 제거하고 기존 PDF 쪽 사본을 내장 이음 엔진으로 연결했다. 기본 한글 편집과 명시적 외부 앱의 저장 감시를 유지한다. 실제 Linux **50/50**, 관련 **7/7**, 타입·web/host/native 빌드 통과. 기존 Linux HOP/PDFCraft 폴더 약243MiB는 배포 제외 대상이며 새 설치본 실측은 아니다. [범위와 근거](office-integration.md#별도-hoppdfcraft-배포-제거), 검증 판 `research:rr-2fcbcc4706adb4e91f451286cc296d10:010e5d7daa5b1c621979811baf98782c4d4fdc28810d2d28aa074530f89ce56d`. Ieum Electron·HOP 패치/hallym-kordoc·OS 설치/용량/릴리스는 계속 진행한다.
 
 2026-10-31 출력 연결: 원본 Word/PPT/Markdown/HTML → 시스템 WebView PDF·공통 저장을 Linux 실제 앱 **15/15**, 공통 PDF·시스템 인쇄 창/취소를 **8/8**로 검증했다. 출력 준비/링크4/4, 인접 회귀34/34, 타입·web/Office/native 빌드 통과. Word의 중복 글꼴 약144MB 요청을 작업별 자산으로 줄였다. 실행 web1008/1008과 host/hwp-cli 일치. [범위와 한계](office-integration.md#원본-pdf-출력과-시스템-인쇄), 근거 `html-output-native-07/verification.json`, 검증 판 `research:rr-46296b7e11f6692905e32ef10c674a75:87ff5413de0dfd3168107e18f2d5e52c5e3a6e219edbf716fabd55bb1be63903`. 전체 G4/G5/G6는 계속 진행하며 배포 번들·설치본·용량은 미완료다.

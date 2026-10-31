@@ -122,7 +122,11 @@ export class ScmRemotes {
       const url = remote.pushUrls[i]!; await this.target(state, request);
       options.onOutput?.(`\n보내는 대상 ${i + 1}/${remote.pushUrls.length}: ${redactGit(url)} · ${request.branch}\n`);
       try {
-        await run(["push", "--porcelain", "--progress", "--no-follow-tags", "--recurse-submodules=check", ...(remote.receivePack ? [`--receive-pack=${remote.receivePack}`] : []), ...(expected ? [`--force-with-lease=refs/heads/${request.branch}:${expected[i]!.head ?? ""}`] : []), "--", url, `${state.head}:refs/heads/${request.branch}`]);
+        // Git 2.56 also updates tracking refs when pushing by URL. A command-local
+        // remote without fetch refspecs leaves those updates to the guarded step below,
+        // including when the push destination differs from the fetch repository.
+        const pushRemote = `workbench-push-${job.id}-${i}`;
+        await run(["-c", `remote.${pushRemote}.url=${url}`, "push", "--porcelain", "--progress", "--no-follow-tags", "--recurse-submodules=check", ...(remote.receivePack ? [`--receive-pack=${remote.receivePack}`] : []), ...(expected ? [`--force-with-lease=refs/heads/${request.branch}:${expected[i]!.head ?? ""}`] : []), "--", pushRemote, `${state.head}:refs/heads/${request.branch}`]);
         results[i] = { url: redactGit(url), phase: "complete", head: state.head! }; onResults([...results]);
       } catch (error) { results[i] = { url: redactGit(url), phase: "failed", error: redactGit(error instanceof Error ? error.message : String(error)) }; onResults([...results]); throw error; }
     }

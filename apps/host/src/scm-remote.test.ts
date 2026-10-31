@@ -63,7 +63,9 @@ it("uses fork push defaults, preserves pull upstream unless selected, and sends 
   git(f.root, "switch", "-qc", "feature"); git(f.root, "config", "branch.feature.remote", "origin"); git(f.root, "config", "branch.feature.merge", "refs/heads/main");
   const reviewed = commit(f.root, "feature.md", "reviewed\n"), inventory = await f.scm.remoteInventory(f.id); expect(inventory.pullTarget).toEqual({ remote: "origin", branch: "main" }); expect(inventory.pushTarget).toEqual({ remote: "fork", branch: "feature" });
   const hook = join(f.root, ".git", "hooks", "pre-push"); writeFileSync(hook, "#!/bin/sh\nprintf 'PRE_PUSH_OK\\n'\n"); chmodSync(hook, 0o755);
+  const config = readFileSync(join(f.root, ".git", "config"));
   const job = await f.act("push", await f.target({ remote: "fork", branch: "feature" })); expect(job.phase, job.error ?? "").toBe("complete"); expect(job.output).toContain("PRE_PUSH_OK"); expect(git(fork, "rev-parse", "refs/heads/feature")).toBe(reviewed); expect(git(f.root, "config", "branch.feature.remote")).toBe("origin"); expect(git(f.bare, "rev-parse", "main")).toBe(f.base);
+  expect(readFileSync(join(f.root, ".git", "config"))).toEqual(config);
   expect((await f.act("push", await f.target({ remote: "fork", branch: "feature", setUpstream: true }))).phase).toBe("complete"); expect(git(f.root, "config", "branch.feature.remote")).toBe("fork"); expect(git(f.root, "config", "branch.feature.merge")).toBe("refs/heads/feature");
 });
 
