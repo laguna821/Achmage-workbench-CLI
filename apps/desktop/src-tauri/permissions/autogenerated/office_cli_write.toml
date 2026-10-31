@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-office-cli-write"
+description = "Enables the office_cli_write command without any pre-configured scope."
+commands.allow = ["office_cli_write"]
+
+[[permission]]
+identifier = "deny-office-cli-write"
+description = "Denies the office_cli_write command without any pre-configured scope."
+commands.deny = ["office_cli_write"]

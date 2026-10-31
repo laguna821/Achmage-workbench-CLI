@@ -1,5 +1,5 @@
 import "./docs.css";
-import { Events, Gateway, GatewayError, handshake, listen, post, stubBridge } from "./bridge.ts";
+import { Events, Gateway, GatewayError, handshake, headlessExport, listen, post, stubBridge } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
 import { convertForeignPictures, pasteDesktopPictures } from "./pictures.ts";
 import { createOfficeAi } from "./office-ai.ts";
@@ -15,6 +15,7 @@ import { createDocsOutput } from "./docs-output.ts";
 const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 const init = await handshake();
+const headless = headlessExport(init);
 const gateway = new Gateway(init.token);
 const events = new Events();
 const ai = createOfficeAi(init, gateway, events);
@@ -243,7 +244,8 @@ const desktop = stubBridge(
     reportMcpResult: () => undefined,
     reportViewMenuState: () => undefined,
     respondToZotero: () => undefined,
-    headlessExportDone: () => undefined,
+    consumeHeadlessExport: async () => headless.consume(),
+    headlessExportDone: headless.done,
     docPasswordIntentRevision: async () => 0,
     discardDocPasswordIntents: async () => ({ ok: true }),
     fontFamilyInfo: async () => [],

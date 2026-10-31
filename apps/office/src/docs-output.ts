@@ -52,7 +52,17 @@ export function createDocsOutput(revision: () => number) {
     } catch (error) { await cancelOutput(plan.id); return { ok: false, error: String(error) }; }
   };
   return {
+    exportHtml: async (_name: string, html: string, _out?: string) => {
+      const plan = await prepareOutput(revision(), "html");
+      if (!plan) return { ok: false };
+      try { return { ok: true, path: (await commitOutput(plan.id, new TextEncoder().encode(html).buffer)).path }; }
+      catch (error) { await cancelOutput(plan.id); return { ok: false, error: String(error) }; }
+    },
     exportPdf: async (_name: string, width: number, height: number, _out?: string, scale = 1, links?: PdfInternalLink[]) => {
+      // Original file-actions responds by opening its own pagination preview
+      // and resuming this export. Use those laid-out pages on every WebView;
+      // continuous Chromium print fragmentation is not portable to WebKit.
+      if (!document.querySelector(".pv-page")) return { ok: false, error: "원본 페이지 미리보기를 준비해야 합니다." };
       try { return await save(await render(width, height, scale), links); }
       catch (error) { return { ok: false, error: String(error) }; }
     },

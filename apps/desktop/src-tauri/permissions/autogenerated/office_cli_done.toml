@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-office-cli-done"
+description = "Enables the office_cli_done command without any pre-configured scope."
+commands.allow = ["office_cli_done"]
+
+[[permission]]
+identifier = "deny-office-cli-done"
+description = "Denies the office_cli_done command without any pre-configured scope."
+commands.deny = ["office_cli_done"]

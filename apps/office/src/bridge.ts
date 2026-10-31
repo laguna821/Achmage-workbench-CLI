@@ -8,6 +8,40 @@ import { encodePdfRequest, type PdfRequest, type PdfSaveResult } from "../../../
 
 export type Init = Extract<OfficeHostMessage, { type: "office:init" }>;
 
+/** The original editors consume their one-shot CLI request and report completion. */
+export function headlessExport(init: Init) {
+  let pending = init.headlessExport;
+  if (pending) {
+    // WebKit suspends animation frames in hidden windows. The original editors
+    // await frames while laying out export canvases; keep that work advancing
+    // without changing the visible editor's rendering or its export engine.
+    const request = window.requestAnimationFrame.bind(window), cancel = window.cancelAnimationFrame.bind(window);
+    const frames = new Map<number, { frame: number; timer: number }>();
+    let next = 0;
+    window.requestAnimationFrame = callback => {
+      const id = ++next;
+      const run = (time: number) => {
+        const entry = frames.get(id); if (!entry) return;
+        frames.delete(id); cancel(entry.frame); window.clearTimeout(entry.timer);
+        document.documentElement.getBoundingClientRect();
+        callback(time);
+      };
+      frames.set(id, { frame: request(run), timer: window.setTimeout(() => run(performance.now()), 32) });
+      return id;
+    };
+    window.cancelAnimationFrame = id => {
+      const entry = frames.get(id); if (!entry) return;
+      frames.delete(id); cancel(entry.frame); window.clearTimeout(entry.timer);
+    };
+  }
+  return {
+    consume() { const target = pending; pending = undefined; return target ?? null; },
+    done(report: { ok?: boolean; error?: string }) {
+      if (init.headlessExport) post({ type: "office:headless-result", ok: report?.ok === true, ...(typeof report?.error === "string" ? { error: report.error } : {}) });
+    },
+  };
+}
+
 /** The origin of the Workbench window around this page. */
 const host = (() => {
   const ancestors = (location as Location & { ancestorOrigins?: DOMStringList }).ancestorOrigins;

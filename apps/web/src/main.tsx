@@ -22,7 +22,9 @@ window.addEventListener("error", (event) => report(`error: ${event.message} @ ${
 window.addEventListener("unhandledrejection", (event) => report(`unhandled: ${String(event.reason?.stack ?? event.reason)}`));
 report(`ui started: ${navigator.userAgent} secure=${window.isSecureContext} uuid=${typeof crypto.randomUUID}`);
 
-createRoot(document.getElementById("root")!).render(
+if (new URLSearchParams(location.search).has("office-cli")) {
+  void import("./office-cli.ts").then(module => module.runOfficeCli());
+} else createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />
   </StrictMode>,

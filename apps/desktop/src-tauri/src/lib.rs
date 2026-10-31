@@ -11,6 +11,7 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tauri_plugin_notification::NotificationExt;
 mod office_output;
 mod office_html_output;
+mod office_cli;
 pub mod office_secrets;
 pub mod terminal_worker;
 
@@ -84,6 +85,11 @@ fn node_binary(app: &tauri::AppHandle) -> PathBuf {
 
 fn gateway_command(app: &tauri::AppHandle) -> Command {
     let mut command = Command::new(node_binary(app));
+    if let Some(root) = office_cli::data_dir(app) {
+        command.env("WORKBENCH_DATA_DIR", root.join("gateway"))
+            .env("WORKBENCH_PORT", "0").env("WORKBENCH_EDITORS_PORT", "0")
+            .env_remove("WORKBENCH_TOKEN");
+    }
     #[cfg(windows)]
     {
         // No console window for the gateway.
@@ -194,13 +200,18 @@ async fn open_session_window(app: tauri::AppHandle, session_id: String, title: S
 fn open_main_window(app: &tauri::AppHandle, ready: &Ready) -> tauri::Result<()> {
     let mut url = url::Url::parse(&ready.url).expect("gateway url");
     url.query_pairs_mut().append_pair("token", &ready.token);
-    WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
+    let cli_dir = office_cli::data_dir(app);
+    if cli_dir.is_some() { url.query_pairs_mut().append_pair("office-cli", "1"); }
+    let mut window = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
         .title("Achmage Workbench")
         .inner_size(1280.0, 860.0)
         .min_inner_size(720.0, 560.0)
         // Files dropped from the desktop reach the page as ordinary drops (attachments, images).
-        .disable_drag_drop_handler()
-        .build()?;
+        .disable_drag_drop_handler();
+    if let Some(root) = cli_dir {
+        window = window.visible(false).skip_taskbar(true).incognito(true).data_directory(root.join("webview"));
+    }
+    window.build()?;
     Ok(())
 }
 
@@ -312,14 +323,23 @@ fn stop_gateway(app: &tauri::AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let app = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let cli = if args.first().map(String::as_str) == Some("--headless-export") {
+        match office_cli::ExportJob::parse(&args[1..]) {
+            Ok(job) => Some(job),
+            Err(error) => { office_cli::print_error(&error.message); std::process::exit(error.code); }
+        }
+    } else { None };
+    let mut builder = tauri::Builder::default();
+    if let Some(job) = &cli { builder = builder.manage(job.clone()); }
+    else { builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app))); }
+    let app = builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .invoke_handler(tauri::generate_handler![open_session_window, notify_session, set_attention, office_output::render_svg_pdf, office_output::print_svg, office_html_output::render_html_pdf, office_html_output::print_html])
+        .invoke_handler(tauri::generate_handler![open_session_window, notify_session, set_attention, office_output::render_svg_pdf, office_output::print_svg, office_html_output::render_html_pdf, office_html_output::print_html, office_cli::office_cli_job, office_cli::office_cli_write, office_cli::office_cli_done])
         .manage(office_html_output::HtmlJobs::default())
-        .register_uri_scheme_protocol("workbench-output", |ctx, request| office_html_output::serve(ctx.app_handle(), request.uri().path()))
+        .register_uri_scheme_protocol("workbench-output", |ctx, request| office_html_output::serve(ctx.app_handle(), request.uri().path(), request.uri().query()))
         .manage(office_output::PrintJobs::default())
         .register_uri_scheme_protocol("workbench-print", |ctx, request| {
             let id = request.uri().path().trim_start_matches('/');
@@ -338,7 +358,7 @@ pub fn run() {
                 if window.label().starts_with("print-") { window.app_handle().state::<office_output::PrintJobs>().0.lock().unwrap().remove(window.label()); }
             }
             if let WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" {
+                if window.label() == "main" && office_cli::data_dir(window.app_handle()).is_none() {
                     api.prevent_close();
                     let _ = window.hide();
                     if !HIDDEN_ONCE.swap(true, Ordering::SeqCst) {
@@ -356,6 +376,8 @@ pub fn run() {
         .manage(Gateway(Mutex::new(None)))
         .setup(|app| {
             let handle = app.handle().clone();
+            #[cfg(target_os = "macos")]
+            if office_cli::data_dir(&handle).is_some() { handle.set_activation_policy(tauri::ActivationPolicy::Accessory)?; }
             match start_gateway(&handle) {
                 Ok((child, ready)) => {
                     *handle.state::<Gateway>().0.lock().unwrap() = Some(child);
@@ -364,17 +386,26 @@ pub fn run() {
                     handle.manage(ready);
                     // Without a tray (no StatusNotifier host) the app still works; launching it
                     // again shows the hidden window (single instance).
-                    if let Err(error) = build_tray(&handle) {
+                    if let Some(job) = handle.try_state::<std::sync::Arc<office_cli::ExportJob>>() {
+                        let job = job.inner().clone(); let timeout_app = handle.clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(std::time::Duration::from_secs(170));
+                            job.complete(Err("문서 내보내기가 제한 시간 안에 완료되지 않았습니다.".into()));
+                            timeout_app.exit(3);
+                        });
+                    } else if let Err(error) = build_tray(&handle) {
                         eprintln!("tray unavailable: {error}");
                     }
                 }
                 Err(message) => {
-                    handle
+                    if let Some(job) = handle.try_state::<std::sync::Arc<office_cli::ExportJob>>() {
+                        job.complete(Err(message));
+                    } else { handle
                         .dialog()
                         .message(message)
                         .title("Achmage Workbench를 시작하지 못했습니다")
                         .kind(MessageDialogKind::Error)
-                        .blocking_show();
+                        .blocking_show(); }
                     handle.exit(1);
                 }
             }
@@ -383,9 +414,13 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building Achmage Workbench");
 
-    app.run(|handle, event| {
+    let on_event = |handle: &tauri::AppHandle, event| {
         if let RunEvent::Exit = event {
             stop_gateway(handle);
         }
-    });
+    };
+    if let Some(job) = cli {
+        app.run_return(on_event);
+        std::process::exit(job.finish());
+    } else { app.run(on_event); }
 }

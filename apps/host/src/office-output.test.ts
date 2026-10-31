@@ -25,6 +25,22 @@ function setup(format: "hwp" | "hwpx" = "hwpx") {
   const outputs = new OfficeOutputs(manager.documents, (source, path) => manager.openFile(source.workId, path));
   return { manager, work, doc, bytes, path, artifact, outputs };
 }
+it("saves the original Word HTML export as a new HTML document without changing its DOCX source", async () => {
+  const { manager, work, outputs, doc } = setup();
+  try {
+    const bytes = readFileSync(new URL("../../../vendor/ieumoffice/fixtures/generated/simple.docx", import.meta.url));
+    const path = join(work.cwd, "word.docx"); writeFileSync(path, bytes);
+    const source = manager.openFile(work.id, path);
+    const plan = outputs.prepare(source.id, source.revision, "word.html");
+    const html = Buffer.from('<!doctype html><html><body><h1>한글 내보내기</h1></body></html>');
+    const result = await outputs.commit(source.id, plan.id, html, false);
+    expect(result.artifact.format).toBe("html");
+    expect(result.artifact.id).not.toBe(source.id);
+    expect(readFileSync(result.path)).toEqual(html);
+    expect(readFileSync(path)).toEqual(bytes);
+    expect(manager.documents.get(source.id).revision).toBe(source.revision);
+  } finally { doc.free(); }
+});
 for (const from of ["hwp", "hwpx"] as const) for (const to of ["hwp", "hwpx"] as const) it(`saves edited ${from} as ${to}, retaining original bytes and memos`, async () => {
   const { outputs, artifact, doc, path, bytes, manager } = setup(from);
   try {

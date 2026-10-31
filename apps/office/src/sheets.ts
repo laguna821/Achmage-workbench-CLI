@@ -1,10 +1,11 @@
 import { mountOfficeAi, officeAiTransport } from "./office-ai.ts";
 import { DEFAULT_AI_PANEL_PREFS, normalizeAiPanelPrefs } from "../../../vendor/ieumoffice/packages/ui/src/ai-panel-prefs.ts";
 import "./sheets.css";
-import { Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
+import { Gateway, GatewayError, handshake, headlessExport, listen, post } from "./bridge.ts";
 import { dispatch, useTransport } from "./platform/electron-renderer.ts";
 import { recovery } from "./recovery.ts";
 import { copyOfficeBytes, officeCopyBusy } from "./copy.ts";
+import { exportSheetsPdf } from "./sheets-output.ts";
 import { convertForeignPictures, pasteDesktopPictures } from "./pictures.ts";
 import type { WorkerCall, WorkerMessage, WorkerRequest } from "./slides/protocol.ts";
 
@@ -15,6 +16,7 @@ import type { WorkerCall, WorkerMessage, WorkerRequest } from "./slides/protocol
 // revision and a save becomes the next revision; AI stays in Workbench's conversation.
 
 const init = await handshake();
+const headless = headlessExport(init);
 const gateway = new Gateway(init.token);
 const ai = mountOfficeAi(init, gateway);
 const artifactId = init.artifact.id;
@@ -60,6 +62,7 @@ const notHere = (what: string) => Promise.reject(new Error(`${what}은(는) Work
 const unhandled = new Set<string>();
 
 async function invoke(channel: string, args: unknown[]): Promise<unknown> {
+  if (channel === "sheets:consume-headless-export") return headless.consume()?.outPath ?? null;
   switch (channel) {
     case "app:get-language":
       return "ko";
@@ -84,8 +87,9 @@ async function invoke(channel: string, args: unknown[]): Promise<unknown> {
     case "workbook:save":
       return save(args);
     case "workbook:export-pdf":
+      return exportSheetsPdf(args[0] as { html: string }, state.revision);
     case "workbook:print":
-      return notHere("PDF 내보내기와 인쇄");
+      return notHere("인쇄");
     case "workbook:create-document":
       return notHere("새 문서 만들기");
     case "shell:open-external":
@@ -103,6 +107,7 @@ async function invoke(channel: string, args: unknown[]): Promise<unknown> {
 
 let closeSaveAnswer: ((ok: boolean) => void) | null = null;
 function send(channel: string, args: unknown[]) {
+  if (channel === "sheets:headless-export-done") { headless.done(args[0] as { ok?: boolean; error?: string }); return; }
   if (channel === "workbook:close-save-result") {
     closeSaveAnswer?.(args[0] === true);
     closeSaveAnswer = null;

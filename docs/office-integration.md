@@ -1,5 +1,15 @@
 # 이음오피스 통합 진행
 
+## 원본 CLI의 Tauri 출력 연결
+
+2026-10-31: 원본 `genoffice.cjs convert`가 호출하는 `--headless-export`를 Workbench에 연결했다. 입력·출력 경로를 고정하고 전용 임시 게이트웨이/문서 뷰/브라우저 저장소를 사용한다. 기존 앱의 설정·세션을 변경하지 않으며 저장·게이트웨이 종료·임시 폴더 정리 후 원본 JSON/종료 코드 계약으로 반환한다. 원본 Word/PPT/Sheets/Markdown/HTML의 내보내기를 그대로 호출한다. Sheets는 원본 인쇄 HTML과 글꼴을 사용해 용지별 출력 후 병합한다. Word HTML 내보내기도 새 사본으로 저장한다.
+
+Word PDF는 원본 페이지 미리보기의 조판·용지 그룹·분할 출력을 사용한다. 주소 없는 ProseMirror 페이지 나눔 요소를 그림으로 해독하지 않으며, 출력 문서를 다른 주소로 이동시키지 않고 준비 완료를 전달한다. CLI의 반복 출력 창은 전용 임시 WebContext를 재사용해 Linux의 incognito/custom-protocol 등록 불일치를 피한다. 숨김 창의 animation frame 보완은 CLI 편집기에만 적용한다.
+
+Linux 실제 원본 CLI **43/43**: DOCX 12쪽 분할·병합과 마지막 본문, DOCX/PPTX/XLSX/MD/HTML→PDF, DOCX→HTML, 원본·설정·임시 폴더 정리. 별도 **20/20**은 수동 2쪽·중간 빈 쪽 보존·Pretendard Sheets PDF다. 기존 GUI 출력/인쇄 **17/17**, 관련 호스트 **31/31**, CLI 인자/입력 오류 **3/3**, 전체 타입과 native 빌드도 통과했다. 근거는 `implementation-20261030/cli-original-check-02/verification.json`, `cli-native-check-11/verification.json`, `cli-gui-regression-01/verification.json`; 검증 판 `research:rr-f6971ea29725560b8f14d540e8674644:ae7ebf5fd8457e89a2c32a0ca8d4b7a696f714f7952a0fde84761cc9f15b72a8`이다.
+
+CSV/XLS→PDF, HTML→DOCX, Sheets 시스템 인쇄, 기존 암호화 설정·앱 제어 연결은 남았다. `GENOFFICE_APP_BIN`의 제품 기본값과 전체 Ieum Electron 배포는 아직 전환하지 않았다. 이 변경의 Windows/macOS 실제 실행·설치·업데이트·용량과 최종 릴리스도 별도 검증한다.
+
 ## 별도 HOP·PDFCraft 배포 제거
 
 2026-10-31: 별도 HOP·PDFCraft 실행 모듈과 Windows/Linux/macOS 배포 매핑을 제거했다. Arch 패키지도 `bundled` 전체를 복사하지 않는다. PDF 쪽 회전·삭제·이동 사본은 이미 내장된 이음 PDF 저장 엔진을 사용한다. 기존 1부터 시작하는 쪽 번호·삭제 뒤 연속 이동 규칙과 본문·메타데이터·쪽 크기를 보존하며, 동시 사본 요청에서도 기존 파일을 덮어쓰지 않는다. 한글 기본 편집기는 앱 안의 이음 한글이고 **다른 앱으로 열기**만 OS 기본 앱을 사용한다. 외부 저장 감시/새 판 수집은 유지한다.

@@ -6,7 +6,14 @@ use base64::Engine;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 const MAX_BYTES: usize = 64 * 1024 * 1024;
-const CSP: &str = "default-src 'none'; script-src 'none'; img-src 'self' data:; font-src 'self' data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'";
+const CSP: &str = "default-src 'none'; script-src 'none'; connect-src 'self'; img-src 'self' data:; font-src 'self' data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'";
+
+fn trace(id: &str, event: &str) {
+    #[cfg(debug_assertions)]
+    if std::env::var_os("WORKBENCH_OUTPUT_TRACE_DIR").is_some() { eprintln!("Output {id}: {event}"); }
+    #[cfg(not(debug_assertions))]
+    let _ = (id, event);
+}
 
 #[derive(Clone, Deserialize)]
 pub struct HtmlAsset { mime: String, base64: String }
@@ -44,17 +51,25 @@ impl HtmlJob {
 }
 
 #[derive(Default)]
-pub struct HtmlJobs(Mutex<HashMap<String, (String, Vec<HtmlAsset>)>>);
+pub struct HtmlJobs(Mutex<HashMap<String, HtmlDocument>>);
+struct HtmlDocument { html: String, assets: Vec<HtmlAsset>, ready: Completion }
 
-pub fn serve(app: &tauri::AppHandle, path: &str) -> tauri::http::Response<Vec<u8>> {
-    let mut parts = path.trim_start_matches('/').split('/'); let id = parts.next().unwrap_or_default();
+pub fn serve(app: &tauri::AppHandle, path: &str, query: Option<&str>) -> tauri::http::Response<Vec<u8>> {
+    let mut parts = path.trim_start_matches('/').split('/'); let first = parts.next().unwrap_or_default();
+    let signal = first == "ready" || first == "error";
+    let id = if signal { parts.next().unwrap_or_default() } else { first };
     let resource = if parts.next() == Some("asset") { parts.next().and_then(|value| value.parse::<usize>().ok()) } else { None };
-    let body = app.state::<HtmlJobs>().0.lock().ok().and_then(|jobs| jobs.get(id).and_then(|(html, assets)| {
-        if let Some(index) = resource {
-            let asset = assets.get(index)?;
+    let body = app.state::<HtmlJobs>().0.lock().ok().and_then(|jobs| jobs.get(id).and_then(|document| {
+        if signal {
+            let message = url::form_urlencoded::parse(query.unwrap_or_default().as_bytes()).find(|(key, _)| key == "message").map(|(_, value)| value.into_owned()).unwrap_or_default();
+            trace(id, &format!("{first} {message}"));
+            document.ready.finish(if first == "ready" { Ok(()) } else { Err(format!("출력할 문서를 불러오지 못했습니다: {message}")) });
+            Some(("text/plain".into(), b"ok".to_vec()))
+        } else if let Some(index) = resource {
+            let asset = document.assets.get(index)?;
             let bytes = base64::engine::general_purpose::STANDARD.decode(&asset.base64).ok()?;
             Some((asset.mime.clone(), bytes))
-        } else { Some(("text/html; charset=utf-8".into(), html.as_bytes().to_vec())) }
+        } else { Some(("text/html; charset=utf-8".into(), document.html.as_bytes().to_vec())) }
     }));
     tauri::http::Response::builder().status(if body.is_some() { 200 } else { 404 })
         .header("Content-Type", body.as_ref().map(|(mime, _)| mime.as_str()).unwrap_or("text/plain"))
@@ -75,8 +90,13 @@ impl Completion {
 /// native code; the document's own scripts, navigation and network are blocked.
 fn ready_script(id: &str) -> String {
     format!(r#"(async () => {{
+      if (document.querySelector('meta[name="workbench-output-id"]')?.content !== '{id}') throw new Error('출력 문서를 불러오지 못했습니다.');
       await document.fonts.ready;
-      await Promise.all(Array.from(document.images, image => image.decode()));
+      // ProseMirror uses sourceless img separators around page breaks. They
+      // are editing placeholders, not image resources that can be decoded.
+      await Promise.all(Array.from(document.images)
+        .filter(image => image.currentSrc || image.getAttribute('src')?.trim())
+        .map(image => image.decode()));
       await Promise.all(Array.from(document.querySelectorAll('svg image'), element => {{
         const source = element.getAttribute('href') || element.getAttribute('xlink:href');
         if (!source) return;
@@ -86,73 +106,84 @@ fn ready_script(id: &str) -> String {
       // Hidden WebKit windows may suspend requestAnimationFrame. The explicit
       // layout flush and task boundary work for both visible and hidden output.
       await new Promise(resolve => setTimeout(resolve, 0));
-      location.replace('workbench-output://localhost/ready/{id}');
-    }})().catch(error => location.replace('workbench-output://localhost/error/{id}?message=' + encodeURIComponent(String(error))));"#)
+      await fetch('/ready/{id}', {{ cache: 'no-store' }});
+    }})().catch(error => fetch('/error/{id}?message=' + encodeURIComponent(String(error)), {{ cache: 'no-store' }}));"#)
 }
 
 async fn output(app: tauri::AppHandle, mut job: HtmlJob, print: bool) -> Result<Vec<u8>, String> {
     job.validate()?;
     let mut random = [0_u8; 16]; getrandom::fill(&mut random).map_err(|e| e.to_string())?;
     let id = format!("html-output-{}", random.iter().map(|b| format!("{b:02x}")).collect::<String>());
+    #[cfg(debug_assertions)]
+    if let Some(root) = std::env::var_os("WORKBENCH_OUTPUT_TRACE_DIR") {
+        let root = PathBuf::from(root);
+        std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+        std::fs::write(root.join(format!("{id}.html")), &job.html).map_err(|e| e.to_string())?;
+        eprintln!("Output trace: {id}, {} × {} in, scale {}", job.width_in, job.height_in, job.scale);
+    }
     let temp = tempfile::Builder::new().prefix("workbench-output-").tempdir().map_err(|e| e.to_string())?;
     let path = temp.path().join("document.pdf");
     let (tx, rx) = mpsc::sync_channel(1);
     let completion = Completion(Arc::new(Mutex::new(Some(tx))));
+    let (ready_tx, ready_rx) = mpsc::sync_channel(1);
+    let readiness = Completion(Arc::new(Mutex::new(Some(ready_tx))));
     {
         let state = app.state::<HtmlJobs>(); let mut jobs = state.0.lock().map_err(|e| e.to_string())?;
         if jobs.len() >= 4 { return Err("다른 문서의 출력이 끝난 뒤 다시 실행해 주세요.".into()); }
         let mut html = std::mem::take(&mut job.html);
+        let marker = format!(r#"<meta name="workbench-output-id" content="{id}">"#);
+        if let Some(at) = html.find("</head>") { html.insert_str(at, &marker); } else { html.push_str(&marker); }
         for index in 0..job.assets.len() { html = html.replace(&format!("workbench-print-asset:{index}:"), &format!("/{id}/asset/{index}")); }
-        jobs.insert(id.clone(), (html, std::mem::take(&mut job.assets)));
+        jobs.insert(id.clone(), HtmlDocument { html, assets: std::mem::take(&mut job.assets), ready: readiness.clone() });
     }
     let load_url: tauri::Url = format!("workbench-output://localhost/{id}").parse().unwrap();
     let load_path = format!("/{id}");
-    let ready_path = format!("/ready/{id}"); let error_path = format!("/error/{id}");
-    let app_nav = app.clone(); let nav_id = id.clone(); let nav_completion = completion.clone();
-    let started = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let ready = ready_script(&id); let load_completion = completion.clone();
+    let ready = ready_script(&id); let load_completion = readiness.clone(); let load_id = id.clone();
     let destroyed = completion.clone(); let cleanup_app = app.clone(); let cleanup_id = id.clone();
-    let view = WebviewWindowBuilder::new(&app, &id, WebviewUrl::External(load_url.clone()))
+    let builder = WebviewWindowBuilder::new(&app, &id, WebviewUrl::External(load_url.clone()))
         .title("문서 출력 · Achmage Workbench").inner_size(900.0, 900.0).visible(print)
         .on_navigation(move |url| {
             let own_protocol = url.scheme() == "workbench-output" || (url.scheme() == "http" && url.host_str() == Some("workbench-output.localhost"));
-            if !own_protocol { return false; }
-            if url.path() == load_path { return true; }
-            if url.path() == error_path {
-                let message = url.query_pairs().find(|(key, _)| key == "message").map(|(_, value)| value.into_owned()).unwrap_or_default();
-                nav_completion.finish(Err(format!("출력할 글꼴·그림을 불러오지 못했습니다: {message}")));
-            } else if url.path() == ready_path && !started.swap(true, std::sync::atomic::Ordering::SeqCst) {
-                let app = app_nav.clone(); let id = nav_id.clone(); let done = nav_completion.clone();
-                let job = job.clone(); let path = path.clone();
-                // Do not re-enter the native print loop inside a WebView callback.
-                tauri::async_runtime::spawn_blocking(move || {
-                    if let Some(view) = app.get_webview_window(&id) {
-                        let failure = done.clone();
-                        if let Err(error) = view.with_webview(move |webview| platform_output(webview, job, path, print, done)) {
-                            failure.finish(Err(error.to_string()));
-                        }
-                    } else { done.finish(Err("인쇄 창이 닫혔습니다.".into())); }
-                });
-            }
-            false
+            own_protocol && url.path() == load_path
         })
         .on_page_load(move |view, payload| {
             if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                trace(&load_id, "load finished");
                 if let Err(error) = view.eval(&ready) { load_completion.finish(Err(error.to_string())); }
             }
-        }).build();
+        });
+    // This directory already belongs to the disposable CLI profile. Reuse its
+    // WebContext: on Linux, incognito creates a new context while Tauri caches
+    // protocol registration by data_directory, breaking the next print chunk.
+    let builder = if let Some(root) = crate::office_cli::data_dir(&app) { builder.data_directory(root.join("output-webview")) } else { builder };
+    let view = builder.build();
     let result = match view {
         Err(error) => Err(error.to_string()),
         Ok(view) => {
             view.on_window_event(move |event| {
                 if matches!(event, tauri::WindowEvent::Destroyed) {
                     cleanup_app.state::<HtmlJobs>().0.lock().unwrap().remove(&cleanup_id);
+                    readiness.finish(Err("인쇄 창이 닫혔습니다.".into()));
                     destroyed.finish(Err("인쇄 창이 닫혔습니다.".into()));
                 }
             });
+            let ready = tauri::async_runtime::spawn_blocking(move || ready_rx.recv_timeout(Duration::from_secs(120))
+                .map_err(|_| "출력 문서 준비 시간이 지났습니다.".to_string())?)
+                .await.map_err(|e| e.to_string()).and_then(|r| r);
+            if let Err(error) = ready { completion.finish(Err(error)); }
+            else {
+                trace(&id, "print started");
+                // Printing starts after readiness, without navigating away from
+                // the document or re-entering a WebView load callback.
+                let done = completion.clone();
+                if let Err(error) = view.with_webview(move |webview| platform_output(webview, job, path, print, done)) {
+                    completion.finish(Err(error.to_string()));
+                }
+            }
             let result = tauri::async_runtime::spawn_blocking(move || rx.recv_timeout(Duration::from_secs(if print { 600 } else { 120 }))
                 .map_err(|_| "출력 응답 시간이 지났습니다. 문서를 확인한 뒤 다시 실행해 주세요.".to_string())?)
                 .await.map_err(|e| e.to_string()).and_then(|r| r);
+            trace(&id, &format!("completed {result:?}"));
             // WebView2's ShowPrintUI returns while the system UI is open. Keep
             // its preview alive until the user closes it; PDF exports are hidden.
             if !cfg!(target_os = "windows") || !print || result.is_err() { let _ = view.destroy(); }

@@ -1,5 +1,5 @@
 import { mountOfficeAi } from "./office-ai.ts";
-import { Events, Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
+import { Events, Gateway, GatewayError, handshake, headlessExport, listen, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
 import { configureTextAssets, resolveTextImage, unresolveTextImage } from "./text-assets.ts";
 import { copyOfficeBytes, officeCopyBusy } from "./copy.ts";
@@ -10,6 +10,7 @@ import { preparePrintHtml } from "./print-html.ts";
 /** The original Markdown/HTML renderers serialize their own source; never normalize it here. */
 export async function createTextEditor(kind: "markdown" | "html") {
   const init = await handshake(), gateway = new Gateway(init.token), events = new Events();
+  const headless = headlessExport(init);
   const ai = mountOfficeAi(init, gateway, events);
   const id = init.artifact.id, path = init.artifact.path;
   const assetBase = (await gateway.textAssets(id)).baseUrl;
@@ -115,8 +116,8 @@ export async function createTextEditor(kind: "markdown" | "html") {
     takeSeed: async () => null,
     takeNoteAppend: async () => [],
     onNoteAppendReady: events.on("noteAppend"),
-    consumeHeadlessExport: async () => null,
-    headlessExportDone: () => {},
+    consumeHeadlessExport: async () => { const target = headless.consume(); return kind === "markdown" ? target?.outPath ?? null : target; },
+    headlessExportDone: headless.done,
     readFile: async (requested: string) => { if (requested !== path) throw new Error("열린 문서만 읽을 수 있습니다."); reportOpen(); return savedSource; },
     recoveryOpen: async () => { if (recovered) reportOpen(); return recovered; },
     writeRecoveryCopy: async (text: string | null) => { if (text !== null) await keep(text); return id; },

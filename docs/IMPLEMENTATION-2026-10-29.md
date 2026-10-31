@@ -1,5 +1,9 @@
 # 통합 업데이트 실행 기록
 
+2026-10-31 CLI 출력 연결: 원본 CLI→Tauri의 주요 문서 변환 **43/43**, 수동 나눔·빈 쪽·Sheets 글꼴 **20/20**, 기존 GUI 출력/인쇄 **17/17**을 Linux에서 확인했다. Word는 원본 페이지 조판을 재사용하며 12쪽 분할·병합을 검증했다. [구현과 남은 범위](office-integration.md#원본-cli의-tauri-출력-연결), 검증 판 `research:rr-f6971ea29725560b8f14d540e8674644:ae7ebf5fd8457e89a2c32a0ca8d4b7a696f714f7952a0fde84761cc9f15b72a8`. 전체 Electron 제거와 OS 설치·릴리스는 미완료다.
+
+OS 빌드 후속 결과: `ba44e4f`의 [run 41173726945](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41173726945)는 공통 검사, Windows/macOS/Linux/Arch 패키징과 Windows/macOS first-run 작업이 모두 성공했다. 태그 없는 실행이므로 릴리스 게시 작업은 건너뛰었고 공개 최신은 v0.2.2다. 위 CLI 변경은 이 실행에 포함되지 않는다. 근거 판 `research:rr-f20dda89520345beccf09fb5ddd30bed:ac4b9a4997b93f3505ee27558182ca5da6d18ba53924a8fe7e37a8cacb9d5053`.
+
 2026-10-31 OS 빌드 차단 수정: 첫 원격 실행 `41171992011`은 공통 검사 7개 실패로 OS 빌드 전에 종료됐다. Git 2.56의 URL push 후 자동 추적 참조 갱신을 명령 한정 remote로 분리하고, 오래된 native 시나리오 기대값과 하나에 몰린 GitHub 검사를 정리했다. Windows PDF 출력 콜백도 라이브러리의 실제 `Result<()>/bool` 형식에 맞췄다. CI와 같은 Git 2.56·Node 24.22.1에서 **153파일·1121/1121**, 전체 타입 통과; Git 2.55/2.56의 원격 검사 각각 **11/11**. 동시 실행 중 한글 검사 한 건의 5초 초과는 부하 없는 단독·전체 실행에서 시간 제한 변경 없이 통과했다. Windows/macOS 컴파일·설치본은 후속 원격 실행에서 검증한다. 근거 판 `research:rr-f20dda89520345beccf09fb5ddd30bed:d793ddd8e5f870a1b1400991fffd5d8b164858da4f48ef368a4f84d471c5ae2e`.
 
 2026-10-31 번들 정리: 별도 HOP/PDFCraft 실행·배포를 제거하고 기존 PDF 쪽 사본을 내장 이음 엔진으로 연결했다. 기본 한글 편집과 명시적 외부 앱의 저장 감시를 유지한다. 실제 Linux **50/50**, 관련 **7/7**, 타입·web/host/native 빌드 통과. 기존 Linux HOP/PDFCraft 폴더 약243MiB는 배포 제외 대상이며 새 설치본 실측은 아니다. [범위와 근거](office-integration.md#별도-hoppdfcraft-배포-제거), 검증 판 `research:rr-2fcbcc4706adb4e91f451286cc296d10:010e5d7daa5b1c621979811baf98782c4d4fdc28810d2d28aa074530f89ce56d`. Ieum Electron·HOP 패치/hallym-kordoc·OS 설치/용량/릴리스는 계속 진행한다.

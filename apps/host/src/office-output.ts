@@ -59,7 +59,8 @@ export class OfficeOutputs {
     const family = formatOf(path);
     const hangul = ["hwp", "hwpx"].includes(source.format) && ["hwp", "hwpx"].includes(format);
     const same = family === source.format && ["docx", "pptx", "xlsx", "markdown", "html", "xmind", "epub", "pdf"].includes(source.format);
-    if (!hangul && !same && format !== "pdf") throw new HttpError(415, "output_format", "현재 문서와 같은 파일 형식으로 저장해 주세요.");
+    const htmlExport = source.format === "docx" && family === "html";
+    if (!hangul && !same && !htmlExport && format !== "pdf") throw new HttpError(415, "output_format", "현재 문서와 같은 파일 형식으로 저장해 주세요.");
     if (isWorkbenchPath(path) || path === resolve(source.path) || (existsSync(source.path) && path === realpathSync(source.path))) throw new HttpError(400, "output_source", "원본과 다른 파일 이름을 선택해 주세요. 원본 저장은 저장 메뉴를 사용하세요.");
     this.documents.registry.assertPath(path);
     const bytes = disk(path);
@@ -104,7 +105,7 @@ export class OfficeOutputs {
         bytes = await prepareHwpSave(readFileSync(this.documents.revisionPath(artifactId, ticket.revision)), decoded.bytes, ticket.format, decoded.metadata, "save", hwpFormat(source.format));
       } else await checkOfficeCopy(bytes, ticket.format);
       if (["md", "markdown", "html", "htm"].includes(ticket.format)) {
-        assets = await prepareTextCopy(source.path, ticket.path, bytes.toString("utf8"), source.format as "markdown" | "html");
+        assets = await prepareTextCopy(source.path, ticket.path, bytes.toString("utf8"), formatOf(ticket.path) as "markdown" | "html");
         bytes = Buffer.from(assets.text, "utf8");
       }
       const currentScope = this.scope(artifactId, access);

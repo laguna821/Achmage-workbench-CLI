@@ -1,5 +1,7 @@
 # Linux 실제 앱 검사
 
+`node scripts/office-cli-check.ts <evidence-directory>`는 실제 Tauri 숨김 실행으로 DOCX 1/2/중간 빈 쪽/12쪽, PPTX, XLSX, MD, HTML의 PDF와 DOCX HTML을 검사한다. `--only=docx-12,xlsx`로 선택하고 `--cli=<genoffice.cjs>`로 고정 원본 CLI의 `convert` 경로를 검사할 수 있다. 파일·설정 보존, 전용 임시 폴더 정리, 정확한 쪽 수·본문·빈 쪽·글꼴과 원본 분할 병합을 확인한다. 실제 변환에는 Electron 앱을 사용하지 않는다. 최종 원본 CLI43/43과 빈 쪽/글꼴20/20, 기존 GUI `--only=start,office-output`17/17의 [범위와 근거](office-integration.md#원본-cli의-tauri-출력-연결)를 따른다.
+
 `--only=pdf-office,hwp`는 HOP/PDFCraft 제거 뒤 내장 리소스 준비 상태와 PDF 쪽 사본 API를 포함한다. 기존 원본 PDF/HWP/HWPX 편집·저장·재열기·복구·사본·출력·시스템 인쇄까지 Linux **50/50** 확인했으며 `bundle-removal-native-01/verification.json`에 실행 파일·리소스·배포 설정 근거를 연결했다. OS 설치본 검증은 별도다.
 
 `--only=office-output --engines=stand-in`은 시스템 WebView의 두 쪽 PDF·한글·스크립트 차단과 실제 GTK 인쇄 창/취소를 확인한 뒤 원본 MD/HTML/PPT/Word 메뉴의 미저장 내용 PDF·원본 파일/판 보존을 검사한다. `APP_E2E_OUTPUT_FORMATS=docx`로 편집기를 선택하고 빈 문자열로 공통 출력/인쇄만 실행한다. 문서 처리·Tauri IPC·PDF는 실제 코드이며 인쇄 대화상자에서 Cancel만 자동으로 누른다. 네 편집기15/15와 공통 출력/인쇄8/8의 근거는 `html-output-native-07/verification.json`. [동작과 한계](office-integration.md#원본-pdf-출력과-시스템-인쇄).

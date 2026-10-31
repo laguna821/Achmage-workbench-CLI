@@ -97,7 +97,10 @@ export async function officeOutputScenario(ctx: Ctx) {
     if (!await until(async () => {
       await wd.frame(null); if (await wd.find(".office-output-dialog")) return true;
       await enter(); const diagnostic = await wd.execute<{ result?: { ok?: boolean }; error?: string }>('return window.__outputCapture');
-      if (diagnostic.error || diagnostic.result?.ok === false) {
+      // The original Word export may first return false to open its pagination
+      // preview, then resume. Wait for the destination instead of failing that
+      // intermediate result; retain it in the timeout diagnostics.
+      if (diagnostic.error) {
         writeFileSync(ctx.report.path(`output-${format}-diagnostic.json`), JSON.stringify(await wd.execute('return {capture:window.__outputCapture,messages:window.__outputMessages,errors:window.__e2e?.errors}'), null, 2));
         await wd.frame(null); writeFileSync(ctx.report.path(`output-${format}-render-meta.json`), JSON.stringify(await wd.execute('return window.__renderMeta'), null, 2));
         exportError = `${format}: original export: ${JSON.stringify(diagnostic)}`; return true;
@@ -120,6 +123,7 @@ export async function officeOutputScenario(ctx: Ctx) {
     copyFileSync(target, ctx.report.path(`exported-${format}.pdf`)); writeFileSync(ctx.report.path(`exported-${format}-text.txt`), pdfText);
     ctx.report.check(S, `${format}: 공통 메뉴 → 원본 출력 → 미저장 편집 내용 PDF`, pdfText.includes(marker), pdfText.slice(0, 250), await shot(ctx, `output-${format}.png`));
     ctx.report.check(S, `${format}: 원본 파일·판 보존`, readFileSync(artifact.path).equals(original) && (await snapshot()).artifacts.find(a => a.id === artifact.id)?.revision === artifact.revision);
+    if (format === "docx") ctx.report.check(S, "docx: 추가 빈 쪽 없이 한 쪽 출력", /Pages:\s+1\b/.test(pdfInfo));
     ctx.report.note(S, `${format}: 출력 용지·쪽수`, pdfInfo.match(/Pages:.*|Page size:.*/g));
     await enter(); const errors = await pageErrors(wd); ctx.report.note(S, `${format}: 편집기 관측 오류`, errors); await wd.frame(null);
   }

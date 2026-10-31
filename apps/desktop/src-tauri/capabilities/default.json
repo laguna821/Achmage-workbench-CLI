@@ -42,6 +42,9 @@
     "allow-render-svg-pdf",
     "allow-print-svg",
     "allow-render-html-pdf",
-    "allow-print-html"
+    "allow-print-html",
+    "allow-office-cli-job",
+    "allow-office-cli-write",
+    "allow-office-cli-done"
   ]
 }

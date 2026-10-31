@@ -780,6 +780,8 @@ export type OfficeHostMessage =
       theme: "light" | "dark";
       /** Reopen unsaved edits kept from an earlier visit (false when the user chose the latest revision). */
       recover: boolean;
+      /** A single native CLI export, using the original renderer's File-menu action. */
+      headlessExport?: { outPath: string; format: "pdf" | "html" | "docx" };
     }
   | { type: "office:theme"; theme: "light" | "dark" }
   /** Refresh a scoped write capability without recreating the editor or dropping its undo state. */
@@ -798,6 +800,7 @@ export type OfficeHostMessage =
 
 /** Office editor page → Workbench window. */
 export type OfficePageMessage =
+  | { type: "office:headless-result"; ok: boolean; error?: string }
   | import("./office-skills.ts").OfficeSkillRequest
   | import("./office-output.ts").OfficeOutputRequest
   | import("./office-references.ts").OfficeReferenceRequest

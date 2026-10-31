@@ -1,7 +1,7 @@
 import { DEFAULT_AI_PANEL_PREFS, normalizeAiPanelPrefs } from "../../../vendor/ieumoffice/packages/ui/src/ai-panel-prefs.ts";
 import { mountOfficeAi, officeAiTransport } from "./office-ai.ts";
 import "./slides.css";
-import { Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
+import { Gateway, GatewayError, handshake, headlessExport, listen, post } from "./bridge.ts";
 import { dispatch, useTransport } from "./platform/electron-renderer.ts";
 import { recovery } from "./recovery.ts";
 import { carriesMark, convertForeignPictures, desktopPicture, markClipboard, pastedPicture, pngBytes, showsNothing } from "./pictures.ts";
@@ -23,6 +23,7 @@ import { stampPdfLinks } from "./pdf-output-links.ts";
 // stays in Workbench's conversation.
 
 const init = await handshake();
+const headless = headlessExport(init);
 const gateway = new Gateway(init.token);
 const ai = mountOfficeAi(init, gateway);
 const artifactId = init.artifact.id;
@@ -65,6 +66,7 @@ const unhandled = new Set<string>();
 let pdfPlan: OfficeOutputPlan | null = null;
 
 async function invoke(channel: string, args: unknown[]): Promise<unknown> {
+  if (channel === "slides:consume-headless-export") return headless.consume()?.outPath ?? null;
   // A copy inside the editor: marked on the system clipboard now, while the key press or click lasts.
   if (channel === "slides:copy-elements" || channel === "slides:copy-slides") {
     copied.mark = markClipboard();
@@ -95,7 +97,7 @@ async function invoke(channel: string, args: unknown[]): Promise<unknown> {
       pdfPlan = await prepareOutput(state.revision, "pdf");
       return pdfPlan?.path ?? null;
     case "slides:export-pdf": {
-      const op = args[0] as ExportPdfOp, plan = pdfPlan; pdfPlan = null;
+      const op = args[0] as ExportPdfOp, plan = pdfPlan ?? (init.headlessExport ? await prepareOutput(state.revision, "pdf") : null); pdfPlan = null;
       if (!plan || op.filePath !== plan.path) return { ok: false, error: "PDF 저장 위치를 다시 선택해 주세요." };
       try {
         const widthIn = exportPageWidthIn(op.widthPx, op.heightPx), heightIn = PDF_EXPORT_HEIGHT_IN;
@@ -143,6 +145,7 @@ async function invoke(channel: string, args: unknown[]): Promise<unknown> {
 
 let closeSaveAnswer: ((ok: boolean) => void) | null = null;
 function send(channel: string, args: unknown[]) {
+  if (channel === "slides:headless-export-done") { headless.done(args[0] as { ok?: boolean; error?: string }); return; }
   if (channel === "slides:close-save-result") {
     closeSaveAnswer?.(args[0] === true);
     closeSaveAnswer = null;
