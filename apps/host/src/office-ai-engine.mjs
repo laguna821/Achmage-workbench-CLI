@@ -64,7 +64,12 @@ export function createOfficeAiEngine(dataDir, injected = {}, hostActions = {}) {
       return getSettings();
     },
     configuration: store,
-    webTools: createOfficeWebTools(store, injected.webTools),
+    webTools: createOfficeWebTools(store, injected.webTools, async (recheck = false) => {
+      // The original panel refreshes capabilities when subscription status changes.
+      // A key-backed tool must not wait for unrelated CLI discovery on first open.
+      if (recheck) await service.check();
+      return { path: "screen", statuses: service.getStatuses() };
+    }),
     settingsInvoke: controls.invoke,
     setMeteredAccepted: controls.setMeteredAccepted,
     close: () => { controls.close(); store.close(); },

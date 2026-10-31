@@ -190,7 +190,7 @@ export class OfficeAi {
       outer?.controller.signal.addEventListener("abort", abort, { once: true });
       if (outer?.controller.signal.aborted) abort();
       try {
-        const value = await engine.webTools.invoke(raw.name, raw.args, run.signal);
+        const value = await engine.webTools.invoke(raw.name, raw.args, run.signal, { path: documents.get(artifactId!).path });
         authorize(); run.signal.throwIfAborted();
         if (!res.destroyed) sendJson(res, 200, value);
       } finally { outer?.controller.signal.removeEventListener("abort", abort); run.finish(); }

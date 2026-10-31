@@ -171,7 +171,6 @@ export async function createTextEditor(kind: "markdown" | "html") {
     onPrintRequest: events.on("print"),
     ...ai.desktop,
     aiSubscription: ai.subscription, subscription: ai.subscription,
-    aiGenerateImage: rejected("이미지 생성"),
     openSourcePath: unavailable("참조 문서 열기"), resolveWikiLinks: unavailable("위키 링크"),
     rememberWikiFragment: unavailable("위키 링크"), takeWikiFragment: async () => "",
     wikiBacklinks: unavailable("백링크"), wikiGraph: unavailable("그래프"),

@@ -106,5 +106,14 @@ export function createOfficeReferences() {
       return [...result, ...extra];
     },
     release: () => { pinned = null; },
+    async mediaUrls(urls: string[]) {
+      const selected = pinned ?? merged(attachments());
+      return Promise.all(urls.map(async url => {
+        if (!selected.some(item => item.path === url && /^(png|jpe?g|gif|webp)$/.test(item.ext))) return url;
+        const image = await readImage(url, pinned !== null);
+        if (!image.ok || !image.mime || !image.base64) throw new Error(image.error ?? "첨부 이미지를 읽지 못했습니다.");
+        return `data:${image.mime};base64,${image.base64}`;
+      }));
+    },
   };
 }

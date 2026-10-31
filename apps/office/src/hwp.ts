@@ -191,7 +191,6 @@ const hwpApi = {
   onAiPanelPrefsChanged: events.on("aiPanelPrefsChanged"),
   ...ai.desktop,
   aiSubscription: ai.subscription,
-  generateImage: pendingFeature,
   openDroppedDocuments: () => false,
 };
 Object.assign(window, { hwpApi });

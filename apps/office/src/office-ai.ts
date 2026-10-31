@@ -166,6 +166,17 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
     try { return await api.json<any>("tool", { requestId: crypto.randomUUID(), name, args, ...(current ? { turnId: current.turnId } : {}) }, controller.signal); }
     finally { webRequests.delete(controller); }
   };
+  const generateImage = async (op: { prompt: string; referenceImageUrls?: string[]; [key: string]: unknown }) => {
+    const current = run;
+    const referencesUrls = op.referenceImageUrls ? await references.mediaUrls(op.referenceImageUrls) : undefined;
+    if (run !== current) throw new Error("이미지 생성 요청의 대화가 바뀌었습니다.");
+    return webTool("generate-image", { ...op, ...(referencesUrls ? { referenceImageUrls: referencesUrls } : {}) });
+  };
+  const analyzeMedia = async (op: { mediaUrls: string[]; requirements: string }) => {
+    const current = run, mediaUrls = await references.mediaUrls(op.mediaUrls);
+    if (run !== current) throw new Error("미디어 분석 요청의 대화가 바뀌었습니다.");
+    return webTool("analyze-media", { ...op, mediaUrls });
+  };
   // Return immediately after attaching the stream, as Electron's invoke does. Its events
   // still arrive through the original subscription, including structured error causes.
   const aiStream = async (request: { requestId: string } & Record<string, unknown>) => {
@@ -211,6 +222,7 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
       imageSearch: (query: string, limit?: number) => webTool("image-search", query, ...(limit === undefined ? [] : [limit])),
       readUrl: (url: string, offset?: number) => webTool("read-url", url, ...(offset === undefined ? [] : [offset])),
       fetchImage: (url: string) => webTool("fetch-image", url),
+      generateImage, aiGenerateImage: generateImage, analyzeMedia,
       setAiSettings: async (settings: unknown) => { const saved = await gateway.aiSession(init.artifact.id).json("selection", settings); events.emit("aiSettingsChanged", saved); return saved; } },
     projectApi,
     templates: skills.bridge,
@@ -259,6 +271,10 @@ export function officeAiTransport(ai: OfficeAiBridge, dispatch: (channel: string
       case "ai:image-search": return ai.desktop.imageSearch(String(args[0]), args[1] as number | undefined);
       case "ai:read-url": return ai.desktop.readUrl(String(args[0]), args[1] as number | undefined);
       case "ai:fetch-image": case "html:fetch-image": case "hwp:fetch-image": case "mindmap:fetch-image": case "sheets:ai-fetch-image": return ai.desktop.fetchImage(String(args[0]));
+      case "ai:generate-image": case "docs:ai-generate-image": case "sheets:ai-generate-image": case "pdf:generate-image":
+      case "mindmap:ai-generate-image": case "markdown:ai-generate-image": case "html:ai-generate-image": case "hwp:ai-generate-image":
+        return ai.desktop.generateImage(args[0] as Parameters<typeof ai.desktop.generateImage>[0]);
+      case "ai:analyze-media": case "docs:analyze-media": return ai.desktop.analyzeMedia(args[0] as Parameters<typeof ai.desktop.analyzeMedia>[0]);
       case "ai:subscription-statuses": return ai.subscription.statuses();
       case "ai:subscription-recheck": return ai.subscription.recheck();
       case "home:open-subscription-install-help": case "home:open-connect-help": return ai.desktop.openAiModelSettings();
@@ -269,7 +285,7 @@ export function officeAiTransport(ai: OfficeAiBridge, dispatch: (channel: string
         // Do not report a successful action merely because that dialog was opened.
         return { ok: false, error: "열린 AI 설정 창에서 연결을 계속해 주세요." };
       }
-      case "ai:subscription-codex-image": return false;
+      case "ai:subscription-codex-image": return Boolean((await ai.desktop.aiToolCapabilities()).codexImageAvailable);
       default: return fallback(channel, args);
     }
   };

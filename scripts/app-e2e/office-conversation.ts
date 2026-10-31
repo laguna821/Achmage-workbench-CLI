@@ -1,5 +1,6 @@
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import JSZip from "jszip";
 import type { Artifact, Session, Snapshot, TranscriptItem, Work } from "@workbench/contracts";
@@ -12,11 +13,21 @@ export async function officeConversationScenario(ctx: Ctx) {
   const S = "Office 같은 세션", { wd, api } = ctx.app;
   const unbound = process.env.APP_E2E_OFFICE_UNBOUND === "1";
   const web = process.env.APP_E2E_OFFICE_WEB === "1";
+  const media = process.env.APP_E2E_OFFICE_MEDIA === "1";
+  if (web && media) throw new Error("Choose either the web or media conversation experiment");
+  const { PNG } = createRequire(import.meta.url)("pngjs");
+  const png = PNG.sync.write({ width: 96, height: 64, data: Buffer.alloc(96 * 64 * 4, Buffer.from([0, 120, 135, 255])) }).toString("base64");
+  const mediaRequests: { url: string; authorized: boolean; body: any }[] = [];
   const requests: any[] = [];
   let cancelledStreams = 0;
   const marker = "WORKBENCH OFFICE NATIVE TOOL EDIT";
   const server = createServer(async (req, res) => {
     let raw = ""; for await (const part of req) raw += String(part);
+    if (media && req.url?.startsWith("/media/v1/")) {
+      mediaRequests.push({ url: req.url, authorized: req.headers.authorization === "Bearer media-fixture-key", body: JSON.parse(raw) });
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify(req.url.endsWith("/images/generations") ? { data: [{ b64_json: png }] } : { choices: [{ message: { content: "NATIVE_MEDIA_ANALYZED_TEAL_RECTANGLE" } }] })); return;
+    }
     if (req.url === "/v1/models") { res.setHeader("content-type", "application/json"); res.end(JSON.stringify({ data: [{ id: "fixture-panel-model" }] })); return; }
     if (req.url !== "/v1/chat/completions") { res.statusCode = 404; res.end(); return; }
     const body = JSON.parse(raw); requests.push(body);
@@ -28,10 +39,15 @@ export async function officeConversationScenario(ctx: Ctx) {
       res.once("close", () => { clearTimeout(timer); if (!res.writableEnded) cancelledStreams++; });
       return;
     }
-    if (web && requests.length === 1) {
+    if (media && requests.length <= 3) {
+      const block = /use analyze_media with blockIndex (\d+)/.exec(raw);
+      const name = requests.length === 1 ? "generate_image" : requests.length === 2 ? "get_document_context" : "analyze_media";
+      const input = requests.length === 1 ? { prompt: "A small teal rectangle", aspectRatio: "3:2" } : requests.length === 2 ? {} : { blockIndex: Number(block?.[1] ?? -1), requirements: "Describe the generated picture" };
+      send({ role: "assistant", tool_calls: [{ index: 0, id: `native-media-${requests.length}`, type: "function", function: { name, arguments: JSON.stringify(input) } }] }); send({}, "tool_calls");
+    } else if (web && requests.length === 1) {
       send({ role: "assistant", tool_calls: [{ index: 0, id: "native-web-read", type: "function", function: { name: "read_url", arguments: JSON.stringify({ url: "https://example.com" }) } }] });
       send({}, "tool_calls");
-    } else if (requests.length === (web ? 2 : 1)) {
+    } else if (requests.length === (media ? 4 : web ? 2 : 1)) {
       send({ role: "assistant", tool_calls: [{ index: 0, id: "native-docs-edit", type: "function", function: { name: "insert_content", arguments: JSON.stringify({ html: `<p>${marker}</p>`, afterBlockIndex: -1 }) } }] });
       send({}, "tool_calls");
     } else { send({ role: "assistant", content: "같은 세션에 문서 수정 완료" }); send({}, "stop"); }
@@ -48,6 +64,7 @@ export async function officeConversationScenario(ctx: Ctx) {
     const settings = (await api<{ settings: any }>("GET", "/api/office-ai/settings")).settings;
     settings.provider = "custom"; settings.subscriptionNoticeSeen = true; settings.customEndpoint = "panel-fixture";
     settings.customEndpoints = [{ id: "panel-fixture", name: "Local panel fixture", baseUrl: `http://127.0.0.1:${address.port}/v1`, apiKey: "", model: "fixture-panel-model", kind: "local", modelProfiles: { "fixture-panel-model": { tools: true, toolsSource: "user", contextLength: 1000000, contextSource: "user" } } }];
+    if (media) settings.media = { imageProvider: "openai", analysisProvider: "openai", providers: { openai: { apiKey: "media-fixture-key", imageModel: "gpt-image-1", analysisModel: "gpt-4o", baseUrl: `http://127.0.0.1:${address.port}/media/v1` } } };
     mkdirSync(join(ctx.app.dataDir, "office"), { recursive: true }); writeFileSync(join(ctx.app.dataDir, "office/ai-settings.json"), JSON.stringify(settings));
     const snapshot = () => api<Snapshot>("GET", "/api/snapshot");
     const items = async (id = session?.id) => id ? (await api<{ items: TranscriptItem[] }>("GET", `/api/sessions/${id}/items`)).items : [];
@@ -57,6 +74,7 @@ export async function officeConversationScenario(ctx: Ctx) {
     const frame = await wd.waitFor("iframe.office-frame", 30000); await wd.frame(frame); await installProbe(wd);
     await wd.waitFor('.tiptap[contenteditable="true"]', 60000);
     const input = await wd.waitFor(".ai-panel textarea", 15000);
+    if (media) await wd.execute('window.__mediaCapabilityProbe = {started:Date.now()}; window.desktop.aiToolCapabilities().then(value => Object.assign(window.__mediaCapabilityProbe,{value,done:Date.now()}), error => Object.assign(window.__mediaCapabilityProbe,{error:String(error),done:Date.now()}));');
     ctx.report.check(S, "Electron 없이 원본 Word AI 패널·모델 선택기 열기", !!input && !!await wd.find(".ai-panel .ai-send-btn"), undefined, await shot(ctx, "office-conversation-open.png"));
     if (unbound) {
       ctx.report.check(S, "세션 없이 문서를 열어도 불필요한 대화를 만들지 않음", (await snapshot()).sessions.every((item) => item.workId !== work.id));
@@ -82,7 +100,19 @@ export async function officeConversationScenario(ctx: Ctx) {
     const tool = transcript.find((item) => item.kind === "tool");
     const xml = await (await JSZip.loadAsync(readFileSync(file))).file("word/document.xml")!.async("string");
     ctx.report.check(S, "원본 편집 도구가 실제 DOCX를 수정하고 새 판으로 저장", tool?.kind === "tool" && tool.status === "completed" && xml.includes(marker) && (await snapshot()).artifacts.find((item) => item.id === artifact.id)!.revision > 1);
-    ctx.report.check(S, "요청·편집 도구·응답·완료가 선택한 Workbench 세션에 함께 기록", transcript.some((item) => item.kind === "user" && item.office?.artifactId === artifact.id) && transcript.some((item) => item.kind === "assistant" && item.text.includes("수정 완료") && item.office?.artifactId === artifact.id) && requests.length === (web ? 3 : 2), undefined, await shot(ctx, "office-conversation-completed.png"));
+    ctx.report.check(S, "요청·편집 도구·응답·완료가 선택한 Workbench 세션에 함께 기록", transcript.some((item) => item.kind === "user" && item.office?.artifactId === artifact.id) && transcript.some((item) => item.kind === "assistant" && item.text.includes("수정 완료") && item.office?.artifactId === artifact.id) && requests.length === (media ? 5 : web ? 3 : 2), undefined, await shot(ctx, "office-conversation-completed.png"));
+    if (media) {
+      writeFileSync(join(ctx.stage.outDir, "office-media-capabilities.json"), JSON.stringify(await wd.execute('return window.__mediaCapabilityProbe;'), null, 2));
+      const visible = await shot(ctx, "office-media-visible.png"), pixels = PNG.sync.read(readFileSync(visible));
+      let teal = 0;
+      for (let i = 0; i < pixels.data.length; i += 4) if (pixels.data[i] === 0 && pixels.data[i + 1] === 120 && pixels.data[i + 2] === 135) teal++;
+      ctx.report.check(S, "생성 그림이 실제 Word 화면에 표시됨", teal > 1000, `${teal} teal pixels`, visible);
+      const zip = await JSZip.loadAsync(readFileSync(file));
+      const images = await Promise.all(Object.values(zip.files).filter(entry => entry.name.startsWith("word/media/") && !entry.dir).map(entry => entry.async("base64")));
+      writeFileSync(join(ctx.stage.outDir, "office-media-provider-requests.json"), JSON.stringify(mediaRequests, null, 2));
+      ctx.report.check(S, "원본 생성 엔진→제한된 임시 저장소→그림 삽입→DOCX 이미지 바이트 저장", mediaRequests[0]?.url.endsWith("/images/generations") === true && images.includes(png));
+      ctx.report.check(S, "문서 안 그림 블록을 원본 미디어 분석기로 읽고 같은 모델 후속에 전달", mediaRequests.length === 2 && mediaRequests.every(request => request.authorized) && JSON.stringify(mediaRequests[1]?.body).includes(png) && JSON.stringify(requests[3]).includes("NATIVE_MEDIA_ANALYZED_TEAL_RECTANGLE") && transcript.some(item => item.kind === "tool" && item.status === "completed" && item.output?.includes("NATIVE_MEDIA_ANALYZED_TEAL_RECTANGLE")));
+    }
     if (web) ctx.report.check(S, "원본 웹 읽기 도구가 실제 공개 페이지 본문을 같은 세션과 모델 후속에 전달", transcript.some(item => item.kind === "tool" && item.status === "completed" && item.output?.includes("Example Domain")) && JSON.stringify(requests[1]).includes("Example Domain"));
     if (process.env.APP_E2E_OFFICE_UNDO === "1") await officeUndo(ctx, "docx", artifact.id, marker, async () => (await JSZip.loadAsync(readFileSync(file))).file("word/document.xml")!.async("string"));
     const firstErrors = await pageErrors(wd); await wd.frame(null); await wd.refresh(); await installProbe(wd);
