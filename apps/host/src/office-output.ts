@@ -8,6 +8,7 @@ import { isWorkbenchPath } from "./artifacts.ts";
 import { HttpError } from "./errors.ts";
 import { decodeHwpSave, hwpFormat, prepareHwpSave } from "./hwp-codec.ts";
 import { checkOfficeCopy } from "./office-copy-codec.ts";
+import { prepareTextCopy } from "./office-text-copy.ts";
 
 export type OutputPlan = { id: string; path: string; format: OfficeOutputFormat; exists: boolean; size: number };
 type Result = { path: string; artifact: Artifact; backupPath?: string };
@@ -59,9 +60,6 @@ export class OfficeOutputs {
     const hangul = ["hwp", "hwpx"].includes(source.format) && ["hwp", "hwpx"].includes(format);
     const same = family === source.format && ["docx", "pptx", "xlsx", "markdown", "html", "xmind", "epub", "pdf"].includes(source.format);
     if (!hangul && !same && format !== "pdf") throw new HttpError(415, "output_format", "현재 문서와 같은 파일 형식으로 저장해 주세요.");
-    // Until the text asset copier handles a destination, do not publish a document with
-    // silently broken relative images/styles/scripts. Binary formats embed their resources.
-    if (["markdown", "html"].includes(source.format) && same && dirname(path) !== realpathSync(dirname(source.path))) throw new HttpError(415, "output_assets_pending", "이 문서의 다른 폴더 저장은 첨부 자산 복사 연결 후 사용할 수 있습니다. 지금은 원본과 같은 폴더를 선택해 주세요.");
     if (isWorkbenchPath(path) || path === resolve(source.path) || (existsSync(source.path) && path === realpathSync(source.path))) throw new HttpError(400, "output_source", "원본과 다른 파일 이름을 선택해 주세요. 원본 저장은 저장 메뉴를 사용하세요.");
     this.documents.registry.assertPath(path);
     const bytes = disk(path);
@@ -83,6 +81,8 @@ export class OfficeOutputs {
     if (this.busy.has(id)) throw new HttpError(409, "output_busy", "이미 저장하고 있습니다.");
     if (ticket.exists && !replace) throw new HttpError(409, "output_exists", "같은 이름의 파일이 있습니다. 바꾸려면 확인란을 선택하세요.");
     this.busy.add(id);
+    let assets: Awaited<ReturnType<typeof prepareTextCopy>> | null = null;
+    let published = false;
     try {
       const source = this.documents.get(artifactId);
       if (source.path !== ticket.sourcePath) throw new HttpError(409, "output_source_moved", "원본의 위치가 바뀌었습니다. 위치를 다시 선택해 주세요.");
@@ -103,6 +103,10 @@ export class OfficeOutputs {
         const decoded = decodeHwpSave(body);
         bytes = await prepareHwpSave(readFileSync(this.documents.revisionPath(artifactId, ticket.revision)), decoded.bytes, ticket.format, decoded.metadata, "save", hwpFormat(source.format));
       } else await checkOfficeCopy(bytes, ticket.format);
+      if (["md", "markdown", "html", "htm"].includes(ticket.format)) {
+        assets = await prepareTextCopy(source.path, ticket.path, bytes.toString("utf8"), source.format as "markdown" | "html");
+        bytes = Buffer.from(assets.text, "utf8");
+      }
       const currentScope = this.scope(artifactId, access);
       if (currentScope.viewId !== ticket.viewId || currentScope.sessionId !== ticket.sessionId) throw new HttpError(409, "output_view_changed", "저장 중 문서 창이나 대화가 바뀌었습니다.");
       this.documents.registry.assertPath(ticket.path);
@@ -120,10 +124,14 @@ export class OfficeOutputs {
           if (hash(readFileSync(ticket.backupPath!)) !== ticket.sha256 || hash(disk(ticket.path)!) !== ticket.sha256) throw new HttpError(409, "output_changed", "백업하는 동안 대상 파일이 바뀌었습니다. 덮어쓰지 않았습니다.");
           renameSync(temporary, ticket.path);
         } else linkSync(temporary, ticket.path); // exclusive publication: never replaces a newly appeared file
+        published = true;
       } finally { rmSync(temporary, { force: true }); }
       // The file is durable before it is advertised as a document; all prior destination
       // revisions and the pre-overwrite backup remain available.
       return finish();
+    } catch (error) {
+      if (!published) await assets?.rollback();
+      throw error;
     } finally { this.busy.delete(id); }
   }
 }

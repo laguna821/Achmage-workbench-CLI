@@ -14,13 +14,20 @@ const files = [
   ['packages/electron-utils/src/atomic-write.ts', 'text-assets/atomic-write.ts'],
   ['apps/html/src/main/preview-document.ts', 'text-assets/preview-document.ts'],
   ['apps/html/src/main/asset-mime.ts', 'text-assets/asset-mime.ts'],
+  ['apps/html/src/main/asset-lifecycle.ts', 'text-assets/css-urls.ts'],
 ];
 const sha = (data) => createHash('sha256').update(data).digest('hex');
-const manifest = { source: 'https://github.com/pblsketch/openoffice', commit, changes: 'Attribution headers; explicit .ts import; inline image MIME type to avoid unrelated editor contracts. Host only calls create/read helpers, never destructive lifecycle cleanup.', files: [] };
+const manifest = { source: 'https://github.com/pblsketch/openoffice', commit, changes: 'Attribution headers; explicit .ts import; inline image MIME type; extract the unchanged CSS URL scanner. Host uses create/read/SaveAs helpers and rollback of new assets, never historical asset cleanup.', files: [] };
 for (const [input, output] of files) {
   const original = readFileSync(join(source, input), 'utf8');
   let text = original.replace("from './atomic-write'", "from './atomic-write.ts'")
     .replace("import type { ImageData } from '../shared/ipc'", "type ImageData = { mime: 'image/png' | 'image/jpeg' | 'image/gif' }");
+  if (output.endsWith('/css-urls.ts')) {
+    const start = original.indexOf('export interface CssUrlMatch {');
+    const end = original.indexOf('/**\n * Every local source', start);
+    if (start < 0 || end < start) throw new Error('Original CSS scanner markers changed');
+    text = original.slice(start, end);
+  }
   text = `// Adapted from IeumOffice ${input} @ ${commit}.\n// Apache-2.0; see ../LICENSE and ../NOTICE. Changes recorded in text-assets.manifest.json.\n` + text;
   const path = join(destination, output);
   if (mode === '--write') { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, text); }

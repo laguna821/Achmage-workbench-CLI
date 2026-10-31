@@ -1,7 +1,7 @@
 {
   "source": "https://github.com/pblsketch/openoffice",
   "commit": "30ff4f051f067fcb2baf1ab416c40718c802ca35",
-  "changes": "Attribution headers; explicit .ts import; inline image MIME type to avoid unrelated editor contracts. Host only calls create/read helpers, never destructive lifecycle cleanup.",
+  "changes": "Attribution headers; explicit .ts import; inline image MIME type; extract the unchanged CSS URL scanner. Host uses create/read/SaveAs helpers and rollback of new assets, never historical asset cleanup.",
   "files": [
     {
       "source": "apps/markdown/src/main/asset-lifecycle.ts",
@@ -26,6 +26,12 @@
       "output": "text-assets/asset-mime.ts",
       "sourceSha256": "d681e3130fe049c8c9222f1f6a22c1db7969a8b79378ecdc016dc33e4e5bd4d0",
       "outputSha256": "154f14eafee6999be4827db35da37e4a807f514fe47d73a23f031fa5df92156b"
+    },
+    {
+      "source": "apps/html/src/main/asset-lifecycle.ts",
+      "output": "text-assets/css-urls.ts",
+      "sourceSha256": "56ceffb0d7d053817007e0911e196bc749813ddd0006fd0fd23f62c78432c803",
+      "outputSha256": "22515b721e042dfd475328144352affaa1948d24a055e0ad60883a88c899dce8"
     }
   ]
 }

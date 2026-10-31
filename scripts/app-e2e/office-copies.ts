@@ -1,4 +1,4 @@
-import { copyFileSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import type { Artifact, ArtifactRevision, Session, Snapshot, Work } from "@workbench/contracts";
@@ -24,8 +24,19 @@ export async function officeCopiesScenario(ctx: Ctx) {
   for (const format of formats.filter((format) => chosen.includes(format))) {
     const work = await api<Work>("POST", "/api/works", { title: `Copy ${format}`, cwd: null });
     const session = await api<Session>("POST", `/api/works/${work.id}/sessions`, { provider: "claude" });
-    const source = join(work.cwd, `Original.${format}`), path = join(work.cwd, `Copy.${format}`), marker = `UNSAVED COPY ${format.toUpperCase()}`;
+    const textFormat = format === "md" || format === "html";
+    const destination = textFormat ? join(work.cwd, "copies") : work.cwd;
+    if (textFormat) mkdirSync(destination);
+    const source = join(work.cwd, `Original.${format}`), path = join(destination, `Copy.${format}`), marker = `UNSAVED COPY ${format.toUpperCase()}`;
     if (format === "docx") copyFileSync(resolve("vendor/ieumoffice/apps/docs/tests/pagination-corpus/docx/simple.docx"), source); else await fixture(source, format);
+    if (textFormat) {
+      mkdirSync(join(work.cwd, "assets/css"), { recursive: true });
+      writeFileSync(join(work.cwd, "assets/original.png"), Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"));
+      writeFileSync(join(work.cwd, "assets/css/style.css"), '@import "theme.css"; h1{background-image:url(../original.png)}');
+      writeFileSync(join(work.cwd, "assets/css/theme.css"), "h1{color:rgb(23,89,123)}");
+      writeFileSync(join(work.cwd, "assets/behavior.js"), 'document.body.dataset.assetCopy="loaded";');
+      writeFileSync(source, format === "md" ? '# Original Markdown\r\n\r\n![원래 그림](assets/original.png)\r\n\r\n[ref]: https://example.com\r\n' : '<!DOCTYPE html><html><head><base href="assets/"><link rel="stylesheet" href="css/style.css"></head><body><h1>Original HTML</h1><img src="original.png"><script src="behavior.js"></script></body></html>\r\n');
+    }
     const original = readFileSync(source), artifact = await api<Artifact>("POST", `/api/works/${work.id}/artifacts`, { path: source });
     const tab = { id: "copy-tab", workId: work.id, sessionId: session.id, view: { kind: "document", artifactId: artifact.id, proposalId: null }, ui: { mode: format === "md" || format === "html" ? "rich" : "edit" } };
     await seedLayout(ctx, { ...(await snapshot()).prefs, paneLayout: { version: 2, focus: "copy-pane", panes: [{ ...tab, id: "copy-pane", tabs: [tab], activeTabId: tab.id, recentTabIds: [tab.id] }] } });
@@ -35,6 +46,11 @@ export async function officeCopiesScenario(ctx: Ctx) {
     if (format === "html") await clickText("분할");
     if (format === "md" || format === "html" || format === "docx") {
       const editor = await wd.waitFor(format === "html" ? '.cm-content[contenteditable="true"]' : '.tiptap[contenteditable="true"]', 60000);
+      if (format === "md") {
+        const image = await until(() => wd.execute<boolean>('return [...document.querySelectorAll(".tiptap img")].some(img=>img.naturalWidth>0);'), 15000);
+        writeFileSync(ctx.report.path("copy-md-source-images.json"), JSON.stringify(await wd.execute('return {html:document.querySelector(".tiptap")?.innerHTML, images:[...document.images].map(img=>({src:img.src,width:img.naturalWidth,complete:img.complete}))}'), null, 2));
+        ctx.report.check(S, "md: 사본 전에 원본 그림이 정상 표시", image);
+      }
       await wd.click(editor); await wd.sendKeys(editor, marker);
     } else if (format === "pptx") {
       if (!await until(() => wd.execute<boolean>('return !!window.Konva?.stages?.some(stage => stage.find("Text").some(node => node.text().trim().length > 4));'), 60000)) throw new Error("Slides did not load");
@@ -128,6 +144,22 @@ export async function officeCopiesScenario(ctx: Ctx) {
     const revisions = await api<ArtifactRevision[]>("GET", `/api/artifacts/${copy.id}/revisions`);
     ctx.report.check(S, `${format}: 사본을 같은 대화에서 열고 원본 판 출처 보존`, opened && copy.workspaceId === artifact.workspaceId && revisions[0]?.sessionId === session.id && revisions[0]?.derivedFrom?.some((r) => r.artifactId === artifact.id && r.revision === 1) === true, undefined, await shot(ctx, `copy-${format}.png`));
     if (!opened) throw new Error(`${format} copy renderer did not load its saved content`);
+    if (textFormat) {
+      // Remove the source asset directory from the rendering path, then reload the new
+      // document. This proves the copy is independent, not a cached view of original files.
+      renameSync(join(work.cwd, "assets"), join(work.cwd, "original-assets-preserved"));
+      await wd.refresh(); await enter(true);
+      if (format === "html") {
+        await clickText("분할"); await wd.frame(await wd.waitFor("iframe.preview-frame", 30000));
+        ctx.report.check(S, "html: 다른 폴더 사본의 그림·CSS import·스크립트가 원본 자산 없이 재열림", await until(() => wd.execute<boolean>('return document.querySelector("img")?.naturalWidth > 0 && getComputedStyle(document.querySelector("h1")).color === "rgb(23, 89, 123)" && document.body.dataset.assetCopy === "loaded";'), 15000), undefined, await shot(ctx, "copy-html-assets.png"));
+      } else {
+        const loaded = await until(() => wd.execute<boolean>('return [...document.querySelectorAll(".tiptap img[src]")].some(img=>img.naturalWidth>0);'), 15000);
+        writeFileSync(ctx.report.path("copy-md-reopened-images.json"), JSON.stringify(await wd.execute('return {html:document.querySelector(".tiptap")?.innerHTML, images:[...document.images].map(img=>({src:img.src,width:img.naturalWidth,complete:img.complete}))}'), null, 2));
+        ctx.report.check(S, "md: 다른 폴더 사본의 그림이 원본 자산 없이 재열림", loaded, undefined, await shot(ctx, "copy-md-assets.png"));
+      }
+      await wd.frame(null);
+      ctx.report.check(S, `${format}: 상대 자산 사본 뒤 원본 파일과 대화 출처 유지`, hash(readFileSync(source)) === hash(original) && (await snapshot()).artifacts.find((a) => a.id === copy.id)?.id === copy.id);
+    }
     copyFileSync(path, ctx.report.path(`copy-${format}.${format}`)); writeFileSync(ctx.report.path(`copy-${format}-revisions.json`), JSON.stringify(revisions, null, 2));
   }
 }
