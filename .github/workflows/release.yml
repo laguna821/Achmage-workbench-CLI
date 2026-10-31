@@ -45,7 +45,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-14]
+        os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     steps:
@@ -216,7 +216,7 @@ jobs:
   macos:
     name: macOS (Apple silicon, dmg)
     needs: web
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -262,7 +262,7 @@ jobs:
         include:
           - os: windows-latest
             artifact: windows
-          - os: macos-14
+          - os: macos-15
             artifact: macos
     runs-on: ${{ matrix.os }}
     steps:
@@ -330,7 +330,8 @@ jobs:
           PY
           gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" -D out \
             -n windows -n macos -n linux -n arch \
-            -n smoke-windows -n smoke-macos -n lightpanda-macos-14 -n lightpanda-ubuntu-24.04
+            -n smoke-windows -n smoke-macos
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" -D out -p 'lightpanda-*'
       - name: Verify evidence and upload to prepared draft
         run: |
           python3 - <<'PY'
