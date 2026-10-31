@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { copyOfficeStyleSelection } from "./office-styles.ts";
 import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unwatchFile, watchFile, writeFileSync, type Stats } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
@@ -1602,6 +1603,16 @@ export class SessionManager {
     const existing = this.documents.list().find((artifact) => artifact.workId === work.id && artifact.path === path);
     if (!existing) throw new HttpError(415, "unsupported_format", "문서로 열 수 없는 파일입니다.");
     return this.documents.check(existing.id);
+  }
+
+  registerOfficeCopy(source: ReturnType<Documents["get"]>, path: string, revision: number, sessionId: string | null) {
+    const work = this.workIn(source.workId, source.workspaceId);
+    const tracked = this.documents.track(work.id, work.cwd, path, "user", sessionId,
+      `「${source.name}」 r${revision}에서 다른 이름으로 저장`, [{ artifactId: source.id, revision }]);
+    const artifact = tracked?.artifact ?? this.documents.list().find((entry) => entry.workId === work.id && entry.path === path);
+    if (!artifact) throw new HttpError(500, "office_copy_untracked", "사본 파일은 저장했지만 문서 목록에 등록하지 못했습니다. 저장 위치에서 확인해 주세요.");
+    if (source.format === "pptx" && artifact.format === "pptx") copyOfficeStyleSelection(this.documents.dataDir, source.id, artifact.id);
+    return artifact;
   }
 
   /**

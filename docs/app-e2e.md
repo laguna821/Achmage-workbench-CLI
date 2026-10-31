@@ -118,6 +118,10 @@ Tauri `invoke`는 쓰기 불가능하므로 원본 호출을 유지하고 정확
 2026-10-31 최종 단일 **117/117**(시작4·문서 참조43·로컬 첨부70), 회귀 **85/85**, 전체 타입 및 최종 빌드 통과. HWP 이력 매핑의 첨부 누락을 수정했다. 실패 실행00–04와 긴 파일명 보완 전 성공05도 보존했다. 근거 `office-local-files-native-06/verification.json`; 검증 판 `research:rr-b31c38482d609cd7a58ccd2c895f8d3a:db02746f1499818e05c808d4b0546cf18fcd6b226845afb237c13467e524dac9`. 모든 바이너리 입력·Windows/macOS·전체 Office/릴리스 완료를 뜻하지 않는다.
 
 
+### 공통 사본 저장 서비스 회귀
+
+`--only=hwp`는 공통 출력 계약을 확장한 뒤에도 원본 한글 메뉴의 취소·미저장 사본·메모·원본 불변·같은 대화 재열기·Rust PDF·네이티브 인쇄를 검사한다. 2026-10-31 **27/27**, 근거 `office-copy-hwp-native-01/verification.json`. 별도 호스트 검사 `office-output.test.ts`, `office-copy.test.ts`, `office-styles.test.ts`는 **29/29**로 등록된 뷰/대화, 형식 게이트, 출처·작업공간, PPT 선택, 동일 요청 재생과 파일 게시 후 등록 중단을 검사한다. 다른 편집기의 Save As 메뉴 연결·자산 이행·늦은 편집·다른 OS 검사는 아직 남아 있다. 정확한 연구 판과 한계는 [공통 사본 저장 서비스](office-integration.md#공통-사본-저장-서비스)에 기록한다.
+
 ### 원본 스킬 제안 카드
 
 `--only=office-cards`는 9종 원본 `propose_skill` 카드에 실제 입력/저장을 하고, 같은 보관함의 자동 `use_skill`과 저장 표시 복원을 검사한다. 첫 PPT는 내 스킬 수정·수동 선택·취소와 앱/host 재시작도 확인한다. 제공자만 로컬 SSE 대역이며 원본 파일과 저장 전/취소의 미작성 여부를 검사한다. `APP_E2E_OFFICE_CARD_FORMATS=pptx`처럼 표적 실행할 수 있다. 이동 중 라디오를 다른 위치에서 클릭하지 않도록 화면 위치 안정과 실제 checked 상태를 확인한다. 현재문서 양식 미리보기 시나리오는 별도 후속이다. 근거는 `office-cards-native-03/verification.json`이며 앞선9종 실행과 표적 실패/수정을 모두 포함한다.

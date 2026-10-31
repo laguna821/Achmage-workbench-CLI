@@ -29,6 +29,15 @@ function write(file: string, value: unknown) {
   const temp = `${file}.${randomUUID()}.tmp`;
   writeFileSync(temp, JSON.stringify(value), { flag: "wx", mode: 0o600 }); renameSync(temp, file);
 }
+/** Save As keeps the current design choice while retaining the destination's previous choice. */
+export function copyOfficeStyleSelection(dataDir: string, sourceId: string, targetId: string) {
+  const root = join(dataDir, "office-styles", "selections");
+  const source = read<Selection>(join(root, `${hash(sourceId)}.json`));
+  if (!source) return;
+  const target = join(root, `${hash(targetId)}.json`), previous = read<Selection>(target);
+  if (previous) write(join(root, "history", `${hash(targetId)}-${randomUUID()}.json`), previous);
+  write(target, { ...source, revision: randomUUID() });
+}
 function styleData(value: unknown): Style["data"] {
   if (!object(value) || !text(value.topic, 100_000) || !text(value.styleSkill, 1_000_000) || !value.styleSkill.trim() || !text(value.createdAt, 100)
     || (value.layout !== undefined && !object(value.layout)) || (value.basedOn !== undefined && !text(value.basedOn, 128))) throw fail("저장할 디자인 스타일 형식을 확인해 주세요.");

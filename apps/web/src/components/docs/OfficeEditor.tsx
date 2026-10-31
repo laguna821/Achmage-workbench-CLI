@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { Artifact, DocumentAccess, EditorGrant, OfficePageMessage } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
-import type { OfficeOutputPlan, OfficeOutputRequest } from "../../../../../packages/contracts/src/office-output.ts";
+import type { OfficeOutputFormat, OfficeOutputPlan, OfficeOutputRequest } from "../../../../../packages/contracts/src/office-output.ts";
 import { OfficeOutputDialog } from "./OfficeOutputDialog.tsx";
 import { OfficeReferencePicker } from "./OfficeReferencePicker.tsx";
 import type { OfficeDocumentChoice, OfficeReferenceRequest, OfficeReferenceSnapshot } from "../../../../../packages/contracts/src/office-references.ts";
@@ -56,9 +56,10 @@ export const OfficeEditor = forwardRef<
   const [referencePicker, setReferencePicker] = useState<{ items: OfficeDocumentChoice[]; choose(paths: string[] | null): void } | null>(null);
   const [skillsOpen, setSkillsOpen] = useState(false);
   const outputBusy = useRef(false);
+  const outputClose = useRef<(() => void) | null>(null);
   const outputPlans = useRef(new Map<string, OfficeOutputPlan>());
   const copied = useRef(new Set<string>());
-  const [output, setOutput] = useState<{ revision: number; format: "pdf" | "hwp" | "hwpx"; choose(plan: OfficeOutputPlan | null): void } | null>(null);
+  const [output, setOutput] = useState<{ revision: number; format: OfficeOutputFormat; choose(plan: OfficeOutputPlan | null): void } | null>(null);
   const latest = useRef(artifact);
   latest.current = artifact;
 
@@ -160,6 +161,10 @@ export const OfficeEditor = forwardRef<
   const handleOutput = async (message: OfficeOutputRequest) => {
     const target = frame.current?.contentWindow, origin = opened.current?.origin;
     if (!target || !origin) return;
+    const owner = latest.current.id, ownerSession = opened.current?.sessionId;
+    const check = () => {
+      if (target !== frame.current?.contentWindow || owner !== latest.current.id || ownerSession !== opened.current?.sessionId) throw new Error("저장 중 문서 창이나 연결된 대화가 바뀌었습니다. 저장한 사본은 문서 목록에서 확인해 주세요.");
+    };
     const reply = (value: unknown, error?: string) => target.postMessage({ type: "office:output-result", requestId: message.requestId, value, error }, origin);
     if (outputBusy.current) { reply(null, "다른 저장·출력 요청을 처리 중입니다."); return; }
     outputBusy.current = true;
@@ -167,7 +172,9 @@ export const OfficeEditor = forwardRef<
       if (message.action === "commit") {
         const plan = outputPlans.current.get(message.planId);
         if (!plan || !(message.bytes instanceof ArrayBuffer)) throw new Error("저장 위치를 다시 선택하세요.");
-        const result = await api.commitOfficeOutput(latest.current.id, plan.id, message.bytes, plan.replace);
+        check();
+        const result = await api.commitOfficeOutput(owner, plan.id, message.bytes, plan.replace);
+        check();
         outputPlans.current.delete(plan.id); copied.current.add(result.artifact.id);
         reply({ path: result.path, artifactId: result.artifact.id });
         if (result.backupPath) handlers.current.onNotice(`이전 파일을 백업했습니다: ${result.backupPath}`);
@@ -178,19 +185,28 @@ export const OfficeEditor = forwardRef<
         const { invoke } = await import("@tauri-apps/api/core"); await invoke("print_svg", { job: message.job });
         handlers.current.onNotice("인쇄 미리보기 창을 열었습니다."); reply({}); return;
       }
-      const plan = await new Promise<OfficeOutputPlan | null>((resolve) => setOutput({ revision: message.revision, format: message.action === "prepare" ? message.format : "pdf", choose: resolve }));
+      const plan = await new Promise<OfficeOutputPlan | null>((resolve) => {
+        const choose = (value: OfficeOutputPlan | null) => { outputClose.current = null; resolve(value); };
+        outputClose.current = () => choose(null);
+        setOutput({ revision: message.revision, format: message.action === "prepare" ? message.format : "pdf", choose });
+      });
       setOutput(null);
       if (!plan) { reply(null); return; }
+      check();
       if (message.action === "prepare") { outputPlans.current.set(plan.id, plan); reply(plan); return; }
       if (!("__TAURI_INTERNALS__" in window)) throw new Error("PDF 출력은 데스크톱 앱에서 실행해 주세요.");
       const { invoke } = await import("@tauri-apps/api/core");
       const bytes = await invoke<ArrayBuffer>("render_svg_pdf", { job: message.job });
-      const result = await api.commitOfficeOutput(latest.current.id, plan.id, bytes, plan.replace);
+      check();
+      const result = await api.commitOfficeOutput(owner, plan.id, bytes, plan.replace);
       handlers.current.onNotice(`PDF를 저장했습니다: ${result.path}`);
       reply({ path: result.path, artifactId: result.artifact.id });
     } catch (error) { reply(null, error instanceof Error ? error.message : String(error)); }
     finally { outputBusy.current = false; }
   };
+  useEffect(() => {
+    return () => { outputClose.current?.(); setOutput(null); outputPlans.current.clear(); copied.current.clear(); };
+  }, [artifact.id, generation, sessionId]);
 
   const handleAi = async (message: Extract<OfficePageMessage, { type: "office:ai-request" }>) => {
     const target = frame.current?.contentWindow, origin = opened.current?.origin;
@@ -272,6 +288,7 @@ export const OfficeEditor = forwardRef<
   const aiHandler = useRef(handleAi); aiHandler.current = handleAi;
   const referenceHandler = useRef(handleReference); referenceHandler.current = handleReference;
   const skillsHandler = useRef(handleSkills); skillsHandler.current = handleSkills;
+  const outputHandler = useRef(handleOutput); outputHandler.current = handleOutput;
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -281,7 +298,7 @@ export const OfficeEditor = forwardRef<
         case "office:skills": void skillsHandler.current(message); break;
         case "office:references": void referenceHandler.current(message); break;
         case "office:ai-request": void aiHandler.current(message); break;
-        case "office:output": void handleOutput(message); break;
+        case "office:output": void outputHandler.current(message); break;
         case "office:copied":
           if (copied.current.delete(message.artifactId)) {
             // The unsaved bytes now belong to the copy. Restore this old tab from its actual

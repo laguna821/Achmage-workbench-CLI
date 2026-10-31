@@ -208,7 +208,7 @@ function streamEvents(req: IncomingMessage, res: ServerResponse, bus: EventBus, 
 export function createHttpServer(manager: SessionManager, bus: EventBus, options: HttpOptions): Server {
   const tickets = new Map<string, PreviewTicket>();
   const userSkills = skillRoutes(manager);
-  const outputs = new OfficeOutputs(manager.documents, (source, path) => manager.openFile(source.workId, path, source.workspaceId));
+  const outputs = new OfficeOutputs(manager.documents, (source, path, revision, sessionId) => manager.registerOfficeCopy(source, path, revision, sessionId));
   return createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const path = url.pathname;
@@ -623,9 +623,9 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const artifactId = parts[1];
         const revision = url.searchParams.get("revision") ? Number(url.searchParams.get("revision")) : undefined;
         if (method === "POST" && parts[2] === "outputs") {
-          if (parts[3]) return sendJson(res, 201, await outputs.commit(artifactId, parts[3], await readBody(req, 201_000_004), url.searchParams.get("replace") === "1"));
+          if (parts[3]) return sendJson(res, 201, await outputs.commit(artifactId, parts[3], await readBody(req, 201_000_004), url.searchParams.get("replace") === "1", documentAccess(req)));
           const body = await readJson(req);
-          return sendJson(res, 200, outputs.prepare(artifactId, Number(body.revision), String(body.path ?? "")));
+          return sendJson(res, 200, outputs.prepare(artifactId, Number(body.revision), String(body.path ?? ""), documentAccess(req)));
         }
         if (method === "POST" && parts[2] === "views") {
           const registration = documents.registry.open(artifactId, await readJson(req) as DocumentViewInput);
