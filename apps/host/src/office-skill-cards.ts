@@ -12,13 +12,13 @@ import { saveSkillCard, type SkillCardInput, type SkillCardRevision } from "./sk
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const string = (v: unknown, max: number): v is string => typeof v === "string" && v.length <= max;
 const hash = (v: string) => createHash("sha256").update(v).digest("hex");
-type Receipt = { identity: string; targetId?: string; label: string; name: string; revisions: SkillCardRevision[] };
-type Saved = { version: 1; fingerprint: string; sessionId: string; artifactId: string; status: "saving" | "interrupted" | "failed" | "completed"; result?: { ok: true; id: string }; item?: TranscriptItem };
+export type SkillCardReceipt = { identity: string; targetId?: string; label: string; name: string; revisions: SkillCardRevision[] };
+type Saved = { version: 1; fingerprint: string; sessionId: string; artifactId: string; previewId?: string; status: "saving" | "interrupted" | "failed" | "completed"; result?: { ok: true; id: string }; item?: TranscriptItem };
 
 /** The original card's explicit Save is the sole write boundary. Name checks
  * pin the source revisions; saved receipts and chat rows share Workbench storage. */
 export class OfficeSkillCards {
-  private readonly checked = new Map<string, Receipt>();
+  private readonly checked = new Map<string, SkillCardReceipt>();
   private readonly saving = new Set<string>();
   private readonly manager: SessionManager;
   private readonly store: Store;
@@ -43,9 +43,16 @@ export class OfficeSkillCards {
   private identity(access: OfficeSkillAccess) { return JSON.stringify([access.scope, access.sessionId, access.artifact.id, access.access.viewId]); }
   private card(raw: unknown) {
     if (!record(raw) || !string(raw.id, 100) || !/^[A-Za-z0-9_-]+$/.test(raw.id) || !string(raw.label, 512) || !raw.label.trim() || (raw.targetId !== undefined && !string(raw.targetId, 100))) throw new HttpError(400, "office_skill_card", "스킬 카드 정보를 확인해 주세요.");
-    return { id: raw.id, label: raw.label, targetId: raw.targetId as string | undefined };
+    if (raw.previewId !== undefined && !string(raw.previewId, 128)) throw new HttpError(400, "office_skill_card", "미리보기 카드 정보를 확인해 주세요.");
+    return { id: raw.id, label: raw.label, targetId: raw.targetId as string | undefined, ...(raw.previewId ? { previewId: raw.previewId as string } : {}) };
   }
-  async read(context: OfficeSkillContext, operation: string, input: unknown) {
+  capture(context: OfficeSkillContext, raw: unknown, name: unknown): SkillCardReceipt {
+    const identity = this.identity(this.access(context)), card = this.card(raw);
+    const receipt = this.checked.get(hash(identity + card.id));
+    if (!receipt || receipt.targetId !== card.targetId || receipt.label !== card.label || receipt.name !== name) throw new HttpError(409, "office_skill_unchecked", "미리보기를 열기 전에 카드 이름과 스킬 판을 확인해 주세요.");
+    return structuredClone(receipt);
+  }
+  async read(context: OfficeSkillContext, operation: string, input: unknown, inherited?: SkillCardReceipt) {
     const before = this.access(context), identity = this.identity(before);
     const current = () => { if (identity !== this.identity(this.access(context))) throw new HttpError(409, "office_skill_scope", "카드를 확인하는 동안 문서나 대화가 바뀌었습니다."); };
     if (!record(input)) throw new HttpError(400, "office_skill_card", "스킬 카드 요청이 올바르지 않습니다.");
@@ -55,11 +62,12 @@ export class OfficeSkillCards {
       return suggestUserSkillName(input.title, { taken: all.map((s) => s.name) });
     }
     const card = this.card(input.card), key = hash(identity + card.id), target = all.find((s) => officeSkillId(s) === card.targetId);
+    if (inherited && (inherited.targetId !== card.targetId || inherited.label !== card.label)) throw new HttpError(409, "office_preview_card", "미리보기로 인계한 카드를 확인해 주세요.");
     if (!string(input.name, 200)) throw new HttpError(400, "office_skill_card", "스킬 이름이 올바르지 않습니다.");
     if (card.targetId && (!target || target.source === "project" || target.problem || !target.editable && target.shadowedBy)) throw new HttpError(409, "office_skill_target", "변경할 스킬을 다시 확인해 주세요.");
     const old = this.checked.get(key);
     if (old && (old.targetId !== card.targetId || old.label !== card.label)) throw new HttpError(409, "office_skill_card", "다른 제안으로 카드 번호를 재사용할 수 없습니다.");
-    const name = input.name.trim(), revisions = old?.revisions.filter((r) => r.id === target?.id) ?? [];
+    const name = input.name.trim(), revisions = (old ?? inherited)?.revisions.filter((r) => r.id === target?.id || (old ?? inherited)?.name === name) ?? [];
     for (const skill of all.filter((s) => s.id === target?.id || s.editable && s.name.toLowerCase() === name.toLowerCase())) {
       if (revisions.some((r) => r.id === skill.id)) continue;
       const detail = await this.manager.userSkills.detail(skill.id, before.scope);
@@ -73,7 +81,7 @@ export class OfficeSkillCards {
     const collision = all.some((s) => s.name.toLowerCase() === name.toLowerCase() && s.id !== target?.id && (s.editable || name !== target?.name));
     return collision ? { ok: false, problem: "taken" } : { ok: true };
   }
-  async save(context: OfficeSkillContext, input: unknown) {
+  async save(context: OfficeSkillContext, input: unknown, completedOnly = false) {
     const before = this.access(context), identity = this.identity(before);
     if (!record(input)) throw new HttpError(400, "office_skill_card", "스킬 저장 요청이 올바르지 않습니다.");
     const card = this.card(input.card), key = hash(identity + card.id), storeKey = `office-skill-card:${key}`;
@@ -91,11 +99,12 @@ export class OfficeSkillCards {
       if (saved.status === "completed" && saved.result) return saved.result;
       throw new HttpError(409, "office_skill_interrupted", "저장 결과를 보관함에서 확인해 주세요. 같은 사본을 다시 쓰지 않았습니다.");
     }
+    if (completedOnly) throw new HttpError(409, "office_preview_ended", "이미 끝난 양식 미리보기입니다. 보관함에 다시 저장하지 않았습니다.");
     if (this.saving.has(key)) throw new HttpError(409, "office_skill_busy", "이 카드를 저장 중입니다.");
     const checked = this.checked.get(key);
     if (!checked || checked.identity !== identity || checked.targetId !== card.targetId || checked.label !== card.label || checked.name !== (input.name as string).trim()) throw new HttpError(409, "office_skill_unchecked", "카드 이름과 현재 스킬 판을 다시 확인해 주세요.");
     this.saving.add(key);
-    const pending: Saved = { version: 1, fingerprint, sessionId: before.sessionId, artifactId: before.artifact.id, status: "saving" };
+    const pending: Saved = { version: 1, fingerprint, sessionId: before.sessionId, artifactId: before.artifact.id, ...(card.previewId ? { previewId: card.previewId } : {}), status: "saving" };
     let committing = false;
     try {
       this.store.setMeta(storeKey, JSON.stringify(pending));

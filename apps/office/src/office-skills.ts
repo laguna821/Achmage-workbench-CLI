@@ -2,6 +2,13 @@ import type { OfficeSkillRead, OfficeSkillView } from "../../../packages/contrac
 import { Events, Gateway, listen, post, type Init } from "./bridge.ts";
 import type { OfficeSkillRequest } from "../../../packages/contracts/src/office-skills.ts";
 
+const encode = (bytes: Uint8Array) => {
+  if (!(bytes instanceof Uint8Array) || bytes.byteLength > 64 * 1024 * 1024) throw new Error("양식 파일 크기를 확인해 주세요.");
+  const parts: string[] = [];
+  for (let at = 0; at < bytes.length; at += 0x8000) parts.push(String.fromCharCode(...bytes.subarray(at, at + 0x8000)));
+  return btoa(parts.join(""));
+};
+
 /** Original picker, read-only tools and explicit cards share Workbench's library. */
 export function createOfficeSkills(init: Init, gateway: Gateway, events: Events, openSettings: () => Promise<void>, prepare: () => Promise<unknown>) {
   let generation = 0;
@@ -24,6 +31,19 @@ export function createOfficeSkills(init: Init, gateway: Gateway, events: Events,
     return result;
   };
   const refresh = () => events.emit("userSkillsChanged");
+  const previewListeners = new Set<(value: unknown) => void>();
+  let previewTimer: number | undefined, polling = false;
+  const poll = async () => {
+    if (polling || !previewListeners.size) return;
+    polling = true;
+    try {
+      const results = await call<{ previewId: string; outcome: string }[]>("preview-events", {});
+      for (const result of results) {
+        for (const listener of previewListeners) listener(result);
+      }
+    } catch { /* A changing document grant is retried while a listener remains. */ }
+    finally { polling = false; if (previewListeners.size) previewTimer = window.setTimeout(() => void poll(), 1500); }
+  };
   return {
     changed: () => { generation++; refresh(); }, refresh,
     bridge: {
@@ -38,17 +58,25 @@ export function createOfficeSkills(init: Init, gateway: Gateway, events: Events,
         let template: { fileName: string; base64: string } | undefined;
         if (input.template) {
           const value = input.template as { fileName: string; bytes: Uint8Array };
-          if (!(value.bytes instanceof Uint8Array) || value.bytes.byteLength > 64 * 1024 * 1024) throw new Error("양식 파일 크기를 확인해 주세요.");
-          const parts: string[] = [];
-          for (let at = 0; at < value.bytes.length; at += 0x8000) parts.push(String.fromCharCode(...value.bytes.subarray(at, at + 0x8000)));
-          template = { fileName: value.fileName, base64: btoa(parts.join("")) };
+          template = { fileName: value.fileName, base64: encode(value.bytes) };
         }
         const result = await parent("save-card", { ...input, ...(template ? { template } : {}) });
         if (before !== generation) throw new Error("저장 중 선택한 대화가 바뀌었습니다. 보관함에서 결과를 확인해 주세요.");
         refresh(); return result;
       },
       openTemplate: async (input: Record<string, unknown>) => { await prepare(); return parent("open-template", input); },
+      openPreview: (input: Record<string, unknown>) => { const { bytes, ...rest } = input; return parent("open-preview", { ...rest, base64: encode(bytes as Uint8Array) }); },
+      previewOriginal: async (previewId: string) => {
+        const result = await call<{ ok: boolean; base64: string; fileName: string }>("preview-original", { previewId });
+        return { ok: result.ok, fileName: result.fileName, bytes: Uint8Array.from(atob(result.base64), (c) => c.charCodeAt(0)) };
+      },
+      finishPreview: (previewId: string, outcome: "saved" | "unsaved", saved?: { skillId: string; title: string }) => parent("finish-preview", { previewId, outcome, ...(saved ? { saved } : {}) }),
+      onPreviewEnded: (listener: (value: unknown) => void) => {
+        previewListeners.add(listener); if (previewListeners.size === 1) { clearTimeout(previewTimer); void poll(); }
+        return () => { previewListeners.delete(listener); if (!previewListeners.size) clearTimeout(previewTimer); };
+      },
       takeHandoff: (target: string) => call("take-handoff", { target }),
+      previewLinks: () => call("preview-links", {}),
       focusTab: (tabId: string) => parent("focus-tab", { tabId }),
       openSettings,
       onChanged: (listener: () => void) => events.on("userSkillsChanged")(listener),

@@ -6,16 +6,19 @@ import type { OfficeSkillHandoff } from "../../../packages/contracts/src/office-
 import { reservePath } from "./create.ts";
 import { HttpError } from "./errors.ts";
 import type { Store } from "./store.ts";
+import type { SkillCardReceipt } from "./office-skill-cards.ts";
 
-type Template = { path: string; sha256: string; skillSha256: string; markdown: string; skillDir: string };
-export type CreationTarget = Omit<CreateTarget, "format"> & { format: DocFormat };
+type Snapshot = { path: string; sha256: string };
+type Template = Snapshot & { skillSha256: string; markdown: string; skillDir: string };
+export type CreationTarget = Omit<CreateTarget, "format"> & { format: DocFormat; extension?: string };
 export type CreationRecord<T extends CreationTarget = CreationTarget> = {
   version: 1; requestId: string; sessionId: string; workId: string; workspaceId: string | null; fingerprint: string;
   cwd: string; path: string; target: T; sources: { artifactId: string; revision: number }[];
   state: "reserved" | "ready" | "sent" | "completed" | "interrupted" | "failed";
   initialSha256: string; skillPath: string | null; skillDir: string | null;
   artifactId: string | null; problem: string | null; createdAt: number; updatedAt: number;
-  office?: { sourceArtifactId: string; sourceViewId: string; handoff: OfficeSkillHandoff; state: "queued" | "taken" | "interrupted"; claimedViewId?: string };
+  office?: { sourceArtifactId: string; sourceViewId: string; handoff: OfficeSkillHandoff; state: "queued" | "taken" | "interrupted"; claimedViewId?: string;
+    preview?: { original: Snapshot; receipt: SkillCardReceipt; status: "open" | "saved" | "unsaved"; skillId?: string; title?: string } };
 };
 const PREFIX = "document-creation:";
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
@@ -47,7 +50,15 @@ export class CreationJournal {
     this.store.setMeta(key(id), JSON.stringify(record));
     return record;
   }
-  reserve<T extends CreationTarget>(input: Pick<CreationRecord<T>, "requestId" | "sessionId" | "workId" | "workspaceId" | "fingerprint" | "cwd" | "target" | "sources">, template: Template | null): CreationRecord<T> {
+  snapshot(bytes: Uint8Array): Snapshot {
+    const sha256 = hash(bytes), path = join(this.dataDir, "document-template-snapshots", sha256);
+    mkdirSync(join(this.dataDir, "document-template-snapshots"), { recursive: true });
+    try { writeFileSync(path, bytes, { flag: "wx", mode: 0o444 }); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+    if (hash(readFileSync(path)) !== sha256) throw new HttpError(409, "template_changed", "보관한 원본 양식의 내용이 바뀌었습니다.");
+    return { path, sha256 };
+  }
+  reserve<T extends CreationTarget>(input: Pick<CreationRecord<T>, "requestId" | "sessionId" | "workId" | "workspaceId" | "fingerprint" | "cwd" | "target" | "sources"> & Pick<CreationRecord, "office">, template: Template | Snapshot | null): CreationRecord<T> {
     const previous = this.get<T>(input.requestId);
     if (previous) {
       if (previous.sessionId !== input.sessionId || previous.fingerprint !== input.fingerprint || previous.cwd !== resolve(input.cwd)) throw new HttpError(409, "request_id_conflict", "같은 requestId로 다른 문서를 만들 수 없습니다.");
@@ -61,15 +72,17 @@ export class CreationJournal {
     mkdirSync(cwd, { recursive: true });
     const reserved = new Set(this.list().filter((item) => ["reserved", "ready", "sent"].includes(item.state)).map((item) => item.path));
     const path = reservePath(cwd, input.target, reserved);
-    const skillPath = template ? join(this.dataDir, "template-instructions", `${template.skillSha256}.md`) : null;
-    if (template) {
-      if (hash(readFileSync(template.path)) !== template.sha256 || hash(template.markdown) !== template.skillSha256) throw new HttpError(409, "template_changed", "선택한 양식 판을 확인할 수 없습니다.");
+    const instructions = template && "markdown" in template ? template : null;
+    const skillPath = instructions ? join(this.dataDir, "template-instructions", `${instructions.skillSha256}.md`) : null;
+    if (template && hash(readFileSync(template.path)) !== template.sha256) throw new HttpError(409, "template_changed", "선택한 양식 판을 확인할 수 없습니다.");
+    if (instructions) {
+      if (hash(instructions.markdown) !== instructions.skillSha256) throw new HttpError(409, "template_changed", "선택한 양식 설명을 확인할 수 없습니다.");
       mkdirSync(join(this.dataDir, "template-instructions"), { recursive: true });
-      try { writeFileSync(skillPath!, template.markdown, { flag: "wx", mode: 0o444 }); }
+      try { writeFileSync(skillPath!, instructions.markdown, { flag: "wx", mode: 0o444 }); }
       catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
-      if (hash(readFileSync(skillPath!)) !== template.skillSha256) throw new HttpError(409, "template_changed", "양식 설명 사본의 내용이 바뀌었습니다.");
+      if (hash(readFileSync(skillPath!)) !== instructions.skillSha256) throw new HttpError(409, "template_changed", "양식 설명 사본의 내용이 바뀌었습니다.");
     }
-    const record: CreationRecord<T> = { ...input, version: 1, cwd, path, initialSha256: template?.sha256 ?? hash(""), skillPath, skillDir: template?.skillDir ?? null, state: "reserved", artifactId: null, problem: null, createdAt: Date.now(), updatedAt: Date.now() };
+    const record: CreationRecord<T> = { ...input, version: 1, cwd, path, initialSha256: template?.sha256 ?? hash(""), skillPath, skillDir: instructions?.skillDir ?? null, state: "reserved", artifactId: null, problem: null, createdAt: Date.now(), updatedAt: Date.now() };
     this.store.setMeta(key(input.requestId), JSON.stringify(record));
     try {
       if (template) copyFileSync(template.path, path, constants.COPYFILE_EXCL);

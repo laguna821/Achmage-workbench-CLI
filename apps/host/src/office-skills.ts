@@ -12,6 +12,7 @@ import { HttpError } from "./errors.ts";
 import { readBody, sendJson } from "./http.ts";
 import { officeEditorKind } from "./editors.ts";
 import { OfficeSkillCards } from "./office-skill-cards.ts";
+import { OfficeTemplatePreviews } from "./office-template-previews.ts";
 import type { Store } from "./store.ts";
 
 export type OfficeSkillContext = { artifactId: string; token: string; grants: EditorGrants };
@@ -30,9 +31,11 @@ export class OfficeSkills {
   private readonly manager: SessionManager;
   private readonly opening = new Set<string>();
   private readonly cards: OfficeSkillCards;
+  readonly previews: OfficeTemplatePreviews;
   constructor(manager: SessionManager, store: Store) {
     this.manager = manager;
     this.cards = new OfficeSkillCards(manager, store, (context) => this.writable(context));
+    this.previews = new OfficeTemplatePreviews(manager, store, this.cards, (context) => this.writable(context));
     // An uncertain handoff never silently starts a model after an app restart.
     for (const record of manager.creations.list()) {
       if (record.office?.state !== "queued") continue;
@@ -76,7 +79,10 @@ export class OfficeSkills {
   async read(context: Context, operation: string, input: unknown = {}) {
     const scope = this.scope(context), identity = JSON.stringify(scope);
     if (operation === "take-handoff") return this.take(context, input);
-    if (operation === "suggest-name" || operation === "check-name") return this.cards.read(context, operation, input);
+    if (operation === "preview-original" && record(input)) return this.previews.original(context, input);
+    if (operation === "preview-events") return this.previews.events(context);
+    if (operation === "preview-links") return this.previews.links(context);
+    if (operation === "suggest-name" || operation === "check-name") return this.cards.read(context, operation, input, this.previews.receipt(context, record(input) && record(input.card) ? input.card.previewId : undefined));
     const stillHere = () => { if (identity !== JSON.stringify(this.scope(context))) throw new HttpError(409, "office_skill_scope", "스킬을 읽는 동안 작업공간 또는 엔진 선택이 바뀌었습니다."); };
     if (operation === "list") {
       const all = await this.manager.userSkills.list(scope); stillHere();
@@ -112,12 +118,14 @@ export class OfficeSkills {
     return { scope, sessionId, access: access!, artifact: this.manager.documents.get(context.artifactId) };
   }
   /** Only the authenticated Workbench parent routes creation and navigation here. */
-  async action(context: Context, action: unknown, input: unknown) {
+  async action(context: Context, action: unknown, input: unknown): Promise<{ ok: boolean; reason?: string; id?: string; tabId?: string; previewId?: string }> {
     const before = this.writable(context);
     if (!record(input)) throw new HttpError(400, "office_template_input", "양식 요청 형식이 올바르지 않습니다.");
-    if (action === "save-card") return this.cards.save(context, input);
+    if (action === "save-card") return this.previews.save(context, record(input.card) ? input.card.previewId : undefined, typeof input.name === "string" ? input.name : "", (completedOnly) => this.cards.save(context, input, completedOnly));
+    if (action === "open-preview") return this.previews.open(context, input);
+    if (action === "finish-preview") return this.previews.finish(context, input);
     if (action === "focus-tab") {
-      const entry = this.manager.creations.list().find((item) => item.artifactId === input.tabId && item.sessionId === before.sessionId && item.office?.sourceArtifactId === context.artifactId && item.office.sourceViewId === before.access.viewId);
+      const entry = this.manager.creations.list().find((item) => item.artifactId === input.tabId && item.sessionId === before.sessionId && item.office?.sourceArtifactId === context.artifactId);
       if (!entry?.artifactId) return fail("not-found");
       this.manager.documents.get(entry.artifactId);
       return { ok: true, tabId: entry.artifactId };
@@ -161,7 +169,9 @@ export class OfficeSkills {
   private take(context: Context, input: unknown) {
     const owner = this.writable(context);
     if (!record(input) || input.target !== officeEditorKind(owner.artifact.format)) return null;
-    const entry = this.manager.creations.list().find((item) => item.artifactId === context.artifactId && item.sessionId === owner.sessionId && item.office?.state === "queued" && item.office.handoff.target === input.target);
+    const preview = this.previews.take(context, input.target);
+    if (preview) return preview;
+    const entry = this.manager.creations.list().find((item) => item.artifactId === context.artifactId && item.sessionId === owner.sessionId && !item.office?.preview && item.office?.state === "queued" && item.office.handoff.target === input.target);
     if (!entry?.office) return null;
     this.manager.creations.update(entry.requestId, { office: { ...entry.office, state: "taken", claimedViewId: owner.access.viewId } });
     return entry.office.handoff;
@@ -190,7 +200,7 @@ export class OfficeSkills {
     return { text: raw.text, skills: selected, skillReads: reads };
   }
   async handle(req: IncomingMessage, res: ServerResponse, url: URL, token: string | null, grants: EditorGrants) {
-    const match = /^\/api\/artifacts\/([^/]+)\/ai\/skills\/(list|read|ai-read|ai-read-file|take-handoff|suggest-name|check-name)$/.exec(url.pathname);
+    const match = /^\/api\/artifacts\/([^/]+)\/ai\/skills\/(list|read|ai-read|ai-read-file|take-handoff|suggest-name|check-name|preview-original|preview-events|preview-links)$/.exec(url.pathname);
     if (!match) return false;
     const [, artifactId, operation] = match;
     if (req.method !== (operation === "list" ? "GET" : "POST")) throw new HttpError(405, "method_not_allowed", "허용되지 않은 스킬 요청입니다.");

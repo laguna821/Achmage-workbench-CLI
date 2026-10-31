@@ -38,7 +38,7 @@ export async function fixture(file: string, format: Format) {
     const doc = await PDFDocument.create(); doc.addPage([400, 600]).drawText("Original text.", { x: 30, y: 550, size: 18 }); writeFileSync(file, await doc.save({ useObjectStreams: false }));
   }
 }
-async function savedText(file: string, format: Format): Promise<string> {
+export async function savedText(file: string, format: Format | "docx"): Promise<string> {
   const bytes = readFileSync(file);
   if (format === "md" || format === "html") return bytes.toString();
   if (format === "hwpx") return hwpToText(bytes);
@@ -52,8 +52,7 @@ async function savedText(file: string, format: Format): Promise<string> {
   const zip = await JSZip.loadAsync(bytes);
   return (await Promise.all(Object.keys(zip.files).filter((name) => /\.(xml|xhtml|json)$/.test(name)).map((name) => zip.file(name)!.async("string")))).join("\n");
 }
-function toolCall(format: Format, count: number, body: any): { name: string; input: object } | null {
-  const text = marker(format);
+export function toolCall(format: Format, count: number, body: any, text = marker(format)): { name: string; input: object } | null {
   if (format === "epub") {
     if (count === 1) return { name: "read_chapter", input: { chapter: 1 } };
     if (count === 2) {

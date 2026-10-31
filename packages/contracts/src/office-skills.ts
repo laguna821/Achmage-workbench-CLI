@@ -19,8 +19,15 @@ export type OfficeSkillRead = {
 export type OfficeSkillHandoff = {
   id: string; mode: "skill"; target: import("./index.ts").OfficeEditorKind;
   text: string; chips: OfficeSkillChip[]; createdAt: number;
+  resumed?: boolean;
+  preview?: OfficeTemplatePreview;
+};
+export type OfficeTemplatePreview = {
+  previewId: string; title: string; fileName: string; originalRedacted: boolean;
+  proposal: { key: string; name: string; title: string; description: string; body: string; wantsTemplate: true; target?: { id: string; name: string; title: string; source: string; owned: boolean } };
+  draft?: { name: string; title: string; description: string; body: string; invoke: "auto" | "manual" };
 };
 export type OfficeSkillRequest = {
-  type: "office:skills"; requestId: string; action: "open-template" | "take-handoff" | "focus-tab" | "save-card";
+  type: "office:skills"; requestId: string; action: "open-template" | "take-handoff" | "focus-tab" | "save-card" | "open-preview" | "finish-preview";
   input: Record<string, unknown>;
 };

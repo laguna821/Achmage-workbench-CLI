@@ -77,6 +77,8 @@ describe("new documents from a request", () => {
     expect(reservePath(work.cwd, { format: "markdown", name: "요약" })).toBe(join(work.cwd, "요약 2.md"));
     expect(reservePath(work.cwd, { format: "hwpx", name: "../보고서.hwpx" })).toBe(join(work.cwd, ".._보고서.hwpx"));
     expect(reservePath(work.cwd, { format: "design", name: "" })).toBe(join(work.cwd, "새 문서.design.json"));
+    expect(reservePath(work.cwd, { format: "xlsx", name: "사본.xlsm", extension: ".xlsm" })).toBe(join(work.cwd, "사본.xlsm"));
+    expect(() => reservePath(work.cwd, { format: "xlsx", name: "사본", extension: ".exe" })).toThrow(/형식/);
     expect(parseCreate({ format: "exe", name: "a" })).toBeNull();
     expect(parseCreate({ format: "pptx", name: "발표" })).toEqual({ format: "pptx", name: "발표" });
   });

@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
-import { CREATE_EXTENSION, CREATE_LABEL, type CreatableFormat, type CreateTarget, type DocFormat } from "@workbench/contracts";
+import { CREATE_EXTENSION, CREATE_LABEL, formatOf, type CreatableFormat, type CreateTarget, type DocFormat } from "@workbench/contracts";
 import { HttpError } from "./errors.ts";
 import type { IeumOffice } from "./ieumoffice.ts";
 import type { Kordoc } from "./kordoc.ts";
@@ -24,14 +24,15 @@ export function parseCreate(value: unknown): CreateTarget | null {
 }
 
 /** A file name in `cwd` that does not exist yet: `<name><ext>`, then `<name> 2<ext>`, … */
-export function reservePath(cwd: string, target: { format: DocFormat; name: string }, reserved: ReadonlySet<string> = new Set()) {
+export function reservePath(cwd: string, target: { format: DocFormat; name: string; extension?: string }, reserved: ReadonlySet<string> = new Set()) {
   const extensions: Record<DocFormat, string> = { ...CREATE_EXTENSION, pdf: ".pdf", hwp: ".hwp", text: ".txt", xmind: ".xmind", epub: ".epub" };
-  const extension = extensions[target.format];
+  if (target.extension && (!/^\.[a-z]+$/.test(target.extension) || formatOf(`copy${target.extension}`) !== target.format)) throw new HttpError(400, "invalid_extension", "사본의 파일 형식을 확인해 주세요.");
+  const extension = target.extension ?? extensions[target.format];
   const stem =
     target.name
       .trim()
       .replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_")
-      .replace(/\.(md|hwpx?|docx|pptx|xlsx|html?|pdf|txt|xmind|epub|design\.json)$/i, "")
+      .replace(/\.(md|markdown|hwpx?|docx|pptx|xlsx|xlsm|html?|pdf|txt|xmind|epub|design\.json)$/i, "")
       .slice(0, 80) || "새 문서";
   let path = join(cwd, `${stem}${extension}`);
   for (let index = 2; existsSync(path) || reserved.has(path); index += 1) {

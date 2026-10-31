@@ -83,7 +83,7 @@ export default function DocumentView({
   /** Answer an approval of the session from the drawer, without leaving the document. */
   onAnswer?: (session: Session, itemId: string, decision: "accept" | "decline") => void;
   /** Register how to save edits only this view holds (the Word editor) before the app leaves it. */
-  onLeaveGuard?: (guard: (() => Promise<void>) | null) => void;
+  onLeaveGuard?: (guard: ((reason?: "close") => Promise<void>) | null) => void;
   /** Open document tabs of this work. */
   tabs?: ReactNode;
   openDocIds?: string[];
@@ -276,18 +276,21 @@ export default function DocumentView({
   // Switching/closing must wait for a confirmed save, including text and design editors.
   useEffect(() => {
     if (!onLeaveGuard) return;
-    onLeaveGuard(async () => {
+    onLeaveGuard(async (reason) => {
       if (editorView && !editorView.dom.closest(".pane[hidden]")) {
         const cursor = editorView.state.selection.main;
         onUiState?.({ cursor: { anchor: cursor.anchor, head: cursor.head }, scroll: { top: editorView.scrollDOM.scrollTop, left: editorView.scrollDOM.scrollLeft } });
       }
-      if (officeEditing && officeRef.current) return officeRef.current.leave();
-      const submittedText = saving.current ? savingText.current : text;
-      if (await save() === null) throw new Error("문서를 저장하지 못해 이동하지 않았습니다. 현재 편집 내용을 확인해 주세요.");
-      if (!design && latestText.current !== submittedText) throw new Error("저장하는 동안 편집 내용이 바뀌어 이동을 보류했습니다. 다시 이동해 주세요.");
+      if (officeEditing && officeRef.current) await officeRef.current.leave();
+      else {
+        const submittedText = saving.current ? savingText.current : text;
+        if (await save() === null) throw new Error("문서를 저장하지 못해 이동하지 않았습니다. 현재 편집 내용을 확인해 주세요.");
+        if (!design && latestText.current !== submittedText) throw new Error("저장하는 동안 편집 내용이 바뀌어 이동을 보류했습니다. 다시 이동해 주세요.");
+      }
+      if (reason === "close" && lease.canWrite) await api.closeOfficePreview(artifactId);
     });
     return () => onLeaveGuard(null);
-  }, [onLeaveGuard, officeEditing, save, text, design, editorView, onUiState]);
+  }, [onLeaveGuard, officeEditing, save, text, design, editorView, onUiState, lease.canWrite, api, artifactId]);
 
   // Autosave shortly after typing stops.
   useEffect(() => {

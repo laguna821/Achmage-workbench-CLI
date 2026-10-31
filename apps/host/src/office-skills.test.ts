@@ -283,3 +283,127 @@ it("keeps a project-owned skill authoritative and refuses copying it from an Off
     expect(existsSync(f.manager.userSkills.appDir)).toBe(false);
   } finally { await f.close(); }
 });
+
+function previewInput(id = "preview", targetId?: string, redacted = false) {
+  const input = proposed(`card-${id}`, `skill-${id}`, targetId);
+  return { requestId: id, card: input.card, fileName: "source.md", title: "원본", tabTitle: "빈 양식", text: "일회성 내용을 지워 빈 양식을 만들어 줘", originalRedacted: redacted,
+    base64: Buffer.from("UNSAVED_CURRENT_BYTES").toString("base64"),
+    proposal: { key: `proposal-${id}`, name: input.name, title: input.title, description: input.description, body: input.body, wantsTemplate: true,
+      ...(targetId ? { target: { id: targetId, name: "installed", title: "Installed", source: "user", owned: false } } : {}) }, draft: input };
+}
+async function openPreview(f: ReturnType<typeof fixture>, input = previewInput()) {
+  await checkCard(f, input.draft);
+  const answer = await f.service.action(f.context, "open-preview", input) as { ok: true; tabId: string; previewId: string };
+  const view = f.manager.documents.registry.open(answer.tabId, { viewId: `preview-${input.requestId}`, windowId: "preview-window", sessionId: f.session.id, claim: true });
+  const token = f.grant.issue(answer.tabId, { viewId: view.view.viewId, writeToken: view.writeToken }, f.session.id);
+  return { ...answer, context: { artifactId: answer.tabId, token, grants: f.grant }, path: f.manager.documents.get(answer.tabId).path, view };
+}
+it("opens current edited bytes in a separate document, preserves the original snapshot, and only hands the clearing request over once", async () => {
+  const f = fixture();
+  try {
+    const input = previewInput(), p = await openPreview(f, input);
+    expect(readFileSync(f.artifact.path, "utf8")).toBe("SOURCE_UNCHANGED");
+    expect(readFileSync(p.path, "utf8")).toBe("UNSAVED_CURRENT_BYTES");
+    expect(f.manager.creations.get(p.previewId)?.skillPath).toBeNull();
+    expect(await f.service.action(f.context, "open-preview", input)).toMatchObject({ tabId: p.tabId, previewId: p.previewId });
+    expect(await f.service.read(p.context, "take-handoff", { target: "markdown" })).toMatchObject({ resumed: false, text: input.text, chips: [], preview: { originalRedacted: false, proposal: { key: input.proposal.key } } });
+    expect(await f.service.read(p.context, "take-handoff", { target: "markdown" })).toMatchObject({ resumed: true });
+    writeFileSync(p.path, "CLEARED_THEN_PERSON_EDITED");
+    const restarted = new OfficeSkills(f.manager, f.store);
+    expect(await restarted.read(p.context, "take-handoff", { target: "markdown" })).toMatchObject({ resumed: true });
+    expect(await restarted.read(p.context, "preview-original", { previewId: p.previewId })).toMatchObject({ base64: input.base64, fileName: "source.md" });
+    expect(readFileSync(p.path, "utf8")).toBe("CLEARED_THEN_PERSON_EDITED");
+    expect(existsSync(f.manager.userSkills.appDir)).toBe(false);
+    await expect(restarted.action(f.context, "open-preview", { ...input, text: "CHANGED" })).rejects.toThrow(/재사용/);
+  } finally { await f.close(); }
+});
+it("restores a queued preview as a card after restart without automatically repeating an uncertain model request", async () => {
+  const f = fixture();
+  try {
+    const p = await openPreview(f), restarted = new OfficeSkills(f.manager, f.store);
+    expect(await restarted.read(p.context, "take-handoff", { target: "markdown" })).toMatchObject({ resumed: true });
+    expect(f.store.items(f.session.id)).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "notice", text: expect.stringContaining("자동 재전송하지") })]));
+  } finally { await f.close(); }
+});
+for (const close of [false, true]) it(`${close ? "tab close" : "Cancel"} ends the preview without a skill write and retains the document copy`, async () => {
+  const f = fixture();
+  try {
+    const p = await openPreview(f);
+    if (close) f.service.previews.close(p.tabId, { viewId: p.view.view.viewId, writeToken: p.view.writeToken });
+    else await f.service.action(p.context, "finish-preview", { previewId: p.previewId, outcome: "unsaved" });
+    expect(await f.service.read(f.context, "preview-events", {})).toEqual([expect.objectContaining({ previewId: p.previewId, outcome: "unsaved" })]);
+    expect(await f.service.read(p.context, "take-handoff", { target: "markdown" })).toBeNull();
+    expect(existsSync(p.path)).toBe(true);
+    expect(existsSync(f.manager.userSkills.appDir)).toBe(false);
+    expect(f.store.items(f.session.id).some((item) => item.office?.cardSaved)).toBe(false);
+    await expect(f.service.read(p.context, "preview-original", { previewId: p.previewId })).rejects.toThrow(/끝난/);
+  } finally { await f.close(); }
+});
+it("denies a redacted original at the host and commits only the explicitly chosen edited template, recovering its completion after restart", async () => {
+  const f = fixture();
+  try {
+    const input = previewInput("redacted", undefined, true), p = await openPreview(f, input);
+    await expect(f.service.read(p.context, "preview-original", { previewId: p.previewId })).rejects.toThrow(/가림/);
+    const save = { ...input.draft, card: { ...input.card, id: "preview-card", previewId: p.previewId }, template: { fileName: "source.md", base64: Buffer.from("BLANK_AND_PERSON_EDITED").toString("base64") } };
+    await f.service.read(p.context, "check-name", { name: save.name, card: save.card });
+    const saved = await f.service.action(p.context, "save-card", save) as { id: string };
+    expect(await f.service.action(p.context, "save-card", save)).toEqual(saved);
+    await expect(f.service.action(p.context, "save-card", { ...save, body: "DIFFERENT" })).rejects.toThrow(/다른 요청/);
+    expect(readFileSync(join(f.manager.userSkills.appDir, save.name, "assets/source.md"), "utf8")).toBe("BLANK_AND_PERSON_EDITED");
+    expect(await f.service.action(p.context, "finish-preview", { previewId: p.previewId, outcome: "saved", saved: { skillId: saved.id, title: save.title } })).toEqual({ ok: true });
+    await f.service.action(p.context, "finish-preview", { previewId: p.previewId, outcome: "unsaved" });
+    expect(await f.service.read(f.context, "preview-events", {})).toEqual([expect.objectContaining({ outcome: "saved", skillId: saved.id })]);
+    const entry = f.manager.creations.get(p.previewId)!;
+    f.manager.creations.update(entry.requestId, { office: { ...entry.office!, preview: { ...entry.office!.preview!, status: "open", skillId: undefined } } });
+    const restarted = new OfficeSkills(f.manager, f.store);
+    expect(await restarted.read(f.context, "preview-events", {})).toEqual([expect.objectContaining({ outcome: "saved", skillId: saved.id })]);
+    expect(f.store.items(f.session.id).filter((item) => item.office?.cardSaved)).toHaveLength(1);
+    expect(readFileSync(f.artifact.path, "utf8")).toBe("SOURCE_UNCHANGED");
+  } finally { await f.close(); }
+});
+it("carries the reviewed skill revision into a preview so changes during clearing cannot be silently overwritten", async () => {
+  const f = fixture();
+  try {
+    const dir = skill(join(f.home, ".claude/skills"), "installed");
+    const input = previewInput("revision", (await f.list())[0]!.id), p = await openPreview(f, input);
+    writeFileSync(join(dir, "SKILL.md"), readFileSync(join(dir, "SKILL.md"), "utf8") + "\nEXTERNAL_EDIT");
+    const save = { ...input.draft, card: { ...input.card, id: "preview-revision-card", previewId: p.previewId } };
+    await f.service.read(p.context, "check-name", { name: save.name, card: save.card });
+    await expect(f.service.action(p.context, "save-card", save)).rejects.toThrow(/바뀌었/);
+    expect(existsSync(join(f.manager.userSkills.appDir, save.name))).toBe(false);
+    expect(readFileSync(join(dir, "SKILL.md"), "utf8")).toContain("EXTERNAL_EDIT");
+  } finally { await f.close(); }
+});
+it("rejects a different document/session, invented save completion, and a close without the writer lease", async () => {
+  const f = fixture();
+  try {
+    const p = await openPreview(f);
+    await expect(f.service.read(f.context, "preview-original", { previewId: p.previewId })).rejects.toThrow();
+    await expect(f.service.action(p.context, "finish-preview", { previewId: p.previewId, outcome: "saved", saved: { skillId: "invented", title: "Forged" } })).rejects.toThrow(/확인하지/);
+    expect(() => f.service.previews.close(p.tabId, { viewId: "source", writeToken: null })).toThrow();
+    const other = f.manager.createSession(f.work.id, { provider: "claude" });
+    f.manager.documents.registry.open(p.tabId, { viewId: "other", windowId: "other", sessionId: other.id, claim: true });
+    const token = f.grant.issue(p.tabId, { viewId: "other", writeToken: null }, other.id);
+    await expect(f.service.read({ artifactId: p.tabId, token, grants: f.grant }, "take-handoff", { target: "markdown" })).rejects.toThrow();
+    expect(existsSync(f.manager.userSkills.appDir)).toBe(false);
+  } finally { await f.close(); }
+});
+it("does not let tab cancellation race a card commit", async () => {
+  const f = fixture();
+  try {
+    const input = previewInput("race"), p = await openPreview(f, input);
+    const save = { ...input.draft, card: { ...input.card, id: "preview-race", previewId: p.previewId } };
+    await f.service.read(p.context, "check-name", { name: save.name, card: save.card });
+    let release!: () => void, started!: () => void;
+    const blocked = new Promise<void>((resolve) => { release = resolve; }), entered = new Promise<void>((resolve) => { started = resolve; });
+    const mutate = f.manager.userSkills.mutate.bind(f.manager.userSkills);
+    vi.spyOn(f.manager.userSkills, "mutate").mockImplementationOnce((run) => mutate(async () => { started(); await blocked; return run(); }));
+    const pending = f.service.action(p.context, "save-card", save); await entered;
+    try {
+      await expect(f.service.action(p.context, "finish-preview", { previewId: p.previewId, outcome: "unsaved" })).rejects.toThrow(/저장 중/);
+      expect(() => f.service.previews.close(p.tabId, { viewId: p.view.view.viewId, writeToken: p.view.writeToken })).toThrow(/저장 중/);
+    } finally { release(); }
+    await pending;
+    expect(await f.service.read(f.context, "preview-events", {})).toEqual([expect.objectContaining({ outcome: "saved" })]);
+  } finally { await f.close(); }
+});

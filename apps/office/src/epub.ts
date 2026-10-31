@@ -29,6 +29,12 @@ async function checkpoint() {
   if (before === epoch) await call("checkpoint-confirm", { checkpoint: kept.checkpoint });
 }
 let keeping: Promise<void> | null = null;
+const templateDocument = () => session ? {
+  fileName: path.split(/[\\/]/).pop() || "전자책.epub", title: init.artifact.name,
+  redacted: () => false,
+  bytes: async () => { await keep(); return new Uint8Array((await gateway.epubCheckpoint(id, session)).bytes); },
+} : null;
+Object.assign(globalThis, { workbenchEpubTemplateDocument: templateDocument });
 function keep(): Promise<void> {
   if (!session || init.readOnly) return Promise.resolve();
   if (keeping) return keeping;

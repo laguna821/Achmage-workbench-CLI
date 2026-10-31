@@ -41,6 +41,7 @@ import { officeReferencesScenario } from "./office-references.ts";
 import { officeFilesScenario } from "./office-files.ts";
 import { officeSkillsScenario } from "./office-skills.ts";
 import { officeCardsScenario } from "./office-cards.ts";
+import { officePreviewsScenario } from "./office-previews.ts";
 
 const { binary, outDir, only, engines } = parseArgs(process.argv.slice(2));
 mkdirSync(outDir, { recursive: true });
@@ -83,6 +84,7 @@ try {
       if (wants("office-files")) await officeFilesScenario(ctx, { binary, engines, profile: "native" });
       if (wants("office-skills")) await officeSkillsScenario(ctx, { binary, engines, profile: "native" });
       if (wants("office-cards")) await officeCardsScenario(ctx, { binary, engines, profile: "native" });
+      if (wants("office-previews")) await officePreviewsScenario(ctx, { binary, engines, profile: "native" });
       if (wants("hwp")) await hwpScenario(ctx);
       if (wants("worktrees")) await worktreesScenario(ctx, { binary, engines, profile: "native" });
       if (wants("terminals")) await terminalsScenario(ctx, { binary, engines, profile: "native" });

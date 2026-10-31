@@ -109,7 +109,6 @@ function workbenchPlatform(): Plugin {
         "print-window",
         "seed-deck",
         "seed-queue",
-        "template-bytes",
         "template-cover",
         "template-fonts",
         "template-selection-ipc",

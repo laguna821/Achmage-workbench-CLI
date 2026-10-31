@@ -5,13 +5,44 @@ export function patchOfficeSkillConversation(code: string, id: string, root: str
     if (code.split(before).length !== 2) throw new Error(`Original Office skill boundary changed: ${id}: ${before.slice(0, 90)}`);
     code = code.replace(before, after);
   };
+  if (id === `${root}/apps/sheets/src/preload/index.ts`) {
+    // A template exports a new copy even when the workbook has no edits.
+    // Use the original copy validation only for this non-mutating byte channel;
+    // the ordinary save and Save As handlers remain untouched.
+    replace("  async workbookTemplateBytes(request) {\n    const validatedRequest = parseSaveRequest(request)", "  async workbookTemplateBytes(request) {\n    const validatedRequest = parseSaveRequest({ ...request, mode: 'save-as' })");
+  }
   if (id === `${root}/packages/ui/src/SkillProposalCard.tsx`) {
-    replace("  const ids = useId()", "  const ids = useId()\n  const wbCardRef = useRef(crypto.randomUUID())\n  const wbCard = { id: wbCardRef.current, label: proposal.name || proposal.title, ...(proposal.target ? { targetId: proposal.target.id } : {}) }");
+    replace("  initialDraft,\n  onSaved,", "  initialDraft,\n  workbenchPreviewId,\n  onSaved,");
+    replace("  const ids = useId()", "  const ids = useId()\n  const wbCardRef = useRef(crypto.randomUUID())\n  const wbCard = { id: wbCardRef.current, label: proposal.name || proposal.title, ...(proposal.target ? { targetId: proposal.target.id } : {}), ...(workbenchPreviewId ? { previewId: workbenchPreviewId } : {}) }");
+    replace("  const templateContext: SkillCardTemplateContext = {\n    lang,", "  const templateContext: SkillCardTemplateContext = {\n    workbenchCard: wbCard,\n    lang,");
     replace(".checkName(name, forId)", ".checkName(name, forId, wbCard)");
     replace("bridge.saveFromCard(input).catch(() => null)", "bridge.saveFromCard({ ...input, card: wbCard }).catch((error) => { setWbSaveError(error instanceof Error ? error.message : String(error)); return null })");
     replace("  const [busy, setBusy] = useState(false)", "  const [busy, setBusy] = useState(false)\n  const [wbSaveError, setWbSaveError] = useState<string | null>(null)");
     replace("    setBusy(true)\n    setFailure(null)", "    setBusy(true)\n    setFailure(null)\n    setWbSaveError(null)");
     replace("{failure ? t(failure) : blocked}", "{wbSaveError || (failure ? t(failure) : blocked)}");
+  }
+  if (id === `${root}/packages/ui/src/SkillTemplateActions.tsx`) {
+    replace("        proposal: context.proposal,", "        card: context.workbenchCard,\n        proposal: context.proposal,");
+  }
+  if (id === `${root}/packages/ui/src/use-skill-proposals.tsx`) {
+    replace("          proposal={proposal}", "          proposal={proposal}\n          workbenchPreviewId={card.preview?.previewId}");
+    replace("      return read.messages", `      // The original transcript closes unsaved cards. Recover links to durable previews.
+      void globalThis.aiOfficeUserSkills?.previewLinks?.().then((links) => {
+        setCards((prev) => {
+          const next = new Map(prev), matched = new Set();
+          for (const link of [...links].reverse()) {
+            const original = [...read.proposals].reverse().find((p) => !matched.has(p.key) && p.title === link.label);
+            if (!original) continue;
+            matched.add(original.key);
+            const card = next.get(original.key);
+            if (!card) continue;
+            next.set(original.key, { ...card, title: link.title || card.title, status: link.outcome === 'open' ? 'preview' : link.outcome,
+              ...(link.outcome === 'open' ? { continuesIn: { tabId: link.tabId, previewId: link.previewId } } : {}) });
+          }
+          return next;
+        });
+      }).catch(() => undefined);
+      return read.messages`);
   }
   if (id === `${root}/packages/ui/src/skill-send.ts`) {
     replace("  id: string\n  title: string", "  id: string\n  sha256?: string\n  title: string");
@@ -22,14 +53,15 @@ export function patchOfficeSkillConversation(code: string, id: string, root: str
     replace("send({ text: built.text, chips: composerChips.map(skillChipRef) })", "send({ text: built.text, chips: composerChips.map(skillChipRef), reads: skills.map(({ id, sha256 }) => ({ id, sha256 })) })");
   }
   if (id === `${root}/packages/ui/src/use-skill-templates.tsx`) {
-    // Template creation/handoff does not need the proposal-card preview bridge.
-    // Keep the latter unavailable until its own persistence boundary is connected.
     replace("options.bridge !== undefined ? options.bridge : skillTemplateBridge()", "options.bridge !== undefined ? options.bridge : (globalThis.workbenchOfficeAi?.templates ?? skillTemplateBridge())");
+    // Reopening restores the card; it must never repeat the clearing model run.
+    replace("      setHanded(taken)\n      let use:", "      setHanded(taken)\n      if (taken.resumed) { setRunPhase('done'); return }\n      let use:");
     replace("use = { text: built.text, chips: taken.chips.map(chipRefOf) }", "use = { text: built.text, chips: taken.chips.map(chipRefOf), reads: skills.map(({ id, sha256 }) => ({ id, sha256 })) }");
   }
   if (id === `${root}/packages/ui/src/skill-template-model.ts`) {
     replace("'docs' | 'sheets' | 'slides' | 'pdf' | 'markdown' | 'html' | 'mindmap' | 'hwp'", "'docs' | 'sheets' | 'slides' | 'pdf' | 'markdown' | 'html' | 'mindmap' | 'hwp' | 'epub'");
     replace("  'mindmap',\n  'hwp',\n])", "  'mindmap',\n  'hwp',\n  'epub',\n])");
+    replace("return { id: raw.id, text: raw.text, chips, ...(preview ? { preview } : {}) }", "return { id: raw.id, text: raw.text, chips, resumed: raw.resumed === true, ...(preview ? { preview } : {}) }");
   }
   const context = (text: string) => `{ text: ${text}, chips: skillUse.chips, reads: skillUse.reads }`;
   for (const app of ["docs", "slides", "hwp", "html", "mindmap", "epub", "markdown", "pdf"]) {
@@ -47,6 +79,7 @@ export function patchOfficeSkillConversation(code: string, id: string, root: str
       // EPUB already exposes the common skills and supports native handoff, but
       // its original panel omitted the shared template request hook.
       replace("  useComposerSkills,", "  useComposerSkills,\n  useSkillTemplates,");
+      replace("  const skillCards = useSkillProposals({\n    lang,", "  const skillCards = useSkillProposals({\n    lang,\n    templateDocument: globalThis.workbenchEpubTemplateDocument?.() ?? null,");
       replace("const skills = useComposerSkills({ lang })", "const skills = useComposerSkills({ lang, onTemplateSkill: (request) => skillTemplatesRef.current.onTemplateSkill(request) })");
       replace("  skillCardsRef.current = skillCards\n", "  skillCardsRef.current = skillCards\n  const skillTemplates = useSkillTemplates({ lang, editor: 'epub', cards: skillCards, busy, send: (text, use) => send(text, undefined, use), setComposer: setPrompt });\n  const skillTemplatesRef = useRef(skillTemplates);\n  skillTemplatesRef.current = skillTemplates;\n");
       replace("          onProposal: (proposal) => {", "          onUsed: (skill) => skillTemplatesRef.current.onUsed(skill),\n          onProposal: (proposal) => {");

@@ -244,9 +244,9 @@ export function App() {
   const { view, workId } = focusedPane(layout);
   // A document view holding edits only it can save (the Word editor) saves them before it is replaced (one per pane).
   const leaveGate = useRef(new LeaveGate());
-  const leaveGuards = useRef<Partial<Record<PaneId, () => Promise<void>>>>({});
+  const leaveGuards = useRef<Partial<Record<PaneId, (reason?: "close") => Promise<void>>>>({});
   const guardOf = useMemo(() => {
-    const keep = (id: PaneId) => (guard: (() => Promise<void>) | null) => {
+    const keep = (id: PaneId) => (guard: ((reason?: "close") => Promise<void>) | null) => {
       if (guard) leaveGuards.current[id] = guard;
       else delete leaveGuards.current[id];
     };
@@ -1692,7 +1692,7 @@ export function App() {
     const rest = focusedPane(next);
     const previous = paneById(current, rest.id);
     const guards = tabsOf(paneById(current, id)!).map((tab) => leaveGuards.current[tab.id]).filter((guard) => !!guard);
-    leaveGate.current.run(id, async () => { await Promise.all(guards.map((guard) => guard())); }, () => {
+    leaveGate.current.run(id, async () => { await Promise.all(guards.map((guard) => guard("close"))); }, () => {
       updateLayout((latest) => closePane(latest, id));
       if (rest.id !== current.focus && previous) showSessionOf(previous.workId, previous.sessionId);
     }, fail, `close-group:${id}`);
@@ -1708,7 +1708,7 @@ export function App() {
   };
   const closeTabNow = (paneId: string, tabId: string) => {
     const guard = leaveGuards.current[tabId];
-    leaveGate.current.run(paneId, guard ?? null, () => {
+    leaveGate.current.run(paneId, guard ? () => guard("close") : null, () => {
       updateLayout((current) => closeTab(current, paneId, tabId, { view: { kind: "new", folderId: null }, workId: null, sessionId: null }));
     }, fail, tabId);
   };
