@@ -726,12 +726,16 @@ export type DesignSelection = { pageId: string; pageIndex: number; objectIds: st
 
 export type DesignSaveState = "idle" | "dirty" | "saving" | "saved" | "conflict" | "error";
 
+/** Private recovery data, separate from the document's saved revisions. */
+export type DesignDraft = { artifactId: string; viewId: string; baseRevision: number; text: string; sha256: string; at: number; active?: boolean };
+
 /** Workbench window → design page (iframe at /design/). */
 export type DesignHostMessage =
   | { type: "design:init"; token: string; artifactId: string; revision: number | null; readOnly: boolean; theme: "light" | "dark"; access?: import("./document-registry.ts").DocumentAccess }
   | { type: "design:access"; access: import("./document-registry.ts").DocumentAccess }
   | { type: "design:theme"; theme: "light" | "dark" }
-  | { type: "design:flush" }
+  | { type: "design:flush"; requestId: string }
+  | { type: "design:check-reload"; revision: number }
   | { type: "render:init"; token: string }
   | { type: "render:request"; id: string; artifactId: string; document: string; page: number; width: number };
 
@@ -740,6 +744,7 @@ export type DesignPageMessage =
   | { type: "design:ready" }
   | { type: "design:opened"; revision: number; pages: number }
   | { type: "design:saved"; revision: number }
+  | { type: "design:flushed"; requestId: string; revision: number | null }
   | { type: "design:state"; state: DesignSaveState; message?: string }
   | { type: "design:selection"; selection: DesignSelection | null }
   | { type: "design:reload" }

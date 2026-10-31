@@ -8,6 +8,6 @@ export default defineConfig({
     { name: "workbench-office-provider-platform", enforce: "pre", resolveId: officeProviderResolve },
     { name: "workbench-office-file-parse", enforce: "pre", resolveId: officeFileParseResolve }],
   test: {
-    include: ["packages/*/src/**/*.test.ts", "apps/host/src/**/*.test.ts", "apps/web/src/**/*.test.tsx"],
+    include: ["packages/*/src/**/*.test.ts", "apps/host/src/**/*.test.ts", "apps/web/src/**/*.test.tsx", "apps/design/**/*.test.ts"],
   },
 });

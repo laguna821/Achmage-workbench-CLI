@@ -1,4 +1,4 @@
-import type { Artifact, DocumentAccess } from "@workbench/contracts";
+import type { Artifact, DesignDraft, DocumentAccess } from "@workbench/contracts";
 import type { FontFamily } from "@/types/api";
 
 // The Workbench gateway, seen from the design page. Images are fetched with the token and handed to
@@ -54,11 +54,28 @@ export class Gateway {
     });
   }
 
-  exportFile(artifactId: string, file: Blob, name: string) {
+  exportFile(artifactId: string, file: Blob, name: string, revision: number | null = null) {
     return this.request<{ path: string; name: string; artifactId: string | null }>("POST", `/api/artifacts/${artifactId}/exports`, file, {
       "content-type": "application/octet-stream",
       "x-file-name": encodeURIComponent(name),
+      ...(revision !== null ? { "x-design-revision": String(revision) } : {}),
     });
+  }
+
+  drafts(artifactId: string) { return this.request<DesignDraft[]>("GET", `/api/artifacts/${artifactId}/design-drafts`); }
+  keepDraft(artifactId: string, baseRevision: number, text: string) {
+    return this.request<DesignDraft>("PUT", `/api/artifacts/${artifactId}/design-drafts`, JSON.stringify({ baseRevision, text }), { "content-type": "application/json" });
+  }
+  removeDraft(artifactId: string, draft: DesignDraft) {
+    return this.request<{ removed: boolean }>("DELETE", `/api/artifacts/${artifactId}/design-drafts`, JSON.stringify(draft), { "content-type": "application/json" });
+  }
+  copy(artifactId: string, baseRevision: number, text: string) {
+    return this.request<Artifact>("POST", `/api/artifacts/${artifactId}/design-copy`, JSON.stringify({ baseRevision, text }), { "content-type": "application/json" });
+  }
+
+  dispose() {
+    for (const url of this.blobs.values()) void url.then((value) => URL.revokeObjectURL(value)).catch(() => {});
+    this.blobs.clear();
   }
 
   fonts() {

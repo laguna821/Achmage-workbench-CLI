@@ -88,3 +88,8 @@ body {
   padding: 0 24px;
   text-align: center;
 }
+
+.wb-design-recovery { padding: 24px; overflow: auto; font-size: 14px; }
+.wb-design-recovery > div { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 16px 0; }
+.wb-design-recovery button { padding: 8px 12px; cursor: pointer; }
+.wb-design-recovery-error { padding: 8px 12px; background: #fff1dc; color: #854d0e; font-size: 13px; }

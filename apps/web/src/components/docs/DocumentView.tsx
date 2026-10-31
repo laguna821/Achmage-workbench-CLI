@@ -232,7 +232,7 @@ export default function DocumentView({
 
   const save = useCallback(async (): Promise<number | null> => {
     if (!lease.access().writeToken) {
-      return (base && text !== base.text) || designStatus.state === "dirty" || designStatus.state === "saving" || officeStatus.dirty ? null : (base?.revision ?? artifact?.revision ?? null);
+      return (base && text !== base.text) || ["dirty", "saving", "conflict", "error"].includes(designStatus.state) || officeStatus.dirty ? null : (base?.revision ?? artifact?.revision ?? null);
     }
     // The design and Word editors save by themselves; make sure the last edits are in before anything is sent.
     if (design) return designRef.current ? designRef.current.flush() : (artifact?.revision ?? null);
@@ -301,7 +301,7 @@ export default function DocumentView({
     return () => window.clearTimeout(timer.current);
   }, [text, base, saveState, save, lease.canWrite, officeEditing]);
   const unsaved = Boolean(base && text !== base.text);
-  const dirty = unsaved || officeStatus.dirty || designStatus.state === "dirty" || designStatus.state === "saving";
+  const dirty = unsaved || officeStatus.dirty || ["dirty", "saving", "conflict", "error"].includes(designStatus.state);
   useEffect(() => { lease.report(dirty, (officeEditing ? officeStatus.revision : base?.revision) ?? designStatus.revision ?? artifact?.revision); }, [dirty, officeEditing, base?.revision, officeStatus.revision, designStatus.revision, artifact?.revision, lease.report]);
   useEffect(() => registerDocumentCommands(lease.viewId, {
     artifactId,

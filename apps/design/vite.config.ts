@@ -1,6 +1,7 @@
 import { fileURLToPath, URL } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import { patchDesign } from "./patch";
 
 // The design page the Workbench UI embeds (iframe at /design/). `@` is the vendored doory source, used
 // unchanged; this app only supplies the adapter, fonts and the bridge to the Workbench window.
@@ -9,7 +10,7 @@ const hostUrl = process.env.WORKBENCH_HOST_URL ?? "http://127.0.0.1:47820";
 
 export default defineConfig({
   base: "/design/",
-  plugins: [react()],
+  plugins: [{ name: "workbench-design", enforce: "pre", transform(source, id) { return id.startsWith(vendor + "/") ? patchDesign(id, source) : null; } }, react()],
   resolve: { alias: { "@": vendor } },
   optimizeDeps: { include: ["mp4-muxer", "webm-muxer", "gifenc"] },
   server: {

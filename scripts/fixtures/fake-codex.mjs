@@ -50,7 +50,7 @@
 //          file, then an answer with a heading, a list, a table, code and a quote (sample-reply.mjs)
 
 import { createHash } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -377,7 +377,12 @@ async function runTurn(threadId, thread, turnId, text, images = "") {
   const working = text.match(/작업 사본만 수정하세요: (.+)/);
   if (text.includes("고쳐") && working) {
     const path = resolve(thread.cwd, working[1].trim());
-    appendFileSync(path, "\n\n고친 문단입니다. 도입부를 질문 하나로 시작하게 바꿨습니다.\n");
+    if (path.endsWith(".design.json")) {
+      const document = JSON.parse(readFileSync(path, "utf8"));
+      const heading = document.pages.flatMap((page) => page.objects).find((object) => typeof object.text === "string");
+      if (heading) heading.text += " NATIVE DESIGN AI";
+      writeFileSync(path, `${JSON.stringify(document, null, 2)}\n`);
+    } else appendFileSync(path, "\n\n고친 문단입니다. 도입부를 질문 하나로 시작하게 바꿨습니다.\n");
   }
   if (text.includes("MCP")) {
     // An MCP tool that needs approval: Codex asks through an elicitation it marks as such.

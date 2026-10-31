@@ -24,6 +24,7 @@ import {
   formatOf,
   DESIGN_EXTENSION,
   type DocRef,
+  type DocumentAccess,
   type DocumentTools,
   type CreateTarget,
   type ExportMarkdownRequest,
@@ -67,7 +68,7 @@ import type { Kordoc } from "./kordoc.ts";
 import type { AdapterSink, LoginStart, ProviderAdapter } from "./providers/types.ts";
 import type { Store } from "./store.ts";
 import { adaptTitle, titleFor } from "./titles.ts";
-import { blankDesign, designProblem, type DesignPreset } from "./design.ts";
+import { blankDesign, copyDesignAssets, designProblem, designStem, type DesignPreset } from "./design.ts";
 import { IeumOffice, ieumFromCliDir, installIeumOffice, type InstallProgress } from "./ieumoffice.ts";
 import { findHop, openInHop, openWithDesktop } from "./hop.ts";
 import { findPdfcraft } from "./pdfcraft.ts";
@@ -1637,19 +1638,48 @@ export class SessionManager {
    * A file the design editor exported (PNG, PDF, video…): written next to the design without
    * overwriting anything, and tracked when it is a document format (a PDF opens in the app).
    */
-  exportDesign(artifactId: string, data: Buffer, rawName: string) {
+  copyDesign(artifactId: string, text: string, baseRevision: number, access?: DocumentAccess) {
+    const view = this.documents.designView(artifactId, access);
+    const source = this.documents.get(artifactId);
+    this.documents.revisionPath(artifactId, baseRevision);
+    if (!Number.isSafeInteger(baseRevision)) throw new HttpError(400, "invalid_revision", "기준 판이 필요합니다.");
+    const problem = designProblem(text);
+    if (problem) throw new HttpError(422, "invalid_design", problem);
+    const work = this.workIn(source.workId, source.workspaceId);
+    const stem = `${designStem(source.name)} (내 편집)`;
+    let path = join(dirname(source.path), `${stem}${DESIGN_EXTENSION}`);
+    for (let index = 2; existsSync(path); index++) path = join(dirname(source.path), `${stem} ${index}${DESIGN_EXTENSION}`);
+    const copied = copyDesignAssets(text, source.path, path);
+    writeFileSync(path, copied, { flag: "wx" });
+    const tracked = this.documents.track(work.id, work.cwd, path, "user", view.sessionId, `「${source.name}」의 편집 사본`, [{ artifactId, revision: baseRevision }]);
+    if (!tracked) throw new HttpError(500, "design_not_tracked", "디자인 사본을 등록하지 못했습니다.");
+    return tracked.artifact;
+  }
+
+  exportDesign(artifactId: string, data: Buffer, rawName: string, access?: DocumentAccess, sourceRevision: number | null = null) {
     const design = this.documents.check(artifactId);
     if (design.format !== "design") throw new HttpError(400, "not_design", "디자인 문서가 아닙니다.");
-    const work = this.requireWork(design.workId);
+    const view = access ? this.documents.designView(artifactId, access) : null;
+    if (sourceRevision !== null) {
+      if (!Number.isSafeInteger(sourceRevision)) throw new HttpError(400, "invalid_revision", "출력 기준 판이 올바르지 않습니다.");
+      this.documents.revisionPath(artifactId, sourceRevision);
+    }
+    const work = this.workIn(design.workId, design.workspaceId);
     const name = basename(rawName.replace(/\\/g, "/")).replace(/[\u0000-\u001f<>:"|?*]/g, "_").trim() || "내보내기";
     if (data.length === 0) throw new HttpError(400, "export_empty", "빈 파일입니다.");
     const extension = extname(name);
+    if (!/^\.(png|jpe?g|webp|svg|pdf|zip|gif|mp4|webm|md|txt)$/i.test(extension)) throw new HttpError(415, "design_export_type", "지원하지 않는 디자인 출력 형식입니다.");
     const stem = name.slice(0, name.length - extension.length);
     let path = join(dirname(design.path), name);
     for (let index = 2; existsSync(path); index += 1) path = join(dirname(design.path), `${stem} ${index}${extension}`);
     writeFileSync(path, data, { flag: "wx" });
-    const tracked = this.documents.track(work.id, work.cwd, path, "user", null, `「${design.name}」에서 내보냄`);
-    return { path, name: basename(path), artifactId: tracked?.artifact.id ?? null };
+    const tracked = this.documents.track(work.id, work.cwd, path, "user", view?.sessionId ?? null, `「${design.name}」${sourceRevision === null ? "의 편집 화면" : ` r${sourceRevision}`}에서 내보냄`, sourceRevision === null ? null : [{ artifactId, revision: sourceRevision }]);
+    const receiptId = randomUUID();
+    const receipt = { id: receiptId, sourceArtifactId: artifactId, sourceRevision, workspaceId: design.workspaceId ?? null, sessionId: view?.sessionId ?? null, path, artifactId: tracked?.artifact.id ?? null, sha256: createHash("sha256").update(data).digest("hex"), size: data.length, at: Date.now() };
+    const receipts = join(this.documents.dataDir, "design-exports");
+    mkdirSync(receipts, { recursive: true });
+    writeFileSync(join(receipts, `${receiptId}.json`), JSON.stringify(receipt), { flag: "wx", mode: 0o600 });
+    return { path, name: basename(path), artifactId: tracked?.artifact.id ?? null, receiptId };
   }
 
   /**

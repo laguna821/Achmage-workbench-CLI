@@ -26,6 +26,7 @@ import { designAssetPath, designGuide, designProblem, designStem, saveDesignAsse
 import type { IeumOffice, OfficePage } from "./ieumoffice.ts";
 import { BackgroundIndex } from "./doc-text.ts";
 import { DocumentRegistry } from "./document-registry.ts";
+import { DesignDrafts } from "./design-drafts.ts";
 import { hwpToText } from "../../../third_party/ieumoffice/file-parse/hwp.ts";
 import { hwpFormat, openHwpBytes, prepareHwpSave } from "./hwp-codec.ts";
 
@@ -108,6 +109,7 @@ function countChanges(before: string, after: string) {
 
 export class Documents {
   readonly registry: DocumentRegistry;
+  readonly designDrafts: DesignDrafts;
   private readonly artifacts = new Map<string, Artifact>();
   private readonly proposals = new Map<string, Proposal>();
   private readonly store: Store;
@@ -130,6 +132,7 @@ export class Documents {
     this.store = store;
     this.bus = bus;
     this.root = join(dataDir, "artifacts");
+    this.designDrafts = new DesignDrafts(join(dataDir, "design-drafts"), this);
     this.kordoc = kordoc;
     this.ieum = ieum;
     for (const artifact of store.artifacts()) this.artifacts.set(artifact.id, { ...artifact, readBy: artifact.readBy ?? {} });
@@ -903,10 +906,20 @@ export class Documents {
   }
 
   /** Keep an image the user put into a design next to the design file. */
-  saveAsset(artifactId: string, data: Buffer, contentType: string, name: string) {
+  saveAsset(artifactId: string, data: Buffer, contentType: string, name: string, access?: DocumentAccess) {
     const artifact = this.get(artifactId);
     if (artifact.format !== "design") throw new HttpError(400, "not_design", "디자인 문서가 아닙니다.");
+    this.registry.assertWrite(artifactId, access);
     return { src: saveDesignAsset(artifact.path, data, contentType, name) };
+  }
+
+  /** Recovery and copies remain available to a registered view after it loses write ownership. */
+  designView(artifactId: string, access?: DocumentAccess) {
+    const artifact = this.get(artifactId);
+    if (artifact.format !== "design") throw new HttpError(400, "not_design", "디자인 문서가 아닙니다.");
+    const view = access && this.registry.forArtifact(artifactId).find((entry) => entry.viewId === access.viewId && entry.artifactId === artifactId);
+    if (!view) throw new HttpError(423, "design_view_missing", "디자인 창의 연결을 확인하지 못했습니다. 문서를 다시 열어 주세요.");
+    return view;
   }
 
   /** File behind an image src of a design (relative to the design's folder). */

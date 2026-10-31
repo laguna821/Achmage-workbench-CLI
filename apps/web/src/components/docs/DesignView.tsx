@@ -34,16 +34,26 @@ export const DesignView = forwardRef<
   const opened = useRef<number | null>(null);
   const status = useRef<DesignSaveState>("idle");
   const own = useRef(new Set<number>());
-  const waiters = useRef<((revision: number | null) => void)[]>([]);
+  const waiters = useRef(new Map<string, { resolve(value: number | null): void; timer: number }>());
   const readOnly = requestedReadOnly || revision !== null;
   const latestAccess = useRef(access); latestAccess.current = access;
   const handlers = useRef({ onStatus, onSelection, onCopied, onExported, onError });
   handlers.current = { onStatus, onSelection, onCopied, onExported, onError };
 
   const theme = () => (frame.current?.closest("[data-theme]")?.getAttribute("data-theme") === "dark" ? "dark" : "light");
-  const settle = (value: number | null) => {
-    for (const resolve of waiters.current.splice(0)) resolve(value);
+  const settle = (id: string, value: number | null) => {
+    const pending = waiters.current.get(id);
+    if (!pending) return;
+    waiters.current.delete(id);
+    window.clearTimeout(pending.timer);
+    pending.resolve(value);
   };
+
+  useEffect(() => {
+    opened.current = null;
+    status.current = "idle";
+    return () => { for (const id of waiters.current.keys()) settle(id, null); };
+  }, [artifact.id, revision, readOnly, generation]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -66,8 +76,9 @@ export const DesignView = forwardRef<
         case "design:state":
           status.current = message.state;
           handlers.current.onStatus({ state: message.state, revision: opened.current, message: message.message });
-          if (message.state === "saved" || message.state === "idle") settle(opened.current);
-          if (message.state === "conflict" || message.state === "error") settle(null);
+          break;
+        case "design:flushed":
+          settle(message.requestId, message.revision);
           break;
         case "design:selection":
           handlers.current.onSelection(message.selection);
@@ -103,17 +114,18 @@ export const DesignView = forwardRef<
   // A revision made elsewhere: open it when nothing here is unsaved.
   useEffect(() => {
     if (readOnly || opened.current === null || artifact.revision <= opened.current || own.current.has(artifact.revision)) return;
-    if (status.current === "saved" || status.current === "idle") setGeneration((value) => value + 1);
+    frame.current?.contentWindow?.postMessage({ type: "design:check-reload", revision: artifact.revision }, location.origin);
   }, [artifact.revision, readOnly]);
 
   useImperativeHandle(ref, () => ({
     flush() {
-      if (readOnly || status.current === "saved" || status.current === "idle") return Promise.resolve(opened.current);
-      if (status.current === "conflict" || status.current === "error") return Promise.resolve(null);
+      if (readOnly) return Promise.resolve(opened.current);
+      if (!frame.current?.contentWindow || opened.current === null) return Promise.resolve(null);
       return new Promise((resolve) => {
-        waiters.current.push(resolve);
-        frame.current?.contentWindow?.postMessage({ type: "design:flush" }, location.origin);
-        window.setTimeout(() => settle(status.current === "saved" ? opened.current : null), 8000);
+        const requestId = crypto.randomUUID();
+        const timer = window.setTimeout(() => settle(requestId, null), 30_000);
+        waiters.current.set(requestId, { resolve, timer });
+        frame.current?.contentWindow?.postMessage({ type: "design:flush", requestId }, location.origin);
       });
     },
   }));

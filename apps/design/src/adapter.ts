@@ -21,16 +21,15 @@ export function createWorkbenchAdapter(options: {
   artifactId: string;
   state: DesignDocumentState;
   fonts: FontFamily[];
-  onSaved(revision: number): void;
+  onSaved(revision: number, text: string): void;
 }): EditorAdapter {
   const { gateway, artifactId, state } = options;
   return {
     async save(input: SaveInput): Promise<SaveResult> {
-      const artifact = await gateway.save(artifactId, state.revision, serializeDesign(input.document));
-      if (artifact.revision !== state.revision) {
-        state.revision = artifact.revision;
-        options.onSaved(artifact.revision);
-      }
+      const text = serializeDesign(input.document);
+      const artifact = await gateway.save(artifactId, state.revision, text);
+      state.revision = artifact.revision;
+      options.onSaved(artifact.revision, text);
       return { savedAt: Date.now(), revision: artifact.revision };
     },
     // There are no accounts: features that would need one stay closed.

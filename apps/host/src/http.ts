@@ -697,11 +697,22 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         if (method === "POST" && parts[2] === "assets") {
           const data = await readBody(req, 50_000_000);
           const name = decodeURIComponent(String(req.headers["x-file-name"] ?? ""));
-          return sendJson(res, 201, documents.saveAsset(artifactId, data, String(req.headers["content-type"] ?? ""), name));
+          return sendJson(res, 201, documents.saveAsset(artifactId, data, String(req.headers["content-type"] ?? ""), name, documentAccess(req)));
+        }
+        if (parts[2] === "design-drafts") {
+          const access = documentAccess(req);
+          if (method === "GET") return sendJson(res, 200, documents.designDrafts.list(artifactId, access));
+          const body = await readJson(req, 20_000_000);
+          if (method === "PUT") return sendJson(res, 200, documents.designDrafts.keep(artifactId, { baseRevision: Number(body.baseRevision), text: body.text as string }, access));
+          if (method === "DELETE") return sendJson(res, 200, documents.designDrafts.remove(artifactId, body as import("@workbench/contracts").DesignDraft, access));
+        }
+        if (method === "POST" && parts[2] === "design-copy") {
+          const body = await readJson(req, 20_000_000);
+          return sendJson(res, 201, manager.copyDesign(artifactId, String(body.text ?? ""), Number(body.baseRevision), documentAccess(req)));
         }
         if (method === "POST" && parts[2] === "exports") {
           const data = await readBody(req, 500_000_000);
-          return sendJson(res, 201, manager.exportDesign(artifactId, data, decodeURIComponent(String(req.headers["x-file-name"] ?? ""))));
+          return sendJson(res, 201, manager.exportDesign(artifactId, data, decodeURIComponent(String(req.headers["x-file-name"] ?? "")), documentAccess(req), req.headers["x-design-revision"] ? Number(req.headers["x-design-revision"]) : null));
         }
         if (method === "GET" && parts[2] === "asset") {
           const file = documents.assetPath(artifactId, url.searchParams.get("src") ?? "");

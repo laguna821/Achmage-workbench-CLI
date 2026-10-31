@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { DESIGN_EXTENSION } from "@workbench/contracts";
 import { HttpError } from "./errors.ts";
@@ -122,10 +122,12 @@ export function saveDesignAsset(designPath: string, data: Buffer, contentType: s
   const folder = `${designStem(basename(designPath))}.assets`;
   const file = `${createHash("sha256").update(data).digest("hex").slice(0, 16)}${extension}`;
   const target = join(dirname(designPath), folder, file);
+  mkdirSync(dirname(target), { recursive: true });
+  const physical = relative(realpathSync(dirname(designPath)), realpathSync(dirname(target)));
+  if (physical.startsWith("..") || isAbsolute(physical)) throw new HttpError(403, "outside", "디자인 폴더 밖에는 이미지를 저장할 수 없습니다.");
   if (!existsSync(target)) {
-    mkdirSync(dirname(target), { recursive: true });
-    writeFileSync(target, data);
-  }
+    writeFileSync(target, data, { flag: "wx" });
+  } else if (!readFileSync(designAssetPath(designPath, `${folder}/${file}`)).equals(data)) throw new HttpError(409, "asset_changed", "같은 이름의 이미지가 변경되어 덮어쓰지 않았습니다.");
   return `${folder}/${file}`;
 }
 
@@ -139,7 +141,29 @@ export function designAssetPath(designPath: string, src: string) {
     throw new HttpError(403, "outside", "디자인 폴더 밖의 파일은 열 수 없습니다.");
   }
   if (!existsSync(file)) throw new HttpError(404, "asset_missing", `이미지 파일이 없습니다: ${src}`);
+  const physical = relative(realpathSync(folder), realpathSync(file));
+  if (physical.startsWith("..") || isAbsolute(physical) || physical.split(sep).includes(".workbench")) throw new HttpError(403, "outside", "디자인 폴더 밖의 파일은 열 수 없습니다.");
   return file;
+}
+
+/** Copy local assets and rewrite all nested src fields, preserving every other document property. */
+export function copyDesignAssets(text: string, source: string, target: string) {
+  const document: unknown = JSON.parse(text);
+  const walk = (value: unknown) => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) { for (const item of value) walk(item); return; }
+    const record = value as Json;
+    if (typeof record.src === "string" && record.src) {
+      if (/^blob:/i.test(record.src)) throw new HttpError(422, "design_copy_asset", "임시 이미지를 저장한 뒤 사본을 만들어 주세요.");
+      if (!/^(data|https?):/i.test(record.src)) {
+        const sourceFile = designAssetPath(source, record.src);
+        record.src = saveDesignAsset(target, readFileSync(sourceFile), "", basename(sourceFile));
+      }
+    }
+    for (const item of Object.values(record)) walk(item);
+  };
+  walk(document);
+  return `${JSON.stringify(document, null, 2)}\n`;
 }
 
 export type FontEntry = { family: string; category: "sans-serif" | "serif" | "monospace" | "display" | "handwriting"; korean: boolean };
