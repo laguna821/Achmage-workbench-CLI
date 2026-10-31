@@ -8,8 +8,14 @@ import { installProbe, pageErrors, shot, until, type Ctx } from "./scenarios.ts"
 export async function officeControlScenario(ctx: Ctx, launch: Omit<LaunchOptions, "name">) {
   const S = "원본 CLI 문서 제어";
   const startupOnly = process.env.APP_E2E_CONTROL_STARTUP_ONLY === "1";
+  if (process.env.APP_E2E_EXPECT_IEUM_ROOT) {
+    const tool = (await ctx.app.api<Snapshot>("GET", "/api/snapshot")).tools.ieumoffice;
+    const bundled = tool.bundled && !!tool.path?.startsWith(process.env.APP_E2E_EXPECT_IEUM_ROOT);
+    ctx.report.check(S, "축소된 설치 자원에서 원본 CLI 선택 (기존 사용자 앱으로 우회하지 않음)", !!bundled, tool.path ?? "");
+    if (!bundled) throw new Error("The staged CLI was not selected");
+  }
   const cli = async (...args: string[]) => {
-    const result = await ctx.app.command(join(ctx.app.dataDir, "bin/ieumoffice"), [...args, "--json"]);
+    const result = await ctx.app.command(process.env.APP_E2E_PACKAGED_CLI ?? join(ctx.app.dataDir, "bin/ieumoffice"), [...args, "--json"]);
     return JSON.parse(result.stdout.trim().split("\n").at(-1)!);
   };
   const work = await ctx.app.api<Work>("POST", "/api/works", { title: "CLI 문서 제어", cwd: null });

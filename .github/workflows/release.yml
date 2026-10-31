@@ -4,13 +4,14 @@
 # then builds only its desktop shell around them. Windows, macOS and the AppImage carry their own
 # Node.js 24 for the gateway and the npm of the same Node release (one-click engine installs);
 # the Arch package uses the system's. HWP/PDF use the embedded Ieum engines. The remaining
-# document runtimes are kordoc (third_party/kordoc) and legacy IeumOffice page rendering
-# (packaging/bundled-apps.json); separate HOP/PDFCraft applications are no longer shipped.
+# document tools are kordoc (third_party/kordoc) and the original IeumOffice CLI engines
+# (packaging/bundled-apps.json); separate Electron/HOP/PDFCraft applications are not shipped.
 # Runs by hand (Actions › release › Run workflow) or for a version tag (v*), which also makes a
 # GitHub release with the installers; the first-run check (job smoke) installs the Windows and
 # macOS builds and runs them with stand-in engines.
 
-name: release
+name: Installers
+run-name: ${{ startsWith(github.ref, 'refs/tags/v') && format('Release {0}', github.ref_name) || format('Test installers · {0}', github.ref_name) }}
 
 on:
   workflow_dispatch:
@@ -80,7 +81,7 @@ jobs:
           cp "${file%.tar.xz}/bin/node" apps/desktop/src-tauri/node/node
           # npm from the same checked release, beside node (node/npm/bin/npm-cli.js).
           cp -R "${file%.tar.xz}/lib/node_modules/npm" apps/desktop/src-tauri/node/npm
-      - name: Legacy IeumOffice renderer (official Linux builds, pinned and checked)
+      - name: Original IeumOffice CLI resources (official Linux builds, pinned and checked)
         run: node scripts/fetch-bundled-apps.ts apps/desktop/src-tauri/bundled linux-x64
       - run: npm ci --ignore-scripts
       # The AppImage keeps the document apps in usr/share/achmage-workbench, where linuxdeploy does
@@ -115,7 +116,7 @@ jobs:
           name: web
           path: apps
       - run: npm ci --ignore-scripts
-      - name: Legacy IeumOffice renderer (official Linux builds, pinned and checked)
+      - name: Original IeumOffice CLI resources (official Linux builds, pinned and checked)
         run: node scripts/fetch-bundled-apps.ts apps/desktop/src-tauri/bundled linux-x64
       - name: "Build (no bundle: the binary with host/, web/ and kordoc/ beside it)"
         working-directory: apps/desktop
@@ -158,7 +159,7 @@ jobs:
           cp "${file%.zip}/node.exe" apps/desktop/src-tauri/node/node.exe
           # npm from the same checked release, beside node.exe (node/npm/bin/npm-cli.js).
           cp -R "${file%.zip}/node_modules/npm" apps/desktop/src-tauri/node/npm
-      - name: Legacy IeumOffice renderer (official Windows builds, pinned and checked; 7-Zip opens the installers)
+      - name: Original IeumOffice CLI resources (official Windows builds, pinned and checked; 7-Zip opens the installers)
         run: node scripts/fetch-bundled-apps.ts apps/desktop/src-tauri/bundled win32-x64
       - run: npm ci --ignore-scripts
       - name: Build
@@ -197,12 +198,12 @@ jobs:
           cp "${file%.tar.gz}/bin/node" apps/desktop/src-tauri/node/node
           # npm from the same checked release, beside node (node/npm/bin/npm-cli.js).
           cp -R "${file%.tar.gz}/lib/node_modules/npm" apps/desktop/src-tauri/node/npm
-      - name: Legacy IeumOffice renderer (official Apple silicon builds, pinned and checked)
+      - name: Original IeumOffice CLI resources (official Apple silicon builds, pinned and checked)
         run: node scripts/fetch-bundled-apps.ts apps/desktop/src-tauri/bundled darwin-arm64
       - run: npm ci --ignore-scripts
       - name: Build
         working-directory: apps/desktop
-        # IeumOffice.app goes into Contents/Resources with their links kept (macOS.files).
+        # CLI engines use the same resources layout on every OS; no nested Electron .app.
         run: npx tauri build --config src-tauri/tauri.release.conf.json --config src-tauri/tauri.release.macos.conf.json --bundles app,dmg
       - uses: actions/upload-artifact@v4
         with:

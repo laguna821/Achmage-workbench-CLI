@@ -3,13 +3,13 @@
 // ways people install them — an npm global install (codex.cmd/claude.cmd shims) on Windows,
 // Homebrew and Claude Code's own installer on macOS, npm's prefix and ~/.local/bin on Linux —
 // and a GUI app's short PATH. Checked through the API: both engines found (and where), both
-// answer a request, kordoc, IeumOffice, PDFCraft and HOP ship with the app and work (text view and
+// answer a request, the original document engines ship with the app and work (text view and
 // page pictures of a .docx, a .pptx and a .hwpx, a PDF page edit), and nothing says "설치되지 않음".
 // Usage: node scripts/setup-smoke.ts <app resources folder> [out folder]
 //   Windows: %LOCALAPPDATA%\Achmage Workbench   macOS: …/Achmage Workbench.app/Contents/Resources
 
-import { spawn, execFileSync, type ChildProcess } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync, execFileSync, type ChildProcess } from "node:child_process";
+import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
@@ -25,7 +25,8 @@ export type Gateway = { url: string; token: string; dataDir: string; child: Chil
 /** The app's node and gateway inside its resource folder. */
 export function appLayout(app: string) {
   const node = join(app, "node", process.platform === "win32" ? "node.exe" : "node");
-  return { node: existsSync(node) ? node : process.execPath, host: join(app, "host", "host.mjs"), web: join(app, "web") };
+  const native = process.platform === "darwin" ? join(app, "..", "MacOS", "achmage-workbench") : join(app, process.platform === "win32" ? "achmage-workbench.exe" : "achmage-workbench");
+  return { node: existsSync(node) ? node : process.execPath, host: join(app, "host", "host.mjs"), web: join(app, "web"), native };
 }
 
 /** npm's .cmd shim for a JavaScript bin (cmd-shim), as `npm install -g` writes it. */
@@ -96,7 +97,7 @@ export function installStandIns(root: string, platform: NodeJS.Platform = proces
 export async function startGateway(app: string, env: Record<string, string>, dataDir: string): Promise<Gateway> {
   const layout = appLayout(app);
   const child = spawn(layout.node, [layout.host], {
-    env: { ...process.env, ...env, WORKBENCH_DATA_DIR: dataDir, WORKBENCH_WEB_DIR: layout.web, WORKBENCH_RESOURCES_DIR: app, WORKBENCH_HOST_LABEL: "확인" },
+    env: { ...process.env, ...(existsSync(layout.native) ? { WORKBENCH_APP_BIN: layout.native } : {}), ...env, WORKBENCH_DATA_DIR: dataDir, WORKBENCH_WEB_DIR: layout.web, WORKBENCH_RESOURCES_DIR: app, WORKBENCH_HOST_LABEL: "확인" },
     stdio: ["ignore", "pipe", "inherit"],
     windowsHide: true,
   });
@@ -215,6 +216,22 @@ export async function apiChecks(gateway: Gateway, app: string, expect: ReturnTyp
     return [unwanted.length === 0, unwanted.join(", ")];
   });
 
+  await step("이음오피스 CLI 엔진만 포함하고 별도 Electron 앱·중복 편집기가 없음", async () => {
+    const root = join(app, "ieumoffice");
+    const unwanted = ["IeumOffice.app", "IeumOffice.exe", "ieumoffice", "resources/app.asar", "resources/modules"].filter(name => existsSync(join(root, name)));
+    return [existsSync(join(root, "resources/cli/genoffice.cjs")) && unwanted.length === 0, unwanted.join(", ")];
+  });
+
+  await step("설치된 터미널 CLI 실행기는 bundled Node와 Workbench 앱을 찾음", async () => {
+    const launcher = join(app, "ieumoffice/resources/cli", process.platform === "win32" ? "ieumoffice.cmd" : "ieumoffice");
+    const options = { encoding: "utf8" as const, timeout: 30_000, env: { ...process.env, WORKBENCH_DATA_DIR: gateway.dataDir } };
+    const windows = process.platform === "win32"
+      ? spawnSync("cmd.exe", ["/d", "/s", "/c", `""${launcher}" --version"`], { ...options, windowsVerbatimArguments: true }) : null;
+    if (windows && windows.status !== 0) throw windows.error ?? new Error(windows.stderr || `CLI exited ${windows.status}`);
+    const version = (windows ? windows.stdout : execFileSync("/bin/sh", [launcher, "--version"], options)).trim();
+    return [/^ieumoffice \d+\.\d+\.\d+$/.test(version), version];
+  });
+
   await step("'설치되지 않음'이 어디에도 없음 (상태와 화면 코드)", async () => {
     const snapshot = await call<Snapshot>("GET", "/api/snapshot");
     const missing = [...snapshot.providers.filter((entry) => !entry.installed).map((entry) => entry.provider), ...(["kordoc", "ieumoffice", "hwp", "pdf"] as const).filter((name) => !snapshot.tools[name]?.available)];
@@ -300,6 +317,13 @@ async function main() {
   const outDir = resolve(process.argv[3] ?? join(tmpdir(), "wb-setup-smoke"));
   if (!existsSync(join(app, "host", "host.mjs"))) throw new Error(`No app at ${app} (host/host.mjs)`);
   mkdirSync(outDir, { recursive: true });
+  const fileBytes = (path: string): number => {
+    const entry = lstatSync(path);
+    return entry.isDirectory() ? readdirSync(path).reduce((sum, name) => sum + fileBytes(join(path, name)), 0) : entry.size;
+  };
+  writeFileSync(join(outDir, "installed-size.json"), JSON.stringify({ platform: process.platform, arch: process.arch,
+    installedFileBytes: fileBytes(process.platform === "darwin" ? resolve(app, "..") : app),
+    ieumCliResourceBytes: fileBytes(join(app, "ieumoffice")), unit: "bytes (file sizes, not filesystem allocation)" }, null, 2));
   const root = mkdtempSync(join(tmpdir(), "wb-smoke-"));
   const results: Result[] = [];
   const check = (step: string, ok: boolean, detail = "") => {

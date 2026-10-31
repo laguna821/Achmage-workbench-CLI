@@ -1,5 +1,15 @@
 # 이음오피스 통합 진행
 
+## 별도 Electron 앱 제거와 CLI 자원 배포
+
+2026-10-31: 해시로 확인한 원본 이음 릴리스에서 CLI·의존 패키지·WASM·스프레드시트 엔진·OS OCR·라이선스만 추출한다. Workbench에 이미 있는 편집기·글꼴의 중복 사본과 Electron 실행 환경은 설치본에서 제외한다. macOS도 같은 CLI 자원 구조를 사용한다. 원본 CLI 코드는 유지하고 터미널용 실행기만 bundled Node와 Workbench 앱·설정 경로에 연결했다.
+
+축소 자원만 선택했음을 확인한 실제 Linux 앱 검사 **30/30**, 별도 터미널 실행기와 bundled Node24.22.1 검사 **30/30**이 통과했다. Word/PPT/Sheets/PDF 제어·저장 전 내용 보존·Word PDF/HTML DOCX 출력·첫 실행/두 번째 실행 파일 열기를 포함한다. PDFium·rhwp·jsdom과 XLS→XLSX sidecar도 축소 자원에서 확인했다. 원본의 BIFF XLS 직접 `info` 오류는 전체 원본 배포본에서도 같았으며 변환 후 읽기는 통과했다.
+
+Linux 이음 부분의 파일 크기 합계는 **713,203,756 → 75,479,809 bytes**(약680.2→72.0MiB, 실행기 수KB 추가)였다. 전체 설치본이나 Windows 설치 용량 수치가 아니다. OS 설치본은 후속 Actions에서 확인하며 설치 크기를 별도 JSON으로 남긴다. 7fb65a4의 기존 Actions는 모든 OS 빌드/첫 실행 검사가 성공했지만 이번 축소 자원은 포함하지 않는다. 수동 Actions는 시험 설치본이며 태그 실행만 공개 릴리스를 만든다.
+
+근거: `implementation-20261030/slim-ieum-native-01/results.json`, `slim-ieum-native-04/results.json`, `slim-ieum-cli-02/{verification,xls-verification}.json`; 정확한 검증 판 `research:rr-a1113b1710d6df910256d23a2c711f5f:9df0cd40cdbd69403feeb5c5aa8999e9bb14eec3a224604b6b1ec1f4362cb946`. 아래 단계별 기록의 Electron 잔존 설명은 당시 상태다. 전체 Office·Orca·한글 생성 스킬·OS 업데이트·정식 릴리스는 계속 진행 중이다.
+
 ## 원본 CLI 문서 제어와 기본 앱 전환
 
 2026-10-31: 원본 `control-server`·`controlHandler`와 Word/PPT/Sheets/PDF의 `__genofficeControl`을 재사용해 `ieumoffice open --block/--slide/--range/--page` 및 `selection`을 연결했다. Workbench의 기존 문서·창 등록부로 실제 편집기를 찾으며 같은 파일이 여러 프로젝트에 등록돼도 열린 writer의 탭을 우선한다. 창별 요청·응답만 전달하고 요청에 담긴 JavaScript는 실행하지 않는다. 이미 열린 탭의 대화·편집기·저장 전 내용을 유지한다.

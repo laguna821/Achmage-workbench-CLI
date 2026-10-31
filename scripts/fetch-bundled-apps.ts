@@ -13,9 +13,10 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { copyIeumCliResources } from "./ieum-cli-resources.ts";
 
 type Asset = { file: string; sha256?: string; sha512?: string; unpack: string; check: string };
-type App = { name: string; repository: string; tag: string; license: string; use: string; assets: Record<string, Asset> };
+type App = { name: string; repository: string; tag: string; license: string; use: string; layout?: "cli-resources"; assets: Record<string, Asset> };
 
 const out = resolve(process.argv[2] ?? "apps/desktop/src-tauri/bundled");
 const target = process.argv[3] ?? `${process.platform}-${process.arch}`;
@@ -128,11 +129,12 @@ for (const [id, app] of apps) {
       throw new Error(`Unknown unpack kind ${asset.unpack}`);
   }
   if (!existsSync(join(staging, asset.check))) throw new Error(`${app.name}: the unpacked app has no ${asset.check}`);
+  const payload = app.layout === "cli-resources" ? copyIeumCliResources(staging, join(work, "cli-resources"), target) : staging;
   writeFileSync(
-    join(staging, "WORKBENCH-BUNDLE.json"),
-    JSON.stringify({ app: id, name: app.name, version: app.tag.replace(/^(achmage-)?v/, ""), repository: `https://github.com/${app.repository}`, file: asset.file, [algorithm]: actual, license: app.license }, null, 2),
+    join(payload, "WORKBENCH-BUNDLE.json"),
+    JSON.stringify({ app: id, name: app.name, version: app.tag.replace(/^(achmage-)?v/, ""), repository: `https://github.com/${app.repository}`, file: asset.file, [algorithm]: actual, license: app.license, layout: app.layout ?? "application" }, null, 2),
   );
-  moveInto(staging, dest);
+  moveInto(payload, dest);
   rmSync(work, { recursive: true, force: true });
   console.log(`  unpacked into ${dest}`);
 }

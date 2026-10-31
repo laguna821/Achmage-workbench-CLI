@@ -44,7 +44,7 @@ export function ieumFromCliDir(cliDir: string, bundled = false, platform: NodeJS
   return { script, app, launcher, bundled };
 }
 
-/** The IeumOffice shipped with the app: <resources>/ieumoffice (Linux, Windows), or its .app inside (macOS). */
+/** Shipped CLI resources use one layout on every OS; older macOS bundles keep their .app layout. */
 export function bundledIeum(platform: NodeJS.Platform = process.platform): IeumInstall | null {
   const root = shipped(join("ieumoffice", "IeumOffice.app"), "ieumoffice");
   if (!root) return null;

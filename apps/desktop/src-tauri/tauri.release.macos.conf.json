@@ -3,7 +3,7 @@
   "bundle": {
     "macOS": {
       "files": {
-        "Resources/ieumoffice/IeumOffice.app": "bundled/ieumoffice/IeumOffice.app"
+        "Resources/ieumoffice": "bundled/ieumoffice"
       }
     }
   }

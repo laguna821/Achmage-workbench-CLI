@@ -1,10 +1,11 @@
 {
-  "comment": "Temporary legacy IeumOffice runtime for CLI page rendering. HWP and PDF use the embedded Ieum engines; no separate HOP or PDFCraft application is shipped. Remove this remaining runtime after native CLI render/export is verified.",
+  "comment": "Original IeumOffice CLI and document engines from hash-checked releases. Workbench hosts the original editor renderers and native export/control; no separate Electron, HOP or PDFCraft application is shipped.",
   "ieumoffice": {
     "name": "IeumOffice",
     "repository": "pblsketch/openoffice",
     "tag": "v0.12.7",
     "license": "Apache-2.0",
+    "layout": "cli-resources",
     "use": "Word, PowerPoint and Excel: text view, page pictures, file checks, the tool engines make and edit Office files with",
     "assets": {
       "linux-x64": {
