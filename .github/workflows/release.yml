@@ -11,21 +11,36 @@
 # macOS builds and runs them with stand-in engines.
 
 name: Installers
-run-name: ${{ startsWith(github.ref, 'refs/tags/v') && format('Release {0}', github.ref_name) || format('Test installers · {0}', github.ref_name) }}
+run-name: ${{ inputs.publish_run && format('Publish tested installers · {0}', inputs.publish_run) || (startsWith(github.ref, 'refs/tags/v') && format('Release {0}', github.ref_name) || format('Test installers · {0}', github.ref_name)) }}
 
 on:
   workflow_dispatch:
+    inputs:
+      publish_run:
+        description: 'Publish an already successful Installers run as a preview (empty: build)'
+        type: string
+        default: ''
+      preview_tag:
+        description: 'New preview-* tag for an existing run'
+        type: string
+        default: ''
+      source_sha:
+        description: 'Exact commit of the existing successful run'
+        type: string
+        default: ''
   push:
     tags: ["v*"]
 
 permissions:
   contents: write
+  actions: read
 
 env:
   NODE_DIST: https://nodejs.org/dist/latest-v24.x
 
 jobs:
   browser:
+    if: ${{ !inputs.publish_run }}
     name: Lightpanda background browsing (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -50,6 +65,7 @@ jobs:
           if-no-files-found: ignore
 
   web:
+    if: ${{ !inputs.publish_run }}
     name: UI and gateway (once)
     runs-on: ubuntu-24.04
     steps:
@@ -286,6 +302,83 @@ jobs:
           name: smoke-${{ matrix.artifact }}
           path: smoke-out
           if-no-files-found: ignore
+
+  publish-tested:
+    name: Publish successful installers without rebuilding
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_run != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: ${{ inputs.publish_run }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      PREVIEW_TAG: ${{ inputs.preview_tag }}
+    steps:
+      - name: Verify source run and download its installers
+        run: |
+          [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$PREVIEW_TAG" =~ ^preview-[a-zA-Z0-9._-]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > run.json
+          python3 - <<'PY'
+          import json, os
+          r = json.load(open('run.json'))
+          assert r['head_sha'] == os.environ['SOURCE_SHA'], 'Source commit changed'
+          assert r['status'] == 'completed' and r['conclusion'] == 'success', 'Run has not passed'
+          assert r['path'] == '.github/workflows/release.yml', 'Wrong workflow'
+          assert r['head_repository']['full_name'] == os.environ['GITHUB_REPOSITORY'], 'Wrong source repository'
+          PY
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" -D out \
+            -n windows -n macos -n linux -n arch \
+            -n smoke-windows -n smoke-macos -n lightpanda-macos-14 -n lightpanda-ubuntu-24.04
+      - name: Verify evidence and publish preview
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          files = sorted(p for p in Path('out').rglob('*') if p.is_file() and any(str(p).endswith(s) for s in ('.exe', '.msi', '.dmg', '.deb', '.AppImage', '.pkg.tar.zst')))
+          assert len(files) == 6 and len({p.name for p in files}) == 6, 'Expected six unique installers'
+          for suffix in ('.exe', '.msi', '.dmg', '.deb', '.AppImage', '.pkg.tar.zst'):
+              assert sum(str(p).endswith(suffix) for p in files) == 1, suffix
+          checks = {}
+          for platform in ('windows', 'macos'):
+              rows = json.loads(Path(f'out/smoke-{platform}/setup-smoke.json').read_text())
+              assert len(rows) >= 18 and all(r.get('ok') is True for r in rows), platform
+              checks[platform] = len(rows)
+          assets = []
+          for p in files:
+              with p.open('rb') as f:
+                  digest = hashlib.file_digest(f, 'sha256').hexdigest()
+              assets.append({'name': p.name, 'bytes': p.stat().st_size, 'sha256': digest})
+          Path('SHA256SUMS.txt').write_text(''.join(f"{a['sha256']}  {a['name']}\n" for a in assets))
+          proof = {'sourceRun': os.environ['SOURCE_RUN'], 'sourceSha': os.environ['SOURCE_SHA'], 'installedFirstRunChecks': checks, 'assets': assets}
+          Path('installer-provenance.json').write_text(json.dumps(proof, ensure_ascii=False, indent=2) + '\n')
+          repo, sha, run = (os.environ[k] for k in ('GITHUB_REPOSITORY', 'SOURCE_SHA', 'SOURCE_RUN'))
+          size = json.loads(Path('out/smoke-windows/installed-size.json').read_text())['installedFileBytes']
+          version_note = ''
+          if sha == 'f36afbb03b9fce3a0b729df75e6d6802c9d5455f':
+              version_note = '''- 파일명과 앱 안의 버전이 `0.2.2`여도 이전 공개 `v0.2.2`와 다른 코드입니다. 이번 시험본은 위 커밋으로 구분합니다.
+          - 이 빌드 이후의 위키·지식베이스 연결과 Sheets/XMind 후속 수정은 포함하지 않습니다.'''
+          body = f'''전체 통합 작업이 끝나기 전에 직접 설치해 볼 수 있도록 공개하는 시험 설치본입니다.
+
+          - Windows: `*-setup.exe` 권장. macOS: Apple silicon용 `.dmg`. Linux: `.AppImage`/`.deb`, Arch/CachyOS: `.pkg.tar.zst`.
+          - 실제 포함 코드: [{sha[:7]}](https://github.com/{repo}/commit/{sha}). 최신 개발 브랜치와는 다를 수 있습니다.
+          - [성공한 설치본 빌드](https://github.com/{repo}/actions/runs/{run})의 파일을 변경 없이 공개했습니다.
+          - Windows/macOS 설치 후 실행 검사 각 {checks['windows']}/{checks['macos']}개 통과. 문서 엔진 실행과 출력 검사를 포함하며 AI 응답은 시험용 엔진을 사용했습니다.
+          - Windows 설치 디렉터리 파일 합계: {size:,} bytes (약 {size / 1024**2:.0f}MiB). 사용자 자료와 시스템 WebView 등은 별도입니다.
+          - 전체 기능 완료판은 아닙니다. 기존 설치 위에 덮어쓰는 업그레이드 전체 검사는 아직 하지 않았습니다.
+          {version_note}
+
+          | 설치 파일 | 다운로드 크기 |
+          |---|---:|
+          '''
+          body += ''.join(f"| `{a['name']}` | {a['bytes'] / 1024**2:.1f}MiB |\n" for a in assets)
+          Path('preview-notes.md').write_text('\n'.join(line.strip() for line in body.splitlines()) + '\n')
+          PY
+          mapfile -t files < <(find out -type f \( -name '*.AppImage' -o -name '*.deb' -o -name '*.pkg.tar.zst' -o -name '*.exe' -o -name '*.msi' -o -name '*.dmg' \))
+          gh release create "$PREVIEW_TAG" --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" \
+            --prerelease --latest=false --title "Achmage Workbench — 시험 설치본 ($PREVIEW_TAG)" \
+            --notes-file preview-notes.md "${files[@]}" SHA256SUMS.txt installer-provenance.json
 
   release:
     name: GitHub release (tags only)
