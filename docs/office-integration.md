@@ -1,5 +1,13 @@
 # 이음오피스 통합 진행
 
+## 별도 HOP·PDFCraft 배포 제거
+
+2026-10-31: 별도 HOP·PDFCraft 실행 모듈과 Windows/Linux/macOS 배포 매핑을 제거했다. Arch 패키지도 `bundled` 전체를 복사하지 않는다. PDF 쪽 회전·삭제·이동 사본은 이미 내장된 이음 PDF 저장 엔진을 사용한다. 기존 1부터 시작하는 쪽 번호·삭제 뒤 연속 이동 규칙과 본문·메타데이터·쪽 크기를 보존하며, 동시 사본 요청에서도 기존 파일을 덮어쓰지 않는다. 한글 기본 편집기는 앱 안의 이음 한글이고 **다른 앱으로 열기**만 OS 기본 앱을 사용한다. 외부 저장 감시/새 판 수집은 유지한다.
+
+내부 리소스 준비 상태와 PDF·HWP/HWPX 편집/저장/재열기·복구·사본·PDF 출력·시스템 인쇄를 실제 Linux 앱 **50/50**, 페이지 변환·사본 동시성·외부 저장 감시는 **7/7**로 확인했다. 전체 타입·web/host/native 빌드 및 실행 web1008/1008·host/hwp-cli 일치. 근거 `bundle-removal-native-01/verification.json`(SHA256 `f8b4eeabfb807347a33a9475a1834fe9e632d3cdda9db4dcc943d91594a97e12`), 검증 판 `research:rr-2fcbcc4706adb4e91f451286cc296d10:010e5d7daa5b1c621979811baf98782c4d4fdc28810d2d28aa074530f89ce56d`.
+
+기존 Linux 추출 폴더의 디스크 사용량은 HOP 약174MiB·PDFCraft 약69MiB였으며 이 두 폴더를 배포 대상에서 뺐다. 이는 새 설치파일이나 Windows 설치 크기 측정이 아니다. **IeumOffice Electron 렌더러는 아직 남는다.** HOP 개선 패치 전체 반영, hallym-kordoc/별도 kordoc 엔진 전환, 남은 원본 Office 기능과 OS별 설치·업데이트·용량·릴리스도 계속 진행한다. 배포 설정 검증은 `bundle-removal/packaging-audit.json`에 있다.
+
 ## 원본 PDF 출력과 시스템 인쇄
 
 2026-10-31: Word·PPT·Markdown·HTML의 원본 출력 명령을 공통 파일 메뉴의 **PDF로 내보내기**와 연결했다. 편집기·페이지 구성·출력 HTML은 원본을 재사용하며 Electron의 숨은 출력 창 역할만 Rust/Tauri의 시스템 WebView로 옮긴다. 현재 미저장 내용을 출력하고 기존 목적지 선택·충돌 확인·사본 등록 경로를 사용한다. Word의 묶음 PDF 병합과 내부 링크, PPT의 슬라이드 링크·배포 자료 HTML도 원본 함수를 재사용한다.
@@ -10,7 +18,7 @@ Linux 실제 앱에서 네 편집기의 미저장 입력 포함·원본 파일/�
 
 근거: `html-output-native-07/verification.json`(SHA256 `3cf3b1ba1098450733740ce62198007e8f532b389edb82139c6274cc74c47222`), 계획 판 `research:rr-46296b7e11f6692905e32ef10c674a75:cac5281d5f160f654a18a4b4b7c0b3d7739c8acabbbb50504aac579b4ca17cd4`, 검증 판 `research:rr-46296b7e11f6692905e32ef10c674a75:87ff5413de0dfd3168107e18f2d5e52c5e3a6e219edbf716fabd55bb1be63903`. 상대 자산 base, 반복 글꼴과 검사기의 준비 대기/형식 선택 실패도 보존했다.
 
-완료 범위는 위 Linux 대표 출력이다. Word는 편집한 빈 문서로 확인했으며 복합 문서·혼합 용지/실제 인쇄, Sheets/다른 형식 변환·CLI 렌더, Windows/macOS는 후속이다. Linux WebView는 일반 HTML/Markdown 링크의 클릭 주석을 보존하지 않아 추가 연결이 필요하다. PPT/Word 링크는 별도 주석 어댑터를 연결했지만 모든 플랫폼의 중복/동등성을 검증한 것은 아니다. IeumOffice·PDFCraft·HOP 배포 manifest는 아직 그대로이며 설치 용량 감소·OS 릴리스 완료를 뜻하지 않는다.
+완료 범위는 위 Linux 대표 출력이다. Word는 편집한 빈 문서로 확인했으며 복합 문서·혼합 용지/실제 인쇄, Sheets/다른 형식 변환·CLI 렌더, Windows/macOS는 후속이다. Linux WebView는 일반 HTML/Markdown 링크의 클릭 주석을 보존하지 않아 추가 연결이 필요하다. PPT/Word 링크는 별도 주석 어댑터를 연결했지만 모든 플랫폼의 중복/동등성을 검증한 것은 아니다. 이 출력 검증 뒤 별도 HOP/PDFCraft 배포는 위 절처럼 제거했다. IeumOffice Electron 렌더러는 남아 있으며 새 설치 용량·OS 릴리스 완료를 뜻하지 않는다.
 
 ## 공통 파일 메뉴와 원본 빈 문서
 

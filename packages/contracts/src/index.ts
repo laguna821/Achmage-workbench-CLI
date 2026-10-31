@@ -525,7 +525,7 @@ export type ToolStatus = {
   message: string | null;
 };
 
-export type DocumentTools = { kordoc: ToolStatus; ieumoffice: ToolStatus; hop: ToolStatus; /** PDF page edits (absent from older gateways). */ pdfcraft?: ToolStatus };
+export type DocumentTools = { kordoc: ToolStatus; ieumoffice: ToolStatus; hwp?: ToolStatus; pdf?: ToolStatus; /** Retired separate apps; kept for older clients. */ hop: ToolStatus; pdfcraft?: ToolStatus };
 
 /** An MCP server definition as one engine has it (env values shown only as names on screen). */
 export type McpDefinition = { type: "stdio" | "http" | "sse"; command: string | null; args: string[]; env: Record<string, string>; url: string | null; enabled: boolean };

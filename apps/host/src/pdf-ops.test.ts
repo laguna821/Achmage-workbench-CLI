@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
-import { editPdf, inspectPdf, queryPdf, transformPdf } from "./pdf-ops.mjs";
+import { editPdf, editPdfPages, inspectPdf, queryPdf, transformPdf } from "./pdf-ops.mjs";
 const require = createRequire(new URL("../../../vendor/ieumoffice/package.json", import.meta.url));
 const { PDFDocument, PDFArray, PDFName, PDFString, PDFNumber } = require("pdf-lib");
 const { PNG } = require("pngjs");
@@ -14,6 +14,22 @@ async function fixture() {
   return Buffer.from(await doc.save({ useObjectStreams: false }));
 }
 describe("original PDF engine on Node", () => {
+  it("keeps one-based page-copy semantics without PDFCraft, including sequential moves and text", async () => {
+    const doc = await PDFDocument.create(); doc.setTitle("Page-copy metadata");
+    for (let i = 0; i < 4; i++) doc.addPage([400 + i, 500 + i]).drawText(`Original page ${i + 1}`, { x: 30, y: 400 });
+    const source = Buffer.from(await doc.save()), before = Buffer.from(source);
+    const result = await editPdfPages(source, { rotate: [{ pages: [1], degrees: 90 }, { pages: [1, 3], degrees: 90 }], delete: [2], move: [{ from: 3, to: 1 }, { from: 2, to: 99 }] });
+    const output = await PDFDocument.load(result.bytes);
+    expect(output.getTitle()).toBe("Page-copy metadata");
+    expect(output.getPages().map((p: any) => [p.getWidth(), p.getHeight(), p.getRotation().angle])).toEqual([[403, 503, 0], [402, 502, 90], [400, 500, 180]]);
+    const text = await queryPdf(result.bytes, "text", {}) as { pages: { text: string }[] };
+    expect(text.pages.map(p => p.text.trim())).toEqual(["Original page 4", "Original page 3", "Original page 1"]);
+    expect(source.equals(before)).toBe(true);
+    await expect(editPdfPages(source, { delete: [1, 2, 3, 4] })).rejects.toThrow("한 쪽 이상");
+    await expect(editPdfPages(source, { move: [{ from: 0, to: 1 }] })).rejects.toThrow("쪽 번호");
+    await expect(editPdfPages(source, {})).rejects.toThrow("바꿀 내용");
+  });
+
   it("preserves a no-op byte for byte and writes original annotations/author/forms/page order", async () => {
     const source = await fixture();
     expect((await editPdf(source, {})).bytes).toEqual(source);

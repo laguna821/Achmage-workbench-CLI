@@ -203,16 +203,21 @@ export async function apiChecks(gateway: Gateway, app: string, expect: ReturnTyp
     });
   }
 
-  await step("문서 도구: kordoc·이음오피스·PDFCraft·HOP가 앱에 들어 있음", async () => {
+  await step("문서 도구: 한글·PDF 내부 엔진과 문서 도구가 앱에 들어 있음", async () => {
     const tools = (await call<Snapshot>("GET", "/api/snapshot")).tools;
-    const rows = { kordoc: tools.kordoc, ieumoffice: tools.ieumoffice, pdfcraft: tools.pdfcraft, hop: tools.hop };
+    const rows = { kordoc: tools.kordoc, ieumoffice: tools.ieumoffice, pdf: tools.pdf, hwp: tools.hwp };
     const ok = Object.values(rows).every((tool) => tool?.available && tool.bundled === true);
     return [ok, Object.entries(rows).map(([name, tool]) => `${name}=${tool?.available}/${tool?.bundled} ${tool?.version ?? ""}`).join(" · ")];
   });
 
+  await step("별도 HOP·PDFCraft 앱이 설치본에 없음", async () => {
+    const unwanted = ["hop", "pdfcraft"].filter(name => existsSync(join(app, name)));
+    return [unwanted.length === 0, unwanted.join(", ")];
+  });
+
   await step("'설치되지 않음'이 어디에도 없음 (상태와 화면 코드)", async () => {
     const snapshot = await call<Snapshot>("GET", "/api/snapshot");
-    const missing = [...snapshot.providers.filter((entry) => !entry.installed).map((entry) => entry.provider), ...(["kordoc", "ieumoffice", "hop", "pdfcraft"] as const).filter((name) => !snapshot.tools[name]?.available)];
+    const missing = [...snapshot.providers.filter((entry) => !entry.installed).map((entry) => entry.provider), ...(["kordoc", "ieumoffice", "hwp", "pdf"] as const).filter((name) => !snapshot.tools[name]?.available)];
     const assets = join(appLayout(app).web, "assets");
     const scripts = existsSync(assets) ? readdirSync(assets).filter((name) => name.endsWith(".js")) : [];
     const said = scripts.filter((name) => readFileSync(join(assets, name), "utf8").includes("설치되지 않음"));

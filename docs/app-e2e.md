@@ -1,5 +1,7 @@
 # Linux 실제 앱 검사
 
+`--only=pdf-office,hwp`는 HOP/PDFCraft 제거 뒤 내장 리소스 준비 상태와 PDF 쪽 사본 API를 포함한다. 기존 원본 PDF/HWP/HWPX 편집·저장·재열기·복구·사본·출력·시스템 인쇄까지 Linux **50/50** 확인했으며 `bundle-removal-native-01/verification.json`에 실행 파일·리소스·배포 설정 근거를 연결했다. OS 설치본 검증은 별도다.
+
 `--only=office-output --engines=stand-in`은 시스템 WebView의 두 쪽 PDF·한글·스크립트 차단과 실제 GTK 인쇄 창/취소를 확인한 뒤 원본 MD/HTML/PPT/Word 메뉴의 미저장 내용 PDF·원본 파일/판 보존을 검사한다. `APP_E2E_OUTPUT_FORMATS=docx`로 편집기를 선택하고 빈 문자열로 공통 출력/인쇄만 실행한다. 문서 처리·Tauri IPC·PDF는 실제 코드이며 인쇄 대화상자에서 Cancel만 자동으로 누른다. 네 편집기15/15와 공통 출력/인쇄8/8의 근거는 `html-output-native-07/verification.json`. [동작과 한계](office-integration.md#원본-pdf-출력과-시스템-인쇄).
 
 `--only=office-new --engines=stand-in`은 프로젝트/문서 공통 파일 메뉴로 8종 빈 문서를 만들고 원본 편집기에서 직접 편집·저장·재열기한다(PDF는 빈 1쪽과 무변경 저장). EPUB는 기존 책 열기로 확인하며 파일 선택기의 IPC 응답만 대역이다. `APP_E2E_OFFICE_NEW_FORMATS=xlsx`처럼 형식을 고르면 해당 형식과 공통 열기만 실행한다. Sheets의 빈 contenteditable은 키보드 호스트이므로 내용 판정에 쓰지 않고, 재열기 후 A1과 원본 Canvas가 그린 문자열을 확인한다. 8종 근거 및 최종 선택 **9/9**는 `office-new-native-05/verification.json`에 연결했다. [동작과 남은 범위](office-integration.md#공통-파일-메뉴와-원본-빈-문서), 검증 판 `research:rr-1e68303c93030a564b197df31c201474:0956ccf443555135e1081d202f0f717aecc1b32f27de0c2ba1c17a8b975c0350`. 실제 OS 선택창·다른 OS 및 원본 untitled 동작을 이 검사로 인증하지 않는다.

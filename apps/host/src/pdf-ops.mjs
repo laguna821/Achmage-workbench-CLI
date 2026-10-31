@@ -60,6 +60,32 @@ export async function editPdf(bytes, input) {
   const { pages } = await inspectPdf(bytes), request = saveRequest(input, pages);
   return renderPdf(bytes, request);
 }
+
+/** Legacy page-copy API: one-based pages, rotations then deletion then sequential
+ * moves. Move destinations describe the resulting order, as PDFCraft did. The
+ * original Ieum save engine retains page objects, text, metadata and annotations. */
+export async function editPdfPages(bytes, input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => !['rotate', 'delete', 'move'].includes(key))) bad('PDF 쪽 편집 요청이 올바르지 않습니다.');
+  const { pages } = await inspectPdf(bytes, true);
+  const list = key => { const value = input[key] ?? []; if (!Array.isArray(value) || value.length > 20000) bad('PDF 쪽 목록이 올바르지 않습니다.'); return value; };
+  const rotations = new Map();
+  const index = (value, count = pages) => { if (!Number.isInteger(value) || value < 1 || value > count) bad('PDF 쪽 번호를 확인해 주세요.'); return value - 1; };
+  for (const rotation of list('rotate')) {
+    if (!rotation || !Array.isArray(rotation.pages) || rotation.pages.length > 20000 || ![90, 180, 270].includes(rotation.degrees)) bad('PDF 회전은 90·180·270도만 가능합니다.');
+    for (const value of new Set(rotation.pages)) { const pageIndex = index(value); rotations.set(pageIndex, ((rotations.get(pageIndex) ?? 0) + rotation.degrees) % 360); }
+  }
+  const deletedPages = [...new Set(list('delete').map(value => index(value)))];
+  if (deletedPages.length >= pages) bad('PDF에는 한 쪽 이상 남아 있어야 합니다.');
+  const deleted = new Set(deletedPages), order = Array.from({ length: pages }, (_, i) => i).filter(i => !deleted.has(i));
+  const moves = list('move');
+  for (const move of moves) {
+    if (!move || !Number.isSafeInteger(move.to) || move.to < 1) bad('PDF 이동 위치를 확인해 주세요.');
+    const from = index(move.from, order.length), [moved] = order.splice(from, 1);
+    order.splice(Math.min(move.to - 1, order.length), 0, moved);
+  }
+  if (!rotations.size && !deletedPages.length && !moves.length) throw new HttpError(400, 'no_edit', '바꿀 내용이 없습니다.');
+  return editPdf(bytes, { rotations: [...rotations].map(([pageIndex, delta]) => ({ pageIndex, delta })), deletedPages, pageOrder: order });
+}
 /** A copy renderer has no authority to write either the source or a chosen target.
  * The prepared-output service alone publishes these bytes. Redaction is a separate
  * operation so normal Save/Save As cannot accidentally apply pending regions. */

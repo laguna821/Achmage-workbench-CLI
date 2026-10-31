@@ -4,9 +4,7 @@
     "linux": {
       "appimage": {
         "files": {
-          "/usr/share/achmage-workbench/ieumoffice": "bundled/ieumoffice",
-          "/usr/share/achmage-workbench/pdfcraft": "bundled/pdfcraft",
-          "/usr/share/achmage-workbench/hop": "bundled/hop"
+          "/usr/share/achmage-workbench/ieumoffice": "bundled/ieumoffice"
         }
       }
     }

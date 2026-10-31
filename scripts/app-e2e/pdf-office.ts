@@ -17,6 +17,11 @@ export async function pdfOfficeScenario(ctx: Ctx) {
   writeFileSync(file, original);
   const artifact = await api<Artifact>("POST", `/api/works/${work.id}/artifacts`, { path: file });
   const snapshot = () => api<Snapshot>("GET", "/api/snapshot");
+  const tools = (await snapshot()).tools;
+  ctx.report.check(S, "내장 한글·PDF 리소스 준비 · 별도 HOP/PDFCraft 실행 안 함", tools.hwp?.available === true && tools.hwp.bundled === true && tools.pdf?.available === true && tools.pdf.bundled === true && !tools.hop.available && !tools.pdfcraft?.available);
+  const copy = await api<Artifact>("POST", `/api/artifacts/${artifact.id}/pdf-edit`, { rotate: [{ pages: [1], degrees: 90 }], delete: [2] });
+  const copyPdf = await PDFDocument.load(readFileSync(copy.path));
+  ctx.report.check(S, "내장 엔진의 PDF 쪽 사본 · 원본 바이트와 판 보존", copyPdf.getPageCount() === 1 && copyPdf.getPage(0).getRotation().angle === 90 && readFileSync(file).equals(original) && (await snapshot()).artifacts.find(a => a.id === artifact.id)?.revision === artifact.revision);
   const tab = { id: "pdf-tab", workId: work.id, sessionId: null, view: { kind: "document", artifactId: artifact.id, proposalId: null }, ui: { mode: "edit" } };
   await seedLayout(ctx, { ...(await snapshot()).prefs, paneLayout: { version: 2, focus: "pdf-pane", panes: [{ ...tab, id: "pdf-pane", tabs: [tab], activeTabId: tab.id, recentTabIds: [tab.id] }] } });
   await wd.setWindowRect({ width: 1800, height: 1100 }); await wd.refresh(); await installProbe(wd);

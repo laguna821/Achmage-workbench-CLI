@@ -2,7 +2,6 @@ import { createHash, randomUUID } from "node:crypto";
 import { copyOfficeStyleSelection } from "./office-styles.ts";
 import { blankOfficeBytes } from "./office-new.mjs";
 import { BLANK_OFFICE_DOCUMENTS, type NewOfficeDocument } from "@workbench/contracts";
-import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unwatchFile, watchFile, writeFileSync, type Stats } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import {
@@ -73,8 +72,8 @@ import type { Store } from "./store.ts";
 import { adaptTitle, titleFor } from "./titles.ts";
 import { blankDesign, copyDesignAssets, designProblem, designStem, type DesignPreset } from "./design.ts";
 import { IeumOffice, ieumFromCliDir, installIeumOffice, type InstallProgress } from "./ieumoffice.ts";
-import { findHop, openInHop, openWithDesktop } from "./hop.ts";
-import { findPdfcraft } from "./pdfcraft.ts";
+import { openWithDesktop } from "./desktop-open.ts";
+import { embeddedDocumentTools } from "./embedded-tools.ts";
 import { createGuide } from "./create.ts";
 import { CreationJournal, type CreationRecord } from "./creation-journal.ts";
 import { UserSkills } from "./user-skills.ts";
@@ -734,21 +733,21 @@ export class SessionManager {
 
   private ieumBusy: InstallProgress | null = null;
   private ieumVersion: string | null = null;
+  private embeddedTools: ReturnType<typeof embeddedDocumentTools> | null = null;
 
   /** Document engines on this computer, as the connection screen and onboarding show them. */
   tools(): DocumentTools {
     const kordoc = this.documents.kordoc;
     const ieum = this.documents.ieum;
-    const hop = findHop();
+    const embedded = this.embeddedTools ??= embeddedDocumentTools();
     const busy = Boolean(this.ieumBusy && this.ieumBusy.stage !== "done" && this.ieumBusy.stage !== "error");
     return {
       kordoc: { available: Boolean(kordoc?.available), bundled: Boolean(kordoc?.bundled), version: kordoc?.version ?? null, path: kordoc?.runner ?? null, busy: false, message: null },
       ieumoffice: { available: Boolean(ieum?.available), bundled: Boolean(ieum?.bundled), version: this.ieumVersion, path: ieum?.cli ?? null, busy, message: this.ieumBusy?.message ?? null },
-      hop: { available: Boolean(hop), bundled: Boolean(hop?.bundled), version: hop?.version ?? null, path: hop ? (hop.args?.at(-1) ?? hop.launcher) : null, busy: false, message: null },
-      pdfcraft: (() => {
-        const cli = findPdfcraft();
-        return { available: Boolean(cli), bundled: Boolean(cli?.bundled), version: cli?.version ?? null, path: cli?.path ?? null, busy: false, message: null };
-      })(),
+      ...embedded,
+      // Older clients may still read these names. Neither separate app is used.
+      hop: { available: false, bundled: false, version: null, path: null, busy: false, message: "앱 안의 한글 편집기를 사용합니다." },
+      pdfcraft: { available: false, bundled: false, version: null, path: null, busy: false, message: "앱 안의 PDF 편집기를 사용합니다." },
     };
   }
 
@@ -819,16 +818,14 @@ export class SessionManager {
   }
 
   /**
-   * Open a document outside Workbench: Hangul files in HOP, everything else in the desktop's
-   * default application. What the other app saves comes back as "changed on disk".
+   * Explicitly open a document in the desktop's default application. What the
+   * other app saves comes back as "changed on disk".
    */
   openExternal(artifactId: string) {
     const artifact = this.documents.check(artifactId);
     if (artifact.diskState === "missing") throw new HttpError(404, "file_missing", "파일이 없습니다.");
-    const hop = artifact.format === "hwpx" || artifact.format === "hwp" ? findHop() : null;
-    if (hop) openInHop(hop, artifact.path);
-    else openWithDesktop(artifact.path);
-    const app = hop ? "HOP" : "기본 앱";
+    openWithDesktop(artifact.path);
+    const app = "기본 앱";
     this.watchExternal(artifact.id, artifact.path, app);
     return { app };
   }
@@ -1726,33 +1723,25 @@ export class SessionManager {
   }
 
   /**
-   * PDF page edits through PDFCraft (rotate, delete, move). The result is a new file next to the
+   * PDF page edits through the embedded Ieum engine. The result is a new file next to the
    * original; the original and its revisions stay untouched.
    */
   async editPdf(artifactId: string, edit: { rotate?: { pages: number[]; degrees: number }[]; delete?: number[]; move?: { from: number; to: number }[] }) {
     const artifact = this.documents.check(artifactId);
     if (artifact.format !== "pdf") throw new HttpError(400, "not_pdf", "PDF 문서가 아닙니다.");
-    const cli = findPdfcraft()?.path;
-    if (!cli) throw new HttpError(501, "pdfcraft_missing", "PDF 편집 도구(PDFCraft)를 찾지 못했습니다. 앱을 다시 설치해 주세요.");
-    const args = ["edit", this.documents.revisionPath(artifactId, artifact.revision)];
-    const rotations = (edit.rotate ?? []).filter((entry) => entry.pages.length && [90, 180, 270].includes(entry.degrees));
-    for (const entry of rotations) args.push("--rotate", `${entry.pages.join(",")}:${entry.degrees}`);
-    if (edit.delete?.length) args.push("--delete", edit.delete.join(","));
-    for (const entry of edit.move ?? []) args.push("--move", `${entry.from}:${entry.to}`);
-    if (args.length === 2) throw new HttpError(400, "no_edit", "바꿀 내용이 없습니다.");
+    const work = this.requireWork(artifact.workId);
+    const { editPdfPages } = await import("./pdf-ops.mjs");
+    const { bytes } = await editPdfPages(readFileSync(this.documents.revisionPath(artifactId, artifact.revision)), edit);
     const extension = extname(artifact.path);
     const stem = artifact.path.slice(0, -extension.length);
-    let out = `${stem}.편집${extension}`;
-    for (let index = 2; existsSync(out); index += 1) out = `${stem}.편집${index}${extension}`;
-    args.push("--out", out);
-    await new Promise<void>((done, fail) =>
-      execFile(cli, args, { timeout: 60_000 }, (error, _stdout, stderr) =>
-        error ? fail(new HttpError(500, "pdfcraft_failed", `PDFCraft 편집 실패: ${String(stderr || error.message).slice(0, 300)}`)) : done(),
-      ),
-    );
-    const work = this.requireWork(artifact.workId);
-    const tracked = this.documents.track(work.id, work.cwd, out, "user", null, `${artifact.name} r${artifact.revision}에서 PDFCraft로 편집`);
-    if (!tracked) throw new HttpError(500, "pdfcraft_failed", "편집 결과를 읽지 못했습니다.");
+    let out = "";
+    for (let index = 1; ; index += 1) {
+      out = `${stem}.편집${index === 1 ? "" : index}${extension}`;
+      try { writeFileSync(out, bytes, { flag: "wx" }); break; }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+    }
+    const tracked = this.documents.track(work.id, work.cwd, out, "user", null, `${artifact.name} r${artifact.revision}에서 PDF 쪽 편집`);
+    if (!tracked) throw new HttpError(500, "pdf_edit_failed", "편집 결과를 읽지 못했습니다.");
     return tracked.artifact;
   }
 

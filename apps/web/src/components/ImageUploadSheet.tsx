@@ -213,7 +213,7 @@ export function ImageUploadSheet({ api, onClose, onToast }: { api: Api; onClose:
               <strong>워드·PPT·엑셀</strong> 편집기에서 붙여넣기·끌어 놓기 → 그림을 문서 파일 안에 넣습니다(R2를 쓰지 않음)
             </li>
             <li>
-              <strong>한글(HWPX)</strong> 앱 안에서는 넣지 못합니다. HOP로 열어 넣어 주세요.
+              <strong>한글(HWPX)</strong> 앱 안의 한글 편집기에서 편집합니다.
             </li>
           </ul>
         </section>

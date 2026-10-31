@@ -28,7 +28,7 @@ const check = (step: string, ok: boolean, detail = "") => {
   console.log(`${ok ? "PASS" : "FAIL"} ${step}${detail ? ` — ${detail}` : ""}`);
 };
 
-if (!["ieumoffice/resources/cli/genoffice.cjs", "pdfcraft/pdfcraft-cli", "hop/usr/bin/hop-desktop"].every((path) => existsSync(join(bundledDir, path)))) {
+if (!existsSync(join(bundledDir, "ieumoffice/resources/cli/genoffice.cjs"))) {
   console.log(`The bundled apps are not unpacked at ${bundledDir}; fetching the pinned Linux builds…`);
   spawnSync(process.execPath, ["scripts/fetch-bundled-apps.ts", bundledDir, "linux-x64"], { stdio: "inherit" });
 }
@@ -47,7 +47,7 @@ mkdirSync(join(app, "node"), { recursive: true });
 copyFileSync("apps/host/dist/host.mjs", join(app, "host", "host.mjs"));
 symlinkSync(resolve("apps/web/dist"), join(app, "web"));
 symlinkSync(resolve("third_party/kordoc"), join(app, "kordoc"));
-for (const name of ["ieumoffice", "pdfcraft", "hop"]) symlinkSync(join(bundledDir, name), join(app, name));
+symlinkSync(join(bundledDir, "ieumoffice"), join(app, "ieumoffice"));
 symlinkSync(process.execPath, join(app, "node", "node"));
 
 // ── A. installed app, engines already on the computer ────────────────────────────────────────

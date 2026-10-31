@@ -67,7 +67,7 @@ function Page({ pdf, number, width, selected, onToggle }: { pdf: PDFDocumentProx
   );
 }
 
-/** PDF.js view with text selection; page edits go through PDFCraft and make a new file. */
+/** PDF.js view with text selection; embedded page edits make a new file. */
 export function PdfView({
   api,
   artifactId,
@@ -152,7 +152,7 @@ export function PdfView({
         <button type="button" className="button small" disabled={!pages.length || busy || (pdf ? pages.length >= pdf.numPages : true)} onClick={() => void run({ delete: pages })}>
           삭제
         </button>
-        <span className="muted">결과는 새 파일로 저장 (PDFCraft)</span>
+        <span className="muted">결과는 새 파일로 저장</span>
       </div>
       <div className="pdf-stage" ref={stage}>
         {error ? <div className="notice notice-error">{error}</div> : null}

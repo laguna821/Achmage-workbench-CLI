@@ -15,15 +15,15 @@ function ToolsSection({ tools, onInstallIeum, onRefreshTools }: { tools: Documen
   const rows = [
     { key: "kordoc", name: "kordoc", role: "한글(HWPX) 만들기·글 보기·쪽 미리보기", status: tools.kordoc },
     { key: "ieumoffice", name: "이음오피스", role: "워드·PPT·엑셀 미리보기·글 보기·AI 수정", status: tools.ieumoffice },
-    { key: "hop", name: "Achmage HOP", role: "한글 문서를 사람이 편집(HOP로 열기 → 저장하면 새 판). 없으면 기본 앱으로 엽니다.", status: tools.hop },
-    ...(tools.pdfcraft ? [{ key: "pdfcraft", name: "PDFCraft", role: "PDF 쪽 돌리기·지우기·옮기기(새 파일로)", status: tools.pdfcraft } as const] : []),
+    ...(tools.hwp ? [{ key: "hwp", name: "이음 한글", role: "앱 안에서 HWP·HWPX 편집·저장·출력", status: tools.hwp } as const] : []),
+    ...(tools.pdf ? [{ key: "pdf", name: "이음 PDF", role: "앱 안에서 PDF 편집·쪽 정리·사본 저장", status: tools.pdf } as const] : []),
   ] as const;
   return (
     <>
       <div className="menu-divider" />
       <div className="menu-label">문서 도구</div>
       {rows.map((row) => {
-        const state = row.key === "hop" && !row.status.available ? { text: "기본 앱으로 열기", tone: "" } : toolState(row.status);
+        const state = toolState(row.status);
         return (
           <div key={row.key} className="connection">
             <div className="connection-head">

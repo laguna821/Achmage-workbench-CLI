@@ -1,14 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "bundle": {
-    "resources": {
-      "bundled/pdfcraft/": "pdfcraft/"
-    },
     "macOS": {
       "files": {
-        "Resources/ieumoffice/IeumOffice.app": "bundled/ieumoffice/IeumOffice.app",
-        "Resources/hop/Achmage HOP.app": "bundled/hop/Achmage HOP.app",
-        "Resources/hop/WORKBENCH-BUNDLE.json": "bundled/hop/WORKBENCH-BUNDLE.json"
+        "Resources/ieumoffice/IeumOffice.app": "bundled/ieumoffice/IeumOffice.app"
       }
     }
   }

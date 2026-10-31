@@ -605,7 +605,7 @@ export default function DocumentView({
           onEdit={async (edit) => {
             try {
               const created = await api.editPdf(artifactId, edit);
-              onToast(`PDFCraft로 새 파일을 만들었습니다: ${created.name}`);
+              onToast(`PDF 쪽 편집을 새 파일로 저장했습니다: ${created.name}`);
               onOpenArtifact(created.id);
             } catch (error) {
               onToast(error instanceof Error ? error.message : String(error));
@@ -721,7 +721,7 @@ export default function DocumentView({
             <button
               type="button"
               className="ghost-button"
-              title={hangul && state.tools?.hop.available ? "Achmage HOP에서 편집하고 저장하면 새 판으로 받을 수 있습니다" : "이 컴퓨터의 기본 앱에서 엽니다"}
+              title="이 컴퓨터의 기본 앱에서 엽니다"
               onClick={() =>
                 void api
                   .openExternal(artifactId)
@@ -729,7 +729,7 @@ export default function DocumentView({
                   .catch((error: Error) => onToast(error.message))
               }
             >
-              <Icon name="file" size={14} /> {hangul && state.tools?.hop.available ? "HOP로 열기" : "앱으로 열기"}
+              <Icon name="file" size={14} /> 다른 앱으로 열기
             </button>
           ) : null}
           <div className="anchor">

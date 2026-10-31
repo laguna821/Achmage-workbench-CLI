@@ -1,5 +1,7 @@
 # 통합 업데이트 실행 기록
 
+2026-10-31 번들 정리: 별도 HOP/PDFCraft 실행·배포를 제거하고 기존 PDF 쪽 사본을 내장 이음 엔진으로 연결했다. 기본 한글 편집과 명시적 외부 앱의 저장 감시를 유지한다. 실제 Linux **50/50**, 관련 **7/7**, 타입·web/host/native 빌드 통과. 기존 Linux HOP/PDFCraft 폴더 약243MiB는 배포 제외 대상이며 새 설치본 실측은 아니다. [범위와 근거](office-integration.md#별도-hoppdfcraft-배포-제거), 검증 판 `research:rr-2fcbcc4706adb4e91f451286cc296d10:010e5d7daa5b1c621979811baf98782c4d4fdc28810d2d28aa074530f89ce56d`. Ieum Electron·HOP 패치/hallym-kordoc·OS 설치/용량/릴리스는 계속 진행한다.
+
 2026-10-31 출력 연결: 원본 Word/PPT/Markdown/HTML → 시스템 WebView PDF·공통 저장을 Linux 실제 앱 **15/15**, 공통 PDF·시스템 인쇄 창/취소를 **8/8**로 검증했다. 출력 준비/링크4/4, 인접 회귀34/34, 타입·web/Office/native 빌드 통과. Word의 중복 글꼴 약144MB 요청을 작업별 자산으로 줄였다. 실행 web1008/1008과 host/hwp-cli 일치. [범위와 한계](office-integration.md#원본-pdf-출력과-시스템-인쇄), 근거 `html-output-native-07/verification.json`, 검증 판 `research:rr-46296b7e11f6692905e32ef10c674a75:87ff5413de0dfd3168107e18f2d5e52c5e3a6e219edbf716fabd55bb1be63903`. 전체 G4/G5/G6는 계속 진행하며 배포 번들·설치본·용량은 미완료다.
 
 목표: 기존 통합 계획과 PKM의 남은 기능을 구현·검증하고 GitHub에 OS별 새 버전을 릴리스한다. 다음 버전은 잠정 `0.3.0`이며, 버전 번호는 실제 릴리스 준비 시 확정한다.
@@ -19,7 +21,7 @@
 | G2 | 내부 문서 셸, 같은 세션의 사이드 채팅, +/@, 사용자 템플릿·스킬 | 일반 채팅·원본7종 문서/로컬 첨부·복원, 원본9종 다중 스킬·양식 사본/같은 대화 인계·제안 카드 저장/자동 호출 검증. 현재 문서 양식 미리보기·명시저장/취소·복원 Linux 검증, 나머지 공통 기능 진행 |
 | G3 | Orca worktree·PTY·Git/PR 검토·내장 브라우저/Design Mode | worktree·PTY·명시적 환경 준비·로컬/원격 Git·충돌 해결·구간 스테이징·기준 비교·행 의견/전달 Linux 검증, PR/CI·브라우저와 나머지 동등성 후속 |
 | G4 | 이음 편집기 9종과 공통 기능, doory | 9종 원본 화면·공통 AI·설정·Rust 키링·Workbench CLI 연결. 대표 편집/저장/복원/첫 세션 자동 연결/새 대화/취소 및 9종 되돌림 Linux 검증. Sheets 저장 경쟁·응답 전달 지연·PDF 저장 후 Undo 수정. 루프 밖 AI·공통 기능·doory와 전체 동등성 진행 |
-| G5 | HOP 개선 패치·hallym-kordoc 생성 스킬·중복 패키지 제거 | 대기 |
+| G5 | HOP 개선 패치·hallym-kordoc 생성 스킬·중복 패키지 제거 | 별도 HOP/PDFCraft 실행·배포 제거, 내장 한글/PDF Linux50/50. HOP 개선 패치·hallym-kordoc/별도 kordoc 엔진 전환과 Ieum Electron 제거 진행 |
 | PKM | 내비게이터/프로젝트 노트/Bases 보존, 썸네일·폴더 템플릿·.base 교환 | 템플릿·썸네일·지원 범위의 .base 완료, OS 검증 G6 |
 | G6 | 기능 회귀·데이터 이행·설치본·용량 측정·릴리스 | 대기 |
 | G7 | Orca 원격·확장 기능의 개별 구현/검증 | 대기 |
