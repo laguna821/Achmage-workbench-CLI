@@ -331,7 +331,7 @@ jobs:
           gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" -D out \
             -n windows -n macos -n linux -n arch \
             -n smoke-windows -n smoke-macos -n lightpanda-macos-14 -n lightpanda-ubuntu-24.04
-      - name: Verify evidence and publish preview
+      - name: Verify evidence and upload to prepared draft
         run: |
           python3 - <<'PY'
           import hashlib, json, os
@@ -376,9 +376,15 @@ jobs:
           Path('preview-notes.md').write_text('\n'.join(line.strip() for line in body.splitlines()) + '\n')
           PY
           mapfile -t files < <(find out -type f \( -name '*.AppImage' -o -name '*.deb' -o -name '*.pkg.tar.zst' -o -name '*.exe' -o -name '*.msi' -o -name '*.dmg' \))
-          gh release create "$PREVIEW_TAG" --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" \
-            --prerelease --latest=false --title "Achmage Workbench — 시험 설치본 ($PREVIEW_TAG)" \
-            --notes-file preview-notes.md "${files[@]}" SHA256SUMS.txt installer-provenance.json
+          # A maintainer creates the draft with their authenticated gh before dispatching.
+          # GITHUB_TOKEN can upload these assets, but release creation for this historical
+          # source returned 403 even with Contents:write and an existing exact source tag.
+          gh release view "$PREVIEW_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease > draft.json
+          python3 -c 'import json; d=json.load(open("draft.json")); assert d["isDraft"] and d["isPrerelease"], "Expected an unpublished preview draft"'
+          tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$PREVIEW_TAG" --jq .object.sha)
+          test "$tag_sha" = "$SOURCE_SHA"
+          gh release upload "$PREVIEW_TAG" --repo "$GITHUB_REPOSITORY" \
+            "${files[@]}" SHA256SUMS.txt installer-provenance.json preview-notes.md
 
   release:
     name: GitHub release (tags only)
