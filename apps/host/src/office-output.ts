@@ -12,7 +12,7 @@ import { prepareTextCopy } from "./office-text-copy.ts";
 
 export type OutputPlan = { id: string; path: string; format: OfficeOutputFormat; exists: boolean; size: number };
 type Result = { path: string; artifact: Artifact | null; backupPath?: string };
-type Ticket = OutputPlan & { artifactId: string; revision: number; sourcePath: string; viewId: string | null; sessionId: string | null; sha256: string | null; expires: number; inputHash?: string; outputHash?: string; backupPath?: string; result?: Result };
+type Ticket = OutputPlan & { artifactId: string; revision: number; sourcePath: string; viewId: string | null; sessionId: string | null; sha256: string | null; expires: number; longJob?: boolean; inputHash?: string; outputHash?: string; backupPath?: string; result?: Result };
 const hash = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 function disk(path: string) {
   if (!existsSync(path)) return null;
@@ -47,7 +47,7 @@ export class OfficeOutputs {
     // Reading/copying a revision is allowed in a read-only view; source bytes are never written.
     return { viewId: view.viewId, sessionId: view.sessionId };
   }
-  prepare(artifactId: string, revision: number, rawPath: string, access?: DocumentAccess): OutputPlan {
+  prepare(artifactId: string, revision: number, rawPath: string, access?: DocumentAccess, longJob = false): OutputPlan {
     const source = this.documents.get(artifactId);
     const scope = this.scope(artifactId, access);
     if (!Number.isSafeInteger(revision) || revision < 1 || revision > source.revision) throw new HttpError(400, "output_revision", "저장할 문서 판이 올바르지 않습니다.");
@@ -57,6 +57,7 @@ export class OfficeOutputs {
     const path = join(realpathSync(dirname(requested)), basename(requested));
     const format = extname(path).slice(1).toLowerCase() as OfficeOutputFormat;
     const family = formatOf(path);
+    if (longJob && (source.format !== "epub" || format !== "epub" || !scope.viewId)) throw new HttpError(400, "output_job", "열린 전자책의 번역 결과만 예약할 수 있습니다.");
     const hangul = ["hwp", "hwpx"].includes(source.format) && ["hwp", "hwpx"].includes(format);
     const same = family === source.format && ["docx", "pptx", "xlsx", "markdown", "html", "xmind", "epub", "pdf"].includes(source.format);
     const textExport = (source.format === "docx" && family === "html")
@@ -65,16 +66,20 @@ export class OfficeOutputs {
     if (isWorkbenchPath(path) || path === resolve(source.path) || (existsSync(source.path) && path === realpathSync(source.path))) throw new HttpError(400, "output_source", "원본과 다른 파일 이름을 선택해 주세요. 원본 저장은 저장 메뉴를 사용하세요.");
     this.documents.registry.assertPath(path);
     const bytes = disk(path);
-    for (const [id, ticket] of this.tickets) if ((ticket.result || ticket.expires < Date.now()) && !this.busy.has(id)) this.tickets.delete(id);
+    const liveViews = new Set(this.documents.registry.list().map(view => view.viewId));
+    for (const [id, ticket] of this.tickets) {
+      const keepForJob = ticket.longJob && ticket.viewId && liveViews.has(ticket.viewId);
+      if ((ticket.result || ticket.expires < Date.now() && !keepForJob) && !this.busy.has(id)) this.tickets.delete(id);
+    }
     if (this.tickets.size >= 100) throw new HttpError(429, "output_busy", "저장 요청이 너무 많습니다.");
-    const ticket: Ticket = { id: randomUUID(), path, format, exists: bytes !== null, size: bytes?.length ?? 0, sha256: bytes ? hash(bytes) : null, artifactId, revision, sourcePath: source.path, ...scope, expires: Date.now() + 15 * 60_000 };
+    const ticket: Ticket = { id: randomUUID(), path, format, exists: bytes !== null, size: bytes?.length ?? 0, sha256: bytes ? hash(bytes) : null, artifactId, revision, sourcePath: source.path, ...scope, expires: Date.now() + 15 * 60_000, ...(longJob ? { longJob } : {}) };
     this.remember(ticket);
     return { id: ticket.id, path, format, exists: ticket.exists, size: ticket.size };
   }
-  async commit(artifactId: string, id: string, body: Buffer, replace: boolean, access?: DocumentAccess): Promise<Result> {
+  async commit(artifactId: string, id: string, body: Buffer, replace: boolean, access?: DocumentAccess, sourceRevision?: number): Promise<Result> {
     if (!/^[a-f0-9-]{36}$/.test(id)) throw new HttpError(404, "output_expired", "저장 위치를 다시 선택해 주세요.");
     const ticket = this.tickets.get(id) ?? (existsSync(this.file(id)) ? JSON.parse(readFileSync(this.file(id), "utf8")) as Ticket : undefined);
-    if (!ticket || ticket.artifactId !== artifactId || (!ticket.outputHash && ticket.expires < Date.now())) throw new HttpError(404, "output_expired", "저장 위치를 다시 선택해 주세요.");
+    if (!ticket || ticket.artifactId !== artifactId || (!ticket.outputHash && !ticket.longJob && ticket.expires < Date.now())) throw new HttpError(404, "output_expired", "저장 위치를 다시 선택해 주세요.");
     const scope = this.scope(artifactId, access);
     if (scope.sessionId !== ticket.sessionId || (!ticket.outputHash && scope.viewId !== ticket.viewId)) throw new HttpError(409, "output_view_changed", "저장 위치를 고른 문서 창이나 대화가 바뀌었습니다.");
     const inputHash = hash(body);
@@ -87,6 +92,11 @@ export class OfficeOutputs {
     let published = false;
     try {
       const source = this.documents.get(artifactId);
+      if (ticket.longJob && !ticket.outputHash) {
+        const current = this.documents.check(artifactId);
+        if (sourceRevision !== current.revision || current.diskState !== "same") throw new HttpError(409, "output_source_changed", "번역한 책의 판이 바뀌었습니다. 현재 책을 확인해 주세요.");
+        ticket.revision = sourceRevision;
+      }
       if (source.path !== ticket.sourcePath) throw new HttpError(409, "output_source_moved", "원본의 위치가 바뀌었습니다. 위치를 다시 선택해 주세요.");
       if (realpathSync(dirname(ticket.path)) !== dirname(ticket.path)) throw new HttpError(409, "output_moved", "저장 폴더가 바뀌었습니다. 위치를 다시 선택하세요.");
       const finish = () => {

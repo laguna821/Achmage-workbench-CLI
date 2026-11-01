@@ -216,7 +216,7 @@ export class OfficeAi {
     if (operation === "cancel") {
       if (!record(raw) || !identifier(raw.requestId)) return invalid();
       this.active.get(`${owner}/${raw.requestId}`)?.controller.abort();
-      for (const call of this.active.values()) if (call.owner === owner && call.tool) call.controller.abort();
+      if (raw.requestOnly !== true) for (const call of this.active.values()) if (call.owner === owner && call.tool) call.controller.abort();
       sendJson(res, 200, { ok: true }); return true;
     }
     if (operation === "tool") {
@@ -256,11 +256,12 @@ export class OfficeAi {
       return true;
     }
     const request = officeAiRequest(raw, true);
+    if (outer?.background && request.tools?.length) throw new HttpError(400, "office_job_tools", "책 번역 요청에는 편집 도구를 사용할 수 없습니다.");
     if (outer) this.sessions!.claimCall(bound!, outer.turnId, request.requestId, raw);
-    const run = this.begin(owner, request.requestId, res);
+    const run = this.begin(owner, request.requestId, res, documents.get(artifactId!).format === "epub" ? 3 : 2);
     const disconnect = connect(run);
     // The original Codex session pool must not join two documents that chose the same id.
-    const sessionId = createHash("sha256").update(bound ? `${bound.sessionId}/${bound.artifactId}` : `${owner}/${request.sessionId ?? request.requestId}`).digest("hex");
+    const sessionId = createHash("sha256").update(bound ? `${bound.sessionId}/${bound.artifactId}${outer?.background ? `/job/${outer.turnId}/${request.requestId}` : ""}` : `${owner}/${request.sessionId ?? request.requestId}`).digest("hex");
     return this.streamResponse(engine, request, sessionId, run, res, disconnect);
   }
   private async streamResponse(engine: OfficeAiEngine, request: OfficeAiStream, sessionId: string, run: ReturnType<OfficeAi["begin"]>, res: ServerResponse, disconnect: () => void) {

@@ -56,6 +56,7 @@ export async function runOfficeCli() {
     const write = async (bytes: ArrayBuffer) => ({ path: await invoke<string>("office_cli_write", new Uint8Array(bytes)), artifactId: artifact.id });
     const output = async (message: OfficeOutputRequest): Promise<OfficeOutputResult["value"]> => {
       trace(`output-${message.action}`);
+      if (message.action === "open-export") throw new Error("결과 파일은 Workbench의 문서 탭에서 열어 주세요.");
       if (message.action === "cancel") { if (message.planId) plans.delete(message.planId); return null; }
       if (message.action === "html-render") return invoke<ArrayBuffer>("render_html_pdf", { job: message.job });
       if (message.action === "browser") return invoke("office_browser", { command: message.command });

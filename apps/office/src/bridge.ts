@@ -206,6 +206,19 @@ export class Gateway {
     return { bytes: await response.arrayBuffer(), baseRevision: Number(response.headers.get("x-epub-revision")), checkpoint: response.headers.get("x-epub-checkpoint") };
   }
 
+  async epubTranslation(artifactId: string, session: string, args: unknown) {
+    const response = await this.call("POST", `/api/artifacts/${artifactId}/epub/translation-build?session=${session}`, JSON.stringify(args), { "content-type": "application/json" });
+    if (response.headers.get("content-type")?.includes("application/json")) {
+      const result = await response.json(); throw new Error(result.message ?? result.error ?? "전자책 변환을 마치지 못했습니다.");
+    }
+    const payload = await response.arrayBuffer();
+    if (payload.byteLength < 4) throw new Error("전자책 결과를 받지 못했습니다.");
+    const size = new DataView(payload).getUint32(0);
+    if (size > payload.byteLength - 4) throw new Error("전자책 결과 정보가 올바르지 않습니다.");
+    const meta = JSON.parse(new TextDecoder().decode(new Uint8Array(payload, 4, size))) as { report: unknown; identifier: string };
+    return { ...meta, bytes: payload.slice(4 + size) };
+  }
+
   closeEpub(artifactId: string, session: string) {
     return fetch(`/api/artifacts/${artifactId}/epub/close?session=${session}`, { method: "POST", headers: { authorization: `Bearer ${this.token}` }, keepalive: true });
   }

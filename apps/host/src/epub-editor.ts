@@ -13,6 +13,7 @@ type BookView = {
   id: string; artifactId: string; scope: string; baseRevision: number; session: EpubSession;
   writable: boolean; restored: boolean; generation: number; checkpoint?: { id: string; generation: number };
   keptGeneration?: number; queue: Promise<unknown>;
+  hashes: Set<string>; jobLanguages: Set<string>;
 };
 const MAX_BOOKS = 32, MAX_OPEN_BYTES = 400_000_000;
 const token = () => randomBytes(24).toString("hex");
@@ -22,12 +23,22 @@ export class EpubEditors {
   private books = new Map<string, BookView>();
   private opening: Promise<unknown> = Promise.resolve();
   private reading: Promise<ReturnType<typeof import("./epub-ops.mjs").epubReadingState>> | null = null;
+  private translations: Promise<ReturnType<typeof import("./epub-translation.mjs").epubTranslationStore>> | null = null;
   private documents: Documents;
   private grants: EditorGrants;
   constructor(documents: Documents, grants: EditorGrants) { this.documents = documents; this.grants = grants; }
 
   private readingState() {
     return this.reading ??= import("./epub-ops.mjs").then((engine) => engine.epubReadingState(join(this.documents.dataDir, "office")));
+  }
+  private translationStore() {
+    return this.translations ??= import("./epub-translation.mjs").then(engine => engine.epubTranslationStore(join(this.documents.dataDir, "office"), (owner, hash) => this.books.get(owner)?.hashes.has(hash) === true));
+  }
+  private assertCurrent(view: BookView, bearer: string) {
+    this.documents.registry.assertWrite(view.artifactId, this.grants.access(bearer));
+    const current = this.documents.check(view.artifactId);
+    if (!view.writable || view.session.bookReadOnly()) throw new HttpError(423, "read_only", "읽기 전용 전자책입니다.");
+    if (this.dirty(view) || current.revision !== view.baseRevision || current.diskState !== "same" || current.sha256 !== view.session.docHash) throw new HttpError(409, "epub_stale", "저장된 책이 바뀌었습니다. 현재 문서를 확인한 뒤 번역해 주세요.");
   }
   private usedBytes(except?: BookView) {
     return [...this.books.values()].reduce((sum, view) => sum + (view === except ? 0 : view.session.bytes.byteLength), 0);
@@ -90,7 +101,7 @@ export class EpubEditors {
         try { this.documents.registry.assertWrite(artifactId!, this.grants.access(bearer!)); } catch { writable = false; }
         if (restored && !writable) throw new HttpError(423, "read_only", "편집 권한을 받은 뒤 복구본을 열어 주세요.");
         const id = token(), session = opened.session;
-        this.books.set(id, { id, artifactId: artifactId!, scope, baseRevision: revision, session, writable, restored, generation: 0, queue: Promise.resolve() });
+        this.books.set(id, { id, artifactId: artifactId!, scope, baseRevision: revision, session, writable, restored, generation: 0, queue: Promise.resolve(), hashes: new Set([session.docHash]), jobLanguages: new Set() });
         sendJson(res, 200, { status: "ok", sessionId: id, book: session.summary(), docHash: session.docHash, readOnly: session.bookReadOnly(), workbenchReadOnly: !writable, assetBase: `/epub-assets/${id}/`, restored });
       });
       this.opening = run.catch(() => {}); await run; return true;
@@ -117,7 +128,32 @@ export class EpubEditors {
         }
         case "lock": {
           if (typeof args.locked !== "boolean") throw new HttpError(400, "invalid_request", "잠금 값이 올바르지 않습니다.");
+          if (args.locked) {
+            this.assertCurrent(view, bearer!);
+            if ([...this.books.values()].some(other => other !== view && other.session.docHash === session.docHash && other.session.locked && this.hasGrant(other))) throw new HttpError(409, "epub_job_busy", "다른 탭에서 이 책을 번역하고 있습니다.");
+          }
           session.setLocked(args.locked); return sendJson(res, 200, session.locked);
+        }
+        case "translation-units": return sendJson(res, 200, await (await this.translationStore()).units(session, args));
+        case "store-translations": case "store-translation": case "store-jobs": case "store-write": {
+          const result = await (await this.translationStore()).invoke(operation, view.id, args);
+          if (result.ok && operation === "store-write" && args.kind === "job" && typeof args.lang === "string") {
+            const job = args.job as { state?: string };
+            if (job.state === "running") view.jobLanguages.add(args.lang); else view.jobLanguages.delete(args.lang);
+          }
+          return sendJson(res, 200, result);
+        }
+        case "translation-build": {
+          this.assertCurrent(view, bearer!);
+          if (!session.locked) throw new HttpError(409, "epub_not_locked", "번역 결과를 만드는 동안 책의 편집을 잠가 주세요.");
+          const result = await (await this.translationStore()).build(session, args);
+          if (!result.ok || !result.bytes) return sendJson(res, 200, result);
+          this.assertCurrent(view, bearer!);
+          // Binary framing avoids base64 copies of a potentially large book.
+          const meta = Buffer.from(JSON.stringify({ report: result.report, identifier: result.identifier })), length = Buffer.alloc(4);
+          length.writeUInt32BE(meta.length);
+          res.writeHead(200, { "content-type": "application/x-workbench-epub-result", "cache-control": "no-store" });
+          res.write(length); res.write(meta); res.end(result.bytes); return;
         }
         case "checkpoint": {
           const { bytes } = await this.prepared(view);
@@ -139,9 +175,15 @@ export class EpubEditors {
           if (!this.grants.allows(bearer, artifactId!)) throw new HttpError(401, "unauthorized", "편집기 권한이 만료되었습니다.");
           const saved = this.documents.saveEpubBytes(artifactId!, revision as number, Buffer.from(bytes), this.grants.access(bearer!));
           const written = saved.revision !== view.baseRevision;
-          if (changed) await session.rebase(bytes, snapshot);
+          let migrationWarning: string | undefined;
+          if (changed) {
+            const hashes = await session.rebase(bytes, snapshot);
+            view.hashes.add(hashes.newDocHash);
+            try { await (await this.translationStore()).migrate(session, hashes); }
+            catch { migrationWarning = "책은 저장했지만 이전 번역 결과를 새 판에 연결하지 못했습니다. 이전 결과는 보관소에 남아 있습니다."; }
+          }
           view.baseRevision = saved.revision; view.restored = false; view.generation++;
-          return sendJson(res, 200, { ok: true, path: artifact.path, written, revision: saved.revision, docHash: session.docHash, workbenchGeneration: view.generation });
+          return sendJson(res, 200, { ok: true, path: artifact.path, written, revision: saved.revision, docHash: session.docHash, workbenchGeneration: view.generation, ...(migrationWarning ? { migrationWarning } : {}) });
         }
         case "hash": return sendJson(res, 200, { ok: true, docHash: session.docHash });
         case "reading": return sendJson(res, 200, await (await this.readingState()).get(artifact.path));
@@ -153,6 +195,7 @@ export class EpubEditors {
         case "prefs": return sendJson(res, 200, await (await this.readingState()).setViewPrefs(args.patch));
         case "close": {
           if (!this.discardable(view)) throw new HttpError(409, "epub_unsaved", "미저장 전자책을 보관한 뒤 닫아 주세요.");
+          if (view.jobLanguages.size) await (await this.translationStore()).interrupt(session.docHash, view.jobLanguages);
           this.books.delete(view.id); return sendJson(res, 200, { ok: true });
         }
         default: throw new HttpError(400, "epub_operation", "지원하지 않는 전자책 요청입니다.");

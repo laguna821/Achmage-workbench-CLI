@@ -4,9 +4,9 @@ import type { OfficeOutputFormat, OfficeOutputPlan } from "../../../../../packag
 import type { Api } from "../../api.ts";
 
 /** Destination selection lives in the trusted parent, never in third-party editor code. */
-export function OfficeOutputDialog({ api, artifact, revision, format, onChoose, onCancel }: { api: Api; artifact: Artifact; revision: number; format: OfficeOutputFormat; onChoose(plan: OfficeOutputPlan): void; onCancel(): void }) {
+export function OfficeOutputDialog({ api, artifact, revision, format, defaultName, longJob, onChoose, onCancel }: { api: Api; artifact: Artifact; revision: number; format: OfficeOutputFormat; defaultName?: string; longJob?: boolean; onChoose(plan: OfficeOutputPlan): void; onCancel(): void }) {
   const [kind, setKind] = useState(format);
-  const [path, setPath] = useState(artifact.path.replace(/\.[^.\\/]+$/, format === "pdf" && artifact.format !== "pdf" ? ".pdf" : ` 사본.${format}`));
+  const [path, setPath] = useState(defaultName && defaultName.length <= 255 && !/[\\/\x00-\x1f]/.test(defaultName) ? artifact.path.replace(/[^\\/]+$/, defaultName) : artifact.path.replace(/\.[^.\\/]+$/, format === "pdf" && artifact.format !== "pdf" ? ".pdf" : ` 사본.${format}`));
   const [plan, setPlan] = useState<Awaited<ReturnType<Api["prepareOfficeOutput"]>> | null>(null);
   const [replace, setReplace] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const change = (value: string) => { setPath(value); setPlan(null); setReplace(false); setError(""); };
@@ -14,16 +14,16 @@ export function OfficeOutputDialog({ api, artifact, revision, format, onChoose, 
   const save = async () => {
     setBusy(true); setError("");
     try {
-      const prepared = plan ?? await api.prepareOfficeOutput(artifact.id, revision, path);
+      const prepared = plan ?? await api.prepareOfficeOutput(artifact.id, revision, path, longJob);
       if (prepared.format !== kind) throw new Error(`파일 이름의 확장자를 .${kind}(으)로 지정하세요.`);
       if (prepared.exists && !replace) { setPlan(prepared); return; }
-      onChoose({ id: prepared.id, path: prepared.path, format: prepared.format, replace });
+      onChoose({ id: prepared.id, path: prepared.path, format: prepared.format, replace, ...(longJob ? { longJob: true } : {}) });
     } catch (error) { setError(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); }
   };
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && !busy && onCancel()}>
     <form className="stage-dialog office-output-dialog" role="dialog" aria-modal="true" aria-label={format === "pdf" ? "PDF로 저장" : "다른 이름으로 저장"} onSubmit={(event) => { event.preventDefault(); void save(); }}>
       <header className="template-head"><h2>{format === "pdf" ? "PDF로 저장" : "다른 이름으로 저장"}</h2></header>
-      <p className="sheet-hint">현재 편집 내용을 저장합니다.</p>
+      <p className="sheet-hint">{longJob ? "번역 결과를 저장할 위치를 선택합니다. 원본 책은 유지됩니다." : "현재 편집 내용을 저장합니다."}</p>
       {format === "hwp" || format === "hwpx" ? <label>파일 형식 <select aria-label="저장 형식" value={kind} disabled={busy} onChange={(event) => { const next = event.target.value as "hwp" | "hwpx"; setKind(next); change(path.replace(/\.(hwp|hwpx)$/i, `.${next}`)); }}><option value="hwpx">한글 HWPX</option><option value="hwp">한글 HWP</option></select></label> : null}
       <label className="column">파일 경로<input className="sheet-input" aria-label="저장할 파일 경로" autoFocus value={path} disabled={busy} onChange={(event) => change(event.target.value)} /></label>
       {"__TAURI_INTERNALS__" in window ? <button type="button" className="button small" disabled={busy} onClick={() => { void import("@tauri-apps/plugin-dialog").then(({ save }) => save({ defaultPath: path, filters: [{ name: kind.toUpperCase(), extensions: [kind] }] })).then((picked) => { if (picked) change(picked); }).catch((error) => setError(String(error))); }}>위치 선택…</button> : null}

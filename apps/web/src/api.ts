@@ -166,9 +166,9 @@ export class Api {
       pending += decoder.decode(); if (pending.trim()) onChunk(JSON.parse(pending));
     } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
   }
-  prepareOfficeOutput = (artifactId: string, revision: number, path: string) => this.request<{ id: string; path: string; format: OfficeOutputFormat; exists: boolean; size: number }>("POST", `/api/artifacts/${artifactId}/outputs`, { revision, path });
-  async commitOfficeOutput(artifactId: string, id: string, bytes: ArrayBuffer, replace: boolean) {
-    const response = await fetch(`/api/artifacts/${artifactId}/outputs/${id}?replace=${replace ? 1 : 0}`, { method: "POST", headers: { authorization: `Bearer ${this.token}`, ...this.editorHeaders(), "content-type": "application/octet-stream" }, body: bytes });
+  prepareOfficeOutput = (artifactId: string, revision: number, path: string, longJob = false) => this.request<{ id: string; path: string; format: OfficeOutputFormat; exists: boolean; size: number }>("POST", `/api/artifacts/${artifactId}/outputs`, { revision, path, ...(longJob ? { longJob } : {}) });
+  async commitOfficeOutput(artifactId: string, id: string, bytes: ArrayBuffer, replace: boolean, sourceRevision?: number) {
+    const response = await fetch(`/api/artifacts/${artifactId}/outputs/${id}?replace=${replace ? 1 : 0}${sourceRevision === undefined ? "" : `&sourceRevision=${sourceRevision}`}`, { method: "POST", headers: { authorization: `Bearer ${this.token}`, ...this.editorHeaders(), "content-type": "application/octet-stream" }, body: bytes });
     const json = await response.json();
     if (!response.ok) throw new ApiRequestError(response.status, json);
     return json as { path: string; artifact: Artifact | null; backupPath?: string };

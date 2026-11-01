@@ -311,6 +311,11 @@ function textEditorPlatform(): Plugin {
     return () => window.removeEventListener('workbench:epub:flush', flush);
   }, [editor]);\n\n${marker}`);
       }
+      if (id === `${ieum}/apps/epub/src/renderer/translate/BookTranslation.tsx`) {
+        const marker = "const ask = createModelCall({\n          api,";
+        if (code.split(marker).length !== 2) this.error("EPUB book-job stream boundary changed");
+        return code.replace(marker, "const ask = createModelCall({\n          api: window.workbenchOfficeAi.job,");
+      }
       if (id === `${ieum}/node_modules/mind-elixir/dist/MindElixir.js`) {
         // Chromium focuses a contenteditable when a Range is selected. WebKit does not.
         // Focus explicitly for topic, summary and relationship-label keyboard editing.

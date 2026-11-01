@@ -67,10 +67,12 @@ export const OfficeEditor = forwardRef<
   const outputClose = useRef<(() => void) | null>(null);
   const outputRequest = useRef<string | null>(null);
   const outputPlans = useRef(new Map<string, OfficeOutputPlan & { preparationId: string }>());
+  const exported = useRef(new Map<string, Artifact>());
+  const blockingOutputs = () => [...outputPlans.current.values()].some(plan => !plan.longJob);
   const browserJobs = useRef(new Set<string>());
   const controlWaiters = useRef(new Map<string, (reply: RendererControlReply) => void>());
   const copied = useRef(new Map<string, string | null>());
-  const [output, setOutput] = useState<{ revision: number; format: OfficeOutputFormat; choose(plan: OfficeOutputPlan | null): void } | null>(null);
+  const [output, setOutput] = useState<{ revision: number; format: OfficeOutputFormat; defaultName?: string; longJob?: boolean; choose(plan: OfficeOutputPlan | null): void } | null>(null);
   const latest = useRef(artifact);
   latest.current = artifact;
 
@@ -177,6 +179,14 @@ export const OfficeEditor = forwardRef<
       if (target !== frame.current?.contentWindow || owner !== latest.current.id || ownerSession !== opened.current?.sessionId) throw new Error("저장 중 문서 창이나 연결된 대화가 바뀌었습니다. 저장한 사본은 문서 목록에서 확인해 주세요.");
     };
     const reply = (value: unknown, error?: string) => target.postMessage({ type: "office:output-result", requestId: message.requestId, value, error }, origin);
+    if (message.action === "open-export") {
+      try {
+        check(); const result = exported.current.get(message.path);
+        if (!result || !handlers.current.onCopied) throw new Error("이 문서에서 내보낸 결과 파일을 선택해 주세요.");
+        handlers.current.onCopied(result.id, { ...result, preserveSource: true }); reply(null);
+      } catch (error) { reply(null, error instanceof Error ? error.message : String(error)); }
+      return;
+    }
     if (message.action === "cancel") {
       if (message.preparationId && outputRequest.current === message.preparationId) outputClose.current?.();
       if (message.planId) outputPlans.current.delete(message.planId);
@@ -191,8 +201,9 @@ export const OfficeEditor = forwardRef<
         if (!plan || !(message.bytes instanceof ArrayBuffer)) throw new Error("저장 위치를 다시 선택하세요.");
         try {
           check();
-          const result = await api.commitOfficeOutput(owner, plan.id, message.bytes, plan.replace);
+          const result = await api.commitOfficeOutput(owner, plan.id, message.bytes, plan.replace, plan.longJob ? message.sourceRevision : undefined);
           check();
+          if (result.artifact) exported.current.set(result.path, result.artifact);
           if (result.artifact && (!message.intent || message.intent === "copy")) copied.current.set(result.artifact.id, ownerSession ?? null);
           reply({ path: result.path, artifactId: result.artifact?.id ?? null });
           if (result.backupPath) handlers.current.onNotice(`이전 파일을 백업했습니다: ${result.backupPath}`);
@@ -229,7 +240,7 @@ export const OfficeEditor = forwardRef<
         const choose = (value: OfficeOutputPlan | null) => { outputClose.current = null; outputRequest.current = null; resolve(value); };
         outputRequest.current = message.requestId;
         outputClose.current = () => choose(null);
-        setOutput({ revision: message.revision, format: message.action === "prepare" ? message.format : "pdf", choose });
+        setOutput({ revision: message.revision, format: message.action === "prepare" ? message.format : "pdf", ...(message.action === "prepare" ? { defaultName: message.defaultName, longJob: message.longJob === true && latest.current.format === "epub" && message.format === "epub" } : {}), choose });
       });
       setOutput(null);
       if (!plan) { reply(null); return; }
@@ -247,7 +258,7 @@ export const OfficeEditor = forwardRef<
   };
   useEffect(() => {
     return () => {
-      outputClose.current?.(); setOutput(null); outputPlans.current.clear();
+      outputClose.current?.(); setOutput(null); outputPlans.current.clear(); exported.current.clear();
       const jobs = [...browserJobs.current]; browserJobs.current.clear();
       if (jobs.length) void import("@tauri-apps/api/core").then(({ invoke }) => Promise.all(jobs.map(id => invoke("office_browser", { command: { kind: "close", id } }).catch(() => {}))));
     };
@@ -550,7 +561,7 @@ export const OfficeEditor = forwardRef<
       send({ type: "office:export-odt" });
     },
     flush() {
-      if (outputBusy.current || outputPlans.current.size || copied.current.size) return Promise.resolve(null);
+      if (outputBusy.current || blockingOutputs() || copied.current.size) return Promise.resolve(null);
       if (status.current.conflict) return Promise.resolve(null);
       // Not opened yet: nothing can have been edited.
       if (status.current.revision === null) return Promise.resolve(latest.current.revision);
@@ -559,13 +570,13 @@ export const OfficeEditor = forwardRef<
       return flushed;
     },
     rebase(revision) {
-      if (outputBusy.current || outputPlans.current.size || copied.current.size) return Promise.resolve(null);
+      if (outputBusy.current || blockingOutputs() || copied.current.size) return Promise.resolve(null);
       const flushed = waitFlushed();
       send({ type: "office:rebase", revision });
       return flushed;
     },
     async leave() {
-      if (outputBusy.current || outputPlans.current.size || copied.current.size) throw new Error("사본 저장을 마치거나 취소한 뒤 이동해 주세요.");
+      if (outputBusy.current || blockingOutputs() || copied.current.size) throw new Error("사본 저장을 마치거나 취소한 뒤 이동해 주세요.");
       if (status.current.revision === null) return;
       if (status.current.conflict) throw new Error("문서의 저장 충돌을 해결한 뒤 이동해 주세요. 편집 내용은 현재 탭에 있습니다.");
       const done = waitFlushed();
@@ -594,7 +605,7 @@ export const OfficeEditor = forwardRef<
   return (<>
     {skillsOpen ? <SkillLibraryDialog api={api} scope={{ workId: artifact.workId, ...(artifact.workspaceId ? { workspaceId: artifact.workspaceId } : {}), ...(sessionId ? { sessionId } : {}) }} onClose={() => { setSkillsOpen(false); send({ type: "office:skills-changed" }); }} /> : null}
     {referencePicker ? <OfficeReferencePicker {...referencePicker} /> : null}
-    {output ? <OfficeOutputDialog api={api} artifact={artifact} revision={output.revision} format={output.format} onChoose={output.choose} onCancel={() => output.choose(null)} /> : null}
+    {output ? <OfficeOutputDialog api={api} artifact={artifact} revision={output.revision} format={output.format} defaultName={output.defaultName} longJob={output.longJob} onChoose={output.choose} onCancel={() => output.choose(null)} /> : null}
     <iframe
       key={`${artifact.id}:${generation}`}
       ref={frame}

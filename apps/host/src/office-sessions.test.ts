@@ -12,12 +12,13 @@ import { createHttpServer } from "./http.ts";
 import { createEditorsServer, EditorGrants } from "./editors.ts";
 import { OfficeAi } from "./office-ai.ts";
 import type { OfficeAiEngine } from "./office-ai-engine.mjs";
+import { epubFixture } from "../../../scripts/app-e2e/epub-fixture.ts";
 
-function fixture() {
+function fixture(extension = "md", content: string | Buffer = "처음 문서\n") {
   const dir = mkdtempSync(join(tmpdir(), "wb-office-session-")), store = new Store(join(dir, "state.sqlite")), bus = new EventBus();
   const options = { hostId: "test", hostLabel: "test", managedWorksDir: join(dir, "works"), dataDir: dir };
   const manager = new SessionManager(store, bus, options), work = manager.createWork({ title: "Office" });
-  const file = join(work.cwd, "자료.md"); writeFileSync(file, "처음 문서\n");
+  const file = join(work.cwd, `자료.${extension}`); writeFileSync(file, content);
   const artifact = manager.openFile(work.id, file), session = manager.createSession(work.id, { provider: "claude" });
   const opened = manager.documents.registry.open(artifact.id, { viewId: "view", windowId: "window", sessionId: session.id, claim: true });
   const binding = { artifactId: artifact.id, sessionId: session.id, owner: "owner", access: { viewId: "view", writeToken: opened.writeToken } };
@@ -37,6 +38,24 @@ function fixture() {
 }
 
 describe("Office runs belong to the existing Workbench session", () => {
+  it("keeps book translation and document chat independent in one document session", async () => {
+    const f = fixture("epub", await epubFixture());
+    try {
+      await f.start("book", { background: "epub-translation" });
+      await f.start("chat");
+      await expect(f.start("another-book", { background: "epub-translation" })).rejects.toMatchObject({ code: "session_busy" });
+      await expect(f.start("another-chat")).rejects.toMatchObject({ code: "session_busy" });
+      const chat = f.manager.office.requireRun(f.binding, "chat");
+      f.manager.office.finish(f.binding, { turnId: "book", status: "interrupted" });
+      expect(chat.controller.signal.aborted).toBe(false);
+      expect(f.manager.view.sessions.get(f.session.id)?.status).toBe("running");
+      await f.start("resume-book", { background: "epub-translation" });
+      f.finish("chat");
+      expect(f.manager.office.requireRun(f.binding, "resume-book").controller.signal.aborted).toBe(false);
+      expect(f.manager.view.sessions.get(f.session.id)?.status).toBe("running");
+      f.finish("resume-book"); expect(f.manager.view.sessions.get(f.session.id)?.status).toBe("idle");
+    } finally { await f.close(); }
+  });
   it("pins the target and persists original tool/answer events in that session, with replay-safe ordering", async () => {
     const f = fixture();
     try {

@@ -35,6 +35,7 @@ import { textWordOutputScenario } from "./text-word-output.ts";
 import { pdfOfficeScenario } from "./pdf-office.ts";
 import { pdfCopiesScenario } from "./pdf-copies.ts";
 import { epubOfficeScenario } from "./epub-office.ts";
+import { epubTranslationScenario } from "./epub-translation.ts";
 import { mindmapOfficeScenario } from "./mindmap-office.ts";
 import { officeSettingsScenario } from "./office-settings.ts";
 import { officeSuiteScenario } from "./office-suite.ts";
@@ -92,6 +93,7 @@ try {
       if (wants("pdf-copies")) await pdfCopiesScenario(ctx);
       if (wants("mindmap-office")) await mindmapOfficeScenario(ctx);
       if (wants("epub-office")) await epubOfficeScenario(ctx);
+      if (wants("epub-translation")) await epubTranslationScenario(ctx);
       if (wants("office-settings")) await officeSettingsScenario(ctx, { binary, engines, profile: "native" });
       if (wants("office-suite")) await officeSuiteScenario(ctx);
       if (wants("office-wiki")) await officeWikiScenario(ctx);

@@ -3,12 +3,17 @@ import { Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
 import { dispatch, useTransport } from "./platform/electron-renderer.ts";
 import { copyOfficeBytes, officeCopyBusy } from "./copy.ts";
+import { cancelOutput, commitOutput, openExport, prepareOutput } from "./output.ts";
+import type { OfficeOutputPlan } from "../../../packages/contracts/src/office-output.ts";
 
 type OpenBook = { status: string; sessionId?: string; assetBase?: string; restored?: boolean; [key: string]: unknown };
 type EditResult = { ok: boolean; dirty?: boolean; workbenchGeneration?: number; [key: string]: unknown };
-type Saved = { ok: true; revision: number; path: string; written: boolean; docHash: string; workbenchGeneration: number };
+type Saved = { ok: true; revision: number; path: string; written: boolean; docHash: string; workbenchGeneration: number; migrationWarning?: string };
 const init = await handshake(), gateway = new Gateway(init.token), id = init.artifact.id, path = init.artifact.path;
 const ai = mountOfficeAi(init, gateway);
+const targets = new Map<string, OfficeOutputPlan & { kind: string; lang: string }>();
+let jobRecord: { state?: string; last_error?: string; progress?: { done: number; total: number } } | null = null;
+let resultPaths: string[] = [], resultError = "";
 let revision = init.artifact.revision, theme = init.theme, session = "", restored = false, pending = false, backendDirty = false, generation = -1, epoch = 0, rebase = false;
 let openPromise: Promise<OpenBook> | null = null, recoveryQueue = Promise.resolve();
 const report = (error: unknown) => post({ type: "office:error", message: error instanceof Error ? error.message : String(error) });
@@ -92,6 +97,7 @@ useTransport({
   invoke: officeAiTransport(ai, dispatch, async (channel, args) => {
     switch (channel) {
       case "epub:consume-pending": return path;
+      case "home:open-path": await openExport(String(args[0])); return true;
       case "epub:open-file": {
         if (args[0] !== path) throw new Error("열린 전자책만 읽을 수 있습니다.");
         return openPromise ??= (async () => {
@@ -113,7 +119,54 @@ useTransport({
         if (result.ok) { takeState(result); scheduleKeep(); }
         return result;
       }
-      case "epub:set-translation-lock": return call("lock", { locked: args[0] });
+      case "epub:set-translation-lock": {
+        const locked = await call("lock", { locked: args[0] });
+        if (args[0] === false && ai.job.busy()) {
+          const state = resultError ? "failed" : jobRecord?.state === "complete" ? "completed" : jobRecord?.last_error === "user" || jobRecord?.last_error === "interrupted" || jobRecord?.state === "stopped" ? "interrupted" : "failed";
+          const progress = jobRecord?.progress;
+          await ai.job.finish(state, ["전자책 번역 " + (state === "completed" ? "완료" : state === "interrupted" ? "중단" : "오류"), progress ? `${progress.done}/${progress.total} 처리` : "", ...resultPaths, resultError || jobRecord?.last_error || ""].filter(Boolean).join("\n")).catch(report);
+        }
+        return locked;
+      }
+      case "epub:translation-units": return call("translation-units", args[0] ?? {});
+      case "epub:store-translations": return call("store-translations", { docHash: args[0] });
+      case "epub:store-translation": return call("store-translation", { docHash: args[0], lang: args[1] });
+      case "epub:store-unfinished-jobs": return call("store-jobs", { docHash: args[0] });
+      case "epub:store-write": {
+        const request = args[0] as { kind?: string; lang?: string; job?: NonNullable<typeof jobRecord> };
+        if (request?.kind === "job" && request.job?.state === "running" && !ai.job.busy()) {
+          resultPaths = []; resultError = ""; jobRecord = null;
+          await ai.job.start(`전자책 번역 · ${init.artifact.name} · 목표 언어 ${request.lang ?? ""}`);
+        }
+        const saved = await call<{ ok: boolean }>("store-write", request);
+        if (saved.ok && request.kind === "job") jobRecord = request.job ?? null;
+        return saved;
+      }
+      case "epub:pick-result-target": case "epub:pick-result-path": {
+        const request = args[0] as { kind?: string; lang?: string; defaultName?: string };
+        if (!request || !["translated", "bilingual"].includes(request.kind ?? "") || typeof request.lang !== "string" || !/^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/.test(request.lang)) return null;
+        const stem = (path.split(/[\\/]/).pop() ?? "전자책.epub").replace(/\.epub$/i, "");
+        const plan = await prepareOutput(revision, "epub", crypto.randomUUID(), { defaultName: request.defaultName ?? `${stem}.${request.lang}.${request.kind}.epub`, longJob: true });
+        if (!plan) return null;
+        for (const [oldPath, old] of targets) if (old.kind === request.kind && old.lang === request.lang) { targets.delete(oldPath); await cancelOutput(old.id); }
+        targets.set(plan.path, { ...plan, kind: request.kind!, lang: request.lang });
+        return channel === "epub:pick-result-path" ? plan.path : { ok: true, path: plan.path };
+      }
+      case "epub:check-result-path": return targets.has(String(args[0])) ? { ok: true } : { ok: false, reason: "invalid" };
+      case "epub:write-translated": {
+        const request = args[0] as { path: string; kind: string; lang: string; docHash: string };
+        const target = targets.get(request?.path);
+        if (!target || target.kind !== request.kind || target.lang !== request.lang) return { ok: false, error: "not-granted" };
+        try {
+          const built = await gateway.epubTranslation(id, session, request);
+          const saved = await commitOutput(target.id, built.bytes, "export", revision);
+          targets.delete(target.path); resultPaths.push(saved.path);
+          return { ok: true, path: saved.path, report: built.report, identifier: built.identifier };
+        } catch (error) {
+          resultError = error instanceof Error ? error.message : String(error);
+          return { ok: false, error: "failed", message: resultError };
+        }
+      }
       case "epub:save": {
         const request = args[0] as { mode?: string } | null;
         if (request?.mode === "save" && officeCopyBusy()) return { ok: false, error: "사본 저장을 마친 뒤 저장해 주세요." };
@@ -127,6 +180,7 @@ useTransport({
           revision = saved.revision; restored = false; rebase = false; epoch++;
           takeState({ ok: true, dirty: false, workbenchGeneration: saved.workbenchGeneration });
           post({ type: "office:saved", revision }); changed();
+          if (saved.migrationWarning) report(new Error(saved.migrationWarning));
           await queueRecovery(() => recovery.drop(id)).catch(report);
           if (isDirty()) scheduleKeep();
           return saved;
