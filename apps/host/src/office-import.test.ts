@@ -6,6 +6,7 @@ import { OfficeImport, ieumSettingsDirectory } from "./office-import.mjs";
 import { OfficeSettings } from "./office-settings.mjs";
 import { OfficeStyles } from "./office-styles.ts";
 import { OfficeVault } from "./office-vault.ts";
+import { OfficePreferences } from "./office-preferences.ts";
 import type { Documents } from "./artifacts.ts";
 
 const cleanup: (() => void)[] = [];
@@ -85,4 +86,22 @@ it("locates only the official product data folder on each OS", () => {
   expect(ieumSettingsDirectory("linux", { XDG_CONFIG_HOME: "/config" }, "/home/person")).toBe("/config/IeumOffice");
   expect(ieumSettingsDirectory("darwin", {}, "/Users/person")).toBe("/Users/person/Library/Application Support/IeumOffice");
   expect(ieumSettingsDirectory("win32", { APPDATA: "/roaming" }, "/home/person")).toBe("/roaming/IeumOffice");
+});
+it("imports preferences without AI or styles, preserves sources and backs up current preferences", async () => {
+  const f = fixture(), file = join(f.source, "app-settings.json"), target = new OfficePreferences(f.data);
+  const source = JSON.stringify({ authorName: " Original Author ", aiPanelSide: "right", aiPanelFontSize: "large", autoSaveDefault: true, mcpEnabled: true, defaultSaveDir: "/original" });
+  writeFileSync(file, source); target.write({ authorName: "Current", documentTheme: "dark" }); const previous = readFileSync(target.path);
+  const p = f.importer.inspect(f.source); expect(p).toMatchObject({ ai: null, preferences: { replacesCurrent: true } });
+  const result = await f.apply(p.id, { ai: false, styles: false, preferences: true });
+  expect(result).toMatchObject({ ai: false, preferences: true, styles: 0, errors: [] });
+  expect(readFileSync(result.preferenceBackup!)).toEqual(previous); expect(readFileSync(file, "utf8")).toBe(source);
+  expect(target.snapshot()).toMatchObject({ author: { value: "Original Author" }, documentTheme: "dark", aiPanel: { side: "right", fontSize: "large" }, autoSaveDefault: { on: true } });
+  expect(readFileSync(target.path, "utf8")).not.toContain("mcpEnabled"); expect(f.reveal).not.toHaveBeenCalled();
+});
+it("rejects changed source or destination preferences after preview", async () => {
+  const f = fixture(), file = join(f.source, "app-settings.json"), target = new OfficePreferences(f.data);
+  writeFileSync(file, JSON.stringify({ authorName: "Original" })); const p = f.importer.inspect(f.source);
+  target.write({ authorName: "Current" }); await expect(f.apply(p.id, { ai: false, styles: false, preferences: true })).rejects.toThrow("변경");
+  const next = f.importer.inspect(f.source); writeFileSync(file, JSON.stringify({ authorName: "Changed" }));
+  await expect(f.apply(next.id, { ai: false, styles: false, preferences: true })).rejects.toThrow("변경"); expect(target.snapshot().author.value).toBe("Current");
 });

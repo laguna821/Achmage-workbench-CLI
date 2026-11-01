@@ -1,3 +1,4 @@
+import { createOfficePreferences } from "./preferences.ts";
 import { mountOfficeAi } from "./office-ai.ts";
 import { Events, Gateway, GatewayError, handshake, headlessExport, listen, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
@@ -97,6 +98,7 @@ export async function createTextEditor(kind: "markdown" | "html") {
   let prefs: Record<string, unknown> = {};
   try { prefs = JSON.parse(localStorage.getItem(prefsKey) ?? "{}"); } catch { /* Ignore a damaged UI preference, never document data. */ }
   const remember = (key: string, value: unknown) => { prefs[key] = value; localStorage.setItem(prefsKey, JSON.stringify(prefs)); return value; };
+  const preferences = await createOfficePreferences(init, gateway, (channel, value) => events.emit(({ "app:ai-panel-prefs-changed": "aiPanel", "app:auto-save-default-changed": "autoSave", "app:document-theme-changed": "documentTheme" } as Record<string, string>)[channel] ?? channel, value), prefs.aiPanel);
   let previewQueue = Promise.resolve();
   const saveImage = async (data: { base64: string; ext: string }) => {
     if (init.readOnly) throw new Error("이 판은 읽기 전용입니다.");
@@ -162,14 +164,14 @@ export async function createTextEditor(kind: "markdown" | "html") {
     onLanguageChanged: events.on("language"),
     getTheme: async () => theme,
     onThemeChanged: events.on("theme"),
-    getDocumentTheme: async () => "follow",
+    getDocumentTheme: async () => preferences.theme(),
     onDocumentThemeChanged: events.on("documentTheme"),
     getMarkdownTheme: async () => prefs.markdownTheme ?? "default",
     setMarkdownTheme: async (value: string) => remember("markdownTheme", value),
-    getAutoSaveDefault: async () => ({ on: false, updatedAt: 0 }),
+    getAutoSaveDefault: async () => preferences.autoSave(),
     onAutoSaveDefaultChanged: events.on("autoSave"),
-    getAiPanelPrefs: async () => prefs.aiPanel ?? {},
-    setAiPanelPrefs: async (patch: Record<string, unknown>) => { const value = { ...(prefs.aiPanel as object ?? {}), ...patch }; remember("aiPanel", value); events.emit("aiPanel", value); return value; },
+    getAiPanelPrefs: async () => preferences.panel(),
+    setAiPanelPrefs: (patch: Record<string, unknown>) => preferences.setPanel(patch),
     onAiPanelPrefsChanged: events.on("aiPanel"),
     onChromePressed: events.on("chrome"),
     onViewImage: events.on("image"),

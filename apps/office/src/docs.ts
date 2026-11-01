@@ -4,7 +4,7 @@ import { recovery } from "./recovery.ts";
 import { convertForeignPictures, pasteDesktopPictures } from "./pictures.ts";
 import { createOfficeAi } from "./office-ai.ts";
 import { beginOfficeCopy, copyOfficeBytes, officeCopyBusy, type OfficeCopy } from "./copy.ts";
-import { DEFAULT_AI_PANEL_PREFS, normalizeAiPanelPrefs } from "../../../vendor/ieumoffice/packages/ui/src/ai-panel-prefs.ts";
+import { createOfficePreferences, legacyOfficePanel } from "./preferences.ts";
 import { createDocsOutput } from "./docs-output.ts";
 import { knowledgeNavigation } from "./knowledge.ts";
 import { installMcp, originalMcp } from "./mcp.ts";
@@ -21,8 +21,7 @@ const headless = headlessExport(init);
 const gateway = new Gateway(init.token);
 const events = new Events();
 const ai = createOfficeAi(init, gateway, events);
-let aiPrefs = DEFAULT_AI_PANEL_PREFS;
-try { aiPrefs = normalizeAiPanelPrefs(JSON.parse(localStorage.getItem("workbench.office.ai-panel") ?? "null")); } catch { /* Original defaults. */ }
+const preferences = await createOfficePreferences(init, gateway, (channel, value) => events.emit(({ "app:ai-panel-prefs-changed": "aiPanelPrefsChanged", "app:auto-save-default-changed": "autoSaveDefaultChanged", "app:document-theme-changed": "documentThemeChanged", "app:author-name-changed": "authorNameChanged" } as Record<string, string>)[channel] ?? channel, value), legacyOfficePanel("workbench.office.ai-panel"));
 const artifactId = init.artifact.id;
 /** `revision`: the revision the editor's content is based on (a save must name it). `kept`: a recovery copy exists. */
 const state = { revision: init.artifact.revision, theme: init.theme, dirty: false, kept: false };
@@ -162,15 +161,14 @@ const desktop = stubBridge(
     onLanguageChanged: events.on("languageChanged"),
     getTheme: async () => state.theme,
     onThemeChanged: events.on("themeChanged"),
-    getDocumentTheme: async () => "follow",
+    getDocumentTheme: async () => preferences.theme(),
     onDocumentThemeChanged: events.on("documentThemeChanged"),
-    // Every save is a revision: saved on Ctrl+S, before a request, when the tab or view changes; not on a timer.
-    getAutoSaveDefault: async () => ({ on: false, updatedAt: 1 }),
+    getAutoSaveDefault: async () => preferences.autoSave(),
     onAutoSaveDefaultChanged: events.on("autoSaveDefaultChanged"),
-    getAuthorName: async () => "",
+    getAuthorName: async () => preferences.name(),
     onAuthorNameChanged: events.on("authorNameChanged"),
-    getAiPanelPrefs: async () => aiPrefs,
-    setAiPanelPrefs: async (patch: object) => { aiPrefs = normalizeAiPanelPrefs({ ...aiPrefs, ...patch }); localStorage.setItem("workbench.office.ai-panel", JSON.stringify(aiPrefs)); events.emit("aiPanelPrefsChanged", aiPrefs); return aiPrefs; },
+    getAiPanelPrefs: async () => preferences.panel(),
+    setAiPanelPrefs: (patch: object) => preferences.setPanel(patch),
     onAiPanelPrefsChanged: events.on("aiPanelPrefsChanged"),
     getRecentFiles: async () => [],
     consumePendingOpenDocx: async () => (pendingOpen ??= openResult()),

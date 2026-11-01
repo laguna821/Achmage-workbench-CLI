@@ -69,6 +69,16 @@ async function fixture(deps: OfficeAiTestDeps = {}) {
 const chunks = async (response: Response) => (await response.text()).trim().split("\n").filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>);
 
 describe("common Office AI", () => {
+  it("allows only display preferences through a document grant without a model request", async () => {
+    const f = await fixture();
+    try {
+      expect((await f.request("preferences", undefined, f.otherToken)).status).toBe(401);
+      expect(await (await f.request("preferences")).json()).toMatchObject({ panelConfigured: false, author: { value: "" } });
+      expect(await (await f.request("preferences-panel", { patch: { side: "right", authorName: "Denied", autoSaveDefault: true } })).json())
+        .toMatchObject({ aiPanel: { side: "right" }, author: { value: "" }, autoSaveDefault: { on: false } });
+      expect(f.requests).toEqual([]);
+    } finally { await f.close(); }
+  });
   it("exposes only Drive availability to an editor and refuses reads outside an active document turn", async () => {
     const f = await fixture(), calls: unknown[] = [];
     f.ai.drive = { state: () => ({ state: "connected", email: "private@example.invalid" }), enabled: () => true,

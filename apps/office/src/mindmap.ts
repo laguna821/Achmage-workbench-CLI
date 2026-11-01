@@ -1,3 +1,4 @@
+import { createOfficePreferences, legacyOfficePanel } from "./preferences.ts";
 import { mountOfficeAi, officeAiTransport } from "./office-ai.ts";
 import { Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
@@ -82,8 +83,7 @@ listen((message) => {
   if (message.type === "office:keep") void keep().catch(report).finally(() => post({ type: "office:flushed", revision: null }));
 });
 
-let prefs: Record<string, unknown> = {};
-try { prefs = JSON.parse(localStorage.getItem("workbench.office.mindmap.prefs") ?? "{}"); } catch { /* UI preferences are not document data. */ }
+const preferences = await createOfficePreferences(init, gateway, (channel, value) => dispatch(channel, [value]), legacyOfficePanel("workbench.office.mindmap.prefs"));
 const fail = (channel: string) => { throw new Error(`마인드맵의 이 서비스를 아직 연결하지 못했습니다: ${channel}`); };
 useTransport({
   invoke: officeAiTransport(ai, dispatch, async (channel, args) => {
@@ -131,12 +131,9 @@ useTransport({
       case "mindmap:handoff-take": case "mindmap:seed-take": return null; // Existing file tabs have no creation handoff.
       case "app:get-language": return "ko";
       case "app:get-theme": return theme;
-      case "app:get-auto-save-default": return { on: false, updatedAt: 0 };
-      case "app:get-ai-panel-prefs": return prefs;
-      case "app:set-ai-panel-prefs": {
-        if (args[0] && typeof args[0] === "object") prefs = { ...prefs, ...args[0] };
-        localStorage.setItem("workbench.office.mindmap.prefs", JSON.stringify(prefs)); dispatch("app:ai-panel-prefs-changed", [prefs]); return prefs;
-      }
+      case "app:get-auto-save-default": return preferences.autoSave();
+      case "app:get-ai-panel-prefs": return preferences.panel();
+      case "app:set-ai-panel-prefs": return preferences.setPanel(args[0]);
       default: return fail(channel);
     }
   }),

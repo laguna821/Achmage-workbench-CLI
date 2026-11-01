@@ -11,7 +11,7 @@ const noop = () => {};
 // ── identity, settings, menus ────────────────────────────────────────────
 export const MAX_REMOTE_IMAGE_BYTES = 50 * 1024 * 1024;
 export const isHeadlessMode = () => false;
-export const configuredAuthorName = () => "";
+export { configuredAuthorName } from "@ieum/packages/electron-utils/src/author-name.ts";
 export const configuredDefaultSaveDir = () => "/documents";
 export const appMenuLabels = () => ({});
 export const contextMenuLabels = () => ({});

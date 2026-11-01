@@ -1,5 +1,5 @@
 import { mountOfficeAi, officeAiTransport } from "./office-ai.ts";
-import { DEFAULT_AI_PANEL_PREFS, normalizeAiPanelPrefs } from "../../../vendor/ieumoffice/packages/ui/src/ai-panel-prefs.ts";
+import { createOfficePreferences, legacyOfficePanel } from "./preferences.ts";
 import "./sheets.css";
 import { Gateway, GatewayError, handshake, headlessExport, listen, post } from "./bridge.ts";
 import { dispatch, useTransport } from "./platform/electron-renderer.ts";
@@ -74,8 +74,7 @@ function call(request: WorkerRequest, transfer: Transferable[] = []) {
 const value = async <T>(request: WorkerRequest, transfer: Transferable[] = []) => (await call(request, transfer)).value as T;
 
 // ── what the page answers itself ─────────────────────────────────────────
-let aiPrefs = DEFAULT_AI_PANEL_PREFS;
-try { aiPrefs = normalizeAiPanelPrefs(JSON.parse(localStorage.getItem("workbench.office.sheets.ai-prefs") ?? "null")); } catch { /* UI preferences only. */ }
+const preferences = await createOfficePreferences(init, gateway, (channel, value) => dispatch(channel, [value]), legacyOfficePanel("workbench.office.sheets.ai-prefs"));
 const noAi = () => Promise.reject(new Error("이 AI 도구는 아직 지원하지 않습니다."));
 const notHere = (what: string) => Promise.reject(new Error(`${what}은(는) Workbench에서 아직 지원하지 않습니다.`));
 const unhandled = new Set<string>();
@@ -88,17 +87,12 @@ async function invoke(channel: string, args: unknown[]): Promise<unknown> {
     case "app:get-theme":
       return state.theme;
     case "app:get-document-theme":
-      return "follow";
-    case "app:get-auto-save-default":
-      // Every save is a revision: saved on Ctrl+S, before a request, when the tab or view changes.
-      return { on: false, updatedAt: 1 };
-    case "app:get-ai-panel-prefs": return aiPrefs;
-    case "app:set-ai-panel-prefs": {
-      aiPrefs = normalizeAiPanelPrefs({ ...aiPrefs, ...(args[0] as object) });
-      localStorage.setItem("workbench.office.sheets.ai-prefs", JSON.stringify(aiPrefs)); dispatch("app:ai-panel-prefs-changed", [aiPrefs]); return aiPrefs;
-    }
+      return preferences.theme();
+    case "app:get-auto-save-default": return preferences.autoSave();
+    case "app:get-ai-panel-prefs": return preferences.panel();
+    case "app:set-ai-panel-prefs": return preferences.setPanel(args[0]);
     case "user:display-name":
-      return "";
+      return preferences.name();
     case "workbook:select-for-merge":
     case "workbook:open-for-merge":
       // Only this document: no other files are opened from the editor.

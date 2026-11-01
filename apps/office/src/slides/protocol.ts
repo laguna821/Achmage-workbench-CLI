@@ -7,7 +7,7 @@ export type WorkerRequest =
   /** Open a document (its bytes) as the page's view. */
   | { type: "open"; name: string; bytes: ArrayBuffer }
   /** `ipcRenderer.invoke` of IeumOffice's renderer. */
-  | { type: "invoke"; channel: string; args: unknown[] }
+  | { type: "invoke"; channel: string; args: unknown[]; authorName?: string }
   /** `ipcRenderer.send`. */
   | { type: "send"; channel: string; args: unknown[] }
   /** The working copy as the last save wrote it. */

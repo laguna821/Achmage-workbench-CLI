@@ -51,6 +51,7 @@ async function handle(call: WorkerCall): Promise<{ value: unknown; unhandled?: b
       return { value: viewId };
     }
     case "invoke": {
+      if (typeof call.authorName === "string") vfs.write("/userData/app-settings.json", new TextEncoder().encode(JSON.stringify({ authorName: call.authorName })));
       const { handled, result } = invoke(viewId, call.channel, call.args);
       if (!handled) return { value: null, unhandled: true };
       const value = await result;

@@ -9,6 +9,7 @@ import type { OfficeSessions } from "./office-sessions.ts";
 import type { OfficeAiHostActions } from "./office-settings-controls.mjs";
 import type { OfficeKnowledge } from "./office-knowledge.mjs";
 import type { OfficeSkills } from "./office-skills.ts";
+import { OfficePreferences } from "./office-preferences.ts";
 
 // Original Office accepts 20 pictures of up to 5 MiB, encoded as base64, plus text.
 export const OFFICE_AI_INPUT_LIMIT = 160_000_000;
@@ -47,6 +48,7 @@ export function officeAiRequest(value: unknown, stream: boolean): OfficeAiStream
  * Original editor tools still execute in their own renderer and save through document CAS. */
 export class OfficeAi {
   drive?: import("./office-drive.mjs").OfficeDrive;
+  readonly preferences: OfficePreferences;
   private engine: Promise<OfficeAiEngine> | null = null;
   private readonly active = new Map<string, { owner: string; controller: AbortController; tool: boolean }>();
   private readonly load: () => Promise<OfficeAiEngine>;
@@ -56,6 +58,7 @@ export class OfficeAi {
   private readonly skills?: OfficeSkills;
   private readonly knowledge?: OfficeKnowledge;
   constructor(dataDir: string, engine?: OfficeAiEngine, sessions?: OfficeSessions, hostActions?: OfficeAiHostActions, skills?: OfficeSkills, knowledge?: OfficeKnowledge) {
+    this.preferences = new OfficePreferences(dataDir);
     this.knowledge = knowledge;
     this.skills = skills;
     this.sessions = sessions;
@@ -160,7 +163,7 @@ export class OfficeAi {
   }
   async handle(req: IncomingMessage, res: ServerResponse, url: URL, bearer: string | null, documents: Documents, grants: EditorGrants): Promise<boolean> {
     if (await this.skills?.handle(req, res, url, bearer, grants)) return true;
-    const match = /^\/api\/artifacts\/([^/]+)\/ai\/(drive-state|settings|selection|statuses|stream|chat|cancel|history|turn-start|turn-events|turn-finish|tool-capabilities|tool)$/.exec(url.pathname);
+    const match = /^\/api\/artifacts\/([^/]+)\/ai\/(preferences|preferences-panel|drive-state|settings|selection|statuses|stream|chat|cancel|history|turn-start|turn-events|turn-finish|tool-capabilities|tool)$/.exec(url.pathname);
     if (!match) return false;
     const [, artifactId, operation] = match;
     const authorize = () => {
@@ -170,8 +173,15 @@ export class OfficeAi {
       return `${artifactId}:${grants.previewInfo(bearer!).baseUrl}`;
     };
     const owner = authorize();
-    const get = operation === "drive-state" || operation === "settings" || operation === "statuses" || operation === "history" || operation === "tool-capabilities";
+    const get = operation === "preferences" || operation === "drive-state" || operation === "settings" || operation === "statuses" || operation === "history" || operation === "tool-capabilities";
     if (req.method !== (get ? "GET" : "POST")) throw new HttpError(405, "method_not_allowed", "허용되지 않은 AI 요청입니다.");
+    if (operation === "preferences") { sendJson(res, 200, this.preferences.snapshot()); return true; }
+    if (operation === "preferences-panel") {
+      let raw: unknown;
+      try { raw = JSON.parse((await readBody(req, 8000)).toString("utf8")); } catch (error) { if (error instanceof HttpError) throw error; return invalid(); }
+      authorize(); if (!record(raw) || !record(raw.patch)) return invalid();
+      sendJson(res, 200, this.preferences.setPanel(raw.patch, raw.legacy)); return true;
+    }
     const binding = () => {
       const sessionId = grants.session(bearer!);
       if (!sessionId || !this.sessions) throw new HttpError(409, "office_session_required", "이 문서와 함께 사용할 Workbench 세션을 먼저 선택해 주세요.");

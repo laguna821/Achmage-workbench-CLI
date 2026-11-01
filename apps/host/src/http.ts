@@ -301,6 +301,11 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         return sendJson(res, 200, { origin, url: `${origin}/office/settings.html` });
       }
       if (path.startsWith("/api/office-ai/") && options.officeAi && await options.officeAi.handleSettings(req, res, url)) return;
+      if (path === "/api/office-preferences" && options.officeAi && method === "POST") {
+        const body = await readJson(req, 8000);
+        if (typeof body.channel !== "string" || !Array.isArray(body.args) || body.args.length > 1) throw new HttpError(400, "office_preferences", "문서 설정 요청을 확인해 주세요.");
+        return sendJson(res, 200, options.officeAi.preferences.invoke(body.channel, body.args));
+      }
       if (options.officeImport && path === "/api/office-import/sources" && method === "GET") return sendJson(res, 200, options.officeImport.sources());
       if (options.officeImport && path.startsWith("/api/office-import/") && method === "POST") {
         const body = await readJson(req, 16_000);

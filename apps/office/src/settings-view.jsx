@@ -6,6 +6,7 @@ import { DriveSettingsCard } from "@ieum/apps/shell/src/renderer/src/DriveSettin
 import { DrivePanel, useDriveState } from "@ieum/apps/shell/src/renderer/src/DrivePanel.tsx";
 import { DrivePickerWindow } from "@ieum/apps/shell/src/renderer/src/drive-picker/DrivePickerWindow.tsx";
 import { ipcRenderer } from "./platform/electron-renderer.ts";
+import { DocumentPreferences } from "./preferences-view.jsx";
 import { AiModelPane, AiMediaPane } from "@ieum/apps/shell/src/renderer/src/SettingsModal.tsx";
 import { LocaleProvider, useI18n } from "@ieum/apps/shell/src/renderer/src/locale.tsx";
 import { useSubscriptionConnection } from "@ieum/apps/shell/src/renderer/src/subscription-client.ts";
@@ -41,6 +42,7 @@ function Settings() {
   return <main className="wb-office-settings set-pane">
     {error && <div className="wb-settings-notice" role="alert"><span>{error}</span><button onClick={() => setError(null)} aria-label="알림 닫기">×</button></div>}
     {legacy > 0 && <p className="wb-settings-notice" role="status">이전 앱에서 보관한 키 {legacy}개를 유지하고 있습니다. 연결하려면 해당 키를 다시 입력해 주세요.</p>}
+    <DocumentPreferences t={t} />
     <AiSection t={t} lang={lang} connection={connection} advanced={(tab) => tab === "model" ? <AiModelPane t={t} /> : <AiMediaPane t={t} lang={lang} codexImageAvailable={connection.codexImageAvailable} />} />
     <McpServerSection t={t} />
     <DriveSettingsCard />

@@ -1,5 +1,5 @@
 import { mountOfficeAi } from "./office-ai.ts";
-import { DEFAULT_AI_PANEL_PREFS, normalizeAiPanelPrefs } from "../../../vendor/ieumoffice/packages/ui/src/ai-panel-prefs.ts";
+import { createOfficePreferences, legacyOfficePanel } from "./preferences.ts";
 import { Events, Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
 import { installMcp } from "./mcp.ts";
@@ -97,8 +97,7 @@ listen((message) => {
 });
 
 const pendingFeature = async (): Promise<never> => { throw new Error("이 메뉴의 Workbench 연결을 준비 중입니다. 현재 문서와 편집 내용은 그대로 유지됩니다."); };
-let panelPrefs = DEFAULT_AI_PANEL_PREFS;
-try { panelPrefs = normalizeAiPanelPrefs(JSON.parse(localStorage.getItem("workbench.office.hwp.ai-prefs") ?? "null")); } catch { /* UI preferences only. */ }
+const preferences = await createOfficePreferences(init, gateway, (channel, value) => events.emit(({ "app:ai-panel-prefs-changed": "aiPanelPrefsChanged", "app:auto-save-default-changed": "autoSaveDefaultChanged", "app:document-theme-changed": "documentThemeChanged", "app:author-name-changed": "authorNameChanged" } as Record<string, string>)[channel] ?? channel, value), legacyOfficePanel("workbench.office.hwp.ai-prefs"));
 const hwpApi = {
   consumePending: async () => path,
   untitledCopy: async () => null,
@@ -160,7 +159,7 @@ const hwpApi = {
   setMemoModalOpen: (open: boolean) => { state.memoOpen = open; },
   getMemoModalOpen: async () => state.memoOpen,
   onMemoBlocked: events.on("memoBlocked"),
-  getAuthorName: async () => ({ value: "", fallback: "Workbench" }),
+  getAuthorName: async () => preferences.author(),
   onReadBytesRequest: events.on("readBytesRequest"),
   sendReadBytesResult: (result: unknown) => events.emit("readBytesResult", result),
   recoveryBegin: async () => {
@@ -198,10 +197,10 @@ const hwpApi = {
   onLanguageChanged: events.on("languageChanged"),
   getTheme: async () => state.theme,
   onThemeChanged: events.on("themeChanged"),
-  getAutoSaveDefault: async () => ({ on: false, updatedAt: 1 }),
+  getAutoSaveDefault: async () => preferences.autoSave(),
   onAutoSaveDefaultChanged: events.on("autoSaveDefaultChanged"),
-  getAiPanelPrefs: async () => panelPrefs,
-  setAiPanelPrefs: async (patch: object) => { panelPrefs = normalizeAiPanelPrefs({ ...panelPrefs, ...patch }); localStorage.setItem("workbench.office.hwp.ai-prefs", JSON.stringify(panelPrefs)); events.emit("aiPanelPrefsChanged", panelPrefs); return panelPrefs; },
+  getAiPanelPrefs: async () => preferences.panel(),
+  setAiPanelPrefs: (patch: object) => preferences.setPanel(patch),
   onAiPanelPrefsChanged: events.on("aiPanelPrefsChanged"),
   ...ai.desktop,
   aiSubscription: ai.subscription,

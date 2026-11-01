@@ -12,6 +12,7 @@ import { OfficeVault } from "./office-vault.ts";
 import { OfficeStyles, officeStyleData } from "./office-styles.ts";
 import { HttpError } from "./errors.ts";
 import { sandboxWrapper } from "./ieumoffice.ts";
+import { OfficePreferences, importedOfficePreferences } from "./office-preferences.ts";
 
 const fail = (message, status = 400) => new HttpError(status, "office_import", message);
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
@@ -52,6 +53,7 @@ export class OfficeImport {
   constructor(documents, desktop, dataDir, injected = {}) {
     this.desktop = desktop; this.dataDir = dataDir; this.plans = new Map(); this.queue = Promise.resolve(); this.closed = false;
     this.vault = injected.vault ?? new OfficeVault(dataDir); this.settings = new OfficeSettings(dataDir, this.vault);
+    this.preferences = new OfficePreferences(dataDir);
     this.styles = new OfficeStyles(documents, null); this.open = injected.reveal ?? revealIeumSecrets;
     this.defaultDirectory = injected.defaultDirectory ?? ieumSettingsDirectory();
   }
@@ -62,6 +64,10 @@ export class OfficeImport {
     if (!existsSync(directory) || !lstatSync(directory).isDirectory() || lstatSync(directory).isSymbolicLink()) throw fail("데이터 폴더를 찾지 못했거나 링크입니다.");
     directory = realpathSync(directory);
     const files = [], refs = new Map(), aiFile = read(join(directory, "ai-settings.json")), warnings = [];
+    const appFile = read(join(directory, "app-settings.json"));
+    const appPreferences = importedOfficePreferences(appFile?.value);
+    const hasPreferences = Object.keys(appPreferences).length > 0;
+    if (hasPreferences) files.push(appFile);
     let ai = null;
     if (aiFile) {
       files.push(aiFile);
@@ -94,33 +100,37 @@ export class OfficeImport {
         } catch (error) { warnings.push(`${file}: ${error instanceof HttpError ? error.message : "스타일 형식을 읽지 못했습니다."}`); }
       }
     }
-    if (!ai && !candidates.length) throw fail("가져올 AI 설정이나 저장 스타일을 찾지 못했습니다.");
+    if (!ai && !candidates.length && !hasPreferences) throw fail("가져올 AI 설정·문서 표시 설정·저장 스타일을 찾지 못했습니다.");
     const used = new Set(); if (ai) mapAiSecrets(ai, value => { if (value) used.add(value); return value; });
     const keys = [...used].map(ref => refs.get(ref)).filter(Boolean), target = this.settings.snapshot(), id = randomUUID();
-    const plan = { id, at: Date.now(), directory, files, ai, refs, styles: candidates, targetRevision: target.revision, targetExists: existsSync(this.settings.path), result: null };
+    const plan = { id, at: Date.now(), directory, files, ai, refs, styles: candidates, targetRevision: target.revision, targetExists: existsSync(this.settings.path), appPreferences,
+      preferenceRevision: hasPreferences ? this.preferences.snapshot().revision : null, result: null };
     for (const [key, value] of this.plans) if (Date.now() - value.at > 3_600_000) this.plans.delete(key);
     if (this.plans.size >= 8) this.plans.delete(this.plans.keys().next().value);
     this.plans.set(id, plan);
     return { id, directory, appAvailable: Boolean(this.desktop.find()?.app), ai: ai ? { provider: ai.provider, keys: keys.length, sealedKeys: keys.filter(value => value.startsWith("sealed:v1:")).length, replacesCurrent: plan.targetExists } : null,
+      preferences: hasPreferences ? { fields: Object.keys(appPreferences), replacesCurrent: existsSync(this.preferences.path) } : null,
       styles: candidates.map(({ name, targetName, same }) => ({ name, targetName, same })), warnings };
   }
   assertPlan(plan, choice) {
     if (this.closed) throw fail("앱을 종료하고 있습니다.", 503);
     for (const source of plan.files) if (read(source.file)?.digest !== source.digest) throw fail("원본 설정이나 스타일이 변경되었습니다. 미리보기를 다시 열어 주세요.", 409);
     if (choice.ai && this.settings.snapshot().revision !== plan.targetRevision) throw fail("Workbench AI 설정이 변경되었습니다. 미리보기를 다시 열어 주세요.", 409);
+    if (choice.preferences && this.preferences.snapshot().revision !== plan.preferenceRevision) throw fail("Workbench 문서 표시 설정이 변경되었습니다. 미리보기를 다시 열어 주세요.", 409);
     if (choice.styles) for (const style of plan.styles) if ((this.styles.inspectSaved(style.targetName)?.revision ?? null) !== style.expectedRevision) throw fail("Workbench 스타일이 변경되었습니다. 미리보기를 다시 열어 주세요.", 409);
   }
   apply(choice, signal) {
     const next = this.queue.then(() => this.perform(choice, signal)); this.queue = next.catch(() => {}); return next;
   }
   async perform(choice, signal) {
-    if (!object(choice) || typeof choice.id !== "string" || [choice.ai, choice.keys, choice.styles].some(value => typeof value !== "boolean") || !choice.ai && !choice.styles) throw fail("가져올 항목을 선택해 주세요.");
+    if (!object(choice) || typeof choice.id !== "string" || [choice.ai, choice.keys, choice.styles].some(value => typeof value !== "boolean") || choice.preferences !== undefined && typeof choice.preferences !== "boolean" || !choice.ai && !choice.styles && !choice.preferences) throw fail("가져올 항목을 선택해 주세요.");
     const plan = this.plans.get(choice.id);
     if (!plan || Date.now() - plan.at > 3_600_000) throw fail("가져오기 미리보기가 만료되었습니다. 다시 확인해 주세요.", 409);
     if (plan.result) return plan.result;
     if (choice.ai && !plan.ai) throw fail("선택한 폴더에 AI 설정이 없습니다.");
+    if (choice.preferences && !plan.preferenceRevision) throw fail("선택한 폴더에 문서 표시 설정이 없습니다.");
     signal?.throwIfAborted(); this.assertPlan(plan, choice);
-    const result = { ai: false, styles: 0, skipped: 0, backup: null, errors: [] };
+    const result = { ai: false, styles: 0, skipped: 0, backup: null, preferences: false, preferenceBackup: null, errors: [] };
     if (choice.ai) {
       const needed = new Set(); mapAiSecrets(plan.ai, value => { if (value) needed.add(plan.refs.get(value)); return value; });
       const legacy = [...needed].filter(value => typeof value === "string" && value.startsWith("sealed:v1:"));
@@ -147,13 +157,19 @@ export class OfficeImport {
       }
       await this.settings.write(next, plan.targetRevision, { signal, beforeCommit: () => this.assertPlan(plan, choice) }); result.ai = true;
     }
+    if (choice.preferences) {
+      try {
+        const saved = this.preferences.write(plan.appPreferences, plan.preferenceRevision, true);
+        result.preferences = true; result.preferenceBackup = saved.backup;
+      } catch { result.errors.push("문서 표시 설정을 저장하지 못했습니다. 현재 설정을 보존했습니다."); }
+    }
     // Report any partial filesystem failure truthfully; successful items are never replayed.
     if (choice.styles) for (const style of plan.styles) {
       if (style.same) { result.skipped++; continue; }
       try { this.styles.saveImported(style.targetName, style.data, style.expectedRevision); result.styles++; }
       catch { result.errors.push(`${style.targetName}: 저장하지 못했습니다. 현재 파일을 보존했습니다.`); }
     }
-    plan.result = result; plan.refs.clear(); plan.ai = null; plan.files = []; plan.styles = [];
+    plan.result = result; plan.refs.clear(); plan.ai = null; plan.files = []; plan.styles = []; plan.appPreferences = {};
     return result;
   }
   close() { this.closed = true; this.plans.clear(); this.settings.close(); }

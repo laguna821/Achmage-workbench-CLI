@@ -1,3 +1,4 @@
+import { createOfficePreferences, legacyOfficePanel } from "./preferences.ts";
 import { mountOfficeAi, officeAiTransport } from "./office-ai.ts";
 import { Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
@@ -97,8 +98,7 @@ window.addEventListener("pagehide", () => { clearTimeout(keepTimer); if (session
 
 const prefsBus = new BroadcastChannel("workbench.office.epub.view");
 prefsBus.onmessage = (event) => dispatch("epub:view-prefs-changed", [event.data]);
-let aiPrefs: Record<string, unknown> = {};
-try { aiPrefs = JSON.parse(localStorage.getItem("workbench.office.epub.ai-prefs") ?? "{}"); } catch { /* preferences only */ }
+const preferences = await createOfficePreferences(init, gateway, (channel, value) => dispatch(channel, [value]), legacyOfficePanel("workbench.office.epub.ai-prefs"));
 useTransport({
   invoke: officeAiTransport(ai, dispatch, async (channel, args) => {
     switch (channel) {
@@ -203,12 +203,9 @@ useTransport({
       }
       case "app:get-language": return "ko";
       case "app:get-theme": return theme;
-      case "app:get-auto-save-default": return { on: false, updatedAt: 0 };
-      case "app:get-ai-panel-prefs": return aiPrefs;
-      case "app:set-ai-panel-prefs": {
-        if (args[0] && typeof args[0] === "object") aiPrefs = { ...aiPrefs, ...args[0] };
-        localStorage.setItem("workbench.office.epub.ai-prefs", JSON.stringify(aiPrefs)); dispatch("app:ai-panel-prefs-changed", [aiPrefs]); return aiPrefs;
-      }
+      case "app:get-auto-save-default": return preferences.autoSave();
+      case "app:get-ai-panel-prefs": return preferences.panel();
+      case "app:set-ai-panel-prefs": return preferences.setPanel(args[0]);
       default: throw new Error(`전자책의 이 서비스를 아직 연결하지 못했습니다: ${channel}`);
     }
   }),

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Api } from "../api.ts";
 import { OFFICE_SETTINGS_CHANNELS, type OfficeSettingsFrameRequest } from "../../../../packages/contracts/src/office-settings.ts";
+import { OFFICE_PREFERENCES_CHANNELS } from "../../../../packages/contracts/src/office-preferences.ts";
 import { OFFICE_MCP_SETTINGS_CHANNELS } from "../../../../packages/contracts/src/office-mcp.ts";
 import { OFFICE_DRIVE_SETTINGS_CHANNELS, type OfficeDriveAttachments } from "../../../../packages/contracts/src/office-drive.ts";
 import "../styles/office-settings.css";
@@ -47,6 +48,7 @@ export function OfficeSettings({ api, theme, onClose, mode = "ai", onPicked, att
           return result;
         }
         if (mode === "drive-picker") throw new Error("첨부 선택창의 요청이 아닙니다.");
+        if (OFFICE_PREFERENCES_CHANNELS.has(message.channel)) return api.request("POST", "/api/office-preferences", { channel: message.channel, args: message.args }, options);
         if (message.channel === "ai:get-settings") return api.request("GET", "/api/office-ai/settings", undefined, options);
         if (message.channel === "ai:set-settings") return api.request("PUT", "/api/office-ai/settings", { settings: message.args[0], expectedRevision: message.revision }, options);
         if (OFFICE_MCP_SETTINGS_CHANNELS.has(message.channel)) {

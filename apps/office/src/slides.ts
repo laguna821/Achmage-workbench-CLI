@@ -1,4 +1,4 @@
-import { DEFAULT_AI_PANEL_PREFS, normalizeAiPanelPrefs } from "../../../vendor/ieumoffice/packages/ui/src/ai-panel-prefs.ts";
+import { createOfficePreferences, legacyOfficePanel } from "./preferences.ts";
 import { mountOfficeAi, officeAiTransport } from "./office-ai.ts";
 import "./slides.css";
 import { Gateway, GatewayError, handshake, headlessExport, listen, post } from "./bridge.ts";
@@ -75,8 +75,7 @@ function call(request: WorkerRequest, transfer: Transferable[] = []) {
 const value = async <T>(request: WorkerRequest, transfer: Transferable[] = []) => (await call(request, transfer)).value as T;
 
 // ── what the page answers itself ─────────────────────────────────────────
-let aiPrefs = DEFAULT_AI_PANEL_PREFS;
-try { aiPrefs = normalizeAiPanelPrefs(JSON.parse(localStorage.getItem("workbench.office.slides.ai-prefs") ?? "null")); } catch { /* UI preferences only. */ }
+const preferences = await createOfficePreferences(init, gateway, (channel, value) => dispatch(channel, [value]), legacyOfficePanel("workbench.office.slides.ai-prefs"));
 const noAi = () => Promise.reject(new Error("이 AI 도구는 아직 지원하지 않습니다."));
 const unhandled = new Set<string>();
 let pdfPlan: OfficeOutputPlan | null = null;
@@ -93,14 +92,9 @@ async function invoke(channel: string, args: unknown[]): Promise<unknown> {
       return "ko";
     case "app:get-theme":
       return state.theme;
-    case "app:get-auto-save-default":
-      // Every save is a revision: saved on Ctrl+S, before a request, when the tab or view changes.
-      return { on: false, updatedAt: 1 };
-    case "app:get-ai-panel-prefs": return aiPrefs;
-    case "app:set-ai-panel-prefs": {
-      aiPrefs = normalizeAiPanelPrefs({ ...aiPrefs, ...(args[0] as object) });
-      localStorage.setItem("workbench.office.slides.ai-prefs", JSON.stringify(aiPrefs)); dispatch("app:ai-panel-prefs-changed", [aiPrefs]); return aiPrefs;
-    }
+    case "app:get-auto-save-default": return preferences.autoSave();
+    case "app:get-ai-panel-prefs": return preferences.panel();
+    case "app:set-ai-panel-prefs": return preferences.setPanel(args[0]);
     case "slides:recent":
       return [];
     case "ai:insert-image-url":
@@ -172,7 +166,7 @@ async function invoke(channel: string, args: unknown[]): Promise<unknown> {
     }
   }
   if (/^(ai|ai-subscription|subscription|project):/.test(channel)) return noAi();
-  const reply = await call({ type: "invoke", channel, args });
+  const reply = await call({ type: "invoke", channel, args, authorName: preferences.name() });
   if (reply.unhandled && !unhandled.has(channel)) {
     unhandled.add(channel);
     console.debug(`[workbench office] not provided: ${channel}`);

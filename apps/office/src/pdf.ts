@@ -1,3 +1,4 @@
+import { createOfficePreferences, legacyOfficePanel } from "./preferences.ts";
 import { mountOfficeAi, officeAiTransport } from "./office-ai.ts";
 import { Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
@@ -165,8 +166,7 @@ const pathQueries: Record<string, string> = {
   "pdf:list-page-images": "images", "pdf:list-static-form-fills": "static-fills", "pdf:annot-subjects": "subjects", "pdf:list-digital-signatures": "signatures",
 };
 const transforms: Record<string, string> = { "pdf:insert-blank-page": "blank-page", "pdf:set-page-size": "page-size", "pdf:crop-pages": "crop" };
-let prefs: Record<string, unknown> = {};
-try { prefs = JSON.parse(localStorage.getItem("workbench.office.pdf.prefs") ?? "{}"); } catch { /* A damaged UI preference is not document data. */ }
+const preferences = await createOfficePreferences(init, gateway, (channel, value) => dispatch(channel, [value]), legacyOfficePanel("workbench.office.pdf.prefs"));
 const fail = (channel: string) => { throw new Error(`PDF의 이 서비스를 아직 연결하지 못했습니다: ${channel}`); };
 const jobs = pdfJobs(init, gateway, ai, () => revision);
 const persistResult = async (next: number) => {
@@ -249,18 +249,15 @@ useTransport({
       case "pdf:list-edit-fonts": return gateway.pdf(id, revision, "fonts", {});
       case "pdf:can-draw-text": return gateway.pdf(id, revision, "can-draw", { text: args[0], font: args[1], bold: args[2], italic: args[3] });
       case "pdf:ocr-page": return null; // Original Linux contract: no system OCR engine.
-      case "pdf:get-username": return ""; // Original /T default stays GenOffice until account preferences are connected.
+      case "pdf:get-username": return preferences.name();
       case "pdf:auto-rename": checkPath(args[0]); return { renamed: false };
       case "pdf:is-untitled": case "pdf:is-untitled-copy": checkPath(args[0]); return false;
       case "pdf:note-unsaved": return false;
       case "app:get-language": return "ko";
       case "app:get-theme": return theme;
-      case "app:get-auto-save-default": return { on: false, updatedAt: 0 };
-      case "app:get-ai-panel-prefs": return prefs;
-      case "app:set-ai-panel-prefs": {
-        if (args[0] && typeof args[0] === "object") prefs = { ...prefs, ...args[0] };
-        localStorage.setItem("workbench.office.pdf.prefs", JSON.stringify(prefs)); dispatch("app:ai-panel-prefs-changed", [prefs]); return prefs;
-      }
+      case "app:get-auto-save-default": return preferences.autoSave();
+      case "app:get-ai-panel-prefs": return preferences.panel();
+      case "app:set-ai-panel-prefs": return preferences.setPanel(args[0]);
       // Keep missing services visible through the original preload's structured failure
       // contracts. No generic null/empty-success proxy, and no implicit model invocation.
       default: return fail(channel);
