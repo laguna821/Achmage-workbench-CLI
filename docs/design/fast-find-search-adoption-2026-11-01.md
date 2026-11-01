@@ -2,7 +2,9 @@
 
 작성일: 2026-11-01. 상태: **원본 분석·호환성 실험·도입 계획 완료 / 제품 검색 교체 미착수**.
 
-사용자 요청은 기존 검색 옆에 검색기를 하나 더 두는 것이 아니라, 세션과 연결 Obsidian 볼트를 Fast Find 같은 즉시 검색·구조화 결과·넓은 미리보기로 찾도록 **기존 검색을 교체**하는 것이다. Design Mode/HOP 마무리는 유지한다.
+사용자 요청은 기존 검색 옆에 검색기를 하나 더 두는 것이 아니라, 세션과 연결 Obsidian 볼트를 Fast Find 같은 즉시 검색·구조화 결과·넓은 미리보기로 찾도록 **기존 검색을 교체**하는 것이다. HOP 개선은 유지한다. 후속 사용자 정정으로 시각적 웹 Design Mode는 이번 릴리스에서 제외했으며 검색 작업의 선행 조건이 아니다.
+
+범위 정정: `decision-d21398c56cf5de805cc77fcc3217b2519b6d733c372a61384a1861dd5687a5ce`; 정확한 판 `research:rr-52e63272408c52a10ffec47ce0a19a2f:76674b66f7a8d695ff793b380d18901b2580defbee377e3dfed010157cce0ba8`.
 
 ## 1. 판단과 고정 기준
 
@@ -13,7 +15,7 @@
 | 원본 | [ssp-data/obsidian-fast-find-10k](https://github.com/ssp-data/obsidian-fast-find-10k) |
 | 고정 소스 | `714548efd3e361a7011a5123f4ae928630a01614`, 플러그인 0.2.6 |
 | 라이선스 | MIT, Copyright 2026 Simon Späti. 배포 시 원문·출처·변경 이력 유지 |
-| 비교한 Workbench | `871bd22`; 진행 중인 Design Mode 변경은 별도 보존 |
+| 비교한 Workbench | `871bd22`; 미출시 Design Mode 변경은 사용자 요청으로 별도 보존 후 제품 소스에서 제외 |
 | 실제 확인 | 원본 CLI release 빌드 성공, 합성 Markdown 7개·질의 13개 실행 |
 | 아직 확인하지 않은 것 | 통합 앱 속도·메모리·OS별 패키지 증가량, 교체 후 GUI/설치본 |
 
@@ -172,7 +174,7 @@ host의 SearchService가 원본 이벤트와 요청을 연결한다. 앱 데이�
 | 순서 | 작업과 주요 파일 | 끝나는 조건 |
 |---|---|---|
 | 0 · 완료 | 소스/라이선스·현행 검색 대조, 원본 CLI 호환 실험, 이 계획 | 고정 소스와 실측 회귀·연결 범위 확인 |
-| 1 | Design Mode 기존 연결 마무리, HOP 완료분 유지 | 현재 진행 범위를 닫고 검색 변경과 원인을 구분 |
+| 1 · 범위 제외 | 웹 Design Mode는 사용자 요청으로 건너뜀. HOP 완료분 유지 | 해당 기능을 출시 차단 조건에서 제거하고 검색 작업으로 진행 |
 | 2 | `third_party/fast-find` 원본·manifest·패치, Rust `search_worker.rs`, host `search-service.ts` | 원본 core가 공통 worker에서 검색/증분 변경/정상 종료 |
 | 3 | typed input·CJK·범위/페이지 패치, Store/VaultMirror·Finder/PKM 연결 | 한글·정확한 YAML·숨김·세션 위치·그룹/페이지 계약 통과 |
 | 4 | 원본 results/preview/similar/keys 이식, `SearchPalette.tsx` 교체 | 실제 앱에서 즉시 검색·미리보기·관련 노트·정확한 열기 |
@@ -195,7 +197,7 @@ host의 SearchService가 원본 이벤트와 요청을 연결한다. 앱 데이�
 
 구현 완료는 FF01–FF08과 기존 요청의 최종 인수로 판단한다. 버전 숫자나 새 기능 발굴을 종료 조건으로 쓰지 않는다. 기존 통과 항목은 관련 변경/재현 실패가 없는 한 반복 검증하지 않는다.
 
-현재 전체 진행과의 관계: HOP 개선은 `871bd22`에서 구현·Linux 확인 완료, Design Mode는 연결 코드와 빌드는 있고 실제 동선 확인이 남아 있다. 이번 요청으로 **Fast Find 검색 교체가 추가 범위**가 됐다. 공개 preview0.2.8에 새 검색이나 진행 중 Design Mode가 포함됐다고 표시하지 않는다.
+현재 전체 진행과의 관계: HOP 개선은 `871bd22`에서 구현·Linux 확인 완료, 웹 Design Mode는 사용자 요청으로 이번 릴리스에서 제외했다. **Fast Find 검색 교체와 최종 OS 설치본 인수**로 진행한다. 공개 preview0.2.8에 새 검색이 포함됐다고 표시하지 않는다.
 
 ## 9. 재현 근거
 
