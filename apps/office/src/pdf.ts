@@ -7,6 +7,7 @@ import type { PdfRequest } from "../../../packages/contracts/src/pdf.ts";
 import { bindPdfHistory, pdfHistory, type PdfHistoryBase } from "./pdf-history.ts";
 import { beginOfficeCopy, officeCopyBusy, type OfficeCopy } from "./copy.ts";
 import { pdfJobs } from "./pdf-jobs.ts";
+import { noteRequests } from "./pdf-notes.ts";
 
 const init = await handshake(), gateway = new Gateway(init.token);
 const ai = mountOfficeAi(init, gateway);
@@ -169,6 +170,7 @@ const transforms: Record<string, string> = { "pdf:insert-blank-page": "blank-pag
 const preferences = await createOfficePreferences(init, gateway, (channel, value) => dispatch(channel, [value]), legacyOfficePanel("workbench.office.pdf.prefs"));
 const fail = (channel: string) => { throw new Error(`PDF의 이 서비스를 아직 연결하지 못했습니다: ${channel}`); };
 const jobs = pdfJobs(init, gateway, ai, () => revision);
+const note = noteRequests();
 const persistResult = async (next: number) => {
   revision = contentRevision = next; restored = false; epoch++;
   historyBase = { revision: next };
@@ -253,6 +255,8 @@ useTransport({
       case "pdf:auto-rename": checkPath(args[0]); return { renamed: false };
       case "pdf:is-untitled": case "pdf:is-untitled-copy": checkPath(args[0]); return false;
       case "pdf:note-unsaved": return false;
+      case "pdf:note-open": return note("open", args[0]);
+      case "pdf:note-insert": return note("insert", args[0]);
       case "app:get-language": return "ko";
       case "app:get-theme": return theme;
       case "app:get-auto-save-default": return preferences.autoSave();

@@ -484,6 +484,7 @@ export type ProviderStatus = {
 };
 
 export type WorkbenchEvent =
+  | { type: "office.note.ready"; artifactId: string }
   | { type: "office.control" }
   | { type: "folder.upserted"; folder: Folder }
   /** A folder deleted ("폴더만 지우기"); what was inside already moved up (navigator.ts). */
@@ -769,6 +770,8 @@ export type EditorGrant = { url: string; origin: string; token: string; sessionI
 
 /** Workbench window → office editor page (iframe at /office/<kind>.html). */
 export type OfficeHostMessage =
+  | import("./pdf-notes.ts").PdfNoteReply
+  | { type: "office:note-ready" }
   | import("./office-knowledge.ts").KnowledgeOpenResult
   | { type: "office:wiki-activate" }
   | import("./office-wiki.ts").OfficeWikiResult
@@ -813,6 +816,7 @@ export type OfficeHostMessage =
 
 /** Office editor page → Workbench window. */
 export type OfficePageMessage =
+  | import("./pdf-notes.ts").PdfNoteRequest
   | import("./office-knowledge.ts").KnowledgeOpenRequest
   | import("./office-wiki.ts").OfficeWikiRequest
   | { type: "office:control-result"; requestId: string; reply: import("./office-control.ts").RendererControlReply }

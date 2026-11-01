@@ -394,6 +394,7 @@ export function App() {
           (event) => {
             dispatch({ type: "event", event });
             if (event.type === "office.control") notifyOfficeControl();
+            if (event.type === "office.note.ready") window.dispatchEvent(new CustomEvent("workbench:note-ready", { detail: event.artifactId }));
             if (event.type === "item.upserted" && event.item.kind === "artifact" && event.item.id.startsWith("artifact:create:")) {
               const requestId = event.item.id.slice("artifact:create:".length), origin = creatingRequests.current.get(requestId);
               if (origin && event.sessionId === origin.sessionId) {

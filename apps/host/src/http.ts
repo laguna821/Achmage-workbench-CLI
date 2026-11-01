@@ -21,6 +21,7 @@ import { OfficeImageOutputs } from "./office-image-output.mjs";
 import type { OfficeAi } from "./office-ai.ts";
 import type { OfficeSkills } from "./office-skills.ts";
 import { OfficeWiki } from "./office-wiki.ts";
+import { PdfNotes } from "./pdf-notes.mjs";
 
 export const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -219,6 +220,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
   const userSkills = skillRoutes(manager);
   const outputs = options.officeMcp?.outputs ?? new OfficeOutputs(manager.documents, (source, path, revision, sessionId) => manager.registerOfficeCopy(source, path, revision, sessionId));
   const wiki = new OfficeWiki(manager);
+  const pdfNotes = new PdfNotes(manager, bus);
   const imageOutputs = new OfficeImageOutputs(manager.documents);
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -797,6 +799,11 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           if (!grants || typeof body.token !== "string" || !body.input || typeof body.input !== "object" || Array.isArray(body.input)) throw new HttpError(400, "office_wiki", "위키 문서 요청을 확인해 주세요.");
           return sendJson(res, 200, await wiki.action(artifactId, body.token, grants, body.action, body.input as Record<string, unknown>));
         }
+        if (method === "POST" && parts[2] === "pdf-note") {
+          const body = await readJson(req, 1_000_000), grants = options.editors?.grants;
+          if (!grants || typeof body.token !== "string" || !body.input || typeof body.input !== "object" || Array.isArray(body.input)) throw new HttpError(400, "pdf_note", "PDF 노트 요청을 확인해 주세요.");
+          return sendJson(res, 200, await pdfNotes.action(artifactId, body.token, grants, body.action, body.input as Record<string, unknown>));
+        }
         if (method === "POST" && parts[2] === "office-knowledge-open" && options.officeKnowledge) {
           const body = await readJson(req, 16_000), grants = options.editors?.grants;
           if (!grants || typeof body.token !== "string") throw new HttpError(403, "office_knowledge_scope", "문서 권한을 확인해 주세요.");
@@ -1007,7 +1014,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       }
     }
   });
-  server.on("close", () => { void imageOutputs.close().catch(() => {}); });
+  server.on("close", () => { pdfNotes.close(); void imageOutputs.close().catch(() => {}); });
   return server;
 }
 

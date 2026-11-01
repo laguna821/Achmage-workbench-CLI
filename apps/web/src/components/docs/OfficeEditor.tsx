@@ -16,6 +16,8 @@ import { SkillLibraryDialog } from "../SkillLibraryDialog.tsx";
 import type { OfficeSkillRequest } from "../../../../../packages/contracts/src/office-skills.ts";
 import type { OfficeWikiRequest } from "../../../../../packages/contracts/src/office-wiki.ts";
 import type { KnowledgeOpenRequest } from "../../../../../packages/contracts/src/office-knowledge.ts";
+import type { PdfNoteRequest, PdfNoteResult } from "../../../../../packages/contracts/src/pdf-notes.ts";
+import { PdfNoteDialog } from "./PdfNoteDialog.tsx";
 
 export type OfficeHandle = {
   mcp(request: OfficeMcpRequest): Promise<OfficeMcpReply>;
@@ -83,6 +85,8 @@ export const OfficeEditor = forwardRef<
   const copied = useRef(new Map<string, string | null>());
   const [output, setOutput] = useState<{ revision: number; format: OfficeOutputFormat; defaultName?: string; longJob?: boolean; choose(plan: OfficeOutputPlan | null): void } | null>(null);
   const [imageOutput, setImageOutput] = useState<{ choose(path: string | null): void } | null>(null);
+  const [notePath, setNotePath] = useState<{ initialPath: string; choose(path: string | null): void } | null>(null);
+  const noteClose = useRef<(() => void) | null>(null), noteBusy = useRef(false);
   const latest = useRef(artifact);
   latest.current = artifact;
 
@@ -445,6 +449,43 @@ export const OfficeEditor = forwardRef<
   };
   const knowledgeHandler = useRef(handleKnowledge); knowledgeHandler.current = handleKnowledge;
 
+  const handleNote = async (message: PdfNoteRequest) => {
+    const target = frame.current?.contentWindow, opening = opened.current, owner = latest.current.id;
+    if (!target || !opening) return;
+    const reply = (value?: unknown, error?: string) => target.postMessage({ type: "office:pdf-note-result", requestId: message.requestId, value, error }, opening.origin);
+    const check = () => { if (target !== frame.current?.contentWindow || latest.current.id !== owner || opened.current?.sessionId !== opening.sessionId) throw new Error("노트를 여는 동안 문서 창이나 대화가 바뀌었습니다."); };
+    const input: Record<string, unknown> = { requestId: message.requestId, request: message.request };
+    const call = <T,>() => api.request<T>("POST", `/api/artifacts/${owner}/pdf-note`, { token: opening.token, action: message.action, input });
+    if (message.action === "take") {
+      try { check(); reply(await call<string[]>()); } catch (error) { reply(undefined, error instanceof Error ? error.message : String(error)); }
+      return;
+    }
+    if (noteBusy.current) { reply({ ok: false, reason: "busy" }); return; }
+    noteBusy.current = true;
+    try {
+      if (latest.current.format !== "pdf" || !handlers.current.onCopied) throw new Error("PDF 탭에서 노트를 열어 주세요.");
+      check(); let value = await call<PdfNoteResult>(); check();
+      if (value.choosePath) {
+        const selected = await new Promise<string | null>(resolve => {
+          const choose = (path: string | null) => { noteClose.current = null; setNotePath(null); resolve(path); };
+          noteClose.current = () => choose(null); setNotePath({ initialPath: value.choosePath!, choose });
+        });
+        check(); if (selected === null) { reply({ ok: false, reason: "cancelled" }); return; }
+        input.selectedPath = selected; value = await call<PdfNoteResult>(); check();
+      }
+      reply({ ok: value.ok, reason: value.reason, message: value.message });
+      if (value.ok && value.artifact) handlers.current.onCopied(value.artifact.id, { ...value.artifact, preserveSource: true });
+    } catch (error) { reply(undefined, error instanceof Error ? error.message : String(error)); }
+    finally { noteBusy.current = false; }
+  };
+  const noteHandler = useRef(handleNote); noteHandler.current = handleNote;
+  useEffect(() => {
+    const ready = (event: Event) => { if ((event as CustomEvent<string>).detail === latest.current.id) send({ type: "office:note-ready" }); };
+    window.addEventListener("workbench:note-ready", ready);
+    return () => { window.removeEventListener("workbench:note-ready", ready); noteClose.current?.(); };
+  }, []);
+  useEffect(() => () => noteClose.current?.(), [artifact.id, generation, sessionId]);
+
   useEffect(() => {
     const activate = (event: Event) => {
       const target = (event as CustomEvent<{ artifactId: string; sessionId: string | null }>).detail;
@@ -482,6 +523,7 @@ export const OfficeEditor = forwardRef<
       switch (message.type) {
         case "office:skills": void skillsHandler.current(message); break;
         case "office:wiki": void wikiHandler.current(message); break;
+        case "office:pdf-note": void noteHandler.current(message); break;
         case "office:knowledge-open": void knowledgeHandler.current(message); break;
         case "office:references": void referenceHandler.current(message); break;
         case "office:ai-request": void aiHandler.current(message); break;
@@ -721,6 +763,7 @@ export const OfficeEditor = forwardRef<
   }
   if (!opened.current) return hidden ? null : <div className="column empty-hint">편집기를 여는 중…</div>;
   return (<>
+    {notePath ? <PdfNoteDialog initialPath={notePath.initialPath} onChoose={notePath.choose} /> : null}
     {skillsOpen ? <SkillLibraryDialog api={api} scope={{ workId: artifact.workId, ...(artifact.workspaceId ? { workspaceId: artifact.workspaceId } : {}), ...(sessionId ? { sessionId } : {}) }} onClose={() => { setSkillsOpen(false); send({ type: "office:skills-changed" }); }} /> : null}
     {referencePicker ? <OfficeReferencePicker {...referencePicker} /> : null}
     {output ? <OfficeOutputDialog key={outputRequest.current} api={api} artifact={artifact} revision={output.revision} format={output.format} defaultName={output.defaultName} longJob={output.longJob} onChoose={output.choose} onCancel={() => output.choose(null)} /> : null}

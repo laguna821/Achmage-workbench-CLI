@@ -11,12 +11,14 @@ import { createOfficeWiki } from "./wiki.ts";
 import { exportTextWord, markdownWordBytes } from "./text-word-output.ts";
 import { installMcp } from "./mcp.ts";
 import { createMarkdownSettings } from "./markdown-settings.ts";
+import { noteRequests } from "./pdf-notes.ts";
 
 /** The original Markdown/HTML renderers serialize their own source; never normalize it here. */
 export async function createTextEditor(kind: "markdown" | "html") {
   const init = await handshake(), gateway = new Gateway(init.token), events = new Events();
   const headless = headlessExport(init);
   const ai = mountOfficeAi(init, gateway, events);
+  const note = noteRequests(() => events.emit("noteAppend"));
   const id = init.artifact.id, path = init.artifact.path;
   const assetBase = (await gateway.textAssets(id)).baseUrl;
   configureTextAssets(assetBase, path);
@@ -128,7 +130,7 @@ export async function createTextEditor(kind: "markdown" | "html") {
   const api = {
     consumePending: async () => path,
     takeSeed: async () => null,
-    takeNoteAppend: async () => [],
+    takeNoteAppend: async () => kind === "markdown" && !init.readOnly ? note<string[]>("take") : [],
     onNoteAppendReady: events.on("noteAppend"),
     consumeHeadlessExport: async () => { const target = headless.consume(); return kind === "markdown" ? target?.outPath ?? null : target; },
     headlessExportDone: headless.done,
