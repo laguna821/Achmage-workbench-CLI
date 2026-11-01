@@ -14,6 +14,7 @@ mod office_html_output;
 mod office_cli;
 mod office_browser;
 pub mod office_secrets;
+pub mod office_fonts;
 pub mod terminal_worker;
 
 /// Closing the window only hides it (work goes on, PRD "트레이로 이동, 작업 유지"); said once.

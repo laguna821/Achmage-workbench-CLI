@@ -19,7 +19,7 @@ for (const [input, output] of files) {
     .replaceAll("'../shared/ipc.ts'", "'../../../packages/contracts/src/hwp.ts'")
     .replaceAll("'@genoffice/file-parse'", "'../file-parse/hwp.ts'")
     .replaceAll("'@genoffice/docx-engine'", "'../zip-gate/index.ts'")
-    .replaceAll("'@rhwp/core'", "'../../../vendor/ieumoffice/vendor/rhwp-core/rhwp.js'");
+    .replaceAll("'@rhwp/core'", "'../../../third_party/hop/rhwp-core/rhwp.js'");
   if (output === 'hwp/save-flow.ts') text = text.replace('  HwpApi,', '  HwpSaveApi as HwpApi,');
   if (output === 'file-parse/hwp.ts') {
     text = text.replace("import { createRequire } from 'node:module'\n", '').replace("import { join } from 'node:path'\n", '');

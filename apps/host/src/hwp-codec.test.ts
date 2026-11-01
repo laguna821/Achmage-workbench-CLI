@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import init, { HwpDocument } from "../../../vendor/ieumoffice/vendor/rhwp-core/rhwp.js";
+import init, { HwpDocument } from "../../../third_party/hop/rhwp-core/rhwp.js";
 import { encodeHwpSave, type MemoSnapshot } from "../../../packages/contracts/src/hwp.ts";
 import { hwpMemosOf, hwpToText } from "../../../third_party/ieumoffice/file-parse/hwp.ts";
 import { sectionTailsOf } from "../../../third_party/ieumoffice/hwp/section-tails.ts";

@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import init, { HwpDocument } from "../../../vendor/ieumoffice/vendor/rhwp-core/rhwp.js";
+import init, { HwpDocument } from "../../../third_party/hop/rhwp-core/rhwp.js";
 import { hwpToText, hwpMemosOf } from "../../../third_party/ieumoffice/file-parse/hwp.ts";
 import { hwpWasmPath } from "./hwp-resource.ts";
 import { runHwpTool } from "./hwp-tool.ts";

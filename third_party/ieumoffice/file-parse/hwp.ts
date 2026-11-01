@@ -9,7 +9,7 @@ import { assertZipInflatesWithinLimits } from '../zip-gate/index.ts'
  * first use and kept; a document is freed as soon as its text is out.
  */
 
-type Engine = typeof import('../../../vendor/ieumoffice/vendor/rhwp-core/rhwp.js')
+type Engine = typeof import('../../../third_party/hop/rhwp-core/rhwp.js')
 type HwpDocument = InstanceType<Engine['HwpDocument']>
 
 /** A table cell holding more paragraphs than this is page layout, not a data cell. */
@@ -27,7 +27,7 @@ let engine: Promise<Engine> | null = null
 function loadEngine(): Promise<Engine> {
   if (!engine) {
     const loading = (async () => {
-      const mod = await import('../../../vendor/ieumoffice/vendor/rhwp-core/rhwp.js')
+      const mod = await import('../../../third_party/hop/rhwp-core/rhwp.js')
       // the bytes are handed over: left to itself the engine fetches its wasm by URL
       await mod.default({ module_or_path: readFileSync(rhwpWasmPath()) })
       return mod

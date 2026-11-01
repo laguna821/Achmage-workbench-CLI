@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import init, { HwpDocument } from "../../../vendor/ieumoffice/vendor/rhwp-core/rhwp.js";
+import init, { HwpDocument } from "../../../third_party/hop/rhwp-core/rhwp.js";
 import { openHwpBytes, hwpFormat } from "./hwp-codec.ts";
 import { hwpWasmPath } from "./hwp-resource.ts";
 

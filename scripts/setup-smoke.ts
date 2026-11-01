@@ -192,6 +192,12 @@ export async function apiChecks(gateway: Gateway, app: string, expect: ReturnTyp
   await until(async () => (await providers()).every((status) => status.installed && status.loggedIn !== null), 60_000);
   const status = async (provider: "claude" | "codex") => (await providers()).find((entry) => entry.provider === provider) as ProviderStatus;
 
+  await step("한글 글꼴 공급자가 OS 설치 글꼴과 컬렉션 인덱스를 읽음", async () => {
+    const catalog = JSON.parse(execFileSync(appLayout(app).native, ["--office-font-catalog"], { encoding: "utf8", timeout: 30_000, maxBuffer: 32 * 1024 * 1024, windowsHide: true })) as { family: string; path: string; faceIndex: number; weight: number }[];
+    const valid = catalog.length > 0 && catalog.every(face => !!face.family && /\.(ttf|otf|ttc|otc)$/i.test(face.path) && Number.isInteger(face.faceIndex) && face.faceIndex >= 0 && face.weight >= 1);
+    return [valid, `${process.platform}/${process.arch}: ${catalog.length} faces`];
+  });
+
   for (const provider of ["codex", "claude"] as const) {
     await step(`${provider}: 설치된 엔진을 찾음 (${expect[provider].origin})`, async () => {
       const found = await status(provider);

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import init, { HwpDocument } from "../../vendor/ieumoffice/vendor/rhwp-core/rhwp.js";
+import init, { HwpDocument } from "../../third_party/hop/rhwp-core/rhwp.js";
 import { hwpMemosOf, hwpToText } from "../../third_party/ieumoffice/file-parse/hwp.ts";
 import type { Artifact, Session, Snapshot, TranscriptItem, Work } from "@workbench/contracts";
 import { Kordoc } from "../../apps/host/src/kordoc.ts";
@@ -13,7 +13,7 @@ import { KEY } from "./webdriver.ts";
 const hash = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 export async function hwpScenario(ctx: Ctx) {
   const S = "12 한글 내부 편집", { wd, api } = ctx.app;
-  await init({ module_or_path: readFileSync(resolve("vendor/ieumoffice/vendor/rhwp-core/rhwp_bg.wasm")) });
+  await init({ module_or_path: readFileSync(resolve("third_party/hop/rhwp-core/rhwp_bg.wasm")) });
   const work = await api<Work>("POST", "/api/works", { title: "한글 내부 편집 검사", cwd: null });
   const session = await api<Session>("POST", `/api/works/${work.id}/sessions`, { provider: "codex" });
   const snapshot = () => api<Snapshot>("GET", "/api/snapshot");
@@ -179,7 +179,9 @@ export async function hwpScenario(ctx: Ctx) {
         readyCopy = await until(async () => !!await wd.find('.hwp-app[data-phase="ready"]'), 60_000);
       }
       const copiedText = await hwpToText(readFileSync(copy.path));
-      ctx.report.check(S, "저장 사본이 같은 세션에서 열리고 미저장 입력·본문·메모 보존", readyCopy && copiedText.includes("UNSAVED COPY") && copiedText.includes("LEGACY RECOVERED") && (await hwpMemosOf(readFileSync(copy.path))).some((memo) => memo.text === "원본 메모를 보존") && (await snapshot()).sessions.filter((item) => item.workId === work.id).length === 1, undefined, await shot(ctx, "12-save-as-copy.png"));
+      const copySessions = (await snapshot()).sessions.filter(item => item.workId === work.id);
+      const copyProof = { ready: readyCopy, unsavedInput: copiedText.includes("UNSAVED COPY"), legacy: copiedText.includes("LEGACY RECOVERED"), memo: (await hwpMemosOf(readFileSync(copy.path))).some(memo => memo.text === "원본 메모를 보존"), mainSessions: copySessions.filter(item => !item.documentAgent).length, documentAgent: copySessions.some(item => item.documentAgent?.artifactId === copy.id) };
+      ctx.report.check(S, "저장 사본의 독립 문서 AI·메인 세션 유지·미저장 입력·본문·메모 보존", copyProof.ready && copyProof.unsavedInput && copyProof.legacy && copyProof.memo && copyProof.mainSessions === 1 && copyProof.documentAgent, JSON.stringify(copyProof), await shot(ctx, "12-save-as-copy.png"));
       await wd.frame(null);
       copyFileSync(copy.path, join(ctx.stage.outDir, "native-copy.hwpx"));
     }

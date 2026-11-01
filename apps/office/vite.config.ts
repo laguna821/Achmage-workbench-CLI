@@ -432,6 +432,7 @@ export default defineConfig({
       { title: "IeumOffice / GenOffice (Apache License 2.0)", files: [`${ieum}/NOTICE`, `${ieum}/LICENSE`] },
       { title: "Unicode data used by IeumOffice", files: [`${ieum}/LICENSE-UNICODE.txt`] },
       { title: "rhwp editor / WASM engine", files: [here("./public/studio/LICENSE-rhwp.txt"), here("./public/studio/THIRD-PARTY-LICENSES-rhwp.md")] },
+      { title: "Achmage HOP font, canvas and layout improvements (MIT)", files: [here("../../third_party/hop/LICENSE")] },
       {
         title: "Fonts bundled with the editors",
         files: [`${ieum}/apps/docs/src/renderer/fonts/README.md`, `${packages}/ui/src/fonts/README.md`, `${ieum}/apps/docs/src/renderer/fonts/LICENSE-OFL.txt`],

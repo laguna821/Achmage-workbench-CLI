@@ -4,7 +4,7 @@ import { createBlankPptx } from "../../../vendor/ieumoffice/packages/pptx-engine
 import { blankXlsxBuffer } from "../../../vendor/ieumoffice/packages/xlsx-gateway/src/gateway/csv-import.ts";
 import { createXmindDocument } from "../../../vendor/ieumoffice/packages/xmind-engine/src/create.ts";
 import { blankPdfBuffer } from "../../../vendor/ieumoffice/apps/pdf/src/main/blank-pdf.ts";
-import initHwp, { HwpDocument } from "../../../vendor/ieumoffice/vendor/rhwp-core/rhwp.js";
+import initHwp, { HwpDocument } from "../../../third_party/hop/rhwp-core/rhwp.js";
 import { hwpWasmPath } from "./hwp-resource.ts";
 
 let hwpReady;

@@ -1,5 +1,11 @@
 # 이음오피스 통합 진행
 
+## HOP 원본 개선 재사용
+
+2026-11-01: 공개 HOP beta.6 `d533eb4`의 설치 글꼴 catalog·canvas 픽셀 정렬과 조판9패치를 기존 이음 편집기에 연결했다. rhwp v0.8.7에 이음20개·HOP9개를 한 번에 적용한 WASM을 화면/host/CLI가 공유한다. 글꼴은 OS에 설치된 파일만 읽으며 문서 권한으로 불투명 ID를 전달한다. HOP 앱·독점 글꼴·브랜딩·충돌하는 저장 탭 폭 변경은 포함하지 않는다.
+
+실제 Linux34/34: HWP/HWPX 입력·저장·재열기, 원본/메모·복구 보존, 사본의 독립 AI, 미저장 PDF·네이티브 인쇄, 설치 글꼴913개와3배율 픽셀 정렬을 확인했다. 집중42/42·전체183파일1270/1270·4개 타입 검사와 앱 빌드 통과. **구현·Linux 완료, 다음 설치본 반영 대기.** Windows/macOS 새 글꼴 도우미는 최종 OS 인수에서 확인한다. 공개0.2.8에 이 변경은 없다. 판: `research:rr-0c8711978a2135e837ebbfc93e56f825:55c55badb9096d492c3af2379c5e9f3bc081ddb636946a22074cdd57bd7cab98`.
+
 **PDF 원본 재사용 완료(2026-11-01):** `4031119`에서 [OpenDataLoader PDF v2.5.17](https://github.com/opendataloader-project/opendataloader-pdf/releases/tag/v2.5.17)의 CLI와 hybrid OCR 서버를 변경 없이 연결했다. 페이지 범위·본문/좌표·그림 포함 Markdown 출력과 기존 이음 OCR 글자층·검색·강조를 사용한다. 기존 Office 변환은 유지하며 새 인식 알고리즘은 작성하지 않았다.
 
 Java/Python/CPU OCR·한국어/영어 모델은 사용자가 설치를 누를 때 앱 전용 경로에 준비한다. Linux 실측 약2.5GiB로 기본 설치본과 별도다. 원본 CLI도 대표4행 중3행을 반환하고 일부 한글 오인식이 있어 완전한 인식을 보장하지 않는다. 실제 Linux 앱11/11, [3OS 실제 런타임 설치·추출·OCR 각8/8](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41297351638), 전체181파일1264/1264·타입·빌드 통과. Windows/macOS 전체 앱 UI나 다음 설치본 완료를 대신하는 검사는 아니다. AI 읽기 활용·핵심 표시·본문 도움도 아래 실제 동선 확인으로 닫았다. 정확한 판: `research:rr-62872cd0cb4e9182261b621185512b31:62e1ff62c417aa6f9ba7f45f5b586a9a8f58e0177af6f065950e30ca0604337b`.
@@ -10,17 +16,17 @@ Java/Python/CPU OCR·한국어/영어 모델은 사용자가 설치를 누를 �
 
 실제 Linux `pdf-reading-native-04` **12/12**(시작4+기능8): 읽기 결과 검색·쪽 이동, 수락 전 원문/판 보존, 실제 PDF Highlight 주석/좌표, 선택 구절·앞뒤 문맥 전달, 저장 전 원문 보존, 실제 Text 주석 저장과 재열기·메인 CLI 분리를 확인했다. 모델만 로컬 대역3회이며 원본 문서 처리·UI·저장은 제품 코드다. `saved-annotations.json`과 화면을 직접 확인했고 최종 root 타입도 통과했다. 앞선 하네스의 리본 입력·읽기 응답 원문 누락·패널 열기·iframe 좌표 오류는 기록 후 같은 제품 빌드로 바로잡았다. 제품 추가 수정이나 전체 검사 반복은 하지 않았다.
 
-기존 `c65bf83`의 읽기 서비스와 `4031119`의 추출/OCR 연결을 사용한다. **PDF 세 항목 기능 확인 완료**, 다음0.2.8 설치본 배치에 포함한다. 정확한 판: `research:rr-62872cd0cb4e9182261b621185512b31:62e1ff62c417aa6f9ba7f45f5b586a9a8f58e0177af6f065950e30ca0604337b`.
+기존 `c65bf83`의 읽기 서비스와 `4031119`의 추출/OCR 연결을 사용한다. **PDF 세 항목 기능 확인 완료, 공개0.2.8 설치본에 포함했다.** 정확한 판: `research:rr-62872cd0cb4e9182261b621185512b31:62e1ff62c417aa6f9ba7f45f5b586a9a8f58e0177af6f065950e30ca0604337b`.
 
 ## Dropbox 폴더 연결·제자리 편집·충돌 보존
 
 2026-11-01: `d617e23`로 전용 연결 화면·공식 등록 폴더 탐지·수동 선택·하위 폴더/문서 탐색·동일 프로젝트 재사용을 연결했다. Dropbox 데스크톱 앱의 원본 경로에 저장하며 문서를 복제하지 않는다. 연속 원자 교체는 안정된 변경을 받은 뒤 새 판으로 표시하고 미저장 편집은 기존 충돌 화면으로 보호한다. 폴더 부재·연결 해제 시 파일·프로젝트·충돌 사본·이력을 유지한다. SQLite·인증정보는 로컬에 남는다.
 
-집중14/14, 실제 Linux22/22, 전체180파일1261/1261, 최종 타입·web/design/Office/host/Tauri 빌드 통과. 실제 컴퓨터의 등록 Dropbox1개는 조회만 했고 변경 시험은 격리 폴더에서 수행했다. 클라우드 전송 상태는 Dropbox 앱 관할이다. **기능 완료·다음 설치본 포함 대기**이다. 아래 현행 배포 현황의11건에 포함한다. 증거 `dropbox-native-00/results.json`, `dropbox-validation/verification.json`; 판 `research:rr-326af50786949ee13b48da5d6241442b:4a250a3a4cb6d12e2a0cd055fe2e4f595a206d5cd7c24533f334d10ad79683b0`.
+집중14/14, 실제 Linux22/22, 전체180파일1261/1261, 최종 타입·web/design/Office/host/Tauri 빌드 통과. 실제 컴퓨터의 등록 Dropbox1개는 조회만 했고 변경 시험은 격리 폴더에서 수행했다. 클라우드 전송 상태는 Dropbox 앱 관할이다. **기능 완료·공개0.2.8 설치본 포함**이다. 아래 현행 배포 현황의11건에 포함한다. 증거 `dropbox-native-00/results.json`, `dropbox-validation/verification.json`; 판 `research:rr-326af50786949ee13b48da5d6241442b:4a250a3a4cb6d12e2a0cd055fe2e4f595a206d5cd7c24533f334d10ad79683b0`.
 
 현재 남은 작업은 [현행 종료 기준](IMPLEMENTATION-2026-10-29.md#남은-로드맵--2026-11-01)을 따른다. 진척은 같은 분류 개수 대신 [직전 공개판 이후 닫힌 기능과 설치본 상태](IMPLEMENTATION-2026-10-29.md#직전-공개판-이후-실제-변화--2026-11-01)로 보고한다. 아래는 구현 순서에 따른 기록이며 과거의 “남았다” 문장으로 이미 구현·배포한 기능을 다시 열지 않는다.
 
-**현재 배포 현황(2026-11-01):** [preview-0.2.7](https://github.com/laguna821/Achmage-workbench-CLI/releases/tag/preview-0.2.7)에 Word/ODT 추가 출력·EPUB/PDF 전체 번역/읽기·내부 MCP·기존 AI 설정/키/스타일 가져오기·공통 작성자/패널/테마/자동 저장6건을 포함했다. Drive 어댑터도 포함하지만 사용자 정정으로 Google Drive 등록·실계정 검증은 릴리스 이후 먼 후속이며 현재 클라우드 기준은 Dropbox다. HTML 단일 파일 출력·새 탭 발표·Markdown 페이지 PNG 출력·Markdown 이미지 호스트/고유 테마 가져오기·파일 검색 재정렬/설정 가져오기·PDF 노트 연결·PDF 추가 변환/그림 출력·Dropbox 폴더 연결·OpenDataLoader 추출/OS OCR·기존 PDF 읽기 활용·Windows WSL2 실행 확인11건은 다음 배치로 전달한다. `34a0bdf`의0.2.8 빌드41298009784 진행 중이다. 이 문단은 아래 각 검증 시점의 “미배포” 기록보다 우선한다. 공개/보존 검증 판: `research:rr-bcfc5be9e8ba0911fe6a0271b0de1934:908344adabd57f19b1f8f2481959b4722c1b24a9b539936a0fe7d339fedba9ce`.
+**현재 배포 현황(2026-11-01):** [preview-0.2.7](https://github.com/laguna821/Achmage-workbench-CLI/releases/tag/preview-0.2.7)에 Word/ODT 추가 출력·EPUB/PDF 전체 번역/읽기·내부 MCP·기존 AI 설정/키/스타일 가져오기·공통 작성자/패널/테마/자동 저장6건을 포함했다. Drive 어댑터도 포함하지만 사용자 정정으로 Google Drive 등록·실계정 검증은 릴리스 이후 먼 후속이며 현재 클라우드 기준은 Dropbox다. HTML 단일 파일 출력·새 탭 발표·Markdown 페이지 PNG 출력·Markdown 이미지 호스트/고유 테마 가져오기·파일 검색 재정렬/설정 가져오기·PDF 노트 연결·PDF 추가 변환/그림 출력·Dropbox 폴더 연결·OpenDataLoader 추출/OS OCR·기존 PDF 읽기 활용·Windows WSL2 실행 확인11건은 [공개0.2.8](https://github.com/laguna821/Achmage-workbench-CLI/releases/tag/preview-0.2.8)에 포함했다. `34a0bdf` 빌드41298009784·게시41299732557 성공, Windows/macOS 설치 각20/20·Windows 업그레이드17/17·공개6종 실제 다운로드/해시 확인을 마쳤다. 배포 판: `research:rr-63f4be1e622aede61375cd41df536462:bdab1b83784673d694938ec18d77699a1c3dad9c885a392cbb9accaa14288804`. 이 문단은 아래 각 검증 시점의 “미배포” 기록보다 우선한다. 공개/보존 검증 판: `research:rr-bcfc5be9e8ba0911fe6a0271b0de1934:908344adabd57f19b1f8f2481959b4722c1b24a9b539936a0fe7d339fedba9ce`.
 
 ## PDF 추가 변환·페이지 PNG·내장 그림 출력
 

@@ -7,6 +7,7 @@ import type { HwpFormat, MeasuredTab, MemoSnapshot } from "../../../packages/con
 import { encodeHwpSave } from "../../../packages/contracts/src/hwp.ts";
 import type { OfficeOutputPlan, SvgJob } from "../../../packages/contracts/src/office-output.ts";
 import { prepareOutput, commitOutput, cancelOutput, printOutput } from "./output.ts";
+import { installHwpEnhancements } from "./hwp-enhancements.ts";
 
 // Ieum's HWP screen owns editing, tables, memos, selection and serialization. This bridge owns
 // the Workbench revision, writer grant and recovery copy. No Electron main process is involved.
@@ -223,7 +224,12 @@ new MutationObserver(() => {
   for (const frame of document.querySelectorAll<HTMLIFrameElement>(".hwp-editor-host iframe")) {
     if (bound.has(frame)) continue;
     bound.add(frame);
-    const bind = () => frame.contentWindow?.addEventListener("keydown", keys, true);
+    let stop = () => {};
+    const bind = () => {
+      frame.contentWindow?.addEventListener("keydown", keys, true);
+      stop(); stop = installHwpEnhancements(frame, init.token);
+    };
+    window.addEventListener("pagehide", () => stop(), { once: true });
     frame.addEventListener("load", bind); bind();
   }
 }).observe(document.documentElement, { childList: true, subtree: true });

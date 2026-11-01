@@ -55,7 +55,7 @@
       "source": "packages/file-parse/src/hwp.ts",
       "output": "file-parse/hwp.ts",
       "sourceSha256": "3d44486239cc95f8abc4d5d8daad025affe855cd6cd04dfa8f624782a745997d",
-      "outputSha256": "ff59d677760424ec2642a6a1e66dce949edb53d4eee197701643357a9f149765"
+      "outputSha256": "1a885da5fdadd5041961e74aaff8196b92d654b90c03fff1583c00fbceb86625"
     },
     {
       "source": "apps/hwp/src/renderer/save-flow.ts",

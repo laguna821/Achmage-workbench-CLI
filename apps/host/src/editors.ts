@@ -8,6 +8,7 @@ import type { DocFormat, DocumentAccess, OfficeEditorKind } from "@workbench/con
 import type { Documents } from "./artifacts.ts";
 import { HttpError } from "./errors.ts";
 import { fontFace, matchFont } from "./fonts.ts";
+import { hwpFontFace, hwpFontSnapshot } from "./hwp-fonts.ts";
 import { MIME, readBody, sendJson, serveStatic } from "./http.ts";
 import { decodeHwpSave, hwpFormat, hwpTabs, HWP_MAX_BYTES, openHwpBytes, prepareHwpSave } from "./hwp-codec.ts";
 import { hwpToText } from "../../../third_party/ieumoffice/file-parse/hwp.ts";
@@ -314,6 +315,13 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
       // System fonts the slides editor measures and draws text with.
       if (path.startsWith("/api/fonts/") && method === "GET") {
         if (!grants.allowsAny(bearer)) throw new HttpError(401, "unauthorized", "편집기 권한이 없습니다.");
+        if (path === "/api/fonts/hwp-catalog") return sendJson(res, 200, await hwpFontSnapshot());
+        const hostFace = /^\/api\/fonts\/hwp-face\/(face-[0-9]+)$/.exec(path);
+        if (hostFace) {
+          const face = await hwpFontFace(hostFace[1]!, url.searchParams.get("revision") ?? "");
+          res.writeHead(200, { "content-type": "font/ttf", "cache-control": "no-store", "x-workbench-font-index": String(face.faceIndex), "x-content-type-options": "nosniff" });
+          res.end(face.bytes); return;
+        }
         if (path === "/api/fonts/match") {
           const family = url.searchParams.get("family") ?? "";
           if (!family || family.length > 200) throw new HttpError(400, "bad_family", "글꼴 이름이 없습니다.");

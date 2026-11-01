@@ -1,5 +1,13 @@
 # 통합 업데이트 실행 기록
 
+## HOP 개선 재사용 완료 — 2026-11-01
+
+공개 HOP beta.6 `d533eb4`에서 글꼴 목록·canvas 선명도와 조판9패치를 가져왔다. 이음20패치와 한 번에 빌드한 공유 WASM을 기존 편집기·미리보기·CLI가 함께 사용한다. HOP 앱·독점 글꼴·브랜딩은 추가하지 않으며 이음의 저장 탭 폭 계약을 유지한다. 일반 앱 빌드에서는 이 엔진을 다시 컴파일하지 않는다.
+
+실제 Linux34/34에서 HWP/HWPX 입력·저장·재열기·메모·원본 바이트 보존, 독립 문서 AI, 미저장 PDF·GTK 인쇄, 설치 글꼴과3배율 선명도를 확인했다. 집중42/42·전체183파일1270/1270·4개 프로젝트 타입 검사 통과. **HOP 구현과 Linux 확인은 완료, Windows/macOS 새 글꼴 도우미 확인은 최종 OS 설치본 인수에 포함한다. 공개0.2.8에는 아직 이 변경이 없다.** 기능 구현 잔여는 Design Mode1건이며 최종 요구 인수·설치본 전달이 별도로 남는다.
+
+정확한 판: `research:rr-0c8711978a2135e837ebbfc93e56f825:55c55badb9096d492c3af2379c5e9f3bc081ddb636946a22074cdd57bd7cab98`; 근거 `hop-native-01/results.json`, `hop-validation/full-tests.log`, `hop-validation/typecheck.log`. 초기 검사 실패는 소수 정밀도·원본 Vite 경로·예전 세션 수 조건을 기록 후 바로잡았으며 제품 저장 계약을 후퇴시키지 않았다.
+
 ## PDF 구현 방식 정정 — 2026-11-01
 
 사용자는 PDF 변환·그림, 읽기 결과 적용·핵심 표시·본문 도움, Windows/macOS OCR을 묶어 OpenDataLoader 원본을 재사용하라고 제안했다. **추출·OCR은 OpenDataLoader PDF v2.5.17 원본 엔진을 연결하고, 편집기 UI는 이미 가져온 이음 원본을 유지한다.** 고정 커밋은 `8dfaad6843f0fb7d9717a42584e38889734169d6`이다. 원본 엔진 알고리즘·표 인식·OCR을 다시 작성하거나 상류 전체 벤치마크를 재검증하지 않는다.
@@ -84,7 +92,7 @@ Markdown PNG 출력은 실제 Linux17/17에서 원본192dpi 엔진의4쪽 PNG·�
 | Orca 기본 작업 흐름 | 중첩분할·탭·worktree·PTY·주요 Git/PR/CI 구현 | 생성→개발→검토→보관 전체 동선과 OS별 동등성 인수 |
 | 브라우저·Design Mode | Lightpanda 기본 백그라운드 탐색과 Chromium 호환 선택 구현, Linux/macOS 실제 실행 확인 | Windows WSL2 실제15/15 확인 완료. Design Mode의 요소/CSS/화면 선택과 에이전트 전달이 남음. 광범위한 사이트/성능 비교는 후속 |
 | 원격·모바일·확장 | G7 별도 후속 | 이번 골의 종료 조건에서 분리. 기본 Orca 작업 흐름과 나머지 Office 제공자는 유지. Google Drive는 사용자 정정으로 먼 후속 |
-| 한글 개선 | hallym-kordoc 기본 스킬·이음 HWPX 표시, 별도 HOP 앱 배포 제거 | HOP의 글꼴/조판/탭/여백/선명도 개선분을 원본과 대조·반영하고 OS별 확인 |
+| 한글 개선 | hallym-kordoc·이음 HWPX·HOP 원본 개선9패치/설치 글꼴/선명도 구현, 실제 Linux34/34 | Windows/macOS 새 글꼴 도우미를 최종 설치본에서 확인. 별도 HOP 앱 배포 없음 |
 | 옵시디언식 관리 | 내비게이터·프로젝트 노트·Bases 보기·썸네일·폴더 템플릿·지원 범위 .base 교환 구현 | 문서/작업공간을 함께 쓰는 전체 동선 및 OS별 마무리 |
 | 업데이트·최종 전달 | 0.2.7 설치본6종 공개, Windows/macOS 설치·공식 이음 앱 연결 각20/20, 실제 v0.2.2→0.2.7 Windows 업그레이드17/17·구형 번들 잔존0 확인 | 남은 변경을 포함한 OS 설치본과 요구 기능의 최종 인수. 이미 통과한 설치/보존 검사를 이유 없이 다시 개발하지 않음 |
 
@@ -99,7 +107,7 @@ Markdown PNG 출력은 실제 Linux17/17에서 원본192dpi 엔진의4쪽 PNG·�
 | 5. PDF OS OCR — 완료 | `4031119`, OpenDataLoader 원본 연결. Windows x64/macOS arm64/Linux x64 각8/8, Linux 실제 UI11/11. 원본 OCR의 인식 한계는 유지. 잔여에 포함하지 않음 |
 | 6. Design Mode | 요소·CSS·화면 선택을 같은 작업 에이전트로 전달 |
 | 7. Windows Lightpanda — 완료 | `42dec7c` 검사. Windows x64/실제 WSL2에서 원본 설치·MCP·JS/fetch·입력/추출·두 세션·권한·중지/정상 종료15/15. 제품 코드 변경 없이 확인. 잔여에 포함하지 않음 |
-| 8. HOP 개선 패치 | 필요한 글꼴·조판·탭·여백·선명도 개선분 반영/확인. 별도 HOP 앱 번들은 제외 유지 |
+| 8. HOP 개선 패치 — 구현·Linux 완료 | 원본9패치·글꼴 catalog·선명도 재사용, 실제 Linux34/34·전체1270/1270. Windows/macOS 글꼴 도우미는 최종 OS 인수에 포함. 별도 HOP 앱 번들 제외 |
 | 기존 요구 최종 인수 | 최초 A01–A14와 추가 UX: Orca 생성→개발→검토→보관, Office/doory, PKM 전체 동선과 필요한 OS 경로. 이미 통과한 검사는 관련 변경/실패 없으면 재개발하지 않음 |
 | 설치본 전달·골 종료 | 위 잔여를 닫고 HTML2건·PNG1건·Markdown 호스트/설정1건·파일 검색 재정렬1건·PDF노트1건·PDF변환/그림1건·Dropbox1건·OpenDataLoader 추출/OS OCR1건·PDF 읽기 활용 확인1건·Windows WSL2 확인1건 및 나머지 완료 변경을 포함한 OS 설치본 전달. 원래 요구+추가 수정 충족 시 종료하며 버전 숫자는 조건이 아님 |
 

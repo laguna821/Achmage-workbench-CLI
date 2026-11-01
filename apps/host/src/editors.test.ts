@@ -165,6 +165,18 @@ describe("office editor pages", () => {
       const face = Buffer.from(await (await get(`/api/fonts/face/${match.id}`)).arrayBuffer());
       expect([0x00010000, 0x4f54544f, 0x74727565]).toContain(face.readUInt32BE(0));
     }
+    expect((await get("/api/fonts/hwp-catalog", null)).status).toBe(401);
+    if (process.platform === "linux") {
+      const snapshot = await (await get("/api/fonts/hwp-catalog")).json() as { revision: string; faces: { id: string; family: string }[] };
+      expect(snapshot.faces.length).toBeGreaterThan(0);
+      expect(JSON.stringify(snapshot)).not.toMatch(/\.(ttf|otf|ttc|otc)"/i);
+      const face = snapshot.faces[0]!;
+      expect((await get(`/api/fonts/hwp-face/${face.id}?revision=old`)).status).toBe(404);
+      const loaded = await get(`/api/fonts/hwp-face/${face.id}?revision=${snapshot.revision}`);
+      expect(loaded.status).toBe(200);
+      expect(Number.isInteger(Number(loaded.headers.get("x-workbench-font-index")))).toBe(true);
+      expect([0x00010000, 0x4f54544f, 0x74727565, 0x74746366]).toContain(Buffer.from(await loaded.arrayBuffer()).readUInt32BE(0));
+    }
   });
 
   it("save bytes as the next revision, and refuse stale or foreign bytes", async () => {

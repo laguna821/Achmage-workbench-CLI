@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import JSZip from "jszip";
-import initHwp, { HwpDocument } from "../../vendor/ieumoffice/vendor/rhwp-core/rhwp.js";
+import initHwp, { HwpDocument } from "../../third_party/hop/rhwp-core/rhwp.js";
 import { hwpToText } from "../../third_party/ieumoffice/file-parse/hwp.ts";
 import { mindmapFixture } from "./mindmap-fixture.ts";
 import { epubFixture } from "./epub-fixture.ts";
@@ -34,7 +34,7 @@ export async function fixture(file: string, format: Format) {
   else if (format === "pptx") copyFileSync(resolve("vendor/ieumoffice/packages/pptx-engine/tests/fixtures/01_standard_business.pptx"), file);
   else if (format === "xlsx") writeFileSync(file, await xlsxFixture());
   else if (format === "hwpx") {
-    await initHwp({ module_or_path: readFileSync(resolve("vendor/ieumoffice/vendor/rhwp-core/rhwp_bg.wasm")) });
+    await initHwp({ module_or_path: readFileSync(resolve("third_party/hop/rhwp-core/rhwp_bg.wasm")) });
     const doc = HwpDocument.createEmpty(); doc.createBlankDocument(); doc.insertText(0, 0, 0, "Original text."); writeFileSync(file, doc.exportHwpx()); doc.free();
   } else {
     const doc = await PDFDocument.create(); doc.addPage([400, 600]).drawText("Original text.", { x: 30, y: 550, size: 18 }); writeFileSync(file, await doc.save({ useObjectStreams: false }));

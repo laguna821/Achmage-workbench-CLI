@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { beforeAll, expect, it } from "vitest";
-import init, { HwpDocument } from "../../../vendor/ieumoffice/vendor/rhwp-core/rhwp.js";
+import init, { HwpDocument } from "../../../third_party/hop/rhwp-core/rhwp.js";
 import { hwpWasmPath } from "./hwp-resource.ts";
 import { editHwp } from "./hwp-ops.mjs";
 import { EventBus } from "./bus.ts";
