@@ -10,6 +10,7 @@ import type { OfficeAiHostActions } from "./office-settings-controls.mjs";
 import type { OfficeKnowledge } from "./office-knowledge.mjs";
 import type { OfficeSkills } from "./office-skills.ts";
 import { OfficePreferences } from "./office-preferences.ts";
+import { OfficeMarkdown } from "./office-markdown.mjs";
 
 // Original Office accepts 20 pictures of up to 5 MiB, encoded as base64, plus text.
 export const OFFICE_AI_INPUT_LIMIT = 160_000_000;
@@ -49,6 +50,7 @@ export function officeAiRequest(value: unknown, stream: boolean): OfficeAiStream
 export class OfficeAi {
   drive?: import("./office-drive.mjs").OfficeDrive;
   readonly preferences: OfficePreferences;
+  readonly markdown: OfficeMarkdown;
   private engine: Promise<OfficeAiEngine> | null = null;
   private readonly active = new Map<string, { owner: string; controller: AbortController; tool: boolean }>();
   private readonly load: () => Promise<OfficeAiEngine>;
@@ -59,6 +61,7 @@ export class OfficeAi {
   private readonly knowledge?: OfficeKnowledge;
   constructor(dataDir: string, engine?: OfficeAiEngine, sessions?: OfficeSessions, hostActions?: OfficeAiHostActions, skills?: OfficeSkills, knowledge?: OfficeKnowledge) {
     this.preferences = new OfficePreferences(dataDir);
+    this.markdown = new OfficeMarkdown(dataDir);
     this.knowledge = knowledge;
     this.skills = skills;
     this.sessions = sessions;
@@ -70,6 +73,7 @@ export class OfficeAi {
   get activeCount() { return this.active.size; }
   close() {
     this.closed = true;
+    this.markdown.close();
     this.sessions?.close();
     for (const run of this.active.values()) run.controller.abort();
     void this.engine?.then((engine) => engine.close?.()).catch(() => {});
@@ -163,7 +167,7 @@ export class OfficeAi {
   }
   async handle(req: IncomingMessage, res: ServerResponse, url: URL, bearer: string | null, documents: Documents, grants: EditorGrants): Promise<boolean> {
     if (await this.skills?.handle(req, res, url, bearer, grants)) return true;
-    const match = /^\/api\/artifacts\/([^/]+)\/ai\/(preferences|preferences-panel|drive-state|settings|selection|statuses|stream|chat|cancel|history|turn-start|turn-events|turn-finish|tool-capabilities|tool)$/.exec(url.pathname);
+    const match = /^\/api\/artifacts\/([^/]+)\/ai\/(preferences|preferences-panel|markdown-upload|markdown-read-image|drive-state|settings|selection|statuses|stream|chat|cancel|history|turn-start|turn-events|turn-finish|tool-capabilities|tool)$/.exec(url.pathname);
     if (!match) return false;
     const [, artifactId, operation] = match;
     const authorize = () => {
@@ -176,6 +180,28 @@ export class OfficeAi {
     const get = operation === "preferences" || operation === "drive-state" || operation === "settings" || operation === "statuses" || operation === "history" || operation === "tool-capabilities";
     if (req.method !== (get ? "GET" : "POST")) throw new HttpError(405, "method_not_allowed", "허용되지 않은 AI 요청입니다.");
     if (operation === "preferences") { sendJson(res, 200, this.preferences.snapshot()); return true; }
+    if (operation === "markdown-read-image") {
+      let data: unknown;
+      try { data = JSON.parse((await readBody(req, 12_000)).toString("utf8")); } catch (error) { if (error instanceof HttpError) throw error; return invalid(); }
+      if (documents.get(artifactId!).format !== "markdown" || !record(data) || !text(data.src, 8192)) return invalid();
+      const run = this.begin(`images:${owner}`, randomUUID(), res, 4);
+      try { sendJson(res, 200, await this.markdown.readImage(data.src, run.signal)); }
+      finally { run.finish(); }
+      return true;
+    }
+    if (operation === "markdown-upload") {
+      const check = () => {
+        authorize();
+        if (documents.get(artifactId!).format !== "markdown") throw new HttpError(415, "office_markdown", "Markdown 문서의 그림만 업로드할 수 있습니다.");
+        documents.registry.assertWrite(artifactId!, grants.access(bearer!));
+      };
+      check(); let data: unknown;
+      try { data = JSON.parse((await readBody(req, 36_000_000)).toString("utf8")); } catch (error) { if (error instanceof HttpError) throw error; return invalid(); }
+      const run = this.begin(`images:${owner}`, randomUUID(), res, 2);
+      try { sendJson(res, 200, await this.markdown.upload(data, run.signal, check)); }
+      finally { run.finish(); }
+      return true;
+    }
     if (operation === "preferences-panel") {
       let raw: unknown;
       try { raw = JSON.parse((await readBody(req, 8000)).toString("utf8")); } catch (error) { if (error instanceof HttpError) throw error; return invalid(); }

@@ -10,6 +10,7 @@ import { preparePrintHtml } from "./print-html.ts";
 import { createOfficeWiki } from "./wiki.ts";
 import { exportTextWord, markdownWordBytes } from "./text-word-output.ts";
 import { installMcp } from "./mcp.ts";
+import { createMarkdownSettings } from "./markdown-settings.ts";
 
 /** The original Markdown/HTML renderers serialize their own source; never normalize it here. */
 export async function createTextEditor(kind: "markdown" | "html") {
@@ -122,6 +123,8 @@ export async function createTextEditor(kind: "markdown" | "html") {
     };
     input.click();
   });
+  const readRemoteImage = (src: string) => gateway.aiSession(id).json<{ base64: string; mime: string } | null>("markdown-read-image", { src });
+  const printOptions = { baseUrl: assetBase, ...(kind === "markdown" ? { imageUrl: resolveTextImage, readRemoteImage } : {}) };
   const api = {
     consumePending: async () => path,
     takeSeed: async () => null,
@@ -182,9 +185,10 @@ export async function createTextEditor(kind: "markdown" | "html") {
     ...ai.desktop,
     aiSubscription: ai.subscription, subscription: ai.subscription,
     ...createOfficeWiki(init),
-    getImageHost: async () => null, setImageHost: unavailable("이미지 호스트"), uploadImage: rejected("이미지 업로드"),
+    ...(kind === "markdown" ? createMarkdownSettings(gateway, id, prefs.markdownTheme) : {}),
     pickImage, saveImage,
     readImage: async (src: string) => {
+      if (kind === "markdown" && /^https?:\/\//i.test(unresolveTextImage(src))) return readRemoteImage(unresolveTextImage(src));
       try { return await gateway.readImage(id, unresolveTextImage(src)); }
       catch (error) { if (error instanceof GatewayError && [400, 403, 404, 415].includes(error.status)) return null; throw error; }
     },
@@ -215,14 +219,14 @@ export async function createTextEditor(kind: "markdown" | "html") {
     },
     exportPdf: async (request: { html: string }) => {
       try {
-        const job = await preparePrintHtml(request.html, { baseUrl: assetBase, ...(kind === "markdown" ? { imageUrl: resolveTextImage } : {}) });
+        const job = await preparePrintHtml(request.html, printOptions);
         const result = await htmlOutput(revision, job, "html-pdf");
         return result?.path ? { ok: true, path: result.path } : { ok: true, canceled: true };
       } catch (error) { report(error); return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
     },
     prepareImageExport: async (request: { html: string; suggestedName: string }) => {
       try {
-        const job = await preparePrintHtml(request.html, { baseUrl: assetBase, imageUrl: resolveTextImage });
+        const job = await preparePrintHtml(request.html, printOptions);
         const prepared = await prepareImageOutput(revision, request.suggestedName, job);
         return prepared ? { ok: true, ...prepared } : { ok: true, canceled: true };
       } catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
@@ -236,7 +240,7 @@ export async function createTextEditor(kind: "markdown" | "html") {
       catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
     },
     printHtml: async (request: { html: string }) => {
-      try { await htmlOutput(revision, await preparePrintHtml(request.html, { baseUrl: assetBase }), "html-print"); return { ok: true }; }
+      try { await htmlOutput(revision, await preparePrintHtml(request.html, printOptions), "html-print"); return { ok: true }; }
       catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
     },
     renderPrintPreview: async () => null,

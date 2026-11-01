@@ -6,6 +6,7 @@ import type { OfficeMcpRequest, OfficeMcpReply } from "../../../../../packages/c
 import type { BrowserResult, OfficeOutputFormat, OfficeOutputPlan, OfficeOutputRequest, OfficePresentation } from "../../../../../packages/contracts/src/office-output.ts";
 import { OfficeOutputDialog } from "./OfficeOutputDialog.tsx";
 import { OfficeImageOutputDialog } from "./OfficeImageOutputDialog.tsx";
+import type { OfficeMarkdownRequest, OfficeMarkdownSnapshot } from "../../../../../packages/contracts/src/office-markdown.ts";
 import { OfficeReferencePicker } from "./OfficeReferencePicker.tsx";
 import type { OfficeDocumentChoice, OfficeReferenceRequest, OfficeReferenceSnapshot } from "../../../../../packages/contracts/src/office-references.ts";
 import { pickOfficeDrive } from "../OfficeDrive.tsx";
@@ -188,6 +189,17 @@ export const OfficeEditor = forwardRef<
     if (referenceSession.current !== sessionId) referenceSnapshot.current = null;
     referencePickerClose.current?.();
   }, [sessionId]);
+
+  const handleMarkdown = async (message: OfficeMarkdownRequest) => {
+    const target = frame.current?.contentWindow, opening = opened.current, owner = latest.current.id;
+    if (!target || !opening) return;
+    try {
+      if (latest.current.format !== "markdown" || !["read", "host", "theme"].includes(message.action)) throw new Error("Markdown 문서의 설정만 변경할 수 있습니다.");
+      const value = await api.request<OfficeMarkdownSnapshot>("POST", "/api/office-markdown", { action: message.action, value: message.value, revision: message.revision });
+      if (target !== frame.current?.contentWindow || owner !== latest.current.id) return;
+      target.postMessage({ type: "office:markdown-result", requestId: message.requestId, value }, opening.origin);
+    } catch (error) { target.postMessage({ type: "office:markdown-result", requestId: message.requestId, error: error instanceof Error ? error.message : String(error) }, opening.origin); }
+  };
 
   const handleOutput = async (message: OfficeOutputRequest) => {
     const target = frame.current?.contentWindow, origin = opened.current?.origin;
@@ -461,6 +473,7 @@ export const OfficeEditor = forwardRef<
   const referenceHandler = useRef(handleReference); referenceHandler.current = handleReference;
   const skillsHandler = useRef(handleSkills); skillsHandler.current = handleSkills;
   const outputHandler = useRef(handleOutput); outputHandler.current = handleOutput;
+  const markdownHandler = useRef(handleMarkdown); markdownHandler.current = handleMarkdown;
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -473,6 +486,7 @@ export const OfficeEditor = forwardRef<
         case "office:references": void referenceHandler.current(message); break;
         case "office:ai-request": void aiHandler.current(message); break;
         case "office:output": void outputHandler.current(message); break;
+        case "office:markdown": void markdownHandler.current(message); break;
         case "office:copied":
           if (copied.current.has(message.artifactId)) {
             const expectedSession = copied.current.get(message.artifactId); copied.current.delete(message.artifactId);

@@ -303,6 +303,16 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         return sendJson(res, 200, { origin, url: `${origin}/office/settings.html` });
       }
       if (path.startsWith("/api/office-ai/") && options.officeAi && await options.officeAi.handleSettings(req, res, url)) return;
+      if (path === "/api/office-markdown" && options.officeAi && method === "POST") {
+        const body = await readJson(req), store = options.officeAi.markdown;
+        if (body.action === "read") return sendJson(res, 200, store.snapshot());
+        if (!["host", "theme"].includes(String(body.action)) || typeof body.revision !== "string") throw new HttpError(400, "office_markdown", "Markdown 설정 요청을 확인해 주세요.");
+        const controller = new AbortController(), abort = () => controller.abort(); res.once("close", abort);
+        try {
+          const saved = await store.write({ [body.action === "host" ? "imageHost" : "markdownTheme"]: body.value }, body.revision, { signal: controller.signal });
+          return sendJson(res, 200, saved.snapshot);
+        } finally { res.removeListener("close", abort); }
+      }
       if (path === "/api/office-preferences" && options.officeAi && method === "POST") {
         const body = await readJson(req, 8000);
         if (typeof body.channel !== "string" || !Array.isArray(body.args) || body.args.length > 1) throw new HttpError(400, "office_preferences", "문서 설정 요청을 확인해 주세요.");

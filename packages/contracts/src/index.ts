@@ -782,6 +782,7 @@ export type OfficeHostMessage =
   | { type: "office:copy-rejected"; artifactId: string }
   | { type: "office:copy-accepted"; artifactId: string }
   | import("./office-output.ts").OfficeOutputResult
+  | import("./office-markdown.ts").OfficeMarkdownReply
   | import("./office-references.ts").OfficeReferenceResult
   | {
       type: "office:init";
@@ -819,6 +820,7 @@ export type OfficePageMessage =
   | { type: "office:headless-result"; ok: boolean; error?: string }
   | import("./office-skills.ts").OfficeSkillRequest
   | import("./office-output.ts").OfficeOutputRequest
+  | import("./office-markdown.ts").OfficeMarkdownRequest
   | import("./office-references.ts").OfficeReferenceRequest
   | { type: "office:ai-request"; requestId: string; action: "prepare" | "new-session" | "settings" | "skills"; sessionId: string | null; freezeReferences?: string[] }
   | { type: "office:copied"; artifactId: string; keepSource?: boolean }

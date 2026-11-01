@@ -5,12 +5,14 @@ import type { HtmlJob } from "../../../packages/contracts/src/office-output.ts";
  * reads use the current document's existing grant or the installed Office UI. */
 export async function preparePrintHtml(html: string, options: {
   baseUrl?: string; imageUrl?: (src: string) => string;
+  readRemoteImage?: (src: string) => Promise<{ base64: string; mime: string } | null>;
   widthIn?: number; heightIn?: number; margin?: number;
 } = {}): Promise<HtmlJob> {
   const doc = new DOMParser().parseFromString(html, "text/html");
   const resourceBase = new URL(options.baseUrl ?? document.baseURI, document.baseURI).href;
   const base = new URL(doc.querySelector("base[href]")?.getAttribute("href") ?? resourceBase, resourceBase).href;
   const permittedBase = options.baseUrl ? new URL(options.baseUrl, location.href) : null;
+  const localResource = (url: URL) => url.origin === location.origin && url.pathname.startsWith("/office/") || Boolean(permittedBase && url.origin === permittedBase.origin && url.pathname.startsWith(permittedBase.pathname));
   let total = new TextEncoder().encode(html).length;
   const cache = new Map<string, Promise<Blob>>();
   const assets: { mime: string; base64: string }[] = [], assetIds = new Map<string, number>();
@@ -22,8 +24,7 @@ export async function preparePrintHtml(html: string, options: {
   };
   const read = (source: string, from: string) => {
     const url = new URL(source, from);
-    const local = (url.origin === location.origin && url.pathname.startsWith("/office/")) ||
-      (permittedBase && url.origin === permittedBase.origin && url.pathname.startsWith(permittedBase.pathname));
+    const local = localResource(url);
     if (!local && url.protocol !== "blob:" && url.protocol !== "data:") throw new Error(`출력 자산을 현재 문서에서 읽을 수 없습니다: ${source.slice(0,120)}`);
     if (!cache.has(url.href)) cache.set(url.href, (async () => {
       const response = await fetch(url, { credentials: "omit", redirect: "error" });
@@ -66,7 +67,16 @@ export async function preparePrintHtml(html: string, options: {
   for (const element of doc.querySelectorAll("img[src],image[href],image[xlink\\:href]")) {
     const attr = element.hasAttribute("src") ? "src" : element.hasAttribute("href") ? "href" : "xlink:href";
     const src = element.getAttribute(attr)!;
-    element.setAttribute(attr, await data(options.imageUrl?.(src) ?? src, base));
+    let source = options.imageUrl?.(src) ?? src;
+    const url = new URL(source, base);
+    if (options.readRemoteImage && /^https?:$/.test(url.protocol) && !localResource(url)) {
+      const image = await options.readRemoteImage(url.href);
+      if (!image) throw new Error(`출력할 원격 그림을 읽지 못했습니다: ${url.hostname}`);
+      total += image.base64.length * 3 / 4;
+      if (total > 48 * 1024 * 1024) throw new Error("출력할 그림·글꼴의 합계가 너무 큽니다.");
+      source = `data:${image.mime};base64,${image.base64}`;
+    }
+    element.setAttribute(attr, await data(source, base));
     element.removeAttribute("srcset");
   }
   for (const node of doc.querySelectorAll('script,base,iframe,object,embed,meta[http-equiv],link:not([rel="stylesheet"])')) node.remove();
