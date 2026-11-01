@@ -1,0 +1,34 @@
+name: PDF original runtime
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/unified-workbench-v0.3]
+    paths:
+      - '.github/workflows/pdf-runtime.yml'
+      - 'apps/host/src/pdf-loader.ts'
+      - 'scripts/check-pdf-loader.ts'
+jobs:
+  runtime:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Install original releases and recognize fixture PDFs
+        run: node scripts/check-pdf-loader.ts pdf-runtime-evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pdf-runtime-${{ matrix.os }}
+          path: |
+            pdf-runtime-evidence/verification.json
+            pdf-runtime-evidence/ocr-result.json
+            pdf-runtime-evidence/data/pdf-loader/*/ocr-packages.txt

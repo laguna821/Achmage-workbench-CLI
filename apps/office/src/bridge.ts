@@ -241,9 +241,9 @@ export class Gateway {
     return (await this.call("POST", `/api/artifacts/${artifactId}/mindmap/save?revision=${revision}`, bytes.slice().buffer)).json();
   }
 
-  async pdf<T = unknown>(artifactId: string, revision: number, operation: string, request: PdfRequest, source?: ArrayBuffer): Promise<T> {
+  async pdf<T = unknown>(artifactId: string, revision: number, operation: string, request: PdfRequest, source?: ArrayBuffer, signal?: AbortSignal): Promise<T> {
     if (["save", "blank-page", "page-size", "crop"].includes(operation)) post({ type: "office:saving" });
-    const response = await this.call("POST", `/api/artifacts/${artifactId}/pdf/${operation}?revision=${revision}`, encodePdfRequest(request, source), { "content-type": "application/octet-stream" });
+    const response = await this.call("POST", `/api/artifacts/${artifactId}/pdf/${operation}?revision=${revision}`, encodePdfRequest(request, source), { "content-type": "application/octet-stream" }, signal);
     return (["recover", "copy", "redact-copy"].includes(operation) ? response.arrayBuffer() : response.json()) as Promise<T>;
   }
 

@@ -9,6 +9,7 @@ import { beginOfficeCopy, officeCopyBusy, type OfficeCopy } from "./copy.ts";
 import { pdfJobs } from "./pdf-jobs.ts";
 import { noteRequests } from "./pdf-notes.ts";
 import { pdfOfficeConvert } from "./pdf-office-convert.tsx";
+import { configurePdfLoader } from "./pdf-loader.tsx";
 import { preparePdfImages, writePdfImages, finishPdfImages, revealExport } from "./output.ts";
 
 const init = await handshake(), gateway = new Gateway(init.token);
@@ -174,6 +175,7 @@ const fail = (channel: string) => { throw new Error(`PDF의 이 서비스를 아
 const jobs = pdfJobs(init, gateway, ai, () => revision);
 const note = noteRequests();
 const convertOffice = pdfOfficeConvert(init, gateway, () => revision, async () => init.readOnly || await flush());
+configurePdfLoader(init, gateway, () => revision, async () => init.readOnly || await flush());
 const persistResult = async (next: number) => {
   revision = contentRevision = next; restored = false; epoch++;
   historyBase = { revision: next };
@@ -270,7 +272,7 @@ useTransport({
       }
       case "pdf:list-edit-fonts": return gateway.pdf(id, revision, "fonts", {});
       case "pdf:can-draw-text": return gateway.pdf(id, revision, "can-draw", { text: args[0], font: args[1], bold: args[2], italic: args[3] });
-      case "pdf:ocr-page": return null; // Original Linux contract: no system OCR engine.
+      case "pdf:ocr-page": return gateway.pdf(id, revision, "ocr-page", { png: args[0] });
       case "pdf:get-username": return preferences.name();
       case "pdf:auto-rename": checkPath(args[0]); return { renamed: false };
       case "pdf:is-untitled": case "pdf:is-untitled-copy": checkPath(args[0]); return false;

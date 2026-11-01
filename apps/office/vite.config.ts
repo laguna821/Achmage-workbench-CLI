@@ -6,6 +6,7 @@ import { collectModules, thirdPartyNotices } from "./notices.ts";
 import { patchPdfHistory } from "./pdf-history-patch.ts";
 import { patchPdfCopy } from "./pdf-copy-patch.ts";
 import { patchPdfImageExport } from "./pdf-image-export-patch.ts";
+import { patchPdfLoader } from "./pdf-loader-patch.ts";
 import { patchOfficeSkillConversation } from "./skill-conversation-patch.ts";
 import { templateFonts } from "./template-fonts-build.ts";
 
@@ -422,7 +423,7 @@ export default defineConfig({
     originalSettingsPanes(),
     originalOfficeConversation(),
     { name: "workbench-pdf-history", enforce: "pre", transform(code, id) {
-      return id === `${ieum}/apps/pdf/src/renderer/App.tsx` ? patchPdfImageExport(patchPdfCopy(patchPdfHistory(code, here("./src/pdf-history.ts"))), here("./src/pdf-history.ts")) : null;
+      return id === `${ieum}/apps/pdf/src/renderer/App.tsx` ? patchPdfLoader(patchPdfImageExport(patchPdfCopy(patchPdfHistory(code, here("./src/pdf-history.ts"))), here("./src/pdf-history.ts")), here("./src/pdf-loader.tsx")) : null;
     } },
     textEditorPlatform(),
     react(),

@@ -32,6 +32,7 @@ import { Projects } from "./project.ts";
 import { handleProject } from "./project-http.ts";
 import { handleEntry, WorksDir } from "./entry.ts";
 import { DropboxFolders } from "./dropbox.ts";
+import { pdfLoader } from "./pdf-loader.ts";
 import { FindTool, withFindTool } from "./find-tool.ts";
 import { findToolInstructions } from "./search.ts";
 import { adoptLoginShellPath } from "./shell-env.ts";
@@ -226,6 +227,7 @@ async function stop() {
   if (stopping) return;
   stopping = true;
   dropbox.close();
+  await pdfLoader(dataDir).close();
   officeImport?.close();
   officeDrive?.close();
   officeControl?.close();

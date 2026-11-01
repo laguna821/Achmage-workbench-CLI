@@ -19,6 +19,7 @@ import { OfficeAi } from "./office-ai.ts";
 import { OfficeReferences } from "./office-references.ts";
 import { OfficeStyles } from "./office-styles.ts";
 import { officeGenerated } from "./office-generated.ts";
+import { pdfLoader } from "./pdf-loader.ts";
 
 // The office editors (IeumOffice's editor screens, apps/office) run on their own origin, a second
 // port on 127.0.0.1. Their code is third-party and reads documents from anywhere, so it never
@@ -237,6 +238,17 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
         }
         const { request, source } = decodePdfRequest(await readBody(req, PDF_MAX_BYTES + PDF_REQUEST_MAX_BYTES + 4));
         if (request.path !== undefined && request.path !== artifact.path) throw new HttpError(403, "pdf_path", "열린 PDF만 처리할 수 있습니다.");
+        const loader = pdfLoader(documents.dataDir);
+        if (operation === "loader-state") return sendJson(res, 200, loader.status());
+        if (operation === "loader-install") { void loader.install(request.ocr === true ? "ocr" : "core"); return sendJson(res, 200, loader.status()); }
+        if (operation === "loader-cancel") { loader.cancelInstall(); return sendJson(res, 200, loader.status()); }
+        if (operation === "ocr-page") return sendJson(res, 200, await (await import("./pdf-loader-image.mjs")).ocrPdfImage(loader, request.png));
+        if (operation === "extract") {
+          if (request.password !== undefined && (typeof request.password !== "string" || request.password.length > 4096) || request.pages !== undefined && !Array.isArray(request.pages)) throw new HttpError(400, "pdf_request", "PDF 추출 요청이 올바르지 않습니다.");
+          const controller = new AbortController(), stop = () => controller.abort(); res.once("close", stop);
+          try { return sendJson(res, 200, await loader.extract(source ?? readFileSync(documents.revisionPath(id!, revision)), { pages: request.pages as number[] | undefined, password: request.password as string | undefined, ocr: request.ocr === true, images: request.images === true, signal: controller.signal })); }
+          finally { res.off("close", stop); }
+        }
         const engine = await import("./pdf-ops.mjs");
         if (operation === "fonts") return sendJson(res, 200, engine.listEditFonts());
         if (operation === "can-draw") {

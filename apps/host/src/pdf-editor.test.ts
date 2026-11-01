@@ -28,6 +28,11 @@ describe("scoped PDF editor", () => {
     const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     const call = (operation: string, revision: number, request: Record<string, unknown>, token = writerToken, source?: ArrayBuffer, id = artifact.id) => fetch(`${origin}/api/artifacts/${id}/pdf/${operation}?revision=${revision}`, { method: "POST", headers: { authorization: `Bearer ${token}` }, body: encodePdfRequest(request, source) });
     try {
+      expect((await call("loader-state", 1, {}, "forged")).status).toBe(401);
+      expect((await call("extract", 1, { path: join(dir, "secret.pdf") })).status).toBe(403);
+      expect((await call("loader-state", 1, {})).status).toBe(200);
+      expect(await (await call("loader-state", 1, {})).json()).toMatchObject({ coreReady: false, ocrReady: false, state: "idle" });
+      expect(await (await call("ocr-page", 1, { png: "not-installed" })).json()).toBeNull();
       expect((await call("save", 1, {}, "forged")).status).toBe(401);
       expect((await call("save", 1, {}, readerToken)).status).toBe(423);
       expect((await call("save", 1, { path: join(dir, "secret.pdf") })).status).toBe(403);
