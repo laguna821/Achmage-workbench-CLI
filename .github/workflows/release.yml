@@ -20,6 +20,11 @@ on:
         description: 'Recheck existing installers using current acceptance scripts (empty: build)'
         type: string
         default: ''
+      smoke_os:
+        description: 'OS to recheck for smoke_run (normal builds always check both)'
+        type: choice
+        options: [both, windows-latest, macos-15]
+        default: both
       publish_run:
         description: 'Publish an already successful Installers run as a preview (empty: build)'
         type: string
@@ -272,12 +277,7 @@ jobs:
     needs: [windows, macos]
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            artifact: windows
-          - os: macos-15
-            artifact: macos
+      matrix: ${{ fromJSON(inputs.smoke_run && inputs.smoke_os == 'macos-15' && '{"include":[{"os":"macos-15","artifact":"macos"}]}' || inputs.smoke_run && inputs.smoke_os == 'windows-latest' && '{"include":[{"os":"windows-latest","artifact":"windows"}]}' || '{"include":[{"os":"windows-latest","artifact":"windows"},{"os":"macos-15","artifact":"macos"}]}') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

@@ -1,6 +1,6 @@
 // Installed-app acceptance: no install/link API call. The installer or first launch must
 // prepare the official standalone app, whose real GUI is then run with Workbench stopped.
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -11,6 +11,20 @@ import { client, startGateway, type Gateway } from "./setup-gateway.ts";
 
 type Check = (step: string, ok: boolean, detail?: string) => void;
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Hosted macOS runners register a large catalog. Check its stream without keeping tens of
+// megabytes in execFileSync's output buffer; retain only a boundary overlap and exit normally.
+async function registeredMacApp(entry: string): Promise<boolean> {
+  const child = spawn("/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister", ["-dump"], { stdio: ["ignore", "pipe", "pipe"], timeout: 30_000 });
+  let tail = "", found = false, error = "";
+  child.stdout.setEncoding("utf8"); child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (chunk: string) => { const text = tail + chunk; found ||= text.includes(entry); tail = text.slice(-entry.length); });
+  child.stderr.on("data", (chunk: string) => { error = (error + chunk).slice(-2000); });
+  return new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", (code) => code === 0 ? resolve(found) : reject(new Error(error || `lsregister exited ${code}`)));
+  });
+}
 
 export async function checkIeumSetup(app: string, outDir: string, check: Check) {
   mkdirSync(outDir, { recursive: true });
@@ -45,8 +59,7 @@ export async function checkIeumSetup(app: string, outDir: string, check: Check) 
     registration = execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")], { encoding: "utf8", env: { ...process.env, IEUM_TEST_SHORTCUT: entry }, timeout: 30_000 }).trim();
     check("시작 메뉴의 독립 이음 앱 대상 확인", realpathSync(registration).toLowerCase() === realpathSync(appPath).toLowerCase(), entry);
   } else if (process.platform === "darwin") {
-    registration = execFileSync("/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister", ["-dump"], { encoding: "utf8", maxBuffer: 20_000_000, timeout: 30_000 });
-    check("macOS 독립 앱 Launch Services 등록 확인", registration.includes(entry), entry);
+    check("macOS 독립 앱 Launch Services 등록 확인", await registeredMacApp(entry), entry);
   } else {
     registration = readFileSync(entry, "utf8");
     execFileSync("desktop-file-validate", [entry], { timeout: 10_000 });
