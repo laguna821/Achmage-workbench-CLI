@@ -101,7 +101,7 @@ export default function DocumentView({
   onPickTarget: () => Promise<Session | null>;
   onAiSettings: () => void;
   onExternalSetup: () => void;
-  onOpenArtifact: (artifactId: string, scope?: Pick<Artifact, "workId" | "workspaceId">) => void;
+  onOpenArtifact: (artifactId: string, scope?: Pick<Artifact, "workId" | "workspaceId"> & { preserveSource?: boolean }) => void;
   pickFile?: ((folder: string) => Promise<string | null>) | null;
   onToast: (message: string) => void;
 }) {
@@ -699,7 +699,9 @@ export default function DocumentView({
           {!officeEditing ? <button type="button" className="ghost-button" aria-expanded={documentChatOpen} onClick={() => setDocumentChatOpen(!documentChatOpen)}><Icon name="chat" size={14} /> 문서 AI</button> : null}
           <OfficeFileMenu api={rootApi} workId={work.id} workspaceId={artifact.workspaceId}
             onExportPdf={officeEditing && ["docx", "pptx", "markdown", "html"].includes(artifact.format) ? () => officeRef.current?.exportPdf() : undefined}
-            onExportDocx={officeEditing && artifact.format === "html" ? () => officeRef.current?.exportDocx() : undefined}
+            onExportDocx={officeEditing && ["markdown", "html"].includes(artifact.format) ? () => officeRef.current?.exportDocx() : undefined}
+            onExportOdt={officeEditing && ["markdown", "html"].includes(artifact.format) ? () => officeRef.current?.exportOdt() : undefined}
+            onOpenWord={officeEditing && artifact.format === "markdown" ? () => officeRef.current?.exportDocx(true) : undefined}
             sessionId={session?.workspaceId === artifact.workspaceId ? session?.id : undefined}
             cwd={state.workspaces[artifact.workspaceId ?? ""]?.cwd ?? work.cwd} sourceKey={artifact.id} pickFile={pickFile}
             beforeOpen={async () => await save() !== null} onOpenArtifact={onOpenArtifact} onToast={onToast} />

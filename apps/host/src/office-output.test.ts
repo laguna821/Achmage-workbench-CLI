@@ -11,6 +11,7 @@ import { SessionManager } from "./sessions.ts";
 import { Store } from "./store.ts";
 import { OfficeOutputs } from "./office-output.ts";
 import { runSave, type SaveEditorPort } from "../../office/src/hwp-save.ts";
+import { exportOdt } from "../../office/src/text-word-engine.mjs";
 
 beforeAll(async () => { await init({ module_or_path: readFileSync(hwpWasmPath()) }); });
 function setup(format: "hwp" | "hwpx" = "hwpx") {
@@ -34,8 +35,8 @@ it("saves the original Word HTML export as a new HTML document without changing 
     const plan = outputs.prepare(source.id, source.revision, "word.html");
     const html = Buffer.from('<!doctype html><html><body><h1>한글 내보내기</h1></body></html>');
     const result = await outputs.commit(source.id, plan.id, html, false);
-    expect(result.artifact.format).toBe("html");
-    expect(result.artifact.id).not.toBe(source.id);
+    expect(result.artifact!.format).toBe("html");
+    expect(result.artifact!.id).not.toBe(source.id);
     expect(readFileSync(result.path)).toEqual(html);
     expect(readFileSync(path)).toEqual(bytes);
     expect(manager.documents.get(source.id).revision).toBe(source.revision);
@@ -51,7 +52,7 @@ for (const from of ["hwp", "hwpx"] as const) for (const to of ["hwp", "hwpx"] as
     expect(await hwpToText(readFileSync(result.path))).toContain("COPY 원본 한글");
     expect((await hwpMemosOf(readFileSync(result.path))).map((memo) => memo.text)).toContain("이 메모를 보존");
     expect(readFileSync(path)).toEqual(bytes); expect(manager.documents.get(artifact.id).revision).toBe(1);
-    expect(result.artifact.id).not.toBe(artifact.id); expect(result.artifact.revision).toBe(1);
+    expect(result.artifact!.id).not.toBe(artifact.id); expect(result.artifact!.revision).toBe(1);
     expect(await outputs.commit(artifact.id, plan.id, body, false)).toEqual(result);
   } finally { doc.free(); }
 });
@@ -64,9 +65,32 @@ it("saves HTML as Word while preserving the original text and revision", async (
     await expect(outputs.commit(source.id, plan.id, Buffer.from("bad DOCX"), false)).rejects.toMatchObject({ status: 422 });
     const bytes = readFileSync(new URL("../../../vendor/ieumoffice/fixtures/generated/simple.docx", import.meta.url));
     const result = await outputs.commit(source.id, plan.id, bytes, false);
-    expect(result.artifact.format).toBe("docx"); expect(result.artifact.id).not.toBe(source.id);
+    expect(result.artifact!.format).toBe("docx"); expect(result.artifact!.id).not.toBe(source.id);
     expect(readFileSync(result.path)).toEqual(bytes); expect(readFileSync(path, "utf8")).toBe(html);
     expect(manager.documents.get(source.id).revision).toBe(source.revision);
+  } finally { doc.free(); }
+});
+for (const extension of ["md", "html"]) it(`exports ${extension} live Word/ODT bytes without rewriting or falsely registering the source`, async () => {
+  const { manager, work, outputs, doc } = setup();
+  try {
+    const path = join(work.cwd, `text.${extension}`), original = "\ufeff원문과 미저장 편집은 별개\r\n";
+    writeFileSync(path, original); const source = manager.openFile(work.id, path);
+    const bytes = readFileSync(new URL("../../../vendor/ieumoffice/fixtures/generated/simple.docx", import.meta.url));
+    const word = outputs.prepare(source.id, source.revision, "export.docx");
+    const result = await outputs.commit(source.id, word.id, bytes, false);
+    expect(result.artifact?.format).toBe("docx"); expect(readFileSync(result.path)).toEqual(bytes);
+    const plan = outputs.prepare(source.id, source.revision, "export.odt");
+    await expect(outputs.commit(source.id, plan.id, bytes, false)).rejects.toMatchObject({ code: "invalid_office_copy" });
+    let odt: Buffer | undefined;
+    const conversion = await exportOdt({ pickPath: async () => plan.path, docx: async () => bytes, confirm: async () => true,
+      write: async (_path, data) => { odt = Buffer.from(data); } });
+    expect(conversion.ok).toBe(true); expect(odt).toBeDefined();
+    const saved = await outputs.commit(source.id, plan.id, odt!, false);
+    expect(saved.artifact).toBeNull(); expect(readFileSync(saved.path)).toEqual(odt);
+    expect(await outputs.commit(source.id, plan.id, odt!, false)).toEqual(saved);
+    expect(readFileSync(path, "utf8")).toBe(original);
+    expect(manager.documents.get(source.id).revision).toBe(source.revision);
+    expect(() => outputs.prepare(source.id, source.revision, "bad.exe")).toThrow();
   } finally { doc.free(); }
 });
 it("Save As carries an intentional memo deletion into HWP while refusing an unlisted loss", async () => {

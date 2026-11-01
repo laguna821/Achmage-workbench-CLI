@@ -11,7 +11,7 @@ import { checkOfficeCopy } from "./office-copy-codec.ts";
 import { prepareTextCopy } from "./office-text-copy.ts";
 
 export type OutputPlan = { id: string; path: string; format: OfficeOutputFormat; exists: boolean; size: number };
-type Result = { path: string; artifact: Artifact; backupPath?: string };
+type Result = { path: string; artifact: Artifact | null; backupPath?: string };
 type Ticket = OutputPlan & { artifactId: string; revision: number; sourcePath: string; viewId: string | null; sessionId: string | null; sha256: string | null; expires: number; inputHash?: string; outputHash?: string; backupPath?: string; result?: Result };
 const hash = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 function disk(path: string) {
@@ -59,8 +59,9 @@ export class OfficeOutputs {
     const family = formatOf(path);
     const hangul = ["hwp", "hwpx"].includes(source.format) && ["hwp", "hwpx"].includes(format);
     const same = family === source.format && ["docx", "pptx", "xlsx", "markdown", "html", "xmind", "epub", "pdf"].includes(source.format);
-    const htmlExport = (source.format === "docx" && family === "html") || (source.format === "html" && family === "docx");
-    if (!hangul && !same && !htmlExport && format !== "pdf") throw new HttpError(415, "output_format", "현재 문서와 같은 파일 형식으로 저장해 주세요.");
+    const textExport = (source.format === "docx" && family === "html")
+      || (["markdown", "html"].includes(source.format) && ["docx", "odt"].includes(format));
+    if (!hangul && !same && !textExport && format !== "pdf") throw new HttpError(415, "output_format", "현재 문서에서 내보낼 수 있는 파일 형식을 선택해 주세요.");
     if (isWorkbenchPath(path) || path === resolve(source.path) || (existsSync(source.path) && path === realpathSync(source.path))) throw new HttpError(400, "output_source", "원본과 다른 파일 이름을 선택해 주세요. 원본 저장은 저장 메뉴를 사용하세요.");
     this.documents.registry.assertPath(path);
     const bytes = disk(path);
@@ -89,7 +90,8 @@ export class OfficeOutputs {
       if (source.path !== ticket.sourcePath) throw new HttpError(409, "output_source_moved", "원본의 위치가 바뀌었습니다. 위치를 다시 선택해 주세요.");
       if (realpathSync(dirname(ticket.path)) !== dirname(ticket.path)) throw new HttpError(409, "output_moved", "저장 폴더가 바뀌었습니다. 위치를 다시 선택하세요.");
       const finish = () => {
-        const artifact = this.register(source, ticket.path, ticket.revision, ticket.sessionId);
+        // An export-only format is a real file, not a document the editor claims to open.
+        const artifact = ticket.format === "odt" ? null : this.register(source, ticket.path, ticket.revision, ticket.sessionId);
         ticket.result = { path: ticket.path, artifact, ...(ticket.backupPath ? { backupPath: ticket.backupPath } : {}) };
         this.remember(ticket); return ticket.result;
       };

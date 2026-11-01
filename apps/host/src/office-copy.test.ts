@@ -48,13 +48,13 @@ for (const format of ["docx", "pptx", "xlsx", "xlsm", "md", "markdown", "html", 
     const saved = await f.outputs.commit(f.artifact.id, plan.id, f.bytes, false, f.access);
     expect(readFileSync(saved.path)).toEqual(f.bytes); expect(readFileSync(f.path)).toEqual(f.bytes);
     expect(f.artifact.workspaceId).toBeTruthy();
-    expect(saved.artifact.workspaceId).toBe(f.artifact.workspaceId);
-    expect(f.manager.documents.revisions(saved.artifact.id)[0]).toMatchObject({ sessionId: f.session.id, author: "user", derivedFrom: [{ artifactId: f.artifact.id, revision: 1 }] });
+    expect(saved.artifact!.workspaceId).toBe(f.artifact.workspaceId);
+    expect(f.manager.documents.revisions(saved.artifact!.id)[0]).toMatchObject({ sessionId: f.session.id, author: "user", derivedFrom: [{ artifactId: f.artifact.id, revision: 1 }] });
     const restarted = new OfficeOutputs(f.manager.documents, f.register);
     expect(await restarted.commit(f.artifact.id, plan.id, f.bytes, false, f.access)).toEqual(saved);
     await expect(restarted.commit(f.artifact.id, plan.id, Buffer.from("different"), false, f.access)).rejects.toMatchObject({ code: "output_payload_changed" });
     expect(f.manager.documents.get(f.artifact.id).revision).toBe(1);
-    expect(f.manager.documents.revisions(saved.artifact.id)).toHaveLength(1);
+    expect(f.manager.documents.revisions(saved.artifact!.id)).toHaveLength(1);
   } finally { await f.close(); }
 });
 
@@ -71,8 +71,8 @@ it("reopens persisted work/session/document state before replaying a completed r
     const result = await new OfficeOutputs(reopened.documents, reopened.registerOfficeCopy.bind(reopened))
       .commit(f.artifact.id, plan.id, Buffer.from("# latest unsaved buffer"), false, { viewId: "after-restart", writeToken: null });
     expect(result).toEqual(saved);
-    expect(reopened.documents.get(result.artifact.id).revision).toBe(1);
-    expect(reopened.documents.revisions(result.artifact.id)[0]?.sessionId).toBe(f.session.id);
+    expect(reopened.documents.get(result.artifact!.id).revision).toBe(1);
+    expect(reopened.documents.revisions(result.artifact!.id)[0]?.sessionId).toBe(f.session.id);
     expect(readFileSync(f.path)).toEqual(f.bytes);
   } finally {
     if (reopened) await reopened.shutdown(); store?.close();
@@ -106,7 +106,7 @@ it("recovers a publication whose registration failed, even after its view is rep
     const view = f.manager.documents.registry.open(f.artifact.id, { viewId: "reopened", windowId: "new", sessionId: f.session.id });
     const access = { viewId: view.view.viewId, writeToken: view.writeToken };
     const result = await new OfficeOutputs(f.manager.documents, f.register).commit(f.artifact.id, plan.id, f.bytes, false, access);
-    expect(result.path).toBe(plan.path); expect(f.manager.documents.revisions(result.artifact.id)).toHaveLength(1);
+    expect(result.path).toBe(plan.path); expect(f.manager.documents.revisions(result.artifact!.id)).toHaveLength(1);
   } finally { await f.close(); }
 });
 
@@ -125,7 +125,7 @@ it("does not retry an uncertain publication over a changed file", async () => {
 it("refuses format changes, damaged containers, macro loss and missing relocated assets", async () => {
   const f = await setup("xlsx");
   try {
-    expect(() => f.outputs.prepare(f.artifact.id, 1, "wrong.docx", f.access)).toThrow(/같은 파일 형식/);
+    expect(() => f.outputs.prepare(f.artifact.id, 1, "wrong.docx", f.access)).toThrow(expect.objectContaining({ code: "output_format" }));
     const plan = f.outputs.prepare(f.artifact.id, 1, "new.xlsx", f.access);
     await expect(f.outputs.commit(f.artifact.id, plan.id, Buffer.from("PK damaged"), false, f.access)).rejects.toMatchObject({ code: "invalid_office_copy" });
     await expect(f.outputs.commit(f.artifact.id, plan.id, await bytesFor("xlsm"), false, f.access)).rejects.toMatchObject({ code: "office_copy_macros" });
@@ -145,8 +145,8 @@ it("preserves the selected PPT design on a copy and keeps the original selection
     const original = styles.call(context, "selection-set", { expectedRevision: null, selection: { kind: "builtin", key: "clean", adjustments: ["파란 표지"] } }) as any;
     const plan = f.outputs.prepare(f.artifact.id, 1, "copy.pptx", f.access);
     const saved = await f.outputs.commit(f.artifact.id, plan.id, f.bytes, false, f.access);
-    const view = f.manager.documents.registry.open(saved.artifact.id, { viewId: "copy", windowId: "one", sessionId: f.session.id, claim: true });
-    const copy = styles.call({ artifactId: saved.artifact.id, token: grants.issue(saved.artifact.id, { viewId: "copy", writeToken: view.writeToken }, f.session.id), grants }, "selection-get") as any;
+    const view = f.manager.documents.registry.open(saved.artifact!.id, { viewId: "copy", windowId: "one", sessionId: f.session.id, claim: true });
+    const copy = styles.call({ artifactId: saved.artifact!.id, token: grants.issue(saved.artifact!.id, { viewId: "copy", writeToken: view.writeToken }, f.session.id), grants }, "selection-get") as any;
     expect(copy.selection).toEqual(original.selection); expect(copy.revision).not.toBe(original.revision);
     expect(styles.call(context, "selection-get")).toEqual(original);
   } finally { await f.close(); }

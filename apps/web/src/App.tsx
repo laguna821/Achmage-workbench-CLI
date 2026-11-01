@@ -267,7 +267,7 @@ export function App() {
     leaveGate.current.run(id, guard && leaving ? guard : null, then, (error) => setToast(error instanceof Error ? error.message : String(error)), pane ? activeTab(pane).id : id);
   }, []);
   const setViewOf = useCallback(
-    (id: PaneId, next: View | ((current: View) => View), openedScope?: Pick<Artifact, "workId" | "workspaceId">) => {
+    (id: PaneId, next: View | ((current: View) => View), openedScope?: Pick<Artifact, "workId" | "workspaceId"> & { preserveSource?: boolean }) => {
       const pane = paneById(layoutRef.current, id);
       if (!pane) return;
       const resolved = typeof next === "function" ? next(pane.view) : next;
@@ -278,7 +278,11 @@ export function App() {
       const content = { view: resolved, workId: artifact?.workId ?? pane.workId, sessionId: changedScope ? null : pane.sessionId };
       const existing = resolved.kind === "new" ? null : findTab(layoutRef.current, contentKey(content));
       const targetId = existing?.pane.id ?? id;
-      afterLeaving(targetId, resolved, () => updateLayout((current) => ({ ...setPane(current, targetId, content), focus: targetId })));
+      const show = () => updateLayout((current) => ({ ...setPane(current, targetId, content), focus: targetId }));
+      // A completed export may open a new tab after preserving the source's recovery
+      // buffer. withTabs keeps that source mounted; opening a conversion is not Save.
+      if (openedScope?.preserveSource && targetId === id && resolved.kind === "document" && ["document", "split"].includes(pane.view.kind)) leaveGate.current.run(id, null, show, () => {});
+      else afterLeaving(targetId, resolved, show);
     },
     [afterLeaving, updateLayout],
   );

@@ -17,7 +17,8 @@ export type OfficeHandle = {
   control(request: RendererControlRequest): Promise<RendererControlReply>;
   /** Run the original renderer's PDF action on current, possibly unsaved content. */
   exportPdf(): void;
-  exportDocx(): void;
+  exportDocx(open?: boolean): void;
+  exportOdt(): void;
   /** Save unsaved edits now; resolves with the saved revision, or null when they could not be saved. */
   flush(): Promise<number | null>;
   /** After a conflict: save my edits as the revision after `revision`; null when there was nothing to keep or it failed. */
@@ -40,7 +41,7 @@ export type OfficeStatus = { dirty: boolean; revision: number | null; conflict: 
  */
 export const OfficeEditor = forwardRef<
   OfficeHandle,
-  { api: Api; artifact: Artifact; access?: DocumentAccess; sessionId: string | null; hidden?: boolean; onStatus(status: OfficeStatus): void; onNotice(message: string): void; onCopied?(artifactId: string, scope?: Pick<Artifact, "workId" | "workspaceId">): void; onPrepareAi(revision: number): Promise<void>; onNewSession(revision: number): Promise<string>; onAiSettings(): void }
+  { api: Api; artifact: Artifact; access?: DocumentAccess; sessionId: string | null; hidden?: boolean; onStatus(status: OfficeStatus): void; onNotice(message: string): void; onCopied?(artifactId: string, scope?: Pick<Artifact, "workId" | "workspaceId"> & { preserveSource?: boolean }): void; onPrepareAi(revision: number): Promise<void>; onNewSession(revision: number): Promise<string>; onAiSettings(): void }
 >(function OfficeEditor({ api, artifact, access, sessionId, hidden = false, onStatus, onNotice, onCopied, onPrepareAi, onNewSession, onAiSettings }, ref) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [generation, setGeneration] = useState(0);
@@ -192,9 +193,12 @@ export const OfficeEditor = forwardRef<
           check();
           const result = await api.commitOfficeOutput(owner, plan.id, message.bytes, plan.replace);
           check();
-          copied.current.set(result.artifact.id, ownerSession ?? null);
-          reply({ path: result.path, artifactId: result.artifact.id });
+          if (result.artifact && (!message.intent || message.intent === "copy")) copied.current.set(result.artifact.id, ownerSession ?? null);
+          reply({ path: result.path, artifactId: result.artifact?.id ?? null });
           if (result.backupPath) handlers.current.onNotice(`이전 파일을 백업했습니다: ${result.backupPath}`);
+          if (message.intent === "open" && result.artifact) handlers.current.onCopied?.(result.artifact.id, { ...result.artifact, preserveSource: true });
+          // Exporting does not change the source renderer or its unsaved recovery buffer.
+          if (message.intent === "export") handlers.current.onNotice(`파일을 내보냈습니다: ${result.path}`);
         } finally { outputPlans.current.delete(plan.id); }
         return;
       }
@@ -237,7 +241,7 @@ export const OfficeEditor = forwardRef<
       check();
       const result = await api.commitOfficeOutput(owner, plan.id, bytes, plan.replace);
       handlers.current.onNotice(`PDF를 저장했습니다: ${result.path}`);
-      reply({ path: result.path, artifactId: result.artifact.id });
+      reply({ path: result.path, artifactId: result.artifact?.id ?? null });
     } catch (error) { reply(null, error instanceof Error ? error.message : String(error)); }
     finally { outputBusy.current = false; }
   };
@@ -533,11 +537,17 @@ export const OfficeEditor = forwardRef<
       }
       send({ type: "office:export-pdf" });
     },
-    exportDocx() {
+    exportDocx(open = false) {
       if (status.current.revision === null || outputBusy.current || outputPlans.current.size) {
         handlers.current.onNotice("문서를 여는 중이거나 다른 출력을 처리 중입니다."); return;
       }
-      send({ type: "office:export-docx" });
+      send({ type: "office:export-docx", open });
+    },
+    exportOdt() {
+      if (status.current.revision === null || outputBusy.current || outputPlans.current.size) {
+        handlers.current.onNotice("문서를 여는 중이거나 다른 출력을 처리 중입니다."); return;
+      }
+      send({ type: "office:export-odt" });
     },
     flush() {
       if (outputBusy.current || outputPlans.current.size || copied.current.size) return Promise.resolve(null);

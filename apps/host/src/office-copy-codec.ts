@@ -14,6 +14,14 @@ export async function checkOfficeCopy(bytes: Buffer, format: OfficeOutputFormat)
     if (!bytes.subarray(0, 8).toString().startsWith("%PDF-")) throw bad();
     return;
   }
+  if (format === "odt") {
+    try {
+      const zip = await JSZip.loadAsync(bytes);
+      if (await zip.file("mimetype")?.async("string") !== "application/vnd.oasis.opendocument.text"
+        || !zip.file("content.xml") || !zip.file("META-INF/manifest.xml")) throw bad();
+    } catch (error) { if (error instanceof HttpError) throw error; throw bad(); }
+    return;
+  }
   if (format === "xmind") {
     const { inspectMindmap } = await import("./mindmap-ops.mjs");
     if (await inspectMindmap(bytes) !== "ok") throw bad();

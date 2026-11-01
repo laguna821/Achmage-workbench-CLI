@@ -171,7 +171,7 @@ export class Api {
     const response = await fetch(`/api/artifacts/${artifactId}/outputs/${id}?replace=${replace ? 1 : 0}`, { method: "POST", headers: { authorization: `Bearer ${this.token}`, ...this.editorHeaders(), "content-type": "application/octet-stream" }, body: bytes });
     const json = await response.json();
     if (!response.ok) throw new ApiRequestError(response.status, json);
-    return json as { path: string; artifact: Artifact; backupPath?: string };
+    return json as { path: string; artifact: Artifact | null; backupPath?: string };
   }
   userSkills = (scope: SkillScope = {}) => this.request<WorkbenchSkill[]>("GET", skillUrl("", scope));
   userSkill = (id: string, scope: SkillScope = {}) => this.request<WorkbenchSkillDetail>("GET", skillUrl(`/${encodeURIComponent(id)}`, scope));

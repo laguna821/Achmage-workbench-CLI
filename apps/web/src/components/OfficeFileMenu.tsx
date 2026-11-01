@@ -5,7 +5,7 @@ import { Icon } from "./Icon.tsx";
 import { MenuItem, Popover } from "./Popover.tsx";
 
 /** Common shell file actions, outside the original editors' independent ribbons. */
-export function OfficeFileMenu({ api, workId, workspaceId, sessionId, cwd, sourceKey, pickFile, beforeOpen, onOpenArtifact, onToast, onExportPdf, onExportDocx }: {
+export function OfficeFileMenu({ api, workId, workspaceId, sessionId, cwd, sourceKey, pickFile, beforeOpen, onOpenArtifact, onToast, onExportPdf, onExportDocx, onExportOdt, onOpenWord }: {
   api: Api;
   workId: string;
   workspaceId?: string;
@@ -18,6 +18,8 @@ export function OfficeFileMenu({ api, workId, workspaceId, sessionId, cwd, sourc
   onToast: (message: string) => void;
   onExportPdf?: () => void;
   onExportDocx?: () => void;
+  onExportOdt?: () => void;
+  onOpenWord?: () => void;
 }) {
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [path, setPath] = useState("");
   const anchor = useRef<HTMLDivElement>(null), pending = useRef(false);
@@ -51,7 +53,9 @@ export function OfficeFileMenu({ api, workId, workspaceId, sessionId, cwd, sourc
     <Popover open={open} onClose={() => setOpen(false)} align="left">
       {onExportPdf ? <MenuItem onSelect={() => { setOpen(false); onExportPdf(); }}>PDF로 내보내기</MenuItem> : null}
       {onExportDocx ? <MenuItem onSelect={() => { setOpen(false); onExportDocx(); }}>Word로 내보내기</MenuItem> : null}
-      {onExportPdf || onExportDocx ? <div className="menu-sep" /> : null}
+      {onExportOdt ? <MenuItem onSelect={() => { setOpen(false); onExportOdt(); }}>ODT로 내보내기</MenuItem> : null}
+      {onOpenWord ? <MenuItem onSelect={() => { setOpen(false); onOpenWord(); }}>Word로 변환해 열기</MenuItem> : null}
+      {onExportPdf || onExportDocx || onExportOdt ? <div className="menu-sep" /> : null}
       <div className="menu-label">새 문서</div>
       {BLANK_OFFICE_DOCUMENTS.map((kind) => <MenuItem key={kind.format} hint={`.${kind.extension}`} onSelect={() => create(kind.format)}>{kind.label}</MenuItem>)}
       <div className="menu-divider" />

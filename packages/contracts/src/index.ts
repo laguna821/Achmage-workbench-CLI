@@ -774,7 +774,8 @@ export type OfficeHostMessage =
   | import("./office-wiki.ts").OfficeWikiResult
   | { type: "office:control"; requestId: string; request: import("./office-control.ts").RendererControlRequest }
   | { type: "office:export-pdf" }
-  | { type: "office:export-docx" }
+  | { type: "office:export-docx"; open?: boolean }
+  | { type: "office:export-odt" }
   | { type: "office:copy-rejected"; artifactId: string }
   | { type: "office:copy-accepted"; artifactId: string }
   | import("./office-output.ts").OfficeOutputResult

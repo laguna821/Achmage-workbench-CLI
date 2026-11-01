@@ -7,6 +7,7 @@ import type { OfficeOutputFormat } from "../../../packages/contracts/src/office-
 import { htmlOutput } from "./output.ts";
 import { preparePrintHtml } from "./print-html.ts";
 import { createOfficeWiki } from "./wiki.ts";
+import { exportTextWord, markdownWordBytes } from "./text-word-output.ts";
 
 /** The original Markdown/HTML renderers serialize their own source; never normalize it here. */
 export async function createTextEditor(kind: "markdown" | "html") {
@@ -77,7 +78,8 @@ export async function createTextEditor(kind: "markdown" | "html") {
 
   listen((message) => {
     if (message.type === "office:export-pdf") events.emit("export", "pdf");
-    if (message.type === "office:export-docx" && kind === "html") events.emit("export", "docx");
+    if (message.type === "office:export-docx") events.emit("export", message.open && kind === "markdown" ? "docs" : "docx");
+    if (message.type === "office:export-odt") events.emit("export", "odt");
     if (message.type === "office:theme") { theme = message.theme; events.emit("theme", theme); }
     if (message.type === "office:flush") void flush();
     if (message.type === "office:rebase") { revision = message.revision; void flush(); }
@@ -180,8 +182,17 @@ export async function createTextEditor(kind: "markdown" | "html") {
       catch (error) { if (error instanceof GatewayError && [400, 403, 404, 415].includes(error.status)) return null; throw error; }
     },
     saveImageAs: rejected("그림 저장"),
-    exportDocx: kind === "html" ? async (request: { html: string }) => (await import("./html-docx.ts")).exportHtmlDocx(revision, request.html, assetBase) : rejected("Word 내보내기"),
-    exportOdt: rejected("ODT 내보내기"), exportHtml: rejected("HTML 내보내기"),
+    exportDocx: kind === "html"
+      ? async (request: { html: string }) => (await import("./html-docx.ts")).exportHtmlDocx(revision, request.html, assetBase)
+      : async (request: { base64: string; mode?: string }) => {
+        // Opening the conversion retains this tab; protect its live draft without saving it.
+        if (request.mode === "openInDocs") await keep();
+        return exportTextWord(revision, "docx", async () => markdownWordBytes(request.base64), request.mode === "openInDocs");
+      },
+    exportOdt: kind === "html"
+      ? async (request: { html: string }) => (await import("./html-docx.ts")).exportHtmlDocx(revision, request.html, assetBase, "odt")
+      : (request: { base64: string }) => exportTextWord(revision, "odt", async () => markdownWordBytes(request.base64)),
+    exportHtml: rejected("HTML 내보내기"),
     exportPdf: async (request: { html: string }) => {
       try {
         const job = await preparePrintHtml(request.html, { baseUrl: assetBase, ...(kind === "markdown" ? { imageUrl: resolveTextImage } : {}) });

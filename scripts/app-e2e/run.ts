@@ -31,6 +31,7 @@ import { githubActionsScenario } from "./github-actions.ts";
 import { githubDiscussionScenario } from "./github-discussion.ts";
 import { parseArgs } from "./args.ts";
 import { textOfficeScenario } from "./text-office.ts";
+import { textWordOutputScenario } from "./text-word-output.ts";
 import { pdfOfficeScenario } from "./pdf-office.ts";
 import { pdfCopiesScenario } from "./pdf-copies.ts";
 import { epubOfficeScenario } from "./epub-office.ts";
@@ -86,6 +87,7 @@ try {
       if (wants("templates")) await templatesScenario(ctx);
       if (wants("template-office")) await templateOfficeScenario(ctx);
       if (wants("text-office")) await textOfficeScenario(ctx);
+      if (wants("text-word-output")) await textWordOutputScenario(ctx);
       if (wants("pdf-office")) await pdfOfficeScenario(ctx);
       if (wants("pdf-copies")) await pdfCopiesScenario(ctx);
       if (wants("mindmap-office")) await mindmapOfficeScenario(ctx);

@@ -11,7 +11,13 @@ function request<T>(message: OfficeOutputRequest): Promise<T> {
   return new Promise((resolve, reject) => { pending.set(message.requestId, { resolve: (value) => resolve(value as T), reject }); post(message); });
 }
 export const prepareOutput = (revision: number, format: OfficeOutputFormat, requestId = crypto.randomUUID()) => request<OfficeOutputPlan | null>({ type: "office:output", requestId, action: "prepare", revision, format });
-export const commitOutput = (planId: string, bytes: ArrayBuffer) => request<{ path: string; artifactId: string }>({ type: "office:output", requestId: crypto.randomUUID(), action: "commit", planId, bytes });
+export function commitOutput(planId: string, bytes: ArrayBuffer): Promise<{ path: string; artifactId: string }>;
+export function commitOutput(planId: string, bytes: ArrayBuffer, intent: "export" | "open"): Promise<{ path: string; artifactId: string | null }>;
+export async function commitOutput(planId: string, bytes: ArrayBuffer, intent: "copy" | "export" | "open" = "copy") {
+  const saved = await request<{ path: string; artifactId: string | null }>({ type: "office:output", requestId: crypto.randomUUID(), action: "commit", planId, bytes, intent });
+  if (intent === "copy" && !saved.artifactId) throw new Error("내보낸 파일은 문서 목록에서 열 수 있는 형식이 아닙니다.");
+  return saved;
+}
 export const cancelOutput = (planId?: string, preparationId?: string) => request<null>({ type: "office:output", requestId: crypto.randomUUID(), action: "cancel", ...(planId ? { planId } : {}), ...(preparationId ? { preparationId } : {}) });
 export const printOutput = (revision: number, job: SvgJob, action: "pdf" | "print") => request<{ path?: string } | null>({ type: "office:output", requestId: crypto.randomUUID(), action, revision, job });
 export const htmlOutput = (revision: number, job: HtmlJob, action: "html-pdf" | "html-print") => request<{ path?: string } | null>({ type: "office:output", requestId: crypto.randomUUID(), action, revision, job });

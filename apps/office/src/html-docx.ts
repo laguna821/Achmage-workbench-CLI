@@ -2,8 +2,8 @@ import "./platform/globals.ts";
 import type { BrowserDriver, ScreenshotOptions, Viewport } from "../../../vendor/ieumoffice/packages/html2docx/src/driver.ts";
 import { convertHtmlToDocx } from "../../../vendor/ieumoffice/packages/html2docx/src/convert.ts";
 import { buildPreviewDocument } from "../../../third_party/ieumoffice/text-assets/preview-document.ts";
-import { browserOperation, cancelOutput, commitOutput, prepareOutput } from "./output.ts";
-import type { OfficeOutputPlan } from "../../../packages/contracts/src/office-output.ts";
+import { browserOperation } from "./output.ts";
+import { exportTextWord } from "./text-word-output.ts";
 
 // Electron's original hidden driver disables background throttling. System
 // WebViews can suspend animation frames, so race each frame with a short timer.
@@ -118,10 +118,9 @@ export class TauriBrowserDriver implements BrowserDriver {
   }
 }
 
-export async function exportHtmlDocx(revision: number, html: string, baseUrl: string) {
-  let plan: OfficeOutputPlan | null = null, driver: TauriBrowserDriver | null = null;
+export async function htmlWordBytes(revision: number, html: string, baseUrl: string) {
+  let driver: TauriBrowserDriver | null = null;
   try {
-    plan = await prepareOutput(revision, "docx"); if (!plan) return { ok: true, canceled: true };
     const absoluteBase = new URL(baseUrl, location.href).href;
     // A standalone native view has a different origin from the editor preview.
     // Resolve authored relative <base> URLs in this disposable copy too.
@@ -131,10 +130,9 @@ export async function exportHtmlDocx(revision: number, html: string, baseUrl: st
     const doctype = preview.doctype ? new XMLSerializer().serializeToString(preview.doctype) : "";
     driver = new TauriBrowserDriver(revision, doctype + preview.documentElement.outerHTML);
     const result = await convertHtmlToDocx({ url: absoluteBase }, driver);
-    const saved = await commitOutput(plan.id, Uint8Array.from(result.docx).buffer);
-    return { ok: true, path: saved.path };
-  } catch (error) {
-    if (plan) await cancelOutput(plan.id).catch(() => {});
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    return Uint8Array.from(result.docx);
   } finally { await driver?.close().catch(() => {}); }
 }
+
+export const exportHtmlDocx = (revision: number, html: string, baseUrl: string, format: "docx" | "odt" = "docx") =>
+  exportTextWord(revision, format, () => htmlWordBytes(revision, html, baseUrl));
