@@ -1,6 +1,6 @@
 # 진행 기록
 
-2026-10-29부터 진행하는 통합 버전의 최신 구현·검증·남은 릴리스 범위는 [통합 업데이트 실행 기록](IMPLEMENTATION-2026-10-29.md)을 따른다. 아래는 이전 설치형 기반의 검증 기록이다.
+2026-11-02 **[v0.3.0 설치본6종](https://github.com/laguna821/Achmage-workbench-CLI/releases/tag/v0.3.0)**을 공개했다. 고정 요구·추가 사용성 수정·Fast Find·OS 설치 인수와 공개 다운로드 검증까지 완료했다. 최신 결과와 제한은 [통합 업데이트 실행 기록](IMPLEMENTATION-2026-10-29.md)을 따른다. 아래는 이전 설치형 기반의 검증 기록이다.
 
 기준: [PRD v1.0](PRD-v1.0.md) · 시안 [assets/ui](../assets/ui) · 2026-10-16 · Linux 노트북(CachyOS, niri, Wayland)
 

@@ -10,8 +10,14 @@
 | CORE02 외부 앱 편집·저장·복귀 | 공식 이음 GUI 왕복4/4, 실제 Codex·Claude 최신 파일 읽기6/6 | 완료 |
 | CORE03 문서 AI2개+메인 병렬 | 실제 `84f696d` AppImage에서 실제 Codex 문서2개+Claude 메인 동시 진행, B만 중지, A 편집·저장, 메인 완료 알림·이력 분리8/8 | 완료 |
 | CORE04 편집기 탭·집중·메인 복귀 | 기존9종86/86, 공통 focus 경로와 실제 Word 집중·메인 복귀/본문·대화 유지 대조 | 완료; 원본 모든 파일·모델의 품질 보장은 아님 |
-| Fast Find | 기본 Finder/저장 보기/AI 공통 전환·FTS 제거, 검색/미리보기/관련 항목/정확한 열기 연결. 전체1290·화면11·후속회귀26 통과, 고정 규모 실측 보고 완료 | 실제 최종 OS 설치본 검색 인수 |
-| 최종 설치본 전달 | 공개 preview0.2.8 이후 변경은 개발 브랜치에 있음 | Fast Find 포함 OS 설치본 검증·게시 |
+| Fast Find | 기본 Finder/저장 보기/AI 공통 전환·FTS 제거, 검색/미리보기/관련 항목/정확한 열기 연결. 전체1290·화면11·후속회귀26 통과, 고정 규모 실측 보고 완료. 최종 Windows/macOS 검색 각5개·Linux 실제 Tauri 검색 화면6개 통과 | 완료 |
+| 최종 설치본 전달 | [v0.3.0 설치 파일6종 공개](https://github.com/laguna821/Achmage-workbench-CLI/releases/tag/v0.3.0). Windows31/31·macOS30/30·Windows 업데이트17/17 통과, 공개6파일 무인증 HTTP200·크기·SHA256 일치 | 완료 |
+
+최종 포함 소스는 `7b174e5b2aa4fbe29e95a8f47c8e1f62a17c91b5`, [빌드41320205699](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41320205699)는 전체 성공했다. 해당 파일을 재빌드 없이 게시했고 `v0.3.0` 태그도 같은 소스를 가리킨다. Windows EXE는148,788,295bytes(약149MB), 새 설치 파일 합계는451,660,503bytes(약452MB)다. 별도 이음 앱·선택 OCR·사용자 자료·시스템 WebView는 제외한다.
+
+최종 설치 검사에서 Windows/macOS는 설치된 실행 파일의 native 검색과 동봉 host의 검색·원본 열기·파일 변경 반영, 공식 이음 독립 GUI·OS 등록을 확인했다. Linux는 최종 AppImage의 실제 Tauri/WebKitGTK 검색 UI6개와 화면4장을 확인했다. 설치 검사 AI는 시험용 제공자이며 실제 Codex·Claude 코어 검사는 아래 기존 증거를 재사용한다. Windows v0.2.2에서 같은 데이터 위치로 업데이트한17개 검사에서 구형 번들 잔존0·사용자 추가/수정 파일5개 보존을 확인했다. 공개 `installer-provenance.json`과 `SHA256SUMS.txt`에 파일·확인 범위를 기록했다.
+
+2026-11-02 01:01 KST에 정식 latest로 게시했고01:02에 설치6파일 전체의 무인증 다운로드를 확인했다. [공개 다운로드 검증](https://github.com/laguna821/Achmage-workbench-CLI/releases/download/v0.3.0/download-verification.json). 정확한 완료 판: `research:rr-236ff3048f29782b4eb36a197c2932df:703f3cac08a9b982814fbf0651c1aa06f0b767240121c50403984087cd8e8613` (R23). 고정 요구와 설치본 전달 기준의 작업을 종료하며, 새 버전 숫자·추가 결함 발굴을 종료 조건으로 늘리지 않는다. 태그 공개가 자동 시작한 중복 빌드41324128232만 취소했으며 실제 성공 빌드는41320205699다.
 
 원본9종 근거는 `docs/office-integration.md`의 첫 세션86/86을 재사용한다. 관련 변경 없는 항목을 재검사하지 않는다. `research:rr-740f2f53edee23d37689ac416605cbf2:2a16d66cb2a8d7890a322ce862571aa0163b35024f03bc3c92a975679aaff215` (R22)를 직접 읽고 반영했다. 실제 병렬 근거는 `core-document-agents-real-05/results.json`, `parallel-states.json`, `document.xml`, 직접 확인한 `parallel-completed-a.png`; 재현 스크립트는 `scripts/app-e2e/document-agents-real-run.ts`다. 문서 변경 알림·현황·결과를 공유하며 별도 worktree 파일을 자동 병합하지 않는다.
 

@@ -2,7 +2,7 @@
 
 Claude Code와 Codex를 한 화면에서 쓰는 데스크톱 작업실입니다. 여러 세션과 문서(워드·PPT·엑셀·한글·PDF·마크다운·디자인)를 한곳에서 다루고, AI가 고친 내용은 수정안으로 받아 확인한 뒤 반영합니다.
 
-**통합 시험판 0.2.8 다운로드:** [Windows 설치 파일](https://github.com/laguna821/Achmage-workbench-CLI/releases/download/preview-0.2.8/Achmage.Workbench_0.2.8_x64-setup.exe) · [모든 OS와 검증 범위](https://github.com/laguna821/Achmage-workbench-CLI/releases/tag/preview-0.2.8). Dropbox 연결과 OpenDataLoader 원본 PDF 추출·OCR, 추가 문서 출력까지 포함합니다. Windows 다운로드 약144MB, 새 설치 파일 합계 약443MB입니다. PDF OCR은 필요할 때 별도 설치하며 Linux 실측 약2.5GiB입니다.
+**0.3.0 다운로드:** [Windows 설치 파일](https://github.com/laguna821/Achmage-workbench-CLI/releases/download/v0.3.0/Achmage.Workbench_0.3.0_x64-setup.exe) · [모든 OS와 변경·검증 내용](https://github.com/laguna821/Achmage-workbench-CLI/releases/tag/v0.3.0). 편집기 집중 화면·문서별 독립 AI, 프로젝트 탐색 개선, 공식 이음오피스 독립 앱 자동 설치·연결, Fast Find 검색을 포함합니다. Windows 다운로드 약149MB, Workbench 새 설치 파일 합계 약452MB입니다. 별도 이음오피스 앱·선택 OCR·사용자 자료·시스템 WebView 용량은 제외합니다. PDF OCR은 필요할 때 별도 설치하며 Linux 실측 약2.5GiB입니다.
 
 - 요구사항: [docs/PRD-v1.0.md](docs/PRD-v1.0.md) · 시안: [assets/ui](assets/ui) · 설계: [docs/design](docs/design)
 - 진행 기록: [docs/STATUS.md](docs/STATUS.md)
@@ -16,7 +16,9 @@ Claude Code와 Codex를 한 화면에서 쓰는 데스크톱 작업실입니다.
 - **에이전트 브라우저**: Lightpanda로 화면 없이 정보를 수집하고 페이지를 조작합니다. 로그인 개입·화면 검증·사이트 호환에는 Chromium을 선택하며 기존 프로필을 보존합니다. Windows의 Lightpanda는 WSL2가 필요합니다. [구현·검증 범위](docs/agent-browser.md)
 - **세션 잇기**: 2~6개 세션이 정한 왕복 수와 시간 안에서 번갈아 답을 주고받습니다.
 - **보기 모드**: 홈은 지금·보드·지도·흐름·문서, 작업 화면은 대화·문서·검토·나란히·읽기입니다. 세션을 새 창으로 떼어 낼 수도 있습니다.
-- **문서 편집**: 앱 안 편집기에서 바로 고칩니다. 그림은 붙여넣거나 끌어 놓으면 들어가고, 마크다운 그림은 Cloudflare R2에도 올릴 수 있습니다.
+- **문서 편집**: 문서 탭에서 편집기에 집중하고 메인 채팅으로 돌아오면 사이드바·입력창을 복원합니다. 문서별 AI는 독립 세션에서 실행하며 메인 세션에 현황·결과를 전달합니다. 공식 이음오피스를 별도 앱으로 자동 설치·등록·연결해 같은 파일을 외부에서 편집하고 돌아올 수 있습니다.
+- **프로젝트 탐색**: 프로젝트를 눌러 오버뷰·속성을 바로 열고, 프로젝트·채팅·문서를 구분해 찾습니다. AI 실행 없이 새 문서부터 만들 수 있습니다.
+- **Fast Find 검색**: 세션·요청·답변·문서·연결 볼트를 같은 Rust 엔진으로 검색합니다. 본문 미리보기·강조·관련 노트와 정확한 메시지/문단 열기를 제공합니다. [연결 범위와 실제 성능](docs/design/fast-find-search-adoption-2026-11-01.md).
 - **노션식 정리 + 옵시디언 볼트**: 볼트를 읽기 전용 거울로 보여 주고, 카드 목록·페이지·저장한 보기·규칙을 씁니다. 엔진이 볼트에 쓰지 못하게 막습니다.
 - **알림**: 알림을 누르면 그 세션이 열립니다(Linux). 트레이에 "확인 필요 N"을 표시합니다.
 
@@ -75,3 +77,4 @@ WORKBENCH_WEB_DIR=apps/web/dist node apps/host/src/main.ts   # WORKBENCH_READY �
 - `vendor/doory`: [doory](https://github.com/shaongitbd/doory). Attribution Assurance License이며, 출처를 앱 시작 화면과 디자인 편집기에 표시합니다.
 - IeumOffice: [pblsketch/openoffice](https://github.com/pblsketch/openoffice), Apache-2.0. 빌드할 때 고정 커밋으로 받습니다(`scripts/fetch-ieum.sh`). 옮겨 온 코드의 출처는 `third_party/ieumoffice`에 있습니다.
 - `third_party/textfold`: [textfold](https://github.com/chenxiachan/textfold), Apache-2.0
+- `third_party/fast-find`: [Obsidian Fast Find 10k](https://github.com/ssp-data/obsidian-fast-find-10k), MIT. 고정 원본·변경 내역과 라이선스를 함께 보존합니다.
