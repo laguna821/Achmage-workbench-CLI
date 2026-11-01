@@ -290,6 +290,8 @@ export function App() {
   const [officeSettingsOpen, setOfficeSettingsOpen] = useState(false);
   const [ieumAppOpen, setIeumAppOpen] = useState(false);
   const [knowledgeOpen, setKnowledgeOpen] = useState(false);
+  const [knowledgeMounted, setKnowledgeMounted] = useState(false);
+  const openKnowledge = () => { setKnowledgeMounted(true); setKnowledgeOpen(true); };
   const [onboardingAgain, setOnboardingAgain] = useState(false);
   // Documents opened in each work, shown as tabs and offered first by "@".
   const [openDocs, setOpenDocs] = useState<Record<string, string[]>>(() => readJson(OPEN_DOCS_KEY, {}));
@@ -1501,7 +1503,7 @@ export function App() {
     { id: "appearance", label: "엔진 외형 설정", icon: "palette", run: () => appearanceApi.openSettings() },
     { id: "integrations", label: "MCP·스킬 보기", icon: "tool", run: () => setIntegrationsOpen(true) },
     { id: "office-settings", label: "문서 AI 설정", icon: "tool", run: () => setOfficeSettingsOpen(true) },
-    { id: "office-knowledge", label: "지식베이스", icon: "tool", run: () => setKnowledgeOpen(true) },
+    { id: "office-knowledge", label: "지식베이스", icon: "tool", run: () => openKnowledge() },
     { id: "connections", label: "연결과 설정", icon: "dots", run: () => setMenuOpen(true) },
     { id: "onboarding", label: "처음 안내 다시 보기", icon: "eye", run: () => setOnboardingAgain(true) },
   ];
@@ -2082,7 +2084,7 @@ export function App() {
             <Popover open={menuOpen} onClose={closeMenu} align="right">
               <Connections
                 onOfficeSettings={() => { closeMenu(); setOfficeSettingsOpen(true); }}
-                onKnowledge={() => { closeMenu(); setKnowledgeOpen(true); }}
+                onKnowledge={() => { closeMenu(); openKnowledge(); }}
                 onIntegrations={() => {
                   closeMenu();
                   setIntegrationsOpen(true);
@@ -2208,7 +2210,7 @@ export function App() {
       {imageUploadOpen && api ? <ImageUploadSheet api={api} onClose={() => setImageUploadOpen(false)} onToast={setToast} /> : null}
       {officeSettingsOpen && api ? <OfficeSettings api={api} theme={appTheme} onClose={() => setOfficeSettingsOpen(false)} /> : null}
       {ieumAppOpen ? <IeumAppDialog api={api} status={state.tools?.ieumApp} onClose={() => setIeumAppOpen(false)} /> : null}
-      {knowledgeOpen && api ? <KnowledgeLibrary api={api} onClose={() => setKnowledgeOpen(false)} /> : null}
+      {knowledgeMounted && api ? <div hidden={!knowledgeOpen}><KnowledgeLibrary api={api} state={state} workId={view.kind === "project" ? view.workId : work?.id} theme={appTheme} visible={knowledgeOpen} onOpen={artifact => { navigateTo({ workId: artifact.workId, sessionId: null, view: { kind: "document", artifactId: artifact.id, proposalId: null } }); setKnowledgeOpen(false); }} onClose={() => { setKnowledgeOpen(false); setKnowledgeMounted(false); }} /></div> : null}
       {state.ready && api && (prefs.onboarding !== "done" || onboardingAgain) ? (
         <Onboarding
           providers={state.providers}

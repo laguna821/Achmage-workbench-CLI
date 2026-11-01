@@ -11,3 +11,13 @@
 .knowledge-row > span:first-of-type { flex: 1; min-width: 0; }
 .knowledge-library small { display: block; overflow-wrap: anywhere; color: var(--muted); margin-top: 3px; }
 .knowledge-library [role=alert] { color: var(--danger, #c53d47); }
+.knowledge-library--home { width: min(1100px, 96vw); height: min(850px, 92vh); display: flex; flex-direction: column; overflow: hidden; }
+.knowledge-modes { display: flex; gap: 8px; padding: 14px 0 10px; border-bottom: 1px solid var(--line); }
+.knowledge-modes [aria-pressed=true] { color: var(--accent); font-weight: 650; background: var(--accent-soft); }
+.knowledge-management { min-height: 0; overflow: auto; }
+.knowledge-home { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.knowledge-home[hidden] { display: none; }
+.knowledge-home iframe { flex: 1; min-height: 0; width: 100%; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.knowledge-destination { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 0; }
+.knowledge-destination small { margin-left: auto; }
+.knowledge-destination select { max-width: 280px; }

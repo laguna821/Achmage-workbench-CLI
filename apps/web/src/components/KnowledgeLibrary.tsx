@@ -1,16 +1,26 @@
 import { useEffect, useState } from "react";
 import type { Api } from "../api.ts";
+import type { State } from "../state.ts";
+import type { Artifact } from "@workbench/contracts";
 import type { KnowledgeHit, KnowledgeLibrary as Library } from "../../../../packages/contracts/src/office-knowledge.ts";
+import { KnowledgeHome } from "./KnowledgeHome.tsx";
+import { OfficeSettings } from "./OfficeSettings.tsx";
+import { SkillLibraryDialog } from "./SkillLibraryDialog.tsx";
 import "../styles/knowledge.css";
 
-export function KnowledgeLibrary({ api, onClose }: { api: Api; onClose(): void }) {
+export function KnowledgeLibrary({ api, state, workId, theme, visible, onOpen, onClose }: {
+  api: Api; state: State; workId?: string | null; theme: "light" | "dark"; visible: boolean;
+  onOpen(artifact: Artifact): void; onClose(): void;
+}) {
+  const [mode, setMode] = useState<"ask" | "manage">("ask"), [settingsOpen, setSettingsOpen] = useState(false);
+  const [skillScope, setSkillScope] = useState<{ workId?: string; workspaceId?: string } | null>(null), [skillRefresh, setSkillRefresh] = useState(0);
   const [library, setLibrary] = useState<Library>({ items: [], groups: [] });
   const [paths, setPaths] = useState(""), [group, setGroup] = useState(""), [filter, setFilter] = useState("*");
   const [selected, setSelected] = useState<string[]>([]), [query, setQuery] = useState("");
   const [hits, setHits] = useState<KnowledgeHit[] | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const run = async (action: () => Promise<void>) => { setBusy(true); setError(""); try { await action(); } catch (error) { setError(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
   useEffect(() => { let live = true; void api.knowledgeLibrary().then(value => { if (live) setLibrary(value); }, error => { if (live) setError(String(error)); }); return () => { live = false; }; }, [api]);
-  useEffect(() => { const key = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); event.stopImmediatePropagation(); if (!busy) onClose(); } }; window.addEventListener("keydown", key, true); return () => window.removeEventListener("keydown", key, true); }, [busy, onClose]);
+  useEffect(() => { const key = (event: KeyboardEvent) => { if (visible && !settingsOpen && !skillScope && event.key === "Escape") { event.preventDefault(); event.stopImmediatePropagation(); if (!busy) onClose(); } }; window.addEventListener("keydown", key, true); return () => window.removeEventListener("keydown", key, true); }, [busy, visible, settingsOpen, skillScope, onClose]);
   const change = (action: string, chosen = selected) => run(async () => { setLibrary(await api.knowledgeAction<Library>(action, { paths: chosen, group })); setSelected([]); setHits(null); if (action === "add") setPaths(""); });
   const addPaths = () => paths.split(/\r?\n/).map(path => path.trim()).filter(Boolean);
   const pick = () => run(async () => {
@@ -21,8 +31,11 @@ export function KnowledgeLibrary({ api, onClose }: { api: Api; onClose(): void }
   });
   const shown = library.items.filter(item => filter === "*" || (item.group ?? "") === filter);
   return <div className="knowledge-overlay">
-    <section className="knowledge-library" role="dialog" aria-modal="true" aria-label="지식베이스">
+    <section className="knowledge-library knowledge-library--home" role="dialog" aria-modal="true" aria-label="지식베이스">
       <header><h2>지식베이스</h2><button type="button" className="icon-button" aria-label="지식베이스 닫기" disabled={busy} onClick={onClose}>×</button></header>
+      <nav className="knowledge-modes" aria-label="지식베이스 화면"><button type="button" aria-pressed={mode === "ask"} onClick={() => setMode("ask")}>자료에 질문</button><button type="button" aria-pressed={mode === "manage"} onClick={() => setMode("manage")}>별표·그룹 관리</button></nav>
+      <KnowledgeHome api={api} state={state} workId={workId} theme={theme} visible={visible && mode === "ask"} refreshToken={JSON.stringify([library, skillRefresh])} onOpen={onOpen} onManage={() => setMode("manage")} onSettings={() => setSettingsOpen(true)} onSkills={setSkillScope} />
+      <div className="knowledge-management" hidden={mode !== "manage"}>
       <p>별표로 모은 파일을 문서 AI가 검색하고 인용합니다. 그룹으로 나누어 관리할 수 있습니다.</p>
       {error && <p role="alert">{error}</p>}
       <form onSubmit={event => { event.preventDefault(); void change("add", addPaths()); }}>
@@ -37,6 +50,9 @@ export function KnowledgeLibrary({ api, onClose }: { api: Api; onClose(): void }
       <div className="knowledge-list" aria-busy={busy}>
         {hits ? <><p>{hits.length}개 검색 결과</p>{hits.map(hit => <article key={hit.path}><strong>{hit.name}</strong><small>{hit.path}</small><p>{hit.snippet}</p></article>)}</> : <><p>별표 파일 {shown.length}개</p>{shown.map(item => <label className="knowledge-row" key={item.path}><input type="checkbox" aria-label={`선택 ${item.file?.name ?? item.path}`} checked={selected.includes(item.path)} onChange={event => setSelected(event.target.checked ? [...selected, item.path] : selected.filter(path => path !== item.path))} /><span><strong>{item.file?.name ?? item.path.split(/[\/\\]/).at(-1)}</strong><small>{item.path}</small></span><span>{item.missing ? "파일을 찾을 수 없음" : item.group ?? "그룹 없음"}</span></label>)}</>}
       </div>
+      </div>
     </section>
+    {settingsOpen && <OfficeSettings api={api} theme={theme} onClose={() => setSettingsOpen(false)} />}
+    {skillScope && <SkillLibraryDialog api={api} scope={skillScope} onClose={() => { setSkillScope(null); setSkillRefresh(value => value + 1); }} />}
   </div>;
 }

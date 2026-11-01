@@ -21,6 +21,10 @@ export async function officePreviewsScenario(ctx: Ctx, launch: { binary: string;
   const api = <T,>(method: string, path: string, body?: unknown) => ctx.app.api<T>(method, path, body);
   const snapshot = () => api<Snapshot>("GET", "/api/snapshot");
   const items = async (id: string) => (await api<{ items: TranscriptItem[] }>("GET", `/api/sessions/${id}/items`)).items;
+  const documentItems = async (artifactId: string) => {
+    const session = (await snapshot()).sessions.find(s => s.documentAgent?.artifactId === artifactId);
+    return session ? items(session.id) : [];
+  };
   const server = createServer(async (req, res) => {
     try {
       let raw = ""; for await (const part of req) raw += String(part);
@@ -62,14 +66,15 @@ export async function officePreviewsScenario(ctx: Ctx, launch: { binary: string;
       active = format; const S = `Office 미리보기 ${format}`; name = `native-preview-${format}`; operation = "propose"; requests = []; step = 0;
       try {
         const work = await api<Work>("POST", "/api/works", { title: `현재 문서 양식 ${format}`, cwd: null }), path = join(work.cwd, `원본.${format}`);
+        const main = await api<Session>("POST", `/api/works/${work.id}/sessions`, { provider: "claude" });
         if (format === "docx") copyFileSync(resolve("vendor/ieumoffice/apps/docs/tests/pagination-corpus/docx/simple.docx"), path); else await fixture(path, format);
         const before = hash(path), source = await api<Artifact>("POST", `/api/works/${work.id}/artifacts`, { path });
-        const tab = { id: "preview-source", workId: work.id, sessionId: null as string | null, view: { kind: "document", artifactId: source.id, proposalId: null }, ui: { mode: format === "md" || format === "html" ? "rich" : "edit" } };
+        const tab = { id: "preview-source", workId: work.id, sessionId: main.id as string | null, view: { kind: "document", artifactId: source.id, proposalId: null }, ui: { mode: format === "md" || format === "html" ? "rich" : "edit" } };
         const layout = (artifactId: string) => { const current = { ...tab, view: { ...tab.view, artifactId } }; return { version: 2, focus: "preview-pane", panes: [{ ...current, id: "preview-pane", tabs: [current], activeTabId: current.id, recentTabIds: [current.id] }] }; };
         await wd.frame(null); await seedLayout(ctx, { ...(await snapshot()).prefs, paneLayout: layout(source.id) }); await wd.setWindowRect({ width: 1900, height: 1200 }); await wd.refresh(); await enter(source.id);
         const input = await wd.waitFor(COMPOSER); await wd.click(input); await wd.sendKeys(input, "현재 문서를 양식으로 포함하는 스킬을 제안해 줘"); await click(".ai-send-btn:not(.ai-stop-btn):not(:disabled)");
         let session: Session | undefined;
-        if (!await until(async () => { session = (await snapshot()).sessions.find((s) => s.workId === work.id); return !!session && (await items(session.id)).some((i) => i.kind === "turnEnd"); }, 60000)) throw new Error("Proposal run did not end");
+        if (!await until(async () => { session = (await snapshot()).sessions.find((s) => s.documentAgent?.artifactId === source.id); return !!session && (await items(session.id)).some((i) => i.kind === "turnEnd"); }, 60000)) throw new Error("Proposal run did not end");
         tab.sessionId = session!.id;
         await wd.waitFor(".ai-skill-card", 15000);
         const cardBody = await wd.waitFor(".ai-skill-card-body"); await wd.click(cardBody); await wd.sendKeys(cardBody, " SOURCE_DRAFT_EDIT");
@@ -79,15 +84,16 @@ export async function officePreviewsScenario(ctx: Ctx, launch: { binary: string;
         let copy: Artifact | undefined;
         if (!await until(async () => { copy = (await snapshot()).artifacts.find((a) => a.workId === work.id && a.id !== source.id); return !!copy; }, 45000)) throw new Error("Preview document missing");
         await enter(copy!.id);
-        if (!await until(async () => (await items(session!.id)).filter((i) => i.kind === "turnEnd").length >= 2, 60000)) throw new Error("Preview handoff did not finish");
+        if (!await until(async () => (await documentItems(copy!.id)).some((i) => i.kind === "turnEnd"), 60000)) throw new Error("Preview handoff did not finish");
         await wd.waitFor(".ai-skill-card .primary:not(:disabled)", 20000);
-        ctx.report.check(S, "새 문서에서 원본 AI 요청·같은 대화·인계한 카드 초안", await wd.execute<boolean>('return document.querySelector(".ai-skill-card-body")?.value.includes("SOURCE_DRAFT_EDIT") === true && [...document.querySelectorAll(".ai-skill-card button")].some(e=>e.textContent.includes("이 탭을"));') && (await snapshot()).sessions.filter((s) => s.workId === work.id).length === 1, undefined, await shot(ctx, `preview-${format}-copy.png`));
+        const copySession = (await snapshot()).sessions.find(s => s.documentAgent?.artifactId === copy!.id);
+        ctx.report.check(S, "새 문서의 독립 AI 요청·인계한 카드 초안·메인 요청 분리", await wd.execute<boolean>('return document.querySelector(".ai-skill-card-body")?.value.includes("SOURCE_DRAFT_EDIT") === true && [...document.querySelectorAll(".ai-skill-card button")].some(e=>e.textContent.includes("이 탭을"));') && !!copySession && copySession.id !== session!.id && copySession.documentAgent?.parentSessionId === main.id && !(await items(main.id)).some(i => i.kind === "user"), undefined, await shot(ctx, `preview-${format}-copy.png`));
         if (format === chosen[0]) {
           const count = requests.length;
           await wd.frame(null); await seedLayout(ctx, { ...(await snapshot()).prefs, paneLayout: layout(copy!.id) });
           await ctx.app.close(); ctx.app = await ctx.stage.launch({ ...launch, name: "previews-restarted" }); wd = ctx.app.wd;
           await wd.setWindowRect({ width: 1900, height: 1200 }); await enter(copy!.id); await wd.waitFor(".ai-skill-card .primary:not(:disabled)", 20000);
-          ctx.report.check(S, "실제 앱·host 재시작 후 카드 복원·AI 요청 중복 없음", requests.length === count && (await items(session!.id)).filter((i) => i.kind === "turnEnd").length === 2, undefined, await shot(ctx, `preview-${format}-restarted.png`));
+          ctx.report.check(S, "실제 앱·host 재시작 후 카드 복원·AI 요청 중복 없음", requests.length === count && (await documentItems(copy!.id)).filter((i) => i.kind === "turnEnd").length === 1, undefined, await shot(ctx, `preview-${format}-restarted.png`));
         }
         if (format === "md") {
           const editor = await wd.waitFor('.tiptap[contenteditable="true"]'); await wd.click(editor); await wd.sendKeys(editor, " PERSON TEMPLATE EDIT ");
@@ -98,12 +104,12 @@ export async function officePreviewsScenario(ctx: Ctx, launch: { binary: string;
         const skillPath = join(ctx.app.dataDir, "user-skills", name, "SKILL.md"), template = join(ctx.app.dataDir, "user-skills", name, "assets", `원본.${format}`);
         const templateText = existsSync(template) ? await savedText(template, format) : "";
         ctx.report.check(S, "AI가 편집한 현재 사본 바이트·사람이 바꾼 카드 본문 저장", templateText.includes(marker()) && existsSync(skillPath) && readFileSync(skillPath, "utf8").includes("PREVIEW_DRAFT_EDIT") && (format !== "md" || templateText.includes("PERSON TEMPLATE EDIT")), undefined, await shot(ctx, `preview-${format}-saved.png`));
-        ctx.report.check(S, "원본 파일 바이트 보존·저장 기록 하나", hash(path) === before && (await items(session!.id)).filter((i) => i.office?.cardSaved).length === 1);
+        ctx.report.check(S, "원본 파일 바이트 보존·저장 기록 하나", hash(path) === before && (await documentItems(copy!.id)).filter((i) => i.office?.cardSaved).length === 1);
         const errors = await pageErrors(wd);
         await wd.frame(null); await seedLayout(ctx, { ...(await snapshot()).prefs, paneLayout: layout(source.id) }); await wd.refresh(); await enter(source.id);
         ctx.report.check(S, "원본 탭 재열기에도 저장 완료 표시", await until(() => wd.execute<boolean>('return [...document.querySelectorAll("[data-skill-card-status=saved]")].some(e=>e.textContent.includes(arguments[0]));', name)));
         ctx.report.check(S, "미리보기·저장·복원 중 페이지 예외 없음", errors.length === 0 && (await pageErrors(wd)).length === 0, JSON.stringify([...errors, ...await pageErrors(wd)]));
-        writeFileSync(ctx.report.path(`preview-${format}.json`), JSON.stringify({ items: await items(session!.id), requests, before, after: hash(path), templateText }, null, 2));
+        writeFileSync(ctx.report.path(`preview-${format}.json`), JSON.stringify({ source: await items(session!.id), copy: await documentItems(copy!.id), main: await items(main.id), requests, before, after: hash(path), templateText }, null, 2));
         if (format === chosen[0]) {
           for (const outcome of ["original", "cancel", "close"] as const) {
             name = `native-preview-${format}-${outcome}`; operation = "propose"; step = 0; requests = [];
@@ -115,7 +121,7 @@ export async function officePreviewsScenario(ctx: Ctx, launch: { binary: string;
             let next: Artifact | undefined;
             if (!await until(async () => { next = (await snapshot()).artifacts.find((entry) => entry.workId === work.id && !oldIds.has(entry.id)); return !!next; }, 30000)) throw new Error("Additional preview missing");
             await enter(next!.id);
-            if (!await until(async () => (await items(session!.id)).filter((i) => i.kind === "turnEnd").length >= oldEnds + 2, 60000)) throw new Error("Additional handoff missing");
+            if (!await until(async () => (await documentItems(next!.id)).some((i) => i.kind === "turnEnd"), 60000)) throw new Error("Additional handoff missing");
             await wd.waitFor(".ai-skill-card .primary:not(:disabled)");
             if (outcome === "original") {
               const count = requests.length;
@@ -157,16 +163,16 @@ export async function officePreviewsScenario(ctx: Ctx, launch: { binary: string;
             const originalHash = hash(path), redacted = await api<Artifact>("POST", `/api/works/${work.id}/artifacts`, { path });
             await wd.frame(null); await seedLayout(ctx, { ...(await snapshot()).prefs, paneLayout: layout(redacted.id) }); await wd.refresh(); await enter(redacted.id);
             name = "native-preview-redacted"; operation = "propose"; requests = []; step = 0;
-            const oldIds = new Set((await snapshot()).artifacts.map((entry) => entry.id)), oldEnds = (await items(session!.id)).filter((entry) => entry.kind === "turnEnd").length;
+            const oldIds = new Set((await snapshot()).artifacts.map((entry) => entry.id));
             const composer = await wd.waitFor(COMPOSER); await wd.click(composer); await wd.sendKeys(composer, "이 문서를 양식 스킬로 제안해 줘"); await click(".ai-send-btn:not(.ai-stop-btn):not(:disabled)");
-            if (!await until(async () => (await items(session!.id)).filter((i) => i.kind === "turnEnd").length > oldEnds, 60000)) throw new Error("Redacted proposal did not finish");
+            if (!await until(async () => (await documentItems(redacted.id)).some((i) => i.kind === "turnEnd"), 60000)) throw new Error("Redacted proposal did not finish");
             await wd.waitFor(".ai-skill-card .primary:not(:disabled)");
             ctx.report.check(S, "가린 원본의 그대로 저장 차단·모델에 숨긴 값 제외", await wd.execute<boolean>('return document.querySelector("[data-template-as-is-blocked=redacted]")?.disabled === true;') && !JSON.stringify(requests).includes(secret), undefined, await shot(ctx, "preview-redacted-original.png"));
             operation = "edit"; step = 0; requests = []; await click(".ai-skill-card .primary:not(:disabled)");
             let next: Artifact | undefined;
             if (!await until(async () => { next = (await snapshot()).artifacts.find((entry) => entry.workId === work.id && !oldIds.has(entry.id)); return !!next; }, 30000)) throw new Error("Redacted preview missing");
             await enter(next!.id);
-            if (!await until(async () => (await items(session!.id)).filter((i) => i.kind === "turnEnd").length >= oldEnds + 2, 60000)) throw new Error("Redacted handoff did not finish");
+            if (!await until(async () => (await documentItems(next!.id)).some((i) => i.kind === "turnEnd"), 60000)) throw new Error("Redacted handoff did not finish");
             await wd.waitFor(".ai-skill-card .primary:not(:disabled)");
             ctx.report.check(S, "미리보기도 원본의 가림 상태 유지·모델 요청에 숨긴 값 없음", await wd.execute<boolean>('return document.querySelector("[data-template-as-is-blocked=redacted]")?.disabled === true;') && !JSON.stringify(requests).includes(secret), undefined, await shot(ctx, "preview-redacted-copy.png"));
             await click(".ai-skill-card-actions > button:last-of-type:not(:disabled)");

@@ -31,6 +31,7 @@ async function listen(server: Server) {
 it("separates privileged settings from both the document and application origins", async () => {
   const { manager, web } = setup();
   writeFileSync(join(web, "office/settings.html"), "<!doctype html><title>settings</title>");
+  writeFileSync(join(web, "office/knowledge.html"), "<!doctype html><title>knowledge</title>");
   mkdirSync(join(web, "office/assets")); writeFileSync(join(web, "office/assets/settings-abc.js"), "export {};\n");
   const parent = "http://127.0.0.1:12345";
   const settings = await listen(createOfficeSettingsServer(web, () => parent));
@@ -38,9 +39,13 @@ it("separates privileged settings from both the document and application origins
   const page = await fetch(`${settings}/office/settings.html`);
   expect(page.status).toBe(200); expect(page.headers.get("content-security-policy")).toBe(`frame-ancestors ${parent}`);
   expect((await fetch(`${settings}/office/assets/settings-abc.js`)).status).toBe(200);
+  const home = await fetch(`${settings}/office/knowledge.html`);
+  expect(home.status).toBe(200); expect(home.headers.get("content-security-policy")).toBe(`frame-ancestors ${parent}`);
   for (const path of ["/office/docs.html", "/index.html", "/api/office-ai/settings", "/api/artifacts/any/bytes"]) expect((await fetch(`${settings}${path}`)).status).toBe(404);
   expect((await fetch(`${editors}/office/settings.html`)).status).toBe(404);
   expect((await fetch(`${editors}/office/%73ettings.html`)).status).toBe(404);
+  expect((await fetch(`${editors}/office/knowledge.html`)).status).toBe(404);
+  expect((await fetch(`${editors}/office/%6bowledge.html`)).status).toBe(404);
 });
 
 function setup() {

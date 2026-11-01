@@ -14,6 +14,8 @@ import { officeEditorKind } from "./editors.ts";
 import { OfficeSkillCards } from "./office-skill-cards.ts";
 import { OfficeTemplatePreviews } from "./office-template-previews.ts";
 import type { Store } from "./store.ts";
+import { OfficeHomeSkills } from "./office-home-skills.ts";
+import { bindTemplateSession, isTemplateSource } from "./office-template-session.ts";
 
 export type OfficeSkillContext = { artifactId: string; token: string; grants: EditorGrants };
 type Context = OfficeSkillContext;
@@ -32,15 +34,20 @@ export class OfficeSkills {
   private readonly opening = new Set<string>();
   private readonly cards: OfficeSkillCards;
   readonly previews: OfficeTemplatePreviews;
+  readonly home: OfficeHomeSkills;
   constructor(manager: SessionManager, store: Store) {
     this.manager = manager;
-    this.cards = new OfficeSkillCards(manager, store, (context) => this.writable(context));
+    this.cards = new OfficeSkillCards(manager, store, (context) => {
+      const owner = this.writable(context);
+      return { scope: owner.scope, sessionId: owner.sessionId, artifactId: owner.artifact.id, ownerId: owner.access.viewId };
+    });
     this.previews = new OfficeTemplatePreviews(manager, store, this.cards, (context) => this.writable(context));
+    this.home = new OfficeHomeSkills(manager, store, this);
     // An uncertain handoff never silently starts a model after an app restart.
     for (const record of manager.creations.list()) {
       if (record.office?.state !== "queued") continue;
       manager.creations.update(record.requestId, { office: { ...record.office, state: "interrupted" } });
-      manager.sink.upsertItem(record.sessionId, { kind: "notice", id: `office-template-recovered:${record.requestId}`, at: Date.now(), level: "info", text: `양식 사본을 보존했습니다. 요청은 자동 재전송하지 않았습니다.\n${record.office.handoff.text}` });
+      manager.sink.upsertItem(record.office.targetSessionId ?? record.sessionId, { kind: "notice", id: `office-template-recovered:${record.requestId}`, at: Date.now(), level: "info", text: `양식 사본을 보존했습니다. 요청은 자동 재전송하지 않았습니다.\n${record.office.handoff.text}` });
     }
   }
   private scope(context: Context) {
@@ -77,13 +84,18 @@ export class OfficeSkills {
     return { detail };
   }
   async read(context: Context, operation: string, input: unknown = {}) {
-    const scope = this.scope(context), identity = JSON.stringify(scope);
     if (operation === "take-handoff") return this.take(context, input);
     if (operation === "preview-original" && record(input)) return this.previews.original(context, input);
     if (operation === "preview-events") return this.previews.events(context);
     if (operation === "preview-links") return this.previews.links(context);
     if (operation === "suggest-name" || operation === "check-name") return this.cards.read(context, operation, input, this.previews.receipt(context, record(input) && record(input.card) ? input.card.previewId : undefined));
-    const stillHere = () => { if (identity !== JSON.stringify(this.scope(context))) throw new HttpError(409, "office_skill_scope", "스킬을 읽는 동안 작업공간 또는 엔진 선택이 바뀌었습니다."); };
+    return this.readLibrary(() => this.scope(context), operation, input);
+  }
+  /** A trusted home owner supplies its own workspace scope; document grants stay unchanged. */
+  async readLibrary(getScope: () => ReturnType<SessionManager["skillScope"]>, operation: string, input: unknown = {}) {
+    if (!["list", "read", "ai-read", "ai-read-file"].includes(operation)) throw new HttpError(400, "office_skill_operation", "연결되지 않은 스킬 요청입니다.");
+    const scope = getScope(), identity = JSON.stringify(scope);
+    const stillHere = () => { if (identity !== JSON.stringify(getScope())) throw new HttpError(409, "office_skill_scope", "스킬을 읽는 동안 작업공간 또는 엔진 선택이 바뀌었습니다."); };
     if (operation === "list") {
       const all = await this.manager.userSkills.list(scope); stillHere();
       return all.map((entry) => this.view(entry, all));
@@ -125,7 +137,7 @@ export class OfficeSkills {
     if (action === "open-preview") return this.previews.open(context, input);
     if (action === "finish-preview") return this.previews.finish(context, input);
     if (action === "focus-tab") {
-      const entry = this.manager.creations.list().find((item) => item.artifactId === input.tabId && item.sessionId === before.sessionId && item.office?.sourceArtifactId === context.artifactId);
+      const entry = this.manager.creations.list().find((item) => item.artifactId === input.tabId && isTemplateSource(this.manager, item, context.artifactId, before.sessionId));
       if (!entry?.artifactId) return fail("not-found");
       this.manager.documents.get(entry.artifactId);
       return { ok: true, tabId: entry.artifactId };
@@ -161,7 +173,7 @@ export class OfficeSkills {
       const tracked = this.manager.documents.track(before.artifact.workId, copy.cwd, copy.path, "user", before.sessionId, "Office 양식 원본의 작업 사본", copy.sources);
       if (!tracked) throw new HttpError(500, "office_template_track", "양식 사본을 문서 목록에 연결하지 못했습니다. 생성 기록에 사본을 보존했습니다.");
       const office = { sourceArtifactId: context.artifactId, sourceViewId: before.access.viewId, state: "queued" as const, handoff: { id: requestId, mode: "skill" as const, target, text: input.text, chips: selected.map(({ id, source, title }) => ({ id, source, title })), createdAt: Date.now() } };
-      this.manager.creations.update(requestId, { state: "completed", artifactId: tracked.artifact.id, office });
+      bindTemplateSession(this.manager, this.manager.creations.update(requestId, { state: "completed", artifactId: tracked.artifact.id, office })!);
       this.manager.sink.upsertItem(before.sessionId, { kind: "artifact", id: `artifact:create:${requestId}`, artifactId: tracked.artifact.id, revision: tracked.artifact.revision, change: "created", at: Date.now() });
       return { ok: true, tabId: tracked.artifact.id };
     } finally { this.opening.delete(before.access.viewId); }
@@ -169,10 +181,14 @@ export class OfficeSkills {
   private take(context: Context, input: unknown) {
     const owner = this.writable(context);
     if (!record(input) || input.target !== officeEditorKind(owner.artifact.format)) return null;
+    const fromHome = this.home.take(owner, input.target);
+    if (fromHome) return fromHome;
     const preview = this.previews.take(context, input.target);
     if (preview) return preview;
-    const entry = this.manager.creations.list().find((item) => item.artifactId === context.artifactId && item.sessionId === owner.sessionId && !item.office?.preview && item.office?.state === "queued" && item.office.handoff.target === input.target);
+    const pending = this.manager.creations.list().find((item) => item.artifactId === context.artifactId && !item.office?.preview && item.office?.state === "queued" && item.office.handoff.target === input.target);
+    const entry = pending && bindTemplateSession(this.manager, pending);
     if (!entry?.office) return null;
+    if (entry.office.targetSessionId !== owner.sessionId) return null;
     this.manager.creations.update(entry.requestId, { office: { ...entry.office, state: "taken", claimedViewId: owner.access.viewId } });
     return entry.office.handoff;
   }

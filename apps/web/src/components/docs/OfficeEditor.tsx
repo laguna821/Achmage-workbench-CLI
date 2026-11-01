@@ -305,10 +305,10 @@ export const OfficeEditor = forwardRef<
     if (!target || !opening) return;
     const reply = (value?: unknown, error?: string) => target.postMessage({ type: "office:skills-result", requestId: message.requestId, value, error }, opening.origin);
     try {
-      const result = await api.officeSkills<{ ok: boolean; tabId?: string }>(latest.current.id, opening.token, message.action, message.input);
+      const result = await api.officeSkills<{ ok: boolean; tabId?: string; artifact?: Artifact }>(latest.current.id, opening.token, message.action, message.input);
       if (target !== frame.current?.contentWindow || opening.sessionId !== opened.current?.sessionId) throw new Error("양식을 준비하는 동안 문서 창이나 세션이 바뀌었습니다. 준비된 사본은 문서 목록에 보존했습니다.");
       reply(result);
-      if (result.ok && result.tabId) handlers.current.onCopied?.(result.tabId);
+      if (result.ok && result.tabId) handlers.current.onCopied?.(result.tabId, result.artifact);
     } catch (error) { reply(undefined, error instanceof Error ? error.message : String(error)); }
   };
 

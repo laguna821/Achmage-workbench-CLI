@@ -110,8 +110,12 @@ it.each(["docx", "pptx", "xlsx", "hwp", "hwpx", "pdf", "xmind", "epub", "html", 
     expect(readFileSync(f.artifact.path, "utf8")).toBe("SOURCE_UNCHANGED");
     expect(f.manager.creations.list()).toHaveLength(1); expect(entry.office?.handoff.chips).toHaveLength(2);
     expect(artifact.workspaceId).toBe(f.session.workspaceId);
-    const opened = f.manager.documents.registry.open(created.tabId, { viewId: "copy", windowId: "window", sessionId: f.session.id, claim: true });
-    const token = f.grant.issue(created.tabId, { viewId: "copy", writeToken: opened.writeToken }, f.session.id), context = { ...f.context, artifactId: created.tabId, token };
+    const child = f.manager.documentSession(created.tabId, f.session.id);
+    expect(child.id).not.toBe(f.session.id);
+    expect(child.documentAgent).toMatchObject({ artifactId: created.tabId, parentSessionId: f.session.id });
+    expect(entry.office?.targetSessionId).toBe(child.id);
+    const opened = f.manager.documents.registry.open(created.tabId, { viewId: "copy", windowId: "window", sessionId: child.id, claim: true });
+    const token = f.grant.issue(created.tabId, { viewId: "copy", writeToken: opened.writeToken }, child.id), context = { ...f.context, artifactId: created.tabId, token };
     expect(await f.service.read(context, "take-handoff", { target: "wrong" })).toBeNull();
     expect(await f.service.read(context, "take-handoff", { target: entry.office!.handoff.target })).toEqual(entry.office!.handoff);
     expect(await f.service.read(context, "take-handoff", { target: entry.office!.handoff.target })).toBeNull();
@@ -125,7 +129,7 @@ it("keeps a queued copy after restart without automatically replaying the handed
     const created = await f.service.action(f.context, "open-template", { requestId: "restart", skillId: chosen.id, text: "DO_NOT_AUTO_RUN", chips: [chosen] }) as { tabId: string };
     const service = new OfficeSkills(f.manager, f.store), entry = f.manager.creations.get("office-template:restart")!;
     expect(entry.office?.state).toBe("interrupted"); expect(readFileSync(f.manager.documents.get(created.tabId).path, "utf8")).toBe("ORIGINAL_TEMPLATE_BYTES");
-    expect(f.manager.items(f.session.id).items).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "notice", text: expect.stringContaining("DO_NOT_AUTO_RUN") })]));
+    expect(f.manager.items(entry.office!.targetSessionId!).items).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "notice", text: expect.stringContaining("DO_NOT_AUTO_RUN") })]));
     expect(await service.action(f.context, "focus-tab", { tabId: created.tabId })).toEqual({ ok: true, tabId: created.tabId });
     expect(await service.action(f.context, "focus-tab", { tabId: f.artifact.id })).toEqual({ ok: false, reason: "not-found" });
   } finally { await f.close(); }
@@ -296,9 +300,10 @@ function previewInput(id = "preview", targetId?: string, redacted = false) {
 async function openPreview(f: ReturnType<typeof fixture>, input = previewInput()) {
   await checkCard(f, input.draft);
   const answer = await f.service.action(f.context, "open-preview", input) as { ok: true; tabId: string; previewId: string };
-  const view = f.manager.documents.registry.open(answer.tabId, { viewId: `preview-${input.requestId}`, windowId: "preview-window", sessionId: f.session.id, claim: true });
-  const token = f.grant.issue(answer.tabId, { viewId: view.view.viewId, writeToken: view.writeToken }, f.session.id);
-  return { ...answer, context: { artifactId: answer.tabId, token, grants: f.grant }, path: f.manager.documents.get(answer.tabId).path, view };
+  const child = f.manager.documentSession(answer.tabId, f.session.id);
+  const view = f.manager.documents.registry.open(answer.tabId, { viewId: `preview-${input.requestId}`, windowId: "preview-window", sessionId: child.id, claim: true });
+  const token = f.grant.issue(answer.tabId, { viewId: view.view.viewId, writeToken: view.writeToken }, child.id);
+  return { ...answer, child, context: { artifactId: answer.tabId, token, grants: f.grant }, path: f.manager.documents.get(answer.tabId).path, view };
 }
 it("opens current edited bytes in a separate document, preserves the original snapshot, and only hands the clearing request over once", async () => {
   const f = fixture();
@@ -324,7 +329,27 @@ it("restores a queued preview as a card after restart without automatically repe
   try {
     const p = await openPreview(f), restarted = new OfficeSkills(f.manager, f.store);
     expect(await restarted.read(p.context, "take-handoff", { target: "markdown" })).toMatchObject({ resumed: true });
-    expect(f.store.items(f.session.id)).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "notice", text: expect.stringContaining("자동 재전송하지") })]));
+    expect(f.store.items(p.child.id)).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "notice", text: expect.stringContaining("자동 재전송하지") })]));
+  } finally { await f.close(); }
+});
+it("keeps legacy source cards linked after binding their existing preview to an independent document agent", async () => {
+  const f = fixture();
+  try {
+    const p = await openPreview(f), entry = f.manager.creations.get(p.previewId)!;
+    f.manager.creations.update(entry.requestId, { office: { ...entry.office!, targetSessionId: undefined, state: "taken" } });
+    const sourceChild = f.manager.documentSession(f.artifact.id, f.session.id);
+    const view = f.manager.documents.registry.open(f.artifact.id, { viewId: "source", windowId: "window", sessionId: sourceChild.id, claim: true });
+    const token = f.grant.issue(f.artifact.id, { viewId: "source", writeToken: view.writeToken }, sourceChild.id);
+    const sourceContext = { ...f.context, token }, restarted = new OfficeSkills(f.manager, f.store);
+    expect(await restarted.read(sourceContext, "preview-links")).toEqual([expect.objectContaining({ tabId: p.tabId, outcome: "open" })]);
+    expect(await restarted.action(sourceContext, "focus-tab", { tabId: p.tabId })).toEqual({ ok: true, tabId: p.tabId });
+    expect(await restarted.read(p.context, "take-handoff", { target: "markdown" })).toMatchObject({ resumed: true });
+    expect(f.manager.creations.get(p.previewId)).toMatchObject({ sessionId: f.session.id, office: { targetSessionId: p.child.id } });
+    await restarted.action(p.context, "finish-preview", { previewId: p.previewId, outcome: "unsaved" });
+    expect(await restarted.read(sourceContext, "preview-events")).toEqual([expect.objectContaining({ outcome: "unsaved" })]);
+    expect(readFileSync(p.path, "utf8")).toBe("UNSAVED_CURRENT_BYTES");
+    expect(f.manager.creations.list()).toHaveLength(1);
+    expect(f.store.items(f.session.id).some(item => item.kind === "user")).toBe(false);
   } finally { await f.close(); }
 });
 for (const close of [false, true]) it(`${close ? "tab close" : "Cancel"} ends the preview without a skill write and retains the document copy`, async () => {
@@ -359,7 +384,7 @@ it("denies a redacted original at the host and commits only the explicitly chose
     f.manager.creations.update(entry.requestId, { office: { ...entry.office!, preview: { ...entry.office!.preview!, status: "open", skillId: undefined } } });
     const restarted = new OfficeSkills(f.manager, f.store);
     expect(await restarted.read(f.context, "preview-events", {})).toEqual([expect.objectContaining({ outcome: "saved", skillId: saved.id })]);
-    expect(f.store.items(f.session.id).filter((item) => item.office?.cardSaved)).toHaveLength(1);
+    expect(f.store.items(p.child.id).filter((item) => item.office?.cardSaved)).toHaveLength(1);
     expect(readFileSync(f.artifact.path, "utf8")).toBe("SOURCE_UNCHANGED");
   } finally { await f.close(); }
 });

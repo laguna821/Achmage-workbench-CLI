@@ -69,7 +69,7 @@ export const ipcRenderer = {
 /** The editor APIs; conversation/settings/document selection use Workbench's own scoped bridges. */
 const EXPOSED = new Set(["slidesApi", "desktopApi", "pdfApi", "mindmapApi", "epubApi"]);
 const FILE_METHODS = ["pickAttachments", "addAttachmentPaths", "addPastedImage", "readAttachment", "readAttachmentImage", "getPathForFile"] as const;
-/** Only the dedicated settings entrypoint opts into these original shell bridges. */
+/** Only dedicated settings/knowledge entrypoints opt into these original shell bridges. */
 export function exposeSettingsBridges() { EXPOSED.add("aiOffice"); EXPOSED.add("aiOfficeSubscription"); }
 export const contextBridge = {
   exposeInMainWorld(key: string, api: unknown) {

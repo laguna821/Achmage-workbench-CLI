@@ -1632,6 +1632,9 @@ export class SessionManager {
     return this.workIn(workId, id);
   }
 
+  /** Authenticated home actions choose a destination without creating a conversation. */
+  documentDestination(workId: string, workspaceId?: string) { return this.officeFileScope(workId, workspaceId); }
+
   /** A direct blank document, without starting an AI request or an Electron process. */
   async createOfficeDocument(workId: string, request: NewOfficeDocument) {
     const kind = BLANK_OFFICE_DOCUMENTS.find((entry) => entry.format === request.format);

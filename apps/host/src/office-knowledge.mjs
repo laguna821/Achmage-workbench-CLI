@@ -8,6 +8,7 @@ import { extractText } from "../../../vendor/ieumoffice/apps/shell/src/main/file
 import { setOpenFilesSource, withoutUnsavedFiles } from "../../../vendor/ieumoffice/packages/electron-utils/src/unsaved-files.ts";
 import { isWorkbenchPath } from "./artifacts.ts";
 import { HttpError } from "./errors.ts";
+import { OfficeKnowledgeHome } from "./office-knowledge-home.mjs";
 
 const currentDocuments = new AsyncLocalStorage();
 setOpenFilesSource(() => {
@@ -24,6 +25,7 @@ export class OfficeKnowledge {
     this.manager = manager; this.closed = false; this.queue = Promise.resolve();
     const root = join(dataDir, "office", "knowledge"); mkdirSync(root, { recursive: true });
     this.path = join(root, "starred.json"); this.index = new FileIndexStore(join(root, "index.sqlite"));
+    this.home = new OfficeKnowledgeHome(manager, this);
   }
   check(signal) { if (this.closed) throw new Error("지식베이스를 종료하고 있습니다."); signal?.throwIfAborted(); }
   physical(path) {
@@ -91,14 +93,14 @@ export class OfficeKnowledge {
     });
     this.queue = refresh; return refresh;
   }
-  async search(query, limit, group, signal) {
+  async search(query, limit, group, signal, selectPaths = () => this.paths(group)) {
     if (typeof query !== "string" || query.length > 200 || !Number.isSafeInteger(limit) || limit < 1 || limit > 20 || group !== undefined && typeof group !== "string") throw invalid();
     return currentDocuments.run(this.manager.documents, async () => {
       await this.refresh(signal); this.check(signal);
-      const paths = this.index.pathsIndexedAsOnDisk(this.paths(group));
+      const paths = this.index.pathsIndexedAsOnDisk(selectPaths());
       const hits = await searchSavedKnowledgeBase((q, pool) => this.index.search(q, { limit: pool }).hits.map(hit => ({ ...hit, snippetText: (hit.snippet ?? []).map(part => part.text).join("") })), query, paths, limit);
       this.check(signal);
-      const live = new Set(this.index.pathsIndexedAsOnDisk(await withoutUnsavedFiles(this.paths(group), path => path)));
+      const live = new Set(this.index.pathsIndexedAsOnDisk(await withoutUnsavedFiles(selectPaths(), path => path)));
       return hits.filter(hit => live.has(hit.path));
     });
   }
@@ -107,12 +109,17 @@ export class OfficeKnowledge {
     if (!Array.isArray(args)) throw invalid();
     if (name === "knowledge-list" && !args.length) return listKnowledgeFiles(this.paths());
     if (name === "knowledge-search" && args.length === 2) return this.search(args[0], args[1], undefined, signal);
-    if (name !== "knowledge-read" || args.length !== 2 || typeof args[0] !== "string" || !Number.isSafeInteger(args[1]) || args[1] < 0) throw invalid();
-    const path = args[0]; if (!this.selected(path)) throw denied();
-    const before = statSync(path);
-    const page = await currentDocuments.run(this.manager.documents, () => readKnowledgeFilePage(path, args[1]));
+    if (name !== "knowledge-read" || args.length !== 2) throw invalid();
+    return this.read(args[0], args[1], signal);
+  }
+  async read(path, offset, signal, allowed = () => this.selected(path)) {
     this.check(signal);
-    if (!this.selected(path) || stamp(before) !== stamp(statSync(path))) throw denied();
+    if (typeof path !== "string" || !Number.isSafeInteger(offset) || offset < 0) throw invalid();
+    if (!this.selected(path) || !allowed()) throw denied();
+    const before = statSync(path);
+    const page = await currentDocuments.run(this.manager.documents, () => readKnowledgeFilePage(path, offset));
+    this.check(signal);
+    if (!this.selected(path) || !allowed() || stamp(before) !== stamp(statSync(path))) throw denied();
     const saved = await currentDocuments.run(this.manager.documents, () => withoutUnsavedFiles([path], path => path));
     if (!saved.length) throw new Error("편집 중인 지식베이스 파일을 저장한 뒤 다시 읽어 주세요.");
     return page;
@@ -127,5 +134,5 @@ export class OfficeKnowledge {
     const target = this.manager.openFile(source.workId, path, source.workspaceId, sessionId ?? undefined);
     return { artifactId: target.id, workId: target.workId, workspaceId: target.workspaceId };
   }
-  close() { this.closed = true; this.index.close(); }
+  close() { this.home.shutdown(); this.closed = true; this.index.close(); }
 }

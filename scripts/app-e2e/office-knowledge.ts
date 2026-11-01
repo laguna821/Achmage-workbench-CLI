@@ -75,6 +75,7 @@ export async function officeKnowledgeScenario(ctx: Ctx) {
     await seedLayout(ctx, { ...(await snapshot()).prefs, paneLayout: { version: 2, focus: "knowledge-pane", panes: [{ ...tab, id: "knowledge-pane", tabs: [tab], activeTabId: tab.id, recentTabIds: [tab.id] }] } });
     await wd.setWindowRect({ width: 1900, height: 1200 }); await wd.refresh(); await installProbe(wd);
     await openLibrary();
+    await clickText("별표·그룹 관리");
     await wd.sendKeys(await wd.waitFor('textarea[aria-label="추가할 파일 경로"]'), reference);
     await wd.sendKeys(await wd.waitFor('input[aria-label="그룹 이름"]'), "공유 연구"); await clickText("별표에 추가");
     const registered = await until(async () => (await api<KnowledgeLibrary>("GET", "/api/office-knowledge")).items.some(item => item.path === reference && item.group === "공유 연구") && await wd.execute<boolean>('return document.querySelector(".knowledge-list")?.textContent.includes("공동 참고자료.md") === true;'));

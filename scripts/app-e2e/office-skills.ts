@@ -58,6 +58,7 @@ export async function officeSkillsScenario(ctx: Ctx, launch: { binary: string; e
       const S = `Office 스킬 ${format}`; requests = [];
       try {
         const work = await api<Work>("POST", "/api/works", { title: `스킬과 양식 ${format}`, cwd: null });
+        const main = await api<Session>("POST", `/api/works/${work.id}/sessions`, { provider: "claude" });
         const file = join(work.cwd, `원본.${format}`);
         if (format === "docx") copyFileSync(resolve("vendor/ieumoffice/apps/docs/tests/pagination-corpus/docx/simple.docx"), file); else await fixture(file, format);
         const own = await api<Artifact>("POST", `/api/works/${work.id}/artifacts`, { path: file });
@@ -74,7 +75,7 @@ export async function officeSkillsScenario(ctx: Ctx, launch: { binary: string; e
         mkdirSync(join(template, "assets")); const templateFile = join(template, "assets", `template.${targetFormat}`);
         if (targetFormat === "docx") copyFileSync(resolve("vendor/ieumoffice/apps/docs/tests/pagination-corpus/docx/simple.docx"), templateFile); else await fixture(templateFile, targetFormat);
         const templateHash = hash(templateFile), sourceHash = hash(file);
-        const tab = { id: "skill-source", workId: work.id, sessionId: null as string | null, view: { kind: "document", artifactId: own.id, proposalId: null }, ui: { mode: format === "html" || format === "md" ? "rich" : "edit" } };
+        const tab = { id: "skill-source", workId: work.id, sessionId: main.id as string | null, view: { kind: "document", artifactId: own.id, proposalId: null }, ui: { mode: format === "html" || format === "md" ? "rich" : "edit" } };
         const layout = () => ({ version: 2, focus: "skill-pane", panes: [{ ...tab, id: "skill-pane", tabs: [tab], activeTabId: tab.id, recentTabIds: [tab.id] }] });
         await wd.frame(null); await seedLayout(ctx, { ...(await snapshot()).prefs, paneLayout: layout() }); await wd.setWindowRect({ width: 1900, height: 1200 }); await wd.refresh(); await enter(own.id, format);
         const listed = await wd.execute<OfficeSkillView[]>("return window.aiOfficeUserSkills.list();"); selectedId = listed.find((s) => s.name === "native-reading")!.id;
@@ -82,7 +83,7 @@ export async function officeSkillsScenario(ctx: Ctx, launch: { binary: string; e
         ctx.report.check(S, "원본 /·$ 선택 메뉴와 두 스킬 칩", await wd.execute<boolean>('return document.querySelectorAll(".ai-skill-chips .ai-skill-chip").length===2;'), undefined, await shot(ctx, `skills-${format}-picker.png`));
         await send("선택한 스킬과 guide.md를 읽어 줘");
         let session: Session | undefined;
-        if (!await until(async () => { session = (await snapshot()).sessions.find((s) => s.workId === work.id); return !!session; }, 20000)) throw new Error("First skill session missing");
+        if (!await until(async () => { session = (await snapshot()).sessions.find((s) => s.documentAgent?.artifactId === own.id); return !!session; }, 20000)) throw new Error("First skill session missing");
         if (!await until(async () => (await items(session!.id)).some((i) => i.kind === "turnEnd"), 60000)) throw new Error("Skill turn did not finish");
         const first = await items(session!.id), user = first.find((i) => i.kind === "user");
         const ok = first.some((i) => i.kind === "turnEnd" && i.status === "completed");
@@ -112,16 +113,18 @@ export async function officeSkillsScenario(ctx: Ctx, launch: { binary: string; e
         let copy: Artifact | undefined;
         if (!await until(async () => { copy = (await snapshot()).artifacts.find((a) => a.workId === work.id && a.name.startsWith("native-template")); return !!copy; }, 30000)) throw new Error(`Template copy missing: ${await wd.execute('return document.body.innerText.slice(-5000);')}`);
         await enter(copy!.id, targetFormat);
-        if (!await until(async () => (await items(session!.id)).some((i) => i.kind === "turnEnd" && i.office?.artifactId === copy!.id), 60000)) throw new Error(`Template handoff missing: ${await wd.execute('return document.body.innerText.slice(-5000);')}`);
-        const copiedItems = await items(session!.id), copiedUser = copiedItems.find((i) => i.kind === "user" && i.office?.artifactId === copy!.id);
+        const copySession = (await snapshot()).sessions.find(s => s.documentAgent?.artifactId === copy!.id);
+        if (!copySession) throw new Error("Template document agent missing");
+        if (!await until(async () => (await items(copySession.id)).some((i) => i.kind === "turnEnd" && i.office?.artifactId === copy!.id), 60000)) throw new Error(`Template handoff missing: ${await wd.execute('return document.body.innerText.slice(-5000);')}`);
+        const copiedItems = await items(copySession.id), copiedUser = copiedItems.find((i) => i.kind === "user" && i.office?.artifactId === copy!.id);
         ctx.report.check(S, "양식 원본 보존·현재 작업공간에 정확한 사본 생성", hash(templateFile) === templateHash && hash(file) === sourceHash && hash(copy!.path) === templateHash && copy!.workspaceId === session!.workspaceId);
-        ctx.report.check(S, "내부 새 편집기·같은 대화에 모든 스킬을 한 번만 인계", copiedUser?.office?.skills?.length === 2 && copiedItems.filter((i) => i.kind === "user" && i.office?.artifactId === copy!.id).length === 1 && (await snapshot()).sessions.filter((s) => s.workId === work.id).length === 1, undefined, await shot(ctx, `skills-${format}-template.png`));
-        writeFileSync(ctx.report.path(`skills-${format}-template.json`), JSON.stringify({ copy, copiedItems, requests }, null, 2));
+        ctx.report.check(S, "새 문서의 독립 대화에 모든 스킬을 한 번 인계·메인 요청과 분리", copiedUser?.office?.skills?.length === 2 && copiedItems.filter((i) => i.kind === "user" && i.office?.artifactId === copy!.id).length === 1 && copySession.id !== session!.id && copySession.documentAgent?.parentSessionId === main.id && !(await items(main.id)).some(i => i.kind === "user") && !(await items(session!.id)).some(i => i.kind === "user" && i.office?.artifactId === copy!.id), undefined, await shot(ctx, `skills-${format}-template.png`));
+        writeFileSync(ctx.report.path(`skills-${format}-template.json`), JSON.stringify({ copy, copySession, copiedItems, main: await items(main.id), source: await items(session!.id), requests }, null, 2));
         if (format === chosen[0] && targetFormat === "docx") {
           const editor = await wd.waitFor('.tiptap[contenteditable="true"]', 30000); await wd.click(await wd.waitFor(".tiptap p")); await wd.sendKeys(editor, " TEMPLATE_MANUAL_EDIT");
           requests = []; const count = copiedItems.filter((i) => i.kind === "turnEnd").length;
           await send("사람이 고친 문서를 확인해 줘");
-          if (!await until(async () => (await items(session!.id)).filter((i) => i.kind === "turnEnd").length > count, 60000)) throw new Error("Edited template follow-up missing");
+          if (!await until(async () => (await items(copySession.id)).filter((i) => i.kind === "turnEnd").length > count, 60000)) throw new Error("Edited template follow-up missing");
           const latest = (await snapshot()).artifacts.find((a) => a.id === copy!.id)!;
           ctx.report.check(S, "사본 직접 편집·저장 후 같은 세션의 AI 입력에 최신 문서 반영", latest.revision > 1 && hash(latest.path) !== templateHash && hash(templateFile) === templateHash && JSON.stringify(requests).includes("TEMPLATE_MANUAL_EDIT"), undefined, await shot(ctx, "skills-template-followup.png"));
         }

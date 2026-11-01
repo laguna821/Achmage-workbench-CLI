@@ -10,6 +10,7 @@ import type { Store } from "./store.ts";
 import type { OfficeSkillAccess, OfficeSkillContext } from "./office-skills.ts";
 import { officeEditorKind } from "./editors.ts";
 import { HttpError } from "./errors.ts";
+import { bindTemplateSession, isTemplateSource } from "./office-template-session.ts";
 
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const string = (v: unknown, max: number): v is string => typeof v === "string" && v.length <= max;
@@ -28,15 +29,16 @@ export class OfficeTemplatePreviews {
     // The card commit may have succeeded just before the process stopped.
     for (const entry of manager.creations.list()) {
       if (entry.office?.preview?.status !== "open" || !entry.artifactId) continue;
-      const saved = store.metaEntries("office-skill-card:").map(({ value }) => JSON.parse(value)).find((value) => value.status === "completed" && value.sessionId === entry.sessionId && value.artifactId === entry.artifactId && value.previewId === entry.requestId)?.item;
+      const saved = store.metaEntries("office-skill-card:").map(({ value }) => JSON.parse(value)).find((value) => value.status === "completed" && [entry.sessionId, entry.office?.targetSessionId].includes(value.sessionId) && value.artifactId === entry.artifactId && value.previewId === entry.requestId)?.item;
       if (saved?.kind === "tool" && saved.office?.cardSaved) this.end(entry, "saved", { skillId: saved.office.cardSaved.skillId, title: saved.office.cardSaved.label });
     }
   }
   private forArtifact(artifactId: string) { return this.manager.creations.list().find((item) => item.artifactId === artifactId && item.office?.preview); }
   private current(context: OfficeSkillContext, open = true) {
-    const owner = this.access(context), entry = this.forArtifact(context.artifactId);
-    if (!entry) return null;
-    if (entry.sessionId !== owner.sessionId) throw new HttpError(409, "office_preview_session", "양식을 만들던 대화에서 이어서 진행해 주세요.");
+    const owner = this.access(context), found = this.forArtifact(context.artifactId);
+    if (!found) return null;
+    const entry = bindTemplateSession(this.manager, found);
+    if (entry.office?.targetSessionId !== owner.sessionId) throw new HttpError(409, "office_preview_session", "이 양식 문서의 AI 대화에서 이어서 진행해 주세요.");
     if (open && entry.office?.preview?.status !== "open") throw new HttpError(409, "office_preview_ended", "이미 끝난 양식 미리보기입니다. 문서 사본은 그대로 보존했습니다.");
     return entry;
   }
@@ -71,7 +73,7 @@ export class OfficeTemplatePreviews {
       throw new HttpError(409, "office_preview_interrupted", "이미 준비한 사본을 확인해 주세요. 중복 생성하지 않았습니다.");
     }
     const receipt = this.cards.capture(context, card, (draft.name as string).trim());
-    const existing = this.manager.creations.list().find((entry) => entry.sessionId === owner.sessionId && entry.office?.sourceArtifactId === context.artifactId && entry.office.preview?.status === "open" && entry.office.handoff.preview?.proposal.key === proposal.key);
+    const existing = this.manager.creations.list().find((entry) => entry.office?.preview?.status === "open" && entry.office.handoff.preview?.proposal.key === proposal.key && isTemplateSource(this.manager, entry, context.artifactId, owner.sessionId));
     if (existing?.artifactId) return { ok: true as const, previewId: existing.requestId, tabId: existing.artifactId };
     const preview: OfficeTemplatePreview = { previewId: requestId, title: input.title, fileName: input.fileName, originalRedacted: input.originalRedacted,
       proposal: { key: proposal.key, name: proposal.name as string, title: proposal.title as string, description: proposal.description as string, body: proposal.body as string, wantsTemplate: true, ...(target ? { target } : {}) },
@@ -83,7 +85,7 @@ export class OfficeTemplatePreviews {
       target: { format, name: input.tabTitle, extension: extname(input.fileName).toLowerCase() }, sources: [{ artifactId: owner.artifact.id, revision: owner.artifact.revision }], office }, snapshot);
     const tracked = this.manager.documents.track(owner.artifact.workId, copy.cwd, copy.path, "user", owner.sessionId, "현재 문서의 양식 미리보기 사본", copy.sources);
     if (!tracked) throw new HttpError(500, "office_preview_track", "양식 사본을 문서 목록에 연결하지 못했습니다. 생성 기록에 사본을 보존했습니다.");
-    this.manager.creations.update(requestId, { state: "completed", artifactId: tracked.artifact.id });
+    bindTemplateSession(this.manager, this.manager.creations.update(requestId, { state: "completed", artifactId: tracked.artifact.id })!);
     this.manager.sink.upsertItem(owner.sessionId, { kind: "artifact", id: `artifact:create:${requestId}`, artifactId: tracked.artifact.id, revision: tracked.artifact.revision, change: "created", at: Date.now() });
     return { ok: true as const, tabId: tracked.artifact.id, previewId: requestId };
   }
@@ -106,7 +108,7 @@ export class OfficeTemplatePreviews {
     const owner = this.access(context);
     return this.manager.creations.list().flatMap((entry) => {
       const office = entry.office, preview = office?.preview;
-      return entry.sessionId === owner.sessionId && office?.sourceArtifactId === context.artifactId && preview && entry.artifactId
+      return office && preview && entry.artifactId && isTemplateSource(this.manager, entry, context.artifactId, owner.sessionId)
         ? [{ previewId: entry.requestId, tabId: entry.artifactId, outcome: preview.status, label: preview.receipt.label, skillId: preview.skillId, title: preview.title || office.handoff.preview?.draft?.name || preview.receipt.name }] : [];
     });
   }

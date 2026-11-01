@@ -148,6 +148,24 @@ export class Api {
   }
 
   snapshot = () => this.request<Snapshot>("GET", "/api/snapshot");
+  async knowledgeStream(owner: string, body: unknown, onChunk: (value: unknown) => void, signal: AbortSignal) {
+    const response = await fetch("/api/office-knowledge/home/" + encodeURIComponent(owner) + "/stream", {
+      method: "POST", headers: { authorization: "Bearer " + this.token, "content-type": "application/json" }, body: JSON.stringify(body), signal,
+    });
+    if (!response.ok) throw new ApiRequestError(response.status, await response.json().catch(() => ({ code: "knowledge_stream", message: response.statusText })));
+    if (!response.body) throw new Error("AI 응답을 받지 못했습니다.");
+    const reader = response.body.getReader(), decoder = new TextDecoder(); let pending = "", received = 0;
+    try {
+      while (true) {
+        const next = await reader.read(); if (next.done) break;
+        received += next.value.byteLength; if (received > 33_000_000) throw new Error("AI 응답의 전송 한도를 넘었습니다.");
+        pending += decoder.decode(next.value, { stream: true });
+        let at: number;
+        while ((at = pending.indexOf("\n")) >= 0) { const line = pending.slice(0, at); pending = pending.slice(at + 1); if (line.trim()) onChunk(JSON.parse(line)); }
+      }
+      pending += decoder.decode(); if (pending.trim()) onChunk(JSON.parse(pending));
+    } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+  }
   prepareOfficeOutput = (artifactId: string, revision: number, path: string) => this.request<{ id: string; path: string; format: OfficeOutputFormat; exists: boolean; size: number }>("POST", `/api/artifacts/${artifactId}/outputs`, { revision, path });
   async commitOfficeOutput(artifactId: string, id: string, bytes: ArrayBuffer, replace: boolean) {
     const response = await fetch(`/api/artifacts/${artifactId}/outputs/${id}?replace=${replace ? 1 : 0}`, { method: "POST", headers: { authorization: `Bearer ${this.token}`, ...this.editorHeaders(), "content-type": "application/octet-stream" }, body: bytes });

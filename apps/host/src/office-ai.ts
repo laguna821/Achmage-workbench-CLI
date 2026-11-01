@@ -123,6 +123,40 @@ export class OfficeAi {
     this.active.set(key, { owner, controller, tool });
     return { signal: controller.signal, abort, finish: () => { response.off("close", abort); this.active.delete(key); } };
   }
+  /** Authenticated parent-only home calls. Document grants never reach this route. */
+  async handleKnowledge(req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
+    const match = /^\/api\/office-knowledge\/home\/([^/]+)\/(settings|selection|statuses|stream|cancel)$/.exec(url.pathname);
+    if (!match) return false;
+    if (!this.knowledge) throw new HttpError(503, "knowledge_unavailable", "지식베이스를 준비하고 있습니다.");
+    const [, homeId, operation] = match, get = operation === "settings" || operation === "statuses";
+    if (req.method !== (get ? "GET" : "POST")) throw new HttpError(405, "method_not_allowed", "허용되지 않은 지식베이스 요청입니다.");
+    const engine = await this.getEngine(), home = this.knowledge.home.require(homeId!);
+    const owner = "knowledge-home:" + homeId;
+    if (get) {
+      const value = operation === "settings" ? engine.settings() : await engine.statuses(url.searchParams.get("refresh") === "1", true);
+      this.knowledge.home.require(homeId!); sendJson(res, 200, value); return true;
+    }
+    let raw: unknown;
+    try { raw = JSON.parse((await readBody(req, OFFICE_AI_INPUT_LIMIT)).toString("utf8")); }
+    catch (error) { if (error instanceof HttpError) throw error; return invalid(); }
+    this.knowledge.home.require(homeId!);
+    if (operation === "selection") {
+      if (!record(raw) || !engine.select) return invalid();
+      sendJson(res, 200, await engine.select(raw)); return true;
+    }
+    if (operation === "cancel") {
+      if (!record(raw) || !identifier(raw.requestId)) return invalid();
+      this.active.get(owner + "/" + raw.requestId)?.controller.abort();
+      this.knowledge.home.cancel(homeId!);
+      sendJson(res, 200, { ok: true }); return true;
+    }
+    const request = officeAiRequest(raw, true), run = this.begin(owner, request.requestId, res, 1);
+    const abort = () => run.abort();
+    home.controller.signal.addEventListener("abort", abort, { once: true });
+    if (home.controller.signal.aborted) abort();
+    const sessionId = createHash("sha256").update(owner + "/" + (request.sessionId ?? request.requestId)).digest("hex");
+    return this.streamResponse(engine, request, sessionId, run, res, () => home.controller.signal.removeEventListener("abort", abort));
+  }
   async handle(req: IncomingMessage, res: ServerResponse, url: URL, bearer: string | null, documents: Documents, grants: EditorGrants): Promise<boolean> {
     if (await this.skills?.handle(req, res, url, bearer, grants)) return true;
     const match = /^\/api\/artifacts\/([^/]+)\/ai\/(settings|selection|statuses|stream|chat|cancel|history|turn-start|turn-events|turn-finish|tool-capabilities|tool)$/.exec(url.pathname);
@@ -227,6 +261,9 @@ export class OfficeAi {
     const disconnect = connect(run);
     // The original Codex session pool must not join two documents that chose the same id.
     const sessionId = createHash("sha256").update(bound ? `${bound.sessionId}/${bound.artifactId}` : `${owner}/${request.sessionId ?? request.requestId}`).digest("hex");
+    return this.streamResponse(engine, request, sessionId, run, res, disconnect);
+  }
+  private async streamResponse(engine: OfficeAiEngine, request: OfficeAiStream, sessionId: string, run: ReturnType<OfficeAi["begin"]>, res: ServerResponse, disconnect: () => void) {
     res.writeHead(200, { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" });
     res.flushHeaders();
     let size = 0, overflow = false;

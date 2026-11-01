@@ -259,6 +259,31 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       const method = req.method ?? "GET";
 
       if (method === "GET" && path === "/api/snapshot") return sendJson(res, 200, manager.snapshot());
+      if (path.startsWith("/api/office-knowledge/") && options.officeKnowledge) {
+        if (await options.officeAi?.handleKnowledge(req, res, url)) return;
+        if (method === "GET" && path === "/api/office-knowledge/page") {
+          const origin = options.officeSettingsOrigin?.();
+          if (!origin) throw new HttpError(503, "editors_unavailable", "지식베이스 화면을 준비하고 있습니다.");
+          return sendJson(res, 200, { origin, url: origin + "/office/knowledge.html" });
+        }
+        if (method === "POST" && path === "/api/office-knowledge/home") return sendJson(res, 200, { owner: options.officeKnowledge.home.open() });
+        const home = /^\/api\/office-knowledge\/home\/([^/]+)(\/invoke)?$/.exec(path);
+        if (home && !home[2] && method === "DELETE") { options.officeKnowledge.home.close(home[1]!); return sendJson(res, 200, { ok: true }); }
+        if (home?.[2] && method === "POST") {
+          const body = await readJson(req, 9_000_000), controller = new AbortController();
+          if (typeof body.channel !== "string" || !Array.isArray(body.args)) throw new HttpError(400, "knowledge_home_request", "지식베이스 요청을 확인해 주세요.");
+          res.once("close", () => controller.abort());
+          if (body.channel === "home:skills" && options.officeSkills) {
+            const [input] = body.args;
+            if (body.args.length !== 1 || !input || typeof input !== "object" || typeof input.operation !== "string") throw new HttpError(400, "knowledge_skill_request", "스킬 요청을 확인해 주세요.");
+            const assertAlive = () => { options.officeKnowledge!.home.require(home[1]!); controller.signal.throwIfAborted(); };
+            const value = await options.officeSkills.home.invoke({ owner: home[1]!, destination: body.destination as { workId: string; workspaceId?: string } | undefined, assertAlive }, input.operation, input.input);
+            const opened = value as { ok?: boolean; tabId?: string };
+            return sendJson(res, 200, opened?.ok && opened.tabId ? { ...opened, artifact: manager.documents.get(opened.tabId) } : value);
+          }
+          return sendJson(res, 200, await options.officeKnowledge.home.invoke(home[1]!, body.channel, body.args, body.destination, controller.signal));
+        }
+      }
       if (path === "/api/office-knowledge" && options.officeKnowledge) {
         if (method === "GET") return sendJson(res, 200, options.officeKnowledge.library());
         if (method === "POST") {
@@ -705,7 +730,8 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         if (method === "POST" && parts[2] === "office-skills") {
           const body = await readJson(req, 90 * 1024 * 1024), grants = options.editors?.grants;
           if (!grants || !options.officeSkills || typeof body.token !== "string") throw new HttpError(401, "unauthorized", "문서 창의 양식 권한이 없습니다.");
-          return sendJson(res, 200, await options.officeSkills.action({ artifactId, token: body.token, grants }, body.action, body.input));
+          const result = await options.officeSkills.action({ artifactId, token: body.token, grants }, body.action, body.input);
+          return sendJson(res, 200, result.ok && result.tabId ? { ...result, artifact: manager.documents.get(result.tabId) } : result);
         }
         // Only the trusted parent can select/freeze/read references for a particular editor.
         // This route is deliberately absent from the third-party editor origin.

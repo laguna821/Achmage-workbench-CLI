@@ -6,33 +6,35 @@ import { MAX_USER_SKILL_BYTES } from "../../../third_party/ieumoffice/user-skill
 import type { SessionManager } from "./sessions.ts";
 import type { Store } from "./store.ts";
 import { HttpError } from "./errors.ts";
-import { officeSkillId, type OfficeSkillAccess, type OfficeSkillContext } from "./office-skills.ts";
+import { officeSkillId, type OfficeSkillContext } from "./office-skills.ts";
 import { saveSkillCard, type SkillCardInput, type SkillCardRevision } from "./skill-card-library.ts";
 
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const string = (v: unknown, max: number): v is string => typeof v === "string" && v.length <= max;
 const hash = (v: string) => createHash("sha256").update(v).digest("hex");
 export type SkillCardReceipt = { identity: string; targetId?: string; label: string; name: string; revisions: SkillCardRevision[] };
-type Saved = { version: 1; fingerprint: string; sessionId: string; artifactId: string; previewId?: string; status: "saving" | "interrupted" | "failed" | "completed"; result?: { ok: true; id: string }; item?: TranscriptItem };
+export type OfficeCardAccess = { scope: ReturnType<SessionManager["skillScope"]>; ownerId: string; sessionId: string | null; artifactId: string | null };
+type Saved = { version: 1; fingerprint: string; sessionId: string | null; artifactId: string | null; previewId?: string; status: "saving" | "interrupted" | "failed" | "completed"; result?: { ok: true; id: string }; item?: TranscriptItem };
 
 /** The original card's explicit Save is the sole write boundary. Name checks
  * pin the source revisions; saved receipts and chat rows share Workbench storage. */
-export class OfficeSkillCards {
+export class OfficeSkillCards<C = OfficeSkillContext> {
   private readonly checked = new Map<string, SkillCardReceipt>();
   private readonly saving = new Set<string>();
   private readonly manager: SessionManager;
   private readonly store: Store;
-  private readonly access: (context: OfficeSkillContext) => OfficeSkillAccess;
-  constructor(manager: SessionManager, store: Store, access: (context: OfficeSkillContext) => OfficeSkillAccess) {
-    this.manager = manager; this.store = store; this.access = access;
-    for (const entry of store.metaEntries("office-skill-card:")) {
+  private readonly access: (context: C) => OfficeCardAccess;
+  private readonly prefix: string;
+  constructor(manager: SessionManager, store: Store, access: (context: C) => OfficeCardAccess, prefix = "office-skill-card:") {
+    this.manager = manager; this.store = store; this.access = access; this.prefix = prefix;
+    for (const entry of store.metaEntries(prefix)) {
       const saved = this.saved(entry.value);
       if (saved.status === "saving") {
         this.store.setMeta(entry.key, JSON.stringify({ ...saved, status: "interrupted" }));
-        this.manager.sink.upsertItem(saved.sessionId, { kind: "notice", id: `${entry.key}:recovered`, level: "info", text: "스킬 저장이 중단되었습니다. 보관함과 백업에서 결과를 확인해 주세요. 저장은 자동 반복하지 않았습니다.", at: Date.now() });
+        if (saved.sessionId) this.manager.sink.upsertItem(saved.sessionId, { kind: "notice", id: `${entry.key}:recovered`, level: "info", text: "스킬 저장이 중단되었습니다. 보관함과 백업에서 결과를 확인해 주세요. 저장은 자동 반복하지 않았습니다.", at: Date.now() });
       }
       // Recover a completed save's notification after a crash between commit and publish.
-      if (saved.status === "completed" && saved.item) this.manager.sink.upsertItem(saved.sessionId, saved.item);
+      if (saved.status === "completed" && saved.item && saved.sessionId) this.manager.sink.upsertItem(saved.sessionId, saved.item);
     }
   }
   private saved(raw: string): Saved {
@@ -40,19 +42,19 @@ export class OfficeSkillCards {
     if (value.version !== 1) throw new HttpError(409, "office_skill_version", "스킬 저장 기록의 버전을 확인해 주세요. 기록은 보존했습니다.");
     return value;
   }
-  private identity(access: OfficeSkillAccess) { return JSON.stringify([access.scope, access.sessionId, access.artifact.id, access.access.viewId]); }
+  private identity(access: OfficeCardAccess) { return JSON.stringify([access.scope, access.sessionId, access.artifactId, access.ownerId]); }
   private card(raw: unknown) {
     if (!record(raw) || !string(raw.id, 100) || !/^[A-Za-z0-9_-]+$/.test(raw.id) || !string(raw.label, 512) || !raw.label.trim() || (raw.targetId !== undefined && !string(raw.targetId, 100))) throw new HttpError(400, "office_skill_card", "스킬 카드 정보를 확인해 주세요.");
     if (raw.previewId !== undefined && !string(raw.previewId, 128)) throw new HttpError(400, "office_skill_card", "미리보기 카드 정보를 확인해 주세요.");
     return { id: raw.id, label: raw.label, targetId: raw.targetId as string | undefined, ...(raw.previewId ? { previewId: raw.previewId as string } : {}) };
   }
-  capture(context: OfficeSkillContext, raw: unknown, name: unknown): SkillCardReceipt {
+  capture(context: C, raw: unknown, name: unknown): SkillCardReceipt {
     const identity = this.identity(this.access(context)), card = this.card(raw);
     const receipt = this.checked.get(hash(identity + card.id));
     if (!receipt || receipt.targetId !== card.targetId || receipt.label !== card.label || receipt.name !== name) throw new HttpError(409, "office_skill_unchecked", "미리보기를 열기 전에 카드 이름과 스킬 판을 확인해 주세요.");
     return structuredClone(receipt);
   }
-  async read(context: OfficeSkillContext, operation: string, input: unknown, inherited?: SkillCardReceipt) {
+  async read(context: C, operation: string, input: unknown, inherited?: SkillCardReceipt) {
     const before = this.access(context), identity = this.identity(before);
     const current = () => { if (identity !== this.identity(this.access(context))) throw new HttpError(409, "office_skill_scope", "카드를 확인하는 동안 문서나 대화가 바뀌었습니다."); };
     if (!record(input)) throw new HttpError(400, "office_skill_card", "스킬 카드 요청이 올바르지 않습니다.");
@@ -81,10 +83,10 @@ export class OfficeSkillCards {
     const collision = all.some((s) => s.name.toLowerCase() === name.toLowerCase() && s.id !== target?.id && (s.editable || name !== target?.name));
     return collision ? { ok: false, problem: "taken" } : { ok: true };
   }
-  async save(context: OfficeSkillContext, input: unknown, completedOnly = false) {
+  async save(context: C, input: unknown, completedOnly = false) {
     const before = this.access(context), identity = this.identity(before);
     if (!record(input)) throw new HttpError(400, "office_skill_card", "스킬 저장 요청이 올바르지 않습니다.");
-    const card = this.card(input.card), key = hash(identity + card.id), storeKey = `office-skill-card:${key}`;
+    const card = this.card(input.card), key = hash(identity + card.id), storeKey = this.prefix + key;
     for (const [field, limit] of [["name", 200], ["title", 512], ["description", 16_000], ["body", 256_000]] as const) if (!string(input[field], limit)) throw new HttpError(400, "office_skill_card", "스킬 내용과 길이를 확인해 주세요.");
     if (!["auto", "manual"].includes(input.invoke as string) || input.targetId !== card.targetId || input.overwrite !== undefined && typeof input.overwrite !== "boolean") throw new HttpError(400, "office_skill_card", "스킬 선택과 대상을 확인해 주세요.");
     let template: SkillCardInput["template"];
@@ -104,7 +106,7 @@ export class OfficeSkillCards {
     const checked = this.checked.get(key);
     if (!checked || checked.identity !== identity || checked.targetId !== card.targetId || checked.label !== card.label || checked.name !== (input.name as string).trim()) throw new HttpError(409, "office_skill_unchecked", "카드 이름과 현재 스킬 판을 다시 확인해 주세요.");
     this.saving.add(key);
-    const pending: Saved = { version: 1, fingerprint, sessionId: before.sessionId, artifactId: before.artifact.id, ...(card.previewId ? { previewId: card.previewId } : {}), status: "saving" };
+    const pending: Saved = { version: 1, fingerprint, sessionId: before.sessionId, artifactId: before.artifactId, ...(card.previewId ? { previewId: card.previewId } : {}), status: "saving" };
     let committing = false;
     try {
       this.store.setMeta(storeKey, JSON.stringify(pending));
@@ -113,9 +115,9 @@ export class OfficeSkillCards {
       const result = await saveSkillCard(this.manager.userSkills, { name: input.name as string, title: input.title as string, description: input.description as string, body: input.body as string, invoke: input.invoke as "auto" | "manual", targetId: target?.id, overwrite: input.overwrite as boolean | undefined, template }, before.scope, checked.revisions,
         () => { if (identity !== this.identity(this.access(context))) throw new HttpError(409, "office_skill_scope", "저장 전에 선택한 문서나 대화가 바뀌었습니다."); }, () => { committing = true; });
       const answer = { ok: true as const, id: officeSkillId(result) };
-      const item: TranscriptItem = { kind: "tool", tool: "mcp", id: `office-skill-card:${key}`, title: card.label, detail: "propose_skill\n{}", output: `skill-card-saved:${answer.id}`, status: "completed", at: Date.now(), office: { turnId: `skill-card:${card.id}`, artifactId: before.artifact.id, cardSaved: { skillId: answer.id, label: card.label } } };
+      const item: TranscriptItem | undefined = before.artifactId && before.sessionId ? { kind: "tool", tool: "mcp", id: `office-skill-card:${key}`, title: card.label, detail: "propose_skill\n{}", output: `skill-card-saved:${answer.id}`, status: "completed", at: Date.now(), office: { turnId: `skill-card:${card.id}`, artifactId: before.artifactId, cardSaved: { skillId: answer.id, label: card.label } } } : undefined;
       this.store.setMeta(storeKey, JSON.stringify({ ...pending, status: "completed", result: answer, item } satisfies Saved));
-      this.manager.sink.upsertItem(before.sessionId, item);
+      if (item && before.sessionId) this.manager.sink.upsertItem(before.sessionId, item);
       return answer;
     } catch (error) {
       if (this.store.getMeta(storeKey) === JSON.stringify(pending)) this.store.setMeta(storeKey, JSON.stringify({ ...pending, status: committing ? "interrupted" : "failed" }));

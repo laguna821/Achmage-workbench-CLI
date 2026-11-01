@@ -159,6 +159,20 @@ function originalSettingsPanes(): Plugin {
   return {
     name: "workbench-original-settings-panes", enforce: "pre",
     transform(code, id) {
+      if (id === `${ieum}/apps/shell/src/renderer/src/KbAskPanel.tsx`) {
+        const marker = "  /** the narrowed run is over:";
+        if (code.split(marker).length !== 2) this.error("Original KB refresh boundary changed; review its corpus refresh adapter");
+        return code.replace(marker, `  useEffect(() => {
+    let alive = true;
+    const refresh = () => {
+      refreshGroups();
+      // Refresh the empty-state/count without changing an active run's corpus.
+      void window.aiOffice.kbList().then(files => { if (alive) setCorpusCount(files.length); }).catch(() => {});
+    };
+    window.addEventListener('workbench:knowledge-corpus-changed', refresh);
+    return () => { alive = false; window.removeEventListener('workbench:knowledge-corpus-changed', refresh); };
+  }, []);\n\n` + marker);
+      }
       if (id !== `${ieum}/apps/shell/src/renderer/src/SettingsModal.tsx`) return null;
       for (const name of ["AiModelPane", "AiMediaPane"]) {
         const marker = `function ${name}(`;
@@ -437,6 +451,6 @@ export default defineConfig({
     target: "es2022",
     sourcemap: false,
     chunkSizeWarningLimit: 6000,
-    rollupOptions: { input: { settings: here("./settings.html"), docs: here("./docs.html"), slides: here("./slides.html"), sheets: here("./sheets.html"), hwp: here("./hwp.html"), markdown: here("./markdown.html"), html: here("./html.html"), pdf: here("./pdf.html"), mindmap: here("./mindmap.html"), epub: here("./epub.html") } },
+    rollupOptions: { input: { knowledge: here("./knowledge.html"), settings: here("./settings.html"), docs: here("./docs.html"), slides: here("./slides.html"), sheets: here("./sheets.html"), hwp: here("./hwp.html"), markdown: here("./markdown.html"), html: here("./html.html"), pdf: here("./pdf.html"), mindmap: here("./mindmap.html"), epub: here("./epub.html") } },
   },
 });

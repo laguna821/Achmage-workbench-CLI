@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { expect, it } from "vitest";
@@ -8,6 +8,7 @@ import { EventBus } from "./bus.ts";
 import { SessionManager } from "./sessions.ts";
 import { EditorGrants } from "./editors.ts";
 import type { KnowledgeHit, KnowledgeLibrary } from "../../../packages/contracts/src/office-knowledge.ts";
+import type { IeumOffice } from "./ieumoffice.ts";
 
 function fixture() {
   const dir = mkdtempSync(join(tmpdir(), "wb-knowledge-")), store = new Store(join(dir, "state.sqlite"));
@@ -95,5 +96,75 @@ it("reads the legacy flat star list without rewriting it until a deliberate meta
     expect(f.library.library().items[0]?.path).toBe(path); expect(readFileSync(f.library.path, "utf8")).toBe(original);
     const library = await f.library.manage("group", { paths: [path], group: "Legacy" }) as KnowledgeLibrary;
     expect(library.groups).toEqual(["Legacy"]); expect(JSON.parse(readFileSync(f.library.path, "utf8"))).toEqual({ version: 1, items: [{ path, group: "Legacy" }] });
+  } finally { await f.close(); }
+});
+
+it("keeps each original home group scope current, private to its owner, and closed after the run", async () => {
+  const f = fixture();
+  try {
+    const a = f.write("Research.md", "그룹 공통 키워드 RESEARCH_ONLY"), b = f.write("Personal.md", "그룹 공통 키워드 PERSONAL_ONLY");
+    await f.library.manage("add", { paths: [a], group: "연구" }); await f.library.manage("add", { paths: [b], group: "개인" });
+    const home = f.library.home, one = home.open(), two = home.open(), signal = new AbortController().signal;
+    const call = (owner: string, channel: string, raw?: unknown) => home.invoke(owner, channel, raw === undefined ? [] : [raw], undefined, signal);
+    const scope = await call(one, "kb:open-scope", "연구");
+    expect(await call(one, "kb:list", { scope })).toEqual([expect.objectContaining({ path: a })]);
+    expect((await call(one, "kb:search", { q: "키워드", scope }) as KnowledgeHit[]).map(hit => hit.path)).toEqual([a]);
+    await expect(call(one, "kb:read", { path: b, scope })).rejects.toThrow();
+    await expect(call(two, "kb:list", { scope })).rejects.toThrow();
+    await call(two, "kb:close-scope", scope); // Another home cannot close this run.
+    expect(await call(one, "kb:read", { path: a, scope })).toMatchObject({ text: expect.stringContaining("RESEARCH_ONLY") });
+    await f.library.manage("group", { paths: [a], group: "개인" });
+    expect(await call(one, "kb:list", { scope })).toEqual([]);
+    await expect(call(one, "kb:read", { path: a, scope })).rejects.toThrow();
+    await expect(call(one, "kb:open-scope", "연구")).rejects.toThrow();
+    await call(one, "kb:close-scope", scope);
+    await expect(call(one, "kb:list", { scope })).rejects.toThrow();
+    home.close(one); await expect(call(one, "kb:list")).rejects.toThrow();
+    expect(await call(two, "kb:list")).toHaveLength(2);
+  } finally { await f.close(); }
+});
+
+it("saves home answers to the selected workspace without overwriting sources or inventing a chat", async () => {
+  const f = fixture();
+  try {
+    const project = f.manager.createWork({ title: "다른 프로젝트" }), home = f.library.home, owner = home.open(), signal = new AbortController().signal;
+    const original = join(project.cwd, "답변.md"); writeFileSync(original, "PRESERVE ORIGINAL");
+    const sessions = f.manager.snapshot().sessions.length, content = '# 답변\r\n\r\n| 한글 | 값 |\r\n|---|---|\r\n| 자료 | 그대로 |\r\n';
+    const destination = { workId: project.id, workspaceId: project.defaultWorkspaceId };
+    const save = (format: string) => home.invoke(owner, "kb:create-document", [{ title: "답변", format, content }], destination, signal);
+    const result = await save("md") as { path: string; artifactId: string };
+    expect(result.path).toBe(join(project.cwd, "답변 2.md"));
+    expect(readFileSync(result.path, "utf8")).toBe(content); expect(readFileSync(original, "utf8")).toBe("PRESERVE ORIGINAL");
+    expect(f.manager.documents.get(result.artifactId)).toMatchObject({ workId: project.id, workspaceId: project.defaultWorkspaceId, revision: 1 });
+    expect(f.manager.snapshot().sessions.length).toBe(sessions);
+    expect(await home.invoke(owner, "home:open-path", [result.path], undefined, signal)).toMatchObject({ id: result.artifactId });
+    const other = home.open();
+    await expect(home.invoke(other, "home:open-path", [result.path], destination, signal)).rejects.toThrow();
+    await expect(home.invoke(owner, "kb:create-document", [{ title: "Bad", format: "md", content }], { workId: project.id, workspaceId: f.work.defaultWorkspaceId }, signal)).rejects.toThrow();
+    expect(readdirSync(project.cwd).filter(name => name.startsWith("Bad"))).toEqual([]);
+    await expect(save("pdf")).rejects.toThrow();
+  } finally { await f.close(); }
+});
+
+it("stages the original DOCX CLI request and cancels an in-flight creation before publishing any file", async () => {
+  const f = fixture();
+  try {
+    const home = f.library.home, owner = home.open(), destination = { workId: f.work.id };
+    let started = false, cancelled = false, stagedInput = "";
+    f.manager.documents.ieum = { available: true, run: async (args: string[], _roots: string[], _timeout: number, signal: AbortSignal) => {
+      started = true; stagedInput = readFileSync(args[args.indexOf("--from") + 1]!, "utf8");
+      expect(args.slice(0, 3)).toEqual(["create", "--type", "docx"]);
+      await new Promise<void>((_resolve, reject) => signal.addEventListener("abort", () => { cancelled = true; reject(new Error("cancelled CLI")); }, { once: true }));
+      return { status: "ok" };
+    } } as unknown as IeumOffice;
+    const pending = home.invoke(owner, "kb:create-document", [{ title: "취소", format: "docx", content: "# 원본 입력" }], destination, new AbortController().signal);
+    const rejected = expect(pending).rejects.toThrow("cancelled CLI");
+    await expect.poll(() => started).toBe(true);
+    home.cancel(owner); await rejected;
+    expect(cancelled).toBe(true); expect(stagedInput).toBe("# 원본 입력");
+    expect(existsSync(join(f.work.cwd, "취소.docx"))).toBe(false);
+    expect(readdirSync(join(f.dir, "office", "knowledge", "generated"))).toEqual([]);
+    const after = await home.invoke(owner, "kb:create-document", [{ title: "다음", format: "md", content: "다음 요청은 사용 가능" }], destination, new AbortController().signal) as { path: string };
+    expect(readFileSync(after.path, "utf8")).toBe("다음 요청은 사용 가능");
   } finally { await f.close(); }
 });

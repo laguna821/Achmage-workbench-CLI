@@ -17,7 +17,7 @@ export type CreationRecord<T extends CreationTarget = CreationTarget> = {
   state: "reserved" | "ready" | "sent" | "completed" | "interrupted" | "failed";
   initialSha256: string; skillPath: string | null; skillDir: string | null;
   artifactId: string | null; problem: string | null; createdAt: number; updatedAt: number;
-  office?: { sourceArtifactId: string; sourceViewId: string; handoff: OfficeSkillHandoff; state: "queued" | "taken" | "interrupted"; claimedViewId?: string;
+  office?: { sourceArtifactId: string; sourceViewId: string; targetSessionId?: string; handoff: OfficeSkillHandoff; state: "queued" | "taken" | "interrupted"; claimedViewId?: string;
     preview?: { original: Snapshot; receipt: SkillCardReceipt; status: "open" | "saved" | "unsaved"; skillId?: string; title?: string } };
 };
 const PREFIX = "document-creation:";

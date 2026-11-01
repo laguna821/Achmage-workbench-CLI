@@ -186,11 +186,11 @@ export class IeumOffice {
   }
 
   /** One command with `--json`; refusals become HTTP errors with the tool's own message. */
-  async run(args: string[], roots: string[], timeoutMs = 180_000): Promise<CliResult> {
+  async run(args: string[], roots: string[], timeoutMs = 180_000, signal?: AbortSignal): Promise<CliResult> {
     if (!this.install) throw new HttpError(501, "ieumoffice_missing", "이음오피스를 찾지 못해 이 문서를 열 수 없습니다. 앱을 다시 설치해 주세요.");
     const { file, args: prefix } = this.command();
     const stdout = await new Promise<string>((resolve, reject) =>
-      execFile(file, [...prefix, ...args, "--json"], { timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, env: this.env(roots), windowsHide: true }, (error, out, err) =>
+      execFile(file, [...prefix, ...args, "--json"], { timeout: timeoutMs, signal, maxBuffer: 64 * 1024 * 1024, env: this.env(roots), windowsHide: true }, (error, out, err) =>
         // A failed command still prints its JSON on stdout.
         out?.trim() ? resolve(out) : reject(new HttpError(500, "ieumoffice_failed", `이음오피스 실행 실패: ${(err || error?.message || "").toString().slice(0, 300)}`)),
       ),
