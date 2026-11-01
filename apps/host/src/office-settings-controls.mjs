@@ -142,8 +142,6 @@ export function createOfficeSettingsControls(dataDir, store, injected = {}, host
           return (injected.openUrl ?? openUrl)(SUBSCRIPTION_INSTALL_URLS[input]);
         }
         case "home:open-connect-help": return (injected.openUrl ?? openUrl)(subscriptionConnectHelpUrl(input));
-        // File search has its own store/index, to be connected with that subsystem.
-        case "home:get-file-search-settings": return null;
         default: throw new HttpError(501, "office_settings_operation_unavailable", "이 설정을 아직 사용할 수 없습니다.");
       }
     },

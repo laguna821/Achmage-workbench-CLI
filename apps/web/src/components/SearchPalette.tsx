@@ -141,6 +141,8 @@ export function SearchPalette({
   const needle = (commandMode ? query.slice(1) : query).trim();
   const lowerNeedle = needle.toLowerCase();
   const first = pages[0] ?? null;
+  const searchRun = useRef(0), rankController = useRef<AbortController | null>(null);
+  const canRank = (page: SearchPage) => page.groups.flatMap(value => value.hits).filter(hit => hit.kind === "document" || hit.kind === "note").length > 1;
 
   useEffect(() => input.current?.focus(), []);
   // Another query, scope or filter leaves an opened group and an old notice behind.
@@ -149,26 +151,35 @@ export function SearchPalette({
     setNotice(null);
   }, [needle, scope, provider, archived]);
 
-  const request = (offset: number) =>
-    api.search(needle, { scope, provider, archived, legacy: false, offset, ...(group ? { group: group.key, limit: HITS_PER_PAGE } : { limit: GROUPS_PER_PAGE, per: HITS_PER_GROUP }) });
+  const request = (offset: number, rerank = false, signal?: AbortSignal) =>
+    api.search(needle, { scope, provider, archived, legacy: false, offset, rerank, ...(group ? { group: group.key, limit: HITS_PER_PAGE } : { limit: GROUPS_PER_PAGE, per: HITS_PER_GROUP }) }, signal);
 
   // The index is asked a moment after typing stops.
   useEffect(() => {
+    ++searchRun.current;
     if (commandMode || !needle) {
       setPages([]);
       setSearching(false);
       return;
     }
     setSearching(true);
-    let cancelled = false;
+    let cancelled = false; const controller = new AbortController(); rankController.current = controller;
     const timer = window.setTimeout(() => {
       request(0)
-        .then((page) => !cancelled && setPages([page]))
+        .then((page) => {
+          if (cancelled) return;
+          setPages([page]);
+          // Show local hits immediately; optional file ordering arrives independently.
+          if (canRank(page)) void request(0, true, controller.signal).then(ranked => {
+            if (!cancelled && ranked.reranked) setPages(current => current.map(value => value === page ? ranked : value));
+          }).catch(() => {});
+        })
         .catch(() => !cancelled && setPages([]))
         .finally(() => !cancelled && setSearching(false));
     }, 160);
     return () => {
       cancelled = true;
+      controller.abort();
       window.clearTimeout(timer);
     };
     // `request` reads the same values.
@@ -180,9 +191,16 @@ export function SearchPalette({
   /** "더 보기": the next page of groups (or of the open group's hits), added below. */
   const more = () => {
     if (!first || loadingMore) return;
+    const run = searchRun.current, signal = rankController.current?.signal;
     setLoadingMore(true);
     request(group ? groupHits.length : shownGroups)
-      .then((page) => setPages((current) => (current[0] === first ? [...current, page] : current)))
+      .then((page) => {
+        if (searchRun.current !== run) return;
+        setPages(current => [...current, page]);
+        if (canRank(page)) void request(group ? groupHits.length : shownGroups, true, signal).then(ranked => {
+          if (ranked.reranked) setPages(current => current.map(value => value === page ? ranked : value));
+        }).catch(() => {});
+      })
       .catch(() => undefined)
       .finally(() => setLoadingMore(false));
   };
@@ -572,7 +590,7 @@ export function SearchPalette({
             aria-label="찾을 말"
             aria-controls="palette-results"
           />
-          {searching ? <span className="spinner small" /> : first && !commandMode ? <span className="palette-took">{first.tookMs}ms · AI 호출 없음</span> : null}
+          {searching ? <span className="spinner small" /> : first && !commandMode ? <span className="palette-took">로컬 검색 {first.tookMs}ms</span> : null}
         </label>
         {!commandMode ? (
           <div className="palette-filters search-filters">
@@ -625,6 +643,7 @@ export function SearchPalette({
                     ? `${group.title} · ${first.groups[0]?.total ?? 0}건`
                     : `${scope === "all" ? "총" : SCOPE_LABEL[scope]} ${first.total}건${places ? ` · 작업 ${places}곳` : ""}${vaultShown ? " · 볼트" : ""}`}
                 </span>
+                {pages.some(page => page.reranked) && <span className="muted">문서 결과 AI 재정렬</span>}
                 <span className="search-filters-gap" />
                 <button
                   type="button"

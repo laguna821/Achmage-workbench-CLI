@@ -303,6 +303,16 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         return sendJson(res, 200, { origin, url: `${origin}/office/settings.html` });
       }
       if (path.startsWith("/api/office-ai/") && options.officeAi && await options.officeAi.handleSettings(req, res, url)) return;
+      if (path === "/api/office-file-search" && options.officeAi && method === "POST") {
+        const body = await readJson(req, 16_000), store = options.officeAi.fileSearch;
+        if (body.channel === "home:get-file-search-settings") return sendJson(res, 200, store.snapshot());
+        const controller = new AbortController(), abort = () => controller.abort(); res.once("close", abort);
+        try {
+          if (body.channel === "home:test-file-search-rerank") return sendJson(res, 200, await store.probe(body.value, controller.signal));
+          if (body.channel !== "home:set-file-search-settings" || typeof body.revision !== "string") throw new HttpError(400, "office_file_search", "파일 검색 설정 요청을 확인해 주세요.");
+          return sendJson(res, 200, (await store.write(body.value, body.revision, { signal: controller.signal })).snapshot);
+        } finally { res.off("close", abort); }
+      }
       if (path === "/api/office-markdown" && options.officeAi && method === "POST") {
         const body = await readJson(req), store = options.officeAi.markdown;
         if (body.action === "read") return sendJson(res, 200, store.snapshot());
@@ -377,10 +387,8 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         // "찾는 길" (search.ts): scope, paging and totals; q/provider/archived/folderId as before.
         const provider = url.searchParams.get("provider");
         const number = (name: string) => (url.searchParams.has(name) ? Number(url.searchParams.get(name)) || 0 : undefined);
-        return sendJson(
-          res,
-          200,
-          manager.search(url.searchParams.get("q") ?? "", {
+        const query = url.searchParams.get("q") ?? "";
+        const page = manager.search(query, {
             archived: url.searchParams.get("archived") === "1",
             provider: provider === "claude" || provider === "codex" ? provider : null,
             folderId: url.searchParams.get("folderId"),
@@ -390,8 +398,11 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
             per: number("per"),
             group: url.searchParams.get("group"),
             legacy: url.searchParams.get("legacy") !== "0",
-          }),
-        );
+          });
+        if (url.searchParams.get("rerank") !== "1" || !options.officeAi) return sendJson(res, 200, page);
+        const controller = new AbortController(), abort = () => controller.abort(); res.once("close", abort);
+        try { return sendJson(res, 200, await options.officeAi.fileSearch.rankPage(query, page, manager, controller.signal)); }
+        finally { res.off("close", abort); }
       }
       if (method === "POST" && path === "/api/works") {
         const body = await readJson(req);

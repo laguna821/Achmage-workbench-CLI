@@ -127,6 +127,18 @@ export class Finder {
     return Boolean(path && this.vault?.current?.notes.has(path) && !this.vault.isHidden(path));
   }
 
+  /** Resolve only a file hit produced by this finder; hidden vault entries stay local. */
+  fileForHit(hit: FoundHit): string | null {
+    try {
+      if (hit.kind === "note" && this.noteShown(hit.path)) return this.vault!.resolve(hit.path!);
+      if (hit.kind === "document" && hit.artifactId) {
+        const artifact = this.host.artifact(hit.artifactId);
+        if (artifact && artifact.path === hit.path && artifact.workId === hit.workId) return artifact.path;
+      }
+    } catch { /* Removed or hidden files do not enter remote reranking. */ }
+    return null;
+  }
+
   /** Where a row belongs and whether it may be shown; null when it may not. */
   private place(row: MatchedRow, options: SearchOptions): Omit<Candidate, keyof MatchedRow | "score" | "answer"> & { at: number } | null {
     if (row.kind === "note") {

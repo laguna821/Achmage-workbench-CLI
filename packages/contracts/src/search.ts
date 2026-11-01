@@ -108,6 +108,8 @@ export type FoundGroup = {
  * older callers.
  */
 export type SearchPage = SearchResult & {
+  /** Optional decision-model ordering of the visible file hits inside their project groups. */
+  reranked?: boolean;
   scope: SearchScope;
   /** Hits in this scope (after rows of a document and its reply were joined). */
   total: number;

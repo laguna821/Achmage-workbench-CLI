@@ -1,11 +1,12 @@
 import { dispatch, exposeSettingsBridges, useTransport } from "./platform/electron-renderer.ts";
-import { OFFICE_SETTINGS_CHANNELS, type OfficeSettingsFrameReply } from "../../../packages/contracts/src/office-settings.ts";
+import { OFFICE_SETTINGS_CHANNELS, OFFICE_FILE_SEARCH_CHANNELS, type OfficeSettingsFrameReply } from "../../../packages/contracts/src/office-settings.ts";
 
 const host = new URLSearchParams(location.search).get("host");
 if (!host || window.parent === window) throw new Error("Workbench의 문서 AI 설정 메뉴에서 열어 주세요.");
 const pending = new Map<string, { resolve(value: unknown): void; reject(error: Error): void; timer: number }>();
 const post = (message: unknown) => window.parent.postMessage(message, host);
 let revision: string | undefined, theme = "light", stopped = false;
+let fileSearchRevision: string | undefined;
 const snapshot = (value: unknown) => value as { revision: string; settings: Record<string, unknown>; legacySecrets: number };
 const report = (message: string) => window.dispatchEvent(new CustomEvent("workbench:settings-error", { detail: message }));
 window.addEventListener("message", (event: MessageEvent) => {
@@ -23,7 +24,7 @@ export function request(channel: string, args: unknown[] = []) {
     const requestId = crypto.randomUUID();
     const timer = window.setTimeout(() => { pending.delete(requestId); post({ type: "office-settings:cancel", requestId }); reject(new Error("설정 요청의 응답을 기다리지 못했습니다. 다시 확인해 주세요.")); }, 660_000);
     pending.set(requestId, { resolve, reject, timer });
-    post({ type: "office-settings:request", requestId, channel, args, revision });
+    post({ type: "office-settings:request", requestId, channel, args, revision: OFFICE_FILE_SEARCH_CHANNELS.has(channel) ? fileSearchRevision : revision });
   });
 }
 function takeSnapshot(value: unknown, announce: boolean) {
@@ -35,6 +36,12 @@ function takeSnapshot(value: unknown, announce: boolean) {
 }
 useTransport({
   async invoke(channel, args) {
+    if (channel === "home:get-file-search-settings" || channel === "home:set-file-search-settings") {
+      if (channel === "home:set-file-search-settings" && !fileSearchRevision) fileSearchRevision = snapshot(await request("home:get-file-search-settings")).revision;
+      const next = snapshot(await request(channel, args)); fileSearchRevision = next.revision;
+      if (channel === "home:set-file-search-settings" && args[0] && typeof args[0] === "object") Object.assign(args[0], next.settings);
+      return next.settings;
+    }
     if (channel === "ai:get-settings") return takeSnapshot(await request(channel), false);
     if (channel === "ai:set-settings") {
       if (!revision) await request("ai:get-settings").then((value) => takeSnapshot(value, false));

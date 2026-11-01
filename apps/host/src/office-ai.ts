@@ -11,6 +11,7 @@ import type { OfficeKnowledge } from "./office-knowledge.mjs";
 import type { OfficeSkills } from "./office-skills.ts";
 import { OfficePreferences } from "./office-preferences.ts";
 import { OfficeMarkdown } from "./office-markdown.mjs";
+import { OfficeFileSearch } from "./office-file-search.mjs";
 
 // Original Office accepts 20 pictures of up to 5 MiB, encoded as base64, plus text.
 export const OFFICE_AI_INPUT_LIMIT = 160_000_000;
@@ -51,6 +52,7 @@ export class OfficeAi {
   drive?: import("./office-drive.mjs").OfficeDrive;
   readonly preferences: OfficePreferences;
   readonly markdown: OfficeMarkdown;
+  readonly fileSearch: OfficeFileSearch;
   private engine: Promise<OfficeAiEngine> | null = null;
   private readonly active = new Map<string, { owner: string; controller: AbortController; tool: boolean }>();
   private readonly load: () => Promise<OfficeAiEngine>;
@@ -62,6 +64,7 @@ export class OfficeAi {
   constructor(dataDir: string, engine?: OfficeAiEngine, sessions?: OfficeSessions, hostActions?: OfficeAiHostActions, skills?: OfficeSkills, knowledge?: OfficeKnowledge) {
     this.preferences = new OfficePreferences(dataDir);
     this.markdown = new OfficeMarkdown(dataDir);
+    this.fileSearch = knowledge?.fileSearch ?? new OfficeFileSearch(dataDir);
     this.knowledge = knowledge;
     this.skills = skills;
     this.sessions = sessions;
@@ -74,6 +77,7 @@ export class OfficeAi {
   close() {
     this.closed = true;
     this.markdown.close();
+    if (!this.knowledge) this.fileSearch.close();
     this.sessions?.close();
     for (const run of this.active.values()) run.controller.abort();
     void this.engine?.then((engine) => engine.close?.()).catch(() => {});

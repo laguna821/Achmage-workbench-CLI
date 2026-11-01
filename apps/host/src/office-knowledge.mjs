@@ -1,20 +1,15 @@
-import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdirSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { readStarredItems, writeStarredItems, dropStarredItems, assignStarredGroup, starredGroupNames } from "../../../vendor/ieumoffice/apps/docs/src/main/starred-files.ts";
 import { listKnowledgeFiles, searchSavedKnowledgeBase, readKnowledgeFilePage } from "../../../vendor/ieumoffice/apps/shell/src/main/knowledge-base.ts";
 import { FileIndexStore } from "../../../vendor/ieumoffice/apps/shell/src/main/file-index/store.ts";
 import { extractText } from "../../../vendor/ieumoffice/apps/shell/src/main/file-index/extract.ts";
-import { setOpenFilesSource, withoutUnsavedFiles } from "../../../vendor/ieumoffice/packages/electron-utils/src/unsaved-files.ts";
+import { withoutUnsavedFiles } from "../../../vendor/ieumoffice/packages/electron-utils/src/unsaved-files.ts";
 import { isWorkbenchPath } from "./artifacts.ts";
 import { HttpError } from "./errors.ts";
 import { OfficeKnowledgeHome } from "./office-knowledge-home.mjs";
-
-const currentDocuments = new AsyncLocalStorage();
-setOpenFilesSource(() => {
-  const documents = currentDocuments.getStore();
-  return documents ? documents.registry.list().map(view => ({ filePath: documents.get(view.artifactId).path, dirty: view.dirty })) : [];
-});
+import { withOfficeDocuments } from "./office-open-files.mjs";
+import { OfficeFileSearch } from "./office-file-search.mjs";
 const invalid = () => new HttpError(400, "office_knowledge", "지식베이스 요청을 확인해 주세요.");
 const denied = () => new HttpError(403, "office_knowledge_scope", "지식베이스에 등록된 파일만 읽을 수 있습니다.");
 const stamp = value => `${value.mtimeMs}:${value.size}`;
@@ -25,6 +20,7 @@ export class OfficeKnowledge {
     this.manager = manager; this.closed = false; this.queue = Promise.resolve();
     const root = join(dataDir, "office", "knowledge"); mkdirSync(root, { recursive: true });
     this.path = join(root, "starred.json"); this.index = new FileIndexStore(join(root, "index.sqlite"));
+    this.fileSearch = new OfficeFileSearch(dataDir);
     this.home = new OfficeKnowledgeHome(manager, this);
   }
   check(signal) { if (this.closed) throw new Error("지식베이스를 종료하고 있습니다."); signal?.throwIfAborted(); }
@@ -58,7 +54,12 @@ export class OfficeKnowledge {
     this.check(signal);
     if (!input || typeof input !== "object" || Array.isArray(input)) throw invalid();
     if (action === "list") return this.library();
-    if (action === "search") return this.search(input.query, input.limit ?? 20, input.group, signal);
+    if (action === "search") {
+      const hits = await this.search(input.query, input.limit ?? 20, input.group, signal);
+      const ranked = await this.fileSearch.rank(input.query, hits.map(hit => hit.path), this.manager.documents, path => this.paths(input.group).includes(path), signal);
+      const order = new Map(ranked?.order.map((path, i) => [path, i]) ?? []);
+      return ranked ? hits.sort((a, b) => (order.get(a.path) ?? Infinity) - (order.get(b.path) ?? Infinity)) : hits;
+    }
     if (!Array.isArray(input.paths) || !input.paths.length || input.paths.length > 500 || input.paths.some(path => typeof path !== "string" || path.length > 8192)) throw invalid();
     if (input.group !== undefined && input.group !== null && (typeof input.group !== "string" || input.group.length > 200)) throw invalid();
     const items = this.items(); let next;
@@ -95,7 +96,7 @@ export class OfficeKnowledge {
   }
   async search(query, limit, group, signal, selectPaths = () => this.paths(group)) {
     if (typeof query !== "string" || query.length > 200 || !Number.isSafeInteger(limit) || limit < 1 || limit > 20 || group !== undefined && typeof group !== "string") throw invalid();
-    return currentDocuments.run(this.manager.documents, async () => {
+    return withOfficeDocuments(this.manager.documents, async () => {
       await this.refresh(signal); this.check(signal);
       const paths = this.index.pathsIndexedAsOnDisk(selectPaths());
       const hits = await searchSavedKnowledgeBase((q, pool) => this.index.search(q, { limit: pool }).hits.map(hit => ({ ...hit, snippetText: (hit.snippet ?? []).map(part => part.text).join("") })), query, paths, limit);
@@ -117,10 +118,10 @@ export class OfficeKnowledge {
     if (typeof path !== "string" || !Number.isSafeInteger(offset) || offset < 0) throw invalid();
     if (!this.selected(path) || !allowed()) throw denied();
     const before = statSync(path);
-    const page = await currentDocuments.run(this.manager.documents, () => readKnowledgeFilePage(path, offset));
+    const page = await withOfficeDocuments(this.manager.documents, () => readKnowledgeFilePage(path, offset));
     this.check(signal);
     if (!this.selected(path) || !allowed() || stamp(before) !== stamp(statSync(path))) throw denied();
-    const saved = await currentDocuments.run(this.manager.documents, () => withoutUnsavedFiles([path], path => path));
+    const saved = await withOfficeDocuments(this.manager.documents, () => withoutUnsavedFiles([path], path => path));
     if (!saved.length) throw new Error("편집 중인 지식베이스 파일을 저장한 뒤 다시 읽어 주세요.");
     return page;
   }
@@ -134,5 +135,5 @@ export class OfficeKnowledge {
     const target = this.manager.openFile(source.workId, path, source.workspaceId, sessionId ?? undefined);
     return { artifactId: target.id, workId: target.workId, workspaceId: target.workspaceId };
   }
-  close() { this.home.shutdown(); this.closed = true; this.index.close(); }
+  close() { this.home.shutdown(); this.closed = true; this.fileSearch.close(); this.index.close(); }
 }

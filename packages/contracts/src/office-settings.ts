@@ -1,6 +1,7 @@
 import { OFFICE_MCP_SETTINGS_CHANNELS } from "./office-mcp.ts";
 import { OFFICE_DRIVE_SETTINGS_CHANNELS } from "./office-drive.ts";
 import { OFFICE_PREFERENCES_CHANNELS } from "./office-preferences.ts";
+export const OFFICE_FILE_SEARCH_CHANNELS = new Set(["home:get-file-search-settings", "home:set-file-search-settings", "home:test-file-search-rerank"]);
 /** Only this surface is available to the dedicated Office settings frame. */
 export const OFFICE_SETTINGS_CHANNELS = new Set([
   ...OFFICE_MCP_SETTINGS_CHANNELS,
@@ -14,7 +15,7 @@ export const OFFICE_SETTINGS_CHANNELS = new Set([
   "ai:subscription-logout", "ai:subscription-install", "ai:subscription-update",
   "ai:subscription-cancel-login", "ai:subscription-metered", "ai:subscription-codex-image",
   "home:open-subscription-install-help", "home:open-connect-help",
-  "home:get-file-search-settings", "home:set-file-search-settings", "home:test-file-search-rerank",
+  ...OFFICE_FILE_SEARCH_CHANNELS,
 ]);
 export type OfficeSettingsFrameRequest = { type: "office-settings:request"; requestId: string; channel: string; args: unknown[]; revision?: string };
 export type OfficeSettingsFrameReply = { type: "office-settings:reply"; requestId: string; value?: unknown; error?: string };

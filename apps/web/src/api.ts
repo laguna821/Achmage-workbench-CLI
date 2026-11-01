@@ -209,7 +209,7 @@ export class Api {
   /** "폴더만 지우기": the folder goes, what was inside moves up to its parent. */
   deleteFolder = (folderId: string) => this.request<DeleteFolderResult>("DELETE", `/api/folders/${folderId}`);
   /** "찾는 길": grouped by work with totals per scope; `group` pages one work's hits. */
-  search = (query: string, options: Omit<SearchRequest, "q"> & { legacy?: boolean } = {}) => {
+  search = (query: string, options: Omit<SearchRequest, "q"> & { legacy?: boolean; rerank?: boolean } = {}, signal?: AbortSignal) => {
     const params = new URLSearchParams({ q: query });
     if (options.provider) params.set("provider", options.provider);
     if (options.archived) params.set("archived", "1");
@@ -218,7 +218,8 @@ export class Api {
     for (const key of ["offset", "limit", "per"] as const) if (options[key] !== undefined) params.set(key, String(options[key]));
     if (options.group) params.set("group", options.group);
     if (options.legacy === false) params.set("legacy", "0");
-    return this.request<SearchPage>("GET", `/api/search?${params}`);
+    if (options.rerank) params.set("rerank", "1");
+    return this.request<SearchPage>("GET", `/api/search?${params}`, undefined, { signal });
   };
   exportMarkdown = (sessionId: string, request: ExportMarkdownRequest) => this.request<ExportMarkdownResult>("POST", `/api/sessions/${sessionId}/export`, request);
   createWork = (title: string, folderId: string | null, cwd: string | null) => this.request<Work>("POST", "/api/works", { title, folderId, cwd });

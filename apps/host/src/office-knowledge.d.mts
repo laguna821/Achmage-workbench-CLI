@@ -3,6 +3,7 @@ import type { EditorGrants } from "./editors.ts";
 import type { KnowledgeLibrary, KnowledgeHit } from "../../../packages/contracts/src/office-knowledge.ts";
 export class OfficeKnowledge {
   constructor(dataDir: string, manager: SessionManager);
+  readonly fileSearch: import("./office-file-search.mjs").OfficeFileSearch;
   readonly path: string;
   readonly home: {
     open(): string;

@@ -14,6 +14,7 @@ import { HttpError } from "./errors.ts";
 import { sandboxWrapper } from "./ieumoffice.ts";
 import { OfficePreferences, importedOfficePreferences } from "./office-preferences.ts";
 import { OfficeMarkdown, importedMarkdownSettings } from "./office-markdown.mjs";
+import { OfficeFileSearch, importedFileSearch, mapFileSearchKeys } from "./office-file-search.mjs";
 
 const fail = (message, status = 400) => new HttpError(status, "office_import", message);
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
@@ -56,6 +57,7 @@ export class OfficeImport {
     this.vault = injected.vault ?? new OfficeVault(dataDir); this.settings = new OfficeSettings(dataDir, this.vault);
     this.preferences = new OfficePreferences(dataDir);
     this.markdown = new OfficeMarkdown(dataDir, { vault: this.vault });
+    this.fileSearch = new OfficeFileSearch(dataDir, { vault: this.vault });
     this.styles = new OfficeStyles(documents, null); this.open = injected.reveal ?? revealIeumSecrets;
     this.defaultDirectory = injected.defaultDirectory ?? ieumSettingsDirectory();
   }
@@ -66,17 +68,19 @@ export class OfficeImport {
     if (!existsSync(directory) || !lstatSync(directory).isDirectory() || lstatSync(directory).isSymbolicLink()) throw fail("데이터 폴더를 찾지 못했거나 링크입니다.");
     directory = realpathSync(directory);
     const files = [], refs = new Map(), aiFile = read(join(directory, "ai-settings.json")), warnings = [];
+    const mask = value => { if (!value) return ""; const token = `__wb_import_${randomUUID()}__`; refs.set(token, value); return token; };
     const appFile = read(join(directory, "app-settings.json"));
     const appPreferences = importedOfficePreferences(appFile?.value);
     const hasPreferences = Object.keys(appPreferences).length > 0;
     if (hasPreferences) files.push(appFile);
+    const fileSearch = importedFileSearch(appFile?.value.fileSearch, mask);
+    if (fileSearch && !hasPreferences) files.push(appFile);
     const markdownFile = read(join(directory, "markdown-settings.json"));
     const markdown = importedMarkdownSettings(markdownFile?.value), hasMarkdown = Object.keys(markdown.patch).length > 0;
     warnings.push(...markdown.warnings); if (hasMarkdown) files.push(markdownFile);
     let ai = null;
     if (aiFile) {
       files.push(aiFile);
-      const mask = value => { if (!value) return ""; const token = `__wb_import_${randomUUID()}__`; refs.set(token, value); return token; };
       const masked = mapAiSecrets(aiFile.value, mask);
       if (typeof masked.apiKey === "string") masked.apiKey = mask(masked.apiKey);
       ai = normalizeAiSettings(masked);
@@ -105,17 +109,19 @@ export class OfficeImport {
         } catch (error) { warnings.push(`${file}: ${error instanceof HttpError ? error.message : "스타일 형식을 읽지 못했습니다."}`); }
       }
     }
-    if (!ai && !candidates.length && !hasPreferences && !hasMarkdown) throw fail("가져올 AI 설정·문서 표시 설정·Markdown 설정·저장 스타일을 찾지 못했습니다.");
+    if (!ai && !candidates.length && !hasPreferences && !hasMarkdown && !fileSearch) throw fail("가져올 AI 설정·문서 표시 설정·검색 설정·Markdown 설정·저장 스타일을 찾지 못했습니다.");
     const used = new Set(); if (ai) mapAiSecrets(ai, value => { if (value) used.add(value); return value; });
     const keys = [...used].map(ref => refs.get(ref)).filter(Boolean), target = this.settings.snapshot(), id = randomUUID();
     const plan = { id, at: Date.now(), directory, files, ai, refs, styles: candidates, targetRevision: target.revision, targetExists: existsSync(this.settings.path), appPreferences,
       preferenceRevision: hasPreferences ? this.preferences.snapshot().revision : null, markdownPatch: markdown.patch,
-      markdownRevision: hasMarkdown ? this.markdown.snapshot().revision : null, result: null };
+      markdownRevision: hasMarkdown ? this.markdown.snapshot().revision : null, fileSearch,
+      fileSearchRevision: fileSearch ? this.fileSearch.snapshot().revision : null, result: null };
     for (const [key, value] of this.plans) if (Date.now() - value.at > 3_600_000) this.plans.delete(key);
     if (this.plans.size >= 8) this.plans.delete(this.plans.keys().next().value);
     this.plans.set(id, plan);
     return { id, directory, appAvailable: Boolean(this.desktop.find()?.app), ai: ai ? { provider: ai.provider, keys: keys.length, sealedKeys: keys.filter(value => value.startsWith("sealed:v1:")).length, replacesCurrent: plan.targetExists } : null,
       preferences: hasPreferences ? { fields: Object.keys(appPreferences), replacesCurrent: existsSync(this.preferences.path) } : null,
+      ...(fileSearch ? { fileSearch: { endpoint: fileSearch.endpoint, rerank: fileSearch.rerank, keys: Object.values(fileSearch.keys).filter(Boolean).length, sealedKeys: Object.values(fileSearch.keys).filter(ref => refs.get(ref)?.startsWith("sealed:v1:")).length, replacesCurrent: existsSync(this.fileSearch.path) } } : {}),
       ...(hasMarkdown ? { markdown: { theme: markdown.patch.markdownTheme ?? null, imageHost: Object.hasOwn(markdown.patch, "imageHost") ? { kind: markdown.patch.imageHost?.kind ?? null } : null, replacesCurrent: existsSync(this.markdown.path) } } : {}),
       styles: candidates.map(({ name, targetName, same }) => ({ name, targetName, same })), warnings };
   }
@@ -124,6 +130,7 @@ export class OfficeImport {
     for (const source of plan.files) if (read(source.file)?.digest !== source.digest) throw fail("원본 설정이나 스타일이 변경되었습니다. 미리보기를 다시 열어 주세요.", 409);
     if (choice.ai && this.settings.snapshot().revision !== plan.targetRevision) throw fail("Workbench AI 설정이 변경되었습니다. 미리보기를 다시 열어 주세요.", 409);
     if (choice.preferences && this.preferences.snapshot().revision !== plan.preferenceRevision) throw fail("Workbench 문서 표시 설정이 변경되었습니다. 미리보기를 다시 열어 주세요.", 409);
+    if (choice.fileSearch && this.fileSearch.snapshot().revision !== plan.fileSearchRevision) throw fail("Workbench 파일 검색 설정이 변경되었습니다. 미리보기를 다시 열어 주세요.", 409);
     if ((choice.markdownTheme || choice.imageHost) && this.markdown.snapshot().revision !== plan.markdownRevision) throw fail("Workbench Markdown 설정이 변경되었습니다. 미리보기를 다시 열어 주세요.", 409);
     if (choice.styles) for (const style of plan.styles) if ((this.styles.inspectSaved(style.targetName)?.revision ?? null) !== style.expectedRevision) throw fail("Workbench 스타일이 변경되었습니다. 미리보기를 다시 열어 주세요.", 409);
   }
@@ -131,14 +138,29 @@ export class OfficeImport {
     const next = this.queue.then(() => this.perform(choice, signal)); this.queue = next.catch(() => {}); return next;
   }
   async perform(choice, signal) {
-    if (!object(choice) || typeof choice.id !== "string" || [choice.ai, choice.keys, choice.styles].some(value => typeof value !== "boolean") || [choice.preferences, choice.markdownTheme, choice.imageHost].some(value => value !== undefined && typeof value !== "boolean") || !choice.ai && !choice.styles && !choice.preferences && !choice.markdownTheme && !choice.imageHost) throw fail("가져올 항목을 선택해 주세요.");
+    if (!object(choice) || typeof choice.id !== "string" || [choice.ai, choice.keys, choice.styles].some(value => typeof value !== "boolean") || [choice.preferences, choice.markdownTheme, choice.imageHost, choice.fileSearch, choice.fileSearchKeys].some(value => value !== undefined && typeof value !== "boolean") || !choice.ai && !choice.styles && !choice.preferences && !choice.markdownTheme && !choice.imageHost && !choice.fileSearch) throw fail("가져올 항목을 선택해 주세요.");
     const plan = this.plans.get(choice.id);
     if (!plan || Date.now() - plan.at > 3_600_000) throw fail("가져오기 미리보기가 만료되었습니다. 다시 확인해 주세요.", 409);
     if (plan.result) return plan.result;
     if (choice.ai && !plan.ai) throw fail("선택한 폴더에 AI 설정이 없습니다.");
     if (choice.preferences && !plan.preferenceRevision) throw fail("선택한 폴더에 문서 표시 설정이 없습니다.");
+    if (choice.fileSearch && !plan.fileSearch) throw fail("선택한 폴더에 파일 검색 설정이 없습니다.");
     if (choice.markdownTheme && !Object.hasOwn(plan.markdownPatch, "markdownTheme") || choice.imageHost && !Object.hasOwn(plan.markdownPatch, "imageHost")) throw fail("선택한 폴더에 가져올 Markdown 설정이 없습니다.");
     signal?.throwIfAborted(); this.assertPlan(plan, choice);
+    let fileSearchNext = null;
+    if (choice.fileSearch) {
+      const values = Object.values(plan.fileSearch.keys).map(ref => plan.refs.get(ref)).filter(Boolean);
+      const legacy = [...new Set(values.filter(value => value.startsWith("sealed:v1:")))], app = this.desktop.find()?.app;
+      const launcher = choice.fileSearchKeys && legacy.length && app ? sandboxWrapper(app, this.dataDir) ?? app : app;
+      const opened = choice.fileSearchKeys && legacy.length ? await this.open(launcher, plan.directory, legacy, signal) : {};
+      fileSearchNext = mapFileSearchKeys(plan.fileSearch, ref => {
+        if (!choice.fileSearchKeys) return "";
+        const raw = plan.refs.get(ref), plain = raw?.startsWith("sealed:v1:") ? opened[raw] : raw;
+        if (typeof plain !== "string" || !plain || plain.startsWith("sealed:")) throw fail("보관된 검색 키를 읽지 못했습니다.", 409);
+        return plain;
+      });
+      signal?.throwIfAborted(); this.assertPlan(plan, choice);
+    }
     const result = { ai: false, styles: 0, skipped: 0, backup: null, preferences: false, preferenceBackup: null, errors: [] };
     if (choice.ai) {
       const needed = new Set(); mapAiSecrets(plan.ai, value => { if (value) needed.add(plan.refs.get(value)); return value; });
@@ -172,6 +194,12 @@ export class OfficeImport {
         result.preferences = true; result.preferenceBackup = saved.backup;
       } catch { result.errors.push("문서 표시 설정을 저장하지 못했습니다. 현재 설정을 보존했습니다."); }
     }
+    if (fileSearchNext) {
+      try {
+        const saved = await this.fileSearch.write(fileSearchNext, plan.fileSearchRevision, { backup: true, signal, beforeCommit: () => this.assertPlan(plan, { fileSearch: true }) });
+        result.fileSearch = true; result.fileSearchBackup = saved.backup;
+      } catch { result.errors.push("파일 검색 설정을 저장하지 못했습니다. 현재 설정을 보존했습니다."); }
+    }
     if (choice.markdownTheme || choice.imageHost) {
       try {
         const patch = { ...(choice.markdownTheme ? { markdownTheme: plan.markdownPatch.markdownTheme } : {}), ...(choice.imageHost ? { imageHost: plan.markdownPatch.imageHost } : {}) };
@@ -186,8 +214,8 @@ export class OfficeImport {
       try { this.styles.saveImported(style.targetName, style.data, style.expectedRevision); result.styles++; }
       catch { result.errors.push(`${style.targetName}: 저장하지 못했습니다. 현재 파일을 보존했습니다.`); }
     }
-    plan.result = result; plan.refs.clear(); plan.ai = null; plan.files = []; plan.styles = []; plan.appPreferences = {}; plan.markdownPatch = {};
+    plan.result = result; plan.refs.clear(); plan.ai = null; plan.files = []; plan.styles = []; plan.appPreferences = {}; plan.markdownPatch = {}; plan.fileSearch = null;
     return result;
   }
-  close() { this.closed = true; this.plans.clear(); this.markdown.close(); this.settings.close(); }
+  close() { this.closed = true; this.plans.clear(); this.markdown.close(); this.fileSearch.close(); this.settings.close(); }
 }
