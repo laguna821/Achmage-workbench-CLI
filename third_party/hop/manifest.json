@@ -80,8 +80,8 @@
       "source": "apps/desktop/src-tauri/src/font_catalog.rs",
       "output": "../../apps/desktop/src-tauri/src/office_fonts.rs",
       "sourceSha256": "16c0cc6c6fdd888e7084ebe030e9bca573c44c1eb8e4564d7fad851c0317a70e",
-      "changes": "Original fontdb metadata enumeration as an app-owned CLI helper; installed OS fonts only.",
-      "outputSha256": "ea378c4dc7626a1d9ac0c1e3d54f535865e5550cb5c994541f7107cc9cdffe35"
+      "changes": "Original fontdb metadata enumeration as an app-owned CLI helper; installed OS fonts only. Invalid OS weight (e.g. Apple Chancery 0) becomes CSS Regular 400.",
+      "outputSha256": "7fe0ce44c7e0070db8eeac521d61ce4825afd7eab30b66c556b1bdc410d7b035"
     }
   ],
   "excludedPatches": {

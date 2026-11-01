@@ -37,7 +37,10 @@ pub fn run() -> i32 {
             if family.is_empty() || !seen.insert((family.to_owned(), path.clone(), face.index)) { continue; }
             entries.push(LocalFontEntry {
                 family: family.to_owned(), post_script_name: face.post_script_name.clone(), style,
-                weight: face.weight.0, source_kind: "system-installed", path: path.clone(), face_index: face.index,
+                // Some installed fonts (macOS Apple Chancery) report usWeightClass=0.
+                // CSS FontFace expects 1..=1000; absent/invalid metadata means Regular.
+                weight: if (1..=1000).contains(&face.weight.0) { face.weight.0 } else { 400 },
+                source_kind: "system-installed", path: path.clone(), face_index: face.index,
             });
         }
     }

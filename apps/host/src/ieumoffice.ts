@@ -5,6 +5,7 @@ import { homedir, tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { HttpError } from "./errors.ts";
+import { latestDesktopRelease } from "./ieum-release.ts";
 import { shipped } from "./resources.ts";
 
 // Word, PowerPoint and Excel documents through the `ieumoffice` command line tool of IeumOffice
@@ -280,10 +281,7 @@ type ReleaseAsset = { name: string; browser_download_url: string; size: number }
  */
 export async function installIeumOffice(progress: (step: InstallProgress) => void, selectedRelease?: { tag_name?: string; assets?: ReleaseAsset[] }): Promise<string> {
   if (process.platform !== "linux") throw new HttpError(501, "unsupported_platform", "자동 설치는 아직 Linux만 지원합니다. 이음오피스 누리집에서 설치해 주세요.");
-  const release = selectedRelease ?? (await (await fetch("https://api.github.com/repos/pblsketch/openoffice/releases/latest", { headers: { accept: "application/vnd.github+json" } })).json()) as {
-    tag_name?: string;
-    assets?: ReleaseAsset[];
-  };
+  const release = selectedRelease ?? await latestDesktopRelease();
   const version = release.tag_name?.replace(/^v/, "");
   const appImage = release.assets?.find((asset) => asset.name.endsWith(".AppImage"));
   const manifest = release.assets?.find((asset) => asset.name === "latest-linux.yml");

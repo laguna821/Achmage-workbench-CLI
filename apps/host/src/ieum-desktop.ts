@@ -10,20 +10,21 @@ import type { ToolStatus } from "@workbench/contracts";
 import { HttpError } from "./errors.ts";
 import { findIeum, ieumFromCliDir, installIeumOffice, sandboxWrapper, type IeumInstall } from "./ieumoffice.ts";
 import { registerIeumDesktop, type DesktopRegistration } from "./ieum-registration.ts";
+import { installerName, latestDesktopRelease, validSha512, type DesktopRelease } from "./ieum-release.ts";
+export type { DesktopRelease } from "./ieum-release.ts";
 
 const run = promisify(execFile);
 const REPO = "https://github.com/pblsketch/openoffice/releases/download/";
-export type DesktopRelease = { tag_name: string; assets: { name: string; browser_download_url: string; digest: string | null; size: number }[] };
 
 /** Select a verified official installer, with no executable URL supplied by the caller. */
 export function desktopAsset(release: DesktopRelease, platform: NodeJS.Platform, arch: string) {
   const version = release.tag_name?.replace(/^v/, "");
   if (!version || !/^\d+\.\d+\.\d+(?:[-.][\w.-]+)?$/.test(version) || !Array.isArray(release.assets)) throw new HttpError(502, "ieum_release", "공식 이음오피스 배포 정보를 확인하지 못했습니다.");
-  const name = platform === "win32" && (arch === "x64" || arch === "arm64") ? `IeumOffice-Setup-${version}.exe`
-    : platform === "darwin" && (arch === "x64" || arch === "arm64") ? `IeumOffice-${version}${arch === "arm64" ? "-arm64" : ""}-mac.zip` : null;
+  const name = ["win32", "darwin"].includes(platform) ? installerName(version, platform, arch) : null;
   const asset = release.assets.find((entry) => entry.name === name);
-  if (!asset || !/^sha256:[a-f0-9]{64}$/.test(asset.digest ?? "") || !Number.isSafeInteger(asset.size) || asset.size < 1 || asset.size > 1_500_000_000 || asset.browser_download_url !== `${REPO}${release.tag_name}/${name}`) throw new HttpError(502, "ieum_release", "이 OS의 공식 설치 파일과 체크섬을 확인하지 못했습니다.");
-  return { ...asset, version, sha256: asset.digest!.slice(7) };
+  const sha256 = /^sha256:[a-f0-9]{64}$/.test(asset?.digest ?? ""), sha512 = asset?.digest?.startsWith("sha512:") && validSha512(asset.digest.slice(7));
+  if (!asset || (!sha256 && !sha512) || !Number.isSafeInteger(asset.size) || asset.size < 1 || asset.size > 1_500_000_000 || asset.browser_download_url !== `${REPO}${release.tag_name}/${name}`) throw new HttpError(502, "ieum_release", "이 OS의 공식 설치 파일과 체크섬을 확인하지 못했습니다.");
+  return { ...asset, version, algorithm: sha256 ? "sha256" : "sha512", encoding: sha256 ? "hex" as const : "base64" as const, checksum: asset.digest!.slice(7) };
 }
 
 export function desktopFromPath(input: string, platform: NodeJS.Platform = process.platform): IeumInstall {
@@ -99,11 +100,7 @@ export class IeumDesktop {
     } catch { return null; }
   }
   protected async latestRelease(): Promise<DesktopRelease> {
-    const response = await fetch("https://api.github.com/repos/pblsketch/openoffice/releases/latest", { headers: { Accept: "application/vnd.github+json" }, signal: AbortSignal.timeout(30_000) });
-    if (!response.ok) throw new Error(`공식 배포 정보를 받지 못했습니다 (${response.status}).`);
-    const release = await response.json() as DesktopRelease;
-    if (!/^v?\d+\.\d+\.\d+(?:[-.][\w.-]+)?$/.test(release.tag_name) || !Array.isArray(release.assets)) throw new Error("공식 이음오피스 배포 정보가 올바르지 않습니다.");
-    return release;
+    return latestDesktopRelease();
   }
   protected register(app: string): Promise<DesktopRegistration> { return registerIeumDesktop(app); }
   private async finish(install: IeumInstall, version: string | null) {
@@ -154,13 +151,13 @@ export class IeumDesktop {
       this.message = `이음오피스 ${asset.version} 다운로드 중 (${Math.ceil(asset.size / 1_000_000)} MB)…`; this.changed();
       const download = await fetch(asset.browser_download_url, { signal: AbortSignal.timeout(600_000) });
       if (!download.ok || !download.body) throw new Error("이음오피스 설치 파일 다운로드에 실패했습니다.");
-      const file = join(staging, asset.name), digest = createHash("sha256"); let bytes = 0;
+      const file = join(staging, asset.name), digest = createHash(asset.algorithm); let bytes = 0;
       await pipeline(Readable.fromWeb(download.body as import("node:stream/web").ReadableStream), new Transform({ transform(chunk: Buffer, _encoding, done) {
         bytes += chunk.length;
         if (bytes > asset.size) { done(new Error("배포 파일 크기가 공식 정보와 다릅니다.")); return; }
         digest.update(chunk); done(null, chunk);
       } }), createWriteStream(file, { flags: "wx" }));
-      if (bytes !== asset.size || digest.digest("hex") !== asset.sha256) throw new Error("설치 파일의 공식 체크섬이 맞지 않아 실행하지 않았습니다.");
+      if (bytes !== asset.size || digest.digest(asset.encoding) !== asset.checksum) throw new Error("설치 파일의 공식 체크섬이 맞지 않아 실행하지 않았습니다.");
       this.message = `이음오피스 ${asset.version} 설치 중…`; this.changed();
       if (process.platform === "win32") {
         await run(file, ["/S"], { timeout: 600_000, windowsHide: false, maxBuffer: 64_000 });
