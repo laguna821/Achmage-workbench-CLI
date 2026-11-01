@@ -28,3 +28,4 @@ export const browserOperation = <T extends BrowserResult | null>(revision: numbe
 export const commitGeneratedOutput = (planId: string, generatedId: string, sourceRevision: number) => request<{ path: string; artifactId: string | null }>({ type: "office:output", requestId: crypto.randomUUID(), action: "commit", planId, generatedId, sourceRevision, bytes: new ArrayBuffer(0), intent: "export" });
 
 export const revealExport = (path: string) => request<null>({ type: "office:output", requestId: crypto.randomUUID(), action: "reveal-export", path });
+export const presentHtml = (title: string, url: string) => request<null>({ type: "office:output", requestId: crypto.randomUUID(), action: "present", title, url });

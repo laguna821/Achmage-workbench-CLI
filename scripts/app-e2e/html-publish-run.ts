@@ -1,0 +1,85 @@
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import type { Artifact, Session, Snapshot, Work } from "@workbench/contracts";
+import { openStage } from "./launch.ts";
+import { Report } from "./report.ts";
+import { startScenario, installProbe, pageErrors, savedLayout, seedLayout, shot, until, type Ctx } from "./scenarios.ts";
+import { KEY } from "./webdriver.ts";
+
+const binary = resolve(process.argv[2]!), outDir = resolve(process.argv[3]!);
+mkdirSync(outDir, { recursive: true });
+const report = new Report(outDir), stage = await openStage(outDir, { nativeX11: true }), S = "HTML 단일 파일·발표";
+let ctx: Ctx | null = null, phase = "start";
+try {
+  ctx = { stage, app: await stage.launch({ binary, name: "html-publish", engines: "stand-in", profile: "html-publish" }), report }; await startScenario(ctx);
+  const { wd, api } = ctx.app; await wd.setWindowRect({ width: 1600, height: 1000 });
+  const work = await api<Work>("POST", "/api/works", { title: "HTML 발표 출력", cwd: null });
+  const main = await api<Session>("POST", `/api/works/${work.id}/sessions`, { provider: "claude" });
+  const source = join(work.cwd, "원문.html"), output = join(work.cwd, "output"), marker = "LIVE UNSAVED HTML";
+  mkdirSync(join(work.cwd, "assets")); mkdirSync(output);
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
+  writeFileSync(join(work.cwd, "assets/그림.png"), png);
+  writeFileSync(join(work.cwd, "assets/shape.svg"), '<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60"><rect width="60" height="60" fill="teal"/></svg>');
+  const original = '<!doctype html>\r\n<html><head><style>body{font:24px sans-serif;padding:40px;background:#f6f8fa}h1{color:#124c75}.hero{height:40px;background-image:url("assets/그림.png")}button{font:inherit;padding:12px}</style></head><body><h1>발표 원문</h1><div class="hero"></div><img src="assets/그림.png" width="60"><img src="assets/shape.svg"><p>원래 본문</p><button id="demo" onclick="document.getElementById(\'proof\').textContent=\'실행됨\'">발표 동작</button><p id="proof">대기</p></body></html>';
+  writeFileSync(source, original);
+  const artifact = await api<Artifact>("POST", `/api/works/${work.id}/artifacts`, { path: source });
+  const snapshot = () => api<Snapshot>("GET", "/api/snapshot");
+  const tab = { id: "html-source", workId: work.id, sessionId: main.id, view: { kind: "document", artifactId: artifact.id, proposalId: null }, ui: { mode: "rich" } };
+  await seedLayout(ctx, { ...(await snapshot()).prefs, paneLayout: { version: 2, focus: "html-pane", panes: [{ ...tab, id: "html-pane", tabs: [tab], activeTabId: tab.id, recentTabIds: [tab.id] }] } });
+  await wd.refresh(); await installProbe(wd);
+  const pane = '.pane[data-tab-active="true"]';
+  const enter = async () => { await wd.frame(null); await wd.frame(await wd.waitFor(`${pane} iframe.office-frame`, 30000)); };
+  const click = async (text: string, selector = "button,[role=menuitem]") => {
+    if (!await until(async () => { for (const button of await wd.findAll(selector)) if (await wd.displayed(button) && await wd.execute<boolean>("return arguments[0].textContent.trim()===arguments[1]", button, text)) { await wd.click(button); return true; } return false; }, 15000)) throw new Error(`Missing command: ${text}`);
+  };
+  const control = (key: string) => wd.keys([{ type: "keyDown", value: KEY.control }, { type: "keyDown", value: key }, { type: "keyUp", value: key }, { type: "keyUp", value: KEY.control }]);
+  const exportMenu = async () => { await wd.frame(null); await wd.click(await wd.waitFor(`${pane} button[aria-label="문서 파일 메뉴"]`)); await click("HTML 단일 파일로 내보내기", ".office-file-menu [role=menuitem]"); await wd.waitFor(".office-output-dialog", 30000); };
+  const destination = async (path: string) => { const field = await wd.waitFor('.office-output-dialog input[aria-label="저장할 파일 경로"]'); await wd.click(field); await control("a"); await wd.sendKeys(field, path); await wd.click(await wd.waitFor('.office-output-dialog button[type="submit"]')); };
+  const append = async (value: string) => { const editor = await wd.waitFor('.cm-content[contenteditable="true"]', 30000); await wd.click(editor); await control("\ue010"); await wd.sendKeys(editor, value); };
+  await enter(); await installProbe(wd); await click("분할"); await append(`<p>${marker}</p>`);
+  await wd.execute('window.__exports=[];const original=window.htmlApi.exportHtml;window.htmlApi.exportHtml=async(...args)=>{const result=await original(...args);window.__exports.push(result);return result;};');
+  phase = "cancel"; await exportMenu();
+  report.check(S, "현재 원문과 다른 .single.html 기본 이름", await wd.execute<boolean>('return document.querySelector(".office-output-dialog input").value.endsWith("원문.single.html");'));
+  await click("취소", ".office-output-dialog button"); await enter();
+  report.check(S, "취소는 원본·출력 파일을 바꾸지 않음", await until(() => wd.execute<boolean>('return window.__exports.some(x=>x.ok&&x.canceled);'), 10000) && readFileSync(source, "utf8") === original && readdirSync(output).length === 0);
+  phase = "single-file export"; const target = join(output, "export.html"); await exportMenu(); await destination(target); await enter();
+  if (!await until(() => wd.execute<boolean>('return window.__exports.some(x=>x.ok&&x.path);'), 15000)) throw new Error("Export did not finish");
+  const exported = readFileSync(target, "utf8");
+  report.check(S, "실제 메뉴에서 미저장 본문·PNG/CSS/SVG를 단일 파일로 출력", exported.includes(marker) && (exported.match(/data:image\/png;base64,/g)?.length ?? 0) === 2 && exported.includes("data:image/svg+xml;base64,") && readdirSync(output).length === 1);
+  report.check(S, "내보낸 뒤 원문 바이트·판·편집 버퍼 보존", readFileSync(source, "utf8") === original && (await snapshot()).artifacts.find(a => a.id === artifact.id)!.revision === 1 && await wd.execute<boolean>('return document.querySelector(".cm-content").textContent.includes(arguments[0]);', marker));
+  phase = "replacement"; await exportMenu(); await destination(target);
+  await wd.waitFor('.office-output-dialog input[type="checkbox"]'); report.check(S, "기존 대상은 확인 전까지 보존", readFileSync(target, "utf8") === exported);
+  await wd.click(await wd.waitFor('.office-output-dialog input[type="checkbox"]')); await wd.click(await wd.waitFor('.office-output-dialog button[type="submit"]'));
+  if (!await until(async () => readdirSync(output).some(name => name.endsWith(".bak")), 15000)) throw new Error("Backup was not written");
+  report.check(S, "명시 교체는 기존 파일을 바이트 그대로 백업", readdirSync(output).filter(name => name.endsWith(".bak")).some(name => readFileSync(join(output, name), "utf8") === exported));
+  await enter(); phase = "skipped references"; await append('<img src="missing.png">'); await exportMenu(); const skippedPath = join(output, "skipped.html"); await destination(skippedPath); await enter();
+  report.check(S, "못 읽은 자산은 원본의 skipped 안내와 참조를 유지", await until(() => wd.execute<boolean>('return window.__exports.some(x=>x.skipped?.includes("missing.png")) && document.body.innerText.includes("인라인할 수 없습니다");'), 15000) && readFileSync(skippedPath, "utf8").includes('src="missing.png"'));
+  const before = await snapshot(); phase = "presentation";
+  await click("프레젠테이션"); await click("새 탭", ".rb-menu [role=menuitem]"); await wd.frame(null);
+  await wd.waitFor(`${pane} iframe[data-office-presentation]`, 30000);
+  report.check(S, "편집기와 구분된 별도 발표 탭·작업 영역", await wd.execute<boolean>('return document.querySelector(".group-tab.active").textContent.includes("발표") && document.querySelectorAll("iframe.office-frame").length===1;'), undefined, await shot(ctx, "presentation-tab.png"));
+  await wd.frame(await wd.waitFor(`${pane} iframe[data-office-presentation]`)); await installProbe(wd);
+  await wd.execute('window.__initialModule = "pending"; import(document.querySelector("script[type=module]").src).then(()=>window.__initialModule="loaded",e=>window.__initialModule=String(e));');
+  await wd.waitFor(".present-view iframe", 30000);
+  report.check(S, "원본 발표 뷰에는 편집/AI 권한을 전달하지 않음", await wd.execute<boolean>('return typeof window.htmlApi.save==="undefined" && typeof window.htmlApi.aiChat==="undefined";'));
+  await wd.frame(await wd.waitFor(".present-view iframe"));
+  report.check(S, "발표가 현재 미저장 본문과 원본 그림을 표시", await until(() => wd.execute<boolean>('return document.body.innerText.includes(arguments[0]) && [...document.images].filter(i=>!i.src.includes("missing.png")).every(i=>i.complete&&i.naturalWidth>0);', marker), 15000));
+  await wd.click(await wd.waitFor("#demo"));
+  report.check(S, "발표 모드에서 원본 HTML 버튼·스크립트 조작", await until(() => wd.execute<boolean>('return document.getElementById("proof").textContent==="실행됨";'), 10000), undefined, await shot(ctx, "presentation-action.png"));
+  await wd.frame(null); const after = await snapshot();
+  report.check(S, "발표 열기는 원문을 저장하거나 새 AI 대화를 만들지 않음", readFileSync(source, "utf8") === original && after.sessions.length === before.sessions.length && after.artifacts.find(a => a.id === artifact.id)!.revision === 1);
+  report.check(S, "영구 탭 배치에 미리보기 URL·권한을 저장하지 않음", await until(async () => { const saved = JSON.stringify((await savedLayout(ctx!))?.layout ?? null); return saved.includes('"presentation"') && !saved.includes("/preview/"); }, 10000));
+  await wd.click(await wd.waitFor(`${pane} .group-tab[data-tab-id="html-source"] [role="tab"]`)); await enter();
+  report.check(S, "원문 탭 복귀 시 미저장 편집을 그대로 유지", await wd.execute<boolean>('return document.querySelector(".cm-content").textContent.includes(arguments[0]);', marker) && readFileSync(source, "utf8") === original);
+  await click("프레젠테이션"); await click("새 탭", ".rb-menu [role=menuitem]"); await wd.frame(null);
+  report.check(S, "원본처럼 한 문서에서 발표 탭을 여러 개 열기", await until(() => wd.execute<boolean>('return document.querySelectorAll("iframe[data-office-presentation]").length===2;'), 15000));
+  phase = "close owner"; await wd.click(await wd.waitFor(`${pane} .group-tab[data-tab-id="html-source"] .group-tab-close`));
+  report.check(S, "원문 탭을 닫으면 연결된 발표 탭도 닫힘", await until(() => wd.execute<boolean>('return document.querySelectorAll("iframe[data-office-presentation]").length===0 && !document.querySelector(".group-tab[data-tab-id=html-source]");'), 20000));
+  report.check(S, "명시적 원문 닫기의 저장과 출력 파일 보존", readFileSync(source, "utf8").includes(marker) && readFileSync(target, "utf8") === exported);
+  report.check(S, "부모 화면 예외 없음", (await pageErrors(wd)).length === 0);
+} catch (error) {
+  report.check(S, phase, false, String(error));
+  if (ctx) { writeFileSync(report.path("failure.json"), JSON.stringify({ phase, error: String(error), page: await ctx.app.wd.execute('return {text:document.body.innerText,url:location.href,html:document.documentElement.outerHTML,api:Object.keys(window.htmlApi||{}),module:window.__initialModule,resources:performance.getEntriesByType("resource").map(x=>({name:x.name,status:x.responseStatus}))}').catch(() => null), errors: await pageErrors(ctx.app.wd).catch(() => []) }, null, 2)); await shot(ctx, "failure.png").catch(() => {}); }
+} finally {
+  await stage.close(); report.write({ binary, modelCalls: 0 }); console.log(report.summary()); if (report.steps.some(step => !step.ok)) process.exitCode = 1;
+}

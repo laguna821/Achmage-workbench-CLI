@@ -169,6 +169,7 @@ type View =
   | { kind: "archive" }
   | { kind: "terminal"; terminalId: string; workspaceId: string; label: string }
   | { kind: "document"; artifactId: string; proposalId: string | null }
+  | { kind: "presentation"; id: string; artifactId: string; ownerTabId: string }
   /** "나란히": chosen only, never where the app opens (views are not kept across launches). */
   | { kind: "split"; artifactId: string; draftKey: string; focus: "chat" | "doc" }
   /** Cards of a vault folder, an app folder, a work or a saved view; or one vault note (pkm). */
@@ -187,6 +188,7 @@ function isView(value: unknown): value is View {
   if (view.kind === "project") return typeof view.workId === "string";
   if (view.kind === "terminal") return typeof view.terminalId === "string" && typeof view.workspaceId === "string" && typeof view.label === "string";
   if (view.kind === "document") return typeof view.artifactId === "string" && (view.proposalId === null || typeof view.proposalId === "string");
+  if (view.kind === "presentation") return typeof view.id === "string" && typeof view.artifactId === "string" && typeof view.ownerTabId === "string";
   if (view.kind === "split") return typeof view.artifactId === "string" && typeof view.draftKey === "string" && (view.focus === "chat" || view.focus === "doc");
   if (view.kind !== "pkm" || !view.target || typeof view.target !== "object") return false;
   const target = view.target;
@@ -240,6 +242,8 @@ export function App() {
   });
   // The layout as last asked for, so changes made in one handler build on each other.
   const layoutRef = useRef(layout);
+  // Preview capabilities are transient. The persisted tab stores only its source identity.
+  const presentations = useRef(new Map<string, { url: string; title: string }>());
   const updateLayout = useCallback((change: (current: Layout<View>) => Layout<View>) => {
     const changed = change(layoutRef.current);
     if (changed === layoutRef.current) return;
@@ -248,6 +252,17 @@ export function App() {
     setLayout(next);
   }, []);
   const { view, workId } = focusedPane(layout);
+  useEffect(() => {
+    const tabs = layout.panes.flatMap(tabsOf), owners = new Set(tabs.map(tab => tab.id));
+    const shown = new Set(tabs.flatMap(tab => tab.view.kind === "presentation" ? [tab.view.id] : []));
+    for (const id of presentations.current.keys()) if (!shown.has(id)) presentations.current.delete(id);
+    let next = layout;
+    for (const pane of layout.panes) for (const tab of tabsOf(pane)) {
+      if (tab.view.kind === "presentation" && (!owners.has(tab.view.ownerTabId) || !presentations.current.has(tab.view.id)))
+        next = closeTab(next, pane.id, tab.id, { view: { kind: "new", folderId: null }, workId: null, sessionId: null });
+    }
+    if (next !== layout) updateLayout(current => current === layout ? next : current);
+  }, [layout, updateLayout]);
   // A document view holding edits only it can save (the Word editor) saves them before it is replaced (one per pane).
   const leaveGate = useRef(new LeaveGate());
   const leaveGuards = useRef<Partial<Record<PaneId, (reason?: "close") => Promise<void>>>>({});
@@ -274,7 +289,7 @@ export function App() {
       if (!pane) return;
       const resolved = typeof next === "function" ? next(pane.view) : next;
       if (resolved === pane.view) return;
-      const artifact = resolved.kind === "document" || resolved.kind === "split" ? stateRef.current.artifacts[resolved.artifactId] ?? openedScope : undefined;
+      const artifact = resolved.kind === "document" || resolved.kind === "split" || resolved.kind === "presentation" ? stateRef.current.artifacts[resolved.artifactId] ?? openedScope : undefined;
       const currentSession = pane.sessionId ? stateRef.current.sessions[pane.sessionId] : undefined;
       const changedScope = artifact && (artifact.workId !== pane.workId || artifact.workspaceId && artifact.workspaceId !== currentSession?.workspaceId);
       const content = { view: resolved, workId: artifact?.workId ?? pane.workId, sessionId: changedScope ? null : pane.sessionId };
@@ -283,7 +298,7 @@ export function App() {
       const show = () => updateLayout((current) => ({ ...setPane(current, targetId, content), focus: targetId }));
       // A completed export may open a new tab after preserving the source's recovery
       // buffer. withTabs keeps that source mounted; opening a conversion is not Save.
-      if (openedScope?.preserveSource && targetId === id && resolved.kind === "document" && ["document", "split"].includes(pane.view.kind)) leaveGate.current.run(id, null, show, () => {});
+      if (openedScope?.preserveSource && targetId === id && (resolved.kind === "document" || resolved.kind === "presentation") && ["document", "split"].includes(pane.view.kind)) leaveGate.current.run(id, null, show, () => {});
       else afterLeaving(targetId, resolved, show);
     },
     [afterLeaving, updateLayout],
@@ -443,7 +458,7 @@ export function App() {
   // The sidebar is where many sessions live: open unless the user closed it (decision 2026-10-28).
   const [expandedEditorTab, setExpandedEditorTab] = useState<string | null>(null);
   const focusedTabId = activeTab(focusedPane(layout)).id;
-  const editorFocus = view.kind === "document" && expandedEditorTab !== focusedTabId;
+  const editorFocus = view.kind === "presentation" || view.kind === "document" && expandedEditorTab !== focusedTabId;
   const sidebarOpen = !single && !editorFocus && prefs.sidebar !== false;
   const toggleSidebar = () => savePrefs({ sidebar: !sidebarOpen });
   const sidebarWidth = typeof prefs.sidebarWidth === "number" ? Math.min(480, Math.max(232, prefs.sidebarWidth)) : 288;
@@ -1541,6 +1556,7 @@ export function App() {
       return [...(shown ? [`session:${shown.id}`] : pane.workId ? [`work:${pane.workId}`] : []), ...(at.kind === "split" ? [`doc:${at.artifactId}`] : [])];
     }
     if (at.kind === "document") return [`doc:${at.artifactId}`];
+    if (at.kind === "presentation") return [`presentation:${at.id}`];
     if (at.kind === "project") return [`project:${at.workId}`];
     if (at.kind === "terminal") return [`terminal:${at.terminalId}`];
     if (at.kind === "pkm") return [pkmKey(at.target)];
@@ -1776,6 +1792,7 @@ export function App() {
   /** A pane's header: what it shows, and what dragging the header carries. */
   const paneHead = (pane: Pane<View>): PaneHead => {
     const at = pane.view;
+    if (at.kind === "presentation") return { title: `${state.artifacts[at.artifactId]?.name ?? "HTML"} · 발표`, icon: <FormatBadge format="html" />, item: null };
     const owner = pane.workId ? state.works[pane.workId] : undefined;
     const artifact = at.kind === "document" || at.kind === "split" ? state.artifacts[at.artifactId] : undefined;
     if (artifact) return { title: artifact.name, icon: <FormatBadge format={artifact.format} />, hint: artifact.path, item: { kind: "doc", id: artifact.id } };
@@ -1857,6 +1874,10 @@ export function App() {
     const pinned = focused ? Boolean(single) : true;
     const tabUi = tabsOf(pane).find((tab) => tab.id === tabId)?.ui;
     const start = at.kind === "new" || (at.kind === "work" && !owner);
+    if (at.kind === "presentation") {
+      const presentation = presentations.current.get(at.id);
+      return presentation ? <iframe data-office-presentation={at.ownerTabId} title={`${presentation.title || "HTML"} 발표`} src={presentation.url} sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads" allowFullScreen style={{ width: "100%", height: "100%", border: 0, display: "block" }} /> : null;
+    }
     if (at.kind === "terminal") return <Suspense fallback={<LoadingView label="터미널을 여는 중…" shape="work" />}><TerminalView api={api} id={at.terminalId} focused={focused && tabActive} uiState={tabUi} onUiState={uiOf[tabId]} onList={() => { const space = state.workspaces[at.workspaceId]; if (space) setTerminalWorkspace(space); }} /></Suspense>;
     if ((at.kind === "document" || at.kind === "split") && owner) {
       // Next to its own conversation in the other pane, a document needs no drawer of it.
@@ -1892,6 +1913,10 @@ export function App() {
                 }}
                 onToast={setToast}
                 onOpenArtifact={(artifactId, scope) => setViewOf(pane.id, { kind: "document", artifactId, proposalId: null }, scope)}
+                onPresent={(value) => {
+                  const id = crypto.randomUUID(); presentations.current.set(id, value);
+                  setViewOf(pane.id, { kind: "presentation", id, artifactId: at.artifactId, ownerTabId: tabId }, { workId: owner.id, workspaceId: state.artifacts[at.artifactId]?.workspaceId, preserveSource: true });
+                }}
                 pickFile={inDesktop ? pickFileNative : null}
                 onPickTarget={() => actions.pickSession(owner, session ?? null)}
                 onAiSettings={() => setOfficeSettingsOpen(true)}

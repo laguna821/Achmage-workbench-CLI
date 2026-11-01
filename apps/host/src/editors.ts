@@ -1,7 +1,7 @@
 import { PdfStructureEditors } from "./pdf-structure-editor.ts";
 import { EpubEditors } from "./epub-editor.ts";
 import { randomBytes } from "node:crypto";
-import { createReadStream, readFileSync } from "node:fs";
+import { createReadStream, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { extname } from "node:path";
 import type { DocFormat, DocumentAccess, OfficeEditorKind } from "@workbench/contracts";
@@ -18,6 +18,7 @@ import { decodePdfRequest } from "./pdf-codec.ts";
 import { OfficeAi } from "./office-ai.ts";
 import { OfficeReferences } from "./office-references.ts";
 import { OfficeStyles } from "./office-styles.ts";
+import { officeGenerated } from "./office-generated.ts";
 
 // The office editors (IeumOffice's editor screens, apps/office) run on their own origin, a second
 // port on 127.0.0.1. Their code is third-party and reads documents from anywhere, so it never
@@ -129,12 +130,31 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
         res.writeHead(200, { ...headers, "content-type": asset.type, "content-length": asset.data.length, ...(asset.type.startsWith("font/") ? { "access-control-allow-origin": "*" } : {}) });
         res.end(asset.data); return;
       }
-      const textEditor = /^\/api\/artifacts\/([^/]+)\/(text|html-preview|assets|image)$/.exec(path);
+      const textEditor = /^\/api\/artifacts\/([^/]+)\/(text|html-preview|html-export|assets|image)$/.exec(path);
       if (textEditor) {
         const [, id, operation] = textEditor;
         if (!grants.allows(bearer, id!)) throw new HttpError(401, "unauthorized", "이 문서를 열 권한이 없습니다.");
         const artifact = documents.check(id!);
         if (artifact.format !== "markdown" && artifact.format !== "html") throw new HttpError(415, "not_text_editor", "Markdown·HTML 편집기 요청이 아닙니다.");
+        if (operation === "html-export" && artifact.format === "html") {
+          const access = grants.access(bearer!);
+          if (!access?.viewId) throw new HttpError(409, "output_view_changed", "문서 탭에서 다시 내보내 주세요.");
+          if (method === "DELETE") {
+            const generatedId = url.searchParams.get("id") ?? "";
+            officeGenerated(documents).read(generatedId, artifact.id, access);
+            officeGenerated(documents).discard(generatedId); return sendJson(res, 200, { ok: true });
+          }
+          if (method === "POST") {
+            const request = JSON.parse((await readBody(req, 16_000_000)).toString("utf8"));
+            if (typeof request?.html !== "string" || !Number.isSafeInteger(request.revision) || request.revision < 1 || request.revision > artifact.revision) throw new HttpError(400, "html_export_request", "내보낼 HTML과 문서 판을 확인해 주세요.");
+            const result = await (await import("./html-single-file.mjs")).singleHtml(documents, artifact, request.html);
+            if (documents.get(artifact.id).path !== artifact.path) throw new HttpError(409, "output_source_moved", "원본의 위치가 바뀌었습니다. 다시 내보내 주세요.");
+            const generated = officeGenerated(documents).create(artifact.id, request.revision, access.viewId, "html");
+            try { writeFileSync(generated.path, result.html, { encoding: "utf8", flag: "wx", mode: 0o600 }); }
+            catch (error) { officeGenerated(documents).discard(generated.id); throw error; }
+            return sendJson(res, 200, { id: generated.id, revision: request.revision, skipped: result.skipped, defaultName: result.defaultName });
+          }
+        }
         if (operation === "assets" && method === "GET") return sendJson(res, 200, grants.previewInfo(bearer!));
         if (operation === "image") {
           if (method === "GET") {

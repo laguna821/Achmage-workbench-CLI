@@ -3,7 +3,7 @@ import type { Artifact, DocumentAccess, EditorGrant, OfficePageMessage } from "@
 import type { Api } from "../../api.ts";
 import type { RendererControlRequest, RendererControlReply } from "../../../../../packages/contracts/src/office-control.ts";
 import type { OfficeMcpRequest, OfficeMcpReply } from "../../../../../packages/contracts/src/office-mcp.ts";
-import type { BrowserResult, OfficeOutputFormat, OfficeOutputPlan, OfficeOutputRequest } from "../../../../../packages/contracts/src/office-output.ts";
+import type { BrowserResult, OfficeOutputFormat, OfficeOutputPlan, OfficeOutputRequest, OfficePresentation } from "../../../../../packages/contracts/src/office-output.ts";
 import { OfficeOutputDialog } from "./OfficeOutputDialog.tsx";
 import { OfficeReferencePicker } from "./OfficeReferencePicker.tsx";
 import type { OfficeDocumentChoice, OfficeReferenceRequest, OfficeReferenceSnapshot } from "../../../../../packages/contracts/src/office-references.ts";
@@ -22,6 +22,7 @@ export type OfficeHandle = {
   exportPdf(): void;
   exportDocx(open?: boolean): void;
   exportOdt(): void;
+  exportHtml(): void;
   /** Save unsaved edits now; resolves with the saved revision, or null when they could not be saved. */
   flush(): Promise<number | null>;
   /** After a conflict: save my edits as the revision after `revision`; null when there was nothing to keep or it failed. */
@@ -44,8 +45,8 @@ export type OfficeStatus = { dirty: boolean; revision: number | null; conflict: 
  */
 export const OfficeEditor = forwardRef<
   OfficeHandle,
-  { api: Api; artifact: Artifact; access?: DocumentAccess; sessionId: string | null; hidden?: boolean; onStatus(status: OfficeStatus): void; onNotice(message: string): void; onCopied?(artifactId: string, scope?: Pick<Artifact, "workId" | "workspaceId"> & { preserveSource?: boolean }): void; onPrepareAi(revision: number): Promise<void>; onNewSession(revision: number): Promise<string>; onAiSettings(): void }
->(function OfficeEditor({ api, artifact, access, sessionId, hidden = false, onStatus, onNotice, onCopied, onPrepareAi, onNewSession, onAiSettings }, ref) {
+  { api: Api; artifact: Artifact; access?: DocumentAccess; sessionId: string | null; hidden?: boolean; onStatus(status: OfficeStatus): void; onNotice(message: string): void; onCopied?(artifactId: string, scope?: Pick<Artifact, "workId" | "workspaceId"> & { preserveSource?: boolean }): void; onPresent?(value: OfficePresentation): void; onPrepareAi(revision: number): Promise<void>; onNewSession(revision: number): Promise<string>; onAiSettings(): void }
+>(function OfficeEditor({ api, artifact, access, sessionId, hidden = false, onStatus, onNotice, onCopied, onPresent, onPrepareAi, onNewSession, onAiSettings }, ref) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [generation, setGeneration] = useState(0);
   // Each opening of the page gets its own grant (a token for this document only).
@@ -58,8 +59,8 @@ export const OfficeEditor = forwardRef<
   const waiters = useRef<((revision: number | null) => void)[]>([]);
   // False only for the reload right after "open the latest revision": kept edits are dropped then.
   const recover = useRef(true);
-  const handlers = useRef({ onStatus, onNotice, onCopied, onPrepareAi, onNewSession, onAiSettings });
-  handlers.current = { onStatus, onNotice, onCopied, onPrepareAi, onNewSession, onAiSettings };
+  const handlers = useRef({ onStatus, onNotice, onCopied, onPresent, onPrepareAi, onNewSession, onAiSettings });
+  handlers.current = { onStatus, onNotice, onCopied, onPresent, onPrepareAi, onNewSession, onAiSettings };
   const aiBusy = useRef(false);
   const referenceSnapshot = useRef<string | null>(null);
   const referenceSession = useRef<string | null>(null);
@@ -192,6 +193,16 @@ export const OfficeEditor = forwardRef<
       if (target !== frame.current?.contentWindow || owner !== latest.current.id || ownerSession !== opened.current?.sessionId) throw new Error("저장 중 문서 창이나 연결된 대화가 바뀌었습니다. 저장한 사본은 문서 목록에서 확인해 주세요.");
     };
     const reply = (value: unknown, error?: string) => target.postMessage({ type: "office:output-result", requestId: message.requestId, value, error }, origin);
+    if (message.action === "present") {
+      try {
+        check();
+        if (latest.current.format !== "html" || !handlers.current.onPresent || typeof message.title !== "string" || !/^\/preview\/[A-Za-z0-9_-]{32}\/document\.html$/.test(message.url)) throw new Error("발표할 HTML 문서를 다시 확인해 주세요.");
+        const url = new URL("/office/html.html", origin);
+        url.search = new URLSearchParams({ present: "1", preview: message.url, title: message.title.slice(0, 160), theme: document.documentElement.dataset.theme ?? "system" }).toString();
+        handlers.current.onPresent({ url: url.href, title: message.title.slice(0, 160) }); reply(null);
+      } catch (error) { reply(null, error instanceof Error ? error.message : String(error)); }
+      return;
+    }
     if (message.action === "open-export" || message.action === "reveal-export") {
       try {
         check(); const result = exported.current.get(message.path);
@@ -217,7 +228,7 @@ export const OfficeEditor = forwardRef<
         if (!plan || !(message.bytes instanceof ArrayBuffer)) throw new Error("저장 위치를 다시 선택하세요.");
         try {
           check();
-          const result = await api.commitOfficeOutput(owner, plan.id, message.bytes, plan.replace, plan.longJob ? message.sourceRevision : undefined, message.generatedId);
+          const result = await api.commitOfficeOutput(owner, plan.id, message.bytes, plan.replace, plan.longJob || message.generatedId ? message.sourceRevision : undefined, message.generatedId);
           check();
           if (result.artifact) exported.current.set(result.path, result.artifact);
           if (result.artifact && (!message.intent || message.intent === "copy")) copied.current.set(result.artifact.id, ownerSession ?? null);
@@ -599,6 +610,12 @@ export const OfficeEditor = forwardRef<
         handlers.current.onNotice("문서를 여는 중이거나 다른 출력을 처리 중입니다."); return;
       }
       send({ type: "office:export-odt" });
+    },
+    exportHtml() {
+      if (status.current.revision === null || outputBusy.current || outputPlans.current.size) {
+        handlers.current.onNotice("문서를 여는 중이거나 다른 출력을 처리 중입니다."); return;
+      }
+      send({ type: "office:export-html" });
     },
     flush() {
       if (outputBusy.current || blockingOutputs() || copied.current.size) return Promise.resolve(null);

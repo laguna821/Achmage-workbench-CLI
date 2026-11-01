@@ -181,6 +181,11 @@ export class Gateway {
     await this.call("PUT", `/api/artifacts/${artifactId}/html-preview`, text, { "content-type": "text/html; charset=utf-8" });
   }
 
+  async exportSingleHtml(artifactId: string, revision: number, html: string): Promise<{ id: string; revision: number; skipped: string[]; defaultName: string }> {
+    return (await this.call("POST", `/api/artifacts/${artifactId}/html-export`, JSON.stringify({ revision, html }), { "content-type": "application/json" })).json();
+  }
+  async discardSingleHtml(artifactId: string, id: string) { await this.call("DELETE", `/api/artifacts/${artifactId}/html-export?id=${encodeURIComponent(id)}`); }
+
   async openHwp(artifactId: string, revision: number) {
     const response = await this.call("GET", `/api/artifacts/${artifactId}/hwp/open?revision=${revision}`);
     return { bytes: await response.arrayBuffer(), trackingDropped: response.headers.get("x-workbench-tracking-dropped") === "true", saveBlocked: response.headers.get("x-workbench-save-blocked") === "true" };

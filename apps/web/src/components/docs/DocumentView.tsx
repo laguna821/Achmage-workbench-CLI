@@ -42,6 +42,7 @@ import { clearRecoveredDraft, keepDraft, newestDraft } from "../../document-draf
 import { registerDocumentCommands } from "../../document-commands.ts";
 import { useDocumentReferences } from "../../document-references.ts";
 import { OfficeFileMenu } from "../OfficeFileMenu.tsx";
+import type { OfficePresentation } from "../../../../../packages/contracts/src/office-output.ts";
 
 /** Save operations only; "unsaved" is derived from the text, never stored (no stale overwrite). */
 type SaveState = "idle" | "saving" | "failed" | "conflict";
@@ -68,6 +69,7 @@ export default function DocumentView({
   onAiSettings,
   onExternalSetup,
   onOpenArtifact,
+  onPresent,
   pickFile,
   onToast,
   tabs,
@@ -105,6 +107,7 @@ export default function DocumentView({
   onAiSettings: () => void;
   onExternalSetup: () => void;
   onOpenArtifact: (artifactId: string, scope?: Pick<Artifact, "workId" | "workspaceId"> & { preserveSource?: boolean }) => void;
+  onPresent?: (value: OfficePresentation) => void;
   pickFile?: ((folder: string) => Promise<string | null>) | null;
   onToast: (message: string) => void;
 }) {
@@ -732,6 +735,7 @@ export default function DocumentView({
             onExportPdf={officeEditing && ["docx", "pptx", "markdown", "html"].includes(artifact.format) ? () => officeRef.current?.exportPdf() : undefined}
             onExportDocx={officeEditing && ["markdown", "html"].includes(artifact.format) ? () => officeRef.current?.exportDocx() : undefined}
             onExportOdt={officeEditing && ["markdown", "html"].includes(artifact.format) ? () => officeRef.current?.exportOdt() : undefined}
+            onExportHtml={officeEditing && artifact.format === "html" ? () => officeRef.current?.exportHtml() : undefined}
             onOpenWord={officeEditing && artifact.format === "markdown" ? () => officeRef.current?.exportDocx(true) : undefined}
             sessionId={session?.workspaceId === artifact.workspaceId ? session?.id : undefined}
             cwd={state.workspaces[artifact.workspaceId ?? ""]?.cwd ?? work.cwd} sourceKey={artifact.id} pickFile={pickFile}
@@ -1013,7 +1017,7 @@ export default function DocumentView({
       </div> : null}
       <div className="doc-body" ref={bodyRef} inert={!lease.canWrite && everWriter.current && Boolean(design || officeEditing)}>
         {officeEditing && everWriter.current ? (
-          <OfficeEditor ref={officeRef} api={api} artifact={artifact} access={lease.access()} sessionId={lease.registration?.view.sessionId ?? null} hidden={Boolean(compare || viewing)} onStatus={setOfficeStatus} onNotice={onToast} onCopied={onOpenArtifact}
+          <OfficeEditor ref={officeRef} api={api} artifact={artifact} access={lease.access()} sessionId={lease.registration?.view.sessionId ?? null} hidden={Boolean(compare || viewing)} onStatus={setOfficeStatus} onNotice={onToast} onCopied={onOpenArtifact} onPresent={onPresent}
             onPrepareAi={(revision) => lease.sync(false, revision)} onAiSettings={onAiSettings}
             onNewSession={async (revision) => {
               await lease.sync(false, revision);

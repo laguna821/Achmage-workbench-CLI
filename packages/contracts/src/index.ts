@@ -777,6 +777,7 @@ export type OfficeHostMessage =
   | { type: "office:export-pdf" }
   | { type: "office:export-docx"; open?: boolean }
   | { type: "office:export-odt" }
+  | { type: "office:export-html" }
   | { type: "office:copy-rejected"; artifactId: string }
   | { type: "office:copy-accepted"; artifactId: string }
   | import("./office-output.ts").OfficeOutputResult

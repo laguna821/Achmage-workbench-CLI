@@ -95,7 +95,7 @@ export class OfficeOutputs {
     if ((ticket.outputHash && ticket.generatedId !== generatedId) || (generatedReplay && (body.length || sourceRevision !== ticket.revision))) throw new HttpError(409, "output_generated_changed", "이미 저장한 변환 결과의 요청이 바뀌었습니다.");
     const generated = generatedId && !generatedReplay ? officeGenerated(this.documents).read(generatedId, artifactId, access) : null;
     if (generated) {
-      if (body.length || generated.format !== ticket.format || generated.revision !== sourceRevision) throw new HttpError(409, "output_generated_changed", "변환 결과의 형식이나 원본 판이 다릅니다.");
+      if (body.length || generated.format !== ticket.format || generated.revision !== sourceRevision || !ticket.longJob && generated.revision !== ticket.revision) throw new HttpError(409, "output_generated_changed", "변환 결과의 형식이나 원본 판이 다릅니다.");
       body = generated.bytes;
     }
     const inputHash = generatedReplay ? ticket.inputHash! : hash(body);
@@ -134,7 +134,9 @@ export class OfficeOutputs {
         const decoded = decodeHwpSave(body);
         bytes = await prepareHwpSave(readFileSync(this.documents.revisionPath(artifactId, ticket.revision)), decoded.bytes, ticket.format, decoded.metadata, "save", hwpFormat(source.format));
       } else await checkOfficeCopy(bytes, ticket.format);
-      if (["md", "markdown", "html", "htm"].includes(ticket.format)) {
+      // The original single-file HTML engine deliberately keeps skipped references;
+      // Save As asset relocation must not rewrite its output or turn warnings into failure.
+      if (["md", "markdown", "html", "htm"].includes(ticket.format) && generated?.format !== "html") {
         assets = await prepareTextCopy(generated?.path ?? source.path, ticket.path, bytes.toString("utf8"), formatOf(ticket.path) as "markdown" | "html");
         bytes = Buffer.from(assets.text, "utf8");
       }

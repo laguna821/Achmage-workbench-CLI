@@ -14,6 +14,7 @@ export type BrowserCommand =
   | { kind: "close"; id: string };
 export type BrowserResult = { id: string } | { value: unknown } | { base64: string };
 export type OfficeOutputRequest =
+  | { type: "office:output"; requestId: string; action: "present"; title: string; url: string }
   | { type: "office:output"; requestId: string; action: "open-export"; path: string }
   | { type: "office:output"; requestId: string; action: "reveal-export"; path: string }
   | { type: "office:output"; requestId: string; action: "browser"; revision: number; command: BrowserCommand }
@@ -23,3 +24,4 @@ export type OfficeOutputRequest =
   | { type: "office:output"; requestId: string; action: "pdf" | "print"; revision: number; job: SvgJob }
   | { type: "office:output"; requestId: string; action: "html-pdf" | "html-print" | "html-render"; revision: number; job: HtmlJob };
 export type OfficeOutputResult = { type: "office:output-result"; requestId: string; value?: OfficeOutputPlan | { path?: string; artifactId?: string | null } | ArrayBuffer | BrowserResult | null; error?: string };
+export type OfficePresentation = { url: string; title: string };
