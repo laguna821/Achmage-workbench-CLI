@@ -5,7 +5,8 @@
 # installs engines with the system's npm.
 # Build: see .github/workflows/release.yml (job arch).
 pkgname=achmage-workbench
-pkgver=0.2.5
+# One release version for the desktop and package manager; do not leave a stale counter here.
+pkgver=$(node -p 'require("../../package.json").version')
 pkgrel=1
 pkgdesc="One screen for Claude Code and Codex sessions, documents and notes (Achmage Workbench)"
 arch=('x86_64')
