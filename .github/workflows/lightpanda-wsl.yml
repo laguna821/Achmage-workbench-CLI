@@ -1,0 +1,48 @@
+name: Lightpanda on Windows WSL2
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/unified-workbench-v0.3]
+    paths:
+      - '.github/workflows/lightpanda-wsl.yml'
+      - 'scripts/check-lightpanda.ts'
+      - 'apps/host/src/browse-lightpanda.ts'
+permissions:
+  contents: read
+jobs:
+  wsl:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Prepare an isolated runner's actual WSL2 distribution
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force wsl-evidence | Out-Null
+          wsl.exe --version | Out-File wsl-evidence/wsl-version.txt
+          wsl.exe --set-default-version 2
+          if ($LASTEXITCODE -ne 0) { throw 'WSL2 default unavailable' }
+          wsl.exe --install -d Ubuntu-24.04 --web-download --no-launch
+          if ($LASTEXITCODE -ne 0) { throw 'Ubuntu WSL2 installation failed' }
+          wsl.exe --set-default Ubuntu-24.04
+          if ($LASTEXITCODE -ne 0) { throw 'WSL default distribution unavailable' }
+          wsl.exe --list --verbose | Out-File wsl-evidence/distributions.txt
+          $kernel = (wsl.exe --exec uname -r) -join "`n"
+          if ($LASTEXITCODE -ne 0 -or $kernel -notmatch 'WSL2') { throw "Expected a running WSL2 kernel: $kernel" }
+          @{kernel=$kernel;node=(node --version);os=[System.Environment]::OSVersion.VersionString} | ConvertTo-Json | Set-Content wsl-evidence/environment.json
+          # Only the synthetic HTTP fixture, on this disposable CI runner, is reachable from
+          # its WSL NAT. Production gateways keep their existing loopback binding.
+          New-NetFirewallRule -DisplayName 'Workbench WSL fixture' -Direction Inbound -Action Allow -Program (Get-Command node).Source -Protocol TCP -Profile Any | Out-Null
+      - name: Run the shipped Windows gateway and original Linux engine through WSL2
+        run: node scripts/check-lightpanda.ts --install wsl-evidence/lightpanda-check.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lightpanda-windows-wsl2
+          path: wsl-evidence
+          if-no-files-found: ignore

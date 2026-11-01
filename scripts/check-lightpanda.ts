@@ -2,7 +2,7 @@
 // gateway/engine spool. No LLM calls, external accounts, or graphical browser.
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, delimiter, resolve } from "node:path";
@@ -25,16 +25,21 @@ const server = createServer((req, res) => {
   }
   res.setHeader("content-type", req.url === "/data" ? "application/json" : "text/html; charset=utf-8"); res.end(req.url === "/data" ? JSON.stringify({ text: "비동기 서버 데이터" }) : html);
 });
-await new Promise<void>(done => server.listen(0, "127.0.0.1", done));
+const windows = process.platform === "win32";
+const fixtureHost = windows ? JSON.parse(execFileSync("wsl.exe", ["--exec", "ip", "-j", "route", "show", "default"], { encoding: "utf8" }))[0]?.gateway : "127.0.0.1";
+assert.ok(typeof fixtureHost === "string" && /^[\d.]+$/.test(fixtureHost), "WSL fixture gateway");
+await new Promise<void>(done => server.listen(0, windows ? "0.0.0.0" : "127.0.0.1", done));
 const address = server.address(); assert.ok(address && typeof address !== "string");
-const url = `http://127.0.0.1:${address.port}`;
+const url = `http://${fixtureHost}:${address.port}`;
 const sessions = ["one", "two"].map(id => ({ id, workId: "work", provider: "claude", status: "running", browser: true, archivedAt: null, purpose: id }) as Session);
 let access: "full" | "ask" = "full";
 const browser = new AgentBrowser({ dataDir: root, lightpanda: binary });
 const items: any[] = [];
 browser.bind({ lookup: id => { const session = sessions.find(s => s.id === id); return session ? { session, work: { id: "work", cwd: root } as Work, access } : null; }, sessions: () => sessions, upsertItem: (_id, item) => items.push(item), updateSession: () => {}, publish: () => {} });
 const cli = (id: string, args: string[]) => new Promise<{ code: number | null; stdout: string; stderr: string }>((done, reject) => {
-  const child = spawn("workbench-browser", [`-s=${browserSessionName(id)}`, ...args], { env: { ...process.env, PATH: `${browser.paths.bin}${delimiter}${process.env.PATH}` }, cwd: root });
+  // The Windows .cmd launcher runs this same generated Node wrapper. Avoid re-quoting the
+  // synthetic JSON/Unicode arguments through cmd in the test harness.
+  const child = spawn(windows ? process.execPath : "workbench-browser", [...(windows ? [join(browser.paths.bin, "playwright-cli.mjs")] : []), `-s=${browserSessionName(id)}`, ...args], { env: { ...process.env, PATH: `${browser.paths.bin}${delimiter}${process.env.PATH}` }, cwd: root });
   let stdout = "", stderr = "";
   child.stdout.on("data", v => stdout += v); child.stderr.on("data", v => stderr += v); child.once("error", reject);
   child.once("exit", code => done({ code, stdout, stderr }));
