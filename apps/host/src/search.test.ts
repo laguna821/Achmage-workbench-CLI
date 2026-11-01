@@ -216,7 +216,8 @@ describe("one ranked index", () => {
     const again = new Store(join(dir, "state.sqlite"));
     const reopened = new SessionManager(again, new EventBus(), { hostId: "h", hostLabel: "노트북", managedWorksDir: join(dir, "works"), dataDir: dir });
     expect(reopened.search("핵심 문장").total).toBe(1);
-    expect(again.getMeta("search.version")).toBe("2");
+    expect(again.getMeta("search.version")).toBe("3-fast-find-714548e");
+    expect(again.search.cached().some((row) => row.body.includes("핵심 문장"))).toBe(true);
     const tables = new DatabaseSync(join(dir, "state.sqlite")).prepare("SELECT name FROM sqlite_master WHERE name = 'item_search'").all();
     expect(tables).toEqual([]);
     // Built once: what is put afterwards stays when the store opens again.

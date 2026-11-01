@@ -68,6 +68,11 @@ export type MatchedRow = {
 
 const sha = (text: string) => createHash("sha1").update(text).digest("base64url");
 
+export type CachedSearchRow = MatchedRow & {
+  body: string;
+  fields: { title: string; aliases: string[]; tags: string[]; properties: [string, FrontmatterValue][]; pathSegments: string[] };
+};
+
 const valueText = (value: FrontmatterValue) => (value ?? []).join(" ");
 
 /** The title field: the title and its aliases, one per line. */
@@ -78,6 +83,7 @@ const tagsField = (entry: IndexEntry) => [...(entry.tags ?? []), ...(entry.prope
 export class SearchIndex {
   private readonly db: DatabaseSync;
   private readonly statements = new Map<string, StatementSync>();
+  private readonly listeners = new Set<(keys: string[] | null) => void>();
 
   constructor(db: DatabaseSync) {
     this.db = db;
@@ -100,6 +106,11 @@ export class SearchIndex {
       );
       CREATE INDEX IF NOT EXISTS search_entries_session ON search_entries (session_id, at);
       CREATE INDEX IF NOT EXISTS search_entries_work ON search_entries (work_id);
+      CREATE TABLE IF NOT EXISTS search_cache (
+        entry_id INTEGER PRIMARY KEY,
+        body TEXT NOT NULL,
+        fields TEXT NOT NULL
+      );
       CREATE VIRTUAL TABLE IF NOT EXISTS search_text USING fts5(title, tags, body, tokenize = 'trigram');
       CREATE VIRTUAL TABLE IF NOT EXISTS search_words USING fts5(title, tags, body, tokenize = 'unicode61 remove_diacritics 2', content = '', contentless_delete = 1);
     `);
@@ -139,7 +150,7 @@ export class SearchIndex {
     const body = text.length > BODY_LIMIT ? text.slice(0, BODY_LIMIT) : text;
     const extra = entry.extra && Object.keys(entry.extra).length ? JSON.stringify(entry.extra) : null;
     const fields = [entry.kind, entry.scope, entry.workId ?? null, entry.sessionId ?? null, entry.itemId ?? null, entry.artifactId ?? null, entry.path ?? null, Math.round(entry.at) || 0, entry.own ? 1 : 0, entry.title ?? "", extra] as const;
-    const sig = entry.sig ?? sha(JSON.stringify([fields, title, tags, body]));
+    const sig = entry.sig ?? sha(JSON.stringify([fields, title, tags, text, entry.properties ?? []]));
     if (existing?.sig === sig) return false;
     this.transaction(() => {
       let id: number;
@@ -155,7 +166,14 @@ export class SearchIndex {
       }
       this.prepare("INSERT INTO search_text (rowid, title, tags, body) VALUES (?, ?, ?, ?)").run(id, title, tags, body);
       this.prepare("INSERT INTO search_words (rowid, title, tags, body) VALUES (?, ?, ?, ?)").run(id, wordStream(title), wordStream(tags), wordStream(body));
+      // Keep structured metadata and the full source body for the native engine. Never recover
+      // YAML keys from the flattened legacy tags column, or append search tokens to raw text.
+      this.prepare("INSERT OR REPLACE INTO search_cache (entry_id, body, fields) VALUES (?, ?, ?)").run(id, text, JSON.stringify({
+        title: entry.title ?? "", aliases: entry.aliases ?? [], tags: entry.tags ?? [],
+        properties: entry.properties ?? [], pathSegments: entry.path?.split(/[\\/]/).filter(Boolean) ?? [],
+      }));
     });
+    this.changed([entry.key]);
     return true;
   }
 
@@ -168,9 +186,12 @@ export class SearchIndex {
   }
 
   private drop(id: number) {
+    const row = this.prepare("SELECT key FROM search_entries WHERE id = ?").get(id) as { key: string } | undefined;
+    this.prepare("DELETE FROM search_cache WHERE entry_id = ?").run(id);
     this.prepare("DELETE FROM search_text WHERE rowid = ?").run(id);
     this.prepare("DELETE FROM search_words WHERE rowid = ?").run(id);
     this.prepare("DELETE FROM search_entries WHERE id = ?").run(id);
+    if (row) this.changed([row.key]);
   }
 
   /** Take out every entry whose key starts with a prefix (a source's, a vault's notes). */
@@ -201,6 +222,7 @@ export class SearchIndex {
   /** Change the kind of an entry in place (a reply that turned out to be a plan). */
   relabel(key: string, kind: SearchKind) {
     this.prepare("UPDATE search_entries SET kind = ? WHERE key = ?").run(kind, key);
+    this.changed([key]);
   }
 
   /** Everything out (a rebuild). */
@@ -209,7 +231,32 @@ export class SearchIndex {
       this.db.exec("DELETE FROM search_entries");
       this.db.exec("DELETE FROM search_text");
       this.db.exec("DELETE FROM search_words");
+      this.db.exec("DELETE FROM search_cache");
     });
+    this.changed(null);
+  }
+
+  /** Notifications are hints to reread committed state, not copies of in-transaction writes.
+   * A rolled-back outer transaction therefore cannot leak a speculative body to the worker. */
+  private changed(keys: string[] | null) { for (const listener of this.listeners) listener(keys); }
+  subscribe(listener: (keys: string[] | null) => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
+
+  /** Bounded raw cache pages, or the current values of a changed-key batch. */
+  cached(options: { after?: number; limit?: number; keys?: string[] } = {}): CachedSearchRow[] {
+    if (options.keys && !options.keys.length) return [];
+    const sql = `SELECT e.*, c.body, c.fields FROM search_entries e JOIN search_cache c ON c.entry_id = e.id WHERE ${
+      options.keys ? `e.key IN (${options.keys.map(() => "?").join(",")})` : "e.id > ?"
+    } ORDER BY e.id LIMIT ?`;
+    const args = options.keys ?? [options.after ?? 0];
+    const rows = this.db.prepare(sql).all(...args, options.limit ?? 500) as Record<string, unknown>[];
+    return rows.map((row) => ({
+      id: Number(row.id), key: String(row.key), kind: row.kind as SearchKind, scope: row.scope as MatchedRow["scope"],
+      workId: row.work_id === null ? null : String(row.work_id), sessionId: row.session_id === null ? null : String(row.session_id),
+      itemId: row.item_id === null ? null : String(row.item_id), artifactId: row.artifact_id === null ? null : String(row.artifact_id),
+      path: row.path === null ? null : String(row.path), at: Number(row.at), own: Number(row.own) === 1,
+      title: String(row.title), extra: row.extra ? JSON.parse(String(row.extra)) : {}, rank: 0,
+      body: String(row.body), fields: JSON.parse(String(row.fields)),
+    }));
   }
 
   /**

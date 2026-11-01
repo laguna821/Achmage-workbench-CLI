@@ -1,0 +1,21 @@
+[package]
+name = "workbench-search-worker"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+ff10k-core = { path = "../../../third_party/fast-find/crates/ff10k-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# This small binary is for host development and protocol tests. Installed apps use the same
+# library through the existing Tauri executable's --search-worker early entry point.
+[[bin]]
+name = "workbench-search-worker"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

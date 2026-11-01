@@ -12,6 +12,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+workbench-search-worker = { path = "../search-worker" }
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
@@ -56,3 +57,16 @@ codegen-units = 4
 lto = "thin"
 opt-level = "s"
 strip = true
+
+# The surrounding shell favours size; the reused search core keeps its upstream speed setting.
+[profile.release.package.ff10k-core]
+opt-level = 3
+codegen-units = 1
+
+[profile.release.package.workbench-search-worker]
+opt-level = 3
+codegen-units = 1
+
+[profile.release.package.neo_frizbee]
+opt-level = 3
+codegen-units = 1

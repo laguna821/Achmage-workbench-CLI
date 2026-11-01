@@ -2,6 +2,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
+    if std::env::args().nth(1).as_deref() == Some("--search-worker") {
+        std::process::exit(achmage_workbench_lib::search_worker::run());
+    }
     if std::env::args().nth(1).as_deref() == Some("--office-font-catalog") {
         std::process::exit(achmage_workbench_lib::office_fonts::run());
     }

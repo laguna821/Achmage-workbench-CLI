@@ -9,6 +9,8 @@
       "../../host/dist/cleanup-legacy.mjs": "host/cleanup-legacy.mjs",
       "../../web/dist/": "web/",
       "../../../third_party/office-output/": "licenses/office-output/",
+      "../../../third_party/fast-find/LICENSE": "licenses/fast-find/LICENSE",
+      "../../../third_party/fast-find/ADAPTATIONS.md": "licenses/fast-find/ADAPTATIONS.md",
       "../../../third_party/skills/": "skills/",
       "node/": "node/"
     },

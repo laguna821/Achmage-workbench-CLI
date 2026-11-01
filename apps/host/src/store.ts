@@ -14,7 +14,8 @@ import { SearchIndex, documentEntry, documentKey, itemEntries, itemKey, sessionE
  * 1: messages and documents in two trigram tables. 2: one ranked index (2-gram and trigram) of
  * requests, replies, plans, attachment names, documents, works, sessions and vault notes.
  */
-const SEARCH_VERSION = "2";
+// 3: native-search raw cache with exact structured fields (only derived data is rebuilt).
+const SEARCH_VERSION = "3-fast-find-714548e";
 
 export class Store {
   private readonly db: DatabaseSync;

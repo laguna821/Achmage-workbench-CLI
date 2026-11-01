@@ -16,6 +16,7 @@ mod office_browser;
 pub mod office_secrets;
 pub mod office_fonts;
 pub mod terminal_worker;
+pub mod search_worker;
 
 /// Closing the window only hides it (work goes on, PRD "트레이로 이동, 작업 유지"); said once.
 static HIDDEN_ONCE: AtomicBool = AtomicBool::new(false);

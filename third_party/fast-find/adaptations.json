@@ -1,0 +1,65 @@
+{
+  "upstream": "714548efd3e361a7011a5123f4ae928630a01614",
+  "changes": [
+    {
+      "path": "crates/ff10k-core/Cargo.toml",
+      "upstreamSha256": "8264e270bd8a9434fc579fca66c1ca207f8c05d3ac30e07342c404b30c57642d",
+      "sha256": "c089363d8e01b1f8779dad5ce999bd720f73672c576666affeb714201f87eec1",
+      "reason": "원본 workspace release 설정 복원, 원문 강조의 grapheme 경계를 위한 unicode-segmentation"
+    },
+    {
+      "path": "crates/ff10k-core/src/doc.rs",
+      "upstreamSha256": "753b46af7513dc0ae1ad30267b145e9315b341498f0bd5d76dfd4bdab7e65d56",
+      "sha256": "1e63d58e3c79f4cc2ecc3d69eb73b44c335718f302d3d556fe8148411b36f2c0",
+      "reason": "host typed metadata, exact YAML keys, opaque IDs excluded from title/path fields"
+    },
+    {
+      "path": "crates/ff10k-core/src/engine.rs",
+      "upstreamSha256": "ddb26fd69ed2034bbe570ed037877b546cc3a19b5df58580362f9220316ff2d3",
+      "sha256": "6950573e86d5247018256e4fd2b847534ae5b17234abd8bcce948a84796e6f60",
+      "reason": "typed upsert, scoped candidate selection and related/preview boundary"
+    },
+    {
+      "path": "crates/ff10k-core/src/index.rs",
+      "upstreamSha256": "c77aa166be17f31915e8282554f09a8b836ff8e2c5ef224a419db20d4eb0fa4c",
+      "sha256": "49500d560f44545c75a858d76bf69425387d00aa0cec1869522cb68a483e18c7",
+      "reason": "typed-field replacement/unindex preservation and CJK gram-to-distinct-token lookup"
+    },
+    {
+      "path": "crates/ff10k-core/src/lib.rs",
+      "upstreamSha256": "510d1bfb05d5600c18e078d4d0dc0ed8b2b932863bf59dca8fa17579cd2f6ed4",
+      "sha256": "5e6254878a142d030f82126f6b3c9a168c1a1bc4c88056d7c40495c74d2782bb",
+      "reason": "Workbench CJK compatibility module registration"
+    },
+    {
+      "path": "crates/ff10k-core/src/matcher.rs",
+      "upstreamSha256": "d1e25162c1937e7a3b3fe956446440f00bf52062b78b41f72d9b3f9c449f8a84",
+      "sha256": "244d14c719ead73c206d07056135c9dbd53ac36a331ce64ce7bfd54d8cae62f8",
+      "reason": "CJK substring/adjacent split candidates with original field/position/range ownership"
+    },
+    {
+      "path": "crates/ff10k-core/src/query.rs",
+      "upstreamSha256": "5004029291ac7901b2d72dd74ed95bebaa1d2732377b0cc61073f884315f672f",
+      "sha256": "a21d64e6548e00755f11d089947bd7a29b36668f2289a288faec50d585b4b7ac",
+      "reason": "conservative Workbench Korean particle rule for unquoted terms"
+    },
+    {
+      "path": "crates/ff10k-core/src/rank.rs",
+      "upstreamSha256": "7371aa098306e66e29cf20545bc39f3bff577024f1219240bb63d79e0c5de339",
+      "sha256": "26396489458ce3d5047b2bdf21fab45b5373578b8c1ad436588bff6d09f1c344",
+      "reason": "scope before partial/topN, compact selection before details, CJK raw highlight mapping"
+    },
+    {
+      "path": "crates/ff10k-core/src/cjk.rs",
+      "upstreamSha256": null,
+      "sha256": "6d8b2b57bae698ecbb1a0fb6c8af37cbdc04033ad44eecfb1edb7f30db844b7e",
+      "reason": "Korean/CJK compatibility and raw grapheme range mapping"
+    },
+    {
+      "path": "crates/ff10k-core/tests/workbench.rs",
+      "upstreamSha256": null,
+      "sha256": "38e658f59144cae43c98d86314691bfcb71c79c76c3b2991db8e1441d67b6dbf",
+      "reason": "Adapter regressions separate from unchanged upstream tests"
+    }
+  ]
+}
