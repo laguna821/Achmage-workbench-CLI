@@ -1,5 +1,7 @@
 # Linux 실제 앱 검사
 
+2026-11-01 `--only=office-mcp` **31/31**: 실제 HTTP/SSE 클라이언트로 원본 MCP 설정·도구·클라이언트별 세션, 열린 Word/PPT/Sheets 읽기/편집/사본 저장, 나머지5형식 읽기, 덮어쓰기 거부, 명시 폐기/재열기, 원문 보기 유지, 자기 파일 저장과 서버 재시작을 확인했다. X11 전용이며 `APP_E2E_XVFB`로 Xvfb 경로를 지정할 수 있다. 모델을 호출하지 않는다. [범위와 원본 제한](office-integration.md#열린-문서의-원본-mcp-연결), 근거 `office-mcp-native-04/results.json`, 검증 판 `research:rr-81416d120ba5163102d2f579aad2ef2b:d1c46d30d928284cefb2879facb172f7e0467c3d68438a0d9372b996e75b1e97`.
+
 `node scripts/office-cli-check.ts <evidence-directory> --only=html-docx --cli=<genoffice.cjs>`는 원본 HTML→Word의 한글·표·스크립트·상대 base/CSS/JS/SVG, 초기 viewport, 실제 PNG 색·긴 그림의 원본 분할 높이, 원본/설정 보존과 정리를 검사한다. `html-docx-assets-07`은12/12 통과했다. `APP_E2E_OUTPUT_FORMATS=html --only=start,office-output`은 새 **Word로 내보내기** 메뉴와 미저장 내용·원본 판 보존을 포함하며 `html-docx-gui-02/results.json`에서12/12 통과했다. [구현·검증 판과 남은 범위](office-integration.md#원본-cli의-tauri-출력-연결)를 따른다.
 
 CLI 검사는 UTF-8/EUC-KR CSV와 HTML .xls도 포함한다. 실제 BIFF5 자료는 `--only=xls --xls-fixture=<calamine-biff5_write.xls> --ieum-cli=<genoffice.cjs>`로 검사한다. 원본 Rust 변환 엔진은 CLI의 `XLSX_SIDECAR_PATH` 또는 패키지 리소스에서 읽는다. `cli-source-native-01`은 고정 원본 CLI와 실제 Rust sidecar를 사용해 변환30/30을 통과했으며 fixture 출처·해시는 연구 판에 보존했다.

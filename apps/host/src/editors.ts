@@ -10,6 +10,7 @@ import { HttpError } from "./errors.ts";
 import { fontFace, matchFont } from "./fonts.ts";
 import { MIME, readBody, sendJson, serveStatic } from "./http.ts";
 import { decodeHwpSave, hwpFormat, hwpTabs, HWP_MAX_BYTES, openHwpBytes, prepareHwpSave } from "./hwp-codec.ts";
+import { hwpToText } from "../../../third_party/ieumoffice/file-parse/hwp.ts";
 import { OFFICE_IMAGE_MAX_BYTES, readOfficeAsset, saveOfficeImage } from "./office-assets.ts";
 import { buildPreviewDocument } from "../../../third_party/ieumoffice/text-assets/preview-document.ts";
 import { PDF_MAX_BYTES, PDF_REQUEST_MAX_BYTES } from "../../../packages/contracts/src/pdf.ts";
@@ -250,7 +251,7 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
         }
         return sendJson(res, 200, await engine.queryPdf(bytes, operation!, request));
       }
-      const hwp = /^\/api\/artifacts\/([^/]+)\/hwp\/(open|tabs|save|repair)$/.exec(path);
+      const hwp = /^\/api\/artifacts\/([^/]+)\/hwp\/(open|tabs|save|repair|read-text)$/.exec(path);
       if (hwp) {
         const [, id, operation] = hwp;
         if (!grants.allows(bearer, id!)) throw new HttpError(401, "unauthorized", "이 문서를 열 권한이 없습니다.");
@@ -263,6 +264,7 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
           res.end(opened.bytes); return;
         }
         if (operation === "tabs" && method === "POST") return sendJson(res, 200, await hwpTabs(await readBody(req, HWP_MAX_BYTES), hwpFormat(url.searchParams.get("format") ?? format)));
+        if (operation === "read-text" && method === "POST") return sendJson(res, 200, await hwpToText(await readBody(req, HWP_MAX_BYTES)));
         if ((operation === "save" || operation === "repair") && method === "POST") {
           if (operation === "save") documents.registry.assertWrite(id!, grants.access(bearer!));
           const { bytes, metadata } = decodeHwpSave(await readBody(req, HWP_MAX_BYTES + 1_000_004));

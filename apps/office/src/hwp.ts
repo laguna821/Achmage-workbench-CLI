@@ -2,6 +2,7 @@ import { mountOfficeAi } from "./office-ai.ts";
 import { DEFAULT_AI_PANEL_PREFS, normalizeAiPanelPrefs } from "../../../vendor/ieumoffice/packages/ui/src/ai-panel-prefs.ts";
 import { Events, Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
+import { installMcp } from "./mcp.ts";
 import type { HwpFormat, MeasuredTab, MemoSnapshot } from "../../../packages/contracts/src/hwp.ts";
 import { encodeHwpSave } from "../../../packages/contracts/src/hwp.ts";
 import type { OfficeOutputPlan, SvgJob } from "../../../packages/contracts/src/office-output.ts";
@@ -15,6 +16,19 @@ const ai = mountOfficeAi(init, gateway, events);
 const id = init.artifact.id, path = init.artifact.path;
 const format: HwpFormat = /\.hwpx$/i.test(path) ? "hwpx" : "hwp";
 const state = { revision: init.artifact.revision, theme: init.theme, dirty: false, kept: false, recovered: false, trackingDropped: false, saveBlocked: false, password: false, memoOpen: false, epoch: 0 };
+installMcp(init, { ready: () => events.has("readBytesRequest"), dirty: () => state.dirty, async run(request) {
+  if (request.kind !== "read") throw new Error("원본 한글 MCP는 읽기만 지원합니다.");
+  const bytes = await new Promise<Uint8Array>((resolve, reject) => {
+    const stop = events.on("readBytesResult")((raw) => {
+      const result = raw as { ok?: boolean; bytes?: Uint8Array; error?: string };
+      clearTimeout(timer); stop();
+      if (result.ok && result.bytes instanceof Uint8Array) resolve(result.bytes); else reject(new Error(result.error || "한글 문서 내용을 받지 못했습니다."));
+    });
+    const timer = window.setTimeout(() => { stop(); reject(new Error("한글 문서 읽기 응답을 기다리지 못했습니다.")); }, 30_000);
+    events.emit("readBytesRequest");
+  });
+  return gateway.liveHwpText(id, state.revision, bytes);
+} });
 let saveTurn: { revision: number; epoch: number; output?: OfficeOutputPlan } | null = null;
 let recoveryTurn: { revision: number; epoch: number } | null = null;
 let opening: Promise<Uint8Array> | null = null;

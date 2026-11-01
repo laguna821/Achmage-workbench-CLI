@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Api } from "../api.ts";
 import { OFFICE_SETTINGS_CHANNELS, type OfficeSettingsFrameRequest } from "../../../../packages/contracts/src/office-settings.ts";
+import { OFFICE_MCP_SETTINGS_CHANNELS } from "../../../../packages/contracts/src/office-mcp.ts";
 import "../styles/office-settings.css";
 
 /** Only this exact frame may request full Office settings operations. It never gets the host token. */
@@ -33,6 +34,13 @@ export function OfficeSettings({ api, theme, onClose }: { api: Api; theme: "ligh
         const options = { signal: controller.signal };
         if (message.channel === "ai:get-settings") return api.request("GET", "/api/office-ai/settings", undefined, options);
         if (message.channel === "ai:set-settings") return api.request("PUT", "/api/office-ai/settings", { settings: message.args[0], expectedRevision: message.revision }, options);
+        if (OFFICE_MCP_SETTINGS_CHANNELS.has(message.channel)) {
+          const value = await api.request<{ path?: string }>("POST", "/api/office-mcp/invoke", { channel: message.channel, args: message.args }, options);
+          if (message.channel === "home:open-mcp-log-file" && value?.path) {
+            const { revealItemInDir } = await import("@tauri-apps/plugin-opener"); await revealItemInDir(value.path);
+          }
+          return value;
+        }
         return api.request("POST", "/api/office-ai/invoke", { channel: message.channel, args: message.args, owner: owner.current }, options);
       };
       void call().then((value) => reply(value), (reason: Error) => { if (!controller.signal.aborted) reply(undefined, reason.message); }).finally(() => calls.current.delete(message.requestId));

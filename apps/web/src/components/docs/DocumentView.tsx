@@ -73,6 +73,7 @@ export default function DocumentView({
   tabs,
   openDocIds,
   onLeaveGuard,
+  onMcpClose,
   onAnswer,
   modes,
   uiState,
@@ -86,6 +87,8 @@ export default function DocumentView({
   onAnswer?: (session: Session, itemId: string, decision: "accept" | "decline") => void;
   /** Register how to save edits only this view holds (the Word editor) before the app leaves it. */
   onLeaveGuard?: (guard: ((reason?: "close") => Promise<void>) | null) => void;
+  /** Called only after the explicit MCP save/discard operation has settled. */
+  onMcpClose?: () => void;
   /** Open document tabs of this work. */
   tabs?: ReactNode;
   openDocIds?: string[];
@@ -322,6 +325,34 @@ export default function DocumentView({
   useEffect(() => { lease.report(dirty, (officeEditing ? officeStatus.revision : base?.revision) ?? designStatus.revision ?? artifact?.revision); }, [dirty, officeEditing, base?.revision, officeStatus.revision, designStatus.revision, artifact?.revision, lease.report]);
   useEffect(() => registerDocumentCommands(lease.viewId, {
     artifactId,
+    mcp: async (request) => {
+      if (!lease.canWrite) return { status: "error", error: { reason: "read_only", message: "이 창에는 문서 편집 권한이 없습니다." } };
+      if (!officeEditing) {
+        if (request.kind === "status") {
+          const pane = bodyRef.current?.closest(".pane");
+          return { status: "ok", result: { value: { dirty, active: pane?.getAttribute("data-tab-active") === "true" && pane?.getAttribute("data-pane-active") === "true" } } };
+        }
+        if (request.kind === "read" && richTextEditor) return base ? { status: "ok", result: { value: text } } : { status: "not_ready" };
+        if (wordEditor) { setMode("edit"); return { status: "not_ready" }; }
+        if (richTextEditor && !unsaved) { setMode("rich"); return { status: "not_ready" }; }
+        return { status: "error", error: { reason: "unsupported", message: "현재 보기의 편집을 저장하고 Office 편집 보기에서 요청해 주세요." } };
+      }
+      if (!officeRef.current) return { status: "not_ready" };
+      if (request.kind === "save" && !request.plan || request.kind === "close" && !request.discard) {
+        await officeRef.current.leave();
+        const revision = await save();
+        if (revision === null) throw new Error("문서를 저장하지 못했습니다. 편집 내용은 유지했습니다.");
+        await lease.report(false, revision);
+        if (request.kind === "save") return { status: "ok", result: { value: { ok: true, path: artifact?.path } } };
+      }
+      const reply = await officeRef.current.mcp(request);
+      if (request.kind === "close" && reply.status === "ok") {
+        if (!onMcpClose) throw new Error("이 문서 창은 외부 닫기를 지원하지 않습니다.");
+        await api.closeOfficePreview(artifactId);
+        onMcpClose();
+      }
+      return reply;
+    },
     control: async (request) => {
       if (!officeEditing) {
         if (request.cmd === "goto" && wordEditor) { setMode("edit"); return { status: "not_ready" }; }
@@ -340,7 +371,7 @@ export default function DocumentView({
       await lease.report(false, revision);
       return revision;
     },
-  }), [artifactId, lease.viewId, dirty, save, text, design, officeEditing, wordEditor, lease.report]);
+  }), [artifactId, artifact?.path, lease.viewId, lease.canWrite, dirty, save, text, base, design, officeEditing, wordEditor, richTextEditor, unsaved, lease.report, onMcpClose, api]);
 
   // A new revision from elsewhere (an applied proposal, a revert): reload when nothing is unsaved here.
   useEffect(() => {

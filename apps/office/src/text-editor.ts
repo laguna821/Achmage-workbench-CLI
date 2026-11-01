@@ -8,6 +8,7 @@ import { htmlOutput } from "./output.ts";
 import { preparePrintHtml } from "./print-html.ts";
 import { createOfficeWiki } from "./wiki.ts";
 import { exportTextWord, markdownWordBytes } from "./text-word-output.ts";
+import { installMcp } from "./mcp.ts";
 
 /** The original Markdown/HTML renderers serialize their own source; never normalize it here. */
 export async function createTextEditor(kind: "markdown" | "html") {
@@ -31,6 +32,8 @@ export async function createTextEditor(kind: "markdown" | "html") {
   const report = (error: unknown) => post({ type: "office:error", message: error instanceof Error ? error.message : String(error) });
   const setDirty = (value: boolean) => { dirty = value; post({ type: "office:dirty", dirty }); };
   let opened = false;
+  installMcp(init, { ready: () => opened && events.has("readText"), dirty: async () => dirty || await liveText() !== savedText,
+    async run(request) { if (request.kind === "read") return liveText(); throw new Error("이 문서에는 읽기·저장·닫기 MCP만 사용할 수 있습니다."); } });
   function reportOpen() {
     if (opened) return;
     opened = true;

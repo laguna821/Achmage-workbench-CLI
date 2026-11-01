@@ -6,6 +6,7 @@ export type Kept = { baseRevision: number; bytes: ArrayBuffer; at: number };
 
 const DB = "workbench-office";
 const STORE = "recovery";
+const discarded = new Set<string>();
 
 function open(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -33,6 +34,8 @@ async function run<T>(mode: IDBTransactionMode, action: (store: IDBObjectStore) 
 
 export const recovery = {
   get: (artifactId: string) => run<Kept | undefined>("readonly", (store) => store.get(artifactId)),
-  put: (artifactId: string, kept: Kept) => run<void>("readwrite", (store) => store.put(kept, artifactId)),
+  put: (artifactId: string, kept: Kept) => discarded.has(artifactId) ? Promise.resolve() : run<void>("readwrite", (store) => discarded.has(artifactId) ? store.get(artifactId) : store.put(kept, artifactId)),
   drop: (artifactId: string) => run<void>("readwrite", (store) => store.delete(artifactId)),
+  /** Explicit external close: timers in this departing frame cannot recreate a discarded draft. */
+  discard: (artifactId: string) => { discarded.add(artifactId); return run<void>("readwrite", (store) => store.delete(artifactId)); },
 };

@@ -6,6 +6,7 @@ import { recovery } from "./recovery.ts";
 let active: OfficeCopy | null = null;
 let aiBusy = () => false;
 export const setCopyAiBusy = (check: () => boolean) => { aiBusy = check; };
+export const officeAiBusy = () => aiBusy();
 export const officeCopyBusy = () => active !== null;
 export const cancelOfficeCopy = () => { active?.cancel(); };
 // Installed before the original renderers: their window-level shortcuts and paste
@@ -64,7 +65,10 @@ export class OfficeCopy {
     if (active !== this || this.committing || this.committed) return;
     void cancelOutput(this.plan?.id, this.preparationId).catch(() => {}); this.release();
   }
-  async commit(bytes: ArrayBuffer, recoveryBytes: ArrayBuffer | null = bytes, options: { keepSource?: boolean } = {}) {
+  handoff(keepSource = false) {
+    if (this.committed) post({ type: "office:copied", artifactId: this.committed, ...(keepSource ? { keepSource: true } : {}) });
+  }
+  async commit(bytes: ArrayBuffer, recoveryBytes: ArrayBuffer | null = bytes, options: { keepSource?: boolean; deferHandoff?: boolean } = {}) {
     if (active !== this || !this.plan) throw new Error("사본 저장을 취소했습니다.");
     this.lock(); this.committing = true; if (this.button) this.button.disabled = true;
     try {
@@ -73,7 +77,7 @@ export class OfficeCopy {
       if (recoveryBytes !== null) await recovery.put(this.source.artifact.id, { baseRevision: this.revision, bytes: recoveryBytes, at: Date.now() });
       const saved = await commitOutput(this.plan.id, bytes);
       this.committed = saved.artifactId;
-      post({ type: "office:copied", artifactId: saved.artifactId, ...(options.keepSource ? { keepSource: true } : {}) });
+      if (!options.deferHandoff) this.handoff(options.keepSource);
       // Keep input locked until the old frame is replaced. A rejected handoff unlocks it.
       return saved;
     } catch (error) { void cancelOutput(this.plan.id, this.preparationId).catch(() => {}); this.release(); throw error; }
@@ -81,12 +85,13 @@ export class OfficeCopy {
   }
 }
 
-export async function beginOfficeCopy(init: Init, revision: number, format: OfficeOutputFormat) {
+export async function beginOfficeCopy(init: Init, revision: number, format: OfficeOutputFormat, prepared?: OfficeOutputPlan) {
   if (active) throw new Error("이미 사본을 저장하고 있습니다.");
   if (aiBusy()) throw new Error("이 문서의 AI 편집이 끝난 뒤 사본을 저장해 주세요.");
   const turn = new OfficeCopy(init, revision); active = turn; turn.lock();
   try {
-    turn.plan = await prepareOutput(revision, format, turn.preparationId);
+    if (prepared && prepared.format !== format) throw new Error("MCP 저장 형식이 현재 문서와 다릅니다.");
+    turn.plan = prepared ?? await prepareOutput(revision, format, turn.preparationId);
     if (!turn.plan || active !== turn) { turn.cancel(); return null; }
     return turn;
   } catch (error) { turn.cancel(); throw error; }

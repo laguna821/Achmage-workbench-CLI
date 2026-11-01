@@ -11,12 +11,14 @@ import { vfs } from "../platform/fs.ts";
 import { setFontToken } from "./fonts.ts";
 import { registerSlideImageIpc } from "./media-ipc.ts";
 import type { WorkerCall, WorkerMessage } from "./protocol.ts";
+import { createSlidesControl } from "@ieum/apps/shell/src/main/mcp/slides-bridge.ts";
 
 const scope = self as unknown as { postMessage(message: WorkerMessage, transfer?: Transferable[]): void; onmessage: ((event: MessageEvent<WorkerCall>) => void) | null };
 const post = (message: WorkerMessage, transfer: Transferable[] = []) => scope.postMessage(message, transfer);
 
 let viewId = 0;
 let path = "";
+const mcp = createSlidesControl({ openBlankTab: () => viewId });
 
 connect({
   deliver: (_page, channel, args) => post({ type: "send", channel, args }),
@@ -30,6 +32,12 @@ const bytesOf = (data: Uint8Array) => {
 
 async function handle(call: WorkerCall): Promise<{ value: unknown; unhandled?: boolean; transfer?: Transferable[] }> {
   switch (call.type) {
+    case "mcp": {
+      if (call.command === "ready") return { value: sessions.has(viewId) };
+      if (call.command === "read_deck") return { value: await mcp.readDeck(viewId, call.payload as { withhold?: boolean } | undefined) };
+      if (call.command === "deck_withholds") return { value: await mcp.deckWithholds?.(viewId) };
+      return { value: await mcp.runTxn(viewId, call.payload as Parameters<typeof mcp.runTxn>[1]) };
+    }
     case "init":
       setFontToken(call.token);
       setUiLang("ko");

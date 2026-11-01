@@ -117,6 +117,7 @@ export class EpubEditors {
       if (!this.books.has(view.id)) throw new HttpError(404, "epub_not_open", "이미 닫은 전자책입니다.");
       const session = view.session;
       switch (operation) {
+        case "read-text": return sendJson(res, 200, await session.readText());
         case "chapter": return sendJson(res, 200, await session.readChapter(args.spineIndex));
         case "apply": case "replace": {
           if (!view.writable) throw new HttpError(423, "read_only", "읽기 전용으로 연 전자책입니다.");

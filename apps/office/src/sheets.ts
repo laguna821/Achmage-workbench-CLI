@@ -4,7 +4,8 @@ import "./sheets.css";
 import { Gateway, GatewayError, handshake, headlessExport, listen, post } from "./bridge.ts";
 import { dispatch, useTransport } from "./platform/electron-renderer.ts";
 import { recovery } from "./recovery.ts";
-import { copyOfficeBytes, officeCopyBusy } from "./copy.ts";
+import { beginOfficeCopy, copyOfficeBytes, officeCopyBusy, type OfficeCopy } from "./copy.ts";
+import { installMcp, originalMcp, type McpResult } from "./mcp.ts";
 import { exportSheetsPdf } from "./sheets-output.ts";
 import { convertForeignPictures, pasteDesktopPictures } from "./pictures.ts";
 import type { WorkerCall, WorkerMessage, WorkerRequest } from "./slides/protocol.ts";
@@ -26,6 +27,24 @@ const artifactId = init.artifact.id;
  * revision (the document moved on meanwhile); the working copy holds them.
  */
 const state = { revision: init.artifact.revision, theme: init.theme, pending: 0, uncommitted: false, kept: false };
+const mcp = originalMcp(message => dispatch("sheets:mcp-command", [message]));
+let mcpCopy: OfficeCopy | null = null;
+installMcp(init, {
+  ready: mcp.ready, dirty: () => dirty(),
+  async run(request) {
+    if (request.kind === "read") return mcp.run("read_sheet");
+    if (request.kind === "command" && request.family === "xlsx" && ["read_sheet", "apply_ops"].includes(request.command)) return mcp.run(request.command, request.payload);
+    if (request.kind === "save" && request.plan) {
+      mcpCopy = await beginOfficeCopy(init, state.revision, request.plan.format, request.plan);
+      if (!mcpCopy) throw new Error("저장을 취소했습니다.");
+      const result = await mcp.run("save_sheet", { path: request.plan.path, overwrite: request.plan.replace }) as { ok?: boolean; error?: string };
+      if (result?.ok === false) throw new Error(result.error || "통합 문서를 저장하지 못했습니다.");
+      return { ok: true, path: request.plan.path };
+    }
+    throw new Error("지원하지 않는 Sheets MCP 명령입니다.");
+  },
+  afterReply() { mcpCopy?.handoff(); mcpCopy?.cancel(); mcpCopy = null; },
+});
 
 document.documentElement.dataset.workbenchTheme = state.theme;
 
@@ -107,6 +126,8 @@ async function invoke(channel: string, args: unknown[]): Promise<unknown> {
 
 let closeSaveAnswer: ((ok: boolean) => void) | null = null;
 function send(channel: string, args: unknown[]) {
+  if (channel === "sheets:mcp-ready") { mcp.signal(); return; }
+  if (channel === "sheets:mcp-result") { mcp.result(args[0] as McpResult); return; }
   if (channel === "sheets:headless-export-done") { headless.done(args[0] as { ok?: boolean; error?: string }); return; }
   if (channel === "workbook:close-save-result") {
     closeSaveAnswer?.(args[0] === true);
@@ -158,6 +179,16 @@ async function commit(): Promise<boolean> {
 
 async function save(args: unknown[]) {
   const input = args[0] as SaveRequest;
+  if (input.mode === "save-as" && input.targetPath && mcpCopy?.plan?.path === input.targetPath) {
+    const request = await withFormulaResults({ ...input, mode: "save", targetPath: undefined });
+    const snapshot = await value<{ ok: boolean; bytes?: Uint8Array }>({ type: "invoke", channel: "workbook:template-bytes", args: [request] });
+    if (!snapshot.ok || !snapshot.bytes) throw new Error("통합 문서 내용을 만들지 못했습니다.");
+    const bytes = snapshot.bytes.slice().buffer;
+    await mcpCopy.commit(bytes, bytes, { deferHandoff: true });
+    // Only after durable publication, let the original renderer finish its save
+    // bookkeeping in the private worker. The source file is never committed.
+    return value({ type: "invoke", channel: "workbook:save", args: [request] });
+  }
   if (input.mode === "save-as") {
     await copyOfficeBytes(init, state.revision, /\.xlsm$/i.test(init.artifact.path) ? "xlsm" : "xlsx", async () => {
       const request = await withFormulaResults({ ...input, mode: "save", targetPath: undefined });

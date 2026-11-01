@@ -5,4 +5,5 @@ import type { RendererControlRequest } from "../../../vendor/ieumoffice/packages
 export type OfficeControlCommand = { id: string; windowId: string | null } & (
   | { kind: "open"; artifact: Artifact }
   | { kind: "renderer"; viewId: string; request: RendererControlRequest }
+  | { kind: "mcp"; viewId: string; request: import("./office-mcp.ts").OfficeMcpRequest }
 );

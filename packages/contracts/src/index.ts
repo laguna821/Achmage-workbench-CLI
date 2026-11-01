@@ -773,6 +773,7 @@ export type OfficeHostMessage =
   | { type: "office:wiki-activate" }
   | import("./office-wiki.ts").OfficeWikiResult
   | { type: "office:control"; requestId: string; request: import("./office-control.ts").RendererControlRequest }
+  | { type: "office:mcp"; requestId: string; request: import("./office-mcp.ts").OfficeMcpRequest }
   | { type: "office:export-pdf" }
   | { type: "office:export-docx"; open?: boolean }
   | { type: "office:export-odt" }
@@ -812,6 +813,7 @@ export type OfficePageMessage =
   | import("./office-knowledge.ts").KnowledgeOpenRequest
   | import("./office-wiki.ts").OfficeWikiRequest
   | { type: "office:control-result"; requestId: string; reply: import("./office-control.ts").RendererControlReply }
+  | { type: "office:mcp-result"; requestId: string; reply: import("./office-mcp.ts").OfficeMcpReply }
   | { type: "office:headless-result"; ok: boolean; error?: string }
   | import("./office-skills.ts").OfficeSkillRequest
   | import("./office-output.ts").OfficeOutputRequest

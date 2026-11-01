@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import type { Artifact, DocumentAccess, EditorGrant, OfficePageMessage } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
 import type { RendererControlRequest, RendererControlReply } from "../../../../../packages/contracts/src/office-control.ts";
+import type { OfficeMcpRequest, OfficeMcpReply } from "../../../../../packages/contracts/src/office-mcp.ts";
 import type { BrowserResult, OfficeOutputFormat, OfficeOutputPlan, OfficeOutputRequest } from "../../../../../packages/contracts/src/office-output.ts";
 import { OfficeOutputDialog } from "./OfficeOutputDialog.tsx";
 import { OfficeReferencePicker } from "./OfficeReferencePicker.tsx";
@@ -14,6 +15,7 @@ import type { OfficeWikiRequest } from "../../../../../packages/contracts/src/of
 import type { KnowledgeOpenRequest } from "../../../../../packages/contracts/src/office-knowledge.ts";
 
 export type OfficeHandle = {
+  mcp(request: OfficeMcpRequest): Promise<OfficeMcpReply>;
   control(request: RendererControlRequest): Promise<RendererControlReply>;
   /** Run the original renderer's PDF action on current, possibly unsaved content. */
   exportPdf(): void;
@@ -71,6 +73,7 @@ export const OfficeEditor = forwardRef<
   const blockingOutputs = () => [...outputPlans.current.values()].some(plan => !plan.longJob);
   const browserJobs = useRef(new Set<string>());
   const controlWaiters = useRef(new Map<string, (reply: RendererControlReply) => void>());
+  const mcpWaiters = useRef(new Map<string, (reply: OfficeMcpReply) => void>());
   const copied = useRef(new Map<string, string | null>());
   const [output, setOutput] = useState<{ revision: number; format: OfficeOutputFormat; defaultName?: string; longJob?: boolean; choose(plan: OfficeOutputPlan | null): void } | null>(null);
   const latest = useRef(artifact);
@@ -441,6 +444,9 @@ export const OfficeEditor = forwardRef<
         case "office:control-result":
           controlWaiters.current.get(message.requestId)?.(message.reply);
           break;
+        case "office:mcp-result":
+          mcpWaiters.current.get(message.requestId)?.(message.reply);
+          break;
         case "office:ready": {
           const doc = latest.current;
           send({
@@ -532,9 +538,30 @@ export const OfficeEditor = forwardRef<
 
   useEffect(() => () => {
     for (const resolve of [...controlWaiters.current.values()]) resolve({ status: "not_ready" });
+    for (const resolve of [...mcpWaiters.current.values()]) resolve({ status: "error", error: { reason: "closed", message: "문서 창이 바뀌어 명령의 완료를 확인하지 못했습니다." } });
   }, [artifact.id, generation]);
 
   useImperativeHandle(ref, () => ({
+    mcp(request) {
+      if (status.current.revision === null) return Promise.resolve({ status: "not_ready" });
+      if (request.kind !== "status" && (aiBusy.current || outputBusy.current || blockingOutputs())) return Promise.resolve({ status: "error", error: { reason: "busy", message: "이 문서에서 실행 중인 AI·저장 작업을 마친 뒤 다시 요청해 주세요." } });
+      return new Promise(resolve => {
+        const requestId = crypto.randomUUID();
+        const plan = request.kind === "save" ? request.plan : undefined;
+        if (plan) outputPlans.current.set(plan.id, { ...plan, preparationId: requestId });
+        const timer = window.setTimeout(() => finish({ status: "error", error: { reason: "timeout", message: "문서 명령 응답을 확인하지 못했습니다. 현재 내용을 확인해 주세요." } }), request.kind === "status" ? 1500 : 120_000);
+        const finish = (reply: OfficeMcpReply) => {
+          window.clearTimeout(timer); mcpWaiters.current.delete(requestId); if (plan) outputPlans.current.delete(plan.id);
+          if (request.kind === "status" && reply.status === "ok") {
+            const pane = frame.current?.closest(".pane");
+            reply = { ...reply, result: { value: { ...(reply.result.value as object), active: pane?.getAttribute("data-tab-active") === "true" && pane?.getAttribute("data-pane-active") === "true" } } };
+          }
+          resolve(reply);
+        };
+        mcpWaiters.current.set(requestId, finish);
+        send({ type: "office:mcp", requestId, request });
+      });
+    },
     control(request) {
       if (status.current.revision === null) return Promise.resolve({ status: "not_ready" });
       return new Promise(resolve => {

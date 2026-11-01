@@ -30,6 +30,12 @@ export class OfficeOutputs {
   private readonly documents: Documents;
   private readonly register: (source: Artifact, path: string, revision: number, sessionId: string | null) => Artifact;
   constructor(documents: Documents, register: OfficeOutputs["register"]) { this.documents = documents; this.register = register; }
+  /** Cancel an unused host-prepared ticket; committed receipts remain replayable. */
+  cancel(artifactId: string, id: string, access: DocumentAccess) {
+    const ticket = this.tickets.get(id);
+    if (!ticket || ticket.artifactId !== artifactId || ticket.viewId !== access.viewId || ticket.result || ticket.outputHash || this.busy.has(id)) return;
+    this.tickets.delete(id); rmSync(this.file(id), { force: true });
+  }
   private file(id: string) { return join(this.documents.dataDir, "office-outputs", `${id}.json`); }
   private remember(ticket: Ticket) {
     const path = this.file(ticket.id), temp = `${path}.${randomUUID()}.tmp`;

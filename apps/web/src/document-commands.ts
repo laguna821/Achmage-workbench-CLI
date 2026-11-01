@@ -1,7 +1,12 @@
 /** Saves in mounted editors; another window must confirm saving in its own editor. */
 import type { RendererControlRequest, RendererControlReply } from "../../../packages/contracts/src/office-control.ts";
-type Editor = { artifactId: string; dirty(): boolean; save(): Promise<number | null>; flushBeforeReference?(): boolean; control?(request: RendererControlRequest): Promise<RendererControlReply> };
+import type { OfficeMcpRequest, OfficeMcpReply } from "../../../packages/contracts/src/office-mcp.ts";
+type Editor = { artifactId: string; dirty(): boolean; save(): Promise<number | null>; flushBeforeReference?(): boolean; control?(request: RendererControlRequest): Promise<RendererControlReply>; mcp?(request: OfficeMcpRequest): Promise<OfficeMcpReply> };
 const editors = new Map<string, Editor>();
+
+export function mcpDocument(viewId: string, request: OfficeMcpRequest): Promise<OfficeMcpReply> {
+  return editors.get(viewId)?.mcp?.(request) ?? Promise.resolve({ status: "not_ready" });
+}
 
 export function controlDocument(viewId: string, request: RendererControlRequest): Promise<RendererControlReply> {
   return editors.get(viewId)?.control?.(request) ?? Promise.resolve({ status: "not_ready" });

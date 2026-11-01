@@ -7,6 +7,7 @@ import { beginOfficeCopy, copyOfficeBytes, officeCopyBusy, type OfficeCopy } fro
 import { DEFAULT_AI_PANEL_PREFS, normalizeAiPanelPrefs } from "../../../vendor/ieumoffice/packages/ui/src/ai-panel-prefs.ts";
 import { createDocsOutput } from "./docs-output.ts";
 import { knowledgeNavigation } from "./knowledge.ts";
+import { installMcp, originalMcp } from "./mcp.ts";
 
 // IeumOffice's Word editor inside Workbench. The editor itself (vendor/ieumoffice/apps/docs,
 // unchanged) reads and writes .docx in the page; this file stands in for its Electron preload:
@@ -27,6 +28,22 @@ const artifactId = init.artifact.id;
 const state = { revision: init.artifact.revision, theme: init.theme, dirty: false, kept: false };
 let pendingOpen: Promise<unknown> | null = null;
 let copyTurn: OfficeCopy | null = null;
+const mcp = originalMcp(message => events.emit("mcpCommand", message));
+let mcpCopy: OfficeCopy | null = null;
+installMcp(init, {
+  ready: mcp.ready, dirty: askDirty,
+  async run(request) {
+    if (request.kind === "read") return mcp.run("read_document");
+    if (request.kind === "command" && request.family === "docx" && ["read_document", "insert_content", "replace_blocks", "apply_ops"].includes(request.command)) return mcp.run(request.command, request.payload);
+    if (request.kind === "save" && request.plan) {
+      mcpCopy = await beginOfficeCopy(init, state.revision, "docx", request.plan);
+      if (!mcpCopy) throw new Error("저장을 취소했습니다.");
+      return mcp.run("save_document", { path: request.plan.path, overwrite: request.plan.replace });
+    }
+    throw new Error("지원하지 않는 Word MCP 명령입니다.");
+  },
+  afterReply() { mcpCopy?.handoff(); mcpCopy?.cancel(); mcpCopy = null; },
+});
 
 document.documentElement.dataset.workbenchTheme = state.theme;
 
@@ -161,6 +178,11 @@ const desktop = stubBridge(
     confirmDocumentReplace: async () => true,
     onOpenDocx: events.on("openDocx"),
     saveDocx: async (_path: string, data: ArrayBuffer) => save(data),
+    saveDocxTo: async (path: string, bytes: ArrayBuffer, overwrite: boolean) => {
+      if (!mcpCopy || mcpCopy.plan?.path !== path || mcpCopy.plan.replace !== overwrite) return { ok: false, error: "MCP 저장 위치를 확인하지 못했습니다." };
+      const saved = await mcpCopy.commit(bytes, bytes, { deferHandoff: true });
+      return { ok: true, path: saved.path };
+    },
     saveDocxAs: async (target: string, bytes: ArrayBuffer) => {
       const turn = copyTurn; copyTurn = null;
       if (!turn || turn.plan?.path !== target) return { ok: false, error: "저장 위치를 다시 선택해 주세요." };
@@ -229,8 +251,9 @@ const desktop = stubBridge(
     spellDiag: () => undefined,
     armContextMenu: () => undefined,
     claimContextMenu: () => undefined,
-    signalMcpReady: () => undefined,
-    reportMcpResult: () => undefined,
+    signalMcpReady: mcp.signal,
+    reportMcpResult: mcp.result,
+    onMcpCommand: events.on("mcpCommand"),
     reportViewMenuState: () => undefined,
     respondToZotero: () => undefined,
     consumeHeadlessExport: async () => headless.consume(),

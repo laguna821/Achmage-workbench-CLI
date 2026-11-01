@@ -7,7 +7,8 @@ import { recovery } from "./recovery.ts";
 import { carriesMark, convertForeignPictures, desktopPicture, markClipboard, pastedPicture, pngBytes, showsNothing } from "./pictures.ts";
 import type { WorkerCall, WorkerMessage, WorkerRequest } from "./slides/protocol.ts";
 import { createSlideStyles } from "./slides/styles.ts";
-import { copyOfficeBytes, officeCopyBusy } from "./copy.ts";
+import { beginOfficeCopy, copyOfficeBytes, officeCopyBusy, type OfficeCopy } from "./copy.ts";
+import { installMcp } from "./mcp.ts";
 import { prepareOutput, commitOutput, cancelOutput, renderHtmlPdf, htmlOutput } from "./output.ts";
 import { preparePrintHtml } from "./print-html.ts";
 import { buildPdfExportHtml, exportPageWidthIn, PDF_EXPORT_HEIGHT_IN } from "../../../third_party/ieumoffice/slides-print.ts";
@@ -30,6 +31,21 @@ const artifactId = init.artifact.id;
 const styles = createSlideStyles(gateway, artifactId);
 /** `revision`: what the editor's deck is based on (a save must name it). */
 const state = { revision: init.artifact.revision, theme: init.theme, conflict: false, kept: false };
+let mcpCopy: OfficeCopy | null = null;
+installMcp(init, {
+  ready: () => value<boolean>({ type: "mcp", command: "ready" }), dirty: () => value<boolean>({ type: "dirty" }),
+  async run(request) {
+    if (request.kind === "read") return value({ type: "mcp", command: "read_deck" });
+    if (request.kind === "command" && request.family === "pptx" && ["read_deck", "apply_slide_ops", "deck_withholds"].includes(request.command)) return value({ type: "mcp", command: request.command as "read_deck" | "apply_slide_ops" | "deck_withholds", payload: request.payload });
+    if (request.kind === "save" && request.plan) {
+      mcpCopy = await beginOfficeCopy(init, state.revision, "pptx", request.plan);
+      if (!mcpCopy) throw new Error("저장을 취소했습니다.");
+      return { ok: true, ...await mcpCopy.commit(await value<ArrayBuffer>({ type: "snapshot" }), undefined, { deferHandoff: true }) };
+    }
+    throw new Error("지원하지 않는 PPT MCP 명령입니다.");
+  },
+  afterReply() { mcpCopy?.handoff(); mcpCopy?.cancel(); mcpCopy = null; },
+});
 
 document.documentElement.dataset.workbenchTheme = state.theme;
 

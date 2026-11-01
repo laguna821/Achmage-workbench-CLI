@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import type { Artifact } from "@workbench/contracts";
 import type { Api } from "./api.ts";
 import { windowId } from "./document-session.ts";
-import { controlDocument } from "./document-commands.ts";
+import { controlDocument, mcpDocument } from "./document-commands.ts";
 
 export function useOfficeControl(api: Api | null, main: boolean, open: (artifact: Artifact) => Promise<void>, onError: (error: unknown) => void) {
   const handlers = useRef({ open, onError }); handlers.current = { open, onError };
@@ -15,7 +15,7 @@ export function useOfficeControl(api: Api | null, main: boolean, open: (artifact
         active.current.add(command.id);
         void (async () => {
           try {
-            const reply = command.kind === "renderer" ? await controlDocument(command.viewId, command.request) : await (async () => {
+            const reply = command.kind === "mcp" ? await mcpDocument(command.viewId, command.request) : command.kind === "renderer" ? await controlDocument(command.viewId, command.request) : await (async () => {
               await handlers.current.open(command.artifact);
               if ("__TAURI_INTERNALS__" in window) {
                 const { getCurrentWindow } = await import("@tauri-apps/api/window");

@@ -2,6 +2,7 @@
 // slides editing code (pptx parsing, layout, edits, saving) off the page's thread.
 
 export type WorkerRequest =
+  | { type: "mcp"; command: "ready" | "read_deck" | "apply_slide_ops" | "deck_withholds"; payload?: unknown }
   | { type: "init"; token: string }
   /** Open a document (its bytes) as the page's view. */
   | { type: "open"; name: string; bytes: ArrayBuffer }

@@ -3,11 +3,25 @@ import { Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
 import { dispatch, useTransport } from "./platform/electron-renderer.ts";
 import { copyOfficeBytes, officeCopyBusy } from "./copy.ts";
+import { installMcp } from "./mcp.ts";
 
 const init = await handshake(), gateway = new Gateway(init.token);
 const ai = mountOfficeAi(init, gateway);
 const id = init.artifact.id, path = init.artifact.path;
 let revision = init.artifact.revision, theme = init.theme, restored = false, opened = false, dirty = false, epoch = 0;
+let outlineAnswer: ((result: { text?: string; error?: string }) => void) | null = null;
+installMcp(init, { ready: () => opened, dirty: () => dirty, async run(request) {
+  if (request.kind !== "read") throw new Error("마인드맵에는 읽기·저장·닫기 MCP만 사용할 수 있습니다.");
+  return new Promise<string>((resolve, reject) => {
+    const finish = (result: { text?: string; error?: string }) => {
+      clearTimeout(timer); clearInterval(retry); outlineAnswer = null;
+      if (typeof result.text === "string") resolve(result.text); else reject(new Error(result.error || "마인드맵 내용을 받지 못했습니다."));
+    };
+    const timer = window.setTimeout(() => finish({ error: "마인드맵 읽기 응답을 기다리지 못했습니다." }), 30_000);
+    const retry = window.setInterval(() => dispatch("mindmap:outline-request", []), 250);
+    outlineAnswer = finish; dispatch("mindmap:outline-request", []);
+  });
+} });
 let file = await gateway.openMindmap(id, revision);
 const report = (error: unknown) => post({ type: "office:error", message: error instanceof Error ? error.message : String(error) });
 if (init.recover && !init.readOnly) {
@@ -127,6 +141,7 @@ useTransport({
     }
   }),
   send(channel, args) {
+    if (channel === "mindmap:outline-result") { outlineAnswer?.(args[0] as { text?: string; error?: string }); return; }
     if (channel === "mindmap:dirty-changed") { dirty = args[0] === true; post({ type: "office:dirty", dirty }); }
     else if (channel === "mindmap:close-save-result") closeAnswer?.(args[0] === true);
     else if (channel === "mindmap:recovery-copy-now-done") recoveryAnswer?.();

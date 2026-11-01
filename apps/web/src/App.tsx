@@ -1865,6 +1865,7 @@ export function App() {
                 tabs={at.kind === "split" ? null : paneTabs}
                 openDocIds={ids}
                 onLeaveGuard={guardOf[tabId]}
+                onMcpClose={() => updateLayout((current) => closeTab(current, pane.id, tabId, { view: { kind: "new", folderId: null }, workId: null, sessionId: null }))}
                 uiState={tabUi}
                 onUiState={uiOf[tabId]}
                 onBack={() => {

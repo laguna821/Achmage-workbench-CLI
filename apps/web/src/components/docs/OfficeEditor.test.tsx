@@ -56,6 +56,23 @@ async function setup() {
   await message({ type: "office:dirty", dirty: true });
   return { ref, message, frame };
 }
+it("correlates MCP replies only from its own frame and reports timeouts as indeterminate errors", async () => {
+  const { ref, message, frame } = await setup();
+  const sent = vi.spyOn(frame.contentWindow!, "postMessage");
+  let settled = false;
+  const pending = ref.current!.mcp({ kind: "command", family: "docx", command: "insert_content", payload: { html: "<p>live</p>" } }).then(value => { settled = true; return value; });
+  const request = sent.mock.calls.at(-1)![0] as { requestId: string };
+  const reply = { type: "office:mcp-result", requestId: request.requestId, reply: { status: "ok", result: { value: { edited: true } } } };
+  await act(async () => window.dispatchEvent(new MessageEvent("message", { origin: "http://untrusted.test", source: frame.contentWindow, data: reply })));
+  expect(settled).toBe(false);
+  await act(async () => window.dispatchEvent(new MessageEvent("message", { origin: "http://office.test", source: window, data: reply })));
+  expect(settled).toBe(false);
+  await message(reply);
+  expect(await pending).toMatchObject({ status: "ok", result: { value: { edited: true } } });
+  const unanswered = ref.current!.mcp({ kind: "read" });
+  await act(async () => vi.advanceTimersByTimeAsync(120_000));
+  expect(await unanswered).toMatchObject({ status: "error", error: { reason: "timeout" } });
+});
 it("does not treat four seconds or a null save response as permission to unmount", async () => {
   const { ref, message } = await setup();
   let done = false;

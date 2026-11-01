@@ -23,6 +23,7 @@ connect({
 
 async function handle(call: WorkerCall): Promise<{ value: unknown; unhandled?: boolean; transfer?: Transferable[] }> {
   switch (call.type) {
+    case "mcp": throw new Error("Sheets MCP commands belong to the live grid renderer.");
     case "init":
       setUiLang("ko");
       vfs.mkdir("/tmp");

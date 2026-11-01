@@ -83,7 +83,7 @@ export class OfficeControl {
     if (this.pending.size >= 64) return Promise.resolve({ status: "error", error: { reason: "app_unavailable", message: "문서 제어 요청이 너무 많습니다." } });
     return new Promise(resolve => {
       const id = randomUUID();
-      const timer = setTimeout(() => { this.pending.delete(id); resolve({ status: "not_ready" }); }, timeout);
+      const timer = setTimeout(() => { this.pending.delete(id); resolve(command.kind === "mcp" ? { status: "error", error: { reason: "timeout", message: "문서 명령의 완료를 확인하지 못했습니다. 현재 문서를 확인한 뒤 다시 요청해 주세요." } } : { status: "not_ready" }); }, timeout);
       this.pending.set(id, { command: { ...command, id }, resolve, timer });
       this.bus.publish({ type: "office.control" });
     });
@@ -104,7 +104,7 @@ export class OfficeControl {
     if (!reply || !["ok", "not_ready", "error"].includes(reply.status) ||
       (reply.status === "ok" && (!reply.result || typeof reply.result !== "object" || Array.isArray(reply.result))) ||
       (reply.status === "error" && (!reply.error || typeof reply.error.reason !== "string" || typeof reply.error.message !== "string")) ||
-      Buffer.byteLength(JSON.stringify(reply)) > 60_000) throw new HttpError(400, "office_control_reply", "문서 제어 응답이 올바르지 않습니다.");
+      Buffer.byteLength(JSON.stringify(reply)) > (entry.command.kind === "mcp" ? 16_000_000 : 60_000)) throw new HttpError(400, "office_control_reply", "문서 제어 응답이 올바르지 않습니다.");
     this.pending.delete(id); clearTimeout(entry.timer); entry.resolve(reply); return { accepted: true };
   }
   close() {

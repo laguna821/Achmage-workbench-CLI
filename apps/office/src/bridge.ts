@@ -186,6 +186,10 @@ export class Gateway {
     return { bytes: await response.arrayBuffer(), trackingDropped: response.headers.get("x-workbench-tracking-dropped") === "true", saveBlocked: response.headers.get("x-workbench-save-blocked") === "true" };
   }
 
+  async liveHwpText(artifactId: string, revision: number, bytes: Uint8Array): Promise<string> {
+    return (await this.call("POST", `/api/artifacts/${artifactId}/hwp/read-text?revision=${revision}`, bytes.slice().buffer, { "content-type": "application/octet-stream" })).json();
+  }
+
   async openMindmap(artifactId: string, revision: number): Promise<{ status: string; bytes?: Uint8Array }> {
     const response = await this.call("GET", `/api/artifacts/${artifactId}/mindmap/open?revision=${revision}`);
     if (response.headers.get("content-type")?.includes("application/json")) return response.json();

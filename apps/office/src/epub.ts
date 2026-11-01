@@ -5,6 +5,7 @@ import { dispatch, useTransport } from "./platform/electron-renderer.ts";
 import { copyOfficeBytes, officeCopyBusy } from "./copy.ts";
 import { cancelOutput, commitOutput, openExport, prepareOutput } from "./output.ts";
 import type { OfficeOutputPlan } from "../../../packages/contracts/src/office-output.ts";
+import { installMcp } from "./mcp.ts";
 
 type OpenBook = { status: string; sessionId?: string; assetBase?: string; restored?: boolean; [key: string]: unknown };
 type EditResult = { ok: boolean; dirty?: boolean; workbenchGeneration?: number; [key: string]: unknown };
@@ -18,6 +19,11 @@ let revision = init.artifact.revision, theme = init.theme, session = "", restore
 let openPromise: Promise<OpenBook> | null = null, recoveryQueue = Promise.resolve();
 const report = (error: unknown) => post({ type: "office:error", message: error instanceof Error ? error.message : String(error) });
 const isDirty = () => restored || pending || backendDirty;
+installMcp(init, { ready: () => Boolean(session), dirty: isDirty, async run(request) {
+  if (request.kind !== "read") throw new Error("전자책에는 읽기·저장·닫기 MCP만 사용할 수 있습니다.");
+  if (pending) await keep(); // Flush the current chapter editor into the original live BookSession.
+  return call<string>("read-text");
+} });
 const changed = () => post({ type: "office:dirty", dirty: isDirty() });
 const queueRecovery = (task: () => Promise<void>) => recoveryQueue = recoveryQueue.catch(() => {}).then(task);
 const call = <T = unknown>(operation: string, args: unknown = {}) => gateway.epub<T>(id, session, operation, args);

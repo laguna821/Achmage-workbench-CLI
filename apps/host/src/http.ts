@@ -102,6 +102,7 @@ function parseRefs(value: unknown): DocRef[] {
 }
 
 export type HttpOptions = {
+  officeMcp?: import("./office-mcp.mjs").OfficeMcp;
   officeControl?: import("./office-control.mjs").OfficeControl;
   /** Fixed native CLI input, available only in its disposable gateway. */
   officeCliInput?: () => Promise<{ path: string }>;
@@ -213,7 +214,7 @@ function streamEvents(req: IncomingMessage, res: ServerResponse, bus: EventBus, 
 export function createHttpServer(manager: SessionManager, bus: EventBus, options: HttpOptions): Server {
   const tickets = new Map<string, PreviewTicket>();
   const userSkills = skillRoutes(manager);
-  const outputs = new OfficeOutputs(manager.documents, (source, path, revision, sessionId) => manager.registerOfficeCopy(source, path, revision, sessionId));
+  const outputs = options.officeMcp?.outputs ?? new OfficeOutputs(manager.documents, (source, path, revision, sessionId) => manager.registerOfficeCopy(source, path, revision, sessionId));
   const wiki = new OfficeWiki(manager);
   return createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -636,11 +637,16 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         return sendJson(res, 200, options.timeline(from, Number.isFinite(until) && until > from ? until : undefined));
       }
       if (method === "GET" && path === "/api/fonts") return sendJson(res, 200, { fonts: systemFonts() });
+      if (options.officeMcp && method === "POST" && path === "/api/office-mcp/invoke") {
+        const body = await readJson(req, 16_000);
+        if (!Array.isArray(body.args) || body.args.length > 1) throw new HttpError(400, "mcp_request", "MCP 설정 요청이 올바르지 않습니다.");
+        return sendJson(res, 200, await options.officeMcp.invoke(String(body.channel), body.args));
+      }
       if (options.officeControl && parts[0] === "office-control") {
         if (method === "GET" && !parts[1]) return sendJson(res, 200, options.officeControl.list(url.searchParams.get("windowId") ?? "", url.searchParams.get("main") === "1"));
         if (method === "POST" && parts[1] === "open") return sendJson(res, 200, await options.officeControl.handle({ cmd: "open", path: String((await readJson(req)).path ?? "") }));
         if (method === "POST" && parts[1]) {
-          const body = await readJson(req);
+          const body = await readJson(req, 16_100_000);
           return sendJson(res, 200, options.officeControl.reply(parts[1], String(body.windowId ?? ""), body.reply));
         }
       }
