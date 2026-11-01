@@ -114,7 +114,7 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
     if (!value?.sessionId) throw new Error("이 문서와 함께 사용할 Workbench 세션을 선택해 주세요.");
     return value;
   };
-  const job = createOfficeJob(gateway, init.artifact.id, events, () => prepare());
+  const job = createOfficeJob(gateway, init.artifact.id, events, () => prepare(), /\.pdf$/i.test(init.artifact.path) ? "pdf-job" : "epub-translation");
   const history = async () => {
     const api = gateway.aiSession(init.artifact.id);
     const page = await api.json<History>("history");
@@ -220,6 +220,7 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
   };
   return {
     job,
+    createReadingJob: () => createOfficeJob(gateway, init.artifact.id, events, () => prepare(), "pdf-reading"),
     desktop: { ...references.desktop, getAiSettings: getSettings, openAiModelSettings: openSettings, aiStream, aiStreamCancel, onAiStream: events.on("aiStream"), onAiSettingsChanged: events.on("aiSettingsChanged"),
       aiToolCapabilities: () => gateway.aiSession(init.artifact.id).json<any>("tool-capabilities"),
       webSearch: (query: string, limit?: number) => webTool("web-search", query, ...(limit === undefined ? [] : [limit])),

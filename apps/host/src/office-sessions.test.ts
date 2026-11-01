@@ -56,6 +56,22 @@ describe("Office runs belong to the existing Workbench session", () => {
       f.finish("resume-book"); expect(f.manager.view.sessions.get(f.session.id)?.status).toBe("idle");
     } finally { await f.close(); }
   });
+  it("keeps PDF long jobs, reading helpers and document chat independently cancellable", async () => {
+    const f = fixture("pdf", Buffer.from("%PDF-1.7\nfixture"));
+    try {
+      await f.start("pdf", { background: "pdf-job" });
+      await f.start("helper-a", { background: "pdf-reading" });
+      await f.start("helper-b", { background: "pdf-reading" });
+      await f.start("chat");
+      await expect(f.start("pdf-2", { background: "pdf-job" })).rejects.toMatchObject({ code: "session_busy" });
+      await expect(f.start("helper-c", { background: "pdf-reading" })).rejects.toMatchObject({ code: "session_busy" });
+      await expect(f.start("wrong-kind", { background: "epub-translation" })).rejects.toMatchObject({ code: "office_turn_request" });
+      f.manager.office.finish(f.binding, { turnId: "pdf", status: "interrupted" });
+      for (const id of ["helper-a", "helper-b", "chat"]) expect(f.manager.office.requireRun(f.binding, id).controller.signal.aborted).toBe(false);
+      for (const id of ["helper-a", "helper-b", "chat"]) f.finish(id);
+      expect(f.manager.view.sessions.get(f.session.id)?.status).toBe("idle");
+    } finally { await f.close(); }
+  });
   it("pins the target and persists original tool/answer events in that session, with replay-safe ordering", async () => {
     const f = fixture();
     try {

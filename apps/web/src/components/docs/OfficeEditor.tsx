@@ -179,11 +179,14 @@ export const OfficeEditor = forwardRef<
       if (target !== frame.current?.contentWindow || owner !== latest.current.id || ownerSession !== opened.current?.sessionId) throw new Error("저장 중 문서 창이나 연결된 대화가 바뀌었습니다. 저장한 사본은 문서 목록에서 확인해 주세요.");
     };
     const reply = (value: unknown, error?: string) => target.postMessage({ type: "office:output-result", requestId: message.requestId, value, error }, origin);
-    if (message.action === "open-export") {
+    if (message.action === "open-export" || message.action === "reveal-export") {
       try {
         check(); const result = exported.current.get(message.path);
         if (!result || !handlers.current.onCopied) throw new Error("이 문서에서 내보낸 결과 파일을 선택해 주세요.");
-        handlers.current.onCopied(result.id, { ...result, preserveSource: true }); reply(null);
+        if (message.action === "reveal-export") {
+          const { revealItemInDir } = await import("@tauri-apps/plugin-opener"); await revealItemInDir(result.path);
+        } else handlers.current.onCopied(result.id, { ...result, preserveSource: true });
+        reply(null);
       } catch (error) { reply(null, error instanceof Error ? error.message : String(error)); }
       return;
     }
@@ -201,7 +204,7 @@ export const OfficeEditor = forwardRef<
         if (!plan || !(message.bytes instanceof ArrayBuffer)) throw new Error("저장 위치를 다시 선택하세요.");
         try {
           check();
-          const result = await api.commitOfficeOutput(owner, plan.id, message.bytes, plan.replace, plan.longJob ? message.sourceRevision : undefined);
+          const result = await api.commitOfficeOutput(owner, plan.id, message.bytes, plan.replace, plan.longJob ? message.sourceRevision : undefined, message.generatedId);
           check();
           if (result.artifact) exported.current.set(result.path, result.artifact);
           if (result.artifact && (!message.intent || message.intent === "copy")) copied.current.set(result.artifact.id, ownerSession ?? null);
@@ -240,7 +243,7 @@ export const OfficeEditor = forwardRef<
         const choose = (value: OfficeOutputPlan | null) => { outputClose.current = null; outputRequest.current = null; resolve(value); };
         outputRequest.current = message.requestId;
         outputClose.current = () => choose(null);
-        setOutput({ revision: message.revision, format: message.action === "prepare" ? message.format : "pdf", ...(message.action === "prepare" ? { defaultName: message.defaultName, longJob: message.longJob === true && latest.current.format === "epub" && message.format === "epub" } : {}), choose });
+        setOutput({ revision: message.revision, format: message.action === "prepare" ? message.format : "pdf", ...(message.action === "prepare" ? { defaultName: message.defaultName, longJob: message.longJob === true && (latest.current.format === "epub" && message.format === "epub" || latest.current.format === "pdf" && ["md", "epub", "pdf"].includes(message.format)) } : {}), choose });
       });
       setOutput(null);
       if (!plan) { reply(null); return; }
@@ -605,7 +608,7 @@ export const OfficeEditor = forwardRef<
   return (<>
     {skillsOpen ? <SkillLibraryDialog api={api} scope={{ workId: artifact.workId, ...(artifact.workspaceId ? { workspaceId: artifact.workspaceId } : {}), ...(sessionId ? { sessionId } : {}) }} onClose={() => { setSkillsOpen(false); send({ type: "office:skills-changed" }); }} /> : null}
     {referencePicker ? <OfficeReferencePicker {...referencePicker} /> : null}
-    {output ? <OfficeOutputDialog api={api} artifact={artifact} revision={output.revision} format={output.format} defaultName={output.defaultName} longJob={output.longJob} onChoose={output.choose} onCancel={() => output.choose(null)} /> : null}
+    {output ? <OfficeOutputDialog key={outputRequest.current} api={api} artifact={artifact} revision={output.revision} format={output.format} defaultName={output.defaultName} longJob={output.longJob} onChoose={output.choose} onCancel={() => output.choose(null)} /> : null}
     <iframe
       key={`${artifact.id}:${generation}`}
       ref={frame}

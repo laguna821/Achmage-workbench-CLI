@@ -242,6 +242,32 @@ export class Gateway {
     return this.pdf<PdfSaveResult>(artifactId, revision, "save", request, source);
   }
 
+  async pdfStructure<T>(artifactId: string, revision: number, instance: string, operation: string, args: unknown[], progress: (value: unknown) => void): Promise<T> {
+    const response = await this.call("POST", `/api/artifacts/${artifactId}/pdf-structure/${operation}?revision=${revision}&instance=${instance}`, JSON.stringify(args), { "content-type": "application/json" });
+    const reader = response.body?.getReader(); if (!reader) throw new Error("PDF 작업 응답이 없습니다.");
+    const decoder = new TextDecoder(); let pending = "", received = 0, answered = false, result: T | undefined;
+    const line = (text: string) => {
+      if (!text.trim()) return;
+      const value = JSON.parse(text, (_key, item) => item && typeof item === "object" && typeof item.workbenchBytes === "string" && Object.keys(item).length === 1 ? Uint8Array.from(atob(item.workbenchBytes), c => c.charCodeAt(0)) : item);
+      if ("progress" in value) progress(value.progress);
+      if ("result" in value) { answered = true; result = value.result; }
+    };
+    try {
+      while (true) {
+        const next = await reader.read(); if (next.done) break;
+        received += next.value.byteLength; if (received > 200_000_000) throw new Error("PDF 분석 결과가 너무 큽니다. 페이지 범위를 나눠 주세요.");
+        pending += decoder.decode(next.value, { stream: true });
+        let at: number; while ((at = pending.indexOf("\n")) >= 0) { line(pending.slice(0, at)); pending = pending.slice(at + 1); }
+      }
+      pending += decoder.decode(); line(pending);
+      if (!answered) throw new Error("PDF 작업이 결과 없이 끝났습니다.");
+      return result as T;
+    } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+  }
+  closePdfStructure(artifactId: string, instance: string) {
+    return fetch(`/api/artifacts/${artifactId}/pdf-structure/close?instance=${instance}`, { method: "POST", headers: { authorization: `Bearer ${this.token}` }, keepalive: true });
+  }
+
   async hwpTabs(artifactId: string, revision: number, bytes: Uint8Array, format?: "hwp" | "hwpx"): Promise<TabSpot[]> {
     return (await this.call("POST", `/api/artifacts/${artifactId}/hwp/tabs?revision=${revision}${format ? `&format=${format}` : ""}`, bytes.slice().buffer)).json();
   }

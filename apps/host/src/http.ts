@@ -685,7 +685,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const artifactId = parts[1];
         const revision = url.searchParams.get("revision") ? Number(url.searchParams.get("revision")) : undefined;
         if (method === "POST" && parts[2] === "outputs") {
-          if (parts[3]) return sendJson(res, 201, await outputs.commit(artifactId, parts[3], await readBody(req, 201_000_004), url.searchParams.get("replace") === "1", documentAccess(req), url.searchParams.has("sourceRevision") ? Number(url.searchParams.get("sourceRevision")) : undefined));
+          if (parts[3]) return sendJson(res, 201, await outputs.commit(artifactId, parts[3], await readBody(req, 201_000_004), url.searchParams.get("replace") === "1", documentAccess(req), url.searchParams.has("sourceRevision") ? Number(url.searchParams.get("sourceRevision")) : undefined, url.searchParams.get("generatedId") ?? undefined));
           const body = await readJson(req);
           return sendJson(res, 200, outputs.prepare(artifactId, Number(body.revision), String(body.path ?? ""), documentAccess(req), body.longJob === true));
         }

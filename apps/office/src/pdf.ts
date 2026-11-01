@@ -5,6 +5,7 @@ import { dispatch, useTransport } from "./platform/electron-renderer.ts";
 import type { PdfRequest } from "../../../packages/contracts/src/pdf.ts";
 import { bindPdfHistory, pdfHistory, type PdfHistoryBase } from "./pdf-history.ts";
 import { beginOfficeCopy, officeCopyBusy, type OfficeCopy } from "./copy.ts";
+import { pdfJobs } from "./pdf-jobs.ts";
 
 const init = await handshake(), gateway = new Gateway(init.token);
 const ai = mountOfficeAi(init, gateway);
@@ -167,6 +168,7 @@ const transforms: Record<string, string> = { "pdf:insert-blank-page": "blank-pag
 let prefs: Record<string, unknown> = {};
 try { prefs = JSON.parse(localStorage.getItem("workbench.office.pdf.prefs") ?? "{}"); } catch { /* A damaged UI preference is not document data. */ }
 const fail = (channel: string) => { throw new Error(`PDF의 이 서비스를 아직 연결하지 못했습니다: ${channel}`); };
+const jobs = pdfJobs(init, gateway, ai, () => revision);
 const persistResult = async (next: number) => {
   revision = contentRevision = next; restored = false; epoch++;
   historyBase = { revision: next };
@@ -178,6 +180,7 @@ const persistResult = async (next: number) => {
 };
 useTransport({
   invoke: officeAiTransport(ai, dispatch, async (channel, args) => {
+    const job = await jobs(channel, args); if (job.handled) return job.value;
     if (queries[channel]) return gateway.pdf(id, revision, queries[channel], requestOf(args[0]), workingSource());
     if (pathQueries[channel]) { checkPath(args[0]); return gateway.pdf(id, revision, pathQueries[channel], { path }, workingSource()); }
     if (transforms[channel]) {

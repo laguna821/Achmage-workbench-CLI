@@ -5,6 +5,7 @@ import { formatOf, type Artifact, type DocumentAccess } from "@workbench/contrac
 import type { OfficeOutputFormat } from "../../../packages/contracts/src/office-output.ts";
 import type { Documents } from "./artifacts.ts";
 import { isWorkbenchPath } from "./artifacts.ts";
+import { officeGenerated } from "./office-generated.ts";
 import { HttpError } from "./errors.ts";
 import { decodeHwpSave, hwpFormat, prepareHwpSave } from "./hwp-codec.ts";
 import { checkOfficeCopy } from "./office-copy-codec.ts";
@@ -12,7 +13,7 @@ import { prepareTextCopy } from "./office-text-copy.ts";
 
 export type OutputPlan = { id: string; path: string; format: OfficeOutputFormat; exists: boolean; size: number };
 type Result = { path: string; artifact: Artifact | null; backupPath?: string };
-type Ticket = OutputPlan & { artifactId: string; revision: number; sourcePath: string; viewId: string | null; sessionId: string | null; sha256: string | null; expires: number; longJob?: boolean; inputHash?: string; outputHash?: string; backupPath?: string; result?: Result };
+type Ticket = OutputPlan & { artifactId: string; revision: number; sourcePath: string; viewId: string | null; sessionId: string | null; sha256: string | null; expires: number; longJob?: boolean; generatedId?: string; inputHash?: string; outputHash?: string; backupPath?: string; result?: Result };
 const hash = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 function disk(path: string) {
   if (!existsSync(path)) return null;
@@ -57,12 +58,12 @@ export class OfficeOutputs {
     const path = join(realpathSync(dirname(requested)), basename(requested));
     const format = extname(path).slice(1).toLowerCase() as OfficeOutputFormat;
     const family = formatOf(path);
-    if (longJob && (source.format !== "epub" || format !== "epub" || !scope.viewId)) throw new HttpError(400, "output_job", "열린 전자책의 번역 결과만 예약할 수 있습니다.");
+    if (longJob && (!(source.format === "epub" && format === "epub" || source.format === "pdf" && ["md", "epub", "pdf"].includes(format)) || !scope.viewId)) throw new HttpError(400, "output_job", "열린 문서의 변환 결과만 예약할 수 있습니다.");
     const hangul = ["hwp", "hwpx"].includes(source.format) && ["hwp", "hwpx"].includes(format);
     const same = family === source.format && ["docx", "pptx", "xlsx", "markdown", "html", "xmind", "epub", "pdf"].includes(source.format);
     const textExport = (source.format === "docx" && family === "html")
       || (["markdown", "html"].includes(source.format) && ["docx", "odt"].includes(format));
-    if (!hangul && !same && !textExport && format !== "pdf") throw new HttpError(415, "output_format", "현재 문서에서 내보낼 수 있는 파일 형식을 선택해 주세요.");
+    if (!hangul && !same && !textExport && !(source.format === "pdf" && ["md", "epub"].includes(format)) && format !== "pdf") throw new HttpError(415, "output_format", "현재 문서에서 내보낼 수 있는 파일 형식을 선택해 주세요.");
     if (isWorkbenchPath(path) || path === resolve(source.path) || (existsSync(source.path) && path === realpathSync(source.path))) throw new HttpError(400, "output_source", "원본과 다른 파일 이름을 선택해 주세요. 원본 저장은 저장 메뉴를 사용하세요.");
     this.documents.registry.assertPath(path);
     const bytes = disk(path);
@@ -76,13 +77,22 @@ export class OfficeOutputs {
     this.remember(ticket);
     return { id: ticket.id, path, format, exists: ticket.exists, size: ticket.size };
   }
-  async commit(artifactId: string, id: string, body: Buffer, replace: boolean, access?: DocumentAccess, sourceRevision?: number): Promise<Result> {
+  async commit(artifactId: string, id: string, body: Buffer, replace: boolean, access?: DocumentAccess, sourceRevision?: number, generatedId?: string): Promise<Result> {
     if (!/^[a-f0-9-]{36}$/.test(id)) throw new HttpError(404, "output_expired", "저장 위치를 다시 선택해 주세요.");
     const ticket = this.tickets.get(id) ?? (existsSync(this.file(id)) ? JSON.parse(readFileSync(this.file(id), "utf8")) as Ticket : undefined);
     if (!ticket || ticket.artifactId !== artifactId || (!ticket.outputHash && !ticket.longJob && ticket.expires < Date.now())) throw new HttpError(404, "output_expired", "저장 위치를 다시 선택해 주세요.");
     const scope = this.scope(artifactId, access);
     if (scope.sessionId !== ticket.sessionId || (!ticket.outputHash && scope.viewId !== ticket.viewId)) throw new HttpError(409, "output_view_changed", "저장 위치를 고른 문서 창이나 대화가 바뀌었습니다.");
-    const inputHash = hash(body);
+    // A durable generated output may be replayed after its private staging file
+    // has been removed or the host has restarted. Bind it to the original ticket.
+    const generatedReplay = !!ticket.outputHash && !!ticket.generatedId;
+    if ((ticket.outputHash && ticket.generatedId !== generatedId) || (generatedReplay && (body.length || sourceRevision !== ticket.revision))) throw new HttpError(409, "output_generated_changed", "이미 저장한 변환 결과의 요청이 바뀌었습니다.");
+    const generated = generatedId && !generatedReplay ? officeGenerated(this.documents).read(generatedId, artifactId, access) : null;
+    if (generated) {
+      if (body.length || generated.format !== ticket.format || generated.revision !== sourceRevision) throw new HttpError(409, "output_generated_changed", "변환 결과의 형식이나 원본 판이 다릅니다.");
+      body = generated.bytes;
+    }
+    const inputHash = generatedReplay ? ticket.inputHash! : hash(body);
     if (ticket.inputHash && inputHash !== ticket.inputHash) throw new HttpError(409, "output_payload_changed", "이미 처리한 저장 요청의 내용이 바뀌었습니다. 새 저장 위치를 선택해 주세요.");
     if (ticket.result) return ticket.result;
     if (this.busy.has(id)) throw new HttpError(409, "output_busy", "이미 저장하고 있습니다.");
@@ -94,7 +104,7 @@ export class OfficeOutputs {
       const source = this.documents.get(artifactId);
       if (ticket.longJob && !ticket.outputHash) {
         const current = this.documents.check(artifactId);
-        if (sourceRevision !== current.revision || current.diskState !== "same") throw new HttpError(409, "output_source_changed", "번역한 책의 판이 바뀌었습니다. 현재 책을 확인해 주세요.");
+        if (sourceRevision !== current.revision || current.diskState !== "same") throw new HttpError(409, "output_source_changed", "작업한 문서의 판이 바뀌었습니다. 현재 문서를 확인해 주세요.");
         ticket.revision = sourceRevision;
       }
       if (source.path !== ticket.sourcePath) throw new HttpError(409, "output_source_moved", "원본의 위치가 바뀌었습니다. 위치를 다시 선택해 주세요.");
@@ -103,7 +113,9 @@ export class OfficeOutputs {
         // An export-only format is a real file, not a document the editor claims to open.
         const artifact = ticket.format === "odt" ? null : this.register(source, ticket.path, ticket.revision, ticket.sessionId);
         ticket.result = { path: ticket.path, artifact, ...(ticket.backupPath ? { backupPath: ticket.backupPath } : {}) };
-        this.remember(ticket); return ticket.result;
+        this.remember(ticket);
+        if (ticket.generatedId) officeGenerated(this.documents).discard(ticket.generatedId);
+        return ticket.result;
       };
       // A host restart after publication must not overwrite the file or create another copy.
       if (ticket.outputHash) {
@@ -117,7 +129,7 @@ export class OfficeOutputs {
         bytes = await prepareHwpSave(readFileSync(this.documents.revisionPath(artifactId, ticket.revision)), decoded.bytes, ticket.format, decoded.metadata, "save", hwpFormat(source.format));
       } else await checkOfficeCopy(bytes, ticket.format);
       if (["md", "markdown", "html", "htm"].includes(ticket.format)) {
-        assets = await prepareTextCopy(source.path, ticket.path, bytes.toString("utf8"), formatOf(ticket.path) as "markdown" | "html");
+        assets = await prepareTextCopy(generated?.path ?? source.path, ticket.path, bytes.toString("utf8"), formatOf(ticket.path) as "markdown" | "html");
         bytes = Buffer.from(assets.text, "utf8");
       }
       const currentScope = this.scope(artifactId, access);
@@ -127,6 +139,7 @@ export class OfficeOutputs {
       const before = disk(ticket.path);
       if ((before ? hash(before) : null) !== ticket.sha256) throw new HttpError(409, "output_changed", "위치를 고른 뒤 대상 파일이 바뀌었습니다. 덮어쓰지 않았습니다.");
       ticket.inputHash = inputHash; ticket.outputHash = hash(bytes);
+      if (generatedId) ticket.generatedId = generatedId;
       if (before) ticket.backupPath = `${ticket.path}.${randomUUID()}.bak`;
       this.remember(ticket);
       const temporary = `${ticket.path}.workbench-${randomUUID()}.tmp`;

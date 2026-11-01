@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import manifest from '../../../third_party/ieumoffice/pdf-runtime.json' with { type: 'json' };
 import { repoRoot, shipped } from './resources.ts';
@@ -17,3 +17,11 @@ function resource(name) {
 }
 export const pdfiumWasmPath = () => resource('pdfium.wasm');
 export const hbSubsetWasmPath = () => resource('hb-subset.wasm');
+
+/** Use the same reviewed system OCR helpers already shipped with the original CLI. */
+export function pdfOcrHelpers() {
+  if (process.platform !== 'win32' && process.platform !== 'darwin') return [];
+  const name = process.platform === 'darwin' ? 'vision-ocr' : 'win-ocr.exe', root = repoRoot();
+  return [shipped(`ieumoffice/resources/ocr/${name}`, `ieumoffice/IeumOffice.app/Contents/Resources/ocr/${name}`),
+    root && join(root, 'vendor/ieumoffice/packages/pdf2docx/ocr-helper', name)].filter(path => path && existsSync(path));
+}

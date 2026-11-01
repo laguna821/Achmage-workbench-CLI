@@ -1,5 +1,5 @@
 /** One user run may contain many provider round trips and document tools. */
-export type OfficeTurnStart = { turnId: string; instruction: string; revision: number; selection?: string; background?: "epub-translation" };
+export type OfficeTurnStart = { turnId: string; instruction: string; revision: number; selection?: string; background?: "epub-translation" | "pdf-job" | "pdf-reading" };
 export type OfficeTurnEvent =
   | { kind: "assistant"; id: string; text: string; streaming: boolean }
   | { kind: "reasoning"; id: string; text: string }

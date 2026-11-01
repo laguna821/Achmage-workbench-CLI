@@ -24,3 +24,7 @@ export const printOutput = (revision: number, job: SvgJob, action: "pdf" | "prin
 export const htmlOutput = (revision: number, job: HtmlJob, action: "html-pdf" | "html-print") => request<{ path?: string } | null>({ type: "office:output", requestId: crypto.randomUUID(), action, revision, job });
 export const renderHtmlPdf = (revision: number, job: HtmlJob) => request<ArrayBuffer>({ type: "office:output", requestId: crypto.randomUUID(), action: "html-render", revision, job });
 export const browserOperation = <T extends BrowserResult | null>(revision: number, command: BrowserCommand) => request<T>({ type: "office:output", requestId: crypto.randomUUID(), action: "browser", revision, command });
+
+export const commitGeneratedOutput = (planId: string, generatedId: string, sourceRevision: number) => request<{ path: string; artifactId: string | null }>({ type: "office:output", requestId: crypto.randomUUID(), action: "commit", planId, generatedId, sourceRevision, bytes: new ArrayBuffer(0), intent: "export" });
+
+export const revealExport = (path: string) => request<null>({ type: "office:output", requestId: crypto.randomUUID(), action: "reveal-export", path });

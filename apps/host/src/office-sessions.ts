@@ -27,8 +27,8 @@ const source = (run: { turnId: string; artifactId: string }) => ({ turnId: run.t
 function invalid(): never { throw new HttpError(400, "office_turn_request", "Office 대화 요청 형식이 올바르지 않습니다."); }
 function startOf(raw: unknown): OfficeTurnStart {
   if (!record(raw) || !id(raw.turnId) || !text(raw.instruction) || !raw.instruction.trim() || !Number.isSafeInteger(raw.revision) || (raw.revision as number) < 1 || (raw.selection !== undefined && !text(raw.selection, 64_000))) return invalid();
-  if (raw.background !== undefined && raw.background !== "epub-translation") return invalid();
-  return { turnId: raw.turnId, instruction: raw.instruction, revision: raw.revision as number, ...(raw.selection !== undefined ? { selection: raw.selection as string } : {}), ...(raw.background ? { background: raw.background as "epub-translation" } : {}) };
+  if (raw.background !== undefined && !["epub-translation", "pdf-job", "pdf-reading"].includes(String(raw.background))) return invalid();
+  return { turnId: raw.turnId, instruction: raw.instruction, revision: raw.revision as number, ...(raw.selection !== undefined ? { selection: raw.selection as string } : {}), ...(raw.background ? { background: raw.background as OfficeTurnStart["background"] } : {}) };
 }
 function eventOf(raw: unknown): OfficeTurnEvent {
   if (!record(raw) || !id(raw.id)) return invalid();
@@ -88,11 +88,10 @@ export class OfficeSessions {
       }
       const session = this.hooks.session(binding.sessionId);
       const artifact = this.documents.check(binding.artifactId);
-      if (input.background && artifact.format !== "epub") return invalid();
+      if (input.background && artifact.format !== (input.background === "epub-translation" ? "epub" : "pdf")) return invalid();
       const concurrent = [...this.runs.values()].filter(run => run.sessionId === session.id);
-      // The original book job and its read-only chat can run side by side. Two chats,
-      // two book jobs, or an active native CLI turn still cannot borrow one another.
-      if (concurrent.some(run => Boolean(run.background) === Boolean(input.background)) || (!concurrent.length && session.status !== "idle" && session.status !== "error")) throw new HttpError(409, "session_busy", "이 세션의 응답을 마치거나 멈춘 뒤 다시 요청해 주세요.");
+      // One normal chat and one long job coexist with up to two independent reading helpers.
+      if ((input.background === "pdf-reading" ? concurrent.filter(run => run.background === "pdf-reading").length >= 2 : concurrent.some(run => run.background === input.background)) || (!concurrent.length && session.status !== "idle" && session.status !== "error")) throw new HttpError(409, "session_busy", "이 세션의 응답을 마치거나 멈춘 뒤 다시 요청해 주세요.");
       if (this.documents.registry.list().find((view) => view.viewId === binding.access?.viewId)?.dirty) throw new HttpError(409, "office_unsaved_target", "현재 문서의 편집 내용을 먼저 저장한 뒤 AI 작업을 시작해 주세요.");
       if (artifact.revision !== input.revision || artifact.diskState !== "same") throw new HttpError(409, "revision_conflict", "문서의 판이 바뀌었습니다. 현재 편집 내용을 확인한 뒤 다시 요청해 주세요.");
       const at = Date.now(), office = { ...source({ ...binding, turnId: input.turnId }), ...(attachments.length ? { attachments } : {}), ...(skillContext?.skillReads.length ? { skills: skillContext.skills, skillReads: skillContext.skillReads } : {}) };

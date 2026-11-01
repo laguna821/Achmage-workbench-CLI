@@ -1,3 +1,4 @@
+import { PdfStructureEditors } from "./pdf-structure-editor.ts";
 import { EpubEditors } from "./epub-editor.ts";
 import { randomBytes } from "node:crypto";
 import { createReadStream, readFileSync } from "node:fs";
@@ -89,6 +90,7 @@ const PAGE_HEADERS = {
 
 export function createEditorsServer(documents: Documents, grants: EditorGrants, webDir: string | null, ai = new OfficeAi(documents.dataDir)): Server {
   const epub = new EpubEditors(documents, grants);
+  const pdfStructure = new PdfStructureEditors(documents, grants);
   const styles = new OfficeStyles(documents, webDir);
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -104,6 +106,7 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
       if (await styles.handle(req, res, url, bearer, grants)) return;
       if (await ai.handle(req, res, url, bearer, documents, grants)) return;
       if (await epub.handle(req, res, url, bearer)) return;
+      if (await pdfStructure.handle(req, res, url, bearer)) return;
       // Document scripts receive only this read-only preview URL, never the editor grant.
       // Enforce an opaque origin at the response as well as the renderer's iframe sandbox.
       const preview = /^\/preview\/([A-Za-z0-9_-]{32})\/(.+)$/.exec(path);
@@ -312,6 +315,12 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
       else sendJson(res, 500, { code: "internal", message: error instanceof Error ? error.message : String(error) });
     }
   });
+  const close = server.close;
+  server.close = function (...args: Parameters<Server["close"]>) {
+    // Cancel child jobs before waiting for their HTTP responses to drain.
+    pdfStructure.close();
+    return close.apply(this, args);
+  };
   server.once("close", () => ai.close());
   return server;
 }

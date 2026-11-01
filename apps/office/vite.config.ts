@@ -311,6 +311,31 @@ function textEditorPlatform(): Plugin {
     return () => window.removeEventListener('workbench:epub:flush', flush);
   }, [editor]);\n\n${marker}`);
       }
+      if (id === `${ieum}/apps/pdf/src/renderer/ai/transport.ts`) {
+        if (!code.includes('  return createIpcTransport<AiSettings>({')) throw new Error('PDF transport boundary changed');
+        return code.replace('  return createIpcTransport<AiSettings>({', '  const api = hooks?.workbenchApi ?? window.pdfApi;\n  return createIpcTransport<AiSettings>({').replaceAll('window.pdfApi.', 'api.');
+      }
+      if (id === `${ieum}/apps/pdf/src/renderer/doc-jobs/model-call.ts`) {
+        const marker = '      const transport = createElectronTransport(o.settings, {';
+        if (!code.includes(marker)) throw new Error('PDF model-call boundary changed');
+        return code.replace(marker, marker + '\n        workbenchApi: window.workbenchPdfJobs.model(o.workbenchLongJob === true),');
+      }
+      if (id === `${ieum}/apps/pdf/src/renderer/doc-jobs/job-session.ts`) {
+        const marker = '      if (last) spec.onEnd?.(last)';
+        if (!code.includes(marker)) throw new Error('PDF job completion boundary changed');
+        return code.replace(marker, marker + '\n      if (last) void window.workbenchPdfJobs.finish(last)');
+      }
+      const pdfLongCall = new Map([
+        ['ai-read/AiPageReading.tsx', 'const ask = createModelCall({'],
+        ['translate/DocumentTranslation.tsx', 'const ask = createModelCall({'],
+        ['highlight/AiHighlights.tsx', 'const ask = createModelCall({'],
+        ['bilingual/actions-controller.ts', 'const ask = createModelCall({'],
+        ['ai/insights/InsightsCard.tsx', 'const call = createModelCall({\n      settings: () => confirmed.settings,'],
+      ]).get(id.replace(`${ieum}/apps/pdf/src/renderer/`, ''));
+      if (pdfLongCall) {
+        if (!code.includes(pdfLongCall)) throw new Error('PDF long-job caller changed');
+        return code.replace(pdfLongCall, pdfLongCall + '\n        workbenchLongJob: true,');
+      }
       if (id === `${ieum}/apps/epub/src/renderer/translate/BookTranslation.tsx`) {
         const marker = "const ask = createModelCall({\n          api,";
         if (code.split(marker).length !== 2) this.error("EPUB book-job stream boundary changed");
