@@ -105,6 +105,7 @@ export function Connections({
   worksDir,
   onOfficeSettings,
   onOfficeDrive,
+  onOfficeImport,
   onKnowledge,
 }: {
   /** The Obsidian vault line (pkm). */
@@ -113,6 +114,7 @@ export function Connections({
   worksDir?: ReactNode;
   onOfficeSettings?: () => void;
   onOfficeDrive?: () => void;
+  onOfficeImport?: () => void;
   onKnowledge?: () => void;
   tools: DocumentTools | null;
   /** The agent browser (absent from older gateways). */
@@ -180,6 +182,7 @@ export function Connections({
       <ToolsSection tools={tools} onInstallIeum={onInstallIeum} onRefreshTools={onRefreshTools} />
       {onOfficeSettings && <button type="button" className="text-button" onClick={onOfficeSettings}>문서 AI 설정…</button>}
       {onOfficeDrive && <button type="button" className="text-button" onClick={onOfficeDrive}>Google Drive…</button>}
+      {onOfficeImport && <button type="button" className="text-button" onClick={onOfficeImport}>이음오피스 설정 가져오기…</button>}
       {onKnowledge && <button type="button" className="text-button" onClick={onKnowledge}>지식베이스…</button>}
       <BrowserSection status={browser} actions={browserActions} />
       {vault}

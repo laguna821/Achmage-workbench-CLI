@@ -38,12 +38,13 @@ export function copyOfficeStyleSelection(dataDir: string, sourceId: string, targ
   if (previous) write(join(root, "history", `${hash(targetId)}-${randomUUID()}.json`), previous);
   write(target, { ...source, revision: randomUUID() });
 }
-function styleData(value: unknown): Style["data"] {
+export function officeStyleData(value: unknown): Style["data"] {
   if (!object(value) || !text(value.topic, 100_000) || !text(value.styleSkill, 1_000_000) || !value.styleSkill.trim() || !text(value.createdAt, 100)
     || (value.layout !== undefined && !object(value.layout)) || (value.basedOn !== undefined && !text(value.basedOn, 128))) throw fail("저장할 디자인 스타일 형식을 확인해 주세요.");
   // Preserve the original layout skeleton and future JSON fields, within the request size cap.
   return value as Style["data"];
 }
+const styleData = officeStyleData;
 function nameOf(value: unknown): string {
   if (!text(value, 128) || !value.trim() || value !== value.trim() || /[\x00-\x1f\\/]/.test(value)) throw fail("스타일 이름을 확인해 주세요.");
   return value;
@@ -57,6 +58,20 @@ export class OfficeStyles {
   constructor(documents: Documents, webDir: string | null) {
     this.documents = documents; this.root = join(documents.dataDir, "office-styles");
     this.fonts = webDir ? join(webDir, "office", "template-fonts") : null;
+  }
+  /** Trusted app import only; editor saves still require their document grant. */
+  inspectSaved(name: string) { return this.style(nameOf(name)); }
+  saveImported(name: string, data: unknown, expectedRevision: string | null) {
+    return this.saveStyle(nameOf(name), styleData(data), expectedRevision);
+  }
+  private saveStyle(name: string, data: Style["data"], expectedRevision: unknown) {
+    const previous = this.style(name);
+    if ((previous?.revision ?? null) !== expectedRevision) throw fail("저장 스타일이 다른 창에서 바뀌었습니다. 최신 내용을 확인한 뒤 다시 저장해 주세요.", 409);
+    const revision = hash(JSON.stringify({ name, data })), next: Style = { name, data, revision };
+    if (previous) write(join(this.root, "history", hash(name), `${previous.revision}.json`), previous);
+    write(join(this.root, "history", hash(name), `${revision}.json`), next);
+    write(join(this.root, "styles", `${hash(name)}.json`), next);
+    return { ok: true, revision };
   }
   private scope(context: Context, writable = false) {
     const { artifactId, token, grants } = context;
@@ -89,15 +104,7 @@ export class OfficeStyles {
     if (operation === "load" || operation === "save") {
       const name = nameOf(input.name), previous = this.style(name);
       if (operation === "load") return previous ? { ok: true, ...previous.data, revision: previous.revision } : { ok: false, error: "저장한 스타일이 없습니다.", revision: null };
-      const data = styleData(input.data);
-      if ((previous?.revision ?? null) !== input.expectedRevision) throw fail("저장 스타일이 다른 창에서 바뀌었습니다. 최신 내용을 확인한 뒤 다시 저장해 주세요.", 409);
-      const serialized = JSON.stringify({ name, data }), revision = hash(serialized);
-      const next: Style = { name, data, revision };
-      // Every style version survives even when the original save tool reuses a name.
-      if (previous) write(join(this.root, "history", hash(name), `${previous.revision}.json`), previous);
-      write(join(this.root, "history", hash(name), `${revision}.json`), next);
-      write(join(this.root, "styles", `${hash(name)}.json`), next);
-      return { ok: true, revision };
+      return this.saveStyle(name, styleData(input.data), input.expectedRevision);
     }
     if (operation === "sidecar") {
       const data = styleData(input.data), file = artifact.path.replace(/\.pptx$/i, ".styleskill.json");

@@ -102,6 +102,7 @@ function parseRefs(value: unknown): DocRef[] {
 }
 
 export type HttpOptions = {
+  officeImport?: import("./office-import.mjs").OfficeImport;
   officeDrive?: import("./office-drive.mjs").OfficeDrive;
   officeMcp?: import("./office-mcp.mjs").OfficeMcp;
   officeControl?: import("./office-control.mjs").OfficeControl;
@@ -300,6 +301,15 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         return sendJson(res, 200, { origin, url: `${origin}/office/settings.html` });
       }
       if (path.startsWith("/api/office-ai/") && options.officeAi && await options.officeAi.handleSettings(req, res, url)) return;
+      if (options.officeImport && path === "/api/office-import/sources" && method === "GET") return sendJson(res, 200, options.officeImport.sources());
+      if (options.officeImport && path.startsWith("/api/office-import/") && method === "POST") {
+        const body = await readJson(req, 16_000);
+        if (path === "/api/office-import/preview") return sendJson(res, 200, options.officeImport.inspect(String(body.directory)));
+        if (path === "/api/office-import/apply") {
+          const controller = new AbortController(); res.once("close", () => controller.abort());
+          return sendJson(res, 200, await options.officeImport.apply(body as unknown as import("../../../packages/contracts/src/office-import.ts").OfficeImportChoice, controller.signal));
+        }
+      }
       if (options.officeDrive && path === "/api/office-drive/activity" && method === "GET") return sendJson(res, 200, options.officeDrive.activity());
       if (options.officeDrive && path.startsWith("/api/office-drive/") && method === "POST") {
         const body = await readJson(req, 32_000), controller = new AbortController();

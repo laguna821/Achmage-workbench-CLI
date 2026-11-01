@@ -7,3 +7,8 @@
 .office-drive-question { width: min(100%, 560px); padding: 24px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px; }
 .office-drive-question h2 { margin: 0; font-size: 18px; }
 .office-drive-choices { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.office-import-dialog { max-height: 90vh; overflow-y: auto; }
+.office-import-actions { display: flex; gap: 8px; margin: 12px 0; }
+.office-import-dialog .office-import-choice { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+.office-import-dialog .office-import-choice input { width: auto; margin: 0; }
+.office-import-preview ul { max-height: 180px; overflow-y: auto; }

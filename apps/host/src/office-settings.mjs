@@ -102,7 +102,7 @@ export class OfficeSettings {
     const job = this.queue.then(() => this.save(settings, expectedRevision, options));
     this.queue = job.catch(() => {}); return job;
   }
-  async save(settings, expectedRevision, { metered = false, signal } = {}) {
+  async save(settings, expectedRevision, { metered = false, signal, beforeCommit } = {}) {
     if (this.closed) throw error("office_settings_closed", "앱을 종료하고 있습니다.", 503);
     const current = this.current();
     if (expectedRevision !== current.revision) throw error("office_settings_changed", "다른 창에서 AI 설정을 변경했습니다. 현재 설정을 다시 읽어 주세요.", 409);
@@ -137,6 +137,7 @@ export class OfficeSettings {
     if (signal?.aborted) throw error("office_settings_cancelled", "설정 연결을 취소했습니다.", 499);
     if (this.closed) throw error("office_settings_closed", "앱을 종료하고 있습니다.", 503);
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });
+    beforeCommit?.();
     const temporary = join(this.directory, `.ai-settings-${randomUUID()}.tmp`);
     let fd;
     try {

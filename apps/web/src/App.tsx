@@ -64,6 +64,7 @@ import { activeTab, activateTab, addBackgroundTab, closeTab, contentKey, findTab
 import { PaneLayout, type PaneHead, type PaneScope } from "./components/Panes.tsx";
 import { NewDocumentButton } from "./components/NewDocumentButton.tsx";
 import { IeumAppDialog } from "./components/IeumAppDialog.tsx";
+import { OfficeImportDialog } from "./components/OfficeImportDialog.tsx";
 import { closePane, effectAt, focusPane, focusedPane, movePane, otherPane, paneById, placeAt, resizeSplit, restoreLayout, setPane, shownElsewhere, singleLayout, splitPane, MAX_PANES, type Layout, type Pane, type PaneContent, type PaneId, type PaneItem, type PaneTarget, type Side, type TabUiState } from "./panes.ts";
 import { PaneActionsContext, type PaneActions } from "./panedrag.ts";
 
@@ -294,6 +295,7 @@ export function App() {
   const [imageUploadOpen, setImageUploadOpen] = useState(false);
   const [officeSettingsOpen, setOfficeSettingsOpen] = useState(false);
   const [officeDriveOpen, setOfficeDriveOpen] = useState(false);
+  const [officeImportOpen, setOfficeImportOpen] = useState(false);
   const [ieumAppOpen, setIeumAppOpen] = useState(false);
   const [knowledgeOpen, setKnowledgeOpen] = useState(false);
   const [knowledgeMounted, setKnowledgeMounted] = useState(false);
@@ -1522,6 +1524,7 @@ export function App() {
     { id: "integrations", label: "MCP·스킬 보기", icon: "tool", run: () => setIntegrationsOpen(true) },
     { id: "office-settings", label: "문서 AI 설정", icon: "tool", run: () => setOfficeSettingsOpen(true) },
     { id: "office-drive", label: "Google Drive", icon: "folder", run: () => setOfficeDriveOpen(true) },
+    { id: "office-import", label: "이음오피스 설정 가져오기", icon: "folder", run: () => setOfficeImportOpen(true) },
     { id: "office-knowledge", label: "지식베이스", icon: "tool", run: () => openKnowledge() },
     { id: "connections", label: "연결과 설정", icon: "dots", run: () => setMenuOpen(true) },
     { id: "onboarding", label: "처음 안내 다시 보기", icon: "eye", run: () => setOnboardingAgain(true) },
@@ -2105,6 +2108,7 @@ export function App() {
               <Connections
                 onOfficeSettings={() => { closeMenu(); setOfficeSettingsOpen(true); }}
                 onOfficeDrive={() => { closeMenu(); setOfficeDriveOpen(true); }}
+                onOfficeImport={() => { closeMenu(); setOfficeImportOpen(true); }}
                 onKnowledge={() => { closeMenu(); openKnowledge(); }}
                 onIntegrations={() => {
                   closeMenu();
@@ -2231,6 +2235,7 @@ export function App() {
       {imageUploadOpen && api ? <ImageUploadSheet api={api} onClose={() => setImageUploadOpen(false)} onToast={setToast} /> : null}
       {officeSettingsOpen && api ? <OfficeSettings api={api} theme={appTheme} onClose={() => setOfficeSettingsOpen(false)} /> : null}
       {officeDriveOpen && api ? <OfficeSettings api={api} theme={appTheme} mode="drive" onClose={() => setOfficeDriveOpen(false)} /> : null}
+      {officeImportOpen && api ? <OfficeImportDialog api={api} onClose={() => setOfficeImportOpen(false)} /> : null}
       {api && <OfficeDrive api={api} theme={appTheme} />}
       {ieumAppOpen ? <IeumAppDialog api={api} status={state.tools?.ieumApp} onClose={() => setIeumAppOpen(false)} /> : null}
       {knowledgeMounted && api ? <div hidden={!knowledgeOpen}><KnowledgeLibrary api={api} state={state} workId={view.kind === "project" ? view.workId : work?.id} theme={appTheme} visible={knowledgeOpen} onOpen={artifact => { navigateTo({ workId: artifact.workId, sessionId: null, view: { kind: "document", artifactId: artifact.id, proposalId: null } }); setKnowledgeOpen(false); }} onClose={() => { setKnowledgeOpen(false); setKnowledgeMounted(false); }} /></div> : null}

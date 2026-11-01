@@ -15,6 +15,7 @@ import { OfficeCliInput } from "./office-cli-input.ts";
 import { OfficeControl } from "./office-control.mjs";
 import { OfficeMcp } from "./office-mcp.mjs";
 import { OfficeDrive } from "./office-drive.mjs";
+import { OfficeImport } from "./office-import.mjs";
 import { installToolWrappers } from "./tool-bin.ts";
 import { createEditorsServer, EditorGrants } from "./editors.ts";
 import { createOfficeSettingsServer } from "./office-settings-server.ts";
@@ -148,8 +149,10 @@ const docImages = new DocImages({ dataDir, documents: manager.documents, workCwd
 const officeControl = env.WORKBENCH_CLI_INPUT ? undefined : new OfficeControl(manager, bus, dataDir);
 const officeMcp = officeControl ? new OfficeMcp(manager, officeControl, dataDir, { defaultSaveDir: () => worksDir.root(), ieum }) : undefined;
 const officeDrive = officeControl ? new OfficeDrive(manager, officeControl, dataDir) : undefined;
+const officeImport = officeControl ? new OfficeImport(manager.documents, manager.ieumDesktop, dataDir) : undefined;
 officeAi.drive = officeDrive;
 const server = createHttpServer(manager, bus, {
+  officeImport,
   officeDrive,
   officeKnowledge,
   officeControl,
@@ -218,6 +221,7 @@ let stopping = false;
 async function stop() {
   if (stopping) return;
   stopping = true;
+  officeImport?.close();
   officeDrive?.close();
   officeControl?.close();
   await officeMcp?.close();
