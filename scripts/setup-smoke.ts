@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import type { ProviderStatus, Session, Snapshot, TranscriptItem, Work } from "@workbench/contracts";
 
 import { appLayout, client, startGateway, type Gateway } from "./setup-gateway.ts";
+import { checkFastFindInstalled } from "./fast-find-installed.ts";
 export { appLayout, client, startGateway, type Gateway } from "./setup-gateway.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -247,6 +248,8 @@ export async function apiChecks(gateway: Gateway, app: string, expect: ReturnTyp
       return [ok && answer.length > 0, answer.replace(/\s+/g, " ").slice(0, 60)];
     });
   }
+
+  await checkFastFindInstalled(gateway, app, work, created.id, check);
 
   await step("기본 한글 스킬·ieumoffice 실행", async () => {
     const bin = join(gateway.dataDir, "bin");

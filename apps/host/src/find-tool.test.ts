@@ -14,9 +14,11 @@ import { Store } from "./store.ts";
 // spool folder and the gateway answers with a file (no socket: Codex's sandbox allows none).
 
 const run = promisify(execFile);
+const managers: SessionManager[] = [];
 const dirs: string[] = [];
 const closers: (() => void)[] = [];
-afterEach(() => {
+afterEach(async () => {
+  for (const manager of managers.splice(0)) await manager.finder.close();
   for (const close of closers.splice(0)) close();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
@@ -27,6 +29,7 @@ function setup() {
   const store = new Store(join(dir, "state.sqlite"));
   const bus = new EventBus();
   const manager = new SessionManager(store, bus, { hostId: "h", hostLabel: "노트북", managedWorksDir: join(dir, "works"), dataDir: dir });
+  managers.push(manager);
   return { dir, bus, manager };
 }
 

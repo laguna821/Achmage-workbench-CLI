@@ -399,26 +399,34 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       }
       // "폴더만 지우기": what was inside moves up (folders.ts).
       if (parts[0] === "folders" && parts[1] && method === "DELETE" && parts.length === 2) return sendJson(res, 200, manager.deleteFolder(parts[1]));
-      if (method === "GET" && path === "/api/search") {
-        // "찾는 길" (search.ts): scope, paging and totals; q/provider/archived/folderId as before.
+      if ((method === "GET" && ["/api/search", "/api/search/preview", "/api/search/related"].includes(path)) || (method === "POST" && path === "/api/search/open")) {
         const provider = url.searchParams.get("provider");
         const number = (name: string) => (url.searchParams.has(name) ? Number(url.searchParams.get(name)) || 0 : undefined);
         const query = url.searchParams.get("q") ?? "";
-        const page = manager.search(query, {
+        const controller = new AbortController(), abort = () => controller.abort(); res.once("close", abort);
+        try {
+          let rawProperties: unknown;
+          try { rawProperties = JSON.parse(url.searchParams.get("properties") ?? "[]"); }
+          catch { throw new HttpError(400, "invalid_search_properties", "검색 속성 조건을 확인해 주세요."); }
+          if (!Array.isArray(rawProperties) || rawProperties.length > 30 || rawProperties.some((p) => !p || typeof p.key !== "string" || (p.value !== undefined && p.value !== null && typeof p.value !== "string"))) throw new HttpError(400, "invalid_search_properties", "검색 속성 조건을 확인해 주세요.");
+          const searchOptions: import("./search.ts").SearchOptions = {
+            signal: controller.signal, partial: url.searchParams.get("partial") === "1",
+            mode: url.searchParams.get("mode") === "filesOnly" ? "filesOnly" : "all",
+            properties: rawProperties, workId: url.searchParams.get("workId"),
             archived: url.searchParams.get("archived") === "1",
             provider: provider === "claude" || provider === "codex" ? provider : null,
-            folderId: url.searchParams.get("folderId"),
-            scope: parseSearchScope(url.searchParams.get("scope")),
-            offset: number("offset"),
-            limit: number("limit"),
-            per: number("per"),
-            group: url.searchParams.get("group"),
-            legacy: url.searchParams.get("legacy") !== "0",
-          });
-        if (url.searchParams.get("rerank") !== "1" || !options.officeAi) return sendJson(res, 200, page);
-        const controller = new AbortController(), abort = () => controller.abort(); res.once("close", abort);
-        try { return sendJson(res, 200, await options.officeAi.fileSearch.rankPage(query, page, manager, controller.signal)); }
-        finally { res.off("close", abort); }
+            folderId: url.searchParams.get("folderId"), scope: parseSearchScope(url.searchParams.get("scope")),
+            offset: number("offset"), limit: number("limit"), per: number("per"),
+            group: url.searchParams.get("group"), legacy: url.searchParams.get("legacy") !== "0",
+          };
+          const key = url.searchParams.get("key") ?? "";
+          if (path === "/api/search/preview") return sendJson(res, 200, await manager.finder.preview(key, searchOptions, number("chunkOffset"), number("line")));
+          if (path === "/api/search/related") return sendJson(res, 200, await manager.finder.related(key, searchOptions));
+          if (path === "/api/search/open") { await manager.finder.recordOpen(key, query, searchOptions); return sendJson(res, 200, { ok: true }); }
+          const page = await manager.search(query, searchOptions);
+          if (url.searchParams.get("rerank") !== "1" || !options.officeAi) return sendJson(res, 200, page);
+          return sendJson(res, 200, await options.officeAi.fileSearch.rankPage(query, page, manager, controller.signal));
+        } finally { res.off("close", abort); }
       }
       if (method === "POST" && path === "/api/works") {
         const body = await readJson(req);

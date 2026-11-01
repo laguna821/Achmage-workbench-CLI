@@ -93,6 +93,10 @@
     "fixtures/vault/💡 Resources/🧮 Zettelkasten/Writing in Public.md": "9d74aad8d2fb7565f2b8e4ab3415a038876dd0ed740d4e4c7b089d09e09755e1",
     "fixtures/vault/💡 Resources/🧮 Zettelkasten/aim high.md": "7f93e1bec74b98e4cc9b20e6ca4c06094a44f01402a6a4aa173174688fad23bd",
     "fixtures/vault/💡 Resources/🧮 Zettelkasten/data.md": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "tests/golden/core.toml": "37d51fe1b1f41685e9d3c7e05152d9f354e2020f7c19f8988ee2d25024ecf501"
+    "tests/golden/core.toml": "37d51fe1b1f41685e9d3c7e05152d9f354e2020f7c19f8988ee2d25024ecf501",
+    "plugin/src/ui/preview.ts": "7a8d58b414e27c0d515e47dedca18d86a076c170f8725c0639f8a8a4f85c964c",
+    "plugin/src/ui/results.ts": "cbe7dc507cbf7c1d18d976709fb7a7796b7f098c309e750fe219e01a818dab12",
+    "plugin/src/ui/similar.ts": "c1163c818b61ec76deb750a0ad2d23bed065de786bec4f32714e21b66b2f788b",
+    "plugin/src/keys.ts": "9ccba865ce3fbd5d1fa7615d69839c1e17c11802392285fd096cfc692b885b92"
   }
 }

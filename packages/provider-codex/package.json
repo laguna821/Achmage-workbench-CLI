@@ -1,1 +1,1 @@
-{ "name": "@workbench/provider-codex", "private": true, "version": "0.2.8", "type": "module", "main": "src/index.ts" }
+{ "name": "@workbench/provider-codex", "private": true, "version": "0.3.0", "type": "module", "main": "src/index.ts" }

@@ -102,8 +102,10 @@ class Engine implements ProviderAdapter {
   async shutdown() {}
 }
 
+const searchManagers: SessionManager[] = [];
 const dirs: string[] = [];
-afterEach(() => {
+afterEach(async () => {
+  for (const manager of searchManagers.splice(0)) await manager.finder.close();
   vi.unstubAllEnvs();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
@@ -112,6 +114,7 @@ function setup(dir = mkdtempSync(join(tmpdir(), "wb-recovery-"))) {
   if (!dirs.includes(dir)) dirs.push(dir);
   const store = new Store(join(dir, "state.sqlite"));
   const manager = new SessionManager(store, new EventBus(), { hostId: "h", hostLabel: "노트북", managedWorksDir: join(dir, "works"), dataDir: dir });
+  searchManagers.push(manager);
   const claude = new Engine("claude", () => manager.sink);
   const codex = new Engine("codex", () => manager.sink);
   manager.registerAdapter(claude);
@@ -307,9 +310,10 @@ describe("Office documents in search (Hangul uses the bundled WASM reader below)
       dataDir: dir,
       ieum: office.tool as never,
     });
+  searchManagers.push(manager);
     const work = manager.createWork({ title: "w", cwd: join(dir, "project") });
     mkdirSync(work.cwd, { recursive: true });
-    const found = (word: string) => manager.search(word).documents.map((entry) => entry.artifactId);
+    const found = async (word: string) => (await manager.search(word)).documents.map((entry) => entry.artifactId);
     for (const [name, tool, prefix, before, after] of [
       ["발표.pptx", office, "PK", "진달래", "개나리"],
     ] as const) {
@@ -317,19 +321,19 @@ describe("Office documents in search (Hangul uses the bundled WASM reader below)
       writeFileSync(file, `${prefix}${before} 계획`);
       const first = manager.documents.track(work.id, work.cwd, file, "engine", null, null)!.artifact;
       await tick();
-      expect(found(before)).toEqual([]);
+      expect((await found(before))).toEqual([]);
       tool.release();
       await manager.documents.textIndex.settled();
-      expect(found(before)).toEqual([first.id]);
+      expect((await found(before))).toEqual([first.id]);
       // A new revision: found by the old words until its own text is ready, then by the new ones only.
       writeFileSync(file, `${prefix}${after} 일정`);
       manager.documents.track(work.id, work.cwd, file, "engine", null, null);
       await tick();
-      expect(found(before)).toEqual([first.id]);
+      expect((await found(before))).toEqual([first.id]);
       tool.release();
       await manager.documents.textIndex.settled();
-      expect(found(after)).toEqual([first.id]);
-      expect(found(before)).toEqual([]);
+      expect((await found(after))).toEqual([first.id]);
+      expect((await found(before))).toEqual([]);
       // Kept with the revision: "글 보기" reads it without the tool.
       expect((await manager.documents.view(first.id, 2)).trim()).toBe(`${after} 일정`);
     }
@@ -339,8 +343,8 @@ describe("Office documents in search (Hangul uses the bundled WASM reader below)
     writeFileSync(file, "PK장미 목록");
     manager.documents.track(work.id, work.cwd, file, "engine", null, null);
     await manager.documents.textIndex.settled();
-    expect(found("개나리").length).toBe(1);
-    expect(found("장미")).toEqual([]);
+    expect((await found("개나리")).length).toBe(1);
+    expect((await found("장미"))).toEqual([]);
   });
 });
 
@@ -361,20 +365,21 @@ describe("Hangul documents an engine writes, with the installed kordoc", () => {
       return readFileSync(generated.files.find((file) => file.path.endsWith(".hwpx"))!.path);
     };
     const manager = new SessionManager(new Store(join(dir, "state.sqlite")), new EventBus(), { hostId: "h", hostLabel: "노트북", managedWorksDir: join(dir, "works"), dataDir: dir, kordoc: new Kordoc() });
+  searchManagers.push(manager);
     const work = manager.createWork({ title: "w", cwd: join(dir, "project") });
     mkdirSync(work.cwd, { recursive: true });
     const file = join(work.cwd, "계획서.hwpx");
-    const found = (word: string) => manager.search(word).documents.map((entry) => entry.artifactId);
+    const found = async (word: string) => (await manager.search(word)).documents.map((entry) => entry.artifactId);
     writeFileSync(file, hwpx("해바라기"));
     const artifact = manager.documents.track(work.id, work.cwd, file, "engine", null, null)!.artifact;
     await manager.documents.textIndex.settled();
-    expect(found("해바라기")).toEqual([artifact.id]);
+    expect((await found("해바라기"))).toEqual([artifact.id]);
     writeFileSync(file, hwpx("코스모스"));
     manager.documents.track(work.id, work.cwd, file, "engine", null, null);
-    expect(found("해바라기")).toEqual([artifact.id]);
+    expect((await found("해바라기"))).toEqual([artifact.id]);
     await manager.documents.textIndex.settled();
-    expect(found("코스모스")).toEqual([artifact.id]);
-    expect(found("해바라기")).toEqual([]);
+    expect((await found("코스모스"))).toEqual([artifact.id]);
+    expect((await found("해바라기"))).toEqual([]);
   }, 60_000);
 });
 

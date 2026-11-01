@@ -43,8 +43,10 @@ class TextEngine implements ProviderAdapter {
   async shutdown() {}
 }
 
+const searchManagers: SessionManager[] = [];
 const dirs: string[] = [];
-afterEach(() => {
+afterEach(async () => {
+  for (const manager of searchManagers.splice(0)) await manager.finder.close();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -57,6 +59,7 @@ function setup(git = false) {
   const store = new Store(join(dir, "state.sqlite"));
   const bus = new EventBus();
   const manager = new SessionManager(store, bus, { hostId: "h", hostLabel: "노트북", managedWorksDir: join(dir, "works"), dataDir: join(dir, "data") });
+  searchManagers.push(manager);
   const engine = new TextEngine(() => manager.sink);
   manager.registerAdapter(engine);
   const pkm = new Pkm(store, bus, manager, { vaultDebounceMs: 30, dataDir: dir });
@@ -485,47 +488,48 @@ describe("멈춘 곳 (what breaks left for the person)", () => {
 });
 
 describe("a project in search (찾는 길)", () => {
-  const found = (manager: SessionManager, query: string, scope: "decision" | "project") =>
-    manager.search(query, { scope }).groups.flatMap((group) => group.hits.map((hit) => ({ kind: hit.kind, title: hit.title, workId: hit.workId, sessionId: hit.sessionId, itemId: hit.itemId })));
+  const found = async (manager: SessionManager, query: string, scope: "decision" | "project") =>
+    (await manager.search(query, { scope })).groups.flatMap((group) => group.hits.map((hit) => ({ kind: hit.kind, title: hit.title, workId: hit.workId, sessionId: hit.sessionId, itemId: hit.itemId })));
 
-  it("finds decisions and open questions in the 결정 scope, by their words, opening where they came from", () => {
+  it("finds decisions and open questions in the 결정 scope, by their words, opening where they came from", async () => {
     const { manager, projects, work } = setup();
     const session = manager.createSession(work.id, { provider: "codex", purpose: "초안" });
     projects.addEntry(work.id, { section: "decision", text: "표지는 파란 B안으로", sessionId: session.id, itemId: "i1" });
     projects.addEntry(work.id, { section: "question", text: "마감을 연장할까?" });
-    expect(found(manager, "표지", "decision")).toEqual([{ kind: "decision", title: "표지는 파란 B안으로", workId: work.id, sessionId: session.id, itemId: "i1" }]);
-    expect(found(manager, "마감", "decision")).toEqual([{ kind: "question", title: "마감을 연장할까?", workId: work.id, sessionId: null, itemId: null }]);
+    expect((await found(manager, "표지", "decision"))).toEqual([{ kind: "decision", title: "표지는 파란 B안으로", workId: work.id, sessionId: session.id, itemId: "i1" }]);
+    expect((await found(manager, "마감", "decision"))).toEqual([{ kind: "question", title: "마감을 연장할까?", workId: work.id, sessionId: null, itemId: null }]);
     // Ticked or removed: the entry follows the note.
     const line = projects.page(work.id).note.questions[0]!.line;
     projects.setQuestionDone(work.id, line, true);
-    expect(found(manager, "마감", "decision")).toHaveLength(1);
+    expect((await found(manager, "마감", "decision"))).toHaveLength(1);
     projects.setBodyText(work.id, "", projects.page(work.id).note.revision);
-    expect(found(manager, "표지", "decision")).toEqual([]);
+    expect((await found(manager, "표지", "decision"))).toEqual([]);
   });
 
-  it("finds a work by its note's aliases, properties and words, also after the note is edited outside", () => {
+  it("finds a work by its note's aliases, properties and words, also after the note is edited outside", async () => {
     const { manager, projects, work, cwd } = setup();
     projects.setProperty(work.id, "aliases", ["가을 특강"]);
-    expect(found(manager, "가을 특강", "project")).toEqual([{ kind: "work", title: "안녕", workId: work.id, sessionId: null, itemId: null }]);
+    expect((await found(manager, "가을 특강", "project"))).toEqual([{ kind: "work", title: "안녕", workId: work.id, sessionId: null, itemId: null }]);
     // Edited in another editor: noticed when the lists read the note.
     const path = join(cwd, "안녕.md");
     writeFileSync(path, `${readFileSync(path, "utf8")}\n형성평가 루브릭을 붙인다.\n\n## 결정\n\n- 2026-10-01 발표는 15분\n`);
     projects.summaries();
-    expect(found(manager, "루브릭", "project").map((hit) => hit.workId)).toEqual([work.id]);
-    expect(found(manager, "발표는", "decision")).toMatchObject([{ kind: "decision", title: "발표는 15분" }]);
+    expect((await found(manager, "루브릭", "project")).map((hit) => hit.workId)).toEqual([work.id]);
+    expect((await found(manager, "발표는", "decision"))).toMatchObject([{ kind: "decision", title: "발표는 15분" }]);
     // The note's sections are found as decisions, not again as the work's words.
-    expect(found(manager, "발표는", "project")).toEqual([]);
+    expect((await found(manager, "발표는", "project"))).toEqual([]);
   });
 
-  it("starts from the notes it knows, after a restart", () => {
+  it("starts from the notes it knows, after a restart", async () => {
     const { dir, manager, projects, work } = setup();
     projects.addEntry(work.id, { section: "decision", text: "평가는 루브릭으로" });
     const store = new Store(join(dir, "state.sqlite"));
     store.search.removePrefix("decision:");
     const bus = new EventBus();
     const again = new SessionManager(store, bus, { hostId: "h", hostLabel: "노트북", managedWorksDir: join(dir, "works"), dataDir: join(dir, "data") });
+  searchManagers.push(again);
     new Projects(store, bus, again, new Pkm(store, bus, again, { vaultDebounceMs: 30, dataDir: dir }));
-    expect(found(again, "루브릭", "decision").map((hit) => hit.title)).toEqual(["평가는 루브릭으로"]);
-    expect(found(manager, "루브릭", "decision")).toHaveLength(1);
+    expect((await found(again, "루브릭", "decision")).map((hit) => hit.title)).toEqual(["평가는 루브릭으로"]);
+    expect((await found(manager, "루브릭", "decision"))).toHaveLength(1);
   });
 });

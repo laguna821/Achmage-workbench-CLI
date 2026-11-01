@@ -46,6 +46,8 @@ describe.skipIf(!process.env.WORKBENCH_SEARCH_WORKER_BIN && !process.env.WORKBEN
     expect(() => index.transaction(() => { index.put(entry("item:long", "rolledbacksecret")); throw new Error("rollback"); })).toThrow("rollback");
     await projection.flush();
     expect((await service.search("rolledbacksecret")).total).toBe(0);
+    expect(projection.row("item:long")).toMatchObject({ key: "item:long", title: "" });
+    expect(projection.row("item:long")).not.toHaveProperty("body");
     expect((await service.search("고유확인값")).total).toBe(1);
     index.put(entry("item:long", "replacement"));
     await projection.flush();
@@ -53,6 +55,7 @@ describe.skipIf(!process.env.WORKBENCH_SEARCH_WORKER_BIN && !process.env.WORKBEN
     expect((await service.status()).documents).toBe(1);
     index.remove("item:long"); await projection.flush();
     expect((await service.status()).documents).toBe(0);
+    expect(projection.row("item:long")).toBeUndefined();
   });
 
   it("replays committed updates during bootstrap and survives a derived-cache rebuild", async () => {
@@ -70,5 +73,7 @@ describe.skipIf(!process.env.WORKBENCH_SEARCH_WORKER_BIN && !process.env.WORKBEN
     await projection.flush();
     expect((await service.search("oldvalue")).total).toBe(0);
     expect((await service.search("rebuilt")).total).toBe(1);
+    expect(projection.row("item:3")).toBeUndefined();
+    expect(projection.row("item:new")).toMatchObject({ key: "item:new" });
   });
 });

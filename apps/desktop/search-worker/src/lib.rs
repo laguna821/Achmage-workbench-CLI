@@ -51,7 +51,7 @@ pub struct Removal {
     pub revision: u64,
 }
 
-#[derive(Default, Deserialize)]
+#[derive(Clone, Default, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub struct Scope {
     // None means unrestricted; Some(empty) intentionally permits no documents.
@@ -68,7 +68,7 @@ pub struct Scope {
     pub properties: Vec<PropertyFilter>,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct PropertyFilter {
     /// Exact host-parsed YAML key, including punctuation/colons.
@@ -125,19 +125,24 @@ pub struct Search {
     /// Compact, ranked identities for the host's existing document/answer joins and Bases.
     /// Excerpts/headings are still generated only for the selected page.
     pub include_candidates: bool,
+    /// Detail only identities chosen after the host's document/reply join. This is not a scope
+    /// restriction: partial-match thresholds and counts still see the entire allowed corpus.
+    pub detail_keys: Option<HashSet<String>>,
 }
 
 impl Default for Search {
     fn default() -> Self {
         Self { query: String::new(), scope: Scope::default(), mode: Mode::All, offset: 0,
             limit: limit(), group: Group::None, per_group: per_group(), now_secs: 0.0,
-            debug: false, include_candidates: false }
+            debug: false, include_candidates: false, detail_keys: None }
     }
 }
 
 #[derive(Deserialize)]
 #[serde(tag = "op", rename_all = "camelCase")]
 pub enum Request {
+    /// Reuse the upstream Canvas extractor before the host splits a long source into chunks.
+    ExtractCanvas { text: String },
     Upsert { documents: Vec<Document> },
     Remove { documents: Vec<Removal> },
     Search { #[serde(flatten)] search: Search },
@@ -168,11 +173,16 @@ pub struct Worker {
     // Tombstones prevent a delayed upsert from resurrecting a removed source.
     revisions: HashMap<String, u64>,
     generation: u64,
+    scope_counts: Vec<(u64, Scope, usize)>,
 }
 
 impl Worker {
     pub fn handle(&mut self, request: Request) -> Result<Value, String> {
         match request {
+            Request::ExtractCanvas { text } => {
+                if text.len() > 16 * 1024 * 1024 { return Err("canvas source exceeds 16MB".into()); }
+                Ok(json!({"text": ff10k_core::canvas::canvas_to_markdown(&text)}))
+            }
             Request::Upsert { documents } => {
                 if documents.len() > MAX_BATCH { return Err("search batch exceeds 500 documents".into()); }
                 // Validate the complete batch before applying any of it.
@@ -244,7 +254,7 @@ impl Worker {
         }
     }
 
-    fn search(&self, search: Search) -> Result<Value, String> {
+    fn search(&mut self, search: Search) -> Result<Value, String> {
         if search.query.chars().count() > 4096 || search.limit > 500 || search.per_group > 100 {
             return Err("search request exceeds query/page limits".into());
         }
@@ -274,7 +284,9 @@ impl Worker {
                 let at = *group_positions.entry(group).or_insert_with(|| { groups.push((group.to_string(), Vec::new())); groups.len() - 1 });
                 groups[at].1.push(i);
             }
-            if search.group == Group::None {
+            if let Some(keys) = &search.detail_keys {
+                indices.into_iter().filter(|&i| keys.contains(&hits[i].doc.path)).take(search.limit).collect()
+            } else if search.group == Group::None {
                 indices.into_iter().skip(search.offset).take(search.limit).collect()
             } else {
                 groups.iter().skip(search.offset).take(search.limit).flat_map(|(_, indices)| indices.iter().take(search.per_group).copied()).collect()
@@ -283,7 +295,13 @@ impl Worker {
         let opts = SearchOptions { mode: search.mode,
             limit: if search.group == Group::None { search.limit } else { search.limit.saturating_mul(search.per_group).min(500) },
             now_secs: search.now_secs, debug: search.debug };
-        let mut result = self.engine.search_selected(&search.query, &opts, &mut Selection { allow: &allow, choose: &mut choose });
+        let count = self.scope_counts.iter().find(|(generation, scope, _)| *generation == self.generation && *scope == search.scope).map(|(_, _, count)| *count);
+        let mut result = self.engine.search_selected_counted(&search.query, &opts, &mut Selection { allow: &allow, choose: &mut choose }, count);
+        if count.is_none() {
+            self.scope_counts.retain(|(generation, _, _)| *generation == self.generation);
+            if self.scope_counts.len() >= 8 { self.scope_counts.remove(0); }
+            self.scope_counts.push((self.generation, search.scope, result.total_docs));
+        }
         // Same conversion as upstream plugin/src/worker.ts: JS offsets count UTF-16 units.
         for hit in &mut result.hits {
             to_utf16_ranges(&hit.title_norm, &mut hit.title_ranges);

@@ -94,14 +94,14 @@ try {
 check.close();
 const dbBytes = size(join(dir, "state.sqlite")) + size(join(dir, "state.sqlite-wal"));
 const indexBytes = tables.filter((table) => table.name.startsWith("search_")).reduce((sum, table) => sum + table.bytes, 0);
-const timed = (label: string, query: string) => {
+const timed = async (label: string, query: string) => {
   const started = performance.now();
-  const page = manager.search(query, { legacy: false });
+  const page = (await manager.search(query, { legacy: false }));
   return `${label} "${query}": ${(performance.now() - started).toFixed(1)}ms · ${page.total}건 · 작업 ${page.groupsTotal}곳`;
 };
 const session = manager.view.sessions.get("s0-0")!;
 const findStarted = performance.now();
-const found = manager.finder.find(["--all", "채점 기준"], { sessionId: session.id });
+const found = (await manager.finder.find(["--all", "채점 기준"], { sessionId: session.id }));
 const findMs = performance.now() - findStarted;
 
 const mb = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;

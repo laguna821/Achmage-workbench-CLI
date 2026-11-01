@@ -1,3 +1,4 @@
+import { mapTitleRanges } from "../../../third_party/fast-find/adapter/ui.ts";
 import { readFileSync } from "node:fs";
 import { isAbsolute, relative } from "node:path";
 import {
@@ -15,21 +16,23 @@ import {
   type SearchHit,
   type SearchPage,
   type SearchScope,
+  type SearchPreview,
+  type SearchRelated,
   type Session,
   type TranscriptItem,
   type Work,
 } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
 import { noteDate, noteTags, parseFrontmatter, splitFrontmatter, valuesOf } from "./frontmatter.ts";
-import { noteKey, type IndexEntry, type MatchedRow, type SearchIndex } from "./search-index.ts";
+import { itemKey, noteKey, type IndexEntry, type MatchedRow, type SearchIndex } from "./search-index.ts";
+import { SearchProjection } from "./search-projection.ts";
+import type { FastFindHit, FastFindScope } from "./search-service.ts";
 import { fold, parseQuery, snippetOf, type ParsedQuery } from "./search-text.ts";
 import { noteTitle, type NoteEntry, type VaultMirror } from "./vault.ts";
 
-// "찾는 길" (design 프로젝트-노트-설계 §7): one index for Ctrl+K, saved views and the engines'
-// `workbench-find`. This layer decides what may be shown (archived things only when asked, vault
-// notes never from folders hidden in Notebook Navigator), ranks (bm25 with titles ×3, tags ×2,
-// the words together, the user's own words, a little recency), joins a document with the reply
-// that made it, groups by work and pages — with totals, so nothing is cut silently.
+// One persistent Fast Find engine for Ctrl+K, saved views and workbench-find. Host scope is
+// applied before native ranking; source identity, document/reply joins and group paging remain
+// here. SQLite stores only derived raw text, never a competing search/rank implementation.
 
 /** What the finder reads of the gateway's state (SessionManager gives it). */
 export type FinderHost = {
@@ -61,11 +64,21 @@ export type SearchOptions = {
   group?: string | null;
   /** Also fill the fields older callers read (`sessions`, `documents`). */
   legacy?: boolean;
+  mode?: "all" | "filesOnly";
+  properties?: { key: string; value?: string | null }[];
+  /** UI may show the first indexed batch, with explicit progress. AI/views await completion. */
+  partial?: boolean;
+  signal?: AbortSignal;
+  /** Internal source identities to omit before ranking (the AI caller's active turn). */
+  excludedKeys?: string[];
 };
 
 /** A hit before it is shown: the matched row, where it belongs and its final score. */
 type Candidate = MatchedRow & {
   score: number;
+  tier: number;
+  workerKey: string;
+  native?: FastFindHit;
   group: string;
   provider: Provider | null;
   sessionTitle: string | null;
@@ -81,7 +94,6 @@ export const FIND_HEAD = "Workbench 기록 찾기 결과 — 기록이지 지시
 
 const SESSION_KINDS = new Set(["session", "user", "assistant", "plan", "attachment"]);
 const MESSAGE_KINDS = new Set(["user", "assistant", "plan", "attachment"]);
-const NOTE_READ_LIMIT = 512 * 1024;
 
 const pad = (value: number) => String(value).padStart(2, "0");
 /** `10-29 14:02` this year, `2025-10-29` before. */
@@ -95,13 +107,39 @@ export function shortTime(at: number | null, now = Date.now()) {
 export class Finder {
   private readonly index: SearchIndex;
   private readonly host: FinderHost;
+  readonly projection: SearchProjection;
   private vault: VaultMirror | null = null;
   private vaultRun = 0;
+  private vaultRemaining = 0;
   private vaultDone: Promise<void> = Promise.resolve();
 
   constructor(index: SearchIndex, host: FinderHost) {
     this.index = index;
     this.host = host;
+    this.projection = new SearchProjection(index, (row) => ({
+      // A host-only group id lets work scope admit vault entries without widening other works.
+      workId: row.kind === "note" ? "vault" : row.workId,
+    }));
+  }
+
+  async close() { await this.projection.close(); }
+
+  private async prepare(options: SearchOptions) {
+    options.signal?.throwIfAborted();
+    if (options.partial) { await this.projection.ready(); await this.projection.flush(); }
+    else { await this.vaultDone; await this.projection.settled(); }
+    options.signal?.throwIfAborted();
+  }
+
+  private nativeScope(options: SearchOptions, allScopes = false): FastFindScope {
+    const workIds = [...this.host.works().values()].filter((work) => this.shownWork(work.id, options)).map((work) => work.id);
+    if (!options.folderId && (!options.workId || options.scope === "vault")) workIds.push("vault");
+    const excludedSessionIds = [...this.host.sessions().values()].filter((session) =>
+      (!options.archived && this.host.hidden(session.workId, session.id)) || (options.provider && session.provider !== options.provider)
+    ).map((session) => session.id);
+    return { workIds, excludedSessionIds, archived: true,
+      scopes: !allScopes && options.scope && options.scope !== "all" ? [options.scope] : undefined,
+      excludedKeys: options.excludedKeys?.flatMap((key) => this.projection.keys(key)), properties: options.properties };
   }
 
   // ── what may be shown ──────────────────────────────────────────────────────────────────
@@ -140,7 +178,7 @@ export class Finder {
   }
 
   /** Where a row belongs and whether it may be shown; null when it may not. */
-  private place(row: MatchedRow, options: SearchOptions): Omit<Candidate, keyof MatchedRow | "score" | "answer"> & { at: number } | null {
+  private place(row: MatchedRow, options: SearchOptions): Pick<Candidate, "group" | "provider" | "sessionTitle" | "at"> | null {
     if (row.kind === "note") {
       if (!this.noteShown(row.path) || options.folderId) return null;
       if (options.workId && options.scope !== "vault") return null;
@@ -173,25 +211,33 @@ export class Finder {
 
   // ── ranking ────────────────────────────────────────────────────────────────────────────
 
-  /** Every hit a query has (all scopes), ranked, with documents and the replies that made them joined. */
-  private rank(parsed: ParsedQuery, options: SearchOptions, now = Date.now()): Candidate[] {
-    const rows = this.index.match(parsed);
-    if (!rows.length) return [];
-    const together = this.index.phraseIds(parsed.phrase);
+  /** Native candidates retain upstream tier and score. Bodies are read only for the page. */
+  private async rank(query: string, options: SearchOptions, strict = false, allScopes = false): Promise<Candidate[]> {
+    await this.prepare(options);
+    const result = await this.projection.service.search(query, { scope: this.nativeScope(options, allScopes),
+      mode: options.mode, includeCandidates: true, limit: 0, nowSecs: Date.now() / 1000 }, options.signal);
+    const candidates = result.candidates ?? [];
     const out: Candidate[] = [];
-    for (const row of rows) {
+    for (const hit of candidates) {
+      if (strict && hit.tier === 4) continue;
+      const source = this.projection.source(hit.key);
+      const row = source && this.projection.row(source.source);
+      if (!row) continue;
       const placed = this.place(row, options);
-      if (!placed) continue;
-      // bm25 is negative (better is lower); a row found only by LIKE scores a small constant.
-      let score = row.rank < 0 ? -row.rank : 1e-6;
-      if (row.own) score *= 1.3;
-      if (together.has(row.id)) score *= 1.6;
-      const days = Math.max(0, (now - placed.at) / 86_400_000);
-      score *= 1 + 0.15 * Math.exp(-days / 14);
-      out.push({ ...row, ...placed, score, answer: null });
+      if (placed) out.push({ ...row, ...placed, score: hit.score, tier: hit.tier, workerKey: hit.key, answer: null });
     }
     this.joinAnswers(out);
-    return out.sort((a, b) => b.score - a.score || b.at - a.at);
+    return out.sort((a, b) => a.tier - b.tier || b.score - a.score || Number(b.own) - Number(a.own) || b.at - a.at);
+  }
+
+  private async detail(query: string, hits: Candidate[], options: SearchOptions) {
+    const selected = hits.flatMap((hit) => [hit, ...(hit.answer?.matched ? [hit.answer.matched] : [])]);
+    if (!selected.length) return;
+    const result = await this.projection.service.search(query, { scope: this.nativeScope(options),
+      mode: options.mode, detailKeys: [...new Set(selected.map((hit) => hit.workerKey))], limit: 500,
+      nowSecs: Date.now() / 1000 }, options.signal);
+    const details = new Map(result.hits.map((hit) => [hit.path, hit]));
+    for (const hit of selected) hit.native = details.get(hit.workerKey);
   }
 
   /**
@@ -232,7 +278,7 @@ export class Finder {
       const shown = best ?? null;
       const last = turn.at(-1)!;
       document.answer = { sessionId, itemId: shown?.itemId ?? last.id, at: shown?.at ?? last.at, matched: shown };
-      if (best) document.score = Math.max(document.score, best.score);
+      if (best) { document.score = Math.max(document.score, best.score); document.tier = Math.min(document.tier, best.tier); }
     }
     if (!dropped.size) return;
     for (let index = hits.length - 1; index >= 0; index -= 1) if (dropped.has(hits[index]!)) hits.splice(index, 1);
@@ -241,7 +287,7 @@ export class Finder {
   // ── Ctrl+K and the API ─────────────────────────────────────────────────────────────────
 
   /** A page of results grouped by work (or one group's hits), with totals per scope. */
-  search(query: string, options: SearchOptions = {}): SearchPage {
+  async search(query: string, options: SearchOptions = {}): Promise<SearchPage> {
     const started = performance.now();
     const scope = options.scope ?? "all";
     const parsed = parseQuery(query);
@@ -261,13 +307,13 @@ export class Finder {
       groups: [],
       terms: parsed.parts.map((part) => part.term),
     };
-    if (!parsed.parts.length) return page;
-    const all = this.rank(parsed, options);
+    if (!query.trim()) return page;
+    const all = await this.rank(query, options, false, true);
     for (const hit of all) {
       counts.all += 1;
       counts[hit.scope] += 1;
     }
-    const inScope = scope === "all" ? all : all.filter((hit) => hit.scope === scope);
+    const inScope = scope === "all" ? all : await this.rank(query, options);
     page.total = inScope.length;
     const groups = new Map<string, Candidate[]>();
     for (const hit of inScope) {
@@ -282,6 +328,7 @@ export class Finder {
         ? [[options.group, groups.get(options.group)!, groups.get(options.group)!.slice(page.offset, page.offset + page.limit)]]
         : []
       : [...groups].slice(page.offset, page.offset + page.limit).map(([key, hits]) => [key, hits, hits.slice(0, per)]);
+    await this.detail(query, chosen.flatMap(([, , shown]) => shown), options);
     const texts = this.index.texts(chosen.flatMap(([, , shown]) => shown.flatMap((hit) => [hit.id, ...(hit.answer?.matched ? [hit.answer.matched.id] : [])])));
     page.groups = chosen.map(([key, hits, shown]): FoundGroup => {
       const work = key === "vault" || key === "none" ? null : (this.host.works().get(key) ?? null);
@@ -296,6 +343,9 @@ export class Finder {
       };
     });
     if (options.legacy !== false) this.legacy(page, all, parsed);
+    page.engine = "fast-find";
+    page.progress = this.projection.state();
+    if (this.vaultRemaining) page.progress = { ...page.progress, phase: "indexing", total: page.progress.total + this.vaultRemaining };
     page.tookMs = Math.round(performance.now() - started);
     return page;
   }
@@ -313,10 +363,14 @@ export class Finder {
     const needles = parsed.needles;
     const has = (value: string) => needles.some((needle) => fold(value).includes(needle));
     const source = text.body && (has(text.body) || (!has(text.title) && !has(text.tags))) ? text.body : has(text.tags) ? text.tags.replace(/\n/g, " · ") : text.title.replace(/\n/g, " · ");
-    const { snippet, ranges } = source ? snippetOf(source, needles) : { snippet: "", ranges: [] as [number, number][] };
+    const excerpt = hit.native?.excerpt;
+    const { snippet, ranges } = excerpt ? { snippet: excerpt.text, ranges: excerpt.ranges } : source ? snippetOf(source, needles) : { snippet: "", ranges: [] as [number, number][] };
     const answer = hit.answer;
     let answerSnippet: { snippet: string; ranges: [number, number][] } = { snippet: "", ranges: [] };
-    if (answer?.matched) answerSnippet = snippetOf(texts.get(answer.matched.id)?.body ?? "", needles);
+    if (answer?.matched) {
+      const excerpt = answer.matched.native?.excerpt;
+      answerSnippet = excerpt ? { snippet: excerpt.text, ranges: excerpt.ranges } : snippetOf(texts.get(answer.matched.id)?.body ?? "", needles);
+    }
     else if (answer) {
       const reply = this.host.items(answer.sessionId).find((item) => item.id === answer.itemId);
       if (reply?.kind === "assistant") answerSnippet = snippetOf(reply.text, needles, 100);
@@ -343,7 +397,7 @@ export class Finder {
       artifactId: hit.artifactId,
       path: hit.path,
       title,
-      titleRanges: marked.snippet === title ? marked.ranges : [],
+      titleRanges: hit.native ? mapTitleRanges(title, hit.native.titleNorm, hit.native.titleRanges) : marked.snippet === title ? marked.ranges : [],
       at: hit.at || null,
       provider: hit.provider,
       sessionTitle: hit.sessionTitle,
@@ -351,6 +405,11 @@ export class Finder {
       snippet,
       ranges,
       score: hit.score,
+      tier: hit.tier,
+      badge: hit.native?.badge,
+      heading: hit.native?.heading ?? null,
+      line: hit.native?.line ?? null,
+      chunkOffset: this.projection.source(hit.workerKey)?.offset ?? 0,
       answer: answer ? { sessionId: answer.sessionId, itemId: answer.itemId, at: answer.at, snippet: answerSnippet.snippet, ranges: answerSnippet.ranges, matched: Boolean(answer.matched) } : null,
       detail,
     };
@@ -378,6 +437,63 @@ export class Finder {
     page.documents = documents.map((hit) => ({ artifactId: hit.artifactId!, workId: hit.group, ...snippet(hit) }));
   }
 
+  private selected(key: string, options: SearchOptions): Candidate | null {
+    const row = this.index.rows([key]).get(key);
+    if (!row || (options.scope && options.scope !== "all" && row.scope !== options.scope)) return null;
+    const place = this.place(row, options);
+    return place ? { ...row, ...place, score: 0, tier: 0, workerKey: key, answer: null } : null;
+  }
+
+  /** Read only a selected source, through the same native scope gate as ranked results. */
+  async preview(key: string, options: SearchOptions = {}, offset = 0, line: number | null = null): Promise<SearchPreview> {
+    await this.prepare(options);
+    const hit = this.selected(key, options);
+    if (!hit) return { key, found: false };
+    const allowed = await this.projection.service.preview(this.projection.keys(key)[0] ?? key, this.nativeScope(options), options.signal);
+    if (!allowed.found || !this.selected(key, options)) return { key, found: false };
+    const raw = this.index.texts([hit.id]).get(hit.id)?.body ?? "";
+    const body = hit.path?.toLowerCase().endsWith(".canvas") ? (await this.projection.service.extractCanvas(raw)).text : raw;
+    // Lines are zero-based, as in the upstream preview/open contract. Long messages open near
+    // their matching chunk and never send the entire transcript to a webview or AI tool.
+    const before = body.slice(0, Math.max(0, Math.min(offset, body.length)));
+    const chunkLine = (before.match(/\n/g) ?? []).length;
+    const target = chunkLine + Math.max(0, line ?? 0);
+    const lines = body.split("\n");
+    const from = Math.max(0, Math.min(target - 30, lines.length - 1));
+    const selected = lines.slice(from, from + 300);
+    let text = selected.join("\n");
+    const clipped = text.length > 96_000;
+    if (clipped) text = text.slice(0, 96_000).replace(/[\uD800-\uDBFF]$/, "");
+    return { key, found: true, text, startLine: from, targetLine: target,
+      totalLines: lines.length, truncated: clipped || from > 0 || from + selected.length < lines.length };
+  }
+
+  async related(key: string, options: SearchOptions = {}): Promise<SearchRelated[]> {
+    await this.prepare(options);
+    if (!this.selected(key, options)) return [];
+    const result = await this.projection.service.similar(this.projection.keys(key)[0] ?? key, this.nativeScope(options), 10, options.signal);
+    if (!this.selected(key, options)) return [];
+    const out: SearchRelated[] = [], seen = new Set<string>();
+    for (const similar of result.hits) {
+      const source = this.projection.source(similar.path)?.source;
+      if (!source || source === key || seen.has(source)) continue;
+      const hit = this.selected(source, options);
+      if (!hit) continue;
+      seen.add(source);
+      const reason = typeof similar.reason === "string" ? similar.reason : "similarTitle";
+      out.push({ hit: this.shown(hit, parseQuery(""), new Map()), reason });
+      if (out.length === 5) break;
+    }
+    return out;
+  }
+
+  async recordOpen(key: string, query: string, options: SearchOptions = {}) {
+    await this.prepare(options);
+    if (!this.selected(key, options)) return;
+    const preview = await this.projection.service.preview(this.projection.keys(key)[0] ?? key, this.nativeScope(options), options.signal);
+    if (preview.found && this.selected(key, options)) await this.projection.service.recordOpen(this.projection.keys(key)[0] ?? key, query);
+  }
+
   // ── workbench-find ─────────────────────────────────────────────────────────────────────
 
   /**
@@ -385,7 +501,7 @@ export class Finder {
    * instructions, then one line per hit with where it comes from, then how to see the rest.
    * Searches the calling session's work unless `--all`; archived things only with `--archived`.
    */
-  find(args: string[], caller: { sessionId: string | null; cwd?: string | null }): { code: number; stdout: string; stderr: string } {
+  async find(args: string[], caller: { sessionId: string | null; cwd?: string | null }): Promise<{ code: number; stdout: string; stderr: string }> {
     const words: string[] = [];
     let all = false;
     let archived = false;
@@ -419,9 +535,10 @@ export class Finder {
     // The turn that runs this command (its request and what it wrote so far) is not a record to find.
     const working = session && session.status !== "idle" && session.status !== "error";
     const turnStart = working ? (this.host.items(session.id).findLast((item) => item.kind === "user")?.at ?? Infinity) : Infinity;
-    const ranked = this.rank(parsed, { archived, workId: onlyWork, scope }).filter(
-      (hit) => (scope === "all" || hit.scope === scope) && !(hit.sessionId === session?.id && MESSAGE_KINDS.has(hit.kind) && hit.at >= turnStart),
-    );
+    const excludedKeys = session ? this.host.items(session.id).filter((item) => item.at >= turnStart).flatMap((item) =>
+      [itemKey(session.id, item.id), `attach:${session.id}:${item.id}`]) : [];
+    const options: SearchOptions = { archived, workId: onlyWork, scope, excludedKeys };
+    const ranked = (await this.rank(query, options, true)).filter((hit) => scope === "all" || hit.scope === scope);
     const where = onlyWork && work ? `작업 「${work.title}」` : "모든 작업과 볼트";
     const head = `${FIND_HEAD} · "${query}" · ${where}${scope !== "all" ? ` · ${SCOPE_LABEL[scope]}` : ""}${archived ? " · 보관 포함" : ""} · 총 ${ranked.length}건`;
     const lines = [head];
@@ -430,6 +547,7 @@ export class Finder {
       return { code: 0, stdout: `${lines.join("\n")}\n`, stderr: "" };
     }
     const slice = ranked.slice(offset, offset + limit);
+    await this.detail(query, slice, options);
     const texts = this.index.texts(slice.flatMap((hit) => [hit.id, ...(hit.answer?.matched ? [hit.answer.matched.id] : [])]));
     const bytes = (text: string) => Buffer.byteLength(text, "utf8");
     const flags = [all ? "--all" : null, archived ? "--archived" : null, scope !== "all" ? `--scope=${scope}` : null].filter(Boolean).join(" ");
@@ -473,15 +591,16 @@ export class Finder {
    * a session (its name or any of its messages), a work (its name, tags, or anything in it).
    * Keys are `<kind>:<id>` as pkm.ts names cards.
    */
-  cardMatches(text: string): Set<string> {
+  async cardMatches(text: string): Promise<Set<string>> {
     const clean = text.replace(/"/g, " ").trim();
     const out = new Set<string>();
     if (!clean) return out;
     // A term with spaces came from quotes in the view: the words together.
-    const parsed = parseQuery(/\s/.test(clean) ? `"${clean}"` : clean);
-    for (const row of this.index.match(parsed)) {
+    const query = /\s/.test(clean) ? `"${clean}"` : clean;
+    for (const row of await this.rank(query, {}, true)) {
       if (row.kind === "note" && row.path) out.add(`note:${row.path}`);
       else if (row.kind === "document" && row.artifactId) out.add(`page:${row.artifactId}`);
+      if (row.answer?.matched) out.add(`session:${row.answer.sessionId}`);
       if (row.sessionId && (SESSION_KINDS.has(row.kind) || row.kind === "decision" || row.kind === "question" || row.kind === "event")) out.add(`session:${row.sessionId}`);
       const workId = row.workId ?? (row.sessionId ? this.host.sessions().get(row.sessionId)?.workId : undefined);
       if (workId && row.kind !== "note") out.add(`work:${workId}`);
@@ -516,6 +635,7 @@ export class Finder {
     const gone = [...indexed.keys()].filter((key) => !wanted.has(key));
     if (gone.length) this.index.transaction(() => gone.forEach((key) => this.index.remove(key)));
     const todo = [...wanted].filter(([key, note]) => indexed.get(key) !== noteSignature(root!, note));
+    this.vaultRemaining = todo.length;
     if (!todo.length || !root) return (this.vaultDone = Promise.resolve());
     this.vaultDone = new Promise<void>((done) => {
       const step = () => {
@@ -528,6 +648,7 @@ export class Finder {
             if (entry) this.index.put(entry);
           }
         });
+        this.vaultRemaining = todo.length;
         if (todo.length) setImmediate(step);
         else done();
       };
@@ -549,8 +670,7 @@ const noteSignature = (root: string, note: NoteEntry) => `${root}|${Math.round(n
 export function readNote(mirror: VaultMirror, root: string, note: NoteEntry): IndexEntry | null {
   let text = "";
   try {
-    const data = readFileSync(mirror.resolve(note.path));
-    text = data.subarray(0, NOTE_READ_LIMIT).toString("utf8");
+    if ([".md", ".canvas", ".base"].includes(note.ext)) text = readFileSync(mirror.resolve(note.path), "utf8");
   } catch {
     return null;
   }
@@ -570,13 +690,9 @@ export function readNote(mirror: VaultMirror, root: string, note: NoteEntry): In
     at = noteDate(valuesOf(front, "date created")[0]) ?? note.mtime;
     // Obsidian comments are not shown in notes, so they are not found either.
     body = rest.replace(/%%[\s\S]*?%%/g, " ");
-  } else if (note.ext === ".canvas") {
-    try {
-      const canvas = JSON.parse(text) as { nodes?: { text?: unknown; file?: unknown; label?: unknown }[] };
-      body = (canvas.nodes ?? []).flatMap((node) => [node.text, node.label, node.file].filter((value): value is string => typeof value === "string")).join("\n");
-    } catch {
-      body = "";
-    }
+  } else if (note.ext === ".canvas" || note.ext === ".base") {
+    // Native Fast Find owns Canvas extraction; Bases YAML remains searchable source text.
+    body = text;
   }
   return {
     key: noteKey(note.path),

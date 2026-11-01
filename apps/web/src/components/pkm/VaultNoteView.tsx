@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import type { Components } from "react-markdown";
+import { createContext, createElement, type ComponentProps, type ElementType, useContext, useEffect, useMemo, useRef, useState } from "react";
+import type { Components, ExtraProps } from "react-markdown";
 import type { VaultNote } from "@workbench/contracts";
 import { ObsidianMarkdown, obsidianComponents, pictureSize, type EmbedProps } from "../../markdown/obsidian.tsx";
 import { cardDate, noteSection, obsidianUrl, openObsidian, vaultMarkdown } from "../../pkm.ts";
@@ -71,7 +71,8 @@ function NoteEmbed({ path, heading, label, components, version }: EmbedProps & {
  * Obsidian links and pictures resolved inside the vault, and "Obsidian에서 열기" to change it there.
  * The input below starts a session with this note attached as a read-only reference.
  */
-export function VaultNoteView({ path }: { path: string }) {
+export function VaultNoteView({ path, location }: { path: string; location?: { line: number; heading?: string } }) {
+  const bodyRef = useRef<HTMLDivElement>(null);
   const pkm = usePkm();
   const [note, setNote] = useState<VaultNote | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -129,9 +130,30 @@ export function VaultNoteView({ path }: { path: string }) {
         embed: (props) => <NoteEmbed {...props} components={drawn} version={vaultVersion} />,
       },
     );
+    // Preserve source line positions through the existing Markdown renderer, so search opens
+    // the actual matching paragraph/heading instead of the beginning of a long note.
+    Object.assign(drawn, Object.fromEntries((["p", "h1", "h2", "h3", "h4", "h5", "h6", "pre", "blockquote"] as const).map(tag => {
+      const original = drawn[tag];
+      return [tag, ({ node, children, ...props }: ComponentProps<"div"> & ExtraProps) => createElement("div", {
+        "data-source-line": node?.position?.start.line, "data-source-end": node?.position?.end.line,
+      }, createElement((original ?? tag) as ElementType, { ...props, ...(original ? { node } : {}) }, children))];
+    })));
     return drawn;
   }, [pkm, vaultVersion]);
   const markdown = useMemo(() => (note ? vaultMarkdown(note.body, note, vaultVersion) : ""), [note, vaultVersion]);
+
+  useEffect(() => {
+    if (!note || !location || !bodyRef.current) return;
+    const rows = [...bodyRef.current.querySelectorAll<HTMLElement>("[data-source-line]")];
+    const line = location.line + 1;
+    const heading = location.heading?.replace(/[*_`]/g, "").normalize("NFC").trim();
+    const target = (heading ? rows.find(row => Boolean(row.querySelector("h1,h2,h3,h4,h5,h6")) && row.textContent?.normalize("NFC").trim() === heading) : undefined)
+      ?? rows.filter(row => Number(row.dataset.sourceLine) <= line && Number(row.dataset.sourceEnd) >= line).at(-1)
+      ?? rows.find(row => Number(row.dataset.sourceLine) >= line);
+    target?.scrollIntoView({ block: "center" });
+    target?.classList.add("search-open-target");
+    return () => target?.classList.remove("search-open-target");
+  }, [note, location]);
 
   return (
     <main className="pkm-view pkm-note-view">
@@ -189,7 +211,7 @@ export function VaultNoteView({ path }: { path: string }) {
                   ))}
                 </dl>
               ) : null}
-              <div className="markdown pkm-note-body">
+              <div className="markdown pkm-note-body" ref={bodyRef}>
                 <ObsidianMarkdown components={components}>{markdown}</ObsidianMarkdown>
               </div>
             </>

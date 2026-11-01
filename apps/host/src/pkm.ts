@@ -119,8 +119,8 @@ export class Pkm {
     this.store.setMeta(key, JSON.stringify(value));
   }
 
-  state(): PkmState {
-    return { vault: this.vault.status(), views: this.viewsWithCounts(), rules: this.rules(), placements: this.placements(), pins: this.readJson<Record<string, string[]>>("pkm.pins", {}) };
+  async state(): Promise<PkmState> {
+    return { vault: this.vault.status(), views: await this.viewsWithCounts(), rules: this.rules(), placements: this.placements(), pins: this.readJson<Record<string, string[]>>("pkm.pins", {}) };
   }
 
   /** Attach a vault folder (or none). Only the path is remembered; the vault itself is never written. */
@@ -302,7 +302,7 @@ export class Pkm {
 
   // ── cards ────────────────────────────────────────────────────────────────────────────────
 
-  cards(target: CardTarget): CardList {
+  async cards(target: CardTarget): Promise<CardList> {
     if (target.kind === "vault") return this.vaultCards(target.path, target.descendants);
     if (target.kind === "folder") return this.folderCards(target.id);
     if (target.kind === "view") {
@@ -469,14 +469,14 @@ export class Pkm {
     return raw === null ? DEFAULT_VIEWS : this.readJson<PkmView[]>("pkm.views", []);
   }
 
-  private viewsWithCounts() {
-    return this.views().map((view) => {
+  private async viewsWithCounts() {
+    return Promise.all(this.views().map(async (view) => {
       try {
-        return { ...view, count: this.viewCards(view).total };
+        return { ...view, count: (await this.viewCards(view)).total };
       } catch {
         return { ...view, count: 0 };
       }
-    });
+    }));
   }
 
   /** Add or change a view (by id). */
@@ -539,10 +539,12 @@ export class Pkm {
   }
 
   /** A view's cards: newest first; grouped by its key when it has one ("값 없음" for missing values). */
-  viewCards(view: Pick<PkmView, "name" | "query" | "groupBy">): CardList {
+  async viewCards(view: Pick<PkmView, "name" | "query" | "groupBy">): Promise<CardList> {
     const { terms, problems } = parseViewQuery(view.query);
     // Plain words use the search index ("찾는 길"): a session matches by what was said in it.
-    const matched = filterItems(this.viewItems(kindsFor(terms)), terms, Date.now(), (text) => this.manager.finder.cardMatches(text));
+    const words = [...new Set(terms.flatMap((term) => term.kind === "text" ? [term.text] : []))];
+    const textMatches = new Map(await Promise.all(words.map(async (word) => [word, await this.manager.finder.cardMatches(word)] as const)));
+    const matched = filterItems(this.viewItems(kindsFor(terms)), terms, Date.now(), (text) => textMatches.get(text) ?? new Set());
     matched.sort((a, b) => (b.card.date ?? 0) - (a.card.date ?? 0) || a.card.title.localeCompare(b.card.title, "ko"));
     const shown = matched.slice(0, CARD_LIMIT);
     return {

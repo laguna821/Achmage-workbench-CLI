@@ -29,7 +29,7 @@ export type PaneItem =
   | { kind: "work"; id: string }
   | { kind: "doc"; id: string }
   | { kind: "project"; id: string }
-  | { kind: "note"; path: string }
+  | { kind: "note"; path: string; location?: { line: number; heading?: string } }
   | { kind: "vault"; path: string }
   | { kind: "folder"; id: string }
   | { kind: "pane"; id: PaneId }

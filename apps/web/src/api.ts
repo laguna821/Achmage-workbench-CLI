@@ -212,17 +212,26 @@ export class Api {
   /** "폴더만 지우기": the folder goes, what was inside moves up to its parent. */
   deleteFolder = (folderId: string) => this.request<DeleteFolderResult>("DELETE", `/api/folders/${folderId}`);
   /** "찾는 길": grouped by work with totals per scope; `group` pages one work's hits. */
-  search = (query: string, options: Omit<SearchRequest, "q"> & { legacy?: boolean; rerank?: boolean } = {}, signal?: AbortSignal) => {
+  private searchParams(query: string, options: Omit<SearchRequest, "q"> & { legacy?: boolean; rerank?: boolean }) {
     const params = new URLSearchParams({ q: query });
-    if (options.provider) params.set("provider", options.provider);
-    if (options.archived) params.set("archived", "1");
-    if (options.folderId) params.set("folderId", options.folderId);
-    if (options.scope && options.scope !== "all") params.set("scope", options.scope);
+    for (const key of ["provider", "folderId", "workId", "scope", "group", "mode"] as const) if (options[key]) params.set(key, options[key]!);
     for (const key of ["offset", "limit", "per"] as const) if (options[key] !== undefined) params.set(key, String(options[key]));
-    if (options.group) params.set("group", options.group);
+    for (const key of ["archived", "rerank", "partial"] as const) if (options[key]) params.set(key, "1");
     if (options.legacy === false) params.set("legacy", "0");
-    if (options.rerank) params.set("rerank", "1");
-    return this.request<SearchPage>("GET", `/api/search?${params}`, undefined, { signal });
+    if (options.properties?.length) params.set("properties", JSON.stringify(options.properties));
+    return params;
+  }
+  search = (query: string, options: Omit<SearchRequest, "q"> & { legacy?: boolean; rerank?: boolean } = {}, signal?: AbortSignal) =>
+    this.request<SearchPage>("GET", `/api/search?${this.searchParams(query, options)}`, undefined, { signal });
+  searchDetail = <T>(kind: "preview" | "related", hit: import("@workbench/contracts").FoundHit, options: Omit<SearchRequest, "q">, signal?: AbortSignal) => {
+    const params = this.searchParams("", options); params.set("key", hit.key);
+    params.set("chunkOffset", String(hit.chunkOffset ?? 0));
+    if (hit.line !== null && hit.line !== undefined) params.set("line", String(hit.line));
+    return this.request<T>("GET", `/api/search/${kind}?${params}`, undefined, { signal });
+  };
+  searchOpen = (key: string, query: string, options: Omit<SearchRequest, "q">) => {
+    const params = this.searchParams(query, options); params.set("key", key);
+    return this.request("POST", `/api/search/open?${params}`, {});
   };
   exportMarkdown = (sessionId: string, request: ExportMarkdownRequest) => this.request<ExportMarkdownResult>("POST", `/api/sessions/${sessionId}/export`, request);
   createWork = (title: string, folderId: string | null, cwd: string | null) => this.request<Work>("POST", "/api/works", { title, folderId, cwd });

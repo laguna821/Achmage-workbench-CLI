@@ -12,9 +12,13 @@ import {
   type Provider,
   type SearchPage,
   type SearchScope,
+  type SearchPreview,
+  type SearchRelated,
   type Session,
   type Work,
 } from "@workbench/contracts";
+import { displayHeading, keyLabel } from "../../../../third_party/fast-find/adapter/ui.ts";
+import { FastFindPreview } from "./FastFindPreview.tsx";
 import type { Api } from "../api.ts";
 import type { State } from "../state.ts";
 import type { PaneItem } from "../panes.ts";
@@ -114,7 +118,7 @@ export function SearchPalette({
   onOpenWork: (work: Work) => void;
   onOpenDoc: (artifact: Artifact) => void;
   /** A vault note found (read-only view). */
-  onOpenNote?: (path: string) => void;
+  onOpenNote?: (path: string, location?: { line: number; heading?: string }) => void;
   /** A view just saved from this search ("보기로 저장"). */
   onOpenView?: (viewId: string) => void;
   /** Shift+Enter on a work: its project page (absent: the work opens as with Enter). */
@@ -128,6 +132,15 @@ export function SearchPalette({
   const [scope, setScope] = useState<SearchScope>("all");
   const [provider, setProvider] = useState<Provider | null>(null);
   const [archived, setArchived] = useState(false);
+  const [filesOnly, setFilesOnly] = useState(false);
+  const [workId, setWorkId] = useState<string | null>(null);
+  const [propertyKey, setPropertyKey] = useState("");
+  const [propertyValue, setPropertyValue] = useState("");
+  const [propertyFilter, setPropertyFilter] = useState<{ key: string; value?: string } | null>(null);
+  const [composing, setComposing] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [sourcePreview, setSourcePreview] = useState<SearchPreview | null>(null);
+  const [related, setRelated] = useState<SearchRelated[]>([]);
   const [pages, setPages] = useState<SearchPage[]>([]);
   const [group, setGroup] = useState<{ key: string; title: string } | null>(null);
   const [searching, setSearching] = useState(false);
@@ -149,41 +162,36 @@ export function SearchPalette({
   useEffect(() => {
     setGroup(null);
     setNotice(null);
-  }, [needle, scope, provider, archived]);
+  }, [needle, scope, provider, archived, workId, filesOnly, propertyFilter]);
 
+  const searchOptions = { scope, provider, archived, workId, mode: filesOnly ? "filesOnly" as const : "all" as const,
+    properties: propertyFilter ? [propertyFilter] : [], partial: true };
   const request = (offset: number, rerank = false, signal?: AbortSignal) =>
-    api.search(needle, { scope, provider, archived, legacy: false, offset, rerank, ...(group ? { group: group.key, limit: HITS_PER_PAGE } : { limit: GROUPS_PER_PAGE, per: HITS_PER_GROUP }) }, signal);
+    api.search(needle, { ...searchOptions, legacy: false, offset, rerank, ...(group ? { group: group.key, limit: HITS_PER_PAGE } : { limit: GROUPS_PER_PAGE, per: HITS_PER_GROUP }) }, signal);
 
-  // The index is asked a moment after typing stops.
+  // No artificial typing delay. IME composition, stale replies and cancellation are local to
+  // this palette; background AI and other windows keep their independent worker requests.
+  const sourceVersion = `${state.pkm.vault ?? 0}|${Object.values(state.artifacts).map(a => `${a.id}:${a.revision}`).join(",")}|${Object.values(state.sessions).map(v => `${v.id}:${v.status}:${v.previewAt}`).join(",")}`;
   useEffect(() => {
     ++searchRun.current;
-    if (commandMode || !needle) {
-      setPages([]);
-      setSearching(false);
-      return;
-    }
-    setSearching(true);
-    let cancelled = false; const controller = new AbortController(); rankController.current = controller;
-    const timer = window.setTimeout(() => {
-      request(0)
-        .then((page) => {
-          if (cancelled) return;
-          setPages([page]);
-          // Show local hits immediately; optional file ordering arrives independently.
-          if (canRank(page)) void request(0, true, controller.signal).then(ranked => {
-            if (!cancelled && ranked.reranked) setPages(current => current.map(value => value === page ? ranked : value));
-          }).catch(() => {});
-        })
-        .catch(() => !cancelled && setPages([]))
-        .finally(() => !cancelled && setSearching(false));
-    }, 160);
-    return () => {
-      cancelled = true;
-      controller.abort();
-      window.clearTimeout(timer);
+    if (composing) { setSearching(false); return; }
+    if (commandMode || !needle) { setPages([]); setSearching(false); return; }
+    setSearching(true); setLoadingMore(false);
+    let cancelled = false, timer: ReturnType<typeof setTimeout> | undefined;
+    const controller = new AbortController(); rankController.current = controller;
+    const run = async () => {
+      try {
+        const page = await request(0, false, controller.signal);
+        if (cancelled) return;
+        setPages([page]);
+        if (page.progress?.phase === "indexing") timer = setTimeout(() => void run(), 250);
+      } catch (error) {
+        if (!cancelled) { setPages([]); setNotice(error instanceof Error ? error.message : "검색을 불러오지 못했습니다."); }
+      } finally { if (!cancelled) setSearching(false); }
     };
-    // `request` reads the same values.
-  }, [api, needle, scope, provider, archived, group, commandMode]);
+    void run();
+    return () => { cancelled = true; controller.abort(); clearTimeout(timer); };
+  }, [api, needle, scope, provider, archived, workId, filesOnly, propertyFilter, group, commandMode, composing, sourceVersion]);
 
   const groupHits = group ? pages.flatMap((page) => page.groups[0]?.hits ?? []) : [];
   const shownGroups = group ? 0 : pages.reduce((count, page) => count + page.groups.length, 0);
@@ -193,13 +201,10 @@ export function SearchPalette({
     if (!first || loadingMore) return;
     const run = searchRun.current, signal = rankController.current?.signal;
     setLoadingMore(true);
-    request(group ? groupHits.length : shownGroups)
+    request(group ? groupHits.length : shownGroups, false, signal)
       .then((page) => {
         if (searchRun.current !== run) return;
         setPages(current => [...current, page]);
-        if (canRank(page)) void request(group ? groupHits.length : shownGroups, true, signal).then(ranked => {
-          if (ranked.reranked) setPages(current => current.map(value => value === page ? ranked : value));
-        }).catch(() => {});
       })
       .catch(() => undefined)
       .finally(() => setLoadingMore(false));
@@ -265,13 +270,27 @@ export function SearchPalette({
   }, [state, commands, needle, lowerNeedle, commandMode, content, pages, group, groupHits, shownGroups, first, provider]);
 
   const flat = sections.flatMap((section) => section.entries);
-  useEffect(() => setFocus(0), [needle, scope, provider, archived, group]);
+  useEffect(() => setFocus(0), [needle, scope, provider, archived, workId, filesOnly, propertyFilter, group]);
   useEffect(() => {
     list.current?.querySelector<HTMLElement>(".palette-entry.focused")?.scrollIntoView({ block: "nearest" });
   }, [focus]);
   const current = flat[Math.min(focus, flat.length - 1)];
+  const selectedHit = current?.kind === "hit" ? current.hit : null;
+  useEffect(() => {
+    setSourcePreview(null); setRelated([]);
+    if (!selectedHit) return;
+    let cancelled = false; const controller = new AbortController();
+    void api.searchDetail<SearchPreview>("preview", selectedHit, searchOptions, controller.signal).then(value => {
+      if (!cancelled) setSourcePreview(value);
+    }).catch(() => {});
+    void api.searchDetail<SearchRelated[]>("related", selectedHit, searchOptions, controller.signal).then(value => {
+      if (!cancelled) setRelated(value);
+    }).catch(() => {});
+    return () => { cancelled = true; controller.abort(); };
+  }, [api, selectedHit?.key, selectedHit?.line, selectedHit?.chunkOffset, scope, provider, archived, workId, propertyFilter, sourceVersion, first?.progress?.phase]);
 
   const openHit = (hit: FoundHit, shift: boolean) => {
+    void api.searchOpen(hit.key, needle, searchOptions).catch(() => {});
     const work = hit.workId ? state.works[hit.workId] : undefined;
     const session = hit.sessionId ? state.sessions[hit.sessionId] : undefined;
     if (hit.kind === "work") {
@@ -291,7 +310,7 @@ export function SearchPalette({
     if (hit.kind === "note") {
       if (!hit.path || !onOpenNote) return;
       onClose();
-      onOpenNote(hit.path);
+      onOpenNote(hit.path, { line: sourcePreview?.key === hit.key ? sourcePreview.targetLine ?? 0 : hit.line ?? 0, heading: hit.heading?.text });
       return;
     }
     if (hit.kind === "session" && session) {
@@ -314,7 +333,7 @@ export function SearchPalette({
   /** What a hit is as something a pane shows: its session, document, note, work or project. */
   const paneItemOf = (hit: FoundHit): PaneItem | null => {
     if (hit.kind === "document" && hit.artifactId) return { kind: "doc", id: hit.artifactId };
-    if (hit.kind === "note" && hit.path) return { kind: "note", path: hit.path };
+    if (hit.kind === "note" && hit.path) return { kind: "note", path: hit.path, location: { line: sourcePreview?.key === hit.key ? sourcePreview.targetLine ?? 0 : hit.line ?? 0, heading: hit.heading?.text } };
     if (hit.kind === "work" && hit.workId) return { kind: "work", id: hit.workId };
     if (hit.sessionId && state.sessions[hit.sessionId]) return { kind: "session", id: hit.sessionId };
     if (hit.workId) return { kind: "project", id: hit.workId };
@@ -324,6 +343,7 @@ export function SearchPalette({
   const openRight = (entry: Entry | undefined) => {
     const item = entry?.kind === "hit" ? paneItemOf(entry.hit) : null;
     if (!item || !onOpenRight) return open(entry);
+    if (entry?.kind === "hit") void api.searchOpen(entry.hit.key, needle, searchOptions).catch(() => {});
     onClose();
     onOpenRight(item);
   };
@@ -399,7 +419,8 @@ export function SearchPalette({
             <span className="palette-title">
               <Marked text={hit.title} ranges={hit.titleRanges} />
             </span>
-            <span className="palette-meta">{hitMeta(hit)}</span>
+            <span className="palette-meta">{hitMeta(hit)}{hit.badge ? ` · ${{ Title: "제목", Alias: "별칭", H1: "제목줄", H2: "제목줄", H3: "제목줄", Body: "본문", Property: "속성", Tag: "태그", Path: "경로", Link: "링크" }[hit.badge] ?? hit.badge}` : ""}{hit.tier === 4 ? " · 부분 일치" : ""}</span>
+            {hit.heading && <span className="search-heading">{displayHeading(hit.heading.text)}</span>}
             {hit.snippet && hit.snippet !== hit.title ? (
               <span className="palette-snippet">
                 {speaker ? <span className="palette-who">{speaker}</span> : null}
@@ -514,6 +535,13 @@ export function SearchPalette({
           {hit.kind === "note" && hit.path ? <div className="palette-preview-path mono">볼트 › {hit.path}</div> : null}
           {hit.kind === "work" && work ? <div className="palette-preview-path mono">{work.cwd}</div> : null}
           {MESSAGE.has(hit.kind) && work ? <div className="palette-preview-path">{work.title}</div> : null}
+          {sourcePreview?.key === hit.key ? <FastFindPreview value={sourcePreview} query={needle} /> : <div className="muted">본문 불러오는 중…</div>}
+          {related.length > 0 && <div className="search-related" aria-label="관련 항목">
+            <div className="palette-preview-who">제목이 비슷한 항목</div>
+            {related.map(value => <button key={value.hit.key} type="button" onClick={() => openHit(value.hit, false)}>
+              <span>{value.hit.title}</span><small>{value.hit.path ?? value.hit.sessionTitle ?? SEARCH_KIND_LABEL[value.hit.kind]} · {{ sameWordsReordered: "단어 순서 차이", copySuffix: "사본·표기 차이", sameTitleDifferentFolder: "다른 폴더의 같은 제목", similarTitle: "유사 제목" }[value.reason] ?? "유사 제목"}</small>
+            </button>)}
+          </div>}
           <div className="palette-preview-foot">{foot}</div>
         </>
       );
@@ -560,12 +588,15 @@ export function SearchPalette({
   return (
     <div className="palette-backdrop" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
       <div
-        className={`palette look-scope${content ? " search-content" : ""}`}
+        className={`palette look-scope fast-find${showPreview ? " show-search-preview" : ""}${content ? " search-content" : ""}`}
         data-theme={appTheme}
         style={lookStyle(NEUTRAL_LOOK[appTheme])}
         role="dialog"
         aria-label={content ? "내용 찾기" : "찾기"}
         onKeyDown={(event) => {
+          if (event.nativeEvent.isComposing || composing || event.nativeEvent.keyCode === 229) return;
+          const target = event.target as HTMLElement;
+          if (target !== input.current && target.matches("input, select, button") && event.key !== "Escape") return;
           if (event.key === "Escape") {
             if (group) setGroup(null);
             else onClose();
@@ -586,6 +617,8 @@ export function SearchPalette({
             ref={input}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onCompositionStart={() => setComposing(true)}
+            onCompositionEnd={() => setComposing(false)}
             placeholder={content ? "대화·문서·노트 내용 찾기" : "작업, 세션, 대화 내용, 문서, 노트 찾기 · > 명령"}
             aria-label="찾을 말"
             aria-controls="palette-results"
@@ -634,16 +667,37 @@ export function SearchPalette({
             </label>
           </div>
         ) : null}
+        {!commandMode && <div className="search-tools">
+          <select aria-label="프로젝트 범위" value={workId ?? ""} onChange={event => setWorkId(event.target.value || null)}>
+            <option value="">모든 프로젝트</option>
+            {Object.values(state.works).filter(work => archived || !work.archivedAt).map(work => <option key={work.id} value={work.id}>{work.title}</option>)}
+          </select>
+          <label><input type="checkbox" checked={filesOnly} onChange={event => setFilesOnly(event.target.checked)} /> 제목·별칭만</label>
+          <details className="search-property-filter"><summary>{propertyFilter ? `${propertyFilter.key}${propertyFilter.value === undefined ? " 있음" : ` = ${propertyFilter.value}`}` : "속성 조건"}</summary>
+            <div><input aria-label="정확한 속성 키" placeholder="속성 키 (콜론 포함 그대로)" value={propertyKey} onChange={event => setPropertyKey(event.target.value)} />
+            <input aria-label="속성 값" placeholder="값 · 비우면 키 존재 여부" value={propertyValue} onChange={event => setPropertyValue(event.target.value)} />
+            <button type="button" disabled={!propertyKey} onClick={() => setPropertyFilter({ key: propertyKey, ...(propertyValue ? { value: propertyValue } : {}) })}>적용</button>
+            <button type="button" onClick={() => setPropertyFilter(null)}>해제</button></div>
+          </details>
+          <button type="button" className="search-preview-toggle" onClick={() => setShowPreview(value => !value)}>{showPreview ? "결과 목록" : "본문 미리보기"}</button>
+        </div>}
+        {first?.progress?.phase === "indexing" && <div className="search-indexing" role="status">검색 준비 중 · {first.progress.indexed.toLocaleString()} / {first.progress.total.toLocaleString()}건 · 준비된 항목부터 표시합니다.</div>}
         <div className="palette-body">
-          <div className="palette-list" id="palette-results" role="listbox" ref={list}>
+          <div className="palette-list" id="palette-results" role="listbox" aria-busy={searching} ref={list}>
             {needle && first && !commandMode ? (
-              <div className="search-summary">
+              <div className="search-summary" data-search-query={first.query}>
                 <span className="search-total">
                   {group
                     ? `${group.title} · ${first.groups[0]?.total ?? 0}건`
                     : `${scope === "all" ? "총" : SCOPE_LABEL[scope]} ${first.total}건${places ? ` · 작업 ${places}곳` : ""}${vaultShown ? " · 볼트" : ""}`}
                 </span>
-                {pages.some(page => page.reranked) && <span className="muted">문서 결과 AI 재정렬</span>}
+                {pages.some(page => page.reranked) ? <span className="muted">문서 결과 AI 재정렬</span> : first && canRank(first) && <button type="button" className="search-save" onClick={() => {
+                  const run = searchRun.current;
+                  setNotice("문서 결과를 AI로 재정렬합니다…");
+                  void request(0, true, rankController.current?.signal).then(page => {
+                    if (searchRun.current === run) { setPages([page]); setNotice(page.reranked ? null : "AI 재정렬을 사용할 수 없어 로컬 순서를 유지했습니다."); }
+                  }).catch(() => { if (searchRun.current === run) setNotice("AI 재정렬을 완료하지 못했습니다."); });
+                }}>AI 재정렬</button>}
                 <span className="search-filters-gap" />
                 <button
                   type="button"
@@ -688,7 +742,7 @@ export function SearchPalette({
                 })}
               </div>
             ))}
-            {needle && first && !first.total && !searching && !commandMode ? (
+            {needle && first && !first.total && !searching && first.progress?.phase !== "indexing" && !commandMode ? (
               <div className="palette-empty">
                 "{needle}"을(를) {scope === "all" ? "" : `${SCOPE_LABEL[scope]}에서 `}찾지 못했습니다.
                 {scope !== "all" && first.counts.all ? ` 다른 범위에 ${first.counts.all}건이 있습니다(Tab).` : ""}
@@ -699,7 +753,8 @@ export function SearchPalette({
         </div>
         <div className="palette-foot">
           <span>↑↓ 고르기</span>
-          <span>Enter 열기</span>
+          <span>{keyLabel("Enter", /Mac/.test(navigator.platform))} 열기</span>
+          {onOpenRight && <span>{keyLabel("Alt+Enter", /Mac/.test(navigator.platform))} 분할 열기</span>}
           {current?.kind === "hit" && current.hit.kind === "work" && onOpenProject ? <span>Shift+Enter 프로젝트</span> : null}
           <span>Tab 범위</span>
           <span>Esc {group ? "돌아가기" : "닫기"}</span>

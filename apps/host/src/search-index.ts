@@ -2,22 +2,10 @@ import { createHash } from "node:crypto";
 import type { DatabaseSync, StatementSync } from "node:sqlite";
 import type { Artifact, ArtifactRevision, SearchKind, SearchScope, Session, TranscriptItem, Work } from "@workbench/contracts";
 import { noteTags, parseFrontmatter, splitFrontmatter, type FrontmatterValue } from "./frontmatter.ts";
-import { likePattern, textExpression, wordStream, wordsExpression, type ParsedQuery } from "./search-text.ts";
 
-// The search index: one row per thing that can be found (search_entries), and two FTS5 tables over
-// the same rows (search-text.ts says why two). Rows are put and removed by key; putting the same
-// content again changes nothing (each row keeps a signature of what it holds).
-//
-// Where rows come from: the store (requests, replies, plans, attachment names, documents, work and
-// session titles; store.ts), the vault mirror (notes; search.ts). The project layer adds decisions,
-// open questions and events through `put`/`remove`, or a whole source through `source` (rebuilt
-// when its version changes). Keys start with the source's name: `decision:<work>:<n>`.
-
-/** Text kept per row: replies, documents and notes longer than this are searched in their first part. */
-export const BODY_LIMIT = 200_000;
-
-/** bm25 column weights: a title or alias ×3, tags and properties ×2, the text ×1. */
-const WEIGHTS = "3.0, 2.0, 1.0";
+// A derived raw-text cache and source identities. Fast Find owns matching and ranking in one
+// persistent Rust worker. SQLite holds no second full-text index; all original records stay in
+// Store/VaultMirror. Changing cache versions only rebuilds these derived tables.
 
 /** One thing the index can find. */
 export type IndexEntry = {
@@ -32,13 +20,13 @@ export type IndexEntry = {
   /** A note's vault-relative path, a document's file. */
   path?: string | null;
   at: number;
-  /** Shown, and ranked ×3 together with `aliases`. */
+  /** Shown title; Fast Find scores title and alias fields using its original tiers. */
   title: string;
   aliases?: string[];
-  /** Ranked ×2 together with property values. */
+  /** Structured tag field, separate from exact property keys and values. */
   tags?: string[];
   properties?: [string, FrontmatterValue][];
-  /** Ranked ×1. */
+  /** Full unmodified source body. */
   body: string;
   /** The user's own words (a request they typed): ranked a little higher. */
   own?: boolean;
@@ -48,7 +36,7 @@ export type IndexEntry = {
   sig?: string;
 };
 
-/** A row that matched, with its raw score (bm25: lower is better; 0 when only LIKE matched). */
+/** Metadata for a source identity selected by Fast Find, without loading the body. */
 export type MatchedRow = {
   id: number;
   key: string;
@@ -63,7 +51,6 @@ export type MatchedRow = {
   own: boolean;
   title: string;
   extra: Record<string, unknown>;
-  rank: number;
 };
 
 const sha = (text: string) => createHash("sha1").update(text).digest("base64url");
@@ -111,8 +98,8 @@ export class SearchIndex {
         body TEXT NOT NULL,
         fields TEXT NOT NULL
       );
-      CREATE VIRTUAL TABLE IF NOT EXISTS search_text USING fts5(title, tags, body, tokenize = 'trigram');
-      CREATE VIRTUAL TABLE IF NOT EXISTS search_words USING fts5(title, tags, body, tokenize = 'unicode61 remove_diacritics 2', content = '', contentless_delete = 1);
+      DROP TABLE IF EXISTS search_text;
+      DROP TABLE IF EXISTS search_words;
     `);
   }
 
@@ -147,7 +134,6 @@ export class SearchIndex {
     const title = titleField(entry);
     const tags = tagsField(entry);
     const text = entry.body ?? "";
-    const body = text.length > BODY_LIMIT ? text.slice(0, BODY_LIMIT) : text;
     const extra = entry.extra && Object.keys(entry.extra).length ? JSON.stringify(entry.extra) : null;
     const fields = [entry.kind, entry.scope, entry.workId ?? null, entry.sessionId ?? null, entry.itemId ?? null, entry.artifactId ?? null, entry.path ?? null, Math.round(entry.at) || 0, entry.own ? 1 : 0, entry.title ?? "", extra] as const;
     const sig = entry.sig ?? sha(JSON.stringify([fields, title, tags, text, entry.properties ?? []]));
@@ -156,16 +142,12 @@ export class SearchIndex {
       let id: number;
       if (existing) {
         id = Number(existing.id);
-        this.prepare("DELETE FROM search_text WHERE rowid = ?").run(id);
-        this.prepare("DELETE FROM search_words WHERE rowid = ?").run(id);
         this.prepare("UPDATE search_entries SET kind = ?, scope = ?, work_id = ?, session_id = ?, item_id = ?, artifact_id = ?, path = ?, at = ?, own = ?, title = ?, extra = ?, sig = ? WHERE id = ?").run(...fields, sig, id);
       } else {
         id = Number(
           this.prepare("INSERT INTO search_entries (kind, scope, work_id, session_id, item_id, artifact_id, path, at, own, title, extra, sig, key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(...fields, sig, entry.key).lastInsertRowid,
         );
       }
-      this.prepare("INSERT INTO search_text (rowid, title, tags, body) VALUES (?, ?, ?, ?)").run(id, title, tags, body);
-      this.prepare("INSERT INTO search_words (rowid, title, tags, body) VALUES (?, ?, ?, ?)").run(id, wordStream(title), wordStream(tags), wordStream(body));
       // Keep structured metadata and the full source body for the native engine. Never recover
       // YAML keys from the flattened legacy tags column, or append search tokens to raw text.
       this.prepare("INSERT OR REPLACE INTO search_cache (entry_id, body, fields) VALUES (?, ?, ?)").run(id, text, JSON.stringify({
@@ -188,8 +170,6 @@ export class SearchIndex {
   private drop(id: number) {
     const row = this.prepare("SELECT key FROM search_entries WHERE id = ?").get(id) as { key: string } | undefined;
     this.prepare("DELETE FROM search_cache WHERE entry_id = ?").run(id);
-    this.prepare("DELETE FROM search_text WHERE rowid = ?").run(id);
-    this.prepare("DELETE FROM search_words WHERE rowid = ?").run(id);
     this.prepare("DELETE FROM search_entries WHERE id = ?").run(id);
     if (row) this.changed([row.key]);
   }
@@ -229,8 +209,6 @@ export class SearchIndex {
   clear() {
     this.transaction(() => {
       this.db.exec("DELETE FROM search_entries");
-      this.db.exec("DELETE FROM search_text");
-      this.db.exec("DELETE FROM search_words");
       this.db.exec("DELETE FROM search_cache");
     });
     this.changed(null);
@@ -254,7 +232,7 @@ export class SearchIndex {
       workId: row.work_id === null ? null : String(row.work_id), sessionId: row.session_id === null ? null : String(row.session_id),
       itemId: row.item_id === null ? null : String(row.item_id), artifactId: row.artifact_id === null ? null : String(row.artifact_id),
       path: row.path === null ? null : String(row.path), at: Number(row.at), own: Number(row.own) === 1,
-      title: String(row.title), extra: row.extra ? JSON.parse(String(row.extra)) : {}, rank: 0,
+      title: String(row.title), extra: row.extra ? JSON.parse(String(row.extra)) : {},
       body: String(row.body), fields: JSON.parse(String(row.fields)),
     }));
   }
@@ -284,82 +262,33 @@ export class SearchIndex {
     this.db.exec("DELETE FROM meta WHERE key LIKE 'search.source.%'");
   }
 
-  /** Rows matching every part of a query, with their raw bm25 rank (unsorted, unfiltered). */
-  match(query: ParsedQuery): MatchedRow[] {
-    const words = wordsExpression(query.parts);
-    const text = textExpression(query.parts);
-    const likes = query.parts.flatMap((part) => (part.like ? [part.like] : []));
-    if (!words && !text && !likes.length) return [];
-    const tables: string[] = [];
-    const where: string[] = [];
-    const params: string[] = [];
-    const rank: string[] = [];
-    if (words) {
-      tables.push("search_words");
-      where.push("search_words MATCH ?");
-      params.push(words);
-      rank.push(`bm25(search_words, ${WEIGHTS})`);
+  /** Bounded metadata lookups for compact native candidates; never fetch every result's body. */
+  rows(keys: string[]): Map<string, MatchedRow> {
+    const out = new Map<string, MatchedRow>();
+    for (let start = 0; start < keys.length; start += 500) {
+      const batch = keys.slice(start, start + 500);
+      const rows = this.db.prepare(`SELECT * FROM search_entries WHERE key IN (${batch.map(() => "?").join(",")})`).all(...batch) as Record<string, unknown>[];
+      for (const row of rows) out.set(String(row.key), {
+        id: Number(row.id), key: String(row.key), kind: row.kind as SearchKind, scope: row.scope as MatchedRow["scope"],
+        workId: row.work_id === null ? null : String(row.work_id), sessionId: row.session_id === null ? null : String(row.session_id),
+        itemId: row.item_id === null ? null : String(row.item_id), artifactId: row.artifact_id === null ? null : String(row.artifact_id),
+        path: row.path === null ? null : String(row.path), at: Number(row.at), own: Number(row.own) === 1,
+        title: String(row.title), extra: row.extra ? JSON.parse(String(row.extra)) : {},
+      });
     }
-    if (text || likes.length) {
-      tables.push("search_text");
-      if (text) {
-        where.push("search_text MATCH ?");
-        params.push(text);
-        rank.push(`bm25(search_text, ${WEIGHTS})`);
-      }
-      for (const needle of likes) {
-        const pattern = likePattern(needle);
-        where.push("(search_text.title LIKE ? ESCAPE '\\' OR search_text.tags LIKE ? ESCAPE '\\' OR search_text.body LIKE ? ESCAPE '\\')");
-        params.push(pattern, pattern, pattern);
-      }
-    }
-    const [first, second] = tables;
-    const sql = `SELECT e.id, e.key, e.kind, e.scope, e.work_id, e.session_id, e.item_id, e.artifact_id, e.path, e.at, e.own, e.title, e.extra, ${rank.length ? rank.join(" + ") : "0"} AS rank
-      FROM ${first}${second ? ` JOIN ${second} ON ${second}.rowid = ${first}.rowid` : ""} JOIN search_entries e ON e.id = ${first}.rowid
-      WHERE ${where.join(" AND ")}`;
-    let rows: Record<string, unknown>[];
-    try {
-      rows = this.prepare(sql).all(...params) as Record<string, unknown>[];
-    } catch {
-      // A query FTS5 cannot read (it should not happen: every token is quoted) finds nothing.
-      return [];
-    }
-    return rows.map((row) => ({
-      id: Number(row.id),
-      key: String(row.key),
-      kind: String(row.kind) as SearchKind,
-      scope: String(row.scope) as MatchedRow["scope"],
-      workId: row.work_id === null ? null : String(row.work_id),
-      sessionId: row.session_id === null ? null : String(row.session_id),
-      itemId: row.item_id === null ? null : String(row.item_id),
-      artifactId: row.artifact_id === null ? null : String(row.artifact_id),
-      path: row.path === null ? null : String(row.path),
-      at: Number(row.at),
-      own: Number(row.own) === 1,
-      title: String(row.title),
-      extra: row.extra ? (JSON.parse(String(row.extra)) as Record<string, unknown>) : {},
-      rank: Number(row.rank),
-    }));
+    return out;
   }
 
-  /** Ids of rows where one of these search_words phrases occurs (the "together, as typed" boost). */
-  phraseIds(phrases: string[]): Set<number> {
-    if (!phrases.length) return new Set();
-    try {
-      const rows = this.prepare("SELECT rowid FROM search_words WHERE search_words MATCH ?").all(phrases.join(" OR ")) as { rowid: number }[];
-      return new Set(rows.map((row) => Number(row.rowid)));
-    } catch {
-      return new Set();
-    }
-  }
-
-  /** The stored text of rows (for snippets). */
+  /** Selected source text, for previews and legacy callers only. */
   texts(ids: number[]): Map<number, { title: string; tags: string; body: string }> {
     const out = new Map<number, { title: string; tags: string; body: string }>();
     for (let start = 0; start < ids.length; start += 200) {
       const chunk = ids.slice(start, start + 200);
-      const rows = this.db.prepare(`SELECT rowid, title, tags, body FROM search_text WHERE rowid IN (${chunk.map(() => "?").join(", ")})`).all(...chunk) as Record<string, unknown>[];
-      for (const row of rows) out.set(Number(row.rowid), { title: String(row.title ?? ""), tags: String(row.tags ?? ""), body: String(row.body ?? "") });
+      const rows = this.db.prepare(`SELECT entry_id, body, fields FROM search_cache WHERE entry_id IN (${chunk.map(() => "?").join(",")})`).all(...chunk) as { entry_id: number; body: string; fields: string }[];
+      for (const row of rows) {
+        const fields = JSON.parse(row.fields) as CachedSearchRow["fields"];
+        out.set(Number(row.entry_id), { title: [fields.title, ...fields.aliases].join("\n"), tags: tagsField({ ...fields, key: "", kind: "note", scope: "vault", at: 0, body: "" }), body: row.body });
+      }
     }
     return out;
   }

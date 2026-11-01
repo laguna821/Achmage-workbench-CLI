@@ -1,6 +1,5 @@
-import { extname } from "node:path";
 import { setImmediate as nextTurn } from "node:timers/promises";
-import { type CachedSearchRow, SearchIndex } from "./search-index.ts";
+import { type CachedSearchRow, type MatchedRow, SearchIndex } from "./search-index.ts";
 import { type FastFindDocument, type FastFindMetadata, SearchService } from "./search-service.ts";
 
 export type SearchProgress = { phase: "idle" | "indexing" | "ready" | "error"; indexed: number; total: number; error: string | null };
@@ -34,6 +33,9 @@ export class SearchProjection {
   readonly service: SearchService;
   private readonly parts = new Map<string, Part[]>();
   private readonly sources = new Map<string, { source: string; offset: number }>();
+  // Metadata only: the raw body remains in SQLite and the worker. Ranking can resolve a
+  // large candidate set without re-reading/parsing the same metadata on every keystroke.
+  private readonly rows = new Map<string, MatchedRow>();
   private readonly dirty = new Set<string>();
   private readonly unsubscribe: () => void;
   private revision = 0;
@@ -60,8 +62,9 @@ export class SearchProjection {
     });
   }
 
-  state(): SearchProgress { return { ...this.progress }; }
+  state(): SearchProgress { return { ...this.progress, indexed: this.parts.size, total: this.progress.phase === "ready" ? this.parts.size : Math.max(this.progress.total, this.parts.size) }; }
   source(key: string) { return this.sources.get(key) ?? null; }
+  row(key: string) { return this.rows.get(key); }
   keys(source: string): string[] { return this.parts.get(source)?.map((p) => p.key) ?? []; }
 
   private failed(error: unknown) {
@@ -85,6 +88,7 @@ export class SearchProjection {
           // overwrite a newer edit with a higher worker revision.
           const rows = this.index.cached({ after, limit: 100 });
           if (!rows.length) return;
+          rows.forEach(row => this.dirty.delete(row.key));
           await this.put(rows); after = rows.at(-1)!.id; count = rows.length;
         });
         if (!count) break;
@@ -115,9 +119,16 @@ export class SearchProjection {
   private async put(rows: CachedSearchRow[]) {
     const docs: FastFindDocument[] = [], removed: { key: string; revision: number }[] = [];
     for (const row of rows) {
+      const { body: _body, fields: _fields, ...metadata } = row;
+      this.rows.set(row.key, metadata);
       const revision = ++this.revision;
-      const chunks = searchChunks(row.body);
-      const parts = chunks.map((chunk, n): Part => ({ key: n ? `${row.key}\u001f${n}${extname(row.path ?? "")}` : row.key, offset: chunk.offset }));
+      const canvas = row.path?.toLowerCase().endsWith(".canvas");
+      const text = canvas ? (await this.service.extractCanvas(row.body)).text : row.body;
+      const chunks = searchChunks(text);
+      // Canvas text has already gone through the original extractor. Its opaque worker key
+      // must not make Engine parse the extracted paragraphs as another JSON canvas.
+      const base = canvas ? `${row.key}\u001fcanvas.md` : row.key;
+      const parts = chunks.map((chunk, n): Part => ({ key: n ? `${base}\u001f${n}.md` : base, offset: chunk.offset }));
       for (const old of this.parts.get(row.key) ?? []) if (!parts.some((p) => p.key === old.key)) {
         removed.push({ key: old.key, revision }); this.sources.delete(old.key);
       }
@@ -154,7 +165,7 @@ export class SearchProjection {
         this.reset = false;
         const deleted = [...this.sources.keys()].map((key) => ({ key, revision: ++this.revision }));
         for (let i = 0; i < deleted.length; i += 100) await this.service.remove(deleted.slice(i, i + 100));
-        this.parts.clear(); this.sources.clear();
+        this.parts.clear(); this.sources.clear(); this.rows.clear();
         // A rebuild can put existing keys back in the same synchronous transaction.
         let after = 0;
         for (;;) {
@@ -170,7 +181,7 @@ export class SearchProjection {
         const rows = this.index.cached({ keys, limit: 100 });
         const live = new Set(rows.map((row) => row.key));
         const removed = keys.filter((key) => !live.has(key)).flatMap((key) => {
-          const parts = this.parts.get(key) ?? []; this.parts.delete(key);
+          const parts = this.parts.get(key) ?? []; this.parts.delete(key); this.rows.delete(key);
           return parts.map((part) => { this.sources.delete(part.key); return { key: part.key, revision: ++this.revision }; });
         });
         for (let i = 0; i < removed.length; i += 100) await this.service.remove(removed.slice(i, i + 100));

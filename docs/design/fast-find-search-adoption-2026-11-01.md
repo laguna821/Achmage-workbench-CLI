@@ -1,6 +1,6 @@
 # Fast Find 기반 세션·볼트 검색 교체 계획
 
-작성일: 2026-11-01. 상태: **Rust 코어·지속 worker·CJK·원문 캐시/증분 투영 구현·집중 확인 / Finder·UI 기본 검색 전환 전**.
+작성일: 2026-11-01. 갱신: 2026-11-02. 상태: **Finder·저장 보기·AI 기본 엔진과 검색 화면 교체 완료 / 고정 규모 측정 및 최종 OS 설치본 확인 중**.
 
 사용자 요청은 기존 검색 옆에 검색기를 하나 더 두는 것이 아니라, 세션과 연결 Obsidian 볼트를 Fast Find 같은 즉시 검색·구조화 결과·넓은 미리보기로 찾도록 **기존 검색을 교체**하는 것이다. HOP 개선은 유지한다. 후속 사용자 정정으로 시각적 웹 Design Mode는 이번 릴리스에서 제외했으며 검색 작업의 선행 조건이 아니다.
 
@@ -8,9 +8,11 @@
 
 사용자의 후속 코어 사용성 점검에 따른 자동 이음 독립 앱 설치·OS 등록·연결과 실제 외부 GUI 왕복·병렬 AI 인수를 완료했다. [현재 인수 기준](../IMPLEMENTATION-2026-10-29.md)을 따른다. 웹 Design Mode 제외는 유지한다.
 
-현재 완료한 연결: typed YAML/원문 보존, 상위 결과 절단 전 범위/집계/페이지 선택, 한글 부분어·조사·인접 띄어쓰기·NFD/이모지 강조, 단일 지속 worker와 호출자별 취소, SQLite 전체원문 캐시와 초기 배치/변경/삭제/긴 메시지 조각 중복 제거. 원본 golden/typo 각1개·adapter7/7·native transport5개·cache3개·기존검색15개 및 타입 검사가 통과했다. 기존 FTS 기본 검색은 아직 전환 전이다.
+현재 완료한 연결: typed YAML/원문 보존, 상위 결과 절단 전 범위/집계/페이지 선택, 한글 부분어·조사·인접 띄어쓰기·NFD/이모지 강조, 단일 지속 worker와 호출자별 취소, 전체원문 캐시와 초기 배치/변경/삭제/긴 메시지 중복 제거. Finder·저장 보기·AI가 같은 native 엔진을 사용하고 기존 FTS 검색 테이블/순위 경로는 제거했다. 원본 Canvas 추출과 결과/미리보기/관련 항목/키 처리도 연결했다. 실제 native worker를 사용한 전체188파일1290시험, 배포 web/host의 화면 검사11개 및 타입 검사가 통과했다. 기본 입력의160ms 대기·자동 LLM 재정렬은 제거했으며 AI 재정렬은 명시적 버튼으로 유지한다.
 
-상류 unit 기능171개는 통과했으나 원본 개발기10ms 예산1개는 원본 release profile 복원 후에도13.458ms였다. 이는 아직 통과로 표시하지 않으며 고정10k/100k 앱 성능 인수와 구분한다. 같은 조건의 예산 검사를 반복하거나 상한을 완화하지 않는다. 정확한 연구 판 `research:rr-236ff3048f29782b4eb36a197c2932df:ac67bdd5e5813e0bb606574b4d10afebc73cba46ed9a19816b166b6c7201aec3` (R4–R11); 원본90개 hash와10개변경은 `third_party/fast-find/{upstream,adaptations}.json`에 기록했다.
+현재 판: `research:rr-236ff3048f29782b4eb36a197c2932df:fdeab07034d81b8ed7793ef3c7824201a3a50ac07adfe2341454e281c4ebf2d0` (R18). 화면 결과 `fast-find-ui-03/results.json`, 전체 검사 `fast-find-full-suite-01.log`, 중복 작업 제거 후 회귀26/26 `fast-find-perf-regression-02.log`. 고정 규모 측정은 아래 성능 절에 기록했다. 실제 OS 설치본 인수는 별도이며 완료로 세지 않는다.
+
+상류 unit 기능171개는 통과했으나 원본 개발기10ms 예산1개는 원본 release profile 복원 후에도13.458ms였다. 이는 아직 통과로 표시하지 않으며 고정10k/100k 앱 성능 인수와 구분한다. 같은 조건의 예산 검사를 반복하거나 상한을 완화하지 않는다. 정확한 연구 판 `research:rr-236ff3048f29782b4eb36a197c2932df:ac67bdd5e5813e0bb606574b4d10afebc73cba46ed9a19816b166b6c7201aec3` (R4–R11); 원본94개 hash와11개변경은 `third_party/fast-find/{upstream,adaptations}.json`에 기록했다.
 
 ## 1. 판단과 고정 기준
 
@@ -23,7 +25,7 @@
 | 라이선스 | MIT, Copyright 2026 Simon Späti. 배포 시 원문·출처·변경 이력 유지 |
 | 비교한 Workbench | `871bd22`; 미출시 Design Mode 변경은 사용자 요청으로 별도 보존 후 제품 소스에서 제외 |
 | 실제 확인 | 원본 CLI release 빌드 성공, 합성 Markdown 7개·질의 13개 실행 |
-| 아직 확인하지 않은 것 | 통합 앱 속도·메모리·OS별 패키지 증가량, 교체 후 GUI/설치본 |
+| 초기 조사 당시 미확인 | 아래 후속 측정과 구분: 통합 앱 속도·메모리·OS별 패키지 증가량, 교체 후 GUI/설치본 |
 
 정확한 연구 판: `research:rr-236ff3048f29782b4eb36a197c2932df:cc4f01703ac3c22394585ebacc01725ca7432b85b390978e818d2d83caa1370f`.
 R1은 원본·현행 검색 대조, R2는 한글/속성 호환 실험, R3는 도입 경계 결정이다. R2에서 확인한 회귀는 **미해결**이며, 계획 작성으로 해결 처리하지 않는다.
@@ -174,6 +176,10 @@ host의 SearchService가 원본 이벤트와 요청을 연결한다. 앱 데이�
 | 설치 용량 | 같은 OS/설정의 이전·이후 바이너리/설치본 크기 비교 |
 
 세션1만 개와 노트1만 개는 같은 크기가 아니다. 원본의5개 질의만 실행해 우리 대화 검색도 같은 속도라고 결론 내리지 않는다. 합성7문서 실험의 마이크로초 값 역시 성능 홍보 수치로 사용하지 않는다. 이 고정된 사례로 검증하고 무한한 벤치마크 경쟁으로 확대하지 않는다.
+
+2026-11-02 최초 제품 측정(`scripts/fast-find-bench.ts`, `fast-find-bench-01/results.json`): 실제10k Markdown/30MB와100k 메시지/약61MB를 사용했다. 첫500건 준비47/42ms, 전체975/3628ms, 외부 변경107/81ms, worker peak105/410MiB다. Node 측정 harness는 별도로245/376MiB이며 앱 전체 RAM 측정이 아니다. 10k질의 p95는 native6.2–36.8ms/Finder14.8–140.9ms였고100k의 모든 메시지에 일치하는 질의는 native466ms/Finder1887ms였다. 모든 질의가20ms/50ms 목표에 도달했다는 뜻이 아니다. 화면 입력→렌더는 아직 별도 측정 전이다. 확인된 중복 작업(질의마다 scoped 전체 문서수 scan, 후보마다 같은 SQLite metadata 재조회)을 제거한 변경을 동일 사례로 검증한다.
+
+후속 동일 사례(`fast-find-bench-02/results.json`): scope+generation별 정확한 문서수와 committed metadata를 재사용했다. 10k native p95는0.99–26.48ms, Finder3.47–79.57ms. 100k선택 질의는 Finder4.68–5.12ms, 1만건 일치는86.97ms, 10만건 전부 일치는1002.75ms다. 첫50049/42ms, 전체904/3458ms, 변경99/52ms, worker105/413MiB, Node harness218/408MiB. 실제10k코퍼스와 기능 fixture를 함께 읽는 배포 화면의 입력→결과 표시 p95는 순서대로 `data engineering`53.2, `alias9876`29.0, `자료707`45.9, `#교육`62.4, `채점 기준`127.1ms다(`fast-find-ui-03/input-to-paint.json`, Chromium155, 입력event부터 두 animation frame까지). 목표20/50ms를 모든 질의에서 달성하지 못한 상태는 유지한다. FF07의 고정 규모 실측 보고를 완료하고, 원본 점수 알고리즘을 재작성하는 추가 작업으로 확대하지 않는다.
 
 ## 8. 구현 순서와 종료 기준
 

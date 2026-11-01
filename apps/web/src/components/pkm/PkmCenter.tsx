@@ -5,7 +5,7 @@ import { VaultNoteView } from "./VaultNoteView.tsx";
 
 /** The centre when it shows cards or a vault note (instead of a conversation; never a split). */
 export function PkmCenter({ target }: { target: PkmTarget }) {
-  if (target.kind === "note") return <VaultNoteView key={target.path} path={target.path} />;
+  if (target.kind === "note") return <VaultNoteView key={target.path} path={target.path} location={target.location} />;
   return <CardListView key={`${target.kind}:${"path" in target ? target.path : target.id}`} target={target} />;
 }
 

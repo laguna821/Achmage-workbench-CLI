@@ -78,6 +78,13 @@ export type FoundHit = {
   /** Matched character ranges within `snippet`. */
   ranges: [number, number][];
   score: number;
+  /** Fast Find's original rank tier (4 means partial terms) and matched field. */
+  tier?: number;
+  badge?: string;
+  heading?: { text: string; line: number; level: number } | null;
+  line?: number | null;
+  /** UTF-16 offset of the matching chunk in a long original message. */
+  chunkOffset?: number;
   /**
    * A document whose latest revision an engine made: the reply of that turn. When the reply
    * matched too it is not listed again — document and reply are one row.
@@ -108,6 +115,8 @@ export type FoundGroup = {
  * older callers.
  */
 export type SearchPage = SearchResult & {
+  engine?: "fast-find";
+  progress?: { phase: "idle" | "indexing" | "ready" | "error"; indexed: number; total: number; error: string | null };
   /** Optional decision-model ordering of the visible file hits inside their project groups. */
   reranked?: boolean;
   scope: SearchScope;
@@ -135,4 +144,20 @@ export type SearchRequest = {
   archived?: boolean;
   provider?: Provider | null;
   folderId?: string | null;
+  workId?: string | null;
+  mode?: "all" | "filesOnly";
+  properties?: { key: string; value?: string | null }[];
+  partial?: boolean;
 };
+
+export type SearchPreview = {
+  key: string;
+  found: boolean;
+  text?: string;
+  startLine?: number;
+  targetLine?: number;
+  totalLines?: number;
+  truncated?: boolean;
+};
+
+export type SearchRelated = { hit: FoundHit; reason: string };

@@ -42,8 +42,10 @@ class Engine implements ProviderAdapter {
   async shutdown() {}
 }
 
+const searchManagers: SessionManager[] = [];
 const dirs: string[] = [];
-afterEach(() => {
+afterEach(async () => {
+  for (const manager of searchManagers.splice(0)) await manager.finder.close();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -53,6 +55,7 @@ function setup() {
   const store = new Store(join(dir, "state.sqlite"));
   const bus = new EventBus();
   const manager = new SessionManager(store, bus, { hostId: "h", hostLabel: "노트북", managedWorksDir: join(dir, "works") });
+  searchManagers.push(manager);
   const engine = new Engine(() => manager.sink);
   manager.registerAdapter(engine);
   return { dir, store, bus, manager, engine };
@@ -121,22 +124,22 @@ describe("search", () => {
     engine.reply = "Citation 범위를 확인했습니다.";
     await send(manager, other.id, "인용 근거를 확인해 줘");
 
-    const three = manager.search("근거 정리");
+    const three = (await manager.search("근거 정리"));
     expect(three.sessions.map((entry) => entry.sessionId)).toEqual([session.id]);
     expect(three.sessions[0]!.total).toBe(2);
     const hit = three.sessions[0]!.hits[0]!;
     expect(hit.snippet.slice(hit.ranges[0]![0], hit.ranges[0]![1])).toBe("근거");
 
-    expect(manager.search("근거").sessions).toHaveLength(2);
+    expect((await manager.search("근거")).sessions).toHaveLength(2);
     // Quoted: the words together as typed (the reply of the other session has both, apart).
-    expect(manager.search('"근거 정리"').sessions[0]!.hits[0]!.ranges).toHaveLength(1);
-    expect(manager.search("정리 근거").sessions).toHaveLength(1);
-    expect(manager.search('"정리 근거"').sessions).toHaveLength(0);
-    expect(manager.search("citation").sessions.map((entry) => entry.sessionId)).toEqual([other.id]);
+    expect((await manager.search('"근거 정리"')).sessions[0]!.hits[0]!.ranges).toHaveLength(1);
+    expect((await manager.search("정리 근거")).sessions).toHaveLength(1);
+    expect((await manager.search('"정리 근거"')).sessions).toHaveLength(0);
+    expect((await manager.search("citation")).sessions.map((entry) => entry.sessionId)).toEqual([other.id]);
 
     manager.updateSession(other.id, { archived: true });
-    expect(manager.search("근거").sessions.map((entry) => entry.sessionId)).toEqual([session.id]);
-    expect(manager.search("근거", { archived: true }).sessions).toHaveLength(2);
+    expect((await manager.search("근거")).sessions.map((entry) => entry.sessionId)).toEqual([session.id]);
+    expect((await manager.search("근거", { archived: true })).sessions).toHaveLength(2);
   });
 
   it("indexes the conversations that were stored before search existed", async () => {
@@ -145,7 +148,8 @@ describe("search", () => {
     const session = manager.createSession(work.id, { provider: "claude" });
     await send(manager, session.id, "오래된 대화의 핵심 문장");
     const reopened = new SessionManager(new Store(join(dir, "state.sqlite")), new EventBus(), { hostId: "h", hostLabel: "노트북", managedWorksDir: join(dir, "works") });
-    expect(reopened.search("핵심 문장").sessions).toHaveLength(1);
+  searchManagers.push(reopened);
+    expect((await reopened.search("핵심 문장")).sessions).toHaveLength(1);
   });
 
   it("marks every match in a snippet", () => {

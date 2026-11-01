@@ -26,6 +26,7 @@ export type FastFindHit = {
 export type FastFindOptions = {
   scope?: FastFindScope; mode?: "all" | "filesOnly"; offset?: number; limit?: number;
   group?: "none" | "work" | "session"; perGroup?: number; nowSecs?: number; includeCandidates?: boolean;
+  detailKeys?: string[];
 };
 export type FastFindResult = {
   hits: FastFindHit[]; total: number; totalDocs: number; counts: Record<string, number>;
@@ -149,6 +150,7 @@ export class SearchService {
   }
 
   upsert(documents: FastFindDocument[]) { return this.request<Mutation>({ op: "upsert", documents }); }
+  extractCanvas(text: string) { return this.request<{ text: string }>({ op: "extractCanvas", text }); }
   remove(documents: { key: string; revision: number }[]) { return this.request<Mutation>({ op: "remove", documents }); }
   search(query: string, options: FastFindOptions = {}, signal?: AbortSignal) {
     return this.request<FastFindResult>({ op: "search", query, nowSecs: Date.now() / 1000, ...options }, signal);

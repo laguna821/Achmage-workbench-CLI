@@ -1,6 +1,6 @@
 # 통합 업데이트 실행 기록
 
-## 현재 인수 현황 — 2026-11-01 23:11 KST
+## 현재 인수 현황 — 2026-11-02
 
 아래 과거의 미확인 상태보다 이 표가 우선한다. 버전 숫자가 아니라 고정 요구 충족과 설치본 전달로 종료한다.
 
@@ -10,14 +10,14 @@
 | CORE02 외부 앱 편집·저장·복귀 | 공식 이음 GUI 왕복4/4, 실제 Codex·Claude 최신 파일 읽기6/6 | 완료 |
 | CORE03 문서 AI2개+메인 병렬 | 실제 `84f696d` AppImage에서 실제 Codex 문서2개+Claude 메인 동시 진행, B만 중지, A 편집·저장, 메인 완료 알림·이력 분리8/8 | 완료 |
 | CORE04 편집기 탭·집중·메인 복귀 | 기존9종86/86, 공통 focus 경로와 실제 Word 집중·메인 복귀/본문·대화 유지 대조 | 완료; 원본 모든 파일·모델의 품질 보장은 아님 |
-| Fast Find | 원본 Rust 코어·지속 worker·한글 호환·원문 캐시/증분 투영 구현 및 집중 확인 | Finder/저장 보기/AI 공통 전환, 검색·미리보기 UI와 고정 인수 |
+| Fast Find | 기본 Finder/저장 보기/AI 공통 전환·FTS 제거, 검색/미리보기/관련 항목/정확한 열기 연결. 전체1290·화면11·후속회귀26 통과, 고정 규모 실측 보고 완료 | 실제 최종 OS 설치본 검색 인수 |
 | 최종 설치본 전달 | 공개 preview0.2.8 이후 변경은 개발 브랜치에 있음 | Fast Find 포함 OS 설치본 검증·게시 |
 
 원본9종 근거는 `docs/office-integration.md`의 첫 세션86/86을 재사용한다. 관련 변경 없는 항목을 재검사하지 않는다. `research:rr-740f2f53edee23d37689ac416605cbf2:2a16d66cb2a8d7890a322ce862571aa0163b35024f03bc3c92a975679aaff215` (R22)를 직접 읽고 반영했다. 실제 병렬 근거는 `core-document-agents-real-05/results.json`, `parallel-states.json`, `document.xml`, 직접 확인한 `parallel-completed-a.png`; 재현 스크립트는 `scripts/app-e2e/document-agents-real-run.ts`다. 문서 변경 알림·현황·결과를 공유하며 별도 worktree 파일을 자동 병합하지 않는다.
 
 macOS 최종 보완 인수는 설치본 `8fa3e3f`와 검사 `83acd76`, [Actions41314357657](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41314357657)에서 성공했다. 실제 Launch Services 등록·공식0.12.10 단독 GUI·다시 열 때 재사용을 확인했다. 고정 CORE01–04 보완을 닫는다. 직접 읽은 판 `research:rr-740f2f53edee23d37689ac416605cbf2:3c221953d7fa1918abbe41173479a31c540a3a4a5ff7ccfe2b37225571435f77` (R24), 근거 `core-install-macos-passed/smoke-out/setup-smoke.json`, `ieum-standalone.png`.
 
-Fast Find 원본 golden/typo 각1개와 adapter7/7, 실제 transport5개·캐시3개·기존 검색15개를 확인했다. 상류 unit 기능171개는 통과했지만 개발기10ms 예산1개는13.458ms로 미달이며 상한을 완화하지 않았다. 앱의10k/100k 성능·메모리 인수는 제품 연결 후 측정한다. 기본 검색은 아직 FTS 경로다. 정확한 판 `research:rr-236ff3048f29782b4eb36a197c2932df:ac67bdd5e5813e0bb606574b4d10afebc73cba46ed9a19816b166b6c7201aec3` (R11).
+Fast Find 원본 golden/typo·adapter·native transport/캐시 회귀를 유지하며 기본 검색과 화면을 교체했다. 실제 배포 web/host 화면11검사와 전체188파일1290시험 통과. 중복 전체 문서수 scan과 SQLite metadata 재조회를 제거한 회귀26/26 및 같은10k/30MB·100k메시지 측정 완료. 100k선택질의는 약5ms, 모든100k에일치하면약1초(Finder p95). 10k화면 입력→결과 표시 p95는29–127ms다. 모든질의의20/50ms목표와 원본개발기10ms예산 실패를 통과로 바꾸지 않는다. 정확한 판 `research:rr-236ff3048f29782b4eb36a197c2932df:fdeab07034d81b8ed7793ef3c7824201a3a50ac07adfe2341454e281c4ebf2d0` (R18). [고정 FF01–FF08 및 측정 범위](design/fast-find-search-adoption-2026-11-01.md).
 
 ## 현재 우선 확인 — 코어 사용성과 이음 독립 앱 자동 설치 (2026-11-01)
 

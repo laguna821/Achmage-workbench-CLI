@@ -49,7 +49,7 @@ export type PkmClient = ReturnType<typeof pkmClient>;
 /** What the centre shows besides conversations and documents: cards of a vault folder, an app folder, a work or a saved view, or one vault note. */
 export type PkmTarget =
   | { kind: "vault"; path: string }
-  | { kind: "note"; path: string }
+  | { kind: "note"; path: string; location?: { line: number; heading?: string } }
   | { kind: "folder"; id: string }
   | { kind: "work"; id: string }
   | { kind: "view"; id: string };

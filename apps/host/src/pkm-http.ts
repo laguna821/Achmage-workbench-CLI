@@ -42,7 +42,7 @@ export async function handlePkm(pkm: Pkm, req: IncomingMessage, res: ServerRespo
   const method = req.method ?? "GET";
   const path = url.pathname.replace(/^\/api\/pkm/, "");
   const query = (name: string) => url.searchParams.get(name) ?? "";
-  if (method === "GET" && path === "/state") return (sendJson(res, 200, pkm.state()), true);
+  if (method === "GET" && path === "/state") return (sendJson(res, 200, await pkm.state()), true);
   if (method === "GET" && path === "/tags") return (sendJson(res, 200, pkm.vaultTags()), true);
   if (method === "GET" && path === "/vault/tree") return (sendJson(res, 200, pkm.vault.tree()), true);
   if (method === "PUT" && path === "/vault") {
@@ -54,7 +54,7 @@ export async function handlePkm(pkm: Pkm, req: IncomingMessage, res: ServerRespo
     pkm.vault.rescan(true);
     return (sendJson(res, 200, pkm.vault.status()), true);
   }
-  if (method === "GET" && path === "/cards") return (sendJson(res, 200, pkm.cards(cardTarget(url))), true);
+  if (method === "GET" && path === "/cards") return (sendJson(res, 200, await pkm.cards(cardTarget(url))), true);
   if (method === "GET" && path === "/vault/note") return (sendJson(res, 200, pkm.note(query("path"))), true);
   if (method === "GET" && path === "/vault/image") return (sendImage(res, pkm.vaultImage(query("path"))), true);
   if (method === "GET" && path === "/page-image") return (sendImage(res, pkm.pageImage(query("artifact"), query("src"))), true);
@@ -69,7 +69,7 @@ export async function handlePkm(pkm: Pkm, req: IncomingMessage, res: ServerRespo
   }
   if (method === "POST" && path === "/views/preview") {
     const body = await readJson(req);
-    return (sendJson(res, 200, pkm.viewCards({ name: "미리보기", query: String(body.query ?? ""), groupBy: typeof body.groupBy === "string" ? body.groupBy : null })), true);
+    return (sendJson(res, 200, await pkm.viewCards({ name: "미리보기", query: String(body.query ?? ""), groupBy: typeof body.groupBy === "string" ? body.groupBy : null })), true);
   }
   if (method === "PUT" && path === "/rules") {
     const body = await readJson(req);

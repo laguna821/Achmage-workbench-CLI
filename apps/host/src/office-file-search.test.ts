@@ -83,7 +83,7 @@ it("orders visible document and vault hits without moving conversations, exposin
   try {
     const a = f.write("A.md", "교육 연구"), b = f.write("B.md", "교육 연구 정답"); f.manager.openFile(f.work.id, a); f.manager.openFile(f.work.id, b);
     await f.service.write(config, f.service.snapshot().revision);
-    const page = f.manager.search("교육 연구", { scope: "document", per: 20, legacy: false }), before = readFileSync(a, "utf8");
+    const page = (await f.manager.search("교육 연구", { scope: "document", per: 20, legacy: false })), before = readFileSync(a, "utf8");
     const conversation = { ...page.groups[0]!.hits[0]!, key: "conversation", kind: "assistant" as const, title: "대화 유지" };
     page.groups[0]!.hits.splice(1, 0, conversation);
     const ranked = await f.service.rankPage("교육 연구", page, f.manager);
@@ -93,7 +93,7 @@ it("orders visible document and vault hits without moving conversations, exposin
     mkdirSync(join(vault, ".obsidian/plugins/notebook-navigator"), { recursive: true });
     writeFileSync(join(vault, ".obsidian/plugins/notebook-navigator/data.json"), JSON.stringify({ vaultProfile: "default", vaultProfiles: [{ id: "default", hiddenFolders: ["/Hidden"] }] }));
     pkm.attachVault(vault); await f.manager.finder.useVault(pkm.vault, f.bus);
-    const notes = f.manager.search("교육 연구", { scope: "vault", per: 20, legacy: false });
+    const notes = (await f.manager.search("교육 연구", { scope: "vault", per: 20, legacy: false }));
     const rankedNotes = await f.service.rankPage("교육 연구", notes, f.manager);
     expect(rankedNotes.groups[0]?.hits.map(hit => hit.path)).toEqual(["B.md", "A.md"]); expect(rankedNotes.reranked).toBe(true);
     // The finder resolves only actual current note hits, never a caller's arbitrary path.

@@ -45,8 +45,10 @@ class Engine implements ProviderAdapter {
   async shutdown() {}
 }
 
+const searchManagers: SessionManager[] = [];
 const dirs: string[] = [];
-afterEach(() => {
+afterEach(async () => {
+  for (const manager of searchManagers.splice(0)) await manager.finder.close();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -75,6 +77,7 @@ export function setup() {
   const store = new Store(join(dir, "state.sqlite"));
   const bus = new EventBus();
   const manager = new SessionManager(store, bus, { hostId: "h", hostLabel: "노트북", managedWorksDir: join(dir, "works") });
+  searchManagers.push(manager);
   const claude = new Engine("claude", () => manager.sink);
   const codex = new Engine("codex", () => manager.sink);
   manager.registerAdapter(claude);
@@ -85,30 +88,30 @@ export function setup() {
 }
 
 describe("card lists", () => {
-  it("lists a vault folder's notes (and its subfolders') with title, excerpt, tags, date, picture; pinned first", () => {
+  it("lists a vault folder's notes (and its subfolders') with title, excerpt, tags, date, picture; pinned first", async () => {
     const { pkm } = setup();
-    const list = pkm.cards({ kind: "vault", path: "20. Information (I)", descendants: true });
+    const list = (await pkm.cards({ kind: "vault", path: "20. Information (I)", descendants: true }));
     // Newest first: the two notes written just now, then the one created on 2026-10-01.
     expect(list.cards.map((card) => card.id).sort()).toEqual(["20. Information (I)/201. Topics/t1.md", "20. Information (I)/x.md", "20. Information (I)/수업 설계.md"]);
     expect(list.cards.at(-1)!.id).toBe("20. Information (I)/수업 설계.md");
     const card = list.cards.find((entry) => entry.id.endsWith("수업 설계.md"))!;
     expect(card).toMatchObject({ title: "수업 설계", stage: "🔵 I", tags: ["AI_교육"], dateKind: "created", thumb: { vault: "attachments/pic.png" } });
     expect(card.excerpt).toBe("첫 문단은 에이 노트와 없는 노트를 잇는다.");
-    expect(pkm.cards({ kind: "vault", path: "20. Information (I)", descendants: false }).cards).toHaveLength(2);
-    const inbox = pkm.cards({ kind: "vault", path: "01. Inbox", descendants: false });
+    expect((await pkm.cards({ kind: "vault", path: "20. Information (I)", descendants: false })).cards).toHaveLength(2);
+    const inbox = (await pkm.cards({ kind: "vault", path: "01. Inbox", descendants: false }));
     expect(inbox.cards[0]!.pinned).toBe(true);
-    expect(() => pkm.cards({ kind: "vault", path: "90. Settings", descendants: true })).toThrow();
+    await expect(pkm.cards({ kind: "vault", path: "90. Settings", descendants: true })).rejects.toThrow();
   });
 
-  it("lists a work's sessions and pages, and an app folder's works", () => {
+  it("lists a work's sessions and pages, and an app folder's works", async () => {
     const { pkm, manager } = setup();
     const folder = manager.createFolder("강의", null);
     const work = manager.createWork({ title: "1주차", folderId: folder.id });
     manager.createSession(work.id, { provider: "claude", purpose: "수업 계획" });
     manager.createPage(work.id, "읽을거리");
-    const cards = pkm.cards({ kind: "work", id: work.id }).cards;
+    const cards = (await pkm.cards({ kind: "work", id: work.id })).cards;
     expect(cards.map((card) => card.kind).sort()).toEqual(["page", "session"]);
-    expect(pkm.cards({ kind: "folder", id: folder.id }).cards.map((card) => card.title)).toEqual(["1주차"]);
+    expect((await pkm.cards({ kind: "folder", id: folder.id })).cards.map((card) => card.title)).toEqual(["1주차"]);
   });
 });
 
@@ -124,14 +127,14 @@ describe("vault notes", () => {
     expect(() => pkm.vaultImage("01. Inbox/a.md")).toThrow();
   });
 
-  it("resolves notes put into a note and HTML pictures, and shows a web picture as the card's picture", () => {
+  it("resolves notes put into a note and HTML pictures, and shows a web picture as the card's picture", async () => {
     const { pkm, vault } = setup();
     put(vault, "20. Information (I)/모음.md", ["![표지](https://pub-x.r2.dev/1-cover.png)", "![[a]] ![[a#제목|별칭]] ![[없는 노트]] ![[pic.png|300]]", '<img src="../attachments/pic.png" width="300">', ""].join("\n"));
     pkm.vault.rescan(true);
     const note = pkm.note("20. Information (I)/모음.md");
     expect(note.links).toEqual({ a: "01. Inbox/a.md", "없는 노트": null });
     expect(note.embeds).toEqual({ "pic.png": "attachments/pic.png", "../attachments/pic.png": "attachments/pic.png" });
-    const card = pkm.cards({ kind: "vault", path: "20. Information (I)", descendants: false }).cards.find((entry) => entry.id.endsWith("모음.md"))!;
+    const card = (await pkm.cards({ kind: "vault", path: "20. Information (I)", descendants: false })).cards.find((entry) => entry.id.endsWith("모음.md"))!;
     expect(card.thumb).toEqual({ url: "https://pub-x.r2.dev/1-cover.png" });
   });
 
@@ -209,7 +212,7 @@ describe("pages phase 2", () => {
 });
 
 describe("context card and write guard", () => {
-  it("gives new sessions the work, the vault and its pinned notes, and guards the vault for both engines", () => {
+  it("gives new sessions the work, the vault and its pinned notes, and guards the vault for both engines", async () => {
     const { pkm, manager, vault } = setup();
     const work = manager.createWork({ title: "1주차" });
     pkm.setPin(work.id, "20. Information (I)/수업 설계.md", true);
@@ -222,7 +225,7 @@ describe("context card and write guard", () => {
     const codex = pkm.codexLaunch({ ...session, provider: "codex", access: "auto" }, manager.view.works.get(work.id)!);
     expect(codex).toMatchObject({ readOnly: false, excludeTmp: true });
     expect(codex.instructions).toBe(claude.append);
-    expect(pkm.cards({ kind: "work", id: work.id }).cards.some((card) => card.kind === "note" && card.pinned)).toBe(true);
+    expect((await pkm.cards({ kind: "work", id: work.id })).cards.some((card) => card.kind === "note" && card.pinned)).toBe(true);
     pkm.setPin(work.id, "20. Information (I)/수업 설계.md", false);
     expect(pkm.claudeLaunch(session, work).append).not.toContain("고정한 노트");
     pkm.attachVault(null);
@@ -231,7 +234,7 @@ describe("context card and write guard", () => {
 });
 
 describe("notes the engines read by themselves", () => {
-  it("counts the sessions whose engine read a vault note (apart from notes attached), never hidden ones, once per session", () => {
+  it("counts the sessions whose engine read a vault note (apart from notes attached), never hidden ones, once per session", async () => {
     const { pkm, manager, vault, dir } = setup();
     mkdirSync(join(dir, "w"), { recursive: true });
     const work = manager.createWork({ title: "w", cwd: join(dir, "w") });
@@ -247,7 +250,7 @@ describe("notes the engines read by themselves", () => {
       { path: "01. Inbox/a.md", title: "A", sessions: 1 },
     ]);
     expect(pkm.notesReadBy(new Set(["another"]))).toEqual([]);
-    const card = pkm.cards({ kind: "vault", path: "20. Information (I)", descendants: false }).cards.find((entry) => entry.title === "수업 설계");
+    const card = (await pkm.cards({ kind: "vault", path: "20. Information (I)", descendants: false })).cards.find((entry) => entry.title === "수업 설계");
     expect(card).toMatchObject({ engineReads: 1 });
   });
 });

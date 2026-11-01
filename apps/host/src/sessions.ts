@@ -2040,7 +2040,7 @@ export class SessionManager {
    * typed, ranked and grouped by work (search.ts). Local index only: no model is asked. Archived
    * things are left out unless asked for.
    */
-  search(query: string, options: SearchOptions = {}): SearchPage {
+  search(query: string, options: SearchOptions = {}): Promise<SearchPage> {
     return this.finder.search(query, options);
   }
 
@@ -2192,6 +2192,7 @@ export class SessionManager {
     this.schedules.stop();
     this.stopExternalWatches();
     this.flush();
+    await this.finder.close();
     await this.worktreeWorkspaces.shutdown();
     await this.preparation.shutdown();
     await this.sourceControl.shutdown();

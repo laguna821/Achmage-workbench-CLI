@@ -255,11 +255,17 @@ impl Engine {
     /// Workbench search with application scope and page selection. Similar counts are computed
     /// on demand through `similar_selected`, never from an unscoped/global cache.
     pub fn search_selected(&self, raw_query: &str, opts: &SearchOptions, selection: &mut crate::rank::Selection<'_>) -> SearchResponse {
+        self.search_selected_counted(raw_query, opts, selection, None)
+    }
+
+    /// A host may cache an exact scope count until its source generation or scope changes.
+    /// Candidate filtering is still evaluated on every search, before partial rules/paging.
+    pub fn search_selected_counted(&self, raw_query: &str, opts: &SearchOptions, selection: &mut crate::rank::Selection<'_>, known_total_docs: Option<usize>) -> SearchResponse {
         let start = std::time::Instant::now();
         let query = Query::parse(raw_query);
         let extras = Extras { ghosts: Some(&self.ghosts), access: Some(&self.access), combos: Some(&self.combos) };
         let ranked = crate::rank::rank_selected(&self.index, &query, &self.config, opts, &extras, selection);
-        let total_docs = self.index.ids().filter_map(|id| self.index.get(id)).filter(|d| (selection.allow)(d)).count();
+        let total_docs = known_total_docs.unwrap_or_else(|| self.index.ids().filter_map(|id| self.index.get(id)).filter(|d| (selection.allow)(d)).count());
         SearchResponse { hits: ranked.hits, total_docs, candidates: ranked.candidates, elapsed_us: start.elapsed().as_micros() as u64 }
     }
 

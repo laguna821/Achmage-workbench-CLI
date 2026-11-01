@@ -72,4 +72,18 @@ describe.skipIf(!process.env.WORKBENCH_SEARCH_WORKER_BIN && !process.env.WORKBEN
     expect(service.pid).toBeNull();
     await expect(service.search("alpha")).rejects.toThrow();
   });
+
+  it("invalidates scoped counts on source changes and never shares them across scopes", async () => {
+    const service = worker();
+    await service.upsert([doc("item:a", "alpha"), doc("item:b", "beta", "work-b")]);
+    const a = { workIds: ["work-a"] };
+    expect((await service.search("alpha", { scope: a })).totalDocs).toBe(1);
+    expect((await service.search("missing", { scope: a })).totalDocs).toBe(1);
+    expect((await service.search("alpha", { scope: { workIds: [] } })).totalDocs).toBe(0);
+    expect((await service.search("alpha")).totalDocs).toBe(2);
+    await service.upsert([doc("item:c", "alpha")]);
+    expect((await service.search("alpha", { scope: a })).totalDocs).toBe(2);
+    await service.remove([{ key: "item:a", revision: 2 }]);
+    expect((await service.search("alpha", { scope: a })).totalDocs).toBe(1);
+  });
 });

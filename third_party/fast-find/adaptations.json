@@ -16,8 +16,8 @@
     {
       "path": "crates/ff10k-core/src/engine.rs",
       "upstreamSha256": "ddb26fd69ed2034bbe570ed037877b546cc3a19b5df58580362f9220316ff2d3",
-      "sha256": "6950573e86d5247018256e4fd2b847534ae5b17234abd8bcce948a84796e6f60",
-      "reason": "typed upsert, scoped candidate selection and related/preview boundary"
+      "sha256": "08bc5c0e067d75235b62cdd13528c91f017a9c0ffe7a16f34696e09d6a2f5d67",
+      "reason": "typed upsert, scoped candidate selection and related/preview boundary; reuse exact generation/scope document counts"
     },
     {
       "path": "crates/ff10k-core/src/index.rs",
@@ -60,6 +60,12 @@
       "upstreamSha256": null,
       "sha256": "38e658f59144cae43c98d86314691bfcb71c79c76c3b2991db8e1441d67b6dbf",
       "reason": "Adapter regressions separate from unchanged upstream tests"
+    },
+    {
+      "path": "adapter/ui.ts",
+      "upstreamSha256": null,
+      "sha256": "df48ee261d12a942946729a8f017f3d30ea67bffb42099751f407e52dca877ef",
+      "reason": "Pinned plugin preview/results/keys pure functions; remove Obsidian DOM integration, TypeScript strict indices, grapheme mapping for Korean NFC/NFD and emoji"
     }
   ]
 }

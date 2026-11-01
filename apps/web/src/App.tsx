@@ -1596,7 +1596,7 @@ export function App() {
       return artifact ? { view: { kind: "document", artifactId: artifact.id, proposalId: null }, workId: artifact.workId, sessionId: null } : null;
     }
     if (item.kind === "project") return state.works[item.id] ? { view: { kind: "project", workId: item.id }, workId: item.id, sessionId: null } : null;
-    if (item.kind === "note" || item.kind === "vault") return { view: { kind: "pkm", target: { kind: item.kind, path: item.path } }, workId: null, sessionId: null };
+    if (item.kind === "note" || item.kind === "vault") return { view: { kind: "pkm", target: { kind: item.kind, path: item.path, ...(item.kind === "note" ? { location: item.location } : {}) } }, workId: null, sessionId: null };
     if (item.kind === "folder") return { view: { kind: "pkm", target: { kind: "folder", id: item.id } }, workId: null, sessionId: null };
     return null;
   };
@@ -2308,7 +2308,7 @@ export function App() {
           onOpenProject={single ? undefined : actions.openProject}
           onOpenRight={single ? undefined : (item) => placeItem(item, "right")}
           onOpenDoc={(artifact) => docActions.openArtifact(artifact.id)}
-          onOpenNote={single ? undefined : (path) => setView({ kind: "pkm", target: { kind: "note", path } })}
+          onOpenNote={single ? undefined : (path, location) => setView({ kind: "pkm", target: { kind: "note", path, location } })}
           onOpenView={single ? undefined : (id) => setView({ kind: "pkm", target: { kind: "view", id } })}
           onClose={() => setPaletteOpen(null)}
         />

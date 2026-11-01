@@ -211,7 +211,7 @@ export class FindTool {
       const dir = join(this.spool, name);
       try {
         for (const file of readdirSync(dir)) {
-          if (file.endsWith(".req.json")) this.take(name, file);
+          if (file.endsWith(".req.json")) void this.take(name, file);
           // Answers nobody picked up (the command was stopped) do not stay.
           else if (file.endsWith(".res.json") && now - statSync(join(dir, file)).mtimeMs > 10 * 60_000) rmSync(join(dir, file), { force: true });
         }
@@ -222,7 +222,7 @@ export class FindTool {
   }
 
   /** Answer one request file (search.ts `find`), then take it away. */
-  private take(name: string, file: string) {
+  private async take(name: string, file: string) {
     const path = join(this.spool, name, file);
     let request: FindRequest;
     try {
@@ -241,7 +241,7 @@ export class FindTool {
     let result: { code: number; stdout: string; stderr: string };
     try {
       result = sessionId && this.options.sessions().has(sessionId)
-        ? this.options.finder.find(request.args, { sessionId, cwd: request.cwd })
+        ? await this.options.finder.find(request.args, { sessionId, cwd: request.cwd })
         : { code: 1, stdout: "", stderr: "workbench-find: 이 세션을 Workbench에서 찾지 못했습니다.\n" };
     } catch (error) {
       result = { code: 1, stdout: "", stderr: `workbench-find: 찾지 못했습니다: ${error instanceof Error ? error.message : String(error)}\n` };

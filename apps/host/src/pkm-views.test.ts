@@ -11,8 +11,10 @@ import { SessionManager } from "./sessions.ts";
 import { Store } from "./store.ts";
 import { makeFixtureVault, put } from "./vault-fixture.ts";
 
+const searchManagers: SessionManager[] = [];
 const dirs: string[] = [];
-afterEach(() => {
+afterEach(async () => {
+  for (const manager of searchManagers.splice(0)) await manager.finder.close();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -25,6 +27,7 @@ function setup() {
   const store = new Store(join(dir, "state.sqlite"));
   const bus = new EventBus();
   const manager = new SessionManager(store, bus, { hostId: "h", hostLabel: "노트북", managedWorksDir: join(dir, "works") });
+  searchManagers.push(manager);
   const pkm = new Pkm(store, bus, manager, { dataDir: dir });
   pkm.attachVault(vault);
   return { dir, manager, pkm };
@@ -81,21 +84,21 @@ describe("view queries", () => {
 });
 
 describe("saved views over the vault, pages and sessions", () => {
-  it("shows matching notes and sessions, newest first, grouped when asked", () => {
+  it("shows matching notes and sessions, newest first, grouped when asked", async () => {
     const { pkm, manager } = setup();
     const work = manager.createWork({ title: "실험" });
     manager.createSession(work.id, { provider: "codex", purpose: "코덱스" });
     manager.createSession(work.id, { provider: "claude", purpose: "클로드" });
-    expect(pkm.viewCards({ name: "t", query: '."DIKM_단계:"="🔵 I"', groupBy: null }).cards.map((card) => card.id)).toEqual(["20. Information (I)/수업.md"]);
-    expect(pkm.viewCards({ name: "t", query: "engine:codex kind:session", groupBy: null }).cards.map((card) => card.title)).toEqual(["코덱스"]);
-    const grouped = pkm.viewCards({ name: "t", query: "kind:note #AI_교육", groupBy: "DIKM_단계:" });
+    expect((await pkm.viewCards({ name: "t", query: '."DIKM_단계:"="🔵 I"', groupBy: null })).cards.map((card) => card.id)).toEqual(["20. Information (I)/수업.md"]);
+    expect((await pkm.viewCards({ name: "t", query: "engine:codex kind:session", groupBy: null })).cards.map((card) => card.title)).toEqual(["코덱스"]);
+    const grouped = (await pkm.viewCards({ name: "t", query: "kind:note #AI_교육", groupBy: "DIKM_단계:" }));
     expect(grouped.groups).toEqual([
       { label: "🔵 I", ids: ["note:20. Information (I)/수업.md"] },
       { label: "값 없음", ids: ["note:20. Information (I)/단계없음.md"] },
     ]);
-    expect(pkm.state().views.map((view) => view.name)).toEqual(["이번 주 노트", "진행 중인 세션"]);
+    expect((await pkm.state()).views.map((view) => view.name)).toEqual(["이번 주 노트", "진행 중인 세션"]);
     const saved = pkm.saveView({ name: "AI 교육", query: "#AI_교육", groupBy: null });
-    expect(pkm.state().views.find((view) => view.id === saved.id)?.count).toBe(2);
+    expect((await pkm.state()).views.find((view) => view.id === saved.id)?.count).toBe(2);
     pkm.deleteView(saved.id);
     expect(pkm.views().some((view) => view.id === saved.id)).toBe(false);
   });
