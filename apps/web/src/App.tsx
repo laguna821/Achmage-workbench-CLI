@@ -444,7 +444,7 @@ export function App() {
   const work = singleSession ? state.works[singleSession.workId] : workId ? state.works[workId] : undefined;
   /** The session a work shows: its active one (unless archived), else its latest. */
   const activeOf = (owner: Work) =>
-    (owner.activeSessionId && state.sessions[owner.activeSessionId] && !state.sessions[owner.activeSessionId]!.archivedAt && state.sessions[owner.activeSessionId]) ||
+    (owner.activeSessionId && state.sessions[owner.activeSessionId] && !state.sessions[owner.activeSessionId]!.archivedAt && !state.sessions[owner.activeSessionId]!.documentAgent && state.sessions[owner.activeSessionId]) ||
     workSessions(state, owner.id).filter((entry) => !entry.documentAgent).at(-1) ||
     sessionsOf(state, owner.id).filter((entry) => !entry.documentAgent).at(-1);
   const restoredSession = focusedPane(layout).sessionId ? state.sessions[focusedPane(layout).sessionId!] : null;
@@ -694,6 +694,10 @@ export function App() {
         cancelWorktreeCreation: async (...args) => { if (!api) throw new Error("연결을 기다려 주세요."); return api.cancelWorktreeCreation(...args); },
       },
       selectSession: (target, session) => {
+        if (session.documentAgent) {
+          navigateTo({ workId: target.id, sessionId: session.id, view: { kind: "document", artifactId: session.documentAgent.artifactId, proposalId: null } });
+          return;
+        }
         if (single) {
           // A detached window stays one window: it switches to the session picked in it.
           navigateTo({ workId: target.id, sessionId: session.id, view: { kind: "work" } }, () => {
@@ -1520,6 +1524,7 @@ export function App() {
     return [`home:${at.folderId ?? ""}`];
   };
   const itemKey = (item: PaneItem): string => {
+    if (item.kind === "session" && state.sessions[item.id]?.documentAgent) return `doc:${state.sessions[item.id]!.documentAgent!.artifactId}`;
     if (item.kind === "work") {
       const owner = state.works[item.id];
       const chosen = owner ? sessionToOpen(state, owner) : null;
@@ -1537,6 +1542,7 @@ export function App() {
   const contentOf = (item: PaneItem): PaneContent<View> | null => {
     if (item.kind === "session") {
       const session = state.sessions[item.id];
+      if (session?.documentAgent) return { view: { kind: "document", artifactId: session.documentAgent.artifactId, proposalId: null }, workId: session.workId, sessionId: session.id };
       return session ? { view: { kind: "work" }, workId: session.workId, sessionId: session.id } : null;
     }
     if (item.kind === "work") {
@@ -1556,7 +1562,7 @@ export function App() {
   const showSessionOf = (ownerId: string | null, sessionId: string | null) => {
     const owner = ownerId ? state.works[ownerId] : undefined;
     const session = sessionId ? state.sessions[sessionId] : undefined;
-    if (owner && session && session.workId === owner.id && owner.activeSessionId !== session.id) {
+    if (owner && session && !session.documentAgent && session.workId === owner.id && owner.activeSessionId !== session.id) {
       dispatch({ type: "focus", work: owner, session });
       void api?.updateWork(owner.id, { activeSessionId: session.id }).catch(fail);
     }

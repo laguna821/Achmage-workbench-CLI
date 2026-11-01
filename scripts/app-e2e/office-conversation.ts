@@ -157,5 +157,19 @@ export async function officeConversationScenario(ctx: Ctx) {
     writeFileSync(join(ctx.stage.outDir, "office-conversation-new-transcript.json"), JSON.stringify(await items(next.id), null, 2));
     ctx.report.check(S, "문서 AI 조작 중 페이지 예외 없음", firstErrors.length === 0 && (await pageErrors(wd)).length === 0);
     await wd.frame(null);
+    if (mainSession) {
+      await wd.click(await wd.waitFor('.pane[data-pane-active="true"] .group-tab[data-tab-id="office-main-tab"] [role="tab"]'));
+      await wd.click(await wd.waitFor(`.sidebar [data-row-id="${next.id}"]`));
+      await wd.click(await wd.waitFor('.pane[data-pane-active="true"] .doc-name'));
+      ctx.report.check(S, "문서 AI 목록을 열고 편집기에 초점을 줘도 메인 대화 선택 유지", (await snapshot()).works.find(entry => entry.id === work.id)?.activeSessionId === mainSession.id);
+      await wd.click(await wd.waitFor('.pane[data-pane-active="true"] .group-tab[data-tab-id="office-main-tab"] [role="tab"]'));
+      await wd.keys([{ type: "keyDown", value: "\uE009" }]);
+      try { await wd.click(await wd.waitFor(`.sidebar [data-row-id="${next.id}"]`)); }
+      finally { await wd.keys([{ type: "keyUp", value: "\uE009" }]); }
+      await wd.click(await wd.waitFor('.pane[data-pane-active="true"] .doc-name'));
+      await wd.frame(await wd.waitFor('.pane[data-pane-active="true"] iframe.office-frame'));
+      ctx.report.check(S, "문서 AI를 Ctrl+클릭으로 옆에 열어도 문서 대화와 메인 선택 유지", await until(() => wd.execute<boolean>('return window.workbenchOfficeAi?.snapshot() === arguments[0]', next.id), 15000) && (await snapshot()).works.find(entry => entry.id === work.id)?.activeSessionId === mainSession.id, undefined, await shot(ctx, "office-conversation-sidebar-split.png"));
+      await wd.frame(null);
+    }
   } finally { server.closeAllConnections(); await new Promise<void>((done) => server.close(() => done())); }
 }

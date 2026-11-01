@@ -51,6 +51,8 @@ it("runs two document agents alongside the main CLI and interrupts only the chos
     f.manager.office.finish(b.binding, { turnId: "child-1", status: "completed" });
     expect(f.manager.office.nativeContext(f.main.id).text).toContain("워드 문서의 결과");
     expect(f.manager.office.nativeContext(f.main.id).text).toContain(b.artifact.path);
+    const nextMain = f.manager.createSession(f.work.id, { provider: "claude" });
+    expect(f.manager.office.nativeContext(nextMain.id).text).toContain(b.artifact.path);
     expect(f.manager.items(a.child.id).items.some((item) => item.kind === "user" && item.text.includes("문서 1"))).toBe(false);
   } finally { await f.close(); }
 });
@@ -77,14 +79,17 @@ it("keeps old main-chat document history readable, rejects cross-document bindin
 it("opens the saved file in Ieum, adopts its external save, and supplies the current revision to main chat", async () => {
   const f = setup();
   try {
-    const a = f.doc("같은 파일.md"), open = vi.spyOn(f.manager.ieumDesktop, "open").mockResolvedValue({ app: "이음오피스", path: a.artifact.path });
+    const a = f.doc("같은 파일.md"), open = vi.spyOn(f.manager.ieumDesktop, "open").mockImplementation(async () => {
+      // An already running app may save before the launcher has returned.
+      writeFileSync(a.artifact.path, "이음 앱에서 저장한 최신 내용\n");
+      return { app: "이음오피스", path: a.artifact.path };
+    });
     f.manager.documents.registry.open(a.artifact.id, { viewId: a.binding.owner, windowId: "window", sessionId: a.child.id, dirty: true });
     await expect(f.manager.openExternal(a.artifact.id)).rejects.toThrow(/저장한 뒤/);
     expect(open).not.toHaveBeenCalled();
     f.manager.documents.registry.open(a.artifact.id, { viewId: a.binding.owner, windowId: "window", sessionId: a.child.id, dirty: false });
     await f.manager.openExternal(a.artifact.id);
     expect(open).toHaveBeenCalledWith(a.artifact.path);
-    writeFileSync(a.artifact.path, "이음 앱에서 저장한 최신 내용\n");
     await expect.poll(() => f.manager.documents.get(a.artifact.id).revision, { timeout: 6_000 }).toBe(2);
     expect(f.manager.documents.get(a.artifact.id).path).toBe(a.artifact.path);
     expect(f.manager.office.nativeContext(f.main.id).text).toContain("이음오피스에서 저장");

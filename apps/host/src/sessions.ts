@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { copyOfficeStyleSelection } from "./office-styles.ts";
 import { blankOfficeBytes } from "./office-new.mjs";
 import { BLANK_OFFICE_DOCUMENTS, type NewOfficeDocument } from "@workbench/contracts";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unwatchFile, watchFile, writeFileSync, type Stats } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync, type Stats } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import {
   PROTOCOL_VERSION,
@@ -368,7 +368,7 @@ export class SessionManager {
       lock: (id, key, identity, action) => this.sendGate.run(id, key, identity, action),
       related: (id) => {
         const parent = this.requireSession(id);
-        return [...this.sessions.values()].filter((entry) => entry.documentAgent && !entry.archivedAt && entry.workId === parent.workId && entry.workspaceId === parent.workspaceId && (entry.documentAgent.parentSessionId === id || entry.documentAgent.parentSessionId === null));
+        return [...this.sessions.values()].filter((entry) => entry.documentAgent && !entry.archivedAt && entry.workId === parent.workId && entry.workspaceId === parent.workspaceId);
       },
     });
     this.engineSetup = new EngineInstaller({
@@ -810,17 +810,19 @@ export class SessionManager {
   }
 
   /**
-   * Explicitly open a document in the desktop's default application. What the
-   * other app saves comes back as "changed on disk".
+   * Open the saved file in the selected desktop application and retain its later saves.
    */
   async openExternal(artifactId: string, target: "ieum" | "default" = "ieum") {
     const artifact = this.documents.check(artifactId);
     if (artifact.diskState === "missing") throw new HttpError(404, "file_missing", "파일이 없습니다.");
     if (this.documents.registry.list().some((view) => view.artifactId === artifactId && view.dirty)) throw new HttpError(409, "external_unsaved", "문서의 편집 내용을 저장한 뒤 앱으로 열어 주세요.");
-    if (target === "default") openWithDesktop(artifact.path);
-    else await this.ieumDesktop.open(artifact.path);
     const app = target === "default" ? "기본 앱" : "이음오피스";
-    this.watchExternal(artifact.id, artifact.path, app);
+    // A running editor can save before its launcher returns. Capture the baseline first.
+    const stop = this.watchExternal(artifact.id, artifact.path, app);
+    try {
+      if (target === "default") openWithDesktop(artifact.path);
+      else await this.ieumDesktop.open(artifact.path);
+    } catch (error) { stop(); throw error; }
     return { app };
   }
 
@@ -828,42 +830,53 @@ export class SessionManager {
 
   /**
    * A document the user opened in another app from here: what that app saves becomes the next
-   * revision ("HOP에서 저장"), so the conversation and the AI see it without another step. Watched
+   * revision, so the conversation and the AI see it without another step. Watched
    * for twelve hours; an AI proposal made on the older revision is then not applied automatically.
    */
   private watchExternal(artifactId: string, path: string, app: string) {
+    let observed: Stats | null = statSync(path);
     this.external.get(artifactId)?.();
     let debounce: NodeJS.Timeout | undefined;
-    const onChange = (current: Stats, previous: Stats) => {
-      if (current.mtimeMs === previous.mtimeMs && current.size === previous.size) return;
-      clearTimeout(debounce);
+    const same = (current: Stats) => observed && current.mtimeMs === observed.mtimeMs && current.ctimeMs === observed.ctimeMs && current.size === observed.size && current.ino === observed.ino;
+    const settle = () => {
       // Editors write in steps (temporary file, rename); take the file once it has settled.
-      debounce = setTimeout(() => {
-        try {
-          const before = this.documents.get(artifactId).revision;
-          const after = this.documents.adoptDisk(artifactId, `${app}에서 저장`);
-          if (after.revision !== before) {
-            this.bus.publish({ type: "artifact.upserted", artifact: after });
-            const parents = new Set([...this.sessions.values()].filter((entry) => entry.documentAgent?.artifactId === artifactId).map((entry) => entry.documentAgent!.parentSessionId).filter((id): id is string => Boolean(id)));
-            const main = this.works.get(after.workId)?.activeSessionId;
-            if (main && !this.sessions.get(main)?.documentAgent) parents.add(main);
-            for (const id of parents) if (this.sessions.has(id)) this.sink.upsertItem(id, { kind: "notice", id: `external:${artifactId}:${after.revision}`, level: "info", text: `${app}에서 저장 · ${after.name} · r${after.revision}\n${after.path}\n최신 파일을 이 프로젝트에서 이어서 사용합니다.`, at: Date.now(), office: { artifactId, turnId: `external-${after.revision}` } });
-          }
-        } catch {
-          // Gone or unreadable for a moment: the next change tries again.
+      try {
+        const current = statSync(path);
+        if (!same(current)) { observed = current; debounce = setTimeout(settle, 800); return; }
+        const before = this.documents.get(artifactId).revision;
+        const after = this.documents.adoptDisk(artifactId, `${app}에서 저장`);
+        if (after.revision !== before) {
+          this.bus.publish({ type: "artifact.upserted", artifact: after });
+          const parents = new Set([...this.sessions.values()].filter((entry) => entry.documentAgent?.artifactId === artifactId).map((entry) => entry.documentAgent!.parentSessionId).filter((id): id is string => Boolean(id)));
+          const main = this.works.get(after.workId)?.activeSessionId;
+          if (main && !this.sessions.get(main)?.documentAgent) parents.add(main);
+          for (const id of parents) if (this.sessions.has(id)) this.sink.upsertItem(id, { kind: "notice", id: `external:${artifactId}:${after.revision}`, level: "info", text: `${app}에서 저장 · ${after.name} · r${after.revision}\n${after.path}\n최신 파일을 이 프로젝트에서 이어서 사용합니다.`, at: Date.now(), office: { artifactId, turnId: `external-${after.revision}` } });
         }
-      }, 800);
+      } catch {
+        // Retry after temporary removal or a write lock, even if the next stat is unchanged.
+        observed = null;
+      }
     };
-    watchFile(path, { interval: 1500 }, onChange);
+    // fs.watchFile establishes its first baseline asynchronously and can miss an immediate save.
+    const poll = setInterval(() => {
+      try {
+        const current = statSync(path);
+        if (same(current)) return;
+        observed = current;
+        clearTimeout(debounce); debounce = setTimeout(settle, 800);
+      } catch { observed = null; }
+    }, 1500);
+    poll.unref();
     const stop = () => {
-      unwatchFile(path, onChange);
+      clearInterval(poll);
       clearTimeout(debounce);
       clearTimeout(expiry);
-      this.external.delete(artifactId);
+      if (this.external.get(artifactId) === stop) this.external.delete(artifactId);
     };
     const expiry = setTimeout(stop, 12 * 3600_000);
     expiry.unref();
     this.external.set(artifactId, stop);
+    return stop;
   }
 
   prefs(): UiPrefs {
