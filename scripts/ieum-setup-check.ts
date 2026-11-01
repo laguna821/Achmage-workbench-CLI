@@ -7,7 +7,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { _electron } from "playwright-core";
 import type { Snapshot, ToolStatus } from "@workbench/contracts";
-import { client, startGateway, type Gateway } from "./setup-smoke.ts";
+import { client, startGateway, type Gateway } from "./setup-gateway.ts";
 
 type Check = (step: string, ok: boolean, detail?: string) => void;
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));

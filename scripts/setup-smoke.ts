@@ -8,27 +8,20 @@
 // Usage: node scripts/setup-smoke.ts <app resources folder> [out folder]
 //   Windows: %LOCALAPPDATA%\Achmage Workbench   macOS: …/Achmage Workbench.app/Contents/Resources
 
-import { spawn, spawnSync, execFileSync, type ChildProcess } from "node:child_process";
+import { spawnSync, execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import type { ProviderStatus, Session, Snapshot, TranscriptItem, Work } from "@workbench/contracts";
+
+import { appLayout, client, startGateway, type Gateway } from "./setup-gateway.ts";
+export { appLayout, client, startGateway, type Gateway } from "./setup-gateway.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixtures = join(here, "fixtures");
 
 export type Result = { step: string; ok: boolean; detail: string };
-export type Gateway = { url: string; token: string; dataDir: string; child: ChildProcess; stop: () => Promise<void> };
-
-/** The app's node and gateway inside its resource folder. */
-export function appLayout(app: string) {
-  const node = join(app, "node", process.platform === "win32" ? "node.exe" : "node");
-  const native = process.platform === "darwin" ? join(app, "..", "MacOS", "achmage-workbench") : join(app, process.platform === "win32" ? "achmage-workbench.exe" : "achmage-workbench");
-  return { node: existsSync(node) ? node : process.execPath, host: join(app, "host", "host.mjs"), web: join(app, "web"), native };
-}
-
 /** npm's .cmd shim for a JavaScript bin (cmd-shim), as `npm install -g` writes it. */
 const cmdShim = (target: string) =>
   `@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\nSETLOCAL\r\nCALL :find_dp0\r\n\r\nIF EXIST "%dp0%\\node.exe" (\r\n  SET "_prog=%dp0%\\node.exe"\r\n) ELSE (\r\n  SET "_prog=node"\r\n  SET PATHEXT=%PATHEXT:;.JS;=;%\r\n)\r\n\r\nendLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\\${target}" %*\r\n`;
@@ -93,56 +86,6 @@ export function installStandIns(root: string, platform: NodeJS.Platform = proces
   return { env, cleanup, expect: { codex: { origin: "npm", path: join(prefix, "bin", "codex") }, claude: { origin: "native", path: join(home, ".local", "bin", "claude") } } };
 }
 
-/** Start the app's gateway on the app's Node; resolves once it accepts requests. */
-export async function startGateway(app: string, env: Record<string, string>, dataDir: string): Promise<Gateway> {
-  const layout = appLayout(app);
-  const child = spawn(layout.node, [layout.host], {
-    env: { ...process.env, ...(existsSync(layout.native) ? { WORKBENCH_APP_BIN: layout.native } : {}), ...env, WORKBENCH_DATA_DIR: dataDir, WORKBENCH_WEB_DIR: layout.web, WORKBENCH_RESOURCES_DIR: app, WORKBENCH_HOST_LABEL: "확인" },
-    stdio: ["ignore", "pipe", "inherit"],
-    windowsHide: true,
-  });
-  const ready = await new Promise<{ url: string; token: string }>((done, fail) => {
-    const timer = setTimeout(() => fail(new Error("the gateway did not start within 60 s")), 60_000);
-    createInterface({ input: child.stdout! }).on("line", (line) => {
-      if (!line.startsWith("WORKBENCH_READY ")) return;
-      clearTimeout(timer);
-      done(JSON.parse(line.slice(16)));
-    });
-    child.on("exit", (code) => fail(new Error(`the gateway exited (${code})`)));
-  });
-  return {
-    ...ready,
-    dataDir,
-    child,
-    stop: () =>
-      new Promise((done) => {
-        if (child.exitCode !== null) return done();
-        child.once("exit", () => done());
-        child.kill();
-        setTimeout(done, 5000);
-      }),
-  };
-}
-
-export function client(gateway: Pick<Gateway, "url" | "token">) {
-  const call = async <T>(method: string, path: string, body?: unknown): Promise<T> => {
-    const response = await fetch(`${gateway.url}${path}`, {
-      method,
-      headers: { authorization: `Bearer ${gateway.token}`, "content-type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    const text = await response.text();
-    if (!response.ok) throw new Error(`${method} ${path}: ${response.status} ${text.slice(0, 300)}`);
-    return (text ? JSON.parse(text) : null) as T;
-  };
-  const bytes = async (path: string) => {
-    const response = await fetch(`${gateway.url}${path}`, { headers: { authorization: `Bearer ${gateway.token}` } });
-    if (!response.ok) throw new Error(`GET ${path}: ${response.status}`);
-    return Buffer.from(await response.arrayBuffer());
-  };
-  return { call, bytes };
-}
-
 const until = async (what: () => Promise<boolean>, timeout: number) => {
   const end = Date.now() + timeout;
   while (Date.now() < end) {
@@ -194,8 +137,9 @@ export async function apiChecks(gateway: Gateway, app: string, expect: ReturnTyp
 
   await step("한글 글꼴 공급자가 OS 설치 글꼴과 컬렉션 인덱스를 읽음", async () => {
     const catalog = JSON.parse(execFileSync(appLayout(app).native, ["--office-font-catalog"], { encoding: "utf8", timeout: 30_000, maxBuffer: 32 * 1024 * 1024, windowsHide: true })) as { family: string; path: string; faceIndex: number; weight: number }[];
-    const valid = catalog.length > 0 && catalog.every(face => !!face.family && /\.(ttf|otf|ttc|otc)$/i.test(face.path) && Number.isInteger(face.faceIndex) && face.faceIndex >= 0 && face.weight >= 1);
-    return [valid, `${process.platform}/${process.arch}: ${catalog.length} faces`];
+    const invalid = catalog.filter(face => !face.family || !/\.(ttf|otf|ttc|otc)$/i.test(face.path) || !Number.isInteger(face.faceIndex) || face.faceIndex < 0 || face.weight < 1);
+    writeFileSync(join(process.env.WORKBENCH_SMOKE_EVIDENCE ?? dirname(work), "font-catalog.json"), JSON.stringify({ catalog, invalid }, null, 2));
+    return [catalog.length > 0 && invalid.length === 0, `${process.platform}/${process.arch}: ${catalog.length} faces; invalid=${JSON.stringify(invalid.slice(0, 12))}`];
   });
 
   for (const provider of ["codex", "claude"] as const) {
@@ -323,6 +267,7 @@ async function main() {
   const outDir = resolve(process.argv[3] ?? join(tmpdir(), "wb-setup-smoke"));
   if (!existsSync(join(app, "host", "host.mjs"))) throw new Error(`No app at ${app} (host/host.mjs)`);
   mkdirSync(outDir, { recursive: true });
+  process.env.WORKBENCH_SMOKE_EVIDENCE = outDir;
   const fileBytes = (path: string): number => {
     const entry = lstatSync(path);
     return entry.isDirectory() ? readdirSync(path).reduce((sum, name) => sum + fileBytes(join(path, name)), 0) : entry.size;

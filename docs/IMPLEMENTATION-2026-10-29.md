@@ -8,7 +8,9 @@
 
 이를 보완해 Windows 설치기와 macOS/Linux 첫 실행에 자동 설정을 연결했다. 공식 최신 버전 확인·기존 설치 재사용/업데이트, Windows 시작 메뉴·macOS Launch Services·Linux 앱 메뉴 등록과 CLI 연결을 한 흐름으로 처리한다. 중단된 설정은 다음 실행이나 명시적 재시도로 이어진다. Linux에서 공식0.12.10 자동 설치·등록·연결, CLI 종료 후 실제 이음 GUI 독립 실행, 다시 열 때 연결 재사용 **6/6**을 확인했고, GIO 실제 메뉴 파서/특수문자 경로·중복 실행·실패 재개·버전 심볼릭 링크 등 집중 **10/10**, 타입 검사와 호스트 빌드가 통과했다. **Windows/macOS 새 설치본 인수는 아직 남아 있으며 공개0.2.8에 이 변경은 없다.** 앱 등록은 독립 실행 경로에 두므로 Workbench 프로세스/Node에 의존하지 않는다. 이음 자체의 최초 안내 화면은 공식 앱 그대로 유지한다.
 
-문서 집중/복귀와 독립 Word AI의 실제 Linux22/22, 두 문서+메인 병렬/개별 중지 회귀, 프로젝트 변경 알림 구현은 재사용한다. AI 응답은 대역이고 외부 앱 저장 검사는 실제 파일쓰기/감시와 가짜 앱 실행을 사용했다. 실제 Codex+Claude 및 외부 이음 GUI를 사용한 종단 검증 완료로 확대하지 않는다. 다른 채팅 전체 이력이 모두 자동 주입되는 구조도 아니며, 프로젝트 문서의 판/변경 알림과 문서 AI 현황/결과를 연결하는 구조다. 별도 Git worktree의 파일은 자동 병합되지 않는다.
+실제 공식 이음0.12.10 Word GUI에서 편집·저장·종료하고 같은 경로의 새 판과 메인/프로젝트 알림을 수집하는 왕복 **4/4**를 확인했다. 이어 같은 문서를 실제 Codex0.160.0과 Claude2.1.292이 병렬로 읽고 프롬프트에 없는 무작위 본문을 정확히 반환했다(**6/6**). Claude OAuth 만료는 사용자 재로그인 후 해소됐다. 이 검사는 실제 host API+공식 GUI+실제 CLI이며, 두 편집기 AI와 메인 UI의 동시 실행 인수는 별도로 남는다. 기존 집중/복귀 Linux22/22와 개별 중지 회귀는 재사용한다. 다른 채팅 전체 이력 대신 프로젝트 문서의 판/변경 알림과 문서 AI 현황/결과를 연결한다. 별도 Git worktree의 파일은 자동 병합되지 않는다.
+
+`84f696d`의 OS 설치 파일 빌드와 Windows 이전판 업데이트·데이터 보존은 성공했다. Windows/macOS 첫 실행 인수는 검사 스크립트의 순환 import로 설치 검증 진입 전 종료됐다. 공통 gateway 모듈을 분리해 같은 설치 파일로 재확인하며, macOS 글꼴 목록 조건 실패는 원본 항목을 기록해 원인을 좁힌다. 아직 자동 설치 OS 인수 통과로 표시하지 않는다.
 
 고정 코어 인수 보완:
 
@@ -19,7 +21,7 @@
 
 Fast Find 진행분은 보존한다. 이 코어 격차를 우선 보완하고 Fast Find 교체와 최종 OS 설치본 인수를 마친다. 아래 과거 “검색과 설치본만 남음”, “선택적 이음 설치” 설명은 이 정정으로 보완된다. Design Mode 제외는 유지한다.
 
-정정: `decision-9223d59a5591b2db15bb5b9f87f9bc62ed1df2d347c3c4d01b6a1bf073c6094a`. 직접 읽은 정확한 조사 판: `research:rr-740f2f53edee23d37689ac416605cbf2:1ece004121d216785194d81132d10233dac4735de55d0693a85e105bd3496378`. 근거: `core-install-linux-01/evidence/ieum-setup-results.json`, `ieum-standalone.png`. 실제 외부 저장 왕복과 모델 교차세션 인수는 이 설치 검증과 별도로 남는다.
+정정: `decision-9223d59a5591b2db15bb5b9f87f9bc62ed1df2d347c3c4d01b6a1bf073c6094a`. 직접 읽은 조사 판: `research:rr-740f2f53edee23d37689ac416605cbf2:39763cbbc0ddbc2991dc27c0bb914271018bc65da68e746847613fe48ee50c12` (R13–R15). 근거: `core-install-linux-01/evidence/ieum-setup-results.json`, `core-roundtrip-linux-01/evidence/roundtrip-results.json`, `core-context-real-02/project-context-results.json`. 검증 스크립트: `scripts/ieum-roundtrip-check.ts`, `scripts/project-context-check.ts`.
 
 ## 웹 Design Mode 범위 제외 — 2026-11-01
 
