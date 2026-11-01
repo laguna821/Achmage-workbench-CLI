@@ -5,6 +5,7 @@ import { defineConfig, type Alias, type Plugin } from "vite";
 import { collectModules, thirdPartyNotices } from "./notices.ts";
 import { patchPdfHistory } from "./pdf-history-patch.ts";
 import { patchPdfCopy } from "./pdf-copy-patch.ts";
+import { patchPdfImageExport } from "./pdf-image-export-patch.ts";
 import { patchOfficeSkillConversation } from "./skill-conversation-patch.ts";
 import { templateFonts } from "./template-fonts-build.ts";
 
@@ -29,6 +30,7 @@ const aliases: Alias[] = [
   { find: /^@ieum\//, replacement: `${ieum}/` },
   // Workbench-owned React components must share the pinned editors' React instance.
   { find: "react", replacement: `${ieum}/node_modules/react` },
+  { find: "react-dom", replacement: `${ieum}/node_modules/react-dom` },
   ...[
     ["@genoffice/docx-engine/lazy-media", "docx-engine/src/lazy-media.ts"],
     ["@genoffice/docx-engine/zip-splice", "docx-engine/src/zip-splice.ts"],
@@ -420,7 +422,7 @@ export default defineConfig({
     originalSettingsPanes(),
     originalOfficeConversation(),
     { name: "workbench-pdf-history", enforce: "pre", transform(code, id) {
-      return id === `${ieum}/apps/pdf/src/renderer/App.tsx` ? patchPdfCopy(patchPdfHistory(code, here("./src/pdf-history.ts"))) : null;
+      return id === `${ieum}/apps/pdf/src/renderer/App.tsx` ? patchPdfImageExport(patchPdfCopy(patchPdfHistory(code, here("./src/pdf-history.ts"))), here("./src/pdf-history.ts")) : null;
     } },
     textEditorPlatform(),
     react(),

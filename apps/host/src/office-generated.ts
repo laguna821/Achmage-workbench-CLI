@@ -17,7 +17,7 @@ class OfficeGenerated {
   private readonly entries = new Map<string, Generated>();
   private readonly documents: Documents;
   constructor(documents: Documents) { this.documents = documents; }
-  create(artifactId: string, revision: number, viewId: string, format: "md" | "epub" | "pdf" | "html") {
+  create(artifactId: string, revision: number, viewId: string, format: "md" | "epub" | "pdf" | "html" | "docx" | "pptx" | "xlsx") {
     const view = this.documents.registry.list().find(v => v.viewId === viewId && v.artifactId === artifactId);
     if (!view) throw new HttpError(409, "output_view_changed", "문서 창을 다시 확인해 주세요.");
     if (this.entries.size >= 100) throw new HttpError(429, "output_busy", "내보내기를 마치거나 문서 탭을 닫아 주세요.");

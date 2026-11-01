@@ -64,12 +64,12 @@ export class OfficeOutputs {
     const path = join(realpathSync(dirname(requested)), basename(requested));
     const format = extname(path).slice(1).toLowerCase() as OfficeOutputFormat;
     const family = formatOf(path);
-    if (longJob && (!(source.format === "epub" && format === "epub" || source.format === "pdf" && ["md", "epub", "pdf"].includes(format)) || !scope.viewId)) throw new HttpError(400, "output_job", "열린 문서의 변환 결과만 예약할 수 있습니다.");
+    if (longJob && (!(source.format === "epub" && format === "epub" || source.format === "pdf" && ["md", "epub", "pdf", "docx", "pptx", "xlsx"].includes(format)) || !scope.viewId)) throw new HttpError(400, "output_job", "열린 문서의 변환 결과만 예약할 수 있습니다.");
     const hangul = ["hwp", "hwpx"].includes(source.format) && ["hwp", "hwpx"].includes(format);
     const same = family === source.format && ["docx", "pptx", "xlsx", "markdown", "html", "xmind", "epub", "pdf"].includes(source.format);
     const textExport = (source.format === "docx" && family === "html")
       || (["markdown", "html"].includes(source.format) && ["docx", "odt"].includes(format));
-    if (!hangul && !same && !textExport && !(source.format === "pdf" && ["md", "epub"].includes(format)) && format !== "pdf") throw new HttpError(415, "output_format", "현재 문서에서 내보낼 수 있는 파일 형식을 선택해 주세요.");
+    if (!hangul && !same && !textExport && !(source.format === "pdf" && ["md", "epub", "docx", "pptx", "xlsx"].includes(format)) && format !== "pdf") throw new HttpError(415, "output_format", "현재 문서에서 내보낼 수 있는 파일 형식을 선택해 주세요.");
     if (isWorkbenchPath(path) || path === resolve(source.path) || (existsSync(source.path) && path === realpathSync(source.path))) throw new HttpError(400, "output_source", "원본과 다른 파일 이름을 선택해 주세요. 원본 저장은 저장 메뉴를 사용하세요.");
     this.documents.registry.assertPath(path);
     const bytes = disk(path);

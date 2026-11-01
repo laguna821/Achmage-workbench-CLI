@@ -18,6 +18,7 @@ import { documentAccess } from "./document-registry.ts";
 import { skillRoutes } from "./skills-http.ts";
 import { OfficeOutputs } from "./office-output.ts";
 import { OfficeImageOutputs } from "./office-image-output.mjs";
+import { pdfImageOutputs } from "./pdf-image-output.mjs";
 import type { OfficeAi } from "./office-ai.ts";
 import type { OfficeSkills } from "./office-skills.ts";
 import { OfficeWiki } from "./office-wiki.ts";
@@ -222,6 +223,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
   const wiki = new OfficeWiki(manager);
   const pdfNotes = new PdfNotes(manager, bus);
   const imageOutputs = new OfficeImageOutputs(manager.documents);
+  const pdfImages = pdfImageOutputs(manager.documents);
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const path = url.pathname;
@@ -718,6 +720,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const body = await readJson(req);
         manager.documents.registry.close(parts[1], String(body.windowId ?? ""));
         await imageOutputs.reconcile();
+        await pdfImages.prune();
         manager.office.reconcileViews();
         return sendJson(res, 200, { ok: true });
       }
@@ -750,6 +753,17 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const documents = manager.documents;
         const artifactId = parts[1];
         const revision = url.searchParams.get("revision") ? Number(url.searchParams.get("revision")) : undefined;
+        if (method === "POST" && parts[2] === "pdf-image-outputs") {
+          let body: Record<string, any>;
+          try { body = JSON.parse((await readBody(req, parts[4] === "write" ? 280_010_000 : 10_000)).toString("utf8")); }
+          catch (error) { if (error instanceof HttpError) throw error; throw new HttpError(400, "pdf_images", "PDF 그림 출력 요청을 확인해 주세요."); }
+          if (!body || typeof body !== "object" || Array.isArray(body)) throw new HttpError(400, "pdf_images", "PDF 그림 출력 요청을 확인해 주세요.");
+          const access = documentAccess(req);
+          if (parts[3] && parts[4] === "write") return sendJson(res, 200, await pdfImages.write(artifactId, parts[3], body, access));
+          if (parts[3] && parts[4] === "finish") return sendJson(res, 200, await pdfImages.finish(artifactId, parts[3], body.success, access));
+          if (!parts[3]) return sendJson(res, 200, await pdfImages.prepare(artifactId, body.revision, body.path, body.name, access));
+          throw new HttpError(400, "pdf_images", "PDF 그림 출력 요청을 확인해 주세요.");
+        }
         if (method === "POST" && parts[2] === "image-outputs") {
           let body: Record<string, any>;
           try { body = JSON.parse((await readBody(req, 70_010_000)).toString("utf8")); }
@@ -1014,7 +1028,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       }
     }
   });
-  server.on("close", () => { pdfNotes.close(); void imageOutputs.close().catch(() => {}); });
+  server.on("close", () => { pdfNotes.close(); void imageOutputs.close().catch(() => {}); void pdfImages.close().catch(() => {}); });
   return server;
 }
 

@@ -5,9 +5,10 @@ import type { EditorGrants } from "./editors.ts";
 import { HttpError } from "./errors.ts";
 import { readBody, sendJson } from "./http.ts";
 import { officeGenerated } from "./office-generated.ts";
+import { pdfImageOutputs } from "./pdf-image-output.mjs";
 
 const METHODS: Record<string, string> = Object.fromEntries([
-  "tree", "text", "convert", "writeBack", "cancel", "storeDocHash", "storeAiReadPages", "storeTranslations", "storeTranslation", "storeUnfinishedJobs", "storeWrite", "storeMigrate", "storeDeleteDocument", "storePassages", "storeHighlightRuns", "storeHighlightBlocks", "storeLatestHighlight", "storeInsights", "storeDeleteCounts", "storePageFingerprints", "storeTranslationRecency",
+  "tree", "text", "convert", "convertOffice", "extractImages", "writeBack", "cancel", "storeDocHash", "storeAiReadPages", "storeTranslations", "storeTranslation", "storeUnfinishedJobs", "storeWrite", "storeMigrate", "storeDeleteDocument", "storePassages", "storeHighlightRuns", "storeHighlightBlocks", "storeLatestHighlight", "storeInsights", "storeDeleteCounts", "storePageFingerprints", "storeTranslationRecency",
 ].map(name => [name.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`), name]));
 type View = { owner: number; key: string; viewId: string; artifactId: string; paths: Set<string>; generated: Set<string> };
 const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -64,7 +65,7 @@ export class PdfStructureEditors {
       this.views.set(key, view = { owner: ++this.nextOwner, key, viewId: access.viewId, artifactId: artifactId!, paths: new Set(), generated: new Set() });
     }
     const source = this.documents.revisionPath(artifactId!, revision);
-    const pathArgument = method === "storeDocHash", requestArgument = ["tree", "text", "convert", "writeBack", "storeMigrate", "storePageFingerprints"].includes(method);
+    const pathArgument = method === "storeDocHash", requestArgument = ["tree", "text", "convert", "convertOffice", "extractImages", "writeBack", "storeMigrate", "storePageFingerprints"].includes(method);
     if (pathArgument || requestArgument) {
       if ((pathArgument ? args[0] : isRecord(args[0]) ? args[0].path : null) !== artifact.path) throw new HttpError(403, "pdf_path", "열린 PDF만 처리할 수 있습니다.");
       view.paths.add(source);
@@ -77,17 +78,21 @@ export class PdfStructureEditors {
     const context = { owner: view.owner, progress: (progress: unknown) => send({ progress }) };
     let staged: ReturnType<ReturnType<typeof officeGenerated>["create"]> | null = null;
     try {
-      if (method === "convert" || method === "writeBack") {
+      if (method === "convert" || method === "convertOffice" || method === "writeBack") {
         const request = args[0] as Record<string, unknown>;
         const format = method === "writeBack" ? "pdf" : request.format;
-        if (format !== "md" && format !== "epub" && format !== "pdf") throw new Error("변환 형식이 올바르지 않습니다.");
+        if (format !== "md" && format !== "epub" && format !== "pdf" && format !== "docx" && format !== "pptx" && format !== "xlsx") throw new Error("변환 형식이 올바르지 않습니다.");
         staged = officeGenerated(this.documents).create(artifactId!, revision, view.viewId, format);
         view.generated.add(staged.id);
-        const target = await engine.pickTarget(view.owner, source, staged.path, format);
+        const target = method === "convertOffice" ? staged.path : await engine.pickTarget(view.owner, source, staged.path, format);
         if (!target) throw new Error("결과 저장 위치를 준비하지 못했습니다.");
         args[0] = { ...request, outPath: target };
       }
-      const value = await engine.handlers[method]!(requestArgument ? context : view.owner, ...args);
+      const value = method === "extractImages" ? await pdfImageOutputs(this.documents).run(artifactId!, String((args[0] as Record<string, unknown>).outDir), access, revision, async path => {
+        const target = await engine.pickTarget(view.owner, source, path, "folder");
+        if (!target) throw new Error("그림 저장 위치를 준비하지 못했습니다.");
+        return engine.handlers.extractImages!(context, { ...args[0] as Record<string, unknown>, outDir: target });
+      }) : await engine.handlers[method]!(requestArgument ? context : view.owner, ...args);
       if (staged) {
         if (!value.ok) { officeGenerated(this.documents).discard(staged.id); view.generated.delete(staged.id); }
         else { delete value.outPath; value.generatedId = staged.id; }

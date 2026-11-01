@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -12,17 +12,27 @@ import { SessionManager } from "./sessions.ts";
 import { createEditorsServer, EditorGrants } from "./editors.ts";
 import { OfficeOutputs } from "./office-output.ts";
 import { officeGenerated } from "./office-generated.ts";
+import { pdfImageOutputs } from "./pdf-image-output.mjs";
+import JSZip from "jszip";
 const require = createRequire(new URL("../../../vendor/ieumoffice/package.json", import.meta.url));
 const { PDFDocument } = require("pdf-lib");
 
-async function fixture() {
+async function fixture(options: { pictures?: boolean; encrypted?: boolean } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "wb-pdf-jobs-")), store = new Store(join(dir, "state.sqlite"));
   const manager = new SessionManager(store, new EventBus(), { hostId: "test", hostLabel: "test", managedWorksDir: join(dir, "works"), dataDir: dir });
   const work = manager.createWork({ title: "PDF jobs", cwd: join(dir, "project") }); mkdirSync(work.cwd, { recursive: true });
   const pdf = await PDFDocument.create();
   pdf.addPage([400, 600]).drawText("Original structure first page", { x: 30, y: 550, size: 16 });
   pdf.addPage([400, 600]).drawText("Second page must survive", { x: 30, y: 550, size: 16 });
-  const original = Buffer.from(await pdf.save()), path = join(work.cwd, "작업 원본.pdf"); writeFileSync(path, original);
+  if (options.pictures) {
+    const { PNG } = createRequire(import.meta.url)("pngjs");
+    for (const size of [64, 16]) {
+      const png = new PNG({ width: size, height: size }); png.data.fill(255);
+      const image = await pdf.embedPng(PNG.sync.write(png));
+      for (const page of pdf.getPages()) page.drawImage(image, { x: 30, y: 300, width: size, height: size });
+    }
+  }
+  const original = options.encrypted ? readFileSync(resolve("vendor/ieumoffice/apps/shell/tests/fixtures/testPassword4Spaces.pdf")) : Buffer.from(await pdf.save()), path = join(work.cwd, "작업 원본.pdf"); writeFileSync(path, original);
   const artifact = manager.openFile(work.id, path), documents = manager.documents;
   const writer = documents.registry.open(artifact.id, { viewId: "writer", windowId: "window", claim: true });
   const access = { viewId: "writer", writeToken: writer.writeToken }, grants = new EditorGrants(), token = grants.issue(artifact.id, access);
@@ -36,11 +46,60 @@ async function fixture() {
   };
   const outputs = new OfficeOutputs(documents, manager.registerOfficeCopy.bind(manager));
   return { dir, manager, documents, artifact, path, original, access, request, call, outputs,
-    async close() { await new Promise<void>(r => server.close(() => r())); await manager.shutdown(); store.close(); rmSync(dir, { recursive: true, force: true }); } };
+    async close() { await new Promise<void>(r => server.close(() => r())); await pdfImageOutputs(documents).close(); await manager.shutdown(); store.close(); rmSync(dir, { recursive: true, force: true }); } };
 }
 
 describe("original PDF structure jobs over document grants", () => {
   beforeAll(() => { execFileSync(process.execPath, [resolve("scripts/build-host.mjs")]); }, 30_000);
+  it("converts to original editable Office formats and publishes only selected outputs", async () => {
+    const f = await fixture();
+    try {
+      for (const [format, expected] of [["docx", "word/document.xml"], ["pptx", "ppt/slides/slide1.xml"], ["xlsx", "xl/worksheets/sheet1.xml"]] as const) {
+        const result = await f.call("convert-office", [{ path: f.path, format, jobId: `office-${format}`, outPath: join(f.dir, `unselected.${format}`) }]);
+        expect(result).toMatchObject({ ok: true, pages: 2, generatedId: expect.any(String), scannedDocument: false });
+        expect(result.pageResults).toHaveLength(2);
+        expect(existsSync(join(f.dir, `unselected.${format}`))).toBe(false);
+        const plan = f.outputs.prepare(f.artifact.id, 1, join(f.dir, `selected.${format}`), f.access, true);
+        const saved = await f.outputs.commit(f.artifact.id, plan.id, Buffer.alloc(0), false, f.access, 1, result.generatedId);
+        const zip = await JSZip.loadAsync(readFileSync(saved.path));
+        expect(zip.file(expected)).not.toBeNull();
+        expect((await zip.file(expected)!.async("string"))).toContain(format === "xlsx" ? "<row" : "Original structure first page");
+        expect(saved.artifact?.format).toBe(format);
+      }
+      expect(await f.call("convert-office", [{ path: f.path, format: "html", jobId: "bad" }])).toMatchObject({ ok: false });
+      expect(readFileSync(f.path)).toEqual(f.original); expect(f.documents.get(f.artifact.id).revision).toBe(1);
+    } finally { await f.close(); }
+  }, 40_000);
+  it("reports encrypted PDF passwords and accepts significant whitespace without publishing failed conversions", async () => {
+    const f = await fixture({ encrypted: true });
+    try {
+      for (const password of [undefined, "incorrect"]) {
+        const result = await f.call("convert-office", [{ path: f.path, format: "docx", jobId: randomUUID(), ...(password === undefined ? {} : { password }) }]);
+        expect(result).toMatchObject({ ok: false, error: "password-required" }); expect(result.generatedId).toBeUndefined();
+      }
+      const result = await f.call("convert-office", [{ path: f.path, format: "docx", jobId: randomUUID(), password: "    " }]);
+      expect(result).toMatchObject({ ok: true, generatedId: expect.any(String) });
+      const generated = officeGenerated(f.documents).read(result.generatedId, f.artifact.id, f.access);
+      expect((await JSZip.loadAsync(generated.bytes)).file("word/document.xml")).not.toBeNull();
+      expect(readFileSync(f.path)).toEqual(f.original);
+    } finally { await f.close(); }
+  }, 40_000);
+  it("extracts original embedded pictures with small/duplicate filtering into the parent-selected folder", async () => {
+    const f = await fixture({ pictures: true });
+    try {
+      const images = pdfImageOutputs(f.documents), parent = join(f.dir, "pictures"); mkdirSync(parent); writeFileSync(join(parent, "existing.txt"), "keep");
+      expect(await f.call("extract-images", [{ path: f.path, jobId: "unselected", outDir: parent, baseName: "picture" }])).toMatchObject({ ok: false });
+      const job = await images.prepare(f.artifact.id, 1, parent, "원본", f.access);
+      const result = await f.call("extract-images", [{ path: f.path, jobId: "pictures", outDir: job.id, baseName: "picture" }]);
+      expect(result).toMatchObject({ ok: true }); expect(result.images).toHaveLength(1);
+      const finished = await images.finish(f.artifact.id, job.id, true, f.access);
+      expect(finished.files).toHaveLength(1); expect(result.images[0].file).toBe(finished.files![0]);
+      const { PNG } = createRequire(import.meta.url)("pngjs"), decoded = PNG.sync.read(readFileSync(finished.files![0]!));
+      expect([decoded.width, decoded.height]).toEqual([64, 64]);
+      expect(readdirSync(parent)).toHaveLength(2); expect(readFileSync(join(parent, "existing.txt"), "utf8")).toBe("keep");
+      expect(readFileSync(f.path)).toEqual(f.original);
+    } finally { await f.close(); }
+  }, 30_000);
   it("runs real child-process analysis/conversion, scopes hashes and preserves the source", async () => {
     const f = await fixture();
     try {

@@ -1,7 +1,7 @@
 import type { OfficeAiBridge } from "./office-ai.ts";
 import type { Gateway, Init } from "./bridge.ts";
 import type { OfficeOutputPlan } from "../../../packages/contracts/src/office-output.ts";
-import { cancelOutput, commitGeneratedOutput, openExport, prepareOutput, revealExport } from "./output.ts";
+import { cancelOutput, commitGeneratedOutput, openExport, prepareOutput, revealExport, preparePdfImages, finishPdfImages } from "./output.ts";
 import { dispatch } from "./platform/electron-renderer.ts";
 
 type Outcome = { ok?: boolean; error?: string; message?: string; generatedId?: string; [key: string]: unknown };
@@ -9,6 +9,7 @@ type JobView = { kind: string; state: string; done: number; total: number; error
 /** Original PDF engine/store calls and their independent model runs. */
 export function pdfJobs(init: Init, gateway: Gateway, ai: OfficeAiBridge, revision: () => number) {
   const instance = crypto.randomUUID(), plans = new Map<string, OfficeOutputPlan>();
+  const folders = new Set<string>();
   const shortCalls = new Map<string, { job: ReturnType<OfficeAiBridge["createReadingJob"]>; cancel: boolean }>();
   const direct = {
     onAiStream: ai.desktop.onAiStream,
@@ -49,7 +50,12 @@ export function pdfJobs(init: Init, gateway: Gateway, ai: OfficeAiBridge, revisi
   return async (channel: string, args: unknown[]): Promise<{ handled: boolean; value?: unknown }> => {
     if (channel === "pdf:structure-pick-target") {
       const request = args[0] as { path: string; kind: string; defaultName?: string };
-      if (request.path !== init.artifact.path || !["md", "epub", "pdf"].includes(request.kind)) throw new Error("이 PDF의 문서 출력 형식을 선택해 주세요.");
+      if (request.path !== init.artifact.path || !["md", "epub", "pdf", "folder"].includes(request.kind)) throw new Error("이 PDF의 문서 출력 형식을 선택해 주세요.");
+      if (request.kind === "folder") {
+        const plan = await preparePdfImages(revision(), init.artifact.name.replace(/\.pdf$/i, ""), true);
+        if (plan) folders.add(plan.id);
+        return { handled: true, value: plan?.id ?? null };
+      }
       const format = request.kind as "md" | "epub" | "pdf";
       const stem = request.defaultName || init.artifact.name.replace(/\.pdf$/i, "");
       const defaultName = stem.toLowerCase().endsWith(`.${format}`) ? stem : `${stem}.${format}`;
@@ -67,6 +73,16 @@ export function pdfJobs(init: Init, gateway: Gateway, ai: OfficeAiBridge, revisi
     if (!/^pdf:(?:structure|store)-/.test(channel)) return { handled: false };
     const operation = channel.replace(/^pdf:/, "").replace(/^structure-/, "");
     const request = args[0] as Record<string, unknown> | undefined;
+    if (operation === "extract-images") {
+      const id = String(request?.outDir);
+      if (!folders.has(id)) throw new Error("그림을 저장할 폴더를 먼저 선택해 주세요.");
+      try {
+        const result = await call(operation, args);
+        await finishPdfImages(id, result.ok === true);
+        return { handled: true, value: result };
+      } catch (error) { await finishPdfImages(id, false).catch(() => {}); throw error; }
+      finally { folders.delete(id); }
+    }
     const job = operation === "store-write" && request?.kind === "job" ? request.job as { kind: string; state: string; lang?: string } : null;
     if (job?.state === "running") await ai.job.start(`PDF ${job.kind}${job.lang ? ` → ${job.lang}` : ""}`);
     const plan = operation === "convert" || operation === "write-back" ? plans.get(String(request?.outPath)) : null;

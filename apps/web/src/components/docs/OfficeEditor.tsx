@@ -78,13 +78,15 @@ export const OfficeEditor = forwardRef<
   const outputPlans = useRef(new Map<string, OfficeOutputPlan & { preparationId: string }>());
   const exported = useRef(new Map<string, Artifact>());
   const imageJobs = useRef(new Map<string, { owner: string; api: Api }>());
-  const blockingOutputs = () => imageJobs.current.size > 0 || [...outputPlans.current.values()].some(plan => !plan.longJob);
+  const pdfImageJobs = useRef(new Map<string, { owner: string; api: Api }>());
+  const exportedImages = useRef(new Set<string>());
+  const blockingOutputs = () => imageJobs.current.size > 0 || pdfImageJobs.current.size > 0 || [...outputPlans.current.values()].some(plan => !plan.longJob);
   const browserJobs = useRef(new Set<string>());
   const controlWaiters = useRef(new Map<string, (reply: RendererControlReply) => void>());
   const mcpWaiters = useRef(new Map<string, (reply: OfficeMcpReply) => void>());
   const copied = useRef(new Map<string, string | null>());
   const [output, setOutput] = useState<{ revision: number; format: OfficeOutputFormat; defaultName?: string; longJob?: boolean; choose(plan: OfficeOutputPlan | null): void } | null>(null);
-  const [imageOutput, setImageOutput] = useState<{ choose(path: string | null): void } | null>(null);
+  const [imageOutput, setImageOutput] = useState<{ embedded?: boolean; choose(path: string | null): void } | null>(null);
   const [notePath, setNotePath] = useState<{ initialPath: string; choose(path: string | null): void } | null>(null);
   const noteClose = useRef<(() => void) | null>(null), noteBusy = useRef(false);
   const latest = useRef(artifact);
@@ -226,10 +228,10 @@ export const OfficeEditor = forwardRef<
     if (message.action === "open-export" || message.action === "reveal-export") {
       try {
         check(); const result = exported.current.get(message.path);
-        if (!result || !handlers.current.onCopied) throw new Error("이 문서에서 내보낸 결과 파일을 선택해 주세요.");
+        if (message.action === "reveal-export" ? !result && !exportedImages.current.has(message.path) : !result || !handlers.current.onCopied) throw new Error("이 문서에서 내보낸 결과 파일을 선택해 주세요.");
         if (message.action === "reveal-export") {
-          const { revealItemInDir } = await import("@tauri-apps/plugin-opener"); await revealItemInDir(result.path);
-        } else handlers.current.onCopied(result.id, { ...result, preserveSource: true });
+          const { revealItemInDir } = await import("@tauri-apps/plugin-opener"); await revealItemInDir(message.path);
+        } else if (result) handlers.current.onCopied!(result.id, { ...result, preserveSource: true });
         reply(null);
       } catch (error) { reply(null, error instanceof Error ? error.message : String(error)); }
       return;
@@ -240,9 +242,35 @@ export const OfficeEditor = forwardRef<
       if (message.preparationId) for (const [id, plan] of outputPlans.current) if (plan.preparationId === message.preparationId) outputPlans.current.delete(id);
       reply(null); return;
     }
-    if (outputBusy.current || imageJobs.current.size && message.action !== "images-write" && message.action !== "images-finish") { reply(null, "다른 저장·출력 요청을 처리 중입니다."); return; }
+    if (outputBusy.current || imageJobs.current.size && message.action !== "images-write" && message.action !== "images-finish" || pdfImageJobs.current.size && message.action !== "pdf-images-write" && message.action !== "pdf-images-finish") { reply(null, "다른 저장·출력 요청을 처리 중입니다."); return; }
     outputBusy.current = true;
     try {
+      if (message.action === "pdf-images-prepare") {
+        if (latest.current.format !== "pdf") throw new Error("PDF 문서를 먼저 열어 주세요.");
+        const path = await new Promise<string | null>((resolve) => {
+          const choose = (value: string | null) => { outputClose.current = null; outputRequest.current = null; setImageOutput(null); resolve(value); };
+          outputRequest.current = message.requestId; outputClose.current = () => choose(null); setImageOutput({ choose, embedded: message.embedded });
+        });
+        if (!path) { reply(null); return; }
+        check(); const bound = access ? { ...access } : null, outputApi = bound ? api.forDocument(() => bound) : api;
+        const plan = await outputApi.preparePdfImages(owner, message.revision, path, message.name);
+        try { check(); pdfImageJobs.current.set(plan.id, { owner, api: outputApi }); reply(plan); }
+        catch (error) { await outputApi.finishPdfImages(owner, plan.id, false).catch(() => {}); throw error; }
+        return;
+      }
+      if (message.action === "pdf-images-write" || message.action === "pdf-images-finish") {
+        const job = pdfImageJobs.current.get(message.id);
+        if (!job || job.owner !== owner) throw new Error("이 문서에서 시작한 그림 출력을 선택해 주세요.");
+        check();
+        if (message.action === "pdf-images-write") { const result = await job.api.writePdfImages(owner, message.id, message); check(); reply(result); return; }
+        try {
+          const result = await job.api.finishPdfImages(owner, message.id, message.success);
+          for (const path of result.files ?? []) exportedImages.current.add(path);
+          if (result.path) handlers.current.onNotice(`그림을 내보냈습니다: ${result.path}`);
+          reply(result);
+        } finally { pdfImageJobs.current.delete(message.id); }
+        return;
+      }
       if (message.action === "images-prepare") {
         if (latest.current.format !== "markdown" || !("__TAURI_INTERNALS__" in window)) throw new Error("Markdown 그림 출력은 데스크톱 앱에서 실행해 주세요.");
         const path = await new Promise<string | null>((resolve) => {
@@ -322,7 +350,7 @@ export const OfficeEditor = forwardRef<
         const choose = (value: OfficeOutputPlan | null) => { outputClose.current = null; outputRequest.current = null; resolve(value); };
         outputRequest.current = message.requestId;
         outputClose.current = () => choose(null);
-        setOutput({ revision: message.revision, format: message.action === "prepare" ? message.format : "pdf", ...(message.action === "prepare" ? { defaultName: message.defaultName, longJob: message.longJob === true && (latest.current.format === "epub" && message.format === "epub" || latest.current.format === "pdf" && ["md", "epub", "pdf"].includes(message.format)) } : {}), choose });
+        setOutput({ revision: message.revision, format: message.action === "prepare" ? message.format : "pdf", ...(message.action === "prepare" ? { defaultName: message.defaultName, longJob: message.longJob === true && (latest.current.format === "epub" && message.format === "epub" || latest.current.format === "pdf" && ["md", "epub", "pdf", "docx", "pptx", "xlsx"].includes(message.format)) } : {}), choose });
       });
       setOutput(null);
       if (!plan) { reply(null); return; }
@@ -343,6 +371,8 @@ export const OfficeEditor = forwardRef<
       outputClose.current?.(); setOutput(null); setImageOutput(null); outputPlans.current.clear(); exported.current.clear();
       for (const [id, job] of imageJobs.current) void job.api.finishOfficeImages(job.owner, id, false).catch(() => {});
       imageJobs.current.clear();
+      for (const [id, job] of pdfImageJobs.current) void job.api.finishPdfImages(job.owner, id, false).catch(() => {});
+      pdfImageJobs.current.clear(); exportedImages.current.clear();
       const jobs = [...browserJobs.current]; browserJobs.current.clear();
       if (jobs.length) void import("@tauri-apps/api/core").then(({ invoke }) => Promise.all(jobs.map(id => invoke("office_browser", { command: { kind: "close", id } }).catch(() => {}))));
     };
@@ -767,7 +797,7 @@ export const OfficeEditor = forwardRef<
     {skillsOpen ? <SkillLibraryDialog api={api} scope={{ workId: artifact.workId, ...(artifact.workspaceId ? { workspaceId: artifact.workspaceId } : {}), ...(sessionId ? { sessionId } : {}) }} onClose={() => { setSkillsOpen(false); send({ type: "office:skills-changed" }); }} /> : null}
     {referencePicker ? <OfficeReferencePicker {...referencePicker} /> : null}
     {output ? <OfficeOutputDialog key={outputRequest.current} api={api} artifact={artifact} revision={output.revision} format={output.format} defaultName={output.defaultName} longJob={output.longJob} onChoose={output.choose} onCancel={() => output.choose(null)} /> : null}
-    {imageOutput ? <OfficeImageOutputDialog initialPath={artifact.path.replace(/[^\\/]+$/, "")} onChoose={imageOutput.choose} /> : null}
+    {imageOutput ? <OfficeImageOutputDialog initialPath={artifact.path.replace(/[^\\/]+$/, "")} embedded={imageOutput.embedded} onChoose={imageOutput.choose} /> : null}
     <iframe
       key={`${artifact.id}:${generation}`}
       ref={frame}

@@ -8,6 +8,8 @@ import { bindPdfHistory, pdfHistory, type PdfHistoryBase } from "./pdf-history.t
 import { beginOfficeCopy, officeCopyBusy, type OfficeCopy } from "./copy.ts";
 import { pdfJobs } from "./pdf-jobs.ts";
 import { noteRequests } from "./pdf-notes.ts";
+import { pdfOfficeConvert } from "./pdf-office-convert.tsx";
+import { preparePdfImages, writePdfImages, finishPdfImages, revealExport } from "./output.ts";
 
 const init = await handshake(), gateway = new Gateway(init.token);
 const ai = mountOfficeAi(init, gateway);
@@ -74,9 +76,9 @@ async function keep() {
   await recoveryQueue;
   if (recoveryFailure) throw new Error("PDF 복구본을 만들지 못했습니다. 편집 탭을 열어 두세요.");
 }
-let flushing: Promise<void> | null = null;
+let flushing: Promise<boolean> | null = null;
 async function flush() {
-  if (copying()) { post({ type: "office:flushed", revision: null }); return; }
+  if (copying()) { post({ type: "office:flushed", revision: null }); return false; }
   if (flushing) return flushing;
   flushing = (async () => {
     try {
@@ -96,9 +98,9 @@ async function flush() {
       // The original renderer subtracts only the saved snapshot. Let its post-save dirty
       // effect land before acknowledging, so typing during a save cannot be lost on close.
       await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-      if (!ok || dirty) { await keep(); post({ type: "office:flushed", revision: null }); }
-      else post({ type: "office:flushed", revision });
-    } catch (error) { report(error); post({ type: "office:flushed", revision: null }); }
+      if (!ok || dirty) { await keep(); post({ type: "office:flushed", revision: null }); return false; }
+      post({ type: "office:flushed", revision }); return true;
+    } catch (error) { report(error); post({ type: "office:flushed", revision: null }); return false; }
   })().finally(() => { flushing = null; });
   return flushing;
 }
@@ -171,6 +173,7 @@ const preferences = await createOfficePreferences(init, gateway, (channel, value
 const fail = (channel: string) => { throw new Error(`PDF의 이 서비스를 아직 연결하지 못했습니다: ${channel}`); };
 const jobs = pdfJobs(init, gateway, ai, () => revision);
 const note = noteRequests();
+const convertOffice = pdfOfficeConvert(init, gateway, () => revision, async () => init.readOnly || await flush());
 const persistResult = async (next: number) => {
   revision = contentRevision = next; restored = false; epoch++;
   historyBase = { revision: next };
@@ -197,6 +200,23 @@ useTransport({
       finally { writing--; }
     }
     switch (channel) {
+      case "pdf:convert-office": {
+        try { return await convertOffice(args[0]); } catch (error) { report(error); return false; }
+      }
+      case "pdf:export-images": {
+        const request = args[0] as { images: string[]; pageNumbers: number[]; baseName: string };
+        const plan = await preparePdfImages(revision, request.baseName);
+        if (!plan) return { ok: true, canceled: true };
+        try {
+          await writePdfImages(plan.id, request.images, request.pageNumbers, request.baseName);
+          const result = await finishPdfImages(plan.id, true);
+          if (result.files?.[0]) void revealExport(result.files[0]).catch(() => {});
+          return { ok: true, savedDir: result.path, count: result.files?.length ?? 0 };
+        } catch (error) {
+          await finishPdfImages(plan.id, false).catch(() => {});
+          return { ok: false, error: error instanceof Error ? error.message : String(error) };
+        }
+      }
       case "pdf:consume-pending": return path;
       case "pdf:read-file": {
         checkPath(args[0]);

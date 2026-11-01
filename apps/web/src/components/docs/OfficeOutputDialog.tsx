@@ -23,7 +23,7 @@ export function OfficeOutputDialog({ api, artifact, revision, format, defaultNam
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && !busy && onCancel()}>
     <form className="stage-dialog office-output-dialog" role="dialog" aria-modal="true" aria-label={format === "pdf" ? "PDF로 저장" : "다른 이름으로 저장"} onSubmit={(event) => { event.preventDefault(); void save(); }}>
       <header className="template-head"><h2>{format === "pdf" ? "PDF로 저장" : "다른 이름으로 저장"}</h2></header>
-      <p className="sheet-hint">{longJob ? "번역 결과를 저장할 위치를 선택합니다. 원본 책은 유지됩니다." : "현재 편집 내용을 저장합니다."}</p>
+      <p className="sheet-hint">{longJob ? "결과를 저장할 위치를 선택합니다. 원본 문서는 유지됩니다." : "현재 편집 내용을 저장합니다."}</p>
       {format === "hwp" || format === "hwpx" ? <label>파일 형식 <select aria-label="저장 형식" value={kind} disabled={busy} onChange={(event) => { const next = event.target.value as "hwp" | "hwpx"; setKind(next); change(path.replace(/\.(hwp|hwpx)$/i, `.${next}`)); }}><option value="hwpx">한글 HWPX</option><option value="hwp">한글 HWP</option></select></label> : null}
       <label className="column">파일 경로<input className="sheet-input" aria-label="저장할 파일 경로" autoFocus value={path} disabled={busy} onChange={(event) => change(event.target.value)} /></label>
       {"__TAURI_INTERNALS__" in window ? <button type="button" className="button small" disabled={busy} onClick={() => { void import("@tauri-apps/plugin-dialog").then(({ save }) => save({ defaultPath: path, filters: [{ name: kind.toUpperCase(), extensions: [kind] }] })).then((picked) => { if (picked) change(picked); }).catch((error) => setError(String(error))); }}>위치 선택…</button> : null}

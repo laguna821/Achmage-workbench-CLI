@@ -20,10 +20,17 @@ export function pdfStructure(directory, isGranted) {
   }, () => ({ wasmPath: pdfiumWasmPath(), hbSubsetWasmPath: hbSubsetWasmPath(), ocrHelperPaths: pdfOcrHelpers(), userDataDir: directory }));
   const targets = new Map();
   const handlers = createPdfStructureHandlers({ runner, store: () => officeResultStore(directory), isGranted,
-    pickPath: async (owner, request) => targets.get(`${owner}:${basename(request.defaultPath)}`) ?? null,
+    pickPath: async (owner, request) => targets.get(`${owner}:${request.kind}`) ?? null,
     hashFile: async path => createHash('sha256').update(await readFile(path)).digest('hex'), caseInsensitivePaths: process.platform !== 'linux' });
+  handlers.convertOffice = async (ctx, request) => {
+    if (!isGranted(ctx.owner, request.path)) return { ok: false, error: 'not-granted' };
+    if (!['docx', 'pptx', 'xlsx'].includes(request.format) || typeof request.jobId !== 'string' || !/^[\w.-]{1,160}$/.test(request.jobId) || request.password !== undefined && (typeof request.password !== 'string' || request.password.length > 4096)) return { ok: false, error: 'invalid-request' };
+    const result = await runner.run(ctx.owner, request.jobId, { op: 'office', format: request.format, source: { pdfPath: request.path, ...(request.password === undefined ? {} : { password: request.password }) }, outPath: request.outPath },
+      (done, total) => ctx.progress({ jobId: request.jobId, done, total }));
+    return result.ok ? { ok: true, ...result.value } : result;
+  };
   return { handlers, async pickTarget(owner, source, path, kind) {
-    const key = `${owner}:${basename(path)}`; targets.set(key, path);
+    const key = `${owner}:${kind}`; targets.set(key, path);
     try { return await handlers.pickTarget(owner, { path: source, kind, defaultName: basename(path) }); }
     finally { targets.delete(key); }
   }, running: () => runner.running(), close: () => runner.cancelAll() };
