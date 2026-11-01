@@ -5,7 +5,7 @@ import { recovery } from "./recovery.ts";
 import { configureTextAssets, resolveTextImage, unresolveTextImage } from "./text-assets.ts";
 import { copyOfficeBytes, officeCopyBusy } from "./copy.ts";
 import type { OfficeOutputFormat } from "../../../packages/contracts/src/office-output.ts";
-import { cancelOutput, commitGeneratedOutput, htmlOutput, prepareOutput, presentHtml } from "./output.ts";
+import { cancelOutput, commitGeneratedOutput, htmlOutput, prepareOutput, presentHtml, prepareImageOutput, writeImageOutput, finishImageOutput } from "./output.ts";
 import { preparePrintHtml } from "./print-html.ts";
 import { createOfficeWiki } from "./wiki.ts";
 import { exportTextWord, markdownWordBytes } from "./text-word-output.ts";
@@ -85,6 +85,7 @@ export async function createTextEditor(kind: "markdown" | "html") {
     if (message.type === "office:export-docx") events.emit("export", message.open && kind === "markdown" ? "docs" : "docx");
     if (message.type === "office:export-odt") events.emit("export", "odt");
     if (message.type === "office:export-html") events.emit("export", "html");
+    if (message.type === "office:export-images" && kind === "markdown") events.emit("export", "png");
     if (message.type === "office:theme") { theme = message.theme; events.emit("theme", theme); }
     if (message.type === "office:flush") void flush();
     if (message.type === "office:rebase") { revision = message.revision; void flush(); }
@@ -219,7 +220,21 @@ export async function createTextEditor(kind: "markdown" | "html") {
         return result?.path ? { ok: true, path: result.path } : { ok: true, canceled: true };
       } catch (error) { report(error); return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
     },
-    prepareImageExport: rejected("그림 내보내기"), writeExportImage: rejected("그림 내보내기"), finishImageExport: rejected("그림 내보내기"),
+    prepareImageExport: async (request: { html: string; suggestedName: string }) => {
+      try {
+        const job = await preparePrintHtml(request.html, { baseUrl: assetBase, imageUrl: resolveTextImage });
+        const prepared = await prepareImageOutput(revision, request.suggestedName, job);
+        return prepared ? { ok: true, ...prepared } : { ok: true, canceled: true };
+      } catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
+    },
+    writeExportImage: async (id: string, page: number, base64: string) => {
+      try { return await writeImageOutput(id, page, base64); }
+      catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
+    },
+    finishImageExport: async (id: string, success: boolean) => {
+      try { return await finishImageOutput(id, success); }
+      catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
+    },
     printHtml: async (request: { html: string }) => {
       try { await htmlOutput(revision, await preparePrintHtml(request.html, { baseUrl: assetBase }), "html-print"); return { ok: true }; }
       catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }

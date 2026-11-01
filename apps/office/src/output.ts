@@ -29,3 +29,6 @@ export const commitGeneratedOutput = (planId: string, generatedId: string, sourc
 
 export const revealExport = (path: string) => request<null>({ type: "office:output", requestId: crypto.randomUUID(), action: "reveal-export", path });
 export const presentHtml = (title: string, url: string) => request<null>({ type: "office:output", requestId: crypto.randomUUID(), action: "present", title, url });
+export const prepareImageOutput = (revision: number, name: string, job: HtmlJob) => request<{ id: string; pdfBase64: string } | null>({ type: "office:output", requestId: crypto.randomUUID(), action: "images-prepare", revision, name, job });
+export const writeImageOutput = (id: string, page: number, base64: string) => request<{ ok: boolean }>({ type: "office:output", requestId: crypto.randomUUID(), action: "images-write", id, page, base64 });
+export const finishImageOutput = (id: string, success: boolean) => request<{ ok: true; path?: string; canceled?: true }>({ type: "office:output", requestId: crypto.randomUUID(), action: "images-finish", id, success });

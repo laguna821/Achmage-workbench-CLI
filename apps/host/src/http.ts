@@ -17,6 +17,7 @@ import { routeCalendar, type CalendarFeeds } from "./calendar-feeds.ts";
 import { documentAccess } from "./document-registry.ts";
 import { skillRoutes } from "./skills-http.ts";
 import { OfficeOutputs } from "./office-output.ts";
+import { OfficeImageOutputs } from "./office-image-output.mjs";
 import type { OfficeAi } from "./office-ai.ts";
 import type { OfficeSkills } from "./office-skills.ts";
 import { OfficeWiki } from "./office-wiki.ts";
@@ -218,7 +219,8 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
   const userSkills = skillRoutes(manager);
   const outputs = options.officeMcp?.outputs ?? new OfficeOutputs(manager.documents, (source, path, revision, sessionId) => manager.registerOfficeCopy(source, path, revision, sessionId));
   const wiki = new OfficeWiki(manager);
-  return createServer(async (req, res) => {
+  const imageOutputs = new OfficeImageOutputs(manager.documents);
+  const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const path = url.pathname;
     try {
@@ -692,6 +694,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       if (method === "DELETE" && parts[0] === "document-views" && parts[1]) {
         const body = await readJson(req);
         manager.documents.registry.close(parts[1], String(body.windowId ?? ""));
+        await imageOutputs.reconcile();
         manager.office.reconcileViews();
         return sendJson(res, 200, { ok: true });
       }
@@ -724,6 +727,17 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const documents = manager.documents;
         const artifactId = parts[1];
         const revision = url.searchParams.get("revision") ? Number(url.searchParams.get("revision")) : undefined;
+        if (method === "POST" && parts[2] === "image-outputs") {
+          let body: Record<string, any>;
+          try { body = JSON.parse((await readBody(req, 70_010_000)).toString("utf8")); }
+          catch (error) { if (error instanceof HttpError) throw error; throw new HttpError(400, "image_output", "그림 출력 요청을 확인해 주세요."); }
+          if (!body || typeof body !== "object" || Array.isArray(body)) throw new HttpError(400, "image_output", "그림 출력 요청을 확인해 주세요.");
+          const access = documentAccess(req);
+          if (parts[3] && parts[4] === "write") return sendJson(res, 200, await imageOutputs.write(artifactId, parts[3], body.page, body.base64, access));
+          if (parts[3] && parts[4] === "finish") return sendJson(res, 200, await imageOutputs.finish(artifactId, parts[3], body.success, access));
+          if (!parts[3]) return sendJson(res, 200, await imageOutputs.prepare(artifactId, body.revision, body.path, body.name, access));
+          throw new HttpError(400, "image_output", "그림 출력 요청을 확인해 주세요.");
+        }
         if (method === "POST" && parts[2] === "outputs") {
           if (parts[3]) return sendJson(res, 201, await outputs.commit(artifactId, parts[3], await readBody(req, 201_000_004), url.searchParams.get("replace") === "1", documentAccess(req), url.searchParams.has("sourceRevision") ? Number(url.searchParams.get("sourceRevision")) : undefined, url.searchParams.get("generatedId") ?? undefined));
           const body = await readJson(req);
@@ -972,6 +986,8 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       }
     }
   });
+  server.on("close", () => { void imageOutputs.close().catch(() => {}); });
+  return server;
 }
 
 /** Attachments named in a message body, shape-checked (the gateway resolves them to its own files). */

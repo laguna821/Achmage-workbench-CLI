@@ -5,7 +5,7 @@ import { Icon } from "./Icon.tsx";
 import { MenuItem, Popover } from "./Popover.tsx";
 
 /** Common shell file actions, outside the original editors' independent ribbons. */
-export function OfficeFileMenu({ api, workId, workspaceId, sessionId, cwd, sourceKey, pickFile, beforeOpen, onOpenArtifact, onToast, onExportPdf, onExportDocx, onExportOdt, onExportHtml, onOpenWord }: {
+export function OfficeFileMenu({ api, workId, workspaceId, sessionId, cwd, sourceKey, pickFile, beforeOpen, onOpenArtifact, onToast, onExportPdf, onExportDocx, onExportOdt, onExportHtml, onExportImages, onOpenWord }: {
   api: Api;
   workId: string;
   workspaceId?: string;
@@ -20,6 +20,7 @@ export function OfficeFileMenu({ api, workId, workspaceId, sessionId, cwd, sourc
   onExportDocx?: () => void;
   onExportOdt?: () => void;
   onExportHtml?: () => void;
+  onExportImages?: () => void;
   onOpenWord?: () => void;
 }) {
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [path, setPath] = useState("");
@@ -56,8 +57,9 @@ export function OfficeFileMenu({ api, workId, workspaceId, sessionId, cwd, sourc
       {onExportDocx ? <MenuItem onSelect={() => { setOpen(false); onExportDocx(); }}>Word로 내보내기</MenuItem> : null}
       {onExportOdt ? <MenuItem onSelect={() => { setOpen(false); onExportOdt(); }}>ODT로 내보내기</MenuItem> : null}
       {onExportHtml ? <MenuItem onSelect={() => { setOpen(false); onExportHtml(); }}>HTML 단일 파일로 내보내기</MenuItem> : null}
+      {onExportImages ? <MenuItem onSelect={() => { setOpen(false); onExportImages(); }}>PNG 그림으로 내보내기</MenuItem> : null}
       {onOpenWord ? <MenuItem onSelect={() => { setOpen(false); onOpenWord(); }}>Word로 변환해 열기</MenuItem> : null}
-      {onExportPdf || onExportDocx || onExportOdt || onExportHtml ? <div className="menu-sep" /> : null}
+      {onExportPdf || onExportDocx || onExportOdt || onExportHtml || onExportImages ? <div className="menu-sep" /> : null}
       <div className="menu-label">새 문서</div>
       {BLANK_OFFICE_DOCUMENTS.map((kind) => <MenuItem key={kind.format} hint={`.${kind.extension}`} onSelect={() => create(kind.format)}>{kind.label}</MenuItem>)}
       <div className="menu-divider" />

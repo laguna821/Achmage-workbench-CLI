@@ -167,6 +167,9 @@ export class Api {
     } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
   }
   prepareOfficeOutput = (artifactId: string, revision: number, path: string, longJob = false) => this.request<{ id: string; path: string; format: OfficeOutputFormat; exists: boolean; size: number }>("POST", `/api/artifacts/${artifactId}/outputs`, { revision, path, ...(longJob ? { longJob } : {}) });
+  prepareOfficeImages = (artifactId: string, revision: number, path: string, name: string) => this.request<{ id: string }>("POST", `/api/artifacts/${artifactId}/image-outputs`, { revision, path, name });
+  writeOfficeImage = (artifactId: string, id: string, page: number, base64: string) => this.request<{ ok: true }>("POST", `/api/artifacts/${artifactId}/image-outputs/${id}/write`, { page, base64 });
+  finishOfficeImages = (artifactId: string, id: string, success: boolean) => this.request<{ ok: true; path?: string; canceled?: true }>("POST", `/api/artifacts/${artifactId}/image-outputs/${id}/finish`, { success });
   async commitOfficeOutput(artifactId: string, id: string, bytes: ArrayBuffer, replace: boolean, sourceRevision?: number, generatedId?: string) {
     const response = await fetch(`/api/artifacts/${artifactId}/outputs/${id}?replace=${replace ? 1 : 0}${sourceRevision === undefined ? "" : `&sourceRevision=${sourceRevision}`}${generatedId ? `&generatedId=${encodeURIComponent(generatedId)}` : ""}`, { method: "POST", headers: { authorization: `Bearer ${this.token}`, ...this.editorHeaders(), "content-type": "application/octet-stream" }, body: bytes });
     const json = await response.json();

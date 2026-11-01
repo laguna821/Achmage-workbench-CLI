@@ -5,6 +5,7 @@ import type { RendererControlRequest, RendererControlReply } from "../../../../.
 import type { OfficeMcpRequest, OfficeMcpReply } from "../../../../../packages/contracts/src/office-mcp.ts";
 import type { BrowserResult, OfficeOutputFormat, OfficeOutputPlan, OfficeOutputRequest, OfficePresentation } from "../../../../../packages/contracts/src/office-output.ts";
 import { OfficeOutputDialog } from "./OfficeOutputDialog.tsx";
+import { OfficeImageOutputDialog } from "./OfficeImageOutputDialog.tsx";
 import { OfficeReferencePicker } from "./OfficeReferencePicker.tsx";
 import type { OfficeDocumentChoice, OfficeReferenceRequest, OfficeReferenceSnapshot } from "../../../../../packages/contracts/src/office-references.ts";
 import { pickOfficeDrive } from "../OfficeDrive.tsx";
@@ -23,6 +24,7 @@ export type OfficeHandle = {
   exportDocx(open?: boolean): void;
   exportOdt(): void;
   exportHtml(): void;
+  exportImages(): void;
   /** Save unsaved edits now; resolves with the saved revision, or null when they could not be saved. */
   flush(): Promise<number | null>;
   /** After a conflict: save my edits as the revision after `revision`; null when there was nothing to keep or it failed. */
@@ -72,12 +74,14 @@ export const OfficeEditor = forwardRef<
   const outputRequest = useRef<string | null>(null);
   const outputPlans = useRef(new Map<string, OfficeOutputPlan & { preparationId: string }>());
   const exported = useRef(new Map<string, Artifact>());
-  const blockingOutputs = () => [...outputPlans.current.values()].some(plan => !plan.longJob);
+  const imageJobs = useRef(new Map<string, { owner: string; api: Api }>());
+  const blockingOutputs = () => imageJobs.current.size > 0 || [...outputPlans.current.values()].some(plan => !plan.longJob);
   const browserJobs = useRef(new Set<string>());
   const controlWaiters = useRef(new Map<string, (reply: RendererControlReply) => void>());
   const mcpWaiters = useRef(new Map<string, (reply: OfficeMcpReply) => void>());
   const copied = useRef(new Map<string, string | null>());
   const [output, setOutput] = useState<{ revision: number; format: OfficeOutputFormat; defaultName?: string; longJob?: boolean; choose(plan: OfficeOutputPlan | null): void } | null>(null);
+  const [imageOutput, setImageOutput] = useState<{ choose(path: string | null): void } | null>(null);
   const latest = useRef(artifact);
   latest.current = artifact;
 
@@ -220,9 +224,44 @@ export const OfficeEditor = forwardRef<
       if (message.preparationId) for (const [id, plan] of outputPlans.current) if (plan.preparationId === message.preparationId) outputPlans.current.delete(id);
       reply(null); return;
     }
-    if (outputBusy.current) { reply(null, "다른 저장·출력 요청을 처리 중입니다."); return; }
+    if (outputBusy.current || imageJobs.current.size && message.action !== "images-write" && message.action !== "images-finish") { reply(null, "다른 저장·출력 요청을 처리 중입니다."); return; }
     outputBusy.current = true;
     try {
+      if (message.action === "images-prepare") {
+        if (latest.current.format !== "markdown" || !("__TAURI_INTERNALS__" in window)) throw new Error("Markdown 그림 출력은 데스크톱 앱에서 실행해 주세요.");
+        const path = await new Promise<string | null>((resolve) => {
+          const choose = (value: string | null) => { outputClose.current = null; outputRequest.current = null; setImageOutput(null); resolve(value); };
+          outputRequest.current = message.requestId; outputClose.current = () => choose(null); setImageOutput({ choose });
+        });
+        if (!path) { reply(null); return; }
+        check(); const bound = access ? { ...access } : null, outputApi = bound ? api.forDocument(() => bound) : api;
+        const plan = await outputApi.prepareOfficeImages(owner, message.revision, path, message.name);
+        imageJobs.current.set(plan.id, { owner, api: outputApi });
+        try {
+          check(); const { invoke } = await import("@tauri-apps/api/core");
+          const bytes = await invoke<ArrayBuffer>("render_html_pdf", { job: message.job }); check();
+          const pdfBase64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(",")[1]!); reader.onerror = () => reject(reader.error); reader.readAsDataURL(new Blob([bytes], { type: "application/pdf" }));
+          });
+          check(); reply({ id: plan.id, pdfBase64 });
+        } catch (error) { await outputApi.finishOfficeImages(owner, plan.id, false).catch(() => {}); imageJobs.current.delete(plan.id); throw error; }
+        return;
+      }
+      if (message.action === "images-write" || message.action === "images-finish") {
+        check(); const job = imageJobs.current.get(message.id);
+        if (!job || job.owner !== owner) throw new Error("이 문서에서 시작한 그림 출력을 선택해 주세요.");
+        if (message.action === "images-write") { const result = await job.api.writeOfficeImage(owner, message.id, message.page, message.base64); check(); reply(result); return; }
+        try {
+          const result = await job.api.finishOfficeImages(owner, message.id, message.success);
+          if (result.path) {
+            handlers.current.onNotice(`그림을 내보냈습니다: ${result.path}`);
+            const path = `${result.path}/page-01.png`;
+            void import("@tauri-apps/plugin-opener").then(({ revealItemInDir }) => revealItemInDir(path)).catch(() => {});
+          }
+          reply(result);
+        } finally { imageJobs.current.delete(message.id); }
+        return;
+      }
       if (message.action === "commit") {
         const plan = outputPlans.current.get(message.planId);
         if (!plan || !(message.bytes instanceof ArrayBuffer)) throw new Error("저장 위치를 다시 선택하세요.");
@@ -285,7 +324,9 @@ export const OfficeEditor = forwardRef<
   };
   useEffect(() => {
     return () => {
-      outputClose.current?.(); setOutput(null); outputPlans.current.clear(); exported.current.clear();
+      outputClose.current?.(); setOutput(null); setImageOutput(null); outputPlans.current.clear(); exported.current.clear();
+      for (const [id, job] of imageJobs.current) void job.api.finishOfficeImages(job.owner, id, false).catch(() => {});
+      imageJobs.current.clear();
       const jobs = [...browserJobs.current]; browserJobs.current.clear();
       if (jobs.length) void import("@tauri-apps/api/core").then(({ invoke }) => Promise.all(jobs.map(id => invoke("office_browser", { command: { kind: "close", id } }).catch(() => {}))));
     };
@@ -617,6 +658,12 @@ export const OfficeEditor = forwardRef<
       }
       send({ type: "office:export-html" });
     },
+    exportImages() {
+      if (status.current.revision === null || outputBusy.current || outputPlans.current.size || imageJobs.current.size) {
+        handlers.current.onNotice("문서를 여는 중이거나 다른 출력을 처리 중입니다."); return;
+      }
+      send({ type: "office:export-images" });
+    },
     flush() {
       if (outputBusy.current || blockingOutputs() || copied.current.size) return Promise.resolve(null);
       if (status.current.conflict) return Promise.resolve(null);
@@ -663,6 +710,7 @@ export const OfficeEditor = forwardRef<
     {skillsOpen ? <SkillLibraryDialog api={api} scope={{ workId: artifact.workId, ...(artifact.workspaceId ? { workspaceId: artifact.workspaceId } : {}), ...(sessionId ? { sessionId } : {}) }} onClose={() => { setSkillsOpen(false); send({ type: "office:skills-changed" }); }} /> : null}
     {referencePicker ? <OfficeReferencePicker {...referencePicker} /> : null}
     {output ? <OfficeOutputDialog key={outputRequest.current} api={api} artifact={artifact} revision={output.revision} format={output.format} defaultName={output.defaultName} longJob={output.longJob} onChoose={output.choose} onCancel={() => output.choose(null)} /> : null}
+    {imageOutput ? <OfficeImageOutputDialog initialPath={artifact.path.replace(/[^\\/]+$/, "")} onChoose={imageOutput.choose} /> : null}
     <iframe
       key={`${artifact.id}:${generation}`}
       ref={frame}

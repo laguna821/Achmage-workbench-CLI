@@ -736,6 +736,7 @@ export default function DocumentView({
             onExportDocx={officeEditing && ["markdown", "html"].includes(artifact.format) ? () => officeRef.current?.exportDocx() : undefined}
             onExportOdt={officeEditing && ["markdown", "html"].includes(artifact.format) ? () => officeRef.current?.exportOdt() : undefined}
             onExportHtml={officeEditing && artifact.format === "html" ? () => officeRef.current?.exportHtml() : undefined}
+            onExportImages={officeEditing && artifact.format === "markdown" ? () => officeRef.current?.exportImages() : undefined}
             onOpenWord={officeEditing && artifact.format === "markdown" ? () => officeRef.current?.exportDocx(true) : undefined}
             sessionId={session?.workspaceId === artifact.workspaceId ? session?.id : undefined}
             cwd={state.workspaces[artifact.workspaceId ?? ""]?.cwd ?? work.cwd} sourceKey={artifact.id} pickFile={pickFile}
