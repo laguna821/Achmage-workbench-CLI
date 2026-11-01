@@ -32,6 +32,7 @@ import { IntegrationsSheet } from "./components/IntegrationsSheet.tsx";
 import { ImageUploadRow, ImageUploadSheet } from "./components/ImageUploadSheet.tsx";
 import { OfficeSettings } from "./components/OfficeSettings.tsx";
 import { OfficeDrive } from "./components/OfficeDrive.tsx";
+import { DropboxDialog } from "./components/DropboxDialog.tsx";
 import { KnowledgeLibrary } from "./components/KnowledgeLibrary.tsx";
 import { Onboarding } from "./components/Onboarding.tsx";
 import type { EngineActions } from "./components/EngineSetup.tsx";
@@ -309,7 +310,7 @@ export function App() {
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const [imageUploadOpen, setImageUploadOpen] = useState(false);
   const [officeSettingsOpen, setOfficeSettingsOpen] = useState(false);
-  const [officeDriveOpen, setOfficeDriveOpen] = useState(false);
+  const [dropboxOpen, setDropboxOpen] = useState(false);
   const [officeImportOpen, setOfficeImportOpen] = useState(false);
   const [ieumAppOpen, setIeumAppOpen] = useState(false);
   const [knowledgeOpen, setKnowledgeOpen] = useState(false);
@@ -1539,7 +1540,7 @@ export function App() {
     { id: "appearance", label: "엔진 외형 설정", icon: "palette", run: () => appearanceApi.openSettings() },
     { id: "integrations", label: "MCP·스킬 보기", icon: "tool", run: () => setIntegrationsOpen(true) },
     { id: "office-settings", label: "문서 AI 설정", icon: "tool", run: () => setOfficeSettingsOpen(true) },
-    { id: "office-drive", label: "Google Drive", icon: "folder", run: () => setOfficeDriveOpen(true) },
+    { id: "dropbox", label: "Dropbox 폴더 연결", icon: "folder", run: () => setDropboxOpen(true) },
     { id: "office-import", label: "이음오피스 설정 가져오기", icon: "folder", run: () => setOfficeImportOpen(true) },
     { id: "office-knowledge", label: "지식베이스", icon: "tool", run: () => openKnowledge() },
     { id: "connections", label: "연결과 설정", icon: "dots", run: () => setMenuOpen(true) },
@@ -2133,7 +2134,7 @@ export function App() {
             <Popover open={menuOpen} onClose={closeMenu} align="right">
               <Connections
                 onOfficeSettings={() => { closeMenu(); setOfficeSettingsOpen(true); }}
-                onOfficeDrive={() => { closeMenu(); setOfficeDriveOpen(true); }}
+                onDropbox={() => { closeMenu(); setDropboxOpen(true); }}
                 onOfficeImport={() => { closeMenu(); setOfficeImportOpen(true); }}
                 onKnowledge={() => { closeMenu(); openKnowledge(); }}
                 onIntegrations={() => {
@@ -2260,7 +2261,7 @@ export function App() {
       {integrationsOpen && api ? <IntegrationsSheet api={api} onClose={() => setIntegrationsOpen(false)} onToast={setToast} /> : null}
       {imageUploadOpen && api ? <ImageUploadSheet api={api} onClose={() => setImageUploadOpen(false)} onToast={setToast} /> : null}
       {officeSettingsOpen && api ? <OfficeSettings api={api} theme={appTheme} onClose={() => setOfficeSettingsOpen(false)} /> : null}
-      {officeDriveOpen && api ? <OfficeSettings api={api} theme={appTheme} mode="drive" onClose={() => setOfficeDriveOpen(false)} /> : null}
+      {dropboxOpen && api ? <DropboxDialog api={api} pickFolder={inDesktop ? (start) => pickFolderNative("Dropbox 폴더 선택", start) : null} openExternal={openExternal} onClose={() => setDropboxOpen(false)} onOpened={({ work, artifact }) => { setDropboxOpen(false); navigateTo({ workId: work.id, sessionId: null, view: artifact ? { kind: "document", artifactId: artifact.id, proposalId: null } : { kind: "project", workId: work.id } }); }} /> : null}
       {officeImportOpen && api ? <OfficeImportDialog api={api} onClose={() => setOfficeImportOpen(false)} /> : null}
       {api && <OfficeDrive api={api} theme={appTheme} />}
       {ieumAppOpen ? <IeumAppDialog api={api} status={state.tools?.ieumApp} onClose={() => setIeumAppOpen(false)} /> : null}

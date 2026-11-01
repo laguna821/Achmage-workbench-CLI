@@ -118,6 +118,7 @@ export function Onboarding({
                   );
                 })
               : null}
+            <p className="muted">Dropbox 문서는 ‘연결과 설정 → Dropbox 폴더 연결’에서 원래 폴더를 연결해 사용합니다. 동기화에는 Dropbox 앱을 사용합니다.</p>
           </section>
         ) : null}
 

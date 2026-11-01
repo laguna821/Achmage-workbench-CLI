@@ -1,0 +1,80 @@
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import type { Artifact, DocumentPresence, Snapshot } from "@workbench/contracts";
+import type { DropboxState } from "../../packages/contracts/src/dropbox.ts";
+import { openStage } from "./launch.ts";
+import { Report } from "./report.ts";
+import { startScenario, installProbe, pageErrors, shot, until, type Ctx } from "./scenarios.ts";
+import { KEY } from "./webdriver.ts";
+
+const binary = resolve(process.argv[2]!), outDir = resolve(process.argv[3]!); mkdirSync(outDir, { recursive: true });
+const report = new Report(outDir), S = "Dropbox 폴더 연결", stage = await openStage(outDir, { nativeX11: true });
+let ctx: Ctx | null = null, phase = "start";
+try {
+  const launch = { binary, engines: "stand-in" as const, profile: "dropbox" };
+  ctx = { stage, app: await stage.launch({ ...launch, name: "dropbox" }), report }; await startScenario(ctx);
+  let wd = ctx.app.wd;
+  const api = <T>(method: string, path: string, body?: unknown) => ctx!.app.api<T>(method, path, body), snapshot = () => api<Snapshot>("GET", "/api/snapshot");
+  const control = (key: string) => wd.keys([{ type: "keyDown", value: KEY.control }, { type: "keyDown", value: key }, { type: "keyUp", value: key }, { type: "keyUp", value: KEY.control }]);
+  const click = async (text: string, selector = "button") => {
+    if (!await until(async () => { for (const el of await wd.findAll(selector)) if (await wd.displayed(el) && await wd.execute<boolean>('return arguments[0].textContent.trim()===arguments[1]', el, text)) { await wd.click(el); return true; } return false; }, 10000)) throw new Error(`Missing button: ${text}`);
+  };
+  const activate = async (selector: string) => { const el = await wd.waitFor(selector); await wd.execute('arguments[0].focus()', el); await wd.keys([{ type: "keyDown", value: KEY.enter }, { type: "keyUp", value: KEY.enter }]); };
+  const fill = async (selector: string, text: string) => { const el = await wd.waitFor(selector); await wd.click(el); await control("a"); await wd.sendKeys(el, text); };
+  const settings = async () => { await wd.frame(null); await wd.click(await wd.waitFor('button[aria-label="연결과 설정"]')); };
+  const openDropbox = async () => { await settings(); await click("Dropbox 폴더 연결…"); await wd.waitFor('.dropbox-dialog'); };
+  const enter = async () => { await wd.frame(null); await wd.frame(await wd.waitFor('.pane[data-tab-active="true"]:not([hidden]) iframe.office-frame[src*="/markdown.html"]', 20000)); await wd.waitFor('.tiptap[contenteditable="true"]', 20000); };
+  const rendered = async (text: string) => { try { await enter(); return await wd.execute<boolean>('return document.querySelector(".tiptap")?.textContent.includes(arguments[0])', text); } catch { return false; } };
+  const cloud = join(stage.root, "fixture-Dropbox"), folder = join(cloud, "프로젝트"), file = join(folder, "동기화.md"), conflict = join(folder, "동기화 (person conflicted copy).md");
+  mkdirSync(folder, { recursive: true }); writeFileSync(file, "# Dropbox note\n\nBASE NOTE\n"); writeFileSync(conflict, "CONFLICT COPY KEEP\n");
+  phase = "Dropbox settings"; await settings();
+  report.check(S, "기본 연결 메뉴는 Dropbox이고 Google Drive는 표시하지 않음", await wd.execute<boolean>('return document.querySelector(".connections")?.textContent.includes("Dropbox 폴더 연결") && !document.querySelector(".connections")?.textContent.includes("Google Drive")'));
+  await click("Dropbox 폴더 연결…"); await wd.waitFor('.dropbox-dialog');
+  const detection = await api<DropboxState>("GET", "/api/dropbox"); writeFileSync(report.path("real-folder-detection.json"), JSON.stringify({ readOnly: true, ...detection }, null, 2));
+  report.check(S, "이 컴퓨터의 Dropbox 탐지는 읽기 전용이며 자동 연결하지 않음", detection.selected === null && detection.syncStatus === "managed-by-dropbox" && detection.candidates.every(candidate => !candidate.available || existsSync(candidate.path)), `${detection.candidates.length}개 발견 · 등록 정보 ${detection.candidates.filter(candidate => candidate.source === "registered").length}개`);
+  await fill("#dropbox-folder-path", cloud); await activate('.dropbox-dialog form button[type="submit"]'); await wd.waitFor('.dropbox-files');
+  report.check(S, "폴더 연결·수동 선택·동기화 상태를 정확히 안내", await wd.execute<boolean>('return document.querySelector(".dropbox-status").textContent.includes("직접 고른 폴더") && document.querySelector(".dropbox-status").textContent.includes("Dropbox 앱에서 확인")'), undefined, await shot(ctx, "connected.png"));
+  await click("폴더프로젝트", ".dropbox-entry"); await wd.waitFor('[data-dropbox-kind="document"]');
+  report.check(S, "문서와 폴더를 구분하고 충돌 사본은 별도로 보존", (await wd.findAll('[data-dropbox-kind="document"]')).length === 2 && await wd.execute<boolean>('return document.querySelector(".dropbox-files").textContent.includes("충돌 사본 · 별도 보존")'));
+  await click("문서동기화.md", ".dropbox-entry"); if (!await until(() => rendered("BASE NOTE"), 20000)) throw new Error("Original Markdown content not rendered");
+  const original = (await snapshot()).artifacts.find(artifact => artifact.path === file)!; if (!original) throw new Error("Dropbox file not registered");
+  report.check(S, "같은 Dropbox 파일을 원본 Markdown 편집기로 열기", original.path === file && (await snapshot()).works.find(work => work.id === original.workId)?.cwd === folder);
+  await installProbe(wd); await wd.click(await wd.waitFor('.tiptap')); await control("\ue010"); await wd.sendKeys(await wd.waitFor('.tiptap'), " LOCAL EDIT"); await control("s");
+  if (!await until(async () => readFileSync(file, "utf8").includes("LOCAL EDIT"), 10000)) throw new Error("Local save did not reach the original Dropbox file");
+  report.check(S, "인터넷·AI 요청 없이 같은 경로에 저장", readFileSync(file, "utf8").includes("LOCAL EDIT"));
+  const replace = (text: string) => { const temporary = join(stage.root, "remote-replacement"); writeFileSync(temporary, `# Dropbox note\n\n${text}\n`); renameSync(temporary, file); };
+  phase = "external sync replacements";
+  for (const text of ["REMOTE FIRST", "REMOTE SECOND"]) { replace(text); if (!await until(() => rendered(text), 16000)) throw new Error(`External revision not rendered: ${text}`); }
+  report.check(S, "연속 두 번의 원자적 동기화 변경을 열린 편집기에 반영", (await snapshot()).artifacts.find(artifact => artifact.id === original.id)!.revision === 4);
+  phase = "unsaved conflict"; await wd.click(await wd.waitFor('.tiptap')); await control("\ue010"); await wd.sendKeys(await wd.waitFor('.tiptap'), " LOCAL DRAFT KEEP");
+  if (!await until(async () => (await api<{ views: DocumentPresence[] }>("GET", "/api/document-views")).views.some(view => view.artifactId === original.id && view.dirty), 10000)) throw new Error("Editing did not become dirty");
+  replace("REMOTE CONCURRENT");
+  if (!await until(async () => (await snapshot()).artifacts.find(artifact => artifact.id === original.id)?.diskState === "changed", 16000)) throw new Error("Concurrent change not detected");
+  report.check(S, "동기화 충돌은 작성 중인 문서와 원격 파일을 모두 보존", await rendered("LOCAL DRAFT KEEP") && readFileSync(file, "utf8").includes("REMOTE CONCURRENT"));
+  await control("s"); await wd.frame(null); await wd.waitFor('.doc-conflict', 10000);
+  report.check(S, "저장 충돌 안내로 자동 덮어쓰기를 차단", readFileSync(file, "utf8").includes("REMOTE CONCURRENT"), undefined, await shot(ctx, "conflict-preserved.png"));
+  await click("내 편집을 새 판으로", ".doc-conflict button");
+  if (!await until(async () => readFileSync(file, "utf8").includes("LOCAL DRAFT KEEP"), 12000)) throw new Error("Explicit keep-mine resolution failed");
+  report.check(S, "명시 선택으로 내 편집 저장·원격 판 이력 유지", (await snapshot()).artifacts.find(artifact => artifact.id === original.id)!.revision === 6 && readFileSync(join(ctx.app.dataDir, "artifacts", original.id, "r5.md"), "utf8").includes("REMOTE CONCURRENT"));
+  report.check(S, "Dropbox 충돌 사본 원문 유지·앱 데이터는 로컬", readFileSync(conflict, "utf8") === "CONFLICT COPY KEEP\n" && existsSync(join(ctx.app.dataDir, "state.sqlite")) && !readdirSync(cloud).some(name => /sqlite|credentials/.test(name)));
+  phase = "project reuse"; await openDropbox(); await click("폴더프로젝트", ".dropbox-entry"); await activate('[data-dropbox-project]');
+  if (!await until(() => wd.execute<boolean>('return !document.querySelector(".dropbox-dialog") && document.body.innerText.includes("프로젝트")'), 8000)) throw new Error("Project did not open");
+  report.check(S, "프로젝트 열기는 같은 폴더의 기존 프로젝트를 재사용", (await snapshot()).works.filter(work => work.cwd === folder).length === 1);
+  const fresh = await api<Artifact>("POST", `/api/works/${original.workId}/office-documents`, { format: "markdown", name: "오프라인 새 문서" });
+  report.check(S, "AI 없는 새 문서도 연결된 Dropbox 프로젝트에 생성", fresh.path.startsWith(folder + "/") && existsSync(fresh.path) && readFileSync(conflict, "utf8") === "CONFLICT COPY KEEP\n");
+  phase = "restart persistence"; await ctx.app.close(); ctx.app = await stage.launch({ ...launch, name: "dropbox-restart" }); wd = ctx.app.wd;
+  await wd.waitFor('button[aria-label="연결과 설정"]', 20000); await installProbe(wd); await openDropbox(); await wd.waitFor('.dropbox-files');
+  report.check(S, "앱 재시작 후 연결 폴더와 프로젝트·문서 판 보존", (await api<DropboxState>("GET", "/api/dropbox")).selected?.path === cloud && (await snapshot()).artifacts.find(artifact => artifact.id === original.id)?.revision === 6);
+  phase = "folder temporarily absent"; renameSync(cloud, join(stage.root, "temporarily-unavailable")); await click("폴더 다시 찾기");
+  if (!await until(() => wd.execute<boolean>('return document.querySelector(".dropbox-status")?.textContent.includes("현재 찾을 수 없습니다")'), 8000)) throw new Error("Missing folder status not shown");
+  report.check(S, "동기화 폴더가 사라져도 연결·문서 이력 보존", (await api<DropboxState>("GET", "/api/dropbox")).selected?.path === cloud && (await snapshot()).artifacts.some(artifact => artifact.id === original.id));
+  renameSync(join(stage.root, "temporarily-unavailable"), cloud); await click("폴더 다시 찾기"); await wd.waitFor('.dropbox-files');
+  report.check(S, "같은 폴더가 돌아오면 다시 탐색 가능", true);
+  await click("연결 해제 · 파일은 유지");
+  if (!await until(async () => (await api<DropboxState>("GET", "/api/dropbox")).selected === null, 8000)) throw new Error("Disconnect failed");
+  report.check(S, "연결 해제는 파일·충돌 사본·기존 프로젝트 유지", readFileSync(file, "utf8").includes("LOCAL DRAFT KEEP") && readFileSync(conflict, "utf8") === "CONFLICT COPY KEEP\n" && (await snapshot()).works.some(work => work.id === original.workId), undefined, await shot(ctx, "disconnected.png"));
+  report.check(S, "Dropbox 화면 예외 없음", !(await pageErrors(wd)).length);
+} catch (error) {
+  report.check(S, phase, false, String(error));
+  if (ctx) { writeFileSync(report.path("failure.json"), JSON.stringify({ phase, error: String(error), page: await ctx.app.wd.execute('return {text:document.body.innerText,html:document.documentElement.outerHTML}').catch(() => null), errors: await pageErrors(ctx.app.wd).catch(() => []) }, null, 2)); await shot(ctx, "failure.png").catch(() => {}); }
+} finally { await stage.close(); report.write({ binary, modelCalls: 0, cloudTransport: "Dropbox desktop client; local replacement fixtures, no real account writes", source: "actual Linux Tauri/WebKit UI and original Markdown editor" }); console.log(report.summary()); if (report.steps.some(step => !step.ok)) process.exitCode = 1; }

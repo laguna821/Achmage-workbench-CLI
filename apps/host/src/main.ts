@@ -31,6 +31,7 @@ import { handlePkm } from "./pkm-http.ts";
 import { Projects } from "./project.ts";
 import { handleProject } from "./project-http.ts";
 import { handleEntry, WorksDir } from "./entry.ts";
+import { DropboxFolders } from "./dropbox.ts";
 import { FindTool, withFindTool } from "./find-tool.ts";
 import { findToolInstructions } from "./search.ts";
 import { adoptLoginShellPath } from "./shell-env.ts";
@@ -150,9 +151,11 @@ const officeControl = env.WORKBENCH_CLI_INPUT ? undefined : new OfficeControl(ma
 const officeMcp = officeControl ? new OfficeMcp(manager, officeControl, dataDir, { defaultSaveDir: () => worksDir.root(), ieum }) : undefined;
 const officeDrive = officeControl ? new OfficeDrive(manager, officeControl, dataDir) : undefined;
 const officeImport = officeControl ? new OfficeImport(manager.documents, manager.ieumDesktop, dataDir) : undefined;
+const dropbox = new DropboxFolders(store, manager, dataDir);
 officeAi.drive = officeDrive;
 const server = createHttpServer(manager, bus, {
   officeImport,
+  dropbox,
   officeDrive,
   officeKnowledge,
   officeControl,
@@ -199,6 +202,7 @@ function listen(target: typeof server, fixed: string | undefined, file: string, 
 await officeControl?.start();
 await officeMcp?.start();
 await officeDrive?.start();
+dropbox.start();
 listen(editors, env.WORKBENCH_EDITORS_PORT, editorsPortFile, (editorsPort) => {
   editorsOrigin = `http://127.0.0.1:${editorsPort}`;
   officeSettingsServer.listen(0, "127.0.0.1", () => {
@@ -221,6 +225,7 @@ let stopping = false;
 async function stop() {
   if (stopping) return;
   stopping = true;
+  dropbox.close();
   officeImport?.close();
   officeDrive?.close();
   officeControl?.close();

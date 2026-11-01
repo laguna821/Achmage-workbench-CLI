@@ -105,6 +105,7 @@ function parseRefs(value: unknown): DocRef[] {
 }
 
 export type HttpOptions = {
+  dropbox?: import("./dropbox.ts").DropboxFolders;
   officeImport?: import("./office-import.mjs").OfficeImport;
   officeDrive?: import("./office-drive.mjs").OfficeDrive;
   officeMcp?: import("./office-mcp.mjs").OfficeMcp;
@@ -268,6 +269,17 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       const method = req.method ?? "GET";
 
       if (method === "GET" && path === "/api/snapshot") return sendJson(res, 200, manager.snapshot());
+      if (options.dropbox && path.startsWith("/api/dropbox")) {
+        if (path === "/api/dropbox" && method === "GET") return sendJson(res, 200, options.dropbox.state());
+        if (path === "/api/dropbox" && method === "DELETE") return sendJson(res, 200, options.dropbox.disconnect());
+        if (path === "/api/dropbox" && method === "PUT") { const body = await readJson(req, 8192); return sendJson(res, 200, options.dropbox.connect(typeof body.path === "string" ? body.path : "")); }
+        if (path === "/api/dropbox/files" && method === "GET") return sendJson(res, 200, options.dropbox.list(url.searchParams.get("path") ?? ""));
+        if (path === "/api/dropbox/open" && method === "POST") {
+          const body = await readJson(req, 8192);
+          if (typeof body.path !== "string" || (body.kind !== "folder" && body.kind !== "document")) throw new HttpError(400, "dropbox_request", "열려는 Dropbox 항목을 다시 선택해 주세요.");
+          return sendJson(res, 200, options.dropbox.open(body.path, body.kind));
+        }
+      }
       if (path.startsWith("/api/office-knowledge/") && options.officeKnowledge) {
         if (await options.officeAi?.handleKnowledge(req, res, url)) return;
         if (method === "GET" && path === "/api/office-knowledge/page") {
