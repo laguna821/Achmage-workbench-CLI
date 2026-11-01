@@ -26,6 +26,7 @@ function fixture(initial: string | null = null, hold = false) {
       const captured = token, capturedSession = selected;
       return { json: async (operation: string, body?: unknown) => {
         calls.push({ operation, token: captured, body });
+        if (operation === "drive-state") return { connected: false, enabled: false };
         if (operation === "history") return { workId: "work", sessionId: capturedSession, items: [...transcripts.get(capturedSession!) ?? []] };
         if (operation === "turn-start") {
           const input = body as { turnId: string; instruction: string; skillContext?: { text: string } };
@@ -115,7 +116,8 @@ it("clears an expired binding before accepting a late unrelated grant", async ()
   f.grant("other");
   f.receive({ type: "office:ai-result", requestId, value: { revision: 2, token: "late", sessionId: "created", createdSession: true } });
   expect(f.failed).toHaveBeenCalledWith(expect.stringContaining("초과")); expect(f.ai.snapshot()).toBe("other");
-  expect(f.model).not.toHaveBeenCalled(); expect(f.calls).toHaveLength(0);
+  expect(f.model).not.toHaveBeenCalled();
+  expect(f.calls.filter(call => call.operation !== "drive-state")).toHaveLength(0);
 });
 it("keeps skill context in live model follow-ups while displaying only the request, then clears it for a new conversation", async () => {
   const f = fixture("existing");

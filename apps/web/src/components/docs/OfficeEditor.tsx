@@ -7,6 +7,7 @@ import type { BrowserResult, OfficeOutputFormat, OfficeOutputPlan, OfficeOutputR
 import { OfficeOutputDialog } from "./OfficeOutputDialog.tsx";
 import { OfficeReferencePicker } from "./OfficeReferencePicker.tsx";
 import type { OfficeDocumentChoice, OfficeReferenceRequest, OfficeReferenceSnapshot } from "../../../../../packages/contracts/src/office-references.ts";
+import { pickOfficeDrive } from "../OfficeDrive.tsx";
 import { saveReferencedDocument } from "../../document-commands.ts";
 import { pickOfficeFiles } from "./office-file-picker.ts";
 import { SkillLibraryDialog } from "../SkillLibraryDialog.tsx";
@@ -132,6 +133,15 @@ export const OfficeEditor = forwardRef<
         value = await referenceCall("read-image", { snapshot: message.frozen ? referenceSnapshot.current : null, path: message.path });
       }
       else if (message.action === "upload") value = await upload(message.file);
+      else if (message.action === "pick-drive") {
+        if (referencePickerClose.current) value = { ok: false, reason: "busy" };
+        else {
+          const controller = new AbortController(); referencePickerClose.current = () => controller.abort();
+          try {
+            value = await pickOfficeDrive(controller.signal, { artifactId: owner, editorToken: opened.current!.token }); checkSelection();
+          } finally { referencePickerClose.current = null; }
+        }
+      }
       else if (message.action === "pick-files") {
         const picked = await pickOfficeFiles(); checkSelection();
         if (!picked) value = null;

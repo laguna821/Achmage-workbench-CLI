@@ -6,6 +6,7 @@ import { Events, Gateway, listen, post, type Init } from "./bridge.ts";
 import { officeCopyBusy, setCopyAiBusy } from "./copy.ts";
 import { installOfficeConversation, type OfficeConversationPort, type OfficeRun, type WorkbenchAgentLoop } from "./office-agent.ts";
 import { createOfficeReferences } from "./office-references.ts";
+import { createDriveBridge } from "./drive.ts";
 import type { OfficeAttachment } from "../../../packages/contracts/src/office-references.ts";
 import { createOfficeSkills } from "./office-skills.ts";
 import type { OfficeSkillChip } from "../../../packages/contracts/src/office-skills.ts";
@@ -219,6 +220,7 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
     appendChat: async () => {},
   };
   return {
+    drive: createDriveBridge(() => gateway.aiSession(init.artifact.id).json("drive-state"), webTool, references.drivePick),
     job,
     createReadingJob: () => createOfficeJob(gateway, init.artifact.id, events, () => prepare(), "pdf-reading"),
     desktop: { ...references.desktop, getAiSettings: getSettings, openAiModelSettings: openSettings, aiStream, aiStreamCancel, onAiStream: events.on("aiStream"), onAiSettingsChanged: events.on("aiSettingsChanged"),
@@ -248,7 +250,7 @@ export type OfficeAiBridge = ReturnType<typeof createOfficeAi>;
 /** Expose the shared conversation before mounting any original renderer/preload. */
 export function mountOfficeAi(init: Init, gateway: Gateway, events = new Events()) {
   const ai = createOfficeAi(init, gateway, events);
-  Object.assign(window, { projectApi: ai.projectApi, aiOfficeSubscription: ai.subscription, aiOfficeDocs: ai.docs, workbenchOfficeAi: ai });
+  Object.assign(window, { projectApi: ai.projectApi, aiOfficeSubscription: ai.subscription, aiOfficeDocs: ai.docs, aiOfficeDriveAi: ai.drive, workbenchOfficeAi: ai });
   window.addEventListener("focus", () => { void ai.refresh().catch(() => {}); });
   return ai;
 }

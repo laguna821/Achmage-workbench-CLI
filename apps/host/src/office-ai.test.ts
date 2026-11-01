@@ -69,6 +69,17 @@ async function fixture(deps: OfficeAiTestDeps = {}) {
 const chunks = async (response: Response) => (await response.text()).trim().split("\n").filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>);
 
 describe("common Office AI", () => {
+  it("exposes only Drive availability to an editor and refuses reads outside an active document turn", async () => {
+    const f = await fixture(), calls: unknown[] = [];
+    f.ai.drive = { state: () => ({ state: "connected", email: "private@example.invalid" }), enabled: () => true,
+      tool: async (...args: unknown[]) => { calls.push(args); return { ok: true }; } } as unknown as import("./office-drive.mjs").OfficeDrive;
+    try {
+      expect(await (await f.request("drive-state")).json()).toEqual({ connected: true, enabled: true });
+      expect((await f.request("drive-state", undefined, f.otherToken)).status).toBe(401);
+      expect((await f.request("tool", { requestId: "drive-read", name: "drive-read", args: ["file", 0] })).status).toBe(403);
+      expect(calls).toEqual([]);
+    } finally { await f.close(); }
+  });
   it("routes web tools through the document grant and cancels only the same view's calls", async () => {
     let searches = 0, finish!: (value: unknown) => void;
     const f = await fixture({ webTools: { webSearch: async () => { searches++; return new Promise(resolve => { finish = resolve; }); } } });

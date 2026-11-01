@@ -102,6 +102,7 @@ function parseRefs(value: unknown): DocRef[] {
 }
 
 export type HttpOptions = {
+  officeDrive?: import("./office-drive.mjs").OfficeDrive;
   officeMcp?: import("./office-mcp.mjs").OfficeMcp;
   officeControl?: import("./office-control.mjs").OfficeControl;
   /** Fixed native CLI input, available only in its disposable gateway. */
@@ -299,6 +300,24 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         return sendJson(res, 200, { origin, url: `${origin}/office/settings.html` });
       }
       if (path.startsWith("/api/office-ai/") && options.officeAi && await options.officeAi.handleSettings(req, res, url)) return;
+      if (options.officeDrive && path === "/api/office-drive/activity" && method === "GET") return sendJson(res, 200, options.officeDrive.activity());
+      if (options.officeDrive && path.startsWith("/api/office-drive/") && method === "POST") {
+        const body = await readJson(req, 32_000), controller = new AbortController();
+        res.once("close", () => controller.abort());
+        if (path === "/api/office-drive/invoke") return sendJson(res, 200, await options.officeDrive.invoke(String(body.channel), body.args as unknown[], controller.signal));
+        if (path === "/api/office-drive/reopen") return sendJson(res, 200, await options.officeDrive.reopen(String(body.artifactId)));
+        if (path === "/api/office-drive/attach") {
+          if (!options.editors || typeof body.artifactId !== "string" || typeof body.editorToken !== "string") throw new HttpError(400, "office_drive_attachment", "첨부할 문서 창이 필요합니다.");
+          const context = { documents: manager.documents, grants: options.editors.grants, artifactId: body.artifactId, token: body.editorToken };
+          context.grants.references.list(context);
+          const result = await options.officeDrive.attach(body.picks as import("../../../packages/contracts/src/office-drive.ts").OfficeDrivePick[], (bytes, name) => {
+            controller.signal.throwIfAborted();
+            return context.grants.references.upload(context, bytes, name).accepted[0]!.path;
+          });
+          return sendJson(res, 200, result);
+        }
+        if (path === "/api/office-drive/answer") return sendJson(res, 200, options.officeDrive.answer(String(body.id), body.value as string | undefined));
+      }
       if (await userSkills(req, res, url)) return;
       if (path.startsWith("/api/pkm/") && options.pkm && (await options.pkm(req, res, url))) return;
       if (path.startsWith("/api/projects/") && options.projects && (await options.projects(req, res, url))) return;

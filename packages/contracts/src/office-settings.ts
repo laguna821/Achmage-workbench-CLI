@@ -1,7 +1,9 @@
 import { OFFICE_MCP_SETTINGS_CHANNELS } from "./office-mcp.ts";
+import { OFFICE_DRIVE_SETTINGS_CHANNELS } from "./office-drive.ts";
 /** Only this surface is available to the dedicated Office settings frame. */
 export const OFFICE_SETTINGS_CHANNELS = new Set([
   ...OFFICE_MCP_SETTINGS_CHANNELS,
+  ...OFFICE_DRIVE_SETTINGS_CHANNELS, "drive-picker:choose", "drive-picker:cancel",
   "ai:get-settings", "ai:set-settings", "ai:chat", "ai:codex-models", "ai:custom-models",
   "ai:local-models", "ai:local-inspect", "ai:local-test", "ai:local-test-cancel",
   "ai:media-test", "ai:search-test", "ai:free-connect", "ai:free-connect-cancel",

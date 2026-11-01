@@ -39,7 +39,7 @@ export function createOfficeReferences() {
   });
   const call = <T,>(input: Request): Promise<T> => new Promise((resolve, reject) => {
     const requestId = crypto.randomUUID();
-    const timer = setTimeout(() => { pending.delete(requestId); reject(new Error("첨부 요청 시간이 초과됐습니다. 다시 선택해 주세요.")); }, input.action === "pick" || input.action === "pick-files" ? 300_000 : 120_000);
+    const timer = setTimeout(() => { pending.delete(requestId); reject(new Error("첨부 요청 시간이 초과됐습니다. 다시 선택해 주세요.")); }, input.action.startsWith("pick") ? 600_000 : 120_000);
     pending.set(requestId, { resolve: (value) => { clearTimeout(timer); resolve(value as T); }, reject: (error) => { clearTimeout(timer); reject(error); } });
     post({ type: "office:references", requestId, ...input });
   });
@@ -58,6 +58,7 @@ export function createOfficeReferences() {
     } catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
   };
   return {
+    drivePick: () => call<import("../../../packages/contracts/src/office-drive.ts").OfficeDriveAttachments>({ action: "pick-drive" }),
     docs: { available: async () => true, list: () => call({ action: "list" }), pick: () => call({ action: "pick" }) },
     desktop: {
       getPathForFile: officeFileIdentity,

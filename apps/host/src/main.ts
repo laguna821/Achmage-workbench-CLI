@@ -14,6 +14,7 @@ import { IeumOffice, findIeum } from "./ieumoffice.ts";
 import { OfficeCliInput } from "./office-cli-input.ts";
 import { OfficeControl } from "./office-control.mjs";
 import { OfficeMcp } from "./office-mcp.mjs";
+import { OfficeDrive } from "./office-drive.mjs";
 import { installToolWrappers } from "./tool-bin.ts";
 import { createEditorsServer, EditorGrants } from "./editors.ts";
 import { createOfficeSettingsServer } from "./office-settings-server.ts";
@@ -146,7 +147,10 @@ const officeSettingsServer = createOfficeSettingsServer(webDir && existsSync(web
 const docImages = new DocImages({ dataDir, documents: manager.documents, workCwd: (workId) => manager.workCwd(workId), endpoint: env.WORKBENCH_R2_ENDPOINT ?? null });
 const officeControl = env.WORKBENCH_CLI_INPUT ? undefined : new OfficeControl(manager, bus, dataDir);
 const officeMcp = officeControl ? new OfficeMcp(manager, officeControl, dataDir, { defaultSaveDir: () => worksDir.root(), ieum }) : undefined;
+const officeDrive = officeControl ? new OfficeDrive(manager, officeControl, dataDir) : undefined;
+officeAi.drive = officeDrive;
 const server = createHttpServer(manager, bus, {
+  officeDrive,
   officeKnowledge,
   officeControl,
   officeMcp,
@@ -191,6 +195,7 @@ function listen(target: typeof server, fixed: string | undefined, file: string, 
 // The editors first, so a document opened right away finds them.
 await officeControl?.start();
 await officeMcp?.start();
+await officeDrive?.start();
 listen(editors, env.WORKBENCH_EDITORS_PORT, editorsPortFile, (editorsPort) => {
   editorsOrigin = `http://127.0.0.1:${editorsPort}`;
   officeSettingsServer.listen(0, "127.0.0.1", () => {
@@ -213,6 +218,7 @@ let stopping = false;
 async function stop() {
   if (stopping) return;
   stopping = true;
+  officeDrive?.close();
   officeControl?.close();
   await officeMcp?.close();
   server.close();

@@ -11,8 +11,12 @@ if (execFileSync('git', ['-C', `${root}vendor/ieumoffice`, 'rev-parse', 'HEAD'],
 await build({
   absWorkingDir: root,
   entryPoints: { host: 'apps/host/src/main.ts', 'hwp-cli': 'apps/host/src/hwp-cli.ts', 'office-reveal': 'apps/host/src/office-reveal.mjs', 'cleanup-legacy': 'apps/host/src/cleanup-legacy.ts', 'pdf-structure-job': 'apps/host/src/pdf-structure-job.mjs' },
-  outdir: 'apps/host/dist', outExtension: { '.js': '.mjs' },
+  outdir: process.env.WORKBENCH_HOST_BUILD_DIR ?? 'apps/host/dist', outExtension: { '.js': '.mjs' },
   bundle: true, platform: 'node', format: 'esm', target: 'node24', logLevel: 'warning',
+  define: {
+    __WORKBENCH_GOOGLE_CLIENT_ID__: JSON.stringify(process.env.WORKBENCH_GOOGLE_CLIENT_ID ?? ''),
+    __WORKBENCH_GOOGLE_CLIENT_SECRET__: JSON.stringify(process.env.WORKBENCH_GOOGLE_CLIENT_SECRET ?? ''),
+  },
   plugins: [pdfHostPlugin(), officeProviderHostPlugin(), officeFileParsePlugin()],
   banner: { js: "import{createRequire as __cr}from'module';const require=__cr(import.meta.url);" },
 });

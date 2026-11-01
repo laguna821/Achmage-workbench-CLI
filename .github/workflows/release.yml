@@ -45,6 +45,8 @@ permissions:
 
 env:
   NODE_DIST: https://nodejs.org/dist/latest-v24.x
+  WORKBENCH_GOOGLE_CLIENT_ID: ${{ secrets.WORKBENCH_GOOGLE_CLIENT_ID }}
+  WORKBENCH_GOOGLE_CLIENT_SECRET: ${{ secrets.WORKBENCH_GOOGLE_CLIENT_SECRET }}
 
 jobs:
   browser:

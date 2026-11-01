@@ -17,7 +17,7 @@ window.addEventListener("message", (event: MessageEvent) => {
   pending.delete(data.requestId); window.clearTimeout(request.timer);
   if (data.error) { report(data.error); request.reject(new Error(data.error)); } else request.resolve(data.value);
 });
-function request(channel: string, args: unknown[] = []) {
+export function request(channel: string, args: unknown[] = []) {
   if (!OFFICE_SETTINGS_CHANNELS.has(channel) || stopped) return Promise.reject(new Error("사용할 수 없는 설정 요청입니다."));
   return new Promise<unknown>((resolve, reject) => {
     const requestId = crypto.randomUUID();
@@ -45,6 +45,7 @@ useTransport({
       dispatch("ai:settings-changed", []); return undefined;
     }
     const result = await request(channel, args);
+    if (channel.startsWith("drive:") && !["drive:list", "drive:open"].includes(channel)) dispatch("drive:state-changed", [channel === "drive:state" ? result : await request("drive:state")]);
     if (["ai:free-connect", "ai:free-disconnect", "ai:subscription-metered"].includes(channel)) {
       takeSnapshot(await request("ai:get-settings"), false); dispatch("ai:settings-changed", []);
     }
@@ -65,8 +66,11 @@ const timer = window.setInterval(async () => {
   if (polling || document.hidden || stopped) return;
   polling = true;
   try {
-    takeSnapshot(await request("ai:get-settings"), true);
-    dispatch("ai:subscription-changed", [await request("ai:subscription-statuses")]);
+    if (!new URLSearchParams(location.search).has("view")) {
+      takeSnapshot(await request("ai:get-settings"), true);
+      dispatch("ai:subscription-changed", [await request("ai:subscription-statuses")]);
+    }
+    dispatch("drive:state-changed", [await request("drive:state")]);
   } catch { /* the bridge already reports the failure; drafts stay mounted */ }
   finally { polling = false; }
 }, 2500);

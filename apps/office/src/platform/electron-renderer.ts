@@ -70,7 +70,7 @@ export const ipcRenderer = {
 const EXPOSED = new Set(["slidesApi", "desktopApi", "pdfApi", "mindmapApi", "epubApi"]);
 const FILE_METHODS = ["pickAttachments", "addAttachmentPaths", "addPastedImage", "readAttachment", "readAttachmentImage", "getPathForFile"] as const;
 /** Only dedicated settings/knowledge entrypoints opt into these original shell bridges. */
-export function exposeSettingsBridges() { EXPOSED.add("aiOffice"); EXPOSED.add("aiOfficeSubscription"); }
+export function exposeSettingsBridges() { EXPOSED.add("aiOffice"); EXPOSED.add("aiOfficeSubscription"); EXPOSED.add("aiOfficeDrive"); }
 export const contextBridge = {
   exposeInMainWorld(key: string, api: unknown) {
     // Slides keeps its original attachment API under `desktop`. Expose that

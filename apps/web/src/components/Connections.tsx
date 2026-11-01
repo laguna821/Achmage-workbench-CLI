@@ -104,6 +104,7 @@ export function Connections({
   vault,
   worksDir,
   onOfficeSettings,
+  onOfficeDrive,
   onKnowledge,
 }: {
   /** The Obsidian vault line (pkm). */
@@ -111,6 +112,7 @@ export function Connections({
   /** "새 프로젝트 폴더 위치" (WorksDirRow.tsx). */
   worksDir?: ReactNode;
   onOfficeSettings?: () => void;
+  onOfficeDrive?: () => void;
   onKnowledge?: () => void;
   tools: DocumentTools | null;
   /** The agent browser (absent from older gateways). */
@@ -177,6 +179,7 @@ export function Connections({
       </button>
       <ToolsSection tools={tools} onInstallIeum={onInstallIeum} onRefreshTools={onRefreshTools} />
       {onOfficeSettings && <button type="button" className="text-button" onClick={onOfficeSettings}>문서 AI 설정…</button>}
+      {onOfficeDrive && <button type="button" className="text-button" onClick={onOfficeDrive}>Google Drive…</button>}
       {onKnowledge && <button type="button" className="text-button" onClick={onKnowledge}>지식베이스…</button>}
       <BrowserSection status={browser} actions={browserActions} />
       {vault}

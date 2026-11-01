@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import type { Api } from "../api.ts";
 import { OFFICE_SETTINGS_CHANNELS, type OfficeSettingsFrameRequest } from "../../../../packages/contracts/src/office-settings.ts";
 import { OFFICE_MCP_SETTINGS_CHANNELS } from "../../../../packages/contracts/src/office-mcp.ts";
+import { OFFICE_DRIVE_SETTINGS_CHANNELS, type OfficeDriveAttachments } from "../../../../packages/contracts/src/office-drive.ts";
 import "../styles/office-settings.css";
 
 /** Only this exact frame may request full Office settings operations. It never gets the host token. */
-export function OfficeSettings({ api, theme, onClose }: { api: Api; theme: "light" | "dark"; onClose(): void }) {
+export function OfficeSettings({ api, theme, onClose, mode = "ai", onPicked, attachmentContext }: { api: Api; theme: "light" | "dark"; onClose(): void; mode?: "ai" | "drive" | "drive-picker"; onPicked?(value: OfficeDriveAttachments): void; attachmentContext?: { artifactId: string; editorToken: string } }) {
   const frame = useRef<HTMLIFrameElement>(null), [page, setPage] = useState<{ origin: string; url: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const owner = useRef(crypto.randomUUID()), calls = useRef(new Map<string, AbortController>()), currentTheme = useRef(theme);
@@ -32,6 +33,20 @@ export function OfficeSettings({ api, theme, onClose }: { api: Api; theme: "ligh
       const controller = new AbortController(); calls.current.set(message.requestId, controller);
       const call = async () => {
         const options = { signal: controller.signal };
+        if (message.channel.startsWith("drive-picker:")) {
+          if (mode !== "drive-picker") throw new Error("첨부 선택창에서만 사용할 수 있습니다.");
+          if (message.channel === "drive-picker:cancel") { onClose(); return { ok: true }; }
+          const result = await api.request<OfficeDriveAttachments>("POST", "/api/office-drive/attach", { picks: message.args[0], ...attachmentContext }, options);
+          if (result.ok) onPicked?.(result);
+          return result;
+        }
+        if (OFFICE_DRIVE_SETTINGS_CHANNELS.has(message.channel)) {
+          if (mode === "drive-picker" && !["drive:state", "drive:list"].includes(message.channel)) throw new Error("첨부 선택창의 요청이 아닙니다.");
+          const result = await api.request<{ ok?: boolean }>("POST", "/api/office-drive/invoke", { channel: message.channel, args: message.args }, options);
+          if (message.channel === "drive:open" && result?.ok) onClose();
+          return result;
+        }
+        if (mode === "drive-picker") throw new Error("첨부 선택창의 요청이 아닙니다.");
         if (message.channel === "ai:get-settings") return api.request("GET", "/api/office-ai/settings", undefined, options);
         if (message.channel === "ai:set-settings") return api.request("PUT", "/api/office-ai/settings", { settings: message.args[0], expectedRevision: message.revision }, options);
         if (OFFICE_MCP_SETTINGS_CHANNELS.has(message.channel)) {
@@ -49,9 +64,9 @@ export function OfficeSettings({ api, theme, onClose }: { api: Api; theme: "ligh
     return () => { alive = false; window.removeEventListener("message", receive); for (const call of calls.current.values()) call.abort(); calls.current.clear(); };
   }, [api, page]);
   return <div className="office-settings-overlay">
-    <section className="office-settings-dialog" role="dialog" aria-modal="true" aria-label="문서 AI 설정">
-      <header><h2>문서 AI 설정</h2><button type="button" className="icon-button" aria-label="문서 AI 설정 닫기" onClick={onClose}>×</button></header>
-      {error ? <p role="alert">{error}</p> : page ? <iframe ref={frame} title="문서 AI 설정 화면" src={`${page.url}?host=${encodeURIComponent(location.origin)}`} sandbox="allow-scripts allow-same-origin allow-modals" onLoad={announceTheme} /> : <p role="status">설정을 불러오고 있습니다.</p>}
+    <section className="office-settings-dialog" role="dialog" aria-modal="true" aria-label={mode === "ai" ? "문서 AI 설정" : mode === "drive" ? "Google Drive" : "Drive에서 첨부"}>
+      <header><h2>{mode === "ai" ? "문서 AI 설정" : mode === "drive" ? "Google Drive" : "Drive에서 첨부"}</h2><button type="button" className="icon-button" aria-label={mode === "ai" ? "문서 AI 설정 닫기" : "Drive 닫기"} onClick={onClose}>×</button></header>
+      {error ? <p role="alert">{error}</p> : page ? <iframe ref={frame} title={mode === "ai" ? "문서 AI 설정 화면" : "Google Drive 화면"} src={`${page.url}?host=${encodeURIComponent(location.origin)}${mode === "ai" ? "" : `&view=${mode}`}`} sandbox="allow-scripts allow-same-origin allow-modals" onLoad={announceTheme} /> : <p role="status">설정을 불러오고 있습니다.</p>}
     </section>
   </div>;
 }

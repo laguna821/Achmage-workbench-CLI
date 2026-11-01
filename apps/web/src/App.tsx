@@ -31,6 +31,7 @@ import { SourceControlDialog } from "./components/SourceControlDialog.tsx";
 import { IntegrationsSheet } from "./components/IntegrationsSheet.tsx";
 import { ImageUploadRow, ImageUploadSheet } from "./components/ImageUploadSheet.tsx";
 import { OfficeSettings } from "./components/OfficeSettings.tsx";
+import { OfficeDrive } from "./components/OfficeDrive.tsx";
 import { KnowledgeLibrary } from "./components/KnowledgeLibrary.tsx";
 import { Onboarding } from "./components/Onboarding.tsx";
 import type { EngineActions } from "./components/EngineSetup.tsx";
@@ -292,6 +293,7 @@ export function App() {
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const [imageUploadOpen, setImageUploadOpen] = useState(false);
   const [officeSettingsOpen, setOfficeSettingsOpen] = useState(false);
+  const [officeDriveOpen, setOfficeDriveOpen] = useState(false);
   const [ieumAppOpen, setIeumAppOpen] = useState(false);
   const [knowledgeOpen, setKnowledgeOpen] = useState(false);
   const [knowledgeMounted, setKnowledgeMounted] = useState(false);
@@ -646,7 +648,12 @@ export function App() {
       },
       pickSession: (work: Work, exclude: Session | null) =>
         new Promise<Session | null>((resolve) => setPicker({ workId: work.id, excludeSessionId: exclude?.id ?? null, resolve })),
-      openArtifact: (artifactId: string) => setView({ kind: "document", artifactId, proposalId: null }),
+      openArtifact: (artifactId: string) => {
+        void api?.request<{ handled: boolean; ok?: boolean }>("POST", "/api/office-drive/reopen", { artifactId }).then(result => {
+          if (!result.handled) setView({ kind: "document", artifactId, proposalId: null });
+          else if (!result.ok) throw new Error("Drive 문서를 열지 못했습니다. 연결 상태를 확인해 주세요.");
+        }).catch(fail);
+      },
       openFile: async (target: Work, path: string, workspaceId?: string) => {
         if (!api) return;
         try {
@@ -754,9 +761,16 @@ export function App() {
   const docActions: DocActions = useMemo(
     () => ({
       openArtifact: (artifactId, proposalId) => {
-        panesRef.current.focusIfShown(`doc:${artifactId}`);
-        const artifact = state.artifacts[artifactId];
-        if (artifact) navigateTo({ workId: artifact.workId, sessionId: null, view: { kind: "document", artifactId, proposalId: proposalId ?? null } });
+        const show = () => {
+          panesRef.current.focusIfShown(`doc:${artifactId}`);
+          const artifact = state.artifacts[artifactId];
+          if (artifact) navigateTo({ workId: artifact.workId, sessionId: null, view: { kind: "document", artifactId, proposalId: proposalId ?? null } });
+        };
+        if (proposalId) { show(); return; }
+        void api?.request<{ handled: boolean; ok?: boolean }>("POST", "/api/office-drive/reopen", { artifactId }).then(result => {
+          if (!result.handled) show();
+          else if (!result.ok) throw new Error("Drive 문서를 열지 못했습니다. 연결 상태를 확인해 주세요.");
+        }).catch(fail);
       },
       applyProposal: (proposal: Proposal) =>
         void api
@@ -1507,6 +1521,7 @@ export function App() {
     { id: "appearance", label: "엔진 외형 설정", icon: "palette", run: () => appearanceApi.openSettings() },
     { id: "integrations", label: "MCP·스킬 보기", icon: "tool", run: () => setIntegrationsOpen(true) },
     { id: "office-settings", label: "문서 AI 설정", icon: "tool", run: () => setOfficeSettingsOpen(true) },
+    { id: "office-drive", label: "Google Drive", icon: "folder", run: () => setOfficeDriveOpen(true) },
     { id: "office-knowledge", label: "지식베이스", icon: "tool", run: () => openKnowledge() },
     { id: "connections", label: "연결과 설정", icon: "dots", run: () => setMenuOpen(true) },
     { id: "onboarding", label: "처음 안내 다시 보기", icon: "eye", run: () => setOnboardingAgain(true) },
@@ -2089,6 +2104,7 @@ export function App() {
             <Popover open={menuOpen} onClose={closeMenu} align="right">
               <Connections
                 onOfficeSettings={() => { closeMenu(); setOfficeSettingsOpen(true); }}
+                onOfficeDrive={() => { closeMenu(); setOfficeDriveOpen(true); }}
                 onKnowledge={() => { closeMenu(); openKnowledge(); }}
                 onIntegrations={() => {
                   closeMenu();
@@ -2214,6 +2230,8 @@ export function App() {
       {integrationsOpen && api ? <IntegrationsSheet api={api} onClose={() => setIntegrationsOpen(false)} onToast={setToast} /> : null}
       {imageUploadOpen && api ? <ImageUploadSheet api={api} onClose={() => setImageUploadOpen(false)} onToast={setToast} /> : null}
       {officeSettingsOpen && api ? <OfficeSettings api={api} theme={appTheme} onClose={() => setOfficeSettingsOpen(false)} /> : null}
+      {officeDriveOpen && api ? <OfficeSettings api={api} theme={appTheme} mode="drive" onClose={() => setOfficeDriveOpen(false)} /> : null}
+      {api && <OfficeDrive api={api} theme={appTheme} />}
       {ieumAppOpen ? <IeumAppDialog api={api} status={state.tools?.ieumApp} onClose={() => setIeumAppOpen(false)} /> : null}
       {knowledgeMounted && api ? <div hidden={!knowledgeOpen}><KnowledgeLibrary api={api} state={state} workId={view.kind === "project" ? view.workId : work?.id} theme={appTheme} visible={knowledgeOpen} onOpen={artifact => { navigateTo({ workId: artifact.workId, sessionId: null, view: { kind: "document", artifactId: artifact.id, proposalId: null } }); setKnowledgeOpen(false); }} onClose={() => { setKnowledgeOpen(false); setKnowledgeMounted(false); }} /></div> : null}
       {state.ready && api && (prefs.onboarding !== "done" || onboardingAgain) ? (

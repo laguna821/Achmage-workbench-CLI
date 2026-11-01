@@ -2,6 +2,22 @@
 
 현재 남은 작업은 [현행 종료 기준과 네 묶음](IMPLEMENTATION-2026-10-29.md#남은-로드맵--2026-11-01)을 따른다. 아래는 구현 순서에 따른 기록이며 과거의 “남았다” 문장으로 이미 구현·배포한 기능을 다시 열지 않는다.
 
+## Google Drive 연결·동기화·문서 AI와 직접 첨부
+
+2026-11-01: 고정 원본의 DriveConnection·DriveFiles·DriveAi·다운로드와 계정/탐색/첨부 화면을 재사용했다. `연결과 설정 → Google Drive…`에서 탐색하고, 내려받은 문서는 같은 Workbench 탭으로 연다. 저장하면 원본 정책에 따라 업로드하며 원격 변경은 덮어쓰기·사본·PC 보존을 묻는다. Google Docs/Sheets/Slides는 Office로 내려받고 첫 저장을 새 Office 파일로 만든다. Google 원본은 유지한다.
+
+로그인은 시스템 브라우저·PKCE·loopback을 사용한다. 토큰은 기존 Workbench OS 보안 저장소로 봉인하며 보안 저장소를 쓸 수 없으면 해당 세션에서만 연결한다. 연결 해제는 토큰을 폐기하고 PC 파일을 보존한다. 원본의 파일 inode 감시는 Linux의 연속 원자적 저장을 놓쳐 파일별 폴더 감시 어댑터로 바꿨다. 원본 충돌·동기화 엔진은 변경하지 않았다. 등록 문서의 캐시 가지치기와 원격 이름 변경으로 기존 문서 이력 파일이 삭제되지 않게 한다.
+
+문서 AI의 원본 Drive 검색·읽기는 활성 문서 실행과 AI 접근 설정을 확인한다. 원본의 Drive 읽기 후 외부 전송 제한을 유지한다. 직접 첨부는 원본이 제공하는7종 편집기의 버튼과 부모 선택창을 사용하며, AI 접근을 꺼도 가능하다. 내려받은 파일은 기존 첨부 보관소에 원래 이름으로 등록한다. 원본 Markdown/PDF에는 직접 첨부 버튼이 없으므로 이들에 새 기능을 임의로 추가하지 않는다.
+
+실제 Linux Tauri/WebKit **17/17**: 실제 loopback·OS 키링, 원본 탐색 화면·문서 열기·연속 저장 업로드·원격 충돌 사본·독립 AI 검색/읽기·외부 전송 거절·Google 문서 Word 열기·직접 첨부·연결 해제를 확인했다. **Google API와 AI 제공자는 시험 대역**이며 실제 Google 계정 로그인 결과가 아니다. 초기 native00에서 확인한 감시 결함, native01의 원본 범위와 다른 선택자, focused02의 취소 인자 기대값 누락은 연구 기록에 구분했다.
+
+Workbench 자체 Google 데스크톱 OAuth 클라이언트를 빌드할 때 `WORKBENCH_GOOGLE_CLIENT_ID`와 `WORKBENCH_GOOGLE_CLIENT_SECRET`으로 넣도록 연결했다. 현재 저장소에 해당 등록 정보가 없어 일반 빌드는 Drive 연결 불가 상태를 정확히 표시한다. 원본 앱이나 다른 서비스의 OAuth 신원을 재사용하지 않는다. 자체 등록·실제 계정 확인, Windows/macOS 인수·설치본 전달은 남는다. 로컬 시나리오는 별도의 fixture host만 사용하며 공개 빌드 자산에 시험 계정을 넣지 않는다.
+
+전체 타입·자산·Office·최종 호스트/Tauri debug 빌드 통과. 전체 회귀171파일1206개 중1205개가 통과했고, 유일한 실패는 새 읽기 전용 Drive 상태 조회도 실행 요청으로 세던 기존 검사였다. 조회만 허용하고 모델/기록 실행은 계속 거절하도록 기대값을 수정한 뒤 해당 UI13/13이 통과했다. 전체 회귀를 다시 실행한 결과로 합산하지 않는다. 최종 native stage와 canonical host가 일치하며 공개 빌드 자산에는 fixture OAuth가 없다.
+
+근거 `office-drive-native-02/results.json`·`ai-requests.json`·`google/remote.json` 및 `office-drive-validation/verification.json`; 정확한 검증 판 `research:rr-5fee6dfe574417f8f889ed1efabbfd9c:01e87055b63beb4f6e138036aaea209873116c9895871fbbf1a638562823f0b5`. **Drive 어댑터 로컬 검증·미배포, 실제 로그인 활성화 대기**이며 전체 Drive 완료로 표시하지 않는다.
+
 ## 열린 문서의 원본 MCP 연결
 
 2026-11-01: 고정 원본의 MCP 서버·HTTP/SSE·도구·클라이언트별 세션과 설정 화면을 연결했다. 기본값은 꺼짐이며 사용자가 설정에서 켠다. 원본의 loopback·Host/Origin 제한과 로그 설정을 유지한다. Electron 창 호출만 Workbench의 실제 문서/창 소유자 검증과 고정 명령 전달로 바꿨다. Word·Sheets의 원본 MCP 브리지와 Slides의 원본 트랜잭션/읽기 엔진을 재사용한다.

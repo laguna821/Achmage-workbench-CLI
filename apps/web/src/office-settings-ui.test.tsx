@@ -29,3 +29,18 @@ it.each(["ai:custom-models", "ai:subscription-install"])("grants %s RPC to only 
   expect(started[0]?.aborted).toBe(false);
   unmount(); expect(started[0]?.aborted).toBe(true);
 });
+it("keeps the Drive attachment picker read-only and binds downloads to its requesting document", async () => {
+  const origin = "http://127.0.0.1:54322", picked = vi.fn();
+  const request = vi.fn(async (_method: string, path: string) => path.endsWith("/page")
+    ? { origin, url: `${origin}/office/settings.html` }
+    : { ok: true, paths: ["/stored/fixture.md"], skipped: 0, failed: 0 });
+  const { container } = render(<OfficeSettings api={{ request } as unknown as Api} theme="light" mode="drive-picker" attachmentContext={{ artifactId: "doc", editorToken: "scoped-document-token" }} onPicked={picked} onClose={() => {}} />);
+  await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+  const frame = container.querySelector("iframe")!, source = frame.contentWindow!, send = (channel: string, args: unknown[]) => window.dispatchEvent(new MessageEvent("message", { source, origin, data: { type: "office-settings:request", requestId: crypto.randomUUID(), channel, args } }));
+  expect(frame.src).not.toContain("scoped-document-token");
+  send("drive:connect", []); send("ai:set-settings", [{}]);
+  await new Promise(resolve => setTimeout(resolve, 0)); expect(request).toHaveBeenCalledTimes(1);
+  send("drive-picker:choose", [[{ id: "remote-file", folder: false }]]);
+  await waitFor(() => expect(picked).toHaveBeenCalledOnce());
+  expect(request.mock.calls[1]).toMatchObject(["POST", "/api/office-drive/attach", { picks: [{ id: "remote-file", folder: false }], artifactId: "doc", editorToken: "scoped-document-token" }, { signal: expect.any(AbortSignal) }]);
+});

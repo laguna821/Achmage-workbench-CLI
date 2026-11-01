@@ -46,6 +46,7 @@ export function officeAiRequest(value: unknown, stream: boolean): OfficeAiStream
  * Does not expose Electron IPC, arbitrary settings writes, filesystem tools or saved credentials.
  * Original editor tools still execute in their own renderer and save through document CAS. */
 export class OfficeAi {
+  drive?: import("./office-drive.mjs").OfficeDrive;
   private engine: Promise<OfficeAiEngine> | null = null;
   private readonly active = new Map<string, { owner: string; controller: AbortController; tool: boolean }>();
   private readonly load: () => Promise<OfficeAiEngine>;
@@ -159,7 +160,7 @@ export class OfficeAi {
   }
   async handle(req: IncomingMessage, res: ServerResponse, url: URL, bearer: string | null, documents: Documents, grants: EditorGrants): Promise<boolean> {
     if (await this.skills?.handle(req, res, url, bearer, grants)) return true;
-    const match = /^\/api\/artifacts\/([^/]+)\/ai\/(settings|selection|statuses|stream|chat|cancel|history|turn-start|turn-events|turn-finish|tool-capabilities|tool)$/.exec(url.pathname);
+    const match = /^\/api\/artifacts\/([^/]+)\/ai\/(drive-state|settings|selection|statuses|stream|chat|cancel|history|turn-start|turn-events|turn-finish|tool-capabilities|tool)$/.exec(url.pathname);
     if (!match) return false;
     const [, artifactId, operation] = match;
     const authorize = () => {
@@ -169,7 +170,7 @@ export class OfficeAi {
       return `${artifactId}:${grants.previewInfo(bearer!).baseUrl}`;
     };
     const owner = authorize();
-    const get = operation === "settings" || operation === "statuses" || operation === "history" || operation === "tool-capabilities";
+    const get = operation === "drive-state" || operation === "settings" || operation === "statuses" || operation === "history" || operation === "tool-capabilities";
     if (req.method !== (get ? "GET" : "POST")) throw new HttpError(405, "method_not_allowed", "허용되지 않은 AI 요청입니다.");
     const binding = () => {
       const sessionId = grants.session(bearer!);
@@ -195,6 +196,9 @@ export class OfficeAi {
       const skills = skillContext === undefined ? undefined : await this.skills!.prepare({ artifactId: artifactId!, token: bearer!, grants }, skillContext);
       const value = operation === "turn-start" ? await this.sessions!.start(bound, raw, references, attachments, skills) : operation === "turn-events" ? this.sessions!.events(bound, raw) : this.sessions!.finish(bound, raw);
       sendJson(res, 200, value); return true;
+    }
+    if (operation === "drive-state") {
+      sendJson(res, 200, { connected: this.drive?.state().state === "connected", enabled: this.drive?.enabled() === true }); return true;
     }
     // No startup status probing, CLI process, model invocation or settings write before a request.
     const engine = await this.getEngine();
@@ -223,11 +227,13 @@ export class OfficeAi {
       if (!record(raw) || !identifier(raw.requestId) || !identifier(raw.name) || !Array.isArray(raw.args) || !engine.webTools) return invalid();
       const bound = raw.turnId === undefined ? null : binding();
       const outer = bound ? this.sessions!.requireRun(bound, raw.turnId) : null;
+      if (raw.name.startsWith("drive-") && (!outer || outer.background || !this.drive)) throw new HttpError(403, "office_drive_turn", "Drive 읽기는 활성 문서 AI 요청에서만 사용할 수 있습니다.");
       const run = this.begin(owner, raw.requestId, res, 8, true), abort = () => run.abort();
       outer?.controller.signal.addEventListener("abort", abort, { once: true });
       if (outer?.controller.signal.aborted) abort();
       try {
-        const value = raw.name.startsWith("knowledge-") && this.knowledge
+        const value = raw.name.startsWith("drive-") && this.drive ? await this.drive.tool(raw.name, raw.args)
+          : raw.name.startsWith("knowledge-") && this.knowledge
           ? await this.knowledge.tool(raw.name, raw.args, run.signal)
           : await engine.webTools.invoke(raw.name, raw.args, run.signal, { path: documents.get(artifactId!).path });
         authorize(); run.signal.throwIfAborted();

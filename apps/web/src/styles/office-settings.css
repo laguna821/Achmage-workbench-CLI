@@ -4,3 +4,6 @@
 .office-settings-dialog h2 { margin: 0; font-size: 16px; }
 .office-settings-dialog iframe { flex: 1; width: 100%; min-height: 0; border: 0; }
 .office-settings-dialog > p { padding: 20px; }
+.office-drive-question { width: min(100%, 560px); padding: 24px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px; }
+.office-drive-question h2 { margin: 0; font-size: 18px; }
+.office-drive-choices { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
