@@ -343,15 +343,10 @@ async function main() {
     await apiChecks(gateway, app, standIns.expect, join(root, "work"), check);
     if (process.env.WORKBENCH_TEST_IEUM_INSTALL === "1") {
       if (!process.env.CI || !process.env.RUNNER_TEMP || !["win32", "darwin"].includes(process.platform)) throw new Error("Standalone install acceptance is only enabled on disposable Windows/macOS CI runners");
-      const { call } = client(gateway);
-      const before = (await call<Snapshot>("GET", "/api/snapshot")).tools;
-      await call("POST", "/api/tools/ieumoffice/install", {});
-      const ended = await until(async () => !(await call<Snapshot>("GET", "/api/snapshot")).tools?.ieumApp?.busy, 600_000);
-      const after = (await call<Snapshot>("GET", "/api/snapshot")).tools;
-      const linked = after?.ieumApp;
-      check("최신 공식 이음오피스 별도 앱 실제 설치와 연결", ended && Boolean(linked?.available && linked.path && existsSync(linked.path)), linked?.message ?? "설치 상태 없음");
-      check("별도 앱 설치 후에도 내장 편집기·CLI 경로 유지", after?.ieumoffice.path === before?.ieumoffice.path && after?.ieumoffice.bundled === before?.ieumoffice.bundled);
-      writeFileSync(join(outDir, "ieum-app-install.json"), JSON.stringify({ platform: process.platform, installed: linked, bundledBefore: before?.ieumoffice, bundledAfter: after?.ieumoffice }, null, 2));
+      // Use the runner's actual OS app registration, not the engine fixture's APPDATA.
+      await gateway.stop(); gateway = null;
+      const { checkIeumSetup } = await import("./ieum-setup-check.ts");
+      await checkIeumSetup(app, outDir, check);
     }
   } finally {
     await gateway?.stop();

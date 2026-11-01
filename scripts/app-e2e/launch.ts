@@ -308,6 +308,9 @@ async function launchApp(input: { stage: Stage; options: LaunchOptions; dpiModul
     XDG_CONFIG_HOME: join(dir, "xdg-config"),
     XDG_CACHE_HOME: join(dir, "xdg-cache"),
     WORKBENCH_DATA_DIR: dataDir,
+    // General editor scenarios must not install desktop apps into the real account.
+    // The dedicated setup acceptance explicitly enables and isolates its install.
+    WORKBENCH_IEUM_BOOTSTRAP: "0",
     WORKBENCH_TOKEN: token,
     // Offer only the fixture vault, never the user's own.
     WORKBENCH_VAULT_SUGGEST: options.vault ?? "",

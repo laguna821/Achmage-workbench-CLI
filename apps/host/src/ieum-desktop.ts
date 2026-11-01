@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 import type { ToolStatus } from "@workbench/contracts";
 import { HttpError } from "./errors.ts";
 import { findIeum, ieumFromCliDir, installIeumOffice, sandboxWrapper, type IeumInstall } from "./ieumoffice.ts";
+import { registerIeumDesktop, type DesktopRegistration } from "./ieum-registration.ts";
 
 const run = promisify(execFile);
 const REPO = "https://github.com/pblsketch/openoffice/releases/download/";
@@ -36,18 +37,30 @@ export function desktopFromPath(input: string, platform: NodeJS.Platform = proce
   return install;
 }
 
-/** Optional standalone application. It never replaces Workbench's bundled document engine. */
+type SelectedApp = { path: string; version: string | null; registration?: string; setupVersion?: number };
+const SETUP_VERSION = 1;
+
+/** Independently installed official app, automatically prepared by installation/first launch.
+ * The bundled document engine remains separate so internal editing works during setup/offline. */
 export class IeumDesktop {
-  private selected: { path: string; version: string | null } | null = null;
+  private selected: SelectedApp | null = null;
   private busy = false;
   private message: string | null = null;
+  private setup: ToolStatus["setup"];
+  private operation: Promise<void> | null = null;
   private readonly config: string;
   private readonly dataDir: string;
   private readonly changed: () => void;
   constructor(dataDir: string, changed: () => void) {
     this.dataDir = dataDir; this.changed = changed;
     this.config = join(dataDir, "ieum-desktop.json");
-    try { const value = JSON.parse(readFileSync(this.config, "utf8")); if (typeof value.path === "string") this.selected = { path: value.path, version: typeof value.version === "string" ? value.version : null }; } catch { /* First use. */ }
+    try {
+      const value = JSON.parse(readFileSync(this.config, "utf8"));
+      if (typeof value.path === "string") this.selected = { path: value.path, version: typeof value.version === "string" ? value.version : null,
+        registration: typeof value.registration === "string" ? value.registration : undefined, setupVersion: value.setupVersion };
+      if (typeof value.setupError === "string") { this.message = value.setupError; this.setup = "error"; }
+      else if (this.selected?.setupVersion === SETUP_VERSION) this.setup = "ready";
+    } catch { /* First use. */ }
   }
   find(): IeumInstall | null {
     if (this.selected) { try { return desktopFromPath(this.selected.path); } catch { /* An app can move or update. */ } }
@@ -55,34 +68,86 @@ export class IeumDesktop {
   }
   status(): ToolStatus {
     const app = this.find()?.app ?? null;
-    return { available: Boolean(app), bundled: false, path: app, version: app === this.selected?.path ? this.selected.version : null, busy: this.busy, message: this.message };
+    const registration = app === this.selected?.path ? this.selected.registration ?? null : null;
+    return { available: Boolean(app), bundled: false, path: app, version: app === this.selected?.path ? this.selected.version : null,
+      busy: this.busy, message: this.message, setup: this.setup, registered: Boolean(registration && existsSync(registration)), registration };
   }
-  link(path: string, version: string | null = null) {
-    const install = desktopFromPath(path);
-    this.selected = { path: install.app!, version };
+  private save(setupError?: string) {
     mkdirSync(this.dataDir, { recursive: true });
     const temporary = `${this.config}.tmp`;
-    writeFileSync(temporary, JSON.stringify(this.selected), { mode: 0o600 }); renameSync(temporary, this.config);
-    this.message = "이음오피스 앱을 연결했습니다. 같은 파일을 열고 저장 내용을 이어받습니다.";
-    this.changed(); return this.status();
+    writeFileSync(temporary, JSON.stringify({ ...this.selected, ...(setupError ? { setupError } : {}) }), { mode: 0o600 });
+    renameSync(temporary, this.config);
   }
-  install() {
-    if (this.busy) return this.status();
-    this.busy = true; this.message = "최신 공식 이음오피스 확인 중…"; this.changed();
-    void this.performInstall().catch((error) => { this.message = error instanceof Error ? error.message : String(error); })
-      .finally(() => { this.busy = false; this.changed(); });
-    return this.status();
+  private stage(setup: ToolStatus["setup"], message: string) { this.setup = setup; this.message = message; this.changed(); }
+  private begin(work: () => Promise<void>): Promise<void> {
+    if (this.operation) return this.operation;
+    this.busy = true;
+    // Start in a microtask so overlapping installer/UI/bootstrap requests see the same promise.
+    this.operation = Promise.resolve().then(work).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      this.setup = "error"; this.message = `이음오피스 자동 설정을 마치지 못했습니다. ${message}`;
+      this.save(this.message); throw error;
+    }).finally(() => { this.busy = false; this.operation = null; this.changed(); });
+    this.changed(); return this.operation;
   }
-  private async performInstall() {
-    if (process.platform === "linux") {
-      const cli = await installIeumOffice((step) => { this.message = step.message; this.changed(); });
-      const app = ieumFromCliDir(dirname(cli))?.app;
-      if (!app) throw new Error("설치한 이음오피스 앱을 찾지 못했습니다.");
-      this.link(app); return;
-    }
+  protected async version(install: IeumInstall): Promise<string | null> {
+    const env: NodeJS.ProcessEnv = { ...process.env, GENOFFICE_APP_BIN: install.app ?? "" }; delete env.ELECTRON_RUN_AS_NODE;
+    try {
+      const { stdout } = await run(process.execPath, [install.script, "--version", "--json"], { env, windowsHide: true, timeout: 30_000, maxBuffer: 64_000 });
+      const value = JSON.parse(stdout.trim());
+      return typeof value.version === "string" && /^\d+\.\d+\.\d+(?:[-.][\w.-]+)?$/.test(value.version) ? value.version : null;
+    } catch { return null; }
+  }
+  protected async latestRelease(): Promise<DesktopRelease> {
     const response = await fetch("https://api.github.com/repos/pblsketch/openoffice/releases/latest", { headers: { Accept: "application/vnd.github+json" }, signal: AbortSignal.timeout(30_000) });
     if (!response.ok) throw new Error(`공식 배포 정보를 받지 못했습니다 (${response.status}).`);
-    const asset = desktopAsset(await response.json() as DesktopRelease, process.platform, process.arch);
+    const release = await response.json() as DesktopRelease;
+    if (!/^v?\d+\.\d+\.\d+(?:[-.][\w.-]+)?$/.test(release.tag_name) || !Array.isArray(release.assets)) throw new Error("공식 이음오피스 배포 정보가 올바르지 않습니다.");
+    return release;
+  }
+  protected register(app: string): Promise<DesktopRegistration> { return registerIeumDesktop(app); }
+  private async finish(install: IeumInstall, version: string | null) {
+    if (!install.app) throw new Error("설치한 이음오피스 독립 앱을 찾지 못했습니다.");
+    // Linux's current symlink (and a user's linked bundle) must match find() after restart.
+    const app = desktopFromPath(install.app).app!;
+    this.stage("registering", "이음오피스를 독립 앱으로 등록하고 Workbench에 연결하는 중…");
+    const registered = await this.register(app);
+    this.selected = { path: app, version, registration: registered.entry, setupVersion: SETUP_VERSION };
+    this.save();
+    this.stage("ready", "이음오피스 독립 앱 등록·Workbench 연결 완료. 앱 목록에서도 단독으로 실행할 수 있습니다.");
+  }
+  /** One automatic setup, then reuse it on every launch. Explicit update rechecks the latest. */
+  bootstrap(force = false): Promise<void> {
+    if (this.operation) return this.operation;
+    const status = this.status();
+    if (!force && this.setup === "ready" && status.available && status.registered) return Promise.resolve();
+    return this.begin(async () => {
+      this.stage("checking", "최신 공식 이음오피스와 기존 설치를 확인하는 중…");
+      const release = await this.latestRelease(), latest = release.tag_name.replace(/^v/, "");
+      const existing = this.find(), current = existing ? await this.version(existing) : null;
+      const installed = existing && current && versionAtLeast(current, latest) ? existing : await this.performInstall(release);
+      await this.finish(installed, installed === existing ? current : latest);
+    });
+  }
+  /** A user's explicit app path is preserved; registration does not download a different app. */
+  link(path: string, version: string | null = null) {
+    const install = desktopFromPath(path);
+    void this.begin(async () => this.finish(install, version ?? await this.version(install))).catch(() => {});
+    return this.status();
+  }
+  install() {
+    void this.bootstrap(true).catch(() => {});
+    return this.status();
+  }
+  protected async performInstall(release: DesktopRelease): Promise<IeumInstall> {
+    this.stage("installing", "최신 공식 이음오피스 설치 중…");
+    if (process.platform === "linux") {
+      const cli = await installIeumOffice((step) => { this.message = step.message; this.changed(); }, release);
+      const install = ieumFromCliDir(dirname(cli));
+      if (!install?.app) throw new Error("설치한 이음오피스 앱을 찾지 못했습니다.");
+      return install;
+    }
+    const asset = desktopAsset(release, process.platform, process.arch);
     const downloads = join(this.dataDir, "installers"); mkdirSync(downloads, { recursive: true });
     const staging = mkdtempSync(join(downloads, "ieum-"));
     try {
@@ -101,7 +166,7 @@ export class IeumDesktop {
         await run(file, ["/S"], { timeout: 600_000, windowsHide: false, maxBuffer: 64_000 });
         const app = findIeum(process.env, process.platform, true)?.app;
         if (!app) throw new Error("설치가 끝났습니다. 앱 위치를 자동으로 찾지 못해 설치된 IeumOffice.exe를 선택해 주세요.");
-        this.link(app, asset.version);
+        return desktopFromPath(app);
       } else {
         const applications = join(homedir(), "Applications"); mkdirSync(applications, { recursive: true });
         const unpack = mkdtempSync(join(applications, ".ieum-install-")), target = join(applications, "IeumOffice.app");
@@ -110,7 +175,7 @@ export class IeumDesktop {
           desktopFromPath(join(unpack, "IeumOffice.app"));
           if (existsSync(target)) renameSync(target, join(applications, `IeumOffice.previous-${Date.now()}.app`));
           renameSync(join(unpack, "IeumOffice.app"), target);
-          this.link(target, asset.version);
+          return desktopFromPath(target);
         } finally { rmSync(unpack, { recursive: true, force: true }); }
       }
     } finally { rmSync(staging, { recursive: true, force: true }); }
@@ -131,4 +196,13 @@ export class IeumDesktop {
     });
     return { app: "이음오피스", path };
   }
+}
+
+/** Stable releases compare numerically; an equal/newer local app is not downloaded again. */
+export function versionAtLeast(current: string, target: string) {
+  const parse = (text: string) => /^(\d+)\.(\d+)\.(\d+)(.*)$/.exec(text);
+  const a = parse(current), b = parse(target);
+  if (!a || !b) return false;
+  for (let i = 1; i <= 3; i += 1) { const diff = Number(a[i]) - Number(b[i]); if (diff) return diff > 0; }
+  return a[4] === b[4] || !a[4];
 }

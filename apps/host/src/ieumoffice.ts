@@ -278,9 +278,9 @@ type ReleaseAsset = { name: string; browser_download_url: string; size: number }
  * SHA-512 the release publishes, unpack it without running it, and point `current` at it.
  * Nothing is installed system-wide and the previous version stays until the new one is ready.
  */
-export async function installIeumOffice(progress: (step: InstallProgress) => void): Promise<string> {
+export async function installIeumOffice(progress: (step: InstallProgress) => void, selectedRelease?: { tag_name?: string; assets?: ReleaseAsset[] }): Promise<string> {
   if (process.platform !== "linux") throw new HttpError(501, "unsupported_platform", "자동 설치는 아직 Linux만 지원합니다. 이음오피스 누리집에서 설치해 주세요.");
-  const release = (await (await fetch("https://api.github.com/repos/pblsketch/openoffice/releases/latest", { headers: { accept: "application/vnd.github+json" } })).json()) as {
+  const release = selectedRelease ?? (await (await fetch("https://api.github.com/repos/pblsketch/openoffice/releases/latest", { headers: { accept: "application/vnd.github+json" } })).json()) as {
     tag_name?: string;
     assets?: ReleaseAsset[];
   };
@@ -322,7 +322,8 @@ export async function installIeumOffice(progress: (step: InstallProgress) => voi
     const staging = join(work, "root");
     await extractAppImage(file, staging);
     if (!existsSync(join(staging, "resources/cli/ieumoffice"))) throw new HttpError(500, "extract_failed", "설치 파일 안에서 명령줄 도구를 찾지 못했습니다.");
-    if (existsSync(target)) rmSync(target, { recursive: true, force: true });
+    // Preserve a prior directory rather than deleting possible user-added resources.
+    if (existsSync(target)) renameSync(target, `${target}.previous-${Date.now()}`);
     renameSync(staging, target);
     const link = join(IEUM_HOME, "current");
     const temporary = `${link}.${process.pid}`;

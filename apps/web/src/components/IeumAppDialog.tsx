@@ -15,9 +15,9 @@ export function IeumAppDialog({ api, status, onClose }: { api: Api; status?: Too
   return <div className="office-settings-overlay">
     <section className="new-document-dialog" role="dialog" aria-modal="true" aria-labelledby="ieum-app-title" style={{ margin: "auto" }}>
       <header><h2 id="ieum-app-title">이음오피스 앱 연결</h2><button type="button" className="icon-button" aria-label="이음오피스 연결 닫기" onClick={onClose}><Icon name="x" size={18} /></button></header>
-      <p>문서를 별도 이음오피스 앱에서도 편집하려면 설치해 주세요. Workbench의 <b>앱으로 열기</b>에서 같은 파일을 열고, 저장하면 여기에서도 최신 내용으로 이어집니다.</p>
-      <p className="muted">Workbench 안의 편집기는 지금도 사용할 수 있습니다. 별도 앱 설치는 선택 사항입니다.</p>
-      {status?.available ? <p role="status">연결됨{status.version ? ` · ${status.version}` : ""}<small className="new-document-path muted">{status.path}</small></p> : null}
+      <p>이음오피스는 Workbench 설치 과정에서 별도 앱으로 자동 설치·등록됩니다. 앱 목록에서 단독 실행하거나, <b>앱으로 열기</b>로 같은 파일을 편집하고 저장한 뒤 여기에서 이어갈 수 있습니다.</p>
+      <p className="muted">자동 설정이 중단되면 여기서 다시 진행할 수 있습니다. 설치 중에도 내장 편집기는 사용할 수 있습니다.</p>
+      {status?.available ? <p role="status">{status.registered ? "독립 앱 등록·연결됨" : "앱 확인됨"}{status.version ? ` · ${status.version}` : ""}<small className="new-document-path muted">{status.path}</small></p> : null}
       <button type="button" className="button primary" disabled={status?.busy} onClick={() => { setError(""); void api.installIeumOffice().catch(fail); }}>{status?.busy ? "설치 중…" : status?.available ? "최신 공식 버전으로 업데이트" : "최신 공식 버전 설치·연결"}</button>
       {status?.message ? <p role="status">{status.message}</p> : null}
       <details style={{ marginTop: 20 }}><summary>이미 설치한 앱 직접 연결</summary>

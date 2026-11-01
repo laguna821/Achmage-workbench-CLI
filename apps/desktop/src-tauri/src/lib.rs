@@ -182,6 +182,8 @@ fn gateway_command(app: &tauri::AppHandle) -> Command {
     }
     command
         .env("PATH", engine_path())
+        .env("WORKBENCH_IEUM_BOOTSTRAP", if office_cli::data_dir(app).is_some() { "0".to_string() }
+            else { std::env::var("WORKBENCH_IEUM_BOOTSTRAP").unwrap_or_else(|_| "1".to_string()) })
         .env("WORKBENCH_PTY_BIN", std::env::current_exe().unwrap_or_default())
         .env("WORKBENCH_SECRET_BIN", std::env::current_exe().unwrap_or_default())
         .env("WORKBENCH_APP_BIN", std::env::current_exe().unwrap_or_default())

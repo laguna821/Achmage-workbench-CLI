@@ -303,7 +303,9 @@ jobs:
           hdiutil detach /tmp/wb-dmg
           ls "$HOME/Applications/Achmage Workbench.app/Contents/Resources"
           echo "APP_DIR=$HOME/Applications/Achmage Workbench.app/Contents/Resources" >> "$GITHUB_ENV"
-      - name: First run with stand-in engines (npm's codex.cmd shim on Windows, Homebrew on macOS)
+      - name: Install acceptance driver (no browser download)
+        run: npm ci --ignore-scripts
+      - name: First run with stand-in engines and automatic standalone Ieum setup
         shell: bash
         env:
           WORKBENCH_TEST_IEUM_INSTALL: '1'

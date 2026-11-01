@@ -527,9 +527,13 @@ export type ToolStatus = {
   /** Install or update running (IeumOffice). */
   busy: boolean;
   message: string | null;
+  /** Standalone Office setup runs during desktop installation/first launch. */
+  setup?: "checking" | "installing" | "registering" | "ready" | "error";
+  registered?: boolean;
+  registration?: string | null;
 };
 
-export type DocumentTools = { kordoc: ToolStatus; ieumoffice: ToolStatus; /** Optional standalone app, separate from the bundled editor. */ ieumApp?: ToolStatus; hwp?: ToolStatus; pdf?: ToolStatus; /** Retired separate apps; kept for older clients. */ hop: ToolStatus; pdfcraft?: ToolStatus };
+export type DocumentTools = { kordoc: ToolStatus; ieumoffice: ToolStatus; /** Separate app, automatically installed/linked; optional field for older hosts. */ ieumApp?: ToolStatus; hwp?: ToolStatus; pdf?: ToolStatus; /** Retired separate apps; kept for older clients. */ hop: ToolStatus; pdfcraft?: ToolStatus };
 
 /** An MCP server definition as one engine has it (env values shown only as names on screen). */
 export type McpDefinition = { type: "stdio" | "http" | "sse"; command: string | null; args: string[]; env: Record<string, string>; url: string | null; enabled: boolean };

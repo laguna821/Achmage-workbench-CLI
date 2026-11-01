@@ -55,6 +55,9 @@ export function Onboarding({
             </li>
           ))}
         </ol>
+        {tools?.ieumApp?.busy || tools?.ieumApp?.setup === "error" ? (
+          <p className="onboarding-notice" role="status">{tools.ieumApp.message ?? "이음오피스 독립 앱을 자동으로 준비하고 있습니다."}</p>
+        ) : null}
 
         {step === 0 ? (
           <section>
@@ -89,13 +92,13 @@ export function Onboarding({
         {step === 2 ? (
           <section>
             <h2>문서 도구</h2>
-            <p className="muted">형식마다 맞는 도구를 씁니다. 한글·워드·PPT·엑셀·PDF 도구는 앱에 들어 있어 따로 설치하지 않습니다.</p>
+            <p className="muted">내장 편집기는 바로 사용할 수 있습니다. 별도 이음오피스도 자동으로 설치·등록하고 연결합니다. 설치가 끝나면 앱 목록에서 단독으로 열거나 여기서 ‘앱으로 열기’를 사용할 수 있습니다.</p>
             {tools
               ? (
                   [
                     { key: "kordoc", name: "hallym-kordoc 스킬", role: "Markdown·양식으로 HWPX 만들기 · 사용자 설치 스킬 우선", status: tools.kordoc },
                     { key: "ieumoffice", name: "내장 이음오피스 편집기", role: "워드·PPT·엑셀 편집·저장·문서별 AI", status: tools.ieumoffice },
-                    ...(tools.ieumApp ? [{ key: "ieumApp", name: "이음오피스 앱 연결 (선택)", role: "앱으로 열기 → 같은 파일 편집·저장 → Workbench에서 이어서 작업", status: tools.ieumApp } as const] : []),
+                    ...(tools.ieumApp ? [{ key: "ieumApp", name: "이음오피스 독립 앱 · 자동 설치·연결", role: "앱 목록에서 단독 실행 · 앱으로 열기 → 같은 파일 편집·저장 → Workbench에서 이어서 작업", status: tools.ieumApp } as const] : []),
                     ...(tools.hwp ? [{ key: "hwp", name: "이음 한글", role: "앱 안에서 HWP·HWPX 편집·저장·출력", status: tools.hwp } as const] : []),
                     ...(tools.pdf ? [{ key: "pdf", name: "이음 PDF", role: "앱 안에서 PDF 편집·쪽 정리·사본 저장", status: tools.pdf } as const] : []),
                   ] as const
@@ -111,7 +114,7 @@ export function Onboarding({
                       {row.status.message ? <div className="connection-meta">{row.status.message}</div> : null}
                       {row.key === "ieumApp" && !row.status.busy ? (
                         <button type="button" className="button small" onClick={onInstallIeum}>
-                          {row.status.available ? "연결 설정·업데이트" : "최신 이음오피스 설치·연결"}
+                          {row.status.setup === "error" ? "설정 다시 시도" : row.status.available ? "연결 설정·업데이트" : "설치 상태 보기"}
                         </button>
                       ) : null}
                     </div>
