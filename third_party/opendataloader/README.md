@@ -12,6 +12,6 @@ Core extraction passes `--include-header-footer` because the reader needs all so
 
 Observed Linux footprint with CPU OCR and Korean/English models: about **2.5 GiB**, downloaded separately from the installer. OCR is fallible: the first four-line Korean/English fixture produced three text regions with some Korean substitutions. The same omission exists in the original CLI JSON; the adapter did not discard the line. Do not claim perfect OCR or count this as an engine algorithm fixed by Workbench.
 
-Validation: native Linux UI 11/11, full suite 1264/1264, original runtime install/extraction/OCR on Windows x64, macOS arm64 and Linux x64 each 8/8 ([CI](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41297351638)). These runtime checks do not replace final installer acceptance.
+Validation: native Linux extraction/OCR UI 11/11, original reading/highlight/passage UI 12/12, full suite 1264/1264, original runtime install/extraction/OCR on Windows x64, macOS arm64 and Linux x64 each 8/8 ([CI](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41297351638)). These runtime checks do not replace final installer acceptance.
 
-Exact research: `research:rr-62872cd0cb4e9182261b621185512b31:52f5301998e29afbf96b3fe5f9bc4eb87fee833e034cd773aff71e8a13af4291`.
+Exact research: `research:rr-62872cd0cb4e9182261b621185512b31:62e1ff62c417aa6f9ba7f45f5b586a9a8f58e0177af6f065950e30ca0604337b`.

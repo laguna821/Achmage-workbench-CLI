@@ -1,5 +1,7 @@
 # Linux 실제 앱 검사
 
+`node scripts/app-e2e/pdf-reading-run.ts <native-binary> <evidence-directory>`는 원본 AI 페이지 읽기→검색/하이라이트 입력, 핵심 표시 수락·실제 PDF 저장, trusted 글자 드래그→구절 설명→노트 저장/재열기를 확인한다. `pdf-reading-native-04` **12/12**로 완료했으며 모델만 로컬 대역이다. `pdf-loader-run.ts <native-binary> <evidence-directory> <installed-runtime-directory>`는 실제 OpenDataLoader 추출/MD저장·ko/en OCR글자층/검색을 확인한다(`odl-native-01`11/11). 원본 런타임3OS 검사는 `.github/workflows/pdf-runtime.yml`의각8/8이다. 정확한 판: `research:rr-62872cd0cb4e9182261b621185512b31:62e1ff62c417aa6f9ba7f45f5b586a9a8f58e0177af6f065950e30ca0604337b`.
+
 2026-11-01 `--only=office-mcp` **31/31**: 실제 HTTP/SSE 클라이언트로 원본 MCP 설정·도구·클라이언트별 세션, 열린 Word/PPT/Sheets 읽기/편집/사본 저장, 나머지5형식 읽기, 덮어쓰기 거부, 명시 폐기/재열기, 원문 보기 유지, 자기 파일 저장과 서버 재시작을 확인했다. X11 전용이며 `APP_E2E_XVFB`로 Xvfb 경로를 지정할 수 있다. 모델을 호출하지 않는다. [범위와 원본 제한](office-integration.md#열린-문서의-원본-mcp-연결), 근거 `office-mcp-native-04/results.json`, 검증 판 `research:rr-81416d120ba5163102d2f579aad2ef2b:d1c46d30d928284cefb2879facb172f7e0467c3d68438a0d9372b996e75b1e97`.
 
 `node scripts/office-cli-check.ts <evidence-directory> --only=html-docx --cli=<genoffice.cjs>`는 원본 HTML→Word의 한글·표·스크립트·상대 base/CSS/JS/SVG, 초기 viewport, 실제 PNG 색·긴 그림의 원본 분할 높이, 원본/설정 보존과 정리를 검사한다. `html-docx-assets-07`은12/12 통과했다. `APP_E2E_OUTPUT_FORMATS=html --only=start,office-output`은 새 **Word로 내보내기** 메뉴와 미저장 내용·원본 판 보존을 포함하며 `html-docx-gui-02/results.json`에서12/12 통과했다. [구현·검증 판과 남은 범위](office-integration.md#원본-cli의-tauri-출력-연결)를 따른다.
