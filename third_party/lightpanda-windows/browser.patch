@@ -1,0 +1,2158 @@
+diff --git a/.gitattributes b/.gitattributes
+new file mode 100644
+index 0000000..e1e7ac8
+--- /dev/null
++++ b/.gitattributes
+@@ -0,0 +1,13 @@
++*.zig text eol=lf
++*.c text eol=lf
++*.h text eol=lf
++*.cpp text eol=lf
++*.md text eol=lf
++*.yml text eol=lf
++*.yaml text eol=lf
++*.zon text eol=lf
++*.json text eol=lf
++*.py text eol=lf
++*.sh text eol=lf
++*.patch text eol=lf
++*.toml text eol=lf
+diff --git a/build.zig b/build.zig
+index 33d5409..d2100ea 100644
+--- a/build.zig
++++ b/build.zig
+@@ -115,6 +115,23 @@ pub fn build(b: *Build) !void {
+         .sanitize_thread = enable_tsan,
+     });
+     lightpanda_module.addImport("lightpanda", lightpanda_module); // allow circular "lightpanda" import
++
++    // WIN-PORT PATCH: expose MSVC/SDK import libs for /DEFAULTLIB directives from c_v8.lib
++    if (target.result.os.tag == .windows) {
++        // WIN-PORT PATCH: filtered msvcrt.lib (TLS clash symbols removed) wins lookup first
++        lightpanda_module.addLibraryPath(windowsFilteredLibs(b));
++        lightpanda_module.linkSystemLibrary("bcrypt", .{});
++        lightpanda_module.linkSystemLibrary("iphlpapi", .{});
++        lightpanda_module.linkSystemLibrary("vcruntime", .{});
++        lightpanda_module.linkSystemLibrary("dbghelp", .{});
++        lightpanda_module.linkSystemLibrary("winmm", .{});
++        lightpanda_module.addCSourceFile(.{ .file = b.path("win-port/shims.c") });
++        const msvc_lib_x64 = try resolveMsvcLibX64(b);
++        const win_sdk_libs = try resolveWinSdkLibs(b);
++        lightpanda_module.addLibraryPath(.{ .cwd_relative = msvc_lib_x64 });
++        lightpanda_module.addLibraryPath(.{ .cwd_relative = win_sdk_libs.um_x64 });
++        lightpanda_module.addLibraryPath(.{ .cwd_relative = win_sdk_libs.ucrt_x64 });
++    }
+     lightpanda_module.addImport("build_config", opts.createModule());
+ 
+     const fmt_step = b.step("fmt", "Check code formatting");
+@@ -369,6 +386,182 @@ fn actionDefault(action: []const u8, key: []const u8) ?[]const u8 {
+     return null;
+ }
+ 
++/// Returns the LP_* override's value with surrounding
++/// whitespace stripped (shell `set` quirks can append a
++/// trailing space), or null when unset/empty.
++fn envPath(b: *Build, name: []const u8) ?[]const u8 {
++    const value = b.graph.environ_map.get(name) orelse return null;
++    const trimmed = std.mem.trim(u8, value, " \t\r\n");
++    if (trimmed.len == 0) return null;
++    return trimmed;
++}
++
++/// WIN-PORT: the filtered msvcrt.lib (TLS clash symbols removed)
++/// location. The repo ships the modified copy under win-port/ so a
++/// fresh clone links without setup; LP_FILTERED_LIBS overrides it
++/// for CI that regenerates the library elsewhere.
++fn windowsFilteredLibs(b: *Build) Build.LazyPath {
++    if (envPath(b, "LP_FILTERED_LIBS")) |p| return .{ .cwd_relative = p };
++    return b.path("win-port/filtered-libs");
++}
++
++const WinSdkLibs = struct { um_x64: []const u8, ucrt_x64: []const u8 };
++
++/// WIN-PORT: resolves the MSVC `lib\x64` import-lib directory at
++/// build time so builds don't depend on the exact toolset version
++/// installed. LP_MSVC_LIB_X64 overrides; otherwise the newest
++/// toolset of the Visual Studio installs on the machine wins.
++fn resolveMsvcLibX64(b: *Build) ![]const u8 {
++    const io = b.graph.io;
++    if (envPath(b, "LP_MSVC_LIB_X64")) |p| {
++        if (std.Io.Dir.accessAbsolute(io, p, .{})) |_| {
++            std.debug.print("Using MSVC import libs (LP_MSVC_LIB_X64): {s}\n", .{p});
++            return p;
++        } else |_| {
++            std.debug.print("LP_MSVC_LIB_X64 points at a missing directory: {s}\nMSVC lib\\x64 search points:\n", .{p});
++            printMsvcSearchPoints();
++            return error.MsvcLibX64NotFound;
++        }
++    }
++    // BuildTools installs (Program Files (x86)); the 2019 layout is
++    // tried too, for machines that still have it.
++    if (tryMsvcRoot(b, "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools", null)) |lib_x64| {
++        std.debug.print("Using MSVC import libs: {s}\n", .{lib_x64});
++        return lib_x64;
++    }
++    if (tryMsvcRoot(b, "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools", null)) |lib_x64| {
++        std.debug.print("Using MSVC import libs: {s}\n", .{lib_x64});
++        return lib_x64;
++    }
++    // WIN-PORT: full editions under Program Files, *any* VS version
++    // (18, 2022, 2019 ...) -- GitHub runners moved to "Microsoft
++    // Visual Studio\18\Enterprise" (VS2026), so a fixed list misses.
++    if (std.Io.Dir.openDirAbsolute(io, "C:\\Program Files\\Microsoft Visual Studio", .{ .iterate = true })) |versions| {
++        defer versions.close(io);
++        var vit = versions.iterate();
++        while (vit.next(io) catch null) |ver| {
++            if (ver.kind != .directory) continue;
++            const ver_root = b.fmt("C:\\Program Files\\Microsoft Visual Studio\\{s}", .{ver.name});
++            if (std.Io.Dir.openDirAbsolute(io, ver_root, .{ .iterate = true })) |editions| {
++                defer editions.close(io);
++                var eit = editions.iterate();
++                while (eit.next(io) catch null) |ed| {
++                    if (ed.kind != .directory) continue;
++                    if (tryMsvcRoot(b, ver_root, ed.name)) |lib_x64| {
++                        std.debug.print("Using MSVC import libs: {s}\n", .{lib_x64});
++                        return lib_x64;
++                    }
++                }
++            } else |_| {}
++        }
++    } else |_| {}
++    std.debug.print("No MSVC lib\\x64 import-lib directory found; searched:\n", .{});
++    printMsvcSearchPoints();
++    return error.MsvcLibX64NotFound;
++}
++
++/// Tries one Visual Studio install root: `<vs_root>\VC\Tools\MSVC`
++/// for BuildTools, `<vs_root>\<edition>\VC\Tools\MSVC` for full
++/// editions. Returns the newest toolset's `lib\x64` when it exists.
++fn tryMsvcRoot(b: *Build, vs_root: []const u8, edition: ?[]const u8) ?[]const u8 {
++    const msvc_root = if (edition) |e|
++        b.fmt("{s}\\{s}\\VC\\Tools\\MSVC", .{ vs_root, e })
++    else
++        b.fmt("{s}\\VC\\Tools\\MSVC", .{vs_root});
++    const toolset_dir = newestVersionSubdir(b, msvc_root, "lib\\x64") catch return null;
++    const toolset = toolset_dir orelse return null;
++    return b.fmt("{s}\\lib\\x64", .{toolset});
++}
++
++/// WIN-PORT: resolves the Windows SDK `um\x64`/`ucrt\x64` import-lib
++/// directories. LP_WINSDK_DIR overrides the Lib root (or points
++/// straight at a version directory); otherwise the newest version
++/// under the Windows 10 SDK Lib directory wins.
++fn resolveWinSdkLibs(b: *Build) !WinSdkLibs {
++    const io = b.graph.io;
++    if (envPath(b, "LP_WINSDK_DIR")) |p| {
++        // Accept either the SDK Lib root (version directories
++        // inside) or a version directory directly.
++        var version_dir: ?[]const u8 = null;
++        if (std.Io.Dir.accessAbsolute(io, b.fmt("{s}\\um\\x64", .{p}), .{})) |_| {
++            version_dir = p;
++        } else |_| {
++            version_dir = try newestVersionSubdir(b, p, "um\\x64");
++        }
++        if (version_dir) |dir| return winSdkLibs(b, dir);
++        std.debug.print("LP_WINSDK_DIR points at a directory without a usable Windows SDK: {s}\nWindows SDK Lib search points:\n", .{p});
++        printWinSdkSearchPoints();
++        return error.WinSdkLibNotFound;
++    }
++    const lib_root = "C:\\Program Files (x86)\\Windows Kits\\10\\Lib";
++    const version_dir = (try newestVersionSubdir(b, lib_root, "um\\x64")) orelse {
++        std.debug.print("No Windows SDK um\\x64 import-lib directory found; searched:\n", .{});
++        printWinSdkSearchPoints();
++        return error.WinSdkLibNotFound;
++    };
++    return winSdkLibs(b, version_dir);
++}
++
++fn winSdkLibs(b: *Build, version_dir: []const u8) WinSdkLibs {
++    return .{
++        .um_x64 = b.fmt("{s}\\um\\x64", .{version_dir}),
++        .ucrt_x64 = b.fmt("{s}\\ucrt\\x64", .{version_dir}),
++    };
++}
++
++/// Returns the path of the highest-version subdirectory of
++/// `dir` whose `probe` subpath exists (e.g.
++/// ...\VC\Tools\MSVC\14.44.35207, ...\Windows Kits\10\Lib\10.0.26100.0).
++/// Returns null when `dir` doesn't exist or holds no matching
++/// subdirectory. The best name is kept separately because the
++/// Io iterator reuses its buffer.
++fn newestVersionSubdir(b: *Build, dir: []const u8, probe: []const u8) !?[]const u8 {
++    const io = b.graph.io;
++    var d = std.Io.Dir.openDirAbsolute(io, dir, .{ .iterate = true }) catch return null;
++    defer d.close(io);
++    var it = d.iterate();
++    var best_name: ?[]const u8 = null;
++    var best_path: ?[]const u8 = null;
++    while (it.next(io) catch null) |entry| {
++        if (entry.kind != .directory) continue;
++        if (best_name != null and !versionGreater(entry.name, best_name.?)) continue;
++        std.Io.Dir.accessAbsolute(io, b.fmt("{s}\\{s}\\{s}", .{ dir, entry.name, probe }), .{}) catch continue;
++        best_name = try b.allocator.dupe(u8, entry.name);
++        best_path = b.fmt("{s}\\{s}", .{ dir, entry.name });
++    }
++    return best_path;
++}
++
++/// Orders dotted version strings ("14.44.35207", "10.0.26100.0")
++/// by numeric component; components that don't parse as numbers
++/// compare as strings, and the longer string wins once the other
++/// runs out of components.
++fn versionGreater(a: []const u8, b: []const u8) bool {
++    var ait = std.mem.splitScalar(u8, a, '.');
++    var bit = std.mem.splitScalar(u8, b, '.');
++    while (true) {
++        const ac = ait.next();
++        const bc = bit.next();
++        if (ac == null) return false;
++        if (bc == null) return true;
++        const an = std.fmt.parseInt(u32, ac.?, 10) catch return std.mem.order(u8, ac.?, bc.?) == .gt;
++        const bn = std.fmt.parseInt(u32, bc.?, 10) catch return std.mem.order(u8, ac.?, bc.?) == .gt;
++        if (an != bn) return an > bn;
++    }
++}
++
++fn printMsvcSearchPoints() void {
++    std.debug.print("  C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\<version>\\lib\\x64\n", .{});
++    std.debug.print("  C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\<version>\\lib\\x64\n", .{});
++    std.debug.print("  C:\\Program Files\\Microsoft Visual Studio\\2022\\<edition>\\VC\\Tools\\MSVC\\<version>\\lib\\x64\n", .{});
++    std.debug.print("  C:\\Program Files\\Microsoft Visual Studio\\2019\\<edition>\\VC\\Tools\\MSVC\\<version>\\lib\\x64\n", .{});
++}
++
++fn printWinSdkSearchPoints() void {
++    std.debug.print("  C:\\Program Files (x86)\\Windows Kits\\10\\Lib\\<version>\\um\\x64\n", .{});
++    std.debug.print("  C:\\Program Files (x86)\\Windows Kits\\10\\Lib\\<version>\\ucrt\\x64\n", .{});
++}
++
+ /// Renames the hot V8 functions' sections (`.text` -> `.text.hot.<sym>`, see
+ /// orderfile/mark_hot_sections.zig) so the orderfile script can gather them.
+ fn markHotSections(b: *Build, archive: Build.LazyPath) Build.LazyPath {
+@@ -432,15 +625,20 @@ fn linkRust(b: *Build, mod: *Build.Module, deps: Deps) void {
+         "--profile",       profile,
+         "--manifest-path", "src/rust/ffi/Cargo.toml",
+     });
++    // WIN-PORT: force the gnu target on windows -- the msvc-host rust
++    // emits compiler_builtins weak symbols that clash with zig compiler_rt
++    // at link time; the gnu target matches the local (working) setup. It
++    // also pins the staticlib name to `liblightpanda_ffi.a` on windows,
++    // so the artifact path needs no toolchain-specific normalization.
++    if (builtin.os.tag == .windows) {
++        exec_cargo.addArgs(&.{ "--target", "x86_64-pc-windows-gnu" });
++    }
+ 
+     addDirInputs(b, exec_cargo, "src/rust", "target") catch |err| {
+         std.debug.panic("walk src/rust: {t}", .{err});
+     };
+ 
+-    // Cargo reports progress on stderr; left uncaptured, Zig prints it as a
+-    // "failed command: ..." diagnostic on a successful build. A non-zero exit
+-    // still surfaces the captured output.
+-    _ = exec_cargo.captureStdErr(.{});
++    // WIN-PORT: cargo stderr printed live (CI diagnostics for the ffi lib).
+ 
+     // TODO: We can prefer `--artifact-dir` once it become stable.
+     const out_dir = exec_cargo.addOutputDirectoryArg2("rust", .{ .prefix = "--target-dir=" });
+@@ -448,7 +646,15 @@ fn linkRust(b: *Build, mod: *Build.Module, deps: Deps) void {
+     const rust_step = b.step("rust", "Build the Rust staticlib (requires cargo)");
+     rust_step.dependOn(&exec_cargo.step);
+ 
+-    const obj = out_dir.path(b, out_subdir).path(b, "liblightpanda_ffi.a");
++    // WIN-PORT: cargo nests artifacts under the target-triple dir when
++    // --target is passed; linux (no --target) uses the host layout. The
++    // declared output directory also orders the cargo run before every
++    // step that consumes the staticlib, so no explicit dependOn is
++    // needed on a fresh tree.
++    const obj = if (builtin.os.tag == .windows)
++        out_dir.path(b, "x86_64-pc-windows-gnu").path(b, out_subdir).path(b, "liblightpanda_ffi.a")
++    else
++        out_dir.path(b, out_subdir).path(b, "liblightpanda_ffi.a");
+     mod.addObjectFile(obj);
+ }
+ 
+@@ -726,12 +932,15 @@ fn buildNghttp2(b: *Build, target: Build.ResolvedTarget, optimize: std.lang.Opti
+     lib.installHeadersDirectory(dep.path("lib/includes/nghttp2"), "nghttp2", .{});
+     mod.addCSourceFiles(.{
+         .root = dep.path("lib"),
+-        .flags = &.{
+-            "-DNGHTTP2_STATICLIB",
+-            "-DHAVE_TIME_H",
+-            "-DHAVE_ARPA_INET_H",
+-            "-DHAVE_NETINET_IN_H",
+-        },
++        .flags = if (target.result.os.tag == .windows)
++            &.{ "-DNGHTTP2_STATICLIB", "-DHAVE_TIME_H" }
++        else
++            &.{
++                "-DNGHTTP2_STATICLIB",
++                "-DHAVE_TIME_H",
++                "-DHAVE_ARPA_INET_H",
++                "-DHAVE_NETINET_IN_H",
++            },
+         .files = &.{
+             "sfparse.c",                 "nghttp2_alpn.c",   "nghttp2_buf.c",
+             "nghttp2_callbacks.c",       "nghttp2_debug.c",  "nghttp2_extpri.c",
+@@ -986,6 +1195,7 @@ fn buildCurl(
+             "-DHAVE_CONFIG_H",
+             "-DCURL_STATICLIB",
+             "-DBUILDING_LIBCURL",
++            "-DNGHTTP2_STATICLIB", // WIN-PORT PATCH: nghttp2 is linked statically
+         },
+         .files = &.{
+             // You can include all files from lib, libcurl uses #ifdef-guards to exclude code for disabled functions
+diff --git a/src/Sighandler.zig b/src/Sighandler.zig
+index aabeef9..d838f97 100644
+--- a/src/Sighandler.zig
++++ b/src/Sighandler.zig
+@@ -22,6 +22,7 @@
+ //! The structure does not clear the memory allocated in the arena,
+ //! clear the entire arena when exiting the program.
+ const std = @import("std");
++const builtin = @import("builtin");
+ const lp = @import("lightpanda");
+ 
+ const log = lp.log;
+@@ -49,6 +50,12 @@ const Listener = struct {
+ };
+ 
+ pub fn install(self: *SigHandler) !void {
++    if (builtin.os.tag == .windows) {
++        // Windows has no POSIX signal mask or sigwait model; Ctrl-C is
++        // handled by the default console handler, so there is nothing to
++        // install here. Listener dispatch and deadlines are POSIX-only.
++        return;
++    }
+     // Block these signals for the current thread and all created from it.
+     // SIGALRM is included so arm() can wake the sighandler thread on a deadline.
+     self.sigset = std.posix.sigemptyset();
+@@ -72,6 +79,10 @@ extern "c" fn setitimer(which: c_int, new_value: *const itimerval, old_value: ?*
+ /// Schedule a SIGALRM after `ms` milliseconds, which wakes the sighandler
+ /// thread and runs the registered listeners. Used to enforce --terminate-ms.
+ pub fn deadline(_: *SigHandler, ms: u32) !void {
++    if (builtin.os.tag == .windows) {
++        // No setitimer/SIGALRM on Windows; a deadline cannot be armed.
++        return error.SetItimerFailed;
++    }
+     const it = itimerval{
+         .interval = .{ .sec = 0, .usec = 0 },
+         .value = .{
+diff --git a/src/agent/Spinner.zig b/src/agent/Spinner.zig
+index 70cfde6..808591d 100644
+--- a/src/agent/Spinner.zig
++++ b/src/agent/Spinner.zig
+@@ -18,10 +18,54 @@
+ 
+ const std = @import("std");
+ const lp = @import("lightpanda");
++const builtin = @import("builtin");
+ const log = lp.log;
+ const ansi = @import("ansi.zig");
+ const truncateUtf8 = @import("../string.zig").truncateUtf8;
+ 
++// std.posix writes need an fd_t, which is a HANDLE on
++// Windows; kernel32's WriteFile is the equivalent.
++extern "kernel32" fn WriteFile(
++    hFile: std.os.windows.HANDLE,
++    lpBuffer: [*]const u8,
++    nNumberOfBytesToWrite: u32,
++    lpNumberOfBytesWritten: *u32,
++    lpOverlapped: ?*anyopaque,
++) std.os.windows.BOOL;
++
++fn writeRaw(handle: std.os.windows.HANDLE, bytes: []const u8) void {
++    var written: u32 = 0;
++    _ = WriteFile(handle, bytes.ptr, @intCast(bytes.len), &written, null);
++}
++
++fn writeErr(bytes: []const u8) void {
++    if (comptime builtin.os.tag == .windows) {
++        writeRaw(std.Io.File.stderr().handle, bytes);
++    } else {
++        _ = std.c.write(std.posix.STDERR_FILENO, bytes.ptr, bytes.len);
++    }
++}
++
++const COORD = extern struct { X: i16, Y: i16 };
++const SMALL_RECT = extern struct {
++    Left: i16,
++    Top: i16,
++    Right: i16,
++    Bottom: i16,
++};
++const CONSOLE_SCREEN_BUFFER_INFO = extern struct {
++    dwSize: COORD,
++    dwCursorPosition: COORD,
++    wAttributes: u16,
++    srWindow: SMALL_RECT,
++    dwMaximumWindowSize: COORD,
++};
++
++extern "kernel32" fn GetConsoleScreenBufferInfo(
++    hConsoleOutput: std.os.windows.HANDLE,
++    lpConsoleScreenBufferInfo: *CONSOLE_SCREEN_BUFFER_INFO,
++) std.os.windows.BOOL;
++
+ const Spinner = @This();
+ 
+ const braille = [_][]const u8{ "⡇", "⣆", "⣤", "⣰", "⢸", "⠹", "⠛", "⠏" };
+@@ -145,7 +189,7 @@ pub fn stop(self: *Spinner) void {
+         "\r" ++ clear_eol ++ ansi.dim ++ "[agent: worked for {d:.1}s · {d} tool call{s}]" ++ ansi.reset ++ "\n",
+         .{ elapsed_s, self.tool_calls, if (self.tool_calls == 1) "" else "s" },
+     ) catch return;
+-    _ = std.c.write(std.posix.STDERR_FILENO, (summary).ptr, (summary).len);
++    writeErr(summary);
+ 
+     self.state = .idle;
+     self.paused = false;
+@@ -159,7 +203,7 @@ pub fn cancel(self: *Spinner) void {
+     self.mu.lockUncancelable(lp.io);
+     defer self.mu.unlock(lp.io);
+     if (self.state == .idle) return;
+-    _ = std.c.write(std.posix.STDERR_FILENO, ("\r" ++ clear_eol).ptr, ("\r" ++ clear_eol).len);
++    writeErr("\r" ++ clear_eol);
+     self.state = .idle;
+     self.paused = false;
+     self.last_render_len = 0;
+@@ -175,7 +219,7 @@ pub fn pause(self: *Spinner) void {
+     defer self.mu.unlock(lp.io);
+     if (self.state == .idle or self.paused) return;
+     self.paused = true;
+-    _ = std.c.write(std.posix.STDERR_FILENO, ("\r" ++ clear_eol).ptr, ("\r" ++ clear_eol).len);
++    writeErr("\r" ++ clear_eol);
+     self.last_render_len = 0;
+     self.cv.signal(lp.io);
+ }
+@@ -234,10 +278,10 @@ pub fn emitAbove(self: *Spinner, text: []const u8) bool {
+     self.mu.lockUncancelable(lp.io);
+     defer self.mu.unlock(lp.io);
+     if (self.state == .idle) return false;
+-    _ = std.c.write(std.posix.STDERR_FILENO, ("\r" ++ clear_eol).ptr, ("\r" ++ clear_eol).len);
+-    _ = std.c.write(std.posix.STDERR_FILENO, (text).ptr, (text).len);
++    writeErr("\r" ++ clear_eol);
++    writeErr(text);
+     if (text.len == 0 or text[text.len - 1] != '\n') {
+-        _ = std.c.write(std.posix.STDERR_FILENO, ("\n").ptr, ("\n").len);
++        writeErr("\n");
+     }
+     self.last_render_len = 0;
+     self.renderLocked();
+@@ -307,14 +351,23 @@ fn renderLocked(self: *Spinner) void {
+     if (written.len == self.last_render_len and std.mem.eql(u8, written, self.last_render_buf[0..self.last_render_len])) return;
+     @memcpy(self.last_render_buf[0..written.len], written);
+     self.last_render_len = written.len;
+-    _ = std.c.write(std.posix.STDERR_FILENO, (written).ptr, (written).len);
++    writeErr(written);
+ }
+ 
+-/// Current terminal width in columns, queried via TIOCGWINSZ on stderr.
+-/// Null when stderr isn't a tty, the ioctl fails, or the kernel reports 0
+-/// (some pseudo-ttys leave the field unset). Cheap enough to call per render
+-/// frame; picks up resizes without SIGWINCH plumbing.
++/// Current terminal width in columns, queried via TIOCGWINSZ on stderr
++/// (GetConsoleScreenBufferInfo on Windows). Null when stderr isn't a tty,
++/// the query fails, or the kernel reports 0 (some pseudo-ttys leave the
++/// field unset). Cheap enough to call per render frame; picks up resizes
++/// without SIGWINCH plumbing.
+ fn columns() ?u16 {
++    if (comptime builtin.os.tag == .windows) {
++        var info: CONSOLE_SCREEN_BUFFER_INFO = undefined;
++        if (GetConsoleScreenBufferInfo(std.Io.File.stderr().handle, &info) == .FALSE)
++            return null;
++        const cols = info.srWindow.Right - info.srWindow.Left + 1;
++        if (cols <= 0) return null;
++        return @intCast(cols);
++    }
+     var ws: std.posix.winsize = undefined;
+     // bitcast via c_uint: on archs where `_IOR` sets the direction bit
+     // (MIPS/PPC/SPARC), `IOCGWINSZ` exceeds i32 range, so a plain @intCast
+diff --git a/src/agent/Terminal.zig b/src/agent/Terminal.zig
+index d2669e2..c69c0ce 100644
+--- a/src/agent/Terminal.zig
++++ b/src/agent/Terminal.zig
+@@ -18,6 +18,7 @@
+ 
+ const std = @import("std");
+ const lp = @import("lightpanda");
++const builtin = @import("builtin");
+ const string = @import("../string.zig");
+ const Config = lp.Config;
+ const Schema = lp.Schema;
+@@ -28,6 +29,37 @@ const prompt_assist = @import("prompt_assist.zig");
+ const ansi = @import("ansi.zig");
+ const c = @import("isocline");
+ 
++// std.posix writes need an fd_t, which is a HANDLE on
++// Windows; kernel32's WriteFile is the equivalent.
++extern "kernel32" fn WriteFile(
++    hFile: std.os.windows.HANDLE,
++    lpBuffer: [*]const u8,
++    nNumberOfBytesToWrite: u32,
++    lpNumberOfBytesWritten: *u32,
++    lpOverlapped: ?*anyopaque,
++) std.os.windows.BOOL;
++
++fn writeRaw(handle: std.os.windows.HANDLE, bytes: []const u8) void {
++    var written: u32 = 0;
++    _ = WriteFile(handle, bytes.ptr, @intCast(bytes.len), &written, null);
++}
++
++fn writeErr(bytes: []const u8) void {
++    if (comptime builtin.os.tag == .windows) {
++        writeRaw(std.Io.File.stderr().handle, bytes);
++    } else {
++        _ = std.c.write(std.posix.STDERR_FILENO, bytes.ptr, bytes.len);
++    }
++}
++
++fn writeOut(bytes: []const u8) void {
++    if (comptime builtin.os.tag == .windows) {
++        writeRaw(std.Io.File.stdout().handle, bytes);
++    } else {
++        _ = std.c.write(std.posix.STDOUT_FILENO, bytes.ptr, bytes.len);
++    }
++}
++
+ const Terminal = @This();
+ 
+ /// Command styling shared with the `/help` listing.
+@@ -136,7 +168,7 @@ pub fn agentToolDone(self: *Terminal, name: []const u8, args: []const u8, ok: bo
+ /// spinner isn't running (non-tty REPL) so the line isn't silently dropped.
+ fn emitStderr(self: *Terminal, bytes: []const u8) void {
+     if (self.spinner.emitAbove(bytes)) return;
+-    _ = std.c.write(std.posix.STDERR_FILENO, bytes.ptr, bytes.len);
++    writeErr(bytes);
+ }
+ 
+ fn formatBulletLine(arena: std.mem.Allocator, name: []const u8, args: []const u8, ok: bool) ![]const u8 {
+@@ -153,8 +185,8 @@ pub fn readLine(prompt: [*:0]const u8) ?[]const u8 {
+     // \r) only while isocline reads: while active, Ctrl-C arrives as a CSI-u
+     // escape rather than raw \x03, so the tty driver raises no SIGINT. Leaving
+     // it on during thinking/tool runs would make Ctrl-C unable to interrupt them.
+-    _ = std.c.write(std.posix.STDOUT_FILENO, (ansi.kitty_disambiguate).ptr, (ansi.kitty_disambiguate).len);
+-    defer _ = std.c.write(std.posix.STDOUT_FILENO, (ansi.kitty_pop).ptr, (ansi.kitty_pop).len);
++    writeOut(ansi.kitty_disambiguate);
++    defer writeOut(ansi.kitty_pop);
+     // Isocline auto-appends the line to its (optionally-persisted) history.
+     const line = c.ic_readline(prompt) orelse return null;
+     return std.mem.sliceTo(line, 0);
+@@ -256,8 +288,8 @@ pub fn printMarkdown(self: *Terminal, text: []const u8) void {
+ pub fn printPlain(self: *Terminal, text: []const u8) void {
+     _ = self;
+     if (text.len == 0) return;
+-    _ = std.c.write(std.posix.STDOUT_FILENO, (text).ptr, (text).len);
+-    _ = std.c.write(std.posix.STDOUT_FILENO, ("\n").ptr, ("\n").len);
++    writeOut(text);
++    writeOut("\n");
+ }
+ 
+ /// Write a streamed assistant-text delta (no trailing newline). Rendered
+@@ -268,13 +300,13 @@ pub fn printPlain(self: *Terminal, text: []const u8) void {
+ pub fn printAssistantDelta(self: *Terminal, text: []const u8) void {
+     if (text.len == 0) return;
+     if (self.styledOutput()) return self.renderStyled(text, .delta);
+-    _ = std.c.write(std.posix.STDOUT_FILENO, (text).ptr, (text).len);
++    writeOut(text);
+ }
+ 
+ /// Flush any partial streamed line, terminate it, and reset stream state.
+ pub fn endAssistantStream(self: *Terminal) void {
+     if (self.styledOutput()) return self.renderStyled("", .end);
+-    _ = std.c.write(std.posix.STDOUT_FILENO, ("\n").ptr, ("\n").len);
++    writeOut("\n");
+ }
+ 
+ // Must exceed the downstream LLM-judge's snapshot window for full grounding
+@@ -312,7 +344,7 @@ pub fn printScriptDone(self: *Terminal, name: []const u8, args: []const u8) void
+         ansi.green ++ "●" ++ ansi.reset ++ " " ++ ansi.dim ++ "[{s} {s}]" ++ ansi.reset ++ "\n",
+         .{ name, args },
+     ) catch return;
+-    _ = std.c.write(std.posix.STDERR_FILENO, (line).ptr, (line).len);
++    writeErr(line);
+ }
+ 
+ /// Re-indents `text` as two-space JSON, or null when it isn't a JSON object/array.
+diff --git a/src/agent/auth/auth.zig b/src/agent/auth/auth.zig
+index de06eb2..6170e1e 100644
+--- a/src/agent/auth/auth.zig
++++ b/src/agent/auth/auth.zig
+@@ -25,6 +25,7 @@
+ 
+ const std = @import("std");
+ const lp = @import("lightpanda");
++const builtin = @import("builtin");
+ const log = lp.log;
+ const zenai = @import("zenai");
+ const Config = lp.Config;
+@@ -140,14 +141,14 @@ fn storeSaveAt(arena: std.mem.Allocator, dir: []const u8, id: []const u8, tokens
+         .account_id = tokens.account_id,
+     });
+     // Secrets file: owner-only perms.
+-    try writeJsonAtomic(path, map, .fromMode(0o600));
++    try writeJsonAtomic(path, map, if (comptime builtin.os.tag == .windows) .default_file else .fromMode(0o600));
+ }
+ 
+ fn storeDeleteAt(arena: std.mem.Allocator, dir: []const u8, id: []const u8) !void {
+     const path = try storePath(arena, dir);
+     var map = readStoreFile(arena, path);
+     if (!map.map.swapRemove(id)) return;
+-    try writeJsonAtomic(path, map, .fromMode(0o600));
++    try writeJsonAtomic(path, map, if (comptime builtin.os.tag == .windows) .default_file else .fromMode(0o600));
+ }
+ 
+ /// Remove the stored token for `id`. No-op when absent.
+diff --git a/src/agent/picker.zig b/src/agent/picker.zig
+index 7625423..c5b7441 100644
+--- a/src/agent/picker.zig
++++ b/src/agent/picker.zig
+@@ -21,9 +21,24 @@
+ //! before — or without — the isocline REPL.
+ 
+ const std = @import("std");
++const builtin = @import("builtin");
+ const lp = @import("lightpanda");
+ const ansi = @import("ansi.zig");
+ 
++// Windows console APIs used for raw key input; not wrapped by std.
++extern "kernel32" fn GetConsoleMode(
++    hConsoleHandle: std.os.windows.HANDLE,
++    lpMode: *u32,
++) std.os.windows.BOOL;
++extern "kernel32" fn SetConsoleMode(
++    hConsoleHandle: std.os.windows.HANDLE,
++    dwMode: u32,
++) std.os.windows.BOOL;
++
++const ENABLE_PROCESSED_INPUT: u32 = 0x0001;
++const ENABLE_LINE_INPUT: u32 = 0x0002;
++const ENABLE_ECHO_INPUT: u32 = 0x0004;
++
+ pub fn interactiveTty() bool {
+     const stdin_tty = std.Io.File.stdin().isTty(lp.io) catch false;
+     const stderr_tty = std.Io.File.stderr().isTty(lp.io) catch false;
+@@ -99,10 +114,20 @@ const ChoiceState = struct {
+ };
+ 
+ const RawTerminal = struct {
+-    original: std.posix.termios,
++    original: if (builtin.os.tag == .windows) u32 else std.posix.termios,
+ 
+     fn enable() error{NotInteractive}!RawTerminal {
+         if (!interactiveTty()) return error.NotInteractive;
++        if (builtin.os.tag == .windows) {
++            const handle = std.Io.File.stdin().handle;
++            var original_mode: u32 = undefined;
++            if (GetConsoleMode(handle, &original_mode) == .FALSE) return error.NotInteractive;
++            // Raw key mode: no line buffering, echo, or input processing.
++            const raw_mode = original_mode & ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT | ENABLE_PROCESSED_INPUT);
++            if (SetConsoleMode(handle, raw_mode) == .FALSE) return error.NotInteractive;
++            writeRaw(ansi.kitty_legacy);
++            return .{ .original = original_mode };
++        }
+         // A tty that refuses raw mode is non-interactive for our purposes.
+         const original = std.posix.tcgetattr(std.posix.STDIN_FILENO) catch return error.NotInteractive;
+         var raw = original;
+@@ -124,16 +149,31 @@ const RawTerminal = struct {
+         // cursor keys arrive as CSI-u the byte reader can't parse; push the
+         // legacy encoding to force plain arrows. restore() pops back to
+         // whatever the REPL had pushed.
+-        _ = std.c.write(std.posix.STDOUT_FILENO, ansi.kitty_legacy.ptr, ansi.kitty_legacy.len);
++        writeRaw(ansi.kitty_legacy);
+         return .{ .original = original };
+     }
+ 
+     fn restore(self: *const RawTerminal) void {
+-        _ = std.c.write(std.posix.STDOUT_FILENO, ansi.kitty_pop.ptr, ansi.kitty_pop.len);
++        if (builtin.os.tag == .windows) {
++            writeRaw(ansi.kitty_pop);
++            _ = SetConsoleMode(std.Io.File.stdin().handle, self.original);
++            return;
++        }
++        writeRaw(ansi.kitty_pop);
+         std.posix.tcsetattr(std.posix.STDIN_FILENO, .FLUSH, self.original) catch {};
+     }
+ };
+ 
++/// Writes a control sequence to stdout. POSIX writes straight through
++/// libc; Windows goes through the streaming writer on `lp.io`.
++fn writeRaw(bytes: []const u8) void {
++    if (builtin.os.tag == .windows) {
++        std.Io.File.stdout().writeStreamingAll(lp.io, bytes) catch {};
++    } else {
++        _ = std.c.write(std.posix.STDOUT_FILENO, bytes.ptr, bytes.len);
++    }
++}
++
+ fn promptInteractiveChoice(header: []const u8, items: []const [:0]const u8, default: ?usize) !usize {
+     var raw: RawTerminal = try .enable();
+     defer raw.restore();
+@@ -235,6 +275,15 @@ fn readChoiceInput() !ChoiceInput {
+ 
+ fn readChoiceByte() !?u8 {
+     var buf: [1]u8 = undefined;
++    if (builtin.os.tag == .windows) {
++        const n = std.Io.File.stdin().readStreaming(lp.io, &.{&buf}) catch |err| switch (err) {
++            error.WouldBlock => return null,
++            error.InputOutput => return error.ReadFailed,
++            else => return err,
++        };
++        if (n == 0) return null;
++        return buf[0];
++    }
+     const n = std.posix.read(std.posix.STDIN_FILENO, &buf) catch |err| switch (err) {
+         error.WouldBlock => return null,
+         error.InputOutput => return error.ReadFailed,
+diff --git a/src/browser/js/Platform.zig b/src/browser/js/Platform.zig
+index 5525b84..a6e5baa 100644
+--- a/src/browser/js/Platform.zig
++++ b/src/browser/js/Platform.zig
+@@ -18,6 +18,7 @@
+ 
+ const js = @import("js.zig");
+ const v8 = js.v8;
++const builtin = @import("builtin");
+ 
+ const Platform = @This();
+ handle: *v8.Platform,
+@@ -42,7 +43,14 @@ pub fn init(opts: Options) !Platform {
+     }
+ 
+     if (opts.timezone) |id| {
+-        _ = setenv("TZ", id, 1);
++        if (comptime builtin.os.tag == .windows) {
++            // The MSVC CRT has no setenv; _putenv_s is the
++            // equivalent and updates the process environment
++            // that InitializeICU and child processes read.
++            _ = _putenv_s("TZ", id);
++        } else {
++            _ = setenv("TZ", id, 1);
++        }
+     }
+ 
+     if (v8.v8__V8__InitializeICU() == false) {
+@@ -66,3 +74,4 @@ pub fn deinit(self: Platform) void {
+ }
+ 
+ extern fn setenv(name: [*:0]const u8, value: [*:0]const u8, override: c_int) c_int;
++extern fn _putenv_s(name: [*:0]const u8, value: [*:0]const u8) c_int;
+diff --git a/src/browser/tools.zig b/src/browser/tools.zig
+index 446aba1..c40d14f 100644
+--- a/src/browser/tools.zig
++++ b/src/browser/tools.zig
+@@ -19,6 +19,7 @@
+ const std = @import("std");
+ const lp = @import("lightpanda");
+ const zenai = @import("zenai");
++const builtin = @import("builtin");
+ 
+ const NodeRegistry = @import("../NodeRegistry.zig");
+ const TelemetryTool = @import("../telemetry/telemetry.zig").Event.Tool;
+@@ -1390,10 +1391,30 @@ fn joinEngines(comptime field: enum { tag, env_var }, comptime last_sep: []const
+ /// the keyless clause is the one part not generated from the table.
+ pub const search_cascade_prose = "tries " ++ joinEngines(.tag, ", then ") ++ " in order, each when its API key (" ++ joinEngines(.env_var, " or ") ++ ") is set; keenable also works without a key through its public endpoint (rate-limited per client IP)";
+ 
++/// getPosix for Windows: std's getWindows takes a WTF-16
++/// key and returns a WTF-16 value, so the key is built on
++/// the stack and the value is transcoded to a null-
++/// terminated UTF-8 string. The copy is intentionally kept:
++/// it backs a string that lives as long as the process
++/// environment it was read from, matching getPosix, which
++/// returns pointers into the global environ on POSIX.
++fn envGet(environ: std.process.Environ, key: []const u8) ?[:0]const u8 {
++    if (comptime builtin.os.tag == .windows) {
++        if (key.len == 0 or key.len >= 2048) return null;
++        var wkey: [2048]u16 = undefined;
++        for (key, 0..) |c, i| wkey[i] = c;
++        wkey[key.len] = 0;
++        const wkey_z: [:0]u16 = wkey[0..key.len :0];
++        const wvalue = environ.getWindows(wkey_z.ptr) orelse return null;
++        return std.unicode.utf16LeToUtf8AllocZ(std.heap.page_allocator, wvalue) catch return null;
++    }
++    return environ.getPosix(key);
++}
++
+ /// The key `engine` uses right now; `null` selects a keyless engine's
+ /// public endpoint.
+ fn engineKey(comptime engine: anytype) error{MissingApiKey}!?[]const u8 {
+-    if (lp.environ().getPosix(engine.env_var)) |key| return key;
++    if (envGet(lp.environ(), engine.env_var)) |key| return key;
+     return if (comptime isKeyless(engine.Client)) null else error.MissingApiKey;
+ }
+ 
+@@ -2575,13 +2596,37 @@ fn formatLpEnvNames(arena: std.mem.Allocator, env_names: []const []const u8) Too
+ /// `std.os.environ` slice or name pointers into entries would dangle.
+ pub fn lpEnvNames(arena: std.mem.Allocator) error{OutOfMemory}![]const []const u8 {
+     var env_names: std.ArrayList([]const u8) = .empty;
+-    var ptr = std.c.environ;
+-    while (ptr[0]) |entry| : (ptr += 1) {
+-        const line = std.mem.span(entry);
+-        const eq_idx = std.mem.findScalar(u8, line, '=') orelse continue;
+-        const name = line[0..eq_idx];
+-        if (!std.mem.startsWith(u8, name, "LP_")) continue;
+-        try env_names.append(arena, try arena.dupe(u8, name));
++    if (comptime builtin.os.tag == .windows) {
++        // std.c.environ is a mingw CRT global with no MSVC
++        // counterpart (it stays undefined at link), so walk the
++        // PEB environment block directly — UTF-16 "NAME=VALUE"
++        // entries terminated by an empty one — the same block
++        // std.process.Environ's Windows path reads.
++        const env_ptr = std.os.windows.peb().ProcessParameters.Environment;
++        var i: usize = 0;
++        while (env_ptr[i] != 0) {
++            const key_value = std.mem.sliceTo(env_ptr[i..], 0);
++            // Skip past a leading '=' (the "=C:=..." drive
++            // entries); names must contain a '=' to be listed.
++            if (std.mem.findScalarPos(u16, key_value, 1, '=')) |equal_index| {
++                const name_w = key_value[0..equal_index];
++                if (name_w.len >= 3 and name_w[0] == 'L' and name_w[1] == 'P' and name_w[2] == '_') {
++                    const name = std.unicode.utf16LeToUtf8Alloc(arena, name_w) catch continue;
++                    try env_names.append(arena, name);
++                }
++            }
++            // skip past the NUL terminator
++            i += key_value.len + 1;
++        }
++    } else {
++        var ptr = std.c.environ;
++        while (ptr[0]) |entry| : (ptr += 1) {
++            const line = std.mem.span(entry);
++            const eq_idx = std.mem.findScalar(u8, line, '=') orelse continue;
++            const name = line[0..eq_idx];
++            if (!std.mem.startsWith(u8, name, "LP_")) continue;
++            try env_names.append(arena, try arena.dupe(u8, name));
++        }
+     }
+     std.mem.sort([]const u8, env_names.items, {}, struct {
+         fn lt(_: void, a: []const u8, b: []const u8) bool {
+diff --git a/src/cli.zig b/src/cli.zig
+index faa9777..1f2834c 100644
+--- a/src/cli.zig
++++ b/src/cli.zig
+@@ -452,7 +452,7 @@ pub fn Builder(comptime commands: anytype) type {
+ 
+         /// Parses executable name, command and options via single call.
+         pub fn parse(allocator: Allocator, proc_args: std.process.Args) !struct { []const u8, Union } {
+-            var args = std.process.Args.Iterator.init(proc_args);
++            var args = try std.process.Args.Iterator.initAllocator(proc_args, allocator);
+             defer args.deinit();
+ 
+             const exec_name = std.fs.path.basename(args.next().?);
+@@ -508,7 +508,7 @@ pub fn Builder(comptime commands: anytype) type {
+             // we can create a new one. Not great, but this fallback is temporary
+             // as we transition to this command mode approach.
+             args.deinit();
+-            args = std.process.Args.Iterator.init(proc_args);
++            args = try std.process.Args.Iterator.initAllocator(proc_args, allocator);
+             // Skip the `exec_name`.
+             _ = args.skip();
+ 
+diff --git a/src/core_dump.zig b/src/core_dump.zig
+index a5c5909..b0eeddb 100644
+--- a/src/core_dump.zig
++++ b/src/core_dump.zig
+@@ -50,6 +50,7 @@ fn shouldDisable() bool {
+ // whether to dump (including the piped-`core_pattern` opt-out), and keeping the
+ // hard limit lets the process raise it again if it ever needs to.
+ fn disable() !void {
++    if (builtin.os.tag == .windows) return;
+     var limit = try std.posix.getrlimit(.CORE);
+     limit.cur = 0;
+     try std.posix.setrlimit(.CORE, limit);
+diff --git a/src/crash_handler.zig b/src/crash_handler.zig
+index 6e268ad..16323f7 100644
+--- a/src/crash_handler.zig
++++ b/src/crash_handler.zig
+@@ -92,6 +92,10 @@ fn report(reason: []const u8, begin_addr: usize, args: anytype) !void {
+         return;
+     }
+ 
++    if (comptime builtin.os.tag == .windows) {
++        return;
++    }
++
+     if (@import("telemetry/telemetry.zig").isDisabled()) {
+         return;
+     }
+diff --git a/src/datetime.zig b/src/datetime.zig
+index 7d72df3..23e149e 100644
+--- a/src/datetime.zig
++++ b/src/datetime.zig
+@@ -18,6 +18,7 @@
+ 
+ const std = @import("std");
+ const lp = @import("lightpanda");
++const builtin = @import("builtin");
+ 
+ const Allocator = std.mem.Allocator;
+ 
+@@ -615,8 +616,20 @@ fn paddingTwoDigits(value: usize) [2]u8 {
+ 
+ pub fn localTime(ts: i64) !LibcTm {
+     var tm: LibcTm = undefined;
+-    if (localtime_r(&ts, &tm) == null) {
+-        return error.InvalidArgument;
++    if (comptime builtin.os.tag == .windows) {
++        // localtime_r is POSIX-only; the MSVC CRT equivalent is
++        // localtime_s, with the arguments swapped and an errno_t
++        // (0 on success) in place of the NULL-on-failure return.
++        // tm_gmtoff/tm_zone have no MSVC counterpart and stay
++        // undefined; no caller reads them (Document.zig formats
++        // only the date and time fields).
++        if (localtime_s(&tm, &ts) != 0) {
++            return error.InvalidArgument;
++        }
++    } else {
++        if (localtime_r(&ts, &tm) == null) {
++            return error.InvalidArgument;
++        }
+     }
+     return tm;
+ }
+@@ -635,6 +648,7 @@ pub const LibcTm = extern struct {
+     tm_zone: ?[*:0]const u8,
+ };
+ extern "c" fn localtime_r(timep: *const i64, result: *LibcTm) ?*LibcTm;
++extern "c" fn localtime_s(result: *LibcTm, timep: *const i64) c_int;
+ 
+ const Parser = struct {
+     input: []const u8,
+diff --git a/src/lightpanda.zig b/src/lightpanda.zig
+index aa2ab78..a67878b 100644
+--- a/src/lightpanda.zig
++++ b/src/lightpanda.zig
+@@ -17,6 +17,7 @@
+ // along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ 
+ const std = @import("std");
++const builtin = @import("builtin");
+ 
+ comptime {
+     // Strong __clear_cache overriding compiler_rt's broken aarch64 one
+@@ -92,6 +93,7 @@ pub const io: std.Io = io_threaded.io();
+ /// need the real process environment (env-var lookups, spawned children) use
+ /// this instead.
+ pub fn environ() std.process.Environ {
++    if (builtin.os.tag == .windows) return .{ .block = .global };
+     return .{ .block = .{ .slice = std.mem.span(std.c.environ) } };
+ }
+ 
+diff --git a/src/mcp/HttpServer.zig b/src/mcp/HttpServer.zig
+index 4e73a3e..aabf4d0 100644
+--- a/src/mcp/HttpServer.zig
++++ b/src/mcp/HttpServer.zig
+@@ -40,6 +40,21 @@ const router = @import("router.zig");
+ const log = lp.log;
+ const posix = std.posix;
+ 
++// std.posix.setsockopt is a compileError on Windows; ws2_32's
++// setsockopt is not wrapped by std. SOCKET is an integer handle
++// (UINT_PTR), so it is passed by value.
++extern "ws2_32" fn setsockopt(
++    s: usize,
++    level: c_int,
++    optname: c_int,
++    optval: [*]const u8,
++    optlen: c_int,
++) c_int;
++
++fn winSetsockopt(sock: posix.socket_t, level: i32, optname: u32, opt: []const u8) !void {
++    if (setsockopt(@intFromPtr(sock), level, @intCast(optname), opt.ptr, @intCast(opt.len)) != 0) return error.Unexpected;
++}
++
+ const HttpServer = @This();
+ 
+ const ns_per_ms = std.time.ns_per_ms;
+@@ -141,7 +156,12 @@ app: *App,
+ 
+ // Blocking listener owned by run(); -1 until bound. stop() unblocks the
+ // accept from another thread.
+-listener: std.atomic.Value(posix.socket_t) = .init(-1),
++listener: std.atomic.Value(posix.socket_t) = if (builtin.os.tag == .windows)
++    // INVALID_SOCKET: socket_t is a HANDLE on
++    // Windows, ~0 is its invalid sentinel.
++    .init(@ptrFromInt(@as(usize, @bitCast(@as(isize, -1)))))
++else
++    .init(-1),
+ shutting_down: std.atomic.Value(bool) = .init(false),
+ 
+ // Registration happens in onAccept — the same (accept) thread deinit runs
+@@ -344,12 +364,24 @@ fn publishUrl(self: *HttpServer, worker: *Worker, url: ?[]const u8) void {
+ /// handler). Blocks the calling thread; each accepted connection is served
+ /// by its own thread doing blocking IO.
+ pub fn run(self: *HttpServer, address: sys_net.IpAddress) !void {
+-    const listener = try sys_net.socket(sys_net.family(&address), posix.SOCK.STREAM | posix.SOCK.CLOEXEC, posix.IPPROTO.TCP);
++    const sock_flags = if (comptime builtin.os.tag == .windows)
++        posix.SOCK.STREAM
++    else
++        posix.SOCK.STREAM | posix.SOCK.CLOEXEC;
++    const listener = try sys_net.socket(sys_net.family(&address), sock_flags, posix.IPPROTO.TCP);
+     errdefer _ = std.c.close(listener);
+ 
+-    try posix.setsockopt(listener, posix.SOL.SOCKET, posix.SO.REUSEADDR, &std.mem.toBytes(@as(c_int, 1)));
++    if (comptime builtin.os.tag == .windows) {
++        try winSetsockopt(listener, posix.SOL.SOCKET, posix.SO.REUSEADDR, &std.mem.toBytes(@as(c_int, 1)));
++    } else {
++        try posix.setsockopt(listener, posix.SOL.SOCKET, posix.SO.REUSEADDR, &std.mem.toBytes(@as(c_int, 1)));
++    }
+     if (@hasDecl(posix.TCP, "NODELAY")) {
+-        try posix.setsockopt(listener, posix.IPPROTO.TCP, posix.TCP.NODELAY, &std.mem.toBytes(@as(c_int, 1)));
++        if (comptime builtin.os.tag == .windows) {
++            try winSetsockopt(listener, posix.IPPROTO.TCP, posix.TCP.NODELAY, &std.mem.toBytes(@as(c_int, 1)));
++        } else {
++            try posix.setsockopt(listener, posix.IPPROTO.TCP, posix.TCP.NODELAY, &std.mem.toBytes(@as(c_int, 1)));
++        }
+     }
+ 
+     const sa = sys_net.sockaddrFromAddress(&address);
+diff --git a/src/mcp/router.zig b/src/mcp/router.zig
+index b76e39c..749b2b2 100644
+--- a/src/mcp/router.zig
++++ b/src/mcp/router.zig
+@@ -1,10 +1,22 @@
+ const std = @import("std");
+ const lp = @import("lightpanda");
++const builtin = @import("builtin");
+ 
+ const protocol = @import("protocol.zig");
+ 
+ const log = lp.log;
+ 
++// std.posix.poll is unavailable on Windows; waiting on the
++// input handle is the equivalent for a console file.
++extern "kernel32" fn WaitForSingleObject(
++    hHandle: std.os.windows.HANDLE,
++    dwMilliseconds: u32,
++) u32;
++
++const WAIT_OBJECT_0: u32 = 0;
++const WAIT_TIMEOUT: u32 = 258;
++const WAIT_FAILED: u32 = 0xFFFFFFFF;
++
+ /// Generic over the server type. The server must expose: `allocator`, a
+ /// `transport: Transport` field, and the per-method `handleInitialize`,
+ /// `handleToolList`, `handleToolCall` methods. `handleResourceList` /
+@@ -53,9 +65,19 @@ fn idleUntilInput(server: anytype, reader: *std.Io.Reader, file: std.Io.File) vo
+         reader.bufferedLen() < reader.buffer.len)
+     {
+         const wait_ms = server.idle();
+-        var fds = [_]std.posix.pollfd{.{ .fd = file.handle, .events = std.posix.POLL.IN, .revents = 0 }};
+-        const ready = std.posix.poll(&fds, wait_ms) catch return;
+-        if (ready > 0) return;
++        if (comptime builtin.os.tag == .windows) {
++            // The input handle is signaled when input is
++            // available; the timeout is the poll equivalent.
++            switch (WaitForSingleObject(file.handle, @intCast(wait_ms))) {
++                WAIT_OBJECT_0 => return,
++                WAIT_TIMEOUT => {},
++                else => return,
++            }
++        } else {
++            var fds = [_]std.posix.pollfd{.{ .fd = file.handle, .events = std.posix.POLL.IN, .revents = 0 }};
++            const ready = std.posix.poll(&fds, wait_ms) catch return;
++            if (ready > 0) return;
++        }
+     }
+ }
+ 
+diff --git a/src/network/http.zig b/src/network/http.zig
+index d6f840f..dc28366 100644
+--- a/src/network/http.zig
++++ b/src/network/http.zig
+@@ -18,6 +18,7 @@
+ 
+ const std = @import("std");
+ const lp = @import("lightpanda");
++const builtin = @import("builtin");
+ 
+ const Config = @import("../Config.zig");
+ const sys_net = @import("../sys/net.zig");
+@@ -248,6 +249,11 @@ fn opensocketCallback(
+         @intCast(address.socktype),
+         @intCast(address.protocol),
+     ) catch return libcurl.CURL_SOCKET_BAD;
++    if (comptime builtin.os.tag == .windows) {
++        // socket_t is a HANDLE on Windows; curl_socket_t
++        // is an integer type there.
++        return @intFromPtr(fd);
++    }
+     return fd;
+ }
+ 
+@@ -584,8 +590,8 @@ pub const Connection = struct {
+     }
+ 
+     // -1 when the transfer used no connection.
+-    pub fn getConnId(self: *const Connection) !c_long {
+-        var conn_id: c_long = undefined;
++    pub fn getConnId(self: *const Connection) !libcurl.CurlOffT {
++        var conn_id: libcurl.CurlOffT = undefined;
+         try libcurl.curl_easy_getinfo(self._easy, .conn_id, &conn_id);
+         return conn_id;
+     }
+@@ -597,8 +603,8 @@ pub const Connection = struct {
+     }
+ 
+     // Total transfer time (name lookup to completion) in microseconds.
+-    pub fn getTotalTimeMicros(self: *const Connection) !c_long {
+-        var micros: c_long = undefined;
++    pub fn getTotalTimeMicros(self: *const Connection) !libcurl.CurlOffT {
++        var micros: libcurl.CurlOffT = undefined;
+         try libcurl.curl_easy_getinfo(self._easy, .total_time_t, &micros);
+         return micros;
+     }
+@@ -628,13 +634,13 @@ pub const Connection = struct {
+     }
+ 
+     fn getInfoMicros(self: *const Connection, comptime info: libcurl.CurlInfo) !u64 {
+-        var micros: c_long = undefined;
++        var micros: libcurl.CurlOffT = undefined;
+         try libcurl.curl_easy_getinfo(self._easy, info, &micros);
+         return @intCast(@max(0, micros));
+     }
+ 
+     pub fn getDownloadSize(self: *const Connection) !u64 {
+-        var size: c_long = undefined;
++        var size: libcurl.CurlOffT = undefined;
+         try libcurl.curl_easy_getinfo(self._easy, .size_download_t, &size);
+         return @intCast(@max(0, size));
+     }
+diff --git a/src/server/Link.zig b/src/server/Link.zig
+index e0ab578..eeb8246 100644
+--- a/src/server/Link.zig
++++ b/src/server/Link.zig
+@@ -17,6 +17,7 @@
+ // along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ 
+ const std = @import("std");
++const builtin = @import("builtin");
+ const lp = @import("lightpanda");
+ 
+ const App = @import("../App.zig");
+@@ -73,7 +74,10 @@ pub fn init(
+     // The Link owns the socket from here on
+     errdefer sys_net.close(socket);
+ 
+-    if (lp.IS_TEST == false) {
++    // The nonblocking assertion is POSIX-only: Windows
++    // sockets created here are blocking, and fcntl does not
++    // exist there.
++    if (lp.IS_TEST == false and comptime builtin.os.tag != .windows) {
+         const socket_flags = try sys_net.fcntl(socket, posix.F.GETFL, 0);
+         const nonblocking = @as(u32, @bitCast(posix.O{ .NONBLOCK = true }));
+         lp.assert(socket_flags & nonblocking == nonblocking, "Link.init blocking", .{});
+@@ -151,6 +155,12 @@ pub fn send(self: *Link, data: []const u8) !void {
+             // file description, so a flip would reach the loop's reads too.
+             // Should virtually never happen.
+             error.WouldBlock => {
++                if (builtin.os.tag == .windows) {
++                    // Windows sockets here are blocking, so WouldBlock
++                    // does not occur; posix.poll() has no Windows
++                    // equivalent anyway.
++                    return error.WouldBlock;
++                }
+                 // The socket is nonblocking so that the main read loop doesn't
+                 // block. But we don't want to make writes truly async, because
+                 // then we'd need to allocate the message and hook that back into
+@@ -243,10 +253,15 @@ pub fn readAvailable(self: *Link, budget: usize) !Read {
+             return error.TooLarge;
+         }
+         const want = dst[0..@min(dst.len, remaining)];
+-        const n = posix.read(self.socket, want) catch |err| switch (err) {
+-            error.WouldBlock => break,
+-            else => return err,
+-        };
++        const n = if (comptime builtin.os.tag == .windows)
++            // A blocking Windows socket never yields
++            // WouldBlock.
++            try sys_net.readSocket(self.socket, want)
++        else
++            posix.read(self.socket, want) catch |err| switch (err) {
++                error.WouldBlock => break,
++                else => return err,
++            };
+         if (n == 0) {
+             return error.Closed;
+         }
+diff --git a/src/server/Server.zig b/src/server/Server.zig
+index 9fa302c..9e09990 100644
+--- a/src/server/Server.zig
++++ b/src/server/Server.zig
+@@ -53,6 +53,21 @@ const Server = @This();
+ // fds the process needs beyond client connections and the HTTP client's
+ const FD_HEADROOM = 128;
+ 
++// std.posix.setsockopt is a compileError on Windows; ws2_32's
++// setsockopt is not wrapped by std. SOCKET is an integer handle
++// (UINT_PTR), so it is passed by value.
++extern "ws2_32" fn setsockopt(
++    s: usize,
++    level: c_int,
++    optname: c_int,
++    optval: [*]const u8,
++    optlen: c_int,
++) c_int;
++
++fn winSetsockopt(sock: posix.socket_t, level: i32, optname: u32, opt: []const u8) !void {
++    if (setsockopt(@intFromPtr(sock), level, @intCast(optname), opt.ptr, @intCast(opt.len)) != 0) return error.Unexpected;
++}
++
+ // How much one readable websocket may pull in per loop iteration; sized so a
+ // large driver message (Playwright sends ~400KB) takes a couple of turns
+ // rather than dozens, without starving the other connections.
+@@ -236,13 +251,24 @@ pub fn init(app: *App, address: Address) !*Server {
+ }
+ 
+ fn listenIp(address: sys_net.IpAddress, backlog: u31) !posix.socket_t {
+-    const flags = posix.SOCK.STREAM | posix.SOCK.CLOEXEC | posix.SOCK.NONBLOCK;
++    const flags = if (comptime builtin.os.tag == .windows)
++        posix.SOCK.STREAM
++    else
++        posix.SOCK.STREAM | posix.SOCK.CLOEXEC | posix.SOCK.NONBLOCK;
+     const l = try sys_net.socket(sys_net.family(&address), flags, posix.IPPROTO.TCP);
+     errdefer sys_net.close(l);
+ 
+-    try posix.setsockopt(l, posix.SOL.SOCKET, posix.SO.REUSEADDR, &std.mem.toBytes(@as(c_int, 1)));
++    if (comptime builtin.os.tag == .windows) {
++        try winSetsockopt(l, posix.SOL.SOCKET, posix.SO.REUSEADDR, &std.mem.toBytes(@as(c_int, 1)));
++    } else {
++        try posix.setsockopt(l, posix.SOL.SOCKET, posix.SO.REUSEADDR, &std.mem.toBytes(@as(c_int, 1)));
++    }
+     if (@hasDecl(posix.TCP, "NODELAY")) {
+-        try posix.setsockopt(l, posix.IPPROTO.TCP, posix.TCP.NODELAY, &std.mem.toBytes(@as(c_int, 1)));
++        if (comptime builtin.os.tag == .windows) {
++            try winSetsockopt(l, posix.IPPROTO.TCP, posix.TCP.NODELAY, &std.mem.toBytes(@as(c_int, 1)));
++        } else {
++            try posix.setsockopt(l, posix.IPPROTO.TCP, posix.TCP.NODELAY, &std.mem.toBytes(@as(c_int, 1)));
++        }
+     }
+ 
+     const sa = sys_net.sockaddrFromAddress(&address);
+@@ -254,6 +280,9 @@ fn listenIp(address: sys_net.IpAddress, backlog: u31) !posix.socket_t {
+ // An existing file at `path` fails the bind with AddressInUse: it may be
+ // another server's socket, so it is never removed.
+ fn listenUnix(path: [:0]const u8, backlog: u31) !posix.socket_t {
++    if (comptime builtin.os.tag == .windows) {
++        return error.Unsupported;
++    }
+     var sa = std.mem.zeroes(posix.sockaddr.un);
+     lp.assert(path.len < sa.path.len, "unix socket path too long", .{ .len = path.len });
+     sa.family = posix.AF.UNIX;
+@@ -381,7 +410,7 @@ fn accept(self: *Server, now: u64) !void {
+     while (true) {
+         var address: posix.sockaddr.storage = undefined;
+         var address_len: posix.socklen_t = @sizeOf(posix.sockaddr.storage);
+-        const socket = sys_net.accept(self.listener, @ptrCast(&address), &address_len, posix.SOCK.NONBLOCK) catch |err| {
++        const socket = sys_net.accept(self.listener, @ptrCast(&address), &address_len, if (comptime builtin.os.tag == .windows) 0 else posix.SOCK.NONBLOCK) catch |err| {
+             switch (err) {
+                 error.WouldBlock => break,
+                 error.ConnectionAborted => {
+@@ -432,6 +461,12 @@ fn accept(self: *Server, now: u64) !void {
+ fn configureSocket(socket: posix.socket_t) void {
+     setSocketOption(socket, posix.SOL.SOCKET, posix.SO.KEEPALIVE, @as(c_int, 1), "SO_KEEPALIVE");
+ 
++    if (comptime builtin.target.os.tag == .windows) {
++        // Windows has no TCP_KEEPIDLE/KEEPINTVL/KEEPCNT
++        // options; SO_KEEPALIVE above uses the OS
++        // defaults.
++        return;
++    }
+     const idle_opt = switch (builtin.target.os.tag) {
+         .macos, .ios => posix.TCP.KEEPALIVE,
+         else => posix.TCP.KEEPIDLE,
+@@ -446,9 +481,15 @@ fn configureSocket(socket: posix.socket_t) void {
+ }
+ 
+ fn setSocketOption(socket: posix.socket_t, level: i32, option: u32, value: anytype, comptime name: []const u8) void {
+-    posix.setsockopt(socket, level, option, &std.mem.toBytes(value)) catch |err| {
+-        log.warn(.serve, "setsockopt", .{ .err = err, .option = name });
+-    };
++    if (comptime builtin.os.tag == .windows) {
++        winSetsockopt(socket, level, option, &std.mem.toBytes(value)) catch |err| {
++            log.warn(.serve, "setsockopt", .{ .err = err, .option = name });
++        };
++    } else {
++        posix.setsockopt(socket, level, option, &std.mem.toBytes(value)) catch |err| {
++            log.warn(.serve, "setsockopt", .{ .err = err, .option = name });
++        };
++    }
+ }
+ 
+ fn liveConnections(self: *const Server) usize {
+@@ -896,6 +937,7 @@ fn nextDeadline(self: *const Server) ?u64 {
+ fn fdBudget(config: *const Config) usize {
+     const reserve: usize = @as(usize, config.httpMaxConcurrent()) + config.wsMaxConcurrent() + FD_HEADROOM;
+     const soft: u64 = blk: {
++        if (comptime builtin.os.tag == .windows) break :blk 1024;
+         const limit = posix.getrlimit(.NOFILE) catch |err| {
+             log.warn(.serve, "getrlimit", .{ .err = err });
+             break :blk 1024;
+@@ -912,9 +954,386 @@ fn fdBudget(config: *const Config) usize {
+ const IOEngine = switch (builtin.target.os.tag) {
+     .linux => EPoll,
+     .macos, .ios, .tvos, .watchos, .freebsd, .netbsd, .dragonfly, .openbsd => KQueue,
++    .windows => WindowsIO,
+     else => unreachable,
+ };
+ 
++/// A select()-based event loop for Windows, mirroring the epoll
++/// engine's semantics: level-triggered, one registration per
++/// socket, the listener and the two wake channels carrying
++/// sentinel owners, and a connection or a Worker link carrying
++/// its pointer as the owner (a Worker's with the low bit set,
++/// see WS_TAG).
++///
++/// Windows has no epoll/kqueue/eventfd, and Zig's std wraps
++/// neither select() nor fd_set, so the winsock2 pieces are
++/// declared here the same way setsockopt is above. select() is
++/// level-triggered, which matches how the epoll engine is
++/// driven: readers drain their socket and rely on an unread
++/// remainder waking the loop again.
++///
++/// Sockets are blocking on Windows (there is no SOCK_NONBLOCK
++/// and no fcntl), which the readers already expect: reading a
++/// readable socket returns at once, and a write never yields
++/// WouldBlock, so the pending-write path stays unused. A
++/// half-closed peer is a readable socket whose read returns
++/// zero -- the same combination epoll delivers as
++/// EPOLLIN|EPOLLRDHUP -- so hangup is never reported here.
++const WindowsIO = struct {
++    const ws2_32 = std.os.windows.ws2_32;
++
++    // select() is not wrapped by Zig's std; the winsock2
++    // signature is declared directly. nfds is ignored on
++    // Windows.
++    extern "ws2_32" fn select(
++        nfds: c_int,
++        readfds: ?*fd_set,
++        writefds: ?*fd_set,
++        exceptfds: ?*fd_set,
++        timeout: ?*const ws2_32.timeval,
++    ) c_int;
++
++    // winsock2 reports failures through WSAGetLastError
++    // rather than errno.
++    extern "ws2_32" fn WSAGetLastError() c_int;
++
++    // Windows has no SOCK_NONBLOCK and no fcntl; flipping a
++    // socket non-blocking is an ioctlsocket(FIONBIO) call.
++    extern "ws2_32" fn ioctlsocket(s: usize, cmd: c_long, arg: *c_ulong) c_int;
++
++    const WSAEINTR = 10004;
++    const FIONBIO: c_long = @bitCast(@as(u32, 0x8004667E));
++
++    // The winsock2 fd_set: a count and a flat array of SOCKET
++    // handles. FD_SETSIZE is a compile-time constant in the
++    // header, but select() reads fd_count entries, so the array
++    // is sized to hold the whole registration set: fdBudget's
++    // Windows soft limit of 1024, plus the listener and the two
++    // wake channels.
++    const MAX_SOCKETS = 1024 + 64;
++    const fd_set = extern struct {
++        fd_count: u32,
++        fd_array: [MAX_SOCKETS]usize,
++    };
++
++    // The wake channels: select() has no eventfd equivalent, so
++    // each is a loopback socketpair. The local end sits in the
++    // read set under a sentinel owner; the remote end is written
++    // to raise the event. Both ends are non-blocking, so a full
++    // buffer fails the write (and the wakeup is logged, like the
++    // eventfd writes on the epoll engine) instead of blocking
++    // the caller, and draining a local end always returns at
++    // once.
++    shutdown_pair: [2]posix.socket_t,
++    signal_pair: [2]posix.socket_t,
++
++    // The registrations, the equivalent of the epoll_ctl set:
++    // which sockets are watched, for what, and who owns them.
++    // Slots are never reordered, so wait() reports events in
++    // registration order; the loop only relies on the deferred
++    // events (accept, signal, shutdown) landing after the batch,
++    // which holds for any order.
++    entries: [MAX_SOCKETS]?Entry,
++    event_list: [MAX_SOCKETS]IOEvent,
++
++    const Entry = struct {
++        socket: posix.socket_t,
++        // 0 is the listener, 1 the shutdown channel, 2 the
++        // signal channel; anything else is a Connection as-is
++        // or a Worker with the low bit set -- the same owner
++        // encoding the epoll and kqueue engines carry in their
++        // event data.
++        owner: usize,
++        read: bool,
++        write: bool,
++    };
++
++    // The owner sentinels, mirroring the epoll engine's event
++    // data.
++    const LISTENER: usize = 0;
++    const SHUTDOWN: usize = 1;
++    const SIGNAL: usize = 2;
++
++    // Poll data carries the owner: an http Connection as-is, a
++    // Worker with the low bit set (both are word-aligned, so
++    // the bit is free).
++    const WS_TAG: usize = 1;
++
++    fn init() !WindowsIO {
++        var self = WindowsIO{
++            .shutdown_pair = undefined,
++            .signal_pair = undefined,
++            .entries = std.mem.zeroes([MAX_SOCKETS]?Entry),
++            .event_list = undefined,
++        };
++
++        self.shutdown_pair = try wakePair();
++        self.signal_pair = wakePair() catch |err| {
++            closePair(&self.shutdown_pair);
++            return err;
++        };
++        errdefer closePair(&self.signal_pair);
++        errdefer closePair(&self.shutdown_pair);
++
++        // Both wake channels stay registered for the engine's
++        // lifetime; every write is its own wakeup, and one
++        // delivery services everything that arrived.
++        try self.add(self.shutdown_pair[0], SHUTDOWN, true, false);
++        try self.add(self.signal_pair[0], SIGNAL, true, false);
++
++        return self;
++    }
++
++    fn deinit(self: *const WindowsIO) void {
++        sys_net.close(self.shutdown_pair[0]);
++        sys_net.close(self.shutdown_pair[1]);
++        sys_net.close(self.signal_pair[0]);
++        sys_net.close(self.signal_pair[1]);
++    }
++
++    fn stop(self: *const WindowsIO) void {
++        _ = sys_net.write(self.shutdown_pair[1], &[_]u8{1}) catch |err| {
++            log.fatal(.serve, "network close", .{ .err = err, .type = "windows" });
++        };
++    }
++
++    fn signal(self: *const WindowsIO) void {
++        _ = sys_net.write(self.signal_pair[1], &[_]u8{1}) catch |err| {
++            log.err(.serve, "network signal", .{ .err = err, .type = "windows" });
++        };
++    }
++
++    fn monitorListener(self: *WindowsIO, fd: posix.fd_t) !void {
++        // The epoll engine gets its non-blocking listener from
++        // SOCK_NONBLOCK at creation; Windows sockets have no
++        // such flag, so it is applied here. accept() drains the
++        // backlog in a loop until it yields WouldBlock, which a
++        // blocking listener never does.
++        try setNonBlocking(fd);
++        return self.add(fd, LISTENER, true, false);
++    }
++
++    fn pauseListener(self: *WindowsIO, fd: posix.fd_t) !void {
++        // mirrors EPOLL_CTL_DEL: the listener leaves the set
++        // until monitorListener re-adds it
++        if (!self.unregister(fd)) return error.FileDescriptorNotRegistered;
++    }
++
++    // No RDHUP to watch: a half-closed peer is a readable
++    // socket whose read returns zero, and the readers deal with
++    // the two together.
++    pub fn monitorHTTP(self: *WindowsIO, conn: *Connection) !void {
++        return self.add(conn.socket, @intFromPtr(conn), true, false);
++    }
++
++    fn monitorWebSocket(self: *WindowsIO, worker: *Worker) !void {
++        return self.add(worker.link.?.socket, @intFromPtr(worker) | WS_TAG, true, false);
++    }
++
++    pub fn waitWritable(self: *WindowsIO, conn: *Connection) !void {
++        // No hangup to watch while writing either: a gone peer
++        // surfaces as a write error instead.
++        return self.modify(conn.socket, @intFromPtr(conn), false, true);
++    }
++
++    pub fn waitReadable(self: *WindowsIO, conn: *Connection) !void {
++        return self.modify(conn.socket, @intFromPtr(conn), true, false);
++    }
++
++    pub fn remove(self: *WindowsIO, socket: posix.socket_t) void {
++        _ = self.unregister(socket);
++    }
++
++    // null blocks until an event arrives
++    fn wait(self: *WindowsIO, timeout_ms: ?u64) Iterator {
++        var read_set: fd_set = .{ .fd_count = 0, .fd_array = undefined };
++        var write_set: fd_set = .{ .fd_count = 0, .fd_array = undefined };
++        for (self.entries) |maybe| {
++            const entry = maybe orelse continue;
++            if (entry.read) fdSet(&read_set, entry.socket);
++            if (entry.write) fdSet(&write_set, entry.socket);
++        }
++
++        var tv: ws2_32.timeval = undefined;
++        const timeout: ?*const ws2_32.timeval = if (timeout_ms) |ms| blk: {
++            // capped at what a 32-bit timeval can hold
++            const total: i64 = @intCast(@min(ms, @as(u64, @intCast(std.math.maxInt(i32)))));
++            tv = .{
++                .sec = @intCast(@divTrunc(total, 1000)),
++                .usec = @intCast(@mod(total, 1000) * 1000),
++            };
++            break :blk &tv;
++        } else null;
++
++        var ready: c_int = undefined;
++        while (true) {
++            ready = select(0, &read_set, &write_set, null, timeout);
++            if (ready >= 0) break;
++            // interrupted: the wait has to be run again
++            if (WSAGetLastError() == WSAEINTR) continue;
++            // A registered socket vanished mid-call; like the
++            // epoll engine, this is a programming error -- every
++            // close path unregisters the socket first.
++            unreachable;
++        }
++
++        // select() rewrote the sets to hold only the ready
++        // sockets. The wake channels are level-triggered: consume
++        // what arrived so they go quiet until the next signal.
++        if (fdIsSet(&read_set, self.shutdown_pair[0])) drain(self.shutdown_pair[0]);
++        if (fdIsSet(&read_set, self.signal_pair[0])) drain(self.signal_pair[0]);
++
++        // One event per ready registration; a socket ready in
++        // both directions gets a single combined event, as an
++        // epoll event would.
++        var count: usize = 0;
++        for (self.entries) |maybe| {
++            const entry = maybe orelse continue;
++            const readable = entry.read and fdIsSet(&read_set, entry.socket);
++            const writable = entry.write and fdIsSet(&write_set, entry.socket);
++            if (!readable and !writable) continue;
++            self.event_list[count] = switch (entry.owner) {
++                LISTENER => .{ .accept = {} },
++                SHUTDOWN => .{ .shutdown = {} },
++                SIGNAL => .{ .signal = {} },
++                else => |owner| .{ .read_write = .{
++                    .target = if (owner & WS_TAG == 0)
++                        .{ .http = @ptrFromInt(owner) }
++                    else
++                        .{ .worker = @ptrFromInt(owner & ~WS_TAG) },
++                    .readable = readable,
++                    .writable = writable,
++                    .hangup = false,
++                } },
++            };
++            count += 1;
++        }
++        return .{ .index = 0, .events = self.event_list[0..count] };
++    }
++
++    const Iterator = struct {
++        index: usize,
++        events: []IOEvent,
++
++        fn next(self: *Iterator) ?IOEvent {
++            const index = self.index;
++            const events = self.events;
++            if (index == events.len) {
++                return null;
++            }
++            self.index = index + 1;
++            return events[index];
++        }
++    };
++
++    fn add(self: *WindowsIO, socket: posix.socket_t, owner: usize, read: bool, write: bool) !void {
++        if (self.find(socket) != null) return error.FileDescriptorAlreadyPresentInSet;
++        const slot = self.freeSlot() orelse {
++            // The registration set is sized to fdBudget's
++            // Windows ceiling, so this needs a config past it.
++            return error.SystemResources;
++        };
++        self.entries[slot] = .{ .socket = socket, .owner = owner, .read = read, .write = write };
++    }
++
++    fn modify(self: *WindowsIO, socket: posix.socket_t, owner: usize, read: bool, write: bool) !void {
++        const slot = self.find(socket) orelse return error.FileDescriptorNotRegistered;
++        self.entries[slot] = .{ .socket = socket, .owner = owner, .read = read, .write = write };
++    }
++
++    // Returns whether the socket was registered.
++    fn unregister(self: *WindowsIO, socket: posix.socket_t) bool {
++        const slot = self.find(socket) orelse return false;
++        self.entries[slot] = null;
++        return true;
++    }
++
++    fn find(self: *const WindowsIO, socket: posix.socket_t) ?usize {
++        for (self.entries, 0..) |maybe, slot| {
++            if (maybe) |entry| {
++                if (entry.socket == socket) return slot;
++            }
++        }
++        return null;
++    }
++
++    fn freeSlot(self: *const WindowsIO) ?usize {
++        for (self.entries, 0..) |maybe, slot| {
++            if (maybe == null) return slot;
++        }
++        return null;
++    }
++
++    fn fdSet(set: *fd_set, socket: posix.socket_t) void {
++        set.fd_array[set.fd_count] = @intFromPtr(socket);
++        set.fd_count += 1;
++    }
++
++    fn fdIsSet(set: *const fd_set, socket: posix.socket_t) bool {
++        const handle: usize = @intFromPtr(socket);
++        for (set.fd_array[0..set.fd_count]) |registered| {
++            if (registered == handle) return true;
++        }
++        return false;
++    }
++
++    // Windows has no socketpair(2); the standard emulation is a
++    // loopback TCP connection: the accepted end is what gets
++    // monitored, the connected end is what gets written to.
++    fn wakePair() ![2]posix.socket_t {
++        const loopback: sys_net.IpAddress = .{ .ip4 = .loopback(0) };
++        const listener = try sys_net.socket(sys_net.family(&loopback), posix.SOCK.STREAM, posix.IPPROTO.TCP);
++        errdefer sys_net.close(listener);
++
++        const sa = sys_net.sockaddrFromAddress(&loopback);
++        try sys_net.bind(listener, sa.ptr(), sa.len);
++        try sys_net.listen(listener, 1);
++
++        // bind(2) on port 0 picked an ephemeral port; look it up
++        // so the connected end can reach it
++        var bound: posix.sockaddr.storage = undefined;
++        var bound_len: posix.socklen_t = @sizeOf(posix.sockaddr.storage);
++        try sys_net.getsockname(listener, @ptrCast(&bound), &bound_len);
++        const address = sys_net.addressFromSockaddr(@ptrCast(&bound));
++
++        const remote = try sys_net.connect(&address);
++        errdefer sys_net.close(remote);
++        const local = try sys_net.accept(listener, null, null, 0);
++        sys_net.close(listener);
++
++        // both ends non-blocking: the writes in stop() and
++        // signal() fail (and are logged) rather than block on a
++        // full buffer, and drain() always returns at once
++        try setNonBlocking(local);
++        try setNonBlocking(remote);
++        return .{ local, remote };
++    }
++
++    fn closePair(pair: *const [2]posix.socket_t) void {
++        sys_net.close(pair[0]);
++        sys_net.close(pair[1]);
++    }
++
++    // Windows has no SOCK_NONBLOCK and no fcntl; a socket is
++    // flipped non-blocking with ioctlsocket(FIONBIO).
++    fn setNonBlocking(socket: posix.socket_t) !void {
++        var on: c_ulong = 1;
++        if (ioctlsocket(@intFromPtr(socket), FIONBIO, &on) != 0) return error.Unexpected;
++    }
++
++    // Consume a delivered wakeup so the level-triggered read set
++    // goes quiet until the next signal. The local end is
++    // readable, so every read here returns at once.
++    fn drain(socket: posix.socket_t) void {
++        var buf: [64]u8 = undefined;
++        while (true) {
++            const n = sys_net.readSocket(socket, &buf) catch return;
++            // drained: nothing was buffered behind what came back
++            if (n < buf.len) return;
++        }
++    }
++};
++
+ // Abstraction over an EPoll or KQueue event
+ pub const IOEvent = union(enum) {
+     accept: void,
+diff --git a/src/server/http.zig b/src/server/http.zig
+index 3f3dccf..193a50d 100644
+--- a/src/server/http.zig
++++ b/src/server/http.zig
+@@ -18,6 +18,7 @@
+ 
+ const std = @import("std");
+ const lp = @import("lightpanda");
++const builtin = @import("builtin");
+ 
+ const App = @import("../App.zig");
+ const sys_net = @import("../sys/net.zig");
+@@ -262,7 +263,10 @@ pub const Connection = struct {
+                 try self.ensureCapacity(@min(self.buf.len * 2, self.max));
+             }
+ 
+-            const n = try posix.read(socket, self.buf[len..]);
++            const n = if (comptime builtin.os.tag == .windows)
++                try sys_net.readSocket(socket, self.buf[len..])
++            else
++                try posix.read(socket, self.buf[len..]);
+             if (n == 0) {
+                 return error.ConnectionClosed;
+             }
+@@ -329,7 +333,12 @@ pub const Connection = struct {
+             }
+ 
+             conn.node = .{};
+-            conn.socket = -1;
++            conn.socket = if (comptime builtin.os.tag == .windows)
++                // INVALID_SOCKET: socket_t is a HANDLE
++                // on Windows, ~0 is its invalid sentinel.
++                @ptrFromInt(@as(usize, @bitCast(@as(isize, -1))))
++            else
++                -1;
+             conn.address = .{ .ip4 = .unspecified(0) };
+             conn.deadline = 0;
+             conn.pending = null;
+@@ -346,7 +355,12 @@ pub const Connection = struct {
+             errdefer allocator.destroy(conn);
+             conn.* = .{
+                 .node = .{},
+-                .socket = -1,
++                .socket = if (comptime builtin.os.tag == .windows)
++                    // INVALID_SOCKET: socket_t is a HANDLE
++                    // on Windows, ~0 is its invalid sentinel.
++                    @ptrFromInt(@as(usize, @bitCast(@as(isize, -1))))
++                else
++                    -1,
+                 .address = .{ .ip4 = .unspecified(0) },
+                 .deadline = 0,
+                 .pending = null,
+diff --git a/src/sys/libcurl.zig b/src/sys/libcurl.zig
+index 29e74e4..97c9a94 100644
+--- a/src/sys/libcurl.zig
++++ b/src/sys/libcurl.zig
+@@ -17,6 +17,7 @@
+ // along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ 
+ const std = @import("std");
++const builtin = @import("builtin");
+ const lp = @import("lightpanda");
+ 
+ const crypto = @import("libcrypto.zig");
+@@ -29,7 +30,7 @@ pub const CurlCode = c.CURLcode;
+ pub const CurlSList = c.curl_slist;
+ pub const CurlHeader = c.curl_header;
+ pub const CurlSocket = c.curl_socket_t;
+-const CurlOffT = c.curl_off_t;
++pub const CurlOffT = c.curl_off_t;
+ 
+ pub const CURLE = struct {
+     pub const OK = c.CURLE_OK;
+@@ -83,6 +84,19 @@ const CurlGlobalFlags = packed struct(u8) {
+     fn to_c(self: @This()) c_long {
+         var flags: c_long = 0;
+         if (self.ssl) flags |= c.CURL_GLOBAL_SSL;
++        if (comptime builtin.os.tag == .windows) {
++            // curl only runs WSAStartup() when CURL_GLOBAL_WIN32 is set
++            // (lib/system_win32.c). Without it every socket() and
++            // getaddrinfo() fails with WSAENOTINITIALISED (10093),
++            // which surfaces as CURLE_COULDNT_CONNECT /
++            // CURLE_COULDNT_RESOLVE_HOST. Callers here pass only
++            // CURL_GLOBAL_SSL, which also bumps curl's global-init
++            // counter and thereby suppresses the lazy CURL_GLOBAL_DEFAULT
++            // (== ALL) init that curl_easy_init() would otherwise run.
++            // Mirror CURL_GLOBAL_DEFAULT's Windows behavior here;
++            // non-Windows builds are unchanged.
++            flags |= c.CURL_GLOBAL_WIN32;
++        }
+         return flags;
+     }
+ };
+diff --git a/src/sys/net.zig b/src/sys/net.zig
+index d922ef1..21703ef 100644
+--- a/src/sys/net.zig
++++ b/src/sys/net.zig
+@@ -96,22 +96,32 @@ pub fn addressFromSockaddr(addr: *align(4) const posix.sockaddr) IpAddress {
+ pub fn socket(domain: u32, socket_type: u32, protocol: u32) !socket_t {
+     // Darwin's socket() rejects flag bits in the type argument (its
+     // SOCK.NONBLOCK/CLOEXEC are Zig-invented shim values); strip them and
+-    // apply via fcntl instead. Linux/FreeBSD accept them natively.
+-    const flag_bits = posix.SOCK.NONBLOCK | posix.SOCK.CLOEXEC;
++    // apply via fcntl instead. Linux/FreeBSD accept them natively, and
++    // Windows defines no such flag bits.
++    const flag_bits: u32 = if (comptime builtin.target.os.tag.isDarwin())
++        posix.SOCK.NONBLOCK | posix.SOCK.CLOEXEC
++    else
++        0;
+     const extra: u32 = if (comptime builtin.target.os.tag.isDarwin()) socket_type & flag_bits else 0;
+     const rc = c.socket(domain, socket_type & ~extra, protocol);
+     if (rc < 0) {
+         return errnoError(c.errno(rc));
+     }
+-    errdefer _ = c.close(rc);
+-    if (extra & posix.SOCK.NONBLOCK != 0) {
+-        const fl = try fcntl(rc, posix.F.GETFL, 0);
+-        _ = try fcntl(rc, posix.F.SETFL, fl | @as(u32, @bitCast(posix.O{ .NONBLOCK = true })));
+-    }
+-    if (extra & posix.SOCK.CLOEXEC != 0) {
+-        _ = try fcntl(rc, posix.F.SETFD, posix.FD_CLOEXEC);
++    if (comptime builtin.os.tag == .windows) {
++        // ws2_32's socket() returns an integer-indexed SOCKET
++        // handle; socket_t on Windows is a HANDLE.
++        return @ptrFromInt(@as(usize, @intCast(rc)));
++    } else {
++        errdefer _ = c.close(rc);
++        if (extra & posix.SOCK.NONBLOCK != 0) {
++            const fl = try fcntl(rc, posix.F.GETFL, 0);
++            _ = try fcntl(rc, posix.F.SETFL, fl | @as(u32, @bitCast(posix.O{ .NONBLOCK = true })));
++        }
++        if (extra & posix.SOCK.CLOEXEC != 0) {
++            _ = try fcntl(rc, posix.F.SETFD, posix.FD_CLOEXEC);
++        }
++        return rc;
+     }
+-    return rc;
+ }
+ 
+ pub fn bind(sock: socket_t, addr: *const posix.sockaddr, len: posix.socklen_t) !void {
+@@ -131,32 +141,51 @@ pub fn listen(sock: socket_t, backlog: u31) !void {
+ pub fn accept(sock: socket_t, addr: ?*posix.sockaddr, addr_size: ?*posix.socklen_t, flags: u32) !socket_t {
+     const have_accept4 = !(builtin.target.os.tag.isDarwin() or native_os == .windows or native_os == .haiku);
+ 
+-    const accepted_sock: socket_t = while (true) {
+-        const rc = if (have_accept4)
+-            c.accept4(sock, addr, addr_size, flags)
+-        else
+-            c.accept(sock, addr, addr_size);
+-
+-        if (rc < 0) {
+-            switch (c.errno(rc)) {
+-                .INTR => continue,
+-                else => |e| return errnoError(e),
++    if (comptime native_os == .windows) {
++        // ws2_32's accept() returns an integer-indexed SOCKET
++        // handle; socket_t is a HANDLE on Windows. There is no
++        // accept4, so the flags argument is unused. Errors come
++        // through WSAGetLastError, not the CRT errno that
++        // c.errno() reads: the WSAEWOULDBLOCK of a drained
++        // backlog must surface as error.WouldBlock or the
++        // caller's accept-drain loop never exits.
++        while (true) {
++            const rc = c.accept(sock, addr, addr_size);
++            if (rc < 0) {
++                const code = WSAGetLastError();
++                if (code == WSAEINTR) continue;
++                return wsaError(code);
+             }
++            return @ptrFromInt(@as(usize, @intCast(rc)));
+         }
+-        break rc;
+-    };
++    } else {
++        const accepted_sock: socket_t = while (true) {
++            const rc = if (have_accept4)
++                c.accept4(sock, addr, addr_size, flags)
++            else
++                c.accept(sock, addr, addr_size);
++
++            if (rc < 0) {
++                switch (c.errno(rc)) {
++                    .INTR => continue,
++                    else => |e| return errnoError(e),
++                }
++            }
++            break rc;
++        };
+ 
+-    if (have_accept4 == false) {
+-        errdefer _ = c.close(accepted_sock);
+-        if (flags & posix.SOCK.NONBLOCK != 0) {
+-            const fl = try fcntl(accepted_sock, posix.F.GETFL, 0);
+-            _ = try fcntl(accepted_sock, posix.F.SETFL, fl | @as(u32, @bitCast(posix.O{ .NONBLOCK = true })));
+-        }
+-        if (flags & posix.SOCK.CLOEXEC != 0) {
+-            _ = try fcntl(accepted_sock, posix.F.SETFD, posix.FD_CLOEXEC);
++        if (have_accept4 == false) {
++            errdefer _ = c.close(accepted_sock);
++            if (flags & posix.SOCK.NONBLOCK != 0) {
++                const fl = try fcntl(accepted_sock, posix.F.GETFL, 0);
++                _ = try fcntl(accepted_sock, posix.F.SETFL, fl | @as(u32, @bitCast(posix.O{ .NONBLOCK = true })));
++            }
++            if (flags & posix.SOCK.CLOEXEC != 0) {
++                _ = try fcntl(accepted_sock, posix.F.SETFD, posix.FD_CLOEXEC);
++            }
+         }
++        return accepted_sock;
+     }
+-    return accepted_sock;
+ }
+ 
+ const ShutdownHow = enum { recv, send, both };
+@@ -198,6 +227,44 @@ pub fn connect(addr: *const IpAddress) !socket_t {
+     return sock;
+ }
+ 
++// ws2_32 socket I/O for Windows, declared directly (the same
++// pattern as Server.zig's WindowsIO): zig's std.c declares
++// send/recv with an isize return, so the int SOCKET_ERROR (-1)
++// result of the real ws2_32 functions would be zero-extended
++// past the rc < 0 checks below. The WSA error codes live in
++// winerror.h and are not defined by zig's ws2_32 bindings.
++extern "ws2_32" fn send(s: usize, buf: [*]const u8, len: c_int, flags: c_int) c_int;
++extern "ws2_32" fn recv(s: usize, buf: [*]u8, len: c_int, flags: c_int) c_int;
++extern "ws2_32" fn closesocket(s: usize) c_int;
++extern "ws2_32" fn WSAGetLastError() c_int;
++
++const WSAEINTR: c_int = 10004;
++const WSAEACCES: c_int = 10013;
++const WSAEINVAL: c_int = 10022;
++const WSAEMFILE: c_int = 10024;
++const WSAEWOULDBLOCK: c_int = 10035;
++const WSAENOTSOCK: c_int = 10038;
++const WSAECONNABORTED: c_int = 10053;
++const WSAECONNRESET: c_int = 10054;
++const WSAENOBUFS: c_int = 10055;
++const WSAENOTCONN: c_int = 10057;
++const WSAESHUTDOWN: c_int = 10058;
++
++pub fn readSocket(sock: socket_t, buf: []u8) !usize {
++    if (comptime native_os == .windows) {
++        // ws2_32 recv is the read path for a SOCKET handle:
++        // kernel32 ReadFile does not operate on sockets. Both
++        // callers pass sockets (Link's connection socket and
++        // Server.drain's wake channels), so no non-socket
++        // branch is needed. A return of 0 is a graceful peer
++        // close; callers map it to error.Closed.
++        const rc = recv(@intFromPtr(sock), buf.ptr, @intCast(buf.len), 0);
++        if (rc == -1) return wsaError(WSAGetLastError());
++        return @intCast(rc);
++    }
++    return posix.read(sock, buf);
++}
++
+ pub fn writeAll(sock: socket_t, bytes: []const u8) !void {
+     var pos: usize = 0;
+     while (pos < bytes.len) {
+@@ -206,6 +273,14 @@ pub fn writeAll(sock: socket_t, bytes: []const u8) !void {
+ }
+ 
+ pub fn write(sock: socket_t, bytes: []const u8) !usize {
++    if (comptime native_os == .windows) {
++        // ws2_32 send: SOCKET_ERROR (-1) on failure, else the
++        // byte count. The CRT write() operates on the fd table
++        // and fails on a SOCKET handle.
++        const rc = send(@intFromPtr(sock), bytes.ptr, @intCast(bytes.len), 0);
++        if (rc == -1) return wsaError(WSAGetLastError());
++        return @intCast(rc);
++    }
+     const rc = c.write(sock, bytes.ptr, bytes.len);
+     if (rc < 0) {
+         return switch (c.errno(rc)) {
+@@ -228,6 +303,14 @@ pub fn fcntl(fd: posix.fd_t, cmd: i32, arg: usize) !usize {
+ }
+ 
+ pub fn close(fd: posix.fd_t) void {
++    if (comptime native_os == .windows) {
++        // fd is a SOCKET handle: closesocket it. The CRT
++        // close() operates on the fd table and returns EBADF
++        // for a SOCKET handle, which would trip the
++        // unreachable below.
++        _ = closesocket(@intFromPtr(fd));
++        return;
++    }
+     switch (c.errno(c.close(fd))) {
+         .BADF => unreachable, // Always a race condition.
+         .INTR => {}, // This is still a success. See https://github.com/ziglang/zig/issues/2425
+@@ -336,3 +419,21 @@ fn errnoError(e: posix.E) anyerror {
+         else => posix.unexpectedErrno(e),
+     };
+ }
++
++// The Windows (WSAGetLastError) counterpart of errnoError.
++fn wsaError(code: c_int) anyerror {
++    return switch (code) {
++        WSAEINTR => error.Interrupted,
++        WSAEACCES => error.AccessDenied,
++        WSAEINVAL => error.InvalidArgument,
++        WSAEMFILE => error.ProcessFdQuotaExceeded,
++        WSAENOBUFS => error.SystemResources,
++        WSAEWOULDBLOCK => error.WouldBlock,
++        WSAENOTSOCK => error.NotASocket,
++        WSAENOTCONN => error.SocketNotConnected,
++        WSAECONNABORTED => error.ConnectionAborted,
++        WSAECONNRESET => error.ConnectionResetByPeer,
++        WSAESHUTDOWN => error.BrokenPipe,
++        else => error.Unexpected,
++    };
++}
+diff --git a/win-port/shims.c b/win-port/shims.c
+new file mode 100644
+index 0000000..a2e1caf
+--- /dev/null
++++ b/win-port/shims.c
+@@ -0,0 +1,49 @@
++/* WIN-PORT shims: link-stage compatibility for zig(mingw) + V8(MSVC /MD) hybrid link. */
++#include <wchar.h>
++#include <stdlib.h>
++
++#define WIN32_LEAN_AND_MEAN
++#include <windows.h>
++
++/* V8's chromium libc++ expects wcstold as dllimport (__imp_ indirect slot). */
++void *__imp_wcstold = (void *)wcstold;
++
++/* MSVC TLS machinery members removed from filtered msvcrt.lib (clashed with zig crt2.o). */
++char __tls_guard = 0;
++void __dyn_tls_on_demand_init(void *h) { (void)h; }
++
++/* UCRT-only _strtold_l: mingw lacks it; locale arg ignored (C-locale parse). */
++long double _strtold_l(const char *s, char **e, void *loc)
++{
++    (void)loc;
++    return strtold(s, e);
++}
++void *__imp__strtold_l = (void *)_strtold_l;
++
++/* c_v8.lib (chromium libc++) references strtold as dllimport; provide the
++ * __imp_ slot explicitly so lld-link does not warn LNK4217 about the local
++ * definition in libmingw32. */
++void *__imp_strtold = (void *)strtold;
++
++/* localtime_s: not in msvcrt.dll nor ucrt.lib present here; Win32 API impl. */
++#undef localtime_s
++int localtime_s(struct tm *_tm, const time_t *_time)
++{
++    SYSTEMTIME st;
++    FILETIME ft, lft;
++    unsigned __int64 t = (unsigned __int64)*_time * 10000000ULL + 116444736000000000ULL;
++    ft.dwLowDateTime = (DWORD)t;
++    ft.dwHighDateTime = (DWORD)(t >> 32);
++    if (!FileTimeToLocalFileTime(&ft, &lft)) return 1;
++    if (!FileTimeToSystemTime(&lft, &st)) return 1;
++    _tm->tm_year = st.wYear - 1900;
++    _tm->tm_mon = st.wMonth - 1;
++    _tm->tm_mday = st.wDay;
++    _tm->tm_hour = st.wHour;
++    _tm->tm_min = st.wMinute;
++    _tm->tm_sec = st.wSecond;
++    _tm->tm_wday = st.wDayOfWeek;
++    _tm->tm_yday = 0;
++    _tm->tm_isdst = -1;
++    return 0;
++}
+diff --git a/win-port/windows-v8-compat.py b/win-port/windows-v8-compat.py
+new file mode 100644
+index 0000000..5a5e2cc
+--- /dev/null
++++ b/win-port/windows-v8-compat.py
+@@ -0,0 +1,113 @@
++#!/usr/bin/env python3
++"""Post-sync compatibility patch for the V8 source tree on Windows.
++
++gclient sync checks out a tree that targets the SDK version the newest
++Visual Studio release prefers (10.0.28000.0), while the build machines
++only carry SDK 10.0.26100.0. The V8 build also has to match the toolchain
++model used here: the dynamic CRT (msvcrt.dll) that the Zig mingw linker
++links against, and no Control Flow Guard flags (the __guard_* symbols
++would clash with the mingw CRT).
++
++This script rewrites the affected build files with plain string
++replacements (no git apply, so it survives context drift) so the freshly
++synced tree builds with the locally installed toolchain.
++
++Usage: python windows-v8-compat.py <v8_tree_root>
++
++Every replacement reports one of:
++  APPLIED  - the tree was changed now
++  ALREADY  - the tree is already in the patched state
++  SKIPPED  - the target was not found (a warning, not an error)
++so the script is idempotent and can be re-run on any tree state.
++"""
++
++import os
++import sys
++
++
++def patch_file(path, edits):
++    """Apply edits to the file at `path`.
++
++    `edits` is a list of (kind, search, replace) tuples. kind is
++    "replace" (swap every occurrence of search with replace) or
++    "comment" (comment out lines whose content starts with search).
++    Prints one status line per edit. Never raises on missing targets.
++    """
++    if not os.path.isfile(path):
++        print("SKIPPED: %s: file not found" % path)
++        return
++
++    # newline="" keeps the original line endings untouched.
++    with open(path, "r", encoding="utf-8", newline="") as f:
++        content = f.read()
++
++    changed = False
++    for kind, search, replace in edits:
++        if kind == "replace":
++            if search not in content:
++                if replace in content:
++                    print("ALREADY: %s: %s" % (path, search))
++                else:
++                    print("SKIPPED: %s: %s not found" % (path, search))
++                continue
++            content = content.replace(search, replace)
++            print("APPLIED: %s: %s -> %s" % (path, search, replace))
++            changed = True
++        elif kind == "comment":
++            lines = content.splitlines(keepends=True)
++            active = 0
++            commented = 0
++            for i, line in enumerate(lines):
++                stripped = line.strip()
++                if stripped.startswith(search):
++                    # Keep the indentation, comment the statement out.
++                    lines[i] = line.replace(search, "# " + search, 1)
++                    active += 1
++                elif stripped.startswith("#") and search in stripped:
++                    commented += 1
++            if active > 0:
++                content = "".join(lines)
++                print("APPLIED: %s: commented out %s (%d line(s))" % (path, search, active))
++                changed = True
++            elif commented > 0:
++                print("ALREADY: %s: %s already commented out" % (path, search))
++            else:
++                print("SKIPPED: %s: %s not found" % (path, search))
++
++    if changed:
++        with open(path, "w", encoding="utf-8", newline="") as f:
++            f.write(content)
++
++
++def main(argv):
++    if len(argv) != 2:
++        sys.stderr.write("usage: python windows-v8-compat.py <v8_tree_root>\n")
++        return 2
++    root = argv[1]
++
++    # The SDK the toolchain scripts hardcode: point them at the SDK
++    # that is actually installed (10.0.26100.0).
++    patch_file(os.path.join(root, "build", "vs_toolchain.py"), [
++        ("replace", "'10.0.28000.0'", "'10.0.26100.0'"),
++        # Skip copying dbghelp.dll when Debugging Tools for Windows
++        # is not installed (it is optional for symbolization only).
++        ("replace", "('dbghelp.dll', False)", "('dbghelp.dll', True)"),
++    ])
++    patch_file(os.path.join(root, "build", "toolchain", "win", "setup_toolchain.py"), [
++        ("replace", "'10.0.28000.0'", "'10.0.26100.0'"),
++    ])
++    patch_file(os.path.join(root, "build", "config", "win", "BUILD.gn"), [
++        # The 10.0.26100.0 SDK headers have no NTDDI_WIN11_BR macro.
++        ("replace", '"NTDDI_VERSION=NTDDI_WIN11_BR"', '"NTDDI_VERSION=NTDDI_WIN10_NI"'),
++        # Avoid __guard_* duplicate symbols against the mingw CRT.
++        ("comment", 'cflags = [ "/guard:cf" ]', None),
++        ("comment", 'cflags = [ "/guard:cf,nochecks" ]', None),
++        # Desktop Windows builds against the dynamic CRT to match the
++        # msvcrt.dll model the Zig mingw linker uses.
++        ("replace", 'configs = [ ":static_crt" ]', 'configs = [ ":dynamic_crt" ]'),
++    ])
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main(sys.argv))

@@ -26,9 +26,10 @@ const server = createServer((req, res) => {
   res.setHeader("content-type", req.url === "/data" ? "application/json" : "text/html; charset=utf-8"); res.end(req.url === "/data" ? JSON.stringify({ text: "비동기 서버 데이터" }) : html);
 });
 const windows = process.platform === "win32";
-const fixtureHost = windows ? JSON.parse(execFileSync("wsl.exe", ["--exec", "ip", "-j", "route", "show", "default"], { encoding: "utf8" }))[0]?.gateway : "127.0.0.1";
-assert.ok(typeof fixtureHost === "string" && /^[\d.]+$/.test(fixtureHost), "WSL fixture gateway");
-await new Promise<void>(done => server.listen(0, windows ? "0.0.0.0" : "127.0.0.1", done));
+const wsl = windows && !/\.exe$/i.test(binary);
+const fixtureHost = wsl ? JSON.parse(execFileSync("wsl.exe", ["--exec", "ip", "-j", "route", "show", "default"], { encoding: "utf8" }))[0]?.gateway : "127.0.0.1";
+assert.ok(typeof fixtureHost === "string" && /^[\d.]+$/.test(fixtureHost), "fixture gateway");
+await new Promise<void>(done => server.listen(0, wsl ? "0.0.0.0" : "127.0.0.1", done));
 const address = server.address(); assert.ok(address && typeof address !== "string");
 const url = `http://${fixtureHost}:${address.port}`;
 const sessions = ["one", "two"].map(id => ({ id, workId: "work", provider: "claude", status: "running", browser: true, archivedAt: null, purpose: id }) as Session);
@@ -79,6 +80,6 @@ try {
   await browser.selectEngine("lightpanda"); check("Lightpanda 재선택·실행", (await run("two", ["open", url])).includes("Lightpanda"));
 } finally {
   await browser.shutdown(); server.closeAllConnections(); await new Promise<void>(done => server.close(() => done()));
-  writeFileSync(out, JSON.stringify({ checks, results, binary, platform: process.platform, arch: process.arch, graphicalBrowser: false, paidModelCalls: 0 }, null, 2));
+  writeFileSync(out, JSON.stringify({ checks, results, binary, platform: process.platform, arch: process.arch, wsl, graphicalBrowser: false, paidModelCalls: 0 }, null, 2));
   rmSync(root, { recursive: true, force: true });
 }

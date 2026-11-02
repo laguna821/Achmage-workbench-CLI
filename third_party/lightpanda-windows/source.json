@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "engineVersion": "1.0.2+achmage.win.1",
+  "zigVersion": "0.17.0",
+  "v8Version": "15.5.35.13",
+  "sources": {
+    "browser": {
+      "repository": "https://github.com/lightpanda-io/browser.git",
+      "commit": "c5f7bb29b127040c899d4e181b5709f76fc71a6f",
+      "patch": "browser.patch",
+      "port": "https://github.com/lightpanda-io/browser/pull/3753",
+      "portCommit": "4bd30d698eedf860e789e887c644d891f4e562d1",
+      "patchSha256": "2dd026c3c1f577664fd30375a820a390268fba661c946a34d1c75a71103112f0"
+    },
+    "v8": {
+      "repository": "https://github.com/lightpanda-io/zig-v8-fork.git",
+      "commit": "b73e4fa2d0afe5036745ae7d332cc5cb7e7adb53",
+      "patch": "v8.patch",
+      "port": "https://github.com/lightpanda-io/zig-v8-fork/pull/219",
+      "portCommit": "7089c36287e90fed4975834ad3f1b79259c94ba2",
+      "patchSha256": "aae857e4ef17eaec2f9d4cb0e8c2c9dfc92335e188b80cef1e89d4f773bddd0d",
+      "localChanges": [
+        "Correct the missing PATH separator before depot_tools when CIPD Python already exists."
+      ]
+    }
+  },
+  "unchangedDependencies": {
+    "zenai": "8bfbb3e5788d278a63708db8ee5f58aa589f9fff"
+  },
+  "researchRevision": "research:rr-13db4ea9fd777aabed7c82207cfb1cda:06b824603c01e5471559809463080a0855cc566d7b778492ed8d84ef52694452"
+}

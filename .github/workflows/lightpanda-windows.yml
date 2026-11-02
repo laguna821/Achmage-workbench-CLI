@@ -1,0 +1,63 @@
+name: Lightpanda native Windows
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/lightpanda-windows-native]
+    paths:
+      - '.github/workflows/lightpanda-windows.yml'
+      - 'third_party/lightpanda-windows/**'
+      - 'scripts/*lightpanda*'
+      - 'apps/host/src/browse-lightpanda.ts'
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: windows-2025
+    timeout-minutes: 300
+    env:
+      LIGHTPANDA_DISABLE_TELEMETRY: 'true'
+      LIGHTPANDA_DISABLE_CORE_DUMP: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: python scripts/prepare-lightpanda-windows.py native-source
+      - run: ./scripts/lightpanda-windows.ps1 setup
+      - uses: actions/cache/restore@v4
+        id: v8-cache
+        with:
+          path: native-cache
+          key: lp-win-v8-15.5.35.13-${{ hashFiles('third_party/lightpanda-windows/v8.patch', 'third_party/lightpanda-windows/tools.json') }}
+      - name: Compile V8 from pinned source
+        run: ./scripts/lightpanda-windows.ps1 v8
+      - uses: actions/cache/save@v4
+        if: steps.v8-cache.outputs.cache-hit != 'true'
+        with:
+          path: native-cache
+          key: ${{ steps.v8-cache.outputs.cache-primary-key }}
+      - name: Compile native browser
+        run: ./scripts/lightpanda-windows.ps1 browser
+      - name: Package native executable and runtime DLLs
+        run: ./scripts/lightpanda-windows.ps1 package
+      - run: npm ci --ignore-scripts
+      - name: Exercise the Workbench gateway with the native engine, without WSL
+        run: node scripts/check-lightpanda.ts native-package/lightpanda.exe native-evidence/workbench-check.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lightpanda-windows-native-evidence
+          path: |
+            native-evidence
+            native-source/source-provenance.json
+            native-cache/provenance.json
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: lightpanda-windows-x64
+          path: lightpanda-windows-x64.zip

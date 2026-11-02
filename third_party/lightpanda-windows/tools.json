@@ -1,0 +1,14 @@
+{
+  "zig": {
+    "url": "https://ziglang.org/download/0.17.0/zig-x86_64-windows-0.17.0.zip",
+    "sha256": "b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428"
+  },
+  "gn": {
+    "url": "https://chrome-infra-packages.appspot.com/dl/gn/gn/windows-amd64/+/dE3x12VMX1Syea3Kad-yzGF8U8QKBVpqZjPy29AAsSQC",
+    "sha256": "744df1d7654c5f54b279adca69dfb2cc617c53c40a055a6a6633f2dbd000b124"
+  },
+  "ninja": {
+    "url": "https://chrome-infra-packages.appspot.com/dl/infra/3pp/tools/ninja/windows-amd64/+/3TgJ1Ckw_8bqhqyrAzltNPV1oYhZClrVWwXWMVE8RVgC",
+    "sha256": "dd3809d42930ffc6ea86acab03396d34f575a188590a5ad55b05d631513c4558"
+  }
+}

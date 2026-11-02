@@ -23,7 +23,7 @@ const env = () => {
 };
 
 export async function lightpandaLaunch(binary: string): Promise<{ command: string; args: string[] }> {
-  if (process.platform !== "win32") return { command: binary, args: [] };
+  if (process.platform !== "win32" || /\.exe$/i.test(binary)) return { command: binary, args: [] };
   try {
     const result = await exec("wsl.exe", ["--exec", "wslpath", "-a", "-u", binary], { timeout: 15000, windowsHide: true });
     const path = result.stdout.trim();
@@ -140,7 +140,9 @@ class PandaSession {
     this.closing = new Promise<void>((resolve, reject) => {
       // 1.0.2 finishes an in-flight navigation before processing EOF/normal SIGTERM.
       // Keep ownership until exit; sending the signal is not evidence of completion.
-      const timer = setTimeout(() => { this.child.kill("SIGTERM"); }, 1500);
+      // On Windows Node implements kill('SIGTERM') with TerminateProcess;
+      // let EOF and the engine's HTTP timeout perform normal cleanup there.
+      const timer = setTimeout(() => { if (process.platform !== "win32") this.child.kill("SIGTERM"); }, 1500);
       const deadline = setTimeout(() => reject(new Error("Lightpanda 정상 종료가 지연되고 있습니다.")), 20000);
       this.child.once("exit", () => { clearTimeout(timer); clearTimeout(deadline); resolve(); });
     });
