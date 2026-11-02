@@ -34,7 +34,7 @@ jobs:
           $sqlite = Get-ChildItem "$env:RUNNER_TEMP/sqlite" -Directory | Select-Object -First 1
           zig fetch $sqlite.FullName
           if ($LASTEXITCODE -ne 0) { throw 'SQLite prefetch failed' }
-          zig build check -Doptimize=ReleaseFast -Dcpu=x86_64 -Dprebuilt_v8_path=diagnostic-empty.lib --summary all 2>&1 | Tee-Object ../../native-evidence/compile-check.log
+          zig build check -Doptimize=ReleaseFast -Dcpu=x86_64 '-Dprebuilt_v8_path=diagnostic-empty.lib' --summary all 2>&1 | Tee-Object ../../native-evidence/compile-check.log
           if ($LASTEXITCODE -ne 0) { throw 'Windows compile preflight failed' }
       - uses: actions/upload-artifact@v4
         if: always()
