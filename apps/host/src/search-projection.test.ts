@@ -33,6 +33,16 @@ it("keeps long raw source and exact YAML keys/shapes in the derived cache", () =
 });
 
 describe.skipIf(!process.env.WORKBENCH_SEARCH_WORKER_BIN && !process.env.WORKBENCH_APP_BIN)("native cache projection", () => {
+  it("finds short Latin words with Korean particles in the original prompt, without broad English prefix matches", async () => {
+    const { index, projection, service } = fixture();
+    index.put(entry("item:prompt", "Ctrl K에서 내가 작성한 요청을 찾아서 ppt로 정리하고 AI와 PDF를 비교해줘"));
+    index.put(entry("item:noise", "Keep powerpoint airframe pdftool"));
+    await projection.settled();
+    for (const query of ["K에서", "ppt로", "AI와", "PDF를", "ppt", "AI", "PDF"]) {
+      const found = await service.search(query);
+      expect(found.hits.map(hit => projection.source(hit.path)?.source), query).toEqual(["item:prompt"]);
+    }
+  });
   it("keeps source identities and removes stale chunks after edit, rollback and delete", async () => {
     const { index, projection, service } = fixture();
     const body = "자료 문단입니다.\n\n".repeat(25_000) + "끝부분 고유확인값";

@@ -206,6 +206,44 @@ describe("one ranked index", () => {
     expect((await manager.search("회의록", { ...all, archived: true })).total).toBe(24);
   });
 
+  it("shows the original prompt in the first project preview after a document was created", async () => {
+    const { manager } = setup();
+    const { work: project, session } = work(manager, "mermaid 마크다운 문서", "codex", "mermaid 마크다운 문서 만들기");
+    const prompt = "방금 이 앱을 새로 설치했는데 간단한 마크다운 문서를 하나 만들어봐 mermaid 그림이랑 테이블도 같이 포함해서";
+    const [request] = say(manager, session.id, ["user", prompt]);
+    const file = join(project.cwd, "mermaid 마크다운 문서.md");
+    writeFileSync(file, "# mermaid 마크다운 문서\n\n| 항목 | 값 |\n| --- | --- |\n| A | B |\n\n```mermaid\nflowchart LR\nA-->B\n```\n");
+    const tracked = manager.documents.track(project.id, project.cwd, file, "engine", session.id, null)!;
+    say(manager, session.id, { kind: "artifact", id: "made-document", artifactId: tracked.artifact.id, revision: 1, change: "created", at: 0 }, ["assistant", "mermaid 그림과 테이블을 포함한 마크다운 문서를 만들었습니다."]);
+    for (const query of ["마크다운 문서", "mermaid", "테이블", prompt]) {
+      const result = await manager.search(query, { per: 3 });
+      expect(hits(result).some(hit => hit.kind === "user" && hit.itemId === request), query).toBe(true);
+    }
+  });
+
+  it("keeps original prompts visible among many repeated assistant body matches", async () => {
+    const { manager } = setup();
+    const { session } = work(manager, "일반 프로젝트");
+    const [request] = say(manager, session.id, ["user", "초롱프롬프트를 찾아 주세요. " + "상세한 배경 설명입니다. ".repeat(80)]);
+    for (let n = 0; n < 12; n++) say(manager, session.id, ["assistant", "초롱프롬프트 ".repeat(10)]);
+    const result = await manager.search("초롱프롬프트", { per: 3 });
+    expect(hits(result).some(hit => hit.kind === "user" && hit.itemId === request)).toBe(true);
+  });
+
+  it("recovers a prompt after a derived-cache write failure when reopened", async () => {
+    const { dir, store, manager } = setup();
+    const { session } = work(manager, "복구 프로젝트");
+    const originalPut = store.search.put.bind(store.search);
+    store.search.put = () => { throw new Error("simulated cache failure"); };
+    say(manager, session.id, ["user", "저장된 요청 복구표식"]);
+    store.search.put = originalPut;
+    expect(store.getMeta("search.version")).toBe("repair-required");
+    await manager.finder.close(); store.close();
+    const again = new Store(join(dir, "state.sqlite")); closers.push(() => again.close());
+    expect(again.search.cached().some(row => row.kind === "user" && row.body === "저장된 요청 복구표식")).toBe(true);
+    expect(again.getMeta("search.version")).toBe("5-fast-find-prompt-recovery");
+  });
+
   it("rebuilds an index written by an older version once", async () => {
     const { dir, store, manager } = setup();
     const { session } = work(manager, "옛 작업", "codex", "오래된 대화");
@@ -221,7 +259,7 @@ describe("one ranked index", () => {
     const reopened = new SessionManager(again, new EventBus(), { hostId: "h", hostLabel: "노트북", managedWorksDir: join(dir, "works"), dataDir: dir });
   searchManagers.push(reopened);
     expect((await reopened.search("핵심 문장")).total).toBe(1);
-    expect(again.getMeta("search.version")).toBe("4-fast-find-native-714548e");
+    expect(again.getMeta("search.version")).toBe("5-fast-find-prompt-recovery");
     expect(again.search.cached().some((row) => row.body.includes("핵심 문장"))).toBe(true);
     const tables = new DatabaseSync(join(dir, "state.sqlite")).prepare("SELECT name FROM sqlite_master WHERE name = 'item_search'").all();
     expect(tables).toEqual([]);

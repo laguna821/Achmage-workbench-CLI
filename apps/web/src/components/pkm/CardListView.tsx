@@ -252,7 +252,7 @@ export function CardListView({ target }: { target: Exclude<PkmTarget, { kind: "n
   return (
     <main className="pkm-view">
       <header className="column pkm-head">
-        <div className="pkm-crumbs">{(list?.crumbs ?? []).slice(0, -1).join(" › ")}</div>
+        {target.kind !== "vault" ? <div className="pkm-crumbs">{(list?.crumbs ?? []).slice(0, -1).join(" › ")}</div> : null}
         <div className="pkm-title-row">
           <h1 className="pkm-title">{list?.title ?? ""}</h1>
           <span className="pkm-count">

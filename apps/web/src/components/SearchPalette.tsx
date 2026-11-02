@@ -87,7 +87,7 @@ function rowKind(entry: Entry) {
 }
 
 function who(hit: FoundHit) {
-  if (hit.kind === "user") return "나";
+  if (hit.kind === "user") return "내 요청";
   if (hit.kind === "assistant") return hit.provider ? PROVIDER_LABEL[hit.provider] : "답";
   if (hit.kind === "plan") return hit.detail ? `계획 · ${hit.detail}` : "계획";
   if (hit.kind === "attachment") return "첨부";

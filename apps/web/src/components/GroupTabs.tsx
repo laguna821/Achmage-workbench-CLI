@@ -7,7 +7,7 @@ import { Icon } from "./Icon.tsx";
 export function GroupTabs<V>({ pane, head, onSelect, onClose, onReorder, onNew }: {
   pane: Pane<V>; head: (pane: Pane<V>) => PaneHead;
   onSelect: (id: string) => void; onClose: (id: string) => void;
-  onReorder: (id: string, index: number) => void; onNew: () => void;
+  onReorder: (id: string, index: number) => void; onNew: (anchor: HTMLButtonElement) => void;
 }) {
   const tabs = tabsOf(pane), activeId = activeTab(pane).id;
   return <nav className="group-tabs" data-pane-id={pane.id} aria-label="작업공간 탭">
@@ -31,6 +31,6 @@ export function GroupTabs<V>({ pane, head, onSelect, onClose, onReorder, onNew }
         </div>;
       })}
     </div>
-    <button type="button" className="icon-button small group-tab-new" aria-label="새 탭" title="새 탭" onClick={onNew}><Icon name="plus" size={14} /></button>
+    <button type="button" className="ghost-button small group-tab-new" aria-label="새 문서 또는 세션 만들기" title="이 프로젝트에 새 문서·디자인·세션 만들기" aria-haspopup="menu" onClick={event => onNew(event.currentTarget)}><Icon name="plus" size={14} /><span>만들기</span></button>
   </nav>;
 }

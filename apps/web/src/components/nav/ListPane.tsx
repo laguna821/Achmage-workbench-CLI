@@ -42,7 +42,7 @@ type RowHandlers = {
   key: (event: ReactKeyboardEvent<HTMLElement>, project: ListProject, row: Extract<Row, { type: "work" }>) => void;
   focus: (id: string) => void;
   toggle: (row: Extract<Row, { type: "work" }>) => void;
-  newPage: (work: Work) => void;
+  newPage: (work: Work, anchor: HTMLButtonElement) => void;
   rename: (work: Work, name: string) => void;
   renameDone: (id: string) => void;
   startRename: (id: string) => void;
@@ -138,7 +138,7 @@ const ProjectRow = memo(function ProjectRow({ project, folder, row, stage, sortK
         {stamp}
         <span className="side-row-trail">
           <PlacementMark workId={work.id} />
-          <RowAdd label="새 페이지" onAdd={() => handlers.newPage(work)} />
+          <RowAdd label="새 문서·세션 만들기" onAdd={anchor => handlers.newPage(work, anchor)} />
           {linkedId ? <LinkBadge sessionId={linkedId} /> : null}
           {density === "compact" && dateText ? <span className="nav-project-date">{dateText}</span> : null}
           {only ? <EngineMark provider={only.provider} size={13} className="side-row-engine" /> : null}
@@ -426,7 +426,11 @@ export function ListPane({
     },
     focus: (id) => setFocusId(id),
     toggle: toggleOpen,
-    newPage: (work) => actions.newPage(work),
+    newPage: (work, anchor) => {
+      const box = anchor.getBoundingClientRect();
+      if (actions.creationMenu) actions.creationMenu(work, box.left, box.bottom);
+      else actions.newPage(work);
+    },
     rename: (work, name) => actions.rename({ kind: "work", id: work.id }, name),
     renameDone: (id) => {
       shared.setRenaming(null);
@@ -444,7 +448,7 @@ export function ListPane({
       key: (event, project, row) => latest.current!.key(event, project, row),
       focus: (id) => latest.current!.focus(id),
       toggle: (row) => latest.current!.toggle(row),
-      newPage: (work) => latest.current!.newPage(work),
+      newPage: (work, anchor) => latest.current!.newPage(work, anchor),
       rename: (work, name) => latest.current!.rename(work, name),
       renameDone: (id) => latest.current!.renameDone(id),
       startRename: (id) => latest.current!.startRename(id),
@@ -600,8 +604,13 @@ export function ListPane({
           <span className="list-count">{count}</span>
         </span>
         <span className="list-tools">
-          <button type="button" className="icon-button small" title={folder ? `「${folder.name}」에 새 프로젝트` : "새 프로젝트"} aria-label="새 프로젝트" onClick={() => actions.newSession({ folderId: folder ? folder.id : null })}>
-            <Icon name="plus" size={14} />
+          <button type="button" className="ghost-button small" title="새 문서·디자인·세션 만들기" aria-label="프로젝트에서 만들기" aria-haspopup="menu" onClick={event => {
+            const box = event.currentTarget.getBoundingClientRect();
+            const owner = selected.length === 1 ? state.works[selected[0]!] : shared.currentWorkId ? state.works[shared.currentWorkId] : null;
+            if (actions.creationMenu) actions.creationMenu(owner ?? null, box.left, box.bottom, folder?.id);
+            else actions.newSession({ folderId: folder?.id ?? null });
+          }}>
+            <Icon name="plus" size={14} /> 만들기
           </button>
           {subfolders ? (
             <button

@@ -27,7 +27,10 @@ export function withTabs<V>(layout: Layout<V>, previous?: Layout<V>): Layout<V> 
     const view = pane.view as { kind?: string };
     const content = { view: pane.view, workId: pane.workId, sessionId: pane.sessionId ?? (view.kind === "work" && pane.workId === current.workId ? current.sessionId : null) };
     const key = contentKey(content);
-    const index = tabs.findIndex((tab) => contentKey(tab) === key);
+    // Explicit in-tab navigation (e.g. a vault browser) retains that tab's history,
+    // even if another tab is already showing the same note.
+    const currentIndex = tabs.findIndex(tab => tab.id === current.id && contentKey(tab) === key);
+    const index = currentIndex >= 0 ? currentIndex : tabs.findIndex((tab) => contentKey(tab) === key);
     const chosen = index >= 0 ? { ...tabs[index]!, ...content } : { id: `tab-${crypto.randomUUID()}`, ...content };
     if (index >= 0) tabs[index] = chosen;
     else {

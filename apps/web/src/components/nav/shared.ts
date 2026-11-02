@@ -27,6 +27,8 @@ export type SidebarActions = {
   /** The menu for a row (built by the app, which knows every action). */
   menuFor: (row: Row, x: number, y: number) => MenuRequest | null;
   openMenu: (request: MenuRequest) => void;
+  /** Blank documents/designs and parallel sessions in this project, also from empty space. */
+  creationMenu?: (work: Work | null, x: number, y: number, folderId?: string | null) => void;
   archive: (target: { kind: "folder" | "work" | "session"; id: string }) => void;
   openSearch: () => void;
   openArchive: () => void;

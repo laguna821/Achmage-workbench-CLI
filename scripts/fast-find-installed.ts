@@ -3,7 +3,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { SearchPage, SearchPreview, TranscriptItem } from "@workbench/contracts";
+import type { SearchPage, SearchPreview, Session, TranscriptItem } from "@workbench/contracts";
 import { appLayout, client, type Gateway } from "./setup-gateway.ts";
 
 export async function checkFastFindInstalled(gateway: Gateway, app: string, root: string, workId: string,
@@ -30,6 +30,26 @@ export async function checkFastFindInstalled(gateway: Gateway, app: string, root
     if (!hit?.sessionId || !hit.itemId || page.engine !== "fast-find") return false;
     const transcript = await call<{ items: TranscriptItem[] }>("GET", `/api/sessions/${hit.sessionId}/items`);
     return transcript.items.some(item => item.id === hit.itemId && item.kind === "user" && item.text === "안녕하세요");
+  });
+  await step("사용자 보고 프롬프트 원문·부분 문장 검색", async () => {
+    const session = await call<Session>("POST", `/api/works/${workId}/sessions`, { provider: "codex", purpose: "원문 검색 확인" });
+    const text = "방금 이 앱을 새로 설치했는데 간단한 마크다운 문서를 하나 만들어봐 mermaid 그림이랑 테이블도 같이 포함해서";
+    await call("POST", `/api/sessions/${session.id}/messages`, { requestId: "smoke-original-prompt", text });
+    if (!await wait(async () => (await call<{ items: TranscriptItem[] }>("GET", `/api/sessions/${session.id}/items`)).items.some(item => item.kind === "user" && item.text === text))) return false;
+    for (const query of ["마크다운 문서", "mermaid", "테이블", text]) {
+      const page = await search(query);
+      if (!page.groups.flatMap(group => group.hits).some(hit => hit.kind === "user" && hit.sessionId === session.id)) return false;
+    }
+    return true;
+  });
+  await step("영문+한글 조사도 내장 검색에서 누락 없음", async () => {
+    const messages = [
+      { version: 1, id: 1, op: "upsert", documents: [{ key: "prompt.md", revision: 1, mtime: 1, text: "Ctrl K에서 AI와 PDF를 찾아 ppt로 만들어줘", fields: { title: "" }, metadata: { kind: "user", scope: "session" } }] },
+      ...["K에서", "AI와", "PDF를", "ppt로"].map((query, i) => ({ version: 1, id: i + 2, op: "search", query })),
+      { version: 1, id: 6, op: "shutdown" },
+    ];
+    const rows = execFileSync(appLayout(app).native, ["--search-worker"], { input: messages.map(row => JSON.stringify(row)).join("\n") + "\n", encoding: "utf8", timeout: 30_000, windowsHide: true }).trim().split(/\r?\n/).map(line => JSON.parse(line));
+    return [2, 3, 4, 5].every(id => rows.find(row => row.id === id)?.result?.hits?.some((hit: { path: string }) => hit.path === "prompt.md"));
   });
   const vault = join(root, "search-vault"), path = "한글 연구.md";
   mkdirSync(join(vault, ".obsidian/plugins/notebook-navigator"), { recursive: true });

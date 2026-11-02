@@ -227,7 +227,9 @@ export class Finder {
       if (placed) out.push({ ...row, ...placed, score: hit.score, tier: hit.tier, workerKey: hit.key, answer: null });
     }
     this.joinAnswers(out);
-    return out.sort((a, b) => a.tier - b.tier || b.score - a.score || Number(b.own) - Number(a.own) || b.at - a.at);
+    // Within the same match tier, keep the user's original request ahead of repeated
+    // assistant prose. Otherwise the per-project preview can hide every prompt.
+    return out.sort((a, b) => a.tier - b.tier || Number(b.own) - Number(a.own) || b.score - a.score || b.at - a.at);
   }
 
   private async detail(query: string, hits: Candidate[], options: SearchOptions) {
@@ -327,7 +329,14 @@ export class Finder {
       ? groups.has(options.group)
         ? [[options.group, groups.get(options.group)!, groups.get(options.group)!.slice(page.offset, page.offset + page.limit)]]
         : []
-      : [...groups].slice(page.offset, page.offset + page.limit).map(([key, hits]) => [key, hits, hits.slice(0, per)]);
+      : [...groups].slice(page.offset, page.offset + page.limit).map(([key, hits]) => {
+        const preview = hits.slice(0, per);
+        // Work/session/file titles can fill all three preview slots after one request
+        // creates a document. Keep a matching original request visible in that group.
+        const request = hits.find(hit => hit.kind === "user" && hit.own);
+        if (per > 1 && request && !preview.includes(request)) preview[preview.length - 1] = request;
+        return [key, hits, preview];
+      });
     await this.detail(query, chosen.flatMap(([, , shown]) => shown), options);
     const texts = this.index.texts(chosen.flatMap(([, , shown]) => shown.flatMap((hit) => [hit.id, ...(hit.answer?.matched ? [hit.answer.matched.id] : [])])));
     page.groups = chosen.map(([key, hits, shown]): FoundGroup => {

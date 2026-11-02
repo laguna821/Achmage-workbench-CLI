@@ -63,7 +63,7 @@ import { LeaveGate } from "./leave-gate.ts";
 import { LayoutPersistence } from "./layout-persistence.ts";
 import { activeTab, activateTab, addBackgroundTab, closeTab, contentKey, findTab, moveTab, tabsOf, updateTabUi, updateTabView, withTabs } from "./tabs.ts";
 import { PaneLayout, type PaneHead, type PaneScope } from "./components/Panes.tsx";
-import { NewDocumentButton } from "./components/NewDocumentButton.tsx";
+import { NewDocumentDialog, NEW_DOCUMENT_TYPES, type NewDocumentTarget } from "./components/NewDocumentButton.tsx";
 import { IeumAppDialog } from "./components/IeumAppDialog.tsx";
 import { OfficeImportDialog } from "./components/OfficeImportDialog.tsx";
 import { closePane, effectAt, focusPane, focusedPane, movePane, otherPane, paneById, placeAt, resizeSplit, restoreLayout, setPane, shownElsewhere, singleLayout, splitPane, MAX_PANES, type Layout, type Pane, type PaneContent, type PaneId, type PaneItem, type PaneTarget, type Side, type TabUiState } from "./panes.ts";
@@ -327,6 +327,7 @@ export function App() {
   const [engineMenu, setEngineMenu] = useState<{ provider: Provider; x: number; y: number } | null>(null);
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
   const [contextMenu, setContextMenu] = useState<MenuRequest | null>(null);
+  const [newDocument, setNewDocument] = useState<(NewDocumentTarget & { paneId: PaneId }) | null>(null);
   // Ctrl+K opens the search box ("palette"); Ctrl+Shift+F opens it for contents only ("content").
   const [paletteOpen, setPaletteOpen] = useState<PaletteMode | null>(null);
   // A message to bring into view after opening its conversation (from search).
@@ -1281,9 +1282,44 @@ export function App() {
     [fail, setToast],
   );
 
+  const creationTarget = useCallback((paneId: PaneId, owner?: Work | null): NewDocumentTarget => {
+    const pane = paneById(layoutRef.current, paneId);
+    const at = pane?.view;
+    const artifact = at && (at.kind === "document" || at.kind === "split") ? stateRef.current.artifacts[at.artifactId] : undefined;
+    const workId = owner?.id ?? artifact?.workId ?? (at?.kind === "project" ? at.workId : pane?.workId);
+    const session = pane?.sessionId ? stateRef.current.sessions[pane.sessionId] : undefined;
+    return { workId, workspaceId: artifact?.workId === workId ? artifact?.workspaceId : session?.workId === workId ? session?.workspaceId : undefined };
+  }, []);
+  const documentEntries = useCallback((paneId: PaneId, owner?: Work | null): MenuEntry[] => {
+    const target = creationTarget(paneId, owner);
+    return NEW_DOCUMENT_TYPES.map(kind => ({ kind: "item", label: `새 ${kind.label}`, icon: kind.format === "design" ? "palette" : "file", onSelect: () => setNewDocument({ ...target, paneId, format: kind.format }) }));
+  }, [creationTarget]);
+  const creationMenu = useCallback((paneId: PaneId, owner: Work | null, x: number, y: number, folderId?: string | null): MenuRequest => {
+    const target = creationTarget(paneId, owner);
+    const project = target.workId ? stateRef.current.works[target.workId] : undefined;
+    const sessions: MenuEntry[] = project ? (["claude", "codex"] as const).map(provider => ({
+      kind: "item", label: `${PROVIDER_LABEL[provider]} 새 세션`, icon: "chat",
+      onSelect: () => {
+        if (!api) return;
+        void api.createSession(project.id, provider, { workspaceId: target.workspaceId }).then(session => {
+          dispatch({ type: "focus", work: project, session });
+          afterLeaving(paneId, { kind: "work" }, () => updateLayout(current => ({ ...setPane(current, paneId, { workId: project.id, sessionId: session.id, view: { kind: "work" } }), focus: paneId })));
+        }).catch(fail);
+      },
+    })) : [{ kind: "item", label: "새 세션", icon: "chat", onSelect: () => setViewOf(paneId, { kind: "new", folderId: folderId ?? null }) }];
+    return { x, y, title: project ? `${project.title} · 만들기` : "만들기", items: [
+      ...documentEntries(paneId, owner), { kind: "separator" }, ...sessions, { kind: "separator" },
+      { kind: "item", label: "새 프로젝트…", icon: "project", onSelect: () => setViewOf(paneId, { kind: "new", folderId: folderId ?? null }) },
+    ] };
+  }, [api, creationTarget, documentEntries, afterLeaving, updateLayout, setViewOf, fail]);
+
   const menuFor = useCallback(
     (row: Row, x: number, y: number): MenuRequest | null => {
       if (!api) return null;
+      if (row.type === "docs" || row.type === "section" && row.workId) {
+        const owner = row.type === "docs" ? row.work : state.works[row.workId!];
+        return creationMenu(layoutRef.current.focus, owner ?? null, x, y);
+      }
       const copy = (text: string, done: string) => () => void copyText(text).then(() => setToast(done));
       if (row.type === "session") {
         const { session, work: owner } = row;
@@ -1380,6 +1416,7 @@ export function App() {
             })),
           },
           { kind: "item", label: "새 페이지", icon: "page", onSelect: () => newPage(owner) },
+          { kind: "submenu", label: "새 문서·디자인", icon: "plus", items: documentEntries(layoutRef.current.focus, owner) },
           { kind: "item", label: "템플릿으로 새 페이지…", icon: "page", onSelect: () => pkmHandle.current?.setDialog({ kind: "template", workId: owner.id, parentId: null }) },
           { kind: "item", label: "이름 바꾸기", icon: "edit", hint: "F2", onSelect: () => setSidebarPending({ rename: owner.id }) },
           { kind: "separator" },
@@ -1442,7 +1479,7 @@ export function App() {
       return null;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [api, state, actions, archive, exportSession, openPath, openSession, visibleIds, startNew, docActions, fail, setToast, linkApi, single],
+    [api, state, actions, archive, exportSession, openPath, openSession, visibleIds, startNew, docActions, fail, setToast, linkApi, single, creationMenu, documentEntries],
   );
 
   function openWorkNow(target: Work) {
@@ -1482,7 +1519,11 @@ export function App() {
     openSession,
     openWork: (target) => actions.openProject(target),
     openDoc: (artifact: Artifact) => docActions.openArtifact(artifact.id),
-    newSession: ({ folderId }) => startNew(folderId ?? null),
+    newSession: ({ folderId, work: owner, provider }) => {
+      if (owner) void actions.newSession(owner, provider ?? engine).then(session => { if (session) actions.selectSession(owner, session); });
+      else startNew(folderId ?? null);
+    },
+    creationMenu: (owner, x, y, folderId) => setContextMenu(creationMenu(layoutRef.current.focus, owner, x, y, folderId)),
     createFolder: async (name, parentId) => {
       await api?.createFolder(name, parentId).catch(fail);
     },
@@ -1961,7 +2002,7 @@ export function App() {
         />
       );
     }
-    if (at.kind === "pkm") return <PkmCenter target={at.target} />;
+    if (at.kind === "pkm") return <PkmCenter target={at.target} active={focused && tabActive} onNavigate={target => updateLayout(current => updateTabView(current, tabId, () => ({ kind: "pkm", target })))} />;
     if (at.kind === "archive") return <ArchiveView state={state} onRestore={actions.restore} onOpenSession={openSession} onOpenWork={openWorkNow} onClose={() => setView({ kind: "work" })} />;
     if (start) {
       return (
@@ -2091,7 +2132,7 @@ export function App() {
           </button>
         )}
         <div className="topbar-right">
-          <NewDocumentButton api={api} state={state} workId={view.kind === "project" ? view.workId : work?.id} workspaceId={visibleSession?.workspaceId} onOpen={(artifact) => navigateTo({ workId: artifact.workId, sessionId: null, view: { kind: "document", artifactId: artifact.id, proposalId: null } })} />
+          <button type="button" className="ghost-button small" onClick={() => setNewDocument({ ...creationTarget(layoutRef.current.focus), paneId: layoutRef.current.focus })}><Icon name="plus" size={15} /> 새 문서</button>
           {view.kind === "document" ? <button type="button" className="ghost-button small" onClick={() => setExpandedEditorTab(editorFocus ? focusedTabId : null)}><Icon name={editorFocus ? "columns" : "expandAll"} size={14} />{editorFocus ? "작업공간 보기" : "편집기에 집중"}</button> : null}
           {!single ? <button type="button" className="ghost-button small" aria-label="배치 선택" disabled={!layoutReady} onClick={(event) => {
             const box = event.currentTarget.getBoundingClientRect();
@@ -2243,7 +2284,7 @@ export function App() {
           head={paneHead}
           scope={paneScope}
           effectOf={effectOf}
-          tabBar={single ? undefined : (pane) => <GroupTabs pane={pane} head={paneHead} onSelect={(tabId) => selectTabNow(pane.id, tabId)} onClose={(tabId) => closeTabNow(pane.id, tabId)} onReorder={(tabId, index) => updateLayout((current) => moveTab(current, tabId, { paneId: pane.id, side: "center" }, index))} onNew={() => setViewOf(pane.id, { kind: "new", folderId: null })} />}
+          tabBar={single ? undefined : (pane) => <GroupTabs pane={pane} head={paneHead} onSelect={(tabId) => selectTabNow(pane.id, tabId)} onClose={(tabId) => closeTabNow(pane.id, tabId)} onReorder={(tabId, index) => updateLayout((current) => moveTab(current, tabId, { paneId: pane.id, side: "center" }, index))} onNew={anchor => { const box = anchor.getBoundingClientRect(); setContextMenu(creationMenu(pane.id, null, box.left, box.bottom)); }} />}
           render={(pane, info) => paneView(pane, info.focused, info.split, info.tabId, info.active)}
           onNarrow={setNarrowPanes}
         />
@@ -2293,6 +2334,7 @@ export function App() {
       ) : null}
       {engineMenu ? <EngineMenu provider={engineMenu.provider} x={engineMenu.x} y={engineMenu.y} onClose={closeEngineMenu} /> : null}
       {contextMenu ? <ContextMenu request={contextMenu} onClose={closeContextMenu} /> : null}
+      {newDocument && api ? <NewDocumentDialog api={api} state={state} request={newDocument} onClose={() => setNewDocument(null)} onOpen={artifact => setViewOf(newDocument.paneId, { kind: "document", artifactId: artifact.id, proposalId: null }, artifact)} /> : null}
       {paletteOpen ? (
         <SearchPalette
           api={api}

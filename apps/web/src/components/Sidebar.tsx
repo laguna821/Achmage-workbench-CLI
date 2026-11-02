@@ -625,6 +625,7 @@ export function Sidebar({
     openRight: actions.openRight,
     newSession: (folderId) => actions.newSession({ folderId }),
     newPage: (row) => actions.newPage(row.work),
+    creationMenu: actions.creationMenu,
     newSubpage: actions.newSubpage,
   };
 
@@ -851,6 +852,13 @@ export function Sidebar({
       ref={asideRef}
       className={`sidebar look-scope nav-${layout}`}
       aria-label="세션과 작업"
+      onContextMenu={event => {
+        if (event.defaultPrevented || !(event.target instanceof Element) || event.target.closest("input,textarea,[contenteditable=true]")) return;
+        if (!event.target.closest(".list-pane,.side-tree-section")) return;
+        if (!actions.creationMenu) return;
+        event.preventDefault();
+        actions.creationMenu(currentWorkId ? state.works[currentWorkId] ?? null : null, event.clientX, event.clientY);
+      }}
       data-theme={appTheme}
       data-layout={layout}
       style={{ ...lookStyle(NEUTRAL_LOOK[appTheme]), width: totalWidth, ...(layout === "dual" ? ({ "--nav-width": `${navWidth}px`, "--list-width": `${listWidth}px` } as CSSProperties) : {}) }}

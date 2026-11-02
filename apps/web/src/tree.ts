@@ -43,7 +43,7 @@ export type Row =
   | { type: "session"; id: string; depth: number; session: Session; work: Work }
   | { type: "docs"; id: string; depth: number; work: Work; count: number; open: boolean }
   | { type: "doc"; id: string; depth: number; artifact: Artifact; work: Work }
-  | { type: "section"; id: string; depth: number; label: string };
+  | { type: "section"; id: string; depth: number; label: string; workId?: string };
 
 /** Archived itself, or inside something archived. */
 export function folderHidden(state: State, folderId: string | null): boolean {
@@ -107,7 +107,7 @@ export function workTreeRows(state: State, work: Work, open: TreeOpenState, curr
   if (!isOpen) return rows;
   const chats = sessions.filter((session) => !session.documentAgent), agents = sessions.filter((session) => session.documentAgent);
   for (const [key, label, members] of [["chats", "채팅", chats], ["agents", "문서 AI", agents]] as const) if (members.length) {
-    rows.push({ type: "section", id: `${key}:${work.id}`, depth: depth + 1, label: `${label} · ${members.length}` });
+    rows.push({ type: "section", id: `${key}:${work.id}`, depth: depth + 1, label: `${label} · ${members.length}`, workId: work.id });
     for (const session of members) rows.push({ type: "session", id: session.id, depth: depth + 2, session, work });
   }
   if (docs.length) {

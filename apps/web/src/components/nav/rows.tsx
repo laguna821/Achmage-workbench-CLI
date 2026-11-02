@@ -1,5 +1,5 @@
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
-import { FORMAT_LABEL, PROVIDER_LABEL, isUnseen, type Artifact, type Provider, type Session } from "@workbench/contracts";
+import { FORMAT_LABEL, PROVIDER_LABEL, isUnseen, type Artifact, type Provider, type Session, type Work } from "@workbench/contracts";
 import type { State } from "../../state.ts";
 import type { Row } from "../../tree.ts";
 import { statusText, statusTone } from "../../format.ts";
@@ -39,7 +39,7 @@ export function docIcon(artifact: Artifact): IconName {
 }
 
 /** The "+" that shows on a hovered row (Notion-style); it never starts a drag or opens the row. */
-export function RowAdd({ label, onAdd }: { label: string; onAdd: () => void }) {
+export function RowAdd({ label, onAdd }: { label: string; onAdd: (anchor: HTMLButtonElement) => void }) {
   return (
     <button
       type="button"
@@ -49,7 +49,7 @@ export function RowAdd({ label, onAdd }: { label: string; onAdd: () => void }) {
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => {
         event.stopPropagation();
-        onAdd();
+        onAdd(event.currentTarget);
       }}
     >
       <Icon name="plus" size={12} />
@@ -81,6 +81,7 @@ export type RowContext = {
   openRight?: (item: PaneItem) => void;
   newSession: (folderId: string) => void;
   newPage: (row: Extract<Row, { type: "work" }>) => void;
+  creationMenu?: (work: Work | null, x: number, y: number) => void;
   newSubpage?: (artifact: Artifact) => void;
   /** Rows marked as the navigator's list rows (keyboard order inside the list). */
   listRow?: boolean;
@@ -90,7 +91,10 @@ export function TreeRow({ row, ctx }: { row: Row; ctx: RowContext }) {
   const { state, visibleSessionId, currentWorkId, currentDocId } = ctx;
   if (row.type === "section") {
     return (
-      <div className="side-section-label" style={{ paddingLeft: 8 + row.depth * 14 }} data-row-id={row.id}>
+      <div className="side-section-label" style={{ paddingLeft: 8 + row.depth * 14 }} data-row-id={row.id} onContextMenu={event => {
+        if (!row.workId) return;
+        event.preventDefault(); event.stopPropagation(); ctx.onMenu(row, event.clientX, event.clientY);
+      }}>
         {row.label}
       </div>
     );
@@ -149,7 +153,11 @@ export function TreeRow({ row, ctx }: { row: Row; ctx: RowContext }) {
     trailing = (
       <span className="side-row-trail">
         <PlacementMark workId={row.work.id} />
-        <RowAdd label="새 페이지" onAdd={() => ctx.newPage(row)} />
+        <RowAdd label="새 문서·세션 만들기" onAdd={anchor => {
+          const box = anchor.getBoundingClientRect();
+          if (ctx.creationMenu) ctx.creationMenu(row.work, box.left, box.bottom);
+          else ctx.newPage(row);
+        }} />
         {linked ? <LinkBadge sessionId={linked.id} /> : null}
         {only ? <EngineMark provider={only.provider} size={13} className="side-row-engine" /> : null}
         {attention ? <span className="dot dot-attention" title="확인 필요" /> : busy ? <span className="dot dot-active" title="진행 중" /> : unseen ? <span className="dot dot-new" title="새 답" /> : null}

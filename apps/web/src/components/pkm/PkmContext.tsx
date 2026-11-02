@@ -60,6 +60,12 @@ export function usePkm() {
 /** For pieces that may render before the provider exists (tests, the fatal screen). */
 export const useOptionalPkm = () => useContext(PkmContext);
 
+/** Internal navigation belongs to the tab that rendered the link, not the globally focused pane. */
+export function PkmNavigationScope({ target, onOpen, children }: { target: PkmTarget; onOpen: (target: PkmTarget) => void; children: ReactNode }) {
+  const parent = usePkm();
+  return <PkmContext.Provider value={{ ...parent, target, open: onOpen }}>{children}</PkmContext.Provider>;
+}
+
 export function PkmProvider({
   api,
   state,

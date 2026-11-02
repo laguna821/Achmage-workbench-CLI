@@ -59,7 +59,12 @@ fn camel_pieces(raw: &str, base: usize, out: &mut Vec<(usize, usize)>) {
     let mut prev: Option<char> = None;
     for (i, c) in raw.char_indices() {
         if let Some(p) = prev {
-            if c.is_uppercase() && p.is_lowercase() {
+            // Keep the full compound as well as script parts. Otherwise `ppt로` is
+            // one token, while the query's Korean particle rule produces `ppt`;
+            // the upstream exact-only rule for 1–3 letters then loses the prompt.
+            let script_boundary = p.is_alphanumeric() && c.is_alphanumeric()
+                && crate::cjk::paired(p) != crate::cjk::paired(c);
+            if (c.is_uppercase() && p.is_lowercase()) || script_boundary {
                 out.push((base + start, base + i));
                 start = i;
             }

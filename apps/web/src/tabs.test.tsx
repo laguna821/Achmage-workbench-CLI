@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeTab, activateTab, closeTab, findTab, moveTab, tabsOf, withTabs } from "./tabs.ts";
+import { activeTab, activateTab, closeTab, findTab, moveTab, tabsOf, updateTabView, withTabs } from "./tabs.ts";
 import { closePane, focusPane, focusedPane, restoreLayout, setPane, singleLayout, splitPane } from "./panes.ts";
 
 type View = { kind: "work" } | { kind: "document"; artifactId: string } | { kind: "new" } | { kind: "terminal"; terminalId: string; label: string };
@@ -8,6 +8,16 @@ const document = (id: string) => ({ view: { kind: "document", artifactId: id } a
 const open = (layout: ReturnType<typeof singleLayout<View>>, id: string) => withTabs(setPane(layout, layout.focus, document(id)), layout);
 
 describe("group tabs", () => {
+  it("keeps in-tab vault navigation in its own tab even when the destination is already open", () => {
+    const first = { kind: "pkm", target: { kind: "note", path: "Inbox/first.md" } };
+    const second = { kind: "pkm", target: { kind: "note", path: "Inbox/second.md" } };
+    const initial = withTabs(singleLayout(first, null));
+    const other = withTabs(setPane(initial, initial.focus, { view: second }), initial);
+    const browserId = activeTab(focusedPane(other)).id;
+    const changed = withTabs(updateTabView(other, browserId, () => first), other);
+    expect(activeTab(focusedPane(changed)).id).toBe(browserId);
+    expect(tabsOf(focusedPane(changed))).toHaveLength(2);
+  });
   it("retains terminal identity and scroll position through title changes, splits and restored layouts", () => {
     const content = { view: { kind: "terminal", terminalId: "pty-one", label: "셸" } as View, workId: "project", sessionId: null };
     const original = withTabs(singleLayout(content.view, content.workId));

@@ -15,7 +15,7 @@ import { SearchIndex, documentEntry, documentKey, itemEntries, itemKey, sessionE
  * requests, replies, plans, attachment names, documents, works, sessions and vault notes.
  */
 // 3: native-search raw cache with exact structured fields (only derived data is rebuilt).
-const SEARCH_VERSION = "4-fast-find-native-714548e";
+const SEARCH_VERSION = "5-fast-find-prompt-recovery";
 
 export class Store {
   private readonly db: DatabaseSync;
@@ -137,12 +137,13 @@ export class Store {
     }
   }
 
-  /** Search is a convenience: a record that cannot be indexed now is indexed again after its next change. */
+  /** Preserve the source even on an index error, and retry from source on next startup. */
   private indexSafely(write: () => void) {
     try {
       write();
     } catch {
-      // Left out of the index for now; never in the way of saving the record itself.
+      // A user's prompt may never change again. Do not leave it missing permanently.
+      this.setMeta("search.version", "repair-required");
     }
   }
 

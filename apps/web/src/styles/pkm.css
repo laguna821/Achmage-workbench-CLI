@@ -234,6 +234,11 @@
 }
 
 /* ── card lists and vault notes in the centre ──────────────────────────── */
+.vault-browser { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+.vault-browser > .pkm-view { flex: 1; min-height: 0; }
+.vault-navigation { display: flex; align-items: center; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.vault-breadcrumbs { overflow: auto; white-space: nowrap; font-size: 12px; min-width: 0; padding: 4px; }
+.vault-subfolders { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px; max-height: 140px; overflow: auto; flex-shrink: 0; }
 .pkm-view {
   position: relative;
   flex: 1 1 auto;

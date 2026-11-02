@@ -66,6 +66,12 @@
       "upstreamSha256": null,
       "sha256": "df48ee261d12a942946729a8f017f3d30ea67bffb42099751f407e52dca877ef",
       "reason": "Pinned plugin preview/results/keys pure functions; remove Obsidian DOM integration, TypeScript strict indices, grapheme mapping for Korean NFC/NFD and emoji"
+    },
+    {
+      "path": "crates/ff10k-core/src/tokenize.rs",
+      "upstreamSha256": "290634bd42c7db10d5b757d13b1284e6fcef40d94bbe02268745e0fb0614402c",
+      "sha256": "a9a8cf867d6be46f995ab49881161115b4592998c0ee815ad74f5d547d8ae597",
+      "reason": "Split Latin/digit–CJK script boundaries while retaining the whole compound and original offsets, so short prompt terms remain searchable after Korean particle removal without widening English prefix matches."
     }
   ]
 }

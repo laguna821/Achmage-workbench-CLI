@@ -1,11 +1,11 @@
 import type { PkmTarget } from "../../pkm.ts";
 import type { State } from "../../state.ts";
 import { CardListView } from "./CardListView.tsx";
-import { VaultNoteView } from "./VaultNoteView.tsx";
+import { VaultBrowser } from "./VaultBrowser.tsx";
 
 /** The centre when it shows cards or a vault note (instead of a conversation; never a split). */
-export function PkmCenter({ target }: { target: PkmTarget }) {
-  if (target.kind === "note") return <VaultNoteView key={target.path} path={target.path} location={target.location} />;
+export function PkmCenter({ target, onNavigate, active }: { target: PkmTarget; onNavigate: (target: PkmTarget) => void; active: boolean }) {
+  if (target.kind === "note" || target.kind === "vault") return <VaultBrowser target={target} onNavigate={onNavigate} active={active} />;
   return <CardListView key={`${target.kind}:${"path" in target ? target.path : target.id}`} target={target} />;
 }
 
