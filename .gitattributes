@@ -1,2 +1,4 @@
 # Public skill manifests pin exact bytes, including upstream CRLF, on every OS.
 third_party/skills/hallym-kordoc/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+# Source patches have pinned byte hashes; never convert LF on Windows checkout.
+third_party/lightpanda-windows/*.patch -text

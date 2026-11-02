@@ -4,6 +4,7 @@ on:
   push:
     branches: [feat/lightpanda-windows-native]
     paths:
+      - '.gitattributes'
       - '.github/workflows/lightpanda-windows.yml'
       - 'third_party/lightpanda-windows/**'
       - 'scripts/*lightpanda*'
