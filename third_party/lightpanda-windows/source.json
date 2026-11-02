@@ -10,9 +10,10 @@
       "patch": "browser.patch",
       "port": "https://github.com/lightpanda-io/browser/pull/3753",
       "portCommit": "4bd30d698eedf860e789e887c644d891f4e562d1",
-      "patchSha256": "352e3abcedebfb12804ba92192c61394b8a4464417f64034ae1ff2161877a246",
+      "patchSha256": "aa4625a80cec85a054b317d3234de571061b332a2ca2e552061d22ccfe55890c",
       "localChanges": [
-        "Exclude opaque MSVC archive and contributor workflow; compile Windows SSL with WIN32_LEAN_AND_MEAN/NOMINMAX to avoid wincrypt X509_NAME collision."
+        "Exclude opaque MSVC archive and contributor workflow; compile Windows SSL with WIN32_LEAN_AND_MEAN/NOMINMAX to avoid wincrypt X509_NAME collision.",
+        "Use the allocating cross-platform argument iterator in the three auxiliary generators."
       ]
     },
     "v8": {

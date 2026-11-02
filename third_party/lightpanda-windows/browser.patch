@@ -947,6 +947,48 @@ index aa2ab78..a67878b 100644
      return .{ .block = .{ .slice = std.mem.span(std.c.environ) } };
  }
  
+diff --git a/src/main_docs.zig b/src/main_docs.zig
+index 461cd06..9fe3288 100644
+--- a/src/main_docs.zig
++++ b/src/main_docs.zig
+@@ -23,7 +23,8 @@ const std = @import("std");
+ const lp = @import("lightpanda");
+ 
+ pub fn main(init: std.process.Init) !void {
+-    var args = std.process.Args.Iterator.init(init.minimal.args);
++    var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
++    defer args.deinit();
+     _ = args.next(); // executable name
+     const out_path = args.next() orelse {
+         std.debug.print("usage: lightpanda-docs <outdir>\n", .{});
+diff --git a/src/main_skills.zig b/src/main_skills.zig
+index 55993e2..d4cb18a 100644
+--- a/src/main_skills.zig
++++ b/src/main_skills.zig
+@@ -34,7 +34,8 @@ const skills = [_]Skill{
+ 
+ pub fn main(init: std.process.Init) !void {
+     // usage: skills <outdir>
+-    var args = std.process.Args.Iterator.init(init.minimal.args);
++    var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
++    defer args.deinit();
+     _ = args.next(); // executable name
+     const out_path = args.next() orelse {
+         std.debug.print("usage: lightpanda-skills <outdir>\n", .{});
+diff --git a/src/main_snapshot_creator.zig b/src/main_snapshot_creator.zig
+index 03378b6..73eb919 100644
+--- a/src/main_snapshot_creator.zig
++++ b/src/main_snapshot_creator.zig
+@@ -26,7 +26,8 @@ pub fn main(init: std.process.Init) !void {
+     // the same value.
+     var v8_flags: ?[]const u8 = null;
+     var out_path: ?[]const u8 = null;
+-    var args = std.process.Args.Iterator.init(init.minimal.args);
++    var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
++    defer args.deinit();
+     _ = args.next(); // executable name
+     while (args.next()) |arg| {
+         if (std.mem.eql(u8, arg, "--v8-flags-unsafe")) {
 diff --git a/src/mcp/HttpServer.zig b/src/mcp/HttpServer.zig
 index 4e73a3e..aabf4d0 100644
 --- a/src/mcp/HttpServer.zig
