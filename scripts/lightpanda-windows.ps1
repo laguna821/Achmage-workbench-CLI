@@ -54,7 +54,8 @@ if ($Stage -eq 'setup') {
     "$($msvc.FullName)/bin/Hostx64/x64" | Out-File $env:GITHUB_PATH -Append -Encoding utf8
     # GN invokes python3.exe. Use the same setup-python interpreter, not the Store stub.
     $python = (Get-Command python).Source
-    Copy-Item $python (Join-Path (Split-Path $python) 'python3.exe') -Force
+    $python3 = Join-Path (Split-Path $python) 'python3.exe'
+    if (!(Test-Path $python3)) { Copy-Item $python $python3 }
     & rustup target add x86_64-pc-windows-gnu
     Check-Exit 'Rust Windows GNU target installation failed'
     @{
