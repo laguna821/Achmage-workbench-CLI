@@ -111,7 +111,27 @@ elseif ($Stage -eq 'package') {
     Copy-Item "$source/browser/zig-out/bin/lightpanda.exe" $package
     Copy-Item "$source/browser/LICENSE", "$source/source-provenance.json" $package
     Copy-Item "$source/v8/LICENSE" "$package/V8-BINDING-LICENSE"
+    Copy-Item "$repo/third_party/lightpanda-windows/V8-ENGINE-LICENSE" $package
     Copy-Item "$cache/provenance.json" "$package/v8-provenance.json"
+    @"
+Achmage Workbench native Windows Lightpanda $($spec.engineVersion)
+
+This is an independently built Windows port, not an official Lightpanda Windows release.
+Source revisions and patch hashes: source-provenance.json
+Source patches and build instructions:
+https://github.com/laguna821/Achmage-workbench-CLI/tree/$env:GITHUB_SHA/third_party/lightpanda-windows
+Build workflow and scripts:
+https://github.com/laguna821/Achmage-workbench-CLI/tree/$env:GITHUB_SHA/scripts
+Original browser: https://github.com/lightpanda-io/browser
+V8 binding: https://github.com/lightpanda-io/zig-v8-fork
+V8 engine source: https://chromium.googlesource.com/v8/v8/+/refs/tags/$($spec.v8Version)
+
+Browser license: LICENSE (AGPL-3.0-or-later)
+V8 binding license: V8-BINDING-LICENSE (MIT)
+V8 engine license: V8-ENGINE-LICENSE (BSD and upstream notices)
+Microsoft Visual C++ runtime DLLs are included for application-local execution.
+Workbench uses MCP over stdio, with one engine process per session.
+"@ | Set-Content "$package/README-WINDOWS.txt"
     $redist = Get-ChildItem "$env:vs2022_install/VC/Redist/MSVC" -Directory | Where-Object Name -Match '^\d+\.' | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
     $crt = @(Get-ChildItem "$($redist.FullName)/x64" -Directory -Filter 'Microsoft.VC*.CRT')
     if ($crt.Count -ne 1) { throw 'MSVC redistributable directory ambiguous or missing' }

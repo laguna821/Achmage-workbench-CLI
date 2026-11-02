@@ -38,13 +38,21 @@ jobs:
         with:
           path: native-cache
           key: ${{ steps.v8-cache.outputs.cache-primary-key }}
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            native-source/browser/.zig-cache
+            native-source/browser/zig-pkg
+            ~/AppData/Local/zig
+          key: lp-win-browser-1.0.2-zig0.17.0-${{ hashFiles('third_party/lightpanda-windows/browser.patch') }}
+          restore-keys: lp-win-browser-1.0.2-zig0.17.0-
       - name: Compile native browser
         run: ./scripts/lightpanda-windows.ps1 browser
       - name: Package native executable and runtime DLLs
         run: ./scripts/lightpanda-windows.ps1 package
       - run: npm ci --ignore-scripts
-      - name: Exercise the Workbench gateway with the native engine, without WSL
-        run: node scripts/check-lightpanda.ts native-package/lightpanda.exe native-evidence/workbench-check.json
+      - name: Install, verify bundled resources and exercise the native engine without WSL
+        run: node scripts/check-lightpanda-native-install.ts lightpanda-windows-x64.zip native-package native-evidence
       - uses: actions/upload-artifact@v4
         if: always()
         with:
