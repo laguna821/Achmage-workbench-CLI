@@ -18,10 +18,10 @@ index 0000000..e1e7ac8
 +*.patch text eol=lf
 +*.toml text eol=lf
 diff --git a/build.zig b/build.zig
-index 33d5409..131f013 100644
+index 33d5409..59981e1 100644
 --- a/build.zig
 +++ b/build.zig
-@@ -115,6 +115,23 @@ pub fn build(b: *Build) !void {
+@@ -115,6 +115,24 @@ pub fn build(b: *Build) !void {
          .sanitize_thread = enable_tsan,
      });
      lightpanda_module.addImport("lightpanda", lightpanda_module); // allow circular "lightpanda" import
@@ -36,6 +36,7 @@ index 33d5409..131f013 100644
 +        lightpanda_module.linkSystemLibrary("dbghelp", .{});
 +        lightpanda_module.linkSystemLibrary("winmm", .{});
 +        lightpanda_module.addCSourceFile(.{ .file = b.path("win-port/shims.c") });
++        lightpanda_module.addCSourceFile(.{ .file = b.path("win-port/guard_dispatch.S") });
 +        const msvc_lib_x64 = try resolveMsvcLibX64(b);
 +        const win_sdk_libs = try resolveWinSdkLibs(b);
 +        lightpanda_module.addLibraryPath(.{ .cwd_relative = msvc_lib_x64 });
@@ -45,7 +46,7 @@ index 33d5409..131f013 100644
      lightpanda_module.addImport("build_config", opts.createModule());
  
      const fmt_step = b.step("fmt", "Check code formatting");
-@@ -369,6 +386,182 @@ fn actionDefault(action: []const u8, key: []const u8) ?[]const u8 {
+@@ -369,6 +387,182 @@ fn actionDefault(action: []const u8, key: []const u8) ?[]const u8 {
      return null;
  }
  
@@ -228,7 +229,7 @@ index 33d5409..131f013 100644
  /// Renames the hot V8 functions' sections (`.text` -> `.text.hot.<sym>`, see
  /// orderfile/mark_hot_sections.zig) so the orderfile script can gather them.
  fn markHotSections(b: *Build, archive: Build.LazyPath) Build.LazyPath {
-@@ -432,15 +625,20 @@ fn linkRust(b: *Build, mod: *Build.Module, deps: Deps) void {
+@@ -432,15 +626,20 @@ fn linkRust(b: *Build, mod: *Build.Module, deps: Deps) void {
          "--profile",       profile,
          "--manifest-path", "src/rust/ffi/Cargo.toml",
      });
@@ -253,7 +254,7 @@ index 33d5409..131f013 100644
  
      // TODO: We can prefer `--artifact-dir` once it become stable.
      const out_dir = exec_cargo.addOutputDirectoryArg2("rust", .{ .prefix = "--target-dir=" });
-@@ -448,7 +646,15 @@ fn linkRust(b: *Build, mod: *Build.Module, deps: Deps) void {
+@@ -448,7 +647,15 @@ fn linkRust(b: *Build, mod: *Build.Module, deps: Deps) void {
      const rust_step = b.step("rust", "Build the Rust staticlib (requires cargo)");
      rust_step.dependOn(&exec_cargo.step);
  
@@ -270,7 +271,7 @@ index 33d5409..131f013 100644
      mod.addObjectFile(obj);
  }
  
-@@ -698,6 +904,11 @@ fn buildBoringSsl(b: *Build, target: Build.ResolvedTarget, optimize: std.lang.Op
+@@ -698,9 +905,21 @@ fn buildBoringSsl(b: *Build, target: Build.ResolvedTarget, optimize: std.lang.Op
  
      const ssl = sectionize(dep.artifact("ssl"), section);
      ssl.bundle_ubsan_rt = false;
@@ -282,7 +283,17 @@ index 33d5409..131f013 100644
  
      const crypto = sectionize(dep.artifact("crypto"), section);
      crypto.bundle_ubsan_rt = false;
-@@ -726,12 +937,15 @@ fn buildNghttp2(b: *Build, target: Build.ResolvedTarget, optimize: std.lang.Opti
++    if (target.result.os.tag == .windows) {
++        // The dependency packages Unix assembly, not Windows NASM objects.
++        // Use BoringSSL's supported portable implementations consistently.
++        ssl.root_module.addCMacro("OPENSSL_NO_ASM", "1");
++        crypto.root_module.addCMacro("OPENSSL_NO_ASM", "1");
++        dep.artifact("fipsmodule").root_module.addCMacro("OPENSSL_NO_ASM", "1");
++    }
+ 
+     return .{ ssl, crypto };
+ }
+@@ -726,12 +945,15 @@ fn buildNghttp2(b: *Build, target: Build.ResolvedTarget, optimize: std.lang.Opti
      lib.installHeadersDirectory(dep.path("lib/includes/nghttp2"), "nghttp2", .{});
      mod.addCSourceFiles(.{
          .root = dep.path("lib"),
@@ -304,7 +315,7 @@ index 33d5409..131f013 100644
          .files = &.{
              "sfparse.c",                 "nghttp2_alpn.c",   "nghttp2_buf.c",
              "nghttp2_callbacks.c",       "nghttp2_debug.c",  "nghttp2_extpri.c",
-@@ -986,6 +1200,7 @@ fn buildCurl(
+@@ -986,6 +1208,7 @@ fn buildCurl(
              "-DHAVE_CONFIG_H",
              "-DCURL_STATICLIB",
              "-DBUILDING_LIBCURL",
@@ -2036,6 +2047,25 @@ index d922ef1..21703ef 100644
 +        else => error.Unexpected,
 +    };
 +}
+diff --git a/win-port/guard_dispatch.S b/win-port/guard_dispatch.S
+new file mode 100644
+index 0000000..26fc8ef
+--- /dev/null
++++ b/win-port/guard_dispatch.S
+@@ -0,0 +1,13 @@
++/**
++ * This file has no copyright assigned and is placed in the Public Domain.
++ * This file is part of the mingw-w64 runtime package.
++ * No warranty is given; refer to the file DISCLAIMER.PD within this package.
++ */
++
++/* When CFGuard is not active, directly tail-call the target address, which
++ * is passed via %rax. */
++        .text
++        .align 16
++        .def __guard_dispatch_icall_dummy;    .scl    2;    .type    32;    .endef
++__guard_dispatch_icall_dummy:
++        jmp *%rax
 diff --git a/win-port/shims.c b/win-port/shims.c
 new file mode 100644
 index 0000000..a2e1caf

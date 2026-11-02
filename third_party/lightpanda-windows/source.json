@@ -10,10 +10,12 @@
       "patch": "browser.patch",
       "port": "https://github.com/lightpanda-io/browser/pull/3753",
       "portCommit": "4bd30d698eedf860e789e887c644d891f4e562d1",
-      "patchSha256": "aa4625a80cec85a054b317d3234de571061b332a2ca2e552061d22ccfe55890c",
+      "patchSha256": "4903a515161064abf82b88fe88ee8832641d8c6496eb371a825b1fe42df9a32e",
       "localChanges": [
         "Exclude opaque MSVC archive and contributor workflow; compile Windows SSL with WIN32_LEAN_AND_MEAN/NOMINMAX to avoid wincrypt X509_NAME collision.",
-        "Use the allocating cross-platform argument iterator in the three auxiliary generators."
+        "Use the allocating cross-platform argument iterator in the three auxiliary generators.",
+        "Use the portable BoringSSL implementations on Windows (OPENSSL_NO_ASM for ssl/crypto/fipsmodule).",
+        "Include the unchanged public-domain MinGW guard_dispatch.S omitted by Zig 0.17.0, from ee9bd87644156c41072a11ad957d1e11831a72df."
       ]
     },
     "v8": {
@@ -31,5 +33,14 @@
   "unchangedDependencies": {
     "zenai": "8bfbb3e5788d278a63708db8ee5f58aa589f9fff"
   },
-  "researchRevision": "research:rr-13db4ea9fd777aabed7c82207cfb1cda:06b824603c01e5471559809463080a0855cc566d7b778492ed8d84ef52694452"
+  "researchRevision": "research:rr-13db4ea9fd777aabed7c82207cfb1cda:06b824603c01e5471559809463080a0855cc566d7b778492ed8d84ef52694452",
+  "additionalSources": {
+    "mingwGuardDispatch": {
+      "repository": "https://github.com/mingw-w64/mingw-w64",
+      "commit": "ee9bd87644156c41072a11ad957d1e11831a72df",
+      "path": "mingw-w64-crt/cfguard/guard_dispatch.S",
+      "sha256": "a479e2319b9a2789afd6f91aedb3e6c640ed16b746df6babffbb17f810432811",
+      "license": "Public domain"
+    }
+  }
 }

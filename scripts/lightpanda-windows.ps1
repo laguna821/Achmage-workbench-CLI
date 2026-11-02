@@ -52,25 +52,28 @@ if ($Stage -eq 'setup') {
     Set-BuildEnv 'LP_FILTERED_LIBS' "$source/browser/win-port/filtered-libs"
     # Native link run 41410510469 identified two CFG globals supplied by both
     # MinGW and this MSVC member. Derive a copy from the installed SDK and remove
-    # only that member; preserve the original SDK and all TLS support members.
+    # only its guard/loadcfg members; preserve the original SDK and all TLS
+    # support members. Run 41413676880 confirmed loadcfg's XFG dependencies.
     New-Item $env:LP_FILTERED_LIBS -ItemType Directory -Force | Out-Null
     $originalCrt = "$env:LP_MSVC_LIB_X64/msvcrt.lib"
     $librarian = "$($msvc.FullName)/bin/Hostx64/x64/lib.exe"
     $members = @(& $librarian /nologo /list $originalCrt | ForEach-Object { $_.Trim() })
     Check-Exit 'MSVC archive inventory failed'
-    $duplicate = @($members | Where-Object { $_ -match '(^|[\\/])guard_support\.obj$' })
-    if ($duplicate.Count -ne 1) { throw 'Expected exactly one MSVC guard_support.obj' }
-    & $librarian /nologo "/remove:$($duplicate[0])" "/out:$env:LP_FILTERED_LIBS/msvcrt.lib" $originalCrt
-    Check-Exit 'MSVC duplicate CFG member removal failed'
+    $excluded = @('guard_support.obj', 'loadcfg.obj')
+    $removed = @($members | Where-Object { [IO.Path]::GetFileName($_) -in $excluded })
+    if ($removed.Count -ne 2) { throw 'Expected exactly one MSVC guard_support.obj and loadcfg.obj' }
+    $removeArgs = @($removed | ForEach-Object { "/remove:$_" })
+    & $librarian /nologo @removeArgs "/out:$env:LP_FILTERED_LIBS/msvcrt.lib" $originalCrt
+    Check-Exit 'MSVC incompatible CFG member removal failed'
     $retained = @(& $librarian /nologo /list "$env:LP_FILTERED_LIBS/msvcrt.lib" | ForEach-Object { $_.Trim() })
     Check-Exit 'Derived MSVC archive inventory failed'
-    $expected = @($members | Where-Object { $_ -ne $duplicate[0] })
+    $expected = @($members | Where-Object { $_ -notin $removed })
     if (@(Compare-Object $expected $retained).Count -ne 0) { throw 'Derived MSVC archive changed unexpected members' }
     @{
         originalSha256=(Get-FileHash $originalCrt -Algorithm SHA256).Hash;
         derivedSha256=(Get-FileHash "$env:LP_FILTERED_LIBS/msvcrt.lib" -Algorithm SHA256).Hash;
-        removed=$duplicate; originalMembers=$members.Count; retainedMembers=$retained.Count;
-        reason='Duplicate CFG globals already defined by MinGW; native link run 41410510469';
+        removed=$removed; originalMembers=$members.Count; retainedMembers=$retained.Count;
+        reason='Use MinGW CFG definitions; native link runs 41410510469 and 41413676880';
         tool=$librarian
     } | ConvertTo-Json -Depth 5 | Set-Content "$evidence/crt-derivation.json"
     "C:/Program Files/Git/usr/bin" | Out-File $env:GITHUB_PATH -Append -Encoding utf8

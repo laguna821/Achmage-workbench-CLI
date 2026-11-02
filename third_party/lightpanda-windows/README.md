@@ -24,9 +24,15 @@ separately so browser fixes do not trigger another full V8 compilation.
 
 Native link run [41410510469](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41410510469)
 found two duplicate CFG globals in MinGW and MSVC. The build now derives a copy
-of the installed SDK's `msvcrt.lib`, removing only `guard_support.obj` with
-Microsoft's librarian. The original SDK and all TLS members remain untouched;
+of the installed SDK's `msvcrt.lib`, removing `guard_support.obj` and `loadcfg.obj`
+with Microsoft's librarian. Run 41413676880 identified the second member's
+MSVC-only XFG dependencies. The original SDK and all TLS members remain untouched;
 the member inventory and original/derived hashes are recorded in `crt-derivation.json`.
+Zig 0.17.0 ships MinGW's CFG pointer declarations but omits `guard_dispatch.S`;
+the unchanged public-domain implementation from the exact MinGW revision in
+`source.json` supplies that missing definition. Windows BoringSSL uses its
+[supported portable implementations](https://github.com/google/boringssl/blob/main/INCORPORATING.md)
+(`OPENSSL_NO_ASM`) because the dependency's assembly list targets Unix platforms.
 There is no automatic publication or installer switch in this workflow.
 
 Required before distribution:

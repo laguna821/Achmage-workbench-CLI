@@ -52,7 +52,7 @@ jobs:
       - name: Compile native browser
         run: ./scripts/lightpanda-windows.ps1 browser
       - uses: actions/cache/save@v4
-        if: always() && steps.browser-cache.outputs.cache-hit != 'true'
+        if: always() && steps.browser-cache.outcome == 'success' && steps.browser-cache.outputs.cache-hit != 'true'
         with:
           path: |
             native-source/browser/.zig-cache
