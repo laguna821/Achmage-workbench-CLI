@@ -31,6 +31,7 @@ type Baseline = {
   origin: string;
   installedBytes: number;
   nativeSha256: string;
+  legacyUpgrade: boolean;
   legacyPaths: string[];
   work: Work;
   folders: Folder[];
@@ -86,6 +87,7 @@ async function launch(app: string, fixture: Baseline["standIns"], out: string, p
 
 async function main() {
   assert.equal(process.platform, "win32", "Run only in the disposable Windows upgrade job");
+  assert.equal(process.env.GITHUB_ACTIONS, "true", "Upgrade acceptance requires a disposable Actions runner");
   const [phase, appArg, rootArg, outArg] = process.argv.slice(2);
   assert.ok(phase === "seed" || phase === "verify");
   assert.ok(appArg && rootArg && outArg);
@@ -103,7 +105,9 @@ async function main() {
     let before: Baseline | null = null;
     let standIns: Baseline["standIns"];
     if (phase === "seed") {
-      assert.ok(!existsSync(root) && !existsSync(defaultData), "Fresh disposable runner: no previous fixture or application data");
+      // Modern installers create Ieum onboarding settings here before the app runs.
+      // Do not delete that directory: verify absence of user records via the old app.
+      assert.ok(!existsSync(root), "Fresh disposable runner: no previous fixture");
       mkdirSync(root, { recursive: true });
       standIns = installStandIns(root);
     } else {
@@ -113,6 +117,10 @@ async function main() {
     gateway = await launch(app, standIns, out, phase);
     const { call, bytes } = client(gateway);
     check("실제 설치본이 기본 데이터 폴더를 사용", () => assert.equal(resolve(gateway!.dataDir), resolve(defaultData)));
+    if (phase === "seed") {
+      const initial = await call<Snapshot>("GET", "/api/snapshot");
+      check("설치기가 만든 설정만 허용하고 기존 사용자 기록은 없음", () => assert.ok(!initial.works.length && !initial.sessions.length && !initial.artifacts.length && !initial.folders.length));
+    }
     await until(async () => {
       const providers = (await call<Snapshot>("GET", "/api/snapshot")).providers;
       return (["codex", "claude"] as const).every(name => providers.some(p => p.provider === name && p.installed && p.loggedIn === true
@@ -153,19 +161,24 @@ async function main() {
       const artifacts = snapshot.artifacts.filter(a => a.workId === work.id);
       const files = [...new Set([...artifacts.map(a => a.path), project.note.path])].map(path => ({ path, sha256: digest(readFileSync(path)) }));
       // Prove the installer does not recursively remove former bundle folders or changed resources.
-      const userPaths = ["hop/사용자 메모.md", "pdfcraft/사용자 메모.md", "kordoc/사용자 양식.hwpx", "ieumoffice/resources/modules/사용자 메모.md", "kordoc/SKILL.md"];
+      const originalLegacyPaths = legacyPaths.filter(p => existsSync(join(app, p)));
+      const legacyUpgrade = originalLegacyPaths.includes("hop") && originalLegacyPaths.includes("pdfcraft");
+      if (process.env.UPGRADE_FROM === "v0.2.2") check("공개 0.2.2에 예전 앱 번들이 실제 존재", () => assert.ok(legacyUpgrade));
+      const userPaths = legacyUpgrade
+        ? ["hop/사용자 메모.md", "pdfcraft/사용자 메모.md", "kordoc/사용자 양식.hwpx", "ieumoffice/resources/modules/사용자 메모.md", "kordoc/SKILL.md"]
+        : ["user-notes/사용자 메모.md", "ieumoffice/user-templates/사용자 양식.hwpx"];
       const userBundleFiles = userPaths.map(path => {
         const full = join(app, path);
-        assert.ok(existsSync(dirname(full)));
+        if (legacyUpgrade) assert.ok(existsSync(dirname(full)));
+        else mkdirSync(dirname(full), { recursive: true });
         if (path !== "kordoc/SKILL.md") assert.ok(!existsSync(full));
         writeFileSync(full, "사용자가 직접 추가하거나 수정한 파일\r\n");
         return { path, sha256: digest(readFileSync(full)) };
       });
       const baseline: Baseline = { standIns, dataDir: gateway.dataDir, origin: gateway.url, installedBytes: fileBytes(app),
-        nativeSha256: digest(readFileSync(appLayout(app).native)), legacyPaths: legacyPaths.filter(p => existsSync(join(app, p))),
+        nativeSha256: digest(readFileSync(appLayout(app).native)), legacyUpgrade, legacyPaths: originalLegacyPaths,
         work: snapshot.works.find(w => w.id === work.id)!, folders: [folder, nested], sessions: snapshot.sessions.filter(s => s.workId === work.id),
         items, prefs, stages, artifacts, files, userBundleFiles, markdown: { id: markdown.id, original, saved }, docxId: docx.id };
-      check("공개 0.2.2에 예전 앱 번들이 실제 존재", () => assert.ok(baseline.legacyPaths.includes("hop") && baseline.legacyPaths.includes("pdfcraft")));
       check("두 엔진의 원래 대화 식별자 생성", () => assert.ok(baseline.sessions.every(s => s.nativeSessionId)));
       check("구형 앱이 저장한 원문과 이전 판 확인", () => assert.equal(readFileSync(markdownPath, "utf8"), saved));
       assert.equal((await bytes(`/api/artifacts/${markdown.id}/raw?revision=1`)).toString(), original);
@@ -208,7 +221,8 @@ async function main() {
       const remainingLegacyFiles = legacyManifest.files.filter(f => !protectedPaths.has(f.path) && existsSync(join(app, f.path))).map(f => f.path);
       check("예전 Electron·HOP·PDFCraft·kordoc 배포 파일 제거", () => assert.deepEqual(remainingLegacyFiles, []));
       const installedBytes = fileBytes(app);
-      check("업그레이드 뒤에도 설치 크기가 실제로 감소", () => assert.ok(installedBytes < before.installedBytes * 0.6));
+      if (before.legacyUpgrade) check("구형 대용량 번들 제거로 설치 크기가 실제로 감소", () => assert.ok(installedBytes < before.installedBytes * 0.6));
+      else check("기존 설치 위치에 새 버전 실행 파일 적용", () => assert.notEqual(digest(readFileSync(appLayout(app).native)), before.nativeSha256));
       writeFileSync(join(out, "after-summary.json"), JSON.stringify({ installedBytes, beforeInstalledBytes: before.installedBytes,
         nativeSha256: digest(readFileSync(appLayout(app).native)), remainingLegacyFiles, preservedUserBundleFiles: before.userBundleFiles,
         preservedWorkId: work.id, workspaceId: work.defaultWorkspaceId, sameDefaultDataDir: gateway.dataDir === before.dataDir, sameOrigin: gateway.url === before.origin }, null, 2));
