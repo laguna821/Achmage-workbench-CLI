@@ -1,0 +1,44 @@
+name: Lightpanda Windows compile preflight
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/lightpanda-windows-native]
+    paths: ['.github/workflows/lightpanda-windows-preflight.yml']
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: windows-2025
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/prepare-lightpanda-windows.py native-source
+      - run: ./scripts/lightpanda-windows.ps1 setup
+      - name: Record installed CRT symbols
+        run: |
+          dumpbin /symbols "$env:LP_MSVC_LIB_X64/msvcrt.lib" > native-evidence/msvcrt-symbols.txt
+          if ($LASTEXITCODE -ne 0) { throw 'CRT inspection failed' }
+      - name: Check browser compilation while the real V8 build runs separately
+        working-directory: native-source/browser
+        run: |
+          # `zig build check` builds static analysis libraries, never an executable.
+          # The empty archive skips only the expensive V8 link dependency. This is
+          # compile diagnostics, not native runtime acceptance or a shipped artifact.
+          zig ar rcs diagnostic-empty.lib
+          if ($LASTEXITCODE -ne 0) { throw 'Diagnostic archive creation failed' }
+          Invoke-WebRequest 'https://sqlite.org/2026/sqlite-amalgamation-3530200.zip' -OutFile "$env:RUNNER_TEMP/sqlite.zip"
+          Expand-Archive "$env:RUNNER_TEMP/sqlite.zip" "$env:RUNNER_TEMP/sqlite"
+          $sqlite = Get-ChildItem "$env:RUNNER_TEMP/sqlite" -Directory | Select-Object -First 1
+          zig fetch $sqlite.FullName
+          if ($LASTEXITCODE -ne 0) { throw 'SQLite prefetch failed' }
+          zig build check -Doptimize=ReleaseFast -Dcpu=x86_64 -Dprebuilt_v8_path=diagnostic-empty.lib --summary all 2>&1 | Tee-Object ../../native-evidence/compile-check.log
+          if ($LASTEXITCODE -ne 0) { throw 'Windows compile preflight failed' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lightpanda-windows-compile-diagnostics
+          path: native-evidence
+          if-no-files-found: ignore
