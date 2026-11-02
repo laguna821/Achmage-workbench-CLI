@@ -1,4 +1,4 @@
-// Actual official Lightpanda binary, JavaScript-rendered fixture, and the shipped
+// Actual Lightpanda binary, JavaScript-rendered fixture, and the shipped
 // gateway/engine spool. No LLM calls, external accounts, or graphical browser.
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
