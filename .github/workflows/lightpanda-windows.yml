@@ -60,7 +60,14 @@ jobs:
             ~/AppData/Local/zig
           key: ${{ steps.browser-cache.outputs.cache-primary-key }}
       - name: Package native executable and runtime DLLs
+        id: package
         run: ./scripts/lightpanda-windows.ps1 package
+      - name: Preserve the candidate package for diagnosis and acceptance
+        uses: actions/upload-artifact@v4
+        with:
+          name: lightpanda-windows-candidate
+          path: lightpanda-windows-x64.zip
+          if-no-files-found: error
       - run: npm ci --ignore-scripts
       - name: Install, verify bundled resources and exercise the native engine without WSL
         run: node scripts/check-lightpanda-native-install.ts lightpanda-windows-x64.zip native-package native-evidence
