@@ -1,6 +1,6 @@
 import { spawn, execFile, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { InstallStep } from "./browse-install.ts";
@@ -15,6 +15,12 @@ const BUILDS: Record<string, { name: string; sha256: string }> = {
   "darwin-x64": { name: "lightpanda-x86_64-macos", sha256: "91a775ecc67937d8d79c1b1a315748e52157804f18f629c6e1c6332a46255fc6" },
 };
 export const lightpandaBuild = (platform: string = process.platform, arch = process.arch) => BUILDS[`${platform === "win32" ? "linux" : platform}-${arch}`] ?? null;
+export type NativeLightpandaBuild = {
+  version: string;
+  url: string;
+  sha256: string;
+  files: Record<string, string>;
+};
 const env = () => {
   const value = { ...process.env, LIGHTPANDA_DISABLE_TELEMETRY: "true", LIGHTPANDA_DISABLE_CORE_DUMP: "1" };
   // Lightpanda expands LP_* placeholders; do not inherit credentials into page tools.
@@ -36,18 +42,33 @@ export async function lightpandaLaunch(binary: string): Promise<{ command: strin
 export class LightpandaInstall {
   readonly binary: string;
   readonly record: string;
-  constructor(root: string) { this.binary = join(root, "lightpanda", "lightpanda"); this.record = join(root, "lightpanda", "install.json"); }
+  readonly version: string;
+  private staged: string | null = null;
+  private readonly native: NativeLightpandaBuild | null;
+  constructor(root: string, native: NativeLightpandaBuild | null = null) {
+    if (native && (!/^\d+\.\d+\.\d+(?:[.+-][0-9A-Za-z.-]+)?$/.test(native.version) || !/^[a-f0-9]{64}$/.test(native.sha256) || !native.files["lightpanda.exe"] ||
+      Object.entries(native.files).some(([name, hash]) => !/^[A-Za-z0-9_.-]+$/.test(name) || name === "." || name === ".." || !/^[a-f0-9]{64}$/.test(hash)))) throw new Error("잘못된 Lightpanda 배포 명세입니다.");
+    this.version = native?.version ?? LIGHTPANDA_VERSION;
+    this.native = native;
+    this.binary = native ? join(root, "lightpanda", this.version, "lightpanda.exe") : join(root, "lightpanda", "lightpanda");
+    this.record = join(root, "lightpanda", "install.json");
+  }
   ready() {
-    try { const saved = JSON.parse(readFileSync(this.record, "utf8")); return saved.version === LIGHTPANDA_VERSION && saved.sha256 === lightpandaBuild()?.sha256 && existsSync(this.binary); }
+    try {
+      const saved = JSON.parse(readFileSync(this.record, "utf8"));
+      return saved.version === this.version && saved.sha256 === (this.native?.sha256 ?? lightpandaBuild()?.sha256) && existsSync(this.binary) &&
+        (!this.native || Object.keys(this.native.files).every(name => existsSync(join(this.binary, "..", name))));
+    }
     catch { return false; }
   }
   steps(): InstallStep[] {
     return [{ stage: "browser", message: "Lightpanda 받는 중…", run: async report => {
-      const build = lightpandaBuild();
+      const build = this.native ?? lightpandaBuild();
       if (!build) throw new Error("이 OS/CPU용 Lightpanda 배포 파일이 없습니다.");
-      if (process.platform === "win32") await lightpandaLaunch(this.binary);
-      mkdirSync(join(this.binary, ".."), { recursive: true, mode: 0o700 });
-      const response = await fetch(`https://github.com/lightpanda-io/browser/releases/download/${LIGHTPANDA_VERSION}/${build.name}`, { signal: AbortSignal.timeout(180000) });
+      if (process.platform === "win32" && !this.native) await lightpandaLaunch(this.binary);
+      mkdirSync(join(this.record, ".."), { recursive: true, mode: 0o700 });
+      const url = this.native?.url ?? `https://github.com/lightpanda-io/browser/releases/download/${LIGHTPANDA_VERSION}/${lightpandaBuild()!.name}`;
+      const response = await fetch(url, { signal: AbortSignal.timeout(180000) });
       if (!response.ok || !response.body) throw new Error(`Lightpanda 다운로드 HTTP ${response.status}`);
       const chunks: Buffer[] = []; let size = 0;
       const total = Number(response.headers.get("content-length"));
@@ -59,13 +80,46 @@ export class LightpandaInstall {
       }
       const bytes = Buffer.concat(chunks), digest = createHash("sha256").update(bytes).digest("hex");
       if (digest !== build.sha256) throw new Error("Lightpanda 배포 파일의 SHA-256이 일치하지 않습니다.");
-      writeFileSync(`${this.binary}.tmp`, bytes, { mode: 0o755 }); chmodSync(`${this.binary}.tmp`, 0o755);
-      renameSync(`${this.binary}.tmp`, this.binary);
+      if (this.native) {
+        if (this.staged) rmSync(this.staged, { recursive: true, force: true });
+        this.staged = mkdtempSync(join(this.record, "..", ".native-install-"));
+        try {
+          const archive = join(this.staged, "engine.zip"), target = join(this.staged, "engine");
+          writeFileSync(archive, bytes, { mode: 0o600 }); mkdirSync(target);
+          const systemTar = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe");
+          const tar = process.platform === "win32" && existsSync(systemTar) ? systemTar : "tar";
+          const { stdout } = await exec(tar, ["-tf", archive], { timeout: 30000, windowsHide: true });
+          const entries = stdout.trim().split(/\r?\n/).map(name => name.replace(/^\.\//, ""));
+          if (!entries.length || entries.some(name => !/^[A-Za-z0-9_.-]+$/.test(name) || name === "." || name === "..")) throw new Error("Lightpanda 압축 파일의 경로가 올바르지 않습니다.");
+          await exec(tar, ["-xf", archive, "-C", target, "--no-same-owner"], { timeout: 60000, windowsHide: true });
+          for (const [name, expected] of Object.entries(this.native.files)) {
+            const actual = createHash("sha256").update(readFileSync(join(target, name))).digest("hex");
+            if (actual !== expected) throw new Error(`Lightpanda 구성 파일의 SHA-256이 일치하지 않습니다: ${name}`);
+          }
+        } catch (error) { rmSync(this.staged, { recursive: true, force: true }); this.staged = null; throw error; }
+      } else {
+        writeFileSync(`${this.binary}.tmp`, bytes, { mode: 0o755 }); chmodSync(`${this.binary}.tmp`, 0o755);
+        renameSync(`${this.binary}.tmp`, this.binary);
+      }
     } }, { stage: "verify", message: "Lightpanda 실행 확인…", run: async () => {
-      const launch = await lightpandaLaunch(this.binary);
-      const { stdout } = await exec(launch.command, [...launch.args, "version"], { env: env(), timeout: 15000, windowsHide: true });
-      if (stdout.trim() !== LIGHTPANDA_VERSION) { rmSync(this.record, { force: true }); throw new Error("Lightpanda 버전을 확인하지 못했습니다."); }
-      writeFileSync(this.record, JSON.stringify({ version: LIGHTPANDA_VERSION, sha256: lightpandaBuild()!.sha256 }), { mode: 0o600 });
+      const staged = this.staged;
+      try {
+        if (this.native && !staged) throw new Error("Lightpanda 설치 파일이 준비되지 않았습니다.");
+        const launch = await lightpandaLaunch(staged ? join(staged, "engine", "lightpanda.exe") : this.binary);
+        const { stdout } = await exec(launch.command, [...launch.args, "version"], { env: env(), timeout: 15000, windowsHide: true });
+        if (stdout.trim() !== this.version) throw new Error("Lightpanda 버전을 확인하지 못했습니다.");
+        if (staged) {
+          // Versioned directories preserve the older engine until the new one verifies.
+          const target = join(this.binary, "..");
+          if (existsSync(target)) rmSync(target, { recursive: true });
+          renameSync(join(staged, "engine"), target);
+        }
+        writeFileSync(`${this.record}.tmp`, JSON.stringify({ version: this.version, sha256: this.native?.sha256 ?? lightpandaBuild()!.sha256 }), { mode: 0o600 });
+        renameSync(`${this.record}.tmp`, this.record);
+      } finally {
+        if (staged) rmSync(staged, { recursive: true, force: true });
+        this.staged = null;
+      }
     } }];
   }
 }

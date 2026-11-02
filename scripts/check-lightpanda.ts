@@ -78,6 +78,10 @@ try {
   mkdirSync(join(browser.paths.profile, "Default"), { recursive: true }); const preserved = join(browser.paths.profile, "Default", "fixture.txt"); writeFileSync(preserved, "existing-profile");
   await browser.selectEngine("chromium"); check("호환 모드 전환 시 기존 Chromium 프로필 보존", browser.status().engine === "chromium" && readFileSync(preserved, "utf8") === "existing-profile");
   await browser.selectEngine("lightpanda"); check("Lightpanda 재선택·실행", (await run("two", ["open", url])).includes("Lightpanda"));
+  if (process.env.LIGHTPANDA_CHECK_HTTPS === "1") {
+    await run("two", ["open", "https://example.com"]);
+    check("실제 인증서를 확인한 HTTPS 본문 수집", (await run("two", ["read", "body"])).includes("Example Domain"));
+  }
 } finally {
   await browser.shutdown(); server.closeAllConnections(); await new Promise<void>(done => server.close(() => done()));
   writeFileSync(out, JSON.stringify({ checks, results, binary, platform: process.platform, arch: process.arch, wsl, graphicalBrowser: false, paidModelCalls: 0 }, null, 2));
