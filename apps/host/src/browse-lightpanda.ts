@@ -4,6 +4,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { InstallStep } from "./browse-install.ts";
+import { shipped } from "./resources.ts";
 
 const exec = promisify(execFile);
 export const LIGHTPANDA_VERSION = "1.0.2";
@@ -45,16 +46,26 @@ export class LightpandaInstall {
   readonly version: string;
   private staged: string | null = null;
   private readonly native: NativeLightpandaBuild | null;
+  private readonly bundled: boolean;
   constructor(root: string, native: NativeLightpandaBuild | null = null) {
     if (native && (!/^\d+\.\d+\.\d+(?:[.+-][0-9A-Za-z.-]+)?$/.test(native.version) || !/^[a-f0-9]{64}$/.test(native.sha256) || !native.files["lightpanda.exe"] ||
       Object.entries(native.files).some(([name, hash]) => !/^[A-Za-z0-9_.-]+$/.test(name) || name === "." || name === ".." || !/^[a-f0-9]{64}$/.test(hash)))) throw new Error("잘못된 Lightpanda 배포 명세입니다.");
     this.version = native?.version ?? LIGHTPANDA_VERSION;
     this.native = native;
-    this.binary = native ? join(root, "lightpanda", this.version, "lightpanda.exe") : join(root, "lightpanda", "lightpanda");
+    let bundled = native && process.platform === "win32" ? shipped("lightpanda/lightpanda.exe") : null;
+    if (bundled && native) {
+      try {
+        // Verify once at gateway startup; status polling only checks presence.
+        if (Object.entries(native.files).some(([name, expected]) => createHash("sha256").update(readFileSync(join(bundled!, "..", name))).digest("hex") !== expected)) bundled = null;
+      } catch { bundled = null; }
+    }
+    this.bundled = Boolean(bundled);
+    this.binary = bundled ?? (native ? join(root, "lightpanda", this.version, "lightpanda.exe") : join(root, "lightpanda", "lightpanda"));
     this.record = join(root, "lightpanda", "install.json");
   }
   ready() {
     try {
+      if (this.bundled && this.native) return Object.keys(this.native.files).every(name => existsSync(join(this.binary, "..", name)));
       const saved = JSON.parse(readFileSync(this.record, "utf8"));
       return saved.version === this.version && saved.sha256 === (this.native?.sha256 ?? lightpandaBuild()?.sha256) && existsSync(this.binary) &&
         (!this.native || Object.keys(this.native.files).every(name => existsSync(join(this.binary, "..", name))));
@@ -62,6 +73,7 @@ export class LightpandaInstall {
     catch { return false; }
   }
   steps(): InstallStep[] {
+    if (this.bundled) return [];
     return [{ stage: "browser", message: "Lightpanda 받는 중…", run: async report => {
       const build = this.native ?? lightpandaBuild();
       if (!build) throw new Error("이 OS/CPU용 Lightpanda 배포 파일이 없습니다.");

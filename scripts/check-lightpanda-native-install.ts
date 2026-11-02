@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { LightpandaInstall, type NativeLightpandaBuild } from "../apps/host/src/browse-lightpanda.ts";
@@ -17,6 +17,7 @@ mkdirSync(output, { recursive: true });
 const source = JSON.parse(readFileSync(join(packageDir, "source-provenance.json"), "utf8"));
 const files = JSON.parse(readFileSync(join(packageDir, "files.json"), "utf8")) as { name: string; sha256: string }[];
 const root = mkdtempSync(join(tmpdir(), "wb-native-install-"));
+const previousResources = process.env.WORKBENCH_RESOURCES_DIR;
 const checks: string[] = [];
 const check = (name: string, value: unknown) => { assert.ok(value, name); checks.push(name); console.log(`PASS ${name}`); };
 const server = createServer((_req, res) => { res.setHeader("Content-Length", archive.length); res.end(archive); });
@@ -47,9 +48,19 @@ try {
   const installer = await install(build);
   check("verified native executable and runtime DLLs installed", installer.ready() && /\.exe$/i.test(installer.binary));
   check("legacy WSL binary preserved during migration", readFileSync(join(legacy, "lightpanda"), "utf8") === "previous-linux-binary");
+  const resources = join(root, "resources");
+  const bundledPath = join(resources, "lightpanda"); cpSync(packageDir, bundledPath, { recursive: true });
+  process.env.WORKBENCH_RESOURCES_DIR = resources;
+  const bundled = new LightpandaInstall(join(root, "bundled-data"), build);
+  check("bundled engine ready without download or WSL setup", bundled.ready() && bundled.steps().length === 0 && bundled.binary === join(bundledPath, "lightpanda.exe"));
+  const dll = files.find(file => /\.dll$/i.test(file.name)); assert.ok(dll, "package must contain runtime DLLs");
+  writeFileSync(join(bundledPath, dll.name), "corrupt-runtime");
+  const damaged = new LightpandaInstall(join(root, "repair-data"), build);
+  check("corrupt bundled DLL is rejected", !damaged.ready() && damaged.binary !== bundled.binary);
+  cpSync(join(packageDir, dll.name), join(bundledPath, dll.name));
   const browserReport = join(output, "native-installed-browser.json");
   await new Promise<void>((done, reject) => {
-    const child = spawn(process.execPath, ["scripts/check-lightpanda.ts", installer.binary, browserReport], { stdio: "inherit", env: { ...process.env, LIGHTPANDA_CHECK_HTTPS: "1" } });
+    const child = spawn(process.execPath, ["scripts/check-lightpanda.ts", bundled.binary, browserReport], { stdio: "inherit", env: { ...process.env, LIGHTPANDA_CHECK_HTTPS: "1" } });
     child.once("error", reject);
     child.once("exit", code => code === 0 ? done() : reject(new Error(`Native installed browser check exited ${code}`)));
   });
@@ -57,6 +68,8 @@ try {
   check("installed engine completed product checks without WSL", browser.wsl === false && browser.checks.length >= 15);
   writeFileSync(join(output, "native-install.json"), JSON.stringify({ checks, build, platform: process.platform, arch: process.arch }, null, 2));
 } finally {
+  if (previousResources === undefined) delete process.env.WORKBENCH_RESOURCES_DIR;
+  else process.env.WORKBENCH_RESOURCES_DIR = previousResources;
   server.closeAllConnections(); await new Promise<void>(done => server.close(() => done()));
   rmSync(root, { recursive: true, force: true });
 }
