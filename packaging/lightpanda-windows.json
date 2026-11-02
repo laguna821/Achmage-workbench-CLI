@@ -1,0 +1,25 @@
+{
+  "version": "1.0.2+achmage.win.1",
+  "url": "https://github.com/laguna821/Achmage-workbench-CLI/releases/download/lightpanda-win-v1.0.2-r1/lightpanda-windows-x64.zip",
+  "sha256": "bf6c8627c8875382699633ff2738a29e4ffe9f39ba040af28edbea9aca7eff76",
+  "files": {
+    "concrt140.dll": "54716f0738af891f283d213b5c8d11b25896bb8ee3097d301eae718560cf974e",
+    "crt-derivation.json": "7151c1bd16db1c3e30ee7a8252c8b6129e402ccddc7b7786ae2954834ccf598a",
+    "LICENSE": "8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef",
+    "lightpanda.exe": "e1969324a2cc95b50d5c5bee88b51983678ba5d800eb2b5ed57315734de633a3",
+    "msvcp140_1.dll": "206c931bf90fdad8816de3b5e2ef80b2bcaa9406c89ecc05fe6fddffe251e982",
+    "msvcp140_2.dll": "d50d7883f20d1dc6191768d3746f52dd9cac89c346ffaed5be1f110c2f34a838",
+    "msvcp140_atomic_wait.dll": "3d0cbfaa1bf3eecf5a3f4491d2960ee803cb994f30292c6adc4a07c498f60e2b",
+    "msvcp140_codecvt_ids.dll": "8a65c7596ef2e6938731f5a1058e7e40145b6d97967cc649231a076b9a608d78",
+    "msvcp140.dll": "7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca",
+    "README-WINDOWS.txt": "ddc1f4aa9555c641b11e41a340cf45bb21bbefafce9de0dd884a53e3f466355e",
+    "source-provenance.json": "c9046bab98cfab5ea5fb93eafb0861669068146bf4260ddd883ee2ee2d0b218e",
+    "V8-BINDING-LICENSE": "d6321ea1cf8d7068361aaeff929b1ee10ee660d21601f9639877091d71df1fbe",
+    "V8-ENGINE-LICENSE": "16da1b2fff4b35ff575277dfdf212e6c6f1a11aad4fb76e6986191cd94e22266",
+    "v8-provenance.json": "f82e5b73e5f2342a1115779bc0a451f46fef7cd002d10c183badc175cd0f3e9a",
+    "vccorlib140.dll": "09f93d5ff96ae09767f3e1af3cdd43a5a58f2598654fc63089429bb6f9f4737f",
+    "vcruntime140_1.dll": "a7146c08f89fe5b04541ab507cdb59ff7b44534d4ba3c668a426c6450a03434e",
+    "vcruntime140_threads.dll": "40f39e8cee5f5a531b4010e18b807e8fe265b908dc58f959ecb7ebc6ea6cb11a",
+    "vcruntime140.dll": "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7"
+  }
+}

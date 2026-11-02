@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import type { InstallStep } from "./browse-install.ts";
 import { shipped } from "./resources.ts";
+import nativeWindowsBuild from "../../../packaging/lightpanda-windows.json" with { type: "json" };
 
 const exec = promisify(execFile);
 export const LIGHTPANDA_VERSION = "1.0.2";
@@ -47,7 +48,7 @@ export class LightpandaInstall {
   private staged: string | null = null;
   private readonly native: NativeLightpandaBuild | null;
   private readonly bundled: boolean;
-  constructor(root: string, native: NativeLightpandaBuild | null = null) {
+  constructor(root: string, native: NativeLightpandaBuild | null = process.platform === "win32" && process.arch === "x64" ? nativeWindowsBuild : null) {
     if (native && (!/^\d+\.\d+\.\d+(?:[.+-][0-9A-Za-z.-]+)?$/.test(native.version) || !/^[a-f0-9]{64}$/.test(native.sha256) || !native.files["lightpanda.exe"] ||
       Object.entries(native.files).some(([name, hash]) => !/^[A-Za-z0-9_.-]+$/.test(name) || name === "." || name === ".." || !/^[a-f0-9]{64}$/.test(hash)))) throw new Error("잘못된 Lightpanda 배포 명세입니다.");
     this.version = native?.version ?? LIGHTPANDA_VERSION;

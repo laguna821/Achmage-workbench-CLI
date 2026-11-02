@@ -32,7 +32,7 @@ import {
 } from "./browse-policy.ts";
 import { cmdLauncherSource, launcherSource, wrapperSource } from "./browse-wrapper.ts";
 import { HttpError } from "./errors.ts";
-import { LightpandaBrowser, LightpandaInstall, LIGHTPANDA_VERSION, LIGHTPANDA_HELP } from "./browse-lightpanda.ts";
+import { LightpandaBrowser, LightpandaInstall, LIGHTPANDA_HELP } from "./browse-lightpanda.ts";
 
 const run = promisify(execFile);
 
@@ -211,7 +211,7 @@ export class AgentBrowser {
     this.engine = options.engine ?? (options.cli ? "chromium" : saved === "chromium" ? "chromium" : "lightpanda");
     const pandaInstall = new LightpandaInstall(this.paths.root);
     this.panda = new LightpandaBrowser(options.lightpanda ?? pandaInstall.binary, options.idleCloseMs);
-    this.pandaInstaller = new BrowserInstaller({ ready: () => Boolean(options.lightpanda) || pandaInstall.ready(), steps: () => pandaInstall.steps(), onChange: () => this.publish(), versions: { cli: "MCP", browser: LIGHTPANDA_VERSION } });
+    this.pandaInstaller = new BrowserInstaller({ ready: () => Boolean(options.lightpanda) || pandaInstall.ready(), steps: () => pandaInstall.steps(), onChange: () => this.publish(), versions: { cli: "MCP", browser: pandaInstall.version } });
     for (const dir of [this.paths.root, this.paths.bin, this.paths.spool, this.paths.output]) mkdirSync(dir, { recursive: true });
     mkdirSync(this.paths.profile, { recursive: true, mode: 0o700 });
     // Sign-ins, page snapshots and screenshots (mail, for one) are this user's alone.

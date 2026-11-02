@@ -1,9 +1,16 @@
-# Native Windows Lightpanda candidate
+# Native Windows Lightpanda
 
-This directory contains source patches and a pinned-source build recipe, not a
-released Windows binary. Linux/macOS continue to use official Lightpanda 1.0.2.
-The existing Windows installation still uses WSL2 until a native artifact passes
-the acceptance checks and is added to the installer manifest.
+This directory contains the source patches and pinned-source build recipe for
+the independently built [Windows x64 package](https://github.com/laguna821/Achmage-workbench-CLI/releases/tag/lightpanda-win-v1.0.2-r1).
+It is not an official Lightpanda Windows release. Workbench 0.3.2 bundles it using
+`packaging/lightpanda-windows.json`; Linux/macOS retain official Lightpanda 1.0.2.
+
+Native build [41420847598](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41420847598)
+passed 66/66 build steps, 8/8 installation checks and 15/15 real browser checks
+on Windows x64, without WSL. ZIP: 32,502,775 bytes; expanded files: 86,822,489 bytes.
+The executable and required runtime DLLs stay together. Run `lightpanda.exe mcp`
+from any compatible MCP stdio client. CDP interoperability and broad performance
+comparisons are outside this package's acceptance scope.
 
 Sources are pinned in `source.json`: official Lightpanda 1.0.2 plus the unmerged
 [Windows browser port](https://github.com/lightpanda-io/browser/pull/3753) and
@@ -35,14 +42,14 @@ the unchanged public-domain implementation from the exact MinGW revision in
 (`OPENSSL_NO_ASM`) because the dependency's assembly list targets Unix platforms.
 There is no automatic publication or installer switch in this workflow.
 
-Required before distribution:
+Acceptance performed for the standalone package:
 
 - Successful source build, exact version, and recorded source/tool provenance.
 - Native Windows execution without WSL: JavaScript/fetch, input/click/extraction,
   independent sessions, bounded output, permission checks, and EOF shutdown.
 - HTTPS navigation and package dependency verification.
-- Workbench installation with pinned artifact checksum, upgrade and launch tests.
+- Product engine installation with pinned artifact checksum and preservation of the previous install.
 - Engine source/license/provenance supplied alongside the native package.
 
 Research:
-`research:rr-13db4ea9fd777aabed7c82207cfb1cda:06b824603c01e5471559809463080a0855cc566d7b778492ed8d84ef52694452`
+`research:rr-13db4ea9fd777aabed7c82207cfb1cda:8ac306f2cc62999eba32093c0e9a0d722bb0f1f1291a512ad45bc6cba31ac084`

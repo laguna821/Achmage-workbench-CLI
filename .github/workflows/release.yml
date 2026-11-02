@@ -229,10 +229,12 @@ jobs:
           cp -R "${file%.zip}/node_modules/npm" apps/desktop/src-tauri/node/npm
       - name: Original IeumOffice CLI resources (official Windows builds, pinned and checked; 7-Zip opens the installers)
         run: node scripts/fetch-bundled-apps.ts apps/desktop/src-tauri/bundled win32-x64
+      - name: Native Windows Lightpanda with runtime DLLs and source provenance
+        run: node scripts/fetch-bundled-lightpanda.ts apps/desktop/src-tauri/bundled
       - run: npm ci --ignore-scripts
       - name: Build
         working-directory: apps/desktop
-        run: npx tauri build --config src-tauri/tauri.release.conf.json --config src-tauri/tauri.release.apps.conf.json --bundles nsis,msi
+        run: npx tauri build --config src-tauri/tauri.release.conf.json --config src-tauri/tauri.release.apps.conf.json --config src-tauri/tauri.release.windows.conf.json --bundles nsis,msi
       - uses: actions/upload-artifact@v4
         with:
           name: windows

@@ -97,7 +97,7 @@ export function BrowserInstall({ status, actions }: { status: AgentBrowserStatus
       ) : (
         <>
           <div className="browser-note">
-            {install.state === "error" ? install.message : status.engine === "lightpanda" ? "AI가 화면 없이 탐색할 Lightpanda를 앱 데이터 폴더에 받습니다(약 74–98MB). Windows에서는 WSL2가 필요합니다." : "호환 브라우저용 Playwright CLI와 Chromium을 앱 데이터 폴더에 받습니다(내려받기 약 200MB, 설치 후 약 420MB)."}
+            {install.state === "error" ? install.message : status.engine === "lightpanda" ? "AI가 화면 없이 탐색할 Lightpanda를 앱 데이터 폴더에 받습니다. Windows x64에서는 WSL 설치가 필요 없습니다." : "호환 브라우저용 Playwright CLI와 Chromium을 앱 데이터 폴더에 받습니다(내려받기 약 200MB, 설치 후 약 420MB)."}
           </div>
           <button type="button" className="button small" onClick={actions.install}>
             {install.state === "error" ? "다시 설치" : "설치"}
