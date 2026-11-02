@@ -18,7 +18,7 @@ index 0000000..e1e7ac8
 +*.patch text eol=lf
 +*.toml text eol=lf
 diff --git a/build.zig b/build.zig
-index 33d5409..d2100ea 100644
+index 33d5409..131f013 100644
 --- a/build.zig
 +++ b/build.zig
 @@ -115,6 +115,23 @@ pub fn build(b: *Build) !void {
@@ -270,7 +270,19 @@ index 33d5409..d2100ea 100644
      mod.addObjectFile(obj);
  }
  
-@@ -726,12 +932,15 @@ fn buildNghttp2(b: *Build, target: Build.ResolvedTarget, optimize: std.lang.Opti
+@@ -698,6 +904,11 @@ fn buildBoringSsl(b: *Build, target: Build.ResolvedTarget, optimize: std.lang.Op
+ 
+     const ssl = sectionize(dep.artifact("ssl"), section);
+     ssl.bundle_ubsan_rt = false;
++    if (target.result.os.tag == .windows) {
++        // wincrypt.h's X509_NAME macro conflicts with BoringSSL's type.
++        ssl.root_module.addCMacro("WIN32_LEAN_AND_MEAN", "1");
++        ssl.root_module.addCMacro("NOMINMAX", "1");
++    }
+ 
+     const crypto = sectionize(dep.artifact("crypto"), section);
+     crypto.bundle_ubsan_rt = false;
+@@ -726,12 +937,15 @@ fn buildNghttp2(b: *Build, target: Build.ResolvedTarget, optimize: std.lang.Opti
      lib.installHeadersDirectory(dep.path("lib/includes/nghttp2"), "nghttp2", .{});
      mod.addCSourceFiles(.{
          .root = dep.path("lib"),
@@ -292,7 +304,7 @@ index 33d5409..d2100ea 100644
          .files = &.{
              "sfparse.c",                 "nghttp2_alpn.c",   "nghttp2_buf.c",
              "nghttp2_callbacks.c",       "nghttp2_debug.c",  "nghttp2_extpri.c",
-@@ -986,6 +1195,7 @@ fn buildCurl(
+@@ -986,6 +1200,7 @@ fn buildCurl(
              "-DHAVE_CONFIG_H",
              "-DCURL_STATICLIB",
              "-DBUILDING_LIBCURL",

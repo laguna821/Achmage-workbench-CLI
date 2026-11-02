@@ -10,7 +10,10 @@
       "patch": "browser.patch",
       "port": "https://github.com/lightpanda-io/browser/pull/3753",
       "portCommit": "4bd30d698eedf860e789e887c644d891f4e562d1",
-      "patchSha256": "2dd026c3c1f577664fd30375a820a390268fba661c946a34d1c75a71103112f0"
+      "patchSha256": "352e3abcedebfb12804ba92192c61394b8a4464417f64034ae1ff2161877a246",
+      "localChanges": [
+        "Exclude opaque MSVC archive and contributor workflow; compile Windows SSL with WIN32_LEAN_AND_MEAN/NOMINMAX to avoid wincrypt X509_NAME collision."
+      ]
     },
     "v8": {
       "repository": "https://github.com/lightpanda-io/zig-v8-fork.git",

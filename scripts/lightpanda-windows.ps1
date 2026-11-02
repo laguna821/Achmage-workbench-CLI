@@ -17,6 +17,10 @@ function Set-BuildEnv([string]$name, [string]$value) {
 }
 
 if ($Stage -eq 'setup') {
+    # Zig cannot invoke the runner's Strawberry Perl pkg-config.BAT shim.
+    # Standard Windows system libraries need no pkg-config metadata.
+    $buildPath = ($env:PATH -split ';' | Where-Object { $_ -notmatch '(?i)[\\/]Strawberry[\\/]perl[\\/]bin[\\/]?$' }) -join ';'
+    Set-BuildEnv 'PATH' $buildPath
     $tools = Get-Content "$repo/third_party/lightpanda-windows/tools.json" -Raw | ConvertFrom-Json
     $toolRoot = Join-Path $env:RUNNER_TEMP 'lightpanda-tools'
     $depot = Join-Path $source "v8/.lp-cache/depot_tools-$($spec.v8Version)"
@@ -106,6 +110,7 @@ elseif ($Stage -eq 'package') {
     New-Item $package -ItemType Directory -Force | Out-Null
     Copy-Item "$source/browser/zig-out/bin/lightpanda.exe" $package
     Copy-Item "$source/browser/LICENSE", "$source/source-provenance.json" $package
+    Copy-Item "$source/v8/LICENSE" "$package/V8-BINDING-LICENSE"
     Copy-Item "$cache/provenance.json" "$package/v8-provenance.json"
     $redist = Get-ChildItem "$env:vs2022_install/VC/Redist/MSVC" -Directory | Where-Object Name -Match '^\d+\.' | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
     $crt = @(Get-ChildItem "$($redist.FullName)/x64" -Directory -Filter 'Microsoft.VC*.CRT')

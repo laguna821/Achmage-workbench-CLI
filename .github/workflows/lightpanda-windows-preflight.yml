@@ -3,7 +3,11 @@ on:
   workflow_dispatch:
   push:
     branches: [feat/lightpanda-windows-native]
-    paths: ['.github/workflows/lightpanda-windows-preflight.yml']
+    paths:
+      - '.github/workflows/lightpanda-windows-preflight.yml'
+      - 'third_party/lightpanda-windows/*.patch'
+      - 'third_party/lightpanda-windows/source.json'
+      - 'scripts/lightpanda-windows.ps1'
 permissions:
   contents: read
 jobs:
@@ -17,6 +21,15 @@ jobs:
           python-version: '3.12'
       - run: python scripts/prepare-lightpanda-windows.py native-source
       - run: ./scripts/lightpanda-windows.ps1 setup
+      - uses: actions/cache/restore@v4
+        id: browser-cache
+        with:
+          path: |
+            native-source/browser/.zig-cache
+            native-source/browser/zig-pkg
+            ~/AppData/Local/zig
+          key: lp-win-browser-1.0.2-zig0.17.0-${{ hashFiles('third_party/lightpanda-windows/browser.patch') }}
+          restore-keys: lp-win-browser-1.0.2-zig0.17.0-
       - name: Record installed CRT symbols
         run: |
           dumpbin /symbols "$env:LP_MSVC_LIB_X64/msvcrt.lib" > native-evidence/msvcrt-symbols.txt
@@ -36,6 +49,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'SQLite prefetch failed' }
           zig build check -Doptimize=ReleaseFast -Dcpu=x86_64 '-Dprebuilt_v8_path=diagnostic-empty.lib' --summary all 2>&1 | Tee-Object ../../native-evidence/compile-check.log
           if ($LASTEXITCODE -ne 0) { throw 'Windows compile preflight failed' }
+      - uses: actions/cache/save@v4
+        if: ${{ !cancelled() && steps.browser-cache.outputs.cache-primary-key != '' && steps.browser-cache.outputs.cache-hit != 'true' }}
+        with:
+          path: |
+            native-source/browser/.zig-cache
+            native-source/browser/zig-pkg
+            ~/AppData/Local/zig
+          key: ${{ steps.browser-cache.outputs.cache-primary-key }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -12,7 +12,8 @@ official zenai dependency already supports Windows and is unchanged. The V8
 patch additionally corrects a missing PATH separator in the contributed code.
 The contributed precompiled `msvcrt.lib` and workflow are deliberately excluded;
 the build uses the runner's installed Microsoft toolchain and records its hash.
-Source patches retain the upstream AGPL-3.0 license included here.
+The browser patch retains the upstream AGPL-3.0 license (`LICENSE`); the V8
+binding patch retains its MIT license (`V8-LICENSE`).
 
 ## Build and acceptance
 
