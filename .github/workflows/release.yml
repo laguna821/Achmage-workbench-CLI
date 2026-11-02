@@ -25,6 +25,10 @@ on:
         type: choice
         options: [both, windows-latest, macos-15]
         default: both
+      upgrade_run:
+        description: 'Recheck upgrade using installers from an existing build run (requires source_sha)'
+        type: string
+        default: ''
       publish_run:
         description: 'Publish an already successful Installers run as a preview (empty: build)'
         type: string
@@ -59,7 +63,7 @@ env:
 
 jobs:
   browser:
-    if: ${{ !inputs.publish_run && !inputs.upgrade_to && !inputs.smoke_run }}
+    if: ${{ !inputs.publish_run && !inputs.upgrade_to && !inputs.smoke_run && !inputs.upgrade_run }}
     name: Lightpanda background browsing (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -84,7 +88,7 @@ jobs:
           if-no-files-found: ignore
 
   web:
-    if: ${{ !inputs.publish_run && !inputs.upgrade_to && !inputs.smoke_run }}
+    if: ${{ !inputs.publish_run && !inputs.upgrade_to && !inputs.smoke_run && !inputs.upgrade_run }}
     name: UI and gateway (once)
     runs-on: ubuntu-24.04
     steps:
@@ -357,7 +361,7 @@ jobs:
   upgrade:
     name: Windows installer upgrade and data preservation
     needs: windows
-    if: always() && inputs.publish_run == '' && (inputs.upgrade_to != '' || needs.windows.result == 'success')
+    if: always() && inputs.publish_run == '' && (inputs.upgrade_to != '' || inputs.upgrade_run != '' || needs.windows.result == 'success')
     runs-on: windows-latest
     timeout-minutes: 15
     env:
@@ -369,6 +373,30 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Verify the existing upgrade candidate source
+        if: inputs.upgrade_run != ''
+        shell: bash
+        env:
+          SOURCE_RUN: ${{ inputs.upgrade_run }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          node --input-type=module - <<'JS'
+          import { mkdirSync, writeFileSync } from 'node:fs';
+          const { SOURCE_RUN, SOURCE_SHA, GITHUB_REPOSITORY, GH_TOKEN } = process.env;
+          if (!/^\d+$/.test(SOURCE_RUN) || !/^[a-f0-9]{40}$/.test(SOURCE_SHA)) throw Error('Exact source run and SHA required');
+          const headers = { authorization: `Bearer ${GH_TOKEN}` };
+          const base = `https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN}`;
+          const response = await fetch(base, { headers });
+          if (!response.ok) throw Error(`Source run lookup: ${response.status}`);
+          const run = await response.json();
+          if (run.head_sha !== SOURCE_SHA || run.head_repository?.full_name !== GITHUB_REPOSITORY || run.path !== '.github/workflows/release.yml' || run.status !== 'completed') throw Error('Wrong source build');
+          const jobsResponse = await fetch(`${base}/jobs`, { headers });
+          if (!jobsResponse.ok) throw Error(`Source jobs lookup: ${jobsResponse.status}`);
+          const jobs = (await jobsResponse.json()).jobs;
+          if (!jobs.some(job => job.name === 'Windows (NSIS, MSI)' && job.conclusion === 'success')) throw Error('Windows installer build did not pass');
+          mkdirSync('upgrade-out', { recursive: true });
+          writeFileSync('upgrade-out/installer-source.json', JSON.stringify({ sourceRun: SOURCE_RUN, sourceSha: SOURCE_SHA, acceptanceSha: process.env.GITHUB_SHA }, null, 2));
+          JS
       - name: Install the published old version and create real application data
         shell: pwsh
         run: |
@@ -396,6 +424,8 @@ jobs:
         with:
           name: windows
           path: new-installer
+          run-id: ${{ inputs.upgrade_run || github.run_id }}
+          github-token: ${{ github.token }}
       - name: Install the new version over the same installation and verify
         shell: pwsh
         run: |

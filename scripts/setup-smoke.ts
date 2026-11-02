@@ -17,7 +17,6 @@ import type { ProviderStatus, Session, Snapshot, TranscriptItem, Work } from "@w
 
 import { appLayout, client, startGateway, type Gateway } from "./setup-gateway.ts";
 import { checkFastFindInstalled } from "./fast-find-installed.ts";
-import { checkLightpandaInstalled } from "./lightpanda-installed.ts";
 export { appLayout, client, startGateway, type Gateway } from "./setup-gateway.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -251,6 +250,9 @@ export async function apiChecks(gateway: Gateway, app: string, expect: ReturnTyp
   }
 
   await checkFastFindInstalled(gateway, app, work, created.id, check);
+  // The upgrade driver imports this module without installing npm dependencies.
+  // Load the browser acceptance helper only when these first-run checks execute.
+  const { checkLightpandaInstalled } = await import("./lightpanda-installed.ts");
   await checkLightpandaInstalled(gateway, app, created.id, check);
 
   await step("기본 한글 스킬·ieumoffice 실행", async () => {
