@@ -50,10 +50,29 @@ if ($Stage -eq 'setup') {
     Set-BuildEnv 'LP_MSVC_LIB_X64' "$($msvc.FullName)/lib/x64"
     Set-BuildEnv 'LP_WINSDK_DIR' $sdk
     Set-BuildEnv 'LP_FILTERED_LIBS' "$source/browser/win-port/filtered-libs"
-    # Start with the installed, unmodified CRT. Any required removals must be
-    # justified by actual linker output; never import the PR's opaque binary.
+    # Native link run 41410510469 identified two CFG globals supplied by both
+    # MinGW and this MSVC member. Derive a copy from the installed SDK and remove
+    # only that member; preserve the original SDK and all TLS support members.
     New-Item $env:LP_FILTERED_LIBS -ItemType Directory -Force | Out-Null
-    Copy-Item "$env:LP_MSVC_LIB_X64/msvcrt.lib" $env:LP_FILTERED_LIBS
+    $originalCrt = "$env:LP_MSVC_LIB_X64/msvcrt.lib"
+    $librarian = "$($msvc.FullName)/bin/Hostx64/x64/lib.exe"
+    $members = @(& $librarian /nologo /list $originalCrt | ForEach-Object { $_.Trim() })
+    Check-Exit 'MSVC archive inventory failed'
+    $duplicate = @($members | Where-Object { $_ -match '(^|[\\/])guard_support\.obj$' })
+    if ($duplicate.Count -ne 1) { throw 'Expected exactly one MSVC guard_support.obj' }
+    & $librarian /nologo "/remove:$($duplicate[0])" "/out:$env:LP_FILTERED_LIBS/msvcrt.lib" $originalCrt
+    Check-Exit 'MSVC duplicate CFG member removal failed'
+    $retained = @(& $librarian /nologo /list "$env:LP_FILTERED_LIBS/msvcrt.lib" | ForEach-Object { $_.Trim() })
+    Check-Exit 'Derived MSVC archive inventory failed'
+    $expected = @($members | Where-Object { $_ -ne $duplicate[0] })
+    if (@(Compare-Object $expected $retained).Count -ne 0) { throw 'Derived MSVC archive changed unexpected members' }
+    @{
+        originalSha256=(Get-FileHash $originalCrt -Algorithm SHA256).Hash;
+        derivedSha256=(Get-FileHash "$env:LP_FILTERED_LIBS/msvcrt.lib" -Algorithm SHA256).Hash;
+        removed=$duplicate; originalMembers=$members.Count; retainedMembers=$retained.Count;
+        reason='Duplicate CFG globals already defined by MinGW; native link run 41410510469';
+        tool=$librarian
+    } | ConvertTo-Json -Depth 5 | Set-Content "$evidence/crt-derivation.json"
     "C:/Program Files/Git/usr/bin" | Out-File $env:GITHUB_PATH -Append -Encoding utf8
     "$($msvc.FullName)/bin/Hostx64/x64" | Out-File $env:GITHUB_PATH -Append -Encoding utf8
     # GN invokes python3.exe. Use the same setup-python interpreter, not the Store stub.
@@ -113,6 +132,7 @@ elseif ($Stage -eq 'package') {
     Copy-Item "$source/v8/LICENSE" "$package/V8-BINDING-LICENSE"
     Copy-Item "$repo/third_party/lightpanda-windows/V8-ENGINE-LICENSE" $package
     Copy-Item "$cache/provenance.json" "$package/v8-provenance.json"
+    Copy-Item "$evidence/crt-derivation.json" $package
     @"
 Achmage Workbench native Windows Lightpanda $($spec.engineVersion)
 

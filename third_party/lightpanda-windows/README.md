@@ -1,6 +1,6 @@
 # Native Windows Lightpanda candidate
 
-This directory contains source patches and a reproducible build recipe, not a
+This directory contains source patches and a pinned-source build recipe, not a
 released Windows binary. Linux/macOS continue to use official Lightpanda 1.0.2.
 The existing Windows installation still uses WSL2 until a native artifact passes
 the acceptance checks and is added to the installer manifest.
@@ -22,8 +22,11 @@ source revisions, checks tool archive hashes, builds V8, saves that intermediate
 archive, then builds the browser and packages the runtime DLLs. V8 is cached
 separately so browser fixes do not trigger another full V8 compilation.
 
-The initial build intentionally uses the original SDK CRT import library;
-compatibility changes, if needed, must be based on actual linker diagnostics.
+Native link run [41410510469](https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/41410510469)
+found two duplicate CFG globals in MinGW and MSVC. The build now derives a copy
+of the installed SDK's `msvcrt.lib`, removing only `guard_support.obj` with
+Microsoft's librarian. The original SDK and all TLS members remain untouched;
+the member inventory and original/derived hashes are recorded in `crt-derivation.json`.
 There is no automatic publication or installer switch in this workflow.
 
 Required before distribution:
