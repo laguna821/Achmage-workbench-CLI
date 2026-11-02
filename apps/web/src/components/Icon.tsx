@@ -1,6 +1,7 @@
 // Small inline icon set (stroke icons, 1.75px), so the UI ships no icon font.
 
 const PATHS = {
+  trash: "M4 6h16M9 6V3.5h6V6M6 6l1 14h10l1-14M10 10v6M14 10v6",
   chevronDown: "M6 9l6 6 6-6",
   chevronUp: "M6 15l6-6 6 6",
   chevronRight: "M9 6l6 6-6 6",

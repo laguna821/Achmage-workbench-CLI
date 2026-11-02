@@ -126,22 +126,18 @@ async function override(engine: EngineName): Promise<ResolvedBinary | null | und
 }
 
 /**
- * Codex: an explicit override, else the newest of the user's own copies (PATH, npm, its installer,
+ * Codex: an explicit override, else the newest available copy (PATH, npm, its installer,
  * the ChatGPT app, editor extensions: the app usually ships a newer engine, which matters for new
- * models), else the one Workbench installed.
+ * models), including the one Workbench installed.
  */
 export async function resolveCodex(): Promise<ResolvedBinary | null> {
   const forced = await override("codex");
   if (forced !== undefined) return forced;
   const pick = async (candidates: EngineLaunch[]) => {
     let best: ResolvedBinary | null = null;
-    for (const candidate of candidates.filter((entry) => entry.origin !== "managed")) {
+    for (const candidate of candidates) {
       const found = await probe(candidate);
       if (found && (!best || compareVersions(found.version, best.version) > 0)) best = found;
-    }
-    for (const candidate of best ? [] : candidates.filter((entry) => entry.origin === "managed")) {
-      best = await probe(candidate);
-      if (best) break;
     }
     return best;
   };

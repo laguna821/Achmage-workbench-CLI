@@ -181,6 +181,11 @@ export class SearchIndex {
     return rows.length;
   }
 
+  removeWork(workId: string) {
+    const rows = this.prepare("SELECT id FROM search_entries WHERE work_id = ?").all(workId) as { id: number }[];
+    this.transaction(() => rows.forEach(row => this.drop(Number(row.id))));
+  }
+
   /** The signature of an entry, or null. */
   signature(key: string): string | null {
     const row = this.prepare("SELECT sig FROM search_entries WHERE key = ?").get(key) as { sig: string } | undefined;

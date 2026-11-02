@@ -44,7 +44,7 @@ on:
       upgrade_from:
         description: 'Published release to install before the upgrade check'
         type: string
-        default: 'v0.2.2'
+        default: 'v0.3.2'
       upgrade_to:
         description: 'Published release to install over the old version (empty: normal build/publish)'
         type: string
@@ -116,6 +116,16 @@ jobs:
         run: |
           npm run typecheck
           npx vitest run
+      - name: Multi-tab document AI and urgent UI checks
+        run: |
+          node node_modules/playwright-core/cli.js install --with-deps chromium --only-shell
+          node scripts/urgent-parallel-check.ts urgent-ui
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: urgent-ui
+          path: urgent-ui
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: web
@@ -366,7 +376,7 @@ jobs:
     timeout-minutes: 15
     env:
       GH_TOKEN: ${{ github.token }}
-      UPGRADE_FROM: ${{ inputs.upgrade_from || 'v0.2.2' }}
+      UPGRADE_FROM: ${{ inputs.upgrade_from || 'v0.3.2' }}
       UPGRADE_TO: ${{ inputs.upgrade_to }}
     steps:
       - uses: actions/checkout@v4
@@ -552,6 +562,7 @@ jobs:
     needs: [browser, linux, arch, windows, macos, smoke, upgrade]
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: out
@@ -562,4 +573,6 @@ jobs:
         run: |
           mapfile -t files < <(find out -type f \( -name '*.AppImage' -o -name '*.deb' -o -name '*.pkg.tar.zst' -o -name '*.exe' -o -name '*.msi' -o -name '*.dmg' \))
           test "${#files[@]}" -eq 6
-          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "Achmage Workbench $GITHUB_REF_NAME" --generate-notes "${files[@]}"
+          notes=(--generate-notes)
+          if [ -f "docs/releases/$GITHUB_REF_NAME.md" ]; then notes=(--notes-file "docs/releases/$GITHUB_REF_NAME.md"); fi
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "Achmage Workbench $GITHUB_REF_NAME" "${notes[@]}" "${files[@]}"

@@ -361,6 +361,33 @@ export class Store {
     this.db.prepare("DELETE FROM folders WHERE id = ?").run(id);
   }
 
+  /** Remove app records only. Project files and the engines' own archives stay on disk. */
+  deleteWork(id: string) {
+    const sessionIds = new Set(this.sessions().filter(session => session.workId === id).map(session => session.id));
+    this.transaction(() => {
+      this.search.removeWork(id);
+      for (const table of ["items", "requests"]) this.db.prepare(`DELETE FROM ${table} WHERE session_id IN (SELECT id FROM sessions WHERE work_id = ?)`).run(id);
+      this.db.prepare("DELETE FROM proposals WHERE artifact_id IN (SELECT id FROM artifacts WHERE work_id = ?)").run(id);
+      this.db.prepare("DELETE FROM revisions WHERE artifact_id IN (SELECT id FROM artifacts WHERE work_id = ?)").run(id);
+      this.db.prepare("DELETE FROM terminal_output WHERE terminal_id IN (SELECT id FROM terminals WHERE workspace_id IN (SELECT id FROM workspaces WHERE work_id = ?))").run(id);
+      for (const table of ["terminals", "workspace_preparations"]) this.db.prepare(`DELETE FROM ${table} WHERE workspace_id IN (SELECT id FROM workspaces WHERE work_id = ?)`).run(id);
+      for (const handoff of this.handoffs()) if (sessionIds.has(handoff.sourceSessionId) || sessionIds.has(handoff.targetSessionId)) this.db.prepare("DELETE FROM handoffs WHERE id = ?").run(handoff.id);
+      for (const link of this.links()) if (link.participants.some(sessionId => sessionIds.has(sessionId))) this.db.prepare("DELETE FROM links WHERE id = ?").run(link.id);
+      for (const table of ["sessions", "artifacts", "worktree_creations", "workspaces"]) this.db.prepare(`DELETE FROM ${table} WHERE work_id = ?`).run(id);
+      this.db.prepare("DELETE FROM works WHERE id = ?").run(id);
+      for (const [key, removed] of [["project.notes", new Set([id])], ["project.told", sessionIds]] as const) {
+        const raw = this.getMeta(key);
+        if (raw) {
+          const values = JSON.parse(raw) as Record<string, unknown>;
+          for (const key of removed) delete values[key];
+          this.setMeta(key, JSON.stringify(values));
+        }
+      }
+      const entries = this.getMeta("project.entries");
+      if (entries) this.setMeta("project.entries", JSON.stringify((JSON.parse(entries) as { workId: string }[]).filter(entry => entry.workId !== id)));
+    });
+  }
+
   saveWork(work: Work) {
     this.db.prepare("INSERT OR REPLACE INTO works (id, json) VALUES (?, ?)").run(work.id, JSON.stringify(work));
     this.indexSafely(() => this.search.put(workEntry(work, this.workExtras?.(work.id) ?? null)));

@@ -116,7 +116,9 @@ export default function DocumentView({
   const [agent, setAgent] = useState<Session | null>(null);
   const [agentError, setAgentError] = useState("");
   const [agentRetry, setAgentRetry] = useState(0);
-  const parentId = mainSession?.id ?? null;
+  // A document tab owns its child conversation for its entire lifetime. Selecting
+  // another tab/main chat must not tear down its writer lease or its running AI.
+  const [parentId] = useState(() => mainSession?.id ?? null);
   const agentScope = useRef({ artifactId, parentId });
   agentScope.current = { artifactId, parentId };
   useEffect(() => {

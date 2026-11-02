@@ -18,12 +18,14 @@ export function ArchiveView({
   onRestore,
   onOpenSession,
   onOpenWork,
+  onDeleteWork,
   onClose,
 }: {
   state: State;
   onRestore: (target: { kind: "folder" | "work" | "session"; id: string }) => void;
   onOpenSession: (session: Session) => void;
   onOpenWork: (work: Work) => void;
+  onDeleteWork?: (work: Work) => void;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
@@ -97,6 +99,7 @@ export function ArchiveView({
                   >
                     <Icon name="restore" size={14} /> 되돌리기
                   </button>
+                  {entry.kind === "work" && onDeleteWork ? <button type="button" className="button small danger" onClick={() => onDeleteWork(entry.work)}>프로젝트 삭제…</button> : null}
                 </li>
               );
             })}

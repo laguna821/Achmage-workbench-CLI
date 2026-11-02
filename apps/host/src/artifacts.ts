@@ -201,6 +201,13 @@ export class Documents {
     return [...this.artifacts.values()];
   }
 
+  forgetWork(workId: string) {
+    const ids = new Set(this.list().filter(artifact => artifact.workId === workId).map(artifact => artifact.id));
+    for (const view of this.registry.list()) if (ids.has(view.artifactId)) this.registry.close(view.viewId, view.windowId);
+    for (const id of ids) this.artifacts.delete(id);
+    for (const [id, proposal] of this.proposals) if (ids.has(proposal.artifactId)) this.proposals.delete(id);
+  }
+
   listProposals() {
     return [...this.proposals.values()];
   }

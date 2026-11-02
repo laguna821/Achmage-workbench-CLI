@@ -452,6 +452,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           }),
         );
       }
+      if (parts[0] === "works" && parts[1] && method === "DELETE" && parts.length === 2) return sendJson(res, 200, manager.deleteWork(parts[1]));
       if (parts[0] === "works" && parts[1] && parts[2] === "workspaces" && parts.length === 3) {
         if (method === "GET") return sendJson(res, 200, { workspaces: manager.workspaces.list().filter((entry) => entry.workId === parts[1]) });
         if (method === "POST") {
@@ -1037,7 +1038,9 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         }
       }
       if (method === "POST" && path === "/api/providers/refresh") {
-        return sendJson(res, 200, await manager.refreshProviders());
+        const provider = url.searchParams.get("provider");
+        if (provider && provider !== "claude" && provider !== "codex") throw new HttpError(400, "invalid_provider", "지원하지 않는 엔진입니다.");
+        return sendJson(res, 200, await manager.refreshProviders(provider === "codex" || provider === "claude" ? provider : undefined));
       }
       throw new HttpError(404, "not_found", `${method} ${path}`);
     } catch (error) {

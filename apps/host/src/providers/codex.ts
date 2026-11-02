@@ -125,6 +125,20 @@ export function modelsFromList(list: ModelListResponse, configured?: { model: st
   return options.map((option) => (option.id === base.id ? { ...option, isDefault: true, defaultEffort: effort } : { ...option, isDefault: false }));
 }
 
+/** Read the whole current engine catalog; cursors and model ids are opaque. */
+export async function currentModels(rpc: Pick<CodexRpc, "request">): Promise<ModelListResponse> {
+  const data: ModelListResponse["data"] = [], cursors = new Set<string>();
+  let cursor: string | null = null;
+  do {
+    const page: ModelListResponse = await rpc.request<ModelListResponse>("model/list", { limit: 100, includeHidden: false, ...(cursor ? { cursor } : {}) });
+    data.push(...page.data);
+    cursor = page.nextCursor;
+    if (cursor && cursors.has(cursor)) throw new Error("Codex 모델 목록의 다음 페이지를 확인하지 못했습니다.");
+    if (cursor) cursors.add(cursor);
+  } while (cursor);
+  return { data: [...new Map(data.map(model => [model.model || model.id, model])).values()], nextCursor: null };
+}
+
 /**
  * Codex keeps a turn's model and effort for later turns, so every turn names them explicitly;
  * otherwise going back to "default" in the picker would silently keep the last override.
@@ -345,6 +359,7 @@ export class CodexAdapter implements ProviderAdapter {
       const account = await rpc.request<GetAccountResponse>("account/read", { refreshToken: false });
       const login = codexAccountInfo(account);
       const loggedIn = Boolean(login?.signedIn);
+      if (!login?.signedIn || login.account !== this.current.account || login.method !== this.current.loginMethod) this.publish({ models: [] });
       this.publish(
         login?.signedIn
           ? { loggedIn, loginMethod: login.method, account: login.account ?? (login.method === "metered" ? "API 키" : null), plan: login.plan }
@@ -358,14 +373,12 @@ export class CodexAdapter implements ProviderAdapter {
       const capabilities = await rpc.request<ModelProviderCapabilitiesReadResponse>("modelProvider/capabilities/read", {}).catch(() => null);
       this.publish({ imageGeneration: capabilities ? capabilities.imageGeneration : null });
       if (loggedIn) {
-        const limits = await rpc.request<GetAccountRateLimitsResponse>("account/rateLimits/read", undefined);
-        this.publish({ usage: usageFromSnapshot(limits.rateLimits), usageObservedAt: Date.now() });
-        if (!this.current.models.length) {
-          const models = await rpc.request<ModelListResponse>("model/list", { limit: 100 });
-          this.publish({
-            models: modelsFromList(models, { model: config?.config.model ?? null, effort: config?.config.model_reasoning_effort ?? null }),
-          });
-        }
+        // Refresh even when an earlier catalog exists. Usage lookup failures must
+        // not hide a newly available model or prevent this account's model lookup.
+        const models = await currentModels(rpc);
+        this.publish({ models: modelsFromList(models, { model: config?.config.model ?? null, effort: config?.config.model_reasoning_effort ?? null }), error: null });
+        const limits = await rpc.request<GetAccountRateLimitsResponse>("account/rateLimits/read", undefined).catch(() => null);
+        if (limits) this.publish({ usage: usageFromSnapshot(limits.rateLimits), usageObservedAt: Date.now() });
       }
     } catch (error) {
       this.publish({ error: error instanceof Error ? error.message : String(error) });

@@ -1,6 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { GLOBAL_LAYOUT, PROVIDER_LABEL, isUnseen, type AccessMode, type Artifact, type Attachment, type CreateTarget, type DocRef, type ProjectPick, type Proposal, type Provider, type Session, type SessionStatus, type UiPrefs, type Work, type Workspace } from "@workbench/contracts";
 import { Api, ApiRequestError, readToken } from "./api.ts";
+import { CompletionNotifications } from "./completion-notifications.ts";
+import type { SequencedEvent } from "@workbench/contracts";
 import { useOfficeControl } from "./office-control.ts";
 import { configureDesign } from "./design.ts";
 import { initialState, isBusy, reducer, sessionsOf } from "./state.ts";
@@ -17,6 +19,7 @@ import { requestNavigatorFocus } from "./components/nav/focus.ts";
 import { ContextMenu, type MenuEntry, type MenuRequest } from "./components/ContextMenu.tsx";
 import { SearchPalette, type PaletteCommand, type PaletteMode } from "./components/SearchPalette.tsx";
 import { ArchiveView } from "./components/ArchiveView.tsx";
+import { ProjectDeleteDialog } from "./components/ProjectDeleteDialog.tsx";
 import { StartView, useEngineChoice } from "./components/StartView.tsx";
 import { WorkView, type WorkActions } from "./components/WorkView.tsx";
 import type { DrawState } from "./components/ImageGen.tsx";
@@ -104,8 +107,6 @@ async function notify(title: string, body: string, sessionId: string) {
   if (!(await isPermissionGranted()) && (await requestPermission()) !== "granted") return;
   sendNotification({ title, body });
 }
-
-const BUSY: SessionStatus[] = ["starting", "running", "interrupting", "awaitingApproval"];
 
 async function pickFolderNative(title = "작업 폴더 선택", defaultPath?: string): Promise<string | null> {
   const { open } = await import("@tauri-apps/plugin-dialog");
@@ -359,6 +360,8 @@ export function App() {
   }), fail);
   // Only this window's explicit creation requests open result tabs. Replayed events open once.
   const creatingRequests = useRef(new Map<string, { workId: string; sessionId: string; tabId: string }>());
+  const completedTurns = useRef(new CompletionNotifications());
+  const tellCompletion = useRef<(event: SequencedEvent) => void>(() => {});
   // "설치" and "로그인" of the engines (onboarding and the connection panel); progress comes as status events.
   const engineActions = useMemo<EngineActions>(
     () => ({
@@ -395,6 +398,12 @@ export function App() {
           snapshot.seq,
           (event) => {
             dispatch({ type: "event", event });
+            tellCompletion.current(event);
+            if (event.type === "work.removed") updateLayout(current => {
+              let next = current;
+              for (const pane of current.panes) for (const tab of tabsOf(pane)) if (tab.workId === event.workId || (tab.view.kind === "project" && tab.view.workId === event.workId)) next = closeTab(next, pane.id, tab.id, { view: { kind: "new", folderId: null }, workId: null, sessionId: null });
+              return next;
+            });
             if (event.type === "office.control") notifyOfficeControl();
             if (event.type === "office.note.ready") window.dispatchEvent(new CustomEvent("workbench:note-ready", { detail: event.artifactId }));
             if (event.type === "item.upserted" && event.item.kind === "artifact" && event.item.id.startsWith("artifact:create:")) {
@@ -482,7 +491,7 @@ export function App() {
     const owner = pane.workId ? state.works[pane.workId] : undefined;
     if (!owner) return undefined;
     const kept = pane.sessionId ? state.sessions[pane.sessionId] : undefined;
-    const candidate = kept && kept.workId === owner.id ? kept : pane.id === layout.focus ? activeSession || undefined : activeOf(owner) || undefined;
+    const candidate = kept && kept.workId === owner.id ? kept : pane.id === layout.focus && activeSession?.workId === owner.id ? activeSession : activeOf(owner) || undefined;
     if (pane.view.kind === "document" || pane.view.kind === "split") {
       const document = state.artifacts[pane.view.artifactId];
       // An external citation has its own workspace. Null must not silently
@@ -959,8 +968,16 @@ export function App() {
     },
     [setView, single],
   );
-  // While the window is behind other windows or hidden in the tray: a reply that arrived, an
-  // approval that waits, a turn that failed. Only changes are told, never what was already so.
+  // Completion follows the actual event, even when a quick running→idle transition
+  // is batched into one render. Main and document chats use the same notification path.
+  tellCompletion.current = event => {
+    const session = event.type === "item.upserted" ? stateRef.current.sessions[event.sessionId] : undefined;
+    const alert = completedTurns.current.take(event, session, session ? stateRef.current.works[session.workId]?.title ?? "" : "", !single && prefsRef.current.notify !== false);
+    if (!alert) return;
+    if (!document.hidden && document.hasFocus()) setToast({ text: alert.body + " · 답변 완료", action: { label: "열기", run: () => openSession(alert.session) } });
+    if (inDesktop) void notify(alert.title, alert.body, alert.session.id).catch(() => undefined);
+  };
+  // Approval/error attention still follows status transitions.
   const statuses = useRef(new Map<string, SessionStatus>());
   useEffect(() => {
     const seen = statuses.current;
@@ -973,9 +990,6 @@ export function App() {
       const where = `${state.works[session.workId]?.title ?? ""} — ${session.purpose}`;
       if (session.status === "awaitingApproval") void notify(`확인이 필요합니다 · ${PROVIDER_LABEL[session.provider]}`, where, session.id).catch(() => undefined);
       else if (session.status === "error") void notify(`응답이 끝나지 못했습니다 · ${PROVIDER_LABEL[session.provider]}`, where, session.id).catch(() => undefined);
-      else if (session.status === "idle" && BUSY.includes(before)) {
-        void notify(`답이 왔습니다 · ${PROVIDER_LABEL[session.provider]}`, `${where}${session.preview ? `\n${session.preview.split("\n")[0]}` : ""}`, session.id).catch(() => undefined);
-      }
     }
   }, [state.sessions, state.works]);
 
@@ -1186,6 +1200,13 @@ export function App() {
   };
 
   // ── what sidebar rows and menus do ──────────────────────────────────────
+  const [deletingWork, setDeletingWork] = useState<Work | null>(null);
+  const deleteProject = async (owner: Work) => {
+    if (!api) return;
+    for (const pane of layoutRef.current.panes) for (const tab of tabsOf(pane)) if (tab.workId === owner.id) await leaveGuards.current[tab.id]?.();
+    await api.deleteWork(owner.id);
+    setToast("프로젝트를 삭제했습니다. 문서 파일과 작업 폴더는 보존했습니다.");
+  };
   const archive = useCallback(
     (target: { kind: "folder" | "work" | "session"; id: string }) => {
       if (!api) return;
@@ -1441,6 +1462,7 @@ export function App() {
           { kind: "item", label: "작업 폴더 경로 복사", icon: "copy", onSelect: copy(owner.cwd, "경로를 복사했습니다.") },
           { kind: "separator" },
           { kind: "item", label: busy ? "보관 (진행 중인 세션이 끝난 뒤)" : "보관", icon: "archive", hint: "Delete", disabled: busy, onSelect: () => archive({ kind: "work", id: owner.id }) },
+          { kind: "item", label: "프로젝트 삭제…", icon: "trash", disabled: busy, onSelect: () => setDeletingWork(owner) },
         ];
         items.splice(1, 0, { kind: "item", label: "프로젝트 페이지", icon: "project", onSelect: () => actions.openProject(owner) }, { kind: "item", label: "카드로 보기", icon: "grid", onSelect: () => setView({ kind: "pkm", target: { kind: "work", id: owner.id } }) });
         return { x, y, title: owner.title, items };
@@ -2003,7 +2025,7 @@ export function App() {
       );
     }
     if (at.kind === "pkm") return <PkmCenter target={at.target} active={focused && tabActive} onNavigate={target => updateLayout(current => updateTabView(current, tabId, () => ({ kind: "pkm", target })))} />;
-    if (at.kind === "archive") return <ArchiveView state={state} onRestore={actions.restore} onOpenSession={openSession} onOpenWork={openWorkNow} onClose={() => setView({ kind: "work" })} />;
+    if (at.kind === "archive") return <ArchiveView state={state} onRestore={actions.restore} onOpenSession={openSession} onOpenWork={openWorkNow} onDeleteWork={setDeletingWork} onClose={() => setView({ kind: "work" })} />;
     if (start) {
       return (
         <StartView
@@ -2334,6 +2356,7 @@ export function App() {
       ) : null}
       {engineMenu ? <EngineMenu provider={engineMenu.provider} x={engineMenu.x} y={engineMenu.y} onClose={closeEngineMenu} /> : null}
       {contextMenu ? <ContextMenu request={contextMenu} onClose={closeContextMenu} /> : null}
+      {deletingWork ? <ProjectDeleteDialog work={deletingWork} sessions={Object.values(state.sessions).filter(session => session.workId === deletingWork.id).length} onDelete={() => deleteProject(deletingWork)} onClose={() => setDeletingWork(null)} /> : null}
       {newDocument && api ? <NewDocumentDialog api={api} state={state} request={newDocument} onClose={() => setNewDocument(null)} onOpen={artifact => setViewOf(newDocument.paneId, { kind: "document", artifactId: artifact.id, proposalId: null }, artifact)} /> : null}
       {paletteOpen ? (
         <SearchPalette

@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ModelListResponse } from "@workbench/provider-codex/src/generated/v2/ModelListResponse.ts";
-import { modelsFromList, turnSettings } from "./codex.ts";
+import { CodexAdapter, currentModels, modelsFromList, turnSettings } from "./codex.ts";
+import type { CodexRpc } from "@workbench/provider-codex/src/rpc.ts";
+import type { AdapterSink } from "./types.ts";
 
 const model = (id: string, isDefault: boolean, defaultEffort: string) =>
   ({
@@ -30,4 +32,30 @@ describe("Codex model settings", () => {
     expect(turnSettings({ model: "luna", effort: "high" }, options)).toEqual({ model: "luna", effort: "high" });
     expect(turnSettings({ model: "unknown", effort: null }, options)).toEqual({ model: "unknown", effort: null });
   });
+});
+
+it("reads every engine model page without hard-coded model names", async () => {
+  const request = vi.fn().mockResolvedValueOnce({ data: [model("new-sol", true, "medium")], nextCursor: "page2" })
+    .mockResolvedValueOnce({ data: [model("future-terra", false, "high")], nextCursor: null });
+  const result = await currentModels({ request } as unknown as Pick<CodexRpc, "request">);
+  expect(result.data.map(entry => entry.model)).toEqual(["new-sol", "future-terra"]);
+  expect(request).toHaveBeenLastCalledWith("model/list", { limit: 100, includeHidden: false, cursor: "page2" });
+});
+
+it("refreshes an already populated model picker despite an unavailable usage endpoint", async () => {
+  let catalog = list, account = "first@example.com";
+  const request = vi.fn(async (method: string) => {
+    if (method === "account/read") return { account: { type: "chatgpt", email: account, planType: "pro" } };
+    if (method === "config/read") return { config: {} };
+    if (method === "model/list") return catalog;
+    throw Error("Usage endpoint temporarily unavailable");
+  });
+  const adapter = new CodexAdapter({ providerStatus: vi.fn() } as unknown as AdapterSink);
+  Object.assign(adapter, { rpc: { running: true, request } });
+  expect((await adapter.refreshStatus()).models.map(entry => entry.id)).toEqual(["sol", "luna"]);
+  catalog = { data: [model("newly-released", true, "high")], nextCursor: null } as ModelListResponse;
+  expect((await adapter.refreshStatus()).models.map(entry => entry.id)).toEqual(["newly-released"]);
+  account = "other@example.com";
+  catalog = { data: [], nextCursor: null } as ModelListResponse;
+  expect((await adapter.refreshStatus()).models).toEqual([]);
 });

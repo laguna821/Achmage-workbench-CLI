@@ -134,6 +134,21 @@ export function reducer(state: State, action: Action): State {
         }
         case "work.upserted":
           return { ...next, works: { ...state.works, [event.work.id]: event.work } };
+        case "work.removed": {
+          const ids = new Set(Object.values(state.sessions).filter(session => session.workId === event.workId).map(session => session.id));
+          const artifacts = new Set(Object.values(state.artifacts).filter(artifact => artifact.workId === event.workId).map(artifact => artifact.id));
+          return { ...next,
+            works: Object.fromEntries(Object.entries(state.works).filter(([id]) => id !== event.workId)),
+            workspaces: Object.fromEntries(Object.entries(state.workspaces).filter(([, space]) => space.workId !== event.workId)),
+            sessions: Object.fromEntries(Object.entries(state.sessions).filter(([id]) => !ids.has(id))),
+            transcripts: Object.fromEntries(Object.entries(state.transcripts).filter(([id]) => !ids.has(id))),
+            artifacts: Object.fromEntries(Object.entries(state.artifacts).filter(([id]) => !artifacts.has(id))),
+            proposals: Object.fromEntries(Object.entries(state.proposals).filter(([, proposal]) => !artifacts.has(proposal.artifactId))),
+            handoffs: Object.fromEntries(Object.entries(state.handoffs).filter(([, handoff]) => !ids.has(handoff.sourceSessionId) && !ids.has(handoff.targetSessionId))),
+            links: Object.fromEntries(Object.entries(state.links).filter(([, link]) => !link.participants.some(id => ids.has(id)))),
+            schedules: state.schedules.filter(schedule => !ids.has(schedule.sessionId)),
+          };
+        }
         case "workspace.upserted":
           return { ...next, workspaces: { ...state.workspaces, [event.workspace.id]: event.workspace } };
         case "session.upserted":

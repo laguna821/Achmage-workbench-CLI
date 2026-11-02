@@ -820,6 +820,7 @@ export function WorkView({
             <>
             <ModelPicker
               models={models}
+              onRefresh={() => api.refreshProviders(pickerProvider)}
               value={active ? { model: active.model, effort: active.effort } : draftChoice}
               onChange={(choice) => (active ? actions.setModel(active, choice) : setDraftChoice(choice))}
             />

@@ -36,6 +36,9 @@ export class Terminals {
     return [...this.live.keys()].some((id) => withinDirectory(root, physicalPath(this.get(id).cwd)));
   }
   has(id: string) { return this.records.has(id); }
+  forgetWork(workId: string) {
+    for (const [id, entry] of this.records) if (entry.workId === workId && !this.live.has(id)) this.records.delete(id);
+  }
   create(workspaceId: string, request: CreateTerminalRequest, internal: { cwd?: string; environment?: Record<string, string>; color?: string } = {}) {
     if (!request || typeof request.requestId !== "string" || !/^[\w-]{1,100}$/.test(request.requestId)) throw new HttpError(400, "terminal_request", "터미널 요청 ID가 필요합니다.");
     if (request.shell !== undefined && (typeof request.shell !== "string" || !request.shell || request.shell.length > 4096 || request.shell.includes("\0"))) throw new HttpError(400, "terminal_shell", "실행할 셸 경로를 확인해 주세요.");

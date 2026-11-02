@@ -264,7 +264,7 @@ export function StartView({
           onSend={(text) => onStart(text, engine, cwd, choice, pick)}
           target={
             <>
-              <ModelPicker models={state.providers[engine]?.models ?? []} value={choice} onChange={setChoice} />
+              <ModelPicker models={state.providers[engine]?.models ?? []} value={choice} onChange={setChoice} onRefresh={() => api.refreshProviders(engine)} />
               <FolderChoice
                 value={cwd}
                 recent={recentFolders}

@@ -236,6 +236,7 @@ export class Api {
   exportMarkdown = (sessionId: string, request: ExportMarkdownRequest) => this.request<ExportMarkdownResult>("POST", `/api/sessions/${sessionId}/export`, request);
   createWork = (title: string, folderId: string | null, cwd: string | null) => this.request<Work>("POST", "/api/works", { title, folderId, cwd });
   updateWork = (workId: string, patch: UpdateWorkRequest) => this.request<Work>("PATCH", `/api/works/${workId}`, patch);
+  deleteWork = (workId: string) => this.request<{ ok: boolean; preservedPath: string }>("DELETE", `/api/works/${workId}`);
   createWorkspace = (workId: string, cwd: string, label?: string) => this.request<Workspace>("POST", `/api/works/${workId}/workspaces`, { cwd, label });
   updateWorkspace = (id: string, patch: UpdateWorkspaceRequest) => this.request<Workspace>("PATCH", `/api/workspaces/${id}`, patch);
   workspaceRepository = (id: string) => this.request<WorkspaceRepository>("GET", `/api/workspaces/${id}/repository`);
@@ -510,7 +511,7 @@ export class Api {
   cancelLogin = (provider: Provider) => this.request<ProviderStatus>("POST", `/api/providers/${provider}/login/cancel`);
   /** "설치": the engine for this user; progress arrives as provider.status events. */
   installEngine = (provider: Provider) => this.request<ProviderStatus>("POST", `/api/providers/${provider}/install`);
-  refreshProviders = () => this.request("POST", "/api/providers/refresh");
+  refreshProviders = (provider?: Provider) => this.request("POST", `/api/providers/refresh${provider ? `?provider=${provider}` : ""}`);
 
   /**
    * Subscribe to events after `since`. Reconnects with the last seen seq so nothing is applied

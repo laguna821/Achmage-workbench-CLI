@@ -490,6 +490,7 @@ export type WorkbenchEvent =
   /** A folder deleted ("폴더만 지우기"); what was inside already moved up (navigator.ts). */
   | { type: "folder.removed"; folderId: string }
   | { type: "work.upserted"; work: Work }
+  | { type: "work.removed"; workId: string }
   | { type: "workspace.upserted"; workspace: Workspace }
   | { type: "session.upserted"; session: Session }
   | { type: "item.upserted"; sessionId: string; item: TranscriptItem }

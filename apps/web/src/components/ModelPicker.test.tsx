@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ModelOption } from "@workbench/contracts";
 import { ModelPicker } from "./ModelPicker.tsx";
@@ -10,6 +10,18 @@ const models: ModelOption[] = [
 ];
 
 describe("ModelPicker request identity", () => {
+  it("refreshes each time the model chooser opens and preserves the saved selection", async () => {
+    const onRefresh = vi.fn().mockResolvedValue(undefined), onChange = vi.fn();
+    const view = render(<ModelPicker models={models} value={{ model: "alias", effort: null }} onChange={onChange} onRefresh={onRefresh} />);
+    fireEvent.click(screen.getByRole("button", { name: "사용 가능한 모델" }));
+    await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(1));
+    view.rerender(<ModelPicker models={[...models, { ...models[0]!, id: "new-model", label: "새 모델" }]} value={{ model: "alias", effort: null }} onChange={onChange} onRefresh={onRefresh} />);
+    expect(screen.getByRole("menuitem", { name: /새 모델/ })).toBeTruthy();
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "사용 가능한 모델" }));
+    fireEvent.click(screen.getByRole("button", { name: "사용 가능한 모델" }));
+    await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(2));
+  });
   it("shows a saved model missing from the list without replacing it or claiming the default", () => {
     const onChange = vi.fn();
     render(<ModelPicker models={models} value={{ model: "saved-custom-id", effort: "max" }} onChange={onChange} />);

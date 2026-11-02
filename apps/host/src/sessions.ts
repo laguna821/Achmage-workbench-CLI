@@ -1080,6 +1080,26 @@ export class SessionManager {
     return this.requireWork(workId);
   }
 
+  deleteWork(workId: string) {
+    const work = this.requireWork(workId);
+    for (const workspace of this.workspaces.list().filter(space => space.workId === workId)) this.assertWorkspaceIdle(workspace);
+    const sessions = [...this.sessions.values()].filter(session => session.workId === workId), ids = new Set(sessions.map(session => session.id));
+    if (sessions.some(session => this.office.busy(session.id)) || this.links.list().some(link => link.state !== "ended" && link.participants.some(id => ids.has(id)))) throw new HttpError(409, "project_busy", "프로젝트의 AI 작업·세션 연결을 마치거나 멈춘 뒤 삭제해 주세요.");
+    const artifacts = this.documents.list().filter(artifact => artifact.workId === workId), documentIds = new Set(artifacts.map(artifact => artifact.id));
+    if (this.documents.registry.list().some(view => documentIds.has(view.artifactId) && view.dirty)) throw new HttpError(409, "project_unsaved", "열린 문서의 편집 내용을 저장한 뒤 프로젝트를 삭제해 주세요.");
+    this.flush();
+    this.store.deleteWork(workId);
+    for (const artifact of artifacts) this.external.get(artifact.id)?.();
+    for (const id of ids) {
+      this.schedules.forget(id); this.sessions.delete(id); this.transcripts.delete(id); this.dirtyItems.delete(id);
+      this.turnStarted.delete(id); this.turnRequest.delete(id); this.creating.delete(id); this.planning.delete(id); this.steering.delete(id);
+    }
+    for (const [id, handoff] of this.handoffs) if (ids.has(handoff.sourceSessionId) || ids.has(handoff.targetSessionId)) this.handoffs.delete(id);
+    this.links.forgetSessions(ids); this.terminals.forgetWork(workId); this.documents.forgetWork(workId); this.works.delete(workId);
+    this.bus.publish({ type: "work.removed", workId });
+    return { ok: true, preservedPath: work.cwd };
+  }
+
   /** `activate`: the new session becomes the one its work shows (not for a drawing session made on the side). */
   createSession(workId: string, request: CreateSessionRequest, activate = true): Session {
     const work = this.requireWork(workId);
@@ -2172,9 +2192,9 @@ export class SessionManager {
     return { ok: true };
   }
 
-  async refreshProviders(): Promise<ProviderStatus[]> {
+  async refreshProviders(provider?: Provider): Promise<ProviderStatus[]> {
     // An engine installed meanwhile (by the user, in a terminal) is found again.
-    return Promise.all([...this.adapters.values()].map(async (adapter) => this.engineSetup.decorate(await adapter.refreshStatus())));
+    return Promise.all([...this.adapters.values()].filter(adapter => !provider || adapter.provider === provider).map(async (adapter) => this.engineSetup.decorate(await adapter.refreshStatus())));
   }
 
   /** Stop watching documents opened in other apps. */

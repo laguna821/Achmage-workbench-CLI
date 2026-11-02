@@ -317,6 +317,10 @@ export class SessionLinks {
     return [...this.links.values()];
   }
 
+  forgetSessions(ids: Set<string>) {
+    for (const [id, link] of this.links) if (link.participants.some(sessionId => ids.has(sessionId))) this.links.delete(id);
+  }
+
   get(linkId: string): SessionLink | null {
     return this.links.get(linkId) ?? null;
   }
