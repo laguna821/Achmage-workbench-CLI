@@ -149,7 +149,7 @@ pub async fn print_svg(app: tauri::AppHandle, job: SvgJob) -> Result<(), String>
     let close = MenuItem::with_id(&app, "close", "닫기", true, Some("CmdOrCtrl+W")).map_err(|e| e.to_string())?;
     let file = Submenu::with_items(&app, "파일", true, &[&print, &close]).map_err(|e| e.to_string())?;
     let menu = Menu::with_items(&app, &[&file]).map_err(|e| e.to_string())?;
-    let result = WebviewWindowBuilder::new(&app, &id, WebviewUrl::External(format!("workbench-print://localhost/{id}").parse().unwrap()))
+    let builder = WebviewWindowBuilder::new(&app, &id, WebviewUrl::External(format!("workbench-print://localhost/{id}").parse().unwrap()))
         .title("인쇄 미리보기 — Achmage Workbench").inner_size(900.0, 900.0).menu(menu)
         .on_menu_event(|window, event| {
             if event.id.as_ref() == "print" {
@@ -171,8 +171,9 @@ pub async fn print_svg(app: tauri::AppHandle, job: SvgJob) -> Result<(), String>
                     if let Err(error) = view.print() { eprintln!("[office-output] print: {error}"); }
                 });
             }
-        })
-        .build();
+        });
+    let builder = if let Some(root) = crate::office_executor::data_dir(&app) { builder.data_directory(root.join("print-webview")) } else { builder };
+    let result = builder.build();
     if let Err(error) = result { app.state::<PrintJobs>().0.lock().unwrap().remove(&id); return Err(error.to_string()); }
     Ok(())
 }

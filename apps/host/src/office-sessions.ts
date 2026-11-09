@@ -137,8 +137,13 @@ export class OfficeSessions {
   }
   current(binding: Binding) {
     this.scope(binding.artifactId, binding.sessionId);
-    const run = [...this.runs.values()].find(run => !run.background && run.artifactId === binding.artifactId && run.sessionId === binding.sessionId && run.lease.mode === "independent-renderer");
+    const run = [...this.runs.values()].find(run => run.artifactId === binding.artifactId && run.sessionId === binding.sessionId && run.lease.mode === "independent-renderer");
     return run ? this.observe(binding, run.turnId) : null;
+  }
+  executionNote(binding: Binding, turnId: string, key: string, text: string) {
+    const run = this.requireRun(binding, turnId), id = `office:${turnId}:${key}`;
+    if (this.hooks.items(run.sessionId).some(item => item.id === id)) return;
+    this.hooks.item(run.sessionId, { kind: "notice", id, level: "info", text: text.slice(0, 16_000), at: Date.now(), office: source(run) });
   }
   question(binding: Binding, raw: unknown) {
     if (!record(raw) || !id(raw.turnId) || !id(raw.id)) return invalid();

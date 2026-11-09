@@ -1,5 +1,6 @@
 //! Host-owned Office execution process. No gateway, tray, plugins, or shell commands.
 //! The boot capability stays in the environment/URL fragment, never in argv or diagnostics.
+mod output;
 
 use std::io::Read;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -11,6 +12,10 @@ use url::Url;
 const LABEL: &str = "office-executor";
 const PARENT_PATH: &str = "/office/executor.html";
 const BOOT_ENV: &str = "WORKBENCH_OFFICE_EXECUTOR_URL";
+struct ExecutorDirectory(std::path::PathBuf);
+pub fn data_dir(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    app.try_state::<ExecutorDirectory>().map(|state| state.0.clone())
+}
 
 fn boot_url() -> Result<Url, ()> {
     let raw = std::env::var(BOOT_ENV).map_err(|_| ())?;
@@ -125,10 +130,27 @@ pub fn run() -> i32 {
     let finished = Arc::new(AtomicBool::new(false));
     let closed = finished.clone();
     let app = tauri::Builder::default()
-        // The distinct label has no capability grant. Deliberately install no
-        // invoke handler or plugins: even the parent receives no OS command API.
+        .manage(ExecutorDirectory(profile.path().to_path_buf()))
+        .manage(output::Outputs::new(parent.clone()))
+        .invoke_handler(tauri::generate_handler![output::office_executor_output])
+        .manage(crate::office_browser::BrowserJobs::default())
+        .register_uri_scheme_protocol("workbench-browser", |ctx, request| crate::office_browser::serve(ctx.app_handle(), request.uri().path()))
+        .manage(crate::office_html_output::HtmlJobs::default())
+        .register_uri_scheme_protocol("workbench-output", |ctx, request| crate::office_html_output::serve(ctx.app_handle(), request.uri().path(), request.uri().query()))
+        .manage(crate::office_output::PrintJobs::default())
+        .register_uri_scheme_protocol("workbench-print", |ctx, request| {
+            let jobs = ctx.app_handle().state::<crate::office_output::PrintJobs>();
+            let body = jobs.0.lock().ok().and_then(|jobs| jobs.get(request.uri().path().trim_start_matches('/')).cloned());
+            tauri::http::Response::builder().status(if body.is_some() { 200 } else { 404 })
+                .header("Content-Type", "text/html; charset=utf-8").header("Cache-Control", "no-store")
+                .header("Content-Security-Policy", "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'")
+                .body(body.unwrap_or_default().into_bytes()).unwrap()
+        })
         .on_window_event(move |window, event| {
-            if matches!(event, WindowEvent::CloseRequested { .. } | WindowEvent::Destroyed) {
+            if matches!(event, WindowEvent::Destroyed) && window.label().starts_with("print-") {
+                window.app_handle().state::<crate::office_output::PrintJobs>().0.lock().unwrap().remove(window.label());
+            }
+            if window.label() == LABEL && matches!(event, WindowEvent::CloseRequested { .. } | WindowEvent::Destroyed) {
                 finish(window.app_handle(), &closed, 3);
             }
         })

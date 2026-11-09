@@ -1,5 +1,6 @@
 import type { OfficeExecutionBoot } from "../../../packages/contracts/src/office-execution.ts";
 import type { OfficePageMessage, OfficeHostMessage } from "@workbench/contracts";
+import { createExecutorOutput } from "./executor-output.ts";
 
 // The native child owns this parent. It receives only a one-use boot capability,
 // never the main application's token or a generic filesystem/OS bridge.
@@ -24,16 +25,15 @@ try {
     if (!response.ok) throw new Error(value.message ?? "문서 실행 요청을 마치지 못했습니다.");
     return value;
   };
-  const output = async (message: Extract<OfficePageMessage, { type: "office:output" }>) => {
-    if (message.action === "prepare") {
-      for (;;) {
-        const value = await api("executor-output", { ...message, turnId: job.init.execution!.turnId });
-        if (!value?.pending) return value;
-        await new Promise(resolve => setTimeout(resolve, 800));
-      }
-    }
-    if (message.action === "cancel") return api("executor-output", { ...message, turnId: job.init.execution!.turnId });
-    if (message.action === "commit") {
+  const output = createExecutorOutput({
+    request: message => api("executor-output", { ...message, turnId: job.init.execution!.turnId }),
+    wait: () => new Promise(resolve => setTimeout(resolve, 800)),
+    native: async (requestId, command) => {
+      const bridge = (window as unknown as { __TAURI_INTERNALS__?: { invoke<T>(command: string, args: unknown): Promise<T> } }).__TAURI_INTERNALS__;
+      if (!bridge) throw new Error("원본 문서 출력용 데스크톱 실행기가 없습니다.");
+      return bridge.invoke("office_executor_output", { requestId, command });
+    },
+    commit: async message => {
       const query = new URLSearchParams({ turnId: job.init.execution!.turnId, planId: message.planId });
       if (message.sourceRevision !== undefined) query.set("sourceRevision", String(message.sourceRevision));
       if (message.generatedId) query.set("generatedId", message.generatedId);
@@ -43,11 +43,8 @@ try {
       const value = await response.json();
       if (!response.ok) throw new Error(value.message ?? "문서 결과를 저장하지 못했습니다.");
       return value;
-    }
-    // Native rendering/printing and OS presentation need a separately owned
-    // service. Reply explicitly until that boundary is connected; never hang.
-    throw new Error("이 출력 동작은 아직 독립 실행기에 연결되지 않았습니다. 문서 편집기의 출력 메뉴에서 실행해 주세요.");
-  };
+    },
+  });
   let sent = false;
   const readiness = window.setTimeout(() => {
     void api("turn-finish", { turnId: job.init.execution!.turnId, status: "failed", error: "원본 편집기를 실행기에 연결하는 시간이 초과되었습니다." })

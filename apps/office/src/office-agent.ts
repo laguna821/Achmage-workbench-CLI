@@ -108,12 +108,14 @@ export class WorkbenchAgentLoop<TSnapshot = unknown> {
   }
 
   get busy() { return this.pending || this.original.busy; }
+  /** Remains readable by the original queue's completion callback. */
+  remoteExecution = false;
   get messages() { return this.original.messages; }
   restore(messages: AgentMessage[]) { if (!this.busy) this.original.restore(messages); }
   run(instruction: string, images?: AgentImage[], skills?: OfficeSkillContext): void {
     if (this.busy || !instruction.trim()) return;
     if (!this.port) { this.options.events?.onError?.("Workbench 문서 세션을 먼저 연결해 주세요."); return; }
-    this.pending = true; this.ending = false; this.detached = false; this.fault = null;
+    this.pending = true; this.ending = false; this.detached = false; this.fault = null; this.remoteExecution = false;
     this.abort = new AbortController(); this.queue = Promise.resolve(); this.toolIds.clear();
     this.assistantId = crypto.randomUUID(); this.assistantText = ""; this.reasoningText = "";
     this.settled = new Promise((resolve) => { this.resolveSettled = resolve; });
@@ -122,6 +124,7 @@ export class WorkbenchAgentLoop<TSnapshot = unknown> {
     void this.port.begin(instruction, this.abort.signal, images, skills).then((run) => {
       this.runState = run;
       if (run.remote) {
+        this.remoteExecution = true;
         if (this.abort.signal.aborted) run.remote.cancel();
         if (this.detached) run.remote.detach();
         void run.remote.wait(text => { if (!this.detached) this.options.events?.onText?.(text); }).then(result => this.finish(result), error => this.finish(undefined, messageOf(error)));

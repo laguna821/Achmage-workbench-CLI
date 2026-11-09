@@ -1,8 +1,10 @@
+import { safeRandomId } from "@workbench/client";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { TerminalSession, Workspace, WorkspaceService, WorkspaceServiceList, WorkspaceServiceStart } from "@workbench/contracts";
 import { ApiRequestError, type Api } from "../api.ts";
 import { restoreSurfaceFocus } from "./controls/menu-navigation.ts";
 import "../styles/workspace-services.css";
+import { WorkspaceServiceInspect } from "./WorkspaceServiceInspect.tsx";
 
 type Draft = { label: string; command: string; port: string };
 type SavedDraft = { draft: Draft; pending: WorkspaceServiceStart | null };
@@ -30,6 +32,7 @@ export function WorkspaceServices({ api, workspace, onOpen, onClose, openExterna
   const draftRef = useRef(draft), pendingRef = useRef(pending);
   const [result, setResult] = useState<WorkspaceServiceList | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [readError, setReadError] = useState(""), [notice, setNotice] = useState("");
+  const [inspect, setInspect] = useState<{ id: string; mode: "logs" | "proxy" } | null>(null);
   const [removeId, setRemoveId] = useState<string | null>(null);
   const dialog = useRef<HTMLDialogElement>(null), opener = useRef(document.activeElement), mounted = useRef(true), acting = useRef(false);
   const listVersion = useRef(0), readQueue = useRef<Promise<unknown>>(Promise.resolve());
@@ -97,7 +100,7 @@ export function WorkspaceServices({ api, workspace, onOpen, onClose, openExterna
     if (pendingRef.current || !result?.available || workspace.archivedAt !== null || workspace.removedAt !== null) return;
     const port = draft.port.trim() ? Number(draft.port) : undefined;
     if (!draft.label.trim() || !draft.command.trim() || (port !== undefined && (!/^\d+$/.test(draft.port.trim()) || !Number.isInteger(port) || port < 1 || port > 65535))) throw new Error("이름·실행 명령과 1~65535 범위의 포트를 확인해 주세요.");
-    const request: WorkspaceServiceStart = { requestId: crypto.randomUUID(), label: draft.label.trim(), command: draft.command, ...(port === undefined ? {} : { port }) };
+    const request: WorkspaceServiceStart = { requestId: safeRandomId(), label: draft.label.trim(), command: draft.command, ...(port === undefined ? {} : { port }) };
     rememberPending(request); await post(request);
   });
   const retry = () => run(async () => {
@@ -130,9 +133,11 @@ export function WorkspaceServices({ api, workspace, onOpen, onClose, openExterna
       return <article className="workspace-service-row" key={entry.id} aria-label={`${entry.label} 실행 기록`} data-status={entry.status}>
         <header><strong>{entry.label}</strong><span>{statusText(entry)}</span></header>
         <small>{new Date(entry.startedAt).toLocaleString()} · 호스트 {entry.hostId}</small><div className="workspace-service-cwd">{entry.cwd}</div><pre>{entry.command}</pre>
-        {entry.port ? <p className="workspace-service-port">포트 {entry.port}{url ? <> · <a href={url} onClick={event => { event.preventDefault(); if (!busy) void run(() => openExternal(url)); }}>{url} 열기</a></> : null}</p> : null}
+        {entry.port ? <p className="workspace-service-port">포트 {entry.port}{url ? <> · <a href={url} onClick={event => { event.preventDefault(); if (!busy) { if (api.isRemote) setInspect({ id: entry.id, mode: "proxy" }); else void run(() => openExternal(url)); } }}>{url} 열기</a></> : null}</p> : null}
         {entry.error ? <p className="workspace-service-error">{entry.error}</p> : null}
         <div className="workspace-service-actions">
+          <button type="button" className="button small" onClick={() => setInspect({ id: entry.id, mode: "logs" })}>로그 검색</button>
+          {url ? <button type="button" className="button small" onClick={() => setInspect({ id: entry.id, mode: "proxy" })}>서비스 포트 요청</button> : null}
           <button type="button" className="button small" disabled={busy} onClick={() => void run(async () => {
             const { terminal } = await api.terminalOutput(entry.terminalId);
             if (terminal.id !== entry.terminalId || terminal.workspaceId !== entry.workspaceId || terminal.createdAt !== entry.startedAt) throw new Error("이 실행의 터미널을 확인할 수 없습니다. 실행 기록을 다시 불러와 주세요.");
@@ -142,6 +147,7 @@ export function WorkspaceServices({ api, workspace, onOpen, onClose, openExterna
             listVersion.current++; upsert(await api.stopWorkspaceService(entry.id, { ownerId: entry.ownerId, terminalId: entry.terminalId, startedAt: entry.startedAt }));
           })}>{entry.status === "stopping" ? "종료 중…" : "실행 종료"}</button> : removeId !== entry.id ? <button type="button" className="text-button" disabled={busy} onClick={() => setRemoveId(entry.id)}>기록 지우기…</button> : <><span>터미널 출력은 남습니다.</span><button type="button" className="button small" disabled={busy} onClick={() => void run(async () => { listVersion.current++; await api.deleteWorkspaceService(entry.id); setResult(before => before && { ...before, services: before.services.filter(row => row.id !== entry.id) }); setRemoveId(null); })}>기록만 지우기</button><button type="button" className="text-button" disabled={busy} onClick={() => setRemoveId(null)}>취소</button></>}
         </div>
+        {inspect?.id === entry.id ? <WorkspaceServiceInspect key={entry.id + inspect.mode} api={api} service={entry} mode={inspect.mode} onClose={() => setInspect(null)} /> : null}
       </article>;
     })}</div>}
     <p className="muted workspace-service-footnote">창을 닫아도 실행은 유지됩니다. 실행 기록에서 명령을 자동으로 다시 시작하지 않습니다.</p>

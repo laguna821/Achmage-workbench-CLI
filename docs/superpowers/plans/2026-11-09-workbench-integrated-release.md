@@ -2384,3 +2384,11 @@ Office 형식별 증거는 한글, Word, 슬라이드, 시트, Markdown, PDF, HT
 ### U22–U24 실행 연결 기록 (2026-11-09)
 
 고정한 Paseo 원본 음성·SDK·manifest·compiler·lifecycle와 Workbench 서비스/UI를 연결했다. 공개 Cloud consumer 부재는 기존 TaskService/SQLite로 보완했다. 신규 타입 오류·화면 direct DTO 불일치를 수정했으며, 실기기/외부계정·원본 outbound Hub client와 전체25개/156요구의 잔여 범위는 유지한다. 기능별 앱/설치본빌드는 실행하지 않는다. [현재 동작/한계](../../voice-extensions-events.md), [실행 상태](../execution/STATUS.md), 근거 `research:rr-79110658024cdb4797375aa15a22a771:ec68d100c4776b2219a705303a379cc524ae2c83caca88c7c9c2f1d9b6c805b5` (R13–R18).
+
+### 2026-11-09 U09·U12–15·U20 연결 구현
+
+원본 Office queue/QC·PDF job·native output, native browser 다운로드/권한/profile/산출물, 공식 agent-desktop CLI·앱 선택·세션 도구, 원본 Paseo terminal runtime·기기 연결·서비스 HTTP 경로를 연결했다. 현재 코드 상태는 `../execution/STATUS.md`, 외부 앱 범위는 `../../desktop-control.md`, Office 범위는 `../../office-execution.md`를 따른다.
+
+새 사용자 교정 `decision-5e2a5ff3288c4ec7973e1f9922dd873605f56843e258b8e4fea0485a18a4cd70`: 구현 우선. 통과 검사 반복과 기능별 추가 검증·재검토 금지. 새 root/web/Rust 확인은 시작하지 않았으며 전체 구현 뒤 필요한 통합 확인만 한다. 전체 25개 단위/156개 요구를 축소하거나 완료로 처리하지 않는다.
+
+외부 앱 근거: `research:rr-fb025ea83d26bd1d7147dd3208893d54:d9f464f99080ff5b2977503a924625a278cd52656ad65dd9a41e9e613a4709ab` (R1–R5).

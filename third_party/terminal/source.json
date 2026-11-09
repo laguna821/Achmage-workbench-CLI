@@ -1,0 +1,708 @@
+{
+  "repository": "https://github.com/getpaseo/paseo",
+  "commit": "1fff127f45b11c1c9c573fbbd12791673004c912",
+  "license": "Apache-2.0",
+  "files": [
+    {
+      "path": "packages/app/src/attachments/upload-limit.ts",
+      "sha256": "eaed0cb78ed409799375065c0048d8a1fa6f8b2ee4e14bbbd108fa68832d2273"
+    },
+    {
+      "path": "packages/app/src/pane-find/find-shortcut.ts",
+      "sha256": "4d63bbf5cc5e83495e617e8557495870c721f97733cdcd255b4eb198be057b86"
+    },
+    {
+      "path": "packages/app/src/terminal/character-widths.ts",
+      "sha256": "95cd5c9551177158f6748f92155acbbc938db53409eae9d6e35f9c08c6399f75"
+    },
+    {
+      "path": "packages/app/src/terminal/drop/terminal-path.ts",
+      "sha256": "693bac69b9bb0b1f6959fa663cc6aa40fc8011c8542417bc7b1f072fc09add78"
+    },
+    {
+      "path": "packages/app/src/terminal/file-paste/index.ts",
+      "sha256": "92bb4d04826de723cf516fe80431511e1eb78a1f4d69c6d39820645f8d81994d"
+    },
+    {
+      "path": "packages/app/src/terminal/local-links/terminal-local-link-parsing.ts",
+      "sha256": "c7c97be50a3e993d80ad505e13b479f3df8644128c37c17af133a908c5602356"
+    },
+    {
+      "path": "packages/app/src/terminal/local-links/terminal-local-link-provider.ts",
+      "sha256": "611cf545d8d5f041fc6c1c62080aebc9e68a777f340ea38ff842c45c313566c9"
+    },
+    {
+      "path": "packages/app/src/terminal/runtime/terminal-emulator-runtime.ts",
+      "sha256": "286fd139c3347033ad58cb25bcc262cc8d0526ca19c56513d9b3d7712fe63efa"
+    },
+    {
+      "path": "packages/app/src/terminal/runtime/terminal-font.ts",
+      "sha256": "2d2ea227f074bf2d63b2956530a43c88c2f4ac58b48e8ce248b89028e5f2637f"
+    },
+    {
+      "path": "packages/app/src/terminal/runtime/terminal-key-dispatch.ts",
+      "sha256": "d025f51fe0bf89c81126d50819a80ac160cfe997ec84d12be438e5540ed45c43"
+    },
+    {
+      "path": "packages/app/src/terminal/runtime/terminal-stream-controller.ts",
+      "sha256": "ec5619ec777b55e940ebedefcafae31c5e29b5b94a9eb1325efe134c5ff6137c"
+    },
+    {
+      "path": "packages/app/src/terminal/runtime/terminal-virtual-keyboard.ts",
+      "sha256": "3fa19baf284b7e09829f68edc4dbdc106502d36d99286ed4b7632d3277b19048"
+    },
+    {
+      "path": "packages/app/src/utils/mac-user-agent.ts",
+      "sha256": "1c49021e102abdd717ec12e2fb601900826a6e4f32694bb9f628d5d3bf2da367"
+    },
+    {
+      "path": "packages/app/src/utils/terminal-keys.ts",
+      "sha256": "0b7f561ce751cbd29e1b611737e5b2533c0e87a9ba9113e279feb9d64f43e38b"
+    },
+    {
+      "path": "packages/server/src/server/local-service-connection.ts",
+      "sha256": "61da87175c758e3094f501e2a0dc2a966ea8dcdd1aa38e467f3379730973ba7b"
+    },
+    {
+      "path": "packages/server/src/terminal/headless-terminal.ts",
+      "sha256": "e9e8c24f6e58cba5e66f3b54f04e609e514a268729e9efc8143a1778705367e3"
+    },
+    {
+      "path": "packages/server/src/terminal/terminal-serializer.ts",
+      "sha256": "e60cd1845671a25a001e23d5e2c88149961bec79862266c4947521075b1278a7"
+    },
+    {
+      "path": "packages/server/src/terminal/terminal-size-ownership.ts",
+      "sha256": "a3e6c5b67bac81bbeb6b5945e1468f40339e556d2ddbc82eb838073af516808e"
+    },
+    {
+      "path": "packages/server/src/terminal/terminal.ts",
+      "sha256": "3c4a2fea6692ae92f73d7ed7ba4eaedbc9d3811676bc64c79b5ea348f3ee4552"
+    }
+  ],
+  "adaptations": [
+    "ESM relative .js imports and explicit file-paste/index",
+    "DaemonClient type-only surface replaced by narrow structural ports; i18n one-error port",
+    "Emulator embedded=true skips document-global styles; getTerminal exposes existing pane renderer; global singleton write removed",
+    "headless serializer/resize types redirected to structural ports",
+    "Original terminal.ts DA/DSR/color parser block directly extracted with PTY write port",
+    "Workbench optional find regex/case controls preserve preexisting UI; replay completion callback follows original output barrier",
+    "Ligatures mjs import receives declaration-only re-export from package root"
+  ],
+  "dependencyPins": {
+    "@getpaseo/protocol": "file:../protocol",
+    "@xterm/xterm": "6.1.0-beta.336",
+    "@xterm/headless": "6.1.0-beta.334",
+    "@xterm/addon-clipboard": "0.3.0-beta.213",
+    "@xterm/addon-fit": "0.12.0-beta.213",
+    "@xterm/addon-image": "0.10.0-beta.331",
+    "@xterm/addon-ligatures": "0.11.0-beta.213",
+    "@xterm/addon-search": "0.17.0-beta.213",
+    "@xterm/addon-unicode-graphemes": "0.5.0-beta.330",
+    "@xterm/addon-unicode11": "0.10.0-beta.213",
+    "@xterm/addon-web-links": "0.13.0-beta.213",
+    "@xterm/addon-webgl": "0.20.0-beta.329",
+    "@xterm/addon-serialize": "0.14.0"
+  },
+  "verification": "Focused integration PASS with the scope above; native/device validation NOT_RUN",
+  "adapterFiles": [
+    {
+      "path": "src/browser/attachments/upload-limit.ts",
+      "sha256": "eaed0cb78ed409799375065c0048d8a1fa6f8b2ee4e14bbbd108fa68832d2273"
+    },
+    {
+      "path": "src/browser/pane-find/find-shortcut.ts",
+      "sha256": "4d63bbf5cc5e83495e617e8557495870c721f97733cdcd255b4eb198be057b86"
+    },
+    {
+      "path": "src/browser/terminal/character-widths.ts",
+      "sha256": "95cd5c9551177158f6748f92155acbbc938db53409eae9d6e35f9c08c6399f75"
+    },
+    {
+      "path": "src/browser/terminal/drop/terminal-path.ts",
+      "sha256": "693bac69b9bb0b1f6959fa663cc6aa40fc8011c8542417bc7b1f072fc09add78"
+    },
+    {
+      "path": "src/browser/terminal/file-paste/index.ts",
+      "sha256": "b92fba7a1926fcf6f879ddda035ef741df233fde1ae4a7a2ecd9543a57348561"
+    },
+    {
+      "path": "src/browser/terminal/local-links/terminal-local-link-parsing.ts",
+      "sha256": "c7c97be50a3e993d80ad505e13b479f3df8644128c37c17af133a908c5602356"
+    },
+    {
+      "path": "src/browser/terminal/local-links/terminal-local-link-provider.ts",
+      "sha256": "54db42bc52e0e0a21f7a68eb15bc386980deae990a809ea79adba0d2cf0ccb85"
+    },
+    {
+      "path": "src/browser/terminal/runtime/terminal-emulator-runtime.ts",
+      "sha256": "5e3fb98ec2f0f7a3d077391583d45f8d5b52e490babee65d9166d5b1d59784e4"
+    },
+    {
+      "path": "src/browser/terminal/runtime/terminal-font.ts",
+      "sha256": "2d2ea227f074bf2d63b2956530a43c88c2f4ac58b48e8ce248b89028e5f2637f"
+    },
+    {
+      "path": "src/browser/terminal/runtime/terminal-key-dispatch.ts",
+      "sha256": "8a7998f17ac391f18320cca33adf29ecdc2e57ef8987e1cc8ade00a2d74a1c42"
+    },
+    {
+      "path": "src/browser/terminal/runtime/terminal-stream-controller.ts",
+      "sha256": "0bdb598c746b9dd28addd5a47cf70a7da07d34c29cf78e865aabd6647c95a9d5"
+    },
+    {
+      "path": "src/browser/terminal/runtime/terminal-virtual-keyboard.ts",
+      "sha256": "015db28a00d41b2096f06384566885721b2358a0eb313e239e3399ad92e453da"
+    },
+    {
+      "path": "src/browser/utils/mac-user-agent.ts",
+      "sha256": "1c49021e102abdd717ec12e2fb601900826a6e4f32694bb9f628d5d3bf2da367"
+    },
+    {
+      "path": "src/browser/utils/terminal-keys.ts",
+      "sha256": "0b7f561ce751cbd29e1b611737e5b2533c0e87a9ba9113e279feb9d64f43e38b"
+    },
+    {
+      "path": "src/ligatures.d.ts",
+      "sha256": "53d038afcd5f9a9307e7f937aa7163b8e4f890d323d850c26c2495330ce3c933"
+    },
+    {
+      "path": "src/ports.ts",
+      "sha256": "6637ce7c5c92bd50ad5e9aa2db32521ab934f3ee7fc81d2c65fad833aa706599"
+    },
+    {
+      "path": "src/server/server/local-service-connection.ts",
+      "sha256": "61da87175c758e3094f501e2a0dc2a966ea8dcdd1aa38e467f3379730973ba7b"
+    },
+    {
+      "path": "src/server/terminal/headless-terminal.ts",
+      "sha256": "e9e8c24f6e58cba5e66f3b54f04e609e514a268729e9efc8143a1778705367e3"
+    },
+    {
+      "path": "src/server/terminal/query-handlers.ts",
+      "sha256": "2343865c61eff96945a3d9df0c4bf13cf85ce196299cbc98ba58cf6c260286cb"
+    },
+    {
+      "path": "src/server/terminal/terminal-serializer.ts",
+      "sha256": "b26905fb71eb70c0f77aa5c4bd1dec3ae173fddc59a6e605a1d9cfbdebcfa8d3"
+    },
+    {
+      "path": "src/server/terminal/terminal-size-ownership.ts",
+      "sha256": "bc28e6dd1f657c3ea4a10a7de85787d8fd0192133b2f3796998584ceeddc48ce"
+    }
+  ],
+  "css": {
+    "path": "xterm.css",
+    "sha256": "4d9a1d50808997f097ccc6040a5da6f6cb06b14e5ee2402df5196a218bba838f",
+    "upstream": "@xterm/xterm@6.1.0-beta.336/css/xterm.css"
+  },
+  "dependencies": [
+    {
+      "name": "@getpaseo/protocol",
+      "version": "0.15.3",
+      "license": "Apache-2.0",
+      "consumers": [
+        "@workbench/paseo-terminal"
+      ],
+      "resolvedDirectory": "vendor/paseo/protocol",
+      "packageJsonSha256": "079c3e26fc9334c2041a2fcd96693283c258486b17b3aa7ee728dea5af1f2519",
+      "licenseFiles": [
+        {
+          "file": "licenses/getpaseo-protocol-0.15.3-LICENSE",
+          "sha256": "79d5aedce6aa0adc547336dc1bd34c5cc9308ba110fac7079ed97515ee573ad3"
+        }
+      ]
+    },
+    {
+      "name": "@xterm/xterm",
+      "version": "6.1.0-beta.336",
+      "license": "MIT",
+      "consumers": [
+        "@workbench/paseo-terminal"
+      ],
+      "resolvedDirectory": "vendor/paseo/terminal/node_modules/@xterm/xterm",
+      "packageJsonSha256": "29cdf3eced9082d95c5d00eccbe3cb15a926e85802c41103e0a1e2d6db2838b9",
+      "licenseFiles": [
+        {
+          "file": "licenses/xterm-xterm-6.1.0-beta.336-LICENSE",
+          "sha256": "b569f629d00f2626a8100df2a1798210535621e42164dfd426a6fe5aac7b0ccd"
+        }
+      ]
+    },
+    {
+      "name": "@xterm/headless",
+      "version": "6.1.0-beta.334",
+      "license": "MIT",
+      "consumers": [
+        "@workbench/paseo-terminal"
+      ],
+      "resolvedDirectory": "node_modules/@xterm/headless",
+      "packageJsonSha256": "3aaf0f9e514291e78832efc05210e6bc059c28872b0ea7b14a42da7cda6d9b7d",
+      "licenseFiles": [],
+      "sharedLicense": {
+        "sourcePackage": "@xterm/xterm@6.1.0-beta.336",
+        "file": "licenses/xterm-xterm-6.1.0-beta.336-LICENSE",
+        "note": "Installed package has no separate license file. Shared xterm MIT notice is preserved from the matching xterm distribution."
+      }
+    },
+    {
+      "name": "@xterm/addon-clipboard",
+      "version": "0.3.0-beta.213",
+      "license": "MIT",
+      "consumers": [
+        "@workbench/paseo-terminal"
+      ],
+      "resolvedDirectory": "vendor/paseo/terminal/node_modules/@xterm/addon-clipboard",
+      "packageJsonSha256": "68f6ed4749d45508921d69e729a3c37ae8210ae92a285c1d1c2f75c1ffad9ea3",
+      "licenseFiles": [
+        {
+          "file": "licenses/xterm-addon-clipboard-0.3.0-beta.213-LICENSE",
+          "sha256": "a26afeeba9ab0a19502a73df658d8fb09186d0906c81af6c04d334064971e81f"
+        }
+      ]
+    },
+    {
+      "name": "@xterm/addon-fit",
+      "version": "0.12.0-beta.213",
+      "license": "MIT",
+      "consumers": [
+        "@workbench/paseo-terminal"
+      ],
+      "resolvedDirectory": "vendor/paseo/terminal/node_modules/@xterm/addon-fit",
+      "packageJsonSha256": "da69fbc552c5693a4a2883007bd38c9dd103e2d9894b13619391bc44fc9a6774",
+      "licenseFiles": [
+        {
+          "file": "licenses/xterm-addon-fit-0.12.0-beta.213-LICENSE",
+          "sha256": "e256f01188af527e4d06d21d06fbf785ae9c50d4b328bf03cbe0ba7f0aa4228f"
+        }
+      ]
+    },
+    {
+      "name": "@xterm/addon-image",
+      "version": "0.10.0-beta.331",
+      "license": "MIT",
+      "consumers": [
+        "@workbench/paseo-terminal"
+      ],
+      "resolvedDirectory": "vendor/paseo/terminal/node_modules/@xterm/addon-image",
+      "packageJsonSha256": "ee02a95f92860b112f94545c4848445b3354f0cddf3c7ef3074eb90983078495",
+      "licenseFiles": [
+        {
+          "file": "licenses/xterm-addon-image-0.10.0-beta.331-LICENSE",
+          "sha256": "00994f891153ba5d613e2b838a9ad2f47d4484070cb594b46efc547ebea5ca05"
+        }
+      ]
+    },
+    {
+      "name": "@xterm/addon-ligatures",
+      "version": "0.11.0-beta.213",
+      "license": "MIT",
+      "consumers": [
+        "@workbench/paseo-terminal"
+      ],
+      "resolvedDirectory": "vendor/paseo/terminal/node_modules/@xterm/addon-ligatures",
+      "packageJsonSha256": "bfd626402f0da69746b1b68f2dc46a2aea39c5ec9845df39a2133a1bd625a622",
+      "licenseFiles": [
+        {
+          "file": "licenses/xterm-addon-ligatures-0.11.0-beta.213-LICENSE",
+          "sha256": "81427c5c7bf3b5ed9222ab13d85918b151e03b21bfd769a6a93741c53fdb0884"
+        }
+      ]
+    },
+    {
+      "name": "@xterm/addon-search",
+      "version": "0.17.0-beta.213",
+      "license": "MIT",
+      "consumers": [
+        "@workbench/paseo-terminal"
+      ],
+      "resolvedDirectory": "vendor/paseo/terminal/node_modules/@xterm/addon-search",
+      "packageJsonSha256": "c93ffe3048e56b93fd5f6e6ffef535ad8791893a737c475fae72045115ad7ff0",
+      "licenseFiles": [
+        {
+          "file": "licenses/xterm-addon-search-0.17.0-beta.213-LICENSE",
+          "sha256": "689ceb10716bd7a87a804c14951d7c2b818cbd60aab83d540902470ce3b13444"
+        }
+      ]
+    },
+    {
+      "name": "@xterm/addon-unicode-graphemes",
+      "version": "0.5.0-beta.330",
+      "license": "MIT",
+      "consumers": [
+        "@workbench/paseo-terminal"
+      ],
+      "resolvedDirectory": "vendor/paseo/terminal/node_modules/@xterm/addon-unicode-graphemes",
+      "packageJsonSha256": "e1a7517b62f5d786eeed8fe8d24900b507e289964cc9ce8b52a6636ae8b137ee",
+      "licenseFiles": [
+        {
+          "file": "licenses/xterm-addon-unicode-graphemes-0.5.0-beta.330-LICENSE",
+          "sha256": "a26afeeba9ab0a19502a73df658d8fb09186d0906c81af6c04d334064971e81f"
+        }
+      ]
+    },
+    {
+      "name": "@xterm/addon-unicode11",
+      "version": "0.10.0-beta.213",
+      "license": "MIT",
+      "consumers": [
+        "@workbench/paseo-terminal"
+      ],
+      "resolvedDirectory": "vendor/paseo/terminal/node_modules/@xterm/addon-unicode11",
+      "packageJsonSha256": "ece84f627643e4c6e0581c755586ca57ecd231b5eb219b61b06bef8f98ecd074",
+      "licenseFiles": [
+        {
+          "file": "licenses/xterm-addon-unicode11-0.10.0-beta.213-LICENSE",
+          "sha256": "e256f01188af527e4d06d21d06fbf785ae9c50d4b328bf03cbe0ba7f0aa4228f"
+        }
+      ]
+    },
+    {
+      "name": "@xterm/addon-web-links",
+      "version": "0.13.0-beta.213",
+      "license": "MIT",
+      "consumers": [
+        "@workbench/paseo-terminal"
+      ],
+      "resolvedDirectory": "vendor/paseo/terminal/node_modules/@xterm/addon-web-links",
+      "packageJsonSha256": "12090498e19a3db216a9d6a7f4b6751606c72c9b8873bfc91542c515b8dcabc5",
+      "licenseFiles": [
+        {
+          "file": "licenses/xterm-addon-web-links-0.13.0-beta.213-LICENSE",
+          "sha256": "689ceb10716bd7a87a804c14951d7c2b818cbd60aab83d540902470ce3b13444"
+        }
+      ]
+    },
+    {
+      "name": "@xterm/addon-webgl",
+      "version": "0.20.0-beta.329",
+      "license": "MIT",
+      "consumers": [
+        "@workbench/paseo-terminal"
+      ],
+      "resolvedDirectory": "vendor/paseo/terminal/node_modules/@xterm/addon-webgl",
+      "packageJsonSha256": "19325a6df128fe40bd4a7ce763928412bd66306fe50f1ad67caa3524865eb3ef",
+      "licenseFiles": [
+        {
+          "file": "licenses/xterm-addon-webgl-0.20.0-beta.329-LICENSE",
+          "sha256": "21b975c39532001d431dc3b2c29fbff691d83f370833a66b54698bda290fde0e"
+        }
+      ]
+    },
+    {
+      "name": "@xterm/addon-serialize",
+      "version": "0.14.0",
+      "license": "MIT",
+      "consumers": [
+        "@workbench/paseo-terminal"
+      ],
+      "resolvedDirectory": "node_modules/@xterm/addon-serialize",
+      "packageJsonSha256": "48b1c275c67f141828765fbf188457c430827c333dba069fe4520cbedb729763",
+      "licenseFiles": [],
+      "sharedLicense": {
+        "sourcePackage": "@xterm/xterm@6.1.0-beta.336",
+        "file": "licenses/xterm-xterm-6.1.0-beta.336-LICENSE",
+        "note": "Installed package has no separate license file. Shared xterm MIT notice is preserved from the matching xterm distribution."
+      }
+    },
+    {
+      "name": "semver",
+      "version": "7.8.5",
+      "license": "ISC",
+      "consumers": [
+        "@getpaseo/protocol@0.15.3"
+      ],
+      "resolvedDirectory": "node_modules/semver",
+      "packageJsonSha256": "7c94cb7f2a53c27b20d76386ec144c062894dbcc909cfabd0f728c37874b1776",
+      "licenseFiles": [
+        {
+          "file": "licenses/semver-7.8.5-LICENSE",
+          "sha256": "4ec3d4c66cd87f5c8d8ad911b10f99bf27cb00cdfcff82621956e379186b016b"
+        }
+      ]
+    },
+    {
+      "name": "zod",
+      "version": "4.4.3",
+      "license": "MIT",
+      "consumers": [
+        "@getpaseo/protocol@0.15.3"
+      ],
+      "resolvedDirectory": "vendor/paseo/protocol/node_modules/zod",
+      "packageJsonSha256": "c630bd10b52dcf71c112a2bf78dbf2734b9db58d62de663b8d86c2ec2c8cda2e",
+      "licenseFiles": [
+        {
+          "file": "licenses/zod-4.4.3-LICENSE",
+          "sha256": "3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8"
+        }
+      ]
+    },
+    {
+      "name": "js-base64",
+      "version": "3.9.6",
+      "license": "BSD-3-Clause",
+      "consumers": [
+        "@xterm/addon-clipboard@0.3.0-beta.213"
+      ],
+      "resolvedDirectory": "node_modules/js-base64",
+      "packageJsonSha256": "4dbd59733dcb0571442b860c9cc26b5a510812cbbaf851a328ab9ff4532eda14",
+      "licenseFiles": [
+        {
+          "file": "licenses/js-base64-3.9.6-LICENSE.md",
+          "sha256": "fcf06aacb36ee29237110d6b3a9fbd6296e85ad4324263abf5f8a5cfb5706c81"
+        }
+      ]
+    },
+    {
+      "name": "lru-cache",
+      "version": "6.0.0",
+      "license": "ISC",
+      "consumers": [
+        "@xterm/addon-ligatures@0.11.0-beta.213"
+      ],
+      "resolvedDirectory": "vendor/paseo/terminal/node_modules/lru-cache",
+      "packageJsonSha256": "b06071b99bebe6cc7f7716f65ed4f36ff54aaf78d74ea0bec72f9029a8e2c215",
+      "licenseFiles": [
+        {
+          "file": "licenses/lru-cache-6.0.0-LICENSE",
+          "sha256": "4ec3d4c66cd87f5c8d8ad911b10f99bf27cb00cdfcff82621956e379186b016b"
+        }
+      ]
+    },
+    {
+      "name": "opentype.js",
+      "version": "0.8.0",
+      "license": "MIT",
+      "consumers": [
+        "@xterm/addon-ligatures@0.11.0-beta.213"
+      ],
+      "resolvedDirectory": "node_modules/opentype.js",
+      "packageJsonSha256": "7503f08d64efe712f5603fb32970627ec8098d8185b16fe6f90bf77bfcc53e11",
+      "licenseFiles": [
+        {
+          "file": "licenses/opentype.js-0.8.0-LICENSE",
+          "sha256": "2db633a29122e6297185afaa2fb8e120b02fe63a5c4fb747c442a3625729ab4c"
+        }
+      ]
+    },
+    {
+      "name": "yallist",
+      "version": "4.0.0",
+      "license": "ISC",
+      "consumers": [
+        "lru-cache@6.0.0"
+      ],
+      "resolvedDirectory": "node_modules/yallist",
+      "packageJsonSha256": "c56b604bce814520105739e9559142ea9d4417454ebb933fd5687ca1d8d89bd5",
+      "licenseFiles": [
+        {
+          "file": "licenses/yallist-4.0.0-LICENSE",
+          "sha256": "4ec3d4c66cd87f5c8d8ad911b10f99bf27cb00cdfcff82621956e379186b016b"
+        }
+      ]
+    },
+    {
+      "name": "tiny-inflate",
+      "version": "1.0.3",
+      "license": "MIT",
+      "consumers": [
+        "opentype.js@0.8.0"
+      ],
+      "resolvedDirectory": "node_modules/tiny-inflate",
+      "packageJsonSha256": "7a97c9567b054c9294036537d42a112f4bd4263892fbfe2714e6acdf25816c6d",
+      "licenseFiles": [
+        {
+          "file": "licenses/tiny-inflate-1.0.3-LICENSE",
+          "sha256": "c0df7f551401f8f80197ff31bf69b8cd23727d127423403282514d242a3ab132"
+        }
+      ]
+    }
+  ],
+  "generatedFiles": [
+    {
+      "path": "dist/browser/attachments/upload-limit.d.ts",
+      "sha256": "e175239a687621618be3c4f82728cf7f079334600ce1c824259c64f420cd4bbf"
+    },
+    {
+      "path": "dist/browser/attachments/upload-limit.js",
+      "sha256": "eaed0cb78ed409799375065c0048d8a1fa6f8b2ee4e14bbbd108fa68832d2273"
+    },
+    {
+      "path": "dist/browser/pane-find/find-shortcut.d.ts",
+      "sha256": "73ec3d56af5c009a8721b38d424e949cd2d9bacefba0de6ad6aa2807384b5b39"
+    },
+    {
+      "path": "dist/browser/pane-find/find-shortcut.js",
+      "sha256": "897567452d20bf522dd8a868d9f4c541cccf62fb894f2be99574b915a85c2383"
+    },
+    {
+      "path": "dist/browser/terminal/character-widths.d.ts",
+      "sha256": "95cd5c9551177158f6748f92155acbbc938db53409eae9d6e35f9c08c6399f75"
+    },
+    {
+      "path": "dist/browser/terminal/character-widths.js",
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+    },
+    {
+      "path": "dist/browser/terminal/drop/terminal-path.d.ts",
+      "sha256": "b46dfad38ef402b8dbad3bc4a09854fd1f74885a280ecaa1fc3687d0bda96775"
+    },
+    {
+      "path": "dist/browser/terminal/drop/terminal-path.js",
+      "sha256": "99d3bf527572b9581353361e529b458bdb96defebc87600821f3fc4efd5c683d"
+    },
+    {
+      "path": "dist/browser/terminal/file-paste/index.d.ts",
+      "sha256": "d00a969d549170c65bee2a8deb767efb33447e64938447c569e2d7d27f0c0865"
+    },
+    {
+      "path": "dist/browser/terminal/file-paste/index.js",
+      "sha256": "a4700fb70772600ae586b3fdde69065706ff00f78cd98936ebbe7d43a6c11fe9"
+    },
+    {
+      "path": "dist/browser/terminal/local-links/terminal-local-link-parsing.d.ts",
+      "sha256": "e7f0647375309c2f55b6bf22245279d48395413640942d76c4a98234338117a3"
+    },
+    {
+      "path": "dist/browser/terminal/local-links/terminal-local-link-parsing.js",
+      "sha256": "5e1ff9cfb9439849e3ec7241db6ef720ac8b64ffc482c0c6d0e4e54d456daf73"
+    },
+    {
+      "path": "dist/browser/terminal/local-links/terminal-local-link-provider.d.ts",
+      "sha256": "be8e88717c12a2960293939ba6c0e2cdf276088ff343336f94ecfc37a3d6f4d4"
+    },
+    {
+      "path": "dist/browser/terminal/local-links/terminal-local-link-provider.js",
+      "sha256": "da5dd81469d5f3b9059b1a8e9552d0d3f54fbff706db46857feb0652db37e1be"
+    },
+    {
+      "path": "dist/browser/terminal/runtime/terminal-emulator-runtime.d.ts",
+      "sha256": "1136a0138d978831b8103f95e8e25c77356a7348b33756820483ae2bd6f3129e"
+    },
+    {
+      "path": "dist/browser/terminal/runtime/terminal-emulator-runtime.js",
+      "sha256": "180808c8bedba4f54260440928ef13ecd32a14d7a96c9bc609002793f8ed9c15"
+    },
+    {
+      "path": "dist/browser/terminal/runtime/terminal-font.d.ts",
+      "sha256": "9af3d4c83d32b5987ad07cc6ba4333e6424d50f1bdfd3d1e8fada8ba1dbb30b1"
+    },
+    {
+      "path": "dist/browser/terminal/runtime/terminal-font.js",
+      "sha256": "2d0d244baeea7a34ccc35ba922983980c040cbf37f254ea8165c83d904575aa7"
+    },
+    {
+      "path": "dist/browser/terminal/runtime/terminal-key-dispatch.d.ts",
+      "sha256": "33d87670a764aefc755936b96f426ef8ac12a09bb3e69d744d1fabbcccfdfc11"
+    },
+    {
+      "path": "dist/browser/terminal/runtime/terminal-key-dispatch.js",
+      "sha256": "a8ab65fca43e54337b323e64a7c43d1ff1373a976384ede60cec6e7a1ef5d4cb"
+    },
+    {
+      "path": "dist/browser/terminal/runtime/terminal-stream-controller.d.ts",
+      "sha256": "960ea668fc0bdd2eeb4b3cdf523dfefd732b045e792cee58ed0c04290b5c901f"
+    },
+    {
+      "path": "dist/browser/terminal/runtime/terminal-stream-controller.js",
+      "sha256": "50e65a3f62f86e9d4593d9da358b606fb83c6aff84042d2ee1e5826d54ee1f1b"
+    },
+    {
+      "path": "dist/browser/terminal/runtime/terminal-virtual-keyboard.d.ts",
+      "sha256": "40c868b443f5ed49552cc54a06644a5b4bc2c3bcdc3e7733fd5418ae5e43421e"
+    },
+    {
+      "path": "dist/browser/terminal/runtime/terminal-virtual-keyboard.js",
+      "sha256": "6df53c6fa8d02bc1222ab89b9f340d989ce8dd2b27e844170ac97764f74d61a1"
+    },
+    {
+      "path": "dist/browser/utils/mac-user-agent.d.ts",
+      "sha256": "88906171acf904d0e3236a3f591c5fa5c3715ad08339511c784c4505ea66bd74"
+    },
+    {
+      "path": "dist/browser/utils/mac-user-agent.js",
+      "sha256": "67b692efbd40020fe718ff257b0492fe73e35f0ebf3c445d479c80e0ddc738d0"
+    },
+    {
+      "path": "dist/browser/utils/terminal-keys.d.ts",
+      "sha256": "dfce9a15d27a5fd15c0bbd7824b731699e044d5136139cf4f9a13b872c26c54c"
+    },
+    {
+      "path": "dist/browser/utils/terminal-keys.js",
+      "sha256": "cf4a7f6deab7a0febeff71f7880b72c17e4afddd2b36c8357eb6fd088faf0b4b"
+    },
+    {
+      "path": "dist/ports.d.ts",
+      "sha256": "f4cf5450be2ff504d6fdfe5b525d4ff3a13f7cedac9b4fa6981dc0b8dccafceb"
+    },
+    {
+      "path": "dist/ports.js",
+      "sha256": "8aab5a71c306acd7aefd9216730fa0c6f1cbb2393923ed9168a7c7000c9da86d"
+    },
+    {
+      "path": "dist/server/server/local-service-connection.d.ts",
+      "sha256": "5fa56ddeb7211807392ed0bbffe3dfa8c037761beb69676b0a99d87d56096baa"
+    },
+    {
+      "path": "dist/server/server/local-service-connection.js",
+      "sha256": "757c59cd28095111da9a48808e0698021958998de699035d3337fa6749ebc4ff"
+    },
+    {
+      "path": "dist/server/terminal/headless-terminal.d.ts",
+      "sha256": "83c413e81439848ca0a75897bcc2e87138e1ef531c42f9c323336488e9311f1a"
+    },
+    {
+      "path": "dist/server/terminal/headless-terminal.js",
+      "sha256": "79fb8c7a86b325f5be2109fe194a8a960db681c78f35337bdbdb5070a9428601"
+    },
+    {
+      "path": "dist/server/terminal/query-handlers.d.ts",
+      "sha256": "a423fc7eba0d8185fb6b64d914f8a8747ba697082a555ce38c0cb275e4ac2eb8"
+    },
+    {
+      "path": "dist/server/terminal/query-handlers.js",
+      "sha256": "6a1d2bbc8b23ecec5b78fa400e80ed9234eaba090058248440638b6b3b583e1f"
+    },
+    {
+      "path": "dist/server/terminal/terminal-serializer.d.ts",
+      "sha256": "4ed55efb5daa49656e51bc6299c0b0b81185e580dd44f74b141eb8246e1166d0"
+    },
+    {
+      "path": "dist/server/terminal/terminal-serializer.js",
+      "sha256": "b2d733a7775167e4635f1319e4ebd9435e50eaf1e4c8d75ef5d960457f54fdc3"
+    },
+    {
+      "path": "dist/server/terminal/terminal-size-ownership.d.ts",
+      "sha256": "fc2125098ec1f112435c461292a83b8bf77b59ca81fbb7e5c144041659b96bb5"
+    },
+    {
+      "path": "dist/server/terminal/terminal-size-ownership.js",
+      "sha256": "7f75da4ff425f60d4f5ae378385840ce19ad3ecb8bee67e4a511d8a59d50975b"
+    }
+  ],
+  "integration": {
+    "protocol": "Workbench secure device gateway; original controller observer port adapts existing HTTP journal",
+    "processOwnership": "existing Rust worker protocol, not new Paseo PTY manager",
+    "test": {
+      "command": "node node_modules/vitest/vitest.mjs run apps/host/src/terminal-remote.test.ts",
+      "result": "PASS",
+      "files": 1,
+      "tests": 2,
+      "durationSeconds": 3.74,
+      "startedAt": "2026-11-09T21:42:05+09:00",
+      "scope": "Original headless/controller, owned worker-protocol fixture, real protected loopback; no Rust PTY/device renderer execution"
+    },
+    "subsequentChange": "Correlation IDs now use original safeRandomId fallback; passing tests not repeated",
+    "notRun": [
+      "real Rust PTY worker",
+      "mobile UI/IME",
+      "external network",
+      "Windows/macOS native UI",
+      "production/installer build"
+    ],
+    "unsupported": [
+      "whole browser preview through service proxy",
+      "WebSocket/HMR tunnel"
+    ]
+  }
+}

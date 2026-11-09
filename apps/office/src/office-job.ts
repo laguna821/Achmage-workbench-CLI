@@ -4,7 +4,7 @@ import type { Events, Gateway } from "./bridge.ts";
 import { maintainOfficeTurn } from "./execution-heartbeat.ts";
 
 /** The original long-job engine owns batching/resume; this adapter records its one user run. */
-export function createOfficeJob(gateway: Gateway, artifactId: string, events: Events, prepare: () => Promise<{ revision: number }>, background: OfficeTurnStart["background"] = "epub-translation") {
+export function createOfficeJob(gateway: Gateway, artifactId: string, events: Events, prepare: () => Promise<{ revision: number }>, background: OfficeTurnStart["background"] = "epub-translation", execution?: { turnId: string; token: string; finish(status: OfficeTurnFinish["status"], error?: string): Promise<void> }) {
   type Run = { turnId: string; api: ReturnType<Gateway["aiSession"]>; seq: number; release(): void };
   let run: Run | null = null;
   let starting: Promise<void> | null = null;
@@ -20,6 +20,10 @@ export function createOfficeJob(gateway: Gateway, artifactId: string, events: Ev
       if (finishing) return finishing.then(() => this.start(instruction));
       if (run) return Promise.resolve();
       return starting ??= (async () => {
+        if (execution) {
+          run = { turnId: execution.turnId, api: gateway.aiSession(artifactId, execution.token), seq: 0, release: () => {} };
+          return;
+        }
         const { revision } = await prepare(), turnId = crypto.randomUUID();
         let api = gateway.aiSession(artifactId);
         const receipt = await api.json<OfficeTurnReceipt>("turn-start", { turnId, instruction, revision, background });
@@ -34,7 +38,7 @@ export function createOfficeJob(gateway: Gateway, artifactId: string, events: Ev
       return finishing = (async () => {
         try {
           try { await current.api.json("turn-events", { turnId: current.turnId, seq: ++current.seq, events: [{ kind: "assistant", id: "document-job-result", text, streaming: false }] }); }
-          finally { await current.api.json("turn-finish", { turnId: current.turnId, status }); }
+          finally { if (execution) await execution.finish(status, status === "failed" ? text : undefined); else await current.api.json("turn-finish", { turnId: current.turnId, status }); }
         } finally { current.release(); if (run === current) run = null; }
       })().finally(() => { finishing = null; });
     },

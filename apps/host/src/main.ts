@@ -45,6 +45,9 @@ import { HostAutostart } from "./daemon/autostart.ts";
 import { VoiceService } from "./voice.ts";
 import { ExtensionService } from "./extensions/service.ts";
 import { EventHub } from "./event-hub.ts";
+import { DesktopService } from "./desktop-adapter.ts";
+import { DesktopTool } from "./desktop-tool.ts";
+import { BrowserOutputs } from "./browser-outputs.ts";
 import { guardDecision } from "./pkm-guard.ts";
 import { HttpError } from "./errors.ts";
 import { systemNotifier } from "./system-notifications.ts";
@@ -141,7 +144,9 @@ const archived = new Map(manager.snapshot().works.map((work) => [work.id, Boolea
 // "찾는 길": vault notes join the search index (and follow the mirror); engines search it with workbench-find.
 void manager.finder.useVault(pkm.vault, bus);
 const find = new FindTool({ dataDir, finder: manager.finder, sessions: () => manager.view.sessions, bus });
-const engineHooks = withFindTool(browse.engineHooks(), find.engineHooks());
+const desktop = new DesktopService(dataDir, store, { session: id => manager.view.sessions.get(id), item: (id, item) => manager.sink.upsertItem(id, item), image: (data, name, mime) => { const attachment = manager.attachments.save(data, name, mime); return { attachment, path: manager.attachments.path(attachment.id) }; } });
+const desktopTool = new DesktopTool(dataDir, desktop, manager.view.sessions, bus);
+const engineHooks = desktopTool.hooks(withFindTool(browse.engineHooks(), find.engineHooks()));
 pkm.findInstructions = findToolInstructions;
 
 const claudeIdleMs = env.WORKBENCH_CLAUDE_IDLE_MS ? Number(env.WORKBENCH_CLAUDE_IDLE_MS) : undefined;
@@ -188,8 +193,9 @@ const extensions = new ExtensionService({ dataDir, manager, authorizeWrite: (wor
 const hub: EventHub = new EventHub({ dataDir, store, manager, bus, ingress: () => devices?.hubIngressState() ?? { enabled: false, url: null } });
 const devices: DeviceService | undefined = env.WORKBENCH_CLI_INPUT ? undefined : new DeviceService({ dataDir, manager, bus, localOrigin: () => applicationOrigin, localToken: token, webDir,
   voice, eventIngress: (req, res) => hub.handleIngress(req, res) });
+const browserOutputs = new BrowserOutputs({ store, browser: manager.sharedBrowser, workspaces: manager.workspaces, documents: manager.documents, attachments: manager.attachments, hostId: env.WORKBENCH_HOST_ID ?? hostname(), session: id => manager.view.sessions.get(id) });
 const server = createHttpServer(manager, bus, {
-  devices, voice, extensions, hub,
+  devices, voice, extensions, hub, desktop, browserOutputs,
   autostart: new HostAutostart(dataDir),
   host: { instance: lease.instance, stopping: () => stopping, stop: () => { void stop(); } },
   officeImport,
@@ -286,6 +292,8 @@ async function stop() {
   officeKnowledge.close();
   editors.close();
   officeSettingsServer.close();
+  desktopTool.close();
+  desktop.close();
   find.close();
   pkm.close();
   await manager.shutdown().catch(() => undefined);

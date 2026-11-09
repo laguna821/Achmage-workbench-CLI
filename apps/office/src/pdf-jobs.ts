@@ -1,5 +1,6 @@
 import type { OfficeAiBridge } from "./office-ai.ts";
-import type { Gateway, Init } from "./bridge.ts";
+import { post, type Gateway, type Init } from "./bridge.ts";
+import { withOfficeExecution } from "./execution-adapter.ts";
 import type { OfficeOutputPlan } from "../../../packages/contracts/src/office-output.ts";
 import { cancelOutput, commitGeneratedOutput, openExport, prepareOutput, revealExport, preparePdfImages, finishPdfImages } from "./output.ts";
 import { dispatch } from "./platform/electron-renderer.ts";
@@ -37,11 +38,29 @@ export function pdfJobs(init: Init, gateway: Gateway, ai: OfficeAiBridge, revisi
     async aiStreamCancel(requestId: string) { const current = shortCalls.get(requestId); if (current) { current.cancel = true; await current.job.aiStreamCancel(requestId); } },
   };
   function report(error: unknown) { console.error("PDF 작업 기록:", error instanceof Error ? error.message : String(error)); }
+  let ended: { resolve(): void; reject(error: unknown): void } | null = null;
   const finish = async (view: JobView) => {
     const status = view.state === "complete" ? "completed" : view.state === "stopped" ? "interrupted" : "failed";
-    await ai.job.finish(status, `PDF ${view.kind}: ${view.done}/${view.total}${view.error ? ` · ${view.error}` : ""}`).catch(report);
+    try { await ai.job.finish(status, `PDF ${view.kind}: ${view.done}/${view.total}${view.error ? ` · ${view.error}` : ""}`); ended?.resolve(); }
+    catch (error) { ended?.reject(error); if (!ended) report(error); }
+    finally { ended = null; }
   };
-  Object.assign(window, { workbenchPdfJobs: { model: (longJob: boolean) => longJob ? ai.job : direct, finish } });
+  Object.assign(window, { workbenchPdfJobs: {
+    model: (longJob: boolean) => longJob ? ai.job : direct, finish,
+    handoff: (kind: string, request: Record<string, unknown>) => ai.handoffJob(`PDF ${kind}${request.lang ? ` → ${request.lang}` : ""}`, { format: "pdf", data: { toolbar: { kind, request: structuredClone(request) } } }),
+    execute: (kind: string, _request: unknown, start: () => Promise<{ ok: boolean; error?: string; cancelled?: boolean }>, cancel: () => void) => withOfficeExecution(async signal => {
+      const done = new Promise<void>((resolve, reject) => { ended = { resolve, reject }; });
+      signal.addEventListener("abort", cancel, { once: true });
+      try {
+        await ai.job.start(`PDF ${kind}`);
+        post({ type: "office:execution-attached" });
+        signal.throwIfAborted();
+        const outcome = await start();
+        if (!outcome.ok) throw new Error(outcome.error ?? (outcome.cancelled ? "PDF 출력 선택을 취소했습니다." : "원본 PDF 작업을 시작하지 못했습니다."));
+        await done;
+      } finally { signal.removeEventListener("abort", cancel); ended = null; }
+    }),
+  } });
   const call = (operation: string, args: unknown[]) => gateway.pdfStructure<Outcome>(init.artifact.id, revision(), instance, operation, args, value => dispatch("pdf:structure-progress", [value]));
   window.addEventListener("pagehide", () => {
     for (const current of shortCalls.values()) current.job.dispose();

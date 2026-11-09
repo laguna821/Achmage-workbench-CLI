@@ -17,8 +17,8 @@ class PdfImageOutputs {
     this.timer = setInterval(() => { void this.prune().catch(() => {}); }, 1000); this.timer.unref();
   }
   scope(artifactId, access) {
-    const source = this.documents.get(artifactId), view = this.documents.registry.list().find(v => v.viewId === access?.viewId && v.artifactId === artifactId);
-    if (this.closed || source.format !== 'pdf' || !view) throw fail('그림을 내보낼 PDF 문서 창을 다시 확인해 주세요.');
+    const source = this.documents.get(artifactId), view = this.documents.registry.authority(access?.viewId);
+    if (this.closed || source.format !== 'pdf' || !view || view.artifactId !== artifactId) throw fail('그림을 내보낼 PDF 문서 창을 다시 확인해 주세요.');
     return { source, view };
   }
   own(artifactId, id, access) {
@@ -28,8 +28,10 @@ class PdfImageOutputs {
   }
   async discard(id) { const job = this.jobs.get(id); if (!job) return; if (job.busy) { job.canceled = true; return; } this.jobs.delete(id); await rm(job.path, { recursive: true, force: true }); }
   async prune() {
-    const views = this.documents.registry.list();
-    for (const [id, job] of this.jobs) if (Date.now() > job.expires || !views.some(v => v.viewId === job.viewId && v.artifactId === job.artifactId && v.sessionId === job.sessionId)) await this.discard(id);
+    for (const [id, job] of this.jobs) {
+      const view = this.documents.registry.authority(job.viewId);
+      if (Date.now() > job.expires || !view || view.artifactId !== job.artifactId || view.sessionId !== job.sessionId) await this.discard(id);
+    }
   }
   async prepare(artifactId, revision, parent, name, access) {
     await this.prune(); const { source, view } = this.scope(artifactId, access);

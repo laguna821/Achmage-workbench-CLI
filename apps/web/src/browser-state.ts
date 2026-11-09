@@ -6,6 +6,9 @@ export type BrowserNativeCommand =
   | { kind: "create"; pageId: string; profileId: string; url: string; control: BrowserControl }
   | { kind: "list" }
   | { kind: "present"; pages: BrowserPlacement[] }
+  | { kind: "download-directory"; pageId: string; directory: string | null }
+  | { kind: "download-cancel"; pageId: string; downloadId: string }
+  | { kind: "permission-decision"; pageId: string; requestId: string; allow: boolean }
   | { kind: "execute"; job: BrowserJob };
 export type BrowserNative = <T>(command: BrowserNativeCommand) => Promise<T>;
 type Pending = { id: string; status: "waiting" | "unknown" };
@@ -216,6 +219,16 @@ export class SharedBrowser {
     }
     catch (error) { await this.refresh().catch(() => {}); throw error; }
   }
+  private async nativeSetting(command: Extract<BrowserNativeCommand, { kind: "download-directory" | "download-cancel" | "permission-decision" }>) {
+    if (!this.native) throw new Error("데스크톱 기본 창에서 열어 주세요.");
+    const page = this.value.pages.find(entry => entry.pageId === command.pageId);
+    if (!page || page.status !== "ready" || page.driverId !== this.driverId) throw new Error("연결된 웹 탭에서 다시 시도해 주세요.");
+    if (page.control.owner !== "human" || !page.native || !sameBrowserControl(page.control, page.native.control)) await this.control(page.pageId, "human");
+    await this.native<NativeBrowserPage>(command); await this.poll();
+  }
+  downloadDirectory(pageId: string, directory: string | null) { return this.nativeSetting({ kind: "download-directory", pageId, directory }); }
+  cancelDownload(pageId: string, downloadId: string) { return this.nativeSetting({ kind: "download-cancel", pageId, downloadId }); }
+  decidePermission(pageId: string, requestId: string, allow: boolean) { return this.nativeSetting({ kind: "permission-decision", pageId, requestId, allow }); }
   async action(pageId: string, action: BrowserAction) {
     if (!this.api) throw new Error("호스트에 연결해 주세요.");
     if (this.value.pending[pageId]) throw new Error("앞선 웹 동작의 결과를 먼저 확인해 주세요.");

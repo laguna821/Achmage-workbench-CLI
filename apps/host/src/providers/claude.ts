@@ -506,6 +506,7 @@ export class ClaudeAdapter implements ProviderAdapter {
     }
     const input = new InputQueue();
     const browser = this.browser?.instructions(session) ?? null;
+    const extraTools = this.browser?.extraInstructions?.(session) ?? null;
     const runtime: Runtime = {
       sessionId: session.id,
       access: session.access,
@@ -593,7 +594,7 @@ export class ClaudeAdapter implements ProviderAdapter {
         includePartialMessages: true,
         settingSources: ["user", "project", "local"],
         // The context card (pkm.ts) and the agent browser's instructions, after Claude Code's own.
-        systemPrompt: { type: "preset", preset: "claude_code", ...(extras?.append || browser ? { append: [extras?.append, browser].filter(Boolean).join("\n\n") } : {}) },
+        systemPrompt: { type: "preset", preset: "claude_code", ...(extras?.append || browser || extraTools ? { append: [extras?.append, browser, extraTools].filter(Boolean).join("\n\n") } : {}) },
         // Never an API key or cloud route left in the gateway's environment: the user's login.
         // The agent browser's playwright-cli is on PATH, and names this session's browser while on.
         ...this.sdkLaunch({ paths: this.browser?.pathDirs(), extra: this.browser?.sessionEnv(session) }),

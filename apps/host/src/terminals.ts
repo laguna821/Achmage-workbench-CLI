@@ -1,5 +1,10 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync } from "node:fs";
+import { stripVTControlCharacters } from "node:util";
+import { applyTerminalSize } from "@workbench/paseo-terminal/size-ownership";
+import type { TerminalSizePort } from "@workbench/paseo-terminal/ports";
+import type { TerminalReplay, TerminalResizeOwner, TerminalSearchRequest, TerminalSearchResult } from "../../../packages/contracts/src/terminal-runtime.ts";
+import { TerminalEmulator } from "./terminal-emulator.ts";
 import type { CreateTerminalRequest, TerminalList, TerminalOutput, TerminalSession } from "@workbench/contracts";
 import { HttpError } from "./errors.ts";
 import { physicalPath, withinDirectory } from "./directory-operations.ts";
@@ -14,6 +19,9 @@ type Running = { child: ChildProcessWithoutNullStreams; done: Promise<void>; clo
 export class Terminals {
   private readonly records = new Map<string, TerminalSession>();
   private readonly live = new Map<string, Running>();
+  private readonly emulators = new Map<string, TerminalEmulator>();
+  private readonly sizePorts = new Map<string, TerminalSizePort>();
+  private readonly sizeOwners = new Map<string, Map<string, object>>();
   private stopping = false;
   private readonly store: Store;
   private readonly spaces: Workspaces;
@@ -59,6 +67,13 @@ export class Terminals {
     let finish!: () => void;
     const running: Running = { child, done: new Promise<void>((resolve) => { finish = resolve; }) };
     this.live.set(entry.id, running);
+    const model = new TerminalEmulator(entry.rows, entry.cols, data => {
+      // Only the owned live worker receives emulator replies; replay never writes to a shell.
+      if (this.live.get(entry.id) === running && this.get(entry.id).status === "running" && child.stdin.writableLength < 1024 * 1024) {
+        child.stdin.write(JSON.stringify({ type: "input", data: Buffer.from(data).toString("base64") }) + "\n");
+      }
+    });
+    this.emulators.set(entry.id, model);
     let buffer = "", stderr = "";
     const failure = (message: string) => { this.save({ ...this.get(entry.id), error: message.slice(0, 2000), status: "error" }); child.stdin.end(); };
     child.stdout.setEncoding("utf8");
@@ -79,7 +94,8 @@ export class Terminals {
       const last = this.get(entry.id);
       if (active(last.status)) this.save({ ...last, pid: null, status: "error", error: stderr || `터미널 실행기가 종료되었습니다 (${code ?? "signal"}).` });
       else if (last.pid !== null) this.save({ ...last, pid: null });
-      this.live.delete(entry.id); finish();
+      this.live.delete(entry.id); this.emulators.delete(entry.id); model.dispose();
+      this.sizeOwners.delete(entry.id); this.sizePorts.delete(entry.id); finish();
     });
     child.stdin.write(JSON.stringify({ cwd: entry.cwd, cols: entry.cols, rows: entry.rows, shell, args, env: internal.environment }) + "\n");
     return entry;
@@ -99,8 +115,10 @@ export class Terminals {
         return next;
       });
       this.records.set(id, next);
+      this.emulators.get(id)?.feed(bytes, next.outputEnd);
     } else if (message.type === "resized" && typeof message.cols === "number" && typeof message.rows === "number") {
       this.save({ ...entry, cols: message.cols, rows: message.rows });
+      this.emulators.get(id)?.resize(message.rows, message.cols);
     } else if (message.type === "error") {
       this.save({ ...entry, status: message.fatal ? "error" : entry.status, error: String(message.message ?? "터미널 오류").slice(0, 2000) });
     } else if (message.type === "exit") {
@@ -119,9 +137,60 @@ export class Terminals {
     if (typeof data !== "string" || Buffer.byteLength(data) > 65_536) throw new HttpError(400, "terminal_input", "한 번의 터미널 입력은 64 KiB 이하여야 합니다.");
     return this.write(id, { type: "input", data: Buffer.from(data).toString("base64") });
   }
-  resize(id: string, cols: unknown, rows: unknown) {
-    if (typeof cols !== "number" || typeof rows !== "number" || !Number.isInteger(cols) || !Number.isInteger(rows) || cols < 2 || cols > 1000 || rows < 2 || rows > 1000) throw new HttpError(400, "terminal_size", "터미널 크기가 올바르지 않습니다.");
-    return this.write(id, { type: "resize", cols, rows });
+  resize(id: string, cols: unknown, rows: unknown, owner?: TerminalResizeOwner) {
+    if (!Number.isInteger(cols) || !Number.isInteger(rows) || Number(cols) < 2 || Number(cols) > 1000 || Number(rows) < 2 || Number(rows) > 1000) throw new HttpError(400, "terminal_size", "터미널 크기를 확인해 주세요.");
+    if (!owner) { this.write(id, { type: "resize", cols, rows }); return { ok: true }; }
+    if (!/^[\w:-]{1,160}$/.test(owner.ownerId) || !["claim", "update"].includes(owner.intent)) throw new HttpError(400, "terminal_size_owner", "터미널 화면 식별자를 확인해 주세요.");
+    const entry = this.get(id); this.spaces.requireActive(entry.workspaceId, entry.workId);
+    if (!this.live.has(id) || entry.status !== "running") throw new HttpError(409, "terminal_not_running", "실행 중인 터미널이 아닙니다.");
+    let port = this.sizePorts.get(id);
+    if (!port) { port = { getSize: () => this.get(id), send: message => this.write(id, message) }; this.sizePorts.set(id, port); }
+    let owners = this.sizeOwners.get(id);
+    if (!owners) { owners = new Map(); this.sizeOwners.set(id, owners); }
+    let identity = owners.get(owner.ownerId);
+    if (!identity) { if (owners.size >= 64) owners.delete(owners.keys().next().value!); identity = {}; owners.set(owner.ownerId, identity); }
+    return { ok: true, applied: applyTerminalSize(port, identity, { cols: Number(cols), rows: Number(rows), intent: owner.intent }) };
+  }
+  ownsRunning(id: string) { return this.live.has(id) && this.get(id).status === "running"; }
+  async replay(id: string): Promise<TerminalReplay> {
+    const terminal = this.get(id), live = this.emulators.get(id);
+    if (live) return { terminal, ...await live.capture(), truncated: terminal.outputStart > 0 };
+    // Historical sessions are rebuilt from their retained journal, never adopted by PID.
+    const model = new TerminalEmulator(terminal.rows, terminal.cols, () => {});
+    try {
+      const output = this.history(id);
+      model.feed(Buffer.from(output.data, "base64"), output.end);
+      return { terminal, ...await model.capture(), truncated: terminal.outputStart > 0 };
+    } finally { model.dispose(); }
+  }
+  search(id: string, request: TerminalSearchRequest): TerminalSearchResult {
+    if (typeof request.query !== "string" || !request.query.trim() || request.query.length > 256) throw new HttpError(400, "terminal_query", "찾을 글자를 1~256자로 입력해 주세요.");
+    const limit = request.limit ?? 100;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new HttpError(400, "terminal_query", "검색 결과는 최대 200개입니다.");
+    const entry = this.get(id), output = this.history(id);
+    const lines = stripVTControlCharacters(Buffer.from(output.data, "base64").toString("utf8")).replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+    const needle = request.caseSensitive ? request.query : request.query.toLocaleLowerCase();
+    const matches: TerminalSearchResult["matches"] = [];
+    let limited = false;
+    for (let line = 0; line < lines.length; line++) {
+      const text = lines[line]!, searchable = request.caseSensitive ? text : text.toLocaleLowerCase();
+      const at = searchable.indexOf(needle); if (at < 0) continue;
+      if (matches.length === limit) { limited = true; break; }
+      const from = Math.max(0, at - 160), cropped = text.slice(from, Math.max(from + 800, at + request.query.length));
+      matches.push({ line: line + 1, text: cropped, from: at - from, to: at - from + request.query.length });
+    }
+    return { terminalId: id, query: request.query, start: output.start, end: output.end, truncated: entry.outputStart > 0, limited, matches };
+  }
+
+  private history(id: string) {
+    const entry = this.get(id), chunks: Buffer[] = [];
+    let cursor = entry.outputStart;
+    while (cursor < entry.outputEnd) {
+      const page = this.output(id, cursor);
+      if (page.end <= cursor) break;
+      chunks.push(Buffer.from(page.data, "base64")); cursor = page.end;
+    }
+    return { start: entry.outputStart, end: cursor, data: Buffer.concat(chunks).toString("base64") };
   }
   output(id: string, cursor = 0): TerminalOutput {
     const terminal = this.get(id);

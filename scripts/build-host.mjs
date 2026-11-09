@@ -1,6 +1,6 @@
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, cpSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { pdfHostPlugin } from './pdf-platform.mjs';
 import { officeProviderHostPlugin } from './office-provider-platform.mjs';
@@ -24,3 +24,8 @@ await build({
 });
 
 await copyExtensionRuntimeAssets(process.env.WORKBENCH_HOST_BUILD_DIR ?? "apps/host/dist");
+
+// Official import-only installer; preserves its Apache notice and package-relative helpers.
+const desktopInstallerTarget = `${process.env.WORKBENCH_HOST_BUILD_DIR ?? "apps/host/dist"}/node_modules/@workbench/agent-desktop-installer`;
+mkdirSync(desktopInstallerTarget, { recursive: true });
+cpSync(`${root}vendor/agent-desktop/npm`, desktopInstallerTarget, { recursive: true });

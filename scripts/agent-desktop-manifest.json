@@ -1,0 +1,39 @@
+{
+  "repository": "https://github.com/vercel-labs/agent-desktop",
+  "version": "1.1.0",
+  "revision": "d3dc190afbf34cd2377252398ddd5c30efbd093a",
+  "protocol": "2.6",
+  "license": "Apache-2.0",
+  "assets": {
+    "agent-desktop-v1.1.0-aarch64-apple-darwin.tar.gz": {
+      "url": "https://github.com/vercel-labs/agent-desktop/releases/download/v1.1.0/agent-desktop-v1.1.0-aarch64-apple-darwin.tar.gz",
+      "sha256": "3048e00aa0741bf25ffe0326f78c966408be4490ce13513f3f94ecf2a0b5270d",
+      "bytes": 2196168
+    },
+    "agent-desktop-v1.1.0-aarch64-pc-windows-msvc.tar.gz": {
+      "url": "https://github.com/vercel-labs/agent-desktop/releases/download/v1.1.0/agent-desktop-v1.1.0-aarch64-pc-windows-msvc.tar.gz",
+      "sha256": "20e2a2a029bc7e86aaacf2003afa78708d66e4cb51f3c216597e1f5d79d496bf",
+      "bytes": 1650739
+    },
+    "agent-desktop-v1.1.0-aarch64-unknown-linux-gnu.tar.gz": {
+      "url": "https://github.com/vercel-labs/agent-desktop/releases/download/v1.1.0/agent-desktop-v1.1.0-aarch64-unknown-linux-gnu.tar.gz",
+      "sha256": "252c17e271a444352a5ba1e9f8fcbace89fa7b6b0bfcc4abebad2b35eb1f7a4d",
+      "bytes": 3305800
+    },
+    "agent-desktop-v1.1.0-x86_64-apple-darwin.tar.gz": {
+      "url": "https://github.com/vercel-labs/agent-desktop/releases/download/v1.1.0/agent-desktop-v1.1.0-x86_64-apple-darwin.tar.gz",
+      "sha256": "b6352ac66aa49e0280c6f690de791dc03c827623a838950856b20ddbebcdc382",
+      "bytes": 2319991
+    },
+    "agent-desktop-v1.1.0-x86_64-pc-windows-msvc.tar.gz": {
+      "url": "https://github.com/vercel-labs/agent-desktop/releases/download/v1.1.0/agent-desktop-v1.1.0-x86_64-pc-windows-msvc.tar.gz",
+      "sha256": "5c13b932add079c141da18631d65b1680d1b9bcb73942f2f99146c9ee13877f6",
+      "bytes": 1699387
+    },
+    "agent-desktop-v1.1.0-x86_64-unknown-linux-gnu.tar.gz": {
+      "url": "https://github.com/vercel-labs/agent-desktop/releases/download/v1.1.0/agent-desktop-v1.1.0-x86_64-unknown-linux-gnu.tar.gz",
+      "sha256": "efbdcf4caf10132e4fe915db1ec643184c947c65e0511845aeb4839445d7ea43",
+      "bytes": 3427576
+    }
+  }
+}

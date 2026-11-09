@@ -167,6 +167,7 @@ export class CodexAdapter implements ProviderAdapter {
   private readonly forced: { approvalPolicy?: string; sandbox?: string };
   /** threadId -> what its turns run with now: access, vault guard and browser roots ("plan" for a turn that only plans) */
   private readonly threadAccess = new Map<string, string>();
+  private readonly extraToolInstructions = new Map<string, string>();
   /** cwd -> skills Codex found there (name -> path), for "/name" requests */
   private readonly skills = new Map<string, Map<string, { name: string; description: string; path: string }>>();
   /** sessionId -> the access the user last set (approvals arriving meanwhile follow it) */
@@ -491,7 +492,8 @@ export class CodexAdapter implements ProviderAdapter {
     if (!threadId) {
       // Developer instructions given at the start stay in the thread's history (also across resumes).
       const browsing = this.browser?.instructions(session) ?? null;
-      const instructions = [guard.instructions, browsing].filter(Boolean).join("\n\n") || null;
+      const extraTools = this.browser?.extraInstructions?.(session) ?? null;
+      const instructions = [guard.instructions, browsing, extraTools].filter(Boolean).join("\n\n") || null;
       const started = await rpc.request<ThreadStartResponse>("thread/start", {
         cwd: work.cwd,
         model: session.model,
@@ -502,6 +504,7 @@ export class CodexAdapter implements ProviderAdapter {
         ...(instructions ? { developerInstructions: instructions } : {}),
       });
       threadId = started.thread.id;
+      if (extraTools) this.extraToolInstructions.set(threadId, extraTools);
       if (browsing) this.browser?.setTold(session.id, true);
       this.sink.updateSession(session.id, { nativeSessionId: threadId, engineModel: started.model, engineEffort: started.reasoningEffort });
       this.loaded.add(threadId);
@@ -631,6 +634,11 @@ export class CodexAdapter implements ProviderAdapter {
    */
   private async tellBrowser(session: Session, threadId: string) {
     if (!this.browser) return;
+    const extra = this.browser.extraInstructions?.(session);
+    if (extra && this.extraToolInstructions.get(threadId) !== extra) {
+      await this.rpc!.request("thread/inject_items", { threadId, items: [{ type: "message", role: "developer", content: [{ type: "input_text", text: extra }] }] });
+      this.extraToolInstructions.set(threadId, extra);
+    }
     const want = Boolean(session.browser);
     if (want === (this.browser.told(session.id) ?? false)) return;
     const text = want ? this.browser.instructions(session) : this.browser.offNote(session);

@@ -60,7 +60,7 @@ export class DeviceGateway {
     expiry.unref();
     const response = async (id: string, result: Response) => {
       const headers: Record<string, string> = {};
-      result.headers.forEach((value, name) => { if (["content-type", "content-disposition", "cache-control"].includes(name)) headers[name] = value; });
+      result.headers.forEach((value, name) => { if (["content-type", "content-disposition", "cache-control", "x-workbench-service-location", "etag", "content-range"].includes(name)) headers[name] = value; });
       await send({ op: "response", id, status: result.status, headers });
       const reader = result.body?.getReader();
       if (reader) try {
@@ -79,9 +79,10 @@ export class DeviceGateway {
       try {
         const grant = authenticated(), bytes = Buffer.concat(upload.chunks);
         const pathname = new URL(request.path, "http://workbench.invalid").pathname;
+        const serviceProxy = /^\/api\/services\/([^/]+)\/proxy$/.exec(pathname);
         const attachmentUpload = pathname === "/api/attachments" && request.method === "POST";
         let body: Record<string, unknown> = {};
-        if (!attachmentUpload && bytes.length && (request.headers["content-type"] ?? "").includes("application/json")) {
+        if (!attachmentUpload && !serviceProxy && bytes.length && (request.headers["content-type"] ?? "").includes("application/json")) {
           const parsed = JSON.parse(bytes.toString("utf8"));
           if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new HttpError(400, "invalid_json", "JSON 요청을 확인해 주세요.");
           body = parsed;
@@ -92,7 +93,8 @@ export class DeviceGateway {
         this.media.requireReferences(grant, body);
         const json = (value: unknown) => Response.json(value);
         let result: Response;
-        if (pathname === "/api/snapshot") result = json(scopedSnapshot(manager.snapshot(), grant));
+        if (serviceProxy) result = await manager.services.proxy(decodeURIComponent(serviceProxy[1]!), new URL(request.path, "http://workbench.invalid").searchParams.get("path") ?? "/", { method: request.method, headers: request.headers, body: bytes.length ? bytes : undefined, signal: abort.signal }, workId => { registry.authorize(credential, "terminal", workId); });
+        else if (pathname === "/api/snapshot") result = json(scopedSnapshot(manager.snapshot(), grant));
         else if (pathname === "/api/tasks") {
           const tasks = manager.tasks.list(); result = json({ ...tasks, tasks: tasks.tasks.filter(t => grant.workIds.includes(t.workId)) });
         } else if (pathname === "/api/attention") result = json(scopedSnapshot(manager.snapshot(), grant).attention);

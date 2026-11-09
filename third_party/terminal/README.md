@@ -1,0 +1,11 @@
+# Paseo terminal integration
+
+Upstream is `https://github.com/getpaseo/paseo` at `1fff127f45b11c1c9c573fbbd12791673004c912`. The 19 selected original TypeScript files are preserved byte-for-byte under `vendor/paseo/terminal/upstream`. `source.json` records each source hash and the packages actually resolved from the vendor package, including nested dependency versions. Apache-2.0 is retained in `LICENSE.paseo`. Local-link source retains its Microsoft MIT notices; the copied xterm MIT license is in `licenses/`.
+
+Workbench directly runs the original app TerminalStreamController, TerminalEmulatorRuntime, keyboard encoding/layout helpers, server headless-terminal, terminal-serializer, size-ownership and local-service-connection modules. The DA/DSR/color query handler block is extracted from the same pinned terminal.ts and accepts the already-owned worker's input port. No Paseo PTY manager, new process supervisor, or public hostname proxy listener is started.
+
+Compatibility changes are recorded in the manifest. They cover ESM paths, narrow type ports, one localized connection error, an embedded-pane style option, an accessor for existing selection/scroll state, preservation of existing regex/case search, and a replay commit callback. The ligatures runtime remains the original mjs import; a declaration-only shim fixes its package type lookup. Original modules remain separately available for comparison.
+
+The host's existing Rust worker protocol, SQLite byte history, workspace identity and service ownership remain authoritative. The renderer uses a snapshot with its next journal byte, resumes from that position, and keeps input mutations out of reconnect replay. Device revocation and project removal end remote subscriptions and pending service requests. A service proxy addresses only the current owned service record's loopback port through the original connector; it strips authentication/cookies and never follows redirects.
+
+Service HTTP request/response inspection and file saving are supported. Full browser application preview, WebSocket/HMR tunnelling, actual mobile rendering/IME and native Rust PTY execution are not established by the Node loopback fixture. No external service or account is used by that fixture. It is not an OS/device acceptance result.

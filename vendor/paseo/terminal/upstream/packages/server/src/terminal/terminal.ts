@@ -1,0 +1,1414 @@
+import * as pty from "node-pty";
+import type { Terminal as TerminalType } from "@xterm/headless";
+import { randomUUID } from "crypto";
+import {
+  accessSync,
+  chmodSync,
+  constants,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+} from "node:fs";
+import { tmpdir, userInfo } from "node:os";
+import { basename, delimiter, dirname, extname, join, resolve as resolvePath } from "node:path";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+import { createExternalProcessEnv } from "../server/paseo-env.js";
+import {
+  resolveExternalProcessPath,
+  resolvePaseoCliBinDir,
+  resolvePaseoCliExecutablePath,
+} from "./paseo-cli-path.js";
+import { writePrivateFileAtomicSync } from "../server/private-files.js";
+import {
+  findExecutable,
+  findExecutableWithoutProbing,
+} from "../executable-resolution/executable-resolution.js";
+import { createHeadlessTerminal } from "./headless-terminal.js";
+import { createTerminalSerializer } from "./terminal-serializer.js";
+import {
+  captureTerminalLines,
+  type CaptureTerminalLinesOptions,
+  type CaptureTerminalLinesResult,
+} from "./terminal-capture.js";
+import type { TerminalReplayOptions, TerminalReplayMetadata } from "./terminal-replay.js";
+import { TerminalInputModeTracker } from "@getpaseo/protocol/terminal-input-mode";
+import { TerminalActivityTracker } from "./activity/terminal-activity-tracker.js";
+import type { TerminalActivity, TerminalActivityState } from "@getpaseo/protocol/terminal-activity";
+
+const require = createRequire(import.meta.url);
+let nodePtySpawnHelperChecked = false;
+const TERMINAL_TITLE_DEBOUNCE_MS = 150;
+const TERMINAL_EXIT_OUTPUT_LINE_LIMIT = 12;
+const TERMINAL_EXIT_OUTPUT_CHAR_LIMIT = 16000;
+const TERMINAL_OSC_COLOR_QUERY_RESPONSES = new Map<number, string>([
+  [10, "rgb:e6e6/e6e6/e6e6"],
+  [11, "rgb:0b0b/0b0b/0b0b"],
+  [12, "rgb:e6e6/e6e6/e6e6"],
+]);
+
+export interface TerminalExitInfo {
+  exitCode: number | null;
+  signal: number | null;
+  lastOutputLines: string[];
+}
+
+// The field is assigned explicitly rather than declared as a constructor
+// parameter property: the terminal worker loads this module under
+// --experimental-strip-types, which erases types but cannot emit the
+// assignment a parameter property implies.
+export class TerminalCommandNotFoundError extends Error {
+  readonly command: string;
+
+  constructor(command: string) {
+    super(`${command}: command not found`);
+    this.name = "TerminalCommandNotFoundError";
+    this.command = command;
+  }
+}
+
+export interface TerminalCommandFinishedInfo {
+  exitCode: number | null;
+}
+
+export type ClientMessage =
+  | { type: "input"; data: string }
+  | { type: "resize"; rows: number; cols: number }
+  | { type: "mouse"; row: number; col: number; button: number; action: "down" | "up" | "move" };
+
+export type ServerMessage =
+  | { type: "output"; data: string; revision?: number }
+  | { type: "snapshotReady"; revision?: number; replayPreamble?: string }
+  | { type: "titleChange"; title?: string };
+
+export interface TerminalActivityTransition {
+  activity: TerminalActivity | null;
+  previous: TerminalActivity | null;
+}
+
+export interface TerminalSession {
+  /** Absent on terminal workers started before creation timestamps were tracked. */
+  createdAt?: string;
+  id: string;
+  name: string;
+  cwd: string;
+  workspaceId: string;
+  send(msg: ClientMessage): void;
+  subscribe(listener: (msg: ServerMessage) => void): () => void;
+  onExit(listener: (info: TerminalExitInfo) => void): () => void;
+  onCommandFinished(listener: (info: TerminalCommandFinishedInfo) => void): () => void;
+  onTitleChange(listener: (title?: string) => void): () => void;
+  onActivityChange(listener: (transition: TerminalActivityTransition) => void): () => void;
+  getSize(): { rows: number; cols: number };
+  hasOutput(): boolean;
+  getReplayPreamble(): string;
+  getTitle(): string | undefined;
+  getActivity(): TerminalActivity | null;
+  setActivity(state: TerminalActivityState): void;
+  clearActivityAttention(): boolean;
+  setTitle(title: string): void;
+  getExitInfo(): TerminalExitInfo | null;
+  kill(): void;
+  killAndWait(options?: { gracefulTimeoutMs?: number; forceTimeoutMs?: number }): Promise<void>;
+}
+
+/** A session that owns its PTY in this process, so it knows the program's pid. */
+export interface LocalTerminalSession extends TerminalSession {
+  readonly pid: number;
+  serializeReplay(options?: TerminalReplayOptions): {
+    metadata: TerminalReplayMetadata;
+    data: Uint8Array;
+  };
+  captureLines(options?: CaptureTerminalLinesOptions): CaptureTerminalLinesResult;
+}
+
+function parseCommandFinishedOsc(data: string): TerminalCommandFinishedInfo | null {
+  // OSC 633 is terminal control traffic, but a foreground command can still
+  // print arbitrary control bytes. Keep this boundary to the exact VS Code
+  // command-finished shape emitted by our shell integration.
+  const parts = data.split(";");
+  if (parts[0] !== "D") {
+    return null;
+  }
+  if (parts.length === 1) {
+    return { exitCode: null };
+  }
+  if (parts.length !== 2 || !/^-?\d+$/.test(parts[1])) {
+    return null;
+  }
+  return { exitCode: Number(parts[1]) };
+}
+
+export interface CreateTerminalOptions {
+  id?: string;
+  cwd: string;
+  workspaceId: string;
+  shell?: string;
+  env?: Record<string, string>;
+  activityEnv?: Record<string, string>;
+  rows?: number;
+  cols?: number;
+  name?: string;
+  title?: string;
+  command?: string;
+  args?: string[];
+  // Environment the terminal starts from instead of this process's own. A detached terminal
+  // worker outlives the daemon that launched it, so each create carries the controlling
+  // daemon's environment and its resolved Paseo CLI path.
+  baseEnv?: Record<string, string>;
+  paseoCliPath?: string | null;
+}
+
+function toTerminalActivity(snapshot: {
+  state: TerminalActivityState | null;
+  attentionReason?: TerminalActivity["attentionReason"];
+  changedAt: number;
+}): TerminalActivity | null {
+  if (!snapshot.state) {
+    return null;
+  }
+  return {
+    state: snapshot.state,
+    ...(snapshot.attentionReason ? { attentionReason: snapshot.attentionReason } : {}),
+    changedAt: snapshot.changedAt,
+  };
+}
+
+function resolveInitialTitleMode(presetTitle: string | undefined): "auto" | "manual" {
+  return presetTitle?.trim() ? "manual" : "auto";
+}
+
+function isTerminalActivityInterruptInput(data: string): boolean {
+  return data === "\x03" || data === "\x1b";
+}
+
+interface BuildTerminalEnvironmentInput {
+  shell: string;
+  env: Record<string, string>;
+  baseEnv?: Record<string, string>;
+  zshShellIntegrationDir?: string;
+  paseoCliBinDir?: string | null;
+  paseoHookCliPath?: string | null;
+}
+
+interface EnsureNodePtySpawnHelperExecutableOptions {
+  packageRoot?: string;
+  platform?: NodeJS.Platform;
+  arch?: string;
+  force?: boolean;
+}
+
+interface WindowsPtyProcessReadiness {
+  _agent?: { innerPid?: number };
+}
+
+function resolveNodePtyPackageRoot(): string | null {
+  try {
+    const packageJsonPath = require.resolve("node-pty/package.json");
+    return dirname(packageJsonPath);
+  } catch {
+    return null;
+  }
+}
+
+function ensureExecutableBit(path: string): void {
+  if (!existsSync(path)) {
+    return;
+  }
+  const stat = statSync(path);
+  if (!stat.isFile()) {
+    return;
+  }
+  // node-pty 1.1.0 shipped darwin prebuild spawn-helper without execute bit.
+  if ((stat.mode & 0o111) === 0o111) {
+    return;
+  }
+  chmodSync(path, stat.mode | 0o111);
+}
+
+export function ensureNodePtySpawnHelperExecutableForCurrentPlatform(
+  options: EnsureNodePtySpawnHelperExecutableOptions = {},
+): void {
+  const platform = options.platform ?? process.platform;
+  if (platform !== "darwin") {
+    return;
+  }
+  if (nodePtySpawnHelperChecked && !options.force) {
+    return;
+  }
+
+  const packageRoot = options.packageRoot ?? resolveNodePtyPackageRoot();
+  if (!packageRoot) {
+    return;
+  }
+  const arch = options.arch ?? process.arch;
+
+  const candidates = [
+    join(packageRoot, "build", "Release", "spawn-helper"),
+    join(packageRoot, "build", "Debug", "spawn-helper"),
+    join(packageRoot, "prebuilds", `darwin-${arch}`, "spawn-helper"),
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      ensureExecutableBit(candidate);
+    } catch {
+      // best-effort hardening only
+    }
+  }
+
+  if (!options.force) {
+    nodePtySpawnHelperChecked = true;
+  }
+}
+
+export function resolveDefaultTerminalShell(
+  options: { platform?: NodeJS.Platform; env?: NodeJS.ProcessEnv } = {},
+): string {
+  const platform = options.platform ?? process.platform;
+  const env = options.env ?? process.env;
+
+  if (platform === "win32") {
+    return env.ComSpec || env.COMSPEC || "C:\\Windows\\System32\\cmd.exe";
+  }
+
+  return env.SHELL || "/bin/sh";
+}
+
+export interface ResolvedTerminalCommand {
+  command: string;
+  // `.cmd`/`.bat` targets resolve to a single pre-escaped `cmd.exe` command
+  // line (string) instead of an argv array. node-pty's own array-quoting
+  // (see `argsToCommandLine` in its `windowsPtyAgent.js`) only produces
+  // MSVCRT/CommandLineToArgvW-safe quoting; cmd.exe re-parses that whole
+  // line itself afterwards and needs a different, cmd.exe-metachar-aware
+  // escape. Building that line ourselves and passing it as a string is the
+  // node-pty-documented way to bypass its array quoting for exactly this
+  // case (see the `spawn` jsdoc in node-pty's typings).
+  args: string[] | string;
+}
+
+export interface ResolveTerminalSpawnCommandOptions {
+  platform?: NodeJS.Platform;
+  env?: Record<string, string | undefined>;
+  resolveExecutable?: (name: string) => Promise<string | null>;
+}
+
+// cmd.exe treats these characters specially even inside a double-quoted
+// argument, unlike a POSIX shell — quoting alone does not neutralize them.
+// Prefixing each with `^`, cmd.exe's own escape character, does. Mirrors the
+// `escape.command` metachar list in the `cross-spawn` npm package (already a
+// dependency of this repo), which solves this exact `.cmd`/`.bat` spawning
+// problem — see http://www.robvanderwoude.com/escapechars.php.
+const CMD_EXE_METACHAR_PATTERN = /([()%!^"`<>&|;, *?])/g;
+
+function escapeCmdExeMetaChars(text: string): string {
+  return text.replace(CMD_EXE_METACHAR_PATTERN, "^$1");
+}
+
+/**
+ * Escape one argument for safe inclusion in a `cmd.exe /c "..."` command
+ * line that is about to invoke a `.cmd`/`.bat` shim.
+ *
+ * node-pty builds an MSVCRT/`CommandLineToArgvW`-style quoted command line
+ * for whatever `command` it is given (double-quote wrap on whitespace,
+ * backslash-escape only backslash runs immediately before a quote). That
+ * quoting is correct for a normal executable, which parses its own argv via
+ * that same convention. It is not correct here: the `command` node-pty
+ * launches for a `.cmd`/`.bat` target is `cmd.exe` itself, and cmd.exe
+ * re-parses the whole line with its *own* tokenizer before ever handing
+ * arguments to the batch script — a tokenizer that treats `&`, `|`, `^`,
+ * `%` (environment-variable expansion), `<`, `>` etc. as live syntax even
+ * inside double quotes. A prompt containing any of those characters would
+ * therefore be interpreted by cmd.exe, not passed through as text — the
+ * same class of hazard tracked upstream as Node's CVE-2024-27980
+ * ("batBadBadging").
+ *
+ * The escaping below is the "qntm" algorithm (https://qntm.org/cmd): double
+ * every backslash run that immediately precedes a quote (or the end of the
+ * argument, since a closing quote is appended next) and escape that quote,
+ * wrap the whole argument in quotes, then caret-escape cmd.exe's
+ * metacharacters — including the quotes just added, because cmd.exe's own
+ * tokenizer runs first and would otherwise treat them as toggling a quoted
+ * region. It is the same algorithm `cross-spawn` uses for its `.cmd`/`.bat`
+ * auto-shell path (`lib/util/escape.js`). Command shims forward `%*`, which
+ * adds a second cmd.exe parse, so metacharacters need a second escape pass to
+ * survive as literal argv in the Node process behind an npm-generated shim.
+ *
+ * cmd.exe has no escape for a literal CR or LF inside a single command
+ * line — its parser treats them as command separators regardless of
+ * quoting, so passing one through verbatim would let a crafted prompt
+ * inject a second, attacker-chosen command after the newline. There is no
+ * fidelity-preserving option for that case, so newlines are normalized to
+ * spaces before quoting: the target process still receives the full text,
+ * just without the original line breaks, instead of cmd.exe splitting the
+ * prompt into multiple commands.
+ */
+function escapeCmdExeArgument(rawArg: string): string {
+  const arg = rawArg.replace(/\r\n|\r|\n/g, " ");
+
+  let escaped = arg.replace(/(\\*)"/g, '$1$1\\"');
+  escaped = escaped.replace(/(\\*)$/, "$1$1");
+  escaped = `"${escaped}"`;
+
+  return escapeCmdExeMetaChars(escapeCmdExeMetaChars(escaped));
+}
+
+/**
+ * Resolve a terminal profile command (e.g. `claude`) into something node-pty's
+ * conpty backend can actually launch on Windows.
+ *
+ * On Windows, conpty's underlying `CreateProcess` does not apply `PATHEXT`, so a
+ * bare `claude` (installed by npm as `claude.cmd`) fails with `error code: 2`
+ * (`ERROR_FILE_NOT_FOUND`). Worse, conpty completes the spawn asynchronously on
+ * its own conout worker thread, so that failure surfaces as an uncaught
+ * exception that takes down the whole terminal worker process. Resolving the
+ * real path up front — and routing `.cmd`/`.bat` shims through `cmd.exe /c`
+ * (node-pty has no `shell` option) — keeps the profile launchable.
+ *
+ * Non-Windows and the default-shell path (no explicit command) are unchanged.
+ */
+export async function resolveTerminalSpawnCommand(
+  command: string,
+  args: string[],
+  options: ResolveTerminalSpawnCommandOptions = {},
+): Promise<ResolvedTerminalCommand> {
+  const platform = options.platform ?? process.platform;
+  if (platform !== "win32") {
+    return { command, args };
+  }
+
+  const resolveExecutable = options.resolveExecutable ?? findExecutable;
+  const resolved = await resolveExecutable(command);
+  if (!resolved) {
+    // Leave the command as-is so the terminal itself surfaces the "not found"
+    // error to the user instead of silently doing nothing.
+    return { command, args };
+  }
+
+  // `.cmd`/`.bat` shims are batch scripts that conpty's CreateProcess cannot
+  // launch directly; they must run through cmd.exe (node-pty has no `shell`
+  // option, so build the `cmd /c` invocation ourselves). Checked by extension
+  // rather than isWindowsCommandScript() because that helper gates on the live
+  // process.platform, which is wrong once we're already on the win32 branch.
+  const extension = extname(resolved).toLowerCase();
+  if (extension === ".cmd" || extension === ".bat") {
+    const env = options.env ?? process.env;
+    const comSpec = env.ComSpec || env.COMSPEC || "C:\\Windows\\System32\\cmd.exe";
+    // Build the `/c` command line ourselves — as a single pre-escaped
+    // string, not an argv array — so node-pty's own array quoting never
+    // runs over these values; see escapeCmdExeArgument for why that
+    // quoting alone is not safe once cmd.exe re-parses the line. `resolved`
+    // gets the same metachar (not quote-wrap) treatment as the args: it
+    // isn't attacker-controlled, but it now sits inside the same joined
+    // command line and needs to survive cmd.exe's tokenizer too (e.g. a
+    // space in the install path).
+    const commandLine = [
+      "/d",
+      "/s",
+      "/c",
+      `"${[escapeCmdExeMetaChars(resolved), ...args.map(escapeCmdExeArgument)].join(" ")}"`,
+    ].join(" ");
+    return { command: comSpec, args: commandLine };
+  }
+
+  return { command: resolved, args };
+}
+
+export { resolvePaseoCliBinDir, resolvePaseoCliExecutablePath };
+
+export function resolveZshShellIntegrationDir(): string {
+  return fileURLToPath(new URL("./shell-integration/zsh", import.meta.url));
+}
+
+function resolveZshShellIntegrationRuntimeDir(): string {
+  let username = "unknown";
+  try {
+    username = userInfo().username || username;
+  } catch {
+    // keep fallback
+  }
+  return join(tmpdir(), `${username}-paseo-zsh-${process.pid}`);
+}
+
+function prepareZshShellIntegrationRuntimeDir(sourceDir = resolveZshShellIntegrationDir()): string {
+  const readableSourceDir = resolveExternalProcessPath(sourceDir);
+  const runtimeDir = resolveZshShellIntegrationRuntimeDir();
+  mkdirSync(runtimeDir, { recursive: true, mode: 0o700 });
+  chmodSync(runtimeDir, 0o700);
+  writePrivateFileAtomicSync(
+    join(runtimeDir, ".zshenv"),
+    readFileSync(join(readableSourceDir, ".zshenv")),
+  );
+  writePrivateFileAtomicSync(
+    join(runtimeDir, "paseo-integration.zsh"),
+    readFileSync(join(readableSourceDir, "paseo-integration.zsh")),
+  );
+  return runtimeDir;
+}
+
+export function buildTerminalEnvironment(
+  input: BuildTerminalEnvironmentInput,
+): Record<string, string> {
+  const baseEnv: Record<string, string> = createExternalProcessEnv(
+    input.baseEnv ?? process.env,
+    input.env,
+    {
+      TERM: "xterm-256color",
+      TERM_PROGRAM: "kitty",
+    },
+  );
+  const envWithAgentHooks = prependPaseoCliToPath(
+    baseEnv,
+    input.paseoCliBinDir === undefined ? resolvePaseoCliBinDir() : input.paseoCliBinDir,
+  );
+  const envWithHookCli = injectPaseoHookCli(
+    envWithAgentHooks,
+    input.paseoHookCliPath === undefined ? resolvePaseoCliExecutablePath() : input.paseoHookCliPath,
+  );
+
+  if (basename(input.shell) !== "zsh") {
+    return envWithHookCli;
+  }
+
+  const originalZdotdir = envWithHookCli.ZDOTDIR ?? "";
+  return {
+    ...envWithHookCli,
+    PASEO_ZSH_ZDOTDIR: originalZdotdir,
+    ZDOTDIR: prepareZshShellIntegrationRuntimeDir(input.zshShellIntegrationDir),
+  };
+}
+
+function injectPaseoHookCli(
+  env: Record<string, string>,
+  cliPath: string | null,
+): Record<string, string> {
+  if (!cliPath) {
+    return env;
+  }
+
+  return {
+    ...env,
+    PASEO_HOOK_CLI: resolvePath(resolveExternalProcessPath(cliPath)),
+  };
+}
+
+// The environment and CLI path a terminal starts from: the caller's when it sends them (the
+// daemon controlling a detached worker does), this process's otherwise.
+function resolveTerminalEnvironmentSource(
+  input: Pick<CreateTerminalOptions, "baseEnv" | "paseoCliPath">,
+): Pick<BuildTerminalEnvironmentInput, "baseEnv" | "paseoCliBinDir" | "paseoHookCliPath"> {
+  const source: Pick<
+    BuildTerminalEnvironmentInput,
+    "baseEnv" | "paseoCliBinDir" | "paseoHookCliPath"
+  > = {};
+  if (input.baseEnv) source.baseEnv = input.baseEnv;
+  if (input.paseoCliPath !== undefined) {
+    source.paseoCliBinDir = input.paseoCliPath ? dirname(input.paseoCliPath) : null;
+    source.paseoHookCliPath = input.paseoCliPath;
+  }
+  return source;
+}
+
+function prependPaseoCliToPath(
+  env: Record<string, string>,
+  cliBinDir: string | null,
+): Record<string, string> {
+  if (!cliBinDir) {
+    return env;
+  }
+
+  const pathKey = getPathEnvKey(env);
+  const currentPath = env[pathKey] ?? "";
+  return {
+    ...env,
+    [pathKey]: prependPathEntry(currentPath, cliBinDir),
+  };
+}
+
+function getPathEnvKey(env: Record<string, string>): string {
+  return Object.keys(env).find((key) => key.toLowerCase() === "path") ?? "PATH";
+}
+
+function prependPathEntry(currentPath: string, entry: string): string {
+  const entries = currentPath.split(delimiter).filter((value) => value && value !== entry);
+  return [entry, ...entries].join(delimiter);
+}
+
+function normalizeProcessToken(token: string): string {
+  if (token.length === 0) {
+    return token;
+  }
+
+  let quote: "'" | '"' | "";
+  if (token.startsWith('"') && token.endsWith('"')) {
+    quote = '"';
+  } else if (token.startsWith("'") && token.endsWith("'")) {
+    quote = "'";
+  } else {
+    quote = "";
+  }
+  const rawToken = quote ? token.slice(1, -1) : token;
+  if (rawToken.length === 0) {
+    return token;
+  }
+
+  const assignmentMatch = rawToken.match(/^([A-Za-z_][A-Za-z0-9_]*=)(.+)$/);
+  const prefix = assignmentMatch ? assignmentMatch[1] : "";
+  const value = assignmentMatch ? assignmentMatch[2] : rawToken;
+  if (!value.includes("/")) {
+    return token;
+  }
+
+  const normalized = `${prefix}${basename(value)}`;
+  return quote ? `${quote}${normalized}${quote}` : normalized;
+}
+
+export function normalizeProcessTitle(processTitle: string): string | undefined {
+  const trimmed = processTitle.trim().replace(/\s+/g, " ");
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+
+  const normalized = trimmed
+    .split(" ")
+    .map((token) => normalizeProcessToken(token))
+    .join(" ")
+    .trim();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+const PROCESS_INTERPRETERS = new Set([
+  "bash",
+  "bun",
+  "deno",
+  "node",
+  "nodejs",
+  "python",
+  "python3",
+  "ruby",
+  "sh",
+  "tsx",
+  "zsh",
+]);
+
+const PACKAGE_MANAGER_SCRIPT_NAMES = new Map<string, string>([
+  ["bun.js", "bun"],
+  ["npm-cli.js", "npm"],
+  ["npx-cli.js", "npx"],
+  ["pnpm.cjs", "pnpm"],
+  ["pnpm.js", "pnpm"],
+  ["yarn.cjs", "yarn"],
+  ["yarn.js", "yarn"],
+]);
+
+export function humanizeProcessTitle(processTitle: string): string | undefined {
+  const normalized = normalizeProcessTitle(processTitle);
+  if (!normalized) {
+    return undefined;
+  }
+
+  const tokens = normalized.split(" ").filter(Boolean);
+  if (tokens.length === 0) {
+    return undefined;
+  }
+
+  while (tokens[0] === "env") {
+    tokens.shift();
+    while (tokens[0] && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[0])) {
+      tokens.shift();
+    }
+  }
+
+  if (tokens.length === 0) {
+    return normalized;
+  }
+
+  const first = tokens[0];
+  const second = tokens[1];
+  if (PROCESS_INTERPRETERS.has(first) && second) {
+    const packageManager = PACKAGE_MANAGER_SCRIPT_NAMES.get(second);
+    if (packageManager) {
+      return [packageManager, ...tokens.slice(2)].join(" ").trim() || packageManager;
+    }
+
+    if (!second.startsWith("-")) {
+      return [second, ...tokens.slice(2)].join(" ").trim();
+    }
+  }
+
+  return normalized;
+}
+
+function extractLastOutputLines(terminal: TerminalType, limit: number): string[] {
+  const buffer = terminal.buffer.active;
+  const mergedLines: string[] = [];
+
+  for (let row = 0; row < buffer.length; row++) {
+    const line = buffer.getLine(row);
+    if (!line) {
+      continue;
+    }
+
+    const text = line.translateToString(true);
+    const isWrapped = (line as { isWrapped?: boolean }).isWrapped === true;
+    if (isWrapped && mergedLines.length > 0) {
+      mergedLines[mergedLines.length - 1] += text;
+      continue;
+    }
+    mergedLines.push(text);
+  }
+
+  while (mergedLines.length > 0 && mergedLines[0]?.trim().length === 0) {
+    mergedLines.shift();
+  }
+  while (mergedLines.length > 0 && mergedLines[mergedLines.length - 1]?.trim().length === 0) {
+    mergedLines.pop();
+  }
+
+  return mergedLines.slice(-limit);
+}
+
+const ESC = String.fromCharCode(0x1b);
+const BEL = String.fromCharCode(0x07);
+const ANSI_SEQUENCE_PATTERN = new RegExp(
+  `${ESC}(?:[@-Z\\\\-_]|\\[[0-?]*[ -/]*[@-~]|\\].*?(?:${BEL}|${ESC}\\\\))`,
+  "g",
+);
+
+function stripAnsiSequences(input: string): string {
+  return input.replace(ANSI_SEQUENCE_PATTERN, "");
+}
+
+function extractLastOutputLinesFromText(text: string, limit: number): string[] {
+  const normalized = stripAnsiSequences(text).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const lines = normalized.split("\n").map((line) => line.trimEnd());
+  while (lines[0]?.trim().length === 0) {
+    lines.shift();
+  }
+  while (lines[lines.length - 1]?.trim().length === 0) {
+    lines.pop();
+  }
+  return lines.slice(-limit);
+}
+
+function isExecutableFile(path: string): boolean {
+  try {
+    if (!statSync(path).isFile()) {
+      return false;
+    }
+    accessSync(path, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export interface AssertTerminalCommandCanStartInput {
+  command: string | undefined;
+  // The terminal's own cwd and environment, not the daemon's: execve in the
+  // child resolves against those, so anything else produces false negatives.
+  cwd: string;
+  env: Record<string, string>;
+  platform?: NodeJS.Platform;
+}
+
+// node-pty spawns directly through execve on POSIX, with no shell, so a command
+// that does not exist fails inside the spawn helper and surfaces as exit code 1
+// with no output -- indistinguishable from `false` or any program that simply
+// failed. Resolving it up front is the only signal that separates "cannot start"
+// from "ran and exited non-zero", and it lets the create report the failure
+// instead of handing back a terminal that dies immediately. Windows keeps
+// resolving inside resolveTerminalSpawnCommand, which has its own shim handling
+// and its own fallback for an unresolved command.
+export async function assertTerminalCommandCanStart(
+  input: AssertTerminalCommandCanStartInput,
+): Promise<void> {
+  const { command, cwd, env } = input;
+  const platform = input.platform ?? process.platform;
+  if (command === undefined || platform === "win32") {
+    return;
+  }
+
+  // A path-ish command is resolved by execve against the child's cwd, never
+  // through PATH and never against the daemon's working directory.
+  if (command.includes("/")) {
+    if (isExecutableFile(resolvePath(cwd, command))) {
+      return;
+    }
+    throw new TerminalCommandNotFoundError(command);
+  }
+
+  const resolved = await findExecutableWithoutProbing(command, {
+    path: env[getPathEnvKey(env)],
+    cwd,
+  });
+  if (!resolved) {
+    throw new TerminalCommandNotFoundError(command);
+  }
+}
+
+export async function createTerminal(
+  options: CreateTerminalOptions,
+): Promise<LocalTerminalSession> {
+  const {
+    cwd,
+    workspaceId,
+    shell,
+    env = {},
+    activityEnv = {},
+    rows = 24,
+    cols = 80,
+    name = "Terminal",
+    title: presetTitle,
+    command,
+    args = [],
+    baseEnv,
+    paseoCliPath,
+  } = options;
+  const resolvedShell = shell ?? resolveDefaultTerminalShell({ env: baseEnv });
+
+  const id = options.id ?? randomUUID();
+  const listeners = new Set<(msg: ServerMessage) => void>();
+  const exitListeners = new Set<(info: TerminalExitInfo) => void>();
+  const commandFinishedListeners = new Set<(info: TerminalCommandFinishedInfo) => void>();
+  const titleChangeListeners = new Set<(title?: string) => void>();
+  let killed = false;
+  let disposed = false;
+  let exitEmitted = false;
+  let processExited = false;
+  const processExitWaiters = new Set<() => void>();
+  let exitInfo: TerminalExitInfo | null = null;
+  // Recent output is retained as whole chunks plus a running char length so we
+  // avoid reallocating a ~16KB string on every pty chunk. We keep enough whole
+  // chunks that their join always contains at least the last
+  // TERMINAL_EXIT_OUTPUT_CHAR_LIMIT chars; the exact tail is sliced at exit.
+  const recentOutputChunks: string[] = [];
+  let recentOutputLength = 0;
+  let title: string | undefined;
+  let titleMode = resolveInitialTitleMode(presetTitle);
+  let pendingTitle: string | undefined;
+  let titleDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingInput = "";
+  let inputFlushImmediate: ReturnType<typeof setImmediate> | null = null;
+  let stateRevision = 0;
+  const inputModeTracker = new TerminalInputModeTracker();
+  const activityTracker = new TerminalActivityTracker();
+  const activityChangeListeners = new Set<(transition: TerminalActivityTransition) => void>();
+  let titleChangeSubscription: { dispose(): void } | null = null;
+
+  const terminal = createHeadlessTerminal({ rows, cols, scrollback: 10000 });
+
+  const serialize = createTerminalSerializer(terminal);
+
+  ensureNodePtySpawnHelperExecutableForCurrentPlatform();
+
+  // Create PTY
+  const { command: spawnCommand, args: spawnArgs } = command
+    ? await resolveTerminalSpawnCommand(command, args)
+    : { command: resolvedShell, args: [] as string[] };
+  const terminalEnv = buildTerminalEnvironment({
+    shell: spawnCommand,
+    env: {
+      ...env,
+      ...activityEnv,
+      PASEO_WORKSPACE_ID: workspaceId,
+    },
+    ...resolveTerminalEnvironmentSource({ baseEnv, paseoCliPath }),
+  });
+
+  await assertTerminalCommandCanStart({ command, cwd, env: terminalEnv });
+
+  const ptyProcess = pty.spawn(spawnCommand, spawnArgs, {
+    name: "xterm-256color",
+    cols,
+    rows,
+    cwd,
+    env: terminalEnv,
+  });
+
+  function emitTitleChange(nextTitle: string | undefined): void {
+    if (title === nextTitle) {
+      return;
+    }
+    title = nextTitle;
+    for (const listener of Array.from(titleChangeListeners)) {
+      try {
+        listener(title);
+      } catch {
+        // no-op
+      }
+    }
+    for (const listener of Array.from(listeners)) {
+      try {
+        listener({ type: "titleChange", title });
+      } catch {
+        // no-op
+      }
+    }
+  }
+
+  function clearPendingTitleChange(): void {
+    pendingTitle = undefined;
+    if (titleDebounceTimer) {
+      clearTimeout(titleDebounceTimer);
+      titleDebounceTimer = null;
+    }
+  }
+
+  function disposeTitleChangeSubscription(): void {
+    titleChangeSubscription?.dispose();
+    titleChangeSubscription = null;
+  }
+
+  function setTitle(nextTitle: string): void {
+    const manualTitle = nextTitle.trim();
+    if (!manualTitle) {
+      return;
+    }
+
+    titleMode = "manual";
+    disposeTitleChangeSubscription();
+    clearPendingTitleChange();
+    emitTitleChange(manualTitle);
+  }
+
+  const initialManualTitle = presetTitle?.trim() || undefined;
+  const processTitle = command ? [command, ...args].join(" ") : null;
+  let initialTitle = initialManualTitle;
+  if (!initialTitle && processTitle) {
+    initialTitle = humanizeProcessTitle(processTitle) ?? normalizeProcessTitle(processTitle);
+  }
+  emitTitleChange(initialTitle);
+
+  // Respond to DA1 queries (CSI c or CSI 0 c) — apps like nvim query terminal capabilities
+  terminal.parser.registerCsiHandler({ final: "c" }, (params) => {
+    if (params.length === 0 || (params.length === 1 && params[0] === 0)) {
+      ptyProcess.write("\x1b[?62;4;22c");
+      return true;
+    }
+    return false;
+  });
+  terminal.parser.registerCsiHandler({ final: "n" }, (params) => {
+    if (params.length !== 1) {
+      return false;
+    }
+    if (params[0] === 5) {
+      ptyProcess.write("\x1b[0n");
+      return true;
+    }
+    if (params[0] === 6) {
+      const buffer = terminal.buffer.active;
+      ptyProcess.write(`\x1b[${buffer.cursorY + 1};${buffer.cursorX + 1}R`);
+      return true;
+    }
+    return false;
+  });
+  terminal.parser.registerCsiHandler({ prefix: "?", final: "n" }, (params) => {
+    if (params.length !== 1 || params[0] !== 6) {
+      return false;
+    }
+    const buffer = terminal.buffer.active;
+    ptyProcess.write(`\x1b[?${buffer.cursorY + 1};${buffer.cursorX + 1}R`);
+    return true;
+  });
+  for (const [code, response] of TERMINAL_OSC_COLOR_QUERY_RESPONSES) {
+    terminal.parser.registerOscHandler(code, (data) => {
+      if (data.trim() !== "?") {
+        return false;
+      }
+      ptyProcess.write(`\x1b]${code};${response}\x1b\\`);
+      return true;
+    });
+  }
+
+  if (titleMode === "auto") {
+    titleChangeSubscription = terminal.onTitleChange((nextTitle) => {
+      if (disposed || killed) {
+        return;
+      }
+      pendingTitle = nextTitle.trim().length > 0 ? nextTitle : undefined;
+      if (titleDebounceTimer) {
+        clearTimeout(titleDebounceTimer);
+      }
+      titleDebounceTimer = setTimeout(() => {
+        titleDebounceTimer = null;
+        emitTitleChange(pendingTitle);
+        pendingTitle = undefined;
+      }, TERMINAL_TITLE_DEBOUNCE_MS);
+    });
+  }
+
+  const disposeCommandLifecycleSubscription = terminal.parser.registerOscHandler(633, (data) => {
+    const commandFinished = parseCommandFinishedOsc(data);
+    if (!commandFinished) {
+      return true;
+    }
+
+    for (const listener of Array.from(commandFinishedListeners)) {
+      try {
+        listener(commandFinished);
+      } catch {
+        // no-op
+      }
+    }
+    return true;
+  });
+
+  activityTracker.onChange((snapshot, previousSnapshot) => {
+    if (disposed || killed) {
+      return;
+    }
+    const transition: TerminalActivityTransition = {
+      activity: toTerminalActivity(snapshot),
+      previous: toTerminalActivity(previousSnapshot),
+    };
+    for (const listener of Array.from(activityChangeListeners)) {
+      try {
+        listener(transition);
+      } catch {
+        // no-op
+      }
+    }
+  });
+
+  function buildExitInfo(input?: {
+    exitCode?: number | null;
+    signal?: number | null;
+  }): TerminalExitInfo {
+    const lastOutputLines = extractLastOutputLines(terminal, TERMINAL_EXIT_OUTPUT_LINE_LIMIT);
+    return {
+      exitCode: input?.exitCode ?? null,
+      signal: input?.signal && input.signal > 0 ? input.signal : null,
+      lastOutputLines:
+        lastOutputLines.length > 0
+          ? lastOutputLines
+          : extractLastOutputLinesFromText(
+              recentOutputChunks.join("").slice(-TERMINAL_EXIT_OUTPUT_CHAR_LIMIT),
+              TERMINAL_EXIT_OUTPUT_LINE_LIMIT,
+            ),
+    };
+  }
+
+  function emitExit(info: TerminalExitInfo): void {
+    if (exitEmitted) {
+      return;
+    }
+    exitEmitted = true;
+    exitInfo = info;
+    for (const listener of Array.from(exitListeners)) {
+      try {
+        listener(info);
+      } catch {
+        // no-op
+      }
+    }
+    exitListeners.clear();
+  }
+
+  function disposeResources(): void {
+    if (disposed) {
+      return;
+    }
+    disposed = true;
+    activityTracker.clear();
+    pendingInput = "";
+    recentOutputChunks.length = 0;
+    recentOutputLength = 0;
+    inputModeTracker.reset();
+    if (inputFlushImmediate) {
+      clearImmediate(inputFlushImmediate);
+      inputFlushImmediate = null;
+    }
+    clearPendingTitleChange();
+    disposeTitleChangeSubscription();
+    disposeCommandLifecycleSubscription.dispose();
+    activityTracker.dispose();
+    terminal.dispose();
+    listeners.clear();
+    exitListeners.clear();
+    commandFinishedListeners.clear();
+    titleChangeListeners.clear();
+    activityChangeListeners.clear();
+  }
+
+  function writeOutputToHeadless(data: string): void {
+    terminal.write(data, () => {
+      if (disposed || killed) {
+        return;
+      }
+      // Commit protocol modes with the parsed bytes, so a replay cut cannot
+      // combine an older xterm buffer with modes from queued future output.
+      const inputModeUpdate = inputModeTracker.feed(data);
+      for (const response of inputModeUpdate.responses) ptyProcess.write(response);
+      stateRevision += 1;
+      for (const listener of listeners) {
+        listener({ type: "output", data, revision: stateRevision });
+      }
+    });
+  }
+
+  // Pipe PTY output to terminal emulator
+  ptyProcess.onData((data) => {
+    if (killed) return;
+    recentOutputChunks.push(data);
+    recentOutputLength += data.length;
+    // Drop whole leading chunks while the rest still covers the char limit, so
+    // the retained join always contains at least the last limit chars.
+    while (
+      recentOutputChunks.length > 1 &&
+      recentOutputLength - recentOutputChunks[0].length >= TERMINAL_EXIT_OUTPUT_CHAR_LIMIT
+    ) {
+      recentOutputLength -= recentOutputChunks[0].length;
+      recentOutputChunks.shift();
+    }
+    // We never drop the last chunk, so a single chunk larger than the cap would
+    // grow the buffer unbounded; slice its tail to keep the cap hard.
+    if (recentOutputChunks.length === 1 && recentOutputLength > TERMINAL_EXIT_OUTPUT_CHAR_LIMIT) {
+      const tail = recentOutputChunks[0].slice(-TERMINAL_EXIT_OUTPUT_CHAR_LIMIT);
+      recentOutputChunks[0] = tail;
+      recentOutputLength = tail.length;
+    }
+    writeOutputToHeadless(data);
+  });
+
+  ptyProcess.onExit((event) => {
+    killed = true;
+    processExited = true;
+    for (const waiter of Array.from(processExitWaiters)) {
+      try {
+        waiter();
+      } catch {
+        // no-op
+      }
+    }
+    processExitWaiters.clear();
+    emitExit(
+      buildExitInfo({
+        exitCode: event.exitCode,
+        signal: event.signal,
+      }),
+    );
+    disposeResources();
+  });
+
+  async function waitForPtyProcessStart(): Promise<void> {
+    if (process.platform !== "win32") {
+      return;
+    }
+
+    const started = (): boolean => {
+      const windowsPtyProcess = ptyProcess as unknown as WindowsPtyProcessReadiness;
+      return ptyProcess.pid > 0 || (windowsPtyProcess._agent?.innerPid ?? 0) > 0 || processExited;
+    };
+
+    const deadline = Date.now() + 5000;
+    while (!started() && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+
+  function serializeReplay(replayOptions?: TerminalReplayOptions) {
+    const metadata = {
+      rows: terminal.rows,
+      cols: terminal.cols,
+      retainedHistoryLines: terminal.buffer.normal.baseY,
+      revision: stateRevision,
+      replayPreamble: getReplayPreamble(),
+    };
+    return { metadata, data: serialize(replayOptions) };
+  }
+
+  function getSize(): { rows: number; cols: number } {
+    return {
+      rows: terminal.rows,
+      cols: terminal.cols,
+    };
+  }
+
+  function getReplayPreamble(): string {
+    return inputModeTracker.getPreamble();
+  }
+
+  function writeInputToPty(data: string): void {
+    ptyProcess.write(data);
+  }
+
+  function flushPendingInput(): void {
+    if (inputFlushImmediate) {
+      clearImmediate(inputFlushImmediate);
+      inputFlushImmediate = null;
+    }
+    const data = pendingInput;
+    pendingInput = "";
+    if (!data || killed || disposed) {
+      return;
+    }
+    writeInputToPty(data);
+  }
+
+  function scheduleInputFlush(): void {
+    if (inputFlushImmediate) {
+      return;
+    }
+    inputFlushImmediate = setImmediate(() => {
+      inputFlushImmediate = null;
+      flushPendingInput();
+    });
+  }
+
+  function send(msg: ClientMessage): void {
+    if (killed) return;
+
+    switch (msg.type) {
+      case "input": {
+        if (isTerminalActivityInterruptInput(msg.data)) {
+          activityTracker.interrupt();
+        }
+        pendingInput += msg.data;
+        scheduleInputFlush();
+        break;
+      }
+      case "resize":
+        flushPendingInput();
+        terminal.resize(msg.cols, msg.rows);
+        ptyProcess.resize(msg.cols, msg.rows);
+        stateRevision += 1;
+        break;
+      case "mouse":
+        // Mouse events can be sent as escape sequences if terminal supports it
+        // For now, we'll just ignore them - can be implemented later
+        break;
+    }
+  }
+
+  function subscribe(listener: (msg: ServerMessage) => void): () => void {
+    let active = true;
+    let snapshotDelivered = false;
+    const queuedMessages: ServerMessage[] = [];
+    const subscriptionListener = (msg: ServerMessage): void => {
+      if (!active) {
+        return;
+      }
+      if (!snapshotDelivered) {
+        queuedMessages.push(msg);
+        return;
+      }
+      listener(msg);
+    };
+
+    listeners.add(subscriptionListener);
+
+    terminal.write("", () => {
+      if (!disposed && active && listeners.has(subscriptionListener)) {
+        snapshotDelivered = true;
+        listener({
+          type: "snapshotReady",
+          revision: stateRevision,
+          replayPreamble: getReplayPreamble(),
+        });
+        for (const message of queuedMessages.splice(0)) {
+          listener(message);
+        }
+      }
+    });
+
+    return () => {
+      active = false;
+      queuedMessages.length = 0;
+      listeners.delete(subscriptionListener);
+    };
+  }
+
+  function onExit(listener: (info: TerminalExitInfo) => void): () => void {
+    if (killed) {
+      queueMicrotask(() => {
+        try {
+          listener(exitInfo ?? buildExitInfo());
+        } catch {
+          // no-op
+        }
+      });
+      return () => {};
+    }
+
+    exitListeners.add(listener);
+    return () => {
+      exitListeners.delete(listener);
+    };
+  }
+
+  function onCommandFinished(listener: (info: TerminalCommandFinishedInfo) => void): () => void {
+    commandFinishedListeners.add(listener);
+    return () => {
+      commandFinishedListeners.delete(listener);
+    };
+  }
+
+  function onTitleChange(listener: (title?: string) => void): () => void {
+    titleChangeListeners.add(listener);
+    if (title !== undefined) {
+      queueMicrotask(() => {
+        if (disposed || !titleChangeListeners.has(listener)) {
+          return;
+        }
+        try {
+          listener(title);
+        } catch {
+          // no-op
+        }
+      });
+    }
+    return () => {
+      titleChangeListeners.delete(listener);
+    };
+  }
+
+  function onActivityChange(
+    listener: (transition: TerminalActivityTransition) => void,
+  ): () => void {
+    activityChangeListeners.add(listener);
+    return () => {
+      activityChangeListeners.delete(listener);
+    };
+  }
+
+  function getTitle(): string | undefined {
+    return title;
+  }
+
+  function getActivity(): TerminalActivity | null {
+    return toTerminalActivity(activityTracker.getSnapshot());
+  }
+
+  function setActivity(state: TerminalActivityState): void {
+    activityTracker.set(state);
+  }
+
+  function clearActivityAttention(): boolean {
+    return activityTracker.clearAttention();
+  }
+
+  function getExitInfo(): TerminalExitInfo | null {
+    return exitInfo;
+  }
+
+  function kill(): void {
+    if (!killed) {
+      killed = true;
+      if (!processExited) {
+        killPtyProcess();
+      }
+      emitExit(buildExitInfo());
+    }
+    if (processExited) {
+      disposeResources();
+      return;
+    }
+    void waitForProcessExit(1000).finally(disposeResources);
+  }
+
+  function killPtyProcess(signal?: NodeJS.Signals): void {
+    if (process.platform === "win32") {
+      ptyProcess.kill();
+      return;
+    }
+    ptyProcess.kill(signal);
+  }
+
+  function waitForProcessExit(timeoutMs: number): Promise<boolean> {
+    if (processExited) {
+      return Promise.resolve(true);
+    }
+    return new Promise((resolve) => {
+      let pendingResolve: ((value: boolean) => void) | null = resolve;
+      const settle = (value: boolean) => {
+        if (!pendingResolve) return;
+        const fn = pendingResolve;
+        pendingResolve = null;
+        fn(value);
+      };
+      const waiter = (): void => {
+        clearTimeout(timer);
+        settle(true);
+      };
+      const timer = setTimeout(() => {
+        processExitWaiters.delete(waiter);
+        settle(false);
+      }, timeoutMs);
+      processExitWaiters.add(waiter);
+    });
+  }
+
+  async function killAndWait(killOptions?: {
+    gracefulTimeoutMs?: number;
+    forceTimeoutMs?: number;
+  }): Promise<void> {
+    const gracefulTimeoutMs = killOptions?.gracefulTimeoutMs ?? 2000;
+    const forceTimeoutMs = killOptions?.forceTimeoutMs ?? 1000;
+
+    if (processExited) {
+      kill();
+      return;
+    }
+
+    try {
+      killPtyProcess();
+    } catch {
+      // process may already be gone
+    }
+
+    const exitedGracefully = await waitForProcessExit(gracefulTimeoutMs);
+    if (!exitedGracefully) {
+      try {
+        killPtyProcess("SIGKILL");
+      } catch {
+        // process may already be gone
+      }
+      await waitForProcessExit(forceTimeoutMs);
+    }
+
+    // Finalize bookkeeping (idempotent if ptyProcess.onExit already fired).
+    kill();
+  }
+
+  await waitForPtyProcessStart();
+
+  // Small delay to let shell initialize
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  return {
+    id,
+    createdAt: new Date().toISOString(),
+    pid: ptyProcess.pid,
+    name,
+    cwd,
+    workspaceId,
+    send,
+    subscribe,
+    onExit,
+    onCommandFinished,
+    onTitleChange,
+    onActivityChange,
+    getSize,
+    serializeReplay,
+    captureLines: (captureOptions) => captureTerminalLines(terminal.buffer.active, captureOptions),
+    hasOutput: () => {
+      const buffer = terminal.buffer.active;
+      for (let row = 0; row < buffer.length; row++) {
+        if (buffer.getLine(row)?.translateToString(true).trim()) return true;
+      }
+      return false;
+    },
+    getReplayPreamble,
+    getTitle,
+    getActivity,
+    setActivity,
+    clearActivityAttention,
+    setTitle,
+    getExitInfo,
+    kill,
+    killAndWait,
+  };
+}

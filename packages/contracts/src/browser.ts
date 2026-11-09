@@ -1,5 +1,21 @@
 /** A visible page is an owned native webview, never a URL alias for a Lightpanda session. */
-export type BrowserCapability = "observe" | "navigate" | "dom_actions" | "persistent_profile";
+export type BrowserCapability = "observe" | "navigate" | "dom_actions" | "persistent_profile" | "downloads" | "download_cancel" | "permission_prompt" | "permission_decision";
+export type BrowserDownload = {
+  id: string; url: string; name: string; path: string | null; directory: string | null; requestedAt: number; finishedAt: number | null;
+  status: "blocked" | "downloading" | "checking" | "completed" | "failed" | "cancelled" | "unconfirmed"; size: number | null; sha256: string | null; error: string | null;
+};
+/** PermissionKind does not expose the requesting frame origin; never infer an origin grant. */
+export type BrowserPermissionRequest = {
+  id: string; kind: string; pageUrl: string; navigationRevision: number; requestedAt: number; expiresAt: number;
+  status: "pending" | "native-prompt" | "allowed" | "denied" | "expired" | "unsupported";
+  requestingOrigin: string | null;
+};
+export type BrowserOutput = {
+  id: string; pageId: string; profileId: string; workId: string; workspaceId: string; sourceUrl: string;
+  sessionId: string | null; parentSessionId: string | null; createdAt: number; downloadId: string | null;
+  attachment: import("./index.ts").Attachment; artifact: import("./index.ts").Artifact | null;
+};
+export type BrowserOutputRequest = { requestId: string; kind: "download"; downloadId: string } | { requestId: string; kind: "page-text" };
 export type BrowserTarget = { pageId: string; profileId: string; navigationRevision: number; capabilities: BrowserCapability[] };
 export type BrowserControl = { generation: number; owner: string }; // "human" or the page's child session id
 export type BrowserObservation = { target: BrowserTarget; documentNonce: string; observedAt: number; text: string };
@@ -7,6 +23,8 @@ export type BrowserProfile = { id: string; name: string; createdAt: number };
 export type NativeBrowserPage = BrowserTarget & {
   url: string; title: string; loading: boolean; control: BrowserControl;
   popups: { id: string; url: string }[]; error: string | null; interactionAt?: number;
+  downloadDirectory?: string | null; downloads?: BrowserDownload[];
+  permissions?: BrowserPermissionRequest[]; permissionSupport?: string[];
 };
 export type BrowserPage = {
   pageId: string; profileId: string; workId: string; workspaceId: string; driverId: string;

@@ -1,3 +1,4 @@
+import { safeRandomId } from "@workbench/client";
 import { useEffect, useState } from "react";
 import type { TerminalList, TerminalSession, Workspace } from "@workbench/contracts";
 import type { Api } from "../api.ts";
@@ -23,7 +24,7 @@ export function TerminalDialog({ api, workspace, onOpen, onClose }: { api: Api; 
       <p className="terminal-path">{workspace.cwd}</p>
       <form onSubmit={async (event) => {
         event.preventDefault(); if (busy) return; setBusy(true); setError("");
-        try { open(await api.createTerminal(workspace.id, { requestId: crypto.randomUUID(), label, ...(shell.trim() ? { shell: shell.trim(), args: args ? args.split("\n") : [] } : {}) })); }
+        try { open(await api.createTerminal(workspace.id, { requestId: safeRandomId(), label, ...(shell.trim() ? { shell: shell.trim(), args: args ? args.split("\n") : [] } : {}) })); }
         catch (error) { setError(String(error)); } finally { setBusy(false); }
       }}>
         <label>터미널 이름<input aria-label="터미널 이름" value={label} maxLength={80} onChange={(event) => setLabel(event.target.value)} /></label>

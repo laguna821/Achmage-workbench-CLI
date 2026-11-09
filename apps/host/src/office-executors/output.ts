@@ -4,6 +4,8 @@ import type { OfficeBinding, OfficeSessions } from "../office-sessions.ts";
 import type { Documents } from "../artifacts.ts";
 import { OfficeOutputs } from "../office-output.ts";
 import { HttpError } from "../errors.ts";
+import { OfficeImageOutputs } from "../office-image-output.mjs";
+import { pdfImageOutputs } from "../pdf-image-output.mjs";
 
 type Pending = { format: string; revision: number; name: string; longJob: boolean; plan?: OfficeOutputPlan; question: string; cancelled: boolean };
 const invalid = () => new HttpError(400, "office_executor_output", "문서 결과의 저장 요청을 확인해 주세요.");
@@ -15,8 +17,59 @@ export class OfficeExecutorOutputs {
   private readonly documents: Documents;
   private readonly sessions: OfficeSessions;
   private readonly outputs: OfficeOutputs;
+  private readonly images: OfficeImageOutputs;
+  private readonly folders = new Map<string, { turnId: string; pdf: boolean }>();
+  private readonly folderRequests = new Map<string, { identity: string; result: Promise<{ id: string }> }>();
   constructor(documents: Documents, sessions: OfficeSessions, outputs: OfficeOutputs) {
-    this.documents = documents; this.sessions = sessions; this.outputs = outputs;
+    this.documents = documents; this.sessions = sessions; this.outputs = outputs; this.images = new OfficeImageOutputs(documents);
+  }
+  close() { void this.images.close().catch(() => {}); }
+  confirmNative(binding: OfficeBinding, turnId: string, request: Record<string, unknown>) {
+    const run = this.sessions.requireRun(binding, turnId);
+    if (typeof request.requestId !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(request.requestId) || request.kind !== "print") throw invalid();
+    const answer = this.sessions.question(run, { turnId, id: "print_" + request.requestId, prompt: "이 문서의 시스템 인쇄 창을 열까요? 인쇄 창을 닫을 때까지 작업을 유지합니다." });
+    return answer.decision === null ? { pending: true } : { accepted: answer.decision === "accept" };
+  }
+  async imageAction(binding: OfficeBinding, turnId: string, request: Record<string, unknown>) {
+    const run = this.sessions.requireRun(binding, turnId), pdf = String(request.action).startsWith("pdf-");
+    const store = pdf ? pdfImageOutputs(this.documents) : this.images;
+    if (request.action === "images-prepare" || request.action === "pdf-images-prepare") {
+      if (typeof request.requestId !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(request.requestId) || typeof request.name !== "string" || request.name.length > 200 || typeof request.revision !== "number") throw invalid();
+      const key = turnId + ":" + request.requestId, identity = JSON.stringify([pdf, request.revision, request.name]);
+      const prior = this.folderRequests.get(key);
+      if (prior) { if (prior.identity !== identity) throw invalid(); return prior.result; }
+      const answer = this.sessions.question(run, { turnId, id: "images_" + request.requestId,
+        prompt: "문서 그림을 저장할 상위 폴더를 선택해 주세요. 기존 파일을 바꾸지 않고 새 결과 폴더를 만듭니다.",
+        fields: [{ id: "path", prompt: "상위 폴더 경로 (빈칸이면 원본 문서의 폴더)", required: false }] });
+      if (answer.decision === null) return { pending: true };
+      if (answer.decision !== "accept") return null;
+      const path = answer.response?.path;
+      if (path !== undefined && typeof path !== "string") throw invalid();
+      const result = store.prepare(binding.artifactId, request.revision, path?.trim() || ".", request.name, run.lease.access).then(plan => {
+        this.folders.set(plan.id, { turnId, pdf });
+        run.controller.signal.addEventListener("abort", () => {
+          this.folders.delete(plan.id);
+          void (pdf ? pdfImageOutputs(this.documents).prune() : this.images.reconcile()).catch(() => {});
+        }, { once: true });
+        return plan;
+      });
+      this.folderRequests.set(key, { identity, result });
+      return result;
+    }
+    const owned = typeof request.id === "string" ? this.folders.get(request.id) : undefined;
+    if (!owned || owned.turnId !== turnId || owned.pdf !== pdf) throw invalid();
+    const id = request.id as string;
+    if (request.action === "images-write") {
+      if (typeof request.page !== "number" || typeof request.base64 !== "string") throw invalid();
+      return this.images.write(binding.artifactId, id, request.page, request.base64, run.lease.access);
+    }
+    if (request.action === "pdf-images-write") return pdfImageOutputs(this.documents).write(binding.artifactId, id, request, run.lease.access);
+    if (request.action !== "images-finish" && request.action !== "pdf-images-finish") throw invalid();
+    if (typeof request.success !== "boolean") throw invalid();
+    const result = await store.finish(binding.artifactId, id, request.success, run.lease.access);
+    if (result.path) this.sessions.executionNote(binding, turnId, "images:" + id, "그림 출력 완료\n" + result.path);
+    this.folders.delete(id);
+    return result;
   }
   prepare(binding: OfficeBinding, turnId: string, request: Record<string, unknown>) {
     const run = this.sessions.requireRun(binding, turnId);
@@ -82,6 +135,7 @@ export class OfficeExecutorOutputs {
     const run = this.sessions.requireRun(binding, turnId), owned = this.plans.get(planId);
     if (!owned || owned.turnId !== turnId) throw invalid();
     const result = await this.outputs.commit(binding.artifactId, planId, bytes, owned.plan.replace, run.lease.access, sourceRevision, generatedId);
+    this.sessions.executionNote(binding, turnId, "output:" + planId, "문서 결과 저장 완료\n" + result.path);
     return { path: result.path, artifactId: result.artifact?.id ?? null };
   }
 }

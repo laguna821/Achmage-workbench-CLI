@@ -29,6 +29,8 @@
     "@workbench/paseo-plugin-host": "file:../../vendor/paseo/plugin-host",
     "@getpaseo/plugin": "file:../../vendor/paseo/plugin",
     "quickjs-emscripten-core": "0.32.0",
-    "@jitl/quickjs-wasmfile-release-sync": "0.32.0"
+    "@jitl/quickjs-wasmfile-release-sync": "0.32.0",
+    "@workbench/paseo-terminal": "file:../../vendor/paseo/terminal",
+    "@workbench/agent-desktop-installer": "file:../../vendor/agent-desktop/npm"
   }
 }

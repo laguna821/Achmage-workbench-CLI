@@ -1,9 +1,23 @@
 import type { OfficeExecutionState, OfficeInteractionRequest, OfficeInteractionResponse } from "../../../packages/contracts/src/office-execution.ts";
 import { type Init, type Gateway, listen, post } from "./bridge.ts";
+import type { ExecutionLifecycle } from "./execution-lifecycle.ts";
 
 type Adapter = { ready(): boolean; capture(): OfficeExecutionState; execute(instruction: string, state: OfficeExecutionState): boolean | Promise<boolean>; lock(locked: boolean): void };
 let adapter: Adapter | null = null, executor: Init["execution"], api: ReturnType<Gateway["aiSession"]> | null = null;
 let locked = false, admitted = false;
+const jobs = new Map<string, { ready(): boolean; execute(request: Record<string, unknown>): Promise<boolean> }>();
+export function registerOriginalOfficeJob(kind: string, value: { ready(): boolean; execute(request: Record<string, unknown>): Promise<boolean> }) {
+  jobs.set(kind, value);
+  return () => { if (jobs.get(kind) === value) jobs.delete(kind); };
+}
+let lifecycle: ExecutionLifecycle | null = null;
+export function installExecutionLifecycle(value: ExecutionLifecycle) { lifecycle = value; }
+export function withOfficeExecution(work: (signal: AbortSignal) => Promise<void>) {
+  if (!executor || !lifecycle) throw new Error("독립 실행 요청이 준비되지 않았습니다.");
+  return lifecycle.execute(work);
+}
+export const officeExecutionSignal = () => lifecycle?.signal;
+export const optionalOfficeExecution = <T>(work: () => Promise<T>) => lifecycle?.held ? lifecycle.optional(work) : work();
 export const isOfficeExecutor = () => Boolean(executor);
 export function reportOfficeExecutionError(error: unknown) {
   if (executor) post({ type: "office:error", message: error instanceof Error ? error.message : String(error) });
@@ -20,11 +34,14 @@ export function installOfficeExecutor(init: Init, gateway: Gateway) {
   let pending: { instruction: string; state: OfficeExecutionState } | null = null;
   let starting = false;
   const run = async () => {
-    if (!pending || admitted || starting || !adapter?.ready()) return;
+    if (!pending || admitted || starting) return;
     const request = pending;
+    const toolbar = request.state.format === "pdf" ? request.state.data.toolbar as { kind: string; request: Record<string, unknown> } | undefined : undefined;
+    const job = toolbar ? jobs.get(toolbar.kind) : null;
+    if (toolbar ? !job?.ready() : !adapter?.ready()) return;
     starting = true;
     try {
-      if (await adapter.execute(request.instruction, request.state)) { admitted = true; pending = null; clearInterval(timer); }
+      if (await (toolbar ? job!.execute(toolbar.request) : adapter!.execute(request.instruction, request.state))) { admitted = true; pending = null; clearInterval(timer); }
     } catch (error) {
       admitted = true; pending = null; clearInterval(timer);
       post({ type: "office:error", message: error instanceof Error ? error.message : String(error) });

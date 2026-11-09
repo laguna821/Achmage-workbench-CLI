@@ -1,0 +1,66 @@
+{
+  "name": "@workbench/paseo-terminal",
+  "version": "0.15.3",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    "./emulator": {
+      "types": "./dist/browser/terminal/runtime/terminal-emulator-runtime.d.ts",
+      "default": "./dist/browser/terminal/runtime/terminal-emulator-runtime.js"
+    },
+    "./controller": {
+      "types": "./dist/browser/terminal/runtime/terminal-stream-controller.d.ts",
+      "default": "./dist/browser/terminal/runtime/terminal-stream-controller.js"
+    },
+    "./keys": {
+      "types": "./dist/browser/terminal/runtime/terminal-key-dispatch.d.ts",
+      "default": "./dist/browser/terminal/runtime/terminal-key-dispatch.js"
+    },
+    "./virtual-keyboard": {
+      "types": "./dist/browser/terminal/runtime/terminal-virtual-keyboard.d.ts",
+      "default": "./dist/browser/terminal/runtime/terminal-virtual-keyboard.js"
+    },
+    "./headless": {
+      "types": "./dist/server/terminal/headless-terminal.d.ts",
+      "default": "./dist/server/terminal/headless-terminal.js"
+    },
+    "./serializer": {
+      "types": "./dist/server/terminal/terminal-serializer.d.ts",
+      "default": "./dist/server/terminal/terminal-serializer.js"
+    },
+    "./size-ownership": {
+      "types": "./dist/server/terminal/terminal-size-ownership.d.ts",
+      "default": "./dist/server/terminal/terminal-size-ownership.js"
+    },
+    "./query-handlers": {
+      "types": "./dist/server/terminal/query-handlers.d.ts",
+      "default": "./dist/server/terminal/query-handlers.js"
+    },
+    "./local-service": {
+      "types": "./dist/server/server/local-service-connection.d.ts",
+      "default": "./dist/server/server/local-service-connection.js"
+    },
+    "./ports": {
+      "types": "./dist/ports.d.ts",
+      "default": "./dist/ports.js"
+    },
+    "./xterm.css": "./xterm.css"
+  },
+  "dependencies": {
+    "@getpaseo/protocol": "file:../protocol",
+    "@xterm/xterm": "6.1.0-beta.336",
+    "@xterm/headless": "6.1.0-beta.334",
+    "@xterm/addon-clipboard": "0.3.0-beta.213",
+    "@xterm/addon-fit": "0.12.0-beta.213",
+    "@xterm/addon-image": "0.10.0-beta.331",
+    "@xterm/addon-ligatures": "0.11.0-beta.213",
+    "@xterm/addon-search": "0.17.0-beta.213",
+    "@xterm/addon-unicode-graphemes": "0.5.0-beta.330",
+    "@xterm/addon-unicode11": "0.10.0-beta.213",
+    "@xterm/addon-web-links": "0.13.0-beta.213",
+    "@xterm/addon-webgl": "0.20.0-beta.329",
+    "@xterm/addon-serialize": "0.14.0"
+  },
+  "x-workbench-vendor-notice": "Pinned original modules retained under upstream. src uses import/type compatibility and explicit embedded-pane ports. No independent PTY supervisor."
+}

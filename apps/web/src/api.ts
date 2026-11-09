@@ -286,14 +286,22 @@ export class Api {
   cancelWorktreeCreation = (id: string) => this.request<WorktreeCreation>("DELETE", `/api/worktree-creations/${id}`);
   terminals = (workspaceId: string) => this.request<TerminalList>("GET", `/api/workspaces/${workspaceId}/terminals`);
   createTerminal = (workspaceId: string, request: CreateTerminalRequest) => this.request<TerminalSession>("POST", `/api/workspaces/${workspaceId}/terminals`, request);
-  terminalOutput = (id: string, cursor = 0) => this.request<TerminalOutput>("GET", `/api/terminals/${id}?cursor=${cursor}`);
+  terminalCanWrite = async () => this.remote ? !!(await this.remote.peer.connect())?.grant.permissions.includes("terminal") : true;
+  terminalOutput = (id: string, cursor = 0, signal?: AbortSignal) => this.request<TerminalOutput>("GET", `/api/terminals/${id}?cursor=${cursor}`, undefined, { signal });
+  terminalReplay = (id: string, signal?: AbortSignal) => this.request<import("../../../packages/contracts/src/terminal-runtime.ts").TerminalReplay>("GET", `/api/terminals/${id}/replay`, undefined, { signal });
+  terminalSearch = (id: string, query: string) => this.request<import("../../../packages/contracts/src/terminal-runtime.ts").TerminalSearchResult>("GET", `/api/terminals/${id}/search?q=${encodeURIComponent(query)}`);
   terminalInput = (id: string, data: string) => this.request<{ ok: boolean }>("POST", `/api/terminals/${id}/input`, { data });
-  resizeTerminal = (id: string, cols: number, rows: number) => this.request<{ ok: boolean }>("POST", `/api/terminals/${id}/resize`, { cols, rows });
+  resizeTerminal = (id: string, cols: number, rows: number, owner?: import("../../../packages/contracts/src/terminal-runtime.ts").TerminalResizeOwner) => this.request<{ ok: boolean }>("POST", `/api/terminals/${id}/resize`, { cols, rows, ...owner });
   closeTerminal = (id: string) => this.request<TerminalSession>("DELETE", `/api/terminals/${id}`);
   workspaceServices = (workspaceId: string) => this.request<WorkspaceServiceList>("GET", `/api/workspaces/${encodeURIComponent(workspaceId)}/services`);
   startWorkspaceService = (workspaceId: string, request: WorkspaceServiceStart) => this.request<WorkspaceService>("POST", `/api/workspaces/${encodeURIComponent(workspaceId)}/services`, request);
   stopWorkspaceService = (id: string, owner: WorkspaceServiceOwner) => this.request<WorkspaceService>("POST", `/api/services/${encodeURIComponent(id)}/stop`, owner);
   deleteWorkspaceService = (id: string) => this.request<{ ok: true }>("DELETE", `/api/services/${encodeURIComponent(id)}`);
+  workspaceServiceLogs = (id: string, query: string) => this.request<import("../../../packages/contracts/src/terminal-runtime.ts").TerminalSearchResult>("GET", `/api/services/${encodeURIComponent(id)}/logs?q=${encodeURIComponent(query)}`);
+  workspaceServiceProxy = (id: string, path: string, init: RequestInit = {}) => {
+    const headers = new Headers(init.headers); headers.set("authorization", `Bearer ${this.token}`);
+    return this.transport(`/api/services/${encodeURIComponent(id)}/proxy?path=${encodeURIComponent(path)}`, { ...init, headers, redirect: "error" });
+  };
   workspaceEnvironment = (workId: string) => this.request<WorkspaceEnvironment>("GET", `/api/works/${workId}/environment`);
   saveWorkspaceEnvironment = (workId: string, settings: WorkspaceEnvironment) => this.request<WorkspaceEnvironment>("PUT", `/api/works/${workId}/environment`, { expectedRevision: settings.revision, settings });
   preparationPreview = (workspaceId: string, options: PreparationOptions) => this.request<PreparationPreview>("POST", `/api/workspaces/${workspaceId}/preparations/preview`, options);

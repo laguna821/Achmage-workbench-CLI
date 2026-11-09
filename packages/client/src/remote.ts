@@ -1,3 +1,4 @@
+import { safeRandomId } from "@getpaseo/client/internal/daemon-client-transport-utils";
 import { fromByteArray, toByteArray } from "base64-js";
 import { parseServerInfoStatusPayload } from "@getpaseo/protocol/messages";
 import type {
@@ -14,7 +15,7 @@ import {
 const DEADLINE_MS = 15_000;
 const RESPONSE_WITHOUT_BODY = new Set([204, 205, 304]);
 const REQUEST_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE"]);
-const REQUEST_HEADERS = new Set(["content-type", "x-file-name", "x-workbench-view", "x-workbench-write", "x-workbench-work"]);
+const REQUEST_HEADERS = new Set(["accept", "accept-language", "range", "if-none-match", "if-modified-since", "content-type", "x-file-name", "x-workbench-view", "x-workbench-write", "x-workbench-work"]);
 
 export class RemoteRequestError extends Error {
   readonly status: number;
@@ -204,7 +205,7 @@ export class RemotePeer {
     if (this.responses.size >= 8) throw new RemoteRequestError("처리 중인 원격 요청을 기다려 주세요.", { status: 429, code: "remote_capacity" });
     const headers: Record<string, string> = {};
     request.headers.forEach((value, name) => { if (REQUEST_HEADERS.has(name)) headers[name] = value; });
-    const id = crypto.randomUUID();
+    const id = safeRandomId();
     let resolve!: (response: Response) => void;
     let reject!: (error: unknown) => void;
     const result = new Promise<Response>((accept, fail) => { resolve = accept; reject = fail; });
@@ -332,7 +333,7 @@ export class RemotePeer {
   }
 
   private callRpc(op: string, fields: Record<string, unknown>, timeout = DEADLINE_MS): Promise<unknown> {
-    const id = crypto.randomUUID();
+    const id = safeRandomId();
     if (!this.transport || !this.serverId) return Promise.reject(disconnected());
     // Serialize before registering a request: invalid local fields never went on wire.
     let text: string;

@@ -106,6 +106,8 @@ export type BrowseHost = {
 
 /** What engine adapters ask of the agent browser (both engines the same way). */
 export type BrowserEngineHooks = {
+  /** Other local tools are available independently of the browser toggle. */
+  extraInstructions?(session: Session): string | null;
   /** Folders put in front of every engine process's PATH (the wrapper). */
   pathDirs(): string[];
   /** Variables for one session's own process (Claude): its browser session name while on. */

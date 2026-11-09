@@ -7,7 +7,7 @@ export function patchPresentationExecutions(code: string, id: string, root: stri
     code = code.replace(before, after);
   };
   const helper = `${module.slice(0, module.lastIndexOf("/"))}/execution-presentations.ts`;
-  const imports = `import { registerOriginalExecutor, isOfficeExecutor, askOfficeExecutionQuestion } from ${JSON.stringify(module)};\nimport { captureHtmlIdentity as wbCaptureHtmlIdentity, restoreHtmlIdentity as wbRestoreHtmlIdentity, capturePresentationSelection as wbCapturePresentationSelection, restorePresentationSelection as wbRestorePresentationSelection, askPresentationClarification as wbAskPresentationClarification, askHtmlExecutionBrief as wbAskHtmlExecutionBrief, lockPresentationSurface as wbLockPresentationSurface } from ${JSON.stringify(helper)};\n`;
+  const imports = `import { registerOriginalExecutor, isOfficeExecutor, askOfficeExecutionQuestion, withOfficeExecution, officeExecutionSignal, optionalOfficeExecution } from ${JSON.stringify(module)};\nimport { captureHtmlIdentity as wbCaptureHtmlIdentity, restoreHtmlIdentity as wbRestoreHtmlIdentity, capturePresentationSelection as wbCapturePresentationSelection, restorePresentationSelection as wbRestorePresentationSelection, askPresentationClarification as wbAskPresentationClarification, askHtmlExecutionBrief as wbAskHtmlExecutionBrief, lockPresentationSurface as wbLockPresentationSurface } from ${JSON.stringify(helper)};\n`;
 
   if (id === `${root}/apps/html/src/renderer/App.tsx`) {
     replace("    getSnapshot: () => ({ text: textRef.current }),", `    getExecutionSelection: () => ({ primary: selectedSidRef.current, extras: [...extraSidsRef.current], brief: briefRef.current }),
@@ -162,6 +162,13 @@ ${marker}`);
     replace("  const slidesRef = useRef(slides)", `  const wbRestoreSelectionRef = useRef(restoreExecutionSelection);
   wbRestoreSelectionRef.current = restoreExecutionSelection;
   const wbExecutionStartRef = useRef<{ resolve(started: boolean): void; reject(error: unknown): void } | null>(null);
+  const wbExecutionCompleteRef = useRef<{ resolve(): void; reject(error: unknown): void } | null>(null);
+  const wbExecutionSettingsRef = useRef<AiSettings | null>(null);
+  const wbExecutionQcRef = useRef<boolean | null>(null);
+  const wbExecutionQueueRef = useRef<EditQueueItem[] | null>(null);
+  const wbSubmittedQueueRef = useRef<EditQueueItem[] | null>(null);
+  const wbQueueTextRef = useRef<string | null>(null);
+  const wbExecutionQueueErrorRef = useRef<unknown>(null);
   const slidesRef = useRef(slides)`);
     replace("      !sendGate.admit({", "      !isOfficeExecutor() && !sendGate.admit({");
     replace("      confirm: (warning) => window.confirm(aiContextConfirmText(getLang(), warning)),", "      confirm: (warning) => isOfficeExecutor() ? askOfficeExecutionQuestion(aiContextConfirmText(getLang(), warning)) : window.confirm(aiContextConfirmText(getLang(), warning)),");
@@ -208,6 +215,57 @@ ${marker}`);
           });
         })
       },`);
+    replace("  settingsRef.current = liveSettings", "  settingsRef.current = isOfficeExecutor() && wbExecutionSettingsRef.current ? wbExecutionSettingsRef.current : liveSettings");
+    replace("    const items = editQueue ?? []", "    const items = wbExecutionQueueRef.current ?? editQueue ?? []\n    wbSubmittedQueueRef.current = structuredClone(items)");
+    replace("    if (!sendGate.admitQueued(() => {})) return", "    if (!isOfficeExecutor() && !sendGate.admitQueued(() => {})) return");
+    replace("    const shown = lines.join('\\n')", "    const shown = lines.join('\\n')\n    wbQueueTextRef.current = shown");
+    replace(`        .catch(() => {
+          runStartingRef.current = false
+          queueRunResolverRef.current = null
+          void finishHistoryBatch().finally(() => setBusy(false))
+          resolve(false)
+        })`, `        .catch((error) => {
+          runStartingRef.current = false;
+          queueRunResolverRef.current = null;
+          void finishHistoryBatch().finally(() => setBusy(false));
+          wbExecutionQueueErrorRef.current = error;
+          resolve(false);
+        })`);
+    replace("      if (!ok) break // stopped or failed: the remaining pages stay queued for a retry", `      // One native receipt covers the captured whole queue. The visible observer
+      // must never submit the remaining pages again after the child finished them.
+      if (loop.remoteExecution) {
+        if (ok) onQueueConsume?.(groups.flatMap(g => g.entries.map(e => e.item.key)));
+        break;
+      }
+      if (!ok || officeExecutionSignal()?.aborted) break // untouched pages stay queued`);
+    replace(`          void finishHistoryBatch().finally(() => {
+            setBusy(false)
+            // Post-generation layout QC: only after a completed run that landed generated pages
+            if (cancelled) qcPagesRef.current = []
+            else if (qcPagesRef.current.length > 0) void runQcPassRef.current()
+            // After the batch closes, so the next queued page opens a fresh one
+            const resolveQueueRun = queueRunResolverRef.current
+            queueRunResolverRef.current = null
+            resolveQueueRun?.(!cancelled)
+          })`, `          void (async () => {
+            try {
+              await finishHistoryBatch();
+              setBusy(false);
+              if (cancelled || officeExecutionSignal()?.aborted) qcPagesRef.current = [];
+              else if (qcPagesRef.current.length > 0) await optionalOfficeExecution(() => runQcPassRef.current());
+              const resolveQueueRun = queueRunResolverRef.current;
+              queueRunResolverRef.current = null;
+              resolveQueueRun?.(!cancelled && !officeExecutionSignal()?.aborted);
+              wbExecutionCompleteRef.current?.resolve();
+            } catch (error) {
+              queueRunResolverRef.current?.(false); queueRunResolverRef.current = null;
+              wbExecutionCompleteRef.current?.reject(error);
+            } finally { wbExecutionCompleteRef.current = null; }
+          })()`);
+    replace("            resolveQueueRun?.(false)\n          })", "            resolveQueueRun?.(false)\n            wbExecutionCompleteRef.current?.reject(new Error(error)); wbExecutionCompleteRef.current = null;\n          })");
+    replace("pages.length === 0 || !access || qcRunningRef.current || !isQcEnabled()", "pages.length === 0 || !access || qcRunningRef.current || !(wbExecutionQcRef.current ?? isQcEnabled()) || officeExecutionSignal()?.aborted");
+    replace("    qcAbortRef.current = controller", "    qcAbortRef.current = controller\n    const wbOwnerSignal = officeExecutionSignal();\n    const wbStopQc = () => controller.abort();\n    wbOwnerSignal?.addEventListener('abort', wbStopQc, { once: true });\n    if (wbOwnerSignal?.aborted) controller.abort();");
+    replace("      qcRunningRef.current = false", "      wbOwnerSignal?.removeEventListener('abort', wbStopQc);\n      qcRunningRef.current = false");
     const run = code.match(/        loop\.run\(modelInstruction, images[^\n]*\)/g);
     if (run?.length !== 1) throw new Error("Original PPTX send completion boundary changed");
     replace(run[0]!, `${run[0]}\n        wbExecutionStartRef.current?.resolve(true)\n        wbExecutionStartRef.current = null`);
@@ -216,6 +274,7 @@ ${marker}`);
         void finishHistoryBatch().finally(() => setBusy(false))
       })`, `      .catch((error) => {
         wbExecutionStartRef.current?.reject(error)
+        wbExecutionCompleteRef.current?.reject(error); wbExecutionCompleteRef.current = null;
         wbExecutionStartRef.current = null
         runStartingRef.current = false
         void finishHistoryBatch().finally(() => setBusy(false))
@@ -223,6 +282,8 @@ ${marker}`);
     replace("  useEffect(() => () => qcAbortRef.current?.abort(), [])", `  useEffect(() => () => {
     wbExecutionStartRef.current?.reject(new Error('슬라이드 실행 준비 중 편집기가 닫혔습니다.'));
     wbExecutionStartRef.current = null;
+    wbExecutionCompleteRef.current?.reject(new Error('슬라이드 실행이 닫혔습니다.'));
+    wbExecutionCompleteRef.current = null;
     loopRef.current?.detach();
     qcAbortRef.current?.abort();
   }, [])`);
@@ -234,6 +295,10 @@ ${marker}`);
       scope: lastScopeRef.current ?? null, attachments: lastAttachmentsRef.current,
       sentAttachments: sentAttachmentsRef.current, template: templateSelectionState.current(),
       queueRun: Boolean(queueRunResolverRef.current),
+      queue: queueRunResolverRef.current ? wbSubmittedQueueRef.current : null,
+      settings: settingsRef.current, qcEnabled: isQcEnabled(),
+      instruction: lastInstructionRef.current,
+      queueText: queueRunResolverRef.current ? wbQueueTextRef.current : null,
     } }),
     execute: async (instruction, state) => {
       if (state.format !== 'pptx') throw new Error('PPTX 실행 상태가 아닙니다.');
@@ -241,8 +306,9 @@ ${marker}`);
         selection: Parameters<typeof wbRestorePresentationSelection>[1]; scope: AiScopeQuoteData | null;
         attachments: AttachmentMeta[]; sentAttachments: AttachmentMeta[];
         template: ReturnType<typeof templateSelectionState.current>; queueRun: boolean;
+        queue: EditQueueItem[] | null; settings: AiSettings; qcEnabled: boolean; instruction: string;
       };
-      if (data.queueRun) throw new Error('여러 페이지 대기열은 독립 실행 수명 연결이 필요합니다.');
+      if (data.queueRun && (!Array.isArray(data.queue) || data.queue.length === 0)) throw new Error('원본 슬라이드 대기열을 전달하지 못했습니다.');
       const loop = loopRef.current;
       if (!loop || loop.busy || runStartingRef.current || qcRunningRef.current) return false;
       const selection = wbRestorePresentationSelection(slidesRef.current, data.selection);
@@ -250,10 +316,25 @@ ${marker}`);
       sentAttachmentsRef.current = data.sentAttachments;
       await templateSelectionState.refresh();
       templateSelectionState.restoreExecutionSelection(data.template);
-      return new Promise<boolean>((resolve, reject) => {
-        wbExecutionStartRef.current = { resolve, reject };
-        runWith(instruction, undefined, { attachments: data.attachments, scope: data.scope ?? undefined });
-        if (!runStartingRef.current && !loop.busy) { wbExecutionStartRef.current = null; resolve(false); }
+      wbExecutionSettingsRef.current = structuredClone(data.settings);
+      settingsRef.current = wbExecutionSettingsRef.current;
+      wbExecutionQcRef.current = data.qcEnabled;
+      wbExecutionQueueRef.current = data.queueRun ? data.queue : null;
+      return withOfficeExecution(async signal => {
+        const stop = () => { loopRef.current?.cancel(); qcAbortRef.current?.abort(); };
+        signal.addEventListener('abort', stop, { once: true });
+        try {
+          if (data.queueRun) {
+            wbExecutionQueueErrorRef.current = null;
+            await sendEditQueue();
+            if (wbExecutionQueueErrorRef.current) throw wbExecutionQueueErrorRef.current;
+          }
+          else await new Promise<void>((resolve, reject) => {
+            wbExecutionCompleteRef.current = { resolve, reject };
+            runWith(data.instruction || instruction, undefined, { attachments: data.attachments, scope: data.scope ?? undefined });
+            if (!runStartingRef.current && !loop.busy) { wbExecutionCompleteRef.current = null; reject(new Error('원본 슬라이드 요청을 시작하지 못했습니다.')); }
+          });
+        } finally { signal.removeEventListener('abort', stop); }
       });
     },
     lock: wbLockPresentationSurface,

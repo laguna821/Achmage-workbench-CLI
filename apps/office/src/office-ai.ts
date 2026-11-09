@@ -1,5 +1,6 @@
 import type { OfficeHostMessage, TranscriptItem } from "@workbench/contracts";
 import type { OfficeTurnReceipt } from "../../../packages/contracts/src/office-ai.ts";
+import type { OfficeExecutionState } from "../../../packages/contracts/src/office-execution.ts";
 import type { AgentMessage } from "../../../vendor/ieumoffice/packages/agent-core/src/types.ts";
 import type { IpcStreamChunk } from "../../../vendor/ieumoffice/packages/agent-core/src/electron-transport.ts";
 import { Events, Gateway, flushOfficeDocument, listen, post, type Init } from "./bridge.ts";
@@ -12,7 +13,8 @@ import { createOfficeSkills } from "./office-skills.ts";
 import type { OfficeSkillChip } from "../../../packages/contracts/src/office-skills.ts";
 import { createOfficeJob } from "./office-job.ts";
 import { maintainOfficeTurn } from "./execution-heartbeat.ts";
-import { captureOfficeExecution, installOfficeExecutor, lockOfficeExecution } from "./execution-adapter.ts";
+import { captureOfficeExecution, installOfficeExecutor, installExecutionLifecycle, lockOfficeExecution } from "./execution-adapter.ts";
+import { createExecutionLifecycle } from "./execution-lifecycle.ts";
 import { observeOfficeExecution, remoteOfficeRun } from "./execution-client.ts";
 
 type Prepared = NonNullable<Extract<OfficeHostMessage, { type: "office:ai-result" }>["value"]>;
@@ -120,7 +122,9 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
     if (!value?.sessionId) throw new Error("이 문서와 함께 사용할 Workbench 세션을 선택해 주세요.");
     return value;
   };
-  const job = createOfficeJob(gateway, init.artifact.id, events, () => prepare(), /\.pdf$/i.test(init.artifact.path) ? "pdf-job" : "epub-translation");
+  const job = createOfficeJob(gateway, init.artifact.id, events, () => prepare(), /\.pdf$/i.test(init.artifact.path) ? "pdf-job" : "epub-translation", init.execution && /\.pdf$/i.test(init.artifact.path) ? {
+    turnId: init.execution.turnId, token: init.token, finish: (status, error) => lifecycle!.segment(status, error),
+  } : undefined);
   const history = async () => {
     const api = gateway.aiSession(init.artifact.id);
     const page = await api.json<History>("history");
@@ -129,8 +133,17 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
     return page;
   };
   let executorAttached = false;
+  let executorSeq = 0;
   const executorApi = init.execution ? gateway.aiSession(init.artifact.id, init.token) : null;
-  const stopExecutorHeartbeat = init.execution ? maintainOfficeTurn(executorApi!, init.execution.turnId, () => { active?.cancel(); abortWeb(); }) : () => {};
+  const lifecycle = init.execution ? createExecutionLifecycle({
+    save: async () => { if (!init.readOnly) await flushOfficeDocument(); },
+    finish: async (status, error) => {
+      try { await executorApi!.json("turn-finish", { turnId: init.execution!.turnId, status, ...(error ? { error } : {}) }); }
+      finally { stopExecutorHeartbeat(); run = null; references.release(); }
+    },
+  }) : null;
+  if (lifecycle) installExecutionLifecycle(lifecycle);
+  const stopExecutorHeartbeat = init.execution ? maintainOfficeTurn(executorApi!, init.execution.turnId, () => { lifecycle?.cancel(); active?.cancel(); abortWeb(); job.stop(); }) : () => {};
   const port: OfficeConversationPort = {
     attach: (loop) => {
       if (officeCopyBusy()) throw new Error("사본 저장이 끝난 뒤 AI 편집을 시작해 주세요.");
@@ -140,21 +153,19 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
     begin: async (instruction, signal, originalImages, skillContext): Promise<OfficeRun> => {
       try {
         if (init.execution) {
-          if (executorAttached) throw new Error("이미 연결된 문서 요청입니다. 다시 실행하지 않았습니다.");
+          if (lifecycle!.ended || executorAttached && !lifecycle!.held) throw new Error("이미 연결된 문서 요청입니다. 다시 실행하지 않았습니다.");
+          const firstSegment = !executorAttached;
           executorAttached = true;
           const api = executorApi!, turnId = init.execution.turnId, page = await history();
           if (signal.aborted) throw new Error("문서 요청이 취소되었습니다.");
-          run = { turnId, api }; let seq = 0;
+          run = { turnId, api };
           post({ type: "office:execution-attached" });
           return {
             history: officeModelHistory(page.items.filter(item => item.office?.turnId !== turnId)),
-            images: init.execution.images,
-            append: async events => { await api.json("turn-events", { turnId, seq: ++seq, events }); },
+            images: originalImages ?? (firstSegment ? init.execution.images : undefined),
+            append: async events => { await api.json("turn-events", { turnId, seq: ++executorSeq, events }); },
             save: async () => { await flushOfficeDocument(); },
-            finish: async (status, error) => {
-              try { await api.json("turn-finish", { turnId, status, ...(error ? { error } : {}) }); }
-              finally { stopExecutorHeartbeat(); run = null; references.release(); }
-            },
+            finish: (status, error) => lifecycle!.segment(status, error),
           };
         }
         const hasAdapter = captureOfficeExecution() !== null;
@@ -169,7 +180,8 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
         const images = await references.imagesForTurn(originalImages);
         if (signal.aborted || page.sessionId !== sessionId) throw new Error("요청을 취소했거나 선택한 세션이 바뀌었습니다.");
         const turnId = crypto.randomUUID();
-        const receipt = await api.json<OfficeTurnReceipt>("turn-start", { turnId, instruction, revision: prepared.revision, ...(skillContext ? { skillContext } : {}), ...(prepared.referenceSnapshot ? { referenceSnapshot: prepared.referenceSnapshot } : {}) });
+        const admittedInstruction = executionState?.format === "pptx" && typeof executionState.data.queueText === "string" ? executionState.data.queueText : instruction;
+        const receipt = await api.json<OfficeTurnReceipt>("turn-start", { turnId, instruction: admittedInstruction, revision: prepared.revision, ...(skillContext ? { skillContext } : {}), ...(prepared.referenceSnapshot ? { referenceSnapshot: prepared.referenceSnapshot } : {}) });
         if (receipt.duplicate || receipt.status !== "running") throw new Error("이미 처리된 요청입니다. 중복 실행하지 않았습니다.");
         if (executionState && receipt.executorAvailable) {
           try { await api.json("executor-start", { turnId, instruction, state: executionState, images, referenceSnapshot: prepared.referenceSnapshot }); }
@@ -268,6 +280,25 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
     appendChat: async () => {},
   };
   return {
+    /** The original toolbar has already confirmed the exact route/pages/options.
+     * Its child owns the job store and outputs; this view only observes a receipt. */
+    async handoffJob(instruction: string, state: OfficeExecutionState) {
+      if (init.execution) return false;
+      const prepared = await prepare(), api = gateway.aiSession(init.artifact.id), turnId = crypto.randomUUID();
+      const receipt = await api.json<OfficeTurnReceipt>("turn-start", { turnId, instruction, revision: prepared.revision, background: "pdf-job" });
+      if (receipt.duplicate || receipt.status !== "running") throw new Error("이미 처리한 PDF 요청입니다. 다시 실행하지 않았습니다.");
+      try {
+        if (!receipt.executorAvailable) throw new Error("PDF 독립 실행기를 사용할 수 없습니다. 데스크톱 실행기를 연결한 뒤 다시 요청해 주세요.");
+        await api.json("executor-start", { turnId, instruction, state });
+      } catch (error) {
+        await api.json("turn-finish", { turnId, status: "failed", error: error instanceof Error ? error.message : String(error) }).catch(() => {});
+        throw error;
+      }
+      const observer = remoteOfficeRun(api, turnId);
+      window.addEventListener("pagehide", () => observer.detach(), { once: true });
+      void observer.wait(() => {}).catch(() => {});
+      return true;
+    },
     drive: createDriveBridge(() => gateway.aiSession(init.artifact.id).json("drive-state"), webTool, references.drivePick),
     job,
     createReadingJob: () => createOfficeJob(gateway, init.artifact.id, events, () => prepare(), "pdf-reading"),

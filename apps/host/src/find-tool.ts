@@ -87,8 +87,8 @@ process.exitCode = main();
 `;
 
 /** The wrapper's JavaScript for a find folder. */
-export function findWrapperSource(root: string) {
-  return WRAPPER.replace("__ROOT__", JSON.stringify(root)).replace("__USAGE__", JSON.stringify(findUsage()));
+export function findWrapperSource(root: string, usage = findUsage()) {
+  return WRAPPER.replace("__ROOT__", JSON.stringify(root)).replace("__USAGE__", JSON.stringify(usage));
 }
 
 /** A session's name in the spool: `wf-` and its id's letters and digits. */

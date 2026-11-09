@@ -5,6 +5,8 @@ import type { Store } from "./store.ts";
 import type { Terminals } from "./terminals.ts";
 import type { Workspaces } from "./workspaces.ts";
 import { HttpError } from "./errors.ts";
+import { proxyOwnedService, type ServiceProxyRequest } from "./service-proxy.ts";
+import type { TerminalSearchRequest } from "../../../packages/contracts/src/terminal-runtime.ts";
 
 const key = "workspace-services:v1";
 const active = (status: WorkspaceService["status"]) => ["starting", "running", "stopping"].includes(status);
@@ -80,6 +82,18 @@ export class WorkspaceServices {
     if (!owner || owner.ownerId !== service.ownerId || owner.terminalId !== service.terminalId || owner.startedAt !== service.startedAt) throw new HttpError(409, "service_owner", "서버 실행의 소유권이 달라졌습니다. 현재 실행을 다시 불러와 주세요.");
     if (active(service.status)) await this.terminals.close(service.terminalId);
     return this.get(id);
+  }
+  search(id: string, request: TerminalSearchRequest) { return this.terminals.search(this.get(id).terminalId, request); }
+  proxy(id: string, path: string, request: ServiceProxyRequest, authorize: (workId: string) => void = () => {}) {
+    const service = this.get(id);
+    const check = () => {
+      const current = this.get(id);
+      authorize(current.workId);
+      this.spaces.requireActive(current.workspaceId, current.workId);
+      if (current.ownerId !== service.ownerId || current.startedAt !== service.startedAt || current.terminalId !== service.terminalId || current.port !== service.port || !this.terminals.ownsRunning(current.terminalId) || !current.port) throw new HttpError(409, "service_proxy_stopped", "이 서버 실행은 더 이상 연결할 수 없습니다.");
+    };
+    check();
+    return proxyOwnedService(service.port!, path, request, check);
   }
   forget(id: string) {
     if (active(this.get(id).status)) throw new HttpError(409, "service_running", "실행을 종료한 뒤 기록을 목록에서 지울 수 있습니다.");

@@ -85,7 +85,15 @@ export class OfficeRendererExecutors {
     const boot: OfficeExecutionBoot = { page: `/office/${officeEditorKind(artifact.format)}.html`, instruction: request.instruction, state,
       init: { type: "office:init", token, sessionId: run.sessionId,
         artifact: { id: artifact.id, name: artifact.name, path: artifact.path, revision: artifact.revision, sha256: artifact.sha256 },
-        readOnly: false, theme: "light", recover: false, execution: { turnId: run.turnId, images, referenceSnapshot } } };
+        readOnly: !run.lease.writable, theme: "light", recover: false, execution: { turnId: run.turnId, images, referenceSnapshot } } };
+    if (state.format === "pdf" && state.data.toolbar) {
+      const toolbar = state.data.toolbar as { kind?: string; request?: Record<string, unknown> }, request = toolbar.request ?? {};
+      if (!["ai-read", "translate"].includes(String(toolbar.kind)) || typeof request.docHash !== "string" || !request.route || typeof request.route !== "object") throw invalid();
+      const route = request.route as { provider?: string; model?: string };
+      this.sessions.executionNote(binding, run.turnId, "pdf-job", "PDF 원본 작업 인계\n" + JSON.stringify({ kind: toolbar.kind, docHash: request.docHash,
+        provider: route.provider, model: route.model, pages: request.pages, lang: request.lang, mode: request.mode,
+        formats: request.formats, bilingual: request.bilingual, keepEdited: request.keepEdited }));
+    }
     const stop = () => {
       const item = this.entries.get(capability); if (!item || item.stopped) return;
       item.stopped = true; clearTimeout(item.timer);

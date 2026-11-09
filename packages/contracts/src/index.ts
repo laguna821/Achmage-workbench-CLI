@@ -1,3 +1,4 @@
+export * from "./desktop.ts";
 export * from "./voice.ts";
 export * from "./extensions.ts";
 // Shared contract between the host gateway and the UI.
@@ -942,3 +943,5 @@ export type { OfficeInteractionField, OfficeInteractionRequest, OfficeInteractio
 export * from "./devices.ts";
 export * from "./remote.ts";
 export * from "./event-hub.ts";
+
+export * from "./terminal-runtime.ts";

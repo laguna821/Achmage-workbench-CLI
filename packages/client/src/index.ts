@@ -31,3 +31,8 @@ export class WorkbenchClient {
 
 export { RemotePeer, RemoteRequestError, RemoteOutcomeUnknownError, parseRemoteOffer } from "./remote.ts";
 export type { RemotePeerOptions, RemotePeerStatus } from "./remote.ts";
+
+export { WorkbenchTerminalClient } from "./terminal.ts";
+export type { TerminalApi, TerminalClientOptions } from "./terminal.ts";
+
+export { safeRandomId } from "@getpaseo/client/internal/daemon-client-transport-utils";

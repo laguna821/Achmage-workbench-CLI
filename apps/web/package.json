@@ -35,7 +35,8 @@
     "remark-gfm": "^4.0.1",
     "yaml": "^2.9.1",
     "@workbench/client": "0.4.0",
-    "@getpaseo/protocol": "file:../../vendor/paseo/protocol"
+    "@getpaseo/protocol": "file:../../vendor/paseo/protocol",
+    "@workbench/paseo-terminal": "file:../../vendor/paseo/terminal"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.3",

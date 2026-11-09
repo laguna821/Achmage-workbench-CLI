@@ -38,7 +38,8 @@
       "../../../third_party/fast-find/ADAPTATIONS.md": "licenses/fast-find/ADAPTATIONS.md",
       "../../../third_party/skills/": "skills/",
       "../../../third_party/voice/": "licenses/voice/",
-      "../../../third_party/extensions/": "licenses/extensions/"
+      "../../../third_party/extensions/": "licenses/extensions/",
+      "../../../third_party/agent-desktop/": "licenses/agent-desktop/"
     },
     "linux": {
       "appimage": {

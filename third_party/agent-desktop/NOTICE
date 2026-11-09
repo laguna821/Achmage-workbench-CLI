@@ -1,0 +1,4 @@
+agent-desktop — https://github.com/vercel-labs/agent-desktop
+Apache License 2.0. Official v1.1.0 release d3dc190afbf34cd2377252398ddd5c30efbd093a.
+Original npm installer/platform modules reused. Workbench adds an owned stagingRoot parameter; disables automatic npm install/cleanup/skill hooks. Official native archives are fetched on explicit installation, pinned by SHA-256.
+See vendor/agent-desktop/PROVENANCE.json and scripts/agent-desktop-manifest.json.

@@ -3,7 +3,10 @@ use std::{collections::{HashMap, HashSet}, sync::{Arc, Mutex}, time::{Duration, 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{Manager, Webview, WebviewUrl, LogicalPosition, LogicalSize};
-use tauri::webview::{WebviewBuilder, NewWindowResponse, PageLoadEvent, PermissionResponse};
+use tauri::webview::{WebviewBuilder, NewWindowResponse, PageLoadEvent, PermissionResponse, DownloadEvent};
+
+#[path = "browser_driver/mod.rs"]
+mod platform;
 
 const SCRIPT: &str = include_str!("shared_browser.js");
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -14,6 +17,7 @@ struct Page {
     page_id: String, profile_id: String, navigation_revision: u64, capabilities: Vec<String>,
     url: String, title: String, loading: bool, control: Control, popups: Vec<Value>, error: Option<String>,
     interaction_at: u64,
+    download_directory: Option<String>, downloads: Vec<Value>, permissions: Vec<Value>, permission_support: Vec<String>,
     #[serde(skip)] visible: bool,
 }
 #[derive(Default)]
@@ -71,23 +75,30 @@ async fn create(app: &tauri::AppHandle, caller: &Webview, command: &Value) -> Re
     let control: Control = serde_json::from_value(command["control"].clone()).map_err(|_| "제어권 정보가 올바르지 않습니다.")?;
     let pages = app.state::<SharedBrowser>().pages.clone();
     if pages.lock().unwrap().len() >= 64 { return Err("열린 웹 탭을 닫은 뒤 다시 열어 주세요.".into()); }
-    let mut capabilities: Vec<String> = ["observe", "navigate", "dom_actions"].iter().map(|s| s.to_string()).collect();
+    let mut capabilities: Vec<String> = ["observe", "navigate", "dom_actions", "downloads", "permission_prompt"].iter().map(|s| s.to_string()).collect();
     #[cfg(not(target_os = "macos"))]
     capabilities.push("persistent_profile".into());
-    let page = Page { page_id: id.clone(), profile_id: profile.clone(), navigation_revision: 0, capabilities, url: url.to_string(), title: url.to_string(), loading: true, control, popups: Vec::new(), error: None, interaction_at: 0, visible: false };
+    #[cfg(target_os = "linux")]
+    { capabilities.push("permission_decision".into()); capabilities.push("download_cancel".into()); }
+    #[cfg(target_os = "macos")]
+    let mac_store = platform::persistent_mac_profile(app, &profile)?;
+    #[cfg(target_os = "macos")]
+    if mac_store.is_some() { capabilities.push("persistent_profile".into()); }
+    let page = Page { page_id: id.clone(), profile_id: profile.clone(), navigation_revision: 0, capabilities, url: url.to_string(), title: url.to_string(), loading: true, control, popups: Vec::new(), error: None, interaction_at: 0, visible: false,
+        download_directory: None, downloads: Vec::new(), permissions: Vec::new(), permission_support: platform::permission_support() };
     pages.lock().unwrap().insert(id.clone(), page);
     let nav_pages = pages.clone(); let nav_id = id.clone(); let nav_app = app.clone();
     let load_pages = pages.clone(); let load_id = id.clone();
     let title_pages = pages.clone(); let title_id = id.clone();
     let popup_pages = pages.clone(); let popup_id = id.clone(); let popup_app = app.clone();
     let permission_pages = pages.clone(); let permission_id = id.clone();
-    let download_pages = pages.clone(); let download_id = id.clone();
     let mut builder = WebviewBuilder::new(label(&id), WebviewUrl::External(url))
         .initialization_script(SCRIPT)
         .disable_drag_drop_handler()
         .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
         .on_navigation(move |url| {
             if allowed_url(&nav_app, url.as_str()).is_err() { return false; }
+            platform::invalidate(&nav_id);
             if let Some(page) = nav_pages.lock().unwrap().get_mut(&nav_id) { page.navigation_revision += 1; page.url = url.to_string(); page.loading = true; page.error = None; }
             true
         })
@@ -105,17 +116,31 @@ async fn create(app: &tauri::AppHandle, caller: &Webview, command: &Value) -> Re
             NewWindowResponse::Deny
         })
         .on_permission_request(move |_, kind| {
-            if let Some(page) = permission_pages.lock().unwrap().get_mut(&permission_id) { page.error = Some(format!("이 웹 탭에서는 {kind:?} 권한을 아직 지원하지 않습니다.")); }
-            PermissionResponse::Deny
-        })
-        .on_download(move |_, _| {
-            if let Some(page) = download_pages.lock().unwrap().get_mut(&download_id) { page.error = Some("웹 파일 다운로드 연결을 준비 중입니다. 현재는 외부 브라우저에서 내려받아 주세요.".into()); }
-            false
+            #[cfg(target_os = "linux")]
+            { let _ = (&permission_pages, &permission_id, kind); PermissionResponse::Default }
+            #[cfg(not(target_os = "linux"))]
+            {
+                let kind = kind.to_string(); let supported = platform::permission_support().contains(&kind);
+                if let Some(page) = permission_pages.lock().unwrap().get_mut(&permission_id) {
+                    if page.permissions.len() >= 80 { page.permissions.remove(0); }
+                    page.permissions.push(json!({"id":platform::new_id(),"kind":kind,"pageUrl":page.url,"navigationRevision":page.navigation_revision,"requestingOrigin":null,"requestedAt":now(),"expiresAt":now()+60000,"status":if supported {"native-prompt"} else {"unsupported"}}));
+                }
+                if supported { PermissionResponse::Default } else { PermissionResponse::Deny }
+            }
         });
-    // WK custom persistent stores require macOS 14+. Until runtime capability detection lands,
-    // isolate each macOS page with an ephemeral store instead of claiming profiles are persistent.
+    // Wry's GTK download callbacks are context-wide. The GTK adapter instead matches Download.web_view.
+    #[cfg(not(target_os = "linux"))]
+    { let download_pages = pages.clone(); let download_id = id.clone();
+      builder = builder.on_download(move |_, event| {
+            match event {
+                DownloadEvent::Requested { url, destination } => platform::requested(&download_pages, &download_id, url.as_str(), destination),
+                DownloadEvent::Finished { url, path, success } => { platform::finished(&download_pages, &download_id, url.as_str(), path.as_deref(), success); true },
+                _ => false,
+            }
+        });
+    }
     #[cfg(target_os = "macos")]
-    { builder = builder.incognito(true); }
+    { builder = if let Some(store) = mac_store { builder.data_store_identifier(store) } else { builder.incognito(true) }; }
     #[cfg(not(target_os = "macos"))]
     {
         let path = app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("browser-profiles").join(&profile);
@@ -124,7 +149,10 @@ async fn create(app: &tauri::AppHandle, caller: &Webview, command: &Value) -> Re
     }
     let result = caller.window().add_child(builder, LogicalPosition::new(0.0, 0.0), LogicalSize::new(1.0, 1.0));
     match result {
-        Ok(view) => { view.hide().map_err(|e| e.to_string())?; Ok(json!(current(app, &id)?)) }
+        Ok(view) => {
+            if let Err(error) = platform::attach(&view, pages.clone(), id.clone()) { let _ = view.close(); pages.lock().unwrap().remove(&id); return Err(error); }
+            view.hide().map_err(|e| e.to_string())?; Ok(json!(current(app, &id)?))
+        }
         Err(error) => { pages.lock().unwrap().remove(&id); Err(error.to_string()) }
     }
 }
@@ -182,7 +210,7 @@ async fn execute_inner(app: &tauri::AppHandle, job: &Value) -> Result<Value, Str
             let checked = evaluate(view.clone(), script).await?;
             if let Some(error) = checked["error"].as_str() { return Err(error.into()); }
         }
-        "close" => { view.close().map_err(|e| e.to_string())?; app.state::<SharedBrowser>().pages.lock().unwrap().remove(page_id); return Ok(json!({"id":id,"pageId":page_id})); }
+        "close" => { platform::detach(&view, page_id)?; view.close().map_err(|e| e.to_string())?; app.state::<SharedBrowser>().pages.lock().unwrap().remove(page_id); return Ok(json!({"id":id,"pageId":page_id})); }
         "snapshot" | "control" | "click" | "fill" | "select" | "press" | "scroll" => (),
         _ => return Err("지원하지 않는 웹 동작입니다.".into()),
     }
@@ -201,6 +229,34 @@ pub async fn shared_browser(app: tauri::AppHandle, webview: Webview, command: Va
     match field(&command, "kind")? {
         "create" => create(&app, &webview, &command).await,
         "execute" => execute(&app, &command["job"]).await,
+        "download-directory" => {
+            let id = field(&command, "pageId")?; let page = current(&app, id)?;
+            if page.control.owner != "human" { return Err("직접 조작으로 전환한 뒤 저장 폴더를 선택해 주세요.".into()); }
+            let directory = if command["directory"].is_null() { None } else {
+                let path = std::path::PathBuf::from(field(&command, "directory")?);
+                let canonical = path.canonicalize().map_err(|error| error.to_string())?;
+                if !path.is_absolute() || !canonical.is_dir() { return Err("다운로드를 저장할 폴더를 선택해 주세요.".into()); }
+                Some(canonical.to_string_lossy().to_string())
+            };
+            if let Some(page) = app.state::<SharedBrowser>().pages.lock().unwrap().get_mut(id) { page.download_directory = directory; }
+            Ok(json!(current(&app, id)?))
+        }
+        "permission-decision" => {
+            let id = field(&command, "pageId")?.to_string(); let request_id = field(&command, "requestId")?.to_string();
+            let page = current(&app, &id)?;
+            if page.control.owner != "human" { return Err("직접 조작으로 전환한 뒤 권한을 결정해 주세요.".into()); }
+            let allow = command["allow"].as_bool().ok_or("허용 또는 거절을 선택해 주세요.")?;
+            let view = app.get_webview(&label(&id)).ok_or("웹 페이지가 닫혔습니다.")?;
+            platform::decide(view, app.state::<SharedBrowser>().pages.clone(), id.clone(), request_id, allow).await?;
+            Ok(json!(current(&app, &id)?))
+        }
+        "download-cancel" => {
+            let id = field(&command, "pageId")?.to_string(); let download_id = field(&command, "downloadId")?.to_string();
+            current(&app, &id)?;
+            let view = app.get_webview(&label(&id)).ok_or("웹 페이지가 닫혔습니다.")?;
+            platform::cancel_download(view, app.state::<SharedBrowser>().pages.clone(), id.clone(), download_id).await?;
+            Ok(json!(current(&app, &id)?))
+        }
         "list" => {
             let pages: Vec<Page> = app.state::<SharedBrowser>().pages.lock().unwrap().values().cloned().collect();
             for page in pages {

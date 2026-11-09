@@ -58,3 +58,25 @@ bufferutil and utf-8-validate were not installed in this attribution snapshot.
 
 These are Workbench attribution and modification notices. Original copyright
 notices and licenses are preserved in the imported sources and copied licenses.
+
+Terminal module bundle added at the same pinned revision:
+- Original app TerminalStreamController, TerminalEmulatorRuntime, keyboard,
+  virtual keyboard, local-link and file-paste dependency closure.
+- Original server headless terminal, serializer, resize ownership and
+  local-service connector. DA/DSR/color handlers are directly extracted from
+  terminal.ts and receive the existing owned-worker input port.
+- Original source is byte-preserved under vendor/paseo/terminal/upstream.
+  Compatibility src uses ESM paths and narrow type ports; embedded-pane style,
+  existing selection/scroll access, existing regex/case options and replay
+  commit callback are explicit adaptations. A declaration shim resolves
+  the original ligatures mjs import without replacing runtime behavior.
+- Workbench retains its existing worker supervisor, workspace ownership,
+  bounded SQLite byte journal and device grants. The public Paseo hostname
+  proxy listener and PTY supervisor are not started.
+- Exact resolved xterm/addon dependencies and generated module hashes are in
+  terminal-provenance.json. Dependency MIT/ISC/Apache notices are copied under
+  dependencies with versioned paths. Local-link modules retain Microsoft MIT
+  notices. Headless/serialize published packages contain no separate license
+  file; their shared xterm MIT notice is preserved from the xterm package.
+- The new loopback fixture is not native/device acceptance. Full browser
+  preview and WebSocket/HMR service tunnelling are not supplied by this port.

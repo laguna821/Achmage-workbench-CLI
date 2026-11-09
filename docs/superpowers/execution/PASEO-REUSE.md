@@ -75,3 +75,8 @@
 원본 음성 60파일과 앱 audio/dictation, 원본 plugin SDK와 server compiler/lifecycle를 실제 서비스에 연결했다. 원본 전체 daemon을 대체한 것이 아니며 Workbench 세션·Workspace·권한을 adapter로 연결한다. 공개 Cloud consumer 부재는 기존 작업 접수 journal로 보완했다. 3묶음 서비스/화면·확장 배포파일 연결과 집중 동작을 마쳤고, 실기기·native 모델·외부계정·원본 outbound Hub client와 전체 릴리즈는 남는다. [구현과 사용 범위](../../voice-extensions-events.md).
 
 연구 근거: `research:rr-79110658024cdb4797375aa15a22a771:ec68d100c4776b2219a705303a379cc524ae2c83caca88c7c9c2f1d9b6c805b5` (R13–R18).
+# U20 후속 연결
+
+원본 terminal controller/emulator/headless/serializer/key/resize 모듈을 기존 Workbench PTY·출력 journal·기기 권한에 연결했다. HTTP 서비스 요청/응답·모바일 보조 키·로그 검색을 추가했다. 실제 Rust PTY/휴대폰 화면·IME 및 전체 웹앱/WebSocket 프록시는 남은 범위다. 원본·의존 라이선스와 변경점은 `vendor/paseo/terminal/source.json`, `third_party/paseo/terminal-provenance.json`을 따른다.
+
+연구 판: `research:rr-79110658024cdb4797375aa15a22a771:5022f016cc6d75dca4b7a945152a47b5d20edf53e2f4fad70e4c778150fe3606` (R19–R20). 사용자 교정 뒤 추가 통과 검사 반복·전체 타입·Rust·앱 빌드를 시작하지 않았다.

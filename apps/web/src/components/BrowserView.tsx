@@ -6,6 +6,7 @@ import { browserUrl, sameBrowserControl, type SharedBrowser } from "../browser-s
 import { isBusy, type State, type Transcript as Conversation } from "../state.ts";
 import { Composer } from "./Composer.tsx";
 import { Transcript } from "./Transcript.tsx";
+import { BrowserTools } from "./BrowserTools.tsx";
 import type { WorkActions } from "./WorkView.tsx";
 import { restoreSurfaceFocus } from "./controls/menu-navigation.ts";
 import "../styles/browser.css";
@@ -84,6 +85,7 @@ export function BrowserView({ browser, api, state, pageId, visible, parentSessio
   const page = data.pages.find(entry => entry.pageId === pageId);
   const [address, setAddress] = useState(page?.url ?? ""), editingAddress = useRef(false);
   const [aiOpen, setAiOpen] = useState(Boolean(focusItem));
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [createdSession, setCreatedSession] = useState<Session | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const viewport = useRef<HTMLDivElement>(null), aiButton = useRef<HTMLButtonElement>(null), acting = useRef(false);
@@ -133,6 +135,7 @@ export function BrowserView({ browser, api, state, pageId, visible, parentSessio
         <button type="submit" className="button small" disabled={!ready || !human || busy || !!pending}>이동</button>
       </form>
       <button type="button" className="ghost-button small" title="이 주소를 프로필을 골라 새 탭으로 열기" onClick={clone}>{data.profiles.find(profile => profile.id === page?.profileId)?.name ?? "프로필"} · 새 탭</button>
+      <button type="button" className="ghost-button small" disabled={!page} aria-expanded={toolsOpen} onClick={() => setToolsOpen(true)}>다운로드·권한{page?.native?.permissions?.some(request => request.status === "pending") ? " · 결정 대기" : ""}</button>
       <button ref={aiButton} type="button" className="button small" aria-expanded={aiOpen} disabled={!ready || busy} onClick={() => aiOpen ? setAiOpen(false) : void run(ask)}>AI에게 요청</button>
     </div>
     <div className="browser-control-bar">
@@ -160,6 +163,7 @@ export function BrowserView({ browser, api, state, pageId, visible, parentSessio
         </> : <p className="muted">대화를 준비한 뒤 AI에게 제어권을 넘겨 주세요.</p>}
       </aside> : null}
     </div>
-    <footer className="browser-footnote">{page?.native && !page.native.capabilities.includes("persistent_profile") ? "이 환경에서는 재시작 뒤 로그인 상태를 유지하지 않습니다. " : ""}업로드·다운로드·사이트 권한 관리 기능은 아직 제공하지 않습니다.</footer>
+    <footer className="browser-footnote">{page?.native && !page.native.capabilities.includes("persistent_profile") ? "이 환경에서는 재시작 뒤 로그인 상태를 유지하지 않습니다. " : ""}다운로드 저장 폴더와 권한 요청은 ‘다운로드·권한’에서 확인할 수 있습니다. AI의 파일 업로드는 아직 지원하지 않습니다.</footer>
+    {toolsOpen && page ? <BrowserTools browser={browser} api={api} page={page} ready={Boolean(ready)} onOpenArtifact={actions.openArtifact} onClose={() => setToolsOpen(false)} /> : null}
   </section>;
 }

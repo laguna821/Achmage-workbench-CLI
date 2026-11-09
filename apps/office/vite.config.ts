@@ -325,11 +325,6 @@ function textEditorPlatform(): Plugin {
         if (!code.includes(marker)) throw new Error('PDF model-call boundary changed');
         return code.replace(marker, marker + '\n        workbenchApi: window.workbenchPdfJobs.model(o.workbenchLongJob === true),');
       }
-      if (id === `${ieum}/apps/pdf/src/renderer/doc-jobs/job-session.ts`) {
-        const marker = '      if (last) spec.onEnd?.(last)';
-        if (!code.includes(marker)) throw new Error('PDF job completion boundary changed');
-        return code.replace(marker, marker + '\n      if (last) void window.workbenchPdfJobs.finish(last)');
-      }
       const pdfLongCall = new Map([
         ['ai-read/AiPageReading.tsx', 'const ask = createModelCall({'],
         ['translate/DocumentTranslation.tsx', 'const ask = createModelCall({'],

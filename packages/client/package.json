@@ -23,6 +23,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@getpaseo/client": "file:../../vendor/paseo/client",
     "@getpaseo/protocol": "file:../../vendor/paseo/protocol",
-    "base64-js": "1.5.1"
+    "base64-js": "1.5.1",
+    "@workbench/paseo-terminal": "file:../../vendor/paseo/terminal"
   }
 }

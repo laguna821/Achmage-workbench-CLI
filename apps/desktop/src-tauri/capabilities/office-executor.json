@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "office-executor",
+  "description": "Host-owned executor parent: original document output engines only. No OS filesystem, shell, tray or general application permissions.",
+  "webviews": ["office-executor"],
+  "remote": { "urls": ["http://127.0.0.1:*/office/executor.html"] },
+  "permissions": ["allow-office-executor-output"]
+}

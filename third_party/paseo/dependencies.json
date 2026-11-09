@@ -469,6 +469,10 @@
       {
         "path": "dependencies/semver/LICENSE",
         "sha256": "4ec3d4c66cd87f5c8d8ad911b10f99bf27cb00cdfcff82621956e379186b016b"
+      },
+      {
+        "path": "dependencies/semver/7.8.5/semver-7.8.5-LICENSE",
+        "sha256": "4ec3d4c66cd87f5c8d8ad911b10f99bf27cb00cdfcff82621956e379186b016b"
       }
     ]
   },
@@ -616,6 +620,210 @@
       {
         "path": "dependencies/zod/LICENSE",
         "sha256": "3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8"
+      },
+      {
+        "path": "dependencies/zod/4.4.3/zod-4.4.3-LICENSE",
+        "sha256": "3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8"
+      }
+    ]
+  },
+  {
+    "name": "@getpaseo/protocol",
+    "version": "0.15.3",
+    "license": "Apache-2.0",
+    "files": [
+      {
+        "path": "dependencies/getpaseo-protocol/0.15.3/getpaseo-protocol-0.15.3-LICENSE",
+        "sha256": "79d5aedce6aa0adc547336dc1bd34c5cc9308ba110fac7079ed97515ee573ad3"
+      }
+    ]
+  },
+  {
+    "name": "@xterm/xterm",
+    "version": "6.1.0-beta.336",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "dependencies/xterm-xterm/6.1.0-beta.336/xterm-xterm-6.1.0-beta.336-LICENSE",
+        "sha256": "b569f629d00f2626a8100df2a1798210535621e42164dfd426a6fe5aac7b0ccd"
+      }
+    ]
+  },
+  {
+    "name": "@xterm/headless",
+    "version": "6.1.0-beta.334",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "dependencies/xterm-headless/6.1.0-beta.334/xterm-xterm-6.1.0-beta.336-LICENSE",
+        "sha256": "b569f629d00f2626a8100df2a1798210535621e42164dfd426a6fe5aac7b0ccd",
+        "sourcePackage": "@xterm/xterm@6.1.0-beta.336"
+      }
+    ]
+  },
+  {
+    "name": "@xterm/addon-clipboard",
+    "version": "0.3.0-beta.213",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "dependencies/xterm-addon-clipboard/0.3.0-beta.213/xterm-addon-clipboard-0.3.0-beta.213-LICENSE",
+        "sha256": "a26afeeba9ab0a19502a73df658d8fb09186d0906c81af6c04d334064971e81f"
+      }
+    ]
+  },
+  {
+    "name": "@xterm/addon-fit",
+    "version": "0.12.0-beta.213",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "dependencies/xterm-addon-fit/0.12.0-beta.213/xterm-addon-fit-0.12.0-beta.213-LICENSE",
+        "sha256": "e256f01188af527e4d06d21d06fbf785ae9c50d4b328bf03cbe0ba7f0aa4228f"
+      }
+    ]
+  },
+  {
+    "name": "@xterm/addon-image",
+    "version": "0.10.0-beta.331",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "dependencies/xterm-addon-image/0.10.0-beta.331/xterm-addon-image-0.10.0-beta.331-LICENSE",
+        "sha256": "00994f891153ba5d613e2b838a9ad2f47d4484070cb594b46efc547ebea5ca05"
+      }
+    ]
+  },
+  {
+    "name": "@xterm/addon-ligatures",
+    "version": "0.11.0-beta.213",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "dependencies/xterm-addon-ligatures/0.11.0-beta.213/xterm-addon-ligatures-0.11.0-beta.213-LICENSE",
+        "sha256": "81427c5c7bf3b5ed9222ab13d85918b151e03b21bfd769a6a93741c53fdb0884"
+      }
+    ]
+  },
+  {
+    "name": "@xterm/addon-search",
+    "version": "0.17.0-beta.213",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "dependencies/xterm-addon-search/0.17.0-beta.213/xterm-addon-search-0.17.0-beta.213-LICENSE",
+        "sha256": "689ceb10716bd7a87a804c14951d7c2b818cbd60aab83d540902470ce3b13444"
+      }
+    ]
+  },
+  {
+    "name": "@xterm/addon-unicode-graphemes",
+    "version": "0.5.0-beta.330",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "dependencies/xterm-addon-unicode-graphemes/0.5.0-beta.330/xterm-addon-unicode-graphemes-0.5.0-beta.330-LICENSE",
+        "sha256": "a26afeeba9ab0a19502a73df658d8fb09186d0906c81af6c04d334064971e81f"
+      }
+    ]
+  },
+  {
+    "name": "@xterm/addon-unicode11",
+    "version": "0.10.0-beta.213",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "dependencies/xterm-addon-unicode11/0.10.0-beta.213/xterm-addon-unicode11-0.10.0-beta.213-LICENSE",
+        "sha256": "e256f01188af527e4d06d21d06fbf785ae9c50d4b328bf03cbe0ba7f0aa4228f"
+      }
+    ]
+  },
+  {
+    "name": "@xterm/addon-web-links",
+    "version": "0.13.0-beta.213",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "dependencies/xterm-addon-web-links/0.13.0-beta.213/xterm-addon-web-links-0.13.0-beta.213-LICENSE",
+        "sha256": "689ceb10716bd7a87a804c14951d7c2b818cbd60aab83d540902470ce3b13444"
+      }
+    ]
+  },
+  {
+    "name": "@xterm/addon-webgl",
+    "version": "0.20.0-beta.329",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "dependencies/xterm-addon-webgl/0.20.0-beta.329/xterm-addon-webgl-0.20.0-beta.329-LICENSE",
+        "sha256": "21b975c39532001d431dc3b2c29fbff691d83f370833a66b54698bda290fde0e"
+      }
+    ]
+  },
+  {
+    "name": "@xterm/addon-serialize",
+    "version": "0.14.0",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "dependencies/xterm-addon-serialize/0.14.0/xterm-xterm-6.1.0-beta.336-LICENSE",
+        "sha256": "b569f629d00f2626a8100df2a1798210535621e42164dfd426a6fe5aac7b0ccd",
+        "sourcePackage": "@xterm/xterm@6.1.0-beta.336"
+      }
+    ]
+  },
+  {
+    "name": "js-base64",
+    "version": "3.9.6",
+    "license": "BSD-3-Clause",
+    "files": [
+      {
+        "path": "dependencies/js-base64/3.9.6/js-base64-3.9.6-LICENSE.md",
+        "sha256": "fcf06aacb36ee29237110d6b3a9fbd6296e85ad4324263abf5f8a5cfb5706c81"
+      }
+    ]
+  },
+  {
+    "name": "lru-cache",
+    "version": "6.0.0",
+    "license": "ISC",
+    "files": [
+      {
+        "path": "dependencies/lru-cache/6.0.0/lru-cache-6.0.0-LICENSE",
+        "sha256": "4ec3d4c66cd87f5c8d8ad911b10f99bf27cb00cdfcff82621956e379186b016b"
+      }
+    ]
+  },
+  {
+    "name": "opentype.js",
+    "version": "0.8.0",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "dependencies/opentype.js/0.8.0/opentype.js-0.8.0-LICENSE",
+        "sha256": "2db633a29122e6297185afaa2fb8e120b02fe63a5c4fb747c442a3625729ab4c"
+      }
+    ]
+  },
+  {
+    "name": "yallist",
+    "version": "4.0.0",
+    "license": "ISC",
+    "files": [
+      {
+        "path": "dependencies/yallist/4.0.0/yallist-4.0.0-LICENSE",
+        "sha256": "4ec3d4c66cd87f5c8d8ad911b10f99bf27cb00cdfcff82621956e379186b016b"
+      }
+    ]
+  },
+  {
+    "name": "tiny-inflate",
+    "version": "1.0.3",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "dependencies/tiny-inflate/1.0.3/tiny-inflate-1.0.3-LICENSE",
+        "sha256": "c0df7f551401f8f80197ff31bf69b8cd23727d127423403282514d242a3ab132"
       }
     ]
   }

@@ -1,0 +1,39 @@
+{
+  "revision": "d3dc190afbf34cd2377252398ddd5c30efbd093a",
+  "files": [
+    {
+      "source": "LICENSE",
+      "upstreamSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "source": "npm/scripts/postinstall.js",
+      "upstreamSha256": "08bd646d2589974561754e5d1c800161862a974b0be9ca9af2ed363f36a760d1"
+    },
+    {
+      "source": "npm/lib/platform.js",
+      "upstreamSha256": "5c29a9fe1c22bc4123880cc632b3d20e57cee3cecb341cbcb96c50298a8217cc"
+    },
+    {
+      "source": "npm/lib/windows-bin.js",
+      "upstreamSha256": "e6b06724c524a73ab446fded639447451ddc020dcc4d8bf6c9278f408761f768"
+    },
+    {
+      "source": "npm/package.json",
+      "upstreamSha256": "cc0eeaf2593fa467c98c7bffdbb7fae70cfccf0b225965f5017dc65b406c0e1b"
+    },
+    {
+      "source": "docs/json-output.md",
+      "upstreamSha256": "a02c3ccad0cd3eaf715f59c3e4ead3d39acb9f27c3baa14a765baa7252b60e29"
+    }
+  ],
+  "changes": [
+    "installArchive accepts Workbench-owned stagingRoot; upstream default retained",
+    "npm package metadata replaces automatic install scripts with a private import-only package"
+  ],
+  "unused": [
+    "main",
+    "stopLeftoverHosts",
+    "linkBinEntry",
+    "promptSkillInstall"
+  ]
+}

@@ -119,11 +119,16 @@ export function scopedRoute(manager: SessionManager, method: string, path: strin
   if (parts[0] === "workspaces" && parts[1]) {
     const workspace = manager.workspaces.get(parts[1]); if (!workspace) throw missing();
     if (read && ["repository", "services", "terminals"].includes(action ?? "")) return { permission: "read", workId: workspace.workId };
-    if (method === "POST" && action === "terminals" && parts.length === 3) return { permission: "terminal", workId: workspace.workId };
+    if (method === "POST" && ["terminals", "services"].includes(action ?? "") && parts.length === 3) return { permission: "terminal", workId: workspace.workId };
   }
   if (parts[0] === "terminals" && parts[1]) {
     const terminal = manager.terminals.get(parts[1]);
-    if ((read && parts.length === 2) || method === "DELETE" || (method === "POST" && ["input", "resize"].includes(action ?? ""))) return { permission: read ? "read" : "terminal", workId: terminal.workId };
+    if ((read && (parts.length === 2 || (parts.length === 3 && ["replay", "search"].includes(action ?? "")))) || (method === "DELETE" && parts.length === 2) || (method === "POST" && ["input", "resize"].includes(action ?? ""))) return { permission: read ? "read" : "terminal", workId: terminal.workId };
+  }
+  if (parts[0] === "services" && parts[1]) {
+    const service = manager.services.get(parts[1]);
+    if (parts.length === 3 && read && action === "logs") return { permission: "read", workId: service.workId };
+    if ((parts.length === 3 && action === "proxy") || (parts.length === 3 && action === "stop" && method === "POST") || (parts.length === 2 && method === "DELETE")) return { permission: "terminal", workId: service.workId };
   }
   if (parts[0] === "attention" && parts[1]) {
     const target = manager.notifications.target(parts[1]);

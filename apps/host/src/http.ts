@@ -1,3 +1,4 @@
+import { handleDesktopHttp } from "./desktop-http.ts";
 import { randomBytes } from "node:crypto";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
@@ -107,6 +108,8 @@ function parseRefs(value: unknown): DocRef[] {
 }
 
 export type HttpOptions = {
+  browserOutputs?: import("./browser-outputs.ts").BrowserOutputs;
+  desktop?: import("./desktop-adapter.ts").DesktopService;
   voice?: import("./voice.ts").VoiceService;
   extensions?: import("./extensions/service.ts").ExtensionService;
   hub?: import("./event-hub.ts").EventHub;
@@ -277,11 +280,16 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       if (options.devices && path.startsWith("/api/devices") && await options.devices.handle(req, res, url)) return;
       if (options.hub && path.startsWith("/api/hub") && await options.hub.handleManagement(req, res, url)) return;
       if (await handleRuntimeHttp(req, res, url, options)) return;
+      if (await handleDesktopHttp(req, res, url, options.desktop)) return;
       const parts = path.split("/").filter(Boolean).slice(1);
       const method = req.method ?? "GET";
 
       if (method === "GET" && path === "/api/snapshot") return sendJson(res, 200, manager.snapshot());
       if (parts[0] === "browser") {
+        if (options.browserOutputs && parts[1] === "pages" && parts[2] && parts[3] === "outputs" && parts.length === 4) {
+          if (method === "GET") return sendJson(res, 200, options.browserOutputs.list(parts[2]));
+          if (method === "POST") return sendJson(res, 200, await options.browserOutputs.save(parts[2], await readJson(req) as unknown as import("@workbench/contracts").BrowserOutputRequest));
+        }
         if (path === "/api/browser/pages" && method === "GET") return sendJson(res, 200, manager.sharedBrowser.list());
         if (path === "/api/browser/pages" && method === "POST") return sendJson(res, 200, manager.sharedBrowser.create(await readJson(req) as unknown as import("@workbench/contracts").BrowserPageCreate));
         if (path === "/api/browser/profiles" && method === "POST") return sendJson(res, 200, manager.sharedBrowser.profile((await readJson(req)).name));
@@ -595,14 +603,33 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       if (parts[0] === "services" && parts[1] && parts[2] === "stop" && parts.length === 3 && method === "POST") {
         return sendJson(res, 200, await manager.services.stop(parts[1], await readJson(req, 2048) as unknown as import("@workbench/contracts").WorkspaceServiceOwner));
       }
+      if (parts[0] === "services" && parts[1] && parts.length === 3) {
+        if (parts[2] === "logs" && method === "GET") return sendJson(res, 200, manager.services.search(parts[1], { query: url.searchParams.get("q") ?? "", caseSensitive: url.searchParams.get("caseSensitive") === "true" }));
+        if (parts[2] === "proxy") {
+          const controller = new AbortController();
+          const abort = () => { if (!res.writableEnded) controller.abort(); }; res.once("close", abort);
+          try {
+            const headers = new Headers(); for (const [key, value] of Object.entries(req.headers)) if (typeof value === "string") headers.set(key, value);
+            const body = method === "GET" || method === "HEAD" ? undefined : await readBody(req, 8 * 1024 * 1024);
+            const response = await manager.services.proxy(parts[1], url.searchParams.get("path") ?? "/", { method, headers, body, signal: controller.signal });
+            res.statusCode = response.status;
+            for (const key of ["content-type", "content-disposition", "etag", "last-modified", "content-range", "accept-ranges", "x-workbench-service-location"]) { const value = response.headers.get(key); if (value) res.setHeader(key, value); }
+            // Project HTML is downloaded; it cannot execute in the authenticated Workbench origin.
+            res.setHeader("content-security-policy", "sandbox; default-src 'none'"); res.setHeader("x-content-type-options", "nosniff");
+            res.end(Buffer.from(await response.arrayBuffer())); return;
+          } finally { res.removeListener("close", abort); }
+        }
+      }
       if (parts[0] === "services" && parts[1] && parts.length === 2 && method === "DELETE") return sendJson(res, 200, manager.services.forget(parts[1]));
       if (parts[0] === "terminals" && parts[1]) {
+        if (parts.length === 3 && parts[2] === "replay" && method === "GET") return sendJson(res, 200, await manager.terminals.replay(parts[1]));
+        if (parts.length === 3 && parts[2] === "search" && method === "GET") return sendJson(res, 200, manager.terminals.search(parts[1], { query: url.searchParams.get("q") ?? "", caseSensitive: url.searchParams.get("caseSensitive") === "true" }));
         if (parts.length === 2 && method === "GET") return sendJson(res, 200, manager.terminals.output(parts[1], Number(url.searchParams.get("cursor") ?? 0)));
         if (parts.length === 2 && method === "DELETE") return sendJson(res, 200, await manager.terminals.close(parts[1]));
         if (parts.length === 3 && method === "POST") {
           const body = await readJson(req);
           if (parts[2] === "input") return sendJson(res, 200, manager.terminals.input(parts[1], body.data));
-          if (parts[2] === "resize") return sendJson(res, 200, manager.terminals.resize(parts[1], body.cols, body.rows));
+          if (parts[2] === "resize") return sendJson(res, 200, manager.terminals.resize(parts[1], body.cols, body.rows, body.ownerId === undefined ? undefined : { ownerId: String(body.ownerId), intent: body.intent as "claim" | "update" }));
         }
       }
       if (parts[0] === "workspaces" && parts[1] && parts[2] === "worktrees" && parts.length === 3 && method === "POST") {

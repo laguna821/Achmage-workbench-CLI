@@ -81,6 +81,7 @@ export class OfficeAi {
     this.markdown.close();
     if (!this.knowledge) this.fileSearch.close();
     this.sessions?.close();
+    this.executorOutputs?.close();
     for (const run of this.active.values()) run.controller.abort();
     void this.engine?.then((engine) => engine.close?.()).catch(() => {});
   }
@@ -230,7 +231,7 @@ export class OfficeAi {
         sendJson(res, 200, await this.executorOutputs.commit(bound, turnId, planId, bytes,
           url.searchParams.has("sourceRevision") ? Number(url.searchParams.get("sourceRevision")) : undefined, url.searchParams.get("generatedId") ?? undefined)); return true;
       }
-      const raw = JSON.parse((await readBody(req, 40_000_000)).toString("utf8"));
+      const raw = JSON.parse((await readBody(req, operation === "executor-output" ? 120_000_000 : 40_000_000)).toString("utf8"));
       authorize();
       if (!record(raw)) return invalid();
       if (operation === "executor-current") { sendJson(res, 200, this.sessions!.current(bound)); return true; }
@@ -245,6 +246,10 @@ export class OfficeAi {
       this.sessions!.requireRun(bound, raw.turnId);
       if (operation === "executor-output") {
         if (!this.executorOutputs) throw new HttpError(503, "office_executor_output", "문서 결과 저장을 연결하지 못했습니다.");
+        if (raw.action === "native-confirm") { sendJson(res, 200, this.executorOutputs.confirmNative(bound, raw.turnId, raw)); return true; }
+        if (["images-prepare", "images-write", "images-finish", "pdf-images-prepare", "pdf-images-write", "pdf-images-finish"].includes(String(raw.action))) {
+          sendJson(res, 200, await this.executorOutputs.imageAction(bound, raw.turnId, raw)); return true;
+        }
         if (raw.action === "prepare") { sendJson(res, 200, this.executorOutputs.prepare(bound, raw.turnId, raw)); return true; }
         if (raw.action === "cancel") {
           if (typeof raw.planId === "string") this.executorOutputs.cancel(bound, raw.turnId, raw.planId);

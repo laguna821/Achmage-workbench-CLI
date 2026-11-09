@@ -11,7 +11,8 @@
       "node/": "node/",
       "../../../third_party/paseo/": "licenses/paseo/",
       "../../../third_party/voice/": "licenses/voice/",
-      "../../../third_party/extensions/": "licenses/extensions/"
+      "../../../third_party/extensions/": "licenses/extensions/",
+      "../../../third_party/agent-desktop/": "licenses/agent-desktop/"
     },
     "windows": {
       "wix": {

@@ -158,7 +158,7 @@ async fn output(app: tauri::AppHandle, mut job: HtmlJob, print: bool) -> Result<
     // This directory already belongs to the disposable CLI profile. Reuse its
     // WebContext: on Linux, incognito creates a new context while Tauri caches
     // protocol registration by data_directory, breaking the next print chunk.
-    let builder = if let Some(root) = crate::office_cli::data_dir(&app) { builder.data_directory(root.join("output-webview")) } else { builder };
+    let builder = if let Some(root) = crate::office_cli::data_dir(&app).or_else(|| crate::office_executor::data_dir(&app)) { builder.data_directory(root.join("output-webview")) } else { builder };
     let view = builder.build();
     crate::office_cli::trace(if view.is_ok() { "html-output-created" } else { "html-output-create-error" });
     let result = match view {
