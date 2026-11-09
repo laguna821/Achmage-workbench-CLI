@@ -1,0 +1,6 @@
+Paseo Hub relationship and execution controllers
+Paseo contributors. Apache License 2.0.
+Pinned source 1fff127f45b11c1c9c573fbbd12791673004c912.
+Original files are retained under vendor/paseo/server/upstream/hub-reuse.
+Workbench adds type-only ports and an OS-vault persistence codec seam.
+Dependencies reuse the existing server-transport pinned packages and distribution license notices.

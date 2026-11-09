@@ -13,6 +13,8 @@ import { verifyGitHub } from "./hub/github.ts";
 import { verifySlack } from "./hub/slack.ts";
 import { verifyDiscord } from "./hub/discord.ts";
 import { digest, object, type HubHeaders } from "./hub/verification.ts";
+import { PaseoHubRelationship } from "./hub/relationship.ts";
+import type { HubRelationshipConnect } from "@workbench/contracts";
 
 const CONNECTORS = "hub.connectors", WORKFLOWS = "hub.workflows";
 const invalid = (message: string) => new HttpError(400, "hub_input", message);
@@ -39,6 +41,7 @@ function sanitizedPayload(value: unknown, depth = 0): unknown {
  * This is the Workbench consumer; Paseo's public Hub code is an outbound client.
  */
 export class EventHub {
+  readonly relationship: PaseoHubRelationship;
   private readonly dir: string;
   private release: (() => void) | undefined;
   private closed = false;
@@ -48,7 +51,7 @@ export class EventHub {
     dataDir: string; store: Store; manager: SessionManager; bus: EventBus;
     ingress: () => HubSnapshot["ingress"];
   };
-  constructor(options: EventHub["options"]) { this.options = options; this.dir = join(options.dataDir, "event-hub"); ensurePrivateDirectory(this.dir); }
+  constructor(options: EventHub["options"]) { this.options = options; this.dir = join(options.dataDir, "event-hub"); ensurePrivateDirectory(this.dir); this.relationship = new PaseoHubRelationship(options); }
 
   private load<T>(key: string): T[] { return JSON.parse(this.options.store.getMeta(key) ?? "[]") as T[]; }
   private connectors() { return this.load<HubConnector>(CONNECTORS); }
@@ -59,9 +62,11 @@ export class EventHub {
   state(): HubSnapshot {
     const { manager, store } = this.options;
     return { hostId: manager.snapshot().hostId, connectors: this.connectors(), workflows: this.workflows(),
-      deliveries: store.hubDeliveries().map(e => e.delivery), profiles: manager.profiles.list(), ingress: this.options.ingress(),
+      deliveries: store.hubDeliveries().map(e => e.delivery), profiles: manager.profiles.list(), ingress: this.options.ingress(), relationship: this.relationship.state(),
       targets: [...manager.view.sessions.values()].filter(s => !s.archivedAt && s.workspaceId && s.hostId === manager.snapshot().hostId)
-        .map(s => ({ sessionId: s.id, workspaceId: s.workspaceId!, workId: s.workId, label: s.purpose })) };
+        .map(s => ({ sessionId: s.id, workspaceId: s.workspaceId!, workId: s.workId, label: s.purpose,
+          hubTemplate: !s.documentAgent && !s.pageAgent, provider: s.provider, model: s.model, effort: s.effort,
+          profileId: s.profileId ?? null, access: s.access, fallbackAccess: manager.accessOf(s) })) };
   }
   saveConnector(input: HubConnectorInput): HubConnector {
     if (!input || !["github", "slack", "discord"].includes(input.kind) || typeof input.enabled !== "boolean") throw invalid("연결 종류를 확인해 주세요.");
@@ -182,6 +187,7 @@ export class EventHub {
   }
   start() {
     this.closed = false;
+    this.relationship.start();
     for (const entry of this.options.store.hubDeliveries(true)) {
       if (entry.delivery.state === "received") void this.dispatch(entry.delivery.id);
       else this.reconcile(entry.delivery.id);
@@ -192,13 +198,21 @@ export class EventHub {
       queueMicrotask(() => { this.pendingReconcile = false; if (!this.closed) for (const entry of this.options.store.hubDeliveries(true)) this.reconcile(entry.delivery.id); });
     });
   }
-  close() { this.closed = true; this.release?.(); }
+  async close() { this.closed = true; this.release?.(); await this.relationship.close(); }
   async handleManagement(req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
     const parts = url.pathname.split("/").filter(Boolean), method = req.method;
     if (parts[0] !== "api" || parts[1] !== "hub") return false;
     const body = async () => object(JSON.parse((await readBody(req, 100_000)).toString("utf8")));
     let value: unknown;
     if (method === "GET" && parts.length === 2) value = this.state();
+    else if (method === "POST" && parts.length === 4 && parts[2] === "relationship") {
+      const input = await body();
+      if (parts[3] === "connect") value = await this.relationship.connect(input as HubRelationshipConnect);
+      else if (parts[3] === "enabled") value = await this.relationship.setEnabled(input.enabled as boolean);
+      else if (parts[3] === "permissions") value = await this.relationship.permissions(input.allowExecution as boolean);
+      else if (parts[3] === "disconnect") value = await this.relationship.disconnect(input.force as boolean);
+      else throw new HttpError(404, "hub_relationship_route", "Hub 관계 관리 경로가 없습니다.");
+    }
     else if (method === "POST" && parts.length === 3 && parts[2] === "connectors") value = this.saveConnector(await body() as HubConnectorInput);
     else if (method === "POST" && parts.length === 3 && parts[2] === "workflows") value = this.saveWorkflow(await body() as HubWorkflowInput);
     else if (method === "POST" && parts.length === 5 && parts[2] === "workflows" && parts[4] === "pause") {

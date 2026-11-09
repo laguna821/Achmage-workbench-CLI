@@ -1,0 +1,29 @@
+{
+  "repository": "https://github.com/getpaseo/paseo",
+  "commit": "1fff127f45b11c1c9c573fbbd12791673004c912",
+  "license": "Apache-2.0",
+  "licenseFile": "../LICENSE",
+  "files": [
+    {
+      "upstream": "packages/server/src/server/push/index.ts",
+      "local": "src/push/index.ts",
+      "sha256": "95d94e1574df5df4bc6be1f2a685b0947d6470a42558bd17f3f7c05a4a2d7380"
+    },
+    {
+      "upstream": "packages/server/src/server/push/token-store.ts",
+      "local": "src/push/token-store.ts",
+      "sha256": "a6ae517f80f197b361f148fccc1e0aa8cb2e225f0d11a92a1029e31989b294e7"
+    },
+    {
+      "upstream": "packages/server/src/server/push/push-service.ts",
+      "local": "src/push/push-service.ts",
+      "sha256": "c3cea56bf08bc011f846a7c646227387dbc55ec2d795b6232f0bf641b5cd5adb"
+    },
+    {
+      "upstream": "packages/server/src/server/private-files.ts",
+      "local": "src/private-files.ts",
+      "sha256": "f3fe47ac757126426f4759b768f4975c536cd4c1b54d22c66c9cb955bad5619e"
+    }
+  ],
+  "integration": "Original lease/token store and createPushNotifications are reused without edits. Workbench injects Web Push delivery with device-grant filtering; Expo PushService is not invoked."
+}

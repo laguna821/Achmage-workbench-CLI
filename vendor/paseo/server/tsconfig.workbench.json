@@ -25,6 +25,11 @@
     "src/server/private-files.ts",
     "src/server/connection-offer.ts",
     "src/server/websocket/secure-relay-ingress.ts",
-    "src/server/socket-metadata.ts"
+    "src/server/socket-metadata.ts",
+    "src/server/hub/relationship-controller.ts",
+    "src/server/hub/relationship-remote.ts",
+    "src/server/hub/relationship-retry.ts",
+    "src/server/hub/execution-controller.ts",
+    "src/server/authorization/index.ts"
   ]
 }

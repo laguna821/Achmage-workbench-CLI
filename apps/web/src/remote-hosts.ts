@@ -1,12 +1,12 @@
 import { RemotePeer, parseRemoteOffer } from "@workbench/client";
 import {
-  createHostConnectionStorage, createSessionHostCredentialStore, createMemoryHostCredentialStore,
+  createHostConnectionStorage,
   type HostConnectionsController, type HostConnectionsSnapshot, type SavedHostConnection,
 } from "./host-connections.ts";
 
-function credentials() { try { return createSessionHostCredentialStore(window.sessionStorage); } catch { return createMemoryHostCredentialStore(); } }
+import { platformHostCredentials } from "./native-host-credentials.ts";
 export class WorkbenchHostConnections implements HostConnectionsController {
-  private readonly storage = createHostConnectionStorage({ credentials: credentials() });
+  private readonly storage = createHostConnectionStorage({ credentials: platformHostCredentials() });
   private value: HostConnectionsSnapshot = { hosts: this.storage.list(), activeHostId: null, phase: "local", credentialStorage: this.storage.credentialStorage };
   private readonly listeners = new Set<() => void>();
   private active: RemotePeer | null = null;
@@ -63,7 +63,7 @@ export class WorkbenchHostConnections implements HostConnectionsController {
     const host = this.storage.list().find(value => value.hostId === hostId);
     if (!host) throw new Error("저장된 기기를 찾지 못했습니다.");
     const credential = await this.storage.credential(hostId);
-    if (!credential) throw new Error("이 탭에 남은 연결 권한이 없습니다. PC에서 새 연결 링크를 만들어 주세요.");
+    if (!credential) throw new Error("저장된 연결 권한이 없습니다. PC에서 새 연결 링크를 만들어 주세요.");
     await this.gate?.(); const operation = ++this.operation;
     this.pairing?.close(); this.pairing = null;
     const peer = new RemotePeer({ url: host.endpoint, daemonPublicKeyB64: host.daemonPublicKeyB64, serverId: host.hostId });

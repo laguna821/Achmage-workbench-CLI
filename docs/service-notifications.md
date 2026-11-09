@@ -6,10 +6,16 @@
 
 사용자가 실제로 보고 있는 세션의 알림은 읽음으로 남기고 운영체제에 중복 표시하지 않는다. 화면 상태는 40초 뒤 만료되며 작업 실행 권한과 무관하다. 알림을 읽는 행위는 승인 요청을 수락하거나 취소하지 않는다. 알림의 대상은 인증된 host에서 다시 조회하며 삭제·보관·다른 host의 대상은 열지 않는다. 가져온 과거 기록을 새 작업 완료로 취급하지 않는다.
 
-Linux는 `notify-send`의 열기 동작에서 현재 앱에 불투명 알림 ID만 전달한다. 앱이 이미 열렸거나 다시 시작된 경우 모두 해당 host에서 ID를 해석한 뒤 이동한다. macOS의 [시스템 알림 명령](https://developer.apple.com/library/archive/documentation/LanguagesUtilities/Conceptual/MacAutomationScriptingGuide/DisplayNotifications.html)과 Windows의 [ToastNotificationManager](https://learn.microsoft.com/en-us/uwp/api/windows.ui.notifications.toastnotificationmanager) 경로는 일반 문구로 알림을 요청한다. 운영체제 거부·알림 서비스 부재 시 앱 안의 알림 기록은 유지된다. 자체 생성한 알림 보조 프로세스만 종료하며 기존 앱 프로세스를 채택하지 않는다.
+Linux는 `notify-send`의 열기 동작에서 현재 앱에 불투명 알림 ID만 전달한다. macOS·Windows는 설치된 앱의 `--notify-attention <id> <kind>` 보조 프로세스에서 기존 `notify-rust`의 운영체제 알림과 클릭 callback을 사용한다. 클릭하면 설치된 앱을 `--attention <id>`로 열며, AppImage는 `APPIMAGE` 경로를 우선한다. 앱이 이미 열렸거나 다시 시작된 경우 모두 해당 host에서 ID를 해석한 뒤 이동한다. macOS의 기존 NSUserNotificationCenter 경로에는 별도 표시 확인이 없어 요청 접수 상태를 결과 미확인으로 기록한다. 설치 앱을 찾을 수 없는 macOS·Windows에서는 기존 일반 알림 명령을 유지하며 클릭 이동을 지원한다고 표시하지 않는다. 운영체제 거부·알림 서비스 부재 시 앱 안의 알림 기록은 유지된다. 자체 생성한 알림 보조 프로세스만 종료하며 기존 앱 프로세스를 채택하지 않는다.
+
+모바일 전달은 기존 웹 앱의 manifest와 service worker를 사용한다. Paseo `1fff127f45b11c1c9c573fbbd12791673004c912`의 원본 구독 수명·철회 코드를 `vendor/paseo/push`에서 그대로 사용하고, 전송은 [web-push 3.6.7](https://github.com/web-push-libs/web-push/tree/v3.6.7)의 VAPID·암호화 구현에 연결한다. 원본 Expo 전송은 호출하지 않는다. 발송은 기본 꺼짐이며 호스트 PC에서 켠 뒤 승인된 각 기기에서 별도로 알림을 허용한다. VAPID 개인 키는 기존 `OfficeVault`의 OS 보안 저장소로 봉인하며 평문 대체 저장은 없다. 브라우저 구독과 불투명 링크의 해시는 host의 private 파일에 보관한다.
+
+알림에는 고정 일반 문구와 무작위 링크만 담는다. 실제 전송 직전 기기의 현재 credential 판본·철회·만료·프로젝트 읽기 권한 및 세션 음소거·화면 상태를 다시 확인한다. 48시간 구독은 원본 Paseo 갱신 규칙을 따르며, 동의한 기기의 foreground 연결에서만 갱신한다. 브라우저 구독 만료와 기기 credential 교체·철회는 구독을 중지한다. 발송 키 교체는 모든 구독과 기존 링크를 해제한다. 전송 결과 미확인은 자동 재전송하지 않는다.
+
+클릭한 링크는 작은 IndexedDB 이동 대기열에 남긴다. warm 창은 새로고침하지 않고 메시지로 이동 요청을 받으며, cold 창은 URL의 불투명 링크를 받아 저장한 뒤 hash에서 제거한다. 연결 관리자가 해당 host를 선택하고 현재 기기 credential로 링크를 해석한 다음 기존 attention 원문 이동을 실행한다. 실제 이동 완료 뒤에만 대기열에서 지운다. worker는 기기 credential·본문·API 응답을 저장하지 않는다. 같은 앱의 여러 호스트는 별도 worker scope로 각각 구독한다. 인터넷 연결과 앱 전달 주소가 필요하며, offline 앱 shell 캐시는 추가하지 않았다. iOS·iPadOS에서는 지원 OS의 홈 화면 웹 앱과 알림 권한이 필요하다. 웹 session-only credential이 사라졌다면 원문을 열기 전에 다시 연결해야 한다.
 
 ## 현재 확인 범위
 
 `apps/host/src/notifications.test.ts`의 4개 동작을 한 번 실행해 통과했다. 화면 없는 완료 처리, 중복 방지와 정확한 문서 하위 작업 식별, 민감 본문 제외, 화면 상태 만료, 읽음과 승인 분리, 전송 결과 미확인 복구, 대체 알림 단일 접수, 설정과 대상 범위를 확인했다. host TypeScript 계약 확인도 통과했다.
 
-각 OS의 실제 알림 권한·설치 앱 등록과 새 Rust 코드 실행은 전체 통합 빌드 때 확인한다. Windows/macOS 알림 클릭에서 직접 원문으로 이동하는 연결과 모바일 push는 아직 남아 있다. 일반 알림 제출 코드를 실제 장치 확인 완료로 표시하지 않는다. 이번 기능 추가로 production/설치본 빌드나 CI를 실행하지 않았다.
+위 4개 통과 기록은 기존 host 알림 구현에 관한 것이다. 후속 모바일 push·새 native helper 구현에서는 사용자 지시에 따라 추가 검사·테스트·빌드·CI나 외부 push 발송을 실행하지 않았다. 이 코드의 타입·native compile 및 실제 Windows/macOS 알림 권한·클릭, Android/iOS cold/warm 전달은 아직 확인하지 않았다(`NOT_RUN_DEVICE`). 구현된 전송 요청이나 서비스 접수를 실제 장치 도착 확인으로 표시하지 않는다.

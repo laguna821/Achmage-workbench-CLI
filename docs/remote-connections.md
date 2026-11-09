@@ -16,13 +16,15 @@
 - 프로젝트별 읽기, 요청 보내기, 승인, 중지, 터미널 권한을 구분한다. snapshot과 이벤트를 승인된 프로젝트로 제한하고, 각 요청의 실제 세션·문서·작업공간을 host에서 확인한다.
 - 사용자 첨부, 도구 이미지, AI 응답 이미지, 대기 메시지 첨부는 허용된 대화에서 읽는다. 전송 전 업로드는 해당 기기와 프로젝트 소유로 기록한다. 첨부 bytes는 기존 content-addressed 저장소를 사용한다.
 - 재접속 때 인증·이벤트 구독을 복구한다. 이력 범위를 벗어나거나 host epoch가 바뀌면 snapshot을 다시 받는다. 실행 결과를 모르는 변경 요청은 자동으로 재전송하지 않는다.
-- 로컬 owner token과 기기 credential은 URL query나 WebSocket upgrade 헤더에 넣지 않는다. 서버는 credential 해시만 저장한다. 웹에서는 public 호스트 목록만 localStorage, credential은 해당 탭의 sessionStorage에 저장한다. sessionStorage를 사용할 수 없으면 메모리를 사용한다.
+- 로컬 owner token과 기기 credential은 URL query나 WebSocket upgrade 헤더에 넣지 않는다. 서버는 credential 해시만 저장한다. 설치형 Tauri 앱은 OS keyring에 credential을 저장하고 기존 세션 값은 저장 성공 후 이행한다. keyring 오류는 표시하며 웹 저장소로 자동 강등하지 않는다. 브라우저는 public 호스트 목록만 localStorage, credential은 해당 탭의 sessionStorage에 저장한다. sessionStorage를 사용할 수 없으면 메모리를 사용한다.
 - 원격 호스트마다 화면 설정·이미지 cache 식별자를 구분한다. 원격 파일 경로로 이 PC의 앱을 실행하거나 원격 세션을 로컬 별도 창으로 떼어내는 동작은 차단한다.
 
 ## 남은 연결
 
-현재 원격 화면은 기존 Workbench App을 연결한 첫 구현이다. 모든 메뉴가 원격용으로 완성된 것은 아니며, 허용 목록에 없는 관리·Office native·브라우저 API는 거부한다. 기기별 OS keychain 저장, 카메라 scan, 모바일 사진/공유/파일 picker, 한글 IME/키보드/회전, 모바일 push와 실제 CJK terminal 동작은 후속 U18–U20 범위다.
+현재 원격 화면은 기존 Workbench App을 연결한 첫 구현이다. 모든 메뉴가 원격용으로 완성된 것은 아니며, 허용 목록에 없는 관리·Office native·브라우저 API는 거부한다. OS keyring·모바일 사진/카메라/파일 선택·첨부 다운로드/공유·IME 최종값·키보드 viewport·회전·완료 첨부 초안 복원·push의 코드 연결을 추가했다. 첨부는 선택한 기기와 대화에 묶으며 다른 호스트의 파일로 대체하지 않는다. QR 카메라 scan, 실제 모바일 동작과 CJK terminal 입력은 남은 범위다. 브라우저의 session credential이 소실되면 다시 승인 연결해야 하며 이를 native 영속 저장으로 표시하지 않는다.
 
 전체 Paseo SDK/공식 모바일 앱과의 protocol 호환, 공개 relay 서비스 운영, 인증된 HTTPS 배포, 실제 iOS/Android·외부망 사용은 완료했다고 표시하지 않는다. 현재 확보한 네트워크 증거는 실제 원본 전송을 사용한 localhost 두 클라이언트 시험이다. 앱·설치본·CI 빌드는 전체 기능 통합 뒤 진행한다.
 
 출처와 수정 사항은 `vendor/paseo/{client,protocol,server}/source.json` 및 배포 `third_party/paseo/`에 있다. 후속 구현 연구 판: `research:rr-79110658024cdb4797375aa15a22a771:39c50e6924caa7e9e0aed55dc8c114f195c9f46bea75d2ad71b54ecb8fbadbf4` (R7–R12). [재사용 실행표](superpowers/execution/PASEO-REUSE.md)에 전체 반입 상태가 있다.
+
+후속 모바일·native credential·push 연결: `research:rr-a19bb59ee9cc2a51ca502509a421c7ac:de8443305abef0bb31264f43cf9032da8b79f5b654405db7645114dc0c13e3b4` (R1–R6). 사진/공유/키보드/OS 권한·알림 도착은 실제 기기 확인 전이다. [모바일 알림](service-notifications.md).

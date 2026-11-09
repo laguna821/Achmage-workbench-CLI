@@ -1,0 +1,13 @@
+{
+  "id": "/",
+  "name": "Achmage Workbench",
+  "short_name": "Workbench",
+  "lang": "ko",
+  "description": "연결한 PC의 작업과 대화를 이어서 확인합니다.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#101827",
+  "theme_color": "#132c4b",
+  "icons": [{ "src": "/workbench-icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }]
+}

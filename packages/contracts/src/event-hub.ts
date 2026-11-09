@@ -33,9 +33,36 @@ export type HubJournalEntry = { delivery: HubDeliveryState; command: SubmitComma
 export type HubSnapshot = {
   hostId: string; connectors: HubConnector[]; workflows: HubWorkflow[];
   deliveries: HubDeliveryState[];
-  targets: { sessionId: string; workspaceId: string; workId: string; label: string }[];
+  targets: { sessionId: string; workspaceId: string; workId: string; label: string; hubTemplate?: boolean;
+    provider?: string; model?: string | null; effort?: string | null; profileId?: string | null;
+    access?: string | null; fallbackAccess?: string }[];
   profiles: AgentProfile[];
   ingress: { enabled: boolean; url: string | null; message?: string };
+  /** Separate outbound Paseo relationship. Signed inbound connectors keep their own policies. */
+  relationship?: HubRelationshipSnapshot;
+};
+export type HubRelationshipSelection = {
+  sessionId: string; workspaceId: string; profileId: string | null;
+  minIntervalSeconds: number; expiresAt: number | null;
+};
+export type HubRelationshipConnect = {
+  hubUrl: string; token: string; selection: HubRelationshipSelection;
+  allowExecution: boolean; confirmExternalConnection: true;
+};
+export type HubRelationshipExecution = {
+  executionId: string; sessionId: string | null; commandId: string; createdAt: number;
+  state: "received" | "accepted" | "running" | "waiting_input" | "completed" | "failed" | "outcome_unknown";
+  detail: string | null;
+};
+export type HubRelationshipSnapshot = {
+  enabled: boolean;
+  state: "disabled" | "credential_locked" | "not_connected" | "connecting" | "connected" | "reconnecting" | "disconnecting" | "revoked";
+  daemonId: string | null; hubOrigin: string | null; permissions: string[];
+  connectedAt: string | null; lastError: string | null;
+  selection: HubRelationshipSelection | null; grantGeneration: number;
+  approvedSettings?: { provider: string; model: string | null; effort: string | null; access: string; profileName: string | null } | null;
+  credentialStorage: "os_vault";
+  executions: HubRelationshipExecution[];
 };
 export const HUB_STATUS_LABEL: Record<HubDeliveryStatus, string> = {
   received: "접수됨", accepted: "전달됨", running: "작업 중", waiting_input: "입력 필요",

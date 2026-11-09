@@ -53,6 +53,7 @@
     "allow-office-cli-write",
     "allow-office-cli-done",
     "allow-office-cli-trace",
-    "allow-office-browser"
+    "allow-office-browser",
+    "allow-host-credential"
   ]
 }

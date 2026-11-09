@@ -25,6 +25,7 @@ export type State = {
   ready: boolean;
   connected: boolean;
   hostLabel: string;
+  hostId: string;
   seq: number;
   folders: Record<string, Folder>;
   works: Record<string, Work>;
@@ -50,6 +51,7 @@ export const initialState: State = {
   ready: false,
   connected: false,
   hostLabel: "",
+  hostId: "",
   seq: 0,
   folders: {},
   works: {},
@@ -90,6 +92,7 @@ export function reducer(state: State, action: Action): State {
         ...state,
         ready: true,
         hostLabel: snapshot.hostLabel,
+        hostId: snapshot.hostId,
         seq: snapshot.seq,
         folders: byId(snapshot.folders),
         works: byId(snapshot.works),

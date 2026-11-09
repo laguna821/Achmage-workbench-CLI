@@ -1,0 +1,100 @@
+{
+  "repository": "https://github.com/getpaseo/paseo",
+  "commit": "1fff127f45b11c1c9c573fbbd12791673004c912",
+  "archiveSha256": "654e4c066977b773a36eabb80a3d231942f36b0287cad8b3d3ca1aaa486cdd7b",
+  "license": "Apache-2.0",
+  "licenseFile": "../LICENSE",
+  "files": [
+    {
+      "upstreamPath": "packages/app/src/utils/keyboard-ime.ts",
+      "vendoredPath": "upstream/utils/keyboard-ime.ts",
+      "sha256": "edfc97e82138e17e0199fa7bfcd357195e267e19bfbb87c1bbb35ecaf665201b",
+      "modified": false
+    },
+    {
+      "upstreamPath": "packages/app/src/utils/keyboard-ime.test.ts",
+      "vendoredPath": "upstream/utils/keyboard-ime.test.ts",
+      "sha256": "2aad7c9f06b155abeb8bf99443b68c4ebc2889be9878298162bd17311daff0f7",
+      "modified": false
+    },
+    {
+      "upstreamPath": "packages/app/src/attachments/file-types.ts",
+      "vendoredPath": "upstream/attachments/file-types.ts",
+      "sha256": "aff730ed01cb685cfec5d67c14ff5ac02d6cd7e13a27df3046b520c400f95364",
+      "modified": false
+    },
+    {
+      "upstreamPath": "packages/app/src/attachments/file-types.test.ts",
+      "vendoredPath": "upstream/attachments/file-types.test.ts",
+      "sha256": "a53832d2086eaeaf7ad821e57dee0a65e19e1eb9f29ce1b56cba0b7f6e3922f2",
+      "modified": false
+    },
+    {
+      "upstreamPath": "packages/app/src/composer/dock/internal/fullscreen.tsx",
+      "vendoredPath": "upstream/composer/dock/internal/fullscreen.tsx",
+      "sha256": "0f110b210528ab924ee6acfd1274176e6ac7a422786819c0861b1c48ff2f8b5d",
+      "modified": false
+    },
+    {
+      "upstreamPath": "packages/app/src/composer/input/state.ts",
+      "vendoredPath": "upstream/composer/input/state.ts",
+      "sha256": "0e77a3e3226927aa04bbd6538c4232e4e1cecdaf7c0e46727f92ddb1c7f53032",
+      "modified": false
+    },
+    {
+      "upstreamPath": "packages/app/src/components/ui/text-input/text-input.web.tsx",
+      "vendoredPath": "upstream/components/ui/text-input/text-input.web.tsx",
+      "sha256": "d4170428cc24d5169da98975a2cdffd012cbdfcd80f28a974f77ef4227d45227",
+      "modified": false
+    },
+    {
+      "upstreamPath": "packages/app/src/stores/download-store.ts",
+      "vendoredPath": "upstream/stores/download-store.ts",
+      "sha256": "f47e2b07e3764396d3e902cf8752aa1861188b025d48d9bb7ff0dc73e16c0750",
+      "modified": false
+    },
+    {
+      "upstreamPath": "packages/app/src/utils/image-attachments-from-files.ts",
+      "vendoredPath": "upstream/utils/image-attachments-from-files.ts",
+      "sha256": "d4c29e59637e396ff372b4eda0fa43cccafb9e56967acef2062cef7203650d3a",
+      "modified": false
+    },
+    {
+      "upstreamPath": "packages/app/src/utils/keyboard-ime.ts",
+      "vendoredPath": "keyboard-ime.ts",
+      "sha256": "edfc97e82138e17e0199fa7bfcd357195e267e19bfbb87c1bbb35ecaf665201b",
+      "modified": false
+    },
+    {
+      "upstreamPath": "packages/app/src/attachments/file-types.ts",
+      "vendoredPath": "file-types.ts",
+      "sha256": "aff730ed01cb685cfec5d67c14ff5ac02d6cd7e13a27df3046b520c400f95364",
+      "modified": false
+    },
+    {
+      "vendoredPath": "viewport.ts",
+      "sha256": "cb291cedaa0e70adfb426e46d6f82fac415d38d708b006ce7c10e460f2a114b7",
+      "modified": true,
+      "changes": "Export the original pure viewport functions; omit React Native component/hook and styles."
+    },
+    {
+      "vendoredPath": "download.ts",
+      "sha256": "1ffa81d4a5d0b668006b0119ef7d46d0e52f5e58b50f82bf67f918adf4c8641d",
+      "modified": true,
+      "changes": "Export original browser download/name functions; inject original openExternalUrl dependency, omit Expo/store/network code."
+    },
+    {
+      "vendoredPath": "enter-action.ts",
+      "sha256": "c09d4831650e09ca6189586e2152f5306490bb948015ca5306710ac19d050fc2",
+      "modified": true,
+      "changes": "Export original Enter decision function and type closure; replace type-only application aliases with their narrow structural types."
+    },
+    {
+      "vendoredPath": "clipboard-images.ts",
+      "sha256": "e16d69e1a0d0f322b6f800098525ea4aac12f3af81cabdf09b3b66825ffa686d",
+      "modified": true,
+      "changes": "Export original clipboard file collector and type closure; resolve file-types locally; omit the different attachment persistence store."
+    }
+  ],
+  "integration": "Workbench uses these original pure functions. Existing authenticated attachment upload and immutable reference/cache stay in Workbench; Expo/React Native stores and a second IndexedDB are not activated. Web Share API is a Workbench platform adapter, not an upstream mobile SDK. Original compositionend DOM-value behavior is adapted in Composer."
+}

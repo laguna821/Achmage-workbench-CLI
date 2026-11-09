@@ -51,6 +51,7 @@ import { BrowserOutputs } from "./browser-outputs.ts";
 import { guardDecision } from "./pkm-guard.ts";
 import { HttpError } from "./errors.ts";
 import { systemNotifier } from "./system-notifications.ts";
+import { PushDevices } from "./push/devices.ts";
 
 // Local gateway: owns engine processes and state, serves the UI and an HTTP + SSE API on
 // 127.0.0.1 only. Prints one `WORKBENCH_READY {json}` line once it accepts connections.
@@ -115,7 +116,7 @@ const browse = new AgentBrowser({
   cli: env.WORKBENCH_BROWSER_CLI ? resolve(env.WORKBENCH_BROWSER_CLI) : null,
   chrome: env.WORKBENCH_BROWSER_CHROME ? resolve(env.WORKBENCH_BROWSER_CHROME) : null,
 });
-const desktopNotifications = env.WORKBENCH_CLI_INPUT ? null : systemNotifier(env.WORKBENCH_PTY_BIN ?? null);
+const desktopNotifications = env.WORKBENCH_CLI_INPUT ? null : systemNotifier(env.WORKBENCH_APP_BIN ?? env.WORKBENCH_PTY_BIN ?? null);
 const manager = new SessionManager(store, bus, {
   browse,
   hostId: env.WORKBENCH_HOST_ID ?? hostname(),
@@ -192,11 +193,13 @@ const extensions = new ExtensionService({ dataDir, manager, authorizeWrite: (wor
 } });
 const hub: EventHub = new EventHub({ dataDir, store, manager, bus, ingress: () => devices?.hubIngressState() ?? { enabled: false, url: null } });
 const devices: DeviceService | undefined = env.WORKBENCH_CLI_INPUT ? undefined : new DeviceService({ dataDir, manager, bus, localOrigin: () => applicationOrigin, localToken: token, webDir,
-  voice, eventIngress: (req, res) => hub.handleIngress(req, res) });
+  voice, push: () => push, eventIngress: (req, res) => hub.handleIngress(req, res) });
+const push: PushDevices | undefined = devices ? new PushDevices({ dataDir, registry: devices.registry, notifications: manager.notifications, hostId: manager.snapshot().hostId }) : undefined;
 const browserOutputs = new BrowserOutputs({ store, browser: manager.sharedBrowser, workspaces: manager.workspaces, documents: manager.documents, attachments: manager.attachments, hostId: env.WORKBENCH_HOST_ID ?? hostname(), session: id => manager.view.sessions.get(id) });
+const autostart = new HostAutostart(dataDir);
 const server = createHttpServer(manager, bus, {
-  devices, voice, extensions, hub, desktop, browserOutputs,
-  autostart: new HostAutostart(dataDir),
+  devices, voice, extensions, hub, desktop, browserOutputs, push,
+  autostart,
   host: { instance: lease.instance, stopping: () => stopping, stop: () => { void stop(); } },
   officeImport,
   dropbox,
@@ -261,6 +264,7 @@ listen(editors, env.WORKBENCH_EDITORS_PORT, editorsPortFile, (editorsPort) => {
       applicationOrigin = `http://127.0.0.1:${boundPort}`;
       const connection = { url: applicationOrigin, port: boundPort, token, dataDir, editorsUrl: editorsOrigin };
       lease.ready(connection);
+      if (lease.instance.mode === "service") void autostart.refreshEnabled().catch(() => {});
       if (lease.instance.mode === "shell") process.stdout.write(`WORKBENCH_READY ${JSON.stringify({ ...connection, instance: lease.instance })}\n`);
       void shellPath.then(() => manager.initProviders());
       // Desktop installation includes a standalone IeumOffice app and its OS registration.
@@ -277,8 +281,9 @@ async function stop() {
   if (stopping) return;
   stopping = true;
   dropbox.close();
+  push?.close();
   devices?.close();
-  hub.close();
+  await hub.close();
   voice.close();
   await extensions.close();
   await pdfLoader(dataDir).close();

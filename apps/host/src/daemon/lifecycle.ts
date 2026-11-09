@@ -27,7 +27,11 @@ export async function startHost(options: { dataDir: string; entry: string; env?:
   const log = openSync(join(options.dataDir, "service.log"), "a", 0o600);
   let launchError: Error | null = null;
   try {
-    const child = spawn(process.execPath, [options.entry], { env: { ...process.env, ...options.env, WORKBENCH_DATA_DIR: options.dataDir, WORKBENCH_HOST_MODE: "service", WORKBENCH_EXIT_ON_STDIN_CLOSE: "0" }, detached: true, windowsHide: true, stdio: ["ignore", log, log] });
+    const env: NodeJS.ProcessEnv = { ...process.env, ...options.env, WORKBENCH_DATA_DIR: options.dataDir, WORKBENCH_HOST_MODE: "service", WORKBENCH_EXIT_ON_STDIN_CLOSE: "0" };
+    // A durable AppImage starts a foreground native parent which owns its own mount.
+    // Spawning the UI mount's Node directly would strand workers when that UI exits.
+    const runner = process.platform === "linux" ? env.WORKBENCH_HOST_RUNNER : undefined;
+    const child = spawn(runner ?? process.execPath, runner ? ["--host-runtime"] : [options.entry], { env, detached: true, windowsHide: true, stdio: ["ignore", log, log] });
     child.on("error", error => { launchError = error; });
     child.unref();
   } finally { closeSync(log); }

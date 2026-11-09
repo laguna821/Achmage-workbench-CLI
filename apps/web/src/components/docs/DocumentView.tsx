@@ -203,7 +203,7 @@ export default function DocumentView({
         onToast(error instanceof Error ? error.message : "파일을 올리지 못했습니다.");
         return null;
       }),
-    artifactId,
+    modes?.draftKey ?? `doc:${artifactId}`,
   );
   const [create, setCreate] = useState<CreateTarget | null>(null);
   const [targetOpen, setTargetOpen] = useState(false);
@@ -1090,7 +1090,7 @@ export default function DocumentView({
           waiting={Boolean(sendTarget && (sendTarget.status === "running" || sendTarget.status === "starting"))}
           header={
             <div className="doc-chips">
-              <PendingFiles files={pending.files} onRemove={(key) => pending.remove([key])} />
+              <PendingFiles files={pending.files} onRetry={pending.retry} onRemove={(key) => pending.remove([key])} />
               {handoffTo ? (
                 <span className="target-chip" style={accentStyle(lookOf(handoffTo.provider))}>
                   <EngineMark provider={handoffTo.provider} size={13} /> @{handoffTo.purpose}

@@ -2392,3 +2392,7 @@ Office 형식별 증거는 한글, Word, 슬라이드, 시트, Markdown, PDF, HT
 새 사용자 교정 `decision-5e2a5ff3288c4ec7973e1f9922dd873605f56843e258b8e4fea0485a18a4cd70`: 구현 우선. 통과 검사 반복과 기능별 추가 검증·재검토 금지. 새 root/web/Rust 확인은 시작하지 않았으며 전체 구현 뒤 필요한 통합 확인만 한다. 전체 25개 단위/156개 요구를 축소하거나 완료로 처리하지 않는다.
 
 외부 앱 근거: `research:rr-fb025ea83d26bd1d7147dd3208893d54:d9f464f99080ff5b2977503a924625a278cd52656ad65dd9a41e9e613a4709ab` (R1–R5).
+
+### U16–U19/U24 구현 후속 (2026-11-09)
+
+정확한 연구 판: `research:rr-a19bb59ee9cc2a51ca502509a421c7ac:de8443305abef0bb31264f43cf9032da8b79f5b654405db7645114dc0c13e3b4` (R1–R6). AppImage 지속 runtime/native credential/mobile file·IME/push/원본 Hub 연결 코드를 추가했다. 사용자 교정에 따라 단위별 RED/GREEN/ten-lane/반복 type·native·설치본 검사는 실행하지 않았다. 기능 수용 범위는 유지하고 구현 뒤 필요한 통합 확인만 수행한다. 현재 구현과 남은 항목은 `../execution/STATUS.md`에 반영한다.

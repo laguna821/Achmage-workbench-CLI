@@ -19,17 +19,19 @@ export class HostAutostart {
   private readonly id: string;
   private readonly launcher: string;
   private readonly cli: string;
+  private readonly runner: string | undefined;
   constructor(dataDir: string, main = process.argv[1] ?? "") {
     this.dir = resolve(dataDir);
     this.id = `kr.achmage.workbench.${createHash("sha256").update(this.dir).digest("hex").slice(0, 12)}`;
     this.launcher = join(this.dir, "login-start.mjs");
     this.cli = main.endsWith(".ts") ? join(dirname(main), "daemon/cli.ts") : join(dirname(main), "workbench-service.mjs");
+    this.runner = process.platform === "linux" ? process.env.WORKBENCH_HOST_RUNNER : undefined;
   }
   private file() {
     return process.platform === "darwin" ? join(homedir(), "Library/LaunchAgents", `${this.id}.plist`) : join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "systemd/user", `${this.id}.service`);
   }
   async status(): Promise<AutostartStatus> {
-    const supported = !process.env.APPIMAGE && ["linux", "darwin", "win32"].includes(process.platform) && existsSync(this.cli);
+    const supported = (!process.env.APPIMAGE || !!this.runner && existsSync(this.runner)) && ["linux", "darwin", "win32"].includes(process.platform) && existsSync(this.cli);
     let enabled = false;
     if (supported) try {
       if (process.platform === "linux") { const result = await run("systemctl", ["--user", "is-enabled", `${this.id}.service`], { timeout: 5000 }); enabled = result.stdout.trim() === "enabled"; }
@@ -38,20 +40,24 @@ export class HostAutostart {
     } catch { /* Not registered or this login has no service manager. */ }
     return { enabled, supported, label: "이 기기 로그인 시 백그라운드 작업 시작" };
   }
+  /** Preserve an existing opt-in across an install/runtime path change; never enable by default. */
+  async refreshEnabled() { if ((await this.status()).enabled) await this.setEnabled(true); }
   async setEnabled(enabled: boolean): Promise<AutostartStatus> {
-    if (enabled && process.env.APPIMAGE) throw Error("로그인 자동 시작은 설치된 deb·pacman 앱에서 사용할 수 있습니다.");
+    if (enabled && process.env.APPIMAGE && (!this.runner || !existsSync(this.runner))) throw Error("AppImage의 백그라운드 실행 파일을 찾지 못했습니다. 앱을 다시 실행해 주세요.");
     if (!existsSync(this.cli)) throw Error("설치본의 백그라운드 실행기를 찾지 못했습니다.");
     const file = this.file();
     if (enabled) {
       mkdirSync(this.dir, { recursive: true, mode: 0o700 });
       const environment: Record<string, string> = { WORKBENCH_DATA_DIR: this.dir, WORKBENCH_IEUM_BOOTSTRAP: "0" };
-      for (const key of ["PATH", "WORKBENCH_WEB_DIR", "WORKBENCH_RESOURCES_DIR", "WORKBENCH_PTY_BIN", "WORKBENCH_SECRET_BIN", "WORKBENCH_APP_BIN", "WORKBENCH_HOST_ID", "WORKBENCH_HOST_LABEL"])
+      for (const key of (this.runner ? ["PATH", "WORKBENCH_HOST_RUNNER", "WORKBENCH_HOST_ID", "WORKBENCH_HOST_LABEL"] : ["PATH", "WORKBENCH_WEB_DIR", "WORKBENCH_RESOURCES_DIR", "WORKBENCH_PTY_BIN", "WORKBENCH_SECRET_BIN", "WORKBENCH_APP_BIN", "WORKBENCH_HOST_ID", "WORKBENCH_HOST_LABEL"]))
         if (process.env[key]) environment[key] = process.env[key]!;
       // Only paths and host identity are captured; no credentials or provider auth are copied.
-      writeFileSync(this.launcher, `Object.assign(process.env, ${JSON.stringify(environment)});\nprocess.argv[2] = "start";\nawait import(${JSON.stringify(pathToFileURL(resolve(this.cli)).href)});\n`, { mode: 0o600 });
+      if (!this.runner) writeFileSync(this.launcher, `Object.assign(process.env, ${JSON.stringify(environment)});\nprocess.argv[2] = "start";\nawait import(${JSON.stringify(pathToFileURL(resolve(this.cli)).href)});\n`, { mode: 0o600 });
       if (process.platform === "linux") {
         mkdirSync(dirname(file), { recursive: true });
-        writeFileSync(file, `[Unit]\nDescription=Achmage Workbench background tasks\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=${unit(process.execPath)} ${unit(this.launcher)}\n[Install]\nWantedBy=default.target\n`, { mode: 0o600 });
+        const environmentLines = this.runner ? Object.entries(environment).map(([key, value]) => `Environment=${JSON.stringify(`${key}=${value}`).replace(/%/g, "%%")}\n`).join("") : "";
+        const start = this.runner ? `${unit(this.runner)} --host-service start` : `${unit(process.execPath)} ${unit(this.launcher)}`;
+        writeFileSync(file, `[Unit]\nDescription=Achmage Workbench background tasks\n[Service]\nType=oneshot\nRemainAfterExit=yes\n${environmentLines}ExecStart=${start}\n[Install]\nWantedBy=default.target\n`, { mode: 0o600 });
         await run("systemctl", ["--user", "daemon-reload"], { timeout: 5000 });
         await run("systemctl", ["--user", "enable", `${this.id}.service`], { timeout: 5000 });
       } else if (process.platform === "darwin") {

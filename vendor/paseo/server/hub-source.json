@@ -1,0 +1,108 @@
+{
+  "repository": "https://github.com/getpaseo/paseo",
+  "commit": "1fff127f45b11c1c9c573fbbd12791673004c912",
+  "license": "Apache-2.0",
+  "sources": [
+    {
+      "source": "packages/server/src/server/hub/relationship-controller.ts",
+      "original": "vendor/paseo/server/upstream/hub-reuse/hub/relationship-controller.ts",
+      "target": "vendor/paseo/server/src/server/hub/relationship-controller.ts",
+      "upstreamSha256": "18f75634a542aa32db9d9e42852f25b1891e5c3806bebcd168a82d655c2771fd",
+      "adaptedSha256": "cd01533c5ac3cff567ef8ab72416f37360882aa3e40399dd1b006f68e8815198"
+    },
+    {
+      "source": "packages/server/src/server/hub/relationship-remote.ts",
+      "original": "vendor/paseo/server/upstream/hub-reuse/hub/relationship-remote.ts",
+      "target": "vendor/paseo/server/src/server/hub/relationship-remote.ts",
+      "upstreamSha256": "b1a28d9e5955806473e704b52fd8ae583a7e177411c3945678adfd5a9f7f466e",
+      "adaptedSha256": "80b5815bc86c718417f90f8cede583dd36df67583ca88945f3f2455d3b30d651"
+    },
+    {
+      "source": "packages/server/src/server/hub/relationship-retry.ts",
+      "original": "vendor/paseo/server/upstream/hub-reuse/hub/relationship-retry.ts",
+      "target": "vendor/paseo/server/src/server/hub/relationship-retry.ts",
+      "upstreamSha256": "049e59ff5effa582a3804ad6228af5a8262174d4c5b828948a437590eef63f9b",
+      "adaptedSha256": "049e59ff5effa582a3804ad6228af5a8262174d4c5b828948a437590eef63f9b"
+    },
+    {
+      "source": "packages/server/src/server/hub/execution-controller.ts",
+      "original": "vendor/paseo/server/upstream/hub-reuse/hub/execution-controller.ts",
+      "target": "vendor/paseo/server/src/server/hub/execution-controller.ts",
+      "upstreamSha256": "e2cf92cca787fc21d20ade0093f57af9bc06fff54cd1c5633ffddbae951648cd",
+      "adaptedSha256": "20c01704b0142e297f36af5d1ba7dfbe95bdff0c6660e1d8cfd4c2994a98329f"
+    },
+    {
+      "source": "packages/server/src/server/authorization/index.ts",
+      "original": "vendor/paseo/server/upstream/hub-reuse/authorization/index.ts",
+      "target": "vendor/paseo/server/src/server/authorization/index.ts",
+      "upstreamSha256": "06903d13102ad699a4f6f8d12a60ba28558b77b0e22f60c6bb5f0f51ff752a47",
+      "adaptedSha256": "6faf6dfbbabaeb3ff191acf8c8a5fd3544d780338ec4a08f3b304ee44bcf231a"
+    },
+    {
+      "source": "packages/server/src/server/authorization/operation-permissions.ts",
+      "original": "vendor/paseo/server/upstream/hub-reuse/authorization/operation-permissions.ts",
+      "target": "vendor/paseo/server/src/server/authorization/operation-permissions.ts",
+      "upstreamSha256": "059eb5814a3070e6a682138e02a40d1e2262605b76177a209c306258452d7028",
+      "adaptedSha256": "69ccab3f0472a592b2f0f3ea38c07d3c60671cdddfef015bc14783fe952e52ac"
+    },
+    {
+      "source": "packages/server/src/server/agent/provider-options.ts",
+      "original": "vendor/paseo/server/upstream/hub-reuse/agent/provider-options.ts",
+      "target": "vendor/paseo/server/src/server/agent/provider-options.ts",
+      "upstreamSha256": "e86dceb7538ee2e9f59224d3f843a3a3fae9481434d5e38d58f30bb7eefffe53",
+      "adaptedSha256": "e86dceb7538ee2e9f59224d3f843a3a3fae9481434d5e38d58f30bb7eefffe53"
+    },
+    {
+      "source": "packages/server/src/server/agent/option-controls.ts",
+      "original": "vendor/paseo/server/upstream/hub-reuse/agent/option-controls.ts",
+      "target": "vendor/paseo/server/src/server/agent/option-controls.ts",
+      "upstreamSha256": "1c663e3b9f178e420cbfcb3562f29679faaa406bb23e53e3eff7bd1442eb0bac",
+      "adaptedSha256": "1c663e3b9f178e420cbfcb3562f29679faaa406bb23e53e3eff7bd1442eb0bac"
+    }
+  ],
+  "typePorts": [
+    {
+      "source": "packages/server/src/server/hub/daemon-executions.ts",
+      "sha256": "feb5912ec7641eb15e3b3f974bc550a019eff46a59236f2c79b036ea112d301f",
+      "target": "vendor/paseo/server/src/server/hub/execution-ports.ts",
+      "adaptedSha256": "3c332b882945690c34183dfbd8e3ce9bede1eb82d07db8838b6f3bf8989494cb"
+    },
+    {
+      "source": "packages/server/src/server/websocket-server.ts",
+      "sha256": "ca1f0705ed918108e170a998e3aa854edd7647e0e0c49df5580f7a3f75d4af85",
+      "target": "vendor/paseo/server/src/server/hub/socket-port.ts",
+      "adaptedSha256": "8ae220ddcb3737f2ea5680d900282efe622966b9311b212c3cc328ff892383ad"
+    }
+  ],
+  "adaptations": [
+    "Type-only imports use extracted public ports and existing protocol module.",
+    "relationship-controller persist/load accepts an injected record codec. Workbench always supplies OS-vault sealing; no plaintext fallback.",
+    "Original Node HTTP/WebSocket enrollment/auth/heartbeat/retry/revoke and execution controller logic retained.",
+    "Export the original normalizeHubUrl function for the Workbench form adapter; implementation unchanged."
+  ],
+  "dependencies": {
+    "ws": "8.20.0",
+    "zod": "4.4.3",
+    "pino": "10.3.1"
+  },
+  "execution": "No tests, builds, external enrollment or account connection performed in this integration.",
+  "licenseFiles": [
+    {
+      "path": "third_party/paseo/hub/LICENSE",
+      "sha256": "79d5aedce6aa0adc547336dc1bd34c5cc9308ba110fac7079ed97515ee573ad3"
+    },
+    {
+      "path": "third_party/paseo/dependencies/ws/LICENSE",
+      "sha256": "2b29dcfe0d6471f7e8c92c5fb38c9f93edee10330937055440192f1832b1ecef"
+    },
+    {
+      "path": "third_party/paseo/dependencies/pino/LICENSE",
+      "sha256": "d4eb00c3ef2fa54cdf05d167b15e994bc67226a7998e090e22a0bc8b16223a6c"
+    },
+    {
+      "path": "third_party/paseo/dependencies/zod/4.4.3/zod-4.4.3-LICENSE",
+      "sha256": "3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8"
+    }
+  ],
+  "validation": "NOT_RUN by explicit implementation-first instruction. No external Hub, account, enroll API or websocket was contacted."
+}

@@ -40,6 +40,14 @@
     "./network": {
       "types": "./dist/server/network/index.d.ts",
       "default": "./dist/server/network/index.js"
+    },
+    "./hub/*": {
+      "types": "./dist/server/hub/*.d.ts",
+      "default": "./dist/server/hub/*.js"
+    },
+    "./authorization": {
+      "types": "./dist/server/authorization/index.d.ts",
+      "default": "./dist/server/authorization/index.js"
     }
   },
   "dependencies": {

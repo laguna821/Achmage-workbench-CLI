@@ -1,0 +1,17 @@
+{
+  "name": "@workbench/paseo-push",
+  "version": "0.15.3",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": {
+      "types": "./dist/push/index.d.ts",
+      "default": "./dist/push/index.js"
+    }
+  },
+  "dependencies": {
+    "pino": "10.3.1"
+  },
+  "x-workbench-vendor-notice": "Original Paseo push leases and delivery injection; standard Web Push adapter is supplied by Workbench. See source.json."
+}

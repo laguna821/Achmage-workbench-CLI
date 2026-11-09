@@ -1,4 +1,5 @@
 import { DesktopTargetPicker } from "./components/DesktopTargetPicker.tsx";
+import { MobilePushSettings } from "./components/MobilePushSettings.tsx";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { GLOBAL_LAYOUT, PROVIDER_LABEL, isUnseen, type AccessMode, type Artifact, type Attachment, type CreateTarget, type DocRef, type ProjectPick, type Proposal, type Provider, type Session, type SessionStatus, type UiPrefs, type Work, type Workspace } from "@workbench/contracts";
 import { Api, ApiRequestError, readToken } from "./api.ts";
@@ -241,7 +242,7 @@ const readJson = <T,>(key: string, fallback: T): T => {
 };
 const SORT_MODES: SortMode[] = ["manual", "recent", "name"];
 
-export function App({ apiOverride, onConnections, connectionLabel, registerHostSwitchGuard }: { apiOverride?: Api | null; onConnections?: () => void; connectionLabel?: string; registerHostSwitchGuard?: (guard: (() => Promise<void>) | null) => void } = {}) {
+export function App({ apiOverride, onConnections, connectionLabel, registerHostSwitchGuard, attentionRequest, onAttentionOpened }: { apiOverride?: Api | null; onConnections?: () => void; connectionLabel?: string; registerHostSwitchGuard?: (guard: (() => Promise<void>) | null) => void; attentionRequest?: { id: string; nonce: string } | null; onAttentionOpened?: (id: string) => void } = {}) {
   const api = useMemo(() => {
     if (apiOverride !== undefined) return apiOverride;
     const token = readToken();
@@ -254,6 +255,7 @@ export function App({ apiOverride, onConnections, connectionLabel, registerHostS
     PANE_LAYOUT_KEY = storagePrefix + "workbench.paneLayout.v1", OPEN_DOCS_KEY = storagePrefix + "workbench.openDocs", MRU_KEY = storagePrefix + "workbench.recentSessions";
   const cachedPrefs = () => readCachedPrefs(PREFS_CACHE_KEY);
   const [state, dispatch] = useReducer(reducer, initialState);
+  const [pushSettingsOpen, setPushSettingsOpen] = useState(false);
   const attentionInbox = useMemo(() => new AttentionInbox(api), [api]);
   const attentionState = useSyncExternalStore(attentionInbox.subscribe, attentionInbox.getState);
   const stateRef = useRef(state);
@@ -1021,7 +1023,7 @@ export function App({ apiOverride, onConnections, connectionLabel, registerHostS
     },
     [state.works, actions],
   );
-  const openAttention = useCallback(async (id: string) => {
+  const openAttention = useCallback(async (id: string, onOpened?: () => void) => {
     if (!api) return;
     const target = await attentionInbox.target(id);
     let current = stateRef.current;
@@ -1038,16 +1040,18 @@ export function App({ apiOverride, onConnections, connectionLabel, registerHostS
     navigateTo({ workId: target.workId, sessionId: target.sessionId, view: target.pageId ? { kind: "browser", pageId: target.pageId } : target.artifactId ? { kind: "document", artifactId: target.artifactId, proposalId: null } : { kind: "work" } }, () => {
       setFocusItem({ sessionId: target.sessionId, itemId: target.itemId, nonce: Date.now() });
       void attentionInbox.read(id).catch(attentionInbox.reportError);
+      onOpened?.();
     });
   }, [api, attentionInbox, navigateTo]);
   const openingAttention = useRef<string | null>(null);
+  useEffect(() => { if (attentionRequest) setPendingAttentionId(attentionRequest.id); }, [attentionRequest]);
   useEffect(() => {
     if (!pendingAttentionId || !state.ready || attentionState.supported !== true || openingAttention.current === pendingAttentionId) return;
     const id = pendingAttentionId; openingAttention.current = id;
-    void openAttention(id).catch(error => { attentionInbox.reportError(error); setAttentionOpen(true); }).finally(() => {
+    void openAttention(id, () => onAttentionOpened?.(id)).catch(error => { attentionInbox.reportError(error); setAttentionOpen(true); }).finally(() => {
       openingAttention.current = null; setPendingAttentionId(current => current === id ? null : current);
     });
-  }, [pendingAttentionId, state.ready, attentionState.supported, openAttention, attentionInbox]);
+  }, [pendingAttentionId, state.ready, attentionState.supported, openAttention, attentionInbox, onAttentionOpened]);
   // "다른 곳의 대화 가져오기": the imported session opens at once (its work may be new, so by id).
   const [importOpen, setImportOpen] = useState(false);
   // "예약 작업" of the session whose dialog is open.
@@ -2371,7 +2375,7 @@ export function App({ apiOverride, onConnections, connectionLabel, registerHostS
             </button>
             <Popover open={menuOpen} onClose={closeMenu} align="right">
               <Connections
-                backgroundHost={<><BackgroundHost api={api} />{!api.isRemote ? <div className="connection"><div className="menu-label">선택 기능</div><div className="feature-actions"><button type="button" className="button small" onClick={() => { closeMenu(); setDesktopOpen(true); }}>외부 앱</button><button type="button" className="button small" onClick={() => { closeMenu(); setExtensionsOpen(true); }}>실행 확장</button><button type="button" className="button small" onClick={() => { closeMenu(); setEventHubOpen(true); }}>이벤트 Hub</button></div></div> : null}</>}
+                backgroundHost={<><BackgroundHost api={api} /><div className="connection"><button type="button" className="button small" onClick={() => { closeMenu(); setPushSettingsOpen(true); }}>모바일 알림</button></div>{!api.isRemote ? <div className="connection"><div className="menu-label">선택 기능</div><div className="feature-actions"><button type="button" className="button small" onClick={() => { closeMenu(); setDesktopOpen(true); }}>외부 앱</button><button type="button" className="button small" onClick={() => { closeMenu(); setExtensionsOpen(true); }}>실행 확장</button><button type="button" className="button small" onClick={() => { closeMenu(); setEventHubOpen(true); }}>이벤트 Hub</button></div></div> : null}</>}
                 onOfficeSettings={() => { closeMenu(); setOfficeSettingsOpen(true); }}
                 onDropbox={() => { closeMenu(); setDropboxOpen(true); }}
                 onOfficeImport={() => { closeMenu(); setOfficeImportOpen(true); }}
@@ -2513,6 +2517,7 @@ export function App({ apiOverride, onConnections, connectionLabel, registerHostS
       {scmWorkspace ? <SourceControlDialog key={scmWorkspace.id} api={api} workspace={state.workspaces[scmWorkspace.id] ?? scmWorkspace} onClose={() => setScmWorkspace(null)} onTerminal={() => { setTerminalWorkspace(scmWorkspace); setScmWorkspace(null); }} /> : null}
       {integrationsOpen && api ? <IntegrationsSheet api={api} onClose={() => setIntegrationsOpen(false)} onToast={setToast} /> : null}
       {imageUploadOpen && api ? <ImageUploadSheet api={api} onClose={() => setImageUploadOpen(false)} onToast={setToast} /> : null}
+      {pushSettingsOpen && api ? <MobilePushSettings api={api} hostId={state.hostId} remote={api.isRemote} onClose={() => setPushSettingsOpen(false)} /> : null}
       {officeSettingsOpen && api ? <OfficeSettings api={api} theme={appTheme} onClose={() => setOfficeSettingsOpen(false)} /> : null}
       {desktopOpen && !api.isRemote ? <DesktopTargetPicker api={api} sessions={Object.values(state.sessions).filter(session => !session.archivedAt).map(session => ({ id: session.id, label: `${state.works[session.workId]?.title ?? "프로젝트"} · ${session.purpose}` }))} onClose={() => setDesktopOpen(false)} /> : null}
       {extensionsOpen && !api.isRemote ? <ExtensionLibrary api={api} workspaces={Object.values(state.workspaces).filter(space => !space.archivedAt && !space.removedAt).map(space => ({ id: space.id, label: `${state.works[space.workId]?.title ?? "프로젝트"} · ${space.label}` }))} onClose={() => setExtensionsOpen(false)} /> : null}

@@ -127,7 +127,9 @@ export class ApiRequestError extends Error {
 
 export type RemoteApiConnection = { hostId: string; peer: RemotePeer };
 let activeMediaConnection: RemoteApiConnection | null = null;
+let localMediaHostId: string | null = null;
 const mediaConnections = new Map<string, RemotePeer>();
+export const attachmentHostId = () => activeMediaConnection?.hostId ?? "local";
 export function setMediaConnection(connection: RemoteApiConnection | null) {
   activeMediaConnection = connection;
   if (connection) mediaConnections.set(connection.hostId, connection.peer);
@@ -174,7 +176,7 @@ export class Api {
     return json;
   }
 
-  snapshot = async () => { const snapshot = await this.request<Snapshot>("GET", "/api/snapshot"); this.epoch = snapshot.epoch; if (this.remote) snapshot.prefs = await this.request("GET", "/api/prefs"); return snapshot; };
+  snapshot = async () => { const snapshot = await this.request<Snapshot>("GET", "/api/snapshot"); this.epoch = snapshot.epoch; if (this.remote) snapshot.prefs = await this.request("GET", "/api/prefs"); else localMediaHostId = snapshot.hostId; return snapshot; };
   attention = () => this.request<AttentionList>("GET", "/api/attention");
   readAttention = (id: string) => this.request<AttentionEvent>("POST", `/api/attention/${encodeURIComponent(id)}/read`, {});
   attentionTarget = (id: string) => this.request<AttentionTarget>("GET", `/api/attention/${encodeURIComponent(id)}/target`);
@@ -645,6 +647,7 @@ const attachmentMedia = new MediaCache(async key => {
 });
 
 /** A local URL for an attachment (fetched once with the token; its content never changes). */
-export function retainAttachmentUrl(id: string, identity = "local") {
-  return attachmentMedia.retain(JSON.stringify([activeMediaConnection?.hostId ?? "local", identity, id]));
+export function retainAttachmentUrl(id: string, identity = "local", referenceHostId = attachmentHostId(), originatingHost = attachmentHostId()) {
+  const transportHost = originatingHost === "local" && referenceHostId === localMediaHostId ? "local" : referenceHostId;
+  return attachmentMedia.retain(JSON.stringify([transportHost, identity, id]));
 }

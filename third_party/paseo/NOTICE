@@ -80,3 +80,18 @@ Terminal module bundle added at the same pinned revision:
   file; their shared xterm MIT notice is preserved from the xterm package.
 - The new loopback fixture is not native/device acceptance. Full browser
   preview and WebSocket/HMR service tunnelling are not supplied by this port.
+
+Workbench 0.4.0 mobile and service integration:
+- Original mobile IME, file classification, viewport and download helper functions: mobile-web/source.json and NOTICE.
+- Original push token lease/store and delivery injection: push/source.json; Workbench supplies standard web-push transport.
+- Original outbound Hub relationship, reconnect and execution controller: hub/source.json.
+
+Paseo Hub relationship reuse (U24)
+Original enrollment/authenticated WebSocket/heartbeat/retry/revocation and execution
+controllers, authorization table and provider-option helpers are reused under
+vendor/paseo/server. Type-only ports and a required Workbench OS-vault record codec
+are the adapter boundary. Source and adaptation hashes are in hub/source.json;
+original source bytes remain under vendor/paseo/server/upstream/hub-reuse.
+Original copyright (c) 2025-present Mohamed Boudra; Apache License 2.0.
+The public Hub service itself is not included. No external enrollment or messaging
+was performed as part of development. Existing dependency licenses apply.

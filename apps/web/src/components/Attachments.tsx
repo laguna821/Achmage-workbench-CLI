@@ -1,8 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { artifactCacheKey, type Attachment } from "@workbench/contracts";
 import { decodeMarkdownImage } from "../../../../vendor/paseo/image-decoding/image-decoding.ts";
-import { retainAttachmentUrl } from "../api.ts";
+import { attachmentHostId, retainAttachmentUrl } from "../api.ts";
+import { collectImageFilesFromClipboardData } from "../../../../vendor/paseo/mobile-web/clipboard-images.ts";
+import { isRasterImageFile } from "../../../../vendor/paseo/mobile-web/file-types.ts";
+import { canShareFile, downloadAttachment, pickedFiles, shareableFile, shareFile } from "../mobile-platform.ts";
+import { Popover } from "./Popover.tsx";
 import { Icon } from "./Icon.tsx";
 import "../styles/attachments.css";
 
@@ -15,6 +19,7 @@ export type PendingFile = {
   preview: string | null;
   attachment: Attachment | null;
   error: string | null;
+  canRetry?: boolean;
 };
 
 /** Pictures both engines take as images. */
@@ -35,71 +40,125 @@ export function sizeText(bytes: number) {
  */
 export function pastedFiles(data: DataTransfer) {
   if (data.getData("text/plain").trim()) return [];
-  return Array.from(data.files);
+  const files = Array.from(data.files);
+  return files.length ? files : collectImageFilesFromClipboardData(data).map(entry => entry.file);
+}
+
+type PendingGroup = {
+  files: PendingFile[];
+  uploads: Map<string, Promise<Attachment | null>>;
+  sources: Map<string, File>;
+  listeners: Set<() => void>;
+};
+const pendingGroups = new Map<string, PendingGroup>();
+const pendingPrefix = "workbench.draft-attachments.";
+function pendingGroup(scope: string): PendingGroup {
+  const existing = pendingGroups.get(scope);
+  if (existing) return existing;
+  let files: PendingFile[] = [];
+  try {
+    const saved = JSON.parse(localStorage.getItem(pendingPrefix + scope) ?? "[]") as PendingFile[];
+    if (Array.isArray(saved)) files = saved.filter(item => item && typeof item.key === "string" && typeof item.name === "string" && Number.isFinite(item.size)).map(item => ({
+      key: item.key, name: item.name, size: item.size, preview: null,
+      attachment: item.attachment && typeof item.attachment.id === "string" ? item.attachment : null,
+      error: item.attachment ? null : "업로드가 중단되었습니다. 파일을 다시 선택해 주세요.",
+    }));
+  } catch { /* A disabled browser store does not stop the active draft. */ }
+  const group: PendingGroup = { files, uploads: new Map(), sources: new Map(), listeners: new Set() };
+  pendingGroups.set(scope, group);
+  return group;
+}
+function publishPending(scope: string, group: PendingGroup) {
+  try {
+    if (group.files.length) localStorage.setItem(pendingPrefix + scope, JSON.stringify(group.files.map(({ preview: _, canRetry: __, ...entry }) => entry)));
+    else localStorage.removeItem(pendingPrefix + scope);
+  } catch { /* Files remain available in this tab; no new database or file-byte copy. */ }
+  for (const notify of group.listeners) notify();
 }
 
 /**
  * Files for the next request. Each uploads as soon as it is pasted or dropped; `take` waits for the
  * uploads still running and hands over the files that made it (a failed one stays, its chip says so).
- * The list empties when `scope` changes (another work or document).
+ * Each exact input/host owns a list. Only uploaded references survive browser suspension/reload.
  */
 export function usePendingFiles(upload: (file: File) => Promise<Attachment | null>, scope: string) {
-  const [files, setFiles] = useState<PendingFile[]>([]);
-  const uploads = useRef(new Map<string, Promise<Attachment | null>>());
+  const storageScope = JSON.stringify([attachmentHostId(), scope]);
+  const group = pendingGroup(storageScope);
+  const files = useSyncExternalStore(listener => {
+    group.listeners.add(listener);
+    return () => group.listeners.delete(listener);
+  }, () => group.files);
+  const start = (entry: PendingFile, file: File) => {
+    const uploading = upload(file).catch(() => null).then(attachment => {
+      group.files = group.files.map(item => item.key === entry.key ? { ...item, attachment, error: attachment ? null : "올리지 못했습니다. 연결 후 다시 시도해 주세요.", canRetry: !attachment } : item);
+      group.uploads.delete(entry.key);
+      if (attachment) group.sources.delete(entry.key);
+      publishPending(storageScope, group);
+      return attachment;
+    });
+    group.uploads.set(entry.key, uploading);
+  };
   const add = (list: File[]) => {
-    const added = list.map((file) => ({
+    const added = pickedFiles(list).map((file) => ({
       file,
       entry: {
-        key: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        key: crypto.randomUUID(),
         name: file.name || "붙여넣은 그림.png",
         size: file.size,
-        preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
+        preview: isRasterImageFile(file) && isPicture(file.type) ? URL.createObjectURL(file) : null,
         attachment: null,
         error: file.size > MAX_FILE ? `25MB보다 큽니다 (${sizeText(file.size)})` : null,
       } satisfies PendingFile,
     }));
-    setFiles((current) => [...current, ...added.map(({ entry }) => entry)]);
+    group.files = [...group.files, ...added.map(({ entry }) => entry)];
+    publishPending(storageScope, group);
     for (const { file, entry } of added) {
       if (entry.error) continue;
-      const uploading = upload(file).catch(() => null).then((attachment) => {
-        setFiles((current) => current.map((item) => (item.key === entry.key ? { ...item, attachment, error: attachment ? null : "올리지 못했습니다" } : item)));
-        return attachment;
-      });
-      uploads.current.set(entry.key, uploading);
+      group.sources.set(entry.key, file);
+      start(entry, file);
     }
   };
   const remove = (keys?: string[]) => {
-    setFiles((current) => {
-      for (const item of keys ? current.filter((entry) => keys.includes(entry.key)) : current) {
-        if (item.preview) URL.revokeObjectURL(item.preview);
-        uploads.current.delete(item.key);
-      }
-      return keys ? current.filter((entry) => !keys.includes(entry.key)) : [];
-    });
+    for (const item of keys ? group.files.filter(entry => keys.includes(entry.key)) : group.files) {
+      if (item.preview) URL.revokeObjectURL(item.preview);
+      group.uploads.delete(item.key);
+      group.sources.delete(item.key);
+    }
+    group.files = keys ? group.files.filter(entry => !keys.includes(entry.key)) : [];
+    publishPending(storageScope, group);
   };
-  useEffect(() => () => remove(), [scope]);
+  const retry = (key: string) => {
+    const entry = group.files.find(item => item.key === key), file = group.sources.get(key);
+    if (!entry || !file || group.uploads.has(key)) return;
+    group.files = group.files.map(item => item.key === key ? { ...item, error: null, canRetry: false } : item);
+    publishPending(storageScope, group);
+    start(entry, file);
+  };
   const take = async () => {
-    const sending = files.filter((item) => !item.error);
-    const carried = (await Promise.all(sending.map((item) => uploads.current.get(item.key) ?? Promise.resolve(item.attachment)))).filter(
-      (attachment): attachment is Attachment => Boolean(attachment),
-    );
-    return { carried, done: () => remove(sending.map((item) => item.key)) };
+    const sending = group.files.filter(item => !item.error);
+    const ready = await Promise.all(sending.map(async item => ({ key: item.key, attachment: await (group.uploads.get(item.key) ?? Promise.resolve(item.attachment)) })));
+    const carried = ready.map(item => item.attachment).filter((attachment): attachment is Attachment => Boolean(attachment));
+    return { carried, done: () => remove(ready.filter(item => item.attachment).map(item => item.key)) };
   };
-  return { files, add, remove, take, count: files.filter((item) => !item.error).length };
+  return { files, add, remove, retry, take, count: files.filter(item => !item.error).length };
 }
 
 /** Chips above the input: a thumbnail or the file's name, with a spinner while it uploads. */
-export function PendingFiles({ files, onRemove }: { files: PendingFile[]; onRemove: (key: string) => void }) {
+export function PendingFiles({ files, onRemove, onRetry }: { files: PendingFile[]; onRemove: (key: string) => void; onRetry?: (key: string) => void }) {
   return (
     <>
       {files.map((file) => (
-        <span key={file.key} className={`attach-chip${file.error ? " failed" : ""}`} title={file.error ?? `${file.name} · ${sizeText(file.size)}`}>
+        <span key={file.key} className="attach-pending">
+        <span className={`attach-chip${file.error ? " failed" : ""}`} title={file.error ?? `${file.name} · ${sizeText(file.size)}`}>
           {file.preview ? <img src={file.preview} alt="" /> : <Icon name="file" size={13} />}
           <span className="attach-name">{file.name}</span>
           {file.error ? <span className="attach-size">올리지 못함</span> : !file.attachment ? <span className="spinner small" aria-label="올리는 중" /> : <span className="attach-size">{sizeText(file.size)}</span>}
+          {file.canRetry && onRetry ? <button type="button" onClick={() => onRetry(file.key)} aria-label={`${file.name} 업로드 다시 시도`}>재시도</button> : null}
           <button type="button" onClick={() => onRemove(file.key)} aria-label={`${file.name} 빼기`}>
             <Icon name="x" size={11} />
           </button>
+        </span>
+        {file.error ? <span className="attach-pending-error" role="status">{file.error}</span> : null}
         </span>
       ))}
     </>
@@ -116,11 +175,7 @@ export function AttachmentStrip({ attachments }: { attachments: Attachment[] }) 
         isPicture(attachment.mime) ? (
           <Thumb key={attachment.id} attachment={attachment} onOpen={() => setShown(pictures.indexOf(attachment))} />
         ) : (
-          <span key={attachment.id} className="attach-chip" title={attachment.name}>
-            <Icon name="file" size={13} />
-            <span className="attach-name">{attachment.name}</span>
-            <span className="attach-size">{sizeText(attachment.size)}</span>
-          </span>
+          <AttachmentFile key={attachment.id} attachment={attachment} />
         ),
       )}
       {shown !== null && pictures[shown] ? <Lightbox attachments={pictures} index={shown} onSelect={setShown} onClose={() => setShown(null)} /> : null}
@@ -128,16 +183,68 @@ export function AttachmentStrip({ attachments }: { attachments: Attachment[] }) 
   );
 }
 
+function AttachmentFile({ attachment }: { attachment: Attachment }) {
+  const [open, setOpen] = useState(false);
+  const [host] = useState(attachmentHostId);
+  return <span className="attach-file">
+    <button type="button" className="attach-chip attach-file-button" title={attachment.name} aria-label={`${attachment.name} 받기 또는 공유`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(value => !value)}>
+      <Icon name="file" size={13} /><span className="attach-name">{attachment.name}</span><span className="attach-size">{sizeText(attachment.size)}</span><Icon name="download" size={14} />
+    </button>
+    <Popover open={open} onClose={() => setOpen(false)} role="dialog" label={attachment.name} className="attach-file-menu">
+      <span className="attach-file-title">{attachment.name}</span>
+      <FileActions attachment={attachment} host={host} />
+    </Popover>
+  </span>;
+}
+
+/** Prepare under the immutable host/reference before the final share/save click. */
+function FileActions({ attachment, host }: { attachment: Attachment; host: string }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [sharing, setSharing] = useState(false);
+  const identity = attachment.reference ? artifactCacheKey(attachment.reference) : "local";
+  useEffect(() => {
+    let live = true;
+    setFile(null); setProblem(null);
+    const lease = retainAttachmentUrl(attachment.id, identity, attachment.reference?.hostId ?? host, host);
+    void lease.promise.then(url => shareableFile(url, attachment.name, attachment.mime)).then(value => {
+      if (live) setFile(value);
+    }).catch(error => { if (live) setProblem(error instanceof Error ? error.message : "파일을 불러오지 못했습니다."); });
+    return () => { live = false; lease.release(); };
+  }, [attachment.id, attachment.name, attachment.mime, identity, host, attempt]);
+  const share = () => {
+    if (!file || sharing) return;
+    setSharing(true); setProblem(null);
+    void shareFile(file).catch(error => {
+      if (!(error instanceof Error && error.name === "AbortError")) setProblem(error instanceof Error ? error.message : "공유하지 못했습니다. 파일 받기를 이용해 주세요.");
+    }).finally(() => setSharing(false));
+  };
+  return <span className="attach-file-actions">
+    {!file && !problem ? <span role="status">파일을 준비하는 중…</span> : null}
+    <span className="attach-file-buttons">
+      <button type="button" disabled={!file} onClick={() => {
+        if (!file) return;
+        try { downloadAttachment(file); } catch (error) { setProblem(error instanceof Error ? error.message : "파일을 저장하지 못했습니다."); }
+      }}><Icon name="download" size={15} /> 파일 받기</button>
+      <button type="button" disabled={!file || !canShareFile(file) || sharing} onClick={share}>{sharing ? "공유 창 여는 중…" : "공유…"}</button>
+    </span>
+    {file && !canShareFile(file) ? <small>이 브라우저에서는 파일 공유를 지원하지 않습니다. 파일 받기를 이용해 주세요.</small> : null}
+    {problem ? <span className="attach-file-error" role="alert">{problem}{!file ? <button type="button" onClick={() => setAttempt(value => value + 1)}>다시 불러오기</button> : null}</span> : null}
+  </span>;
+}
+
 function useImage(attachment: Attachment, active = true) {
   const [url, setUrl] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const identity = attachment.reference ? artifactCacheKey(attachment.reference) : "local";
+  const [host] = useState(attachmentHostId);
   useEffect(() => {
     setUrl(null); setProblem(null);
     if (!active) return;
     let live = true;
-    const lease = retainAttachmentUrl(attachment.id, identity);
+    const lease = retainAttachmentUrl(attachment.id, identity, attachment.reference?.hostId ?? host, host);
     lease.promise.then(async value => {
       if (!live) return;
       try {
@@ -188,6 +295,7 @@ function Lightbox({ attachments, index, onSelect, onClose }: { attachments: Atta
   const attachment = attachments[index]!;
   const image = useImage(attachment);
   const close = useRef<HTMLButtonElement>(null);
+  const [host] = useState(attachmentHostId);
   useEffect(() => {
     const origin = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     close.current?.focus(); return () => { if (origin?.isConnected) origin.focus(); };
@@ -214,7 +322,7 @@ function Lightbox({ attachments, index, onSelect, onClose }: { attachments: Atta
         <button ref={close} type="button" onClick={onClose} aria-label="그림 닫기"><Icon name="x" /></button></header>
       <div className="attach-gallery-image">{image.url && !image.problem ? <img src={image.url} alt={attachment.name} onError={image.failed} /> : <p>{image.problem ?? "그림을 불러오는 중…"}{image.problem ? <button type="button" onClick={image.retry}>다시 불러오기</button> : null}</p>}</div>
       <footer><button type="button" disabled={attachments.length < 2} onClick={() => onSelect((index + attachments.length - 1) % attachments.length)}>이전 그림</button>
-        {image.url ? <a href={image.url} download={attachment.name}>이 그림 저장</a> : null}
+        <FileActions key={attachment.reference ? artifactCacheKey(attachment.reference) : attachment.id} attachment={attachment} host={host} />
         <button type="button" disabled={attachments.length < 2} onClick={() => onSelect((index + 1) % attachments.length)}>다음 그림</button></footer>
     </div>,
     document.body,

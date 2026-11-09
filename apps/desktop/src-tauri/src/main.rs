@@ -2,6 +2,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
+    if std::env::args().nth(1).as_deref() == Some("--host-runtime") {
+        std::process::exit(achmage_workbench_lib::host_runtime::run(false));
+    }
+    if std::env::args().nth(1).as_deref() == Some("--host-service") {
+        std::process::exit(achmage_workbench_lib::host_runtime::run(true));
+    }
     if std::env::args().nth(1).as_deref() == Some("--office-executor") {
         std::process::exit(achmage_workbench_lib::office_executor::run());
     }

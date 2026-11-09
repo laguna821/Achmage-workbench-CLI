@@ -141,3 +141,36 @@
   font-weight: 600;
   pointer-events: none;
 }
+
+.composer-file-picker, .attach-file { position: relative; display: inline-flex; min-width: 0; }
+.composer-file-picker > input[hidden] { display: none; }
+.composer-file-problem { color: var(--danger); font-size: var(--fs-meta); overflow-wrap: anywhere; }
+.composer-file-picker > .composer-file-problem { position: absolute; bottom: 100%; padding: 8px; width: min(300px, 75vw); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); z-index: 8; }
+.attach-pending { display: inline-flex; flex-direction: column; gap: 4px; max-width: 100%; }
+.attach-pending-error { color: var(--danger); font-size: var(--fs-micro); max-width: 280px; overflow-wrap: anywhere; }
+.attach-file-button { cursor: pointer; text-align: left; }
+.attach-file-button:hover { border-color: var(--accent); }
+.attach-file-menu { max-width: min(360px, calc(100vw - 32px)); min-width: min(280px, calc(100vw - 32px)); padding: 12px; }
+.attach-file-title { display: block; overflow-wrap: anywhere; margin-bottom: 8px; }
+.attach-file-actions { display: inline-flex; flex-direction: column; gap: 8px; max-width: 100%; font-size: var(--fs-meta); }
+.attach-file-actions small { max-width: 280px; line-height: 1.5; }
+.attach-file-buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.attach-file-buttons button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--r-md); color: inherit; background: var(--surface); }
+.attach-file-buttons button:disabled { opacity: 0.5; }
+.attach-file-error { display: grid; gap: 6px; color: var(--danger); overflow-wrap: anywhere; }
+.attach-lightbox .attach-file-buttons button { background: rgb(0 0 0 / 0.25); }
+.attach-lightbox .attach-file-error { color: white; }
+.attach-lightbox header > span { overflow-wrap: anywhere; min-width: 0; }
+.attach-lightbox header > button { flex: none; }
+.attach-lightbox footer { flex-wrap: wrap; }
+@media (max-width: 900px), (pointer: coarse) {
+  .attach-chip { height: auto; min-height: 44px; max-width: min(100%, 360px); }
+  .attach-chip button { min-width: 44px; min-height: 44px; align-items: center; justify-content: center; }
+  .attach-file-buttons button, .attach-retry { min-height: 44px; }
+  .attach-file .popover { position: fixed; inset: auto 16px max(16px, env(safe-area-inset-bottom, 0px)); max-height: 65dvh; width: auto; max-width: none; overflow-y: auto; }
+  .attach-lightbox { top: var(--mobile-top, 0px); left: var(--mobile-left, 0px); right: auto; bottom: auto; width: var(--mobile-width, 100vw); height: var(--mobile-height, 100dvh); padding: max(12px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); }
+  .attach-lightbox header, .attach-lightbox footer { gap: 8px; }
+  .attach-lightbox button, .attach-lightbox a { min-height: 44px; }
+  .attach-lightbox footer { max-height: 40dvh; overflow-y: auto; }
+  .attach-thumb img { max-width: min(280px, 75vw); }
+}

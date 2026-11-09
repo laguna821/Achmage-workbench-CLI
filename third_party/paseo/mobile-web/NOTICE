@@ -1,0 +1,4 @@
+Paseo mobile web helpers
+Source: https://github.com/getpaseo/paseo at 1fff127f45b11c1c9c573fbbd12791673004c912
+Apache License 2.0; see ../LICENSE and source.json. Original source preserved under upstream/.
+Workbench compatibility extraction: selected pure functions are exported with type-only dependency closure; no original algorithm rewrite.

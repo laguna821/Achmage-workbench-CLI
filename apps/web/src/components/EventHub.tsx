@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { HUB_STATUS_LABEL, type HubConnector, type HubConnectorInput, type HubDeliveryState, type HubSnapshot, type HubWorkflow, type HubWorkflowInput } from "../../../../packages/contracts/src/event-hub.ts";
 import type { Api } from "../api.ts";
 import { FeatureDialog, featureError, featureTime } from "./FeatureDialog.tsx";
+import { PaseoHubConnection } from "./PaseoHubConnection.tsx";
 
 const list = (value: string) => [...new Set(value.split(/[\n,]/).map(part => part.trim()).filter(Boolean))];
 const localDate = (value: number | null) => value === null ? "" : new Date(value - new Date(value).getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 const newConnector = (): HubConnectorInput => ({ name: "", kind: "github", enabled: false });
 const newWorkflow = (hostId: string): HubWorkflowInput => ({ name: "", connectorId: "", enabled: false, allowedSources: [], eventTypes: [], hostId, workspaceId: "", sessionId: "", profileId: null, instructions: "", minIntervalSeconds: 60, expiresAt: Date.now() + 7 * 86400_000 });
 
-/** Only signed inbound events can start work. This UI never fabricates a delivery or model run. */
+/** Signed ingress and an explicitly enrolled outbound Hub relationship remain separate. */
 export function EventHub({ api, onClose }: { api: Api; onClose(): void }) {
   const [state, setState] = useState<HubSnapshot | null>(null), [error, setError] = useState(""), [busy, setBusy] = useState(false), [notice, setNotice] = useState("");
   const [connector, setConnector] = useState<HubConnectorInput>(newConnector), [workflow, setWorkflow] = useState<HubWorkflowInput | null>(null);
@@ -38,6 +39,7 @@ export function EventHub({ api, onClose }: { api: Api; onClose(): void }) {
       <div className="feature-actions"><button type="button" className="button small" disabled={busy} onClick={() => void perform(refresh, "목록을 새로 불러왔습니다.")}>새로고침</button><span>{state?.ingress.enabled ? "이벤트 수신 켜짐" : "이벤트 수신 꺼짐"}</span></div>
       {state?.ingress.url ? <p className="feature-mono">수신 주소 {state.ingress.url}</p> : null}{state?.ingress.message ? <p className="sheet-hint">{state.ingress.message}</p> : null}
       {!state ? <p role="status">Hub 불러오는 중…</p> : <>
+        <PaseoHubConnection api={api} snapshot={state} busy={busy} perform={perform} />
         <section className="feature-section"><h3>이벤트 연결</h3><div className="feature-cards">{state.connectors.map(item => <article key={item.id}><strong>{item.name}</strong><p>{item.kind} · {item.enabled ? "켜짐" : "꺼짐"} · {item.credentialConfigured ? "서명 확인 설정됨" : "서명 확인 정보 필요"}</p><small>최근 수신 {featureTime(item.lastReceivedAt)}</small><div className="feature-actions"><button type="button" className="button small" disabled={busy} onClick={() => editConnector(item)}>설정 편집</button></div></article>)}{!state.connectors.length ? <p>등록한 이벤트 연결이 없습니다.</p> : null}</div>
           <form className="feature-form" onSubmit={event => { event.preventDefault(); void perform(async () => { const result = await api.request<HubConnector>("POST", "/api/hub/connectors", connector); if (live.current) editConnector(result); }, "이벤트 연결을 저장했습니다."); }}>
             <h4>{connector.id ? "연결 편집" : "새 연결"}</h4>{connector.kind === "discord" ? <p className="sheet-hint">Discord 공식 Webhook Events를 받습니다. 일반 서버 메시지 전체 수신은 지원하지 않습니다.</p> : null}<fieldset disabled={busy}>

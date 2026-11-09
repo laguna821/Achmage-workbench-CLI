@@ -61,6 +61,9 @@ export function scopedRoute(manager: SessionManager, method: string, path: strin
   };
   if (read && ["/api/snapshot", "/api/tasks", "/api/host", "/api/attention", "/api/agent-profiles", "/api/tools", "/api/prefs"].includes(url.pathname)) return { permission: "read" };
   if (url.pathname === "/api/prefs" && method === "PUT") return { permission: "read" };
+  if ((url.pathname === "/api/push" && read)
+    || (url.pathname === "/api/push/subscription" && ["PUT", "DELETE"].includes(method))
+    || (url.pathname === "/api/push/links/resolve" && method === "POST")) return { permission: "read" };
   if (url.pathname === "/api/attention/presence" && method === "POST") return { permission: "read", ...(body.sessionId ? { workId: sessionWork(body.sessionId) } : {}) };
   if (parts[0] === "voice" && context?.voice) {
     if (read && parts.length === 1) return { permission: "read" };

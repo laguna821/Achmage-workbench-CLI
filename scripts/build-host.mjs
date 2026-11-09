@@ -7,6 +7,7 @@ import { officeProviderHostPlugin } from './office-provider-platform.mjs';
 import { officeFileParsePlugin } from './office-file-parse-platform.mjs';
 import { extensionRuntimeExternals, copyExtensionRuntimeAssets } from '../extension-runtime/package-assets.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
+await import('./emit-paseo-host.mjs');
 const pin = readFileSync(new URL('../vendor/ieumoffice.PINNED', import.meta.url), 'utf8').match(/^commit: (.+)$/m)?.[1];
 if (execFileSync('git', ['-C', `${root}vendor/ieumoffice`, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() !== pin) throw new Error('Ieum source differs from the reviewed pin');
 await build({

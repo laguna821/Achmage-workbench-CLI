@@ -25,6 +25,7 @@ export class Notifications {
   private readonly now: () => number;
   private readonly records = new Map<string, AttentionEvent>();
   private readonly presence = new Map<string, AttentionPresence & { at: number }>();
+  private readonly deliveries = new Set<(row: AttentionEvent, payload: AttentionPayload) => void>();
   private readonly unsubscribe: () => void;
   private closed = false;
 
@@ -43,7 +44,13 @@ export class Notifications {
       }
     });
   }
-  close() { this.closed = true; this.unsubscribe(); this.presence.clear(); }
+  close() { this.closed = true; this.unsubscribe(); this.presence.clear(); this.deliveries.clear(); }
+  /** Live producer only. Subscribing never replays historical or uncertain OS deliveries. */
+  subscribeDelivery(listener: (row: AttentionEvent, payload: AttentionPayload) => void) { this.deliveries.add(listener); return () => { this.deliveries.delete(listener); }; }
+  deliverable(id: string) {
+    const row = this.require(id), session = this.hooks.session(row.taskRef.sessionId)!;
+    return row.readAt === null && this.hooks.enabled() && !session.muted && !this.visible(session.id) && (row.kind !== "input_needed" || row.resolvedAt === null);
+  }
   private persist(emit = true) {
     if (this.records.size > MAX_RECORDS) {
       const oldest = [...this.records.values()].sort((a, b) => a.createdAt - b.createdAt);
@@ -150,6 +157,9 @@ export class Notifications {
       taskRef: { hostId: session.hostId, workspaceId: session.workspaceId ?? null, sessionId: session.id, nativeSessionId: session.nativeSessionId,
         runId, parentRunId: parent ? JSON.parse(parent) as string | null : null, executorKind: session.pageAgent ? "browser" : session.documentAgent ? "office" : "session" } };
     this.records.set(id, row); this.persist();
+    if (enabled && !seen) for (const listener of this.deliveries) {
+      try { listener(row, this.payload(row)); } catch { /* The independent push adapter retains its own failure state. */ }
+    }
     if (row.delivery === "pending") void this.deliver(row);
   }
   private async deliver(row: AttentionEvent) {

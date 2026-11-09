@@ -374,7 +374,7 @@ export function WorkView({
   });
   const panes = usePaneActions();
   // Capture this composer's owner, including when another pane gains focus during an upload.
-  const pending = usePendingFiles(file => actions.upload(file, active?.workId ?? work.id), work.id);
+  const pending = usePendingFiles(file => actions.upload(file, active?.workId ?? work.id), modes?.draftKey ?? `work:${work.id}:${active?.id ?? "none"}`);
   // "/" in the input: the active session's commands and skills, asked for when first typed.
   const [commandList, setCommandList] = useState<{ sessionId: string; items: EngineCommand[] } | null>(null);
   const slash = active
@@ -752,7 +752,7 @@ export function WorkView({
               <div className="doc-chips">
                 {draw.on ? <DrawChip state={state} provider={pickerProvider} value={draw} onClear={() => setDraw({ ...draw, on: false })} /> : null}
                 <NoteChips notes={notes} onRemove={(path) => setNotes((current) => current.filter((note) => note.path !== path))} />
-                <PendingFiles files={pending.files} onRemove={(key) => pending.remove([key])} />
+                <PendingFiles files={pending.files} onRetry={pending.retry} onRemove={(key) => pending.remove([key])} />
                 {handoffTo ? (
                   <span className="target-chip" style={accentStyle(lookOf(handoffTo.provider))}>
                     <EngineMark provider={handoffTo.provider} size={13} /> @{handoffTo.purpose}

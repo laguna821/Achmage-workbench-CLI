@@ -31,6 +31,8 @@
     "quickjs-emscripten-core": "0.32.0",
     "@jitl/quickjs-wasmfile-release-sync": "0.32.0",
     "@workbench/paseo-terminal": "file:../../vendor/paseo/terminal",
-    "@workbench/agent-desktop-installer": "file:../../vendor/agent-desktop/npm"
+    "@workbench/agent-desktop-installer": "file:../../vendor/agent-desktop/npm",
+    "@workbench/paseo-push": "file:../../vendor/paseo/push",
+    "web-push": "3.6.7"
   }
 }

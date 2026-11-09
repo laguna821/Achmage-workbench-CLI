@@ -1,6 +1,6 @@
 # 0.4.0 실행 상태
 
-2026-11-09. **남은 기능을 구현하고 전체 기능 연결 뒤 통합 빌드·릴리즈한다.** 사용자 재교정: 기능마다 검사·재검토를 끼워 넣지 않는다. 이미 통과한 검사는 반복하지 않고, 발견한 문제에 필요한 확인만 수행한다. 남은 기능 연결을 먼저 마친 뒤 설치본 단계에서 통합 확인을 묶는다. 기능 추가마다 production/설치본 빌드를 반복하지 않는다. 다음 후보 CI는 취소했다. 필요한 동작 확인은 묶음당 한 번, 실제 실패는 해당 부분만 수정·재확인한다.
+2026-11-09. **남은 기능을 구현하고 전체 기능 연결 뒤 통합 빌드·릴리즈한다.** 사용자 재교정: 기능마다 검사·재검토를 끼워 넣지 않는다. 이미 통과한 검사는 반복하지 않고, 발견한 문제에 필요한 확인만 수행한다. 남은 기능 연결을 먼저 마친 뒤 설치본 단계에서 통합 확인을 묶는다. 기능 추가마다 production/설치본 빌드를 반복하지 않는다. 다음 후보 CI는 취소했다. 필요한 동작 확인만 수행하며 실제 실패는 해당 부분만 수정·재확인한다.
 
 | 기능 묶음 | 현재 코드 | 근거와 남은 범위 |
 |---|---|---|
@@ -8,7 +8,7 @@
 | U02 공통 UI | 구현 | `abf4f68` — 키보드 이동·초점 복귀·HIG 컨트롤 |
 | U03 생성·프로젝트·탭 | 주요 흐름 구현 | `abf4f68`, `a3d9683`, `e056d8b` — 9종 문서·실제 폴더 생성, 정리 폴더 구분 |
 | U04 대화·초안 | 구현 | `abf4f68` — 읽기 위치·검색 원문 펼침·초안 보호 |
-| U05 그림 결과 | 주요 흐름 구현 | `53c60ce`, `50cb030` 및 후속 연결 — 당시 이미지 보존·미리보기·원본 decoder. 원격 승인된 대화/업로드 첨부 연결 코드 추가; 전체 파일·획득 흐름 남음 |
+| U05 그림 결과 | 파일·사진·공유 연결 구현 | 기존 이미지·원본 decoder에 파일/사진/카메라 선택, 다운로드·Web Share, host·대화별 업로드 초안 복원을 추가했다. 실제 휴대폰 제공자·공유 화면 확인은 남음 |
 | U06 작업 목록·명령 | 주요 흐름 구현 | `22166e5`, `498a710` — 독립 문서·하위 작업과 공통 접수. 공급자 하위 작업은 관찰만 지원 |
 | U07 역할·CLI/MCP API | 구현 | `9239725`, `498a710` — 역할 CRUD·요청 당시 설정 보존·공통 receipt |
 | U08 9형식 Office UI | 주요 흐름 구현 | `b40fb38` — 원본 명령 메뉴·theme 전달. 전체 native OS 사용 확인은 통합 때 |
@@ -17,12 +17,12 @@
 | U11 설정·가져오기 | 주요 흐름 구현 | 기존 이음/Dropbox 흐름 유지, `18bac42` 과거 기록/실행 구분·원문 보존. 전체 온보딩 통합 남음 |
 | U12–U14 공유 웹·같은 페이지 AI | 핵심 코드 구현 | `2df5f41`, `1c5e688` — 네이티브 웹 탭·주소 이동·독립 웹 AI·사람 인계·숨김 유지·대상/문서/제어권 식별. 이번 묶음에서 다운로드·사이트 권한·macOS 14+ 프로필·문서/첨부 산출물 연결을 추가했다. Windows/macOS 다운로드 취소와 실제 OS 화면 사용 등은 남음. [범위](../../shared-browser.md) |
 | U15 외부 앱 조작 | 원본 CLI·세션·화면 연결 구현 | 공식 v1.1.0 설치/원본 installer, 창 선택, 관찰·조작·캡처·제어권·기록, Codex/Claude 도구 연결. 실제 OS 앱 조작과 설치본 사용은 남음. [범위](../../desktop-control.md) |
-| U16 독립 host | 주요 흐름 구현 | `4924188` — 창 종료 뒤 지속·재접속·epoch·선택 로그인 시작. AppImage 지속 runtime 남음 |
-| U17–U18 기기·모바일 | 원본 전송·실제 listener·기기 승인·첫 연결 UI 구현 | 원본 client/protocol/server 전송 묶음 + Workbench 프로젝트 권한·기존 HTTP/event·첨부·호스트 전환 연결. 실제 loopback 두 클라이언트에서 등록/범위/철회/재접속 확인. 실제 외부망·모바일 UX·native credential 저장 남음. [재사용 실행표](PASEO-REUSE.md), [사용 범위](../../remote-connections.md) |
-| U19 서비스 알림 | 주요 흐름 구현 | `9c56e75`, `573eebf` — host의 영구 기록·중복 방지·읽음/승인 분리·정확한 세션/문서 원문 이동. 모바일 push와 OS 클릭 연동 일부 남음 |
+| U16 독립 host | AppImage 지속 경로까지 코드 구현 | 기존 서비스·재접속에 압축 runtime 보존, 별도 AppImage mount/Node 수명, 로그인 실행 경로 갱신을 연결. 새 AppImage/native OS 실행 확인은 통합 때 |
+| U17–U18 기기·모바일 | 원본 전송·기기 승인·native 저장·모바일 입력 연결 구현 | Tauri OS keyring과 세션 값 이행, 사진·공유·파일 선택, IME 최종값·viewport·초안 복원을 연결했다. 브라우저는 session credential이며 QR camera scan·실제 외부망/휴대폰은 남음. [사용 범위](../../remote-connections.md) |
+| U19 서비스 알림 | push·OS 클릭 연결 코드 구현 | 원본 Paseo lease/store + web-push, VAPID OS vault, host별 구독, 현재 권한 resolve 뒤 실제 이동 시 ack, macOS/Windows native 클릭 helper 연결. 실제 OS·모바일 도착/권한/클릭은 미실행. [범위](../../service-notifications.md) |
 | U20 workspace 운영 | 주요 흐름 구현 | `2462057`, `83a908b` — owned 서버 실행·포트 충돌·출력 재사용·정확한 소유 실행 종료와 UI 연결. 이번 묶음에서 원본 terminal controller/emulator/headless, 모바일 보조 키, 로그 검색·고정 서비스 HTTP 프록시를 연결. 실제 모바일 입력과 전체 웹앱/WebSocket 프록시는 남음 |
 | U21 예약 | 주요 흐름 구현 | `1a39d77` — occurrence 기록·timezone·횟수/기한·미실행 정책·unknown 재전송 방지 |
-| U22–U24 음성·플러그인·Hub | 핵심 서비스·화면 연결 구현 | 원본 음성/SDK/compiler/lifecycle + 실제 QuickJS 실행, 서명 사건 consumer/기존 task journal, Composer·설정 메뉴 연결. 실마이크·native 모델·실모바일·외부계정·원본 outbound Hub client 남음. [사용 범위](../../voice-extensions-events.md) |
+| U22–U24 음성·플러그인·Hub | 핵심 서비스·화면·원본 outbound Hub 연결 구현 | 음성/SDK/compiler/lifecycle + QuickJS, 서명 사건/TaskService receipt에 원본 Hub relationship/retry/execution·OS vault·관리 화면 추가. 실마이크/native 모델/실모바일/외부 계정 확인은 남음. [범위](../../voice-extensions-events.md) |
 | U25 설치·릴리즈 | 전체 통합 뒤 진행 | 두 과거 후보 run은 증거로 보존. 다음 candidate dispatch 없음 |
 
 현재 코드의 확인은 해당 묶음에서 확보한 결과를 재사용한다. Office production bundle은 Rust PATH와 vendor realpath를 보정한 실행에서 통과했다. U03/U10 관련 동작 15개, import 9개, 실제 폴더 경계 1개, U20 서비스 3개와 UI 4개, U19 host 알림 4개와 UI 6개 확인을 마쳤다. 전체 OS/실계정/실기기 완료를 뜻하지 않는다.
@@ -53,4 +53,10 @@ U22–U24 원본을 실제 서비스와 화면에 연결했다. 음성 host3/UI4
 
 사용자 교정 `decision-5e2a5ff3288c4ec7973e1f9922dd873605f56843e258b8e4fea0485a18a4cd70`에 따라 준비하던 root/web 타입 및 Rust 검사는 시작하지 않았다. Office 담당도 시작 전이던 새 검사를 실행하지 않았다. 이미 끝난 새 desktop4·browser outputs4·terminal2 결과를 재사용하며 다시 돌리지 않는다. 전체 남은 기능 구현을 먼저 진행하고 필요한 통합 확인은 설치본 시점에 묶는다.
 
-이 묶음은 U09·U12–15·U20의 실제 코드 연결을 추가했으며, U25 릴리즈나 25개 단위/156개 요구의 전체 완료를 뜻하지 않는다. AppImage 영속 runtime, 실제 외부망/모바일·native credential·push, 전체 파일 흐름·하위 작업 제어·온보딩, outbound Hub, 통합 설치·업데이트 등 기존 미완료 범위를 유지한다.
+이전 묶음 e1cb098은 U09·U12–15·U20 연결을 추가했다. 아래 후속에서 AppImage·native credential·모바일 파일/입력·push·outbound Hub 코드를 연결했다. 25개 단위/156개 요구와 U25 릴리즈의 전체 완료를 뜻하지 않는다.
+
+## 2026-11-09 지속 실행·모바일 후속
+
+연구 판 `research:rr-a19bb59ee9cc2a51ca502509a421c7ac:de8443305abef0bb31264f43cf9032da8b79f5b654405db7645114dc0c13e3b4` (R1–R6). 기존 3 owner를 구현에만 배정했다. root가 지속 AppImage·keyring·공통 API/화면/권한·배포 출처를 연결했다. 원본 server/push 의존 모듈 emit 한 번은 성공했으며, 새 테스트·전체 타입검사·Rust·production/설치본/CI·외부 발송은 수행하지 않았다.
+
+남은 구현에는 공급자 하위 작업 제어, 전체 온보딩, QR camera scan, 공유 웹의 OS별 남은 동작, 서비스 전체 웹앱/WebSocket 프록시가 있다. 실제 OS/휴대폰/외부망/음성·계정 확인과 전체 통합 빌드·설치·업데이트·배포는 별도 남은 작업이다. 이미 끝낸 검사를 반복하거나 기능 범위를 새로 늘리지 않는다.

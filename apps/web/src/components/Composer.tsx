@@ -5,7 +5,12 @@ import { showsNothing } from "./docs/image-paste.ts";
 import { SlashList, rankCommands, slashQuery, type ComposerSlash } from "./SlashList.tsx";
 import { FormatBadge } from "./DocCards.tsx";
 import { Icon } from "./Icon.tsx";
-import { DRAFT_EVENT, DRAFT_PREFIX } from "../draft.ts";
+import { DRAFT_EVENT, persistDraft, readDraft, readDraftSelection, saveDraftSelection } from "../draft.ts";
+import { isImeComposingKeyboardEvent } from "../../../../vendor/paseo/mobile-web/keyboard-ime.ts";
+import { resolveMessageInputEnterAction } from "../../../../vendor/paseo/mobile-web/enter-action.ts";
+import { compactInput } from "../mobile-layout.ts";
+import { pickedFiles } from "../mobile-platform.ts";
+import { MenuItem, Popover } from "./Popover.tsx";
 import { VoiceInput } from "./VoiceInput.tsx";
 import { appendVoiceTranscript, type VoiceScope } from "../voice/capture.ts";
 
@@ -73,11 +78,18 @@ export function Composer({
   voiceScope?: VoiceScope;
   voiceReply?: string;
 }) {
-  const [draft, setDraft] = useState(() => ({ key: draftKey, text: localStorage.getItem(DRAFT_PREFIX + draftKey) ?? "" }));
-  const text = draft.key === draftKey ? draft.text : localStorage.getItem(DRAFT_PREFIX + draftKey) ?? "";
-  const setText = (next: string) => setDraft({ key: draftKey, text: next });
+  const [draft, setDraft] = useState(() => ({ key: draftKey, text: readDraft(draftKey) }));
+  const text = draft.key === draftKey ? draft.text : readDraft(draftKey);
+  const composingRef = useRef(false);
+  const [draftProblem, setDraftProblem] = useState(false);
   const currentDraft = useRef({ key: draftKey, text });
-  currentDraft.current = { key: draftKey, text };
+  if (!composingRef.current || currentDraft.current.key !== draftKey) currentDraft.current = { key: draftKey, text };
+  const setText = (next: string) => {
+    currentDraft.current = { key: draftKey, text: next };
+    if (ref.current && !composingRef.current && ref.current.value !== next) ref.current.value = next;
+    setDraft({ key: draftKey, text: next });
+    setDraftProblem(!persistDraft(draftKey, next));
+  };
   const [sending, setSending] = useState(false);
   const [voiceEpoch, setVoiceEpoch] = useState(0);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -125,30 +137,57 @@ export function Composer({
   };
 
   useLayoutEffect(() => {
-    setText(localStorage.getItem(DRAFT_PREFIX + draftKey) ?? "");
+    const element = ref.current;
+    const saved = readDraft(draftKey);
+    composingRef.current = false;
+    setText(saved);
     setSpans([]);
-    setCaret(0);
+    const selection = readDraftSelection(draftKey, saved);
+    if (element) {
+      element.value = saved;
+      element.setSelectionRange(selection?.start ?? saved.length, selection?.end ?? saved.length);
+      element.scrollTop = selection?.scrollTop ?? 0;
+    }
+    setCaret(selection?.start ?? saved.length);
     setComposing(false);
     setDismissed(null);
     setSlashDismissed(null);
     pendingCaret.current = null;
+    return () => {
+      if (!element) return;
+      persistDraft(draftKey, element.value);
+      saveDraftSelection(draftKey, { text: element.value, start: element.selectionStart, end: element.selectionEnd, scrollTop: element.scrollTop });
+    };
   }, [draftKey]);
+
+  // Like Paseo's web input, the DOM owns an active IME composition. Only settled text or an
+  // explicit external draft replacement writes back to the textarea.
+  useLayoutEffect(() => {
+    if (ref.current && !composingRef.current && ref.current.value !== text) ref.current.value = text;
+  }, [text, draftKey]);
 
   // A draft written for this box from elsewhere ("이 요청 전으로" puts the request back), whether
   // the box shows that draft already or switches to it after.
   useEffect(() => {
     const onDraft = (event: Event) => {
-      if ((event as CustomEvent<string>).detail === draftKey) setText(localStorage.getItem(DRAFT_PREFIX + draftKey) ?? "");
+      if ((event as CustomEvent<string>).detail === draftKey && !composingRef.current) setText(readDraft(draftKey));
     };
     window.addEventListener(DRAFT_EVENT, onDraft);
     return () => window.removeEventListener(DRAFT_EVENT, onDraft);
   }, [draftKey]);
 
   useEffect(() => {
-    if (draft.key !== draftKey) return;
-    if (text) localStorage.setItem(DRAFT_PREFIX + draftKey, text);
-    else localStorage.removeItem(DRAFT_PREFIX + draftKey);
-  }, [draftKey, draft.key, text]);
+    const flush = () => {
+      const element = ref.current;
+      if (!element || currentDraft.current.key !== draftKey) return;
+      persistDraft(draftKey, element.value);
+      saveDraftSelection(draftKey, { text: element.value, start: element.selectionStart, end: element.selectionEnd, scrollTop: element.scrollTop });
+    };
+    const visibility = () => { if (document.visibilityState === "hidden") flush(); };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", visibility);
+    return () => { window.removeEventListener("pagehide", flush); document.removeEventListener("visibilitychange", visibility); };
+  }, [draftKey]);
 
   useLayoutEffect(() => {
     const element = ref.current;
@@ -170,13 +209,13 @@ export function Composer({
   }, [text]);
 
   useEffect(() => {
-    if (autoFocus) ref.current?.focus();
+    if (autoFocus && !compactInput()) ref.current?.focus({ preventScroll: true });
   }, [autoFocus, draftKey]);
 
   const canSend = !disabled && !sending && !composing && (text.trim().length > 0 || attachments > 0);
 
   const submit = async (mode: "auto" | "queue" = "auto") => {
-    if (!canSend) return;
+    if (!canSend || composingRef.current) return;
     const submitted = { key: draftKey, text };
     setVoiceEpoch(current => current + 1);
     setSending(true);
@@ -186,13 +225,13 @@ export function Composer({
         if (currentDraft.current.key === submitted.key && currentDraft.current.text === submitted.text) {
           setText("");
           setSpans([]);
-        } else if (currentDraft.current.key !== submitted.key && localStorage.getItem(DRAFT_PREFIX + submitted.key) === submitted.text) {
-          localStorage.removeItem(DRAFT_PREFIX + submitted.key);
+        } else if (currentDraft.current.key !== submitted.key && readDraft(submitted.key) === submitted.text) {
+          persistDraft(submitted.key, "");
         }
       }
     } finally {
       setSending(false);
-      if (currentDraft.current.key === submitted.key) ref.current?.focus({ preventScroll: true });
+      if (currentDraft.current.key === submitted.key && !compactInput()) ref.current?.focus({ preventScroll: true });
     }
   };
 
@@ -248,9 +287,10 @@ export function Composer({
         className="composer-input"
         aria-label="요청 입력"
         rows={1}
-        value={text}
+        defaultValue={text}
+        enterKeyHint={compactInput() ? "enter" : "send"}
         placeholder={
-          busy
+          busy && !compactInput()
             ? steerable
               ? "작업 중에도 보낼 수 있어요 · Enter 끼어들기 · Alt+Enter 끝나면 보내기"
               : "끝나면 이어서 보낼 요청 · Enter로 예약"
@@ -261,11 +301,20 @@ export function Composer({
         disabled={disabled}
         onChange={(event) => {
           const next = event.target.value;
+          if (composingRef.current) {
+            currentDraft.current = { key: draftKey, text: next };
+            setDraftProblem(!persistDraft(draftKey, next));
+            return;
+          }
           setSpans(relocateMentions(text, next, spans));
           setText(next);
           setCaret(event.target.selectionStart);
         }}
-        onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
+        onSelect={(event) => {
+          const element = event.currentTarget;
+          setCaret(element.selectionStart);
+          saveDraftSelection(draftKey, { text: element.value, start: element.selectionStart, end: element.selectionEnd, scrollTop: element.scrollTop });
+        }}
         onPaste={(event) => {
           if (!onFiles) return;
           const files = pastedFiles(event.clipboardData);
@@ -279,13 +328,18 @@ export function Composer({
               .catch(() => undefined);
           }
         }}
-        onCompositionStart={() => setComposing(true)}
+        onCompositionStart={() => { composingRef.current = true; setComposing(true); }}
         onCompositionEnd={(event) => {
+          composingRef.current = false;
+          const next = event.currentTarget.value;
+          setSpans(relocateMentions(text, next, spans));
+          setText(next);
           setComposing(false);
           setCaret(event.currentTarget.selectionStart);
         }}
         onKeyDown={(event) => {
-          if (slashOpen && !event.nativeEvent.isComposing && event.keyCode !== 229) {
+          if (composingRef.current || isImeComposingKeyboardEvent(event.nativeEvent)) return;
+          if (slashOpen) {
             if ((event.key === "ArrowDown" || event.key === "ArrowUp") && slashRows.length) {
               event.preventDefault();
               const step = event.key === "ArrowDown" ? 1 : -1;
@@ -303,7 +357,7 @@ export function Composer({
               return;
             }
           }
-          if (listOpen && !event.nativeEvent.isComposing && event.keyCode !== 229) {
+          if (listOpen) {
             if (event.key === "ArrowDown" || event.key === "ArrowUp") {
               event.preventDefault();
               const step = event.key === "ArrowDown" ? 1 : -1;
@@ -321,12 +375,18 @@ export function Composer({
               return;
             }
           }
-          if (event.key !== "Enter" || event.shiftKey) return;
-          if (composing || event.nativeEvent.isComposing || event.keyCode === 229) return;
+          if (event.key !== "Enter") return;
+          const action = resolveMessageInputEnterAction({
+            submitOnEnter: !compactInput(), sendShortcut: "enter", shiftKey: event.shiftKey,
+            metaKey: event.metaKey, ctrlKey: event.ctrlKey, isAgentRunning: busy,
+            onQueue: steerable ? () => undefined : undefined,
+          });
+          if (action === null) return;
           event.preventDefault();
-          void submit(busy && event.altKey ? "queue" : "auto");
+          void submit(busy && (event.altKey || action === "alternate-send") ? "queue" : "auto");
         }}
       />
+      {draftProblem ? <p className="composer-file-problem" role="status">이 브라우저에 초안을 저장하지 못했습니다. 창을 닫기 전에 복사해 주세요.</p> : null}
       {voiceScope ? <VoiceInput key={draftKey} draftId={draftKey} scope={voiceScope} resetVersion={voiceEpoch} reply={voiceReply} disabled={disabled || sending || composing} onApply={(captureDraft, transcript) => {
         const next = appendVoiceTranscript(currentDraft.current, captureDraft, transcript);
         if (next === null || disabled || sending || composing) return false;
@@ -334,7 +394,7 @@ export function Composer({
         ref.current?.focus({ preventScroll: true }); return true;
       }} /> : null}
       <div className="composer-bar">
-        <div className="composer-left">{left}</div>
+        <div className="composer-left">{onFiles ? <AttachmentPicker draftKey={draftKey} disabled={disabled || sending} onFiles={onFiles} /> : null}{left}</div>
         <div className="composer-right">
           {target}
           {busy && (text.trim() || attachments > 0) ? (
@@ -373,4 +433,47 @@ export function Composer({
       </div>
     </div>
   );
+}
+
+function AttachmentPicker({ draftKey, disabled, onFiles }: { draftKey: string; disabled?: boolean; onFiles(files: File[]): void }) {
+  const [open, setOpen] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const photos = useRef<HTMLInputElement>(null);
+  const camera = useRef<HTMLInputElement>(null);
+  const chosenFor = useRef<string | null>(null);
+  const currentKey = useRef(draftKey);
+  currentKey.current = draftKey;
+  useEffect(() => { setOpen(false); setProblem(null); }, [draftKey]);
+  const choose = (element: HTMLInputElement | null) => {
+    chosenFor.current = draftKey;
+    setOpen(false); setProblem(null);
+    element?.click();
+  };
+  const selected = (element: HTMLInputElement) => {
+    const files = element.files ? pickedFiles(element.files) : [];
+    element.value = "";
+    if (!files.length) return;
+    if (disabled) { setProblem("입력이 가능해지면 파일을 다시 선택해 주세요."); return; }
+    if (chosenFor.current !== currentKey.current) {
+      setProblem("파일을 고르는 동안 대화가 바뀌었습니다. 이 대화에서 다시 선택해 주세요.");
+      return;
+    }
+    onFiles(files);
+  };
+  return <span className="composer-file-picker">
+    <button type="button" className="select-button" disabled={disabled} aria-label="사진 또는 파일 첨부" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen(value => !value)}>
+      <Icon name="file" size={15} /> 첨부
+    </button>
+    <Popover open={open} onClose={() => setOpen(false)} placement="above" role="menu" label="사진 또는 파일 첨부">
+      <MenuItem onSelect={() => choose(photos.current)}>사진 보관함에서 선택</MenuItem>
+      <MenuItem onSelect={() => choose(camera.current)}>사진 촬영</MenuItem>
+      <MenuItem onSelect={() => choose(input.current)}>파일 선택</MenuItem>
+      <p className="menu-label">파일마다 최대 25MB · 선택한 대화에만 첨부</p>
+    </Popover>
+    <input ref={input} type="file" multiple hidden tabIndex={-1} onChange={event => selected(event.currentTarget)} />
+    <input ref={photos} type="file" accept="image/*" multiple hidden tabIndex={-1} onChange={event => selected(event.currentTarget)} />
+    <input ref={camera} type="file" accept="image/*" capture="environment" hidden tabIndex={-1} onChange={event => selected(event.currentTarget)} />
+    {problem ? <span className="composer-file-problem" role="alert">{problem}</span> : null}
+  </span>;
 }

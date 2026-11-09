@@ -1,6 +1,6 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import type { AttentionPayload } from "@workbench/contracts";
+import { ATTENTION_LABEL, type AttentionPayload } from "@workbench/contracts";
 
 type Result = { status: "sent" | "unavailable" | "unknown"; detail?: string };
 type Command = { file: string; args: string[]; env?: NodeJS.ProcessEnv; opensAttention: boolean };
@@ -35,8 +35,28 @@ export function systemNotifier(binary: string | null) {
   const desktopBinary = binary && existsSync(binary) ? binary : null;
   const children = new Set<ChildProcess>();
   let closed = false;
+  const native = (payload: AttentionPayload): Promise<Result> => new Promise(resolve => {
+    const kind = Object.entries(ATTENTION_LABEL).find(([, body]) => body === payload.body)?.[0];
+    if (!kind || !desktopBinary || !/^[a-f0-9]{64}$/.test(payload.attentionId)) { resolve({ status: "unavailable" }); return; }
+    const child = spawn(desktopBinary, ["--notify-attention", payload.attentionId, kind], { stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
+    children.add(child); let buffer = "", settled = false;
+    const finish = (result: Result) => { if (settled) return; settled = true; clearTimeout(handshake); resolve(result); };
+    const handshake = setTimeout(() => { child.kill("SIGTERM"); finish({ status: "unknown", detail: "알림 도우미의 표시 결과를 확인하지 못했습니다." }); }, 10000);
+    // Keep only this owned callback helper alive; never adopt or terminate another app process.
+    const expiry = setTimeout(() => child.kill("SIGTERM"), 86400000); expiry.unref();
+    child.stdout!.on("data", (chunk: Buffer) => {
+      buffer += chunk.toString("utf8");
+      if (buffer.length > 256) { child.kill("SIGTERM"); finish({ status: "unknown" }); return; }
+      if (buffer.includes("sent\n")) finish({ status: "sent" });
+      else if (buffer.includes("queued\n")) finish({ status: "unknown", detail: "macOS 알림을 요청했습니다. 현재 운영체제 API는 별도 표시 확인을 제공하지 않습니다." });
+      else if (buffer.includes("unavailable\n")) finish({ status: "unavailable", detail: "운영체제 알림 권한과 앱 등록을 확인해 주세요." });
+    });
+    child.once("error", () => finish({ status: "unavailable", detail: "설치된 앱의 알림 도우미를 시작하지 못했습니다." }));
+    child.once("close", () => { clearTimeout(expiry); children.delete(child); finish({ status: "unknown", detail: "알림 표시 결과를 확인하지 못했습니다." }); });
+  });
   const deliver = (payload: AttentionPayload): Promise<Result> => {
     if (closed || children.size >= 16) return Promise.resolve({ status: "unavailable", detail: "운영체제 알림을 지금 표시할 수 없습니다. 앱의 알림 목록에서 확인해 주세요." });
+    if (desktopBinary && ["darwin", "win32"].includes(process.platform)) return native(payload);
     const command = notificationCommand(process.platform, payload, desktopBinary);
     if (!command) return Promise.resolve({ status: "unavailable", detail: "이 환경에서는 운영체제 알림을 보낼 수 없습니다." });
     return new Promise(resolve => {

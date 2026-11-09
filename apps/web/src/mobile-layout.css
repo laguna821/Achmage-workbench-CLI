@@ -1,0 +1,32 @@
+:root[data-mobile-layout] #root {
+  position: fixed;
+  top: var(--mobile-top, 0px);
+  left: var(--mobile-left, 0px);
+  width: var(--mobile-width, 100%);
+  height: var(--mobile-height, 100dvh);
+  overflow: hidden;
+}
+:root[data-mobile-layout] .app {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+}
+:root[data-mobile-layout] .composer-area {
+  padding-bottom: max(var(--space-3), env(safe-area-inset-bottom, 0px));
+}
+:root[data-mobile-keyboard="open"] .composer-area { padding-bottom: var(--space-2); }
+@media (max-width: 900px), (pointer: coarse) {
+  .composer-input { font-size: max(16px, var(--e-size)); max-height: min(280px, 32dvh); }
+  .composer-bar { gap: 6px; }
+  .composer-left { flex: 1 1 100%; }
+  .composer-right { flex-wrap: wrap; max-width: 100%; }
+  .composer-bar .icon-button:not(.primary), .composer-bar .icon-button.primary,
+  .composer-bar .select-button, .composer-bar .ghost-button, .composer-bar .feature-pill {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .composer-bar .plain-select { min-height: 44px; }
+  .composer .popover { max-width: min(360px, calc(100vw - 32px)); max-height: min(360px, 60dvh); overflow-y: auto; }
+  .approval-actions { flex-wrap: wrap; }
+  .approval-actions button { min-height: 44px; }
+}

@@ -3,16 +3,46 @@
 
 export const DRAFT_PREFIX = "workbench.draft.";
 export const DRAFT_EVENT = "workbench:draft";
+const memory = new Map<string, string>();
+const selectionPrefix = "workbench.draft-selection.";
+export type DraftSelection = { text: string; start: number; end: number; scrollTop: number };
+
+export function readDraft(draftKey: string) {
+  try { return memory.get(draftKey) ?? localStorage.getItem(DRAFT_PREFIX + draftKey) ?? ""; }
+  catch { return memory.get(draftKey) ?? ""; }
+}
+
+/** Synchronous flush also works while a mobile tab is being suspended. No draft event feedback. */
+export function persistDraft(draftKey: string, text: string) {
+  memory.set(draftKey, text);
+  try {
+    if (text) localStorage.setItem(DRAFT_PREFIX + draftKey, text);
+    else localStorage.removeItem(DRAFT_PREFIX + draftKey);
+    return true;
+  } catch { return false; }
+}
+
+export function saveDraftSelection(draftKey: string, selection: DraftSelection) {
+  try { localStorage.setItem(selectionPrefix + draftKey, JSON.stringify(selection)); } catch { /* Text still has its in-memory fallback. */ }
+}
+
+export function readDraftSelection(draftKey: string, text: string): DraftSelection | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(selectionPrefix + draftKey) ?? "null") as DraftSelection | null;
+    return value?.text === text && Number.isInteger(value.start) && Number.isInteger(value.end) &&
+      value.start >= 0 && value.end >= value.start && value.end <= text.length ? value : null;
+  } catch { return null; }
+}
 
 /** Put text in an input box's draft (by its draft key), shown now if that box is on screen. */
 export function writeDraft(draftKey: string, text: string) {
-  localStorage.setItem(DRAFT_PREFIX + draftKey, text);
+  persistDraft(draftKey, text);
   window.dispatchEvent(new CustomEvent(DRAFT_EVENT, { detail: draftKey }));
 }
 
 /** Add a block after what the box already holds (a blank line between), keeping what was typed. */
 export function appendDraft(draftKey: string, block: string) {
-  const current = (localStorage.getItem(DRAFT_PREFIX + draftKey) ?? "").replace(/\s+$/, "");
+  const current = readDraft(draftKey).replace(/\s+$/, "");
   writeDraft(draftKey, `${current ? `${current}\n\n` : ""}${block}\n\n`);
 }
 

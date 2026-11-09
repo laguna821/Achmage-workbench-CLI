@@ -16,6 +16,8 @@ pub mod office_executor;
 mod office_browser;
 mod shared_browser;
 mod notifications;
+mod host_credentials;
+pub mod host_runtime;
 pub mod office_secrets;
 pub mod office_fonts;
 pub mod terminal_worker;
@@ -145,13 +147,11 @@ pub fn reveal_ai_secrets() -> i32 {
 }
 
 fn service_enabled(app: &tauri::AppHandle) -> bool {
-    // An AppImage's temporary mount goes away with its launcher. Until the runtime has a
-    // persistent install location, keep its established UI-bound mode.
-    office_cli::data_dir(app).is_none() && std::env::var_os("APPIMAGE").is_none()
+    office_cli::data_dir(app).is_none()
         && std::env::var("WORKBENCH_HOST_MODE").as_deref() != Ok("shell")
 }
 
-fn gateway_command(app: &tauri::AppHandle, action: &str) -> Command {
+fn gateway_command(app: &tauri::AppHandle, action: &str) -> Result<Command, String> {
     let service = service_enabled(app);
     let mut command = Command::new(node_binary(app));
     command.env_remove("WORKBENCH_CLI_INPUT");
@@ -189,6 +189,9 @@ fn gateway_command(app: &tauri::AppHandle, action: &str) -> Command {
         }
     }
     if service { command.arg(action); if action == "start" { command.arg("--desktop"); } }
+    if service && action == "start" {
+        if let Some(image) = host_runtime::persistent_image()? { command.env("WORKBENCH_HOST_RUNNER", image); }
+    }
     // The tools shipped with the app (kordoc, IeumOffice, npm) sit in the resource folder.
     if let Ok(dirs) = std::env::join_paths(app_dirs(app)) {
         command.env("WORKBENCH_RESOURCES_DIR", dirs);
@@ -204,12 +207,12 @@ fn gateway_command(app: &tauri::AppHandle, action: &str) -> Command {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit());
-    command
+    Ok(command)
 }
 
 fn start_gateway(app: &tauri::AppHandle) -> Result<(Child, Ready), String> {
     if office_cli::data_dir(app).is_some() { office_cli::trace("gateway-spawn"); }
-    let mut child = gateway_command(app, "start")
+    let mut child = gateway_command(app, "start")?
         .spawn()
         .map_err(|error| format!("Node.js를 실행하지 못했습니다 ({error}). Node 24 이상이 필요합니다."))?;
     let stdout = child.stdout.take().ok_or("게이트웨이 출력을 읽지 못했습니다.")?;
@@ -331,7 +334,7 @@ fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             "stop-service" => {
                 let app = app.clone();
                 std::thread::spawn(move || {
-                    match gateway_command(&app, "stop").stdin(Stdio::null()).stdout(Stdio::null()).status() {
+                    match gateway_command(&app, "stop").and_then(|mut command| command.stdin(Stdio::null()).stdout(Stdio::null()).status().map_err(|error| error.to_string())) {
                         Ok(status) if status.success() => app.exit(0),
                         _ => { app.dialog().message("백그라운드 호스트를 종료하지 못했습니다. 작업 상태를 확인하고 다시 시도해 주세요.").title("종료 실패").kind(MessageDialogKind::Error).blocking_show(); }
                     }
@@ -419,6 +422,7 @@ fn stop_gateway(app: &tauri::AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(code) = notifications::helper(&args) { std::process::exit(code); }
     let cli = if args.first().map(String::as_str) == Some("--headless-export") {
         match office_cli::ExportJob::parse(&args[1..]) {
             Ok(job) => { office_cli::trace("native-start"); Some(job) },
@@ -439,7 +443,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .invoke_handler(tauri::generate_handler![open_session_window, notify_session, notifications::notify_attention, notifications::take_open_attention, set_attention, take_open_files, office_output::render_svg_pdf, office_output::print_svg, office_html_output::render_html_pdf, office_html_output::print_html, office_cli::office_cli_job, office_cli::office_cli_write, office_cli::office_cli_done, office_cli::office_cli_trace, office_browser::office_browser, shared_browser::shared_browser])
+        .invoke_handler(tauri::generate_handler![host_credentials::host_credential, open_session_window, notify_session, notifications::notify_attention, notifications::take_open_attention, set_attention, take_open_files, office_output::render_svg_pdf, office_output::print_svg, office_html_output::render_html_pdf, office_html_output::print_html, office_cli::office_cli_job, office_cli::office_cli_write, office_cli::office_cli_done, office_cli::office_cli_trace, office_browser::office_browser, shared_browser::shared_browser])
         .manage(shared_browser::SharedBrowser::default())
         .manage(office_browser::BrowserJobs::default())
         .register_uri_scheme_protocol("workbench-browser", |ctx, request| office_browser::serve(ctx.app_handle(), request.uri().path()))

@@ -19,7 +19,7 @@ import { attachProtectedSocket, loadOrCreateKeyPair, startProtectedRelayTranspor
 type DeviceConfig = { enabled: boolean; label?: string; relayUrl?: string; publicUrl?: string; listenHost?: string; port?: number };
 export class DeviceService {
   readonly registry: DeviceRegistry;
-  private readonly options: { dataDir: string; manager: SessionManager; bus: EventBus; localOrigin: () => string | null; localToken: string; webDir: string | null; voice?: import("../voice.ts").VoiceService; eventIngress?: (req: IncomingMessage, res: ServerResponse) => Promise<void> };
+  private readonly options: { dataDir: string; manager: SessionManager; bus: EventBus; localOrigin: () => string | null; localToken: string; webDir: string | null; push?: () => import("../push/devices.ts").PushDevices | undefined; voice?: import("../voice.ts").VoiceService; eventIngress?: (req: IncomingMessage, res: ServerResponse) => Promise<void> };
   private readonly gateway: DeviceGateway;
   private readonly dir: string;
   private readonly logger = pino({ level: "silent" });

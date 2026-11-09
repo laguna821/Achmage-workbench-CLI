@@ -22,6 +22,7 @@ export class DeviceGateway {
   private readonly options: {
     registry: DeviceRegistry; manager: SessionManager; bus: EventBus;
     localOrigin: () => string | null; localToken: string; dataDir: string; voice?: import("../voice.ts").VoiceService;
+    push?: () => import("../push/devices.ts").PushDevices | undefined;
   };
   constructor(options: DeviceGateway["options"]) { this.options = options; this.media = new RemoteMediaAccess(options.dataDir, options.manager); }
   close() { for (const socket of this.sockets) socket.close(1000, "remote access disabled"); this.sockets.clear(); }
@@ -93,7 +94,12 @@ export class DeviceGateway {
         this.media.requireReferences(grant, body);
         const json = (value: unknown) => Response.json(value);
         let result: Response;
-        if (serviceProxy) result = await manager.services.proxy(decodeURIComponent(serviceProxy[1]!), new URL(request.path, "http://workbench.invalid").searchParams.get("path") ?? "/", { method: request.method, headers: request.headers, body: bytes.length ? bytes : undefined, signal: abort.signal }, workId => { registry.authorize(credential, "terminal", workId); });
+        if (pathname === "/api/push" || pathname.startsWith("/api/push/")) {
+          const push = this.options.push?.();
+          if (!push) throw new HttpError(503, "push_unavailable", "이 호스트에서는 푸시 알림을 사용할 수 없습니다.");
+          result = json(push.handle(credential, request.method, pathname, body));
+        }
+        else if (serviceProxy) result = await manager.services.proxy(decodeURIComponent(serviceProxy[1]!), new URL(request.path, "http://workbench.invalid").searchParams.get("path") ?? "/", { method: request.method, headers: request.headers, body: bytes.length ? bytes : undefined, signal: abort.signal }, workId => { registry.authorize(credential, "terminal", workId); });
         else if (pathname === "/api/snapshot") result = json(scopedSnapshot(manager.snapshot(), grant));
         else if (pathname === "/api/tasks") {
           const tasks = manager.tasks.list(); result = json({ ...tasks, tasks: tasks.tasks.filter(t => grant.workIds.includes(t.workId)) });

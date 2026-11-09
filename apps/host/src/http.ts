@@ -28,6 +28,7 @@ import { OfficeWiki } from "./office-wiki.ts";
 import { PdfNotes } from "./pdf-notes.mjs";
 
 export const MIME: Record<string, string> = {
+  ".webmanifest": "application/manifest+json",
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".mjs": "text/javascript; charset=utf-8",
@@ -108,6 +109,7 @@ function parseRefs(value: unknown): DocRef[] {
 }
 
 export type HttpOptions = {
+  push?: import("./push/devices.ts").PushDevices;
   browserOutputs?: import("./browser-outputs.ts").BrowserOutputs;
   desktop?: import("./desktop-adapter.ts").DesktopService;
   voice?: import("./voice.ts").VoiceService;
@@ -200,6 +202,7 @@ export function serveStatic(res: ServerResponse, webDir: string, pathname: strin
     "content-type": MIME[extname(file)] ?? "application/octet-stream",
     "cache-control": page ? "no-store" : hashed ? "public, max-age=31536000, immutable" : "no-cache",
     ...(page ? pageHeaders : {}),
+    ...(found && /^assets\/mobile-worker-[\w-]+\.js$/.test(rel) ? { "service-worker-allowed": "/" } : {}),
   });
   createReadStream(file).pipe(res);
 }
@@ -278,6 +281,15 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         throw new HttpError(401, "unauthorized", "인증 토큰이 맞지 않습니다.");
       }
       if (options.devices && path.startsWith("/api/devices") && await options.devices.handle(req, res, url)) return;
+      if (path.startsWith("/api/push/") && options.push) {
+        if (path === "/api/push/settings" && method === "GET") return sendJson(res, 200, options.push.settings());
+        if (path === "/api/push/settings" && method === "PUT") return sendJson(res, 200, await options.push.configure(await readJson(req, 4096) as unknown as import("@workbench/contracts").PushConfiguration));
+        if (path === "/api/push/rotate" && method === "POST") return sendJson(res, 200, await options.push.rotate());
+        if (path === "/api/push/devices" && method === "GET") return sendJson(res, 200, options.push.settings().devices);
+        const device = /^\/api\/push\/devices\/([^/]+)$/.exec(path);
+        if (device && method === "DELETE") { options.push.revoke(decodeURIComponent(device[1]!)); return sendJson(res, 200, options.push.settings()); }
+        throw new HttpError(404, "not_found", "푸시 설정 요청을 찾지 못했습니다.");
+      }
       if (options.hub && path.startsWith("/api/hub") && await options.hub.handleManagement(req, res, url)) return;
       if (await handleRuntimeHttp(req, res, url, options)) return;
       if (await handleDesktopHttp(req, res, url, options.desktop)) return;
