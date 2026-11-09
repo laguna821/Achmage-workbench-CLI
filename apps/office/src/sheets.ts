@@ -1,3 +1,4 @@
+import { connectOfficeUi } from "./ui-adapters/connect.ts";
 import { mountOfficeAi, officeAiTransport } from "./office-ai.ts";
 import { createOfficePreferences, legacyOfficePanel } from "./preferences.ts";
 import "./sheets.css";
@@ -27,6 +28,9 @@ const artifactId = init.artifact.id;
  * revision (the document moved on meanwhile); the working copy holds them.
  */
 const state = { revision: init.artifact.revision, theme: init.theme, pending: 0, uncommitted: false, kept: false };
+connectOfficeUi(init, "sheets", command => dispatch("menu:action", [command]), theme => {
+  state.theme = theme; document.documentElement.dataset.workbenchTheme = theme; dispatch("app:theme-changed", [theme]);
+});
 const mcp = originalMcp(message => dispatch("sheets:mcp-command", [message]));
 let mcpCopy: OfficeCopy | null = null;
 installMcp(init, {
@@ -377,11 +381,8 @@ async function flush() {
 }
 
 listen((message) => {
-  if (message.type === "office:theme") {
-    state.theme = message.theme;
-    document.documentElement.dataset.workbenchTheme = message.theme;
-    dispatch("app:theme-changed", [message.theme]);
-  }
+  if (message.type === "office:export-pdf") dispatch("menu:action", ["export-pdf"]);
+
   if (message.type === "office:flush") void flush();
   if (message.type === "office:rebase") {
     state.revision = message.revision;

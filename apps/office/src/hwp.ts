@@ -1,3 +1,4 @@
+import { connectOfficeUi } from "./ui-adapters/connect.ts";
 import { mountOfficeAi } from "./office-ai.ts";
 import { createOfficePreferences, legacyOfficePanel } from "./preferences.ts";
 import { Events, Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
@@ -17,6 +18,10 @@ const ai = mountOfficeAi(init, gateway, events);
 const id = init.artifact.id, path = init.artifact.path;
 const format: HwpFormat = /\.hwpx$/i.test(path) ? "hwpx" : "hwp";
 const state = { revision: init.artifact.revision, theme: init.theme, dirty: false, kept: false, recovered: false, trackingDropped: false, saveBlocked: false, password: false, memoOpen: false, epoch: 0 };
+connectOfficeUi(init, "hangul", command => {
+  if (command === "save" || command === "save-as") events.emit("saveRequest", command === "save-as" ? "saveAs" : "save");
+  else events.emit("printRequest", command === "export-pdf" ? "pdf" : "print");
+}, theme => { state.theme = theme; events.emit("themeChanged", theme); });
 installMcp(init, { ready: () => events.has("readBytesRequest"), dirty: () => state.dirty, async run(request) {
   if (request.kind !== "read") throw new Error("원본 한글 MCP는 읽기만 지원합니다.");
   const bytes = await new Promise<Uint8Array>((resolve, reject) => {
@@ -86,7 +91,7 @@ async function flush() {
 }
 
 listen((message) => {
-  if (message.type === "office:theme") { state.theme = message.theme; events.emit("themeChanged", message.theme); }
+  if (message.type === "office:export-pdf") events.emit("printRequest", "pdf");
   if (message.type === "office:flush") void flush();
   if (message.type === "office:rebase") {
     // Explicit user resolution; the overwritten revision remains in Workbench history.

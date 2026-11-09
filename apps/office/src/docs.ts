@@ -1,3 +1,4 @@
+import { connectOfficeUi } from "./ui-adapters/connect.ts";
 import "./docs.css";
 import { Events, Gateway, GatewayError, handshake, headlessExport, listen, post, stubBridge } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
@@ -25,6 +26,9 @@ const preferences = await createOfficePreferences(init, gateway, (channel, value
 const artifactId = init.artifact.id;
 /** `revision`: the revision the editor's content is based on (a save must name it). `kept`: a recovery copy exists. */
 const state = { revision: init.artifact.revision, theme: init.theme, dirty: false, kept: false };
+connectOfficeUi(init, "word", command => events.emit("menuCommand", command), theme => {
+  state.theme = theme; document.documentElement.dataset.workbenchTheme = theme; events.emit("themeChanged", theme);
+});
 let pendingOpen: Promise<unknown> | null = null;
 let copyTurn: OfficeCopy | null = null;
 const mcp = originalMcp(message => events.emit("mcpCommand", message));
@@ -135,11 +139,9 @@ async function rebase(revision: number) {
 
 listen((message) => {
   if (message.type === "office:export-pdf") events.emit("menuCommand", "export-pdf");
-  if (message.type === "office:theme") {
-    state.theme = message.theme;
-    document.documentElement.dataset.workbenchTheme = message.theme;
-    events.emit("themeChanged", message.theme);
-  }
+  if (message.type === "office:export-html") events.emit("menuCommand", "export-html");
+  if (message.type === "office:export-images") events.emit("menuCommand", "export-images");
+
   if (message.type === "office:flush") void flush();
   if (message.type === "office:rebase") void rebase(message.revision);
   if (message.type === "office:keep") {

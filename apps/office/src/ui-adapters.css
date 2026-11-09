@@ -1,0 +1,21 @@
+/* This surface owns only its controls. No renderer canvas, page or content styles are changed. */
+.wb-office-ui { --wb-ui-bg: #fff; --wb-ui-text: #172333; --wb-ui-muted: #586879; --wb-ui-line: #d7e0e8; --wb-ui-hover: #edf3f7; --wb-ui-focus: #005bac; }
+.wb-office-ui[data-theme="dark"] { --wb-ui-bg: #18222d; --wb-ui-text: #e7edf3; --wb-ui-muted: #b2c0ce; --wb-ui-line: #43505e; --wb-ui-hover: #293746; --wb-ui-focus: #8ebff0; }
+.wb-office-ui .wb-office-commands { width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 16px; box-sizing: border-box; border: 1px solid var(--wb-ui-line); border-radius: 12px; color: var(--wb-ui-text); background: var(--wb-ui-bg); font-family: inherit; font-size: 14px; line-height: 1.5; overflow: auto; box-shadow: 0 16px 50px #0004; }
+.wb-office-commands::backdrop { background: #0006; }
+.wb-office-commands header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+.wb-office-commands button, .wb-office-commands input { font: inherit; color: inherit; border: 1px solid var(--wb-ui-line); background: var(--wb-ui-bg); border-radius: 6px; min-height: 36px; }
+.wb-office-commands header button { padding: 4px 12px; }
+.wb-office-commands input { width: 100%; box-sizing: border-box; padding: 8px 10px; }
+.wb-office-commands :focus-visible { outline: 2px solid var(--wb-ui-focus); outline-offset: 2px; }
+.wb-office-command-status { font-size: 12px; color: var(--wb-ui-muted); margin: 10px 0; }
+.wb-office-command-list { max-height: min(55dvh, 420px); overflow: auto; padding: 3px; display: grid; gap: 3px; }
+.wb-office-commands .wb-office-command { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 12px; width: 100%; text-align: left; padding: 7px 9px; border-color: transparent; }
+.wb-office-commands .wb-office-command:hover { background: var(--wb-ui-hover); }
+.wb-office-command small { font-size: 12px; color: var(--wb-ui-muted); }
+.wb-office-command[aria-disabled="true"] > span { color: var(--wb-ui-muted); }
+.wb-office-command .wb-office-command-reason { grid-column: 1 / -1; }
+@media (pointer: coarse) { .wb-office-commands button, .wb-office-commands input { min-height: 44px; } }
+@media (max-width: 440px) { .wb-office-commands .wb-office-command { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .wb-office-commands, .wb-office-commands * { animation: none; transition: none; scroll-behavior: auto; } }
+@media (prefers-reduced-transparency: reduce) { .wb-office-commands::backdrop { background: #172333; } }

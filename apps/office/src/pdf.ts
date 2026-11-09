@@ -1,3 +1,4 @@
+import { connectOfficeUi } from "./ui-adapters/connect.ts";
 import { createOfficePreferences, legacyOfficePanel } from "./preferences.ts";
 import { mountOfficeAi, officeAiTransport } from "./office-ai.ts";
 import { Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
@@ -16,6 +17,10 @@ const init = await handshake(), gateway = new Gateway(init.token);
 const ai = mountOfficeAi(init, gateway);
 const id = init.artifact.id, path = init.artifact.path;
 let revision = init.artifact.revision, contentRevision = revision, theme = init.theme;
+connectOfficeUi(init, "pdf", command => {
+  if (command === "save-as") return saveCopy().catch(report);
+  dispatch("pdf:print-request", []);
+}, next => { theme = next; dispatch("app:theme-changed", [theme]); });
 let source = await gateway.raw(id, revision), restored = false, dirty = false, epoch = 0, opened = false;
 let writing = 0, copyOpening = false;
 let copyState: { turn: OfficeCopy; redaction: boolean; finish(ok: boolean): void } | null = null;
@@ -106,7 +111,6 @@ async function flush() {
   return flushing;
 }
 listen((message) => {
-  if (message.type === "office:theme") { theme = message.theme; dispatch("app:theme-changed", [theme]); }
   if (message.type === "office:flush") void flush();
   if (message.type === "office:rebase") {
     if (copying()) post({ type: "office:flushed", revision: null });

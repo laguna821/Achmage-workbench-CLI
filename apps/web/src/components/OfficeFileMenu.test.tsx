@@ -43,3 +43,13 @@ it("cancels a file picker without saving and opens a picked file in the same sco
   await open(); expect(p.beforeOpen).not.toHaveBeenCalled(); expect(p.api.openFile).not.toHaveBeenCalled();
   await open(); expect(p.api.openFile).toHaveBeenCalledWith("work", "/project/book.epub", "space", "session"); expect(p.onOpenArtifact).toHaveBeenCalledWith("opened");
 });
+it("routes the available outputs to the live editor without replacing or saving the source", () => {
+  const p = props(), onExportPdf = vi.fn(), onExportHtml = vi.fn(), onExportImages = vi.fn();
+  const screen = render(<OfficeFileMenu {...p} pickFile={async () => null} onExportPdf={onExportPdf} onExportHtml={onExportHtml} onExportImages={onExportImages} />);
+  for (const name of ["PDF로 내보내기", "HTML로 내보내기", "PNG 그림으로 내보내기"]) {
+    fireEvent.click(screen.getByRole("button", { name: "문서 파일 메뉴" }));
+    fireEvent.click(screen.getByRole("menuitem", { name }));
+  }
+  expect(onExportPdf).toHaveBeenCalledOnce(); expect(onExportHtml).toHaveBeenCalledOnce(); expect(onExportImages).toHaveBeenCalledOnce();
+  expect(p.beforeOpen).not.toHaveBeenCalled(); expect(p.onOpenArtifact).not.toHaveBeenCalled(); expect(p.api.createOfficeDocument).not.toHaveBeenCalled();
+});

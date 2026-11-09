@@ -1,3 +1,4 @@
+import { connectOfficeUi } from "./ui-adapters/connect.ts";
 import { createOfficePreferences, legacyOfficePanel } from "./preferences.ts";
 import { mountOfficeAi, officeAiTransport } from "./office-ai.ts";
 import { Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
@@ -10,6 +11,11 @@ const init = await handshake(), gateway = new Gateway(init.token);
 const ai = mountOfficeAi(init, gateway);
 const id = init.artifact.id, path = init.artifact.path;
 let revision = init.artifact.revision, theme = init.theme, restored = false, opened = false, dirty = false, epoch = 0;
+connectOfficeUi(init, "mindmap", command => {
+  if (command === "save" || command === "save-as") dispatch("mindmap:save-request", [command === "save-as" ? "saveAs" : "save"]);
+  else if (command === "print") dispatch("mindmap:print-request", []);
+  else dispatch("mindmap:menu-command", [command]);
+}, next => { theme = next; dispatch("app:theme-changed", [theme]); });
 let outlineAnswer: ((result: { text?: string; error?: string }) => void) | null = null;
 installMcp(init, { ready: () => opened, dirty: () => dirty, async run(request) {
   if (request.kind !== "read") throw new Error("마인드맵에는 읽기·저장·닫기 MCP만 사용할 수 있습니다.");
@@ -77,7 +83,6 @@ async function flush() {
   return flushing;
 }
 listen((message) => {
-  if (message.type === "office:theme") { theme = message.theme; dispatch("app:theme-changed", [theme]); }
   if (message.type === "office:flush") void flush();
   if (message.type === "office:rebase") { revision = message.revision; void flush(); }
   if (message.type === "office:keep") void keep().catch(report).finally(() => post({ type: "office:flushed", revision: null }));

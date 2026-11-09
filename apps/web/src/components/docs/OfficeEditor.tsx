@@ -20,6 +20,8 @@ import type { PdfNoteRequest, PdfNoteResult } from "../../../../../packages/cont
 import { PdfNoteDialog } from "./PdfNoteDialog.tsx";
 
 export type OfficeHandle = {
+  /** Find and execute the mounted renderer's original menu/ribbon commands. */
+  showCommands(): void;
   mcp(request: OfficeMcpRequest): Promise<OfficeMcpReply>;
   control(request: RendererControlRequest): Promise<RendererControlReply>;
   /** Run the original renderer's PDF action on current, possibly unsaved content. */
@@ -610,6 +612,8 @@ export const OfficeEditor = forwardRef<
           break;
         }
         case "office:opened":
+          // A theme can change while the renderer is fetching its document and preferences.
+          send({ type: "office:theme", theme: theme() });
           if (message.recovered && message.revision < latest.current.revision) {
             update({
               revision: message.revision,
@@ -668,15 +672,17 @@ export const OfficeEditor = forwardRef<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Follow the app's light/dark switch.
+  // The initial render waits for a grant and has no iframe. Attach after it mounts, and keep
+  // the same frame/lease when the pane's theme changes or an overlay temporarily hides it.
   useEffect(() => {
-    const scope = frame.current?.closest("[data-theme]");
-    if (!scope) return;
-    const observer = new MutationObserver(() => send({ type: "office:theme", theme: theme() }));
-    observer.observe(scope, { attributes: true, attributeFilter: ["data-theme"] });
+    if (!frame.current || !opened.current) return;
+    const notify = () => send({ type: "office:theme", theme: theme() });
+    const observer = new MutationObserver(notify);
+    for (let scope: HTMLElement | null = frame.current.parentElement; scope; scope = scope.parentElement) observer.observe(scope, { attributes: true, attributeFilter: ["data-theme"] });
+    notify();
     return () => observer.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [artifact.id, generation, Boolean(opened.current)]);
 
   // A revision made elsewhere (an applied AI proposal, a revert): open it when nothing here is unsaved.
   useEffect(() => {
@@ -690,6 +696,9 @@ export const OfficeEditor = forwardRef<
   }, [artifact.id, generation]);
 
   useImperativeHandle(ref, () => ({
+    showCommands() {
+      if (status.current.revision !== null) send({ type: "office:show-commands" });
+    },
     mcp(request) {
       if (status.current.revision === null) return Promise.resolve({ status: "not_ready" });
       if (request.kind !== "status" && (aiBusy.current || outputBusy.current || blockingOutputs())) return Promise.resolve({ status: "error", error: { reason: "busy", message: "이 문서에서 실행 중인 AI·저장 작업을 마친 뒤 다시 요청해 주세요." } });

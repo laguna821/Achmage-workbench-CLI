@@ -1,3 +1,4 @@
+import { connectOfficeUi } from "./ui-adapters/connect.ts";
 import { createOfficePreferences } from "./preferences.ts";
 import { mountOfficeAi } from "./office-ai.ts";
 import { Events, Gateway, GatewayError, handshake, headlessExport, listen, post } from "./bridge.ts";
@@ -26,6 +27,11 @@ export async function createTextEditor(kind: "markdown" | "html") {
   const encode = (text: string) => new TextEncoder().encode(text).buffer;
   const savedSource = decode(await gateway.raw(id, init.artifact.revision));
   let revision = init.artifact.revision, theme = init.theme, dirty = false, savedText = savedSource;
+  connectOfficeUi(init, kind, command => {
+    if (command === "save" || command === "save-as") events.emit("save", command === "save-as" ? "saveAs" : "save");
+    else if (command === "print") events.emit("print");
+    else events.emit("export", command === "open-docx" ? "docs" : command === "export-images" ? "png" : command.slice("export-".length));
+  }, next => { theme = next; events.emit("theme", theme); });
   let kept = init.recover && !init.readOnly ? await recovery.get(id) : undefined;
   if (kept && kept.baseRevision > revision) kept = undefined;
   if (!init.recover && !init.readOnly) await recovery.drop(id);
@@ -89,7 +95,6 @@ export async function createTextEditor(kind: "markdown" | "html") {
     if (message.type === "office:export-odt") events.emit("export", "odt");
     if (message.type === "office:export-html") events.emit("export", "html");
     if (message.type === "office:export-images" && kind === "markdown") events.emit("export", "png");
-    if (message.type === "office:theme") { theme = message.theme; events.emit("theme", theme); }
     if (message.type === "office:flush") void flush();
     if (message.type === "office:rebase") { revision = message.revision; void flush(); }
     if (message.type === "office:keep") void keep().catch(report).finally(() => post({ type: "office:flushed", revision: null }));

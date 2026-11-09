@@ -1,3 +1,4 @@
+import { connectOfficeUi } from "./ui-adapters/connect.ts";
 import { createOfficePreferences, legacyOfficePanel } from "./preferences.ts";
 import { mountOfficeAi, officeAiTransport } from "./office-ai.ts";
 import "./slides.css";
@@ -31,6 +32,9 @@ const artifactId = init.artifact.id;
 const styles = createSlideStyles(gateway, artifactId);
 /** `revision`: what the editor's deck is based on (a save must name it). */
 const state = { revision: init.artifact.revision, theme: init.theme, conflict: false, kept: false };
+connectOfficeUi(init, "slides", command => dispatch("slides:menu", [command]), theme => {
+  state.theme = theme; document.documentElement.dataset.workbenchTheme = theme; dispatch("app:theme-changed", [theme]);
+});
 let mcpCopy: OfficeCopy | null = null;
 installMcp(init, {
   ready: () => value<boolean>({ type: "mcp", command: "ready" }), dirty: () => value<boolean>({ type: "dirty" }),
@@ -242,11 +246,8 @@ async function flush() {
 
 listen((message) => {
   if (message.type === "office:export-pdf") dispatch("slides:menu", ["export-pdf"]);
-  if (message.type === "office:theme") {
-    state.theme = message.theme;
-    document.documentElement.dataset.workbenchTheme = message.theme;
-    dispatch("app:theme-changed", [message.theme]);
-  }
+  if (message.type === "office:export-images") dispatch("slides:menu", ["export-images"]);
+
   if (message.type === "office:flush") void flush();
   if (message.type === "office:rebase") {
     void isDirty().then(async (dirty) => {

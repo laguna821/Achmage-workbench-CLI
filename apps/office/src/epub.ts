@@ -1,3 +1,4 @@
+import { connectOfficeUi } from "./ui-adapters/connect.ts";
 import { createOfficePreferences, legacyOfficePanel } from "./preferences.ts";
 import { mountOfficeAi, officeAiTransport } from "./office-ai.ts";
 import { Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
@@ -17,6 +18,10 @@ const targets = new Map<string, OfficeOutputPlan & { kind: string; lang: string 
 let jobRecord: { state?: string; last_error?: string; progress?: { done: number; total: number } } | null = null;
 let resultPaths: string[] = [], resultError = "";
 let revision = init.artifact.revision, theme = init.theme, session = "", restored = false, pending = false, backendDirty = false, generation = -1, epoch = 0, rebase = false;
+connectOfficeUi(init, "epub", command => {
+  if (command === "save" || command === "save-as") dispatch("epub:save-request", [command === "save-as" ? "saveAs" : "save"]);
+  else dispatch("epub:menu-command", [command]);
+}, next => { theme = next; dispatch("app:theme-changed", [theme]); });
 let openPromise: Promise<OpenBook> | null = null, recoveryQueue = Promise.resolve();
 const report = (error: unknown) => post({ type: "office:error", message: error instanceof Error ? error.message : String(error) });
 const isDirty = () => restored || pending || backendDirty;
@@ -89,7 +94,6 @@ function flush() {
   return flushing;
 }
 listen((message) => {
-  if (message.type === "office:theme") { theme = message.theme; dispatch("app:theme-changed", [theme]); }
   if (message.type === "office:flush") void flush();
   if (message.type === "office:rebase") { revision = message.revision; rebase = true; void flush(); }
   if (message.type === "office:keep") void keep().catch(report).finally(() => post({ type: "office:flushed", revision: null }));

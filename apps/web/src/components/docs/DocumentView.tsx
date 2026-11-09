@@ -734,15 +734,16 @@ export default function DocumentView({
           {session ? <span className="muted" title="이 문서의 AI는 메인 채팅과 다른 문서의 AI와 독립적으로 실행됩니다.">문서별 AI</span> : null}
           {!officeEditing ? <button type="button" className="ghost-button" aria-expanded={documentChatOpen} onClick={() => setDocumentChatOpen(!documentChatOpen)}><Icon name="chat" size={14} /> 문서 AI</button> : null}
           <OfficeFileMenu api={rootApi} workId={work.id} workspaceId={artifact.workspaceId}
-            onExportPdf={officeEditing && ["docx", "pptx", "markdown", "html"].includes(artifact.format) ? () => officeRef.current?.exportPdf() : undefined}
+            onExportPdf={officeEditing && ["docx", "pptx", "xlsx", "hwpx", "hwp", "markdown", "html"].includes(artifact.format) ? () => officeRef.current?.exportPdf() : undefined}
             onExportDocx={officeEditing && ["markdown", "html"].includes(artifact.format) ? () => officeRef.current?.exportDocx() : undefined}
             onExportOdt={officeEditing && ["markdown", "html"].includes(artifact.format) ? () => officeRef.current?.exportOdt() : undefined}
-            onExportHtml={officeEditing && artifact.format === "html" ? () => officeRef.current?.exportHtml() : undefined}
-            onExportImages={officeEditing && artifact.format === "markdown" ? () => officeRef.current?.exportImages() : undefined}
+            onExportHtml={officeEditing && ["docx", "html"].includes(artifact.format) ? () => officeRef.current?.exportHtml() : undefined}
+            onExportImages={officeEditing && ["docx", "pptx", "markdown"].includes(artifact.format) ? () => officeRef.current?.exportImages() : undefined}
             onOpenWord={officeEditing && artifact.format === "markdown" ? () => officeRef.current?.exportDocx(true) : undefined}
             sessionId={session?.workspaceId === artifact.workspaceId ? session?.id : undefined}
             cwd={state.workspaces[artifact.workspaceId ?? ""]?.cwd ?? work.cwd} sourceKey={artifact.id} pickFile={pickFile}
             beforeOpen={async () => await save() !== null} onOpenArtifact={onOpenArtifact} onToast={onToast} />
+          {officeEditing ? <button type="button" className="ghost-button" aria-haspopup="dialog" disabled={officeStatus.revision === null || Boolean(compare || viewing)} title="원본 메뉴와 현재 리본의 명령 찾기 (편집기에서 Alt+/)" onClick={() => officeRef.current?.showCommands()}><Icon name="search" size={14} /> 편집 명령</button> : null}
           {markdownDoc && (mode === "edit" || mode === "split") && !viewing && !compare && base ? (
             <button type="button" className="ghost-button draw-here" onClick={() => setDrawOpen(!drawOpen)} aria-expanded={drawOpen} title="여기에 그림 그리기 (Ctrl+Alt+G) · GPT Image (Codex)">
               <Icon name="image" size={14} /> 그림

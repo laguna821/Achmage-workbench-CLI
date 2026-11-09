@@ -49,14 +49,14 @@ export function OfficeFileMenu({ api, workId, workspaceId, sessionId, cwd, sourc
   const create = (format: BlankOfficeFormat) => void run(async () => () => api.createOfficeDocument(workId, { format, workspaceId, sessionId }));
   const openPath = (value: string) => void run(async () => () => api.openFile(workId, value, workspaceId, sessionId));
   return <div className="anchor office-file-menu" ref={anchor}>
-    <button type="button" className="ghost-button" aria-label="문서 파일 메뉴" aria-expanded={open} disabled={busy} onClick={() => setOpen(!open)}>
+    <button type="button" className="ghost-button" aria-label="문서 파일 메뉴" aria-haspopup={pickFile ? "menu" : "dialog"} aria-expanded={open} disabled={busy} onClick={() => setOpen(!open)}>
       <Icon name="file" size={15} /> {busy ? "준비 중…" : "파일"}
     </button>
     <Popover open={open} onClose={() => setOpen(false)} align="left">
       {onExportPdf ? <MenuItem onSelect={() => { setOpen(false); onExportPdf(); }}>PDF로 내보내기</MenuItem> : null}
       {onExportDocx ? <MenuItem onSelect={() => { setOpen(false); onExportDocx(); }}>Word로 내보내기</MenuItem> : null}
       {onExportOdt ? <MenuItem onSelect={() => { setOpen(false); onExportOdt(); }}>ODT로 내보내기</MenuItem> : null}
-      {onExportHtml ? <MenuItem onSelect={() => { setOpen(false); onExportHtml(); }}>HTML 단일 파일로 내보내기</MenuItem> : null}
+      {onExportHtml ? <MenuItem onSelect={() => { setOpen(false); onExportHtml(); }}>HTML로 내보내기</MenuItem> : null}
       {onExportImages ? <MenuItem onSelect={() => { setOpen(false); onExportImages(); }}>PNG 그림으로 내보내기</MenuItem> : null}
       {onOpenWord ? <MenuItem onSelect={() => { setOpen(false); onOpenWord(); }}>Word로 변환해 열기</MenuItem> : null}
       {onExportPdf || onExportDocx || onExportOdt || onExportHtml || onExportImages ? <div className="menu-sep" /> : null}
