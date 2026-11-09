@@ -4,6 +4,7 @@ import type { NewOfficeDocument } from "@workbench/contracts";
 import type { CommandReceipt, TaskCommand, TaskSnapshot } from "@workbench/contracts";
 import type { AgentProfile, AgentProfileInput } from "@workbench/contracts";
 import type { WorkspaceService, WorkspaceServiceList, WorkspaceServiceOwner, WorkspaceServiceStart } from "@workbench/contracts";
+import type { AttentionEvent, AttentionList, AttentionPayload, AttentionPresence, AttentionTarget } from "@workbench/contracts";
 import type {
   GitHubBinding, GitHubSelection, GitHubView, GitHubCheckDetails, GitHubLog,
   GitHubActionContext, GitHubActionPreview, GitHubActionInput, GitHubActionJob, GitHubDraft, GitHubTemplate, GitHubRecoveryPreview,
@@ -152,6 +153,11 @@ export class Api {
   }
 
   snapshot = async () => { const snapshot = await this.request<Snapshot>("GET", "/api/snapshot"); this.epoch = snapshot.epoch; return snapshot; };
+  attention = () => this.request<AttentionList>("GET", "/api/attention");
+  readAttention = (id: string) => this.request<AttentionEvent>("POST", `/api/attention/${encodeURIComponent(id)}/read`, {});
+  attentionTarget = (id: string) => this.request<AttentionTarget>("GET", `/api/attention/${encodeURIComponent(id)}/target`);
+  attentionPresence = (presence: AttentionPresence, keepalive = false) => this.request<{ ok: true }>("POST", "/api/attention/presence", presence, { keepalive });
+  claimAttention = (id: string, clientId: string) => this.request<{ claimed: boolean; payload: AttentionPayload | null }>("POST", `/api/attention/${encodeURIComponent(id)}/claim`, { clientId });
   hostStatus = () => this.request<import("@workbench/contracts").HostStatus>("GET", "/api/host");
   tasks = (workId?: string) => this.request<TaskSnapshot>("GET", `/api/tasks${workId ? `?workId=${encodeURIComponent(workId)}` : ""}`);
   agentProfiles = () => this.request<{ profiles: AgentProfile[] }>("GET", "/api/agent-profiles");

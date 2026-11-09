@@ -61,6 +61,8 @@ export default function DocumentView({
   state,
   artifactId,
   focusProposalId,
+  focusItem,
+  onFocusDone,
   work,
   session: mainSession,
   onBack,
@@ -98,6 +100,8 @@ export default function DocumentView({
   state: State;
   artifactId: string;
   focusProposalId: string | null;
+  focusItem?: { sessionId: string; itemId: string; nonce: number } | null;
+  onFocusDone?: () => void;
   work: Work;
   session: Session | null;
   onBack: () => void;
@@ -141,6 +145,13 @@ export default function DocumentView({
   const docImages = useDocImages(api, artifact, onToast);
   const [drawer, setDrawer] = useState<DrawerMode>("closed");
   const [documentChatOpen, setDocumentChatOpen] = useState(false);
+  // Notification/search targets can refer to an older child conversation. Keep its exact
+  // transcript separate from this editor's current agent and writer registration.
+  const [focusedConversationId, setFocusedConversationId] = useState<string | null>(null);
+  const focusedConversation = focusedConversationId ? state.sessions[focusedConversationId] : undefined;
+  useEffect(() => {
+    if (focusItem && state.sessions[focusItem.sessionId]?.documentAgent?.artifactId === artifactId) setFocusedConversationId(focusItem.sessionId);
+  }, [artifactId, focusItem?.nonce, focusItem?.sessionId, state.sessions]);
   const textual = artifact ? TEXT_FORMATS.has(artifact.format) : false;
   const [base, setBase] = useState<{ revision: number; text: string } | null>(null);
   const [text, setText] = useState("");
@@ -719,6 +730,7 @@ export default function DocumentView({
 
   return (
     <main className="document-view" data-editor-view={lease.viewId} data-editor-access={lease.canWrite ? "write" : "read"}>
+      {focusedConversation ? <ConversationSheet state={state} session={focusedConversation} focusItem={focusItem?.sessionId === focusedConversation.id ? focusItem : null} onFocusDone={onFocusDone} onClose={() => { setFocusedConversationId(null); onFocusDone?.(); }} onAnswer={(itemId, decision) => onAnswer?.(focusedConversation, itemId, decision)} /> : null}
       {tabs}
       <header className="doc-header">
         <button type="button" className="ghost-button" onClick={() => void save().then((revision) => { if (revision !== null) onBack(); })}>
@@ -1052,7 +1064,7 @@ export default function DocumentView({
       ) : null}
 
       {!officeEditing && documentChatOpen ? place(<div className="column composer-area doc-composer">
-        {session && drawer === "open" && !modes?.split ? (
+        {session && drawer === "open" && !modes?.split && !focusedConversation ? (
           <ConversationSheet state={state} session={session} onClose={() => setDrawer("peek")} onAnswer={(itemId, decision) => onAnswer?.(session, itemId, decision)} />
         ) : null}
         {session && !modes?.split ? (

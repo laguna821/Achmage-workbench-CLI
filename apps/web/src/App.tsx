@@ -1,8 +1,8 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { GLOBAL_LAYOUT, PROVIDER_LABEL, isUnseen, type AccessMode, type Artifact, type Attachment, type CreateTarget, type DocRef, type ProjectPick, type Proposal, type Provider, type Session, type SessionStatus, type UiPrefs, type Work, type Workspace } from "@workbench/contracts";
 import { Api, ApiRequestError, readToken } from "./api.ts";
-import { CompletionNotifications } from "./completion-notifications.ts";
-import type { SequencedEvent } from "@workbench/contracts";
+import { AttentionInbox, CompletionNotifications, watchAttentionPresence } from "./completion-notifications.ts";
+import type { AttentionPayload, SequencedEvent } from "@workbench/contracts";
 import { useOfficeControl } from "./office-control.ts";
 import { configureDesign } from "./design.ts";
 import { initialState, isBusy, reducer, sessionsOf } from "./state.ts";
@@ -31,6 +31,7 @@ import { Switcher, UnseenContext } from "./components/SessionCards.tsx";
 import { DocContext, FormatBadge, type DocActions } from "./components/DocCards.tsx";
 import { GroupTabs } from "./components/GroupTabs.tsx";
 import { TaskPanel } from "./components/TaskPanel.tsx";
+import { AttentionCenter } from "./components/AttentionCenter.tsx";
 import { TerminalDialog } from "./components/TerminalDialog.tsx";
 import { WorkspaceServices } from "./components/WorkspaceServices.tsx";
 import { WorkspacePreparationDialog } from "./components/WorkspacePreparationDialog.tsx";
@@ -111,6 +112,22 @@ async function notify(title: string, body: string, sessionId: string) {
   const { isPermissionGranted, requestPermission, sendNotification } = await import("@tauri-apps/plugin-notification");
   if (!(await isPermissionGranted()) && (await requestPermission()) !== "granted") return;
   sendNotification({ title, body });
+}
+
+/** Claimed host fallback: generic copy and an opaque attention id, never local titles or text. */
+async function notifyAttention(payload: AttentionPayload, onOpen: (id: string) => void) {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("notify_attention", { title: payload.title, body: payload.body, attentionId: payload.attentionId });
+  } catch (error) {
+    // Only an explicit unsupported result permits another adapter. Unknown delivery is not retried.
+    if (String(error) !== "unsupported") throw error;
+    if (typeof Notification === "undefined") throw new Error("이 화면에서는 시스템 알림을 표시할 수 없습니다. 알림 목록에서 확인해 주세요.");
+    const permission = Notification.permission === "default" ? await Notification.requestPermission() : Notification.permission;
+    if (permission !== "granted") throw new Error("시스템 알림 권한이 없습니다. 알림 목록에서 확인해 주세요.");
+    const notification = new Notification(payload.title, { body: payload.body, tag: payload.attentionId });
+    notification.onclick = () => { window.focus(); notification.close(); onOpen(payload.attentionId); };
+  }
 }
 
 async function pickFolderNative(title = "작업 폴더 선택", defaultPath?: string): Promise<string | null> {
@@ -223,6 +240,8 @@ export function App() {
     return token ? new Api(token) : null;
   }, []);
   const [state, dispatch] = useReducer(reducer, initialState);
+  const attentionInbox = useMemo(() => new AttentionInbox(api), [api]);
+  const attentionState = useSyncExternalStore(attentionInbox.subscribe, attentionInbox.getState);
   const stateRef = useRef(state);
   stateRef.current = state;
   const layoutPersistence = useMemo(() => api ? new LayoutPersistence(api) : null, [api]);
@@ -318,6 +337,8 @@ export function App() {
   const [imageUploadOpen, setImageUploadOpen] = useState(false);
   const [officeSettingsOpen, setOfficeSettingsOpen] = useState(false);
   const [taskPanelOpen, setTaskPanelOpen] = useState(false);
+  const [attentionOpen, setAttentionOpen] = useState(false);
+  const [pendingAttentionId, setPendingAttentionId] = useState<string | null>(null);
   const [dropboxOpen, setDropboxOpen] = useState(false);
   const [officeImportOpen, setOfficeImportOpen] = useState(false);
   const [ieumAppOpen, setIeumAppOpen] = useState(false);
@@ -401,11 +422,13 @@ export function App() {
       try {
         const snapshot = await api.snapshot();
         if (cancelled) return;
+        attentionInbox.snapshot(snapshot);
         dispatch({ type: "snapshot", snapshot });
         stop();
         stop = api.events(
           snapshot.seq,
           (event) => {
+            attentionInbox.event(event);
             dispatch({ type: "event", event });
             tellCompletion.current(event);
             if (event.type === "work.removed") updateLayout(current => {
@@ -439,7 +462,7 @@ export function App() {
       cancelled = true;
       stop();
     };
-  }, [api, fail, navigateTo, updateLayout]);
+  }, [api, fail, navigateTo, updateLayout, attentionInbox]);
 
   // Screen preferences: kept by the gateway, edited optimistically, cached for the first frame.
   const [localPrefs, setLocalPrefs] = useState<UiPrefs | null>(null);
@@ -884,6 +907,20 @@ export function App() {
   // New replies: kept by the gateway, so every window agrees. Looking at a session marks it seen,
   // except right after the user marked it unread while looking at it.
   const visibleSession = (view.kind === "work" || view.kind === "split") && activeSession ? activeSession : null;
+  const attentionSessionId = view.kind === "document"
+    ? (activeSession?.documentAgent?.artifactId === view.artifactId ? activeSession.id : Object.values(state.sessions).filter(session => session.documentAgent?.artifactId === view.artifactId && !session.archivedAt).sort((a, b) => b.createdAt - a.createdAt)[0]?.id ?? null)
+    : visibleSession?.id ?? null;
+  const attentionSession = useRef<string | null>(null); attentionSession.current = attentionSessionId;
+  const presenceWatcher = useRef<ReturnType<typeof watchAttentionPresence> | null>(null);
+  useEffect(() => {
+    if (attentionState.supported !== true) return;
+    const watcher = watchAttentionPresence(attentionInbox, () => attentionSession.current); presenceWatcher.current = watcher;
+    return () => { watcher.close(); presenceWatcher.current = null; };
+  }, [attentionInbox, attentionState.supported]);
+  useEffect(() => { presenceWatcher.current?.update(); }, [attentionSessionId]);
+  useEffect(() => {
+    if (inDesktop && !single && prefs.notify !== false && attentionState.supported === true) void attentionInbox.fallback(payload => notifyAttention(payload, setPendingAttentionId));
+  }, [attentionInbox, attentionState.list, attentionState.supported, prefs.notify, single]);
   // The other pane's conversation is on screen too (unless the window is too narrow to show it).
   const [narrowPanes, setNarrowPanes] = useState(false);
   const visibleSessions = layout.panes.filter((pane) => (!narrowPanes || pane.id === layout.focus) && (pane.view.kind === "work" || pane.view.kind === "split")).map(sessionIn).filter((session): session is Session => Boolean(session));
@@ -936,6 +973,33 @@ export function App() {
     },
     [state.works, actions],
   );
+  const openAttention = useCallback(async (id: string) => {
+    if (!api) return;
+    const target = await attentionInbox.target(id);
+    let current = stateRef.current;
+    if (!current.sessions[target.sessionId] || !current.works[target.workId] || (target.artifactId && !current.artifacts[target.artifactId])) {
+      const snapshot = await api.snapshot(); attentionInbox.snapshot(snapshot); dispatch({ type: "snapshot", snapshot });
+      current = reducer(current, { type: "snapshot", snapshot });
+    }
+    const session = current.sessions[target.sessionId];
+    if (!session || session.hostId !== target.hostId || session.workId !== target.workId || !current.works[target.workId] || (target.artifactId && !current.artifacts[target.artifactId])) throw new Error("알림의 원문을 찾을 수 없습니다. 호스트 연결과 알림을 확인해 주세요.");
+    if (!current.transcripts[target.sessionId]?.items.some(item => item.id === target.itemId)) {
+      const transcript = await api.items(target.sessionId); dispatch({ type: "transcript", sessionId: target.sessionId, transcript });
+    }
+    setAttentionOpen(false);
+    navigateTo({ workId: target.workId, sessionId: target.sessionId, view: target.artifactId ? { kind: "document", artifactId: target.artifactId, proposalId: null } : { kind: "work" } }, () => {
+      setFocusItem({ sessionId: target.sessionId, itemId: target.itemId, nonce: Date.now() });
+      void attentionInbox.read(id).catch(attentionInbox.reportError);
+    });
+  }, [api, attentionInbox, navigateTo]);
+  const openingAttention = useRef<string | null>(null);
+  useEffect(() => {
+    if (!pendingAttentionId || !state.ready || attentionState.supported !== true || openingAttention.current === pendingAttentionId) return;
+    const id = pendingAttentionId; openingAttention.current = id;
+    void openAttention(id).catch(error => { attentionInbox.reportError(error); setAttentionOpen(true); }).finally(() => {
+      openingAttention.current = null; setPendingAttentionId(current => current === id ? null : current);
+    });
+  }, [pendingAttentionId, state.ready, attentionState.supported, openAttention, attentionInbox]);
   // "다른 곳의 대화 가져오기": the imported session opens at once (its work may be new, so by id).
   const [importOpen, setImportOpen] = useState(false);
   // "예약 작업" of the session whose dialog is open.
@@ -982,10 +1046,10 @@ export function App() {
   // is batched into one render. Main and document chats use the same notification path.
   tellCompletion.current = event => {
     const session = event.type === "item.upserted" ? stateRef.current.sessions[event.sessionId] : undefined;
-    const alert = completedTurns.current.take(event, session, session ? stateRef.current.works[session.workId]?.title ?? "" : "", !single && prefsRef.current.notify !== false);
+    const alert = completedTurns.current.take(event, session, session ? stateRef.current.works[session.workId]?.title ?? "" : "", attentionInbox.getState().supported === false && !single && prefsRef.current.notify !== false);
     if (!alert) return;
     if (!document.hidden && document.hasFocus()) setToast({ text: alert.body + " · 답변 완료", action: { label: "열기", run: () => openSession(alert.session) } });
-    if (inDesktop) void notify(alert.title, alert.body, alert.session.id).catch(() => undefined);
+    if (inDesktop) void notify("Achmage Workbench", "작업이 완료되었습니다.", alert.session.id).catch(() => undefined);
   };
   // Approval/error attention still follows status transitions.
   const statuses = useRef(new Map<string, SessionStatus>());
@@ -996,10 +1060,9 @@ export function App() {
       const before = seen.get(session.id);
       seen.set(session.id, session.status);
       // Only the main window tells; a detached one would say the same thing twice.
-      if (!before || before === session.status || !inDesktop || !away || prefsRef.current.notify === false || single || session.muted) continue;
-      const where = `${state.works[session.workId]?.title ?? ""} — ${session.purpose}`;
-      if (session.status === "awaitingApproval") void notify(`확인이 필요합니다 · ${PROVIDER_LABEL[session.provider]}`, where, session.id).catch(() => undefined);
-      else if (session.status === "error") void notify(`응답이 끝나지 못했습니다 · ${PROVIDER_LABEL[session.provider]}`, where, session.id).catch(() => undefined);
+      if (attentionInbox.getState().supported !== false || !before || before === session.status || !inDesktop || !away || prefsRef.current.notify === false || single || session.muted) continue;
+      if (session.status === "awaitingApproval") void notify("Achmage Workbench", "확인이 필요한 작업이 있습니다.", session.id).catch(() => undefined);
+      else if (session.status === "error") void notify("Achmage Workbench", "작업을 마치지 못했습니다.", session.id).catch(() => undefined);
     }
   }, [state.sessions, state.works]);
 
@@ -1007,18 +1070,19 @@ export function App() {
   const attention = useRef(-1);
   useEffect(() => {
     if (!inDesktop || single) return;
-    const count = Object.values(state.sessions).filter((session) => session.status === "awaitingApproval" && !session.archivedAt).length;
+    const count = attentionState.supported === true ? attentionState.list.unread : Object.values(state.sessions).filter((session) => session.status === "awaitingApproval" && !session.archivedAt).length;
     if (count === attention.current) return;
     attention.current = count;
     void import("@tauri-apps/api/core").then(({ invoke }) => invoke("set_attention", { count })).catch(() => undefined);
-  }, [state.sessions]);
+  }, [state.sessions, attentionState.supported, attentionState.list.unread]);
 
   // A clicked notification, or the tray's "확인 필요", opens its session.
-  const opener = useRef<{ open: (sessionId: string | null) => void }>({ open: () => undefined });
+  const opener = useRef<{ open: (sessionId: string | null) => void; attention: (id: string | null) => void }>({ open: () => undefined, attention: () => undefined });
   opener.current.open = (sessionId) => {
     const target = sessionId ? state.sessions[sessionId] : Object.values(state.sessions).find((session) => session.status === "awaitingApproval" && !session.archivedAt);
     if (target) openSession(target);
   };
+  opener.current.attention = id => { if (id) setPendingAttentionId(id); else opener.current.open(null); };
   useEffect(() => {
     if (!inDesktop || single) return;
     let stop = false;
@@ -1026,10 +1090,17 @@ export function App() {
     void import("@tauri-apps/api/event").then(async ({ listen }) => {
       const handlers = [
         await listen<string>("workbench://open-session", (event) => opener.current.open(event.payload)),
-        await listen("workbench://open-attention", () => opener.current.open(null)),
+        await listen<string | null>("workbench://open-attention", event => {
+          const id = typeof event.payload === "string" ? event.payload : null;
+          if (id) void import("@tauri-apps/api/core").then(({ invoke }) => invoke("take_open_attention")).catch(() => undefined);
+          opener.current.attention(id);
+        }),
       ];
       if (stop) handlers.forEach((handler) => handler());
-      else unlisten.push(...handlers);
+      else {
+        unlisten.push(...handlers);
+        void import("@tauri-apps/api/core").then(({ invoke }) => invoke<string | null>("take_open_attention")).then(id => { if (!stop && id) opener.current.attention(id); }).catch(() => undefined);
+      }
     });
     return () => {
       stop = true;
@@ -1977,6 +2048,8 @@ export function App() {
                 state={state}
                 artifactId={at.artifactId}
                 focusProposalId={at.kind === "document" ? at.proposalId : null}
+                focusItem={focusItem && state.sessions[focusItem.sessionId]?.documentAgent?.artifactId === at.artifactId ? focusItem : null}
+                onFocusDone={() => setFocusItem(null)}
                 work={owner}
                 session={session ?? null}
                 tabs={at.kind === "split" ? null : paneTabs}
@@ -2168,6 +2241,7 @@ export function App() {
         <div className="topbar-right">
           <button type="button" className="ghost-button small shell-create" aria-haspopup="menu" title={`새 문서·세션·폴더 (${shortcuts.newWork})`} onClick={event => openCreate.current(event.currentTarget)}><Icon name="plus" size={15} /> 새로 만들기<Icon name="chevronDown" size={12} /></button>
           <button type="button" className="ghost-button small" aria-haspopup="dialog" aria-expanded={taskPanelOpen} onClick={() => setTaskPanelOpen(true)}><Icon name="clock" size={15} /> 작업</button>
+          <button type="button" className="ghost-button small" aria-haspopup="dialog" aria-expanded={attentionOpen} aria-label={attentionState.list.unread ? `알림 · 읽지 않음 ${attentionState.list.unread}개` : "알림"} onClick={() => setAttentionOpen(true)}><Icon name="bell" size={15} /> 알림{attentionState.list.unread ? <span className="shell-attention-count">{attentionState.list.unread}</span> : null}</button>
           {view.kind === "document" ? <button type="button" className="ghost-button small" onClick={() => setExpandedEditorTab(editorFocus ? focusedTabId : null)}><Icon name={editorFocus ? "columns" : "expandAll"} size={14} />{editorFocus ? "작업공간 보기" : "편집기에 집중"}</button> : null}
           {!single ? <button type="button" className="ghost-button small" aria-label="배치 선택" disabled={!layoutReady} onClick={(event) => {
             const box = event.currentTarget.getBoundingClientRect();
@@ -2332,6 +2406,7 @@ export function App() {
         </Suspense>
       ) : null}
 
+      {attentionOpen ? <AttentionCenter inbox={attentionInbox} state={state} onOpen={openAttention} onClose={() => setAttentionOpen(false)} /> : null}
       {taskPanelOpen ? <TaskPanel api={api} workId={view.kind === "project" ? view.workId : work?.id} onClose={() => setTaskPanelOpen(false)} onOpen={(sessionId, itemId) => {
         const target = stateRef.current.sessions[sessionId];
         if (!target) { setToast("원문 대화를 찾을 수 없습니다."); return; }

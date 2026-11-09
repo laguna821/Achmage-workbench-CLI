@@ -11,6 +11,7 @@ import { diagramComponents } from "../Diagram.tsx";
 import { EngineMark } from "../EngineMark.tsx";
 import { Icon } from "../Icon.tsx";
 import { Transcript } from "../Transcript.tsx";
+import { restoreSurfaceFocus } from "../controls/menu-navigation.ts";
 
 const DRAWN = diagramComponents();
 
@@ -180,12 +181,14 @@ export function ConversationDrawer({
 }
 
 /** The whole conversation laid over the document while it stays where it is (Esc closes). */
-export function ConversationSheet({ state, session, onClose, onAnswer }: { state: State; session: Session; onClose: () => void; onAnswer: (itemId: string, decision: "accept" | "decline") => void }) {
+export function ConversationSheet({ state, session, onClose, onAnswer, focusItem, onFocusDone }: { state: State; session: Session; onClose: () => void; onAnswer: (itemId: string, decision: "accept" | "decline") => void; focusItem?: { itemId: string; nonce: number } | null; onFocusDone?: () => void }) {
+  const sheet = useRef<HTMLDivElement>(null), closeButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => { const origin = document.activeElement, surface = sheet.current; closeButton.current?.focus({ preventScroll: true }); return () => restoreSurfaceFocus(origin, surface); }, []);
   // Esc closes the sheet, and only that: caught first (capture) so the conversation's own Esc
   // ("decline the waiting approval") never sees it.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || (event.target as HTMLElement).closest("textarea, input")) return;
+      if (event.key !== "Escape" || event.isComposing || !sheet.current?.contains(event.target as Node) || (event.target as HTMLElement).closest("textarea, input")) return;
       event.stopPropagation();
       onClose();
     };
@@ -194,13 +197,13 @@ export function ConversationSheet({ state, session, onClose, onAnswer }: { state
   }, [onClose]);
   const transcript = state.transcripts[session.id];
   return (
-    <div className="drawer-sheet" role="dialog" aria-label={`대화 · ${session.purpose}`}>
+    <div ref={sheet} className="drawer-sheet" role="dialog" aria-label={`대화 · ${session.purpose}`}>
       <header className="drawer-sheet-head">
         <EngineMark provider={session.provider} size={15} />
         <span>
           {session.purpose} · {PROVIDER_LABEL[session.provider]}
         </span>
-        <button type="button" className="icon-button small" onClick={onClose} aria-label="대화 닫기" title="닫기 (Esc)">
+        <button ref={closeButton} type="button" className="icon-button small" onClick={onClose} aria-label="대화 닫기" title="닫기 (Esc)">
           <Icon name="x" size={14} />
         </button>
       </header>
@@ -211,6 +214,8 @@ export function ConversationSheet({ state, session, onClose, onAnswer }: { state
         running={session.status === "running" || session.status === "starting"}
         loading={!transcript}
         onAnswer={onAnswer}
+        focusItem={focusItem}
+        onFocusDone={onFocusDone}
       />
     </div>
   );
