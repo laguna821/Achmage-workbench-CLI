@@ -272,6 +272,13 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       const method = req.method ?? "GET";
 
       if (method === "GET" && path === "/api/snapshot") return sendJson(res, 200, manager.snapshot());
+      if (path === "/api/attention" && method === "GET") return sendJson(res, 200, manager.notifications.list());
+      if (path === "/api/attention/presence" && method === "POST") return sendJson(res, 200, manager.notifications.observe(await readJson(req) as unknown as import("@workbench/contracts").AttentionPresence));
+      if (parts[0] === "attention" && parts.length === 3) {
+        if (parts[2] === "target" && method === "GET") return sendJson(res, 200, manager.notifications.target(parts[1]!));
+        if (parts[2] === "read" && method === "POST") return sendJson(res, 200, manager.notifications.read(parts[1]!));
+        if (parts[2] === "claim" && method === "POST") return sendJson(res, 200, manager.notifications.claim(parts[1]!, (await readJson(req)).clientId));
+      }
       if (path === "/api/host/autostart" && options.autostart) {
         if (method === "GET") return sendJson(res, 200, await options.autostart.status());
         if (method === "PUT") {

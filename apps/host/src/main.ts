@@ -38,6 +38,7 @@ import { findToolInstructions } from "./search.ts";
 import { adoptLoginShellPath } from "./shell-env.ts";
 import { claimInstance } from "./daemon/instance.ts";
 import { HostAutostart } from "./daemon/autostart.ts";
+import { systemNotifier } from "./system-notifications.ts";
 
 // Local gateway: owns engine processes and state, serves the UI and an HTTP + SSE API on
 // 127.0.0.1 only. Prints one `WORKBENCH_READY {json}` line once it accepts connections.
@@ -102,6 +103,7 @@ const browse = new AgentBrowser({
   cli: env.WORKBENCH_BROWSER_CLI ? resolve(env.WORKBENCH_BROWSER_CLI) : null,
   chrome: env.WORKBENCH_BROWSER_CHROME ? resolve(env.WORKBENCH_BROWSER_CHROME) : null,
 });
+const desktopNotifications = env.WORKBENCH_CLI_INPUT ? null : systemNotifier(env.WORKBENCH_PTY_BIN ?? null);
 const manager = new SessionManager(store, bus, {
   browse,
   hostId: env.WORKBENCH_HOST_ID ?? hostname(),
@@ -111,6 +113,8 @@ const manager = new SessionManager(store, bus, {
   dataDir,
   kordoc,
   ieum,
+  // Headless export owns a disposable gateway and must not create desktop alerts.
+  ...(desktopNotifications ? { deliverNotification: desktopNotifications } : {}),
 });
 void manager.refreshTools();
 const pkm = new Pkm(store, bus, manager, { dataDir });
@@ -255,6 +259,7 @@ async function stop() {
   find.close();
   pkm.close();
   await manager.shutdown().catch(() => undefined);
+  desktopNotifications?.close();
   await officeAi.shutdownProviders();
   store.close();
   process.exit(0);

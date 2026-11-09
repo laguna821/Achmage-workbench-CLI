@@ -13,6 +13,7 @@ mod office_output;
 mod office_html_output;
 mod office_cli;
 mod office_browser;
+mod notifications;
 pub mod office_secrets;
 pub mod office_fonts;
 pub mod terminal_worker;
@@ -421,9 +422,12 @@ pub fn run() {
         }
     } else { None };
     let initial_files = if cli.is_none() { file_arguments(&args, &std::env::current_dir().unwrap_or_default()) } else { Vec::new() };
-    let mut builder = tauri::Builder::default().manage(OpenFiles(Mutex::new(initial_files)));
+    let initial_attention = notifications::argument(&args);
+    let mut builder = tauri::Builder::default().manage(OpenFiles(Mutex::new(initial_files)))
+        .manage(notifications::OpenAttention(Mutex::new(initial_attention)));
     if let Some(job) = &cli { builder = builder.manage(job.clone()); }
     else { builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+        if let Some(id) = notifications::argument(args.get(1..).unwrap_or_default()) { notifications::open(app, id); return; }
         enqueue_files(app, file_arguments(args.get(1..).unwrap_or_default(), std::path::Path::new(&cwd)));
         show_main(app);
     })); }
@@ -431,7 +435,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .invoke_handler(tauri::generate_handler![open_session_window, notify_session, set_attention, take_open_files, office_output::render_svg_pdf, office_output::print_svg, office_html_output::render_html_pdf, office_html_output::print_html, office_cli::office_cli_job, office_cli::office_cli_write, office_cli::office_cli_done, office_cli::office_cli_trace, office_browser::office_browser])
+        .invoke_handler(tauri::generate_handler![open_session_window, notify_session, notifications::notify_attention, notifications::take_open_attention, set_attention, take_open_files, office_output::render_svg_pdf, office_output::print_svg, office_html_output::render_html_pdf, office_html_output::print_html, office_cli::office_cli_job, office_cli::office_cli_write, office_cli::office_cli_done, office_cli::office_cli_trace, office_browser::office_browser])
         .manage(office_browser::BrowserJobs::default())
         .register_uri_scheme_protocol("workbench-browser", |ctx, request| office_browser::serve(ctx.app_handle(), request.uri().path()))
         .manage(office_html_output::HtmlJobs::default())

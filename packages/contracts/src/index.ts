@@ -500,6 +500,7 @@ export type ProviderStatus = {
 };
 
 export type WorkbenchEvent =
+  | { type: "attention.changed" }
   | { type: "office.note.ready"; artifactId: string }
   | { type: "office.control" }
   | { type: "folder.upserted"; folder: Folder }
@@ -579,6 +580,7 @@ export type Snapshot = {
   sessions: Session[];
   providers: ProviderStatus[];
   prefs: UiPrefs;
+  attention?: import("./attention.ts").AttentionList;
   artifacts: Artifact[];
   proposals: Proposal[];
   handoffs: Handoff[];
@@ -922,3 +924,4 @@ export * from "./github-discussion.ts";
 export * from "./artifacts.ts";
 export * from "./agent-profiles.ts";
 export * from "./workspace-services.ts";
+export * from "./attention.ts";

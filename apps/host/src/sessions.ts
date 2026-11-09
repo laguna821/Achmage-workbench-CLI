@@ -60,6 +60,7 @@ import { physicalPath, withinDirectory } from "./directory-operations.ts";
 import { WorktreeWorkspaces } from "./worktree-workspaces.ts";
 import { Terminals } from "./terminals.ts";
 import { WorkspaceServices } from "./workspace-services.ts";
+import { Notifications } from "./notifications.ts";
 import { WorkspacePreparation } from "./workspace-preparation.ts";
 import { SourceControl } from "./source-control.ts";
 import { ScmReviews, type ScmReviewHooks } from "./scm-review.ts";
@@ -155,6 +156,7 @@ export type ManagerOptions = {
   /** Isolated profiles/tests may supply a skill home; native defaults use the person's home. */
   skillHomeDir?: string;
   ptyBinary?: string;
+  deliverNotification?: (payload: import("@workbench/contracts").AttentionPayload) => Promise<{ status: "sent" | "unavailable" | "unknown"; detail?: string }>;
 };
 
 const DEFAULT_PURPOSE = /^대화 \d+$/;
@@ -296,6 +298,7 @@ export class SessionManager {
   readonly worktreeWorkspaces: WorktreeWorkspaces;
   readonly terminals: Terminals;
   readonly services: WorkspaceServices;
+  readonly notifications: Notifications;
   readonly preparation: WorkspacePreparation;
   readonly sourceControl: SourceControl;
   readonly scmReviews: ScmReviews;
@@ -499,6 +502,11 @@ export class SessionManager {
       canSteer: session => Boolean(this.adapters.get(session.provider)?.steer),
       stop: id => this.interrupt(id), approve: (id, itemId, decision) => this.answerApproval(id, itemId, decision),
       cancelQueue: (id, queuedId) => this.cancelQueued(id, queuedId), sendQueue: (id, queuedId) => this.sendQueued(id, queuedId),
+    });
+    this.notifications = new Notifications(store, bus, {
+      hostId: options.hostId, session: id => this.sessions.get(id), items: id => this.loadItems(id),
+      hidden: (workId, sessionId) => this.hidden(workId, sessionId), enabled: () => this.prefs().notify !== false,
+      deliver: options.deliverNotification,
     });
     options.browse?.bind({
       lookup: (sessionId) => {
@@ -765,6 +773,7 @@ export class SessionManager {
       sessions: [...this.sessions.values()],
       providers: [...this.adapters.values()].map((adapter) => this.engineSetup.decorate(adapter.status())),
       prefs: this.prefs(),
+      attention: this.notifications.list(),
       artifacts: this.documents.list(),
       proposals: this.documents.listProposals(),
       handoffs: [...this.handoffs.values()],
@@ -2270,6 +2279,7 @@ export class SessionManager {
   }
 
   async shutdown() {
+    this.notifications.close();
     this.tasks.close();
     this.office.close();
     this.scmReviews.stop();
