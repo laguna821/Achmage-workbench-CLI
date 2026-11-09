@@ -40,4 +40,4 @@ The executor must attach to the admitted turn instead of generating another turn
 - These four suites total 22 cases. One expiry fixture initially captured real time before enabling fake timers; moving fake-timer activation before fixture creation fixed that one case. Only the failed case was repeated. A later changed HTTP case was checked individually.
 - The affected reference, skill and style suites passed 49 cases. Host and Office TypeScript passed. No production, installer, native OS E2E or CI build was run for this phase.
 
-Research basis: R35, `research:rr-1b4bb9d2193a4e5dced6dca4128061a9:ee99d6c78d22cfe51dc32b308eee915110ba3ad21d6e19cdeb379c58b4d93aa0`. U09 and the full 0.4.0 goal remain incomplete.
+Implementation: `aa6779d`. Research basis and results: R35, `research:rr-1b4bb9d2193a4e5dced6dca4128061a9:1bc8ee43194f035f2258e6ce0c12aaf74acd1a95c01e76703bb6c1a899ab7bc1`. U09 and the full 0.4.0 goal remain incomplete.

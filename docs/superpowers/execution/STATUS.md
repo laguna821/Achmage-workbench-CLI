@@ -12,7 +12,7 @@
 | U06 작업 목록·명령 | 주요 흐름 구현 | `22166e5`, `498a710` — 독립 문서·하위 작업과 공통 접수. 공급자 하위 작업은 관찰만 지원 |
 | U07 역할·CLI/MCP API | 구현 | `9239725`, `498a710` — 역할 CRUD·요청 당시 설정 보존·공통 receipt |
 | U08 9형식 Office UI | 주요 흐름 구현 | `b40fb38` — 원본 명령 메뉴·theme 전달. 전체 native OS 사용 확인은 통합 때 |
-| U09 Office UI 독립 실행 | 실행 권한·저장 경로 분리 구현 | UI presence와 실행 lease 분리, 원본 serializer 직접 저장, 취소·외부 저장·늦은 writer 차단. 독립 renderer 프로세스와 원본 질문/선택 인계는 남음. [범위](../../office-execution.md) |
+| U09 Office UI 독립 실행 | 실행 권한·저장 경로 분리 구현 | `aa6779d` — UI presence와 실행 lease 분리, 원본 serializer 직접 저장, 취소·외부 저장·늦은 writer 차단. 독립 renderer 프로세스와 원본 질문/선택 인계는 남음. [범위](../../office-execution.md) |
 | U10 검색·Bases·그래프 | 주요 흐름 구현 | `e056d8b` — 검색 취소 복귀·다중선택/일괄 보관·그래프 키보드 이동 |
 | U11 설정·가져오기 | 주요 흐름 구현 | 기존 이음/Dropbox 흐름 유지, `18bac42` 과거 기록/실행 구분·원문 보존. 전체 온보딩 통합 남음 |
 | U12–U14 공유 웹·같은 페이지 AI | 핵심 코드 구현 | `2df5f41`, `1c5e688` — 네이티브 웹 탭·주소 이동·독립 웹 AI·사람 인계·숨김 유지·대상/문서/제어권 식별. 다운로드·사이트 권한·macOS 프로필·산출물 및 실제 OS 화면 확인은 남음. [범위](../../shared-browser.md) |
@@ -35,4 +35,4 @@ U09 실행 권한·저장 분리의 집중 22개와 영향받은 참조/스킬/�
 
 원본 [156개 요구 대응표](../plans/support/coverage.json)와 [통합 계획](../plans/2026-11-09-workbench-integrated-release.md)을 유지한다. 이 상태표의 ‘구현’은 기능 코드 상태이며 전체 릴리즈 완료 판정이 아니다.
 
-연구 판: `research:rr-1b4bb9d2193a4e5dced6dca4128061a9:1cc77057b0caa5abd8cdcc7a42916d0f056c7bb1b633a068e7ee3596b0bdbeb3` (R24–R34). 실행 교정: `decision-7287723b7dd57957ec551667abe6ddc8c02067f7f0f0988cb2a44d58b05cd626`, `decision-b10e79c5567f53f7c9dfe5e459933f13cbff1b06242c87566dfbaea9d13d4e63`.
+연구 판: `research:rr-1b4bb9d2193a4e5dced6dca4128061a9:1bc8ee43194f035f2258e6ce0c12aaf74acd1a95c01e76703bb6c1a899ab7bc1` (R24–R35). 실행 교정: `decision-7287723b7dd57957ec551667abe6ddc8c02067f7f0f0988cb2a44d58b05cd626`, `decision-b10e79c5567f53f7c9dfe5e459933f13cbff1b06242c87566dfbaea9d13d4e63`.
