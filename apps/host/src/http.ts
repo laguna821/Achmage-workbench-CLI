@@ -556,6 +556,14 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         if (method === "GET") return sendJson(res, 200, manager.terminals.list(parts[1]));
         if (method === "POST") return sendJson(res, 201, manager.terminals.create(parts[1], await readJson(req) as unknown as import("@workbench/contracts").CreateTerminalRequest));
       }
+      if (parts[0] === "workspaces" && parts[1] && parts[2] === "services" && parts.length === 3) {
+        if (method === "GET") return sendJson(res, 200, manager.services.list(parts[1]));
+        if (method === "POST") return sendJson(res, 201, await manager.services.start(parts[1], await readJson(req, 16_000) as unknown as import("@workbench/contracts").WorkspaceServiceStart));
+      }
+      if (parts[0] === "services" && parts[1] && parts[2] === "stop" && parts.length === 3 && method === "POST") {
+        return sendJson(res, 200, await manager.services.stop(parts[1], await readJson(req, 2048) as unknown as import("@workbench/contracts").WorkspaceServiceOwner));
+      }
+      if (parts[0] === "services" && parts[1] && parts.length === 2 && method === "DELETE") return sendJson(res, 200, manager.services.forget(parts[1]));
       if (parts[0] === "terminals" && parts[1]) {
         if (parts.length === 2 && method === "GET") return sendJson(res, 200, manager.terminals.output(parts[1], Number(url.searchParams.get("cursor") ?? 0)));
         if (parts.length === 2 && method === "DELETE") return sendJson(res, 200, await manager.terminals.close(parts[1]));

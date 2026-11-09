@@ -921,3 +921,4 @@ export * from "./github-actions.ts";
 export * from "./github-discussion.ts";
 export * from "./artifacts.ts";
 export * from "./agent-profiles.ts";
+export * from "./workspace-services.ts";

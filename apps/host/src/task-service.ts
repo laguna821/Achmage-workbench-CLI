@@ -89,7 +89,7 @@ export class TaskService {
       sourceItemId: null, approvalIds: [], capabilities: { ...base.capabilities, steer: false, stop: false, approve: false } });
     const children = new Map<string, TaskSummary>();
     for (const item of recent) if (item.kind === "tool" && item.tool === "agent") {
-      const observations = item.agent?.children.length ? item.agent.children : [{ nativeSessionId: "", state: item.status === "running" ? "running" as const : item.status === "failed" ? "failed" as const : item.status === "declined" ? "cancelled" as const : "completed" as const }];
+      const observations = item.agent?.children.length ? item.agent.children : [{ nativeSessionId: "", state: item.status === "running" ? "running" as const : item.status === "failed" ? "failed" as const : item.status === "declined" ? "cancelled" as const : item.status === "unknown" ? "outcome_unknown" as const : "completed" as const }];
       for (const child of observations) {
         const key = child.nativeSessionId || item.id;
         children.set(key, { ...base, runId: `${runId}/agent:${key}`, parentRunId: runId, parentSessionId: session.id,

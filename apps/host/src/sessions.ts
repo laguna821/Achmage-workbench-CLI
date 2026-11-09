@@ -59,6 +59,7 @@ import { Workspaces } from "./workspaces.ts";
 import { physicalPath, withinDirectory } from "./directory-operations.ts";
 import { WorktreeWorkspaces } from "./worktree-workspaces.ts";
 import { Terminals } from "./terminals.ts";
+import { WorkspaceServices } from "./workspace-services.ts";
 import { WorkspacePreparation } from "./workspace-preparation.ts";
 import { SourceControl } from "./source-control.ts";
 import { ScmReviews, type ScmReviewHooks } from "./scm-review.ts";
@@ -294,6 +295,7 @@ export class SessionManager {
   readonly workspaces: Workspaces;
   readonly worktreeWorkspaces: WorktreeWorkspaces;
   readonly terminals: Terminals;
+  readonly services: WorkspaceServices;
   readonly preparation: WorkspacePreparation;
   readonly sourceControl: SourceControl;
   readonly scmReviews: ScmReviews;
@@ -331,6 +333,7 @@ export class SessionManager {
     this.workspaces = new Workspaces(store, options.hostId, bus);
     this.worktreeWorkspaces = new WorktreeWorkspaces(store, this.workspaces, options.dataDir ?? dirname(options.managedWorksDir), (id) => this.requireWork(id));
     this.terminals = new Terminals(store, this.workspaces, options.ptyBinary);
+    this.services = new WorkspaceServices(store, this.workspaces, this.terminals, id => this.requireWork(id));
     this.preparation = new WorkspacePreparation(store, this.workspaces, this.terminals, options.dataDir ?? dirname(options.managedWorksDir), (id) => this.requireWork(id));
     this.sourceControl = new SourceControl(store, this.workspaces, {
       sharedLinks: (root) => this.preparation.sharedLinks(root),
@@ -1129,7 +1132,7 @@ export class SessionManager {
       this.turnStarted.delete(id); this.turnRequest.delete(id); this.creating.delete(id); this.planning.delete(id); this.steering.delete(id);
     }
     for (const [id, handoff] of this.handoffs) if (ids.has(handoff.sourceSessionId) || ids.has(handoff.targetSessionId)) this.handoffs.delete(id);
-    this.links.forgetSessions(ids); this.terminals.forgetWork(workId); this.documents.forgetWork(workId); this.works.delete(workId);
+    this.links.forgetSessions(ids); this.services.forgetWork(workId); this.terminals.forgetWork(workId); this.documents.forgetWork(workId); this.works.delete(workId);
     this.bus.publish({ type: "work.removed", workId });
     return { ok: true, preservedPath: work.cwd };
   }
