@@ -333,8 +333,8 @@ export function ProjectsSection({ shared }: { shared: NavShared }) {
       <input
         autoFocus
         value={folderName}
-        placeholder="새 폴더 이름"
-        aria-label="새 폴더 이름"
+        placeholder="새 정리 폴더 이름"
+        aria-label="새 정리 폴더 이름"
         onChange={(event) => setFolderName(event.target.value)}
         onBlur={() => !folderName.trim() && shared.setCreatingIn(undefined)}
         onKeyDown={(event) => {

@@ -67,7 +67,11 @@ export function Composer({
   /** "/" at the start: the engine's commands and skills. */
   slash?: ComposerSlash;
 }) {
-  const [text, setText] = useState(() => localStorage.getItem(DRAFT_PREFIX + draftKey) ?? "");
+  const [draft, setDraft] = useState(() => ({ key: draftKey, text: localStorage.getItem(DRAFT_PREFIX + draftKey) ?? "" }));
+  const text = draft.key === draftKey ? draft.text : localStorage.getItem(DRAFT_PREFIX + draftKey) ?? "";
+  const setText = (next: string) => setDraft({ key: draftKey, text: next });
+  const currentDraft = useRef({ key: draftKey, text });
+  currentDraft.current = { key: draftKey, text };
   const [sending, setSending] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
   const [spans, setSpans] = useState<MentionSpan[]>([]);
@@ -113,8 +117,14 @@ export function Composer({
     mentions.onPick(item);
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setText(localStorage.getItem(DRAFT_PREFIX + draftKey) ?? "");
+    setSpans([]);
+    setCaret(0);
+    setComposing(false);
+    setDismissed(null);
+    setSlashDismissed(null);
+    pendingCaret.current = null;
   }, [draftKey]);
 
   // A draft written for this box from elsewhere ("이 요청 전으로" puts the request back), whether
@@ -128,9 +138,10 @@ export function Composer({
   }, [draftKey]);
 
   useEffect(() => {
+    if (draft.key !== draftKey) return;
     if (text) localStorage.setItem(DRAFT_PREFIX + draftKey, text);
     else localStorage.removeItem(DRAFT_PREFIX + draftKey);
-  }, [draftKey, text]);
+  }, [draftKey, draft.key, text]);
 
   useLayoutEffect(() => {
     const element = ref.current;
@@ -155,19 +166,25 @@ export function Composer({
     if (autoFocus) ref.current?.focus();
   }, [autoFocus, draftKey]);
 
-  const canSend = !disabled && !sending && (text.trim().length > 0 || attachments > 0);
+  const canSend = !disabled && !sending && !composing && (text.trim().length > 0 || attachments > 0);
 
   const submit = async (mode: "auto" | "queue" = "auto") => {
     if (!canSend) return;
+    const submitted = { key: draftKey, text };
     setSending(true);
     try {
       if (await onSend(text.trim(), busy && !steerable ? "queue" : mode)) {
-        setText("");
-        setSpans([]);
+        // A late send receipt belongs to the submitted draft, never the tab opened meanwhile.
+        if (currentDraft.current.key === submitted.key && currentDraft.current.text === submitted.text) {
+          setText("");
+          setSpans([]);
+        } else if (currentDraft.current.key !== submitted.key && localStorage.getItem(DRAFT_PREFIX + submitted.key) === submitted.text) {
+          localStorage.removeItem(DRAFT_PREFIX + submitted.key);
+        }
       }
     } finally {
       setSending(false);
-      ref.current?.focus();
+      if (currentDraft.current.key === submitted.key) ref.current?.focus({ preventScroll: true });
     }
   };
 
@@ -221,6 +238,7 @@ export function Composer({
       <textarea
         ref={ref}
         className="composer-input"
+        aria-label="요청 입력"
         rows={1}
         value={text}
         placeholder={
@@ -296,7 +314,7 @@ export function Composer({
             }
           }
           if (event.key !== "Enter" || event.shiftKey) return;
-          if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+          if (composing || event.nativeEvent.isComposing || event.keyCode === 229) return;
           event.preventDefault();
           void submit(busy && event.altKey ? "queue" : "auto");
         }}

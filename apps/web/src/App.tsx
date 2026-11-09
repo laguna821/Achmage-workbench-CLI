@@ -17,6 +17,7 @@ import { Popover } from "./components/Popover.tsx";
 import { Sidebar, type SidebarActions } from "./components/Sidebar.tsx";
 import { requestNavigatorFocus } from "./components/nav/focus.ts";
 import { ContextMenu, type MenuEntry, type MenuRequest } from "./components/ContextMenu.tsx";
+import { createActions, creationWorkspace, type CreateAction } from "./create-actions.ts";
 import { SearchPalette, type PaletteCommand, type PaletteMode } from "./components/SearchPalette.tsx";
 import { ArchiveView } from "./components/ArchiveView.tsx";
 import { ProjectDeleteDialog } from "./components/ProjectDeleteDialog.tsx";
@@ -28,6 +29,7 @@ import { EngineMenu } from "./components/EngineMenu.tsx";
 import { Switcher, UnseenContext } from "./components/SessionCards.tsx";
 import { DocContext, FormatBadge, type DocActions } from "./components/DocCards.tsx";
 import { GroupTabs } from "./components/GroupTabs.tsx";
+import { TaskPanel } from "./components/TaskPanel.tsx";
 import { TerminalDialog } from "./components/TerminalDialog.tsx";
 import { WorkspacePreparationDialog } from "./components/WorkspacePreparationDialog.tsx";
 import { SourceControlDialog } from "./components/SourceControlDialog.tsx";
@@ -66,7 +68,7 @@ import { LeaveGate } from "./leave-gate.ts";
 import { LayoutPersistence } from "./layout-persistence.ts";
 import { activeTab, activateTab, addBackgroundTab, closeTab, contentKey, findTab, moveTab, tabsOf, updateTabUi, updateTabView, withTabs } from "./tabs.ts";
 import { PaneLayout, type PaneHead, type PaneScope } from "./components/Panes.tsx";
-import { NewDocumentDialog, NEW_DOCUMENT_TYPES, type NewDocumentTarget } from "./components/NewDocumentButton.tsx";
+import { NewDocumentDialog, type NewDocumentTarget } from "./components/NewDocumentButton.tsx";
 import { IeumAppDialog } from "./components/IeumAppDialog.tsx";
 import { OfficeImportDialog } from "./components/OfficeImportDialog.tsx";
 import { closePane, effectAt, focusPane, focusedPane, movePane, otherPane, paneById, placeAt, resizeSplit, restoreLayout, setPane, shownElsewhere, singleLayout, splitPane, MAX_PANES, type Layout, type Pane, type PaneContent, type PaneId, type PaneItem, type PaneTarget, type Side, type TabUiState } from "./panes.ts";
@@ -311,6 +313,7 @@ export function App() {
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const [imageUploadOpen, setImageUploadOpen] = useState(false);
   const [officeSettingsOpen, setOfficeSettingsOpen] = useState(false);
+  const [taskPanelOpen, setTaskPanelOpen] = useState(false);
   const [dropboxOpen, setDropboxOpen] = useState(false);
   const [officeImportOpen, setOfficeImportOpen] = useState(false);
   const [ieumAppOpen, setIeumAppOpen] = useState(false);
@@ -329,6 +332,7 @@ export function App() {
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
   const [contextMenu, setContextMenu] = useState<MenuRequest | null>(null);
   const [newDocument, setNewDocument] = useState<(NewDocumentTarget & { paneId: PaneId }) | null>(null);
+  const openCreate = useRef<(anchor?: HTMLElement) => void>(() => undefined);
   // Ctrl+K opens the search box ("palette"); Ctrl+Shift+F opens it for contents only ("content").
   const [paletteOpen, setPaletteOpen] = useState<PaletteMode | null>(null);
   // A message to bring into view after opening its conversation (from search).
@@ -1049,6 +1053,7 @@ export function App() {
   }, [state.ready, state.prefs.startScreen, state.works, view, workId, setView]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
       if (event.ctrlKey && event.key === "Tab") {
         event.preventDefault();
         if (switchable.length < 2) return;
@@ -1070,7 +1075,7 @@ export function App() {
           setPaletteOpen((open) => (open === "content" ? null : "content"));
         } else if (combo === shortcuts.newWork) {
           event.preventDefault();
-          startNew(null);
+          openCreate.current();
         } else if (combo === shortcuts.otherPane && focusOtherPane.current()) {
           event.preventDefault();
         } else if (combo === shortcuts.navigator && !single) {
@@ -1309,30 +1314,44 @@ export function App() {
     const artifact = at && (at.kind === "document" || at.kind === "split") ? stateRef.current.artifacts[at.artifactId] : undefined;
     const workId = owner?.id ?? artifact?.workId ?? (at?.kind === "project" ? at.workId : pane?.workId);
     const session = pane?.sessionId ? stateRef.current.sessions[pane.sessionId] : undefined;
-    return { workId, workspaceId: artifact?.workId === workId ? artifact?.workspaceId : session?.workId === workId ? session?.workspaceId : undefined };
-  }, []);
-  const documentEntries = useCallback((paneId: PaneId, owner?: Work | null): MenuEntry[] => {
-    const target = creationTarget(paneId, owner);
-    return NEW_DOCUMENT_TYPES.map(kind => ({ kind: "item", label: `새 ${kind.label}`, icon: kind.format === "design" ? "palette" : "file", onSelect: () => setNewDocument({ ...target, paneId, format: kind.format }) }));
-  }, [creationTarget]);
+    const project = workId ? stateRef.current.works[workId] : undefined;
+    return { workId, workspaceId: creationWorkspace(project, [artifact?.workspaceId, session?.workspaceId, layoutScope], stateRef.current.workspaces) };
+  }, [layoutScope]);
+  const runCreateAction = useCallback((paneId: PaneId, action: CreateAction) => {
+    const { target } = action;
+    if (action.kind === "document") { setNewDocument({ ...target, paneId, format: action.format }); return; }
+    if (action.kind === "folder") {
+      savePrefs({ sidebar: true });
+      setExpandedEditorTab(paneById(layoutRef.current, paneId)?.activeTabId ?? null);
+      setSidebarPending({ createIn: target.folderId });
+      return;
+    }
+    const project = target.workId ? stateRef.current.works[target.workId] : undefined;
+    if (action.kind === "project" || !project || !action.provider) { setViewOf(paneId, { kind: "new", folderId: target.folderId }); return; }
+    if (!api) return;
+    void api.createSession(project.id, action.provider, { workspaceId: target.workspaceId }).then(session => {
+      dispatch({ type: "focus", work: project, session });
+      afterLeaving(paneId, { kind: "work" }, () => updateLayout(current => ({ ...setPane(current, paneId, { workId: project.id, sessionId: session.id, view: { kind: "work" } }), focus: paneId })));
+    }).catch(fail);
+  }, [api, afterLeaving, updateLayout, setViewOf, fail, savePrefs]);
   const creationMenu = useCallback((paneId: PaneId, owner: Work | null, x: number, y: number, folderId?: string | null): MenuRequest => {
     const target = creationTarget(paneId, owner);
     const project = target.workId ? stateRef.current.works[target.workId] : undefined;
-    const sessions: MenuEntry[] = project ? (["claude", "codex"] as const).map(provider => ({
-      kind: "item", label: `${PROVIDER_LABEL[provider]} 새 세션`, icon: "chat",
-      onSelect: () => {
-        if (!api) return;
-        void api.createSession(project.id, provider, { workspaceId: target.workspaceId }).then(session => {
-          dispatch({ type: "focus", work: project, session });
-          afterLeaving(paneId, { kind: "work" }, () => updateLayout(current => ({ ...setPane(current, paneId, { workId: project.id, sessionId: session.id, view: { kind: "work" } }), focus: paneId })));
-        }).catch(fail);
-      },
-    })) : [{ kind: "item", label: "새 세션", icon: "chat", onSelect: () => setViewOf(paneId, { kind: "new", folderId: folderId ?? null }) }];
-    return { x, y, title: project ? `${project.title} · 만들기` : "만들기", items: [
-      ...documentEntries(paneId, owner), { kind: "separator" }, ...sessions, { kind: "separator" },
-      { kind: "item", label: "새 프로젝트…", icon: "project", onSelect: () => setViewOf(paneId, { kind: "new", folderId: folderId ?? null }) },
+    const space = target.workspaceId ? stateRef.current.workspaces[target.workspaceId] : undefined;
+    const at = paneById(layoutRef.current, paneId)?.view;
+    const commands = createActions({ ...target, folderId: folderId !== undefined ? folderId : project?.folderId ?? (at?.kind === "new" ? at.folderId : null) });
+    const entry = (action: CreateAction): MenuEntry => ({ kind: "item", label: action.label, icon: action.icon, onSelect: () => runCreateAction(paneId, action) });
+    return { x, y, title: project ? `${project.title}${space ? ` · ${space.label}` : ""}` : "새로 만들기", items: [
+      { kind: "submenu", label: "새 문서·디자인", icon: "file", items: commands.filter(action => action.kind === "document").map(entry) },
+      ...commands.filter(action => action.kind === "session").map(entry), { kind: "separator" },
+      ...commands.filter(action => action.kind === "folder" || action.kind === "project").map(entry),
     ] };
-  }, [api, creationTarget, documentEntries, afterLeaving, updateLayout, setViewOf, fail]);
+  }, [creationTarget, runCreateAction]);
+  openCreate.current = anchor => {
+    const button = anchor ?? document.querySelector<HTMLElement>(".shell-create");
+    const box = button?.getBoundingClientRect();
+    setContextMenu(creationMenu(layoutRef.current.focus, null, box?.left ?? 24, box?.bottom ?? 56));
+  };
 
   const menuFor = useCallback(
     (row: Row, x: number, y: number): MenuRequest | null => {
@@ -1412,7 +1431,7 @@ export function App() {
           { kind: "item", label: `${PROVIDER_LABEL[session.provider]} 외형…`, icon: "palette", onSelect: () => appearanceApi.openSettings(session.provider) },
           { kind: "separator" },
           ...(busy ? [{ kind: "item" as const, label: "멈추기", icon: "stop" as const, onSelect: () => actions.interrupt(session) }] : []),
-          { kind: "item", label: busy ? "보관 (멈춘 뒤 가능)" : "보관", icon: "archive", hint: "Delete", disabled: busy, onSelect: () => archive({ kind: "session", id: session.id }) },
+          { kind: "item", label: "보관", icon: "archive", hint: "Delete", disabled: busy, disabledReason: "진행 중인 세션을 멈춘 뒤 보관할 수 있습니다.", onSelect: () => archive({ kind: "session", id: session.id }) },
         ];
         return { x, y, title: session.purpose, items };
       }
@@ -1423,21 +1442,8 @@ export function App() {
         const items: MenuEntry[] = [
           { kind: "item", label: "열기", icon: "project", hint: "Enter", onSelect: () => openWorkNow(owner) },
           ...(single ? [] : [{ kind: "item" as const, label: "오른쪽에 열기", icon: "columns" as const, hint: "Ctrl+클릭", onSelect: () => panesRef.current.placeItem({ kind: "work", id: owner.id }, "right") }]),
-          {
-            kind: "submenu",
-            label: "이 작업에 새 세션",
-            icon: "plus",
-            items: (["claude", "codex"] as const).map((provider) => ({
-              kind: "item" as const,
-              label: `${PROVIDER_LABEL[provider]} 새 세션`,
-              onSelect: () =>
-                void actions.newSession(owner, provider).then((created) => {
-                  if (created) actions.selectSession(owner, created);
-                }),
-            })),
-          },
+          { kind: "submenu", label: "새로 만들기", icon: "plus", items: creationMenu(layoutRef.current.focus, owner, 0, 0).items },
           { kind: "item", label: "새 페이지", icon: "page", onSelect: () => newPage(owner) },
-          { kind: "submenu", label: "새 문서·디자인", icon: "plus", items: documentEntries(layoutRef.current.focus, owner) },
           { kind: "item", label: "템플릿으로 새 페이지…", icon: "page", onSelect: () => pkmHandle.current?.setDialog({ kind: "template", workId: owner.id, parentId: null }) },
           { kind: "item", label: "이름 바꾸기", icon: "edit", hint: "F2", onSelect: () => setSidebarPending({ rename: owner.id }) },
           { kind: "separator" },
@@ -1461,8 +1467,8 @@ export function App() {
           ...(inDesktop ? [{ kind: "item" as const, label: "작업 폴더 열기", icon: "folderOpen" as const, onSelect: () => void openPath(owner.cwd) }] : []),
           { kind: "item", label: "작업 폴더 경로 복사", icon: "copy", onSelect: copy(owner.cwd, "경로를 복사했습니다.") },
           { kind: "separator" },
-          { kind: "item", label: busy ? "보관 (진행 중인 세션이 끝난 뒤)" : "보관", icon: "archive", hint: "Delete", disabled: busy, onSelect: () => archive({ kind: "work", id: owner.id }) },
-          { kind: "item", label: "프로젝트 삭제…", icon: "trash", disabled: busy, onSelect: () => setDeletingWork(owner) },
+          { kind: "item", label: "보관", icon: "archive", hint: "Delete", disabled: busy, disabledReason: "진행 중인 세션이 끝나면 보관할 수 있습니다.", onSelect: () => archive({ kind: "work", id: owner.id }) },
+          { kind: "item", label: "프로젝트 삭제…", icon: "trash", disabled: busy, disabledReason: "진행 중인 세션이 끝나면 삭제할 수 있습니다.", onSelect: () => setDeletingWork(owner) },
         ];
         items.splice(1, 0, { kind: "item", label: "프로젝트 페이지", icon: "project", onSelect: () => actions.openProject(owner) }, { kind: "item", label: "카드로 보기", icon: "grid", onSelect: () => setView({ kind: "pkm", target: { kind: "work", id: owner.id } }) });
         return { x, y, title: owner.title, items };
@@ -1501,7 +1507,7 @@ export function App() {
       return null;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [api, state, actions, archive, exportSession, openPath, openSession, visibleIds, startNew, docActions, fail, setToast, linkApi, single, creationMenu, documentEntries],
+    [api, state, actions, archive, exportSession, openPath, openSession, visibleIds, startNew, docActions, fail, setToast, linkApi, single, creationMenu],
   );
 
   function openWorkNow(target: Work) {
@@ -1581,7 +1587,7 @@ export function App() {
     ...(single
       ? []
       : [
-          { id: "new", label: "새 세션", icon: "plus" as const, hint: "Ctrl+N", run: () => startNew(null) },
+          { id: "new", label: "새로 만들기", icon: "plus" as const, hint: shortcuts.newWork, run: () => openCreate.current() },
           { id: "home", label: "홈", icon: "home" as const, run: () => startNew(null) },
         ]),
     ...(visibleSession
@@ -2021,6 +2027,7 @@ export function App() {
           onToast={setToast}
           onError={fail}
           openMenu={setContextMenu}
+          onCreate={anchor => { const box = anchor.getBoundingClientRect(); setContextMenu(creationMenu(pane.id, state.works[at.workId] ?? null, box.left, box.bottom)); }}
         />
       );
     }
@@ -2126,9 +2133,6 @@ export function App() {
           )}
           {!sidebarOpen && !single && !editorFocus ? (
             <>
-              <button type="button" className="ghost-button" onClick={() => startNew(null)} title="새 세션 (Ctrl+N)">
-                <Icon name="plus" size={15} /> 새 세션
-              </button>
               <button type="button" className="ghost-button" onClick={() => setPaletteOpen("palette")} title="찾기 (Ctrl+K)">
                 <Icon name="search" size={15} /> 찾기
                 {unseen.size ? <span className="count-chip new" title="새 답">{unseen.size}</span> : null}
@@ -2150,11 +2154,13 @@ export function App() {
             title={work && view.kind === "work" && !showStart && !single ? "눌러서 작업 이름 바꾸기" : title}
             onClick={() => work && view.kind === "work" && !showStart && !single && setEditingTitle(true)}
           >
-            {title}
+            <span className="shell-location-kind">{view.kind === "document" || view.kind === "split" ? "문서" : view.kind === "project" ? "프로젝트" : view.kind === "work" ? "대화" : view.kind === "pkm" ? "자료" : "작업공간"}</span>
+            <span>{title}</span>
           </button>
         )}
         <div className="topbar-right">
-          <button type="button" className="ghost-button small" onClick={() => setNewDocument({ ...creationTarget(layoutRef.current.focus), paneId: layoutRef.current.focus })}><Icon name="plus" size={15} /> 새 문서</button>
+          <button type="button" className="ghost-button small shell-create" aria-haspopup="menu" title={`새 문서·세션·정리 폴더 (${shortcuts.newWork})`} onClick={event => openCreate.current(event.currentTarget)}><Icon name="plus" size={15} /> 새로 만들기<Icon name="chevronDown" size={12} /></button>
+          <button type="button" className="ghost-button small" aria-haspopup="dialog" aria-expanded={taskPanelOpen} onClick={() => setTaskPanelOpen(true)}><Icon name="clock" size={15} /> 작업</button>
           {view.kind === "document" ? <button type="button" className="ghost-button small" onClick={() => setExpandedEditorTab(editorFocus ? focusedTabId : null)}><Icon name={editorFocus ? "columns" : "expandAll"} size={14} />{editorFocus ? "작업공간 보기" : "편집기에 집중"}</button> : null}
           {!single ? <button type="button" className="ghost-button small" aria-label="배치 선택" disabled={!layoutReady} onClick={(event) => {
             const box = event.currentTarget.getBoundingClientRect();
@@ -2318,6 +2324,13 @@ export function App() {
         </Suspense>
       ) : null}
 
+      {taskPanelOpen ? <TaskPanel api={api} workId={view.kind === "project" ? view.workId : work?.id} onClose={() => setTaskPanelOpen(false)} onOpen={(sessionId, itemId) => {
+        const target = stateRef.current.sessions[sessionId];
+        if (!target) { setToast("원문 대화를 찾을 수 없습니다."); return; }
+        setTaskPanelOpen(false);
+        openSession(target);
+        if (itemId) setFocusItem({ sessionId, itemId, nonce: Date.now() });
+      }} /> : null}
       {terminalWorkspace ? <TerminalDialog api={api} workspace={state.workspaces[terminalWorkspace.id] ?? terminalWorkspace} onClose={() => setTerminalWorkspace(null)} onOpen={(entry) => navigateTo({ view: { kind: "terminal", terminalId: entry.id, workspaceId: entry.workspaceId, label: entry.label }, workId: entry.workId, sessionId: null })} /> : null}
       {preparationWorkspace ? <WorkspacePreparationDialog api={api} workspace={state.workspaces[preparationWorkspace.id] ?? preparationWorkspace} onClose={() => setPreparationWorkspace(null)} onOpen={(entry) => navigateTo({ view: { kind: "terminal", terminalId: entry.id, workspaceId: entry.workspaceId, label: entry.label }, workId: entry.workId, sessionId: null })} /> : null}
       {scmWorkspace ? <SourceControlDialog key={scmWorkspace.id} api={api} workspace={state.workspaces[scmWorkspace.id] ?? scmWorkspace} onClose={() => setScmWorkspace(null)} onTerminal={() => { setTerminalWorkspace(scmWorkspace); setScmWorkspace(null); }} /> : null}

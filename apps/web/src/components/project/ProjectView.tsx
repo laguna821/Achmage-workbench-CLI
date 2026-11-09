@@ -61,8 +61,10 @@ export function ProjectView({
   onError,
   openMenu,
   onLeaveGuard,
+  onCreate,
 }: {
   onLeaveGuard?: (guard: (() => Promise<void>) | null) => void;
+  onCreate?: (anchor: HTMLButtonElement) => void;
   api: Api;
   state: State;
   workId: string;
@@ -251,7 +253,7 @@ export function ProjectView({
   const events = allEvents ?? page.events;
 
   return (
-    <main className="project-view" data-note-revision={page.note.revision}>
+    <main className="project-view" data-screen="S02" data-note-revision={page.note.revision}>
       <div className="project-scroll">
         <div className="column project-column">
           <header className="project-head">
@@ -259,6 +261,7 @@ export function ProjectView({
             <div className="project-title-row">
               <h1 className="project-title">{work.title}</h1>
               <span className="project-head-tools">
+                {onCreate ? <button type="button" className="button small" aria-haspopup="menu" onClick={event => onCreate(event.currentTarget)}><Icon name="plus" size={14} /> 새로 만들기</button> : null}
                 {next ? (
                   <button type="button" className="button small project-continue" onClick={() => onOpenSession(next)} title="이 프로젝트에서 이어서 하기">
                     <EngineMark provider={next.provider} size={14} /> 이어서: {next.purpose || "세션"}

@@ -14,7 +14,7 @@ function props() {
 }
 async function create(screen: ReturnType<typeof render>) {
   fireEvent.click(screen.getByRole("button", { name: "문서 파일 메뉴" }));
-  await act(async () => { fireEvent.click(screen.getByRole("menuitem", { name: /^워드 문서/ })); });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /^워드 문서/ })); });
 }
 it("saves the source before creating and carries the exact workspace and session", async () => {
   const p = props(), screen = render(<OfficeFileMenu {...p} />);

@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { PROVIDER_LABEL, turnEndText, type Provider, type TranscriptItem } from "@workbench/contracts";
@@ -13,6 +13,7 @@ import { ImageCard } from "./ImageGen.tsx";
 import { LinkEndCard, LinkHopBadge, LinkRequestText } from "./LinkCards.tsx";
 import { NoteChips } from "./pkm/NoteChips.tsx";
 import { MessageActions } from "./pkm/MessageActions.tsx";
+import { captureReadingAnchor, nearTranscriptEnd, readingAnchorTop, type ChatPosition, type ReadingAnchor } from "../conversation/reading-anchor.ts";
 
 const DRAWN = diagramComponents();
 const STREAMING = diagramComponents(true);
@@ -164,11 +165,12 @@ function workSummary(items: (Item<"tool"> | Item<"reasoning">)[]) {
   return { text: parts.join(" · "), running: false };
 }
 
-function ToolRow({ item }: { item: Item<"tool"> }) {
-  const [open, setOpen] = useState(false);
+function ToolRow({ item, focused }: { item: Item<"tool">; focused: boolean }) {
+  const [open, setOpen] = useState(focused);
+  useLayoutEffect(() => { if (focused) setOpen(true); }, [focused]);
   const hasBody = Boolean(item.output || (item.detail && item.tool !== "command"));
   return (
-    <li className={`tool-row status-${item.status}`}>
+    <li className={`tool-row status-${item.status}`} data-item-id={item.id}>
       <button type="button" className="tool-row-head" onClick={() => hasBody && setOpen(!open)} aria-expanded={open}>
         <Icon name={TOOL_ICON[item.tool] ?? "tool"} size={14} className="tool-icon" />
         <span className={item.tool === "command" ? "tool-title mono" : "tool-title"}>{item.title}</span>
@@ -183,9 +185,12 @@ function ToolRow({ item }: { item: Item<"tool"> }) {
   );
 }
 
-function WorkBlock({ block }: { block: Extract<Block, { type: "work" }> }) {
-  const [open, setOpen] = useState(false);
+function WorkBlock({ block, focusItemId }: { block: Extract<Block, { type: "work" }>; focusItemId?: string }) {
+  const focused = block.items.some(item => item.id === focusItemId);
+  const [open, setOpen] = useState(focused);
+  useLayoutEffect(() => { if (focused) setOpen(true); }, [focused]);
   const summary = workSummary(block.items);
+  const problems = block.items.filter((item): item is Item<"tool"> => item.kind === "tool" && (item.status === "failed" || item.status === "declined"));
   // Pictures the steps made or looked at stay in view while the steps are folded (Codex app).
   const images = block.items
     .flatMap((item) => (item.kind === "tool" ? (item.images ?? []) : []))
@@ -195,16 +200,17 @@ function WorkBlock({ block }: { block: Extract<Block, { type: "work" }> }) {
     <div className="work-block">
       <button type="button" className="work-summary" onClick={() => setOpen(!open)} aria-expanded={open}>
         <Icon name={open ? "chevronDown" : "chevronRight"} size={14} />
-        <span className={summary.running ? "work-summary-text running" : "work-summary-text"}>{summary.text}</span>
+        <span className={summary.running ? "work-summary-text running" : "work-summary-text"}>실행 상세 · {summary.text}</span>
         {summary.running ? <span className="spinner" /> : null}
       </button>
-      {open ? (
+      {!open && problems.length ? <div className="work-problems" role="status">{problems.map(item => <button key={item.id} type="button" className="text-button" onClick={() => setOpen(true)}>{item.status === "declined" ? "거절됨" : "실패"} · {item.title}</button>)}</div> : null}
+      {open || focused ? (
         <ul className="work-list">
           {block.items.map((item) =>
             item.kind === "tool" ? (
-              <ToolRow key={item.id} item={item} />
+              <ToolRow key={item.id} item={item} focused={item.id === focusItemId} />
             ) : (
-              <li key={item.id} className="reasoning-row">
+              <li key={item.id} className="reasoning-row" data-item-id={item.id}>
                 {item.text}
               </li>
             ),
@@ -307,7 +313,7 @@ type RailMark = { id: string; index: number; top: number; text: string; attentio
 
 const PIN_OPEN_KEY = "workbench.pinOpen";
 /** Where each conversation was read, while it is shown again after another view (mode switches). */
-const readAt = new Map<string, number>();
+const readAt = new Map<string, { top: number; anchor?: ReadingAnchor }>();
 /** Height of the folded request band; the band appears once the request slides under it. */
 const PIN_HEIGHT = 46;
 
@@ -331,8 +337,8 @@ export function Transcript({
   position,
   onPosition,
 }: {
-  position?: { top: number; follow: boolean };
-  onPosition?: (position: { top: number; follow: boolean }) => void;
+  position?: ChatPosition;
+  onPosition?: (position: ChatPosition) => void;
   sessionId: string;
   items: TranscriptItem[];
   provider: Provider;
@@ -355,12 +361,15 @@ export function Transcript({
   const restorePending = useRef<number | null>(position && !position.follow ? position.top : null);
   const ownTop = useRef<number | null>(null);
   const lastTop = useRef(0);
+  const readingAnchor = useRef<ReadingAnchor | null>(position?.anchor ?? null);
+  const reconcileLayout = useRef<() => void>(() => undefined);
+  const flashTarget = useRef<{ element: HTMLElement; timer: number } | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const pinRef = useRef<HTMLDivElement>(null);
   const [pinOpen, setPinOpen] = useState(() => localStorage.getItem(PIN_OPEN_KEY) === "1");
   const sections = useRef(new Map<string, HTMLElement>());
-  const blocks = toBlocks(items);
-  const turns = toTurns(blocks);
+  const blocks = useMemo(() => toBlocks(items), [items]);
+  const turns = useMemo(() => toTurns(blocks), [blocks]);
   const pending = items.find((item): item is Item<"approval"> => item.kind === "approval" && item.decision === null);
   // The engine is working but nothing has arrived since the last request yet.
   const waitingFirst = running && blocks[blocks.length - 1]?.type === "user";
@@ -390,7 +399,7 @@ export function Transcript({
     const stillInside = section ? section.offsetTop + section.offsetHeight > top + cover + 48 : false;
     const nextSticky = current && headerGone && stillInside ? current : null;
     setSticky((previous) => (previous?.id === nextSticky?.id ? previous : nextSticky));
-    setAtBottom(element.scrollHeight - top - element.clientHeight < 24);
+    setAtBottom(nearTranscriptEnd(element));
     const next = { marks, viewTop: top / height, viewHeight: element.clientHeight / height, current: current?.id ?? null };
     // Measuring runs after every render, so state only changes when something visible moved.
     const key = (value: typeof next) =>
@@ -402,7 +411,9 @@ export function Transcript({
   // conversation comes back after another view.
   useLayoutEffect(() => {
     const element = scroller.current;
-    const top = position && !position.follow ? position.top : readAt.get(sessionId);
+    const saved = position && !position.follow ? position : readAt.get(sessionId);
+    const top = saved?.top;
+    readingAnchor.current = saved?.anchor ?? null;
     restorePending.current = top ?? null;
     if (element && top !== undefined && !focusItem && element.scrollHeight - element.clientHeight >= top) {
       pinned.current = false;
@@ -417,48 +428,80 @@ export function Transcript({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
-  useLayoutEffect(() => {
+  reconcileLayout.current = () => {
     const element = scroller.current;
+    if (!element || element.closest(".pane[hidden]")) return;
     if (element && restorePending.current !== null && !loading && !focusItem && element.clientHeight > 0) {
-      element.scrollTop = Math.min(restorePending.current, Math.max(0, element.scrollHeight - element.clientHeight));
+      const top = readingAnchor.current ? readingAnchorTop(element, readingAnchor.current) : null;
+      element.scrollTop = Math.min(top ?? restorePending.current, Math.max(0, element.scrollHeight - element.clientHeight));
       ownTop.current = element.scrollTop; lastTop.current = element.scrollTop;
       pinned.current = false; restorePending.current = null;
+    }
+    if (!pinned.current && readingAnchor.current && restorePending.current === null && !focusItem) {
+      const top = readingAnchorTop(element, readingAnchor.current);
+      if (top !== null && Math.abs(element.scrollTop - top) > 0.5) {
+        element.scrollTop = top;
+        ownTop.current = element.scrollTop;
+        lastTop.current = element.scrollTop;
+      }
     }
     if (element && pinned.current && !focusItem && element.scrollTop + element.clientHeight < element.scrollHeight - 1) {
       element.scrollTop = element.scrollHeight;
       // Remember where this put us: the scroll event it raises is ours, not the reader's.
       ownTop.current = element.scrollTop;
     }
+    if (!loading && restorePending.current === null && element.clientHeight > 0) readingAnchor.current = captureReadingAnchor(element);
     measure();
-  });
+  };
+  useLayoutEffect(() => { reconcileLayout.current(); });
+
+  // Image decode, nested tool disclosures and composer/viewport resizing can change geometry
+  // without changing `items`. Apply the same message + offset anchor in every case.
+  useEffect(() => {
+    const element = scroller.current;
+    if (!element) return;
+    const reconcile = () => reconcileLayout.current();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(reconcile);
+    observer?.observe(element);
+    const content = element.querySelector(".transcript-inner");
+    if (content) observer?.observe(content);
+    window.addEventListener("resize", reconcile);
+    element.addEventListener("load", reconcile, true);
+    return () => { observer?.disconnect(); window.removeEventListener("resize", reconcile); element.removeEventListener("load", reconcile, true); };
+  }, [sessionId]);
 
   // A search hit: scroll to that message once it is on screen, then mark it briefly.
+  useEffect(() => () => {
+    if (flashTarget.current) { window.clearTimeout(flashTarget.current.timer); flashTarget.current.element.classList.remove("flash"); }
+  }, []);
   useEffect(() => {
     if (!focusItem || loading) return;
     const target = scroller.current?.querySelector<HTMLElement>(`[data-item-id="${CSS.escape(focusItem.itemId)}"]`);
     if (!target) return;
+    if (flashTarget.current) { window.clearTimeout(flashTarget.current.timer); flashTarget.current.element.classList.remove("flash"); }
     pinned.current = false;
+    restorePending.current = null;
     target.scrollIntoView({ block: "center" });
+    if (scroller.current) {
+      ownTop.current = scroller.current.scrollTop;
+      lastTop.current = scroller.current.scrollTop;
+      readingAnchor.current = captureReadingAnchor(scroller.current);
+    }
     target.classList.remove("flash");
     void target.offsetWidth;
     target.classList.add("flash");
-    const timer = window.setTimeout(() => target.classList.remove("flash"), 2400);
+    const timer = window.setTimeout(() => { target.classList.remove("flash"); flashTarget.current = null; }, 2400);
+    flashTarget.current = { element: target, timer };
     onFocusDone?.();
-    return () => window.clearTimeout(timer);
   }, [focusItem, loading, items.length, onFocusDone]);
-
-  useEffect(() => {
-    const onResize = () => measure();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  });
 
   // Enter / Esc answer the pending approval when focus is not in a text field.
   useEffect(() => {
     if (!pending) return;
     const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
       const target = event.target as HTMLElement;
-      if (target.closest("textarea, input, [contenteditable=true]")) return;
+      if (target.closest("textarea, input, select, button, [contenteditable=true], [role=menu], [role=dialog], dialog")) return;
       // With two panes, only the conversation in the focused one answers from the keyboard.
       if (scroller.current?.closest('[data-pane-active="false"]')) return;
       if (event.key === "Enter") onAnswer(pending.id, "accept");
@@ -473,14 +516,18 @@ export function Transcript({
     const element = scroller.current;
     if (!section || !element) return;
     pinned.current = false;
-    element.scrollTo({ top: section.offsetTop - 8, behavior: "smooth" });
+    readingAnchor.current = null;
+    element.scrollTo({ top: section.offsetTop - 8, behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   };
 
   const toBottom = () => {
     const element = scroller.current;
     if (!element) return;
     pinned.current = true;
-    element.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
+    readingAnchor.current = null;
+    element.scrollTo({ top: element.scrollHeight, behavior: "auto" });
+    ownTop.current = element.scrollTop;
+    onPosition?.({ top: element.scrollTop, follow: true });
   };
 
   const speaker = (
@@ -490,13 +537,13 @@ export function Transcript({
     </div>
   );
 
-  const renderBlock = (block: Block) => {
+  const renderBlockContent = (block: Block) => {
     switch (block.type) {
       case "user":
         return null;
       case "assistant":
         return (
-          <div key={block.item.id} className="turn-assistant" data-item-id={block.item.id}>
+          <div key={block.item.id} className="turn-assistant">
             {block.speaker ? speaker : null}
             <AssistantText text={block.item.text} streaming={block.item.streaming} />
             <MessageActions sessionId={sessionId} itemId={block.item.id} streaming={block.item.streaming} />
@@ -506,7 +553,7 @@ export function Transcript({
         return (
           <div key={block.id} className="turn-assistant">
             {block.speaker ? speaker : null}
-            <WorkBlock block={block} />
+            <WorkBlock block={block} focusItemId={focusItem?.itemId} />
           </div>
         );
       case "approval":
@@ -539,12 +586,17 @@ export function Transcript({
         return null;
     }
   };
+  const renderBlock = (block: Block) => {
+    const id = block.type === "work" ? block.id : block.item.id;
+    return <div key={id} className="transcript-block" data-reading-id={id} data-item-id={block.type === "work" ? undefined : id}>{renderBlockContent(block)}</div>;
+  };
 
   return (
-    <div className="transcript-wrap">
+    <div className="transcript-wrap" data-screen="S03" data-follow-output={pinned.current}>
       <div
         className="transcript"
         ref={scroller}
+        onClickCapture={() => { if (scroller.current && !pinned.current) readingAnchor.current = captureReadingAnchor(scroller.current); }}
         onWheel={(event) => {
           // Wheel inside the opened band scrolls the band, not the conversation.
           if (event.deltaY < 0 && !(event.target as HTMLElement).closest(".turn-pin")) pinned.current = false;
@@ -562,13 +614,14 @@ export function Transcript({
           const own = ownTop.current !== null && Math.abs(top - ownTop.current) < 1;
           ownTop.current = null;
           if (!own) {
-            if (element.scrollHeight - top - element.clientHeight < 4) pinned.current = true;
+            if (nearTranscriptEnd(element)) pinned.current = true;
             else if (top < lastTop.current - 0.5) pinned.current = false;
           }
           lastTop.current = top;
+          readingAnchor.current = captureReadingAnchor(element);
           if (pinned.current) readAt.delete(sessionId);
-          else readAt.set(sessionId, top);
-          if (restorePending.current === null) onPosition?.({ top, follow: pinned.current });
+          else readAt.set(sessionId, { top, ...(readingAnchor.current ? { anchor: readingAnchor.current } : {}) });
+          if (restorePending.current === null) onPosition?.({ top, follow: pinned.current, ...(readingAnchor.current ? { anchor: readingAnchor.current } : {}) });
           measure();
         }}
       >
@@ -615,7 +668,7 @@ export function Transcript({
               }}
             >
               {turn.user ? (
-                <header className="turn-request" data-item-id={turn.user.id}>
+                <header className="turn-request" data-item-id={turn.user.id} data-reading-id={turn.user.id}>
                   <div className="turn-meta">
                     <span className="turn-no">{turn.index}</span>
                     <span>{turn.user.link ? (turn.user.link.fromSessionId ? "받은 답" : "목표") : turn.user.peer ? "받은 메시지" : "요청"}</span>
@@ -687,7 +740,7 @@ export function Transcript({
                 ) : null}
               </div>
               {turn.end ? (
-                <div className={`turn-end turn-end-${turn.end.status}`}>
+                <div className={`turn-end turn-end-${turn.end.status}`} data-item-id={turn.end.id} data-reading-id={turn.end.id}>
                   {turn.end.status === "completed" ? <Icon name="check" size={13} /> : null}
                   {turnEndText(turn.end)}
                   {duration(turn.end.durationMs) ? <span className="muted"> · {duration(turn.end.durationMs)}</span> : null}

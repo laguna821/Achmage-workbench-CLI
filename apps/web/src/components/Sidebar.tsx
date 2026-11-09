@@ -851,6 +851,7 @@ export function Sidebar({
     <aside
       ref={asideRef}
       className={`sidebar look-scope nav-${layout}`}
+      data-screen="S06"
       aria-label="세션과 작업"
       onContextMenu={event => {
         if (event.defaultPrevented || !(event.target instanceof Element) || event.target.closest("input,textarea,[contenteditable=true]")) return;
@@ -865,8 +866,12 @@ export function Sidebar({
     >
       <div className="side-head">
         <div className="side-head-row">
-          <button type="button" className="side-new" onClick={() => actions.newSession({})} title={`새 세션 (${comboLabel(keys.newWork)})`}>
-            <Icon name="plus" size={15} /> 새 세션
+          <button type="button" className="side-new" aria-haspopup="menu" onClick={event => {
+            const box = event.currentTarget.getBoundingClientRect();
+            if (actions.creationMenu) actions.creationMenu(currentWorkId ? state.works[currentWorkId] ?? null : null, box.left, box.bottom, selected.kind === "folder" ? selected.id : undefined);
+            else actions.newSession({});
+          }} title={`새로 만들기 (${comboLabel(keys.newWork)})`}>
+            <Icon name="plus" size={15} /> 새로 만들기
           </button>
           <button
             type="button"

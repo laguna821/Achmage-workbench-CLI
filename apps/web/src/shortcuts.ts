@@ -7,7 +7,7 @@ export type ShortcutId = "palette" | "content" | "newWork" | "otherPane" | "navi
 export const SHORTCUTS: { id: ShortcutId; label: string; fallback: string }[] = [
   { id: "palette", label: "찾기·명령 상자", fallback: "Ctrl+K" },
   { id: "content", label: "내용으로 찾기", fallback: "Ctrl+Shift+F" },
-  { id: "newWork", label: "새 작업", fallback: "Ctrl+N" },
+  { id: "newWork", label: "새로 만들기", fallback: "Ctrl+N" },
   // F6 moves between panes in many apps; two panes are optional, so a key that types nothing.
   { id: "otherPane", label: "다른 칸으로 (두 칸일 때)", fallback: "F6" },
   // Notebook Navigator's own key for "focus the navigator"; it opens the sidebar when hidden.

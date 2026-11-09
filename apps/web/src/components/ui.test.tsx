@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TranscriptItem } from "@workbench/contracts";
 import { Composer } from "./Composer.tsx";
@@ -47,6 +47,37 @@ describe("Composer", () => {
     unmount();
     render(<Composer draftKey="w1" placeholder="입력" busy={false} onSend={async () => true} />);
     expect((screen.getByPlaceholderText("입력") as HTMLTextAreaElement).value).toBe("초안");
+  });
+
+  it("keeps another tab's draft and focus when an earlier send finishes", async () => {
+    let finish!: (ok: boolean) => void;
+    const onSend = vi.fn(() => new Promise<boolean>(resolve => { finish = resolve; }));
+    localStorage.setItem("workbench.draft.second", "다른 초안");
+    const view = render(<><button>탭 이동</button><Composer draftKey="first" placeholder="입력" busy={false} onSend={onSend} /></>);
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "먼저 보낸 요청" } });
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+    view.rerender(<><button>탭 이동</button><Composer draftKey="second" placeholder="입력" busy={false} onSend={onSend} /></>);
+    const other = screen.getByRole("button", { name: "탭 이동" }); other.focus();
+    await act(async () => finish(true));
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("다른 초안");
+    expect(document.activeElement).toBe(other);
+    expect(localStorage.getItem("workbench.draft.first")).toBeNull();
+    expect(localStorage.getItem("workbench.draft.second")).toBe("다른 초안");
+  });
+
+  it("preserves text typed while waiting for a send receipt and does not submit during composition", async () => {
+    let finish!: (ok: boolean) => void;
+    const onSend = vi.fn(() => new Promise<boolean>(resolve => { finish = resolve; }));
+    render(<Composer draftKey="draft" placeholder="입력" busy={false} onSend={onSend} />);
+    const input = screen.getByRole("textbox");
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: "한글 조합" } });
+    fireEvent.keyDown(input, { key: "Enter" }); expect(onSend).not.toHaveBeenCalled();
+    fireEvent.compositionEnd(input);
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.change(input, { target: { value: "그동안 적은 다음 요청" } });
+    await act(async () => finish(true));
+    expect((input as HTMLTextAreaElement).value).toBe("그동안 적은 다음 요청");
   });
 });
 

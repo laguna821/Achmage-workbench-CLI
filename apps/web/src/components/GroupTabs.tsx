@@ -14,6 +14,7 @@ export function GroupTabs<V>({ pane, head, onSelect, onClose, onReorder, onNew }
     <div role="tablist" aria-label="열린 탭">
       {tabs.map((tab, index) => {
         const title = head({ ...pane, view: tab.view, workId: tab.workId, sessionId: tab.sessionId });
+        const kind = title.item?.kind === "session" ? "대화" : title.item?.kind === "doc" ? "문서" : title.item?.kind === "project" || title.item?.kind === "work" ? "프로젝트" : null;
         return <div className={`group-tab${tab.id === activeId ? " active" : ""}`} data-tab-index={index} data-tab-id={tab.id} key={tab.id}>
           <button type="button" role="tab" aria-selected={tab.id === activeId} tabIndex={tab.id === activeId ? 0 : -1} title={`${title.hint ?? title.title} · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경`}
             onPointerDown={(event) => paneDrag.press({ item: { kind: "tab", id: tab.id }, label: title.title }, event)}
@@ -24,13 +25,17 @@ export function GroupTabs<V>({ pane, head, onSelect, onClose, onReorder, onNew }
               const step = event.key === "ArrowLeft" ? -1 : event.key === "ArrowRight" ? 1 : 0;
               if (step && (event.ctrlKey || event.metaKey) && event.shiftKey) { event.preventDefault(); onReorder(tab.id, Math.max(0, Math.min(tabs.length - 1, index + step))); return; }
               const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : step ? (index + step + tabs.length) % tabs.length : -1;
-              if (next >= 0) { event.preventDefault(); onSelect(tabs[next]!.id); }
+              if (next >= 0) {
+                event.preventDefault();
+                event.currentTarget.closest('[role="tablist"]')?.querySelectorAll<HTMLElement>('[role="tab"]')[next]?.focus({ preventScroll: true });
+                onSelect(tabs[next]!.id);
+              }
               if (event.key === "Delete") { event.preventDefault(); onClose(tab.id); }
-            }}><span aria-hidden>{title.icon}</span><span className="group-tab-title">{title.title}</span></button>
+            }}><span aria-hidden>{title.icon}</span>{kind ? <span className="group-tab-kind">{kind}</span> : null}<span className="group-tab-title">{title.title}</span></button>
           <button type="button" className="group-tab-close" aria-label={`${title.title} 탭 닫기`} title="탭 닫기 · 파일과 세션 기록은 유지" onClick={() => onClose(tab.id)}><Icon name="x" size={12} /></button>
         </div>;
       })}
     </div>
-    <button type="button" className="ghost-button small group-tab-new" aria-label="새 문서 또는 세션 만들기" title="이 프로젝트에 새 문서·디자인·세션 만들기" aria-haspopup="menu" onClick={event => onNew(event.currentTarget)}><Icon name="plus" size={14} /><span>만들기</span></button>
+    <button type="button" className="ghost-button small group-tab-new" aria-label="새로 만들기" title="이 프로젝트에 새 문서·디자인·세션 만들기" aria-haspopup="menu" onClick={event => onNew(event.currentTarget)}><Icon name="plus" size={14} /><span>새로 만들기</span></button>
   </nav>;
 }

@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { BLANK_OFFICE_DOCUMENTS, type Artifact, type BlankOfficeFormat, type Work } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import type { State } from "../state.ts";
 import { Icon } from "./Icon.tsx";
+import { restoreSurfaceFocus } from "./controls/menu-navigation.ts";
 import "./new-document.css";
 
 export const NEW_DOCUMENT_TYPES = [...BLANK_OFFICE_DOCUMENTS,
@@ -18,6 +19,7 @@ export function NewDocumentDialog({ api, state, request, onOpen, onClose }: {
 }) {
   const { workId, workspaceId } = request;
   const dialog = useRef<HTMLDialogElement>(null), pending = useRef(false), created = useRef<Work | null>(null);
+  const opener = useRef(document.activeElement);
   const projects = Object.values(state.works).filter((work) => !work.archivedAt);
   const [target, setTarget] = useState(() => projects.some((entry) => entry.id === workId) ? workId! : projects[0]?.id ?? "");
   const [format, setFormat] = useState<NewDocumentFormat>(request.format ?? "docx");
@@ -25,7 +27,11 @@ export function NewDocumentDialog({ api, state, request, onOpen, onClose }: {
   const [name, setName] = useState(""), [projectName, setProjectName] = useState("내 문서");
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const kind = NEW_DOCUMENT_TYPES.find((entry) => entry.format === format)!;
-  useEffect(() => { dialog.current?.showModal(); }, []);
+  useLayoutEffect(() => {
+    const surface = dialog.current;
+    surface?.showModal();
+    return () => restoreSurfaceFocus(opener.current, surface);
+  }, []);
   const create = async () => {
     if (pending.current) return;
     pending.current = true; setBusy(true); setError("");
@@ -41,7 +47,7 @@ export function NewDocumentDialog({ api, state, request, onOpen, onClose }: {
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
     finally { pending.current = false; setBusy(false); }
   };
-  return <dialog ref={dialog} className="new-document-dialog" aria-labelledby="new-document-title" onCancel={(event) => { if (busy) event.preventDefault(); else onClose(); }}>
+  return <dialog ref={dialog} className="new-document-dialog" aria-labelledby="new-document-title" aria-busy={busy} onCancel={(event) => { if (busy) event.preventDefault(); else onClose(); }}>
       <form onSubmit={(event) => { event.preventDefault(); void create(); }}>
         <header><h2 id="new-document-title">새 문서 만들기</h2><button type="button" className="icon-button" aria-label="새 문서 닫기" disabled={busy} onClick={onClose}><Icon name="x" size={18} /></button></header>
         <p className="muted">빈 파일을 만들고 바로 편집합니다. AI 연결 없이 사용할 수 있습니다.</p>
@@ -57,7 +63,7 @@ export function NewDocumentDialog({ api, state, request, onOpen, onClose }: {
           <option value="story">세로 (스토리) · 1080×1920</option><option value="wide">가로 (썸네일·화면) · 1920×1080</option><option value="a4">A4 문서 · 794×1123</option>
         </select></label> : null}
         <label>파일 이름<input autoFocus value={name} placeholder={kind.name} disabled={busy} onChange={(event) => setName(event.target.value)} /><small className="muted">.{kind.extension} · 같은 이름이 있으면 새 이름으로 만듭니다.</small></label>
-        {target ? <small className="muted new-document-path">{target === workId && workspaceId ? state.workspaces[workspaceId]?.cwd : state.works[target]?.cwd}</small> : null}
+        {target ? <small className="muted new-document-path">{target === workId && workspaceId ? <>{state.workspaces[workspaceId]?.label ?? "현재 작업공간"} · {state.workspaces[workspaceId]?.cwd}</> : state.works[target]?.cwd}</small> : null}
         {error ? <p role="alert">{error}</p> : null}
         <footer><button type="submit" className="button primary" disabled={busy}>{busy ? "만드는 중…" : "만들고 열기"}</button></footer>
       </form>

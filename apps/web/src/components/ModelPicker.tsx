@@ -54,7 +54,7 @@ export function ModelPicker({
         </button>
         <Popover open={open === "model"} onClose={close} placement="above" align="right" className="model-menu">
           <div className="menu-label">모델 · 다음 메시지부터 적용</div>
-          {onRefresh ? <MenuItem disabled={refreshing} onSelect={() => void refresh()}>{refreshing ? "최신 모델 확인 중…" : "모델 목록 새로고침"}</MenuItem> : null}
+          {onRefresh ? <MenuItem disabled={refreshing} disabledReason="최신 모델 목록을 확인하고 있습니다." onSelect={() => void refresh()}>{refreshing ? "최신 모델 확인 중…" : "모델 목록 새로고침"}</MenuItem> : null}
           {error ? <div className="menu-label" role="alert">{error}</div> : null}
           {!known ? <div className="menu-label">현재 선택: {value.model} · 목록에서 확인되지 않음</div> : null}
           <MenuItem active={!value.model} hint={fallback?.label} onSelect={() => { onChange({ model: null, effort: null }); close(); }}>

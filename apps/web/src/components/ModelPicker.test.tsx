@@ -16,7 +16,7 @@ describe("ModelPicker request identity", () => {
     fireEvent.click(screen.getByRole("button", { name: "사용 가능한 모델" }));
     await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(1));
     view.rerender(<ModelPicker models={[...models, { ...models[0]!, id: "new-model", label: "새 모델" }]} value={{ model: "alias", effort: null }} onChange={onChange} onRefresh={onRefresh} />);
-    expect(screen.getByRole("menuitem", { name: /새 모델/ })).toBeTruthy();
+    expect(screen.getByRole("menuitemcheckbox", { name: /새 모델/ })).toBeTruthy();
     expect(onChange).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "사용 가능한 모델" }));
     fireEvent.click(screen.getByRole("button", { name: "사용 가능한 모델" }));
@@ -30,7 +30,7 @@ describe("ModelPicker request identity", () => {
     expect(screen.getByRole("button", { name: "최대" })).toBeTruthy();
     expect(onChange).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "saved-custom-id" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: /엔진 기본값/ }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: /엔진 기본값/ }));
     expect(onChange).toHaveBeenCalledWith({ model: null, effort: null });
   });
 
@@ -43,7 +43,7 @@ describe("ModelPicker request identity", () => {
     const onChange = vi.fn();
     render(<ModelPicker models={models} value={{ model: "old-model", effort: "max" }} onChange={onChange} />);
     fireEvent.click(screen.getByRole("button", { name: "old-model" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: /^사용 가능한 모델/ }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: /^사용 가능한 모델/ }));
     expect(onChange).toHaveBeenCalledWith({ model: "alias", effort: null });
   });
 
@@ -52,7 +52,7 @@ describe("ModelPicker request identity", () => {
     render(<ModelPicker models={models} value={{ model: "alias", effort: "low" }} onChange={onChange} />);
     expect(screen.getByRole("button", { name: "사용 가능한 모델" }).title).toContain("canonical-model");
     fireEvent.click(screen.getByRole("button", { name: "낮음" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "기본 강도" }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "기본 강도" }));
     expect(onChange).toHaveBeenCalledWith({ model: "alias", effort: null });
   });
 });
