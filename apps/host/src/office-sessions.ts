@@ -8,7 +8,8 @@ import type { OfficeStoredAttachment } from "../../../packages/contracts/src/off
 import type { OfficeStoredSkill } from "../../../packages/contracts/src/office-skills.ts";
 import type { DocumentExecutionLease } from "./document-execution-lease.ts";
 
-type Binding = { artifactId: string; sessionId: string; owner: string; access?: DocumentAccess };
+export type OfficeBinding = { artifactId: string; sessionId: string; owner: string; access?: DocumentAccess };
+type Binding = OfficeBinding;
 type Running = Binding & { lease: DocumentExecutionLease; turnId: string; background?: OfficeTurnStart["background"]; controller: AbortController; started: number; seq: number; bytes: number; timer: NodeJS.Timeout };
 type Hooks = {
   session(id: string): Session;
@@ -128,6 +129,39 @@ export class OfficeSessions {
     run.lease = this.documents.registry.executions.renew(run.lease);
     return { expiresAt: run.lease.expiresAt };
   }
+  observe(binding: Binding, turnId: unknown) {
+    if (!id(turnId)) return invalid();
+    this.scope(binding.artifactId, binding.sessionId); this.known(binding, turnId);
+    return { receipt: this.receipt(binding, turnId, true), items: this.hooks.items(binding.sessionId).filter(item => item.office?.turnId === turnId) };
+  }
+  current(binding: Binding) {
+    this.scope(binding.artifactId, binding.sessionId);
+    const run = [...this.runs.values()].find(run => !run.background && run.artifactId === binding.artifactId && run.sessionId === binding.sessionId && run.lease.mode === "independent-renderer");
+    return run ? this.observe(binding, run.turnId) : null;
+  }
+  question(binding: Binding, raw: unknown) {
+    if (!record(raw) || !id(raw.turnId) || !id(raw.id)) return invalid();
+    const run = this.requireRun(binding, raw.turnId), itemId = `office-question:${run.turnId}:${raw.id}`;
+    const prior = this.hooks.items(run.sessionId).find(item => item.id === itemId);
+    if (prior?.kind === "approval") return { id: raw.id, decision: prior.decision };
+    if (!text(raw.prompt, 8_000) || !raw.prompt.trim()) return invalid();
+    if (this.hooks.items(run.sessionId).some(item => item.kind === "approval" && item.office?.turnId === run.turnId && item.decision === null))
+      throw new HttpError(409, "office_question_pending", "앞선 문서 확인 요청에 먼저 답해 주세요.");
+    this.hooks.item(run.sessionId, { kind: "approval", id: itemId, title: raw.prompt, detail: null,
+      reason: "원본 문서 편집기가 작업을 계속하기 전에 확인을 요청했습니다.", decision: null, at: Date.now(), office: source(run) });
+    this.hooks.update(run.sessionId, { status: "awaitingApproval", activity: "문서 AI 확인 대기" });
+    return { id: raw.id, decision: null };
+  }
+  answerQuestion(sessionId: string, itemId: string, decision: "accept" | "decline") {
+    if (!itemId.startsWith("office-question:")) return false;
+    const item = this.hooks.items(sessionId).find(item => item.id === itemId);
+    const run = item?.office ? this.runs.get(item.office.turnId) : undefined;
+    if (item?.kind !== "approval" || item.decision !== null || !run || run.sessionId !== sessionId) throw new HttpError(409, "approval_not_pending", "이미 끝난 문서 확인 요청입니다.");
+    this.requireRun(run, run.turnId);
+    this.hooks.item(sessionId, { ...item, decision });
+    this.hooks.update(sessionId, { status: "running", activity: "문서 AI 작업 중" });
+    return true;
+  }
   claimCall(binding: Binding, turnId: string, callId: unknown, payload: unknown) {
     if (typeof callId !== "string" || !/^[A-Za-z0-9_.:-]{1,160}$/.test(callId)) return invalid();
     this.requireRun(binding, turnId);
@@ -177,6 +211,8 @@ export class OfficeSessions {
   private stop(turnId: string, status: OfficeTurnFinish["status"], error?: string) {
     const run = this.runs.get(turnId); if (!run) return;
     this.runs.delete(turnId); clearInterval(run.timer); this.documents.registry.executions.release(run.lease); run.controller.abort();
+    for (const item of this.hooks.items(run.sessionId)) if (item.kind === "approval" && item.office?.turnId === turnId && item.decision === null)
+      this.hooks.item(run.sessionId, { ...item, decision: "expired" });
     if (error) this.hooks.item(run.sessionId, { kind: "notice", id: `office:${turnId}:error`, level: status === "failed" ? "error" : "info", text: error, at: Date.now(), office: source(run) });
     this.hooks.item(run.sessionId, { kind: "turnEnd", id: `end:${requestId(turnId)}`, requestId: requestId(turnId), status, durationMs: Date.now() - run.started, at: Date.now(), ...(status === "interrupted" ? { cause: "stop" as const } : {}), model: null, effort: null, office: source(run) });
     const remaining = this.busy(run.sessionId);
@@ -204,6 +240,11 @@ export class OfficeSessions {
   disconnected(binding: Binding, turnId: string) {
     const run = this.runs.get(turnId);
     if (run?.owner === binding.owner && run.sessionId === binding.sessionId) this.stop(turnId, "interrupted", "AI 응답 연결이 끝나 작업을 멈췄습니다.");
+  }
+  executorLost(binding: Binding, turnId: string) {
+    const run = this.runs.get(turnId);
+    if (run?.owner === binding.owner && run.sessionId === binding.sessionId && run.artifactId === binding.artifactId)
+      this.stop(turnId, "interrupted", "독립 문서 실행기가 종료되었습니다. 같은 요청을 자동 재실행하지 않았습니다.");
   }
   history(binding: Binding, before: string | null = null) {
     this.live(binding, false);

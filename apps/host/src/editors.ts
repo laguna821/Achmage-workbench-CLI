@@ -123,6 +123,8 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
         return serveStatic(res, webDir, path, PAGE_HEADERS);
       }
       const bearer = req.headers.authorization?.replace(/^Bearer\s+/i, "") ?? null;
+      if (path === "/api/office-executor/boot" && method === "POST" && ai.executors) return sendJson(res, 200, ai.executors.boot(bearer));
+      if (path === "/api/office-executor/state" && method === "GET" && ai.executors) return sendJson(res, 200, ai.executors.state(bearer));
       if (await styles.handle(req, res, url, bearer, grants)) return;
       if (await ai.handle(req, res, url, bearer, documents, grants)) return;
       if (await epub.handle(req, res, url, bearer)) return;

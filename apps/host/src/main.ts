@@ -18,6 +18,7 @@ import { OfficeDrive } from "./office-drive.mjs";
 import { OfficeImport } from "./office-import.mjs";
 import { installToolWrappers } from "./tool-bin.ts";
 import { createEditorsServer, EditorGrants } from "./editors.ts";
+import { OfficeRendererExecutors } from "./office-executors/renderer.ts";
 import { createOfficeSettingsServer } from "./office-settings-server.ts";
 import { OfficeAi } from "./office-ai.ts";
 import { OfficeKnowledge } from "./office-knowledge.mjs";
@@ -157,6 +158,8 @@ const officeAi = new OfficeAi(dataDir, undefined, manager.office, {
   install: (provider) => manager.installEngineAndWait(provider === "claude-code" ? "claude" : "codex"),
 }, officeSkills, officeKnowledge);
 const editors = createEditorsServer(manager.documents, grants, webDir && existsSync(webDir) ? webDir : null, officeAi);
+const officeExecutors = new OfficeRendererExecutors(manager.documents, manager.office, grants, { binary: env.WORKBENCH_APP_BIN, webDir });
+officeAi.executors = officeExecutors;
 let editorsOrigin: string | null = null;
 let officeSettingsOrigin: string | null = null, applicationOrigin: string | null = null;
 const officeSettingsServer = createOfficeSettingsServer(webDir && existsSync(webDir) ? webDir : null, () => applicationOrigin);
@@ -222,6 +225,7 @@ await officeDrive?.start();
 dropbox.start();
 listen(editors, env.WORKBENCH_EDITORS_PORT, editorsPortFile, (editorsPort) => {
   editorsOrigin = `http://127.0.0.1:${editorsPort}`;
+  officeExecutors.bind(editorsOrigin);
   officeSettingsServer.listen(0, "127.0.0.1", () => {
     const address = officeSettingsServer.address();
     if (!address || typeof address === "string") throw new Error("Office settings server has no address");
@@ -252,6 +256,7 @@ async function stop() {
   officeControl?.close();
   await officeMcp?.close();
   server.close();
+  officeExecutors.close();
   officeAi.close();
   officeKnowledge.close();
   editors.close();

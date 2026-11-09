@@ -12,6 +12,8 @@ import { createOfficeSkills } from "./office-skills.ts";
 import type { OfficeSkillChip } from "../../../packages/contracts/src/office-skills.ts";
 import { createOfficeJob } from "./office-job.ts";
 import { maintainOfficeTurn } from "./execution-heartbeat.ts";
+import { captureOfficeExecution, installOfficeExecutor, lockOfficeExecution } from "./execution-adapter.ts";
+import { observeOfficeExecution, remoteOfficeRun } from "./execution-client.ts";
 
 type Prepared = NonNullable<Extract<OfficeHostMessage, { type: "office:ai-result" }>["value"]>;
 type History = { workId: string; sessionId: string; items: TranscriptItem[]; attachments?: OfficeAttachment[]; before: string | null; hasMore: boolean };
@@ -41,6 +43,7 @@ export function officeModelHistory(items: TranscriptItem[], liveInstructions?: R
 }
 
 export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
+  installOfficeExecutor(init, gateway);
   const references = createOfficeReferences();
   let sessionId = init.sessionId, sessionKey = sessionId ?? "unbound";
   let active: WorkbenchAgentLoop<unknown> | null = null;
@@ -112,6 +115,7 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
   const skills = createOfficeSkills(init, gateway, events, async () => { await parent("skills"); }, async () => { await prepare(); });
   Object.assign(window, { aiOfficeUserSkills: skills.bridge });
   const prepare = async (freeze = false) => {
+    if (init.execution) return { revision: init.artifact.revision, token: init.token, sessionId: init.sessionId!, referenceSnapshot: init.execution.referenceSnapshot };
     const value = await parent("prepare", freeze ? references.pin() : undefined);
     if (!value?.sessionId) throw new Error("이 문서와 함께 사용할 Workbench 세션을 선택해 주세요.");
     return value;
@@ -124,6 +128,9 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
     references.restore(page.attachments ?? []);
     return page;
   };
+  let executorAttached = false;
+  const executorApi = init.execution ? gateway.aiSession(init.artifact.id, init.token) : null;
+  const stopExecutorHeartbeat = init.execution ? maintainOfficeTurn(executorApi!, init.execution.turnId, () => { active?.cancel(); abortWeb(); }) : () => {};
   const port: OfficeConversationPort = {
     attach: (loop) => {
       if (officeCopyBusy()) throw new Error("사본 저장이 끝난 뒤 AI 편집을 시작해 주세요.");
@@ -132,8 +139,29 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
     },
     begin: async (instruction, signal, originalImages, skillContext): Promise<OfficeRun> => {
       try {
+        if (init.execution) {
+          if (executorAttached) throw new Error("이미 연결된 문서 요청입니다. 다시 실행하지 않았습니다.");
+          executorAttached = true;
+          const api = executorApi!, turnId = init.execution.turnId, page = await history();
+          if (signal.aborted) throw new Error("문서 요청이 취소되었습니다.");
+          run = { turnId, api }; let seq = 0;
+          post({ type: "office:execution-attached" });
+          return {
+            history: officeModelHistory(page.items.filter(item => item.office?.turnId !== turnId)),
+            images: init.execution.images,
+            append: async events => { await api.json("turn-events", { turnId, seq: ++seq, events }); },
+            save: async () => { await flushOfficeDocument(); },
+            finish: async (status, error) => {
+              try { await api.json("turn-finish", { turnId, status, ...(error ? { error } : {}) }); }
+              finally { stopExecutorHeartbeat(); run = null; references.release(); }
+            },
+          };
+        }
+        const hasAdapter = captureOfficeExecution() !== null;
+        if (hasAdapter) lockOfficeExecution(true);
         if (sessionId) await history();
         const prepared = await prepare(true);
+        const executionState = hasAdapter ? captureOfficeExecution() : null;
         let api = gateway.aiSession(init.artifact.id);
         const page = await api.json<History>("history");
         if (signal.aborted) throw new Error("요청을 취소했습니다.");
@@ -143,6 +171,17 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
         const turnId = crypto.randomUUID();
         const receipt = await api.json<OfficeTurnReceipt>("turn-start", { turnId, instruction, revision: prepared.revision, ...(skillContext ? { skillContext } : {}), ...(prepared.referenceSnapshot ? { referenceSnapshot: prepared.referenceSnapshot } : {}) });
         if (receipt.duplicate || receipt.status !== "running") throw new Error("이미 처리된 요청입니다. 중복 실행하지 않았습니다.");
+        if (executionState && receipt.executorAvailable) {
+          try { await api.json("executor-start", { turnId, instruction, state: executionState, images, referenceSnapshot: prepared.referenceSnapshot }); }
+          catch (error) { await api.json("turn-finish", { turnId, status: "failed", error: error instanceof Error ? error.message : String(error) }).catch(() => {}); throw error; }
+          return {
+            history: [], remote: remoteOfficeRun(api, turnId),
+            append: async () => { throw new Error("실행기가 대화 기록을 소유합니다."); },
+            save: async () => { throw new Error("실행기가 문서를 저장합니다."); },
+            finish: async () => { references.release(); },
+          };
+        }
+        if (hasAdapter) lockOfficeExecution(false);
         const releaseExecution = receipt.executionToken ? gateway.pinExecution(receipt.executionToken) : () => {};
         if (receipt.executionToken) api = gateway.aiSession(init.artifact.id, receipt.executionToken);
         const stopHeartbeat = receipt.executionToken ? maintainOfficeTurn(api, turnId, () => { active?.cancel(); abortWeb(); }) : () => {};
@@ -165,10 +204,11 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
             finally { stopHeartbeat(); releaseExecution(); if (run?.turnId === turnId) run = null; references.release(); }
           },
         };
-      } catch (error) { references.release(); throw error; }
+      } catch (error) { if (!init.execution) lockOfficeExecution(false); references.release(); throw error; }
     },
   };
   installOfficeConversation(port);
+  if (!init.execution) observeOfficeExecution(() => sessionId ? gateway.aiSession(init.artifact.id) : null, () => active !== null);
   const getSettings = () => gateway.aiSession(init.artifact.id).json("settings");
   const statuses = (refresh = false) => gateway.aiSession(init.artifact.id).json(`statuses${refresh ? "?refresh=1" : ""}`);
   const openSettings = async () => { await parent("settings"); };

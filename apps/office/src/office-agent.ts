@@ -10,6 +10,7 @@ export type OfficeRun = {
   append(events: OfficeTurnEvent[]): Promise<void>;
   save(): Promise<void>;
   finish(status: OfficeTurnFinish["status"], error?: string): Promise<void>;
+  remote?: { wait(onText: (text: string) => void): Promise<AgentRunResult>; cancel(): void; detach(): void };
 };
 export type OfficeConversationPort = {
   begin(instruction: string, signal: AbortSignal, images?: AgentImage[], skills?: OfficeSkillContext): Promise<OfficeRun>;
@@ -120,15 +121,31 @@ export class WorkbenchAgentLoop<TSnapshot = unknown> {
     catch (error) { void this.finish(undefined, messageOf(error)); return; }
     void this.port.begin(instruction, this.abort.signal, images, skills).then((run) => {
       this.runState = run;
+      if (run.remote) {
+        if (this.abort.signal.aborted) run.remote.cancel();
+        if (this.detached) run.remote.detach();
+        void run.remote.wait(text => { if (!this.detached) this.options.events?.onText?.(text); }).then(result => this.finish(result), error => this.finish(undefined, messageOf(error)));
+        return;
+      }
+      if (this.detached) this.abort.abort();
       if (this.abort.signal.aborted) { void this.finish({ text: "", cancelled: true, turnLimit: false }); return; }
       this.original.reset(); this.original.restore(run.history);
       this.original.run(instruction, run.images ?? images);
     }).catch((error) => { void this.finish(undefined, messageOf(error)); });
   }
-  cancel(): void { this.abort.abort(); this.original.cancel(); }
+  cancel(): void { this.abort.abort(); this.runState?.remote?.cancel(); this.original.cancel(); }
+  detach(): void {
+    this.detached = true;
+    if (this.pending && !this.runState) return;
+    if (this.runState?.remote) { this.detached = true; this.runState.remote.detach(); return; }
+    this.reset();
+  }
   reset(): void {
     // Unmounting a panel must not erase or silently abandon a Workbench run.
-    this.detached = true; this.cancel();
+    this.detached = true;
+    if (this.pending && !this.runState) return;
+    if (this.runState?.remote) { this.runState.remote.detach(); return; }
+    this.cancel();
     if (!this.pending) this.original.reset();
   }
   private enqueue(task: () => Promise<void>) {

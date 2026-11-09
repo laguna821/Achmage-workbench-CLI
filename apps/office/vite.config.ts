@@ -8,6 +8,7 @@ import { patchPdfCopy } from "./pdf-copy-patch.ts";
 import { patchPdfImageExport } from "./pdf-image-export-patch.ts";
 import { patchPdfLoader } from "./pdf-loader-patch.ts";
 import { patchOfficeSkillConversation } from "./skill-conversation-patch.ts";
+import { patchOfficeExecution } from "./execution-patch.ts";
 import { templateFonts } from "./template-fonts-build.ts";
 
 // IeumOffice's editor screens, built from vendor/ieumoffice (scripts/fetch-ieum.sh) and served on
@@ -199,7 +200,7 @@ function originalOfficeConversation(): Plugin {
   return {
     name: "workbench-office-conversation", enforce: "pre",
     transform(code, id) {
-      const adapted = patchOfficeSkillConversation(code, id, ieum);
+      const adapted = patchOfficeExecution(patchOfficeSkillConversation(code, id, ieum), id, ieum, here("./src/execution-adapter.ts"));
       const skillChanged = adapted !== code;
       code = adapted;
       if (["docs", "slides", "sheets", "hwp", "html", "mindmap", "epub"].some((app) => id === `${ieum}/apps/${app}/src/renderer/ai/files-skill.ts`)) {
@@ -486,6 +487,6 @@ export default defineConfig({
     target: "es2022",
     sourcemap: false,
     chunkSizeWarningLimit: 6000,
-    rollupOptions: { input: { knowledge: here("./knowledge.html"), settings: here("./settings.html"), docs: here("./docs.html"), slides: here("./slides.html"), sheets: here("./sheets.html"), hwp: here("./hwp.html"), markdown: here("./markdown.html"), html: here("./html.html"), pdf: here("./pdf.html"), mindmap: here("./mindmap.html"), epub: here("./epub.html") } },
+    rollupOptions: { input: { executor: here("./executor.html"), knowledge: here("./knowledge.html"), settings: here("./settings.html"), docs: here("./docs.html"), slides: here("./slides.html"), sheets: here("./sheets.html"), hwp: here("./hwp.html"), markdown: here("./markdown.html"), html: here("./html.html"), pdf: here("./pdf.html"), mindmap: here("./mindmap.html"), epub: here("./epub.html") } },
   },
 });

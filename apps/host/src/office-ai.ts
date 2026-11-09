@@ -49,6 +49,7 @@ export function officeAiRequest(value: unknown, stream: boolean): OfficeAiStream
  * Does not expose Electron IPC, arbitrary settings writes, filesystem tools or saved credentials.
  * Original editor tools still execute in their own renderer and save through document CAS. */
 export class OfficeAi {
+  executors?: import("./office-executors/renderer.ts").OfficeRendererExecutors;
   drive?: import("./office-drive.mjs").OfficeDrive;
   readonly preferences: OfficePreferences;
   readonly markdown: OfficeMarkdown;
@@ -171,7 +172,7 @@ export class OfficeAi {
   }
   async handle(req: IncomingMessage, res: ServerResponse, url: URL, bearer: string | null, documents: Documents, grants: EditorGrants): Promise<boolean> {
     if (await this.skills?.handle(req, res, url, bearer, grants)) return true;
-    const match = /^\/api\/artifacts\/([^/]+)\/ai\/(preferences|preferences-panel|markdown-upload|markdown-read-image|drive-state|settings|selection|statuses|stream|chat|cancel|history|turn-start|turn-events|turn-finish|turn-heartbeat|tool-capabilities|tool)$/.exec(url.pathname);
+    const match = /^\/api\/artifacts\/([^/]+)\/ai\/(preferences|preferences-panel|markdown-upload|markdown-read-image|drive-state|settings|selection|statuses|stream|chat|cancel|history|turn-start|turn-events|turn-finish|turn-heartbeat|turn-question|executor-start|executor-observe|executor-current|executor-answer|executor-reference|executor-stop|tool-capabilities|tool)$/.exec(url.pathname);
     if (!match) return false;
     const [, artifactId, operation] = match;
     const authorize = () => {
@@ -217,6 +218,35 @@ export class OfficeAi {
       if (!sessionId || !this.sessions) throw new HttpError(409, "office_session_required", "이 문서와 함께 사용할 Workbench 세션을 먼저 선택해 주세요.");
       return { artifactId: artifactId!, sessionId, owner, access: grants.access(bearer!) };
     };
+    if (operation!.startsWith("executor-")) {
+      const bound = binding();
+      const raw = JSON.parse((await readBody(req, 40_000_000)).toString("utf8"));
+      authorize();
+      if (!record(raw)) return invalid();
+      if (operation === "executor-current") { sendJson(res, 200, this.sessions!.current(bound)); return true; }
+      if (!identifier(raw.turnId)) return invalid();
+      if (operation === "executor-observe") { sendJson(res, 200, this.sessions!.observe(bound, raw.turnId)); return true; }
+      if (operation === "executor-answer") {
+        if (bound.access?.viewId.startsWith("execution-")) throw new HttpError(403, "office_executor_approval", "문서 실행기는 자신의 확인 요청에 답할 수 없습니다.");
+        const observed = this.sessions!.observe(bound, raw.turnId);
+        if (typeof raw.itemId !== "string" || !observed.items.some(item => item.id === raw.itemId) || raw.decision !== "accept" && raw.decision !== "decline") return invalid();
+        sendJson(res, 200, { ok: this.sessions!.answerQuestion(bound.sessionId, raw.itemId, raw.decision) }); return true;
+      }
+      this.sessions!.requireRun(bound, raw.turnId);
+      if (operation === "executor-start") {
+        if (!this.executors) throw new HttpError(503, "office_executor_unavailable", "독립 문서 실행기를 연결하지 못했습니다.");
+        sendJson(res, 200, this.executors.start(bound, raw.turnId, bearer!, raw)); return true;
+      }
+      if (operation === "executor-stop") { sendJson(res, 200, this.sessions!.finish(bound, { turnId: raw.turnId, status: "interrupted" })); return true; }
+      const context = { documents, grants, artifactId: artifactId!, token: bearer! };
+      // The child may only read this admitted turn's already frozen references.
+      if (typeof raw.snapshot !== "string") return invalid();
+      grants.references.references(context, raw.snapshot);
+      const value = raw.action === "read" ? await grants.references.read(context, raw.snapshot, raw.path, raw.offset as number | undefined, raw.length as number | undefined)
+        : raw.action === "read-image" ? grants.references.readImage(context, raw.snapshot, raw.path)
+        : raw.action === "list" ? grants.references.attachments(context, raw.snapshot) : invalid();
+      sendJson(res, 200, value); return true;
+    }
     if (operation === "history" || operation!.startsWith("turn-")) {
       const bound = binding();
       const referenceContext = { documents, grants, artifactId: artifactId!, token: bearer! };
@@ -228,6 +258,7 @@ export class OfficeAi {
       let raw: unknown;
       try { raw = JSON.parse((await readBody(req, OFFICE_AI_INPUT_LIMIT)).toString("utf8")); } catch (error) { if (error instanceof HttpError) throw error; return invalid(); }
       authorize();
+      if (operation === "turn-question") { sendJson(res, 200, this.sessions!.question(bound, raw)); return true; }
       if (operation === "turn-heartbeat") {
         if (!record(raw)) return invalid();
         sendJson(res, 200, this.sessions!.heartbeat(bound, raw.turnId)); return true;
@@ -241,7 +272,7 @@ export class OfficeAi {
       const value = operation === "turn-start" ? await this.sessions!.start(bound, raw, references, attachments, skills) : operation === "turn-events" ? this.sessions!.events(bound, raw) : this.sessions!.finish(bound, raw);
       if (operation === "turn-start" && "status" in value && value.status === "running") {
         const run = this.sessions!.requireRun(bound, (raw as Record<string, unknown>).turnId);
-        Object.assign(value, { executionToken: grants.execution(bearer!, run.lease.access, () => {
+        Object.assign(value, { executorAvailable: this.executors?.available(artifactId!) ?? false, executionToken: grants.execution(bearer!, run.lease.access, () => {
           try { documents.registry.executions.require(run.lease, documents.get(artifactId!).path); return true; } catch { return false; }
         }) });
       }

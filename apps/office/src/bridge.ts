@@ -11,7 +11,7 @@ export type Init = Extract<OfficeHostMessage, { type: "office:init" }>;
 /** The original editors consume their one-shot CLI request and report completion. */
 export function headlessExport(init: Init) {
   let pending = init.headlessExport;
-  if (pending) {
+  if (pending || init.execution) {
     // WebKit suspends animation frames in hidden windows. The original editors
     // await frames while laying out export canvases; keep that work advancing
     // without changing the visible editor's rendering or its export engine.

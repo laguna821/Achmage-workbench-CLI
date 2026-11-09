@@ -12,6 +12,7 @@ use tauri_plugin_notification::NotificationExt;
 mod office_output;
 mod office_html_output;
 mod office_cli;
+pub mod office_executor;
 mod office_browser;
 mod shared_browser;
 mod notifications;

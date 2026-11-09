@@ -799,6 +799,7 @@ export type EditorGrant = { url: string; origin: string; token: string; sessionI
 
 /** Workbench window → office editor page (iframe at /office/<kind>.html). */
 export type OfficeHostMessage =
+  | { type: "office:execute"; instruction: string; state: import("./office-execution.ts").OfficeExecutionState }
   | import("./pdf-notes.ts").PdfNoteReply
   | { type: "office:note-ready" }
   | import("./office-knowledge.ts").KnowledgeOpenResult
@@ -827,6 +828,8 @@ export type OfficeHostMessage =
       recover: boolean;
       /** A single native CLI export, using the original renderer's File-menu action. */
       headlessExport?: { outPath: string; format: "pdf" | "html" | "docx" };
+      /** An independently owned original renderer attaches to this admitted turn. */
+      execution?: { turnId: string; images?: { base64: string; mime: string }[]; referenceSnapshot?: string };
     }
   | { type: "office:theme"; theme: "light" | "dark" }
   | { type: "office:show-commands" }
@@ -846,6 +849,8 @@ export type OfficeHostMessage =
 
 /** Office editor page → Workbench window. */
 export type OfficePageMessage =
+  | { type: "office:execution-attached" }
+  | { type: "office:execution-refresh" }
   | import("./pdf-notes.ts").PdfNoteRequest
   | import("./office-knowledge.ts").KnowledgeOpenRequest
   | import("./office-wiki.ts").OfficeWikiRequest

@@ -7,7 +7,7 @@ import { WorkbenchAgentLoop } from "./office-agent.ts";
 
 const wire = vi.hoisted(() => ({ post: vi.fn() }));
 vi.mock("./bridge.ts", async original => ({ ...await original<typeof import("./bridge.ts")>(), post: wire.post }));
-afterEach(() => { vi.unstubAllGlobals(); wire.post.mockReset(); });
+afterEach(() => { window.dispatchEvent(new Event("pagehide")); vi.unstubAllGlobals(); wire.post.mockReset(); });
 
 it("saves a mutated tool with its pinned execution grant without another parent prepare", async () => {
   const originalBridge = await vi.importActual<typeof import("./bridge.ts")>("./bridge.ts");
@@ -51,4 +51,26 @@ it("saves a mutated tool with its pinned execution grant without another parent 
     await gateway.saveText("doc", 2, "manual next");
     expect(requests.at(-1)?.token).toBe("Bearer renewed-ui");
   } finally { stop(); }
+});
+
+it("attaches the original loop to an admitted executor turn without another prepare or turn-start", async () => {
+  const init: Init = { type: "office:init", token: "execution-token", sessionId: "session", artifact: { id: "doc", name: "note.md", path: "/note.md", revision: 1, sha256: "hash" }, readOnly: false, theme: "light", recover: false, execution: { turnId: "same-turn" } };
+  const calls: { path: string; body: any }[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (path: string, options: RequestInit) => {
+    calls.push({ path, body: options.body ? JSON.parse(String(options.body)) : undefined });
+    const value = path.endsWith("/history") ? { workId: "work", sessionId: "session", items: [{ id: "current", kind: "user", text: "original request", at: 1, office: { turnId: "same-turn", artifactId: "doc" } }] }
+      : path.endsWith("/drive-state") ? { enabled: false, connected: false } : {};
+    return new Response(JSON.stringify(value), { status: 200 });
+  }));
+  createOfficeAi(init, new Gateway(init.token), new Events());
+  const done = vi.fn(), failure = vi.fn();
+  const loop = new WorkbenchAgentLoop({ skill: { id: "fixture", systemPrompt: "", tools: [], executeTool: () => ({ summary: "", output: "" }) },
+    transport: { stream: (_request, callbacks) => { queueMicrotask(() => { callbacks.onDelta("same answer"); callbacks.onDone(); }); return { cancel: () => callbacks.onDone() }; } },
+    events: { onDone: done, onError: failure } });
+  loop.run("original request"); await loop.settled;
+  expect(failure).not.toHaveBeenCalled(); expect(done).toHaveBeenCalledOnce();
+  expect(calls.some(call => call.path.endsWith("/turn-start"))).toBe(false);
+  expect(wire.post.mock.calls.some(([message]) => message.type === "office:ai-request")).toBe(false);
+  expect(calls.find(call => call.path.endsWith("/turn-finish"))?.body).toMatchObject({ turnId: "same-turn", status: "completed" });
+  expect(calls.filter(call => call.path.endsWith("/turn-events")).every(call => call.body.turnId === "same-turn")).toBe(true);
 });

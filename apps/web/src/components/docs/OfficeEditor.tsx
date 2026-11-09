@@ -643,6 +643,9 @@ export const OfficeEditor = forwardRef<
         case "office:dirty":
           if (message.dirty !== status.current.dirty) update({ dirty: message.dirty });
           break;
+        case "office:execution-refresh":
+          if (!status.current.dirty) { recover.current = false; update({ revision: null }); setGeneration(value => value + 1); }
+          break;
         case "office:flushed":
           for (const resolve of waiters.current.splice(0)) resolve(message.revision);
           break;

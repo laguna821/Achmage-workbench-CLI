@@ -78,6 +78,12 @@ export class DocumentExecutionLeases {
     current.expiresAt = this.now() + TTL;
     return this.copy(current);
   }
+  mode(lease: DocumentExecutionLease, mode: ExecutorMode) {
+    this.require(lease);
+    const current = this.leases.get(lease.id)!;
+    current.mode = mode;
+    return this.copy(current);
+  }
   release(lease: DocumentExecutionLease) {
     const current = this.leases.get(lease.id);
     if (current?.generation === lease.generation && current.access.writeToken === lease.access.writeToken) this.leases.delete(lease.id);

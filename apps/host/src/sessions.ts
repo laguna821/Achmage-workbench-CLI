@@ -2257,7 +2257,7 @@ export class SessionManager {
       return;
     }
     // The agent browser's own cards are answered there (browse.ts), the rest by the engine.
-    const handled = this.options.browse?.answer(sessionId, itemId, decision) || (await this.adapter(session.provider).answerApproval(session, itemId, decision));
+    const handled = this.office.answerQuestion(sessionId, itemId, decision) || this.options.browse?.answer(sessionId, itemId, decision) || (await this.adapter(session.provider).answerApproval(session, itemId, decision));
     if (!handled) {
       throw new HttpError(409, "approval_not_pending", "이미 처리되었거나 만료된 승인 요청입니다.");
     }
