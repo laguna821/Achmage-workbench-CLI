@@ -18,6 +18,7 @@ import { Sidebar, type SidebarActions } from "./components/Sidebar.tsx";
 import { requestNavigatorFocus } from "./components/nav/focus.ts";
 import { ContextMenu, type MenuEntry, type MenuRequest } from "./components/ContextMenu.tsx";
 import { createActions, creationWorkspace, type CreateAction } from "./create-actions.ts";
+import { NewDirectoryDialog } from "./components/NewDirectoryDialog.tsx";
 import { SearchPalette, type PaletteCommand, type PaletteMode } from "./components/SearchPalette.tsx";
 import { ArchiveView } from "./components/ArchiveView.tsx";
 import { ProjectDeleteDialog } from "./components/ProjectDeleteDialog.tsx";
@@ -333,6 +334,7 @@ export function App() {
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
   const [contextMenu, setContextMenu] = useState<MenuRequest | null>(null);
   const [newDocument, setNewDocument] = useState<(NewDocumentTarget & { paneId: PaneId }) | null>(null);
+  const [newDirectory, setNewDirectory] = useState<string | null>(null);
   const openCreate = useRef<(anchor?: HTMLElement) => void>(() => undefined);
   // Ctrl+K opens the search box ("palette"); Ctrl+Shift+F opens it for contents only ("content").
   const [paletteOpen, setPaletteOpen] = useState<PaletteMode | null>(null);
@@ -1321,6 +1323,7 @@ export function App() {
   const runCreateAction = useCallback((paneId: PaneId, action: CreateAction) => {
     const { target } = action;
     if (action.kind === "document") { setNewDocument({ ...target, paneId, format: action.format }); return; }
+    if (action.kind === "directory") { if (target.workspaceId) setNewDirectory(target.workspaceId); return; }
     if (action.kind === "folder") {
       savePrefs({ sidebar: true });
       setExpandedEditorTab(paneById(layoutRef.current, paneId)?.activeTabId ?? null);
@@ -1345,7 +1348,7 @@ export function App() {
     return { x, y, title: project ? `${project.title}${space ? ` · ${space.label}` : ""}` : "새로 만들기", items: [
       { kind: "submenu", label: "새 문서·디자인", icon: "file", items: commands.filter(action => action.kind === "document").map(entry) },
       ...commands.filter(action => action.kind === "session").map(entry), { kind: "separator" },
-      ...commands.filter(action => action.kind === "folder" || action.kind === "project").map(entry),
+      ...commands.filter(action => action.kind === "directory" || action.kind === "folder" || action.kind === "project").map(entry),
     ] };
   }, [creationTarget, runCreateAction]);
   openCreate.current = anchor => {
@@ -1481,7 +1484,7 @@ export function App() {
           ...(single ? [] : [{ kind: "item" as const, label: "오른쪽에 카드로 보기", icon: "columns" as const, hint: "Ctrl+클릭", onSelect: () => panesRef.current.placeItem({ kind: "folder", id: folder.id }, "right") }]),
           { kind: "item", label: "이 폴더에 새 작업", icon: "plus", onSelect: () => startNew(folder.id) },
           { kind: "item", label: "폴더 노트 템플릿…", icon: "page", onSelect: () => setFolderTemplateId(folder.id) },
-          { kind: "item", label: "하위 폴더 만들기", icon: "folder", onSelect: () => setSidebarPending({ createIn: folder.id }) },
+          { kind: "item", label: "하위 정리 폴더 만들기", icon: "folder", onSelect: () => setSidebarPending({ createIn: folder.id }) },
           { kind: "item", label: "이름 바꾸기", icon: "edit", hint: "F2", onSelect: () => setSidebarPending({ rename: folder.id }) },
           { kind: "separator" },
           { kind: "item", label: "보관 (안의 것 포함)", icon: "archive", hint: "Delete", onSelect: () => archive({ kind: "folder", id: folder.id }) },
@@ -2160,7 +2163,7 @@ export function App() {
           </button>
         )}
         <div className="topbar-right">
-          <button type="button" className="ghost-button small shell-create" aria-haspopup="menu" title={`새 문서·세션·정리 폴더 (${shortcuts.newWork})`} onClick={event => openCreate.current(event.currentTarget)}><Icon name="plus" size={15} /> 새로 만들기<Icon name="chevronDown" size={12} /></button>
+          <button type="button" className="ghost-button small shell-create" aria-haspopup="menu" title={`새 문서·세션·폴더 (${shortcuts.newWork})`} onClick={event => openCreate.current(event.currentTarget)}><Icon name="plus" size={15} /> 새로 만들기<Icon name="chevronDown" size={12} /></button>
           <button type="button" className="ghost-button small" aria-haspopup="dialog" aria-expanded={taskPanelOpen} onClick={() => setTaskPanelOpen(true)}><Icon name="clock" size={15} /> 작업</button>
           {view.kind === "document" ? <button type="button" className="ghost-button small" onClick={() => setExpandedEditorTab(editorFocus ? focusedTabId : null)}><Icon name={editorFocus ? "columns" : "expandAll"} size={14} />{editorFocus ? "작업공간 보기" : "편집기에 집중"}</button> : null}
           {!single ? <button type="button" className="ghost-button small" aria-label="배치 선택" disabled={!layoutReady} onClick={(event) => {
@@ -2373,6 +2376,7 @@ export function App() {
       {contextMenu ? <ContextMenu request={contextMenu} onClose={closeContextMenu} /> : null}
       {deletingWork ? <ProjectDeleteDialog work={deletingWork} sessions={Object.values(state.sessions).filter(session => session.workId === deletingWork.id).length} onDelete={() => deleteProject(deletingWork)} onClose={() => setDeletingWork(null)} /> : null}
       {newDocument && api ? <NewDocumentDialog api={api} state={state} request={newDocument} onClose={() => setNewDocument(null)} onOpen={artifact => setViewOf(newDocument.paneId, { kind: "document", artifactId: artifact.id, proposalId: null }, artifact)} /> : null}
+      {newDirectory && api && state.workspaces[newDirectory] ? <NewDirectoryDialog api={api} workspace={state.workspaces[newDirectory]!} onClose={() => setNewDirectory(null)} onCreated={created => setToast({ text: `폴더를 만들었습니다: ${created.path}`, action: { label: inDesktop ? "폴더 열기" : "경로 복사", run: () => void openPath(created.path) } })} /> : null}
       {paletteOpen ? (
         <SearchPalette
           api={api}

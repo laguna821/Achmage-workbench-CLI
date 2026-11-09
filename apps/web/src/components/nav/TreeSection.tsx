@@ -50,7 +50,7 @@ export function TreeSection({ shared, rows, treeRef, onSort }: { shared: NavShar
             const box = event.currentTarget.getBoundingClientRect();
             shared.actions.creationMenu?.(shared.currentWorkId ? shared.state.works[shared.currentWorkId] ?? null : null, box.left, box.bottom);
           }}><Icon name="plus" size={13} /> 만들기</button> : null}
-          <button type="button" className="icon-button small" title="새 폴더" onClick={() => shared.setCreatingIn(null)}>
+          <button type="button" className="icon-button small" title="새 정리 폴더" onClick={() => shared.setCreatingIn(null)}>
             <Icon name="plus" size={13} />
           </button>
           <button type="button" className="icon-button small" title="정렬" aria-haspopup="menu" onClick={(event) => onSort(event.currentTarget)}>

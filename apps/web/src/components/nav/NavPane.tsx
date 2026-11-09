@@ -287,7 +287,7 @@ export function ProjectsSection({ shared }: { shared: NavShared }) {
       title: "프로젝트",
       items: [
         { kind: "item", label: "새 프로젝트", icon: "plus", onSelect: () => actions.newSession({ folderId: null }) },
-        { kind: "item", label: "새 폴더", icon: "folder", onSelect: () => shared.setCreatingIn(null) },
+        { kind: "item", label: "새 정리 폴더", icon: "folder", onSelect: () => shared.setCreatingIn(null) },
       ],
     });
   const onKey = (event: ReactKeyboardEvent<HTMLElement>, folder: Folder | null, isOpen: boolean, children: boolean) => {
@@ -355,7 +355,7 @@ export function ProjectsSection({ shared }: { shared: NavShared }) {
         shared={shared}
         count={`전체 ${root.own + root.below}개`}
         tools={
-          <button type="button" className="icon-button small" title="새 폴더" aria-label="새 폴더" onClick={() => shared.setCreatingIn(null)}>
+          <button type="button" className="icon-button small" title="새 정리 폴더" aria-label="새 정리 폴더" onClick={() => shared.setCreatingIn(null)}>
             <Icon name="plus" size={13} />
           </button>
         }

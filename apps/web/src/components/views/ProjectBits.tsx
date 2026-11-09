@@ -11,6 +11,7 @@ import { FormatBadge } from "../DocCards.tsx";
 import { EngineMark } from "../EngineMark.tsx";
 import { Icon } from "../Icon.tsx";
 import { ProjectThumbnail } from "../project/ProjectThumbnail.tsx";
+import { ProjectSelectionCheckbox } from "../project/ProjectSelection.tsx";
 import type { ProjectRow } from "./keys.ts";
 import { fileValues, propLabel } from "./keys.ts";
 
@@ -133,6 +134,7 @@ export function WorkCard({
   const path = fields.includes("folder") ? folderPath(state.folders, work.folderId)?.replaceAll("/", " / ") : null;
   return (
     <div className={`work-card${chips ? " with-chips" : ""}`} data-flip={`w:${work.id}`} data-work={work.id}>
+      <ProjectSelectionCheckbox id={work.id} title={work.title} disabled={row?.archived ?? Boolean(work.archivedAt)} />
       {fields.includes("thumbnail") ? <ProjectThumbnail summary={row?.summary} /> : null}
       <button type="button" className="work-card-title" onClick={() => open.project(work)} title={work.cwd}>
         <Icon name="project" size={14} />
@@ -312,6 +314,7 @@ export function TableRow({ row, columns, openProject }: { row: ProjectRow; colum
   return (
     <tr data-work={row.work.id}>
       <td>
+        <ProjectSelectionCheckbox id={row.work.id} title={row.work.title} disabled={row.archived} />
         <button type="button" className="projects-name" onClick={() => openProject(row.work)} title={row.work.cwd}>
           {row.work.title}
         </button>
@@ -330,6 +333,7 @@ export function ListRow({ row, fields, stages, openProject }: { row: ProjectRow;
   const tags = tagsOf(row);
   return (
     <div className="project-line" data-work={row.work.id} data-flip={`w:${row.work.id}`}>
+      <ProjectSelectionCheckbox id={row.work.id} title={row.work.title} disabled={row.archived} />
       {fields.includes("thumbnail") ? <ProjectThumbnail summary={row.summary} small /> : null}
       <button type="button" className="project-line-main" onClick={() => openProject(row.work)} title={row.work.cwd}>
         <span className="project-line-title">{row.work.title}</span>

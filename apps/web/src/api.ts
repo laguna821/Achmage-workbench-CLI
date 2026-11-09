@@ -218,6 +218,7 @@ export class Api {
   closeDocument = (viewId: string, windowId: string) => this.request<{ ok: boolean }>("DELETE", `/api/document-views/${viewId}`, { windowId }, { keepalive: true });
   items = (sessionId: string) => this.request<{ seq: number; items: TranscriptItem[] }>("GET", `/api/sessions/${sessionId}/items`);
   createFolder = (name: string, parentId: string | null) => this.request<Folder>("POST", "/api/folders", { name, parentId });
+  createWorkspaceDirectory = (workspaceId: string, path: string) => this.request<{ workspaceId: string; path: string; relativePath: string }>("POST", `/api/workspaces/${encodeURIComponent(workspaceId)}/directories`, { path });
   updateFolder = (folderId: string, patch: UpdateFolderRequest) => this.request<Folder>("PATCH", `/api/folders/${folderId}`, patch);
   /** "폴더만 지우기": the folder goes, what was inside moves up to its parent. */
   deleteFolder = (folderId: string) => this.request<DeleteFolderResult>("DELETE", `/api/folders/${folderId}`);

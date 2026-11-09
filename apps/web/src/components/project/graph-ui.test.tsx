@@ -42,6 +42,24 @@ const pointer = (type: string, target: EventTarget, x: number, y: number) =>
   });
 
 describe("ProjectsGraph", () => {
+  it("uses one Tab stop and directional navigation without moving nodes or opening projects", () => {
+    const openProject = vi.fn();
+    render(<ProjectsGraph items={items} stages={DEFAULT_STAGES} openProject={openProject} />);
+    const nodes = [...document.querySelectorAll<SVGGElement>("g[data-node]")];
+    expect(nodes.filter(item => item.getAttribute("tabindex") === "0")).toHaveLength(1);
+    const left = [...nodes].sort((a, b) => position(a.dataset.node!)[0] - position(b.dataset.node!)[0])[0]!;
+    const before = new Map(nodes.map(item => [item.dataset.node!, item.getAttribute("transform")]));
+    act(() => left.focus());
+    fireEvent.keyDown(left, { key: "ArrowRight" });
+    expect(document.activeElement).not.toBe(left);
+    const next = document.activeElement as unknown as SVGGElement;
+    expect(position(next.dataset.node!)[0]).toBeGreaterThan(position(left.dataset.node!)[0]);
+    expect(nodes.filter(item => item.getAttribute("tabindex") === "0")).toHaveLength(1);
+    fireEvent.keyDown(next, { key: "End" }); expect(document.activeElement).toBe(nodes.at(-1));
+    fireEvent.keyDown(document.activeElement!, { key: "Home" }); expect(document.activeElement).toBe(nodes[0]);
+    nodes.forEach(item => expect(item.getAttribute("transform")).toBe(before.get(item.dataset.node!)));
+    expect(openProject).not.toHaveBeenCalled();
+  });
   it("draws a point per project and tag, at rest at once under reduced motion; archived ones only when asked", () => {
     render(<ProjectsGraph items={items} stages={DEFAULT_STAGES} openProject={() => undefined} />);
     expect(document.querySelectorAll(".graph-node.project")).toHaveLength(3);

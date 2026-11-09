@@ -296,6 +296,19 @@ export class GraphView {
     if (this.sim.nodes.length) this.view = fitView(extent(this.sim.nodes), this.frame);
   }
 
+  /** Bring a keyboard target into the viewport without resetting zoom or node positions. */
+  reveal(id: string) {
+    const node = this.sim.nodes.find(candidate => candidate.id === id);
+    if (!node) return;
+    const x = this.view.x + node.x * this.view.k, y = this.view.y + node.y * this.view.k;
+    const margin = 48;
+    const dx = x < margin ? margin - x : x > this.frame.width - margin ? this.frame.width - margin - x : 0;
+    const dy = y < margin ? margin - y : y > this.frame.height - margin ? this.frame.height - margin - y : 0;
+    if (!dx && !dy) return;
+    this.follow = false; this.touched = true;
+    this.moveView({ ...this.view, x: this.view.x + dx, y: this.view.y + dy });
+  }
+
   private moveView(to: View) {
     if (this.reduced || !this.parts) {
       this.view = to;

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { GroupRule, HomeView, ModeViews, Provider, Session, Work } from "@workbench/contracts";
 import { baseMatcher } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
@@ -16,6 +16,7 @@ import { BoardCardBody, ListRow, TableHead, TableRow, WorkCard, tableColumns, us
 import { useProjectData } from "../views/useProjectData.ts";
 import { ViewHead, ViewTabs, ViewTools, type ShownGroups } from "../views/ViewHead.tsx";
 import { ProjectsGraph } from "./ProjectsGraph.tsx";
+import { ProjectSelectionCheckbox, ProjectSelectionScope } from "./ProjectSelection.tsx";
 import "../../styles/projects-mode.css";
 import "../../styles/groups.css";
 
@@ -86,6 +87,37 @@ export function ProjectsMode({
   const sortRule = view.sort ?? (view.layout === "cards" ? null : ({ key: "activity", dir: "desc" } as const));
   const sortDef = sortRule ? (sorts.find((entry) => entry.key === sortRule.key) ?? null) : null;
   const ordered = sortDef ? sortItems(visible, sortDef, sortRule!.dir, (row) => row.work.title) : [...visible].sort(manual);
+  const [selected, setSelected] = useState<Set<string>>(new Set()), anchor = useRef<string | null>(null);
+  const [confirmArchive, setConfirmArchive] = useState(false), [archiving, setArchiving] = useState(false), [selectionNotice, setSelectionNotice] = useState("");
+  const archivingRef = useRef(false);
+  const selectedRows = rows.filter(row => selected.has(row.work.id) && !row.archived);
+  const selectedHidden = selectedRows.filter(row => !visible.some(shown => shown.work.id === row.work.id)).length;
+  useEffect(() => {
+    setSelected(current => { const active = new Set(rows.filter(row => !row.archived).map(row => row.work.id)); const kept = new Set([...current].filter(id => active.has(id))); return kept.size === current.size ? current : kept; });
+  }, [rows]);
+  const toggleSelection = (id: string, range: boolean) => {
+    if (archivingRef.current) return;
+    setConfirmArchive(false); setSelectionNotice("");
+    const ids = ordered.filter(row => !row.archived).map(row => row.work.id), from = anchor.current ? ids.indexOf(anchor.current) : -1, to = ids.indexOf(id);
+    setSelected(current => {
+      const next = new Set(current);
+      if (range && from >= 0 && to >= 0) ids.slice(Math.min(from, to), Math.max(from, to) + 1).forEach(value => next.add(value));
+      else if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+    anchor.current = id;
+  };
+  const archiveSelection = async () => {
+    if (archivingRef.current || !selectedRows.length) return;
+    const requested = selectedRows.map(row => row.work);
+    archivingRef.current = true; setArchiving(true); setSelectionNotice("");
+    const results = await Promise.allSettled(requested.map(work => Promise.resolve().then(() => api.updateWork(work.id, { archived: true }))));
+    const failed = requested.filter((_, index) => results[index]!.status === "rejected");
+    const reasons = results.flatMap(result => result.status === "rejected" ? [result.reason instanceof Error ? result.reason.message : String(result.reason)] : []);
+    setSelected(new Set(failed.map(work => work.id))); setConfirmArchive(false);
+    setSelectionNotice(`${requested.length - failed.length}개 프로젝트를 보관했습니다.${failed.length ? ` ${failed.length}개 실패: ${[...new Set(reasons)].join(" · ")}` : ""}`);
+    archivingRef.current = false; setArchiving(false);
+  };
   const today = localDay(Date.now());
   const fields = view.layout === "graph" ? [] : (view.fields ?? DEFAULT_PROJECT_FIELDS[view.layout as keyof typeof DEFAULT_PROJECT_FIELDS] ?? []);
 
@@ -224,7 +256,7 @@ export function ProjectsMode({
           itemId={(row) => row.work.id}
           itemAttr="work"
           itemTitle={(row) => row.work.title}
-          card={(row) => <BoardCardBody row={row} fields={fields} stages={stages} showStage={groupDef.key !== "stage" && subDef?.key !== "stage"} folders={state.folders} />}
+          card={(row) => <><ProjectSelectionCheckbox id={row.work.id} title={row.work.title} disabled={row.archived} /><BoardCardBody row={row} fields={fields} stages={stages} showStage={groupDef.key !== "stage" && subDef?.key !== "stage"} folders={state.folders} /></>}
           onOpen={(row) => openProject(row.work)}
           canMove={(row, from, to) => {
             const steps = plan(row, from, to);
@@ -315,11 +347,24 @@ export function ProjectsMode({
   }
 
   return (
+    <ProjectSelectionScope value={{ ids: selected, toggle: toggleSelection, busy: archiving }}>
     <div className={`projects-mode layout-${view.layout}`}>
       {head}
+      <div className="project-selection-bar" role="group" aria-label="프로젝트 다중 선택" aria-busy={archiving}>
+        <span>{selectedRows.length}개 선택{selectedHidden ? ` · 이 보기 밖 ${selectedHidden}개 포함` : ""}</span>
+        <button type="button" className="ghost-button small" disabled={archiving || !visible.some(row => !row.archived)} onClick={() => { setSelected(new Set(visible.filter(row => !row.archived).map(row => row.work.id))); setConfirmArchive(false); }}>현재 결과 모두 선택</button>
+        <button type="button" className="ghost-button small" disabled={archiving || !selected.size} onClick={() => { setSelected(new Set()); setConfirmArchive(false); }}>선택 해제</button>
+        {confirmArchive ? <>
+          <span>선택한 {selectedRows.length}개 프로젝트를 보관합니다.</span>
+          <button type="button" className="button small" disabled={archiving || !selectedRows.length} onClick={() => void archiveSelection()}>{archiving ? "보관 중…" : `${selectedRows.length}개 보관`}</button>
+          <button type="button" className="ghost-button small" disabled={archiving} onClick={() => setConfirmArchive(false)}>취소</button>
+        </> : <button type="button" className="ghost-button small" disabled={archiving || !selectedRows.length} onClick={() => setConfirmArchive(true)}>선택 항목 보관…</button>}
+      </div>
+      {selectionNotice ? <p className="project-selection-notice" role="status">{selectionNotice}</p> : null}
       {body}
       {panel}
     </div>
+    </ProjectSelectionScope>
   );
 }
 

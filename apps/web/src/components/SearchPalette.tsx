@@ -19,6 +19,7 @@ import {
 } from "@workbench/contracts";
 import { displayHeading, keyLabel } from "../../../../third_party/fast-find/adapter/ui.ts";
 import { FastFindPreview } from "./FastFindPreview.tsx";
+import { captureSurfaceFocus } from "./controls/focus-scope.ts";
 import type { Api } from "../api.ts";
 import type { State } from "../state.ts";
 import type { PaneItem } from "../panes.ts";
@@ -149,6 +150,10 @@ export function SearchPalette({
   const [notice, setNotice] = useState<string | null>(null);
   const [focus, setFocus] = useState(0);
   const input = useRef<HTMLInputElement>(null);
+  const [restoreFocus] = useState(() => captureSurfaceFocus());
+  const cancelled = useRef(true);
+  const closeForOpen = () => { cancelled.current = false; onClose(); };
+  useEffect(() => () => { if (cancelled.current) restoreFocus(); }, [restoreFocus]);
   const list = useRef<HTMLDivElement>(null);
   const content = mode === "content";
   const commandMode = !content && query.startsWith(">");
@@ -302,7 +307,7 @@ export function SearchPalette({
     const session = hit.sessionId ? state.sessions[hit.sessionId] : undefined;
     if (hit.kind === "work") {
       if (!work) return;
-      onClose();
+      closeForOpen();
       if (shift && onOpenProject) onOpenProject(work);
       else onOpenWork(work);
       return;
@@ -310,28 +315,28 @@ export function SearchPalette({
     if (hit.kind === "document") {
       const artifact = hit.artifactId ? state.artifacts[hit.artifactId] : undefined;
       if (!artifact) return;
-      onClose();
+      closeForOpen();
       onOpenDoc(artifact);
       return;
     }
     if (hit.kind === "note") {
       if (!hit.path || !onOpenNote) return;
-      onClose();
+      closeForOpen();
       onOpenNote(hit.path, { line: sourcePreview?.key === hit.key ? sourcePreview.targetLine ?? 0 : hit.line ?? 0, heading: hit.heading?.text });
       return;
     }
     if (hit.kind === "session" && session) {
-      onClose();
+      closeForOpen();
       onOpenSession(session);
       return;
     }
     if (session && hit.itemId) {
-      onClose();
+      closeForOpen();
       onOpenHit(session, hit.itemId);
       return;
     }
     if (work) {
-      onClose();
+      closeForOpen();
       if (onOpenProject) onOpenProject(work);
       else onOpenWork(work);
     }
@@ -351,7 +356,7 @@ export function SearchPalette({
     const item = entry?.kind === "hit" ? paneItemOf(entry.hit) : null;
     if (!item || !onOpenRight) return open(entry);
     if (entry?.kind === "hit") void api.searchOpen(entry.hit.key, needle, searchOptions).catch(() => {});
-    onClose();
+    closeForOpen();
     onOpenRight(item);
   };
 
@@ -371,10 +376,10 @@ export function SearchPalette({
         setGroup(null);
         return;
       case "session":
-        onClose();
+        closeForOpen();
         return onOpenSession(entry.session);
       case "command":
-        onClose();
+        closeForOpen();
         return entry.command.run();
     }
   };
@@ -386,7 +391,7 @@ export function SearchPalette({
       .request<PkmView>("PUT", "/api/pkm/views", { name: needle.slice(0, 60), query: viewQuery, groupBy: null })
       .then((view) => {
         if (onOpenView) {
-          onClose();
+          closeForOpen();
           onOpenView(view.id);
         } else setNotice(`보기 「${view.name}」로 저장했습니다.`);
       })

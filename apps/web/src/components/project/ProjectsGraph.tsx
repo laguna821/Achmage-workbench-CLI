@@ -57,6 +57,7 @@ export function ProjectsGraph({
   const reduced = useReducedMotion();
   const [panel, setPanel] = useState(false);
   const [focus, setFocus] = useState<string | null>(null);
+  const [keyboardNode, setKeyboardNode] = useState<string | null>(null);
   const [pinned, setPinned] = useState(0);
   const [size, setSize] = useState({ width: 900, height: 560 });
   const frame = useRef<HTMLDivElement>(null);
@@ -102,6 +103,7 @@ export function ProjectsGraph({
 
   const { filter, display, color, force } = settings;
   const graph = useMemo(() => filterGraph(input, filter), [input, filter.tags, filter.archived, filter.orphans, filter.search]); // eslint-disable-line react-hooks/exhaustive-deps
+  const keyboardTarget = graph.nodes.some(node => node.id === keyboardNode) ? keyboardNode : graph.nodes[0]?.id ?? null;
   const shapes = useMemo(() => new Map(graph.nodes.map((node) => [node.id, pointShape(node, display.nodeScale, display.labelSize)] as const)), [graph, display.nodeScale, display.labelSize]);
 
   useLayoutEffect(() => {
@@ -139,7 +141,7 @@ export function ProjectsGraph({
       const item = byId.get(node.id);
       const fill = item ? fillOf(item) : undefined;
       return (
-        <g key={node.id} className={`graph-node ${node.kind}${node.archived ? " archived" : ""}`} data-node={node.id} tabIndex={0} role="button" aria-label={node.label}>
+        <g key={node.id} className={`graph-node ${node.kind}${node.archived ? " archived" : ""}`} data-node={node.id} tabIndex={node.id === keyboardTarget ? 0 : -1} role="button" aria-label={node.label} onFocus={() => setKeyboardNode(node.id)}>
           <title>{node.label}</title>
           {/* A wider, invisible target: small points are easy to grab, and a label never moves it. */}
           <circle className="graph-hit" r={Math.round((shape.r + 8) * 10) / 10} />
@@ -149,7 +151,7 @@ export function ProjectsGraph({
       );
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graph, shapes, stageColors, color.projectBy, display.labelSize]);
+  }, [graph, shapes, stageColors, color.projectBy, display.labelSize, keyboardTarget]);
 
   // A click on a point (not the end of a drag) opens the project or lights the tag.
   const onClick = (event: ReactMouseEvent<SVGSVGElement>) => {
@@ -159,9 +161,23 @@ export function ProjectsGraph({
   };
   const onKeyDown = (event: ReactKeyboardEvent<SVGSVGElement>) => {
     const id = (event.target as Element).closest?.("g[data-node]")?.getAttribute("data-node");
-    if (!id || (event.key !== "Enter" && event.key !== " ")) return;
-    event.preventDefault();
-    activate(id);
+    if (!id || event.altKey || event.ctrlKey || event.metaKey || event.nativeEvent.isComposing) return;
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); activate(id); return; }
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+    event.preventDefault(); event.stopPropagation();
+    const nodes = engine.sim.nodes, current = nodes.find(node => node.id === id);
+    let next = event.key === "Home" ? graph.nodes[0]?.id : event.key === "End" ? graph.nodes.at(-1)?.id : undefined;
+    if (!next && current) {
+      const horizontal = event.key === "ArrowLeft" || event.key === "ArrowRight", sign = event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 1;
+      next = nodes.filter(node => node.id !== id).map(node => {
+        const dx = node.x - current.x, dy = node.y - current.y;
+        return { id: node.id, forward: (horizontal ? dx : dy) * sign, score: Math.hypot(dx, dy) + 2 * Math.abs(horizontal ? dy : dx) };
+      }).filter(node => node.forward > 0).sort((a, b) => a.score - b.score)[0]?.id;
+    }
+    if (next) {
+      setKeyboardNode(next); engine.reveal(next);
+      [...(svg.current?.querySelectorAll<SVGGElement>("g[data-node]") ?? [])].find(node => node.dataset.node === next)?.focus({ preventScroll: true });
+    }
   };
 
   const projects = graph.nodes.filter((node) => node.kind === "project").length;
@@ -202,6 +218,7 @@ export function ProjectsGraph({
           </button>
         ) : null}
         <span className="graph-bar-gap" />
+        <span className="graph-key-hint">방향키 이동 · Enter 열기</span>
         <button type="button" className="link small" onClick={() => engine.fit()}>
           화면에 맞추기
         </button>
