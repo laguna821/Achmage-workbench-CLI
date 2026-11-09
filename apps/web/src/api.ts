@@ -323,6 +323,8 @@ export class Api {
   discardWorktree = (sessionId: string) => this.request<{ ok: boolean }>("POST", `/api/sessions/${sessionId}/worktree/discard`);
   /** "예약 작업": requests a session gets at set times. */
   createSchedule = (request: CreateScheduleRequest) => this.request<Schedule>("POST", "/api/schedules", request);
+  scheduleHistory = (id: string) => this.request<{ occurrences: import("@workbench/contracts").ScheduleOccurrence[] }>("GET", `/api/schedules/${encodeURIComponent(id)}/history`);
+  reconcileSchedule = (id: string, occurrenceId: string) => this.request<import("@workbench/contracts").ScheduleOccurrence>("POST", `/api/schedules/${encodeURIComponent(id)}/history/${encodeURIComponent(occurrenceId)}/reconcile`);
   updateSchedule = (id: string, patch: { enabled: boolean }) => this.request<Schedule>("PATCH", `/api/schedules/${encodeURIComponent(id)}`, patch);
   removeSchedule = (id: string) => this.request<{ ok: boolean }>("DELETE", `/api/schedules/${encodeURIComponent(id)}`);
   /** "이 요청 전으로": a new session with the conversation up to that request. */

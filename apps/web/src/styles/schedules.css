@@ -1,6 +1,7 @@
 /* "예약 작업" of a session. */
 
 .schedule-dialog {
+  overflow-y: auto;
   width: min(620px, calc(100vw - 40px));
   max-height: min(84vh, 760px);
   display: flex;
@@ -147,3 +148,11 @@
   color: var(--muted);
   font-size: var(--fs-micro);
 }
+
+.schedule-policy { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
+.schedule-policy label { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-meta); }
+.schedule-policy input, .schedule-policy select { min-width: 0; width: 100%; padding: 7px 8px; border: 1px solid var(--line); border-radius: var(--r-md); color: var(--text); background: var(--bg); font: inherit; }
+.schedule-history { margin: 6px 10px 12px; font-size: var(--fs-meta); }
+.schedule-history-row { display: flex; flex-wrap: wrap; gap: 4px 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.schedule-history-row > span { flex-basis: 100%; overflow-wrap: anywhere; }
+@media (max-width: 540px) { .schedule-policy { grid-template-columns: 1fr; } .schedule-row { flex-wrap: wrap; } .schedule-main { flex-basis: 100%; } }

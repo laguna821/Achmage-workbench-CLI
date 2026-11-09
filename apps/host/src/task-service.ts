@@ -16,7 +16,7 @@ export function reconcileReceipt(current: CommandReceipt, observed: ReceiptObser
 }
 
 type Hooks = {
-  submit?(input: SubmitCommand): Promise<SendResult>;
+  submit?(input: SubmitCommand, source?: "schedule"): Promise<SendResult>;
   sessions(): Session[]; items(sessionId: string): TranscriptItem[]; canSteer(session: Session): boolean;
   stop(sessionId: string): Promise<void>; approve(sessionId: string, itemId: string, decision: "accept" | "decline"): Promise<void>;
   cancelQueue(sessionId: string, queuedId: string): unknown; sendQueue(sessionId: string, queuedId: string): Promise<unknown>;
@@ -108,7 +108,7 @@ export class TaskService {
   private save(receipt: CommandReceipt) { this.store.setMeta(receiptKey(receipt.commandId), JSON.stringify(receipt)); return receipt; }
 
   /** CLI, MCP and UI automation share the existing session send gate and request journal. */
-  async submit(input: SubmitCommand): Promise<CommandReceipt> {
+  async submit(input: SubmitCommand, source?: "schedule"): Promise<CommandReceipt> {
     if (!input || typeof input.commandId !== "string" || !/^[\w.-]{1,160}$/.test(input.commandId) || typeof input.text !== "string" || !input.text.trim() || input.text.length > 100_000)
       throw new HttpError(400, "task_submit_invalid", "명령 ID와 요청 본문이 필요합니다.");
     if (input.mode !== undefined && !["auto", "queue", "steer"].includes(input.mode)) throw new HttpError(400, "task_mode", "지원하지 않는 전송 방식입니다.");
@@ -127,7 +127,7 @@ export class TaskService {
       status: "accepted", resultRef: null, detail: null, createdAt: now, updatedAt: now };
     this.save(receipt);
     try {
-      const result = await this.hooks.submit(input);
+      const result = await this.hooks.submit(input, source);
       receipt = { ...reconcileReceipt(receipt, { kind: "observed", status: "completed", detail: result.delivery === "queued" ? "다음 요청으로 대기합니다." : result.delivery === "steered" ? "진행 중인 작업에 전달했습니다." : "요청을 전달했습니다." }), resultRef: runKey(session.id, input.commandId) };
     } catch (error) {
       receipt = { ...receipt, status: error instanceof HttpError && error.status < 500 ? "rejected" : "outcome_unknown", detail: error instanceof Error ? error.message : String(error), updatedAt: Date.now() };

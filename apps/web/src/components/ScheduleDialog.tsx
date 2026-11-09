@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import type { Schedule, ScheduleWhen, Session } from "@workbench/contracts";
+import type { Schedule, SchedulePolicy, ScheduleWhen, Session } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import { Icon } from "./Icon.tsx";
+import { ScheduleHistory } from "./ScheduleHistory.tsx";
 import "../styles/schedules.css";
 
 type Kind = ScheduleWhen["kind"];
@@ -28,7 +29,7 @@ function inAnHour() {
  * "예약 작업" of a session: requests it gets at set times (every day, once, every few hours). The
  * gateway sends them while the app runs; one due while the engine works goes when it finishes.
  */
-export function ScheduleDialog({ api, session, schedules, onClose, onError }: { api: Api; session: Session; schedules: Schedule[]; onClose: () => void; onError: (error: unknown) => void }) {
+export function ScheduleDialog({ api, session, schedules, onClose, onError, onOpenSession }: { api: Api; session: Session; schedules: Schedule[]; onClose: () => void; onError: (error: unknown) => void; onOpenSession?: (id: string) => void }) {
   const mine = schedules.filter((entry) => entry.sessionId === session.id).sort((a, b) => (a.nextAt ?? Infinity) - (b.nextAt ?? Infinity));
   const [text, setText] = useState("");
   const [kind, setKind] = useState<Kind>("daily");
@@ -36,6 +37,12 @@ export function ScheduleDialog({ api, session, schedules, onClose, onError }: { 
   const [at, setAt] = useState(inAnHour);
   const [hours, setHours] = useState(3);
   const [saving, setSaving] = useState(false);
+  const [mode, setMode] = useState<SchedulePolicy["mode"]>("resume_session");
+  const [missed, setMissed] = useState<SchedulePolicy["missed"]>("once");
+  const [timezone, setTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const [expires, setExpires] = useState("");
+  const [limit, setLimit] = useState("");
+  const [history, setHistory] = useState<string | null>(null);
   const field = useRef<HTMLTextAreaElement>(null);
   useEffect(() => field.current?.focus(), []);
   // Esc closes it wherever the focus is (a removed row's button takes the focus with it).
@@ -54,7 +61,8 @@ export function ScheduleDialog({ api, session, schedules, onClose, onError }: { 
     const when: ScheduleWhen = kind === "daily" ? { kind, time } : kind === "every" ? { kind, hours } : { kind, at: new Date(at).getTime() };
     setSaving(true);
     try {
-      await api.createSchedule({ sessionId: session.id, text: text.trim(), when });
+      await api.createSchedule({ sessionId: session.id, text: text.trim(), when,
+        policy: { mode, missed, timezone, expiresAt: expires ? new Date(expires).getTime() : null, maxRuns: limit ? Number(limit) : null } });
       setText("");
     } catch (error) {
       onError(error);
@@ -68,6 +76,7 @@ export function ScheduleDialog({ api, session, schedules, onClose, onError }: { 
       <div
         className="schedule-dialog"
         role="dialog"
+        aria-modal="true"
         aria-label={`예약 작업 · ${session.purpose}`}
       >
         <header className="schedule-head">
@@ -75,21 +84,23 @@ export function ScheduleDialog({ api, session, schedules, onClose, onError }: { 
             <Icon name="clock" size={18} /> 예약 작업
           </h2>
           <p className="muted">
-            「{session.purpose}」에 정한 때 요청을 보냅니다. 앱이 켜져 있어야 보내고, 꺼져 있던 동안 지난 예약은 다시 켰을 때 한 번만 보냅니다. 엔진이 일하는 중이면 끝난 뒤에 보냅니다.
+            「{session.purpose}」을 기준으로 정한 때 요청을 보냅니다. 백그라운드 호스트가 실행 중이면 창을 닫아도 이어집니다. 엔진이 일하는 중이거나 승인을 기다리면 대기열에 보냅니다.
           </p>
         </header>
 
         <div className="schedule-list" role="list">
           {mine.length ? null : <div className="schedule-empty">아직 예약이 없습니다.</div>}
           {mine.map((entry) => (
-            <div key={entry.id} className={`schedule-row${entry.enabled ? "" : " off"}`} role="listitem">
+            <div key={entry.id} role="listitem"><div className={`schedule-row${entry.enabled ? "" : " off"}`}>
               <div className="schedule-main">
                 <span className="schedule-when">{whenText(entry.when)}</span>
                 <span className="schedule-text" title={entry.text}>
                   {entry.text.split("\n")[0]}
                 </span>
                 <span className="schedule-next">{entry.enabled ? nextText(entry.nextAt) : "꺼짐"}</span>
+                <span className="schedule-next">{entry.policy?.mode === "new_run" ? "매번 새 대화" : "현재 대화 이어서"} · {entry.policy?.timezone ?? "기기 시간대"} · {entry.runCount ?? 0}회 접수{entry.policy?.maxRuns ? ` / 최대 ${entry.policy.maxRuns}회` : ""}</span>
               </div>
+              <button type="button" className="text-button" onClick={() => setHistory(history === entry.id ? null : entry.id)} aria-expanded={history === entry.id}>실행 기록</button>
               {entry.nextAt !== null || entry.when.kind !== "once" ? (
                 <button type="button" className="text-button" onClick={() => void api.updateSchedule(entry.id, { enabled: !entry.enabled }).catch(onError)}>
                   {entry.enabled ? "끄기" : "켜기"}
@@ -98,12 +109,19 @@ export function ScheduleDialog({ api, session, schedules, onClose, onError }: { 
               <button type="button" className="icon-button small" aria-label="예약 지우기" title="지우기" onClick={() => void api.removeSchedule(entry.id).catch(onError)}>
                 <Icon name="x" size={14} />
               </button>
-            </div>
+            </div>{history === entry.id ? <ScheduleHistory api={api} schedule={entry} onError={onError} onOpenSession={onOpenSession} /> : null}</div>
           ))}
         </div>
 
         <div className="schedule-form">
           <textarea ref={field} rows={3} value={text} onChange={(event) => setText(event.target.value)} placeholder="보낼 요청 (예: 어제 바뀐 문서를 요약해 줘)" />
+          <div className="schedule-policy">
+            <label>실행 방식<select value={mode} onChange={event => setMode(event.target.value as SchedulePolicy["mode"])}><option value="resume_session">현재 대화 이어서</option><option value="new_run">같은 작업공간에서 매번 새 대화</option></select></label>
+            <label>호스트가 꺼져 있던 동안<select value={missed} onChange={event => setMissed(event.target.value as SchedulePolicy["missed"])}><option value="once">지난 예약을 한 번만 보내기</option><option value="skip">1분 넘게 지난 예약 건너뛰기</option></select></label>
+            {kind === "daily" ? <label>매일 예약 시간대<input value={timezone} onChange={event => setTimezone(event.target.value)} placeholder="Asia/Seoul" /></label> : null}
+            <label>종료 기한 (선택)<input type="datetime-local" value={expires} onChange={event => setExpires(event.target.value)} /></label>
+            <label>최대 실행 횟수 (선택)<input type="number" min={1} max={100000} value={limit} onChange={event => setLimit(event.target.value)} placeholder="제한 없음" /></label>
+          </div>
           <div className="schedule-when-row">
             <div className="segmented" role="radiogroup" aria-label="반복">
               {(

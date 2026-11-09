@@ -2402,7 +2402,7 @@ export function App() {
         <WorktreeReview api={api} session={state.sessions[reviewing]} managed={state.workspaces[state.sessions[reviewing].workspaceId ?? ""]?.managed ?? true} onClose={() => setReviewing(null)} onToast={setToast} onError={fail} />
       ) : null}
       {scheduling && state.sessions[scheduling] ? (
-        <ScheduleDialog api={api} session={state.sessions[scheduling]} schedules={state.schedules} onClose={() => setScheduling(null)} onError={fail} />
+        <ScheduleDialog api={api} session={state.sessions[scheduling]} schedules={state.schedules} onClose={() => setScheduling(null)} onError={fail} onOpenSession={id => { const target = state.sessions[id]; if (target) { setScheduling(null); openSession(target); } }} />
       ) : null}
       {picker ? (
         <SessionPicker

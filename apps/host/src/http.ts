@@ -723,7 +723,16 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       if (path === "/api/schedules" && method === "GET") return sendJson(res, 200, { schedules: manager.schedules.all() });
       if (path === "/api/schedules" && method === "POST") {
         const body = await readJson(req);
-        return sendJson(res, 201, manager.schedules.create({ sessionId: String(body.sessionId ?? ""), text: String(body.text ?? ""), when: body.when as never }));
+        return sendJson(res, 201, manager.schedules.create({ sessionId: String(body.sessionId ?? ""), text: String(body.text ?? ""), when: body.when as never, policy: body.policy as never }));
+      }
+      if (parts[0] === "schedules" && parts[1] && parts[2] === "history") {
+        const scheduleId = decodeURIComponent(parts[1]);
+        if (method === "GET" && parts.length === 3) return sendJson(res, 200, { occurrences: manager.schedules.journal.list(scheduleId) });
+        if (method === "POST" && parts[3] && parts[4] === "reconcile") {
+          const id = decodeURIComponent(parts[3]), row = manager.schedules.journal.get(id);
+          if (row?.scheduleId !== scheduleId) throw new HttpError(404, "occurrence_missing", "예약 실행 기록을 찾지 못했습니다.");
+          return sendJson(res, 200, manager.schedules.journal.reconcile(id));
+        }
       }
       if (parts[0] === "schedules" && parts[1] && parts.length === 2 && method === "PATCH") {
         const body = await readJson(req);

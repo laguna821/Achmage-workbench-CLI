@@ -1,4 +1,5 @@
-// "예약 작업": a request a session gets at set times, sent by the gateway while the app runs.
+import type { CommandReceipt } from "./tasks.ts";
+// The host owns schedule admission, independently from the UI.
 
 /** When: every day at a local time, once at a moment, or every few hours. */
 export type ScheduleWhen = { kind: "daily"; time: string } | { kind: "once"; at: number } | { kind: "every"; hours: number };
@@ -13,6 +14,25 @@ export type Schedule = {
   nextAt: number | null;
   lastAt: number | null;
   createdAt: number;
+  policy?: SchedulePolicy;
+  runCount?: number;
 };
 
-export type CreateScheduleRequest = { sessionId: string; text: string; when: ScheduleWhen };
+export type SchedulePolicy = {
+  mode: "new_run" | "resume_session";
+  timezone: string;
+  missed: "once" | "skip";
+  expiresAt: number | null;
+  maxRuns: number | null;
+};
+export type CreateScheduleRequest = { sessionId: string; text: string; when: ScheduleWhen; policy?: Partial<SchedulePolicy> };
+export type ScheduleOccurrence = {
+  id: string; scheduleId: string; dueAt: number; admittedAt: number; updatedAt: number;
+  commandId: string; status: "accepted" | "submitted" | "rejected" | "outcome_unknown" | "skipped";
+  detail: string; receipt: CommandReceipt | null;
+};
+export type ScheduleTickInput = {
+  scheduleId: string; dueAt: number; now: number; enabled: boolean; expiresAt: number | null;
+  mode: "new_run" | "resume_session"; previous: "none" | "accepted" | "outcome_unknown" | "completed";
+};
+export type ScheduleTickPlan = { occurrenceId: string; action: "dispatch" | "reconcile" | "skip" };

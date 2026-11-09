@@ -477,16 +477,21 @@ export class SessionManager {
       getMeta: (key) => store.getMeta(key),
       setMeta: (key, value) => store.setMeta(key, value),
       sessionExists: (id) => this.sessions.has(id),
+      transaction: run => store.transaction(run),
+      receipt: commandId => this.tasks.receipt(commandId),
       send: async (schedule, requestId) => {
-        if (this.sessions.get(schedule.sessionId)?.archivedAt) throw new Error("archived");
+        let target = this.requireSession(schedule.sessionId);
+        if (target.archivedAt) throw new HttpError(409, "archived", "보관한 대화에는 예약 요청을 보내지 않습니다.");
+        if (schedule.policy?.mode === "new_run") target = this.createSession(target.workId, { provider: target.provider, workspaceId: target.workspaceId,
+          purpose: `${target.purpose} · 예약`, model: target.model, effort: target.effort, access: target.access, profileId: target.profileId }, false);
         // Waits for a running turn ("끝나면 보내기"); the screen stays where the user is.
-        await this.send(schedule.sessionId, requestId, schedule.text, [], null, null, "queue", { scheduled: true, activate: false });
+        return this.tasks.submit({ commandId: requestId, hostId: target.hostId, workspaceId: target.workspaceId!, sessionId: target.id, text: schedule.text, mode: "queue" }, "schedule");
       },
       changed: (schedules) => this.bus.publish({ type: "schedules.changed", schedules }),
     });
     this.profiles = new AgentProfiles(store);
     this.tasks = new TaskService(store, bus, {
-      submit: input => this.send(input.sessionId, input.commandId, input.text, [], null, null, input.mode ?? "auto", { profileId: input.profileId, activate: false }),
+      submit: (input, source) => this.send(input.sessionId, input.commandId, input.text, [], null, null, input.mode ?? "auto", { profileId: input.profileId, activate: false, scheduled: source === "schedule" }),
       sessions: () => [...this.sessions.values()], items: id => this.loadItems(id),
       canSteer: session => Boolean(this.adapters.get(session.provider)?.steer),
       stop: id => this.interrupt(id), approve: (id, itemId, decision) => this.answerApproval(id, itemId, decision),
