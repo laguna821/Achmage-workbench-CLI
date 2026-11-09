@@ -1,0 +1,26 @@
+Achmage Workbench includes source from Paseo.
+
+Upstream: https://github.com/getpaseo/paseo
+Revision: 1fff127f45b11c1c9c573fbbd12791673004c912
+Copyright (c) 2025-present Mohamed Boudra
+License: Apache License 2.0 (see LICENSE)
+
+Included upstream modules:
+- packages/relay: original source, tests, fixtures and configuration.
+- packages/app/src/components/markdown/image-decoding.ts.
+
+Workbench adaptations:
+- Relay package.json is private, removes prepack and pins runtime dependency
+  versions. Original manifest is retained as package.upstream.json.
+- Relay source is unchanged. Dist JavaScript and declarations were generated
+  with TypeScript 5.9.3. Workbench host/client wrappers request protected mode;
+  they do not replace device enrollment or command authorization.
+- The unchanged image decoder receives Workbench's authenticated Blob URL and
+  DOM Image.decode adapter in apps/web/src/components/Attachments.tsx.
+
+Source and generated file hashes are in relay-provenance.json and
+image-decoding-provenance.json. Runtime dependency licenses are under
+dependencies/ and their versions and hashes are in dependencies.json.
+
+These are Workbench attribution and modification notices. No upstream NOTICE
+file was present in either imported source module.

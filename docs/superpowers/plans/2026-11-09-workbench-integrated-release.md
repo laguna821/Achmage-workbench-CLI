@@ -14,6 +14,16 @@
 
 추가 교정: “기능 추가하고 빌드하고 기능 추가하고 빌드하고 그게 맞아? ㅡㅡ; 그게 superpowers 및 pstack식이냐고 아닐거 같은데” — `decision-b10e79c5567f53f7c9dfe5e459933f13cbff1b06242c87566dfbaea9d13d4e63`. 목적별 구현·커밋과 설치본 생성은 별개다. 이미 끝난 두 후보 실행은 과거 증거로만 보존한다.
 
+### Paseo 원본 코드 재사용 우선 — 2026-11-09 추가 교정
+
+사용자 원문: “paseo  보니까  깃허브 보니까  아파치 라이센스던데. 미련하게 맨땅에서 다 새로 개발하려고 하지 말고 재활용할만한거 싹 다 재활용해서 효율적으로 작업해보자”. `decision-ad213a131da97ba4c7079eeaca47430ffd819ae80f1963b5d546c71559fcbe6c`를 적용한다.
+
+남은 단위는 먼저 [원본 모듈 재사용표](../execution/PASEO-REUSE.md)의 package/file 묶음을 가져오고 기존 Workbench 세션·문서·권한·저장소에 연결한다. 아래 과거 `Create`/구현 상세는 필요한 통합 지점을 뜻하며, 이미 Paseo에 있는 기능을 처음부터 작성할 근거가 아니다. 직접 이식 가능한 모듈은 의존 모듈·기존 테스트·라이선스와 함께 가져온다. 새 코드는 Workbench 연결과 원본에 없는 기능에 집중한다. 재사용하지 못하는 부분은 구체적인 소스 부재 또는 인터페이스 차이를 기록하고 해당 연결만 구현한다.
+
+원본 pin은 기존 조사와 같은 `1fff127f45b11c1c9c573fbbd12791673004c912`이다. 별도 third-party 고지와 수정 내역을 보존하며 첫 이식은 `@getpaseo/relay` 보안 전송 패키지다. 원본 패키지의 테스트를 필요한 경계에서 재사용하고 기능마다 production/설치본 빌드를 반복하지 않는다. 이 교정은 25개 목적과 기존 데이터 보존 요구를 유지하면서 구현 방식을 바꾼다.
+
+직접 재사용 전환과 첫 relay·이미지 반입의 근거: `research:rr-79110658024cdb4797375aa15a22a771:413d49e0d715c8db9687a0b1a48c6669ad100f71a9fdf72b13a250ecf0fc6a03` (R1–R6). 실제 네트워크·모바일 연결은 이후 단위에서 진행한다.
+
 ## How to read this
 
 One box is one unit of work. Every box names the evidence that checks it. Check a box only when its evidence exists. 파일, 로그, 화면, 실행 결과와 정확한 SHA를 함께 기록한다.

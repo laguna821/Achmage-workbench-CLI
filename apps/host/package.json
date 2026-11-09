@@ -9,6 +9,7 @@
     "build": "node ../../scripts/build-host.mjs"
   },
   "dependencies": {
+    "@getpaseo/relay": "file:../../vendor/paseo/relay",
     "@workbench/contracts": "0.4.0",
     "@workbench/provider-claude": "0.4.0",
     "@workbench/provider-codex": "0.4.0",

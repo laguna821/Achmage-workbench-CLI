@@ -1,4 +1,6 @@
 import type { AgentProfile, CommandReceipt, Snapshot, SubmitCommand, TaskCommand, TaskSnapshot } from "@workbench/contracts";
+export { openWorkbenchClientChannel } from "./secure-channel.ts";
+export type { SecureChannel, SecureChannelEvents, Transport as SecureTransport } from "./secure-channel.ts";
 
 export type ClientOptions = { baseUrl: string; token: string; fetch?: typeof globalThis.fetch };
 export class WorkbenchClient {

@@ -1,0 +1,326 @@
+{
+  "schemaVersion": 1,
+  "upstream": {
+    "name": "Paseo",
+    "repository": "https://github.com/getpaseo/paseo",
+    "commit": "1fff127f45b11c1c9c573fbbd12791673004c912",
+    "subdirectory": "packages/relay",
+    "sourceUrl": "https://github.com/getpaseo/paseo/tree/1fff127f45b11c1c9c573fbbd12791673004c912/packages/relay",
+    "packageName": "@getpaseo/relay",
+    "packageVersion": "0.15.3",
+    "license": "Apache-2.0",
+    "copyrightNotice": "Copyright (c) 2025-present Mohamed Boudra"
+  },
+  "source": {
+    "fileCount": 30,
+    "packageTreeSha256": "75b868721f456be9b10e73a646975368236ca1c2aa9cc75e6de5ce43bf0073fd",
+    "treeHashEncoding": "SHA-256 of UTF-8 sorted package-relative path + NUL + file SHA-256 hex + LF for each original file",
+    "preserved": "All original source, tests, fixtures, tsconfig, wrangler configuration and licenses are byte-for-byte copies. Only package.json is adapted."
+  },
+  "changes": [
+    {
+      "path": "relay/package.json",
+      "upstreamSha256": "c486865738548b42ec0e619dd6dcff78d6cd78856ba2814bf56b0a779b7740b7",
+      "currentSha256": "328c8c062f5e2bef111ff8e48c5734c56383fd25469dd0bf515c5ae0fcec45d5",
+      "reasons": [
+        "Set private=true to keep the vendored package unpublished.",
+        "Remove prepack (no prepare hook was present); importing this package does not activate upstream build scripts.",
+        "Pin runtime dependencies to upstream lock versions: @noble/ciphers, @noble/curves and @noble/hashes 2.4.0; base64-js 1.5.1; tweetnacl 1.0.3; ws 8.20.0.",
+        "Add x-workbench-vendor-notice identifying the manifest adaptation."
+      ]
+    }
+  ],
+  "additions": [
+    {
+      "path": "relay/package.upstream.json",
+      "sourcePath": "packages/relay/package.json",
+      "sha256": "c486865738548b42ec0e619dd6dcff78d6cd78856ba2814bf56b0a779b7740b7",
+      "purpose": "Byte-exact original package manifest."
+    }
+  ],
+  "rootLicense": {
+    "path": "LICENSE",
+    "upstreamPath": "LICENSE",
+    "upstreamSha256": "79d5aedce6aa0adc547336dc1bd34c5cc9308ba110fac7079ed97515ee573ad3",
+    "currentSha256": "79d5aedce6aa0adc547336dc1bd34c5cc9308ba110fac7079ed97515ee573ad3"
+  },
+  "files": [
+    {
+      "path": "relay/LICENSE",
+      "upstreamSha256": "79d5aedce6aa0adc547336dc1bd34c5cc9308ba110fac7079ed97515ee573ad3",
+      "currentSha256": "79d5aedce6aa0adc547336dc1bd34c5cc9308ba110fac7079ed97515ee573ad3"
+    },
+    {
+      "path": "relay/package.json",
+      "upstreamSha256": "c486865738548b42ec0e619dd6dcff78d6cd78856ba2814bf56b0a779b7740b7",
+      "currentSha256": "328c8c062f5e2bef111ff8e48c5734c56383fd25469dd0bf515c5ae0fcec45d5"
+    },
+    {
+      "path": "relay/src/base64.ts",
+      "upstreamSha256": "74d69461af9727aa3fb70b37ee50ae54e467e1eebf26fb0356453557094137e7",
+      "currentSha256": "74d69461af9727aa3fb70b37ee50ae54e467e1eebf26fb0356453557094137e7"
+    },
+    {
+      "path": "relay/src/cloudflare-adapter.test.ts",
+      "upstreamSha256": "9c4fd39fadeda95b94c762c6f9432bd9da8137d601c1917995593c7a2f47f6a1",
+      "currentSha256": "9c4fd39fadeda95b94c762c6f9432bd9da8137d601c1917995593c7a2f47f6a1"
+    },
+    {
+      "path": "relay/src/cloudflare-adapter.ts",
+      "upstreamSha256": "4865d510384dce1be25d586e521c785335840501c8b033d83edd25558e65c318",
+      "currentSha256": "4865d510384dce1be25d586e521c785335840501c8b033d83edd25558e65c318"
+    },
+    {
+      "path": "relay/src/crypto.test.ts",
+      "upstreamSha256": "c943f6c527d25868dfe4fb72b6f0d863f9a563905441213906e32e908611b786",
+      "currentSha256": "c943f6c527d25868dfe4fb72b6f0d863f9a563905441213906e32e908611b786"
+    },
+    {
+      "path": "relay/src/crypto.ts",
+      "upstreamSha256": "309d5cb94ceb236ced93a188d0a0bc3b42a0e347815b4dbe6679374d810db845",
+      "currentSha256": "309d5cb94ceb236ced93a188d0a0bc3b42a0e347815b4dbe6679374d810db845"
+    },
+    {
+      "path": "relay/src/cutover-proxy.test.ts",
+      "upstreamSha256": "8f16500749d66f9f1ecf8386e6739f39689b53397aa2499af00b8ebdac0a7c1a",
+      "currentSha256": "8f16500749d66f9f1ecf8386e6739f39689b53397aa2499af00b8ebdac0a7c1a"
+    },
+    {
+      "path": "relay/src/cutover-proxy.ts",
+      "upstreamSha256": "254cef003160eca4a125730c578faba2fa9790a6515e86a2707a7041858ebccd",
+      "currentSha256": "254cef003160eca4a125730c578faba2fa9790a6515e86a2707a7041858ebccd"
+    },
+    {
+      "path": "relay/src/dist-handshake-parity.test.ts",
+      "upstreamSha256": "7ba295e814c4b751404fb089bb9af89648e090c76156c05189741b9b0d4af6bb",
+      "currentSha256": "7ba295e814c4b751404fb089bb9af89648e090c76156c05189741b9b0d4af6bb"
+    },
+    {
+      "path": "relay/src/e2e.test.ts",
+      "upstreamSha256": "899566cf5fa8af446ffb1ee30efbc9c8d29872e1800ac4a9c096a25cc855e52b",
+      "currentSha256": "899566cf5fa8af446ffb1ee30efbc9c8d29872e1800ac4a9c096a25cc855e52b"
+    },
+    {
+      "path": "relay/src/e2ee.ts",
+      "upstreamSha256": "70504448f5e6f685dba572a31d2fa5e87cd7dbd88a2bcba797fb13c6409475f2",
+      "currentSha256": "70504448f5e6f685dba572a31d2fa5e87cd7dbd88a2bcba797fb13c6409475f2"
+    },
+    {
+      "path": "relay/src/encrypted-channel.test.ts",
+      "upstreamSha256": "e5c5429c1213f26ec07fcabdc86c9f7bdaafea8ca595f2115a7457fe48fcb5f2",
+      "currentSha256": "e5c5429c1213f26ec07fcabdc86c9f7bdaafea8ca595f2115a7457fe48fcb5f2"
+    },
+    {
+      "path": "relay/src/encrypted-channel.ts",
+      "upstreamSha256": "2b0d31520917d24993644fc30f065be4d46d3517475f8821388a2263ced3e6a6",
+      "currentSha256": "2b0d31520917d24993644fc30f065be4d46d3517475f8821388a2263ced3e6a6"
+    },
+    {
+      "path": "relay/src/handshake-lifetime.test.ts",
+      "upstreamSha256": "d1ecf1a636d4652b3eda9f71988bdbb06ae4cf32f01354f7829adea382f33d92",
+      "currentSha256": "d1ecf1a636d4652b3eda9f71988bdbb06ae4cf32f01354f7829adea382f33d92"
+    },
+    {
+      "path": "relay/src/index.ts",
+      "upstreamSha256": "9fdc46549ffe7b1ddb9e139cfbf7929e54acc6fe4cd1c8db938ff1e980fe067e",
+      "currentSha256": "9fdc46549ffe7b1ddb9e139cfbf7929e54acc6fe4cd1c8db938ff1e980fe067e"
+    },
+    {
+      "path": "relay/src/live-relay.e2e.test.ts",
+      "upstreamSha256": "7695bed9cdb48108d7a19e6bb6caf9d59a90be3bb8b7e6ab9d9bec6f5db7e614",
+      "currentSha256": "7695bed9cdb48108d7a19e6bb6caf9d59a90be3bb8b7e6ab9d9bec6f5db7e614"
+    },
+    {
+      "path": "relay/src/noise/cipher-state.ts",
+      "upstreamSha256": "51283ef7f08e427f5bd5c28e3168e61e2f32e57c479af80d9cfe3d1340357aaf",
+      "currentSha256": "51283ef7f08e427f5bd5c28e3168e61e2f32e57c479af80d9cfe3d1340357aaf"
+    },
+    {
+      "path": "relay/src/noise/fixtures/nk-25519-chachapoly-sha256.json",
+      "upstreamSha256": "83d375592fa04ac47fc933ccad71974a397002c04b9ac6ae360db0921343d1d5",
+      "currentSha256": "83d375592fa04ac47fc933ccad71974a397002c04b9ac6ae360db0921343d1d5"
+    },
+    {
+      "path": "relay/src/noise/index.ts",
+      "upstreamSha256": "24faa17b926bf7b994ce4370f3d36d15f95c135c32fb479fc38f00e62c5f858e",
+      "currentSha256": "24faa17b926bf7b994ce4370f3d36d15f95c135c32fb479fc38f00e62c5f858e"
+    },
+    {
+      "path": "relay/src/noise/noise.test.ts",
+      "upstreamSha256": "7efb9b8d96059ea28775501564f410fb2a0e2b82931c0b71fb97e2088814bfe9",
+      "currentSha256": "7efb9b8d96059ea28775501564f410fb2a0e2b82931c0b71fb97e2088814bfe9"
+    },
+    {
+      "path": "relay/src/noise/symmetric-state.ts",
+      "upstreamSha256": "a3ae574c7667c44ba9bb784dd2313d705c507ef8ab741e7f111560939126b4c6",
+      "currentSha256": "a3ae574c7667c44ba9bb784dd2313d705c507ef8ab741e7f111560939126b4c6"
+    },
+    {
+      "path": "relay/src/package-exports.test.ts",
+      "upstreamSha256": "6d4f58ef2f95deffed45c218819a8b1de99129a1c51e35f0c3ab496f998b8536",
+      "currentSha256": "6d4f58ef2f95deffed45c218819a8b1de99129a1c51e35f0c3ab496f998b8536"
+    },
+    {
+      "path": "relay/src/protected-records.test.ts",
+      "upstreamSha256": "891629abb900f76b64042ac593fba83ddd324500c57d51709242fbbe2decadc5",
+      "currentSha256": "891629abb900f76b64042ac593fba83ddd324500c57d51709242fbbe2decadc5"
+    },
+    {
+      "path": "relay/src/protected-records.ts",
+      "upstreamSha256": "4405226de9f052df471370c79a5bae89b7d6040eafcff740f7a4689f2c63bdd7",
+      "currentSha256": "4405226de9f052df471370c79a5bae89b7d6040eafcff740f7a4689f2c63bdd7"
+    },
+    {
+      "path": "relay/src/secure-channel.test.ts",
+      "upstreamSha256": "b3fe3fa2f7129c5704bd4b0302cc9cfaaec44d485f32a77b5f8ac7ac2d1e03a1",
+      "currentSha256": "b3fe3fa2f7129c5704bd4b0302cc9cfaaec44d485f32a77b5f8ac7ac2d1e03a1"
+    },
+    {
+      "path": "relay/src/secure-channel.ts",
+      "upstreamSha256": "180e088fcc4739e7ee9a8edb4c004484c14597781d7322be2cac1139d81dac85",
+      "currentSha256": "180e088fcc4739e7ee9a8edb4c004484c14597781d7322be2cac1139d81dac85"
+    },
+    {
+      "path": "relay/src/types.ts",
+      "upstreamSha256": "794a6cbe75994c123e965a346d0b21509b91c1c245eceb7a23f8c87fce7c6a7d",
+      "currentSha256": "794a6cbe75994c123e965a346d0b21509b91c1c245eceb7a23f8c87fce7c6a7d"
+    },
+    {
+      "path": "relay/tsconfig.json",
+      "upstreamSha256": "271485987e3e084f335fc53d0c69960b43769e0e1a8e414c070f23de997b1a79",
+      "currentSha256": "271485987e3e084f335fc53d0c69960b43769e0e1a8e414c070f23de997b1a79"
+    },
+    {
+      "path": "relay/wrangler.toml",
+      "upstreamSha256": "08f551cf7d2ca3e6ebaaf298cc001aa3437072c59e7745034b5ba2e3a50dc0d2",
+      "currentSha256": "08f551cf7d2ca3e6ebaaf298cc001aa3437072c59e7745034b5ba2e3a50dc0d2"
+    }
+  ],
+  "generatedArtifacts": {
+    "directory": "relay/dist",
+    "status": "generated",
+    "compiler": "TypeScript 5.9.3",
+    "command": "npx tsc -p vendor/paseo/relay/tsconfig.json --incremental false --sourceMap false --declarationMap false",
+    "files": [
+      {
+        "path": "relay/dist/base64.d.ts",
+        "sha256": "8e1874a8269374789879f6cffd3cd79dd54738fba8b8962adcfbffe2ba257e5c"
+      },
+      {
+        "path": "relay/dist/base64.js",
+        "sha256": "5c335faefbd543c3be0c206bf0da4f5340b02cf0df51ef5019727d1ee193cec9"
+      },
+      {
+        "path": "relay/dist/cloudflare-adapter.d.ts",
+        "sha256": "e5cdeb94e58ca705732cb8db18dcc3aca7f500212830a144e1eb35b3a25cf613"
+      },
+      {
+        "path": "relay/dist/cloudflare-adapter.js",
+        "sha256": "2ba3d9c4d106a8afa41a4cb5a6c67f06a00f8fda8c8902097ebac97ca87a0236"
+      },
+      {
+        "path": "relay/dist/crypto.d.ts",
+        "sha256": "1fef87a69bc126bae2fded582eeb3157221bb5f1b60e019f939707ca16bf0318"
+      },
+      {
+        "path": "relay/dist/crypto.js",
+        "sha256": "f8546451e62d28d210ec5906b0b05872fbc6174e19f86b62b39db1303e5886e1"
+      },
+      {
+        "path": "relay/dist/cutover-proxy.d.ts",
+        "sha256": "cc07c07f103c5097b26268d50986d94bda363724bace1ea234ca8812a7a23035"
+      },
+      {
+        "path": "relay/dist/cutover-proxy.js",
+        "sha256": "0be0f2a0c51ce747c56ce0eaf07a7d4825a38ef33bd7dde6169ffc787d1388ee"
+      },
+      {
+        "path": "relay/dist/e2ee.d.ts",
+        "sha256": "89606ccb9620b335f3ece3903792fa59e08351284dc74f84ff3578b263459530"
+      },
+      {
+        "path": "relay/dist/e2ee.js",
+        "sha256": "3fbc3b09adec80f73fa14c9ed1ad8a20790b8507b21e605975458a6eb33c18b3"
+      },
+      {
+        "path": "relay/dist/encrypted-channel.d.ts",
+        "sha256": "961410d475359d5e946e1ddca0da4ee204b670688e4cb3228ff6178f9fe27878"
+      },
+      {
+        "path": "relay/dist/encrypted-channel.js",
+        "sha256": "0f2a83f47c9acf1ac95ac295d3ec556708c6865a84ee49771984e2c192a351d8"
+      },
+      {
+        "path": "relay/dist/index.d.ts",
+        "sha256": "eb8bf0c5793911ae55c17ef121317f5f0734afc5ed2e886510f02360f167285c"
+      },
+      {
+        "path": "relay/dist/index.js",
+        "sha256": "d8ce3d5543505974d4febf570e4d9400550b3ab04114fc2af907a5b6707a8f1e"
+      },
+      {
+        "path": "relay/dist/noise/cipher-state.d.ts",
+        "sha256": "eed5aed98f474b65bcf6126e1b85da598c8a9966a77f47158081281bea1660df"
+      },
+      {
+        "path": "relay/dist/noise/cipher-state.js",
+        "sha256": "042573e40b452c3268658c7ccb64b72db090302713f0dcacc530d4c21e512a7a"
+      },
+      {
+        "path": "relay/dist/noise/index.d.ts",
+        "sha256": "9e726df14f8e83f6d3b16cd6637c07b40047ccb4a4cddf514349b519da57a1c4"
+      },
+      {
+        "path": "relay/dist/noise/index.js",
+        "sha256": "5050a74034ac2c3c7feec0db67376c9c8068583fa8bd9ce2220613c670107ed6"
+      },
+      {
+        "path": "relay/dist/noise/symmetric-state.d.ts",
+        "sha256": "9d7e4cb0700b4382de5fe54011f9cf557cc0413ee1ddc550c0d89114b7cd4db8"
+      },
+      {
+        "path": "relay/dist/noise/symmetric-state.js",
+        "sha256": "66121556540e954c1354629af50407b134b34081bee8f7419d443921e323bf96"
+      },
+      {
+        "path": "relay/dist/protected-records.d.ts",
+        "sha256": "89c65a4b5783771c93c35a68160d38f5d10955c725c13d6ef93dab4ffaa12ba4"
+      },
+      {
+        "path": "relay/dist/protected-records.js",
+        "sha256": "4359245b44414ae98b01a4d528f48b55b44626d49292b575caa872bff4e4f81e"
+      },
+      {
+        "path": "relay/dist/secure-channel.d.ts",
+        "sha256": "9eff3bb70a8ff08c4cd2bdefa83f7a77fb724f2d66bad9b96e3325094906a6c6"
+      },
+      {
+        "path": "relay/dist/secure-channel.js",
+        "sha256": "a76ee09a5fba4455e29888dc6116b9750f94327a8201e8ec62590a9a4320bf8f"
+      },
+      {
+        "path": "relay/dist/types.d.ts",
+        "sha256": "00b1f5ae2fed910e2f36df0125f8d898fb745478474e64319e0ae1d35b65a56f"
+      },
+      {
+        "path": "relay/dist/types.js",
+        "sha256": "4e927af739069d1e09c9f2341e8228f928c0c06f1757b7ebb4001962a258be1d"
+      }
+    ],
+    "note": "Standalone original relay dependency emitted once; no application or installer build."
+  },
+  "execution": {
+    "upstreamCodeExecutedDuringImport": false,
+    "scriptsActivatedDuringImport": false,
+    "testsRunDuringImport": false,
+    "note": "Original upstream tests are retained under vendor, including live/network and dist/build-dependent tests; no such suite was invoked by this import."
+  },
+  "manifestHashScope": "This provenance file is excluded from its own hashes.",
+  "integrationValidation": {
+    "upstreamNoiseCases": 7,
+    "workbenchProtectedChannelCases": 1,
+    "rootTypecheck": "passed",
+    "webTypecheck": "passed",
+    "note": "Only original Noise cases and one endpoint integration were invoked; live/network and broader upstream suites were not run."
+  }
+}

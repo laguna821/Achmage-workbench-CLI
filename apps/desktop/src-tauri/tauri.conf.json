@@ -26,6 +26,7 @@
       "../../host/dist/ieum-setup.mjs": "host/ieum-setup.mjs",
       "../../web/dist/": "web/",
       "../../../third_party/office-output/": "licenses/office-output/",
+      "../../../third_party/paseo/": "licenses/paseo/",
       "../../../third_party/fast-find/LICENSE": "licenses/fast-find/LICENSE",
       "../../../third_party/fast-find/ADAPTATIONS.md": "licenses/fast-find/ADAPTATIONS.md",
       "../../../third_party/skills/": "skills/"

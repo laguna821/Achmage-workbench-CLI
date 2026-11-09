@@ -1,0 +1,68 @@
+[
+  {
+    "name": "@noble/ciphers",
+    "version": "2.4.0",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "dependencies/noble-ciphers/LICENSE",
+        "sha256": "f36671a5487c9c5050efacb58011c37c24c55a889803cb036cf9d9a6347c1e2d"
+      }
+    ]
+  },
+  {
+    "name": "@noble/curves",
+    "version": "2.4.0",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "dependencies/noble-curves/LICENSE",
+        "sha256": "4f221aee6e072336700c408c68ab3b96a3fc09f6aebe6f48f1bd99e5ef13faec"
+      }
+    ]
+  },
+  {
+    "name": "@noble/hashes",
+    "version": "2.4.0",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "dependencies/noble-hashes/LICENSE",
+        "sha256": "4f221aee6e072336700c408c68ab3b96a3fc09f6aebe6f48f1bd99e5ef13faec"
+      }
+    ]
+  },
+  {
+    "name": "base64-js",
+    "version": "1.5.1",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "dependencies/base64-js/LICENSE",
+        "sha256": "5b37224c080cdcc97c871ada971c224e9926370fe74f11b539aa1cf9f3b1aca1"
+      }
+    ]
+  },
+  {
+    "name": "tweetnacl",
+    "version": "1.0.3",
+    "license": "Unlicense",
+    "files": [
+      {
+        "path": "dependencies/tweetnacl/LICENSE",
+        "sha256": "88d9b4eb60579c191ec391ca04c16130572d7eedc4a86daa58bf28c6e14c9bcd"
+      }
+    ]
+  },
+  {
+    "name": "ws",
+    "version": "8.20.0",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "dependencies/ws/LICENSE",
+        "sha256": "2b29dcfe0d6471f7e8c92c5fb38c9f93edee10330937055440192f1832b1ecef"
+      }
+    ]
+  }
+]

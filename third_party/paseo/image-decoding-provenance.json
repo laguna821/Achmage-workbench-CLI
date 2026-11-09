@@ -1,0 +1,17 @@
+{
+  "repository": "https://github.com/getpaseo/paseo",
+  "commit": "1fff127f45b11c1c9c573fbbd12791673004c912",
+  "archiveSha256": "654e4c066977b773a36eabb80a3d231942f36b0287cad8b3d3ca1aaa486cdd7b",
+  "license": "Apache-2.0",
+  "licenseFile": "../LICENSE",
+  "files": [
+    {
+      "upstreamPath": "packages/app/src/components/markdown/image-decoding.ts",
+      "vendoredPath": "image-decoding.ts",
+      "sha256": "96a434a00ddb635a45ea7431a57e00721eed71369987277d7dd1f2997709a2e3",
+      "bytes": 967,
+      "modified": false
+    }
+  ],
+  "integration": "apps/web/src/components/Attachments.tsx adapts DOM Image.decode to the original decodeMarkdownImage callback. Authenticated blob acquisition, immutable media identity, URL retention/release and workspace access remain owned by Workbench."
+}

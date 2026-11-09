@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { artifactCacheKey, type Attachment } from "@workbench/contracts";
+import { decodeMarkdownImage } from "../../../../vendor/paseo/image-decoding/image-decoding.ts";
 import { retainAttachmentUrl } from "../api.ts";
 import { Icon } from "./Icon.tsx";
 import "../styles/attachments.css";
@@ -137,7 +138,20 @@ function useImage(attachment: Attachment, active = true) {
     if (!active) return;
     let live = true;
     const lease = retainAttachmentUrl(attachment.id, identity);
-    lease.promise.then(value => { if (live) setUrl(value); }).catch(error => { if (live) setProblem(error instanceof Error ? error.message : "그림을 불러오지 못했습니다"); });
+    lease.promise.then(async value => {
+      if (!live) return;
+      try {
+        // Keep the same blob lease while Paseo checks that the browser can display it.
+        await decodeMarkdownImage(value, (uri, success, failure) => {
+          const image = new Image();
+          image.src = uri;
+          void image.decode().then(() => success(image.naturalWidth, image.naturalHeight), failure);
+        });
+        if (live) setUrl(value);
+      } catch {
+        if (live) setProblem("그림을 표시하지 못했습니다");
+      }
+    }).catch(error => { if (live) setProblem(error instanceof Error ? error.message : "그림을 불러오지 못했습니다"); });
     return () => { live = false; lease.release(); };
   }, [attachment.id, identity, active, attempt]);
   return { url, problem, retry: () => setAttempt(value => value + 1), failed: () => setProblem("그림을 표시하지 못했습니다") };

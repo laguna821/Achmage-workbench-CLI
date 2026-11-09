@@ -1,0 +1,53 @@
+{
+  "name": "@getpaseo/relay",
+  "version": "0.15.3",
+  "description": "Paseo relay for bridging daemon and client connections",
+  "license": "Apache-2.0",
+  "files": [
+    "dist",
+    "!dist/**/*.map"
+  ],
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./e2ee": {
+      "types": "./dist/e2ee.d.ts",
+      "default": "./dist/e2ee.js"
+    },
+    "./cloudflare": {
+      "types": "./dist/cloudflare-adapter.d.ts",
+      "default": "./dist/cloudflare-adapter.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "clean": "node ../../scripts/clean-package-dist.mjs",
+    "build": "tsc -p tsconfig.json --incremental false",
+    "build:clean": "npm run clean && npm run build",
+    "typecheck": "tsgo --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@noble/ciphers": "2.4.0",
+    "@noble/curves": "2.4.0",
+    "@noble/hashes": "2.4.0",
+    "base64-js": "1.5.1",
+    "tweetnacl": "1.0.3",
+    "ws": "8.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.9.0",
+    "@types/ws": "^8.5.8",
+    "typescript": "^5.2.2",
+    "vitest": "^4.1.6"
+  },
+  "private": true,
+  "x-workbench-vendor-notice": "Adapted manifest only: private package, automatic prepare/prepack hooks disabled, runtime dependencies pinned to upstream lock versions. Source, tests, fixtures, tsconfig and dist exports are unchanged. Original: package.upstream.json. Provenance: ../provenance.json."
+}
