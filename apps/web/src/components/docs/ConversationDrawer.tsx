@@ -7,6 +7,7 @@ import { statusText } from "../../format.ts";
 import { isBusy, type State } from "../../state.ts";
 import { ProposalCard } from "../DocCards.tsx";
 import { ImageCard } from "../ImageGen.tsx";
+import { OfficeQuestion } from "../OfficeQuestion.tsx";
 import { diagramComponents } from "../Diagram.tsx";
 import { EngineMark } from "../EngineMark.tsx";
 import { Icon } from "../Icon.tsx";
@@ -73,7 +74,7 @@ export function ConversationDrawer({
   session: Session;
   mode: DrawerMode;
   onMode: (mode: DrawerMode) => void;
-  onAnswer: (itemId: string, decision: "accept" | "decline") => void;
+  onAnswer: (itemId: string, decision: "accept" | "decline", response?: import("@workbench/contracts").OfficeInteractionResponse) => void;
   onOpenConversation: () => void;
 }) {
   const items = state.transcripts[session.id]?.items ?? [];
@@ -132,7 +133,9 @@ export function ConversationDrawer({
       </div>
       {mode === "peek" ? (
         <div className="drawer-peek">
-          {approvals.map((approval) => (
+          {approvals.map((approval) => approval.officeInteraction ? (
+            <OfficeQuestion key={approval.id} item={approval} onAnswer={(decision, response) => onAnswer(approval.id, decision, response)} />
+          ) : (
             <div key={approval.id} className="drawer-approval" role="alert">
               <div className="drawer-approval-text">
                 <strong>{approval.title}</strong>
@@ -181,7 +184,7 @@ export function ConversationDrawer({
 }
 
 /** The whole conversation laid over the document while it stays where it is (Esc closes). */
-export function ConversationSheet({ state, session, onClose, onAnswer, focusItem, onFocusDone }: { state: State; session: Session; onClose: () => void; onAnswer: (itemId: string, decision: "accept" | "decline") => void; focusItem?: { itemId: string; nonce: number } | null; onFocusDone?: () => void }) {
+export function ConversationSheet({ state, session, onClose, onAnswer, focusItem, onFocusDone }: { state: State; session: Session; onClose: () => void; onAnswer: (itemId: string, decision: "accept" | "decline", response?: import("@workbench/contracts").OfficeInteractionResponse) => void; focusItem?: { itemId: string; nonce: number } | null; onFocusDone?: () => void }) {
   const sheet = useRef<HTMLDivElement>(null), closeButton = useRef<HTMLButtonElement>(null);
   useEffect(() => { const origin = document.activeElement, surface = sheet.current; closeButton.current?.focus({ preventScroll: true }); return () => restoreSurfaceFocus(origin, surface); }, []);
   // Esc closes the sheet, and only that: caught first (capture) so the conversation's own Esc

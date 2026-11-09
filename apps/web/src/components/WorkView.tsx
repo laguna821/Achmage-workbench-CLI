@@ -61,7 +61,7 @@ export type WorkActions = {
   openFile: (work: Work, path: string, workspaceId?: string) => Promise<void>;
   newDesign: (work: Work, preset: string, workspaceId?: string) => Promise<void>;
   interrupt: (session: Session) => void;
-  answer: (session: Session, itemId: string, decision: "accept" | "decline") => void;
+  answer: (session: Session, itemId: string, decision: "accept" | "decline", response?: import("@workbench/contracts").OfficeInteractionResponse) => void;
   newSession: (work: Work, provider: Provider, choice?: ModelChoice, options?: { browser?: boolean; worktree?: boolean; workspaceId?: string }) => Promise<Session | null>;
   createWorkspace: (work: Work, cwd: string) => Promise<Workspace | null>;
   updateWorkspace: (workspace: Workspace, patch: UpdateWorkspaceRequest) => Promise<Workspace | null>;
@@ -670,11 +670,11 @@ export function WorkView({
           provider={active.provider}
           running={working}
           loading={!transcript}
-          onAnswer={(itemId, decision) => {
+          onAnswer={(itemId, decision, response) => {
             // Going ahead with a plan ends "계획 먼저" for the requests after it.
             const answered = transcript?.items.find((item) => item.id === itemId);
             if (decision === "accept" && answered?.kind === "approval" && answered.plan) setPlanFirst(false);
-            actions.answer(active, itemId, decision);
+            actions.answer(active, itemId, decision, response);
           }}
           onTrust={() => actions.setAccess(active, active.provider, "full")}
           onFork={busy ? undefined : (itemId) => actions.fork(active, itemId)}

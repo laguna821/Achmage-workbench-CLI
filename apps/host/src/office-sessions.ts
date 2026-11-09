@@ -7,6 +7,7 @@ import { HttpError } from "./errors.ts";
 import type { OfficeStoredAttachment } from "../../../packages/contracts/src/office-references.ts";
 import type { OfficeStoredSkill } from "../../../packages/contracts/src/office-skills.ts";
 import type { DocumentExecutionLease } from "./document-execution-lease.ts";
+import { interactionFields, interactionResponse } from "./office-executors/interaction.ts";
 
 export type OfficeBinding = { artifactId: string; sessionId: string; owner: string; access?: DocumentAccess };
 type Binding = OfficeBinding;
@@ -143,22 +144,25 @@ export class OfficeSessions {
     if (!record(raw) || !id(raw.turnId) || !id(raw.id)) return invalid();
     const run = this.requireRun(binding, raw.turnId), itemId = `office-question:${run.turnId}:${raw.id}`;
     const prior = this.hooks.items(run.sessionId).find(item => item.id === itemId);
-    if (prior?.kind === "approval") return { id: raw.id, decision: prior.decision };
+    if (prior?.kind === "approval") return { id: raw.id, decision: prior.decision, response: prior.officeInteraction?.response };
     if (!text(raw.prompt, 8_000) || !raw.prompt.trim()) return invalid();
     if (this.hooks.items(run.sessionId).some(item => item.kind === "approval" && item.office?.turnId === run.turnId && item.decision === null))
       throw new HttpError(409, "office_question_pending", "앞선 문서 확인 요청에 먼저 답해 주세요.");
+    const fields = interactionFields(raw.fields);
     this.hooks.item(run.sessionId, { kind: "approval", id: itemId, title: raw.prompt, detail: null,
+      ...(fields ? { officeInteraction: { prompt: raw.prompt, fields } } : {}),
       reason: "원본 문서 편집기가 작업을 계속하기 전에 확인을 요청했습니다.", decision: null, at: Date.now(), office: source(run) });
     this.hooks.update(run.sessionId, { status: "awaitingApproval", activity: "문서 AI 확인 대기" });
     return { id: raw.id, decision: null };
   }
-  answerQuestion(sessionId: string, itemId: string, decision: "accept" | "decline") {
+  answerQuestion(sessionId: string, itemId: string, decision: "accept" | "decline", rawResponse?: unknown) {
     if (!itemId.startsWith("office-question:")) return false;
     const item = this.hooks.items(sessionId).find(item => item.id === itemId);
     const run = item?.office ? this.runs.get(item.office.turnId) : undefined;
     if (item?.kind !== "approval" || item.decision !== null || !run || run.sessionId !== sessionId) throw new HttpError(409, "approval_not_pending", "이미 끝난 문서 확인 요청입니다.");
     this.requireRun(run, run.turnId);
-    this.hooks.item(sessionId, { ...item, decision });
+    const response = item.officeInteraction && decision === "accept" ? interactionResponse(item.officeInteraction.fields, rawResponse) : undefined;
+    this.hooks.item(sessionId, { ...item, decision, ...(response ? { officeInteraction: { ...item.officeInteraction!, response } } : {}) });
     this.hooks.update(sessionId, { status: "running", activity: "문서 AI 작업 중" });
     return true;
   }

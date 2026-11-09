@@ -2,6 +2,7 @@ import type { OfficeExecutionObservation } from "../../../packages/contracts/src
 import type { AgentRunResult } from "../../../vendor/ieumoffice/packages/agent-core/src/loop.ts";
 import { type Gateway, post } from "./bridge.ts";
 import { lockOfficeExecution } from "./execution-adapter.ts";
+import { executionQuestionFields } from "./execution-question.ts";
 
 type Api = ReturnType<Gateway["aiSession"]>;
 let approval: HTMLDivElement | null = null;
@@ -11,13 +12,14 @@ function showQuestion(observation: OfficeExecutionObservation | null, api: Api) 
   if (approval?.dataset.id === item.id) return;
   approval?.remove(); approval = document.createElement("div"); approval.dataset.id = item.id;
   approval.setAttribute("role", "dialog"); approval.setAttribute("aria-label", "문서 AI 확인");
-  approval.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:100000;max-width:360px;padding:16px;border:1px solid #888;border-radius:12px;background:Canvas;color:CanvasText;box-shadow:0 4px 24px #0003";
+  approval.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:100000;max-width:480px;max-height:70vh;overflow:auto;padding:16px;border:1px solid #888;border-radius:12px;background:Canvas;color:CanvasText;box-shadow:0 4px 24px #0003";
   const text = document.createElement("p"); text.textContent = item.title; approval.append(text);
-  for (const [label, decision] of [["유지하고 계속", "accept"], ["취소", "decline"]] as const) {
+  const readResponse = item.officeInteraction ? executionQuestionFields(approval, item.officeInteraction.fields) : undefined;
+  for (const [label, decision] of [["답변하고 계속", "accept"], ["취소", "decline"]] as const) {
     const button = document.createElement("button"); button.textContent = label; button.style.marginRight = "8px";
     button.onclick = () => {
       button.disabled = true;
-      void api.json("executor-answer", { turnId: observation!.receipt.turnId, itemId: item.id, decision }).then(() => { approval?.remove(); approval = null; }, error => { button.disabled = false; text.textContent = String(error.message); });
+      void api.json("executor-answer", { turnId: observation!.receipt.turnId, itemId: item.id, decision, ...(readResponse && decision === "accept" ? { response: readResponse() } : {}) }).then(() => { approval?.remove(); approval = null; }, error => { button.disabled = false; text.textContent = String(error.message); });
     };
     approval.append(button);
   }

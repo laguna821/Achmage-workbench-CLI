@@ -24,6 +24,30 @@ try {
     if (!response.ok) throw new Error(value.message ?? "문서 실행 요청을 마치지 못했습니다.");
     return value;
   };
+  const output = async (message: Extract<OfficePageMessage, { type: "office:output" }>) => {
+    if (message.action === "prepare") {
+      for (;;) {
+        const value = await api("executor-output", { ...message, turnId: job.init.execution!.turnId });
+        if (!value?.pending) return value;
+        await new Promise(resolve => setTimeout(resolve, 800));
+      }
+    }
+    if (message.action === "cancel") return api("executor-output", { ...message, turnId: job.init.execution!.turnId });
+    if (message.action === "commit") {
+      const query = new URLSearchParams({ turnId: job.init.execution!.turnId, planId: message.planId });
+      if (message.sourceRevision !== undefined) query.set("sourceRevision", String(message.sourceRevision));
+      if (message.generatedId) query.set("generatedId", message.generatedId);
+      const response = await fetch(`/api/artifacts/${job.init.artifact.id}/ai/executor-output-commit?${query}`, {
+        method: "POST", headers: { authorization: `Bearer ${job.init.token}`, "content-type": "application/octet-stream" }, body: message.bytes,
+      });
+      const value = await response.json();
+      if (!response.ok) throw new Error(value.message ?? "문서 결과를 저장하지 못했습니다.");
+      return value;
+    }
+    // Native rendering/printing and OS presentation need a separately owned
+    // service. Reply explicitly until that boundary is connected; never hang.
+    throw new Error("이 출력 동작은 아직 독립 실행기에 연결되지 않았습니다. 문서 편집기의 출력 메뉴에서 실행해 주세요.");
+  };
   let sent = false;
   const readiness = window.setTimeout(() => {
     void api("turn-finish", { turnId: job.init.execution!.turnId, status: "failed", error: "원본 편집기를 실행기에 연결하는 시간이 초과되었습니다." })
@@ -47,6 +71,10 @@ try {
       void api("executor-reference", { ...message, turnId: job.init.execution!.turnId, snapshot: job.init.execution!.referenceSnapshot
         }).then(value => send({ type: "office:references-result", requestId: message.requestId, value }),
         error => send({ type: "office:references-result", requestId: message.requestId, error: String(error.message) }));
+    }
+    if (message?.type === "office:output") {
+      void output(message).then(value => send({ type: "office:output-result", requestId: message.requestId, value }),
+        error => send({ type: "office:output-result", requestId: message.requestId, error: String(error.message) }));
     }
     if (message?.type === "office:error" || message?.type === "office:conflict") {
       void api("turn-finish", { turnId: job.init.execution!.turnId, status: "failed", error: message.message }).catch(() => {}).finally(() => { document.title = "workbench-office-executor:failed"; });

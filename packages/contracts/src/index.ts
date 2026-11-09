@@ -411,6 +411,8 @@ export type TranscriptItem = (
        * `detail` holds the plan when it is not the reply above (Claude's plan mode).
        */
       plan?: boolean;
+      /** Original document questions survive a closed editor and retain their answer. */
+      officeInteraction?: import("./office-execution.ts").OfficeStoredInteraction;
     }
   | { kind: "notice"; id: string; level: "info" | "error"; text: string; at: number }
   /** A document this turn created or changed, opened in the central area. */
@@ -878,7 +880,7 @@ export type OfficePageMessage =
   /** A paste showed the page nothing (WebKitGTK keeps clipboard pictures from pages): ask for the clipboard's picture. */
   | { type: "office:clipboard-picture" };
 
-export type ApprovalAnswerRequest = { decision: ApprovalDecision };
+export type ApprovalAnswerRequest = { decision: ApprovalDecision; response?: import("./office-execution.ts").OfficeInteractionResponse };
 
 /** Apply one event to an item list (shared by host replay and UI). */
 export function applyItemEvent(items: TranscriptItem[], event: WorkbenchEvent): TranscriptItem[] {
@@ -933,3 +935,4 @@ export * from "./artifacts.ts";
 export * from "./agent-profiles.ts";
 export * from "./workspace-services.ts";
 export * from "./attention.ts";
+export type { OfficeInteractionField, OfficeInteractionRequest, OfficeInteractionResponse, OfficeStoredInteraction } from "./office-execution.ts";

@@ -12,7 +12,7 @@
 | U06 작업 목록·명령 | 주요 흐름 구현 | `22166e5`, `498a710` — 독립 문서·하위 작업과 공통 접수. 공급자 하위 작업은 관찰만 지원 |
 | U07 역할·CLI/MCP API | 구현 | `9239725`, `498a710` — 역할 CRUD·요청 당시 설정 보존·공통 receipt |
 | U08 9형식 Office UI | 주요 흐름 구현 | `b40fb38` — 원본 명령 메뉴·theme 전달. 전체 native OS 사용 확인은 통합 때 |
-| U09 Office UI 독립 실행 | 실행 권한 분리 + 독립 실행기·Markdown 연결 | `aa6779d`, `f89fd18` — host 소유 native process, 같은 요청 인계, 원본 Markdown 선택/send/질문/저장, 재접속 관찰 구현. 다른 8형식 adapter와 실제 native 실행은 남음. [범위](../../office-execution.md) |
+| U09 Office UI 독립 실행 | 8종 독립 adapter + 공통 질문·출력 코드 연결 | `aa6779d`, `f89fd18` 및 후속 R37 — 원본 Markdown/Word/한글/Sheets/PDF/HTML/XMind/EPUB send·선택·질문, 기존 요청/저장/재접속 연결. 슬라이드는 adapter가 있으나 queue/QC 수명 때문에 ui-required 유지. native 출력 서비스·실제 OS 실행은 남음. [범위](../../office-execution.md) |
 | U10 검색·Bases·그래프 | 주요 흐름 구현 | `e056d8b` — 검색 취소 복귀·다중선택/일괄 보관·그래프 키보드 이동 |
 | U11 설정·가져오기 | 주요 흐름 구현 | 기존 이음/Dropbox 흐름 유지, `18bac42` 과거 기록/실행 구분·원문 보존. 전체 온보딩 통합 남음 |
 | U12–U14 공유 웹·같은 페이지 AI | 핵심 코드 구현 | `2df5f41`, `1c5e688` — 네이티브 웹 탭·주소 이동·독립 웹 AI·사람 인계·숨김 유지·대상/문서/제어권 식별. 다운로드·사이트 권한·macOS 프로필·산출물 및 실제 OS 화면 확인은 남음. [범위](../../shared-browser.md) |
@@ -29,10 +29,10 @@
 
 U12–U14 host 4개, UI 6개, 정확한 DOM adapter fixture, host/web TypeScript 및 Linux native compile을 확인했다. HTTP 환경의 nonce 생성도 별도 단일 확인했다. Native OS 화면 E2E나 실제 로그인은 아직 확인하지 않았다. 이번 공유 웹 묶음에서는 production/installer/CI를 실행하지 않았고 최신 구현은 로컬 개발 브랜치에 있다.
 
-U09 실행 권한·저장 분리의 집중 22개와 영향받은 참조/스킬/스타일 49개 결과를 재사용한다. 후속 독립 실행기·원본 Markdown 경로 6개 집중 확인 및 Linux native check를 추가했다. 다른 8형식은 ui-required이고 실제 OS에서 UI 종료 뒤 실행 완료까지 아직 확인하지 않았으므로 U09 완료로 표시하지 않는다.
+U09 실행 권한·저장 분리의 집중 22개와 영향받은 참조/스킬/스타일 49개, 독립 실행기·원본 Markdown 경로 6개와 Linux native check 결과를 재사용한다. R37에서는 기존 원본8형식의 adapter, 선택/입력 질문, 비동기 context 확인, UI 소실 뒤 출력 저장을 추가했다. 슬라이드의 후속 실행 수명과 native 출력 서비스가 남으며 실제 OS에서 UI 종료 뒤 실행 완료까지 아직 확인하지 않았으므로 U09 완료로 표시하지 않는다. 기존 통과 suite와 production/installer/CI는 반복하지 않았다.
 
 기존 CI `42575034938`은 lock 버전 두 항목 실수로 실패했고 복구했다. `42576006213`은 공통/macOS/Linux/Arch 성공, Windows 앱·NSIS 생성 후 WiX 다운로드 HTTP504로 MSI 실패했다. 실패한 bundle만 재시도하는 코드를 준비했으며 지금 재빌드하지 않는다.
 
 원본 [156개 요구 대응표](../plans/support/coverage.json)와 [통합 계획](../plans/2026-11-09-workbench-integrated-release.md)을 유지한다. 이 상태표의 ‘구현’은 기능 코드 상태이며 전체 릴리즈 완료 판정이 아니다.
 
-연구 판: `research:rr-1b4bb9d2193a4e5dced6dca4128061a9:31f3ad558c13afa959e59e9d1c264a879adb750745fed75568909c0fbcc3fa34` (R24–R36). 실행 교정: `decision-7287723b7dd57957ec551667abe6ddc8c02067f7f0f0988cb2a44d58b05cd626`, `decision-b10e79c5567f53f7c9dfe5e459933f13cbff1b06242c87566dfbaea9d13d4e63`.
+연구 판: `research:rr-1b4bb9d2193a4e5dced6dca4128061a9:eaf1781fb6ea15427f1698896ce325e66c7ae94fae3c0f05a1b3b54e907b0d2a` (R24–R37). 실행 교정: `decision-7287723b7dd57957ec551667abe6ddc8c02067f7f0f0988cb2a44d58b05cd626`, `decision-b10e79c5567f53f7c9dfe5e459933f13cbff1b06242c87566dfbaea9d13d4e63`.

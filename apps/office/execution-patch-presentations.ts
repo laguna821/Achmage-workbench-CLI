@@ -1,0 +1,266 @@
+/** Restore transient state into the original HTML/PPTX loader and call its own
+ * send path. The original document tools, serializers and explicit decisions stay
+ * in charge; source changes at these pinned boundaries fail the transform. */
+export function patchPresentationExecutions(code: string, id: string, root: string, module: string): string {
+  const replace = (before: string, after: string) => {
+    if (code.split(before).length !== 2) throw new Error(`Original presentation executor boundary changed: ${id}: ${before.slice(0, 100)}`);
+    code = code.replace(before, after);
+  };
+  const helper = `${module.slice(0, module.lastIndexOf("/"))}/execution-presentations.ts`;
+  const imports = `import { registerOriginalExecutor, isOfficeExecutor, askOfficeExecutionQuestion } from ${JSON.stringify(module)};\nimport { captureHtmlIdentity as wbCaptureHtmlIdentity, restoreHtmlIdentity as wbRestoreHtmlIdentity, capturePresentationSelection as wbCapturePresentationSelection, restorePresentationSelection as wbRestorePresentationSelection, askPresentationClarification as wbAskPresentationClarification, askHtmlExecutionBrief as wbAskHtmlExecutionBrief, lockPresentationSurface as wbLockPresentationSurface } from ${JSON.stringify(helper)};\n`;
+
+  if (id === `${root}/apps/html/src/renderer/App.tsx`) {
+    replace("    getSnapshot: () => ({ text: textRef.current }),", `    getExecutionSelection: () => ({ primary: selectedSidRef.current, extras: [...extraSidsRef.current], brief: briefRef.current }),
+    restoreExecutionSelection: (selection) => {
+      const map = getMap();
+      if ((selection.primary !== null && !map.bySid.has(selection.primary)) || selection.extras.some(sid => !map.bySid.has(sid))) throw new Error('HTML 선택 위치를 복원할 수 없습니다.');
+      wbExecutionFlushSync(() => {
+        selectSid(selection.primary, { reveal: true });
+        setExtras([...selection.extras]);
+        briefRef.current = selection.brief;
+      });
+    },
+    getSnapshot: () => ({ text: textRef.current }),`);
+    return `import { flushSync as wbExecutionFlushSync } from 'react-dom';\n${code}`;
+  }
+
+  if (id === `${root}/apps/html/src/renderer/ai/AiPanel.tsx`) {
+    replace("  getSnapshot(): DocSnapshot", "  getExecutionSelection(): { primary: number | null; extras: number[]; brief: Brief | null }\n  restoreExecutionSelection(selection: ReturnType<HtmlAiDeps['getExecutionSelection']>): void\n  getSnapshot(): DocSnapshot");
+    replace("      !sendGate.admit({", "      !isOfficeExecutor() && !sendGate.admit({");
+    replace("  const loopRef = useRef<AgentLoop<DocSnapshot> | null>(null)", `  const wbExecutionAttachmentsRef = useRef<AttachmentMeta[]>([]);
+  const wbExecutionStartRef = useRef<{ resolve(started: boolean): void; reject(error: unknown): void } | null>(null);
+  const loopRef = useRef<AgentLoop<DocSnapshot> | null>(null)`);
+    replace("    const sentAtts = attachmentsOverride ?? attachmentsRef.current", "    const sentAtts = attachmentsOverride ?? attachmentsRef.current\n    wbExecutionAttachmentsRef.current = sentAtts");
+    replace("      loopRef.current?.cancel()\n      depsRef.current.clearHighlights()", "      wbExecutionStartRef.current?.reject(new Error('문서 실행 준비 중 편집기가 닫혔습니다.'))\n      wbExecutionStartRef.current = null\n      loopRef.current?.detach()\n      depsRef.current.clearHighlights()");
+    replace(`            askClarification: (questions) =>
+              new Promise((resolve) => {
+                clarifyResolverRef.current = resolve
+                setActiveClarify(questions)
+              }),`, `            askClarification: (questions) =>
+              new Promise((resolve, reject) => {
+                clarifyResolverRef.current = resolve
+                setActiveClarify(questions)
+                if (isOfficeExecutor()) void wbAskPresentationClarification(questions, tGlobal('aiClarifyDecideAnswer')).then(answer => {
+                  if (clarifyResolverRef.current !== resolve) return;
+                  clarifyResolverRef.current = null; setActiveClarify(null); resolve(answer);
+                }, error => {
+                  if (clarifyResolverRef.current !== resolve) return;
+                  clarifyResolverRef.current = null; setActiveClarify(null); reject(error);
+                });
+              }),`);
+    replace(`            confirmBrief: (brief) =>
+              new Promise((resolve) => {
+                briefResolverRef.current = resolve
+                setActiveBrief(brief)
+              }),`, `            confirmBrief: (brief) =>
+              new Promise((resolve, reject) => {
+                briefResolverRef.current = resolve
+                setActiveBrief(brief)
+                if (isOfficeExecutor()) void wbAskHtmlExecutionBrief(brief).then(decision => {
+                  if (briefResolverRef.current !== resolve) return;
+                  if (decision.kind === 'confirmed') depsRef.current.onBriefConfirmed(decision.brief);
+                  briefResolverRef.current = null; setActiveBrief(null); resolve(decision);
+                }, error => {
+                  if (briefResolverRef.current !== resolve) return;
+                  briefResolverRef.current = null; setActiveBrief(null); reject(error);
+                });
+              }),`);
+    replace(`    const keep = await new Promise<boolean>((resolve) => {
+      partialResolverRef.current = resolve
+      setActivePartial({ lines: outcome.html.split('\\n').length })
+    })`, `    const keep = await new Promise<boolean>((resolve, reject) => {
+      partialResolverRef.current = resolve
+      setActivePartial({ lines: outcome.html.split('\\n').length })
+      if (isOfficeExecutor()) void askOfficeExecutionQuestion('HTML 작성을 끝내지 못했습니다. 지금까지 작성한 ' + outcome.html.split('\\n').length + '줄을 유지할까요?').then(keep => {
+        if (partialResolverRef.current !== resolve) return;
+        partialResolverRef.current = null; setActivePartial(null); resolve(keep);
+      }, error => {
+        if (partialResolverRef.current !== resolve) return;
+        partialResolverRef.current = null; setActivePartial(null); reject(error);
+      });
+    })`);
+    const run = code.match(/        await loop\.run\(instruction \+ skillUse\.text, images\.length > 0 \? images : undefined[^\n]*\)/g);
+    if (run?.length !== 1) throw new Error("Original HTML send completion boundary changed");
+    replace(run[0]!, `${run[0]}\n        wbExecutionStartRef.current?.resolve(true)\n        wbExecutionStartRef.current = null`);
+    replace("        patchLast({\n          streaming: false,\n          text: err instanceof Error ? err.message : String(err),", "        wbExecutionStartRef.current?.reject(err)\n        wbExecutionStartRef.current = null\n        patchLast({\n          streaming: false,\n          text: err instanceof Error ? err.message : String(err),");
+    const marker = "  const stop = (): void => {";
+    replace(marker, `  useEffect(() => registerOriginalExecutor({
+    ready: () => Boolean(loopRef.current && depsRef.current.access.getMap()),
+    capture: () => ({ format: 'html', data: {
+      identities: wbCaptureHtmlIdentity(depsRef.current.access.getMap()),
+      selection: depsRef.current.getExecutionSelection(), intent: intentRef.current,
+      scope: lastScopeRef.current ?? null, queueRun: lastQueueRunRef.current,
+      attachments: wbExecutionAttachmentsRef.current, sentAttachments: sentAttachmentsRef.current,
+    } }),
+    execute: async (instruction, state) => {
+      if (state.format !== 'html') throw new Error('HTML 실행 상태가 아닙니다.');
+      const data = state.data as {
+        identities: Parameters<typeof wbRestoreHtmlIdentity>[1];
+        selection: ReturnType<HtmlAiDeps['getExecutionSelection']>; intent: PageIntent;
+        scope: AiScopeQuoteData | null; queueRun: boolean;
+        attachments: AttachmentMeta[]; sentAttachments: AttachmentMeta[];
+      };
+      if (!loopRef.current || loopRef.current.busy) return false;
+      wbRestoreHtmlIdentity(depsRef.current.access.getMap(), data.identities);
+      depsRef.current.restoreExecutionSelection(data.selection);
+      wbExecutionFlushSync(() => setIntent(data.intent));
+      intentRef.current = data.intent;
+      sentAttachmentsRef.current = data.sentAttachments;
+      return new Promise<boolean>((resolve, reject) => {
+        wbExecutionStartRef.current = { resolve, reject };
+        if (!send(instruction, undefined, data.queueRun, data.attachments, data.scope ?? undefined)) {
+          wbExecutionStartRef.current = null; resolve(false);
+        }
+      });
+    },
+    lock: wbLockPresentationSurface,
+  }), []);
+
+${marker}`);
+    return `${imports}import { flushSync as wbExecutionFlushSync } from 'react-dom';\n${code}`;
+  }
+
+  if (id === `${root}/apps/slides/src/renderer/App.tsx`) {
+    replace("                key={aiPanelKey}\n                slides={slides}", `                key={aiPanelKey}
+                restoreExecutionSelection={(page, ids) => wbExecutionFlushSync(() => {
+                  setCurrent(page); setSelectedIds(ids); setEditing(null);
+                })}
+                slides={slides}`);
+    return `import { flushSync as wbExecutionFlushSync } from 'react-dom';\n${code}`;
+  }
+
+  if (id === `${root}/apps/slides/src/renderer/ai/deck-context-gate.ts`) {
+    replace("  confirm(warning: ContextWarning): boolean", "  confirm(warning: ContextWarning): boolean | Promise<boolean>");
+    replace("  allows(settings: S, system: string, user: string, run: AbortSignal | undefined): boolean", "  allows(settings: S, system: string, user: string, run: AbortSignal | undefined): Promise<boolean>");
+    replace("  const answers = new WeakMap<AbortSignal, boolean>()", "  const answers = new WeakMap<AbortSignal, boolean>()\n  const pending = new WeakMap<AbortSignal, Promise<boolean>>()");
+    replace("    allows(settings, system, user, run) {", "    async allows(settings, system, user, run) {\n      if (run?.aborted) return false\n      if (run && pending.has(run)) return (await pending.get(run)!) && !run.aborted");
+    replace(`      let confirmed: boolean
+      try {
+        confirmed = options.confirm(warning) === true
+      } catch {
+        // a broken dialog declines: nothing is sent without a yes
+        confirmed = false
+      }
+      if (run) answers.set(run, confirmed)
+      return confirmed`, `      const confirmation = Promise.resolve().then(() => options.confirm(warning)).then(answer => answer === true, () => false)
+      if (run) pending.set(run, confirmation)
+      const confirmed = (await confirmation) && !run?.aborted
+      if (run) { pending.delete(run); answers.set(run, confirmed) }
+      return confirmed`);
+    return code;
+  }
+
+  if (id === `${root}/apps/slides/src/renderer/ai/template-selection-state.ts`) {
+    replace("  current(): TemplateSelection | null", "  current(): TemplateSelection | null\n  /** Restore an admitted executor's snapshot without rewriting the user's saved selection. */\n  restoreExecutionSelection(selection: TemplateSelection | null): void");
+    replace("    current: () => current,", "    current: () => current,\n    restoreExecutionSelection: (selection) => { writes += 1; publish(structuredClone(selection)); },");
+    return code;
+  }
+
+  if (id === `${root}/apps/slides/src/renderer/ai/AiPanel.tsx`) {
+    replace("interface AiPanelProps {", "interface AiPanelProps {\n  restoreExecutionSelection: (page: number, ids: string[]) => void");
+    replace("export function AiPanel({\n  slides,", "export function AiPanel({\n  restoreExecutionSelection,\n  slides,");
+    replace("  const slidesRef = useRef(slides)", `  const wbRestoreSelectionRef = useRef(restoreExecutionSelection);
+  wbRestoreSelectionRef.current = restoreExecutionSelection;
+  const wbExecutionStartRef = useRef<{ resolve(started: boolean): void; reject(error: unknown): void } | null>(null);
+  const slidesRef = useRef(slides)`);
+    replace("      !sendGate.admit({", "      !isOfficeExecutor() && !sendGate.admit({");
+    replace("      confirm: (warning) => window.confirm(aiContextConfirmText(getLang(), warning)),", "      confirm: (warning) => isOfficeExecutor() ? askOfficeExecutionQuestion(aiContextConfirmText(getLang(), warning)) : window.confirm(aiContextConfirmText(getLang(), warning)),");
+    replace("    const runLlmAttempt = (", "    const runLlmAttempt = async (");
+    replace(`    ): Promise<LlmResult> =>
+      new Promise((resolve) => {
+        if (signal?.aborted) {
+          resolve({ ok: false, error: tGlobal('aiErrStopped'), errKind: 'stopped' })
+          return
+        }
+        // declined: the model is not called, and 'stopped' keeps retry ladders from trying again
+        if (!deckContextGate.allows(settings, system, user, signal)) {
+          resolve({
+            ok: false,
+            error: aiRunErrorText(getLang(), { kind: 'context-limit' }) ?? tGlobal('aiErrStopped'),
+            errKind: 'stopped',
+          })
+          return
+        }
+        const requestId = crypto.randomUUID()`, `    ): Promise<LlmResult> => {
+      if (signal?.aborted) return { ok: false, error: tGlobal('aiErrStopped'), errKind: 'stopped' };
+      if (!await deckContextGate.allows(settings, system, user, signal)) return {
+        ok: false, error: aiRunErrorText(getLang(), { kind: 'context-limit' }) ?? tGlobal('aiErrStopped'), errKind: 'stopped',
+      };
+      if (signal?.aborted) return { ok: false, error: tGlobal('aiErrStopped'), errKind: 'stopped' };
+      return new Promise((resolve) => {
+        const requestId = crypto.randomUUID()`);
+    replace("      })\n    const runLlmOnce = async (", "      })\n    }\n    const runLlmOnce = async (");
+    replace(`      askClarification: (questions: ClarifyQuestion[]) => {
+        return new Promise<{ answers: string; cancelled?: boolean }>((resolve) => {
+          clarifyResolverRef.current = resolve
+          setActiveClarify(questions)
+        })
+      },`, `      askClarification: (questions: ClarifyQuestion[]) => {
+        return new Promise<{ answers: string; cancelled?: boolean }>((resolve, reject) => {
+          clarifyResolverRef.current = resolve
+          setActiveClarify(questions)
+          if (isOfficeExecutor()) void wbAskPresentationClarification(questions, tGlobal('aiClarifyDecideAnswer')).then(answer => {
+            if (clarifyResolverRef.current !== resolve) return;
+            clarifyResolverRef.current = null; setActiveClarify(null); resolve(answer);
+          }, error => {
+            if (clarifyResolverRef.current !== resolve) return;
+            clarifyResolverRef.current = null; setActiveClarify(null); reject(error);
+          });
+        })
+      },`);
+    const run = code.match(/        loop\.run\(modelInstruction, images[^\n]*\)/g);
+    if (run?.length !== 1) throw new Error("Original PPTX send completion boundary changed");
+    replace(run[0]!, `${run[0]}\n        wbExecutionStartRef.current?.resolve(true)\n        wbExecutionStartRef.current = null`);
+    replace(`      .catch(() => {
+        runStartingRef.current = false
+        void finishHistoryBatch().finally(() => setBusy(false))
+      })`, `      .catch((error) => {
+        wbExecutionStartRef.current?.reject(error)
+        wbExecutionStartRef.current = null
+        runStartingRef.current = false
+        void finishHistoryBatch().finally(() => setBusy(false))
+      })`);
+    replace("  useEffect(() => () => qcAbortRef.current?.abort(), [])", `  useEffect(() => () => {
+    wbExecutionStartRef.current?.reject(new Error('슬라이드 실행 준비 중 편집기가 닫혔습니다.'));
+    wbExecutionStartRef.current = null;
+    loopRef.current?.detach();
+    qcAbortRef.current?.abort();
+  }, [])`);
+    const marker = "  const cancel = () => {";
+    replace(marker, `  useEffect(() => registerOriginalExecutor({
+    ready: () => Boolean(loopRef.current && slidesRef.current[currentRef.current] && wbRestoreSelectionRef.current),
+    capture: () => ({ format: 'pptx', data: {
+      selection: wbCapturePresentationSelection(slidesRef.current, currentRef.current, selectedRef.current),
+      scope: lastScopeRef.current ?? null, attachments: lastAttachmentsRef.current,
+      sentAttachments: sentAttachmentsRef.current, template: templateSelectionState.current(),
+      queueRun: Boolean(queueRunResolverRef.current),
+    } }),
+    execute: async (instruction, state) => {
+      if (state.format !== 'pptx') throw new Error('PPTX 실행 상태가 아닙니다.');
+      const data = state.data as {
+        selection: Parameters<typeof wbRestorePresentationSelection>[1]; scope: AiScopeQuoteData | null;
+        attachments: AttachmentMeta[]; sentAttachments: AttachmentMeta[];
+        template: ReturnType<typeof templateSelectionState.current>; queueRun: boolean;
+      };
+      if (data.queueRun) throw new Error('여러 페이지 대기열은 독립 실행 수명 연결이 필요합니다.');
+      const loop = loopRef.current;
+      if (!loop || loop.busy || runStartingRef.current || qcRunningRef.current) return false;
+      const selection = wbRestorePresentationSelection(slidesRef.current, data.selection);
+      wbRestoreSelectionRef.current(selection.current, selection.ids);
+      sentAttachmentsRef.current = data.sentAttachments;
+      await templateSelectionState.refresh();
+      templateSelectionState.restoreExecutionSelection(data.template);
+      return new Promise<boolean>((resolve, reject) => {
+        wbExecutionStartRef.current = { resolve, reject };
+        runWith(instruction, undefined, { attachments: data.attachments, scope: data.scope ?? undefined });
+        if (!runStartingRef.current && !loop.busy) { wbExecutionStartRef.current = null; resolve(false); }
+      });
+    },
+    lock: wbLockPresentationSurface,
+  }), []);
+
+${marker}`);
+    return `${imports}${code}`;
+  }
+  return code;
+}

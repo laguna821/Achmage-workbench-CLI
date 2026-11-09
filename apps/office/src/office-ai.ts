@@ -115,7 +115,7 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
   const skills = createOfficeSkills(init, gateway, events, async () => { await parent("skills"); }, async () => { await prepare(); });
   Object.assign(window, { aiOfficeUserSkills: skills.bridge });
   const prepare = async (freeze = false) => {
-    if (init.execution) return { revision: init.artifact.revision, token: init.token, sessionId: init.sessionId!, referenceSnapshot: init.execution.referenceSnapshot };
+    if (init.execution) return { revision: await flushOfficeDocument(), token: init.token, sessionId: init.sessionId!, referenceSnapshot: init.execution.referenceSnapshot };
     const value = await parent("prepare", freeze ? references.pin() : undefined);
     if (!value?.sessionId) throw new Error("이 문서와 함께 사용할 Workbench 세션을 선택해 주세요.");
     return value;

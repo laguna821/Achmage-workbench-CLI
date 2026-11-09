@@ -758,7 +758,7 @@ export function App() {
         }
       },
       interrupt: (session) => void api?.interrupt(session.id).catch(fail),
-      answer: (session, itemId, decision) => void api?.answer(session.id, itemId, decision).catch(fail),
+      answer: (session, itemId, decision, response) => void api?.answer(session.id, itemId, decision, response).catch(fail),
       newSession: async (target: Work, provider: Provider, choice, options) => {
         if (!api) return null;
         try {
@@ -2134,7 +2134,7 @@ export function App() {
                 onPickTarget={() => actions.pickSession(owner, session ?? null)}
                 onAiSettings={() => setOfficeSettingsOpen(true)}
                 onExternalSetup={() => setIeumAppOpen(true)}
-                onAnswer={(answered, itemId, decision) => actions.answer(answered, itemId, decision)}
+                onAnswer={(answered, itemId, decision, response) => actions.answer(answered, itemId, decision, response)}
                 onSend={async (target, text, refs, handoffTo, create, attachments) => {
                   let source = target;
                   if (!source) source = await actions.newSession(owner, engine);

@@ -544,8 +544,8 @@ export class Api {
     return response.arrayBuffer();
   }
   interrupt = (sessionId: string) => this.request("POST", `/api/sessions/${sessionId}/interrupt`);
-  answer = (sessionId: string, itemId: string, decision: "accept" | "decline") =>
-    this.request("POST", `/api/sessions/${sessionId}/approvals/${encodeURIComponent(itemId)}`, { decision });
+  answer = (sessionId: string, itemId: string, decision: "accept" | "decline", response?: import("@workbench/contracts").OfficeInteractionResponse) =>
+    this.request("POST", `/api/sessions/${sessionId}/approvals/${encodeURIComponent(itemId)}`, { decision, ...(response ? { response } : {}) });
   login = (provider: Provider) => this.request<{ url: string | null; message: string }>("POST", `/api/providers/${provider}/login`);
   /** The code the engine's login page showed (Claude Code), handed to its waiting login. */
   loginCode = (provider: Provider, code: string) => this.request<ProviderStatus>("POST", `/api/providers/${provider}/login/code`, { code });

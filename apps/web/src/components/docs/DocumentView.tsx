@@ -88,7 +88,7 @@ export default function DocumentView({
   /** The work screen's modes: their bar, and in "나란히" where the input goes. */
   modes?: ModeProps;
   /** Answer an approval of the session from the drawer, without leaving the document. */
-  onAnswer?: (session: Session, itemId: string, decision: "accept" | "decline") => void;
+  onAnswer?: (session: Session, itemId: string, decision: "accept" | "decline", response?: import("@workbench/contracts").OfficeInteractionResponse) => void;
   /** Register how to save edits only this view holds (the Word editor) before the app leaves it. */
   onLeaveGuard?: (guard: ((reason?: "close") => Promise<void>) | null) => void;
   /** Called only after the explicit MCP save/discard operation has settled. */
@@ -730,7 +730,7 @@ export default function DocumentView({
 
   return (
     <main className="document-view" data-editor-view={lease.viewId} data-editor-access={lease.canWrite ? "write" : "read"}>
-      {focusedConversation ? <ConversationSheet state={state} session={focusedConversation} focusItem={focusItem?.sessionId === focusedConversation.id ? focusItem : null} onFocusDone={onFocusDone} onClose={() => { setFocusedConversationId(null); onFocusDone?.(); }} onAnswer={(itemId, decision) => onAnswer?.(focusedConversation, itemId, decision)} /> : null}
+      {focusedConversation ? <ConversationSheet state={state} session={focusedConversation} focusItem={focusItem?.sessionId === focusedConversation.id ? focusItem : null} onFocusDone={onFocusDone} onClose={() => { setFocusedConversationId(null); onFocusDone?.(); }} onAnswer={(itemId, decision, response) => onAnswer?.(focusedConversation, itemId, decision, response)} /> : null}
       {tabs}
       <header className="doc-header">
         <button type="button" className="ghost-button" onClick={() => void save().then((revision) => { if (revision !== null) onBack(); })}>
@@ -1065,7 +1065,7 @@ export default function DocumentView({
 
       {!officeEditing && documentChatOpen ? place(<div className="column composer-area doc-composer">
         {session && drawer === "open" && !modes?.split && !focusedConversation ? (
-          <ConversationSheet state={state} session={session} onClose={() => setDrawer("peek")} onAnswer={(itemId, decision) => onAnswer?.(session, itemId, decision)} />
+          <ConversationSheet state={state} session={session} onClose={() => setDrawer("peek")} onAnswer={(itemId, decision, response) => onAnswer?.(session, itemId, decision, response)} />
         ) : null}
         {session && !modes?.split ? (
           <ConversationDrawer
@@ -1073,7 +1073,7 @@ export default function DocumentView({
             session={session}
             mode={drawer}
             onMode={setDrawer}
-            onAnswer={(itemId, decision) => onAnswer?.(session, itemId, decision)}
+            onAnswer={(itemId, decision, response) => onAnswer?.(session, itemId, decision, response)}
             onOpenConversation={onBack}
           />
         ) : null}

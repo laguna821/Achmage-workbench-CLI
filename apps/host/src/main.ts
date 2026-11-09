@@ -19,6 +19,8 @@ import { OfficeImport } from "./office-import.mjs";
 import { installToolWrappers } from "./tool-bin.ts";
 import { createEditorsServer, EditorGrants } from "./editors.ts";
 import { OfficeRendererExecutors } from "./office-executors/renderer.ts";
+import { OfficeExecutorOutputs } from "./office-executors/output.ts";
+import { OfficeOutputs } from "./office-output.ts";
 import { createOfficeSettingsServer } from "./office-settings-server.ts";
 import { OfficeAi } from "./office-ai.ts";
 import { OfficeKnowledge } from "./office-knowledge.mjs";
@@ -167,6 +169,7 @@ const officeSettingsServer = createOfficeSettingsServer(webDir && existsSync(web
 const docImages = new DocImages({ dataDir, documents: manager.documents, workCwd: (workId) => manager.workCwd(workId), endpoint: env.WORKBENCH_R2_ENDPOINT ?? null });
 const officeControl = env.WORKBENCH_CLI_INPUT ? undefined : new OfficeControl(manager, bus, dataDir);
 const officeMcp = officeControl ? new OfficeMcp(manager, officeControl, dataDir, { defaultSaveDir: () => worksDir.root(), ieum }) : undefined;
+officeAi.executorOutputs = new OfficeExecutorOutputs(manager.documents, manager.office, officeMcp?.outputs ?? new OfficeOutputs(manager.documents, (...args) => manager.registerOfficeCopy(...args)));
 const officeDrive = officeControl ? new OfficeDrive(manager, officeControl, dataDir) : undefined;
 const officeImport = officeControl ? new OfficeImport(manager.documents, manager.ieumDesktop, dataDir) : undefined;
 const dropbox = new DropboxFolders(store, manager, dataDir);

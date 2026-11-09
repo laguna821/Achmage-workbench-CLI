@@ -9,6 +9,7 @@ import { Icon, type IconName } from "./Icon.tsx";
 import { diagramComponents } from "./Diagram.tsx";
 import { AttachmentStrip, MessageImage } from "./Attachments.tsx";
 import { PlanApproval } from "./PlanFirst.tsx";
+import { OfficeQuestion } from "./OfficeQuestion.tsx";
 import { ImageCard } from "./ImageGen.tsx";
 import { LinkEndCard, LinkHopBadge, LinkRequestText } from "./LinkCards.tsx";
 import { NoteChips } from "./pkm/NoteChips.tsx";
@@ -228,7 +229,8 @@ function WorkBlock({ block, focusItemId }: { block: Extract<Block, { type: "work
   );
 }
 
-function ApprovalCard({ item, onAnswer, onTrust }: { item: Item<"approval">; onAnswer: (decision: "accept" | "decline") => void; onTrust?: () => void }) {
+function ApprovalCard({ item, onAnswer, onTrust }: { item: Item<"approval">; onAnswer: (decision: "accept" | "decline", response?: import("@workbench/contracts").OfficeInteractionResponse) => void; onTrust?: () => void }) {
+  if (item.officeInteraction) return <OfficeQuestion item={item} onAnswer={onAnswer} />;
   if (item.plan) return <PlanApproval item={item} onAnswer={onAnswer} />;
   if (item.decision !== null) {
     const label = item.decision === "accept" ? "허용함" : item.decision === "decline" ? "거절함" : "응답 없이 지나감";
@@ -349,7 +351,7 @@ export function Transcript({
   provider: Provider;
   running: boolean;
   loading: boolean;
-  onAnswer: (itemId: string, decision: "accept" | "decline") => void;
+  onAnswer: (itemId: string, decision: "accept" | "decline", response?: import("@workbench/contracts").OfficeInteractionResponse) => void;
   /** "앞으로 묻지 않기": full access for this session (answers what waits, too). */
   onTrust?: () => void;
   /** "이 요청 전으로": a new session with the conversation up to this request, the request to edit. */
@@ -502,7 +504,7 @@ export function Transcript({
 
   // Enter / Esc answer the pending approval when focus is not in a text field.
   useEffect(() => {
-    if (!pending) return;
+    if (!pending || pending.officeInteraction) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
       const target = event.target as HTMLElement;
@@ -562,7 +564,7 @@ export function Transcript({
           </div>
         );
       case "approval":
-        return <ApprovalCard key={block.item.id} item={block.item} onAnswer={(decision) => onAnswer(block.item.id, decision)} onTrust={onTrust} />;
+        return <ApprovalCard key={block.item.id} item={block.item} onAnswer={(decision, response) => onAnswer(block.item.id, decision, response)} onTrust={onTrust} />;
       case "plan":
         return <PlanCard key={block.item.id} item={block.item} />;
       case "notice":

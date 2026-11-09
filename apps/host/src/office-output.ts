@@ -49,8 +49,8 @@ export class OfficeOutputs {
       this.documents.registry.assertWrite(artifactId);
       return { viewId: null, sessionId: null };
     }
-    const view = this.documents.registry.list().find((entry) => entry.viewId === access.viewId && entry.artifactId === artifactId);
-    if (!view) throw new HttpError(409, "output_view_changed", "문서 창을 다시 확인해 주세요.");
+    const view = this.documents.registry.authority(access.viewId);
+    if (!view || view.artifactId !== artifactId) throw new HttpError(409, "output_view_changed", "문서 창 또는 실행기를 다시 확인해 주세요.");
     // Reading/copying a revision is allowed in a read-only view; source bytes are never written.
     return { viewId: view.viewId, sessionId: view.sessionId };
   }
@@ -73,9 +73,8 @@ export class OfficeOutputs {
     if (isWorkbenchPath(path) || path === resolve(source.path) || (existsSync(source.path) && path === realpathSync(source.path))) throw new HttpError(400, "output_source", "원본과 다른 파일 이름을 선택해 주세요. 원본 저장은 저장 메뉴를 사용하세요.");
     this.documents.registry.assertPath(path);
     const bytes = disk(path);
-    const liveViews = new Set(this.documents.registry.list().map(view => view.viewId));
     for (const [id, ticket] of this.tickets) {
-      const keepForJob = ticket.longJob && ticket.viewId && liveViews.has(ticket.viewId);
+      const keepForJob = ticket.longJob && ticket.viewId && this.documents.registry.authority(ticket.viewId);
       if ((ticket.result || ticket.expires < Date.now() && !keepForJob) && !this.busy.has(id)) this.tickets.delete(id);
     }
     if (this.tickets.size >= 100) throw new HttpError(429, "output_busy", "저장 요청이 너무 많습니다.");

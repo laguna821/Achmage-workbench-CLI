@@ -10,19 +10,19 @@ UI presence remains separate from execution authority. `DocumentRegistry.list()`
 
 ## Current executor matrix
 
-The independent native process, host ownership and original **Markdown** adapter are now wired in code. Other original document editing tool sets still use **ui-required** execution. A destroyed iframe or app process still loses those engines. Markdown's independent path is enabled only when the matching executor entry and desktop binary are installed. Actual native window execution remains to be observed during integration; code and isolated engine checks are not a completed OS acceptance result.
+The independent native process and host ownership now connect the original Markdown, Word, HWP/HWPX, HTML, XMind, Sheets, PDF and EPUB adapters. Slides also has its selection/send/question adapter, but remains **ui-required** until its subsequent queue and QC loops have one request-level owner. Independent paths require the matching executor entry and desktop binary. Actual native window execution remains to be observed during integration; code and isolated checks are not a completed OS acceptance result.
 
-| Format | Original skill / factory | Remaining engine dependency |
+| Format | Original skill / factory | Adapter code and remaining boundary |
 |---|---|---|
-| Word | `docx` / `createDocsSkill` | ProseMirror selection, panel writer and rollback state |
-| Slides | `slides` / `createSlidesSkill` | Deck state, selection, clarification resolver |
-| Sheets | `sheets` / `createWorkbookSkill` | Univer/workbook state; merge/search/image skills in the App |
-| HWP/HWPX | `hwp` / `createHwpSkill` | Captured selection, refreshed context, memo-removal confirmation |
-| PDF | `pdf` / `createPdfSkill` | PDF renderer state and original file-operation confirmation |
+| Word | `docx` / `createDocsSkill` | Original runWith after full loading, validated ProseMirror selection, track changes, attachments and partial writer confirmation |
+| Slides | `slides` / `createSlidesSkill` | Original runWith, saved slide/durable IDs, nested multi-selection, attachments/template, clarification and context gate. Queue/QC lifecycle remains; not promoted |
+| Sheets | `sheets` / `createWorkbookSkill` | Original handleSend/runAgent, saved sheet/range, frozen scope and attachments; original merge/search/image skills remain in the App |
+| HWP/HWPX | `hwp` / `createHwpSkill` | Original send/readiness, paragraph/table SelectionScope, attachments and original memo-removal confirmation |
+| PDF | `pdf` / `createPdfSkill` | Original send, saved page-order positions, selected passage and cancellable file-operation confirmation |
 | Markdown | `markdown` / `createMarkdownSkill` | Independent adapter wired: original send, Tiptap document/selection, raw frontmatter, long-form writer and keep/discard confirmation. Native full-path execution not yet observed |
-| HTML | `html` / `createDocumentSkill` | Document map/SID, clarification and brief-confirmation resolvers |
-| XMind | `mindmap` / `createMindmapSkill` | Mindmap model and selected nodes |
-| EPUB | `epub` / `createEpubSkill` | Original chapter/selection state and book bridge |
+| HTML | `html` / `createDocumentSkill` | Original send, saved SID map/multi-selection/intent, clarification, editable brief and partial writer confirmation |
+| XMind | `mindmap` / `createMindmapSkill` | Original send, saved sheet/root identity and selected nodes |
+| EPUB | `epub` / `createEpubSkill` | Original send, chapter/viewport/DOM selection, attachments and translation dialog choices. Parent waits through original translation result write/unlock |
 
 The existing web-search, image-search, read-url, fetch-image, generate-image, analyze-media and knowledge tool implementations execute in the host. Their enclosing Office loop still needs an independent owner. `office-markdown.mjs` handles preferences/image upload; it is not a host implementation of the original Markdown editing skill. A new string-replacement tool must not be counted as that skill's completed migration.
 
@@ -32,15 +32,19 @@ The existing web-search, image-search, read-url, fetch-image, generate-image, an
 
 `office_executor.rs` bypasses the normal app's single-instance, tray and gateway setup. A hidden 1280×860 window retains layout, uses an isolated temporary profile, installs no native command handlers and refuses popups, downloads and OS permission requests. The child accepts only the local executor parent. Linux also rejects a replacement main response before commit; macOS currently has a load guard and still needs its native integration check.
 
-`executor-entry.ts` hosts the original format iframe. The Markdown source adapter calls the original `send` after restoring its document JSON, selection and raw-frontmatter snapshot. `createOfficeAi` attaches that renderer to the admitted turn instead of issuing another user request. The original serializer saves mutations. Hidden animation frames get the same fallback already used for native Office export.
+`executor-entry.ts` hosts the original format iframe. Each pinned adapter restores its original transient state before invoking the original send function. Markdown restores document JSON, selection and raw frontmatter; binary formats open the admitted saved file through their existing bridge. `createOfficeAi` attaches that renderer to the admitted turn instead of issuing another user request. The original serializer saves mutations. Hidden animation frames get the same fallback already used for native Office export.
 
-The visible source becomes an observer. Closing or remounting it detaches observation instead of cancelling the independent owner; an explicit stop still cancels. Reopening observes the existing turn and pending confirmation. The original Markdown partial-write question becomes an existing transcript approval, which can be answered from the document view or session task UI. The executor's grant cannot approve its own question. Main sessions remain available, and final results use the existing parent-report path.
+The visible source becomes an observer. Closing or remounting it detaches observation instead of cancelling the independent owner; an explicit stop still cancels. Reopening observes the existing turn and pending confirmation. Original boolean, choice, multiple-choice and free-text questions use the same transcript approval, answered from the document view or session task UI. Original resolvers receive those answers; a missing answer is never acceptance. The executor's grant cannot approve its own question. Main sessions remain available, and final results use the existing parent-report path.
+
+The original transport now awaits asynchronous context confirmation before starting its model stream. Cancelling while that question is pending cannot start a stream after a late answer. Original output preparation asks for a path and, when necessary, a separate overwrite decision. The host then issues an existing `OfficeOutputs` ticket; original serialized bytes or a generated-file identity commit through that ticket, retaining revision, collision and backup checks after UI loss. Nested translation preparation flushes the current document revision instead of reusing its startup revision.
 
 ## Next implementation boundary
 
-Extend the pinned adapter from Markdown to the remaining eight original `send`/`handleSend`, readiness, selection and question paths. Eight formats instantiate their loop in AiPanel; Sheets does so in App. Registering a loop constructor is insufficient: HWP's send captures selection and refreshes context, and other panels prepare attachments, writer callbacks and model gates before `loop.run()`.
+Slides must keep one parent request alive across its page queue and follow-up QC loops before it can leave ui-required mode. Its current adapter explicitly refuses queued execution. Native printing/rendering, image extraction and OS presentation/open-export require an independently owned service; unsupported output actions return an explicit error rather than wait indefinitely. Original serializers and ordinary output tickets are connected, but this is not the entire output surface.
 
-Original questions must reach their actual resolvers with run/question identity; pending interaction is not success. Keep the same executor through selection, question, tool, serialization and finish. Remaining work includes the other eight adapters, original multi-choice/free-text questions and output interactions, actual native lifecycle execution, and the AppImage persistent runtime boundary. The complete U09 acceptance remains open.
+PDF's separate toolbar AI-reading and whole-document translation dialogs are not covered by this general AiPanel adapter. In the pinned source, that panel does not supply either optional start capability to `PdfAiDeps`; its corresponding tools already return unavailable. Their separate UI-owned job paths still require their own handoff rather than being counted as completed by the general PDF adapter.
+
+Remaining integration includes actual native loading/tool/save/question completion after visible UI exit, native output services, complete request/runtime receipt acceptance, settings continuity across handoff and the AppImage persistent runtime boundary. Do not count a pinned-source transform as proof of full document execution. The complete U09 acceptance remains open.
 
 ## Focused evidence
 
@@ -52,4 +56,6 @@ Original questions must reach their actual resolvers with run/question identity;
 
 Independent-renderer phase: six new focused cases cover host ownership/one-use boot/UI loss/questions/same-turn save, crash without replay, original Markdown selection editing/serialization, the actual pinned transform chain, detachment during handoff, and renderer attachment without a second turn-start. The original tool case uses Tiptap and IeumOffice's actual `createMarkdownSkill`; it is not a raw-text replacement tool. Linux `cargo check --offline` passed once. Type-check fixture issues and a jsdom/esbuild realm issue were isolated and corrected; passed product cases were not repeated. No installer, production bundle or native screen run is claimed.
 
-Implementation: `aa6779d` and `f89fd18`. Research basis and results: R35–R36, `research:rr-1b4bb9d2193a4e5dced6dca4128061a9:31f3ad558c13afa959e59e9d1c264a879adb750745fed75568909c0fbcc3fa34`. U09 and the full 0.4.0 goal remain incomplete.
+Original-format phase: five new focused cases cover structured questions in the host/UI, output path/overwrite/save after source UI loss, and the actual original transport waiting/cancellation. Seven Sheets/PDF/EPUB cases cover request reconstruction, exact selection, document locks/question input and translation write/unlock lifetime; one of these transforms seven actual pinned modules. The document owner transformed three pinned modules and the presentation owner transformed six with its state/question probes. Ten original context callbacks were connected. New fixture/type issues and the esbuild/jsdom realm mismatch were isolated; only the failed new checks were repeated. Host, web and Office TypeScript passed. These are code-level checks, not native execution proof.
+
+Foundation commits: `aa6779d` and `f89fd18`; original-format adapters follow in R37. Research basis and results: R35–R37, `research:rr-1b4bb9d2193a4e5dced6dca4128061a9:eaf1781fb6ea15427f1698896ce325e66c7ae94fae3c0f05a1b3b54e907b0d2a`. U09 and the full 0.4.0 goal remain incomplete.

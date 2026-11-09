@@ -1,6 +1,15 @@
+import { patchDocumentExecutions } from "./execution-patch-documents.ts";
+import { patchExecutionTransport } from "./execution-transport-patch.ts";
+import { patchPresentationExecutions } from "./execution-patch-presentations.ts";
+import { patchBookExecutions } from "./execution-patch-books.ts";
+
 /** Pinned adapters call the original panel's send path, retaining its preparation,
  * document writer and tool set. A changed upstream boundary fails explicitly. */
 export function patchOfficeExecution(code: string, id: string, root: string, module: string) {
+  code = patchExecutionTransport(code, id, root, module);
+  code = patchDocumentExecutions(code, id, root, module);
+  code = patchPresentationExecutions(code, id, root, module);
+  code = patchBookExecutions(code, id, root, module);
   if (id !== `${root}/apps/markdown/src/renderer/ai/AiPanel.tsx`) return code;
   const marker = "  const stop = (): void => {";
   const gate = "    if (!sendGate.admit({ text: instruction, displayText, retryScope, skillUse })) {";

@@ -4,8 +4,9 @@ import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { OfficeExecutionBoot, OfficeExecutionState } from "../../../../packages/contracts/src/office-execution.ts";
+import type { DocFormat } from "@workbench/contracts";
 import type { Documents } from "../artifacts.ts";
-import type { EditorGrants } from "../editors.ts";
+import { officeEditorKind, type EditorGrants } from "../editors.ts";
 import { HttpError } from "../errors.ts";
 import type { OfficeSessions, OfficeBinding } from "../office-sessions.ts";
 import { officeExecutorMode } from "./registry.ts";
@@ -15,12 +16,15 @@ type Launch = (url: string) => OwnedProcess;
 type Options = { binary?: string; webDir?: string | null; launch?: Launch };
 type Entry = { binding: OfficeBinding; turnId: string; boot: OfficeExecutionBoot; claimed: boolean; stopped: boolean; process?: OwnedProcess; timer?: NodeJS.Timeout; dispose(): void };
 const invalid = () => new HttpError(400, "office_executor_state", "원본 편집기의 실행 상태를 전달하지 못했습니다.");
-function executionState(raw: unknown): OfficeExecutionState {
+function executionState(raw: unknown, format: DocFormat): OfficeExecutionState {
   const value = raw as OfficeExecutionState;
-  if (!value || value.format !== "markdown" || typeof value.snapshot?.body !== "string" || typeof value.snapshot.frontmatter !== "string"
-    || !value.document || typeof value.document !== "object" || Array.isArray(value.document)
-    || !value.selection || typeof value.selection !== "object" || Array.isArray(value.selection)
+  if (!value || typeof value !== "object" || !officeEditorKind(value.format) || officeEditorKind(value.format) !== officeEditorKind(format)
     || JSON.stringify(value).length > 12_000_000) throw invalid();
+  if (value.format === "markdown") {
+    if (typeof value.snapshot?.body !== "string" || typeof value.snapshot.frontmatter !== "string"
+      || !value.document || typeof value.document !== "object" || Array.isArray(value.document)
+      || !value.selection || typeof value.selection !== "object" || Array.isArray(value.selection)) throw invalid();
+  } else if (!value.data || typeof value.data !== "object" || Array.isArray(value.data)) throw invalid();
   return structuredClone(value);
 }
 
@@ -60,7 +64,7 @@ export class OfficeRendererExecutors {
     if (!this.available(run.artifactId)) throw new HttpError(503, "office_executor_unavailable", "독립 문서 실행기를 사용할 수 없습니다.");
     if ([...this.entries.values()].filter(entry => !entry.stopped).length >= 4) throw new HttpError(429, "office_executor_busy", "독립 문서 작업 4개가 진행 중입니다. 하나가 끝난 뒤 다시 요청해 주세요.");
     const request = raw as { state?: unknown; instruction?: unknown; images?: unknown; referenceSnapshot?: unknown };
-    const state = executionState(request?.state);
+    const state = executionState(request?.state, this.documents.get(run.artifactId).format);
     if (typeof request.instruction !== "string" || !request.instruction.trim() || request.instruction.length > 2_000_000) throw invalid();
     const images = request.images as { base64: string; mime: string }[] | undefined;
     if (images !== undefined && (!Array.isArray(images) || images.length > 20 || images.some(image => typeof image?.base64 !== "string" || !/^image\/(png|jpeg|gif|webp)$/.test(image.mime)) || JSON.stringify(images).length > 24_000_000)) throw invalid();
@@ -78,7 +82,7 @@ export class OfficeRendererExecutors {
     // Mode change removes the visible view's write bypass before another DOM exists.
     run.lease = this.documents.registry.executions.mode(run.lease, "independent-renderer");
     const capability = randomBytes(32).toString("base64url");
-    const boot: OfficeExecutionBoot = { page: "/office/markdown.html", instruction: request.instruction, state,
+    const boot: OfficeExecutionBoot = { page: `/office/${officeEditorKind(artifact.format)}.html`, instruction: request.instruction, state,
       init: { type: "office:init", token, sessionId: run.sessionId,
         artifact: { id: artifact.id, name: artifact.name, path: artifact.path, revision: artifact.revision, sha256: artifact.sha256 },
         readOnly: false, theme: "light", recover: false, execution: { turnId: run.turnId, images, referenceSnapshot } } };

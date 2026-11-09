@@ -50,6 +50,7 @@ export function officeAiRequest(value: unknown, stream: boolean): OfficeAiStream
  * Original editor tools still execute in their own renderer and save through document CAS. */
 export class OfficeAi {
   executors?: import("./office-executors/renderer.ts").OfficeRendererExecutors;
+  executorOutputs?: import("./office-executors/output.ts").OfficeExecutorOutputs;
   drive?: import("./office-drive.mjs").OfficeDrive;
   readonly preferences: OfficePreferences;
   readonly markdown: OfficeMarkdown;
@@ -172,7 +173,7 @@ export class OfficeAi {
   }
   async handle(req: IncomingMessage, res: ServerResponse, url: URL, bearer: string | null, documents: Documents, grants: EditorGrants): Promise<boolean> {
     if (await this.skills?.handle(req, res, url, bearer, grants)) return true;
-    const match = /^\/api\/artifacts\/([^/]+)\/ai\/(preferences|preferences-panel|markdown-upload|markdown-read-image|drive-state|settings|selection|statuses|stream|chat|cancel|history|turn-start|turn-events|turn-finish|turn-heartbeat|turn-question|executor-start|executor-observe|executor-current|executor-answer|executor-reference|executor-stop|tool-capabilities|tool)$/.exec(url.pathname);
+    const match = /^\/api\/artifacts\/([^/]+)\/ai\/(preferences|preferences-panel|markdown-upload|markdown-read-image|drive-state|settings|selection|statuses|stream|chat|cancel|history|turn-start|turn-events|turn-finish|turn-heartbeat|turn-question|executor-start|executor-observe|executor-current|executor-answer|executor-reference|executor-stop|executor-output|executor-output-commit|tool-capabilities|tool)$/.exec(url.pathname);
     if (!match) return false;
     const [, artifactId, operation] = match;
     const authorize = () => {
@@ -220,6 +221,15 @@ export class OfficeAi {
     };
     if (operation!.startsWith("executor-")) {
       const bound = binding();
+      if (operation === "executor-output-commit") {
+        const turnId = url.searchParams.get("turnId"), planId = url.searchParams.get("planId");
+        authorize();
+        if (!identifier(turnId) || !identifier(planId) || !this.executorOutputs) return invalid();
+        this.sessions!.requireRun(bound, turnId);
+        const bytes = await readBody(req, 201_000_004); authorize();
+        sendJson(res, 200, await this.executorOutputs.commit(bound, turnId, planId, bytes,
+          url.searchParams.has("sourceRevision") ? Number(url.searchParams.get("sourceRevision")) : undefined, url.searchParams.get("generatedId") ?? undefined)); return true;
+      }
       const raw = JSON.parse((await readBody(req, 40_000_000)).toString("utf8"));
       authorize();
       if (!record(raw)) return invalid();
@@ -230,9 +240,19 @@ export class OfficeAi {
         if (bound.access?.viewId.startsWith("execution-")) throw new HttpError(403, "office_executor_approval", "문서 실행기는 자신의 확인 요청에 답할 수 없습니다.");
         const observed = this.sessions!.observe(bound, raw.turnId);
         if (typeof raw.itemId !== "string" || !observed.items.some(item => item.id === raw.itemId) || raw.decision !== "accept" && raw.decision !== "decline") return invalid();
-        sendJson(res, 200, { ok: this.sessions!.answerQuestion(bound.sessionId, raw.itemId, raw.decision) }); return true;
+        sendJson(res, 200, { ok: this.sessions!.answerQuestion(bound.sessionId, raw.itemId, raw.decision, raw.response) }); return true;
       }
       this.sessions!.requireRun(bound, raw.turnId);
+      if (operation === "executor-output") {
+        if (!this.executorOutputs) throw new HttpError(503, "office_executor_output", "문서 결과 저장을 연결하지 못했습니다.");
+        if (raw.action === "prepare") { sendJson(res, 200, this.executorOutputs.prepare(bound, raw.turnId, raw)); return true; }
+        if (raw.action === "cancel") {
+          if (typeof raw.planId === "string") this.executorOutputs.cancel(bound, raw.turnId, raw.planId);
+          if (typeof raw.preparationId === "string") this.executorOutputs.cancelPreparation(bound, raw.turnId, raw.preparationId);
+          sendJson(res, 200, null); return true;
+        }
+        return invalid();
+      }
       if (operation === "executor-start") {
         if (!this.executors) throw new HttpError(503, "office_executor_unavailable", "독립 문서 실행기를 연결하지 못했습니다.");
         sendJson(res, 200, this.executors.start(bound, raw.turnId, bearer!, raw)); return true;

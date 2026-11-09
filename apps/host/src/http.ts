@@ -733,7 +733,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         }
         if (method === "POST" && parts[2] === "approvals" && parts[3]) {
           const body = await readJson(req);
-          await manager.answerApproval(sessionId, decodeURIComponent(parts[3]), body.decision as never);
+          await manager.answerApproval(sessionId, decodeURIComponent(parts[3]), body.decision as never, body.response);
           return sendJson(res, 200, { ok: true });
         }
       }

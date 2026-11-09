@@ -9,6 +9,8 @@ import { EventBus } from "../bus.ts";
 import { SessionManager } from "../sessions.ts";
 import { EditorGrants } from "../editors.ts";
 import { OfficeRendererExecutors } from "./renderer.ts";
+import { OfficeExecutorOutputs } from "./output.ts";
+import { OfficeOutputs } from "../office-output.ts";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const done of cleanup.splice(0)) await done(); });
@@ -38,7 +40,7 @@ function fixture() {
 
 it("hands off once, keeps original selection, answers the original question after UI loss and saves in the same turn", async () => {
   const f = fixture(), capability = await f.start(), boot = f.executors.boot(capability);
-  expect(boot.state.selection).toEqual(f.payload.state.selection);
+  expect(boot.state.format === "markdown" && boot.state.selection).toEqual(f.payload.state.selection);
   expect(boot.init.execution?.turnId).toBe("run");
   expect(() => f.executors.boot(capability)).toThrow(/이미 사용/);
   expect(() => f.executors.start(f.binding, "run", f.token, f.payload)).toThrow(/이미 인계/);
@@ -70,4 +72,46 @@ it("interrupts a lost owner without replay or surviving approvals", async () => 
   expect(f.manager.items(f.session.id).items.find(item => item.kind === "approval")).toMatchObject({ decision: "expired" });
   expect(f.launches).toHaveLength(1);
   expect(() => f.executors.boot(capability)).toThrow();
+});
+
+it("keeps structured original questions pending until valid answers arrive from the observed conversation", async () => {
+  const f = fixture(), capability = await f.start(), boot = f.executors.boot(capability);
+  f.manager.documents.registry.close("ui", "window");
+  const bound = { ...f.binding, access: f.grants.access(boot.init.token) };
+  f.manager.office.question(bound, { turnId: "run", id: "brief", prompt: "문서를 어떻게 만들까요?", fields: [
+    { id: "audience", prompt: "대상", options: [{ id: "student", label: "학생" }, { id: "expert", label: "전문가" }] },
+    { id: "sections", prompt: "내용", multiple: true, options: [{ id: "intro", label: "소개" }, { id: "data", label: "자료" }] },
+    { id: "note", prompt: "추가 요청" },
+  ] });
+  const itemId = "office-question:run:brief";
+  await expect(f.manager.answerApproval(f.session.id, itemId, "accept")).rejects.toThrow(/질문과 답변/);
+  await expect(f.manager.answerApproval(f.session.id, itemId, "accept", { audience: "invented", sections: ["data"], note: "표 포함" })).rejects.toThrow();
+  expect(f.manager.office.question(bound, { turnId: "run", id: "brief" }).decision).toBeNull();
+  const response = { audience: "student", sections: ["intro", "data"], note: "표와 그림 포함" };
+  await f.manager.answerApproval(f.session.id, itemId, "accept", response);
+  expect(f.manager.office.question(bound, { turnId: "run", id: "brief" })).toMatchObject({ decision: "accept", response });
+  expect(f.manager.office.observe(f.binding, "run").items.find(item => item.id === itemId)).toMatchObject({ officeInteraction: { response } });
+  await expect(f.manager.answerApproval(f.session.id, itemId, "decline")).rejects.toThrow(/이미 끝난/);
+  f.manager.office.finish(bound, { turnId: "run", status: "completed" });
+});
+
+it("saves original output under the independent owner only after the observed path and replacement questions", async () => {
+  const f = fixture(), capability = await f.start(), boot = f.executors.boot(capability);
+  const bound = { ...f.binding, access: f.grants.access(boot.init.token) };
+  const outputs = new OfficeExecutorOutputs(f.manager.documents, f.manager.office, new OfficeOutputs(f.manager.documents, (...args) => f.manager.registerOfficeCopy(...args)));
+  const destination = join(f.path, "..", "result.md"); writeFileSync(destination, "# previous");
+  f.manager.documents.registry.close("ui", "window");
+  const request = { requestId: "save", revision: 1, format: "md", defaultName: "result.md" };
+  expect(outputs.prepare(bound, "run", request)).toEqual({ pending: true });
+  await f.manager.answerApproval(f.session.id, "office-question:run:output_save", "accept", { path: "result.md" });
+  expect(outputs.prepare(bound, "run", request)).toEqual({ pending: true });
+  expect(readFileSync(destination, "utf8")).toBe("# previous");
+  await f.manager.answerApproval(f.session.id, "office-question:run:output_save_replace", "accept");
+  const plan = outputs.prepare(bound, "run", request);
+  if (!plan || !("id" in plan)) throw new Error("no approved output");
+  const saved = await outputs.commit(bound, "run", plan.id, Buffer.from("# original serializer result"));
+  expect(saved.path).toBe(destination); expect(saved.artifactId).toBeTruthy();
+  expect(readFileSync(destination, "utf8")).toBe("# original serializer result");
+  expect(readFileSync(f.path, "utf8")).toBe("before\n");
+  f.manager.office.finish(bound, { turnId: "run", status: "completed" });
 });
