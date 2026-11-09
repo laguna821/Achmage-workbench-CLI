@@ -6,6 +6,8 @@ import { SlashList, rankCommands, slashQuery, type ComposerSlash } from "./Slash
 import { FormatBadge } from "./DocCards.tsx";
 import { Icon } from "./Icon.tsx";
 import { DRAFT_EVENT, DRAFT_PREFIX } from "../draft.ts";
+import { VoiceInput } from "./VoiceInput.tsx";
+import { appendVoiceTranscript, type VoiceScope } from "../voice/capture.ts";
 
 export { writeDraft } from "../draft.ts";
 
@@ -37,6 +39,8 @@ export function Composer({
   onDesktopPicture,
   attachments = 0,
   slash,
+  voiceScope,
+  voiceReply,
 }: {
   draftKey: string;
   placeholder: string;
@@ -66,6 +70,8 @@ export function Composer({
   attachments?: number;
   /** "/" at the start: the engine's commands and skills. */
   slash?: ComposerSlash;
+  voiceScope?: VoiceScope;
+  voiceReply?: string;
 }) {
   const [draft, setDraft] = useState(() => ({ key: draftKey, text: localStorage.getItem(DRAFT_PREFIX + draftKey) ?? "" }));
   const text = draft.key === draftKey ? draft.text : localStorage.getItem(DRAFT_PREFIX + draftKey) ?? "";
@@ -73,6 +79,7 @@ export function Composer({
   const currentDraft = useRef({ key: draftKey, text });
   currentDraft.current = { key: draftKey, text };
   const [sending, setSending] = useState(false);
+  const [voiceEpoch, setVoiceEpoch] = useState(0);
   const ref = useRef<HTMLTextAreaElement>(null);
   const [spans, setSpans] = useState<MentionSpan[]>([]);
   const [caret, setCaret] = useState(0);
@@ -171,6 +178,7 @@ export function Composer({
   const submit = async (mode: "auto" | "queue" = "auto") => {
     if (!canSend) return;
     const submitted = { key: draftKey, text };
+    setVoiceEpoch(current => current + 1);
     setSending(true);
     try {
       if (await onSend(text.trim(), busy && !steerable ? "queue" : mode)) {
@@ -319,6 +327,12 @@ export function Composer({
           void submit(busy && event.altKey ? "queue" : "auto");
         }}
       />
+      {voiceScope ? <VoiceInput key={draftKey} draftId={draftKey} scope={voiceScope} resetVersion={voiceEpoch} reply={voiceReply} disabled={disabled || sending || composing} onApply={(captureDraft, transcript) => {
+        const next = appendVoiceTranscript(currentDraft.current, captureDraft, transcript);
+        if (next === null || disabled || sending || composing) return false;
+        setSpans(relocateMentions(currentDraft.current.text, next, spans)); setText(next); setCaret(next.length); pendingCaret.current = next.length;
+        ref.current?.focus({ preventScroll: true }); return true;
+      }} /> : null}
       <div className="composer-bar">
         <div className="composer-left">{left}</div>
         <div className="composer-right">

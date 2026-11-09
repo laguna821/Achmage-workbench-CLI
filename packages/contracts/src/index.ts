@@ -1,3 +1,5 @@
+export * from "./voice.ts";
+export * from "./extensions.ts";
 // Shared contract between the host gateway and the UI.
 // Provider-specific protocols stay inside the host adapters; the UI only sees these shapes.
 import type { AgentBrowserStatus } from "./browse.ts";
@@ -939,3 +941,4 @@ export type { OfficeInteractionField, OfficeInteractionRequest, OfficeInteractio
 
 export * from "./devices.ts";
 export * from "./remote.ts";
+export * from "./event-hub.ts";

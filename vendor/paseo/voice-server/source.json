@@ -1,0 +1,743 @@
+{
+  "upstream": {
+    "url": "https://github.com/getpaseo/paseo",
+    "commit": "1fff127f45b11c1c9c573fbbd12791673004c912",
+    "archiveSha256": "654e4c066977b773a36eabb80a3d231942f36b0287cad8b3d3ca1aaa486cdd7b"
+  },
+  "license": "Apache-2.0",
+  "files": [
+    {
+      "path": "src/plugin/server/process-internal/windows-command.test.ts",
+      "upstreamPath": "packages/plugin/src/server/process-internal/windows-command.test.ts",
+      "upstreamSha256": "2f9f2b48fe184c3391137102b0588c429596293a1cbfece71862b5b91d25f160",
+      "sha256": "2f9f2b48fe184c3391137102b0588c429596293a1cbfece71862b5b91d25f160"
+    },
+    {
+      "path": "src/plugin/server/process-internal/windows-command.ts",
+      "upstreamPath": "packages/plugin/src/server/process-internal/windows-command.ts",
+      "upstreamSha256": "3e0a465f777b63e48f4b6d5d7e8d5e70c1ffe6575c0c7ebcac0712041032ba15",
+      "sha256": "3e0a465f777b63e48f4b6d5d7e8d5e70c1ffe6575c0c7ebcac0712041032ba15"
+    },
+    {
+      "path": "src/plugin/server/process.ts",
+      "upstreamPath": "packages/plugin/src/server/process.ts",
+      "upstreamSha256": "04a64423df0aeedd273c2f569623db39b97edfd4f3f1ed0b6c1b1034b02a5c0d",
+      "sha256": "04a64423df0aeedd273c2f569623db39b97edfd4f3f1ed0b6c1b1034b02a5c0d"
+    },
+    {
+      "path": "src/server/agent/audio-utils.ts",
+      "upstreamPath": "packages/server/src/server/agent/audio-utils.ts",
+      "upstreamSha256": "bc0068f6fd85040d405c9dc2900ce873f569f582238ccde60ce5622e4bd9292e",
+      "sha256": "bc0068f6fd85040d405c9dc2900ce873f569f582238ccde60ce5622e4bd9292e"
+    },
+    {
+      "path": "src/server/agent/dictation-debug.ts",
+      "upstreamPath": "packages/server/src/server/agent/dictation-debug.ts",
+      "upstreamSha256": "0f0819cbdfb5a53ba5ba53f2a926993252955dc59f9c950ceab43c69ed8275be",
+      "sha256": "0f0819cbdfb5a53ba5ba53f2a926993252955dc59f9c950ceab43c69ed8275be"
+    },
+    {
+      "path": "src/server/agent/pcm16-resampler.ts",
+      "upstreamPath": "packages/server/src/server/agent/pcm16-resampler.ts",
+      "upstreamSha256": "c38a54a0dd6f900517d73709416f53030fb73bbeb9f93c345d81782ab6d23c0c",
+      "sha256": "c38a54a0dd6f900517d73709416f53030fb73bbeb9f93c345d81782ab6d23c0c"
+    },
+    {
+      "path": "src/server/agent/recordings-debug.ts",
+      "upstreamPath": "packages/server/src/server/agent/recordings-debug.ts",
+      "upstreamSha256": "d12b08b87ed66d927a64072b2737bace2ea9350730732b91cd8ccf66e8136290",
+      "sha256": "d12b08b87ed66d927a64072b2737bace2ea9350730732b91cd8ccf66e8136290"
+    },
+    {
+      "path": "src/server/dictation/dictation-stream-manager.test.ts",
+      "upstreamPath": "packages/server/src/server/dictation/dictation-stream-manager.test.ts",
+      "upstreamSha256": "4809249e307d0e5d66e1363e2535b3f5be64017a26c0f67d37392d79417a10ce",
+      "sha256": "4809249e307d0e5d66e1363e2535b3f5be64017a26c0f67d37392d79417a10ce"
+    },
+    {
+      "path": "src/server/dictation/dictation-stream-manager.ts",
+      "upstreamPath": "packages/server/src/server/dictation/dictation-stream-manager.ts",
+      "upstreamSha256": "7d8cc94984b90c72c2ebffdb64937c1d97333966a8696f4c21653e9e08fdaeb9",
+      "sha256": "309e49e66ba2ceef47c40d335e808eaa19137600e9dd300d5383c838c3384f12"
+    },
+    {
+      "path": "src/server/paseo-env.ts",
+      "upstreamPath": "packages/server/src/server/paseo-env.ts",
+      "upstreamSha256": "0e90a3b4f4ed25ab4c5c402048577aed550742867d0afd0b93276c7070906894",
+      "sha256": "0e90a3b4f4ed25ab4c5c402048577aed550742867d0afd0b93276c7070906894"
+    },
+    {
+      "path": "src/server/speech/audio.ts",
+      "upstreamPath": "packages/server/src/server/speech/audio.ts",
+      "upstreamSha256": "d4a0efcb5fd74d5689f7bd2072fd8e614fa91ec4da937d0c3e29da5ae6f39cbe",
+      "sha256": "d4a0efcb5fd74d5689f7bd2072fd8e614fa91ec4da937d0c3e29da5ae6f39cbe"
+    },
+    {
+      "path": "src/server/speech/provider-resolver.ts",
+      "upstreamPath": "packages/server/src/server/speech/provider-resolver.ts",
+      "upstreamSha256": "bcdf14c91d3013d4630d58c5e44637183126b8ba0fee5c170cbe32383d79fc5d",
+      "sha256": "bcdf14c91d3013d4630d58c5e44637183126b8ba0fee5c170cbe32383d79fc5d"
+    },
+    {
+      "path": "src/server/speech/providers/local/config.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/config.ts",
+      "upstreamSha256": "025df7ed4a821add7798dfd8cfa2bce1a806d6b08f01979406e5f2a34a6c19ae",
+      "sha256": "025df7ed4a821add7798dfd8cfa2bce1a806d6b08f01979406e5f2a34a6c19ae"
+    },
+    {
+      "path": "src/server/speech/providers/local/model-library.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/model-library.ts",
+      "upstreamSha256": "97f5ac1dd30610889fa35edbe687a84decd2068fdf4b690adef86337dcd8cded",
+      "sha256": "97f5ac1dd30610889fa35edbe687a84decd2068fdf4b690adef86337dcd8cded"
+    },
+    {
+      "path": "src/server/speech/providers/local/models.test.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/models.test.ts",
+      "upstreamSha256": "c5e737e69487adff41fe6dd7a9fee944d0cb5c72fa9ce22f642a0a4a1756c809",
+      "sha256": "c5e737e69487adff41fe6dd7a9fee944d0cb5c72fa9ce22f642a0a4a1756c809"
+    },
+    {
+      "path": "src/server/speech/providers/local/models.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/models.ts",
+      "upstreamSha256": "df00d9a16c0931f920ef244e5514198914e59073796015b1fa93327cc8c212f1",
+      "sha256": "df00d9a16c0931f920ef244e5514198914e59073796015b1fa93327cc8c212f1"
+    },
+    {
+      "path": "src/server/speech/providers/local/runtime.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/runtime.ts",
+      "upstreamSha256": "1c305b8e783b5d970b3da49f759eecaab727e299fa9330acde6a4881f627e863",
+      "sha256": "1c305b8e783b5d970b3da49f759eecaab727e299fa9330acde6a4881f627e863"
+    },
+    {
+      "path": "src/server/speech/providers/local/sherpa/assets/silero_vad.onnx",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/sherpa/assets/silero_vad.onnx",
+      "upstreamSha256": "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6",
+      "sha256": "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6"
+    },
+    {
+      "path": "src/server/speech/providers/local/sherpa/model-catalog.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/sherpa/model-catalog.ts",
+      "upstreamSha256": "7751b2fe4272488db9d58aa40c02ec2e49b32b3c561916a0e8d6af8e8ec02cc4",
+      "sha256": "7751b2fe4272488db9d58aa40c02ec2e49b32b3c561916a0e8d6af8e8ec02cc4"
+    },
+    {
+      "path": "src/server/speech/providers/local/sherpa/model-downloader.test.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/sherpa/model-downloader.test.ts",
+      "upstreamSha256": "5a470a66dd0751e98f0338f20f6230b878964b9b8ebc3b1fbe8da8203021373e",
+      "sha256": "5a470a66dd0751e98f0338f20f6230b878964b9b8ebc3b1fbe8da8203021373e"
+    },
+    {
+      "path": "src/server/speech/providers/local/sherpa/model-downloader.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/sherpa/model-downloader.ts",
+      "upstreamSha256": "b26d0e1ad30f91249a4501c2c5c29dd0f55d11354820389dd584c002067057ae",
+      "sha256": "a8699d2d06d9b956df7d834993011516bfd49166eac191cfd5ce70b8cad397d8"
+    },
+    {
+      "path": "src/server/speech/providers/local/sherpa/sherpa-offline-recognizer.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/sherpa/sherpa-offline-recognizer.ts",
+      "upstreamSha256": "48fb2cadc1ac962064f54dca8b6d32208aee9a3639afa6e2a5c39369787daac2",
+      "sha256": "48fb2cadc1ac962064f54dca8b6d32208aee9a3639afa6e2a5c39369787daac2"
+    },
+    {
+      "path": "src/server/speech/providers/local/sherpa/sherpa-onnx-node-loader.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/sherpa/sherpa-onnx-node-loader.ts",
+      "upstreamSha256": "ed12caf4eed64cf515dd5584f9cea9162d25a01514f5ab7bc3ec38f8f43a9453",
+      "sha256": "ed12caf4eed64cf515dd5584f9cea9162d25a01514f5ab7bc3ec38f8f43a9453"
+    },
+    {
+      "path": "src/server/speech/providers/local/sherpa/sherpa-parakeet-realtime-session.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/sherpa/sherpa-parakeet-realtime-session.ts",
+      "upstreamSha256": "494507d0e9d24b499634f6915cdcf9ff451c84f80bee9ce53d015ad4f71b24dc",
+      "sha256": "494507d0e9d24b499634f6915cdcf9ff451c84f80bee9ce53d015ad4f71b24dc"
+    },
+    {
+      "path": "src/server/speech/providers/local/sherpa/sherpa-parakeet-stt.test.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/sherpa/sherpa-parakeet-stt.test.ts",
+      "upstreamSha256": "e0fb5ac6c47014158eac8844e4aa97c2f86c7feb7fa6bd7cc1643902b0c2e89a",
+      "sha256": "e0fb5ac6c47014158eac8844e4aa97c2f86c7feb7fa6bd7cc1643902b0c2e89a"
+    },
+    {
+      "path": "src/server/speech/providers/local/sherpa/sherpa-parakeet-stt.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/sherpa/sherpa-parakeet-stt.ts",
+      "upstreamSha256": "9d550aae82541c7ef0f177d9de46db59eb1f150b87d1838044042e1f15f23802",
+      "sha256": "9d550aae82541c7ef0f177d9de46db59eb1f150b87d1838044042e1f15f23802"
+    },
+    {
+      "path": "src/server/speech/providers/local/sherpa/sherpa-runtime-env.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/sherpa/sherpa-runtime-env.ts",
+      "upstreamSha256": "43d93be29d291557be49ecea844b9756996eb88ad7bc8b04918a8b2c5024dfc0",
+      "sha256": "aaecfd8300d072ac633fb137e252db3f9834cbbaf3f3dc2fe1172731dfb60198"
+    },
+    {
+      "path": "src/server/speech/providers/local/sherpa/sherpa-tts.test.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/sherpa/sherpa-tts.test.ts",
+      "upstreamSha256": "adf034e43458f2da43f25614387d8e65ede52d77bb6c5bdfd34d20e27e2cfaf5",
+      "sha256": "adf034e43458f2da43f25614387d8e65ede52d77bb6c5bdfd34d20e27e2cfaf5"
+    },
+    {
+      "path": "src/server/speech/providers/local/sherpa/sherpa-tts.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/sherpa/sherpa-tts.ts",
+      "upstreamSha256": "697b55615580dbd3e178a7ae8d02d64ccf542f7a50c1836cbc147788349cd339",
+      "sha256": "697b55615580dbd3e178a7ae8d02d64ccf542f7a50c1836cbc147788349cd339"
+    },
+    {
+      "path": "src/server/speech/providers/local/sherpa/silero-vad-provider.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/sherpa/silero-vad-provider.ts",
+      "upstreamSha256": "b47ef4717349645c48e201caa2d3d2290eb7904998707573d2282628b4db73ff",
+      "sha256": "b47ef4717349645c48e201caa2d3d2290eb7904998707573d2282628b4db73ff"
+    },
+    {
+      "path": "src/server/speech/providers/local/sherpa/silero-vad-session.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/sherpa/silero-vad-session.ts",
+      "upstreamSha256": "3b795f8def9fad0839ca25881aff5958dce574543e55d12cf2fc4029488a96a1",
+      "sha256": "3b795f8def9fad0839ca25881aff5958dce574543e55d12cf2fc4029488a96a1"
+    },
+    {
+      "path": "src/server/speech/providers/local/sherpa/speech-download.e2e.test.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/sherpa/speech-download.e2e.test.ts",
+      "upstreamSha256": "2354a602ac992872caab68e0af8686b060dcaf0dc7686014b8508acde7b8e1b6",
+      "sha256": "2354a602ac992872caab68e0af8686b060dcaf0dc7686014b8508acde7b8e1b6"
+    },
+    {
+      "path": "src/server/speech/providers/local/test-fixtures/paused-ipc-worker.cjs",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/test-fixtures/paused-ipc-worker.cjs",
+      "upstreamSha256": "ca183d204e4faf92c362e4e3f50fd8808afe018551b2f7b616d2ba9a39b2366e",
+      "sha256": "ca183d204e4faf92c362e4e3f50fd8808afe018551b2f7b616d2ba9a39b2366e"
+    },
+    {
+      "path": "src/server/speech/providers/local/worker-bytes.test.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/worker-bytes.test.ts",
+      "upstreamSha256": "37a31a027183680dd612fdb5f5a85ec8bc4243c3165064ad6b40bfeb0fd4e984",
+      "sha256": "37a31a027183680dd612fdb5f5a85ec8bc4243c3165064ad6b40bfeb0fd4e984"
+    },
+    {
+      "path": "src/server/speech/providers/local/worker-bytes.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/worker-bytes.ts",
+      "upstreamSha256": "1b7c486dee4a98ef881276e535c0d62e8b1222bc1def18519a7019b9fba93fed",
+      "sha256": "1b7c486dee4a98ef881276e535c0d62e8b1222bc1def18519a7019b9fba93fed"
+    },
+    {
+      "path": "src/server/speech/providers/local/worker-client.test.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/worker-client.test.ts",
+      "upstreamSha256": "3adaf6db27f6b8d1597c423794eb6aa8e5a91859a3b68dfc2b2eea6e90cb60ae",
+      "sha256": "3adaf6db27f6b8d1597c423794eb6aa8e5a91859a3b68dfc2b2eea6e90cb60ae"
+    },
+    {
+      "path": "src/server/speech/providers/local/worker-client.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/worker-client.ts",
+      "upstreamSha256": "47f739a0120a4f27d58fa4efdc7081bef0678ea2c1fb1bea38c1e842de728a35",
+      "sha256": "8b1dc47250dfd7628da61cb487d5c84a351205127acee435a64aaad6fd5e5e29"
+    },
+    {
+      "path": "src/server/speech/providers/local/worker-process.local.e2e.test.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/worker-process.local.e2e.test.ts",
+      "upstreamSha256": "e7a96e68c2d22b79a723adbc08836797e6a69ef844aefc72929d7856914e171a",
+      "sha256": "e7a96e68c2d22b79a723adbc08836797e6a69ef844aefc72929d7856914e171a"
+    },
+    {
+      "path": "src/server/speech/providers/local/worker-process.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/worker-process.ts",
+      "upstreamSha256": "fa3a1e1950886c266b15075f1c63f5727b1096ee3ba07e393ef96ff08e6b2a85",
+      "sha256": "fa3a1e1950886c266b15075f1c63f5727b1096ee3ba07e393ef96ff08e6b2a85"
+    },
+    {
+      "path": "src/server/speech/providers/local/worker-protocol.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/local/worker-protocol.ts",
+      "upstreamSha256": "0e4caff69cc79ba7a1be2ab45fada30558ef1cf0ef1f05a7db5a4a766eb23b48",
+      "sha256": "0e4caff69cc79ba7a1be2ab45fada30558ef1cf0ef1f05a7db5a4a766eb23b48"
+    },
+    {
+      "path": "src/server/speech/providers/openai/config.test.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/openai/config.test.ts",
+      "upstreamSha256": "0b45ffc8644685682e0d8d2181cc0968a41785627cc839880750d8fc541cb871",
+      "sha256": "0b45ffc8644685682e0d8d2181cc0968a41785627cc839880750d8fc541cb871"
+    },
+    {
+      "path": "src/server/speech/providers/openai/config.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/openai/config.ts",
+      "upstreamSha256": "6a24f75e07050c82907a6b9e8b6da9509b4edc5ec384d069a774d7b5a51c81b3",
+      "sha256": "6a24f75e07050c82907a6b9e8b6da9509b4edc5ec384d069a774d7b5a51c81b3"
+    },
+    {
+      "path": "src/server/speech/providers/openai/runtime.test.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/openai/runtime.test.ts",
+      "upstreamSha256": "19b6b7757275dc710fbe0be01aa7dcb82a7102ccc928b2a08c8b18f3db5ec3b9",
+      "sha256": "19b6b7757275dc710fbe0be01aa7dcb82a7102ccc928b2a08c8b18f3db5ec3b9"
+    },
+    {
+      "path": "src/server/speech/providers/openai/runtime.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/openai/runtime.ts",
+      "upstreamSha256": "69c26b779cc9ca3f6abfc7923da61a56afc3b2b517404f56949f8edf372c3564",
+      "sha256": "69c26b779cc9ca3f6abfc7923da61a56afc3b2b517404f56949f8edf372c3564"
+    },
+    {
+      "path": "src/server/speech/providers/openai/stt.test.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/openai/stt.test.ts",
+      "upstreamSha256": "3c7334b0df35487d251377dd6e551a0ccd48204c4a2964ced6d12434d045fb4c",
+      "sha256": "3c7334b0df35487d251377dd6e551a0ccd48204c4a2964ced6d12434d045fb4c"
+    },
+    {
+      "path": "src/server/speech/providers/openai/stt.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/openai/stt.ts",
+      "upstreamSha256": "f06d6fd9b36d96c806bc46de49bb8e72ef76163cc6bc9f84195f379bf078dbf7",
+      "sha256": "33c84976d3f96ffef9aa903631eedecf300bbbe5587a1ef926770774c9a75717"
+    },
+    {
+      "path": "src/server/speech/providers/openai/test-utils/prefetched-playback.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/openai/test-utils/prefetched-playback.ts",
+      "upstreamSha256": "8d1ca8843505d65f52b1f03eb3c137859caeb8991cd97e3369cb420eba7afb6d",
+      "sha256": "8d1ca8843505d65f52b1f03eb3c137859caeb8991cd97e3369cb420eba7afb6d"
+    },
+    {
+      "path": "src/server/speech/providers/openai/tts-playback.test.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/openai/tts-playback.test.ts",
+      "upstreamSha256": "0ae4fe78573ef3ad388ea04fc17907e0248ee0f6fdebab83bcc320c91ff934d6",
+      "sha256": "0ae4fe78573ef3ad388ea04fc17907e0248ee0f6fdebab83bcc320c91ff934d6"
+    },
+    {
+      "path": "src/server/speech/providers/openai/tts.test.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/openai/tts.test.ts",
+      "upstreamSha256": "02b68a9d1f6afd6524db85eb4b26bdab74b36899e973ce40cb6d05e8b3aaef00",
+      "sha256": "02b68a9d1f6afd6524db85eb4b26bdab74b36899e973ce40cb6d05e8b3aaef00"
+    },
+    {
+      "path": "src/server/speech/providers/openai/tts.ts",
+      "upstreamPath": "packages/server/src/server/speech/providers/openai/tts.ts",
+      "upstreamSha256": "9f548a00b19f07f5d738ef07eec0f637ac0b0bd4eedc37ec21430b8a45eab0d3",
+      "sha256": "fc37f5d93a947590fdbfbb661f04759ea05c2f71a050fe161cd502731bfeae5f"
+    },
+    {
+      "path": "src/server/speech/speech-config-resolver.test.ts",
+      "upstreamPath": "packages/server/src/server/speech/speech-config-resolver.test.ts",
+      "upstreamSha256": "c8d8a208a53e50f97dd65084fb718d6fddf535b45979d00a0010f8e06853f0fb",
+      "sha256": "c8d8a208a53e50f97dd65084fb718d6fddf535b45979d00a0010f8e06853f0fb"
+    },
+    {
+      "path": "src/server/speech/speech-config-resolver.ts",
+      "upstreamPath": "packages/server/src/server/speech/speech-config-resolver.ts",
+      "upstreamSha256": "60ea78af955e45e77d73575fafba3cd4114ae511ddd648aa76d1696800439505",
+      "sha256": "60ea78af955e45e77d73575fafba3cd4114ae511ddd648aa76d1696800439505"
+    },
+    {
+      "path": "src/server/speech/speech-provider.ts",
+      "upstreamPath": "packages/server/src/server/speech/speech-provider.ts",
+      "upstreamSha256": "32da100c40b563d30ce02e4abc3c0c3a409ca52cef79e6644065e7c2bd75e675",
+      "sha256": "32da100c40b563d30ce02e4abc3c0c3a409ca52cef79e6644065e7c2bd75e675"
+    },
+    {
+      "path": "src/server/speech/speech-runtime.test.ts",
+      "upstreamPath": "packages/server/src/server/speech/speech-runtime.test.ts",
+      "upstreamSha256": "d6df5bee89b310ce874f67ae63000bc70cbca47bb87950ac2d8c3930c9fd868e",
+      "sha256": "d6df5bee89b310ce874f67ae63000bc70cbca47bb87950ac2d8c3930c9fd868e"
+    },
+    {
+      "path": "src/server/speech/speech-runtime.ts",
+      "upstreamPath": "packages/server/src/server/speech/speech-runtime.ts",
+      "upstreamSha256": "013105d236b6f885ff67a243127e5898a1edb6559ce59019d7b2898be4d52033",
+      "sha256": "013105d236b6f885ff67a243127e5898a1edb6559ce59019d7b2898be4d52033"
+    },
+    {
+      "path": "src/server/speech/speech-settings.ts",
+      "upstreamPath": "packages/server/src/server/speech/speech-settings.ts",
+      "upstreamSha256": "959cc05756b9360d0909be4a42e05fc24a3c175ff2caae85446ef47a2fe79ac8",
+      "sha256": "959cc05756b9360d0909be4a42e05fc24a3c175ff2caae85446ef47a2fe79ac8"
+    },
+    {
+      "path": "src/server/speech/speech-types.ts",
+      "upstreamPath": "packages/server/src/server/speech/speech-types.ts",
+      "upstreamSha256": "80c00a18e75c8b9c4c11857fc7150b29dd3b2b4b6c35c87c41bf2b92d561d201",
+      "sha256": "80c00a18e75c8b9c4c11857fc7150b29dd3b2b4b6c35c87c41bf2b92d561d201"
+    },
+    {
+      "path": "src/server/speech/turn-detection-provider.ts",
+      "upstreamPath": "packages/server/src/server/speech/turn-detection-provider.ts",
+      "upstreamSha256": "f0a65f5bfb42c41edc97ed12d202030063be38ee3ae4cb25672446d001ac2acb",
+      "sha256": "f0a65f5bfb42c41edc97ed12d202030063be38ee3ae4cb25672446d001ac2acb"
+    },
+    {
+      "path": "src/terminal/terminal-ts-loader.mjs",
+      "upstreamPath": "packages/server/src/terminal/terminal-ts-loader.mjs",
+      "upstreamSha256": "b0c72b4d30636de85341932841cf026962637b2ff3f6d58265f17c3e18681258",
+      "sha256": "b0c72b4d30636de85341932841cf026962637b2ff3f6d58265f17c3e18681258"
+    },
+    {
+      "path": "src/utils/spawn.ts",
+      "upstreamPath": "packages/server/src/utils/spawn.ts",
+      "upstreamSha256": "1effd51690f8f6853b3e133ec4fa6268d6680d63d3eda0d01c454c2b1f423c75",
+      "sha256": "9a6ccb1e5e66649e2acb717917519f384475a7c32e279d18db25ee5b8b25e0e5"
+    }
+  ],
+  "localChanges": [
+    {
+      "path": "src/server/dictation/dictation-stream-manager.ts",
+      "reason": "Optional persistDebugAudio flag; Workbench always disables audio files and duplicate debug audio buffering. Original sequencing/resampling/finalization paths remain in use.",
+      "originalCopy": "upstream/src/server/dictation/dictation-stream-manager.ts",
+      "upstreamSha256": "7d8cc94984b90c72c2ebffdb64937c1d97333966a8696f4c21653e9e08fdaeb9",
+      "sha256": "309e49e66ba2ceef47c40d335e808eaa19137600e9dd300d5383c838c3384f12"
+    },
+    {
+      "path": "src/server/speech/providers/local/sherpa/model-downloader.ts",
+      "reason": "Export original archive download/extract functions for optional runtime packages; enforce pinned size/SHA256/SHA512 before extraction. Workbench installs into isolated staging before activation.",
+      "originalCopy": "upstream/src/server/speech/providers/local/sherpa/model-downloader.ts",
+      "upstreamSha256": "b26d0e1ad30f91249a4501c2c5c29dd0f55d11354820389dd584c002067057ae",
+      "sha256": "a8699d2d06d9b956df7d834993011516bfd49166eac191cfd5ce70b8cad397d8"
+    },
+    {
+      "path": "src/server/speech/providers/local/sherpa/sherpa-runtime-env.ts",
+      "reason": "Resolve native shared library path against the explicitly installed optional runtime before spawning the original worker.",
+      "originalCopy": "upstream/src/server/speech/providers/local/sherpa/sherpa-runtime-env.ts",
+      "upstreamSha256": "43d93be29d291557be49ecea844b9756996eb88ad7bc8b04918a8b2c5024dfc0",
+      "sha256": "aaecfd8300d072ac633fb137e252db3f9834cbbaf3f3dc2fe1172731dfb60198"
+    },
+    {
+      "path": "src/server/speech/providers/local/worker-client.ts",
+      "reason": "Optional runtime directory for isolated native modules; inherited original worker protocol; normal IPC disconnect shutdown without kill fallback.",
+      "originalCopy": "upstream/src/server/speech/providers/local/worker-client.ts",
+      "upstreamSha256": "47f739a0120a4f27d58fa4efdc7081bef0678ea2c1fb1bea38c1e842de728a35",
+      "sha256": "8b1dc47250dfd7628da61cb487d5c84a351205127acee435a64aaad6fd5e5e29"
+    },
+    {
+      "path": "src/server/speech/providers/openai/stt.ts",
+      "reason": "Memory-only SDK toFile upload instead of temporary audio file; AbortSignal and timeout; zero automatic paid retries; remove transcript/logprob text from diagnostics.",
+      "originalCopy": "upstream/src/server/speech/providers/openai/stt.ts",
+      "upstreamSha256": "f06d6fd9b36d96c806bc46de49bb8e72ef76163cc6bc9f84195f379bf078dbf7",
+      "sha256": "33c84976d3f96ffef9aa903631eedecf300bbbe5587a1ef926770774c9a75717"
+    },
+    {
+      "path": "src/server/speech/providers/openai/tts.ts",
+      "reason": "AbortSignal and timeout; zero automatic paid retries; remove text preview from diagnostics.",
+      "originalCopy": "upstream/src/server/speech/providers/openai/tts.ts",
+      "upstreamSha256": "9f548a00b19f07f5d738ef07eec0f637ac0b0bd4eedc37ec21430b8a45eab0d3",
+      "sha256": "fc37f5d93a947590fdbfbb661f04759ea05c2f71a050fe161cd502731bfeae5f"
+    },
+    {
+      "path": "src/utils/spawn.ts",
+      "reason": "Resolve the imported original plugin process helper locally; same upstream process/Windows quoting implementation.",
+      "originalCopy": "upstream/src/utils/spawn.ts",
+      "upstreamSha256": "1effd51690f8f6853b3e133ec4fa6268d6680d63d3eda0d01c454c2b1f423c75",
+      "sha256": "9a6ccb1e5e66649e2acb717917519f384475a7c32e279d18db25ee5b8b25e0e5"
+    }
+  ],
+  "integration": {
+    "runtime": "Original DictationStreamManager, OpenAISTT/OpenAITTS, LocalSpeechWorkerClient/WorkerBackedSpeechToTextProvider, original native worker and sherpa recognizer/downloader are called by VoiceService.",
+    "scope": "Selected standalone compile. Full Paseo server/SDK facade and speech session orchestration are not connected. Original local TTS source is preserved but Korean local TTS is not provided.",
+    "default": "Disabled. No model/native runtime is bundled or downloaded until explicit selection. No live microphone, paid API or model execution during implementation.",
+    "compileConfig": {
+      "path": "tsconfig.workbench.json",
+      "sha256": "9941a63117d07d324bfb68f2b97db36b551223c1022712aa98975bc7803e7957"
+    },
+    "packageManifest": {
+      "path": "package.json",
+      "sha256": "6c123f941fe7ccd0c9472c7d9abf132ddf4efd594bfae3f5c7b1b0ec040d317c"
+    },
+    "generatedArtifacts": {
+      "compiler": "TypeScript",
+      "version": "5.9.3",
+      "config": "tsconfig.workbench.json",
+      "files": [
+        {
+          "path": "dist/plugin/server/process-internal/windows-command.d.ts",
+          "bytes": 729,
+          "sha256": "7f7a108abaeb5dc6c0bfc1f4cf5b27b5802c1bc843025198095b610d980a12cf"
+        },
+        {
+          "path": "dist/plugin/server/process-internal/windows-command.js",
+          "bytes": 1818,
+          "sha256": "43675e48a673ec1870db6c46318a32346812ec7b4bbe812bc7c42ccfb1cfd314"
+        },
+        {
+          "path": "dist/plugin/server/process.d.ts",
+          "bytes": 1123,
+          "sha256": "069894ead1960af71f0d0e85c6c4d2defe3812ec69c0ec5785413dba490368c7"
+        },
+        {
+          "path": "dist/plugin/server/process.js",
+          "bytes": 2773,
+          "sha256": "169cb05d2fab7cbc0cbbfd788efcdda409e305b8bf8467f9c2423b734ed293cd"
+        },
+        {
+          "path": "dist/server/agent/audio-utils.d.ts",
+          "bytes": 181,
+          "sha256": "3c72a318071ee5013a1417fdd4538358d74c33d6d44d0151e450dcb81f060eab"
+        },
+        {
+          "path": "dist/server/agent/audio-utils.js",
+          "bytes": 916,
+          "sha256": "37045e17d4d7c528af8abcb340ae2b8821c14f0d7f394342b4a94392abb1463c"
+        },
+        {
+          "path": "dist/server/agent/dictation-debug.d.ts",
+          "bytes": 654,
+          "sha256": "eb717b72534fe523ba1909cc168f4b97fac858cc218f20e700db18bc78904d15"
+        },
+        {
+          "path": "dist/server/agent/dictation-debug.js",
+          "bytes": 2184,
+          "sha256": "71c4f8080a060d01e9b2613388f71c98805c8acac1b9e67ea5fa7c5b1d89510a"
+        },
+        {
+          "path": "dist/server/agent/pcm16-resampler.d.ts",
+          "bytes": 329,
+          "sha256": "11b1cb3589faf59641a221ec2b329d7afa247215cd58c6b39bd1ca7272930c6b"
+        },
+        {
+          "path": "dist/server/agent/pcm16-resampler.js",
+          "bytes": 2402,
+          "sha256": "dc60f1a2a4ef40a7d80cb4244e65644a9536c5f125cfa6e5e28f39ea717e009e"
+        },
+        {
+          "path": "dist/server/agent/recordings-debug.d.ts",
+          "bytes": 159,
+          "sha256": "3f29131f0185891a493a0216e655c404f6399b912ecdc1e86583fa12b891d68b"
+        },
+        {
+          "path": "dist/server/agent/recordings-debug.js",
+          "bytes": 668,
+          "sha256": "666818de721cc989f693bc2b5d09f3a3b886c6df7228384f74727497a3c1f037"
+        },
+        {
+          "path": "dist/server/dictation/dictation-stream-manager.d.ts",
+          "bytes": 2713,
+          "sha256": "957b2f7f25b764a2713b6c383bce163f57c9c2fccf3b7f9a2dc260d30385e177"
+        },
+        {
+          "path": "dist/server/dictation/dictation-stream-manager.js",
+          "bytes": 24740,
+          "sha256": "cc3629d184d3a80739f178bcfef73aa3d179b60ce012f4946b1548e2c8e921d5"
+        },
+        {
+          "path": "dist/server/paseo-env.d.ts",
+          "bytes": 853,
+          "sha256": "ad0f818f9cc8f88ed341e2af13866af6d87bea209b456db3f0a99a58cd182291"
+        },
+        {
+          "path": "dist/server/paseo-env.js",
+          "bytes": 1782,
+          "sha256": "5d5978c301edec0f8fade7a65cacb92d7f54fd66a5ddfc0b2dfd8a4271832cab"
+        },
+        {
+          "path": "dist/server/speech/audio.d.ts",
+          "bytes": 521,
+          "sha256": "2da5563ffddca1e34916b0f5bfc06a7094b20e804c08ae9de4e705e0b624c9b6"
+        },
+        {
+          "path": "dist/server/speech/audio.js",
+          "bytes": 3758,
+          "sha256": "eeea1f4a655049409a3d17e31dbdc2511852ee9ee35f03bc6e303b710f954df6"
+        },
+        {
+          "path": "dist/server/speech/provider-resolver.d.ts",
+          "bytes": 113,
+          "sha256": "0b365ae296381bd168df67fcd79aa77fbf934fde23c86bee8354fafb53198456"
+        },
+        {
+          "path": "dist/server/speech/provider-resolver.js",
+          "bytes": 129,
+          "sha256": "f1a53a38878501e02507ddb021ad53ec28b19e21c849c7ace10b7e625383ef88"
+        },
+        {
+          "path": "dist/server/speech/providers/local/models.d.ts",
+          "bytes": 949,
+          "sha256": "64cdba3543793a9cf78f6f8dee0919dfce3cf034dc3093780e42a45af936eebf"
+        },
+        {
+          "path": "dist/server/speech/providers/local/models.js",
+          "bytes": 854,
+          "sha256": "eec32a82883afc665d30e9ee933e937c92ad0da71be484f5f7bcbbe6ab8ce4b3"
+        },
+        {
+          "path": "dist/server/speech/providers/local/sherpa/model-catalog.d.ts",
+          "bytes": 15934,
+          "sha256": "b66429bc0ec044f2c4290e3c9b9eb9860e87460f84d788408703dc711e90e11b"
+        },
+        {
+          "path": "dist/server/speech/providers/local/sherpa/model-catalog.js",
+          "bytes": 13557,
+          "sha256": "d0907ef7f3fc96dc9a44d045b79150fc9c409ade0d63f1737ea615651a3c0b07"
+        },
+        {
+          "path": "dist/server/speech/providers/local/sherpa/model-downloader.d.ts",
+          "bytes": 1901,
+          "sha256": "63c3a365333171d264331a248411b0ddf7394ce1565d6c7fa4154fd387e809e6"
+        },
+        {
+          "path": "dist/server/speech/providers/local/sherpa/model-downloader.js",
+          "bytes": 9218,
+          "sha256": "8a48f8c539d7e678a410f7d3ed1f63d3b847920b8533f9c96450b5f07cbb4fae"
+        },
+        {
+          "path": "dist/server/speech/providers/local/sherpa/sherpa-offline-recognizer.d.ts",
+          "bytes": 1333,
+          "sha256": "2bc5409edcd72fbbff9b8eee317f5a4c013d0c90c15f2d9c3b2e993f88df4d94"
+        },
+        {
+          "path": "dist/server/speech/providers/local/sherpa/sherpa-offline-recognizer.js",
+          "bytes": 4017,
+          "sha256": "054a6f2cee8035fae53083ef1d27cd50c216aef6dee0170272ccd06f824d8a71"
+        },
+        {
+          "path": "dist/server/speech/providers/local/sherpa/sherpa-onnx-node-loader.d.ts",
+          "bytes": 404,
+          "sha256": "e5048c69f5d3fdb4412e82543a9229a5c379c44408e9625b34ea8d5b34d4e387"
+        },
+        {
+          "path": "dist/server/speech/providers/local/sherpa/sherpa-onnx-node-loader.js",
+          "bytes": 3567,
+          "sha256": "f55b274cd7a20278292c8f8d8982df03d2d32455e9a1b5d18141111f62562470"
+        },
+        {
+          "path": "dist/server/speech/providers/local/sherpa/sherpa-parakeet-realtime-session.d.ts",
+          "bytes": 948,
+          "sha256": "2990b91700f335fa91cac96fa1b9bdba3acd7758a87a2dff2bad7e0d7a7f4d52"
+        },
+        {
+          "path": "dist/server/speech/providers/local/sherpa/sherpa-parakeet-realtime-session.js",
+          "bytes": 4707,
+          "sha256": "92d9e429defa19e544570207e0258c2f1fa9a9ebabfe8daa0d5656d71332ec2c"
+        },
+        {
+          "path": "dist/server/speech/providers/local/sherpa/sherpa-parakeet-stt.d.ts",
+          "bytes": 871,
+          "sha256": "4441cdafa407e60e2ac2a6a7871dee5b8e326fd1b2a792d70dd21bcbada1a6ff"
+        },
+        {
+          "path": "dist/server/speech/providers/local/sherpa/sherpa-parakeet-stt.js",
+          "bytes": 5649,
+          "sha256": "760a710ab334217bfad72aa041166339f38393243492ae18bed51f4e635a9e9a"
+        },
+        {
+          "path": "dist/server/speech/providers/local/sherpa/sherpa-runtime-env.d.ts",
+          "bytes": 1011,
+          "sha256": "de04e99ee26891ca2535c84246734acb6005fc48e8a21cd315e02afabbbc2f36"
+        },
+        {
+          "path": "dist/server/speech/providers/local/sherpa/sherpa-runtime-env.js",
+          "bytes": 2994,
+          "sha256": "3107c13ed933dcb787d1ec076a2326e2a4e971457a474c54a60df243c82650f7"
+        },
+        {
+          "path": "dist/server/speech/providers/local/sherpa/sherpa-tts.d.ts",
+          "bytes": 958,
+          "sha256": "88af76ec175a67a4f8a9ef3635823997092bc5784ddc01786ade7bec4ef656f1"
+        },
+        {
+          "path": "dist/server/speech/providers/local/sherpa/sherpa-tts.js",
+          "bytes": 6132,
+          "sha256": "48191d848fb2cb46b27273914cf572a4368e21bec91817aa91708820e1e66ec1"
+        },
+        {
+          "path": "dist/server/speech/providers/local/sherpa/silero-vad-provider.d.ts",
+          "bytes": 888,
+          "sha256": "134edbefe78efe910923232e3a53f99484710321e36c76cbdbc510173fd5452e"
+        },
+        {
+          "path": "dist/server/speech/providers/local/sherpa/silero-vad-provider.js",
+          "bytes": 1834,
+          "sha256": "6c53650c43f8ccf10b9b83788fda937f33bef0d6ee9a15bc545c366f685fe7bf"
+        },
+        {
+          "path": "dist/server/speech/providers/local/sherpa/silero-vad-session.d.ts",
+          "bytes": 1172,
+          "sha256": "905fc95e7185c7df70ca54104d9c56d87d664281352c3241e783ffb07000767c"
+        },
+        {
+          "path": "dist/server/speech/providers/local/sherpa/silero-vad-session.js",
+          "bytes": 7280,
+          "sha256": "6fdf3f729a474f6ccf9bfd023aa0da5f335e2d4a9a2f7141293277a342cf2506"
+        },
+        {
+          "path": "dist/server/speech/providers/local/worker-bytes.d.ts",
+          "bytes": 219,
+          "sha256": "3bd24893ce05ebfa268510983182c7d3e2ade3294476b140048d7c03e838eb61"
+        },
+        {
+          "path": "dist/server/speech/providers/local/worker-bytes.js",
+          "bytes": 227,
+          "sha256": "9033f0cba93bf9933452078d93f60bf2ff859b8be62a96f1d3d6a970a3ad3d63"
+        },
+        {
+          "path": "dist/server/speech/providers/local/worker-client.d.ts",
+          "bytes": 3790,
+          "sha256": "0ccf3cf945bb1169df8f46c93478f6f2501291f65bd98908b29f578d10813807"
+        },
+        {
+          "path": "dist/server/speech/providers/local/worker-client.js",
+          "bytes": 20903,
+          "sha256": "87e20097b70c1cbcf3cbdb7c6e4cd1190c0558614b9961112f4b420b0562219a"
+        },
+        {
+          "path": "dist/server/speech/providers/local/worker-process.d.ts",
+          "bytes": 11,
+          "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+        },
+        {
+          "path": "dist/server/speech/providers/local/worker-process.js",
+          "bytes": 8937,
+          "sha256": "ed8d07402384d9bef1ccf7a5db3d9c8f362ad5e12fc45de0086e315073578982"
+        },
+        {
+          "path": "dist/server/speech/providers/local/worker-protocol.d.ts",
+          "bytes": 2495,
+          "sha256": "b21eecfb2613dd9f70bc30590fdaf562cefd53a693361be30b0b1e512e95a5b2"
+        },
+        {
+          "path": "dist/server/speech/providers/local/worker-protocol.js",
+          "bytes": 11,
+          "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+        },
+        {
+          "path": "dist/server/speech/providers/openai/stt.d.ts",
+          "bytes": 903,
+          "sha256": "01fe92458ba8a7f28dd7dd838d66b6b4739860cba89adf36d97e5824aa122f16"
+        },
+        {
+          "path": "dist/server/speech/providers/openai/stt.js",
+          "bytes": 8356,
+          "sha256": "57b44149289c60d2a63e12d0b76be51370851217dcf65fe6eb7d1b485478ee7e"
+        },
+        {
+          "path": "dist/server/speech/providers/openai/tts.d.ts",
+          "bytes": 805,
+          "sha256": "2619bebb899f1c08519734034fe2ba8fbc4af114c954ec2e9243d4e35bdd377a"
+        },
+        {
+          "path": "dist/server/speech/providers/openai/tts.js",
+          "bytes": 2301,
+          "sha256": "b32e2ec1f4d5875b1b560ed9565c8e4adfe8ee77cf96955112bc136458a0b695"
+        },
+        {
+          "path": "dist/server/speech/speech-provider.d.ts",
+          "bytes": 1745,
+          "sha256": "371d566012a839aba2df9c0fc033467ef1bff9e05e605c94c9d3352fed1507e2"
+        },
+        {
+          "path": "dist/server/speech/speech-provider.js",
+          "bytes": 11,
+          "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+        },
+        {
+          "path": "dist/server/speech/turn-detection-provider.d.ts",
+          "bytes": 734,
+          "sha256": "8c11981b9ea6cd397bc3b1cac49744843313e1d413c50385cdfc8ad6dd8e97e7"
+        },
+        {
+          "path": "dist/server/speech/turn-detection-provider.js",
+          "bytes": 11,
+          "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+        },
+        {
+          "path": "dist/utils/spawn.d.ts",
+          "bytes": 954,
+          "sha256": "e3efc34a0ce665d38cc7c59e22d4bfab162fb69a84b2f19f7ce54e6a89530cfa"
+        },
+        {
+          "path": "dist/utils/spawn.js",
+          "bytes": 1396,
+          "sha256": "7c7788893698d366293c78959a61ecee3901605f1f417d782cfd1a78ae96d583"
+        }
+      ],
+      "note": "Selected standalone emit by root; no application/installer build. Original source + explicitly listed Workbench compatibility adaptations are compiled.",
+      "treeSha256": "048cae75efb71a290c08c1dd7566574b3ca37c4dbf30ba568543cc4d359b713e"
+    }
+  }
+}

@@ -1,0 +1,227 @@
+{
+  "repository": "https://github.com/getpaseo/paseo",
+  "revision": "1fff127f45b11c1c9c573fbbd12791673004c912",
+  "license": "Apache-2.0",
+  "files": [
+    {
+      "path": "src/server/plugins/agent-tools.ts",
+      "sha256": "0441e3c3f6cc15dfc3cdf0e9916fb79ac1ae62059b74b14b23ff4e6b720a019a",
+      "upstreamSha256": "0441e3c3f6cc15dfc3cdf0e9916fb79ac1ae62059b74b14b23ff4e6b720a019a",
+      "modified": false
+    },
+    {
+      "path": "src/server/plugins/compiler-build.ts",
+      "sha256": "67a5984e5ce9ddc741abba053aa1973b6831ade7d4f600b36efba0a60915ddef",
+      "upstreamSha256": "67a5984e5ce9ddc741abba053aa1973b6831ade7d4f600b36efba0a60915ddef",
+      "modified": false
+    },
+    {
+      "path": "src/server/plugins/compiler-esbuild.ts",
+      "sha256": "9cdc246a79834f538caee2c2c15f91cd1b97db900e895ec47edcd92b26e41ffe",
+      "upstreamSha256": "9cdc246a79834f538caee2c2c15f91cd1b97db900e895ec47edcd92b26e41ffe",
+      "modified": false
+    },
+    {
+      "path": "src/server/plugins/compiler-imports.ts",
+      "sha256": "fc36be49841397f7954e5b25ef77fa4375b645b5e96f215031c9e5a08dcb9fb6",
+      "upstreamSha256": "fc36be49841397f7954e5b25ef77fa4375b645b5e96f215031c9e5a08dcb9fb6",
+      "modified": false
+    },
+    {
+      "path": "src/server/plugins/lifecycle/index.ts",
+      "sha256": "f1b7f38f52d825b8735776fdd1988692c1f8bec713f4ad80ce579f0363147e1a",
+      "upstreamSha256": "f1b7f38f52d825b8735776fdd1988692c1f8bec713f4ad80ce579f0363147e1a",
+      "modified": false
+    },
+    {
+      "path": "src/server/plugins/manifest.ts",
+      "sha256": "51205af56fb879e398ecc5842b16190ce2bbb09e8e1125649a930d0e9084e3f6",
+      "upstreamSha256": "51205af56fb879e398ecc5842b16190ce2bbb09e8e1125649a930d0e9084e3f6",
+      "modified": false
+    },
+    {
+      "path": "src/server/plugins/plugin-process-protocol.ts",
+      "sha256": "1e617befb59f901f8d0ef6d9f3b535e12ce3e725d68f1184d3f9e3ebaadc0a70",
+      "upstreamSha256": "1e617befb59f901f8d0ef6d9f3b535e12ce3e725d68f1184d3f9e3ebaadc0a70",
+      "modified": false
+    },
+    {
+      "path": "src/server/plugins/plugin-sdk-specifiers.ts",
+      "sha256": "38c2b6dc183cfacfaf5edb3e024c7a06b46d227f2369b46f45a169a843083d0d",
+      "upstreamSha256": "38c2b6dc183cfacfaf5edb3e024c7a06b46d227f2369b46f45a169a843083d0d",
+      "modified": false
+    },
+    {
+      "path": "src/server/plugins/runtime-subscription.ts",
+      "sha256": "905c4d9dd7ae4af4af0dcbbee1f6d287c56430eb1e0acf935b905ebbb22b4550",
+      "upstreamSha256": "905c4d9dd7ae4af4af0dcbbee1f6d287c56430eb1e0acf935b905ebbb22b4550",
+      "modified": false
+    },
+    {
+      "path": "src/server/plugins/runtime.ts",
+      "sha256": "70e3be8da0b03c7af770640c98009f2bdf7c3a2c0d4eb343125e5c04be83f2ce",
+      "upstreamSha256": "1278d6b67dfff8e27ca845e4831f73cb2e734f20076434a7b9f28b95fd9e33d3",
+      "modified": true
+    },
+    {
+      "path": "src/server/plugins/session-socket.ts",
+      "sha256": "e370290b050c6b354db6c47d72799dee0b63af242df9ab688820a35e1e655a2c",
+      "upstreamSha256": "e370290b050c6b354db6c47d72799dee0b63af242df9ab688820a35e1e655a2c",
+      "modified": false
+    },
+    {
+      "path": "src/utils/path.ts",
+      "sha256": "7edeaec75a1e7912b16085cfcdd1481d7e2f25a138182796fd4bce6d46a6634b",
+      "upstreamSha256": "7edeaec75a1e7912b16085cfcdd1481d7e2f25a138182796fd4bce6d46a6634b",
+      "modified": false
+    },
+    {
+      "path": "src/utils/worktree-path.ts",
+      "sha256": "4cee31ca63d371b2bc42aafd0a20ca82dce2b150491c625249630b9cad427422",
+      "upstreamSha256": "4cee31ca63d371b2bc42aafd0a20ca82dce2b150491c625249630b9cad427422",
+      "modified": false
+    }
+  ],
+  "adaptations": [
+    "runtime compiler import uses original compiler-build directly, with author build commands absent",
+    "spawnChild is mandatory; unmanaged Node spawn helper and imports removed",
+    "startBuiltinPlugin rejects without evaluating code; upstream runtime retained separately"
+  ],
+  "dist": [
+    {
+      "path": "dist/guest-sdk.js",
+      "sha256": "d7ef51db483649eb7651c06f73dff875eb8aa5cbfba4ce4f5f6558337bdf0149",
+      "bytes": 1196153
+    },
+    {
+      "path": "dist/server/plugins/agent-tools.d.ts",
+      "sha256": "d0a9eba720a52f3e8fc5b0d3f27519228edcfbbc0b749afc6acef3df2c31267c",
+      "bytes": 1620
+    },
+    {
+      "path": "dist/server/plugins/agent-tools.js",
+      "sha256": "282468179f6710ce7453f6b8a41bb54d9550b8c91e13e3ab7a798b619505005d",
+      "bytes": 2677
+    },
+    {
+      "path": "dist/server/plugins/compiler-build.d.ts",
+      "sha256": "fa184181417c7bc50885364e7e4b0db2364ce7b7404c2474989fb7b5e7119fd6",
+      "bytes": 611
+    },
+    {
+      "path": "dist/server/plugins/compiler-build.js",
+      "sha256": "a81182c06129b603cad03dabfc97cf68610f8ade92dc26425288bf2773b74756",
+      "bytes": 18698
+    },
+    {
+      "path": "dist/server/plugins/compiler-esbuild.d.ts",
+      "sha256": "1b1fecad27a8662aa2faca148955c5cba81cc5fee79beb1d4816115f0e26d4d9",
+      "bytes": 448
+    },
+    {
+      "path": "dist/server/plugins/compiler-esbuild.js",
+      "sha256": "d333ab312ec3260f5b4dff69cca4851b80bd5c70f203254a397ba236d95cc5a9",
+      "bytes": 2483
+    },
+    {
+      "path": "dist/server/plugins/compiler-imports.d.ts",
+      "sha256": "026fa66f4fd1a8e7799cf9d8c897ced40defb8d222e955b957e9ae66374fb341",
+      "bytes": 425
+    },
+    {
+      "path": "dist/server/plugins/compiler-imports.js",
+      "sha256": "072416e1fcec4af429c83ffb4eaa0b592eb09b0de888aaf58c6439b5a932da28",
+      "bytes": 4454
+    },
+    {
+      "path": "dist/server/plugins/lifecycle/index.d.ts",
+      "sha256": "cbb0e08f0a37c99fe8b8f593e8be32f68ebfae366ce503802e7cf504e9d633ef",
+      "bytes": 2842
+    },
+    {
+      "path": "dist/server/plugins/lifecycle/index.js",
+      "sha256": "5ee166b96257fabb90f9519db959ba1b7b4d1c5149c0ecf31c73ab40a93550dc",
+      "bytes": 11759
+    },
+    {
+      "path": "dist/server/plugins/manifest.d.ts",
+      "sha256": "0041da0f42d4609b165b27cab9d372fe7d532bcd5892498fecceef5ee5b9798f",
+      "bytes": 663
+    },
+    {
+      "path": "dist/server/plugins/manifest.js",
+      "sha256": "1e83c37f765e940f48c073efd788bbf3f851855c1b02aafe3e4f12ee368b6117",
+      "bytes": 1916
+    },
+    {
+      "path": "dist/server/plugins/plugin-process-protocol.d.ts",
+      "sha256": "209b3052e8ac3f84a0a81993c823755164d5bd773470a760602a1305a6f91b24",
+      "bytes": 3928
+    },
+    {
+      "path": "dist/server/plugins/plugin-process-protocol.js",
+      "sha256": "c2f7ee685cf1603a62a7e41a85576e532f8854dc53960c32c3a3a5631be2b55d",
+      "bytes": 7505
+    },
+    {
+      "path": "dist/server/plugins/plugin-sdk-specifiers.d.ts",
+      "sha256": "3b2794c7ee428ffd6d1d6f67bd80346bf4c427935086e0c082cbfd1d1518c03c",
+      "bytes": 621
+    },
+    {
+      "path": "dist/server/plugins/plugin-sdk-specifiers.js",
+      "sha256": "3465970a55804cd86a5b67aa276f0d5c1676954331a3e84d25d8721b8299ef87",
+      "bytes": 906
+    },
+    {
+      "path": "dist/server/plugins/runtime-subscription.d.ts",
+      "sha256": "f94abbefa3d2df5b2ab5dc841396587485d4fab1d0bc6a25fa56956ef363d6aa",
+      "bytes": 1027
+    },
+    {
+      "path": "dist/server/plugins/runtime-subscription.js",
+      "sha256": "c874e5f614bd23b29e06542d8cfd619883f38df4dc32d806a09397cdb6ef163b",
+      "bytes": 1169
+    },
+    {
+      "path": "dist/server/plugins/runtime.d.ts",
+      "sha256": "da848f6dffd1fc4b57856834638672d9bdf771b72a139e301698afa934151187",
+      "bytes": 6284
+    },
+    {
+      "path": "dist/server/plugins/runtime.js",
+      "sha256": "90b49aa56998f8a05867b0d22936cd6e891f038ce3e6767a1b809a6b0ab87b7c",
+      "bytes": 46123
+    },
+    {
+      "path": "dist/server/plugins/session-socket.d.ts",
+      "sha256": "a7f2060507929138198c32464984be051b09327a7f4629bc05f951a19cb15abc",
+      "bytes": 928
+    },
+    {
+      "path": "dist/server/plugins/session-socket.js",
+      "sha256": "95f244d4e7967443e27123c38710331400596a469f8cca07e2cb411aaab6f81b",
+      "bytes": 2705
+    },
+    {
+      "path": "dist/utils/path.d.ts",
+      "sha256": "d36f4de72d58936c6dc09fbb4768e4ac4ce829beed2bf84d5b82435700ca1ebb",
+      "bytes": 2209
+    },
+    {
+      "path": "dist/utils/path.js",
+      "sha256": "7da261f89eae6bd55b52b5ad82553d06c0a779cf6f136e76cc464270b3c55641",
+      "bytes": 7727
+    },
+    {
+      "path": "dist/utils/worktree-path.d.ts",
+      "sha256": "e77435778dccb1606e78e16836c7fd28ecaa03bb4a2c307a72fffce7c78af7fa",
+      "bytes": 248
+    },
+    {
+      "path": "dist/utils/worktree-path.js",
+      "sha256": "efaffd36fd8f4ec7e546dc84b6c927605031f4da8c4844670e518f8ec03fb765",
+      "bytes": 3106
+    }
+  ]
+}

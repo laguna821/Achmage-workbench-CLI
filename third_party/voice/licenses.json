@@ -1,0 +1,34 @@
+[
+  {
+    "path": "WHISPER-LICENSE",
+    "sourceUrl": "https://raw.githubusercontent.com/openai/whisper/v20250625/LICENSE",
+    "sha256": "b5d65a59060e68c4ff940e1eddfa6f94b2d68fdf58ed7f4dd57721c997e35e9d"
+  },
+  {
+    "path": "SHERPA-LICENSE",
+    "sourceUrl": "https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/v1.12.28/LICENSE",
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  },
+  {
+    "package": "openai",
+    "version": "6.44.0",
+    "license": "Apache-2.0",
+    "path": "openai-6.44.0-LICENSE",
+    "sourcePath": "node_modules/openai/LICENSE",
+    "sha256": "636eb7d79da9bb6d515a4b3fd417aa26679eb3cf16396ddab4bc55fa74e616e4"
+  },
+  {
+    "package": "uuid",
+    "version": "9.0.1",
+    "license": "MIT",
+    "path": "uuid-9.0.1-LICENSE.md",
+    "sourcePath": "node_modules/uuid/LICENSE.md",
+    "sha256": "beaa6b04fb82e41dd2ad679e19e27953afb5999b1abbb455b6564e78ebfeb332"
+  },
+  {
+    "path": "SILERO-LICENSE",
+    "sourceUrl": "https://raw.githubusercontent.com/snakers4/silero-vad/v6.2/LICENSE",
+    "sha256": "2e63e9a38b6e8fc0c7bc37ce174caca1862870856c6daf5697cfb785e925520b",
+    "scope": "Upstream source-only silero_vad.onnx retained with original speech module; not copied into the application runtime."
+  }
+]

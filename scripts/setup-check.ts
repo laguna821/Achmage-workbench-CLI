@@ -10,7 +10,7 @@
 // Usage: node scripts/setup-check.ts [outDir] [folder with the unpacked Linux apps]
 
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -44,7 +44,7 @@ const root = mkdtempSync(join(tmpdir(), "wb-setup-check-"));
 const app = join(root, "app");
 mkdirSync(join(app, "host"), { recursive: true });
 mkdirSync(join(app, "node"), { recursive: true });
-copyFileSync("apps/host/dist/host.mjs", join(app, "host", "host.mjs"));
+cpSync("apps/host/dist", join(app, "host"), { recursive: true });
 symlinkSync(resolve("apps/web/dist"), join(app, "web"));
 symlinkSync(resolve("third_party/skills"), join(app, "skills"));
 symlinkSync(join(bundledDir, "ieumoffice"), join(app, "ieumoffice"));

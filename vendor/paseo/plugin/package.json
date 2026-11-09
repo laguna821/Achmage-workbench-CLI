@@ -1,0 +1,33 @@
+{
+  "name": "@getpaseo/plugin",
+  "version": "0.15.3",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "default": "./dist/server/index.js"
+    },
+    "./server/provider": {
+      "types": "./dist/server/provider.d.ts",
+      "default": "./dist/server/provider.js"
+    },
+    "./server/usage": {
+      "types": "./dist/server/usage.d.ts",
+      "default": "./dist/server/usage.js"
+    },
+    "./internal/lifecycle": {
+      "types": "./dist/server/lifecycle.d.ts",
+      "default": "./dist/server/lifecycle.js"
+    }
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  },
+  "x-workbench-vendor-notice": "Original SDK source preserved. Only selected server/shared exports are emitted; no lifecycle scripts or plugin activation."
+}

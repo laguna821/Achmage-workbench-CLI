@@ -6,6 +6,7 @@ import { timingSafeEqual } from "node:crypto";
 import { isAccessMode, parseSearchScope, type AccessMode, type Attachment, type CreateSessionRequest, type DocRef, type DocumentViewInput, type Provider, type SequencedEvent, type Timeline } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
 import { HttpError, type SessionManager } from "./sessions.ts";
+import { handleRuntimeHttp } from "./runtime-http.ts";
 import { DeviceRegistryError } from "./devices.ts";
 import { DESIGN_PRESETS, systemFonts, type DesignPreset } from "./design.ts";
 import { parseCreate } from "./create.ts";
@@ -106,6 +107,9 @@ function parseRefs(value: unknown): DocRef[] {
 }
 
 export type HttpOptions = {
+  voice?: import("./voice.ts").VoiceService;
+  extensions?: import("./extensions/service.ts").ExtensionService;
+  hub?: import("./event-hub.ts").EventHub;
   devices?: import("./devices/service.ts").DeviceService;
   autostart?: import("./daemon/autostart.ts").HostAutostart;
   host?: { instance: import("@workbench/contracts").HostInstance; stopping: () => boolean; stop: () => void };
@@ -271,6 +275,8 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         throw new HttpError(401, "unauthorized", "인증 토큰이 맞지 않습니다.");
       }
       if (options.devices && path.startsWith("/api/devices") && await options.devices.handle(req, res, url)) return;
+      if (options.hub && path.startsWith("/api/hub") && await options.hub.handleManagement(req, res, url)) return;
+      if (await handleRuntimeHttp(req, res, url, options)) return;
       const parts = path.split("/").filter(Boolean).slice(1);
       const method = req.method ?? "GET";
 

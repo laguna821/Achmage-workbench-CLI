@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { CREATE_LABEL, type CreatableFormat, type CreateTarget, type SkillImportPreview, type SkillUpdatePreview, type TemplatePreview, type WorkbenchSkill, type WorkbenchSkillDetail } from "@workbench/contracts";
 import type { Api, SkillScope } from "../api.ts";
 import { Icon } from "./Icon.tsx";
+import { ExtensionLibrary } from "./ExtensionLibrary.tsx";
 import "./skills.css";
 
 const SOURCE: Record<WorkbenchSkill["source"], string> = { project: "프로젝트", claude: "Claude 설치", codex: "Codex 설치", shared: "공유 설치", plugin: "플러그인", imported: "내 보관함", ieum: "이음오피스", builtin: "기본 제공" };
@@ -23,6 +24,7 @@ function PreviewPage({ api, page }: { api: Api; page: TemplatePreview["pages"][n
 
 /** The same library selects a template for a request and manages personal, portable skill copies. */
 export function SkillLibraryDialog({ api, scope = {}, onClose, onPick }: { api: Api; scope?: SkillScope; onClose: () => void; onPick?: (target: CreateTarget) => void }) {
+  const [extensionsOpen, setExtensionsOpen] = useState(false);
   const [skills, setSkills] = useState<WorkbenchSkill[]>([]), [detail, setDetail] = useState<WorkbenchSkillDetail | null>(null);
   const [preview, setPreview] = useState<TemplatePreview | null>(null), [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
@@ -55,11 +57,11 @@ export function SkillLibraryDialog({ api, scope = {}, onClose, onPick }: { api: 
     if (pendingUpdate.current) void api.discardSkillImport(pendingUpdate.current).catch(() => undefined);
   }, [api]);
   useEffect(() => {
-    const key = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); event.stopImmediatePropagation(); if (!busy) leave(onClose); } };
+    const key = (event: KeyboardEvent) => { if (event.key === "Escape" && !extensionsOpen) { event.preventDefault(); event.stopImmediatePropagation(); if (!busy) leave(onClose); } };
     window.addEventListener("keydown", key, true); return () => window.removeEventListener("keydown", key, true);
   });
   const pickPath = async (folder: boolean, put: (path: string) => void) => {
-    if (!("__TAURI_INTERNALS__" in window)) return;
+    if (api.isRemote || !("__TAURI_INTERNALS__" in window)) return;
     const { open } = await import("@tauri-apps/plugin-dialog");
     const value = await open({ directory: folder, multiple: false, title: folder ? "스킬 폴더 선택" : "양식·ZIP 파일 선택" });
     if (typeof value === "string") put(value);
@@ -75,6 +77,7 @@ export function SkillLibraryDialog({ api, scope = {}, onClose, onPick }: { api: 
       {error ? <p className="notice notice-error compact" role="alert">{error}</p> : null}
       {pending ? <div className="skill-confirm" role="alertdialog"><p>{pending.text}</p><button className="button small" onClick={() => setPending(null)}>계속 작성</button><button className="button small" onClick={() => { const action = pending.action; setPending(null); action(); }}>확인</button></div> : null}
       <div className="skill-toolbar"><input className="sheet-input" aria-label="양식·스킬 검색" placeholder="이름·설명으로 찾기" value={query} onChange={(event) => setQuery(event.target.value)} /><button className="button small" disabled={busy} onClick={() => leave(() => { setMode("new"); setDetail(null); setPreview(null); setForm(emptyForm); })}>내 양식 등록</button><button className="button small" disabled={busy} onClick={() => leave(() => { setMode("import"); setDetail(null); setPreview(null); })}>가져오기</button><button className="button small" disabled={busy} onClick={() => void run(async () => { await reload(); })}>새로고침</button></div>
+      <div className="feature-actions">{!api.isRemote ? <button type="button" className="button small" onClick={() => setExtensionsOpen(true)}>실행 확장 관리</button> : null}</div>
       <div className="skill-columns">
         <nav className="skill-list" aria-label="설치된 양식·스킬">{filtered.map((item) => <button key={item.id} className={`skill-row${skill?.id === item.id ? " active" : ""}`} disabled={busy} onClick={() => select(item.id)}><strong>{item.title}</strong><span>{SOURCE[item.source]} · {item.template ? "양식 포함" : "스킬"} · {item.shadowedBy ? "선택된 다른 판 있음" : item.state.enabled ? "사용" : "꺼짐"}</span><small>{item.description || item.problem}</small></button>)}{!filtered.length ? <p className="sheet-hint">찾은 스킬이 없습니다. 양식 파일을 등록하거나 스킬 폴더를 가져오세요.</p> : null}</nav>
         <main className="skill-detail">
@@ -107,5 +110,6 @@ export function SkillLibraryDialog({ api, scope = {}, onClose, onPick }: { api: 
       {imported ? <div className="skill-import-overlay"><section role="dialog" aria-label="가져오기 확인"><h3>가져오기 확인</h3>{error ? <p className="notice notice-error compact" role="alert">{error}</p> : null}<p className="skill-location">{imported.origin}</p><p className="sheet-hint">가져온 스킬은 꺼진 상태로 보관합니다. 사용하려면 목록에서 선택해 주세요.</p>{imported.candidates.map((candidate) => <div className="skill-candidate" key={candidate.key}><label><input type="checkbox" disabled={busy || !!candidate.problem} checked={selected.includes(candidate.key)} onChange={(e) => setSelected(e.target.checked ? [...selected, candidate.key] : selected.filter((key) => key !== candidate.key))} /><strong>{candidate.title}</strong></label><p>{candidate.description}</p><small>{candidate.files}개 파일 · {Math.round(candidate.bytes / 1024)} KB{candidate.hasTemplate ? " · 양식 포함" : ""}{candidate.hasScripts ? " · 실행 스크립트 포함" : ""}{candidate.license ? ` · ${candidate.license}` : ""}{candidate.problem ? ` · ${candidate.problem}` : ""}</small>{candidate.collision ? <label>같은 이름<select aria-label={`${candidate.title} 충돌 처리`} value={collisions[candidate.key] ?? ""} onChange={(e) => setCollisions({ ...collisions, [candidate.key]: e.target.value as "replace" | "skip" })}><option value="">선택하세요</option><option value="skip">이번 항목 건너뛰기</option><option value="replace">기존 판 백업 후 교체</option></select></label> : null}{candidate.urls.length ? <details><summary>포함된 웹 주소</summary>{candidate.urls.map((url) => <p key={url}>{url}</p>)}</details> : null}</div>)}<div className="skill-actions"><button className="button small" disabled={busy} onClick={() => void run(async () => { await api.discardSkillImport(imported.id); pendingImport.current = null; setImported(null); })}>취소</button><button className="button primary" disabled={busy || !selected.length || imported.candidates.some((item) => selected.includes(item.key) && item.collision && !collisions[item.key])} onClick={() => void run(async () => { await api.installSkills(imported.id, selected, collisions); pendingImport.current = null; setImported(null); setMode("list"); setForm(emptyForm); const items = await reload(); const first = items.find((item) => item.source === "imported" && imported.candidates.some((entry) => selected.includes(entry.key) && entry.name === item.name)); if (first) showDetail(await api.userSkill(first.id, currentScope)); })}>보관함에 가져오기</button></div></section></div> : null}
       {busy ? <div className="skill-busy" role="status">처리 중…</div> : null}
     </section>
+    {extensionsOpen && !api.isRemote ? <ExtensionLibrary api={api} onClose={() => setExtensionsOpen(false)} /> : null}
   </div>, document.body);
 }

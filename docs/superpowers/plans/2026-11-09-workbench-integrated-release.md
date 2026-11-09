@@ -2379,3 +2379,8 @@ Office 형식별 증거는 한글, Word, 슬라이드, 시트, Markdown, PDF, HT
 이 문서는 계획 산출물이다. 구조 checker 결과는 문서 구조에 관한 검증이며 제품 tests, prototype, native UI, 모바일, build, GitHub 배포의 성공을 뜻하지 않는다. 모든 제품 체크박스와 실행 결과는 NOT_RUN으로 남긴다.
 
 선택된 원본 pstack의 읽기 전용 check-plan.mjs를 이 파일에 실행한다. root는 그 결과와 별도로 spec, 실제 파일 경로, 계약/의존, fixture의 비공허한 assertion, 현재 지원 범위와 release provenance를 직접 검토한다. 구조 통과만으로 설계 검토를 대신하지 않는다.
+
+
+### U22–U24 실행 연결 기록 (2026-11-09)
+
+고정한 Paseo 원본 음성·SDK·manifest·compiler·lifecycle와 Workbench 서비스/UI를 연결했다. 공개 Cloud consumer 부재는 기존 TaskService/SQLite로 보완했다. 신규 타입 오류·화면 direct DTO 불일치를 수정했으며, 실기기/외부계정·원본 outbound Hub client와 전체25개/156요구의 잔여 범위는 유지한다. 기능별 앱/설치본빌드는 실행하지 않는다. [현재 동작/한계](../../voice-extensions-events.md), [실행 상태](../execution/STATUS.md), 근거 `research:rr-79110658024cdb4797375aa15a22a771:ec68d100c4776b2219a705303a379cc524ae2c83caca88c7c9c2f1d9b6c805b5` (R13–R18).

@@ -23,6 +23,9 @@
     "src/messages.ts",
     "src/connection-offer.ts",
     "src/daemon-endpoints.ts",
-    "src/websocket-message-limit.ts"
+    "src/websocket-message-limit.ts",
+    "src/branch-slug.ts",
+    "src/agent-labels.ts",
+    "src/plugin-requirements.ts"
   ]
 }

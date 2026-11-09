@@ -19,7 +19,7 @@ import { attachProtectedSocket, loadOrCreateKeyPair, startProtectedRelayTranspor
 type DeviceConfig = { enabled: boolean; label?: string; relayUrl?: string; publicUrl?: string; listenHost?: string; port?: number };
 export class DeviceService {
   readonly registry: DeviceRegistry;
-  private readonly options: { dataDir: string; manager: SessionManager; bus: EventBus; localOrigin: () => string | null; localToken: string; webDir: string | null };
+  private readonly options: { dataDir: string; manager: SessionManager; bus: EventBus; localOrigin: () => string | null; localToken: string; webDir: string | null; voice?: import("../voice.ts").VoiceService; eventIngress?: (req: IncomingMessage, res: ServerResponse) => Promise<void> };
   private readonly gateway: DeviceGateway;
   private readonly dir: string;
   private readonly logger = pino({ level: "silent" });
@@ -64,6 +64,7 @@ export class DeviceService {
     const keys = this.keys;
     const server = createServer((req, res) => {
       const path = new URL(req.url ?? "/", "http://localhost").pathname;
+      if (path.startsWith("/hub/events/") && this.options.eventIngress) { void this.options.eventIngress(req, res); return; }
       if (path.startsWith("/api/")) return sendJson(res, 404, { code: "protected_channel_required", message: "보호된 기기 연결이 필요합니다." });
       if (!this.options.webDir) return sendJson(res, 503, { code: "web_missing", message: "웹 화면이 포함된 설치본에서 열어 주세요." });
       try { serveStatic(res, this.options.webDir, path); }
@@ -93,6 +94,11 @@ export class DeviceService {
       this.endpoint = buildRelayWebSocketUrl({ endpoint: relayEndpoint, serverId: this.options.manager.snapshot().hostId, role: "client", useTls: true });
     }
     this.problem = "";
+  }
+  hubIngressState() {
+    const enabled = !!this.server && this.config.enabled && !!this.config.publicUrl?.startsWith("https://");
+    return { enabled, url: enabled ? new URL("/hub/events/", this.config.publicUrl).href : null,
+      message: enabled ? "각 연결의 서명 검증을 통과한 사건만 접수합니다." : "기기 연결에서 공개 HTTPS 주소를 등록해야 외부 사건을 받을 수 있습니다." };
   }
   state() {
     return { config: this.config, hostId: this.options.manager.snapshot().hostId,

@@ -2,18 +2,24 @@
   "$schema": "https://schema.tauri.app/config/2",
   "bundle": {
     "resources": {
-      "../../host/dist/host.mjs": "host/host.mjs",
-      "../../host/dist/hwp-cli.mjs": "host/hwp-cli.mjs",
-      "../../host/dist/office-reveal.mjs": "host/office-reveal.mjs",
-      "../../host/dist/ieum-setup.mjs": "host/ieum-setup.mjs",
-      "../../host/dist/cleanup-legacy.mjs": "host/cleanup-legacy.mjs",
+      "../../host/dist/": "host/",
       "../../web/dist/": "web/",
       "../../../third_party/office-output/": "licenses/office-output/",
       "../../../third_party/fast-find/LICENSE": "licenses/fast-find/LICENSE",
       "../../../third_party/fast-find/ADAPTATIONS.md": "licenses/fast-find/ADAPTATIONS.md",
       "../../../third_party/skills/": "skills/",
-      "node/": "node/"
+      "node/": "node/",
+      "../../../third_party/paseo/": "licenses/paseo/",
+      "../../../third_party/voice/": "licenses/voice/",
+      "../../../third_party/extensions/": "licenses/extensions/"
     },
-    "windows": { "wix": { "language": "ko-KR" }, "nsis": { "installerHooks": "./windows/hooks.nsh" } }
+    "windows": {
+      "wix": {
+        "language": "ko-KR"
+      },
+      "nsis": {
+        "installerHooks": "./windows/hooks.nsh"
+      }
+    }
   }
 }

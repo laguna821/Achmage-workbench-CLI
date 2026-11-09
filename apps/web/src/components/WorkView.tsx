@@ -717,6 +717,8 @@ export function WorkView({
                 }
           }
           draftKey={modes?.draftKey ?? `work:${work.id}:${active?.id ?? "none"}`}
+          voiceScope={(handoffTo ?? active) ? { workId: (handoffTo ?? active)!.workId, sessionId: (handoffTo ?? active)!.id } : undefined}
+          voiceReply={state.transcripts[(handoffTo ?? active)?.id ?? ""]?.items.filter(item => item.kind === "assistant" && !item.streaming).map(item => item.kind === "assistant" ? item.text : "").at(-1)}
           placeholder={draw.on ? "그릴 그림을 설명하세요" : planFirst ? "계획부터 세울 요청 (계획을 보고 진행할지 고릅니다)" : "이 작업에 이어서 요청하기"}
           busy={busy}
           waiting={working}

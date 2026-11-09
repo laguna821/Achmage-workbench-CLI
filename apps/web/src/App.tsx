@@ -1,6 +1,9 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { GLOBAL_LAYOUT, PROVIDER_LABEL, isUnseen, type AccessMode, type Artifact, type Attachment, type CreateTarget, type DocRef, type ProjectPick, type Proposal, type Provider, type Session, type SessionStatus, type UiPrefs, type Work, type Workspace } from "@workbench/contracts";
 import { Api, ApiRequestError, readToken } from "./api.ts";
+import { VoiceEnvironment } from "./voice/context.ts";
+import { ExtensionLibrary } from "./components/ExtensionLibrary.tsx";
+import { EventHub } from "./components/EventHub.tsx";
 import { AttentionInbox, CompletionNotifications, watchAttentionPresence } from "./completion-notifications.ts";
 import { SharedBrowser, type BrowserNativeCommand } from "./browser-state.ts";
 import { BrowserView, NewBrowserDialog } from "./components/BrowserView.tsx";
@@ -362,6 +365,7 @@ export function App({ apiOverride, onConnections, connectionLabel, registerHostS
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const [imageUploadOpen, setImageUploadOpen] = useState(false);
   const [officeSettingsOpen, setOfficeSettingsOpen] = useState(false);
+  const [extensionsOpen, setExtensionsOpen] = useState(false), [eventHubOpen, setEventHubOpen] = useState(false);
   const [taskPanelOpen, setTaskPanelOpen] = useState(false);
   const [attentionOpen, setAttentionOpen] = useState(false);
   const [pendingAttentionId, setPendingAttentionId] = useState<string | null>(null);
@@ -2239,6 +2243,7 @@ export function App({ apiOverride, onConnections, connectionLabel, registerHostS
             : (work?.title ?? "");
 
   return (
+    <VoiceEnvironment.Provider value={api}>
     <AppearanceContext.Provider value={appearanceApi}>
     <UnseenContext.Provider value={unseen}>
     <DocContext.Provider value={{ state, actions: docActions }}>
@@ -2364,7 +2369,7 @@ export function App({ apiOverride, onConnections, connectionLabel, registerHostS
             </button>
             <Popover open={menuOpen} onClose={closeMenu} align="right">
               <Connections
-                backgroundHost={<BackgroundHost api={api} />}
+                backgroundHost={<><BackgroundHost api={api} />{!api.isRemote ? <div className="connection"><div className="menu-label">선택 기능</div><div className="feature-actions"><button type="button" className="button small" onClick={() => { closeMenu(); setExtensionsOpen(true); }}>실행 확장</button><button type="button" className="button small" onClick={() => { closeMenu(); setEventHubOpen(true); }}>이벤트 Hub</button></div></div> : null}</>}
                 onOfficeSettings={() => { closeMenu(); setOfficeSettingsOpen(true); }}
                 onDropbox={() => { closeMenu(); setDropboxOpen(true); }}
                 onOfficeImport={() => { closeMenu(); setOfficeImportOpen(true); }}
@@ -2507,6 +2512,8 @@ export function App({ apiOverride, onConnections, connectionLabel, registerHostS
       {integrationsOpen && api ? <IntegrationsSheet api={api} onClose={() => setIntegrationsOpen(false)} onToast={setToast} /> : null}
       {imageUploadOpen && api ? <ImageUploadSheet api={api} onClose={() => setImageUploadOpen(false)} onToast={setToast} /> : null}
       {officeSettingsOpen && api ? <OfficeSettings api={api} theme={appTheme} onClose={() => setOfficeSettingsOpen(false)} /> : null}
+      {extensionsOpen && !api.isRemote ? <ExtensionLibrary api={api} workspaces={Object.values(state.workspaces).filter(space => !space.archivedAt && !space.removedAt).map(space => ({ id: space.id, label: `${state.works[space.workId]?.title ?? "프로젝트"} · ${space.label}` }))} onClose={() => setExtensionsOpen(false)} /> : null}
+      {eventHubOpen && !api.isRemote ? <EventHub api={api} onClose={() => setEventHubOpen(false)} /> : null}
       {dropboxOpen && api ? <DropboxDialog api={api} pickFolder={inDesktop ? (start) => pickFolderNative("Dropbox 폴더 선택", start) : null} openExternal={openExternal} onClose={() => setDropboxOpen(false)} onOpened={({ work, artifact }) => { setDropboxOpen(false); navigateTo({ workId: work.id, sessionId: null, view: artifact ? { kind: "document", artifactId: artifact.id, proposalId: null } : { kind: "project", workId: work.id } }); }} /> : null}
       {officeImportOpen && api ? <OfficeImportDialog api={api} onClose={() => setOfficeImportOpen(false)} /> : null}
       {api && <OfficeDrive api={api} theme={appTheme} />}
@@ -2621,5 +2628,6 @@ export function App({ apiOverride, onConnections, connectionLabel, registerHostS
     </DocContext.Provider>
     </UnseenContext.Provider>
     </AppearanceContext.Provider>
+    </VoiceEnvironment.Provider>
   );
 }

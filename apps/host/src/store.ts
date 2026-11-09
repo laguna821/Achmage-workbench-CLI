@@ -5,6 +5,7 @@ import type { Workspace, WorktreeCreation, TerminalSession, PreparationJob } fro
 import type { Artifact, ArtifactRevision, Folder, Handoff, Proposal, Session, SessionLink, TimelineRevision, TranscriptItem, Work } from "@workbench/contracts";
 import type { TurnMark } from "./timeline.ts";
 import { SearchIndex, documentEntry, documentKey, itemEntries, itemKey, sessionEntry, workEntry, type WorkExtras } from "./search-index.ts";
+import type { HubJournalEntry } from "@workbench/contracts";
 
 // Local state only: works, folders, sessions, transcript items and request ids.
 // Never place this database in Dropbox (live SQLite must not be synced).
@@ -68,6 +69,15 @@ export class Store {
       CREATE TABLE IF NOT EXISTS proposals (id TEXT PRIMARY KEY, artifact_id TEXT NOT NULL, json TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS handoffs (id TEXT PRIMARY KEY, json TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS links (id TEXT PRIMARY KEY, json TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS hub_deliveries (
+        id TEXT PRIMARY KEY, connector_id TEXT NOT NULL, delivery_id TEXT NOT NULL,
+        workflow_id TEXT NOT NULL, payload_hash TEXT NOT NULL, state TEXT NOT NULL,
+        created_at INTEGER NOT NULL, json TEXT NOT NULL,
+        UNIQUE(connector_id, delivery_id, workflow_id),
+        UNIQUE(connector_id, payload_hash, workflow_id)
+      );
+      CREATE INDEX IF NOT EXISTS hub_deliveries_recent ON hub_deliveries(created_at DESC);
+      CREATE INDEX IF NOT EXISTS hub_deliveries_state ON hub_deliveries(state);
     `);
     this.search = new SearchIndex(this.db);
     if (this.getMeta("search.version") !== SEARCH_VERSION) this.rebuildSearch();
@@ -492,6 +502,29 @@ export class Store {
   getMeta(key: string): string | null {
     const row = this.db.prepare("SELECT value FROM meta WHERE key = ?").get(key);
     return row ? String(row.value) : null;
+  }
+
+  insertHubDelivery(entry: HubJournalEntry): boolean {
+    const d = entry.delivery;
+    return Number(this.db.prepare("INSERT OR IGNORE INTO hub_deliveries (id,connector_id,delivery_id,workflow_id,payload_hash,state,created_at,json) VALUES (?,?,?,?,?,?,?,?)")
+      .run(d.id,d.connectorId,d.deliveryId,d.workflowId,d.payloadHash,d.state,d.createdAt,JSON.stringify(entry)).changes) > 0;
+  }
+  updateHubDelivery(entry: HubJournalEntry): void {
+    this.db.prepare("UPDATE hub_deliveries SET state=?,json=? WHERE id=?").run(entry.delivery.state,JSON.stringify(entry),entry.delivery.id);
+  }
+  hubDelivery(id: string): HubJournalEntry | null {
+    const row = this.db.prepare("SELECT json FROM hub_deliveries WHERE id=?").get(id);
+    return row ? JSON.parse(String(row.json)) as HubJournalEntry : null;
+  }
+  hubDuplicate(connectorId: string, deliveryId: string, payloadHash: string, workflowId: string): HubJournalEntry | null {
+    const row = this.db.prepare("SELECT json FROM hub_deliveries WHERE connector_id=? AND workflow_id=? AND (delivery_id=? OR payload_hash=?) LIMIT 1")
+      .get(connectorId,workflowId,deliveryId,payloadHash);
+    return row ? JSON.parse(String(row.json)) as HubJournalEntry : null;
+  }
+  hubDeliveries(activeOnly = false): HubJournalEntry[] {
+    return this.all<HubJournalEntry>(activeOnly
+      ? "SELECT json FROM hub_deliveries WHERE state IN ('received','accepted','running','waiting_input','outcome_unknown') ORDER BY created_at DESC LIMIT 500"
+      : "SELECT json FROM hub_deliveries ORDER BY created_at DESC LIMIT 200");
   }
 
   setMeta(key: string, value: string) {

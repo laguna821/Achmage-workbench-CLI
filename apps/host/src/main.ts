@@ -42,6 +42,11 @@ import { adoptLoginShellPath } from "./shell-env.ts";
 import { claimInstance } from "./daemon/instance.ts";
 import { DeviceService } from "./devices/service.ts";
 import { HostAutostart } from "./daemon/autostart.ts";
+import { VoiceService } from "./voice.ts";
+import { ExtensionService } from "./extensions/service.ts";
+import { EventHub } from "./event-hub.ts";
+import { guardDecision } from "./pkm-guard.ts";
+import { HttpError } from "./errors.ts";
 import { systemNotifier } from "./system-notifications.ts";
 
 // Local gateway: owns engine processes and state, serves the UI and an HTTP + SSE API on
@@ -175,9 +180,16 @@ const officeDrive = officeControl ? new OfficeDrive(manager, officeControl, data
 const officeImport = officeControl ? new OfficeImport(manager.documents, manager.ieumDesktop, dataDir) : undefined;
 const dropbox = new DropboxFolders(store, manager, dataDir);
 officeAi.drive = officeDrive;
-const devices = env.WORKBENCH_CLI_INPUT ? undefined : new DeviceService({ dataDir, manager, bus, localOrigin: () => applicationOrigin, localToken: token, webDir });
+const voice = new VoiceService({ dataDir, sessionExists: id => { const s = manager.view.sessions.get(id); return !!s && !s.archivedAt; } });
+const extensions = new ExtensionService({ dataDir, manager, authorizeWrite: (workspace, path) => {
+  const reason = guardDecision("Write", { file_path: path }, workspace.cwd, pkm.protectedRoots());
+  if (reason) throw new HttpError(403, "extension_protected_file", reason);
+} });
+const hub: EventHub = new EventHub({ dataDir, store, manager, bus, ingress: () => devices?.hubIngressState() ?? { enabled: false, url: null } });
+const devices: DeviceService | undefined = env.WORKBENCH_CLI_INPUT ? undefined : new DeviceService({ dataDir, manager, bus, localOrigin: () => applicationOrigin, localToken: token, webDir,
+  voice, eventIngress: (req, res) => hub.handleIngress(req, res) });
 const server = createHttpServer(manager, bus, {
-  devices,
+  devices, voice, extensions, hub,
   autostart: new HostAutostart(dataDir),
   host: { instance: lease.instance, stopping: () => stopping, stop: () => { void stop(); } },
   officeImport,
@@ -230,6 +242,8 @@ await officeMcp?.start();
 await officeDrive?.start();
 dropbox.start();
 await devices?.start();
+await extensions.start();
+hub.start();
 listen(editors, env.WORKBENCH_EDITORS_PORT, editorsPortFile, (editorsPort) => {
   editorsOrigin = `http://127.0.0.1:${editorsPort}`;
   officeExecutors.bind(editorsOrigin);
@@ -258,6 +272,9 @@ async function stop() {
   stopping = true;
   dropbox.close();
   devices?.close();
+  hub.close();
+  voice.close();
+  await extensions.close();
   await pdfLoader(dataDir).close();
   officeImport?.close();
   officeDrive?.close();

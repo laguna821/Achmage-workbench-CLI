@@ -1,0 +1,434 @@
+{
+  "repository": "https://github.com/getpaseo/paseo",
+  "revision": "1fff127f45b11c1c9c573fbbd12791673004c912",
+  "license": "Apache-2.0",
+  "files": [
+    {
+      "path": "src/attachments.ts",
+      "sha256": "877fe577366614aad0f4bd993026997408b13fe7589b7ec06f0c2eb45353465c",
+      "upstreamSha256": "877fe577366614aad0f4bd993026997408b13fe7589b7ec06f0c2eb45353465c",
+      "modified": false
+    },
+    {
+      "path": "src/boundaries.test.ts",
+      "sha256": "03960677a8b2303ee108a62369a711a936c8694ee786bd80d41e9552f0035385",
+      "upstreamSha256": "03960677a8b2303ee108a62369a711a936c8694ee786bd80d41e9552f0035385",
+      "modified": false
+    },
+    {
+      "path": "src/client/buttons.ts",
+      "sha256": "3a0a1ca21450ba6b60f2a4f6d23d46b68f86d8ed89088e16fdaa2ddc6286ae14",
+      "upstreamSha256": "3a0a1ca21450ba6b60f2a4f6d23d46b68f86d8ed89088e16fdaa2ddc6286ae14",
+      "modified": false
+    },
+    {
+      "path": "src/client/contracts.ts",
+      "sha256": "b79ce4289fba6a876ee26faaa13c8fb5f1a84dee2c6dbfc18240efd3ad57892d",
+      "upstreamSha256": "b79ce4289fba6a876ee26faaa13c8fb5f1a84dee2c6dbfc18240efd3ad57892d",
+      "modified": false
+    },
+    {
+      "path": "src/client/file.ts",
+      "sha256": "527e0dc76f36289b42d8564060a5f30d5d753778859f3b94131e1e75980773c2",
+      "upstreamSha256": "527e0dc76f36289b42d8564060a5f30d5d753778859f3b94131e1e75980773c2",
+      "modified": false
+    },
+    {
+      "path": "src/client/host.test.ts",
+      "sha256": "b1a4b6f6a01897f16eaf4dabf5a31cad5241d8c33bfda8a064cec09f120ad9f8",
+      "upstreamSha256": "b1a4b6f6a01897f16eaf4dabf5a31cad5241d8c33bfda8a064cec09f120ad9f8",
+      "modified": false
+    },
+    {
+      "path": "src/client/host.ts",
+      "sha256": "9e67bcbd4056b4448cde281f11ec50aed1f1c1f440dba07d3b01b0cd33738cac",
+      "upstreamSha256": "9e67bcbd4056b4448cde281f11ec50aed1f1c1f440dba07d3b01b0cd33738cac",
+      "modified": false
+    },
+    {
+      "path": "src/client/index.ts",
+      "sha256": "9ff90b192d472efe6aad364185e66156206f05b48743357904315be99c02d1a1",
+      "upstreamSha256": "9ff90b192d472efe6aad364185e66156206f05b48743357904315be99c02d1a1",
+      "modified": false
+    },
+    {
+      "path": "src/client/query.test.ts",
+      "sha256": "c98df7691a3fed49e414325e53e92dcb21fd5a5bc96974c662fc16e4effbdd85",
+      "upstreamSha256": "c98df7691a3fed49e414325e53e92dcb21fd5a5bc96974c662fc16e4effbdd85",
+      "modified": false
+    },
+    {
+      "path": "src/client/query.ts",
+      "sha256": "718bff80d05e3e95bf98d5f4d6aabb38e328f90152f91ed6e9c8910cff6d968a",
+      "upstreamSha256": "718bff80d05e3e95bf98d5f4d6aabb38e328f90152f91ed6e9c8910cff6d968a",
+      "modified": false
+    },
+    {
+      "path": "src/client/react-native.ts",
+      "sha256": "a4f701aecadb06c9a8c09568993a12b0e62f94394066b711ea2cb1a4fe473601",
+      "upstreamSha256": "a4f701aecadb06c9a8c09568993a12b0e62f94394066b711ea2cb1a4fe473601",
+      "modified": false
+    },
+    {
+      "path": "src/client/reference-api.ts",
+      "sha256": "4d32dd6b2cf50b801a672732e0ac87fed594c867ab3827737b6bf18e694d5c84",
+      "upstreamSha256": "4d32dd6b2cf50b801a672732e0ac87fed594c867ab3827737b6bf18e694d5c84",
+      "modified": false
+    },
+    {
+      "path": "src/client/refs.test.ts",
+      "sha256": "dbef8c3f92bae9f05bee87468760dd25b00eca43d34a32ea3b2ecba964a5166b",
+      "upstreamSha256": "dbef8c3f92bae9f05bee87468760dd25b00eca43d34a32ea3b2ecba964a5166b",
+      "modified": false
+    },
+    {
+      "path": "src/client/refs.ts",
+      "sha256": "b4e0491c84f131295191164b7f53d00a5c2ac40f8ff2f382db92b999a8d4da1a",
+      "upstreamSha256": "b4e0491c84f131295191164b7f53d00a5c2ac40f8ff2f382db92b999a8d4da1a",
+      "modified": false
+    },
+    {
+      "path": "src/client/shallow.test.ts",
+      "sha256": "e1d281a953e74aacccbefcc84f218ad314a33c8df14f0a9f1164b4c3ebc4bf92",
+      "upstreamSha256": "e1d281a953e74aacccbefcc84f218ad314a33c8df14f0a9f1164b4c3ebc4bf92",
+      "modified": false
+    },
+    {
+      "path": "src/client/shallow.ts",
+      "sha256": "e55668ba17932750b0a30e1cffcb5cea4b042061757fb156e4a08d9af4767045",
+      "upstreamSha256": "e55668ba17932750b0a30e1cffcb5cea4b042061757fb156e4a08d9af4767045",
+      "modified": false
+    },
+    {
+      "path": "src/client/tab.ts",
+      "sha256": "1b907d1f1235ffad8d312ad1cd041b6aebc33abe1c53e65c9c2728bb95259887",
+      "upstreamSha256": "1b907d1f1235ffad8d312ad1cd041b6aebc33abe1c53e65c9c2728bb95259887",
+      "modified": false
+    },
+    {
+      "path": "src/client/translations.test.ts",
+      "sha256": "a2f2b898ef1d4007b60355759153aebcc97712fe20990050ff460764fdf3d628",
+      "upstreamSha256": "a2f2b898ef1d4007b60355759153aebcc97712fe20990050ff460764fdf3d628",
+      "modified": false
+    },
+    {
+      "path": "src/client/ui.ts",
+      "sha256": "65963000905cb059f8d792cd01533594791131b46200295a5c7eed357abd33da",
+      "upstreamSha256": "65963000905cb059f8d792cd01533594791131b46200295a5c7eed357abd33da",
+      "modified": false
+    },
+    {
+      "path": "src/client/use-sync-external-store.d.ts",
+      "sha256": "4ab157998a37b69310355225eb2e3201d8fe4bcba6e826d15dbacca7a287170e",
+      "upstreamSha256": "4ab157998a37b69310355225eb2e3201d8fe4bcba6e826d15dbacca7a287170e",
+      "modified": false
+    },
+    {
+      "path": "src/contracts.ts",
+      "sha256": "b1d94a42846680911cfaf43c65fdabfb3f060f2e6c1d1df4043a29b23e515e99",
+      "upstreamSha256": "b1d94a42846680911cfaf43c65fdabfb3f060f2e6c1d1df4043a29b23e515e99",
+      "modified": false
+    },
+    {
+      "path": "src/icons.test.ts",
+      "sha256": "dbe19d4515a33937e39cb844c132c926e422d5293198db1fce58c2bdd1c061aa",
+      "upstreamSha256": "dbe19d4515a33937e39cb844c132c926e422d5293198db1fce58c2bdd1c061aa",
+      "modified": false
+    },
+    {
+      "path": "src/icons.ts",
+      "sha256": "a63be14cdcf53e56871178cade18e30e27fd1009c18be643b969f245be43e04c",
+      "upstreamSha256": "a63be14cdcf53e56871178cade18e30e27fd1009c18be643b969f245be43e04c",
+      "modified": false
+    },
+    {
+      "path": "src/index.ts",
+      "sha256": "1a3fd7bee0e559dc5bb3eb1237d84deb2b2826d8d8a7a32916606405f94a434f",
+      "upstreamSha256": "1a3fd7bee0e559dc5bb3eb1237d84deb2b2826d8d8a7a32916606405f94a434f",
+      "modified": false
+    },
+    {
+      "path": "src/migration-doc.test.ts",
+      "sha256": "67690b943c2d1399ae99b9cdb56264e0cd7191d458a39d2655514791e89bee69",
+      "upstreamSha256": "67690b943c2d1399ae99b9cdb56264e0cd7191d458a39d2655514791e89bee69",
+      "modified": false
+    },
+    {
+      "path": "src/refs.ts",
+      "sha256": "9ce4e51b92e821d0b2d198fbdc2152d5e6c48a9ae82fed8d36088b24c9ca0306",
+      "upstreamSha256": "9ce4e51b92e821d0b2d198fbdc2152d5e6c48a9ae82fed8d36088b24c9ca0306",
+      "modified": false
+    },
+    {
+      "path": "src/rpc.ts",
+      "sha256": "3c89d2dd84c3ee05c4acba81f82345679e210596efa2dd0042e47230e2d70f39",
+      "upstreamSha256": "3c89d2dd84c3ee05c4acba81f82345679e210596efa2dd0042e47230e2d70f39",
+      "modified": false
+    },
+    {
+      "path": "src/server/acp-internal/connection.ts",
+      "sha256": "ec7cd7b835f518e70978eb721e9b6defe1acdb9084b7d052524a2d33964c4381",
+      "upstreamSha256": "ec7cd7b835f518e70978eb721e9b6defe1acdb9084b7d052524a2d33964c4381",
+      "modified": false
+    },
+    {
+      "path": "src/server/acp.test.ts",
+      "sha256": "12c15bbe929d696f1f11f981a25eb15639045fa1632115f6394f89849305aa5d",
+      "upstreamSha256": "12c15bbe929d696f1f11f981a25eb15639045fa1632115f6394f89849305aa5d",
+      "modified": false
+    },
+    {
+      "path": "src/server/acp.ts",
+      "sha256": "b19f933425c29b66fbb1b6f1b3301d9c9ed66276480bc5f6ce5d48326cccb248",
+      "upstreamSha256": "b19f933425c29b66fbb1b6f1b3301d9c9ed66276480bc5f6ce5d48326cccb248",
+      "modified": false
+    },
+    {
+      "path": "src/server/agent-tools.ts",
+      "sha256": "0da4006c9a34141eaa900d6d9267936137c7285b411e77639b99cfd83006c9c7",
+      "upstreamSha256": "0da4006c9a34141eaa900d6d9267936137c7285b411e77639b99cfd83006c9c7",
+      "modified": false
+    },
+    {
+      "path": "src/server/contracts.ts",
+      "sha256": "a42f291352ab90e443200f3892ceb4fadd15c2e72989c99d73da08fe7b645389",
+      "upstreamSha256": "a42f291352ab90e443200f3892ceb4fadd15c2e72989c99d73da08fe7b645389",
+      "modified": false
+    },
+    {
+      "path": "src/server/index.ts",
+      "sha256": "57f97af0699dfe30f1796cb4bc2aa9093ac00e04feb3c3d4e84feca932ee65aa",
+      "upstreamSha256": "57f97af0699dfe30f1796cb4bc2aa9093ac00e04feb3c3d4e84feca932ee65aa",
+      "modified": false
+    },
+    {
+      "path": "src/server/lifecycle.ts",
+      "sha256": "e336ac495e6f26a6f095b34f11c1676c1c8de6cfa8375891fccdad35e54010be",
+      "upstreamSha256": "e336ac495e6f26a6f095b34f11c1676c1c8de6cfa8375891fccdad35e54010be",
+      "modified": false
+    },
+    {
+      "path": "src/server/process-internal/windows-command.test.ts",
+      "sha256": "2f9f2b48fe184c3391137102b0588c429596293a1cbfece71862b5b91d25f160",
+      "upstreamSha256": "2f9f2b48fe184c3391137102b0588c429596293a1cbfece71862b5b91d25f160",
+      "modified": false
+    },
+    {
+      "path": "src/server/process-internal/windows-command.ts",
+      "sha256": "3e0a465f777b63e48f4b6d5d7e8d5e70c1ffe6575c0c7ebcac0712041032ba15",
+      "upstreamSha256": "3e0a465f777b63e48f4b6d5d7e8d5e70c1ffe6575c0c7ebcac0712041032ba15",
+      "modified": false
+    },
+    {
+      "path": "src/server/process.test.ts",
+      "sha256": "4e56a04f8c98ecd8cfd9f723254efeb681913513d44d6667e52f15817927d829",
+      "upstreamSha256": "4e56a04f8c98ecd8cfd9f723254efeb681913513d44d6667e52f15817927d829",
+      "modified": false
+    },
+    {
+      "path": "src/server/process.ts",
+      "sha256": "04a64423df0aeedd273c2f569623db39b97edfd4f3f1ed0b6c1b1034b02a5c0d",
+      "upstreamSha256": "04a64423df0aeedd273c2f569623db39b97edfd4f3f1ed0b6c1b1034b02a5c0d",
+      "modified": false
+    },
+    {
+      "path": "src/server/provider.ts",
+      "sha256": "9fb994b470423fc76b559d532f6828c50333138dfdc041e549050fd3abb54b62",
+      "upstreamSha256": "9fb994b470423fc76b559d532f6828c50333138dfdc041e549050fd3abb54b62",
+      "modified": false
+    },
+    {
+      "path": "src/server/usage.test.ts",
+      "sha256": "752bd0a50a3397201018d44026b2a33ab69ff048c31c31a2cd104f13fe9b99ed",
+      "upstreamSha256": "752bd0a50a3397201018d44026b2a33ab69ff048c31c31a2cd104f13fe9b99ed",
+      "modified": false
+    },
+    {
+      "path": "src/server/usage.ts",
+      "sha256": "5ab038733c1dcdb1495c86550b12df45fe024565b618a2f41c2ca5cd44af7831",
+      "upstreamSha256": "5ab038733c1dcdb1495c86550b12df45fe024565b618a2f41c2ca5cd44af7831",
+      "modified": false
+    },
+    {
+      "path": "src/settings.ts",
+      "sha256": "fb0742af783f60a7c6af568e496f52f39d873e8b55da9b89b2dcd3fbeb594d45",
+      "upstreamSha256": "fb0742af783f60a7c6af568e496f52f39d873e8b55da9b89b2dcd3fbeb594d45",
+      "modified": false
+    },
+    {
+      "path": "src/skill-examples.test.ts",
+      "sha256": "6a6e39b3221401ae1d7c9ce6320db7ab9f65adbda2b163341f883a5b2c65aefe",
+      "upstreamSha256": "6a6e39b3221401ae1d7c9ce6320db7ab9f65adbda2b163341f883a5b2c65aefe",
+      "modified": false
+    },
+    {
+      "path": "src/text.ts",
+      "sha256": "e4a8753562fd83209bac909490dc57ddf616bc85a0e1771d57ad264b32f5df55",
+      "upstreamSha256": "e4a8753562fd83209bac909490dc57ddf616bc85a0e1771d57ad264b32f5df55",
+      "modified": false
+    }
+  ],
+  "adaptations": [],
+  "dist": [
+    {
+      "path": "dist/attachments.d.ts",
+      "sha256": "81b023c2996996f09eb72c63c8878d927d37b9aa697a9e1ed8c7f765584bc2b3",
+      "bytes": 1110
+    },
+    {
+      "path": "dist/attachments.js",
+      "sha256": "74270917e4f8607793c6e6d5abaf1766aa8930eda9fe8ff33adaa1567ffb029a",
+      "bytes": 452
+    },
+    {
+      "path": "dist/contracts.d.ts",
+      "sha256": "7e71751a363fe181bfccc55533faaa736f7e550198053505756de99ddbdf184a",
+      "bytes": 4681
+    },
+    {
+      "path": "dist/contracts.js",
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+      "bytes": 11
+    },
+    {
+      "path": "dist/icons.d.ts",
+      "sha256": "93392032545e591db25005965e2f3011f27bd189b52a8dfbb5c664d24761011c",
+      "bytes": 734
+    },
+    {
+      "path": "dist/icons.js",
+      "sha256": "6bbf0b3056f3f8ee90cf0a821115de127135f5ef09a33502f9b62408bda4e20b",
+      "bytes": 1258
+    },
+    {
+      "path": "dist/index.d.ts",
+      "sha256": "f996a25bf22eb36683fdf77b528c9357c811c1b5c0933d13d271228f08fc3d4d",
+      "bytes": 1008
+    },
+    {
+      "path": "dist/index.js",
+      "sha256": "75a816a9624a0144233fb9792d1003c06915c5a13cd23c832ae9c92349d1e22a",
+      "bytes": 322
+    },
+    {
+      "path": "dist/refs.d.ts",
+      "sha256": "bc0257a44c5b8221698d77571fd5523cd6efa05ae8670b18afcd500e7850ffa8",
+      "bytes": 407
+    },
+    {
+      "path": "dist/refs.js",
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+      "bytes": 11
+    },
+    {
+      "path": "dist/rpc.d.ts",
+      "sha256": "137595c3cbee3ad1da97a60482ce895291ff36bc6fbbb0f2a7afc29a23733c48",
+      "bytes": 3418
+    },
+    {
+      "path": "dist/rpc.js",
+      "sha256": "2232bb8161a9578cfae8232180f192379dc05ef90ee98f34d255b275eec9c321",
+      "bytes": 1681
+    },
+    {
+      "path": "dist/server/agent-tools.d.ts",
+      "sha256": "9f0099b645efd6247da3db6fe49763c2b79be2abb5e47c9b36057ef876454432",
+      "bytes": 872
+    },
+    {
+      "path": "dist/server/agent-tools.js",
+      "sha256": "908b8c46c2a7840c6cebb492c97b2b0bd92e698200764eb05e57e81ea1bc2ca9",
+      "bytes": 204
+    },
+    {
+      "path": "dist/server/contracts.d.ts",
+      "sha256": "c62b8a0644cd2af1180dee894d1bd3bfd13f8f25946da89de2f7ebc5181f0e0c",
+      "bytes": 2836
+    },
+    {
+      "path": "dist/server/contracts.js",
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+      "bytes": 11
+    },
+    {
+      "path": "dist/server/index.d.ts",
+      "sha256": "a9f39f9bbdc997d3da94db0da78466fbba3b961be111c5484cacc33a2ec2a4c2",
+      "bytes": 861
+    },
+    {
+      "path": "dist/server/index.js",
+      "sha256": "c426e9bead7fe3fd25bad137747ed6b6efdc2a7ca1f416221cc72a6ac4c385a4",
+      "bytes": 128
+    },
+    {
+      "path": "dist/server/lifecycle.d.ts",
+      "sha256": "2a1f6f13680c1a11cb91311d0b962aed8d0038022d0a943bb788b81fb91001d6",
+      "bytes": 8977
+    },
+    {
+      "path": "dist/server/lifecycle.js",
+      "sha256": "bad4a04e7979e91a53d5310eb1fff4e7d595708a1eaddea3ddc75dae0f1a2085",
+      "bytes": 2288
+    },
+    {
+      "path": "dist/server/process-internal/windows-command.d.ts",
+      "sha256": "7f7a108abaeb5dc6c0bfc1f4cf5b27b5802c1bc843025198095b610d980a12cf",
+      "bytes": 729
+    },
+    {
+      "path": "dist/server/process-internal/windows-command.js",
+      "sha256": "43675e48a673ec1870db6c46318a32346812ec7b4bbe812bc7c42ccfb1cfd314",
+      "bytes": 1818
+    },
+    {
+      "path": "dist/server/process.d.ts",
+      "sha256": "069894ead1960af71f0d0e85c6c4d2defe3812ec69c0ec5785413dba490368c7",
+      "bytes": 1123
+    },
+    {
+      "path": "dist/server/process.js",
+      "sha256": "169cb05d2fab7cbc0cbbfd788efcdda409e305b8bf8467f9c2423b734ed293cd",
+      "bytes": 2773
+    },
+    {
+      "path": "dist/server/provider.d.ts",
+      "sha256": "a9b6f579500e827ef96b6381323c77fbe551dd49139901781b14b54ee929e322",
+      "bytes": 19601
+    },
+    {
+      "path": "dist/server/provider.js",
+      "sha256": "254daf4f7cb3243a0626f9bfe57977516788a9d36760c9f1152dd2d4868062f3",
+      "bytes": 27082
+    },
+    {
+      "path": "dist/server/usage.d.ts",
+      "sha256": "5f6d692659cc6fcdc31c297ef4a1338844b3a3d0fa267271eb32a2930c9a03e5",
+      "bytes": 4984
+    },
+    {
+      "path": "dist/server/usage.js",
+      "sha256": "8fa97b000f6d4b1c861f2aa3a4a150347384efdbedc5e0a0e4a1940d48a08c10",
+      "bytes": 3975
+    },
+    {
+      "path": "dist/settings.d.ts",
+      "sha256": "94b9afdd0a0e7b88a30cba312577f375b57374f88589d1dd27861ac78397d030",
+      "bytes": 2756
+    },
+    {
+      "path": "dist/settings.js",
+      "sha256": "9371a42c24acac58f51bccca1b1f65d58c8dd0dff665617b9e3d300e41bb56f7",
+      "bytes": 1632
+    },
+    {
+      "path": "dist/text.d.ts",
+      "sha256": "098ad64ba85adadc3dc67979579a113a63f1dbf3581d389273d6117c2bd26ca4",
+      "bytes": 2320
+    },
+    {
+      "path": "dist/text.js",
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+      "bytes": 11
+    }
+  ]
+}

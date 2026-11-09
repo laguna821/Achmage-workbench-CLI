@@ -1,0 +1,58 @@
+{
+  "name": "@workbench/paseo-voice-server",
+  "version": "0.15.3-workbench.1",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    "./dictation": {
+      "types": "./dist/server/dictation/dictation-stream-manager.d.ts",
+      "default": "./dist/server/dictation/dictation-stream-manager.js"
+    },
+    "./openai-stt": {
+      "types": "./dist/server/speech/providers/openai/stt.d.ts",
+      "default": "./dist/server/speech/providers/openai/stt.js"
+    },
+    "./openai-tts": {
+      "types": "./dist/server/speech/providers/openai/tts.d.ts",
+      "default": "./dist/server/speech/providers/openai/tts.js"
+    },
+    "./local-worker": {
+      "types": "./dist/server/speech/providers/local/worker-client.d.ts",
+      "default": "./dist/server/speech/providers/local/worker-client.js"
+    },
+    "./models": {
+      "types": "./dist/server/speech/providers/local/models.d.ts",
+      "default": "./dist/server/speech/providers/local/models.js"
+    },
+    "./model-downloader": {
+      "types": "./dist/server/speech/providers/local/sherpa/model-downloader.d.ts",
+      "default": "./dist/server/speech/providers/local/sherpa/model-downloader.js"
+    },
+    "./speech-provider": {
+      "types": "./dist/server/speech/speech-provider.d.ts",
+      "default": "./dist/server/speech/speech-provider.js"
+    },
+    "./spawn": {
+      "types": "./dist/utils/spawn.d.ts",
+      "default": "./dist/utils/spawn.js"
+    },
+    "./runtime-env": {
+      "types": "./dist/server/speech/providers/local/sherpa/sherpa-runtime-env.d.ts",
+      "default": "./dist/server/speech/providers/local/sherpa/sherpa-runtime-env.js"
+    },
+    "./worker-entry": {
+      "types": "./dist/server/speech/providers/local/worker-process.d.ts",
+      "default": "./dist/server/speech/providers/local/worker-process.js"
+    }
+  },
+  "dependencies": {
+    "openai": "6.44.0",
+    "uuid": "9.0.1",
+    "pino": "10.3.1",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/uuid": "9.0.8"
+  }
+}

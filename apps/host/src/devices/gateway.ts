@@ -21,7 +21,7 @@ export class DeviceGateway {
   private readonly media: RemoteMediaAccess;
   private readonly options: {
     registry: DeviceRegistry; manager: SessionManager; bus: EventBus;
-    localOrigin: () => string | null; localToken: string; dataDir: string;
+    localOrigin: () => string | null; localToken: string; dataDir: string; voice?: import("../voice.ts").VoiceService;
   };
   constructor(options: DeviceGateway["options"]) { this.options = options; this.media = new RemoteMediaAccess(options.dataDir, options.manager); }
   close() { for (const socket of this.sockets) socket.close(1000, "remote access disabled"); this.sockets.clear(); }
@@ -86,7 +86,7 @@ export class DeviceGateway {
           if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new HttpError(400, "invalid_json", "JSON 요청을 확인해 주세요.");
           body = parsed;
         }
-        const route = scopedRoute(manager, request.method, request.path, body, { grant, headers: request.headers, media: this.media });
+        const route = scopedRoute(manager, request.method, request.path, body, { grant, headers: request.headers, media: this.media, voice: this.options.voice });
         registry.authorize(credential, route.permission, route.workId);
         checkReferences(manager, grant, body);
         this.media.requireReferences(grant, body);

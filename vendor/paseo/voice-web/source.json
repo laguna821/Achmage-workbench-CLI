@@ -1,0 +1,52 @@
+{
+  "repository": "https://github.com/getpaseo/paseo",
+  "commit": "1fff127f45b11c1c9c573fbbd12791673004c912",
+  "archiveSha256": "654e4c066977b773a36eabb80a3d231942f36b0287cad8b3d3ca1aaa486cdd7b",
+  "license": "Apache-2.0",
+  "licenseFile": "../LICENSE",
+  "files": [
+    {
+      "upstreamPath": "packages/app/src/audio/audio-engine.web.ts",
+      "vendoredPath": "audio-engine.web.ts",
+      "upstreamSha256": "0d8f3143fc0c4dbfb4475ddef826acf98b1da17ec4bc5a1a0bc53bcbe821aec0",
+      "sha256": "0478037c111022ba7502f193d1ff0a7029db1e700f60a9db192e5c6b40463674",
+      "modified": true,
+      "changes": "App-only import aliases point to the Workbench platform facade."
+    },
+    {
+      "upstreamPath": "packages/app/src/audio/audio-engine-types.ts",
+      "vendoredPath": "audio-engine-types.ts",
+      "upstreamSha256": "6fe43951edcf833987529904b527a2e37642c921e9b49792640b3ec8d1a77c63",
+      "sha256": "6fe43951edcf833987529904b527a2e37642c921e9b49792640b3ec8d1a77c63",
+      "modified": false,
+      "changes": "None."
+    },
+    {
+      "upstreamPath": "packages/app/src/audio/pcm/index.ts",
+      "vendoredPath": "pcm/index.ts",
+      "upstreamSha256": "9b0baee1decb14fcaef50721c13ea54668d546add73da0772371e07d6826c768",
+      "sha256": "9b0baee1decb14fcaef50721c13ea54668d546add73da0772371e07d6826c768",
+      "modified": false,
+      "changes": "None."
+    },
+    {
+      "upstreamPath": "packages/app/src/audio/playback.ts",
+      "vendoredPath": "playback.ts",
+      "upstreamSha256": "f8b270e369b8fb3105281bf4860c00baf8d0cd990e0e4b49285f1c0a9fb2aa71",
+      "sha256": "f8b270e369b8fb3105281bf4860c00baf8d0cd990e0e4b49285f1c0a9fb2aa71",
+      "modified": false,
+      "changes": "None."
+    },
+    {
+      "upstreamPath": "packages/app/src/dictation/dictation-stream-sender.ts",
+      "vendoredPath": "dictation-stream-sender.ts",
+      "upstreamSha256": "c197fe6c79ef10b9daa9df2164f923b91287ddd2323bccece228fda805979226",
+      "sha256": "456f3b23f6231b447a0ae0fe6ce7f94b06d8e6c12615ff5777f50a1841a81090",
+      "modified": true,
+      "changes": "App-only import aliases point to the Workbench platform facade."
+    }
+  ],
+  "addedFiles": [
+    "workbench-platform.ts"
+  ]
+}

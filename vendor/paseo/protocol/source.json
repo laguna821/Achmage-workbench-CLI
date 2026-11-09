@@ -848,7 +848,7 @@
     "status": "present-selected-standalone-emit",
     "configuration": {
       "path": "tsconfig.workbench.json",
-      "sha256": "f847a216eec0d250369e5f29ac38fcb81867140f7fe04e635b0dfb63e447a9a7",
+      "sha256": "2fd6a1a0ec448ae04febf689cfeeaa3a24569caec3ec57a20ef986810c14116e",
       "content": {
         "compilerOptions": {
           "target": "ES2023",
@@ -874,7 +874,10 @@
           "src/messages.ts",
           "src/connection-offer.ts",
           "src/daemon-endpoints.ts",
-          "src/websocket-message-limit.ts"
+          "src/websocket-message-limit.ts",
+          "src/branch-slug.ts",
+          "src/agent-labels.ts",
+          "src/plugin-requirements.ts"
         ]
       }
     },
@@ -883,8 +886,28 @@
       "installedVersion": "5.9.3",
       "installedPackageJsonSha256": "822ef7ca6452205657b6288b066481ecf508bfbf43455d715cf7d3ec457561e6"
     },
-    "fileCount": 54,
+    "fileCount": 62,
     "files": [
+      {
+        "path": "dist/addresses.d.ts",
+        "sha256": "9ab8249e50a2d472de31e24634a4dffe0cffb413a6bfea49ece8280fabd074bb",
+        "bytes": 168
+      },
+      {
+        "path": "dist/addresses.js",
+        "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+        "bytes": 11
+      },
+      {
+        "path": "dist/agent-labels.d.ts",
+        "sha256": "d58d66d9c855d4672e8d3259c787fc65f7397e5c6494b05da2a0c4c106e9e25d",
+        "bytes": 949
+      },
+      {
+        "path": "dist/agent-labels.js",
+        "sha256": "75db2d2c123f68f419b2e207a4c99f4b42227a2cf7b54a9a99d334b28e720f15",
+        "bytes": 1498
+      },
       {
         "path": "dist/agent-lifecycle.d.ts",
         "sha256": "62d963ae828677814073cb586058fce7e6a960939064556a4b0a4ca79245e762",
@@ -934,6 +957,16 @@
         "path": "dist/agent-types.js",
         "sha256": "922ab8eac5836e5f3fec0c1557e9dd7dd6130912f7210ca863437e47964d39d5",
         "bytes": 1036
+      },
+      {
+        "path": "dist/branch-slug.d.ts",
+        "sha256": "95ddb6c1d6b08bd26e4ab1b1b0f90fef0341bbd3a5c9743a3a17d6ae9fa94b8e",
+        "bytes": 402
+      },
+      {
+        "path": "dist/branch-slug.js",
+        "sha256": "03ef57bc41bb4d36d502adb9b93ec5ffaff1d73bf87f9e667e3588ae9d7b120d",
+        "bytes": 1560
       },
       {
         "path": "dist/browser-automation/capabilities.d.ts",
@@ -1066,6 +1099,16 @@
         "bytes": 3898
       },
       {
+        "path": "dist/plugin-requirements.d.ts",
+        "sha256": "20a87d589eb08933f08b8ae61fd9878e776db6f4e5910235a1d76b9e035b9383",
+        "bytes": 415
+      },
+      {
+        "path": "dist/plugin-requirements.js",
+        "sha256": "2e8e62e2572d8165b3cab398bd3fa27af8bc5d6a0b21bae61ba18cd36f22487f",
+        "bytes": 1632
+      },
+      {
         "path": "dist/provider-config.d.ts",
         "sha256": "657e8fffd36b5523ea851f795bcc1182fcdf8540f255c7c03ff0b2928bb0d332",
         "bytes": 6403
@@ -1156,10 +1199,10 @@
         "bytes": 374
       }
     ],
-    "treeSha256": "a083217ddeef1f5e46b71926c9100e0a5ad3ad5e550e85bf9a8f00956585b461",
+    "treeSha256": "2c7819397148404f2922ed348054c919f0458ad70b823323ad54cfabef5d9ecb",
     "treeHashEncoding": "SHA-256 of UTF-8 sorted package-relative path + NUL + file SHA-256 hex + LF.",
-    "scope": "Selected original transport/protocol entry points and their imported dependency closure only. The full Paseo DaemonClient facade and generated AOT validator are not integrated.",
-    "provenanceUpdate": "Existing artifact bytes and configuration were hashed; this provenance update did not run an emit, application build, install or test."
+    "scope": "Selected original transport/protocol and plugin label/requirement entry points and their imported dependency closure. Full DaemonClient/AOT facade remains unconnected.",
+    "provenanceUpdate": "U23 selected emit adds branch-slug, agent-labels and plugin-requirements; no original protocol source changes."
   },
   "distribution": {
     "provenanceCopy": "third_party/paseo/protocol-provenance.json",
@@ -1167,5 +1210,5 @@
     "sourceLicenseSha256": "79d5aedce6aa0adc547336dc1bd34c5cc9308ba110fac7079ed97515ee573ad3",
     "note": "Paths in files/additions/generatedArtifacts are relative to pathBase, not the flat distribution copy."
   },
-  "integrationResearchRevision": "research:rr-79110658024cdb4797375aa15a22a771:39c50e6924caa7e9e0aed55dc8c114f195c9f46bea75d2ad71b54ecb8fbadbf4"
+  "integrationResearchRevision": "research:rr-79110658024cdb4797375aa15a22a771:ec68d100c4776b2219a705303a379cc524ae2c83caca88c7c9c2f1d9b6c805b5"
 }

@@ -1,0 +1,35 @@
+{
+  "name": "@workbench/paseo-plugin-host",
+  "version": "0.15.3",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    "./runtime": {
+      "types": "./dist/server/plugins/runtime.d.ts",
+      "default": "./dist/server/plugins/runtime.js"
+    },
+    "./compiler": {
+      "types": "./dist/server/plugins/compiler-build.d.ts",
+      "default": "./dist/server/plugins/compiler-build.js"
+    },
+    "./manifest": {
+      "types": "./dist/server/plugins/manifest.d.ts",
+      "default": "./dist/server/plugins/manifest.js"
+    },
+    "./protocol": {
+      "types": "./dist/server/plugins/plugin-process-protocol.d.ts",
+      "default": "./dist/server/plugins/plugin-process-protocol.js"
+    }
+  },
+  "dependencies": {
+    "@getpaseo/plugin": "file:../plugin",
+    "@getpaseo/protocol": "file:../protocol",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "zod": "4.4.3",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3",
+    "pino": "10.3.1"
+  },
+  "x-workbench-vendor-notice": "Selected original server plugin graph. runtime.ts requires injected child, refuses builtins, and directly uses original compiler-build. No unmanaged child or author build command is called."
+}

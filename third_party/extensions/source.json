@@ -1,0 +1,296 @@
+{
+  "schemaVersion": 1,
+  "paseoRevision": "1fff127f45b11c1c9c573fbbd12791673004c912",
+  "sourceManifests": [
+    {
+      "path": "vendor/paseo/plugin/source.json",
+      "sha256": "b1c724cd49c9668ad019a1636e9b7bf2f1d97466c880d34ab334fcd57b64957a"
+    },
+    {
+      "path": "vendor/paseo/plugin-host/source.json",
+      "sha256": "f09ec1b8f624ac763516b866eac84015e628e63337d078ec822aaf2fa566ee01"
+    }
+  ],
+  "runtimeFormat": "paseo-quickjs-v1",
+  "packages": [
+    {
+      "name": "quickjs-emscripten-core",
+      "version": "0.32.0",
+      "resolved": "https://registry.npmjs.org/quickjs-emscripten-core/-/quickjs-emscripten-core-0.32.0.tgz",
+      "integrity": "sha512-QFnPfjFey8EqknSrSxe1hZrf1/8z7/6s1QzGOmKo6++02r7QRRX7ZoyNaZh7JuVjWsVW87KnQrbZqnHkOAzUyg==",
+      "license": "MIT",
+      "installations": [
+        {
+          "path": "node_modules/quickjs-emscripten-core",
+          "packageJsonSha256": "9e6ee511f4dd74ca9283848b1dd7e4a94abe94581bae1c62f98e42e00c12d765",
+          "lockKey": "node_modules/quickjs-emscripten-core"
+        }
+      ],
+      "consumers": [
+        {
+          "importer": "apps/host/src/extensions/runtime.ts",
+          "specifier": "quickjs-emscripten-core",
+          "packageRoot": "node_modules/quickjs-emscripten-core"
+        }
+      ],
+      "licenseFiles": [
+        {
+          "path": "third_party/extensions/licenses/quickjs-emscripten-core-0.32.0/LICENSE",
+          "source": "node_modules/quickjs-emscripten-core/LICENSE",
+          "sha256": "3c6040aa318612a234cc951609b640c0c63d85ae5a98a9330d3116f1553a79db"
+        }
+      ]
+    },
+    {
+      "name": "@jitl/quickjs-wasmfile-release-sync",
+      "version": "0.32.0",
+      "resolved": "https://registry.npmjs.org/@jitl/quickjs-wasmfile-release-sync/-/quickjs-wasmfile-release-sync-0.32.0.tgz",
+      "integrity": "sha512-BKNDI/TPBfGlLNGYpLrhcDGXmIk4xHm4MRAisOBnOzpXVn9HZWsfmMAc9WMBrAHjvvds6HOikKeaOBKdPdpVrg==",
+      "license": "MIT",
+      "installations": [
+        {
+          "path": "node_modules/@jitl/quickjs-wasmfile-release-sync",
+          "packageJsonSha256": "f1d8c02102ee441a6a85bf31522a9bc436e66600b31392ac9b0dddb15b33245d",
+          "lockKey": "node_modules/@jitl/quickjs-wasmfile-release-sync"
+        }
+      ],
+      "consumers": [
+        {
+          "importer": "apps/host/src/extensions/runtime.ts",
+          "specifier": "@jitl/quickjs-wasmfile-release-sync",
+          "packageRoot": "node_modules/@jitl/quickjs-wasmfile-release-sync"
+        }
+      ],
+      "licenseFiles": [
+        {
+          "path": "third_party/extensions/licenses/jitl-quickjs-wasmfile-release-sync-0.32.0/LICENSE",
+          "source": "node_modules/@jitl/quickjs-wasmfile-release-sync/LICENSE",
+          "sha256": "446a69ae534aa8612d8b16d3bfc670c5a5050597dca3ce9820441a60d5d04fbb"
+        }
+      ]
+    },
+    {
+      "name": "@jitl/quickjs-ffi-types",
+      "version": "0.32.0",
+      "resolved": "https://registry.npmjs.org/@jitl/quickjs-ffi-types/-/quickjs-ffi-types-0.32.0.tgz",
+      "integrity": "sha512-v9T+GQpmk43VDJ7d72sf0Nexhk+ArvtUihW27dy7lqAl0zBObFKtSBBIm5RBjwIhE8VwsPPm9PNuvPvNqLWUEg==",
+      "license": "MIT",
+      "installations": [
+        {
+          "path": "node_modules/@jitl/quickjs-ffi-types",
+          "packageJsonSha256": "94fec038d66a1b64e3bc0b5bbcd87a8ab217badf5291085a53e97b2bafbd4e3f",
+          "lockKey": "node_modules/@jitl/quickjs-ffi-types"
+        }
+      ],
+      "consumers": [
+        {
+          "importer": "node_modules/quickjs-emscripten-core/dist/index.mjs",
+          "specifier": "@jitl/quickjs-ffi-types",
+          "packageRoot": "node_modules/@jitl/quickjs-ffi-types"
+        }
+      ],
+      "licenseFiles": [
+        {
+          "path": "third_party/extensions/licenses/jitl-quickjs-ffi-types-0.32.0/LICENSE",
+          "source": "node_modules/@jitl/quickjs-ffi-types/LICENSE",
+          "sha256": "3c6040aa318612a234cc951609b640c0c63d85ae5a98a9330d3116f1553a79db"
+        }
+      ]
+    },
+    {
+      "name": "zod",
+      "version": "4.4.3",
+      "resolved": "https://registry.npmjs.org/zod/-/zod-4.4.3.tgz",
+      "integrity": "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==",
+      "license": "MIT",
+      "installations": [
+        {
+          "path": "vendor/paseo/plugin-host/node_modules/zod",
+          "packageJsonSha256": "c630bd10b52dcf71c112a2bf78dbf2734b9db58d62de663b8d86c2ec2c8cda2e",
+          "lockKey": "vendor/paseo/plugin-host/node_modules/zod"
+        },
+        {
+          "path": "vendor/paseo/plugin/node_modules/zod",
+          "packageJsonSha256": "c630bd10b52dcf71c112a2bf78dbf2734b9db58d62de663b8d86c2ec2c8cda2e",
+          "lockKey": "vendor/paseo/plugin/node_modules/zod"
+        }
+      ],
+      "consumers": [
+        {
+          "importer": "vendor/paseo/plugin-host/dist/server/plugins/manifest.js",
+          "specifier": "zod",
+          "packageRoot": "vendor/paseo/plugin-host/node_modules/zod"
+        },
+        {
+          "importer": "vendor/paseo/plugin/dist/settings.js",
+          "specifier": "zod",
+          "packageRoot": "vendor/paseo/plugin/node_modules/zod"
+        },
+        {
+          "importer": "vendor/paseo/plugin-host/guest-entry.ts",
+          "specifier": "zod",
+          "packageRoot": "vendor/paseo/plugin-host/node_modules/zod"
+        }
+      ],
+      "licenseFiles": [
+        {
+          "path": "third_party/extensions/licenses/zod-4.4.3/LICENSE",
+          "source": "vendor/paseo/plugin-host/node_modules/zod/LICENSE",
+          "sha256": "3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8"
+        }
+      ]
+    },
+    {
+      "name": "typescript",
+      "version": "5.9.3",
+      "resolved": "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz",
+      "integrity": "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==",
+      "license": "Apache-2.0",
+      "installations": [
+        {
+          "path": "node_modules/typescript",
+          "packageJsonSha256": "822ef7ca6452205657b6288b066481ecf508bfbf43455d715cf7d3ec457561e6",
+          "lockKey": "node_modules/typescript"
+        }
+      ],
+      "consumers": [
+        {
+          "importer": "vendor/paseo/plugin-host/dist/server/plugins/compiler-imports.js",
+          "specifier": "typescript",
+          "packageRoot": "node_modules/typescript"
+        }
+      ],
+      "licenseFiles": [
+        {
+          "path": "third_party/extensions/licenses/typescript-5.9.3/LICENSE.txt",
+          "source": "node_modules/typescript/LICENSE.txt",
+          "sha256": "a7d00bfd54525bc694b6e32f64c7ebcf5e6b7ae3657be5cc12767bce74654a47"
+        },
+        {
+          "path": "third_party/extensions/licenses/typescript-5.9.3/ThirdPartyNoticeText.txt",
+          "source": "node_modules/typescript/ThirdPartyNoticeText.txt",
+          "sha256": "1af3c68039c57e539422da82a4faada506ce6d0ea6f90e0b699d02dbcdb7a90c"
+        }
+      ]
+    },
+    {
+      "name": "esbuild",
+      "version": "0.28.2",
+      "resolved": "https://registry.npmjs.org/esbuild/-/esbuild-0.28.2.tgz",
+      "integrity": "sha512-HKVLS8dvII+xoKW9kmqxbRKrnWEXfJJr/FZhhJmiqIB0e053QNYFqOBouTMO/k5sID4MvCiUCvv8b9M4h32wIA==",
+      "license": "MIT",
+      "installations": [
+        {
+          "path": "node_modules/esbuild",
+          "packageJsonSha256": "9d0bc453f4e791553c4cc2298ba023b409241fd9801e494741666eb0f6051490",
+          "lockKey": "node_modules/esbuild"
+        }
+      ],
+      "consumers": [
+        {
+          "importer": "vendor/paseo/plugin-host/dist/server/plugins/compiler-esbuild.js",
+          "specifier": "esbuild",
+          "packageRoot": "node_modules/esbuild"
+        }
+      ],
+      "licenseFiles": [
+        {
+          "path": "third_party/extensions/licenses/esbuild-0.28.2/LICENSE.md",
+          "source": "node_modules/esbuild/LICENSE.md",
+          "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681"
+        }
+      ]
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "version": "1.29.0",
+      "resolved": "https://registry.npmjs.org/@modelcontextprotocol/sdk/-/sdk-1.29.0.tgz",
+      "integrity": "sha512-zo37mZA9hJWpULgkRpowewez1y6ML5GsXJPY8FI0tBBCd77HEvza4jDqRKOXgHNn867PVGCyTdzqpz0izu5ZjQ==",
+      "license": "MIT",
+      "installations": [
+        {
+          "path": "vendor/paseo/plugin-host/node_modules/@modelcontextprotocol/sdk",
+          "packageJsonSha256": "7ab20eba8fee70f316516b5b3fc45837294caee7e4dd36f2a1593210b0f003ac",
+          "lockKey": "vendor/paseo/plugin-host/node_modules/@modelcontextprotocol/sdk"
+        }
+      ],
+      "consumers": [
+        {
+          "importer": "vendor/paseo/plugin-host/dist/server/plugins/agent-tools.js",
+          "specifier": "@modelcontextprotocol/sdk/server/zod-json-schema-compat.js",
+          "packageRoot": "vendor/paseo/plugin-host/node_modules/@modelcontextprotocol/sdk"
+        }
+      ],
+      "licenseFiles": [
+        {
+          "path": "third_party/extensions/licenses/modelcontextprotocol-sdk-1.29.0/LICENSE",
+          "source": "vendor/paseo/plugin-host/node_modules/@modelcontextprotocol/sdk/LICENSE",
+          "sha256": "5e13dbbc1d120fc2a03cecde7c91424ae2d7de11b63d58ded2f4431e261ee50d"
+        }
+      ]
+    }
+  ],
+  "adapters": [
+    {
+      "path": "apps/host/src/extensions/broker.ts",
+      "sha256": "d5aa0c9a4c03d3eb9624e7aa3e13c4c90a1e381c0307a3a09b229cda426eb977"
+    },
+    {
+      "path": "apps/host/src/extensions/permissions.ts",
+      "sha256": "eca7209a2f54c7b1e4148f3fa6fd398b03d06d2e68b0c154653a8fea4e71f373"
+    },
+    {
+      "path": "apps/host/src/extensions/registry.ts",
+      "sha256": "bd04b16fd102a8e20dbdb9354109f26a88f9012f40266493b42b46804686915b"
+    },
+    {
+      "path": "apps/host/src/extensions/runtime.ts",
+      "sha256": "eaaa9928f2243999811ee6e0083dfd2d07bd5b3ca0df91b2c7b4c1e91b484521"
+    },
+    {
+      "path": "apps/host/src/extensions/screen.ts",
+      "sha256": "8491abf0ae081a7a65b1201f7efa7d13d1c74f8ea1aef74543dd4dd536a87ac4"
+    },
+    {
+      "path": "apps/host/src/extensions/service.ts",
+      "sha256": "0d5a0850b9111b610ebd556f05906998898621cb3ed0b89cf67e78e6eb25d4aa"
+    }
+  ],
+  "guestBundle": {
+    "path": "vendor/paseo/plugin-host/dist/guest-sdk.js",
+    "sha256": "d7ef51db483649eb7651c06f73dff875eb8aa5cbfba4ce4f5f6558337bdf0149"
+  },
+  "focusedVerification": {
+    "command": "node node_modules/vitest/vitest.mjs run apps/host/src/extensions.test.ts",
+    "platform": "linux",
+    "tests": 3,
+    "status": "PASS",
+    "durationMs": 6220,
+    "executedAtLocal": "2026-11-09T21:01:35+09:00",
+    "limitations": [
+      "No external account or HTTPS call",
+      "No browser/phone execution",
+      "Windows/macOS NOT_RUN",
+      "No installer or production build",
+      "Packaging lookup, explicit identical release-sync import, type-only fixes and deterministic package ordering/depth guard adjusted after focused test; no repeat of passing tests"
+    ]
+  },
+  "dependencyResolution": {
+    "method": "Node createRequire.resolve from each consuming source/dist file, used only to identify the installed package root; no dependency code executed.",
+    "lockFile": "package-lock.json",
+    "lockSha256": "a32b25d1b4df0daf54f1c72f747b8556271bc45c1fc68fa1a0a7ff1223f79462",
+    "rootOnlyVersionsNotSelectedForVendoredPlugin": [
+      {
+        "name": "zod",
+        "version": "4.6.7",
+        "path": "node_modules/zod"
+      },
+      {
+        "name": "@modelcontextprotocol/sdk",
+        "version": "1.32.1",
+        "path": "node_modules/@modelcontextprotocol/sdk"
+      }
+    ],
+    "note": "Root application dependencies may have newer versions. Paseo plugin/plugin-host and the trusted guest SDK select the nested exact pins recorded above; root-only versions are not substituted in extension provenance."
+  }
+}

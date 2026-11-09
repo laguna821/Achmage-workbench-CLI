@@ -24,6 +24,11 @@
     "@getpaseo/protocol": "file:../../vendor/paseo/protocol",
     "pino": "10.3.1",
     "ws": "8.20.0",
-    "qrcode": "1.5.4"
+    "qrcode": "1.5.4",
+    "@workbench/paseo-voice-server": "file:../../vendor/paseo/voice-server",
+    "@workbench/paseo-plugin-host": "file:../../vendor/paseo/plugin-host",
+    "@getpaseo/plugin": "file:../../vendor/paseo/plugin",
+    "quickjs-emscripten-core": "0.32.0",
+    "@jitl/quickjs-wasmfile-release-sync": "0.32.0"
   }
 }

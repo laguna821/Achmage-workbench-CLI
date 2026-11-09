@@ -1,0 +1,14 @@
+{
+  "apiVersion": 1,
+  "runtime": "paseo-quickjs-v1",
+  "id": "workbench-notebook",
+  "name": "제한된 도구·화면·공급자 예제",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "source": { "url": "https://github.com/getpaseo/paseo", "revision": "Workbench example using SDK 1fff127f45b11c1c9c573fbbd12791673004c912" },
+  "capabilities": ["tool", "screen", "provider"],
+  "permissions": { "files": ["read"], "network": [] },
+  "tools": [ { "id": "echo", "title": "입력 확인", "method": "echo" }, { "id": "read-text", "title": "작업공간 텍스트 읽기", "method": "read-text" } ],
+  "screens": [ { "id": "notebook", "title": "입력 확인 화면", "file": "screens/notebook.html" } ],
+  "providers": [ { "id": "example-echo", "title": "로컬 예제 공급자", "method": "example-echo" } ]
+}

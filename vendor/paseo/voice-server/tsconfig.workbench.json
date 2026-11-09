@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "strict": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "esModuleInterop": true,
+    "types": [
+      "node"
+    ]
+  },
+  "files": [
+    "src/server/dictation/dictation-stream-manager.ts",
+    "src/server/speech/providers/openai/stt.ts",
+    "src/server/speech/providers/openai/tts.ts",
+    "src/server/speech/providers/local/worker-client.ts",
+    "src/server/speech/providers/local/models.ts",
+    "src/server/speech/providers/local/sherpa/model-downloader.ts",
+    "src/server/speech/speech-provider.ts",
+    "src/utils/spawn.ts",
+    "src/server/speech/providers/local/worker-process.ts"
+  ]
+}

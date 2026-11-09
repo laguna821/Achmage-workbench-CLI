@@ -1,0 +1,185 @@
+{
+  "version": 1,
+  "defaultEnabled": false,
+  "paseoCommit": "1fff127f45b11c1c9c573fbbd12791673004c912",
+  "models": [
+    {
+      "id": "whisper-base",
+      "label": "Whisper Base · 한국어 로컬 받아쓰기",
+      "kind": "stt",
+      "online": false,
+      "languages": [
+        "ko",
+        "en",
+        "ja",
+        "zh"
+      ],
+      "license": "MIT",
+      "sourceUrl": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-base.tar.bz2",
+      "revision": "github-release-asset-196350768",
+      "sha256": "911b2083efd7c0dca2ac3b358b75222660dc09fb716d64fbfc417ba6c99ff3de",
+      "checksumSource": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/checksum.txt",
+      "downloadBytes": 207557382,
+      "installedBytes": null,
+      "platforms": [
+        "linux-x64",
+        "linux-arm64",
+        "darwin-x64",
+        "darwin-arm64",
+        "win32-x64",
+        "win32-ia32"
+      ],
+      "cost": "별도 API 요금 없음. 모델과 현재 운영체제용 런타임을 사용자가 선택하면 다운로드합니다.",
+      "destination": null
+    },
+    {
+      "id": "openai-whisper-1",
+      "label": "OpenAI Whisper · 온라인 받아쓰기",
+      "kind": "stt",
+      "online": true,
+      "languages": [
+        "ko",
+        "en",
+        "ja",
+        "zh"
+      ],
+      "license": "OpenAI API terms (service; no model redistribution)",
+      "sourceUrl": "https://developers.openai.com/api/docs/guides/speech-to-text",
+      "revision": "whisper-1 (provider-managed API model)",
+      "sha256": null,
+      "downloadBytes": 0,
+      "installedBytes": 0,
+      "platforms": [
+        "linux-x64",
+        "linux-arm64",
+        "darwin-x64",
+        "darwin-arm64",
+        "win32-x64",
+        "win32-arm64",
+        "win32-ia32"
+      ],
+      "cost": "OpenAI API 사용량에 따라 과금됩니다. ChatGPT 구독과 별도이며 녹음이 api.openai.com으로 전송됩니다.",
+      "destination": "https://api.openai.com/v1/audio/transcriptions"
+    },
+    {
+      "id": "openai-tts-1",
+      "label": "OpenAI TTS · 한국어 음성 읽기",
+      "kind": "tts",
+      "online": true,
+      "languages": [
+        "ko",
+        "en",
+        "ja",
+        "zh"
+      ],
+      "license": "OpenAI API terms (service; no model redistribution)",
+      "sourceUrl": "https://developers.openai.com/api/docs/guides/text-to-speech",
+      "revision": "tts-1 (provider-managed API model)",
+      "sha256": null,
+      "downloadBytes": 0,
+      "installedBytes": 0,
+      "platforms": [
+        "linux-x64",
+        "linux-arm64",
+        "darwin-x64",
+        "darwin-arm64",
+        "win32-x64",
+        "win32-arm64",
+        "win32-ia32"
+      ],
+      "cost": "OpenAI API 사용량에 따라 과금됩니다. 선택한 텍스트가 api.openai.com으로 전송됩니다. AI 생성 음성입니다.",
+      "destination": "https://api.openai.com/v1/audio/speech"
+    }
+  ],
+  "runtime": {
+    "version": "1.12.28",
+    "optional": true,
+    "sourceUrl": "https://github.com/k2-fsa/sherpa-onnx/tree/v1.12.28",
+    "license": "Apache-2.0",
+    "packages": [
+      {
+        "name": "sherpa-onnx-node",
+        "version": "1.12.28",
+        "sourceUrl": "https://registry.npmjs.org/sherpa-onnx-node/1.12.28",
+        "url": "https://registry.npmjs.org/sherpa-onnx-node/-/sherpa-onnx-node-1.12.28.tgz",
+        "integrity": "sha512-EHSB3EG6hKyXaTNh6GU/bwh6i3dncCH6ZCU2mScNzkxRbVStZ7QmNj0Oo4E9XrGGo9jX9pKg9MPHEPyjdK+ApA==",
+        "sha256": null,
+        "downloadBytes": null,
+        "installedBytes": 51427,
+        "license": "Apache-2.0"
+      },
+      {
+        "name": "sherpa-onnx-linux-x64",
+        "version": "1.12.28",
+        "sourceUrl": "https://registry.npmjs.org/sherpa-onnx-linux-x64/1.12.28",
+        "url": "https://registry.npmjs.org/sherpa-onnx-linux-x64/-/sherpa-onnx-linux-x64-1.12.28.tgz",
+        "integrity": "sha512-+7ZwpAqQYz5fjNQ13F9+sR11zKo6+HhOa1OvT+F4g4PjmoCS1o3YYQqT4JZuLeNRWAY6kKn4IXGWLx93K+OV7A==",
+        "sha256": null,
+        "downloadBytes": null,
+        "installedBytes": 30290638,
+        "license": "Apache-2.0"
+      },
+      {
+        "name": "sherpa-onnx-linux-arm64",
+        "version": "1.12.28",
+        "sourceUrl": "https://registry.npmjs.org/sherpa-onnx-linux-arm64/1.12.28",
+        "url": "https://registry.npmjs.org/sherpa-onnx-linux-arm64/-/sherpa-onnx-linux-arm64-1.12.28.tgz",
+        "integrity": "sha512-NeDVuNcSUmqye/fUlqogIDX/O8NVkD9423KTQt4E/EftwoiReHLQP4CbtGoL9wHhRAy+opCzw+ssMb/coB+TqA==",
+        "sha256": null,
+        "downloadBytes": null,
+        "installedBytes": 37340353,
+        "license": "Apache-2.0"
+      },
+      {
+        "name": "sherpa-onnx-darwin-x64",
+        "version": "1.12.28",
+        "sourceUrl": "https://registry.npmjs.org/sherpa-onnx-darwin-x64/1.12.28",
+        "url": "https://registry.npmjs.org/sherpa-onnx-darwin-x64/-/sherpa-onnx-darwin-x64-1.12.28.tgz",
+        "integrity": "sha512-YG5WNS/19zNS25TbG5HttsBaHWo97Mdoz4OLspyQ3EkM/XEZILz6M+Kt1/2NjZEuDKMlpgdjIyfANnBY2GYRZA==",
+        "sha256": null,
+        "downloadBytes": null,
+        "installedBytes": 85132415,
+        "license": "Apache-2.0"
+      },
+      {
+        "name": "sherpa-onnx-darwin-arm64",
+        "version": "1.12.28",
+        "sourceUrl": "https://registry.npmjs.org/sherpa-onnx-darwin-arm64/1.12.28",
+        "url": "https://registry.npmjs.org/sherpa-onnx-darwin-arm64/-/sherpa-onnx-darwin-arm64-1.12.28.tgz",
+        "integrity": "sha512-QzKrJwZR9aOmz/X6i37e0p0XDCEAGS9AuLXD5SejQxyrwOc+8db+Qi7Y+IOKk7DUebpe1mTS4gAFEXk2JnSAAg==",
+        "sha256": null,
+        "downloadBytes": null,
+        "installedBytes": 75698651,
+        "license": "Apache-2.0"
+      },
+      {
+        "name": "sherpa-onnx-win-x64",
+        "version": "1.12.28",
+        "sourceUrl": "https://registry.npmjs.org/sherpa-onnx-win-x64/1.12.28",
+        "url": "https://registry.npmjs.org/sherpa-onnx-win-x64/-/sherpa-onnx-win-x64-1.12.28.tgz",
+        "integrity": "sha512-p8vpdVUtPRuI9ksm2EnuabK9+r285m5ARYzZkCfvg9ia/TQAq8pVoOCOuUTbMteBSQRPOl9lamfOcg3Sy085yQ==",
+        "sha256": null,
+        "downloadBytes": null,
+        "installedBytes": 20169279,
+        "license": "Apache-2.0"
+      },
+      {
+        "name": "sherpa-onnx-win-ia32",
+        "version": "1.12.28",
+        "sourceUrl": "https://registry.npmjs.org/sherpa-onnx-win-ia32/1.12.28",
+        "url": "https://registry.npmjs.org/sherpa-onnx-win-ia32/-/sherpa-onnx-win-ia32-1.12.28.tgz",
+        "integrity": "sha512-C9bvyg3SuVGVVRCjPH3sKk9C1rYiihTO7C9EF1T9n1V7ABdr6VE2O/7HzzMeTx9B4kUaAIDQNUq52XFE5x8oWQ==",
+        "sha256": null,
+        "downloadBytes": null,
+        "installedBytes": 17171521,
+        "license": "Apache-2.0"
+      }
+    ],
+    "note": "No native binaries are included in the base install. Registry SHA512 integrity is pinned; SHA256 is computed and recorded after explicit download. No npm lifecycle scripts run."
+  },
+  "limitations": [
+    "Korean local TTS is not available in the pinned Paseo model catalog.",
+    "No Korean accuracy, real microphone or mobile/native playback test was run.",
+    "Whisper installed bytes are measured on explicit installation, not estimated."
+  ]
+}

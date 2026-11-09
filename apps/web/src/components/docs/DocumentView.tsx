@@ -1083,6 +1083,8 @@ export default function DocumentView({
           onDesktopPicture={() => api.clipboardPicture()}
           attachments={pending.count}
           draftKey={modes?.draftKey ?? `doc:${artifactId}`}
+          voiceScope={sendTarget ? { workId: sendTarget.workId, sessionId: sendTarget.id } : undefined}
+          voiceReply={state.transcripts[sendTarget?.id ?? ""]?.items.filter(item => item.kind === "assistant" && !item.streaming).map(item => item.kind === "assistant" ? item.text : "").at(-1)}
           placeholder={selection ? "이 부분에 요청하기" : "이 문서에 요청하기"}
           busy={Boolean(sendTarget && isBusy(sendTarget))}
           waiting={Boolean(sendTarget && (sendTarget.status === "running" || sendTarget.status === "starting"))}

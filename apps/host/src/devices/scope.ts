@@ -50,7 +50,7 @@ export function scopedEvent(event: SequencedEvent, manager: SessionManager, gran
 }
 export type ScopedRoute = { permission: DevicePermission; workId?: string };
 /** Admit only existing routes whose resource identity is resolved by the host. */
-export function scopedRoute(manager: SessionManager, method: string, path: string, body: Record<string, unknown>, context?: { grant: DeviceGrant; headers: Record<string, string>; media: RemoteMediaAccess }): ScopedRoute {
+export function scopedRoute(manager: SessionManager, method: string, path: string, body: Record<string, unknown>, context?: { grant: DeviceGrant; headers: Record<string, string>; media: RemoteMediaAccess; voice?: Pick<import("../voice.ts").VoiceService, "getCapture" | "speechSessionId"> }): ScopedRoute {
   const url = new URL(path, "http://workbench.invalid");
   if (url.origin !== "http://workbench.invalid" || !path.startsWith("/api/") || url.pathname !== path.split("?")[0] || /%2f|%5c|\\/i.test(url.pathname)) throw denied();
   const parts = url.pathname.slice(5).split("/").map(decodeURIComponent);
@@ -62,6 +62,16 @@ export function scopedRoute(manager: SessionManager, method: string, path: strin
   if (read && ["/api/snapshot", "/api/tasks", "/api/host", "/api/attention", "/api/agent-profiles", "/api/tools", "/api/prefs"].includes(url.pathname)) return { permission: "read" };
   if (url.pathname === "/api/prefs" && method === "PUT") return { permission: "read" };
   if (url.pathname === "/api/attention/presence" && method === "POST") return { permission: "read", ...(body.sessionId ? { workId: sessionWork(body.sessionId) } : {}) };
+  if (parts[0] === "voice" && context?.voice) {
+    if (read && parts.length === 1) return { permission: "read" };
+    if (method === "POST" && parts.length === 2 && ["captures", "speech"].includes(parts[1]!)) return { permission: "send", workId: sessionWork(body.sessionId) };
+    if (parts[1] === "captures" && parts[2] && ((read && parts.length === 3) || (method === "POST" && parts.length === 4 && ["chunks", "finish", "cancel"].includes(parts[3]!)))) {
+      const capture = context.voice.getCapture(parts[2]);
+      return { permission: read ? "read" : "send", workId: sessionWork(capture.state.sessionId) };
+    }
+    if (method === "POST" && parts[1] === "speech" && parts[2] && parts.length === 4 && parts[3] === "cancel") return { permission: "send", workId: sessionWork(context.voice.speechSessionId(parts[2])) };
+    throw denied();
+  }
   if (parts[0] === "attachments" && context) {
     if (method === "POST" && parts.length === 1) {
       const workId = context.headers["x-workbench-work"];

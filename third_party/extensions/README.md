@@ -1,0 +1,13 @@
+# Bounded Paseo extension runtime
+
+Paseo source revision `1fff127f45b11c1c9c573fbbd12791673004c912` is preserved in `vendor/paseo/plugin` and the selected server graph in `vendor/paseo/plugin-host`. Each directory contains Apache-2.0 LICENSE, upstream package metadata and a per-file source/hash manifest. The upstream server runtime is also retained at `vendor/paseo/plugin-host/upstream/runtime.ts`.
+
+The host adaptation requires the original `spawnChild` port, removes the unmanaged Node child helper and rejects `startBuiltinPlugin`. It uses the original compiler-build directly without invoking author build commands, worker preparation or npm. The original runtime RPC, provider protocol, lifecycle validators, request ownership and shutdown logic remain in use. `apps/host/src/extensions/runtime.ts` supplies a QuickJS child and a deny-by-default Paseo session socket. It does not expose the Paseo daemon owner API.
+
+The sole executable format is `paseo-quickjs-v1`. `quickjs-emscripten-core` and the original default `@jitl/quickjs-wasmfile-release-sync` variant are pinned to `0.32.0` (MIT). Its runtime and WebAssembly dependencies are identified by the repository package lock. `extension-runtime/build-guest.mjs` bundles only the original pure SDK exports and Zod into the VM; Node process helpers, ACP, arbitrary imports and Node evaluation are not supplied. Every package starts disabled. Searching or importing skills does not install or activate an executable package, and this implementation does not rewrite the existing skill library.
+
+The permitted host imports are workspace-scoped text reads, explicitly policy-approved new text-file creation, declared HTTPS endpoints, and bounded delay. Calls recheck current grant generation and actual Workspace ID. Network sockets pin a validated public DNS result and do not follow redirects or inherit host credentials. The screen format is sanitized declarative HTML with an engine-owned nonce bridge in an opaque-origin sandbox iframe. Author JavaScript, native addons, shell processes, screen network requests, arbitrary HTML and unrestricted fallback are unsupported.
+
+Runtime limits are 32 MiB guest heap, 512 KiB guest stack, one second per evaluation/job batch, 1 MiB input/output messages, 4 MiB aggregate guest messages and 64 broker calls per operation. These are configured limits, not benchmark results. The OS isolation fixtures still require separate Windows/macOS/Linux execution evidence; no cross-platform acceptance or browser/phone rendering is claimed by source integration.
+
+Primary QuickJS API reference: https://github.com/justjake/quickjs-emscripten/blob/main/README.md

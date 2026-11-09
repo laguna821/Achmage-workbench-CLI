@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": [
+      "ES2023",
+      "DOM"
+    ],
+    "skipLibCheck": true,
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "esModuleInterop": true,
+    "types": [
+      "node"
+    ],
+    "noCheck": true
+  },
+  "files": [
+    "src/server/plugins/runtime.ts",
+    "src/server/plugins/runtime-subscription.ts",
+    "src/server/plugins/session-socket.ts",
+    "src/server/plugins/plugin-process-protocol.ts",
+    "src/server/plugins/manifest.ts",
+    "src/server/plugins/compiler-build.ts",
+    "src/server/plugins/compiler-imports.ts",
+    "src/server/plugins/compiler-esbuild.ts",
+    "src/server/plugins/plugin-sdk-specifiers.ts",
+    "src/server/plugins/lifecycle/index.ts",
+    "src/server/plugins/agent-tools.ts",
+    "src/utils/worktree-path.ts",
+    "src/utils/path.ts"
+  ]
+}

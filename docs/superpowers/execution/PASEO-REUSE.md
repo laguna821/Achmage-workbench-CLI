@@ -23,10 +23,10 @@
 | U17–U18 다기기·모바일 | `packages/protocol`, `packages/client` 원본 보존; protected transport·offer parser·reconnect delay 사용. 앱 pairing/runtime/storage 원본은 후속 | Workbench 기존 snapshot/task/receipt·대화 UI를 원본 전송에 연결. 세션 자격증명·호스트별 화면 상태·첨부 범위 적용 | 기기 연결 화면·클라이언트 연결 코드 구현. 전체 DaemonClient/공식 앱 호환·카메라·실제 모바일 남음 |
 | U19 원격 알림 | 서버 `push/{index,push-service,token-store}.ts`, private-files; 앱 `push-notifications/`, notification-open model; protocol attention/deeplink | 원본 `deliver/now/filePath`에 기존 attention 정책·승인된 item ID·설치별 push 설정 연결 | 원본·연결 지점 확정 |
 | U20 원격 터미널 | protocol terminal frame/subscription, client stream router; 앱 `terminal/runtime/terminal-stream-controller.ts` 및 원본 web/native emulator; 서버 `src/terminal/` 묶음 | `observeTerminal/sendTerminalInput` 포트, 기존 PTY·workspace 수명 연결. 원본 xterm/node-pty 버전 묶음 유지 | 원본·의존 묶음 확정 |
-| U22 받아쓰기 | 앱 `dictation/dictation-stream-sender.ts`, 서버 `dictation/dictation-stream-manager.ts` | start/chunk/ACK/finish/cancel 메시지를 연결하고 현재 Composer draft/generation에 적용 | 원본 확인 |
-| U22 녹음·재생·음성 엔진 | 앱 `audio/audio-engine.web.ts`, `audio/playback.ts`, `audio/pcm/`; 서버 `speech/` provider/runtime/worker/model-library | Tauri/Web 환경 판별, 원본 `forkWorker` 주입점에 소유 프로세스 수명 연결, 명시적 모델 다운로드 | 원본 확인 |
-| U23 플러그인 | `packages/plugin` SDK; 서버 `plugins/manifest.ts`, `compiler-build.ts`, `plugin-process.ts`, `runtime.ts`, `index.ts` | `readPluginManifest`부터 가져오고 `PluginServiceDependencies.runtime`에 기존 grant/hash/workspace 제어 연결 | 원본 확인 |
-| U24 Hub 연결 | 서버 `hub/relationship-controller.ts`, `relationship-remote.ts`, `relationship-retry.ts`; CLI `commands/hub/hub-client/` | 원본 HTTP/relationship client와 `attachSocket/updateAttachedPermissions/createExecutionAgents`를 기존 identity/명령에 연결 | 원본 확인; Cloud consumer는 이 저장소에 없음 |
+| U22 받아쓰기 | 앱 `dictation/dictation-stream-sender.ts`, 서버 `dictation/dictation-stream-manager.ts` | start/chunk/ACK/finish/cancel 메시지를 연결하고 현재 Composer draft/generation에 적용 | 실제 host/Composer 연결, 취소·지연 결과 분리 구현 |
+| U22 녹음·재생·음성 엔진 | 앱 `audio/audio-engine.web.ts`, `audio/playback.ts`, `audio/pcm/`; 서버 `speech/` provider/runtime/worker/model-library | Tauri/Web 환경 판별, 원본 `forkWorker` 주입점에 소유 프로세스 수명 연결, 명시적 모델 다운로드 | 원본 녹음·PCM·provider·worker·다운로더 연결; native 모델·실기기 확인 남음 |
+| U23 플러그인 | `packages/plugin` SDK; 서버 `plugins/manifest.ts`, `compiler-build.ts`, `plugin-process.ts`, `runtime.ts`, `index.ts` | `readPluginManifest`부터 가져오고 `PluginServiceDependencies.runtime`에 기존 grant/hash/workspace 제어 연결 | 원본 compiler/runtime와 실제 QuickJS 실행, 관리·화면·업데이트 연결 |
+| U24 Hub 연결 | 서버 `hub/relationship-controller.ts`, `relationship-remote.ts`, `relationship-retry.ts`; CLI `commands/hub/hub-client/` | 원본 HTTP/relationship client와 `attachSocket/updateAttachedPermissions/createExecutionAgents`를 기존 identity/명령에 연결 | 공개 consumer 부재를 기존 TaskService/SQLite로 보완; outbound 원본 relationship client 전체 연결은 남음 |
 | U05 이미지 표시 | 앱 `components/markdown/image-decoding.ts` | 현재 인증된 media/Blob URL에 원본 decoder와 DOM Image.decode를 연결 | 실제 Attachments 화면 코드 적용; 기존 media cache 2개 통과 |
 | U05 이미지 획득·대화 복사 | 앱 `assistant-image/{acquisition-cache,file-acquisition}.ts`, `assistant-selection-copy/content.web.ts`와 `markup.ts`/clipboard | 현재 immutable image capture·파일 해시·byte budget, 기존 채팅 DOM을 원본 포트에 연결 | 원본 확인 |
 
@@ -69,3 +69,9 @@
 기존 Paseo 조사: `research:rr-b3a4efd5af5ac21ca608ac4ce17dd71d:89fcdaee6e62df01c31f9f4c56c19d9916acab297f64b1b42cd5b67317e03ad5` (R1–R5).
 기존 통합 계획: `research:rr-0b42f53d2a049398bbf5a5c07c18266f:3c3cbe2fbb6979b57bafcbc9851e54112d02ea4662f7afc6c9fc48b81c2335b0`.
 현재 사용자 교정은 과거 구현 방식 권고보다 우선한다. 이 문서는 전체 기능이나 모바일 사용 완료 선언이 아니다.
+
+## 음성·실행 확장·사건 consumer 연결
+
+원본 음성 60파일과 앱 audio/dictation, 원본 plugin SDK와 server compiler/lifecycle를 실제 서비스에 연결했다. 원본 전체 daemon을 대체한 것이 아니며 Workbench 세션·Workspace·권한을 adapter로 연결한다. 공개 Cloud consumer 부재는 기존 작업 접수 journal로 보완했다. 3묶음 서비스/화면·확장 배포파일 연결과 집중 동작을 마쳤고, 실기기·native 모델·외부계정·원본 outbound Hub client와 전체 릴리즈는 남는다. [구현과 사용 범위](../../voice-extensions-events.md).
+
+연구 근거: `research:rr-79110658024cdb4797375aa15a22a771:ec68d100c4776b2219a705303a379cc524ae2c83caca88c7c9c2f1d9b6c805b5` (R13–R18).
