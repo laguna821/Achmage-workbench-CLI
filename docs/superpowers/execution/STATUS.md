@@ -12,7 +12,7 @@
 | U06 작업 목록·명령 | 주요 흐름 구현 | `22166e5`, `498a710` — 독립 문서·하위 작업과 공통 접수. 공급자 하위 작업은 관찰만 지원 |
 | U07 역할·CLI/MCP API | 구현 | `9239725`, `498a710` — 역할 CRUD·요청 당시 설정 보존·공통 receipt |
 | U08 9형식 Office UI | 주요 흐름 구현 | `b40fb38` — 원본 명령 메뉴·theme 전달. 전체 native OS 사용 확인은 통합 때 |
-| U09 Office UI 독립 실행 | 남음 | renderer 소유 AI를 host 독립 executor로 이전해야 함 |
+| U09 Office UI 독립 실행 | 실행 권한·저장 경로 분리 구현 | UI presence와 실행 lease 분리, 원본 serializer 직접 저장, 취소·외부 저장·늦은 writer 차단. 독립 renderer 프로세스와 원본 질문/선택 인계는 남음. [범위](../../office-execution.md) |
 | U10 검색·Bases·그래프 | 주요 흐름 구현 | `e056d8b` — 검색 취소 복귀·다중선택/일괄 보관·그래프 키보드 이동 |
 | U11 설정·가져오기 | 주요 흐름 구현 | 기존 이음/Dropbox 흐름 유지, `18bac42` 과거 기록/실행 구분·원문 보존. 전체 온보딩 통합 남음 |
 | U12–U14 공유 웹·같은 페이지 AI | 핵심 코드 구현 | `2df5f41`, `1c5e688` — 네이티브 웹 탭·주소 이동·독립 웹 AI·사람 인계·숨김 유지·대상/문서/제어권 식별. 다운로드·사이트 권한·macOS 프로필·산출물 및 실제 OS 화면 확인은 남음. [범위](../../shared-browser.md) |
@@ -28,6 +28,8 @@
 현재 코드의 확인은 해당 묶음에서 확보한 결과를 재사용한다. Office production bundle은 Rust PATH와 vendor realpath를 보정한 실행에서 통과했다. U03/U10 관련 동작 15개, import 9개, 실제 폴더 경계 1개, U20 서비스 3개와 UI 4개, U19 host 알림 4개와 UI 6개 확인을 마쳤다. 전체 OS/실계정/실기기 완료를 뜻하지 않는다.
 
 U12–U14 host 4개, UI 6개, 정확한 DOM adapter fixture, host/web TypeScript 및 Linux native compile을 확인했다. HTTP 환경의 nonce 생성도 별도 단일 확인했다. Native OS 화면 E2E나 실제 로그인은 아직 확인하지 않았다. 이번 공유 웹 묶음에서는 production/installer/CI를 실행하지 않았고 최신 구현은 로컬 개발 브랜치에 있다.
+
+U09 실행 권한·저장 분리의 집중 22개와 영향받은 참조/스킬/스타일 49개를 확인했다. 시간 fixture 1개 수정 후 해당 항목만 재실행했다. Host/Office TypeScript 통과. 9형식 전체 도구는 아직 renderer가 필요한 상태이며 앱 프로세스 종료 후 실행 완료로 표시하지 않는다.
 
 기존 CI `42575034938`은 lock 버전 두 항목 실수로 실패했고 복구했다. `42576006213`은 공통/macOS/Linux/Arch 성공, Windows 앱·NSIS 생성 후 WiX 다운로드 HTTP504로 MSI 실패했다. 실패한 bundle만 재시도하는 코드를 준비했으며 지금 재빌드하지 않는다.
 

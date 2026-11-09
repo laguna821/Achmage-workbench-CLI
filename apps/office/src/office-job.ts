@@ -1,10 +1,11 @@
 import type { OfficeTurnFinish, OfficeTurnReceipt, OfficeTurnStart } from "../../../packages/contracts/src/office-ai.ts";
 import type { IpcStreamChunk } from "../../../vendor/ieumoffice/packages/agent-core/src/electron-transport.ts";
 import type { Events, Gateway } from "./bridge.ts";
+import { maintainOfficeTurn } from "./execution-heartbeat.ts";
 
 /** The original long-job engine owns batching/resume; this adapter records its one user run. */
 export function createOfficeJob(gateway: Gateway, artifactId: string, events: Events, prepare: () => Promise<{ revision: number }>, background: OfficeTurnStart["background"] = "epub-translation") {
-  type Run = { turnId: string; api: ReturnType<Gateway["aiSession"]>; seq: number };
+  type Run = { turnId: string; api: ReturnType<Gateway["aiSession"]>; seq: number; release(): void };
   let run: Run | null = null;
   let starting: Promise<void> | null = null;
   let finishing: Promise<void> | null = null;
@@ -14,15 +15,17 @@ export function createOfficeJob(gateway: Gateway, artifactId: string, events: Ev
   return {
     busy: () => run !== null || starting !== null,
     stop,
-    dispose: () => { stop(); window.removeEventListener("pagehide", stop); },
+    dispose: () => { stop(); run?.release(); window.removeEventListener("pagehide", stop); },
     start(instruction: string): Promise<void> {
       if (finishing) return finishing.then(() => this.start(instruction));
       if (run) return Promise.resolve();
       return starting ??= (async () => {
-        const { revision } = await prepare(), api = gateway.aiSession(artifactId), turnId = crypto.randomUUID();
+        const { revision } = await prepare(), turnId = crypto.randomUUID();
+        let api = gateway.aiSession(artifactId);
         const receipt = await api.json<OfficeTurnReceipt>("turn-start", { turnId, instruction, revision, background });
         if (receipt.duplicate || receipt.status !== "running") throw new Error("이미 처리된 문서 AI 요청입니다.");
-        run = { turnId, api, seq: 0 };
+        if (receipt.executionToken) api = gateway.aiSession(artifactId, receipt.executionToken);
+        run = { turnId, api, seq: 0, release: receipt.executionToken ? maintainOfficeTurn(api, turnId, stop) : () => {} };
       })().finally(() => { starting = null; });
     },
     finish(status: OfficeTurnFinish["status"], text: string): Promise<void> {
@@ -32,7 +35,7 @@ export function createOfficeJob(gateway: Gateway, artifactId: string, events: Ev
         try {
           try { await current.api.json("turn-events", { turnId: current.turnId, seq: ++current.seq, events: [{ kind: "assistant", id: "document-job-result", text, streaming: false }] }); }
           finally { await current.api.json("turn-finish", { turnId: current.turnId, status }); }
-        } finally { if (run === current) run = null; }
+        } finally { current.release(); if (run === current) run = null; }
       })().finally(() => { finishing = null; });
     },
     async aiStream(request: { requestId: string } & Record<string, unknown>) {

@@ -77,7 +77,7 @@ export class OfficeStyles {
     const { artifactId, token, grants } = context;
     if (!grants.allows(token, artifactId)) throw fail("이 문서의 디자인 권한이 없습니다.", 401);
     const artifact = this.documents.get(artifactId), access = grants.access(token);
-    const view = this.documents.registry.list().find((entry) => entry.viewId === access?.viewId);
+    const view = this.documents.registry.authority(access?.viewId);
     if (artifact.format !== "pptx" || !view || view.artifactId !== artifactId || view.sessionId !== grants.session(token)) throw fail("문서 창이나 연결된 대화가 바뀌었습니다.", 409);
     if (writable) this.documents.registry.assertWrite(artifactId, access);
     return artifact;

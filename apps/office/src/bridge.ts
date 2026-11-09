@@ -49,17 +49,37 @@ const host = (() => {
 })();
 
 export function post(message: OfficePageMessage) {
+  if (message.type === "office:flushed" && localFlush) {
+    const pending = localFlush; localFlush = null; window.clearTimeout(pending.timer);
+    if (message.revision === null) pending.reject(new Error("문서를 저장하지 못했습니다. 편집 내용은 유지했습니다."));
+    else pending.resolve(message.revision);
+  }
   if (window.parent !== window) window.parent.postMessage(message, host);
 }
 
+const localListeners = new Set<(message: OfficeHostMessage) => void>();
+let localFlush: { promise: Promise<number>; resolve(revision: number): void; reject(error: Error): void; timer: number } | null = null;
+/** Already admitted tools save through the editor's original serializer without
+ * asking the visible parent to renew a UI lease or select a conversation again. */
+export function flushOfficeDocument(): Promise<number> {
+  if (localFlush) return localFlush.promise;
+  let resolve!: (revision: number) => void, reject!: (error: Error) => void;
+  const promise = new Promise<number>((yes, no) => { resolve = yes; reject = no; });
+  const timer = window.setTimeout(() => { localFlush = null; reject(new Error("문서 저장 응답 시간이 초과됐습니다.")); }, 25_000);
+  localFlush = { promise, resolve, reject, timer };
+  for (const handler of localListeners) handler({ type: "office:flush" });
+  return promise;
+}
+
 export function listen(handler: (message: OfficeHostMessage) => void) {
+  localListeners.add(handler);
   const onMessage = (event: MessageEvent) => {
     if (event.origin !== host || event.source !== window.parent) return;
     const message = event.data as OfficeHostMessage;
     if (message && typeof message.type === "string") handler(message);
   };
   window.addEventListener("message", onMessage);
-  return () => window.removeEventListener("message", onMessage);
+  return () => { localListeners.delete(handler); window.removeEventListener("message", onMessage); };
 }
 
 // All original editor kinds share this bridge; the four original control handlers
@@ -97,13 +117,14 @@ export class GatewayError extends Error {
 
 export class Gateway {
   private token: string;
+  private executionToken: string | null = null;
   constructor(token: string) {
     this.token = token;
     listen((message) => { if (message.type === "office:grant") this.token = message.token; });
   }
 
   private async call(method: string, path: string, body?: BodyInit, headers: Record<string, string> = {}, signal?: AbortSignal) {
-    const response = await fetch(path, { method, headers: { authorization: `Bearer ${this.token}`, ...headers }, body, signal });
+    const response = await fetch(path, { method, headers: { authorization: `Bearer ${this.executionToken ?? this.token}`, ...headers }, body, signal });
     if (!response.ok) {
       const json = (await response.json().catch(() => ({}))) as { code?: string; message?: string };
       throw new GatewayError(response.status, json.code ?? "error", json.message ?? response.statusText);
@@ -112,9 +133,14 @@ export class Gateway {
   }
 
   setToken(token: string) { this.token = token; }
+  pinExecution(token: string) {
+    if (this.executionToken) throw new Error("문서 편집 실행 권한이 이미 연결되어 있습니다.");
+    this.executionToken = token;
+    return () => { if (this.executionToken === token) this.executionToken = null; };
+  }
   /** Capture the capability for one run; switching panes must not retarget its requests. */
-  aiSession(artifactId: string) {
-    const token = this.token, base = `/api/artifacts/${artifactId}/ai/`;
+  aiSession(artifactId: string, executionToken?: string) {
+    const token = executionToken ?? this.executionToken ?? this.token, base = `/api/artifacts/${artifactId}/ai/`;
     const call = (operation: string, body?: unknown, signal?: AbortSignal) => this.call(body === undefined ? "GET" : "POST", `${base}${operation}`, body === undefined ? undefined : JSON.stringify(body), { authorization: `Bearer ${token}`, "content-type": "application/json" }, signal);
     return {
       json: async <T = unknown>(operation: string, body?: unknown, signal?: AbortSignal): Promise<T> => (await call(operation, body, signal)).json(),

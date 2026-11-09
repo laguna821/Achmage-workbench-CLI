@@ -2,7 +2,7 @@ import type { OfficeHostMessage, TranscriptItem } from "@workbench/contracts";
 import type { OfficeTurnReceipt } from "../../../packages/contracts/src/office-ai.ts";
 import type { AgentMessage } from "../../../vendor/ieumoffice/packages/agent-core/src/types.ts";
 import type { IpcStreamChunk } from "../../../vendor/ieumoffice/packages/agent-core/src/electron-transport.ts";
-import { Events, Gateway, listen, post, type Init } from "./bridge.ts";
+import { Events, Gateway, flushOfficeDocument, listen, post, type Init } from "./bridge.ts";
 import { officeCopyBusy, setCopyAiBusy } from "./copy.ts";
 import { installOfficeConversation, type OfficeConversationPort, type OfficeRun, type WorkbenchAgentLoop } from "./office-agent.ts";
 import { createOfficeReferences } from "./office-references.ts";
@@ -11,6 +11,7 @@ import type { OfficeAttachment } from "../../../packages/contracts/src/office-re
 import { createOfficeSkills } from "./office-skills.ts";
 import type { OfficeSkillChip } from "../../../packages/contracts/src/office-skills.ts";
 import { createOfficeJob } from "./office-job.ts";
+import { maintainOfficeTurn } from "./execution-heartbeat.ts";
 
 type Prepared = NonNullable<Extract<OfficeHostMessage, { type: "office:ai-result" }>["value"]>;
 type History = { workId: string; sessionId: string; items: TranscriptItem[]; attachments?: OfficeAttachment[]; before: string | null; hasMore: boolean };
@@ -132,7 +133,8 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
     begin: async (instruction, signal, originalImages, skillContext): Promise<OfficeRun> => {
       try {
         if (sessionId) await history();
-        const prepared = await prepare(true), api = gateway.aiSession(init.artifact.id);
+        const prepared = await prepare(true);
+        let api = gateway.aiSession(init.artifact.id);
         const page = await api.json<History>("history");
         if (signal.aborted) throw new Error("요청을 취소했습니다.");
         if (page.sessionId !== prepared.sessionId || page.sessionId !== sessionId) throw new Error("선택한 세션이 바뀌었습니다.");
@@ -141,6 +143,9 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
         const turnId = crypto.randomUUID();
         const receipt = await api.json<OfficeTurnReceipt>("turn-start", { turnId, instruction, revision: prepared.revision, ...(skillContext ? { skillContext } : {}), ...(prepared.referenceSnapshot ? { referenceSnapshot: prepared.referenceSnapshot } : {}) });
         if (receipt.duplicate || receipt.status !== "running") throw new Error("이미 처리된 요청입니다. 중복 실행하지 않았습니다.");
+        const releaseExecution = receipt.executionToken ? gateway.pinExecution(receipt.executionToken) : () => {};
+        if (receipt.executionToken) api = gateway.aiSession(init.artifact.id, receipt.executionToken);
+        const stopHeartbeat = receipt.executionToken ? maintainOfficeTurn(api, turnId, () => { active?.cancel(); abortWeb(); }) : () => {};
         liveInstructions.set(turnId, instruction);
         while (liveInstructions.size > 64 || [...liveInstructions.values()].reduce((sum, text) => sum + text.length, 0) > 8_000_000) liveInstructions.delete(liveInstructions.keys().next().value!);
         run = { turnId, api }; let seq = 0;
@@ -149,12 +154,15 @@ export function createOfficeAi(init: Init, gateway: Gateway, events: Events) {
           images,
           append: async (events) => { await api.json("turn-events", { turnId, seq: ++seq, events }); },
           save: async () => {
-            const saved = await prepare();
-            if (saved.sessionId !== page.sessionId) throw new Error("문서 저장 중 선택한 세션이 바뀌었습니다.");
+            if (receipt.executionToken) await flushOfficeDocument();
+            else {
+              const saved = await prepare();
+              if (saved.sessionId !== page.sessionId) throw new Error("문서 저장 중 선택한 세션이 바뀌었습니다.");
+            }
           },
           finish: async (status, error) => {
             try { await api.json("turn-finish", { turnId, status, ...(error ? { error } : {}) }); }
-            finally { if (run?.turnId === turnId) run = null; references.release(); }
+            finally { stopHeartbeat(); releaseExecution(); if (run?.turnId === turnId) run = null; references.release(); }
           },
         };
       } catch (error) { references.release(); throw error; }

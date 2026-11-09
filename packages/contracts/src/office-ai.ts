@@ -6,4 +6,4 @@ export type OfficeTurnEvent =
   | { kind: "tool"; id: string; name: string; summary: string; input: string; output: string | null; status: "running" | "completed" | "failed" };
 export type OfficeTurnEvents = { turnId: string; seq: number; events: OfficeTurnEvent[] };
 export type OfficeTurnFinish = { turnId: string; status: "completed" | "interrupted" | "failed"; error?: string };
-export type OfficeTurnReceipt = { turnId: string; sessionId: string; duplicate: boolean; status: "running" | "completed" | "interrupted" | "failed" };
+export type OfficeTurnReceipt = { turnId: string; sessionId: string; duplicate: boolean; status: "running" | "completed" | "interrupted" | "failed"; executionToken?: string };

@@ -27,12 +27,12 @@ export class OfficeReferences {
   private readonly snapshots = new Map<string, Snapshot>();
   private readonly parse: (path: string) => Promise<{ ok: boolean; kind: string; text?: string; error?: string }>;
   constructor(parse = async (path: string) => (await import("./office-file-parse.mjs")).parseFileToText(path)) { this.parse = parse; }
-  private scope(context: Context) {
+  private scope(context: Context, writable = true) {
     const { documents, grants, artifactId, token, access } = context;
     if (!grants.allows(token, artifactId)) return fail("이 문서 창의 참조 권한을 확인하지 못했습니다.");
-    const bound = grants.access(token), view = documents.registry.forArtifact(artifactId).find((v) => v.viewId === bound?.viewId);
-    if (!view || access && access.viewId !== bound?.viewId || view.sessionId !== grants.session(token)) return fail("문서 창이나 선택한 세션이 바뀌었습니다.");
-    documents.registry.assertWrite(artifactId, bound);
+    const bound = grants.access(token), view = documents.registry.authority(bound?.viewId);
+    if (!view || view.artifactId !== artifactId || access && access.viewId !== bound?.viewId || view.sessionId !== grants.session(token)) return fail("문서 창이나 선택한 세션이 바뀌었습니다.");
+    if (writable) documents.registry.assertWrite(artifactId, bound);
     return { owner: `${artifactId}:${grants.previewInfo(token).baseUrl}`, sessionId: grants.session(token), artifact: documents.get(artifactId) };
   }
   private candidates(context: Context) {
@@ -53,8 +53,8 @@ export class OfficeReferences {
     items.sort((a, b) => Number(a.group === "recent") - Number(b.group === "recent"));
     return { ok: true, items };
   }
-  private selected(context: Context) {
-    const { owner, sessionId } = this.scope(context);
+  private selected(context: Context, writable = true) {
+    const { owner, sessionId } = this.scope(context, writable);
     let entry = this.selections.get(owner);
     // Keep the first request's selection when it creates its session. A switch
     // between real conversations never carries the old composer authority.
@@ -116,7 +116,7 @@ export class OfficeReferences {
   }
   /** Only persisted host transcript entries, never a client-provided list, enroll a reopened chat. */
   restore(context: Context, items: TranscriptItem[]) {
-    const selected = this.selected(context), { artifact } = this.scope(context), restored = new Map<string, OfficeAttachment>();
+    const selected = this.selected(context, false), { artifact } = this.scope(context, false), restored = new Map<string, OfficeAttachment>();
     for (const item of items) {
       if (item.kind !== "user" || item.office?.artifactId !== artifact.id) continue;
       const stored: OfficeStoredAttachment[] = item.office.attachments ?? item.refs?.filter((ref) => ref.mode === "review").flatMap((ref) => {
@@ -169,7 +169,7 @@ export class OfficeReferences {
     return { id, refs };
   }
   private snapshot(context: Context, id: unknown) {
-    const scope = this.scope(context), found = typeof id === "string" ? this.snapshots.get(id) : undefined;
+    const scope = this.scope(context, false), found = typeof id === "string" ? this.snapshots.get(id) : undefined;
     if (!found || found.owner !== scope.owner || found.sessionId !== scope.sessionId) return fail("현재 문서·세션의 참조 판이 아닙니다. 요청을 다시 보내 주세요.");
     found.touched = Date.now(); return found;
   }
@@ -185,7 +185,7 @@ export class OfficeReferences {
   }
   readImage(context: Context, id: unknown, path: unknown) {
     if (id != null) { const file = this.frozenFile(context, id, path); return officeImageBytes(file.meta, file.bytes); }
-    const entry = typeof path === "string" ? this.selected(context).get(path) : null;
+    const entry = typeof path === "string" ? this.selected(context, false).get(path) : null;
     if (!entry || !("meta" in entry)) return fail("이 문서 창에서 선택한 이미지만 읽을 수 있습니다.");
     const file = selectedOfficeBytes(context.documents.dataDir, entry);
     return officeImageBytes(file.meta, file.bytes);

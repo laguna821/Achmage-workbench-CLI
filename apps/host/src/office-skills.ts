@@ -54,7 +54,7 @@ export class OfficeSkills {
     const { artifactId, token, grants } = context;
     if (!grants.allows(token, artifactId)) throw new HttpError(401, "unauthorized", "이 문서의 스킬을 읽을 권한이 없습니다.");
     const artifact = this.manager.documents.get(artifactId), access = grants.access(token), sessionId = grants.session(token);
-    const view = this.manager.documents.registry.list().find((item) => item.viewId === access?.viewId);
+    const view = this.manager.documents.registry.authority(access?.viewId);
     if (!view || view.artifactId !== artifactId || view.sessionId !== sessionId) throw new HttpError(409, "office_view_changed", "문서 창이나 선택한 세션이 바뀌었습니다.");
     if (sessionId) this.manager.office.scope(artifactId, sessionId);
     return this.manager.skillScope(sessionId ?? undefined, artifact.workId, artifact.workspaceId ?? undefined);

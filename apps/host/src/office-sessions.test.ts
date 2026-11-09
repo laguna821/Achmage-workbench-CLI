@@ -187,17 +187,21 @@ describe("Office runs belong to the existing Workbench session", () => {
       expect(first.items[0]).toMatchObject({ kind: "user", text: "문서를 고쳐줘" }); expect(first.hasMore).toBe(false);
     } finally { f.store.saveRequest = original; await f.close(); }
   });
-  it("requires the saved target and stops on an expired view without touching another session", async () => {
+  it("requires the saved target and keeps the run until its executor expires, independent of UI presence", async () => {
+    vi.useFakeTimers();
     const f = fixture();
     try {
       f.manager.documents.registry.open(f.artifact.id, { viewId: "view", windowId: "window", dirty: true });
       await expect(f.start()).rejects.toThrow(/먼저 저장/);
       expect(f.items()).toHaveLength(0);
       f.manager.documents.registry.open(f.artifact.id, { viewId: "view", windowId: "window", dirty: false });
-      vi.useFakeTimers(); await f.start();
+      await f.start();
       const signal = f.manager.office.requireRun(f.binding, "run").controller.signal;
       f.manager.documents.registry.close("view", "window");
       await vi.advanceTimersByTimeAsync(10_001);
+      expect(signal.aborted).toBe(false); expect(f.manager.office.busy(f.session.id)).toBe(true);
+      f.manager.office.heartbeat(f.binding, "run");
+      await vi.advanceTimersByTimeAsync(130_001);
       expect(signal.aborted).toBe(true); expect(f.manager.office.busy(f.session.id)).toBe(false);
       expect(f.items().find((i) => i.kind === "turnEnd")).toMatchObject({ status: "interrupted" });
     } finally { vi.useRealTimers(); await f.close(); }
@@ -213,7 +217,7 @@ describe("Office runs belong to the existing Workbench session", () => {
       expect(warning).toHaveBeenCalledOnce();
     } finally { f.store.setMeta = original; warning.mockRestore(); await f.close(); }
   });
-  it("immediately interrupts the owned document run when its view selects another session", async () => {
+  it("keeps the admitted document run in its original session when the UI selects another", async () => {
     const f = fixture();
     try {
       await f.start();
@@ -221,8 +225,10 @@ describe("Office runs belong to the existing Workbench session", () => {
       const next = f.manager.createSession(f.work.id, { provider: "claude" });
       f.manager.documents.registry.open(f.artifact.id, { viewId: "view", windowId: "window", sessionId: next.id });
       f.manager.office.reconcileViews();
-      expect(signal.aborted).toBe(true); expect(f.manager.office.busy(f.session.id)).toBe(false);
-      expect(f.items().find((item) => item.kind === "turnEnd")).toMatchObject({ status: "interrupted" });
+      expect(signal.aborted).toBe(false); expect(f.manager.office.busy(f.session.id)).toBe(true);
+      f.manager.office.events(f.binding, { turnId: "run", seq: 1, events: [{ kind: "assistant", id: "after-switch", text: "원래 문서 작업", streaming: false }] });
+      f.finish();
+      expect(f.items().find((item) => item.kind === "turnEnd")).toMatchObject({ status: "completed" });
       expect(f.manager.items(next.id).items).toHaveLength(0);
       expect(f.interrupted()).toBe(0);
     } finally { await f.close(); }
@@ -292,12 +298,18 @@ describe("scoped Office lifecycle HTTP", () => {
       expect((await request("history", undefined, unbound)).status).toBe(409);
       const stream = { requestId: "call1", turnId: "run", system: "test", messages: [{ role: "user", text: "test" }], settings: {} };
       expect((await request("stream", stream)).status).toBe(409); expect(calls).toBe(0);
-      expect((await request("turn-start", { turnId: "run", instruction: "같은 세션", revision: 1 })).status).toBe(200);
+      const admitted = await request("turn-start", { turnId: "run", instruction: "같은 세션", revision: 1 });
+      expect(admitted.status).toBe(200);
+      const executionToken = (await admitted.json()).executionToken as string;
+      expect(executionToken).toBeTruthy(); expect(executionToken).not.toBe(editor.token);
+      expect((await request("turn-heartbeat", { turnId: "run" }, executionToken)).status).toBe(200);
       expect((await (await request("history")).json()).sessionId).toBe(f.session.id);
-      const response = await request("stream", stream);
+      expect((await (await request("history", undefined, executionToken)).json()).sessionId).toBe(f.session.id);
+      const response = await request("stream", stream, executionToken);
       await expect.poll(() => calls).toBe(1);
       expect((await request("stream", stream)).status).toBe(409);
       await f.manager.interrupt(f.session.id); expect(await response.text()).toContain('"type":"done"');
+      expect((await request("turn-heartbeat", { turnId: "run" }, executionToken)).status).toBe(401);
       expect(f.items().find((i) => i.kind === "turnEnd")).toMatchObject({ status: "interrupted" });
       expect((await request("turn-start", { turnId: "next", instruction: "연결 종료", revision: 1 })).status).toBe(200);
       const abort = new AbortController(), open = await request("stream", { ...stream, turnId: "next", requestId: "call2" }, editor.token, abort.signal);

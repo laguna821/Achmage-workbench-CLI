@@ -27,6 +27,7 @@ import { designAssetPath, designGuide, designProblem, designStem, saveDesignAsse
 import type { IeumOffice, OfficePage } from "./ieumoffice.ts";
 import { BackgroundIndex } from "./doc-text.ts";
 import { DocumentRegistry } from "./document-registry.ts";
+import { physicalPath } from "./directory-operations.ts";
 import { DesignDrafts } from "./design-drafts.ts";
 import { hwpToText } from "../../../third_party/ieumoffice/file-parse/hwp.ts";
 import { hwpFormat, openHwpBytes, prepareHwpSave } from "./hwp-codec.ts";
@@ -51,6 +52,9 @@ function readFileOrNull(path: string): Buffer | null {
 
 /** Write next to the target, then rename, so a crash never leaves half a file. */
 function writeAtomic(path: string, data: Buffer | string) {
+  // A document opened through a symlink still writes the leased physical file,
+  // not a replacement regular file at the link's directory entry.
+  path = physicalPath(path);
   const temporary = `${path}.workbench-${process.pid}-${Date.now()}.tmp`;
   writeFileSync(temporary, data);
   renameSync(temporary, path);

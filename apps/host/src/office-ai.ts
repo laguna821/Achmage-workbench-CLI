@@ -171,7 +171,7 @@ export class OfficeAi {
   }
   async handle(req: IncomingMessage, res: ServerResponse, url: URL, bearer: string | null, documents: Documents, grants: EditorGrants): Promise<boolean> {
     if (await this.skills?.handle(req, res, url, bearer, grants)) return true;
-    const match = /^\/api\/artifacts\/([^/]+)\/ai\/(preferences|preferences-panel|markdown-upload|markdown-read-image|drive-state|settings|selection|statuses|stream|chat|cancel|history|turn-start|turn-events|turn-finish|tool-capabilities|tool)$/.exec(url.pathname);
+    const match = /^\/api\/artifacts\/([^/]+)\/ai\/(preferences|preferences-panel|markdown-upload|markdown-read-image|drive-state|settings|selection|statuses|stream|chat|cancel|history|turn-start|turn-events|turn-finish|turn-heartbeat|tool-capabilities|tool)$/.exec(url.pathname);
     if (!match) return false;
     const [, artifactId, operation] = match;
     const authorize = () => {
@@ -228,6 +228,10 @@ export class OfficeAi {
       let raw: unknown;
       try { raw = JSON.parse((await readBody(req, OFFICE_AI_INPUT_LIMIT)).toString("utf8")); } catch (error) { if (error instanceof HttpError) throw error; return invalid(); }
       authorize();
+      if (operation === "turn-heartbeat") {
+        if (!record(raw)) return invalid();
+        sendJson(res, 200, this.sessions!.heartbeat(bound, raw.turnId)); return true;
+      }
       const references = operation === "turn-start" && record(raw) && raw.referenceSnapshot !== undefined
         ? grants.references.references({ documents, grants, artifactId: artifactId!, token: bearer! }, raw.referenceSnapshot) : [];
       const attachments = operation === "turn-start" && record(raw) && raw.referenceSnapshot !== undefined ? grants.references.attachments(referenceContext, raw.referenceSnapshot) : [];
@@ -235,6 +239,12 @@ export class OfficeAi {
       if (skillContext !== undefined && !this.skills) throw new HttpError(503, "office_skills_unavailable", "스킬 보관함을 연결하지 못했습니다.");
       const skills = skillContext === undefined ? undefined : await this.skills!.prepare({ artifactId: artifactId!, token: bearer!, grants }, skillContext);
       const value = operation === "turn-start" ? await this.sessions!.start(bound, raw, references, attachments, skills) : operation === "turn-events" ? this.sessions!.events(bound, raw) : this.sessions!.finish(bound, raw);
+      if (operation === "turn-start" && "status" in value && value.status === "running") {
+        const run = this.sessions!.requireRun(bound, (raw as Record<string, unknown>).turnId);
+        Object.assign(value, { executionToken: grants.execution(bearer!, run.lease.access, () => {
+          try { documents.registry.executions.require(run.lease, documents.get(artifactId!).path); return true; } catch { return false; }
+        }) });
+      }
       sendJson(res, 200, value); return true;
     }
     if (operation === "drive-state") {

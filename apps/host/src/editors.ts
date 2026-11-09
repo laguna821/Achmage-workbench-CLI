@@ -38,7 +38,7 @@ export function officeEditorKind(format: DocFormat): OfficeEditorKind | null {
 /** Tokens that open one document each, for as long as the gateway runs (the most recent ones). */
 export class EditorGrants {
   readonly references = new OfficeReferences();
-  private readonly grants = new Map<string, { artifactId: string; access?: DocumentAccess; sessionId: string | null; preview: { id?: string; text?: string } }>();
+  private readonly grants = new Map<string, { artifactId: string; access?: DocumentAccess; sessionId: string | null; preview: { id?: string; text?: string }; valid?: () => boolean }>();
   private readonly limit: number;
   constructor(limit = 500) {
     this.limit = limit;
@@ -49,16 +49,31 @@ export class EditorGrants {
     // Refreshing a view's writer lease must preserve the live preview URL already in its DOM.
     const prior = access ? [...this.grants.values()].find((grant) => grant.artifactId === artifactId && grant.access?.viewId === access.viewId) : undefined;
     this.grants.set(token, { artifactId, ...(access ? { access: { ...access } } : {}), sessionId, preview: prior?.preview ?? {} });
-    while (this.grants.size > this.limit) this.grants.delete(this.grants.keys().next().value!);
+    for (const [key, grant] of this.grants) if (grant.valid && !grant.valid()) this.grants.delete(key);
+    // UI refresh churn must not evict an admitted executor's pinned capability.
+    const uiKeys = [...this.grants].filter(([, grant]) => !grant.valid).map(([key]) => key);
+    for (const key of uiKeys.slice(0, Math.max(0, uiKeys.length - this.limit))) this.grants.delete(key);
     return token;
   }
 
   allows(token: string | null, artifactId: string) {
-    return Boolean(token && this.grants.get(token)?.artifactId === artifactId);
+    const grant = token ? this.grants.get(token) : undefined;
+    return Boolean(grant?.artifactId === artifactId && (!grant.valid || grant.valid()));
   }
 
   access(token: string) { return this.grants.get(token)?.access; }
   session(token: string) { return this.grants.get(token)?.sessionId ?? null; }
+  /** A per-run capability shares preview/owner identity, never UI write expiry. */
+  execution(token: string, access: DocumentAccess, valid: () => boolean) {
+    for (const [key, grant] of this.grants) if (grant.valid && !grant.valid()) this.grants.delete(key);
+    const source = this.grants.get(token);
+    if (!source) throw new HttpError(401, "unauthorized", "문서 실행 권한이 없습니다.");
+    const prior = [...this.grants.entries()].find(([, grant]) => grant.artifactId === source.artifactId && grant.access?.viewId === access.viewId && grant.access.writeToken === access.writeToken);
+    if (prior) return prior[0];
+    const next = randomBytes(24).toString("base64url");
+    this.grants.set(next, { ...source, access: { ...access }, valid });
+    return next;
+  }
 
   previewInfo(token: string) {
     const grant = this.grants.get(token);
@@ -82,7 +97,8 @@ export class EditorGrants {
 
   /** Any open page (for what is not a document: the system's fonts). */
   allowsAny(token: string | null) {
-    return Boolean(token && this.grants.has(token));
+    const grant = token ? this.grants.get(token) : undefined;
+    return Boolean(grant && (!grant.valid || grant.valid()));
   }
 }
 

@@ -6,9 +6,10 @@ import type { Store } from "./store.ts";
 import { HttpError } from "./errors.ts";
 import type { OfficeStoredAttachment } from "../../../packages/contracts/src/office-references.ts";
 import type { OfficeStoredSkill } from "../../../packages/contracts/src/office-skills.ts";
+import type { DocumentExecutionLease } from "./document-execution-lease.ts";
 
 type Binding = { artifactId: string; sessionId: string; owner: string; access?: DocumentAccess };
-type Running = Binding & { turnId: string; background?: OfficeTurnStart["background"]; controller: AbortController; started: number; seq: number; bytes: number; timer: NodeJS.Timeout };
+type Running = Binding & { lease: DocumentExecutionLease; turnId: string; background?: OfficeTurnStart["background"]; controller: AbortController; started: number; seq: number; bytes: number; timer: NodeJS.Timeout };
 type Hooks = {
   session(id: string): Session;
   active(session: Session): void;
@@ -57,11 +58,11 @@ export class OfficeSessions {
     if (session.documentAgent && session.documentAgent.artifactId !== artifactId) throw new HttpError(403, "office_document_scope", "다른 문서의 AI 대화를 사용할 수 없습니다.");
     return session;
   }
-  private live(binding: Binding) {
+  private live(binding: Binding, write = true) {
     this.scope(binding.artifactId, binding.sessionId);
-    const view = this.documents.registry.list().find((view) => view.viewId === binding.access?.viewId);
+    const view = this.documents.registry.authority(binding.access?.viewId);
     if (!view || view.artifactId !== binding.artifactId || view.sessionId !== binding.sessionId) throw new HttpError(409, "office_view_changed", "문서 창의 세션이 바뀌었거나 닫혔습니다. 현재 창에서 다시 요청해 주세요.");
-    this.documents.registry.assertWrite(binding.artifactId, binding.access);
+    if (write) this.documents.registry.assertWrite(binding.artifactId, binding.access);
   }
   private known(binding: Binding, turnId: string) {
     const user = this.hooks.items(binding.sessionId).find((item) => item.id === `user:${requestId(turnId)}`);
@@ -77,7 +78,7 @@ export class OfficeSessions {
     let duplicate = false;
     const result = await this.hooks.lock(binding.sessionId, key, identity, async () => {
       if (this.closed) throw new HttpError(503, "office_closed", "앱을 종료하고 있습니다.");
-      this.live(binding);
+      this.scope(binding.artifactId, binding.sessionId);
       const prior = this.store.findRequest(key);
       if (prior) {
         if (prior.sessionId !== binding.sessionId || prior.textHash !== identity) throw new HttpError(409, "request_id_conflict", "같은 요청 번호로 다른 내용을 보낼 수 없습니다.");
@@ -86,6 +87,7 @@ export class OfficeSessions {
         if (running && running.owner !== binding.owner) throw new HttpError(409, "office_turn_owner", "다른 문서 창에서 이 요청을 실행 중입니다.");
         duplicate = true; return { duplicate: true, delivery: "turn" };
       }
+      this.live(binding);
       const session = this.hooks.session(binding.sessionId);
       const artifact = this.documents.check(binding.artifactId);
       if (input.background && artifact.format !== (input.background === "epub-translation" ? "epub" : "pdf")) return invalid();
@@ -97,11 +99,14 @@ export class OfficeSessions {
       const at = Date.now(), office = { ...source({ ...binding, turnId: input.turnId }), ...(attachments.length ? { attachments } : {}), ...(skillContext?.skillReads.length ? { skills: skillContext.skills, skillReads: skillContext.skillReads } : {}) };
       const user: TranscriptItem = { kind: "user", id: `user:${key}`, text: skillContext?.text ?? input.instruction, at, office, refs: [{ artifactId: artifact.id, name: artifact.name, revision: artifact.revision, sha256: artifact.sha256, mode: "edit", selection: input.selection ?? null }, ...references.map((ref) => ({ artifactId: ref.artifactId, name: this.documents.get(ref.artifactId).name, revision: ref.revision, sha256: ref.sha256!, mode: "review" as const, selection: null }))] };
       const patch = { status: "running" as const, activity: "문서 AI 작업 중", lastError: null, updatedAt: at };
-      this.store.transaction(() => { this.store.saveRequest(key, session.id, identity); this.store.saveItem(session.id, user); this.store.saveSession({ ...session, ...patch }); });
+      const lease = this.documents.registry.acquireExecution(binding.artifactId, input.turnId, binding.sessionId, binding.access!, !input.background);
+      try { this.store.transaction(() => { this.store.saveRequest(key, session.id, identity); this.store.saveItem(session.id, user); this.store.saveSession({ ...session, ...patch }); }); }
+      catch (error) { this.documents.registry.executions.release(lease); throw error; }
       const timer = setInterval(() => {
-        try { this.live(binding); } catch { this.stop(input.turnId, "interrupted", "문서 창의 연결이 끝나 AI 작업을 멈췄습니다."); }
+        try { this.scope(binding.artifactId, binding.sessionId); this.documents.registry.executions.require(lease, this.documents.get(binding.artifactId).path); }
+        catch { this.stop(input.turnId, "interrupted", "문서 작업 실행기의 연결 또는 권한이 끝나 AI 작업을 멈췄습니다."); }
       }, 10_000); timer.unref();
-      this.runs.set(input.turnId, { ...binding, turnId: input.turnId, ...(input.background ? { background: input.background } : {}), controller: new AbortController(), started: at, seq: 0, bytes: 0, timer });
+      this.runs.set(input.turnId, { ...binding, lease, turnId: input.turnId, ...(input.background ? { background: input.background } : {}), controller: new AbortController(), started: at, seq: 0, bytes: 0, timer });
       this.hooks.item(session.id, user); this.hooks.update(session.id, patch);
       return { duplicate: false, delivery: "turn" };
     });
@@ -112,10 +117,16 @@ export class OfficeSessions {
   }
   requireRun(binding: Binding, turnId: unknown) {
     if (!id(turnId)) return invalid();
-    this.live(binding);
+    this.scope(binding.artifactId, binding.sessionId);
     const run = this.runs.get(turnId);
     if (!run || run.owner !== binding.owner || run.sessionId !== binding.sessionId || run.artifactId !== binding.artifactId || run.controller.signal.aborted) throw new HttpError(409, "office_turn_inactive", "이 문서 창에서 진행 중인 AI 요청이 아닙니다.");
+    this.documents.registry.executions.require(run.lease, this.documents.get(run.artifactId).path);
     return run;
+  }
+  heartbeat(binding: Binding, turnId: unknown) {
+    const run = this.requireRun(binding, turnId);
+    run.lease = this.documents.registry.executions.renew(run.lease);
+    return { expiresAt: run.lease.expiresAt };
   }
   claimCall(binding: Binding, turnId: string, callId: unknown, payload: unknown) {
     if (typeof callId !== "string" || !/^[A-Za-z0-9_.:-]{1,160}$/.test(callId)) return invalid();
@@ -165,7 +176,7 @@ export class OfficeSessions {
   }
   private stop(turnId: string, status: OfficeTurnFinish["status"], error?: string) {
     const run = this.runs.get(turnId); if (!run) return;
-    this.runs.delete(turnId); clearInterval(run.timer); run.controller.abort();
+    this.runs.delete(turnId); clearInterval(run.timer); this.documents.registry.executions.release(run.lease); run.controller.abort();
     if (error) this.hooks.item(run.sessionId, { kind: "notice", id: `office:${turnId}:error`, level: status === "failed" ? "error" : "info", text: error, at: Date.now(), office: source(run) });
     this.hooks.item(run.sessionId, { kind: "turnEnd", id: `end:${requestId(turnId)}`, requestId: requestId(turnId), status, durationMs: Date.now() - run.started, at: Date.now(), ...(status === "interrupted" ? { cause: "stop" as const } : {}), model: null, effort: null, office: source(run) });
     const remaining = this.busy(run.sessionId);
@@ -181,8 +192,8 @@ export class OfficeSessions {
   busy(sessionId: string) { return [...this.runs.values()].some((run) => run.sessionId === sessionId); }
   reconcileViews() {
     for (const run of this.runs.values()) {
-      try { this.live(run); }
-      catch { this.stop(run.turnId, "interrupted", "문서 창의 세션 또는 편집 권한이 바뀌어 AI 작업을 멈췄습니다."); }
+      try { this.scope(run.artifactId, run.sessionId); this.documents.registry.executions.require(run.lease, this.documents.get(run.artifactId).path); }
+      catch { this.stop(run.turnId, "interrupted", "문서 작업의 실행 권한이 끝나 AI 작업을 멈췄습니다."); }
     }
   }
   interrupt(sessionId: string) {
@@ -195,7 +206,7 @@ export class OfficeSessions {
     if (run?.owner === binding.owner && run.sessionId === binding.sessionId) this.stop(turnId, "interrupted", "AI 응답 연결이 끝나 작업을 멈췄습니다.");
   }
   history(binding: Binding, before: string | null = null) {
-    this.live(binding);
+    this.live(binding, false);
     const parent = this.hooks.session(binding.sessionId).documentAgent?.legacySessionId;
     // Older releases wrote document turns in the main chat. Read those records in place.
     const legacy = parent ? this.hooks.items(parent).filter((item) => item.office?.artifactId === binding.artifactId && !item.id.startsWith("document-result:")) : [];
@@ -205,7 +216,7 @@ export class OfficeSessions {
     return { sessionId: binding.sessionId, workId: this.hooks.session(binding.sessionId).workId, items: page, hasMore: index > page.length, before: page[0]?.id ?? null };
   }
   attachmentHistory(binding: Binding) {
-    this.live(binding);
+    this.live(binding, false);
     const parent = this.hooks.session(binding.sessionId).documentAgent?.legacySessionId;
     const legacy = parent ? this.hooks.items(parent) : [];
     return [...legacy, ...this.hooks.items(binding.sessionId)].filter((item) => item.kind === "user" && item.office?.artifactId === binding.artifactId);

@@ -25,8 +25,7 @@ export class PdfStructureEditors {
   constructor(documents: Documents, grants: EditorGrants) {
     this.documents = documents; this.grants = grants;
     this.timer = setInterval(() => {
-      const live = new Set(documents.registry.list().map(view => view.viewId));
-      for (const view of this.views.values()) if (!live.has(view.viewId)) this.forget(view);
+      for (const view of this.views.values()) if (!documents.registry.authority(view.viewId)) this.forget(view);
     }, 1000); this.timer.unref();
   }
   private load() {
@@ -47,7 +46,7 @@ export class PdfStructureEditors {
     if (req.method !== "POST") throw new HttpError(405, "method_not_allowed", "허용되지 않은 PDF 요청입니다.");
     const artifact = this.documents.get(artifactId!), access = this.grants.access(bearer!);
     if (artifact.format !== "pdf") throw new HttpError(415, "not_pdf", "PDF 문서가 아닙니다.");
-    if (!access || !this.documents.registry.list().some(v => v.viewId === access.viewId && v.artifactId === artifactId)) throw new HttpError(409, "pdf_view_closed", "PDF 문서 탭이 닫혔습니다.");
+    if (!access || this.documents.registry.authority(access.viewId)?.artifactId !== artifactId) throw new HttpError(409, "pdf_view_closed", "PDF 문서 탭이 닫혔습니다.");
     const instance = url.searchParams.get("instance") ?? "";
     if (!/^[a-f0-9-]{36}$/.test(instance)) throw new HttpError(400, "pdf_instance", "PDF 화면의 식별자가 없습니다.");
     const key = `${this.grants.previewInfo(bearer!).baseUrl}/${instance}`;
