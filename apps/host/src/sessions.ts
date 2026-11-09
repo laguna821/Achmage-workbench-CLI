@@ -1416,7 +1416,7 @@ export class SessionManager {
     const engine = request.provider === "claude" ? "Claude Code" : "Codex";
     const when = new Date(history.updatedAt).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" });
     const items: TranscriptItem[] = [
-      { kind: "notice", id: "imported", level: "info", text: `${engine}에서 가져온 대화입니다(마지막 ${when}). 여기서 이어 쓰면 같은 대화로 이어집니다.`, at: history.items[0]?.at ?? history.updatedAt },
+      { kind: "notice", id: "imported", level: "info", text: `${engine}에서 가져온 대화입니다(마지막 ${when}). 과거 기록을 읽어 왔으며 작업은 실행하지 않았습니다. 새 요청을 보내면 같은 대화로 이어집니다.`, at: history.items[0]?.at ?? history.updatedAt },
       ...history.items,
     ];
     for (const item of items) this.store.saveItem(created.id, item);
@@ -1425,6 +1425,7 @@ export class SessionManager {
     this.saveSession({
       ...this.requireSession(created.id),
       nativeSessionId: request.nativeSessionId,
+      importedHistory: { kind: "archive", provider: request.provider, nativeSessionId: request.nativeSessionId, sourceUpdatedAt: history.updatedAt, importedAt: Date.now(), continuedAt: null },
       purposeSource: "user",
       preview: last ? previewOf(last.text) : null,
       previewAt: last ? history.updatedAt : null,
@@ -1625,7 +1626,10 @@ export class SessionManager {
     this.turnRequest.set(sessionId, requestId);
     if (plan) this.planning.set(sessionId, requestId);
     else this.planning.delete(sessionId);
-    this.sink.updateSession(sessionId, { status: "starting", activity: plan ? "계획 세우는 중" : "응답 준비 중", lastError: null });
+    this.sink.updateSession(sessionId, {
+      status: "starting", activity: plan ? "계획 세우는 중" : "응답 준비 중", lastError: null,
+      ...(session.importedHistory?.kind === "archive" ? { importedHistory: { ...session.importedHistory, kind: "live" as const, continuedAt: Date.now() } } : {}),
+    });
     // A relayed message does not switch the conversation on screen (it goes back and forth), nor
     // does a drawing made for another conversation.
     this.saveWork({ ...work, activeSessionId: options.activate === false || relay ? work.activeSessionId : sessionId, updatedAt: Date.now() });

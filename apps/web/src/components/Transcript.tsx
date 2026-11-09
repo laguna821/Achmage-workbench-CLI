@@ -180,7 +180,7 @@ function ToolRow({ item, focused }: { item: Item<"tool">; focused: boolean }) {
         <Icon name={TOOL_ICON[item.tool] ?? "tool"} size={14} className="tool-icon" />
         <span className={item.tool === "command" ? "tool-title mono" : "tool-title"}>{item.title}</span>
         <span className="tool-status">
-          {item.status === "running" ? <span className="spinner" /> : item.status === "completed" ? <Icon name="check" size={14} /> : item.status === "declined" ? "거절됨" : "실패"}
+          {item.status === "running" ? <span className="spinner" /> : item.status === "completed" ? <Icon name="check" size={14} /> : item.status === "declined" ? "거절됨" : item.status === "unknown" ? "기록에 결과 없음" : "실패"}
         </span>
       </button>
       {open && hasBody ? (

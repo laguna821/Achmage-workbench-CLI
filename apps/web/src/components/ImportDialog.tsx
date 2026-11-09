@@ -6,7 +6,7 @@ import { EngineMark } from "./EngineMark.tsx";
 import { Icon } from "./Icon.tsx";
 import "../styles/imports.css";
 
-const folderName = (path: string | null) => (path ? (path.split("/").filter(Boolean).pop() ?? path) : "폴더 모름");
+const folderName = (path: string | null) => (path ? (path.split(/[\\/]/).filter(Boolean).pop() ?? path) : "폴더 모름");
 
 /**
  * "다른 곳의 대화 가져오기": conversations Claude Code and Codex keep on this computer (made in a
@@ -75,7 +75,7 @@ export function ImportDialog({ api, onClose, onOpen, onError }: { api: Api; onCl
         }}
       >
         <h2>다른 곳의 대화 가져오기</h2>
-        <p className="muted import-note">터미널이나 다른 앱에서 하던 대화를 여기서 이어 씁니다. 지난 내용이 보이고, 다음 요청은 같은 대화로 이어집니다.</p>
+        <p className="muted import-note">터미널이나 다른 앱의 과거 대화를 읽어 옵니다. 가져오기만으로 작업이 실행되지는 않습니다. 새 요청을 보내면 같은 대화로 이어집니다.</p>
         <div className="import-tabs" role="tablist">
           {(["claude", "codex"] as const).map((entry) => (
             <button key={entry} type="button" role="tab" aria-selected={provider === entry} className={`import-tab${provider === entry ? " active" : ""}`} onClick={() => setProvider(entry)}>

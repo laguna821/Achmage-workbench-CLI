@@ -653,6 +653,14 @@ export function WorkView({
         </div>
       ) : null}
 
+      {active?.importedHistory ? (
+        <div className="column archived-banner" role="status">
+          <Icon name="archive" size={15} />
+          <span>{active.importedHistory.kind === "archive" ? "가져온 과거 기록 · 새 요청을 보내면 이어서 작업합니다." : "가져온 기록에서 이어 쓰는 대화"}</span>
+          <span className="muted" title={active.importedHistory.nativeSessionId}>{PROVIDER_LABEL[active.importedHistory.provider]}</span>
+        </div>
+      ) : null}
+
       {active ? (
         <Transcript
           sessionId={active.id}

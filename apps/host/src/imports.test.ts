@@ -44,9 +44,16 @@ describe("a Claude Code record as a transcript", () => {
     expect([...times].sort((a, b) => a - b)).toEqual(times);
   });
 
-  it("finishes a step the record left running", () => {
+  it("does not claim success for a step whose archived record has no result", () => {
     const items = claudeHistory(records.slice(0, 2), 0, 10);
-    expect(items.find((item) => item.kind === "tool")).toMatchObject({ status: "completed" });
+    expect(items.find((item) => item.kind === "tool")).toMatchObject({ status: "unknown" });
+    expect(items.at(-1)).toMatchObject({ kind: "turnEnd", status: "interrupted" });
+  });
+
+  it("preserves the original prompt whitespace", () => {
+    const text = "  원문 프롬프트\n\n| 표 | 값 |\n  ";
+    const items = claudeHistory([{ type: "user", uuid: "raw", parent_tool_use_id: null, message: { content: text } }], 0, 1);
+    expect(items[0]).toMatchObject({ kind: "user", text });
   });
 });
 
@@ -76,6 +83,7 @@ describe("Codex turns as a transcript", () => {
 
 class RecordEngine implements ProviderAdapter {
   readonly provider = "codex" as const;
+  sends = 0;
   private readonly cwd: string;
   constructor(cwd: string) {
     this.cwd = cwd;
@@ -90,7 +98,7 @@ class RecordEngine implements ProviderAdapter {
   async login() {
     return { url: null, message: "" };
   }
-  async send() {}
+  async send() { this.sends += 1; }
   async interrupt() {}
   async answerApproval(_session: Session, _itemId: string, _decision: ApprovalDecision) {
     return false;
@@ -125,11 +133,22 @@ function setup() {
   const dir = mkdtempSync(join(tmpdir(), "wb-import-"));
   dirs.push(dir);
   const manager = new SessionManager(new Store(join(dir, "state.sqlite")), new EventBus(), { hostId: "h", hostLabel: "노트북", managedWorksDir: join(dir, "works"), dataDir: dir });
-  manager.registerAdapter(new RecordEngine(dir));
-  return { manager, dir };
+  const engine = new RecordEngine(dir);
+  manager.registerAdapter(engine);
+  return { manager, dir, engine };
 }
 
 describe("importing a conversation", () => {
+  it("imports only history and continues only after a new explicit request", async () => {
+    const { manager, engine } = setup();
+    const imported = await manager.importSession({ provider: "codex", nativeSessionId: "thr_term" });
+    expect(imported.importedHistory).toMatchObject({ kind: "archive", nativeSessionId: "thr_term", sourceUpdatedAt: 5_000, continuedAt: null });
+    manager.items(imported.id);
+    expect(engine.sends).toBe(0);
+    await manager.send(imported.id, "new-explicit-request", "새 요청만 실행해");
+    expect(engine.sends).toBe(1);
+    expect(manager.snapshot().sessions.find(session => session.id === imported.id)?.importedHistory).toMatchObject({ kind: "live", nativeSessionId: "thr_term", continuedAt: expect.any(Number) });
+  });
   it("reuses a connected workspace instead of making another project for the same cwd", async () => {
     const { manager, dir } = setup();
     const work = manager.createWork({ title: "기존 프로젝트" });

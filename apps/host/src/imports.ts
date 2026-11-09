@@ -27,7 +27,7 @@ function typed(content: unknown): string | null {
         : "";
   const trimmed = text.trim();
   if (!trimmed || /^<(command-|local-command-|system-reminder)/.test(trimmed) || trimmed.startsWith("Caveat:")) return null;
-  return trimmed;
+  return text;
 }
 
 /**
@@ -41,8 +41,11 @@ export function claudeHistory(records: ClaudeRecord[], from: number, to: number)
   let index = 0;
   const mapper = new ClaudeTranscriptMapper(() => Math.round(from + index * step));
   let turn: string | null = null;
+  let turnStart = 0;
   const end = () => {
-    if (turn) items.push({ kind: "turnEnd", id: `end:${turn}`, status: "completed", durationMs: null, at: Math.round(from + Math.max(0, index - 1) * step) });
+    const rows = items.slice(turnStart);
+    const incomplete = rows.some(item => item.kind === "tool" && item.status === "running") || !rows.some(item => item.kind === "assistant");
+    if (turn) items.push({ kind: "turnEnd", id: `end:${turn}`, status: incomplete ? "interrupted" : "completed", durationMs: null, at: Math.round(from + Math.max(0, index - 1) * step) });
     turn = null;
   };
   for (; index < records.length; index += 1) {
@@ -54,6 +57,7 @@ export function claudeHistory(records: ClaudeRecord[], from: number, to: number)
       if (text) {
         end();
         turn = record.uuid;
+        turnStart = items.length;
         items.push({ kind: "user", id: `user:${record.uuid}`, text, at: Math.round(from + index * step) });
         continue;
       }
@@ -68,8 +72,12 @@ export function claudeHistory(records: ClaudeRecord[], from: number, to: number)
     }
   }
   end();
-  // A step whose result never came (the record ends mid-turn) is not running any more.
-  return items.map((item) => (item.kind === "tool" && item.status === "running" ? { ...item, status: "completed" as const } : item));
+  // An archived step without a result is neither currently running nor known to have succeeded.
+  return finishImportedTools(items);
+}
+
+function finishImportedTools(items: TranscriptItem[]): TranscriptItem[] {
+  return items.map(item => item.kind === "tool" && item.status === "running" ? { ...item, status: "unknown" } : item);
 }
 
 /** A Codex thread's turns: each request, what Codex did and said, and how the turn ended. */
@@ -86,8 +94,8 @@ export function codexHistory(turns: CodexTurn[]): TranscriptItem[] {
       const mapped = mapThreadItem(item as never, started, false);
       if (mapped) items.push(mapped);
     }
-    const status = turn.status === "interrupted" ? "interrupted" : turn.status === "failed" ? "failed" : "completed";
+    const status = turn.status === "completed" ? "completed" : turn.status === "failed" ? "failed" : "interrupted";
     items.push({ kind: "turnEnd", id: `end:${turn.id}`, status, durationMs: turn.startedAt && turn.completedAt ? (turn.completedAt - turn.startedAt) * 1000 : null, at: (turn.completedAt ?? turn.startedAt ?? 0) * 1000 });
   }
-  return items;
+  return finishImportedTools(items);
 }

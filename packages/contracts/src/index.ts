@@ -89,6 +89,15 @@ export type Session = {
   hostId: string;
   /** Provider-native id: Codex thread id or Claude session id. Null until the engine reports it. */
   nativeSessionId: string | null;
+  /** Reading an imported transcript does not resume its old instructions. */
+  importedHistory?: {
+    kind: "archive" | "live";
+    provider: Provider;
+    nativeSessionId: string;
+    sourceUpdatedAt: number;
+    importedAt: number;
+    continuedAt: number | null;
+  };
   /** Purpose label shown on the tab, e.g. "강의 작성". */
   purpose: string;
   purposeSource: TitleSource;
@@ -177,7 +186,7 @@ export const isUnseen = (session: Session) => session.unread || Boolean(session.
 
 export type ToolKind = "command" | "fileChange" | "search" | "web" | "mcp" | "agent" | "other";
 
-export type ItemStatus = "running" | "completed" | "failed" | "declined";
+export type ItemStatus = "running" | "completed" | "failed" | "declined" | "unknown";
 
 export type PlanStep = { text: string; status: "pending" | "inProgress" | "completed" };
 
