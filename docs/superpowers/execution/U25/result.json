@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "unit": "U25",
+  "status": "release_delivery_verified_full_goal_acceptance_unproven",
+  "applicationVersion": "0.4.0",
+  "sourceSha": "30112bc8602b3d449c78ff59a5db2ff26431d405",
+  "sourceRun": "42648941283",
+  "publishedAt": "2026-11-09T16:51:21Z",
+  "releaseUrl": "https://github.com/laguna821/Achmage-workbench-CLI/releases/tag/v0.4.0",
+  "acceptance": {
+    "firstRun:windows": {
+      "state": "PASS",
+      "checks": 35,
+      "detail": "Installed application checks passed with stand-in AI engines"
+    },
+    "firstRun:macos": {
+      "state": "PASS",
+      "checks": 32,
+      "detail": "Installed application checks passed with stand-in AI engines"
+    },
+    "upgrade:windows": {
+      "state": "PASS",
+      "checks": 17,
+      "detail": "Installed application checks passed with stand-in AI engines"
+    }
+  },
+  "upgradeFrom": "v0.3.3",
+  "commonChecks": {
+    "testFiles": 238,
+    "testsPassed": 1473,
+    "testsSkipped": 9,
+    "actualUiChecksPassed": 11
+  },
+  "assets": [
+    {
+      "name": "achmage-workbench-0.4.0-1-x86_64.pkg.tar.zst",
+      "artifactName": "achmage-workbench-0.4.0-1-x86_64.pkg.tar.zst",
+      "bytes": 160573718,
+      "sha256": "7b39c22ac9f4b81978b458a4c12817cfe9bc702b691eafcd61e826c7c1ec79ee"
+    },
+    {
+      "name": "Achmage.Workbench_0.4.0_amd64.AppImage",
+      "artifactName": "Achmage Workbench_0.4.0_amd64.AppImage",
+      "bytes": 280373752,
+      "sha256": "89fda16f73f4355ffb6bccd0ba30856ea41acef118bcfd14d642ad3b91951d5f"
+    },
+    {
+      "name": "Achmage.Workbench_0.4.0_amd64.deb",
+      "artifactName": "Achmage Workbench_0.4.0_amd64.deb",
+      "bytes": 219988328,
+      "sha256": "71ecf42fc1a020d455934a2577bf513a549e13fd85589143f1a3b26bd4471224"
+    },
+    {
+      "name": "Achmage.Workbench_0.4.0_aarch64.dmg",
+      "artifactName": "Achmage Workbench_0.4.0_aarch64.dmg",
+      "bytes": 212903611,
+      "sha256": "d22a70ab21cbe0cb55bc38c20800b41669b727c1e4e46695673a1156c21082bf"
+    },
+    {
+      "name": "Achmage.Workbench_0.4.0_x64_ko-KR.msi",
+      "artifactName": "Achmage Workbench_0.4.0_x64_ko-KR.msi",
+      "bytes": 237250364,
+      "sha256": "d9772964a12065c12093482d0fb191595fcc6a44b6171f6c981e7dbd12afa4d7"
+    },
+    {
+      "name": "Achmage.Workbench_0.4.0_x64-setup.exe",
+      "artifactName": "Achmage Workbench_0.4.0_x64-setup.exe",
+      "bytes": 179267437,
+      "sha256": "81fa5a3859c9fb28a5f7fa3459dbc6c65c6ee1940d673400d5cc42f653efbafe"
+    }
+  ],
+  "publication": {
+    "assetsVerified": 9,
+    "sourceTagMatches": true,
+    "hashAndSizeMatch": true,
+    "anonymousWindowsDownloadHttp": 200,
+    "rebuiltForPublication": false
+  },
+  "collectionCorrection": {
+    "originalArtifact": "https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/42648941283/artifacts/13693106385",
+    "originalReceiptSha256": "df67eb2bbb58a2a03a820b4ae0767887dd1be28eef586bcf4c4101cad6d98150",
+    "originalReceiptPreservedInPublishedManifest": true
+  },
+  "scopePreserved": {
+    "coveragePath": "docs/superpowers/plans/support/coverage.json",
+    "coverageSha256": "0b92ce914093a1b36092f1ad19a8d2c14b754cf564410e148b4ca85ac869b437",
+    "units": 25,
+    "requirements": 156,
+    "regressions": 12,
+    "officeFormats": 9
+  },
+  "notProvenByThisReceipt": [
+    "실제 iOS/Android 기기의 입력·사진·앱 전환·네트워크 변경·push 수용",
+    "모든 OS에서의 공유 웹·agent-desktop 앱 제어/권한/다운로드 수용",
+    "실제 계정·외부망·마이크의 전체 기능 수용"
+  ],
+  "completionClaim": "설치 파일 배포와 명시한 확인은 완료. 버전 공개만으로 전체 원본 요구의 수용 완료를 선언하지 않는다."
+}

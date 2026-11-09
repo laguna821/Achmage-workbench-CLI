@@ -514,7 +514,7 @@ jobs:
         run: |
           gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" -D out -n windows -n macos -n linux -n arch
           gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" -D out -p 'smoke-*' || true
-          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" -D out -n upgrade-windows || true
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" -D out/upgrade-windows -n upgrade-windows || true
           node scripts/release/collect-candidate.ts out candidate
       - uses: actions/upload-artifact@v4
         with:

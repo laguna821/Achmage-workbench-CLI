@@ -1,6 +1,6 @@
 # 0.4.0 실행 상태
 
-2026-11-10. **기능 연결과 OS 설치본 6종 생성까지 마쳤으며 설치 후 발견된 오류만 수정한다.** 사용자 재교정: 기능마다 검사·재검토를 끼워 넣지 않는다. 이미 통과한 검사는 반복하지 않고, 발견한 문제에 필요한 확인만 수행한다. 기능 추가마다 production/설치본 빌드를 반복하지 않는다. 후보 `42638537165`의 공통 빌드·타입·1,471개 테스트·실제 UI 11개와 네 플랫폼 빌드는 통과했다. 설치 후 모듈 누락·이음 공식 저장소 이름 변경·선택 앱 문구 검사의 잘못된 실패를 수정했고, 해당 원인만 집중 확인해 통과했다. 수정 설치본의 신규 설치·업데이트·공개가 남아 있다.
+2026-11-10. **[v0.4.0 설치 파일 6종을 정식 공개했다](https://github.com/laguna821/Achmage-workbench-CLI/releases/tag/v0.4.0).** source `30112bc`, run `42648941283`의 공통 빌드·타입·1,473개 테스트·실제 UI 11개, Windows 신규 설치 35개·macOS 32개·Windows v0.3.3 업데이트 데이터 보존 17개와 정상 종료가 통과했다. 실제 설치 파일을 재빌드하지 않고 게시했으며 공개 9자산의 크기·해시·소스와 Windows 공개 다운로드 HTTP 200을 확인했다. 사용자 교정에 따라 통과한 검사·기능별 빌드를 반복하지 않는다. 실제 휴대폰·외부망·모든 OS 앱 제어와 계정 조합의 인수를 완료했다고 표시하지 않는다. 버전 공개와 전체 25개 목적의 실기기 수용 완료는 구분한다.
 
 | 기능 묶음 | 현재 코드 | 근거와 남은 범위 |
 |---|---|---|
@@ -23,7 +23,7 @@
 | U20 workspace 운영 | 주요 흐름 구현 | `2462057`, `83a908b` — owned 서버 실행·포트 충돌·출력 재사용·정확한 소유 실행 종료와 UI 연결. 이번 묶음에서 원본 terminal controller/emulator/headless, 모바일 보조 키, 로그 검색·고정 서비스 HTTP 프록시를 연결. 원본 전체 HTTP/WebSocket 프록시도 별도 origin·owned 실행·기기 권한에 연결했다. 휴대폰 웹 화면은 별도 HTTPS preview 경로 설정 필요; 실제 모바일 입력·외부망 확인은 남음 |
 | U21 예약 | 주요 흐름 구현 | `1a39d77` — occurrence 기록·timezone·횟수/기한·미실행 정책·unknown 재전송 방지 |
 | U22–U24 음성·플러그인·Hub | 핵심 서비스·화면·원본 outbound Hub 연결 구현 | 음성/SDK/compiler/lifecycle + QuickJS, 서명 사건/TaskService receipt에 원본 Hub relationship/retry/execution·OS vault·관리 화면 추가. 실마이크/native 모델/실모바일/외부 계정 확인은 남음. [범위](../../voice-extensions-events.md) |
-| U25 설치·릴리즈 | 최종 OS 설치본 빌드 준비 | 로컬 웹·Office·host 및 Linux native release 완료. protocol/schema·migration backup·drain·NSIS 연결과 동일 artifact 승격 구현. 새로운 업데이트 경계 2개·승격 경계 1개 통과. 다음은 최종 source의 OS candidate dispatch |
+| U25 설치·릴리즈 | 6종 정식 게시·설치/업데이트 확인 완료 | source30112bc/run42648941283. Windows35/macOS32/업데이트17 PASS, 공개파일 동일 hash 확인. [결과](U25/result.json). 실제 휴대폰·외부망 등 개별 기기 수용 범위는 미확인으로 유지 |
 
 현재 코드의 확인은 해당 묶음에서 확보한 결과를 재사용한다. Office production bundle은 Rust PATH와 vendor realpath를 보정한 실행에서 통과했다. U03/U10 관련 동작 15개, import 9개, 실제 폴더 경계 1개, U20 서비스 3개와 UI 4개, U19 host 알림 4개와 UI 6개 확인을 마쳤다. 전체 OS/실계정/실기기 완료를 뜻하지 않는다.
 
@@ -100,3 +100,11 @@ U25 통합: host/web TypeScript와 새 protocol·migration backup 경계 2개가
 변경 host만 한 번 빌드한 뒤 저장소 밖에서 실행해 원본 installer와 세 OS helper, 실제 desktop API, stdin-close 종료 코드 0을 확인했다. 이음 변경 경계 2개도 한 번 통과했다. 기존 전체 로컬 suite·Office·native 빌드를 반복하지 않았다. 실패 후보를 정식 게시하지 않으며 수정 source의 설치본으로 신규 설치·업데이트를 이어간다.
 
 근거: `research:rr-8b1de8f70ac6198a1f734b3f63b45bcb:e35537822163829170be1345a27af709827e916a871b5e2a9c7d8922dbdf3525` (R18–R24).
+
+## 0.4.0 공개 결과
+
+수정 후보 `42648941283`의 모든 빌드·설치 job이 성공했다. Windows/macOS에서 공식 이음 0.12.12의 자동 설치·OS 앱 등록·Workbench 없는 독립 GUI 실행도 확인했다. 게시 전 집계에서 단일 `upgrade-windows` artifact의 다운로드 경로가 잘못되어 실제 통과 결과가 누락된 것을 찾아 workflow 목적 폴더 한 줄을 수정했다. 원본 설치 파일과 실제 receipt를 올바른 폴더에 모아 **동일한 기존 collector의 `--require-install-checks`와 promoter**로 게시했다. 검사 조건을 완화하거나 설치 파일을 재빌드하지 않았다. 교정된 manifest의 `collectionCorrection`에 원본 집계 전체·해시·출처와 수정 이유를 보존했다.
+
+공개 시각: 2026-11-10 01:51:21 KST. source/tag는 `30112bc8602b3d449c78ff59a5db2ff26431d405`이다. 이 뒤의 기록·CI 경로 수정은 설치 파일의 소스를 바꾸지 않는다. 실제 iOS/Android·외부망·마이크·OS별 앱 제어 및 계정 기능의 모든 수용 기준까지 입증했다는 결론은 내리지 않는다.
+
+근거: `research:rr-8b1de8f70ac6198a1f734b3f63b45bcb:d12e95c7859fd25cc515252f68eaa150218bc17046562aa1abf5752f3ee2816c` (R25–R34).
