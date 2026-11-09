@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { fileURLToPath, URL } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Alias, type Plugin } from "vite";
@@ -19,7 +19,8 @@ import { templateFonts } from "./template-fonts-build.ts";
 //   sheets — the same, and its Rust xlsx engine runs in the worker as WebAssembly
 //            (native/build-xlsx-wasm.sh) instead of a separate process.
 // The editors resolve their own packages from the vendored node_modules.
-const ieum = fileURLToPath(new URL("../../vendor/ieumoffice", import.meta.url));
+// Vite resolves importer symlinks. Match platform adapters against that same path.
+const ieum = realpathSync(fileURLToPath(new URL("../../vendor/ieumoffice", import.meta.url)));
 if (!existsSync(`${ieum}/node_modules`)) throw new Error("vendor/ieumoffice is missing: run scripts/fetch-ieum.sh first");
 const packages = `${ieum}/packages`;
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));

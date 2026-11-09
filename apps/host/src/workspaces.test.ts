@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
@@ -54,6 +54,24 @@ async function legacy() {
 }
 
 describe("workspace migration and execution boundaries", () => {
+  it("creates a real directory only inside the selected workspace and preserves existing entries", () => {
+    const { manager, dir } = setup();
+    const work = manager.createWork({ title: "폴더 생성" });
+    const create = (path: string) => manager.workspaces.createDirectory(work.defaultWorkspaceId!, path);
+    expect(create("새 폴더")).toMatchObject({ relativePath: "새 폴더", path: join(work.cwd, "새 폴더") });
+    expect(statSync(join(work.cwd, "새 폴더")).isDirectory()).toBe(true);
+    expect(create("새 폴더/하위").relativePath).toBe("새 폴더/하위");
+    writeFileSync(join(work.cwd, "원문.md"), "원문 유지");
+    expect(() => create("원문.md")).toThrow("이미 있습니다");
+    expect(() => create("새 폴더")).toThrow("이미 있습니다");
+    expect(() => create("../밖")).toThrow("절대 경로와 ..");
+    expect(() => create("없는 상위/하위")).toThrow("상위 폴더");
+    const outside = join(dir, "outside"); mkdirSync(outside);
+    symlinkSync(outside, join(work.cwd, "외부 연결"), "junction");
+    expect(() => create("외부 연결/밖")).toThrow("작업공간 밖");
+    expect(readFileSync(join(work.cwd, "원문.md"), "utf8")).toBe("원문 유지");
+  });
+
   it("adds links once while preserving IDs, native sessions, unknown fields, revisions and original bytes", async () => {
     const old = await legacy();
     const store = new Store(old.db); cleanup.push(() => store.close());

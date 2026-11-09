@@ -490,6 +490,10 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       if (parts[0] === "workspaces" && parts[1] && parts[2] === "repository" && parts.length === 3 && method === "GET") {
         return sendJson(res, 200, await manager.worktreeWorkspaces.inspect(parts[1]));
       }
+      if (parts[0] === "workspaces" && parts[1] && parts[2] === "directories" && parts.length === 3 && method === "POST") {
+        const body = await readJson(req, 4096);
+        return sendJson(res, 201, manager.workspaces.createDirectory(parts[1], body.path));
+      }
       if (parts[0] === "works" && parts[1] && parts[2] === "environment" && parts.length === 3) {
         if (method === "GET") return sendJson(res, 200, manager.preparation.settings(parts[1]));
         if (method === "PUT") { const body = await readJson(req); return sendJson(res, 200, manager.preparation.saveSettings(parts[1], body.expectedRevision, body.settings)); }

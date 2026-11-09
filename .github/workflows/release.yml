@@ -268,9 +268,8 @@ jobs:
       - name: Native Windows Lightpanda with runtime DLLs and source provenance
         run: node scripts/fetch-bundled-lightpanda.ts apps/desktop/src-tauri/bundled
       - run: npm ci --ignore-scripts
-      - name: Build
-        working-directory: apps/desktop
-        run: npx tauri build --config src-tauri/tauri.release.conf.json --config src-tauri/tauri.release.apps.conf.json --config src-tauri/tauri.release.windows.conf.json --bundles nsis,msi
+      - name: Build once and package each Windows installer
+        run: node scripts/release/build-windows.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: windows

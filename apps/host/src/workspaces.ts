@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { realpathSync, statSync } from "node:fs";
-import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { mkdirSync, realpathSync, statSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { Artifact, CreateWorkspaceRequest, SessionWorktree, Work, Workspace } from "@workbench/contracts";
 import type { Store } from "./store.ts";
 import type { EventBus } from "./bus.ts";
@@ -90,6 +90,32 @@ export class Workspaces {
 
   update(workspace: Workspace, patch: Partial<Pick<Workspace, "label" | "archivedAt" | "removedAt">>) {
     return this.persist({ ...workspace, ...patch, updatedAt: Date.now() }, true);
+  }
+
+  /** Creates an actual directory in the selected execution workspace, independently of AI. */
+  createDirectory(id: string, input: unknown) {
+    const selected = this.get(id), space = this.requireActive(id, selected.workId);
+    const work = this.store.works().find(entry => entry.id === space.workId);
+    if (!work || work.archivedAt) throw new HttpError(409, "workspace_archived", "보관한 프로젝트에는 폴더를 만들 수 없습니다.");
+    if (typeof input !== "string" || !input.trim() || input.length > 2048) throw new HttpError(400, "directory_path", "새 폴더의 상대 경로를 입력해 주세요.");
+    const path = input.trim().replace(/\\/g, "/"), parts = path.split("/");
+    if (path.startsWith("/") || /^[a-z]:/i.test(path) || parts.some(part => !part || part === "." || part === ".." || /[\x00-\x1f<>:"|?*]/.test(part) || /[. ]$/.test(part)))
+      throw new HttpError(400, "directory_path", "작업공간 안의 폴더 이름을 입력해 주세요. 절대 경로와 ..는 사용할 수 없습니다.");
+    const root = realpathSync(space.cwd);
+    let parent: string;
+    try { parent = realpathSync(resolve(root, ...parts.slice(0, -1))); if (!statSync(parent).isDirectory()) throw Error(); }
+    catch { throw new HttpError(400, "directory_parent", "상위 폴더를 먼저 만들거나 기존 폴더를 선택해 주세요."); }
+    if (!inside(root, parent)) throw new HttpError(403, "directory_outside", "작업공간 밖으로 연결된 폴더에는 만들 수 없습니다.");
+    const target = join(parent, parts.at(-1)!);
+    this.directoryOperations.assertAvailable(target);
+    try { mkdirSync(target); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new HttpError(409, "directory_exists", "같은 이름의 파일 또는 폴더가 이미 있습니다.");
+      if (["EACCES", "EPERM"].includes((error as NodeJS.ErrnoException).code ?? "")) throw new HttpError(403, "directory_permission", "이 폴더에 새 폴더를 만들 권한이 없습니다.");
+      throw error;
+    }
+    this.persist({ ...space, updatedAt: Date.now() }, true);
+    return { workspaceId: space.id, path: target, relativePath: relative(root, target).split(sep).join("/") };
   }
 
   /** Explicit cwd wins for overlapping folders; otherwise choose the most specific existing root. */
