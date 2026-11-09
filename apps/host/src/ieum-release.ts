@@ -1,6 +1,10 @@
 import { parseDocument } from "yaml";
 
-export const IEUM_RELEASE_ROOT = "https://github.com/pblsketch/openoffice/releases";
+export const IEUM_RELEASE_ROOT = "https://github.com/pblsketch/ieumoffice/releases";
+// GitHub repository 1416407565 was renamed from openoffice to ieumoffice. Keep
+// the original release URLs valid, without trusting arbitrary repository redirects.
+const officialReleaseRoots = [IEUM_RELEASE_ROOT, "https://github.com/pblsketch/openoffice/releases"];
+export const isOfficialIeumAssetUrl = (url: string, tag: string, name: string) => officialReleaseRoots.some(root => url === `${root}/download/${tag}/${name}`);
 export type DesktopRelease = { tag_name: string; assets: { name: string; browser_download_url: string; digest: string | null; size: number }[] };
 const tagPattern = /^v?\d+\.\d+\.\d+(?:[-.][\w.-]+)?$/;
 export const updaterName = (platform: NodeJS.Platform) => platform === "win32" ? "latest.yml" : platform === "darwin" ? "latest-mac.yml" : platform === "linux" ? "latest-linux.yml" : null;
@@ -31,7 +35,7 @@ export function releaseFromManifest(tag: string, text: string, platform: NodeJS.
 
 export async function latestDesktopRelease(platform: NodeJS.Platform = process.platform, arch = process.arch, request: typeof fetch = fetch): Promise<DesktopRelease> {
   try {
-    const response = await request("https://api.github.com/repos/pblsketch/openoffice/releases/latest", { headers: { Accept: "application/vnd.github+json" }, signal: AbortSignal.timeout(30_000) });
+    const response = await request("https://api.github.com/repos/pblsketch/ieumoffice/releases/latest", { headers: { Accept: "application/vnd.github+json" }, signal: AbortSignal.timeout(30_000) });
     if (!response.ok) throw new Error(`GitHub API ${response.status}`);
     const release = await response.json() as DesktopRelease;
     if (!tagPattern.test(release.tag_name) || !Array.isArray(release.assets)) throw new Error("Invalid release metadata");
@@ -40,7 +44,8 @@ export async function latestDesktopRelease(platform: NodeJS.Platform = process.p
     // Shared networks/CI can exhaust GitHub's anonymous API quota. The official release
     // page and updater assets remain public; no account token is requested or forwarded.
     const page = await request(`${IEUM_RELEASE_ROOT}/latest`, { method: "HEAD", signal: AbortSignal.timeout(30_000) });
-    const prefix = `${IEUM_RELEASE_ROOT}/tag/`, tag = page.url.startsWith(prefix) ? page.url.slice(prefix.length) : "";
+    const prefix = officialReleaseRoots.map(root => `${root}/tag/`).find(root => page.url.startsWith(root));
+    const tag = prefix ? page.url.slice(prefix.length) : "";
     const updater = updaterName(platform);
     if (!page.ok || !tagPattern.test(tag) || !updater) throw new Error("공식 이음오피스 최신 배포를 확인하지 못했습니다.");
     const response = await request(`${IEUM_RELEASE_ROOT}/download/${tag}/${updater}`, { signal: AbortSignal.timeout(30_000) });

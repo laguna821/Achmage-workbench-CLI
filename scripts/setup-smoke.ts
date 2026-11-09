@@ -4,7 +4,7 @@
 // Homebrew and Claude Code's own installer on macOS, npm's prefix and ~/.local/bin on Linux —
 // and a GUI app's short PATH. Checked through the API: both engines found (and where), both
 // answer a request, the original document engines ship with the app and work (text view and
-// page pictures of a .docx, a .pptx and a .hwpx, a PDF page edit), and nothing says "설치되지 않음".
+// page pictures of a .docx, a .pptx and a .hwpx, a PDF page edit), and compiled web assets ship.
 // Usage: node scripts/setup-smoke.ts <app resources folder> [out folder]
 //   Windows: %LOCALAPPDATA%\Achmage Workbench   macOS: …/Achmage Workbench.app/Contents/Resources
 
@@ -183,13 +183,14 @@ export async function apiChecks(gateway: Gateway, app: string, expect: ReturnTyp
     return [/^ieumoffice \d+\.\d+\.\d+$/.test(version), version];
   });
 
-  await step("'설치되지 않음'이 어디에도 없음 (상태와 화면 코드)", async () => {
+  await step("AI 엔진·필수 문서 도구 상태와 컴파일된 웹 파일이 준비됨", async () => {
     const snapshot = await call<Snapshot>("GET", "/api/snapshot");
     const missing = [...snapshot.providers.filter((entry) => !entry.installed).map((entry) => entry.provider), ...(["kordoc", "ieumoffice", "hwp", "pdf"] as const).filter((name) => !snapshot.tools[name]?.available)];
     const assets = join(appLayout(app).web, "assets");
     const scripts = existsSync(assets) ? readdirSync(assets).filter((name) => name.endsWith(".js")) : [];
-    const said = scripts.filter((name) => readFileSync(join(assets, name), "utf8").includes("설치되지 않음"));
-    return [missing.length === 0 && said.length === 0 && scripts.length > 0, `missing=[${missing.join(", ")}] ui=${scripts.length} scripts, saying it: [${said.join(", ")}]`];
+    // Optional apps can legitimately have an uninstalled label in the bundle. Check
+    // the installed providers/tools themselves, not every possible UI state string.
+    return [missing.length === 0 && scripts.length > 0, `missing=[${missing.join(", ")}] ui=${scripts.length} compiled scripts`];
   });
 
   mkdirSync(work, { recursive: true });

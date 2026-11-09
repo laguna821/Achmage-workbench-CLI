@@ -10,11 +10,10 @@ import type { ToolStatus } from "@workbench/contracts";
 import { HttpError } from "./errors.ts";
 import { findIeum, ieumFromCliDir, installIeumOffice, sandboxWrapper, type IeumInstall } from "./ieumoffice.ts";
 import { registerIeumDesktop, type DesktopRegistration } from "./ieum-registration.ts";
-import { installerName, latestDesktopRelease, validSha512, type DesktopRelease } from "./ieum-release.ts";
+import { installerName, isOfficialIeumAssetUrl, latestDesktopRelease, validSha512, type DesktopRelease } from "./ieum-release.ts";
 export type { DesktopRelease } from "./ieum-release.ts";
 
 const run = promisify(execFile);
-const REPO = "https://github.com/pblsketch/openoffice/releases/download/";
 
 /** Select a verified official installer, with no executable URL supplied by the caller. */
 export function desktopAsset(release: DesktopRelease, platform: NodeJS.Platform, arch: string) {
@@ -23,7 +22,7 @@ export function desktopAsset(release: DesktopRelease, platform: NodeJS.Platform,
   const name = ["win32", "darwin"].includes(platform) ? installerName(version, platform, arch) : null;
   const asset = release.assets.find((entry) => entry.name === name);
   const sha256 = /^sha256:[a-f0-9]{64}$/.test(asset?.digest ?? ""), sha512 = asset?.digest?.startsWith("sha512:") && validSha512(asset.digest.slice(7));
-  if (!asset || (!sha256 && !sha512) || !Number.isSafeInteger(asset.size) || asset.size < 1 || asset.size > 1_500_000_000 || asset.browser_download_url !== `${REPO}${release.tag_name}/${name}`) throw new HttpError(502, "ieum_release", "이 OS의 공식 설치 파일과 체크섬을 확인하지 못했습니다.");
+  if (!asset || (!sha256 && !sha512) || !Number.isSafeInteger(asset.size) || asset.size < 1 || asset.size > 1_500_000_000 || !isOfficialIeumAssetUrl(asset.browser_download_url, release.tag_name, asset.name)) throw new HttpError(502, "ieum_release", "이 OS의 공식 설치 파일과 체크섬을 확인하지 못했습니다.");
   return { ...asset, version, algorithm: sha256 ? "sha256" : "sha512", encoding: sha256 ? "hex" as const : "base64" as const, checksum: asset.digest!.slice(7) };
 }
 
