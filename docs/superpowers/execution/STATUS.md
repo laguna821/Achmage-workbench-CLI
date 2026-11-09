@@ -86,3 +86,9 @@ U25 통합: host/web TypeScript와 새 protocol·migration backup 경계 2개가
 `42632532399` / `de13e01`: 공통 production 및 전체 타입 확인 통과. 회귀 1463개 통과·9개 skip, 8개 실패. 실패는 Composer의 JSDOM matchMedia 누락 5개, Hub 모의 manager의 accessOf 누락 2개, HWP catalog 테스트가 host를 중복 빌드하다 5초를 초과한 1개다. 누락된 fixture를 채우고 HWP/PDF 테스트가 CI 직전 단계에서 만든 bundle을 사용하도록 했다. 실제 catalog·편집·변환 assertion은 유지한다. 실패했던 8개만 3.79초에 통과했다. NSIS prepare-update 대상도 실제 배포되는 workbench-service.mjs로 수정했다. 빌드 실패 뒤 남은 queued macOS 작업은 취소하고 수정 source로 최종 후보를 다시 실행한다.
 
 근거: `research:rr-8b1de8f70ac6198a1f734b3f63b45bcb:96363956b13dea6cd1f0de2453861f46517a3b5c4027f7869a43b31fc2b9cf20` (R13–R14). 전체 목표와 OS 설치본 완료는 아직 미완료다.
+
+## 두 번째 CI의 완료 알림 수정
+
+`42634953460` / `4180be0`: 공통 production·전체 타입·238 test files / 1471 tests(9 skip)가 통과했다. 실제 UI는 10/11 통과했고 foreground 완료 toast만 실패했다. modern host의 OS 알림 소유권 확인이 화면 내 toast까지 꺼버린 제품 회귀를 수정했다. 웹만 다시 빌드하고 기존 실제 UI harness의 `--completion-only` 모드로 실패 동작 1개만 통과시켰다. 기존 병렬 문서·메인 세션·저장·권한·모델·삭제 검사를 로컬에서 반복하지 않았다. 다음 후보 CI에서 OS별 설치본 단계로 이어간다.
+
+근거: `research:rr-8b1de8f70ac6198a1f734b3f63b45bcb:c7d270192a4bf518aadea96fb7b0ad28b232a229b04c23f88a1c8563ec72174e` (R15–R17). 설치본·업데이트·공개 완료는 아직 미완료다.

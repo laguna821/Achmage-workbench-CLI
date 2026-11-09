@@ -1099,10 +1099,11 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   // is batched into one render. Main and document chats use the same notification path.
   tellCompletion.current = event => {
     const session = event.type === "item.upserted" ? stateRef.current.sessions[event.sessionId] : undefined;
-    const alert = completedTurns.current.take(event, session, session ? stateRef.current.works[session.workId]?.title ?? "" : "", attentionInbox.getState().supported === false && !single && prefsRef.current.notify !== false);
+    const alert = completedTurns.current.take(event, session, session ? stateRef.current.works[session.workId]?.title ?? "" : "", !single && prefsRef.current.notify !== false);
     if (!alert) return;
     if (!document.hidden && document.hasFocus()) setToast({ text: alert.body + " · 답변 완료", action: { label: "열기", run: () => openSession(alert.session) } });
-    if (inDesktop) void notify("Achmage Workbench", "작업이 완료되었습니다.", alert.session.id).catch(() => undefined);
+    // The host owns OS notifications; the foreground toast still follows every live completion.
+    if (inDesktop && attentionInbox.getState().supported === false) void notify("Achmage Workbench", "작업이 완료되었습니다.", alert.session.id).catch(() => undefined);
   };
   // Approval/error attention still follows status transitions.
   const statuses = useRef(new Map<string, SessionStatus>());

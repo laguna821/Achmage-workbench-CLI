@@ -94,6 +94,15 @@ try {
     const pane = page!.locator(`.pane[data-pane-active="true"][data-tab="${id}"]`); await pane.waitFor();
     if (editor) { const frame = pane.frameLocator("iframe.office-frame"); await frame.locator('.tiptap[contenteditable="true"]').waitFor({ timeout: 60_000 }); await frame.locator(".ai-panel textarea").waitFor(); return frame; }
   };
+  if (process.argv.includes("--completion-only")) {
+    await activate("main");
+    await page.locator('.pane[data-pane-active="true"] .composer-input').fill("완료 알림 확인");
+    await page.locator('.pane[data-pane-active="true"]').getByRole("button", { name: "보내기", exact: true }).click();
+    await page.locator(".toast").filter({ hasText: "답변 완료" }).waitFor();
+    const announcement = await page.locator(".toast").innerText();
+    check("foreground completion is announced", announcement.includes("답변 완료"), announcement);
+    await page.screenshot({ path: join(out, "foreground-completed.png") });
+  } else {
   for (const [id, marker] of [["doc-a", "PARALLEL_DOC_A"], ["doc-b", "PARALLEL_DOC_B"]]) {
     const frame = (await activate(id!, true))!;
     await frame.locator(".ai-panel textarea").fill(`문서에 ${marker} 문단을 넣어 주세요.`);
@@ -143,6 +152,7 @@ try {
   await until(async () => !(await snapshot()).works.some((w: any) => w.id === work.id));
   check("project menu deletes records, closes tabs, preserves files and other project", readFileSync(source).equals(bytes) && (await snapshot()).works.some((w: any) => w.id === other.id) && await page.locator('.group-tab[data-tab-id="doc-a"]').count() === 0);
   check("no browser exceptions or cancelled provider streams", errors.length === 0 && cancelled === 0, errors.join("; "));
+  }
 } catch (error) {
   check("urgent parallel UI scenario", false, String(error));
   if (page) { await page.screenshot({ path: join(out, "failure.png") }).catch(() => undefined); writeFileSync(join(out, "failure.txt"), await page.locator("body").innerText().catch(() => "")); }
