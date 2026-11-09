@@ -17,16 +17,17 @@
 | U11 설정·가져오기 | 주요 흐름 구현 | 기존 이음/Dropbox 흐름 유지, `18bac42` 과거 기록/실행 구분·원문 보존. 전체 온보딩 통합 남음 |
 | U12–U15 공유 웹·같은 페이지 AI·외부 앱 | 남음 | 기존 Lightpanda와 구분되는 사람/AI 공유 페이지·agent-desktop 연결 |
 | U16 독립 host | 주요 흐름 구현 | `4924188` — 창 종료 뒤 지속·재접속·epoch·선택 로그인 시작. AppImage 지속 runtime 남음 |
-| U17–U19 기기·모바일·서비스 알림 | 남음 | 기기 권한·보호 전송·모바일 UX·백그라운드 알림 연결 |
-| U20 workspace 운영 | 구현 중 | 기존 worktree/Git/PTY 유지. owned 서버 실행·포트 충돌·출력 재사용과 UI 연결 중 |
+| U17–U18 기기·모바일 | 남음 | 기기 권한·보호 전송·모바일 UX 연결 |
+| U19 서비스 알림 | 구현 중 | `9c56e75` — host의 영구 기록·중복 방지·OS 일반 알림·읽음/승인 분리. 알림 센터 UI 연결 중. 모바일 push와 OS 클릭 연동 일부 남음 |
+| U20 workspace 운영 | 주요 흐름 구현 | `2462057`, `83a908b` — owned 서버 실행·포트 충돌·출력 재사용·정확한 소유 실행 종료와 UI 연결. 원격 포트 프록시·모바일 터미널·로그 검색 남음 |
 | U21 예약 | 주요 흐름 구현 | `1a39d77` — occurrence 기록·timezone·횟수/기한·미실행 정책·unknown 재전송 방지 |
 | U22–U24 음성·플러그인·Hub | 남음 | 통합 계획의 기능 범위 유지 |
 | U25 설치·릴리즈 | 전체 통합 뒤 진행 | 두 과거 후보 run은 증거로 보존. 다음 candidate dispatch 없음 |
 
-현재 코드의 확인은 해당 묶음에서 확보한 결과를 재사용한다. Office production bundle은 Rust PATH와 vendor realpath를 보정한 실행에서 통과했다. U03/U10 관련 동작 15개, import 9개, 실제 폴더 경계 1개, U20 서비스 3개 확인을 마쳤다. 전체 OS/실계정/실기기 완료를 뜻하지 않는다.
+현재 코드의 확인은 해당 묶음에서 확보한 결과를 재사용한다. Office production bundle은 Rust PATH와 vendor realpath를 보정한 실행에서 통과했다. U03/U10 관련 동작 15개, import 9개, 실제 폴더 경계 1개, U20 서비스 3개와 UI 4개, U19 host 알림 4개 확인을 마쳤다. 전체 OS/실계정/실기기 완료를 뜻하지 않는다.
 
 기존 CI `42575034938`은 lock 버전 두 항목 실수로 실패했고 복구했다. `42576006213`은 공통/macOS/Linux/Arch 성공, Windows 앱·NSIS 생성 후 WiX 다운로드 HTTP504로 MSI 실패했다. 실패한 bundle만 재시도하는 코드를 준비했으며 지금 재빌드하지 않는다.
 
 원본 [156개 요구 대응표](../plans/support/coverage.json)와 [통합 계획](../plans/2026-11-09-workbench-integrated-release.md)을 유지한다. 이 상태표의 ‘구현’은 기능 코드 상태이며 전체 릴리즈 완료 판정이 아니다.
 
-연구 판: `research:rr-1b4bb9d2193a4e5dced6dca4128061a9:c3d02f5562109d62a6612be450300c4f4dc445d5990671d91079701adcffd25f` (R24–R32). 실행 교정: `decision-7287723b7dd57957ec551667abe6ddc8c02067f7f0f0988cb2a44d58b05cd626`, `decision-b10e79c5567f53f7c9dfe5e459933f13cbff1b06242c87566dfbaea9d13d4e63`.
+연구 판: `research:rr-1b4bb9d2193a4e5dced6dca4128061a9:7ff109f4c77bbd08c24179aee081fbab4da44bfbe070d85341cb2fb395914669` (R24–R33). 실행 교정: `decision-7287723b7dd57957ec551667abe6ddc8c02067f7f0f0988cb2a44d58b05cd626`, `decision-b10e79c5567f53f7c9dfe5e459933f13cbff1b06242c87566dfbaea9d13d4e63`.
