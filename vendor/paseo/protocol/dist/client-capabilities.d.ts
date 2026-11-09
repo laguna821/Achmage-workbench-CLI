@@ -1,0 +1,26 @@
+export declare const CLIENT_CAPS: {
+    readonly terminalChunkedReplay: "terminal_chunked_replay";
+    readonly binaryChunkingV1: "binary_chunking_v1";
+    readonly helloRejection: "hello_rejection";
+    readonly ownedSubscriptions: "owned_subscriptions";
+    readonly explicitEventSubscriptions: "explicit_event_subscriptions";
+    readonly allProviders: "all_providers";
+    readonly selectiveAgentTimeline: "selective_agent_timeline";
+    readonly reasoningMergeEnum: "reasoning_merge_enum";
+    readonly customModeIcons: "custom_mode_icons";
+    readonly terminalReflowableSnapshot: "terminal_reflowable_snapshot";
+    readonly providerSubagents: "provider_subagents";
+    readonly projectedSubagentTimeline: "projected_subagent_timeline";
+    readonly projectUpdates: "project_updates";
+    readonly compactProviderSnapshots: "compact_provider_snapshots";
+    readonly providerSnapshotReferences: "provider_snapshot_references";
+    readonly timelineReplacementInvalidation: "timeline_replacement_invalidation";
+    readonly timelineNotifications: "timeline_notifications";
+    readonly pluginTimelineItems: "plugin_timeline_items";
+    readonly workspaceSetupObservation: "workspace_setup_observation";
+    readonly pluginBinaryPayloads: "plugin_binary_payloads";
+    readonly workspaceSetupBlocked: "workspace_setup_blocked";
+    readonly backgroundAgents: "background_agents";
+    readonly browserHost: "browser_host";
+};
+export type ClientCapability = (typeof CLIENT_CAPS)[keyof typeof CLIENT_CAPS];

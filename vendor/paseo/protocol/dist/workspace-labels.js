@@ -1,0 +1,18 @@
+export const WORKSPACE_LABEL_COLORS = [
+    "violet",
+    "sky",
+    "emerald",
+    "orange",
+    "pink",
+    "indigo",
+    "teal",
+    "red",
+    "amber",
+    "blue",
+];
+export function normalizeWorkspaceLabelName(name) {
+    return name.replace(/\s+/g, " ").trim();
+}
+export function workspaceLabelKey(name) {
+    return normalizeWorkspaceLabelName(name).toLowerCase();
+}

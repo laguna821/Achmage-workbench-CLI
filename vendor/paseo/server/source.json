@@ -1,0 +1,297 @@
+{
+  "schemaVersion": 1,
+  "upstream": {
+    "repository": "https://github.com/getpaseo/paseo",
+    "commit": "1fff127f45b11c1c9c573fbbd12791673004c912",
+    "archiveSha256": "654e4c066977b773a36eabb80a3d231942f36b0287cad8b3d3ca1aaa486cdd7b",
+    "license": "Apache-2.0",
+    "copyrightNotice": "Copyright (c) 2025-present Mohamed Boudra",
+    "rootLicense": "../LICENSE",
+    "researchRevision": "research:rr-79110658024cdb4797375aa15a22a771:413d49e0d715c8db9687a0b1a48c6669ad100f71a9fdf72b13a250ecf0fc6a03",
+    "subdirectory": "packages/server",
+    "sourceUrl": "https://github.com/getpaseo/paseo/tree/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server"
+  },
+  "scope": "secure relay ingress, encrypted/physical sockets, outgoing relay, keypair/private-files/connection-offer and network dependency closure; corresponding existing tests included",
+  "changes": {
+    "description": "relay-transport.ts has a notice and one type-only import target changed from websocket-server.js to socket-metadata.js; all runtime statements are unchanged. Other selected source/tests/config/license are unchanged. Original manifest is package.upstream.json.",
+    "files": [
+      {
+        "path": "src/server/relay-transport.ts",
+        "upstreamSha256": "7bf637e0e56ac7bbf125afb4d8f4f671b60275d185f2d5077204cc0955212c8c",
+        "currentSha256": "f5a7abe775ed7a3faaf26f2cb2e4343e2c158ece154d8d5e0ca6c326db01206b"
+      }
+    ]
+  },
+  "files": [
+    {
+      "path": "LICENSE",
+      "upstreamSha256": "79d5aedce6aa0adc547336dc1bd34c5cc9308ba110fac7079ed97515ee573ad3",
+      "currentSha256": "79d5aedce6aa0adc547336dc1bd34c5cc9308ba110fac7079ed97515ee573ad3"
+    },
+    {
+      "path": "package.upstream.json",
+      "upstreamSha256": "ea06810f2109fa33892fc036fc54e7dff99212cf42d5deb22654e83cfb04294e",
+      "currentSha256": "ea06810f2109fa33892fc036fc54e7dff99212cf42d5deb22654e83cfb04294e",
+      "upstreamPath": "package.json"
+    },
+    {
+      "path": "src/server/connection-offer.ts",
+      "upstreamSha256": "a415bdd14089fde317839830b4989f8cc9de529efe9f1f8f5cf3b9588c2e2ecc",
+      "currentSha256": "a415bdd14089fde317839830b4989f8cc9de529efe9f1f8f5cf3b9588c2e2ecc"
+    },
+    {
+      "path": "src/server/daemon-keypair.test.ts",
+      "upstreamSha256": "f2da51d50e1ee9103bdb2cb47fc4c3cc6476bf373b45fcaa615c84276ebc4d62",
+      "currentSha256": "f2da51d50e1ee9103bdb2cb47fc4c3cc6476bf373b45fcaa615c84276ebc4d62"
+    },
+    {
+      "path": "src/server/daemon-keypair.ts",
+      "upstreamSha256": "7aebe9d45ca032cf90c4a0501272cdaff3fad20c4f36838d5702b0e2894562f6",
+      "currentSha256": "7aebe9d45ca032cf90c4a0501272cdaff3fad20c4f36838d5702b0e2894562f6"
+    },
+    {
+      "path": "src/server/network/index.ts",
+      "upstreamSha256": "c1996234207ae3ab936b25c377156c796496fca538a1d62bb74d1af12d5739c6",
+      "currentSha256": "c1996234207ae3ab936b25c377156c796496fca538a1d62bb74d1af12d5739c6"
+    },
+    {
+      "path": "src/server/network/network.test.ts",
+      "upstreamSha256": "e88670a1499bc6d4a8103a9e833dad160c2bef407fafb75d9b52cb877f2fb3d8",
+      "currentSha256": "e88670a1499bc6d4a8103a9e833dad160c2bef407fafb75d9b52cb877f2fb3d8"
+    },
+    {
+      "path": "src/server/private-files.ts",
+      "upstreamSha256": "f3fe47ac757126426f4759b768f4975c536cd4c1b54d22c66c9cb955bad5619e",
+      "currentSha256": "f3fe47ac757126426f4759b768f4975c536cd4c1b54d22c66c9cb955bad5619e"
+    },
+    {
+      "path": "src/server/relay-transport.test.ts",
+      "upstreamSha256": "f6077a963b5037978782e7c910be6e8caf7837c4a988aaf846afe20d1383e488",
+      "currentSha256": "f6077a963b5037978782e7c910be6e8caf7837c4a988aaf846afe20d1383e488"
+    },
+    {
+      "path": "src/server/relay-transport.ts",
+      "upstreamSha256": "7bf637e0e56ac7bbf125afb4d8f4f671b60275d185f2d5077204cc0955212c8c",
+      "currentSha256": "f5a7abe775ed7a3faaf26f2cb2e4343e2c158ece154d8d5e0ca6c326db01206b"
+    },
+    {
+      "path": "src/server/websocket/encrypted-relay-socket.test.ts",
+      "upstreamSha256": "dbc229a8a86613f2d6429d59ba223dab8e758fe2ec5218ec90d70238a0c7cc0b",
+      "currentSha256": "dbc229a8a86613f2d6429d59ba223dab8e758fe2ec5218ec90d70238a0c7cc0b"
+    },
+    {
+      "path": "src/server/websocket/encrypted-relay-socket.ts",
+      "upstreamSha256": "068051c441dd66087450aa4f946d757170978ad991bc9fad05812e1747d4a6de",
+      "currentSha256": "068051c441dd66087450aa4f946d757170978ad991bc9fad05812e1747d4a6de"
+    },
+    {
+      "path": "src/server/websocket/physical-socket.test.ts",
+      "upstreamSha256": "ec2f91cfb46e9c8f9c63f7a803f4c615d75817c030a7e4dcd1527f3cb572cb7a",
+      "currentSha256": "ec2f91cfb46e9c8f9c63f7a803f4c615d75817c030a7e4dcd1527f3cb572cb7a"
+    },
+    {
+      "path": "src/server/websocket/physical-socket.ts",
+      "upstreamSha256": "b15a2818754bcb2b9264dca744c1ece97ee326e66d1f2764ea416e3f7fe87545",
+      "currentSha256": "b15a2818754bcb2b9264dca744c1ece97ee326e66d1f2764ea416e3f7fe87545"
+    },
+    {
+      "path": "src/server/websocket/secure-relay-ingress.test.ts",
+      "upstreamSha256": "af3744b5fc5b6827f7df1013e80e1434f250bfc22587edec6c313726c0ca6539",
+      "currentSha256": "af3744b5fc5b6827f7df1013e80e1434f250bfc22587edec6c313726c0ca6539"
+    },
+    {
+      "path": "src/server/websocket/secure-relay-ingress.ts",
+      "upstreamSha256": "cfdf5642f3ba16937e35a4fcdfe6bc4386a1dca62fd6532b47d60b63d037e34e",
+      "currentSha256": "cfdf5642f3ba16937e35a4fcdfe6bc4386a1dca62fd6532b47d60b63d037e34e"
+    },
+    {
+      "path": "tsconfig.server.json",
+      "upstreamSha256": "4a624f182322817d42c69b16e69c45d3731cfd8c98efc932b961a041160f23b9",
+      "currentSha256": "4a624f182322817d42c69b16e69c45d3731cfd8c98efc932b961a041160f23b9"
+    }
+  ],
+  "additions": [
+    {
+      "path": "package.json",
+      "sha256": "941130543b57c3e3b2d7a6c23ade2f55dd56d05b8a35013365007572066b49ec",
+      "description": "Private dependency-closure package with subpath exports and exact upstream-lock runtime dependencies, without lifecycle scripts."
+    },
+    {
+      "path": "src/server/socket-metadata.ts",
+      "sha256": "26e020a4f11e9fe2596c1a9b6b434e2a06f868706a25f70f1c9a93755399ea73",
+      "sourcePath": "packages/server/src/server/websocket-server.ts",
+      "sourceSha256": "ca1f0705ed918108e170a998e3aa854edd7647e0e0c49df5580f7a3f75d4af85",
+      "sourceLines": "146-153",
+      "description": "Exact ExternalSocketMetadata interface extraction and its SecurityMode type import; avoids a type-only dependency on the full Paseo daemon."
+    },
+    {
+      "path": "upstream/src/server/relay-transport.ts",
+      "sha256": "7bf637e0e56ac7bbf125afb4d8f4f671b60275d185f2d5077204cc0955212c8c",
+      "description": "Byte-exact original of the only adapted server runtime source."
+    },
+    {
+      "path": "tsconfig.workbench.json",
+      "sha256": "9c9c3fbc9cf33213db65f91c6ddf77b942b52f8cc26dd5fa14b621bc8fa2ec6b",
+      "description": "Workbench-added standalone emit configuration. The original upstream tsconfig remains unchanged. Selects transport entry points and their dependency closure, uses ES2023/NodeNext with declaration emission, and does not activate upstream lifecycle scripts or compile the full SDK facade."
+    }
+  ],
+  "integration": {
+    "sourceExecutedByImport": false,
+    "testsRunByImport": false,
+    "buildRunByImport": false,
+    "generatedArtifacts": "Existing selective standalone emit outputs and the Workbench-added compile configuration are recorded in generatedArtifacts. Initial source import did not execute a build; integration produced these outputs separately.",
+    "applicationProtocol": "Original protected channel and server_info schema; Workbench device admission/RPC remains a separate adapter. Full Paseo DaemonClient application protocol is not implemented by Workbench.",
+    "sourceOnlyModules": "Whole client/protocol copies preserve future dependencies and tests. Integration emits only the needed entry closure; upstream generated AOT validators are absent from the pinned archive and are not needed by the transport entry.",
+    "fullSdkFacadeConnected": false,
+    "runtimeSource": "Selected upstream runtime statements are unchanged. relay-transport.ts changes only a type-only import to an extracted identical metadata interface; the byte-exact original is retained under upstream/."
+  },
+  "hashScope": "SHA-256 over original/adapted source bytes, local additions, compile configuration and current generated artifacts. Excludes this source.json itself and node_modules; runtime dependency licenses are separately recorded in third_party/paseo/dependencies.json.",
+  "pathBase": "vendor/paseo/server",
+  "generatedArtifacts": {
+    "directory": "dist",
+    "status": "present-selected-standalone-emit",
+    "configuration": {
+      "path": "tsconfig.workbench.json",
+      "sha256": "9c9c3fbc9cf33213db65f91c6ddf77b942b52f8cc26dd5fa14b621bc8fa2ec6b",
+      "content": {
+        "compilerOptions": {
+          "target": "ES2023",
+          "module": "NodeNext",
+          "moduleResolution": "NodeNext",
+          "lib": [
+            "ES2023",
+            "DOM",
+            "DOM.Iterable"
+          ],
+          "strict": true,
+          "skipLibCheck": true,
+          "declaration": true,
+          "outDir": "dist",
+          "rootDir": "src",
+          "esModuleInterop": true,
+          "resolveJsonModule": true,
+          "types": [
+            "node"
+          ]
+        },
+        "files": [
+          "src/server/relay-transport.ts",
+          "src/server/daemon-keypair.ts",
+          "src/server/private-files.ts",
+          "src/server/connection-offer.ts",
+          "src/server/websocket/secure-relay-ingress.ts",
+          "src/server/socket-metadata.ts"
+        ]
+      }
+    },
+    "compiler": {
+      "package": "typescript",
+      "installedVersion": "5.9.3",
+      "installedPackageJsonSha256": "822ef7ca6452205657b6288b066481ecf508bfbf43455d715cf7d3ec457561e6"
+    },
+    "fileCount": 18,
+    "files": [
+      {
+        "path": "dist/server/connection-offer.d.ts",
+        "sha256": "0d0ce3da55671f98eddbad55adcdf44aafcbd54b2564ac536cf19155a6671d7e",
+        "bytes": 641
+      },
+      {
+        "path": "dist/server/connection-offer.js",
+        "sha256": "5368c3803b91e685f3143d20c940d8d8b0ac7bb4903b9eaae53081a0661ac148",
+        "bytes": 1987
+      },
+      {
+        "path": "dist/server/daemon-keypair.d.ts",
+        "sha256": "5338ea947fc11f645ea628d09f078564d38a43d6843aec70c4133d26ca01b46d",
+        "bytes": 294
+      },
+      {
+        "path": "dist/server/daemon-keypair.js",
+        "sha256": "0e22549c12d1d6c8e6522c02e52ad062b1c1990fa98db941ff576eb0dd843c0d",
+        "bytes": 1796
+      },
+      {
+        "path": "dist/server/network/index.d.ts",
+        "sha256": "209a01b1b829be907a9fa93995c4f2c851ede104ae22fa1b7545f4d28bc16885",
+        "bytes": 406
+      },
+      {
+        "path": "dist/server/network/index.js",
+        "sha256": "5ab38904a9594439c69936f9de64d4647a94d2fa457412a858c779aba0381ee0",
+        "bytes": 3823
+      },
+      {
+        "path": "dist/server/private-files.d.ts",
+        "sha256": "5f89729842af5b0fd36c85c76124ff196d2db7f7527aeedece6e561625c73275",
+        "bytes": 532
+      },
+      {
+        "path": "dist/server/private-files.js",
+        "sha256": "03d12d11a55e627057914cfb2765f2e32e8e212271326b89c11a9cd8b17d3866",
+        "bytes": 2778
+      },
+      {
+        "path": "dist/server/relay-transport.d.ts",
+        "sha256": "862fc41713f0ba7d722d336716ab8b82ef2e8968805e2bfd4f6cb0763b9061dc",
+        "bytes": 1351
+      },
+      {
+        "path": "dist/server/relay-transport.js",
+        "sha256": "08f9c8bb0386b0bca67b24aaf453ad823e01811d1159b272a5b9eeca04ec0dcb",
+        "bytes": 12609
+      },
+      {
+        "path": "dist/server/socket-metadata.d.ts",
+        "sha256": "d9893828098f6ea61101ba5d8cc1f8c505ffebdb3e3e16a5cd6e6d4308b7e61f",
+        "bytes": 325
+      },
+      {
+        "path": "dist/server/socket-metadata.js",
+        "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+        "bytes": 11
+      },
+      {
+        "path": "dist/server/websocket/encrypted-relay-socket.d.ts",
+        "sha256": "dc5ca9ee020c7d905031b992871cf14a7dfd4cf851e68b68ff6cfe5df862fd86",
+        "bytes": 996
+      },
+      {
+        "path": "dist/server/websocket/encrypted-relay-socket.js",
+        "sha256": "9ca8005d16f4ea1c9f7ed836ff55509621316730b5e7afc22ee41f0f4c57151a",
+        "bytes": 2353
+      },
+      {
+        "path": "dist/server/websocket/physical-socket.d.ts",
+        "sha256": "8b10303ac09839bf26d8e2741c165fb7f6d8662460a1578ffb87c797793577cf",
+        "bytes": 1416
+      },
+      {
+        "path": "dist/server/websocket/physical-socket.js",
+        "sha256": "403d2136f05f21d080979760c739c5fded7ca9a8e45869ed0c5c1931bdc67c62",
+        "bytes": 3020
+      },
+      {
+        "path": "dist/server/websocket/secure-relay-ingress.d.ts",
+        "sha256": "d43f6218279a311fafb454180f12b74fc9577d142e4136e862a9ed064c971de7",
+        "bytes": 1408
+      },
+      {
+        "path": "dist/server/websocket/secure-relay-ingress.js",
+        "sha256": "07ded075444e63913927a25e7a1cec2efac3ce7c7ea0d0e735dd549a49352032",
+        "bytes": 6325
+      }
+    ],
+    "treeSha256": "153fd823aa1da5ec9de3c56a89602497132a364e42c6238882f4870f0cb30aa3",
+    "treeHashEncoding": "SHA-256 of UTF-8 sorted package-relative path + NUL + file SHA-256 hex + LF.",
+    "scope": "Selected original transport/protocol entry points and their imported dependency closure only. The full Paseo DaemonClient facade and generated AOT validator are not integrated.",
+    "provenanceUpdate": "Existing artifact bytes and configuration were hashed; this provenance update did not run an emit, application build, install or test."
+  },
+  "distribution": {
+    "provenanceCopy": "third_party/paseo/server-provenance.json",
+    "sharedLicense": "third_party/paseo/LICENSE",
+    "sourceLicenseSha256": "79d5aedce6aa0adc547336dc1bd34c5cc9308ba110fac7079ed97515ee573ad3",
+    "note": "Paths in files/additions/generatedArtifacts are relative to pathBase, not the flat distribution copy."
+  },
+  "integrationResearchRevision": "research:rr-79110658024cdb4797375aa15a22a771:39c50e6924caa7e9e0aed55dc8c114f195c9f46bea75d2ad71b54ecb8fbadbf4"
+}

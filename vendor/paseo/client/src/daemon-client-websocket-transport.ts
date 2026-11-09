@@ -1,0 +1,220 @@
+import type {
+  DaemonTransportFactory,
+  WebSocketFactory,
+  WebSocketLike,
+} from "./daemon-client-transport-types.js";
+import { extractRelayMessage } from "./daemon-client-transport-utils.js";
+
+type GlobalWebSocketConstructor = new (
+  url: string,
+  protocols?: string | string[],
+  options?: { headers?: Record<string, string> },
+) => WebSocketLike;
+
+function getGlobalWebSocket(): GlobalWebSocketConstructor {
+  const globalWs = (globalThis as { WebSocket?: GlobalWebSocketConstructor }).WebSocket;
+  if (!globalWs) {
+    throw new Error("WebSocket is not available in this runtime");
+  }
+  return globalWs;
+}
+
+export function defaultWebSocketFactory(
+  url: string,
+  options?: { headers?: Record<string, string>; protocols?: string[] },
+): WebSocketLike {
+  const globalWs = getGlobalWebSocket();
+  if (options?.protocols === undefined) {
+    return new globalWs(url);
+  }
+  return new globalWs(url, options.protocols);
+}
+
+// React Native and Node-compatible WebSocket implementations accept this extra options object.
+// Keep it out of the standard browser factory above.
+export function nativeWebSocketFactory(
+  url: string,
+  options?: { headers?: Record<string, string>; protocols?: string[] },
+): WebSocketLike {
+  return new (getGlobalWebSocket())(url, options?.protocols, { headers: options?.headers });
+}
+
+// React Native leaves bufferedAmount at zero, including while native output is queued.
+nativeWebSocketFactory.supportsDrain = false;
+
+export function createWebSocketTransportFactory(factory: WebSocketFactory): DaemonTransportFactory {
+  return ({ url, headers, protocols }) => {
+    const ws = factory(url, { headers, protocols });
+    if ("binaryType" in ws) {
+      try {
+        ws.binaryType = "arraybuffer";
+      } catch {
+        // no-op
+      }
+    }
+    return {
+      supportsDrain: factory.supportsDrain !== false,
+      send: (data) => {
+        if (typeof ws.readyState === "number" && ws.readyState !== 1) {
+          throw new Error(`WebSocket not open (readyState=${ws.readyState})`);
+        }
+        ws.send(data);
+        if ((ws.bufferedAmount ?? 0) > 1024 * 1024) {
+          return new Promise<void>((resolve, reject) => {
+            const drain = () => {
+              if (ws.readyState !== 1) {
+                reject(new Error("WebSocket closed while draining"));
+                return;
+              }
+              if ((ws.bufferedAmount ?? 0) <= 1024 * 1024) {
+                resolve();
+                return;
+              }
+              setTimeout(drain, 10);
+            };
+            drain();
+          });
+        }
+      },
+      close: (code?: number, reason?: string) => {
+        // Node's `ws` may emit an `error` when a connecting socket is closed before the
+        // handshake completes. Keep a temporary no-op handler attached so cleanup during
+        // connect timeouts does not crash the CLI with an unhandled error event.
+        const suppressEarlyCloseError = bindTemporaryEarlyCloseErrorHandler(ws);
+        try {
+          ws.close(toSendableCloseCode(code), toSendableCloseReason(reason));
+        } finally {
+          if (typeof ws.on !== "function" && typeof ws.addEventListener !== "function") {
+            suppressEarlyCloseError();
+          }
+        }
+      },
+      onOpen: (handler) => bindWsHandler(ws, "open", handler),
+      onClose: (handler) => bindWsHandler(ws, "close", handler),
+      onError: (handler) => bindWsHandler(ws, "error", handler),
+      onMessage: (handler) => bindWsMessageHandler(ws, handler),
+    };
+  };
+}
+
+// WHATWG WebSocket.close throws for a code other than 1000 or 3000-4999 and for a
+// reason over 123 UTF-8 bytes, and the throw leaves the socket open: the peer keeps
+// streaming into a connection nobody reads. Browsers, Electron and Node's global
+// WebSocket enforce this; Node's `ws` accepts more. Translate once here so callers
+// keep their reasons and every runtime sends the same close frame.
+const MAX_CLOSE_REASON_BYTES = 123;
+
+function toSendableCloseCode(code: number | undefined): number {
+  if (code === 1000 || (code !== undefined && code >= 3000 && code <= 4999)) return code;
+  return 1000;
+}
+
+function toSendableCloseReason(reason: string | undefined): string | undefined {
+  if (reason === undefined) return undefined;
+  const encoder = new TextEncoder();
+  if (encoder.encode(reason).byteLength <= MAX_CLOSE_REASON_BYTES) return reason;
+  let truncated = "";
+  let bytes = 0;
+  for (const character of reason) {
+    bytes += encoder.encode(character).byteLength;
+    if (bytes > MAX_CLOSE_REASON_BYTES) break;
+    truncated += character;
+  }
+  return truncated;
+}
+
+function bindWsMessageHandler(
+  ws: WebSocketLike,
+  handler: (data: unknown, isBinary: boolean) => void,
+): () => void {
+  const listener = (...args: unknown[]) => {
+    const message = extractRelayMessage(
+      args[0],
+      typeof args[1] === "boolean" ? args[1] : undefined,
+    );
+    handler(message.data, message.isBinary);
+  };
+  return bindWsHandler(ws, "message", listener);
+}
+
+function bindTemporaryEarlyCloseErrorHandler(ws: WebSocketLike): () => void {
+  const noop = () => {};
+
+  if (typeof ws.addEventListener === "function") {
+    ws.addEventListener("error", noop);
+    const removeOnClose = bindWsHandler(ws, "close", () => {
+      removeOnClose();
+      if (typeof ws.removeEventListener === "function") {
+        ws.removeEventListener("error", noop);
+      }
+    });
+    return () => {
+      removeOnClose();
+      if (typeof ws.removeEventListener === "function") {
+        ws.removeEventListener("error", noop);
+      }
+    };
+  }
+
+  if (typeof ws.on === "function") {
+    ws.on("error", noop);
+    const removeOnClose = bindWsHandler(ws, "close", () => {
+      removeOnClose();
+      if (typeof ws.off === "function") {
+        ws.off("error", noop);
+        return;
+      }
+      if (typeof ws.removeListener === "function") {
+        ws.removeListener("error", noop);
+      }
+    });
+    return () => {
+      removeOnClose();
+      if (typeof ws.off === "function") {
+        ws.off("error", noop);
+        return;
+      }
+      if (typeof ws.removeListener === "function") {
+        ws.removeListener("error", noop);
+      }
+    };
+  }
+
+  return () => {};
+}
+
+export function bindWsHandler(
+  ws: WebSocketLike,
+  event: "open" | "close" | "error" | "message",
+  handler: (...args: unknown[]) => void,
+): () => void {
+  if (typeof ws.addEventListener === "function") {
+    ws.addEventListener(event, handler);
+    return () => {
+      if (typeof ws.removeEventListener === "function") {
+        ws.removeEventListener(event, handler);
+      }
+    };
+  }
+  if (typeof ws.on === "function") {
+    ws.on(event, handler);
+    return () => {
+      if (typeof ws.off === "function") {
+        ws.off(event, handler);
+        return;
+      }
+      if (typeof ws.removeListener === "function") {
+        ws.removeListener(event, handler);
+      }
+    };
+  }
+  const prop = `on${event}`;
+  const wsRecord = ws as unknown as Record<string, unknown>;
+  const previous = wsRecord[prop];
+  wsRecord[prop] = handler;
+  return () => {
+    if (wsRecord[prop] === handler) {
+      wsRecord[prop] = previous ?? null;
+    }
+  };
+}

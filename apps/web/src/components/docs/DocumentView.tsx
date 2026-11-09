@@ -199,7 +199,7 @@ export default function DocumentView({
   // Pictures and files pasted or dropped into the input below the document go with the request.
   const pending = usePendingFiles(
     (file) =>
-      api.uploadAttachment(file).catch((error: unknown) => {
+      api.uploadAttachment(file, artifact?.workId ?? work.id).catch((error: unknown) => {
         onToast(error instanceof Error ? error.message : "파일을 올리지 못했습니다.");
         return null;
       }),

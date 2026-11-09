@@ -40,6 +40,7 @@ import { FindTool, withFindTool } from "./find-tool.ts";
 import { findToolInstructions } from "./search.ts";
 import { adoptLoginShellPath } from "./shell-env.ts";
 import { claimInstance } from "./daemon/instance.ts";
+import { DeviceService } from "./devices/service.ts";
 import { HostAutostart } from "./daemon/autostart.ts";
 import { systemNotifier } from "./system-notifications.ts";
 
@@ -174,7 +175,9 @@ const officeDrive = officeControl ? new OfficeDrive(manager, officeControl, data
 const officeImport = officeControl ? new OfficeImport(manager.documents, manager.ieumDesktop, dataDir) : undefined;
 const dropbox = new DropboxFolders(store, manager, dataDir);
 officeAi.drive = officeDrive;
+const devices = env.WORKBENCH_CLI_INPUT ? undefined : new DeviceService({ dataDir, manager, bus, localOrigin: () => applicationOrigin, localToken: token, webDir });
 const server = createHttpServer(manager, bus, {
+  devices,
   autostart: new HostAutostart(dataDir),
   host: { instance: lease.instance, stopping: () => stopping, stop: () => { void stop(); } },
   officeImport,
@@ -226,6 +229,7 @@ await officeControl?.start();
 await officeMcp?.start();
 await officeDrive?.start();
 dropbox.start();
+await devices?.start();
 listen(editors, env.WORKBENCH_EDITORS_PORT, editorsPortFile, (editorsPort) => {
   editorsOrigin = `http://127.0.0.1:${editorsPort}`;
   officeExecutors.bind(editorsOrigin);
@@ -253,6 +257,7 @@ async function stop() {
   if (stopping) return;
   stopping = true;
   dropbox.close();
+  devices?.close();
   await pdfLoader(dataDir).close();
   officeImport?.close();
   officeDrive?.close();

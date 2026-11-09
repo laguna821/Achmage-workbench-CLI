@@ -8,7 +8,7 @@
 | U02 공통 UI | 구현 | `abf4f68` — 키보드 이동·초점 복귀·HIG 컨트롤 |
 | U03 생성·프로젝트·탭 | 주요 흐름 구현 | `abf4f68`, `a3d9683`, `e056d8b` — 9종 문서·실제 폴더 생성, 정리 폴더 구분 |
 | U04 대화·초안 | 구현 | `abf4f68` — 읽기 위치·검색 원문 펼침·초안 보호 |
-| U05 그림 결과 | 주요 흐름 구현 | `53c60ce` — 당시 이미지 보존·로컬 미리보기·갤러리. 원격 미디어/전체 파일 연동 남음 |
+| U05 그림 결과 | 주요 흐름 구현 | `53c60ce`, `50cb030` 및 후속 연결 — 당시 이미지 보존·미리보기·원본 decoder. 원격 승인된 대화/업로드 첨부 연결 코드 추가; 전체 파일·획득 흐름 남음 |
 | U06 작업 목록·명령 | 주요 흐름 구현 | `22166e5`, `498a710` — 독립 문서·하위 작업과 공통 접수. 공급자 하위 작업은 관찰만 지원 |
 | U07 역할·CLI/MCP API | 구현 | `9239725`, `498a710` — 역할 CRUD·요청 당시 설정 보존·공통 receipt |
 | U08 9형식 Office UI | 주요 흐름 구현 | `b40fb38` — 원본 명령 메뉴·theme 전달. 전체 native OS 사용 확인은 통합 때 |
@@ -18,7 +18,7 @@
 | U12–U14 공유 웹·같은 페이지 AI | 핵심 코드 구현 | `2df5f41`, `1c5e688` — 네이티브 웹 탭·주소 이동·독립 웹 AI·사람 인계·숨김 유지·대상/문서/제어권 식별. 다운로드·사이트 권한·macOS 프로필·산출물 및 실제 OS 화면 확인은 남음. [범위](../../shared-browser.md) |
 | U15 외부 앱 조작 | 남음 | agent-desktop 연결 |
 | U16 독립 host | 주요 흐름 구현 | `4924188` — 창 종료 뒤 지속·재접속·epoch·선택 로그인 시작. AppImage 지속 runtime 남음 |
-| U17–U18 기기·모바일 | 원본 보안 전송 반입·endpoint API 구현 | Paseo relay 전체 원본과 host/client protected 연결 코드. 실제 listener·기기 권한·모바일 UX 연결 남음. [재사용 실행표](PASEO-REUSE.md) |
+| U17–U18 기기·모바일 | 원본 전송·실제 listener·기기 승인·첫 연결 UI 구현 | 원본 client/protocol/server 전송 묶음 + Workbench 프로젝트 권한·기존 HTTP/event·첨부·호스트 전환 연결. 실제 loopback 두 클라이언트에서 등록/범위/철회/재접속 확인. 실제 외부망·모바일 UX·native credential 저장 남음. [재사용 실행표](PASEO-REUSE.md), [사용 범위](../../remote-connections.md) |
 | U19 서비스 알림 | 주요 흐름 구현 | `9c56e75`, `573eebf` — host의 영구 기록·중복 방지·읽음/승인 분리·정확한 세션/문서 원문 이동. 모바일 push와 OS 클릭 연동 일부 남음 |
 | U20 workspace 운영 | 주요 흐름 구현 | `2462057`, `83a908b` — owned 서버 실행·포트 충돌·출력 재사용·정확한 소유 실행 종료와 UI 연결. 원격 포트 프록시·모바일 터미널·로그 검색 남음 |
 | U21 예약 | 주요 흐름 구현 | `1a39d77` — occurrence 기록·timezone·횟수/기한·미실행 정책·unknown 재전송 방지 |
@@ -34,6 +34,12 @@ U09 실행 권한·저장 분리의 집중 22개와 영향받은 참조/스킬/�
 기존 CI `42575034938`은 lock 버전 두 항목 실수로 실패했고 복구했다. `42576006213`은 공통/macOS/Linux/Arch 성공, Windows 앱·NSIS 생성 후 WiX 다운로드 HTTP504로 MSI 실패했다. 실패한 bundle만 재시도하는 코드를 준비했으며 지금 재빌드하지 않는다.
 
 사용자 교정에 따라 Paseo 관련 남은 범위는 **원본 코드·의존 묶음 재사용 + Workbench 연결**로 전환했다. 첫 relay 패키지와 실제 채팅 이미지 decoder를 반입했다. 원본 Noise 7개와 endpoint 연결 1개, 기존 media cache 2개 및 영향받은 타입 확인이 통과했다. 원본 source·출처·의존 라이선스와 배포 고지를 보존했다. 앱·설치본·CI는 실행하지 않았으며 U17–U18 전체 완료를 뜻하지 않는다.
+
+후속 U17–U18에서는 원본 client/protocol source와 server 전송 의존 묶음을 반입하고 실제 기기 listener·단일 사용 QR/링크·PC의 프로젝트별 승인·credential 해시 저장·철회를 연결했다. 기존 대화/실행/이미지 API를 보호된 전송으로 사용하며 전역 owner token은 원격에 전달하지 않는다. 첫 연결 UI는 기존 App을 호스트별로 열며 로컬 경로 실행·detach를 차단한다. 전체 Paseo DaemonClient·공식 앱 protocol 호환이나 실제 휴대폰 완료로 표시하지 않는다.
+
+기기 registry 8개, 연결 UI·저장소 5개, 실제 loopback 네트워크 2개 시나리오를 각 한 번 통과했다. 후속 첨부 연결은 media 권한 3개와 새 network 시나리오 1개를 추가해 통과했고, 기존 network 2개는 다시 실행하지 않았다. 원본 전송 closure의 protocol/client/server standalone emit과 변경 후 host/web 타입이 통과했다. 이전 통과 검사와 production/설치본/CI 빌드는 반복하지 않았다.
+
+후속 연결·첨부 근거: `research:rr-79110658024cdb4797375aa15a22a771:39c50e6924caa7e9e0aed55dc8c114f195c9f46bea75d2ad71b54ecb8fbadbf4` (R7–R12). 전체 U17–U18, 실제 모바일, 0.4.0 릴리즈 완료 판정이 아니다.
 
 원본 [156개 요구 대응표](../plans/support/coverage.json)와 [통합 계획](../plans/2026-11-09-workbench-integrated-release.md)을 유지한다. 이 상태표의 ‘구현’은 기능 코드 상태이며 전체 릴리즈 완료 판정이 아니다.
 

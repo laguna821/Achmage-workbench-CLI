@@ -1,3 +1,4 @@
+import type { RemotePeer } from "@workbench/client";
 import type { OfficeOutputFormat } from "../../../packages/contracts/src/office-output.ts";
 import type { KnowledgeLibrary } from "../../../packages/contracts/src/office-knowledge.ts";
 import type { NewOfficeDocument } from "@workbench/contracts";
@@ -124,25 +125,45 @@ export class ApiRequestError extends Error {
   }
 }
 
+export type RemoteApiConnection = { hostId: string; peer: RemotePeer };
+let activeMediaConnection: RemoteApiConnection | null = null;
+const mediaConnections = new Map<string, RemotePeer>();
+export function setMediaConnection(connection: RemoteApiConnection | null) {
+  activeMediaConnection = connection;
+  if (connection) mediaConnections.set(connection.hostId, connection.peer);
+}
+
 export class Api {
   private epoch: string | undefined;
   private readonly scmPreferenceWrites = new Map<string, Promise<ScmComparisonPreferences>>();
   private readonly token: string;
   private readonly documentAccess?: () => DocumentAccess;
-  constructor(token: string, access?: () => DocumentAccess) {
+  private readonly remote: RemoteApiConnection | null;
+  constructor(token: string, access?: () => DocumentAccess, remote: RemoteApiConnection | null = null) {
+    this.remote = remote;
     this.token = token;
     this.documentAccess = access;
   }
 
-  forDocument = (access: () => DocumentAccess) => new Api(this.token, access);
+  get isRemote() { return this.remote !== null; }
+  get remoteHostId() { return this.remote?.hostId ?? null; }
+
+  forDocument = (access: () => DocumentAccess) => new Api(this.token, access, this.remote);
   private editorHeaders(): Record<string, string> {
     const access = this.documentAccess?.();
     return access ? { "x-workbench-view": access.viewId, "x-workbench-write": access.writeToken ?? "" } : {};
   }
 
+  private transport(path: string, init?: RequestInit) { return this.remote ? this.remote.peer.fetch(path, init) : fetch(path, init); }
+
   /** Any API call (feature clients such as pkm.ts build on it). */
   async request<T>(method: string, path: string, body?: unknown, options: Pick<RequestInit, "keepalive" | "signal"> = {}): Promise<T> {
-    const response = await fetch(path, {
+    if (this.remote && path === "/api/prefs") {
+      const key = "workbench.remote-prefs:" + this.remote.hostId;
+      if (method === "GET") { try { return JSON.parse(localStorage.getItem(key) ?? "{}") as T; } catch { return {} as T; } }
+      if (method === "PUT") { localStorage.setItem(key, JSON.stringify(body)); return body as T; }
+    }
+    const response = await this.transport(path, {
       method,
       headers: { authorization: `Bearer ${this.token}`, "content-type": "application/json", ...this.editorHeaders() },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -153,7 +174,7 @@ export class Api {
     return json;
   }
 
-  snapshot = async () => { const snapshot = await this.request<Snapshot>("GET", "/api/snapshot"); this.epoch = snapshot.epoch; return snapshot; };
+  snapshot = async () => { const snapshot = await this.request<Snapshot>("GET", "/api/snapshot"); this.epoch = snapshot.epoch; if (this.remote) snapshot.prefs = await this.request("GET", "/api/prefs"); return snapshot; };
   attention = () => this.request<AttentionList>("GET", "/api/attention");
   readAttention = (id: string) => this.request<AttentionEvent>("POST", `/api/attention/${encodeURIComponent(id)}/read`, {});
   attentionTarget = (id: string) => this.request<AttentionTarget>("GET", `/api/attention/${encodeURIComponent(id)}/target`);
@@ -167,7 +188,7 @@ export class Api {
   taskCommand = (command: TaskCommand) => this.request<CommandReceipt>("POST", "/api/task-commands", command);
   taskReceipt = (commandId: string) => this.request<CommandReceipt>("GET", `/api/task-commands/${encodeURIComponent(commandId)}`);
   async knowledgeStream(owner: string, body: unknown, onChunk: (value: unknown) => void, signal: AbortSignal) {
-    const response = await fetch("/api/office-knowledge/home/" + encodeURIComponent(owner) + "/stream", {
+    const response = await this.transport("/api/office-knowledge/home/" + encodeURIComponent(owner) + "/stream", {
       method: "POST", headers: { authorization: "Bearer " + this.token, "content-type": "application/json" }, body: JSON.stringify(body), signal,
     });
     if (!response.ok) throw new ApiRequestError(response.status, await response.json().catch(() => ({ code: "knowledge_stream", message: response.statusText })));
@@ -192,7 +213,7 @@ export class Api {
   writePdfImages = (artifactId: string, id: string, request: { images: string[]; pageNumbers: number[]; baseName: string }) => this.request<{ ok: true }>("POST", `/api/artifacts/${artifactId}/pdf-image-outputs/${id}/write`, request);
   finishPdfImages = (artifactId: string, id: string, success: boolean) => this.request<{ ok: true; path?: string; files?: string[]; canceled?: true }>("POST", `/api/artifacts/${artifactId}/pdf-image-outputs/${id}/finish`, { success });
   async commitOfficeOutput(artifactId: string, id: string, bytes: ArrayBuffer, replace: boolean, sourceRevision?: number, generatedId?: string) {
-    const response = await fetch(`/api/artifacts/${artifactId}/outputs/${id}?replace=${replace ? 1 : 0}${sourceRevision === undefined ? "" : `&sourceRevision=${sourceRevision}`}${generatedId ? `&generatedId=${encodeURIComponent(generatedId)}` : ""}`, { method: "POST", headers: { authorization: `Bearer ${this.token}`, ...this.editorHeaders(), "content-type": "application/octet-stream" }, body: bytes });
+    const response = await this.transport(`/api/artifacts/${artifactId}/outputs/${id}?replace=${replace ? 1 : 0}${sourceRevision === undefined ? "" : `&sourceRevision=${sourceRevision}`}${generatedId ? `&generatedId=${encodeURIComponent(generatedId)}` : ""}`, { method: "POST", headers: { authorization: `Bearer ${this.token}`, ...this.editorHeaders(), "content-type": "application/octet-stream" }, body: bytes });
     const json = await response.json();
     if (!response.ok) throw new ApiRequestError(response.status, json);
     return json as { path: string; artifact: Artifact | null; backupPath?: string };
@@ -212,7 +233,7 @@ export class Api {
   removeSkill = (id: string, sha256: string, scope: SkillScope = {}) => this.request("DELETE", skillUrl(`/${encodeURIComponent(id)}`, scope), { sha256 });
   async skillBlob(path: string): Promise<Blob> {
     if (!path.startsWith("/api/user-skills/")) throw new Error("양식 파일 주소가 올바르지 않습니다.");
-    const response = await fetch(path, { headers: { authorization: `Bearer ${this.token}` } });
+    const response = await this.transport(path, { headers: { authorization: `Bearer ${this.token}` } });
     if (!response.ok) throw new Error((await response.json().catch(() => null))?.message ?? response.statusText);
     return response.blob();
   }
@@ -384,10 +405,11 @@ export class Api {
   /** "알릴 변경": what the next request of a session will be told changed since its last one. */
   changes = (sessionId: string) => this.request<ChangeLine[]>("GET", `/api/projects/changes?${new URLSearchParams({ sessionId })}`);
   /** A pasted or dropped file, kept by the gateway until a request names it. */
-  async uploadAttachment(file: File): Promise<Attachment> {
-    const response = await fetch("/api/attachments", {
+  async uploadAttachment(file: File, workId?: string): Promise<Attachment> {
+    if (this.remote && !workId) throw new Error("파일을 첨부할 프로젝트를 확인할 수 없습니다.");
+    const response = await this.transport("/api/attachments", {
       method: "POST",
-      headers: { authorization: `Bearer ${this.token}`, "content-type": file.type || "application/octet-stream", "x-file-name": encodeURIComponent(file.name || "붙여넣은 이미지.png") },
+      headers: { authorization: `Bearer ${this.token}`, "content-type": file.type || "application/octet-stream", "x-file-name": encodeURIComponent(file.name || "붙여넣은 이미지.png"), ...(workId ? { "x-workbench-work": workId } : {}) },
       body: file,
     });
     const json = (await response.json().catch(() => ({ code: "invalid_response", message: response.statusText }))) as Attachment & ApiError;
@@ -487,7 +509,7 @@ export class Api {
   openKnowledge = (artifactId: string, token: string, path: string) => this.request<{ artifactId: string } & Pick<Artifact, "workId" | "workspaceId">>("POST", `/api/artifacts/${artifactId}/office-knowledge-open`, { token, path });
   closeOfficePreview = (artifactId: string) => this.request<{ ok: boolean }>("POST", `/api/artifacts/${artifactId}/office-preview-close`);
   async uploadOfficeReference(artifactId: string, token: string, file: File) {
-    const response = await fetch(`/api/artifacts/${artifactId}/office-reference-upload`, {
+    const response = await this.transport(`/api/artifacts/${artifactId}/office-reference-upload`, {
       method: "POST", headers: { authorization: `Bearer ${this.token}`, ...this.editorHeaders(), "x-office-token": token, "x-file-name": encodeURIComponent(file.name), "content-type": "application/octet-stream" }, body: file,
     });
     const result = await response.json() as { accepted: import("../../../packages/contracts/src/office-references.ts").OfficeAttachment[]; rejected: string[] } & ApiError;
@@ -509,7 +531,7 @@ export class Api {
   clearImageUpload = () => this.request<ImageUploadView>("DELETE", "/api/image-upload");
   checkImageUpload = (input: ImageUploadInput) => this.request<ImageUploadCheck>("POST", "/api/image-upload/check", input);
   async uploadDocImage(artifactId: string, file: Blob, name: string): Promise<DocImageResult> {
-    const response = await fetch(`/api/artifacts/${artifactId}/images`, {
+    const response = await this.transport(`/api/artifacts/${artifactId}/images`, {
       method: "POST",
       headers: { authorization: `Bearer ${this.token}`, "content-type": file.type || "application/octet-stream", "x-file-name": encodeURIComponent(name) },
       body: file,
@@ -523,7 +545,7 @@ export class Api {
    * clipboard text and copied files, not picture data). Null when the clipboard holds no picture.
    */
   async clipboardPicture(): Promise<File | null> {
-    const response = await fetch("/api/clipboard/picture", { headers: { authorization: `Bearer ${this.token}` } });
+    const response = await this.transport("/api/clipboard/picture", { headers: { authorization: `Bearer ${this.token}` } });
     if (response.status === 204) return null;
     if (!response.ok) throw new ApiRequestError(response.status, { code: "clipboard_failed", message: response.statusText });
     const type = response.headers.get("content-type") ?? "image/png";
@@ -531,13 +553,13 @@ export class Api {
   }
   /** An image a Markdown document links relatively (inside its work folder), for the preview. */
   async docImage(artifactId: string, src: string): Promise<Blob> {
-    const response = await fetch(`/api/artifacts/${artifactId}/asset?src=${encodeURIComponent(src)}`, { headers: { authorization: `Bearer ${this.token}` } });
+    const response = await this.transport(`/api/artifacts/${artifactId}/asset?src=${encodeURIComponent(src)}`, { headers: { authorization: `Bearer ${this.token}` } });
     if (!response.ok) throw new ApiRequestError(response.status, { code: "image_failed", message: response.statusText });
     return response.blob();
   }
   /** Raw bytes of a revision (PDF viewer). */
   async raw(artifactId: string, revision?: number): Promise<ArrayBuffer> {
-    const response = await fetch(`/api/artifacts/${artifactId}/raw${revision ? `?revision=${revision}` : ""}`, {
+    const response = await this.transport(`/api/artifacts/${artifactId}/raw${revision ? `?revision=${revision}` : ""}`, {
       headers: { authorization: `Bearer ${this.token}` },
     });
     if (!response.ok) throw new ApiRequestError(response.status, { code: "raw_failed", message: response.statusText });
@@ -565,6 +587,7 @@ export class Api {
   saveLayout = (key: string, expectedRevision: number, layout: Record<string, unknown>) => this.request<{ record: import("@workbench/contracts").WorkspaceLayoutRecord }>("PUT", `/api/layouts/${encodeURIComponent(key)}`, { expectedRevision, layout });
 
   events(since: number, onEvent: (event: SequencedEvent) => void, onResync: () => void, onStatus: (connected: boolean) => void) {
+    if (this.remote) return this.remote.peer.events({ epoch: this.epoch ?? "", seq: since }, onEvent, onResync, onStatus);
     let lastSeq = since;
     let epoch = this.epoch;
     let source: EventSource | null = null;
@@ -604,13 +627,16 @@ export class Api {
 
 import { MediaCache } from "./media-cache.ts";
 const attachmentMedia = new MediaCache(async key => {
-  const id = JSON.parse(key)[1] as string;
-  const response = await fetch(`/api/attachments/${encodeURIComponent(id)}`, { headers: { authorization: `Bearer ${readToken() ?? ""}` } });
+  const [hostId, , id] = JSON.parse(key) as [string, string, string];
+  const peer = hostId === "local" ? null : mediaConnections.get(hostId);
+  if (hostId !== "local" && !peer) throw new Error("그림이 속한 기기 연결이 없습니다.");
+  const transport = peer ? peer.fetch.bind(peer) : fetch;
+  const response = await transport(`/api/attachments/${encodeURIComponent(id)}`, { headers: { authorization: peer ? "" : `Bearer ${readToken() ?? ""}` } });
   if (!response.ok) throw new ApiRequestError(response.status, { code: "attachment_failed", message: response.status === 404 ? "저장된 그림이 없습니다" : response.statusText });
   return response.blob();
 });
 
 /** A local URL for an attachment (fetched once with the token; its content never changes). */
 export function retainAttachmentUrl(id: string, identity = "local") {
-  return attachmentMedia.retain(JSON.stringify([identity, id]));
+  return attachmentMedia.retain(JSON.stringify([activeMediaConnection?.hostId ?? "local", identity, id]));
 }

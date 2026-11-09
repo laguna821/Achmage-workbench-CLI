@@ -1,0 +1,14 @@
+import type { DaemonTransportFactory, WebSocketFactory, WebSocketLike } from "./daemon-client-transport-types.js";
+export declare function defaultWebSocketFactory(url: string, options?: {
+    headers?: Record<string, string>;
+    protocols?: string[];
+}): WebSocketLike;
+export declare function nativeWebSocketFactory(url: string, options?: {
+    headers?: Record<string, string>;
+    protocols?: string[];
+}): WebSocketLike;
+export declare namespace nativeWebSocketFactory {
+    var supportsDrain: boolean;
+}
+export declare function createWebSocketTransportFactory(factory: WebSocketFactory): DaemonTransportFactory;
+export declare function bindWsHandler(ws: WebSocketLike, event: "open" | "close" | "error" | "message", handler: (...args: unknown[]) => void): () => void;

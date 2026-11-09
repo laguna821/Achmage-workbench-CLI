@@ -28,3 +28,6 @@ export class WorkbenchClient {
   command(input: TaskCommand) { return this.request<CommandReceipt>("POST", "/api/task-commands", input); }
   receipt(commandId: string) { return this.request<CommandReceipt>("GET", `/api/task-commands/${encodeURIComponent(commandId)}`); }
 }
+
+export { RemotePeer, RemoteRequestError, RemoteOutcomeUnknownError, parseRemoteOffer } from "./remote.ts";
+export type { RemotePeerOptions, RemotePeerStatus } from "./remote.ts";

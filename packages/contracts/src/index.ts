@@ -936,3 +936,6 @@ export * from "./agent-profiles.ts";
 export * from "./workspace-services.ts";
 export * from "./attention.ts";
 export type { OfficeInteractionField, OfficeInteractionRequest, OfficeInteractionResponse, OfficeStoredInteraction } from "./office-execution.ts";
+
+export * from "./devices.ts";
+export * from "./remote.ts";

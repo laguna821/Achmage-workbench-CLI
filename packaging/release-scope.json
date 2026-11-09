@@ -21,6 +21,8 @@
     "U11 CLI 과거 기록과 실제 이어쓰기 구분·원문 보존",
     "U16 독립 호스트·재접속·epoch·선택 로그인 시작",
     "U17 Paseo 원본 relay 보존·host/client protected endpoint API 연결 코드",
+    "U17 원본 client/protocol/server 전송·선택 listener·QR 제안·프로젝트별 기기 승인·철회·기존 API/event 전달",
+    "U18 첫 기기 연결 UI·호스트별 화면/이미지 식별·원격 첨부 업로드와 대화 참조 권한",
     "U21 예약 실행 정책·occurrence 이력·전송 결과 조회",
     "U20 작업공간 서버 명령·출력·소유 실행 종료 관리",
     "U19 백그라운드 알림 기록·중복 방지·읽음과 승인 분리·알림 센터 원문 이동",
@@ -32,13 +34,13 @@
     "U09 슬라이드 queue/QC 실행 수명·native 출력 서비스·설정/receipt 연속성·실제 native 종료/재접속 실행 확인",
     "U11 온보딩 통합의 나머지",
     "U16 AppImage 지속 runtime 및 OS 등록 실증",
+    "U17–U18 실제 외부 relay·모바일 연결 UX·native credential 저장·기기별 파일/입력/공유",
     "U19 OS별 클릭 이동·모바일 push",
     "U20 원격 포트 프록시·모바일 터미널·로그 검색",
     "U12–U14 다운로드·사이트 권한·macOS 영구 프로필·산출물 연결·실제 native OS 사용 확인"
   ],
   "remaining": [
     "U15 agent-desktop 외부 앱 연결",
-    "U17–U18 실제 relay listener·기기 승인·다중 기기·모바일 연결",
     "U22–U24 음성·플러그인·Hub",
     "U25 전체 통합 뒤 설치·업데이트 및 정식 승격"
   ],

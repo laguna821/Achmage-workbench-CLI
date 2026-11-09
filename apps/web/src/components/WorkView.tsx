@@ -40,8 +40,8 @@ import { useDocumentReferences } from "../document-references.ts";
 export type WorkActions = {
   /** Send a request; while the engine works it steers into the turn or waits ("queue"). `notes`: vault notes read with it. */
   send: (session: Session, text: string, refs?: DocRef[], create?: CreateTarget | null, mode?: "auto" | "queue", attachments?: Attachment[], plan?: boolean, omitChanges?: string[], notes?: string[]) => Promise<boolean>;
-  /** Keep a pasted or dropped file at the gateway for the next request (null: it could not). */
-  upload: (file: File) => Promise<Attachment | null>;
+  /** Keep a pasted or dropped file for the requesting composer's project (null: it could not). */
+  upload: (file: File, workId: string) => Promise<Attachment | null>;
   /** "이 요청 전으로": a new session up to that request, opened with the request in its input. */
   fork: (session: Session, itemId: string) => void;
   /** The desktop clipboard's picture (a screenshot pasted in the desktop app), or null. */
@@ -373,8 +373,8 @@ export function WorkView({
     if (note.path.endsWith(".md")) setNotes((current) => (current.some((entry) => entry.path === note.path) ? current : [...current, note]));
   });
   const panes = usePaneActions();
-  // Files pasted or dropped into the input go with the request being written for this work.
-  const pending = usePendingFiles(actions.upload, work.id);
+  // Capture this composer's owner, including when another pane gains focus during an upload.
+  const pending = usePendingFiles(file => actions.upload(file, active?.workId ?? work.id), work.id);
   // "/" in the input: the active session's commands and skills, asked for when first typed.
   const [commandList, setCommandList] = useState<{ sessionId: string; items: EngineCommand[] } | null>(null);
   const slash = active

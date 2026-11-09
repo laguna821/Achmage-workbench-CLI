@@ -19,6 +19,11 @@
     "jszip": "3.10.1",
     "parse5": "^8.0.1",
     "pngjs": "7.0.0",
-    "yaml": "^2.9.1"
+    "yaml": "^2.9.1",
+    "@workbench/paseo-server-transport": "file:../../vendor/paseo/server",
+    "@getpaseo/protocol": "file:../../vendor/paseo/protocol",
+    "pino": "10.3.1",
+    "ws": "8.20.0",
+    "qrcode": "1.5.4"
   }
 }

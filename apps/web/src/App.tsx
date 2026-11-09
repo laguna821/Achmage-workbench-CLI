@@ -87,17 +87,16 @@ const TerminalView = lazy(() => import("./components/TerminalView.tsx"));
 import { AppearanceContext, DEFAULT_APPEARANCE, engineTheme, lookStyle, readAppearance, type AppearanceApi } from "./appearance.ts";
 import { isThemePref, resolveTheme, setRootTheme, useSystemTheme, type ThemePref } from "./theme.ts";
 
-const LAST_WORK_KEY = "workbench.lastWork";
 const PREFS_CACHE_KEY = "workbench.prefsCache";
 
-function cachedPrefs(): UiPrefs {
+function readCachedPrefs(key = PREFS_CACHE_KEY): UiPrefs {
   try {
-    return JSON.parse(localStorage.getItem(PREFS_CACHE_KEY) ?? "{}") as UiPrefs;
+    return JSON.parse(localStorage.getItem(key) ?? "{}") as UiPrefs;
   } catch {
     return {};
   }
 }
-const inDesktop = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+const desktopRuntime = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 async function sharedBrowserNative<T>(command: BrowserNativeCommand): Promise<T> {
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<T>("shared_browser", { command });
@@ -161,7 +160,7 @@ async function pickSavePath(defaultPath: string): Promise<string | null> {
 }
 
 async function openExternal(url: string) {
-  if (inDesktop) {
+  if (desktopRuntime) {
     const { openUrl } = await import("@tauri-apps/plugin-opener");
     await openUrl(url);
   } else {
@@ -210,7 +209,6 @@ type View =
 
 type Toast = { text: string; action?: { label: string; run: () => void } };
 
-const PANE_LAYOUT_KEY = "workbench.paneLayout.v1";
 function isView(value: unknown): value is View {
   if (!value || typeof value !== "object") return false;
   const view = value as View;
@@ -227,10 +225,8 @@ function isView(value: unknown): value is View {
   return target.kind === "note" || target.kind === "vault" ? typeof target.path === "string" : ["folder", "work", "view"].includes(target.kind) && "id" in target && typeof target.id === "string";
 }
 
-const OPEN_DOCS_KEY = "workbench.openDocs";
 /** The document body in the focused pane (with two panes, the other may show a document too). */
 const FOCUSED_DOC = '.pane[data-pane-active="true"] .document-view .doc-body';
-const MRU_KEY = "workbench.recentSessions";
 const readJson = <T,>(key: string, fallback: T): T => {
   try {
     const raw = localStorage.getItem(key);
@@ -241,12 +237,18 @@ const readJson = <T,>(key: string, fallback: T): T => {
 };
 const SORT_MODES: SortMode[] = ["manual", "recent", "name"];
 
-export function App() {
+export function App({ apiOverride, onConnections, connectionLabel, registerHostSwitchGuard }: { apiOverride?: Api | null; onConnections?: () => void; connectionLabel?: string; registerHostSwitchGuard?: (guard: (() => Promise<void>) | null) => void } = {}) {
   const api = useMemo(() => {
+    if (apiOverride !== undefined) return apiOverride;
     const token = readToken();
     if (token) configureDesign(token);
     return token ? new Api(token) : null;
-  }, []);
+  }, [apiOverride]);
+  const inDesktop = desktopRuntime && !api?.isRemote;
+  const storagePrefix = api?.remoteHostId ? "host:" + api.remoteHostId + ":" : "";
+  const LAST_WORK_KEY = storagePrefix + "workbench.lastWork", PREFS_CACHE_KEY = storagePrefix + "workbench.prefsCache",
+    PANE_LAYOUT_KEY = storagePrefix + "workbench.paneLayout.v1", OPEN_DOCS_KEY = storagePrefix + "workbench.openDocs", MRU_KEY = storagePrefix + "workbench.recentSessions";
+  const cachedPrefs = () => readCachedPrefs(PREFS_CACHE_KEY);
   const [state, dispatch] = useReducer(reducer, initialState);
   const attentionInbox = useMemo(() => new AttentionInbox(api), [api]);
   const attentionState = useSyncExternalStore(attentionInbox.subscribe, attentionInbox.getState);
@@ -318,6 +320,12 @@ export function App() {
     };
     return Object.fromEntries(layout.panes.flatMap((pane) => tabsOf(pane).map((tab) => [tab.id, keep(tab.id)])));
   }, [layout.panes.flatMap((pane) => tabsOf(pane).map((tab) => tab.id)).sort().join(",")]);
+  useEffect(() => {
+    registerHostSwitchGuard?.(async () => {
+      for (const guard of Object.values(leaveGuards.current)) await guard?.("close");
+    });
+    return () => registerHostSwitchGuard?.(null);
+  }, [registerHostSwitchGuard]);
   const uiOf = useMemo(() => Object.fromEntries(layout.panes.flatMap((pane) => tabsOf(pane).map((tab) => [tab.id, (ui: TabUiState) => updateLayout((current) => updateTabUi(current, tab.id, ui))]))), [updateLayout, layout.panes.flatMap((pane) => tabsOf(pane).map((tab) => tab.id)).sort().join(",")]);
   /** `then`, after the pane's document view saved what only it can save, when that view goes away. */
   const afterLeaving = useCallback((id: PaneId, next: View | null, then: () => void) => {
@@ -702,10 +710,10 @@ export function App() {
           return [];
         }
       },
-      upload: async (file: File) => {
+      upload: async (file: File, workId: string) => {
         if (!api) return null;
         try {
-          return await api.uploadAttachment(file);
+          return await api.uploadAttachment(file, workId);
         } catch (error) {
           fail(error);
           return null;
@@ -1419,6 +1427,14 @@ export function App() {
     [fail, setToast],
   );
 
+  const detachSessionWindow = useCallback((session: Session) => {
+    if (api?.isRemote) {
+      setToast("원격 호스트의 세션은 새 창으로 열 수 없습니다. 현재 창의 탭이나 나란히 보기를 사용하세요.");
+      return;
+    }
+    void detachSession(session.id, session.purpose, inDesktop).catch(fail);
+  }, [api, inDesktop, fail, setToast]);
+
   const creationTarget = useCallback((paneId: PaneId, owner?: Work | null): NewDocumentTarget => {
     const pane = paneById(layoutRef.current, paneId);
     const at = pane?.view;
@@ -1484,7 +1500,7 @@ export function App() {
         const items: MenuEntry[] = [
           { kind: "item", label: "열기", icon: "chat", hint: "Enter", onSelect: () => openSession(session) },
           ...(single ? [] : [{ kind: "item" as const, label: "오른쪽에 열기", icon: "columns" as const, hint: "Ctrl+클릭", onSelect: () => panesRef.current.placeItem({ kind: "session", id: session.id }, "right") }]),
-          ...(single === session.id ? [] : [{ kind: "item" as const, label: "새 창으로 떼어 내기", icon: "openNew" as const, onSelect: () => void detachSession(session.id, session.purpose, inDesktop).catch(fail) }]),
+          ...(single === session.id ? [] : [{ kind: "item" as const, label: "새 창으로 떼어 내기", icon: "openNew" as const, disabled: api.isRemote, disabledReason: "원격 연결에서는 현재 창의 탭이나 나란히 보기를 사용하세요.", onSelect: () => detachSessionWindow(session) }]),
           { kind: "item", label: "이름 바꾸기", icon: "edit", hint: "F2", onSelect: () => setSidebarPending({ rename: session.id }) },
           { kind: "separator" },
           { kind: "item", label: session.pinned ? "고정 풀기" : "고정", icon: "pin", onSelect: () => void api.updateSession(session.id, { pinned: !session.pinned }).catch(fail) },
@@ -1621,7 +1637,7 @@ export function App() {
       return null;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [api, state, actions, archive, exportSession, openPath, openSession, visibleIds, startNew, docActions, fail, setToast, linkApi, single, creationMenu],
+    [api, state, actions, archive, exportSession, openPath, openSession, visibleIds, startNew, docActions, fail, setToast, linkApi, single, creationMenu, detachSessionWindow],
   );
 
   function openWorkNow(target: Work) {
@@ -1708,9 +1724,9 @@ export function App() {
       ? [
           { id: "export-work", label: "지금 대화를 마크다운으로 저장 (작업 폴더)", icon: "markdown" as const, run: () => void exportSession(visibleSession, "work") },
           { id: "export-copy", label: "지금 대화를 마크다운으로 복사", icon: "copy" as const, run: () => void exportSession(visibleSession, "text") },
-          ...(single
+          ...(single || api?.isRemote
             ? []
-            : [{ id: "detach", label: "지금 세션을 새 창으로 떼어 내기", icon: "openNew" as const, run: () => void detachSession(visibleSession.id, visibleSession.purpose, inDesktop).catch(fail) }]),
+            : [{ id: "detach", label: "지금 세션을 새 창으로 떼어 내기", icon: "openNew" as const, run: () => detachSessionWindow(visibleSession) }]),
         ]
       : []),
     visibleLink
@@ -2303,6 +2319,7 @@ export function App() {
           </button>
         )}
         <div className="topbar-right">
+          {onConnections ? <button type="button" className="ghost-button small" onClick={onConnections} aria-haspopup="dialog">{connectionLabel ?? "기기 연결"}</button> : null}
           <button type="button" className="ghost-button small shell-create" aria-haspopup="menu" title={`새 문서·세션·폴더 (${shortcuts.newWork})`} onClick={event => openCreate.current(event.currentTarget)}><Icon name="plus" size={15} /> 새로 만들기<Icon name="chevronDown" size={12} /></button>
           <button type="button" className="ghost-button small" aria-haspopup="dialog" aria-expanded={taskPanelOpen} onClick={() => setTaskPanelOpen(true)}><Icon name="clock" size={15} /> 작업</button>
           <button type="button" className="ghost-button small" aria-haspopup="dialog" aria-expanded={attentionOpen} aria-label={attentionState.list.unread ? `알림 · 읽지 않음 ${attentionState.list.unread}개` : "알림"} onClick={() => setAttentionOpen(true)}><Icon name="bell" size={15} /> 알림{attentionState.list.unread ? <span className="shell-attention-count">{attentionState.list.unread}</span> : null}</button>

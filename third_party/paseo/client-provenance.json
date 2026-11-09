@@ -1,0 +1,432 @@
+{
+  "schemaVersion": 1,
+  "upstream": {
+    "repository": "https://github.com/getpaseo/paseo",
+    "commit": "1fff127f45b11c1c9c573fbbd12791673004c912",
+    "archiveSha256": "654e4c066977b773a36eabb80a3d231942f36b0287cad8b3d3ca1aaa486cdd7b",
+    "license": "Apache-2.0",
+    "copyrightNotice": "Copyright (c) 2025-present Mohamed Boudra",
+    "rootLicense": "../LICENSE",
+    "researchRevision": "research:rr-79110658024cdb4797375aa15a22a771:413d49e0d715c8db9687a0b1a48c6669ad100f71a9fdf72b13a250ecf0fc6a03",
+    "subdirectory": "packages/client",
+    "sourceUrl": "https://github.com/getpaseo/paseo/tree/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client"
+  },
+  "scope": "complete original package source",
+  "changes": {
+    "description": "Only package.json is modified: private; automatic prepack removed; local Paseo packages and exact ws/zod pins; internal transport and extracted delay exports; modification notice. Every original source/test/script file is unchanged.",
+    "files": [
+      {
+        "path": "package.json",
+        "upstreamSha256": "1fa734988ec9c2b6aa1647acafa5828b3ab82c503f5a6e132be36adc91783618",
+        "currentSha256": "ccc0410b1f5335c42d2e3ee67b05292d324dab8a21db99aca0ce91aa84e29161"
+      }
+    ]
+  },
+  "files": [
+    {
+      "path": "LICENSE",
+      "upstreamSha256": "79d5aedce6aa0adc547336dc1bd34c5cc9308ba110fac7079ed97515ee573ad3",
+      "currentSha256": "79d5aedce6aa0adc547336dc1bd34c5cc9308ba110fac7079ed97515ee573ad3"
+    },
+    {
+      "path": "README.md",
+      "upstreamSha256": "b947f33309c5787781a555588b3bd92ad9de478abbd91b0dc1b78713d1d0526b",
+      "currentSha256": "b947f33309c5787781a555588b3bd92ad9de478abbd91b0dc1b78713d1d0526b"
+    },
+    {
+      "path": "examples/README.md",
+      "upstreamSha256": "dbba7f1176504be45a1edcc7be6b47627d98ee75a826ee11981912aa7a143935",
+      "currentSha256": "dbba7f1176504be45a1edcc7be6b47627d98ee75a826ee11981912aa7a143935"
+    },
+    {
+      "path": "examples/agents-and-providers.ts",
+      "upstreamSha256": "0a5445d82eaa3741df43c4fde4ce48d63e3442fc4a4d7a55dad2a56c102f2358",
+      "currentSha256": "0a5445d82eaa3741df43c4fde4ce48d63e3442fc4a4d7a55dad2a56c102f2358"
+    },
+    {
+      "path": "examples/events-and-timeline.ts",
+      "upstreamSha256": "c2ef3319639ca9a4dd88e32e6595179b9526945d6491fa1dad365560a9be6a1c",
+      "currentSha256": "c2ef3319639ca9a4dd88e32e6595179b9526945d6491fa1dad365560a9be6a1c"
+    },
+    {
+      "path": "examples/issue-to-agent.ts",
+      "upstreamSha256": "1a1eb1f2a255f7bbe7e993804c9724e184e4896cd03642952df5a100713850a5",
+      "currentSha256": "1a1eb1f2a255f7bbe7e993804c9724e184e4896cd03642952df5a100713850a5"
+    },
+    {
+      "path": "examples/parallel-review.ts",
+      "upstreamSha256": "2e107a6b5f3400678020c8fe842f618cbfa6e2fdde4296ad607fafdf108edd52",
+      "currentSha256": "2e107a6b5f3400678020c8fe842f618cbfa6e2fdde4296ad607fafdf108edd52"
+    },
+    {
+      "path": "examples/provider-settings.ts",
+      "upstreamSha256": "3544f933ea9de45717a291c18b2f48660ad916f6ad0b3698fceddcd30a9a1326",
+      "currentSha256": "3544f933ea9de45717a291c18b2f48660ad916f6ad0b3698fceddcd30a9a1326"
+    },
+    {
+      "path": "examples/quickstart.ts",
+      "upstreamSha256": "03646aea9e09caaaa9a543e83cf08065cc4b69b7113eb9a6bd64ac402419e673",
+      "currentSha256": "03646aea9e09caaaa9a543e83cf08065cc4b69b7113eb9a6bd64ac402419e673"
+    },
+    {
+      "path": "examples/workspaces.ts",
+      "upstreamSha256": "e5aa88954459d913e2fc12ea7376db9f510d30a2c62c7bd904cfdea2ad730461",
+      "currentSha256": "e5aa88954459d913e2fc12ea7376db9f510d30a2c62c7bd904cfdea2ad730461"
+    },
+    {
+      "path": "package.json",
+      "upstreamSha256": "1fa734988ec9c2b6aa1647acafa5828b3ab82c503f5a6e132be36adc91783618",
+      "currentSha256": "ccc0410b1f5335c42d2e3ee67b05292d324dab8a21db99aca0ce91aa84e29161"
+    },
+    {
+      "path": "scripts/measure-diff-materialization.ts",
+      "upstreamSha256": "064e38ef699c143fb876f1d7b250fb0b53d583046696defb717132b9f65082a3",
+      "currentSha256": "064e38ef699c143fb876f1d7b250fb0b53d583046696defb717132b9f65082a3"
+    },
+    {
+      "path": "src/compat/legacy-provider-options.ts",
+      "upstreamSha256": "54dd6649f9369fb7b41c413428323467efd952b6415cd7ab432921c39d5e85b3",
+      "currentSha256": "54dd6649f9369fb7b41c413428323467efd952b6415cd7ab432921c39d5e85b3"
+    },
+    {
+      "path": "src/compat/normalize-provider-models.ts",
+      "upstreamSha256": "53eb262fe7afd4eeccef418409145e61228492c949111dd5ecb5c20d938e8398",
+      "currentSha256": "53eb262fe7afd4eeccef418409145e61228492c949111dd5ecb5c20d938e8398"
+    },
+    {
+      "path": "src/connection/index.ts",
+      "upstreamSha256": "e404fa9e1e2fb70937a6388405baf114f1d89d6b73a23a8d688e7030365757c5",
+      "currentSha256": "e404fa9e1e2fb70937a6388405baf114f1d89d6b73a23a8d688e7030365757c5"
+    },
+    {
+      "path": "src/connection/legacy-workspaces.ts",
+      "upstreamSha256": "4ddd3ecf555dbaa6613d5160459c64c7ab23aa806e7d3ad8a130d5e66bca9028",
+      "currentSha256": "4ddd3ecf555dbaa6613d5160459c64c7ab23aa806e7d3ad8a130d5e66bca9028"
+    },
+    {
+      "path": "src/connection/legacy.ts",
+      "upstreamSha256": "e109237678017f77da8829d24cdb870b92f9537f588a9483ba48bb713825bd5e",
+      "currentSha256": "e109237678017f77da8829d24cdb870b92f9537f588a9483ba48bb713825bd5e"
+    },
+    {
+      "path": "src/connection/owned.test.ts",
+      "upstreamSha256": "9bf623727f75ba3d48aceb00a66484d750fdde88a0004b7654e198506b7602c2",
+      "currentSha256": "9bf623727f75ba3d48aceb00a66484d750fdde88a0004b7654e198506b7602c2"
+    },
+    {
+      "path": "src/connection/owned.ts",
+      "upstreamSha256": "7db993184a56c51b060ce408066dabe59c3456360d8e28390bee049d98e2181e",
+      "currentSha256": "7db993184a56c51b060ce408066dabe59c3456360d8e28390bee049d98e2181e"
+    },
+    {
+      "path": "src/connection.test.ts",
+      "upstreamSha256": "a0f2be848c3f885a862891ca06ba49ea757536a27fdc122778e8cf9b3825ffe2",
+      "currentSha256": "a0f2be848c3f885a862891ca06ba49ea757536a27fdc122778e8cf9b3825ffe2"
+    },
+    {
+      "path": "src/creation/index.test.ts",
+      "upstreamSha256": "668833ab2c1f3edb74f7f0916e1885af19506a34ea2742529e1e514ceb4fd787",
+      "currentSha256": "668833ab2c1f3edb74f7f0916e1885af19506a34ea2742529e1e514ceb4fd787"
+    },
+    {
+      "path": "src/creation/index.ts",
+      "upstreamSha256": "55c938a878f46429e855370ca2e9cd7661d31199ac8d1c827c51b455ac4b9ab7",
+      "currentSha256": "55c938a878f46429e855370ca2e9cd7661d31199ac8d1c827c51b455ac4b9ab7"
+    },
+    {
+      "path": "src/daemon-client-relay-e2ee-transport.ts",
+      "upstreamSha256": "7674f7e0372efd63b5eed22725124d71a911505e192f592657582763aa6a8781",
+      "currentSha256": "7674f7e0372efd63b5eed22725124d71a911505e192f592657582763aa6a8781"
+    },
+    {
+      "path": "src/daemon-client-runtime-metrics.ts",
+      "upstreamSha256": "81080000b2346802a12a7c8d1c7a17e443ff8d83d1262feaa39ed04738ad4b17",
+      "currentSha256": "81080000b2346802a12a7c8d1c7a17e443ff8d83d1262feaa39ed04738ad4b17"
+    },
+    {
+      "path": "src/daemon-client-transport-types.ts",
+      "upstreamSha256": "62b28bcdddde94001c46f355f9a8cc82dc2fe018e8c1e8c36e6f3dfc4c241772",
+      "currentSha256": "62b28bcdddde94001c46f355f9a8cc82dc2fe018e8c1e8c36e6f3dfc4c241772"
+    },
+    {
+      "path": "src/daemon-client-transport-utils.ts",
+      "upstreamSha256": "f08d4ff0102985d12413ab119760a530ebb7b24dee4d8f308840b02d253ecc6f",
+      "currentSha256": "f08d4ff0102985d12413ab119760a530ebb7b24dee4d8f308840b02d253ecc6f"
+    },
+    {
+      "path": "src/daemon-client-transport.test.ts",
+      "upstreamSha256": "e28bea41619b38155470214961abf87cb6a4c68b91ad03ed35f61b7545eca97f",
+      "currentSha256": "e28bea41619b38155470214961abf87cb6a4c68b91ad03ed35f61b7545eca97f"
+    },
+    {
+      "path": "src/daemon-client-transport.ts",
+      "upstreamSha256": "7c07c920e8e7b2e55810f178b8caeb03f25654d109c6b86153ce70cce93be996",
+      "currentSha256": "7c07c920e8e7b2e55810f178b8caeb03f25654d109c6b86153ce70cce93be996"
+    },
+    {
+      "path": "src/daemon-client-websocket-transport.ts",
+      "upstreamSha256": "b21cbad69468e10f1f204de8d98bed564ca2fce60c287f673ba62881de18df5a",
+      "currentSha256": "b21cbad69468e10f1f204de8d98bed564ca2fce60c287f673ba62881de18df5a"
+    },
+    {
+      "path": "src/daemon-client.test.ts",
+      "upstreamSha256": "be919f124420aef0fe0bb281e170bdc24399232b9d736b915a59bf371e57afb8",
+      "currentSha256": "be919f124420aef0fe0bb281e170bdc24399232b9d736b915a59bf371e57afb8"
+    },
+    {
+      "path": "src/daemon-client.ts",
+      "upstreamSha256": "adac6456cc519de4f3459a935a160c0c5e3a567ed46abd2ee7b819a3366cbdbb",
+      "currentSha256": "adac6456cc519de4f3459a935a160c0c5e3a567ed46abd2ee7b819a3366cbdbb"
+    },
+    {
+      "path": "src/diff/client.test.ts",
+      "upstreamSha256": "70672a89f43ee91ce826124be7a3205973407f8ae779d62e78cf604a2bf05216",
+      "currentSha256": "70672a89f43ee91ce826124be7a3205973407f8ae779d62e78cf604a2bf05216"
+    },
+    {
+      "path": "src/diff/index.ts",
+      "upstreamSha256": "479cd4fdfdcb21943bf34c01cf71bd4894d3fc0d2167a80ad6f4bb5e0df0f179",
+      "currentSha256": "479cd4fdfdcb21943bf34c01cf71bd4894d3fc0d2167a80ad6f4bb5e0df0f179"
+    },
+    {
+      "path": "src/diff/stream.test.ts",
+      "upstreamSha256": "fdca42142d8171f683015e3ff1013ef39ef3997c694271f2df35f4a27981575f",
+      "currentSha256": "fdca42142d8171f683015e3ff1013ef39ef3997c694271f2df35f4a27981575f"
+    },
+    {
+      "path": "src/diff/stream.ts",
+      "upstreamSha256": "e94a1cbb47d3ed1a6efeff063984399067af8bac91f30246654bd2dcba4460ef",
+      "currentSha256": "e94a1cbb47d3ed1a6efeff063984399067af8bac91f30246654bd2dcba4460ef"
+    },
+    {
+      "path": "src/hosts/index.ts",
+      "upstreamSha256": "05ad99ec146852e9af555ee07bdb4578cf3a5dbd52391fd153494100104a9b87",
+      "currentSha256": "05ad99ec146852e9af555ee07bdb4578cf3a5dbd52391fd153494100104a9b87"
+    },
+    {
+      "path": "src/index.test.ts",
+      "upstreamSha256": "dfb970e3e8faba38c771ea515c70a83d88deeb83540c4bfc1f41084b9a5c68ce",
+      "currentSha256": "dfb970e3e8faba38c771ea515c70a83d88deeb83540c4bfc1f41084b9a5c68ce"
+    },
+    {
+      "path": "src/index.ts",
+      "upstreamSha256": "3ec6649f3208808991e0f2716b5b6af67769b3af9dd89e683d85f9769a54596f",
+      "currentSha256": "3ec6649f3208808991e0f2716b5b6af67769b3af9dd89e683d85f9769a54596f"
+    },
+    {
+      "path": "src/legacy-usage-icons.ts",
+      "upstreamSha256": "2188f014857def3a0e375e7619de7c5f122b92b74db83e870f039f185cec1659",
+      "currentSha256": "2188f014857def3a0e375e7619de7c5f122b92b74db83e870f039f185cec1659"
+    },
+    {
+      "path": "src/node/buffering.ts",
+      "upstreamSha256": "bf66a7f2d6a509dba19aa6d544b31d83860b6e77e75d00849b3caa5f97d435d7",
+      "currentSha256": "bf66a7f2d6a509dba19aa6d544b31d83860b6e77e75d00849b3caa5f97d435d7"
+    },
+    {
+      "path": "src/node/connector.test.ts",
+      "upstreamSha256": "ae1be740770db5076f68d0f40b0f22b5da3706a47fe072c70be07fe6e4899eec",
+      "currentSha256": "ae1be740770db5076f68d0f40b0f22b5da3706a47fe072c70be07fe6e4899eec"
+    },
+    {
+      "path": "src/node/index.ts",
+      "upstreamSha256": "2d3673bb0894be7afb10fbac7142a46e013dd45fcac7119aafccd5739519b1b5",
+      "currentSha256": "2d3673bb0894be7afb10fbac7142a46e013dd45fcac7119aafccd5739519b1b5"
+    },
+    {
+      "path": "src/node/ssh-tunnel.test.ts",
+      "upstreamSha256": "625ba7d3d0af5b8d9235dfb2dcbefa9008e4b49a2f42fb7a79f40bc7ca6c0c9d",
+      "currentSha256": "625ba7d3d0af5b8d9235dfb2dcbefa9008e4b49a2f42fb7a79f40bc7ca6c0c9d"
+    },
+    {
+      "path": "src/node/ssh-tunnel.ts",
+      "upstreamSha256": "208f52c6c7c3ce21c380b69de1983ff0159d7cf36a04b54cb4f198354c969690",
+      "currentSha256": "208f52c6c7c3ce21c380b69de1983ff0159d7cf36a04b54cb4f198354c969690"
+    },
+    {
+      "path": "src/provider-snapshots/index.ts",
+      "upstreamSha256": "2ae776df5a03884cfa91204142add82b4e2896afd4e3f90ceeaabfd907f46e56",
+      "currentSha256": "2ae776df5a03884cfa91204142add82b4e2896afd4e3f90ceeaabfd907f46e56"
+    },
+    {
+      "path": "src/terminal-stream-router.test.ts",
+      "upstreamSha256": "956bf97dc6d1cc20a740f029ce63210735ca3a5fe31160dd600495455e2e841d",
+      "currentSha256": "956bf97dc6d1cc20a740f029ce63210735ca3a5fe31160dd600495455e2e841d"
+    },
+    {
+      "path": "src/terminal-stream-router.ts",
+      "upstreamSha256": "586feff328411ddfad892f33f6bff4049cb6afb5dbb61947db2f9319cd26aa99",
+      "currentSha256": "586feff328411ddfad892f33f6bff4049cb6afb5dbb61947db2f9319cd26aa99"
+    },
+    {
+      "path": "src/terminals/index.test.ts",
+      "upstreamSha256": "7e89e265906ed360fb1de771075bd791873da6bdea8250a320b29f86d64b3117",
+      "currentSha256": "7e89e265906ed360fb1de771075bd791873da6bdea8250a320b29f86d64b3117"
+    },
+    {
+      "path": "src/terminals/index.ts",
+      "upstreamSha256": "6d03dbbbfb5356e0632659e13b2f9dbd922b6ecdfe2614eac92e0491911c3407",
+      "currentSha256": "6d03dbbbfb5356e0632659e13b2f9dbd922b6ecdfe2614eac92e0491911c3407"
+    },
+    {
+      "path": "src/timeline-subscription/index.ts",
+      "upstreamSha256": "41b18347001905540b5d51639d36608894937bb1e202360fb0b9683feec769f7",
+      "currentSha256": "41b18347001905540b5d51639d36608894937bb1e202360fb0b9683feec769f7"
+    },
+    {
+      "path": "tsconfig.examples.json",
+      "upstreamSha256": "3c35a06d34c2b449391edcc6bb696e2eacbef0d2079cd0a50b1a0bcdac666e67",
+      "currentSha256": "3c35a06d34c2b449391edcc6bb696e2eacbef0d2079cd0a50b1a0bcdac666e67"
+    },
+    {
+      "path": "tsconfig.json",
+      "upstreamSha256": "8b222624becc3aa3de80b50998646d4b27296e775ea49da4e44d06160e834f52",
+      "currentSha256": "8b222624becc3aa3de80b50998646d4b27296e775ea49da4e44d06160e834f52"
+    }
+  ],
+  "additions": [
+    {
+      "path": "package.upstream.json",
+      "sha256": "1fa734988ec9c2b6aa1647acafa5828b3ab82c503f5a6e132be36adc91783618",
+      "description": "Byte-exact original package manifest."
+    },
+    {
+      "path": "src/compat/reconnect-delay.ts",
+      "sha256": "528c11f1c2a0de9992bfd83a0a0eefed9d75082e35fd1371e9acf7f150d9a6f1",
+      "sourcePath": "packages/client/src/daemon-client.ts",
+      "sourceSha256": "adac6456cc519de4f3459a935a160c0c5e3a567ed46abd2ee7b819a3366cbdbb",
+      "sourceLines": "1150-1151 and 7800-7805",
+      "description": "Extract original reconnect defaults and delay expression as a pure adapter function. Only this calculation is reused; the original DaemonClient state machine remains unchanged in its full source file."
+    },
+    {
+      "path": "tsconfig.workbench.json",
+      "sha256": "f78088198dafa3dd4831f75fe60a2ee31ddc50f4e37943a208b0469d66bc8506",
+      "description": "Workbench-added standalone emit configuration. The original upstream tsconfig remains unchanged. Selects transport entry points and their dependency closure, uses ES2023/NodeNext with declaration emission, and does not activate upstream lifecycle scripts or compile the full SDK facade."
+    }
+  ],
+  "integration": {
+    "sourceExecutedByImport": false,
+    "testsRunByImport": false,
+    "buildRunByImport": false,
+    "generatedArtifacts": "Existing selective standalone emit outputs and the Workbench-added compile configuration are recorded in generatedArtifacts. Initial source import did not execute a build; integration produced these outputs separately.",
+    "applicationProtocol": "Original protected channel and server_info schema; Workbench device admission/RPC remains a separate adapter. Full Paseo DaemonClient application protocol is not implemented by Workbench.",
+    "sourceOnlyModules": "Whole client/protocol copies preserve future dependencies and tests. Integration emits only the needed entry closure; upstream generated AOT validators are absent from the pinned archive and are not needed by the transport entry.",
+    "fullSdkFacadeConnected": false,
+    "runtimeSource": "Every original runtime source file is byte-exact upstream. Workbench adds only a separately identified pure extraction of the original reconnect defaults/delay expression; it does not port the DaemonClient connection state machine."
+  },
+  "hashScope": "SHA-256 over original/adapted source bytes, local additions, compile configuration and current generated artifacts. Excludes this source.json itself and node_modules; runtime dependency licenses are separately recorded in third_party/paseo/dependencies.json.",
+  "pathBase": "vendor/paseo/client",
+  "generatedArtifacts": {
+    "directory": "dist",
+    "status": "present-selected-standalone-emit",
+    "configuration": {
+      "path": "tsconfig.workbench.json",
+      "sha256": "f78088198dafa3dd4831f75fe60a2ee31ddc50f4e37943a208b0469d66bc8506",
+      "content": {
+        "compilerOptions": {
+          "target": "ES2023",
+          "module": "NodeNext",
+          "moduleResolution": "NodeNext",
+          "lib": [
+            "ES2023",
+            "DOM",
+            "DOM.Iterable"
+          ],
+          "strict": true,
+          "skipLibCheck": true,
+          "declaration": true,
+          "outDir": "dist",
+          "rootDir": "src",
+          "esModuleInterop": true,
+          "resolveJsonModule": true,
+          "types": [
+            "node"
+          ]
+        },
+        "files": [
+          "src/daemon-client-transport.ts",
+          "src/compat/reconnect-delay.ts"
+        ]
+      }
+    },
+    "compiler": {
+      "package": "typescript",
+      "installedVersion": "5.9.3",
+      "installedPackageJsonSha256": "822ef7ca6452205657b6288b066481ecf508bfbf43455d715cf7d3ec457561e6"
+    },
+    "fileCount": 12,
+    "files": [
+      {
+        "path": "dist/compat/reconnect-delay.d.ts",
+        "sha256": "a7befb1744f0a68b4d13e5030ff6b7f1dadfd4dd50b3be7d41e07b944de16947",
+        "bytes": 138
+      },
+      {
+        "path": "dist/compat/reconnect-delay.js",
+        "sha256": "b6ea03aa03b23aa1e4fed888bcfd87037777ff7ce699f3d6a779bb050655e2ed",
+        "bytes": 720
+      },
+      {
+        "path": "dist/daemon-client-relay-e2ee-transport.d.ts",
+        "sha256": "98204bf2ac5aa17b180290ae164462e488813c66a3d6c634952529c9e2ccd06d",
+        "bytes": 1574
+      },
+      {
+        "path": "dist/daemon-client-relay-e2ee-transport.js",
+        "sha256": "578c46c61a8a011e7dffad20dc3234fa15e21565c3da65f5c89681e06fa50b80",
+        "bytes": 9660
+      },
+      {
+        "path": "dist/daemon-client-transport-types.d.ts",
+        "sha256": "443daf277f0325870f1552744ea893bfe248655606101a4992b41f4960acca9c",
+        "bytes": 1829
+      },
+      {
+        "path": "dist/daemon-client-transport-types.js",
+        "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+        "bytes": 11
+      },
+      {
+        "path": "dist/daemon-client-transport-utils.d.ts",
+        "sha256": "d2461d5b556ed355591fc77d23de1151900724f46962f011b9d2a933803fc94c",
+        "bytes": 827
+      },
+      {
+        "path": "dist/daemon-client-transport-utils.js",
+        "sha256": "25395cc5f6ee79100b0beefbf04112204a7ced56a1bc52934444308328ad0dd3",
+        "bytes": 4153
+      },
+      {
+        "path": "dist/daemon-client-transport.d.ts",
+        "sha256": "8d01affafcc443e487b20c26136cb72894aefe9a68009bbebf94a78805c4d506",
+        "bytes": 667
+      },
+      {
+        "path": "dist/daemon-client-transport.js",
+        "sha256": "da74824a5c33402a686be2b7cae4f1684f96052dd383e2e51dee78fb8851a4be",
+        "bytes": 517
+      },
+      {
+        "path": "dist/daemon-client-websocket-transport.d.ts",
+        "sha256": "85a079d394e23ef107296e8e317eed1860191460395f7626a53c65475b4abb46",
+        "bytes": 774
+      },
+      {
+        "path": "dist/daemon-client-websocket-transport.js",
+        "sha256": "bc50d9a08d052bdaaf7efade4053102907ecb510a6919d4b35d0ecc69dac89a1",
+        "bytes": 7115
+      }
+    ],
+    "treeSha256": "f153dee7bda606660834bf71cc390be31afe8377b26d76487a36fbd6a9895d3c",
+    "treeHashEncoding": "SHA-256 of UTF-8 sorted package-relative path + NUL + file SHA-256 hex + LF.",
+    "scope": "Selected original transport/protocol entry points and their imported dependency closure only. The full Paseo DaemonClient facade and generated AOT validator are not integrated.",
+    "provenanceUpdate": "Existing artifact bytes and configuration were hashed; this provenance update did not run an emit, application build, install or test."
+  },
+  "distribution": {
+    "provenanceCopy": "third_party/paseo/client-provenance.json",
+    "sharedLicense": "third_party/paseo/LICENSE",
+    "sourceLicenseSha256": "79d5aedce6aa0adc547336dc1bd34c5cc9308ba110fac7079ed97515ee573ad3",
+    "note": "Paths in files/additions/generatedArtifacts are relative to pathBase, not the flat distribution copy."
+  },
+  "integrationResearchRevision": "research:rr-79110658024cdb4797375aa15a22a771:39c50e6924caa7e9e0aed55dc8c114f195c9f46bea75d2ad71b54ecb8fbadbf4"
+}

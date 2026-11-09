@@ -1,0 +1,28 @@
+# 기기 연결 — 0.4.0 개발 상태
+
+이 기능은 작업 중인 PC의 기존 세션과 파일을 다른 클라이언트에서 여는 연결이다. AI 실행은 원래 PC의 host가 계속 소유한다. 상단 **기기 연결**에서 관리한다. 현재는 개발 코드이며 실제 휴대폰·외부망을 포함한 출시 완료판이 아니다.
+
+## 연결 순서
+
+1. 작업 중인 PC에서 **기기 연결 → 이 PC에 연결 허용**을 열고 원격 연결을 켠다. 기본값은 꺼짐이며 로컬 API는 계속 loopback 전용이다.
+2. 접근 가능한 웹 주소를 설정한다. HTTPS reverse proxy를 사용할 때 정적 웹 화면과 `/workbench` WebSocket을 별도 기기 listener에 전달한다. 선택적으로 원본 Paseo와 호환되는 WSS relay 주소를 사용할 수 있다. relay는 웹 화면을 배포하지 않으므로 휴대폰에서 열 웹 주소가 별도로 필요하다.
+3. 새 연결 링크/QR을 만든다. 링크는 짧게 만료되며 한 번만 사용할 수 있다. public 웹 주소가 없으면 `workbench://connect/#offer=...` 형식의 **붙여넣기용 링크**다. 이 주소를 OS 앱 실행 프로토콜로 등록했다고 가정하지 않는다.
+4. 다른 클라이언트의 기기 연결 화면에 링크를 붙여넣거나, QR에 담긴 웹 주소를 연다. 두 화면의 6자리 확인번호를 비교한 뒤 원래 PC에서 프로젝트와 권한을 선택해 승인한다. 새 프로젝트는 자동으로 허용되지 않는다.
+5. 승인 후 호스트 목록에서 해당 PC를 선택하면 같은 프로젝트·세션의 원문과 실행 상태를 연다. 연결을 끊어도 원래 PC의 작업을 중단하지 않는다. 기기를 철회하면 해당 기기의 기존 연결도 닫힌다.
+
+## 연결된 범위
+
+- Paseo 원본 보호 전송·Noise/E2EE·서버 키·relay/client WebSocket 코드와 offer parser를 사용한다. Workbench의 기존 HTTP·이벤트·receipt를 보호된 연결 안에 전달한다.
+- 프로젝트별 읽기, 요청 보내기, 승인, 중지, 터미널 권한을 구분한다. snapshot과 이벤트를 승인된 프로젝트로 제한하고, 각 요청의 실제 세션·문서·작업공간을 host에서 확인한다.
+- 사용자 첨부, 도구 이미지, AI 응답 이미지, 대기 메시지 첨부는 허용된 대화에서 읽는다. 전송 전 업로드는 해당 기기와 프로젝트 소유로 기록한다. 첨부 bytes는 기존 content-addressed 저장소를 사용한다.
+- 재접속 때 인증·이벤트 구독을 복구한다. 이력 범위를 벗어나거나 host epoch가 바뀌면 snapshot을 다시 받는다. 실행 결과를 모르는 변경 요청은 자동으로 재전송하지 않는다.
+- 로컬 owner token과 기기 credential은 URL query나 WebSocket upgrade 헤더에 넣지 않는다. 서버는 credential 해시만 저장한다. 웹에서는 public 호스트 목록만 localStorage, credential은 해당 탭의 sessionStorage에 저장한다. sessionStorage를 사용할 수 없으면 메모리를 사용한다.
+- 원격 호스트마다 화면 설정·이미지 cache 식별자를 구분한다. 원격 파일 경로로 이 PC의 앱을 실행하거나 원격 세션을 로컬 별도 창으로 떼어내는 동작은 차단한다.
+
+## 남은 연결
+
+현재 원격 화면은 기존 Workbench App을 연결한 첫 구현이다. 모든 메뉴가 원격용으로 완성된 것은 아니며, 허용 목록에 없는 관리·Office native·브라우저 API는 거부한다. 기기별 OS keychain 저장, 카메라 scan, 모바일 사진/공유/파일 picker, 한글 IME/키보드/회전, 모바일 push와 실제 CJK terminal 동작은 후속 U18–U20 범위다.
+
+전체 Paseo SDK/공식 모바일 앱과의 protocol 호환, 공개 relay 서비스 운영, 인증된 HTTPS 배포, 실제 iOS/Android·외부망 사용은 완료했다고 표시하지 않는다. 현재 확보한 네트워크 증거는 실제 원본 전송을 사용한 localhost 두 클라이언트 시험이다. 앱·설치본·CI 빌드는 전체 기능 통합 뒤 진행한다.
+
+출처와 수정 사항은 `vendor/paseo/{client,protocol,server}/source.json` 및 배포 `third_party/paseo/`에 있다. 후속 구현 연구 판: `research:rr-79110658024cdb4797375aa15a22a771:39c50e6924caa7e9e0aed55dc8c114f195c9f46bea75d2ad71b54ecb8fbadbf4` (R7–R12). [재사용 실행표](superpowers/execution/PASEO-REUSE.md)에 전체 반입 상태가 있다.

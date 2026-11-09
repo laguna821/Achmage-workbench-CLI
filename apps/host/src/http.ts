@@ -6,6 +6,7 @@ import { timingSafeEqual } from "node:crypto";
 import { isAccessMode, parseSearchScope, type AccessMode, type Attachment, type CreateSessionRequest, type DocRef, type DocumentViewInput, type Provider, type SequencedEvent, type Timeline } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
 import { HttpError, type SessionManager } from "./sessions.ts";
+import { DeviceRegistryError } from "./devices.ts";
 import { DESIGN_PRESETS, systemFonts, type DesignPreset } from "./design.ts";
 import { parseCreate } from "./create.ts";
 import { officeEditorKind, type EditorGrants } from "./editors.ts";
@@ -105,6 +106,7 @@ function parseRefs(value: unknown): DocRef[] {
 }
 
 export type HttpOptions = {
+  devices?: import("./devices/service.ts").DeviceService;
   autostart?: import("./daemon/autostart.ts").HostAutostart;
   host?: { instance: import("@workbench/contracts").HostInstance; stopping: () => boolean; stop: () => void };
   dropbox?: import("./dropbox.ts").DropboxFolders;
@@ -268,6 +270,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       if (!sameToken(bearer ?? queryToken, options.token)) {
         throw new HttpError(401, "unauthorized", "인증 토큰이 맞지 않습니다.");
       }
+      if (options.devices && path.startsWith("/api/devices") && await options.devices.handle(req, res, url)) return;
       const parts = path.split("/").filter(Boolean).slice(1);
       const method = req.method ?? "GET";
 
@@ -1131,7 +1134,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       }
       throw new HttpError(404, "not_found", `${method} ${path}`);
     } catch (error) {
-      if (error instanceof HttpError) {
+      if (error instanceof HttpError || error instanceof DeviceRegistryError) {
         sendJson(res, error.status, { code: error.code, message: error.message });
       } else {
         sendJson(res, 500, { code: "internal", message: error instanceof Error ? error.message : String(error) });

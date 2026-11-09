@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "strict": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "types": [
+      "node"
+    ]
+  },
+  "files": [
+    "src/messages.ts",
+    "src/connection-offer.ts",
+    "src/daemon-endpoints.ts",
+    "src/websocket-message-limit.ts"
+  ]
+}

@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { App } from "./App.tsx";
+import { ConnectedWorkbench } from "./ConnectedWorkbench.tsx";
 import { readToken } from "./api.ts";
 import { applyFirstPaintTheme } from "./theme.ts";
 import "./styles.css";
@@ -26,6 +26,6 @@ if (new URLSearchParams(location.search).has("office-cli")) {
   void import("./office-cli.ts").then(module => module.runOfficeCli());
 } else createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    <ConnectedWorkbench />
   </StrictMode>,
 );

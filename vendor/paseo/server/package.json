@@ -1,0 +1,55 @@
+{
+  "name": "@workbench/paseo-server-transport",
+  "version": "0.15.3",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    "./secure-relay-ingress": {
+      "types": "./dist/server/websocket/secure-relay-ingress.d.ts",
+      "default": "./dist/server/websocket/secure-relay-ingress.js"
+    },
+    "./encrypted-relay-socket": {
+      "types": "./dist/server/websocket/encrypted-relay-socket.d.ts",
+      "default": "./dist/server/websocket/encrypted-relay-socket.js"
+    },
+    "./physical-socket": {
+      "types": "./dist/server/websocket/physical-socket.d.ts",
+      "default": "./dist/server/websocket/physical-socket.js"
+    },
+    "./relay-transport": {
+      "types": "./dist/server/relay-transport.d.ts",
+      "default": "./dist/server/relay-transport.js"
+    },
+    "./daemon-keypair": {
+      "types": "./dist/server/daemon-keypair.d.ts",
+      "default": "./dist/server/daemon-keypair.js"
+    },
+    "./private-files": {
+      "types": "./dist/server/private-files.d.ts",
+      "default": "./dist/server/private-files.js"
+    },
+    "./connection-offer": {
+      "types": "./dist/server/connection-offer.d.ts",
+      "default": "./dist/server/connection-offer.js"
+    },
+    "./socket-metadata": {
+      "types": "./dist/server/socket-metadata.d.ts",
+      "default": "./dist/server/socket-metadata.js"
+    },
+    "./network": {
+      "types": "./dist/server/network/index.d.ts",
+      "default": "./dist/server/network/index.js"
+    }
+  },
+  "dependencies": {
+    "@getpaseo/protocol": "file:../protocol",
+    "@getpaseo/relay": "file:../relay",
+    "https-proxy-agent": "7.0.6",
+    "pino": "10.3.1",
+    "undici": "7.24.8",
+    "ws": "8.20.0",
+    "zod": "4.4.3"
+  },
+  "x-workbench-vendor-notice": "Selected original Paseo server transport dependency closure. No lifecycle scripts. All original runtime source bytes preserved except a type-only import redirected to an exact interface extraction; original relay-transport.ts retained under upstream/. See source.json and package.upstream.json."
+}

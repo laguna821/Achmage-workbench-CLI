@@ -8,6 +8,12 @@ License: Apache License 2.0 (see LICENSE)
 Included upstream modules:
 - packages/relay: original source, tests, fixtures and configuration.
 - packages/app/src/components/markdown/image-decoding.ts.
+- packages/client: complete original package source, including its tests.
+- packages/protocol: complete original package source, including its tests,
+  fixtures and generator scripts.
+- packages/server: secure-relay-ingress, encrypted-relay-socket,
+  physical-socket, relay-transport, daemon-keypair, private-files,
+  connection-offer and network dependency closure, with corresponding tests.
 
 Workbench adaptations:
 - Relay package.json is private, removes prepack and pins runtime dependency
@@ -17,10 +23,38 @@ Workbench adaptations:
   they do not replace device enrollment or command authorization.
 - The unchanged image decoder receives Workbench's authenticated Blob URL and
   DOM Image.decode adapter in apps/web/src/components/Attachments.tsx.
+- Client and protocol original runtime sources are unchanged. Their manifests
+  are private, reference local Paseo dependencies, pin installed runtime
+  versions and remove automatic lifecycle hooks. Original manifests remain
+  as package.upstream.json. Client internal exports expose the transport family.
+- The server transport package has a private dependency-closure manifest with
+  no lifecycle scripts. relay-transport.ts changes one type-only import to an
+  exact extraction of ExternalSocketMetadata. Its runtime statements are
+  unchanged, and its byte-exact original is retained under upstream/.
+- A separate client compatibility helper extracts the original reconnect
+  defaults and delay calculation. The full original DaemonClient connection
+  state machine and SDK application-protocol facade remain unconnected.
+- Added tsconfig.workbench.json files select the required transport/protocol
+  entry points and their dependency closure. Existing standalone JavaScript
+  and declaration outputs are recorded with file SHA-256 hashes. Original
+  upstream tsconfig files remain unchanged. The selected compile does not
+  execute the retained upstream lifecycle or validator-generation scripts.
+- Workbench adapters use the original protected WebSocket/E2EE and outgoing
+  relay implementations. The original server_info schema precedes Workbench's
+  separate device authorization, request/reply and event-subscription protocol.
 
-Source and generated file hashes are in relay-provenance.json and
-image-decoding-provenance.json. Runtime dependency licenses are under
-dependencies/ and their versions and hashes are in dependencies.json.
+Source and generated file hashes are in relay-provenance.json,
+image-decoding-provenance.json, client-provenance.json,
+protocol-provenance.json and server-provenance.json. The latter three also
+record the added compile configurations and selected compilation scope.
 
-These are Workbench attribution and modification notices. No upstream NOTICE
-file was present in either imported source module.
+Installed runtime dependency licenses and notices are preserved under
+dependencies/; actual package versions and copied-file SHA-256 hashes are in
+dependencies.json. This includes pino and its installed helper dependencies,
+zod, semver, undici (including its embedded fetch license), https-proxy-agent
+and its dependency closure, and qrcode 1.5.4 with its installed dependencies.
+Distinct installed versions have separate entries. Optional ws peers
+bufferutil and utf-8-validate were not installed in this attribution snapshot.
+
+These are Workbench attribution and modification notices. Original copyright
+notices and licenses are preserved in the imported sources and copied licenses.

@@ -22,7 +22,7 @@
 
 원본 pin은 기존 조사와 같은 `1fff127f45b11c1c9c573fbbd12791673004c912`이다. 별도 third-party 고지와 수정 내역을 보존하며 첫 이식은 `@getpaseo/relay` 보안 전송 패키지다. 원본 패키지의 테스트를 필요한 경계에서 재사용하고 기능마다 production/설치본 빌드를 반복하지 않는다. 이 교정은 25개 목적과 기존 데이터 보존 요구를 유지하면서 구현 방식을 바꾼다.
 
-직접 재사용 전환과 첫 relay·이미지 반입의 근거: `research:rr-79110658024cdb4797375aa15a22a771:413d49e0d715c8db9687a0b1a48c6669ad100f71a9fdf72b13a250ecf0fc6a03` (R1–R6). 실제 네트워크·모바일 연결은 이후 단위에서 진행한다.
+직접 재사용 전환과 첫 relay·이미지 반입의 근거: `research:rr-79110658024cdb4797375aa15a22a771:413d49e0d715c8db9687a0b1a48c6669ad100f71a9fdf72b13a250ecf0fc6a03` (R1–R6). 후속 원본 client/protocol/server와 실제 listener·기기 승인·기존 API/event·첨부·첫 연결 UI 구현은 `research:rr-79110658024cdb4797375aa15a22a771:39c50e6924caa7e9e0aed55dc8c114f195c9f46bea75d2ad71b54ecb8fbadbf4` (R7–R12). 실제 loopback 두 클라이언트와 추가 첨부 경로가 통과했으며, 외부망·실제 모바일 및 전체 SDK/공식 앱 호환은 남아 있다. 자세한 현재 상태는 실행표를 따른다.
 
 ## How to read this
 
