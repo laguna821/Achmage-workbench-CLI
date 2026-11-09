@@ -64,6 +64,7 @@ export function WorkspacePicker({ state, work, session, actions }: { state: Stat
       {current && !current.archivedAt && !current.removedAt ? <button type="button" className="button small workspace-git-open" onClick={() => { close(); setGitOpen(true); }}>Git 워크트리 관리…</button> : null}
       {current ? <button type="button" className="button small workspace-terminals-open" onClick={() => { close(); actions.openTerminals(current); }}>터미널…</button> : null}
       {current ? <button type="button" className="button small workspace-services-open" onClick={() => { close(); actions.openServices(current); }}>서버·실행 관리…</button> : null}
+      {current && !current.archivedAt && !current.removedAt ? <button type="button" className="button small workspace-browser-open" onClick={() => { close(); actions.openBrowser(current); }}>웹 탭 열기…</button> : null}
       {current && !current.archivedAt && !current.removedAt ? <button type="button" className="button small workspace-scm-open" onClick={() => { close(); actions.reviewWorkspace(current); }}>Git 변경 검토…</button> : null}
       {current ? <button type="button" className="button small workspace-preparation-open" onClick={() => { close(); actions.prepareWorkspace(current); }}>{current.archivedAt || current.removedAt ? "환경 준비 기록…" : "환경 준비…"}</button> : null}
     </Popover>

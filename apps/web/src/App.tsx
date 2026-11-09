@@ -2,6 +2,8 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, us
 import { GLOBAL_LAYOUT, PROVIDER_LABEL, isUnseen, type AccessMode, type Artifact, type Attachment, type CreateTarget, type DocRef, type ProjectPick, type Proposal, type Provider, type Session, type SessionStatus, type UiPrefs, type Work, type Workspace } from "@workbench/contracts";
 import { Api, ApiRequestError, readToken } from "./api.ts";
 import { AttentionInbox, CompletionNotifications, watchAttentionPresence } from "./completion-notifications.ts";
+import { SharedBrowser, type BrowserNativeCommand } from "./browser-state.ts";
+import { BrowserView, NewBrowserDialog } from "./components/BrowserView.tsx";
 import type { AttentionPayload, SequencedEvent } from "@workbench/contracts";
 import { useOfficeControl } from "./office-control.ts";
 import { configureDesign } from "./design.ts";
@@ -96,6 +98,10 @@ function cachedPrefs(): UiPrefs {
   }
 }
 const inDesktop = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+async function sharedBrowserNative<T>(command: BrowserNativeCommand): Promise<T> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<T>("shared_browser", { command });
+}
 
 /**
  * An OS notification (desktop app). On Linux the shell's own one opens its session when clicked;
@@ -192,6 +198,7 @@ type View =
   | { kind: "new"; folderId: string | null }
   | { kind: "archive" }
   | { kind: "terminal"; terminalId: string; workspaceId: string; label: string }
+  | { kind: "browser"; pageId: string }
   | { kind: "document"; artifactId: string; proposalId: string | null }
   | { kind: "presentation"; id: string; artifactId: string; ownerTabId: string }
   /** "나란히": chosen only, never where the app opens (views are not kept across launches). */
@@ -211,6 +218,7 @@ function isView(value: unknown): value is View {
   if (view.kind === "new") return view.folderId === null || typeof view.folderId === "string";
   if (view.kind === "project") return typeof view.workId === "string";
   if (view.kind === "terminal") return typeof view.terminalId === "string" && typeof view.workspaceId === "string" && typeof view.label === "string";
+  if (view.kind === "browser") return typeof view.pageId === "string";
   if (view.kind === "document") return typeof view.artifactId === "string" && (view.proposalId === null || typeof view.proposalId === "string");
   if (view.kind === "presentation") return typeof view.id === "string" && typeof view.artifactId === "string" && typeof view.ownerTabId === "string";
   if (view.kind === "split") return typeof view.artifactId === "string" && typeof view.draftKey === "string" && (view.focus === "chat" || view.focus === "doc");
@@ -258,6 +266,16 @@ export function App() {
   const [scmWorkspace, setScmWorkspace] = useState<Workspace | null>(null);
   // A window of its own for one session (`?session=`, "새 창으로 떼어 내기"): no sidebar, no home.
   const [single, setSingle] = useState<string | null>(() => windowSession());
+  const sharedBrowser = useMemo(() => new SharedBrowser(api?.sharedBrowser ?? null, inDesktop && !single ? sharedBrowserNative : null), [api, Boolean(single)]);
+  const browserState = useSyncExternalStore(sharedBrowser.subscribe, sharedBrowser.getState);
+  const lastNativeInteraction = useRef(0), lastDomInteraction = useRef(0);
+  useEffect(() => {
+    const remember = () => { lastDomInteraction.current = Date.now(); };
+    window.addEventListener("pointerdown", remember, true); window.addEventListener("keydown", remember, true);
+    return () => { window.removeEventListener("pointerdown", remember, true); window.removeEventListener("keydown", remember, true); };
+  }, []);
+  useEffect(() => sharedBrowser.start(), [sharedBrowser]);
+  const [newBrowser, setNewBrowser] = useState<{ paneId: PaneId; workspaceId?: string; profileId?: string; url?: string } | null>(null);
   // One pane on a new profile; an existing layout is restored from gateway preferences after
   // the snapshot. Sidebar/search actions route into the focused pane.
   const [layout, setLayout] = useState<Layout<View>>(() => {
@@ -513,13 +531,19 @@ export function App() {
   const work = singleSession ? state.works[singleSession.workId] : workId ? state.works[workId] : undefined;
   /** The session a work shows: its active one (unless archived), else its latest. */
   const activeOf = (owner: Work) =>
-    (owner.activeSessionId && state.sessions[owner.activeSessionId] && !state.sessions[owner.activeSessionId]!.archivedAt && !state.sessions[owner.activeSessionId]!.documentAgent && state.sessions[owner.activeSessionId]) ||
-    workSessions(state, owner.id).filter((entry) => !entry.documentAgent).at(-1) ||
-    sessionsOf(state, owner.id).filter((entry) => !entry.documentAgent).at(-1);
+    (owner.activeSessionId && state.sessions[owner.activeSessionId] && !state.sessions[owner.activeSessionId]!.archivedAt && !state.sessions[owner.activeSessionId]!.documentAgent && !state.sessions[owner.activeSessionId]!.pageAgent && state.sessions[owner.activeSessionId]) ||
+    workSessions(state, owner.id).filter((entry) => !entry.documentAgent && !entry.pageAgent).at(-1) ||
+    sessionsOf(state, owner.id).filter((entry) => !entry.documentAgent && !entry.pageAgent).at(-1);
   const restoredSession = focusedPane(layout).sessionId ? state.sessions[focusedPane(layout).sessionId!] : null;
   const activeSession = singleSession ?? (restoredSession && restoredSession.workId === work?.id && !restoredSession.archivedAt ? restoredSession : work && activeOf(work));
   // ── two panes (panes.ts): the other pane keeps the session it showed when it lost the focus ──
   const sessionIn = (pane: Pane<View>): Session | undefined => {
+    if (pane.view.kind === "browser") {
+      const pageId = pane.view.pageId;
+      const page = browserState.pages.find(entry => entry.pageId === pageId);
+      const child = state.sessions[page?.sessionId ?? pane.sessionId ?? ""];
+      return child?.pageAgent?.pageId === pageId ? child : undefined;
+    }
     const owner = pane.workId ? state.works[pane.workId] : undefined;
     if (!owner) return undefined;
     const kept = pane.sessionId ? state.sessions[pane.sessionId] : undefined;
@@ -759,6 +783,7 @@ export function App() {
       openWorkspace: (workspace) => openWorkspaceRef.current(workspace),
       openTerminals: (workspace) => setTerminalWorkspace(workspace),
       openServices: (workspace) => setServiceWorkspace(workspace),
+      openBrowser: (workspace) => setNewBrowser({ paneId: layoutRef.current.focus, workspaceId: workspace.id }),
       prepareWorkspace: (workspace) => setPreparationWorkspace(workspace),
       reviewWorkspace: (workspace) => setScmWorkspace(workspace),
       workspaceGit: {
@@ -769,6 +794,10 @@ export function App() {
         cancelWorktreeCreation: async (...args) => { if (!api) throw new Error("연결을 기다려 주세요."); return api.cancelWorktreeCreation(...args); },
       },
       selectSession: (target, session) => {
+        if (session.pageAgent) {
+          navigateTo({ workId: target.id, sessionId: session.id, view: { kind: "browser", pageId: session.pageAgent.pageId } });
+          return;
+        }
         if (session.documentAgent) {
           navigateTo({ workId: target.id, sessionId: session.id, view: { kind: "document", artifactId: session.documentAgent.artifactId, proposalId: null } });
           return;
@@ -909,6 +938,7 @@ export function App() {
   const visibleSession = (view.kind === "work" || view.kind === "split") && activeSession ? activeSession : null;
   const attentionSessionId = view.kind === "document"
     ? (activeSession?.documentAgent?.artifactId === view.artifactId ? activeSession.id : Object.values(state.sessions).filter(session => session.documentAgent?.artifactId === view.artifactId && !session.archivedAt).sort((a, b) => b.createdAt - a.createdAt)[0]?.id ?? null)
+    : view.kind === "browser" ? browserState.pages.find(page => page.pageId === view.pageId)?.sessionId ?? null
     : visibleSession?.id ?? null;
   const attentionSession = useRef<string | null>(null); attentionSession.current = attentionSessionId;
   const presenceWatcher = useRef<ReturnType<typeof watchAttentionPresence> | null>(null);
@@ -964,6 +994,10 @@ export function App() {
   const switcherRef = useRef<number | null>(null);
   const openSession = useCallback(
     (session: Session) => {
+      if (session.pageAgent) {
+        navigateTo({ workId: session.workId, sessionId: session.id, view: { kind: "browser", pageId: session.pageAgent.pageId } });
+        return;
+      }
       if (session.documentAgent) {
         navigateTo({ workId: session.workId, sessionId: session.id, view: { kind: "document", artifactId: session.documentAgent.artifactId, proposalId: null } });
         return;
@@ -987,7 +1021,7 @@ export function App() {
       const transcript = await api.items(target.sessionId); dispatch({ type: "transcript", sessionId: target.sessionId, transcript });
     }
     setAttentionOpen(false);
-    navigateTo({ workId: target.workId, sessionId: target.sessionId, view: target.artifactId ? { kind: "document", artifactId: target.artifactId, proposalId: null } : { kind: "work" } }, () => {
+    navigateTo({ workId: target.workId, sessionId: target.sessionId, view: target.pageId ? { kind: "browser", pageId: target.pageId } : target.artifactId ? { kind: "document", artifactId: target.artifactId, proposalId: null } : { kind: "work" } }, () => {
       setFocusItem({ sessionId: target.sessionId, itemId: target.itemId, nonce: Date.now() });
       void attentionInbox.read(id).catch(attentionInbox.reportError);
     });
@@ -1389,15 +1423,17 @@ export function App() {
     const pane = paneById(layoutRef.current, paneId);
     const at = pane?.view;
     const artifact = at && (at.kind === "document" || at.kind === "split") ? stateRef.current.artifacts[at.artifactId] : undefined;
-    const workId = owner?.id ?? artifact?.workId ?? (at?.kind === "project" ? at.workId : pane?.workId);
+    const page = at?.kind === "browser" ? sharedBrowser.getState().pages.find(entry => entry.pageId === at.pageId) : undefined;
+    const workId = owner?.id ?? artifact?.workId ?? page?.workId ?? (at?.kind === "project" ? at.workId : pane?.workId);
     const session = pane?.sessionId ? stateRef.current.sessions[pane.sessionId] : undefined;
     const project = workId ? stateRef.current.works[workId] : undefined;
-    return { workId, workspaceId: creationWorkspace(project, [artifact?.workspaceId, session?.workspaceId, layoutScope], stateRef.current.workspaces) };
-  }, [layoutScope]);
+    return { workId, workspaceId: creationWorkspace(project, [artifact?.workspaceId, page?.workspaceId, session?.workspaceId, layoutScope], stateRef.current.workspaces) };
+  }, [layoutScope, sharedBrowser]);
   const runCreateAction = useCallback((paneId: PaneId, action: CreateAction) => {
     const { target } = action;
     if (action.kind === "document") { setNewDocument({ ...target, paneId, format: action.format }); return; }
     if (action.kind === "directory") { if (target.workspaceId) setNewDirectory(target.workspaceId); return; }
+    if (action.kind === "browser") { setNewBrowser({ paneId, workspaceId: target.workspaceId }); return; }
     if (action.kind === "folder") {
       savePrefs({ sidebar: true });
       setExpandedEditorTab(paneById(layoutRef.current, paneId)?.activeTabId ?? null);
@@ -1421,7 +1457,7 @@ export function App() {
     const entry = (action: CreateAction): MenuEntry => ({ kind: "item", label: action.label, icon: action.icon, onSelect: () => runCreateAction(paneId, action) });
     return { x, y, title: project ? `${project.title}${space ? ` · ${space.label}` : ""}` : "새로 만들기", items: [
       { kind: "submenu", label: "새 문서·디자인", icon: "file", items: commands.filter(action => action.kind === "document").map(entry) },
-      ...commands.filter(action => action.kind === "session").map(entry), { kind: "separator" },
+      ...commands.filter(action => action.kind === "session" || action.kind === "browser").map(entry), { kind: "separator" },
       ...commands.filter(action => action.kind === "directory" || action.kind === "folder" || action.kind === "project").map(entry),
     ] };
   }, [creationTarget, runCreateAction]);
@@ -1708,11 +1744,13 @@ export function App() {
     if (at.kind === "presentation") return [`presentation:${at.id}`];
     if (at.kind === "project") return [`project:${at.workId}`];
     if (at.kind === "terminal") return [`terminal:${at.terminalId}`];
+    if (at.kind === "browser") return [`browser:${at.pageId}`];
     if (at.kind === "pkm") return [pkmKey(at.target)];
     if (at.kind === "archive") return ["archive"];
     return [`home:${at.folderId ?? ""}`];
   };
   const itemKey = (item: PaneItem): string => {
+    if (item.kind === "session" && state.sessions[item.id]?.pageAgent) return `browser:${state.sessions[item.id]!.pageAgent!.pageId}`;
     if (item.kind === "session" && state.sessions[item.id]?.documentAgent) return `doc:${state.sessions[item.id]!.documentAgent!.artifactId}`;
     if (item.kind === "work") {
       const owner = state.works[item.id];
@@ -1731,6 +1769,7 @@ export function App() {
   const contentOf = (item: PaneItem): PaneContent<View> | null => {
     if (item.kind === "session") {
       const session = state.sessions[item.id];
+      if (session?.pageAgent) return { view: { kind: "browser", pageId: session.pageAgent.pageId }, workId: session.workId, sessionId: session.id };
       if (session?.documentAgent) return { view: { kind: "document", artifactId: session.documentAgent.artifactId, proposalId: null }, workId: session.workId, sessionId: session.id };
       return session ? { view: { kind: "work" }, workId: session.workId, sessionId: session.id } : null;
     }
@@ -1751,7 +1790,7 @@ export function App() {
   const showSessionOf = (ownerId: string | null, sessionId: string | null) => {
     const owner = ownerId ? state.works[ownerId] : undefined;
     const session = sessionId ? state.sessions[sessionId] : undefined;
-    if (owner && session && !session.documentAgent && session.workId === owner.id && owner.activeSessionId !== session.id) {
+    if (owner && session && !session.documentAgent && !session.pageAgent && session.workId === owner.id && owner.activeSessionId !== session.id) {
       dispatch({ type: "focus", work: owner, session });
       void api?.updateWork(owner.id, { activeSessionId: session.id }).catch(fail);
     }
@@ -1956,6 +1995,10 @@ export function App() {
     }
     if (at.kind === "project") return { title: `${state.works[at.workId]?.title ?? "프로젝트"} · 프로젝트`, icon: <Icon name="project" size={14} />, item: { kind: "project", id: at.workId } };
     if (at.kind === "terminal") return { title: at.label, icon: <Icon name="terminal" size={14} />, hint: state.workspaces[at.workspaceId]?.cwd, item: null };
+    if (at.kind === "browser") {
+      const page = browserState.pages.find(entry => entry.pageId === at.pageId);
+      return { title: page?.title || "웹 탭", icon: <Icon name="globe" size={14} />, hint: page?.url, item: null };
+    }
     if (at.kind === "pkm") {
       const target = at.target;
       const viewName = target.kind === "view" ? pkmHandle.current?.pkmState?.views.find((entry) => entry.id === target.id)?.name : null;
@@ -1969,6 +2012,17 @@ export function App() {
     if (at.kind === "archive") return { title: "보관함", icon: <Icon name="archive" size={14} />, item: null };
     return { title: at.kind === "new" && at.folderId ? "새 작업" : "홈", icon: <Icon name="home" size={14} />, item: null };
   };
+
+  useEffect(() => {
+    const latest = browserState.pages.reduce<(typeof browserState.pages)[number] | null>((found, page) => (page.native?.interactionAt ?? 0) > (found?.native?.interactionAt ?? 0) ? page : found, null);
+    const at = latest?.native?.interactionAt ?? 0;
+    if (!latest || at <= lastNativeInteraction.current) return;
+    lastNativeInteraction.current = at;
+    if (at <= lastDomInteraction.current) return;
+    const found = findTab(layoutRef.current, `browser:${latest.pageId}`);
+    if (found && (layoutRef.current.focus !== found.pane.id || activeTab(found.pane).id !== found.tab.id)) updateLayout(current => activateTab(current, found.pane.id, found.tab.id));
+    // Keep focus inside the native page: only the surrounding pane selection changes.
+  }, [browserState.pages, updateLayout]);
 
   if (!api) {
     return (
@@ -2028,6 +2082,14 @@ export function App() {
       return presentation ? <iframe data-office-presentation={at.ownerTabId} title={`${presentation.title || "HTML"} 발표`} src={presentation.url} sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads" allowFullScreen style={{ width: "100%", height: "100%", border: 0, display: "block" }} /> : null;
     }
     if (at.kind === "terminal") return <Suspense fallback={<LoadingView label="터미널을 여는 중…" shape="work" />}><TerminalView api={api} id={at.terminalId} focused={focused && tabActive} uiState={tabUi} onUiState={uiOf[tabId]} onList={() => { const space = state.workspaces[at.workspaceId]; if (space) setTerminalWorkspace(space); }} /></Suspense>;
+    if (at.kind === "browser" || (singleSession?.pageAgent && at.kind === "work")) {
+      const pageId = at.kind === "browser" ? at.pageId : singleSession!.pageAgent!.pageId;
+      return <BrowserView key={pageId} browser={sharedBrowser} api={api} state={state} pageId={pageId} visible={tabActive && (!narrowPanes || focused)} parentSessionId={owner ? activeOf(owner)?.id ?? null : null} actions={actions}
+        onNew={target => setNewBrowser({ ...target, paneId: pane.id })}
+        onClosed={() => closeTabNow(pane.id, tabId)} onOpenSession={openSession} onLeaveGuard={guardOf[tabId]}
+        onTranscript={(sessionId, transcript) => dispatch({ type: "transcript", sessionId, transcript })}
+        focusItem={focusItem && state.sessions[focusItem.sessionId]?.pageAgent?.pageId === pageId ? focusItem : null} onFocusDone={() => setFocusItem(null)} />;
+    }
     if ((at.kind === "document" || at.kind === "split") && owner) {
       // Next to its own conversation in the other pane, a document needs no drawer of it.
       const besideChat = split && Boolean(session) && layout.panes.some((other) => other.id !== pane.id && other.view.kind === "work" && sessionIn(other)?.id === session?.id);
@@ -2146,6 +2208,8 @@ export function App() {
   const title =
     single && singleSession && work
       ? `${work.title} · ${singleSession.purpose}`
+      : view.kind === "browser"
+        ? browserState.pages.find(page => page.pageId === view.pageId)?.title || "웹 탭"
       : view.kind === "archive"
         ? "보관함"
         : view.kind === "project"
@@ -2234,7 +2298,7 @@ export function App() {
             title={work && view.kind === "work" && !showStart && !single ? "눌러서 작업 이름 바꾸기" : title}
             onClick={() => work && view.kind === "work" && !showStart && !single && setEditingTitle(true)}
           >
-            <span className="shell-location-kind">{view.kind === "document" || view.kind === "split" ? "문서" : view.kind === "project" ? "프로젝트" : view.kind === "work" ? "대화" : view.kind === "pkm" ? "자료" : "작업공간"}</span>
+            <span className="shell-location-kind">{view.kind === "browser" ? "웹" : view.kind === "document" || view.kind === "split" ? "문서" : view.kind === "project" ? "프로젝트" : view.kind === "work" ? "대화" : view.kind === "pkm" ? "자료" : "작업공간"}</span>
             <span>{title}</span>
           </button>
         )}
@@ -2407,6 +2471,11 @@ export function App() {
       ) : null}
 
       {attentionOpen ? <AttentionCenter inbox={attentionInbox} state={state} onOpen={openAttention} onClose={() => setAttentionOpen(false)} /> : null}
+      {newBrowser ? <NewBrowserDialog browser={sharedBrowser} workspaces={Object.values(state.workspaces)} target={newBrowser} onClose={() => setNewBrowser(null)} onOpen={page => {
+        const content: PaneContent<View> = { view: { kind: "browser", pageId: page.pageId }, workId: page.workId, sessionId: page.sessionId };
+        const targetId = findTab(layoutRef.current, contentKey(content))?.pane.id ?? newBrowser.paneId;
+        afterLeaving(targetId, content.view, () => updateLayout(current => ({ ...setPane(current, targetId, content), focus: targetId })));
+      }} /> : null}
       {taskPanelOpen ? <TaskPanel api={api} workId={view.kind === "project" ? view.workId : work?.id} onClose={() => setTaskPanelOpen(false)} onOpen={(sessionId, itemId) => {
         const target = stateRef.current.sessions[sessionId];
         if (!target) { setToast("원문 대화를 찾을 수 없습니다."); return; }

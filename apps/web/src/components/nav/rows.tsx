@@ -165,7 +165,7 @@ export function TreeRow({ row, ctx }: { row: Row; ctx: RowContext }) {
     );
     title = `프로젝트 · ${row.work.title}\n오버뷰와 속성 열기\n${row.work.cwd}`;
   } else if (row.type === "session") {
-    icon = row.session.documentAgent ? "file" : "chat";
+    icon = row.session.pageAgent ? "globe" : row.session.documentAgent ? "file" : "chat";
     label = row.session.purpose;
     style = { ...indent, ...accentStyle(ctx.lookOf(row.session.provider)) };
     const tone = statusTone(row.session);

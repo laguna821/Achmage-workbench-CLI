@@ -105,8 +105,8 @@ export function workTreeRows(state: State, work: Work, open: TreeOpenState, curr
   const isOpen = expandable && workOpen(open, work.id, currentWorkId);
   const rows: Row[] = [{ type: "work", id: work.id, depth, work, open: isOpen, expandable, sessions, docs }];
   if (!isOpen) return rows;
-  const chats = sessions.filter((session) => !session.documentAgent), agents = sessions.filter((session) => session.documentAgent);
-  for (const [key, label, members] of [["chats", "채팅", chats], ["agents", "문서 AI", agents]] as const) if (members.length) {
+  const chats = sessions.filter((session) => !session.documentAgent && !session.pageAgent), agents = sessions.filter((session) => session.documentAgent), pages = sessions.filter(session => session.pageAgent);
+  for (const [key, label, members] of [["chats", "채팅", chats], ["agents", "문서 AI", agents], ["pages", "웹 탭 AI", pages]] as const) if (members.length) {
     rows.push({ type: "section", id: `${key}:${work.id}`, depth: depth + 1, label: `${label} · ${members.length}`, workId: work.id });
     for (const session of members) rows.push({ type: "session", id: session.id, depth: depth + 2, session, work });
   }

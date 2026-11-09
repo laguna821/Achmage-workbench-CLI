@@ -5,6 +5,7 @@ import type { CommandReceipt, TaskCommand, TaskSnapshot } from "@workbench/contr
 import type { AgentProfile, AgentProfileInput } from "@workbench/contracts";
 import type { WorkspaceService, WorkspaceServiceList, WorkspaceServiceOwner, WorkspaceServiceStart } from "@workbench/contracts";
 import type { AttentionEvent, AttentionList, AttentionPayload, AttentionPresence, AttentionTarget } from "@workbench/contracts";
+import type { BrowserAction, BrowserDriverPoll, BrowserDriverReply, BrowserJobResult, BrowserList, BrowserObservation, BrowserPage, BrowserPageCreate, BrowserProfile } from "@workbench/contracts";
 import type {
   GitHubBinding, GitHubSelection, GitHubView, GitHubCheckDetails, GitHubLog,
   GitHubActionContext, GitHubActionPreview, GitHubActionInput, GitHubActionJob, GitHubDraft, GitHubTemplate, GitHubRecoveryPreview,
@@ -422,7 +423,23 @@ export class Api {
   openExternal = (artifactId: string, target: "ieum" | "default" = "ieum") => this.request<{ app: string }>("POST", `/api/artifacts/${artifactId}/open-external`, { target });
   documentSession = (artifactId: string, parentSessionId: string | null, fresh = false) => this.request<Session>("POST", `/api/artifacts/${artifactId}/document-session`, { parentSessionId, fresh });
   refreshTools = () => this.request<DocumentTools>("POST", "/api/tools/refresh");
-  /** The agent browser: install, the plain sign-in window, bring the window forward, pause a session. */
+  /** Bound transport waits without retrying mutations. Unknown outcomes use their durable receipt. */
+  private async browserRequest<T>(method: string, path: string, body?: unknown, timeout = 10000): Promise<T> {
+    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeout);
+    try { return await this.request<T>(method, path, body, { signal: controller.signal }); }
+    finally { clearTimeout(timer); }
+  }
+  sharedBrowser = {
+    list: () => this.browserRequest<BrowserList>("GET", "/api/browser/pages"),
+    profile: (name: string) => this.browserRequest<BrowserProfile>("POST", "/api/browser/profiles", { name }),
+    create: (input: BrowserPageCreate) => this.browserRequest<BrowserPage>("POST", "/api/browser/pages", input),
+    session: (pageId: string, parentSessionId: string | null) => this.browserRequest<Session>("POST", `/api/browser/pages/${encodeURIComponent(pageId)}/session`, { parentSessionId }),
+    control: (pageId: string, owner: string, expectedGeneration: number) => this.browserRequest<BrowserPage>("POST", `/api/browser/pages/${encodeURIComponent(pageId)}/control`, { owner, expectedGeneration }, 30000),
+    action: (pageId: string, requestId: string, action: BrowserAction, expected?: BrowserObservation) => this.browserRequest<BrowserJobResult>("POST", `/api/browser/pages/${encodeURIComponent(pageId)}/action`, { requestId, action, expected }, 30000),
+    receipt: (id: string) => this.browserRequest<{ status: "queued" | "dispatched" | "completed" | "rejected" | "outcome_unknown"; result: BrowserJobResult | null } | null>("GET", `/api/browser/jobs/${encodeURIComponent(id)}`),
+    poll: (input: BrowserDriverPoll) => this.browserRequest<BrowserDriverReply>("POST", "/api/browser/driver/poll", input, 8000),
+  };
+  /** Legacy engine setup stays independent of the shared native web tabs. */
   browser = {
     engine: (engine: "lightpanda" | "chromium") => this.request<AgentBrowserStatus>("POST", "/api/agent-browser/engine", { engine }),
     install: () => this.request<AgentBrowserStatus>("POST", "/api/agent-browser/install"),

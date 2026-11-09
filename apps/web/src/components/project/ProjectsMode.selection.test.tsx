@@ -9,7 +9,7 @@ import { initialState } from "../../state.ts";
 import { ProjectsMode } from "./ProjectsMode.tsx";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
-const works = Object.fromEntries(["가", "나", "다"].map((title, index) => [title, { id: title, title, cwd: "/projects/" + title, tags: [], folderId: null, archivedAt: null, sort: index, createdAt: 1, updatedAt: 1 } as Work]));
+const works = Object.fromEntries(["가", "나", "다"].map((title, index) => [title, { id: title, title, titleSource: "user", cwd: "/projects/" + title, cwdManaged: false, activeSessionId: null, pinned: false, tags: [], folderId: null, archivedAt: null, sort: index, createdAt: 1, updatedAt: 1 } satisfies Work]));
 async function setup(layout: HomeView["layout"] = "table") {
   const updateWork = vi.fn(async (id: string, _patch: unknown) => works[id]!);
   const api = { updateWork, projects: async () => [], projectStages: async () => DEFAULT_STAGES, propertyTemplate: async () => [] } as unknown as Api;

@@ -68,6 +68,7 @@ export type WorkActions = {
   openWorkspace: (workspace: Workspace | null) => Promise<boolean>;
   openTerminals: (workspace: Workspace) => void;
   openServices: (workspace: Workspace) => void;
+  openBrowser: (workspace: Workspace) => void;
   prepareWorkspace: (workspace: Workspace) => void;
   reviewWorkspace: (workspace: Workspace) => void;
   workspaceGit: Pick<Api, "workspaceRepository" | "connectWorktree" | "worktreeCreations" | "createWorktreeWorkspace" | "cancelWorktreeCreation">;
@@ -313,8 +314,8 @@ export function WorkView({
   const references = useDocumentReferences(api, work.id, onToast);
   const unseen = useUnseen();
   // Archived sessions leave the tabs (they stay in the archive), unless one is on screen.
-  const listed = workSessions(state, work.id).filter((session) => !session.documentAgent);
-  const shown = (work.activeSessionId && !state.sessions[work.activeSessionId]?.documentAgent && state.sessions[work.activeSessionId]) || listed[listed.length - 1] || sessionsOf(state, work.id).filter((session) => !session.documentAgent).at(-1) || null;
+  const listed = workSessions(state, work.id).filter((session) => !session.documentAgent && !session.pageAgent);
+  const shown = (work.activeSessionId && !state.sessions[work.activeSessionId]?.documentAgent && !state.sessions[work.activeSessionId]?.pageAgent && state.sessions[work.activeSessionId]) || listed[listed.length - 1] || sessionsOf(state, work.id).filter((session) => !session.documentAgent && !session.pageAgent).at(-1) || null;
   const active = shown;
   const workspace = state.workspaces[active?.workspaceId ?? work.defaultWorkspaceId ?? ""];
   const cwd = workspace?.cwd ?? active?.worktree?.cwd ?? work.cwd;
