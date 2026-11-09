@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { Attachment } from "@workbench/contracts";
-import { attachmentUrl } from "../api.ts";
+import { artifactCacheKey, type Attachment } from "@workbench/contracts";
+import { retainAttachmentUrl } from "../api.ts";
 import { Icon } from "./Icon.tsx";
 import "../styles/attachments.css";
 
@@ -60,7 +60,7 @@ export function usePendingFiles(upload: (file: File) => Promise<Attachment | nul
     setFiles((current) => [...current, ...added.map(({ entry }) => entry)]);
     for (const { file, entry } of added) {
       if (entry.error) continue;
-      const uploading = upload(file).then((attachment) => {
+      const uploading = upload(file).catch(() => null).then((attachment) => {
         setFiles((current) => current.map((item) => (item.key === entry.key ? { ...item, attachment, error: attachment ? null : "올리지 못했습니다" } : item)));
         return attachment;
       });
@@ -107,12 +107,13 @@ export function PendingFiles({ files, onRemove }: { files: PendingFile[]; onRemo
 
 /** What a request carried: pictures as thumbnails (click for the whole picture), other files by name. */
 export function AttachmentStrip({ attachments }: { attachments: Attachment[] }) {
-  const [shown, setShown] = useState<{ url: string; name: string } | null>(null);
+  const [shown, setShown] = useState<number | null>(null);
+  const pictures = attachments.filter(attachment => isPicture(attachment.mime));
   return (
     <div className="attach-strip">
       {attachments.map((attachment) =>
         isPicture(attachment.mime) ? (
-          <Thumb key={attachment.id} attachment={attachment} onOpen={(url) => setShown({ url, name: attachment.name })} />
+          <Thumb key={attachment.id} attachment={attachment} onOpen={() => setShown(pictures.indexOf(attachment))} />
         ) : (
           <span key={attachment.id} className="attach-chip" title={attachment.name}>
             <Icon name="file" size={13} />
@@ -121,44 +122,86 @@ export function AttachmentStrip({ attachments }: { attachments: Attachment[] }) 
           </span>
         ),
       )}
-      {shown ? <Lightbox url={shown.url} name={shown.name} onClose={() => setShown(null)} /> : null}
+      {shown !== null && pictures[shown] ? <Lightbox attachments={pictures} index={shown} onSelect={setShown} onClose={() => setShown(null)} /> : null}
     </div>
   );
 }
 
-function Thumb({ attachment, onOpen }: { attachment: Attachment; onOpen: (url: string) => void }) {
+function useImage(attachment: Attachment, active = true) {
   const [url, setUrl] = useState<string | null>(null);
-  const [missing, setMissing] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const identity = attachment.reference ? artifactCacheKey(attachment.reference) : "local";
   useEffect(() => {
+    setUrl(null); setProblem(null);
+    if (!active) return;
     let live = true;
-    attachmentUrl(attachment.id)
-      .then((value) => live && setUrl(value))
-      .catch(() => live && setMissing(true));
-    return () => {
-      live = false;
-    };
-  }, [attachment.id]);
+    const lease = retainAttachmentUrl(attachment.id, identity);
+    lease.promise.then(value => { if (live) setUrl(value); }).catch(error => { if (live) setProblem(error instanceof Error ? error.message : "그림을 불러오지 못했습니다"); });
+    return () => { live = false; lease.release(); };
+  }, [attachment.id, identity, active, attempt]);
+  return { url, problem, retry: () => setAttempt(value => value + 1), failed: () => setProblem("그림을 표시하지 못했습니다") };
+}
+
+function Thumb({ attachment, onOpen }: { attachment: Attachment; onOpen: () => void }) {
+  const container = useRef<HTMLSpanElement>(null);
+  const [visible, setVisible] = useState(typeof IntersectionObserver === "undefined");
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined" || !container.current) return;
+    const observer = new IntersectionObserver(([entry]) => setVisible(Boolean(entry?.isIntersecting)), { rootMargin: "400px" });
+    observer.observe(container.current); return () => observer.disconnect();
+  }, []);
+  const image = useImage(attachment, visible);
   return (
-    <button type="button" className="attach-thumb" onClick={() => url && onOpen(url)} title={attachment.name} aria-label={`${attachment.name} 크게 보기`} disabled={!url}>
-      {url ? <img src={url} alt={attachment.name} /> : <span className="attach-thumb-wait">{missing ? "그림 없음" : ""}</span>}
-    </button>
+    <span className="attach-preview" ref={container}>
+      <button type="button" className="attach-thumb" onClick={onOpen} title={attachment.name} aria-label={`${attachment.name} 크게 보기`} disabled={!image.url || !!image.problem}>
+        {image.url && !image.problem ? <img src={image.url} alt={attachment.name} onError={image.failed} decoding="async" /> : <span className="attach-thumb-wait">{image.problem ? "그림 없음" : visible ? "불러오는 중…" : "그림"}</span>}
+      </button>
+      {image.problem ? <button type="button" className="text-button attach-retry" onClick={image.retry} title={image.problem}>다시 불러오기</button> : null}
+    </span>
   );
 }
 
-/** The whole picture over everything; Esc or a click closes it (and Esc does nothing else). */
-function Lightbox({ url, name, onClose }: { url: string; name: string; onClose: () => void }) {
+/** Inline Markdown images use the immutable message capture, never an arbitrary file URL. */
+export function MessageImage({ attachment, gallery }: { attachment: Attachment; gallery: Attachment[] }) {
+  const [shown, setShown] = useState<number | null>(null);
+  return <span className="message-image"><Thumb attachment={attachment} onOpen={() => setShown(Math.max(0, gallery.indexOf(attachment)))} />
+    {shown !== null ? <Lightbox attachments={gallery} index={shown} onSelect={setShown} onClose={() => setShown(null)} /> : null}</span>;
+}
+
+/** The gallery retains its own blob while the source thumbnail scrolls out of view. */
+function Lightbox({ attachments, index, onSelect, onClose }: { attachments: Attachment[]; index: number; onSelect(index: number): void; onClose(): void }) {
+  const attachment = attachments[index]!;
+  const image = useImage(attachment);
+  const close = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const origin = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    close.current?.focus(); return () => { if (origin?.isConnected) origin.focus(); };
+  }, []);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.stopPropagation();
-      onClose();
+      if (!["Escape", "ArrowLeft", "ArrowRight"].includes(event.key)) return;
+      event.preventDefault(); event.stopPropagation();
+      if (event.key === "Escape") onClose();
+      if (event.key === "ArrowLeft") onSelect((index + attachments.length - 1) % attachments.length);
+      if (event.key === "ArrowRight") onSelect((index + 1) % attachments.length);
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
+  }, [onClose, onSelect, index, attachments.length]);
   return createPortal(
-    <div className="attach-lightbox" role="dialog" aria-label={name} onClick={onClose}>
-      <img src={url} alt={name} />
+    <div className="attach-lightbox" role="dialog" aria-modal="true" aria-label={attachment.name} onPointerDown={event => { if (event.target === event.currentTarget) onClose(); }} onKeyDown={event => {
+      if (event.key !== "Tab") return;
+      const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not([disabled]), a[href]')], first = items[0], last = items.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    }}>
+      <header><span>{attachment.name} · {index + 1}/{attachments.length}{attachment.reference ? " · 답변 당시 그림" : ""}</span>
+        <button ref={close} type="button" onClick={onClose} aria-label="그림 닫기"><Icon name="x" /></button></header>
+      <div className="attach-gallery-image">{image.url && !image.problem ? <img src={image.url} alt={attachment.name} onError={image.failed} /> : <p>{image.problem ?? "그림을 불러오는 중…"}{image.problem ? <button type="button" onClick={image.retry}>다시 불러오기</button> : null}</p>}</div>
+      <footer><button type="button" disabled={attachments.length < 2} onClick={() => onSelect((index + attachments.length - 1) % attachments.length)}>이전 그림</button>
+        {image.url ? <a href={image.url} download={attachment.name}>이 그림 저장</a> : null}
+        <button type="button" disabled={attachments.length < 2} onClick={() => onSelect((index + 1) % attachments.length)}>다음 그림</button></footer>
     </div>,
     document.body,
   );

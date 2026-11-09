@@ -560,18 +560,15 @@ export class Api {
   }
 }
 
-const attachmentUrls = new Map<string, Promise<string>>();
+import { MediaCache } from "./media-cache.ts";
+const attachmentMedia = new MediaCache(async key => {
+  const id = JSON.parse(key)[1] as string;
+  const response = await fetch(`/api/attachments/${encodeURIComponent(id)}`, { headers: { authorization: `Bearer ${readToken() ?? ""}` } });
+  if (!response.ok) throw new ApiRequestError(response.status, { code: "attachment_failed", message: response.status === 404 ? "저장된 그림이 없습니다" : response.statusText });
+  return response.blob();
+});
 
 /** A local URL for an attachment (fetched once with the token; its content never changes). */
-export function attachmentUrl(id: string): Promise<string> {
-  let url = attachmentUrls.get(id);
-  if (!url) {
-    url = fetch(`/api/attachments/${encodeURIComponent(id)}`, { headers: { authorization: `Bearer ${readToken() ?? ""}` } }).then(async (response) => {
-      if (!response.ok) throw new ApiRequestError(response.status, { code: "attachment_failed", message: response.statusText });
-      return URL.createObjectURL(await response.blob());
-    });
-    url.catch(() => attachmentUrls.delete(id));
-    attachmentUrls.set(id, url);
-  }
-  return url;
+export function retainAttachmentUrl(id: string, identity = "local") {
+  return attachmentMedia.retain(JSON.stringify([identity, id]));
 }

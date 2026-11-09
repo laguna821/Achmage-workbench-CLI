@@ -1,13 +1,13 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import Markdown from "react-markdown";
+import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { PROVIDER_LABEL, turnEndText, type Provider, type TranscriptItem } from "@workbench/contracts";
+import { PROVIDER_LABEL, turnEndText, type MessageMedia, type Provider, type TranscriptItem } from "@workbench/contracts";
 import { EngineMark } from "./EngineMark.tsx";
 import { FileCard, HandoffCard, ProposalCard, RefChips, useDocs } from "./DocCards.tsx";
 import { CREATE_LABEL } from "@workbench/contracts";
 import { Icon, type IconName } from "./Icon.tsx";
 import { diagramComponents } from "./Diagram.tsx";
-import { AttachmentStrip } from "./Attachments.tsx";
+import { AttachmentStrip, MessageImage } from "./Attachments.tsx";
 import { PlanApproval } from "./PlanFirst.tsx";
 import { ImageCard } from "./ImageGen.tsx";
 import { LinkEndCard, LinkHopBadge, LinkRequestText } from "./LinkCards.tsx";
@@ -103,10 +103,15 @@ const TOOL_ICON: Record<string, IconName> = {
   other: "tool",
 };
 
-const AssistantText = memo(function AssistantText({ text, streaming }: { text: string; streaming: boolean }) {
+const AssistantText = memo(function AssistantText({ text, streaming, media = [] }: { text: string; streaming: boolean; media?: MessageMedia[] }) {
+  const gallery = media.map(entry => entry.attachment);
   return (
     <div className={`markdown${streaming ? " streaming" : ""}`}>
-      <Markdown remarkPlugins={[remarkGfm]} components={streaming ? STREAMING : DRAWN}>
+      <Markdown remarkPlugins={[remarkGfm]} urlTransform={(url, key) => key === "src" ? url : defaultUrlTransform(url)} components={{ ...(streaming ? STREAMING : DRAWN), img: ({ src, alt }) => {
+        const saved = media.find(entry => entry.source === src);
+        return saved ? <MessageImage attachment={saved.attachment} gallery={gallery} />
+          : <span className="muted">{alt || "그림"}{typeof src === "string" && /^https?:\/\//i.test(src) ? <> · <a href={src} target="_blank" rel="noreferrer">원본 링크</a></> : streaming ? " · 응답 후 미리보기" : " · 미리보기 없음"}</span>;
+      } }}>
         {text || " "}
       </Markdown>
     </div>
@@ -545,7 +550,7 @@ export function Transcript({
         return (
           <div key={block.item.id} className="turn-assistant">
             {block.speaker ? speaker : null}
-            <AssistantText text={block.item.text} streaming={block.item.streaming} />
+            <AssistantText text={block.item.text} streaming={block.item.streaming} media={block.item.media} />
             <MessageActions sessionId={sessionId} itemId={block.item.id} streaming={block.item.streaming} />
           </div>
         );

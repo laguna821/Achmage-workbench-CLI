@@ -167,7 +167,7 @@ export type QueuedMessage = { id: string; text: string; refs: DocRef[]; create: 
  * A file pasted or dropped into the input (a picture, a PDF, any file), kept by the gateway by its
  * content and handed to the engine with the request. `id` is `<sha256><ext>`.
  */
-export type Attachment = { id: string; name: string; mime: string; size: number };
+export type Attachment = { id: string; name: string; mime: string; size: number; reference?: import("./artifacts.ts").ArtifactRef };
 
 /** A reply the user has not looked at yet (or a session marked unread). */
 export const isUnseen = (session: Session) => session.unread || Boolean(session.previewAt && session.previewAt > (session.seenAt ?? 0));
@@ -360,7 +360,7 @@ export type TranscriptItem = (
       /** Vault notes given as read-only references (vault-relative paths). */
       notes?: { path: string; title: string }[];
     }
-  | { kind: "assistant"; id: string; text: string; streaming: boolean; at: number }
+  | { kind: "assistant"; id: string; text: string; streaming: boolean; at: number; media?: import("./artifacts.ts").MessageMedia[] }
   | { kind: "reasoning"; id: string; text: string; at: number }
   | {
       kind: "tool";
@@ -902,3 +902,4 @@ export * from "./user-skills.ts";
 export * from "./github.ts";
 export * from "./github-actions.ts";
 export * from "./github-discussion.ts";
+export * from "./artifacts.ts";

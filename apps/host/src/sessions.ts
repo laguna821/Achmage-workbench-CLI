@@ -87,6 +87,7 @@ import { copyMcp, copySkill, integrations, type EngineBinaries } from "./integra
 import { exportFileName, sessionMarkdown } from "./export-md.ts";
 import { Attachments } from "./attachments.ts";
 import { imagesNamed, keepImage, withImages } from "./tool-images.ts";
+import { captureMessageMedia } from "./media-references.ts";
 import { ImageGen } from "./imagegen.ts";
 import { SessionLinks } from "./links.ts";
 import { Schedules } from "./schedules.ts";
@@ -527,6 +528,16 @@ export class SessionManager {
       }
       const items = this.loadItems(sessionId);
       if (item.kind === "tool") item = this.withStepImages(sessionId, item, items);
+      if (item.kind === "assistant" && !item.streaming && item.text.includes("![")) {
+        const session = this.sessions.get(sessionId), project = session && this.works.get(session.workId);
+        const previous = items.find(entry => entry.id === item.id);
+        if (session && project) {
+          const media = captureMessageMedia(this.attachments, {
+            hostId: session.hostId, workspaceId: session.workspaceId ?? null, cwd: this.engineWork(session, project).cwd, sourceMessageId: item.id,
+          }, item.text, item.media ?? (previous?.kind === "assistant" ? previous.media : undefined));
+          if (media.length) item = { ...item, media };
+        }
+      }
       this.transcripts.set(sessionId, applyItemEvent(items, { type: "item.upserted", sessionId, item }));
       this.store.saveItem(sessionId, item);
       this.bus.publish({ type: "item.upserted", sessionId, item });
