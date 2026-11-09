@@ -36,13 +36,23 @@ import { pdfLoader } from "./pdf-loader.ts";
 import { FindTool, withFindTool } from "./find-tool.ts";
 import { findToolInstructions } from "./search.ts";
 import { adoptLoginShellPath } from "./shell-env.ts";
+import { claimInstance } from "./daemon/instance.ts";
+import { HostAutostart } from "./daemon/autostart.ts";
 
 // Local gateway: owns engine processes and state, serves the UI and an HTTP + SSE API on
 // 127.0.0.1 only. Prints one `WORKBENCH_READY {json}` line once it accepts connections.
 
 const env = process.env;
 const dataDir = env.WORKBENCH_DATA_DIR ?? join(env.XDG_DATA_HOME ?? join(homedir(), ".local/share"), "achmage-workbench");
-const token = env.WORKBENCH_TOKEN ?? randomBytes(24).toString("base64url");
+const lease = claimInstance(dataDir, env.WORKBENCH_HOST_ID ?? hostname(), env.WORKBENCH_HOST_MODE === "service" ? "service" : "shell");
+process.on("exit", () => lease.release());
+function localToken() {
+  const file = join(dataDir, "host-auth");
+  try { const saved = readFileSync(file, "utf8").trim(); if (/^[a-zA-Z0-9_-]{32,}$/.test(saved)) return saved; } catch { /* First service start. */ }
+  const value = randomBytes(32).toString("base64url");
+  writeFileSync(file, value, { mode: 0o600 }); return value;
+}
+const token = env.WORKBENCH_TOKEN ?? (lease.instance.mode === "service" ? localToken() : randomBytes(24).toString("base64url"));
 // The window's storage (drafts, screen choices) belongs to the page origin, so the gateway keeps
 // the same port across launches: reuse the last one, and only fall back to a new one if it is taken.
 const portFile = join(dataDir, "port");
@@ -82,7 +92,7 @@ const ieum = new IeumOffice(findIeum(), { dataDir });
 const wrapped = installToolWrappers(dataDir, { kordoc: kordoc.runner, ieum: ieum.install, ieumAppWrapper: ieum.appWrapper });
 if (wrapped.includes("kordoc")) kordoc.engineCommand = "kordoc";
 if (wrapped.includes("ieumoffice")) ieum.engineCommand = "ieumoffice";
-const bus = new EventBus();
+const bus = new EventBus(5000, lease.instance.instanceId);
 // "새 프로젝트 폴더 위치": works started without a folder get theirs under the folder the user chose.
 const worksDir: WorksDir = new WorksDir(store, join(dataDir, "works"), (): string | null => pkm.vault.root);
 // Lightpanda background sessions by default; Chromium remains an explicit compatibility mode.
@@ -155,6 +165,8 @@ const officeImport = officeControl ? new OfficeImport(manager.documents, manager
 const dropbox = new DropboxFolders(store, manager, dataDir);
 officeAi.drive = officeDrive;
 const server = createHttpServer(manager, bus, {
+  autostart: new HostAutostart(dataDir),
+  host: { instance: lease.instance, stopping: () => stopping, stop: () => { void stop(); } },
   officeImport,
   dropbox,
   officeDrive,
@@ -212,9 +224,9 @@ listen(editors, env.WORKBENCH_EDITORS_PORT, editorsPortFile, (editorsPort) => {
     officeSettingsOrigin = `http://127.0.0.1:${address.port}`;
     listen(server, env.WORKBENCH_PORT, portFile, (boundPort) => {
       applicationOrigin = `http://127.0.0.1:${boundPort}`;
-      process.stdout.write(
-        `WORKBENCH_READY ${JSON.stringify({ url: applicationOrigin, port: boundPort, token, dataDir, editorsUrl: editorsOrigin })}\n`,
-      );
+      const connection = { url: applicationOrigin, port: boundPort, token, dataDir, editorsUrl: editorsOrigin };
+      lease.ready(connection);
+      if (lease.instance.mode === "shell") process.stdout.write(`WORKBENCH_READY ${JSON.stringify({ ...connection, instance: lease.instance })}\n`);
       void shellPath.then(() => manager.initProviders());
       // Desktop installation includes a standalone IeumOffice app and its OS registration.
       // Keep the UI responsive while the official installer runs; failures stay visible there.
@@ -250,7 +262,7 @@ async function stop() {
 process.on("SIGTERM", stop);
 process.on("SIGINT", stop);
 // When the desktop shell dies, stdin closes; do not outlive it.
-if (env.WORKBENCH_EXIT_ON_STDIN_CLOSE === "1") {
+if (lease.instance.mode === "shell" && env.WORKBENCH_EXIT_ON_STDIN_CLOSE === "1") {
   process.stdin.on("end", stop);
   process.stdin.resume();
 }

@@ -105,6 +105,8 @@ function parseRefs(value: unknown): DocRef[] {
 }
 
 export type HttpOptions = {
+  autostart?: import("./daemon/autostart.ts").HostAutostart;
+  host?: { instance: import("@workbench/contracts").HostInstance; stopping: () => boolean; stop: () => void };
   dropbox?: import("./dropbox.ts").DropboxFolders;
   officeImport?: import("./office-import.mjs").OfficeImport;
   officeDrive?: import("./office-drive.mjs").OfficeDrive;
@@ -193,7 +195,7 @@ export function serveStatic(res: ServerResponse, webDir: string, pathname: strin
   createReadStream(file).pipe(res);
 }
 
-function streamEvents(req: IncomingMessage, res: ServerResponse, bus: EventBus, since: number) {
+function streamEvents(req: IncomingMessage, res: ServerResponse, bus: EventBus, since: number, epoch?: string) {
   res.writeHead(200, {
     "content-type": "text/event-stream; charset=utf-8",
     "cache-control": "no-store",
@@ -201,8 +203,9 @@ function streamEvents(req: IncomingMessage, res: ServerResponse, bus: EventBus, 
   });
   // Send the headers at once: the browser reports the stream as open only when they arrive.
   res.write(": open\n\n");
+  res.write(`event: cursor\ndata: ${JSON.stringify({ epoch: bus.epoch, seq: bus.currentSeq })}\n\n`);
   const write = (event: SequencedEvent) => res.write(`id: ${event.seq}\ndata: ${JSON.stringify(event)}\n\n`);
-  const backlog = bus.replay(since);
+  const backlog = bus.replay(since, epoch);
   if (backlog === null) {
     // The client is too far behind; it must reload the snapshot.
     res.write(`event: resync\ndata: {}\n\n`);
@@ -269,6 +272,26 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       const method = req.method ?? "GET";
 
       if (method === "GET" && path === "/api/snapshot") return sendJson(res, 200, manager.snapshot());
+      if (path === "/api/host/autostart" && options.autostart) {
+        if (method === "GET") return sendJson(res, 200, await options.autostart.status());
+        if (method === "PUT") {
+          const body = await readJson(req, 1024);
+          if (typeof body.enabled !== "boolean") throw new HttpError(400, "autostart_input", "자동 시작 여부를 선택해 주세요.");
+          return sendJson(res, 200, await options.autostart.setEnabled(body.enabled));
+        }
+      }
+      if (method === "GET" && path === "/api/host" && options.host) return sendJson(res, 200, {
+        instance: options.host.instance, cursor: { epoch: bus.epoch, seq: bus.currentSeq }, state: options.host.stopping() ? "stopping" : "running",
+        activeTasks: [...manager.view.sessions.values()].filter(session => !["idle", "error"].includes(session.status)).length,
+      });
+      if (method === "POST" && path === "/api/host/stop" && options.host) {
+        const body = await readJson(req, 4000), expected = body.instance as import("@workbench/contracts").HostInstance | undefined;
+        const own = options.host.instance;
+        if (!expected || expected.hostId !== own.hostId || expected.instanceId !== own.instanceId || expected.ownerPid !== own.ownerPid || expected.ownerStartedAt !== own.ownerStartedAt || expected.protocolVersion !== own.protocolVersion)
+          throw new HttpError(409, "OWNER_MISMATCH", "호스트 소유권이 변경되었습니다. 현재 연결에서 다시 종료해 주세요.");
+        sendJson(res, 202, { instanceId: own.instanceId, state: "stopping", requestedAt: Date.now() });
+        setImmediate(options.host.stop); return;
+      }
       if (options.dropbox && path.startsWith("/api/dropbox")) {
         if (path === "/api/dropbox" && method === "GET") return sendJson(res, 200, options.dropbox.state());
         if (path === "/api/dropbox" && method === "DELETE") return sendJson(res, 200, options.dropbox.disconnect());
@@ -376,7 +399,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       if (path.startsWith("/api/projects/") && options.projects && (await options.projects(req, res, url))) return;
       if (path.startsWith("/api/entry/") && options.entry && (await options.entry(req, res, url))) return;
       if (method === "GET" && path === "/api/events") {
-        return streamEvents(req, res, bus, Number(url.searchParams.get("since") ?? bus.currentSeq));
+        return streamEvents(req, res, bus, Number(url.searchParams.get("since") ?? bus.currentSeq), url.searchParams.get("epoch") ?? undefined);
       }
       if (method === "POST" && path === "/api/folders") {
         const body = await readJson(req);

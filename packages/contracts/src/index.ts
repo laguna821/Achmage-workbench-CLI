@@ -17,6 +17,7 @@ export * from "./scm-review.ts";
 export * from "./document-registry.ts";
 export * from "./office-new.ts";
 export * from "./tasks.ts";
+export * from "./host-session.ts";
 
 export const PROTOCOL_VERSION = 1;
 
@@ -522,7 +523,7 @@ export type WorkbenchEvent =
  */
 export type UiPrefs = Record<string, unknown>;
 
-export type SequencedEvent = WorkbenchEvent & { seq: number; at: number };
+export type SequencedEvent = WorkbenchEvent & { seq: number; at: number; epoch?: string };
 
 /** A document engine the gateway can use: kordoc (Hangul), IeumOffice (Office formats), HOP (Hangul editor). */
 export type ToolStatus = {
@@ -560,6 +561,7 @@ export type IntegrationsView = {
 export type Snapshot = {
   protocolVersion: number;
   seq: number;
+  epoch?: string;
   hostId: string;
   hostLabel: string;
   folders: Folder[];
@@ -813,6 +815,7 @@ export type OfficeHostMessage =
       headlessExport?: { outPath: string; format: "pdf" | "html" | "docx" };
     }
   | { type: "office:theme"; theme: "light" | "dark" }
+  | { type: "office:show-commands" }
   /** Refresh a scoped write capability without recreating the editor or dropping its undo state. */
   | { type: "office:grant"; token: string; sessionId: string | null }
   | { type: "office:skills-changed" }

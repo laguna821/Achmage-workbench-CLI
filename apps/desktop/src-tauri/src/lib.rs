@@ -141,7 +141,15 @@ pub fn reveal_ai_secrets() -> i32 {
     command.status().ok().and_then(|status| status.code()).unwrap_or(1)
 }
 
-fn gateway_command(app: &tauri::AppHandle) -> Command {
+fn service_enabled(app: &tauri::AppHandle) -> bool {
+    // An AppImage's temporary mount goes away with its launcher. Until the runtime has a
+    // persistent install location, keep its established UI-bound mode.
+    office_cli::data_dir(app).is_none() && std::env::var_os("APPIMAGE").is_none()
+        && std::env::var("WORKBENCH_HOST_MODE").as_deref() != Ok("shell")
+}
+
+fn gateway_command(app: &tauri::AppHandle, action: &str) -> Command {
+    let service = service_enabled(app);
     let mut command = Command::new(node_binary(app));
     command.env_remove("WORKBENCH_CLI_INPUT");
     if let Some(root) = office_cli::data_dir(app) {
@@ -159,7 +167,7 @@ fn gateway_command(app: &tauri::AppHandle) -> Command {
     // Bundles (AppImage) use the resource dir; a plain install keeps host/ and web/ next to the binary.
     let bundled = app_dirs(app)
         .into_iter()
-        .map(|dir| (dir.join("host/host.mjs"), dir.join("web")))
+        .map(|dir| (dir.join(if service { "host/workbench-service.mjs" } else { "host/host.mjs" }), dir.join("web")))
         .find(|(host, _)| host.exists());
     match bundled {
         Some((host, web)) => {
@@ -169,14 +177,15 @@ fn gateway_command(app: &tauri::AppHandle) -> Command {
             // Development only: run the gateway straight from the repository sources.
             let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
             command
-                .arg(repo.join("apps/host/src/main.ts"))
+                .arg(repo.join(if service { "apps/host/src/daemon/cli.ts" } else { "apps/host/src/main.ts" }))
                 .env("WORKBENCH_WEB_DIR", repo.join("apps/web/dist"));
         }
         None => {
             // Release builds never fall back to a source checkout; this fails visibly at spawn.
-            command.arg("host/host.mjs");
+            command.arg(if service { "host/workbench-service.mjs" } else { "host/host.mjs" });
         }
     }
+    if service { command.arg(action); if action == "start" { command.arg("--desktop"); } }
     // The tools shipped with the app (kordoc, IeumOffice, npm) sit in the resource folder.
     if let Ok(dirs) = std::env::join_paths(app_dirs(app)) {
         command.env("WORKBENCH_RESOURCES_DIR", dirs);
@@ -188,7 +197,7 @@ fn gateway_command(app: &tauri::AppHandle) -> Command {
         .env("WORKBENCH_PTY_BIN", std::env::current_exe().unwrap_or_default())
         .env("WORKBENCH_SECRET_BIN", std::env::current_exe().unwrap_or_default())
         .env("WORKBENCH_APP_BIN", std::env::current_exe().unwrap_or_default())
-        .env("WORKBENCH_EXIT_ON_STDIN_CLOSE", "1")
+        .env("WORKBENCH_EXIT_ON_STDIN_CLOSE", if service { "0" } else { "1" })
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit());
@@ -197,7 +206,7 @@ fn gateway_command(app: &tauri::AppHandle) -> Command {
 
 fn start_gateway(app: &tauri::AppHandle) -> Result<(Child, Ready), String> {
     if office_cli::data_dir(app).is_some() { office_cli::trace("gateway-spawn"); }
-    let mut child = gateway_command(app)
+    let mut child = gateway_command(app, "start")
         .spawn()
         .map_err(|error| format!("Node.js를 실행하지 못했습니다 ({error}). Node 24 이상이 필요합니다."))?;
     let stdout = child.stdout.take().ok_or("게이트웨이 출력을 읽지 못했습니다.")?;
@@ -300,8 +309,9 @@ struct Attention(Mutex<Option<MenuItem<tauri::Wry>>>);
 fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     let attention = MenuItem::with_id(app, "attention", "확인할 것 없음", false, None::<&str>)?;
     let open = MenuItem::with_id(app, "open", "Achmage Workbench 열기", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "끝내기 (진행 중인 응답도 멈춤)", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&attention, &open, &quit])?;
+    let quit = MenuItem::with_id(app, "quit", if service_enabled(app) { "앱 종료 (백그라운드 작업 유지)" } else { "끝내기 (진행 중인 응답도 멈춤)" }, true, None::<&str>)?;
+    let stop = MenuItem::with_id(app, "stop-service", "작업까지 모두 종료", service_enabled(app), None::<&str>)?;
+    let menu = Menu::with_items(app, &[&attention, &open, &quit, &stop])?;
     app.manage(Attention(Mutex::new(Some(attention))));
     let mut tray = TrayIconBuilder::with_id("main")
         .tooltip("Achmage Workbench")
@@ -313,6 +323,15 @@ fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             }
             "open" => show_main(app),
             "quit" => app.exit(0),
+            "stop-service" => {
+                let app = app.clone();
+                std::thread::spawn(move || {
+                    match gateway_command(&app, "stop").stdin(Stdio::null()).stdout(Stdio::null()).status() {
+                        Ok(status) if status.success() => app.exit(0),
+                        _ => { app.dialog().message("백그라운드 호스트를 종료하지 못했습니다. 작업 상태를 확인하고 다시 시도해 주세요.").title("종료 실패").kind(MessageDialogKind::Error).blocking_show(); }
+                    }
+                });
+            }
             _ => {}
         });
     if let Some(icon) = app.default_window_icon() {
@@ -374,6 +393,8 @@ fn notify_session(app: tauri::AppHandle, title: String, body: String, session_id
 }
 
 fn stop_gateway(app: &tauri::AppHandle) {
+    // The service launcher has already exited. UI exit never signals the owned service.
+    if service_enabled(app) { return; }
     if let Some(state) = app.try_state::<Gateway>() {
         if let Some(mut child) = state.0.lock().unwrap().take() {
             // Closing stdin asks the gateway to shut down cleanly; kill only if it lingers.

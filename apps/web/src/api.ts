@@ -122,6 +122,7 @@ export class ApiRequestError extends Error {
 }
 
 export class Api {
+  private epoch: string | undefined;
   private readonly scmPreferenceWrites = new Map<string, Promise<ScmComparisonPreferences>>();
   private readonly token: string;
   private readonly documentAccess?: () => DocumentAccess;
@@ -149,7 +150,8 @@ export class Api {
     return json;
   }
 
-  snapshot = () => this.request<Snapshot>("GET", "/api/snapshot");
+  snapshot = async () => { const snapshot = await this.request<Snapshot>("GET", "/api/snapshot"); this.epoch = snapshot.epoch; return snapshot; };
+  hostStatus = () => this.request<import("@workbench/contracts").HostStatus>("GET", "/api/host");
   tasks = (workId?: string) => this.request<TaskSnapshot>("GET", `/api/tasks${workId ? `?workId=${encodeURIComponent(workId)}` : ""}`);
   agentProfiles = () => this.request<{ profiles: AgentProfile[] }>("GET", "/api/agent-profiles");
   saveAgentProfile = (input: AgentProfileInput, id?: string, expectedRevision?: number) => this.request<AgentProfile>(id ? "PUT" : "POST", `/api/agent-profiles${id ? `/${encodeURIComponent(id)}` : ""}`, { ...input, expectedRevision });
@@ -533,22 +535,27 @@ export class Api {
 
   events(since: number, onEvent: (event: SequencedEvent) => void, onResync: () => void, onStatus: (connected: boolean) => void) {
     let lastSeq = since;
+    let epoch = this.epoch;
     let source: EventSource | null = null;
     let closed = false;
     let retry: number | null = null;
     const connect = () => {
-      source = new EventSource(`/api/events?since=${lastSeq}&token=${encodeURIComponent(this.token)}`);
+      source = new EventSource(`/api/events?since=${lastSeq}&token=${encodeURIComponent(this.token)}${epoch ? `&epoch=${encodeURIComponent(epoch)}` : ""}`);
+      const reset = () => { if (closed) return; closed = true; source?.close(); onResync(); };
       source.onopen = () => onStatus(true);
+      source.addEventListener("cursor", (message) => {
+        const cursor = JSON.parse((message as MessageEvent).data) as { epoch: string; seq: number };
+        if ((epoch && epoch !== cursor.epoch) || cursor.seq < lastSeq) return reset();
+        epoch = cursor.epoch;
+      });
       source.onmessage = (message) => {
         const event = JSON.parse(message.data) as SequencedEvent;
+        if (event.epoch && epoch && event.epoch !== epoch) return reset();
         if (event.seq <= lastSeq) return;
         lastSeq = event.seq;
         onEvent(event);
       };
-      source.addEventListener("resync", () => {
-        source?.close();
-        onResync();
-      });
+      source.addEventListener("resync", reset);
       source.onerror = () => {
         onStatus(false);
         source?.close();

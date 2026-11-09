@@ -36,6 +36,7 @@ import { SourceControlDialog } from "./components/SourceControlDialog.tsx";
 import { IntegrationsSheet } from "./components/IntegrationsSheet.tsx";
 import { ImageUploadRow, ImageUploadSheet } from "./components/ImageUploadSheet.tsx";
 import { OfficeSettings } from "./components/OfficeSettings.tsx";
+import { BackgroundHost } from "./components/BackgroundHost.tsx";
 import { OfficeDrive } from "./components/OfficeDrive.tsx";
 import { DropboxDialog } from "./components/DropboxDialog.tsx";
 import { KnowledgeLibrary } from "./components/KnowledgeLibrary.tsx";
@@ -2202,6 +2203,7 @@ export function App() {
             </button>
             <Popover open={menuOpen} onClose={closeMenu} align="right">
               <Connections
+                backgroundHost={<BackgroundHost api={api} />}
                 onOfficeSettings={() => { closeMenu(); setOfficeSettingsOpen(true); }}
                 onDropbox={() => { closeMenu(); setDropboxOpen(true); }}
                 onOfficeImport={() => { closeMenu(); setOfficeImportOpen(true); }}

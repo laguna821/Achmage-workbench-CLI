@@ -107,6 +107,7 @@ export function Connections({
   onDropbox,
   onOfficeImport,
   onKnowledge,
+  backgroundHost,
 }: {
   /** The Obsidian vault line (pkm). */
   vault?: ReactNode;
@@ -116,6 +117,7 @@ export function Connections({
   onDropbox?: () => void;
   onOfficeImport?: () => void;
   onKnowledge?: () => void;
+  backgroundHost?: ReactNode;
   tools: DocumentTools | null;
   /** The agent browser (absent from older gateways). */
   browser: AgentBrowserStatus | null;
@@ -151,6 +153,7 @@ export function Connections({
   return (
     <div className="connections">
       <div className="menu-label">연결 · {hostLabel}</div>
+      {backgroundHost}
       {!connected ? <div className="notice notice-error compact">앱 내부 연결이 끊겼습니다. 다시 연결하는 중…</div> : null}
       {(["claude", "codex"] as const).map((provider) => {
         const status = providers[provider];

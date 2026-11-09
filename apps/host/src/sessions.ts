@@ -748,6 +748,7 @@ export class SessionManager {
     return {
       protocolVersion: PROTOCOL_VERSION,
       seq: this.bus.currentSeq,
+      epoch: this.bus.epoch,
       hostId: this.options.hostId,
       hostLabel: this.options.hostLabel,
       folders: [...this.folders.values()],

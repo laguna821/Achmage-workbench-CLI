@@ -22,7 +22,7 @@ export class Terminals {
     this.store = store; this.spaces = spaces; this.binary = binary;
     for (const entry of store.terminals()) {
       this.records.set(entry.id, entry);
-      if (active(entry.status)) this.save({ ...entry, status: "interrupted", pid: null, error: "앱이 종료되어 이전 실행은 이어지지 않습니다. 출력 기록을 확인하고 새 터미널을 열어 주세요." });
+      if (active(entry.status)) this.save({ ...entry, status: "interrupted", pid: null, error: "호스트가 재시작되어 이전 터미널 실행은 이어지지 않습니다. 출력 기록을 확인하고 새 터미널을 열어 주세요." });
     }
   }
   private save(entry: TerminalSession) { const next = { ...entry, updatedAt: Date.now() }; this.records.set(next.id, next); this.store.saveTerminal(next); return next; }
