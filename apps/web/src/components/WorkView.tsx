@@ -67,6 +67,7 @@ export type WorkActions = {
   updateWorkspace: (workspace: Workspace, patch: UpdateWorkspaceRequest) => Promise<Workspace | null>;
   openWorkspace: (workspace: Workspace | null) => Promise<boolean>;
   openTerminals: (workspace: Workspace) => void;
+  openServices: (workspace: Workspace) => void;
   prepareWorkspace: (workspace: Workspace) => void;
   reviewWorkspace: (workspace: Workspace) => void;
   workspaceGit: Pick<Api, "workspaceRepository" | "connectWorktree" | "worktreeCreations" | "createWorktreeWorkspace" | "cancelWorktreeCreation">;

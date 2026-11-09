@@ -3,6 +3,7 @@ import type { KnowledgeLibrary } from "../../../packages/contracts/src/office-kn
 import type { NewOfficeDocument } from "@workbench/contracts";
 import type { CommandReceipt, TaskCommand, TaskSnapshot } from "@workbench/contracts";
 import type { AgentProfile, AgentProfileInput } from "@workbench/contracts";
+import type { WorkspaceService, WorkspaceServiceList, WorkspaceServiceOwner, WorkspaceServiceStart } from "@workbench/contracts";
 import type {
   GitHubBinding, GitHubSelection, GitHubView, GitHubCheckDetails, GitHubLog,
   GitHubActionContext, GitHubActionPreview, GitHubActionInput, GitHubActionJob, GitHubDraft, GitHubTemplate, GitHubRecoveryPreview,
@@ -261,6 +262,10 @@ export class Api {
   terminalInput = (id: string, data: string) => this.request<{ ok: boolean }>("POST", `/api/terminals/${id}/input`, { data });
   resizeTerminal = (id: string, cols: number, rows: number) => this.request<{ ok: boolean }>("POST", `/api/terminals/${id}/resize`, { cols, rows });
   closeTerminal = (id: string) => this.request<TerminalSession>("DELETE", `/api/terminals/${id}`);
+  workspaceServices = (workspaceId: string) => this.request<WorkspaceServiceList>("GET", `/api/workspaces/${encodeURIComponent(workspaceId)}/services`);
+  startWorkspaceService = (workspaceId: string, request: WorkspaceServiceStart) => this.request<WorkspaceService>("POST", `/api/workspaces/${encodeURIComponent(workspaceId)}/services`, request);
+  stopWorkspaceService = (id: string, owner: WorkspaceServiceOwner) => this.request<WorkspaceService>("POST", `/api/services/${encodeURIComponent(id)}/stop`, owner);
+  deleteWorkspaceService = (id: string) => this.request<{ ok: true }>("DELETE", `/api/services/${encodeURIComponent(id)}`);
   workspaceEnvironment = (workId: string) => this.request<WorkspaceEnvironment>("GET", `/api/works/${workId}/environment`);
   saveWorkspaceEnvironment = (workId: string, settings: WorkspaceEnvironment) => this.request<WorkspaceEnvironment>("PUT", `/api/works/${workId}/environment`, { expectedRevision: settings.revision, settings });
   preparationPreview = (workspaceId: string, options: PreparationOptions) => this.request<PreparationPreview>("POST", `/api/workspaces/${workspaceId}/preparations/preview`, options);

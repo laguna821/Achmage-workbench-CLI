@@ -32,6 +32,7 @@ import { DocContext, FormatBadge, type DocActions } from "./components/DocCards.
 import { GroupTabs } from "./components/GroupTabs.tsx";
 import { TaskPanel } from "./components/TaskPanel.tsx";
 import { TerminalDialog } from "./components/TerminalDialog.tsx";
+import { WorkspaceServices } from "./components/WorkspaceServices.tsx";
 import { WorkspacePreparationDialog } from "./components/WorkspacePreparationDialog.tsx";
 import { SourceControlDialog } from "./components/SourceControlDialog.tsx";
 import { IntegrationsSheet } from "./components/IntegrationsSheet.tsx";
@@ -233,6 +234,7 @@ export function App() {
   const [layoutProblem, setLayoutProblem] = useState<{ key: string; message: string } | null>(null);
   const openWorkspaceRef = useRef<(workspace: Workspace | null) => Promise<boolean>>(async () => false);
   const [terminalWorkspace, setTerminalWorkspace] = useState<Workspace | null>(null);
+  const [serviceWorkspace, setServiceWorkspace] = useState<Workspace | null>(null);
   const [preparationWorkspace, setPreparationWorkspace] = useState<Workspace | null>(null);
   const [scmWorkspace, setScmWorkspace] = useState<Workspace | null>(null);
   // A window of its own for one session (`?session=`, "새 창으로 떼어 내기"): no sidebar, no home.
@@ -733,6 +735,7 @@ export function App() {
       },
       openWorkspace: (workspace) => openWorkspaceRef.current(workspace),
       openTerminals: (workspace) => setTerminalWorkspace(workspace),
+      openServices: (workspace) => setServiceWorkspace(workspace),
       prepareWorkspace: (workspace) => setPreparationWorkspace(workspace),
       reviewWorkspace: (workspace) => setScmWorkspace(workspace),
       workspaceGit: {
@@ -2337,6 +2340,7 @@ export function App() {
         if (itemId) setFocusItem({ sessionId, itemId, nonce: Date.now() });
       }} /> : null}
       {terminalWorkspace ? <TerminalDialog api={api} workspace={state.workspaces[terminalWorkspace.id] ?? terminalWorkspace} onClose={() => setTerminalWorkspace(null)} onOpen={(entry) => navigateTo({ view: { kind: "terminal", terminalId: entry.id, workspaceId: entry.workspaceId, label: entry.label }, workId: entry.workId, sessionId: null })} /> : null}
+      {serviceWorkspace ? <WorkspaceServices key={serviceWorkspace.id} api={api} workspace={state.workspaces[serviceWorkspace.id] ?? serviceWorkspace} onClose={() => setServiceWorkspace(null)} openExternal={openExternal} onOpen={(entry) => navigateTo({ view: { kind: "terminal", terminalId: entry.id, workspaceId: entry.workspaceId, label: entry.label }, workId: entry.workId, sessionId: null })} /> : null}
       {preparationWorkspace ? <WorkspacePreparationDialog api={api} workspace={state.workspaces[preparationWorkspace.id] ?? preparationWorkspace} onClose={() => setPreparationWorkspace(null)} onOpen={(entry) => navigateTo({ view: { kind: "terminal", terminalId: entry.id, workspaceId: entry.workspaceId, label: entry.label }, workId: entry.workId, sessionId: null })} /> : null}
       {scmWorkspace ? <SourceControlDialog key={scmWorkspace.id} api={api} workspace={state.workspaces[scmWorkspace.id] ?? scmWorkspace} onClose={() => setScmWorkspace(null)} onTerminal={() => { setTerminalWorkspace(scmWorkspace); setScmWorkspace(null); }} /> : null}
       {integrationsOpen && api ? <IntegrationsSheet api={api} onClose={() => setIntegrationsOpen(false)} onToast={setToast} /> : null}

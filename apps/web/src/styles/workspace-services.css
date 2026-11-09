@@ -1,0 +1,14 @@
+.workspace-services-dialog { width: min(720px, calc(100vw - 32px)); max-height: 88dvh; padding: 24px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); color: var(--ink); box-shadow: 0 14px 60px #0003; }
+.workspace-services-dialog::backdrop { background: #0006; }
+.workspace-services-dialog > header, .workspace-service-heading, .workspace-service-row > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.workspace-services-dialog h2 { margin: 0; font-size: 19px; }.workspace-services-dialog h3 { margin: 0; font-size: 15px; }
+.workspace-service-location { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; font-size: 12px; }.workspace-service-location dt { color: var(--muted); }.workspace-service-location dd { margin: 0; overflow-wrap: anywhere; }
+.workspace-services-dialog form { display: grid; gap: 12px; margin: 20px 0; }.workspace-services-dialog label { display: grid; gap: 5px; font-size: 13px; }
+.workspace-services-dialog input, .workspace-services-dialog textarea { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: inherit; }.workspace-services-dialog textarea { resize: vertical; }
+.workspace-services-dialog .muted { margin: 0; font-size: 12px; line-height: 1.5; }.workspace-services-dialog form > .button { justify-self: start; }
+.workspace-service-pending { padding: 12px; margin: 12px 0; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }.workspace-service-pending p { line-height: 1.5; }
+.workspace-service-error { color: var(--danger, #b5362c); overflow-wrap: anywhere; font-size: 13px; }.workspace-service-heading { margin: 20px 0 10px; }
+.workspace-service-list { display: grid; gap: 10px; }.workspace-service-row { padding: 14px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }.workspace-service-row > header span { white-space: nowrap; color: var(--muted); }
+.workspace-service-row small, .workspace-service-cwd { display: block; margin-top: 5px; color: var(--muted); overflow-wrap: anywhere; }.workspace-service-row pre { margin: 10px 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }.workspace-service-port a { color: var(--accent); }
+.workspace-service-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }.workspace-services-dialog .workspace-service-footnote { margin-top: 20px; }
+@media (max-width: 520px) { .workspace-services-dialog { padding: 16px; }.workspace-services-dialog > header { gap: 8px; }.workspace-services-dialog h2 { font-size: 16px; }.workspace-service-row > header { flex-wrap: wrap; gap: 4px; } }
