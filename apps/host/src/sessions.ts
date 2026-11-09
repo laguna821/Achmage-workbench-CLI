@@ -81,6 +81,7 @@ import { CreationJournal, type CreationRecord } from "./creation-journal.ts";
 import { UserSkills } from "./user-skills.ts";
 import { SkillLibrary } from "./skill-library.ts";
 import { SendGate } from "./send-gate.ts";
+import { TaskService } from "./task-service.ts";
 import { OfficeSessions } from "./office-sessions.ts";
 import { copyMcp, copySkill, integrations, type EngineBinaries } from "./integrations.ts";
 import { exportFileName, sessionMarkdown } from "./export-md.ts";
@@ -276,6 +277,7 @@ export class SessionManager {
   /** The new document each running request asked for. */
   private readonly creating = new Map<string, PendingCreate>();
   private readonly sendGate = new SendGate();
+  readonly tasks: TaskService;
   readonly creations: CreationJournal;
   readonly userSkills: UserSkills;
   readonly skillLibrary: SkillLibrary;
@@ -474,6 +476,12 @@ export class SessionManager {
         await this.send(schedule.sessionId, requestId, schedule.text, [], null, null, "queue", { scheduled: true, activate: false });
       },
       changed: (schedules) => this.bus.publish({ type: "schedules.changed", schedules }),
+    });
+    this.tasks = new TaskService(store, bus, {
+      sessions: () => [...this.sessions.values()], items: id => this.loadItems(id),
+      canSteer: session => Boolean(this.adapters.get(session.provider)?.steer),
+      stop: id => this.interrupt(id), approve: (id, itemId, decision) => this.answerApproval(id, itemId, decision),
+      cancelQueue: (id, queuedId) => this.cancelQueued(id, queuedId), sendQueue: (id, queuedId) => this.sendQueued(id, queuedId),
     });
     options.browse?.bind({
       lookup: (sessionId) => {
@@ -2203,6 +2211,7 @@ export class SessionManager {
   }
 
   async shutdown() {
+    this.tasks.close();
     this.office.close();
     this.scmReviews.stop();
     this.githubFeedback.stop();

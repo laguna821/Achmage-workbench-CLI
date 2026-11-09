@@ -1,6 +1,7 @@
 import type { OfficeOutputFormat } from "../../../packages/contracts/src/office-output.ts";
 import type { KnowledgeLibrary } from "../../../packages/contracts/src/office-knowledge.ts";
 import type { NewOfficeDocument } from "@workbench/contracts";
+import type { CommandReceipt, TaskCommand, TaskSnapshot } from "@workbench/contracts";
 import type {
   GitHubBinding, GitHubSelection, GitHubView, GitHubCheckDetails, GitHubLog,
   GitHubActionContext, GitHubActionPreview, GitHubActionInput, GitHubActionJob, GitHubDraft, GitHubTemplate, GitHubRecoveryPreview,
@@ -148,6 +149,9 @@ export class Api {
   }
 
   snapshot = () => this.request<Snapshot>("GET", "/api/snapshot");
+  tasks = (workId?: string) => this.request<TaskSnapshot>("GET", `/api/tasks${workId ? `?workId=${encodeURIComponent(workId)}` : ""}`);
+  taskCommand = (command: TaskCommand) => this.request<CommandReceipt>("POST", "/api/task-commands", command);
+  taskReceipt = (commandId: string) => this.request<CommandReceipt>("GET", `/api/task-commands/${encodeURIComponent(commandId)}`);
   async knowledgeStream(owner: string, body: unknown, onChunk: (value: unknown) => void, signal: AbortSignal) {
     const response = await fetch("/api/office-knowledge/home/" + encodeURIComponent(owner) + "/stream", {
       method: "POST", headers: { authorization: "Bearer " + this.token, "content-type": "application/json" }, body: JSON.stringify(body), signal,

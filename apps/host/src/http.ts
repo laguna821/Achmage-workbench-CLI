@@ -585,6 +585,16 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         createReadStream(file.path).pipe(res);
         return;
       }
+      if (path === "/api/tasks" && method === "GET") return sendJson(res, 200, manager.tasks.list({
+        workId: url.searchParams.get("workId") || undefined, workspaceId: url.searchParams.get("workspaceId") || undefined,
+        parentSessionId: url.searchParams.get("parentSessionId") || undefined, activeOnly: url.searchParams.get("active") === "1",
+      }));
+      if (path === "/api/task-commands" && method === "POST") return sendJson(res, 202, await manager.tasks.command(await readJson(req, 16_000) as unknown as import("@workbench/contracts").TaskCommand));
+      if (parts[0] === "task-commands" && parts[1] && parts.length === 2 && method === "GET") {
+        const receipt = manager.tasks.receipt(decodeURIComponent(parts[1]));
+        if (!receipt) throw new HttpError(404, "task_receipt_missing", "아직 접수되지 않은 명령입니다.");
+        return sendJson(res, 200, receipt);
+      }
       if (parts[0] === "sessions" && parts[1]) {
         const sessionId = parts[1];
         if (method === "GET" && parts[2] === "items") return sendJson(res, 200, manager.items(sessionId));

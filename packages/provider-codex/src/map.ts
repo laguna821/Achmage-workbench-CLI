@@ -91,6 +91,25 @@ export function mapThreadItem(item: ThreadItem, at: number, inProgress: boolean)
         status: inProgress ? "running" : "completed",
         at,
       };
+    case "collabAgentToolCall": {
+      const states = item.agentsStates;
+      return { kind: "tool", id: item.id, tool: "agent", title: item.tool === "spawnAgent" ? "하위 에이전트 시작" : "하위 에이전트 작업",
+        detail: clip(item.prompt, 2_000), output: clip(Object.values(states).map(state => state?.message).filter(Boolean).join("\n")),
+        status: item.status === "interrupted" ? "declined" : toItemStatus(item.status), at,
+        agent: { parentNativeSessionId: item.senderThreadId, operation: item.tool,
+          children: [...new Set([...item.receiverThreadIds, ...Object.keys(states)])].map(nativeSessionId => {
+            const status = states[nativeSessionId]?.status;
+            return { nativeSessionId, state: status === "completed" ? "completed" : status === "errored" ? "failed" : status === "shutdown" ? "cancelled"
+              : status === "interrupted" ? "interrupted" : status === "pendingInit" ? "queued" : status === "running" ? "running" : "outcome_unknown",
+              result: states[nativeSessionId]?.message ?? null };
+          }) },
+      };
+    }
+    case "subAgentActivity":
+      return { kind: "tool", id: item.id, tool: "agent", title: item.agentPath || "하위 에이전트", detail: null, output: null,
+        status: item.kind === "completed" ? "completed" : item.kind === "interrupted" ? "declined" : "running", at,
+        agent: { operation: item.kind, children: [{ nativeSessionId: item.agentThreadId,
+          state: item.kind === "completed" ? "completed" : item.kind === "interrupted" ? "interrupted" : "running", title: item.agentPath }] } };
     case "contextCompaction":
       return { kind: "notice", id: item.id, level: "info", text: "대화가 길어 앞부분을 압축했습니다.", at };
     case "imageView":

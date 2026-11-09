@@ -16,6 +16,7 @@ export * from "./source-control.ts";
 export * from "./scm-review.ts";
 export * from "./document-registry.ts";
 export * from "./office-new.ts";
+export * from "./tasks.ts";
 
 export const PROTOCOL_VERSION = 1;
 
@@ -376,6 +377,8 @@ export type TranscriptItem = (
       reads?: string[];
       /** Pictures the step produced or looked at (screenshots, images read), shown in the conversation. */
       images?: Attachment[];
+      /** Provider-reported child observations; control capabilities are explicit in TaskSummary. */
+      agent?: import("./tasks.ts").NativeAgentObservation;
     }
   | { kind: "plan"; id: string; steps: PlanStep[]; at: number }
   | {
