@@ -8,19 +8,21 @@
 
 ## Current execution rule — 2026-11-09 사용자 교정
 
-**구현과 설치 가능한 빌드 전달을 우선한다.** 아래 원래 계획의 반복 RED/GREEN, 매 U의 독립 리뷰, 10개 live lane, 모든 perf gate는 매 변경마다 다시 수행할 필수 관문이 아니다. 변경 기능 묶음에 필요한 집중 확인을 한 번 하고, 실패·추가 변경·구체적 미해결 위험이 있을 때만 영향 범위를 다시 확인한다. 이미 확보한 기준판과 테스트는 재사용한다. U01의 검증 기반 확장을 기다리며 제품 구현을 미루지 않는다. 필요한 설치·데이터 보존 검사는 빌드 경계에서 묶어서 수행하며 미확인 플랫폼을 PASS로 표시하지 않는다. 제품 기능 범위는 유지한다.
+**남은 기능 구현을 우선하고 전체 기능 연결 뒤 통합 빌드·릴리즈한다.** 기능 몇 개 추가할 때마다 production/설치본 빌드를 끼워 넣지 않는다. 예고한 다음 후보 CI와 U25a 중간 설치본 반복은 중단한다. 아래 원래 계획의 반복 RED/GREEN, 매 U의 독립 리뷰, 10개 live lane, 모든 perf gate는 매 변경마다 다시 수행할 필수 관문이 아니다. 변경 기능 묶음에 필요한 집중 확인을 한 번 하고, 실제 실패로 실행이 막힐 때만 해당 부분을 수정·재확인한다. 이미 확보한 기준판과 테스트는 재사용한다. U01의 검증 기반 확장을 기다리며 제품 구현을 미루지 않는다. 필요한 설치·데이터 보존 검사는 마지막 통합 빌드 경계에서 묶어서 수행하며 미확인 플랫폼을 PASS로 표시하지 않는다. 제품 기능 범위는 유지한다.
 
 근거: 현재 세션의 사용자 원문 “검증하고 또 확인검증하고 이런거 제발 하지마 … 구현을 우선으로 해”, `decision-7287723b7dd57957ec551667abe6ddc8c02067f7f0f0988cb2a44d58b05cd626`. 이 절이 아래 과거 검증 절차와 충돌하면 이 절을 적용한다.
+
+추가 교정: “기능 추가하고 빌드하고 기능 추가하고 빌드하고 그게 맞아? ㅡㅡ; 그게 superpowers 및 pstack식이냐고 아닐거 같은데” — `decision-b10e79c5567f53f7c9dfe5e459933f13cbff1b06242c87566dfbaea9d13d4e63`. 목적별 구현·커밋과 설치본 생성은 별개다. 이미 끝난 두 후보 실행은 과거 증거로만 보존한다.
 
 ## How to read this
 
 One box is one unit of work. Every box names the evidence that checks it. Check a box only when its evidence exists. 파일, 로그, 화면, 실행 결과와 정확한 SHA를 함께 기록한다.
 
-실행은 Achmage override를 적용한 `pstack/upstream/skills/poteto-mode/playbooks/autopilot-stack.md`를 따른다. 2026-11-09 사용자가 구현부터 GitHub 0.4.0 빌드까지 실행을 요청했다. 목적별 변경을 구현하고 검증한 뒤 중간 설치본과 0.4.0 빌드를 진행한다. 원격 변경은 실제 권한과 현재 절차를 따른다.
+실행은 Achmage override를 적용한 `pstack/upstream/skills/poteto-mode/playbooks/autopilot-stack.md`를 따른다. 2026-11-09 사용자가 구현부터 GitHub 0.4.0 빌드까지 실행을 요청했다. 목적별 변경을 구현·커밋하고, 전체 요구가 연결된 뒤 통합 빌드와 0.4.0 릴리즈를 진행한다. 원격 변경은 실제 권한과 현재 절차를 따른다.
 
 Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-[coverage.json](support/coverage.json)의 156개 원본 정의와 [회귀 대응표](support/coverage-notes.md)를 유지한다. HIG `F01`과 Paseo `F01`은 별개다. U 번호는 목적별 변경 경계이고 문서 순서가 실행 순서는 아니다. U09는 U16을 기다린다. U25a는 U01 뒤 시작하고 U25b만 U01부터 U24 전체를 기다린다.
+[coverage.json](support/coverage.json)의 156개 원본 정의와 [회귀 대응표](support/coverage-notes.md)를 유지한다. HIG `F01`과 Paseo `F01`은 별개다. U 번호는 목적별 변경 경계이고 문서 순서가 실행 순서는 아니다. U09는 U16을 기다린다. U25 설치본 생성은 전체 기능 통합 뒤 수행한다.
 
 열 개 lane은 서로 다른 시나리오다. 열 명의 agent나 열 대의 VM을 의미하지 않는다. `current-session-model`로 순차 또는 제한 병렬 실행하며 root와 최대 3개 owner만 둔다. 같은 모델의 새 문맥 검토를 다중 모델 검증이라고 부르지 않는다.
 
@@ -2309,20 +2311,20 @@ it("incompatible_major_cannot_issue_commands", () => {
 - [ ] 사용자에게 설치 경로, 핵심 새 동작, 현재 지원 환경, 남은 제한과 rollback 경로를 전달한다. 중간 빌드의 변경 목록을 전체 완료로 포장하지 않는다.
 - [ ] 명시된 실제 작업 완료 뒤 해당 workId의 등록된 임시 도구와 owned service만 정상 종료하고 resource lease를 해제한다. 다음 실행을 위한 handoff와 정확한 research revision을 남긴다.
 
-## Appendix Execution order and intermediate builds
+## Appendix Execution order and final integration build
 
 25개 U는 목적별 ownership 단위다. 실행 순서는 [executionGraph](support/coverage.json)의 26개 노드 U01-U24, U25a, U25b를 따른다. 분기별 전체 의존이 준비되기 전에도 명시된 startAfter의 독립 준비를 시작할 수 있지만 완료 판정은 원래 의존을 모두 기다린다.
 
 | 단계 | 필요한 결과 | 전달과 완료 범위 |
 |---|---|---|
 | 시작 | U01 뒤 U02, U06, U12, U25a | 공통 기준과 위험 실증, 설치 경로를 먼저 준비한다 |
-| Build A | U01-U06, U25a | 셸/프로젝트/대화/이미지/작업 상태의 중간 설치본이며 전체 프로그램 완료가 아니다 |
-| Build B | A와 U07-U08, U10-U15 | Office UI, 검색/볼트/이음, 일반 웹/같은 페이지 AI/외부 앱의 검증 범위를 공개한다 |
-| Build C | B와 U09, U16-U19 | 독립 host와 문서 executor, 실제 기기 연결/모바일/알림의 검증 범위를 공개한다 |
-| Build D | C와 U20-U24 | workspace 운영, 예약, 음성, 플러그인과 Hub를 포함한다 |
+| 구현 A | U01-U06 | 셸/프로젝트/대화/이미지/작업 상태를 구현·커밋한다 |
+| 구현 B | A와 U07-U08, U10-U15 | Office UI, 검색/볼트/이음, 일반 웹/같은 페이지 AI/외부 앱을 연결한다 |
+| 구현 C | B와 U09, U16-U19 | 독립 host와 문서 executor, 기기 연결/모바일/알림을 연결한다 |
+| 구현 D | C와 U20-U24 | workspace 운영, 예약, 음성, 플러그인과 Hub를 연결한다 |
 | Full release | U01-U24 및 U25a 완료 뒤 U25b | 모든 원본 ID/회귀/형식과 설치본 검증을 만족한 동일 artifact를 정식 승격한다 |
 
-각 중간 빌드의 release body에는 검증한 U와 미완료 U, 대상 OS, 정확한 source/asset hash를 적는다. 기능 수나 버전 숫자가 완료 표를 대신하지 않는다. U25a의 CI와 install harness는 A부터 사용하고, U25b를 기다리느라 첫 설치본 전달을 미루지 않는다.
+위 A–D는 구현의 구분이며 각각 설치본을 빌드하는 단계가 아니다. 전체 요구가 연결된 뒤 U25에서 통합 빌드·설치·데이터 보존 확인과 릴리즈를 수행한다. 2026-11-09 추가 사용자 교정이 이전 중간 빌드 계획을 대체한다. 기능 수나 버전 숫자가 완료 표를 대신하지 않는다.
 
 병렬 owner는 최대 3개다. 예를 들어 공통 UI owner, host 계약 owner, renderer 실증 owner를 두며 root가 공통 entry를 통합한다. 다음 단위에 들어갈 때 owner를 재배치한다. 이것은 열 개 live lane을 열 명의 worker로 만드는 계획이 아니다.
 
