@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-take-open-attention"
+description = "Enables the take_open_attention command without any pre-configured scope."
+commands.allow = ["take_open_attention"]
+
+[[permission]]
+identifier = "deny-take-open-attention"
+description = "Denies the take_open_attention command without any pre-configured scope."
+commands.deny = ["take_open_attention"]

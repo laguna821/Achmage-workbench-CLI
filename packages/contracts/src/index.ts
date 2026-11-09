@@ -18,6 +18,7 @@ export * from "./document-registry.ts";
 export * from "./office-new.ts";
 export * from "./tasks.ts";
 export * from "./host-session.ts";
+export * from "./browser.ts";
 
 export const PROTOCOL_VERSION = 1;
 
@@ -82,6 +83,8 @@ export type Session = {
   workId: string;
   /** Independent document conversation, linked to its main conversation without sharing its run. */
   documentAgent?: { artifactId: string; parentSessionId: string | null; legacySessionId?: string };
+  /** One real browser page and an independent run, attached to a main conversation. */
+  pageAgent?: { pageId: string; parentSessionId: string | null };
   /** Fixed when the session is created; switching tabs never changes its cwd. */
   workspaceId?: string;
   provider: Provider;

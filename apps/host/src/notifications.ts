@@ -73,7 +73,7 @@ export class Notifications {
   target(id: string): AttentionTarget {
     const row = this.require(id), session = this.hooks.session(row.taskRef.sessionId)!;
     return { hostId: this.hooks.hostId, workId: row.workId, sessionId: session.id, itemId: row.itemId,
-      artifactId: session.documentAgent?.artifactId ?? null, taskRef: row.taskRef };
+      artifactId: session.documentAgent?.artifactId ?? null, pageId: session.pageAgent?.pageId ?? null, taskRef: row.taskRef };
   }
   read(id: string): AttentionEvent {
     const row = this.require(id);
@@ -148,7 +148,7 @@ export class Notifications {
       readAt: seen ? now : null, resolvedAt: kind === "input_needed" ? null : now,
       delivery: !enabled || seen ? "suppressed" : this.hooks.deliver ? "pending" : "unavailable", deliveryError: null,
       taskRef: { hostId: session.hostId, workspaceId: session.workspaceId ?? null, sessionId: session.id, nativeSessionId: session.nativeSessionId,
-        runId, parentRunId: parent ? JSON.parse(parent) as string | null : null, executorKind: session.documentAgent ? "office" : "session" } };
+        runId, parentRunId: parent ? JSON.parse(parent) as string | null : null, executorKind: session.pageAgent ? "browser" : session.documentAgent ? "office" : "session" } };
     this.records.set(id, row); this.persist();
     if (row.delivery === "pending") void this.deliver(row);
   }

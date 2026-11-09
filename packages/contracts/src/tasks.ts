@@ -3,7 +3,7 @@ import type { Provider } from "./index.ts";
 export type TaskState = "queued" | "running" | "waiting_input" | "completed" | "failed" | "cancelled" | "interrupted" | "outcome_unknown";
 export type TaskRef = {
   hostId: string; workspaceId: string | null; sessionId: string; nativeSessionId: string | null;
-  runId: string; parentRunId: string | null; executorKind: "session" | "office" | "native_agent";
+  runId: string; parentRunId: string | null; executorKind: "session" | "office" | "browser" | "native_agent";
 };
 export type TaskCapabilities = { observe: true; send: boolean; queue: boolean; steer: boolean; stop: boolean; approve: boolean };
 export type TaskSummary = TaskRef & {

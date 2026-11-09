@@ -12,7 +12,7 @@ export type AttentionEvent = {
 export type AttentionList = { events: AttentionEvent[]; unread: number };
 /** Ephemeral UI presence. It never owns or extends a job's execution lease. */
 export type AttentionPresence = { clientId: string; sessionId: string | null; visible: boolean };
-export type AttentionTarget = { hostId: string; workId: string; sessionId: string; itemId: string; artifactId: string | null; taskRef: TaskRef };
+export type AttentionTarget = { hostId: string; workId: string; sessionId: string; itemId: string; artifactId: string | null; pageId?: string | null; taskRef: TaskRef };
 export const ATTENTION_LABEL: Record<AttentionKind, string> = {
   completed: "작업이 완료되었습니다.", failed: "작업을 마치지 못했습니다.", input_needed: "확인이 필요한 작업이 있습니다.",
 };

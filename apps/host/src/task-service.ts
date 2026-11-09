@@ -40,7 +40,7 @@ export class TaskService {
     this.unsubscribe = bus.subscribe(event => {
       if (event.type !== "item.upserted" || event.item.kind !== "user") return;
       const session = hooks.sessions().find(s => s.id === event.sessionId);
-      const parentId = session?.documentAgent?.parentSessionId;
+      const parentId = (session?.pageAgent?.parentSessionId ?? session?.documentAgent?.parentSessionId);
       if (!parentId) return;
       const key = `task-parent:${runKey(event.sessionId, requestOf(event.item))}`;
       if (store.getMeta(key) !== null) return;
@@ -52,7 +52,7 @@ export class TaskService {
 
   list(filter: { workId?: string; workspaceId?: string; parentSessionId?: string; activeOnly?: boolean } = {}): TaskSnapshot {
     const sessions = this.hooks.sessions().filter(s => !s.archivedAt && (!filter.workId || s.workId === filter.workId)
-      && (!filter.workspaceId || s.workspaceId === filter.workspaceId) && (!filter.parentSessionId || s.documentAgent?.parentSessionId === filter.parentSessionId))
+      && (!filter.workspaceId || s.workspaceId === filter.workspaceId) && (!filter.parentSessionId || (s.pageAgent?.parentSessionId ?? s.documentAgent?.parentSessionId) === filter.parentSessionId))
       .sort((a, b) => b.updatedAt - a.updatedAt);
     const tasks = sessions.flatMap(session => this.forSession(session));
     const active = new Set(["queued", "running", "waiting_input", "outcome_unknown"]);
@@ -77,8 +77,8 @@ export class TaskService {
       : session.status === "error" || error ? "failed" : !idle(session) ? "running" : request && !finishedReply ? "outcome_unknown" : "completed";
     const base: TaskSummary = {
       hostId: session.hostId, workspaceId: session.workspaceId ?? null, sessionId: session.id, nativeSessionId: session.nativeSessionId,
-      runId, parentRunId: binding ? JSON.parse(binding) as string | null : null, executorKind: session.documentAgent ? "office" : "session",
-      workId: session.workId, parentSessionId: session.documentAgent?.parentSessionId ?? null, provider: session.provider,
+      runId, parentRunId: binding ? JSON.parse(binding) as string | null : null, executorKind: session.pageAgent ? "browser" : session.documentAgent ? "office" : "session",
+      workId: session.workId, parentSessionId: session.pageAgent?.parentSessionId ?? session.documentAgent?.parentSessionId ?? null, provider: session.provider,
       title: session.purpose, requestId, state, activity: session.activity, preview: session.preview, updatedAt: Math.max(session.updatedAt, recent.at(-1)?.at ?? 0),
       approvalIds, sourceItemId: request?.id ?? null,
       capabilities: { observe: true, send: true, queue: true, steer: !idle(session) && this.hooks.canSteer(session), stop: !idle(session), approve: approvalIds.length > 0 },

@@ -30,6 +30,7 @@ const KINDS: Record<string, BrowserCommandKind> = {
   hover: "read",
   mousemove: "read",
   mousewheel: "read",
+  scroll: "read",
   highlight: "read",
   "generate-locator": "read",
   "webmcp-list": "read",

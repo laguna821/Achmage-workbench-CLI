@@ -13,6 +13,7 @@ mod office_output;
 mod office_html_output;
 mod office_cli;
 mod office_browser;
+mod shared_browser;
 mod notifications;
 pub mod office_secrets;
 pub mod office_fonts;
@@ -281,6 +282,8 @@ fn open_main_window(app: &tauri::AppHandle, ready: &Ready) -> tauri::Result<()> 
         .title("Achmage Workbench")
         .inner_size(1280.0, 860.0)
         .min_inner_size(720.0, 560.0)
+        // Keep the shared-page transport alive when another tab or window is in front.
+        .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
         // Files dropped from the desktop reach the page as ordinary drops (attachments, images).
         .disable_drag_drop_handler();
     if let Some(root) = cli_dir {
@@ -435,7 +438,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .invoke_handler(tauri::generate_handler![open_session_window, notify_session, notifications::notify_attention, notifications::take_open_attention, set_attention, take_open_files, office_output::render_svg_pdf, office_output::print_svg, office_html_output::render_html_pdf, office_html_output::print_html, office_cli::office_cli_job, office_cli::office_cli_write, office_cli::office_cli_done, office_cli::office_cli_trace, office_browser::office_browser])
+        .invoke_handler(tauri::generate_handler![open_session_window, notify_session, notifications::notify_attention, notifications::take_open_attention, set_attention, take_open_files, office_output::render_svg_pdf, office_output::print_svg, office_html_output::render_html_pdf, office_html_output::print_html, office_cli::office_cli_job, office_cli::office_cli_write, office_cli::office_cli_done, office_cli::office_cli_trace, office_browser::office_browser, shared_browser::shared_browser])
+        .manage(shared_browser::SharedBrowser::default())
         .manage(office_browser::BrowserJobs::default())
         .register_uri_scheme_protocol("workbench-browser", |ctx, request| office_browser::serve(ctx.app_handle(), request.uri().path()))
         .manage(office_html_output::HtmlJobs::default())

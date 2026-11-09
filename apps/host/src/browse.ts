@@ -8,6 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
 import {
   LOGIN_SITES,
+  SHARED_BROWSER_HELP,
   browserSessionName,
   type AccessMode,
   type AgentBrowserStatus,
@@ -16,6 +17,8 @@ import {
   type Session,
   type TranscriptItem,
   type Work,
+  type BrowserControl,
+  type BrowserJobResult,
 } from "@workbench/contracts";
 import { BrowserInstaller, browserPaths, installSteps, installedOnDisk, type BrowserPaths, type InstallStep } from "./browse-install.ts";
 import {
@@ -97,6 +100,8 @@ export type BrowseHost = {
   upsertItem(sessionId: string, item: TranscriptItem): void;
   updateSession(sessionId: string, patch: Partial<Session>): void;
   publish(status: AgentBrowserStatus): void;
+  pageControl?(sessionId: string): BrowserControl;
+  pageCommand?(sessionId: string, requestId: string, command: string, args: string[], control: BrowserControl): Promise<BrowserJobResult>;
 };
 
 /** What engine adapters ask of the agent browser (both engines the same way). */
@@ -417,13 +422,16 @@ export class AgentBrowser {
     const entry = sessionId ? this.host?.lookup(sessionId) : null;
     if (!sessionId || !entry || !entry.session.browser) throw new Refusal(`세션 ${name}의 Workbench 브라우저가 꺼져 있습니다. 사용자에게 입력창 아래 '브라우저'를 켜 달라고 하세요.`);
     const parsed = parseCliArgs(request.args);
+    const shared = Boolean(entry.session.pageAgent);
     // Help and the version change nothing.
-    if (!parsed.command || parsed.help || request.args.includes("--version")) return this.engine === "lightpanda" ? { code: 0, stdout: LIGHTPANDA_HELP, stderr: "" } : this.cli(name, request.args.filter((arg) => !/^(?:-s|--session)(=|$)/.test(arg)), this.paths.root);
+    if (!parsed.command || parsed.help || request.args.includes("--version")) return shared ? { code: 0, stdout: SHARED_BROWSER_HELP, stderr: "" } : this.engine === "lightpanda" ? { code: 0, stdout: LIGHTPANDA_HELP, stderr: "" } : this.cli(name, request.args.filter((arg) => !/^(?:-s|--session)(=|$)/.test(arg)), this.paths.root);
     const kind = browserCommandKind(parsed.command);
     if (kind === "blocked") throw new Refusal(`'${parsed.command}' 명령은 Workbench 브라우저에서 쓸 수 없습니다(쿠키·저장소·네트워크 기록·창 관리는 막혀 있습니다).`);
-    if (this.installer.state.state !== "ready") throw new Refusal("에이전트 브라우저가 아직 설치되지 않았습니다. 사용자에게 '브라우저 › 설치'를 부탁하세요.");
-    this.blocker(sessionId);
-    if (parsed.command === "close") return this.closeOwn(sessionId);
+    if (!shared && this.installer.state.state !== "ready") throw new Refusal("에이전트 브라우저가 아직 설치되지 않았습니다. 사용자에게 '브라우저 › 설치'를 부탁하세요.");
+    if (!shared) this.blocker(sessionId);
+    if (!shared && parsed.command === "close") return this.closeOwn(sessionId);
+    // Capture authority before the approval card. A later human takeover cannot authorize this old request.
+    const pageControl = shared ? this.host?.pageControl?.(sessionId) : null;
     const url = kind === "navigate" && parsed.command !== "search" ? targetUrl(parsed.args) : null;
     const sites = this.sites.get(sessionId) ?? new Set<string>();
     const newSite = parsed.command === "search" || Boolean(url && !sites.has(url.host));
@@ -435,10 +443,15 @@ export class AgentBrowser {
       const accepted = await this.ask(sessionId, view.title, `${view.detail}\nplaywright-cli -s=${name} ${[parsed.command, ...parsed.args].join(" ")}`, reason);
       if (!accepted) throw new Refusal("사용자가 이 브라우저 동작을 허용하지 않았습니다. 다른 방법을 찾거나 사용자에게 물어보세요.");
       // The window may have changed hands while the card waited, or the engine stopped waiting.
-      this.blocker(sessionId);
+      if (!shared) this.blocker(sessionId);
       if (!this.waiting(name, request.id)) throw new Refusal("명령이 이미 끝나 실행하지 않았습니다.");
     }
     if (url) this.sites.set(sessionId, sites.add(url.host));
+    if (shared) {
+      if (!pageControl || !this.host?.pageCommand) throw new Refusal("공유 웹 탭 연결을 사용할 수 없습니다.");
+      const result = await this.host.pageCommand(sessionId, request.id, parsed.command, parsed.args, pageControl);
+      return { code: result.error ? 1 : 0, stdout: result.error ? "" : result.observation?.text ?? `완료: ${parsed.command}\n${result.page?.url ?? ""}`, stderr: result.error ?? "" };
+    }
     if (this.engine === "lightpanda") {
       this.setWindow({ kind: "agent", sessionId, url: url?.href ?? null, title: null, busy: true, at: Date.now() });
       try {
@@ -818,7 +831,7 @@ export class AgentBrowser {
     return {
       pathDirs: () => [this.paths.bin],
       sessionEnv: (session): Record<string, string> => (session.browser ? { PLAYWRIGHT_CLI_SESSION: browserSessionName(session.id) } : {}),
-      instructions: (session) => (session.browser ? browserInstructions(browserSessionName(session.id), this.engine) : null),
+      instructions: (session) => (session.browser ? session.pageAgent ? `${SHARED_BROWSER_HELP}\nYour browser session: playwright-cli -s=${browserSessionName(session.id)}` : browserInstructions(browserSessionName(session.id), this.engine) : null),
       offNote: (session) => browserOffNote(browserSessionName(session.id)),
       allowsCommand: (sessionId, command) => Boolean(this.host?.lookup(sessionId)?.session.browser) && isPlainBrowserCommand(command),
       writableRoots: (session) => (session.browser ? [join(this.paths.spool, browserSessionName(session.id))] : []),

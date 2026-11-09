@@ -272,6 +272,22 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       const method = req.method ?? "GET";
 
       if (method === "GET" && path === "/api/snapshot") return sendJson(res, 200, manager.snapshot());
+      if (parts[0] === "browser") {
+        if (path === "/api/browser/pages" && method === "GET") return sendJson(res, 200, manager.sharedBrowser.list());
+        if (path === "/api/browser/pages" && method === "POST") return sendJson(res, 200, manager.sharedBrowser.create(await readJson(req) as unknown as import("@workbench/contracts").BrowserPageCreate));
+        if (path === "/api/browser/profiles" && method === "POST") return sendJson(res, 200, manager.sharedBrowser.profile((await readJson(req)).name));
+        if (path === "/api/browser/driver/poll" && method === "POST") return sendJson(res, 200, manager.sharedBrowser.poll(await readJson(req, 2 * 1024 * 1024) as unknown as import("@workbench/contracts").BrowserDriverPoll));
+        if (parts[1] === "jobs" && parts.length === 3 && method === "GET") return sendJson(res, 200, manager.sharedBrowser.receipt(parts[2]!));
+        if (parts[1] === "pages" && parts.length === 4 && method === "POST") {
+          const id = parts[2]!, body = await readJson(req);
+          if (parts[3] === "session") {
+            if (body.parentSessionId !== null && typeof body.parentSessionId !== "string") throw new HttpError(400, "browser_parent", "메인 대화를 선택해 주세요.");
+            return sendJson(res, 200, manager.browserSession(id, body.parentSessionId));
+          }
+          if (parts[3] === "control") return sendJson(res, 200, await manager.sharedBrowser.control(id, body.owner, body.expectedGeneration));
+          if (parts[3] === "action") return sendJson(res, 200, await manager.sharedBrowser.human(id, body as unknown as { requestId: string; action: unknown; expected?: import("@workbench/contracts").BrowserObservation }));
+        }
+      }
       if (path === "/api/attention" && method === "GET") return sendJson(res, 200, manager.notifications.list());
       if (path === "/api/attention/presence" && method === "POST") return sendJson(res, 200, manager.notifications.observe(await readJson(req) as unknown as import("@workbench/contracts").AttentionPresence));
       if (parts[0] === "attention" && parts.length === 3) {
