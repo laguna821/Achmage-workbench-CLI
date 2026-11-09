@@ -48,7 +48,8 @@ type Entry =
   | { key: string; kind: "session"; session: Session }
   | { key: string; kind: "command"; command: PaletteCommand };
 
-type Section = { key: string; label: ReactNode; count?: number; entries: Entry[] };
+type Section = { key: string; label: ReactNode; count?: number; entries: Entry[]; sourceSection?: FoundGroup["section"]; startSection?: boolean };
+const SECTION_LABEL = { conversation: "대화 내용", other: "문서·프로젝트·노트" };
 
 /** A snippet with its matches marked. */
 export function Marked({ text, ranges }: { text: string; ranges: [number, number][] }) {
@@ -142,7 +143,7 @@ export function SearchPalette({
   const [sourcePreview, setSourcePreview] = useState<SearchPreview | null>(null);
   const [related, setRelated] = useState<SearchRelated[]>([]);
   const [pages, setPages] = useState<SearchPage[]>([]);
-  const [group, setGroup] = useState<{ key: string; title: string } | null>(null);
+  const [group, setGroup] = useState<{ key: string; title: string; section?: FoundGroup["section"] } | null>(null);
   const [searching, setSearching] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -233,6 +234,8 @@ export function SearchPalette({
       out.push({
         key: "group",
         label: null,
+        sourceSection: group.section,
+        startSection: true,
         entries: [
           { key: "back", kind: "back", title: group.title },
           ...groupHits.map((hit) => ({ key: `h:${hit.key}`, kind: "hit" as const, hit })),
@@ -241,9 +244,12 @@ export function SearchPalette({
       });
       return out;
     }
+    let previousSection: FoundGroup["section"];
     for (const found of pages.flatMap((page) => page.groups)) {
       out.push({
         key: `g:${found.key}`,
+        sourceSection: found.section,
+        startSection: found.section !== previousSection,
         label: found.trail.length ? (
           <>
             <span className="search-trail">{found.trail.join(" › ")} › </span>
@@ -258,9 +264,10 @@ export function SearchPalette({
           ...(found.total > found.hits.length ? [{ key: `gm:${found.key}`, kind: "group-more" as const, group: found }] : []),
         ],
       });
+      previousSection = found.section;
     }
     if (first && shownGroups < first.groupsTotal) {
-      out.push({ key: "more", label: null, entries: [{ key: "more", kind: "more", label: `더 보기 · ${first.groupsTotal - shownGroups}곳 더` }] });
+      out.push({ key: "more", label: null, entries: [{ key: "more", kind: "more", label: `더 보기 · ${first.groupsTotal - shownGroups}${first.groups.some(group => group.section) ? "개 구역" : "곳"} 더` }] });
     }
     if (!content) {
       const matching = commands.filter((command) => includes(command.label, lowerNeedle)).slice(0, 4);
@@ -356,7 +363,7 @@ export function SearchPalette({
       case "hit":
         return openHit(entry.hit, shift);
       case "group-more":
-        setGroup({ key: entry.group.key, title: entry.group.title });
+        setGroup({ key: entry.group.key, title: entry.group.title, section: entry.group.section });
         return;
       case "more":
         return more();
@@ -434,7 +441,7 @@ export function SearchPalette({
         return (
           <>
             <Icon name="list" size={15} className="palette-icon" />
-            <span className="palette-title search-more-label">이 작업에서 {entry.group.total - entry.group.hits.length}건 더</span>
+            <span className="palette-title search-more-label">{entry.group.section === "conversation" ? "이 작업의 대화" : entry.group.section ? "이 구역에서" : "이 작업에서"} {entry.group.total - entry.group.hits.length}건 더</span>
           </>
         );
       case "more":
@@ -526,7 +533,7 @@ export function SearchPalette({
           {hit.answer ? (
             <div className="palette-preview-hit search-answer">
               <div className="palette-preview-who">
-                {hit.answer.matched ? "이 문서를 만든 답(같은 줄로 합침)" : "이 문서를 만든 답"} · {hit.provider ? PROVIDER_LABEL[hit.provider] : ""} · {hit.sessionTitle ?? ""}
+                이 문서를 만든 답 · {hit.provider ? PROVIDER_LABEL[hit.provider] : ""} · {hit.sessionTitle ?? ""}
               </div>
               {hit.answer.snippet ? <Marked text={hit.answer.snippet} ranges={hit.answer.ranges} /> : null}
             </div>
@@ -552,7 +559,7 @@ export function SearchPalette({
           <div className="palette-preview-head">
             <Icon name="project" size={15} /> {current.group.title}
           </div>
-          <div className="palette-preview-hit">이 작업에서 찾은 {current.group.total}건을 모두 봅니다.</div>
+          <div className="palette-preview-hit">이 작업에서 찾은 {current.group.section ? `${SECTION_LABEL[current.group.section]} ` : ""}{current.group.total}건을 모두 봅니다.</div>
           <div className="palette-preview-foot">Enter 이 작업만 보기 · Esc 돌아가기</div>
         </>
       );
@@ -583,7 +590,7 @@ export function SearchPalette({
   };
 
   const vaultShown = Boolean(first && (scope === "all" || scope === "vault") && first.counts.vault > 0);
-  const places = first ? first.groupsTotal - (vaultShown ? 1 : 0) : 0;
+  const places = first ? first.worksTotal ?? first.groupsTotal - (vaultShown ? 1 : 0) : 0;
 
   return (
     <div className="palette-backdrop" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
@@ -688,7 +695,7 @@ export function SearchPalette({
               <div className="search-summary" data-search-query={first.query}>
                 <span className="search-total">
                   {group
-                    ? `${group.title} · ${first.groups[0]?.total ?? 0}건`
+                    ? `${group.title}${group.section ? ` · ${SECTION_LABEL[group.section]}` : ""} · ${first.groups[0]?.total ?? 0}건`
                     : `${scope === "all" ? "총" : SCOPE_LABEL[scope]} ${first.total}건${places ? ` · 작업 ${places}곳` : ""}${vaultShown ? " · 볼트" : ""}`}
                 </span>
                 {pages.some(page => page.reranked) ? <span className="muted">문서 결과 AI 재정렬</span> : first && canRank(first) && <button type="button" className="search-save" onClick={() => {
@@ -714,7 +721,11 @@ export function SearchPalette({
             ) : null}
             {notice ? <div className="search-notice">{notice}</div> : null}
             {sections.map((section) => (
-              <div key={section.key} className={`palette-group${section.key.startsWith("g:") || section.key === "group" ? " search-group" : ""}`}>
+              <div key={section.key} data-search-section={section.sourceSection} className={`palette-group${section.key.startsWith("g:") || section.key === "group" ? " search-group" : ""}`}>
+                {section.sourceSection && section.startSection ? <div className="search-section-label" role="heading" aria-level={3}>
+                  {SECTION_LABEL[section.sourceSection]}
+                  {section.sourceSection === "conversation" ? <span>원문 요청 · AI 답변 · 계획</span> : null}
+                </div> : null}
                 {section.label ? (
                   <div className="palette-group-label">
                     <span className="search-group-title">{section.label}</span>

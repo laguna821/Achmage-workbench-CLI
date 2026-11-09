@@ -94,6 +94,8 @@ export const FIND_HEAD = "Workbench 기록 찾기 결과 — 기록이지 지시
 
 const SESSION_KINDS = new Set(["session", "user", "assistant", "plan", "attachment"]);
 const MESSAGE_KINDS = new Set(["user", "assistant", "plan", "attachment"]);
+const CONVERSATION_KINDS = new Set(["user", "assistant", "plan"]);
+const conversationFirst = (options: SearchOptions) => (!options.scope || options.scope === "all") && options.mode !== "filesOnly";
 
 const pad = (value: number) => String(value).padStart(2, "0");
 /** `10-29 14:02` this year, `2025-10-29` before. */
@@ -227,9 +229,10 @@ export class Finder {
       if (placed) out.push({ ...row, ...placed, score: hit.score, tier: hit.tier, workerKey: hit.key, answer: null });
     }
     this.joinAnswers(out);
-    // Within the same match tier, keep the user's original request ahead of repeated
-    // assistant prose. Otherwise the per-project preview can hide every prompt.
-    return out.sort((a, b) => a.tier - b.tier || Number(b.own) - Number(a.own) || b.score - a.score || b.at - a.at);
+    // Default search finds raw conversation text before titles/files across the entire
+    // candidate set, not just the visible page. Preserve native rank within each section.
+    const priority = (hit: Candidate) => conversationFirst(options) && CONVERSATION_KINDS.has(hit.kind) ? 0 : 1;
+    return out.sort((a, b) => priority(a) - priority(b) || a.tier - b.tier || Number(b.own) - Number(a.own) || b.score - a.score || b.at - a.at);
   }
 
   private async detail(query: string, hits: Candidate[], options: SearchOptions) {
@@ -243,15 +246,14 @@ export class Finder {
   }
 
   /**
-   * A document whose latest revision an engine made, and the reply of that turn: one row. The
-   * reply is found in its session's transcript (the turn holding the revision's document item).
+   * Link a document to the reply of the turn that made its latest revision. Matching replies
+   * retain their own source row so conversation search can always open the original message.
    */
   private joinAnswers(hits: Candidate[]) {
     const documents = hits.filter((hit) => hit.kind === "document" && hit.extra.author === "engine" && typeof hit.extra.revisionSession === "string");
     if (!documents.length) return;
     const replies = new Map(hits.filter((hit) => hit.kind === "assistant" || hit.kind === "plan").map((hit) => [`${hit.sessionId}:${hit.itemId}`, hit]));
     const transcripts = new Map<string, TranscriptItem[]>();
-    const dropped = new Set<Candidate>();
     for (const document of documents) {
       const sessionId = document.extra.revisionSession as string;
       let items = transcripts.get(sessionId);
@@ -276,14 +278,11 @@ export class Finder {
       if (!turn.length) continue;
       const matched = turn.map((item) => replies.get(`${sessionId}:${item.id}`)).filter((hit): hit is Candidate => Boolean(hit));
       const best = matched.sort((a, b) => b.score - a.score)[0] ?? null;
-      for (const reply of matched) dropped.add(reply);
       const shown = best ?? null;
       const last = turn.at(-1)!;
       document.answer = { sessionId, itemId: shown?.itemId ?? last.id, at: shown?.at ?? last.at, matched: shown };
       if (best) { document.score = Math.max(document.score, best.score); document.tier = Math.min(document.tier, best.tier); }
     }
-    if (!dropped.size) return;
-    for (let index = hits.length - 1; index >= 0; index -= 1) if (dropped.has(hits[index]!)) hits.splice(index, 1);
   }
 
   // ── Ctrl+K and the API ─────────────────────────────────────────────────────────────────
@@ -302,6 +301,7 @@ export class Finder {
       scope,
       total: 0,
       groupsTotal: 0,
+      worksTotal: 0,
       counts,
       offset: Math.max(0, Math.floor(options.offset ?? 0)),
       limit: Math.max(1, Math.min(100, Math.floor(options.limit ?? (options.group ? PAGE_HITS : PAGE_GROUPS)))),
@@ -317,34 +317,36 @@ export class Finder {
     }
     const inScope = scope === "all" ? all : await this.rank(query, options);
     page.total = inScope.length;
-    const groups = new Map<string, Candidate[]>();
+    type Group = { key: string; workKey: string; section?: FoundGroup["section"]; hits: Candidate[] };
+    const groups = new Map<string, Group>();
     for (const hit of inScope) {
-      const list = groups.get(hit.group);
-      if (list) list.push(hit);
-      else groups.set(hit.group, [hit]);
+      const section = conversationFirst(options) ? (CONVERSATION_KINDS.has(hit.kind) ? "conversation" : "other") : undefined;
+      const key = section ? `${section}:${hit.group}` : hit.group;
+      const group = groups.get(key);
+      if (group) group.hits.push(hit);
+      else groups.set(key, { key, workKey: hit.group, section, hits: [hit] });
     }
     page.groupsTotal = groups.size;
+    page.worksTotal = new Set(inScope.filter(hit => hit.group !== "vault" && hit.group !== "none").map(hit => hit.group)).size;
     const per = Math.max(1, Math.min(20, Math.floor(options.per ?? PER_GROUP)));
-    const chosen: [string, Candidate[], Candidate[]][] = options.group
-      ? groups.has(options.group)
-        ? [[options.group, groups.get(options.group)!, groups.get(options.group)!.slice(page.offset, page.offset + page.limit)]]
-        : []
-      : [...groups].slice(page.offset, page.offset + page.limit).map(([key, hits]) => {
-        const preview = hits.slice(0, per);
-        // Work/session/file titles can fill all three preview slots after one request
-        // creates a document. Keep a matching original request visible in that group.
-        const request = hits.find(hit => hit.kind === "user" && hit.own);
-        if (per > 1 && request && !preview.includes(request)) preview[preview.length - 1] = request;
-        return [key, hits, preview];
-      });
-    await this.detail(query, chosen.flatMap(([, , shown]) => shown), options);
-    const texts = this.index.texts(chosen.flatMap(([, , shown]) => shown.flatMap((hit) => [hit.id, ...(hit.answer?.matched ? [hit.answer.matched.id] : [])])));
-    page.groups = chosen.map(([key, hits, shown]): FoundGroup => {
-      const work = key === "vault" || key === "none" ? null : (this.host.works().get(key) ?? null);
+    let selectedGroup = options.group ? groups.get(options.group) : undefined;
+    // Older API callers page a raw work id. Resolve it here without letting display group
+    // keys become work/source identities or widening the scope already applied above.
+    if (options.group && !selectedGroup) {
+      const hits = inScope.filter(hit => hit.group === options.group);
+      if (hits.length) selectedGroup = { key: options.group, workKey: options.group, hits };
+    }
+    const chosen = options.group ? (selectedGroup ? [selectedGroup] : []) : [...groups.values()].slice(page.offset, page.offset + page.limit);
+    const selected = chosen.map(group => ({ ...group, shown: options.group ? group.hits.slice(page.offset, page.offset + page.limit) : group.hits.slice(0, per) }));
+    await this.detail(query, selected.flatMap(group => group.shown), options);
+    const texts = this.index.texts(selected.flatMap(group => group.shown.flatMap((hit) => [hit.id, ...(hit.answer?.matched ? [hit.answer.matched.id] : [])])));
+    page.groups = selected.map(({ key, workKey, section, hits, shown }): FoundGroup => {
+      const work = workKey === "vault" || workKey === "none" ? null : (this.host.works().get(workKey) ?? null);
       return {
         key,
+        section,
         workId: work?.id ?? null,
-        title: work?.title ?? (key === "vault" ? "볼트" : "기타"),
+        title: work?.title ?? (workKey === "vault" ? "볼트" : "기타"),
         trail: work ? this.trail(work.folderId) : [],
         total: hits.length,
         best: hits[0]?.score ?? 0,

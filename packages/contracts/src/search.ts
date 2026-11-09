@@ -86,30 +86,33 @@ export type FoundHit = {
   /** UTF-16 offset of the matching chunk in a long original message. */
   chunkOffset?: number;
   /**
-   * A document whose latest revision an engine made: the reply of that turn. When the reply
-   * matched too it is not listed again — document and reply are one row.
+   * A document whose latest revision an engine made: the reply of that turn. A matching reply
+   * also keeps its standalone conversation result and original message location.
    */
   answer: { sessionId: string; itemId: string; at: number; snippet: string; ranges: [number, number][]; matched: boolean } | null;
   /** A plan's decision, a note's folder… shown after the kind. */
   detail: string | null;
 };
 
-/** Hits of one work (or of the vault) in rank order; `total` counts all of them, not only those shown. */
+/** Hits of one work/section (or the vault); `total` counts every hit in this group. */
 export type FoundGroup = {
-  /** The work id, `vault` for vault notes, or `none`. */
+  /** Opaque paging identity. Default search prefixes the work id with its section. */
   key: string;
+  /** Default search separates original conversation text from other records before paging. */
+  section?: "conversation" | "other";
   workId: string | null;
   title: string;
   /** App folders above the work, top first. */
   trail: string[];
   total: number;
   hits: FoundHit[];
-  /** The score of its best hit (groups come in this order). */
+  /** The score of its best hit; section and native tier also determine group order. */
   best: number;
 };
 
 /**
- * A page of a search: groups by work in rank order, with totals so nothing is cut silently.
+ * A page of a search: default all-content search groups conversation text before other records,
+ * then by work within each section. Explicit scopes/filesOnly group only by work.
  * Grouped (`group` null): `offset`/`limit` count groups, each with its best `per` hits. One group
  * (`group` set): `offset`/`limit` count that group's hits. The fields of `SearchResult` stay for
  * older callers.
@@ -120,10 +123,12 @@ export type SearchPage = SearchResult & {
   /** Optional decision-model ordering of the visible file hits inside their project groups. */
   reranked?: boolean;
   scope: SearchScope;
-  /** Hits in this scope (after rows of a document and its reply were joined). */
+  /** Distinct source rows in this scope, including a document's matching conversation reply. */
   total: number;
   /** Groups in this scope. */
   groupsTotal: number;
+  /** Distinct projects in this scope, regardless of how many sections contain them. */
+  worksTotal?: number;
   /** Hits per scope, for the chips. */
   counts: Record<SearchScope, number>;
   offset: number;

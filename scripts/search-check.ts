@@ -3,8 +3,8 @@
 // stand-in engines (no model) with a seeded store and a fixture vault in temporary folders (the
 // user's vault is never touched):
 //   한국어 — a two-syllable word, a longer one, a word with a particle ("기준을"), spaced and joined
-//   ("채점 기준" ↔ "채점기준"); 순위 — a work title above a body match; 중복 — a document and the reply
-//   that made it are one row, conversation records are left out; 볼트 — notes are found, a folder
+//   ("채점 기준" ↔ "채점기준"); 순위 — original conversation text before titles; a document keeps its
+//   related reply and the reply keeps its source row, exported records are left out; 볼트 — notes are found, a folder
 //   hidden in Notebook Navigator never is.
 //   화면 (Codex and Claude alike) — Ctrl+K scope chips switched with Tab, totals and "더 보기", a
 //   work's "N건 더", "보기로 저장" (a saved view opens with the same results), Ctrl+Shift+F opens the
@@ -94,7 +94,7 @@ say("s-grade", { kind: "user", id: "u-grade-3", text: "첨부한 계획서 확�
 say("s-rubric", user("u-rubric-1", "자료를 모아 줘"), reply("a-rubric-1", "모았습니다."), end("e-rubric-1"));
 // Claude's plan waiting for the go-ahead (its text is the plan).
 say("s-slides", user("u-slides-0", "슬라이드 구성을 계획해 줘"), { kind: "approval", id: "approval:plan-1", title: "이 계획대로 진행할까요?", detail: "1. 설문 문항을 고친다\n2. 표본을 늘린다", reason: null, decision: "accept", plan: true, at: 0 });
-// A document the Claude session made in a turn, and that turn's reply: one row in the results.
+// A document the Claude session made in a turn, linked to its independently searchable reply.
 const report = "# 보고서\n\n예산 집행 계획을 정리했습니다. 항목별 집행률은 표로 붙였고, 채점 기준표는 부록에 두었습니다.\n";
 const reportPath = join(hello.cwd, "보고서.md");
 writeFileSync(reportPath, report);
@@ -164,10 +164,10 @@ const vaultReady = await until(async () => (await search("형성평가", { scope
   const both = (page: SearchPage) => keys(page).includes("item:s-grade:u-grade-1") && keys(page).includes("item:s-grade:a-grade-1");
   pass("띄어 쓴 말과 붙여 쓴 말을 함께 찾음('채점 기준' ↔ '채점기준')", both(spaced) && both(joined), `${spaced.total}건 / ${joined.total}건`);
   const ranked = await search("루브릭");
-  pass("순위: 이름이 맞은 작업이 본문보다 위", hits(ranked)[0]?.kind === "work" && hits(ranked)[0]?.workId === rubric.id && hits(ranked).some((hit) => hit.kind === "assistant"), hits(ranked).map((hit) => `${hit.kind}:${hit.title}`).slice(0, 3).join(" > "));
+  pass("순위: 대화 원문이 작업 제목보다 위", hits(ranked)[0]?.kind === "assistant" && hits(ranked).some((hit) => hit.kind === "work" && hit.workId === rubric.id), hits(ranked).map((hit) => `${hit.kind}:${hit.title}`).slice(0, 3).join(" > "));
   const joinedRow = await search("예산 집행");
-  const row = hits(joinedRow)[0];
-  pass("문서와 그 문서를 만든 답이 한 줄", joinedRow.total === 1 && row?.kind === "document" && row.answer?.matched === true && row.answer.itemId === "a-slides-1" && row.provider === "claude", `${joinedRow.total}건 · ${row?.kind} · 답 ${row?.answer?.itemId}`);
+  const row = hits(joinedRow).find(hit => hit.kind === "document");
+  pass("답 원문을 먼저 찾고 문서에도 관련 답 유지", joinedRow.total === 2 && hits(joinedRow)[0]?.itemId === "a-slides-1" && row?.answer?.matched === true && row.answer.itemId === "a-slides-1" && row.provider === "claude", `${joinedRow.total}건 · ${row?.kind} · 답 ${row?.answer?.itemId}`);
   const exported = await api<{ artifactId: string | null }>("POST", "/api/sessions/s-grade/export", { target: "work" });
   const afterExport = await search("채점기준표");
   pass("내보낸 세션 기록은 숨김", Boolean(exported.artifactId) && !hits(afterExport).some((hit) => hit.artifactId === exported.artifactId), `기록 문서 ${exported.artifactId?.slice(0, 8)} · ${afterExport.counts.document}건`);

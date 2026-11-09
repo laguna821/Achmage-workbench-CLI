@@ -2,13 +2,14 @@
 // The built web UI + real host + native Fast Find worker, using disposable synthetic records.
 // Usage: WORKBENCH_SEARCH_WORKER_BIN=... BROWSER_BIN=... node scripts/fast-find-check.ts <evidence>
 import { spawn, type ChildProcess } from "node:child_process";
+import { createHash } from "node:crypto";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { chromium, type Browser, type Page } from "playwright-core";
 import { Store } from "../apps/host/src/store.ts";
-import type { Work, Session } from "@workbench/contracts";
+import type { Work, Session, Artifact, SearchPage } from "@workbench/contracts";
 import { put } from "../apps/host/src/vault-fixture.ts";
 
 const out = resolve(process.argv[2]!); mkdirSync(out, { recursive: true });
@@ -39,6 +40,36 @@ put(vault, ".obsidian/plugins/notebook-navigator/data.json", JSON.stringify({ va
 put(vault, "연구/가을.md", original);
 put(vault, "연구/가을 사본.md", '---\ntitle: 가을 연구 메모\n"단계:": B\n---\n봄 노트 사본');
 put(vault, "비밀/숨김.md", '---\ntitle: 가을 연구 메모\n---\n숨김고유표식');
+// Conversation-first regression: enough title-heavy projects to exceed the first group page,
+// duplicate document/vault titles, and original replies that also made matching documents.
+const sourcePrompt = "방금 이 앱을 새로 설치했는데 간단한 마크다운 문서를 하나 만들어봐 mermaid 그림이랑 테이블도 같이 포함해서";
+for (let n = 0; n < 12; n++) {
+  const conversation = n >= 10;
+  const project: Work = { ...work, id: `w-priority-${n}`, cwd: join(dir, `priority-${n}`),
+    title: conversation ? `원문 프로젝트 ${n}` : "mermaid 마크다운 문서", activeSessionId: conversation ? `s-priority-${n}` : null };
+  mkdirSync(project.cwd, { recursive: true }); store.saveWork(project);
+  const body = "# mermaid 마크다운 문서\n\n| 항목 | 값 |\n| --- | --- |\n| A | B |\n\n```mermaid\nflowchart LR\nA-->B\n```\n";
+  const artifact: Artifact = { id: `doc-priority-${n}`, workId: project.id, path: join(project.cwd, "자료.md"), name: "자료.md", format: "markdown", revision: 1,
+    sha256: createHash("sha256").update(body).digest("hex"), size: Buffer.byteLength(body), diskState: "same", readBy: {}, createdAt: now, updatedAt: now };
+  writeFileSync(artifact.path, body);
+  mkdirSync(join(dir, "artifacts", artifact.id), { recursive: true });
+  writeFileSync(join(dir, "artifacts", artifact.id, "r1.md"), body);
+  store.saveArtifact(artifact);
+  store.saveRevision({ artifactId: artifact.id, revision: 1, sha256: artifact.sha256, size: artifact.size, author: conversation ? "engine" : "user",
+    sessionId: project.activeSessionId, baseRevision: null, note: null, at: now });
+  if (conversation) {
+    const original: Session = { ...session, id: project.activeSessionId!, workId: project.id, purpose: `원문 대화 ${n}`, provider: n === 10 ? "codex" : "claude" };
+    store.saveSession(original);
+    store.saveItem(original.id, { kind: "user", id: `priority-request-${n}`, text: sourcePrompt, at: now - 6000 });
+    store.saveItem(original.id, { kind: "artifact", id: `priority-artifact-${n}`, artifactId: artifact.id, revision: 1, change: "created", at: now - 5000 });
+    store.saveItem(original.id, { kind: "assistant", id: `priority-answer-${n}`, text: "mermaid 그림과 테이블을 포함한 마크다운 문서를 만들었습니다.", streaming: false, at: now - 4000 });
+    store.saveItem(original.id, { kind: "approval", id: `priority-plan-${n}`, title: "계획", detail: "마크다운 문서의 표와 mermaid 그림을 확인한다", reason: null, decision: "accept", plan: true, at: now - 3000 });
+    store.saveItem(original.id, { kind: "assistant", id: `priority-followup-${n}`, text: "추가 답변: 마크다운 문서 확인을 완료했습니다.", streaming: false, at: now - 2000 });
+    store.saveItem(original.id, { kind: "turnEnd", id: `priority-end-${n}`, status: "completed", durationMs: 1000, at: now - 1000 });
+  }
+}
+for (let n = 0; n < 3; n++) put(vault, `중복${n}/자료.md`, "---\ntitle: mermaid 마크다운 문서\n---\n테이블과 그림 노트입니다.");
+put(vault, "비밀/중복.md", "# mermaid 마크다운 문서\n숨김대화충돌");
 store.setMeta("pkm.vault", vault);
 store.setMeta("ui.prefs", JSON.stringify({ onboarding: "done", startScreen: "last" }));
 store.close();
@@ -65,7 +96,7 @@ try {
   const palette = async (query: string) => {
     if (!(await page!.locator(".palette").count())) await page!.keyboard.press("Control+k");
     await page!.getByRole("textbox", { name: "찾을 말" }).fill(query);
-    await page!.waitForFunction(q => document.querySelector<HTMLInputElement>('.palette-input input')?.value === q && Boolean(document.querySelector(".search-summary")) && !document.querySelector(".palette .spinner"), query);
+    await page!.waitForFunction(q => document.querySelector<HTMLElement>(".search-summary")?.dataset.searchQuery === q && document.querySelector(".palette-list")?.getAttribute("aria-busy") === "false", query);
   };
   if (process.argv[3]) {
     const queries = ["data engineering", "alias9876", "자료707", "#교육", "채점 기준"];
@@ -143,6 +174,34 @@ try {
     const value = await response.json(); return value.groups?.some((g: any) => g.hits.some((h: any) => h.path === "연구/이름변경.md"));
   });
   check("external edit and rename update the same engine", true);
+  await palette("마크다운 문서");
+  const priority: SearchPage = await api(`/api/search?${new URLSearchParams({ q: "마크다운 문서", legacy: "0", limit: "100", per: "20" })}`);
+  const small: SearchPage = await api(`/api/search?${new URLSearchParams({ q: "마크다운 문서", legacy: "0", limit: "1", per: "1" })}`);
+  writeFileSync(join(out, "conversation-priority.json"), JSON.stringify({ priority, small }, null, 2));
+  check("conversation priority precedes global group paging with exact totals", small.groups[0]?.hits[0]?.kind === "user" && priority.total === 33 && priority.worksTotal === 12 && priority.groupsTotal === 15 && priority.groups.slice(0, 2).every(group => group.section === "conversation"));
+  check("conversation and other-source sections are visible", await page.locator('[data-search-section="conversation"] .search-section-label').count() === 1 && await page.locator('[data-search-section="other"] .search-section-label').count() === 1);
+  await page.screenshot({ path: join(out, "conversation-priority.png") });
+  const firstOriginal = priority.groups[0]?.hits[0];
+  await page.keyboard.press("Enter");
+  const openedOriginal = firstOriginal?.kind === "user" && await page.locator(`[data-item-id="${firstOriginal.itemId}"].flash`).waitFor({ timeout: 5000 }).then(() => true, () => false);
+  check("Enter opens the first original prompt at its exact transcript item", openedOriginal === true);
+  await palette("마크다운 문서");
+  await page.locator('[data-search-section="conversation"] .palette-entry.kind-more').first().click();
+  await page.waitForFunction(() => document.querySelector(".palette-entry.kind-back") || document.querySelector(".palette-entry.kind-more")?.textContent?.includes("모든 결과로"));
+  await page.waitForFunction(() => document.querySelector(".palette-list")?.getAttribute("aria-busy") === "false" && document.querySelectorAll(".palette-entry.kind-hit").length === 4);
+  check("expanded conversation preserves prompt, reply and plan without files", await page.locator(".palette-entry.kind-hit").count() === 4 && await page.locator(".palette-entry.kind-doc, .palette-entry.kind-note").count() === 0);
+  // The first row is Back; keyboard navigation continues into the original message rows.
+  await page.keyboard.press("ArrowDown"); await page.keyboard.press("Enter");
+  check("keyboard selection in an expanded group opens a source message", await page.locator('[data-item-id^="priority-request-"].flash').waitFor({ timeout: 5000 }).then(() => true, () => false));
+  await palette("마크다운 문서");
+  const shownBefore = await page.locator(".search-group").count();
+  await page.getByRole("option", { name: /^더 보기/ }).click();
+  await page.waitForFunction(() => document.querySelectorAll(".search-group").length === 15);
+  check("more groups retains section order and reaches all projects and vault", shownBefore === 8 && await page.locator(".search-group").count() === 15);
+  await page.getByRole("tab", { name: /^문서/ }).click();
+  await page.waitForFunction(() => document.querySelector('.palette [role="tab"][aria-selected="true"]')?.textContent?.startsWith("문서") && document.querySelector(".palette-list")?.getAttribute("aria-busy") === "false");
+  check("explicit document scope retains linked replies without conversation rows", await page.locator(".palette-entry.kind-hit").count() === 0 && (await api("/api/search?q=마크다운%20문서&scope=document&limit=100&per=20")).total === 12 && priority.groups.flatMap(group => group.hits).some(hit => hit.kind === "document" && hit.answer?.matched));
+  check("hidden duplicate vault note stays excluded and unchanged", (await api("/api/search?q=숨김대화충돌")).total === 0 && readFileSync(join(vault, "비밀/중복.md"), "utf8") === "# mermaid 마크다운 문서\n숨김대화충돌");
   check("default typing never invokes AI reranking", !requests.some(url => url.includes("rerank=1")));
   check("original source unchanged except explicit fixture edit and rename", readFileSync(join(vault, "연구/이름변경.md"), "utf8") === original + "\n새로운달맞이 확인\n");
   check("no browser exceptions", errors.length === 0, errors.join(" | "));

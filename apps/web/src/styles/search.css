@@ -159,7 +159,25 @@
   font-size: var(--fs-micro);
 }
 
-/* One group per work: the work (with its folders) and how many were found in it. */
+/* Default search groups original conversation text before the other source groups. */
+.search-section-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 12px 10px 4px;
+  color: var(--text);
+  font-size: var(--fs-meta);
+  font-weight: 650;
+}
+
+.search-section-label span {
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-weight: 400;
+}
+
+/* One group per work/section: its folder trail and full result count. */
 .search-group + .search-group {
   margin-top: 4px;
   border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);

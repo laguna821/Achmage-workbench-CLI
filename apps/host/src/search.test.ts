@@ -123,20 +123,21 @@ describe("one ranked index", () => {
     expect(marked.ranges.map(([from, to]) => marked.snippet.slice(from, to))).toEqual(["채점", "기준"]);
   });
 
-  it("ranks a title above a body match, and the user's own words above the same words in a reply", async () => {
+  it("ranks conversation text above titles, and the user's own words above the same words in a reply", async () => {
     const { manager } = setup();
     const titled = work(manager, "루브릭 설계", "claude", "준비");
     const other = work(manager, "수업 운영", "codex", "메모");
     say(manager, other.session.id, ["assistant", "다음 주에는 루브릭 초안을 같이 보면서 항목별 점수 기준을 다듬고, 예시 답안도 두 개 붙이겠습니다."]);
     const first = hits((await manager.search("루브릭", all)))[0]!;
-    expect(first).toMatchObject({ kind: "work", workId: titled.work.id });
-    expect(first.titleRanges.length).toBe(1);
+    expect(first).toMatchObject({ kind: "assistant", workId: other.work.id });
+    expect(hits(await manager.search("루브릭", all)).find(hit => hit.kind === "work")!.titleRanges.length).toBe(1);
+    expect(hits(await manager.search("루브릭", { ...all, scope: "project" }))[0]).toMatchObject({ kind: "work", workId: titled.work.id });
     const [mine, theirs] = say(manager, titled.session.id, ["user", "발표 일정 정리"], ["assistant", "발표 일정 정리"]);
     const order = hits((await manager.search("발표 일정", all))).map((hit) => hit.itemId);
     expect(order.indexOf(mine!)).toBeLessThan(order.indexOf(theirs!));
   });
 
-  it("shows a document and the reply that made it as one row, and leaves conversation records out", async () => {
+  it.each(["assistant", "plan"] as const)("keeps a document's matching %s as a conversation result and preserves the document's related reply", async (kind) => {
     const { manager } = setup();
     const { work: lecture, session } = work(manager, "보고", "claude", "보고서 쓰기");
     const [request] = say(manager, session.id, ["user", "보고서 초안을 써 줘"]);
@@ -149,13 +150,19 @@ describe("one ranked index", () => {
       { kind: "artifact", id: "artifact:1", artifactId: tracked.artifact.id, revision: 1, change: "created", at: 0 },
       ["assistant", "보고서.md에 예산 집행 계획을 정리해 두었습니다."],
     );
+    if (kind === "plan") say(manager, session.id, { kind: "approval", id: "approve-plan", title: "계획", detail: null, reason: null, decision: null, plan: true, at: 0 });
     const joined = (await manager.search("예산 집행", all));
-    expect(joined.total).toBe(1);
-    expect(hits(joined)[0]).toMatchObject({ kind: "document", artifactId: tracked.artifact.id, revision: 1, provider: "claude", sessionTitle: "보고서 쓰기", answer: { sessionId: session.id, itemId: reply, matched: true } });
-    // The request still has its own row; the reply does not.
+    expect(joined.total).toBe(2);
+    expect(joined.counts).toMatchObject({ all: 2, session: 1, document: 1 });
+    expect(hits(joined)[0]).toMatchObject({ kind, workId: lecture.id, sessionId: session.id, itemId: reply });
+    expect(hits(joined)[1]).toMatchObject({ kind: "document", artifactId: tracked.artifact.id, revision: 1, provider: "claude", sessionTitle: "보고서 쓰기", answer: { sessionId: session.id, itemId: reply, matched: true } });
+    // Both original messages retain their own entry into the conversation.
     const named = (await manager.search("보고서", all));
     expect(keys(named)).toContain(`item:${session.id}:${request}`);
-    expect(keys(named)).not.toContain(`item:${session.id}:${reply}`);
+    expect(keys(named)).toContain(`item:${session.id}:${reply}`);
+    const documents = await manager.search("예산 집행", { ...all, scope: "document" });
+    expect(documents.total).toBe(1);
+    expect(hits(documents)[0]).toMatchObject({ kind: "document", answer: { sessionId: session.id, itemId: reply } });
     // "마크다운으로 내보내기" makes a record of the conversation: found in the conversation, not twice.
     const exported = manager.exportMarkdown(session.id, { target: "work" });
     expect(exported.artifactId).toBeTruthy();
@@ -219,6 +226,87 @@ describe("one ranked index", () => {
       const result = await manager.search(query, { per: 3 });
       expect(hits(result).some(hit => hit.kind === "user" && hit.itemId === request), query).toBe(true);
     }
+  });
+
+  // Catches ranking only the visible page, or grouping mixed document/conversation rows by
+  // work before applying the global conversation priority. Every dependency is real.
+  it.each([1, 3])("pages conversation text before title-heavy projects and duplicate files with %i preview rows", async (per) => {
+    const { manager, dir, bus, store } = setup();
+    const title = "mermaid 마크다운 문서";
+    const prompt = "방금 이 앱을 새로 설치했는데 간단한 마크다운 문서를 하나 만들어봐 mermaid 그림이랑 테이블도 같이 포함해서";
+    for (let n = 0; n < 10; n++) {
+      const { work: project } = work(manager, title);
+      const file = join(project.cwd, "자료.md");
+      writeFileSync(file, `# ${title}\n\n테이블과 그림 자료입니다.`);
+      manager.documents.track(project.id, project.cwd, file, "user", null, null);
+    }
+    const conversations = [];
+    for (let n = 0; n < 2; n++) {
+      const { work: project, session } = work(manager, `작성 프로젝트 ${n}`, n ? "claude" : "codex", `작성 대화 ${n}`);
+      const [request] = say(manager, session.id, ["user", prompt]);
+      const file = join(project.cwd, "자료.md");
+      writeFileSync(file, `# ${title}\n\n테이블과 그림을 만들었습니다.`);
+      const document = manager.documents.track(project.id, project.cwd, file, "engine", session.id, null)!;
+      const [, reply, plan] = say(manager, session.id,
+        { kind: "artifact", id: `made-${n}`, artifactId: document.artifact.id, revision: 1, change: "created", at: 0 },
+        ["assistant", "mermaid 그림과 테이블을 포함한 마크다운 문서를 만들었습니다."],
+        { kind: "approval", id: `plan-${n}`, title: "계획", detail: "마크다운 문서의 표와 mermaid 그림을 확인한다", reason: null, decision: null, plan: true, at: 0 });
+      conversations.push({ project, session, request, reply, plan });
+    }
+    const vault = join(dir, "vault");
+    put(vault, ".obsidian/app.json", "{}");
+    put(vault, ".obsidian/plugins/notebook-navigator/data.json", JSON.stringify({ vaultProfile: "default", vaultProfiles: [{ id: "default", hiddenFolders: ["비밀"] }] }));
+    for (let n = 0; n < 3; n++) put(vault, `폴더${n}/자료.md`, `---\ntitle: ${title}\n---\n테이블과 그림 노트입니다.`);
+    put(vault, "비밀/자료.md", `# ${title}`);
+    const pkm = new Pkm(store, bus, manager, { dataDir: dir });
+    closers.push(() => pkm.close()); pkm.attachVault(vault);
+    await manager.finder.useVault(pkm.vault, bus);
+
+    const first = await manager.search("마크다운 문서", { limit: 1, per });
+    expect(first.engine).toBe("fast-find");
+    expect(first.groups[0]!.hits[0]).toMatchObject({ kind: "user" });
+    expect(first.total).toBe(31);
+    expect(first.counts).toMatchObject({ all: 31, session: 6, document: 12, project: 10, vault: 3 });
+    expect(first.worksTotal).toBe(12);
+    expect(first.groupsTotal).toBe(15);
+    const second = await manager.search("마크다운 문서", { limit: 1, offset: 1, per });
+    expect([first.groups[0]!.section, second.groups[0]!.section]).toEqual(["conversation", "conversation"]);
+    expect(new Set([first.groups[0]!.workId, second.groups[0]!.workId])).toEqual(new Set(conversations.map(value => value.project.id)));
+    expect(hits(first).concat(hits(second)).every(hit => ["user", "assistant", "plan"].includes(hit.kind))).toBe(true);
+    const third = await manager.search("마크다운 문서", { limit: 1, offset: 2, per });
+    expect(third.groups[0]!.section).toBe("other");
+    const every = await manager.search("마크다운 문서", all);
+    expect(hits(every).slice(0, 6).every(hit => ["user", "assistant", "plan"].includes(hit.kind))).toBe(true);
+    expect(new Set(keys(every)).size).toBe(31);
+
+    // Expanding a conversation group never borrows document rows from the same work.
+    const group = first.groups[0]!;
+    const expanded = await manager.search("마크다운 문서", { group: group.key, limit: 1, offset: 1 });
+    expect(expanded.groups[0]!.total).toBe(3);
+    expect(hits(expanded)[0]!.workId).toBe(group.workId);
+    expect(["assistant", "plan"]).toContain(hits(expanded)[0]!.kind);
+    const fullGroup = await manager.search("마크다운 문서", { group: group.key, limit: 20 });
+    expect(hits(fullGroup).map(hit => hit.kind).sort()).toEqual(["assistant", "plan", "user"]);
+    // Existing callers may still page a raw work id across all its result kinds.
+    expect((await manager.search("마크다운 문서", { group: group.workId, limit: 20 })).groups[0]!.total).toBe(4);
+    const ownPrompt = hits(fullGroup).find(hit => hit.kind === "user")!;
+    expect((await manager.finder.preview(ownPrompt.key)).text).toBe(prompt);
+    expect(ownPrompt.itemId).toBe(conversations.find(value => value.project.id === group.workId)!.request);
+
+    const documents = await manager.search("마크다운 문서", { ...all, scope: "document" });
+    expect(documents.total).toBe(12);
+    expect(documents.groups.every(value => !value.section)).toBe(true);
+    expect(hits(documents).filter(hit => hit.answer).map(hit => hit.answer!.itemId).sort()).toEqual(conversations.map(value => value.reply!).sort());
+    expect((await manager.search("마크다운 문서", { ...all, scope: "vault" })).total).toBe(3);
+    const files = await manager.search("마크다운 문서", { ...all, mode: "filesOnly" });
+    expect(files.groups.every(value => !value.section)).toBe(true);
+    expect(hits(files).some(hit => ["user", "assistant", "plan"].includes(hit.kind))).toBe(false);
+    expect((await manager.search("마크다운 문서", { ...all, provider: "codex" })).counts.session).toBe(3);
+    expect((await manager.search("마크다운 문서", { ...all, workId: conversations[0]!.project.id })).total).toBe(4);
+    manager.updateSession(conversations[0]!.session.id, { archived: true });
+    expect((await manager.search("마크다운 문서", all)).counts.session).toBe(3);
+    expect((await manager.search("마크다운 문서", { ...all, archived: true })).counts.session).toBe(6);
+    expect(existsSync(join(vault, "비밀/자료.md"))).toBe(true);
   });
 
   it("keeps original prompts visible among many repeated assistant body matches", async () => {
