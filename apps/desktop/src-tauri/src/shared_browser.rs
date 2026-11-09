@@ -3,7 +3,9 @@ use std::{collections::{HashMap, HashSet}, sync::{Arc, Mutex}, time::{Duration, 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{Manager, Webview, WebviewUrl, LogicalPosition, LogicalSize};
-use tauri::webview::{WebviewBuilder, NewWindowResponse, PageLoadEvent, PermissionResponse, DownloadEvent};
+use tauri::webview::{WebviewBuilder, NewWindowResponse, PageLoadEvent, PermissionResponse};
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
+use tauri::webview::DownloadEvent;
 
 #[path = "browser_driver/mod.rs"]
 mod platform;
@@ -18,6 +20,8 @@ struct Page {
     url: String, title: String, loading: bool, control: Control, popups: Vec<Value>, error: Option<String>,
     interaction_at: u64,
     download_directory: Option<String>, downloads: Vec<Value>, permissions: Vec<Value>, permission_support: Vec<String>,
+    site_permissions: Vec<Value>,
+    #[serde(skip)] permission_store: Arc<platform::permissions::Store>,
     #[serde(skip)] visible: bool,
 }
 #[derive(Default)]
@@ -26,6 +30,7 @@ pub struct SharedBrowser {
     receipts: Mutex<HashMap<String, Value>>,
     running: Mutex<HashSet<String>>,
     queues: Mutex<HashMap<String, Arc<tauri::async_runtime::Mutex<()>>>>,
+    permission_store: Mutex<Option<Arc<platform::permissions::Store>>>,
 }
 fn now() -> u64 { SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64 }
 fn identifier(value: &str) -> bool { !value.is_empty() && value.len() <= 160 && value.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_') }
@@ -84,8 +89,13 @@ async fn create(app: &tauri::AppHandle, caller: &Webview, command: &Value) -> Re
     let mac_store = platform::persistent_mac_profile(app, &profile)?;
     #[cfg(target_os = "macos")]
     if mac_store.is_some() { capabilities.push("persistent_profile".into()); }
+    let permission_store = {
+        let state = app.state::<SharedBrowser>(); let mut store = state.permission_store.lock().unwrap();
+        if store.is_none() { *store = Some(Arc::new(platform::permissions::Store::load(app.path().app_local_data_dir().map_err(|error| error.to_string())?.join("browser-profiles").join("site-permissions.json"))?)); }
+        store.as_ref().unwrap().clone()
+    };
     let page = Page { page_id: id.clone(), profile_id: profile.clone(), navigation_revision: 0, capabilities, url: url.to_string(), title: url.to_string(), loading: true, control, popups: Vec::new(), error: None, interaction_at: 0, visible: false,
-        download_directory: None, downloads: Vec::new(), permissions: Vec::new(), permission_support: platform::permission_support() };
+        download_directory: None, downloads: Vec::new(), permissions: Vec::new(), permission_support: platform::permission_support(), site_permissions: permission_store.list(&profile), permission_store };
     pages.lock().unwrap().insert(id.clone(), page);
     let nav_pages = pages.clone(); let nav_id = id.clone(); let nav_app = app.clone();
     let load_pages = pages.clone(); let load_id = id.clone();
@@ -118,7 +128,9 @@ async fn create(app: &tauri::AppHandle, caller: &Webview, command: &Value) -> Re
         .on_permission_request(move |_, kind| {
             #[cfg(target_os = "linux")]
             { let _ = (&permission_pages, &permission_id, kind); PermissionResponse::Default }
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(any(target_os = "windows", target_os = "macos"))]
+            { let _ = (&permission_pages, &permission_id, kind); PermissionResponse::Deny }
+            #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
             {
                 let kind = kind.to_string(); let supported = platform::permission_support().contains(&kind);
                 if let Some(page) = permission_pages.lock().unwrap().get_mut(&permission_id) {
@@ -129,7 +141,9 @@ async fn create(app: &tauri::AppHandle, caller: &Webview, command: &Value) -> Re
             }
         });
     // Wry's GTK download callbacks are context-wide. The GTK adapter instead matches Download.web_view.
-    #[cfg(not(target_os = "linux"))]
+    // WK's original navigation policy must still know a download delegate exists; the native
+    // proxy takes ownership of the real WKDownload before this fallback callback can run.
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     { let download_pages = pages.clone(); let download_id = id.clone();
       builder = builder.on_download(move |_, event| {
             match event {
@@ -247,12 +261,31 @@ pub async fn shared_browser(app: tauri::AppHandle, webview: Webview, command: Va
             if page.control.owner != "human" { return Err("직접 조작으로 전환한 뒤 권한을 결정해 주세요.".into()); }
             let allow = command["allow"].as_bool().ok_or("허용 또는 거절을 선택해 주세요.")?;
             let view = app.get_webview(&label(&id)).ok_or("웹 페이지가 닫혔습니다.")?;
-            platform::decide(view, app.state::<SharedBrowser>().pages.clone(), id.clone(), request_id, allow).await?;
+            let remember = command["remember"].as_bool().unwrap_or(false);
+            if remember && !page.capabilities.iter().any(|capability| capability == "permission_persistence") { return Err("이 환경에서는 요청별 권한만 결정할 수 있습니다.".into()); }
+            platform::decide(view, app.state::<SharedBrowser>().pages.clone(), id.clone(), request_id, allow, remember).await?;
             Ok(json!(current(&app, &id)?))
+        }
+        "site-permission-forget" => {
+            let id = field(&command, "pageId")?; let rule_id = field(&command, "ruleId")?; let page = current(&app, id)?;
+            if page.control.owner != "human" { return Err("직접 조작으로 전환한 뒤 저장된 권한을 삭제해 주세요.".into()); }
+            let origin = page.permission_store.remove(&page.profile_id, rule_id)?;
+            let pages = app.state::<SharedBrowser>().pages.clone(); platform::permissions::refresh(&pages, &page.profile_id);
+            let affected: Vec<_> = pages.lock().unwrap().values_mut().filter(|candidate| candidate.profile_id == page.profile_id && platform::permissions::origin(&candidate.url).as_deref() == Some(origin.as_str())).map(|page| {
+                page.control = Control { generation: page.control.generation + 1, owner: "human".into() }; (page.page_id.clone(), page.control.clone())
+            }).collect();
+            // The button explicitly includes reloading this profile's affected tabs: active documents
+            // do not retain a camera/microphone grant that the person just removed.
+            for (page_id, control) in affected { if let Some(view) = app.get_webview(&label(&page_id)) {
+                let action = json!({"kind":"control","control":control});
+                let _ = evaluate(view.clone(), api_expression(&format!("api.run({action}, {}, null)", json!(control)))).await;
+                platform::reset_permission(&view, &page_id)?; view.reload().map_err(|error| error.to_string())?;
+            } }
+            Ok(json!(current(&app, id)?))
         }
         "download-cancel" => {
             let id = field(&command, "pageId")?.to_string(); let download_id = field(&command, "downloadId")?.to_string();
-            current(&app, &id)?;
+            if current(&app, &id)?.control.owner != "human" { return Err("직접 조작으로 전환한 뒤 다운로드를 취소해 주세요.".into()); }
             let view = app.get_webview(&label(&id)).ok_or("웹 페이지가 닫혔습니다.")?;
             platform::cancel_download(view, app.state::<SharedBrowser>().pages.clone(), id.clone(), download_id).await?;
             Ok(json!(current(&app, &id)?))

@@ -45,7 +45,11 @@
       "types": "./dist/ports.d.ts",
       "default": "./dist/ports.js"
     },
-    "./xterm.css": "./xterm.css"
+    "./xterm.css": "./xterm.css",
+    "./service-proxy": {
+      "types": "./dist/server/server/service-proxy.d.ts",
+      "default": "./dist/server/server/service-proxy.js"
+    }
   },
   "dependencies": {
     "@getpaseo/protocol": "file:../protocol",
@@ -60,7 +64,9 @@
     "@xterm/addon-unicode11": "0.10.0-beta.213",
     "@xterm/addon-web-links": "0.13.0-beta.213",
     "@xterm/addon-webgl": "0.20.0-beta.329",
-    "@xterm/addon-serialize": "0.14.0"
+    "@xterm/addon-serialize": "0.14.0",
+    "express": "^4.18.2",
+    "pino": "10.3.1"
   },
   "x-workbench-vendor-notice": "Pinned original modules retained under upstream. src uses import/type compatibility and explicit embedded-pane ports. No independent PTY supervisor."
 }

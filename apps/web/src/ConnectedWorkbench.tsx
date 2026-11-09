@@ -66,7 +66,7 @@ export function ConnectedWorkbench() {
   }, [pushIntent, pushTarget, connections.activeHostId, reportPushError]);
   return <>
     {pushError ? <div role="status" className="connection-error">{pushError} {pushIntent ? <button type="button" className="button small" onClick={() => { setPushError(""); setPushAttempt(value => value + 1); }}>알림 다시 열기</button> : <button type="button" className="button small" onClick={() => setPushError("")}>닫기</button>}</div> : null}
-    {token || peer ? <App key={connections.activeHostId ?? "local"} apiOverride={apiOverride} onConnections={() => setOpen(true)}
+    {token || peer ? <App key={connections.activeHostId ?? "local"} apiOverride={apiOverride} onConnections={() => setOpen(true)} connectionsOpen={open}
       attentionRequest={pushIntent?.hostId === connections.activeHostId ? pushTarget : null} onAttentionOpened={openedPush}
       connectionLabel={selected ? selected.label + (connections.phase === "connected" ? " · 연결됨" : " · 연결 확인") : "기기 연결"} registerHostSwitchGuard={guard} />
       : <main style={{ maxWidth: 560, margin: "12vh auto", padding: 24 }}><h1>Achmage Workbench</h1><p>작업 중인 PC에 연결해 대화와 파일을 이어서 보세요.</p><button type="button" className="primary-button" onClick={() => setOpen(true)}>기기 연결</button></main>}

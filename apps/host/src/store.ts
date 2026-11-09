@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { randomUUID } from "node:crypto";
+import { chmodSync, existsSync, mkdirSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import type { Workspace, WorktreeCreation, TerminalSession, PreparationJob } from "@workbench/contracts";
 import type { Artifact, ArtifactRevision, Folder, Handoff, Proposal, Session, SessionLink, TimelineRevision, TranscriptItem, Work } from "@workbench/contracts";
 import type { TurnMark } from "./timeline.ts";
@@ -18,12 +19,44 @@ import type { HubJournalEntry } from "@workbench/contracts";
 // 3: native-search raw cache with exact structured fields (only derived data is rebuilt).
 const SEARCH_VERSION = "5-fast-find-prompt-recovery";
 
+export const STORE_SCHEMA_VERSION = 1;
+export type StoreMigration = { from: number; to: number; backupPath: string | null };
+
 export class Store {
   private readonly db: DatabaseSync;
+  readonly migration: StoreMigration;
 
   constructor(path: string) {
     mkdirSync(dirname(path), { recursive: true });
+    const existing = path !== ":memory:" && existsSync(path);
+    let version = 0, needsBackup = false;
+    // Reject a future DB before opening a writable connection or changing its journal mode.
+    if (existing) {
+      const probe = new DatabaseSync(path, { readOnly: true });
+      try {
+        version = Number(probe.prepare("PRAGMA user_version").get()?.user_version ?? 0);
+        if (version > STORE_SCHEMA_VERSION) throw Object.assign(Error(`이 데이터베이스는 더 새로운 Workbench가 사용한 schema ${version}입니다. 지원 버전은 ${STORE_SCHEMA_VERSION}이며 원본은 변경하지 않았습니다.`), { code: "future_schema" });
+        const hasTables = Number(probe.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").get()?.n ?? 0) > 0;
+        const hasMeta = Boolean(probe.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'meta'").get());
+        const searchVersion = hasMeta ? probe.prepare("SELECT value FROM meta WHERE key = 'search.version'").get()?.value : null;
+        needsBackup = hasTables && (version < STORE_SCHEMA_VERSION || searchVersion !== SEARCH_VERSION);
+      } finally { probe.close(); }
+    }
     this.db = new DatabaseSync(path);
+    let backupPath: string | null = null;
+    try {
+      if (needsBackup) {
+        const folder = join(dirname(path), "backups"); mkdirSync(folder, { recursive: true, mode: 0o700 }); chmodSync(folder, 0o700);
+        backupPath = join(folder, `${basename(path)}.schema-${version}.${Date.now()}-${randomUUID()}.sqlite`);
+        // SQLite takes a coherent snapshot including committed WAL pages. Never copy a live DB file.
+        this.db.exec(`VACUUM INTO '${backupPath.replaceAll("'", "''")}'`);
+        chmodSync(backupPath, 0o600);
+        const backup = new DatabaseSync(backupPath, { readOnly: true });
+        try { if (backup.prepare("PRAGMA quick_check").get()?.quick_check !== "ok") throw Error("마이그레이션 전 복구본을 확인하지 못했습니다."); }
+        finally { backup.close(); }
+      }
+    } catch (error) { this.db.close(); throw error; }
+    this.migration = { from: version, to: STORE_SCHEMA_VERSION, backupPath };
     // Writes report their rowid as a BigInt. FTS5 keeps the delete markers of the search index at
     // rowids past 2^53 and SQLite's "last inserted rowid" can be one of them after a search write;
     // read as a number it threw on the next INSERT, UPDATE or DELETE (of any table) and stopped
@@ -34,9 +67,11 @@ export class Store {
       if (/^\s*(INSERT|UPDATE|DELETE|REPLACE)\b/i.test(sql)) statement.setReadBigInts(true);
       return statement;
     };
+    try {
     this.db.exec(`
       PRAGMA journal_mode = WAL;
       PRAGMA busy_timeout = 3000;
+      BEGIN IMMEDIATE;
       CREATE TABLE IF NOT EXISTS folders (id TEXT PRIMARY KEY, json TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS works (id TEXT PRIMARY KEY, json TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, work_id TEXT NOT NULL, json TEXT NOT NULL);
@@ -78,9 +113,13 @@ export class Store {
       );
       CREATE INDEX IF NOT EXISTS hub_deliveries_recent ON hub_deliveries(created_at DESC);
       CREATE INDEX IF NOT EXISTS hub_deliveries_state ON hub_deliveries(state);
+      COMMIT;
     `);
     this.search = new SearchIndex(this.db);
     if (this.getMeta("search.version") !== SEARCH_VERSION) this.rebuildSearch();
+    this.db.exec(`PRAGMA user_version = ${STORE_SCHEMA_VERSION}`);
+    if (backupPath) this.setMeta("schema.last-backup", JSON.stringify(this.migration));
+    } catch (error) { try { this.db.exec("ROLLBACK"); } catch { /* No transaction open. */ } this.db.close(); throw error; }
   }
 
   /** The search index ("찾는 길"): every request, reply, plan, document, work, session and note. */

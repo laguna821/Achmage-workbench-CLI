@@ -1,3 +1,4 @@
+import { WORKBENCH_PROTOCOL, PROTOCOL_HEADER, protocolHeader, requireProtocolWrite } from "@workbench/contracts";
 import { safeRandomId } from "@getpaseo/client/internal/daemon-client-transport-utils";
 import { fromByteArray, toByteArray } from "base64-js";
 import { parseServerInfoStatusPayload } from "@getpaseo/protocol/messages";
@@ -15,7 +16,7 @@ import {
 const DEADLINE_MS = 15_000;
 const RESPONSE_WITHOUT_BODY = new Set([204, 205, 304]);
 const REQUEST_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE"]);
-const REQUEST_HEADERS = new Set(["accept", "accept-language", "range", "if-none-match", "if-modified-since", "content-type", "x-file-name", "x-workbench-view", "x-workbench-write", "x-workbench-work"]);
+const REQUEST_HEADERS = new Set(["accept", "accept-language", "range", "if-none-match", "if-modified-since", "content-type", "x-file-name", "x-workbench-view", "x-workbench-write", "x-workbench-work", PROTOCOL_HEADER]);
 
 export class RemoteRequestError extends Error {
   readonly status: number;
@@ -147,7 +148,7 @@ export class RemotePeer {
     const generation = this.generation;
     const attempt: { credential: string; promise: Promise<RemoteAuthentication> } = { credential: requested, promise: Promise.resolve().then(async () => {
       try {
-        const value = await this.callRpc("authenticate", { credential: requested }, remaining(deadline));
+        const value = await this.callRpc("authenticate", { credential: requested, protocol: WORKBENCH_PROTOCOL }, remaining(deadline));
         if (generation !== this.generation) throw disconnected();
         return this.acceptAuthentication(value, requested);
       } catch (error) {
@@ -203,7 +204,8 @@ export class RemotePeer {
     // been dispatched yet, so establishing its initial connection is safe.
     if (!await abortable(this.connect(), signal)) throw new RemoteRequestError("기기 인증이 필요합니다.", { status: 401, code: "authentication_required" });
     if (this.responses.size >= 8) throw new RemoteRequestError("처리 중인 원격 요청을 기다려 주세요.", { status: 429, code: "remote_capacity" });
-    const headers: Record<string, string> = {};
+    if (method !== "GET" && this.authentication?.compatibility) requireProtocolWrite(this.authentication.compatibility);
+    const headers: Record<string, string> = { [PROTOCOL_HEADER]: protocolHeader() };
     request.headers.forEach((value, name) => { if (REQUEST_HEADERS.has(name)) headers[name] = value; });
     const id = safeRandomId();
     let resolve!: (response: Response) => void;

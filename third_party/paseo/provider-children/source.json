@@ -1,0 +1,110 @@
+{
+  "repository": "https://github.com/getpaseo/paseo",
+  "commit": "1fff127f45b11c1c9c573fbbd12791673004c912",
+  "license": "Apache-2.0",
+  "files": [
+    {
+      "source": "packages/server/src/server/agent/providers/claude/subagents/live-source.ts",
+      "upstreamSha256": "859c7ab7c021c6745bbfb9d1d9ae54077e374881cb03d3d71b70c8f8bfcd5f9e",
+      "vendored": "vendor/paseo/server/src/server/agent/providers/claude/subagents/live-source.ts",
+      "sha256": "c2638acd59f7d3fe83dc40d43361ecf652bbd3b219c196aaf87c129c7ccd845a",
+      "adaptation": "Type-only imports redirected to existing protocol contracts and exact extracted provider-subagent event types. Runtime code unchanged."
+    },
+    {
+      "source": "packages/server/src/server/agent/providers/claude/subagents/task-status.ts",
+      "upstreamSha256": "50cbddd1691a56dfefe85ad02e2c754321d1350171d195f5f5d497c1380e956b",
+      "vendored": "vendor/paseo/server/src/server/agent/providers/claude/subagents/task-status.ts",
+      "sha256": "d4db73759210c905fc6ab2e53dd3a4a8fb9af91d1d0b9dea9b24a47cf94f9d84",
+      "adaptation": "Type-only imports redirected to existing protocol contracts and exact extracted provider-subagent event types. Runtime code unchanged."
+    },
+    {
+      "source": "packages/server/src/server/agent/providers/claude/subagents/observation.ts",
+      "upstreamSha256": "9501e30b216e62630febcdcdaf4d72fa62950472d78e48f2c7a00f25958d57c9",
+      "vendored": "vendor/paseo/server/src/server/agent/providers/claude/subagents/observation.ts",
+      "sha256": "06a347300e5e3d1d657ccf550cd417618304adca8e1f98ed40297a5b0d58a032",
+      "adaptation": "Type-only imports redirected to existing protocol contracts and exact extracted provider-subagent event types. Runtime code unchanged."
+    },
+    {
+      "source": "packages/server/src/server/agent/providers/claude/subagents/presentation.ts",
+      "upstreamSha256": "53b64122a0be437dff831018f560a35347139bfb320f19b4f3dabb9e6fa4e0ef",
+      "vendored": "vendor/paseo/server/src/server/agent/providers/claude/subagents/presentation.ts",
+      "sha256": "53b64122a0be437dff831018f560a35347139bfb320f19b4f3dabb9e6fa4e0ef",
+      "adaptation": "Type-only imports redirected to existing protocol contracts and exact extracted provider-subagent event types. Runtime code unchanged."
+    },
+    {
+      "source": "packages/server/src/server/agent/providers/claude/models.ts",
+      "upstreamSha256": "c9231a04a37651f7ad65a68c7d8de871907762d2166aba28f00beafa9b6a9fba",
+      "vendored": "vendor/paseo/server/src/server/agent/providers/claude/models.ts",
+      "sha256": "b24c42d5ecfc585786cf29190fab27c18ec1a25ddf11137e5b901156cc87c25b",
+      "adaptation": "Type-only imports redirected to existing protocol contracts and exact extracted provider-subagent event types. Runtime code unchanged."
+    },
+    {
+      "source": "packages/server/src/server/agent/providers/claude/model-manifest.ts",
+      "upstreamSha256": "384031a56acce6b88cdd0ea55b26709f293031749fd9879c868f43056ad4b0ad",
+      "vendored": "vendor/paseo/server/src/server/agent/providers/claude/model-manifest.ts",
+      "sha256": "7288a3742fab02431c48c9143ac6ec5530a6e7897c24548013f3560d8d82d19b",
+      "adaptation": "Type-only imports redirected to existing protocol contracts and exact extracted provider-subagent event types. Runtime code unchanged."
+    }
+  ],
+  "ports": {
+    "source": "packages/server/src/server/agent/provider-subagents/store.ts",
+    "upstreamSha256": "2b9375cdfcd217294950b03dd26c8fdb39fc66ef551f413047ef9ffe05a06568",
+    "adaptation": "Exact ProviderSubagentStatus and ProviderSubagentInputEvent type extraction only. Store runtime is not imported."
+  },
+  "referenceImplementations": [
+    {
+      "source": "packages/server/src/server/agent/providers/claude/agent.ts",
+      "sha256": "2d7fc5a0442cbc53d6f0501577d56b6a6793a37574f32a4b145699ae01bf4c04",
+      "use": "Original stopBackgroundWork confirms both Query.stopTask acknowledgement and task_notification; Workbench keeps the same bounded outcome-wait semantics."
+    },
+    {
+      "source": "packages/server/src/server/agent/providers/codex-app-server-agent.ts",
+      "sha256": "980cdf7c84899b0a3f55f99c410c2bc003bb108ff5451e26e5ea4da41f998038",
+      "use": "Provider descendant ownership and child timeline routing; existing Workbench CodexRpc and generated official schemas remain the actual transport."
+    }
+  ],
+  "officialLocalSchemas": [
+    {
+      "path": "node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts",
+      "version": "0.3.301",
+      "sha256": "26f9a0c91ad64e2020f0d3734932302e3cc09685bddf2b2f9ef60839ce278773",
+      "used": [
+        "Query.stopTask(taskId)",
+        "Query.backgroundTasks(toolUseId)",
+        "CanUseTool.agentID",
+        "task_started/task_updated/task_notification run_id",
+        "background_tasks_changed level snapshot",
+        "listSubagents/getSubagentMessages"
+      ]
+    },
+    {
+      "path": "packages/provider-codex/src/generated/v2/Thread.ts",
+      "sha256": "a6a528b2d88115ff3fe8db1c32ced5a90a1af3ec3fa0cfe39106931d6cccebd6"
+    },
+    {
+      "path": "packages/provider-codex/src/generated/v2/ThreadItem.ts",
+      "sha256": "047df9febb13b40263fb5b0abe244171c4dcb5e83229bbf9efba31abae840746"
+    },
+    {
+      "path": "packages/provider-codex/src/generated/v2/TurnStartParams.ts",
+      "sha256": "aee116ebc86d05a738ae7cdace79f791a8b99a85693c3a005c295eb7e08b647c"
+    },
+    {
+      "path": "packages/provider-codex/src/generated/v2/TurnSteerParams.ts",
+      "sha256": "47cdc50a4b0b350c00d7b921beb6b620f63642684f4b48a1e574089e8f1690be"
+    },
+    {
+      "path": "packages/provider-codex/src/generated/v2/ThreadResumeParams.ts",
+      "sha256": "ceeedf2cfda691faf97432ee29135837f4cc0e7a9f3e9dc97db2379c63f73aa4"
+    },
+    {
+      "path": "packages/provider-codex/src/generated/v2/TurnInterruptParams.ts",
+      "sha256": "643034c3d25c23c7700236d4d1ff16286565786d48148e85b0c4761fe46d3804"
+    }
+  ],
+  "workbenchAdapters": [
+    "apps/host/src/providers/claude-children.ts",
+    "apps/host/src/providers/codex-children.ts"
+  ],
+  "validation": "NOT_RUN for this implementation assignment per user instruction. No external provider request, model turn, test, app build or installer was executed by this owner."
+}

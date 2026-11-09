@@ -22,7 +22,7 @@ import {
   type SpawnedProcess,
   type SpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { AccessMode, ApprovalDecision, EngineCommand, ModelOption, ProviderStatus, Session, UsageWindow, Work } from "@workbench/contracts";
+import type { AccessMode, ApprovalDecision, EngineCommand, ModelOption, ProviderStatus, Session, UsageWindow, Work, NativeTaskControl, NativeTaskIdentity } from "@workbench/contracts";
 import { ClaudeTranscriptMapper, describeTool, type MapperOutput } from "@workbench/provider-claude";
 import { launchEnv, resolveClaude, sdkBundledBinary, type ResolvedBinary } from "../binaries.ts";
 import { billingVarsIn } from "../engine-env.ts";
@@ -33,6 +33,7 @@ import { claudeHistory, isRequest } from "../imports.ts";
 import { isImage, mentionFiles } from "../attachments.ts";
 import type { BrowserEngineHooks } from "../browse.ts";
 import { MODEL_CACHE_TTL, modelCacheKey, readModelCache } from "./model-cache.ts";
+import { ClaudeChildren } from "./claude-children.ts";
 
 const run = promisify(execFile);
 
@@ -77,6 +78,7 @@ class InputQueue implements AsyncIterable<SDKUserMessage> {
 }
 
 type PendingApproval = {
+  agentId?: string;
   toolUseId: string;
   toolName: string;
   input: Record<string, unknown>;
@@ -101,6 +103,7 @@ type Runtime = {
   input: InputQueue;
   query: Query;
   mapper: ClaudeTranscriptMapper;
+  children: ClaudeChildren;
   turnKey: string;
   /** The request the running turn answers (null for a turn nobody here sent, or a compaction). */
   requestId: string | null;
@@ -519,6 +522,7 @@ export class ClaudeAdapter implements ProviderAdapter {
       input,
       query: undefined as unknown as Query,
       mapper: new ClaudeTranscriptMapper(),
+      children: undefined as unknown as ClaudeChildren,
       turnKey: "",
       requestId: null,
       steered: [],
@@ -528,6 +532,12 @@ export class ClaudeAdapter implements ProviderAdapter {
       idleTimer: null,
       planning: Boolean(session.plan),
     };
+    runtime.children = new ClaudeChildren(session.nativeSessionId, {
+      query: () => this.runtimes.get(session.id) === runtime ? runtime.query : null,
+      publish: (tasks, source) => this.sink.nativeTasks?.(session.id, tasks, source),
+      settled: () => { if (!runtime.turnActive && this.runtimes.get(session.id) === runtime) this.scheduleIdle(runtime); },
+    });
+    this.childRecords.set(session.id, runtime.children);
     const canUseTool: CanUseTool = (toolName, toolInput, options) =>
       new Promise<PermissionResult>((resolve) => {
         // The end of plan mode: the plan waits for the user's go-ahead, whatever the access.
@@ -543,9 +553,9 @@ export class ClaudeAdapter implements ProviderAdapter {
             plan: true,
             at: Date.now(),
           };
-          runtime.approvals.set(itemId, { toolUseId: options.toolUseID, toolName, input: toolInput, resolve, item });
+          runtime.approvals.set(itemId, { toolUseId: options.toolUseID, agentId: options.agentID, toolName, input: toolInput, resolve, item });
           this.sink.upsertItem(session.id, item);
-          this.sink.updateSession(session.id, { status: "awaitingApproval", activity: "계획 확인 필요" });
+          if (!runtime.children.approval(options.agentID, item, true)) this.sink.updateSession(session.id, { status: "awaitingApproval", activity: "계획 확인 필요" });
           return;
         }
         // The access was raised while Claude Code was deciding: let it through as the new mode would.
@@ -565,12 +575,13 @@ export class ClaudeAdapter implements ProviderAdapter {
           decision: null,
           at: Date.now(),
         };
-        runtime.approvals.set(itemId, { toolUseId: options.toolUseID, toolName, input: toolInput, resolve, item });
+        runtime.approvals.set(itemId, { toolUseId: options.toolUseID, agentId: options.agentID, toolName, input: toolInput, resolve, item });
         this.sink.upsertItem(session.id, item);
-        this.sink.updateSession(session.id, { status: "awaitingApproval", activity: "승인 필요" });
+        if (!runtime.children.approval(options.agentID, item, true)) this.sink.updateSession(session.id, { status: "awaitingApproval", activity: "승인 필요" });
         options.signal.addEventListener("abort", () => {
           if (runtime.approvals.delete(itemId)) {
             this.sink.upsertItem(session.id, { ...item, decision: "expired" });
+            runtime.children.approval(options.agentID, { ...item, decision: "expired" }, false);
             resolve({ behavior: "deny", message: "Request aborted" });
           }
         });
@@ -624,6 +635,7 @@ export class ClaudeAdapter implements ProviderAdapter {
     let failure: string | null = null;
     try {
       for await (const message of runtime.query) {
+        if (runtime.children.observe(message, runtime.requestId)) continue;
         this.noteModel(runtime, message);
         for (const output of runtime.mapper.handle(message, runtime.turnKey)) {
           this.apply(runtime, output);
@@ -638,6 +650,12 @@ export class ClaudeAdapter implements ProviderAdapter {
       if (runtime.idleTimer) {
         clearTimeout(runtime.idleTimer);
       }
+      for (const [id, pending] of runtime.approvals) {
+        runtime.approvals.delete(id);
+        pending.resolve({ behavior: "deny", message: "The provider runtime closed before approval." });
+        this.sink.upsertItem(sessionId, { ...pending.item, decision: "expired" });
+      }
+      runtime.children.disconnected();
       if (runtime.turnActive && !this.closing) this.lost(runtime, failure);
     }
   }
@@ -779,6 +797,7 @@ export class ClaudeAdapter implements ProviderAdapter {
   private closeRuntime(runtime: Runtime) {
     if (this.runtimes.get(runtime.sessionId) === runtime) this.runtimes.delete(runtime.sessionId);
     if (runtime.idleTimer) clearTimeout(runtime.idleTimer);
+    runtime.children.disconnected();
     runtime.input.close();
     runtime.query.close();
   }
@@ -789,7 +808,7 @@ export class ClaudeAdapter implements ProviderAdapter {
       clearTimeout(runtime.idleTimer);
     }
     runtime.idleTimer = setTimeout(() => {
-      if (!runtime.turnActive && this.runtimes.get(runtime.sessionId) === runtime) {
+      if (!runtime.turnActive && !runtime.children.hasActive() && this.runtimes.get(runtime.sessionId) === runtime) {
         this.runtimes.delete(runtime.sessionId);
         runtime.input.close();
         runtime.query.close();
@@ -802,7 +821,7 @@ export class ClaudeAdapter implements ProviderAdapter {
     let current = this.runtimes.get(session.id);
     // The browser was switched since this process started. Its instructions are part of the system
     // prompt, so a new process resumes the same session with the new ones.
-    if (current && !current.turnActive && current.browser !== Boolean(this.browser?.instructions(session))) {
+    if (current && !current.turnActive && !current.children.hasActive() && current.browser !== Boolean(this.browser?.instructions(session))) {
       this.closeRuntime(current);
       current = undefined;
     }
@@ -949,6 +968,7 @@ export class ClaudeAdapter implements ProviderAdapter {
     runtime.interrupting = true;
     this.sink.updateSession(session.id, { status: "interrupting", activity: "중단하는 중" });
     for (const [itemId, pending] of runtime.approvals) {
+      if (pending.agentId) continue;
       runtime.approvals.delete(itemId);
       pending.resolve({ behavior: "deny", message: "User interrupted", interrupt: true });
       this.sink.upsertItem(session.id, { ...pending.item, decision: "decline" });
@@ -999,11 +1019,26 @@ export class ClaudeAdapter implements ProviderAdapter {
       }
     }
     this.sink.upsertItem(session.id, { ...pending.item, decision });
-    if (runtime.approvals.size === 0) {
+    runtime.children.approval(pending.agentId, { ...pending.item, decision }, false);
+    if (!pending.agentId && ![...runtime.approvals.values()].some(entry => !entry.agentId)) {
       this.sink.updateSession(session.id, { status: "running", activity: "응답 준비 중" });
     }
     return true;
   }
+
+  private readonly childRecords = new Map<string, ClaudeChildren>();
+  nativeTasks(session: Session) { return this.childRecords.get(session.id)?.list() ?? []; }
+  private childrenFor(session: Session) {
+    let children = this.childRecords.get(session.id);
+    if (!children) {
+      children = new ClaudeChildren(session.nativeSessionId, { query: () => null, publish: (tasks, source) => this.sink.nativeTasks?.(session.id, tasks, source), settled: () => undefined });
+      this.childRecords.set(session.id, children);
+    }
+    return children;
+  }
+  async refreshNativeTasks(session: Session, work: Work) { return this.childrenFor(session).refresh(work.cwd); }
+  async controlNativeTask(session: Session, _work: Work, target: NativeTaskIdentity, command: NativeTaskControl) { await this.childrenFor(session).control(target, command); }
+  async nativeTaskHistory(session: Session, work: Work, target: NativeTaskIdentity) { return this.childrenFor(session).history(target, work.cwd); }
 
   async shutdown() {
     this.closing = true;

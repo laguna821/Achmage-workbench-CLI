@@ -242,7 +242,7 @@ const readJson = <T,>(key: string, fallback: T): T => {
 };
 const SORT_MODES: SortMode[] = ["manual", "recent", "name"];
 
-export function App({ apiOverride, onConnections, connectionLabel, registerHostSwitchGuard, attentionRequest, onAttentionOpened }: { apiOverride?: Api | null; onConnections?: () => void; connectionLabel?: string; registerHostSwitchGuard?: (guard: (() => Promise<void>) | null) => void; attentionRequest?: { id: string; nonce: string } | null; onAttentionOpened?: (id: string) => void } = {}) {
+export function App({ apiOverride, onConnections, connectionsOpen = false, connectionLabel, registerHostSwitchGuard, attentionRequest, onAttentionOpened }: { apiOverride?: Api | null; onConnections?: () => void; connectionsOpen?: boolean; connectionLabel?: string; registerHostSwitchGuard?: (guard: (() => Promise<void>) | null) => void; attentionRequest?: { id: string; nonce: string } | null; onAttentionOpened?: (id: string) => void } = {}) {
   const api = useMemo(() => {
     if (apiOverride !== undefined) return apiOverride;
     const token = readToken();
@@ -1038,7 +1038,8 @@ export function App({ apiOverride, onConnections, connectionLabel, registerHostS
     }
     setAttentionOpen(false);
     navigateTo({ workId: target.workId, sessionId: target.sessionId, view: target.pageId ? { kind: "browser", pageId: target.pageId } : target.artifactId ? { kind: "document", artifactId: target.artifactId, proposalId: null } : { kind: "work" } }, () => {
-      setFocusItem({ sessionId: target.sessionId, itemId: target.itemId, nonce: Date.now() });
+      if (target.taskRef.executorKind === "native_agent") setTaskPanelOpen(true);
+      else setFocusItem({ sessionId: target.sessionId, itemId: target.itemId, nonce: Date.now() });
       void attentionInbox.read(id).catch(attentionInbox.reportError);
       onOpened?.();
     });
@@ -2512,7 +2513,10 @@ export function App({ apiOverride, onConnections, connectionLabel, registerHostS
         if (itemId) setFocusItem({ sessionId, itemId, nonce: Date.now() });
       }} /> : null}
       {terminalWorkspace ? <TerminalDialog api={api} workspace={state.workspaces[terminalWorkspace.id] ?? terminalWorkspace} onClose={() => setTerminalWorkspace(null)} onOpen={(entry) => navigateTo({ view: { kind: "terminal", terminalId: entry.id, workspaceId: entry.workspaceId, label: entry.label }, workId: entry.workId, sessionId: null })} /> : null}
-      {serviceWorkspace ? <WorkspaceServices key={serviceWorkspace.id} api={api} workspace={state.workspaces[serviceWorkspace.id] ?? serviceWorkspace} onClose={() => setServiceWorkspace(null)} openExternal={openExternal} onOpen={(entry) => navigateTo({ view: { kind: "terminal", terminalId: entry.id, workspaceId: entry.workspaceId, label: entry.label }, workId: entry.workId, sessionId: null })} /> : null}
+      {serviceWorkspace ? <WorkspaceServices key={serviceWorkspace.id} api={api} workspace={state.workspaces[serviceWorkspace.id] ?? serviceWorkspace} onClose={() => setServiceWorkspace(null)} openExternal={openExternal} onOpenPreview={inDesktop && !single ? async (url, workspace) => {
+        const page = await sharedBrowser.create({ requestId: newRequestId(), driverId: sharedBrowser.driverId, workspaceId: workspace.id, profileId: browserState.profiles[0]?.id ?? "default", url });
+        navigateTo({ view: { kind: "browser", pageId: page.pageId }, workId: page.workId, sessionId: page.sessionId });
+      } : undefined} onOpen={(entry) => navigateTo({ view: { kind: "terminal", terminalId: entry.id, workspaceId: entry.workspaceId, label: entry.label }, workId: entry.workId, sessionId: null })} /> : null}
       {preparationWorkspace ? <WorkspacePreparationDialog api={api} workspace={state.workspaces[preparationWorkspace.id] ?? preparationWorkspace} onClose={() => setPreparationWorkspace(null)} onOpen={(entry) => navigateTo({ view: { kind: "terminal", terminalId: entry.id, workspaceId: entry.workspaceId, label: entry.label }, workId: entry.workId, sessionId: null })} /> : null}
       {scmWorkspace ? <SourceControlDialog key={scmWorkspace.id} api={api} workspace={state.workspaces[scmWorkspace.id] ?? scmWorkspace} onClose={() => setScmWorkspace(null)} onTerminal={() => { setTerminalWorkspace(scmWorkspace); setScmWorkspace(null); }} /> : null}
       {integrationsOpen && api ? <IntegrationsSheet api={api} onClose={() => setIntegrationsOpen(false)} onToast={setToast} /> : null}
@@ -2529,6 +2533,19 @@ export function App({ apiOverride, onConnections, connectionLabel, registerHostS
       {knowledgeMounted && api ? <div hidden={!knowledgeOpen}><KnowledgeLibrary api={api} state={state} workId={view.kind === "project" ? view.workId : work?.id} theme={appTheme} visible={knowledgeOpen} onOpen={artifact => { navigateTo({ workId: artifact.workId, sessionId: null, view: { kind: "document", artifactId: artifact.id, proposalId: null } }); setKnowledgeOpen(false); }} onClose={() => { setKnowledgeOpen(false); setKnowledgeMounted(false); }} /></div> : null}
       {state.ready && api && (prefs.onboarding !== "done" || onboardingAgain) ? (
         <Onboarding
+          api={api}
+          hostLabel={state.hostLabel}
+          artifacts={Object.values(state.artifacts)}
+          suspended={ieumAppOpen || dropboxOpen || connectionsOpen || importOpen}
+          onOpenDropbox={api.isRemote ? undefined : () => setDropboxOpen(true)}
+          onOpenVault={api.isRemote ? undefined : () => pkmHandle.current?.setDialog({ kind: "vault" })}
+          onOpenDevices={onConnections}
+          onOpenDocument={artifactId => {
+            const artifact = stateRef.current.artifacts[artifactId];
+            if (artifact) navigateTo({ view: { kind: "document", artifactId, proposalId: null }, workId: artifact.workId, sessionId: null });
+          }}
+          onCreateDocument={() => setNewDocument({ ...creationTarget(layoutRef.current.focus), paneId: layoutRef.current.focus })}
+          onImportHistory={api.isRemote ? undefined : () => setImportOpen(true)}
           providers={state.providers}
           tools={state.tools}
           engineActions={engineActions}

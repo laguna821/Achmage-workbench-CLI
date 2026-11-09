@@ -1,0 +1,4 @@
+Paseo onboarding and QR attempt model
+https://github.com/getpaseo/paseo at 1fff127f45b11c1c9c573fbbd12791673004c912
+Apache-2.0; see ../LICENSE. Original complete files preserved under upstream/.
+model.ts runtime is unchanged; pair-scan-model.ts redirects only its type import. Adaptation and hashes: source.json.

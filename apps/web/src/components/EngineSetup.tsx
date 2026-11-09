@@ -153,7 +153,9 @@ export function EngineCard({ provider, status, actions, children }: { provider: 
           <div className="setup-hint">브라우저가 열립니다. 로그인을 마치면 이 창이 저절로 바뀝니다.</div>
         </>
       ) : null}
-      {status?.loginMethod === "metered" ? <div className="setup-hint warn">구독이 아니라 쓴 만큼 요금이 나가는 로그인(API 키 등)입니다. 구독으로 쓰려면 구독 계정으로 다시 로그인하세요.</div> : null}
+      {status?.loginMethod === "metered" ? <div className="setup-hint warn">구독이 아니라 쓴 만큼 요금이 나가는 로그인(API 키 등)입니다. 구독으로 쓰려면 구독 계정으로 다시 로그인하세요.
+        {status.installed && !installing && login?.state !== "waiting" ? <button type="button" className="button small" onClick={() => actions.login(provider)}>구독 계정으로 다시 로그인</button> : null}
+      </div> : null}
       {status?.billingVars.length ? <div className="setup-hint">{status.billingVars.join(", ")} 환경 변수는 엔진에 넘기지 않습니다(구독 로그인으로 실행).</div> : null}
       {status?.binarySource === "bundled" ? <div className="setup-hint">설치된 Claude Code가 없어 SDK에 들어 있는 엔진으로 실행합니다.</div> : null}
       {status?.binarySource === "managed" && status.canInstall && !installing ? (

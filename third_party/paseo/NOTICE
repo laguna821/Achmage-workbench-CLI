@@ -95,3 +95,5 @@ original source bytes remain under vendor/paseo/server/upstream/hub-reuse.
 Original copyright (c) 2025-present Mohamed Boudra; Apache License 2.0.
 The public Hub service itself is not included. No external enrollment or messaging
 was performed as part of development. Existing dependency licenses apply.
+
+Service previews reuse the pinned Paseo service-proxy module; a Workbench adapter supplies owned-execution and device authorization. Original bytes and hashes are under vendor/paseo/terminal/upstream and terminal/source.json. Onboarding and QR scan state use the original pinned modules; see onboarding/source.json. Express and jsQR runtime notices are preserved under service-preview/licenses with dependencies.json.

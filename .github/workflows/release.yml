@@ -30,11 +30,11 @@ on:
         type: string
         default: ''
       publish_run:
-        description: 'Publish an already successful Installers run as a preview (empty: build)'
+        description: 'Upload an accepted Installers run to a prepared release draft (empty: build)'
         type: string
         default: ''
       preview_tag:
-        description: 'New preview-* tag for an existing run'
+        description: 'Prepared preview-* or vMAJOR.MINOR.PATCH tag for an existing run'
         type: string
         default: ''
       source_sha:
@@ -79,7 +79,7 @@ jobs:
           if (modes.length > 1) throw Error('Choose build, first-run recheck, upgrade or promotion; do not combine them');
           for (const key of ['SMOKE_RUN', 'UPGRADE_RUN', 'PUBLISH_RUN']) if (e[key] && !/^\d+$/.test(e[key])) throw Error(`Invalid ${key}`);
           if (modes.some(k => k.endsWith('_RUN')) && !/^[a-f0-9]{40}$/.test(e.SOURCE_SHA ?? '')) throw Error('An exact source SHA is required');
-          if (e.PUBLISH_RUN && !/^preview-[a-zA-Z0-9._-]+$/.test(e.PREVIEW_TAG ?? '')) throw Error('A prepared preview tag is required');
+          if (e.PUBLISH_RUN && !/^(preview-[a-zA-Z0-9._-]+|v\d+\.\d+\.\d+)$/.test(e.PREVIEW_TAG ?? '')) throw Error('A prepared release tag is required');
           JS
 
   browser:
@@ -542,7 +542,7 @@ jobs:
         run: |
           [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$PREVIEW_TAG" =~ ^preview-[a-zA-Z0-9._-]+$ ]]
+          [[ "$PREVIEW_TAG" =~ ^(preview-[a-zA-Z0-9._-]+|v[0-9]+\.[0-9]+\.[0-9]+)$ ]]
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > run.json
           python3 - <<'PY'
           import json, os
@@ -554,15 +554,8 @@ jobs:
           PY
           gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" -D out \
             -n windows -n macos -n linux -n arch \
-            -n smoke-windows -n smoke-macos -n upgrade-windows
+            -n smoke-windows -n smoke-macos -n upgrade-windows -n candidate-provenance
           gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" -D out -p 'lightpanda-*'
       - name: Verify installed candidate bytes and upload to prepared draft
         run: |
-          node scripts/release/collect-candidate.ts out candidate --require-install-checks
-          mapfile -t files < <(find out -type f \( -name '*.AppImage' -o -name '*.deb' -o -name '*.pkg.tar.zst' -o -name '*.exe' -o -name '*.msi' -o -name '*.dmg' \))
-          gh release view "$PREVIEW_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease > draft.json
-          python3 -c 'import json; d=json.load(open("draft.json")); assert d["isDraft"] and d["isPrerelease"], "Expected an unpublished preview draft"'
-          tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$PREVIEW_TAG" --jq .object.sha)
-          test "$tag_sha" = "$SOURCE_SHA"
-          gh release upload "$PREVIEW_TAG" --repo "$GITHUB_REPOSITORY" \
-            "${files[@]}" candidate/SHA256SUMS.txt candidate/installer-provenance.json candidate/preview-notes.md
+          node scripts/release/promote.ts out out/candidate-provenance/installer-provenance.json release-files

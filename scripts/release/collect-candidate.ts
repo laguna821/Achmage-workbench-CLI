@@ -76,7 +76,7 @@ export async function collectCandidate(input: { root: string; output: string; so
   writeFileSync(join(input.output, "installer-provenance.json"), JSON.stringify(manifest, null, 2) + "\n");
   writeFileSync(join(input.output, "SHA256SUMS.txt"), assets.map(a => `${a.sha256}  ${a.name}\n`).join(""));
   writeFileSync(join(input.output, "preview-notes.md"), [
-    "# Achmage Workbench 0.4.0 시험 설치본", "", "전체 통합 기능이 완료되기 전에 사용할 수 있는 중간 빌드입니다.", "",
+    `# Achmage Workbench ${scope?.applicationVersion ?? "0.4.0"} 설치 파일`, "", String(scope?.label ?? "통합 설치 후보"), "",
     `- 소스: ${input.sourceSha}`, `- 빌드: ${input.sourceRun}`, `- Windows 업데이트 기준: ${manifest.upgradeFrom ?? "미확인"}`,
     ...Object.entries(acceptance).map(([name, check]) => `- ${name}: ${check.state} (${check.checks}개)`),
     "", "## 포함 범위", "", ...((scope?.implemented as string[] | undefined) ?? []).map(s => `- ${s}`),

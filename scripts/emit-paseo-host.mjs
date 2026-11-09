@@ -3,6 +3,7 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("../", import.meta.url));
-for (const project of ["server", "push"]) {
-  execFileSync(process.execPath, [`${root}node_modules/typescript/bin/tsc`, "-p", `${root}vendor/paseo/${project}/tsconfig.workbench.json`], { cwd: root, stdio: "inherit" });
+for (const project of ["protocol", "server", "push", "terminal"]) {
+  const config = project === "terminal" ? "tsconfig.json" : "tsconfig.workbench.json";
+  execFileSync(process.execPath, [`${root}node_modules/typescript/bin/tsc`, "-p", `${root}vendor/paseo/${project}/${config}`], { cwd: root, stdio: "inherit" });
 }

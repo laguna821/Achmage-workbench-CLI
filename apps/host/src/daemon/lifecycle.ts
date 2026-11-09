@@ -1,3 +1,4 @@
+import { PROTOCOL_HEADER, protocolHeader, WORKBENCH_PROTOCOL, negotiateProtocol, requireProtocolWrite } from "@workbench/contracts";
 import { closeSync, mkdirSync, openSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
@@ -8,7 +9,7 @@ export async function attachHost(dataDir: string): Promise<HostConnection | null
   const connection = readConnection(dataDir);
   if (!connection) return null;
   try {
-    const response = await fetch(`${connection.url}/api/host`, { headers: { authorization: `Bearer ${connection.token}` }, redirect: "error", signal: AbortSignal.timeout(1500) });
+    const response = await fetch(`${connection.url}/api/host`, { headers: { [PROTOCOL_HEADER]: protocolHeader(), authorization: `Bearer ${connection.token}` }, redirect: "error", signal: AbortSignal.timeout(1500) });
     if (!response.ok) return null;
     const status = await response.json() as HostStatus;
     return status.state === "running" && sameInstance(connection.instance, status.instance) ? connection : null;
@@ -45,9 +46,9 @@ export async function startHost(options: { dataDir: string; entry: string; env?:
   throw Error("호스트를 시작하지 못했습니다. 데이터 폴더의 service.log를 확인해 주세요.");
 }
 
-export async function stopOwnedHost(connection: HostConnection, expected: HostInstance = connection.instance): Promise<StopReceipt> {
+export async function stopOwnedHost(connection: HostConnection, expected: HostInstance = connection.instance, mode: "drain" | "interrupt" = "interrupt"): Promise<StopReceipt> {
   if (!sameInstance(connection.instance, expected)) throw Object.assign(Error("호스트 소유권이 일치하지 않습니다."), { code: "OWNER_MISMATCH" });
-  const response = await fetch(`${connection.url}/api/host/stop`, { method: "POST", redirect: "error", headers: { authorization: `Bearer ${connection.token}`, "content-type": "application/json" }, body: JSON.stringify({ instance: expected }), signal: AbortSignal.timeout(5000) });
+  const response = await fetch(`${connection.url}/api/host/stop`, { method: "POST", redirect: "error", headers: { [PROTOCOL_HEADER]: protocolHeader(), authorization: `Bearer ${connection.token}`, "content-type": "application/json" }, body: JSON.stringify({ instance: expected, mode }), signal: AbortSignal.timeout(5000) });
   const receipt = await response.json() as StopReceipt & { message?: string; code?: string };
   if (!response.ok) throw Object.assign(Error(receipt.message ?? "호스트를 종료하지 못했습니다."), { code: receipt.code });
   const deadline = Date.now() + 10_000;
@@ -57,4 +58,14 @@ export async function stopOwnedHost(connection: HostConnection, expected: HostIn
     await new Promise(resolve => setTimeout(resolve, 100));
   }
   return receipt;
+}
+
+/** Installer preparation never upgrades ownership or guesses whether an old host is idle. */
+export async function prepareHostUpdate(connection: HostConnection, action: "prepare" | "cancel" = "prepare") {
+  if (connection.instance.protocol) requireProtocolWrite(negotiateProtocol(WORKBENCH_PROTOCOL, connection.instance.protocol));
+  const response = await fetch(`${connection.url}/api/host/update`, { method: "POST", redirect: "error", headers: { [PROTOCOL_HEADER]: protocolHeader(), authorization: `Bearer ${connection.token}`, "content-type": "application/json" },
+    body: JSON.stringify({ instance: connection.instance, action }), signal: AbortSignal.timeout(5000) });
+  const result = await response.json() as import("@workbench/contracts").HostUpdateStatus & { message?: string; code?: string };
+  if (!response.ok) throw Object.assign(Error(result.message ?? "기존 호스트에서 작업을 마친 뒤 앱의 ‘작업까지 모두 종료’를 사용해 주세요."), { code: result.code ?? "update_unavailable" });
+  return result;
 }

@@ -4,16 +4,31 @@ export type TaskState = "queued" | "running" | "waiting_input" | "completed" | "
 export type TaskRef = {
   hostId: string; workspaceId: string | null; sessionId: string; nativeSessionId: string | null;
   runId: string; parentRunId: string | null; executorKind: "session" | "office" | "browser" | "native_agent";
+  nativeTask?: NativeTaskIdentity;
 };
-export type TaskCapabilities = { observe: true; send: boolean; queue: boolean; steer: boolean; stop: boolean; approve: boolean };
+export type TaskCapabilities = { observe: true; send: boolean; queue: boolean; steer: boolean; stop: boolean; approve: boolean; background?: boolean };
 export type TaskSummary = TaskRef & {
   workId: string; parentSessionId: string | null; provider: Provider; title: string; requestId: string | null;
   state: TaskState; activity: string | null; preview: string | null; updatedAt: number;
   approvalIds: string[]; capabilities: TaskCapabilities; sourceItemId: string | null;
+  controlDetail?: string;
 };
 export type TaskSnapshot = { epoch: string; seq: number; tasks: TaskSummary[] };
-export type TaskCommandKind = "stop" | "approve" | "cancel_queue" | "send_queue";
-export type TaskCommand = { commandId: string; target: TaskRef; kind: TaskCommandKind; itemId?: string; decision?: "accept" | "decline"; queuedId?: string };
+export type TaskCommandKind = "stop" | "approve" | "cancel_queue" | "send_queue" | "steer" | "background" | "send";
+export type TaskCommand = { commandId: string; target: TaskRef; kind: TaskCommandKind; itemId?: string; decision?: "accept" | "decline"; queuedId?: string; text?: string };
+/** Provider-owned identity. A process generation and current turn/run guard stale controls. */
+export type NativeTaskIdentity = {
+  provider: Provider; parentNativeSessionId: string; childId: string;
+  generation: string; nativeRunId: string | null;
+};
+export type NativeTaskSnapshot = {
+  identity: NativeTaskIdentity; parentRequestId: string | null; parentChildId: string | null;
+  title: string; state: TaskState; preview: string | null; activity: string | null;
+  updatedAt: number; sourceItemId: string | null; approvalIds: string[];
+  capabilities: TaskCapabilities; controlDetail: string;
+};
+export type NativeTaskControl = { kind: "stop" | "steer" | "background" | "send"; text?: string; commandId: string };
+export type NativeTaskDetail = { task: TaskSummary; items: import("./index.ts").TranscriptItem[]; detail: string | null };
 export type CommandReceipt = {
   commandId: string; targetRunId: string; sessionId: string; payloadHash: string;
   status: "accepted" | "running" | "completed" | "rejected" | "outcome_unknown";

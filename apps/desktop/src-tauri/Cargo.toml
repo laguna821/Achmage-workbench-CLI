@@ -13,6 +13,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 sha2 = "0.10"
+tokio = { version = "1", features = ["time"] }
 workbench-search-worker = { path = "../search-worker" }
 tauri = { version = "2", features = ["tray-icon", "image-png", "unstable"] }
 tauri-plugin-dialog = "2"
@@ -50,8 +51,8 @@ windows = { version = "0.62", features = ["Win32_Foundation"] }
 block2 = "0.6"
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "objc2-core-foundation", "NSPrintInfo", "NSPrintOperation", "NSView", "NSWindow", "NSResponder", "NSImage", "NSImageRep", "NSBitmapImageRep"] }
-objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSDictionary", "NSURL", "NSString", "NSGeometry", "NSData", "NSError", "NSRunLoop", "NSDate"] }
-objc2-web-kit = { version = "0.3.2", default-features = false, features = ["std", "WKWebView", "WKContentWorld", "WKFrameInfo", "WKSnapshotConfiguration", "block2", "objc2-core-foundation", "objc2-app-kit"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSDictionary", "NSURL", "NSString", "NSGeometry", "NSData", "NSError", "NSRunLoop", "NSDate", "NSURLRequest", "NSURLResponse", "NSProgress"] }
+objc2-web-kit = { version = "0.3.2", default-features = false, features = ["std", "WKDownload", "WKDownloadDelegate", "WKNavigationDelegate", "WKNavigationAction", "WKNavigationResponse", "WKUIDelegate", "WKSecurityOrigin", "WKWebView", "WKContentWorld", "WKFrameInfo", "WKSnapshotConfiguration", "block2", "objc2-core-foundation", "objc2-app-kit"] }
 
 [profile.release]
 codegen-units = 4

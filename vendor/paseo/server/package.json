@@ -48,6 +48,10 @@
     "./authorization": {
       "types": "./dist/server/authorization/index.d.ts",
       "default": "./dist/server/authorization/index.js"
+    },
+    "./provider-children/claude": {
+      "types": "./dist/server/agent/providers/claude/subagents/live-source.d.ts",
+      "default": "./dist/server/agent/providers/claude/subagents/live-source.js"
     }
   },
   "dependencies": {

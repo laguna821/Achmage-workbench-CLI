@@ -15,3 +15,13 @@ Rust 실행파일의 `--pty-worker`가 `portable-pty`로 PTY를 열고, 인증�
 - Windows ConPTY·macOS, IME·고급 TUI·분리된 자식 프로세스의 모든 종료 경우는 후속 검증이다. OSC52·링크·테마 가져오기·빠른 명령·부동 터미널 등 전체 Orca 터미널 동등성은 아직 완료가 아니다.
 
 연구 판: `research:rr-fdd3f16d3f14981eddc957e59a4cfcd2:bbbc1e7a1379b7a97614968db4dc2f1005dc71cf303263c12455aa4d5f11ee7e`.
+
+## 서비스 웹 화면
+
+서버·실행 관리의 **웹 탭으로 열기**는 해당 workspace의 실행 중인 포트를 기존 내장 브라우저 탭으로 연다. 로컬은 별도 `*.localhost` origin이고 모바일은 **웹 화면 연결 → 웹 화면 열기**로 별도 HTTPS origin을 연다. 원본 Paseo HTTP/WebSocket proxy를 사용하므로 페이지·정적 파일·실시간 갱신을 스트리밍한다. 정적인 요청/응답 조사 기능도 그대로 있다.
+
+모바일 전체 페이지에는 로컬 호스트의 서버·실행 관리에서 미리보기 전용 HTTPS 도메인을 등록해야 한다. 예를 들어 Workbench 접속 주소가 `workbench.example.com`이면 별도 `preview.example.com`을 사용하고 `*.preview.example.com`의 HTTPS와 WebSocket을 기기 연결 listener로 전달한다. reverse proxy는 원래 Host와 포트를 유지한다. 개발 서버가 허용 호스트 목록을 요구하면 해당 미리보기 주소를 등록한다. 암호화 relay 연결만으로 별도 공개 HTTP 경로가 만들어지지는 않는다.
+
+페이지를 여는 2분짜리 단일 사용 fragment ticket은 host-only HttpOnly cookie로 바뀌고 주소에서 제거된다. 화면 연결은 1시간 또는 원래 실행 종료·workspace 보관·기기 권한 철회까지 유지한다. Workbench owner token은 프로젝트 서버에 전달하지 않는다. 프로젝트 cookie는 해당 미리보기 host에만 남고, 실행/권한이 사라지면 소유한 HTTP/WebSocket 연결을 닫는다.
+
+최종 연결·통합 빌드 근거: `research:rr-8b1de8f70ac6198a1f734b3f63b45bcb:046ce54f184df15eb9eeb09a64d3c751434bb5ad388abf6c0623b51526362629` (R1–R8).

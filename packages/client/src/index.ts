@@ -1,9 +1,11 @@
+import { PROTOCOL_HEADER, protocolHeader, parseProtocol, negotiateProtocol, requireProtocolWrite, WORKBENCH_PROTOCOL } from "@workbench/contracts";
 import type { AgentProfile, CommandReceipt, Snapshot, SubmitCommand, TaskCommand, TaskSnapshot } from "@workbench/contracts";
 export { openWorkbenchClientChannel } from "./secure-channel.ts";
 export type { SecureChannel, SecureChannelEvents, Transport as SecureTransport } from "./secure-channel.ts";
 
 export type ClientOptions = { baseUrl: string; token: string; fetch?: typeof globalThis.fetch };
 export class WorkbenchClient {
+  private peerProtocol: import("@workbench/contracts").ProtocolDescriptor | null = null;
   private readonly url: string;
   private readonly token: string;
   private readonly transport: typeof globalThis.fetch;
@@ -15,12 +17,15 @@ export class WorkbenchClient {
     this.url = url.origin; this.token = options.token; this.transport = options.fetch ?? globalThis.fetch;
   }
   async request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const response = await this.transport(this.url + path, { method, redirect: "error", credentials: "omit", headers: { authorization: `Bearer ${this.token}`, "content-type": "application/json" },
+    if (!["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase()) && this.peerProtocol) requireProtocolWrite(negotiateProtocol(WORKBENCH_PROTOCOL, this.peerProtocol));
+    const response = await this.transport(this.url + path, { method, redirect: "error", credentials: "omit", headers: { [PROTOCOL_HEADER]: protocolHeader(), authorization: `Bearer ${this.token}`, "content-type": "application/json" },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    this.peerProtocol = parseProtocol(response.headers.get(PROTOCOL_HEADER)) ?? this.peerProtocol;
     const data = await response.json() as T & { code?: string; message?: string };
     if (!response.ok) throw Object.assign(Error(data.message ?? `Workbench HTTP ${response.status}`), { status: response.status, code: data.code });
     return data;
   }
+  protocol() { return this.request<import("@workbench/contracts").ProtocolHandshake>("GET", "/api/protocol"); }
   snapshot() { return this.request<Snapshot>("GET", "/api/snapshot"); }
   tasks(workId?: string) { return this.request<TaskSnapshot>("GET", `/api/tasks${workId ? `?workId=${encodeURIComponent(workId)}` : ""}`); }
   profiles() { return this.request<{ profiles: AgentProfile[] }>("GET", "/api/agent-profiles"); }

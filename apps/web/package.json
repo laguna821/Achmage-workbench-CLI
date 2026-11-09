@@ -36,7 +36,8 @@
     "yaml": "^2.9.1",
     "@workbench/client": "0.4.0",
     "@getpaseo/protocol": "file:../../vendor/paseo/protocol",
-    "@workbench/paseo-terminal": "file:../../vendor/paseo/terminal"
+    "@workbench/paseo-terminal": "file:../../vendor/paseo/terminal",
+    "jsqr": "1.4.0"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.3",

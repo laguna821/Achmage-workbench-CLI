@@ -33,6 +33,7 @@
     "@workbench/paseo-terminal": "file:../../vendor/paseo/terminal",
     "@workbench/agent-desktop-installer": "file:../../vendor/agent-desktop/npm",
     "@workbench/paseo-push": "file:../../vendor/paseo/push",
-    "web-push": "3.6.7"
+    "web-push": "3.6.7",
+    "express": "^4.18.2"
   }
 }

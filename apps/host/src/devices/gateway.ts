@@ -1,3 +1,4 @@
+import { handshakeFromHeader, PROTOCOL_HEADER, protocolHeader, requireProtocolWrite } from "@workbench/contracts";
 import { randomUUID } from "node:crypto";
 import type { RemoteFrame, RemoteRequest, EventCursor } from "@workbench/contracts";
 import { REMOTE_BODY_LIMIT, REMOTE_CHUNK_BYTES } from "@workbench/contracts";
@@ -23,6 +24,7 @@ export class DeviceGateway {
     registry: DeviceRegistry; manager: SessionManager; bus: EventBus;
     localOrigin: () => string | null; localToken: string; dataDir: string; voice?: import("../voice.ts").VoiceService;
     push?: () => import("../push/devices.ts").PushDevices | undefined;
+    servicePreviews?: import("../service-previews.ts").ServicePreviews;
   };
   constructor(options: DeviceGateway["options"]) { this.options = options; this.media = new RemoteMediaAccess(options.dataDir, options.manager); }
   close() { for (const socket of this.sockets) socket.close(1000, "remote access disabled"); this.sockets.clear(); }
@@ -33,6 +35,7 @@ export class DeviceGateway {
     const connectionId = randomUUID(), uploads = new Map<string, Upload>(), requests = new Map<string, AbortController>();
     let credential = "", deviceId = "", rotating = false, closed = false, queued: Promise<void> = Promise.resolve(), releaseEvents: (() => void) | undefined;
     let queuedBytes = 0, uploadBytes = 0;
+    let compatibility = handshakeFromHeader(undefined);
     const send = (message: Record<string, unknown>) => closed ? Promise.resolve() : Promise.resolve(socket.send(JSON.stringify({ type: "workbench", ...message })));
     const reply = (id: string, value: unknown) => send({ op: "result", id, value });
     const failure = (id: string, error: unknown) => {
@@ -60,7 +63,7 @@ export class DeviceGateway {
     }, 15_000);
     expiry.unref();
     const response = async (id: string, result: Response) => {
-      const headers: Record<string, string> = {};
+      const headers: Record<string, string> = { [PROTOCOL_HEADER]: protocolHeader() };
       result.headers.forEach((value, name) => { if (["content-type", "content-disposition", "cache-control", "x-workbench-service-location", "etag", "content-range"].includes(name)) headers[name] = value; });
       await send({ op: "response", id, status: result.status, headers });
       const reader = result.body?.getReader();
@@ -80,6 +83,8 @@ export class DeviceGateway {
       try {
         const grant = authenticated(), bytes = Buffer.concat(upload.chunks);
         const pathname = new URL(request.path, "http://workbench.invalid").pathname;
+        const requestCompatibility = handshakeFromHeader(request.headers[PROTOCOL_HEADER] ?? protocolHeader(compatibility.client));
+        if (request.method !== "GET") { requireProtocolWrite(compatibility); requireProtocolWrite(requestCompatibility); }
         const serviceProxy = /^\/api\/services\/([^/]+)\/proxy$/.exec(pathname);
         const attachmentUpload = pathname === "/api/attachments" && request.method === "POST";
         let body: Record<string, unknown> = {};
@@ -94,13 +99,27 @@ export class DeviceGateway {
         this.media.requireReferences(grant, body);
         const json = (value: unknown) => Response.json(value);
         let result: Response;
-        if (pathname === "/api/push" || pathname.startsWith("/api/push/")) {
+        const preview = /^\/api\/services\/([^/]+)\/preview(?:\/([^/]+))?$/.exec(pathname);
+        if (preview && this.options.servicePreviews) {
+          const serviceId = decodeURIComponent(preview[1]!), owner = "device:" + grant.deviceId;
+          if (request.method === "POST" && !preview[2]) {
+            // Bind the ticket to this exact credential generation, not a later re-pairing.
+            const approvedCredential = credential;
+            result = json(this.options.servicePreviews.create(serviceId, "device", owner, workId => { registry.authorize(approvedCredential, "terminal", workId); }));
+          } else if (request.method === "DELETE" && preview[2]) result = json(this.options.servicePreviews.revoke(serviceId, decodeURIComponent(preview[2]), owner));
+          else throw new HttpError(405, "service_preview_method", "서비스 화면 요청을 확인해 주세요.");
+        }
+        else if (pathname === "/api/push" || pathname.startsWith("/api/push/")) {
           const push = this.options.push?.();
           if (!push) throw new HttpError(503, "push_unavailable", "이 호스트에서는 푸시 알림을 사용할 수 없습니다.");
           result = json(push.handle(credential, request.method, pathname, body));
         }
         else if (serviceProxy) result = await manager.services.proxy(decodeURIComponent(serviceProxy[1]!), new URL(request.path, "http://workbench.invalid").searchParams.get("path") ?? "/", { method: request.method, headers: request.headers, body: bytes.length ? bytes : undefined, signal: abort.signal }, workId => { registry.authorize(credential, "terminal", workId); });
+        else if (pathname === "/api/protocol") result = json(requestCompatibility);
         else if (pathname === "/api/snapshot") result = json(scopedSnapshot(manager.snapshot(), grant));
+        else if (pathname === "/api/tasks/native-refresh") {
+          const tasks = await manager.tasks.refreshNative(String(body.sessionId ?? "")); result = json({ ...tasks, tasks: tasks.tasks.filter(t => grant.workIds.includes(t.workId)) });
+        }
         else if (pathname === "/api/tasks") {
           const tasks = manager.tasks.list(); result = json({ ...tasks, tasks: tasks.tasks.filter(t => grant.workIds.includes(t.workId)) });
         } else if (pathname === "/api/attention") result = json(scopedSnapshot(manager.snapshot(), grant).attention);
@@ -115,9 +134,10 @@ export class DeviceGateway {
           const origin = this.options.localOrigin();
           if (!origin) throw new HttpError(503, "host_starting", "호스트를 시작하고 있습니다.");
           const headers = new Headers();
-          for (const name of ["content-type", "x-file-name", "x-workbench-view", "x-workbench-write"]) {
+          for (const name of ["content-type", "x-file-name", "x-workbench-view", "x-workbench-write", PROTOCOL_HEADER]) {
             const value = request.headers[name]; if (typeof value === "string") headers.set(name, value);
           }
+          if (!headers.has(PROTOCOL_HEADER)) headers.set(PROTOCOL_HEADER, protocolHeader(compatibility.client));
           headers.set("authorization", "Bearer " + this.options.localToken);
           result = await fetch(origin + request.path, { method: request.method, headers, body: bytes.length ? bytes : undefined, signal: abort.signal, redirect: "error" });
           if (attachmentUpload && result.ok) {
@@ -142,13 +162,15 @@ export class DeviceGateway {
       }
       if (message.op === "claim") return reply(id, registry.claimCredential({ requestId: String(message.requestId ?? ""), claimToken: String(message.claimToken ?? ""), connectionId }));
       if (message.op === "authenticate") {
+        compatibility = handshakeFromHeader(message.protocol === undefined ? undefined : JSON.stringify(message.protocol));
         credential = String(message.credential ?? ""); const grant = authenticated();
         deviceId = grant.deviceId;
-        return reply(id, { grant, hostId: manager.snapshot().hostId, cursor: { epoch: bus.epoch, seq: bus.currentSeq } });
+        return reply(id, { grant, compatibility, hostId: manager.snapshot().hostId, cursor: { epoch: bus.epoch, seq: bus.currentSeq } });
       }
       if (message.op === "unsubscribe") { releaseEvents?.(); releaseEvents = undefined; return; }
       authenticated();
       if (message.op === "rotate") {
+        requireProtocolWrite(compatibility);
         rotating = true;
         try { const rotated = registry.rotate(credential); credential = rotated.credential; return reply(id, rotated); } finally { rotating = false; }
       }

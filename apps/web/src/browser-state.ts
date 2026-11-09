@@ -8,7 +8,8 @@ export type BrowserNativeCommand =
   | { kind: "present"; pages: BrowserPlacement[] }
   | { kind: "download-directory"; pageId: string; directory: string | null }
   | { kind: "download-cancel"; pageId: string; downloadId: string }
-  | { kind: "permission-decision"; pageId: string; requestId: string; allow: boolean }
+  | { kind: "permission-decision"; pageId: string; requestId: string; allow: boolean; remember?: boolean }
+  | { kind: "site-permission-forget"; pageId: string; ruleId: string }
   | { kind: "execute"; job: BrowserJob };
 export type BrowserNative = <T>(command: BrowserNativeCommand) => Promise<T>;
 type Pending = { id: string; status: "waiting" | "unknown" };
@@ -219,7 +220,7 @@ export class SharedBrowser {
     }
     catch (error) { await this.refresh().catch(() => {}); throw error; }
   }
-  private async nativeSetting(command: Extract<BrowserNativeCommand, { kind: "download-directory" | "download-cancel" | "permission-decision" }>) {
+  private async nativeSetting(command: Extract<BrowserNativeCommand, { kind: "download-directory" | "download-cancel" | "permission-decision" | "site-permission-forget" }>) {
     if (!this.native) throw new Error("데스크톱 기본 창에서 열어 주세요.");
     const page = this.value.pages.find(entry => entry.pageId === command.pageId);
     if (!page || page.status !== "ready" || page.driverId !== this.driverId) throw new Error("연결된 웹 탭에서 다시 시도해 주세요.");
@@ -228,7 +229,8 @@ export class SharedBrowser {
   }
   downloadDirectory(pageId: string, directory: string | null) { return this.nativeSetting({ kind: "download-directory", pageId, directory }); }
   cancelDownload(pageId: string, downloadId: string) { return this.nativeSetting({ kind: "download-cancel", pageId, downloadId }); }
-  decidePermission(pageId: string, requestId: string, allow: boolean) { return this.nativeSetting({ kind: "permission-decision", pageId, requestId, allow }); }
+  decidePermission(pageId: string, requestId: string, allow: boolean, remember = false) { return this.nativeSetting({ kind: "permission-decision", pageId, requestId, allow, remember }); }
+  forgetSitePermission(pageId: string, ruleId: string) { return this.nativeSetting({ kind: "site-permission-forget", pageId, ruleId }); }
   async action(pageId: string, action: BrowserAction) {
     if (!this.api) throw new Error("호스트에 연결해 주세요.");
     if (this.value.pending[pageId]) throw new Error("앞선 웹 동작의 결과를 먼저 확인해 주세요.");

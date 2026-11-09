@@ -54,6 +54,10 @@
 .host-connections-error { margin-top: var(--space-3) !important; color: var(--control-error); overflow-wrap: anywhere; }
 .host-connections-notice { margin-top: var(--space-3) !important; color: var(--muted); }
 .host-connections-foot { display: flex; justify-content: flex-end; padding-top: var(--space-5); }
+.host-qr-scanner { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg); }
+.host-qr-scanner video { width: 100%; max-height: min(360px, 45dvh); object-fit: contain; border-radius: var(--r-md); background: black; }
+.host-qr-scanner video[hidden], .host-qr-scanner input[hidden] { display: none; }
+.host-qr-scanner small { color: var(--muted); line-height: 1.55; }
 @media (max-width: 560px) {
   .host-connections-dialog { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); padding: var(--space-4); }
   .host-connection-actions { gap: var(--space-2); }

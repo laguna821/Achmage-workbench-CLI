@@ -19,7 +19,7 @@ import { attachProtectedSocket, loadOrCreateKeyPair, startProtectedRelayTranspor
 type DeviceConfig = { enabled: boolean; label?: string; relayUrl?: string; publicUrl?: string; listenHost?: string; port?: number };
 export class DeviceService {
   readonly registry: DeviceRegistry;
-  private readonly options: { dataDir: string; manager: SessionManager; bus: EventBus; localOrigin: () => string | null; localToken: string; webDir: string | null; push?: () => import("../push/devices.ts").PushDevices | undefined; voice?: import("../voice.ts").VoiceService; eventIngress?: (req: IncomingMessage, res: ServerResponse) => Promise<void> };
+  private readonly options: { dataDir: string; manager: SessionManager; bus: EventBus; localOrigin: () => string | null; localToken: string; webDir: string | null; push?: () => import("../push/devices.ts").PushDevices | undefined; voice?: import("../voice.ts").VoiceService; servicePreviews?: import("../service-previews.ts").ServicePreviews; eventIngress?: (req: IncomingMessage, res: ServerResponse) => Promise<void> };
   private readonly gateway: DeviceGateway;
   private readonly dir: string;
   private readonly logger = pino({ level: "silent" });
@@ -63,6 +63,7 @@ export class DeviceService {
     if (!this.keys || !this.config.enabled) return;
     const keys = this.keys;
     const server = createServer((req, res) => {
+      if (this.options.servicePreviews?.handle(req, res, "device")) return;
       const path = new URL(req.url ?? "/", "http://localhost").pathname;
       if (path.startsWith("/hub/events/") && this.options.eventIngress) { void this.options.eventIngress(req, res); return; }
       if (path.startsWith("/api/")) return sendJson(res, 404, { code: "protected_channel_required", message: "보호된 기기 연결이 필요합니다." });
@@ -72,6 +73,7 @@ export class DeviceService {
     });
     const ws = new WebSocketServer({ noServer: true, perMessageDeflate: false, maxPayload: 512 * 1024 });
     server.on("upgrade", (req, socket, head) => {
+      if (this.options.servicePreviews?.handleUpgrade(req, socket, head, "device")) return;
       if (!this.config.enabled || new URL(req.url ?? "/", "http://localhost").pathname !== "/workbench") { socket.destroy(); return; }
       ws.handleUpgrade(req, socket, head, raw => { void attachProtectedSocket(raw, { keyPair: keys.keyPair, logger: this.logger }, this.gateway.attach); });
     });
@@ -127,7 +129,9 @@ export class DeviceService {
     const url = base.replace(/\/$/, "") + "/#offer=" + Buffer.from(JSON.stringify(data)).toString("base64url");
     return { ...offer, url, qrDataUrl: await QRCode.toDataURL(url, { width: 320, margin: 2 }), hostFingerprint: this.state().hostFingerprint };
   }
+  previewEndpointState() { return { enabled: this.config.enabled && this.server !== null, appOrigin: this.config.publicUrl || null }; }
   private stopNetwork() {
+    this.options.servicePreviews?.closeRemote();
     void this.relay?.stop().catch(() => {}); this.relay = null; this.gateway.close();
     for (const socket of this.ws?.clients ?? []) socket.close(1000, "remote configuration changed");
     this.ws?.close(); this.ws = null; this.server?.close(); this.server = null;

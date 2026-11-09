@@ -28,3 +28,11 @@
 출처와 수정 사항은 `vendor/paseo/{client,protocol,server}/source.json` 및 배포 `third_party/paseo/`에 있다. 후속 구현 연구 판: `research:rr-79110658024cdb4797375aa15a22a771:39c50e6924caa7e9e0aed55dc8c114f195c9f46bea75d2ad71b54ecb8fbadbf4` (R7–R12). [재사용 실행표](superpowers/execution/PASEO-REUSE.md)에 전체 반입 상태가 있다.
 
 후속 모바일·native credential·push 연결: `research:rr-a19bb59ee9cc2a51ca502509a421c7ac:de8443305abef0bb31264f43cf9032da8b79f5b654405db7645114dc0c13e3b4` (R1–R6). 사진/공유/키보드/OS 권한·알림 도착은 실제 기기 확인 전이다. [모바일 알림](service-notifications.md).
+
+## QR와 초기 설정 연결
+
+기기 연결 화면의 카메라 스캔·QR 그림 읽기는 원본 Paseo scan-attempt model을 사용한다. BarcodeDetector가 없는 브라우저는 jsQR 1.4.0으로 읽는다. 읽은 링크는 기존 만료·보호 모드 검사 뒤 입력창에 들어가며, 접속 요청과 호스트 승인은 그대로 명시적으로 수행한다. 화면을 닫거나 중단하면 카메라도 해제한다. 기존 붙여넣기 경로를 유지한다.
+
+초기 설정은 AI 연결, Dropbox/읽기 전용 볼트, 이음오피스 독립 앱 등록·연동, 기존 문서 열기·새 문서, 기기 연결을 한 흐름에서 제공한다. 하위 설정창을 닫으면 같은 안내 단계로 돌아온다. 실제 휴대폰 권한·카메라·외부망은 아직 확인 전이다. 전체 서비스 페이지의 공개 주소 설정은 [서비스 웹 화면](terminals.md)을 따른다.
+
+최종 연결·통합 빌드 근거: `research:rr-8b1de8f70ac6198a1f734b3f63b45bcb:046ce54f184df15eb9eeb09a64d3c751434bb5ad388abf6c0623b51526362629` (R1–R8).

@@ -30,6 +30,7 @@
     "src/server/hub/relationship-remote.ts",
     "src/server/hub/relationship-retry.ts",
     "src/server/hub/execution-controller.ts",
-    "src/server/authorization/index.ts"
+    "src/server/authorization/index.ts",
+    "src/server/agent/providers/claude/subagents/live-source.ts"
   ]
 }

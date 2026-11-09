@@ -59,7 +59,7 @@ export function scopedRoute(manager: SessionManager, method: string, path: strin
     const s = typeof id === "string" ? manager.view.sessions.get(id) : null;
     if (!s) throw missing(); return s.workId;
   };
-  if (read && ["/api/snapshot", "/api/tasks", "/api/host", "/api/attention", "/api/agent-profiles", "/api/tools", "/api/prefs"].includes(url.pathname)) return { permission: "read" };
+  if (read && ["/api/snapshot", "/api/protocol", "/api/tasks", "/api/host", "/api/attention", "/api/agent-profiles", "/api/tools", "/api/prefs"].includes(url.pathname)) return { permission: "read" };
   if (url.pathname === "/api/prefs" && method === "PUT") return { permission: "read" };
   if ((url.pathname === "/api/push" && read)
     || (url.pathname === "/api/push/subscription" && ["PUT", "DELETE"].includes(method))
@@ -94,8 +94,10 @@ export function scopedRoute(manager: SessionManager, method: string, path: strin
   if (url.pathname === "/api/task-commands" && method === "POST") {
     const target = body.target as { sessionId?: string; hostId?: string } | undefined;
     if (target?.hostId !== manager.snapshot().hostId) throw new HttpError(403, "HOST_SCOPE_MISMATCH", "요청한 호스트가 다릅니다.");
-    return { permission: body.kind === "approve" ? "approve" : body.kind === "send_queue" ? "send" : "cancel", workId: sessionWork(target?.sessionId) };
+    return { permission: body.kind === "approve" ? "approve" : ["send_queue", "send", "steer", "background"].includes(String(body.kind)) ? "send" : "cancel", workId: sessionWork(target?.sessionId) };
   }
+  if (url.pathname === "/api/tasks/native-refresh" && method === "POST") return { permission: "read", workId: sessionWork(body.sessionId) };
+  if (url.pathname === "/api/tasks/native-history" && read) return { permission: "read", workId: sessionWork(url.searchParams.get("sessionId")) };
   if (url.pathname === "/api/automation/submit" && method === "POST") {
     if (body.hostId !== manager.snapshot().hostId) throw new HttpError(403, "HOST_SCOPE_MISMATCH", "요청한 호스트가 다릅니다.");
     return { permission: "send", workId: sessionWork(body.sessionId) };
@@ -130,6 +132,7 @@ export function scopedRoute(manager: SessionManager, method: string, path: strin
   }
   if (parts[0] === "services" && parts[1]) {
     const service = manager.services.get(parts[1]);
+    if ((parts.length === 3 && action === "preview" && method === "POST") || (parts.length === 4 && action === "preview" && method === "DELETE")) return { permission: "terminal", workId: service.workId };
     if (parts.length === 3 && read && action === "logs") return { permission: "read", workId: service.workId };
     if ((parts.length === 3 && action === "proxy") || (parts.length === 3 && action === "stop" && method === "POST") || (parts.length === 2 && method === "DELETE")) return { permission: "terminal", workId: service.workId };
   }

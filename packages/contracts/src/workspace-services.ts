@@ -8,3 +8,5 @@ export type WorkspaceService = {
 };
 export type WorkspaceServiceOwner = Pick<WorkspaceService, "ownerId" | "terminalId" | "startedAt">;
 export type WorkspaceServiceList = { available: boolean; services: WorkspaceService[] };
+export type WorkspaceServicePreview = { id: string; serviceId: string; workspaceId: string; url: string; openUrl: string; expiresAt: number };
+export type WorkspaceServicePreviewSettings = { publicBaseUrl: string | null; remoteEnabled: boolean; message: string };

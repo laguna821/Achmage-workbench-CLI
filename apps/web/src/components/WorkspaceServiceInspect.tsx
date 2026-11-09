@@ -37,7 +37,7 @@ export function WorkspaceServiceInspect({ api, service, mode, onClose }: { api: 
         <label>요청 방식<select value={method} onChange={event => setMethod(event.target.value)}>{["GET", "POST", "PUT", "PATCH", "DELETE"].map(value => <option key={value}>{value}</option>)}</select></label>
         <label>서비스 안의 경로<input value={path} maxLength={16000} onChange={event => setPath(event.target.value)} placeholder="/api/status" /></label>
         {method !== "GET" ? <label>JSON 요청 내용<textarea value={body} onChange={event => setBody(event.target.value)} rows={4} maxLength={1_000_000} /></label> : null}
-        <p className="muted">응답 내용을 확인하고 파일로 저장할 수 있습니다. 브라우저 전체 미리보기와 WebSocket 연결은 지원하지 않습니다. POST·PUT·PATCH·DELETE는 이 서버의 데이터를 바꿀 수 있습니다.</p>
+        <p className="muted">응답 내용을 확인하고 파일로 저장할 수 있습니다. 실제 웹 페이지는 실행 기록의 웹 화면 버튼에서 열 수 있습니다. POST·PUT·PATCH·DELETE는 이 서버의 데이터를 바꿀 수 있습니다.</p>
       </>}
       <div className="workspace-service-actions"><button className="button small primary" disabled={busy || (mode === "logs" ? !query.trim() : !path.startsWith("/"))}>{mode === "logs" ? "검색" : "요청 보내기"}</button>{busy ? <button className="button small" type="button" onClick={() => controller.current?.abort()}>요청 취소</button> : null}</div>
     </form>

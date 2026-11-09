@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { ATTENTION_LABEL, type AttentionEvent, type AttentionKind, type AttentionList, type AttentionPayload, type AttentionPresence, type AttentionTarget, type SequencedEvent, type Session, type TranscriptItem } from "@workbench/contracts";
+import { ATTENTION_LABEL, type AttentionEvent, type AttentionKind, type AttentionList, type AttentionPayload, type AttentionPresence, type AttentionTarget, type SequencedEvent, type Session, type TranscriptItem, type NativeTaskSnapshot } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
 import type { Store } from "./store.ts";
 import { HttpError } from "./errors.ts";
@@ -26,6 +26,7 @@ export class Notifications {
   private readonly records = new Map<string, AttentionEvent>();
   private readonly presence = new Map<string, AttentionPresence & { at: number }>();
   private readonly deliveries = new Set<(row: AttentionEvent, payload: AttentionPayload) => void>();
+  private readonly nativeLive = new Map<string, NativeTaskSnapshot["state"]>();
   private readonly unsubscribe: () => void;
   private closed = false;
 
@@ -44,7 +45,30 @@ export class Notifications {
       }
     });
   }
-  close() { this.closed = true; this.unsubscribe(); this.presence.clear(); this.deliveries.clear(); }
+  close() { this.closed = true; this.unsubscribe(); this.presence.clear(); this.deliveries.clear(); this.nativeLive.clear(); }
+  /** Only the provider's live stream calls this. Refresh/history never replays completion alerts. */
+  nativeTask(session: Session, task: NativeTaskSnapshot) {
+    if (this.closed || session.hostId !== this.hooks.hostId || session.importedHistory?.kind === "archive" || task.identity.parentNativeSessionId !== session.nativeSessionId || this.hooks.hidden(session.workId, session.id)) return;
+    const native = task.identity;
+    const runId = `${session.id}/native:${native.parentNativeSessionId}/${native.childId}/${native.nativeRunId ?? "observed"}`;
+    const key = runId + "/" + native.generation, before = this.nativeLive.get(key);
+    this.nativeLive.set(key, task.state);
+    if (this.nativeLive.size > 2000) this.nativeLive.delete(this.nativeLive.keys().next().value!);
+    const kind = task.state === "completed" ? "completed" : task.state === "failed" ? "failed" : null;
+    if (!kind || !before || !["queued", "running", "waiting_input"].includes(before)) return;
+    const id = createHash("sha256").update(JSON.stringify([this.hooks.hostId, runId, kind])).digest("hex");
+    if (this.records.has(id)) return;
+    const now = this.now(), seen = this.visible(session.id), enabled = this.hooks.enabled() && !session.muted;
+    const request = this.hooks.items(session.id).findLast(item => item.kind === "user" && (item.id === task.parentRequestId || item.id === "user:" + task.parentRequestId));
+    const row: AttentionEvent = { id, kind, workId: session.workId, itemId: task.sourceItemId ?? request?.id ?? "native:" + native.childId,
+      createdAt: now, readAt: seen ? now : null, resolvedAt: now,
+      delivery: !enabled || seen ? "suppressed" : this.hooks.deliver ? "pending" : "unavailable", deliveryError: null,
+      taskRef: { hostId: session.hostId, workspaceId: session.workspaceId ?? null, sessionId: session.id, nativeSessionId: native.childId,
+        runId, parentRunId: task.parentRequestId ? `${session.id}/${task.parentRequestId}` : null, executorKind: "native_agent", nativeTask: native } };
+    this.records.set(id, row); this.persist();
+    if (enabled && !seen) for (const listener of this.deliveries) { try { listener(row, this.payload(row)); } catch { /* The push adapter records its delivery result. */ } }
+    if (row.delivery === "pending") void this.deliver(row);
+  }
   /** Live producer only. Subscribing never replays historical or uncertain OS deliveries. */
   subscribeDelivery(listener: (row: AttentionEvent, payload: AttentionPayload) => void) { this.deliveries.add(listener); return () => { this.deliveries.delete(listener); }; }
   deliverable(id: string) {

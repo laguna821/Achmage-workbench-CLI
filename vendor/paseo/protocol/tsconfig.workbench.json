@@ -28,6 +28,7 @@
     "src/agent-labels.ts",
     "src/plugin-requirements.ts",
     "src/terminal-input-mode.ts",
-    "src/terminal-key-input.ts"
+    "src/terminal-key-input.ts",
+    "src/chunked-transport.ts"
   ]
 }

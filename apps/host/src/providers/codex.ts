@@ -1,4 +1,4 @@
-import type { AccessMode, ApprovalDecision, EngineCommand, ModelOption, ProviderStatus, Session, UsageWindow, Work } from "@workbench/contracts";
+import type { AccessMode, ApprovalDecision, EngineCommand, ModelOption, ProviderStatus, Session, UsageWindow, Work, NativeTaskControl, NativeTaskIdentity } from "@workbench/contracts";
 import { CodexRpc, mapPlanSteps, mapThreadItem, type RpcNotification, type RpcServerRequest } from "@workbench/provider-codex";
 import type { AgentMessageDeltaNotification } from "@workbench/provider-codex/src/generated/v2/AgentMessageDeltaNotification.ts";
 import type { CommandExecutionRequestApprovalParams } from "@workbench/provider-codex/src/generated/v2/CommandExecutionRequestApprovalParams.ts";
@@ -42,6 +42,7 @@ import type { AccountLoginCompletedNotification } from "@workbench/provider-code
 import { emptyStatus, type AdapterSink, type AttachedFile, type CodexLaunch, type EngineCli, type LoginStart, type NativeConversation, type ProviderAdapter, type ToolImage } from "./types.ts";
 import { isImage, mentionFiles } from "../attachments.ts";
 import type { BrowserEngineHooks } from "../browse.ts";
+import { CodexChildren } from "./codex-children.ts";
 
 const CLIENT_VERSION = "0.1.0";
 
@@ -163,6 +164,7 @@ export class CodexAdapter implements ProviderAdapter {
   private ready: Promise<void> | null = null;
   private current: ProviderStatus = emptyStatus("codex");
   private readonly sink: AdapterSink;
+  private readonly children: CodexChildren;
   /** Fixed by the environment for tests (WORKBENCH_CODEX_APPROVAL / _SANDBOX); otherwise per session. */
   private readonly forced: { approvalPolicy?: string; sandbox?: string };
   /** threadId -> what its turns run with now: access, vault guard and browser roots ("plan" for a turn that only plans) */
@@ -205,6 +207,7 @@ export class CodexAdapter implements ProviderAdapter {
 
   constructor(sink: AdapterSink, options?: { approvalPolicy?: string; sandbox?: string; idleMs?: number; browser?: BrowserEngineHooks | null; launch?: CodexLaunch }) {
     this.sink = sink;
+    this.children = new CodexChildren({ rpc: () => this.rpc, root: id => this.threads.get(id), request: id => this.turnRequests.get(id) ?? null, publish: (id, tasks, source) => this.sink.nativeTasks?.(id, tasks, source) });
     this.forced = { approvalPolicy: options?.approvalPolicy, sandbox: options?.sandbox };
     this.idleMs = options?.idleMs ?? 10 * 60_000;
     this.browser = options?.browser ?? null;
@@ -220,7 +223,7 @@ export class CodexAdapter implements ProviderAdapter {
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null;
       // The login's callback server lives in the app-server: keep it while a login waits.
-      if (this.activeTurns.size === 0 && this.approvals.size === 0 && !this.pendingLogin) {
+      if (this.activeTurns.size === 0 && !this.children.hasActive() && this.approvals.size === 0 && !this.pendingLogin) {
         this.rpc?.stop();
       }
     }, ms);
@@ -337,6 +340,8 @@ export class CodexAdapter implements ProviderAdapter {
       }
       this.sink.updateSession(sessionId, { status: "idle", activity: null, lastError: stopping ? null : error });
     }
+    this.children.disconnected();
+    for (const [itemId, pending] of this.approvals) this.sink.upsertItem(pending.sessionId, { ...this.approvalItem(itemId, pending), decision: "expired" });
     this.activeTurns.clear();
     this.approvals.clear();
     this.turnRequests.clear();
@@ -679,7 +684,7 @@ export class CodexAdapter implements ProviderAdapter {
     this.interrupting.add(threadId);
     this.sink.updateSession(session.id, { status: "interrupting", activity: "중단하는 중" });
     for (const [itemId, pending] of this.approvals) {
-      if (pending.sessionId === session.id) {
+      if (pending.sessionId === session.id && (pending.params as { threadId?: string }).threadId === threadId) {
         await this.answerApproval(session, itemId, "decline");
       }
     }
@@ -698,7 +703,10 @@ export class CodexAdapter implements ProviderAdapter {
     } else {
       this.rpc?.respond(pending.rpcId, { decision });
     }
-    if (shown) this.sink.upsertItem(pending.sessionId, { ...this.approvalItem(itemId, pending), decision });
+    const item = { ...this.approvalItem(itemId, pending), decision };
+    const threadId = (pending.params as { threadId?: string }).threadId;
+    if (threadId) this.children.approval(threadId, item, false);
+    if (shown) this.sink.upsertItem(pending.sessionId, item);
   }
 
   async answerApproval(session: Session, itemId: string, decision: ApprovalDecision) {
@@ -707,9 +715,31 @@ export class CodexAdapter implements ProviderAdapter {
       return false;
     }
     this.respond(itemId, pending, decision);
-    const stillWaiting = [...this.approvals.values()].some((other) => other.sessionId === session.id);
-    this.sink.updateSession(session.id, stillWaiting ? {} : { status: "running", activity: "응답 준비 중" });
+    const child = (pending.params as { threadId?: string }).threadId;
+    const stillWaiting = [...this.approvals.values()].some((other) => other.sessionId === session.id && !this.children.owner((other.params as { threadId?: string }).threadId ?? ""));
+    if (!child || !this.children.owner(child)) this.sink.updateSession(session.id, stillWaiting ? {} : { status: "running", activity: "응답 준비 중" });
     return true;
+  }
+
+  nativeTasks(session: Session) { return this.children.list(session.id); }
+  async refreshNativeTasks(session: Session, work: Work) {
+    if (!session.nativeSessionId) return [];
+    await this.ensureRunning();
+    // Register the existing parent for read-only child discovery; do not start a model turn.
+    this.threads.set(session.nativeSessionId, session.id);
+    try { return await this.children.refresh(session, work); }
+    finally { if (!this.children.hasActive() && this.activeTurns.size === 0) this.scheduleIdleStop(this.idleMs); }
+  }
+  async controlNativeTask(session: Session & { access: AccessMode }, work: Work, target: NativeTaskIdentity, command: NativeTaskControl) {
+    this.sessionAccess.set(session.id, session.access);
+    await this.children.control(session, work, target, command, cwd => {
+      const guard = this.guardOf(session, { ...work, cwd });
+      const policy = this.policyFor(session.access, guard.readOnly);
+      return { ...policy, sandboxPolicy: sandboxPolicy(policy.sandbox, [], guard.excludeTmp) };
+    });
+  }
+  async nativeTaskHistory(session: Session, work: Work, target: NativeTaskIdentity) {
+    return this.children.history(session, work, target);
   }
 
   async shutdown() {
@@ -786,7 +816,7 @@ export class CodexAdapter implements ProviderAdapter {
 
   private onServerRequest(request: RpcServerRequest) {
     const params = (request.params ?? {}) as { threadId?: string };
-    const sessionId = params.threadId ? this.threads.get(params.threadId) : undefined;
+    const sessionId = params.threadId ? this.threads.get(params.threadId) ?? this.children.owner(params.threadId) : undefined;
     const supported = [
       "item/commandExecution/requestApproval",
       "item/fileChange/requestApproval",
@@ -829,8 +859,10 @@ export class CodexAdapter implements ProviderAdapter {
       this.respond(itemId, pending, "accept", false);
       return;
     }
-    this.sink.upsertItem(sessionId, this.approvalItem(itemId, pending));
-    this.sink.updateSession(sessionId, { status: "awaitingApproval", activity: "승인 필요" });
+    const item = this.approvalItem(itemId, pending);
+    const isChild = params.threadId ? this.children.approval(params.threadId, item, true) : false;
+    this.sink.upsertItem(sessionId, item);
+    if (!isChild) this.sink.updateSession(sessionId, { status: "awaitingApproval", activity: "승인 필요" });
   }
 
   /** Full access answers what was waiting; the next turns run with the new policy (see send). */
@@ -862,6 +894,7 @@ export class CodexAdapter implements ProviderAdapter {
   }
 
   private onNotification({ method, params }: RpcNotification) {
+    this.children.observe({ method, params });
     const threadId = (params as { threadId?: string } | undefined)?.threadId;
     const sessionId = threadId ? this.threads.get(threadId) : undefined;
     switch (method) {
@@ -878,6 +911,16 @@ export class CodexAdapter implements ProviderAdapter {
       case "account/updated":
         void this.refreshStatus();
         return;
+    }
+    if (threadId && this.children.owner(threadId)) {
+      if (method === "turn/completed") {
+        for (const [id, pending] of this.approvals) if ((pending.params as { threadId?: string }).threadId === threadId) {
+          this.approvals.delete(id);
+          this.sink.upsertItem(pending.sessionId, { ...this.approvalItem(id, pending), decision: "expired" });
+        }
+        if (!this.children.hasActive() && this.activeTurns.size === 0) this.scheduleIdleStop(this.idleMs);
+      }
+      return;
     }
     if (!sessionId || !threadId) {
       return;
@@ -975,7 +1018,7 @@ export class CodexAdapter implements ProviderAdapter {
         if (dropped.length) this.sink.steerDropped(sessionId, dropped);
         const status = interrupted ? "interrupted" : turn.status === "failed" ? "failed" : "completed";
         for (const [itemId, pending] of this.approvals) {
-          if (pending.sessionId === sessionId) {
+          if (pending.sessionId === sessionId && (pending.params as { threadId?: string }).threadId === threadId) {
             this.approvals.delete(itemId);
             this.sink.upsertItem(sessionId, { ...this.approvalItem(itemId, pending), decision: "expired" });
           }

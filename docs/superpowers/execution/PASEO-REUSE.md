@@ -77,7 +77,7 @@
 연구 근거: `research:rr-79110658024cdb4797375aa15a22a771:ec68d100c4776b2219a705303a379cc524ae2c83caca88c7c9c2f1d9b6c805b5` (R13–R18).
 # U20 후속 연결
 
-원본 terminal controller/emulator/headless/serializer/key/resize 모듈을 기존 Workbench PTY·출력 journal·기기 권한에 연결했다. HTTP 서비스 요청/응답·모바일 보조 키·로그 검색을 추가했다. 실제 Rust PTY/휴대폰 화면·IME 및 전체 웹앱/WebSocket 프록시는 남은 범위다. 원본·의존 라이선스와 변경점은 `vendor/paseo/terminal/source.json`, `third_party/paseo/terminal-provenance.json`을 따른다.
+원본 terminal controller/emulator/headless/serializer/key/resize 모듈을 기존 Workbench PTY·출력 journal·기기 권한에 연결했다. HTTP 서비스 요청/응답·모바일 보조 키·로그 검색을 추가했다. 실제 Rust PTY/휴대폰 화면·IME는 확인 전이다. 전체 웹앱/WebSocket 프록시는 아래 최종 연결에서 원본을 재사용했다. 원본·의존 라이선스와 변경점은 `vendor/paseo/terminal/source.json`, `third_party/paseo/terminal-provenance.json`을 따른다.
 
 연구 판: `research:rr-79110658024cdb4797375aa15a22a771:5022f016cc6d75dca4b7a945152a47b5d20edf53e2f4fad70e4c778150fe3606` (R19–R20). 사용자 교정 뒤 추가 통과 검사 반복·전체 타입·Rust·앱 빌드를 시작하지 않았다.
 
@@ -86,3 +86,16 @@
 원본 `mobile-web`의 IME/file/viewport/download helper, `push`의 token lease/store, `server/hub`의 relationship/remote/retry/execution을 연결했다. Workbench의 기존 첨부·대화 초안·TaskService·권한·OS vault를 사용한다. runtime package export용 selected emit 한 번은 성공했으며 앱/설치본 빌드나 실기기 확인을 뜻하지 않는다. 출처는 `third_party/paseo/{mobile-web,push,hub}`. 최신 범위는 [상태표](STATUS.md)를 따른다.
 
 근거: `research:rr-a19bb59ee9cc2a51ca502509a421c7ac:de8443305abef0bb31264f43cf9032da8b79f5b654405db7645114dc0c13e3b4` (R1–R6). 브라우저 credential은 아직 session-only이며 Hub Cloud 서비스는 공개 원본에 없다. 원본 API를 이용하는 outbound client와 기존 signed ingress는 연결했으며 실제 계정 연결은 실행하지 않았다.
+
+## 마지막 연결 묶음
+
+원본 service-proxy 전체, ClaudeTaskProtocolSource·하위 task lifecycle, onboarding model·pair scan model을 반입했다. 원본 bytes/hash/Apache 고지는 보존하고 Workbench의 기존 service ownership·TaskService·설정·기기 승인 포트에 연결했다. 서비스 proxy의 유일한 원본 runtime 변경은 WebSocket forwarded protocol을 승인된 adapter 값으로 전달하는 것이다. 새 Express/jsQR runtime dependency 고지는 `third_party/paseo/service-preview`에 있다.
+
+- U06 실제 공급자 child identity와 현재 generation/turn별 제어·개별 대화·receipt 연결. Claude SDK에 없는 직접 child 메시지는 지원한다고 표시하지 않는다.
+- U11 기존 설정/파일·앱 등록 경로를 원본 온보딩 단계에 연결.
+- U17–18 원본 scan model과 웹 카메라/QR 파일 platform adapter 연결.
+- U20 원본 HTTP/WebSocket을 별도 서비스 origin에 연결. 공개 preview base는 원본과 같은 wildcard HTTPS 설정 경로이며 relay-only 전체 웹앱 tunnel이 아니다.
+
+Host/web 타입과 새 loopback proxy 경계 1개를 통과했고 전체 통합 build 단계로 이동했다. 실제 설치·OS·기기 완료 선언은 아니다.
+
+최종 연결·통합 빌드 근거: `research:rr-8b1de8f70ac6198a1f734b3f63b45bcb:046ce54f184df15eb9eeb09a64d3c751434bb5ad388abf6c0623b51526362629` (R1–R8).

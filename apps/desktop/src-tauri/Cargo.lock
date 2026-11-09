@@ -32,6 +32,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",
  "tempfile",
+ "tokio",
  "url",
  "webkit2gtk",
  "webview2-com",

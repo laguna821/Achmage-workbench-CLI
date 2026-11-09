@@ -49,7 +49,10 @@ export class DesktopInstall {
       const response = await fetch(asset.url, { signal: AbortSignal.any([this.controller.signal, AbortSignal.timeout(120_000)]) });
       if (!response.ok || !response.body) throw new Error(`다운로드 실패: HTTP ${response.status}`);
       const chunks: Buffer[] = []; let bytes = 0;
-      for await (const chunk of response.body) { bytes += chunk.byteLength; if (bytes > asset.bytes) throw new Error("공식 파일 크기와 다릅니다."); chunks.push(Buffer.from(chunk)); }
+      const reader = response.body.getReader();
+      try {
+        for (;;) { const { done, value } = await reader.read(); if (done) break; bytes += value.byteLength; if (bytes > asset.bytes) throw new Error("공식 파일 크기와 다릅니다."); chunks.push(Buffer.from(value)); }
+      } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
       const data = Buffer.concat(chunks);
       if (bytes !== asset.bytes || createHash("sha256").update(data).digest("hex") !== asset.sha256) throw new Error("공식 실행 파일의 SHA-256 또는 크기가 일치하지 않습니다.");
       writeFileSync(archive, data, { mode: 0o600 });

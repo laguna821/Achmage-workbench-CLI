@@ -1,6 +1,6 @@
 # 0.4.0 실행 상태
 
-2026-11-09. **남은 기능을 구현하고 전체 기능 연결 뒤 통합 빌드·릴리즈한다.** 사용자 재교정: 기능마다 검사·재검토를 끼워 넣지 않는다. 이미 통과한 검사는 반복하지 않고, 발견한 문제에 필요한 확인만 수행한다. 남은 기능 연결을 먼저 마친 뒤 설치본 단계에서 통합 확인을 묶는다. 기능 추가마다 production/설치본 빌드를 반복하지 않는다. 다음 후보 CI는 취소했다. 필요한 동작 확인만 수행하며 실제 실패는 해당 부분만 수정·재확인한다.
+2026-11-09. **남은 기능을 구현하고 전체 기능 연결 뒤 통합 빌드·릴리즈한다.** 사용자 재교정: 기능마다 검사·재검토를 끼워 넣지 않는다. 이미 통과한 검사는 반복하지 않고, 발견한 문제에 필요한 확인만 수행한다. 남은 기능 연결을 먼저 마친 뒤 설치본 단계에서 통합 확인을 묶는다. 기능 추가마다 production/설치본 빌드를 반복하지 않는다. 웹·Office·호스트 및 Linux 네이티브 배포 빌드를 마쳤고 최종 OS 설치본 CI를 준비한다. 실제 실패는 해당 부분만 수정·재확인한다.
 
 | 기능 묶음 | 현재 코드 | 근거와 남은 범위 |
 |---|---|---|
@@ -9,21 +9,21 @@
 | U03 생성·프로젝트·탭 | 주요 흐름 구현 | `abf4f68`, `a3d9683`, `e056d8b` — 9종 문서·실제 폴더 생성, 정리 폴더 구분 |
 | U04 대화·초안 | 구현 | `abf4f68` — 읽기 위치·검색 원문 펼침·초안 보호 |
 | U05 그림 결과 | 파일·사진·공유 연결 구현 | 기존 이미지·원본 decoder에 파일/사진/카메라 선택, 다운로드·Web Share, host·대화별 업로드 초안 복원을 추가했다. 실제 휴대폰 제공자·공유 화면 확인은 남음 |
-| U06 작업 목록·명령 | 주요 흐름 구현 | `22166e5`, `498a710` — 독립 문서·하위 작업과 공통 접수. 공급자 하위 작업은 관찰만 지원 |
+| U06 작업 목록·명령 | 실제 공급자 하위 제어 연결 | Codex child steer/interrupt/resume+start, 원본 Claude task protocol·stopTask·backgroundTasks·승인, 별도 child 대화·TaskPanel·receipt·live 완료 알림 연결. 공급자가 제공하지 않는 제어는 표시하지 않음 |
 | U07 역할·CLI/MCP API | 구현 | `9239725`, `498a710` — 역할 CRUD·요청 당시 설정 보존·공통 receipt |
 | U08 9형식 Office UI | 주요 흐름 구현 | `b40fb38` — 원본 명령 메뉴·theme 전달. 전체 native OS 사용 확인은 통합 때 |
 | U09 Office UI 독립 실행 | 8종 독립 adapter + 공통 질문·출력 코드 연결 | `aa6779d`, `f89fd18` 및 후속 R37 — 원본 Markdown/Word/한글/Sheets/PDF/HTML/XMind/EPUB send·선택·질문, 기존 요청/저장/재접속 연결. 이번 묶음에서 슬라이드 queue/QC 수명·PDF toolbar 작업·native 출력 서비스 연결을 추가했다. 실제 OS 실행·통합 확인은 남음. [범위](../../office-execution.md) |
 | U10 검색·Bases·그래프 | 주요 흐름 구현 | `e056d8b` — 검색 취소 복귀·다중선택/일괄 보관·그래프 키보드 이동 |
-| U11 설정·가져오기 | 주요 흐름 구현 | 기존 이음/Dropbox 흐름 유지, `18bac42` 과거 기록/실행 구분·원문 보존. 전체 온보딩 통합 남음 |
-| U12–U14 공유 웹·같은 페이지 AI | 핵심 코드 구현 | `2df5f41`, `1c5e688` — 네이티브 웹 탭·주소 이동·독립 웹 AI·사람 인계·숨김 유지·대상/문서/제어권 식별. 이번 묶음에서 다운로드·사이트 권한·macOS 14+ 프로필·문서/첨부 산출물 연결을 추가했다. Windows/macOS 다운로드 취소와 실제 OS 화면 사용 등은 남음. [범위](../../shared-browser.md) |
+| U11 설정·가져오기 | 온보딩 통합 구현 | 원본 Paseo onboarding model에 기존 AI 로그인·Dropbox·이음 독립 앱 등록·문서 시작·음성 캐시·기기 연결·기록 가져오기를 연결 |
+| U12–U14 공유 웹·같은 페이지 AI | 핵심 코드 구현 | `2df5f41`, `1c5e688` — 네이티브 웹 탭·주소 이동·독립 웹 AI·사람 인계·숨김 유지·대상/문서/제어권 식별. 이번 묶음에서 다운로드·사이트 권한·macOS 14+ 프로필·문서/첨부 산출물 연결을 추가했다. Windows/macOS 실제 download 객체 취소와 요청 origin별 권한 저장·삭제까지 연결. 실제 OS 화면 사용은 통합 단계. [범위](../../shared-browser.md) |
 | U15 외부 앱 조작 | 원본 CLI·세션·화면 연결 구현 | 공식 v1.1.0 설치/원본 installer, 창 선택, 관찰·조작·캡처·제어권·기록, Codex/Claude 도구 연결. 실제 OS 앱 조작과 설치본 사용은 남음. [범위](../../desktop-control.md) |
 | U16 독립 host | AppImage 지속 경로까지 코드 구현 | 기존 서비스·재접속에 압축 runtime 보존, 별도 AppImage mount/Node 수명, 로그인 실행 경로 갱신을 연결. 새 AppImage/native OS 실행 확인은 통합 때 |
-| U17–U18 기기·모바일 | 원본 전송·기기 승인·native 저장·모바일 입력 연결 구현 | Tauri OS keyring과 세션 값 이행, 사진·공유·파일 선택, IME 최종값·viewport·초안 복원을 연결했다. 브라우저는 session credential이며 QR camera scan·실제 외부망/휴대폰은 남음. [사용 범위](../../remote-connections.md) |
+| U17–U18 기기·모바일 | 원본 전송·기기 승인·native 저장·모바일 입력 연결 구현 | Tauri OS keyring과 세션 값 이행, 사진·공유·파일 선택, IME 최종값·viewport·초안 복원을 연결했다. 브라우저는 session credential. 원본 scan model·카메라·QR 그림·붙여넣기를 연결했고 실제 외부망/휴대폰 확인은 남음. [사용 범위](../../remote-connections.md) |
 | U19 서비스 알림 | push·OS 클릭 연결 코드 구현 | 원본 Paseo lease/store + web-push, VAPID OS vault, host별 구독, 현재 권한 resolve 뒤 실제 이동 시 ack, macOS/Windows native 클릭 helper 연결. 실제 OS·모바일 도착/권한/클릭은 미실행. [범위](../../service-notifications.md) |
-| U20 workspace 운영 | 주요 흐름 구현 | `2462057`, `83a908b` — owned 서버 실행·포트 충돌·출력 재사용·정확한 소유 실행 종료와 UI 연결. 이번 묶음에서 원본 terminal controller/emulator/headless, 모바일 보조 키, 로그 검색·고정 서비스 HTTP 프록시를 연결. 실제 모바일 입력과 전체 웹앱/WebSocket 프록시는 남음 |
+| U20 workspace 운영 | 주요 흐름 구현 | `2462057`, `83a908b` — owned 서버 실행·포트 충돌·출력 재사용·정확한 소유 실행 종료와 UI 연결. 이번 묶음에서 원본 terminal controller/emulator/headless, 모바일 보조 키, 로그 검색·고정 서비스 HTTP 프록시를 연결. 원본 전체 HTTP/WebSocket 프록시도 별도 origin·owned 실행·기기 권한에 연결했다. 휴대폰 웹 화면은 별도 HTTPS preview 경로 설정 필요; 실제 모바일 입력·외부망 확인은 남음 |
 | U21 예약 | 주요 흐름 구현 | `1a39d77` — occurrence 기록·timezone·횟수/기한·미실행 정책·unknown 재전송 방지 |
 | U22–U24 음성·플러그인·Hub | 핵심 서비스·화면·원본 outbound Hub 연결 구현 | 음성/SDK/compiler/lifecycle + QuickJS, 서명 사건/TaskService receipt에 원본 Hub relationship/retry/execution·OS vault·관리 화면 추가. 실마이크/native 모델/실모바일/외부 계정 확인은 남음. [범위](../../voice-extensions-events.md) |
-| U25 설치·릴리즈 | 전체 통합 뒤 진행 | 두 과거 후보 run은 증거로 보존. 다음 candidate dispatch 없음 |
+| U25 설치·릴리즈 | 최종 OS 설치본 빌드 준비 | 로컬 웹·Office·host 및 Linux native release 완료. protocol/schema·migration backup·drain·NSIS 연결과 동일 artifact 승격 구현. 새로운 업데이트 경계 2개·승격 경계 1개 통과. 다음은 최종 source의 OS candidate dispatch |
 
 현재 코드의 확인은 해당 묶음에서 확보한 결과를 재사용한다. Office production bundle은 Rust PATH와 vendor realpath를 보정한 실행에서 통과했다. U03/U10 관련 동작 15개, import 9개, 실제 폴더 경계 1개, U20 서비스 3개와 UI 4개, U19 host 알림 4개와 UI 6개 확인을 마쳤다. 전체 OS/실계정/실기기 완료를 뜻하지 않는다.
 
@@ -60,3 +60,23 @@ U22–U24 원본을 실제 서비스와 화면에 연결했다. 음성 host3/UI4
 연구 판 `research:rr-a19bb59ee9cc2a51ca502509a421c7ac:de8443305abef0bb31264f43cf9032da8b79f5b654405db7645114dc0c13e3b4` (R1–R6). 기존 3 owner를 구현에만 배정했다. root가 지속 AppImage·keyring·공통 API/화면/권한·배포 출처를 연결했다. 원본 server/push 의존 모듈 emit 한 번은 성공했으며, 새 테스트·전체 타입검사·Rust·production/설치본/CI·외부 발송은 수행하지 않았다.
 
 남은 구현에는 공급자 하위 작업 제어, 전체 온보딩, QR camera scan, 공유 웹의 OS별 남은 동작, 서비스 전체 웹앱/WebSocket 프록시가 있다. 실제 OS/휴대폰/외부망/음성·계정 확인과 전체 통합 빌드·설치·업데이트·배포는 별도 남은 작업이다. 이미 끝낸 검사를 반복하거나 기능 범위를 새로 늘리지 않는다.
+
+## 최종 연결 구현 마감 · 통합 빌드 진입
+
+U06 하위 작업 제어, U11 전체 온보딩, U17–18 QR scan, U12–14 Windows/macOS 다운로드 취소·사이트 권한, U20 전체 HTTP/WebSocket 서비스 화면을 합쳤다. 3 owner는 구현만 담당했으며 추가 검사를 돌리지 않았다. root의 host/web 타입과 실제 loopback 서비스 HTTP/WebSocket·격리 origin·권한 철회 경계 1개가 통과했다.
+
+첫 통합에서 agent-desktop stream 타입과 Hub ChunkedTransport 생성물 누락을 수정했다. protocol emit 종료 이전 재시도는 실행 순서 오류로 기록했고, 생성 완료 뒤 순차 실행에서 통과했다. 이미 통과한 기존 suite는 로컬에서 반복하지 않았다. 전체 production build가 통과했고 Linux native release 실행파일도 생성했다. 아직 OS별 설치본/업데이트/배포 완료는 아니다.
+
+최종 연결·통합 빌드 근거: `research:rr-8b1de8f70ac6198a1f734b3f63b45bcb:046ce54f184df15eb9eeb09a64d3c751434bb5ad388abf6c0623b51526362629` (R1–R8).
+
+## 설치본 빌드 준비
+
+최초 Linux native compile의 Rust let 문법과 webkit2gtk extension trait import를 고친 뒤 해당 native compile만 재개했고 3분7초에 완료했다. 새로운 승격 확인은 기존 후보 파일 6개를 그대로 복사하고 source/hash가 다른 파일을 거절하는 1개 시나리오만 통과했다. 같은 후보의 원래 설치 receipt와 SHA256SUMS를 보존하며 preview와 stable 모두 준비된 빈 draft에만 업로드한다.
+
+U25의 기존 요구 중 빠져 있던 protocol/schema 협상과 업데이트·migration 데이터 보호 연결을 마쳤다. 이전 버전과의 명시된 payload 호환은 유지하고, 호환되지 않는 새 쓰기는 거절한다. NSIS는 실제 기존 host만 drain하고 작업이 남으면 설치를 중단한다. 이 변경은 최종 installer source에 합친다. 새로운 제품 기능이나 추가 리뷰 절차를 만들지 않는다.
+
+근거: `research:rr-8b1de8f70ac6198a1f734b3f63b45bcb:4754ea8c9049f2bc887f2950b8624c01544bb1555ad1349d94dc1fd1b4e28f77` (R1–R10).
+
+U25 통합: host/web TypeScript와 새 protocol·migration backup 경계 2개가 통과했다. 최종 Office drain allowlist 보완은 이 확인 직후 합쳤으며 해당 최종 source는 CI의 전체 타입/빌드에서 확인한다. 이미 완료한 웹·Office·native 로컬 빌드는 반복하지 않고 OS installer CI로 진행한다.
+
+최종 연결·배포 준비 연구: `research:rr-8b1de8f70ac6198a1f734b3f63b45bcb:5274ec8a5649b1c7b9b0b06dabb836045b90e93122a32221b5a4e53492b82445` (R1–R11).

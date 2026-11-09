@@ -1,8 +1,9 @@
+import { PROTOCOL_HEADER, protocolHeader, parseProtocol, negotiateProtocol, requireProtocolWrite, WORKBENCH_PROTOCOL } from "@workbench/contracts";
 import type { RemotePeer } from "@workbench/client";
 import type { OfficeOutputFormat } from "../../../packages/contracts/src/office-output.ts";
 import type { KnowledgeLibrary } from "../../../packages/contracts/src/office-knowledge.ts";
 import type { NewOfficeDocument } from "@workbench/contracts";
-import type { CommandReceipt, TaskCommand, TaskSnapshot } from "@workbench/contracts";
+import type { CommandReceipt, TaskCommand, TaskSnapshot, NativeTaskDetail } from "@workbench/contracts";
 import type { AgentProfile, AgentProfileInput } from "@workbench/contracts";
 import type { WorkspaceService, WorkspaceServiceList, WorkspaceServiceOwner, WorkspaceServiceStart } from "@workbench/contracts";
 import type { AttentionEvent, AttentionList, AttentionPayload, AttentionPresence, AttentionTarget } from "@workbench/contracts";
@@ -137,6 +138,7 @@ export function setMediaConnection(connection: RemoteApiConnection | null) {
 
 export class Api {
   private epoch: string | undefined;
+  private peerProtocol: import("@workbench/contracts").ProtocolDescriptor | null = null;
   private readonly scmPreferenceWrites = new Map<string, Promise<ScmComparisonPreferences>>();
   private readonly token: string;
   private readonly documentAccess?: () => DocumentAccess;
@@ -156,7 +158,17 @@ export class Api {
     return access ? { "x-workbench-view": access.viewId, "x-workbench-write": access.writeToken ?? "" } : {};
   }
 
-  private transport(path: string, init?: RequestInit) { return this.remote ? this.remote.peer.fetch(path, init) : fetch(path, init); }
+  private async transport(path: string, init: RequestInit = {}) {
+    const method = init.method ?? "GET";
+    if (!["GET", "HEAD", "OPTIONS"].includes(method) && this.peerProtocol) requireProtocolWrite(negotiateProtocol(WORKBENCH_PROTOCOL, this.peerProtocol));
+    const headers = new Headers(init.headers); headers.set(PROTOCOL_HEADER, protocolHeader());
+    // The server evaluates this descriptor before executing the same request, including uploads.
+    const response = await (this.remote ? this.remote.peer.fetch(path, { ...init, headers }) : fetch(path, { ...init, headers }));
+    this.peerProtocol = parseProtocol(response.headers.get(PROTOCOL_HEADER)) ?? this.peerProtocol;
+    return response;
+  }
+  protocol = () => this.request<import("@workbench/contracts").ProtocolHandshake>("GET", "/api/protocol");
+  prepareHostUpdate = (instance: import("@workbench/contracts").HostInstance, action: "prepare" | "cancel" = "prepare") => this.request<import("@workbench/contracts").HostUpdateStatus>("POST", "/api/host/update", { instance, action });
 
   /** Any API call (feature clients such as pkm.ts build on it). */
   async request<T>(method: string, path: string, body?: unknown, options: Pick<RequestInit, "keepalive" | "signal"> = {}): Promise<T> {
@@ -188,6 +200,8 @@ export class Api {
   saveAgentProfile = (input: AgentProfileInput, id?: string, expectedRevision?: number) => this.request<AgentProfile>(id ? "PUT" : "POST", `/api/agent-profiles${id ? `/${encodeURIComponent(id)}` : ""}`, { ...input, expectedRevision });
   removeAgentProfile = (id: string, expectedRevision: number) => this.request<{ ok: true }>("DELETE", `/api/agent-profiles/${encodeURIComponent(id)}`, { expectedRevision });
   taskCommand = (command: TaskCommand) => this.request<CommandReceipt>("POST", "/api/task-commands", command);
+  nativeTaskDetail = (sessionId: string, runId: string) => this.request<NativeTaskDetail>("GET", `/api/tasks/native-history?sessionId=${encodeURIComponent(sessionId)}&runId=${encodeURIComponent(runId)}`);
+  refreshNativeTasks = (sessionId: string) => this.request<TaskSnapshot>("POST", "/api/tasks/native-refresh", { sessionId });
   taskReceipt = (commandId: string) => this.request<CommandReceipt>("GET", `/api/task-commands/${encodeURIComponent(commandId)}`);
   async knowledgeStream(owner: string, body: unknown, onChunk: (value: unknown) => void, signal: AbortSignal) {
     const response = await this.transport("/api/office-knowledge/home/" + encodeURIComponent(owner) + "/stream", {
@@ -299,6 +313,10 @@ export class Api {
   startWorkspaceService = (workspaceId: string, request: WorkspaceServiceStart) => this.request<WorkspaceService>("POST", `/api/workspaces/${encodeURIComponent(workspaceId)}/services`, request);
   stopWorkspaceService = (id: string, owner: WorkspaceServiceOwner) => this.request<WorkspaceService>("POST", `/api/services/${encodeURIComponent(id)}/stop`, owner);
   deleteWorkspaceService = (id: string) => this.request<{ ok: true }>("DELETE", `/api/services/${encodeURIComponent(id)}`);
+  openWorkspaceServicePreview = (id: string) => this.request<import("@workbench/contracts").WorkspaceServicePreview>("POST", `/api/services/${encodeURIComponent(id)}/preview`);
+  closeWorkspaceServicePreview = (serviceId: string, previewId: string) => this.request<{ ok: true }>("DELETE", `/api/services/${encodeURIComponent(serviceId)}/preview/${encodeURIComponent(previewId)}`);
+  servicePreviewSettings = () => this.request<import("@workbench/contracts").WorkspaceServicePreviewSettings>("GET", "/api/service-preview/settings");
+  configureServicePreview = (publicBaseUrl: string | null) => this.request<import("@workbench/contracts").WorkspaceServicePreviewSettings>("PUT", "/api/service-preview/settings", { publicBaseUrl });
   workspaceServiceLogs = (id: string, query: string) => this.request<import("../../../packages/contracts/src/terminal-runtime.ts").TerminalSearchResult>("GET", `/api/services/${encodeURIComponent(id)}/logs?q=${encodeURIComponent(query)}`);
   workspaceServiceProxy = (id: string, path: string, init: RequestInit = {}) => {
     const headers = new Headers(init.headers); headers.set("authorization", `Bearer ${this.token}`);

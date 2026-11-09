@@ -1,0 +1,72 @@
+{
+  "repository": "https://github.com/getpaseo/paseo",
+  "commit": "1fff127f45b11c1c9c573fbbd12791673004c912",
+  "archiveSha256": "654e4c066977b773a36eabb80a3d231942f36b0287cad8b3d3ca1aaa486cdd7b",
+  "license": "Apache-2.0",
+  "licenseFile": "../LICENSE",
+  "files": [
+    {
+      "upstreamPath": "packages/app/src/onboarding/internal/model.ts",
+      "vendoredPath": "upstream/onboarding/internal/model.ts",
+      "sha256": "826e635d2b0cf73684d9d030880b04f914338226ca81c3de8af0d91164ffbf44",
+      "modified": false
+    },
+    {
+      "upstreamPath": "packages/app/src/onboarding/internal/model.test.ts",
+      "vendoredPath": "upstream/onboarding/internal/model.test.ts",
+      "sha256": "06c3d4682fa96952a9fb5d6606f3befeef31f2878dad1ee7bcd6f405550935e5",
+      "modified": false
+    },
+    {
+      "upstreamPath": "packages/app/src/onboarding/internal/completion-storage.ts",
+      "vendoredPath": "upstream/onboarding/internal/completion-storage.ts",
+      "sha256": "de00691f948fbd30081f0d3ddfcece0e210580d669a96359046f237ff7648a5d",
+      "modified": false
+    },
+    {
+      "upstreamPath": "packages/app/src/hosts/add-host/internal/pair-scan-model.ts",
+      "vendoredPath": "upstream/hosts/add-host/internal/pair-scan-model.ts",
+      "sha256": "1a5e7c2bda11b10132c532278f64a4fccd15cd8df8f77e23111ab78d7a26d171",
+      "modified": false
+    },
+    {
+      "upstreamPath": "packages/app/src/hosts/add-host/internal/pair-scan-model.test.ts",
+      "vendoredPath": "upstream/hosts/add-host/internal/pair-scan-model.test.ts",
+      "sha256": "ee92a829ce55bf3b52adedaa3b1deb894f4c774ae7e7ffcf27a43586b95e106d",
+      "modified": false
+    },
+    {
+      "upstreamPath": "packages/app/src/hosts/add-host/internal/scan.tsx",
+      "vendoredPath": "upstream/hosts/add-host/internal/scan.tsx",
+      "sha256": "af9cdcd29927e1c09433048fdf66af40d362cb33bf1d576686fdb8e5354c61b9",
+      "modified": false
+    },
+    {
+      "upstreamPath": "packages/app/src/runtime/host-runtime.ts",
+      "vendoredPath": "upstream/runtime/host-runtime.ts",
+      "sha256": "f8923a12ea85613a66398ec7b23e4ff3547dd5c70eb1fc8e3f41c521053c1404",
+      "modified": false
+    },
+    {
+      "upstreamPath": "packages/app/src/onboarding/internal/model.ts",
+      "vendoredPath": "model.ts",
+      "sha256": "826e635d2b0cf73684d9d030880b04f914338226ca81c3de8af0d91164ffbf44",
+      "modified": false
+    },
+    {
+      "upstreamPath": "packages/app/src/hosts/add-host/internal/pair-scan-model.ts",
+      "vendoredPath": "pair-scan-model.ts",
+      "sha256": "9a7c2a724e9fdbbddea4cdcfda6d1d6d995f17350e696be674a8e252fdfe87c2",
+      "modified": true,
+      "changes": "Only the original type import and its type closure are adapted; original scanner runtime is unchanged. Opaque unused password-pairing type, no password flow added."
+    },
+    {
+      "upstreamPath": "packages/app/src/runtime/host-runtime.ts",
+      "vendoredPath": "pair-scan-types.ts",
+      "sha256": "31708206c8fa815d129da428ddbe7980c33d58cb2224ccefce6a5c0469326471",
+      "modified": true,
+      "changes": "Only the original type import and its type closure are adapted; original scanner runtime is unchanged. Opaque unused password-pairing type, no password flow added."
+    }
+  ],
+  "integration": "Original onboarding model with Workbench existing prefs completion port and mapped step content. Original scan attempt model gates camera/image decode and existing strict Workbench offer parsing; connected in this adapter means decoded/validated link, not enrollment. Enrollment remains an explicit HostConnections submit and host approval. Original scan.tsx uses Expo Camera and marks web unavailable; getUserMedia + BarcodeDetector/jsqr is the Workbench web platform adapter. No Expo runtime, new provider, installer or database."
+}

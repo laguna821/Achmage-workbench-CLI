@@ -78,6 +78,14 @@
     {
       "path": "packages/server/src/terminal/terminal.ts",
       "sha256": "3c4a2fea6692ae92f73d7ed7ba4eaedbc9d3811676bc64c79b5ea348f3ee4552"
+    },
+    {
+      "path": "packages/server/src/server/service-proxy.ts",
+      "sha256": "e90365c6e3390ffc27381aaea27c1e9eb612c11a9de58ab0ebedff8eba8dd27c",
+      "integrationPath": "src/server/server/service-proxy.ts",
+      "changes": [
+        "WebSocket forwarded protocol uses the authenticated adapter-selected protocol instead of unconditional http; upstream bytes retained."
+      ]
     }
   ],
   "adaptations": [
@@ -648,6 +656,14 @@
       "sha256": "757c59cd28095111da9a48808e0698021958998de699035d3337fa6749ebc4ff"
     },
     {
+      "path": "dist/server/server/service-proxy.d.ts",
+      "sha256": "52e0cff61e66de35394623e58ec67d5c4f84854b300c86d5fb888f69d385a345"
+    },
+    {
+      "path": "dist/server/server/service-proxy.js",
+      "sha256": "9880d5e8bb9727569f1d7b95ae6aaed9e0daffd2b480580e99da5721f76bfaff"
+    },
+    {
       "path": "dist/server/terminal/headless-terminal.d.ts",
       "sha256": "83c413e81439848ca0a75897bcc2e87138e1ef531c42f9c323336488e9311f1a"
     },
@@ -700,9 +716,7 @@
       "Windows/macOS native UI",
       "production/installer build"
     ],
-    "unsupported": [
-      "whole browser preview through service proxy",
-      "WebSocket/HMR tunnel"
-    ]
+    "unsupported": [],
+    "fullPreview": "Original HTTP/WebSocket proxy + Workbench owned-service/device-scoped cookie boundary, implementation pending integrated verification"
   }
 }

@@ -1,10 +1,11 @@
 import { safeRandomId } from "@workbench/client";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { TerminalSession, Workspace, WorkspaceService, WorkspaceServiceList, WorkspaceServiceStart } from "@workbench/contracts";
+import type { TerminalSession, Workspace, WorkspaceService, WorkspaceServiceList, WorkspaceServiceStart, WorkspaceServicePreview } from "@workbench/contracts";
 import { ApiRequestError, type Api } from "../api.ts";
 import { restoreSurfaceFocus } from "./controls/menu-navigation.ts";
 import "../styles/workspace-services.css";
 import { WorkspaceServiceInspect } from "./WorkspaceServiceInspect.tsx";
+import { ServicePreviewSettings } from "./ServicePreviewSettings.tsx";
 
 type Draft = { label: string; command: string; port: string };
 type SavedDraft = { draft: Draft; pending: WorkspaceServiceStart | null };
@@ -23,8 +24,9 @@ function readDraft(key: string): SavedDraft {
   return { draft: { ...emptyDraft }, pending: null };
 }
 
-export function WorkspaceServices({ api, workspace, onOpen, onClose, openExternal }: {
+export function WorkspaceServices({ api, workspace, onOpen, onClose, openExternal, onOpenPreview }: {
   api: Api; workspace: Workspace; onOpen: (terminal: TerminalSession) => void; onClose: () => void; openExternal: (url: string) => Promise<void>;
+  onOpenPreview?: (url: string, workspace: Workspace) => Promise<void>;
 }) {
   const storageKey = `workbench.serviceDraft:${workspace.hostId}:${workspace.id}`;
   const [saved] = useState(() => readDraft(storageKey));
@@ -34,6 +36,7 @@ export function WorkspaceServices({ api, workspace, onOpen, onClose, openExterna
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [readError, setReadError] = useState(""), [notice, setNotice] = useState("");
   const [inspect, setInspect] = useState<{ id: string; mode: "logs" | "proxy" } | null>(null);
   const [removeId, setRemoveId] = useState<string | null>(null);
+  const [previews, setPreviews] = useState<Record<string, WorkspaceServicePreview>>({});
   const dialog = useRef<HTMLDialogElement>(null), opener = useRef(document.activeElement), mounted = useRef(true), acting = useRef(false);
   const listVersion = useRef(0), readQueue = useRef<Promise<unknown>>(Promise.resolve());
   const persist = useCallback(() => {
@@ -127,6 +130,7 @@ export function WorkspaceServices({ api, workspace, onOpen, onClose, openExterna
     {error ? <p className="workspace-service-error" role="alert">{error}</p> : null}
     {readError ? <p className="workspace-service-error" role="alert">실행 기록을 읽지 못했습니다. {readError}</p> : null}
     {notice ? <p role="status">{notice}</p> : null}
+    <ServicePreviewSettings api={api} />
     <div className="workspace-service-heading"><h3>실행 기록</h3><button type="button" className="button small" disabled={busy} onClick={() => void run(async () => { await readList(); })}>새로고침</button></div>
     {!result ? <p className="muted">실행 기록을 읽는 중…</p> : !result.services.length ? <p className="muted">이 작업공간에서 실행한 서버가 없습니다.</p> : <div className="workspace-service-list">{result.services.map(entry => {
       const url = entry.status === "running" && Number.isInteger(entry.port) && entry.port! >= 1 && entry.port! <= 65535 ? `http://127.0.0.1:${entry.port}` : null;
@@ -138,6 +142,12 @@ export function WorkspaceServices({ api, workspace, onOpen, onClose, openExterna
         <div className="workspace-service-actions">
           <button type="button" className="button small" onClick={() => setInspect({ id: entry.id, mode: "logs" })}>로그 검색</button>
           {url ? <button type="button" className="button small" onClick={() => setInspect({ id: entry.id, mode: "proxy" })}>서비스 포트 요청</button> : null}
+          {url ? <button type="button" className="button small" disabled={busy} onClick={() => void run(async () => {
+            const preview = await api.openWorkspaceServicePreview(entry.id);
+            if (preview.serviceId !== entry.id || preview.workspaceId !== workspace.id) throw new Error("서비스 화면의 작업공간을 확인할 수 없습니다.");
+            if (mounted.current) setPreviews(before => ({ ...before, [entry.id]: preview }));
+            if (onOpenPreview) { await onOpenPreview(preview.openUrl, workspace); onClose(); }
+          })}>{onOpenPreview ? "웹 탭으로 열기" : "웹 화면 연결"}</button> : null}
           <button type="button" className="button small" disabled={busy} onClick={() => void run(async () => {
             const { terminal } = await api.terminalOutput(entry.terminalId);
             if (terminal.id !== entry.terminalId || terminal.workspaceId !== entry.workspaceId || terminal.createdAt !== entry.startedAt) throw new Error("이 실행의 터미널을 확인할 수 없습니다. 실행 기록을 다시 불러와 주세요.");
@@ -147,6 +157,11 @@ export function WorkspaceServices({ api, workspace, onOpen, onClose, openExterna
             listVersion.current++; upsert(await api.stopWorkspaceService(entry.id, { ownerId: entry.ownerId, terminalId: entry.terminalId, startedAt: entry.startedAt }));
           })}>{entry.status === "stopping" ? "종료 중…" : "실행 종료"}</button> : removeId !== entry.id ? <button type="button" className="text-button" disabled={busy} onClick={() => setRemoveId(entry.id)}>기록 지우기…</button> : <><span>터미널 출력은 남습니다.</span><button type="button" className="button small" disabled={busy} onClick={() => void run(async () => { listVersion.current++; await api.deleteWorkspaceService(entry.id); setResult(before => before && { ...before, services: before.services.filter(row => row.id !== entry.id) }); setRemoveId(null); })}>기록만 지우기</button><button type="button" className="text-button" disabled={busy} onClick={() => setRemoveId(null)}>취소</button></>}
         </div>
+        {previews[entry.id] ? <div className="service-preview-link">
+          <a className="button small" href={previews[entry.id]!.openUrl} target="_blank" rel="noopener noreferrer">웹 화면 열기</a>
+          <span className="muted">{new Date(previews[entry.id]!.expiresAt).toLocaleTimeString()}까지 · HTTP·WebSocket 연결</span>
+          <button type="button" className="text-button" disabled={busy} onClick={() => void run(async () => { await api.closeWorkspaceServicePreview(entry.id, previews[entry.id]!.id); setPreviews(before => { const next = { ...before }; delete next[entry.id]; return next; }); })}>화면 연결 종료</button>
+        </div> : null}
         {inspect?.id === entry.id ? <WorkspaceServiceInspect key={entry.id + inspect.mode} api={api} service={entry} mode={inspect.mode} onClose={() => setInspect(null)} /> : null}
       </article>;
     })}</div>}

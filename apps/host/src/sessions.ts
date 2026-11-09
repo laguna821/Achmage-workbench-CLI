@@ -515,6 +515,18 @@ export class SessionManager {
       submit: (input, source) => this.send(input.sessionId, input.commandId, input.text, [], null, null, input.mode ?? "auto", { profileId: input.profileId, activate: false, scheduled: source === "schedule" }),
       sessions: () => [...this.sessions.values()], items: id => this.loadItems(id),
       canSteer: session => Boolean(this.adapters.get(session.provider)?.steer),
+      nativeTasks: session => this.adapters.get(session.provider)?.nativeTasks?.(session) ?? [],
+      refreshNative: async session => this.adapters.get(session.provider)?.refreshNativeTasks?.(session, this.engineWork(session, this.requireWork(session.workId))) ?? [],
+      controlNative: async (session, target, command) => {
+        const adapter = this.adapters.get(session.provider);
+        if (!adapter?.controlNativeTask) throw new HttpError(409, "native_control_unavailable", "이 공급자는 해당 하위 작업 제어를 지원하지 않습니다.");
+        await adapter.controlNativeTask({ ...session, access: this.accessOf(session) }, this.engineWork(session, this.requireWork(session.workId)), target, command);
+      },
+      nativeHistory: async (session, target) => {
+        const adapter = this.adapters.get(session.provider);
+        if (!adapter?.nativeTaskHistory) throw new HttpError(409, "native_history_unavailable", "이 공급자는 하위 작업 기록을 지원하지 않습니다.");
+        return adapter.nativeTaskHistory(session, this.engineWork(session, this.requireWork(session.workId)), target);
+      },
       stop: id => this.interrupt(id), approve: (id, itemId, decision) => this.answerApproval(id, itemId, decision),
       cancelQueue: (id, queuedId) => this.cancelQueued(id, queuedId), sendQueue: (id, queuedId) => this.sendQueued(id, queuedId),
     });
@@ -561,6 +573,11 @@ export class SessionManager {
 
   /** Adapters report through this sink; every change is persisted and published. */
   readonly sink: AdapterSink = {
+    nativeTasks: (sessionId, tasks, source) => {
+      this.tasks.observeNative(sessionId, tasks);
+      const session = this.sessions.get(sessionId);
+      if (source === "live" && session) for (const task of tasks) this.notifications.nativeTask(session, task);
+    },
     upsertItem: (sessionId, incoming) => {
       let item = incoming;
       if (item.kind === "turnEnd") {

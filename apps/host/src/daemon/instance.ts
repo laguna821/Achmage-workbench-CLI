@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { HostInstance } from "@workbench/contracts";
-import { PROTOCOL_VERSION } from "@workbench/contracts";
+import { PROTOCOL_VERSION, WORKBENCH_PROTOCOL } from "@workbench/contracts";
 
 export type HostConnection = { url: string; port: number; token: string; dataDir: string; editorsUrl: string | null; instance: HostInstance };
 export function runtimeBuildId(entry: string) { return createHash("sha256").update(readFileSync(entry)).digest("hex"); }
@@ -31,7 +31,7 @@ export function readConnection(dataDir: string): HostConnection | null {
 export function claimInstance(dataDir: string, hostId: string, mode: HostInstance["mode"]) {
   mkdirSync(dataDir, { recursive: true, mode: 0o700 });
   const root = join(dataDir, "host.lock");
-  const instance: HostInstance = { hostId, mode, instanceId: randomUUID(), ownerPid: process.pid, ownerStartedAt: new Date().toISOString(), protocolVersion: PROTOCOL_VERSION, version: "0.4.0", buildId: runtimeBuildId(process.argv[1]!) };
+  const instance: HostInstance = { hostId, mode, instanceId: randomUUID(), ownerPid: process.pid, ownerStartedAt: new Date().toISOString(), protocolVersion: PROTOCOL_VERSION, protocol: WORKBENCH_PROTOCOL, version: "0.4.0", buildId: runtimeBuildId(process.argv[1]!) };
   function claim() {
     try { mkdirSync(root, { mode: 0o700 }); }
     catch (error) {

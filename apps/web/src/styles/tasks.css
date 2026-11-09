@@ -20,3 +20,14 @@
 .task-child { margin-left: var(--space-3); }
 .task-panel-empty, .task-panel-error, .task-panel-receipt { padding: var(--space-4); margin: 0; font-size: var(--fs-meta); }
 .task-panel-error { color: var(--danger); background: var(--danger-soft); }
+
+.task-native-detail { min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.task-native-head, .task-native-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-2) var(--space-4); }
+.task-native-head { justify-content: space-between; }
+.task-native-detail h3 { font: 600 var(--fs-ui)/1.5 var(--font-ui); padding: 0 var(--space-4); margin: var(--space-2) 0; overflow-wrap: anywhere; }
+.task-native-control-detail { color: var(--muted); font-size: var(--fs-meta); line-height: 1.5; padding: 0 var(--space-4); margin: var(--space-2) 0; }
+.task-native-detail > .transcript { min-height: 0; flex: 1; }
+.task-native-compose { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-top: 1px solid var(--line); }
+.task-native-compose label { font-size: var(--fs-meta); }
+.task-native-compose textarea { resize: vertical; min-height: 4rem; max-height: 12rem; width: 100%; box-sizing: border-box; font: inherit; padding: var(--space-2); color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); }
+.task-native-compose .button { align-self: flex-end; }

@@ -113,7 +113,7 @@
   "additions": [
     {
       "path": "package.json",
-      "sha256": "941130543b57c3e3b2d7a6c23ade2f55dd56d05b8a35013365007572066b49ec",
+      "sha256": "f5c039e02f1fb4cf5e792890f5c39b1947c70d78bd2418a5f4399dfa93c72e57",
       "description": "Private dependency-closure package with subpath exports and exact upstream-lock runtime dependencies, without lifecycle scripts."
     },
     {
@@ -131,7 +131,7 @@
     },
     {
       "path": "tsconfig.workbench.json",
-      "sha256": "9c9c3fbc9cf33213db65f91c6ddf77b942b52f8cc26dd5fa14b621bc8fa2ec6b",
+      "sha256": "aaa2813b972ad980fc30188b5ceb5e84b119fd767cee0a7e0f664f1ab90fcbd5",
       "description": "Workbench-added standalone emit configuration. The original upstream tsconfig remains unchanged. Selects transport entry points and their dependency closure, uses ES2023/NodeNext with declaration emission, and does not activate upstream lifecycle scripts or compile the full SDK facade."
     }
   ],
@@ -152,7 +152,7 @@
     "status": "present-selected-standalone-emit",
     "configuration": {
       "path": "tsconfig.workbench.json",
-      "sha256": "9c9c3fbc9cf33213db65f91c6ddf77b942b52f8cc26dd5fa14b621bc8fa2ec6b",
+      "sha256": "aaa2813b972ad980fc30188b5ceb5e84b119fd767cee0a7e0f664f1ab90fcbd5",
       "content": {
         "compilerOptions": {
           "target": "ES2023",
@@ -180,7 +180,13 @@
           "src/server/private-files.ts",
           "src/server/connection-offer.ts",
           "src/server/websocket/secure-relay-ingress.ts",
-          "src/server/socket-metadata.ts"
+          "src/server/socket-metadata.ts",
+          "src/server/hub/relationship-controller.ts",
+          "src/server/hub/relationship-remote.ts",
+          "src/server/hub/relationship-retry.ts",
+          "src/server/hub/execution-controller.ts",
+          "src/server/authorization/index.ts",
+          "src/server/agent/providers/claude/subagents/live-source.ts"
         ]
       }
     },
@@ -189,8 +195,118 @@
       "installedVersion": "5.9.3",
       "installedPackageJsonSha256": "822ef7ca6452205657b6288b066481ecf508bfbf43455d715cf7d3ec457561e6"
     },
-    "fileCount": 18,
+    "fileCount": 52,
     "files": [
+      {
+        "path": "dist/server/agent/option-controls.d.ts",
+        "sha256": "aabd71f40c36dacad1110d8e222e10b913b246719ac300d238a757bdf3fa4f0a",
+        "bytes": 5169
+      },
+      {
+        "path": "dist/server/agent/option-controls.js",
+        "sha256": "0806d4be2521449d71e3b44da0c1488bb5be7c11ae130d2268aef287f2ec96de",
+        "bytes": 6153
+      },
+      {
+        "path": "dist/server/agent/provider-options.d.ts",
+        "sha256": "e23d20e8eae076f6101761fee894898920499fefc79dd67a4638874d86a348c9",
+        "bytes": 1431
+      },
+      {
+        "path": "dist/server/agent/provider-options.js",
+        "sha256": "c648bf75fface23804a67cf64abd93d89b5ec7c6d68c9c9223ea22e31356f585",
+        "bytes": 3698
+      },
+      {
+        "path": "dist/server/agent/provider-subagents/ports.d.ts",
+        "sha256": "264e88cceeee25a05f7b1bc36a357235e10b9ed736239759bdcfdfb42397fe96",
+        "bytes": 806
+      },
+      {
+        "path": "dist/server/agent/provider-subagents/ports.js",
+        "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+        "bytes": 11
+      },
+      {
+        "path": "dist/server/agent/providers/claude/model-manifest.d.ts",
+        "sha256": "32c84d60497fa334e2d233ed2c1fe07e577f89bf95009e8ec99a24992b28da32",
+        "bytes": 8061
+      },
+      {
+        "path": "dist/server/agent/providers/claude/model-manifest.js",
+        "sha256": "7e9116ca5565c44f73e1e902c6da10365b2b86215501cbf690c533605b1cb5da",
+        "bytes": 14474
+      },
+      {
+        "path": "dist/server/agent/providers/claude/models.d.ts",
+        "sha256": "0e5dd12f9ef5f0634facd77621f10233fdc5743cf0f9dafdb132090732172890",
+        "bytes": 1941
+      },
+      {
+        "path": "dist/server/agent/providers/claude/models.js",
+        "sha256": "971f778b07b27e213b7c90b192461219ea5a477141868f731c7a14c7feba4db2",
+        "bytes": 5851
+      },
+      {
+        "path": "dist/server/agent/providers/claude/subagents/live-source.d.ts",
+        "sha256": "6b3c8c13dce901990055946306e64b128e72acc2b0dd22eb15d0908c32cb6d60",
+        "bytes": 10111
+      },
+      {
+        "path": "dist/server/agent/providers/claude/subagents/live-source.js",
+        "sha256": "63b478386a5bd251cbf7a7f7e08ecc59616d5537a28102f66faddac86a4fad9e",
+        "bytes": 20279
+      },
+      {
+        "path": "dist/server/agent/providers/claude/subagents/observation.d.ts",
+        "sha256": "c3bde49fc60b5db271dfff92b120ad947eeb9a45bc57b6f1329dc5faa99218f2",
+        "bytes": 2197
+      },
+      {
+        "path": "dist/server/agent/providers/claude/subagents/observation.js",
+        "sha256": "7c91a8135dfa8299e182a2be41a8b18e2986062e127792bb7f222d5734ac16d0",
+        "bytes": 2435
+      },
+      {
+        "path": "dist/server/agent/providers/claude/subagents/presentation.d.ts",
+        "sha256": "759d526253e25d1fb202f08ee44d308b589f1b3acf3a15d3ffb042a655f80925",
+        "bytes": 414
+      },
+      {
+        "path": "dist/server/agent/providers/claude/subagents/presentation.js",
+        "sha256": "4742bc63408f069b7dab7354043653bf7ca74890f699f03d077b1992ba97dec7",
+        "bytes": 1366
+      },
+      {
+        "path": "dist/server/agent/providers/claude/subagents/task-status.d.ts",
+        "sha256": "23bc56f91bb132b7f92e9e3c70e712b8e3100135b395c5ad3595ea71bc8423da",
+        "bytes": 385
+      },
+      {
+        "path": "dist/server/agent/providers/claude/subagents/task-status.js",
+        "sha256": "d45d0e8bb05c4c7c37027918a1bd294430446d08fc2a9e505f5362f4b843850e",
+        "bytes": 604
+      },
+      {
+        "path": "dist/server/authorization/index.d.ts",
+        "sha256": "6c14e90c27210e0f05a50d34e7680eb3a8d293698b1821483bed25ca9c9c72c1",
+        "bytes": 1050
+      },
+      {
+        "path": "dist/server/authorization/index.js",
+        "sha256": "54874c1fa1e842611c7d6f34cb4449e40a52a3a3fb7330906efdb2d2729c0099",
+        "bytes": 1793
+      },
+      {
+        "path": "dist/server/authorization/operation-permissions.d.ts",
+        "sha256": "bdc26902539f7952b4fe965a6e76bac2b6ca4f3d6c868dd160cfba7c77eaf1a6",
+        "bytes": 524
+      },
+      {
+        "path": "dist/server/authorization/operation-permissions.js",
+        "sha256": "f800741bdbfeb4ae168c17758fa0032db11f31de05b9141cc297aae1374eab18",
+        "bytes": 25805
+      },
       {
         "path": "dist/server/connection-offer.d.ts",
         "sha256": "0d0ce3da55671f98eddbad55adcdf44aafcbd54b2564ac536cf19155a6671d7e",
@@ -210,6 +326,66 @@
         "path": "dist/server/daemon-keypair.js",
         "sha256": "0e22549c12d1d6c8e6522c02e52ad062b1c1990fa98db941ff576eb0dd843c0d",
         "bytes": 1796
+      },
+      {
+        "path": "dist/server/hub/execution-controller.d.ts",
+        "sha256": "c078d30ffd44e659920345b07cc506e170fc780c44d3d944b72b2a80de46a58b",
+        "bytes": 1457
+      },
+      {
+        "path": "dist/server/hub/execution-controller.js",
+        "sha256": "f25d7466fcc3234bd5c48886fc52637e2b653f820c2da86692e2e544b3ba635e",
+        "bytes": 7701
+      },
+      {
+        "path": "dist/server/hub/execution-ports.d.ts",
+        "sha256": "e29418d59b4e38fb61cfaae81573796cb5be3835da06b39a0d3d36b928185819",
+        "bytes": 1396
+      },
+      {
+        "path": "dist/server/hub/execution-ports.js",
+        "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+        "bytes": 11
+      },
+      {
+        "path": "dist/server/hub/relationship-controller.d.ts",
+        "sha256": "9f5c81f3742cb0f58f608c2945aea376101d85ac02d453dea343fb116787a2ff",
+        "bytes": 3996
+      },
+      {
+        "path": "dist/server/hub/relationship-controller.js",
+        "sha256": "d89780077c677a789496df6236a6e01ebf8acd8c586e75c3f82aad095cfd4b9b",
+        "bytes": 21541
+      },
+      {
+        "path": "dist/server/hub/relationship-remote.d.ts",
+        "sha256": "ff2c66a6d5ba9368f68b52ee381fd8dc5daae4312579169b8c7ccda935f42345",
+        "bytes": 2090
+      },
+      {
+        "path": "dist/server/hub/relationship-remote.js",
+        "sha256": "bc3ceef81cd63f6cfd6190f96aa3343e0dd735f16dab84f4e6cb9d98bcebd276",
+        "bytes": 7225
+      },
+      {
+        "path": "dist/server/hub/relationship-retry.d.ts",
+        "sha256": "4159049d62aea02660c520d841627da56d825a66eedff136cfc626c7fde7ed41",
+        "bytes": 281
+      },
+      {
+        "path": "dist/server/hub/relationship-retry.js",
+        "sha256": "a0e7d456cbddd2ff38d5c1a01c748d88070bda25852012b83c50bfcd2faac2c6",
+        "bytes": 498
+      },
+      {
+        "path": "dist/server/hub/socket-port.d.ts",
+        "sha256": "a0eca76df005f03f9ebdf1af04aaabfa0bc973124eb1b7edb3a2504985f70b94",
+        "bytes": 532
+      },
+      {
+        "path": "dist/server/hub/socket-port.js",
+        "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+        "bytes": 11
       },
       {
         "path": "dist/server/network/index.d.ts",
@@ -282,10 +458,10 @@
         "bytes": 6325
       }
     ],
-    "treeSha256": "153fd823aa1da5ec9de3c56a89602497132a364e42c6238882f4870f0cb30aa3",
+    "treeSha256": "10e3e7418c36189572b1f0d1e074e367f6b9bb013be85f73cf93f7a1566d63c5",
     "treeHashEncoding": "SHA-256 of UTF-8 sorted package-relative path + NUL + file SHA-256 hex + LF.",
     "scope": "Selected original transport/protocol entry points and their imported dependency closure only. The full Paseo DaemonClient facade and generated AOT validator are not integrated.",
-    "provenanceUpdate": "Existing artifact bytes and configuration were hashed; this provenance update did not run an emit, application build, install or test."
+    "provenanceUpdate": "0.4.0 final integration: selected emit includes original Hub chunked transport and Claude provider child task source; emit and production bundle passed."
   },
   "distribution": {
     "provenanceCopy": "third_party/paseo/server-provenance.json",

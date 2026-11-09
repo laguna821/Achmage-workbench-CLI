@@ -1,3 +1,5 @@
+import { UpdatePolicy } from "./update-policy.ts";
+import { ServicePreviews } from "./service-previews.ts";
 import { randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, hostname } from "node:os";
@@ -192,13 +194,16 @@ const extensions = new ExtensionService({ dataDir, manager, authorizeWrite: (wor
   if (reason) throw new HttpError(403, "extension_protected_file", reason);
 } });
 const hub: EventHub = new EventHub({ dataDir, store, manager, bus, ingress: () => devices?.hubIngressState() ?? { enabled: false, url: null } });
+const servicePreviews = new ServicePreviews({ store, services: manager.services, localOrigin: () => applicationOrigin, remote: () => devices?.previewEndpointState() ?? { enabled: false, appOrigin: null } });
 const devices: DeviceService | undefined = env.WORKBENCH_CLI_INPUT ? undefined : new DeviceService({ dataDir, manager, bus, localOrigin: () => applicationOrigin, localToken: token, webDir,
-  voice, push: () => push, eventIngress: (req, res) => hub.handleIngress(req, res) });
+  voice, servicePreviews, push: () => push, eventIngress: (req, res) => hub.handleIngress(req, res) });
 const push: PushDevices | undefined = devices ? new PushDevices({ dataDir, registry: devices.registry, notifications: manager.notifications, hostId: manager.snapshot().hostId }) : undefined;
 const browserOutputs = new BrowserOutputs({ store, browser: manager.sharedBrowser, workspaces: manager.workspaces, documents: manager.documents, attachments: manager.attachments, hostId: env.WORKBENCH_HOST_ID ?? hostname(), session: id => manager.view.sessions.get(id) });
 const autostart = new HostAutostart(dataDir);
+const updatePolicy = new UpdatePolicy(manager, store, () => manager.schedules.start(Number(env.WORKBENCH_SCHEDULE_TICK_MS) || 30_000));
 const server = createHttpServer(manager, bus, {
-  devices, voice, extensions, hub, desktop, browserOutputs, push,
+  updatePolicy,
+  devices, voice, extensions, hub, desktop, browserOutputs, push, servicePreviews,
   autostart,
   host: { instance: lease.instance, stopping: () => stopping, stop: () => { void stop(); } },
   officeImport,
@@ -280,7 +285,9 @@ let stopping = false;
 async function stop() {
   if (stopping) return;
   stopping = true;
+  if (updatePolicy.status().state !== "stopping") await updatePolicy.stop("interrupt");
   dropbox.close();
+  servicePreviews.close();
   push?.close();
   devices?.close();
   await hub.close();

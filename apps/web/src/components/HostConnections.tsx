@@ -7,6 +7,8 @@ import {
 } from "../host-connections.ts";
 import { restoreSurfaceFocus } from "./controls/menu-navigation.ts";
 import { Icon } from "./Icon.tsx";
+import { QrScanner } from "./QrScanner.tsx";
+import { parseRemoteOffer } from "@workbench/client";
 import "../styles/host-connections.css";
 
 export type HostConnectionsProps = {
@@ -41,9 +43,11 @@ function HostConnectionsDialog({ api, controller, onClose, localLabel = "현재 
   const [offer, setOffer] = useState<HostPairingOffer | null>(null);
   const [busy, setBusy] = useState(""), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [link, setLink] = useState(initialOffer), [deviceName, setDeviceName] = useState("");
+  const [scanOpen, setScanOpen] = useState(false);
   const [removeId, setRemoveId] = useState<string | null>(null), [now, setNow] = useState(Date.now);
   const preview = pairingHostPreview(link);
   const connecting = snapshot.phase === "connecting" || snapshot.phase === "awaiting-approval";
+  useEffect(() => { if (connecting || busy) setScanOpen(false); }, [connecting, busy]);
 
   useLayoutEffect(() => {
     const surface = dialog.current;
@@ -99,7 +103,7 @@ function HostConnectionsDialog({ api, controller, onClose, localLabel = "현재 
   };
   const projects = [...new Map((state?.workspaces ?? []).map(project => [project.workId, project])).values()];
 
-  return <dialog ref={dialog} className="host-connections-dialog" aria-labelledby="host-connections-title" onCancel={event => { event.preventDefault(); onClose(); }}>
+  return <dialog ref={dialog} className="host-connections-dialog" aria-labelledby="host-connections-title" onCancel={event => { event.preventDefault(); if (scanOpen) setScanOpen(false); else onClose(); }}>
     <header className="host-connections-head">
       <div><h2 id="host-connections-title">기기 연결</h2><p role="status">{!localAvailable && snapshot.phase === "local" ? "연결할 호스트를 선택하세요" : PHASE_LABELS[snapshot.phase]}{snapshot.message ? ` · ${snapshot.message}` : ""}</p></div>
       <button type="button" className="icon-button" onClick={onClose} aria-label="기기 연결 닫기"><Icon name="x" size={18} /></button>
@@ -135,6 +139,7 @@ function HostConnectionsDialog({ api, controller, onClose, localLabel = "현재 
       <h3 id="join-host-title">다른 PC에 연결</h3>
       <form className="host-connection-form" onSubmit={event => {
         event.preventDefault();
+        setScanOpen(false);
         void perform("connect", () => controller.connectOffer(link.trim(), deviceName.trim()), () => { setLink(""); setNotice("호스트에 연결했습니다."); });
       }}>
         <label>연결 링크<textarea value={link} onChange={event => setLink(event.target.value)} placeholder="호스트에서 만든 연결 링크를 붙여넣으세요" rows={2} autoComplete="off" autoCapitalize="none" spellCheck={false} disabled={!!busy || connecting} required /></label>
@@ -142,10 +147,12 @@ function HostConnectionsDialog({ api, controller, onClose, localLabel = "현재 
         {preview ? <div className="host-connection-identity"><span>대상 호스트 <code>{preview.hostId}</code></span><span>호스트 공개키 <code>{preview.daemonPublicKeyB64}</code></span></div> : null}
         <div className="host-connection-actions">
           <button type="submit" className="button primary" disabled={!!busy || connecting || !link.trim() || !deviceName.trim()}>연결 요청</button>
-          <button type="button" className="button" disabled={!!busy || connecting || !controller.scan} title={controller.scan ? undefined : "이 환경에서는 휴대폰 카메라로 QR을 열거나 링크를 붙여넣으세요."} onClick={() => void perform("scan", () => controller.scan!(), value => { if (value) setLink(value); })}>QR 스캔</button>
+          <button type="button" className="button" disabled={!!busy || connecting} aria-expanded={scanOpen} onClick={() => setScanOpen(value => !value)}>QR 스캔</button>
+          {controller.scan ? <button type="button" className="text-button" disabled={!!busy || connecting} onClick={() => void perform("scan", async () => { const value = await controller.scan!(); if (value) parseRemoteOffer(value); return value; }, value => { if (value) { setLink(value); setScanOpen(false); } })}>기기의 QR 스캐너 사용</button> : null}
           {connecting ? <button type="button" className="text-button" onClick={disconnect}>연결 요청 취소</button> : null}
         </div>
-        {!controller.scan ? <p className="muted">휴대폰 카메라로 QR을 열거나 연결 링크를 붙여넣을 수 있습니다.</p> : null}
+        {scanOpen ? <QrScanner onOffer={value => { setLink(value); setScanOpen(false); setError(""); setNotice("QR의 연결 대상을 읽었습니다. 기기 이름과 대상을 확인한 뒤 연결 요청을 누르세요."); }} onClose={() => setScanOpen(false)} /> : null}
+        <p className="muted">카메라를 쓰기 어려우면 QR 그림을 고르거나 연결 링크를 붙여넣으세요.</p>
       </form>
       {snapshot.verificationCode ? <div className="host-connection-verification" role="status"><span>연결 확인번호</span><strong>{snapshot.verificationCode}</strong><p>호스트 화면에도 같은 번호가 표시되는지 확인한 뒤 승인하세요.</p></div> : null}
       {snapshot.credentialStorage === "session" ? <p className="muted">연결 인증정보는 현재 앱·브라우저 세션에 보관됩니다. 세션이 끝나면 다시 연결해야 할 수 있습니다.</p> : <p className="muted">연결 인증정보를 이 기기의 보안 저장소에 보관합니다.</p>}

@@ -2,7 +2,8 @@
 use std::{cell::{Cell, RefCell}, collections::HashMap, path::PathBuf, rc::Rc, sync::{Arc, Mutex}, time::Duration};
 use serde_json::json;
 use tauri::Webview;
-use webkit2gtk::{prelude::*, Download, PermissionRequest};
+use gtk::glib::prelude::*;
+use webkit2gtk::{Download, DownloadExt, PermissionRequest, PermissionRequestExt, URIRequestExt, UserMediaPermissionRequestExt, WebContextExt, WebViewExt};
 use super::{Page, new_id, now};
 
 type Pages = Arc<Mutex<HashMap<String, Page>>>;

@@ -1,3 +1,4 @@
+import { handshakeFromHeader, protocolHeader, PROTOCOL_HEADER, requireProtocolWrite } from "@workbench/contracts";
 import { handleDesktopHttp } from "./desktop-http.ts";
 import { randomBytes } from "node:crypto";
 import { createReadStream, existsSync, statSync } from "node:fs";
@@ -109,6 +110,7 @@ function parseRefs(value: unknown): DocRef[] {
 }
 
 export type HttpOptions = {
+  servicePreviews?: import("./service-previews.ts").ServicePreviews;
   push?: import("./push/devices.ts").PushDevices;
   browserOutputs?: import("./browser-outputs.ts").BrowserOutputs;
   desktop?: import("./desktop-adapter.ts").DesktopService;
@@ -117,6 +119,7 @@ export type HttpOptions = {
   hub?: import("./event-hub.ts").EventHub;
   devices?: import("./devices/service.ts").DeviceService;
   autostart?: import("./daemon/autostart.ts").HostAutostart;
+  updatePolicy?: import("./update-policy.ts").UpdatePolicy;
   host?: { instance: import("@workbench/contracts").HostInstance; stopping: () => boolean; stop: () => void };
   dropbox?: import("./dropbox.ts").DropboxFolders;
   officeImport?: import("./office-import.mjs").OfficeImport;
@@ -241,8 +244,10 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
   const imageOutputs = new OfficeImageOutputs(manager.documents);
   const pdfImages = pdfImageOutputs(manager.documents);
   const server = createServer(async (req, res) => {
+    if (options.servicePreviews?.handle(req, res, "local")) return;
     const url = new URL(req.url ?? "/", "http://localhost");
     const path = url.pathname;
+    const method = req.method ?? "GET";
     try {
       if (path.startsWith("/preview/")) {
         const [, , ticketId, ...rest] = path.split("/");
@@ -280,7 +285,20 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       if (!sameToken(bearer ?? queryToken, options.token)) {
         throw new HttpError(401, "unauthorized", "인증 토큰이 맞지 않습니다.");
       }
+      let compatibility: import("@workbench/contracts").ProtocolHandshake;
+      try {
+        compatibility = handshakeFromHeader(req.headers[PROTOCOL_HEADER]);
+        if (!["GET", "HEAD", "OPTIONS"].includes(method)) requireProtocolWrite(compatibility);
+      } catch (error) { const e = error as { status?: number; code?: string; message?: string }; throw new HttpError(e.status ?? 409, e.code ?? "protocol_incompatible", e.message ?? "호스트 호환성을 확인해 주세요."); }
+      res.setHeader(PROTOCOL_HEADER, protocolHeader());
+      if (method === "GET" && path === "/api/protocol") return sendJson(res, 200, compatibility);
+      options.updatePolicy?.assertRequest(method, path, typeof req.headers["x-workbench-view"] === "string" && typeof req.headers["x-workbench-write"] === "string"
+        ? { viewId: req.headers["x-workbench-view"], writeToken: req.headers["x-workbench-write"] } : undefined);
       if (options.devices && path.startsWith("/api/devices") && await options.devices.handle(req, res, url)) return;
+      if (path === "/api/service-preview/settings" && options.servicePreviews) {
+        if (method === "GET") return sendJson(res, 200, options.servicePreviews.settings());
+        if (method === "PUT") return sendJson(res, 200, options.servicePreviews.configure(await readJson(req, 4096)));
+      }
       if (path.startsWith("/api/push/") && options.push) {
         if (path === "/api/push/settings" && method === "GET") return sendJson(res, 200, options.push.settings());
         if (path === "/api/push/settings" && method === "PUT") return sendJson(res, 200, await options.push.configure(await readJson(req, 4096) as unknown as import("@workbench/contracts").PushConfiguration));
@@ -294,7 +312,6 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       if (await handleRuntimeHttp(req, res, url, options)) return;
       if (await handleDesktopHttp(req, res, url, options.desktop)) return;
       const parts = path.split("/").filter(Boolean).slice(1);
-      const method = req.method ?? "GET";
 
       if (method === "GET" && path === "/api/snapshot") return sendJson(res, 200, manager.snapshot());
       if (parts[0] === "browser") {
@@ -334,15 +351,23 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       }
       if (method === "GET" && path === "/api/host" && options.host) return sendJson(res, 200, {
         instance: options.host.instance, cursor: { epoch: bus.epoch, seq: bus.currentSeq }, state: options.host.stopping() ? "stopping" : "running",
-        activeTasks: [...manager.view.sessions.values()].filter(session => !["idle", "error"].includes(session.status)).length,
+        activeTasks: options.updatePolicy?.status().blockers.length ?? [...manager.view.sessions.values()].filter(session => !["idle", "error"].includes(session.status)).length,
+        compatibility, ...(options.updatePolicy ? { update: options.updatePolicy.status() } : {}),
       });
-      if (method === "POST" && path === "/api/host/stop" && options.host) {
+      if (method === "POST" && (path === "/api/host/stop" || path === "/api/host/update") && options.host) {
         const body = await readJson(req, 4000), expected = body.instance as import("@workbench/contracts").HostInstance | undefined;
         const own = options.host.instance;
         if (!expected || expected.hostId !== own.hostId || expected.instanceId !== own.instanceId || expected.ownerPid !== own.ownerPid || expected.ownerStartedAt !== own.ownerStartedAt || expected.protocolVersion !== own.protocolVersion)
           throw new HttpError(409, "OWNER_MISMATCH", "호스트 소유권이 변경되었습니다. 현재 연결에서 다시 종료해 주세요.");
+        if (path === "/api/host/update") {
+          if (!options.updatePolicy) throw new HttpError(409, "update_unavailable", "이 호스트는 업데이트 준비를 지원하지 않습니다.");
+          return sendJson(res, 200, body.action === "cancel" ? options.updatePolicy.cancel() : options.updatePolicy.prepare());
+        }
+        const mode = body.mode === "drain" ? "drain" : body.mode === undefined || body.mode === "interrupt" ? "interrupt" : null;
+        if (!mode) throw new HttpError(400, "stop_mode", "drain 또는 interrupt 종료 방식을 선택하세요.");
+        if (mode === "drain" && options.updatePolicy?.prepare().blockers.length) throw new HttpError(409, "host_active_work", "진행 중인 작업이 남아 있습니다. 완료를 기다리거나 명시적으로 작업까지 종료하세요.");
         sendJson(res, 202, { instanceId: own.instanceId, state: "stopping", requestedAt: Date.now() });
-        setImmediate(options.host.stop); return;
+        setImmediate(() => { void (options.updatePolicy?.stop(mode) ?? Promise.resolve()).then(() => options.host!.stop()).catch(error => { console.error("Host shutdown could not finish:", error instanceof Error ? error.message : String(error)); }); }); return;
       }
       if (options.dropbox && path.startsWith("/api/dropbox")) {
         if (path === "/api/dropbox" && method === "GET") return sendJson(res, 200, options.dropbox.state());
@@ -616,6 +641,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         return sendJson(res, 200, await manager.services.stop(parts[1], await readJson(req, 2048) as unknown as import("@workbench/contracts").WorkspaceServiceOwner));
       }
       if (parts[0] === "services" && parts[1] && parts.length === 3) {
+        if (parts[2] === "preview" && method === "POST" && options.servicePreviews) return sendJson(res, 201, options.servicePreviews.create(parts[1], "local", "local"));
         if (parts[2] === "logs" && method === "GET") return sendJson(res, 200, manager.services.search(parts[1], { query: url.searchParams.get("q") ?? "", caseSensitive: url.searchParams.get("caseSensitive") === "true" }));
         if (parts[2] === "proxy") {
           const controller = new AbortController();
@@ -632,6 +658,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           } finally { res.removeListener("close", abort); }
         }
       }
+      if (parts[0] === "services" && parts[1] && parts[2] === "preview" && parts[3] && parts.length === 4 && method === "DELETE" && options.servicePreviews) return sendJson(res, 200, options.servicePreviews.revoke(parts[1], parts[3], "local"));
       if (parts[0] === "services" && parts[1] && parts.length === 2 && method === "DELETE") return sendJson(res, 200, manager.services.forget(parts[1]));
       if (parts[0] === "terminals" && parts[1]) {
         if (parts.length === 3 && parts[2] === "replay" && method === "GET") return sendJson(res, 200, await manager.terminals.replay(parts[1]));
@@ -696,6 +723,16 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         workId: url.searchParams.get("workId") || undefined, workspaceId: url.searchParams.get("workspaceId") || undefined,
         parentSessionId: url.searchParams.get("parentSessionId") || undefined, activeOnly: url.searchParams.get("active") === "1",
       }));
+      if (path === "/api/tasks/native-refresh" && method === "POST") {
+        const body = await readJson(req, 2048);
+        return sendJson(res, 200, await manager.tasks.refreshNative(String(body.sessionId ?? "")));
+      }
+      if (path === "/api/tasks/native-history" && method === "GET") {
+        const sessionId = url.searchParams.get("sessionId"), runId = url.searchParams.get("runId");
+        const task = manager.tasks.list().tasks.find(entry => entry.sessionId === sessionId && entry.runId === runId && entry.executorKind === "native_agent");
+        if (!task) throw new HttpError(404, "native_task_missing", "현재 하위 작업을 다시 불러와 주세요.");
+        return sendJson(res, 200, await manager.tasks.nativeDetail(task));
+      }
       if (path === "/api/agent-profiles" && method === "GET") return sendJson(res, 200, { profiles: manager.profiles.list() });
       if (path === "/api/agent-profiles" && method === "POST") return sendJson(res, 201, manager.profiles.save(await readJson(req, 24_000) as unknown as import("@workbench/contracts").AgentProfileInput));
       if (parts[0] === "agent-profiles" && parts[1] && parts.length === 2) {
@@ -1186,6 +1223,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       }
     }
   });
+  server.on("upgrade", (req, socket, head) => { if (!options.servicePreviews?.handleUpgrade(req, socket, head, "local")) socket.destroy(); });
   server.on("close", () => { pdfNotes.close(); void imageOutputs.close().catch(() => {}); void pdfImages.close().catch(() => {}); });
   return server;
 }

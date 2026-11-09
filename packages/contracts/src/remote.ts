@@ -13,7 +13,7 @@ export type RemoteEventMessage =
   | { op: "event"; event: SequencedEvent }
   | { op: "cursor"; cursor: EventCursor }
   | { op: "resync" };
-export type RemoteAuthentication = { grant: DeviceGrant; hostId: string; cursor: EventCursor };
+export type RemoteAuthentication = { grant: DeviceGrant; hostId: string; cursor: EventCursor; compatibility?: import("./protocol.ts").ProtocolHandshake };
 export type RemotePairingResult = PairingRequestTicket | PairingCredentialResult;
 export const REMOTE_CHUNK_BYTES = 192 * 1024;
 export const REMOTE_BODY_LIMIT = 32 * 1024 * 1024;

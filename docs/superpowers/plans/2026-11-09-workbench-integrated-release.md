@@ -2396,3 +2396,11 @@ Office 형식별 증거는 한글, Word, 슬라이드, 시트, Markdown, PDF, HT
 ### U16–U19/U24 구현 후속 (2026-11-09)
 
 정확한 연구 판: `research:rr-a19bb59ee9cc2a51ca502509a421c7ac:de8443305abef0bb31264f43cf9032da8b79f5b654405db7645114dc0c13e3b4` (R1–R6). AppImage 지속 runtime/native credential/mobile file·IME/push/원본 Hub 연결 코드를 추가했다. 사용자 교정에 따라 단위별 RED/GREEN/ten-lane/반복 type·native·설치본 검사는 실행하지 않았다. 기능 수용 범위는 유지하고 구현 뒤 필요한 통합 확인만 수행한다. 현재 구현과 남은 항목은 `../execution/STATUS.md`에 반영한다.
+
+## 마지막 구현 연결과 통합 빌드 진입
+
+U06 actual provider child control, U11 onboarding, U17–18 QR scan, U12–14 OS-specific cancel/permission, U20 original full HTTP/WebSocket proxy를 기존 authority/UI에 연결했다. Host/web types와 새 proxy 경계 1개가 통과했고 최종 production build도 통과했다. 기존 통과 suite와 독립 review loop는 반복하지 않았다. Native compile 이후 OS 설치본/업데이트/build receipt로 이어가며 실제 실패가 있으면 해당 실패만 고친다.
+
+정확한 연구 판: `research:rr-8b1de8f70ac6198a1f734b3f63b45bcb:046ce54f184df15eb9eeb09a64d3c751434bb5ad388abf6c0623b51526362629` (R1–R8). 별도 public HTTPS preview origin을 쓰는 원격 웹앱 경로를 relay-only tunnel로 표시하지 않는다. 공급자 API가 없는 제어/실계정·실기기 미확인은 문서에 구분한다. 이 기록은 전체 goal 완료 판정이 아니다.
+
+최종 설치 준비 R9–R10: `research:rr-8b1de8f70ac6198a1f734b3f63b45bcb:4754ea8c9049f2bc887f2950b8624c01544bb1555ad1349d94dc1fd1b4e28f77`. Linux native release 생성 완료. U25의 기존 protocol/update 경계와 동일 artifact 승격 연결을 최종 source에 합친다. 반복 unit/live/perf·리뷰 절차는 이후 사용자의 구현 우선·필요한 만큼만 검증하라는 교정에 따라 실행하지 않는다.

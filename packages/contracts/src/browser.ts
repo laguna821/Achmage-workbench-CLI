@@ -1,15 +1,17 @@
 /** A visible page is an owned native webview, never a URL alias for a Lightpanda session. */
-export type BrowserCapability = "observe" | "navigate" | "dom_actions" | "persistent_profile" | "downloads" | "download_cancel" | "permission_prompt" | "permission_decision";
+export type BrowserCapability = "observe" | "navigate" | "dom_actions" | "persistent_profile" | "downloads" | "download_cancel" | "permission_prompt" | "permission_decision" | "permission_persistence";
 export type BrowserDownload = {
   id: string; url: string; name: string; path: string | null; directory: string | null; requestedAt: number; finishedAt: number | null;
-  status: "blocked" | "downloading" | "checking" | "completed" | "failed" | "cancelled" | "unconfirmed"; size: number | null; sha256: string | null; error: string | null;
+  status: "blocked" | "downloading" | "cancelling" | "checking" | "completed" | "failed" | "cancelled" | "unconfirmed"; size: number | null; sha256: string | null; error: string | null;
 };
-/** PermissionKind does not expose the requesting frame origin; never infer an origin grant. */
+/** A persistent decision requires an actual native requesting-frame origin; GTK's null stays one-shot. */
 export type BrowserPermissionRequest = {
   id: string; kind: string; pageUrl: string; navigationRevision: number; requestedAt: number; expiresAt: number;
   status: "pending" | "native-prompt" | "allowed" | "denied" | "expired" | "unsupported";
   requestingOrigin: string | null;
+  topLevelOrigin?: string | null; remembered?: boolean;
 };
+export type BrowserSitePermission = { id: string; profileId: string; topLevelOrigin: string; requestingOrigin: string; kind: string; allow: boolean; updatedAt: number };
 export type BrowserOutput = {
   id: string; pageId: string; profileId: string; workId: string; workspaceId: string; sourceUrl: string;
   sessionId: string | null; parentSessionId: string | null; createdAt: number; downloadId: string | null;
@@ -25,6 +27,7 @@ export type NativeBrowserPage = BrowserTarget & {
   popups: { id: string; url: string }[]; error: string | null; interactionAt?: number;
   downloadDirectory?: string | null; downloads?: BrowserDownload[];
   permissions?: BrowserPermissionRequest[]; permissionSupport?: string[];
+  sitePermissions?: BrowserSitePermission[];
 };
 export type BrowserPage = {
   pageId: string; profileId: string; workId: string; workspaceId: string; driverId: string;

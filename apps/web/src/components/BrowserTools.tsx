@@ -5,7 +5,7 @@ import type { SharedBrowser } from "../browser-state.ts";
 import { AttachmentStrip, MAX_FILE, sizeText } from "./Attachments.tsx";
 import { FeatureDialog, featureError, featureTime } from "./FeatureDialog.tsx";
 
-const downloadLabel: Record<BrowserDownload["status"], string> = { blocked: "저장 전 중단", downloading: "다운로드 중", checking: "파일 확인 중", completed: "저장 완료", failed: "다운로드 실패", cancelled: "취소됨", unconfirmed: "결과 확인 필요" };
+const downloadLabel: Record<BrowserDownload["status"], string> = { blocked: "저장 전 중단", downloading: "다운로드 중", cancelling: "취소 요청 중", checking: "파일 확인 중", completed: "저장 완료", failed: "다운로드 실패", cancelled: "취소됨", unconfirmed: "결과 확인 필요" };
 const permissionLabel: Record<BrowserPermissionRequest["status"], string> = { pending: "결정 대기", "native-prompt": "브라우저 확인창에서 결정", allowed: "이번 요청 허용", denied: "거절됨", expired: "만료됨", unsupported: "지원하지 않아 거절됨" };
 const kinds: Record<string, string> = { microphone: "마이크", camera: "카메라", "camera-microphone": "카메라와 마이크", "display-capture": "화면 공유", geolocation: "위치", notifications: "알림", "pointer-lock": "마우스 잠금", "clipboard-read": "클립보드 읽기", midi: "MIDI", sensors: "센서", "local-fonts": "설치된 글꼴", "window-management": "창 관리", "automatic-downloads": "여러 파일 다운로드", "file-system-access": "파일 접근", autoplay: "자동 재생", other: "기타 권한" };
 
@@ -14,6 +14,7 @@ export function BrowserTools({ browser, api, page, ready, onOpenArtifact, onClos
 }) {
   const [outputs, setOutputs] = useState<BrowserOutput[]>([]), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [remember, setRemember] = useState<Record<string, boolean>>({});
   const pending = useRef<BrowserOutputRequest | null>(null), acting = useRef(false);
   const endpoint = `/api/browser/pages/${encodeURIComponent(page.pageId)}/outputs`;
   const native = page.native, downloads = native?.downloads ?? [], permissions = native?.permissions ?? [];
@@ -42,8 +43,9 @@ export function BrowserTools({ browser, api, page, ready, onOpenArtifact, onClos
     setNotice(output.artifact ? "작업공간에 문서와 원본 첨부를 보관했습니다." : "작업공간에 파일과 원본 첨부를 보관했습니다. 이 형식은 문서 편집 대상이 아닙니다.");
   };
   const decide = async (request: BrowserPermissionRequest, allow: boolean) => {
-    await browser.decidePermission(page.pageId, request.id, allow);
-    setNotice(allow ? "이 요청을 허용했습니다. 영구 사이트 권한을 저장하지 않습니다." : "이 요청을 거절했습니다.");
+    const saved = Boolean(remember[request.id] && request.requestingOrigin && request.topLevelOrigin && native?.capabilities.includes("permission_persistence"));
+    await browser.decidePermission(page.pageId, request.id, allow, saved);
+    setNotice(saved ? `이 프로필에서 같은 상위 사이트와 요청 출처의 ${allow ? "허용" : "거절"} 결정을 저장했습니다.` : allow ? "이번 요청을 허용했습니다." : "이번 요청을 거절했습니다.");
   };
   return <FeatureDialog title="이 웹 탭의 다운로드·권한" description="현재 페이지와 프로필에 속한 요청만 표시합니다. 설정을 바꾸거나 권한을 결정하면 직접 조작으로 전환합니다." onClose={onClose}>
     <div className="browser-tools">
@@ -65,12 +67,20 @@ export function BrowserTools({ browser, api, page, ready, onOpenArtifact, onClos
       </section>
       <section aria-labelledby="browser-permission-title">
         <h3 id="browser-permission-title">사이트 권한 요청</h3>
-        <p className="muted">지원 항목: {(native?.permissionSupport ?? []).map(kind => kinds[kind] ?? kind).join(", ") || "확인할 수 없음"}. 요청의 하위 프레임 주소는 현재 API가 제공하지 않아 상위 페이지 주소를 표시합니다. 사이트 전체에 대한 영구 허용·일괄 취소는 제공하지 않습니다.</p>
-        {!native?.capabilities.includes("permission_decision") ? <p className="muted">권한은 브라우저·운영체제 확인창에서 결정합니다. 이 목록은 요청 기록이며 허용 결과를 뜻하지 않습니다.</p> : <p className="muted">대기 요청은 60초 또는 페이지 이동 후 만료됩니다. 허용은 이 요청에만 적용됩니다.</p>}
+        <p className="muted">지원 항목: {(native?.permissionSupport ?? []).map(kind => kinds[kind] ?? kind).join(", ") || "확인할 수 없음"}. 운영체제의 별도 카메라·마이크 권한도 필요할 수 있습니다.</p>
+        {!native?.capabilities.includes("permission_decision") ? <p className="muted">이 환경에서는 앱의 요청별 권한 결정을 지원하지 않습니다. 허용되지 않은 요청은 차단합니다.</p> : <p className="muted">대기 요청은 60초 또는 페이지 이동 후 만료됩니다. 저장을 선택하지 않으면 이번 요청에만 적용합니다.</p>}
+        {!native?.capabilities.includes("permission_persistence") ? <p className="muted">현재 API는 실제 요청 프레임의 출처를 제공하지 않아 사이트 권한을 저장하지 않습니다. 표시된 페이지 주소는 상위 페이지이며 요청 출처를 뜻하지 않습니다.</p> : <p className="muted">저장한 결정은 이 프로필의 상위 사이트·요청한 출처·권한 종류가 모두 같은 요청에만 적용합니다.</p>}
         {!permissions.length ? <p className="muted">이 탭에서 받은 권한 요청이 없습니다.</p> : <ol className="browser-tools-list">{permissions.slice().reverse().map(request => <li key={request.id}>
-          <div><strong>{kinds[request.kind] ?? request.kind}</strong><span className="browser-record-status">{permissionLabel[request.status]}</span></div><p className="browser-file-path">{request.pageUrl}</p><small>{featureTime(request.requestedAt)}</small>
-          {request.status === "pending" && native?.capabilities.includes("permission_decision") ? <div className="browser-tools-actions"><button type="button" className="button small" disabled={!ready || busy || request.expiresAt <= Date.now()} onClick={() => void run(() => decide(request, true))}>이번 요청 허용</button><button type="button" className="ghost-button small" disabled={!ready || busy || request.expiresAt <= Date.now()} onClick={() => void run(() => decide(request, false))}>거절</button></div> : null}
+          <div><strong>{kinds[request.kind] ?? request.kind}</strong><span className="browser-record-status">{request.remembered ? `저장된 결정 · ${request.status === "allowed" ? "허용" : "거절"}` : permissionLabel[request.status]}</span></div><p className="browser-file-path">상위 페이지 {request.topLevelOrigin ?? request.pageUrl}</p><p className="browser-file-path">요청 출처 {request.requestingOrigin ?? "API가 제공하지 않음"}</p><small>{featureTime(request.requestedAt)}</small>
+          {request.status === "pending" && native?.capabilities.includes("permission_decision") ? <>
+            {native.capabilities.includes("permission_persistence") && request.requestingOrigin && request.topLevelOrigin ? <label className="browser-permission-remember"><input type="checkbox" checked={!!remember[request.id]} disabled={busy} onChange={event => setRemember(current => ({ ...current, [request.id]: event.target.checked }))} />이 프로필에서 같은 사이트·출처의 결정을 기억</label> : null}
+            <div className="browser-tools-actions"><button type="button" className="button small" disabled={!ready || busy || request.expiresAt <= Date.now()} onClick={() => void run(() => decide(request, true))}>{remember[request.id] ? "허용하고 저장" : "이번 요청 허용"}</button><button type="button" className="ghost-button small" disabled={!ready || busy || request.expiresAt <= Date.now()} onClick={() => void run(() => decide(request, false))}>{remember[request.id] ? "거절하고 저장" : "이번 요청 거절"}</button></div>
+          </> : null}
         </li>)}</ol>}
+      </section>
+      <section aria-labelledby="browser-saved-permission-title">
+        <h3 id="browser-saved-permission-title">이 프로필에 저장한 사이트 권한</h3><p className="muted">삭제하면 같은 프로필의 해당 상위 사이트 탭을 새로고칩니다. 작성 중인 사이트 입력은 먼저 저장해 주세요. 이후 요청은 다시 결정합니다.</p>
+        {!native?.sitePermissions?.length ? <p className="muted">저장한 권한이 없습니다.</p> : <ol className="browser-tools-list">{native.sitePermissions.map(rule => <li key={rule.id}><div><strong>{kinds[rule.kind] ?? rule.kind}</strong><span>{rule.allow ? "허용" : "거절"}</span></div><p className="browser-file-path">상위 사이트 {rule.topLevelOrigin}</p><p className="browser-file-path">요청 출처 {rule.requestingOrigin}</p><small>{featureTime(rule.updatedAt)}</small><button className="button small" type="button" disabled={!ready || busy} onClick={() => void run(async () => { await browser.forgetSitePermission(page.pageId, rule.id); setNotice("저장된 결정을 삭제하고 같은 프로필의 해당 사이트 탭을 새로고쳤습니다."); })}>저장한 권한 삭제·사이트 탭 새로고침</button></li>)}</ol>}
       </section>
       <section aria-labelledby="browser-output-title">
         <h3 id="browser-output-title">작업공간에 보관한 웹 자료</h3>

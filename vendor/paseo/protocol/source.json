@@ -827,7 +827,7 @@
     },
     {
       "path": "tsconfig.workbench.json",
-      "sha256": "f847a216eec0d250369e5f29ac38fcb81867140f7fe04e635b0dfb63e447a9a7",
+      "sha256": "cdbb4a3c9cab655921dfd890ea1685d7b6949f97b0703061b052b5cd8ee09c43",
       "description": "Workbench-added standalone emit configuration. The original upstream tsconfig remains unchanged. Selects transport entry points and their dependency closure, uses ES2023/NodeNext with declaration emission, and does not activate upstream lifecycle scripts or compile the full SDK facade."
     }
   ],
@@ -848,7 +848,7 @@
     "status": "present-selected-standalone-emit",
     "configuration": {
       "path": "tsconfig.workbench.json",
-      "sha256": "2fd6a1a0ec448ae04febf689cfeeaa3a24569caec3ec57a20ef986810c14116e",
+      "sha256": "cdbb4a3c9cab655921dfd890ea1685d7b6949f97b0703061b052b5cd8ee09c43",
       "content": {
         "compilerOptions": {
           "target": "ES2023",
@@ -877,7 +877,10 @@
           "src/websocket-message-limit.ts",
           "src/branch-slug.ts",
           "src/agent-labels.ts",
-          "src/plugin-requirements.ts"
+          "src/plugin-requirements.ts",
+          "src/terminal-input-mode.ts",
+          "src/terminal-key-input.ts",
+          "src/chunked-transport.ts"
         ]
       }
     },
@@ -886,7 +889,7 @@
       "installedVersion": "5.9.3",
       "installedPackageJsonSha256": "822ef7ca6452205657b6288b066481ecf508bfbf43455d715cf7d3ec457561e6"
     },
-    "fileCount": 62,
+    "fileCount": 68,
     "files": [
       {
         "path": "dist/addresses.d.ts",
@@ -1007,6 +1010,16 @@
         "path": "dist/chat/types.js",
         "sha256": "eb109f15fd15bdbc52aa654a68e2ba831d92664b2b585d7a99f5b6f58b24d8b3",
         "bytes": 763
+      },
+      {
+        "path": "dist/chunked-transport.d.ts",
+        "sha256": "dda5d04ee88e897ae6aea492283ff148268a7a88d261d1bdca6a85784a668c28",
+        "bytes": 1336
+      },
+      {
+        "path": "dist/chunked-transport.js",
+        "sha256": "41c282c9e8a49ca6f01309e26fd79f2ee352bd9d249e5232da5e569d1d00ece0",
+        "bytes": 7759
       },
       {
         "path": "dist/client-capabilities.d.ts",
@@ -1169,6 +1182,26 @@
         "bytes": 1076
       },
       {
+        "path": "dist/terminal-input-mode.d.ts",
+        "sha256": "c413018ea2553d40c50ff8fbfd24b3a0267e175d2527ed30bb9f5f9d953d2d3b",
+        "bytes": 1103
+      },
+      {
+        "path": "dist/terminal-input-mode.js",
+        "sha256": "ce3679d71d1c1af8e7cde309607816c817d024ce628f24c194aaec641f8d796c",
+        "bytes": 6263
+      },
+      {
+        "path": "dist/terminal-key-input.d.ts",
+        "sha256": "c889dd722207d8c9f849742d8b6eda87b4646132127663119a3c08c13d7536b4",
+        "bytes": 424
+      },
+      {
+        "path": "dist/terminal-key-input.js",
+        "sha256": "3dcb4aec80114eb42cc4f2c56b84430ebc1efc8c30ce018be8b76b2bb7f8c332",
+        "bytes": 6363
+      },
+      {
         "path": "dist/terminal-profile.d.ts",
         "sha256": "fd6d7821c90dd36da476a59673718fca02360458e391ff053a7cdffb78390aa5",
         "bytes": 329
@@ -1199,10 +1232,10 @@
         "bytes": 374
       }
     ],
-    "treeSha256": "2c7819397148404f2922ed348054c919f0458ad70b823323ad54cfabef5d9ecb",
+    "treeSha256": "d0f3460c6620d9c740d19fe66fbb86df6c933277263021dfdd29702301c0efef",
     "treeHashEncoding": "SHA-256 of UTF-8 sorted package-relative path + NUL + file SHA-256 hex + LF.",
     "scope": "Selected original transport/protocol and plugin label/requirement entry points and their imported dependency closure. Full DaemonClient/AOT facade remains unconnected.",
-    "provenanceUpdate": "U23 selected emit adds branch-slug, agent-labels and plugin-requirements; no original protocol source changes."
+    "provenanceUpdate": "0.4.0 final integration: selected emit includes original Hub chunked transport and Claude provider child task source; emit and production bundle passed."
   },
   "distribution": {
     "provenanceCopy": "third_party/paseo/protocol-provenance.json",

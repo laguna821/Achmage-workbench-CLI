@@ -7,6 +7,7 @@ import type {
   Session,
   TranscriptItem,
   Work,
+  NativeTaskIdentity, NativeTaskSnapshot, NativeTaskControl,
 } from "@workbench/contracts";
 
 /** An attachment as the engine gets it: the stored file and what it is. */
@@ -27,6 +28,8 @@ export type EngineImage = {
 
 /** Callbacks an adapter uses to report what its engine is doing. */
 export type AdapterSink = {
+  /** Separate child track; never inserts child replies into its parent's response. */
+  nativeTasks?(sessionId: string, tasks: NativeTaskSnapshot[], source?: "live" | "refresh"): void;
   upsertItem(sessionId: string, item: TranscriptItem): void;
   delta(sessionId: string, itemId: string, text: string): void;
   updateSession(sessionId: string, patch: Partial<Session>): void;
@@ -107,6 +110,10 @@ export interface ProviderAdapter {
   listNative?(query: string): Promise<NativeConversation[]>;
   /** One such conversation: where it ran, its title, and its record as transcript items. */
   nativeHistory?(nativeSessionId: string): Promise<NativeConversation & { items: TranscriptItem[] }>;
+  nativeTasks?(session: Session): NativeTaskSnapshot[];
+  refreshNativeTasks?(session: Session, work: Work): Promise<NativeTaskSnapshot[]>;
+  controlNativeTask?(session: Session & { access: AccessMode }, work: Work, target: NativeTaskIdentity, command: NativeTaskControl): Promise<void>;
+  nativeTaskHistory?(session: Session, work: Work, target: NativeTaskIdentity): Promise<{ items: TranscriptItem[]; detail: string | null }>;
   /** What a request can start with ("/"): the engine's commands and the skills it finds for the work. */
   commands?(session: Session & { access: AccessMode }, work: Work): Promise<EngineCommand[]>;
   answerApproval(session: Session, itemId: string, decision: ApprovalDecision): Promise<boolean>;
