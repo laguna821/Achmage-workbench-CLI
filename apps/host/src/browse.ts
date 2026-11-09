@@ -291,7 +291,7 @@ export class AgentBrowser {
     if (engine === this.engine) return this.status();
     if (this.panda.busy || (this.window.kind === "agent" && this.window.busy)) throw new HttpError(409, "browser_busy", "진행 중인 탐색이 끝나거나 중지된 뒤 전환하세요.");
     if (this.window.kind === "login") throw new HttpError(409, "browser_login", "열린 로그인 창을 닫은 뒤 전환하세요.");
-    for (const sessionId of this.known.keys()) this.expire(sessionId);
+    for (const sessionId of this.known.keys()) if (!this.host?.lookup(sessionId)?.session.pageAgent) this.expire(sessionId);
     await this.closeAgent(); await this.panda.closeAll();
     this.engine = engine;
     writeFileSync(join(this.paths.root, "engine.json"), JSON.stringify({ engine }), { mode: 0o600 });

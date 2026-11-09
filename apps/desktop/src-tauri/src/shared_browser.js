@@ -1,6 +1,8 @@
 (() => {
   if (window.top !== window || Object.prototype.hasOwnProperty.call(window, '__ACHMAGE_PAGE__')) return;
-  const nonce = crypto.randomUUID(), refs = new Map(), names = new WeakMap();
+  // getRandomValues also works on HTTP intranet pages where randomUUID requires a secure context.
+  const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
+  const refs = new Map(), names = new WeakMap();
   let nextRef = 1, control = null, humanBeforeBind = false, interactionAt = 0;
   const visible = el => el.isConnected && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
   const bind = wanted => {

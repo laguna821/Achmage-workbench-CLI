@@ -6,7 +6,9 @@ The implementation uses the existing Tauri 2.12.4 runtime with its child-webview
 
 The host records pages, profiles, command identities and outcomes in the existing local SQLite metadata. One main-window bridge reports real native pages and drains jobs independent of tab selection. Jobs are ordered per page and different pages can proceed concurrently. Lost execution results are `outcome_unknown`, retained and observed without replay. Host restart or actual page destruction interrupts the browser target; it never moves that task to Lightpanda or recreates a page under the old identity.
 
-Each web tab can have a `Session.pageAgent` child with its own provider run and the selected main conversation as parent. Existing provider/browser approval cards still govern the supported browser commands. The child uses the normal `playwright-cli` spool, routed to this exact native page even when Lightpanda is absent. It neither activates nor blocks the main session. Common task projection, attention targets and the main conversation's next-request context include page children.
+Each web tab can have a `Session.pageAgent` child with its own provider run and the selected main conversation as parent. Existing provider/browser approval cards still govern the supported browser commands. The child uses the normal `playwright-cli` spool, routed to this exact native page even when Lightpanda is absent. It neither activates nor blocks the main session. Common task projection, attention targets and the main conversation's next-request context include page children. Changing the global background browser engine preserves these page-child approval requests.
+
+The new-tab menu and workspace menu open the shared page with address/history/profile controls and an independent AI panel. Explicit handoff waits for native acknowledgement. Switching tabs retains the page; the tab X or explicit close ends that exact page and its child work. A lost create response is reconciled by identity, not another create request.
 
 Native actions use a document nonce, navigation revision and stable element references. A changed document or disconnected element rejects a stale action. Human control increments a generation. A trusted pointer/key/wheel event inside the page revokes AI control before the event acts; queued AI actions check the fence in the document. UI presence is not this authority. Native interaction timestamps also identify the pane the person actually used.
 
@@ -25,6 +27,7 @@ Untrusted remote pages receive no Workbench command capability. The capability b
 - Exact `shared_browser.js` in an isolated Chromium fixture: distinct DOM nonces, retained target while another page is selected, trusted-human takeover, stale navigation rejection and no reference reuse for a replaced element passed. Script: `scripts/architecture-probes/shared-page-dom.mjs`.
 - Host TypeScript passed after correcting an unused import and unsupported parameter-property syntax.
 - Linux `cargo check --locked --offline` passed; an incremental compile covered the later interaction timestamp/unknown-result changes. This creates no installer or release bundle.
-- Browser UI checks and web TypeScript are recorded in the matching execution report when complete.
+- Browser UI: five initial focused cases and one additional explicit-close case passed; web TypeScript passed. Source `1c5e688`, report `.superpowers/sdd/2026-11-09-workbench-integrated-release/task-U13-U14-ui-report.md`.
+- A single exact nonce-initialization probe passed with `crypto.randomUUID` unavailable. The DOM adapter uses `getRandomValues` so HTTP intranet pages can initialize as well.
 
 Research basis: `research:rr-8ee5519df2391bc87774abc748cec9f6:b536f3d644acbc942964beda941d1582d39b893babbd4d40700ee1b0e5fff228`. Execution scope and original requirement labels remain in the integrated plan and coverage map. Full 0.4.0 remains incomplete.
