@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "applicationVersion": "0.4.0",
+  "channel": "trial",
+  "label": "0.4.0 통합 개발 시험판",
+  "implemented": [
+    "S0 대화 원문 우선 검색"
+  ],
+  "inProgress": [
+    "U02–U04 공통 UI·프로젝트·탭·대화 개편"
+  ],
+  "remaining": [
+    "U05–U24 통합 기능 및 U25 최종 설치·업데이트"
+  ],
+  "limitations": [
+    "시험판이며 전체 0.4.0 기능 완료판이 아닙니다.",
+    "설치 smoke의 AI 엔진은 시험용입니다. 실제 계정과 모바일 기기 검증은 별도입니다."
+  ]
+}
