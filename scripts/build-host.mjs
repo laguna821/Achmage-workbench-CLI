@@ -10,7 +10,7 @@ const pin = readFileSync(new URL('../vendor/ieumoffice.PINNED', import.meta.url)
 if (execFileSync('git', ['-C', `${root}vendor/ieumoffice`, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() !== pin) throw new Error('Ieum source differs from the reviewed pin');
 await build({
   absWorkingDir: root,
-  entryPoints: { host: 'apps/host/src/main.ts', 'hwp-cli': 'apps/host/src/hwp-cli.ts', 'office-reveal': 'apps/host/src/office-reveal.mjs', 'ieum-setup': 'apps/host/src/ieum-setup.ts', 'cleanup-legacy': 'apps/host/src/cleanup-legacy.ts', 'pdf-structure-job': 'apps/host/src/pdf-structure-job.mjs' },
+  entryPoints: { host: 'apps/host/src/main.ts', 'hwp-cli': 'apps/host/src/hwp-cli.ts', 'office-reveal': 'apps/host/src/office-reveal.mjs', 'ieum-setup': 'apps/host/src/ieum-setup.ts', 'cleanup-legacy': 'apps/host/src/cleanup-legacy.ts', 'pdf-structure-job': 'apps/host/src/pdf-structure-job.mjs', 'workbench-client': 'packages/client/src/cli.ts', 'workbench-mcp': 'packages/client/src/mcp.ts' },
   outdir: process.env.WORKBENCH_HOST_BUILD_DIR ?? 'apps/host/dist', outExtension: { '.js': '.mjs' },
   bundle: true, platform: 'node', format: 'esm', target: 'node24', logLevel: 'warning',
   define: {

@@ -2,6 +2,7 @@ import type { OfficeOutputFormat } from "../../../packages/contracts/src/office-
 import type { KnowledgeLibrary } from "../../../packages/contracts/src/office-knowledge.ts";
 import type { NewOfficeDocument } from "@workbench/contracts";
 import type { CommandReceipt, TaskCommand, TaskSnapshot } from "@workbench/contracts";
+import type { AgentProfile, AgentProfileInput } from "@workbench/contracts";
 import type {
   GitHubBinding, GitHubSelection, GitHubView, GitHubCheckDetails, GitHubLog,
   GitHubActionContext, GitHubActionPreview, GitHubActionInput, GitHubActionJob, GitHubDraft, GitHubTemplate, GitHubRecoveryPreview,
@@ -150,6 +151,9 @@ export class Api {
 
   snapshot = () => this.request<Snapshot>("GET", "/api/snapshot");
   tasks = (workId?: string) => this.request<TaskSnapshot>("GET", `/api/tasks${workId ? `?workId=${encodeURIComponent(workId)}` : ""}`);
+  agentProfiles = () => this.request<{ profiles: AgentProfile[] }>("GET", "/api/agent-profiles");
+  saveAgentProfile = (input: AgentProfileInput, id?: string, expectedRevision?: number) => this.request<AgentProfile>(id ? "PUT" : "POST", `/api/agent-profiles${id ? `/${encodeURIComponent(id)}` : ""}`, { ...input, expectedRevision });
+  removeAgentProfile = (id: string, expectedRevision: number) => this.request<{ ok: true }>("DELETE", `/api/agent-profiles/${encodeURIComponent(id)}`, { expectedRevision });
   taskCommand = (command: TaskCommand) => this.request<CommandReceipt>("POST", "/api/task-commands", command);
   taskReceipt = (commandId: string) => this.request<CommandReceipt>("GET", `/api/task-commands/${encodeURIComponent(commandId)}`);
   async knowledgeStream(owner: string, body: unknown, onChunk: (value: unknown) => void, signal: AbortSignal) {

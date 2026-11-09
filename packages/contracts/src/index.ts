@@ -93,6 +93,8 @@ export type Session = {
   purposeSource: TitleSource;
   /** Null means the engine default. Applies from the next turn. */
   model: string | null;
+  /** Optional reusable role. Session model/effort/access choices override it. */
+  profileId?: string | null;
   /** Reasoning effort id as the engine names it (e.g. "medium", "xhigh"); null = engine default. */
   effort: string | null;
   /** Model the engine reported for the latest turn (what actually answered). */
@@ -161,7 +163,7 @@ export type ContextUsage = { used: number; window: number | null; compactAt: num
  * A request written while the engine was working, sent as the next turn when this one ends.
  * `held`: kept after a stop, a failure, a restart or a steer the stop dropped — sent only by hand.
  */
-export type QueuedMessage = { id: string; text: string; refs: DocRef[]; create: CreateTarget | null; at: number; held?: boolean; attachments?: Attachment[]; plan?: boolean; notes?: string[] };
+export type QueuedMessage = { id: string; text: string; refs: DocRef[]; create: CreateTarget | null; at: number; held?: boolean; attachments?: Attachment[]; plan?: boolean; notes?: string[]; runSettings?: import("./agent-profiles.ts").RunSettings };
 
 /**
  * A file pasted or dropped into the input (a picture, a PDF, any file), kept by the gateway by its
@@ -334,6 +336,7 @@ export type TranscriptItem = (
       kind: "user";
       id: string;
       text: string;
+      runSettings?: import("./agent-profiles.ts").RunSettings;
       at: number;
       /** Sent with "계획 먼저": the engine plans and waits for the go-ahead. */
       plan?: boolean;
@@ -587,6 +590,7 @@ export type CreateWorkRequest = {
 
 export type CreateSessionRequest = {
   provider: Provider;
+  profileId?: string | null;
   workspaceId?: string;
   purpose?: string;
   model?: string | null;
@@ -599,6 +603,7 @@ export type CreateSessionRequest = {
 
 export type UpdateSessionRequest = {
   purpose?: string;
+  profileId?: string | null;
   model?: string | null;
   effort?: string | null;
   pinned?: boolean;
@@ -903,3 +908,4 @@ export * from "./github.ts";
 export * from "./github-actions.ts";
 export * from "./github-discussion.ts";
 export * from "./artifacts.ts";
+export * from "./agent-profiles.ts";

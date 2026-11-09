@@ -88,6 +88,8 @@ import { exportFileName, sessionMarkdown } from "./export-md.ts";
 import { Attachments } from "./attachments.ts";
 import { imagesNamed, keepImage, withImages } from "./tool-images.ts";
 import { captureMessageMedia } from "./media-references.ts";
+import { AgentProfiles } from "./agent-profiles.ts";
+import type { RunSettings } from "@workbench/contracts";
 import { ImageGen } from "./imagegen.ts";
 import { SessionLinks } from "./links.ts";
 import { Schedules } from "./schedules.ts";
@@ -166,6 +168,9 @@ const DEFAULT_PURPOSE = /^대화 \d+$/;
  * work's active session as it is (a drawing session working for another conversation).
  */
 export type SendOptions = {
+  profileId?: string | null;
+  /** Host-owned snapshot retained when a queued request is delivered later. */
+  runSettings?: RunSettings;
   attachments?: Attachment[];
   plan?: boolean;
   engineText?: string;
@@ -279,6 +284,7 @@ export class SessionManager {
   private readonly creating = new Map<string, PendingCreate>();
   private readonly sendGate = new SendGate();
   readonly tasks: TaskService;
+  readonly profiles: AgentProfiles;
   readonly creations: CreationJournal;
   readonly userSkills: UserSkills;
   readonly skillLibrary: SkillLibrary;
@@ -478,7 +484,9 @@ export class SessionManager {
       },
       changed: (schedules) => this.bus.publish({ type: "schedules.changed", schedules }),
     });
+    this.profiles = new AgentProfiles(store);
     this.tasks = new TaskService(store, bus, {
+      submit: input => this.send(input.sessionId, input.commandId, input.text, [], null, null, input.mode ?? "auto", { profileId: input.profileId, activate: false }),
       sessions: () => [...this.sessions.values()], items: id => this.loadItems(id),
       canSteer: session => Boolean(this.adapters.get(session.provider)?.steer),
       stop: id => this.interrupt(id), approve: (id, itemId, decision) => this.answerApproval(id, itemId, decision),
@@ -618,6 +626,7 @@ export class SessionManager {
       create: null,
       at: Date.now(),
       held: true,
+      ...(entry.item?.runSettings ? { runSettings: entry.item.runSettings } : {}),
       ...(entry.attachments.length ? { attachments: entry.attachments } : {}),
     }));
     this.saveSession({ ...this.requireSession(sessionId), queued: [...again, ...this.requireSession(sessionId).queued] });
@@ -695,7 +704,7 @@ export class SessionManager {
       const next = session?.queued.find((entry) => !entry.held);
       if (!session || session.status !== "idle" || !next) return;
       this.saveSession({ ...session, queued: session.queued.filter((entry) => entry !== next) });
-      void this.send(sessionId, next.id, next.text, next.refs, null, next.create, "auto", { attachments: next.attachments ?? [], plan: next.plan === true, notes: next.notes ?? [] }).catch((error: unknown) => {
+      void this.send(sessionId, next.id, next.text, next.refs, null, next.create, "auto", { attachments: next.attachments ?? [], plan: next.plan === true, notes: next.notes ?? [], runSettings: next.runSettings }).catch((error: unknown) => {
         this.sink.upsertItem(sessionId, {
           kind: "notice",
           id: `queue-failed:${next.id}`,
@@ -732,7 +741,7 @@ export class SessionManager {
     const entry = session.queued.find((item) => item.id === queuedId);
     if (!entry) throw new HttpError(404, "queued_not_found", "보낼 예정인 요청이 없습니다.");
     this.saveSession({ ...session, queued: session.queued.filter((item) => item.id !== queuedId) });
-    return this.send(sessionId, entry.id, entry.text, entry.refs, null, entry.create, entry.plan ? "queue" : "steer", { attachments: entry.attachments ?? [], plan: entry.plan === true, notes: entry.notes ?? [] });
+    return this.send(sessionId, entry.id, entry.text, entry.refs, null, entry.create, entry.plan ? "queue" : "steer", { attachments: entry.attachments ?? [], plan: entry.plan === true, notes: entry.notes ?? [], runSettings: entry.runSettings });
   }
 
   snapshot(): Snapshot {
@@ -1127,6 +1136,7 @@ export class SessionManager {
       throw new HttpError(400, "invalid_provider", "지원하지 않는 엔진입니다.");
     }
     const now = Date.now();
+    if (request.profileId) this.profiles.get(request.profileId, request.provider);
     const count = [...this.sessions.values()].filter((session) => session.workId === workId).length;
     const session: Session = {
       id: randomUUID(),
@@ -1139,6 +1149,7 @@ export class SessionManager {
       purpose: request.purpose?.trim() || `대화 ${count + 1}`,
       purposeSource: request.purpose?.trim() ? "user" : "auto",
       model: request.model ?? null,
+      ...(request.profileId ? { profileId: request.profileId } : {}),
       effort: request.effort ?? null,
       engineModel: null,
       engineEffort: null,
@@ -1299,6 +1310,10 @@ export class SessionManager {
       next.purposeSource = trimmed ? "user" : "auto";
     }
     if (patch.model !== undefined) next.model = patch.model || null;
+    if (patch.profileId !== undefined) {
+      if (patch.profileId) this.profiles.get(patch.profileId, session.provider);
+      next.profileId = patch.profileId || null;
+    }
     if (patch.effort !== undefined) next.effort = patch.effort || null;
     if (patch.access !== undefined) {
       if (patch.access !== null && !isAccessMode(patch.access)) throw new HttpError(400, "invalid_access", "알 수 없는 권한입니다.");
@@ -1445,6 +1460,20 @@ export class SessionManager {
     return this.sendGate.run(sessionId, requestId, identity, (release) => this.sendPrepared(sessionId, requestId, text, refs, from, create, mode, options, release));
   }
 
+  private sameRunSettings(sessionId: string, next: RunSettings): boolean {
+    const active = this.loadItems(sessionId).findLast(item => item.kind === "user");
+    const previous = active?.kind === "user" ? active.runSettings : null;
+    if (!previous) return !next.profileId;
+    return previous.provider === next.provider && previous.model === next.model && previous.effort === next.effort
+      && previous.access === next.access && previous.instructions === next.instructions;
+  }
+
+  removeAgentProfile(id: string, expectedRevision: number) {
+    const result = this.profiles.remove(id, expectedRevision);
+    for (const session of this.sessions.values()) if (session.profileId === id) this.saveSession({ ...session, profileId: null });
+    return result;
+  }
+
   private async sendPrepared(
     sessionId: string, requestId: string, text: string, refs: DocRef[],
     from: { sessionId: string; label: string } | null, create: CreateTarget | null,
@@ -1473,6 +1502,7 @@ export class SessionManager {
       if (requestFingerprint(queued.text, queued.refs, queued.create, queued.attachments ?? [], queued.notes ?? []) !== fingerprint) throw new HttpError(409, "request_id_conflict", "같은 requestId로 다른 대기 요청을 보냈습니다.");
       return { duplicate: true, delivery: "queued" };
     }
+    const settings = options.runSettings ?? this.profiles.resolve(session, this.accessOf(session), options.profileId === undefined ? session.profileId : options.profileId);
     // Anything else sent to a linked session comes from the user: it pauses the link.
     if (!relay) this.links.userInput(sessionId);
     const work = this.requireWork(session.workId);
@@ -1489,6 +1519,7 @@ export class SessionManager {
       // A request to plan first is a turn of its own: it waits for the running one.
       const steerable =
         !this.office.busy(sessionId) &&
+        this.sameRunSettings(sessionId, settings) &&
         mode !== "queue" &&
         !plan &&
         Boolean(adapter.steer) &&
@@ -1510,6 +1541,7 @@ export class SessionManager {
             kind: "user",
             id: `user:${requestId}`,
             text: trimmed,
+            runSettings: settings,
             at: Date.now(),
             steered: true,
             ...(refs.length ? { refs: refs.map((ref) => this.documents.summary(ref)) } : {}),
@@ -1527,6 +1559,7 @@ export class SessionManager {
         const waiting: QueuedMessage = {
           id: requestId,
           text: trimmed,
+          runSettings: settings,
           refs,
           create,
           at: Date.now(),
@@ -1564,11 +1597,13 @@ export class SessionManager {
     // sessions' revisions, the note), before the request; relays and drawings carry their own.
     const told = !relay && !options.engineText;
     const change = told ? (this.changeHook?.(session, work, options.omitChanges ?? []) ?? null) : null;
-    const engineText = officeContext.text + (change ? `${change}\n\n${baseText}` : baseText);
+    const roleText = settings.instructions ? `이 요청에 선택한 역할: ${settings.profileName}\n${settings.instructions}\n\n` : "";
+    const engineText = roleText + officeContext.text + (change ? `${change}\n\n${baseText}` : baseText);
     this.sink.upsertItem(sessionId, {
       kind: "user",
       id: `user:${requestId}`,
       text: trimmed,
+      runSettings: settings,
       at: Date.now(),
       ...(plan ? { plan: true } : {}),
       ...(refs.length ? { refs: refs.map((ref) => this.documents.summary(ref)) } : {}),
@@ -1591,7 +1626,7 @@ export class SessionManager {
     releasePreparation();
     try {
       const current = this.requireSession(sessionId);
-      await this.adapter(session.provider).send({ ...current, access: this.accessOf(current), plan }, this.engineWork(current, work), engineText, requestId, files);
+      await this.adapter(session.provider).send({ ...current, model: settings.model, effort: settings.effort, access: settings.access, plan }, this.engineWork(current, work), engineText, requestId, files);
       officeContext.accept();
       if (told) this.toldHook?.(current);
     } catch (error) {

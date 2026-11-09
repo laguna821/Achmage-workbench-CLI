@@ -49,7 +49,7 @@ it("creates a reusable role with discovered or direct IDs without changing the c
   fireEvent.change(screen.getByLabelText("기본 권한"), { target: { value: "ask" } });
   fireEvent.change(screen.getByLabelText("역할 지침"), { target: { value: "원문과 대조합니다.\n변경 이유를 씁니다." } });
   expect(dialog.querySelector('option[value="discovered-id"]')).toBeTruthy();
-  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "저장", exact: true })); });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "저장" })); });
   expect(api.saveAgentProfile).toHaveBeenCalledWith({ name: "검토 도우미", provider: "codex", model: "custom/preview-id", effort: "high", access: "ask", instructions: "원문과 대조합니다.\n변경 이유를 씁니다." }, undefined, undefined);
   expect(api.updateSession).not.toHaveBeenCalled();
   expect(onNotice).toHaveBeenCalledWith("‘검토 도우미’ 역할을 저장했습니다.");
@@ -63,7 +63,7 @@ it("edits with the displayed revision, preserves custom IDs, then deletes withou
   fireEvent.click(await screen.findByRole("menuitem", { name: "선택한 역할 편집…" }));
   expect((screen.getByLabelText("기본 모델 ID") as HTMLInputElement).value).toBe("saved-research-id");
   fireEvent.change(screen.getByLabelText("역할 지침"), { target: { value: "수정한 지침" } });
-  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "저장", exact: true })); });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "저장" })); });
   expect(api.saveAgentProfile).toHaveBeenCalledWith(expect.objectContaining({ model: "saved-research-id", access: "ask", instructions: "수정한 지침" }), "research", 3);
   api.agentProfiles.mockResolvedValue({ profiles: [{ ...research, revision: 4, instructions: "수정한 지침" }] });
   fireEvent.click(screen.getByRole("button", { name: "역할: 연구" }));

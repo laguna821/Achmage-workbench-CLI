@@ -566,6 +566,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
             workspaceId: typeof body.workspaceId === "string" ? body.workspaceId : undefined,
             purpose: body.purpose as string | undefined,
             model: (body.model as string | null) ?? null,
+            profileId: typeof body.profileId === "string" ? body.profileId : null,
             effort: (body.effort as string | null) ?? null,
             access: isAccessMode(body.access) ? body.access : null,
             browser: body.browser === true,
@@ -589,6 +590,14 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         workId: url.searchParams.get("workId") || undefined, workspaceId: url.searchParams.get("workspaceId") || undefined,
         parentSessionId: url.searchParams.get("parentSessionId") || undefined, activeOnly: url.searchParams.get("active") === "1",
       }));
+      if (path === "/api/agent-profiles" && method === "GET") return sendJson(res, 200, { profiles: manager.profiles.list() });
+      if (path === "/api/agent-profiles" && method === "POST") return sendJson(res, 201, manager.profiles.save(await readJson(req, 24_000) as unknown as import("@workbench/contracts").AgentProfileInput));
+      if (parts[0] === "agent-profiles" && parts[1] && parts.length === 2) {
+        const id = decodeURIComponent(parts[1]);
+        if (method === "PUT") { const body = await readJson(req, 24_000); return sendJson(res, 200, manager.profiles.save(body as unknown as import("@workbench/contracts").AgentProfileInput, id, Number(body.expectedRevision))); }
+        if (method === "DELETE") { const body = await readJson(req, 1_000); return sendJson(res, 200, manager.removeAgentProfile(id, Number(body.expectedRevision))); }
+      }
+      if (path === "/api/automation/submit" && method === "POST") return sendJson(res, 202, await manager.tasks.submit(await readJson(req, 110_000) as unknown as import("@workbench/contracts").SubmitCommand));
       if (path === "/api/task-commands" && method === "POST") return sendJson(res, 202, await manager.tasks.command(await readJson(req, 16_000) as unknown as import("@workbench/contracts").TaskCommand));
       if (parts[0] === "task-commands" && parts[1] && parts.length === 2 && method === "GET") {
         const receipt = manager.tasks.receipt(decodeURIComponent(parts[1]));
@@ -605,6 +614,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
             200,
             manager.updateSession(sessionId, {
               purpose: typeof body.purpose === "string" ? body.purpose : undefined,
+              profileId: body.profileId === null ? null : typeof body.profileId === "string" ? body.profileId : undefined,
               model: body.model === undefined ? undefined : ((body.model as string | null) ?? null),
               effort: body.effort === undefined ? undefined : ((body.effort as string | null) ?? null),
               pinned: typeof body.pinned === "boolean" ? body.pinned : undefined,
