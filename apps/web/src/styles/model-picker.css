@@ -1,0 +1,7 @@
+.model-inherited { color: var(--control-muted); font-size: var(--fs-micro); }
+.model-custom-form { display: grid; gap: 12px; width: min(300px, calc(100vw - 48px)); padding: 8px; }
+.model-custom-form label { display: grid; gap: 6px; font-size: var(--fs-meta); }
+.model-custom-form input { box-sizing: border-box; width: 100%; min-height: 36px; padding: 7px 9px; border: 1px solid var(--control-line); border-radius: var(--r-sm); background: var(--control-surface); color: var(--control-text); font: inherit; }
+.model-custom-form p { margin: 0; font-size: var(--fs-meta); line-height: 1.5; }
+.model-custom-form > div { display: flex; justify-content: flex-end; gap: 8px; }
+@media (pointer: coarse) { .model-custom-form input, .model-custom-form button { min-height: 44px; } }

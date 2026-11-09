@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { EFFORT_LABEL, PROVIDER_LABEL, accessFor, type AccessMode, type Attachment, type CreateTarget, type DocRef, type EngineCommand, type Provider, type Session, type UiPrefs, type Work, type Workspace, type UpdateWorkspaceRequest } from "@workbench/contracts";
+import { EFFORT_LABEL, PROVIDER_LABEL, accessFor, type AccessMode, type AgentProfile, type Attachment, type CreateTarget, type DocRef, type EngineCommand, type Provider, type Session, type UiPrefs, type Work, type Workspace, type UpdateWorkspaceRequest } from "@workbench/contracts";
 import type { ReactNode } from "react";
 import type { MentionItem } from "../mention.ts";
 import { CreateChip, CreateTargetButton, stemOf } from "./CreateTarget.tsx";
@@ -10,6 +10,7 @@ import { Composer } from "./Composer.tsx";
 import { ChangeChip } from "./project/ChangeChip.tsx";
 import { EditableText } from "./EditableText.tsx";
 import { ModelPicker, type ModelChoice } from "./ModelPicker.tsx";
+import { AgentProfilePicker } from "./AgentProfilePicker.tsx";
 import { Icon } from "./Icon.tsx";
 import { MenuItem, Popover } from "./Popover.tsx";
 import { WorkspacePicker } from "./WorkspacePicker.tsx";
@@ -338,7 +339,12 @@ export function WorkView({
   const [browserDraft, setBrowserDraft] = useState(false);
   const pickerProvider = active?.provider ?? engine;
   const models = state.providers[pickerProvider]?.models ?? [];
-  const access = accessFor(pickerProvider, active?.access, prefs, state.providers[pickerProvider]?.configuredAccess);
+  const [resolvedRole, setResolvedRole] = useState<{ sessionId: string; profile: AgentProfile | null } | null>(null);
+  const resolveProfile = useCallback((profile: AgentProfile | null) => {
+    if (active) setResolvedRole({ sessionId: active.id, profile });
+  }, [active?.id]);
+  const profile = active && resolvedRole && resolvedRole.sessionId === active.id && resolvedRole.profile?.id === active.profileId ? resolvedRole.profile : null;
+  const access = accessFor(pickerProvider, active?.access ?? profile?.access, prefs, state.providers[pickerProvider]?.configuredAccess);
   const [statusOpen, setStatusOpen] = useState(false);
   const closeStatus = useCallback(() => setStatusOpen(false), []);
   const [folderOpen, setFolderOpen] = useState(false);
@@ -818,10 +824,12 @@ export function WorkView({
           onStop={active ? () => actions.interrupt(active) : undefined}
           target={
             <>
+            {active ? <AgentProfilePicker key={active.id} api={api} session={active} models={{ claude: state.providers.claude?.models, codex: state.providers.codex?.models }} onRefreshModels={provider => api.refreshProviders(provider)} onResolved={resolveProfile} onNotice={onToast} /> : null}
             <ModelPicker
               models={models}
               onRefresh={() => api.refreshProviders(pickerProvider)}
               value={active ? { model: active.model, effort: active.effort } : draftChoice}
+              inherited={profile ? { name: profile.name, model: profile.model, effort: profile.effort } : undefined}
               onChange={(choice) => (active ? actions.setModel(active, choice) : setDraftChoice(choice))}
             />
             {active ? (
