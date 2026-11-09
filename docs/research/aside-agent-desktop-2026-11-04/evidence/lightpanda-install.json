@@ -1,0 +1,9 @@
+{
+  "version": "1.0.2",
+  "path": "/home/achamge/.local/opt/lightpanda/1.0.2/lightpanda",
+  "launcher": "/home/achamge/.local/bin/lightpanda",
+  "sha256": "ae7d01d261efb9e480e18ce3424533332883863bcf70b12a4321b5733f37e19e",
+  "bytes": 76408136,
+  "url": "https://github.com/lightpanda-io/browser/releases/download/1.0.2/lightpanda-x86_64-linux",
+  "release": "https://github.com/lightpanda-io/browser/releases/tag/1.0.2"
+}

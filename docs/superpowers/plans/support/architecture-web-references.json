@@ -1,0 +1,16 @@
+{
+  "accessed": "2026-11-09",
+  "method": "web.open official primary documentation; not runtime evidence",
+  "references": [
+    {
+      "url": "https://v2.tauri.app/reference/webview-versions/",
+      "observedLines": "89-108",
+      "claim": "Windows WebView2; macOS and Linux WebKit"
+    },
+    {
+      "url": "https://playwright.dev/docs/webview2",
+      "observedLines": "77-127",
+      "claim": "WebView2 automation uses CDP endpoint; per-test profile isolation"
+    }
+  ]
+}

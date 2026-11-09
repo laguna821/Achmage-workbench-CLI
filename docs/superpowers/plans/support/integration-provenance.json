@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "asOf": "2026-11-09",
+  "workId": "work-1b7f68199bcb4756b2a7fd2a102ccc2e",
+  "nativeSessionId": "01a187dc-c850-7991-93c0-aa60b50f9a26",
+  "scope": "OS ingest and integrated implementation planning only",
+  "sourceHead": "bc1057c2c5fb04f2046f4fd711bf718f5cc93737",
+  "productVersion": "0.3.3",
+  "proposedTargetVersion": "0.4.0",
+  "sourceResearchRevisions": [
+    "research:rr-dd53e234a77f3fe9e4e3afc62aea3018:2807fc5a0c540680000deb85ab0ea25cb53a6ffa89a4c436c9317c7a19b08ea9",
+    "research:rr-da5ca50fa3e6593f1a243cce69cc5ed7:36aff60113a7574e1b41bb9ce53999de1ae9a325cde9fe73abf3304c122323f7",
+    "research:rr-b3a4efd5af5ac21ca608ac4ce17dd71d:89fcdaee6e62df01c31f9f4c56c19d9916acab297f64b1b42cd5b67317e03ad5"
+  ],
+  "ingestResearchRevision": "research:rr-52be450697ae9e5b42c0568446dc2ca5:ed954ad1001b1ba9da1c1d368cf57e7057c7a202781467955951d0910135da7d",
+  "superpowers": {
+    "version": "7.0.2",
+    "commit": "22f0b463e7a5e579904dd6211a520321035526f7",
+    "path": "/home/achamge/Dropbox/-- ACH_한림대 미디어스쿨/= Ach's Obsidian/Achmage_OS/20_Master-Skills/superpowers",
+    "sourceIntegrity": "236/236 matched",
+    "scopeValidation": "zero new violations",
+    "hooksActivated": false,
+    "dropboxRemoteSyncVerified": false
+  },
+  "pstack": {
+    "version": "0.15.36-achmage.1",
+    "path": "/home/achamge/Dropbox/-- ACH_한림대 미디어스쿨/= Ach's Obsidian/Achmage_OS/20_Master-Skills/pstack",
+    "mode": "multi-phase-plan, delivery plan uses autopilot-stack with local override",
+    "automaticLoopArmed": false
+  },
+  "reviews": {
+    "builderCheck": {
+      "status": "pass",
+      "scope": "spec, coverage and architecture gates",
+      "findingsFixed": [
+        "early U25a executionGraph",
+        "page navigation vs pane move nonce semantics",
+        "Office executor reuse boundary"
+      ],
+      "productPass": false
+    },
+    "rootPlanReview": "passed",
+    "rootPlanReviewScope": [
+      "all 25 unit contracts and dependencies",
+      "non-vacuous fixture assertions and runtime wiring",
+      "bounded architecture decisions and Office reuse",
+      "current source/release provenance and early installer path",
+      "156 original definitions, 53 acceptance criteria, 12 regressions, 9 Office formats"
+    ],
+    "rootFindingsAddressed": [
+      "Added explicit ArtifactRef, shared client, Office executor and mobile prerequisites",
+      "Split U25a early build infrastructure from final U25b acceptance",
+      "Clarified pane move versus navigation document nonce",
+      "Added actual protocol handshake and update runtime changes",
+      "Bounded U23 to one mediated execution format; no arbitrary native sandbox project",
+      "Separated mixed Create/Edit lines for unambiguous path validation"
+    ]
+  },
+  "productTestsRun": false,
+  "productBuildsRun": false,
+  "remoteProductWrites": false,
+  "localEvidenceRoot": "/home/achamge/.local/state/achmage/workspaces/achmage-workbench-research/work-1b7f68199bcb4756b2a7fd2a102ccc2e/branch-c5c46cea4de14900be37b66368fb3909/evidence/integration-plan-2026-11-09",
+  "planValidation": "plan-validation.json",
+  "productPrototypesRun": false,
+  "integratedPlanResearchRevision": "research:rr-0b42f53d2a049398bbf5a5c07c18266f:3c3cbe2fbb6979b57bafcbc9851e54112d02ea4662f7afc6c9fc48b81c2335b0",
+  "researchRecordRemoteVerified": true
+}

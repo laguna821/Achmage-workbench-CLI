@@ -1,0 +1,161 @@
+{
+  "date": "2026-11-09",
+  "timezone": "Asia/Seoul",
+  "scope": "plan; code and documentation review; no new live UI audit",
+  "skill": {
+    "name": "apple-hig-design",
+    "version": "1.0.0",
+    "path": "/home/achamge/Dropbox/-- ACH_한림대 미디어스쿨/= Ach's Obsidian/Achmage_OS/20_Master-Skills/apple-hig-design/SKILL.md",
+    "sha256": "9a06e8198f3146a2ec0a6e11611dc777d4b62ca3b902fd4f7cbd9b0103907419",
+    "corpusDate": "2026-11-04"
+  },
+  "appleSources": [
+    {
+      "slug": "sidebars",
+      "url": "https://developer.apple.com/design/human-interface-guidelines/sidebars.md",
+      "httpStatus": 200,
+      "contentType": "text/markdown; charset=utf-8",
+      "bytes": 9963,
+      "sha256": "f924f7f3c45b35f23da43e3aa6c2054a821095818c669dabaa8515ceea57ec53",
+      "accessedAt": "2026-11-09"
+    },
+    {
+      "slug": "toolbars",
+      "url": "https://developer.apple.com/design/human-interface-guidelines/toolbars.md",
+      "httpStatus": 200,
+      "contentType": "text/markdown; charset=utf-8",
+      "bytes": 23422,
+      "sha256": "ed2379c1dfd2807770903233c047d781ed57d6b506b31aa45b9e2484ddeb57a8",
+      "accessedAt": "2026-11-09"
+    },
+    {
+      "slug": "materials",
+      "url": "https://developer.apple.com/design/human-interface-guidelines/materials.md",
+      "httpStatus": 200,
+      "contentType": "text/markdown; charset=utf-8",
+      "bytes": 21576,
+      "sha256": "d8a174d7b15beae242cfca2c77941351e955a451c362b8296ac6c16e8efe6c6e",
+      "accessedAt": "2026-11-09"
+    },
+    {
+      "slug": "accessibility",
+      "url": "https://developer.apple.com/design/human-interface-guidelines/accessibility.md",
+      "httpStatus": 200,
+      "contentType": "text/markdown; charset=utf-8",
+      "bytes": 26389,
+      "sha256": "9c8b4ef2a74e3de3268dd120d5c2713bb1e728f899843585dff94d2033503a71",
+      "accessedAt": "2026-11-09"
+    },
+    {
+      "slug": "generative-ai",
+      "url": "https://developer.apple.com/design/human-interface-guidelines/generative-ai.md",
+      "httpStatus": 200,
+      "contentType": "text/markdown; charset=utf-8",
+      "bytes": 19363,
+      "sha256": "20fb79e758668c395c35b412a06a94ce6480276ee094cc7300022eaf8a2480c5",
+      "accessedAt": "2026-11-09"
+    },
+    {
+      "slug": "going-full-screen",
+      "url": "https://developer.apple.com/design/human-interface-guidelines/going-full-screen.md",
+      "httpStatus": 200,
+      "contentType": "text/markdown; charset=utf-8",
+      "bytes": 8202,
+      "sha256": "87de7a17d3819bc8754671d8245fd638e588c3f25da0c2c808f3892678b264d0",
+      "accessedAt": "2026-11-09"
+    },
+    {
+      "slug": "searching",
+      "url": "https://developer.apple.com/design/human-interface-guidelines/searching.md",
+      "httpStatus": 200,
+      "contentType": "text/markdown; charset=utf-8",
+      "bytes": 6222,
+      "sha256": "4ab07380fe9a57c944a6c8951f58c7b7a6fb734bfc079b78eac6458dcbb0ef89",
+      "accessedAt": "2026-11-09"
+    }
+  ],
+  "workbench": {
+    "commit": "bc1057c2c5fb04f2046f4fd711bf718f5cc93737",
+    "files": [
+      {
+        "path": "docs/design/DESIGN.md",
+        "sha256": "ff4320c192fc88c530f391403514a321e967b9b20d68bd21961e4f8a04c8cd8b",
+        "lines": 322
+      },
+      {
+        "path": "apps/web/src/App.tsx",
+        "sha256": "3c29f7015ed1db919072301758ee1acf2958bbcef85df34a94f9fb1b08f52c30",
+        "lines": 2441
+      },
+      {
+        "path": "apps/web/src/styles.css",
+        "sha256": "342b51c68de05fd4af238c010b18069ecf8d011bb469c026c8838187c409a76f",
+        "lines": 6455
+      },
+      {
+        "path": "apps/web/src/appearance.ts",
+        "sha256": "1ed64493d8cadb9ab06d0406f2e22fd33c5f12174a56e18f2069a39ae8e2a972",
+        "lines": 369
+      },
+      {
+        "path": "apps/web/src/components/Sidebar.tsx",
+        "sha256": "fd59fc7aa4244b3050089e1e3c4b1df4da34ff0b6d1a40ab53caca70299229a2",
+        "lines": 965
+      },
+      {
+        "path": "apps/web/src/components/Panes.tsx",
+        "sha256": "f25c1b11f4a35f79fdb6ef8c2107a337774903e8cb6e9b9adaa6b3a797e5a599",
+        "lines": 176
+      },
+      {
+        "path": "apps/web/src/components/Transcript.tsx",
+        "sha256": "41923d25ef0b4a9801992b5e83da9b40b5eac1e8dc2cb61498d3ee55d61668fc",
+        "lines": 724
+      },
+      {
+        "path": "apps/web/src/components/SearchPalette.tsx",
+        "sha256": "2da3b8147a1cfa0475a0d9782507300cc83d16eb9b4d424d6800dafccc524f71",
+        "lines": 766
+      },
+      {
+        "path": "apps/web/src/components/ProjectDeleteDialog.tsx",
+        "sha256": "580adce3a97e488ef25e01a57e56465395facc1ed2282a75af7ae32c28ec3b5a",
+        "lines": 22
+      },
+      {
+        "path": "apps/web/src/components/Icon.tsx",
+        "sha256": "aea3b5d1c940372f2c72c255164f101225f443739420a0a83eefa730329861d3",
+        "lines": 127
+      },
+      {
+        "path": "apps/web/src/components/docs/OfficeEditor.tsx",
+        "sha256": "7af0df448c3b5e2a476e8b9e0700af05778c61192d58d5b1bc1b496b624973d8",
+        "lines": 812
+      },
+      {
+        "path": "apps/web/src/tabs.ts",
+        "sha256": "1375a45aa3072436ea3205d757cfaf11d278b919947e4f93e76c6d3aad4e3a4d",
+        "lines": 114
+      },
+      {
+        "path": "apps/web/src/document-session.ts",
+        "sha256": "42f3ff5243c7a188f81af49a1e8f7d5cb31e0e59d88a205142fdc18b61a161c8",
+        "lines": 85
+      },
+      {
+        "path": "apps/office/vite.config.ts",
+        "sha256": "dfa24ab3392ef8eab9de48701bc63c76f28079cc34261d150aa426d84dd442fc",
+        "lines": 490
+      },
+      {
+        "path": "apps/desktop/src-tauri/src/lib.rs",
+        "sha256": "b023dc25574843147177e08ce2bdbda0654a8006a990777e95c2186f91b5219b",
+        "lines": 517
+      }
+    ]
+  },
+  "priorResearch": {
+    "researchId": "rr-dd53e234a77f3fe9e4e3afc62aea3018",
+    "revision": "2807fc5a0c540680000deb85ab0ea25cb53a6ffa89a4c436c9317c7a19b08ea9"
+  }
+}

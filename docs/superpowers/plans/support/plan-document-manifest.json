@@ -1,0 +1,135 @@
+{
+  "scope": "Planning artifacts; excludes this manifest and mutable research receipt pointer",
+  "files": [
+    {
+      "path": "docs/superpowers/README.md",
+      "sha256": "ba31506906e0fdf94b3de1d97a130139df842b88a2c74875b9537444627bc586",
+      "bytes": 3106
+    },
+    {
+      "path": "docs/superpowers/plans/2026-11-09-workbench-integrated-release.md",
+      "sha256": "70340ea6eba2513d7de322a40835e2d3e85262c500c6cf36b882a24bc998ac6c",
+      "bytes": 213626
+    },
+    {
+      "path": "docs/superpowers/plans/support/architecture-files-read.json",
+      "sha256": "270b7e0ad17cd25d9969e9ae918271ebe84bbc3d6ac01b7578253f5c3214f27b",
+      "bytes": 13594
+    },
+    {
+      "path": "docs/superpowers/plans/support/architecture-gates.md",
+      "sha256": "5206f38a6d501c2f93398bdf6d5ac6708fa1203fe8aabda7afe3ee3b0758b4e9",
+      "bytes": 27166
+    },
+    {
+      "path": "docs/superpowers/plans/support/architecture-source-downloads.json",
+      "sha256": "2e6be9df006e0de93b8e09a0c8731a98cef79a458ac1532169fe0d76004fd905",
+      "bytes": 1676
+    },
+    {
+      "path": "docs/superpowers/plans/support/architecture-web-references.json",
+      "sha256": "46f46392e9bf029803f17f18a37f56b357b866054f7d4f1ede59c21ae3d0f61b",
+      "bytes": 481
+    },
+    {
+      "path": "docs/superpowers/plans/support/builder-check.json",
+      "sha256": "2da67e88eb461ed0cf1af68d732bc8f6bfac94dd7e7453a6a87e7043916dfa8f",
+      "bytes": 1034
+    },
+    {
+      "path": "docs/superpowers/plans/support/check-plan.log",
+      "sha256": "c8b56f61956be613cdf2b84e2c318286d72c5a4cecb5645364ef8573cf586d57",
+      "bytes": 3884
+    },
+    {
+      "path": "docs/superpowers/plans/support/coverage-notes.md",
+      "sha256": "47a61681df19c1e229b20ef520e7d58fa30e599c1d58f1a0fac7dd10835dc860",
+      "bytes": 36355
+    },
+    {
+      "path": "docs/superpowers/plans/support/coverage-validation.json",
+      "sha256": "e79df420b9bf0b334a70b5ec2c76627484e4824b5dd4a7dd49ed4b08085476aa",
+      "bytes": 704
+    },
+    {
+      "path": "docs/superpowers/plans/support/coverage.json",
+      "sha256": "0e4909260e53692402a70283f4c82a38387c84e88950f64e992ff746a49f9f0e",
+      "bytes": 117738
+    },
+    {
+      "path": "docs/superpowers/plans/support/ingest-validation.json",
+      "sha256": "858df2d0562c2cf9a0403087972eec337f27ad7a30d8bcd98051b119f6b400fd",
+      "bytes": 1106
+    },
+    {
+      "path": "docs/superpowers/plans/support/inspected-files.json",
+      "sha256": "90d56ed56ef152a8cdf786f8399974fc9374c9cd5c3c3d5136adaaf27df7b58c",
+      "bytes": 8542
+    },
+    {
+      "path": "docs/superpowers/plans/support/integration-plan-research-receipt.json",
+      "sha256": "bccb8174aac9a38f7264d721c73a280198dd87f462737afe20c026a8a7926eed",
+      "bytes": 711
+    },
+    {
+      "path": "docs/superpowers/plans/support/plan-validation.json",
+      "sha256": "d3b491566d61d509ad0d0eeff39921ee7022921271b9ebcebc1fd8d76f0b6721",
+      "bytes": 851
+    },
+    {
+      "path": "docs/superpowers/plans/support/prior-evidence/runtime/files-read.json",
+      "sha256": "6ac876f043dca5525275c304f5ca022fc3eaf50193dc2828f7f068307c46980f",
+      "bytes": 35573
+    },
+    {
+      "path": "docs/superpowers/plans/support/prior-evidence/runtime/files-read.md",
+      "sha256": "2eaa6be816c822f7aa1c31e77e7aff9893f750cafd83677bc8aae6dbe524791d",
+      "bytes": 30966
+    },
+    {
+      "path": "docs/superpowers/plans/support/prior-evidence/runtime/manifest.json",
+      "sha256": "9857b20f36d04a7b186a577b21b8f3c4973aa6d271e66f455f47209e0c58f3f3",
+      "bytes": 38805
+    },
+    {
+      "path": "docs/superpowers/plans/support/prior-evidence/runtime/notes.md",
+      "sha256": "019bd2553b8593edd13e5a832dd4af473d309af991e2ae0bc6f1c90ce9cb2f3f",
+      "bytes": 44034
+    },
+    {
+      "path": "docs/superpowers/plans/support/prior-evidence/runtime/release-check.md",
+      "sha256": "c717675a0211747e11f6cd5160e3f09688f624fa97246e81290ab7e88aa80c1a",
+      "bytes": 4424
+    },
+    {
+      "path": "docs/superpowers/plans/support/prior-evidence/runtime/release-manifest.json",
+      "sha256": "615ed09e6387ab85222c06ab96f78dbf85368547243b4486d7874c6d0e1c0b68",
+      "bytes": 2293
+    },
+    {
+      "path": "docs/superpowers/plans/support/prior-evidence/workbench/notes.md",
+      "sha256": "a73a693c87597cd6b2b9b33fec563d0375ef722bcb9a692c15d74a51040c783a",
+      "bytes": 28926
+    },
+    {
+      "path": "docs/superpowers/plans/support/release-notes.md",
+      "sha256": "48e1b454c2f60669a00112eb157324c4a73a0295cc31df5c6b906c4e6568ccf0",
+      "bytes": 23137
+    },
+    {
+      "path": "docs/superpowers/plans/support/source-files.sha256.json",
+      "sha256": "e465065ecf527eace413a0a109ff13591942d52b2862e234732eae92cc41f6be",
+      "bytes": 7209
+    },
+    {
+      "path": "docs/superpowers/plans/support/superpowers-source-manifest.json",
+      "sha256": "98fe307ea161bc399fda7a6454c922d9db4914fe6d22b78033a0d6fd735faba7",
+      "bytes": 42487
+    },
+    {
+      "path": "docs/superpowers/specs/2026-11-09-workbench-integrated-design.md",
+      "sha256": "9156673f0287d75ee14fc83ac9aadc2de011ba2bec5a3d1c38436c270f0814ec",
+      "bytes": 20017
+    }
+  ]
+}

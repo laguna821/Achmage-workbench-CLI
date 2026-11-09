@@ -1,0 +1,210 @@
+{
+  "generatedAt": "2026-11-09T05:08:42.152529+00:00",
+  "repo": "/home/achamge/다운로드/achmage-workbench",
+  "head": "bc1057c2c5fb04f2046f4fd711bf718f5cc93737",
+  "readOnlyProductInvestigation": true,
+  "files": [
+    {
+      "path": ".github/workflows/lightpanda-windows-preflight.yml",
+      "sha256": "6f1a00a3edbc8b01a394097714c1561d1cc69edf5ff18e3c4c5aae4906d804d6",
+      "bytes": 3076,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": ".github/workflows/lightpanda-windows.yml",
+      "sha256": "8cfa680e0679f7eaf44c89cba46f3c6b8baa34d4e617ba7023771a3f267e4154",
+      "bytes": 3366,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": ".github/workflows/lightpanda-wsl.yml",
+      "sha256": "b33d34acbf526db59459ae3aa1403b48dffee49b439c8ab2b78413d199c6d02c",
+      "bytes": 2274,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": ".github/workflows/pdf-runtime.yml",
+      "sha256": "9fbbb60a6132027bb1085fb623a55b8b9b3f419531e2f2eb80b4a0210593931b",
+      "bytes": 1038,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "sha256": "5e32a71910d86d4b69457683e6097bbd388dcb7cad52ec3b91cf04e187929775",
+      "bytes": 31329,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "apps/design/package.json",
+      "sha256": "16786ec07a80bf1b98790b62496ca9939148ab3408a8524bf0cd4902dca9700e",
+      "bytes": 1234,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "apps/desktop/package.json",
+      "sha256": "cef0d0352697014ba100359e2cbd4295919f86af1247abe4d86a2507a6d5ebaf",
+      "bytes": 198,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "apps/desktop/src-tauri/Cargo.lock",
+      "sha256": "129e7ddbc436b534d3ca9de07f34bf7ce994b05d3fca5a471d3203d6756c568a",
+      "bytes": 153433,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "apps/desktop/src-tauri/Cargo.toml",
+      "sha256": "a9dc75b1432cd386132b2119f334af6423c8c5b266e958a01721cec3a4920ae3",
+      "bytes": 2519,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "apps/desktop/src-tauri/tauri.conf.json",
+      "sha256": "2656025364e1b7ef0cc8090e9dfa101970675469d8787634f8c7c2fdca6fc79e",
+      "bytes": 1418,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "apps/desktop/src-tauri/tauri.release.conf.json",
+      "sha256": "d3d616853befd17f7904c313397d7174c8bf4301809dd28f7bdad0873dcad1a9",
+      "bytes": 859,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "apps/desktop/src-tauri/tauri.release.macos.conf.json",
+      "sha256": "7cabc7da6e095c1a163c47df14d72aed0e26163927c06faf9132d4eb60b51c22",
+      "bytes": 171,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "apps/desktop/src-tauri/tauri.release.windows.conf.json",
+      "sha256": "9b77eb9824f1dd422c7315802cd64bc6ee933ad5d95b235d22ffd600eb36ac26",
+      "bytes": 140,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "apps/host/package.json",
+      "sha256": "c170d0719fd9db8448ef23f0e82b86d26297f9f0e48ef967c9b3d9742464b01d",
+      "bytes": 537,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "apps/office/package.json",
+      "sha256": "1d32e83f7dc0fe6be7fc85c26ad467f9ca46b8bb67182db20b27cf8d65fd4412",
+      "bytes": 803,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "apps/web/package.json",
+      "sha256": "9b21d04f3889dbe4bfb1cd3e73f0442aaca794608da16ca9947ea7fdd6627a5d",
+      "bytes": 1347,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "docs/app-e2e.md",
+      "sha256": "6356de5e6824ae5fdcb2bca7223d04df190b64ee82f25b90198dafd4e2672ec3",
+      "bytes": 42069,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "docs/design/hig-remake-2026-11-09/implementation-plan.md",
+      "sha256": "9ad7a434042d4c26fe4ce76115eab9b158710469df4540086f08ff095ee1de26",
+      "bytes": 9974,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "docs/releases/v0.3.3.md",
+      "sha256": "7fe10b6c0420d912012c76a7384aaabdcdc7328c8c1afee50de2a24e4f478fce",
+      "bytes": 2629,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sha256": "ec932f1e1be59e53fa7194d6948888d35e8d191165b5f778cabe40a37d8af957",
+      "bytes": 9068,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sha256": "8fc36ab2a911743c132fd22d418c7bd90f29cf018604847ea2718fa15f708088",
+      "bytes": 12142,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "7921513d07410e70a97dd9217c74aed241b7cf1e33518a1c1d51479ebadbd502",
+      "bytes": 305026,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "package.json",
+      "sha256": "3545e3d012406c8bc009e9211d3baa5444ec8c2fb7623ea0ab1c0c68e729dcf9",
+      "bytes": 1006,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "packages/contracts/package.json",
+      "sha256": "aea2ec59fbcd9aa29721cc3301f52cb1e1f088c926bf9af533df01033a4bc736",
+      "bytes": 114,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "packages/provider-claude/package.json",
+      "sha256": "ca448d47457a57b601a23eecc4567339d1c6fe4d2c5754807ac3b47997b91219",
+      "bytes": 203,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "packages/provider-codex/package.json",
+      "sha256": "2a6ca68a662be41699982bd31bfa44cc7395a6cfa1d75cbf4cb60701a373b8fd",
+      "bytes": 119,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "packaging/arch/PKGBUILD",
+      "sha256": "efb64068a3415573ada3a24671c14b3ff85851ca1bea1d75ebe8c87d73c6db51",
+      "bytes": 2939,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "scripts/app-e2e/run.ts",
+      "sha256": "55a2325b7886bc9de350248cf7ff55a229b72398d0712cd29d45314cef91d3c3",
+      "bytes": 9263,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "scripts/setup-gateway.ts",
+      "sha256": "ac67553bb0eab1f75ce37e241f692bfe032179d46ab268ccefe5234d7f184f8d",
+      "bytes": 3182,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "scripts/setup-smoke.ts",
+      "sha256": "6f2546f620dd5fbc1fbbf6d4745d803a4409d85b814ab3ea415659a64a83164f",
+      "bytes": 20712,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "scripts/upgrade-smoke.ts",
+      "sha256": "4c43e288ba9a82d66457fe7d9c16367df35fc5c157f50474aa0bd620045c745d",
+      "bytes": 18185,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "scripts/urgent-parallel-check.ts",
+      "sha256": "ca03335afe665315eb1b6862e9ea653f11a3f7c122ed2b3dd0a683d75a2320ec",
+      "bytes": 14151,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    },
+    {
+      "path": "vitest.config.ts",
+      "sha256": "186b146c5993159176c19e4f329a1ac23f67b808cf1e929c3069b50e01625be3",
+      "bytes": 784,
+      "inspection": "full or selected line/pattern reads; see release-notes.md"
+    }
+  ],
+  "attemptedMissingPaths": [
+    "scripts/app-e2e.ts",
+    "docs/research/aside-browser-integration-plan-2026-11-09.md"
+  ]
+}

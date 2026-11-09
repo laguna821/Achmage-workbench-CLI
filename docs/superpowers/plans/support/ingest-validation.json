@@ -1,0 +1,48 @@
+{
+  "date": "2026-11-09",
+  "upstreamVersion": "7.0.2",
+  "upstreamRevision": "22f0b463e7a5e579904dd6211a520321035526f7",
+  "upstreamFilesVerified": 236,
+  "byteMismatches": [],
+  "scopedValidation": [
+    {
+      "file": "20_Master-Skills/superpowers/SKILL.md",
+      "exitCode": 0,
+      "violations": [],
+      "summary": {
+        "total": 0,
+        "by_severity": {},
+        "by_rule": {},
+        "top_files": {}
+      }
+    },
+    {
+      "file": "30_AI-Skills-Wiki/wiki/skills/superpowers.md",
+      "exitCode": 0,
+      "violations": [],
+      "summary": {
+        "total": 0,
+        "by_severity": {},
+        "by_rule": {},
+        "top_files": {}
+      }
+    },
+    {
+      "file": "30_AI-Skills-Wiki/wiki/workflows/superpowers-pstack-delivery.md",
+      "exitCode": 0,
+      "violations": [],
+      "summary": {
+        "total": 0,
+        "by_severity": {},
+        "by_rule": {},
+        "top_files": {}
+      }
+    }
+  ],
+  "globalBefore": 51,
+  "globalAfter": 51,
+  "introducedViolations": [],
+  "pluginHooksActivated": false,
+  "remoteDropboxSyncVerified": false,
+  "status": "pass"
+}

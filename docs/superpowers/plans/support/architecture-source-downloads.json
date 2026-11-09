@@ -1,0 +1,32 @@
+[
+  {
+    "path": "packages/desktop/src/features/browser-automation/service.ts",
+    "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/desktop/src/features/browser-automation/service.ts",
+    "sha256": "5918545da9505c22e3462a52d9e9efc2c070f048d9443e4ab3f45878ecd3e9f1",
+    "bytes": 53079
+  },
+  {
+    "path": "packages/desktop/src/features/browser-automation/trusted-input.ts",
+    "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/desktop/src/features/browser-automation/trusted-input.ts",
+    "sha256": "5123c8f20870ce6fea40d7c6972ecbd355cac26f19dfafa7d706457351a05d2e",
+    "bytes": 4644
+  },
+  {
+    "path": "packages/desktop/src/features/browser-webviews/registry.ts",
+    "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/desktop/src/features/browser-webviews/registry.ts",
+    "sha256": "964b9158f702e5e30db4f281a4f45087c8c1fc03461cd9de0382650985ffe28f",
+    "bytes": 9180
+  },
+  {
+    "path": "packages/server/src/server/browser-tools/broker.ts",
+    "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/browser-tools/broker.ts",
+    "sha256": "e79cf38cec6a4c60ed1cf22657579551711c1e8730ca236251b6428a7333ca3a",
+    "bytes": 16188
+  },
+  {
+    "path": "packages/client/src/index.ts",
+    "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client/src/index.ts",
+    "sha256": "3ec6649f3208808991e0f2716b5b6af67769b3af9dd89e683d85f9769a54596f",
+    "bytes": 52866
+  }
+]

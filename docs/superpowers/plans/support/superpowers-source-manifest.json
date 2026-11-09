@@ -1,0 +1,1190 @@
+{
+  "repository": "https://github.com/obra/superpowers",
+  "revision": "22f0b463e7a5e579904dd6211a520321035526f7",
+  "commitDate": "2026-11-03T22:17:07Z",
+  "archiveSha256": "5f15e6bfa1b628ebabc84f88508b9652f5c7b8cb4529731e266006ba8f798976",
+  "retrievedAt": "2026-11-09",
+  "executed": false,
+  "files": [
+    {
+      "path": ".agents/plugins/marketplace.json",
+      "sha256": "2b94116c190896480e5054222a744e375976f8ae5bdb66ff0ab6b348dfad4182",
+      "bytes": 363
+    },
+    {
+      "path": ".antigravity-plugin/plugin.json",
+      "sha256": "47fe1ae9311cdf7a1136e2d39d74194ee2bc06d4b9fe2fe8d8652a265ca4a57a",
+      "bytes": 668
+    },
+    {
+      "path": ".claude-plugin/marketplace.json",
+      "sha256": "04015bf36c0c8e475e61509f4c0c2e72838abb1b6ab70a2c44f04be4317f79fa",
+      "bytes": 514
+    },
+    {
+      "path": ".claude-plugin/plugin.json",
+      "sha256": "6728b554d1aaf9235f7981c7838a32f50c191297284af97f4c2a808155f7c399",
+      "bytes": 497
+    },
+    {
+      "path": ".codex-plugin/plugin.json",
+      "sha256": "925b862a7ee38f170f4595a33a1d3c1cecd5e944f271b30d98efa55919febab0",
+      "bytes": 1730
+    },
+    {
+      "path": ".cursor-plugin/plugin.json",
+      "sha256": "e74bbc3086286fec5595e3adc35f3c340ec255508afdf5030dd617a6a850afea",
+      "bytes": 578
+    },
+    {
+      "path": ".devin-plugin/plugin.json",
+      "sha256": "5d1227aa357f7c44c07c6555190c3f8e106af24666b8cb48bf0475026113f3d7",
+      "bytes": 575
+    },
+    {
+      "path": ".gitattributes",
+      "sha256": "4702b23e09afad9638c184c8900b31af635673ba439c265ecc3d341efb54eaf8",
+      "bytes": 373
+    },
+    {
+      "path": ".github/FUNDING.yml",
+      "sha256": "2f9cdda7b1f3ea4be28bbcc3444c2c6512d7739589e6c5e72fd4f95950d3e7d4",
+      "bytes": 62
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/bug_report.md",
+      "sha256": "c766d3023f9a12280019055997ad2424887778d9b701b4118ea86a7fbf1f7fdb",
+      "bytes": 2338
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/config.yml",
+      "sha256": "e955d428a9ac46ed35f407b6532d74d1dade217d89d9a4c7f6b05b72872a004a",
+      "bytes": 241
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/feature_request.md",
+      "sha256": "a7aac80c9df2e46fce9a3c89a6e9e73e8d81e6de311dbd634ed9d5dfacb0bdc8",
+      "bytes": 2164
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/platform_support.md",
+      "sha256": "19f6d78322bf53b62ac8d7baf117492de3bbfae80851657c24c102980ea2aa26",
+      "bytes": 1525
+    },
+    {
+      "path": ".github/PULL_REQUEST_TEMPLATE.md",
+      "sha256": "d837f95474fafb23298bb6e295409ecc522d4c4db6a2e1eff955bbfb7a4a40d9",
+      "bytes": 6626
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "30b79670d7359590a4f1798e99112d9298d8eed889042aba2ee9a1722dc06ebb",
+      "bytes": 347
+    },
+    {
+      "path": ".hermes-plugin/__init__.py",
+      "sha256": "767b7956f86b0343a8244943ac733c4f9f2a38cb571162cf67b26d2704a8afb1",
+      "bytes": 5092
+    },
+    {
+      "path": ".hermes-plugin/plugin.yaml",
+      "sha256": "31827794da38529aa1fd1b0020f29b6325a94029aaa425a1c3a1b329c47efec7",
+      "bytes": 151
+    },
+    {
+      "path": ".kimi-plugin/plugin.json",
+      "sha256": "fd150224125adf931a839b210adeff56a36ce7937c67916da93c7da428d22e44",
+      "bytes": 3090
+    },
+    {
+      "path": ".muse-plugin/marketplace.json",
+      "sha256": "cb77cc7e9cc87ca74892584ad6810288551b6ec71123ece2da112a20a6b190ae",
+      "bytes": 507
+    },
+    {
+      "path": ".muse-plugin/plugin.json",
+      "sha256": "56f1ce972975db8f6efe65e6b0136e7cbcc3a1c3ca22658e2fae01f132af7c9a",
+      "bytes": 2288
+    },
+    {
+      "path": ".opencode/INSTALL.md",
+      "sha256": "15a91f33314d5a156ed6b8fa9e243bfe85e6e9e4e60238f6e9b0e06b17640d2e",
+      "bytes": 5379
+    },
+    {
+      "path": ".opencode/plugins/superpowers.js",
+      "sha256": "e0a696ca06f0b05f9e76734ea302f0796fe747d6a79fe4910e34462822723043",
+      "bytes": 19346
+    },
+    {
+      "path": ".pi/extensions/superpowers.ts",
+      "sha256": "59774512277ffb41b706f6ed376b27fda83c3a04045a41560f4a2307591e3939",
+      "bytes": 4359
+    },
+    {
+      "path": ".pre-commit-config.yaml",
+      "sha256": "73070dfddbcb1e94980a2e7172532e5d6403e44aa3f30ef5de30306b77684f32",
+      "bytes": 579
+    },
+    {
+      "path": ".version-bump.json",
+      "sha256": "cb4a788a2c54b06b798731aa40d929611bd6290e9c09463dad97f4f84adc6761",
+      "bytes": 1020
+    },
+    {
+      "path": "AGENTS.md",
+      "sha256": "3d7c31b2ed1592d0816e436a90549c8af5829627bcb663fe1c886a30f427cabe",
+      "bytes": 9911
+    },
+    {
+      "path": "CODE_OF_CONDUCT.md",
+      "sha256": "5604db48bb38684df7b0816cc2a8b2659a9c7efcfb2fa17936e6b16b1ec79316",
+      "bytes": 13724
+    },
+    {
+      "path": "GEMINI.md",
+      "sha256": "0823da8b7277f8b623746d57c0bee75fda02e4c832fe57843e644d0fe633abbc",
+      "bytes": 92
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "a37e0e9697144819e1d965176ac4ae5bc3fa02d11e7812036bbcadf6dafe2400",
+      "bytes": 1070
+    },
+    {
+      "path": "README.md",
+      "sha256": "79f29f50c735862d2e304ea547b4c9aa67d9db6909ff6fb7b5ea922d7bcbc3e7",
+      "bytes": 14847
+    },
+    {
+      "path": "RELEASE-NOTES.md",
+      "sha256": "af121b6df7d328b0f325bdd016f31bbb59b1f23cfaf6c7f2a9ac2be8c7e0fc01",
+      "bytes": 120808
+    },
+    {
+      "path": "assets/antigravity-logo.png",
+      "sha256": "d9eb1f1893e686de4afc7a8305d1e7a125fdf9df3741a28b2aa0999005e60a3a",
+      "bytes": 16690
+    },
+    {
+      "path": "assets/app-icon.png",
+      "sha256": "b7477eb39b5109617fe37e51dd65d8bdd8dff6c40fda49adfbc21eec445777ee",
+      "bytes": 48231
+    },
+    {
+      "path": "assets/superpowers-small.svg",
+      "sha256": "54a632d9ee6197ccbc10d43d42217e23d08375bea63ba8eb4b6af757c1535038",
+      "bytes": 1733
+    },
+    {
+      "path": "docs/README.kimi.md",
+      "sha256": "915b112731bbcb635885ed1c5f24a36b43248bc18689fa253bb4f89c937c6585",
+      "bytes": 2691
+    },
+    {
+      "path": "docs/README.opencode.md",
+      "sha256": "7ce149e5b91bf7f55bab76732c0e054c0b7ff29dc2865b3a59a10085c793e5ae",
+      "bytes": 9090
+    },
+    {
+      "path": "docs/plans/2025-11-22-opencode-support-design.md",
+      "sha256": "4688cb2e4bafa7e6124dd811be57c8873bfb4b8cccb95ddbd7032557a9cfd10b",
+      "bytes": 8831
+    },
+    {
+      "path": "docs/plans/2025-11-22-opencode-support-implementation.md",
+      "sha256": "2cc68cc29ee1174e13a65739b004f2346911a0d89a20744930f9f5b81963b4f3",
+      "bytes": 27539
+    },
+    {
+      "path": "docs/plans/2025-11-28-skills-improvements-from-user-feedback.md",
+      "sha256": "cce0b2e951209ac7d555fcbacfc858d8069b4036019d44dd95bb4334afaf2e65",
+      "bytes": 21033
+    },
+    {
+      "path": "docs/plans/2026-01-17-visual-brainstorming.md",
+      "sha256": "2ff9c06d8c7cf650becb588d74507c5681c55844c61e21160a290cbe26d41ca4",
+      "bytes": 15107
+    },
+    {
+      "path": "docs/porting-to-a-new-harness.md",
+      "sha256": "562a1436134babc815c11adf0379e2df00c8de0e73c362291faf495448b94f3e",
+      "bytes": 52650
+    },
+    {
+      "path": "docs/superpowers/specs/2026-01-22-document-review-system-design.md",
+      "sha256": "19dd839168b9e4a072985e8941aa3ae7cf9101357111620755d50dbeb1bea04b",
+      "bytes": 4723
+    },
+    {
+      "path": "docs/superpowers/specs/2026-02-19-visual-brainstorming-refactor-design.md",
+      "sha256": "f27d0f9c33cc4f34101fd676d48e73d6259e6cd4e1b3adc477ea81f4c7557af7",
+      "bytes": 9445
+    },
+    {
+      "path": "docs/superpowers/specs/2026-03-11-zero-dep-brainstorm-server-design.md",
+      "sha256": "8f29bac7d4df2b51062c005fe4d591140f1da3ab2030b28537df6f964637b9e9",
+      "bytes": 6021
+    },
+    {
+      "path": "docs/superpowers/specs/2026-03-23-codex-app-compatibility-design.md",
+      "sha256": "f351216f0b8abb5f08a9209d71ec3c218c79b1ba9d6a1c68aec990ef00e31a53",
+      "bytes": 13369
+    },
+    {
+      "path": "docs/superpowers/specs/2026-04-06-worktree-rototill-design.md",
+      "sha256": "757ce61bbcd16dcb8f61fa69778ca7a3b1d26f7a11a0fcea3d302fd99a52ebae",
+      "bytes": 20120
+    },
+    {
+      "path": "docs/superpowers/specs/2026-05-05-platform-neutral-config-refs-design.md",
+      "sha256": "7a3c5e5fb77a3f8a500e9406283653cfee5edf1b98e58d5f267c5f21905eee19",
+      "bytes": 4886
+    },
+    {
+      "path": "docs/superpowers/specs/2026-05-05-platform-neutral-prose-design.md",
+      "sha256": "d55fa30a3b1422f8364a81f49c755ada9cc792b2cc10193b1dbd43c551918c19",
+      "bytes": 6038
+    },
+    {
+      "path": "docs/superpowers/specs/2026-05-05-platform-neutral-readme-design.md",
+      "sha256": "63eb346415386c6850832f4b7414d03570a033eaf37de0b60d2ec4834169896e",
+      "bytes": 2100
+    },
+    {
+      "path": "docs/superpowers/specs/2026-05-06-lift-drill-into-evals-design.md",
+      "sha256": "fac3785f6f779bd899a6e93bcd60a934b4946ce4f7e8b6129d7910979650a6a1",
+      "bytes": 21059
+    },
+    {
+      "path": "docs/superpowers/specs/2026-06-09-sdd-task-scoped-review-dispatch-design.md",
+      "sha256": "08b6b77be0d3b95e1d19a3dc320b93bba52917ca9beb0084fd74ecd75c015b59",
+      "bytes": 17835
+    },
+    {
+      "path": "docs/superpowers/specs/2026-06-10-positive-instruction-redesign-design.md",
+      "sha256": "3a87b9e873728a3a4331437eb90f9fc5f4c9d7d0b88a931cce2bc3bda041b68b",
+      "bytes": 10590
+    },
+    {
+      "path": "docs/superpowers/specs/2026-06-10-strict-cost-sdd-design.md",
+      "sha256": "e8865d184479ffd4f2fe2c3072bf6a2b70179bbb4565cd6cefcbcb127c9f9b28",
+      "bytes": 15315
+    },
+    {
+      "path": "docs/superpowers/specs/2026-06-10-visual-companion-auth-hardening-design.md",
+      "sha256": "8d97d0384c61c0400fb67429a4384ad989bdc11953cce160069c368ac1f7e362",
+      "bytes": 8314
+    },
+    {
+      "path": "docs/superpowers/specs/2026-06-11-visual-companion-final-hardening-fixup-design.md",
+      "sha256": "78c4fbc2b609b1fe3ca0d7aba0f4d800511baf069355d25b37da5cf957dc0e7c",
+      "bytes": 12956
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-06-sdd-plan-scoped-workspace-eval-results.md",
+      "sha256": "c4d2f3f086648ee6b949fd0ed999dd7b0a3a8d45ba290b2024389c66b2ed95b7",
+      "bytes": 24547
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-06-sdd-plan-scoped-workspace.md",
+      "sha256": "301328cb8dec833dc35e05e90b4c10a6e67ebd915b33a3a5d34f83927094815d",
+      "bytes": 10210
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-15-sdd-fix-loop-redesign-design.md",
+      "sha256": "9ed33fe2821fd9d61e198c03e0377a9151294737a6ea34074637c1eef98c1a06",
+      "bytes": 10963
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-30-codex-efficiency-fixes-design.md",
+      "sha256": "6a6f81dcea03ebb8ffa710536fc92faab285c7bc894430c3348eb0bfa3fea926",
+      "bytes": 12583
+    },
+    {
+      "path": "docs/superpowers/specs/2026-08-05-hermes-version-bump-wiring-design.md",
+      "sha256": "f649e3afbd3a14df4c1ac5bd1942ffb4846129836f20b5f2aa3263fd3c19ed69",
+      "bytes": 2196
+    },
+    {
+      "path": "docs/superpowers/specs/2026-08-27-diagnosing-superpowers-design.md",
+      "sha256": "396a4951cda08633501deb638a77961a638560441b7fde53fb43fc1a6497d0bf",
+      "bytes": 27158
+    },
+    {
+      "path": "docs/superpowers/specs/2026-10-05-brainstorming-rebuild-design.md",
+      "sha256": "a15a0ceb2df039469ea15b8f66d001782e1b2c1d0690c0891070ac11389870a3",
+      "bytes": 7480
+    },
+    {
+      "path": "docs/superpowers/specs/2026-10-06-antigravity-marketplace-design.md",
+      "sha256": "db4b3e15709b9ce2b0c40a59c590a5f63ae551b28f6a1104df3306d1d542ab1d",
+      "bytes": 8848
+    },
+    {
+      "path": "docs/testing.md",
+      "sha256": "2959880663be4abecbcf11331e64e435cfadffae2c9e2fb24eb5509224f51f30",
+      "bytes": 3045
+    },
+    {
+      "path": "docs/windows/polyglot-hooks.md",
+      "sha256": "6691f1a4fedfecb456550610afda3bda56ad458cf6f2200bc5249fa3cd743a94",
+      "bytes": 7658
+    },
+    {
+      "path": "gemini-extension.json",
+      "sha256": "acb18fa699f7e1b313ef46df10cea32904ea3681b833d6ef068ed87fb00f39b7",
+      "bytes": 187
+    },
+    {
+      "path": "hooks/hooks-cursor.json",
+      "sha256": "53d8ceb3ff5d8bb1c4f283f238cc868b8c1af22e40a3ac30f6d6e4173effefbd",
+      "bytes": 137
+    },
+    {
+      "path": "hooks/hooks.json",
+      "sha256": "19fa1af26a0ed32bfabee6c4d744e5447ea3bdf769efceba9e268f2d9f6dc263",
+      "bytes": 424
+    },
+    {
+      "path": "hooks/run-hook.cmd",
+      "sha256": "324b298bd370d6f3ea71c165e0b732d5678e5cff68d0d7f7e47c13bc2cb2559a",
+      "bytes": 3577
+    },
+    {
+      "path": "hooks/session-start",
+      "sha256": "38fdeed045b28b62034a809e45602e33358573acbc23c83787d76d449cb89902",
+      "bytes": 4421
+    },
+    {
+      "path": "index.js",
+      "sha256": "f0132fd5339befeb99ba903b1619fd9530969e5b4a1ea8cecf0b0a7f0213a099",
+      "bytes": 536
+    },
+    {
+      "path": "package.json",
+      "sha256": "49004c08be59f027bf23a500d57ab1ba6a288deb5697d3cbd743432cf4a42059",
+      "bytes": 433
+    },
+    {
+      "path": "scripts/bump-version.sh",
+      "sha256": "76dc971d2bb5d8b322eeb89b1d181f983b37f169a92bdf9883517fc746f657e8",
+      "bytes": 7639
+    },
+    {
+      "path": "scripts/lint-shell.sh",
+      "sha256": "aa34cc2dad4b130231bcf21fdd18f3f91e8fd7ab80d88a82a13e1395f32756f8",
+      "bytes": 4088
+    },
+    {
+      "path": "scripts/package-codex-plugin.sh",
+      "sha256": "297c6f3e7c5ee9fabe2fe39765109a7a5e79e9b19c990775025586c5263121d4",
+      "bytes": 10338
+    },
+    {
+      "path": "scripts/render-antigravity-logo.sh",
+      "sha256": "48a8d329a7e048f5dba229bdb688f71bea7c9feaa1f139176d693ced4eccb9da",
+      "bytes": 2027
+    },
+    {
+      "path": "scripts/sync-to-codex-plugin.sh",
+      "sha256": "68faa7e87b9df99ded0b9a1ed2e683c1007c36543593adfdbf55a9d57ab318d5",
+      "bytes": 15097
+    },
+    {
+      "path": "skills/brainstorming/SKILL.md",
+      "sha256": "2c9ca71f94886f9ca9f4aef055f7cafb3e1a9bdf3aeebf8f4cb547c69405d207",
+      "bytes": 15190
+    },
+    {
+      "path": "skills/brainstorming/builder-check-prompt.md",
+      "sha256": "36d51a4723d6f0a3ce5811a0ea3b3a8424f07533947e1355f5d8cb8cce40c55e",
+      "bytes": 881
+    },
+    {
+      "path": "skills/brainstorming/scripts/frame-template.html",
+      "sha256": "6a8a4e58bd6a44b904e2e3c57de774481d909204597e1498de53f1b2fecc4c4e",
+      "bytes": 8094
+    },
+    {
+      "path": "skills/brainstorming/scripts/helper.js",
+      "sha256": "43c6d69954a46ec34a2a262bcc62a9a7e83e839c739f199cb72646d397c686e3",
+      "bytes": 5615
+    },
+    {
+      "path": "skills/brainstorming/scripts/server.cjs",
+      "sha256": "763abf96510e0b892a1141397b31aa82ef900cf87ed34dde94bc8782baf4a7ca",
+      "bytes": 25699
+    },
+    {
+      "path": "skills/brainstorming/scripts/start-server.sh",
+      "sha256": "314dd68dc00e8dd94c7491aca8a5f004c7fddffc161e2b07482f29f48d13659a",
+      "bytes": 7315
+    },
+    {
+      "path": "skills/brainstorming/scripts/stop-server.sh",
+      "sha256": "0b5ccbbd57f62d3ed88993f7940b5ee0e5c0fc9b21c550c623da4f6292e47daf",
+      "bytes": 3263
+    },
+    {
+      "path": "skills/brainstorming/visual-companion.md",
+      "sha256": "6ffcb038b53254bd31debaa15e12dcd4ff24bd63d690e0b644ac6396701cf2e2",
+      "bytes": 13413
+    },
+    {
+      "path": "skills/diagnosing-superpowers/SKILL.md",
+      "sha256": "3143de8695c5a2d63e8b1675f33837578076f464deb127c2ebdd0b46fceef886",
+      "bytes": 6941
+    },
+    {
+      "path": "skills/diagnosing-superpowers/prompts/analyst-common.md",
+      "sha256": "88801c36070be2a54a8a9a29632b01ab21db053e2e76ee49b5252a9b74ca4090",
+      "bytes": 1582
+    },
+    {
+      "path": "skills/diagnosing-superpowers/prompts/cost-and-time.md",
+      "sha256": "fe97a66d4db3b436816ef82694bda413b522b3a862dd41978da01e358fffecc4",
+      "bytes": 1640
+    },
+    {
+      "path": "skills/diagnosing-superpowers/prompts/plan-adherence.md",
+      "sha256": "1dcbab82033598a2e9c9ee42e950d4b1822d2c871c02cef9e102cdd5cbbda113",
+      "bytes": 1637
+    },
+    {
+      "path": "skills/diagnosing-superpowers/prompts/quality-evidence.md",
+      "sha256": "749d11cf678f379ed77a29274cad456634e0284aa523639a1a214a9f2b986eb1",
+      "bytes": 1476
+    },
+    {
+      "path": "skills/diagnosing-superpowers/prompts/repeated-work.md",
+      "sha256": "895027f2dfa4b1b8bcdb7ac9aec8d45a80bff212fad6ec6cad5ab38fa68322f5",
+      "bytes": 1469
+    },
+    {
+      "path": "skills/diagnosing-superpowers/prompts/request-conflicts.md",
+      "sha256": "e800e38d8b7752c212c76c5c3ed75cd78b749684263ea0c313586f26af6f4b5c",
+      "bytes": 1011
+    },
+    {
+      "path": "skills/diagnosing-superpowers/prompts/scrub-audit.md",
+      "sha256": "5cc48f05a7f81f5f7e05e0c7ceafc0fb8774bcaf75fe88dcb5c7e408026c70ad",
+      "bytes": 1363
+    },
+    {
+      "path": "skills/diagnosing-superpowers/prompts/scrub.md",
+      "sha256": "854cb3320cc5377b493cea2f72519d67983464882db68a0f408a7d0a0f040b8c",
+      "bytes": 1471
+    },
+    {
+      "path": "skills/diagnosing-superpowers/prompts/similar-session.md",
+      "sha256": "b190f713b463df2bb5ec3914647e204074d1bd50643a53159db6d13cace916c1",
+      "bytes": 1711
+    },
+    {
+      "path": "skills/diagnosing-superpowers/prompts/skill-timeline.md",
+      "sha256": "45d604d583b57a77b9033eced8eb875ef342af70fcd66cf7d15c6dc89964890f",
+      "bytes": 1646
+    },
+    {
+      "path": "skills/diagnosing-superpowers/prompts/stumbles.md",
+      "sha256": "1f2d1f048aff7b8b400006301f1ce8c232ecc7e9d5f705af27a849b2c03ea2e7",
+      "bytes": 1330
+    },
+    {
+      "path": "skills/diagnosing-superpowers/references/context-safety.md",
+      "sha256": "e6be2bd3495f454d4bedee9484d728d245d1fa656e11fc4ceec5693c16e4730a",
+      "bytes": 990
+    },
+    {
+      "path": "skills/diagnosing-superpowers/references/github-issues.md",
+      "sha256": "d26ef9197b4a6ae5159ae6d11abd162bcc624d95fc7ccf508e07b68f916a1b19",
+      "bytes": 1636
+    },
+    {
+      "path": "skills/diagnosing-superpowers/references/redaction-policy.md",
+      "sha256": "96b16f47074838fe2d7e609577d6f8b0ad460f8378b281a3f96ee23cb5a08bde",
+      "bytes": 2243
+    },
+    {
+      "path": "skills/diagnosing-superpowers/references/session-discovery.md",
+      "sha256": "6d1dced083e5d978448a78df298cf515531b0eb39b2854a4a2afbffeb69a7435",
+      "bytes": 1859
+    },
+    {
+      "path": "skills/diagnosing-superpowers/templates/bundle-README.md",
+      "sha256": "2e6ddc6b106028d5ebd00a50ad93a77111d675c219ee1273cd0857869e8d51ec",
+      "bytes": 3672
+    },
+    {
+      "path": "skills/diagnosing-superpowers/templates/case.md",
+      "sha256": "597892462be83bc478536ec91f7c285f6dd25d119c560734a3a180fe8471301d",
+      "bytes": 2983
+    },
+    {
+      "path": "skills/diagnosing-superpowers/templates/issue.md",
+      "sha256": "afd21779e5de5bc5adfe2f5a50a04e44ab8d50d9ad0f829243de248d6f023eed",
+      "bytes": 2680
+    },
+    {
+      "path": "skills/diagnosing-superpowers/templates/report.md",
+      "sha256": "38295d0fd785e8608f330815c59ebd7047942002ec7085aecbed54681f56b0c1",
+      "bytes": 2359
+    },
+    {
+      "path": "skills/dispatching-parallel-agents/SKILL.md",
+      "sha256": "1968923066f3b707eb01d1992cdf4c42284c3855f70253b9cd5000ff45fca13c",
+      "bytes": 6078
+    },
+    {
+      "path": "skills/executing-plans/SKILL.md",
+      "sha256": "deaf176fa179827e80f2ea3101db3ea90fdf562ebef340eba761e4687940f5f5",
+      "bytes": 18364
+    },
+    {
+      "path": "skills/executing-plans/scripts/task-done",
+      "sha256": "ac0b5ebafc7d471507b7e94d88da77a11f187ba277c8d48fefaf8ff3e4fee50e",
+      "bytes": 1900
+    },
+    {
+      "path": "skills/executing-plans/scripts/task-start",
+      "sha256": "4ae7ce3b6777c3240af786197836a6b4bbf3b0ee831c25f147c149ea8db54a21",
+      "bytes": 1185
+    },
+    {
+      "path": "skills/finishing-a-development-branch/SKILL.md",
+      "sha256": "8db5a922b242dd4e1bf824cb91c13b3e8d8e8a86d6ceaf7f0774eb9cce909d65",
+      "bytes": 7781
+    },
+    {
+      "path": "skills/receiving-code-review/SKILL.md",
+      "sha256": "091df1629510af1b92fc4abd6f96732ebedb4cb2c0f3457e8f2740b0504a2438",
+      "bytes": 6203
+    },
+    {
+      "path": "skills/requesting-code-review/SKILL.md",
+      "sha256": "2180e14a448e9410bec88e6646a2d1f0ce7fdd58de27388c1e052e929679d2bc",
+      "bytes": 2974
+    },
+    {
+      "path": "skills/requesting-code-review/code-reviewer.md",
+      "sha256": "82e370be6b3447523816286195571e4216ba56ba1ad6ad0e87862294c4c78dcb",
+      "bytes": 6449
+    },
+    {
+      "path": "skills/subagent-driven-development/SKILL.md",
+      "sha256": "1baf70e307bde682c462513c86116333f1f066168c6710f45145bf5f0b00828d",
+      "bytes": 19740
+    },
+    {
+      "path": "skills/subagent-driven-development/implementer-prompt.md",
+      "sha256": "81dd9d5a3fb0b09b96b5829f03b9796842f3199ef7591d1ba1c2db2a515f64d0",
+      "bytes": 6335
+    },
+    {
+      "path": "skills/subagent-driven-development/re-review-prompt.md",
+      "sha256": "ad54d0a10f1c2c8e656456e0a46e654af5dfe5ee6bcef63428cfd69b8dcd9311",
+      "bytes": 4833
+    },
+    {
+      "path": "skills/subagent-driven-development/references/batching.md",
+      "sha256": "b54dc7e23dbfb90db89bcb2fb3af591aabf6a271a165fbc0da4c6f9439980eac",
+      "bytes": 583
+    },
+    {
+      "path": "skills/subagent-driven-development/references/cannot-verify.md",
+      "sha256": "e698713a15e0eabf1a2ab26ffe1bb04bf70c9d6d2e2060d44a0f9a1bdd4408bf",
+      "bytes": 513
+    },
+    {
+      "path": "skills/subagent-driven-development/references/final-review.md",
+      "sha256": "6c9e12093e46c4ad0a203bc07709c17e3470f855f1b78e55c5e7b722a012a32c",
+      "bytes": 2576
+    },
+    {
+      "path": "skills/subagent-driven-development/references/fix-loop.md",
+      "sha256": "1938ce707915efc44021e563ebc29666329e20ad861b6c50b89f305b8f4e8d8b",
+      "bytes": 4314
+    },
+    {
+      "path": "skills/subagent-driven-development/references/handling-reports.md",
+      "sha256": "8f759cdd4936220c38aab05b6d6c48c6df8ac8f146b0f37a6d2facbf87133c67",
+      "bytes": 1062
+    },
+    {
+      "path": "skills/subagent-driven-development/references/preflight.md",
+      "sha256": "3ea21c5fc1af1a190ac8a9d19ceb0849b47bf2ffe27b87dffcc21b6a0539776c",
+      "bytes": 1353
+    },
+    {
+      "path": "skills/subagent-driven-development/references/resuming.md",
+      "sha256": "ff6e38bde2276faa2a7e93513086caded0ea10edbf2ec7f349a7e3b0d7c668c4",
+      "bytes": 614
+    },
+    {
+      "path": "skills/subagent-driven-development/scripts/review-package",
+      "sha256": "aed7c6e09fc660417d28898ed975e84651cb9f18f4675141cd475edfb7037f3d",
+      "bytes": 2444
+    },
+    {
+      "path": "skills/subagent-driven-development/scripts/sdd-repo",
+      "sha256": "6f8256a776968d394bae679572e41ce572fd45c72074b98f9a8eb8b4f160e06f",
+      "bytes": 2356
+    },
+    {
+      "path": "skills/subagent-driven-development/scripts/sdd-workspace",
+      "sha256": "de3af5252fa595fc2000ba05cf69e06187d5c8aae9d283cced4c167ad1813061",
+      "bytes": 4823
+    },
+    {
+      "path": "skills/subagent-driven-development/scripts/task-brief",
+      "sha256": "0f244a12e146393c552ba62069d3eedcc85cb3f76de67b01f4e11219e5ebbcd8",
+      "bytes": 4769
+    },
+    {
+      "path": "skills/subagent-driven-development/task-reviewer-prompt.md",
+      "sha256": "61a04c2fb29907887d8babee1594f5e35ae26d461e7e584f5b7c283215165e08",
+      "bytes": 9175
+    },
+    {
+      "path": "skills/systematic-debugging/SKILL.md",
+      "sha256": "51c6435d98c83c42c96ba7c35725a0b2c376cd487fb1a4e6bd0ddbe7e33ef202",
+      "bytes": 9530
+    },
+    {
+      "path": "skills/systematic-debugging/condition-based-waiting-example.ts",
+      "sha256": "40ae5ebe497fdf310200e43fe986552546d0a22837c0d39e855db1cfd33eb88e",
+      "bytes": 5054
+    },
+    {
+      "path": "skills/systematic-debugging/condition-based-waiting.md",
+      "sha256": "e89fec8400d6cd50f43407cec9fab50976ba4d55d0ec2eb51c0bd68036b54c26",
+      "bytes": 3516
+    },
+    {
+      "path": "skills/systematic-debugging/defense-in-depth.md",
+      "sha256": "1e175fb86fc357e58c6aebf5441e481e1b7868b4380c0456b63a17eefbd18ba7",
+      "bytes": 3650
+    },
+    {
+      "path": "skills/systematic-debugging/find-polluter.sh",
+      "sha256": "dd7b8f13c4cc2a24b33ff87b18da9248f3e1c80a085c3316224f69ff0fa5c43c",
+      "bytes": 1986
+    },
+    {
+      "path": "skills/systematic-debugging/root-cause-tracing.md",
+      "sha256": "75b933b6a8c40bdb2031b10f21654395b56ec6ab6bc7b018c18d3fe57aeb7fb8",
+      "bytes": 5321
+    },
+    {
+      "path": "skills/test-driven-development/SKILL.md",
+      "sha256": "64b03fce4aee5a97a93160cea8111f3ba13a17b7c001db4bd5836d67fd10705d",
+      "bytes": 9578
+    },
+    {
+      "path": "skills/test-driven-development/writing-good-tests.md",
+      "sha256": "51471c853306ff92ca8bb41dcaea05f31c0e46b03651f8f3c99754b7172f4ae1",
+      "bytes": 8268
+    },
+    {
+      "path": "skills/using-git-worktrees/SKILL.md",
+      "sha256": "8cfb86f121269e8f7f12361e6795c4f6738828340e28964c9229d365666c9edd",
+      "bytes": 6813
+    },
+    {
+      "path": "skills/using-superpowers/SKILL.md",
+      "sha256": "82c5c8866ad7f5dd4440ce66bd7806ba48a2f13771beae5cf112e53f08fe36ba",
+      "bytes": 3192
+    },
+    {
+      "path": "skills/using-superpowers/references/antigravity-tools.md",
+      "sha256": "4880f6de3da4e32f9659ebe7a72b9e0ebfff04e028c2ed96173f86d0387a04c0",
+      "bytes": 1495
+    },
+    {
+      "path": "skills/using-superpowers/references/claude-code-tools.md",
+      "sha256": "21479a3fee27448cab8748a3b5687e53bb257883bda9c070426f9a1ab5cebf1b",
+      "bytes": 1469
+    },
+    {
+      "path": "skills/using-superpowers/references/codex-tools.md",
+      "sha256": "1a38ad9b188c393052f58d95657a1c35ea6aafc8b5a27f198f3922912f70bbe7",
+      "bytes": 4762
+    },
+    {
+      "path": "skills/using-superpowers/references/gemini-tools.md",
+      "sha256": "62b9157bcb0ee3c6784e3d0da0798ddfa5872f9e0c34bea48f3079dabea71965",
+      "bytes": 4598
+    },
+    {
+      "path": "skills/using-superpowers/references/hermes-tools.md",
+      "sha256": "e2185c976a3c87503910e05e2aea58cc89bc8e569bb624b93df9958ac47a9190",
+      "bytes": 1964
+    },
+    {
+      "path": "skills/using-superpowers/references/muse-tools.md",
+      "sha256": "5a1da5c575fe18456ca71cd47ebfd8a38c745f8d82a67fe64d5b83080000eeb3",
+      "bytes": 1908
+    },
+    {
+      "path": "skills/using-superpowers/references/pi-tools.md",
+      "sha256": "703dbc83d23ecab9c6f388460c38abc482e9dee2fe6772a8c7a255152ad3a4d5",
+      "bytes": 1242
+    },
+    {
+      "path": "skills/verification-before-completion/SKILL.md",
+      "sha256": "2befe7fc55bcadaa3d97dd9e8efeb633d2561c0ebe74c5a8b17c4d9e7e4520b3",
+      "bytes": 3646
+    },
+    {
+      "path": "skills/writing-plans/SKILL.md",
+      "sha256": "a6c67c1900064347c2a329990dd3c555657c51c3ec53b259a08aa01a2c26139a",
+      "bytes": 10335
+    },
+    {
+      "path": "skills/writing-skills/SKILL.md",
+      "sha256": "8cb3ac68c6d8c4bb46886b998b09af7989643cab8bd0e46ee86dd62e64546bbe",
+      "bytes": 16738
+    },
+    {
+      "path": "skills/writing-skills/references/CLAUDE_MD_TESTING.md",
+      "sha256": "0b379a3415e185d3c434b3ad283d8aa132f3022c2a4f210f168865b5986bcef0",
+      "bytes": 5423
+    },
+    {
+      "path": "skills/writing-skills/references/anthropic-best-practices.md",
+      "sha256": "217629b356c09c9bd11017c9788e8fc654ca1b32c92d4a51cd490e16dd65e59a",
+      "bytes": 46197
+    },
+    {
+      "path": "skills/writing-skills/references/bulletproofing.md",
+      "sha256": "9397023e6bc85b556a57f3097371363bf03e28e755c57f403f470bcda90e0a23",
+      "bytes": 2577
+    },
+    {
+      "path": "skills/writing-skills/references/discovery.md",
+      "sha256": "c6bbc74af3be90f693f7cbc986af6fa94e8df75f65109b52e96032587f5b92af",
+      "bytes": 7616
+    },
+    {
+      "path": "skills/writing-skills/references/flowcharts.md",
+      "sha256": "8b1f542391f274f0d33f3457ac099a3d317d6877eaa3b8d3b1ebef151b55fda7",
+      "bytes": 1262
+    },
+    {
+      "path": "skills/writing-skills/references/graphviz-conventions.dot",
+      "sha256": "e2890a593c91370e384b42f2f67b1a6232c9e69dddea7891a0c1c46d7b20b694",
+      "bytes": 5970
+    },
+    {
+      "path": "skills/writing-skills/references/persuasion-principles.md",
+      "sha256": "a51bc9bf75189ea73a27b3fb504a2fdfdb966fb1f7f1cdf03203230a216ccc03",
+      "bytes": 5901
+    },
+    {
+      "path": "skills/writing-skills/references/testing-skills-with-subagents.md",
+      "sha256": "ed8a6862c085900135962390530d9dc7637ad6d650b4324ce3b051287a5c3f22",
+      "bytes": 12557
+    },
+    {
+      "path": "skills/writing-skills/render-graphs.js",
+      "sha256": "c7f412cc629461c4d10287e668731874c0497707023e3e3f74a5355eb2cee196",
+      "bytes": 4968
+    },
+    {
+      "path": "tests/antigravity/run-tests.sh",
+      "sha256": "76355b01132d4f27cc5545c15926eb0c3614d38db2b5d6988a2d818918d9eaf1",
+      "bytes": 319
+    },
+    {
+      "path": "tests/antigravity/test-antigravity-tools.sh",
+      "sha256": "c38a501650f5ba63337514044083636998824749adb4c564431253f3cc66254c",
+      "bytes": 1975
+    },
+    {
+      "path": "tests/antigravity/test-logo.sh",
+      "sha256": "d7d133df78b917bf00b24c93be19f7b21e185dbcb6d475542993eb3d5c0f3cc3",
+      "bytes": 1603
+    },
+    {
+      "path": "tests/antigravity/test-plugin-manifest.sh",
+      "sha256": "627d97c59d806a6d495e54dff5dd57447eba21d8a3293251b472898f28268c12",
+      "bytes": 4804
+    },
+    {
+      "path": "tests/brainstorm-server/auth.test.js",
+      "sha256": "8efa43628b582973dcc543c0768e91066cf9834292e2e724657c6801b63df062",
+      "bytes": 12084
+    },
+    {
+      "path": "tests/brainstorm-server/branding.test.js",
+      "sha256": "b116f645b46130a3a58867493863a1398cf5426375d695203c858c95eb5e8d02",
+      "bytes": 12213
+    },
+    {
+      "path": "tests/brainstorm-server/browser-launcher.test.js",
+      "sha256": "ffb9ccecf27968b9359049ff96b50725669b1f86863f88b583b9aa0c3aa37c94",
+      "bytes": 1768
+    },
+    {
+      "path": "tests/brainstorm-server/helper.test.js",
+      "sha256": "9917fc944e8c5594430ba2600035ff5fd8212119b9cae2d62c75f5725de94061",
+      "bytes": 8240
+    },
+    {
+      "path": "tests/brainstorm-server/lifecycle.test.js",
+      "sha256": "686e19a12c6ba9b3003f4dedf840161b05f5c42dfb87c49a6b9c8abc596f1156",
+      "bytes": 23089
+    },
+    {
+      "path": "tests/brainstorm-server/package-lock.json",
+      "sha256": "80f45a9d8857e27d9363d47789284a26d13fb47388fa8596ef0db7207e6d7c10",
+      "bytes": 861
+    },
+    {
+      "path": "tests/brainstorm-server/package.json",
+      "sha256": "d785483894bfedbccf9731fd7ed52f959973f62dc9c42a8a7407fc7779d220c8",
+      "bytes": 374
+    },
+    {
+      "path": "tests/brainstorm-server/server.test.js",
+      "sha256": "7e98be35f51747ac54def39b17fc5de1002fdd36ecbad17c3d026ca11e5d1f90",
+      "bytes": 27226
+    },
+    {
+      "path": "tests/brainstorm-server/start-server.test.sh",
+      "sha256": "fc32961620c79a01230631a29e50760c0cc39e08638ac42aa5341ea5106b58a2",
+      "bytes": 4879
+    },
+    {
+      "path": "tests/brainstorm-server/stop-server.test.sh",
+      "sha256": "35e150e95f0e97d50470f2c0a30bc7c9c8c5cb7721c53dcff887b430067490db",
+      "bytes": 6346
+    },
+    {
+      "path": "tests/brainstorm-server/windows-lifecycle.test.sh",
+      "sha256": "7dc8e09edfe0a4cc34550fdb0e5ae5117758991d490756971be51c88e4f5908d",
+      "bytes": 12043
+    },
+    {
+      "path": "tests/brainstorm-server/ws-protocol.test.js",
+      "sha256": "abd0a10eaffe4e30a9918c79c7692775db36c8a3e132e04d52ec06d6cddaa132",
+      "bytes": 15002
+    },
+    {
+      "path": "tests/claude-code/README.md",
+      "sha256": "df8cc7a1709b5fd881f41f6e7afc180f1b686c14b97624c27e4957a174c09911",
+      "bytes": 4724
+    },
+    {
+      "path": "tests/claude-code/analyze-token-usage.py",
+      "sha256": "b3b124b975086e66540dca1328d7b6b75416450b0c93fc246f0d7d148fc2394c",
+      "bytes": 6733
+    },
+    {
+      "path": "tests/claude-code/run-skill-tests.sh",
+      "sha256": "a7bffa447f489be5a9507114027ddcdb94409eba3156df88c9338307710502a4",
+      "bytes": 5334
+    },
+    {
+      "path": "tests/claude-code/test-executing-plans-scripts.sh",
+      "sha256": "dabc5a81cc989331d27ae470bf107f691cb4412883fb4056035d55d5206a6b07",
+      "bytes": 10352
+    },
+    {
+      "path": "tests/claude-code/test-helpers.sh",
+      "sha256": "b06a890c9d371195d8f256b1227607dd32ad28831658be1033756cc8dbcd86a7",
+      "bytes": 5438
+    },
+    {
+      "path": "tests/claude-code/test-sdd-workspace.sh",
+      "sha256": "56fe0e161064e02ecd9dbb09b858da25731f80bab42553fce5b27e22fc9c1e29",
+      "bytes": 35023
+    },
+    {
+      "path": "tests/claude-code/test-subagent-driven-development-integration.sh",
+      "sha256": "0794d17e3cc5d8a64c07a6c181538e1142819b86382d171f677510cfe6a3f722",
+      "bytes": 10779
+    },
+    {
+      "path": "tests/claude-code/test-subagent-driven-development.sh",
+      "sha256": "37e9a1fbb20f9f6ca2e7eb62f16b4b04c90da2874ec48ec3d2cc5c73ed99155d",
+      "bytes": 5511
+    },
+    {
+      "path": "tests/claude-code/test-worktree-native-preference.sh",
+      "sha256": "1c0a94fb097ad33186bb7ea2b0321b11d8ba92ed8c6ef61464a2246eec33acf6",
+      "bytes": 6680
+    },
+    {
+      "path": "tests/claude-code/test-worktree-path-policy.sh",
+      "sha256": "3498f973a9cf288f2959b7a02fc3acea09ee11650b46d689aef81b394f8ab85c",
+      "bytes": 2546
+    },
+    {
+      "path": "tests/codex-plugin-sync/test-sync-to-codex-plugin.sh",
+      "sha256": "28e801f3b4792de2593178204b0bf696c434f0ce04a050381520569c4b6176c4",
+      "bytes": 26160
+    },
+    {
+      "path": "tests/codex/test-marketplace-manifest.sh",
+      "sha256": "9c5afb24318bd959606f5063f444042e08e6fc2c6ff8c4988760476021e4ec90",
+      "bytes": 2889
+    },
+    {
+      "path": "tests/codex/test-package-codex-plugin.sh",
+      "sha256": "671e0667b268947ea44d49687d0efb05ae5387621191c9122c318fc59ffc86fa",
+      "bytes": 10750
+    },
+    {
+      "path": "tests/devin/test-devin-plugin.sh",
+      "sha256": "e156be13b2e902449ef8bd1836b9dc60a7fc5f2f670896f4faf621d9a1f3a6e4",
+      "bytes": 2610
+    },
+    {
+      "path": "tests/diagnosing-superpowers/test-skill-structure.sh",
+      "sha256": "35baf007e9a744621c6d374200cfac3b597a5b969bbf824178975257f239854b",
+      "bytes": 5449
+    },
+    {
+      "path": "tests/explicit-skill-requests/prompts/action-oriented.txt",
+      "sha256": "4ee13db41ce891b5b328f8ad5284e516253f87dc65307df0e60a2713a47442d1",
+      "bytes": 173
+    },
+    {
+      "path": "tests/explicit-skill-requests/prompts/after-planning-flow.txt",
+      "sha256": "7da11dd7918b083c43087cd21e241d3b397d5488ba1e06bebed74488c4827d22",
+      "bytes": 551
+    },
+    {
+      "path": "tests/explicit-skill-requests/prompts/claude-suggested-it.txt",
+      "sha256": "cb46492d9f905ebf6098aa6d0884f046a1b863b39036e5ec9a3244991b758d6f",
+      "bytes": 498
+    },
+    {
+      "path": "tests/explicit-skill-requests/prompts/i-know-what-sdd-means.txt",
+      "sha256": "64f33d0b328471c800541e268996a91e360d625bfe151b476b65bb64f0f1cd8d",
+      "bytes": 366
+    },
+    {
+      "path": "tests/explicit-skill-requests/prompts/mid-conversation-execute-plan.txt",
+      "sha256": "601301c1da6e138427c5c1b18acf34b3931bdd08397c3aec7bc94bec30d5c606",
+      "bytes": 119
+    },
+    {
+      "path": "tests/explicit-skill-requests/prompts/please-use-brainstorming.txt",
+      "sha256": "de9508ffad9e29ee8ddda26ed9403b4a650e1081df39800edb6b56a6a3a859dd",
+      "bytes": 73
+    },
+    {
+      "path": "tests/explicit-skill-requests/prompts/skip-formalities.txt",
+      "sha256": "b4c1fc115fc67d9919a29db6d8ceaa57a41933bde343168bd0858a62cfe11c51",
+      "bytes": 171
+    },
+    {
+      "path": "tests/explicit-skill-requests/prompts/subagent-driven-development-please.txt",
+      "sha256": "c2499520cb588008437148facc965800e4a302baa1cc4d726f5b02bfcfc5f3e1",
+      "bytes": 36
+    },
+    {
+      "path": "tests/explicit-skill-requests/prompts/use-systematic-debugging.txt",
+      "sha256": "4aa7a8da6f68bb22d2b1fb66aeb26c1bed6fdf86d33d2d6f7a9752334856a990",
+      "bytes": 52
+    },
+    {
+      "path": "tests/explicit-skill-requests/run-all.sh",
+      "sha256": "b657ef562b6ce3d02b3422eb5ab8571be5545525249088034ab36c27343b95cc",
+      "bytes": 1977
+    },
+    {
+      "path": "tests/explicit-skill-requests/run-extended-multiturn-test.sh",
+      "sha256": "1004578e3ef68d6fda8646c9257d27dd4ca30c4c1bdc986a50fbcb929ea0934d",
+      "bytes": 3407
+    },
+    {
+      "path": "tests/explicit-skill-requests/run-haiku-test.sh",
+      "sha256": "27b92722271fd25dfcad9b04e8c45b81e2a51a51005c3bcf13dd9d5a70567d01",
+      "bytes": 4042
+    },
+    {
+      "path": "tests/explicit-skill-requests/run-multiturn-test.sh",
+      "sha256": "dc22f0b1ed0d367811ecf046c942430d15e87f4b8b2b4cc8260d60e00bee6ecb",
+      "bytes": 4564
+    },
+    {
+      "path": "tests/explicit-skill-requests/run-test.sh",
+      "sha256": "841f1d014f231c84f441cc6b91f388cc3e9e788012e6d36f5e78406c1f4c9b49",
+      "bytes": 4327
+    },
+    {
+      "path": "tests/hermes/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tests/hermes/conftest.py",
+      "sha256": "6cf5e434b124d912e1b53b4e6c1287f72c9af8d60aa01e8b49722c98e8a41dc8",
+      "bytes": 1036
+    },
+    {
+      "path": "tests/hermes/test_bootstrap.py",
+      "sha256": "a4aaeb394779f3d22106866bfe67723301a5cf317dfad7a1386994eddd7a3031",
+      "bytes": 3341
+    },
+    {
+      "path": "tests/hermes/test_plugin.py",
+      "sha256": "f15ef2b31a293113830a8e82441540372bf0cb3bd02ffa51ef690ec7207e5ff9",
+      "bytes": 7609
+    },
+    {
+      "path": "tests/hooks/test-run-hook-cmd-windows.sh",
+      "sha256": "af80fc5779c806ca42bf4b16f62343cedada2b0cd12693bcdcb0416b2c007b70",
+      "bytes": 9491
+    },
+    {
+      "path": "tests/hooks/test-session-start.sh",
+      "sha256": "23f462f38fc152d1f63b0bbe859acb88cc382adf51e7c8f9537b4e8f2e83b2af",
+      "bytes": 13993
+    },
+    {
+      "path": "tests/kimi/run-tests.sh",
+      "sha256": "fb53a9ce91ae119146764ef2d55c63a5d20b86198e2ee08759fbae8194177ff0",
+      "bytes": 127
+    },
+    {
+      "path": "tests/kimi/test-plugin-manifest.sh",
+      "sha256": "d7ca4db2e67c8611d3d1fe1fbf28fe41a33b187155563f1a553212df04250aaa",
+      "bytes": 2301
+    },
+    {
+      "path": "tests/opencode/run-tests.sh",
+      "sha256": "fa16ebeba28fd98adbb4c9a7572965de8e614e06de9912c287883f677114cf1c",
+      "bytes": 4735
+    },
+    {
+      "path": "tests/opencode/setup.sh",
+      "sha256": "0e8600fa5e56d7613f41d19732601397d2c18087a71da2801cc53443756a6348",
+      "bytes": 2864
+    },
+    {
+      "path": "tests/opencode/test-bootstrap-caching.mjs",
+      "sha256": "63c3156aebf3db49c25e97aadcff613932d6a7ceab59c66cef9ecff20f6e5019",
+      "bytes": 11198
+    },
+    {
+      "path": "tests/opencode/test-bootstrap-caching.sh",
+      "sha256": "b13d826fdae77feaf922f4009f544d0ad51ce722258dee997b252f76af70330a",
+      "bytes": 1060
+    },
+    {
+      "path": "tests/opencode/test-hook-registration.mjs",
+      "sha256": "22bc8f8031787c20f291e0a4e852d9e6fbd8c7fd11931e75586433ba26134634",
+      "bytes": 3464
+    },
+    {
+      "path": "tests/opencode/test-hook-registration.sh",
+      "sha256": "f60323f6eab36d921d49a2312dc101752232b62e702079ab0595c6720e899b56",
+      "bytes": 181
+    },
+    {
+      "path": "tests/opencode/test-plugin-loading.sh",
+      "sha256": "41389f92e160766cfb27bfd15849e3ef546427444f88d241506915044209bed0",
+      "bytes": 2589
+    },
+    {
+      "path": "tests/opencode/test-priority.sh",
+      "sha256": "123a82b72f22a5a0d1be2c6cfb898bf4d8d772ee4c7ba2f4540562a1b62a0902",
+      "bytes": 6994
+    },
+    {
+      "path": "tests/opencode/test-session-bootstrap.mjs",
+      "sha256": "fc1655c45f484e6c19e738b1aec162e9b2e825a89dbe7facdd90b3a8fcbe81d7",
+      "bytes": 9854
+    },
+    {
+      "path": "tests/opencode/test-session-bootstrap.sh",
+      "sha256": "8dd9605232ac6030f052ab0102fcea6109dfe6a44e74a2bbe15fd6eb450fe7db",
+      "bytes": 181
+    },
+    {
+      "path": "tests/opencode/test-skill-registration.mjs",
+      "sha256": "779ba75046c2860096e232b5efa298c2073b459234e7279d87510e10fdeacd79",
+      "bytes": 9176
+    },
+    {
+      "path": "tests/opencode/test-skill-registration.sh",
+      "sha256": "0d01ec62a39b3d996ca8c3160a93e7d5f0bc3591941a8ee6d48f65dd61eddd28",
+      "bytes": 899
+    },
+    {
+      "path": "tests/opencode/test-tools.sh",
+      "sha256": "ae8bfae51fd2d25b9659177ec257c0551bc521d7f9e7c60c34110497b501e182",
+      "bytes": 3383
+    },
+    {
+      "path": "tests/pi/test-pi-extension.mjs",
+      "sha256": "807b0d5623600d70e8fc4bd4bb8ab836d0f45003a2fd044114b076d1ba3d4af5",
+      "bytes": 7333
+    },
+    {
+      "path": "tests/sdd-helper-paths/test-sdd-helper-paths.sh",
+      "sha256": "38e37aa1043a96eeaec08b6f26a4908d1088c6f740a118a6abcaf3d1b6bafd9d",
+      "bytes": 2202
+    },
+    {
+      "path": "tests/shell-lint/test-lint-shell.sh",
+      "sha256": "e777907226ed8614fe1cbc06afd538e223e4081c368757b26a5f77dfb4355b40",
+      "bytes": 4719
+    },
+    {
+      "path": "tests/skill-layout/test-no-dev-files-in-skills.sh",
+      "sha256": "4ebc2c8e396998764d55855012efa3ad38dece864b9bef137ee81b30bfc61bc6",
+      "bytes": 1062
+    },
+    {
+      "path": "tests/skill-size/test-skill-size.sh",
+      "sha256": "82aa688a6f17cb04006954f2c7e6894578ef13009c273fd40777f90c87d8b99a",
+      "bytes": 1099
+    },
+    {
+      "path": "tests/systematic-debugging/pressure-scenarios/CREATION-LOG.md",
+      "sha256": "c24733a5b1821bd6bed1fc950261f0b9f4e90097e0bbb96459d8179713730789",
+      "bytes": 4257
+    },
+    {
+      "path": "tests/systematic-debugging/pressure-scenarios/test-academic.md",
+      "sha256": "fe2ba480d78ac0d686dc025f41c2a32a43d642bf533f91b0c6053a04d35d6486",
+      "bytes": 653
+    },
+    {
+      "path": "tests/systematic-debugging/pressure-scenarios/test-pressure-1.md",
+      "sha256": "0b6a915db0054577819834c79be9eb614e97bddba10d73768e1fbe91cfed048a",
+      "bytes": 1900
+    },
+    {
+      "path": "tests/systematic-debugging/pressure-scenarios/test-pressure-2.md",
+      "sha256": "b2030aeffba07050e8ad573ddf87486457c4a016a786bb326235bebd856f2016",
+      "bytes": 2283
+    },
+    {
+      "path": "tests/systematic-debugging/pressure-scenarios/test-pressure-3.md",
+      "sha256": "96b50a52e2c7989c9cf20fb752c47c1e9a3a70dc362f8f7989f8f5b64dac7708",
+      "bytes": 2692
+    },
+    {
+      "path": "tests/systematic-debugging/test-find-polluter.sh",
+      "sha256": "7c5ae1adb7c6e292b73eccba6ba442501c442aefe8c883a94c9fdd809d592cea",
+      "bytes": 2609
+    },
+    {
+      "path": "tests/version-bump/test-bump-version.sh",
+      "sha256": "9979d56389d953449cd1bdb93017e1f9abbab5f5522e80e9b91dcd6a00baf820",
+      "bytes": 2864
+    },
+    {
+      "path": "tests/writing-skills/test-render-graphs.sh",
+      "sha256": "e758c2e751fcfa73ceaeac7114251d48cd7ece167ac535dd765c3f9d95a6a9a9",
+      "bytes": 2660
+    }
+  ]
+}

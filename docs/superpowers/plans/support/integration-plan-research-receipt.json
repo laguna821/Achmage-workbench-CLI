@@ -1,0 +1,17 @@
+{
+  "eventId": "0b42f53d2a049398bbf5a5c07c18266f43b1163b24e5eecb50083276e8b8c340",
+  "researchId": "rr-0b42f53d2a049398bbf5a5c07c18266f",
+  "revision": "3c3cbe2fbb6979b57bafcbc9851e54112d02ea4662f7afc6c9fc48b81c2335b0",
+  "requestSha256": "cf2a34ab33e72630f7db3538a6cd0ba129d1e86bec67cc0d62086bbe4f2addc9",
+  "deviceId": "laptop-linux",
+  "at": "2026-11-09T05:46:42+00:00",
+  "status": "published",
+  "remoteVerified": true,
+  "deduplicated": false,
+  "modelCalls": 0,
+  "sourceId": "research:rr-0b42f53d2a049398bbf5a5c07c18266f:3c3cbe2fbb6979b57bafcbc9851e54112d02ea4662f7afc6c9fc48b81c2335b0",
+  "heads": [
+    "3c3cbe2fbb6979b57bafcbc9851e54112d02ea4662f7afc6c9fc48b81c2335b0"
+  ],
+  "displayNumber": null
+}

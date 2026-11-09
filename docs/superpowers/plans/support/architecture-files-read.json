@@ -1,0 +1,260 @@
+{
+  "status": "planning-only",
+  "sourceExecution": false,
+  "files": [
+    {
+      "origin": "workbench",
+      "path": "/home/achamge/다운로드/achmage-workbench/apps/desktop/src-tauri/src/office_browser.rs",
+      "repoPath": "apps/desktop/src-tauri/src/office_browser.rs",
+      "observedHead": "bc1057c2c5fb04f2046f4fd711bf718f5cc93737",
+      "readRanges": "1-130,160-301",
+      "sha256": "db26f37211418b18f1abd57f4a144628c9be7d302e863b5d396176ab4f1a7cfb",
+      "bytes": 18782
+    },
+    {
+      "origin": "workbench",
+      "path": "/home/achamge/다운로드/achmage-workbench/apps/desktop/src-tauri/src/lib.rs",
+      "repoPath": "apps/desktop/src-tauri/src/lib.rs",
+      "observedHead": "bc1057c2c5fb04f2046f4fd711bf718f5cc93737",
+      "readRanges": "144-225,435-464",
+      "sha256": "b023dc25574843147177e08ce2bdbda0654a8006a990777e95c2186f91b5219b",
+      "bytes": 24509
+    },
+    {
+      "origin": "workbench",
+      "path": "/home/achamge/다운로드/achmage-workbench/apps/desktop/src-tauri/capabilities/default.json",
+      "repoPath": "apps/desktop/src-tauri/capabilities/default.json",
+      "observedHead": "bc1057c2c5fb04f2046f4fd711bf718f5cc93737",
+      "readRanges": "1-55",
+      "sha256": "0f83c1e8e2a8080fb23fa4809317f79efd866172fa86a1b23dae48e90f8115c1",
+      "bytes": 1256
+    },
+    {
+      "origin": "workbench",
+      "path": "/home/achamge/다운로드/achmage-workbench/apps/host/src/main.ts",
+      "repoPath": "apps/host/src/main.ts",
+      "observedHead": "bc1057c2c5fb04f2046f4fd711bf718f5cc93737",
+      "readRanges": "228-255",
+      "sha256": "646522449ca3f6b429b7571cf07829c9d79e5e7e38272b89002d70a363c641c1",
+      "bytes": 12582
+    },
+    {
+      "origin": "workbench",
+      "path": "/home/achamge/다운로드/achmage-workbench/apps/host/src/office-sessions.ts",
+      "repoPath": "apps/host/src/office-sessions.ts",
+      "observedHead": "bc1057c2c5fb04f2046f4fd711bf718f5cc93737",
+      "readRanges": "43-195,213-235",
+      "sha256": "3e0856645fa08250574525c682899b2d08d9e79fe9612c21fc1af49a85f5ac68",
+      "bytes": 21260
+    },
+    {
+      "origin": "workbench",
+      "path": "/home/achamge/다운로드/achmage-workbench/apps/host/src/document-registry.ts",
+      "repoPath": "apps/host/src/document-registry.ts",
+      "observedHead": "bc1057c2c5fb04f2046f4fd711bf718f5cc93737",
+      "readRanges": "1-92",
+      "sha256": "e26930472e577b115e37d3ef1f97abe0b300cbb7ea8e16a94bedf1296cd07393",
+      "bytes": 6145
+    },
+    {
+      "origin": "workbench",
+      "path": "/home/achamge/다운로드/achmage-workbench/apps/web/src/document-session.ts",
+      "repoPath": "apps/web/src/document-session.ts",
+      "observedHead": "bc1057c2c5fb04f2046f4fd711bf718f5cc93737",
+      "readRanges": "1-85",
+      "sha256": "42f3ff5243c7a188f81af49a1e8f7d5cb31e0e59d88a205142fdc18b61a161c8",
+      "bytes": 5321
+    },
+    {
+      "origin": "workbench",
+      "path": "/home/achamge/다운로드/achmage-workbench/apps/host/src/office-ai.ts",
+      "repoPath": "apps/host/src/office-ai.ts",
+      "observedHead": "bc1057c2c5fb04f2046f4fd711bf718f5cc93737",
+      "readRanges": "48-57,127-137,283-311; keyword search",
+      "sha256": "58b064bcbb29c25060f35b5ea463dfc3f91bd1686d663951faf6708d2771d510",
+      "bytes": 24186
+    },
+    {
+      "origin": "workbench",
+      "path": "/home/achamge/다운로드/achmage-workbench/apps/office/src/office-agent.ts",
+      "repoPath": "apps/office/src/office-agent.ts",
+      "observedHead": "bc1057c2c5fb04f2046f4fd711bf718f5cc93737",
+      "readRanges": "35-75; keyword search",
+      "sha256": "04438ed988ce0a75412478361357c9392c67a13cbf302cbc6119cc964f058994",
+      "bytes": 9059
+    },
+    {
+      "origin": "workbench",
+      "path": "/home/achamge/다운로드/achmage-workbench/apps/host/src/bus.ts",
+      "repoPath": "apps/host/src/bus.ts",
+      "observedHead": "bc1057c2c5fb04f2046f4fd711bf718f5cc93737",
+      "readRanges": "1-50",
+      "sha256": "3d81df06d8d10657a280d3f639754c5521c7d6c43ae9de1b9e2d8600eaca6905",
+      "bytes": 1472
+    },
+    {
+      "origin": "workbench",
+      "path": "/home/achamge/다운로드/achmage-workbench/apps/web/src/api.ts",
+      "repoPath": "apps/web/src/api.ts",
+      "observedHead": "bc1057c2c5fb04f2046f4fd711bf718f5cc93737",
+      "readRanges": "526-555",
+      "sha256": "e5d4397645caa09653f731d8812064aec3fc6a59c7fd27aeedbf6222fa4d212c",
+      "bytes": 48838
+    },
+    {
+      "origin": "workbench",
+      "path": "/home/achamge/다운로드/achmage-workbench/docs/research/aside-agent-desktop-2026-11-04/04-workbench-design.md",
+      "repoPath": "docs/research/aside-agent-desktop-2026-11-04/04-workbench-design.md",
+      "observedHead": "bc1057c2c5fb04f2046f4fd711bf718f5cc93737",
+      "readRanges": "82-179",
+      "sha256": "8834920cbe2577518faf75dd2fb8ef5e9ec8ec7a104825503357a87d8f8055fc",
+      "bytes": 18549
+    },
+    {
+      "origin": "workbench",
+      "path": "/home/achamge/다운로드/achmage-workbench/docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "repoPath": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "observedHead": "bc1057c2c5fb04f2046f4fd711bf718f5cc93737",
+      "readRanges": "keyword search",
+      "sha256": "ec932f1e1be59e53fa7194d6948888d35e8d191165b5f778cabe40a37d8af957",
+      "bytes": 9068
+    },
+    {
+      "origin": "workbench",
+      "path": "/home/achamge/다운로드/achmage-workbench/docs/research/aside-agent-desktop-2026-11-04/06-sources.md",
+      "repoPath": "docs/research/aside-agent-desktop-2026-11-04/06-sources.md",
+      "observedHead": "bc1057c2c5fb04f2046f4fd711bf718f5cc93737",
+      "readRanges": "keyword search",
+      "sha256": "e3aaddf97732d422844c6a7577a3d94f5e1d95203d22a8fe5223f9315a96011b",
+      "bytes": 8892
+    },
+    {
+      "origin": "workbench",
+      "path": "/home/achamge/다운로드/achmage-workbench/apps/host/src/browse.ts",
+      "repoPath": "apps/host/src/browse.ts",
+      "observedHead": "bc1057c2c5fb04f2046f4fd711bf718f5cc93737",
+      "readRanges": "keyword search",
+      "sha256": "60cc55602f3ffe51466b684f39904c57791290ec24fc7864862516fd2a760cae",
+      "bytes": 42097
+    },
+    {
+      "origin": "workbench",
+      "path": "/home/achamge/다운로드/achmage-workbench/apps/office/src/office-ai.ts",
+      "repoPath": "apps/office/src/office-ai.ts",
+      "observedHead": "bc1057c2c5fb04f2046f4fd711bf718f5cc93737",
+      "readRanges": "keyword search",
+      "sha256": "7610d15ba4eae51ebecf1785d2d0e1bb69de5a35475a5a48e3799ee317ecfa77",
+      "bytes": 22167
+    },
+    {
+      "origin": "workbench",
+      "path": "/home/achamge/다운로드/achmage-workbench/apps/web/src/components/Panes.tsx",
+      "repoPath": "apps/web/src/components/Panes.tsx",
+      "observedHead": "bc1057c2c5fb04f2046f4fd711bf718f5cc93737",
+      "readRanges": "keyword search",
+      "sha256": "f25c1b11f4a35f79fdb6ef8c2107a337774903e8cb6e9b9adaa6b3a797e5a599",
+      "bytes": 12833
+    },
+    {
+      "origin": "workbench",
+      "path": "/home/achamge/다운로드/achmage-workbench/docs/agent-browser.md",
+      "repoPath": "docs/agent-browser.md",
+      "observedHead": "bc1057c2c5fb04f2046f4fd711bf718f5cc93737",
+      "readRanges": "keyword search",
+      "sha256": "b70c172d7b4042537bfcc71a58f9044989ac792a31e04c829d51ceeee6b071d5",
+      "bytes": 6135
+    },
+    {
+      "origin": "paseo-main",
+      "path": "/home/achamge/.local/state/achmage/workspaces/achmage-workbench-research/work-1b7f68199bcb4756b2a7fd2a102ccc2e/branch-c5c46cea4de14900be37b66368fb3909/evidence/integration-plan-2026-11-09/source-paseo/packages/desktop/src/features/browser-automation/service.ts",
+      "repoPath": "packages/desktop/src/features/browser-automation/service.ts",
+      "commit": "1fff127f45b11c1c9c573fbbd12791673004c912",
+      "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/desktop/src/features/browser-automation/service.ts",
+      "readRanges": "1-65; keyword search",
+      "sha256": "5918545da9505c22e3462a52d9e9efc2c070f048d9443e4ab3f45878ecd3e9f1",
+      "bytes": 53079
+    },
+    {
+      "origin": "paseo-main",
+      "path": "/home/achamge/.local/state/achmage/workspaces/achmage-workbench-research/work-1b7f68199bcb4756b2a7fd2a102ccc2e/branch-c5c46cea4de14900be37b66368fb3909/evidence/integration-plan-2026-11-09/source-paseo/packages/desktop/src/features/browser-automation/trusted-input.ts",
+      "repoPath": "packages/desktop/src/features/browser-automation/trusted-input.ts",
+      "commit": "1fff127f45b11c1c9c573fbbd12791673004c912",
+      "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/desktop/src/features/browser-automation/trusted-input.ts",
+      "readRanges": "1-84; keyword search",
+      "sha256": "5123c8f20870ce6fea40d7c6972ecbd355cac26f19dfafa7d706457351a05d2e",
+      "bytes": 4644
+    },
+    {
+      "origin": "paseo-main",
+      "path": "/home/achamge/.local/state/achmage/workspaces/achmage-workbench-research/work-1b7f68199bcb4756b2a7fd2a102ccc2e/branch-c5c46cea4de14900be37b66368fb3909/evidence/integration-plan-2026-11-09/source-paseo/packages/desktop/src/features/browser-webviews/registry.ts",
+      "repoPath": "packages/desktop/src/features/browser-webviews/registry.ts",
+      "commit": "1fff127f45b11c1c9c573fbbd12791673004c912",
+      "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/desktop/src/features/browser-webviews/registry.ts",
+      "readRanges": "keyword search",
+      "sha256": "964b9158f702e5e30db4f281a4f45087c8c1fc03461cd9de0382650985ffe28f",
+      "bytes": 9180
+    },
+    {
+      "origin": "paseo-main",
+      "path": "/home/achamge/.local/state/achmage/workspaces/achmage-workbench-research/work-1b7f68199bcb4756b2a7fd2a102ccc2e/branch-c5c46cea4de14900be37b66368fb3909/evidence/integration-plan-2026-11-09/source-paseo/packages/server/src/server/browser-tools/broker.ts",
+      "repoPath": "packages/server/src/server/browser-tools/broker.ts",
+      "commit": "1fff127f45b11c1c9c573fbbd12791673004c912",
+      "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/browser-tools/broker.ts",
+      "readRanges": "73-107,340-365; keyword search",
+      "sha256": "e79cf38cec6a4c60ed1cf22657579551711c1e8730ca236251b6428a7333ca3a",
+      "bytes": 16188
+    },
+    {
+      "origin": "paseo-main",
+      "path": "/home/achamge/.local/state/achmage/workspaces/achmage-workbench-research/work-1b7f68199bcb4756b2a7fd2a102ccc2e/branch-c5c46cea4de14900be37b66368fb3909/evidence/integration-plan-2026-11-09/source-paseo/packages/client/src/index.ts",
+      "repoPath": "packages/client/src/index.ts",
+      "commit": "1fff127f45b11c1c9c573fbbd12791673004c912",
+      "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client/src/index.ts",
+      "readRanges": "78-115,353-370,585-625; keyword search",
+      "sha256": "3ec6649f3208808991e0f2716b5b6af67769b3af9dd89e683d85f9769a54596f",
+      "bytes": 52866
+    },
+    {
+      "origin": "prior-evidence",
+      "path": "/home/achamge/.local/state/achmage/workspaces/achmage-workbench-research/work-1b7f68199bcb4756b2a7fd2a102ccc2e/branch-c5c46cea4de14900be37b66368fb3909/evidence/paseo-2026-11-09/runtime/notes.md",
+      "readRanges": "previous full investigation + referenced",
+      "sha256": "019bd2553b8593edd13e5a832dd4af473d309af991e2ae0bc6f1c90ce9cb2f3f",
+      "bytes": 44034
+    },
+    {
+      "origin": "prior-evidence",
+      "path": "/home/achamge/.local/state/achmage/workspaces/achmage-workbench-research/work-1b7f68199bcb4756b2a7fd2a102ccc2e/branch-c5c46cea4de14900be37b66368fb3909/evidence/paseo-2026-11-09/runtime/release-check.md",
+      "readRanges": "previous full investigation",
+      "sha256": "c717675a0211747e11f6cd5160e3f09688f624fa97246e81290ab7e88aa80c1a",
+      "bytes": 4424
+    },
+    {
+      "origin": "prior-evidence",
+      "path": "/home/achamge/.local/state/achmage/workspaces/achmage-workbench-research/work-1b7f68199bcb4756b2a7fd2a102ccc2e/branch-c5c46cea4de14900be37b66368fb3909/evidence/paseo-2026-11-09/workbench/notes.md",
+      "readRanges": "1-170; source search",
+      "sha256": "a73a693c87597cd6b2b9b33fec563d0375ef722bcb9a692c15d74a51040c783a",
+      "bytes": 28926
+    },
+    {
+      "origin": "prior-evidence",
+      "path": "/home/achamge/.local/state/achmage/workspaces/achmage-workbench-research/work-1b7f68199bcb4756b2a7fd2a102ccc2e/branch-c5c46cea4de14900be37b66368fb3909/evidence/paseo-2026-11-09/synthesis.md",
+      "readRanges": "excerpt up to tool truncation",
+      "sha256": "d014cf1a1c96178c26d9de6d5fb5f572fb334e77a4883f67a4bc7dd9fe731447",
+      "bytes": 17099
+    },
+    {
+      "origin": "prior-evidence",
+      "path": "/home/achamge/.local/state/achmage/workspaces/achmage-workbench-research/work-1b7f68199bcb4756b2a7fd2a102ccc2e/branch-c5c46cea4de14900be37b66368fb3909/evidence/paseo-2026-11-09/official/public-docs/browser.md",
+      "readRanges": "full",
+      "sha256": "d56820ad2c0afcea60d4127cd7fc8c30556a8dd0f18b745bf5f2d855962df186",
+      "bytes": 4162
+    },
+    {
+      "origin": "prior-evidence",
+      "path": "/home/achamge/.local/state/achmage/workspaces/achmage-workbench-research/work-1b7f68199bcb4756b2a7fd2a102ccc2e/branch-c5c46cea4de14900be37b66368fb3909/evidence/paseo-2026-11-09/runtime/source/packages/client/package.json",
+      "readRanges": "full",
+      "sha256": "1fa734988ec9c2b6aa1647acafa5828b3ab82c503f5a6e132be36adc91783618",
+      "bytes": 1859
+    }
+  ]
+}

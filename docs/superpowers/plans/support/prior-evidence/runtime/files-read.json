@@ -1,0 +1,597 @@
+[
+  {
+    "id": "desktop-settings",
+    "path": "packages/desktop/src/settings/desktop-settings.ts",
+    "readRanges": "32-40,209-224",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/desktop/src/settings/desktop-settings.ts#L32-L40",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/desktop/src/settings/desktop-settings.ts"
+  },
+  {
+    "id": "desktop-main",
+    "path": "packages/desktop/src/main.ts",
+    "readRanges": "711-726,1027-1072",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/desktop/src/main.ts#L711-L726",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/desktop/src/main.ts"
+  },
+  {
+    "id": "quit",
+    "path": "packages/desktop/src/daemon/quit-lifecycle.ts",
+    "readRanges": "38-74,111-167",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/desktop/src/daemon/quit-lifecycle.ts#L38-L74",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/desktop/src/daemon/quit-lifecycle.ts"
+  },
+  {
+    "id": "desktop-daemon",
+    "path": "packages/desktop/src/daemon/daemon-manager.ts",
+    "readRanges": "62-89,139-153,271-431",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/desktop/src/daemon/daemon-manager.ts#L62-L89",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/desktop/src/daemon/daemon-manager.ts"
+  },
+  {
+    "id": "daemon-instance",
+    "path": "packages/server/src/server/daemon-instance.ts",
+    "readRanges": "101-154,251-325",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/daemon-instance.ts#L101-L154",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/daemon-instance.ts"
+  },
+  {
+    "id": "cli-start",
+    "path": "packages/cli/src/commands/daemon/start.ts",
+    "readRanges": "7-55",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/cli/src/commands/daemon/start.ts#L7-L55",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/cli/src/commands/daemon/start.ts"
+  },
+  {
+    "id": "cli-launch",
+    "path": "packages/cli/src/commands/daemon/local-daemon.ts",
+    "readRanges": "43-71,82-110",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/cli/src/commands/daemon/local-daemon.ts#L43-L71",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/cli/src/commands/daemon/local-daemon.ts"
+  },
+  {
+    "id": "cli-stop",
+    "path": "packages/cli/src/commands/daemon/stop.ts",
+    "readRanges": "13-22,41-100",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/cli/src/commands/daemon/stop.ts#L13-L22",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/cli/src/commands/daemon/stop.ts"
+  },
+  {
+    "id": "cli-daemon",
+    "path": "packages/cli/src/commands/daemon/index.ts",
+    "readRanges": "1-32",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/cli/src/commands/daemon/index.ts#L1-L32",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/cli/src/commands/daemon/index.ts"
+  },
+  {
+    "id": "supervisor-entry",
+    "path": "packages/server/scripts/supervisor-entrypoint.ts",
+    "readRanges": "105-184",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/scripts/supervisor-entrypoint.ts#L105-L184",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/scripts/supervisor-entrypoint.ts"
+  },
+  {
+    "id": "supervisor",
+    "path": "packages/server/scripts/supervisor.ts",
+    "readRanges": "180-205,306-350,415-469,478-551",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/scripts/supervisor.ts#L180-L205",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/scripts/supervisor.ts"
+  },
+  {
+    "id": "worker",
+    "path": "packages/server/src/server/daemon-worker.ts",
+    "readRanges": "157-198,275-335,370-393",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/daemon-worker.ts#L157-L198",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/daemon-worker.ts"
+  },
+  {
+    "id": "bootstrap",
+    "path": "packages/server/src/server/bootstrap.ts",
+    "readRanges": "1910-1930,1969-2030",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/bootstrap.ts#L1910-L1930",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/bootstrap.ts"
+  },
+  {
+    "id": "restart",
+    "path": "packages/server/src/server/agent/restart-recovery/index.ts",
+    "readRanges": "9-82",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/restart-recovery/index.ts#L9-L82",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/restart-recovery/index.ts"
+  },
+  {
+    "id": "config",
+    "path": "packages/server/src/server/config.ts",
+    "readRanges": "305-346,546-558,840-844",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/config.ts#L305-L346",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/config.ts"
+  },
+  {
+    "id": "nixos",
+    "path": "nix/module.nix",
+    "readRanges": "16-45,80-105,168-193,211-290",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/nix/module.nix#L16-L45",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/nix/module.nix"
+  },
+  {
+    "id": "nix-package",
+    "path": "nix/package.nix",
+    "readRanges": "130-143",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/nix/package.nix#L130-L143",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/nix/package.nix"
+  },
+  {
+    "id": "flake",
+    "path": "flake.nix",
+    "readRanges": "14-19,63-69",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/flake.nix#L14-L19",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/flake.nix"
+  },
+  {
+    "id": "docker",
+    "path": "public-docs/docker.md",
+    "readRanges": "9-62,89-109,150-166",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/docker.md#L9-L62",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/docker.md"
+  },
+  {
+    "id": "lifecycle",
+    "path": "docs/agent-lifecycle.md",
+    "readRanges": "5-78,110-190",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/docs/agent-lifecycle.md#L5-L78",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/docs/agent-lifecycle.md"
+  },
+  {
+    "id": "agent-contract",
+    "path": "packages/server/src/server/agent/agent-sdk-types.ts",
+    "readRanges": "450-529,690-747,807-850",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/agent-sdk-types.ts#L450-L529",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/agent-sdk-types.ts"
+  },
+  {
+    "id": "providers",
+    "path": "packages/server/src/server/agent/provider-registry.ts",
+    "readRanges": "145-229,439-486,810-875",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/provider-registry.ts#L145-L229",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/provider-registry.ts"
+  },
+  {
+    "id": "claude-spawn",
+    "path": "packages/server/src/server/agent/providers/claude/query.ts",
+    "readRanges": "1-117",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/providers/claude/query.ts#L1-L117",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/providers/claude/query.ts"
+  },
+  {
+    "id": "codex-startup",
+    "path": "packages/server/src/server/agent/providers/codex/app-server-startup.ts",
+    "readRanges": "7-9,61-160",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/providers/codex/app-server-startup.ts#L7-L9",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/providers/codex/app-server-startup.ts"
+  },
+  {
+    "id": "supported-providers",
+    "path": "public-docs/supported-providers.md",
+    "readRanges": "13-41,61-118",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/supported-providers.md#L13-L41",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/supported-providers.md"
+  },
+  {
+    "id": "mcp-server",
+    "path": "packages/server/src/server/agent/mcp-server.ts",
+    "readRanges": "1-52",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/mcp-server.ts#L1-L52",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/mcp-server.ts"
+  },
+  {
+    "id": "tool-policy",
+    "path": "packages/server/src/server/agent/paseo-tool-policy.ts",
+    "readRanges": "1-29",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/paseo-tool-policy.ts#L1-L29",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/paseo-tool-policy.ts"
+  },
+  {
+    "id": "tools",
+    "path": "packages/server/src/server/agent/tools/paseo-tools.ts",
+    "readRanges": "121-169,710-811,1220-1311,1383-1401,1605-1695,1966-2097,2150-2237,3236-3271",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/tools/paseo-tools.ts#L121-L169",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/tools/paseo-tools.ts"
+  },
+  {
+    "id": "delivery",
+    "path": "packages/server/src/server/agent/agent-messages/delivery.ts",
+    "readRanges": "1-192",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/agent-messages/delivery.ts#L1-L192",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/agent-messages/delivery.ts"
+  },
+  {
+    "id": "prompt",
+    "path": "packages/server/src/server/agent/agent-prompt.ts",
+    "readRanges": "36-80,91-157,326-403",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/agent-prompt.ts#L36-L80",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/agent-prompt.ts"
+  },
+  {
+    "id": "finish",
+    "path": "packages/server/src/server/agent/finish-subscriptions/index.ts",
+    "readRanges": "16-75",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/finish-subscriptions/index.ts#L16-L75",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/finish-subscriptions/index.ts"
+  },
+  {
+    "id": "finish-observation",
+    "path": "packages/server/src/server/agent/finish-subscriptions/internal/observation.ts",
+    "readRanges": "20-59",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/finish-subscriptions/internal/observation.ts#L20-L59",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/finish-subscriptions/internal/observation.ts"
+  },
+  {
+    "id": "orchestration-doc",
+    "path": "public-docs/orchestration.md",
+    "readRanges": "15-56",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/orchestration.md#L15-L56",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/orchestration.md"
+  },
+  {
+    "id": "orchestration-workflows",
+    "path": "public-docs/orchestration-workflows.md",
+    "readRanges": "45-80,90-103",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/orchestration-workflows.md#L45-L80",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/orchestration-workflows.md"
+  },
+  {
+    "id": "mcp-doc",
+    "path": "public-docs/mcp.md",
+    "readRanges": "92-96",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/mcp.md#L92-L96",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/mcp.md"
+  },
+  {
+    "id": "host-doc",
+    "path": "docs/connected-hosts.md",
+    "readRanges": "1-107",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/docs/connected-hosts.md#L1-L107",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/docs/connected-hosts.md"
+  },
+  {
+    "id": "host-operations",
+    "path": "packages/server/src/server/agent/host-operations/index.ts",
+    "readRanges": "225-299,403-463",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/host-operations/index.ts#L225-L299",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/host-operations/index.ts"
+  },
+  {
+    "id": "host-runtime",
+    "path": "packages/app/src/runtime/host-runtime.ts",
+    "readRanges": "565-659,1062-1156,1665-1705,1775-1802,2112-2213,2237-2264,2304-2338,2498-2608,2772-2786",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/runtime/host-runtime.ts#L565-L659",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/runtime/host-runtime.ts"
+  },
+  {
+    "id": "selection",
+    "path": "packages/app/src/utils/connection-selection.ts",
+    "readRanges": "1-50",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/utils/connection-selection.ts#L1-L50",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/utils/connection-selection.ts"
+  },
+  {
+    "id": "session-store",
+    "path": "packages/app/src/stores/session-store.ts",
+    "readRanges": "65-89",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/stores/session-store.ts#L65-L89",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/stores/session-store.ts"
+  },
+  {
+    "id": "worktree-service",
+    "path": "packages/server/src/server/paseo-worktree-service.ts",
+    "readRanges": "70-150,200-254",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/paseo-worktree-service.ts#L70-L150",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/paseo-worktree-service.ts"
+  },
+  {
+    "id": "worktree-archive",
+    "path": "packages/server/src/server/workspace-archive-service.ts",
+    "readRanges": "441-531",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/workspace-archive-service.ts#L441-L531",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/workspace-archive-service.ts"
+  },
+  {
+    "id": "worktree-doc",
+    "path": "public-docs/worktrees/index.md",
+    "readRanges": "13-45,87-110,251-274",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/worktrees/index.md#L13-L45",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/worktrees/index.md"
+  },
+  {
+    "id": "security",
+    "path": "SECURITY.md",
+    "readRanges": "16-59,87-89",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/SECURITY.md#L16-L59",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/SECURITY.md"
+  },
+  {
+    "id": "security-public",
+    "path": "public-docs/security.md",
+    "readRanges": "24-53,85-106,132-140",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/security.md#L24-L53",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/security.md"
+  },
+  {
+    "id": "connectivity",
+    "path": "public-docs/connectivity.md",
+    "readRanges": "11-72,74-131",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/connectivity.md#L11-L72",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/connectivity.md"
+  },
+  {
+    "id": "pair-offer",
+    "path": "packages/server/src/server/pairing-offer.ts",
+    "readRanges": "14-73",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/pairing-offer.ts#L14-L73",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/pairing-offer.ts"
+  },
+  {
+    "id": "connection-offer",
+    "path": "packages/server/src/server/connection-offer.ts",
+    "readRanges": "30-51",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/connection-offer.ts#L30-L51",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/connection-offer.ts"
+  },
+  {
+    "id": "daemon-key",
+    "path": "packages/server/src/server/daemon-keypair.ts",
+    "readRanges": "16-68",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/daemon-keypair.ts#L16-L68",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/daemon-keypair.ts"
+  },
+  {
+    "id": "pair-cli",
+    "path": "packages/cli/src/commands/daemon/pair.ts",
+    "readRanges": "60-93,143-174",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/cli/src/commands/daemon/pair.ts#L60-L93",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/cli/src/commands/daemon/pair.ts"
+  },
+  {
+    "id": "pair-scan",
+    "path": "packages/app/src/hosts/add-host/internal/scan.tsx",
+    "readRanges": "122-143,174-195,233-233",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/hosts/add-host/internal/scan.tsx#L122-L143",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/hosts/add-host/internal/scan.tsx"
+  },
+  {
+    "id": "pair-model",
+    "path": "packages/app/src/hosts/add-host/internal/pair-scan-model.ts",
+    "readRanges": "35-103",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/hosts/add-host/internal/pair-scan-model.ts#L35-L103",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/hosts/add-host/internal/pair-scan-model.ts"
+  },
+  {
+    "id": "relay-security-doc",
+    "path": "docs/relay-endpoint-security.md",
+    "readRanges": "1-88",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/docs/relay-endpoint-security.md#L1-L88",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/docs/relay-endpoint-security.md"
+  },
+  {
+    "id": "secure-channel",
+    "path": "packages/relay/src/secure-channel.ts",
+    "readRanges": "149-215,260-307,406-534,627-640",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/relay/src/secure-channel.ts#L149-L215",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/relay/src/secure-channel.ts"
+  },
+  {
+    "id": "relay-client",
+    "path": "packages/client/src/daemon-client-relay-e2ee-transport.ts",
+    "readRanges": "83-154,181-205",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client/src/daemon-client-relay-e2ee-transport.ts#L83-L154",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client/src/daemon-client-relay-e2ee-transport.ts"
+  },
+  {
+    "id": "relay-daemon",
+    "path": "packages/server/src/server/relay-transport.ts",
+    "readRanges": "162-182,219-249,297-335,342-389",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/relay-transport.ts#L162-L182",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/relay-transport.ts"
+  },
+  {
+    "id": "relay-runtime",
+    "path": "packages/server/src/server/relay-runtime.ts",
+    "readRanges": "31-74",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/relay-runtime.ts#L31-L74",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/relay-runtime.ts"
+  },
+  {
+    "id": "ssh",
+    "path": "packages/client/src/node/ssh-tunnel.ts",
+    "readRanges": "28-92",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client/src/node/ssh-tunnel.ts#L28-L92",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client/src/node/ssh-tunnel.ts"
+  },
+  {
+    "id": "ssh-args",
+    "path": "packages/protocol/src/ssh-transport.ts",
+    "readRanges": "47-82",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/protocol/src/ssh-transport.ts#L47-L82",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/protocol/src/ssh-transport.ts"
+  },
+  {
+    "id": "auth",
+    "path": "packages/server/src/server/auth.ts",
+    "readRanges": "24-36,77-155",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/auth.ts#L24-L36",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/auth.ts"
+  },
+  {
+    "id": "admission",
+    "path": "packages/server/src/server/session-admission-auth.ts",
+    "readRanges": "1-32",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/session-admission-auth.ts#L1-L32",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/session-admission-auth.ts"
+  },
+  {
+    "id": "authorization",
+    "path": "packages/server/src/server/authorization/index.ts",
+    "readRanges": "23-55",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/authorization/index.ts#L23-L55",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/authorization/index.ts"
+  },
+  {
+    "id": "ws-server",
+    "path": "packages/server/src/server/websocket-server.ts",
+    "readRanges": "1126-1145,1785-1846,1888-1934,2898-2948",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/websocket-server.ts#L1126-L1145",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/websocket-server.ts"
+  },
+  {
+    "id": "client",
+    "path": "packages/client/src/daemon-client.ts",
+    "readRanges": "2244-2322,2732-2781,4228-4277,6853-6874,7723-7816,7888-7910,7982-7997",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client/src/daemon-client.ts#L2244-L2322",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client/src/daemon-client.ts"
+  },
+  {
+    "id": "timeline-subscription",
+    "path": "packages/client/src/timeline-subscription/index.ts",
+    "readRanges": "1-75",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client/src/timeline-subscription/index.ts#L1-L75",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client/src/timeline-subscription/index.ts"
+  },
+  {
+    "id": "timeline-plan",
+    "path": "packages/app/src/timeline/timeline-sync-plan.ts",
+    "readRanges": "1-108",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/timeline/timeline-sync-plan.ts#L1-L108",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/timeline/timeline-sync-plan.ts"
+  },
+  {
+    "id": "timeline-doc",
+    "path": "docs/timeline-sync.md",
+    "readRanges": "3-16,35-79,91-136",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/docs/timeline-sync.md#L3-L16",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/docs/timeline-sync.md"
+  },
+  {
+    "id": "receipts",
+    "path": "packages/server/src/server/message-receipts/index.ts",
+    "readRanges": "1-81",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/message-receipts/index.ts#L1-L81",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/message-receipts/index.ts"
+  },
+  {
+    "id": "creation-server",
+    "path": "packages/server/src/server/creation/index.ts",
+    "readRanges": "49-123,253-317",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/creation/index.ts#L49-L123",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/creation/index.ts"
+  },
+  {
+    "id": "creation-client",
+    "path": "packages/client/src/creation/index.ts",
+    "readRanges": "97-107,110-245",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client/src/creation/index.ts#L97-L107",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client/src/creation/index.ts"
+  },
+  {
+    "id": "session",
+    "path": "packages/server/src/server/session.ts",
+    "readRanges": "8835-8945",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/session.ts#L8835-L8945",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/session.ts"
+  },
+  {
+    "id": "protocol-doc",
+    "path": "docs/protocol-compatibility.md",
+    "readRanges": "3-53,55-94",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/docs/protocol-compatibility.md#L3-L53",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/docs/protocol-compatibility.md"
+  },
+  {
+    "id": "attention",
+    "path": "packages/server/src/server/agent-attention-policy.ts",
+    "readRanges": "1-80",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent-attention-policy.ts#L1-L80",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent-attention-policy.ts"
+  },
+  {
+    "id": "push",
+    "path": "packages/server/src/server/push/push-service.ts",
+    "readRanges": "1-109",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/push/push-service.ts#L1-L109",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/push/push-service.ts"
+  },
+  {
+    "id": "push-index",
+    "path": "packages/server/src/server/push/index.ts",
+    "readRanges": "1-45",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/push/index.ts#L1-L45",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/push/index.ts"
+  },
+  {
+    "id": "push-subscriptions",
+    "path": "packages/app/src/push-notifications/internal/subscriptions.ts",
+    "readRanges": "1-102",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/push-notifications/internal/subscriptions.ts#L1-L102",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/push-notifications/internal/subscriptions.ts"
+  },
+  {
+    "id": "push-native",
+    "path": "packages/app/src/push-notifications/index.native.ts",
+    "readRanges": "1-12",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/push-notifications/index.native.ts#L1-L12",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/push-notifications/index.native.ts"
+  },
+  {
+    "id": "notification",
+    "path": "packages/protocol/src/agent-attention-notification.ts",
+    "readRanges": "1-37,112-213",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/protocol/src/agent-attention-notification.ts#L1-L37",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/protocol/src/agent-attention-notification.ts"
+  },
+  {
+    "id": "notification-doc",
+    "path": "docs/notifications.md",
+    "readRanges": "18-71",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/docs/notifications.md#L18-L71",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/docs/notifications.md"
+  },
+  {
+    "id": "license",
+    "path": "LICENSE",
+    "readRanges": "1-15",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/LICENSE#L1-L15",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/LICENSE"
+  },
+  {
+    "id": "client-package",
+    "path": "packages/client/package.json",
+    "readRanges": "1-62",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client/package.json#L1-L62",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client/package.json"
+  },
+  {
+    "id": "protocol-package",
+    "path": "packages/protocol/package.json",
+    "readRanges": "1-49",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/protocol/package.json#L1-L49",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/protocol/package.json"
+  },
+  {
+    "id": "relay-package",
+    "path": "packages/relay/package.json",
+    "readRanges": "1-52",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/relay/package.json#L1-L52",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/relay/package.json"
+  },
+  {
+    "id": "server-package",
+    "path": "packages/server/package.json",
+    "readRanges": "1-56",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/package.json#L1-L56",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/package.json"
+  },
+  {
+    "id": "persisted-config",
+    "path": "packages/server/src/server/persisted-config.ts",
+    "readRanges": "287-299,380-395",
+    "url": "https://github.com/getpaseo/paseo/blob/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/persisted-config.ts#L380-L395",
+    "rawUrl": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/persisted-config.ts"
+  }
+]

@@ -1,0 +1,47 @@
+{
+  "commit": "d91ae138cb931447635e94296023414a58bedcc5",
+  "files": [
+    {
+      "path": "packages/desktop/src/settings/desktop-settings.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/d91ae138cb931447635e94296023414a58bedcc5/packages/desktop/src/settings/desktop-settings.ts",
+      "sha256": "41dc47324766e15d2197e50df7f6a22076b123df771c50c500b890e0f8a924c6",
+      "lines": 325
+    },
+    {
+      "path": "packages/desktop/src/daemon/quit-lifecycle.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/d91ae138cb931447635e94296023414a58bedcc5/packages/desktop/src/daemon/quit-lifecycle.ts",
+      "sha256": "6e38764e0ade63da39e5861ada25aa8f969c7759297f2bc443a2ce33efee1085",
+      "lines": 167
+    },
+    {
+      "path": "packages/desktop/src/main.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/d91ae138cb931447635e94296023414a58bedcc5/packages/desktop/src/main.ts",
+      "sha256": "98e2ad5b2302e7c6aa7195c40adede86e156cdb5be5de8e5387fc1f109e4e577",
+      "lines": 1072
+    },
+    {
+      "path": "docs/relay-endpoint-security.md",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/d91ae138cb931447635e94296023414a58bedcc5/docs/relay-endpoint-security.md",
+      "sha256": "4cf9e474fbe23b0d268ad7907086a724d7de481dcfdde17a7ef5f9a6e168693a",
+      "lines": 88
+    },
+    {
+      "path": "packages/relay/src/secure-channel.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/d91ae138cb931447635e94296023414a58bedcc5/packages/relay/src/secure-channel.ts",
+      "sha256": "82baf0c15de951ec574329a61115d87c848ed98dff09b320395f9d9087074ae7",
+      "lines": 835
+    },
+    {
+      "path": "packages/server/src/server/agent/tools/paseo-tools.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/d91ae138cb931447635e94296023414a58bedcc5/packages/server/src/server/agent/tools/paseo-tools.ts",
+      "sha256": "731439f7e406f912a3205b18932f00ff61ca94a3041b32d13877e97caea13e5d",
+      "lines": 3347
+    },
+    {
+      "path": "docs/connected-hosts.md",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/d91ae138cb931447635e94296023414a58bedcc5/docs/connected-hosts.md",
+      "sha256": "0f543ad8cb309b642108fb2579f7e8eb509ddfcdaa8bf4674d34010cfdd49c69",
+      "lines": 104
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "binary": "/home/achamge/.local/bin/lightpanda",
+  "version": "1.0.2",
+  "cwd": "/home/achamge/다운로드",
+  "codexHome": "/home/achamge/.codex",
+  "codexConfigurations": {
+    "/home/achamge/.codex/config.toml": {
+      "command": "/home/achamge/.local/bin/lightpanda",
+      "args": [
+        "mcp"
+      ]
+    }
+  },
+  "claudeConfiguration": {
+    "args": [
+      "mcp"
+    ],
+    "command": "/home/achamge/.local/bin/lightpanda",
+    "env": {},
+    "type": "stdio"
+  },
+  "mcpServer": {
+    "name": "lightpanda",
+    "version": "0.1.0"
+  },
+  "toolCount": 32,
+  "asideRead": true,
+  "readBytes": 2274,
+  "mcpNormalExit": true
+}

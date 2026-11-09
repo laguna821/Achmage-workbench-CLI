@@ -1,0 +1,792 @@
+{
+  "commit": "1fff127f45b11c1c9c573fbbd12791673004c912",
+  "files": [
+    {
+      "path": "LICENSE",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/LICENSE",
+      "sha256": "79d5aedce6aa0adc547336dc1bd34c5cc9308ba110fac7079ed97515ee573ad3",
+      "bytes": 11708,
+      "lines": 211
+    },
+    {
+      "path": "README.md",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/README.md",
+      "sha256": "0748adcf4c93e2e9e6868a6b0caadc9988503bcd2f10f555f69b70f26931cbe9",
+      "bytes": 9777,
+      "lines": 232
+    },
+    {
+      "path": "packages/desktop/README.md",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/desktop/README.md",
+      "sha256": "dd85bc1dd3db7e998fad8196f7e2b65439be040d2fd3763d72ff797860bcc2e8",
+      "bytes": 43,
+      "lines": 3
+    },
+    {
+      "path": "packages/desktop/src/main.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/desktop/src/main.ts",
+      "sha256": "98e2ad5b2302e7c6aa7195c40adede86e156cdb5be5de8e5387fc1f109e4e577",
+      "bytes": 36784,
+      "lines": 1072
+    },
+    {
+      "path": "packages/desktop/src/daemon/quit-lifecycle.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/desktop/src/daemon/quit-lifecycle.ts",
+      "sha256": "6e38764e0ade63da39e5861ada25aa8f969c7759297f2bc443a2ce33efee1085",
+      "bytes": 4391,
+      "lines": 167
+    },
+    {
+      "path": "packages/desktop/src/daemon/daemon-manager.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/desktop/src/daemon/daemon-manager.ts",
+      "sha256": "0f308a9384e4d0dd671ca197a0cccf27030960d38c07cce5c447cfd8ca7155bc",
+      "bytes": 19159,
+      "lines": 562
+    },
+    {
+      "path": "packages/desktop/src/window/window-manager.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/desktop/src/window/window-manager.ts",
+      "sha256": "618d0ed84f5979b604b20ad6f6c1be42ebb8ffbf245414459270598e0031f352",
+      "bytes": 12024,
+      "lines": 409
+    },
+    {
+      "path": "packages/desktop/src/settings/desktop-settings.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/desktop/src/settings/desktop-settings.ts",
+      "sha256": "41dc47324766e15d2197e50df7f6a22076b123df771c50c500b890e0f8a924c6",
+      "bytes": 9805,
+      "lines": 325
+    },
+    {
+      "path": "packages/cli/src/commands/daemon/start.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/cli/src/commands/daemon/start.ts",
+      "sha256": "d3c4f56c870a3b3a7c3b4c732eb58743d16a60009d95e25102f6dd3650977e63",
+      "bytes": 2317,
+      "lines": 55
+    },
+    {
+      "path": "packages/cli/src/commands/daemon/stop.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/cli/src/commands/daemon/stop.ts",
+      "sha256": "575847f0fc4f365edca27e66d5bba210ea4c6b2e477cf99a757bad81ead51e4d",
+      "bytes": 3872,
+      "lines": 101
+    },
+    {
+      "path": "packages/cli/src/commands/daemon/local-daemon.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/cli/src/commands/daemon/local-daemon.ts",
+      "sha256": "2846b5cafe536868150ea69e90782c3a7254360fbf26561d4b233dcfaf8112c1",
+      "bytes": 4110,
+      "lines": 111
+    },
+    {
+      "path": "packages/server/src/server/daemon-worker.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/daemon-worker.ts",
+      "sha256": "98822d70ff64f6d4bea15165caa343624de1988232ab95758fd2912e73f5e705",
+      "bytes": 12322,
+      "lines": 394
+    },
+    {
+      "path": "packages/server/src/server/daemon-instance.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/daemon-instance.ts",
+      "sha256": "adcc70e59f42050b8d7277b4c7730f2b27f88e840e82f0a40a114fbc4cf67372",
+      "bytes": 12596,
+      "lines": 353
+    },
+    {
+      "path": "public-docs/connectivity.md",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/connectivity.md",
+      "sha256": "383599276440e5c1474ddd8f27d52804c238f66da7d3528243fde12702e55f7c",
+      "bytes": 4916,
+      "lines": 131
+    },
+    {
+      "path": "public-docs/security.md",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/security.md",
+      "sha256": "65ac94939b11435e883b3962ad34f9a950ad7be75550e67082b052659eb82ddf",
+      "bytes": 11937,
+      "lines": 160
+    },
+    {
+      "path": "public-docs/orchestration.md",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/orchestration.md",
+      "sha256": "d76673f1525790f3f6f2eb8f697b7ee396d08ec77560ae327df913bfcd28cc15",
+      "bytes": 4320,
+      "lines": 72
+    },
+    {
+      "path": "public-docs/orchestration-workflows.md",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/orchestration-workflows.md",
+      "sha256": "1cbbc9c488393dfe4b02e03db58b436def729ce1d40b0f5e07e35c47bb7eba9e",
+      "bytes": 6250,
+      "lines": 103
+    },
+    {
+      "path": "public-docs/worktrees/index.md",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/worktrees/index.md",
+      "sha256": "38b0508a6bc998dff367dda82d8cef249da415fb56f9646a275f418ee6158e95",
+      "bytes": 9722,
+      "lines": 274
+    },
+    {
+      "path": "public-docs/supported-providers.md",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/supported-providers.md",
+      "sha256": "6cefce472dab65c398c7c3ca56bf6adda68eac9ec23d98c16b466d5b987f8d38",
+      "bytes": 6873,
+      "lines": 118
+    },
+    {
+      "path": "docs/agent-lifecycle.md",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/docs/agent-lifecycle.md",
+      "sha256": "4eff3d3d4feef5b54d7d5b3479255c7e41ec5a35abca4c452ff3a53f13857f8f",
+      "bytes": 38136,
+      "lines": 437
+    },
+    {
+      "path": "docs/notifications.md",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/docs/notifications.md",
+      "sha256": "384a6298b0f32f5fd31943dc9f068d80b5973acb84dff502ae64d5543db37f09",
+      "bytes": 3329,
+      "lines": 71
+    },
+    {
+      "path": "docs/relay-endpoint-security.md",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/docs/relay-endpoint-security.md",
+      "sha256": "4cf9e474fbe23b0d268ad7907086a724d7de481dcfdde17a7ef5f9a6e168693a",
+      "bytes": 10068,
+      "lines": 88
+    },
+    {
+      "path": "docs/protocol-compatibility.md",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/docs/protocol-compatibility.md",
+      "sha256": "a2a117f4daac7976bb4682a8e96f4cc7221312e1d1e6a643b8a77952f6197665",
+      "bytes": 10020,
+      "lines": 144
+    },
+    {
+      "path": "packages/relay/src/e2ee.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/relay/src/e2ee.ts",
+      "sha256": "70504448f5e6f685dba572a31d2fa5e87cd7dbd88a2bcba797fb13c6409475f2",
+      "bytes": 823,
+      "lines": 28
+    },
+    {
+      "path": "packages/relay/src/secure-channel.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/relay/src/secure-channel.ts",
+      "sha256": "180e088fcc4739e7ee9a8edb4c004484c14597781d7322be2cac1139d81dac85",
+      "bytes": 28643,
+      "lines": 833
+    },
+    {
+      "path": "packages/relay/src/types.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/relay/src/types.ts",
+      "sha256": "794a6cbe75994c123e965a346d0b21509b91c1c245eceb7a23f8c87fce7c6a7d",
+      "bytes": 801,
+      "lines": 28
+    },
+    {
+      "path": "packages/client/src/daemon-client-relay-e2ee-transport.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client/src/daemon-client-relay-e2ee-transport.ts",
+      "sha256": "7674f7e0372efd63b5eed22725124d71a911505e192f592657582763aa6a8781",
+      "bytes": 10189,
+      "lines": 306
+    },
+    {
+      "path": "packages/server/src/server/relay-runtime.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/relay-runtime.ts",
+      "sha256": "56420438d8ce664a557b8b7f6d500abf70dff1d20635d30d2bdf365ad1a2aec4",
+      "bytes": 1919,
+      "lines": 75
+    },
+    {
+      "path": "packages/server/src/server/relay-transport.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/relay-transport.ts",
+      "sha256": "7bf637e0e56ac7bbf125afb4d8f4f671b60275d185f2d5077204cc0955212c8c",
+      "bytes": 12119,
+      "lines": 401
+    },
+    {
+      "path": "packages/server/src/server/agent/mcp-server.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/mcp-server.ts",
+      "sha256": "26ae9bd3656bae5f7cd730e5b9c7a1958e11850f021dbd3e29d16a41c1ec954b",
+      "bytes": 1833,
+      "lines": 52
+    },
+    {
+      "path": "packages/server/src/server/agent/tools/paseo-tools.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/tools/paseo-tools.ts",
+      "sha256": "743ec50464b65e68b512dbfe27c88585d86b8fbf5a38d51cb665a2a1c0f8f852",
+      "bytes": 110501,
+      "lines": 3369
+    },
+    {
+      "path": "packages/server/src/server/agent/paseo-tool-policy.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/paseo-tool-policy.ts",
+      "sha256": "e630c5150c47e1f220873c6833463fc3ac5c0dc8202cebc69365f3f87afab218",
+      "bytes": 837,
+      "lines": 29
+    },
+    {
+      "path": "packages/server/src/server/agent/provider-registry.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/provider-registry.ts",
+      "sha256": "5a3ef7ca0a0f8050344250b89d3f0acffceb85735e127275d382ef32010afd7b",
+      "bytes": 35556,
+      "lines": 1034
+    },
+    {
+      "path": "packages/server/src/server/agent/restart-recovery/index.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/restart-recovery/index.ts",
+      "sha256": "29276c5260502c3c4cbf1162b9b05c0c52a8a274d1b418d4a40725d916c41ec3",
+      "bytes": 3462,
+      "lines": 83
+    },
+    {
+      "path": "packages/server/src/server/push/push-service.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/push/push-service.ts",
+      "sha256": "c3cea56bf08bc011f846a7c646227387dbc55ec2d795b6232f0bf641b5cd5adb",
+      "bytes": 2915,
+      "lines": 109
+    },
+    {
+      "path": "packages/server/scripts/supervisor.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/scripts/supervisor.ts",
+      "sha256": "72057f1dca177ba79f838aa68515035667b31cff561a8fc9894a3164d70e5bc7",
+      "bytes": 17861,
+      "lines": 560
+    },
+    {
+      "path": "packages/server/src/server/connection-offer.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/connection-offer.ts",
+      "sha256": "a415bdd14089fde317839830b4989f8cc9de529efe9f1f8f5cf3b9588c2e2ecc",
+      "bytes": 2264,
+      "lines": 81
+    },
+    {
+      "path": "packages/server/src/server/pairing-offer.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/pairing-offer.ts",
+      "sha256": "607d0b102159f9869fc140e78c138f83ba6e7fc0668ff2280b71589cb8492de4",
+      "bytes": 2263,
+      "lines": 73
+    },
+    {
+      "path": "packages/server/src/server/daemon-keypair.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/daemon-keypair.ts",
+      "sha256": "7aebe9d45ca032cf90c4a0501272cdaff3fad20c4f36838d5702b0e2894562f6",
+      "bytes": 1960,
+      "lines": 69
+    },
+    {
+      "path": "packages/server/src/server/auth.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/auth.ts",
+      "sha256": "3a8c23196953d994179f347caf981d3dc0fe6ed0def99924203f214c928a1ef1",
+      "bytes": 4622,
+      "lines": 155
+    },
+    {
+      "path": "packages/server/src/server/websocket-server.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/websocket-server.ts",
+      "sha256": "ca1f0705ed918108e170a998e3aa854edd7647e0e0c49df5580f7a3f75d4af85",
+      "bytes": 123637,
+      "lines": 3377
+    },
+    {
+      "path": "packages/server/src/server/websocket/secure-relay-ingress.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/websocket/secure-relay-ingress.ts",
+      "sha256": "cfdf5642f3ba16937e35a4fcdfe6bc4386a1dca62fd6532b47d60b63d037e34e",
+      "bytes": 6801,
+      "lines": 210
+    },
+    {
+      "path": "packages/server/src/server/agent/agent-manager.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/agent-manager.ts",
+      "sha256": "3b1c3da06e495752ac0aaba011651f847814a10b10e51c4f9de3ff3f54c87f29",
+      "bytes": 215151,
+      "lines": 6305
+    },
+    {
+      "path": "packages/server/src/server/agent/agent-messages/delivery.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/agent-messages/delivery.ts",
+      "sha256": "a4a3ca0162093f535a78842b9826a11e397febc1e803d8228422b058f9076d9a",
+      "bytes": 7349,
+      "lines": 192
+    },
+    {
+      "path": "packages/server/src/server/authorization/operation-permissions.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/authorization/operation-permissions.ts",
+      "sha256": "059eb5814a3070e6a682138e02a40d1e2262605b76177a209c306258452d7028",
+      "bytes": 25410,
+      "lines": 508
+    },
+    {
+      "path": "packages/server/src/server/push/index.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/push/index.ts",
+      "sha256": "95d94e1574df5df4bc6be1f2a685b0947d6470a42558bd17f3f7c05a4a2d7380",
+      "bytes": 1385,
+      "lines": 45
+    },
+    {
+      "path": "packages/server/src/server/push/token-store.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/push/token-store.ts",
+      "sha256": "a6ae517f80f197b361f148fccc1e0aa8cb2e225f0d11a92a1029e31989b294e7",
+      "bytes": 4781,
+      "lines": 141
+    },
+    {
+      "path": "packages/server/src/server/session.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/session.ts",
+      "sha256": "0c9dc8e13bf4227c66dd6c619a099406acb6464ac5a328f3c4de139229d545b5",
+      "bytes": 341969,
+      "lines": 9450
+    },
+    {
+      "path": "packages/client/src/daemon-client.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client/src/daemon-client.ts",
+      "sha256": "adac6456cc519de4f3459a935a160c0c5e3a567ed46abd2ee7b819a3366cbdbb",
+      "bytes": 274049,
+      "lines": 8182
+    },
+    {
+      "path": "packages/client/src/timeline-subscription/index.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client/src/timeline-subscription/index.ts",
+      "sha256": "41b18347001905540b5d51639d36608894937bb1e202360fb0b9683feec769f7",
+      "bytes": 2370,
+      "lines": 75
+    },
+    {
+      "path": "packages/client/src/node/ssh-tunnel.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client/src/node/ssh-tunnel.ts",
+      "sha256": "208f52c6c7c3ce21c380b69de1983ff0159d7cf36a04b54cb4f198354c969690",
+      "bytes": 2851,
+      "lines": 92
+    },
+    {
+      "path": "packages/app/src/runtime/host-runtime.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/runtime/host-runtime.ts",
+      "sha256": "f8923a12ea85613a66398ec7b23e4ff3547dd5c70eb1fc8e3f41c521053c1404",
+      "bytes": 108549,
+      "lines": 3111
+    },
+    {
+      "path": "packages/app/src/data/daemon-pairing.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/data/daemon-pairing.ts",
+      "sha256": "52a84c0ebad98babae475f05225ab7ef08178b784a0fa0c2f498c31bef51ac1a",
+      "bytes": 119,
+      "lines": 3
+    },
+    {
+      "path": "packages/app/src/stores/session-store.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/stores/session-store.ts",
+      "sha256": "58d60ccab6b573956160653571157b544bff76d7e2b8e1adae8dc1f4336ba7b4",
+      "bytes": 62850,
+      "lines": 1929
+    },
+    {
+      "path": "packages/app/src/push-notifications/index.native.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/push-notifications/index.native.ts",
+      "sha256": "859480f514c1a4c92bbf4e55e393032490fa3b8456848dc12e39489d7571c0d7",
+      "bytes": 554,
+      "lines": 12
+    },
+    {
+      "path": "packages/app/src/push-notifications/internal/subscriptions.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/push-notifications/internal/subscriptions.ts",
+      "sha256": "039f1f50bf9ee06c044b0511af1e21d76a5d94e7f551c9e9f0bf51c125ac0b74",
+      "bytes": 3479,
+      "lines": 102
+    },
+    {
+      "path": "packages/protocol/src/connection-offer.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/protocol/src/connection-offer.ts",
+      "sha256": "af2c12b36413b68281aa51b39c280b6ef92fc416851225ecb84c036c31b952e3",
+      "bytes": 2311,
+      "lines": 62
+    },
+    {
+      "path": "packages/protocol/src/host-connection-schema.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/protocol/src/host-connection-schema.ts",
+      "sha256": "b62ff31cbe21c3b5c6d1c35d28d01faf033ea5b5e1c57aa5bcafc34e94f29940",
+      "bytes": 426,
+      "lines": 12
+    },
+    {
+      "path": "packages/protocol/src/paseo-config-schema.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/protocol/src/paseo-config-schema.ts",
+      "sha256": "57aef569ac23d5d19e16eef0e657491f168c32ba25cd15833986b00d2332aa41",
+      "bytes": 4324,
+      "lines": 121
+    },
+    {
+      "path": "public-docs/mcp.md",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/mcp.md",
+      "sha256": "0869744eabb379c8a39bc3209a28778b41efb50edf530969265911f2da802dbe",
+      "bytes": 16605,
+      "lines": 203
+    },
+    {
+      "path": "public-docs/configuration.md",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/configuration.md",
+      "sha256": "cbbe0b0142b265b7c69b9626b5fe6fac52d19ec2261a027761bd921957b38bf0",
+      "bytes": 12899,
+      "lines": 289
+    },
+    {
+      "path": "docs/permissions.md",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/docs/permissions.md",
+      "sha256": "52989e558542e107082416f101a3178afe1f285c1be04f9133aa4cb7ccc2f806",
+      "bytes": 3948,
+      "lines": 63
+    },
+    {
+      "path": "packages/server/src/server/paseo-worktree-service.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/paseo-worktree-service.ts",
+      "sha256": "cdd78e4fee49a60d8704f0be5bdb7dc1b16ca24d022bc1cccfd6dcb47c1df864",
+      "bytes": 10901,
+      "lines": 297
+    },
+    {
+      "path": "packages/server/src/server/workspace-archive-service.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/workspace-archive-service.ts",
+      "sha256": "75c70df3368c49d96b69eded31fd3d6765fc411889db66673e0fcea253e981ba",
+      "bytes": 27674,
+      "lines": 750
+    },
+    {
+      "path": "packages/client/package.json",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client/package.json",
+      "sha256": "1fa734988ec9c2b6aa1647acafa5828b3ab82c503f5a6e132be36adc91783618",
+      "bytes": 1859,
+      "lines": 62
+    },
+    {
+      "path": "packages/protocol/package.json",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/protocol/package.json",
+      "sha256": "b9c51d6205d04ac8c1f89342953333311a2a963b03ed78afacb28b1d0ed4740c",
+      "bytes": 1422,
+      "lines": 49
+    },
+    {
+      "path": "packages/server/package.json",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/package.json",
+      "sha256": "ea06810f2109fa33892fc036fc54e7dff99212cf42d5deb22654e83cfb04294e",
+      "bytes": 9544,
+      "lines": 172
+    },
+    {
+      "path": "packages/relay/package.json",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/relay/package.json",
+      "sha256": "c486865738548b42ec0e619dd6dcff78d6cd78856ba2814bf56b0a779b7740b7",
+      "bytes": 1277,
+      "lines": 52
+    },
+    {
+      "path": "packages/server/scripts/supervisor-entrypoint.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/scripts/supervisor-entrypoint.ts",
+      "sha256": "3a530784096a9d30c574bc5248a42f8a55bea875a7be48f5b1724bc992c4d727",
+      "bytes": 7080,
+      "lines": 214
+    },
+    {
+      "path": "packages/server/src/server/bootstrap.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/bootstrap.ts",
+      "sha256": "87b1ce7b20ae640f157b7b523efd97dc44b6e1c5ef36829224fde867a71b71e9",
+      "bytes": 81181,
+      "lines": 2088
+    },
+    {
+      "path": "packages/server/src/server/agent/host-operations/index.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/host-operations/index.ts",
+      "sha256": "8ff820a217990dbc344f7b928153bdaabebe51b6567887ea25ad41edcf50433f",
+      "bytes": 21056,
+      "lines": 525
+    },
+    {
+      "path": "docs/connected-hosts.md",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/docs/connected-hosts.md",
+      "sha256": "f2f3db462d771c40642ba64aa45e7584ecbed4654933eee2b522ccc5804931b1",
+      "bytes": 8030,
+      "lines": 107
+    },
+    {
+      "path": "packages/protocol/src/hosts.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/protocol/src/hosts.ts",
+      "sha256": "7f0d829c9d9223df39156828a968c0f38333bf0b98e779f317939954154312e6",
+      "bytes": 4840,
+      "lines": 134
+    },
+    {
+      "path": "packages/client/src/hosts/index.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client/src/hosts/index.ts",
+      "sha256": "05ad99ec146852e9af555ee07bdb4578cf3a5dbd52391fd153494100104a9b87",
+      "bytes": 8106,
+      "lines": 241
+    },
+    {
+      "path": "packages/server/src/server/connected-hosts/index.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/connected-hosts/index.ts",
+      "sha256": "42be5187363da880c7a153a2abceb977081c6a8c19fd063485a18437bb3436a8",
+      "bytes": 21372,
+      "lines": 584
+    },
+    {
+      "path": "packages/server/src/server/client-message-id.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/client-message-id.ts",
+      "sha256": "da1899962dbcc8b63480f4239946027813602b7ec88ba1b4fc159a3bdc580433",
+      "bytes": 503,
+      "lines": 16
+    },
+    {
+      "path": "packages/server/src/server/agent/agent-prompt.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/agent-prompt.ts",
+      "sha256": "b5a2b6f942a36f59cb2991d76ea35d9b116c32608909409ebee4b99ff41a64ef",
+      "bytes": 14219,
+      "lines": 403
+    },
+    {
+      "path": "packages/server/src/server/agent/finish-subscriptions/index.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/finish-subscriptions/index.ts",
+      "sha256": "5c0a1ee0e1cdc0969875ff4da7e8fa9613c38d84a87991a9b717d59b41377efe",
+      "bytes": 14209,
+      "lines": 381
+    },
+    {
+      "path": "packages/server/src/server/agent-attention-policy.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent-attention-policy.ts",
+      "sha256": "317e81944deb151de1506116e869a917bdddb52e5f976f76289040e3fa76e2be",
+      "bytes": 2421,
+      "lines": 80
+    },
+    {
+      "path": "packages/protocol/src/agent-attention-notification.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/protocol/src/agent-attention-notification.ts",
+      "sha256": "f85b298112d428d406edb59ebd046e7499933652ddf68c474dc589b49665a1c6",
+      "bytes": 6004,
+      "lines": 213
+    },
+    {
+      "path": "packages/app/src/types/host-connection.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/types/host-connection.ts",
+      "sha256": "47828b64ad7561b5c3ab7a04ef8230439e9eb19b16885384df8f7bbd92a62c84",
+      "bytes": 20470,
+      "lines": 641
+    },
+    {
+      "path": "packages/app/src/utils/connection-selection.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/utils/connection-selection.ts",
+      "sha256": "34f4673374e98e4efc4cb7def9b0f259a97dcee64545e04cf6ea5b661a1e5066",
+      "bytes": 1430,
+      "lines": 50
+    },
+    {
+      "path": "packages/server/src/server/daemon-config-schema.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/daemon-config-schema.ts",
+      "httpStatus": 404
+    },
+    {
+      "path": "packages/client/src/creations/index.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client/src/creations/index.ts",
+      "httpStatus": 404
+    },
+    {
+      "path": "SECURITY.md",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/SECURITY.md",
+      "sha256": "de2f2b294b4a2d7857d9cf7c7cb8dfa23a7b2d5180f72154d71ca8fc2a9e979e",
+      "bytes": 11427,
+      "lines": 97
+    },
+    {
+      "path": "packages/server/src/server/session-admission-auth.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/session-admission-auth.ts",
+      "sha256": "f9b2ca3cff2a88aef215c944f37298341e42e1965f4954ec79b7857cb3c5fb78",
+      "bytes": 1370,
+      "lines": 32
+    },
+    {
+      "path": "packages/server/src/server/authorization/index.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/authorization/index.ts",
+      "sha256": "06903d13102ad699a4f6f8d12a60ba28558b77b0e22f60c6bb5f0f51ff752a47",
+      "bytes": 2295,
+      "lines": 66
+    },
+    {
+      "path": "packages/server/src/server/config.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/config.ts",
+      "sha256": "7833ddb9b55c121e44546547e29815e9e5484b42289823ef97e6dc9a9368735c",
+      "bytes": 28102,
+      "lines": 845
+    },
+    {
+      "path": "packages/server/src/server/persisted-config.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/persisted-config.ts",
+      "sha256": "854b370e948ec91b935316260aebbbc2ac8bd1c46a99f77b1ecaffcb9031deb4",
+      "bytes": 23159,
+      "lines": 729
+    },
+    {
+      "path": "packages/server/src/server/message-receipts/index.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/message-receipts/index.ts",
+      "sha256": "3067855835a17f5cbcdfb41f0cce07b1e3c68734691395e76f282a23b876761d",
+      "bytes": 2851,
+      "lines": 81
+    },
+    {
+      "path": "packages/server/src/server/creation/index.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/creation/index.ts",
+      "sha256": "09126dd5e400278571efae1dc83d083ad2da2c5e2f214a3e89bfa88a315418fd",
+      "bytes": 14584,
+      "lines": 377
+    },
+    {
+      "path": "packages/client/src/creation/index.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client/src/creation/index.ts",
+      "sha256": "55c938a878f46429e855370ca2e9cd7661d31199ac8d1c827c51b455ac4b9ab7",
+      "bytes": 9936,
+      "lines": 259
+    },
+    {
+      "path": "docs/timeline-sync.md",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/docs/timeline-sync.md",
+      "sha256": "46c1c6a77e7ea04d72ac5bcf26764c116be2767c049fd93676d3e913a6770133",
+      "bytes": 23083,
+      "lines": 327
+    },
+    {
+      "path": "packages/app/src/timeline/viewed-timeline-sync.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/timeline/viewed-timeline-sync.ts",
+      "sha256": "76ceba003ef553959fe3ab2f461fe9c1de40e5d1347f61986c60dcee70fe1f81",
+      "bytes": 32509,
+      "lines": 883
+    },
+    {
+      "path": "packages/app/src/timeline/timeline-sync-plan.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/timeline/timeline-sync-plan.ts",
+      "sha256": "a96f2a3ba324699f969fe15eb42a4e8ad42ee9ce4f6dfba28ac562e34101f50b",
+      "bytes": 2703,
+      "lines": 108
+    },
+    {
+      "path": "packages/server/src/server/agent/agent-sdk-types.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/agent-sdk-types.ts",
+      "sha256": "babb2c36316536b804ffb37d60012edf8328949da2e17262babe5df85dfc3a14",
+      "bytes": 28553,
+      "lines": 886
+    },
+    {
+      "path": "packages/server/src/server/agent/provider-launch-config.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/provider-launch-config.ts",
+      "sha256": "4e17c67e6340b5a9fe8b7e757e29fffbc105a7e0e0b6b24d7a9e75413353e39d",
+      "bytes": 8007,
+      "lines": 279
+    },
+    {
+      "path": "packages/server/src/server/agent/providers/codex/app-server-startup.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/providers/codex/app-server-startup.ts",
+      "sha256": "6af526037db85e46abff76b0c64d997ffdfebfa292b76f5435470735fe0ae5a8",
+      "bytes": 6971,
+      "lines": 189
+    },
+    {
+      "path": "packages/server/src/server/agent/providers/claude/query.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/providers/claude/query.ts",
+      "sha256": "1c3743cc967bcf0c66c1db7276fcaee24e12e61f759424abf1a584d4a6e444f2",
+      "bytes": 4809,
+      "lines": 117
+    },
+    {
+      "path": "nix/module.nix",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/nix/module.nix",
+      "sha256": "ffda9765c2ad2500f0aec9ec7777481990556382bf573cb91dfd35ae79e32869",
+      "bytes": 9873,
+      "lines": 293
+    },
+    {
+      "path": "flake.nix",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/flake.nix",
+      "sha256": "8eecf966761b6fb405f15cd87ca5dabd03e2703dc6663b3f4f46d7a8838c501c",
+      "bytes": 2379,
+      "lines": 86
+    },
+    {
+      "path": "public-docs/docker.md",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/public-docs/docker.md",
+      "sha256": "ac966c7f2bb23e9eadc0f2301f2fe8297a37e3c190816550eece0544d4202a52",
+      "bytes": 5267,
+      "lines": 166
+    },
+    {
+      "path": "packages/cli/src/commands/daemon/index.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/cli/src/commands/daemon/index.ts",
+      "sha256": "6f5ce66878deb943509577af757d596694e8f446e00593bd1845197931440acd",
+      "bytes": 1197,
+      "lines": 32
+    },
+    {
+      "path": "packages/desktop/electron-builder.yml",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/desktop/electron-builder.yml",
+      "sha256": "64bac0320d6175bf0d7770dcf500916c7b39e9703571962c08909b3f25e6d2be",
+      "bytes": 3174,
+      "lines": 106
+    },
+    {
+      "path": "packages/client/src/connection/index.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/client/src/connection/index.ts",
+      "sha256": "e404fa9e1e2fb70937a6388405baf114f1d89d6b73a23a8d688e7030365757c5",
+      "bytes": 5447,
+      "lines": 157
+    },
+    {
+      "path": "packages/protocol/src/ssh-transport.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/protocol/src/ssh-transport.ts",
+      "sha256": "01e4619ed5b174ab1be351c0c84a13d4bee8941d9c2999e170c51ef226f87119",
+      "bytes": 2525,
+      "lines": 82
+    },
+    {
+      "path": "packages/server/src/server/agent/finish-subscriptions/internal/observation.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/finish-subscriptions/internal/observation.ts",
+      "sha256": "e28c4f45cb5a55d4a1345fcc0e96bb2fc7417895a6071e55f9c82438002b6f8b",
+      "bytes": 4875,
+      "lines": 118
+    },
+    {
+      "path": "packages/server/src/server/agent/finish-subscriptions/internal/observation-stream.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/server/src/server/agent/finish-subscriptions/internal/observation-stream.ts",
+      "sha256": "8026c5b3a8a6f4caa4f99f0e60dda5fe553f0f18bee063f04df7cb5fce8b47a5",
+      "bytes": 3807,
+      "lines": 121
+    },
+    {
+      "path": "packages/app/src/hosts/add-host/internal/scan.tsx",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/hosts/add-host/internal/scan.tsx",
+      "sha256": "af9cdcd29927e1c09433048fdf66af40d362cb33bf1d576686fdb8e5354c61b9",
+      "bytes": 7127,
+      "lines": 233
+    },
+    {
+      "path": "packages/app/src/hosts/add-host/internal/pair-scan-model.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/hosts/add-host/internal/pair-scan-model.ts",
+      "sha256": "1a5e7c2bda11b10132c532278f64a4fccd15cd8df8f77e23111ab78d7a26d171",
+      "bytes": 3258,
+      "lines": 103
+    },
+    {
+      "path": "packages/cli/src/commands/daemon/pair.ts",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/cli/src/commands/daemon/pair.ts",
+      "sha256": "327bb4ca565148dadd4126dcc32906029d235d3f0f048a16a8158b526b88ed24",
+      "bytes": 7118,
+      "lines": 223
+    },
+    {
+      "path": "packages/app/src/desktop/components/pair-device-modal.tsx",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/packages/app/src/desktop/components/pair-device-modal.tsx",
+      "sha256": "82da413fe0ebf014d883f5e200ec8454e012db644619b388b2b0460b3e226c1d",
+      "bytes": 961,
+      "lines": 34
+    },
+    {
+      "path": "nix/package.nix",
+      "url": "https://raw.githubusercontent.com/getpaseo/paseo/1fff127f45b11c1c9c573fbbd12791673004c912/nix/package.nix",
+      "sha256": "6391575d388c95de7b97a002ac2368ee4e2219879bb2eb17205d1d454f86fad4",
+      "bytes": 5980,
+      "lines": 155
+    }
+  ]
+}

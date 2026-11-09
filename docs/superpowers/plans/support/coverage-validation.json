@@ -1,0 +1,57 @@
+{
+  "requirements": 156,
+  "mapped": 156,
+  "ownershipUnits": 25,
+  "executionNodes": 26,
+  "regressionGroups": 12,
+  "officeFormats": 9,
+  "dependencyCycles": false,
+  "executionWaves": [
+    [
+      "U01"
+    ],
+    [
+      "U02",
+      "U06",
+      "U12",
+      "U25a"
+    ],
+    [
+      "U03",
+      "U04",
+      "U07",
+      "U15",
+      "U16"
+    ],
+    [
+      "U05",
+      "U08",
+      "U13",
+      "U21"
+    ],
+    [
+      "U09",
+      "U10",
+      "U11",
+      "U17"
+    ],
+    [
+      "U14",
+      "U18"
+    ],
+    [
+      "U19",
+      "U20",
+      "U22",
+      "U23"
+    ],
+    [
+      "U24"
+    ],
+    [
+      "U25b"
+    ]
+  ],
+  "productTestsRun": false,
+  "checkedAfterRootReview": true
+}

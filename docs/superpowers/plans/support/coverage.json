@@ -1,0 +1,3904 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-09T05:07:52.275157+00:00",
+  "purpose": "Planning only: full three-study integration coverage, no product implementation or execution",
+  "workId": "work-1b7f68199bcb4756b2a7fd2a102ccc2e",
+  "nativeSessionId": "01a187dc-c850-7991-93c0-aa60b50f9a26",
+  "baselineCommit": "bc1057c2c5fb04f2046f4fd711bf718f5cc93737",
+  "sourceResearchRevisions": [
+    "research:rr-dd53e234a77f3fe9e4e3afc62aea3018:2807fc5a0c540680000deb85ab0ea25cb53a6ffa89a4c436c9317c7a19b08ea9",
+    "research:rr-da5ca50fa3e6593f1a243cce69cc5ed7:36aff60113a7574e1b41bb9ce53999de1ae9a325cde9fe73abf3304c122323f7",
+    "research:rr-b3a4efd5af5ac21ca608ac4ce17dd71d:89fcdaee6e62df01c31f9f4c56c19d9916acab297f64b1b42cd5b67317e03ad5"
+  ],
+  "scopeOverride": "Latest user request includes Paseo E01-E08 and all three program requirements; original IDs and original source wording remain unchanged. Upstream product parity excluded by original plans is not inferred.",
+  "units": [
+    {
+      "id": "U01",
+      "title": "기준판·지원 범위·시각/성능 계약",
+      "dependsOn": [],
+      "scope": "현재 설치본/설정/데이터 보존, S01~S15와 기존 command→새 진입점→shortcut 대응, 9형식 fixture, HIG W0 시안, 대상 OS/기기/성능 문턱 고정",
+      "completionEvidence": "현재 SHA·설치본 식별·fixture 해시·before 화면/측정, 미확정 capability 및 후속 실증 목록",
+      "status": "planned_not_run"
+    },
+    {
+      "id": "U02",
+      "title": "HIG 공통 UI와 접근성",
+      "dependsOn": [
+        "U01"
+      ],
+      "scope": "기존 브랜드·서체·엔진별 룩 유지; 토큰·아이콘·버튼·메뉴·시트·focus·상태·light/dark·대비·reduced motion/transparency",
+      "completionEvidence": "대표 상태 키보드·screenreader·200%·좁은 창; HIG 규칙 검사+시각 감사, 문서 캔버스 스타일 미변경",
+      "status": "planned_not_run"
+    },
+    {
+      "id": "U03",
+      "title": "셸·프로젝트·탭·생성 흐름",
+      "dependsOn": [
+        "U02"
+      ],
+      "scope": "홈/최근/프로젝트 개요·YAML 진입, 클릭/펼침 구별, 수동 생성 공통 action, 안정된 탭/분할·편집 집중·복귀·레이아웃 호환",
+      "completionEvidence": "S01/S02/S06 실제 데이터 사용, AI 없이 문서/폴더/세션/웹 생성 진입, 초안·선택·작업 ID 보존",
+      "status": "planned_not_run"
+    },
+    {
+      "id": "U04",
+      "title": "대화 읽기·스트림·검색 위치",
+      "dependsOn": [
+        "U02"
+      ],
+      "scope": "Markdown/표/코드/Mermaid·복사, 도구/턴 접기, reader anchor, 오래된 이력 paging/windowing·선택 유지·초안",
+      "completionEvidence": "PA01/04/05와 H14 동일 fixture; 한글·이모지·긴 기록·완료 즉시 표시, 원문 검색 삭제 없음",
+      "status": "planned_not_run"
+    },
+    {
+      "id": "U05",
+      "title": "이미지·artifact 정체성과 파일 결과",
+      "dependsOn": [
+        "U04",
+        "U06"
+      ],
+      "scope": "입력/도구/Markdown 이미지 통합, host/workspace path 검증, message/revision/hash media ref, gallery·원본·loading/error/expiry/eviction, MIME별 기존 편집기로 연결",
+      "completionEvidence": "PA02/03/05; 한글·공백 경로·같은 파일 덮어쓰기·느린 decode·첨부 실패·원격 인증, 과거 결과와 최신 파일 구별",
+      "status": "planned_not_run"
+    },
+    {
+      "id": "U06",
+      "title": "공통 작업·자식·승인·전송 상태",
+      "dependsOn": [
+        "U01"
+      ],
+      "scope": "기존 session/work/nativeSession 연결; task/run/parent와 native child 구분; provider capability·queue/steer/stop·plan/question/approval·durable receipt; 한 번의 부모 보고",
+      "completionEvidence": "C06/07/11 및 PA04/06/07/12; 메인 비차단·중복/unknown·지원 불가 명시; UI별 재실행 없음",
+      "status": "planned_not_run"
+    },
+    {
+      "id": "U07",
+      "title": "역할 프로필·모델 카탈로그·공통 API",
+      "dependsOn": [
+        "U06"
+      ],
+      "scope": "E02; 조사/작성/코딩/검토 프로필, 실제 모델/사용량/메타데이터·사용자 모델; CLI/MCP/TypeScript SDK가 같은 권한·receipt·capability 사용",
+      "completionEvidence": "F16/32/35; 프로필 변경은 다음 실행, 모델 발견/사용자 override 보존, API와 UI 결과·권한 동일",
+      "status": "planned_not_run"
+    },
+    {
+      "id": "U08",
+      "title": "문서 셸과 9형식 내장 Office UI",
+      "dependsOn": [
+        "U02",
+        "U03"
+      ],
+      "scope": "S04/S05 한글·Word·슬라이드·시트·Markdown·PDF·HTML·마인드맵·EPUB 전부; narrow renderer adapter·theme message; 독립 AI와 메뉴/명령 대응",
+      "completionEvidence": "형식별 편집/selection/Undo/dirty/save revision/내보내기/출력·원본 서식; 분할/테마/패널 변경 시 iframe 및 lease 유지",
+      "status": "planned_not_run"
+    },
+    {
+      "id": "U09",
+      "title": "Office 작업의 UI 독립 실행",
+      "dependsOn": [
+        "U06",
+        "U08",
+        "U16"
+      ],
+      "scope": "실행기 서버/iframe 의존 실증, 승인된 job/입력 snapshot/revision/task lease와 view presence 분리, writer 인계·외부 저장 충돌·부모 보고",
+      "completionEvidence": "PA08의 문서 부분; UI 종료·재접속·미저장 상태·writer 만료·물리 파일 하나의 writer·기존 병렬 PDF/helper 회귀",
+      "status": "planned_not_run"
+    },
+    {
+      "id": "U10",
+      "title": "Fast Find·휴먼볼트·Bases/그래프",
+      "dependsOn": [
+        "U03",
+        "U04",
+        "U05",
+        "U06"
+      ],
+      "scope": "단일 검색 엔진에 원문 prompt/reply/doc/vault 및 웹 child/url/artifact/host 참조; exact hit 위치; 읽기전용 볼트 navigation·YAML·보기/필터/선택",
+      "completionEvidence": "C15/H06/H07/PA16; 가상화된 원문 로드·Esc focus·볼트 뒤/앞/상위, human metadata/body bytes 무변경",
+      "status": "planned_not_run"
+    },
+    {
+      "id": "U11",
+      "title": "설정·온보딩·이음·Dropbox·기록 가져오기",
+      "dependsOn": [
+        "U03",
+        "U07",
+        "U05"
+      ],
+      "scope": "S12/S13/S15; 독립 이음 설치/등록/열기/같은 파일 저장 복귀, Dropbox·볼트 연결, E03 CLI 기록/작업 추천, 보관·삭제·복구 의미",
+      "completionEvidence": "H09/H13/C17/PA16; live session과 archive 구별·옛 지시 자동재개 없음; 외부저장/충돌·설정 보존·파일 보존 삭제",
+      "status": "planned_not_run"
+    },
+    {
+      "id": "U12",
+      "title": "공유 웹 렌더러 OS 실증",
+      "dependsOn": [
+        "U01"
+      ],
+      "scope": "WebView2 우선, WKWebView/WebKitGTK driver 개별 검증 및 필요시 공통 renderer 대안; page/profile/DOM·팝업/파일·hide/bounds·IME/focus·앱 bridge 격리",
+      "completionEvidence": "URL→동일 페이지 AI 제어→사람 인계→hide/show 전체 흐름; OS별 증거, 실패 원인·새 가설·대안 선택 기록",
+      "status": "planned_not_run"
+    },
+    {
+      "id": "U13",
+      "title": "일반 웹 탭·프로필·다운로드",
+      "dependsOn": [
+        "U02",
+        "U03",
+        "U12"
+      ],
+      "scope": "Browser registry/pageId/profileId/navigationRevision, address/history/reload/stop/link/new tab·pin/clone/move·split/restore·site permissions·download",
+      "completionEvidence": "C01/02/03/10/12; 동일 URL 2개 정확한 대상, 로그인 유지·한글 focus, 외부 앱 UI와 권한 격리",
+      "status": "planned_not_run"
+    },
+    {
+      "id": "U14",
+      "title": "같은 페이지 AI·사람 인계·Lightpanda",
+      "dependsOn": [
+        "U06",
+        "U13",
+        "U05",
+        "U08",
+        "U10"
+      ],
+      "scope": "공유 task coordinator의 page별 제어 owner·action boundary 인계·재관찰; 독립 sidebar child·부모 진행; LP 조사/새 시각 페이지 전환·artifact bridge",
+      "completionEvidence": "C04~C09/C11~C16·PA06; 웹2+문서1+메인 병행, 탭 숨김 지속, task별 executor 고정, DOM 소멸은 interrupted",
+      "status": "planned_not_run"
+    },
+    {
+      "id": "U15",
+      "title": "agent-desktop 외부 앱 어댑터",
+      "dependsOn": [
+        "U06"
+      ],
+      "scope": "고정 CLI/hash/JSON envelope·capability·timeout/cancel; 앱/창 target·snapshot freshness·partial/unknown 결과; 물리입력 lease·사람 제어 조정",
+      "completionEvidence": "X01~X03 실제 지원 OS/앱, niri 별도; 저장 결과 확인·stale ref 재관찰·불명 입력 중복 실행 없음",
+      "status": "planned_not_run"
+    },
+    {
+      "id": "U16",
+      "title": "기존 Node host 독립 서비스",
+      "dependsOn": [
+        "U06"
+      ],
+      "scope": "start/status/stop/attach·owner identity·정상 종료·OS 시작 등록·desktop stdin 분리·resource lease·터미널/agent restart semantics",
+      "completionEvidence": "PA08 일반채팅·PA09/18; 창 hide/UI quit/service stop/crash/sleep/reboot 별도, 기존 프로세스 미채택·모든 작업 지속 과장 없음",
+      "status": "planned_not_run"
+    },
+    {
+      "id": "U17",
+      "title": "기기 인증·복구·다중 호스트 연결",
+      "dependsOn": [
+        "U05",
+        "U06",
+        "U16"
+      ],
+      "scope": "device grant/revoke/rotation·protected transport·QR/relay/direct/VPN/desktop SSH; host epoch snapshot reset·unknown reconcile; 한 host 다기기 후 두 host",
+      "completionEvidence": "PA09~PA13/18; 동시 승인·응답 유실·host generation·외부망 복구·copied offer/revoke; 원격 비활성 로컬 사용; live migration 주장 없음",
+      "status": "planned_not_run"
+    },
+    {
+      "id": "U18",
+      "title": "모바일 대화·파일·터미널",
+      "dependsOn": [
+        "U02",
+        "U04",
+        "U05",
+        "U07",
+        "U09",
+        "U17"
+      ],
+      "scope": "native/PWA/공식 client 호환 bounded proof 후 경로 선택; phone/tablet·IME·safe area·회전·사진/공유·파일 결과·approval·background restore·CJK terminal",
+      "completionEvidence": "PA13/14 및 F24/29 실제 iOS·Android; desktop와 동일 작업·초안/사진 identity·terminal selection/reconnect; UI 독립 Office는 U09와 통합",
+      "status": "planned_not_run"
+    },
+    {
+      "id": "U19",
+      "title": "서비스 알림·push·정확한 이동",
+      "dependsOn": [
+        "U06",
+        "U14",
+        "U16",
+        "U17",
+        "U18"
+      ],
+      "scope": "UI 없는 producer·presence/read/attention·dedupe·generic push·native permission/token·deep link·host/task 이동·tray",
+      "completionEvidence": "C16/H10/PA15; desktop 종료 중 완료/승인 알림, warm/cold/open·기기 전환·중복 방지·민감 본문 기본 미포함",
+      "status": "planned_not_run"
+    },
+    {
+      "id": "U20",
+      "title": "workspace 운영·개발 도구",
+      "dependsOn": [
+        "U03",
+        "U13",
+        "U16",
+        "U18"
+      ],
+      "scope": "E01; local folder/worktree·setup/teardown·서비스 감독·포트/프록시·터미널·diff/conflict·GitHub·브라우저 배치; archive와 삭제 구별",
+      "completionEvidence": "H08/C18/F11/12/27/28/29; 대상 cwd/host 정확·비Git 문서 허용·충돌/포트·owned shutdown·mobile terminal U18 통합",
+      "status": "planned_not_run",
+      "startAfter": [
+        "U03",
+        "U16"
+      ]
+    },
+    {
+      "id": "U21",
+      "title": "예약·heartbeat의 지속 서비스 실행",
+      "dependsOn": [
+        "U06",
+        "U16"
+      ],
+      "scope": "E04; 기존 scheduler 재사용·새 run/기존 session wake 구별·due/expiry/pause/end·missed policy·receipt·상태 화면",
+      "completionEvidence": "F31; 재시작/clock/중복 tick/승인대기/일시중지·기한·종료; UI가 없어도 명시된 정책대로 동작",
+      "status": "planned_not_run"
+    },
+    {
+      "id": "U22",
+      "title": "한국어 받아쓰기·선택 음성 대화",
+      "dependsOn": [
+        "U07",
+        "U18"
+      ],
+      "scope": "E05; 한국어 STT/model 선택·별도 다운로드·모바일 음성/사진 입력·선택 TTS/voice conversation·cancel/권한·비용 표시",
+      "completionEvidence": "F30; 실제 한국어 fixture·정확도/latency/모델 크기·offline/online 범위·작업 중 입력/중지·무음 설정·기본 설치 크기 분리",
+      "status": "planned_not_run"
+    },
+    {
+      "id": "U23",
+      "title": "선택 실행 플러그인·라이브러리 UI",
+      "dependsOn": [
+        "U06",
+        "U07",
+        "U16",
+        "U18"
+      ],
+      "scope": "E06; tool/screen/provider extension lifecycle·version/scope·device capability·enable/disable/rollback; 기존 skills/templates/knowledge/image/convert 진입 유지; broker로 접근을 제한한 지원 실행 형식 하나와 screen 격리, 임의 native 코드 sandbox는 제외",
+      "completionEvidence": "F33/S14/H08; OS skill 검색·ingest와 코드 설치/실행 분리, 권한 boundary·업데이트 실패 복구·모바일 capability",
+      "status": "planned_not_run",
+      "startAfter": [
+        "U06",
+        "U07",
+        "U16"
+      ]
+    },
+    {
+      "id": "U24",
+      "title": "외부 이벤트 Hub",
+      "dependsOn": [
+        "U07",
+        "U16",
+        "U17",
+        "U21",
+        "U23"
+      ],
+      "scope": "E07; GitHub/Slack/Discord 등 선택 connector→검증 event→중복키→대상 제한 workflow; credential local·기한/pause/audit·모델 작업 dispatch",
+      "completionEvidence": "F36; signed/verified event·redelivery·unknown reconcile·잘못된 대상 거부·실제 연결별 E2E; 단순 webhook 수신만으로 완료 아님",
+      "status": "planned_not_run"
+    },
+    {
+      "id": "U25",
+      "title": "버전 호환·업데이트·전체 GitHub 배포",
+      "dependsOn": [
+        "U01",
+        "U02",
+        "U03",
+        "U04",
+        "U05",
+        "U06",
+        "U07",
+        "U08",
+        "U09",
+        "U10",
+        "U11",
+        "U12",
+        "U13",
+        "U14",
+        "U15",
+        "U16",
+        "U17",
+        "U18",
+        "U19",
+        "U20",
+        "U21",
+        "U22",
+        "U23",
+        "U24"
+      ],
+      "scope": "E08; stable/trial channel·client/daemon protocol·데이터 migration/rollback·활성 작업 보존·설치/upgrade/remove·GitHub CI/artifact/tag/release provenance",
+      "completionEvidence": "전체 C/H/PA/X·모든 E/F·9 Office formats·REG 통과, 실제 각 지원 OS 설치본+모바일 증거·SHA/hash·release asset 검증",
+      "status": "planned_not_run",
+      "startAfter": [
+        "U01"
+      ],
+      "executionTasks": [
+        "U25a",
+        "U25b"
+      ]
+    }
+  ],
+  "requirements": [
+    {
+      "key": "aside:P0",
+      "namespace": "aside",
+      "originalId": "P0",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 11,
+      "originalCells": [
+        "P0. 렌더러 실증",
+        "별도 실증 경로에서 OS WebView 생성, 프로필, DOM 제어, 팝업·파일, hide/show, 분할·IME 확인",
+        "OS별 실행 증거와 capability 표; 채택할 렌더러 결정",
+        "없음"
+      ],
+      "mappedUnits": [
+        "U12"
+      ],
+      "primaryOwner": "U12",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:P1",
+      "namespace": "aside",
+      "originalId": "P1",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 12,
+      "originalCells": [
+        "P1. 일반 웹 탭",
+        "Browser View, pageId, 주소창·이동, 새 탭 메뉴, 탭/분할/복원, 프로필·다운로드",
+        "AI 없이도 수작업 가능한 웹 탭",
+        "P0"
+      ],
+      "mappedUnits": [
+        "U13"
+      ],
+      "primaryOwner": "U13",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:P2",
+      "namespace": "aside",
+      "originalId": "P2",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 13,
+      "originalCells": [
+        "P2. 탭 AI와 작업 수명",
+        "독립 자식 세션, host 소유 작업, 페이지 제어, 사용자 인계, 부모 이벤트",
+        "두 탭에 작업을 맡기면서 메인 대화 사용 가능",
+        "P1"
+      ],
+      "mappedUnits": [
+        "U14",
+        "U06"
+      ],
+      "primaryOwner": "U14",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:P3",
+      "namespace": "aside",
+      "originalId": "P3",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 14,
+      "originalCells": [
+        "P3. 기존 기능 연결",
+        "LP/공유 웹 실행기 선택, 결과물 등록, Ctrl+K, 완료 알림, 이음오피스 연계",
+        "핵심 사용성 C01~C18 통과 및 해당 OS 설치본 검증",
+        "P2"
+      ],
+      "mappedUnits": [
+        "U05",
+        "U10",
+        "U11",
+        "U19"
+      ],
+      "primaryOwner": "U05",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:P4",
+      "namespace": "aside",
+      "originalId": "P4",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 15,
+      "originalCells": [
+        "P4. 외부 앱 조작",
+        "agent-desktop 버전 고정·capability·JSON 어댑터, 대상 앱 조정·결과 확인",
+        "지원한다고 표시한 OS/앱에서 X01~X03 통과",
+        "P0 이후 별도 진행 가능"
+      ],
+      "mappedUnits": [
+        "U15"
+      ],
+      "primaryOwner": "U15",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:C01",
+      "namespace": "aside",
+      "originalId": "C01",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 43,
+      "originalCells": [
+        "C01",
+        "프로젝트에서 `+`와 우클릭 사용",
+        "새 세션·지원 문서·폴더·웹 탭이 보이고 AI 없이 생성 가능",
+        "미실행"
+      ],
+      "mappedUnits": [
+        "U03",
+        "U13"
+      ],
+      "primaryOwner": "U03",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:C02",
+      "namespace": "aside",
+      "originalId": "C02",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 44,
+      "originalCells": [
+        "C02",
+        "웹을 일반 브라우저처럼 사용",
+        "주소 입력, 뒤로/앞으로, 새로고침·중지, 링크·새 탭이 올바른 페이지에 적용",
+        "미실행"
+      ],
+      "mappedUnits": [
+        "U13"
+      ],
+      "primaryOwner": "U13",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:C03",
+      "namespace": "aside",
+      "originalId": "C03",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 45,
+      "originalCells": [
+        "C03",
+        "분할·탭 이동·동일 URL 두 개",
+        "pageId를 혼동하지 않고 한글 입력·크기·포커스가 유지",
+        "미실행"
+      ],
+      "mappedUnits": [
+        "U12",
+        "U13"
+      ],
+      "primaryOwner": "U12",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:C04",
+      "namespace": "aside",
+      "originalId": "C04",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 46,
+      "originalCells": [
+        "C04",
+        "로그인 후 이 페이지의 AI 요청",
+        "사람과 AI가 동일 프로필의 **같은 살아 있는 페이지**에서 작업",
+        "미실행"
+      ],
+      "mappedUnits": [
+        "U14"
+      ],
+      "primaryOwner": "U14",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:C05",
+      "namespace": "aside",
+      "originalId": "C05",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 47,
+      "originalCells": [
+        "C05",
+        "사이드 AI 실행 후 다른 탭 이동",
+        "작업이 계속되고, 돌아오면 같은 대화·진행·결과가 보임",
+        "미실행"
+      ],
+      "mappedUnits": [
+        "U14",
+        "U06"
+      ],
+      "primaryOwner": "U14",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:C06",
+      "namespace": "aside",
+      "originalId": "C06",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 48,
+      "originalCells": [
+        "C06",
+        "웹 2개와 문서 1개에 작업, 메인에도 요청",
+        "독립 세션으로 실행; 탭 전환으로 쓰기 권한 오류/취소가 발생하지 않음",
+        "미실행"
+      ],
+      "mappedUnits": [
+        "U14",
+        "U08",
+        "U06"
+      ],
+      "primaryOwner": "U14",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:C07",
+      "namespace": "aside",
+      "originalId": "C07",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 49,
+      "originalCells": [
+        "C07",
+        "부모 세션에서 자식 진행 확인",
+        "부모 입력을 막지 않고 진행 카드와 완료 맥락이 전달; 중복 실행 없음",
+        "미실행"
+      ],
+      "mappedUnits": [
+        "U06",
+        "U14"
+      ],
+      "primaryOwner": "U06",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:C08",
+      "namespace": "aside",
+      "originalId": "C08",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 50,
+      "originalCells": [
+        "C08",
+        "AI 작업 중 사람이 개입하고 재개",
+        "진행 중 행동 경계에서 인계, 사람 입력을 덮지 않음; 재관찰 후 계속",
+        "미실행"
+      ],
+      "mappedUnits": [
+        "U14"
+      ],
+      "primaryOwner": "U14",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:C09",
+      "namespace": "aside",
+      "originalId": "C09",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 51,
+      "originalCells": [
+        "C09",
+        "같은 페이지에 두 작업의 변경 요청",
+        "변경 작업을 조정하고 다른 페이지의 작업은 진행 가능",
+        "미실행"
+      ],
+      "mappedUnits": [
+        "U14"
+      ],
+      "primaryOwner": "U14",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:C10",
+      "namespace": "aside",
+      "originalId": "C10",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 52,
+      "originalCells": [
+        "C10",
+        "팝업·다운로드·사이트 권한 발생",
+        "대상 탭/프로필을 보존하고 다운로드가 올바른 프로젝트에 등록",
+        "미실행"
+      ],
+      "mappedUnits": [
+        "U13",
+        "U05"
+      ],
+      "primaryOwner": "U13",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:C11",
+      "namespace": "aside",
+      "originalId": "C11",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 53,
+      "originalCells": [
+        "C11",
+        "실행 중 탭 닫기·명시적 중지",
+        "숨김과 중지를 구별; 중지는 자식 실행까지 끝내며 종료 이벤트 중복 없음",
+        "미실행"
+      ],
+      "mappedUnits": [
+        "U14",
+        "U06"
+      ],
+      "primaryOwner": "U14",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:C12",
+      "namespace": "aside",
+      "originalId": "C12",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 54,
+      "originalCells": [
+        "C12",
+        "앱 종료·재시작",
+        "대화·탭 기록 복원; 살아 있지 않은 DOM 작업은 중단 상태로 정확히 표시",
+        "미실행"
+      ],
+      "mappedUnits": [
+        "U13",
+        "U14",
+        "U16",
+        "U25"
+      ],
+      "primaryOwner": "U13",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:C13",
+      "namespace": "aside",
+      "originalId": "C13",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 55,
+      "originalCells": [
+        "C13",
+        "공개 자료 조사를 메인에서 요청",
+        "LP 경로로 수집하고 출처·결과를 반환; 불필요하게 화면을 열지 않음",
+        "미실행"
+      ],
+      "mappedUnits": [
+        "U14"
+      ],
+      "primaryOwner": "U14",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:C14",
+      "namespace": "aside",
+      "originalId": "C14",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 56,
+      "originalCells": [
+        "C14",
+        "LP 결과를 사람이 웹 탭에서 확인",
+        "새 렌더링 페이지임을 구별; 기존 로그인·폼이 자동 복제됐다고 표시하지 않음",
+        "미실행"
+      ],
+      "mappedUnits": [
+        "U14",
+        "U13"
+      ],
+      "primaryOwner": "U14",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:C15",
+      "namespace": "aside",
+      "originalId": "C15",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 57,
+      "originalCells": [
+        "C15",
+        "Ctrl+K에 원문 프롬프트 일부 입력",
+        "사이드/메인 요청 원문 모두 검색되고 해당 대화로 이동",
+        "미실행"
+      ],
+      "mappedUnits": [
+        "U10",
+        "U04",
+        "U14"
+      ],
+      "primaryOwner": "U10",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:C16",
+      "namespace": "aside",
+      "originalId": "C16",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 58,
+      "originalCells": [
+        "C16",
+        "다른 탭에서 작업 완료·입력 필요",
+        "정책에 따른 알림 1회, 클릭 시 해당 작업/탭으로 이동",
+        "미실행"
+      ],
+      "mappedUnits": [
+        "U19",
+        "U06",
+        "U14"
+      ],
+      "primaryOwner": "U19",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:C17",
+      "namespace": "aside",
+      "originalId": "C17",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 59,
+      "originalCells": [
+        "C17",
+        "결과 파일을 편집기→이음오피스에서 저장",
+        "돌아와 최신 내용을 읽고 같은 프로젝트의 다른 세션도 결과를 찾음",
+        "미실행"
+      ],
+      "mappedUnits": [
+        "U05",
+        "U08",
+        "U11"
+      ],
+      "primaryOwner": "U05",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:C18",
+      "namespace": "aside",
+      "originalId": "C18",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 60,
+      "originalCells": [
+        "C18",
+        "기존 프로젝트·문서·볼트·worktree 흐름",
+        "개요 진입·문서 집중 모드·볼트 이동 유지; 다른 worktree 결과를 동일 파일로 혼동하지 않음",
+        "미실행"
+      ],
+      "mappedUnits": [
+        "U03",
+        "U08",
+        "U10",
+        "U20"
+      ],
+      "primaryOwner": "U03",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:X01",
+      "namespace": "aside",
+      "originalId": "X01",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 68,
+      "originalCells": [
+        "X01",
+        "지원 OS에서 지정 앱 관찰·한 가지 수정·저장",
+        "정확한 앱/창을 선택하고 저장 결과를 별도로 확인",
+        "미실행"
+      ],
+      "mappedUnits": [
+        "U15"
+      ],
+      "primaryOwner": "U15",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:X02",
+      "namespace": "aside",
+      "originalId": "X02",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 69,
+      "originalCells": [
+        "X02",
+        "stale ref·부분 snapshot·불확실한 입력 결과",
+        "fresh observation과 안전한 재시도로 처리; 중복 저장/전송 없음",
+        "미실행"
+      ],
+      "mappedUnits": [
+        "U15"
+      ],
+      "primaryOwner": "U15",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "aside:X03",
+      "namespace": "aside",
+      "originalId": "X03",
+      "source": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sourceLine": 70,
+      "originalCells": [
+        "X03",
+        "사용자 조작·다른 작업과 경합",
+        "포커스·포인터 정책과 대상 앱 소유권을 지키고 미지원 기능을 정확히 표시",
+        "미실행"
+      ],
+      "mappedUnits": [
+        "U15"
+      ],
+      "primaryOwner": "U15",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:W0",
+      "namespace": "hig",
+      "originalId": "W0",
+      "source": "docs/design/hig-remake-2026-11-09/implementation-plan.md",
+      "sourceLine": 9,
+      "originalCells": [
+        "W0 현재 기준과 대표 시안",
+        "현행 설치본의 핵심 상태 캡처; 기존 메뉴/명령 대응표; 홈/프로젝트·메인 대화·문서 집중 시안; 제어층 재질 후보 비교",
+        "`docs/design/DESIGN.md`의 차기 계약과 화면 사양",
+        "화면·기능 범위와 시각 계약 고정. 이전 감사 사진을 현재 사진으로 쓰지 않음"
+      ],
+      "mappedUnits": [
+        "U01"
+      ],
+      "primaryOwner": "U01",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:W1",
+      "namespace": "hig",
+      "originalId": "W1",
+      "source": "docs/design/hig-remake-2026-11-09/implementation-plan.md",
+      "sourceLine": 10,
+      "originalCells": [
+        "W1 공통 UI",
+        "토큰 역할 정리; 버튼/아이콘/메뉴/팝오버/시트/목록/초점/상태 공통화",
+        "`apps/web`의 UI 컴포넌트·스타일, 스킬 HIG Kit 대응",
+        "대표 상태가 light/dark·키보드·확대에서 사용 가능"
+      ],
+      "mappedUnits": [
+        "U02"
+      ],
+      "primaryOwner": "U02",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:W2",
+      "namespace": "hig",
+      "originalId": "W2",
+      "source": "docs/design/hig-remake-2026-11-09/implementation-plan.md",
+      "sourceLine": 11,
+      "originalCells": [
+        "W2 셸·프로젝트·대화",
+        "탐색/프로젝트/탭/도구 모음 재구성, 생성/검색 진입, 메인 대화·작업 보고",
+        "`App`, `Sidebar/nav`, `Panes/tabs`, `WorkView/Transcript/Composer`",
+        "기존 데이터로 핵심 세 화면을 실제 사용 가능. 이 시점에 검토 가능한 중간 설치본 준비"
+      ],
+      "mappedUnits": [
+        "U03",
+        "U04",
+        "U05",
+        "U06"
+      ],
+      "primaryOwner": "U03",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:W3",
+      "namespace": "hig",
+      "originalId": "W3",
+      "source": "docs/design/hig-remake-2026-11-09/implementation-plan.md",
+      "sourceLine": 12,
+      "originalCells": [
+        "W3 문서와 편집기 내부",
+        "집중 모드·공통 문서 도구·독립 AI; 모든 형식의 내부 UI adapter와 메뉴 대응",
+        "`components/docs`, `apps/office`, 기존 renderer build adapter",
+        "S04/S05의 모든 형식군 통과. 바깥 셸만 변경한 상태를 전면 완료로 계산하지 않음"
+      ],
+      "mappedUnits": [
+        "U08"
+      ],
+      "primaryOwner": "U08",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:W4",
+      "namespace": "hig",
+      "originalId": "W4",
+      "source": "docs/design/hig-remake-2026-11-09/implementation-plan.md",
+      "sourceLine": 13,
+      "originalCells": [
+        "W4 나머지 화면",
+        "볼트/Bases/그래프, 터미널·worktree·GitHub, 스킬/템플릿, 설정/온보딩/Dropbox, 보관·삭제·복구",
+        "해당 기능 컴포넌트의 표시 계층",
+        "S01~S15 중 기존 기능의 미이관 항목 없음"
+      ],
+      "mappedUnits": [
+        "U10",
+        "U11",
+        "U20",
+        "U23"
+      ],
+      "primaryOwner": "U10",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:W5",
+      "namespace": "hig",
+      "originalId": "W5",
+      "source": "docs/design/hig-remake-2026-11-09/implementation-plan.md",
+      "sourceLine": 14,
+      "originalCells": [
+        "W5 통합 마감",
+        "접근성·실제 OS·설치본·기존 데이터 복귀 검증, 발견된 관련 결함 수정",
+        "이관된 UI와 경계 계약",
+        "아래 H01~H14 및 화면군 대응표 통과"
+      ],
+      "mappedUnits": [
+        "U25"
+      ],
+      "primaryOwner": "U25",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:W6",
+      "namespace": "hig",
+      "originalId": "W6",
+      "source": "docs/design/hig-remake-2026-11-09/implementation-plan.md",
+      "sourceLine": 15,
+      "originalCells": [
+        "W6 공유 웹 연결",
+        "같은 셸의 웹 View·페이지 AI·인계·진행/결과를 실제 엔진에 연결",
+        "앞선 Aside 계획의 page/task coordinator",
+        "해당 계획 C01~C18에 따라 별도 기능 검증"
+      ],
+      "mappedUnits": [
+        "U12",
+        "U13",
+        "U14"
+      ],
+      "primaryOwner": "U12",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:H01",
+      "namespace": "hig",
+      "originalId": "H01",
+      "source": "docs/design/hig-remake-2026-11-09/implementation-plan.md",
+      "sourceLine": 49,
+      "originalCells": [
+        "H01",
+        "프로젝트 이름/펼침/폴더/대화/문서의 역할이 구분되고 이름 클릭으로 개요에 진입",
+        "S01/S02"
+      ],
+      "mappedUnits": [
+        "U03"
+      ],
+      "primaryOwner": "U03",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:H02",
+      "namespace": "hig",
+      "originalId": "H02",
+      "source": "docs/design/hig-remake-2026-11-09/implementation-plan.md",
+      "sourceLine": 50,
+      "originalCells": [
+        "H02",
+        "생성 기능을 상단·프로젝트 메뉴·키보드에서 찾고 AI 없이 문서/세션/폴더 생성",
+        "S01~S05"
+      ],
+      "mappedUnits": [
+        "U03",
+        "U08"
+      ],
+      "primaryOwner": "U03",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:H03",
+      "namespace": "hig",
+      "originalId": "H03",
+      "source": "docs/design/hig-remake-2026-11-09/implementation-plan.md",
+      "sourceLine": 51,
+      "originalCells": [
+        "H03",
+        "문서 집중과 메인 복귀 시 필요한 도구와 입력이 복원; OS 전체 화면을 임의로 바꾸지 않음",
+        "S03~S06"
+      ],
+      "mappedUnits": [
+        "U03",
+        "U08"
+      ],
+      "primaryOwner": "U03",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:H04",
+      "namespace": "hig",
+      "originalId": "H04",
+      "source": "docs/design/hig-remake-2026-11-09/implementation-plan.md",
+      "sourceLine": 52,
+      "originalCells": [
+        "H04",
+        "여러 문서 AI와 메인 세션을 병행; 탭/분할/테마/패널 변경이 작업·쓰기 권한을 끊지 않음",
+        "S03~S06"
+      ],
+      "mappedUnits": [
+        "U08",
+        "U06",
+        "U09"
+      ],
+      "primaryOwner": "U08",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:H05",
+      "namespace": "hig",
+      "originalId": "H05",
+      "source": "docs/design/hig-remake-2026-11-09/implementation-plan.md",
+      "sourceLine": 53,
+      "originalCells": [
+        "H05",
+        "형식별 기존 메뉴/명령 대응표의 누락 없음; 편집·저장·Undo·출력과 실제 문서 서식 보존",
+        "S04/S05"
+      ],
+      "mappedUnits": [
+        "U08"
+      ],
+      "primaryOwner": "U08",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:H06",
+      "namespace": "hig",
+      "originalId": "H06",
+      "source": "docs/design/hig-remake-2026-11-09/implementation-plan.md",
+      "sourceLine": 54,
+      "originalCells": [
+        "H06",
+        "Ctrl+K 원문 프롬프트·답변·문서·볼트 검색과 원문 위치 열기, 범위 표시가 유지",
+        "S08"
+      ],
+      "mappedUnits": [
+        "U10",
+        "U04"
+      ],
+      "primaryOwner": "U10",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:H07",
+      "namespace": "hig",
+      "originalId": "H07",
+      "source": "docs/design/hig-remake-2026-11-09/implementation-plan.md",
+      "sourceLine": 55,
+      "originalCells": [
+        "H07",
+        "볼트 뒤/앞/상위와 읽기 전용, Bases/그래프 선택·필터 및 프로젝트 YAML 값 보존",
+        "S02/S07"
+      ],
+      "mappedUnits": [
+        "U10",
+        "U03"
+      ],
+      "primaryOwner": "U10",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:H08",
+      "namespace": "hig",
+      "originalId": "H08",
+      "source": "docs/design/hig-remake-2026-11-09/implementation-plan.md",
+      "sourceLine": 56,
+      "originalCells": [
+        "H08",
+        "worktree·터미널·GitHub 검토 등 현재 노출된 기존 기능의 새 진입점이 있고 대상 workspace가 정확",
+        "S10/S11/S14"
+      ],
+      "mappedUnits": [
+        "U20",
+        "U23"
+      ],
+      "primaryOwner": "U20",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:H09",
+      "namespace": "hig",
+      "originalId": "H09",
+      "source": "docs/design/hig-remake-2026-11-09/implementation-plan.md",
+      "sourceLine": 57,
+      "originalCells": [
+        "H09",
+        "이음오피스 독립 설치/열기/저장/복귀와 Dropbox·모델·외형·단축키 설정 유지",
+        "S12/S13"
+      ],
+      "mappedUnits": [
+        "U11",
+        "U07",
+        "U02"
+      ],
+      "primaryOwner": "U11",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:H10",
+      "namespace": "hig",
+      "originalId": "H10",
+      "source": "docs/design/hig-remake-2026-11-09/implementation-plan.md",
+      "sourceLine": 58,
+      "originalCells": [
+        "H10",
+        "완료/실패/입력 필요를 구분, 알림 중복 없음, 알림에서 정확한 작업으로 이동",
+        "S03/S15"
+      ],
+      "mappedUnits": [
+        "U19",
+        "U06"
+      ],
+      "primaryOwner": "U19",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:H11",
+      "namespace": "hig",
+      "originalId": "H11",
+      "source": "docs/design/hig-remake-2026-11-09/implementation-plan.md",
+      "sourceLine": 59,
+      "originalCells": [
+        "H11",
+        "키보드만으로 핵심 흐름 가능, 초점 표시·순서·대화상자 닫기·원위치 복귀, 스크린리더 이름 검증",
+        "전체"
+      ],
+      "mappedUnits": [
+        "U02",
+        "U25"
+      ],
+      "primaryOwner": "U02",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:H12",
+      "namespace": "hig",
+      "originalId": "H12",
+      "source": "docs/design/hig-remake-2026-11-09/implementation-plan.md",
+      "sourceLine": 60,
+      "originalCells": [
+        "H12",
+        "light/dark·대비·움직임/투명도 줄이기·200% 글자 확대와 좁은 창에서 내용/제어가 잘리지 않음",
+        "전체 대표 상태"
+      ],
+      "mappedUnits": [
+        "U02",
+        "U08",
+        "U18",
+        "U25"
+      ],
+      "primaryOwner": "U02",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:H13",
+      "namespace": "hig",
+      "originalId": "H13",
+      "source": "docs/design/hig-remake-2026-11-09/implementation-plan.md",
+      "sourceLine": 61,
+      "originalCells": [
+        "H13",
+        "이전 설정·프로젝트·레이아웃을 실제 설치본에서 열고, 재시작 후 저장 상태와 작업 결과가 일관됨",
+        "전체"
+      ],
+      "mappedUnits": [
+        "U25",
+        "U11",
+        "U03",
+        "U16"
+      ],
+      "primaryOwner": "U25",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:H14",
+      "namespace": "hig",
+      "originalId": "H14",
+      "source": "docs/design/hig-remake-2026-11-09/implementation-plan.md",
+      "sourceLine": 62,
+      "originalCells": [
+        "H14",
+        "같은 fixture로 대화 스트림·검색·탭 이동의 전후 시간/메모리 측정. 큰 회귀는 원인과 근거 없이 수용하지 않음",
+        "S03/S06/S08"
+      ],
+      "mappedUnits": [
+        "U01",
+        "U04",
+        "U10",
+        "U25"
+      ],
+      "primaryOwner": "U01",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:S01",
+      "namespace": "hig",
+      "originalId": "S01",
+      "source": "docs/design/hig-remake-2026-11-09/screen-inventory.md",
+      "sourceLine": 9,
+      "originalCells": [
+        "S01 시작/최근 작업",
+        "마지막 작업, 새 작업, 최근 프로젝트",
+        "간결한 입력·최근 목록·새로 만들기",
+        "실행 → S02/S03/S04",
+        "`StartView`, `HomeModes`, `WorkModes`; D01/D03"
+      ],
+      "mappedUnits": [
+        "U03",
+        "U11"
+      ],
+      "primaryOwner": "U03",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:S02",
+      "namespace": "hig",
+      "originalId": "S02",
+      "source": "docs/design/hig-remake-2026-11-09/screen-inventory.md",
+      "sourceLine": 10,
+      "originalCells": [
+        "S02 프로젝트 개요",
+        "이름·설명·속성, 관련 대화/문서, 작업공간",
+        "프로젝트 노트, 속성 편집, 썸네일·템플릿·보기 전환",
+        "프로젝트 클릭 → S03/S04/S07/S10",
+        "`project/ProjectView`, `PropertiesPanel`, `ProjectsMode`; D01/D09/D12"
+      ],
+      "mappedUnits": [
+        "U03",
+        "U10"
+      ],
+      "primaryOwner": "U03",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:S03",
+      "namespace": "hig",
+      "originalId": "S03",
+      "source": "docs/design/hig-remake-2026-11-09/screen-inventory.md",
+      "sourceLine": 11,
+      "originalCells": [
+        "S03 메인 대화",
+        "원문 요청·응답·결과, 작업 진행, 상세 로그",
+        "입력·첨부·모델·실행 제어·자식 작업·수정안",
+        "세션 선택/검색 결과 → 문서/웹/검토",
+        "`WorkView`, `Transcript`, `Composer`, `SessionControls`, `ModelPicker`; D06~D08/D13"
+      ],
+      "mappedUnits": [
+        "U04",
+        "U05",
+        "U06"
+      ],
+      "primaryOwner": "U04",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:S04",
+      "namespace": "hig",
+      "originalId": "S04",
+      "source": "docs/design/hig-remake-2026-11-09/screen-inventory.md",
+      "sourceLine": 12,
+      "originalCells": [
+        "S04 문서 작업 셸",
+        "파일명·저장 상태, 편집기, 해당 문서 AI",
+        "저장·앱으로 열기·내보내기·작업공간 보기",
+        "문서 선택/생성 → S05/S06/외부 앱",
+        "`docs/DocumentView`, `DocTabs`, `OfficeFileMenu`, `OfficeEditor`; D02~D05/D13"
+      ],
+      "mappedUnits": [
+        "U08",
+        "U09"
+      ],
+      "primaryOwner": "U08",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:S05",
+      "namespace": "hig",
+      "originalId": "S05",
+      "source": "docs/design/hig-remake-2026-11-09/screen-inventory.md",
+      "sourceLine": 13,
+      "originalCells": [
+        "S05 형식별 편집기 내부",
+        "편집 캔버스, 자주 쓰는 도구, 선택 대상 속성",
+        "아래 형식별 표의 모든 기존 명령",
+        "S04 안에서 작업, 형식별 대화상자",
+        "`apps/office`, 내장 renderer; D04/D05/D09/D13"
+      ],
+      "mappedUnits": [
+        "U08"
+      ],
+      "primaryOwner": "U08",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:S06",
+      "namespace": "hig",
+      "originalId": "S06",
+      "source": "docs/design/hig-remake-2026-11-09/screen-inventory.md",
+      "sourceLine": 14,
+      "originalCells": [
+        "S06 나란히 작업",
+        "선택한 두 작업과 활성 칸",
+        "탭 이동·분할·크기·집중·복귀",
+        "사용자가 분할 선택 → 원래 작업",
+        "`Panes`, `tabs`, `panes`, `layout-persistence`; D02/D04/D09"
+      ],
+      "mappedUnits": [
+        "U03",
+        "U08",
+        "U13"
+      ],
+      "primaryOwner": "U03",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:S07",
+      "namespace": "hig",
+      "originalId": "S07",
+      "source": "docs/design/hig-remake-2026-11-09/screen-inventory.md",
+      "sourceLine": 15,
+      "originalCells": [
+        "S07 자료·볼트·보기",
+        "위치·읽기 권한, 폴더/목록, 노트·미리보기",
+        "뒤로/앞으로/상위, 필터·정렬·표/보드/그래프",
+        "프로젝트/연결 볼트 → 노트/문서/검색",
+        "`pkm/VaultBrowser`, `VaultNoteView`, `views/*`, `project/ProjectsGraph`; D01/D08/D09/D12"
+      ],
+      "mappedUnits": [
+        "U10"
+      ],
+      "primaryOwner": "U10",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:S08",
+      "namespace": "hig",
+      "originalId": "S08",
+      "source": "docs/design/hig-remake-2026-11-09/screen-inventory.md",
+      "sourceLine": 16,
+      "originalCells": [
+        "S08 통합 검색",
+        "검색어·범위, 종류별 결과, 원문 문맥",
+        "Ctrl+K, 필터, 미리보기, 원문 위치 열기",
+        "모든 화면 → 정확한 작업/문서/메시지",
+        "`SearchPalette`, `FastFindPreview`; D08"
+      ],
+      "mappedUnits": [
+        "U10"
+      ],
+      "primaryOwner": "U10",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:S09",
+      "namespace": "hig",
+      "originalId": "S09",
+      "source": "docs/design/hig-remake-2026-11-09/screen-inventory.md",
+      "sourceLine": 17,
+      "originalCells": [
+        "S09 공유 웹 탭",
+        "주소·이동, 페이지, 이 페이지 AI",
+        "사용자 인계·재개·분할·다운로드",
+        "생성/AI 작업 → 웹/문서 결과",
+        "**신규 기능 설계**; 기존 `BrowserPill`과 구별, D02/D05~D07"
+      ],
+      "mappedUnits": [
+        "U13",
+        "U14"
+      ],
+      "primaryOwner": "U13",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:S10",
+      "namespace": "hig",
+      "originalId": "S10",
+      "source": "docs/design/hig-remake-2026-11-09/screen-inventory.md",
+      "sourceLine": 18,
+      "originalCells": [
+        "S10 worktree·변경 검토",
+        "작업공간, 변경 파일, 차이·충돌·검토 상태",
+        "준비·비교·적용·GitHub 검토/작업 상태",
+        "S02/S03 → 검토/터미널/프로젝트",
+        "`WorkspacePicker`, `WorktreeReview`, `SourceControlDialog`, `Scm*`, `GitHub*`; D09/D10/D13"
+      ],
+      "mappedUnits": [
+        "U20"
+      ],
+      "primaryOwner": "U20",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:S11",
+      "namespace": "hig",
+      "originalId": "S11",
+      "source": "docs/design/hig-remake-2026-11-09/screen-inventory.md",
+      "sourceLine": 19,
+      "originalCells": [
+        "S11 터미널",
+        "현재 프로젝트/workspace, 출력, 입력",
+        "세션 생성·전환·찾기·닫기",
+        "S02/S03/S10 → 기존 작업",
+        "`TerminalView`, `TerminalDialog`; D02/D09"
+      ],
+      "mappedUnits": [
+        "U20",
+        "U18"
+      ],
+      "primaryOwner": "U20",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:S12",
+      "namespace": "hig",
+      "originalId": "S12",
+      "source": "docs/design/hig-remake-2026-11-09/screen-inventory.md",
+      "sourceLine": 20,
+      "originalCells": [
+        "S12 설정",
+        "작업과 분리된 일반 환경설정",
+        "외형·단축키·AI 연결/모델·권한·통합 기능",
+        "명시적 설정 메뉴 → 원래 화면",
+        "`AppearanceSheet`, `ShortcutSettings`, `Connections`, `IntegrationsSheet`, `OfficeSettings`; D11/D14"
+      ],
+      "mappedUnits": [
+        "U11",
+        "U07",
+        "U02"
+      ],
+      "primaryOwner": "U11",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:S13",
+      "namespace": "hig",
+      "originalId": "S13",
+      "source": "docs/design/hig-remake-2026-11-09/screen-inventory.md",
+      "sourceLine": 21,
+      "originalCells": [
+        "S13 온보딩·설치·연결",
+        "가능한 기능과 현재 설정 상태",
+        "이음오피스 독립 설치/연결, 엔진 설정, Dropbox·볼트 연결",
+        "최초/기능 첫 사용/설정 → 실제 작업",
+        "`Onboarding`, `EngineSetup`, `IeumAppDialog`, `DropboxDialog`, `VaultDialog`; D11/D14"
+      ],
+      "mappedUnits": [
+        "U11"
+      ],
+      "primaryOwner": "U11",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:S14",
+      "namespace": "hig",
+      "originalId": "S14",
+      "source": "docs/design/hig-remake-2026-11-09/screen-inventory.md",
+      "sourceLine": 22,
+      "originalCells": [
+        "S14 라이브러리·보조 작업",
+        "스킬·양식·지식·기존 이미지/변환 작업",
+        "선택·가져오기·적용·생성·상태 확인",
+        "생성 메뉴/문서/설정 → 결과물",
+        "`SkillLibraryDialog`, `KnowledgeHome`, `ImageGen`, `ScheduleDialog` 등 **현재 노출된 기능**; D03/D07/D11"
+      ],
+      "mappedUnits": [
+        "U23",
+        "U21",
+        "U22"
+      ],
+      "primaryOwner": "U23",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:S15",
+      "namespace": "hig",
+      "originalId": "S15",
+      "source": "docs/design/hig-remake-2026-11-09/screen-inventory.md",
+      "sourceLine": 23,
+      "originalCells": [
+        "S15 보관·삭제·복구·공통 피드백",
+        "대상·영향·복구 가능성·상태",
+        "복원·삭제·취소·재시도·결과 열기",
+        "메뉴/오류/알림 → 관련 화면",
+        "`ArchiveView`, `ProjectDeleteDialog`, `Recovery`, 공통 알림; D07/D10/D14"
+      ],
+      "mappedUnits": [
+        "U11",
+        "U19",
+        "U25"
+      ],
+      "primaryOwner": "U11",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:F01",
+      "namespace": "hig",
+      "originalId": "F01",
+      "source": "docs/design/hig-remake-2026-11-09/flow-map.md",
+      "sourceLine": 13,
+      "originalCells": [
+        "F01 시작·복귀",
+        "앱 실행 → 마지막 작업 복원, 없으면 S01",
+        "초기 설정을 건너뛰어 로컬 문서 생성 가능",
+        "D01, D14"
+      ],
+      "mappedUnits": [
+        "U03",
+        "U11",
+        "U25"
+      ],
+      "primaryOwner": "U03",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:F02",
+      "namespace": "hig",
+      "originalId": "F02",
+      "source": "docs/design/hig-remake-2026-11-09/flow-map.md",
+      "sourceLine": 14,
+      "originalCells": [
+        "F02 프로젝트",
+        "이름 클릭 → S02 개요; 펼침 클릭 → 내용 목록",
+        "상위 프로젝트/폴더 경로로 이동",
+        "D01"
+      ],
+      "mappedUnits": [
+        "U03",
+        "U10"
+      ],
+      "primaryOwner": "U03",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:F03",
+      "namespace": "hig",
+      "originalId": "F03",
+      "source": "docs/design/hig-remake-2026-11-09/flow-map.md",
+      "sourceLine": 15,
+      "originalCells": [
+        "F03 수동 새 문서",
+        "상단/프로젝트 메뉴 → 형식·위치 선택 → S04/S05",
+        "생성 취소 시 원래 탭·선택 유지",
+        "D03"
+      ],
+      "mappedUnits": [
+        "U03",
+        "U08"
+      ],
+      "primaryOwner": "U03",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:F04",
+      "namespace": "hig",
+      "originalId": "F04",
+      "source": "docs/design/hig-remake-2026-11-09/flow-map.md",
+      "sourceLine": 16,
+      "originalCells": [
+        "F04 병렬 AI",
+        "S03 메인에서 시작 → 문서 탭 S04에서 별도 요청 → 다른 탭으로 이동",
+        "작업은 유지. `중지`만 해당 작업에 적용",
+        "D06, D07"
+      ],
+      "mappedUnits": [
+        "U06",
+        "U08",
+        "U09"
+      ],
+      "primaryOwner": "U06",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:F05",
+      "namespace": "hig",
+      "originalId": "F05",
+      "source": "docs/design/hig-remake-2026-11-09/flow-map.md",
+      "sourceLine": 17,
+      "originalCells": [
+        "F05 문서·외부 앱",
+        "S04 편집 → 앱으로 열기 → 외부 저장 → 복귀",
+        "최신 판 확인; 미저장 충돌은 해당 문서에 표시",
+        "D04, D13"
+      ],
+      "mappedUnits": [
+        "U08",
+        "U11"
+      ],
+      "primaryOwner": "U08",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:F06",
+      "namespace": "hig",
+      "originalId": "F06",
+      "source": "docs/design/hig-remake-2026-11-09/flow-map.md",
+      "sourceLine": 18,
+      "originalCells": [
+        "F06 통합 검색",
+        "Ctrl+K/검색 버튼 → S08 → 결과·미리보기 → 원문 위치",
+        "Esc는 검색만 닫고 이전 위치·초점 복원",
+        "D08"
+      ],
+      "mappedUnits": [
+        "U10",
+        "U04"
+      ],
+      "primaryOwner": "U10",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:F07",
+      "namespace": "hig",
+      "originalId": "F07",
+      "source": "docs/design/hig-remake-2026-11-09/flow-map.md",
+      "sourceLine": 19,
+      "originalCells": [
+        "F07 볼트",
+        "S07 폴더 → 노트 → 링크 → 뒤로/앞으로/상위 폴더",
+        "한 칸의 기록만 이동; 다른 칸은 유지",
+        "D01, D09"
+      ],
+      "mappedUnits": [
+        "U10"
+      ],
+      "primaryOwner": "U10",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:F08",
+      "namespace": "hig",
+      "originalId": "F08",
+      "source": "docs/design/hig-remake-2026-11-09/flow-map.md",
+      "sourceLine": 20,
+      "originalCells": [
+        "F08 Bases·그래프",
+        "S02/S07의 보기 선택 → 표/보드/그래프",
+        "동일 집합·선택·필터 보존",
+        "D01, D12"
+      ],
+      "mappedUnits": [
+        "U10"
+      ],
+      "primaryOwner": "U10",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:F09",
+      "namespace": "hig",
+      "originalId": "F09",
+      "source": "docs/design/hig-remake-2026-11-09/flow-map.md",
+      "sourceLine": 21,
+      "originalCells": [
+        "F09 변경 검토",
+        "S03/S10 결과 → 비교·승인/적용 → 원래 작업",
+        "닫기로 원래 세션·스크롤 복원",
+        "D10, D13"
+      ],
+      "mappedUnits": [
+        "U20",
+        "U06"
+      ],
+      "primaryOwner": "U20",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:F10",
+      "namespace": "hig",
+      "originalId": "F10",
+      "source": "docs/design/hig-remake-2026-11-09/flow-map.md",
+      "sourceLine": 22,
+      "originalCells": [
+        "F10 연결·설정",
+        "S12/S13 → 모델·앱·Dropbox 설정",
+        "닫으면 원래 문서로 복귀; 설정 변경이 실행 재시작을 유발하지 않음",
+        "D11, D14"
+      ],
+      "mappedUnits": [
+        "U11",
+        "U07"
+      ],
+      "primaryOwner": "U11",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:F11",
+      "namespace": "hig",
+      "originalId": "F11",
+      "source": "docs/design/hig-remake-2026-11-09/flow-map.md",
+      "sourceLine": 23,
+      "originalCells": [
+        "F11 웹 작업",
+        "S09 웹 → 이 페이지의 AI → 다른 탭 → 진행/결과 확인",
+        "보는 것, 제어 인계, 작업 중지 구별",
+        "D05~D07; 별도 웹 엔진 의존"
+      ],
+      "mappedUnits": [
+        "U13",
+        "U14"
+      ],
+      "primaryOwner": "U13",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:D01",
+      "namespace": "hig",
+      "originalId": "D01",
+      "source": "docs/design/hig-remake-2026-11-09/decisions.md",
+      "sourceLine": 9,
+      "originalCells": [
+        "D01 탐색과 내용 목록 분리",
+        "프로젝트/폴더/대화가 섞임 → Simplicity/Familiarity",
+        "사이드바에는 프로젝트·전역 진입, 깊은 계층은 내용 목록·경로; 프로젝트 클릭/펼침 분리",
+        "`sidebars/best-practices/in-general-show-no-more-than`, `sidebars/best-practices/group-hierarchy-with-disclosure-controls-if` [HIG transfer]"
+      ],
+      "mappedUnits": [
+        "U03",
+        "U10"
+      ],
+      "primaryOwner": "U03",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:D02",
+      "namespace": "hig",
+      "originalId": "D02",
+      "source": "docs/design/hig-remake-2026-11-09/decisions.md",
+      "sourceLine": 10,
+      "originalCells": [
+        "D02 열린 작업 탭 유지",
+        "여러 문서·세션을 빠르게 이동 → Flexibility",
+        "종류 아이콘·제목·작업 상태가 있는 동적 문서 탭, 안정된 ID·순서",
+        "`design-principles/flexibility/preserve-a-persons-context`, `tab-views/best-practices/make-sure-the-controls-within-a` [HIG transfer + House]"
+      ],
+      "mappedUnits": [
+        "U03",
+        "U13"
+      ],
+      "primaryOwner": "U03",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:D03",
+      "namespace": "hig",
+      "originalId": "D03",
+      "source": "docs/design/hig-remake-2026-11-09/decisions.md",
+      "sourceLine": 11,
+      "originalCells": [
+        "D03 생성 진입점 노출",
+        "기능이 있어도 시작 메뉴를 못 찾음 → Agency",
+        "이름 있는 `새로 만들기`, 프로젝트 우클릭·키보드의 같은 명령",
+        "`toolbars/actions/provide-actions-that-support-the-main`, `pointing-devices/platform-considerations/macos/touch-support-for-hidden-controls/make-essential-hidden-controls-available-in` [HIG transfer]"
+      ],
+      "mappedUnits": [
+        "U03"
+      ],
+      "primaryOwner": "U03",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:D04",
+      "namespace": "hig",
+      "originalId": "D04",
+      "source": "docs/design/hig-remake-2026-11-09/decisions.md",
+      "sourceLine": 12,
+      "originalCells": [
+        "D04 편집 집중 기본",
+        "전역 대화가 문서 공간을 차지함 → Agency",
+        "편집 시 전역 사이드/하단 입력을 접고 작업 탭·현재 도구·복귀를 유지",
+        "`going-full-screen/best-practices/continue-to-provide-access-to-essential`, `design-principles/agency/stay-out-of-the-way` [HIG transfer + 사용자 요구]"
+      ],
+      "mappedUnits": [
+        "U03",
+        "U08"
+      ],
+      "primaryOwner": "U03",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:D05",
+      "namespace": "hig",
+      "originalId": "D05",
+      "source": "docs/design/hig-remake-2026-11-09/decisions.md",
+      "sourceLine": 13,
+      "originalCells": [
+        "D05 속성과 AI 대화 분리",
+        "두 보조 역할이 경쟁 → Simplicity",
+        "속성은 선택 대상 편집 패널, AI는 해당 작업의 대화. 기본적으로 한 보조 역할 선택, 동시 표시는 명시적 분할",
+        "`layout/visual-hierarchy/group-related-items-to-clearly-express`, `design-principles/simplicity/include-just-whats-necessary` [HIG transfer + House]"
+      ],
+      "mappedUnits": [
+        "U08",
+        "U13"
+      ],
+      "primaryOwner": "U08",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:D06",
+      "namespace": "hig",
+      "originalId": "D06",
+      "source": "docs/design/hig-remake-2026-11-09/decisions.md",
+      "sourceLine": 14,
+      "originalCells": [
+        "D06 대화의 내용 우선",
+        "답변과 로그의 무게가 같음 → Purpose",
+        "요청·응답·결과 우선, 실행 상세는 disclosure. 모델·권한·첨부는 입력 맥락",
+        "`layout/visual-hierarchy/use-progressive-disclosure-to-make-layouts`, `generative-ai/transparency/communicate-where-your-app-uses-ai` [HIG transfer]"
+      ],
+      "mappedUnits": [
+        "U04"
+      ],
+      "primaryOwner": "U04",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:D07",
+      "namespace": "hig",
+      "originalId": "D07",
+      "source": "docs/design/hig-remake-2026-11-09/decisions.md",
+      "sourceLine": 15,
+      "originalCells": [
+        "D07 상태와 제어 표시",
+        "여러 작업의 진행을 놓침 → Agency/Responsibility",
+        "탭 상태+작업 요약, 정확한 단계, 중지/입력 필요, 완료 알림",
+        "`progress-indicators/best-practices/if-its-helpful-display-a-description`, `generative-ai/best-practices/keep-people-in-control` [HIG transfer]"
+      ],
+      "mappedUnits": [
+        "U06",
+        "U19"
+      ],
+      "primaryOwner": "U06",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:D08",
+      "namespace": "hig",
+      "originalId": "D08",
+      "source": "docs/design/hig-remake-2026-11-09/decisions.md",
+      "sourceLine": 16,
+      "originalCells": [
+        "D08 검색은 한 진입점",
+        "원문·문서·볼트·명령을 찾아야 함 → Simplicity",
+        "Ctrl+K와 눈에 보이는 검색, 범위·종류·원문 문맥, 동일 검색 엔진",
+        "`searching/best-practices/aim-to-make-your-apps-content`, `searching/best-practices/clearly-display-the-current-scope-of` [HIG transfer]"
+      ],
+      "mappedUnits": [
+        "U10"
+      ],
+      "primaryOwner": "U10",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:D09",
+      "namespace": "hig",
+      "originalId": "D09",
+      "source": "docs/design/hig-remake-2026-11-09/decisions.md",
+      "sourceLine": 17,
+      "originalCells": [
+        "D09 현재 대상의 도구",
+        "잘못된 칸에 행동할 위험 → Familiarity",
+        "활성 칸의 제목·이동·도구, 기능별 묶음과 일관된 배치",
+        "`toolbars/item-groupings/group-toolbar-items-logically-by-function`, `toolbars/item-groupings/keep-consistent-groupings-and-placement-across` [HIG transfer]"
+      ],
+      "mappedUnits": [
+        "U03",
+        "U08",
+        "U20"
+      ],
+      "primaryOwner": "U03",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:D10",
+      "namespace": "hig",
+      "originalId": "D10",
+      "source": "docs/design/hig-remake-2026-11-09/decisions.md",
+      "sourceLine": 18,
+      "originalCells": [
+        "D10 파괴성과 복구 가능성 구별",
+        "삭제/보관/취소의 의미가 다름 → Agency",
+        "되돌릴 수 없는 프로젝트 삭제는 영향 안내+취소; 가능한 작업은 실제 복구 경로",
+        "`alerts/buttons/if-theres-a-destructive-action-include`, `design-principles/agency/help-people-recover-from-mistakes` [HIG transfer]"
+      ],
+      "mappedUnits": [
+        "U11",
+        "U25"
+      ],
+      "primaryOwner": "U11",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:D11",
+      "namespace": "hig",
+      "originalId": "D11",
+      "source": "docs/design/hig-remake-2026-11-09/decisions.md",
+      "sourceLine": 19,
+      "originalCells": [
+        "D11 설정을 작업 옵션과 분리",
+        "긴 설정 목록에 작업 기능이 숨음 → Simplicity",
+        "일반 설정은 S12, 파일/모델/권한 등 현재 선택은 관련 도구에",
+        "`settings/general-settings/put-general-infrequently-changed-settings-in`, `settings/task-specific-options/when-possible-prefer-letting-people-modify` [HIG transfer]"
+      ],
+      "mappedUnits": [
+        "U11",
+        "U07"
+      ],
+      "primaryOwner": "U11",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:D12",
+      "namespace": "hig",
+      "originalId": "D12",
+      "source": "docs/design/hig-remake-2026-11-09/decisions.md",
+      "sourceLine": 20,
+      "originalCells": [
+        "D12 같은 자료의 보기만 전환",
+        "표·보드·그래프가 다른 곳처럼 보임 → Familiarity",
+        "같은 집합·필터·선택을 유지하는 보기 선택",
+        "`segmented-controls/best-practices/use-a-segmented-control-to-provide` [HIG transfer + House]"
+      ],
+      "mappedUnits": [
+        "U10"
+      ],
+      "primaryOwner": "U10",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:D13",
+      "namespace": "hig",
+      "originalId": "D13",
+      "source": "docs/design/hig-remake-2026-11-09/decisions.md",
+      "sourceLine": 21,
+      "originalCells": [
+        "D13 내용과 앱 장식을 분리",
+        "UI 개편이 문서 형식·미저장 상태를 건드릴 수 있음 → Responsibility",
+        "앱 토큰은 제어층에, 문서 캔버스는 문서 서식. 저장·수정안·충돌은 명시",
+        "`file-management/saving-work/help-people-be-confident-that-their`, `layout/visual-hierarchy/differentiate-controls-from-content` [HIG transfer + Engineering]"
+      ],
+      "mappedUnits": [
+        "U08",
+        "U09"
+      ],
+      "primaryOwner": "U08",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "hig:D14",
+      "namespace": "hig",
+      "originalId": "D14",
+      "source": "docs/design/hig-remake-2026-11-09/decisions.md",
+      "sourceLine": 22,
+      "originalCells": [
+        "D14 설정 전에 가치 제공",
+        "설치·연결이 수작업을 막음 → Agency",
+        "로컬 새 문서를 먼저 사용, 필요한 연결을 그 기능에서 안내; 설치 진행은 유지",
+        "`onboarding/additional-requests/postpone-nonessential-setup-flows-or-customization`, `onboarding/additional-content/dont-let-large-downloads-hinder-onboarding` [HIG transfer]"
+      ],
+      "mappedUnits": [
+        "U11"
+      ],
+      "primaryOwner": "U11",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F01",
+      "namespace": "paseo",
+      "originalId": "F01",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 21,
+      "originalCells": [
+        "F01",
+        "대화 답변과 도구 실행 기록의 위계",
+        "원문 질문·최종 답변은 읽기 쉽게, 반복 실행 기록은 묶어서 펼치기",
+        "소스·공식 화면"
+      ],
+      "mappedUnits": [
+        "U04"
+      ],
+      "primaryOwner": "U04",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F02",
+      "namespace": "paseo",
+      "originalId": "F02",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 22,
+      "originalCells": [
+        "F02",
+        "보낸 이미지와 AI가 참조한 로컬 이미지의 대화 내 표시",
+        "양방향 이미지 카드. 보내기 첨부만 지원하는 데서 끝내지 않기",
+        "소스·출시판 대조"
+      ],
+      "mappedUnits": [
+        "U05"
+      ],
+      "primaryOwner": "U05",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F03",
+      "namespace": "paseo",
+      "originalId": "F03",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 23,
+      "originalCells": [
+        "F03",
+        "이미지 확대·이전/다음·원본 확인",
+        "메시지를 떠나지 않는 갤러리와 파일 위치 이동",
+        "소스·출시판 대조"
+      ],
+      "mappedUnits": [
+        "U05"
+      ],
+      "primaryOwner": "U05",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F04",
+      "namespace": "paseo",
+      "originalId": "F04",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 24,
+      "originalCells": [
+        "F04",
+        "Markdown 표·코드·링크·Mermaid의 전용 표현",
+        "긴 표의 가로 이동, 코드 복사, 그림 확대, 파일 열기",
+        "소스·공식 변경 기록"
+      ],
+      "mappedUnits": [
+        "U04"
+      ],
+      "primaryOwner": "U04",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F05",
+      "namespace": "paseo",
+      "originalId": "F05",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 25,
+      "originalCells": [
+        "F05",
+        "문장 선택·부분 복사와 모바일 텍스트 선택",
+        "전체 답변 복사와 선택 범위 복사를 구분. 한글·혼합 텍스트 검증",
+        "소스·공식 변경 기록"
+      ],
+      "mappedUnits": [
+        "U04",
+        "U18"
+      ],
+      "primaryOwner": "U04",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F06",
+      "namespace": "paseo",
+      "originalId": "F06",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 26,
+      "originalCells": [
+        "F06",
+        "스트리밍 중 읽던 위치 보존",
+        "위쪽을 읽으면 자동으로 맨 아래로 이동하지 않기. 새 내용 표시와 복귀 버튼",
+        "소스"
+      ],
+      "mappedUnits": [
+        "U04"
+      ],
+      "primaryOwner": "U04",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F07",
+      "namespace": "paseo",
+      "originalId": "F07",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 27,
+      "originalCells": [
+        "F07",
+        "긴 기록을 다루는 렌더·전송 제어",
+        "보이는 부분 우선, 변경 없는 메시지 재사용, 과대한 도구 출력의 별도 열기",
+        "소스·기술 문서"
+      ],
+      "mappedUnits": [
+        "U04"
+      ],
+      "primaryOwner": "U04",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F08",
+      "namespace": "paseo",
+      "originalId": "F08",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 28,
+      "originalCells": [
+        "F08",
+        "질문·승인·계획을 실행 가능한 UI로 표시",
+        "무엇을 승인하는지, 대상 파일·기기·작업을 대화 안에서 확인",
+        "소스"
+      ],
+      "mappedUnits": [
+        "U06"
+      ],
+      "primaryOwner": "U06",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F09",
+      "namespace": "paseo",
+      "originalId": "F09",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 29,
+      "originalCells": [
+        "F09",
+        "지금 지시·대기열·취소를 구분",
+        "실행 중 보낸 메시지가 즉시 개입인지 다음 턴인지 명시",
+        "소스·공식 변경 기록"
+      ],
+      "mappedUnits": [
+        "U06"
+      ],
+      "primaryOwner": "U06",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F10",
+      "namespace": "paseo",
+      "originalId": "F10",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 30,
+      "originalCells": [
+        "F10",
+        "검색·대화 위치 이동·입력 초안의 연속성",
+        "현재 Fast Find 원문 검색 유지. 메시지 위치와 첨부로 이동, 기기 전환 시 초안 정책",
+        "소스. 모바일 기능 차이 있음"
+      ],
+      "mappedUnits": [
+        "U10",
+        "U04",
+        "U18"
+      ],
+      "primaryOwner": "U10",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F11",
+      "namespace": "paseo",
+      "originalId": "F11",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 38,
+      "originalCells": [
+        "F11",
+        "프로젝트 안의 workspace가 작업의 안정적인 단위",
+        "프로젝트 YAML·노트는 유지하고 그 아래 작업 공간·채팅·문서를 구분",
+        "공식 문서·소스"
+      ],
+      "mappedUnits": [
+        "U03",
+        "U20"
+      ],
+      "primaryOwner": "U03",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F12",
+      "namespace": "paseo",
+      "originalId": "F12",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 39,
+      "originalCells": [
+        "F12",
+        "기존 폴더와 Git worktree 중 격리 선택",
+        "문서 연구는 공유 폴더, 충돌할 코드 수정은 별도 worktree로 시작",
+        "공식 문서"
+      ],
+      "mappedUnits": [
+        "U20"
+      ],
+      "primaryOwner": "U20",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F13",
+      "namespace": "paseo",
+      "originalId": "F13",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 40,
+      "originalCells": [
+        "F13",
+        "여러 공급자의 에이전트 생성·지시·결과 수집",
+        "Codex·Claude 작업을 공통 상태로 표시하고 부모가 결과 참조를 받기",
+        "소스·공식 문서"
+      ],
+      "mappedUnits": [
+        "U06"
+      ],
+      "primaryOwner": "U06",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F14",
+      "namespace": "paseo",
+      "originalId": "F14",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 41,
+      "originalCells": [
+        "F14",
+        "Workbench형 자식 세션과 공급자 내부 자식의 구분",
+        "제어 가능한 하위 세션과 읽기 전용 내부 작업을 다르게 표시",
+        "소스·공식 문서"
+      ],
+      "mappedUnits": [
+        "U06"
+      ],
+      "primaryOwner": "U06",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F15",
+      "namespace": "paseo",
+      "originalId": "F15",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 42,
+      "originalCells": [
+        "F15",
+        "하위 작업을 별도 track에서 열고 관리",
+        "문서 AI·웹 AI·코딩 자식의 상태와 승인 요청을 메인 대화 옆에서 확인",
+        "소스·공식 변경 기록"
+      ],
+      "mappedUnits": [
+        "U06"
+      ],
+      "primaryOwner": "U06",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F16",
+      "namespace": "paseo",
+      "originalId": "F16",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 43,
+      "originalCells": [
+        "F16",
+        "역할별 에이전트 프로필과 선택 설명",
+        "조사·작성·코딩·검토별 모델·권한·설정 묶음. 변경은 이후 실행에 적용",
+        "공식 문서"
+      ],
+      "mappedUnits": [
+        "U07"
+      ],
+      "primaryOwner": "U07",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F17",
+      "namespace": "paseo",
+      "originalId": "F17",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 44,
+      "originalCells": [
+        "F17",
+        "다른 호스트의 작업 생성·후속 지시",
+        "작업이 실행되는 컴퓨터를 명시한 원격 위임과 부모 보고",
+        "소스. 공용 문서 일부는 뒤처짐"
+      ],
+      "mappedUnits": [
+        "U17"
+      ],
+      "primaryOwner": "U17",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F18",
+      "namespace": "paseo",
+      "originalId": "F18",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 45,
+      "originalCells": [
+        "F18",
+        "상태별 작업 목록·미확인 결과·입력 필요 표시",
+        "작업 중·내 응답 필요·검토 가능·완료로 찾기. 시간순 목록만으로 찾게 하지 않기",
+        "공식 화면·소스"
+      ],
+      "mappedUnits": [
+        "U06"
+      ],
+      "primaryOwner": "U06",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F19",
+      "namespace": "paseo",
+      "originalId": "F19",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 53,
+      "originalCells": [
+        "F19",
+        "여러 클라이언트가 같은 daemon 작업을 봄",
+        "PC에서 시작한 같은 작업을 휴대폰에서 확인·승인·추가 지시",
+        "소스·공식 문서"
+      ],
+      "mappedUnits": [
+        "U17",
+        "U18"
+      ],
+      "primaryOwner": "U17",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F20",
+      "namespace": "paseo",
+      "originalId": "F20",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 54,
+      "originalCells": [
+        "F20",
+        "QR·링크를 통한 연결과 relay 경로",
+        "주소·포트 입력 부담을 낮춘 기기 연결. 등록·철회 결과까지 보여주기",
+        "소스·공식 문서"
+      ],
+      "mappedUnits": [
+        "U17"
+      ],
+      "primaryOwner": "U17",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F21",
+      "namespace": "paseo",
+      "originalId": "F21",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 55,
+      "originalCells": [
+        "F21",
+        "직접 연결·VPN·SSH 등 연결 선택",
+        "연구실 사설망과 외부 접속의 경로를 구분. 휴대폰 SSH 지원을 추정하지 않기",
+        "공식 문서·소스"
+      ],
+      "mappedUnits": [
+        "U17"
+      ],
+      "primaryOwner": "U17",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F22",
+      "namespace": "paseo",
+      "originalId": "F22",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 56,
+      "originalCells": [
+        "F22",
+        "연결 복구와 기록 이어 받기",
+        "신호 변경·앱 복귀 시 cursor 동기화, 중복 메시지·명령 방지",
+        "소스"
+      ],
+      "mappedUnits": [
+        "U17"
+      ],
+      "primaryOwner": "U17",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F23",
+      "namespace": "paseo",
+      "originalId": "F23",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 57,
+      "originalCells": [
+        "F23",
+        "완료·승인 대기 push와 해당 작업 이동",
+        "잠금 화면에서 상태 파악 후 정확한 기기·세션으로 이동",
+        "소스"
+      ],
+      "mappedUnits": [
+        "U19"
+      ],
+      "primaryOwner": "U19",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F24",
+      "namespace": "paseo",
+      "originalId": "F24",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 58,
+      "originalCells": [
+        "F24",
+        "폰·태블릿에 맞춘 레이아웃과 키보드 처리",
+        "한 화면 집중, 서랍형 탐색, 확대·회전·한글 입력·사진 첨부",
+        "소스·공식 화면"
+      ],
+      "mappedUnits": [
+        "U18"
+      ],
+      "primaryOwner": "U18",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F25",
+      "namespace": "paseo",
+      "originalId": "F25",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 59,
+      "originalCells": [
+        "F25",
+        "데스크톱 없이 서버에서 실행",
+        "UI 종료 후에도 승인된 작업을 유지하고 재접속",
+        "소스·공식 문서. 설정·플랫폼에 따라 종료 동작 다름"
+      ],
+      "mappedUnits": [
+        "U16",
+        "U09"
+      ],
+      "primaryOwner": "U16",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F26",
+      "namespace": "paseo",
+      "originalId": "F26",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 60,
+      "originalCells": [
+        "F26",
+        "daemon 재시작 후 터미널 보존·에이전트 복구",
+        "별도 프로세스 수명과 중단 기록. 재시작을 무손실 계속 실행으로 오표시하지 않기",
+        "출시 변경 기록·소스"
+      ],
+      "mappedUnits": [
+        "U16",
+        "U20",
+        "U25"
+      ],
+      "primaryOwner": "U16",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F27",
+      "namespace": "paseo",
+      "originalId": "F27",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 68,
+      "originalCells": [
+        "F27",
+        "작업 공간별 setup·teardown·상주 서비스·포트 배정·프록시",
+        "병렬 worktree에서 포트 충돌을 줄이는 실용 기능. 기존 Workbench 준비 절차와 통합"
+      ],
+      "mappedUnits": [
+        "U20"
+      ],
+      "primaryOwner": "U20",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F28",
+      "namespace": "paseo",
+      "originalId": "F28",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 69,
+      "originalCells": [
+        "F28",
+        "파일·diff·터미널·브라우저를 같은 workspace에 배치",
+        "HIG 분할 화면과 Aside 웹 탭 계획에 합쳐 구현"
+      ],
+      "mappedUnits": [
+        "U20",
+        "U13",
+        "U03"
+      ],
+      "primaryOwner": "U20",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F29",
+      "namespace": "paseo",
+      "originalId": "F29",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 70,
+      "originalCells": [
+        "F29",
+        "모바일 터미널의 한글·CJK·선택·재접속 기록",
+        "원격 승인만 하는 앱을 넘어 실제 상태 확인에 유용. 입력과 표시를 별도 검증"
+      ],
+      "mappedUnits": [
+        "U18",
+        "U20"
+      ],
+      "primaryOwner": "U18",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F30",
+      "namespace": "paseo",
+      "originalId": "F30",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 71,
+      "originalCells": [
+        "F30",
+        "음성 받아쓰기와 음성 대화",
+        "한국어 모델·다운로드 크기·추가 모델 비용을 검증한 선택 기능"
+      ],
+      "mappedUnits": [
+        "U22"
+      ],
+      "primaryOwner": "U22",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F31",
+      "namespace": "paseo",
+      "originalId": "F31",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 72,
+      "originalCells": [
+        "F31",
+        "새 에이전트를 만드는 예약과 기존 대화를 깨우는 heartbeat",
+        "현재 Workbench 스케줄 구조를 대조해 중복 구현을 피함. 종료 조건·기한·일시중지 표시"
+      ],
+      "mappedUnits": [
+        "U21"
+      ],
+      "primaryOwner": "U21",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F32",
+      "namespace": "paseo",
+      "originalId": "F32",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 73,
+      "originalCells": [
+        "F32",
+        "CLI·MCP·TypeScript SDK의 공통 실행 기능",
+        "UI에 숨어 있는 기능을 자동화에서 사용할 수 있도록 계약 정리"
+      ],
+      "mappedUnits": [
+        "U07"
+      ],
+      "primaryOwner": "U07",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F33",
+      "namespace": "paseo",
+      "originalId": "F33",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 74,
+      "originalCells": [
+        "F33",
+        "daemon 플러그인이 모바일에도 기능을 제공",
+        "Achmage OS 스킬과 실행 플러그인을 구분. 스킬 검색만으로 코드 설치·실행하지 않기"
+      ],
+      "mappedUnits": [
+        "U23"
+      ],
+      "primaryOwner": "U23",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F34",
+      "namespace": "paseo",
+      "originalId": "F34",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 75,
+      "originalCells": [
+        "F34",
+        "기존 CLI 기록 불러오기와 프로젝트 추천",
+        "최초 설치에서 빈 화면을 줄임. 보관 기록과 재개 가능한 세션을 구분"
+      ],
+      "mappedUnits": [
+        "U11"
+      ],
+      "primaryOwner": "U11",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F35",
+      "namespace": "paseo",
+      "originalId": "F35",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 76,
+      "originalCells": [
+        "F35",
+        "모델·공급자 카탈로그·계정 사용량·메타데이터 생성",
+        "고정된 모델 이름을 복사하지 않기. 실제 공급자 발견과 사용자 지정 모델 유지"
+      ],
+      "mappedUnits": [
+        "U07"
+      ],
+      "primaryOwner": "U07",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:F36",
+      "namespace": "paseo",
+      "originalId": "F36",
+      "source": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sourceLine": 77,
+      "originalCells": [
+        "F36",
+        "Hub의 외부 이벤트·워크플로, 안정/베타 업데이트",
+        "핵심 모바일 기능 이후 별도 후보. 계정·서비스 운영·외부 실행 권한을 추가로 요구"
+      ],
+      "mappedUnits": [
+        "U24",
+        "U25"
+      ],
+      "primaryOwner": "U24",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:P01",
+      "namespace": "paseo",
+      "originalId": "P01",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 17,
+      "originalCells": [
+        "P01 대화 읽기",
+        "답변·도구 내역·승인·마지막 결과가 구분되고 읽던 위치 유지",
+        "기준 fixture·HIG 대표 화면 결정",
+        "`Transcript.tsx`, 공통 Markdown·스타일. 한글·표·Mermaid·복사·검색 위치·긴 기록"
+      ],
+      "mappedUnits": [
+        "U04",
+        "U10"
+      ],
+      "primaryOwner": "U04",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:P02",
+      "namespace": "paseo",
+      "originalId": "P02",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 18,
+      "originalCells": [
+        "P02 결과물 연결",
+        "입력 이미지·AI 결과 이미지·문서 카드가 대화에서 열림",
+        "P01의 본문·카드 계약",
+        "`Attachments.tsx`, `attachments.ts`, `tool-images.ts`, API media 경계. 경로·revision·실패·재접속"
+      ],
+      "mappedUnits": [
+        "U05"
+      ],
+      "primaryOwner": "U05",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:P03",
+      "namespace": "paseo",
+      "originalId": "P03",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 19,
+      "originalCells": [
+        "P03 작업 현황",
+        "메인·문서 AI·공급자 내부 자식을 구분하고 지원되는 제어 제공",
+        "기존 Session·Office 계약. P01의 카드와 통합",
+        "`contracts`, provider mapper, `sessions.ts`, `office-sessions.ts`. 실제 Codex·Claude 이벤트와 부모 보고"
+      ],
+      "mappedUnits": [
+        "U06"
+      ],
+      "primaryOwner": "U06",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:P04",
+      "namespace": "paseo",
+      "originalId": "P04",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 20,
+      "originalCells": [
+        "P04 독립 실행",
+        "UI 종료 뒤 일반 채팅과 승인된 문서 작업 지속, 재접속",
+        "P03의 작업 상태·식별자",
+        "Tauri `lib.rs`, `main.ts`, Office lease, service lifecycle. 정상 종료·중단·재시작·버전 변경"
+      ],
+      "mappedUnits": [
+        "U16",
+        "U09"
+      ],
+      "primaryOwner": "U16",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:P05",
+      "namespace": "paseo",
+      "originalId": "P05",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 21,
+      "originalCells": [
+        "P05 기기 연결",
+        "등록한 PC 두 대의 작업을 한 클라이언트에서 보고 제어",
+        "P04",
+        "인증·연결 registry·cursor·request receipt. 사설망 실증 후 외부망 pairing·회수까지"
+      ],
+      "mappedUnits": [
+        "U17"
+      ],
+      "primaryOwner": "U17",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:P06",
+      "namespace": "paseo",
+      "originalId": "P06",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 22,
+      "originalCells": [
+        "P06 모바일 작업",
+        "폰에서 기기 선택·채팅·사진·결과·승인·중단·복귀",
+        "P01~P03, P05",
+        "모바일 UI adapter, 입력·미디어·파일·연결 상태. iOS·Android 실제 기기"
+      ],
+      "mappedUnits": [
+        "U18"
+      ],
+      "primaryOwner": "U18",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:P07",
+      "namespace": "paseo",
+      "originalId": "P07",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 23,
+      "originalCells": [
+        "P07 모바일 알림",
+        "UI가 없어도 완료·승인 대기를 받고 정확한 작업으로 이동",
+        "P04~P06",
+        "서비스 notification producer, native push adapter·deep link·읽음 상태"
+      ],
+      "mappedUnits": [
+        "U19"
+      ],
+      "primaryOwner": "U19",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:E01",
+      "namespace": "paseo",
+      "originalId": "E01",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 42,
+      "originalCells": [
+        "E01 작업 공간 운영",
+        "폴더/worktree 의미 정리, 준비 명령, 서비스·포트·터미널, diff·브라우저 배치",
+        "기존 Workbench 기능을 재사용. 새 서비스 감독은 P04 이후. Git을 문서 프로젝트에 강제하지 않음"
+      ],
+      "mappedUnits": [
+        "U20",
+        "U18"
+      ],
+      "primaryOwner": "U20",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:E02",
+      "namespace": "paseo",
+      "originalId": "E02",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 43,
+      "originalCells": [
+        "E02 역할 프로필·capability",
+        "조사·작성·코딩·검토 설정 묶음과 설명, 실제 모델 목록, 공통 CLI/MCP API",
+        "P03 이후. 공급자 지원 차이를 표시하고 최신 모델 발견 유지"
+      ],
+      "mappedUnits": [
+        "U07"
+      ],
+      "primaryOwner": "U07",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:E03",
+      "namespace": "paseo",
+      "originalId": "E03",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 44,
+      "originalCells": [
+        "E03 초반 온보딩·기록 가져오기",
+        "기존 CLI의 작업 폴더·기록 추천, 실행 가능한 세션과 보관 기록 구분",
+        "HIG 온보딩과 합침. 자동으로 옛 지시를 재개하지 않음"
+      ],
+      "mappedUnits": [
+        "U11"
+      ],
+      "primaryOwner": "U11",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:E04",
+      "namespace": "paseo",
+      "originalId": "E04",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 45,
+      "originalCells": [
+        "E04 예약·heartbeat",
+        "현재 예약 엔진을 독립 서비스와 연결, 새 실행·기존 대화 재개 구분",
+        "P04 이후. 만료·중복 실행·일시중지·종료 조건 필수"
+      ],
+      "mappedUnits": [
+        "U21"
+      ],
+      "primaryOwner": "U21",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:E05",
+      "namespace": "paseo",
+      "originalId": "E05",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 46,
+      "originalCells": [
+        "E05 한국어 음성",
+        "받아쓰기, 선택적 음성 대화, 기기에서 사진·음성 전달",
+        "기본은 별도 다운로드·선택 사용. 한국어 인식·모델 용량·비용 검증"
+      ],
+      "mappedUnits": [
+        "U22"
+      ],
+      "primaryOwner": "U22",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:E06",
+      "namespace": "paseo",
+      "originalId": "E06",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 47,
+      "originalCells": [
+        "E06 플러그인",
+        "선택적 도구·화면·provider 확장",
+        "핵심 계약 안정 후. Achmage 스킬 검색·등록과 실행 코드 설치를 구분"
+      ],
+      "mappedUnits": [
+        "U23"
+      ],
+      "primaryOwner": "U23",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:E07",
+      "namespace": "paseo",
+      "originalId": "E07",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 48,
+      "originalCells": [
+        "E07 외부 이벤트 Hub",
+        "GitHub·Slack·Discord 같은 외부 사건에서 작업 시작",
+        "별도 요청 범위. 서비스 운영·명시적 실행 권한·대상 제한 필요"
+      ],
+      "mappedUnits": [
+        "U24"
+      ],
+      "primaryOwner": "U24",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:E08",
+      "namespace": "paseo",
+      "originalId": "E08",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 49,
+      "originalCells": [
+        "E08 업데이트 운영",
+        "안정/시험 채널, 클라이언트·daemon 버전 호환, 복구 경로",
+        "기존 설치·업데이트 작업에 합침. 활성 작업과 실제 설치본 보존 검증"
+      ],
+      "mappedUnits": [
+        "U25"
+      ],
+      "primaryOwner": "U25",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:PA01",
+      "namespace": "paseo",
+      "originalId": "PA01",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 78,
+      "originalCells": [
+        "PA01",
+        "원문 질문·답변·표·코드·Mermaid를 읽고 부분 복사하며, Ctrl+K로 원문 프롬프트 위치로 돌아옴",
+        "P01"
+      ],
+      "mappedUnits": [
+        "U04",
+        "U10"
+      ],
+      "primaryOwner": "U04",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:PA02",
+      "namespace": "paseo",
+      "originalId": "PA02",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 79,
+      "originalCells": [
+        "PA02",
+        "한글·공백 경로의 사용자 첨부와 AI 생성 이미지를 대화에서 확대·원본 확인",
+        "P02"
+      ],
+      "mappedUnits": [
+        "U05"
+      ],
+      "primaryOwner": "U05",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:PA03",
+      "namespace": "paseo",
+      "originalId": "PA03",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 80,
+      "originalCells": [
+        "PA03",
+        "같은 이름의 이미지가 바뀌어도 과거 메시지 당시 결과와 최신 파일을 구분",
+        "P02"
+      ],
+      "mappedUnits": [
+        "U05"
+      ],
+      "primaryOwner": "U05",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:PA04",
+      "namespace": "paseo",
+      "originalId": "PA04",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 81,
+      "originalCells": [
+        "PA04",
+        "작업 로그를 접어도 실패·승인·최종 결과·원문 검색이 보존됨",
+        "P01, P03"
+      ],
+      "mappedUnits": [
+        "U04",
+        "U06",
+        "U10"
+      ],
+      "primaryOwner": "U04",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:PA05",
+      "namespace": "paseo",
+      "originalId": "PA05",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 82,
+      "originalCells": [
+        "PA05",
+        "과거 메시지 로드·이미지 디코딩·도구 펼침·새 토큰 수신 중 읽던 줄과 선택 유지",
+        "P01, P02"
+      ],
+      "mappedUnits": [
+        "U04",
+        "U05"
+      ],
+      "primaryOwner": "U04",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:PA06",
+      "namespace": "paseo",
+      "originalId": "PA06",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 83,
+      "originalCells": [
+        "PA06",
+        "메인 대화와 문서/웹 자식 작업 여러 개가 병행되고 개별 결과·후속 지시를 식별",
+        "P03, 기존 Aside"
+      ],
+      "mappedUnits": [
+        "U06",
+        "U08",
+        "U14"
+      ],
+      "primaryOwner": "U06",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:PA07",
+      "namespace": "paseo",
+      "originalId": "PA07",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 84,
+      "originalCells": [
+        "PA07",
+        "공급자 내부 자식과 Workbench 자식을 구분. 지원하지 않는 제어를 성공처럼 표시하지 않음",
+        "P03"
+      ],
+      "mappedUnits": [
+        "U06"
+      ],
+      "primaryOwner": "U06",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:PA08",
+      "namespace": "paseo",
+      "originalId": "PA08",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 85,
+      "originalCells": [
+        "PA08",
+        "UI 종료 뒤 승인된 일반·문서 작업이 유지되고 휴대폰 또는 재실행 UI에서 확인",
+        "P04~P06"
+      ],
+      "mappedUnits": [
+        "U09",
+        "U16",
+        "U17",
+        "U18"
+      ],
+      "primaryOwner": "U09",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:PA09",
+      "namespace": "paseo",
+      "originalId": "PA09",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 86,
+      "originalCells": [
+        "PA09",
+        "daemon 재시작·토큰 변경·호스트 실행 세대 변경 뒤 snapshot·요청 상태를 복구. 결과 불명 요청을 보존·조회하고 프롬프트를 무조건 재실행하지 않음",
+        "P04, P05"
+      ],
+      "mappedUnits": [
+        "U16",
+        "U17"
+      ],
+      "primaryOwner": "U16",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:PA10",
+      "namespace": "paseo",
+      "originalId": "PA10",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 87,
+      "originalCells": [
+        "PA10",
+        "같은 프로젝트·파일 이름이 있는 PC 두 대에서 실행 위치와 결과가 섞이지 않음",
+        "P05"
+      ],
+      "mappedUnits": [
+        "U17",
+        "U20"
+      ],
+      "primaryOwner": "U17",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:PA11",
+      "namespace": "paseo",
+      "originalId": "PA11",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 88,
+      "originalCells": [
+        "PA11",
+        "기기 등록·권한 변경·회수 후 서버가 실제로 새 접근을 허용하거나 거절",
+        "P05"
+      ],
+      "mappedUnits": [
+        "U17"
+      ],
+      "primaryOwner": "U17",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:PA12",
+      "namespace": "paseo",
+      "originalId": "PA12",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 89,
+      "originalCells": [
+        "PA12",
+        "두 기기에서 같은 요청을 보내거나 승인해도 동작이 한 번만 접수·실행",
+        "P03, P05"
+      ],
+      "mappedUnits": [
+        "U06",
+        "U17"
+      ],
+      "primaryOwner": "U06",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:PA13",
+      "namespace": "paseo",
+      "originalId": "PA13",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 90,
+      "originalCells": [
+        "PA13",
+        "휴대폰 앱 전환·잠금·Wi-Fi/셀룰러 변경 후 최신 작업 상태로 복구",
+        "P05, P06"
+      ],
+      "mappedUnits": [
+        "U17",
+        "U18"
+      ],
+      "primaryOwner": "U17",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:PA14",
+      "namespace": "paseo",
+      "originalId": "PA14",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 91,
+      "originalCells": [
+        "PA14",
+        "iOS·Android에서 한글 입력·사진 첨부·긴 표·복사·승인·파일 결과 확인 가능",
+        "P06"
+      ],
+      "mappedUnits": [
+        "U18",
+        "U05"
+      ],
+      "primaryOwner": "U18",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:PA15",
+      "namespace": "paseo",
+      "originalId": "PA15",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 92,
+      "originalCells": [
+        "PA15",
+        "데스크톱 UI 없이 완료/승인 알림 수신. 알림을 열면 올바른 호스트·작업으로 이동",
+        "P07"
+      ],
+      "mappedUnits": [
+        "U19"
+      ],
+      "primaryOwner": "U19",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:PA16",
+      "namespace": "paseo",
+      "originalId": "PA16",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 93,
+      "originalCells": [
+        "PA16",
+        "기존 편집 집중·문서 병렬 AI·외부 이음 저장 재인식·Dropbox·볼트·Fast Find 유지",
+        "전체"
+      ],
+      "mappedUnits": [
+        "U08",
+        "U09",
+        "U10",
+        "U11",
+        "U25"
+      ],
+      "primaryOwner": "U08",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:PA17",
+      "namespace": "paseo",
+      "originalId": "PA17",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 94,
+      "originalCells": [
+        "PA17",
+        "동일 fixture로 시작·입력·스트림·긴 기록·이미지·메모리를 기준판과 비교해 회귀 기준 통과",
+        "P01~P07"
+      ],
+      "mappedUnits": [
+        "U01",
+        "U04",
+        "U05",
+        "U18",
+        "U25"
+      ],
+      "primaryOwner": "U01",
+      "status": "planned_not_run"
+    },
+    {
+      "key": "paseo:PA18",
+      "namespace": "paseo",
+      "originalId": "PA18",
+      "source": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sourceLine": 95,
+      "originalCells": [
+        "PA18",
+        "원격 연결 비활성 상태에서 기존 로컬 사용 가능. 앱/daemon 버전 차이를 안내하고 저장 데이터 보존",
+        "P04, P05, E08"
+      ],
+      "mappedUnits": [
+        "U17",
+        "U25",
+        "U16"
+      ],
+      "primaryOwner": "U17",
+      "status": "planned_not_run"
+    }
+  ],
+  "regressions": [
+    {
+      "id": "REG01",
+      "requirement": "내장 Office 9형식 내부 UI·기존 명령·선택·Undo·dirty/revision·저장·출력·실제 문서 서식",
+      "mappedUnits": [
+        "U08",
+        "U09",
+        "U25"
+      ],
+      "status": "planned_not_run"
+    },
+    {
+      "id": "REG02",
+      "requirement": "메인+복수 문서/PDF helper 병행; tab/split/theme/panel 변경 시 remount·lease 취소 없음",
+      "mappedUnits": [
+        "U06",
+        "U08",
+        "U09",
+        "U25"
+      ],
+      "status": "planned_not_run"
+    },
+    {
+      "id": "REG03",
+      "requirement": "독립 공식 이음 설치/등록/열기/같은 파일 수정/저장/Workbench 복귀·최신 맥락·외부 충돌 보존",
+      "mappedUnits": [
+        "U08",
+        "U11",
+        "U25"
+      ],
+      "status": "planned_not_run"
+    },
+    {
+      "id": "REG04",
+      "requirement": "Dropbox 기존 연결·같은 실제 파일 감시·다른 host 경로 구별; live DB/credential은 로컬",
+      "mappedUnits": [
+        "U05",
+        "U11",
+        "U17",
+        "U25"
+      ],
+      "status": "planned_not_run"
+    },
+    {
+      "id": "REG05",
+      "requirement": "Fast Find 메인·side·문서·vault 원문 prompt/reply 검색·exact hit; 접기/가상화로 원문 삭제 없음; 기본 결과는 세션 사용자 프롬프트/AI 로그가 문서·볼트보다 우선이며 페이지·그룹·응답/문서 결합으로 묻히지 않음",
+      "mappedUnits": [
+        "U04",
+        "U10",
+        "U14",
+        "U25"
+      ],
+      "status": "planned_not_run"
+    },
+    {
+      "id": "REG06",
+      "requirement": "휴먼볼트 원문 read-only, YAML key(콜론 포함)/scalar-list/empty-unknown/body bytes·기존 링크/태그/source metadata 무변경",
+      "mappedUnits": [
+        "U10",
+        "U11",
+        "U25"
+      ],
+      "status": "planned_not_run"
+    },
+    {
+      "id": "REG07",
+      "requirement": "프로젝트 YAML·노트·Bases/graph 집합·필터·선택·볼트 뒤/앞/상위·분할별 이동 유지",
+      "mappedUnits": [
+        "U03",
+        "U10",
+        "U25"
+      ],
+      "status": "planned_not_run"
+    },
+    {
+      "id": "REG08",
+      "requirement": "workspace/worktree 실제 저장 위치·Git/비Git·diff/conflict/GitHub·터미널·원본 보존; archive≠삭제",
+      "mappedUnits": [
+        "U13",
+        "U17",
+        "U20",
+        "U25"
+      ],
+      "status": "planned_not_run"
+    },
+    {
+      "id": "REG09",
+      "requirement": "실제 모델 발견·사용자 override·브랜드/폰트/테마/엔진룩·Ctrl+S/Ctrl+K·단축키·권한 설정 보존",
+      "mappedUnits": [
+        "U02",
+        "U07",
+        "U11",
+        "U25"
+      ],
+      "status": "planned_not_run"
+    },
+    {
+      "id": "REG10",
+      "requirement": "이전 설치 데이터/레이아웃/초안 복원·중단/unknown 정확표시·새 버전 migration/rollback·파일 보존",
+      "mappedUnits": [
+        "U03",
+        "U16",
+        "U17",
+        "U25"
+      ],
+      "status": "planned_not_run"
+    },
+    {
+      "id": "REG11",
+      "requirement": "Windows/macOS/Linux(현재 niri 포함) 실제 focus/IME/DPI/keyboard/screenreader; iOS/Android 사진·회전·복귀",
+      "mappedUnits": [
+        "U02",
+        "U12",
+        "U15",
+        "U18",
+        "U25"
+      ],
+      "status": "planned_not_run"
+    },
+    {
+      "id": "REG12",
+      "requirement": "동일 SHA/fixture/장치의 시작·검색·탭·입력·스트림·이미지·메모리; 본체/이음/선택모델/cache 크기 분리",
+      "mappedUnits": [
+        "U01",
+        "U04",
+        "U05",
+        "U18",
+        "U25"
+      ],
+      "status": "planned_not_run"
+    }
+  ],
+  "officeFormats": [
+    {
+      "format": "한글",
+      "owner": "U08",
+      "integrationOwners": [
+        "U09",
+        "U11",
+        "U25"
+      ],
+      "status": "planned_not_run"
+    },
+    {
+      "format": "Word",
+      "owner": "U08",
+      "integrationOwners": [
+        "U09",
+        "U11",
+        "U25"
+      ],
+      "status": "planned_not_run"
+    },
+    {
+      "format": "슬라이드",
+      "owner": "U08",
+      "integrationOwners": [
+        "U09",
+        "U11",
+        "U25"
+      ],
+      "status": "planned_not_run"
+    },
+    {
+      "format": "스프레드시트",
+      "owner": "U08",
+      "integrationOwners": [
+        "U09",
+        "U11",
+        "U25"
+      ],
+      "status": "planned_not_run"
+    },
+    {
+      "format": "Markdown",
+      "owner": "U08",
+      "integrationOwners": [
+        "U09",
+        "U11",
+        "U25"
+      ],
+      "status": "planned_not_run"
+    },
+    {
+      "format": "PDF",
+      "owner": "U08",
+      "integrationOwners": [
+        "U09",
+        "U11",
+        "U25"
+      ],
+      "status": "planned_not_run"
+    },
+    {
+      "format": "HTML",
+      "owner": "U08",
+      "integrationOwners": [
+        "U09",
+        "U11",
+        "U25"
+      ],
+      "status": "planned_not_run"
+    },
+    {
+      "format": "마인드맵",
+      "owner": "U08",
+      "integrationOwners": [
+        "U09",
+        "U11",
+        "U25"
+      ],
+      "status": "planned_not_run"
+    },
+    {
+      "format": "EPUB",
+      "owner": "U08",
+      "integrationOwners": [
+        "U09",
+        "U11",
+        "U25"
+      ],
+      "status": "planned_not_run"
+    }
+  ],
+  "sourceManifest": "source-files.sha256.json",
+  "validation": {
+    "definedRequirements": 156,
+    "mappedRequirements": 156,
+    "unmapped": [],
+    "duplicateSourceIds": [],
+    "unitCount": 25,
+    "dependencyCycles": false,
+    "topologicalWaves": [
+      [
+        "U01"
+      ],
+      [
+        "U02",
+        "U06",
+        "U12"
+      ],
+      [
+        "U03",
+        "U04",
+        "U07",
+        "U15",
+        "U16"
+      ],
+      [
+        "U05",
+        "U08",
+        "U13",
+        "U21"
+      ],
+      [
+        "U09",
+        "U10",
+        "U11",
+        "U17"
+      ],
+      [
+        "U14",
+        "U18"
+      ],
+      [
+        "U19",
+        "U20",
+        "U22",
+        "U23"
+      ],
+      [
+        "U24"
+      ],
+      [
+        "U25"
+      ]
+    ],
+    "productTestsRun": false
+  },
+  "dependencySemantics": "units.dependsOn denotes unit completion prerequisites. executionGraph is authoritative for scheduling, including early U25a.",
+  "executionGraph": {
+    "nodes": [
+      {
+        "id": "U01",
+        "unitId": "U01",
+        "dependsOn": [],
+        "status": "planned_not_run"
+      },
+      {
+        "id": "U02",
+        "unitId": "U02",
+        "dependsOn": [
+          "U01"
+        ],
+        "status": "planned_not_run"
+      },
+      {
+        "id": "U03",
+        "unitId": "U03",
+        "dependsOn": [
+          "U02"
+        ],
+        "status": "planned_not_run"
+      },
+      {
+        "id": "U04",
+        "unitId": "U04",
+        "dependsOn": [
+          "U02"
+        ],
+        "status": "planned_not_run"
+      },
+      {
+        "id": "U05",
+        "unitId": "U05",
+        "dependsOn": [
+          "U04",
+          "U06"
+        ],
+        "status": "planned_not_run"
+      },
+      {
+        "id": "U06",
+        "unitId": "U06",
+        "dependsOn": [
+          "U01"
+        ],
+        "status": "planned_not_run"
+      },
+      {
+        "id": "U07",
+        "unitId": "U07",
+        "dependsOn": [
+          "U06"
+        ],
+        "status": "planned_not_run"
+      },
+      {
+        "id": "U08",
+        "unitId": "U08",
+        "dependsOn": [
+          "U02",
+          "U03"
+        ],
+        "status": "planned_not_run"
+      },
+      {
+        "id": "U09",
+        "unitId": "U09",
+        "dependsOn": [
+          "U06",
+          "U08",
+          "U16"
+        ],
+        "status": "planned_not_run"
+      },
+      {
+        "id": "U10",
+        "unitId": "U10",
+        "dependsOn": [
+          "U03",
+          "U04",
+          "U05",
+          "U06"
+        ],
+        "status": "planned_not_run"
+      },
+      {
+        "id": "U11",
+        "unitId": "U11",
+        "dependsOn": [
+          "U03",
+          "U07",
+          "U05"
+        ],
+        "status": "planned_not_run"
+      },
+      {
+        "id": "U12",
+        "unitId": "U12",
+        "dependsOn": [
+          "U01"
+        ],
+        "status": "planned_not_run"
+      },
+      {
+        "id": "U13",
+        "unitId": "U13",
+        "dependsOn": [
+          "U02",
+          "U03",
+          "U12"
+        ],
+        "status": "planned_not_run"
+      },
+      {
+        "id": "U14",
+        "unitId": "U14",
+        "dependsOn": [
+          "U06",
+          "U13",
+          "U05",
+          "U08",
+          "U10"
+        ],
+        "status": "planned_not_run"
+      },
+      {
+        "id": "U15",
+        "unitId": "U15",
+        "dependsOn": [
+          "U06"
+        ],
+        "status": "planned_not_run"
+      },
+      {
+        "id": "U16",
+        "unitId": "U16",
+        "dependsOn": [
+          "U06"
+        ],
+        "status": "planned_not_run"
+      },
+      {
+        "id": "U17",
+        "unitId": "U17",
+        "dependsOn": [
+          "U05",
+          "U06",
+          "U16"
+        ],
+        "status": "planned_not_run"
+      },
+      {
+        "id": "U18",
+        "unitId": "U18",
+        "dependsOn": [
+          "U02",
+          "U04",
+          "U05",
+          "U07",
+          "U09",
+          "U17"
+        ],
+        "status": "planned_not_run"
+      },
+      {
+        "id": "U19",
+        "unitId": "U19",
+        "dependsOn": [
+          "U06",
+          "U14",
+          "U16",
+          "U17",
+          "U18"
+        ],
+        "status": "planned_not_run"
+      },
+      {
+        "id": "U20",
+        "unitId": "U20",
+        "dependsOn": [
+          "U03",
+          "U13",
+          "U16",
+          "U18"
+        ],
+        "status": "planned_not_run",
+        "startAfter": [
+          "U03",
+          "U16"
+        ]
+      },
+      {
+        "id": "U21",
+        "unitId": "U21",
+        "dependsOn": [
+          "U06",
+          "U16"
+        ],
+        "status": "planned_not_run"
+      },
+      {
+        "id": "U22",
+        "unitId": "U22",
+        "dependsOn": [
+          "U07",
+          "U18"
+        ],
+        "status": "planned_not_run"
+      },
+      {
+        "id": "U23",
+        "unitId": "U23",
+        "dependsOn": [
+          "U06",
+          "U07",
+          "U16",
+          "U18"
+        ],
+        "status": "planned_not_run",
+        "startAfter": [
+          "U06",
+          "U07",
+          "U16"
+        ]
+      },
+      {
+        "id": "U24",
+        "unitId": "U24",
+        "dependsOn": [
+          "U07",
+          "U16",
+          "U17",
+          "U21",
+          "U23"
+        ],
+        "status": "planned_not_run"
+      },
+      {
+        "id": "U25a",
+        "unitId": "U25",
+        "dependsOn": [
+          "U01"
+        ],
+        "purpose": "Early candidate CI, checksums/provenance and same-artifact promotion infrastructure",
+        "status": "planned_not_run"
+      },
+      {
+        "id": "U25b",
+        "unitId": "U25",
+        "dependsOn": [
+          "U01",
+          "U02",
+          "U03",
+          "U04",
+          "U05",
+          "U06",
+          "U07",
+          "U08",
+          "U09",
+          "U10",
+          "U11",
+          "U12",
+          "U13",
+          "U14",
+          "U15",
+          "U16",
+          "U17",
+          "U18",
+          "U19",
+          "U20",
+          "U21",
+          "U22",
+          "U23",
+          "U24",
+          "U25a"
+        ],
+        "purpose": "Final protocol/update/OS acceptance and stable promotion",
+        "status": "planned_not_run"
+      }
+    ],
+    "allProductChecks": "NOT_RUN",
+    "maximumConcurrentOwners": 3,
+    "topologicalWaves": [
+      [
+        "U01"
+      ],
+      [
+        "U02",
+        "U06",
+        "U12",
+        "U25a"
+      ],
+      [
+        "U03",
+        "U04",
+        "U07",
+        "U15",
+        "U16"
+      ],
+      [
+        "U05",
+        "U08",
+        "U13",
+        "U21"
+      ],
+      [
+        "U09",
+        "U10",
+        "U11",
+        "U17"
+      ],
+      [
+        "U14",
+        "U18"
+      ],
+      [
+        "U19",
+        "U20",
+        "U22",
+        "U23"
+      ],
+      [
+        "U24"
+      ],
+      [
+        "U25b"
+      ]
+    ]
+  },
+  "planningCorrections": [
+    {
+      "unit": "U05",
+      "reason": "resolveMediaReference consumes TaskRef produced by U06",
+      "change": "Explicit U06 dependency; original requirement IDs unchanged"
+    },
+    {
+      "unit": "U11",
+      "reason": "openInIeum consumes ArtifactRef from U05",
+      "change": "Explicit U05 prerequisite"
+    },
+    {
+      "unit": "U14",
+      "reason": "Real browser result must open through artifact, Office UI and search",
+      "change": "Explicit U05/U08/U10 prerequisites; U10 validates protocol fixtures before actual web integration"
+    },
+    {
+      "unit": "U18",
+      "reason": "Shared client API and real Office continuation acceptance",
+      "change": "Explicit U07/U09 prerequisites"
+    },
+    {
+      "unit": "U19",
+      "reason": "Actual web target deep-link acceptance",
+      "change": "Explicit U14 prerequisite"
+    },
+    {
+      "unit": "U20",
+      "reason": "Real workspace web layout and mobile terminal acceptance",
+      "change": "Completion needs U13/U18; service implementation may start after U03/U16"
+    },
+    {
+      "unit": "U10",
+      "reason": "Actual artifact result search consumes shared U05 identity",
+      "change": "Explicit U05 prerequisite; browser fixture before U14 retained"
+    },
+    {
+      "unit": "U23",
+      "reason": "Real mobile capability acceptance needs U18; optional plugin scope is bounded",
+      "change": "Completion depends on U18; runtime work starts after U06/U07/U16. Select one mediated execution format, not a general native-code OS sandbox."
+    }
+  ],
+  "executionAuthorization": {
+    "at": "2026-11-09",
+    "targetVersion": "0.4.0",
+    "scope": "Implement integrated plan and GitHub builds in sequence",
+    "priorityCorrection": "기본 Ctrl+K 검색에서는 일치한 각 세션의 사용자 프롬프트 원문과 AI 대화 로그를 문서 및 읽기 전용 볼트 본문 결과보다 먼저 표시한다. 관련도 비교와 그룹/페이지 제한 전에 이 제품 우선순위를 적용하고, 문서에 연결한 AI 답변도 대화 결과에서 사라지지 않게 한다. 명시한 문서/볼트 범위 검색은 유지한다.",
+    "decisionId": "decision-8ae1fe586efe7e66967630799be1e6bde67993d765605c12905637d962570054"
+  }
+}

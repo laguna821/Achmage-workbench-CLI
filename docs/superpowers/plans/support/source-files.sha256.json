@@ -1,0 +1,181 @@
+{
+  "generatedAt": "2026-11-09T05:07:52.275157+00:00",
+  "repository": "/home/achamge/다운로드/achmage-workbench",
+  "files": [
+    {
+      "path": "docs/research/aside-agent-desktop-2026-11-04/01-orca-lightpanda.md",
+      "sha256": "5afa42c12fb8e35071d55c3fbb8665a1716e041bb8b20b64301230266006a6c6",
+      "bytes": 5113,
+      "readScope": "markdown content and requirement tables",
+      "namespace": "aside"
+    },
+    {
+      "path": "docs/research/aside-agent-desktop-2026-11-04/02-aside-ux.md",
+      "sha256": "ead7d232f5ce35997ab7811940815fc643205b5136dff3d8f5ee7ec4301701b9",
+      "bytes": 12107,
+      "readScope": "markdown content and requirement tables",
+      "namespace": "aside"
+    },
+    {
+      "path": "docs/research/aside-agent-desktop-2026-11-04/03-agent-desktop.md",
+      "sha256": "621dc8afbfd75fa95fbc7c9acfc04f28f4e131549cbe77f3076cec01bb2aa86d",
+      "bytes": 9105,
+      "readScope": "markdown content and requirement tables",
+      "namespace": "aside"
+    },
+    {
+      "path": "docs/research/aside-agent-desktop-2026-11-04/04-workbench-design.md",
+      "sha256": "8834920cbe2577518faf75dd2fb8ef5e9ec8ec7a104825503357a87d8f8055fc",
+      "bytes": 18549,
+      "readScope": "markdown content and requirement tables",
+      "namespace": "aside"
+    },
+    {
+      "path": "docs/research/aside-agent-desktop-2026-11-04/05-delivery-plan.md",
+      "sha256": "ec932f1e1be59e53fa7194d6948888d35e8d191165b5f778cabe40a37d8af957",
+      "bytes": 9068,
+      "readScope": "markdown content and requirement tables",
+      "namespace": "aside"
+    },
+    {
+      "path": "docs/research/aside-agent-desktop-2026-11-04/06-sources.md",
+      "sha256": "e3aaddf97732d422844c6a7577a3d94f5e1d95203d22a8fe5223f9315a96011b",
+      "bytes": 8892,
+      "readScope": "markdown content and requirement tables",
+      "namespace": "aside"
+    },
+    {
+      "path": "docs/research/aside-agent-desktop-2026-11-04/07-provenance.md",
+      "sha256": "0bcc7dc4cf48c3ebc0e655824448a6a62b2272100918927584395982896f20e4",
+      "bytes": 3300,
+      "readScope": "markdown content and requirement tables",
+      "namespace": "aside"
+    },
+    {
+      "path": "docs/research/aside-agent-desktop-2026-11-04/README.md",
+      "sha256": "1a072aa9cb23cfa57168cdb7e0281fc6c20c72705e2783500a9b20a5f80a9f55",
+      "bytes": 4040,
+      "readScope": "markdown content and requirement tables",
+      "namespace": "aside"
+    },
+    {
+      "path": "docs/research/aside-agent-desktop-2026-11-04/sources.json",
+      "sha256": "cdc048eddfd63f2bb97c1aab5e1b265f5abfcc98066d982e75c31e558aec0fa9",
+      "bytes": 41581,
+      "readScope": "parsed metadata structure; underlying remote source bodies not re-read in this task",
+      "namespace": "aside"
+    },
+    {
+      "path": "docs/design/hig-remake-2026-11-09/README.md",
+      "sha256": "8ce3460d8b78ca46b4189924783953836f4f292e4379da0dcb4ed944cf418124",
+      "bytes": 4347,
+      "readScope": "markdown content and requirement tables",
+      "namespace": "hig"
+    },
+    {
+      "path": "docs/design/hig-remake-2026-11-09/decisions.md",
+      "sha256": "9f1d15a5f976f2535537ea40416c0663fb79802d37d75951f97ea170ac1ada36",
+      "bytes": 12460,
+      "readScope": "markdown content and requirement tables",
+      "namespace": "hig"
+    },
+    {
+      "path": "docs/design/hig-remake-2026-11-09/design-brief.md",
+      "sha256": "4c2e06335f38fbdc995cb6dd3616e3a9a55fec6ccd5b32575eb4378be6ab1746",
+      "bytes": 6926,
+      "readScope": "markdown content and requirement tables",
+      "namespace": "hig"
+    },
+    {
+      "path": "docs/design/hig-remake-2026-11-09/flow-map.md",
+      "sha256": "079a04147202b30b919fcaa55f01ea165d8cb8b7d69caf59ae82fd4701dcb5c9",
+      "bytes": 5494,
+      "readScope": "markdown content and requirement tables",
+      "namespace": "hig"
+    },
+    {
+      "path": "docs/design/hig-remake-2026-11-09/implementation-plan.md",
+      "sha256": "9ad7a434042d4c26fe4ce76115eab9b158710469df4540086f08ff095ee1de26",
+      "bytes": 9974,
+      "readScope": "markdown content and requirement tables",
+      "namespace": "hig"
+    },
+    {
+      "path": "docs/design/hig-remake-2026-11-09/screen-inventory.md",
+      "sha256": "6dfe0bc91510653a8a7bab7ae09c867d3290fbb6d75a22851d205fcb7dec6262",
+      "bytes": 8439,
+      "readScope": "markdown content and requirement tables",
+      "namespace": "hig"
+    },
+    {
+      "path": "docs/design/hig-remake-2026-11-09/sources-and-evidence.md",
+      "sha256": "97138270d52e2729ee9b589466088058ebcc5b0440adfe3b3d99249c2ced2734",
+      "bytes": 6763,
+      "readScope": "markdown content and requirement tables",
+      "namespace": "hig"
+    },
+    {
+      "path": "docs/design/hig-remake-2026-11-09/sources.json",
+      "sha256": "4ff7c31627d0e4d4f77581eaeec1e4c53df384802cd632e7a01aebd710d7ec25",
+      "bytes": 5838,
+      "readScope": "parsed metadata structure; underlying remote source bodies not re-read in this task",
+      "namespace": "hig"
+    },
+    {
+      "path": "docs/research/paseo-2026-11-09/01-findings.md",
+      "sha256": "5dd17be0408163625ff88033b60e644831e59b56347c34e325e53a008cbe1857",
+      "bytes": 13088,
+      "readScope": "markdown content and requirement tables",
+      "namespace": "paseo"
+    },
+    {
+      "path": "docs/research/paseo-2026-11-09/02-chat-and-artifacts.md",
+      "sha256": "72faf39a1ad7b13099d35966af5bd46ed9abbf256991e44bfd1b1fcb826c4267",
+      "bytes": 9104,
+      "readScope": "markdown content and requirement tables",
+      "namespace": "paseo"
+    },
+    {
+      "path": "docs/research/paseo-2026-11-09/03-workbench-gap.md",
+      "sha256": "4d08b0ec731899df42d0eb110f4eaa4000f7063f71addb8290cc9bc4b0d4a0f5",
+      "bytes": 6361,
+      "readScope": "markdown content and requirement tables",
+      "namespace": "paseo"
+    },
+    {
+      "path": "docs/research/paseo-2026-11-09/04-integration.md",
+      "sha256": "7e69bb9fea8bb15f45b6384a71906ed795e83e0a2b7a6eb3f1e07a5bc618e3bd",
+      "bytes": 11780,
+      "readScope": "markdown content and requirement tables",
+      "namespace": "paseo"
+    },
+    {
+      "path": "docs/research/paseo-2026-11-09/05-adoption-plan.md",
+      "sha256": "8fc36ab2a911743c132fd22d418c7bd90f29cf018604847ea2718fa15f708088",
+      "bytes": 12142,
+      "readScope": "markdown content and requirement tables",
+      "namespace": "paseo"
+    },
+    {
+      "path": "docs/research/paseo-2026-11-09/06-evidence.md",
+      "sha256": "7cdad76011961576b3c21c946e171f7ae6ac30d608c43230614e011041435393",
+      "bytes": 11653,
+      "readScope": "markdown content and requirement tables",
+      "namespace": "paseo"
+    },
+    {
+      "path": "docs/research/paseo-2026-11-09/README.md",
+      "sha256": "844c7519603d70d53e706f437464fee056a1cfe7167a31c664c36408707db710",
+      "bytes": 3850,
+      "readScope": "markdown content and requirement tables",
+      "namespace": "paseo"
+    },
+    {
+      "path": "docs/research/paseo-2026-11-09/sources.json",
+      "sha256": "71fbbf120f9b3467da89a11317213b57448f10df9c10badd073c4f8eada765d2",
+      "bytes": 304734,
+      "readScope": "parsed metadata structure; underlying remote source bodies not re-read in this task",
+      "namespace": "paseo"
+    }
+  ]
+}
