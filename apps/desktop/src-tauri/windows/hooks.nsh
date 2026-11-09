@@ -1,8 +1,8 @@
 ; The persistent host may outlive its window. Ask the installed owner to drain before
 ; replacing executable files. Never kill other Node/AI processes or discard active jobs.
 !macro NSIS_HOOK_PREINSTALL
-  IfFileExists "$INSTDIR\host\service-cli.mjs" 0 workbench_update_ready
-  nsExec::ExecToLog /TIMEOUT=45000 '"$INSTDIR\node\node.exe" "$INSTDIR\host\service-cli.mjs" prepare-update'
+  IfFileExists "$INSTDIR\host\workbench-service.mjs" 0 workbench_update_ready
+  nsExec::ExecToLog /TIMEOUT=45000 '"$INSTDIR\node\node.exe" "$INSTDIR\host\workbench-service.mjs" prepare-update'
   Pop $0
   ${If} $0 == 20
     DetailPrint "Workbench still has active tasks. Finish or stop them in the app, then run this installer again."

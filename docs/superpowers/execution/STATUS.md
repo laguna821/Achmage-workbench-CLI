@@ -80,3 +80,9 @@ U25의 기존 요구 중 빠져 있던 protocol/schema 협상과 업데이트·m
 U25 통합: host/web TypeScript와 새 protocol·migration backup 경계 2개가 통과했다. 최종 Office drain allowlist 보완은 이 확인 직후 합쳤으며 해당 최종 source는 CI의 전체 타입/빌드에서 확인한다. 이미 완료한 웹·Office·native 로컬 빌드는 반복하지 않고 OS installer CI로 진행한다.
 
 최종 연결·배포 준비 연구: `research:rr-8b1de8f70ac6198a1f734b3f63b45bcb:5274ec8a5649b1c7b9b0b06dabb836045b90e93122a32221b5a4e53492b82445` (R1–R11).
+
+## 첫 최종 CI의 실제 실패 수정
+
+`42632532399` / `de13e01`: 공통 production 및 전체 타입 확인 통과. 회귀 1463개 통과·9개 skip, 8개 실패. 실패는 Composer의 JSDOM matchMedia 누락 5개, Hub 모의 manager의 accessOf 누락 2개, HWP catalog 테스트가 host를 중복 빌드하다 5초를 초과한 1개다. 누락된 fixture를 채우고 HWP/PDF 테스트가 CI 직전 단계에서 만든 bundle을 사용하도록 했다. 실제 catalog·편집·변환 assertion은 유지한다. 실패했던 8개만 3.79초에 통과했다. NSIS prepare-update 대상도 실제 배포되는 workbench-service.mjs로 수정했다. 빌드 실패 뒤 남은 queued macOS 작업은 취소하고 수정 source로 최종 후보를 다시 실행한다.
+
+근거: `research:rr-8b1de8f70ac6198a1f734b3f63b45bcb:96363956b13dea6cd1f0de2453861f46517a3b5c4027f7869a43b31fc2b9cf20` (R13–R14). 전체 목표와 OS 설치본 완료는 아직 미완료다.

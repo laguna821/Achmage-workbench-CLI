@@ -31,6 +31,7 @@ function fixture() {
   const tasks = new TaskService(store, bus, { sessions: () => [session], items: () => items, canSteer: () => false,
     stop: async () => {}, approve: async () => {}, cancelQueue() {}, sendQueue: async () => {}, submit });
   const manager = { tasks, view: { sessions: new Map([[session.id, session]]) }, snapshot: () => ({ hostId: "host" }),
+    accessOf: (target: Session) => target.access ?? "ask",
     profiles: { list: () => [], get: () => { throw Error("unknown profile"); } },
     workspaces: { requireActive: (id: string, workId: string) => { if (id !== "space" || workId !== "work") throw Error("wrong workspace"); } },
     items: () => ({ items }) } as unknown as SessionManager;

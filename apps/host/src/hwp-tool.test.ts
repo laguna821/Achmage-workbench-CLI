@@ -62,8 +62,9 @@ describe("packaged native Hangul operations", () => {
   });
 
   it("bundles the same 31-operation catalog without requiring Electron", async () => {
-    // Build a real shipped Node entry, not a Vitest-only import graph.
-    execFileSync(process.execPath, [resolve("scripts/build-host.mjs")]);
+    // CI already built this exact source. Exercise that shipped entry without building it twice.
+    // A standalone invocation still constructs the real bundle instead of a Vitest-only graph.
+    if (process.env.WORKBENCH_HOST_BUNDLE_READY !== "1") execFileSync(process.execPath, [resolve("scripts/build-host.mjs")]);
     const result = JSON.parse(execFileSync(process.execPath, [resolve("apps/host/dist/hwp-cli.mjs"), "catalog"], { encoding: "utf8" }));
     expect(result.catalog.ops).toHaveLength(31);
     expect(result.catalog.ops.map((op: { op: string }) => op.op)).toContain("fill_cells");
@@ -71,5 +72,5 @@ describe("packaged native Hangul operations", () => {
     const applied = JSON.parse(execFileSync(process.execPath, [resolve("apps/host/dist/hwp-cli.mjs"), "apply", path, "--ops", ops(changes)], { encoding: "utf8" }));
     expect(applied).toMatchObject({ status: "ok", written: true });
     expect(await hwpToText(readFileSync(path))).toContain("담당자 확인");
-  });
+  }, 60_000);
 });

@@ -50,7 +50,9 @@ async function fixture(options: { pictures?: boolean; encrypted?: boolean } = {}
 }
 
 describe("original PDF structure jobs over document grants", () => {
-  beforeAll(() => { execFileSync(process.execPath, [resolve("scripts/build-host.mjs")]); }, 30_000);
+  beforeAll(() => {
+    if (process.env.WORKBENCH_HOST_BUNDLE_READY !== "1") execFileSync(process.execPath, [resolve("scripts/build-host.mjs")]);
+  }, 60_000);
   it("converts to original editable Office formats and publishes only selected outputs", async () => {
     const f = await fixture();
     try {

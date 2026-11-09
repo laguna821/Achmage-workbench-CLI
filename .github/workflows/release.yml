@@ -135,6 +135,8 @@ jobs:
       - name: Build (IeumOffice checkout, xlsx engine, UI, editors, gateway)
         run: npm run build
       - name: Typecheck and tests
+        env:
+          WORKBENCH_HOST_BUNDLE_READY: '1'
         run: |
           npm run typecheck
           npx vitest run

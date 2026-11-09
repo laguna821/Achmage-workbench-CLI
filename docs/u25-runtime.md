@@ -26,7 +26,7 @@ and the existing scheduler. `POST /api/host/stop` supports `mode: drain` only wh
 are gone. Existing explicit stop-all IPC retains `mode: interrupt` and records interrupted or
 unknown work before closing the existing providers. No request is automatically replayed.
 
-Installer entry point is `service-cli.mjs prepare-update`. It verifies the saved/live owner,
+Installer entry point is `workbench-service.mjs prepare-update`. It verifies the saved/live owner,
 prepares drain, and stops the same host only if no blocker remains. Exit 0 means stopped and
 ready; 20 means active work and installation must stop; 21 means ownership, compatibility or
 shutdown could not be confirmed. A remaining host.lock is never treated as proof of shutdown.
