@@ -1,34 +1,34 @@
 {
   "schemaVersion": 1,
-  "applicationVersion": "0.4.0",
-  "channel": "trial",
-  "label": "0.4.0 통합 설치 후보",
+  "applicationVersion": "0.4.1",
+  "channel": "stable",
+  "label": "0.4.1 — HIG 작업공간과 공유 웹 탭 수정",
   "implemented": [
     "Fast Find 사용자 프롬프트·AI 대화 원문 우선 검색, 원문 위치 이동",
-    "HIG 스타일 공통 셸·메뉴·키보드 초점·프로젝트/세션/문서 구분과 생성 메뉴",
+    "Apple HIG 기반 공통 컴포넌트·Pretendard Variable·프로젝트/세션/문서 구분·직접 YAML 개요·1/2/4/9분할과 작업 전달",
     "대화 읽기 위치·초안 보존, 메시지 당시 이미지·파일과 인라인 미리보기·갤러리",
     "세션·문서 AI·공급자 하위 작업 통합 목록, Codex child 제어·Claude stop/background·별도 대화",
     "역할 프로필·불변 실행 설정·CLI/MCP 공통 입력과 예약 실행 이력",
     "9형식 이음오피스 편집기·전체화면·독립 문서 AI 실행·화면 종료 뒤 출력 및 재접속 연결",
     "검색·Bases·그래프 키보드 사용성, 온보딩·기록 가져오기·Dropbox·독립 이음오피스 설치 연결",
-    "Lightpanda 백그라운드 조사, 공유 네이티브 웹 탭·독립 웹 AI·제어권 인계·다운로드·사이트 권한",
+    "Lightpanda 백그라운드 조사, Search/Ask 시작 화면, 공유 네이티브 웹 탭과 전체 높이의 독립 AI 채팅·요청 시 자동 제어 연결·다운로드·사이트 권한",
     "공식 agent-desktop 설치 및 외부 앱 작업·권한·산출물 연결",
     "독립 호스트·선택 로그인 실행·AppImage 지속 runtime·OS credential 저장",
     "Paseo 원본 보호 전송·QR 카메라/이미지 연결·기기별 프로젝트 승인/철회·모바일 입력/첨부/공유",
     "백그라운드 완료 알림·클릭 이동·알림 센터·원본 모바일 push lease 연결",
     "원본 터미널·모바일 키 입력·서비스 실행 관리·전체 HTTP/WebSocket 서비스 화면",
     "Paseo 원본 음성 worker·모델 관리·확장 실행·outbound Hub 연결과 사건 이력",
-    "클라이언트/호스트 protocol·schema 호환성, 업데이트 실행 보호, migration 전 로컬 DB 백업과 future schema 거절"
+    "클라이언트/호스트 protocol·schema 호환성, 업데이트 실행 보호, migration 전 로컬 DB 백업과 future schema 거절",
+    "네이티브 빈 탭·탭 복귀 크기·iframe 주소 덮임·Linux 앱 메뉴 클릭 차단 수정, 좁은 화면 메뉴·입력창·승인 버튼 마감"
   ],
   "inProgress": [],
-  "remaining": [
-    "Windows/macOS/Linux 설치본 생성과 기존 신규 설치·Windows 업데이트 확인, 동일 파일 게시"
-  ],
+  "remaining": [],
   "limitations": [
     "포함 범위는 구현 상태입니다. 실제 계정·모바일 기기·외부망·마이크의 모든 조합을 확인했다는 뜻은 아닙니다.",
     "설치 smoke는 시험용 AI 엔진을 사용합니다. 실제 수행 결과는 installer-provenance.json에 표시합니다.",
     "원격 서비스 전체 웹 화면에는 별도 HTTPS preview 도메인이 필요합니다. relay-only 연결이 자동으로 웹 페이지까지 전달하지 않습니다.",
-    "Claude SDK에 없는 직접 하위 작업 send/steer는 제공하지 않습니다. Linux 사이트 권한은 일회성입니다."
+    "Claude SDK에 없는 직접 하위 작업 send/steer는 제공하지 않습니다. Linux 사이트 권한은 일회성입니다.",
+    "실제 Codex 웹 탭 입력과 메인 채팅 병렬 실행은 Linux에서 확인했습니다. Windows/macOS/Linux 공통 네이티브 10항목 확인과 전체 앱·외부 사이트의 모든 조합은 구분합니다."
   ],
   "buildPolicy": "전체 기능 통합 뒤 빌드·릴리즈; 기능 추가마다 중간 설치본 생성하지 않음"
 }

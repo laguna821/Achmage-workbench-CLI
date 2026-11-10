@@ -59,7 +59,7 @@ export class HubSession {
     this.hello = true; clearTimeout(this.helloTimeout); this.ceiling = message.sessionPermissions;
     this.updatePermissions(this.options.permissions);
     this.send({ type: "status", payload: ServerInfoStatusPayloadSchema.parse({ status: "server_info", protocolVersion: 1,
-      serverId: this.options.serverId, hostname: this.options.hostname, version: "workbench-0.4.0", sourceId: this.options.principalId,
+      serverId: this.options.serverId, hostname: this.options.hostname, version: "workbench-0.4.1", sourceId: this.options.principalId,
       permissions: this.authorization.listPermissions(), features: { hubAgentRpc: true, binaryChunkingV1: true, explicitEventSubscriptions: true, ownedSubscriptions: true } }) });
     this.transport.enabled = message.capabilities?.binaryChunkingV1 === true;
     if (!message.capabilities?.explicitEventSubscriptions) {

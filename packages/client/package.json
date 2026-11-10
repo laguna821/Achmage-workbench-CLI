@@ -1,7 +1,7 @@
 {
   "name": "@workbench/client",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.4.1",
   "type": "module",
   "main": "src/index.ts",
   "exports": {
@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@getpaseo/relay": "file:../../vendor/paseo/relay",
-    "@workbench/contracts": "0.4.0",
+    "@workbench/contracts": "0.4.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@getpaseo/client": "file:../../vendor/paseo/client",
     "@getpaseo/protocol": "file:../../vendor/paseo/protocol",

@@ -5,7 +5,7 @@ import type { WorkbenchClient } from "./index.ts";
 
 const string = { type: "string" } as const;
 export function createAutomationServer(client: WorkbenchClient) {
-  const server = new Server({ name: "achmage-workbench", version: "0.4.0" }, { capabilities: { tools: {} }, instructions: "Use snapshot/tasks to select exact host, workspace, session and run. Submitting or controlling a task requires a unique commandId. After a lost response, look up the receipt; do not repeat the external action. Native child tasks may be observation-only." });
+  const server = new Server({ name: "achmage-workbench", version: "0.4.1" }, { capabilities: { tools: {} }, instructions: "Use snapshot/tasks to select exact host, workspace, session and run. Submitting or controlling a task requires a unique commandId. After a lost response, look up the receipt; do not repeat the external action. Native child tasks may be observation-only." });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [
     { name: "workbench_snapshot", description: "List projects, workspaces and sessions on the connected host.", inputSchema: { type: "object", properties: {} } },
     { name: "workbench_tasks", description: "Read independent session, document AI and native child task states.", inputSchema: { type: "object", properties: { workId: string } } },

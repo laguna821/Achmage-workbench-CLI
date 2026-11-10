@@ -1,7 +1,7 @@
 {
   "name": "@workbench/web",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.4.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -19,7 +19,7 @@
     "@tauri-apps/plugin-dialog": "^2.8.3",
     "@tauri-apps/plugin-notification": "^2.8.0",
     "@tauri-apps/plugin-opener": "^2.7.2",
-    "@workbench/contracts": "0.4.0",
+    "@workbench/contracts": "0.4.1",
     "@xterm/addon-fit": "0.11.0",
     "@xterm/addon-search": "0.16.0",
     "@xterm/xterm": "6.0.0",
@@ -34,7 +34,7 @@
     "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.1",
     "yaml": "^2.9.1",
-    "@workbench/client": "0.4.0",
+    "@workbench/client": "0.4.1",
     "@getpaseo/protocol": "file:../../vendor/paseo/protocol",
     "@workbench/paseo-terminal": "file:../../vendor/paseo/terminal",
     "jsqr": "1.4.0"
