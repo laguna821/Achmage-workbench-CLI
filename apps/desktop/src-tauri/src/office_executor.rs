@@ -203,7 +203,7 @@ pub fn run() -> i32 {
             watch_owner(app.handle().clone(), finished);
             Ok(())
         })
-        .build(tauri::generate_context!());
+        .build(crate::app_context());
     let app = match app {
         Ok(app) => app,
         Err(_) => { eprintln!("Office executor could not start."); return 1; }

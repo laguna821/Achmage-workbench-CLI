@@ -12,7 +12,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15, windows-latest]
+        # The follow-up branch limits a macOS-only compile repair to its failed leg.
+        os: ${{ fromJSON(endsWith(github.ref_name, '-macos') && '["macos-15"]' || '["ubuntu-24.04","macos-15","windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
