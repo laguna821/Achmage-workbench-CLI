@@ -75,7 +75,7 @@ function fixture(initial: BrowserPage[] = [page()]) {
 const job = (id: string, pageId: string): BrowserJob => ({ id, pageId, driverId, action: { kind: "reload" }, expected: null, control: { owner: "human", generation: 0 }, deadline: Date.now() + 20000 });
 const settle = async () => { for (let turn = 0; turn < 12; turn++) await Promise.resolve(); };
 
-it("uses an explicit acknowledged handoff, sends only to the page child, and keeps the main session", async () => {
+it("automatically hands off on send, sends only to the page child, and keeps the main session", async () => {
   const f = fixture(); await f.browser.poll();
   const onNew = vi.fn(), onOpenSession = vi.fn();
   await act(async () => render(<BrowserView browser={f.browser} api={f.api} state={f.state} pageId="page-a" visible parentSessionId="main" actions={f.actions} onNew={onNew} onClosed={() => {}} onTranscript={() => {}} onOpenSession={onOpenSession} focusItem={null} onFocusDone={() => {}} />));
@@ -97,7 +97,8 @@ it("uses an explicit acknowledged handoff, sends only to the page child, and kee
   expect((screen.getByRole("button", { name: "이전 페이지" }) as HTMLButtonElement).disabled).toBe(false);
   expect(f.state.works.work.activeSessionId).toBe("main"); expect(sessionToOpen(f.state, work)?.id).toBe("main");
   fireEvent.click(screen.getByRole("button", { name: "원래 대화 열기" })); expect(onOpenSession).toHaveBeenCalledWith(main);
-  fireEvent.click(screen.getByRole("button", { name: "기본" })); expect(onNew).toHaveBeenCalledWith({ workspaceId: "space", profileId: "default", url: "https://example.com/" });
+  fireEvent.click(screen.getByRole("button", { name: "웹 탭 메뉴" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "프로필과 웹 탭 설정…" })); expect(onNew).toHaveBeenCalledWith({ workspaceId: "space", profileId: "default", url: "https://example.com/" });
 });
 
 it("reconciles an unknown human action by its receipt without repeating the mutation", async () => {
