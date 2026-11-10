@@ -27,3 +27,6 @@ apps/desktop/src-tauri/bundled/
 packaging/arch/*.pkg.tar.zst
 packaging/arch/pkg/
 packaging/arch/src/
+
+# Isolated UI review builds (never release inputs by accident)
+apps/web/dist-*/

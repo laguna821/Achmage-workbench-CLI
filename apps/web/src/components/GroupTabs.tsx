@@ -14,9 +14,9 @@ export function GroupTabs<V>({ pane, head, onSelect, onClose, onReorder, onNew }
     <div role="tablist" aria-label="열린 탭">
       {tabs.map((tab, index) => {
         const title = head({ ...pane, view: tab.view, workId: tab.workId, sessionId: tab.sessionId });
-        const kind = title.item?.kind === "session" ? "대화" : title.item?.kind === "doc" ? "문서" : title.item?.kind === "project" || title.item?.kind === "work" ? "프로젝트" : null;
+        const kind = title.kindLabel ?? (title.item?.kind === "session" ? "채팅" : title.item?.kind === "doc" ? "문서" : title.item?.kind === "project" || title.item?.kind === "work" ? "프로젝트" : null);
         return <div className={`group-tab${tab.id === activeId ? " active" : ""}`} data-tab-index={index} data-tab-id={tab.id} key={tab.id}>
-          <button type="button" role="tab" aria-selected={tab.id === activeId} tabIndex={tab.id === activeId ? 0 : -1} title={`${title.hint ?? title.title} · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경`}
+          <button type="button" role="tab" aria-label={`${kind ? `${kind} · ` : ""}${title.title}`} aria-selected={tab.id === activeId} tabIndex={tab.id === activeId ? 0 : -1} title={`${title.hint ?? title.title} · 끌어서 이동 · Ctrl+Shift+←→로 순서 변경`}
             onPointerDown={(event) => paneDrag.press({ item: { kind: "tab", id: tab.id }, label: title.title }, event)}
             onMouseDown={(event) => paneDrag.press({ item: { kind: "tab", id: tab.id }, label: title.title }, event)}
             onClick={() => { if (!paneDrag.justDragged()) onSelect(tab.id); }}

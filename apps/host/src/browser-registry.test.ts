@@ -5,11 +5,18 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { assertFreshTarget, type BrowserObservation, type BrowserPage, type NativeBrowserPage, type Session } from "@workbench/contracts";
 import { Store } from "./store.ts";
-import { BrowserRegistry } from "./browser-registry.ts";
+import { BrowserRegistry, webUrl } from "./browser-registry.ts";
 import { SessionManager } from "./sessions.ts";
 import { EventBus } from "./bus.ts";
 
 const cleanup: (() => void | Promise<void>)[] = [];
+it("opens an actual blank tab without admitting arbitrary about, data or script documents", () => {
+  expect(webUrl("about:blank")).toBe("about:blank");
+  for (const input of ["about:config", "about:blank#payload", "data:text/html,hello", "javascript:alert(1)", "file:///tmp/example.html"]) expect(() => webUrl(input)).toThrow();
+  const { registry, driverId } = fixture();
+  const page = registry.create({ requestId: randomUUID(), driverId, profileId: "default", workspaceId: "workspace", url: "about:blank" });
+  expect(page.url).toBe("about:blank"); expect(page.title).toBe("새 탭");
+});
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
 const native = (page: BrowserPage): NativeBrowserPage => ({ pageId: page.pageId, profileId: page.profileId, navigationRevision: 1, capabilities: ["observe", "navigate", "dom_actions"], url: page.url, title: "동일 주소", loading: false, control: { ...page.control }, popups: [], error: null });
 function fixture() {
@@ -71,6 +78,33 @@ it("rejects old document identity while preserving the same page through pane mo
   expect(() => assertFreshTarget({ ...a }, a)).not.toThrow();
   expect(() => assertFreshTarget({ ...a, target: { ...a.target, navigationRevision: 3 }, documentNonce: "doc-b" }, a)).toThrow("STALE_DOCUMENT");
   expect(() => assertFreshTarget({ ...a, target: { ...a.target, pageId: "b" } }, a)).toThrow("STALE_DOCUMENT");
+});
+it("opens a real driver page for a main agent while keeping its page chat independent", async () => {
+  const { registry, sessions, driverId } = fixture();
+  const main = { id: "main", workId: "work", workspaceId: "workspace" } as Session;
+  sessions.set(main.id, main);
+  const states = new Map<string, NativeBrowserPage>();
+  const driver = setInterval(() => {
+    for (const page of registry.list().pages) if (!states.has(page.pageId)) states.set(page.pageId, native(page));
+    const jobs = registry.poll({ driverId, pages: [...states.values()], results: [] }).jobs;
+    for (const job of jobs) {
+      const state = states.get(job.pageId)!;
+      if (job.action.kind === "control") state.control = job.control;
+      registry.poll({ driverId, pages: [...states.values()], results: [{ id: job.id, pageId: job.pageId, page: state }] });
+    }
+  }, 10);
+  try {
+    const page = await registry.openAgentPage(main.id, "https://example.com");
+    expect(page.agentSessionId).toBe(main.id); expect(page.sessionId).toBeNull();
+    expect(page.control.owner).toBe(main.id); expect(registry.agentPage(main.id)?.pageId).toBe(page.pageId);
+    const child = { id: "child", workId: "work", workspaceId: "workspace", pageAgent: { pageId: page.pageId, parentSessionId: main.id } } as Session;
+    sessions.set(child.id, child); registry.attach(page.pageId, child);
+    expect(registry.agentPage(main.id)?.pageId).toBe(registry.agentPage(child.id)?.pageId);
+    expect(page.sessionId).toBe(child.id);
+    await expect(registry.control(page.pageId, "unrelated", page.control.generation)).rejects.toThrow();
+    page.status = "closed";
+    expect(registry.agentPage(main.id)?.status).toBe("closed"); // do not silently switch back to Lightpanda
+  } finally { clearInterval(driver); }
 });
 it("creates page children without changing the main conversation and projects their parent task", async () => {
   const dir = mkdtempSync(join(tmpdir(), "wb-page-session-")), store = new Store(join(dir, "state.sqlite"));

@@ -22,8 +22,7 @@ export type ComposerMentions = { items: MentionItem[]; onPick: (item: MentionIte
 /**
  * The single input box. Enter sends, Shift+Enter breaks the line, and Enter while a Korean
  * syllable is still being composed never sends. Drafts survive switching work and reloads.
- * While the engine is working, a light trail orbits the box border (CMDS Achmage), and the box
- * keeps taking requests: Enter steers into the running turn ("끼어들기"), Alt+Enter keeps the
+ * The input keeps taking requests while the engine works: Enter steers into the running turn ("끼어들기"), Alt+Enter keeps the
  * request for when the turn ends ("끝나면 보내기").
  */
 export function Composer({
@@ -46,6 +45,7 @@ export function Composer({
   slash,
   voiceScope,
   voiceReply,
+  tools,
 }: {
   draftKey: string;
   placeholder: string;
@@ -77,7 +77,17 @@ export function Composer({
   slash?: ComposerSlash;
   voiceScope?: VoiceScope;
   voiceReply?: string;
+  /** Optional request tools, disclosed together without crowding the main controls. */
+  tools?: ReactNode;
 }) {
+  const [compactControls, setCompactControls] = useState(() => window.matchMedia?.("(max-width: 743px)").matches ?? false);
+  useEffect(() => {
+    const query = window.matchMedia?.("(max-width: 743px)");
+    if (!query) return;
+    const update = () => setCompactControls(query.matches);
+    update(); query.addEventListener?.("change", update);
+    return () => query.removeEventListener?.("change", update);
+  }, []);
   const [draft, setDraft] = useState(() => ({ key: draftKey, text: readDraft(draftKey) }));
   const text = draft.key === draftKey ? draft.text : readDraft(draftKey);
   const composingRef = useRef(false);
@@ -237,7 +247,8 @@ export function Composer({
 
   return (
     <div
-      className="composer"
+      className="composer hig-composer"
+      aria-label="메시지 작성"
       data-phase={waiting ? "waiting" : undefined}
       data-drop={dropping ? "" : undefined}
       onDragOver={(event) => {
@@ -292,8 +303,8 @@ export function Composer({
         placeholder={
           busy && !compactInput()
             ? steerable
-              ? "작업 중에도 보낼 수 있어요 · Enter 끼어들기 · Alt+Enter 끝나면 보내기"
-              : "끝나면 이어서 보낼 요청 · Enter로 예약"
+              ? "작업 중에도 요청을 이어 쓰세요"
+              : "끝나면 보낼 요청을 쓰세요"
             : mentions
               ? `${placeholder} (@로 문서 붙이기)`
               : placeholder
@@ -387,16 +398,26 @@ export function Composer({
         }}
       />
       {draftProblem ? <p className="composer-file-problem" role="status">이 브라우저에 초안을 저장하지 못했습니다. 창을 닫기 전에 복사해 주세요.</p> : null}
-      {voiceScope ? <VoiceInput key={draftKey} draftId={draftKey} scope={voiceScope} resetVersion={voiceEpoch} reply={voiceReply} disabled={disabled || sending || composing} onApply={(captureDraft, transcript) => {
+      <div className="composer-bar">
+        <div className="composer-left">
+          {onFiles ? <AttachmentPicker draftKey={draftKey} disabled={disabled || sending} onFiles={onFiles} /> : null}
+          {!compactControls ? left : null}
+          {voiceScope ? <VoiceInput key={draftKey} draftId={draftKey} scope={voiceScope} resetVersion={voiceEpoch} reply={voiceReply} disabled={disabled || sending || composing} onApply={(captureDraft, transcript) => {
         const next = appendVoiceTranscript(currentDraft.current, captureDraft, transcript);
         if (next === null || disabled || sending || composing) return false;
         setSpans(relocateMentions(currentDraft.current.text, next, spans)); setText(next); setCaret(next.length); pendingCaret.current = next.length;
         ref.current?.focus({ preventScroll: true }); return true;
       }} /> : null}
-      <div className="composer-bar">
-        <div className="composer-left">{onFiles ? <AttachmentPicker draftKey={draftKey} disabled={disabled || sending} onFiles={onFiles} /> : null}{left}</div>
+          {tools || compactControls && (left || target) ? <details className="composer-tools" onKeyDown={event => {
+            if (event.key !== "Escape" || event.defaultPrevented) return;
+            event.preventDefault(); event.stopPropagation(); event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus();
+          }}>
+            <summary title="계획, 그림, 브라우저와 문서 도구"><Icon name="tool" size={15} /><span>도구</span><Icon name="chevronDown" size={13} /></summary>
+            <div className="composer-tools-panel"><span className="composer-tools-label">다음 요청 설정</span><div className="composer-tools-controls">{compactControls ? <>{left}{target}</> : null}{tools}</div></div>
+          </details> : null}
+        </div>
         <div className="composer-right">
-          {target}
+          {!compactControls ? target : null}
           {busy && (text.trim() || attachments > 0) ? (
             <>
               {steerable ? (
@@ -431,6 +452,7 @@ export function Composer({
           )}
         </div>
       </div>
+      {busy ? <div className="composer-status" role="status"><span className="spinner small" aria-hidden />{waiting ? "응답 중" : "작업 중"}<span>{steerable ? "Enter로 지금 전하기 · Alt+Enter로 끝나면 보내기" : "새 요청은 차례대로 보냅니다"}</span></div> : null}
     </div>
   );
 }

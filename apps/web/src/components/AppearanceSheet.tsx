@@ -14,7 +14,7 @@ import {
 } from "../appearance.ts";
 import type { Theme, ThemePref } from "../theme.ts";
 import { EngineMark } from "./EngineMark.tsx";
-import { Icon } from "./Icon.tsx";
+import { IconButton, Segmented } from "./ui/Hig.tsx";
 
 const THEME_LABEL: Record<Theme, string> = { light: "라이트", dark: "다크" };
 const BUBBLES: { id: Bubble; label: string }[] = [
@@ -99,21 +99,13 @@ export function AppearanceSheet({
     <aside className="appearance-sheet" aria-label="외형 설정">
       <div className="sheet-head">
         <h2>외형</h2>
-        <button type="button" className="icon-button" onClick={onClose} aria-label="닫기">
-          <Icon name="x" size={18} />
-        </button>
+        <IconButton icon="x" label="외형 설정 닫기" onClick={onClose} />
       </div>
 
       <div className="sheet-body">
         <section className="sheet-section">
           <div className="sheet-label">화면</div>
-          <div className="segmented">
-            {THEME_PREFS.map((option) => (
-              <button key={option.id} type="button" className={themePref === option.id ? "active" : ""} onClick={() => onThemePref(option.id)}>
-                {option.label}
-              </button>
-            ))}
-          </div>
+          <Segmented label="화면" value={themePref} onChange={onThemePref} options={THEME_PREFS.map(({ id, label }) => ({ value: id, label }))} />
           <p className="sheet-hint">엔진마다 라이트·다크 외형이 따로 있습니다. 고른 외형이 지금 화면에 미리 보입니다.</p>
           <div className="look-grid">
             {(["claude", "codex"] as const).flatMap((engine) =>
@@ -135,13 +127,7 @@ export function AppearanceSheet({
           <div className="sheet-label">
             <EngineMark provider={provider} size={15} /> {PROVIDER_LABEL[provider]} 화면
           </div>
-          <div className="segmented">
-            {MODES.map((option) => (
-              <button key={option.id} type="button" className={appearance[provider].mode === option.id ? "active" : ""} onClick={() => setMode(provider, option.id)}>
-                {option.label}
-              </button>
-            ))}
-          </div>
+          <Segmented label={`${PROVIDER_LABEL[provider]} 화면 모드`} value={appearance[provider].mode} onChange={value => setMode(provider, value)} options={MODES.map(({ id, label }) => ({ value: id, label }))} />
         </section>
 
         <section className="sheet-section">
@@ -211,23 +197,11 @@ export function AppearanceSheet({
           <div className="sheet-label">대화 · 입력창</div>
           <div className="option-row">
             <span>말풍선</span>
-            <div className="segmented small">
-              {BUBBLES.map((option) => (
-                <button key={option.id} type="button" className={look.bubble === option.id ? "active" : ""} onClick={() => update({ bubble: option.id })}>
-                  {option.label}
-                </button>
-              ))}
-            </div>
+            <Segmented label="메시지 모양" value={look.bubble} onChange={value => update({ bubble: value })} options={BUBBLES.map(({ id, label }) => ({ value: id, label }))} />
           </div>
           <div className="option-row">
             <span>빛 효과</span>
-            <div className="segmented small">
-              {GLOWS.map((option) => (
-                <button key={option.id} type="button" className={look.glow === option.id ? "active" : ""} onClick={() => update({ glow: option.id })}>
-                  {option.label}
-                </button>
-              ))}
-            </div>
+            <Segmented label="작업 표시" value={look.glow} onChange={value => update({ glow: value })} options={GLOWS.map(({ id, label }) => ({ value: id, label }))} />
           </div>
           <label className="slider-row">
             <span>모서리</span>

@@ -93,10 +93,11 @@ describe("navigator preferences", () => {
     expect(sortFor(prefs, { kind: "root" })).toEqual({ key: "activity", desc: true });
   });
 
-  it("choose two panes on a wide window and stacked on a narrow one, unless the person chose", () => {
-    expect(layoutFor({ layout: null }, 1440)).toBe("dual");
-    expect(layoutFor({ layout: null }, 1000)).toBe("stacked");
+  it("keeps one project navigator at every width and preserves opt-in advanced layouts", () => {
+    for (const width of [390, 743, 744, 1000, 1440, 2560]) expect(layoutFor(readNavigator(undefined), width)).toBe("tree");
     expect(layoutFor({ layout: "tree" }, 1440)).toBe("tree");
+    expect(layoutFor(readNavigator({ layout: "dual" }), 1440)).toBe("dual");
+    expect(layoutFor(readNavigator({ layout: "stacked" }), 743)).toBe("stacked");
   });
 });
 

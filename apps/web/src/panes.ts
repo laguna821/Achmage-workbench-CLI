@@ -21,7 +21,7 @@ export type Pane<V> = { id: PaneId; view: V; workId: string | null; sessionId: s
 export type PaneContent<V> = Pick<Pane<V>, "view" | "workId" | "sessionId">;
 
 /** The panes from left to right (one or two) and the focused one. */
-export type Layout<V> = { panes: Pane<V>[]; focus: PaneId; tree?: PaneTree };
+export type Layout<V> = { panes: Pane<V>[]; focus: PaneId; tree?: PaneTree; grid?: 2 | 3 };
 
 /** Something that can be opened in a pane: a sidebar row, a card, a tab, or a pane itself (its header). */
 export type PaneItem =
@@ -217,14 +217,14 @@ export function resizeSplit<V>(layout: Layout<V>, id: string, ratio: number): La
 
 export type PaneRect = { left: number; top: number; width: number; height: number };
 export type DividerRect = PaneRect & { id: string; axis: "horizontal" | "vertical"; parent: PaneRect; ratio: number; min: number; max: number };
-export function minimumSize(tree: PaneTree): { width: number; height: number } {
-  if (tree.kind === "pane") return { width: MIN_PANE, height: MIN_PANE_HEIGHT };
-  const a = minimumSize(tree.first), b = minimumSize(tree.second);
+export function minimumSize(tree: PaneTree, compact = false): { width: number; height: number } {
+  if (tree.kind === "pane") return { width: compact ? 240 : MIN_PANE, height: compact ? 180 : MIN_PANE_HEIGHT };
+  const a = minimumSize(tree.first, compact), b = minimumSize(tree.second, compact);
   return tree.axis === "horizontal" ? { width: a.width + b.width + DIVIDER, height: Math.max(a.height, b.height) } : { width: Math.max(a.width, b.width), height: a.height + b.height + DIVIDER };
 }
 
 /** Flat rectangles keep React's editor keys/parents stable when panes move in the tree. */
-export function paneGeometry(tree: PaneTree, width: number, height: number) {
+export function paneGeometry(tree: PaneTree, width: number, height: number, compact = false) {
   const panes: Record<string, PaneRect> = {};
   const dividers: DividerRect[] = [];
   const walk = (node: PaneTree, box: PaneRect) => {
@@ -232,8 +232,8 @@ export function paneGeometry(tree: PaneTree, width: number, height: number) {
     const horizontal = node.axis === "horizontal";
     const dimension = horizontal ? "width" : "height";
     const available = Math.max(0, box[dimension] - DIVIDER);
-    const min = Math.max(0.1, available ? minimumSize(node.first)[dimension] / available : 0.5);
-    const max = Math.min(0.9, available ? 1 - minimumSize(node.second)[dimension] / available : 0.5);
+    const min = Math.max(0.1, available ? minimumSize(node.first, compact)[dimension] / available : 0.5);
+    const max = Math.min(0.9, available ? 1 - minimumSize(node.second, compact)[dimension] / available : 0.5);
     const ratio = min > max ? 0.5 : Math.max(min, Math.min(max, node.ratio));
     const size = available * ratio;
     dividers.push({ ...box, id: node.id, axis: node.axis, parent: box, ratio, min, max, ...(horizontal ? { left: box.left + size, width: DIVIDER } : { top: box.top + size, height: DIVIDER }) });
@@ -296,7 +296,7 @@ export function restoreLayout<V>(raw: unknown, isView: (value: unknown) => value
   };
   const tree = data.tree === undefined ? treeOf({ panes, focus }) : parse(data.tree);
   if (!tree || leafIds(tree).length !== panes.length) return fallback;
-  return { tree, panes: orderedPanes(tree, panes), focus };
+  return { tree, panes: orderedPanes(tree, panes), focus, ...(data.grid === 2 || data.grid === 3 ? { grid: data.grid } : {}) };
 }
 
 // ── the divider ───────────────────────────────────────────────────────────────────────────────

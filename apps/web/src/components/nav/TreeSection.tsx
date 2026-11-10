@@ -42,23 +42,19 @@ export function TreeSection({ shared, rows, treeRef, onSort }: { shared: NavShar
     </form>
   );
   return (
-    <section className="side-section side-tree-section" aria-label="작업 공간">
+    <section className="side-section side-tree-section" aria-label="프로젝트">
       <div className="side-section-title with-tools">
-        <span>작업 공간</span>
+        <span>프로젝트</span>
         <span className="side-tools">
-          {shared.actions.creationMenu ? <button type="button" className="ghost-button small" aria-label="프로젝트에서 만들기" aria-haspopup="menu" onClick={event => {
-            const box = event.currentTarget.getBoundingClientRect();
-            shared.actions.creationMenu?.(shared.currentWorkId ? shared.state.works[shared.currentWorkId] ?? null : null, box.left, box.bottom);
-          }}><Icon name="plus" size={13} /> 만들기</button> : null}
-          <button type="button" className="icon-button small" title="새 정리 폴더" onClick={() => shared.setCreatingIn(null)}>
-            <Icon name="plus" size={13} />
+          <button type="button" className="icon-button small" title="새 정리 폴더" aria-label="새 정리 폴더" onClick={() => shared.setCreatingIn(null)}>
+            <Icon name="folder" size={13} />
           </button>
-          <button type="button" className="icon-button small" title="정렬" aria-haspopup="menu" onClick={(event) => onSort(event.currentTarget)}>
+          <button type="button" className="icon-button small" title="프로젝트 정렬" aria-label="프로젝트 정렬" aria-haspopup="menu" onClick={(event) => onSort(event.currentTarget)}>
             <Icon name="dots" size={13} />
           </button>
         </span>
       </div>
-      <div className="side-tree" role="tree" aria-label="작업 공간" ref={treeRef}>
+      <div className="side-tree" role="tree" aria-label="프로젝트" ref={treeRef}>
         {shared.creatingIn === null ? creatingRow : null}
         {rows.map((row) => (
           <div key={row.id} className="side-tree-item">
@@ -66,7 +62,7 @@ export function TreeSection({ shared, rows, treeRef, onSort }: { shared: NavShar
             {shared.creatingIn !== undefined && shared.creatingIn === row.id && row.type === "folder" ? <div style={{ paddingLeft: 14 * (row.depth + 1) }}>{creatingRow}</div> : null}
           </div>
         ))}
-        {!rows.length && shared.creatingIn === undefined ? <div className="empty-hint side-empty">아직 작업이 없습니다. 위의 "새 세션"으로 시작하세요.</div> : null}
+        {!rows.length && shared.creatingIn === undefined ? <div className="empty-hint side-empty">아직 프로젝트가 없습니다. 위의 "새로 만들기"로 시작하세요.</div> : null}
         <LinkLines tree={treeRef} />
       </div>
     </section>

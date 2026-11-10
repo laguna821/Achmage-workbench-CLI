@@ -374,11 +374,11 @@ export function PropertiesPanel(props: Props) {
   };
 
   return (
-    <section className={`properties-panel${collapsed ? " collapsed" : ""}`} aria-label="속성">
+    <section className={`properties-panel${collapsed ? " collapsed" : ""}`} aria-label="프로젝트 YAML 속성">
       <div className="properties-head">
         <button type="button" className="properties-title" aria-expanded={!collapsed} onClick={toggle}>
           <Icon name={collapsed ? "chevronRight" : "chevronDown"} size={14} />
-          속성
+          프로젝트 속성
           <span className="properties-count">{filled}/{rows.length}</span>
         </button>
         <button type="button" className="link small" onClick={onTemplate} title="모든 프로젝트에 미리 보일 속성(이름과 형식)을 정합니다">

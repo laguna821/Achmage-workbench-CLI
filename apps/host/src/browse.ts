@@ -101,6 +101,8 @@ export type BrowseHost = {
   updateSession(sessionId: string, patch: Partial<Session>): void;
   publish(status: AgentBrowserStatus): void;
   pageControl?(sessionId: string): BrowserControl;
+  hasPage?(sessionId: string): boolean;
+  openPage?(sessionId: string, url: string): Promise<unknown>;
   pageCommand?(sessionId: string, requestId: string, command: string, args: string[], control: BrowserControl): Promise<BrowserJobResult>;
 };
 
@@ -424,16 +426,17 @@ export class AgentBrowser {
     const entry = sessionId ? this.host?.lookup(sessionId) : null;
     if (!sessionId || !entry || !entry.session.browser) throw new Refusal(`세션 ${name}의 Workbench 브라우저가 꺼져 있습니다. 사용자에게 입력창 아래 '브라우저'를 켜 달라고 하세요.`);
     const parsed = parseCliArgs(request.args);
-    const shared = Boolean(entry.session.pageAgent);
+    const tabOpen = parsed.command === "tab-open";
+    let shared = Boolean(entry.session.pageAgent || this.host?.hasPage?.(sessionId));
     // Help and the version change nothing.
     if (!parsed.command || parsed.help || request.args.includes("--version")) return shared ? { code: 0, stdout: SHARED_BROWSER_HELP, stderr: "" } : this.engine === "lightpanda" ? { code: 0, stdout: LIGHTPANDA_HELP, stderr: "" } : this.cli(name, request.args.filter((arg) => !/^(?:-s|--session)(=|$)/.test(arg)), this.paths.root);
-    const kind = browserCommandKind(parsed.command);
+    const kind = browserCommandKind(tabOpen ? "open" : parsed.command);
     if (kind === "blocked") throw new Refusal(`'${parsed.command}' 명령은 Workbench 브라우저에서 쓸 수 없습니다(쿠키·저장소·네트워크 기록·창 관리는 막혀 있습니다).`);
-    if (!shared && this.installer.state.state !== "ready") throw new Refusal("에이전트 브라우저가 아직 설치되지 않았습니다. 사용자에게 '브라우저 › 설치'를 부탁하세요.");
-    if (!shared) this.blocker(sessionId);
+    if (!shared && !tabOpen && this.installer.state.state !== "ready") throw new Refusal("에이전트 브라우저가 아직 설치되지 않았습니다. 사용자에게 '브라우저 › 설치'를 부탁하세요.");
+    if (!shared && !tabOpen) this.blocker(sessionId);
     if (!shared && parsed.command === "close") return this.closeOwn(sessionId);
     // Capture authority before the approval card. A later human takeover cannot authorize this old request.
-    const pageControl = shared ? this.host?.pageControl?.(sessionId) : null;
+    let pageControl = shared && !tabOpen ? this.host?.pageControl?.(sessionId) : null;
     const url = kind === "navigate" && parsed.command !== "search" ? targetUrl(parsed.args) : null;
     const sites = this.sites.get(sessionId) ?? new Set<string>();
     const newSite = parsed.command === "search" || Boolean(url && !sites.has(url.host));
@@ -445,13 +448,18 @@ export class AgentBrowser {
       const accepted = await this.ask(sessionId, view.title, `${view.detail}\nplaywright-cli -s=${name} ${[parsed.command, ...parsed.args].join(" ")}`, reason);
       if (!accepted) throw new Refusal("사용자가 이 브라우저 동작을 허용하지 않았습니다. 다른 방법을 찾거나 사용자에게 물어보세요.");
       // The window may have changed hands while the card waited, or the engine stopped waiting.
-      if (!shared) this.blocker(sessionId);
+      if (!shared && !tabOpen) this.blocker(sessionId);
       if (!this.waiting(name, request.id)) throw new Refusal("명령이 이미 끝나 실행하지 않았습니다.");
     }
     if (url) this.sites.set(sessionId, sites.add(url.host));
+    if (tabOpen) {
+      if (!url || !this.host?.openPage) throw new Refusal("tab-open에는 http(s) 웹 주소가 필요합니다.");
+      await this.host.openPage(sessionId, url.href);
+      shared = true; pageControl = this.host.pageControl?.(sessionId);
+    }
     if (shared) {
       if (!pageControl || !this.host?.pageCommand) throw new Refusal("공유 웹 탭 연결을 사용할 수 없습니다.");
-      const result = await this.host.pageCommand(sessionId, request.id, parsed.command, parsed.args, pageControl);
+      const result = await this.host.pageCommand(sessionId, request.id, tabOpen ? "goto" : parsed.command, parsed.args, pageControl);
       return { code: result.error ? 1 : 0, stdout: result.error ? "" : result.observation?.text ?? `완료: ${parsed.command}\n${result.page?.url ?? ""}`, stderr: result.error ?? "" };
     }
     if (this.engine === "lightpanda") {
@@ -833,7 +841,7 @@ export class AgentBrowser {
     return {
       pathDirs: () => [this.paths.bin],
       sessionEnv: (session): Record<string, string> => (session.browser ? { PLAYWRIGHT_CLI_SESSION: browserSessionName(session.id) } : {}),
-      instructions: (session) => (session.browser ? session.pageAgent ? `${SHARED_BROWSER_HELP}\nYour browser session: playwright-cli -s=${browserSessionName(session.id)}` : browserInstructions(browserSessionName(session.id), this.engine) : null),
+      instructions: (session) => (session.browser ? session.pageAgent ? `${SHARED_BROWSER_HELP}\nYour browser session: playwright-cli -s=${browserSessionName(session.id)}` : `${browserInstructions(browserSessionName(session.id), this.engine)}\nTo open a page that the user can see and interact with in a Workbench tab, use playwright-cli tab-open <http(s) URL>. This creates a real shared tab and routes subsequent snapshot/fill/click/navigation commands to that same page, not Lightpanda. Use it for visible browsing tasks. For background research, keep the default browser. On a new user request, tab-open also resumes control of your existing tab. Never silently switch browsers after an error.\n${this.host?.hasPage?.(session.id) ? SHARED_BROWSER_HELP : ""}` : null),
       offNote: (session) => browserOffNote(browserSessionName(session.id)),
       allowsCommand: (sessionId, command) => Boolean(this.host?.lookup(sessionId)?.session.browser) && isPlainBrowserCommand(command),
       writableRoots: (session) => (session.browser ? [join(this.paths.spool, browserSessionName(session.id))] : []),

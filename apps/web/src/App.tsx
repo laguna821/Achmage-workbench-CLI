@@ -8,18 +8,19 @@ import { ExtensionLibrary } from "./components/ExtensionLibrary.tsx";
 import { EventHub } from "./components/EventHub.tsx";
 import { AttentionInbox, CompletionNotifications, watchAttentionPresence } from "./completion-notifications.ts";
 import { SharedBrowser, type BrowserNativeCommand } from "./browser-state.ts";
-import { BrowserView, NewBrowserDialog } from "./components/BrowserView.tsx";
+import { BrowserView, NewBrowserDialog, openBrowserTab, type BrowserTarget } from "./components/BrowserView.tsx";
 import type { AttentionPayload, SequencedEvent } from "@workbench/contracts";
 import { useOfficeControl } from "./office-control.ts";
 import { configureDesign } from "./design.ts";
 import { initialState, isBusy, reducer, sessionsOf } from "./state.ts";
-import { newRequestId, titleFrom } from "./format.ts";
+import { applyPanePreset, type PanePreset } from "./layout-presets.ts";
+import { WorkspaceLayoutTools, PaneStart, WorkLinkDialog } from "./components/WorkspaceLayoutTools.tsx";
+import { newRequestId, titleFrom, statusText } from "./format.ts";
 import { folderChoices, readOpenState, workSessions, type Move, type Row, type SortMode, type TreeOpenState } from "./tree.ts";
 import { Connections } from "./components/Connections.tsx";
 import type { BrowserActions } from "./components/BrowserPill.tsx";
 import { EditableText } from "./components/EditableText.tsx";
 import { Icon } from "./components/Icon.tsx";
-import { BrandSymbol, Wordmark } from "./components/BrandMark.tsx";
 import { Popover } from "./components/Popover.tsx";
 import { Sidebar, type SidebarActions } from "./components/Sidebar.tsx";
 import { requestNavigatorFocus } from "./components/nav/focus.ts";
@@ -276,6 +277,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   const [single, setSingle] = useState<string | null>(() => windowSession());
   const sharedBrowser = useMemo(() => new SharedBrowser(api?.sharedBrowser ?? null, inDesktop && !single ? sharedBrowserNative : null), [api, Boolean(single)]);
   const browserState = useSyncExternalStore(sharedBrowser.subscribe, sharedBrowser.getState);
+  const seenAgentPages = useRef(new Set<string>());
   const lastNativeInteraction = useRef(0), lastDomInteraction = useRef(0);
   useEffect(() => {
     const remember = () => { lastDomInteraction.current = Date.now(); };
@@ -283,6 +285,8 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
     return () => { window.removeEventListener("pointerdown", remember, true); window.removeEventListener("keydown", remember, true); };
   }, []);
   useEffect(() => sharedBrowser.start(), [sharedBrowser]);
+  const openBrowserRef = useRef<(paneId: PaneId, target: BrowserTarget & { workId?: string | null }) => Promise<boolean>>(async () => false);
+  const browserOpening = useRef(false);
   const [newBrowser, setNewBrowser] = useState<{ paneId: PaneId; workspaceId?: string; profileId?: string; url?: string } | null>(null);
   // One pane on a new profile; an existing layout is restored from gateway preferences after
   // the snapshot. Sidebar/search actions route into the focused pane.
@@ -371,6 +375,8 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   const [desktopOpen, setDesktopOpen] = useState(false);
   const [extensionsOpen, setExtensionsOpen] = useState(false), [eventHubOpen, setEventHubOpen] = useState(false);
   const [taskPanelOpen, setTaskPanelOpen] = useState(false);
+  const [workLinksOpen, setWorkLinksOpen] = useState(false);
+  const [paneFocus, setPaneFocus] = useState(false);
   const [attentionOpen, setAttentionOpen] = useState(false);
   const [pendingAttentionId, setPendingAttentionId] = useState<string | null>(null);
   const [dropboxOpen, setDropboxOpen] = useState(false);
@@ -536,9 +542,19 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
   // The sidebar is where many sessions live: open unless the user closed it (decision 2026-10-28).
   const [expandedEditorTab, setExpandedEditorTab] = useState<string | null>(null);
   const focusedTabId = activeTab(focusedPane(layout)).id;
-  const editorFocus = view.kind === "presentation" || view.kind === "document" && expandedEditorTab !== focusedTabId;
-  const sidebarOpen = !single && !editorFocus && prefs.sidebar !== false;
-  const toggleSidebar = () => savePrefs({ sidebar: !sidebarOpen });
+  const editorFocus = view.kind === "presentation" || view.kind === "document" && !layout.grid && expandedEditorTab !== focusedTabId;
+  const [compactShell, setCompactShell] = useState(() => window.matchMedia("(max-width: 900px)").matches);
+  const [compactSidebar, setCompactSidebar] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 900px)");
+    const update = () => { setCompactShell(media.matches); setCompactSidebar(false); };
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  useEffect(() => setCompactSidebar(false), [focusedTabId, view.kind, workId, focusedPane(layout).sessionId]);
+  const sidebarOpen = !single && !editorFocus && (compactShell ? compactSidebar : prefs.sidebar !== false);
+  const showSidebar = () => { setCompactSidebar(true); savePrefs({ sidebar: true }); };
+  const toggleSidebar = () => compactShell ? setCompactSidebar(!compactSidebar) : savePrefs({ sidebar: !sidebarOpen });
   const sidebarWidth = typeof prefs.sidebarWidth === "number" ? Math.min(480, Math.max(232, prefs.sidebarWidth)) : 288;
   const sortMode: SortMode = SORT_MODES.includes(prefs.treeSort as SortMode) ? (prefs.treeSort as SortMode) : "manual";
   const treeOpen = useMemo(() => readOpenState(prefs.tree), [prefs.tree]);
@@ -799,7 +815,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
       openWorkspace: (workspace) => openWorkspaceRef.current(workspace),
       openTerminals: (workspace) => setTerminalWorkspace(workspace),
       openServices: (workspace) => setServiceWorkspace(workspace),
-      openBrowser: (workspace) => setNewBrowser({ paneId: layoutRef.current.focus, workspaceId: workspace.id }),
+      openBrowser: (workspace) => { void openBrowserRef.current(layoutRef.current.focus, { workspaceId: workspace.id, workId: workspace.workId }); },
       prepareWorkspace: (workspace) => setPreparationWorkspace(workspace),
       reviewWorkspace: (workspace) => setScmWorkspace(workspace),
       workspaceGit: {
@@ -852,7 +868,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
         panesRef.current.focusIfShown(`project:${target.id}`);
         navigateTo({ workId: target.id, sessionId: null, view: { kind: "project", workId: target.id } });
       },
-      openSidebar: () => savePrefs({ sidebar: true }),
+      openSidebar: showSidebar,
       restore: (target) => {
         if (!api) return;
         const request =
@@ -1212,7 +1228,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
         } else if (combo === shortcuts.navigator && !single) {
           // "내비게이터로": the navigator's list takes the focus; a hidden sidebar opens first.
           event.preventDefault();
-          if (prefsRef.current.sidebar === false) savePrefs({ sidebar: true });
+          showSidebar();
           requestNavigatorFocus();
         }
       }
@@ -1457,13 +1473,27 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
     const project = workId ? stateRef.current.works[workId] : undefined;
     return { workId, workspaceId: creationWorkspace(project, [artifact?.workspaceId, page?.workspaceId, session?.workspaceId, layoutScope], stateRef.current.workspaces) };
   }, [layoutScope, sharedBrowser]);
+  openBrowserRef.current = async (paneId, target) => {
+    if (!api || browserOpening.current) return false;
+    browserOpening.current = true;
+    try {
+      const at = paneById(layoutRef.current, paneId)?.view;
+      const source = at?.kind === "browser" ? sharedBrowser.getState().pages.find(page => page.pageId === at.pageId) : undefined;
+      const page = await openBrowserTab(sharedBrowser, api, stateRef.current, { profileId: source?.profileId, ...target });
+      const content: PaneContent<View> = { view: { kind: "browser", pageId: page.pageId }, workId: page.workId, sessionId: page.sessionId };
+      const targetId = findTab(layoutRef.current, contentKey(content))?.pane.id ?? paneId;
+      afterLeaving(targetId, content.view, () => updateLayout(current => ({ ...setPane(current, targetId, content), focus: targetId })));
+      return true;
+    } catch (error) { fail(error); return false; }
+    finally { browserOpening.current = false; }
+  };
   const runCreateAction = useCallback((paneId: PaneId, action: CreateAction) => {
     const { target } = action;
     if (action.kind === "document") { setNewDocument({ ...target, paneId, format: action.format }); return; }
     if (action.kind === "directory") { if (target.workspaceId) setNewDirectory(target.workspaceId); return; }
-    if (action.kind === "browser") { setNewBrowser({ paneId, workspaceId: target.workspaceId }); return; }
+    if (action.kind === "browser") { void openBrowserRef.current(paneId, target); return; }
     if (action.kind === "folder") {
-      savePrefs({ sidebar: true });
+      showSidebar();
       setExpandedEditorTab(paneById(layoutRef.current, paneId)?.activeTabId ?? null);
       setSidebarPending({ createIn: target.folderId });
       return;
@@ -2011,21 +2041,22 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
     if (at.kind === "presentation") return { title: `${state.artifacts[at.artifactId]?.name ?? "HTML"} · 발표`, icon: <FormatBadge format="html" />, item: null };
     const owner = pane.workId ? state.works[pane.workId] : undefined;
     const artifact = at.kind === "document" || at.kind === "split" ? state.artifacts[at.artifactId] : undefined;
-    if (artifact) return { title: artifact.name, icon: <FormatBadge format={artifact.format} />, hint: artifact.path, item: { kind: "doc", id: artifact.id } };
+    if (artifact) return { project: owner?.title, kindLabel: "문서", title: artifact.name, icon: <FormatBadge format={artifact.format} />, hint: artifact.path, item: { kind: "doc", id: artifact.id } };
     if (at.kind === "work" && owner) {
       const shown = sessionIn(pane);
       return {
-        title: shown ? `${owner.title} · ${shown.purpose}` : owner.title,
+        title: shown?.purpose ?? owner.title,
+        project: owner.title, kindLabel: shown?.pageAgent ? "웹 AI" : shown?.documentAgent ? "문서 AI" : "채팅", status: shown ? statusText(shown) : undefined,
         icon: shown ? <EngineMark provider={shown.provider} size={14} /> : <Icon name="project" size={14} />,
         hint: owner.cwd,
         item: shown ? { kind: "session", id: shown.id } : { kind: "work", id: owner.id },
       };
     }
-    if (at.kind === "project") return { title: `${state.works[at.workId]?.title ?? "프로젝트"} · 프로젝트`, icon: <Icon name="project" size={14} />, item: { kind: "project", id: at.workId } };
-    if (at.kind === "terminal") return { title: at.label, icon: <Icon name="terminal" size={14} />, hint: state.workspaces[at.workspaceId]?.cwd, item: null };
+    if (at.kind === "project") return { kindLabel: "프로젝트", title: `${state.works[at.workId]?.title ?? "프로젝트"} · 프로젝트`, icon: <Icon name="project" size={14} />, item: { kind: "project", id: at.workId } };
+    if (at.kind === "terminal") return { project: owner?.title, kindLabel: "터미널", title: at.label, icon: <Icon name="terminal" size={14} />, hint: state.workspaces[at.workspaceId]?.cwd, item: null };
     if (at.kind === "browser") {
       const page = browserState.pages.find(entry => entry.pageId === at.pageId);
-      return { title: page?.title || "웹 탭", icon: <Icon name="globe" size={14} />, hint: page?.url, item: null };
+      return { project: owner?.title, kindLabel: "웹", title: page?.title || "웹 탭", icon: <Icon name="globe" size={14} />, hint: page?.url, item: null };
     }
     if (at.kind === "pkm") {
       const target = at.target;
@@ -2040,6 +2071,25 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
     if (at.kind === "archive") return { title: "보관함", icon: <Icon name="archive" size={14} />, item: null };
     return { title: at.kind === "new" && at.folderId ? "새 작업" : "홈", icon: <Icon name="home" size={14} />, item: null };
   };
+
+  useEffect(() => {
+    if (!layoutReady || single || !sharedBrowser.available || layoutSwitching.current) return;
+    const pages = browserState.pages.filter(page => page.agentSessionId && page.driverId === sharedBrowser.driverId && page.status === "ready" && !seenAgentPages.current.has(page.pageId));
+    if (!pages.length) return;
+    updateLayout(current => {
+      let next = current;
+      for (const page of pages) {
+        const key = `browser:${page.pageId}`;
+        if (!findTab(next, key)) {
+          const owner = next.panes.find(pane => tabsOf(pane).some(tab => tab.view.kind === "work" && tab.sessionId === page.agentSessionId));
+          next = addBackgroundTab(next, owner?.id ?? next.focus, { view: { kind: "browser", pageId: page.pageId }, workId: page.workId, sessionId: page.sessionId });
+        }
+        // Keep a deliberate user close final; polling must not reopen an already offered page.
+        if (findTab(next, key)) seenAgentPages.current.add(page.pageId);
+      }
+      return next;
+    });
+  }, [browserState.pages, sharedBrowser, layoutReady, single, layout, updateLayout]);
 
   useEffect(() => {
     const latest = browserState.pages.reduce<(typeof browserState.pages)[number] | null>((found, page) => (page.native?.interactionAt ?? 0) > (found?.native?.interactionAt ?? 0) ? page : found, null);
@@ -2113,6 +2163,11 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
     if (at.kind === "browser" || (singleSession?.pageAgent && at.kind === "work")) {
       const pageId = at.kind === "browser" ? at.pageId : singleSession!.pageAgent!.pageId;
       return <BrowserView key={pageId} browser={sharedBrowser} api={api} state={state} pageId={pageId} visible={tabActive && (!narrowPanes || focused)} parentSessionId={owner ? activeOf(owner)?.id ?? null : null} actions={actions}
+        engine={engine}
+        onStart={(text, provider, choice) => {
+          const page = sharedBrowser.getState().pages.find(page => page.pageId === pageId);
+          return startWork(text, provider, null, null, choice, page ? { kind: "work", workId: page.workId } : { kind: "new" }, pane.id);
+        }}
         onNew={target => setNewBrowser({ ...target, paneId: pane.id })}
         onClosed={() => closeTabNow(pane.id, tabId)} onOpenSession={openSession} onLeaveGuard={guardOf[tabId]}
         onTranscript={(sessionId, transcript) => dispatch({ type: "transcript", sessionId, transcript })}
@@ -2205,6 +2260,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
     if (at.kind === "archive") return <ArchiveView state={state} onRestore={actions.restore} onOpenSession={openSession} onOpenWork={openWorkNow} onDeleteWork={setDeletingWork} onClose={() => setView({ kind: "work" })} />;
     if (start) {
       return (
+        <PaneStart split={split} works={Object.values(state.works).filter(work => !work.archivedAt).sort((a, b) => b.updatedAt - a.updatedAt)} onProject={id => placeItemAt({ kind: "project", id }, { paneId: pane.id, side: "center" })}>
         <StartView
           state={state}
           autoFocus={focused}
@@ -2212,6 +2268,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
           draftKey={pane.id === "a" ? `new:${at.kind === "new" ? at.folderId ?? "root" : "root"}` : `new:${pane.id}:${at.kind === "new" ? at.folderId ?? "root" : "root"}`}
           onClearFolder={() => setView({ kind: "new", folderId: null })}
           onStart={(text, provider, cwd, choice, pick) => startWork(text, provider, cwd, at.kind === "new" ? at.folderId : null, choice, pick, pane.id)}
+          onOpenBrowser={sharedBrowser.available ? address => openBrowserRef.current(pane.id, { ...creationTarget(pane.id), url: address }) : undefined}
           onOpenWork={openWorkNow}
           onOpenProject={actions.openProject}
           onOpenSession={(session, itemId) => {
@@ -2229,10 +2286,23 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
           engine={engine}
           setEngine={setEngine}
         />
+        </PaneStart>
       );
     }
     return owner ? workView(owner, session, pinned, paneTabs, ids, { bar, single: Boolean(single), paned: split || !focused, uiState: tabUi, onUiState: uiOf[tabId] }) : null;
   };
+  const workspaceLayoutTools = !single ? <WorkspaceLayoutTools inline={compactShell} count={layout.panes.length} disabled={!layoutReady} onPreset={(count: PanePreset) => {
+            closeMenu();
+            setPaneFocus(false);
+            updateLayout(current => applyPanePreset(current, count, () => ({ view: { kind: "new", folderId: null }, workId: null, sessionId: null })));
+          }} onLink={() => { closeMenu(); setWorkLinksOpen(true); }} onAdvanced={anchor => {
+            const box = anchor.getBoundingClientRect();
+            closeMenu();
+            setContextMenu({ x: box.left, y: box.bottom, title: "저장된 작업공간 배치", items: [
+              { kind: "item", label: "전체 작업 배치", icon: "grid", onSelect: () => { setPaneFocus(false); void openWorkspaceRef.current(null); } },
+              ...Object.values(state.workspaces).filter(space => !space.archivedAt && !space.removedAt && !state.works[space.workId]?.archivedAt).map(space => ({ kind: "item" as const, label: `${state.works[space.workId]?.title ?? "프로젝트"} · ${space.label}`, icon: "folder" as const, onSelect: () => { setPaneFocus(false); void openWorkspaceRef.current(space); } })),
+            ] });
+          }} /> : null;
   const title =
     single && singleSession && work
       ? `${work.title} · ${singleSession.purpose}`
@@ -2284,8 +2354,8 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
         <div className="topbar-left">
           {single ? (
             <span className="brand" aria-label="Achmage">
-              <Wordmark className="brand-wordmark" />
-              <BrandSymbol className="brand-compact" size={26} />
+              <Icon name="home" size={18} />
+              <span className="hig-app-name">Workbench</span>
             </span>
           ) : (
             <>
@@ -2299,8 +2369,8 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
                 <Icon name="sidebar" size={18} />
               </button>
               <button type="button" className="brand" onClick={() => startNew(null)} title="홈" aria-label="Achmage 홈">
-                <Wordmark className="brand-wordmark" />
-                <BrandSymbol className="brand-compact" size={26} />
+                <Icon name="home" size={18} className="hig-home-icon" />
+                <span className="hig-app-name">Workbench</span>
               </button>
             </>
           )}
@@ -2332,22 +2402,12 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
           </button>
         )}
         <div className="topbar-right">
-          {onConnections ? <button type="button" className="ghost-button small" onClick={onConnections} aria-haspopup="dialog">{connectionLabel ?? "기기 연결"}</button> : null}
+          {onConnections ? <button type="button" className="ghost-button small shell-connections" onClick={onConnections} aria-label={connectionLabel ?? "기기 연결"} title={connectionLabel ?? "기기 연결"} aria-haspopup="dialog"><Icon name="link" size={18} /><span>{connectionLabel ?? "기기 연결"}</span></button> : null}
           <button type="button" className="ghost-button small shell-create" aria-haspopup="menu" title={`새 문서·세션·폴더 (${shortcuts.newWork})`} onClick={event => openCreate.current(event.currentTarget)}><Icon name="plus" size={15} /> 새로 만들기<Icon name="chevronDown" size={12} /></button>
-          <button type="button" className="ghost-button small" aria-haspopup="dialog" aria-expanded={taskPanelOpen} onClick={() => setTaskPanelOpen(true)}><Icon name="clock" size={15} /> 작업</button>
-          <button type="button" className="ghost-button small" aria-haspopup="dialog" aria-expanded={attentionOpen} aria-label={attentionState.list.unread ? `알림 · 읽지 않음 ${attentionState.list.unread}개` : "알림"} onClick={() => setAttentionOpen(true)}><Icon name="bell" size={15} /> 알림{attentionState.list.unread ? <span className="shell-attention-count">{attentionState.list.unread}</span> : null}</button>
+          <button type="button" className="ghost-button small shell-tasks" aria-label="작업 현황" title="작업 현황" aria-haspopup="dialog" aria-expanded={taskPanelOpen} onClick={() => setTaskPanelOpen(true)}><Icon name="clock" size={18} /></button>
+          <button type="button" className="ghost-button small" aria-haspopup="dialog" aria-expanded={attentionOpen} aria-label={attentionState.list.unread ? `알림 · 읽지 않음 ${attentionState.list.unread}개` : "알림"} onClick={() => setAttentionOpen(true)}><Icon name="bell" size={18} />{attentionState.list.unread ? <span className="shell-attention-count">{attentionState.list.unread}</span> : null}</button>
           {view.kind === "document" ? <button type="button" className="ghost-button small" onClick={() => setExpandedEditorTab(editorFocus ? focusedTabId : null)}><Icon name={editorFocus ? "columns" : "expandAll"} size={14} />{editorFocus ? "작업공간 보기" : "편집기에 집중"}</button> : null}
-          {!single ? <button type="button" className="ghost-button small" aria-label="배치 선택" disabled={!layoutReady} onClick={(event) => {
-            const box = event.currentTarget.getBoundingClientRect();
-            setContextMenu({ x: box.left, y: box.bottom, title: "작업공간별 탭과 창 배치", items: [
-              { kind: "item", label: "전체 작업 배치", icon: "columns", onSelect: () => { void openWorkspaceRef.current(null); } },
-              ...Object.values(state.workspaces).filter((space) => !space.archivedAt && !space.removedAt && !state.works[space.workId]?.archivedAt).map((space) => ({ kind: "item" as const, label: `${state.works[space.workId]?.title ?? "프로젝트"} · ${space.label}`, icon: "folder" as const, onSelect: () => { void openWorkspaceRef.current(space); } })),
-            ] });
-          }}><Icon name="folder" size={14} />{layoutScope === GLOBAL_LAYOUT ? "전체 배치" : state.workspaces[layoutScope]?.label ?? "작업공간"}<Icon name="chevronDown" size={12} /></button> : null}
-          {!single ? <>
-            <button type="button" className="icon-button" aria-label="오른쪽으로 분할" title="오른쪽으로 분할" onClick={() => splitPaneNow(layout.focus, "right")}><Icon name="columns" size={18} /></button>
-            <button type="button" className="icon-button" aria-label="아래로 분할" title="아래로 분할" onClick={() => splitPaneNow(layout.focus, "bottom")}><Icon name="rows" size={18} /></button>
-          </> : null}
+          {!compactShell ? workspaceLayoutTools : null}
           {pendingApprovals.length && !single ? (
             <button
               type="button"
@@ -2364,7 +2424,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
           {!state.connected && state.ready ? <span className="offline">연결 끊김</span> : null}
           <button
             type="button"
-            className="icon-button"
+            className="icon-button shell-theme"
             onClick={() => savePrefs({ theme: focusedTheme === "dark" ? "light" : "dark" })}
             aria-label={focusedTheme === "dark" ? "라이트 화면으로" : "다크 화면으로"}
             title={focusedTheme === "dark" ? "라이트 화면으로" : "다크 화면으로"}
@@ -2376,6 +2436,12 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
               <Icon name="dots" size={18} />
             </button>
             <Popover open={menuOpen} onClose={closeMenu} align="right">
+              {compactShell ? <div className="compact-toolbar-menu">
+                {onConnections ? <button type="button" className="ghost-button" onClick={() => { closeMenu(); onConnections(); }}><Icon name="link" size={18} />{connectionLabel ?? "기기 연결"}</button> : null}
+                <button type="button" className="ghost-button" onClick={() => { closeMenu(); setTaskPanelOpen(true); }}><Icon name="clock" size={18} />작업 현황</button>
+                {workspaceLayoutTools}
+                <button type="button" className="ghost-button" onClick={() => { savePrefs({ theme: focusedTheme === "dark" ? "light" : "dark" }); closeMenu(); }}><Icon name={focusedTheme === "dark" ? "sun" : "moon"} size={18} />{focusedTheme === "dark" ? "라이트 화면으로" : "다크 화면으로"}</button>
+              </div> : null}
               <Connections
                 backgroundHost={<><BackgroundHost api={api} /><div className="connection"><button type="button" className="button small" onClick={() => { closeMenu(); setPushSettingsOpen(true); }}>모바일 알림</button></div>{!api.isRemote ? <div className="connection"><div className="menu-label">선택 기능</div><div className="feature-actions"><button type="button" className="button small" onClick={() => { closeMenu(); setDesktopOpen(true); }}>외부 앱</button><button type="button" className="button small" onClick={() => { closeMenu(); setExtensionsOpen(true); }}>실행 확장</button><button type="button" className="button small" onClick={() => { closeMenu(); setEventHubOpen(true); }}>이벤트 Hub</button></div></div> : null}</>}
                 onOfficeSettings={() => { closeMenu(); setOfficeSettingsOpen(true); }}
@@ -2448,6 +2514,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
       {layoutProblem ? <div className="layout-problem" role="alert"><span>{layoutProblem.message}</span><button type="button" className="button small" onClick={() => void resolveLayoutProblem(false)}>{layoutReady ? "저장된 배치 불러오기" : "다시 불러오기"}</button>{layoutReady ? <button type="button" className="button small" onClick={() => void resolveLayoutProblem(true)}>현재 배치로 저장</button> : null}</div> : null}
 
       <div className={`body${sidebarOpen && state.ready ? " with-sidebar" : ""}`}>
+      {compactShell && sidebarOpen ? <button className="sidebar-scrim" type="button" aria-label="사이드바 닫고 작업으로 돌아가기" onClick={() => setCompactSidebar(false)} /> : null}
       {sidebarOpen && state.ready ? (
         <Sidebar
           state={state}
@@ -2477,7 +2544,8 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
       ) : (
         <PaneLayout
           layout={layout}
-          maximized={editorFocus}
+          maximized={editorFocus || paneFocus}
+          onMaximize={id => { focusPaneNow(id); setPaneFocus(value => !value); }}
           enabled={!single}
           onResize={(id, ratio) => updateLayout((current) => resizeSplit(current, id, ratio))}
           onFocus={focusPaneNow}
@@ -2506,6 +2574,7 @@ export function App({ apiOverride, onConnections, connectionsOpen = false, conne
         const targetId = findTab(layoutRef.current, contentKey(content))?.pane.id ?? newBrowser.paneId;
         afterLeaving(targetId, content.view, () => updateLayout(current => ({ ...setPane(current, targetId, content), focus: targetId })));
       }} /> : null}
+      {workLinksOpen ? <WorkLinkDialog state={state} initialSource={sessionIn(focusedPane(layout))?.id} visibleIds={layout.panes.map(pane => sessionIn(pane)?.id).filter((id): id is string => !!id)} onSend={actions.handoff} onOpen={openSession} onClose={() => setWorkLinksOpen(false)} /> : null}
       {taskPanelOpen ? <TaskPanel api={api} workId={view.kind === "project" ? view.workId : work?.id} onClose={() => setTaskPanelOpen(false)} onOpen={(sessionId, itemId) => {
         const target = stateRef.current.sessions[sessionId];
         if (!target) { setToast("원문 대화를 찾을 수 없습니다."); return; }

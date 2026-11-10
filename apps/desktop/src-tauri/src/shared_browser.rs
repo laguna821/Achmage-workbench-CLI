@@ -37,6 +37,7 @@ fn identifier(value: &str) -> bool { !value.is_empty() && value.len() <= 160 && 
 fn label(id: &str) -> String { format!("wb-page-{id}") }
 fn field<'a>(value: &'a Value, key: &str) -> Result<&'a str, String> { value[key].as_str().ok_or_else(|| format!("잘못된 브라우저 입력: {key}")) }
 fn allowed_url(app: &tauri::AppHandle, raw: &str) -> Result<url::Url, String> {
+    if raw == "about:blank" { return url::Url::parse(raw).map_err(|error| error.to_string()); }
     let url = url::Url::parse(raw).map_err(|_| "웹 주소를 확인해 주세요.")?;
     if !matches!(url.scheme(), "http" | "https") || !url.username().is_empty() || url.password().is_some() || raw.len() > 8192 { return Err("http 또는 https 웹 주소만 열 수 있습니다.".into()); }
     if let Some(ready) = app.try_state::<crate::Ready>() {
@@ -72,6 +73,9 @@ async fn create(app: &tauri::AppHandle, caller: &Webview, command: &Value) -> Re
     let id = field(command, "pageId")?.to_string(); let profile = field(command, "profileId")?.to_string();
     if !identifier(&id) || !identifier(&profile) || id.len() > 80 || profile.len() > 80 { return Err("웹 탭 식별자가 올바르지 않습니다.".into()); }
     let url = allowed_url(app, field(command, "url")?)?;
+    // Tauri intentionally omits an initial about:blank URL. On WebKitGTK this
+    // leaves Wry's script queue pending forever, including the page-control API.
+    let explicit_blank = (url.as_str() == "about:blank").then(|| url.clone());
     if let Ok(page) = current(app, &id) {
         if page.profile_id != profile { return Err("다른 프로필의 웹 탭입니다.".into()); }
         if app.get_webview(&label(&id)).is_some() { return Ok(json!(page)); }
@@ -94,10 +98,10 @@ async fn create(app: &tauri::AppHandle, caller: &Webview, command: &Value) -> Re
         if store.is_none() { *store = Some(Arc::new(platform::permissions::Store::load(app.path().app_local_data_dir().map_err(|error| error.to_string())?.join("browser-profiles").join("site-permissions.json"))?)); }
         store.as_ref().unwrap().clone()
     };
-    let page = Page { page_id: id.clone(), profile_id: profile.clone(), navigation_revision: 0, capabilities, url: url.to_string(), title: url.to_string(), loading: true, control, popups: Vec::new(), error: None, interaction_at: 0, visible: false,
+    let page = Page { page_id: id.clone(), profile_id: profile.clone(), navigation_revision: 0, capabilities, url: url.to_string(), title: if url.as_str() == "about:blank" { "새 탭".into() } else { url.to_string() }, loading: true, control, popups: Vec::new(), error: None, interaction_at: 0, visible: false,
         download_directory: None, downloads: Vec::new(), permissions: Vec::new(), permission_support: platform::permission_support(), site_permissions: permission_store.list(&profile), permission_store };
     pages.lock().unwrap().insert(id.clone(), page);
-    let nav_pages = pages.clone(); let nav_id = id.clone(); let nav_app = app.clone();
+    let nav_app = app.clone();
     let load_pages = pages.clone(); let load_id = id.clone();
     let title_pages = pages.clone(); let title_id = id.clone();
     let popup_pages = pages.clone(); let popup_id = id.clone(); let popup_app = app.clone();
@@ -107,15 +111,20 @@ async fn create(app: &tauri::AppHandle, caller: &Webview, command: &Value) -> Re
         .disable_drag_drop_handler()
         .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
         .on_navigation(move |url| {
-            if allowed_url(&nav_app, url.as_str()).is_err() { return false; }
-            platform::invalidate(&nav_id);
-            if let Some(page) = nav_pages.lock().unwrap().get_mut(&nav_id) { page.navigation_revision += 1; page.url = url.to_string(); page.loading = true; page.error = None; }
-            true
+            // GTK invokes this policy callback for subframes too. They must never replace
+            // the tab URL or invalidate observations of the top-level document.
+            allowed_url(&nav_app, url.as_str()).is_ok()
         })
         .on_page_load(move |_, event| {
-            if let Some(page) = load_pages.lock().unwrap().get_mut(&load_id) { page.loading = matches!(event.event(), PageLoadEvent::Started); page.url = event.url().to_string(); }
+            let started = matches!(event.event(), PageLoadEvent::Started);
+            if started { platform::invalidate(&load_id); }
+            if let Some(page) = load_pages.lock().unwrap().get_mut(&load_id) {
+                if started { page.navigation_revision += 1; page.error = None; }
+                page.loading = started; page.url = event.url().to_string();
+                if page.url == "about:blank" { page.title = "새 탭".into(); }
+            }
         })
-        .on_document_title_changed(move |_, title| { if let Some(page) = title_pages.lock().unwrap().get_mut(&title_id) { page.title = title.chars().take(300).collect(); } })
+        .on_document_title_changed(move |_, title| { if let Some(page) = title_pages.lock().unwrap().get_mut(&title_id) { page.title = if page.url == "about:blank" { "새 탭".into() } else { title.chars().take(300).collect() }; } })
         .on_new_window(move |url, _| {
             if allowed_url(&popup_app, url.as_str()).is_ok() {
                 if let Some(page) = popup_pages.lock().unwrap().get_mut(&popup_id) {
@@ -165,6 +174,9 @@ async fn create(app: &tauri::AppHandle, caller: &Webview, command: &Value) -> Re
     match result {
         Ok(view) => {
             if let Err(error) = platform::attach(&view, pages.clone(), id.clone()) { let _ = view.close(); pages.lock().unwrap().remove(&id); return Err(error); }
+            if let Some(url) = explicit_blank {
+                if let Err(error) = view.navigate(url) { let _ = view.close(); pages.lock().unwrap().remove(&id); return Err(error.to_string()); }
+            }
             view.hide().map_err(|e| e.to_string())?; Ok(json!(current(app, &id)?))
         }
         Err(error) => { pages.lock().unwrap().remove(&id); Err(error.to_string()) }
@@ -312,8 +324,10 @@ pub async fn shared_browser(app: tauri::AppHandle, webview: Webview, command: Va
                     let number = |key: &str| position[key].as_f64().filter(|n| n.is_finite()).unwrap_or(0.0);
                     let width = number("width"); let height = number("height");
                     if width <= 1.0 || height <= 1.0 { let _ = view.hide(); continue; }
-                    view.set_bounds(tauri::Rect { position: LogicalPosition::new(number("x"), number("y")).into(), size: LogicalSize::new(width, height).into() }).map_err(|e| e.to_string())?;
                     view.show().map_err(|e| e.to_string())?;
+                    // GTK ignores allocation while hidden. Restore visibility before
+                    // applying this pane's current size, not its previous allocation.
+                    platform::set_bounds(&view, number("x"), number("y"), width, height)?;
                     if position["focus"] == true { view.set_focus().map_err(|e| e.to_string())?; }
                 } else { view.hide().map_err(|e| e.to_string())?; }
                 if let Some(record) = app.state::<SharedBrowser>().pages.lock().unwrap().get_mut(&page.page_id) { record.visible = position.is_some(); }

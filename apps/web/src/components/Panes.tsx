@@ -5,14 +5,15 @@ import { Icon } from "./Icon.tsx";
 import { activeTab, tabsOf } from "../tabs.ts";
 import "../styles/panes.css";
 
-export type PaneHead = { title: string; icon: ReactNode; hint?: string; item: PaneItem | null };
+export type PaneHead = { title: string; icon: ReactNode; hint?: string; kindLabel?: string; project?: string; status?: string; item: PaneItem | null };
 export type PaneScope = { theme: string; bubble: string; frame: boolean; glow: string; style: CSSProperties };
 const SIDE_LABEL = { left: "왼쪽으로 분할", right: "오른쪽으로 분할", top: "위로 분할", bottom: "아래로 분할", center: "이 칸에 열기" };
 
 /** The tree determines geometry; editors retain the same parent and React key when moved. */
-export function PaneLayout<V>({ layout, enabled, maximized = false, onResize, onFocus, onClose, onMove, onSplit, onDrop, head, scope, effectOf, render, onNarrow, tabBar }: {
+export function PaneLayout<V>({ layout, enabled, maximized = false, onMaximize, onResize, onFocus, onClose, onMove, onSplit, onDrop, head, scope, effectOf, render, onNarrow, tabBar }: {
   layout: Layout<V>; enabled: boolean;
   maximized?: boolean;
+  onMaximize?: (id: PaneId) => void;
   onResize: (id: string, ratio: number) => void;
   onFocus: (id: PaneId) => void;
   onClose: (id: PaneId) => void;
@@ -34,9 +35,9 @@ export function PaneLayout<V>({ layout, enabled, maximized = false, onResize, on
   for (const pane of layout.panes) mountedTabs.current.add(activeTab(pane).id);
   const split = layout.panes.length > 1;
   const tree = treeOf(live ? resizeSplit(layout, live.id, live.ratio) : layout);
-  const minimum = minimumSize(tree);
+  const minimum = minimumSize(tree, !!layout.grid);
   const narrow = split && size.width > 0 && (size.width < minimum.width || size.height < minimum.height);
-  const geometry = paneGeometry(tree, size.width, size.height);
+  const geometry = paneGeometry(tree, size.width, size.height, !!layout.grid);
   const whole = { left: 0, top: 0, ...size };
   const collapsed = narrow || maximized;
   const boxes = collapsed ? { [layout.focus]: whole } : geometry.panes;
@@ -49,7 +50,7 @@ export function PaneLayout<V>({ layout, enabled, maximized = false, onResize, on
     observer?.observe(element);
     return () => observer?.disconnect();
   }, []);
-  useEffect(() => onNarrow?.(narrow), [narrow, onNarrow]);
+  useEffect(() => onNarrow?.(collapsed), [collapsed, onNarrow]);
   useEffect(() => () => cancelResize.current?.(), []);
   useDropArea(enabled ? {
     element: () => host.current,
@@ -102,7 +103,7 @@ export function PaneLayout<V>({ layout, enabled, maximized = false, onResize, on
     window.addEventListener("pointercancel", cancel); window.addEventListener("blur", cancel);
   };
   const takesFocus = (target: EventTarget | null) => !(target instanceof Element && target.closest(".pane-head-tools,.pane-narrow"));
-  return <div ref={host} className={`panes recursive${split && !narrow ? " two" : ""}${narrow ? " narrow" : ""}`}>
+  return <div ref={host} data-grid={layout.grid} data-dense={layout.grid && !collapsed ? "true" : undefined} className={`panes recursive${split && !narrow ? " two" : ""}${narrow ? " narrow" : ""}`}>
     {layout.panes.flatMap((group) => tabsOf(group).filter((tab) => mountedTabs.current.has(tab.id)).map((tab) => ({ group, tab }))).sort((a, b) => a.tab.id.localeCompare(b.tab.id)).map(({ group, tab }) => {
       const pane = { ...group, view: tab.view, workId: tab.workId, sessionId: tab.sessionId };
       const active = activeTab(group).id === tab.id;
@@ -117,11 +118,13 @@ export function PaneLayout<V>({ layout, enabled, maximized = false, onResize, on
         }} onPointerDown={(event) => {
           if (takesFocus(event.target)) paneDrag.press({ item: { kind: "pane", id: pane.id }, label: title.title }, event);
         }}>
-          <span className="pane-head-icon" aria-hidden>{title.icon}</span><span className="pane-head-title">{title.title}</span>
+          <span className="pane-head-icon" aria-hidden>{title.icon}</span><span className="pane-head-title">{title.project ? <small>{title.project}</small> : null}{title.title}</span>
+          {title.status ? <span className="pane-status">{title.status}</span> : null}
           {collapsed ? <span className="pane-narrow"><select aria-label="표시할 칸" value={layout.focus} onChange={(event) => onFocus(event.target.value)}>
             {layout.panes.map((entry, index) => <option key={entry.id} value={entry.id}>{index + 1}. {head(entry).title}</option>)}
           </select></span> : null}
           <span className="pane-head-tools">
+            {onMaximize ? <button type="button" className="icon-button small" aria-label={maximized ? "전체 칸 보기" : "이 칸 확대"} title={maximized ? "전체 칸 보기" : "이 칸 확대"} onClick={() => onMaximize(pane.id)}><Icon name={maximized ? "grid" : "expandAll"} size={14} /></button> : null}
             {enabled ? <>
               <button type="button" className="icon-button small" disabled={layout.panes.length >= MAX_PANES} aria-label="오른쪽으로 분할" title="오른쪽으로 분할" onClick={() => onSplit(pane.id, "right")}><Icon name="columns" size={14} /></button>
               <button type="button" className="icon-button small" disabled={layout.panes.length >= MAX_PANES} aria-label="아래로 분할" title="아래로 분할" onClick={() => onSplit(pane.id, "bottom")}><Icon name="rows" size={14} /></button>

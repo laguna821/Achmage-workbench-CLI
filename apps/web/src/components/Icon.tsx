@@ -1,127 +1,221 @@
-// Small inline icon set (stroke icons, 1.75px), so the UI ships no icon font.
+// Lucide SVG source (ISC). See ../vendor/lucide/LICENSE and mapping.json.
+import type { ReactNode } from "react";
 
-const PATHS = {
-  trash: "M4 6h16M9 6V3.5h6V6M6 6l1 14h10l1-14M10 10v6M14 10v6",
-  chevronDown: "M6 9l6 6 6-6",
-  chevronUp: "M6 15l6-6 6 6",
-  chevronRight: "M9 6l6 6-6 6",
-  chevronLeft: "M15 6l-6 6 6 6",
-  chevronsLeft: "M12 6l-6 6 6 6M18 6l-6 6 6 6",
-  chevronsRight: "M6 6l6 6-6 6M12 6l6 6-6 6",
-  // Fold or unfold a whole tree: two chevrons closing on a line, or opening away from it.
-  collapseAll: "M8 4l4 4 4-4M8 20l4-4 4 4M4.5 12h15",
-  expandAll: "M8 8l4-4 4 4M8 16l4 4 4-4M4.5 12h15",
-  // Two panes: a page split down the middle ("오른쪽에 열기"), and the two trading places.
-  columns: "M4.5 5h15a1 1 0 011 1v12a1 1 0 01-1 1h-15a1 1 0 01-1-1V6a1 1 0 011-1zM12 5v14M15 12h3M16.5 10.5v3",
-  swap: "M19.5 8.5H5M8.5 5L5 8.5 8.5 12M4.5 15.5H19M15.5 12l3.5 3.5-3.5 3.5",
-  arrowLeft: "M19 12H5M11 18l-6-6 6-6",
-  arrowRight: "M5 12h14M13 6l6 6-6 6",
-  send: "M4 12l16-8-6 16-2.5-6.5L4 12z",
-  plus: "M12 5v14M5 12h14",
-  check: "M5 12.5l4.5 4.5L19 7.5",
-  shield: "M12 3l7 3v5c0 4.6-3 8.4-7 10-4-1.6-7-5.4-7-10V6l7-3z",
-  bolt: "M13 3L5 13.5h6L10 21l8-10.5h-6L13 3z",
-  refresh: "M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6",
-  home: "M4 10.5L12 4l8 6.5V20h-5.5v-5.5h-5V20H4z",
-  unlock: "M6 11h12v10H6zM8.5 11V7.5a3.5 3.5 0 0 1 6.8-1.2",
-  x: "M6 6l12 12M18 6L6 18",
-  folder: "M3.5 7.5a2 2 0 012-2h4l2 2.5h7a2 2 0 012 2v7.5a2 2 0 01-2 2h-13a2 2 0 01-2-2z",
-  file: "M7 3.5h7l4.5 4.5v12a1 1 0 01-1 1h-10.5a1 1 0 01-1-1v-15.5a1 1 0 011-1zM13.5 3.5v5h5",
-  search: "M11 18a7 7 0 100-14 7 7 0 000 14zM20 20l-4-4",
-  terminal: "M4.5 6.5l5 5.5-5 5.5M12 18h7.5",
-  edit: "M4 20h4L19 9a2.8 2.8 0 00-4-4L4 16v4z",
-  globe: "M12 21a9 9 0 100-18 9 9 0 000 18zM3 12h18M12 3c2.5 2.7 3.5 5.7 3.5 9s-1 6.3-3.5 9c-2.5-2.7-3.5-5.7-3.5-9s1-6.3 3.5-9z",
-  grid: "M4.5 4.5h6v6h-6zM13.5 4.5h6v6h-6zM4.5 13.5h6v6h-6zM13.5 13.5h6v6h-6z",
-  sidebar: "M4 5.5h16a1 1 0 011 1v11a1 1 0 01-1 1H4a1 1 0 01-1-1v-11a1 1 0 011-1zM9 5.5v13",
-  sun: "M12 16.5a4.5 4.5 0 100-9 4.5 4.5 0 000 9zM12 2.5v2M12 19.5v2M4.5 12h-2M21.5 12h-2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4",
-  moon: "M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z",
-  tool: "M14.5 6.5a4 4 0 00-5.4 5L3.5 17v3.5H7l5.5-5.6a4 4 0 005.2-5.3l-2.6 2.6-2.4-.6-.6-2.4z",
-  chat: "M4.5 5.5h15a1 1 0 011 1v9a1 1 0 01-1 1h-8l-4.5 3.5v-3.5h-2.5a1 1 0 01-1-1v-9a1 1 0 011-1z",
-  project: "M4 6.5A1.5 1.5 0 015.5 5h13A1.5 1.5 0 0120 6.5v11a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 014 17.5zM4 9.5h16",
-  page: "M7 3.5h7l4.5 4.5v12a1 1 0 01-1 1h-10.5a1 1 0 01-1-1v-15.5a1 1 0 011-1zM13.5 3.5v5h5M9 13h6M9 16.5h6",
-  mindmap: "M12 9.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5zM14.3 11l4.2-3M14.3 13l4.2 3M9.7 11L5.5 8M9.7 13l-4.2 3",
-  pin: "M9 3.5h6l-1 5.5 3.5 3v1.5h-11V12L10 9 9 3.5zM12 14v6.5",
-  archive: "M3.5 5h17v4.5h-17zM5 9.5v9a1 1 0 001 1h12a1 1 0 001-1v-9M10 13.5h4",
-  copy: "M9 9h10.5v11.5H9zM5.5 15V4h10.5",
-  download: "M12 4v11M7 10.5l5 5 5-5M5 20h14",
-  bell: "M6 16.5V11a6 6 0 0112 0v5.5l1.5 2h-15zM10 20.5a2 2 0 004 0",
-  clock: "M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2",
-  eye: "M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12zM12 15a3 3 0 100-6 3 3 0 000 6z",
-  folderOpen: "M3.5 17.5v-10a2 2 0 012-2h4l2 2.5h6a2 2 0 012 2v1M3.5 17.5l2.6-6a1.5 1.5 0 011.4-1h12.6l-2.8 7a1.5 1.5 0 01-1.4 1h-11a1.4 1.4 0 01-1.4-1z",
-  restore: "M4.5 12a7.5 7.5 0 107.5-7.5 7.8 7.8 0 00-5.5 2.3L4.5 9M4.5 4.5V9H9",
-  palette: "M12 3.5a8.5 8.5 0 000 17c1.2 0 1.8-.9 1.4-1.9-.4-1 .2-2.1 1.3-2.1h2a3.8 3.8 0 003.8-4.5A8.5 8.5 0 0012 3.5zM8 12.5h.01M9.5 8h.01M14.5 8h.01",
-  markdown: "M3.5 6.5h17v11h-17zM6.5 14.5v-5l2.5 3 2.5-3v5M15.5 9.5v5M13.5 12.5l2 2 2-2",
-  image: "M4.5 5h15a1 1 0 011 1v12a1 1 0 01-1 1h-15a1 1 0 01-1-1V6a1 1 0 011-1zM8.75 11a1.75 1.75 0 100-3.5 1.75 1.75 0 000 3.5zM20.5 15l-5-5-11 9",
-  link: "M4 8h15M15.5 4.5L19 8l-3.5 3.5M20 16H5M8.5 12.5L5 16l3.5 3.5",
-  openNew: "M13.5 4.5h6v6M19.5 4.5l-8 8M17.5 13.5v5a1 1 0 01-1 1h-11a1 1 0 01-1-1v-11a1 1 0 011-1h5",
-  // Folder icons of the vault mirror (Notebook Navigator's icon ids map to these).
-  mail: "M4 6.5h16a1 1 0 011 1v9a1 1 0 01-1 1H4a1 1 0 01-1-1v-9a1 1 0 011-1zM3.5 7.5l8.5 6 8.5-6",
-  info: "M12 21a9 9 0 100-18 9 9 0 000 18zM12 11v5.5M12 7.5v.5",
-  // Callout kinds (Obsidian's set, drawn in the same stroke).
-  alert: "M10.3 4.3L2.9 17.2A2 2 0 004.6 20.2h14.8a2 2 0 001.7-3L13.7 4.3a2 2 0 00-3.4 0zM12 9.5v4.5M12 17.2v.3",
-  help: "M12 21a9 9 0 100-18 9 9 0 000 18zM9.6 9.4a2.5 2.5 0 014.8.9c0 1.7-2.4 2.2-2.4 3.7M12 17v.3",
-  quote: "M5 7.5h5v5H7.2c0 2 .8 3.3 2.3 4M14 7.5h5v5h-2.8c0 2 .8 3.3 2.3 4",
-  list: "M9 6.5h11M9 12h11M9 17.5h11M4.5 6.5h.3M4.5 12h.3M4.5 17.5h.3",
-  flame: "M12 21c-3.6 0-6-2.5-6-5.7 0-3 2.2-4.6 3.3-7.3.5 1.7 1.4 2.6 2.4 3 .2-3.2 1.8-5.6 3.8-7.5-.2 3.2 4.5 5.8 4.5 11.1 0 3.6-3.1 6.4-8 6.4z",
-  bug: "M8.5 9.5a3.5 3.5 0 017 0V15a3.5 3.5 0 01-7 0zM12 10v8.5M4.5 13h4M15.5 13h4M5.5 8l3 2M18.5 8l-3 2M5.5 18.5l3-2M18.5 18.5l-3-2M9.5 6.2L8 4.5M14.5 6.2L16 4.5",
-  clipboard: "M9 3.5h6v3H9zM9 5H6.5a1 1 0 00-1 1v13.5a1 1 0 001 1h11a1 1 0 001-1V6a1 1 0 00-1-1H15M9 12h6M9 15.5h4",
-  book: "M12 6.5c-1.8-1.4-4.6-2-8-1.8v13c3.4-.2 6.2.4 8 1.8 1.8-1.4 4.6-2 8-1.8v-13c-3.4-.2-6.2.4-8 1.8zM12 6.5v13",
-  star: "M12 3.8l2.5 5.2 5.7.8-4.1 4 1 5.6L12 16.7l-5.1 2.7 1-5.6-4.1-4 5.7-.8z",
-  tag: "M3.5 12.2V4.5a1 1 0 011-1h7.7l8.3 8.3a1.5 1.5 0 010 2.1l-6.2 6.2a1.5 1.5 0 01-2.1 0zM8 8h.01",
-  run: "M13.5 5.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM7 21l3.5-6.5L13 17v4M10.5 14.5L12 9l-3 1.5-1.5 3M12 9l2.5 2.5 3 .5",
-  bulb: "M9 18h6M10 21h4M12 3a6 6 0 00-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0012 3z",
-  external: "M14 4h6v6M20 4l-9 9M18 13.5V19a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5.5",
-  // Property kinds (the project's properties panel).
-  calendar: "M5 5.5h14a1 1 0 011 1V19a1 1 0 01-1 1H5a1 1 0 01-1-1V6.5a1 1 0 011-1zM4 10h16M8.5 3.5v4M15.5 3.5v4",
-  hash: "M9.5 4l-2 16M16.5 4l-2 16M5 9h15M4 15h15",
-  checkSquare: "M5 4h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1zM8 12.5l3 3 5-6",
-  text: "M5 6h14M12 6v13M9 19h6",
-  stage: "M12 21a9 9 0 100-18 9 9 0 000 18zM12 16a4 4 0 100-8 4 4 0 000 8z",
-  // The navigator: panes stacked ("위아래"), projects of subfolders too ("하위 포함"), sorting.
-  rows: "M4.5 5h15a1 1 0 011 1v12a1 1 0 01-1 1h-15a1 1 0 01-1-1V6a1 1 0 011-1zM3.5 10.5h17",
-  layers: "M12 3.5l8.5 4.5-8.5 4.5L3.5 8zM3.5 12l8.5 4.5 8.5-4.5M3.5 16l8.5 4.5 8.5-4.5",
-  sort: "M7.5 4.5v15M4 16l3.5 3.5L11 16M16.5 19.5v-15M13 8l3.5-3.5L20 8",
-  // A gear: eight teeth around a ring (settings).
-  settings:
-    "M10.31 5.21L10.72 2.89A9.2 9.2 0 0 1 13.28 2.89L13.69 5.21A7 7 0 0 1 15.61 6L17.54 4.65A9.2 9.2 0 0 1 19.35 6.46L18 8.39A7 7 0 0 1 18.79 10.31L21.11 10.72A9.2 9.2 0 0 1 21.11 13.28L18.79 13.69A7 7 0 0 1 18 15.61L19.35 17.54A9.2 9.2 0 0 1 17.54 19.35L15.61 18A7 7 0 0 1 13.69 18.79L13.28 21.11A9.2 9.2 0 0 1 10.72 21.11L10.31 18.79A7 7 0 0 1 8.39 18L6.46 19.35A9.2 9.2 0 0 1 4.65 17.54L6 15.61A7 7 0 0 1 5.21 13.69L2.89 13.28A9.2 9.2 0 0 1 2.89 10.72L5.21 10.31A7 7 0 0 1 6 8.39L4.65 6.46A9.2 9.2 0 0 1 6.46 4.65L8.39 6A7 7 0 0 1 10.31 5.21ZM12 15a3 3 0 100-6 3 3 0 000 6z",
-} as const;
+const GLYPHS = {
+  trash: <><path d="M10 11v6" />
+  <path d="M14 11v6" />
+  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+  <path d="M3 6h18" />
+  <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></>,
+  chevronDown: <><path d="m6 9 6 6 6-6" /></>,
+  chevronUp: <><path d="m18 15-6-6-6 6" /></>,
+  chevronRight: <><path d="m9 18 6-6-6-6" /></>,
+  chevronLeft: <><path d="m15 18-6-6 6-6" /></>,
+  chevronsLeft: <><path d="m11 17-5-5 5-5" />
+  <path d="m18 17-5-5 5-5" /></>,
+  chevronsRight: <><path d="m6 17 5-5-5-5" />
+  <path d="m13 17 5-5-5-5" /></>,
+  collapseAll: <><path d="M3 5h8" />
+  <path d="M3 12h8" />
+  <path d="M3 19h8" />
+  <path d="m15 8 3-3 3 3" />
+  <path d="m15 16 3 3 3-3" /></>,
+  expandAll: <><path d="M3 5h8" />
+  <path d="M3 12h8" />
+  <path d="M3 19h8" />
+  <path d="m15 5 3 3 3-3" />
+  <path d="m15 19 3-3 3 3" /></>,
+  columns: <><rect width="18" height="18" x="3" y="3" rx="2" />
+  <path d="M12 3v18" /></>,
+  swap: <><path d="m16 3 4 4-4 4" />
+  <path d="M20 7H4" />
+  <path d="m8 21-4-4 4-4" />
+  <path d="M4 17h16" /></>,
+  arrowLeft: <><path d="m12 19-7-7 7-7" />
+  <path d="M19 12H5" /></>,
+  arrowRight: <><path d="M5 12h14" />
+  <path d="m12 5 7 7-7 7" /></>,
+  send: <><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z" />
+  <path d="m21.854 2.147-10.94 10.939" /></>,
+  plus: <><path d="M5 12h14" />
+  <path d="M12 5v14" /></>,
+  check: <><path d="M20 6 9 17l-5-5" /></>,
+  shield: <><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" /></>,
+  bolt: <><path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z" /></>,
+  refresh: <><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+  <path d="M21 3v5h-5" />
+  <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+  <path d="M8 16H3v5" /></>,
+  home: <><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" />
+  <path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></>,
+  unlock: <><circle cx="12" cy="16" r="1" />
+  <rect width="18" height="12" x="3" y="10" rx="2" />
+  <path d="M7 10V7a5 5 0 0 1 9.33-2.5" /></>,
+  x: <><path d="M18 6 6 18" />
+  <path d="m6 6 12 12" /></>,
+  folder: <><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /></>,
+  file: <><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+  <path d="M14 2v5a1 1 0 0 0 1 1h5" /></>,
+  search: <><path d="m21 21-4.34-4.34" />
+  <circle cx="11" cy="11" r="8" /></>,
+  terminal: <><path d="M12 19h8" />
+  <path d="m4 17 6-6-6-6" /></>,
+  edit: <><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+  <path d="m15 5 4 4" /></>,
+  globe: <><circle cx="12" cy="12" r="10" />
+  <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+  <path d="M2 12h20" /></>,
+  grid: <><rect width="7" height="7" x="3" y="3" rx="1" />
+  <rect width="7" height="7" x="14" y="3" rx="1" />
+  <rect width="7" height="7" x="14" y="14" rx="1" />
+  <rect width="7" height="7" x="3" y="14" rx="1" /></>,
+  sidebar: <><rect width="18" height="18" x="3" y="3" rx="2" />
+  <path d="M9 3v18" /></>,
+  sun: <><circle cx="12" cy="12" r="4" />
+  <path d="M12 2v2" />
+  <path d="M12 20v2" />
+  <path d="m4.93 4.93 1.41 1.41" />
+  <path d="m17.66 17.66 1.41 1.41" />
+  <path d="M2 12h2" />
+  <path d="M20 12h2" />
+  <path d="m6.34 17.66-1.41 1.41" />
+  <path d="m19.07 4.93-1.41 1.41" /></>,
+  moon: <><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401" /></>,
+  tool: <><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.106-3.105c.32-.322.863-.22.983.218a6 6 0 0 1-8.259 7.057l-7.91 7.91a1 1 0 0 1-2.999-3l7.91-7.91a6 6 0 0 1 7.057-8.259c.438.12.54.662.219.984z" /></>,
+  chat: <><path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z" /></>,
+  project: <><rect width="18" height="18" x="3" y="3" rx="2" />
+  <path d="M3 9h18" />
+  <path d="M9 21V9" /></>,
+  page: <><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+  <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+  <path d="M10 9H8" />
+  <path d="M16 13H8" />
+  <path d="M16 17H8" /></>,
+  mindmap: <><rect x="16" y="16" width="6" height="6" rx="1" />
+  <rect x="2" y="16" width="6" height="6" rx="1" />
+  <rect x="9" y="2" width="6" height="6" rx="1" />
+  <path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3" />
+  <path d="M12 12V8" /></>,
+  pin: <><path d="M12 17v5" />
+  <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" /></>,
+  archive: <><rect width="20" height="5" x="2" y="3" rx="1" />
+  <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+  <path d="M10 12h4" /></>,
+  copy: <><rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></>,
+  download: <><path d="M12 15V3" />
+  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+  <path d="m7 10 5 5 5-5" /></>,
+  bell: <><path d="M10.268 21a2 2 0 0 0 3.464 0" />
+  <path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326" /></>,
+  clock: <><circle cx="12" cy="12" r="10" />
+  <path d="M12 6v6l4 2" /></>,
+  eye: <><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
+  <circle cx="12" cy="12" r="3" /></>,
+  folderOpen: <><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" /></>,
+  restore: <><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+  <path d="M3 3v5h5" />
+  <path d="M12 7v5l4 2" /></>,
+  palette: <><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z" />
+  <circle cx="13.5" cy="6.5" r=".5" fill="currentColor" />
+  <circle cx="17.5" cy="10.5" r=".5" fill="currentColor" />
+  <circle cx="6.5" cy="12.5" r=".5" fill="currentColor" />
+  <circle cx="8.5" cy="7.5" r=".5" fill="currentColor" /></>,
+  markdown: <><path d="M4 12.15V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2h-3.35" />
+  <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+  <path d="m5 16-3 3 3 3" />
+  <path d="m9 22 3-3-3-3" /></>,
+  image: <><rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+  <circle cx="9" cy="9" r="2" />
+  <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></>,
+  link: <><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></>,
+  openNew: <><path d="M15 3h6v6" />
+  <path d="M10 14 21 3" />
+  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></>,
+  mail: <><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7" />
+  <rect x="2" y="4" width="20" height="16" rx="2" /></>,
+  info: <><circle cx="12" cy="12" r="10" />
+  <path d="M12 16v-4" />
+  <path d="M12 8h.01" /></>,
+  alert: <><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
+  <path d="M12 9v4" />
+  <path d="M12 17h.01" /></>,
+  help: <><circle cx="12" cy="12" r="10" />
+  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+  <path d="M12 17h.01" /></>,
+  quote: <><path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z" />
+  <path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z" /></>,
+  list: <><path d="M3 5h.01" />
+  <path d="M3 12h.01" />
+  <path d="M3 19h.01" />
+  <path d="M8 5h13" />
+  <path d="M8 12h13" />
+  <path d="M8 19h13" /></>,
+  flame: <><path d="M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4" /></>,
+  bug: <><path d="M12 20v-9" />
+  <path d="M14 7a4 4 0 0 1 4 4v3a6 6 0 0 1-12 0v-3a4 4 0 0 1 4-4z" />
+  <path d="M14.12 3.88 16 2" />
+  <path d="M21 21a4 4 0 0 0-3.81-4" />
+  <path d="M21 5a4 4 0 0 1-3.55 3.97" />
+  <path d="M22 13h-4" />
+  <path d="M3 21a4 4 0 0 1 3.81-4" />
+  <path d="M3 5a4 4 0 0 0 3.55 3.97" />
+  <path d="M6 13H2" />
+  <path d="m8 2 1.88 1.88" />
+  <path d="M9 7.13V6a3 3 0 1 1 6 0v1.13" /></>,
+  clipboard: <><rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
+  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /></>,
+  book: <><path d="M12 5v16" />
+  <path d="M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z" /></>,
+  star: <><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></>,
+  tag: <><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" />
+  <circle cx="7.5" cy="7.5" r=".5" fill="currentColor" /></>,
+  run: <><path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z" />
+  <path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z" />
+  <path d="M16 17h4" />
+  <path d="M4 13h4" /></>,
+  bulb: <><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" />
+  <path d="M9 18h6" />
+  <path d="M10 22h4" /></>,
+  external: <><path d="M15 3h6v6" />
+  <path d="M10 14 21 3" />
+  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></>,
+  calendar: <><path d="M8 2v3" />
+  <path d="M16 2v3" />
+  <rect x="3" y="3" width="18" height="18" rx="2" />
+  <path d="M3 9h18" /></>,
+  hash: <><line x1="4" x2="20" y1="9" y2="9" />
+  <line x1="4" x2="20" y1="15" y2="15" />
+  <line x1="10" x2="8" y1="3" y2="21" />
+  <line x1="16" x2="14" y1="3" y2="21" /></>,
+  checkSquare: <><path d="M21 10.656V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.344" />
+  <path d="m9 11 3 3L22 4" /></>,
+  text: <><path d="M12 4v16" />
+  <path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2" />
+  <path d="M9 20h6" /></>,
+  stage: <><circle cx="12" cy="12" r="1" />
+  <circle cx="12" cy="12" r="10" /></>,
+  rows: <><rect width="18" height="18" x="3" y="3" rx="2" />
+  <path d="M3 12h18" /></>,
+  layers: <><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z" />
+  <path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12" />
+  <path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17" /></>,
+  sort: <><path d="m21 16-4 4-4-4" />
+  <path d="M17 20V4" />
+  <path d="m3 8 4-4 4 4" />
+  <path d="M7 4v16" /></>,
+  settings: <><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" />
+  <circle cx="12" cy="12" r="3" /></>,
+  dots: <><circle cx="12" cy="12" r="1" />
+  <circle cx="19" cy="12" r="1" />
+  <circle cx="5" cy="12" r="1" /></>,
+  stop: <><rect width="18" height="18" x="3" y="3" rx="2" /></>,
+} satisfies Record<string, ReactNode>;
 
-export type IconName = keyof typeof PATHS | "dots" | "stop";
-
-/** An icon name that came as data (the vault mirror's folder icons), or null when this set lacks it. */
-export const iconName = (name: string | null | undefined): IconName | null => (name && (name in PATHS || name === "dots" || name === "stop") ? (name as IconName) : null);
+export type IconName = keyof typeof GLYPHS;
+export const iconName = (name: string | null | undefined): IconName | null => name && Object.hasOwn(GLYPHS, name) ? name as IconName : null;
 
 export function Icon({ name, size = 16, className }: { name: IconName; size?: number; className?: string }) {
-  if (name === "dots") {
-    return (
-      <svg width={size} height={size} viewBox="0 0 24 24" className={className} aria-hidden>
-        <circle cx="5" cy="12" r="1.6" fill="currentColor" />
-        <circle cx="12" cy="12" r="1.6" fill="currentColor" />
-        <circle cx="19" cy="12" r="1.6" fill="currentColor" />
-      </svg>
-    );
-  }
-  if (name === "stop") {
-    return (
-      <svg width={size} height={size} viewBox="0 0 24 24" className={className} aria-hidden>
-        <rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor" />
-      </svg>
-    );
-  }
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.75}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
-      <path d={PATHS[name]} />
-    </svg>
-  );
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true" focusable="false">{GLYPHS[name]}</svg>;
 }

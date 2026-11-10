@@ -3,7 +3,7 @@ import type { Artifact, Folder, NavigatorPrefs, NavLayout, NavSelection, NavShor
 import type { Api } from "../api.ts";
 import type { State } from "../state.ts";
 import { holds, linkPair, moveFor, nudge, toggleWork, treeRows, workTreeRows, type Row, type SortMode, type TreeOpenState } from "../tree.ts";
-import { lookStyle, NEUTRAL_LOOK, useAppearance } from "../appearance.ts";
+import { useAppearance } from "../appearance.ts";
 import { comboLabel, shortcutsOf } from "../shortcuts.ts";
 import { Icon, type IconName } from "./Icon.tsx";
 import type { MenuEntry, MenuRequest } from "./ContextMenu.tsx";
@@ -40,11 +40,8 @@ import { onNavigatorFocus, takeNavigatorFocus } from "./nav/focus.ts";
 import type { NavDialog, NavShared, SidebarActions, Toast } from "./nav/shared.ts";
 import "../styles/navigator.css";
 
-// The sidebar: a two-pane navigator shaped like Obsidian's Notebook Navigator. The navigation pane
-// holds 지금, 바로가기, the project folders (folders only), tags, saved views and the vault; the
-// list pane lists the projects of what is selected, one row per project like a note. Stacked on a
-// narrow window, or the single tree as before ("한 칸"). New session, search and home stay on top,
-// the plan limits and the archive at the foot.
+// A single project navigator is the default. Each project opens its overview; disclosure
+// reveals its grouped chats, web AI and documents. Two-pane layouts remain opt-in.
 
 export type { SidebarActions } from "./nav/shared.ts";
 export { rowItem } from "./nav/rows.tsx";
@@ -54,9 +51,9 @@ const MAX_WIDTH = 480;
 const NO_SHORTCUTS: NavShortcut[] = [];
 
 const LAYOUTS: { id: NavLayout; label: string; icon: IconName }[] = [
-  { id: "dual", label: "두 칸", icon: "columns" },
-  { id: "stacked", label: "위아래", icon: "rows" },
-  { id: "tree", label: "한 칸 (트리)", icon: "list" },
+  { id: "tree", label: "프로젝트 목록", icon: "list" },
+  { id: "dual", label: "탐색 + 목록 (고급)", icon: "columns" },
+  { id: "stacked", label: "탐색 / 목록 (고급)", icon: "rows" },
 ];
 
 const record = (value: unknown): Record<string, unknown> => (value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {});
@@ -672,7 +669,7 @@ export function Sidebar({
   // ── head menus ──────────────────────────────────────────────────────────────────────────
   const layoutItems = (): MenuEntry[] => [
     ...LAYOUTS.map((entry) => ({ kind: "item" as const, label: entry.label, icon: entry.icon, checked: layout === entry.id, onSelect: () => saveNav({ layout: entry.id }) })),
-    { kind: "item", label: "창 너비에 맞추기", hint: "넓으면 두 칸", checked: nav.layout === null, onSelect: () => saveNav({ layout: undefined }) },
+    { kind: "item", label: "기본 배치로 되돌리기", hint: "프로젝트 목록", checked: nav.layout === null, onSelect: () => saveNav({ layout: undefined }) },
   ];
   const menuAt = (button: HTMLElement, title: string, items: MenuEntry[]) => {
     const box = button.getBoundingClientRect();
@@ -852,7 +849,7 @@ export function Sidebar({
       ref={asideRef}
       className={`sidebar look-scope nav-${layout}`}
       data-screen="S06"
-      aria-label="세션과 작업"
+      aria-label="프로젝트 탐색"
       onContextMenu={event => {
         if (event.defaultPrevented || !(event.target instanceof Element) || event.target.closest("input,textarea,[contenteditable=true]")) return;
         if (!event.target.closest(".list-pane,.side-tree-section")) return;
@@ -862,7 +859,7 @@ export function Sidebar({
       }}
       data-theme={appTheme}
       data-layout={layout}
-      style={{ ...lookStyle(NEUTRAL_LOOK[appTheme]), width: totalWidth, ...(layout === "dual" ? ({ "--nav-width": `${navWidth}px`, "--list-width": `${listWidth}px` } as CSSProperties) : {}) }}
+      style={{ width: totalWidth, ...(layout === "dual" ? ({ "--nav-width": `${navWidth}px`, "--list-width": `${listWidth}px` } as CSSProperties) : {}) }}
     >
       <div className="side-head">
         <div className="side-head-row">
@@ -872,16 +869,6 @@ export function Sidebar({
             else actions.newSession({});
           }} title={`새로 만들기 (${comboLabel(keys.newWork)})`}>
             <Icon name="plus" size={15} /> 새로 만들기
-          </button>
-          <button
-            type="button"
-            className="icon-button small side-layout"
-            title={`사이드바 배치: ${LAYOUTS.find((entry) => entry.id === layout)!.label}`}
-            aria-label="사이드바 배치"
-            aria-haspopup="menu"
-            onClick={(event) => menuAt(event.currentTarget, "사이드바 배치", layoutItems())}
-          >
-            <Icon name={LAYOUTS.find((entry) => entry.id === layout)!.icon} size={16} />
           </button>
           <button type="button" className="icon-button small" title="사이드바 메뉴" aria-label="사이드바 메뉴" aria-haspopup="menu" onClick={(event) => sideMenu(event.currentTarget)}>
             <Icon name="dots" size={16} />
@@ -912,16 +899,25 @@ export function Sidebar({
       ) : (
         <div className="side-scroll">
           <HomeRow shared={shared} />
-          <NowSection shared={shared} />
-          <ShortcutsSection shared={shared} />
           <TreeSection shared={shared} rows={rows} treeRef={treeRef} onSort={openSort} />
-          <ViewsSection openMenu={actions.openMenu} folded={Boolean(nav.sections.views)} onFold={(folded) => saveNav({ sections: { ...nav.sections, views: folded } })} menuExtras={(view) => [viewShortcutEntry(shared, view.id)]} />
-          <VaultSection theme={appTheme} openMenu={actions.openMenu} />
+          <details className="side-disclosure side-activity">
+            <summary>활동 및 바로가기</summary>
+            <NowSection shared={shared} />
+            <ShortcutsSection shared={shared} />
+          </details>
+          <details className="side-disclosure side-library">
+            <summary>라이브러리</summary>
+            <ViewsSection openMenu={actions.openMenu} folded={Boolean(nav.sections.views)} onFold={(folded) => saveNav({ sections: { ...nav.sections, views: folded } })} menuExtras={(view) => [viewShortcutEntry(shared, view.id)]} />
+            <VaultSection theme={appTheme} openMenu={actions.openMenu} />
+          </details>
         </div>
       )}
 
       <div className="side-foot">
-        <UsageCard providers={state.providers} onRefresh={actions.refreshUsage} />
+        <details className="side-disclosure side-usage">
+          <summary>사용량</summary>
+          <UsageCard providers={state.providers} onRefresh={actions.refreshUsage} />
+        </details>
         <button type="button" className="side-row" onClick={actions.openArchive} title="보관한 세션·작업·폴더">
           <Icon name="archive" size={15} className="side-row-icon" />
           <span className="side-row-label">보관함</span>

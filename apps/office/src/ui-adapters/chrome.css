@@ -1,0 +1,137 @@
+/* Loaded into the editor document and same-origin HWP studio only. Selectors
+   are substituted by chrome.ts; authored content is excluded at both levels. */
+@font-face {
+  font-family: "Pretendard Variable";
+  src: url(__WB_FONT_URL__) format("truetype");
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+}
+__WB_ROOT__ {
+  --wb-ui-font: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, "Noto Sans KR", sans-serif;
+  --wb-ui-bg: #fff;
+  --wb-ui-group: #f2f2f7;
+  --wb-ui-text: #000;
+  --wb-ui-muted: #6c6c70;
+  --wb-ui-line: #d1d1d6;
+  --wb-ui-focus: #1e6ef4;
+  --wb-ui-on-accent: #fff;
+  --wb-ui-hover: #f2f2f7;
+  --wb-ui-selected: color-mix(in srgb, #1e6ef4 10%, #fff);
+  --wb-ui-target: 28px;
+}
+__WB_ROOT__[data-wb-office-theme="dark"] {
+  --wb-ui-bg: #2c2c2e;
+  --wb-ui-group: #1c1c1e;
+  --wb-ui-text: #fff;
+  --wb-ui-muted: #aeaeb2;
+  --wb-ui-line: #3a3a3c;
+  --wb-ui-focus: #5cb8ff;
+  --wb-ui-on-accent: #1c1c1e;
+  --wb-ui-hover: #3a3a3c;
+  --wb-ui-selected: color-mix(in srgb, #5cb8ff 14%, #2c2c2e);
+}
+__WB_CHROME__ {
+  /* Rebind renderer chrome tokens locally. Never change renderer :root tokens:
+     those can also supply page, canvas, selection and export styling. */
+  --gs-font-sans: var(--wb-ui-font);
+  --font-ui: var(--wb-ui-font);
+  --text-small: 13px;
+  --text-caption: 13px;
+  --radius-6: 8px;
+  --radius-16: 18px;
+  --color-text-primary: var(--wb-ui-text);
+  --color-bg-page: var(--wb-ui-bg);
+  --color-bg-subtle: var(--wb-ui-group);
+  --color-border-default: var(--wb-ui-line);
+  --color-border-strong: var(--wb-ui-line);
+  --color-border-brand: var(--wb-ui-focus);
+  --color-btn-primary: var(--wb-ui-focus);
+  --color-btn-primary-hover: var(--wb-ui-focus);
+  --color-btn-primary-text: var(--wb-ui-on-accent);
+  --color-ai-action: var(--wb-ui-focus);
+  --color-ai-action-hover: var(--wb-ui-focus);
+  --color-ai-action-text: var(--wb-ui-on-accent);
+  --surface: var(--wb-ui-bg);
+  --surface-raised: var(--wb-ui-bg);
+  --chrome-bg: var(--wb-ui-bg);
+  --text: var(--wb-ui-text);
+  --text-primary: var(--wb-ui-text);
+  --text-secondary: var(--wb-ui-muted);
+  --border: var(--wb-ui-line);
+  --border-strong: var(--wb-ui-line);
+  --hover: var(--wb-ui-hover);
+  --active-bg: var(--wb-ui-selected);
+  --accent: var(--wb-ui-focus);
+  --accent-dark: var(--wb-ui-focus);
+  --accent-soft: var(--wb-ui-selected);
+  --color-surface: var(--wb-ui-bg);
+  --color-surface-raised: var(--wb-ui-bg);
+  --color-text: var(--wb-ui-text);
+  --color-text-secondary: var(--wb-ui-muted);
+  --color-text-muted: var(--wb-ui-muted);
+  --ui-border: var(--wb-ui-line);
+  --ui-border-light: var(--wb-ui-line);
+  --ui-hover: var(--wb-ui-hover);
+  --ui-hover-strong: var(--wb-ui-hover);
+  --ui-active: var(--wb-ui-selected);
+  color: var(--wb-ui-text) !important;
+  background: var(--wb-ui-bg) !important;
+  border-color: var(--wb-ui-line) !important;
+  font-family: var(--wb-ui-font) !important;
+  font-size: 13px !important;
+  line-height: 16px;
+}
+__WB_CHROME__ :is(button, input, select, textarea, [role="button"], [role="menuitem"], [role="tab"])__WB_SAFE__ {
+  box-sizing: border-box;
+  min-height: var(--wb-ui-target);
+  min-width: var(--wb-ui-target);
+  border-radius: 8px;
+  font-family: var(--wb-ui-font);
+  font-size: 13px;
+  line-height: 16px;
+  accent-color: var(--wb-ui-focus);
+}
+/* Font samples and color swatches retain their actual typeface/color. */
+__WB_CHROME__ :is(button, [role="button"], [role="menuitem"], [role="tab"]):not([style*="color"], [style*="background"], [style*="font-family"], [class*="swatch"], [class*="color-cell"], [class*="palette"])__WB_SAFE__ {
+  color: var(--wb-ui-text);
+}
+__WB_CHROME__ :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]), select, textarea)__WB_SAFE__ {
+  color: var(--wb-ui-text);
+  background-color: var(--wb-ui-bg);
+  border-color: var(--wb-ui-line);
+  padding-inline: 8px;
+}
+__WB_CHROME__ :is(input, textarea)__WB_SAFE__::placeholder { color: var(--wb-ui-muted); opacity: 1; }
+__WB_CHROME__ :is(button, [role="button"], [role="menuitem"], [role="tab"]):hover:not(:disabled, [aria-disabled="true"], [style*="background"], [class*="swatch"], [class*="palette"])__WB_SAFE__ { background-color: var(--wb-ui-hover); }
+__WB_CHROME__ :is(button, [role="button"], [role="menuitem"], [role="tab"]):active:not(:disabled, [aria-disabled="true"])__WB_SAFE__ { box-shadow: inset 0 0 0 1px var(--wb-ui-focus); }
+__WB_CHROME__ :is(.ribbon-tab.active, .rb-btn.active, .rb-btn.on, .ribbon-tool.is-current, .sb-btn.active, [aria-pressed="true"], [role="tab"][aria-selected="true"])__WB_SAFE__ {
+  color: var(--wb-ui-focus);
+  background-color: var(--wb-ui-selected);
+  box-shadow: inset 0 -2px var(--wb-ui-focus);
+}
+__WB_CHROME__ :is(button, [role="button"], [role="menuitem"], input, select, textarea, [tabindex]):focus-visible__WB_SAFE__ { outline: 2px solid var(--wb-ui-focus); outline-offset: 2px; }
+__WB_CHROME__ :is(button:disabled, [aria-disabled="true"])__WB_SAFE__ { color: var(--wb-ui-muted); cursor: default; }
+__WB_CHROME__ :is(.ribbon-group-label, .rb-menu-group-label, .file-menu-key, .status-item, .status-msg, .sb-field-label, .tb-label)__WB_SAFE__ { color: var(--wb-ui-muted); font-size: 13px; }
+__WB_CHROME__ :is(.ribbon-tabs, .ribbon-body, .ribbon-group-items, .dialog-actions, .modal-actions, .dialog-footer)__WB_SAFE__ { gap: 4px; }
+__WB_CHROME__:is(.status-bar, .epub-status, #status-bar) { min-height: var(--wb-ui-target); background: var(--wb-ui-group) !important; }
+__WB_CHROME__:is(.file-menu, .ctx-menu, .ctx-submenu, .rb-menu, .menu-dropdown, .tb-split-menu, .sb-dropdown-menu, .sheet-tab-menu, .context-menu, .slash-menu, .md-block-menu, .md-theme-menu) { border-radius: 12px; }
+__WB_CHROME__:is(.modal, .dialog-wrap, .pdf-modal, .mm-modal, .bt-dialog, .redact-dialog, .memo-modal, .print-dialog, .font-dialog, .zoom-dialog) { border-radius: 18px; }
+__WB_CHROME__ :is(.modal-title, .dialog-title, .pdf-modal-title, .mm-modal-title, .redact-dialog-title, .memo-modal-title)__WB_SAFE__ { font-size: 17px; line-height: 22px; font-weight: 600; color: var(--wb-ui-text); background: var(--wb-ui-bg); }
+@media (pointer: coarse) { __WB_ROOT__ { --wb-ui-target: 44px; } }
+@media (prefers-contrast: more) { __WB_ROOT__ { --wb-ui-line: var(--wb-ui-muted); } }
+@media (forced-colors: active) {
+  __WB_ROOT__ { --wb-ui-bg: Canvas; --wb-ui-group: Canvas; --wb-ui-text: CanvasText; --wb-ui-muted: CanvasText; --wb-ui-line: CanvasText; --wb-ui-focus: Highlight; --wb-ui-hover: Canvas; --wb-ui-selected: Canvas; }
+}
+@media (prefers-reduced-motion: reduce) { __WB_CHROME__, __WB_CHROME__ :is(button, input, select, [role="tab"])__WB_SAFE__ { transition: none; animation: none; } }
+
+/* File tabs are navigation; reserve a filled accent for an existing primary action. */
+__WB_CHROME__ :is(.ribbon-tab-file, .ribbon-file, .file-tab-wrap)__WB_SAFE__ { color: var(--wb-ui-text) !important; background: transparent !important; }
+__WB_CHROME__ :is(button.primary, .btn-primary, .primary-action, .dialog-btn-primary, .ai-send-btn:not(.ai-stop-btn)):not(.danger, .destructive):not(:disabled)__WB_SAFE__ {
+  color: var(--wb-ui-on-accent) !important;
+  background: var(--wb-ui-focus) !important;
+  border-color: var(--wb-ui-focus);
+  font-weight: 700;
+}
+__WB_CHROME__ :is(.ai-panel-title, .ai-input-box, .ai-input-footer, .ai-input-hint)__WB_SAFE__ { font-family: var(--wb-ui-font); }
+__WB_CHROME__ .ai-panel-title__WB_SAFE__ { font-size: 15px; line-height: 20px; font-weight: 600; }

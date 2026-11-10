@@ -260,7 +260,7 @@ function useImage(attachment: Attachment, active = true) {
       }
     }).catch(error => { if (live) setProblem(error instanceof Error ? error.message : "그림을 불러오지 못했습니다"); });
     return () => { live = false; lease.release(); };
-  }, [attachment.id, identity, active, attempt]);
+  }, [attachment.id, identity, active, attempt, host]);
   return { url, problem, retry: () => setAttempt(value => value + 1), failed: () => setProblem("그림을 표시하지 못했습니다") };
 }
 
@@ -274,9 +274,9 @@ function Thumb({ attachment, onOpen }: { attachment: Attachment; onOpen: () => v
   }, []);
   const image = useImage(attachment, visible);
   return (
-    <span className="attach-preview" ref={container}>
-      <button type="button" className="attach-thumb" onClick={onOpen} title={attachment.name} aria-label={`${attachment.name} 크게 보기`} disabled={!image.url || !!image.problem}>
-        {image.url && !image.problem ? <img src={image.url} alt={attachment.name} onError={image.failed} decoding="async" /> : <span className="attach-thumb-wait">{image.problem ? "그림 없음" : visible ? "불러오는 중…" : "그림"}</span>}
+    <span className="attach-preview" ref={container} data-state={image.problem ? "error" : image.url ? "ready" : "loading"}>
+      <button type="button" className="attach-thumb" onClick={onOpen} title={attachment.name} aria-label={`${attachment.name} 크게 보기`} aria-haspopup="dialog" aria-busy={!image.url && !image.problem} disabled={!image.url || !!image.problem}>
+        {image.url && !image.problem ? <img src={image.url} alt={attachment.name} onError={image.failed} decoding="async" /> : <span className="attach-thumb-wait" role="status">{image.problem ? <><Icon name="image" size={22} /><span>{image.problem}</span></> : <><span className="spinner" aria-hidden /><span>{visible ? "그림 불러오는 중…" : "그림"}</span></>}</span>}
       </button>
       {image.problem ? <button type="button" className="text-button attach-retry" onClick={image.retry} title={image.problem}>다시 불러오기</button> : null}
     </span>
@@ -286,8 +286,9 @@ function Thumb({ attachment, onOpen }: { attachment: Attachment; onOpen: () => v
 /** Inline Markdown images use the immutable message capture, never an arbitrary file URL. */
 export function MessageImage({ attachment, gallery }: { attachment: Attachment; gallery: Attachment[] }) {
   const [shown, setShown] = useState<number | null>(null);
-  return <span className="message-image"><Thumb attachment={attachment} onOpen={() => setShown(Math.max(0, gallery.indexOf(attachment)))} />
-    {shown !== null ? <Lightbox attachments={gallery} index={shown} onSelect={setShown} onClose={() => setShown(null)} /> : null}</span>;
+  const pictures = gallery.length ? gallery : [attachment];
+  return <span className="message-image"><Thumb attachment={attachment} onOpen={() => setShown(Math.max(0, pictures.findIndex(picture => picture.id === attachment.id)))} />
+    {shown !== null ? <Lightbox attachments={pictures} index={shown} onSelect={setShown} onClose={() => setShown(null)} /> : null}</span>;
 }
 
 /** The gallery retains its own blob while the source thumbnail scrolls out of view. */
@@ -298,7 +299,9 @@ function Lightbox({ attachments, index, onSelect, onClose }: { attachments: Atta
   const [host] = useState(attachmentHostId);
   useEffect(() => {
     const origin = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    close.current?.focus(); return () => { if (origin?.isConnected) origin.focus(); };
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    close.current?.focus(); return () => { document.body.style.overflow = overflow; if (origin?.isConnected) origin.focus(); };
   }, []);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -320,7 +323,7 @@ function Lightbox({ attachments, index, onSelect, onClose }: { attachments: Atta
     }}>
       <header><span>{attachment.name} · {index + 1}/{attachments.length}{attachment.reference ? " · 답변 당시 그림" : ""}</span>
         <button ref={close} type="button" onClick={onClose} aria-label="그림 닫기"><Icon name="x" /></button></header>
-      <div className="attach-gallery-image">{image.url && !image.problem ? <img src={image.url} alt={attachment.name} onError={image.failed} /> : <p>{image.problem ?? "그림을 불러오는 중…"}{image.problem ? <button type="button" onClick={image.retry}>다시 불러오기</button> : null}</p>}</div>
+      <div className="attach-gallery-image">{image.url && !image.problem ? <img src={image.url} alt={attachment.name} onError={image.failed} /> : <p role={image.problem ? "alert" : "status"}>{image.problem ?? "그림을 불러오는 중…"}{image.problem ? <button type="button" onClick={image.retry}>다시 불러오기</button> : null}</p>}</div>
       <footer><button type="button" disabled={attachments.length < 2} onClick={() => onSelect((index + attachments.length - 1) % attachments.length)}>이전 그림</button>
         <FileActions key={attachment.reference ? artifactCacheKey(attachment.reference) : attachment.id} attachment={attachment} host={host} />
         <button type="button" disabled={attachments.length < 2} onClick={() => onSelect((index + 1) % attachments.length)}>다음 그림</button></footer>

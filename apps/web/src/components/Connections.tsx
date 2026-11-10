@@ -4,6 +4,7 @@ import { usageText } from "../format.ts";
 import type { ThemePref } from "../theme.ts";
 import { BrowserEngine, BrowserInstall, BrowserLogin, type BrowserActions } from "./BrowserPill.tsx";
 import { EngineCard, type EngineActions } from "./EngineSetup.tsx";
+import { Segmented } from "./ui/Hig.tsx";
 import { toolState } from "./Onboarding.tsx";
 
 const THEME_LABEL: Record<ThemePref, string> = { system: "시스템", light: "라이트", dark: "다크" };
@@ -199,29 +200,12 @@ export function Connections({
       {imageUpload}
       <div className="menu-divider" />
       <div className="menu-label">화면</div>
-      <div className="segmented theme-choice" role="radiogroup" aria-label="화면">
-        {(["system", "light", "dark"] as const).map((pref) => (
-          <button key={pref} type="button" role="radio" aria-checked={themePref === pref} className={themePref === pref ? "active" : ""} onClick={() => onTheme(pref)}>
-            {THEME_LABEL[pref]}
-          </button>
-        ))}
-      </div>
+      <Segmented label="화면" className="theme-choice" value={themePref} onChange={onTheme} options={(["system", "light", "dark"] as const).map(value => ({ value, label: THEME_LABEL[value] }))} />
       <button type="button" className="text-button" onClick={onAppearance}>
         외형 설정 · 엔진별 색과 글자…
       </button>
       <div className="menu-label">앱을 열면</div>
-      <div className="segmented theme-choice" role="radiogroup" aria-label="앱을 열면">
-        {(
-          [
-            ["home", "홈"],
-            ["last", "마지막 작업"],
-          ] as const
-        ).map(([value, label]) => (
-          <button key={value} type="button" role="radio" aria-checked={startScreen === value} className={startScreen === value ? "active" : ""} onClick={() => onStartScreen(value)}>
-            {label}
-          </button>
-        ))}
-      </div>
+      <Segmented label="앱을 열면" className="theme-choice" value={startScreen} onChange={onStartScreen} options={[{ value: "home", label: "홈" }, { value: "last", label: "마지막 작업" }]} />
       <label className="check-row switch-row" data-gallery="uiverse:Toggle-switches/zjssun_friendly-sheep-29" data-component="toggle">
         <input type="checkbox" checked={brandMotion} onChange={(event) => onBrandMotion(event.target.checked)} />
         홈 로고 움직임

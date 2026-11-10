@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { APPEARANCE_VERSION, DEFAULT_APPEARANCE, NEUTRAL_LOOK, readAppearance } from "./appearance.ts";
+import { APPEARANCE_VERSION, DEFAULT_APPEARANCE, NEUTRAL_LOOK, onColor, readAppearance } from "./appearance.ts";
 
 // Looks stored before the design pass carry the old defaults wholesale (saving one change saves
 // every look). Those values take today's defaults; what the user changed stays; looks stored
@@ -34,6 +34,12 @@ const storedBefore = () => ({
 });
 
 describe("readAppearance", () => {
+  it("keeps primary text readable on both theme blues and custom mid-tone colors", () => {
+    expect(onColor("#005ac1")).toBe("#ffffff");
+    expect(onColor("#0091ff")).toBe("#000000");
+    expect(onColor("#5cb8ff")).toBe("#000000");
+    expect(onColor("#777777")).toBe("#000000");
+  });
   it("gives old default values today's defaults", () => {
     const read = readAppearance(storedBefore());
     for (const provider of ["claude", "codex"] as const) {
@@ -43,10 +49,27 @@ describe("readAppearance", () => {
       }
     }
     expect(read.claude.light.palette.accent).toBe(DEFAULT_APPEARANCE.claude.light.palette.accent);
-    expect(read.codex.light.palette.text).toBe("#0e1726");
+    expect(read.codex.light.palette.text).toBe("#000000");
     expect(read.codex.light.bubble).toBe("soft");
-    expect(read.claude.dark.bubble).toBe("rail");
+    expect(read.claude.dark.bubble).toBe("soft");
     expect(read.v).toBe(APPEARANCE_VERSION);
+  });
+
+  it("migrates installed v2 defaults while preserving custom fonts and colors", () => {
+    const stored = { ...storedBefore(), v: 2 };
+    stored.codex.light.palette.text = "#0e1726";
+    stored.codex.light.glow = "off";
+    stored.codex.light.radius = 12;
+    stored.claude.dark.font = "custom:My Font";
+    stored.claude.dark.palette.accent = "#ff00aa";
+    const read = readAppearance(stored);
+    expect(read.codex.light.font).toBe("pretendard");
+    expect(read.codex.light.palette.accent).toBe("#1e6ef4");
+    expect(read.codex.light.palette.text).toBe("#000000");
+    expect(read.codex.light.frame).toBe(false);
+    expect(read.claude.dark.font).toBe("custom:My Font");
+    expect(read.claude.dark.palette.accent).toBe("#ff00aa");
+    expect(readAppearance(read)).toEqual(read);
   });
 
   it("keeps what the user changed", () => {
@@ -77,7 +100,7 @@ describe("readAppearance", () => {
     expect(read.codex.light).toEqual(DEFAULT_APPEARANCE.codex.light);
     expect(read.claude.dark.glow).toBe("off");
     // The neutral frame is not the Claude dark look: no pink in the sidebar or menus.
-    expect(NEUTRAL_LOOK.dark.palette.accent).not.toBe(DEFAULT_APPEARANCE.claude.dark.palette.accent);
+    expect(NEUTRAL_LOOK.dark.palette.accent).toBe(DEFAULT_APPEARANCE.claude.dark.palette.accent);
     expect(NEUTRAL_LOOK.light.palette.bg).not.toBe(DEFAULT_APPEARANCE.codex.light.palette.bg);
   });
 });

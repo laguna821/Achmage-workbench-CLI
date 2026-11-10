@@ -547,6 +547,8 @@ export class SessionManager {
       updateSession: (sessionId, patch) => this.sink.updateSession(sessionId, patch),
       publish: (status) => this.bus.publish({ type: "browser.status", status }),
       pageControl: id => this.sharedBrowser.generation(id),
+      hasPage: id => Boolean(this.sharedBrowser.agentPage(id)),
+      openPage: (id, url) => this.sharedBrowser.openAgentPage(id, url),
       pageCommand: (id, requestId, command, args, control) => this.sharedBrowser.agent(id, requestId, command, args, control),
     });
   }
@@ -1250,7 +1252,8 @@ export class SessionManager {
     const page = this.sharedBrowser.get(pageId);
     if (page.status !== "ready") throw new HttpError(409, "browser_interrupted", "웹 페이지를 먼저 열어 주세요.");
     if (page.sessionId) return this.requireSession(page.sessionId);
-    let parent = parentSessionId ? this.requireSession(parentSessionId) : null;
+    const parentIdFromPage = page.agentSessionId ?? parentSessionId;
+    let parent = parentIdFromPage ? this.requireSession(parentIdFromPage) : null;
     const parentId = parent?.pageAgent?.parentSessionId ?? parent?.documentAgent?.parentSessionId;
     if (parent?.pageAgent || parent?.documentAgent) parent = parentId ? this.requireSession(parentId) : null;
     if (!parent) {

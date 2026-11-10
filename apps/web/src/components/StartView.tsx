@@ -5,7 +5,7 @@ import { entryClient, pickedWork } from "../entry.ts";
 import { folderPath, type State } from "../state.ts";
 import { readHomeMode, type HomeMode } from "../overview.ts";
 import { workHidden } from "../tree.ts";
-import { Wordmark } from "./BrandMark.tsx";
+import { BrowseStart } from "./BrowseStart.tsx";
 import { Composer } from "./Composer.tsx";
 import { HomeModes } from "./HomeModes.tsx";
 import { Icon } from "./Icon.tsx";
@@ -13,7 +13,8 @@ import { MenuItem, Popover } from "./Popover.tsx";
 import { ModelPicker, type ModelChoice } from "./ModelPicker.tsx";
 import { EngineMark } from "./EngineMark.tsx";
 import { ProjectChoice } from "./ProjectChoice.tsx";
-import { accentStyle, fontStack, useAppearance } from "../appearance.ts";
+import { useAppearance } from "../appearance.ts";
+import { Segmented } from "./ui/Hig.tsx";
 
 const ENGINE_KEY = "workbench.lastEngine";
 
@@ -33,30 +34,7 @@ export function useEngineChoice() {
  * selected engine's look covers the screen, so the choice is visible before anything is sent.
  */
 export function EngineTabs({ value, onChange }: { value: Provider; onChange: (provider: Provider) => void }) {
-  const { lookOf, openMenu } = useAppearance();
-  return (
-    <div className="engine-tabs" role="radiogroup" aria-label="엔진">
-      {(["claude", "codex"] as const).map((provider) => {
-        const look = lookOf(provider);
-        return (
-          <button
-            key={provider}
-            type="button"
-            role="radio"
-            aria-checked={value === provider}
-            className="engine-tab"
-            style={{ ...accentStyle(look), fontFamily: fontStack(look.font) }}
-            onClick={() => onChange(provider)}
-            onContextMenu={(event) => openMenu(event, provider)}
-            title="오른쪽 클릭: 이 엔진의 외형"
-          >
-            <EngineMark provider={provider} size={19} />
-            {PROVIDER_LABEL[provider]}
-          </button>
-        );
-      })}
-    </div>
-  );
+  return <Segmented className="engine-tabs" value={value} onChange={onChange} label="엔진" options={(["claude", "codex"] as const).map(provider => ({ value: provider, label: <><EngineMark provider={provider} size={15} />{PROVIDER_LABEL[provider]}</> }))} />;
 }
 
 /** Pick a working folder: none (app-managed), a recent one, or a folder chosen in the system dialog. */
@@ -139,9 +117,6 @@ function FolderChoice({
   );
 }
 
-// The logo comes in once per launch (not each time home is opened again).
-let greeted = false;
-
 /**
  * Home: the brand, a new session right away (the input is ready at once, the logo only greets),
  * then what is going on across all works. With a folder picked from the sidebar it is just the
@@ -155,6 +130,7 @@ export function StartView({
   onClearFolder,
   onStart,
   onOpenWork,
+  onOpenBrowser,
   onOpenProject,
   onOpenSession,
   onOpenDoc,
@@ -166,7 +142,6 @@ export function StartView({
   pickFolder,
   engine,
   setEngine,
-  motion = true,
 }: {
   state: State;
   folderId: string | null;
@@ -176,6 +151,7 @@ export function StartView({
   /** `pick`: where the request goes ("auto": the folder's live work, else a new project). */
   onStart: (text: string, provider: Provider, cwd: string | null, choice: ModelChoice, pick: ProjectPick) => Promise<boolean>;
   onOpenWork: (work: Work) => void;
+  onOpenBrowser?: (address: string) => Promise<boolean>;
   /** A project's page (home "프로젝트"). */
   onOpenProject?: (work: Work) => void;
   /** With a request's item id (home "흐름"), the conversation opens at that request. */
@@ -194,14 +170,10 @@ export function StartView({
   /** The logo's short entrance (off in settings or with reduced motion). */
   motion?: boolean;
 }) {
-  const [greet] = useState(() => {
-    const first = !greeted;
-    greeted = true;
-    return first && motion;
-  });
   const { openMenu } = useAppearance();
   const [cwd, setCwd] = useState<string | null>(null);
   const [choice, setChoice] = useState<ModelChoice>({ model: null, effort: null });
+  const [overviewOpen, setOverviewOpen] = useState(false);
   // "같은 폴더 = 같은 프로젝트": a folder that already has a live work sends there unless picked otherwise.
   const client = useMemo(() => entryClient(api), [api]);
   const [pick, setPick] = useState<ProjectPick>({ kind: "auto" });
@@ -237,9 +209,7 @@ export function StartView({
   return (
     <main className={`start-view${board ? " with-board" : ""}`} onContextMenu={(event) => openMenu(event, engine)}>
       <div className="column start-inner">
-        <h1 className={`home-brand${greet ? " greet" : ""}`}>
-          <Wordmark className="home-wordmark" title="Achmage" />
-        </h1>
+        <h1 className="home-title">무엇을 시작할까요?</h1>
         {path.length ? (
           <div className="start-folder">
             <Icon name="folder" size={14} />
@@ -249,6 +219,7 @@ export function StartView({
             </button>
           </div>
         ) : null}
+        <BrowseStart onSearch={onOpenBrowser} autoFocus={autoFocus} initialMode="ask">
         <EngineTabs
           value={engine}
           onChange={(next) => {
@@ -258,7 +229,7 @@ export function StartView({
         />
         <Composer
           draftKey={draftKey ?? `new:${folderId ?? "root"}`}
-          placeholder={target ? "새 세션의 첫 요청을 입력하세요" : "새 작업의 첫 요청을 입력하세요"}
+          placeholder={target ? "이 프로젝트에서 할 일을 입력하세요" : "AI에게 맡길 일을 입력하세요"}
           busy={false}
           autoFocus={autoFocus}
           onSend={(text) => onStart(text, engine, cwd, choice, pick)}
@@ -279,9 +250,14 @@ export function StartView({
             </>
           }
         />
-        {board ? null : credit}
+        </BrowseStart>
+        {board ? <section className="home-recent" aria-label="최근 프로젝트">
+          <header><h2>이어서 하기</h2><button type="button" className="text-button" aria-expanded={overviewOpen} onClick={() => setOverviewOpen(!overviewOpen)}>{overviewOpen ? "간단히 보기" : "작업 모아보기"}<Icon name={overviewOpen ? "chevronUp" : "chevronDown"} size={14} /></button></header>
+          {!overviewOpen ? <div className="home-recent-list">{works.filter(work => !workHidden(state, work)).slice(0, 3).map(work => <button type="button" key={work.id} onClick={() => (onOpenProject ?? onOpenWork)(work)}><Icon name="project" size={18} /><span>{work.title}</span><Icon name="chevronRight" size={14} /></button>)}</div> : null}
+        </section> : null}
+        {!overviewOpen || !board ? credit : null}
       </div>
-      {board ? (
+      {board && overviewOpen ? (
         <HomeModes
           api={api}
           state={state}

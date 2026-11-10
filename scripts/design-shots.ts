@@ -14,7 +14,7 @@
 // takes the screens of another UI build (for before/after pairs).
 
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
@@ -25,6 +25,8 @@ import { makePkmVault } from "./fixtures/pkm-vault.ts";
 const args = process.argv.slice(2);
 const outDir = resolve(args.find((arg) => !arg.startsWith("--")) ?? join(tmpdir(), "wb-design-shots"));
 const option = (name: string) => args.find((arg) => arg.startsWith(`--${name}=`))?.split("=")[1];
+const higMode = args.includes("--hig");
+const auditSource = process.env.HIG_AUDIT_SOURCE ? readFileSync(process.env.HIG_AUDIT_SOURCE, "utf8") : null;
 const only = option("only")?.split(",").filter(Boolean) ?? null;
 const themes = (option("themes")?.split(",") ?? ["light", "dark"]).filter((theme) => theme === "light" || theme === "dark");
 const runChromium = !args.includes("--webkit-only");
@@ -44,7 +46,7 @@ const check = (step: string, ok: boolean, detail = "") => {
   console.log(`${ok ? "PASS" : "FAIL"} ${step}${detail ? ` — ${detail}` : ""}`);
 };
 
-const child = spawn(process.execPath, ["apps/host/src/main.ts"], {
+const child = spawn(process.execPath, [process.env.DESIGN_SHOTS_HOST_ENTRY ?? "apps/host/src/main.ts"], {
   env: {
     ...process.env,
     WORKBENCH_DATA_DIR: dataDir,
@@ -57,7 +59,9 @@ const child = spawn(process.execPath, ["apps/host/src/main.ts"], {
   },
   stdio: ["ignore", "pipe", "inherit"],
 });
-const ready = await new Promise<{ url: string; token: string }>((done) => {
+const ready = await new Promise<{ url: string; token: string }>((done, reject) => {
+  child.once("error", reject);
+  child.once("exit", code => reject(new Error(`Preview host exited before readiness (${code})`)));
   createInterface({ input: child.stdout! }).on("line", (line) => {
     if (line.startsWith("WORKBENCH_READY ")) done(JSON.parse(line.slice(16)));
   });
@@ -165,7 +169,7 @@ await idle(reviewer.id);
 
 const meeting = await newWork("학과 회의록 정리", null, dir("meeting"));
 const minutes = await api<Session>("POST", `/api/works/${meeting.id}/sessions`, { provider: "codex", purpose: "회의록", access: "auto" });
-await send(minutes.id, "견본: 회의록을 정리해 줘.");
+await send(minutes.id, higMode ? "스크린샷 견본: 회의록을 정리하고 그림을 확인해 줘." : "견본: 회의록을 정리해 줘.");
 await until(async () => (await session(minutes.id)).status !== "idle", 3000);
 await idle(minutes.id);
 
@@ -196,13 +200,14 @@ type Screen = { name: string; steps: Step[]; settle?: number; cleanup?: Step[]; 
 const PRELUDE = `
   window.__wb = window.__wb || {
     q(selector, text) {
-      const all = [...document.querySelectorAll(selector)];
+      const all = [...document.querySelectorAll(selector)].filter(element => element.getClientRects().length > 0);
       return text ? all.find((element) => element.textContent.includes(text)) : all[0];
     },
     click(selector, text) {
       const element = this.q(selector, text);
       if (!element) return false;
       element.scrollIntoView({ block: "nearest" });
+      element.focus({ preventScroll: true });
       element.click();
       return true;
     },
@@ -283,7 +288,10 @@ const INVARIANTS = {
 
 const row = (id: string) => `.sidebar [data-row-id="${id}"]`;
 // A session row, or the row of a work with one session (the tree shows no session row for it).
-const openSession = (id: string): Step[] => [{ js: `__wb.click('${row(id)}')`, wait: `__wb.has('.work-view .transcript')` }];
+const openSession = (id: string): Step[] => [
+  { js: "if (!__wb.has('.sidebar')) __wb.click('.topbar-left [aria-label=\"사이드바 열기\"]')", wait: `__wb.has('${row(id)}')` },
+  { js: `__wb.click('${row(id)}')`, wait: `__wb.has('.work-view .transcript')` },
+];
 const SCREENS: Screen[] = [
   {
     name: "01-home",
@@ -460,10 +468,39 @@ const SCREENS: Screen[] = [
     cleanup: [{ js: "window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Control', bubbles: true }))", wait: "!__wb.has('.switcher')" }],
   },
 ];
-const screens = only ? SCREENS.filter((screen) => only.some((name) => screen.name.includes(name))) : SCREENS;
-const VIEWPORT = { width: 1280, height: 860 };
+const gridSteps = (n: number): Step[] => [
+  { js: "if (!__wb.has('[aria-label=\"화면 배치\"]')) __wb.click('[aria-label=\"연결과 설정\"]')", wait: "__wb.has('[aria-label=\"화면 배치\"]')" },
+  { js: "__wb.click('[aria-label=\"화면 배치\"]')", wait: "__wb.has('.layout-options button')" },
+  { js: `__wb.click('.layout-options button', '${n}칸')`, wait: `document.querySelectorAll('.pane:not([hidden])').length === ${n}${n === 1 ? " && !document.querySelector('.panes')?.dataset.grid" : ""}` },
+];
+const HIG_SCREENS: Screen[] = [
+  ...SCREENS.filter(s => ["01-home", "03-work-codex", "07-search", "09-settings"].includes(s.name)).map(s => ({ ...s, steps: [...(s.name === "01-home" ? gridSteps(1) : []), ...s.steps.filter(step => !step.assert)] })),
+  { name: "hig-project", steps: [{ js: `__wb.click('${row(lecture.id)}')`, wait: "__wb.has('.project-view')" }] },
+  { ...SCREENS.find(screen => screen.name === "08-document")!, name: "hig-editor" },
+  { name: "hig-images", steps: [...openSession(minutes.id),
+    { wait: "__wb.has('.transcript .attach-preview')" },
+    { js: "document.querySelector('.transcript .attach-preview').scrollIntoView({block:'center'})", wait: "[...document.querySelectorAll('.transcript .attach-thumb img')].some(img => img.complete && img.naturalWidth > 0)" },
+  ] },
+  { name: "hig-image-gallery", steps: [
+    { js: "__wb.click('.transcript .attach-thumb:not(:disabled)')", wait: "__wb.has('.attach-lightbox img')" },
+    { wait: "document.querySelector('.attach-lightbox img')?.naturalWidth > 0" },
+  ], cleanup: [{ js: "__wb.click('[aria-label=\"그림 닫기\"]')", wait: "!__wb.has('.attach-lightbox')" }] },
+  { name: "hig-grid-nine", steps: gridSteps(9), viewport: { width: 1600, height: 1000 } },
+  { name: "hig-grid-focus", steps: [{ js: "__wb.click('[aria-label=\"이 칸 확대\"]')", wait: "document.querySelectorAll('.pane:not([hidden])').length === 1" }], viewport: { width: 1600, height: 1000 }, cleanup: [{ js: "__wb.click('[aria-label=\"전체 칸 보기\"]')" }] },
+  { name: "hig-work-links", steps: [{ js: "__wb.click('[aria-label=\"화면 배치\"]')" }, { js: "__wb.click('[role^=menuitem]', '작업 연결')", wait: "__wb.has('.work-link-dialog[open]')" },
+    { js: `const fields = document.querySelectorAll('.work-link-pair select'); fields[0].value = '${minutes.id}'; fields[0].dispatchEvent(new Event('change', {bubbles:true}));` },
+    { js: `const target = document.querySelectorAll('.work-link-pair select')[1]; target.value = '${reviewer.id}'; target.dispatchEvent(new Event('change', {bubbles:true}));` },
+    { js: "__wb.type('.work-link-dialog textarea', 'HIG 연결 확인: 요청을 정리해 줘.');" },
+    { js: "__wb.click('.work-link-dialog [type=submit]')", wait: "__wb.has('.work-link-dialog [role=status]', '요청을 보냈습니다') && __wb.has('.work-link-history')" },
+  ], cleanup: [{ js: "__wb.click('[aria-label=\"작업 연결 닫기\"]')" }] },
+  { name: "hig-narrow", steps: [...gridSteps(1), ...openSession(minutes.id)], viewport: { width: 744, height: 900 } },
+  { name: "hig-large-text", steps: [{ js: "document.documentElement.style.fontSize = '32px'" }], viewport: { width: 1000, height: 900 }, cleanup: [{ js: "document.documentElement.style.fontSize = ''" }] },
+];
+const availableScreens = higMode ? HIG_SCREENS : SCREENS;
+const screens = only ? availableScreens.filter((screen) => only.some((name) => screen.name.includes(name))) : availableScreens;
+const VIEWPORT = { width: Number(option("width")) || 1280, height: Number(option("height")) || 860 };
 const url = `${ready.url}/?token=${ready.token}`;
-const appReady = "__wb.has('.work-view, .start-view, .archive-view, .pkm-center')";
+const appReady = "__wb.has('.work-view, .start-view, .archive-view, .pkm-center, .document-view, .project-view, .browser-view')";
 
 async function chromiumPass() {
   const browser = await chromium.launch();
@@ -473,7 +510,7 @@ async function chromiumPass() {
       await setPrefs({ theme });
       const page = await browser.newPage({ viewport: VIEWPORT });
       page.on("console", (message) => message.type() === "error" && logs.push(`[${theme}] ${message.text().slice(0, 200)}`));
-      page.on("pageerror", (error) => logs.push(`[${theme} pageerror] ${error.message.slice(0, 200)}`));
+      page.on("pageerror", (error) => logs.push(`[${theme} pageerror] ${(error.stack ?? error.message).slice(0, 6000)}`));
       const run = (script: string) => page.evaluate(`(() => { ${PRELUDE}; ${script}; return true; })()`);
       const wait = (expression: string, timeout = 12_000) => page.waitForFunction(`(() => { ${PRELUDE}; return Boolean(${expression}); })()`, null, { timeout });
       const step = async (entry: Step) => {
@@ -494,7 +531,29 @@ async function chromiumPass() {
         try {
           await page.setViewportSize(screen.viewport ?? VIEWPORT);
           for (const entry of screen.steps) await step(entry);
+          if (args.includes("--close-sidebar")) await run("__wb.click('.sidebar-scrim')");
           await page.waitForTimeout(screen.settle ?? 500);
+          if (screen.name === "hig-editor") {
+            const editor = await page.locator(".office-frame").elementHandle();
+            const frame = await editor?.contentFrame();
+            if (!frame) throw new Error("Office editor iframe did not open");
+            await frame.waitForFunction(() => document.querySelector("style[data-wb-office-chrome]") && document.querySelector(".ribbon"));
+            const chrome = await frame.evaluate(async () => {
+              const fonts = await document.fonts.load('400 13px "Pretendard Variable"');
+              const asset = await fetch('/office/fonts/pretendard/PretendardVariable.ttf');
+              return { format: document.documentElement.dataset.wbOfficeFormat, family: getComputedStyle(document.querySelector(".ribbon")!).fontFamily, font: fonts.some(font => font.status === 'loaded'), asset: asset.status };
+            });
+            check(`Chromium ${theme} actual office chrome`, chrome.format === "markdown" && chrome.family.includes("Pretendard Variable") && chrome.font && chrome.asset === 200, JSON.stringify(chrome));
+          }
+          if (higMode) {
+            await page.evaluate(() => document.fonts.ready);
+            const font = await page.evaluate(() => document.fonts.check('400 17px "Pretendard Variable"'));
+            check(`Chromium ${theme} ${screen.name} bundled font`, font);
+            if (auditSource) {
+              await page.evaluate(() => { (window as Window & { HIG_AUDIT?: unknown }).HIG_AUDIT = { pxPerPt: 1, minTextPt: 10, minTarget: 28 }; });
+              writeFileSync(join(outDir, `audit-${theme}-${screen.name}.json`), JSON.stringify(await page.evaluate(auditSource), null, 2));
+            }
+          }
           await page.screenshot({ path: join(outDir, `chromium-${theme}-${screen.name}.png`) });
           for (const entry of screen.cleanup ?? []) await step(entry);
           check(`Chromium ${theme} ${screen.name}`, true);
@@ -555,9 +614,16 @@ function webkitPass() {
 }
 
 try {
-  if (runChromium) await chromiumPass();
-  if (runWebkit) webkitPass();
-  if (runChromium && !only) await motionCheck();
+  if (args.includes("--serve")) {
+    // An owned fixture host for external visual reviewers; never the user's app/data.
+    writeFileSync(join(outDir, "preview.json"), JSON.stringify({ url, host: ready.url, token: ready.token, sessions: { codex: codex.id, claude: claude.id, minutes: minutes.id } }, null, 2), { mode: 0o600 });
+    console.log(`Fixture preview ready: ${join(outDir, "preview.json")}`);
+    await new Promise<void>(done => { process.once("SIGTERM", done); process.once("SIGINT", done); });
+  } else {
+    if (runChromium) await chromiumPass();
+    if (runWebkit) webkitPass();
+    if (runChromium && !only && !higMode) await motionCheck();
+  }
 } finally {
   child.kill();
   for (const folder of [dataDir, worksDir, vaultDir, claudeConfig]) rmSync(folder, { recursive: true, force: true });

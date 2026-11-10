@@ -8,6 +8,7 @@ import { htmlAdapter } from "./ui-adapters/html.ts";
 import { mindmapAdapter } from "./ui-adapters/mindmap.ts";
 import { epubAdapter } from "./ui-adapters/epub.ts";
 import "./ui-adapters.css";
+import { installOfficeChrome } from "./ui-adapters/chrome.ts";
 
 export type OfficeUiFormat = "hangul" | "word" | "slides" | "sheets" | "markdown" | "pdf" | "html" | "mindmap" | "epub";
 export type UiTheme = "light" | "dark";
@@ -57,7 +58,7 @@ function rememberSelection(documents: Document[]): () => void {
   };
 }
 
-type MountedUi = { root: HTMLElement; theme: UiTheme; notify: (theme: UiTheme) => void };
+type MountedUi = { root: HTMLElement; theme: UiTheme; notify: (theme: UiTheme) => void; chrome: ReturnType<typeof installOfficeChrome> };
 const mounted = new Map<string, MountedUi>();
 
 /** Only UI state and the original theme event change. Document state stays in its renderer. */
@@ -65,6 +66,7 @@ export async function applyOfficeTheme(viewId: string, theme: UiTheme): Promise<
   const view = mounted.get(viewId);
   if (!view) throw new Error("편집기 UI가 아직 준비되지 않았습니다.");
   view.root.dataset.theme = theme;
+  view.chrome.setTheme(theme);
   if (view.theme !== theme) { view.theme = theme; view.notify(theme); }
   return { remounted: false };
 }
@@ -83,7 +85,8 @@ export function mountOfficeUi({ viewId, format, theme, onTheme, onCommand, doc =
   const summary = doc.createElement("p"); summary.className = "wb-office-command-status"; summary.setAttribute("role", "status");
   const results = doc.createElement("div"); results.className = "wb-office-command-list";
   dialog.append(header, input, summary, results); root.append(dialog); doc.body.append(root);
-  const view = { root, theme, notify: onTheme }; mounted.set(viewId, view);
+  const chrome = installOfficeChrome(doc, format, theme, () => controlDocuments(doc, adapter));
+  const view = { root, theme, notify: onTheme, chrome }; mounted.set(viewId, view);
   let restore = () => {}, commands: CommandPlacement[] = [], filtered: CommandPlacement[] = [], composing = false;
   const ids = new WeakMap<Element, string>(); let nextId = 0;
   const collect = (): CommandPlacement[] => {
@@ -158,10 +161,11 @@ export function mountOfficeUi({ viewId, format, theme, onTheme, onCommand, doc =
   bind(doc);
   const frames = new Map<HTMLIFrameElement, () => void>();
   const bindFrames = () => {
+    chrome.sync();
     if (!adapter.frames) return;
     for (const frame of doc.querySelectorAll<HTMLIFrameElement>(adapter.frames)) {
       if (frames.has(frame)) continue;
-      const loaded = () => { controlDocuments(doc, adapter).forEach(bind); };
+      const loaded = () => { chrome.sync(); controlDocuments(doc, adapter).forEach(bind); };
       frames.set(frame, loaded); frame.addEventListener("load", loaded);
     }
     controlDocuments(doc, adapter).forEach(bind);
@@ -174,5 +178,5 @@ export function mountOfficeUi({ viewId, format, theme, onTheme, onCommand, doc =
   dismiss.addEventListener("click", close);
   dialog.addEventListener("cancel", event => { event.preventDefault(); close(); });
   dialog.addEventListener("click", event => { if (event.target === dialog) { const box = dialog.getBoundingClientRect(); if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) close(); } });
-  return { show, dispose() { close(); observe?.disconnect(); frames.forEach((loaded, frame) => frame.removeEventListener("load", loaded)); documents.forEach(source => source.defaultView?.removeEventListener("keydown", keys, true)); root.remove(); if (mounted.get(viewId) === view) mounted.delete(viewId); } };
+  return { show, dispose() { close(); chrome.dispose(); observe?.disconnect(); frames.forEach((loaded, frame) => frame.removeEventListener("load", loaded)); documents.forEach(source => source.defaultView?.removeEventListener("keydown", keys, true)); root.remove(); if (mounted.get(viewId) === view) mounted.delete(viewId); } };
 }

@@ -9,8 +9,8 @@ import { folderHidden, workHidden } from "../../tree.ts";
 // Notebook Navigator's rules where they apply: a folder lists its own projects, or those of its
 // subfolders too ("하위 포함"); pinned ones come first; dates group into 오늘·어제·이번 주….
 
-/** Below this window width the navigator stacks its panes unless the person chose a layout. */
-export const WIDE_WINDOW = 1200;
+/** The desktop compact breakpoint; advanced layouts remain an explicit choice. */
+export const WIDE_WINDOW = 744;
 export const NAV_WIDTH = { min: 168, max: 360, initial: 216 };
 export const LIST_WIDTH = { min: 240, max: 520, initial: 300 };
 export const NAV_HEIGHT = { min: 0.15, max: 0.8, initial: 0.42 };
@@ -81,8 +81,8 @@ export function readNavigator(value: unknown): NavPrefs {
   };
 }
 
-/** The layout in use: the person's, else two panes on a wide window and stacked on a narrow one. */
-export const layoutFor = (prefs: Pick<NavPrefs, "layout">, windowWidth: number): NavLayout => prefs.layout ?? (windowWidth >= WIDE_WINDOW ? "dual" : "stacked");
+/** One project navigator by default. Saved advanced layouts remain available. */
+export const layoutFor = (prefs: Pick<NavPrefs, "layout">, _windowWidth: number): NavLayout => prefs.layout ?? "tree";
 
 /** The key a selection keeps its own sort under (Notebook Navigator sorts per folder). */
 export const selectionKey = (selection: NavSelection) => (selection.kind === "folder" ? selection.id : selection.kind === "tag" ? `tag:${selection.tag}` : selection.kind);

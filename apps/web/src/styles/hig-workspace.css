@@ -1,0 +1,80 @@
+.topbar { min-height: 48px; gap: 12px; padding-inline: 12px; background: var(--chrome-bg); border-bottom: 1px solid var(--chrome-line); color: var(--chrome-text); }
+.hig-app-name { color: var(--chrome-text); font: 600 15px/20px var(--font-ui); letter-spacing: 0; }
+.hig-home-icon { display: none; }
+.topbar-title { min-width: 0; min-height: 28px; gap: 8px; font-size: 13px; }
+.topbar-right { gap: 4px; }
+.compact-toolbar-menu { display: flex; flex-direction: column; gap: 4px; padding: 8px; border-bottom: 1px solid var(--line); }
+.compact-toolbar-menu > button, .compact-toolbar-menu .workspace-layout-tools > button { justify-content: flex-start; width: 100%; min-height: 36px; }
+.workspace-layout-inline > summary { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 4px 8px; cursor: pointer; list-style: none; }
+.workspace-layout-inline > summary::-webkit-details-marker { display: none; }
+.topbar-right > button { min-width: 28px; }
+.topbar-right button { white-space: nowrap; }
+.topbar .shell-create { color: var(--chrome-text); }
+.topbar .shell-attention-count { color: var(--chrome-text); }
+.app:has(.body.with-sidebar) > .topbar .shell-create { display: none; }
+.sidebar-scrim { position: absolute; inset: 0; background: var(--scrim); z-index: 19; border: 0; border-radius: 0; }
+.workspace-layout-tools .popover { min-width: 240px; }
+.layout-mini { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; width: 24px; height: 24px; margin-right: 8px; flex: 0 0 auto; }
+.layout-mini-1 { grid-template-columns: 1fr; }
+.layout-mini-9 { grid-template-columns: repeat(3, 1fr); }
+.layout-mini i { border: 1px solid currentColor; border-radius: 2px; }
+.panes.recursive { background: var(--chrome-bg); }
+.panes.recursive .pane { container-type: inline-size; container-name: work-pane; }
+.panes.recursive .pane-head { min-height: 40px; height: auto; padding: 4px 8px; gap: 8px; border-bottom: 1px solid var(--line); background: var(--chrome-bg); color: var(--chrome-text); }
+.pane-head-title { display: flex; flex-direction: column; min-width: 0; line-height: 1.4; font-size: 13px; }
+.pane-head-title small { font-size: 12px; color: var(--chrome-muted); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pane-status { color: var(--muted); font-size: 12px; flex: 0 1 auto; max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.panes[data-grid] .pane-head-tools > button:not([aria-label="이 칸 확대"]):not([aria-label="전체 칸 보기"]) { display: none; }
+.pane-start { display: flex; flex: 1; min-height: 0; flex-direction: column; align-items: stretch; gap: 12px; padding: 20px; overflow: auto; }
+.pane-start h2 { font: 600 15px/20px var(--font-ui); margin: 0; }
+.pane-start p { color: var(--muted); font-size: 13px; margin: 0; }
+.pane-start-projects { display: flex; flex-direction: column; gap: 4px; }
+.pane-start-projects button { display: flex; align-items: center; gap: 8px; text-align: left; border: 0; border-radius: 8px; padding: 8px; color: var(--text); background: transparent; }
+.pane-start-projects button:hover { background: var(--surface-muted); }
+.pane-start-projects button span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pane-start > .button { align-self: flex-start; }
+.work-link-dialog { width: min(720px, calc(100% - 32px)); max-height: calc(100dvh - 48px); overflow: auto; border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--elev-3); background: var(--surface); color: var(--text); padding: 24px; }
+.work-link-dialog::backdrop { background: var(--scrim); }
+.work-link-dialog > header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 24px; }
+.work-link-dialog h2 { font-size: 22px; margin: 0 0 8px; }
+.work-link-dialog p { font-size: 13px; color: var(--muted); margin: 0; }
+.work-link-dialog form { display: grid; gap: 16px; }
+.work-link-dialog label { display: grid; gap: 8px; font-size: 13px; }
+.work-link-pair { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center; }
+.work-link-pair label { min-width: 0; }
+.work-link-dialog select, .work-link-dialog textarea { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); padding: 8px 12px; }
+.work-link-dialog textarea { font-size: 15px; line-height: 1.6; resize: vertical; }
+.work-link-dialog footer { display: flex; align-items: center; gap: 12px; justify-content: flex-end; }
+.work-link-dialog footer span { margin-right: auto; font-size: 13px; color: var(--muted); }
+.work-link-history { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 16px; }
+.work-link-history h3 { font-size: 15px; margin: 0 0 8px; }
+.work-link-history article { padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.work-link-history strong { display: inline-flex; gap: 8px; align-items: center; font-weight: 500; }
+.work-link-history article > span { float: right; color: var(--muted); }
+.work-link-history article p { margin-top: 8px; white-space: pre-wrap; max-height: 120px; overflow: auto; }
+@container work-pane (max-width: 500px) {
+  .pane-head { gap: 4px; }
+  .pane-status { max-width: 72px; }
+  .start-view.with-board .start-inner { padding-block: 24px; }
+  .start-view .home-modes { display: none; }
+  .start-view .home-title { font-size: 17px; line-height: 22px; margin-bottom: 16px; }
+}
+@media (max-width: 743px) {
+  .hig-app-name, .shell-location-kind, .topbar-right .shell-create { display: none; }
+  .topbar { padding-inline: 8px; gap: 4px; }
+  .work-link-pair { grid-template-columns: 1fr; }
+  .work-link-pair > svg { display: none; }
+}
+@media (max-width: 1100px) {
+  .shell-connections > span { display: none; }
+}
+@media (max-width: 900px) {
+  .topbar { display: flex; align-items: center; height: auto; min-height: 48px; }
+  .topbar-title, .topbar .hig-app-name, .shell-location-kind { display: none; }
+  .hig-home-icon { display: block; }
+  .topbar-right { margin-left: auto; flex-wrap: nowrap; padding-bottom: 0; }
+  .topbar > .topbar-right > :is(.shell-connections,.shell-tasks,.shell-theme) { display: none; }
+  .topbar-left { min-width: 0; gap: 4px; }
+  .body { position: relative; }
+  .body > .sidebar { position: absolute; inset: 0 auto 0 0; z-index: 20; max-width: calc(100% - 48px); box-shadow: var(--elev-3); }
+}

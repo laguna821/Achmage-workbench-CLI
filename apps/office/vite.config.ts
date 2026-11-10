@@ -1,4 +1,4 @@
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath, URL } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Alias, type Plugin } from "vite";
@@ -400,6 +400,9 @@ function tiptapMountGrace(): Plugin {
 export default defineConfig({
   base: "/office/",
   plugins: [
+    { name: "workbench-office-ui-font", generateBundle() {
+      for (const file of ["PretendardVariable.ttf", "LICENSE.txt"]) this.emitFile({ type: "asset", fileName: `fonts/pretendard/${file}`, source: readFileSync(here(`../web/public/fonts/pretendard/${file}`)) });
+    } },
     { name: "workbench-sheets-generated-images", enforce: "pre", transform(code, id) {
       if (id !== `${ieum}/apps/sheets/src/preload/index.ts`) return;
       // The original renderer accepts generated file URLs. Its older preload still rejects

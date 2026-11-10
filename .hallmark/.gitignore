@@ -1,0 +1,6 @@
+# Local fixtures contain ephemeral access tokens; publish only curated evidence.
+*
+!.gitignore
+!preflight.json
+!triage.json
+!finish-review.md

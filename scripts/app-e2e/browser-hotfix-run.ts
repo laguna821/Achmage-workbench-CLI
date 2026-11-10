@@ -1,0 +1,104 @@
+// One actual Linux app flow. A real Codex turn must fill the human-visible native page.
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { createServer } from "node:http";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import type { BrowserList, BrowserJobResult, Session, Snapshot, TranscriptItem, Work } from "@workbench/contracts";
+import { openStage } from "./launch.ts";
+import { Report } from "./report.ts";
+import { until, type Ctx } from "./scenarios.ts";
+
+if (process.env.WORKBENCH_REAL_PROVIDER_ACCEPTANCE !== "1") throw Error("Enable one real-provider acceptance explicitly");
+const binary = resolve(process.argv[2]!), output = resolve(process.argv[3]!);
+mkdirSync(output, { recursive: true });
+const report = new Report(output), stage = await openStage(output);
+const fixture = createServer((req, res) => {
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.end(req.url === "/frame" ? '<title>Subframe</title>iframe' : '<!doctype html><title>Browser input fixture</title><style>body{font:20px sans-serif;padding:32px;background:#f0faf8}input{font:inherit;width:80%;padding:16px}</style><h1>같은 페이지 입력 확인</h1><input aria-label="검색" placeholder="검색어"><iframe src="/frame" style="width:100px;height:40px"></iframe>');
+});
+await new Promise<void>(done => fixture.listen(0, "127.0.0.1", done));
+const address = `http://127.0.0.1:${(fixture.address() as {port:number}).port}/`;
+let ctx: Ctx | null = null;
+try {
+  ctx = { stage, report, app: await stage.launch({ binary, engines: "real", name: "browser-hotfix", window: { width: 1440, height: 1000 } }) };
+  const { api, wd } = ctx.app;
+  const snapshot = () => api<Snapshot>("GET", "/api/snapshot");
+  const pages = () => api<BrowserList>("GET", "/api/browser/pages");
+  await wd.click(await wd.waitFor(".onboarding-actions button", 30_000));
+  assert(await until(async () => (await snapshot()).prefs.onboarding === "done"));
+  assert(await until(async () => Boolean((await snapshot()).providers.find(row => row.provider === "codex")?.loggedIn), 45_000), "Real Codex login required");
+  const provider = (await snapshot()).providers.find(row => row.provider === "codex")!;
+  assert(!/fake/.test(provider.version ?? ""));
+  const work = await api<Work>("POST", "/api/works", { title: "브라우저 입력 확인", cwd: null });
+  const main = await api<Session>("POST", `/api/works/${work.id}/sessions`, { provider: "codex", model: "gpt-6.1-sol", access: "full", purpose: "브라우저 확인 메인" });
+  await wd.waitFor(`[data-row-id="${work.id}"]`);
+  if (!await wd.find(`[data-row-id="${main.id}"]`)) await wd.click(await wd.waitFor(`[data-row-id="${work.id}"] .row-chevron`));
+  await wd.click(await wd.waitFor(`[data-row-id="${main.id}"]`));
+  await wd.waitFor('.work-view .composer textarea');
+  const mainTab = await wd.execute<string>("return document.querySelector('.pane:not([hidden]) .group-tab.active').dataset.tabId");
+  const before = await wd.execute<number[]>("return [innerWidth, innerHeight]");
+  await wd.click(await wd.waitFor('.pane:not([hidden]) .group-tab-new'));
+  await wd.waitFor('[role="menuitem"]');
+  await wd.execute("[...document.querySelectorAll('[role=menuitem]')].find(el=>el.textContent.includes('새 웹 탭')).click()");
+  await wd.waitFor(".browser-blank", 20_000);
+  const browserTab = await wd.execute<string>("return document.querySelector('.pane:not([hidden]) .group-tab.active').dataset.tabId");
+  assert(await wd.find('[role="tab"][aria-selected="true"]'));
+  report.check("native browser", "빈 탭에 중앙 Search/Ask, 별도 설정 모달 없음", !await wd.find(".browser-create-dialog"), "", await wd.screenshot(report.path("blank.png")));
+  await wd.sendKeys(await wd.waitFor('.browser-blank input[aria-label="웹 검색 또는 주소"]'), address);
+  await wd.click(await wd.waitFor('.browser-blank .browser-search button[type="submit"]'));
+  assert(await until(async () => (await pages()).pages.some(page => page.url === address && !page.native?.loading), 20_000));
+  let page = (await pages()).pages.find(page => page.url === address)!;
+  const after = await wd.execute<number[]>("return [innerWidth, innerHeight]");
+  assert.deepEqual(after, before, "Native page must not divide the main webview vertically");
+  assert(!await wd.find(".browser-conversation"), "Panel starts collapsed");
+  await wd.execute("[...document.querySelectorAll('.browser-toolbar button')].find(el=>el.textContent==='AI에게 요청').click()");
+  await wd.waitFor('.browser-conversation textarea', 20_000);
+  page = (await pages()).pages.find(p => p.pageId === page.pageId)!;
+  assert(page.sessionId, "Page has an independent child");
+  const child = (await snapshot()).sessions.find(row => row.id === page.sessionId)!;
+  assert.equal(child.pageAgent?.parentSessionId, main.id);
+  const geometry = await wd.execute<any>(`const box=s=>{const r=document.querySelector(s).getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,bottom:r.bottom}};return {viewport:box('.browser-viewport'),chat:box('.browser-conversation'),composer:box('.browser-conversation .composer'),inner:[innerWidth,innerHeight]}`);
+  assert(Math.abs(geometry.viewport.height - geometry.chat.height) < 2);
+  assert(geometry.composer.bottom <= geometry.chat.bottom + 1);
+  report.check("native browser", "웹 영역과 전체 높이 우측 채팅, main viewport 유지", true, JSON.stringify(geometry));
+  await wd.sendKeys(await wd.waitFor('.browser-conversation textarea'), '현재 웹 페이지의 검색 입력칸에 new york times 라는 글자만 입력해 주세요. 검색 제출이나 페이지 이동은 하지 마세요. 실제 페이지에 입력된 값을 확인하고 끝내세요.');
+  await wd.click(await wd.waitFor('.browser-conversation button[aria-label="보내기"]'));
+  const items = () => api<{items:TranscriptItem[]}>("GET", `/api/sessions/${page.sessionId}/items`);
+  assert(await until(async () => (await snapshot()).sessions.some(row => row.id === page.sessionId && (row.status === "starting" || row.status === "running")), 15_000), "Browser child never started");
+  await wd.click(await wd.waitFor(`.pane:not([hidden]) [data-tab-id="${mainTab}"] [role="tab"]`));
+  await wd.sendKeys(await wd.waitFor('.pane:not([hidden]) .work-view .composer textarea'), '7 곱하기 8의 결과만 답해 주세요. 도구는 필요 없습니다.');
+  await wd.click(await wd.waitFor('.pane:not([hidden]) .work-view button[aria-label="보내기"]'));
+  assert(await until(async () => (await api<{items:TranscriptItem[]}>("GET", `/api/sessions/${main.id}/items`)).items.length > 0), "Main session did not accept its own request");
+  await wd.click(await wd.waitFor(`.pane:not([hidden]) [data-tab-id="${browserTab}"] [role="tab"]`));
+  assert(await until(async () => (await items()).items.some(item => item.kind === "turnEnd"), 120_000, 400), "Real browser turn did not finish");
+  const mainItems = () => api<{items:TranscriptItem[]}>("GET", `/api/sessions/${main.id}/items`);
+  assert(await until(async () => (await mainItems()).items.some(item => item.kind === "turnEnd"), 120_000, 400), "Independent main turn did not finish");
+  const mainTranscript = (await mainItems()).items;
+  writeFileSync(report.path("main-transcript.json"), JSON.stringify(mainTranscript, null, 2));
+  assert(mainTranscript.some(item => item.kind === "assistant" && JSON.stringify(item).includes("56")), "Main reply missing");
+  report.check("native browser", "웹 작업 중 탭 전환·메인 독립 요청·복귀", true);
+  const transcript = (await items()).items;
+  writeFileSync(report.path("fixture-transcript.json"), JSON.stringify(transcript, null, 2));
+  const actual = await api<BrowserJobResult>("POST", `/api/browser/pages/${page.pageId}/action`, { requestId: randomUUID(), action: { kind: "snapshot" } });
+  writeFileSync(report.path("actual-page.json"), JSON.stringify(actual, null, 2));
+  assert(!actual.error, actual.error ?? "Native observation failed");
+  assert(actual.observation?.text.includes('value="new york times"'), "Actual same-page input value is missing");
+  assert.equal(actual.page?.url, address, "Iframe URL replaced top-level URL");
+  assert(await until(() => wd.execute<boolean>("return [...document.querySelectorAll('.browser-conversation .transcript-wrap')].some(el=>el.textContent.includes('new york times'))")), "Assistant body missing from panel");
+  report.check("native browser", "실제 Codex 요청 → 자동 제어 연결 → 같은 페이지 실제 입력", true, `provider=${provider.version}; page=${page.pageId}; child=${page.sessionId}`, await wd.screenshot(report.path("after-fill.png")));
+  await wd.click(await wd.waitFor('[aria-label="웹 탭 AI 대화 접기"]'));
+  assert(!await wd.find(".browser-conversation"));
+  report.check("native browser", "채팅 패널 접기", true);
+} catch (error) {
+  report.check("native browser", "실제 앱 흐름", false, error instanceof Error ? error.stack ?? error.message : String(error));
+  if (ctx) {
+    writeFileSync(report.path("failure-dom.txt"), await ctx.app.wd.execute<string>("return document.body.innerText").catch(String));
+    await ctx.app.wd.screenshot(report.path("failure.png")).catch(() => {});
+  }
+  process.exitCode = 1;
+} finally {
+  report.write({ scope: "Linux actual built app, private profile, real browser child and independent main Codex turns; cross-OS native driver checked separately" });
+  await ctx?.app.close(); await stage.close();
+  await new Promise<void>(done => fixture.close(() => done()));
+}

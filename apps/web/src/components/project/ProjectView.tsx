@@ -257,7 +257,7 @@ export function ProjectView({
       <div className="project-scroll">
         <div className="column project-column">
           <header className="project-head">
-            <div className="project-crumbs muted"><Icon name="project" size={14} /> 프로젝트 노트 · 오버뷰{folders.length ? ` · ${folders.join(" / ")}` : ""}</div>
+            <div className="project-crumbs muted"><Icon name="project" size={14} /> 프로젝트 개요{folders.length ? ` · ${folders.join(" / ")}` : ""}</div>
             <div className="project-title-row">
               <h1 className="project-title">{work.title}</h1>
               <span className="project-head-tools">
@@ -271,6 +271,7 @@ export function ProjectView({
                   type="button"
                   className="icon-button small"
                   title="프로젝트 메뉴"
+                  aria-label="프로젝트 메뉴"
                   aria-haspopup="menu"
                   onClick={(event) => {
                     const box = event.currentTarget.getBoundingClientRect();
@@ -414,6 +415,58 @@ export function ProjectView({
             </div>
           ) : null}
 
+          {([
+            { key: "chats", label: "채팅", icon: "chat", members: sessions.filter(session => !session.documentAgent && !session.pageAgent) },
+            { key: "web", label: "웹 AI", icon: "globe", members: sessions.filter(session => session.pageAgent) },
+            { key: "document-ai", label: "문서 AI", icon: "file", members: sessions.filter(session => session.documentAgent && !session.pageAgent) },
+          ] as const).map(group => (
+            <section className="project-section project-session-group" aria-label={group.label} data-project-content={group.key} key={group.key}>
+              <div className="project-section-head">
+                <h2><Icon name={group.icon} size={16} /> {group.label} <span className="project-section-count">{group.members.length}</span></h2>
+              </div>
+              <ul className="project-rows">
+                {sessionOrder(group.members).slice(0, 12).map(session => (
+                  <li key={session.id}>
+                    <button type="button" className="project-row" onClick={() => onOpenSession(session)}>
+                      <EngineMark provider={session.provider} size={15} />
+                      <span className="project-row-title">{session.purpose || group.label}</span>
+                      <span className={`project-row-status status-${session.status}`}>{statusText(session)}</span>
+                      <span className="project-row-time muted">{ago(session.updatedAt)}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {!group.members.length ? <div className="project-empty">{group.label}이 없습니다.</div> : null}
+            </section>
+          ))}
+
+          <section className="project-section" aria-label="문서" data-project-content="documents">
+            <div className="project-section-head">
+              <h2><Icon name="file" size={16} /> 문서 <span className="project-section-count">{files.length}</span></h2>
+            </div>
+            <ul className="project-rows">
+              {[...files]
+                .sort((a, b) => b.updatedAt - a.updatedAt)
+                .slice(0, 12)
+                .map((artifact) => {
+                  const pending = Object.values(state.proposals).filter((proposal) => proposal.artifactId === artifact.id && proposal.status === "pending").length;
+                  return (
+                    <li key={artifact.id}>
+                      <button type="button" className="project-row" onClick={() => onOpenDocument(artifact.id, null)}>
+                        <FormatBadge format={artifact.format} />
+                        <span className="project-row-title">{artifact.name}</span>
+                        {pending ? <span className="project-row-status status-awaitingApproval">수정안 {pending}</span> : null}
+                        <span className="project-row-time muted">
+                          r{artifact.revision} · {ago(artifact.updatedAt)}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+            </ul>
+            {!files.length ? <div className="project-empty">아직 문서가 없습니다.</div> : null}
+          </section>
+
           <section className="project-section" aria-label="기록">
             <div className="project-section-head">
               <h2>{allEvents ? "전체 기록" : "이번 주 기록"}</h2>
@@ -514,54 +567,6 @@ export function ProjectView({
               </ul>
               {adding === "question" ? <AddInput placeholder="열린 질문 (Enter)" onAdd={(value) => run(api.addProjectEntry(workId, { section: "question", text: value }))} onDone={() => setAdding(null)} /> : null}
             </div>
-          </section>
-
-          <section className="project-section" aria-label="세션">
-            <div className="project-section-head">
-              <h2>세션 {sessions.length || ""}</h2>
-            </div>
-            <ul className="project-rows">
-              {sessionOrder(sessions)
-                .slice(0, 12)
-                .map((session) => (
-                  <li key={session.id}>
-                    <button type="button" className="project-row" onClick={() => onOpenSession(session)}>
-                      <EngineMark provider={session.provider} size={15} />
-                      <span className="project-row-title">{session.purpose || "세션"}</span>
-                      <span className={`project-row-status status-${session.status}`}>{statusText(session)}</span>
-                      <span className="project-row-time muted">{ago(session.updatedAt)}</span>
-                    </button>
-                  </li>
-                ))}
-            </ul>
-            {!sessions.length ? <div className="project-empty">세션이 없습니다.</div> : null}
-          </section>
-
-          <section className="project-section" aria-label="파일">
-            <div className="project-section-head">
-              <h2>파일 {files.length || ""}</h2>
-            </div>
-            <ul className="project-rows">
-              {[...files]
-                .sort((a, b) => b.updatedAt - a.updatedAt)
-                .slice(0, 12)
-                .map((artifact) => {
-                  const pending = Object.values(state.proposals).filter((proposal) => proposal.artifactId === artifact.id && proposal.status === "pending").length;
-                  return (
-                    <li key={artifact.id}>
-                      <button type="button" className="project-row" onClick={() => onOpenDocument(artifact.id, null)}>
-                        <FormatBadge format={artifact.format} />
-                        <span className="project-row-title">{artifact.name}</span>
-                        {pending ? <span className="project-row-status status-awaitingApproval">수정안 {pending}</span> : null}
-                        <span className="project-row-time muted">
-                          r{artifact.revision} · {ago(artifact.updatedAt)}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-            </ul>
-            {!files.length ? <div className="project-empty">아직 문서가 없습니다.</div> : null}
           </section>
 
           {(() => {

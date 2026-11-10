@@ -3,7 +3,13 @@ import { createRoot } from "react-dom/client";
 import { ConnectedWorkbench } from "./ConnectedWorkbench.tsx";
 import { readToken } from "./api.ts";
 import { applyFirstPaintTheme } from "./theme.ts";
+import "./vendor/hig-kit/kit.css";
 import "./styles.css";
+import "./styles/foundation.css";
+import "./styles/hig-shell.css";
+import "./styles/hig-entry.css";
+import "./styles/hig-workspace.css";
+import "./styles/hig-chat.css";
 
 readToken();
 applyFirstPaintTheme();

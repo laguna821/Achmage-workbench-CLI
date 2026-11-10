@@ -1,0 +1,147 @@
+{
+  "capturedAt": "2026-11-10",
+  "environment": "Chromium / Linux; actual product frontend with isolated fixture host/data, simulated CLI replies",
+  "nativeOsAcceptance": false,
+  "captures": [
+    {
+      "scene": "home",
+      "theme": "light",
+      "image": "home-light.png",
+      "source": ".superpowers/sdd/2026-11-10-hig-product-remake/preview-accepted/chromium-light-01-home.png",
+      "sha256": "5bfbfe22a40a4be885bcaafe250463166584a36aa9ae53507c52970d9e2486cf"
+    },
+    {
+      "scene": "home",
+      "theme": "dark",
+      "image": "home-dark.png",
+      "source": ".superpowers/sdd/2026-11-10-hig-product-remake/preview-accepted/chromium-dark-01-home.png",
+      "sha256": "453c9d78bcfe22515b98a85b33ab85d7dcf215b62329641fc346f23354073544"
+    },
+    {
+      "scene": "project",
+      "theme": "light",
+      "image": "project-light.png",
+      "source": ".superpowers/sdd/2026-11-10-hig-product-remake/preview-accepted/chromium-light-hig-project.png",
+      "sha256": "d10ddcd20ce62166b9ead5b933dea219d19f467bd76d4371c6d4e3838b809a57"
+    },
+    {
+      "scene": "project",
+      "theme": "dark",
+      "image": "project-dark.png",
+      "source": ".superpowers/sdd/2026-11-10-hig-product-remake/preview-accepted/chromium-dark-hig-project.png",
+      "sha256": "56c39344598f0db4c18307b01904403a82460088177d6a7aad245bd2ddab8907"
+    },
+    {
+      "scene": "chat",
+      "theme": "light",
+      "image": "chat-light.png",
+      "source": ".superpowers/sdd/2026-11-10-hig-product-remake/preview-accepted/chromium-light-03-work-codex.png",
+      "sha256": "5cdde0c3d268739e31b629c6a7b5ff9451e19e8f2538ee98c8eb3792315690f6"
+    },
+    {
+      "scene": "chat",
+      "theme": "dark",
+      "image": "chat-dark.png",
+      "source": ".superpowers/sdd/2026-11-10-hig-product-remake/preview-accepted/chromium-dark-03-work-codex.png",
+      "sha256": "80642be4a11f73a81a43f0a1bf40e7584723e8c75a6723a7ba0329d7d886a451"
+    },
+    {
+      "scene": "images",
+      "theme": "light",
+      "image": "images-light.png",
+      "source": ".superpowers/sdd/2026-11-10-hig-product-remake/preview-polish/chromium-light-hig-images.png",
+      "sha256": "db2d8d68c613f91680e5dc12fe2330186f3b29eab12dd8dbf1c9eddddf9a6fb0"
+    },
+    {
+      "scene": "images",
+      "theme": "dark",
+      "image": "images-dark.png",
+      "source": ".superpowers/sdd/2026-11-10-hig-product-remake/preview-polish/chromium-dark-hig-images.png",
+      "sha256": "f9bdf24ae10ea69ff63c62520de566e3710503418ff976136e0216117b1bd8e7"
+    },
+    {
+      "scene": "grid",
+      "theme": "light",
+      "image": "grid-light.png",
+      "source": ".superpowers/sdd/2026-11-10-hig-product-remake/preview-accepted/chromium-light-hig-grid-nine.png",
+      "sha256": "2dbf81e1b9c6e10e6d18c49ec2b3ec3f144f2a02c0651c50f8979f17800497c5"
+    },
+    {
+      "scene": "grid",
+      "theme": "dark",
+      "image": "grid-dark.png",
+      "source": ".superpowers/sdd/2026-11-10-hig-product-remake/preview-accepted/chromium-dark-hig-grid-nine.png",
+      "sha256": "74d88decf289be4c9bbc97d2072cd3ad58556a4682674d0fbf77b086d058919c"
+    },
+    {
+      "scene": "links",
+      "theme": "light",
+      "image": "links-light.png",
+      "source": ".superpowers/sdd/2026-11-10-hig-product-remake/preview-accepted/chromium-light-hig-work-links.png",
+      "sha256": "713b6fe1c5d4cbbe9ec9ebef91375fae897e47a7436cda7cad6e8c3c97c3c6cd"
+    },
+    {
+      "scene": "links",
+      "theme": "dark",
+      "image": "links-dark.png",
+      "source": ".superpowers/sdd/2026-11-10-hig-product-remake/preview-accepted/chromium-dark-hig-work-links.png",
+      "sha256": "270a2c47d85f61522f42dc017bb62bfa7fd427d7bf2b272bdfca6f41251eab91"
+    },
+    {
+      "scene": "search",
+      "theme": "light",
+      "image": "search-light.png",
+      "source": ".superpowers/sdd/2026-11-10-hig-product-remake/preview-polish/chromium-light-07-search.png",
+      "sha256": "e727c446ba634ea75d3c0318711d0829b01012e7f37bb0f81332b785c3b48001"
+    },
+    {
+      "scene": "search",
+      "theme": "dark",
+      "image": "search-dark.png",
+      "source": ".superpowers/sdd/2026-11-10-hig-product-remake/preview-polish/chromium-dark-07-search.png",
+      "sha256": "7aae0a8db999b21e5cde16b9604799aaa7321cfb0d96ec41ea31ca8d90db96bb"
+    },
+    {
+      "scene": "narrow",
+      "theme": "light",
+      "image": "narrow-light.png",
+      "source": ".superpowers/sdd/2026-11-10-hig-product-remake/preview-accepted/chromium-light-hig-narrow.png",
+      "sha256": "2fd8baf88787ea66b123a880e88dcaccb1b0d71ecbb7c5f8d9498283884a3902"
+    },
+    {
+      "scene": "narrow",
+      "theme": "dark",
+      "image": "narrow-dark.png",
+      "source": ".superpowers/sdd/2026-11-10-hig-product-remake/preview-accepted/chromium-dark-hig-narrow.png",
+      "sha256": "fb272373b8a59f0560e8b197e3e0f942908a96f63a3cde5876540f17044043d4"
+    },
+    {
+      "scene": "large-text",
+      "theme": "light",
+      "image": "large-text-light.png",
+      "source": ".superpowers/sdd/2026-11-10-hig-product-remake/preview-polish/chromium-light-hig-large-text.png",
+      "sha256": "fd27eedd978550fb55d2c307b408d4d096b164408db1b95834d480ba1e98f7c0"
+    },
+    {
+      "scene": "large-text",
+      "theme": "dark",
+      "image": "large-text-dark.png",
+      "source": ".superpowers/sdd/2026-11-10-hig-product-remake/preview-polish/chromium-dark-hig-large-text.png",
+      "sha256": "12f36dca8ccf13d7464cd37308c4ef4fcdd52dc9b9f2caa357c7855521e75599"
+    },
+    {
+      "scene": "editor",
+      "theme": "light",
+      "image": "editor-light.png",
+      "source": ".superpowers/sdd/2026-11-10-hig-product-remake/preview-editor-final/chromium-light-hig-editor.png",
+      "sha256": "372446521762927e4d3bb253b4f45ecb0aff0e69f50c2d78d0c39be10b119846"
+    },
+    {
+      "scene": "editor",
+      "theme": "dark",
+      "image": "editor-dark.png",
+      "source": ".superpowers/sdd/2026-11-10-hig-product-remake/preview-editor-dark/chromium-dark-hig-editor.png",
+      "sha256": "958dbfe5bc59b67105617f1741b4a81556caac419524732f40fd4b6611fee6b3"
+    }
+  ]
+}

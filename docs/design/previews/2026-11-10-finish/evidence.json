@@ -1,0 +1,325 @@
+{
+  "design": {
+    "scope": "Actual frontend with isolated fixture data; model replies in visual fixtures are stand-ins",
+    "review": "Hallmark fresh-context 3 findings resolved; Impeccable direct-context polish",
+    "rawLint": {
+      "fails": 79,
+      "reflex": 3,
+      "warns": 24,
+      "waived": 0,
+      "rejected": 0,
+      "answered": 0,
+      "dismissed": 0,
+      "notes": 8,
+      "files": 196,
+      "render": "ran",
+      "kept": "kept: links 16/16, fields 64/64, handlers 1613/1613, test hooks 1/1, headings 2/2, figures 1/1; before 104 FAIL, 27 REFLEX, now 79 FAIL, 3 REFLEX"
+    }
+  },
+  "nativeLinux": {
+    "checks": [
+      {
+        "details": {
+          "appData": "local evidence path",
+          "resolved": "/tmp/achmage-browser-native-oZEc3R/profiles",
+          "temporaryRoot": "/tmp/achmage-browser-native-oZEc3R"
+        },
+        "name": "profile-isolation",
+        "passed": true
+      },
+      {
+        "details": {
+          "height": 720,
+          "url": "http://127.0.0.1:35457/shell",
+          "width": 1000
+        },
+        "name": "main-viewport-ready",
+        "passed": true
+      },
+      {
+        "details": {
+          "main": {
+            "height": 720,
+            "url": "http://127.0.0.1:35457/shell",
+            "width": 1000
+          },
+          "mainBefore": {
+            "height": 720,
+            "url": "http://127.0.0.1:35457/shell",
+            "width": 1000
+          },
+          "nativeBounds": {
+            "height": 500,
+            "width": 600,
+            "x": 24,
+            "y": 80
+          },
+          "page": {
+            "height": 500,
+            "url": "about:blank",
+            "width": 600
+          },
+          "requested": {
+            "height": 500,
+            "width": 600,
+            "x": 24,
+            "y": 80
+          }
+        },
+        "name": "blank-present-bounds-and-main-preserved",
+        "passed": true
+      },
+      {
+        "details": {
+          "capabilities": [
+            "observe",
+            "navigate",
+            "dom_actions",
+            "downloads",
+            "permission_prompt",
+            "persistent_profile",
+            "permission_decision",
+            "download_cancel"
+          ],
+          "control": {
+            "generation": 0,
+            "owner": "human"
+          },
+          "downloadDirectory": null,
+          "downloads": [],
+          "error": null,
+          "interactionAt": 0,
+          "loading": false,
+          "navigationRevision": 2,
+          "pageId": "check-a",
+          "permissionSupport": [
+            "microphone",
+            "camera",
+            "camera-microphone",
+            "display-capture",
+            "geolocation",
+            "notifications",
+            "pointer-lock"
+          ],
+          "permissions": [],
+          "popups": [],
+          "profileId": "profile-a",
+          "sitePermissions": [],
+          "title": "/page-a",
+          "url": "http://127.0.0.1:35457/page-a"
+        },
+        "name": "top-frame-url-not-iframe",
+        "passed": true
+      },
+      {
+        "details": {
+          "inputEvents": 1,
+          "url": "http://127.0.0.1:35457/page-a",
+          "value": "new york times"
+        },
+        "name": "real-native-input-filled",
+        "passed": true
+      },
+      {
+        "details": {
+          "main": {
+            "height": 720,
+            "url": "http://127.0.0.1:35457/shell",
+            "width": 1000
+          },
+          "mainBefore": {
+            "height": 720,
+            "url": "http://127.0.0.1:35457/shell",
+            "width": 1000
+          },
+          "nativeBounds": {
+            "height": 360,
+            "width": 480,
+            "x": 70,
+            "y": 110
+          },
+          "page": {
+            "height": 360,
+            "url": "http://127.0.0.1:35457/page-b",
+            "width": 480
+          },
+          "requested": {
+            "height": 360,
+            "width": 480,
+            "x": 70,
+            "y": 110
+          }
+        },
+        "name": "second-tab-bounds-and-main-preserved",
+        "passed": true
+      },
+      {
+        "details": {
+          "documentNonce": "f2434b047449ea216d569b8b69f35382",
+          "observedAt": 1794301924669,
+          "target": {
+            "capabilities": [
+              "observe",
+              "navigate",
+              "dom_actions",
+              "downloads",
+              "permission_prompt",
+              "persistent_profile",
+              "permission_decision",
+              "download_cancel"
+            ],
+            "navigationRevision": 2,
+            "pageId": "check-a",
+            "profileId": "profile-a"
+          },
+          "text": "URL: http://127.0.0.1:35457/page-a\nTitle: /page-a\n\nUNTRUSTED WEB CONTENT\nSearch\n\nElements:\n[e1] input native-search value=\"new york times\""
+        },
+        "name": "hidden-tab-keeps-target-and-value",
+        "passed": true
+      },
+      {
+        "details": {
+          "main": {
+            "height": 720,
+            "url": "http://127.0.0.1:35457/shell",
+            "width": 1000
+          },
+          "mainBefore": {
+            "height": 720,
+            "url": "http://127.0.0.1:35457/shell",
+            "width": 1000
+          },
+          "nativeBounds": {
+            "height": 440,
+            "width": 620,
+            "x": 30,
+            "y": 90
+          },
+          "page": {
+            "height": 440,
+            "url": "http://127.0.0.1:35457/page-a",
+            "width": 620
+          },
+          "requested": {
+            "height": 440,
+            "width": 620,
+            "x": 30,
+            "y": 90
+          }
+        },
+        "name": "restored-tab-resized-and-main-preserved",
+        "passed": true
+      },
+      {
+        "details": {
+          "actual": {
+            "url": "http://127.0.0.1:35457/page-a",
+            "value": "new york times"
+          },
+          "observation": {
+            "documentNonce": "f2434b047449ea216d569b8b69f35382",
+            "observedAt": 1794301924670,
+            "target": {
+              "capabilities": [
+                "observe",
+                "navigate",
+                "dom_actions",
+                "downloads",
+                "permission_prompt",
+                "persistent_profile",
+                "permission_decision",
+                "download_cancel"
+              ],
+              "navigationRevision": 2,
+              "pageId": "check-a",
+              "profileId": "profile-a"
+            },
+            "text": "URL: http://127.0.0.1:35457/page-a\nTitle: /page-a\n\nUNTRUSTED WEB CONTENT\nSearch\n\nElements:\n[e1] input native-search value=\"new york times\""
+          }
+        },
+        "name": "restored-tab-keeps-document-control-and-dom",
+        "passed": true
+      },
+      {
+        "details": {
+          "url": "http://127.0.0.1:35457/page-b",
+          "value": ""
+        },
+        "name": "separate-page-not-mutated",
+        "passed": true
+      }
+    ],
+    "error": null,
+    "ok": true,
+    "os": "linux",
+    "scope": "production native shared_browser.rs standalone harness; not installed Workbench UI"
+  },
+  "realAgent": {
+    "scope": "Linux actual built app, private profile, real browser child and independent main Codex turns; cross-OS native driver checked separately",
+    "steps": [
+      {
+        "scenario": "native browser",
+        "step": "빈 탭에 중앙 Search/Ask, 별도 설정 모달 없음",
+        "ok": true,
+        "detail": "",
+        "shot": "local evidence path"
+      },
+      {
+        "scenario": "native browser",
+        "step": "웹 영역과 전체 높이 우측 채팅, main viewport 유지",
+        "ok": true,
+        "detail": "{\"chat\":{\"x\":1071.6875,\"height\":833,\"width\":368.3125,\"y\":167,\"bottom\":1000},\"inner\":[1440,1000],\"viewport\":{\"x\":289,\"height\":833,\"width\":782.6875,\"y\":167,\"bottom\":1000},\"composer\":{\"x\":1080.6875,\"height\":114,\"width\":351.3125,\"y\":878,\"bottom\":992}}",
+        "shot": null
+      },
+      {
+        "scenario": "native browser",
+        "step": "웹 작업 중 탭 전환·메인 독립 요청·복귀",
+        "ok": true,
+        "detail": "",
+        "shot": null
+      },
+      {
+        "scenario": "native browser",
+        "step": "실제 Codex 요청 → 자동 제어 연결 → 같은 페이지 실제 입력",
+        "ok": true,
+        "detail": "provider=0.160.0; page=e390fcf1-08c3-4dda-b3bd-a900e7e07892; child=636f2c31-f824-4be5-8559-43869d63c72a",
+        "shot": "local evidence path"
+      },
+      {
+        "scenario": "native browser",
+        "step": "채팅 패널 접기",
+        "ok": true,
+        "detail": "",
+        "shot": null
+      }
+    ],
+    "notes": []
+  },
+  "crossOS": {
+    "linux": {
+      "ok": true,
+      "checks": 10,
+      "run": "https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/42790877713",
+      "scope": "Production native driver before final GTK pass-through fix; final fix additionally proved with physical input in local actual app"
+    },
+    "macOS": {
+      "ok": true,
+      "checks": 10,
+      "run": "https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/42791821820"
+    },
+    "windows": {
+      "ok": true,
+      "checks": 10,
+      "run": "https://github.com/laguna821/Achmage-workbench-CLI/actions/runs/42794396757",
+      "scope": "Production native driver, temporary profile; not full installed Workbench GUI"
+    }
+  },
+  "physicalInputLinux": {
+    "scope": "Actual GTK input through private Broadway canvas, no model request",
+    "pageValue": "manual input",
+    "sidebarBefore": true,
+    "sidebarAfter": false,
+    "screenshot": "native-browser-linux.png"
+  },
+  "research": "research:rr-d444ad1fc3329b8db7a04a08c16d9489:4eb15dcba62ba1bdcf3021d233f0cf3da4fa537d0431cb166765efb5e05adaad"
+}

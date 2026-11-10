@@ -1,0 +1,76 @@
+name: Shared browser native checks
+run-name: Native shared browser · ${{ github.ref_name }}
+on:
+  workflow_dispatch:
+  push:
+    branches: ['check/native-browser-hig-*']
+permissions:
+  contents: read
+jobs:
+  native:
+    name: Native browser (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Follow-up branches rerun only the affected platform.
+        os: ${{ fromJSON(endsWith(github.ref_name, '-macos') && '["macos-15"]' || endsWith(github.ref_name, '-linux') && '["ubuntu-24.04"]' || endsWith(github.ref_name, '-windows') && '["windows-2022"]' || '["ubuntu-24.04","macos-15","windows-2022"]') }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/browser-check-target
+      CARGO_BUILD_JOBS: '2'
+      # RFC 7396 merges maps, so [] (not {}) replaces the production resource map.
+      TAURI_CONFIG: '{"bundle":{"resources":[],"active":false}}'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> ../../../browser-check-target
+          shared-key: browser-hotfix-${{ runner.os }}
+          cache-on-failure: true
+      - name: Linux native webview dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev libdbus-1-dev xvfb dbus-x11
+      - name: Prepare evidence directory
+        run: |
+          node -e "require('node:fs').mkdirSync('browser-native-evidence', { recursive: true })"
+      - name: Minimal standalone shell asset
+        shell: bash
+        run: |
+          mkdir -p apps/web/dist
+          if [ ! -f apps/web/dist/index.html ]; then printf '%s\n' '<!doctype html><title>Native check</title>' > apps/web/dist/index.html; fi
+      - name: Build real shared-browser source example
+        run: cargo build --locked --release --manifest-path apps/desktop/src-tauri/Cargo.toml --example browser-check
+      - name: Native Linux check in a disposable display
+        if: runner.os == 'Linux'
+        env:
+          # Xvfb has no DRI3 device. Keep this software-rendering choice in CI.
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
+        run: xvfb-run -a -s '-screen 0 1280x960x24' dbus-run-session -- node scripts/check-shared-browser-native.mjs --binary browser-check-target/release/examples/browser-check
+      - name: Native macOS check
+        if: runner.os == 'macOS'
+        run: node scripts/check-shared-browser-native.mjs --binary browser-check-target/release/examples/browser-check
+      - name: Native Windows check
+        if: runner.os == 'Windows'
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -products '*' -property installationPath
+          $dumpbin = Get-ChildItem "$vs/VC/Tools/MSVC/*/bin/Hostx64/x64/dumpbin.exe" | Sort-Object FullName -Descending | Select-Object -First 1
+          if ($dumpbin) { & $dumpbin.FullName /imports browser-check-target/release/examples/browser-check.exe > browser-native-evidence/windows-imports.txt }
+          node scripts/check-shared-browser-native.mjs --binary browser-check-target/release/examples/browser-check.exe
+      - name: Upload actual checks and failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-native-${{ matrix.os }}
+          path: |
+            browser-native-evidence/
+            browser-check-target/release/examples/browser-check
+            browser-check-target/release/examples/browser-check.exe
+          if-no-files-found: warn

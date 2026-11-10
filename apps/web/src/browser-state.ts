@@ -21,7 +21,12 @@ const message = (error: unknown) => error instanceof Error ? error.message : Str
 export const sameBrowserControl = (a: BrowserControl, b: BrowserControl) => a.owner === b.owner && a.generation === b.generation;
 export function browserUrl(input: string): string {
   const value = input.trim();
-  const url = new URL(/^[a-z][a-z\d+.-]*:/i.test(value) ? value : `https://${value}`);
+  if (!value || value === "about:blank") return "about:blank";
+  if (value.length > 8192) throw new Error("검색어나 웹 주소를 짧게 입력해 주세요.");
+  const host = /^(?:localhost|(?:[\p{L}\d-]+\.)+[\p{L}\d-]+|\[[a-f\d:]+\])(?::\d+)?(?:[/?#]|$)/iu.test(value);
+  const scheme = /^[a-z][a-z\d+.-]*:/i.test(value) && !host;
+  if (!scheme && (!host || /\s/.test(value))) return `https://www.google.com/search?q=${encodeURIComponent(value)}`;
+  const url = new URL(scheme ? value : `https://${value}`);
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) throw new Error("로그인 정보가 없는 http 또는 https 주소를 입력해 주세요.");
   return url.href;
 }
@@ -125,6 +130,10 @@ export class SharedBrowser {
       if (version === this.version) this.change({ pages: reply.pages.map(page => this.creationState(page)), profiles: reply.profiles, connected: true, error: null });
       else this.change({ connected: true, error: null });
       for (const job of reply.jobs) this.scheduleJob(job);
+      // Host-created agent tabs use this same native driver; never a URL-copy viewer.
+      for (const page of reply.pages) if (page.agentSessionId && page.driverId === this.driverId && page.status === "opening" && !this.nativeCreates.has(page.pageId)) {
+        void this.connectCreated(page).catch(error => { this.creationErrors.set(page.pageId, message(error)); });
+      }
       this.schedulePresentation();
     } catch (error) { this.change({ connected: false, error: message(error) }); this.schedulePresentation(); }
   }

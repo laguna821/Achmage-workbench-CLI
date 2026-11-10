@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ImgHTMLAttributes } from "react";
+import { useCallback, useEffect, useRef, useState, type ImgHTMLAttributes } from "react";
 import { createPortal } from "react-dom";
 import type { Components } from "react-markdown";
 import { ASPECT_LABEL, IMAGE_ASPECTS, dirOf, markdownImageLink, relativePath, resolvePath, type ImageInfo, type ImageItem, type ImageTemplates, type Provider, type Session, type Work } from "@workbench/contracts";
@@ -251,9 +251,19 @@ export function DrawChip({ state, provider, value, onClear }: { state: State; pr
 
 /** The picture full size over the app (Esc or a click outside closes it). */
 function ImageViewer({ info, url, onClose }: { info: ImageInfo; url: string; onClose: () => void }) {
+  const close = useRef<HTMLButtonElement>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    const origin = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    close.current?.focus();
+    return () => { document.body.style.overflow = overflow; if (origin?.isConnected) origin.focus(); };
+  }, []);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      event.preventDefault();
       event.stopPropagation();
       onClose();
     };
@@ -262,8 +272,13 @@ function ImageViewer({ info, url, onClose }: { info: ImageInfo; url: string; onC
   }, [onClose]);
   // Over everything, inside the app element so the look's colors still apply.
   return createPortal(
-    <div className="image-viewer" role="dialog" aria-label={`그림 · ${firstLine(info.brief)}`} onClick={onClose}>
-      <img src={url} alt={info.brief} onClick={(event) => event.stopPropagation()} />
+    <div className="image-viewer" role="dialog" aria-modal="true" aria-label={`그림 · ${firstLine(info.brief)}`} onClick={event => { if (event.target === event.currentTarget) onClose(); }} onKeyDown={event => {
+      if (event.key !== "Tab") return;
+      const controls = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not([disabled])')], first = controls[0], last = controls.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    }}>
+      {failed ? <p role="alert">그림을 표시하지 못했습니다. 원본 파일을 열어 확인해 주세요.</p> : <img src={url} alt={info.brief} onError={() => setFailed(true)} />}
       <div className="image-viewer-bar" onClick={(event) => event.stopPropagation()}>
         <span className="image-viewer-name" title={info.path ?? ""}>
           {info.relPath} · {info.width}×{info.height}
@@ -273,7 +288,7 @@ function ImageViewer({ info, url, onClose }: { info: ImageInfo; url: string; onC
             앱으로 열기
           </button>
         ) : null}
-        <button type="button" className="button small" onClick={onClose}>
+        <button ref={close} type="button" className="button small" onClick={onClose}>
           닫기 <kbd>Esc</kbd>
         </button>
       </div>
@@ -292,6 +307,8 @@ export function ImageCard({ item, viewer, compact }: { item: ImageItem; viewer: 
   const info = item.image;
   const picture = usePicture(info.status === "done" ? info.workId : null, info.relPath ?? info.path, info.workspaceId);
   const [viewing, setViewing] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
+  useEffect(() => setImageFailed(false), [picture.url]);
   const [note, setNote] = useState<string | null>(null);
   const drawer = state.sessions[info.drawSessionId];
   const origin = state.sessions[info.originSessionId];
@@ -327,15 +344,15 @@ export function ImageCard({ item, viewer, compact }: { item: ImageItem; viewer: 
         {meta ? <span className="image-card-meta">{meta}</span> : null}
       </div>
       {info.status === "done" ? (
-        <button type="button" className="image-card-picture" onClick={() => picture.url && setViewing(true)} title="크게 보기">
-          {picture.url ? <img src={picture.url} alt={info.brief} /> : <span className="image-card-wait">{picture.error ?? ""}</span>}
+        <button type="button" className="image-card-picture" onClick={() => picture.url && setViewing(true)} title="크게 보기" aria-label={`${firstLine(info.brief)} 크게 보기`} aria-haspopup="dialog" disabled={!picture.url || imageFailed}>
+          {picture.url && !imageFailed ? <img src={picture.url} alt={info.brief} onError={() => setImageFailed(true)} decoding="async" /> : <span className="image-card-wait" role={picture.error || imageFailed ? "alert" : "status"}>{picture.error ?? (imageFailed ? "그림을 표시하지 못했습니다. 원본 파일을 확인해 주세요." : "그림을 불러오는 중…")}</span>}
         </button>
       ) : info.status === "drawing" ? (
-        <div className="image-card-wait drawing" style={{ aspectRatio: shape }}>
+        <div className="image-card-wait drawing" style={{ aspectRatio: shape }} role="status" aria-label="그림을 그리는 중">
           <span className="spinner" /> GPT Image
         </div>
       ) : (
-        <div className="image-card-error">{info.error ?? "그리지 못했습니다."}</div>
+        <div className="image-card-error" role="alert">{info.error ?? "그리지 못했습니다."}</div>
       )}
       <figcaption className="image-card-brief" title={info.revisedPrompt ? `그린 프롬프트: ${info.revisedPrompt}` : info.prompt}>
         {info.brief}

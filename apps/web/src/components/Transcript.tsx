@@ -177,11 +177,11 @@ function ToolRow({ item, focused }: { item: Item<"tool">; focused: boolean }) {
   const hasBody = Boolean(item.output || (item.detail && item.tool !== "command"));
   return (
     <li className={`tool-row status-${item.status}`} data-item-id={item.id}>
-      <button type="button" className="tool-row-head" onClick={() => hasBody && setOpen(!open)} aria-expanded={open}>
+      <button type="button" className="tool-row-head" onClick={() => hasBody && setOpen(!open)} aria-expanded={hasBody ? open : undefined} aria-label={`${item.title} · ${item.status === "running" ? "실행 중" : item.status === "completed" ? "완료" : item.status === "declined" ? "거절됨" : item.status === "unknown" ? "기록에 결과 없음" : "실패"}`}>
         <Icon name={TOOL_ICON[item.tool] ?? "tool"} size={14} className="tool-icon" />
         <span className={item.tool === "command" ? "tool-title mono" : "tool-title"}>{item.title}</span>
         <span className="tool-status">
-          {item.status === "running" ? <span className="spinner" /> : item.status === "completed" ? <Icon name="check" size={14} /> : item.status === "declined" ? "거절됨" : item.status === "unknown" ? "기록에 결과 없음" : "실패"}
+          {item.status === "running" ? <span className="spinner" aria-label="실행 중" /> : item.status === "completed" ? <Icon name="check" size={14} /> : item.status === "declined" ? "거절됨" : item.status === "unknown" ? "기록에 결과 없음" : "실패"}
         </span>
       </button>
       {open && hasBody ? (
@@ -253,12 +253,14 @@ function ApprovalCard({ item, onAnswer, onTrust }: { item: Item<"approval">; onA
             <Icon name="unlock" size={14} /> 앞으로 묻지 않기
           </button>
         ) : null}
+        <div className="approval-decisions">
         <button type="button" className="button" onClick={() => onAnswer("decline")}>
           거절 <kbd>Esc</kbd>
         </button>
         <button type="button" className="button primary" onClick={() => onAnswer("accept")}>
           허용 <kbd>Enter</kbd>
         </button>
+        </div>
       </div>
     </div>
   );
@@ -372,7 +374,6 @@ export function Transcript({
   const reconcileLayout = useRef<() => void>(() => undefined);
   const flashTarget = useRef<{ element: HTMLElement; timer: number } | null>(null);
   const [atBottom, setAtBottom] = useState(true);
-  const pinRef = useRef<HTMLDivElement>(null);
   const [pinOpen, setPinOpen] = useState(() => localStorage.getItem(PIN_OPEN_KEY) === "1");
   const sections = useRef(new Map<string, HTMLElement>());
   const blocks = useMemo(() => toBlocks(items), [items]);
@@ -401,7 +402,10 @@ export function Transcript({
     const section = current ? sections.current.get(current.id) : null;
     // Offsets are relative to the scroller (the positioned ancestor of both). The band takes over
     // once the request has slid under where the band sits, so it never pops up over the answer.
-    const cover = pinRef.current?.offsetHeight ?? PIN_HEIGHT;
+    // The trigger must not depend on the band that this state mounts. Dense layouts and
+    // expanded requests have different heights; measuring that height toggled the band
+    // on/off at the threshold until React hit its update-depth limit during a resize.
+    const cover = PIN_HEIGHT;
     const headerGone = header ? header.offsetTop + header.offsetHeight < top + cover : false;
     const stillInside = section ? section.offsetTop + section.offsetHeight > top + cover + 48 : false;
     const nextSticky = current && headerGone && stillInside ? current : null;
@@ -569,7 +573,7 @@ export function Transcript({
         return <PlanCard key={block.item.id} item={block.item} />;
       case "notice":
         return (
-          <div key={block.item.id} className={`notice notice-${block.item.level}`}>
+          <div key={block.item.id} className={`notice notice-${block.item.level}`} role={block.item.level === "error" ? "alert" : "status"}>
             {block.item.text}
           </div>
         );
@@ -602,6 +606,10 @@ export function Transcript({
     <div className="transcript-wrap" data-screen="S03" data-follow-output={pinned.current}>
       <div
         className="transcript"
+        role="region"
+        aria-label={`${PROVIDER_LABEL[provider]} 대화`}
+        aria-busy={loading}
+        tabIndex={0}
         ref={scroller}
         onClickCapture={() => { if (scroller.current && !pinned.current) readingAnchor.current = captureReadingAnchor(scroller.current); }}
         onWheel={(event) => {
@@ -634,7 +642,7 @@ export function Transcript({
       >
         <div className="turn-pin-slot">
           {sticky?.user ? (
-            <div className={`turn-pin${pinOpen ? " open" : ""}`} ref={pinRef}>
+            <div className={`turn-pin${pinOpen ? " open" : ""}`}>
               <div className="column turn-pin-inner">
                 <button type="button" className="turn-pin-main" onClick={() => jumpTo(sticky.id)} title="이 요청으로 올라가기">
                   <span className="turn-no">{sticky.index}</span>
@@ -663,7 +671,7 @@ export function Transcript({
           ) : null}
         </div>
         <div className="column transcript-inner">
-          {loading ? <div className="empty-hint">불러오는 중…</div> : null}
+          {loading ? <div className="empty-hint" role="status">대화를 불러오는 중…</div> : null}
           {!loading && !blocks.length ? <div className="empty-hint">이 세션에 요청을 보내면 여기에 대화가 이어집니다.</div> : null}
           {turns.map((turn, position) => (
             <section
@@ -764,20 +772,20 @@ export function Transcript({
         </button>
       ) : null}
       {rail.marks.length >= 3 ? (
-        <nav className="turn-rail" aria-label="요청 목록">
-          <span className="turn-rail-view" style={{ top: `${rail.viewTop * 100}%`, height: `${Math.min(rail.viewHeight, 1) * 100}%` }} />
-          {rail.marks.map((mark) => (
-            <button
-              key={mark.id}
-              type="button"
-              className={`turn-rail-mark${mark.id === rail.current ? " current" : ""}${mark.attention ? " attention" : ""}`}
-              style={{ top: `${mark.top * 100}%` }}
-              onClick={() => jumpTo(mark.id)}
-              title={`${mark.index}. ${mark.text.slice(0, 80)}`}
-              aria-label={`요청 ${mark.index}`}
-            />
-          ))}
-        </nav>
+        <details className="turn-outline" onKeyDown={event => {
+          if (event.key !== "Escape" || event.defaultPrevented) return;
+          event.preventDefault(); event.stopPropagation(); event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus();
+        }}>
+          <summary aria-label="요청 목록" title="요청 목록"><Icon name="list" size={16} /></summary>
+          <nav aria-label="요청 목록">
+            <div className="turn-outline-label">이 대화의 요청</div>
+            {rail.marks.map(mark => <button key={mark.id} type="button" aria-current={mark.id === rail.current ? "location" : undefined} onClick={event => {
+              jumpTo(mark.id);
+              const disclosure = event.currentTarget.closest("details");
+              if (disclosure) { disclosure.open = false; disclosure.querySelector("summary")?.focus(); }
+            }}><span>{mark.index}</span><span>{firstLine(mark.text) || "첨부한 파일"}</span>{mark.attention ? <span className="turn-outline-attention">확인 필요</span> : null}</button>)}
+          </nav>
+        </details>
       ) : null}
     </div>
   );

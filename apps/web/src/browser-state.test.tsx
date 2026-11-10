@@ -4,12 +4,14 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { BrowserAction, BrowserDriverPoll, BrowserDriverReply, BrowserJob, BrowserJobResult, BrowserPage, BrowserPageCreate, NativeBrowserPage, Session, Work, Workspace } from "@workbench/contracts";
 import type { Api } from "./api.ts";
 import { SharedBrowser, type BrowserNative, type BrowserNativeCommand } from "./browser-state.ts";
-import { BrowserView, NewBrowserDialog } from "./components/BrowserView.tsx";
+import { BrowserView, NewBrowserDialog, BrowserSearch, openBrowserTab } from "./components/BrowserView.tsx";
 import type { WorkActions } from "./components/WorkView.tsx";
 import { initialState } from "./state.ts";
 import { contentKey, moveTab, tabsOf, withTabs } from "./tabs.ts";
 import { singleLayout, splitPane } from "./panes.ts";
 import { createActions } from "./create-actions.ts";
+import { BrowseStart } from "./components/BrowseStart.tsx";
+import { AppearanceContext, DEFAULT_APPEARANCE } from "./appearance.ts";
 import { sessionToOpen } from "./entry.ts";
 
 vi.mock("./components/Transcript.tsx", () => ({ Transcript: (props: { sessionId: string; focusItem?: { itemId: string }; onAnswer: (id: string, decision: "accept") => void }) => <div data-testid="browser-transcript" data-session={props.sessionId} data-item={props.focusItem?.itemId}><button type="button" onClick={() => props.onAnswer("approval-exact", "accept")}>요청 확인</button></div> }));
@@ -37,7 +39,7 @@ function fixture(initial: BrowserPage[] = [page()]) {
   const list = vi.fn(async () => ({ pages: rows, profiles }));
   const profile = vi.fn(async (name: string) => ({ id: "profile-new", name, createdAt: 2 }));
   const create = vi.fn(async (input: BrowserPageCreate): Promise<BrowserPage> => {
-    const row = { ...page(input.requestId), url: input.url, profileId: input.profileId, native: null, status: "opening" as const };
+    const row = { ...page(input.requestId), workspaceId: input.workspaceId, url: input.url, profileId: input.profileId, native: null, status: "opening" as const };
     rows = [...rows, row]; return row;
   });
   const session = vi.fn(async (_pageId: string, _parent: string | null) => child);
@@ -77,22 +79,25 @@ it("uses an explicit acknowledged handoff, sends only to the page child, and kee
   const f = fixture(); await f.browser.poll();
   const onNew = vi.fn(), onOpenSession = vi.fn();
   await act(async () => render(<BrowserView browser={f.browser} api={f.api} state={f.state} pageId="page-a" visible parentSessionId="main" actions={f.actions} onNew={onNew} onClosed={() => {}} onTranscript={() => {}} onOpenSession={onOpenSession} focusItem={null} onFocusDone={() => {}} />));
+  expect(screen.queryByRole("complementary", { name: "웹 탭 AI 대화" })).toBeNull();
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "AI에게 요청" })));
   expect(f.endpoint.session).toHaveBeenCalledWith("page-a", "main"); expect(f.endpoint.control).not.toHaveBeenCalled();
-  expect((screen.getByRole("button", { name: "요청 보내기" }) as HTMLButtonElement).disabled).toBe(true);
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "AI에게 맡기기" })));
-  expect(f.endpoint.control).toHaveBeenCalledWith("page-a", "child", 0); expect(f.send).not.toHaveBeenCalled();
+  expect((screen.getByRole("button", { name: "요청 보내기" }) as HTMLButtonElement).disabled).toBe(false);
+  expect(screen.queryByRole("button", { name: "AI에게 맡기기" })).toBeNull();
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "요청 보내기" })));
+  expect(f.endpoint.control).toHaveBeenCalledWith("page-a", "child", 0);
+  expect(f.endpoint.control.mock.invocationCallOrder[0]!).toBeLessThan(f.send.mock.invocationCallOrder[0]!);
   expect(f.send).toHaveBeenCalledWith(child, "이 페이지를 읽어 주세요", undefined, undefined, undefined);
   expect(screen.getByTestId("browser-transcript").dataset.session).toBe("child");
   fireEvent.click(screen.getByRole("button", { name: "요청 확인" })); expect(f.answer).toHaveBeenCalledWith(child, "approval-exact", "accept");
-  expect((screen.getByRole("button", { name: "이전 페이지" }) as HTMLButtonElement).disabled).toBe(true);
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "내가 조작하기" })));
+  expect((screen.getByRole("button", { name: "이전 페이지" }) as HTMLButtonElement).disabled).toBe(false);
+  expect(screen.queryByRole("button", { name: "내가 조작하기" })).toBeNull();
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "이전 페이지" })));
   expect(f.endpoint.control).toHaveBeenLastCalledWith("page-a", "human", 1);
   expect((screen.getByRole("button", { name: "이전 페이지" }) as HTMLButtonElement).disabled).toBe(false);
   expect(f.state.works.work.activeSessionId).toBe("main"); expect(sessionToOpen(f.state, work)?.id).toBe("main");
   fireEvent.click(screen.getByRole("button", { name: "원래 대화 열기" })); expect(onOpenSession).toHaveBeenCalledWith(main);
-  fireEvent.click(screen.getByRole("button", { name: "기본 · 새 탭" })); expect(onNew).toHaveBeenCalledWith({ workspaceId: "space", profileId: "default", url: "https://example.com/" });
+  fireEvent.click(screen.getByRole("button", { name: "기본" })); expect(onNew).toHaveBeenCalledWith({ workspaceId: "space", profileId: "default", url: "https://example.com/" });
 });
 
 it("reconciles an unknown human action by its receipt without repeating the mutation", async () => {
@@ -164,7 +169,7 @@ it("creates one native page after a lost host response, offers profiles, and pre
   const moved = moveTab(two, tab.id, { paneId: two.panes[1]!.id, side: "center" });
   expect(moved.panes.flatMap(tabsOf).filter(entry => contentKey(entry) === `browser:${request.requestId}`)).toHaveLength(1);
   expect(moved.panes.flatMap(tabsOf).find(entry => entry.id === tab.id)?.view.pageId).toBe(request.requestId);
-  expect(createActions({ workId: "work", workspaceId: "space", folderId: null }).find(action => action.kind === "browser")?.label).toBe("새 웹 탭…");
+  expect(createActions({ workId: "work", workspaceId: "space", folderId: null }).find(action => action.kind === "browser")?.label).toBe("새 웹 탭");
 });
 
 it("closes the native page only for an explicit close guard, with takeover before close and no duplicate footer close", async () => {
@@ -183,4 +188,93 @@ it("closes the native page only for an explicit close guard, with takeover befor
   expect(f.endpoint.control.mock.invocationCallOrder[0]!).toBeLessThan(f.endpoint.action.mock.invocationCallOrder[0]!);
   expect(f.endpoint.action).toHaveBeenCalledWith("page-a", expect.any(String), { kind: "close" });
   await holder.guard!("close"); expect(f.endpoint.action).toHaveBeenCalledOnce(); expect(f.browser.getState().pages[0]?.status).toBe("closed");
+});
+
+
+it("opens a direct blank tab with the inherited workspace/profile and searches without a dialog", async () => {
+  const f = fixture([]); await f.browser.poll();
+  const opened = await openBrowserTab(f.browser, f.api, f.state, { workspaceId: "space", profileId: "default" });
+  expect(f.endpoint.create).toHaveBeenCalledWith(expect.objectContaining({ workspaceId: "space", profileId: "default", url: "about:blank" }));
+  expect(opened.url).toBe("about:blank"); expect(sessionStorage.getItem("workbench.browser.creation")).toBeNull();
+  const onOpen = vi.fn(async () => true);
+  render(<BrowserSearch onOpen={onOpen} />);
+  fireEvent.change(screen.getByRole("textbox", { name: "웹 검색 또는 주소" }), { target: { value: "한림대학교" } });
+  await act(async () => fireEvent.submit(screen.getByRole("search", { name: "웹 검색" })));
+  expect(onOpen).toHaveBeenCalledWith("한림대학교"); expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+it("creates a default project only when a workspace is missing", async () => {
+  const f = fixture([]); await f.browser.poll();
+  const createWork = vi.fn(async () => ({ ...work, defaultWorkspaceId: "managed-space" }));
+  await openBrowserTab(f.browser, { ...f.api, createWork } as unknown as Api, { ...f.state, works: {}, workspaces: {} }, {});
+  expect(createWork).toHaveBeenCalledOnce();
+  expect(f.endpoint.create).toHaveBeenCalledWith(expect.objectContaining({ workspaceId: "managed-space", url: "about:blank" }));
+});
+
+it("keeps the composer available after human takeover and does not send when control fails", async () => {
+  const f = fixture([{ ...page(), sessionId: "child" }]); await f.browser.poll();
+  await act(async () => render(<BrowserView browser={f.browser} api={f.api} state={f.state} pageId="page-a" visible parentSessionId="main" actions={f.actions} onNew={() => {}} onClosed={() => {}} onTranscript={() => {}} onOpenSession={() => {}} focusItem={{ sessionId: "child", itemId: "a", nonce: 1 }} onFocusDone={() => {}} />));
+  f.endpoint.control.mockRejectedValueOnce(new Error("제어권 인계 실패"));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "요청 보내기" })));
+  expect(f.send).not.toHaveBeenCalled(); expect(screen.getByRole("alert").textContent).toContain("제어권 인계 실패");
+  expect((screen.getByRole("button", { name: "요청 보내기" }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+it("hands a queued request to the same page session only after control is granted", async () => {
+  const f = fixture([{ ...page(), sessionId: "child" }]); await f.browser.poll();
+  const queued = { ...child, queued: [{ id: "q1", text: "검색해 주세요", held: true }] } as Session;
+  await act(async () => render(<BrowserView browser={f.browser} api={f.api} state={{ ...f.state, sessions: { ...f.state.sessions, child: queued } }} pageId="page-a" visible parentSessionId="main" actions={f.actions} onNew={() => {}} onClosed={() => {}} onTranscript={() => {}} onOpenSession={() => {}} focusItem={{ sessionId: "child", itemId: "a", nonce: 1 }} onFocusDone={() => {}} />));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "보내기" })));
+  expect(f.endpoint.control).toHaveBeenCalledWith("page-a", "child", 0);
+  expect(f.actions.queued.send).toHaveBeenCalledWith(queued, "q1");
+  expect(f.endpoint.control.mock.invocationCallOrder[0]!).toBeLessThan(vi.mocked(f.actions.queued.send).mock.invocationCallOrder[0]!);
+});
+
+
+it("refreshes the page transcript when a turn ends so the assistant body arrives with its receipt", async () => {
+  const f = fixture([{ ...page(), sessionId: "child" }]); await f.browser.poll();
+  const text = "브라우저 제어권이 사용자에게 있어 검색을 진행하지 못했습니다.";
+  const completed = { items: [{ id: "answer", kind: "assistant", text, streaming: false, at: 3 }, { id: "end", kind: "turnEnd", status: "completed", at: 4 }], seq: 9 } as Awaited<ReturnType<Api["items"]>>;
+  f.api.items = vi.fn(async () => completed);
+  const onTranscript = vi.fn();
+  const state = { ...f.state, transcripts: { child: { items: [], seq: 2 } } };
+  const props = { browser: f.browser, api: f.api, pageId: "page-a", visible: true, parentSessionId: "main", actions: f.actions, onNew: () => {}, onClosed: () => {}, onTranscript, onOpenSession: () => {}, focusItem: null, onFocusDone: () => {} };
+  let mounted!: ReturnType<typeof render>;
+  await act(async () => { mounted = render(<BrowserView {...props} state={{ ...state, sessions: { ...state.sessions, child: { ...child, status: "running" } } }} />); });
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "AI에게 요청" })));
+  expect(f.api.items).not.toHaveBeenCalled();
+  await act(async () => mounted.rerender(<BrowserView {...props} state={state} />));
+  expect(onTranscript).toHaveBeenCalledWith("child", completed);
+});
+
+
+it("shows one Search or Ask input in the common home entry", async () => {
+  const onSearch = vi.fn(async () => true);
+  render(<BrowseStart onSearch={onSearch}><textarea aria-label="메인 작업 요청" /></BrowseStart>);
+  expect(screen.getAllByRole("textbox")).toHaveLength(1);
+  expect(screen.queryByRole("textbox", { name: "메인 작업 요청" })).toBeNull();
+  fireEvent.click(screen.getByRole("tab", { name: "Ask" }));
+  expect(screen.getAllByRole("textbox")).toHaveLength(1);
+  expect(screen.getByRole("textbox", { name: "메인 작업 요청" })).toBeTruthy();
+  expect(screen.queryByRole("search")).toBeNull();
+  fireEvent.click(screen.getByRole("tab", { name: "Search" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "웹 검색 또는 주소" }), { target: { value: "example.com" } });
+  await act(async () => fireEvent.submit(screen.getByRole("search")));
+  expect(onSearch).toHaveBeenCalledWith("example.com");
+});
+
+it("routes blank-tab Ask to the main task callback without creating a page child", async () => {
+  const native = { ...nativePage(), url: "about:blank" };
+  const f = fixture([{ ...page(), url: "about:blank", native }]); await f.browser.poll();
+  const onStart = vi.fn(async () => true);
+  const appearance = { lookOf: (provider: "codex" | "claude") => DEFAULT_APPEARANCE[provider].light } as React.ContextType<typeof AppearanceContext>;
+  await act(async () => render(<AppearanceContext.Provider value={appearance}><BrowserView browser={f.browser} api={f.api} state={f.state} pageId="page-a" visible parentSessionId="main" actions={f.actions} onNew={() => {}} onClosed={() => {}} onStart={onStart} engine="codex" onTranscript={() => {}} onOpenSession={() => {}} focusItem={null} onFocusDone={() => {}} /></AppearanceContext.Provider>));
+  expect(screen.queryByRole("complementary", { name: "웹 탭 AI 대화" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "AI에게 요청" })).toBeNull();
+  expect(screen.getByRole("search")).toBeTruthy();
+  fireEvent.click(screen.getByRole("tab", { name: "Ask" }));
+  fireEvent.click(screen.getByRole("radio", { name: "Claude" }));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "요청 보내기" })));
+  expect(onStart).toHaveBeenCalledWith("이 페이지를 읽어 주세요", "claude", { model: null, effort: null });
+  expect(f.endpoint.session).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
 });

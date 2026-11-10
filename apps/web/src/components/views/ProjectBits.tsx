@@ -1,6 +1,5 @@
 import { useMemo, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { BASE_FILE_LABELS, isUnseen, type Artifact, type ProjectStage, type PropertyType, type Session, type SortRule, type Work } from "@workbench/contracts";
-import { accentStyle, useAppearance } from "../../appearance.ts";
 import { ago, statusText, statusTone } from "../../format.ts";
 import { isWorking, recency } from "../../overview.ts";
 import { linkLabel, stageOf } from "../../project.ts";
@@ -128,7 +127,6 @@ export function WorkCard({
   row?: ProjectRow;
   open: OpenThings;
 }) {
-  const { lookOf } = useAppearance();
   const chips = fields.includes("chips");
   const last = Math.max(work.updatedAt, ...sessions.map(recency));
   const path = fields.includes("folder") ? folderPath(state.folders, work.folderId)?.replaceAll("/", " / ") : null;
@@ -145,28 +143,36 @@ export function WorkCard({
       {row && fields.includes("preview") && row.summary?.preview ? <span className="work-card-preview">{row.summary.preview}</span> : null}
       {row && fields.includes("tags") && tagsOf(row).length ? <span className="kanban-card-tags">{tagsOf(row).map((tag) => `#${tag}`).join(" ")}</span> : null}
       {row ? <PropChips row={row} fields={fields} /> : null}
-      {chips && sessions.length ? (
-        <div className="work-chips">
-          {sessions.slice(0, 6).map((session) => (
-            <button
-              key={session.id}
-              type="button"
-              className={`work-chip session tone-${statusTone(session)}`}
-              data-flip={`s:${session.id}`}
-              style={accentStyle(lookOf(session.provider))}
-              onClick={() => open.session(session)}
-              title={`${session.purpose} · ${statusText(session)}`}
-            >
-              {isWorking(session) || session.status === "awaitingApproval" ? <span className={`dot dot-${statusTone(session)}`} /> : <EngineMark provider={session.provider} size={12} />}
-              <span className="work-chip-text">{session.purpose}</span>
-              {isUnseen(session) ? <span className="new-dot" title="새 답" /> : null}
-            </button>
-          ))}
-          {sessions.length > 6 ? <span className="work-chip more">+{sessions.length - 6}</span> : null}
+      {chips ? ([
+        { key: "chats", label: "채팅", members: sessions.filter(session => !session.pageAgent && !session.documentAgent) },
+        { key: "web", label: "웹 AI", members: sessions.filter(session => session.pageAgent) },
+        { key: "document-ai", label: "문서 AI", members: sessions.filter(session => session.documentAgent && !session.pageAgent) },
+      ] as const).filter(group => group.members.length).map(group => (
+        <div className="work-content-group" key={group.key}>
+          <span className="work-content-label">{group.label} · {group.members.length}</span>
+          <div className="work-chips">
+            {group.members.slice(0, 6).map(session => (
+              <button
+                key={session.id}
+                type="button"
+                className={`work-chip session tone-${statusTone(session)}`}
+                data-flip={`s:${session.id}`}
+                onClick={() => open.session(session)}
+                title={`${group.label} · ${session.purpose} · ${statusText(session)}`}
+              >
+                {isWorking(session) || session.status === "awaitingApproval" ? <span className={`dot dot-${statusTone(session)}`} /> : <EngineMark provider={session.provider} size={12} />}
+                <span className="work-chip-text">{session.purpose}</span>
+                {isUnseen(session) ? <span className="new-dot" title="새 답" /> : null}
+              </button>
+            ))}
+            {group.members.length > 6 ? <button type="button" className="work-chip more" onClick={() => open.project(work)} aria-label={`${group.label} 전체 보기`}>+{group.members.length - 6}</button> : null}
+          </div>
         </div>
-      ) : null}
+      )) : null}
       {chips && docs.length ? (
-        <div className="work-chips">
+        <div className="work-content-group">
+          <span className="work-content-label">문서 · {docs.length}</span>
+          <div className="work-chips">
           {docs.slice(0, 4).map((artifact) => (
             <button key={artifact.id} type="button" className="work-chip doc" data-flip={`d:${artifact.id}`} onClick={() => open.doc(artifact.id)} title={artifact.path}>
               <FormatBadge format={artifact.format} />
@@ -174,7 +180,8 @@ export function WorkCard({
               {pending.get(artifact.id) ? <span className="work-chip-count" title="검토할 수정안">{pending.get(artifact.id)}</span> : null}
             </button>
           ))}
-          {docs.length > 4 ? <span className="work-chip more">+{docs.length - 4}</span> : null}
+          {docs.length > 4 ? <button type="button" className="work-chip more" onClick={() => open.project(work)} aria-label="문서 전체 보기">+{docs.length - 4}</button> : null}
+          </div>
         </div>
       ) : null}
       {fields.includes("sessions") || fields.includes("activity") ? (

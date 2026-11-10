@@ -13,6 +13,7 @@ const sameControl = (a: BrowserControl, b: BrowserControl) => a.generation === b
 const fingerprint = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 export function webUrl(value: unknown): string {
   if (typeof value !== "string" || value.length > 8192) throw new HttpError(400, "browser_url", "웹 주소를 확인해 주세요.");
+  if (value === "about:blank") return value;
   let url: URL;
   try { url = new URL(value); } catch { throw new HttpError(400, "browser_url", "http 또는 https 웹 주소를 입력해 주세요."); }
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) throw new HttpError(400, "browser_url", "로그인 정보가 없는 http 또는 https 주소만 열 수 있습니다.");
@@ -97,7 +98,7 @@ export class BrowserRegistry {
     if ((this.drivers.get(input.driverId) ?? 0) < Date.now() - 15000) throw fail("browser_driver_missing", "데스크톱 브라우저 연결을 기다린 뒤 다시 열어 주세요.");
     if ([...this.pages.values()].filter(page => page.status !== "closed").length >= 64) throw fail("browser_tab_limit", "열린 웹 탭을 닫은 뒤 새 탭을 열어 주세요.");
     const now = Date.now();
-    const page: BrowserPage = { pageId: input.requestId, profileId: input.profileId, driverId: input.driverId, workspaceId: input.workspaceId, workId: workspace.workId, url, title: url, status: "opening", sessionId: null, control: { generation: 0, owner: "human" }, native: null, error: null, createdAt: now, updatedAt: now };
+    const page: BrowserPage = { pageId: input.requestId, profileId: input.profileId, driverId: input.driverId, workspaceId: input.workspaceId, workId: workspace.workId, url, title: url === "about:blank" ? "새 탭" : url, status: "opening", sessionId: null, control: { generation: 0, owner: "human" }, native: null, error: null, createdAt: now, updatedAt: now };
     this.pages.set(page.pageId, page); this.store.setMeta(`shared-browser-create:${input.requestId}`, createHash); this.save(); return page;
   }
   attach(pageId: string, session: Session) {
@@ -105,10 +106,31 @@ export class BrowserRegistry {
     if (session.pageAgent?.pageId !== pageId || session.workId !== page.workId || session.workspaceId !== page.workspaceId) throw fail("browser_session_scope", "같은 웹 탭의 대화만 연결할 수 있습니다.");
     page.sessionId = session.id; page.updatedAt = Date.now(); this.save();
   }
+  agentPage(sessionId: string): BrowserPage | undefined {
+    const session = this.hooks.session(sessionId);
+    if (session.pageAgent) return this.get(session.pageAgent.pageId);
+    return [...this.pages.values()].reverse().find(page => page.agentSessionId === sessionId);
+  }
+  /** Explicit tab-open creates a real desktop page. Background Lightpanda stays separate. */
+  async openAgentPage(sessionId: string, url: string): Promise<BrowserPage> {
+    const session = this.hooks.session(sessionId);
+    const driverId = [...this.drivers].sort((a, b) => b[1] - a[1]).find(([, at]) => at > Date.now() - 15000)?.[0];
+    if (!driverId || !session.workspaceId) throw fail("browser_driver_missing", "웹 탭을 열려면 데스크톱 앱에 연결해 주세요.");
+    let page = this.agentPage(sessionId);
+    if (!page || page.status === "interrupted" || page.status === "closed") {
+      page = this.create({ requestId: randomUUID(), driverId, workspaceId: session.workspaceId, profileId: "default", url });
+      page.agentSessionId = sessionId; this.save();
+    }
+    const until = Date.now() + 12000;
+    while (page.status === "opening" && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 50));
+    this.requireReady(page);
+    await this.control(page.pageId, sessionId, page.control.generation);
+    return page;
+  }
   receipt(id: string) { const receipt = this.readReceipt(id); return receipt ? { status: receipt.status, result: receipt.result } : null; }
   async control(pageId: string, owner: unknown, expectedGeneration: unknown): Promise<BrowserPage> {
     const page = this.get(pageId); this.requireReady(page);
-    if (typeof owner !== "string" || (owner !== "human" && owner !== page.sessionId) || !Number.isSafeInteger(expectedGeneration)) throw fail("browser_control", "이 웹 탭의 사람 또는 AI 대화를 선택해 주세요.");
+    if (typeof owner !== "string" || (owner !== "human" && owner !== page.sessionId && owner !== page.agentSessionId) || !Number.isSafeInteger(expectedGeneration)) throw fail("browser_control", "이 웹 탭의 사람 또는 AI 대화를 선택해 주세요.");
     if (page.control.owner === owner && page.control.generation === expectedGeneration) return page;
     const generation = Number(expectedGeneration) + 1, id = `control-${pageId}-${generation}`;
     if (page.control.generation === generation && page.control.owner === owner) {
@@ -134,15 +156,18 @@ export class BrowserRegistry {
     return this.enqueue(page, input.requestId, action, input.expected ?? null, page.control);
   }
   generation(sessionId: string): BrowserControl {
-    const session = this.hooks.session(sessionId), page = this.get(session.pageAgent?.pageId ?? ""); this.requireReady(page);
+    const page = this.agentPage(sessionId);
+    if (!page) throw fail("browser_missing", "연결된 웹 탭이 없습니다.");
+    this.requireReady(page);
     return { ...page.control };
   }
   async agent(sessionId: string, requestId: string, command: string, args: string[], control: BrowserControl) {
-    const session = this.hooks.session(sessionId), page = this.get(session.pageAgent?.pageId ?? "");
+    const page = this.agentPage(sessionId);
+    if (!page) throw fail("browser_missing", "연결된 웹 탭이 없습니다.");
     let action: BrowserAction;
     if (["snapshot", "read", "links"].includes(command) || (command === "open" && !args.length)) action = { kind: "snapshot" };
     else if (command === "open" || command === "goto") action = pageAction({ kind: "navigate", url: args[0] });
-    else if (["go-back", "go-forward", "reload"].includes(command)) action = { kind: command === "go-back" ? "back" : command === "go-forward" ? "forward" : "reload" };
+    else if (["go-back", "go-forward", "reload", "close"].includes(command)) action = { kind: command === "go-back" ? "back" : command === "go-forward" ? "forward" : command as "reload" | "close" };
     else if (command === "click") action = pageAction({ kind: "click", ref: args[0] });
     else if (command === "fill" || command === "select") action = pageAction({ kind: command, ref: args[0], value: args.slice(1).join(" ") });
     else if (command === "press") action = pageAction({ kind: "press", ref: args[0], key: args[1] });
@@ -151,7 +176,7 @@ export class BrowserRegistry {
     const id = `${sessionId}-${requestId}`, prior = this.readReceipt(id);
     if (prior) return this.replay(prior, page, action);
     this.requireReady(page);
-    if (action.kind !== "snapshot" && (control.owner !== sessionId || !sameControl(control, page.control))) throw fail("CONTROL_REVOKED", "사람이 제어권을 가져갔습니다. 사용자가 AI에게 맡기기를 누를 때까지 기다리세요.");
+    if (action.kind !== "snapshot" && (control.owner !== sessionId || !sameControl(control, page.control))) throw fail("CONTROL_REVOKED", "사용자가 페이지를 직접 조작해 이번 동작을 멈췄습니다. 다음 채팅 요청에서 이어가세요. 이 동작은 실행되지 않았습니다.");
     const expected = action.kind === "snapshot" ? null : this.observed.get(page.pageId) ?? null;
     if ("ref" in action && !expected) throw fail("STALE_DOCUMENT", "먼저 snapshot으로 이 페이지의 현재 요소를 읽어 주세요.");
     return this.enqueue(page, id, action, expected, control);
@@ -188,7 +213,7 @@ export class BrowserRegistry {
     for (const native of input.pages) {
       const page = this.pages.get(native.pageId);
       if (!page || page.driverId !== input.driverId || page.profileId !== native.profileId || page.status === "closed" || page.status === "interrupted") continue;
-      if (!Number.isSafeInteger(native.navigationRevision) || !native.control || !Number.isSafeInteger(native.control.generation) || (native.control.owner !== "human" && native.control.owner !== page.sessionId)) continue;
+      if (!Number.isSafeInteger(native.navigationRevision) || !native.control || !Number.isSafeInteger(native.control.generation) || (native.control.owner !== "human" && native.control.owner !== page.sessionId && native.control.owner !== page.agentSessionId)) continue;
       if (native.control.generation > page.control.generation) { page.control = { ...native.control }; this.observed.delete(page.pageId); }
       if (JSON.stringify(page.native) !== JSON.stringify(native) || page.status !== "ready") {
         page.native = native; page.url = native.url; page.title = native.title || native.url; page.status = "ready"; page.error = native.error; page.updatedAt = Date.now(); changed = true;

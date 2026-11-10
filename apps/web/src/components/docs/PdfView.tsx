@@ -58,7 +58,7 @@ function Page({ pdf, number, width, selected, onToggle }: { pdf: PDFDocumentProx
 
   return (
     <div className={`pdf-page${selected ? " selected" : ""}`} ref={box} data-page={number} style={size ? { width: size.width, height: size.height } : { width, height: width * 1.41 }}>
-      <canvas ref={canvas} />
+      <canvas ref={canvas} role="img" aria-label={`PDF ${number}페이지`} />
       <div className="textLayer" ref={textLayer} />
       <label className="pdf-page-pick" title="이 페이지 고르기">
         <input type="checkbox" checked={selected} onChange={onToggle} /> {number}

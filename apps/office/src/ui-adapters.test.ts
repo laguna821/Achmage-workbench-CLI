@@ -5,6 +5,13 @@ import { adaptOfficeCommands, applyOfficeTheme, mountOfficeUi, officeUiAdapters,
 import { connectOfficeUi } from "./ui-adapters/connect.ts";
 import type { Init } from "./bridge.ts";
 
+// Vitest stubs CSS imports by default; use the actual raw stylesheet for the
+// injection contract and selector-isolation checks below. Vite serves ?raw in-app.
+vi.mock("./ui-adapters/chrome.css?raw", async () => {
+  const { readFileSync } = await import("node:fs");
+  return { default: readFileSync("apps/office/src/ui-adapters/chrome.css", "utf8") };
+});
+
 const formats = Object.keys(officeUiAdapters) as OfficeUiFormat[];
 const dialogMethods = Object.fromEntries(["showModal", "close"].map(name => [name, Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, name)]));
 let dispose: (() => void) | undefined;
@@ -144,4 +151,47 @@ it("connects shell requests through the existing parent-origin bridge and cleans
     expect(onCommand).toHaveBeenCalledWith("save");
   } finally { window.dispatchEvent(new Event("pagehide")); }
   expect(document.querySelector(".wb-office-ui")).toBeNull();
+});
+
+it("skins actual chrome with an offline font without changing authored nodes, and removes the skin", async () => {
+  document.documentElement.setAttribute("data-wb-office-theme", "original");
+  document.body.innerHTML = '<div class="ribbon"><button>원본 도구</button></div><div class="ai-panel-header"><button>새 대화</button></div><div class="ai-composer"><textarea>질문 초안</textarea></div><div class="doc-page" style="font-family: serif; color: red"><div class="ribbon"><button style="font-family: Georgia">문서 안의 버튼</button></div>원문</div>';
+  const page = document.querySelector(".doc-page")!, original = page.outerHTML;
+  const chrome = document.querySelector(".ribbon")!, control = chrome.querySelector("button")!;
+  const ui = mount();
+  const style = document.querySelector<HTMLStyleElement>('style[data-wb-office-chrome="word"]')!;
+  expect(style.textContent).toContain(new URL("/office/fonts/pretendard/PretendardVariable.ttf", document.location.href).href);
+  expect(style.textContent).toContain(".ai-panel-header, .ai-composer, .ai-model-picker");
+  expect(style.textContent).not.toMatch(/__WB_/);
+  expect(document.documentElement.dataset.wbOfficeFormat).toBe("word");
+  const surfaceRule = Array.from(style.sheet!.cssRules).find(rule => "selectorText" in rule && String(rule.selectorText).includes(".ribbon") && rule.cssText.includes("font-family: var(--wb-ui-font) !important")) as CSSStyleRule;
+  expect(chrome.matches(surfaceRule.selectorText)).toBe(true);
+  expect(page.querySelector(".ribbon")!.matches(surfaceRule.selectorText)).toBe(false);
+  await applyOfficeTheme("view", "dark");
+  expect(document.documentElement.dataset.wbOfficeTheme).toBe("dark");
+  expect(page.outerHTML).toBe(original);
+  expect(chrome.querySelector("button")).toBe(control);
+  expect(document.querySelector(".ai-composer textarea")?.textContent).toBe("질문 초안");
+  ui.dispose(); dispose = undefined;
+  expect(document.querySelector("style[data-wb-office-chrome]")).toBeNull();
+  expect(document.documentElement.hasAttribute("data-wb-office-format")).toBe(false);
+  expect(document.documentElement.dataset.wbOfficeTheme).toBe("original");
+  document.documentElement.removeAttribute("data-wb-office-theme");
+});
+
+it("installs and themes only the HWP editor frame, then restores both documents", async () => {
+  document.body.innerHTML = '<div class="hwp-editor-host"><iframe></iframe></div><iframe id="preview"></iframe>';
+  const frame = document.querySelector<HTMLIFrameElement>(".hwp-editor-host iframe")!, inner = frame.contentDocument!;
+  inner.body.innerHTML = '<div id="menu-bar"><button>파일</button></div><div id="icon-toolbar"><button>저장</button></div><canvas></canvas>';
+  const original = inner.body.innerHTML;
+  const ui = mount("hangul");
+  fireEvent.load(frame);
+  expect(inner.querySelector("style[data-wb-office-chrome]")?.textContent).toContain("#icon-toolbar, #style-bar, #status-bar");
+  expect(document.querySelector<HTMLIFrameElement>("#preview")!.contentDocument!.querySelector("style[data-wb-office-chrome]")).toBeNull();
+  await applyOfficeTheme("view", "dark");
+  expect(inner.documentElement.dataset.wbOfficeTheme).toBe("dark");
+  expect(inner.body.innerHTML).toBe(original);
+  ui.dispose(); dispose = undefined;
+  expect(inner.querySelector("style[data-wb-office-chrome]")).toBeNull();
+  expect(inner.documentElement.hasAttribute("data-wb-office-format")).toBe(false);
 });

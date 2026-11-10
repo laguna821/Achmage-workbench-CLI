@@ -56,7 +56,7 @@ pub(crate) fn persistent_image() -> Result<Option<PathBuf>, String> {
 }
 
 fn command(service: bool) -> Result<Command, String> {
-    let context: tauri::Context<tauri::Wry> = tauri::generate_context!();
+    let context = crate::app_context();
     let dirs = crate::resource_dirs(tauri::utils::platform::resource_dir(context.package_info(), &Default::default()).ok());
     let name = if service { "host/workbench-service.mjs" } else { "host/host.mjs" };
     let root = dirs.iter().find(|dir| dir.join(name).is_file()).ok_or("설치본의 호스트 실행기를 찾지 못했습니다.")?;

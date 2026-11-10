@@ -122,9 +122,15 @@ fn node_in(dirs: &[PathBuf]) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(name))
 }
 
+// macOS embeds an Info.plist symbol at each generate_context! expansion. Keep a
+// single expansion per crate, shared by the shell and headless helper entrypoints.
+pub(crate) fn app_context() -> tauri::Context<tauri::Wry> {
+    tauri::generate_context!()
+}
+
 /// Original Office CLI credential protocol. Never starts a window or writes settings.
 pub fn reveal_ai_secrets() -> i32 {
-    let context: tauri::Context<tauri::Wry> = tauri::generate_context!();
+    let context = app_context();
     let dirs = resource_dirs(tauri::utils::platform::resource_dir(context.package_info(), &Default::default()).ok());
     let worker = dirs.iter().map(|dir| dir.join("host/office-reveal.mjs"))
         .find(|path| path.is_file())
@@ -530,7 +536,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(app_context())
         .expect("error while building Achmage Workbench");
 
     let on_event = |handle: &tauri::AppHandle, event| {

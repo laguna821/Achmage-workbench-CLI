@@ -20,6 +20,16 @@ pub fn new_id() -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+pub fn set_bounds(view: &Webview, x: f64, y: f64, width: f64, height: f64) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    { webkitgtk::set_bounds(view, x, y, width, height) }
+    #[cfg(not(target_os = "linux"))]
+    { view.set_bounds(tauri::Rect {
+        position: tauri::LogicalPosition::new(x, y).into(),
+        size: tauri::LogicalSize::new(width, height).into(),
+    }).map_err(|error| error.to_string()) }
+}
+
 pub fn permission_support() -> Vec<String> {
     #[cfg(target_os = "macos")]
     let kinds = ["microphone", "camera", "camera-microphone"];

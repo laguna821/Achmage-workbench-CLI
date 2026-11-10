@@ -1,0 +1,1511 @@
+{
+  "rawSummary": {
+    "fails": 79,
+    "reflex": 3,
+    "warns": 24,
+    "waived": 0,
+    "rejected": 0,
+    "answered": 0,
+    "dismissed": 0,
+    "notes": 8,
+    "files": 196,
+    "render": "ran",
+    "kept": "kept: links 16/16, fields 64/64, handlers 1613/1613, test hooks 1/1, headings 2/2, figures 1/1; before 104 FAIL, 27 REFLEX, now 79 FAIL, 3 REFLEX"
+  },
+  "findings": [
+    {
+      "gate": "19",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/FlowViews.tsx",
+      "line": 149,
+      "evidence": "dash \"–\" in copy",
+      "fix": "A comma, a colon, a full stop or parentheses; never a dash",
+      "disposition": [
+        "context exception",
+        "Unavailable-value dashes, range notation and authored content are product semantics."
+      ]
+    },
+    {
+      "gate": "19",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/GitHubActions.tsx",
+      "line": 94,
+      "evidence": "dash \"—\" in copy",
+      "fix": "A comma, a colon, a full stop or parentheses; never a dash",
+      "disposition": [
+        "context exception",
+        "Unavailable-value dashes, range notation and authored content are product semantics."
+      ]
+    },
+    {
+      "gate": "19",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/GitHubRecovery.tsx",
+      "line": 37,
+      "evidence": "dash \"—\" in copy",
+      "fix": "A comma, a colon, a full stop or parentheses; never a dash",
+      "disposition": [
+        "context exception",
+        "Unavailable-value dashes, range notation and authored content are product semantics."
+      ]
+    },
+    {
+      "gate": "19",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/WorkspaceServiceInspect.tsx",
+      "line": 46,
+      "evidence": "dash \"–\" in copy",
+      "fix": "A comma, a colon, a full stop or parentheses; never a dash",
+      "disposition": [
+        "context exception",
+        "Unavailable-value dashes, range notation and authored content are product semantics."
+      ]
+    },
+    {
+      "gate": "19",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/docs/DocumentView.tsx",
+      "line": 563,
+      "evidence": "dash \"—\" in copy",
+      "fix": "A comma, a colon, a full stop or parentheses; never a dash",
+      "disposition": [
+        "context exception",
+        "Unavailable-value dashes, range notation and authored content are product semantics."
+      ]
+    },
+    {
+      "gate": "19",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/pkm/InsightDialog.tsx",
+      "line": 84,
+      "evidence": "dash \"—\" in copy",
+      "fix": "A comma, a colon, a full stop or parentheses; never a dash",
+      "disposition": [
+        "context exception",
+        "Unavailable-value dashes, range notation and authored content are product semantics."
+      ]
+    },
+    {
+      "gate": "19",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/project/ProjectView.tsx",
+      "line": 320,
+      "evidence": "dash \"—\" in copy",
+      "fix": "A comma, a colon, a full stop or parentheses; never a dash",
+      "disposition": [
+        "context exception",
+        "Unavailable-value dashes, range notation and authored content are product semantics."
+      ]
+    },
+    {
+      "gate": "20",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/docs/pdf-text-layer.css",
+      "line": 1,
+      "evidence": "no Hallmark stamp on the first non-empty line of any CSS",
+      "fix": "The stamp comment is line 1 of the CSS; only @charset may precede it",
+      "disposition": [
+        "scope exception",
+        "Untouched PDF text-layer and notebook styles retain their source headers. HIG foundation has the app stamp."
+      ]
+    },
+    {
+      "gate": "20",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/new-document.css",
+      "line": 1,
+      "evidence": "no Hallmark stamp on the first non-empty line of any CSS",
+      "fix": "The stamp comment is line 1 of the CSS; only @charset may precede it",
+      "disposition": [
+        "scope exception",
+        "Untouched PDF text-layer and notebook styles retain their source headers. HIG foundation has the app stamp."
+      ]
+    },
+    {
+      "gate": "30a",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/GitHubDiscussion.tsx",
+      "line": 8,
+      "evidence": "emoji passed as an icon: 👍",
+      "fix": "One icon library, a custom SVG, or the word alone",
+      "disposition": [
+        "false positive",
+        "GitHub reaction emoji are original user reaction data, not an icon system."
+      ]
+    },
+    {
+      "gate": "40",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "isolated local fixture",
+      "line": 1,
+      "evidence": "[1440px] a field's edge is under 3:1 against what surrounds it: textarea.composer-input 1.00:1",
+      "fix": "Draw the field in --color-muted, or fill it a step off the surface it sits on",
+      "disposition": [
+        "manual review",
+        "Borderless inner textarea lives inside one composer field. Raised its outer edge to semantic field-line; button onColor compares real black/white contrast; sidebar secondary labels use chrome text. No duplicate inner border."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/docs/pdf-text-layer.css",
+      "line": 64,
+      "evidence": "colour literal rgb(180 0 170 / 0.25) outside tokens (--highlight-bg-color on .textLayer .highlight)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/docs/pdf-text-layer.css",
+      "line": 65,
+      "evidence": "colour literal rgb(0 100 0 / 0.25) outside tokens (--highlight-selected-bg-color on .textLayer .highlight)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/docs/pdf-text-layer.css",
+      "line": 108,
+      "evidence": "colour literal rgba(0 0 255 / 0.25) outside tokens (background on .textLayer ::-moz-selection)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/docs/pdf-text-layer.css",
+      "line": 114,
+      "evidence": "colour literal rgba(0 0 255 / 0.25) outside tokens (background on .textLayer ::selection)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 42,
+      "evidence": "colour literal #f2f2f7 outside tokens (--chrome-bg on :root, .look-scope[data-theme…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 42,
+      "evidence": "colour literal #ffffff outside tokens (--chrome-surface on :root, .look-scope[data-theme…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 42,
+      "evidence": "colour literal #d1d1d6 outside tokens (--chrome-line on :root, .look-scope[data-theme…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 43,
+      "evidence": "colour literal #000000 outside tokens (--chrome-text on :root, .look-scope[data-theme…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 43,
+      "evidence": "colour literal #6c6c70 outside tokens (--chrome-muted on :root, .look-scope[data-theme…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 43,
+      "evidence": "colour literal #1e6ef4 outside tokens (--chrome-accent on :root, .look-scope[data-theme…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 44,
+      "evidence": "colour literal #1e6ef4 outside tokens (--accent-text on :root, .look-scope[data-theme…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 44,
+      "evidence": "colour literal #1e6ef4 outside tokens (--accent-fill on :root, .look-scope[data-theme…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 45,
+      "evidence": "colour literal #c55300 outside tokens (--amber on :root, .look-scope[data-theme…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 45,
+      "evidence": "colour literal #934000 outside tokens (--amber-text on :root, .look-scope[data-theme…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 45,
+      "evidence": "colour literal #fff3e5 outside tokens (--amber-soft on :root, .look-scope[data-theme…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 46,
+      "evidence": "colour literal #e9152d outside tokens (--danger on :root, .look-scope[data-theme…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 46,
+      "evidence": "colour literal #fff0f1 outside tokens (--danger-soft on :root, .look-scope[data-theme…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 46,
+      "evidence": "colour literal #008932 outside tokens (--ok on :root, .look-scope[data-theme…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 47,
+      "evidence": "colour literal rgb(0 0 0 / .24) outside tokens (--scrim on :root, .look-scope[data-theme…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 47,
+      "evidence": "colour literal rgb(0 0 0 / .12) outside tokens (--popover-shadow on :root, .look-scope[data-theme…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 47,
+      "evidence": "colour literal rgb(0 0 0 / .08) outside tokens (--popover-shadow on :root, .look-scope[data-theme…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 48,
+      "evidence": "colour literal rgb(0 0 0 / .22) outside tokens (--elev-3 on :root, .look-scope[data-theme…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 49,
+      "evidence": "colour literal #2c2c2e outside tokens (--toast-bg on :root, .look-scope[data-theme…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 49,
+      "evidence": "colour literal #ffffff outside tokens (--toast-text on :root, .look-scope[data-theme…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 52,
+      "evidence": "colour literal #1c1c1e outside tokens (--chrome-bg on :root[data-theme=\"dark\"], .lo…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 52,
+      "evidence": "colour literal #2c2c2e outside tokens (--chrome-surface on :root[data-theme=\"dark\"], .lo…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 52,
+      "evidence": "colour literal #3a3a3c outside tokens (--chrome-line on :root[data-theme=\"dark\"], .lo…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 53,
+      "evidence": "colour literal #ffffff outside tokens (--chrome-text on :root[data-theme=\"dark\"], .lo…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 53,
+      "evidence": "colour literal #aeaeb2 outside tokens (--chrome-muted on :root[data-theme=\"dark\"], .lo…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 53,
+      "evidence": "colour literal #5cb8ff outside tokens (--chrome-accent on :root[data-theme=\"dark\"], .lo…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 54,
+      "evidence": "colour literal #5cb8ff outside tokens (--accent-text on :root[data-theme=\"dark\"], .lo…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 54,
+      "evidence": "colour literal #0091ff outside tokens (--accent-fill on :root[data-theme=\"dark\"], .lo…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 55,
+      "evidence": "colour literal #000000 outside tokens (--on-action on :root[data-theme=\"dark\"], .lo…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 56,
+      "evidence": "colour literal #ffa056 outside tokens (--amber on :root[data-theme=\"dark\"], .lo…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 56,
+      "evidence": "colour literal #ffa056 outside tokens (--amber-text on :root[data-theme=\"dark\"], .lo…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 56,
+      "evidence": "colour literal #33271e outside tokens (--amber-soft on :root[data-theme=\"dark\"], .lo…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 57,
+      "evidence": "colour literal #ff6165 outside tokens (--danger on :root[data-theme=\"dark\"], .lo…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 57,
+      "evidence": "colour literal #382024 outside tokens (--danger-soft on :root[data-theme=\"dark\"], .lo…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 57,
+      "evidence": "colour literal #4ad968 outside tokens (--ok on :root[data-theme=\"dark\"], .lo…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 58,
+      "evidence": "colour literal rgb(0 0 0 / .4) outside tokens (--scrim on :root[data-theme=\"dark\"], .lo…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 58,
+      "evidence": "colour literal rgb(0 0 0 / .32) outside tokens (--popover-shadow on :root[data-theme=\"dark\"], .lo…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 58,
+      "evidence": "colour literal rgb(0 0 0 / .2) outside tokens (--popover-shadow on :root[data-theme=\"dark\"], .lo…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 59,
+      "evidence": "colour literal rgb(0 0 0 / .4) outside tokens (--elev-3 on :root[data-theme=\"dark\"], .lo…)",
+      "fix": "Lift the value into the token block",
+      "disposition": [
+        "false positive / upstream boundary",
+        "Combined :root and .look-scope theme tokens are declarations; PDF text-layer selection colors belong to its upstream renderer, not app chrome."
+      ]
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/ArchiveView.tsx",
+      "line": 73,
+      "evidence": "middle-dot meta string \"폴더 · 안에 개 작업 · 세션 개 세션 · 보관 되돌리기 프로젝트 삭제…\"",
+      "fix": "Line breaks, columns or hairlines; one dot in a byline at most",
+      "disposition": [
+        "context exception",
+        "Most hits concatenate distinct JSX elements; project counts, addresses, session labels and actual state indicators remain named. Changed crowded chat status groups."
+      ]
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/BrowserPill.tsx",
+      "line": 113,
+      "evidence": "middle-dot meta string \"탐색 방식 Lightpanda · 백그라운드 수집 Chromium · 로그인·화면·호환\"",
+      "fix": "Line breaks, columns or hairlines; one dot in a byline at most",
+      "disposition": [
+        "context exception",
+        "Most hits concatenate distinct JSX elements; project counts, addresses, session labels and actual state indicators remain named. Changed crowded chat status groups."
+      ]
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/DocCards.tsx",
+      "line": 179,
+      "evidence": "middle-dot meta string \"의 수정안 · r 기준 · + −\"",
+      "fix": "Line breaks, columns or hairlines; one dot in a byline at most",
+      "disposition": [
+        "context exception",
+        "Most hits concatenate distinct JSX elements; project counts, addresses, session labels and actual state indicators remain named. Changed crowded chat status groups."
+      ]
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/EventHub.tsx",
+      "line": 71,
+      "evidence": "middle-dot meta string \"호스트 · 작업공간 · 세션\"",
+      "fix": "Line breaks, columns or hairlines; one dot in a byline at most",
+      "disposition": [
+        "context exception",
+        "Most hits concatenate distinct JSX elements; project counts, addresses, session labels and actual state indicators remain named. Changed crowded chat status groups."
+      ]
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/ImageUploadSheet.tsx",
+      "line": 157,
+      "evidence": "middle-dot meta string \"옵시디언 CMDS Eagle 설정의 Cloudflare R2 칸에 넣은 세 값(Worke…\"",
+      "fix": "Line breaks, columns or hairlines; one dot in a byline at most",
+      "disposition": [
+        "context exception",
+        "Most hits concatenate distinct JSX elements; project counts, addresses, session labels and actual state indicators remain named. Changed crowded chat status groups."
+      ]
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/LinkCards.tsx",
+      "line": 81,
+      "evidence": "middle-dot meta string \"/ 왕복 · 번 주고받음 · ·\"",
+      "fix": "Line breaks, columns or hairlines; one dot in a byline at most",
+      "disposition": [
+        "context exception",
+        "Most hits concatenate distinct JSX elements; project counts, addresses, session labels and actual state indicators remain named. Changed crowded chat status groups."
+      ]
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/NewDocumentButton.tsx",
+      "line": 61,
+      "evidence": "middle-dot meta string \"캔버스 크기 정사각 (SNS) · 1080×1080 카드뉴스 · 1080×1350 세로 …\"",
+      "fix": "Line breaks, columns or hairlines; one dot in a byline at most",
+      "disposition": [
+        "context exception",
+        "Most hits concatenate distinct JSX elements; project counts, addresses, session labels and actual state indicators remain named. Changed crowded chat status groups."
+      ]
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/OfficeImportDialog.tsx",
+      "line": 49,
+      "evidence": "middle-dot meta string \"AI 설정 · 문서 표시 설정 · 스타일 개 추가 · 같은 스타일 개 유지\"",
+      "fix": "Line breaks, columns or hairlines; one dot in a byline at most",
+      "disposition": [
+        "context exception",
+        "Most hits concatenate distinct JSX elements; project counts, addresses, session labels and actual state indicators remain named. Changed crowded chat status groups."
+      ]
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/PaseoHubConnection.tsx",
+      "line": 56,
+      "evidence": "middle-dot meta string \"승인할 설정 · · · 추론 · 접근\"",
+      "fix": "Line breaks, columns or hairlines; one dot in a byline at most",
+      "disposition": [
+        "context exception",
+        "Most hits concatenate distinct JSX elements; project counts, addresses, session labels and actual state indicators remain named. Changed crowded chat status groups."
+      ]
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/ScmDiffText.tsx",
+      "line": 21,
+      "evidence": "middle-dot meta string \"변경 구간 개 · 선택 개 선택 구간 다음 변경 · F7\"",
+      "fix": "Line breaks, columns or hairlines; one dot in a byline at most",
+      "disposition": [
+        "context exception",
+        "Most hits concatenate distinct JSX elements; project counts, addresses, session labels and actual state indicators remain named. Changed crowded chat status groups."
+      ]
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/SearchPalette.tsx",
+      "line": 696,
+      "evidence": "middle-dot meta string \"검색 준비 중 · / 건 · 준비된 항목부터 표시합니다.\"",
+      "fix": "Line breaks, columns or hairlines; one dot in a byline at most",
+      "disposition": [
+        "context exception",
+        "Most hits concatenate distinct JSX elements; project counts, addresses, session labels and actual state indicators remain named. Changed crowded chat status groups."
+      ]
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/SearchPalette.tsx",
+      "line": 730,
+      "evidence": "middle-dot meta string \"원문 요청 · AI 답변 · 계획\"",
+      "fix": "Line breaks, columns or hairlines; one dot in a byline at most",
+      "disposition": [
+        "context exception",
+        "Most hits concatenate distinct JSX elements; project counts, addresses, session labels and actual state indicators remain named. Changed crowded chat status groups."
+      ]
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/SearchPalette.tsx",
+      "line": 732,
+      "evidence": "middle-dot meta string \"원문 요청 · AI 답변 · 계획\"",
+      "fix": "Line breaks, columns or hairlines; one dot in a byline at most",
+      "disposition": [
+        "context exception",
+        "Most hits concatenate distinct JSX elements; project counts, addresses, session labels and actual state indicators remain named. Changed crowded chat status groups."
+      ]
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/VoiceInput.tsx",
+      "line": 16,
+      "evidence": "middle-dot meta string \"언어 · 다운로드 · 설치 · 실행\"",
+      "fix": "Line breaks, columns or hairlines; one dot in a byline at most",
+      "disposition": [
+        "context exception",
+        "Most hits concatenate distinct JSX elements; project counts, addresses, session labels and actual state indicators remain named. Changed crowded chat status groups."
+      ]
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/WorkView.tsx",
+      "line": 128,
+      "evidence": "middle-dot meta string \"남겨 둠 · 문서 · 첨부 고치기 지우기\"",
+      "fix": "Line breaks, columns or hairlines; one dot in a byline at most",
+      "disposition": [
+        "context exception",
+        "Most hits concatenate distinct JSX elements; project counts, addresses, session labels and actual state indicators remain named. Changed crowded chat status groups."
+      ]
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/WorkView.tsx",
+      "line": 155,
+      "evidence": "middle-dot meta string \"남겨 둠 · 문서 · 첨부\"",
+      "fix": "Line breaks, columns or hairlines; one dot in a byline at most",
+      "disposition": [
+        "context exception",
+        "Most hits concatenate distinct JSX elements; project counts, addresses, session labels and actual state indicators remain named. Changed crowded chat status groups."
+      ]
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/nav/ListPane.tsx",
+      "line": 106,
+      "evidence": "decorative status dots (dot dot-new) repeated across the page",
+      "fix": "Delete them; a dot means live state, and only where it is one",
+      "disposition": [
+        "context exception",
+        "Most hits concatenate distinct JSX elements; project counts, addresses, session labels and actual state indicators remain named. Changed crowded chat status groups."
+      ]
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/nav/rows.tsx",
+      "line": 163,
+      "evidence": "decorative status dots (dot dot-new) repeated across the page",
+      "fix": "Delete them; a dot means live state, and only where it is one",
+      "disposition": [
+        "context exception",
+        "Most hits concatenate distinct JSX elements; project counts, addresses, session labels and actual state indicators remain named. Changed crowded chat status groups."
+      ]
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/onboarding/ModelCache.tsx",
+      "line": 43,
+      "evidence": "middle-dot meta string \"언어 · 모델 · 실행 파일 ·\"",
+      "fix": "Line breaks, columns or hairlines; one dot in a byline at most",
+      "disposition": [
+        "context exception",
+        "Most hits concatenate distinct JSX elements; project counts, addresses, session labels and actual state indicators remain named. Changed crowded chat status groups."
+      ]
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/pkm/ViewDialog.tsx",
+      "line": 88,
+      "evidence": "middle-dot meta string \"#태그 .\"키\"=\"값\" .\"키\"=\"\" (값 없음) @today @last7d @thisw…\"",
+      "fix": "Line breaks, columns or hairlines; one dot in a byline at most",
+      "disposition": [
+        "context exception",
+        "Most hits concatenate distinct JSX elements; project counts, addresses, session labels and actual state indicators remain named. Changed crowded chat status groups."
+      ]
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/project/ProjectView.tsx",
+      "line": 376,
+      "evidence": "middle-dot meta string \"파일 · 판 사람 · AI\"",
+      "fix": "Line breaks, columns or hairlines; one dot in a byline at most",
+      "disposition": [
+        "context exception",
+        "Most hits concatenate distinct JSX elements; project counts, addresses, session labels and actual state indicators remain named. Changed crowded chat status groups."
+      ]
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/project/ProjectsGraph.tsx",
+      "line": 205,
+      "evidence": "middle-dot meta string \"프로젝트 · 선 강조 풀기 고정 개 풀기 방향키 이동 · Enter 열기 화면에 맞추기 …\"",
+      "fix": "Line breaks, columns or hairlines; one dot in a byline at most",
+      "disposition": [
+        "context exception",
+        "Most hits concatenate distinct JSX elements; project counts, addresses, session labels and actual state indicators remain named. Changed crowded chat status groups."
+      ]
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/views/parts.tsx",
+      "line": 170,
+      "evidence": "middle-dot meta string \"색은 모양 ▾의 테두리 · 옅은 바탕 · 머리 강조에 쓰입니다.\"",
+      "fix": "Line breaks, columns or hairlines; one dot in a byline at most",
+      "disposition": [
+        "context exception",
+        "Most hits concatenate distinct JSX elements; project counts, addresses, session labels and actual state indicators remain named. Changed crowded chat status groups."
+      ]
+    },
+    {
+      "gate": "67",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/ServicePreviewSettings.tsx",
+      "line": 20,
+      "evidence": "\"미리보기 HTTPS 주소\" typed in capitals at 12px (<label>)",
+      "fix": "Sentence case in the body face; capitals survive only as a wordmark or as the display voice",
+      "disposition": [
+        "false positive",
+        "HTTPS is a protocol name and is not converted to invented sentence case."
+      ]
+    },
+    {
+      "gate": "67",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "apps/web/src/components/WorkspaceServiceInspect.tsx",
+      "line": 40,
+      "evidence": "\"응답 내용을 확인하고 파일로 저장할 수 있습니다. 실제 …\" typed in capitals at 12px (<p class=\"muted\">)",
+      "fix": "Sentence case in the body face; capitals survive only as a wordmark or as the display voice",
+      "disposition": [
+        "false positive",
+        "HTTPS is a protocol name and is not converted to invented sentence case."
+      ]
+    },
+    {
+      "gate": "28b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "apps/web/src/components/QrScanner.tsx",
+      "line": 117,
+      "evidence": "video without poster",
+      "fix": "Add a poster frame; guard: below the fold and not the LCP",
+      "disposition": [
+        "not applicable",
+        "QR scanner video is a live camera capture, not prerecorded marketing media with a poster."
+      ]
+    },
+    {
+      "gate": "39b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "isolated local fixture",
+      "line": 1,
+      "evidence": "[1440px] control height outside 32 to 52px: button.side-row 28px, button.side-row 28px, button.hk-seg__item 28px",
+      "fix": "Marketing controls stand 44 to 52px; app UI 32 to 40px with a 44px hit target",
+      "disposition": [
+        "user contract",
+        "Locked HIG desktop controls 28px; coarse pointer target 44px."
+      ]
+    },
+    {
+      "gate": "72",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "isolated local fixture",
+      "line": 1,
+      "evidence": "[1440px] text crowds the edge of its box: aside.sidebar bottom -226px",
+      "fix": "Pad the box: max(8px, 0.5em) at the sides, max(4px, 0.3em) above and below",
+      "disposition": [
+        "false positive",
+        "Scrollable sidebar descendants can extend below the clipping viewport; no page-edge padding bug in the inspected screenshots."
+      ]
+    },
+    {
+      "gate": "28a",
+      "grade": "WARN",
+      "tier": "floor",
+      "file": "apps/web/src/components/HomeModes.tsx",
+      "line": 441,
+      "evidence": "lazy-loaded first image (likely LCP)",
+      "fix": "fetchpriority=high on the LCP element",
+      "disposition": [
+        "not applicable",
+        "Tool/document images are not a marketing LCP hero."
+      ]
+    },
+    {
+      "gate": "28a",
+      "grade": "WARN",
+      "tier": "floor",
+      "file": "apps/web/src/components/docs/DocImages.tsx",
+      "line": 50,
+      "evidence": "lazy-loaded first image (likely LCP)",
+      "fix": "fetchpriority=high on the LCP element",
+      "disposition": [
+        "not applicable",
+        "Tool/document images are not a marketing LCP hero."
+      ]
+    },
+    {
+      "gate": "28a",
+      "grade": "WARN",
+      "tier": "floor",
+      "file": "apps/web/src/components/docs/OfficeView.tsx",
+      "line": 15,
+      "evidence": "lazy-loaded first image (likely LCP)",
+      "fix": "fetchpriority=high on the LCP element",
+      "disposition": [
+        "not applicable",
+        "Tool/document images are not a marketing LCP hero."
+      ]
+    },
+    {
+      "gate": "28a",
+      "grade": "WARN",
+      "tier": "floor",
+      "file": "apps/web/src/components/pkm/CardListView.tsx",
+      "line": 46,
+      "evidence": "lazy-loaded first image (likely LCP)",
+      "fix": "fetchpriority=high on the LCP element",
+      "disposition": [
+        "not applicable",
+        "Tool/document images are not a marketing LCP hero."
+      ]
+    },
+    {
+      "gate": "40",
+      "grade": "WARN",
+      "tier": "floor",
+      "file": "apps/web/src/styles/hig-chat.css",
+      "line": 93,
+      "evidence": "2.15:1 < 4.5:1 on .hig-composer .composer-bar .icon-button.primary",
+      "fix": "Raise the contrast to threshold",
+      "disposition": [
+        "manual review",
+        "Borderless inner textarea lives inside one composer field. Raised its outer edge to semantic field-line; button onColor compares real black/white contrast; sidebar secondary labels use chrome text. No duplicate inner border."
+      ]
+    },
+    {
+      "gate": "40",
+      "grade": "WARN",
+      "tier": "floor",
+      "file": "isolated local fixture",
+      "line": 1,
+      "evidence": "[1280px] contrast drops to 3.96:1 over the gradient behind span.side-row-label \"workbench-design-vault-y\"",
+      "fix": "Check the text where the gradient is darkest or lightest; give the label its own ground",
+      "disposition": [
+        "manual review",
+        "Borderless inner textarea lives inside one composer field. Raised its outer edge to semantic field-line; button onColor compares real black/white contrast; sidebar secondary labels use chrome text. No duplicate inner border."
+      ]
+    },
+    {
+      "gate": "40",
+      "grade": "WARN",
+      "tier": "floor",
+      "file": "isolated local fixture",
+      "line": 1,
+      "evidence": "[1280px] contrast drops to 1.52:1 over the gradient behind span.side-row-trail.muted \"1 · 11\"",
+      "fix": "Check the text where the gradient is darkest or lightest; give the label its own ground",
+      "disposition": [
+        "manual review",
+        "Borderless inner textarea lives inside one composer field. Raised its outer edge to semantic field-line; button onColor compares real black/white contrast; sidebar secondary labels use chrome text. No duplicate inner border."
+      ]
+    },
+    {
+      "gate": "41",
+      "grade": "WARN",
+      "tier": "floor",
+      "file": "apps/web/src/styles/hig-chat.css",
+      "line": 59,
+      "evidence": "dark surface (L 29%) on .transcript :is(.approval-card,.plan-card) sets no text colour",
+      "fix": "Swap text to paper in the same rule",
+      "disposition": [
+        "inherited semantic color",
+        "Dialog cards inherit --text from their theme scope."
+      ]
+    },
+    {
+      "gate": "41",
+      "grade": "WARN",
+      "tier": "floor",
+      "file": "apps/web/src/styles/hig-chat.css",
+      "line": 100,
+      "evidence": "dark surface (L 29%) on .hig-composer .voice-panel sets no text colour",
+      "fix": "Swap text to paper in the same rule",
+      "disposition": [
+        "inherited semantic color",
+        "Dialog cards inherit --text from their theme scope."
+      ]
+    },
+    {
+      "gate": "41",
+      "grade": "WARN",
+      "tier": "floor",
+      "file": "apps/web/src/styles/hig-chat.css",
+      "line": 105,
+      "evidence": "dark surface (L 29%) on .hig-composer .composer-tools-panel sets no text colour",
+      "fix": "Swap text to paper in the same rule",
+      "disposition": [
+        "inherited semantic color",
+        "Dialog cards inherit --text from their theme scope."
+      ]
+    },
+    {
+      "gate": "41",
+      "grade": "WARN",
+      "tier": "floor",
+      "file": "apps/web/src/styles/hig-chat.css",
+      "line": 173,
+      "evidence": "dark surface (L 29%) on .appearance-sheet .look-card sets no text colour",
+      "fix": "Swap text to paper in the same rule",
+      "disposition": [
+        "inherited semantic color",
+        "Dialog cards inherit --text from their theme scope."
+      ]
+    },
+    {
+      "gate": "41",
+      "grade": "WARN",
+      "tier": "floor",
+      "file": "apps/web/src/styles/hig-shell.css",
+      "line": 185,
+      "evidence": "dark surface (L 29%) on .project-view .properties-panel sets no text colour",
+      "fix": "Swap text to paper in the same rule",
+      "disposition": [
+        "inherited semantic color",
+        "Dialog cards inherit --text from their theme scope."
+      ]
+    },
+    {
+      "gate": "41",
+      "grade": "WARN",
+      "tier": "floor",
+      "file": "apps/web/src/styles/hig-shell.css",
+      "line": 231,
+      "evidence": "dark surface (L 29%) on .projects-mode .work-card sets no text colour",
+      "fix": "Swap text to paper in the same rule",
+      "disposition": [
+        "inherited semantic color",
+        "Dialog cards inherit --text from their theme scope."
+      ]
+    },
+    {
+      "gate": "41",
+      "grade": "WARN",
+      "tier": "floor",
+      "file": "apps/web/src/styles/hig-shell.css",
+      "line": 246,
+      "evidence": "dark surface (L 29%) on .projects-mode .kanban-card sets no text colour",
+      "fix": "Swap text to paper in the same rule",
+      "disposition": [
+        "inherited semantic color",
+        "Dialog cards inherit --text from their theme scope."
+      ]
+    },
+    {
+      "gate": "49",
+      "grade": "WARN",
+      "tier": "floor",
+      "file": "apps/web/src/components/Connections.tsx",
+      "line": 194,
+      "evidence": "long clickable label \"MCP·스킬 연동 · Claude와 Codex 나란히…\" without nowrap",
+      "fix": "Shorten the label or set nowrap",
+      "disposition": [
+        "intentional wrapping",
+        "Long localized settings labels wrap rather than clip on narrow screens."
+      ]
+    },
+    {
+      "gate": "49",
+      "grade": "WARN",
+      "tier": "floor",
+      "file": "apps/web/src/components/ScmReviewNotes.tsx",
+      "line": 77,
+      "evidence": "long clickable label \"아래 최신 의견을 확인했음 · 현재 입력으로 수정\" without nowrap",
+      "fix": "Shorten the label or set nowrap",
+      "disposition": [
+        "intentional wrapping",
+        "Long localized settings labels wrap rather than clip on narrow screens."
+      ]
+    },
+    {
+      "gate": "49",
+      "grade": "WARN",
+      "tier": "floor",
+      "file": "apps/web/src/components/nav/dialogs.tsx",
+      "line": 39,
+      "evidence": "long clickable label \"폴더만 지우기 안의 것은 위 폴더( )로 옮깁니다.\" without nowrap",
+      "fix": "Shorten the label or set nowrap",
+      "disposition": [
+        "intentional wrapping",
+        "Long localized settings labels wrap rather than clip on narrow screens."
+      ]
+    },
+    {
+      "gate": "49",
+      "grade": "WARN",
+      "tier": "floor",
+      "file": "apps/web/src/components/nav/dialogs.tsx",
+      "line": 43,
+      "evidence": "long clickable label \"보관 안의 것과 함께 보관함으로 옮깁니다. 보관함에서 되돌릴 수…\" without nowrap",
+      "fix": "Shorten the label or set nowrap",
+      "disposition": [
+        "intentional wrapping",
+        "Long localized settings labels wrap rather than clip on narrow screens."
+      ]
+    },
+    {
+      "gate": "49",
+      "grade": "WARN",
+      "tier": "floor",
+      "file": "apps/web/src/components/pkm/RulesDialog.tsx",
+      "line": 146,
+      "evidence": "long clickable label \"기본 묶음 「디스크 위치대로」 넣기 · 작업 폴더가 있는 폴더 …\" without nowrap",
+      "fix": "Shorten the label or set nowrap",
+      "disposition": [
+        "intentional wrapping",
+        "Long localized settings labels wrap rather than clip on narrow screens."
+      ]
+    },
+    {
+      "gate": "F3",
+      "grade": "WARN",
+      "tier": "finish",
+      "file": "apps/web/src/components/new-document.css",
+      "line": 4,
+      "evidence": "no text-wrap: balance on any display head (3 head rule(s), e.g. .new-document-dialog h2)",
+      "fix": "Add text-wrap: balance to h1/h2-level heads",
+      "disposition": [
+        "not needed",
+        "Short tool/dialog headings are not display hero text."
+      ]
+    },
+    {
+      "gate": "F3",
+      "grade": "WARN",
+      "tier": "finish",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 98,
+      "evidence": "no text-wrap: balance on any display head (11 head rule(s), e.g. .sheet h1, .sheet h2, .dialog h…)",
+      "fix": "Add text-wrap: balance to h1/h2-level heads",
+      "disposition": [
+        "not needed",
+        "Short tool/dialog headings are not display hero text."
+      ]
+    },
+    {
+      "gate": "F7",
+      "grade": "WARN",
+      "tier": "finish",
+      "file": "apps/web/src/styles/hig-chat.css",
+      "line": 142,
+      "evidence": "same container recipe on 11 selectors ((.feature-dialog, .stage-dialog, .linked-dialog…...)",
+      "fix": "Vary weight, radius, or fill by role; not every box is the same box",
+      "disposition": [
+        "user contract",
+        "Consistent dialog recipes are requested HIG system behavior."
+      ]
+    },
+    {
+      "gate": "F7",
+      "grade": "WARN",
+      "tier": "finish",
+      "file": "apps/web/src/styles/hig-shell.css",
+      "line": 185,
+      "evidence": "same container recipe on 13 selectors (.project-view .properties-panel, .browser-toolb…...)",
+      "fix": "Vary weight, radius, or fill by role; not every box is the same box",
+      "disposition": [
+        "user contract",
+        "Consistent dialog recipes are requested HIG system behavior."
+      ]
+    },
+    {
+      "gate": "F24",
+      "grade": "WARN",
+      "tier": "finish",
+      "file": "apps/web/src/styles/hig-chat.css",
+      "line": 70,
+      "evidence": "a hairline border under a wide soft shadow on .turn-outline > nav",
+      "fix": "Commit to one: a defined edge, or elevation by shadow",
+      "disposition": [
+        "user contract",
+        "Menu edge remains visible with elevation in light/dark; no decorative container added."
+      ]
+    },
+    {
+      "gate": "24b",
+      "grade": "NOTE",
+      "tier": "reflex",
+      "file": "apps/web/src/styles/foundation.css",
+      "line": 93,
+      "evidence": "padding: 6px (off the 4px scale) on .hig-icon-button",
+      "fix": "Use the 4px spacing scale",
+      "disposition": [
+        "optical sizing",
+        "28px desktop icon targets use optical 6px padding around 16px icons."
+      ]
+    },
+    {
+      "gate": "24b",
+      "grade": "NOTE",
+      "tier": "reflex",
+      "file": "apps/web/src/styles/hig-entry.css",
+      "line": 8,
+      "evidence": "padding: 3px (off the 4px scale) on .browse-start .browse-start-modes",
+      "fix": "Use the 4px spacing scale",
+      "disposition": [
+        "optical sizing",
+        "28px desktop icon targets use optical 6px padding around 16px icons."
+      ]
+    },
+    {
+      "gate": "24b",
+      "grade": "NOTE",
+      "tier": "reflex",
+      "file": "apps/web/src/styles/hig-entry.css",
+      "line": 11,
+      "evidence": "gap: 6px (off the 4px scale) on .browse-entry .engine-tabs > button",
+      "fix": "Use the 4px spacing scale",
+      "disposition": [
+        "optical sizing",
+        "28px desktop icon targets use optical 6px padding around 16px icons."
+      ]
+    },
+    {
+      "gate": "24b",
+      "grade": "NOTE",
+      "tier": "reflex",
+      "file": "apps/web/src/styles/hig-entry.css",
+      "line": 11,
+      "evidence": "padding: 4px 10px (off the 4px scale) on .browse-entry .engine-tabs > button",
+      "fix": "Use the 4px spacing scale",
+      "disposition": [
+        "optical sizing",
+        "28px desktop icon targets use optical 6px padding around 16px icons."
+      ]
+    },
+    {
+      "gate": "24b",
+      "grade": "NOTE",
+      "tier": "reflex",
+      "file": "apps/web/src/styles/hig-entry.css",
+      "line": 20,
+      "evidence": "padding: 6px (off the 4px scale) on .browser-search-go",
+      "fix": "Use the 4px spacing scale",
+      "disposition": [
+        "optical sizing",
+        "28px desktop icon targets use optical 6px padding around 16px icons."
+      ]
+    },
+    {
+      "gate": "24b",
+      "grade": "NOTE",
+      "tier": "reflex",
+      "file": "apps/web/src/styles/hig-entry.css",
+      "line": 36,
+      "evidence": "padding: 6px 12px (off the 4px scale) on .browser-toolbar input",
+      "fix": "Use the 4px spacing scale",
+      "disposition": [
+        "optical sizing",
+        "28px desktop icon targets use optical 6px padding around 16px icons."
+      ]
+    },
+    {
+      "gate": "24b",
+      "grade": "NOTE",
+      "tier": "reflex",
+      "file": "apps/web/src/styles/hig-entry.css",
+      "line": 50,
+      "evidence": "padding: 5px (off the 4px scale) on .browser-navigation .hig-icon-button",
+      "fix": "Use the 4px spacing scale",
+      "disposition": [
+        "optical sizing",
+        "28px desktop icon targets use optical 6px padding around 16px icons."
+      ]
+    },
+    {
+      "gate": "24b",
+      "grade": "NOTE",
+      "tier": "reflex",
+      "file": "apps/web/src/styles/hig-entry.css",
+      "line": 51,
+      "evidence": "padding: 6px 8px (off the 4px scale) on .browser-ask",
+      "fix": "Use the 4px spacing scale",
+      "disposition": [
+        "optical sizing",
+        "28px desktop icon targets use optical 6px padding around 16px icons."
+      ]
+    }
+  ],
+  "review": {
+    "mode": "fresh-context subagent",
+    "firstWord": "fix",
+    "count": 3,
+    "changes": [
+      "compact toolbar overflow",
+      "compact composer Tools disclosure",
+      "grouped approval decisions"
+    ],
+    "recapture": "resolved in inspected 375px light/dark home/chat captures; 10/10 checks"
+  },
+  "note": "Raw parser FAIL count is preserved. Context exceptions are human dispositions, not a fabricated zero or a successful tool exit."
+}

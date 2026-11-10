@@ -6,7 +6,7 @@
   let nextRef = 1, control = null, humanBeforeBind = false, interactionAt = 0;
   const visible = el => el.isConnected && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
   const bind = wanted => {
-    if (!control) control = humanBeforeBind ? { generation: wanted.generation + 1, owner: 'human' } : { ...wanted };
+    if (!control) control = humanBeforeBind && wanted.owner !== 'human' ? { generation: wanted.generation + 1, owner: 'human' } : { ...wanted };
     return { ...control };
   };
   const human = event => {
@@ -21,6 +21,11 @@
     return names.get(el);
   };
   const run = (action, wanted, expectedNonce) => {
+    // A fresh chat grant supersedes interaction that happened before the initial
+    // document binding. Once bound, later trusted input still fences queued work.
+    if (action.kind === 'control' && !control) {
+      control = { ...action.control }; humanBeforeBind = false; return { control };
+    }
     bind(wanted);
     if (action.kind === 'control') {
       if (action.control.generation < control.generation || (action.control.generation === control.generation && action.control.owner !== control.owner)) throw Error('CONTROL_REVOKED');
@@ -33,7 +38,9 @@
       const lines = elements.map(el => {
         const label = (el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.innerText || el.getAttribute('title') || el.getAttribute('name') || '').replace(/\s+/g, ' ').slice(0, 180);
         const href = el.tagName === 'A' ? el.href : '';
-        return `[${refFor(el)}] ${el.tagName.toLowerCase()} ${label}${href ? ` → ${href}` : ''}`;
+        const editable = el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && !['password', 'file', 'hidden'].includes(el.type)) || el instanceof HTMLSelectElement;
+        const value = editable ? ` value=${JSON.stringify(el.value.slice(0, 500))}` : '';
+        return `[${refFor(el)}] ${el.tagName.toLowerCase()} ${label}${href ? ` → ${href}` : ''}${value}`;
       });
       return { documentNonce: nonce, control, text: `URL: ${location.href}\nTitle: ${document.title}\n\nUNTRUSTED WEB CONTENT\n${(document.body?.innerText || '').slice(0, 24000)}\n\nElements:\n${lines.join('\n')}`.slice(0, 50000) };
     }
@@ -47,12 +54,15 @@
     else if (action.kind === 'fill') {
       el.focus();
       if (el instanceof HTMLInputElement && ['file', 'password'].includes(el.type)) throw Error('PROTECTED_INPUT: 이 입력은 사람이 직접 처리해 주세요.');
+      if (el.readOnly) throw Error('READ_ONLY_INPUT');
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
         const prototype = el instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
         Object.getOwnPropertyDescriptor(prototype, 'value').set.call(el, action.value);
       } else if (el.isContentEditable) el.textContent = action.value;
       else throw Error('NOT_EDITABLE');
       el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }));
+      const actual = el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el.value : el.textContent;
+      if (actual !== action.value) throw Error('INPUT_NOT_APPLIED: 입력 내용이 페이지에 반영되지 않았습니다.');
     } else if (action.kind === 'select') {
       if (!(el instanceof HTMLSelectElement) || ![...el.options].some(option => option.value === action.value)) throw Error('OPTION_NOT_FOUND');
       el.value = action.value; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }));

@@ -3,7 +3,7 @@ import { FORMAT_LABEL, PROVIDER_LABEL, isUnseen, type Artifact, type Provider, t
 import type { State } from "../../state.ts";
 import type { Row } from "../../tree.ts";
 import { statusText, statusTone } from "../../format.ts";
-import { accentStyle, type Look } from "../../appearance.ts";
+import type { Look } from "../../appearance.ts";
 import { EditableText } from "../EditableText.tsx";
 import { EngineMark } from "../EngineMark.tsx";
 import { Icon, iconName, type IconName } from "../Icon.tsx";
@@ -167,7 +167,6 @@ export function TreeRow({ row, ctx }: { row: Row; ctx: RowContext }) {
   } else if (row.type === "session") {
     icon = row.session.pageAgent ? "globe" : row.session.documentAgent ? "file" : "chat";
     label = row.session.purpose;
-    style = { ...indent, ...accentStyle(ctx.lookOf(row.session.provider)) };
     const tone = statusTone(row.session);
     const unseen = row.session.id !== visibleSessionId && isUnseen(row.session);
     trailing = (
@@ -177,7 +176,7 @@ export function TreeRow({ row, ctx }: { row: Row; ctx: RowContext }) {
         {tone !== "idle" ? <span className={`dot dot-${tone}`} title={statusText(row.session)} /> : unseen ? <span className="dot dot-new" title="새 답" /> : null}
       </span>
     );
-    title = `${PROVIDER_LABEL[row.session.provider]} · ${statusText(row.session)}`;
+    title = `${row.session.pageAgent ? "웹 AI" : row.session.documentAgent ? "문서 AI" : "채팅"} · ${PROVIDER_LABEL[row.session.provider]} · ${statusText(row.session)}`;
   } else if (row.type === "docs") {
     icon = "file";
     label = `문서 ${row.count}`;
@@ -195,7 +194,7 @@ export function TreeRow({ row, ctx }: { row: Row; ctx: RowContext }) {
   const classes = ["side-row", `row-${row.type}`];
   if (row.type === "folder" && row.folder.color) classes.push("nav-folder", "colored");
   if (row.id === ctx.focusId) classes.push("focused");
-  if (row.type === "work" && row.id === currentWorkId && (!visibleSessionId || !row.open)) classes.push("current");
+  if (row.type === "work" && row.id === currentWorkId && !visibleSessionId && !currentDocId) classes.push("current");
   if (row.type === "session" && row.id === visibleSessionId) classes.push("current");
   if (row.type === "doc" && row.id === currentDocId) classes.push("current");
   const item = rowItem(row);
@@ -240,7 +239,7 @@ export function TreeRow({ row, ctx }: { row: Row; ctx: RowContext }) {
         <Icon name={icon} size={15} className="side-row-icon" />
       )}
       <span className="side-row-label">{label}</span>
-      {row.type === "work" ? <span className="nav-kind">프로젝트</span> : null}
+      {row.type === "session" ? <span className="nav-kind">{row.session.pageAgent ? "웹 AI" : row.session.documentAgent ? "문서 AI" : "채팅"}</span> : null}
       {trailing}
     </div>
   );
@@ -251,7 +250,6 @@ export function NowRow({
   session,
   label,
   current,
-  look,
   onOpen,
   onMenu,
   openRight,
@@ -272,7 +270,6 @@ export function NowRow({
     <button
       type="button"
       className={`side-row now-row${current ? " current" : ""}${extraClass}`}
-      style={accentStyle(look)}
       onPointerDown={(event) => {
         if (event.button === 1 && openRight) event.preventDefault();
         paneDrag.press({ item: { kind: "session", id: session.id }, label: session.purpose }, event);

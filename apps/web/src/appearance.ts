@@ -2,9 +2,8 @@ import { createContext, useContext, type CSSProperties, type MouseEvent } from "
 import type { Provider } from "@workbench/contracts";
 import type { Theme } from "./theme.ts";
 
-// Per-engine looks. Every engine has its own light look and its own dark look (four in all), so a
-// Claude conversation and a Codex conversation differ in color, type and frame, not only in a tab
-// label. The look of the engine in focus covers the whole window.
+// HIG defaults share one visual system across providers. Explicit per-engine customization
+// remains available; old bundled defaults migrate without overwriting deliberate custom values.
 
 export type Bubble = "filled" | "soft" | "rail";
 export type Glow = "off" | "soft" | "neon";
@@ -43,7 +42,7 @@ export type Look = {
 };
 
 export type EngineAppearance = { mode: EngineMode; light: Look; dark: Look };
-/** `v` marks looks stored after the design pass (docs/design/DESIGN.md, 2026-10-29). */
+/** Versioned defaults let installed clients receive the current design without losing custom looks. */
 export type Appearance = Record<Provider, EngineAppearance> & { v?: number };
 
 export const PALETTE_FIELDS: { key: keyof Palette; label: string }[] = [
@@ -63,6 +62,7 @@ export const PALETTE_FIELDS: { key: keyof Palette; label: string }[] = [
 ];
 
 export const FONT_PRESETS: { id: string; label: string; family: string | null; stack: string }[] = [
+  { id: "pretendard", label: "Pretendard Variable · 기본", family: "Pretendard Variable", stack: '"Pretendard Variable", var(--font-fallback)' },
   { id: "sametone", label: "Achmage SameTone", family: "Achmage SameTone", stack: '"Achmage SameTone", var(--font-fallback)' },
   { id: "serif", label: "명조 · 마루부리", family: "MaruBuri", stack: '"MaruBuri", "NanumMyeongjo", "Noto Serif CJK KR", "Noto Serif KR", "Batang", serif' },
   { id: "square", label: "나눔스퀘어 네오", family: "NanumSquare Neo", stack: '"NanumSquare Neo", "NanumSquare", var(--font-fallback)' },
@@ -140,41 +140,6 @@ const CLAUDE_PAPER: Palette = {
   codeText: "#7a3a1f",
 };
 
-// The app's own frame (sidebar, top bar, menus, search): a cool neutral "desk" under the engine's
-// "paper", tinted toward the Achmage blue. Not a user look; the stylesheet's --chrome-* tokens
-// carry the same values for the top bar (docs/design/DESIGN.md 4.1).
-const DESK_LIGHT: Palette = {
-  bg: "#f3f5f8",
-  surface: "#ffffff",
-  text: "#151b27",
-  muted: "#5a6475",
-  line: "#dce1e8",
-  accent: "#005bac",
-  motion: "#00a3a0",
-  heading: "#0d1b33",
-  headingAlt: "#00328d",
-  strong: "#002870",
-  link: "#005bac",
-  codeBg: "#eef1f5",
-  codeText: "#1b2a44",
-};
-
-const DESK_DARK: Palette = {
-  bg: "#10151c",
-  surface: "#181e27",
-  text: "#e3e7ed",
-  muted: "#97a1b0",
-  line: "#2a323d",
-  accent: "#7db2f0",
-  motion: "#3cc7c0",
-  heading: "#f2f4f7",
-  headingAlt: "#a9cbf5",
-  strong: "#e9eef5",
-  link: "#7db2f0",
-  codeBg: "#1d2430",
-  codeText: "#c9d6ea",
-};
-
 const look = (palette: Palette, rest: Partial<Look> = {}): Look => ({
   palette,
   font: "sametone",
@@ -189,9 +154,9 @@ const look = (palette: Palette, rest: Partial<Look> = {}): Look => ({
   ...rest,
 });
 
-export const APPEARANCE_VERSION = 2;
+export const APPEARANCE_VERSION = 3;
 
-export const DEFAULT_APPEARANCE: Appearance = {
+const V2_DEFAULT_APPEARANCE: Appearance = {
   claude: {
     mode: "follow",
     light: look(CLAUDE_PAPER, { bubble: "soft" }),
@@ -205,11 +170,29 @@ export const DEFAULT_APPEARANCE: Appearance = {
   v: APPEARANCE_VERSION,
 };
 
-/**
- * Achmage's own look, for what belongs to no engine: the sidebar, menus and search keep it, so they
- * do not change color every time a Claude or Codex session is selected.
- */
-export const NEUTRAL_LOOK: Record<Theme, Look> = { light: look(DESK_LIGHT), dark: look(DESK_DARK) };
+// Neutral HIG roles. These match foundation.css; provider identity is carried by its label/icon.
+const HIG_LIGHT: Palette = {
+  bg: "#ffffff", surface: "#ffffff", text: "#000000", muted: "#6c6c70", line: "#d1d1d6",
+  accent: "#1e6ef4", motion: "#008932", heading: "#000000", headingAlt: "#000000", strong: "#000000",
+  link: "#1e6ef4", codeBg: "#f2f2f7", codeText: "#000000",
+};
+const HIG_DARK: Palette = {
+  bg: "#1c1c1e", surface: "#2c2c2e", text: "#ffffff", muted: "#aeaeb2", line: "#3a3a3c",
+  accent: "#5cb8ff", motion: "#4ad968", heading: "#ffffff", headingAlt: "#ffffff", strong: "#ffffff",
+  link: "#5cb8ff", codeBg: "#2c2c2e", codeText: "#ffffff",
+};
+const higLook = (palette: Palette): Look => look(palette, {
+  font: "pretendard", fontSize: 17, lineHeight: 1.75, bubble: "soft", frame: false,
+});
+export const DEFAULT_APPEARANCE: Appearance = {
+  claude: { mode: "follow", light: higLook(HIG_LIGHT), dark: higLook(HIG_DARK) },
+  codex: { mode: "follow", light: higLook(HIG_LIGHT), dark: higLook(HIG_DARK) },
+  v: APPEARANCE_VERSION,
+};
+export const NEUTRAL_LOOK: Record<Theme, Look> = {
+  light: higLook({ ...HIG_LIGHT, bg: "#f2f2f7" }),
+  dark: higLook(HIG_DARK),
+};
 
 const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
@@ -249,8 +232,8 @@ function upgradeLook(stored: Partial<Look>, base: Look, legacy: (typeof LEGACY_D
 
 /** Quick choices for the right-click menu and the settings sheet. */
 export const ACCENT_SWATCHES: Record<Theme, string[]> = {
-  light: ["#005bac", "#b5532f", "#0e8a6a", "#6b4fd8", "#c2410c", "#be185d", "#0891b2", "#1f2937"],
-  dark: ["#f27aa4", "#5aa9f0", "#e08a6b", "#2bc48a", "#a78bfa", "#fb923c", "#22d3ee", "#e5e7eb"],
+  light: ["#1e6ef4", "#b5532f", "#0e8a6a", "#6b4fd8", "#c2410c", "#be185d", "#0891b2", "#1f2937"],
+  dark: ["#5cb8ff", "#f27aa4", "#e08a6b", "#2bc48a", "#a78bfa", "#fb923c", "#22d3ee", "#e5e7eb"],
 };
 
 export const BG_SWATCHES: Record<Theme, string[]> = {
@@ -261,11 +244,26 @@ export const BG_SWATCHES: Record<Theme, string[]> = {
 /** Stored preferences merged over the defaults, so new options get sane values. */
 export function readAppearance(stored: unknown): Appearance {
   const source = isObject(stored) ? stored : {};
-  const legacy = source.v !== APPEARANCE_VERSION;
+  const version = typeof source.v === "number" ? source.v : 1;
   const mergeLook = (provider: Provider, theme: Theme, value: unknown): Look => {
     const base = DEFAULT_APPEARANCE[provider][theme];
     let given = isObject(value) ? (value as Partial<Look>) : {};
-    if (legacy) given = upgradeLook(given, base, LEGACY_DEFAULTS[provider][theme]);
+    const previous = V2_DEFAULT_APPEARANCE[provider][theme];
+    if (version < 2) given = upgradeLook(given, previous, LEGACY_DEFAULTS[provider][theme]);
+    if (version < 3) {
+      const migrated: Partial<Look> = { ...given };
+      for (const key of Object.keys(previous) as (keyof Look)[]) {
+        if (key !== "palette" && sameValue(given[key], previous[key])) Object.assign(migrated, { [key]: base[key] });
+      }
+      if (isObject(given.palette)) {
+        const palette = { ...given.palette };
+        for (const key of Object.keys(previous.palette) as (keyof Palette)[]) {
+          if (sameValue(palette[key], previous.palette[key])) palette[key] = base.palette[key];
+        }
+        migrated.palette = palette;
+      }
+      given = migrated;
+    }
     return { ...base, ...given, palette: { ...base.palette, ...(isObject(given.palette) ? given.palette : {}) } };
   };
   const merge = (provider: Provider): EngineAppearance => {
@@ -290,10 +288,14 @@ export function onColor(hex: string) {
   const value = parseInt(match[1], 16);
   const channel = (shift: number) => {
     const c = ((value >> shift) & 255) / 255;
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
   };
   const luminance = 0.2126 * channel(16) + 0.7152 * channel(8) + 0.0722 * channel(0);
-  return luminance > 0.42 ? "#0b0c0e" : "#ffffff";
+  // Compare the actual contrast pairs. A brightness cutoff left bright blue
+  // controls with white text below 3:1 in dark mode.
+  const whiteContrast = 1.05 / (luminance + 0.05);
+  const blackContrast = (luminance + 0.05) / 0.05;
+  return blackContrast >= whiteContrast ? "#000000" : "#ffffff";
 }
 
 const GLOW: Record<Glow, string> = { off: "0", soft: "var(--theme-glow)", neon: "1.7" };
@@ -317,7 +319,7 @@ export function lookStyle(value: Look): CSSProperties {
     "--code-bg": palette.codeBg,
     "--code-text": palette.codeText,
     "--e-font": fontStack(value.font),
-    "--e-size": `${value.fontSize}px`,
+    "--e-size": `${value.fontSize / 16}rem`,
     "--e-line": String(value.lineHeight),
     "--e-weight": String(value.fontWeight),
     "--e-border": `${value.borderWidth}px`,

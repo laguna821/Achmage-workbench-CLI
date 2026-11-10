@@ -480,7 +480,7 @@ export function WorkView({
         </div>
         <div className="anchor">
           <button type="button" className="ghost-button docs-button" onClick={() => setDocsOpen(!docsOpen)} aria-expanded={docsOpen} title="이 작업의 문서">
-            <Icon name="file" size={15} /> 문서 {artifacts.length ? artifacts.length : ""}
+            <Icon name="file" size={15} /><span>문서 {artifacts.length ? artifacts.length : ""}</span>
           </button>
           <Popover open={docsOpen} onClose={() => setDocsOpen(false)} align="left" className="docs-menu">
             <div className="menu-label">이 작업의 문서</div>
@@ -521,13 +521,11 @@ export function WorkView({
             <button type="button" className="status-pill" onClick={() => setStatusOpen(!statusOpen)} aria-expanded={statusOpen}>
               <StatusDot tone={statusTone(active)} />
               <span>{statusText(active)}</span>
-              <span className="status-sep">·</span>
               <span className="status-engine">
                 <EngineMark provider={active.provider} size={14} />
                 {PROVIDER_LABEL[active.provider]}
               </span>
-              <span className="status-sep">·</span>
-              <span>{state.hostLabel}</span>
+              <span className="status-host">{state.hostLabel}</span>
               <Icon name={statusOpen ? "chevronUp" : "chevronDown"} size={14} />
             </button>
             {active.worktree ? (
@@ -728,6 +726,11 @@ export function WorkView({
             <>
               <AccessPicker provider={pickerProvider} value={access} onChange={(mode) => actions.setAccess(active, pickerProvider, mode)} />
               {active ? <ContextGauge context={active.context} canCompact={!busy && Boolean(active.nativeSessionId)} onCompact={() => actions.compact(active)} /> : null}
+            </>
+          }
+          tools={
+            <>
+              {active ? <AgentProfilePicker key={active.id} api={api} session={active} models={{ claude: state.providers.claude?.models, codex: state.providers.codex?.models }} onRefreshModels={provider => api.refreshProviders(provider)} onResolved={resolveProfile} onNotice={onToast} /> : null}
               {!handoffTo ? <PlanToggle on={planFirst} onChange={setPlanFirst} /> : null}
               <DrawPill state={state} work={work} session={active} provider={pickerProvider} value={draw} onChange={changeDraw} />
               <BrowserPill
@@ -741,6 +744,17 @@ export function WorkView({
               />
               <VaultGuardPill provider={pickerProvider} access={access} workId={work.id} />
               <InsightPill sessionId={active?.id ?? null} />
+              <CreateTargetButton
+                tools={state.tools}
+                api={api}
+                scope={{ sessionId: active?.id, workId: work.id, workspaceId: workspace?.id }}
+                onTemplate={(target) => { setCreate(target); setAttached((current) => current.map((entry) => ({ ...entry, mode: "review" }))); }}
+                onPick={(format) => {
+                  const first = attached[0] ? state.artifacts[attached[0].id] : undefined;
+                  setCreate({ format, name: first ? stemOf(first.name) : "새 문서" });
+                  setAttached((current) => current.map((entry) => ({ ...entry, mode: "review" })));
+                }}
+              />
             </>
           }
           onFiles={pending.add}
@@ -836,7 +850,6 @@ export function WorkView({
           onStop={active ? () => actions.interrupt(active) : undefined}
           target={
             <>
-            {active ? <AgentProfilePicker key={active.id} api={api} session={active} models={{ claude: state.providers.claude?.models, codex: state.providers.codex?.models }} onRefreshModels={provider => api.refreshProviders(provider)} onResolved={resolveProfile} onNotice={onToast} /> : null}
             <ModelPicker
               models={models}
               onRefresh={() => api.refreshProviders(pickerProvider)}
@@ -854,19 +867,8 @@ export function WorkView({
                 onHandoff={() => void actions.pickSession(work, active).then((picked) => picked && picked.id !== active.id && setHandoffTo(picked))}
               />
             ) : null}
-            <CreateTargetButton
-              tools={state.tools}
-              api={api}
-              scope={{ sessionId: active?.id, workId: work.id, workspaceId: workspace?.id }}
-              onTemplate={(target) => { setCreate(target); setAttached((current) => current.map((entry) => ({ ...entry, mode: "review" }))); }}
-              onPick={(format) => {
-                const first = attached[0] ? state.artifacts[attached[0].id] : undefined;
-                setCreate({ format, name: first ? stemOf(first.name) : "새 문서" });
-                setAttached((current) => current.map((entry) => ({ ...entry, mode: "review" })));
-              }}
-            />
             <div className="anchor">
-              <button type="button" className="icon-button" onClick={() => setAttachOpen(!attachOpen)} title="문서·파일 붙이기" aria-label="문서·파일 붙이기">
+              <button type="button" className="icon-button" onClick={() => setAttachOpen(!attachOpen)} title="프로젝트 문서 붙이기" aria-label="프로젝트 문서 붙이기" aria-expanded={attachOpen} aria-haspopup="menu">
                 <Icon name="file" size={17} />
               </button>
               <input

@@ -1,0 +1,29 @@
+{
+  "date": "2026-11-10",
+  "scope": "app",
+  "mode": "polish",
+  "contract": "docs/design/DESIGN.md:1",
+  "skills": {
+    "hallmark": "2.0.0",
+    "impeccable": "4.8.0",
+    "impeccableContext": "not run; OS-documented direct-context fallback"
+  },
+  "preserve": [
+    "HIG/Pretendard",
+    "project and content hierarchy",
+    "all existing source changes and product wiring",
+    "installed application and real user data"
+  ],
+  "introduce": [
+    "semantic state/contrast/shadow polish",
+    "narrow-layout refinements",
+    "native blank initialization and resize fixes"
+  ],
+  "material": "actual seeded Workbench UI and isolated native app screenshots",
+  "audience": "existing Workbench user managing projects, documents and parallel agents",
+  "primaryAction": "open a project, work or ask without hidden setup steps",
+  "tone": "quiet desktop tool, neutral surfaces, content first",
+  "reviewBudget": "one independent finish review; one fix batch and recapture",
+  "research": "research:rr-d444ad1fc3329b8db7a04a08c16d9489:32ddac54fcb5a32a5d30ac3fd1330da4afd06377fef34fb1ea3c97a41428146e",
+  "completionResearch": "research:rr-d444ad1fc3329b8db7a04a08c16d9489:4eb15dcba62ba1bdcf3021d233f0cf3da4fa537d0431cb166765efb5e05adaad"
+}
