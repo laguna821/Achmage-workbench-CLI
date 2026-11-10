@@ -3,6 +3,7 @@ use std::{cell::{Cell, RefCell}, collections::HashMap, path::PathBuf, rc::Rc, sy
 use serde_json::json;
 use tauri::Webview;
 use gtk::glib::prelude::*;
+use gtk::prelude::*;
 use webkit2gtk::{Download, DownloadExt, PermissionRequest, PermissionRequestExt, URIRequestExt, UserMediaPermissionRequestExt, WebContextExt, WebViewExt};
 use super::{Page, new_id, now};
 
@@ -11,6 +12,51 @@ struct Pending { page_id: String, revision: u64, expires: u64, request: Permissi
 thread_local! {
     static REQUESTS: RefCell<HashMap<String, Pending>> = RefCell::new(HashMap::new());
     static DOWNLOADS: RefCell<HashMap<(String, String), Download>> = RefCell::new(HashMap::new());
+    static PAGE_LAYER: RefCell<Option<gtk::Fixed>> = const { RefCell::new(None) };
+}
+
+// Tauri creates GTK children in its vertical box. Wry ignores set_bounds for those
+// children, so a shared page otherwise divides the window into two stacked views.
+fn embed_page(webview: &webkit2gtk::WebView) -> Result<(), String> {
+    let parent = webview.parent().and_then(|parent| parent.downcast::<gtk::Box>().ok())
+        .ok_or("웹 페이지의 앱 표시 영역을 찾지 못했습니다.")?;
+    let layer = PAGE_LAYER.with(|slot| {
+        if let Some(layer) = slot.borrow().as_ref() { return layer.clone(); }
+        let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        for child in parent.children() {
+            if child == webview.clone().upcast::<gtk::Widget>() { continue; }
+            let (expand, fill, padding, pack) = parent.query_child_packing(&child);
+            parent.remove(&child);
+            if pack == gtk::PackType::End { content.pack_end(&child, expand, fill, padding); }
+            else { content.pack_start(&child, expand, fill, padding); }
+        }
+        let layer = gtk::Fixed::new();
+        let overlay = gtk::Overlay::new();
+        overlay.add(&content);
+        overlay.add_overlay(&layer);
+        parent.pack_start(&overlay, true, true, 0);
+        // Do not show_all: hidden Office renderer webviews must stay hidden.
+        content.show(); layer.show(); overlay.show();
+        *slot.borrow_mut() = Some(layer.clone());
+        layer
+    });
+    parent.remove(webview);
+    layer.put(webview, 0, 0);
+    webview.set_size_request(1, 1);
+    webview.hide();
+    Ok(())
+}
+
+pub fn set_bounds(view: &Webview, x: f64, y: f64, width: f64, height: f64) -> Result<(), String> {
+    view.with_webview(move |native| {
+        let webview = native.inner();
+        if let Some(layer) = webview.parent().and_then(|parent| parent.downcast::<gtk::Fixed>().ok()) {
+            let (x, y, width, height) = (x.round() as i32, y.round() as i32, width.round() as i32, height.round() as i32);
+            webview.set_size_request(width, height);
+            layer.move_(&webview, x, y);
+            webview.size_allocate(&gtk::Allocation::new(x, y, width, height));
+        }
+    }).map_err(|error| error.to_string())
 }
 
 fn finish_permission(id: &str, pending: Pending, status: &str, allow: bool) {
@@ -38,6 +84,10 @@ pub fn detach(page_id: &str) {
 pub fn attach(view: &Webview, pages: Pages, page_id: String) -> Result<(), String> {
     view.with_webview(move |native| {
         let webview = native.inner();
+        if let Err(error) = embed_page(&webview) {
+            if let Some(page) = pages.lock().unwrap().get_mut(&page_id) { page.error = Some(error); }
+            return;
+        }
         let permission_pages = pages.clone(); let permission_page = page_id.clone();
         webview.connect_permission_request(move |_, request| {
             let kind = if let Some(media) = request.downcast_ref::<webkit2gtk::UserMediaPermissionRequest>() {
