@@ -64,7 +64,7 @@ try {
   try {
     const canvas = await display.newPage({ viewport: { width: 1800, height: 1400 } });
     await canvas.goto('http://127.0.0.1:' + stage.broadwayPort);
-    await canvas.waitForFunction(() => document.querySelector('canvas')?.width > 0);
+    await canvas.waitForFunction(() => (document.querySelector('canvas')?.width ?? 0) > 0);
     await canvas.waitForTimeout(1200);
     const surface = await canvas.locator('canvas').first().elementHandle();
     assert(surface);
