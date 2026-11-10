@@ -12,8 +12,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The follow-up branch limits a macOS-only compile repair to its failed leg.
-        os: ${{ fromJSON(endsWith(github.ref_name, '-macos') && '["macos-15"]' || '["ubuntu-24.04","macos-15","windows-latest"]') }}
+        # Follow-up branches rerun only the affected platform.
+        os: ${{ fromJSON(endsWith(github.ref_name, '-macos') && '["macos-15"]' || endsWith(github.ref_name, '-linux') && '["ubuntu-24.04"]' || endsWith(github.ref_name, '-windows') && '["windows-2022"]' || '["ubuntu-24.04","macos-15","windows-2022"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
@@ -31,6 +31,7 @@ jobs:
         with:
           workspaces: apps/desktop/src-tauri -> ../../../browser-check-target
           shared-key: browser-hotfix-${{ runner.os }}
+          cache-on-failure: true
       - name: Linux native webview dependencies
         if: runner.os == 'Linux'
         run: |
@@ -48,17 +49,28 @@ jobs:
         run: cargo build --locked --release --manifest-path apps/desktop/src-tauri/Cargo.toml --example browser-check
       - name: Native Linux check in a disposable display
         if: runner.os == 'Linux'
+        env:
+          # Xvfb has no DRI3 device. Keep this software-rendering choice in CI.
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
         run: xvfb-run -a -s '-screen 0 1280x960x24' dbus-run-session -- node scripts/check-shared-browser-native.mjs --binary browser-check-target/release/examples/browser-check
       - name: Native macOS check
         if: runner.os == 'macOS'
         run: node scripts/check-shared-browser-native.mjs --binary browser-check-target/release/examples/browser-check
       - name: Native Windows check
         if: runner.os == 'Windows'
-        run: node scripts/check-shared-browser-native.mjs --binary browser-check-target/release/examples/browser-check.exe
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -products '*' -property installationPath
+          $dumpbin = Get-ChildItem "$vs/VC/Tools/MSVC/*/bin/Hostx64/x64/dumpbin.exe" | Sort-Object FullName -Descending | Select-Object -First 1
+          if ($dumpbin) { & $dumpbin.FullName /imports browser-check-target/release/examples/browser-check.exe > browser-native-evidence/windows-imports.txt }
+          node scripts/check-shared-browser-native.mjs --binary browser-check-target/release/examples/browser-check.exe
       - name: Upload actual checks and failures
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: browser-native-${{ matrix.os }}
-          path: browser-native-evidence/
+          path: |
+            browser-native-evidence/
+            browser-check-target/release/examples/browser-check
+            browser-check-target/release/examples/browser-check.exe
           if-no-files-found: warn

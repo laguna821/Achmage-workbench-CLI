@@ -85,7 +85,11 @@ try {
     child.once('error', error => { clearTimeout(timer); reject(error); });
     child.once('close', (code, endedBy) => { clearTimeout(timer); exitCode = code; signal = endedBy; resolveExit(); });
   }).finally(() => { child.stdout.unpipe(log); child.stderr.unpipe(log); log.end(); });
-  native = JSON.parse(await readFile(nativeReportPath, 'utf8'));
+  try { native = JSON.parse(await readFile(nativeReportPath, 'utf8')); }
+  catch (error) {
+    const code = typeof exitCode === 'number' ? `${exitCode} (0x${(exitCode >>> 0).toString(16)})` : String(exitCode);
+    throw Error(`Native process ended before writing its report: exit=${code}, signal=${signal ?? 'none'}; ${error.message}`);
+  }
   if (exitCode !== 0 || native.ok !== true || native.checks?.length < 10 || !native.checks.every(check => check.passed === true)) throw Error(native.error ?? `Native check exited ${exitCode}`);
 } catch (error) {
   failure = error instanceof Error ? error.message : String(error);

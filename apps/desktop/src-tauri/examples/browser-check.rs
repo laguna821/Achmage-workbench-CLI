@@ -106,8 +106,20 @@ async fn run(app: &tauri::AppHandle, base: &str, isolation: &PathBuf, checks: &m
     let resolved = data.canonicalize().map_err(|error| error.to_string())?;
     let root = isolation.canonicalize().map_err(|error| error.to_string())?;
     check(checks, "profile-isolation", resolved.starts_with(&root), json!({"appData":data,"resolved":resolved,"temporaryRoot":root}))?;
-    tokio::time::sleep(Duration::from_millis(400)).await;
-    let baseline = geometry(&caller).await?;
+    // A cold CI web process may still be navigating; wait for the read-only
+    // shell observation rather than guessing its startup time with a sleep.
+    let mut baseline = Value::Null;
+    for _ in 0..100 {
+        match geometry(&caller).await {
+            Ok(value) => {
+                let ready = value["url"] == format!("{base}/shell") && value["width"].as_i64().unwrap_or(0) >= 900;
+                baseline = value;
+                if ready { break; }
+            }
+            Err(error) => baseline = json!({"evaluationError":error}),
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
     check(checks, "main-viewport-ready", baseline["width"].as_i64().unwrap_or(0) >= 900 && baseline["height"].as_i64().unwrap_or(0) >= 600, baseline.clone())?;
     let human = json!({"owner":"human","generation":0});
     let ai = json!({"owner":"check-session","generation":1});
