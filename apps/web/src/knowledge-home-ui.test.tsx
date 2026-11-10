@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { KnowledgeHome } from "./components/KnowledgeHome.tsx";
 import type { Api } from "./api.ts";
@@ -17,7 +17,8 @@ it("accepts only the exact home frame and keeps its calls/frame alive while hidd
   });
   const api = { request } as unknown as Api, state = { works: {}, workspaces: {} } as State;
   const props = { api, state, visible: true, theme: "light" as const, refreshToken: 0, onOpen: vi.fn(), onManage: vi.fn(), onSettings: vi.fn(), onSkills: vi.fn() };
-  const { container, rerender, unmount } = render(<KnowledgeHome {...props} />);
+  // Flush the async owner setup and message-listener effect before simulating frame messages.
+  const { container, rerender, unmount } = await act(async () => render(<KnowledgeHome {...props} />));
   await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
   const frame = container.querySelector("iframe")!, win = frame.contentWindow!;
   expect(frame.src).not.toMatch(/token|authorization|home-owner/);
@@ -44,7 +45,7 @@ it("passes the selected workspace to creation and opens only a successful templa
     return { ok: true, tabId: "created-document", artifact: { id: "created-document", workId: "project" } };
   });
   const state = { works: { project: { id: "project", title: "Project", defaultWorkspaceId: "workspace" } }, workspaces: { workspace: { id: "workspace", workId: "project", label: "main" } } } as unknown as State;
-  const { container } = render(<KnowledgeHome api={{ request } as unknown as Api} state={state} workId="project" theme="light" visible refreshToken={0} onOpen={onOpen} onManage={() => {}} onSettings={() => {}} onSkills={() => {}} />);
+  const { container } = await act(async () => render(<KnowledgeHome api={{ request } as unknown as Api} state={state} workId="project" theme="light" visible refreshToken={0} onOpen={onOpen} onManage={() => {}} onSettings={() => {}} onSkills={() => {}} />));
   await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
   const input = { operation: "open-template", input: { requestId: "once", skillId: "selected", text: "Create", chips: [] } };
   window.dispatchEvent(new MessageEvent("message", { origin, source: container.querySelector("iframe")!.contentWindow, data: { type: "knowledge:request", requestId: "rpc", channel: "home:skills", args: [input] } }));
