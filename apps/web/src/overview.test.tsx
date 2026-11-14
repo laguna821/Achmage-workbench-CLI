@@ -12,6 +12,7 @@ import {
   nowGroups,
   readHomeMode,
   resumeSessions,
+  sessionResume,
 } from "./overview.ts";
 import { excerpt } from "./thumbs.ts";
 
@@ -91,6 +92,15 @@ const stateOf = (parts: { folders?: Folder[]; works?: Work[]; sessions?: Session
 const held = { id: "q", text: "남은 요청", refs: [], create: null, at: NOW, held: true };
 
 describe("지금", () => {
+  it("shows current activity or problems instead of a stale successful answer", () => {
+    const stale = { preview: "이전 작업을 완료했습니다.", previewAt: NOW - 20 };
+    expect(sessionResume(session("running", "w", { ...stale, status: "running", activity: "자료를 읽는 중" }))).toMatchObject({ label: "진행 중", summary: "자료를 읽는 중" });
+    expect(sessionResume(session("error", "w", { ...stale, status: "error", lastError: "연결이 끊겼습니다." }))).toMatchObject({ label: "오류·멈춤", summary: "연결이 끊겼습니다." });
+    expect(sessionResume(session("approval", "w", { ...stale, status: "awaitingApproval" }))).toMatchObject({ label: "확인 필요", summary: "요청을 확인해 주세요." });
+    expect(sessionResume(session("unseen", "w", { ...stale, seenAt: 0 }))).toMatchObject({ label: "새 답", summary: stale.preview });
+    expect(sessionResume(session("held", "w", { ...stale, queued: [held] }))).toMatchObject({ label: "오류·멈춤", summary: "보류된 요청이 있습니다." });
+  });
+
   it("puts each session in its first matching group, by priority", () => {
     expect(bucketOf(session("a", "w", { status: "awaitingApproval", lastError: "x" }))).toBe("attention");
     expect(bucketOf(session("b", "w", { status: "error" }))).toBe("trouble");

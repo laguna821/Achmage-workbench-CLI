@@ -132,6 +132,10 @@ jobs:
           cargo test --locked --release --manifest-path third_party/fast-find/crates/ff10k-core/Cargo.toml --features golden -- --test-threads=1
           cargo build --locked --release --manifest-path apps/desktop/search-worker/Cargo.toml
           echo "WORKBENCH_SEARCH_WORKER_BIN=$CARGO_TARGET_DIR/release/workbench-search-worker" >> "$GITHUB_ENV"
+      # Before the build: the office build runs the built studio in this headless Chromium to prove
+      # the save report still reaches its document (scripts/check-hwp-studio-report.ts).
+      - name: Headless Chromium (office build check, urgent UI checks)
+        run: node node_modules/playwright-core/cli.js install --with-deps chromium --only-shell
       - name: Build (IeumOffice checkout, xlsx engine, UI, editors, gateway)
         run: npm run build
       - name: Typecheck and tests
@@ -141,9 +145,7 @@ jobs:
           npm run typecheck
           npx vitest run
       - name: Multi-tab document AI and urgent UI checks
-        run: |
-          node node_modules/playwright-core/cli.js install --with-deps chromium --only-shell
-          node scripts/urgent-parallel-check.ts urgent-ui
+        run: node scripts/urgent-parallel-check.ts urgent-ui
       - uses: actions/upload-artifact@v4
         if: always()
         with:

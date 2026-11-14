@@ -41,8 +41,10 @@ export async function designScenario(ctx: Ctx, launch: Omit<LaunchOptions, "name
   };
   const saveKey = () => wd.keys([{ type: "keyDown", value: KEY.control }, { type: "keyDown", value: "s" }, { type: "keyUp", value: "s" }, { type: "keyUp", value: KEY.control }]);
   await open(); await wd.setWindowRect({ width: 1800, height: 1100 });
-  await clickLabel(".work-view button", "문서", true);
-  await clickLabel('[role="menuitem"]', "정사각 (SNS)", true);
+  // New designs are in the conversation note's menu (⋯), one level down.
+  await wd.click(await wd.waitFor('.pane:not([hidden]) .work-view button[aria-label="노트 메뉴"]'));
+  await clickLabel('.note-menu [role="menuitem"]', "새 디자인", true);
+  await clickLabel('.note-menu [role="menuitem"]', "정사각 (SNS)", true);
   await enter(); await wd.waitFor("canvas", 30_000);
   const design = (await snapshot()).artifacts.find((entry) => entry.workId === work.id && entry.format === "design")!;
   ctx.report.check(S, "실제 새 디자인 메뉴·작업공간·기본 캔버스", !!design && design.workspaceId === workspace.id && design.path.startsWith(other), undefined, await shot(ctx, "design-new.png"));

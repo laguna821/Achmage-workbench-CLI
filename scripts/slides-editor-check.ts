@@ -135,9 +135,9 @@ async function editText(p: Page, word: string, typed: string) {
 try {
   await page.addInitScript((id) => localStorage.setItem("workbench.lastWork", id), work.id);
   await page.goto(`${ready.url}/?token=${ready.token}`);
-  await page.waitForSelector(".docs-button");
-  await page.locator(".docs-button").click();
-  await page.locator(".docs-menu").getByText("표지.pptx", { exact: true }).click();
+  await page.waitForSelector(".note-head-more");
+  await page.locator(".note-head-more").click();
+  await page.locator(".note-menu").getByText("표지.pptx", { exact: true }).click();
   await waitFor("slide stage", async () => (await editorFrame(page)?.locator(".konvajs-content").count()) === 1 || ((await editorFrame(page)?.locator(".konvajs-content").count()) ?? 0) > 0, 60_000);
   await page.waitForTimeout(1500);
   await page.screenshot({ path: join(outDir, "01-open.png") });

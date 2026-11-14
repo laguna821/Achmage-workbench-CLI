@@ -18,8 +18,8 @@ export async function usabilityScenario(ctx: Ctx) {
     }, 15000)) throw new Error(`Command missing: ${label}`);
   };
   const project = await wd.waitFor(`.sidebar .row-work[data-row-id="${work.id}"]`, 20000);
-  await wd.click(project); await wd.waitFor(".project-view .properties-panel", 20000);
-  ctx.report.check(S, "사이드바 프로젝트 한 번 클릭 → 오버뷰와 YAML 속성", await wd.execute<boolean>('return document.querySelector(".project-title")?.textContent === arguments[0] && document.querySelector(".group-tab.active")?.textContent.includes("프로젝트") === true;', work.title), undefined, await shot(ctx, "usability-project-overview.png"));
+  await wd.click(project); await wd.waitFor(".project-view .pn-stats", 20000);
+  ctx.report.check(S, "사이드바 프로젝트 한 번 클릭 → 프로젝트 노트(속성 통계)", await wd.execute<boolean>('return document.querySelector(".project-title")?.textContent === arguments[0] && document.querySelector(".group-tab.active")?.textContent.includes("프로젝트") === true;', work.title), undefined, await shot(ctx, "usability-project-overview.png"));
   ctx.report.check(S, "전체 프로젝트 보기와 정리 폴더, 채팅 목록의 구분", await wd.execute<boolean>('const rows=[...document.querySelectorAll(".sidebar [data-row-id]")];return document.querySelector(".nav-root")?.textContent.includes("전체 프로젝트 보기") === true && document.querySelector(".nav-folder-heading")?.textContent === "정리 폴더" && rows.some(el=>el.dataset.rowId === "chats:"+arguments[0]) && rows.some(el=>el.dataset.rowId === arguments[1]);', work.id, main.id));
   await clickText(".topbar button", "새 문서");
   await wd.sendKeys(await wd.waitFor('.new-document-dialog[open] input[placeholder="새 워드"]'), "오프라인 새 문서");

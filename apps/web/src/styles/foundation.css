@@ -15,13 +15,16 @@
   --font-ui: var(--font-fallback); --font-read: var(--font-fallback); --font-display: var(--font-fallback); --font: var(--font-ui);
   --fs-micro: .75rem; --fs-meta: .8125rem; --fs-ui: .8125rem; --fs-body: .9375rem;
   --fs-lead: 1.0625rem; --fs-title: 1.375rem; --fs-heading: 1.625rem; --fs-display: 1.625rem;
+  --nav-size: 14px; --nav-weight: 500; --nav-line: 20px; --nav-row: 32px;
   --r-xs: 4px; --r-sm: 8px; --r-md: 12px; --r-lg: 18px; --r-xl: 26px; --radius: 12px;
   --dur-press: 120ms; --dur-fast: 120ms; --dur-base: 220ms; --dur-slow: 320ms;
   --column: 720px; --target: 28px; --target-min: 28px;
-  --bg: #ffffff; --surface: #ffffff; --text: #000000; --muted: #6c6c70; --line: #d1d1d6;
-  --accent: #1e6ef4; --on-accent: #ffffff; --motion: #008932;
-  --heading: var(--text); --heading-alt: var(--text); --strong: var(--text); --link: var(--accent);
-  --code-bg: #f2f2f7; --code-text: #000000; --e-font: var(--font-read);
+  --bg: #ffffff; --surface: #ffffff; --text: #151b27; --muted: #566173; --line: #dce1e8;
+  --accent: #005bac; --on-accent: #ffffff; --motion: #00ada9;
+  --heading: #00102e; --heading-alt: #00328d; --strong: #002870; --link: var(--accent);
+  --code-bg: #f1f4f8; --code-text: #151b27; --e-font: var(--font-read);
+  /* The engine shows only as its mark and the line above the input; Codex uses the accent. */
+  --engine-claude: #c96442;
   --on-action: #ffffff;
   --shadow-ink-float: rgb(0 0 0 / .13); --shadow-ink-soft: rgb(0 0 0 / .07);
   --shadow-ink-faint: rgb(0 0 0 / .03); --shadow-ink-dialog: rgb(0 0 0 / .15);
@@ -31,19 +34,24 @@
   --shadow-dialog: 0 16px 48px rgb(0 0 0 / .15);
   --shadow-hairline: 0 1px 0 rgb(0 0 0 / .07);
   --shadow-composer: 0 2px 8px rgb(0 0 0 / .03);
+  /* The work surface's resting edge. No blur: WebKitGTK without compositing repaints a blurred
+     shadow whenever anything inside the sheet repaints (a tab open stalled ~150ms). */
+  --shadow-worksurface: 0 1px 0 rgb(16 24 40 / .06), 0 2px 0 rgb(16 24 40 / .03);
   --press-shade: rgb(0 0 0 / .07);
   --viewer-scrim: rgb(0 0 0 / .86);
   --viewer-text: #ffffff;
 }
 :root[data-theme="dark"] {
-  --bg: #1c1c1e; --surface: #2c2c2e; --text: #ffffff; --muted: #aeaeb2; --line: #3a3a3c;
-  --accent: #5cb8ff; --motion: #4ad968; --code-bg: #2c2c2e; --code-text: #ffffff;
+  --bg: #131820; --surface: #1b222c; --text: #e8ecf2; --muted: #a3adba; --line: #2c3541;
+  --accent: #7db2f0; --motion: #00ada9; --code-bg: #1b222c; --code-text: #e8ecf2;
+  --heading: #e8ecf2; --heading-alt: #e8ecf2; --strong: #a9d1ff;
 }
 :root, .look-scope[data-theme="light"] {
-  --chrome-bg: #f2f2f7; --chrome-surface: #ffffff; --chrome-line: #d1d1d6;
-  --chrome-text: #000000; --chrome-muted: #6c6c70; --chrome-accent: #1e6ef4;
-  --accent-text: #1e6ef4; --accent-fill: #1e6ef4;
-  --field-line: #8e8e93;
+  --chrome-bg: #f3f5f8; --chrome-surface: #ffffff; --chrome-line: #d6dce4;
+  --chrome-text: #202733; --chrome-muted: #4e5968; --chrome-accent: #005bac;
+  --brand-ink: #00102e; --brand-accent: #00a8a3;
+  --accent-text: #005bac; --accent-fill: #005bac;
+  --field-line: #818d9e;
   --amber: #c55300; --amber-text: #934000; --amber-soft: #fff3e5;
   --danger: #e9152d; --danger-soft: #fff0f1; --ok: #008932;
   --scrim: rgb(0 0 0 / .24); --popover-shadow: 0 8px 28px rgb(0 0 0 / .12), 0 1px 3px rgb(0 0 0 / .08);
@@ -51,11 +59,14 @@
   --theme-glow: 0; --toast-bg: #2c2c2e; --toast-text: #ffffff;
 }
 :root[data-theme="dark"], .look-scope[data-theme="dark"] {
-  --chrome-bg: #1c1c1e; --chrome-surface: #2c2c2e; --chrome-line: #3a3a3c;
-  --chrome-text: #ffffff; --chrome-muted: #aeaeb2; --chrome-accent: #5cb8ff;
-  --accent-text: #5cb8ff; --accent-fill: #0091ff;
-  --field-line: #8e8e93;
+  --chrome-bg: #10151c; --chrome-surface: #181e27; --chrome-line: #2a323d;
+  --chrome-text: #ffffff; --chrome-muted: #aeaeb2; --chrome-accent: #7db2f0;
+  --brand-ink: #e3e7ed; --brand-accent: #00a8a3;
+  --accent-text: #7db2f0; --accent-fill: #7db2f0;
+  --field-line: #647183;
   --on-action: #000000;
+  /* The lighter side for a highlight passing along a line: the ink on dark paper. */
+  --line-highlight: var(--text);
   --amber: #ffa056; --amber-text: #ffa056; --amber-soft: #33271e;
   --danger: #ff6165; --danger-soft: #382024; --ok: #4ad968;
   --scrim: rgb(0 0 0 / .4); --popover-shadow: 0 8px 28px rgb(0 0 0 / .32), 0 1px 3px rgb(0 0 0 / .2);
@@ -74,6 +85,15 @@
   --bg-grouped: var(--chrome-bg); --fill: var(--surface-raised); --fill-2: var(--surface-muted); --raised: var(--surface);
   --t-body: 400 .8125rem/1.25rem var(--font-ui); --t-callout: 400 .8125rem/1.25rem var(--font-ui);
 }
+/* Neutral navigation and white reading surfaces have different roles. Do not tint
+   the whole frame with the accent; it belongs to selection and actions. Custom
+   document/engine palettes remain independent of these chrome roles. */
+:root:not([data-theme="dark"]), .look-scope[data-theme="light"] {
+  --surface-muted: color-mix(in srgb, var(--chrome-bg) 80%, var(--surface));
+  --surface-raised: var(--surface);
+  --line-strong: color-mix(in srgb, var(--line) 90%, var(--text));
+  --line-highlight: var(--surface);
+}
 html { font-size: 16px; }
 html, body { overflow-x: clip; }
 body, button, input, textarea, select { font-family: var(--font-ui); }
@@ -83,16 +103,20 @@ button { touch-action: manipulation; }
 button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--chrome-accent); outline-offset: 2px; }
 button:disabled, input:disabled, select:disabled, textarea:disabled, [aria-disabled="true"] { cursor: not-allowed; }
 input, textarea { caret-color: var(--accent); }
-.count-chip, .session-time, .status-pill, .usage-row { font-variant-numeric: tabular-nums; }
+.count-chip, .session-time, .usage-row { font-variant-numeric: tabular-nums; }
 input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .button, .icon-button, .select-button { min-height: 28px; border-radius: 8px; box-shadow: none; font-weight: 500; }
 .icon-button { min-width: 28px; }
 .button.primary { background: var(--accent-fill); color: var(--on-action); font-weight: 700; border-color: transparent; }
 .button:active:not(:disabled), .icon-button:active:not(:disabled), .select-button:active:not(:disabled) { background-image: linear-gradient(var(--press-shade), var(--press-shade)); }
 .hk-btn { font-family: var(--font-ui); min-height: var(--target); }
-.hk-seg { font-size: var(--fs-ui); }
-.hk-seg > button { min-height: 28px; border: 0; background: transparent; border-radius: 8px; padding: 4px 12px; font: 500 var(--fs-ui)/1.4 var(--font-ui); color: var(--muted); }
-.hk-seg > button[aria-selected="true"], .hk-seg > button[aria-checked="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-selection); }
+.hk-seg { border-radius: var(--r-md); background: var(--surface-muted); font-size: var(--fs-ui); }
+.hk-seg > button { min-height: 28px; border: 0; background: transparent; border-radius: var(--r-sm); padding: 4px 12px; font: 500 var(--fs-ui)/1.4 var(--font-ui); color: var(--muted); white-space: nowrap; }
+.hk-seg > button:hover:not(:disabled) { color: var(--text); }
+.hk-seg > button:is([aria-selected="true"], [aria-checked="true"]) { color: var(--text); }
+.hk-seg > button:disabled { color: var(--faint); }
+/* The selection slides, so its edge is a hairline: WebKitGTK repaints a blurred shadow every frame. */
+.hk-seg__indicator { border-radius: var(--r-sm); background: var(--surface); box-shadow: 0 0 0 1px var(--line); }
 .hig-icon-button { flex: 0 0 auto; width: 32px; height: 32px; padding: 6px; color: var(--muted); border-radius: 8px; }
 .hig-icon-button:hover:not(:disabled) { color: var(--text); background: var(--hover); }
 .hig-icon-button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }

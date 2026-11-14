@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { failure } from "../../top-notice.ts";
 import type { GroupRule, HomeView, ModeViews, Provider, Session, Work } from "@workbench/contracts";
 import { baseMatcher } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
@@ -122,7 +123,7 @@ export function ProjectsMode({
   const fields = view.layout === "graph" ? [] : (view.fields ?? DEFAULT_PROJECT_FIELDS[view.layout as keyof typeof DEFAULT_PROJECT_FIELDS] ?? []);
 
   // ── writes: a stage, a folder, a property; each with a way back ───────────────────────────
-  const notice = useCallback((text: string, undo?: () => Promise<unknown>) => pkm?.onToast(undo ? { text, action: { label: "되돌리기", run: () => void undo().then(data.reload).catch((error: Error) => pkm?.onToast(error.message)) } } : text), [pkm, data.reload]);
+  const notice = useCallback((text: string, undo?: () => Promise<unknown>) => pkm?.onToast(undo ? { text, action: { label: "되돌리기", run: () => void undo().then(data.reload).catch((error: Error) => pkm?.onToast(failure(error))) } } : text), [pkm, data.reload]);
   const moveStage = useCallback(
     (work: Work, stage: string | null) =>
       api.setProjectStage(work.id, stage).then((write) => {
@@ -167,8 +168,8 @@ export function ProjectsMode({
   };
   const onMove = (row: ProjectRow, from: Cell, to: Cell) => {
     const steps = plan(row, from, to);
-    if ("reason" in steps) return void pkm?.onToast(steps.reason);
-    void steps.writes.reduce<Promise<unknown>>((chain, [def, value]) => chain.then(() => write(row.work, def, value)), Promise.resolve()).catch((error: Error) => pkm?.onToast(error.message));
+    if ("reason" in steps) return void pkm?.onToast(failure(steps.reason));
+    void steps.writes.reduce<Promise<unknown>>((chain, [def, value]) => chain.then(() => write(row.work, def, value)), Promise.resolve()).catch((error: Error) => pkm?.onToast(failure(error)));
   };
 
   const stageMenu = (work: Work, x: number, y: number) => {
@@ -178,9 +179,9 @@ export function ProjectsMode({
       y,
       title: `${work.title} · 단계`,
       items: [
-        ...stages.map((stage) => ({ kind: "item" as const, label: stage.name, checked: stage.name === current, onSelect: () => void moveStage(work, stage.name).catch((error: Error) => pkm?.onToast(error.message)) })),
+        ...stages.map((stage) => ({ kind: "item" as const, label: stage.name, checked: stage.name === current, onSelect: () => void moveStage(work, stage.name).catch((error: Error) => pkm?.onToast(failure(error))) })),
         { kind: "separator" as const },
-        { kind: "item" as const, label: "값 없음", checked: !current, onSelect: () => void moveStage(work, null).catch((error: Error) => pkm?.onToast(error.message)) },
+        { kind: "item" as const, label: "값 없음", checked: !current, onSelect: () => void moveStage(work, null).catch((error: Error) => pkm?.onToast(failure(error))) },
       ],
     });
   };
@@ -346,11 +347,13 @@ export function ProjectsMode({
     );
   }
 
+  // Selection mode: something is chosen (or being archived). At rest the boxes wait under the pointer and the bar is away.
+  const selecting = selected.size > 0 || archiving || confirmArchive;
   return (
     <ProjectSelectionScope value={{ ids: selected, toggle: toggleSelection, busy: archiving }}>
-    <div className={`projects-mode layout-${view.layout}`}>
+    <div className={`projects-mode layout-${view.layout}`} data-selecting={selecting ? "" : undefined}>
       {head}
-      <div className="project-selection-bar" role="group" aria-label="프로젝트 다중 선택" aria-busy={archiving}>
+      {selecting ? <div className="project-selection-bar" role="group" aria-label="프로젝트 다중 선택" aria-busy={archiving}>
         <span>{selectedRows.length}개 선택{selectedHidden ? ` · 이 보기 밖 ${selectedHidden}개 포함` : ""}</span>
         <button type="button" className="ghost-button small" disabled={archiving || !visible.some(row => !row.archived)} onClick={() => { setSelected(new Set(visible.filter(row => !row.archived).map(row => row.work.id))); setConfirmArchive(false); }}>현재 결과 모두 선택</button>
         <button type="button" className="ghost-button small" disabled={archiving || !selected.size} onClick={() => { setSelected(new Set()); setConfirmArchive(false); }}>선택 해제</button>
@@ -359,7 +362,7 @@ export function ProjectsMode({
           <button type="button" className="button small" disabled={archiving || !selectedRows.length} onClick={() => void archiveSelection()}>{archiving ? "보관 중…" : `${selectedRows.length}개 보관`}</button>
           <button type="button" className="ghost-button small" disabled={archiving} onClick={() => setConfirmArchive(false)}>취소</button>
         </> : <button type="button" className="ghost-button small" disabled={archiving || !selectedRows.length} onClick={() => setConfirmArchive(true)}>선택 항목 보관…</button>}
-      </div>
+      </div> : null}
       {selectionNotice ? <p className="project-selection-notice" role="status">{selectionNotice}</p> : null}
       {body}
       {panel}

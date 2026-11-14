@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { assertFreshTarget, type BrowserObservation, type BrowserPage, type NativeBrowserPage, type Session } from "@workbench/contracts";
 import { Store } from "./store.ts";
-import { BrowserRegistry, webUrl } from "./browser-registry.ts";
+import { BrowserRegistry, pageAction, webUrl } from "./browser-registry.ts";
 import { SessionManager } from "./sessions.ts";
 import { EventBus } from "./bus.ts";
 
@@ -29,7 +29,24 @@ function fixture() {
   const create = () => registry.create({ requestId: randomUUID(), driverId, profileId: "default", workspaceId: "workspace", url: "https://example.com" });
   return { registry, store, sessions, driverId, create, hooks, interrupted };
 }
-it("keeps same-URL pages distinct and never binds a restarted record to a new driver", () => {
+it("pages long rendered text on the same authenticated page without asking for write control", async () => {
+  const { registry, driverId, create, sessions } = fixture(), page = create(), state = native(page);
+  const child = { id: "reader", workId: "work", workspaceId: "workspace", pageAgent: { pageId: page.pageId, parentSessionId: "parent" } } as Session;
+  sessions.set(child.id, child); registry.attach(page.pageId, child);
+  registry.poll({ driverId, pages: [state], results: [] });
+  const pending = registry.agent(child.id, "long-read", "read", ["24000", "12000"], state.control);
+  const job = registry.poll({ driverId, pages: [state], results: [] }).jobs[0]!;
+  expect(job.action).toEqual({ kind: "read", offset: 24000, limit: 12000 });
+  expect(job.pageId).toBe(page.pageId);
+  const observation = { target: state, documentNonce: "signed-in-document", observedAt: Date.now(), text: "PRIVATE ARTICLE TAIL" };
+  registry.poll({ driverId, pages: [state], results: [{ id: job.id, pageId: page.pageId, observation }] });
+  expect((await pending).observation?.text).toBe("PRIVATE ARTICLE TAIL");
+  for (const args of [["-1"], ["NaN"], ["0", "24001"], ["0", "1", "ignored"]]) {
+    await expect(registry.agent(child.id, randomUUID(), "read", args, state.control)).rejects.toThrow();
+  }
+  expect(() => pageAction({ kind: "read", offset: 0, limit: 0 })).toThrow();
+});
+it("restores the same identity and profile after restart only through an explicit authenticated restore", () => {
   const { registry, store, create, driverId, hooks } = fixture();
   const a = create(), b = create();
   const states = [native(a), native(b)];
@@ -42,6 +59,47 @@ it("keeps same-URL pages distinct and never binds a restarted record to a new dr
   resumed.poll({ driverId, pages: states, results: [] });
   expect(resumed.get(a.pageId).status).toBe("interrupted");
   expect(resumed.get(b.pageId).status).toBe("interrupted");
+  const freshDriver = randomUUID();
+  resumed.poll({ driverId: freshDriver, pages: [], results: [] });
+  // This test explicitly polls the old driver above: a live owner cannot be stolen.
+  expect(() => resumed.restore(a.pageId, freshDriver)).toThrow();
+  const restored = resumed.restore(a.pageId, driverId);
+  expect(restored).toMatchObject({ pageId: a.pageId, profileId: a.profileId, url: a.url, status: "opening", control: { owner: "human" } });
+  resumed.poll({ driverId, pages: [native(restored)], results: [] });
+  expect(resumed.get(a.pageId).status).toBe("ready");
+  expect(resumed.get(b.pageId).status).toBe("interrupted");
+});
+it("recovers a legacy closed layout tab, but keeps an explicitly closed tab closed across restart", () => {
+  const { registry, store, hooks, create } = fixture(), page = create();
+  page.status = "closed";
+  store.setMeta("shared-browser:v1", JSON.stringify({ ...registry.list(), pages: [page] }));
+  registry.shutdown();
+  const resumed = new BrowserRegistry(store, hooks); cleanup.push(() => resumed.shutdown());
+  const driverId = randomUUID(); resumed.poll({ driverId, pages: [], results: [] });
+  expect(resumed.restore(page.pageId, driverId)).toMatchObject({ pageId: page.pageId, url: page.url, status: "opening" });
+  resumed.poll({ driverId, pages: [native(resumed.get(page.pageId))], results: [] });
+  resumed.poll({ driverId, pages: [], results: [] }); // lost native view
+  resumed.close(page.pageId);
+  expect(resumed.list().closedPageIds).toContain(page.pageId);
+  resumed.shutdown();
+  const final = new BrowserRegistry(store, hooks); cleanup.push(() => final.shutdown());
+  final.poll({ driverId, pages: [], results: [] });
+  expect(() => final.restore(page.pageId, driverId)).toThrow("닫은 웹 탭");
+  expect(final.list().pages).toHaveLength(0);
+});
+it("does not let a late close receipt from the old driver close a restored page", async () => {
+  const { registry, store, hooks, driverId, create } = fixture(), page = create();
+  registry.poll({ driverId, pages: [native(page)], results: [] });
+  const pending = registry.human(page.pageId, { requestId: "close-before-restart", action: { kind: "close" } });
+  const job = registry.poll({ driverId, pages: [native(page)], results: [] }).jobs[0]!;
+  registry.shutdown(); await pending;
+  const resumed = new BrowserRegistry(store, hooks); cleanup.push(() => resumed.shutdown());
+  const nextDriver = randomUUID(); resumed.poll({ driverId: nextDriver, pages: [], results: [] });
+  const restored = resumed.restore(page.pageId, nextDriver);
+  resumed.poll({ driverId: nextDriver, pages: [native(restored)], results: [] });
+  resumed.poll({ driverId, pages: [], results: [{ id: job.id, pageId: page.pageId }] });
+  expect(resumed.get(page.pageId).status).toBe("ready");
+  expect(resumed.poll({ driverId: nextDriver, pages: [native(restored)], results: [] }).jobs).toEqual([]);
 });
 it("fences an approved old action after human takeover and does not replay an unknown dispatch", async () => {
   const { registry, driverId, create, sessions } = fixture(), page = create();
@@ -114,11 +172,44 @@ it("creates page children without changing the main conversation and projects th
   const driverId = randomUUID(); manager.sharedBrowser.poll({ driverId, pages: [], results: [] });
   const page = manager.sharedBrowser.create({ requestId: randomUUID(), driverId, workspaceId: work.defaultWorkspaceId!, profileId: "default", url: "https://example.com" });
   manager.sharedBrowser.poll({ driverId, pages: [native(page)], results: [] });
-  const child = manager.browserSession(page.pageId, main.id);
+  const child = await manager.browserSession(page.pageId, main.id);
   expect(child.id).not.toBe(main.id); expect(child.pageAgent?.parentSessionId).toBe(main.id);
-  expect(manager.browserSession(page.pageId, main.id).id).toBe(child.id);
+  expect((await manager.browserSession(page.pageId, main.id)).id).toBe(child.id);
   expect(manager.view.works.get(work.id)?.activeSessionId).toBe(main.id);
   manager.sink.upsertItem(main.id, { id: "user:parent-run", kind: "user", text: "main", at: Date.now(), refs: [] });
   manager.sink.upsertItem(child.id, { id: "user:child-run", kind: "user", text: "page", at: Date.now(), refs: [] });
   expect(manager.tasks.list({ parentSessionId: main.id }).tasks).toContainEqual(expect.objectContaining({ sessionId: child.id, executorKind: "browser", parentRunId: `${main.id}/parent-run` }));
+  manager.updateSession(child.id, { model: "saved-codex-model", effort: "high" });
+  manager.sink.updateSession(child.id, { nativeSessionId: "codex-thread" });
+  const other = await manager.browserSession(page.pageId, main.id, "claude");
+  expect(other).toMatchObject({ provider: "claude", model: null, effort: null, pageAgent: { pageId: page.pageId, parentSessionId: main.id } });
+  expect(other.id).not.toBe(child.id);
+  manager.updateSession(other.id, { model: "saved-claude-model" });
+  const restored = await manager.browserSession(page.pageId, main.id, "codex");
+  expect(restored).toMatchObject({ id: child.id, model: "saved-codex-model", effort: "high", nativeSessionId: "codex-thread" });
+  expect(manager.items(restored.id).items.some(item => item.id === "user:child-run")).toBe(true);
+  expect(manager.view.sessions.get(main.id)?.model).toBeNull();
+  expect(manager.view.works.get(work.id)?.activeSessionId).toBe(main.id);
+  manager.sink.updateSession(child.id, { status: "running" });
+  await expect(manager.browserSession(page.pageId, main.id, "claude")).rejects.toMatchObject({ code: "browser_agent_busy" });
+  expect(page.sessionId).toBe(child.id);
+  manager.sink.updateSession(child.id, { status: "idle" });
+  // A completed turn still owns native control: switching must settle a real handoff first.
+  const take = manager.sharedBrowser.control(page.pageId, child.id, page.control.generation);
+  let job = manager.sharedBrowser.poll({ driverId, pages: [native(page)], results: [] }).jobs[0]!;
+  manager.sharedBrowser.poll({ driverId, pages: [native(page)], results: [{ id: job.id, pageId: page.pageId, page: native(page) }] });
+  await take;
+  const switching = manager.browserSession(page.pageId, main.id, "claude");
+  job = manager.sharedBrowser.poll({ driverId, pages: [native(page)], results: [] }).jobs[0]!;
+  expect(job.action).toMatchObject({ kind: "control", control: { owner: "human" } });
+  expect(page.sessionId).toBe(child.id);
+  manager.sharedBrowser.poll({ driverId, pages: [native(page)], results: [{ id: job.id, pageId: page.pageId, page: native(page) }] });
+  expect(await switching).toMatchObject({ id: other.id, model: "saved-claude-model" });
+  expect(page.control.owner).toBe("human");
+  const originalItems = manager.items(child.id).items;
+  manager.sharedBrowser.close(page.pageId);
+  expect(manager.view.sessions.get(child.id)?.archivedAt).toBeTypeOf("number");
+  expect(manager.view.sessions.get(other.id)?.archivedAt).toBeTypeOf("number");
+  expect(manager.view.sessions.get(main.id)?.archivedAt).toBeNull();
+  expect(manager.items(child.id).items).toEqual(originalItems);
 });

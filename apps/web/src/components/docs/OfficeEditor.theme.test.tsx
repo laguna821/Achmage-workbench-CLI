@@ -32,6 +32,6 @@ it("attaches theme updates after a delayed grant and keeps the dirty iframe thro
   expect(sent).toHaveBeenCalledWith({ type: "office:show-commands" }, "http://office.test");
   expect(screen.container.querySelector("iframe")).toBe(frame); expect(frame.src).toBe(source);
   expect(editorGrant).toHaveBeenCalledOnce();
-  expect(onStatus).toHaveBeenLastCalledWith({ dirty: true, revision: 1, conflict: null });
+  expect(onStatus).toHaveBeenLastCalledWith({ dirty: true, revision: 1, conflict: null, changed: true, same: false });
   expect(sent.mock.calls.some(([value]) => ["office:flush", "office:rebase", "office:init"].includes(value.type))).toBe(false);
 });

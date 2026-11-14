@@ -4,13 +4,11 @@ import { usePkm } from "./PkmContext.tsx";
 import { TemplateDialog } from "./TemplateDialog.tsx";
 import { ViewDialog } from "./ViewDialog.tsx";
 import { RulesDialog } from "./RulesDialog.tsx";
-import { InsightDialog } from "./InsightDialog.tsx";
 import "../../styles/pkm.css";
 
 /**
  * "옵시디언 볼트 연결": pick the vault folder (the one with `.obsidian`). The vault found on this
- * computer is offered first. Workbench only reads it; the only way anything reaches the vault is
- * an insight published through Achmage.
+ * computer is offered first. Workbench only reads it.
  */
 export function VaultDialog({ pickFolder }: { pickFolder: (() => Promise<string | null>) | null }) {
   const pkm = usePkm();
@@ -114,7 +112,6 @@ export function VaultDialogHost({ pickFolder }: { pickFolder: (() => Promise<str
   if (pkm.dialog?.kind === "template") return <TemplateDialog workId={pkm.dialog.workId} parentId={pkm.dialog.parentId} />;
   if (pkm.dialog?.kind === "view") return <ViewDialog id={pkm.dialog.id} />;
   if (pkm.dialog?.kind === "rules") return <RulesDialog />;
-  if (pkm.dialog?.kind === "insight") return <InsightDialog sessionId={pkm.dialog.sessionId} />;
   return null;
 }
 

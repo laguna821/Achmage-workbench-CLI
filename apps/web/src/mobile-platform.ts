@@ -9,12 +9,17 @@ export function pickedFiles(files: FileList | File[]): File[] {
   });
 }
 
-export function downloadAttachment(file: File) {
-  const url = URL.createObjectURL(file);
-  triggerBrowserDownload(url, sanitizeDownloadFileName(file.name), target => window.open(target, "_blank", "noopener,noreferrer"));
+/** Hands bytes to the browser to save under a name. They may be anything a conversation, document
+ * or service holds (a web page, an SVG): the object URL is typed as plain bytes, so a browser that
+ * opens it instead of saving it runs nothing on this app's address. The name keeps its extension. */
+export function saveBlobAs(blob: Blob, name: string) {
+  const url = URL.createObjectURL(new Blob([blob], { type: "application/octet-stream" }));
+  triggerBrowserDownload(url, sanitizeDownloadFileName(name), target => window.open(target, "_blank", "noopener,noreferrer"));
   // Paseo keeps a save-prompt URL alive for a minute, independently of the source view.
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
+
+export function downloadAttachment(file: File) { saveBlobAs(file, file.name); }
 
 export async function shareableFile(url: string, name: string, mime: string): Promise<File> {
   // Only a cache-owned blob URL, never a credential-bearing URL or a workspace path.

@@ -97,7 +97,7 @@ export function mountOfficeUi({ viewId, format, theme, onTheme, onCommand, doc =
     for (const source of documents) {
       const seen = new Set<Element>();
       for (const chrome of source.querySelectorAll(adapter.roots)) for (const element of chrome.querySelectorAll<HTMLElement>('button, [role="button"], [role="menuitem"], [role="tab"]')) {
-        if (seen.has(element) || root.contains(element) || element.closest('[hidden], [inert], [aria-hidden="true"]') || !element.getClientRects().length) continue;
+        if (seen.has(element) || root.contains(element) || element.closest('[hidden], [inert], [aria-hidden="true"]') || element.getAttribute("role") === "combobox" || !element.getClientRects().length) continue;
         seen.add(element);
         const label = (element.getAttribute("aria-label") || element.getAttribute("title") || element.dataset.tip || element.textContent || "").replace(/\s+/g, " ").trim();
         if (!label) continue;

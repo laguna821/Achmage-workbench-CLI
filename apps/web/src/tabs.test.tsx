@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeTab, activateTab, closeTab, findTab, moveTab, tabsOf, updateTabView, withTabs } from "./tabs.ts";
+import { activeTab, activateTab, closeTab, dropTabs, findTab, moveTab, tabsOf, updateTabView, withTabs } from "./tabs.ts";
 import { closePane, focusPane, focusedPane, restoreLayout, setPane, singleLayout, splitPane } from "./panes.ts";
 
 type View = { kind: "work" } | { kind: "document"; artifactId: string } | { kind: "new" } | { kind: "terminal"; terminalId: string; label: string };
@@ -89,5 +89,20 @@ describe("group tabs", () => {
     expect(restoreLayout(corrupt, valid, fallback)).toBe(fallback);
     const closed = closeTab(layout, layout.focus, activeTab(focusedPane(layout)).id, home);
     expect(tabsOf(focusedPane(closed)).length).toBeGreaterThan(0);
+  });
+});
+
+describe("a document taken out of its project", () => {
+  it("closes its document tabs and leaves the other tabs as they were", () => {
+    const first = open(singleLayout<View>(home.view, null), "kept");
+    const both = open(first, "gone");
+    const dropped = dropTabs(both, (view) => (view.kind === "document" && view.artifactId === "gone" ? "close" : null), home);
+    expect(tabsOf(focusedPane(dropped)).map((tab) => (tab.view as { artifactId?: string }).artifactId)).toEqual(["kept"]);
+    expect(dropTabs(both, () => null, home)).toBe(both);
+  });
+  it("gives a tab another view when asked (a conversation beside the document stays)", () => {
+    const layout = open(singleLayout<View>(home.view, null), "gone");
+    const changed = dropTabs(layout, (view) => (view.kind === "document" ? ({ kind: "work" } as View) : null), home);
+    expect(activeTab(focusedPane(changed)).view).toEqual({ kind: "work" });
   });
 });

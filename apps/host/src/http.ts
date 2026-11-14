@@ -3,7 +3,7 @@ import { handleDesktopHttp } from "./desktop-http.ts";
 import { randomBytes } from "node:crypto";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { dirname, extname, join, normalize, resolve, sep } from "node:path";
+import { basename, dirname, extname, join, normalize, resolve, sep } from "node:path";
 import { timingSafeEqual } from "node:crypto";
 import { isAccessMode, parseSearchScope, type AccessMode, type Attachment, type CreateSessionRequest, type DocRef, type DocumentViewInput, type Provider, type SequencedEvent, type Timeline } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
@@ -117,6 +117,8 @@ export type HttpOptions = {
   voice?: import("./voice.ts").VoiceService;
   extensions?: import("./extensions/service.ts").ExtensionService;
   hub?: import("./event-hub.ts").EventHub;
+  /** The messenger channel ("휴대폰 메신저"); local only, never in a remote device's allowlist. */
+  channels?: import("./channels/service.ts").ChannelService;
   devices?: import("./devices/service.ts").DeviceService;
   autostart?: import("./daemon/autostart.ts").HostAutostart;
   updatePolicy?: import("./update-policy.ts").UpdatePolicy;
@@ -309,6 +311,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         throw new HttpError(404, "not_found", "푸시 설정 요청을 찾지 못했습니다.");
       }
       if (options.hub && path.startsWith("/api/hub") && await options.hub.handleManagement(req, res, url)) return;
+      if (options.channels && (path === "/api/channels" || path.startsWith("/api/channels/")) && await options.channels.handleManagement(req, res, url)) return;
       if (await handleRuntimeHttp(req, res, url, options)) return;
       if (await handleDesktopHttp(req, res, url, options.desktop)) return;
       const parts = path.split("/").filter(Boolean).slice(1);
@@ -326,9 +329,12 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         if (parts[1] === "jobs" && parts.length === 3 && method === "GET") return sendJson(res, 200, manager.sharedBrowser.receipt(parts[2]!));
         if (parts[1] === "pages" && parts.length === 4 && method === "POST") {
           const id = parts[2]!, body = await readJson(req);
+          if (parts[3] === "restore") return sendJson(res, 200, manager.sharedBrowser.restore(id, body.driverId));
+          if (parts[3] === "close") return sendJson(res, 200, manager.sharedBrowser.close(id));
           if (parts[3] === "session") {
             if (body.parentSessionId !== null && typeof body.parentSessionId !== "string") throw new HttpError(400, "browser_parent", "메인 대화를 선택해 주세요.");
-            return sendJson(res, 200, manager.browserSession(id, body.parentSessionId));
+            if (body.provider !== undefined && body.provider !== "codex" && body.provider !== "claude") throw new HttpError(400, "invalid_provider", "지원하지 않는 엔진입니다.");
+            return sendJson(res, 200, manager.shown(await manager.browserSession(id, body.parentSessionId, body.provider)));
           }
           if (parts[3] === "control") return sendJson(res, 200, await manager.sharedBrowser.control(id, body.owner, body.expectedGeneration));
           if (parts[3] === "action") return sendJson(res, 200, await manager.sharedBrowser.human(id, body as unknown as { requestId: string; action: unknown; expected?: import("@workbench/contracts").BrowserObservation }));
@@ -694,7 +700,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         return sendJson(
           res,
           201,
-          await (body.worktree === true ? manager.createIsolatedSession.bind(manager) : async (workId: string, request: CreateSessionRequest) => manager.createSession(workId, request))(parts[1], {
+          manager.shown(await (body.worktree === true ? manager.createIsolatedSession.bind(manager) : async (workId: string, request: CreateSessionRequest) => manager.createSession(workId, request))(parts[1], {
             provider: body.provider as Provider,
             workspaceId: typeof body.workspaceId === "string" ? body.workspaceId : undefined,
             purpose: body.purpose as string | undefined,
@@ -703,7 +709,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
             effort: (body.effort as string | null) ?? null,
             access: isAccessMode(body.access) ? body.access : null,
             browser: body.browser === true,
-          }),
+          })),
         );
       }
       // "그림": draw with GPT Image through Codex, the drawings, templates, and picture files of a work.
@@ -719,19 +725,19 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         createReadStream(file.path).pipe(res);
         return;
       }
-      if (path === "/api/tasks" && method === "GET") return sendJson(res, 200, manager.tasks.list({
+      if (path === "/api/tasks" && method === "GET") return sendJson(res, 200, manager.shown(manager.tasks.list({
         workId: url.searchParams.get("workId") || undefined, workspaceId: url.searchParams.get("workspaceId") || undefined,
         parentSessionId: url.searchParams.get("parentSessionId") || undefined, activeOnly: url.searchParams.get("active") === "1",
-      }));
+      })));
       if (path === "/api/tasks/native-refresh" && method === "POST") {
         const body = await readJson(req, 2048);
-        return sendJson(res, 200, await manager.tasks.refreshNative(String(body.sessionId ?? "")));
+        return sendJson(res, 200, manager.shown(await manager.tasks.refreshNative(String(body.sessionId ?? ""))));
       }
       if (path === "/api/tasks/native-history" && method === "GET") {
         const sessionId = url.searchParams.get("sessionId"), runId = url.searchParams.get("runId");
         const task = manager.tasks.list().tasks.find(entry => entry.sessionId === sessionId && entry.runId === runId && entry.executorKind === "native_agent");
         if (!task) throw new HttpError(404, "native_task_missing", "현재 하위 작업을 다시 불러와 주세요.");
-        return sendJson(res, 200, await manager.tasks.nativeDetail(task));
+        return sendJson(res, 200, manager.shown(await manager.tasks.nativeDetail(task)));
       }
       if (path === "/api/agent-profiles" && method === "GET") return sendJson(res, 200, { profiles: manager.profiles.list() });
       if (path === "/api/agent-profiles" && method === "POST") return sendJson(res, 201, manager.profiles.save(await readJson(req, 24_000) as unknown as import("@workbench/contracts").AgentProfileInput));
@@ -755,7 +761,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           return sendJson(
             res,
             200,
-            manager.updateSession(sessionId, {
+            manager.shown(manager.updateSession(sessionId, {
               purpose: typeof body.purpose === "string" ? body.purpose : undefined,
               profileId: body.profileId === null ? null : typeof body.profileId === "string" ? body.profileId : undefined,
               model: body.model === undefined ? undefined : ((body.model as string | null) ?? null),
@@ -767,12 +773,12 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
               access: body.access === undefined ? undefined : body.access === null ? null : (body.access as AccessMode),
               browser: typeof body.browser === "boolean" ? body.browser : undefined,
               muted: typeof body.muted === "boolean" ? body.muted : undefined,
-            }),
+            })),
           );
         }
         if (method === "POST" && parts[2] === "compact") return sendJson(res, 202, await manager.compact(sessionId));
         if (method === "GET" && parts[2] === "commands") return sendJson(res, 200, { commands: await manager.commands(sessionId) });
-        if (method === "POST" && parts[2] === "fork") return sendJson(res, 201, await manager.forkBefore(sessionId, String((await readJson(req)).itemId ?? "")));
+        if (method === "POST" && parts[2] === "fork") return sendJson(res, 201, manager.shown(await manager.forkBefore(sessionId, String((await readJson(req)).itemId ?? ""))));
         if (method === "GET" && parts[2] === "worktree" && parts.length === 3) return sendJson(res, 200, await manager.worktreeChanges(sessionId));
         if (method === "POST" && parts[2] === "worktree" && parts[3] === "apply") return sendJson(res, 200, await manager.applyWorktree(sessionId));
         if (method === "POST" && parts[2] === "worktree" && parts[3] === "discard") return sendJson(res, 200, await manager.discardWorktree(sessionId));
@@ -799,16 +805,18 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
                 plan: body.plan === true,
                 notes: Array.isArray(body.notes) ? body.notes.filter((note): note is string => typeof note === "string").slice(0, 20) : [],
                 omitChanges: Array.isArray(body.omitChanges) ? body.omitChanges.filter((line): line is string => typeof line === "string").slice(0, 50) : [],
+                // Typed into this PC's composer: the person's draft while it waits (R6).
+                draft: true,
               },
             ),
           );
         }
         if (parts[2] === "queue" && parts[3]) {
           const queuedId = decodeURIComponent(parts[3]);
-          if (method === "DELETE" && parts.length === 4) return sendJson(res, 200, manager.cancelQueued(sessionId, queuedId));
+          if (method === "DELETE" && parts.length === 4) return sendJson(res, 200, manager.shown(manager.cancelQueued(sessionId, queuedId)));
           if (method === "PATCH" && parts.length === 4) {
             const body = await readJson(req);
-            return sendJson(res, 200, manager.updateQueued(sessionId, queuedId, String(body.text ?? "")));
+            return sendJson(res, 200, manager.shown(manager.updateQueued(sessionId, queuedId, String(body.text ?? ""))));
           }
           if (method === "POST" && parts[4] === "send") return sendJson(res, 202, await manager.sendQueued(sessionId, queuedId));
         }
@@ -840,10 +848,10 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const preset = (typeof body.preset === "string" && body.preset in DESIGN_PRESETS ? body.preset : "square") as DesignPreset;
         return sendJson(res, 201, manager.createDesign(parts[1], String(body.name ?? ""), preset, typeof body.text === "string" ? body.text : null, typeof body.workspaceId === "string" ? body.workspaceId : undefined));
       }
-      if (path === "/api/schedules" && method === "GET") return sendJson(res, 200, { schedules: manager.schedules.all() });
+      if (path === "/api/schedules" && method === "GET") return sendJson(res, 200, manager.shown({ schedules: manager.schedules.all() }));
       if (path === "/api/schedules" && method === "POST") {
         const body = await readJson(req);
-        return sendJson(res, 201, manager.schedules.create({ sessionId: String(body.sessionId ?? ""), text: String(body.text ?? ""), when: body.when as never, policy: body.policy as never }));
+        return sendJson(res, 201, manager.shown(manager.schedules.create({ sessionId: String(body.sessionId ?? ""), text: String(body.text ?? ""), when: body.when as never, policy: body.policy as never, draft: true })));
       }
       if (parts[0] === "schedules" && parts[1] && parts[2] === "history") {
         const scheduleId = decodeURIComponent(parts[1]);
@@ -856,7 +864,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       }
       if (parts[0] === "schedules" && parts[1] && parts.length === 2 && method === "PATCH") {
         const body = await readJson(req);
-        return sendJson(res, 200, manager.schedules.update(decodeURIComponent(parts[1]), { enabled: typeof body.enabled === "boolean" ? body.enabled : undefined }));
+        return sendJson(res, 200, manager.shown(manager.schedules.update(decodeURIComponent(parts[1]), { enabled: typeof body.enabled === "boolean" ? body.enabled : undefined })));
       }
       if (parts[0] === "schedules" && parts[1] && parts.length === 2 && method === "DELETE") {
         manager.schedules.remove(decodeURIComponent(parts[1]));
@@ -870,7 +878,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       if (method === "POST" && path === "/api/import") {
         const body = await readJson(req);
         if (body.provider !== "claude" && body.provider !== "codex") throw new HttpError(400, "invalid_provider", "엔진을 골라 주세요.");
-        return sendJson(res, 201, await manager.importSession({ provider: body.provider, nativeSessionId: String(body.nativeSessionId ?? "") }));
+        return sendJson(res, 201, manager.shown(await manager.importSession({ provider: body.provider, nativeSessionId: String(body.nativeSessionId ?? "") })));
       }
       if (method === "POST" && path === "/api/attachments") {
         const data = await readBody(req, 26 * 1024 * 1024);
@@ -946,6 +954,25 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const documents = manager.documents;
         const artifactId = parts[1];
         const revision = url.searchParams.get("revision") ? Number(url.searchParams.get("revision")) : undefined;
+        // "삭제" (to the app's trash, or off the list for a file the app does not manage), restore, delete for good.
+        if (method === "GET" && parts[2] === "removal" && parts.length === 3) return sendJson(res, 200, manager.documentRemoval(artifactId));
+        if (method === "POST" && parts[2] === "remove" && parts.length === 3) {
+          const body = await readJson(req);
+          if (body.action !== "trash" && body.action !== "unlisted") throw new HttpError(400, "removal_action", "할 일(trash·unlisted)이 필요합니다.");
+          return sendJson(res, 200, manager.removeDocument(artifactId, { action: body.action }));
+        }
+        if (method === "POST" && parts[2] === "restore" && parts.length === 3) return sendJson(res, 200, manager.restoreDocument(artifactId));
+        if (method === "POST" && parts[2] === "save-copy" && parts.length === 3) {
+          const body = await readJson(req);
+          return sendJson(res, 200, manager.saveDocumentCopy(artifactId, typeof body.to === "string" ? body.to : ""));
+        }
+        if (method === "GET" && parts[2] === "trash-file" && parts.length === 3) {
+          const file = documents.trashFile(artifactId);
+          res.writeHead(200, { "content-type": MIME[extname(file).toLowerCase()] ?? "application/octet-stream", "cache-control": "no-store", "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(basename(file))}` });
+          createReadStream(file).pipe(res);
+          return;
+        }
+        if (method === "DELETE" && parts.length === 2) return sendJson(res, 200, manager.purgeDocument(artifactId));
         if (method === "POST" && parts[2] === "pdf-image-outputs") {
           let body: Record<string, any>;
           try { body = JSON.parse((await readBody(req, parts[4] === "write" ? 280_010_000 : 10_000)).toString("utf8")); }
@@ -1095,7 +1122,8 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         if (method === "POST" && parts[2] === "document-session") {
           const body = await readJson(req);
           if ((body.parentSessionId !== null && body.parentSessionId !== undefined && typeof body.parentSessionId !== "string") || (body.fresh !== undefined && typeof body.fresh !== "boolean")) throw new HttpError(400, "invalid_document_session", "문서 대화 요청 형식이 올바르지 않습니다.");
-          return sendJson(res, 200, manager.documentSession(artifactId, typeof body.parentSessionId === "string" ? body.parentSessionId : null, body.fresh === true));
+          if (body.provider !== undefined && body.provider !== "codex" && body.provider !== "claude") throw new HttpError(400, "invalid_provider", "지원하지 않는 엔진입니다.");
+          return sendJson(res, 200, manager.shown(manager.documentSession(artifactId, typeof body.parentSessionId === "string" ? body.parentSessionId : null, body.fresh === true, body.provider)));
         }
         if (method === "POST" && parts[2] === "open-external") {
           const body = await readJson(req);
@@ -1138,14 +1166,15 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         return sendJson(
           res,
           202,
-          await manager.handoff({
+          manager.shown(await manager.handoff({
             requestId: String(body.requestId ?? ""),
             sourceSessionId: String(body.sourceSessionId ?? ""),
             targetSessionId: String(body.targetSessionId ?? ""),
             text: String(body.text ?? ""),
             refs: parseRefs(body.refs),
             attachments: parseAttachments(body.attachments),
-          }),
+            draft: true,
+          })),
         );
       }
       // "다시 보내기": a request another session did not answer, sent again as a new one.
@@ -1153,7 +1182,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         const body = await readJson(req);
         const requestId = String(body.requestId ?? "");
         if (!requestId) throw new HttpError(400, "missing_request_id", "requestId가 필요합니다.");
-        return sendJson(res, 202, await manager.resendHandoff(parts[1], requestId));
+        return sendJson(res, 202, manager.shown(await manager.resendHandoff(parts[1], requestId)));
       }
       // "세션 잇기": start, pause, go on, cut, one more round, and what was exchanged.
       if (parts[0] === "links") {

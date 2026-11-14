@@ -318,3 +318,75 @@ test("protected reconnect replays scoped events once and requires resync for epo
   expect(recovered.resyncs()).toBe(0);
   recovered.release();
 }, 20_000);
+
+type Management = { pending: import("@workbench/contracts").PairingRequest[]; devices: DeviceGrant[] };
+/** One pairing through the real protected channel, with what the device says about itself. */
+async function register(f: Awaited<ReturnType<typeof fixture>>, about: { remember?: boolean; previousDeviceId?: string }, approval: (pending: Management) => DeviceApproval) {
+  const offer = await f.offer(), client = f.peer(offer);
+  await client.peer.connect();
+  const ticket = await client.peer.rpc<PairingRequestTicket>("pair", { offer: offer.workbench, name: "내 휴대폰", platform: "test-loopback", ...about });
+  const before = await f.local<Management>("/api/devices");
+  await f.approve(ticket.requestId, approval(before));
+  const claim = await client.peer.rpc<PairingCredentialResult>("claim", { requestId: ticket.requestId, claimToken: ticket.claimToken });
+  if (claim.status !== "approved") throw Error("Expected local approval");
+  await client.peer.connect(claim.credential);
+  return { ...client, offer, ticket, claim, before };
+}
+
+test("a remembered device connects again on a later day without a new approval, shows as remembered on the PC, and is cut off at once by revocation", async () => {
+  const f = await fixture();
+  const phone = await register(f, { remember: true }, () => ({ permissions: ["read"], workIds: [f.ownWork.id] }));
+  expect(phone.before.pending).toMatchObject([{ requestId: phone.ticket.requestId, remember: true }]);
+  const listed = (await f.local<Management>("/api/devices")).devices;
+  expect(listed).toHaveLength(1);
+  expect(listed[0]).toMatchObject({ deviceId: phone.claim.grant.deviceId, revokedAt: null });
+  expect(listed[0]!.rememberedAt).toBe(listed[0]!.approvedAt);
+  expect(JSON.stringify(listed)).not.toContain(phone.claim.credential);
+
+  // The tab or app was closed: nothing of the first connection is left, only the kept credential.
+  phone.peer.close();
+  await bounded(Promise.all(phone.sockets.map(socket => socket.closed)), "First connection did not close");
+  const nextDay = f.peer(phone.offer);
+  const authentication = await nextDay.peer.connect(phone.claim.credential);
+  expect(authentication.grant).toMatchObject({ deviceId: phone.claim.grant.deviceId, rememberedAt: listed[0]!.rememberedAt });
+  expect((await f.local<Management>("/api/devices")).pending).toEqual([]);
+  const snapshot = await json<Snapshot>(nextDay.peer, "/api/snapshot");
+  expect(snapshot.works.map(work => work.id)).toEqual([f.ownWork.id]);
+
+  const live = nextDay.sockets.at(-1)!;
+  await f.local("/api/devices/" + phone.claim.grant.deviceId + "/revoke", { method: "POST" });
+  await bounded(live.closed, "Revoked remembered device stayed connected");
+  await expect(nextDay.peer.connect(phone.claim.credential)).rejects.toMatchObject({ status: 401 });
+  const stolen = f.peer(phone.offer);
+  await expect(stolen.peer.connect(phone.claim.credential)).rejects.toMatchObject({ status: 401 });
+  expect(nextDay.wire.join("\n")).not.toContain(phone.claim.credential);
+}, 20_000);
+
+test("registering the same device again leaves one entry: the earlier approval is removed and its connection ends", async () => {
+  const f = await fixture();
+  const first = await register(f, { remember: true }, () => ({ permissions: ["read", "send"], workIds: [f.ownWork.id] }));
+  const other = await f.enroll(f.foreignWork.id);
+  const firstSocket = first.sockets.at(-1)!;
+  const again = await register(f, { remember: true, previousDeviceId: first.claim.grant.deviceId }, pending => {
+    const request = pending.pending.find(entry => entry.requestId !== undefined && entry.previousDeviceId)!;
+    // The PC is told which earlier entry the device names; the owner's approval removes it.
+    expect(request.previousDeviceId).toBe(first.claim.grant.deviceId);
+    return { permissions: ["read"], workIds: [f.ownWork.id], replaces: [request.previousDeviceId!] };
+  });
+  await bounded(firstSocket.closed, "The earlier approval's connection stayed open");
+  const devices = (await f.local<Management>("/api/devices")).devices;
+  expect(devices.map(device => device.deviceId).sort()).toEqual([again.claim.grant.deviceId, other.claim.grant.deviceId].sort());
+  await expect(first.peer.connect(first.claim.credential)).rejects.toMatchObject({ status: 401 });
+  // Nothing carries over from the earlier approval: the new one has only what the owner chose now.
+  expect(again.claim.grant.permissions).toEqual(["read"]);
+  expect((await json<Snapshot>(other.peer, "/api/snapshot")).works.map(work => work.id)).toEqual([f.foreignWork.id]);
+
+  // Taking a device off the list is the owner's act on the PC: a connected device cannot do it to another.
+  const attempt = await again.peer.fetch("/api/devices/" + other.claim.grant.deviceId + "/remove", { method: "POST" });
+  expect(attempt.status).toBe(403); await attempt.arrayBuffer();
+  expect((await f.local<Management>("/api/devices")).devices).toHaveLength(2);
+  await f.local("/api/devices/" + other.claim.grant.deviceId + "/remove", { method: "POST" });
+  await bounded(other.sockets.at(-1)!.closed, "A device taken off the list stayed connected");
+  expect((await f.local<Management>("/api/devices")).devices.map(device => device.deviceId)).toEqual([again.claim.grant.deviceId]);
+  await expect(other.peer.connect(other.claim.credential)).rejects.toMatchObject({ status: 401 });
+}, 20_000);

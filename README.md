@@ -41,6 +41,7 @@ Node.js 24 이상, Rust stable(`wasm32-wasip1` 타깃 포함), Tauri 2의 시스
 
 ```bash
 npm ci --ignore-scripts
+node node_modules/playwright-core/cli.js install chromium --only-shell   # 한 번: 오피스 빌드가 한글 편집 화면을 이 브라우저로 검사
 npm run build                      # IeumOffice 소스 받기, 엑셀 엔진 wasm, UI, 편집기, 게이트웨이
 (cd apps/desktop && npx tauri build --no-bundle)
 bash scripts/install-linux.sh      # Linux: 사용자 폴더에 설치하고 런처 등록

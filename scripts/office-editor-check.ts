@@ -135,9 +135,9 @@ async function typeAtStart(p: Page, text: string) {
 try {
   await page.addInitScript((id) => localStorage.setItem("workbench.lastWork", id), work.id);
   await page.goto(`${ready.url}/?token=${ready.token}`);
-  await page.waitForSelector(".docs-button");
-  await page.locator(".docs-button").click();
-  await page.locator(".docs-menu").getByText("계획.docx", { exact: true }).click();
+  await page.waitForSelector(".note-head-more");
+  await page.locator(".note-head-more").click();
+  await page.locator(".note-menu").getByText("계획.docx", { exact: true }).click();
   await editor(page).waitFor({ timeout: 60_000 });
   await waitEditorText(page, "질문에서 시작하는 글쓰기");
   await page.waitForTimeout(1200);

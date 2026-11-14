@@ -1,11 +1,12 @@
 import stylesheet from "./chrome.css?raw";
+import hangulStudio from "./hangul-studio.css?raw";
 import type { OfficeUiFormat, UiTheme } from "../ui-adapters.ts";
 
 // These are renderer UI surfaces, read from the pinned Ieum/rhwp source. Never
 // include document pages, canvas containers, preview panes or chapter frames.
 export const officeChromeSelectors: Record<OfficeUiFormat, string[]> = {
   word: [".ribbon", ".status-bar", ".nav-pane", ".comments-pane", ".styles-pane", ".find-panel", ".file-menu", ".ctx-menu", ".ctx-submenu", ".rb-font-family-menu", ".rb-font-size-menu", ".style-gallery-menu", ".spacing-menu", ".paste-menu", ".table-autofit-menu", ".modal", ".font-dialog", ".table-properties-dialog", ".table-small-dialog", ".zoom-dialog", ".print-dialog", ".equation-modal", ".list-define-modal"],
-  hangul: [".hwp-topbar", ".hwp-notice", ".memo-panel", ".memo-modal", "#menu-bar", "#icon-toolbar", "#style-bar", "#status-bar", ".menu-dropdown", ".context-menu", ".tb-split-menu", ".sb-dropdown-menu", ".font-picker-menu", ".dialog-wrap", ".find-dialog", ".zoom-dialog"],
+  hangul: [".hwp-topbar", ".hwp-notice", ".memo-panel", ".memo-modal", "#menu-bar", "#icon-toolbar", "#style-bar", "#status-bar", ".menu-dropdown", ".context-menu", ".tb-split-menu", ".sb-dropdown-menu", ".font-picker-menu", ".dialog-wrap", ".find-dialog", ".zoom-dialog", ".custom-select-menu"],
   slides: [".ribbon", ".status-bar", ".format-pane", ".anim-pane", ".comments-pane", ".find-panel", ".file-menu", ".ctx-menu", ".ctx-submenu", ".rb-menu", ".rb-font-menu", ".rb-size-menu", ".rb-fill-menu", ".rb-anim-menu", ".modal", ".print-dialog", ".chart-data-modal", ".chart-type-modal"],
   sheets: [".excel-header", ".ribbon", ".status-bar", ".find-replace-panel", ".chart-format-pane", ".pivot-fields-pane", ".threaded-comments-pane", ".note-pictures-pane", ".table-style-panel", ".sheet-tab-menu", ".sheet-tab-menu-pop", ".chart-menu", ".menu-select-drop", ".modal", ".cells-dialog", ".format-cells-dialog", ".function-args-dialog", ".insert-function-dialog", ".name-manager-dialog", ".sort-dialog", ".pivot-dialog", ".link-dialog", ".sheet-tab-dialog", ".equation-dialog", ".icons-dialog", ".select-data-dialog", ".recommended-charts-dialog", ".print-dialog", '[data-u-comp="ribbon-toolbar"]', '[data-u-comp="ribbon-header-menu"]', '[data-u-comp="slide-tab-bar"]', '[data-u-comp="sidebar"]', '[data-u-comp="find-replace-dialog"]'],
   markdown: [".ribbon", ".status-bar", ".find-panel", ".fm-panel", ".md-block-menu", ".md-theme-menu", ".slash-menu", ".table-menu", ".redact-menu", ".redact-dialog", ".image-host-dialog"],
@@ -27,7 +28,7 @@ export function installOfficeChrome(doc: Document, format: OfficeUiFormat, theme
   const safe = `:not(:where(${content}, ${content} *))`;
   const chrome = `${root} :is(${[...officeChromeSelectors[format], ".ai-panel-header", ".ai-composer", ".ai-model-picker"].join(", ")})${safe}`;
   // Exclude preview content from descendant controls as well as surface roots.
-  const css = stylesheet.replaceAll("__WB_ROOT__", root).replaceAll("__WB_CHROME__", chrome).replaceAll("__WB_SAFE__", safe).replaceAll("__WB_FONT_URL__", JSON.stringify(fontUrl));
+  const css = (format === "hangul" ? stylesheet + hangulStudio : stylesheet).replaceAll("__WB_ROOT__", root).replaceAll("__WB_CHROME__", chrome).replaceAll("__WB_SAFE__", safe).replaceAll("__WB_FONT_URL__", JSON.stringify(fontUrl));
   function remove(source: Document) {
     const skin = skins.get(source); if (!skin) return;
     skin.style.remove();

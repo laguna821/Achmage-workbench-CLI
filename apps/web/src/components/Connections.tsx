@@ -15,7 +15,7 @@ function ToolsSection({ tools, onInstallIeum, onRefreshTools }: { tools: Documen
   if (!tools) return null;
   const rows = [
     { key: "kordoc", name: "hallym-kordoc 스킬", role: "Markdown·양식으로 HWPX 만들기 · 사용자 설치 스킬 우선", status: tools.kordoc },
-    { key: "ieumoffice", name: "내장 이음오피스 편집기", role: "워드·PPT·엑셀 편집·저장·문서별 AI", status: tools.ieumoffice },
+    { key: "ieumoffice", name: "내장 이음오피스 편집기", role: "워드·PPT·엑셀 편집·저장·문서 AI", status: tools.ieumoffice },
     ...(tools.ieumApp ? [{ key: "ieumApp", name: "이음오피스 앱 연결", role: "같은 파일을 앱으로 열고 저장 내용을 이어받기", status: tools.ieumApp } as const] : []),
     ...(tools.hwp ? [{ key: "hwp", name: "이음 한글", role: "앱 안에서 HWP·HWPX 편집·저장·출력", status: tools.hwp } as const] : []),
     ...(tools.pdf ? [{ key: "pdf", name: "이음 PDF", role: "앱 안에서 PDF 편집·쪽 정리·사본 저장", status: tools.pdf } as const] : []),

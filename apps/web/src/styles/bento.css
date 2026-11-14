@@ -1,0 +1,136 @@
+/* Bento parts for the management screens (components/ui/Bento, Card, Stat, SectionLabel).
+   Rich but tidy: an 8px grid, hairlines instead of boxes in boxes, neutral surfaces, status colour
+   only on dots and tags. Columns follow the container, not the window. */
+
+/* ── Bento ─────────────────────────────────────────────────────────────────────────────── */
+.ui-bento { container-type: inline-size; min-width: 0; }
+.ui-bento-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; align-items: stretch; }
+.ui-bento-cell { display: flex; min-width: 0; }
+.ui-bento-cell > * { flex: 1 1 auto; min-width: 0; }
+
+@container (min-width: 480px) {
+  .ui-bento:not([data-max="1"]) > .ui-bento-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ui-bento:not([data-max="1"]) .ui-bento-cell[data-span="2"],
+  .ui-bento:not([data-max="1"]) .ui-bento-cell[data-span="3"] { grid-column: span 2; }
+}
+@container (min-width: 720px) {
+  .ui-bento:is([data-max="3"], [data-max="4"]) > .ui-bento-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ui-bento:is([data-max="3"], [data-max="4"]) .ui-bento-cell[data-span="3"] { grid-column: span 3; }
+}
+@container (min-width: 1040px) {
+  .ui-bento[data-max="4"] > .ui-bento-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* ── Card: tags → title → two lines → (more) → hairline → foot ─────────────────────────── */
+.ui-card {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  color: var(--text);
+  font: 400 13px/20px var(--font-ui);
+  text-align: left;
+  transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+}
+button.ui-card { cursor: pointer; }
+button.ui-card:hover { border-color: var(--line-strong); background: var(--surface-muted); }
+button.ui-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ui-card-tags { display: flex; align-items: center; gap: 8px; min-width: 0; height: 20px; overflow: hidden; color: var(--muted); font: 500 12px/16px var(--font-ui); white-space: nowrap; }
+.ui-card-tags > * { flex: none; }
+.ui-card-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 14px/20px var(--font-ui); }
+.ui-card-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  min-height: 40px;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+.ui-card-more { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ui-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font: 400 12px/16px var(--font-ui);
+  white-space: nowrap;
+}
+/* The foot sits at least 8px under what comes before it, even when the card is not stretched. */
+.ui-card > :nth-last-child(2):not(.ui-card-foot) { margin-bottom: 4px; }
+.ui-card-foot-start { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ui-card-foot-end { flex: none; font-variant-numeric: tabular-nums; }
+
+/* ── Stat and StatRow: label over value, hairlines between ─────────────────────────────── */
+.ui-stat-row { min-width: 0; overflow: hidden; container-type: inline-size; }
+/* Each stat draws the hairline on its left; the track is pulled left by one padding and one
+   hairline, so the first stat of every row starts flush and its hairline is clipped. Columns are
+   equal: up to 8 where 8 stats of 112px fit, else up to 4 (counts set by StatRow). */
+.ui-stat-track { display: grid; grid-template-columns: repeat(var(--stat-cols, 4), minmax(0, 1fr)); row-gap: 12px; margin: 0 0 0 -17px; padding: 0; }
+@container (min-width: 896px) {
+  .ui-stat-track { grid-template-columns: repeat(var(--stat-cols-wide, 8), minmax(0, 1fr)); }
+}
+.ui-stat { box-sizing: border-box; min-width: 0; padding: 0 16px; border-left: 1px solid var(--line); }
+.ui-stat-label { overflow: hidden; color: var(--muted); font: 400 12px/16px var(--font-ui); text-overflow: ellipsis; white-space: nowrap; }
+/* Status colour on the dot only (bento rule); the value stays ink. */
+.ui-stat-label > .dot { margin-right: 6px; vertical-align: middle; }
+.ui-stat-value { display: flex; align-items: center; min-width: 0; height: 28px; margin: 4px 0 0; overflow: hidden; color: var(--text); font: 600 18px/24px var(--font-ui); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ui-stat-value > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ui-stat-button {
+  max-width: calc(100% + 8px);
+  margin: 0 -4px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.ui-stat-button:hover { background: var(--hover); }
+.ui-stat-button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.ui-stat-value:has(input) { overflow: visible; }
+.ui-stat-value input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  margin: 0;
+  padding: 0 4px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: 500 15px/24px var(--font-ui);
+  outline: none;
+}
+
+/* ── SectionLabel ───────────────────────────────────────────────────────────────────────── */
+.ui-section-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; margin: 0 0 8px; }
+.ui-section-heading { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 0; color: var(--muted); font: 600 12px/16px var(--font-ui); }
+.ui-section-heading > svg { flex: none; }
+.ui-section-count { font-weight: 500; font-variant-numeric: tabular-nums; }
+.ui-section-toggle { display: inline-flex; align-items: center; gap: 6px; margin: 0 -4px; padding: 4px; border: 0; border-radius: var(--r-sm); background: none; color: inherit; font: inherit; cursor: pointer; }
+.ui-section-toggle:hover { color: var(--text); background: var(--hover); }
+.ui-section-toggle:focus-visible { outline: 2px solid var(--focus); outline-offset: 0; }
+.ui-section-action { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-card, .ui-stat-button { transition: none; }
+}

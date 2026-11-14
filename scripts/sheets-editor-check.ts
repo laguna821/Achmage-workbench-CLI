@@ -154,9 +154,9 @@ async function loaded(p: Page) {
 try {
   await page.addInitScript((id) => localStorage.setItem("workbench.lastWork", id), work.id);
   await page.goto(`${ready.url}/?token=${ready.token}`);
-  await page.waitForSelector(".docs-button");
-  await page.locator(".docs-button").click();
-  await page.locator(".docs-menu").getByText("비품.xlsx", { exact: true }).click();
+  await page.waitForSelector(".note-head-more");
+  await page.locator(".note-head-more").click();
+  await page.locator(".note-menu").getByText("비품.xlsx", { exact: true }).click();
   await loaded(page);
   await page.screenshot({ path: join(outDir, "01-open.png") });
   check("문서 화면 안에서 엑셀 편집기로 열림(엔진은 WebAssembly)", (await status(page)).includes("r1 저장됨"), await status(page));

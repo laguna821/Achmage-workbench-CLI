@@ -1,585 +1,190 @@
-/* The project page (프로젝트 = 노트 한 장): properties on top, one line of what needs the person,
-   then the record, decisions and questions, sessions, files and the note. */
-
-.project-view {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  flex: 1;
-}
-
-.project-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.project-column {
-  padding-top: 22px;
-  padding-bottom: 32px;
-}
-
-.project-crumbs {
-  font-size: var(--fs-micro);
-  margin-bottom: 4px;
-}
-
-.project-title-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.project-title {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  font-size: var(--fs-display);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.project-head-tools {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.project-continue {
-  max-width: 280px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Properties */
-.project-props {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-top: 14px;
-}
-
-.project-stage {
-  --stage: var(--muted);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding: 0 10px 0 8px;
-  border: 1px solid color-mix(in srgb, var(--stage) 45%, transparent);
-  border-radius: var(--r-xs);
-  background: color-mix(in srgb, var(--stage) 12%, transparent);
-  color: color-mix(in srgb, var(--stage) 75%, var(--text));
-  font-size: var(--fs-meta);
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.project-stage.empty {
-  border-style: dashed;
-  border-color: var(--line);
-  background: none;
-  color: var(--muted);
-  font-weight: 500;
-}
-
-.project-stage-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--r-full);
-  background: var(--stage);
-}
-
-.project-stage.empty .project-stage-dot {
-  background: var(--line);
-}
-
-.project-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 24px;
-  padding: 0 4px 0 9px;
-  border-radius: var(--r-xs);
-  /* Like the vault's tags (pkm.css .pkm-tag): a muted tint, not the action colour. */
-  background: color-mix(in srgb, var(--muted) 12%, transparent);
-  color: color-mix(in srgb, var(--muted) 75%, var(--text));
-  font-size: var(--fs-micro);
-}
-
-.project-chip.link {
-  background: var(--surface-muted);
-  color: var(--text);
-}
-
-.project-chip-x {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  border: 0;
-  border-radius: var(--r-xs);
-  background: none;
-  color: inherit;
-  opacity: 0.45;
-  cursor: pointer;
-}
-
-.project-chip-x:hover,
-.project-chip-x:focus-visible {
-  opacity: 1;
-  background: color-mix(in srgb, currentColor 14%, transparent);
-}
-
-.project-sep {
-  width: 1px;
-  height: 16px;
-  margin: 0 4px;
-  background: var(--line);
-}
-
-.project-add {
-  height: 24px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: var(--r-sm);
-  background: none;
-  color: var(--muted);
-  font-size: var(--fs-micro);
-  cursor: pointer;
-}
-
-.project-add:hover,
-.project-add:focus-visible {
-  background: color-mix(in srgb, var(--text) 6%, transparent);
-  color: var(--text);
-}
-
-.project-add-input {
-  height: 26px;
-  min-width: 140px;
-  padding: 0 8px;
-  border: 1px solid var(--accent);
-  border-radius: var(--r-sm);
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  font-size: var(--fs-meta);
-}
-
-.project-other-props {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 4px 14px;
-  margin: 10px 0 0;
-  font-size: var(--fs-meta);
-}
-
-.project-prop {
-  display: contents;
-}
-
-.project-prop dt {
-  color: var(--muted);
-}
-
-.project-prop dd {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin: 0;
-}
-
-.project-prop-value {
-  padding: 0 4px;
-  border: 0;
-  border-radius: var(--r-xs);
-  background: none;
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-  cursor: text;
-}
-
-.project-prop-value:hover {
-  background: color-mix(in srgb, var(--text) 6%, transparent);
-}
-
-/* What needs the person */
-.project-facts {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-  font-size: var(--fs-micro);
-}
-
-.project-fact {
-  height: 24px;
-  padding: 0 9px;
-  border: 1px solid transparent;
-  border-radius: var(--r-sm);
-  background: none;
-  color: var(--text);
-  font: inherit;
-  display: inline-flex;
-  align-items: center;
-}
-
-button.project-fact {
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.project-fact.attention {
-  background: var(--amber-soft);
-  color: var(--amber-text);
-}
-
-.project-fact.error {
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
-  color: var(--danger);
-}
-
-.project-fact.proposal {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: color-mix(in srgb, var(--accent) 80%, var(--text));
-}
-
-.project-fact.quiet {
-  padding: 0 4px;
-  color: var(--muted);
-}
-
-.project-fact.path {
-  max-width: 280px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-details-toggle {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  border: 0;
-  background: none;
-  color: var(--muted);
-  font: inherit;
-  cursor: pointer;
-}
-
-.project-details {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 8px 18px;
-  margin: 10px 0 0;
-  padding: 12px 14px;
-  border-radius: var(--r-lg);
-  background: color-mix(in srgb, var(--text) 4%, transparent);
-  font-size: var(--fs-micro);
-}
-
-.project-details dt {
-  color: var(--muted);
-  margin-bottom: 2px;
-}
-
-.project-details dd {
-  margin: 0;
-}
-
-.project-engine-edit {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 16px;
-  padding: 8px 12px;
-  border-radius: var(--r-md);
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-  font-size: var(--fs-meta);
-}
-
-/* Sections */
-.project-section {
-  margin-top: var(--space-8);
-}
-
-/* Section titles read like a vault note's ##: a display-size heading over a rule, so the page's parts
-   (기록, 결정, 세션, 파일, 노트) stand apart at a glance. */
-.project-section-head {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-3);
-  margin-bottom: var(--space-3);
-  padding-bottom: var(--space-2);
-  border-bottom: 1px solid var(--line-strong);
-}
-
-.project-section-head h2 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: var(--fs-title);
-  font-weight: 600;
-  line-height: 1.3;
-  color: var(--h2, var(--text));
-}
-
-/* ── 속성: Obsidian's properties block, at the top of the page ─────────────────────────── */
-.properties-panel {
-  margin-top: var(--space-4);
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  background: var(--surface);
-}
-
-.properties-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid var(--line);
-}
-
-.properties-panel.collapsed .properties-head {
-  border-bottom: 0;
-}
-
-.properties-title {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  border: 0;
-  background: none;
-  color: var(--text);
-  font: inherit;
-  font-size: var(--fs-ui);
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.properties-count {
-  color: var(--muted);
-  font-size: var(--fs-micro);
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-}
-
-.properties-rows {
-  padding: var(--space-1) 0;
-}
-
-.prop-row {
-  display: grid;
-  grid-template-columns: 28px minmax(96px, 160px) 1fr;
-  align-items: center;
-  min-height: 36px;
-  padding: 0 var(--space-3) 0 var(--space-2);
-}
-
-.prop-row:hover,
-.prop-row:focus-within {
-  background: var(--surface-raised);
-}
-
-.prop-kind {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: 0;
-  border-radius: var(--r-sm);
-  background: none;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.prop-kind:hover {
-  color: var(--text);
-  background: var(--hover, var(--surface-muted));
-}
-
-.prop-key {
-  overflow: hidden;
-  padding-right: var(--space-3);
-  color: var(--muted);
-  font-size: var(--fs-meta);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.prop-value-cell {
-  min-width: 0;
-  padding: var(--space-1) 0;
-  font-size: var(--fs-ui);
-}
-
-.prop-row.absent .prop-key {
-  color: var(--muted);
-}
-
-.prop-line {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  max-width: 100%;
-}
-
-.prop-value {
-  max-width: 100%;
-  overflow: hidden;
-  padding: 2px var(--space-1);
-  border: 0;
-  border-radius: var(--r-sm);
-  background: none;
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: text;
-}
-
-.prop-value:hover {
-  background: var(--surface-muted);
-}
-
-.prop-value.empty,
-.prop-add-value.empty {
-  color: var(--muted);
-}
-
-.prop-quick {
-  padding: 1px var(--space-2);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-sm);
-  background: var(--surface);
-  color: var(--muted);
-  font-size: var(--fs-micro);
-  cursor: pointer;
-}
-
-.prop-input {
-  width: min(100%, 360px);
-  height: 28px;
-  padding: 0 var(--space-2);
-  border: 1px solid var(--accent);
-  border-radius: var(--r-sm);
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  font-size: var(--fs-ui);
-  outline: none;
-}
-
-.prop-chips {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.prop-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  max-width: 100%;
-  padding: 1px 4px 1px var(--space-2);
-  border-radius: var(--r-xs);
-  background: color-mix(in srgb, var(--muted) 12%, transparent);
-  color: color-mix(in srgb, var(--muted) 75%, var(--text));
-  font-size: var(--fs-meta);
-  white-space: nowrap;
-}
-
-.prop-chip.kind-tags {
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-  color: var(--accent);
-}
-
-.prop-chip-x {
-  display: inline-flex;
-  padding: 2px;
-  border: 0;
-  border-radius: var(--r-xs);
-  background: none;
-  color: inherit;
-  opacity: 0.6;
-  cursor: pointer;
-}
-
-.prop-chip-x:hover {
-  opacity: 1;
-}
-
-.prop-add-value {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px var(--space-1);
-  border: 0;
-  border-radius: var(--r-sm);
-  background: none;
-  color: var(--muted);
-  font: inherit;
-  font-size: var(--fs-ui);
-  cursor: pointer;
-}
-
-.prop-add-value:hover {
-  background: var(--surface-muted);
-  color: var(--text);
-}
-
-.prop-check {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.prop-add {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  margin: 0 0 var(--space-2) var(--space-3);
-  padding: var(--space-1) var(--space-2);
-  border: 0;
-  border-radius: var(--r-sm);
-  background: none;
-  color: var(--muted);
-  font: inherit;
-  font-size: var(--fs-meta);
-  cursor: pointer;
-}
-
-.prop-add:hover {
-  background: var(--surface-muted);
-  color: var(--text);
-}
-
-.prop-new {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3) var(--space-3);
-}
-
-.prop-new .prop-input {
-  width: 200px;
-}
-
-.prop-new-kind {
-  height: 28px;
+/* The project page (프로젝트 = 노트 한 장) as a management surface: title and next step, the
+   note's properties as a block of rows, the counts (stats), the note's words beside its decisions,
+   then the cards of what hangs on the project. Bento parts (bento.css) carry the grid, cards and stats; this file
+   places them. Columns follow the pane (`@container pn`), so a 4- or 9-pane cell reflows. */
+
+.project-view { display: flex; flex: 1; flex-direction: column; min-height: 0; background: var(--bg); color: var(--text); }
+.pn-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; container: pn / inline-size; }
+.pn-column { box-sizing: border-box; width: min(100%, 1040px); margin: 0 auto; padding: 28px 32px 48px; color: var(--text); font-family: var(--font-ui); }
+
+/* ── Head: title, next step, the line of folder · stage · tags ─────────────────────────── */
+.pn-head { display: flex; flex-direction: column; gap: 8px; padding-bottom: 12px; }
+/* The title line and the property chips are the shared note head (chat-note.css). */
+.project-view .note-head-tools { gap: 8px; }
+.project-continue { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-props .pn-stage { color: var(--text); font-weight: 500; }
+.pn-stage-dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: var(--r-full); background: var(--stage, var(--faint)); }
+.pn-meta-key { margin-right: 4px; color: var(--faint); font-size: 12px; font-weight: 500; }
+.pn-input { box-sizing: border-box; width: 100%; height: 28px; padding: 0 8px; border: 1px solid var(--accent); border-radius: var(--r-sm); background: var(--surface); color: var(--text); font: 400 14px/20px var(--font-ui); outline: none; }
+
+/* ── Properties: one block under the title, a row per key ──────────────────────────────── */
+/* As Obsidian shows a note's: a head that folds, then icon · key · value on a fixed key column, so
+   the values line up. No box around it and no rules between rows: the hairline above and the stat
+   row's below are its edges. A long value wraps inside its row. */
+.pn-props { padding: 8px 0 12px; border-top: 1px solid var(--line); }
+.pn-props > .ui-section-label { margin-bottom: 4px; }
+.pn-prop-rows { display: flex; flex-direction: column; max-width: 760px; margin: 0; padding: 0; }
+.pn-prop { display: grid; grid-template-columns: 168px minmax(0, 1fr); column-gap: 12px; align-items: start; min-height: 28px; }
+.pn-prop-key { display: flex; align-items: center; gap: 6px; min-width: 0; height: 28px; margin: 0; color: var(--muted); font: 400 13px/20px var(--font-ui); }
+/* The kind's icon in a 24px box pulled left, so the icon itself starts on the column's edge. */
+.pn-prop-kind { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 24px; height: 24px; margin-left: -5px; padding: 0; border: 0; border-radius: var(--r-sm); background: none; color: var(--faint); }
+button.pn-prop-kind { cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
+button.pn-prop-kind:hover { background: var(--hover); color: var(--text); }
+button.pn-prop-kind:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.pn-prop-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pn-prop-value { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; min-width: 0; min-height: 28px; margin: 0; color: var(--text); font: 400 14px/20px var(--font-ui); overflow-wrap: anywhere; }
+/* The value is the button: its text starts on the value column's edge, the hover reaches 8px past it. */
+.pn-prop-button { max-width: calc(100% + 16px); margin: 0 -8px; padding: 4px 8px; border: 0; border-radius: var(--r-sm); background: none; color: inherit; font: inherit; text-align: left; overflow-wrap: anywhere; cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out); }
+.pn-prop-button:is(:hover, [aria-expanded="true"]) { background: var(--hover); }
+.pn-prop-button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.pn-prop-empty { color: var(--faint); }
+.pn-prop-stage { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+.pn-pills { display: inline-flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.pn-pill { display: inline-flex; align-items: center; gap: 4px; min-width: 0; padding: 0 8px; border-radius: var(--r-full); background: var(--surface-muted); color: var(--text-soft); font: 400 13px/20px var(--font-ui); }
+.pn-pill > svg { flex: none; color: var(--muted); }
+/* "원문에서 고치기" after a value the page does not change in place: quiet until pointed at. */
+.pn-prop-source { flex: none; padding: 0; border: 0; background: none; color: var(--muted); font: 400 12px/20px var(--font-ui); cursor: pointer; }
+.pn-prop-source:hover { color: var(--accent); text-decoration: underline; }
+.pn-prop-source:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-xs); }
+/* The app's own key: there to be seen, not read. */
+.pn-prop[data-machine] .pn-prop-text { color: var(--muted); font: 400 12px/20px var(--mono); }
+/* The field takes the value's place: its text where the value's was (8px padding + 1px line). */
+.pn-prop-value .pn-field { flex: 1 1 100%; width: auto; max-width: 480px; margin-left: -9px; }
+/* A sentence gets the row's width; a short kind a short field: as wide as what is typed there (and its hint). */
+.pn-prop[data-kind="text"] .pn-field { max-width: none; }
+.pn-prop[data-kind="number"] .pn-field { max-width: 160px; }
+.pn-prop[data-kind="date"] .pn-field { max-width: 208px; }
+.pn-prop[data-kind="datetime"] .pn-field { max-width: 240px; }
+.pn-prop-add { display: inline-flex; align-items: center; gap: 6px; height: 28px; margin: 4px 0 0 -8px; padding: 0 8px; border: 0; border-radius: var(--r-sm); background: none; color: var(--muted); font: 400 13px/20px var(--font-ui); cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
+.pn-prop-add:is(:hover, [aria-expanded="true"]) { background: var(--hover); color: var(--text); }
+.pn-prop-add:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+/* A pane cell: a narrower key column. A narrow one: the key sits above its value, the value under the key's name. */
+@container pn (max-width: 640px) {
+  .pn-prop { grid-template-columns: 128px minmax(0, 1fr); }
+}
+@container pn (max-width: 400px) {
+  .pn-prop { grid-template-columns: minmax(0, 1fr); padding-bottom: 4px; }
+  .pn-prop-key { height: 24px; font-size: 12px; line-height: 16px; }
+  .pn-prop-value { padding-left: 25px; }
+}
+
+/* ── Stats ─────────────────────────────────────────────────────────────────────────────── */
+.pn-stats { padding: 16px 0; border-block: 1px solid var(--line); }
+
+/* One band for what asks about the note's properties (a key changed elsewhere, a refused value,
+   a kept draft): a boxed line under the rows, its choices as boxed buttons, as the body's draft
+   conflict has. The bands stay when the block is folded. */
+.pn-band { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 16px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); color: var(--text-soft); font: 400 13px/20px var(--font-ui); }
+.pn-band-text { flex: 1 1 240px; min-width: 0; }
+.pn-band .pn-meta-key { flex: none; }
+.pn-band .pn-kept-text { flex: 1 1 160px; }
+.pn-band .pn-field-problem { position: static; flex-basis: 100%; width: auto; max-width: none; padding: 0; border: 0; background: none; }
+.pn-bands { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.project-engine-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); color: var(--text-soft); font: 400 13px/20px var(--font-ui); }
+
+/* ── The note's words | decisions and open questions ───────────────────────────────────── */
+.pn-grid { display: grid; grid-template-columns: minmax(0, 1fr); border-bottom: 1px solid var(--line); }
+.pn-block { min-width: 0; padding: 20px 0 24px; }
+.pn-entries { border-top: 1px solid var(--line); }
+@container pn (min-width: 720px) {
+  .pn-grid { grid-template-columns: minmax(0, 8fr) minmax(0, 4fr); }
+  .pn-body { padding-right: 24px; }
+  .pn-entries { padding-left: 24px; border-top: 0; border-left: 1px solid var(--line); }
+}
+/* "원문 전체" holds the whole file (its decisions too): one column while it is open. A run being
+   edited keeps the page as it is — the side column stays. */
+.pn-grid:has(.pn-body-edit[data-mode="source"]) { grid-template-columns: minmax(0, 1fr); }
+.pn-grid:has(.pn-body-edit[data-mode="source"]) .pn-body { padding-right: 0; }
+.pn-grid:has(.pn-body-edit[data-mode="source"]) .pn-entries { display: none; }
+
+.pn-body-read { border-radius: var(--r-md); }
+.pn-body-read:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }
+/* A run reads as the note; it is the click target that turns into its source. */
+.pn-run { margin: 0 -8px; padding: 4px 8px; border-radius: var(--r-md); cursor: text; transition: background-color var(--dur-fast) var(--ease-out); }
+.pn-body-read:not([data-broken]) .pn-run:hover { background: var(--surface-muted); }
+.pn-body-read[data-broken] .pn-run { cursor: default; }
+.markdown.pn-markdown { font-size: 15px; line-height: 1.7; }
+.markdown.pn-markdown :is(h1, h2, h3, h4) { margin: 16px 0 8px; color: var(--heading); font-size: var(--fs-body); font-weight: 600; line-height: 24px; }
+.markdown.pn-markdown > :first-child { margin-top: 0; }
+.markdown.pn-markdown > :last-child { margin-bottom: 0; }
+.markdown.pn-markdown :is(p, ul, ol) { margin-block: 0 8px; }
+
+/* The same box and text position as the run it replaces (the 1px line takes a pixel of padding). */
+.pn-body-edit { margin: 0 -8px; overflow: hidden; border: 1px solid var(--accent-line); border-radius: var(--r-md); background: var(--surface); }
+.pn-body-edit[data-saving] { opacity: 0.8; }
+.pn-editor { padding: 3px 7px; }
+.pn-body-edit[data-mode="source"] .pn-editor { min-height: 160px; padding: 11px 15px; }
+.pn-recovery { margin-bottom: 8px; border: 1px solid var(--line); border-radius: var(--r-md); }
+.pn-edit-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--line); font: 400 13px/20px var(--font-ui); }
+.pn-edit-line > span:not(.pn-edit-actions):not(.dot) { flex: 1 1 240px; min-width: 0; }
+.pn-body-edit .diff-view { max-height: 40vh; overflow: auto; border-bottom: 1px solid var(--line); }
+.pn-edit-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 16px; border-top: 1px solid var(--line); color: var(--muted); font: 400 12px/16px var(--font-ui); }
+.pn-edit-actions { display: inline-flex; flex: none; gap: 8px; }
+
+.pn-empty { margin: 0 0 16px; color: var(--muted); font: 400 13px/20px var(--font-ui); }
+.pn-body-read .pn-empty { margin: 0; }
+.pn-entries .ui-section-label ~ .ui-section-label { margin-top: 8px; }
+.pn-list { display: flex; flex-direction: column; gap: 8px; margin: 0 0 16px; padding: 0; list-style: none; font: 400 14px/20px var(--font-ui); }
+.pn-list li { display: flex; align-items: flex-start; gap: 8px; }
+.pn-list li > svg { flex: none; margin-top: 3px; color: var(--muted); }
+/* A box to tick (an open question, a checkbox property): an outlined square in both themes (the native one fills white in dark). */
+:is(.pn-list li > input[type="checkbox"], .pn-prop-check) { flex: none; width: 16px; height: 16px; margin: 2px 0 0; border: 1px solid var(--field-line); border-radius: var(--r-xs); background: var(--surface) center / 12px 12px no-repeat; cursor: pointer; appearance: none; -webkit-appearance: none; }
+:is(.pn-list li > input[type="checkbox"], .pn-prop-check):checked { border-color: var(--accent-fill); background-color: var(--accent-fill); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E"); }
+:is(.pn-list li > input[type="checkbox"], .pn-prop-check):disabled { cursor: not-allowed; opacity: .4; }
+.pn-prop-check { margin: 0; }
+.pn-prop-check:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.pn-entry-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.pn-entry-text p { display: inline; margin: 0; }
+.pn-entry-date { flex: none; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.pn-list li.done .pn-entry-text { color: var(--muted); text-decoration: line-through; }
+/* A line being added stays until it is written or put away; its reason sits under it in the flow. */
+.pn-add-line { display: flex; align-items: flex-start; gap: 4px; margin-bottom: 16px; }
+.pn-add-line .pn-field { flex: 1 1 auto; min-width: 0; }
+.pn-add-line .pn-field-problem { position: static; width: auto; max-width: none; margin-top: 4px; padding: 0; border: 0; background: none; }
+
+/* ── What hangs on the project ─────────────────────────────────────────────────────────── */
+.pn-group { padding-top: 24px; }
+.pn-tag { display: inline-flex; align-items: center; gap: 6px; }
+
+.pn-day-label { margin: 8px 0 4px; color: var(--muted); font: 600 12px/16px var(--font-ui); }
+.pn-events { margin: 0; padding: 0; list-style: none; }
+.pn-event { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line); }
+.pn-event:first-child { border-top: 0; }
+.pn-event-main { display: grid; flex: 1 1 auto; grid-template-columns: 48px 48px minmax(0, 1fr); align-items: baseline; gap: 8px; min-width: 0; min-height: 32px; padding: 6px 0; border: 0; background: none; color: var(--text); font: 400 13px/20px var(--font-ui); text-align: left; cursor: pointer; }
+.pn-event-main:hover .pn-event-text { color: var(--accent); }
+.pn-event-main:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.pn-event-time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.pn-event.fresh .pn-event-time { color: var(--accent); font-weight: 600; }
+.pn-event-by { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.pn-event-by.by-claude, .pn-event-by.by-codex { color: var(--accent); }
+.pn-event-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pn-event-keep { flex: none; height: 24px; padding: 0 8px; border: 0; border-radius: var(--r-sm); background: none; color: var(--muted); font: 400 12px/16px var(--font-ui); cursor: pointer; opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); }
+.pn-event:hover .pn-event-keep, .pn-event:focus-within .pn-event-keep { opacity: 1; }
+.pn-event-keep:hover { background: var(--hover); color: var(--text); }
+.pn-fresh { color: var(--accent); font: 600 12px/16px var(--font-ui); }
+
+.pn-details { margin-bottom: 8px; }
+.pn-details .ui-stat-value { font-size: 14px; font-weight: 500; }
+.pn-path { margin: 4px 0 0; color: var(--muted); font: 400 12px/16px var(--mono); overflow-wrap: anywhere; }
+.project-card pre { max-height: 320px; margin: 8px 0; padding: 12px; overflow: auto; border-radius: var(--r-md); background: var(--surface-muted); color: var(--text-soft); font: 400 12px/1.55 var(--mono); white-space: pre-wrap; }
+.pn-read-notes { margin: 0; padding-left: 18px; font: 400 13px/1.7 var(--font-ui); }
+
+@container pn (max-width: 560px) {
+  .pn-column { padding: 20px 16px 32px; }
+  .project-view .note-title { font-size: var(--fs-title); line-height: 32px; }
+  .project-view .note-kind { margin-top: 6px; }
+  /* The title keeps the line; the tools go under it. */
+  .project-view .note-head-title { flex-wrap: wrap; }
+  .project-view .note-head-tools { flex-basis: 100%; min-height: 0; }
+  .project-view .project-continue { max-width: 100%; }
+}
+
+@media (pointer: coarse) {
+  .pn-event-keep { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pn-run, .pn-event-keep, .pn-prop-button, .pn-prop-add, button.pn-prop-kind { transition: none; }
 }
 
 /* ── 속성 템플릿 ─────────────────────────────────────────────────────────────────────── */
@@ -660,268 +265,6 @@ button.project-fact {
   padding: 6px 0;
   color: var(--muted);
   font-size: var(--fs-meta);
-}
-
-/* The record */
-.project-day + .project-day {
-  margin-top: 10px;
-}
-
-.project-day-label {
-  margin-bottom: 2px;
-  color: var(--muted);
-  font-size: var(--fs-micro);
-  font-weight: 600;
-}
-
-.project-events {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.project-event {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  border-radius: var(--r-sm);
-}
-
-.project-event:hover,
-.project-event:focus-within {
-  background: color-mix(in srgb, var(--text) 4%, transparent);
-}
-
-.project-event-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 5px 6px;
-  border: 0;
-  background: none;
-  color: var(--text);
-  font: inherit;
-  font-size: var(--fs-meta);
-  text-align: left;
-  cursor: pointer;
-}
-
-.project-event-time {
-  flex: none;
-  width: 44px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-  font-size: var(--fs-micro);
-}
-
-.project-event-by {
-  flex: none;
-  min-width: 42px;
-  color: var(--muted);
-  font-size: var(--fs-micro);
-}
-
-.project-event-by.by-claude,
-.project-event-by.by-codex {
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.project-event-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-event.kind-decision .project-event-text::before {
-  content: "결정 · ";
-  color: var(--muted);
-}
-
-.project-event.kind-question .project-event-text::before {
-  content: "질문 · ";
-  color: var(--muted);
-}
-
-/* "지난번 본 뒤": what came after the last visit on a faint tint (no side stripe), and its count as a seal. */
-.project-event.fresh {
-  background: var(--accent-soft);
-}
-
-.project-fresh-count {
-  padding: 1px 7px;
-  border-radius: var(--r-xs);
-  background: var(--accent-soft);
-  font-variant-numeric: tabular-nums;
-  color: var(--accent);
-  font-size: var(--fs-micro);
-  font-weight: 600;
-}
-
-.project-event-keep {
-  flex: none;
-  visibility: hidden;
-  margin-right: 4px;
-  padding: 2px 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--surface);
-  color: var(--muted);
-  font-size: var(--fs-micro);
-  cursor: pointer;
-}
-
-.project-event:hover .project-event-keep,
-.project-event:focus-within .project-event-keep {
-  visibility: visible;
-}
-
-/* Decisions and open questions: two lists side by side when there is room. */
-.project-entries {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 18px 28px;
-}
-
-.project-entry-list ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.project-entry {
-  padding: 4px 0;
-  font-size: var(--fs-meta);
-}
-
-.project-entry p {
-  margin: 0;
-}
-
-.project-entry.question label {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  cursor: pointer;
-}
-
-.project-entry.question.done {
-  color: var(--muted);
-  text-decoration: line-through;
-}
-
-/* Sessions and files */
-.project-rows {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.project-row {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 8px;
-  border: 0;
-  border-radius: var(--r-md);
-  background: none;
-  color: var(--text);
-  font: inherit;
-  font-size: var(--fs-meta);
-  text-align: left;
-  cursor: pointer;
-}
-
-.project-row:hover,
-.project-row:focus-visible {
-  background: color-mix(in srgb, var(--text) 5%, transparent);
-}
-
-.project-row-title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-row-status {
-  flex: none;
-  color: var(--muted);
-  font-size: var(--fs-micro);
-}
-
-.project-row-status.status-awaitingApproval {
-  color: var(--amber-text);
-  font-weight: 600;
-}
-
-.project-row-status.status-error {
-  color: var(--danger);
-}
-
-.project-row-status.status-running,
-.project-row-status.status-starting {
-  color: var(--accent);
-}
-
-.project-row-time {
-  flex: none;
-  min-width: 70px;
-  text-align: right;
-  font-size: var(--fs-micro);
-}
-
-/* The note */
-.project-note-body {
-  padding: 4px 2px;
-}
-
-.project-note-editor {
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  overflow: hidden;
-}
-
-.project-note-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 8px;
-  border-top: 1px solid var(--line);
-}
-
-.project-note-path {
-  margin-top: 6px;
-  font-size: var(--fs-micro);
-  word-break: break-all;
-}
-
-.project-card summary {
-  cursor: pointer;
-  color: var(--muted);
-  font-size: var(--fs-meta);
-}
-
-.project-card pre {
-  margin: 8px 0 0;
-  padding: 12px 14px;
-  border-radius: var(--r-lg);
-  background: color-mix(in srgb, var(--text) 4%, transparent);
-  white-space: pre-wrap;
-  font-size: var(--fs-micro);
-  line-height: 1.55;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .project-event-keep,
-  .project-chip-x {
-    transition: opacity 0.12s ease, background 0.12s ease;
-  }
 }
 
 /* "알릴 변경 N" above the input */
@@ -1044,7 +387,7 @@ button.project-fact {
   width: 78px;
   height: 24px;
   padding: 0 6px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--field-line);
   border-radius: var(--r-sm);
   background: var(--bg);
   color: var(--text);
@@ -1099,40 +442,22 @@ button.project-fact {
   color: var(--text);
   font-weight: 600;
 }
+/* The fields' accent border is their focus mark; no second ring around them. */
+.project-view .pn-input:focus-visible { outline: none; }
+.pn-from-template { margin-left: 8px; }
 
-/* "엔진이 읽은 노트": under the card, the vault notes the engines opened themselves. */
-.project-read-notes h3 {
-  margin: 12px 0 4px;
-  color: var(--muted);
-  font-size: var(--fs-micro);
-  font-weight: 600;
-}
-
-.project-read-notes ul {
-  margin: 0;
-  padding-left: 18px;
-  font-size: var(--fs-meta);
-  line-height: 1.7;
-}
-
-/* The Achmage work the note names: one quiet line, read-only. */
-.project-achmage {
-  margin: 4px 0 8px;
-  font-size: var(--fs-meta);
-  line-height: 1.5;
-}
-
-.project-achmage-label {
-  margin-right: 8px;
-  padding: 1px 6px;
-  border-radius: var(--r-xs);
-  background: color-mix(in srgb, var(--text) 6%, transparent);
-  color: var(--muted);
-  font-size: var(--fs-micro);
-  font-weight: 600;
-}
-
-.project-achmage-summary {
-  margin: 4px 0 0;
-  color: var(--muted);
-}
+/* A value the note refused stays in its field; the reason sits under it, over what follows. */
+.pn-field { position: relative; display: block; width: 100%; }
+.pn-field-problem { position: absolute; top: calc(100% + 4px); left: 0; z-index: var(--z-float); width: max-content; max-width: 280px; padding: 4px 8px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); color: var(--danger); font: 400 12px/16px var(--font-ui); white-space: normal; }
+.pn-field .pn-input[aria-invalid] { border-color: var(--danger); }
+/* Text kept on this device that has no field to return into: the text, then what can be done with it. */
+.pn-kept { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.pn-kept-text { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--text); font: 400 14px/20px var(--font-ui); text-overflow: ellipsis; white-space: nowrap; }
+.pn-kept .link { flex: none; font: 400 13px/20px var(--font-ui); }
+.pn-kept .pn-meta-key { flex: none; }
+/* A kept line beside the decisions: its label, then the whole line, then the actions. */
+.pn-kept-line { flex-wrap: wrap; row-gap: 2px; margin: 0 0 16px; }
+.pn-kept-line .pn-kept-text { flex: 1 1 100%; overflow: visible; white-space: normal; overflow-wrap: anywhere; }
+.pn-broken > span:not(.dot) { flex: 1 1 320px; min-width: 0; }
+/* Under the properties block: one hairline above it; the stat row's is the one below. */
+.pn-props + .pn-broken { border-top: 1px solid var(--line); border-bottom: 0; }

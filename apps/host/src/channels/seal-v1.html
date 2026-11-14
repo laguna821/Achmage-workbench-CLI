@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Workbench 비밀 입력</title>
+<!--
+  Achmage Workbench · seal-v1 (design m02 §6.3 (ii)). A static page the PC's bot opens inside
+  Telegram from a keyboard button. Everything it needs is in the address after "#" (which is never
+  sent to the server that hosts this page): the PC's one-time public key (k), the request's nonce
+  (n), a title (t) and the field names (f). The values typed here are sealed on this phone with an
+  ECDH P-256 key of its own, HKDF-SHA-256 and AES-256-GCM, and only the sealed block goes to
+  Telegram (Telegram.WebApp.sendData, at most 4096 bytes). The page loads nothing and connects
+  nowhere (see the Content-Security-Policy above). Its version is in its name: a changed page is a
+  new file.
+-->
+<style>
+  :root { color-scheme: light dark; --text: #1d1d1f; --muted: #6e6e73; --line: #d2d2d7; --accent: #0a66d8; --bg: #fff; }
+  @media (prefers-color-scheme: dark) { :root { --text: #f5f5f7; --muted: #a1a1a6; --line: #3a3a3c; --accent: #4c9bff; --bg: #1c1c1e; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--tg-theme-bg-color, var(--bg)); color: var(--tg-theme-text-color, var(--text)); font: 16px/1.5 -apple-system, "Pretendard", "Noto Sans KR", system-ui, sans-serif; }
+  main { display: grid; gap: 12px; max-width: 420px; margin: 0 auto; }
+  h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  p { margin: 0; }
+  .hint { color: var(--tg-theme-hint-color, var(--muted)); font-size: 14px; }
+  form { display: grid; gap: 12px; }
+  label { display: grid; gap: 4px; font-size: 14px; }
+  input { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: inherit; font: inherit; }
+  input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button { padding: 12px; border: 0; border-radius: 8px; background: var(--tg-theme-button-color, var(--accent)); color: var(--tg-theme-button-text-color, #fff); font: inherit; font-weight: 600; }
+  button:disabled { opacity: .5; }
+  #status:empty { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title">비밀 입력</h1>
+  <p class="hint">값은 이 휴대폰에서 봉인된 뒤 PC로만 갑니다. 텔레그램에는 봉인된 덩어리만 남습니다.</p>
+  <form id="form" autocomplete="off"></form>
+  <p id="status" role="status"></p>
+</main>
+<script>
+/* seal:begin */
+const b64u = {
+  enc(bytes) { let text = ""; for (const byte of bytes) text += String.fromCharCode(byte); return btoa(text).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); },
+  dec(text) { const plain = atob(text.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((text.length + 3) % 4)); return Uint8Array.from(plain, (char) => char.charCodeAt(0)); },
+};
+/** Seal `fields` ({ name: value }) for the PC's one-time public key: a JSON block of at most a few hundred bytes. */
+async function sealFields(publicKey, nonce, fields) {
+  const subtle = crypto.subtle, text = new TextEncoder();
+  const pc = await subtle.importKey("raw", b64u.dec(publicKey), { name: "ECDH", namedCurve: "P-256" }, false, []);
+  const mine = await subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+  const shared = await subtle.deriveBits({ name: "ECDH", public: pc }, mine.privateKey, 256);
+  const material = await subtle.importKey("raw", shared, "HKDF", false, ["deriveKey"]);
+  const key = await subtle.deriveKey({ name: "HKDF", hash: "SHA-256", salt: text.encode(nonce), info: text.encode("workbench-seal-v1") }, material, { name: "AES-GCM", length: 256 }, false, ["encrypt"]);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const sealed = await subtle.encrypt({ name: "AES-GCM", iv, additionalData: text.encode(nonce) }, key, text.encode(JSON.stringify({ n: nonce, f: fields })));
+  const epk = new Uint8Array(await subtle.exportKey("raw", mine.publicKey));
+  return JSON.stringify({ v: 1, n: nonce, epk: b64u.enc(epk), iv: b64u.enc(iv), ct: b64u.enc(new Uint8Array(sealed)) });
+}
+/* seal:end */
+
+/**
+ * To the bot: Telegram's own script when it is there, else the bridge of the client the page runs in
+ * (mobile apps: TelegramWebviewProxy; desktop apps: window.external.notify; web: the parent frame).
+ * False when there is none (the page was opened outside Telegram).
+ */
+function sendToBot(data) {
+  const app = window.Telegram && window.Telegram.WebApp;
+  if (app && typeof app.sendData === "function") { app.sendData(data); return true; }
+  if (window.TelegramWebviewProxy && typeof window.TelegramWebviewProxy.postEvent === "function") { window.TelegramWebviewProxy.postEvent("web_app_data_send", JSON.stringify({ data })); return true; }
+  if (window.external && typeof window.external.notify === "function") { window.external.notify(JSON.stringify({ eventType: "web_app_data_send", eventData: { data } })); return true; }
+  if (window.parent && window.parent !== window) { window.parent.postMessage(JSON.stringify({ eventType: "web_app_data_send", eventData: { data } }), "*"); return true; }
+  return false;
+}
+
+(() => {
+  const params = new URLSearchParams(location.hash.slice(1));
+  const key = params.get("k") || "", nonce = params.get("n") || "", title = params.get("t") || "", names = (params.get("f") || "").split(",").map((name) => name.trim()).filter(Boolean).slice(0, 6);
+  const form = document.getElementById("form"), status = document.getElementById("status");
+  if (!/^[A-Za-z0-9_-]{80,100}$/.test(key) || !/^[A-Za-z0-9_-]{16,64}$/.test(nonce) || !names.length) {
+    status.textContent = "이 입력 양식의 주소가 올바르지 않습니다. 채팅에서 다시 열어 주세요.";
+    return;
+  }
+  if (title) document.getElementById("title").textContent = title.slice(0, 60);
+  const inputs = names.map((name) => {
+    const label = document.createElement("label"), input = document.createElement("input");
+    label.textContent = name.slice(0, 20);
+    input.type = "password"; input.autocomplete = "off"; input.spellcheck = false; input.maxLength = 1000; input.required = true;
+    label.append(input); form.append(label);
+    return [name, input];
+  });
+  const button = document.createElement("button");
+  button.type = "submit"; button.textContent = "봉인해서 보내기";
+  form.append(button);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    button.disabled = true;
+    try {
+      const fields = Object.fromEntries(inputs.map(([name, input]) => [name, input.value]));
+      const data = await sealFields(key, nonce, fields);
+      if (new TextEncoder().encode(data).length > 4096) throw new Error("too large");
+      if (!sendToBot(data)) {
+        status.textContent = "이 화면은 텔레그램 밖에서 열려 보낼 수 없습니다. 텔레그램 채팅의 [입력 양식 열기]로 열어 주세요.";
+        button.disabled = false;
+        return;
+      }
+      // Said only once it went.
+      for (const [, input] of inputs) input.value = "";
+      status.textContent = "보냈습니다.";
+    } catch {
+      status.textContent = "봉인하지 못했습니다. 이 휴대폰의 텔레그램이 암호 기능을 지원하지 않을 수 있습니다. 이 창을 닫고 값을 채팅에 하나씩 보내도 됩니다(받는 즉시 지웁니다).";
+      button.disabled = false;
+    }
+  });
+})();
+</script>
+</body>
+</html>

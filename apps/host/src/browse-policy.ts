@@ -93,6 +93,17 @@ const KINDS: Record<string, BrowserCommandKind> = {
   unroute: "blocked",
   requests: "blocked",
   request: "blocked",
+  "request-body": "blocked",
+  "request-headers": "blocked",
+  "response-body": "blocked",
+  "response-headers": "blocked",
+  "network-state-set": "blocked",
+  "config-print": "blocked",
+  // Script debugging and the daemon's tray icon: Workbench has no use for them.
+  "pause-at": "blocked",
+  resume: "blocked",
+  "step-over": "blocked",
+  tray: "blocked",
   "tracing-start": "blocked",
   "tracing-stop": "blocked",
   "recording-start": "blocked",
@@ -114,9 +125,14 @@ const KINDS: Record<string, BrowserCommandKind> = {
   show: "blocked",
 };
 
-/** Commands not known here (a newer CLI) count as changing the page. */
+/** Whether the command has its own rule here. */
+export function isNamedBrowserCommand(command: string): boolean {
+  return Object.hasOwn(KINDS, command);
+}
+
+/** A command not named here (a newer CLI) does not run until it is. */
 export function browserCommandKind(command: string): BrowserCommandKind {
-  return KINDS[command] ?? "act";
+  return isNamedBrowserCommand(command) ? KINDS[command]! : "blocked";
 }
 
 export type ParsedCli = { session: string | null; command: string | null; args: string[]; help: boolean };
@@ -270,6 +286,7 @@ export function browserInstructions(name: string, engine: "lightpanda" | "chromi
     `이 세션은 사용자 화면에 보이는 Chromium 창 하나를 Playwright CLI(\`playwright-cli\`)로 쓸 수 있습니다. 이 세션의 브라우저 이름은 \`${name}\`입니다. 명령마다 \`-s=${name}\`을 붙이세요.`,
     `- 예: \`playwright-cli -s=${name} open https://example.com\` → \`playwright-cli -s=${name} snapshot\`(요소 ref가 있는 페이지 구조, 주소·제목 포함) → \`playwright-cli -s=${name} click e15\`.`,
     "- 자주 쓰는 명령: open <주소>(창이 없으면 열고 이동), goto <주소>, snapshot, find \"글자\", click <ref>, fill <ref> \"글\", type \"글\", press Enter, select <ref> <값>, go-back, tab-list, tab-select <번호>, screenshot, close. 나머지는 `playwright-cli --help`.",
+    "- 화면 사진·PDF처럼 파일로 남길 때는 작업 폴더 안의 이름을 주세요(예: `screenshot --filename=shot.png`). Workbench가 비밀 값을 숨긴 뒤 그 자리에 두고 결과에 그 경로를 알려 줍니다. 작업 폴더 밖에는 쓸 수 없습니다.",
     "- 셸 명령 하나에 playwright-cli 하나씩 실행하세요(파이프·리다이렉트 없이). 그래야 권한에 따라 Workbench가 바로 실행하거나 사용자에게 한 번만 묻습니다. 출력은 그대로 읽으면 됩니다.",
     "- 창은 사용자에게 보이고, Workbench가 창과 프로필을 관리합니다. 한 번에 한 세션만 창을 씁니다. 사용자가 이 프로필에 미리 로그인해 두었을 수 있습니다(예: Gmail).",
     "- 쿠키·localStorage·sessionStorage·state-save/load, run-code, route, requests, tracing·video, attach, list, close-all, kill-all, delete-data, install, show는 막혀 있습니다.",

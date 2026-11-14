@@ -2,8 +2,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { copyOfficeStyleSelection } from "./office-styles.ts";
 import { blankOfficeBytes } from "./office-new.mjs";
 import { BLANK_OFFICE_DOCUMENTS, type NewOfficeDocument } from "@workbench/contracts";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync, type Stats } from "node:fs";
-import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, writeFileSync, type Stats } from "node:fs";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import type { Artifact, DocumentRemovalPlan } from "@workbench/contracts";
 import {
   PROTOCOL_VERSION,
   accessFor,
@@ -31,6 +32,7 @@ import {
   type CreateTarget,
   type ExportMarkdownRequest,
   type QueuedMessage,
+  type RequestOrigin,
   type ImportCandidate,
   type ForkResult,
   type ImportRequest,
@@ -42,6 +44,7 @@ import {
   type DeleteFolderResult,
   type UpdateWorkRequest,
   type Handoff,
+  type WorkbenchEvent,
   type HandoffRequest,
   type LinkHop,
   type Proposal,
@@ -50,11 +53,12 @@ import {
   type UpdateSessionRequest,
   type Work,
   turnBreakOf,
+  type Schedule,
 } from "@workbench/contracts";
 import type { EventBus } from "./bus.ts";
 import { HttpError } from "./errors.ts";
 import { folderColor, folderIcon, liftOut } from "./folders.ts";
-import { Documents, isWorkbenchPath } from "./artifacts.ts";
+import { Documents, fileOps, isWorkbenchPath } from "./artifacts.ts";
 import { Workspaces } from "./workspaces.ts";
 import { physicalPath, withinDirectory } from "./directory-operations.ts";
 import { WorktreeWorkspaces } from "./worktree-workspaces.ts";
@@ -86,7 +90,7 @@ import { SkillLibrary } from "./skill-library.ts";
 import { SendGate } from "./send-gate.ts";
 import { TaskService } from "./task-service.ts";
 import { OfficeSessions } from "./office-sessions.ts";
-import { copyMcp, copySkill, integrations, type EngineBinaries } from "./integrations.ts";
+import { copyMcp, copySkill, integrations, withoutEnvValues, type EngineBinaries } from "./integrations.ts";
 import { exportFileName, sessionMarkdown } from "./export-md.ts";
 import { Attachments } from "./attachments.ts";
 import { imagesNamed, keepImage, withImages } from "./tool-images.ts";
@@ -188,6 +192,15 @@ export type SendOptions = {
   scheduled?: boolean;
   /** Lines of "지난 요청 뒤 바뀐 것" the user chose not to send (project.ts `changes`). */
   omitChanges?: string[];
+  /** The request waits in the session's queue and is sent from there (`sendWaiting` only): it leaves the queue when its user item is written. */
+  waiting?: boolean;
+  /**
+   * Sent from a paired messenger chat, not typed at this PC. Kept on the request record, on the
+   * request while it waits in the queue, and on its user item.
+   */
+  origin?: RequestOrigin;
+  /** Typed by the person at this PC's composer (a request from the paired chat is theirs too): a draft while it waits (R6). */
+  draft?: boolean;
 };
 
 type PendingCreate = CreationRecord<CreateTarget>;
@@ -269,7 +282,46 @@ function plain(text: string) {
 export type NoteHook = (notes: string[], cwd: string, sessionId: string) => { prompt: string; refs: { path: string; title: string }[] };
 
 /** A request steered into a running turn, kept until the session's next own turn starts. */
-type Steered = { requestId: string; text: string; refs: DocRef[]; attachments: Attachment[]; item: Extract<TranscriptItem, { kind: "user" }> | null; dropped: boolean };
+type Steered = { requestId: string; text: string; refs: DocRef[]; attachments: Attachment[]; item: Extract<TranscriptItem, { kind: "user" }> | null; dropped: boolean; draft?: boolean };
+
+/** An archived conversation is read-only: nothing is sent to it or queued for it until 되돌리기. */
+const archivedRefusal = () => new HttpError(409, "archived", "보관한 대화에는 보낼 수 없습니다. 대화를 되돌린 뒤에 보내 주세요.");
+/** A path as compared: Unicode NFC, and case-folded where the file system ignores case. */
+function comparable(path: string) {
+  const text = path.normalize("NFC");
+  return process.platform === "win32" || process.platform === "darwin" ? text.toLowerCase() : text;
+}
+
+/** A folder's real location, or null when it cannot be read. */
+function realRoot(path: string): string | null {
+  try { return comparable(realpathSync.native(path)); } catch { return null; }
+}
+
+/**
+ * Where a document's file really is: its folder's real path and its own name, or what stops the
+ * app from moving it (missing, a link, not a regular file).
+ */
+function realPlace(path: string): string | "missing" | "link" | "other" {
+  let entry;
+  try { entry = lstatSync(path); } catch { return "missing"; }
+  if (entry.isSymbolicLink()) return "link";
+  if (!entry.isFile()) return "other";
+  const folder = realRoot(dirname(path));
+  return folder === null ? "missing" : comparable(join(folder, basename(path)));
+}
+
+const within = (root: string, path: string) => {
+  const rel = relative(root, path);
+  return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+};
+
+/** Inside a git repository: a `.git` (any kind, even a dangling link) in the folder or above it. */
+function insideGit(folder: string) {
+  for (let at = folder; ; at = dirname(at)) {
+    try { lstatSync(join(at, ".git")); return true; } catch { /* none here */ }
+    if (dirname(at) === at) return false;
+  }
+}
 
 export class SessionManager {
   private readonly folders = new Map<string, Folder>();
@@ -322,6 +374,83 @@ export class SessionManager {
   changeHook: ((session: Session, work: Work, omit: string[]) => string | null) | null = null;
   /** A request went out: the session now knows the project as of now (project.ts). */
   toldHook: ((session: Session) => void) | null = null;
+  /**
+   * What the engine is told before a request that came from a paired messenger chat (the phone
+   * preamble, channels/preamble.ts). The engine reads it; the user item keeps the person's words.
+   */
+  channelHook: ((origin: RequestOrigin, run?: { session: Session; settings: RunSettings }) => string | null) | null = null;
+  /** Set by the messenger channel: why a request of that chat may not start now (paused, locked, disconnected), or null. */
+  channelGate: ((origin: RequestOrigin, schedule?: Schedule) => string | null) | null = null;
+  /** Set by the messenger channel: a schedule of that chat is not due yet (the chat is open, the channel not started). */
+  channelDefer: ((origin: RequestOrigin) => boolean) | null = null;
+  /** Set by the messenger channel: why a schedule of that chat may not be turned on (locked, disconnected), or null. */
+  channelEnable: ((origin: RequestOrigin) => string | null) | null = null;
+  /** Hides stored credential values in what conversations keep and show (credentials/scrubber.ts). */
+  scrubber: import("./credentials/scrubber.ts").TranscriptScrubber | null = null;
+  /**
+   * Settled before any engine is started (the credential store's warm-up, R5); the gateway listens
+   * meanwhile. Set with the warm-up's promise (true: the keyring opened); read as the wait itself.
+   */
+  get engineGate(): Promise<void> | null {
+    return this.gate?.done ?? null;
+  }
+  set engineGate(value: Promise<boolean | void> | null) {
+    if (!value) {
+      this.gate = null;
+      return;
+    }
+    const gate = { settled: false, opened: true, done: Promise.resolve() };
+    gate.done = value.then((opened) => { gate.opened = opened !== false; }, () => { gate.opened = false; }).finally(() => { gate.settled = true; });
+    this.gate = gate;
+  }
+  private gate: { settled: boolean; opened: boolean; done: Promise<void> } | null = null;
+  /**
+   * What of a value leaves the gateway (an HTTP answer, the snapshot, an event), ruling R6. A DRAFT
+   * (text the person typed and has not sent: a waiting or steered request, a schedule's text, a
+   * hand-off note) goes out exactly as typed: it is theirs, shown and edited on their own surfaces,
+   * and hidden only once it is a transcript item. Everything else is shown with stored values
+   * hidden: a session's line (title, preview, activity, last error) and a hand-off's reply, which
+   * matters for a value stored after that text was written; and what sub-agent tasks show.
+   */
+  shown<T>(value: T): T {
+    if (!this.scrubber || !value || typeof value !== "object") return value;
+    const object = value as Record<string, unknown>;
+    if (Array.isArray(object.queued) && typeof object.workId === "string") return this.shownSession(value as unknown as Session) as T;
+    if (typeof object.sourceSessionId === "string" && typeof object.targetSessionId === "string") return this.shownHandoff(value as unknown as Handoff) as T;
+    if (Array.isArray(object.schedules)) return { ...object, schedules: this.shownSchedules(object.schedules as Schedule[]) } as T;
+    if (typeof object.sessionId === "string" && typeof object.text === "string" && "when" in object) return this.shownSchedules([value as unknown as Schedule])[0] as T;
+    // A fork: the new session, and the request it starts from (an item, already hidden).
+    if (object.session && typeof object.text === "string" && Object.keys(object).length === 2) return { ...object, session: this.shownSession(object.session as Session) } as T;
+    return this.scrubber.value(value);
+  }
+
+  private shownSession(session: Session): Session {
+    if (!this.scrubber) return session;
+    const bare = { ...session, queued: [] }, line = this.scrubber.value(bare);
+    const queued = session.queued.map((entry) => (entry.draft ? entry : this.scrubber!.value(entry)));
+    return line === bare && queued.every((entry, index) => entry === session.queued[index]) ? session : { ...line, queued };
+  }
+
+  private shownHandoff(handoff: Handoff): Handoff {
+    if (!this.scrubber) return handoff;
+    if (!handoff.draft) return this.scrubber.value(handoff);
+    return { ...this.scrubber.value({ ...handoff, text: "" }), text: handoff.text };
+  }
+
+  /** A schedule the person made at the PC keeps its text as typed; any other is hidden (R6). */
+  private shownSchedules(schedules: Schedule[]): Schedule[] {
+    const scrubber = this.scrubber;
+    return scrubber ? schedules.map((schedule) => (schedule.draft ? schedule : scrubber.value(schedule))) : schedules;
+  }
+
+  /** Every published event (bus.outgoing): a session or a hand-off as `shown`; schedules are drafts. */
+  shownEvent(event: WorkbenchEvent): WorkbenchEvent {
+    if (!this.scrubber) return event;
+    if (event.type === "session.upserted") return { ...event, session: this.shownSession(event.session) };
+    if (event.type === "handoff.upserted") return { ...event, handoff: this.shownHandoff(event.handoff) };
+    if (event.type === "schedules.changed") return { ...event, schedules: this.shownSchedules(event.schedules) };
+    return event;
+  }
   /** "찾는 길": the search over the store's index, for Ctrl+K, saved views and workbench-find (search.ts). */
   readonly finder: Finder;
   private readonly store: Store;
@@ -331,6 +460,7 @@ export class SessionManager {
   constructor(store: Store, bus: EventBus, options: ManagerOptions) {
     this.store = store;
     this.bus = bus;
+    this.bus.outgoing = (event) => this.shownEvent(event);
     this.options = options;
     this.creations = new CreationJournal(store, options.dataDir ?? dirname(options.managedWorksDir));
     this.userSkills = new UserSkills(store, { dataDir: options.dataDir ?? dirname(options.managedWorksDir), homeDir: options.skillHomeDir });
@@ -340,6 +470,13 @@ export class SessionManager {
     this.terminals = new Terminals(store, this.workspaces, options.ptyBinary);
     this.services = new WorkspaceServices(store, this.workspaces, this.terminals, id => this.requireWork(id));
     this.sharedBrowser = new BrowserRegistry(store, {
+      closed: pageId => {
+        // Keep every provider's conversation in the archive. A parent session is independent.
+        for (const session of this.sessions.values()) if (session.pageAgent?.pageId === pageId) {
+          if (!["idle", "error"].includes(session.status)) void this.interrupt(session.id).catch(() => undefined);
+          this.saveSession({ ...session, archivedAt: session.archivedAt ?? Date.now(), queued: session.queued.map(request => ({ ...request, held: true })) });
+        }
+      },
       workspace: id => {
         const space = this.workspaces.get(id); this.workspaces.requireActive(id, space.workId);
         if (space.hostId !== options.hostId || this.hidden(space.workId)) throw new HttpError(409, "browser_workspace", "활성 로컬 작업공간에서 웹 탭을 열어 주세요.");
@@ -503,21 +640,28 @@ export class SessionManager {
       send: async (schedule, requestId) => {
         let target = this.requireSession(schedule.sessionId);
         if (target.archivedAt) throw new HttpError(409, "archived", "보관한 대화에는 예약 요청을 보내지 않습니다.");
+        // Made from a messenger chat: it runs only when the channel says that chat is open now. With
+        // no channel to ask (not built in, or not set up yet) it does not run: closed, not open.
+        const closed = schedule.origin ? (this.channelGate ? this.channelGate(schedule.origin, schedule) : "휴대폰 채널이 없어 휴대폰에서 만든 예약을 보내지 않았습니다.") : null;
+        if (closed) throw new HttpError(409, "channel_closed", closed);
         if (schedule.policy?.mode === "new_run") target = this.createSession(target.workId, { provider: target.provider, workspaceId: target.workspaceId,
           purpose: `${target.purpose} · 예약`, model: target.model, effort: target.effort, access: target.access, profileId: target.profileId }, false);
         // Waits for a running turn ("끝나면 보내기"); the screen stays where the user is.
-        return this.tasks.submit({ commandId: requestId, hostId: target.hostId, workspaceId: target.workspaceId!, sessionId: target.id, text: schedule.text, mode: "queue" }, "schedule");
+        return this.tasks.submit({ commandId: requestId, hostId: target.hostId, workspaceId: target.workspaceId!, sessionId: target.id, text: schedule.text, mode: "queue" }, "schedule", schedule.origin);
       },
       changed: (schedules) => this.bus.publish({ type: "schedules.changed", schedules }),
+      defer: (schedule) => Boolean(schedule.origin && this.channelDefer?.(schedule.origin)),
+      mayEnable: (schedule) => (schedule.origin ? this.channelEnable?.(schedule.origin) ?? null : null),
     });
     this.profiles = new AgentProfiles(store);
     this.tasks = new TaskService(store, bus, {
-      submit: (input, source) => this.send(input.sessionId, input.commandId, input.text, [], null, null, input.mode ?? "auto", { profileId: input.profileId, activate: false, scheduled: source === "schedule" }),
+      submit: (input, source, origin) => this.send(input.sessionId, input.commandId, input.text, [], null, null, input.mode ?? "auto", { profileId: input.profileId, activate: false, scheduled: source === "schedule", ...(origin ? { origin } : {}) }),
       sessions: () => [...this.sessions.values()], items: id => this.loadItems(id),
       canSteer: session => Boolean(this.adapters.get(session.provider)?.steer),
       nativeTasks: session => this.adapters.get(session.provider)?.nativeTasks?.(session) ?? [],
       refreshNative: async session => this.adapters.get(session.provider)?.refreshNativeTasks?.(session, this.engineWork(session, this.requireWork(session.workId))) ?? [],
       controlNative: async (session, target, command) => {
+        if (this.requireSession(session.id).archivedAt) throw new HttpError(409, "archived", "보관한 대화의 하위 작업은 제어할 수 없습니다. 대화를 되돌린 뒤에 해 주세요.");
         const adapter = this.adapters.get(session.provider);
         if (!adapter?.controlNativeTask) throw new HttpError(409, "native_control_unavailable", "이 공급자는 해당 하위 작업 제어를 지원하지 않습니다.");
         await adapter.controlNativeTask({ ...session, access: this.accessOf(session) }, this.engineWork(session, this.requireWork(session.workId)), target, command);
@@ -581,7 +725,8 @@ export class SessionManager {
       if (source === "live" && session) for (const task of tasks) this.notifications.nativeTask(session, task);
     },
     upsertItem: (sessionId, incoming) => {
-      let item = incoming;
+      // Kept whole (values replaced); only the live copy below may hold back a tail.
+      let item = this.scrubber ? this.scrubber.value(incoming) : incoming;
       if (item.kind === "turnEnd") {
         this.finishStreaming(sessionId);
         item = stampTurnEnd(item, this.sessions.get(sessionId), this.turnStarted.get(sessionId), this.turnRequest.get(sessionId));
@@ -600,7 +745,8 @@ export class SessionManager {
       }
       this.transcripts.set(sessionId, applyItemEvent(items, { type: "item.upserted", sessionId, item }));
       this.store.saveItem(sessionId, item);
-      this.bus.publish({ type: "item.upserted", sessionId, item });
+      this.bus.publish({ type: "item.upserted", sessionId, item: this.scrubber ? this.scrubber.live(`${sessionId}\u0000${item.id}`, incoming, item) : item });
+      if (item.kind === "turnEnd") this.releaseLive(sessionId);
       if (item.kind === "assistant" && !item.streaming && item.text.trim()) {
         this.sink.updateSession(sessionId, { preview: previewOf(item.text), previewAt: Date.now() });
       }
@@ -618,15 +764,33 @@ export class SessionManager {
     },
     delta: (sessionId, itemId, textDelta) => {
       const items = this.loadItems(sessionId);
-      this.transcripts.set(sessionId, applyItemEvent(items, { type: "item.delta", sessionId, itemId, textDelta }));
+      const key = `${sessionId}\u0000${itemId}`;
+      // With nothing stored (and no stream under way) no extra work: the piece is kept and sent as it came.
+      const watched = Boolean(this.scrubber && (this.scrubber.active || this.scrubber.tracks(key)));
+      const index = watched ? items.findIndex((entry) => entry.id === itemId) : -1;
+      const target = items[index];
+      const stream = watched && (target?.kind === "assistant" || target?.kind === "reasoning") ? this.scrubber!.delta(key, textDelta, target.text) : null;
+      if (!stream || !target) {
+        this.transcripts.set(sessionId, applyItemEvent(items, { type: "item.delta", sessionId, itemId, textDelta }));
+        this.markDirty(sessionId, itemId);
+        this.bus.publish({ type: "item.delta", sessionId, itemId, textDelta });
+        return;
+      }
+      // Kept whole (values replaced); live, a tail that could begin a stored value waits for the next piece.
+      const next = items.slice();
+      next[index] = { ...target, text: stream.whole } as TranscriptItem;
+      this.transcripts.set(sessionId, next);
       this.markDirty(sessionId, itemId);
-      this.bus.publish({ type: "item.delta", sessionId, itemId, textDelta });
+      if (stream.live) this.bus.publish({ type: "item.delta", sessionId, itemId, textDelta: stream.live });
     },
-    updateSession: (sessionId, patch) => {
+    updateSession: (sessionId, raw) => {
+      const patch = this.scrubber ? this.scrubber.value(raw) : raw;
       const session = this.sessions.get(sessionId);
       if (!session) return;
       const wasBusy = session.status !== "idle" && session.status !== "error";
       this.saveSession({ ...session, ...patch, updatedAt: Date.now() });
+      // Stopped, failed, or the engine exited: nothing stays held back on the screens.
+      if (wasBusy && (patch.status === "idle" || patch.status === "error")) this.releaseLive(sessionId);
       if (wasBusy && patch.status === "idle") {
         // Ended in an error (an engine that died, also between turns): the waiting requests stay.
         if (patch.lastError) this.holdQueued(sessionId);
@@ -680,6 +844,8 @@ export class SessionManager {
       held: true,
       ...(entry.item?.runSettings ? { runSettings: entry.item.runSettings } : {}),
       ...(entry.attachments.length ? { attachments: entry.attachments } : {}),
+      ...(entry.item?.origin ? { origin: entry.item.origin } : {}),
+      ...(entry.draft ? { draft: true } : {}),
     }));
     this.saveSession({ ...this.requireSession(sessionId), queued: [...again, ...this.requireSession(sessionId).queued] });
     this.sink.upsertItem(sessionId, {
@@ -749,51 +915,110 @@ export class SessionManager {
     return fresh;
   }
 
+  /**
+   * Send a request from where it waits. It stays in the queue, untouched, until its user item is
+   * written to the conversation (`sendPrepared` takes it out at that moment): a failure before then
+   * leaves it waiting as it was, and after it the request is in the conversation, never in both.
+   */
+  private sendWaiting(sessionId: string, entry: QueuedMessage): Promise<SendResult> {
+    return this.send(sessionId, entry.id, entry.text, entry.refs, null, entry.create, entry.plan ? "queue" : "steer", { attachments: entry.attachments ?? [], plan: entry.plan === true, notes: entry.notes ?? [], runSettings: entry.runSettings, waiting: true, ...(entry.origin ? { origin: entry.origin } : {}) });
+  }
+
   /** The turn ended normally: the oldest request not kept back becomes the next turn. */
   private drainSoon(sessionId: string) {
     setTimeout(() => {
       const session = this.sessions.get(sessionId);
       const next = session?.queued.find((entry) => !entry.held);
       if (!session || session.status !== "idle" || !next) return;
-      this.saveSession({ ...session, queued: session.queued.filter((entry) => entry !== next) });
-      void this.send(sessionId, next.id, next.text, next.refs, null, next.create, "auto", { attachments: next.attachments ?? [], plan: next.plan === true, notes: next.notes ?? [], runSettings: next.runSettings }).catch((error: unknown) => {
+      void this.sendWaiting(sessionId, next).catch((error: unknown) => {
+        // The person deleted or edited that very request meanwhile: not a failure. The turn's end
+        // goes on with what waits now.
+        if (error instanceof HttpError && (error.code === "queued_changed" || error.code === "queued_not_found")) { this.drainSoon(sessionId); return; }
+        // It did not reach the conversation: it keeps its place, and as after any failure the
+        // waiting requests go only by hand (not tried again at the next turn's end).
+        this.holdQueued(sessionId);
         this.sink.upsertItem(sessionId, {
           kind: "notice",
           id: `queue-failed:${next.id}`,
           level: "error",
-          text: `보낼 예정이던 요청을 보내지 못했습니다: ${error instanceof Error ? error.message : String(error)}`,
+          text: `보낼 예정이던 요청을 보내지 못했습니다: ${error instanceof Error ? error.message : String(error)} · 기다리던 요청은 입력창 위 목록에 남겨 두었습니다. 직접 보내거나 지울 수 있습니다.`,
           at: Date.now(),
         });
       });
     }, 0);
   }
 
-  /** Change the text of a waiting request. */
+  /**
+   * Requests a paired messenger chat sent that still wait: kept back (sent only by hand at the PC)
+   * once that chat is paused, locked or disconnected, so nothing of it starts a turn afterwards.
+   * They stay in their queues. Returns how many were newly kept back.
+   */
+  holdQueuedOf(bindingId: string): number {
+    let kept = 0;
+    for (const session of this.sessions.values()) {
+      const fresh = session.queued.filter((entry) => entry.origin?.bindingId === bindingId && !entry.held).length;
+      if (!fresh) continue;
+      kept += fresh;
+      this.saveSession({ ...session, queued: session.queued.map((entry) => (entry.origin?.bindingId === bindingId ? { ...entry, held: true } : entry)) });
+    }
+    return kept;
+  }
+
+  /**
+   * Change the text of a waiting request. A name reserved for it as it was (a new document, tried
+   * before) is given up: the edited request reserves anew when it is sent.
+   */
   updateQueued(sessionId: string, queuedId: string, text: string): Session {
     const session = this.requireSession(sessionId);
     const trimmed = text.trim();
     if (!trimmed) throw new HttpError(400, "empty_message", "보낼 내용이 없습니다.");
-    if (!session.queued.some((entry) => entry.id === queuedId)) throw new HttpError(404, "queued_not_found", "보낼 예정인 요청이 없습니다.");
-    const next = { ...session, queued: session.queued.map((entry) => (entry.id === queuedId ? { ...entry, text: trimmed } : entry)) };
+    const before = session.queued.find((entry) => entry.id === queuedId);
+    if (!before) throw new HttpError(404, "queued_not_found", "보낼 예정인 요청이 없습니다.");
+    // An entry that was shown hidden (another source, or written before the draft mark) gets back each
+    // value its shown copy hid, in order, so the engine receives what was written. Edited by the person
+    // at the PC it is theirs from now on (R6) — unless a value was put back: that value the person never
+    // typed, so the entry stays hidden on every surface (N9).
+    const own = before.draft || !this.scrubber ? trimmed : this.scrubber.restore(before.text, trimmed);
+    const next = { ...session, queued: session.queued.map((entry) => (entry.id === queuedId ? { ...entry, text: own, draft: before.draft === true || own === trimmed } : entry)) };
     this.saveSession(next);
+    if (before.create && before.text.trim() !== own) this.releaseCreation(sessionId, queuedId);
     return next;
   }
 
-  /** Drop a waiting request (it was never sent). */
+  /**
+   * Drop a waiting request (it was never sent). One for a new document that was tried before holds
+   * a reserved name and file: given up with it, so the next start has nothing to report.
+   */
   cancelQueued(sessionId: string, queuedId: string): Session {
     const session = this.requireSession(sessionId);
-    const next = { ...session, queued: session.queued.filter((entry) => entry.id !== queuedId) };
+    const entry = session.queued.find((item) => item.id === queuedId);
+    const next = { ...session, queued: session.queued.filter((item) => item.id !== queuedId) };
     this.saveSession(next);
+    if (entry?.create) this.releaseCreation(sessionId, queuedId);
     return next;
   }
 
-  /** Send a waiting request now: into the running turn when the engine can take it, else as a new turn. */
+  /** The reservation of a waiting request that is gone or edited; never a reason for that to fail. */
+  private releaseCreation(sessionId: string, requestId: string) {
+    try {
+      if (this.creations.get(requestId)?.sessionId === sessionId) this.creations.release(requestId);
+    } catch { /* An unreadable record is kept as it is. */ }
+  }
+
+  /**
+   * "지금 보내기": into the running turn when the engine can take it, else as a new turn. A read-only
+   * (archived, or its document removed) conversation refuses; the request leaves its queue only when
+   * its user item is written (see `sendWaiting`).
+   */
   async sendQueued(sessionId: string, queuedId: string): Promise<SendResult> {
     const session = this.requireSession(sessionId);
     const entry = session.queued.find((item) => item.id === queuedId);
     if (!entry) throw new HttpError(404, "queued_not_found", "보낼 예정인 요청이 없습니다.");
-    this.saveSession({ ...session, queued: session.queued.filter((item) => item.id !== queuedId) });
-    return this.send(sessionId, entry.id, entry.text, entry.refs, null, entry.create, entry.plan ? "queue" : "steer", { attachments: entry.attachments ?? [], plan: entry.plan === true, notes: entry.notes ?? [], runSettings: entry.runSettings });
+    const retired = this.retiredAgent(session);
+    if (retired) throw new HttpError(409, "document_removed", retired);
+    // Refused before anything leaves the queue: the request waits for 되돌리기.
+    if (session.archivedAt) throw archivedRefusal();
+    return this.sendWaiting(sessionId, entry);
   }
 
   snapshot(): Snapshot {
@@ -806,17 +1031,18 @@ export class SessionManager {
       folders: [...this.folders.values()],
       works: [...this.works.values()],
       workspaces: this.workspaces.list(),
-      sessions: [...this.sessions.values()],
+      sessions: [...this.sessions.values()].map((session) => this.shownSession(session)),
       providers: [...this.adapters.values()].map((adapter) => this.engineSetup.decorate(adapter.status())),
       prefs: this.prefs(),
       attention: this.notifications.list(),
       artifacts: this.documents.list(),
+      removedArtifacts: this.documents.removedList(),
       proposals: this.documents.listProposals(),
-      handoffs: [...this.handoffs.values()],
+      handoffs: [...this.handoffs.values()].map((handoff) => this.shownHandoff(handoff)),
       links: this.links.list(),
       tools: this.tools(),
       ...(this.options.browse ? { browser: this.options.browse.status() } : {}),
-      schedules: this.schedules.all(),
+      schedules: this.shownSchedules(this.schedules.all()),
     };
   }
 
@@ -862,9 +1088,9 @@ export class SessionManager {
     return file ? dirname(file) : null;
   }
 
-  /** MCP servers and skills as Claude Code and Codex see them (read only). */
-  integrations() {
-    return integrations(this.engineBinaries(), this.ieumSkillDir());
+  /** MCP servers and skills as Claude Code and Codex see them (read only), environment values left out. */
+  async integrations() {
+    return withoutEnvValues(await integrations(this.engineBinaries(), this.ieumSkillDir()));
   }
 
   /** Give the other engine an MCP server one engine has (its official command, user scope). */
@@ -1140,6 +1366,8 @@ export class SessionManager {
     if (patch.activeSessionId && this.sessions.get(patch.activeSessionId)?.workId !== workId) {
       throw new HttpError(400, "invalid_session", "다른 작업의 세션입니다.");
     }
+    // Looking at an archived conversation (보관함, 연결) never makes it the project's active one.
+    if (patch.activeSessionId && this.sessions.get(patch.activeSessionId)?.archivedAt) throw new HttpError(409, "archived", "보관한 대화는 작업의 현재 대화가 될 수 없습니다.");
     if (patch.folderId && !this.folders.has(patch.folderId)) throw new HttpError(404, "folder_not_found", "폴더가 없습니다.");
     const next: Work = { ...work };
     if (patch.activeSessionId !== undefined) next.activeSessionId = patch.activeSessionId;
@@ -1169,17 +1397,179 @@ export class SessionManager {
     if (sessions.some(session => this.office.busy(session.id)) || this.links.list().some(link => link.state !== "ended" && link.participants.some(id => ids.has(id)))) throw new HttpError(409, "project_busy", "프로젝트의 AI 작업·세션 연결을 마치거나 멈춘 뒤 삭제해 주세요.");
     const artifacts = this.documents.list().filter(artifact => artifact.workId === workId), documentIds = new Set(artifacts.map(artifact => artifact.id));
     if (this.documents.registry.list().some(view => documentIds.has(view.artifactId) && view.dirty)) throw new HttpError(409, "project_unsaved", "열린 문서의 편집 내용을 저장한 뒤 프로젝트를 삭제해 주세요.");
+    // A trashed document's file has nowhere else to be: it outlives the project in 보관함.
+    const trashed = this.documents.removedList().filter((artifact) => artifact.workId === workId && artifact.removed?.kind === "trash" && artifact.removed.trashPath);
+    for (const artifact of trashed) this.documents.orphan(artifact.id, work.title);
+    const keep = new Set(trashed.map((artifact) => artifact.id));
     this.flush();
-    this.store.deleteWork(workId);
+    this.store.deleteWork(workId, keep);
     for (const artifact of artifacts) this.external.get(artifact.id)?.();
     for (const id of ids) {
       this.schedules.forget(id); this.sessions.delete(id); this.transcripts.delete(id); this.dirtyItems.delete(id);
       this.turnStarted.delete(id); this.turnRequest.delete(id); this.creating.delete(id); this.planning.delete(id); this.steering.delete(id);
     }
     for (const [id, handoff] of this.handoffs) if (ids.has(handoff.sourceSessionId) || ids.has(handoff.targetSessionId)) this.handoffs.delete(id);
-    this.links.forgetSessions(ids); this.services.forgetWork(workId); this.terminals.forgetWork(workId); this.documents.forgetWork(workId); this.works.delete(workId);
+    this.links.forgetSessions(ids); this.services.forgetWork(workId); this.terminals.forgetWork(workId); this.documents.forgetWork(workId, keep); this.works.delete(workId);
     this.bus.publish({ type: "work.removed", workId });
-    return { ok: true, preservedPath: work.cwd };
+    return { ok: true, preservedPath: work.cwd, trashedDocuments: trashed.length };
+  }
+
+  /**
+   * Why a path is not a place in the app's own work area — exactly `<data>/works`, a real folder
+   * (not a link), with no link on the way down. `exists`: the path must be a regular file (to
+   * move it out); otherwise its place must be free (to bring it back). Never the folder the user
+   * chose for new projects.
+   */
+  private areaBlocker(path: string, exists: boolean): string | null {
+    const root = resolve(this.options.managedWorksDir);
+    let rootEntry;
+    try { rootEntry = lstatSync(root); } catch { return "앱 작업 영역을 찾을 수 없어 옮기지 않습니다."; }
+    if (rootEntry.isSymbolicLink() || !rootEntry.isDirectory()) return "앱 작업 영역이 링크이거나 폴더가 아니라 옮기지 않습니다.";
+    const realArea = realRoot(root);
+    if (!realArea) return "앱 작업 영역을 찾을 수 없어 옮기지 않습니다.";
+    const rel = relative(root, resolve(path));
+    if (!rel || rel.startsWith("..") || isAbsolute(rel)) return "앱 작업 영역 밖의 파일이라 옮기지 않습니다.";
+    const parts = rel.split(sep);
+    let at = root;
+    for (const [index, part] of parts.entries()) {
+      at = join(at, part);
+      const last = index === parts.length - 1;
+      let entry;
+      try { entry = lstatSync(at); } catch {
+        if (last && !exists) break;
+        return "파일이 없습니다.";
+      }
+      if (last && !exists) return "그 자리에 이미 무언가 있습니다.";
+      if (entry.isSymbolicLink()) return "링크(바로 가기)가 끼어 있어 옮기지 않습니다.";
+      if (last ? !entry.isFile() : !entry.isDirectory()) return last ? "보통 파일이 아니라 옮기지 않습니다." : "폴더가 아닌 것이 끼어 있어 옮기지 않습니다.";
+    }
+    const realDir = realRoot(dirname(resolve(path)));
+    if (!realDir || realDir !== comparable(join(realArea, dirname(rel)))) return "실제 위치가 달라 옮기지 않습니다.";
+    return null;
+  }
+
+  /**
+   * Why the trash cannot take this document, or null in the narrow case the gateway can prove:
+   * a regular file of the app's own work area (`areaBlocker`), not in a git repository or the
+   * vault, on the same file system as the trash, and no other document on the same file (device
+   * and inode). Every configured root must resolve; when one does not, nothing is trashable. Any
+   * failure while checking means "not certain": the file stays.
+   */
+  private trashBlocker(artifact: Artifact, work: Work): string | null {
+    try {
+      const vault = this.store.getMeta("pkm.vault");
+      const realVault = vault ? realRoot(vault) : null;
+      if (vault && !realVault) return "설정된 볼트를 찾을 수 없어 앱은 어떤 파일도 옮기지 않습니다.";
+      if (!work.cwdManaged) return "직접 고른 폴더의 파일이라 앱이 옮기지 않습니다.";
+      const area = this.areaBlocker(artifact.path, true);
+      if (area) return area;
+      const place = realPlace(artifact.path);
+      if (realVault && (place === realVault || within(realVault, place))) return "볼트 노트라 옮기지 않습니다.";
+      if (insideGit(dirname(place))) return "Git 저장소 안이라 옮기지 않습니다.";
+      if (fileOps.device(artifact.path) !== fileOps.device(this.documents.trashRoot())) return "앱 휴지통과 같은 디스크가 아니라 옮기지 않습니다.";
+      const self = statSync(artifact.path);
+      for (const other of this.documents.list()) {
+        if (other.id === artifact.id) continue;
+        try {
+          const twin = statSync(other.path);
+          if (twin.dev === self.dev && twin.ino === self.ino) return "다른 문서도 이 파일을 쓰고 있어 옮기지 않습니다.";
+        } catch { /* a missing file is no twin */ }
+      }
+      return null;
+    } catch {
+      return "파일을 확인하지 못해 옮기지 않습니다.";
+    }
+  }
+
+  /**
+   * What can be done with a document now. "unlisted" (목록에서 빼기) never touches the file and is
+   * always offered; "trash" only in the narrow case. While its AI works or a proposal is open,
+   * nothing is offered: the person stops or closes it first. Unsaved edits are reported (`dirty`):
+   * the app saves them first, and the removal itself is refused while they remain.
+   */
+  documentRemoval(artifactId: string): DocumentRemovalPlan {
+    const artifact = this.documents.get(artifactId);
+    const work = this.requireWork(artifact.workId);
+    const running = [...this.sessions.values()].filter((session) => session.documentAgent?.artifactId === artifactId && !session.archivedAt
+      && (this.office.busy(session.id) || !["idle", "error"].includes(session.status)));
+    const proposals = this.documents.listProposals().filter((proposal) => proposal.artifactId === artifactId && (proposal.status === "pending" || proposal.status === "running")).length;
+    const dirty = this.documents.registry.list().some((view) => view.artifactId === artifactId && view.dirty);
+    const base = { running: running.map((session) => ({ id: session.id, provider: session.provider })), proposals, dirty };
+    if (artifact.role === "project-note") return { actions: [], reason: "프로젝트 노트는 뺄 수 없습니다.", ...base };
+    if (running.length || proposals) return { actions: [], reason: "문서 AI가 일하는 중이거나 수정안이 열려 있습니다. 먼저 멈추거나 닫아 주세요.", ...base };
+    const blocker = this.trashBlocker(artifact, work);
+    return blocker ? { actions: ["unlisted"], reason: blocker, ...base } : { actions: ["unlisted", "trash"], ...base };
+  }
+
+  /**
+   * Do exactly the action the person chose, or refuse with the reason; never the other one. The
+   * whole decision is made again here, in the same synchronous step as the move.
+   */
+  removeDocument(artifactId: string, options: { action: "trash" | "unlisted" }) {
+    if (options.action !== "trash" && options.action !== "unlisted") throw new HttpError(400, "removal_action", "할 일(trash·unlisted)이 필요합니다.");
+    const plan = this.documentRemoval(artifactId);
+    if (plan.dirty) throw new HttpError(409, "document_unsaved", "저장하지 않은 편집이 있습니다. 저장한 뒤 다시 해 주세요.");
+    if (!plan.actions.length) throw new HttpError(409, plan.running.length || plan.proposals ? "document_busy" : "removal_refused", plan.reason ?? "지금은 뺄 수 없습니다.");
+    if (!plan.actions.includes(options.action)) throw new HttpError(409, "removal_changed", `휴지통으로 옮길 수 없습니다. ${plan.reason ?? ""} 목록에서 빼기만 할 수 있습니다.`.replace(/\s+/g, " ").trim());
+    for (const view of this.documents.registry.list()) if (view.artifactId === artifactId) this.documents.registry.close(view.viewId, view.windowId);
+    this.external.get(artifactId)?.();
+    const agents = [...this.sessions.values()].filter((session) => session.documentAgent?.artifactId === artifactId && !session.archivedAt);
+    const removed = this.documents.remove(artifactId, options.action, agents.map((session) => session.id));
+    // Its conversations go with it; their waiting requests are kept, held, with them.
+    const now = Date.now();
+    for (const session of agents) {
+      const current = this.requireSession(session.id);
+      this.saveSession({ ...current, archivedAt: now, queued: current.queued.map((request) => ({ ...request, held: true })) });
+    }
+    // The project's active conversation went with the document (one of its AIs, also one archived
+    // before), or is archived anyway: the most recent live chat (never a document's or a web tab's
+    // AI) takes that place, or none. A restore does not move it back.
+    const work = this.works.get(removed.workId);
+    const active = work?.activeSessionId ? this.sessions.get(work.activeSessionId) : undefined;
+    if (work && active && (active.archivedAt || active.documentAgent?.artifactId === artifactId)) {
+      const chats = [...this.sessions.values()].filter((session) => session.workId === work.id && !session.archivedAt && !session.documentAgent && !session.pageAgent);
+      const latest = chats.reduce<Session | null>((best, session) => (best && best.updatedAt > session.updatedAt ? best : session), null);
+      this.saveWork({ ...work, activeSessionId: latest?.id ?? null });
+    }
+    return removed;
+  }
+
+  /** Back to its project's list, with its AI conversations (and their waiting requests). */
+  restoreDocument(artifactId: string) {
+    const before = this.documents.find(artifactId);
+    // A trashed file comes back only to the same kind of place it left: the app's own work area,
+    // with no link on the way (a folder may have become one meanwhile).
+    if (before?.removed?.kind === "trash" && !before.removed.orphaned) {
+      const blocker = this.areaBlocker(before.path, false);
+      if (blocker) throw new HttpError(409, "restore_conflict", blocker === "그 자리에 이미 무언가 있습니다." ? `「${before.name}」 자리에 이미 파일이 있습니다. 그 파일을 옮기거나 이름을 바꾼 뒤 되돌리세요. (${before.path})` : `원래 자리가 바뀌어 되돌리지 않습니다: ${blocker}`);
+    }
+    const artifact = this.documents.restore(artifactId, Boolean(before && this.works.has(before.workId)));
+    for (const id of before?.removed?.sessionIds ?? []) {
+      const session = this.sessions.get(id);
+      if (session?.archivedAt && session.documentAgent?.artifactId === artifactId) this.saveSession({ ...session, archivedAt: null });
+    }
+    return artifact;
+  }
+
+  /** "다른 곳에 저장": a copy of a deleted project's trashed document, never over a file; the record stays. */
+  saveDocumentCopy(artifactId: string, to: string) {
+    if (!isAbsolute(to)) throw new HttpError(400, "copy_path", "저장할 곳은 절대 경로여야 합니다.");
+    if (existsSync(to)) throw new HttpError(409, "copy_exists", `그 자리에 이미 파일이 있습니다: ${to}`);
+    return this.documents.saveCopy(artifactId, to);
+  }
+
+  purgeDocument(artifactId: string) {
+    this.documents.purge(artifactId);
+    return { ok: true };
+  }
+
+  /** Why a document AI cannot take a request: its document was deleted (restorable) or deleted for good. */
+  private retiredAgent(session: Session): string | null {
+    const artifactId = session.documentAgent?.artifactId;
+    if (!artifactId || this.documents.list().some((artifact) => artifact.id === artifactId)) return null;
+    return this.documents.find(artifactId)
+      ? "이 문서 AI의 문서를 지웠습니다. 보관함에서 문서를 되돌리면 다시 쓸 수 있습니다."
+      : "이 문서 AI의 문서를 영구 삭제해 기록만 남아 있습니다.";
   }
 
   /** `activate`: the new session becomes the one its work shows (not for a drawing session made on the side). */
@@ -1230,29 +1620,50 @@ export class SessionManager {
   }
 
   /** Reuse a durable document child. Creating it never activates or interrupts the parent. */
-  documentSession(artifactId: string, parentSessionId: string | null, fresh = false): Session {
+  documentSession(artifactId: string, parentSessionId: string | null, fresh = false, provider?: Provider): Session {
+    if (provider !== undefined && provider !== "claude" && provider !== "codex") throw new HttpError(400, "invalid_provider", "지원하지 않는 엔진입니다.");
     const artifact = this.documents.get(artifactId), work = this.requireWork(artifact.workId);
     const workspace = this.workspaces.requireActive(artifact.workspaceId ?? this.workspaces.defaultFor(work).id, work.id);
     let parent = parentSessionId ? this.requireSession(parentSessionId) : null;
-    if (parent?.documentAgent?.artifactId === artifactId && !fresh && parent.workId === work.id && parent.workspaceId === workspace.id && !this.hidden(work.id, parent.id)) return parent;
+    if (parent?.documentAgent?.artifactId === artifactId && !fresh && (!provider || parent.provider === provider) && parent.workId === work.id && parent.workspaceId === workspace.id && !this.hidden(work.id, parent.id)) return parent;
     if (parent?.documentAgent) parent = parent.documentAgent.parentSessionId ? this.requireSession(parent.documentAgent.parentSessionId) : null;
     if (parent && (parent.workId !== work.id || parent.workspaceId !== workspace.id || parent.hostId !== this.options.hostId || this.hidden(parent.workId, parent.id))) throw new HttpError(403, "document_session_scope", "문서와 같은 프로젝트·작업공간의 메인 대화를 선택해 주세요.");
     if (!parent) parent = [...this.sessions.values()].find((entry) => !entry.documentAgent && entry.id === work.activeSessionId && entry.workspaceId === workspace.id && !this.hidden(work.id, entry.id)) ?? null;
-    const prior = [...this.sessions.values()].reverse().find((entry) => entry.documentAgent?.artifactId === artifactId && entry.workspaceId === workspace.id && !this.hidden(work.id, entry.id));
-    if (prior && !fresh) return prior;
-    if (prior && this.office.busy(prior.id)) throw new HttpError(409, "document_agent_busy", "진행 중인 문서 AI를 마치거나 멈춘 뒤 새 대화를 시작해 주세요.");
-    const session = this.createSession(work.id, { provider: parent?.provider ?? (this.prefs().engine === "codex" ? "codex" : "claude"), workspaceId: workspace.id, purpose: `${artifact.name} · 문서 AI`, model: parent?.model ?? null, effort: parent?.effort ?? null, access: parent?.access ?? null }, false);
+    const children = [...this.sessions.values()].reverse().filter(entry => entry.documentAgent?.artifactId === artifactId && entry.workspaceId === workspace.id && !this.hidden(work.id, entry.id));
+    const selectionKey = `document-agent-selection:${artifactId}`;
+    const prior = children.find(entry => entry.id === this.store.getMeta(selectionKey)) ?? children[0];
+    if (prior && !fresh && (!provider || prior.provider === provider)) return prior;
+    if (children.some(entry => this.office.busy(entry.id) || !["idle", "error"].includes(entry.status) || entry.queued.length)) throw new HttpError(409, "document_agent_busy", "진행 중인 문서 AI와 대기 요청을 마치거나 멈춘 뒤 엔진이나 대화를 바꿔 주세요.");
+    const chosen = provider ?? prior?.provider ?? parent?.provider ?? (this.prefs().engine === "codex" ? "codex" : "claude");
+    const existing = !fresh ? children.find(entry => entry.provider === chosen) : null;
+    if (existing) { this.store.setMeta(selectionKey, existing.id); return existing; }
+    const defaults = prior?.provider === chosen ? prior : parent?.provider === chosen ? parent : null;
+    const session = this.createSession(work.id, { provider: chosen, workspaceId: workspace.id, purpose: `${artifact.name} · 문서 AI`, model: defaults?.model ?? null, effort: defaults?.effort ?? null, access: parent?.access ?? null }, false);
     const child = { ...session, documentAgent: { artifactId, parentSessionId: parent?.id ?? null, ...(!prior && parent ? { legacySessionId: parent.id } : {}) } };
     this.saveSession(child);
+    this.store.setMeta(selectionKey, child.id);
     return child;
   }
 
   /** The page child has its own provider run. Its main conversation remains independently usable. */
-  browserSession(pageId: string, parentSessionId: string | null): Session {
+  async browserSession(pageId: string, parentSessionId: string | null, provider?: Provider): Promise<Session> {
+    if (provider !== undefined && provider !== "claude" && provider !== "codex") throw new HttpError(400, "invalid_provider", "지원하지 않는 엔진입니다.");
     const page = this.sharedBrowser.get(pageId);
     if (page.status !== "ready") throw new HttpError(409, "browser_interrupted", "웹 페이지를 먼저 열어 주세요.");
-    if (page.sessionId) return this.requireSession(page.sessionId);
-    const parentIdFromPage = page.agentSessionId ?? parentSessionId;
+    const current = page.sessionId ? this.requireSession(page.sessionId) : null;
+    if (current && (!provider || current.provider === provider)) return current;
+    const assertIdle = () => {
+      const selected = page.sessionId ? this.requireSession(page.sessionId) : null;
+      if (selected && (!["idle", "error"].includes(selected.status) || selected.queued.length)) throw new HttpError(409, "browser_agent_busy", "현재 웹 AI의 응답과 대기 요청을 마치거나 멈춘 뒤 엔진을 바꿔 주세요.");
+    };
+    assertIdle();
+    // Settle the old native owner before changing the selected child. Never steal a running turn.
+    if (current && page.control.owner === current.id) {
+      await this.sharedBrowser.control(pageId, "human", page.control.generation);
+      assertIdle();
+      if (page.sessionId !== current.id) return this.browserSession(pageId, parentSessionId, provider);
+    }
+    const parentIdFromPage = current?.pageAgent?.parentSessionId ?? page.agentSessionId ?? parentSessionId;
     let parent = parentIdFromPage ? this.requireSession(parentIdFromPage) : null;
     const parentId = parent?.pageAgent?.parentSessionId ?? parent?.documentAgent?.parentSessionId;
     if (parent?.pageAgent || parent?.documentAgent) parent = parentId ? this.requireSession(parentId) : null;
@@ -1262,7 +1673,11 @@ export class SessionManager {
       if (parent?.pageAgent || parent?.documentAgent || parent?.workspaceId !== page.workspaceId) parent = null;
     }
     if (parent && (parent.workId !== page.workId || parent.workspaceId !== page.workspaceId || this.hidden(parent.workId, parent.id))) throw new HttpError(403, "browser_parent_scope", "같은 작업공간의 메인 대화를 선택해 주세요.");
-    const created = this.createSession(page.workId, { workspaceId: page.workspaceId, provider: parent?.provider ?? (this.prefs().engine === "codex" ? "codex" : "claude"), purpose: `${page.title.slice(0, 60)} · 웹 AI`, model: parent?.model, effort: parent?.effort, access: parent?.access, profileId: parent?.profileId, browser: true }, false);
+    const chosen = provider ?? parent?.provider ?? (this.prefs().engine === "codex" ? "codex" : "claude");
+    const prior = [...this.sessions.values()].reverse().find(entry => entry.pageAgent?.pageId === pageId && entry.provider === chosen && entry.workspaceId === page.workspaceId && !this.hidden(page.workId, entry.id));
+    if (prior) { this.sharedBrowser.attach(pageId, prior); return prior; }
+    const defaults = parent?.provider === chosen ? parent : null;
+    const created = this.createSession(page.workId, { workspaceId: page.workspaceId, provider: chosen, purpose: `${page.title.slice(0, 60)} · 웹 AI`, model: defaults?.model, effort: defaults?.effort, access: parent?.access, profileId: defaults?.profileId, browser: true }, false);
     const child = { ...created, pageAgent: { pageId, parentSessionId: parent?.id ?? null } };
     this.saveSession(child); this.sharedBrowser.attach(pageId, child); return child;
   }
@@ -1365,6 +1780,10 @@ export class SessionManager {
     if (patch.pinned !== undefined) next.pinned = Boolean(patch.pinned);
     if (patch.muted !== undefined) next.muted = Boolean(patch.muted);
     if (patch.sort !== undefined) next.sort = finiteSort(patch.sort);
+    if (patch.archived === false && session.archivedAt) {
+      const retired = this.retiredAgent(session);
+      if (retired) throw new HttpError(409, "document_removed", retired);
+    }
     if (patch.archived !== undefined) {
       if (patch.archived && session.status !== "idle" && session.status !== "error") {
         throw new HttpError(409, "session_busy", "응답 중인 세션은 보관할 수 없습니다. 멈춘 뒤에 보관하세요.");
@@ -1512,6 +1931,7 @@ export class SessionManager {
 
   async compact(sessionId: string) {
     const session = this.requireSession(sessionId);
+    if (session.archivedAt) throw new HttpError(409, "archived", "보관한 대화는 압축할 수 없습니다. 대화를 되돌린 뒤에 압축해 주세요.");
     if (session.status !== "idle" && session.status !== "error") throw new HttpError(409, "session_busy", "응답이 끝난 뒤에 압축할 수 있습니다.");
     const adapter = this.adapter(session.provider);
     if (!session.nativeSessionId || !adapter.compact) throw new HttpError(409, "nothing_to_compact", "아직 압축할 대화가 없습니다.");
@@ -1531,6 +1951,15 @@ export class SessionManager {
     mode: "auto" | "steer" | "queue" = "auto",
     options: SendOptions = {},
   ): Promise<SendResult> {
+    if (this.gate && !this.gate.settled) {
+      // A request typed while the keyring is still being asked: one line in the conversation says so, and then what happened.
+      const line = (text: string) => this.sink.upsertItem(sessionId, { kind: "notice", id: `keyring-wait:${requestId}`, level: "info", text, at: Date.now() });
+      line("PC의 키링을 기다리고 있습니다. 열리면 바로 보냅니다.");
+      await this.gate.done;
+      line(this.gate.opened ? "PC의 키링이 열려 보냈습니다." : "PC의 키링이 열리지 않아 저장한 값 없이 보냈습니다. 저장한 값이 필요하면 비밀 보관함에서 다시 시도해 주세요.");
+    } else if (this.gate) await this.gate.done;
+    const retired = this.retiredAgent(this.requireSession(sessionId));
+    if (retired) throw new HttpError(409, "document_removed", retired);
     const identity = JSON.stringify([sessionId, text.trim(), refs, from, create, mode, options]);
     return this.sendGate.run(sessionId, requestId, identity, (release) => this.sendPrepared(sessionId, requestId, text, refs, from, create, mode, options, release));
   }
@@ -1555,29 +1984,67 @@ export class SessionManager {
     mode: "auto" | "steer" | "queue", options: SendOptions, releasePreparation: () => void,
   ): Promise<SendResult> {
     const session = this.requireSession(sessionId);
+    // An archived conversation is read-only (it is shown from 보관함 and the right sidebar's 연결):
+    // nothing is sent or queued until it is brought back.
+    if (session.archivedAt) throw archivedRefusal();
     const attachments = options.attachments ?? [];
     const plan = options.plan === true;
     const relay = options.relay ?? null;
     const notes = options.notes ?? [];
-    const trimmed = text.trim() || (attachments.length ? "첨부한 파일을 봐 주세요." : "");
+    const origin = options.origin ?? null;
+    const draft = options.draft === true || Boolean(origin);
+    const textOf = (raw: string, sent: Attachment[]) => raw.trim() || (sent.length ? "첨부한 파일을 봐 주세요." : "");
+    const trimmed = textOf(text, attachments);
     if (!requestId) throw new HttpError(400, "missing_request_id", "requestId가 필요합니다.");
     if (!trimmed) throw new HttpError(400, "empty_message", "보낼 내용이 없습니다.");
     // Checked up front: a request is never half sent because a file went missing.
     const files = this.attachments.resolve(attachments);
     const fingerprint = requestFingerprint(trimmed, refs, create, attachments, notes);
     const seen = this.store.findRequest(requestId);
-    if (seen) {
-      if (seen.sessionId !== sessionId || seen.textHash !== fingerprint) {
-        throw new HttpError(409, "request_id_conflict", "같은 requestId로 다른 요청을 보냈습니다.");
+    const waiting = options.waiting === true;
+    // Still waiting as it was sent from the queue (not deleted or edited meanwhile).
+    const stillWaiting = () => {
+      const entry = this.sessions.get(sessionId)?.queued.find((item) => item.id === requestId);
+      return entry !== undefined && requestFingerprint(textOf(entry.text, entry.attachments ?? []), entry.refs, entry.create, entry.attachments ?? [], entry.notes ?? []) === fingerprint;
+    };
+    // Checked again right before the engine gets the request, on every path. The conversation is
+    // idle while a request is prepared, so it may have been archived, or its document removed,
+    // meanwhile: refused as at the start. And what the person deleted or edited while it was
+    // prepared is not sent.
+    const mustStillGo = () => {
+      const now = this.requireSession(sessionId);
+      const retired = this.retiredAgent(now);
+      if (retired) throw new HttpError(409, "document_removed", retired);
+      if (now.archivedAt) throw archivedRefusal();
+      if (waiting && !stillWaiting()) throw new HttpError(409, "queued_changed", "보내는 사이에 이 요청이 바뀌었거나 지워져 보내지 않았습니다.");
+    };
+    const leaveQueue = () => {
+      const current = this.requireSession(sessionId);
+      if (current.queued.some((item) => item.id === requestId)) this.saveSession({ ...current, queued: current.queued.filter((item) => item.id !== requestId) });
+    };
+    if (waiting) {
+      // The queue decides, not the request record: a request that still waits is sent. A new turn
+      // calls the engine only after the request left the queue. A request put into a running turn
+      // is handed to the engine before it leaves the queue, so a crash at that moment can leave it
+      // in both places and 지금 보내기 sends it again. Accepted: it fails toward "both", never "neither".
+      if (!stillWaiting()) throw new HttpError(404, "queued_not_found", "보낼 예정인 요청이 없습니다.");
+    } else {
+      if (seen) {
+        if (seen.sessionId !== sessionId || seen.textHash !== fingerprint) {
+          throw new HttpError(409, "request_id_conflict", "같은 requestId로 다른 요청을 보냈습니다.");
+        }
+        return { duplicate: true, delivery: "turn" };
       }
-      return { duplicate: true, delivery: "turn" };
-    }
-    const queued = session.queued.find((entry) => entry.id === requestId);
-    if (queued) {
-      if (requestFingerprint(queued.text, queued.refs, queued.create, queued.attachments ?? [], queued.notes ?? []) !== fingerprint) throw new HttpError(409, "request_id_conflict", "같은 requestId로 다른 대기 요청을 보냈습니다.");
-      return { duplicate: true, delivery: "queued" };
+      const queued = session.queued.find((entry) => entry.id === requestId);
+      if (queued) {
+        if (requestFingerprint(queued.text, queued.refs, queued.create, queued.attachments ?? [], queued.notes ?? []) !== fingerprint) throw new HttpError(409, "request_id_conflict", "같은 requestId로 다른 대기 요청을 보냈습니다.");
+        return { duplicate: true, delivery: "queued" };
+      }
     }
     const settings = options.runSettings ?? this.profiles.resolve(session, this.accessOf(session), options.profileId === undefined ? session.profileId : options.profileId);
+    // A request from the phone is told so, also when it waited in the queue first (its origin went with it).
+    const channelText = origin ? (this.channelHook?.(origin, { session, settings }) ?? null) : null;
+    const channelContext = channelText ? `${channelText}\n\n` : "";
     // Anything else sent to a linked session comes from the user: it pauses the link.
     if (!relay) this.links.userInput(sessionId);
     const work = this.requireWork(session.workId);
@@ -1605,13 +2072,15 @@ export class SessionManager {
       if (steerable) {
         const pinned: { ref: DocRef; pinned: string; pinnedView: string | null; proposal: Proposal | null }[] = [];
         for (const ref of refs) pinned.push({ ref, ...(await this.documents.prepare(ref, sessionId, requestId, execution.cwd)) });
-        const entry: Steered = { requestId, text: trimmed, refs, attachments, item: null, dropped: false };
+        const entry: Steered = { requestId, text: trimmed, refs, attachments, item: null, dropped: false, ...(draft ? { draft: true } : {}) };
+        const read = notes.length && this.noteHook ? this.noteHook(notes, execution.cwd, sessionId) : null;
+        const steerText = channelContext + this.engineText(trimmed, pinned, execution.cwd, null, null, read?.prompt);
+        mustStillGo();
         const steering = this.steering.get(sessionId) ?? new Map<string, Steered>();
         this.steering.set(sessionId, steering.set(requestId, entry));
-        const read = notes.length && this.noteHook ? this.noteHook(notes, execution.cwd, sessionId) : null;
-        const steered = await adapter.steer!(session, this.engineWork(session, work), this.engineText(trimmed, pinned, execution.cwd, null, null, read?.prompt), requestId, files).catch(() => false);
+        const steered = await adapter.steer!(session, this.engineWork(session, work), steerText, requestId, files).catch(() => false);
         if (steered) {
-          this.store.saveRequest(requestId, sessionId, fingerprint);
+          if (!seen) this.store.saveRequest(requestId, sessionId, fingerprint, origin);
           entry.item = {
             kind: "user",
             id: `user:${requestId}`,
@@ -1622,8 +2091,17 @@ export class SessionManager {
             ...(refs.length ? { refs: refs.map((ref) => this.documents.summary(ref)) } : {}),
             ...(attachments.length ? { attachments } : {}),
             ...(read?.refs.length ? { notes: read.refs } : {}),
+            ...(origin ? { origin } : {}),
           };
           this.sink.upsertItem(sessionId, entry.item);
+          // The engine has it and the conversation shows it: it waits no longer. An edit made while
+          // the engine was taking it is not what was sent: it stays, kept for the person, as a
+          // request of its own (a new id, so sending it does not overwrite this one).
+          if (waiting && stillWaiting()) leaveQueue();
+          else if (waiting) {
+            const now = this.requireSession(sessionId);
+            if (now.queued.some((item) => item.id === requestId)) this.saveSession({ ...now, queued: now.queued.map((item) => (item.id === requestId ? { ...item, id: `again-${randomUUID()}`, held: true } : item)) });
+          }
           if (entry.dropped) this.requeueDropped(sessionId, [entry]);
           return { duplicate: false, delivery: "steered" };
         }
@@ -1631,7 +2109,12 @@ export class SessionManager {
       }
       const current = this.requireSession(sessionId);
       if (current.status !== "idle" && current.status !== "error") {
-        const waiting: QueuedMessage = {
+        if (waiting) {
+          // It already waits: it keeps its place and, since the user asked to send it, follows the turn.
+          this.saveSession({ ...current, queued: current.queued.map((item) => (item.id === requestId ? { ...item, held: false } : item)) });
+          return { duplicate: false, delivery: "queued" };
+        }
+        const later: QueuedMessage = {
           id: requestId,
           text: trimmed,
           runSettings: settings,
@@ -1641,8 +2124,10 @@ export class SessionManager {
           ...(attachments.length ? { attachments } : {}),
           ...(plan ? { plan: true } : {}),
           ...(notes.length ? { notes } : {}),
+          ...(origin ? { origin } : {}),
+          ...(draft ? { draft: true } : {}),
         };
-        this.saveSession({ ...current, queued: [...current.queued, waiting] });
+        this.saveSession({ ...current, queued: [...current.queued, later] });
         return { duplicate: false, delivery: "queued" };
       }
       // The turn ended meanwhile: this request starts the next one.
@@ -1655,69 +2140,99 @@ export class SessionManager {
     this.expirePlans(sessionId);
     // Pin each document: the engine reads exactly this revision; edits go to a working copy.
     const prepared: { ref: DocRef; pinned: string; pinnedView: string | null; proposal: Proposal | null }[] = [];
-    for (const ref of refs) prepared.push({ ref, ...(await this.documents.prepare(ref, sessionId, requestId, execution.cwd)) });
     // A new document: a free name in the work folder now, tracked with its sources after the turn.
     let created: PendingCreate | null = null;
-    if (create) {
-      const template = create.template ? await this.userSkills.templateSnapshot(create.template.skillId, this.skillScope(sessionId)) : null;
-      if (template && (template.sha256 !== create.template!.sha256 || template.skillSha256 !== create.template!.skillSha256 || template.format !== create.format)) throw new HttpError(409, "template_changed", "선택한 양식이나 설명이 바뀌었습니다. 미리보기에서 다시 선택해 주세요.");
-      created = this.creations.reserve({ requestId, sessionId, workId: work.id, workspaceId: session.workspaceId ?? null, fingerprint, cwd: execution.cwd, target: create, sources: refs.map((ref) => ({ artifactId: ref.artifactId, revision: ref.revision })) }, template ? { ...template, skillDir: template.skill.dir } : null);
-      this.creating.set(sessionId, created);
-    }
-    const read = notes.length && this.noteHook ? this.noteHook(notes, execution.cwd, sessionId) : null;
-    this.store.saveRequest(requestId, sessionId, fingerprint);
-    if (created) this.creations.update(requestId, { state: "sent" });
-    const wantsHangul = create?.format === "hwpx" || /\bhwpx?\b|한글\s*(문서|파일|양식|보고서)|한글로|한림대/i.test(trimmed);
-    const hangulSkill = wantsHangul ? (await this.userSkills.list(this.skillScope(sessionId))).find((skill) => skill.name === "hallym-kordoc" && !skill.shadowedBy && !skill.problem && skill.state.enabled) : null;
-    const baseText = options.engineText ?? (relay ? `${relay.header}\n\n${trimmed}` : this.engineText(trimmed, prepared, execution.cwd, from, created, read?.prompt, hangulSkill?.dir));
-    // What changed in the project since this session's last request (people's edits, other
-    // sessions' revisions, the note), before the request; relays and drawings carry their own.
+    let engineText: string;
     const told = !relay && !options.engineText;
-    const change = told ? (this.changeHook?.(session, work, options.omitChanges ?? []) ?? null) : null;
-    const roleText = settings.instructions ? `이 요청에 선택한 역할: ${settings.profileName}\n${settings.instructions}\n\n` : "";
-    const engineText = roleText + officeContext.text + browserContext + (change ? `${change}\n\n${baseText}` : baseText);
-    this.sink.upsertItem(sessionId, {
-      kind: "user",
-      id: `user:${requestId}`,
-      text: trimmed,
-      runSettings: settings,
-      at: Date.now(),
-      ...(plan ? { plan: true } : {}),
-      ...(refs.length ? { refs: refs.map((ref) => this.documents.summary(ref)) } : {}),
-      ...(read?.refs.length ? { notes: read.refs } : {}),
-      ...(from ? { from } : {}),
-      ...(created ? { create: { ...created.target, name: basename(created.path), path: created.path } } : {}),
-      ...(attachments.length ? { attachments } : {}),
-      ...(options.draw ? { draw: options.draw } : {}),
-      ...(relay ? { link: relay.hop } : {}),
-      ...(options.scheduled ? { scheduled: true } : {}),
-    });
-    this.turnStarted.set(sessionId, Date.now());
-    this.turnRequest.set(sessionId, requestId);
-    if (plan) this.planning.set(sessionId, requestId);
-    else this.planning.delete(sessionId);
-    this.sink.updateSession(sessionId, {
-      status: "starting", activity: plan ? "계획 세우는 중" : "응답 준비 중", lastError: null,
-      ...(session.importedHistory?.kind === "archive" ? { importedHistory: { ...session.importedHistory, kind: "live" as const, continuedAt: Date.now() } } : {}),
-    });
-    // A relayed message does not switch the conversation on screen (it goes back and forth), nor
-    // does a drawing made for another conversation.
-    this.saveWork({ ...work, activeSessionId: options.activate === false || relay || session.pageAgent ? work.activeSessionId : sessionId, updatedAt: Date.now() });
-    releasePreparation();
+    // Up to the user item nothing of the request is in the conversation: a failure here undoes what
+    // this attempt prepared and leaves the request where it was (still waiting, if it came from the
+    // queue), so the same request can be sent again.
     try {
+      for (const ref of refs) prepared.push({ ref, ...(await this.documents.prepare(ref, sessionId, requestId, execution.cwd)) });
+      if (create) {
+        const template = create.template ? await this.userSkills.templateSnapshot(create.template.skillId, this.skillScope(sessionId)) : null;
+        if (template && (template.sha256 !== create.template!.sha256 || template.skillSha256 !== create.template!.skillSha256 || template.format !== create.format)) throw new HttpError(409, "template_changed", "선택한 양식이나 설명이 바뀌었습니다. 미리보기에서 다시 선택해 주세요.");
+        // No name is reserved, or taken up again, for a request that is gone.
+        mustStillGo();
+        created = this.creations.reserve({ requestId, sessionId, workId: work.id, workspaceId: session.workspaceId ?? null, fingerprint, cwd: execution.cwd, target: create, sources: refs.map((ref) => ({ artifactId: ref.artifactId, revision: ref.revision })) }, template ? { ...template, skillDir: template.skill.dir } : null);
+        this.creating.set(sessionId, created);
+      }
+      const read = notes.length && this.noteHook ? this.noteHook(notes, execution.cwd, sessionId) : null;
+      const wantsHangul = create?.format === "hwpx" || /\bhwpx?\b|한글\s*(문서|파일|양식|보고서)|한글로|한림대/i.test(trimmed);
+      const hangulSkill = wantsHangul ? (await this.userSkills.list(this.skillScope(sessionId))).find((skill) => skill.name === "hallym-kordoc" && !skill.shadowedBy && !skill.problem && skill.state.enabled) : null;
+      const baseText = options.engineText ?? (relay ? `${relay.header}\n\n${trimmed}` : this.engineText(trimmed, prepared, execution.cwd, from, created, read?.prompt, hangulSkill?.dir));
+      // What changed in the project since this session's last request (people's edits, other
+      // sessions' revisions, the note), before the request; relays and drawings carry their own.
+      const change = told ? (this.changeHook?.(session, work, options.omitChanges ?? []) ?? null) : null;
+      const roleText = settings.instructions ? `이 요청에 선택한 역할: ${settings.profileName}\n${settings.instructions}\n\n` : "";
+      engineText = channelContext + roleText + officeContext.text + browserContext + (change ? `${change}\n\n${baseText}` : baseText);
+      mustStillGo();
+      if (created) this.creations.update(requestId, { state: "sent" });
+      this.sink.upsertItem(sessionId, {
+        kind: "user",
+        id: `user:${requestId}`,
+        text: trimmed,
+        runSettings: settings,
+        at: Date.now(),
+        ...(plan ? { plan: true } : {}),
+        ...(refs.length ? { refs: refs.map((ref) => this.documents.summary(ref)) } : {}),
+        ...(read?.refs.length ? { notes: read.refs } : {}),
+        ...(from ? { from } : {}),
+        ...(created ? { create: { ...created.target, name: basename(created.path), path: created.path } } : {}),
+        ...(attachments.length ? { attachments } : {}),
+        ...(options.draw ? { draw: options.draw } : {}),
+        ...(relay ? { link: relay.hop } : {}),
+        ...(options.scheduled ? { scheduled: true } : {}),
+        ...(origin ? { origin } : {}),
+      });
+    } catch (error) {
+      for (const entry of prepared) if (entry.proposal) this.documents.discardProposal(entry.proposal.id, "failure");
+      if (created) {
+        if (this.creating.get(sessionId) === created) this.creating.delete(sessionId);
+        // A request that still waits as it was keeps its reservation for the next 지금 보내기 (same
+        // file, same name). Any other is nowhere now (sent directly, or deleted or edited
+        // meanwhile): its reservation is given up, so the next start has nothing to report.
+        try {
+          if (waiting && stillWaiting()) this.creations.update(requestId, { state: "ready" });
+          else this.creations.release(requestId);
+        } catch { /* The failure above is the one to report. */ }
+      }
+      throw error;
+    }
+    // The request is in the conversation: it leaves the queue here, and whatever fails from now on
+    // is said on it there.
+    try {
+      if (waiting) leaveQueue();
+      if (!seen) this.store.saveRequest(requestId, sessionId, fingerprint, origin);
+      this.turnStarted.set(sessionId, Date.now());
+      this.turnRequest.set(sessionId, requestId);
+      if (plan) this.planning.set(sessionId, requestId);
+      else this.planning.delete(sessionId);
+      this.sink.updateSession(sessionId, {
+        status: "starting", activity: plan ? "계획 세우는 중" : "응답 준비 중", lastError: null,
+        ...(session.importedHistory?.kind === "archive" ? { importedHistory: { ...session.importedHistory, kind: "live" as const, continuedAt: Date.now() } } : {}),
+      });
+      // A relayed message does not switch the conversation on screen (it goes back and forth), nor
+      // does a drawing made for another conversation.
+      this.saveWork({ ...work, activeSessionId: options.activate === false || relay || session.pageAgent ? work.activeSessionId : sessionId, updatedAt: Date.now() });
+      releasePreparation();
       const current = this.requireSession(sessionId);
       await this.adapter(session.provider).send({ ...current, model: settings.model, effort: settings.effort, access: settings.access, plan }, this.engineWork(current, work), engineText, requestId, files);
       officeContext.accept();
       if (told) this.toldHook?.(current);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      // Said first: the request is no longer anywhere else.
+      this.sink.upsertItem(sessionId, { kind: "notice", id: `error:${requestId}`, level: "error", text: `보내지 못했습니다: ${message}`, at: Date.now() });
+      this.sink.updateSession(sessionId, { status: "error", activity: null, lastError: message });
       for (const entry of prepared) if (entry.proposal) this.documents.discardProposal(entry.proposal.id, "failure");
       if (created) {
         this.creating.delete(sessionId);
-        this.creations.update(requestId, { state: "failed", problem: message });
+        // Still in the queue (its write failed): the engine was never called, and the request must
+        // stay sendable from there, so its reservation stays usable.
+        const stillQueued = waiting && Boolean(this.sessions.get(sessionId)?.queued.some((item) => item.id === requestId));
+        this.creations.update(requestId, stillQueued ? { state: "ready" } : { state: "failed", problem: message });
       }
-      this.sink.upsertItem(sessionId, { kind: "notice", id: `error:${requestId}`, level: "error", text: `보내지 못했습니다: ${message}`, at: Date.now() });
-      this.sink.updateSession(sessionId, { status: "error", activity: null, lastError: message });
     }
     return { duplicate: false, delivery: "turn" };
   }
@@ -1768,6 +2283,12 @@ export class SessionManager {
       if (!["reserved", "ready", "sent"].includes(record.state)) continue;
       const session = this.sessions.get(record.sessionId), work = this.works.get(record.workId);
       if (!session || !work) continue;
+      // Its request still waits, so the engine was never asked (a request leaves the queue before
+      // the engine is called): nothing was interrupted, and the request must stay sendable.
+      if (session.queued.some((entry) => entry.id === record.requestId)) {
+        if (record.state === "sent" && this.creations.untouched(record)) this.creations.update(record.requestId, { state: "ready" });
+        continue;
+      }
       let artifactId: string | null = null;
       if (existsSync(record.path) && statSync(record.path).size > 0) {
         const tracked = this.documents.track(work.id, record.cwd, record.path, "external", null, "앱 재시작 뒤 생성 사본 복구", record.sources);
@@ -2138,6 +2659,7 @@ export class SessionManager {
       reply: null,
       error: null,
       ...(request.attachments?.length ? { attachments: request.attachments } : {}),
+      ...(request.draft ? { draft: true } : {}),
       createdAt: Date.now(),
       answeredAt: null,
     };
@@ -2175,7 +2697,7 @@ export class SessionManager {
     if (old.status !== "failed") throw new HttpError(409, "handoff_not_failed", "답을 받지 못한 요청만 다시 보낼 수 있습니다.");
     let failure: unknown = null;
     try {
-      await this.handoff({ requestId, sourceSessionId: old.sourceSessionId, targetSessionId: old.targetSessionId, text: old.text, refs: old.refs, attachments: old.attachments ?? [] });
+      await this.handoff({ requestId, sourceSessionId: old.sourceSessionId, targetSessionId: old.targetSessionId, text: old.text, refs: old.refs, attachments: old.attachments ?? [], ...(old.draft ? { draft: true } : {}) });
     } catch (error) {
       failure = error;
     }
@@ -2265,6 +2787,8 @@ export class SessionManager {
 
   async answerApproval(sessionId: string, itemId: string, decision: ApprovalDecision, response?: unknown) {
     const session = this.requireSession(sessionId);
+    // Read-only until 되돌리기: nothing is answered (tool, plan or Office question), nothing changes.
+    if (session.archivedAt) throw new HttpError(409, "archived", "보관한 대화의 승인 요청에는 답할 수 없습니다. 대화를 되돌린 뒤에 답해 주세요.");
     if (decision !== "accept" && decision !== "decline") {
       throw new HttpError(400, "invalid_decision", "accept 또는 decline만 가능합니다.");
     }
@@ -2273,7 +2797,10 @@ export class SessionManager {
     if (plan?.kind === "approval") {
       if (plan.decision !== null) throw new HttpError(409, "approval_not_pending", "이미 처리되었거나 만료된 승인 요청입니다.");
       this.sink.upsertItem(sessionId, { ...plan, decision });
-      if (decision === "accept") await this.send(sessionId, `go-${itemId.slice(5)}`, "계획대로 진행해 주세요.");
+      // A plan asked for from a messenger chat goes ahead as that chat's request (its answer goes back there).
+      const asked = this.loadItems(sessionId).find((item) => item.id === `user:${itemId.slice(5)}`);
+      const origin = asked?.kind === "user" ? asked.origin : undefined;
+      if (decision === "accept") await this.send(sessionId, `go-${itemId.slice(5)}`, "계획대로 진행해 주세요.", [], null, null, "auto", origin ? { origin, activate: false } : {});
       return;
     }
     // The agent browser's own cards are answered there (browse.ts), the rest by the engine.
@@ -2399,6 +2926,14 @@ export class SessionManager {
         this.sink.upsertItem(sessionId, { ...item, status: "failed" });
       }
     }
+  }
+
+  /** Items whose live copy held back a tail are sent whole (the turn ended, stopped or failed). */
+  private releaseLive(sessionId: string) {
+    if (!this.scrubber) return;
+    const ids = new Set(this.scrubber.release(`${sessionId}\u0000`));
+    if (!ids.size) return;
+    for (const item of this.loadItems(sessionId)) if (ids.has(item.id)) this.bus.publish({ type: "item.upserted", sessionId, item });
   }
 
   private loadItems(sessionId: string) {

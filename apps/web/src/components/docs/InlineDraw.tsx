@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { failure, type Notify } from "../../top-notice.ts";
 import { StateEffect, StateField, type Extension } from "@codemirror/state";
 import { Decoration, EditorView, WidgetType, keymap } from "@codemirror/view";
 import { ASPECT_LABEL, IMAGE_ASPECTS, dirOf, markdownImageLink, placeBlock, relativePath, type Artifact, type ImageInfo, type ImageItem, type Session, type Work } from "@workbench/contracts";
@@ -105,7 +106,7 @@ export function InlineDraw({
   onOpen: (open: boolean) => void;
   /** Change the document's text without an editor on screen. */
   onInsertText: (change: (text: string) => string) => void;
-  onToast: (message: string) => void;
+  onToast: Notify;
 }) {
   const pending = inlineDrawings(artifact.id);
   const [waiting, setWaiting] = useState(pending.size);
@@ -156,7 +157,7 @@ export function InlineDraw({
         insert(markdownImageLink(firstLine(info.brief), relativePath(dirOf(artifact.path), info.path)), at);
         onToast(`그림을 넣었습니다: ${info.relPath}`);
       } else {
-        onToast(`그림을 그리지 못했습니다${info.error ? `: ${info.error}` : "."}`);
+        onToast(failure(`그림을 그리지 못했습니다${info.error ? `: ${info.error}` : "."}`));
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -209,7 +210,7 @@ export function InlineDraw({
       pending.delete(id);
       editor?.dispatch({ effects: dropMarker.of(id) });
       refresh();
-      onToast(`그림을 그리지 못했습니다: ${error instanceof Error ? error.message : String(error)}`);
+      onToast(failure(error, "그림을 그리지 못했습니다: "));
       return false;
     }
   };

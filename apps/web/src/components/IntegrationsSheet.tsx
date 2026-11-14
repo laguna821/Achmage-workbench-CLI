@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { failure, type Notify } from "../top-notice.ts";
 import type { IntegrationsView, McpDefinition } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import { Icon } from "./Icon.tsx";
@@ -29,7 +30,7 @@ function Cell({ present, enabled }: { present: boolean; enabled?: boolean }) {
  * own: this is the engines' configuration. Copying to the other engine happens only on a click,
  * after showing where it will be written, through the engine's own command.
  */
-export function IntegrationsSheet({ api, onClose, onToast }: { api: Api; onClose: () => void; onToast: (message: string) => void }) {
+export function IntegrationsSheet({ api, onClose, onToast }: { api: Api; onClose: () => void; onToast: Notify }) {
   const [view, setView] = useState<IntegrationsView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -59,7 +60,7 @@ export function IntegrationsSheet({ api, onClose, onToast }: { api: Api; onClose
       setView(await pending.action());
       onToast(pending.done);
     } catch (reason) {
-      onToast(reason instanceof Error ? reason.message : String(reason));
+      onToast(failure(reason));
     } finally {
       setBusy(null);
       setPending(null);

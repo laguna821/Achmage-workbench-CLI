@@ -1,0 +1,274 @@
+/* HWP studio only (chrome.ts adds it for the hangul format). The role map follows Achmage HOP's
+   palette (apps/studio-host/src/styles/achmage-theme.css @ d533eb4, MIT; third_party/hop/LICENSE):
+   the studio's own --ui-* tokens are bound at its root, so every bar, menu, dialog and status
+   surface follows, including ones no selector names. The values are the app's (chrome.css).
+   Paper, ink, caret, selection and the ruler's page band stay the document's in both themes. */
+/* Above the studio's own theme and skin rules (:root[data-theme-skin="flat"]:not(…) is 0,3,0). */
+__WB_ROOT__:root:root {
+  --ui-bg: var(--wb-ui-group);
+  --ui-bg-light: var(--wb-ui-group);
+  --ui-surface: var(--wb-ui-bg);
+  --ui-surface-raised: var(--wb-ui-bg);
+  --ui-surface-muted: var(--wb-ui-hover);
+  --ui-border: var(--wb-ui-line);
+  --ui-border-light: var(--wb-ui-line);
+  --ui-border-subtle: var(--wb-ui-line);
+  --ui-border-strong: var(--wb-ui-line-strong);
+  --ui-text: var(--wb-ui-text);
+  --ui-text-secondary: var(--wb-ui-muted);
+  --ui-text-muted: var(--wb-ui-muted);
+  --ui-text-hint: var(--wb-ui-muted);
+  --ui-text-placeholder: var(--wb-ui-muted);
+  --ui-text-disabled: color-mix(in srgb, var(--wb-ui-muted) 60%, var(--wb-ui-bg));
+  --ui-text-on-accent: var(--wb-ui-on-accent);
+  --ui-hover: var(--wb-ui-hover);
+  --ui-hover-strong: var(--wb-ui-selected);
+  --ui-active: var(--wb-ui-selected);
+  --ui-selected: var(--wb-ui-selected);
+  --ui-menu-open: var(--wb-ui-selected);
+  --ui-menu-open-border: var(--wb-ui-selected);
+  --ui-toolbar-bg-start: var(--wb-ui-bg);
+  --ui-toolbar-bg-end: var(--wb-ui-bg);
+  --ui-accent-bg: var(--wb-ui-selected);
+  --ui-accent-bg-light: var(--wb-ui-group);
+  --ui-note-bg: var(--wb-ui-group);
+  --ui-note-border: var(--wb-ui-line);
+  --ui-note-text: var(--wb-ui-text);
+  --ui-link: var(--wb-ui-focus);
+  --ui-danger: var(--wb-ui-danger);
+  --ui-danger-strong: var(--wb-ui-danger);
+  --ui-focus-soft: color-mix(in srgb, var(--wb-ui-focus) 18%, transparent);
+  --focus-ring: var(--wb-ui-focus);
+  --resize-handle: var(--wb-ui-focus);
+  --accent-primary: var(--wb-ui-focus);
+  --accent-strong: var(--wb-ui-focus);
+  --accent-light: var(--wb-ui-focus);
+  --accent-hover: var(--wb-ui-selected);
+  --accent-subtle: var(--wb-ui-muted);
+  --doc-workspace: var(--wb-ui-group);
+  --ruler-bg: var(--wb-ui-group);
+  --ruler-tick: var(--wb-ui-muted);
+  --ruler-text: var(--wb-ui-text);
+  --ruler-marker: var(--wb-ui-focus);
+  --font-family-ui: var(--wb-ui-font);
+  /* Hard-edged: menus and dialogs sit over a page WebKitGTK repaints without compositing (no blur). */
+  --shadow-light: 0 1px 0 var(--wb-ui-line);
+  --shadow-dropdown: 0 2px 0 var(--wb-ui-line);
+  --shadow-dialog: 0 2px 0 var(--wb-ui-line);
+}
+/* One AI entry: the editor's own AI dock is the document's 문서 AI, opened and closed by the tab's
+   문서 AI button (apps/office/src/hwp-ai-dock.ts). Its own rail is not a second entry: closed, the
+   dock takes no width and the page gets the editor's width. */
+__WB_ROOT__ .hwp-app .ai-dock.collapsed { width: 0; }
+__WB_ROOT__ .hwp-app .ai-dock .ai-rail { display: none; }
+/* A narrow pane: the open dock lies over the page instead of squeezing it (as the tab's own column does). */
+@media (max-width: 1039px) {
+  __WB_ROOT__ .hwp-app .app-main { position: relative; }
+  __WB_ROOT__ .hwp-app .ai-dock:not(.collapsed) {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    z-index: 30;
+    max-width: 100%;
+    background: var(--wb-ui-bg);
+    border-inline-end: 1px solid var(--wb-ui-line);
+  }
+  /* Over the page it would cover the studio's own dialogs (찾아 바꾸기 opens at the left): it steps
+     aside while one is open — hidden, not closed (its state and text stay; it reports itself not
+     shown) — unless the person asked for it again (문서 AI pressed: data-wb-ai-over, it comes over
+     the dialog) — apps/office/src/hwp-ai-dock.ts. */
+  __WB_ROOT__[data-wb-studio-dialog]:not([data-wb-ai-over]) .hwp-app .ai-dock:not(.collapsed) { visibility: hidden; }
+}
+
+/* The open menu title is a quiet selected state, not a filled accent block. */
+__WB_ROOT__ #menu-bar .menu-item.open > .menu-title { color: var(--wb-ui-text); }
+
+/* One theme switch: the app's. The studio's own 테마 / 스킨 submenu (and the line above it) is not offered. */
+__WB_ROOT__ #menu-bar .md-sub:has([data-theme-mode-choice], [data-theme-skin-choice]),
+__WB_ROOT__ #menu-bar .md-sep:has(+ .md-sub [data-theme-mode-choice]) { display: none; }
+
+/* HOP's drawn drop-down (styles/custom-select.css @ d533eb4, MIT), on the app's tokens and sizes.
+   The original select stays in the page as the studio's state holder. */
+__WB_ROOT__ .native-select-hidden {
+  position: absolute !important;
+  inline-size: 1px !important;
+  block-size: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+__WB_ROOT__ .native-select-anchor {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+__WB_ROOT__ .custom-select {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  min-width: 0;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  vertical-align: middle;
+  font-family: var(--wb-ui-font);
+  font-size: 13px;
+  color: var(--wb-ui-text);
+}
+__WB_ROOT__ .custom-select-trigger {
+  appearance: none;
+  -webkit-appearance: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  padding: 0 4px 0 8px;
+  border: 1px solid var(--wb-ui-line);
+  border-radius: 8px;
+  background: var(--wb-ui-bg);
+  color: inherit;
+  font: inherit;
+  line-height: 16px;
+  text-align: left;
+  cursor: default;
+  box-shadow: none;
+}
+__WB_ROOT__ .custom-select:not(.disabled) .custom-select-trigger:hover,
+__WB_ROOT__ .custom-select.open .custom-select-trigger { border-color: var(--wb-ui-line-strong); background: var(--wb-ui-hover); }
+__WB_ROOT__ .custom-select-trigger:focus-visible { outline: 2px solid var(--wb-ui-focus); outline-offset: 1px; }
+__WB_ROOT__ .custom-select.disabled { opacity: .5; }
+__WB_ROOT__ .custom-select-text { display: block; min-width: 0; }
+__WB_ROOT__ .custom-select-value { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+__WB_ROOT__ .custom-select-sizer { display: block; height: 0; overflow: hidden; visibility: hidden; }
+__WB_ROOT__ .custom-select-sizer > span { display: block; white-space: nowrap; }
+__WB_ROOT__ .custom-select-arrow { display: inline-flex; align-items: center; justify-content: center; color: var(--wb-ui-muted); font-size: 10px; line-height: 1; }
+__WB_ROOT__ .custom-select-menu {
+  display: none;
+  /* Placed in the viewport by custom-select.ts when it opens (fixed, below or above the control). */
+  position: fixed;
+  z-index: 12000;
+  box-sizing: border-box;
+  max-width: min(420px, 90vw);
+  max-height: 280px;
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--wb-ui-line);
+  border-radius: 12px;
+  background: var(--wb-ui-bg);
+  /* No blur: the menu sits over a scrolling page that WebKitGTK repaints without compositing. */
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--wb-ui-text) 8%, transparent);
+}
+__WB_ROOT__ .custom-select.open .custom-select-menu { display: block; }
+__WB_ROOT__ .custom-select-option {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 28px;
+  padding: 6px 24px 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--wb-ui-text);
+  font: inherit;
+  line-height: 16px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: default;
+}
+__WB_ROOT__ .custom-select-option:hover { background: var(--wb-ui-hover); }
+/* The row the arrow keys are on (aria-activedescendant): a focus ring, apart from the chosen row's fill. */
+__WB_ROOT__ .custom-select-option.active { box-shadow: inset 0 0 0 2px var(--wb-ui-focus); }
+__WB_ROOT__ .custom-select-option[aria-selected="true"] { background: var(--wb-ui-selected); color: var(--wb-ui-focus); font-weight: 600; }
+__WB_ROOT__ .custom-select-option[aria-disabled="true"] { color: var(--wb-ui-muted); opacity: .6; }
+__WB_ROOT__ .custom-select-group { padding: 8px 8px 4px; color: var(--wb-ui-muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
+__WB_ROOT__ #style-bar .custom-select[data-select-id="style-name"] { width: 112px; }
+__WB_ROOT__ #style-bar .custom-select[data-select-id="font-lang"] { width: 76px; }
+__WB_ROOT__ #style-bar .custom-select[data-select-id="font-name"] { width: 180px; }
+__WB_ROOT__ #style-bar .custom-select[data-select-id="linespacing-select"] { width: 78px; }
+/* Inside the style bar's field grid a picker fills its own field and never grows past it. */
+__WB_ROOT__ #style-bar .sb-field-grid .sb-field > .custom-select { width: 100%; max-width: 100%; min-width: 0; }
+/* Style-bar fields are narrow grid cells: a tighter trigger keeps "180 %" and "18.0" whole. */
+__WB_ROOT__ #style-bar .custom-select-trigger { grid-template-columns: minmax(0, 1fr) 10px; gap: 2px; padding: 0 2px 0 6px; }
+__WB_ROOT__ #style-bar .sb-size-group > input.sb-size { padding-inline: 4px; }
+__WB_ROOT__ .dialog-wrap .custom-select { height: 28px; }
+__WB_ROOT__ .fse-select.custom-select { flex: 1; }
+@media (prefers-reduced-motion: reduce) { __WB_ROOT__ .custom-select-trigger, __WB_ROOT__ .custom-select-option { transition: none; } }
+/* A font substitution, said beside the font control for a few seconds (apps/office/src/hwp-fonts.ts). */
+__WB_ROOT__ .wb-font-note {
+  position: fixed;
+  z-index: 12001;
+  max-width: min(360px, 90vw);
+  padding: 6px 10px;
+  border: 1px solid var(--wb-ui-line);
+  border-radius: 8px;
+  background: var(--wb-ui-bg);
+  color: var(--wb-ui-text);
+  font: 13px/18px var(--wb-ui-font);
+  box-shadow: 0 2px 0 var(--wb-ui-line);
+}
+__WB_ROOT__ .wb-font-note[hidden] { display: none; }
+
+/* Check boxes and radio buttons in the studio's dialogs, drawn by the page on the app's tokens:
+   WebKitGTK paints its own light widget whatever color-scheme says, a white slab in a dark dialog.
+   Only in the dialogs: the AI dock's own controls keep their styles. */
+__WB_ROOT__ :is(.modal-overlay, .dialog-wrap, .find-dialog, .compare-dialog) input[type="checkbox"],
+__WB_ROOT__ :is(.modal-overlay, .dialog-wrap, .find-dialog, .compare-dialog) input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  display: inline-grid;
+  place-content: center;
+  flex: 0 0 auto;
+  inline-size: 14px;
+  block-size: 14px;
+  /* Not the app's 28 px control size (buttons, fields): a box beside its label, which is clickable. */
+  min-width: 0 !important;
+  min-height: 0 !important;
+  margin: 0;
+  border: 1px solid;
+  border-color: var(--wb-ui-muted);
+  border-radius: 3px !important;
+  background-color: var(--wb-ui-bg);
+  color-scheme: inherit;
+  vertical-align: middle;
+  cursor: default;
+}
+__WB_ROOT__ :is(.modal-overlay, .dialog-wrap, .find-dialog, .compare-dialog) input[type="radio"] { border-radius: 50% !important; }
+__WB_ROOT__ :is(.modal-overlay, .dialog-wrap, .find-dialog, .compare-dialog) input[type="checkbox"]:checked,
+__WB_ROOT__ :is(.modal-overlay, .dialog-wrap, .find-dialog, .compare-dialog) input[type="radio"]:checked { border-color: var(--wb-ui-focus); background-color: var(--wb-ui-focus); }
+__WB_ROOT__ :is(.modal-overlay, .dialog-wrap, .find-dialog, .compare-dialog) input[type="checkbox"]:checked::after {
+  content: "";
+  inline-size: 4px;
+  block-size: 8px;
+  margin-block-start: -2px;
+  border: solid;
+  border-color: var(--wb-ui-on-accent);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+__WB_ROOT__ :is(.modal-overlay, .dialog-wrap, .find-dialog, .compare-dialog) input[type="checkbox"]:indeterminate::after { content: ""; inline-size: 8px; block-size: 2px; background-color: var(--wb-ui-on-accent); }
+__WB_ROOT__ :is(.modal-overlay, .dialog-wrap, .find-dialog, .compare-dialog) input[type="radio"]:checked::after { content: ""; inline-size: 6px; block-size: 6px; border-radius: 50%; background-color: var(--wb-ui-on-accent); }
+__WB_ROOT__ :is(.modal-overlay, .dialog-wrap, .find-dialog, .compare-dialog) input[type="checkbox"]:focus-visible,
+__WB_ROOT__ :is(.modal-overlay, .dialog-wrap, .find-dialog, .compare-dialog) input[type="radio"]:focus-visible { outline: 2px solid var(--wb-ui-focus); outline-offset: 1px; }
+__WB_ROOT__ :is(.modal-overlay, .dialog-wrap, .find-dialog, .compare-dialog) input[type="checkbox"]:disabled,
+__WB_ROOT__ :is(.modal-overlay, .dialog-wrap, .find-dialog, .compare-dialog) input[type="radio"]:disabled { opacity: .5; }
+
+/* A disabled menu row (and the context menu's) keeps its shortcut and sub-menu arrow readable,
+   at least 3:1, instead of the line colour (1.3:1): the label is greyed, the key is still told. */
+__WB_ROOT__ .md-item.disabled .md-shortcut,
+__WB_ROOT__ .md-item.disabled .md-arrow,
+__WB_ROOT__ .md-sub.disabled .md-arrow { color: color-mix(in srgb, var(--wb-ui-muted) 75%, var(--wb-ui-bg)); }
+
+/* Unit labels (mm, pt, %) next to dialog fields: the app's muted text, at least 4.5:1 on the dialog,
+   its sunken group boxes and its fields in both themes (Ieum's hint colour was 4.1:1 on light groups).
+   A disabled group keeps its disabled colour. */
+__WB_ROOT__:root:root .dialog-unit { color: var(--wb-ui-muted); }
+__WB_ROOT__:root:root .tcp-disabled .dialog-unit { color: var(--ieum-dialog-ink-disabled, var(--wb-ui-muted)); }

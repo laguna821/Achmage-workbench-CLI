@@ -3,19 +3,24 @@
 .start-view .start-inner { width: min(100% - 48px, 720px); padding-block: 48px 32px; }
 .start-view:not(.with-board) .start-inner { margin-block: auto; }
 .start-view.with-board .start-inner { padding-block: 48px 24px; }
-.home-title { font: 600 1.625rem/2rem var(--font-ui); color: var(--text); text-align: center; letter-spacing: 0; margin: 0 0 32px; }
+.home-title { font: 600 1.625rem/2rem var(--font-ui); color: var(--heading); text-align: center; letter-spacing: 0; margin: 0 0 32px; }
 .browse-start { display: grid; gap: 12px; width: 100%; }
-.browse-start .browse-start-modes { justify-self: center; width: auto; margin: 0; background: var(--surface-muted); padding: 3px; border: 0; border-radius: 12px; }
+.browse-start .browse-start-modes { justify-self: center; margin: 0; }
 .browse-entry { min-width: 0; position: relative; }
-.browse-entry .engine-tabs { width: fit-content; margin: 0 0 8px 8px; padding: 0; background: transparent; border: 0; border-radius: 8px; box-shadow: none; }
-.browse-entry .engine-tabs > button { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; }
-.browse-entry .engine-tabs > button[aria-checked="true"] { background: var(--surface-muted); box-shadow: none; }
+.browse-entry .engine-tabs { width: fit-content; margin: 0 0 8px 8px; background: transparent; }
+.browse-entry .engine-tabs > button { padding: 4px 10px; }
+.browse-entry .engine-tabs .hk-seg__indicator { background: var(--surface-muted); box-shadow: none; }
 .browse-entry .composer-area { margin: 0; }
-.browse-entry .composer { border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow-soft); }
+/* The border (and the engine line on top) comes from the shared composer rules. */
+.browse-entry .composer { border-radius: 18px; box-shadow: var(--shadow-soft); }
 .browse-entry .composer textarea { font-size: 17px; }
-.browse-entry .composer:focus-within { border-color: var(--accent); box-shadow: var(--composer-focus); }
-.browser-search { border: 1px solid var(--line); border-radius: 18px; background: var(--surface); padding: 12px 16px; gap: 12px; margin: 0; box-shadow: var(--shadow-soft); color: var(--muted); }
+.browse-entry .composer:focus-within { box-shadow: var(--composer-focus); }
+.browser-search { border: 1px solid var(--field-line); border-radius: 18px; background: var(--surface); padding: 12px 16px; gap: 12px; margin: 0; box-shadow: var(--shadow-soft); color: var(--muted); }
 .browser-search:focus-within { border-color: var(--accent); box-shadow: var(--composer-focus); }
+.look-scope[data-theme="light"] .browse-entry .composer,
+.look-scope[data-theme="light"] .browser-search { box-shadow: var(--shadow-composer), var(--shadow-soft); }
+.look-scope[data-theme="light"] .browse-entry .composer:focus-within,
+.look-scope[data-theme="light"] .browser-search:focus-within { box-shadow: var(--composer-focus); }
 .browser-search input { border: 0; box-shadow: none; background: transparent; padding: 8px 0; font: 400 17px/1.5 var(--font-ui); color: var(--text); outline: none; }
 .browser-search-go { width: 32px; height: 32px; min-width: 32px; padding: 6px; border-radius: 999px; }
 .start-credit { font: 400 12px/1.5 var(--font-ui); color: var(--muted); margin-top: 24px; }
@@ -24,10 +29,13 @@
 .home-recent > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
 .home-recent h2 { margin: 0; font: 600 .9375rem/1.4 var(--font-ui); }
 .home-recent .text-button { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; color: var(--muted); }
-.home-recent-list { display: grid; gap: 4px; }
-.home-recent-list > button { display: flex; gap: 12px; align-items: center; min-height: 44px; padding: 12px; border: 0; border-radius: 8px; color: var(--text); background: var(--surface-muted); text-align: left; }
-.home-recent-list > button:hover { background: var(--surface-raised); }
-.home-recent-list > button span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-recent-list { display: grid; gap: 12px; }
+.home-recent-work { min-width: 0; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.home-recent-project { display: flex; gap: 8px; align-items: center; width: 100%; min-height: 36px; padding: 8px 12px; border: 0; border-radius: 6px; color: var(--text); background: transparent; text-align: left; font: 600 15px/20px var(--font-ui); }
+.home-recent-project:hover { background: var(--surface-muted); }
+.home-recent-project > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-recent-project > svg { flex-shrink: 0; color: var(--muted); }
+.home-recent-project > time { flex-shrink: 0; font: 400 13px/20px var(--font-ui); color: var(--muted); }
 .browser-view { container-type: inline-size; container-name: web-tab; background: var(--bg); }
 .browser-toolbar { gap: 8px; padding: 8px 12px; min-height: 48px; background: var(--chrome-bg); border-color: var(--chrome-line); color: var(--chrome-text); }
 .browser-navigation { gap: 0; }
@@ -38,10 +46,6 @@
 .browser-ask { display: inline-flex; align-items: center; gap: 8px; padding-inline: 12px; white-space: nowrap; font-size: 13px; }
 .browser-ask[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
 .browser-more .popover { min-width: 220px; }
-.browser-conversation { flex-basis: clamp(300px, 32%, 460px); background: var(--bg); }
-.browser-conversation > header { padding: 16px; border-bottom: 1px solid var(--line); }
-.browser-conversation header strong { font-size: 15px; font-weight: 600; }
-.browser-conversation header small { font-size: 12px; margin-top: 4px; }
 .browser-blank { padding: 32px; gap: 24px; }
 .browser-blank h2 { font: 600 26px/32px var(--font-ui); margin: 0; }
 .browser-create-dialog { border-radius: 18px; box-shadow: var(--elev-3); background: var(--surface); color: var(--text); }
@@ -49,8 +53,6 @@
   .browser-toolbar { padding-inline: 8px; gap: 4px; }
   .browser-navigation .hig-icon-button { width: 28px; padding: 5px; }
   .browser-ask { padding: 6px 8px; }
-  .browser-content:has(.browser-conversation) .browser-viewport { display: none; }
-  .browser-conversation { flex: 1 1 100%; border-left: 0; }
   .browser-blank { padding: 16px; }
 }
 @media (max-width: 743px) {

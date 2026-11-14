@@ -15,8 +15,8 @@ export type NavSort = { key: NavSortKey; desc: boolean };
 /** What the navigation pane has selected: the "프로젝트" root, a folder, a tag (with those under it) or "태그 없음". */
 export type NavSelection = { kind: "root" } | { kind: "folder"; id: string } | { kind: "tag"; tag: string } | { kind: "untagged" };
 
-/** Section heads of the navigation pane that fold (the vault keeps its own fold). */
-export type NavSectionId = "now" | "shortcuts" | "projects" | "tags" | "views";
+/** Section heads of the sidebar that fold (the vault keeps its own fold); "usage" is the plan limits at its foot. */
+export type NavSectionId = "now" | "shortcuts" | "projects" | "tags" | "views" | "usage";
 
 /** prefs `navigator`: one object, every field optional (missing ones take the defaults). */
 export type NavigatorPrefs = {

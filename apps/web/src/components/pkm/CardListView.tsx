@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { failure } from "../../top-notice.ts";
 import { FORMAT_LABEL, type CardList, type PkmCard } from "@workbench/contracts";
 import { cardDate, groupCards, obsidianUrl, openObsidian, pictureUrl, thumbPath, type PkmTarget } from "../../pkm.ts";
 import { useDocs } from "../DocCards.tsx";
@@ -180,7 +181,7 @@ export function CardListView({ target }: { target: Exclude<PkmTarget, { kind: "n
   const attach = (card: PkmCard) => {
     if (card.kind !== "note") return;
     if (!card.id.endsWith(".md")) {
-      pkm.onToast("마크다운 노트만 요청에 붙일 수 있습니다.");
+      pkm.onToast(failure("마크다운 노트만 요청에 붙일 수 있습니다."));
       return;
     }
     setNotes((current) => (current.some((note) => note.path === card.id) ? current : [...current, { path: card.id, title: card.title }]));
@@ -213,7 +214,7 @@ export function CardListView({ target }: { target: Exclude<PkmTarget, { kind: "n
         .sort((a, b) => Number(b.id === (target.kind === "work" ? target.id : "")) - Number(a.id === (target.kind === "work" ? target.id : "")) || b.updatedAt - a.updatedAt)
         .slice(0, 8);
       if (target.kind === "work" && pins[target.id]?.includes(card.id)) {
-        items.push({ kind: "item", label: "이 작업에서 고정 풀기", icon: "pin", onSelect: () => void pkm.client.pin(target.id, card.id, false).catch((reason: Error) => pkm.onToast(reason.message)) });
+        items.push({ kind: "item", label: "이 작업에서 고정 풀기", icon: "pin", onSelect: () => void pkm.client.pin(target.id, card.id, false).catch((reason: Error) => pkm.onToast(failure(reason))) });
       } else if (works.length) {
         items.push({
           kind: "submenu",
@@ -229,7 +230,7 @@ export function CardListView({ target }: { target: Exclude<PkmTarget, { kind: "n
                 void pkm.client
                   .pin(work.id, card.id, !pinned)
                   .then(() => pkm.onToast(pinned ? `「${work.title}」에서 고정을 풀었습니다.` : `「${work.title}」에 고정했습니다. 그 작업의 새 세션이 이 노트 경로를 받습니다.`))
-                  .catch((reason: Error) => pkm.onToast(reason.message)),
+                  .catch((reason: Error) => pkm.onToast(failure(reason))),
             };
           }),
         });

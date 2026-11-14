@@ -99,7 +99,7 @@ type Runtime = {
   engineModel: string | null;
   engineEffort: string | null;
   /** Started with the agent browser's instructions in its system prompt. */
-  browser: boolean;
+  browser: string | null;
   input: InputQueue;
   query: Query;
   mapper: ClaudeTranscriptMapper;
@@ -518,7 +518,7 @@ export class ClaudeAdapter implements ProviderAdapter {
       effort: session.effort,
       engineModel: null,
       engineEffort: null,
-      browser: Boolean(browser),
+      browser,
       input,
       query: undefined as unknown as Query,
       mapper: new ClaudeTranscriptMapper(),
@@ -821,7 +821,7 @@ export class ClaudeAdapter implements ProviderAdapter {
     let current = this.runtimes.get(session.id);
     // The browser was switched since this process started. Its instructions are part of the system
     // prompt, so a new process resumes the same session with the new ones.
-    if (current && !current.turnActive && !current.children.hasActive() && current.browser !== Boolean(this.browser?.instructions(session))) {
+    if (current && !current.turnActive && !current.children.hasActive() && current.browser !== (this.browser?.instructions(session) ?? null)) {
       this.closeRuntime(current);
       current = undefined;
     }

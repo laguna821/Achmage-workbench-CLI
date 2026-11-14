@@ -37,8 +37,8 @@ export type PaneItem =
 
 /** A pane narrower than this is not usable (the input's controls stop fitting). */
 export const MIN_PANE = 360;
-/** The divider between the panes (its line is 1px; the rest is room to grab it). */
-export const DIVIDER = 7;
+/** The gap between panes: the window shows through it, and it is the handle to resize them. */
+export const DIVIDER = 8;
 export const MIN_PANE_HEIGHT = 220;
 export const MAX_PANES = 16;
 const MIN_RATIO = 0.2;

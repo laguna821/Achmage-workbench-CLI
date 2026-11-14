@@ -1,6 +1,5 @@
-/* Two panes side by side (Panes.tsx). One pane is the paper beside the sidebar as before; two are
-   two sheets on the desk with the desk showing between them. The focused sheet's header is ruled
-   underneath like the current tab (no side stripes). */
+/* The work surface (Panes.tsx). Each pane is one rounded sheet resting on the tinted window: one
+   pane fills the area, several leave the window showing in the 8px gap between them (DIVIDER). */
 
 .body > .panes {
   position: relative;
@@ -9,13 +8,20 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
-  background: var(--bg);
-  border-top: 1px solid var(--chrome-line);
+  /* A margin, not padding: panes are placed from the host's measured client box. */
+  margin: 0 var(--space-2) var(--space-2) 0;
 }
 
-.body.with-sidebar > .panes {
-  border-left: 1px solid var(--chrome-line);
-  border-top-left-radius: var(--r-lg);
+/* Without the sidebar beside it (closed, or laid over the work below 900px) the sheet keeps the
+   same gap from the window's left edge. */
+.body:not(.with-sidebar) > .panes {
+  margin-left: var(--space-2);
+}
+
+@media (max-width: 900px) {
+  .body.with-sidebar > .panes {
+    margin-left: var(--space-2);
+  }
 }
 
 .pane {
@@ -29,67 +35,68 @@
   display: none !important;
 }
 
-.group-tabs { display: flex; flex: 0 0 auto; min-width: 0; gap: 4px; align-items: center; padding: 4px 6px; border-bottom: 1px solid var(--line); background: var(--chrome-surface); }
-.group-tabs [role="tablist"] { display: flex; flex: 1; min-width: 0; overflow-x: auto; gap: 3px; scrollbar-width: thin; }
-.group-tab { display: inline-flex; flex: 0 0 auto; max-width: 250px; border: 1px solid transparent; border-radius: var(--r-sm); color: var(--muted); }
-.group-tab.active { background: var(--bg); color: var(--text); border-color: var(--line); }
+.group-tabs { display: flex; flex: 0 0 auto; min-width: 0; align-items: flex-end; }
+/* Positioned: tabs measure their places within the strip for the open/close motion. */
+/* No scrollbar: drawn inside the strip it covers the tabs. The strip still scrolls — the active tab
+   is brought into view, a wheel moves it sideways, the arrow keys walk the tabs. */
+.group-tabs [role="tablist"] { position: relative; display: flex; flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; align-items: flex-end; scrollbar-width: none; }
+.group-tabs [role="tablist"]::-webkit-scrollbar { display: none; }
+.group-tab { display: inline-flex; flex: 0 0 auto; max-width: 250px; }
 .group-tab [role="tab"] { display: flex; align-items: center; min-width: 0; gap: 6px; padding: 5px 6px 5px 8px; border: 0; background: none; color: inherit; font: inherit; font-size: var(--fs-meta); cursor: grab; }
 .group-tab-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .group-tab-close { display: grid; place-items: center; flex: 0 0 24px; border: 0; background: none; color: var(--faint); border-radius: var(--r-sm); }
 .group-tab-close:hover { color: var(--text); background: var(--surface); }
-.group-tab-new { flex: 0 0 auto; }
-.layout-problem { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; padding: 8px 16px; color: var(--text); background: var(--surface); border-bottom: 1px solid var(--line-strong); font-size: var(--fs-meta); }
+.group-tab-new { flex: 0 0 auto; align-self: center; }
 
-/* Flat positioning preserves mounted editors while the split tree changes. */
-.body > .panes.recursive { display: block; min-height: 0; overflow: hidden; }
+/* Flat positioning preserves mounted editors while the split tree changes. The host stays
+   unclipped so each sheet's shadow can fall on the window around it. */
+.body > .panes.recursive { display: block; min-height: 0; overflow: visible; }
 .panes.recursive > .pane, .panes.recursive > .pane-divider { position: absolute; }
-.panes.recursive.two > .pane { border: 1px solid var(--chrome-line); border-radius: var(--r-md) var(--r-md) 0 0; overflow: hidden; }
+.panes.recursive > .pane {
+  border: 1px solid var(--chrome-line);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  box-shadow: var(--shadow-worksurface);
+  overflow: hidden;
+}
 .pane-divider.vertical { cursor: row-resize; }
 .pane-divider.vertical::after { top: 50%; bottom: auto; left: 0; right: 0; width: auto; height: 2px; transform: translateY(-50%); }
 :root.pane-resizing-vertical, :root.pane-resizing-vertical * { cursor: row-resize !important; user-select: none !important; }
-.pane-narrow select { max-width: 180px; min-width: 0; font-size: var(--fs-micro); }
+.pane-narrow .ui-select { max-width: 180px; font-size: var(--fs-micro); }
 
-/* One pane is the host's paper (its rounded corner beside the sidebar shows through). */
-.panes:not(.two) > .pane {
-  background: transparent;
+/* A native web page is drawn above the DOM from the viewport's rectangle and cannot be clipped by
+   the sheet's radius; it stops short of the rounded bottom corners. */
+.panes.recursive > .pane .browser-viewport {
+  margin-bottom: var(--r-md);
+}
+
+/* Narrow windows use every pixel: no gap, no corners, no shadow. */
+@media (max-width: 743px) {
+  .body > .panes,
+  .body.with-sidebar > .panes,
+  .body:not(.with-sidebar) > .panes {
+    margin: 0;
+  }
+
+  .panes.recursive > .pane {
+    border-width: 1px 0 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .panes.recursive > .pane .browser-viewport {
+    margin-bottom: 0;
+  }
 }
 
 .pane > main,
-.pane > .split-host {
+.pane > .beside {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
 }
 
-/* Two sheets: the desk between them, each with its own edge and engine paper. */
-.body > .panes.two {
-  background: var(--chrome-bg);
-  border-top: none;
-  border-left: none;
-  border-radius: 0;
-}
-
-.panes.two > .pane {
-  border-top: 1px solid var(--chrome-line);
-  background: var(--bg);
-}
-
-.panes.two > .pane.left {
-  border-right: 1px solid var(--chrome-line);
-  border-top-right-radius: var(--r-lg);
-}
-
-.body.with-sidebar > .panes.two > .pane.left {
-  border-left: 1px solid var(--chrome-line);
-  border-top-left-radius: var(--r-lg);
-}
-
-.panes.two > .pane.right {
-  border-left: 1px solid var(--chrome-line);
-  border-top-left-radius: var(--r-lg);
-}
-
-/* Half a window: a document's name keeps its line, its controls go under it (as in "나란히"). */
+/* Half a window: a document's name keeps its line, its controls go under it (as beside a conversation). */
 .panes.two .document-view .doc-header {
   grid-template-columns: auto minmax(0, 1fr);
   row-gap: 6px;

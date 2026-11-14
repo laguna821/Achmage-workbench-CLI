@@ -1,5 +1,5 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
-import type { Artifact, Folder, NavigatorPrefs, NavLayout, NavSelection, NavShortcut, ProjectStage, ProjectSummary, Provider, Session, Work } from "@workbench/contracts";
+import type { Artifact, DocumentRemovalPlan, Folder, NavigatorPrefs, NavLayout, NavSelection, NavShortcut, ProjectStage, ProjectSummary, Provider, Session, Work } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
 import type { Look } from "../../appearance.ts";
 import type { State } from "../../state.ts";
@@ -13,19 +13,24 @@ import type { RowContext } from "./rows.tsx";
 // What the sidebar's panes share: the app's state and actions, the navigator's preferences and
 // data, the drag controller and the few things one pane asks of another (focus, selection).
 
-export type Toast = string | { text: string; action?: { label: string; run: () => void } };
+export type Toast = string | import("../../top-notice.ts").Note;
 
 export type SidebarActions = {
   openSession: (session: Session) => void;
+  closeWebTab?: (session: Session) => void;
   openWork: (work: Work) => void;
   openDoc: (artifact: Artifact) => void;
+  /** A document with this AI beside it (the view switches to it if the document is already open). */
+  openDocAgent?: (artifact: Artifact, agent: Session) => void;
   /** The start screen, for a new work (in a folder) — or a new session in a work right away. */
   newSession: (target: { folderId?: string | null; work?: Work; provider?: Provider }) => void;
   createFolder: (name: string, parentId: string | null) => Promise<void>;
   rename: (target: { kind: "folder" | "work" | "session"; id: string }, name: string) => void;
   move: (move: Move) => void;
   /** The menu for a row (built by the app, which knows every action). */
-  menuFor: (row: Row, x: number, y: number) => MenuRequest | null;
+  menuFor: (row: Row, x: number, y: number, removal?: DocumentRemovalPlan) => MenuRequest | null;
+  /** What "삭제" of a document would do now (the gateway's decision; the menu words its item by it). */
+  docRemoval?: (artifact: Artifact) => Promise<DocumentRemovalPlan>;
   openMenu: (request: MenuRequest) => void;
   /** Blank documents/designs and parallel sessions in this project, also from empty space. */
   creationMenu?: (work: Work | null, x: number, y: number, folderId?: string | null) => void;
@@ -98,6 +103,8 @@ export type NavShared = {
   moveProjects: (works: Work[], folderId: string | null) => void;
   /** A row's menu: the app's, with the navigator's items (바로가기, a folder's colour and delete). */
   rowMenu: (row: Row, x: number, y: number) => void;
+  /** A menu of the navigator's own under one of its buttons, on the shared Menu (above the lists and their scrollbars). */
+  menuUnder: (request: MenuRequest, button: HTMLElement) => void;
   toast: (message: Toast) => void;
   fail: (error: unknown) => void;
 };

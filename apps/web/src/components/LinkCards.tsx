@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { REMARK_BASE } from "../markdown/plugins.ts";
 import { LINK_REASON_LABEL, linkMaxHops, type LinkHop, type LinkTurn, type SessionLink } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import { accentStyle, useAppearance } from "../appearance.ts";
 import { durationText, goalLine, hopsText, participantName, useLinks, useNow } from "../links.ts";
 import { diagramComponents } from "./Diagram.tsx";
 import { EngineMark } from "./EngineMark.tsx";
+import { RequestText } from "./note/RequestText.tsx";
 import { Icon } from "./Icon.tsx";
 import { LinkDialog } from "./LinkDialog.tsx";
 import "../styles/links.css";
@@ -45,24 +46,9 @@ export function LinkHopBadge({ hop }: { hop: LinkHop }) {
   );
 }
 
-/** Another session's reply as this session received it: folded when long. */
-export function LinkRequestText({ text }: { text: string }) {
-  const long = text.length > 700 || text.split("\n").length > 14;
-  const [open, setOpen] = useState(false);
-  return (
-    <div className={`linked-request${long && !open ? " folded" : ""}`}>
-      <div className="user-bubble markdown">
-        <Markdown remarkPlugins={[remarkGfm]} components={DRAWN}>
-          {text}
-        </Markdown>
-      </div>
-      {long ? (
-        <button type="button" className="link linked-request-toggle" onClick={() => setOpen(!open)}>
-          {open ? "접기" : "받은 답 전체 보기"}
-        </button>
-      ) : null}
-    </div>
-  );
+/** Another session's reply as this session received it: folded when long, like a long request. */
+export function LinkRequestText({ text, reveal = 0 }: { text: string; reveal?: number }) {
+  return <RequestText text={text} received reveal={reveal} />;
 }
 
 /** Where a link ended, in each participant's conversation: rounds, why, how long. */
@@ -157,7 +143,7 @@ export function LinkView({ api, linkId, inDesktop, onClose }: { api: Api; linkId
               <span className="linked-turn-no">목표</span> 나 · {clock(link.startedAt)}
             </div>
             <div className="markdown">
-              <Markdown remarkPlugins={[remarkGfm]} components={DRAWN}>
+              <Markdown remarkPlugins={REMARK_BASE} components={DRAWN}>
                 {link.goal}
               </Markdown>
             </div>
@@ -177,7 +163,7 @@ export function LinkView({ api, linkId, inDesktop, onClose }: { api: Api; linkId
                 </div>
                 {turn.reply ? (
                   <div className="markdown">
-                    <Markdown remarkPlugins={[remarkGfm]} components={DRAWN}>
+                    <Markdown remarkPlugins={REMARK_BASE} components={DRAWN}>
                       {turn.reply}
                     </Markdown>
                   </div>

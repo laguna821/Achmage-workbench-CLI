@@ -154,7 +154,7 @@ const look = (palette: Palette, rest: Partial<Look> = {}): Look => ({
   ...rest,
 });
 
-export const APPEARANCE_VERSION = 3;
+export const APPEARANCE_VERSION = 6;
 
 const V2_DEFAULT_APPEARANCE: Appearance = {
   claude: {
@@ -167,10 +167,10 @@ const V2_DEFAULT_APPEARANCE: Appearance = {
     light: look(ACHMAGE_LIGHT, { fontSize: 16, lineHeight: 1.7, bubble: "soft" }),
     dark: look(CODEX_MIDNIGHT, { fontSize: 16, lineHeight: 1.7, bubble: "rail" }),
   },
-  v: APPEARANCE_VERSION,
+  v: 2,
 };
 
-// Neutral HIG roles. These match foundation.css; provider identity is carried by its label/icon.
+// Keep the shipped v3 palette as a migration baseline, not the current brand contract.
 const HIG_LIGHT: Palette = {
   bg: "#ffffff", surface: "#ffffff", text: "#000000", muted: "#6c6c70", line: "#d1d1d6",
   accent: "#1e6ef4", motion: "#008932", heading: "#000000", headingAlt: "#000000", strong: "#000000",
@@ -181,17 +181,42 @@ const HIG_DARK: Palette = {
   accent: "#5cb8ff", motion: "#4ad968", heading: "#ffffff", headingAlt: "#ffffff", strong: "#ffffff",
   link: "#5cb8ff", codeBg: "#2c2c2e", codeText: "#ffffff",
 };
+// v4: the Achmage 0.3 color roles on Apple system greys. Kept as the v5 migration baseline.
+const V4_LIGHT: Palette = {
+  ...HIG_LIGHT,
+  accent: ACHMAGE_LIGHT.accent, motion: ACHMAGE_LIGHT.motion,
+  heading: ACHMAGE_LIGHT.heading, headingAlt: ACHMAGE_LIGHT.headingAlt,
+  strong: ACHMAGE_LIGHT.strong, link: ACHMAGE_LIGHT.link,
+};
+const V4_DARK: Palette = {
+  ...HIG_DARK,
+  accent: "#7db2f0", motion: CODEX_MIDNIGHT.motion,
+  heading: CODEX_MIDNIGHT.heading, headingAlt: CODEX_MIDNIGHT.headingAlt,
+  strong: CODEX_MIDNIGHT.strong, link: "#7db2f0",
+};
+// v5 "떠 있는 작업면": the same roles on navy-tinted neutrals, so the reading surface shares the
+// navigation's colour temperature. Both engines read alike; the engine shows only as a mark.
+const BRAND_LIGHT: Palette = {
+  ...V4_LIGHT,
+  text: "#151b27", muted: "#566173", line: "#dce1e8", codeBg: "#f1f4f8", codeText: "#151b27",
+};
+const V5_DARK: Palette = {
+  ...V4_DARK,
+  bg: "#131820", surface: "#1b222c", text: "#e8ecf2", muted: "#a3adba", line: "#2c3541", codeBg: "#1b222c", codeText: "#e8ecf2",
+};
+// v6: headings, small ones too, are ink in dark as they are in light (v5 drew them link blue and teal).
+const BRAND_DARK: Palette = { ...V5_DARK, heading: V5_DARK.text, headingAlt: V5_DARK.text };
 const higLook = (palette: Palette): Look => look(palette, {
   font: "pretendard", fontSize: 17, lineHeight: 1.75, bubble: "soft", frame: false,
 });
 export const DEFAULT_APPEARANCE: Appearance = {
-  claude: { mode: "follow", light: higLook(HIG_LIGHT), dark: higLook(HIG_DARK) },
-  codex: { mode: "follow", light: higLook(HIG_LIGHT), dark: higLook(HIG_DARK) },
+  claude: { mode: "follow", light: higLook(BRAND_LIGHT), dark: higLook(BRAND_DARK) },
+  codex: { mode: "follow", light: higLook(BRAND_LIGHT), dark: higLook(BRAND_DARK) },
   v: APPEARANCE_VERSION,
 };
 export const NEUTRAL_LOOK: Record<Theme, Look> = {
-  light: higLook({ ...HIG_LIGHT, bg: "#f2f2f7" }),
-  dark: higLook(HIG_DARK),
+  light: higLook({ ...BRAND_LIGHT, bg: "#f3f5f8" }),
+  dark: higLook({ ...BRAND_DARK, bg: "#10151c", surface: "#181e27" }),
 };
 
 const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -232,8 +257,8 @@ function upgradeLook(stored: Partial<Look>, base: Look, legacy: (typeof LEGACY_D
 
 /** Quick choices for the right-click menu and the settings sheet. */
 export const ACCENT_SWATCHES: Record<Theme, string[]> = {
-  light: ["#1e6ef4", "#b5532f", "#0e8a6a", "#6b4fd8", "#c2410c", "#be185d", "#0891b2", "#1f2937"],
-  dark: ["#5cb8ff", "#f27aa4", "#e08a6b", "#2bc48a", "#a78bfa", "#fb923c", "#22d3ee", "#e5e7eb"],
+  light: ["#005bac", "#b5532f", "#0e8a6a", "#6b4fd8", "#c2410c", "#be185d", "#0891b2", "#1f2937"],
+  dark: ["#7db2f0", "#f27aa4", "#e08a6b", "#2bc48a", "#a78bfa", "#fb923c", "#22d3ee", "#e5e7eb"],
 };
 
 export const BG_SWATCHES: Record<Theme, string[]> = {
@@ -263,6 +288,20 @@ export function readAppearance(stored: unknown): Appearance {
         migrated.palette = palette;
       }
       given = migrated;
+    }
+    // A stored value moves only if it equals the default of the version it was saved under.
+    if ((version === 3 || version === 4) && isObject(given.palette)) {
+      const prior = version === 3 ? (theme === "dark" ? HIG_DARK : HIG_LIGHT) : (theme === "dark" ? V4_DARK : V4_LIGHT);
+      const palette = { ...given.palette };
+      for (const key of Object.keys(prior) as (keyof Palette)[]) {
+        if (sameValue(palette[key], prior[key])) palette[key] = base.palette[key];
+      }
+      given = { ...given, palette };
+    }
+    if (version === 5 && theme === "dark" && isObject(given.palette)) {
+      const palette = { ...given.palette };
+      for (const key of ["heading", "headingAlt"] as const) if (sameValue(palette[key], V5_DARK[key])) palette[key] = base.palette[key];
+      given = { ...given, palette: palette as Palette };
     }
     return { ...base, ...given, palette: { ...base.palette, ...(isObject(given.palette) ? given.palette : {}) } };
   };

@@ -1,19 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { EFFORT_LABEL, PROVIDER_LABEL, accessFor, type AccessMode, type AgentProfile, type Attachment, type CreateTarget, type DocRef, type EngineCommand, type Provider, type Session, type UiPrefs, type Work, type Workspace, type UpdateWorkspaceRequest } from "@workbench/contracts";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { failure, type Notify } from "../top-notice.ts";
+import { PROVIDER_LABEL, accessFor, type BrowserPage, type AccessMode, type AgentProfile, type Attachment, type CreateTarget, type DocRef, type EngineCommand, type Provider, type Session, type UiPrefs, type Work, type Workspace, type UpdateWorkspaceRequest } from "@workbench/contracts";
 import type { ReactNode } from "react";
 import type { MentionItem } from "../mention.ts";
 import { CreateChip, CreateTargetButton, stemOf } from "./CreateTarget.tsx";
-import { folderPath, isBusy, sessionsOf, type State } from "../state.ts";
+import { isBusy, sessionsOf, turnRunning, type State } from "../state.ts";
 import { sessionLabel, statusText, statusTone } from "../format.ts";
 import { Composer } from "./Composer.tsx";
+import { readDraft } from "../draft.ts";
 import { ChangeChip } from "./project/ChangeChip.tsx";
 import { EditableText } from "./EditableText.tsx";
 import { ModelPicker, type ModelChoice } from "./ModelPicker.tsx";
 import { AgentProfilePicker } from "./AgentProfilePicker.tsx";
 import { Icon } from "./Icon.tsx";
 import { MenuItem, Popover } from "./Popover.tsx";
-import { WorkspacePicker } from "./WorkspacePicker.tsx";
 import { EngineMark } from "./EngineMark.tsx";
 import { EngineTabs } from "./StartView.tsx";
 import { accentStyle, useAppearance } from "../appearance.ts";
@@ -30,12 +30,16 @@ import { LinkBar } from "./LinkBar.tsx";
 import { BrowserPill, type BrowserActions } from "./BrowserPill.tsx";
 import type { ModeProps } from "../workmodes.ts";
 import { VaultGuardPill } from "./pkm/VaultGuardPill.tsx";
-import { InsightPill } from "./pkm/InsightDialog.tsx";
 import { NoteChips } from "./pkm/NoteChips.tsx";
 import { paneDrag, usePaneActions, useNoteDrop } from "../panedrag.ts";
 import type { Api } from "../api.ts";
-import { OfficeFileMenu } from "./OfficeFileMenu.tsx";
+import { ConversationHead, StatusProp, WorktreeProp, useNoteMenu, type DocModes } from "./note/ConversationHead.tsx";
+import { RawNote } from "./note/RawNote.tsx";
 import { useDocumentReferences } from "../document-references.ts";
+import { NoteBanner } from "../conversation/NoteBanner.tsx";
+import { DocContext, useDocs } from "./DocCards.tsx";
+import { ChildWork } from "./companion/ChildWork.tsx";
+import { childWork } from "../companion.ts";
 
 export type WorkActions = {
   /** Send a request; while the engine works it steers into the turn or waits ("queue"). `notes`: vault notes read with it. */
@@ -58,6 +62,10 @@ export type WorkActions = {
   draw: (session: Session, brief: string, draw: DrawState) => Promise<boolean>;
   pickSession: (work: Work, exclude: Session | null) => Promise<Session | null>;
   openArtifact: (artifactId: string) => void;
+  /** A document opened from this conversation (a card, a 연결 row): beside it, in its tab. */
+  openBeside: (artifactId: string, proposalId?: string) => void;
+  /** A web page opened from this conversation's 연결: beside it. False: there is no conversation to put it beside. */
+  openPageBeside: (pageId: string) => boolean;
   openFile: (work: Work, path: string, workspaceId?: string) => Promise<void>;
   newDesign: (work: Work, preset: string, workspaceId?: string) => Promise<void>;
   interrupt: (session: Session) => void;
@@ -87,16 +95,11 @@ export type WorkActions = {
   openProject: (work: Work) => void;
   openSidebar: () => void;
   restore: (target: { kind: "folder" | "work" | "session"; id: string }) => void;
+  /** 보관함: where a removed document (and with it its AI) is brought back. */
+  openArchive: () => void;
 };
 
-/** Sizes a new design starts with (the gateway knows the same ids). */
-const DESIGN_PRESETS = [
-  { id: "square", label: "정사각 (SNS)", size: "1080×1080" },
-  { id: "portrait", label: "카드뉴스", size: "1080×1350" },
-  { id: "story", label: "세로 (스토리)", size: "1080×1920" },
-  { id: "wide", label: "가로 (썸네일·화면)", size: "1920×1080" },
-  { id: "a4", label: "A4 문서", size: "794×1123" },
-];
+const NO_PAGES: BrowserPage[] = [];
 
 /** Tabs that stay readable with many sessions: the active one and the latest few, the rest behind "+N". */
 const MAX_TABS = 5;
@@ -106,7 +109,8 @@ function StatusDot({ tone }: { tone: string }) {
 }
 
 /** Requests written while the engine worked, waiting for the turn to end ("끝나면 보내기"). */
-function QueuedList({ session, busy, actions }: { session: Session; busy: boolean; actions: WorkActions["queued"] }) {
+/** `readOnly` (an archived conversation, or its document removed): the requests stay visible, untouched, with no actions. */
+export function QueuedList({ session, busy, actions, readOnly = false }: { session: Session; busy: boolean; actions: WorkActions["queued"]; readOnly?: boolean }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   if (!session.queued.length) return null;
@@ -119,7 +123,7 @@ function QueuedList({ session, busy, actions }: { session: Session; busy: boolea
         <Icon name="bell" size={13} />{" "}
         {[
           waiting ? `끝나면 보낼 요청 ${waiting}개 · 차례대로 보냅니다` : null,
-          kept ? `남겨 둔 요청 ${kept}개 · 직접 보내거나 지울 수 있습니다` : null,
+          kept ? `남겨 둔 요청 ${kept}개 · ${readOnly ? "대화를 되돌리면 보낼 수 있습니다" : "직접 보내거나 지울 수 있습니다"}` : null,
         ]
           .filter(Boolean)
           .join(" · ")}
@@ -153,13 +157,14 @@ function QueuedList({ session, busy, actions }: { session: Session; busy: boolea
             </form>
           ) : (
             <span className="queued-text" title={entry.text}>
-              {entry.held ? <span className="queued-held">남겨 둠</span> : null}
+              {entry.origin ? <span className="queued-tag" title="휴대폰 메신저에서 보낸 요청">휴대폰</span> : null}
+              {entry.held ? <span className="queued-tag">남겨 둠</span> : null}
               {entry.text}
               {entry.refs.length ? <span className="muted"> · 문서 {entry.refs.length}</span> : null}
               {entry.attachments?.length ? <span className="muted"> · 첨부 {entry.attachments.length}</span> : null}
             </span>
           )}
-          <span className="queued-actions">
+          {readOnly ? null : <span className="queued-actions">
             <button type="button" className="link" onClick={() => actions.send(session, entry.id)} title={busy ? "하던 작업에 지금 전하기" : "지금 보내기"}>
               {busy ? "지금 끼어들기" : "지금 보내기"}
             </button>
@@ -176,7 +181,7 @@ function QueuedList({ session, busy, actions }: { session: Session; busy: boolea
             <button type="button" className="link danger" onClick={() => actions.cancel(session, entry.id)}>
               지우기
             </button>
-          </span>
+          </span>}
         </div>
       ))}
     </div>
@@ -289,9 +294,11 @@ export function WorkView({
   sidebarOpen,
   prefs,
   modes,
+  pages = NO_PAGES,
+  docModes,
 }: {
   api: Api;
-  onToast: (message: string) => void;
+  onToast: Notify;
   state: State;
   work: Work;
   actions: WorkActions;
@@ -307,16 +314,38 @@ export function WorkView({
   sidebarOpen?: boolean;
   /** UI prefs as they are now (the access last picked for each engine lives there). */
   prefs: UiPrefs;
-  /** The work screen's modes (while a document is open): their bar, and in "나란히" where the input goes. */
+  /** Where the conversation is shown: a window of its own, one of several panes, its tab's kept position. */
   modes?: ModeProps;
+  /** The shared browser's pages (a web tab's AI working for this conversation is named by its page). */
+  pages?: BrowserPage[];
+  /** 읽기 and 검토 of the project's open document, in the note's ⋯. */
+  docModes?: DocModes;
 }) {
   const { lookOf, openMenu } = useAppearance();
-  const references = useDocumentReferences(api, work.id, onToast);
+  const references = useDocumentReferences(api, work.id, useCallback((text: string) => onToast(failure(text)), [onToast]));
   const unseen = useUnseen();
   // Archived sessions leave the tabs (they stay in the archive), unless one is on screen.
   const listed = workSessions(state, work.id).filter((session) => !session.documentAgent && !session.pageAgent);
-  const shown = (work.activeSessionId && !state.sessions[work.activeSessionId]?.documentAgent && !state.sessions[work.activeSessionId]?.pageAgent && state.sessions[work.activeSessionId]) || listed[listed.length - 1] || sessionsOf(state, work.id).filter((session) => !session.documentAgent && !session.pageAgent).at(-1) || null;
+  // A document's or web tab's AI is shown beside its document or page; an archived one, or a
+  // document AI whose document was deleted, is shown here, as history.
+  const retiredAgent = (session: Session | undefined) => Boolean(session?.documentAgent && !state.artifacts[session.documentAgent.artifactId]);
+  const asConversation = (session: Session | undefined) => Boolean(session && ((!session.documentAgent && !session.pageAgent) || session.archivedAt || retiredAgent(session)));
+  const shown = (work.activeSessionId && asConversation(state.sessions[work.activeSessionId]) && state.sessions[work.activeSessionId]) || listed[listed.length - 1] || sessionsOf(state, work.id).filter((session) => !session.documentAgent && !session.pageAgent).at(-1) || null;
   const active = shown;
+  // A document AI whose document was deleted: history only, until the document comes back from 보관함.
+  const retiredDoc = active?.documentAgent && !state.artifacts[active.documentAgent.artifactId] ? active.documentAgent.artifactId : null;
+  const retired = retiredDoc
+    ? state.removedArtifacts[retiredDoc]
+      ? `${state.removedArtifacts[retiredDoc]!.removed?.kind === "unlisted" ? "목록에서 뺀" : "지운"} 문서 「${state.removedArtifacts[retiredDoc]!.name}」의 문서 AI 기록입니다. 문서를 되돌리면 이어서 쓸 수 있습니다.`
+      : "영구 삭제한 문서의 문서 AI 기록입니다. 읽기만 할 수 있습니다."
+    : null;
+  // A conversation the gateway takes nothing for: no input at all, one line in its place saying
+  // why, with its way out (되돌리기; for a removed document, 보관함).
+  const readOnly = retired
+    ? { text: retired, action: retiredDoc && state.removedArtifacts[retiredDoc] ? { label: "보관함에서 보기", run: actions.openArchive } : undefined }
+    : active?.archivedAt
+      ? { text: "보관한 대화입니다. 읽기만 할 수 있습니다.", action: { label: "되돌리기", run: () => actions.restore({ kind: "session", id: active.id }) } }
+      : null;
   const workspace = state.workspaces[active?.workspaceId ?? work.defaultWorkspaceId ?? ""];
   const cwd = workspace?.cwd ?? active?.worktree?.cwd ?? work.cwd;
   const members = listed.filter((entry) => !workspace || entry.workspaceId === workspace.id);
@@ -328,10 +357,8 @@ export function WorkView({
     return null;
   })();
   const transcript = active ? state.transcripts[active.id] : undefined;
-  const path = folderPath(state, work.folderId);
   const busy = isBusy(active ?? undefined);
-  // The engine itself is working (not waiting on the user's approval).
-  const working = active?.status === "starting" || active?.status === "running";
+  const working = turnRunning(active);
   const otherActive = Object.values(state.works).filter(
     (other) => other.id !== work.id && sessionsOf(state, other.id).some((session) => isBusy(session)),
   ).length;
@@ -347,10 +374,11 @@ export function WorkView({
   }, [active?.id]);
   const profile = active && resolvedRole && resolvedRole.sessionId === active.id && resolvedRole.profile?.id === active.profileId ? resolvedRole.profile : null;
   const access = accessFor(pickerProvider, active?.access ?? profile?.access, prefs, state.providers[pickerProvider]?.configuredAccess);
-  const [statusOpen, setStatusOpen] = useState(false);
-  const closeStatus = useCallback(() => setStatusOpen(false), []);
-  const [folderOpen, setFolderOpen] = useState(false);
-  const closeFolder = useCallback(() => setFolderOpen(false), []);
+  // "원문": the raw Markdown of this conversation instead of the reading view (per session shown).
+  const [rawFor, setRawFor] = useState<string | null>(null);
+  // The inline title being renamed (the session it belongs to, so another session never takes the draft).
+  const [titleEdit, setTitleEdit] = useState<string | null>(null);
+  const raw = Boolean(active && rawFor === active.id);
   const [renaming, setRenaming] = useState<string | null>(null);
   // "다른 세션에": the receiving session, and documents pinned to the next request.
   const [handoffTo, setHandoffTo] = useState<Session | null>(null);
@@ -364,7 +392,6 @@ export function WorkView({
     writeDrawChoice(next.choice);
     setDraw(next);
   };
-  const [docsOpen, setDocsOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   // Vault notes dropped on the input (from a note beside it): read-only references of the next request.
   const [notes, setNotes] = useState<{ path: string; title: string }[]>([]);
@@ -374,7 +401,10 @@ export function WorkView({
   });
   const panes = usePaneActions();
   // Capture this composer's owner, including when another pane gains focus during an upload.
-  const pending = usePendingFiles(file => actions.upload(file, active?.workId ?? work.id), modes?.draftKey ?? `work:${work.id}:${active?.id ?? "none"}`);
+  const draftKey = `work:${work.id}:${active?.id ?? "none"}`;
+  const pending = usePendingFiles(file => actions.upload(file, active?.workId ?? work.id), draftKey);
+  // Text typed before the conversation turned read-only is kept under its own key and comes back with the input.
+  const keptDraft = Boolean(readOnly && active && readDraft(`work:${work.id}:${active.id}`).trim());
   // "/" in the input: the active session's commands and skills, asked for when first typed.
   const [commandList, setCommandList] = useState<{ sessionId: string; items: EngineCommand[] } | null>(null);
   const slash = active
@@ -422,153 +452,29 @@ export function WorkView({
   const tabSessions = sessions.filter((session) => keep.has(session.id));
   const hiddenTabs = sessions.length - tabSessions.length;
 
-  // Folders flattened in tree order for the "move to" menu.
-  const folderOptions: { id: string; name: string; depth: number }[] = [];
-  const walk = (parentId: string | null, depth: number) => {
-    Object.values(state.folders)
-      .filter((folder) => folder.parentId === parentId)
-      .sort((a, b) => a.sort - b.sort)
-      .forEach((folder) => {
-        folderOptions.push({ id: folder.id, name: folder.name, depth });
-        walk(folder.id, depth + 1);
-      });
-  };
-  walk(null, 0);
-  // The input: in its place, or in "나란히" under both sides (or not here: the document has it).
-  const place = (input: ReactNode) => (modes?.slot === undefined ? input : modes.slot ? createPortal(input, modes.slot) : null);
+  // What this conversation's documents' and pages' AIs are doing: read here, opened beside their document or page.
+  const children = active && !readOnly ? childWork(state, active, pages) : [];
+  // A card in this conversation opens its document beside it, in this conversation's tab.
+  const docs = useDocs();
+  const docsHere = useMemo(() => ({ state: docs.state, actions: { ...docs.actions, openArtifact: actions.openBeside } }), [docs.state, docs.actions, actions.openBeside]);
+
+  const inherited = profile ? { name: profile.name, model: profile.model, effort: profile.effort } : undefined;
+  const noteMenu = useNoteMenu({ api, state, work, session: active, actions, cwd, pickFile, onToast, onRename: () => active && setTitleEdit(active.id), docModes });
+  const head = (
+    <ConversationHead state={state} work={work} session={active} actions={actions} cwd={cwd} inherited={inherited}
+      raw={raw} onRaw={(next) => setRawFor(next && active ? active.id : null)} menuButton={noteMenu.trigger("head")}
+      renaming={Boolean(active && titleEdit === active.id)} onRenaming={(on) => setTitleEdit(on && active ? active.id : null)} readOnly={Boolean(readOnly)} />
+  );
+  // While the head is out of view, the pinned band carries its essentials at its right end.
+  const band = active ? { title: sessionLabel(active), tail: <><StatusProp session={active} /><WorktreeProp session={active} actions={actions} />{noteMenu.trigger("band")}</> } : undefined;
+  // The raw note is fetched again when an item completes, and at the end of the turn.
+  const items = transcript?.items ?? [];
+  const settled = items.filter((item) => !(item.kind === "assistant" && item.streaming) && !(item.kind === "tool" && item.status === "running")).length;
 
   return (
     <main className="work-view" onContextMenu={(event) => openMenu(event, active?.provider ?? engine)}>
       {tabs}
-      <div className="column context-row">
-        <WorkspacePicker state={state} work={work} session={active} actions={actions} />
-        <div className="anchor breadcrumb-anchor">
-          <button type="button" className="breadcrumb" onClick={() => setFolderOpen(!folderOpen)} title="분류 옮기기" aria-expanded={folderOpen}>
-            {path.length ? path.map((folder) => folder.name).join(" / ") : <span className="muted">분류 없음</span>}
-          </button>
-          <span className="breadcrumb-sep" aria-hidden>
-            ›
-          </span>
-          <button type="button" className="breadcrumb project-link" onClick={() => actions.openProject(work)} title="프로젝트 페이지: 속성·기록·결정·세션·파일">
-            {work.title}
-          </button>
-          <Popover open={folderOpen} onClose={closeFolder} align="left">
-            <div className="menu-label">분류 옮기기 · 실제 파일 위치는 그대로입니다</div>
-            <MenuItem
-              active={!work.folderId}
-              onSelect={() => {
-                actions.moveWork(work, null);
-                closeFolder();
-              }}
-            >
-              분류 없음
-            </MenuItem>
-            {folderOptions.map((option) => (
-              <MenuItem
-                key={option.id}
-                active={work.folderId === option.id}
-                onSelect={() => {
-                  actions.moveWork(work, option.id);
-                  closeFolder();
-                }}
-              >
-                <span style={{ paddingLeft: option.depth * 14 }}>{option.name}</span>
-              </MenuItem>
-            ))}
-            {!folderOptions.length ? <div className="menu-label">작업 찾기에서 폴더를 만들 수 있습니다.</div> : null}
-          </Popover>
-        </div>
-        <div className="anchor">
-          <button type="button" className="ghost-button docs-button" onClick={() => setDocsOpen(!docsOpen)} aria-expanded={docsOpen} title="이 작업의 문서">
-            <Icon name="file" size={15} /><span>문서 {artifacts.length ? artifacts.length : ""}</span>
-          </button>
-          <Popover open={docsOpen} onClose={() => setDocsOpen(false)} align="left" className="docs-menu">
-            <div className="menu-label">이 작업의 문서</div>
-            {artifacts.map((artifact) => (
-              <MenuItem
-                key={artifact.id}
-                hint={`r${artifact.revision}`}
-                onSelect={() => {
-                  setDocsOpen(false);
-                  actions.openArtifact(artifact.id);
-                }}
-              >
-                {artifact.name}
-              </MenuItem>
-            ))}
-            {!artifacts.length ? <div className="menu-label">AI가 만든 문서나 연 파일이 여기에 모입니다.</div> : null}
-            <div className="menu-divider" />
-            <div className="menu-label">새 디자인</div>
-            {DESIGN_PRESETS.map((preset) => (
-              <MenuItem
-                key={preset.id}
-                hint={preset.size}
-                onSelect={() => {
-                  setDocsOpen(false);
-                  void actions.newDesign(work, preset.id, workspace?.id);
-                }}
-              >
-                {preset.label}
-              </MenuItem>
-            ))}
-            <div className="menu-divider" />
-          </Popover>
-        </div>
-        <OfficeFileMenu api={api} workId={work.id} workspaceId={workspace?.id} sessionId={active?.id} cwd={cwd}
-          sourceKey={work.id} pickFile={pickFile} onOpenArtifact={actions.openArtifact} onToast={onToast} />
-        {active ? (
-          <div className="anchor">
-            <button type="button" className="status-pill" onClick={() => setStatusOpen(!statusOpen)} aria-expanded={statusOpen}>
-              <StatusDot tone={statusTone(active)} />
-              <span>{statusText(active)}</span>
-              <span className="status-engine">
-                <EngineMark provider={active.provider} size={14} />
-                {PROVIDER_LABEL[active.provider]}
-              </span>
-              <span className="status-host">{state.hostLabel}</span>
-              <Icon name={statusOpen ? "chevronUp" : "chevronDown"} size={14} />
-            </button>
-            {active.worktree ? (
-              <span className="worktree-chip" title={`격리 사본: ${active.worktree.path}`}>
-                격리 사본 <code>{active.worktree.branch}</code>
-                <button type="button" className="text-button" onClick={() => actions.reviewWorktree(active)}>
-                  변경 검토
-                </button>
-              </span>
-            ) : null}
-            <Popover open={statusOpen} onClose={closeStatus} align="left" className="status-detail">
-              <dl>
-                <dt>세션</dt>
-                <dd>{sessionLabel(active)}</dd>
-                <dt>모델</dt>
-                <dd>{models.find((model) => model.id === active.model)?.label ?? active.model ?? "엔진 기본값"}</dd>
-                <dt>추론 강도</dt>
-                <dd>{active.effort ? (EFFORT_LABEL[active.effort] ?? active.effort) : "모델 기본값"}</dd>
-                {active.engineModel ? (
-                  <>
-                    <dt>최근 응답</dt>
-                    <dd className="mono">
-                      {active.engineModel}
-                      {active.engineEffort ? ` · ${EFFORT_LABEL[active.engineEffort] ?? active.engineEffort}` : ""}
-                    </dd>
-                  </>
-                ) : null}
-                <dt>실행 위치</dt>
-                <dd>{state.hostLabel}</dd>
-                <dt>작업 폴더</dt>
-                <dd className="mono">{cwd}</dd>
-                {active.lastError ? (
-                  <>
-                    <dt>마지막 오류</dt>
-                    <dd>{active.lastError}</dd>
-                  </>
-                ) : null}
-              </dl>
-            </Popover>
-          </div>
-        ) : null}
-      </div>
-
+      {noteMenu.layers}
       {sessions.length > 1 && !modes?.single && !modes?.groupedTabs ? (
         <nav className="column session-tabs" aria-label="세션">
           {tabSessions.map((session) =>
@@ -597,17 +503,15 @@ export function WorkView({
                 onContextMenu={(event) => openMenu(event, session.provider)}
                 title="두 번 눌러 이름 바꾸기 · 오른쪽 클릭으로 외형"
               >
-                {isBusy(session) ? <StatusDot tone={statusTone(session)} /> : <EngineMark provider={session.provider} size={14} />}
+                {isBusy(session) ? <StatusDot tone={statusTone(session)} /> : <span className="badged"><EngineMark provider={session.provider} size={14} />{unseen.has(session.id) ? <span className="new-badge" title="새 답" /> : null}</span>}
                 {sessionLabel(session)}
-                {unseen.has(session.id) ? <span className="new-dot" title="새 답" /> : null}
               </button>
             ),
           )}
           {hiddenTabs ? (
             <div className="anchor">
               <button type="button" className="session-tab more" onClick={() => setMoreOpen(!moreOpen)} title="이 작업의 다른 세션" aria-expanded={moreOpen}>
-                +{hiddenTabs}
-                {sessions.some((session) => unseen.has(session.id) && !tabSessions.includes(session)) ? <span className="new-dot" /> : null}
+                <span className="badged">+{hiddenTabs}{sessions.some((session) => unseen.has(session.id) && !tabSessions.includes(session)) ? <span className="new-badge" /> : null}</span>
               </button>
               <Popover open={moreOpen} onClose={closeMore} align="left">
                 <div className="menu-label">이 작업의 다른 세션</div>
@@ -635,34 +539,29 @@ export function WorkView({
         </nav>
       ) : null}
 
-      {work.archivedAt || archivedFolder || active?.archivedAt ? (
-        <div className="column archived-banner" role="status">
-          <Icon name="archive" size={15} />
-          <span>
-            {work.archivedAt ? "보관한 작업입니다." : archivedFolder ? `보관한 폴더(${archivedFolder.name}) 안의 작업입니다.` : "보관한 세션입니다."} 사이드바와 목록에는 보이지 않습니다.
-          </span>
-          <button
-            type="button"
-            className="link"
-            onClick={() =>
-              actions.restore(work.archivedAt ? { kind: "work", id: work.id } : archivedFolder ? { kind: "folder", id: archivedFolder.id } : { kind: "session", id: active!.id })
-            }
-          >
-            되돌리기
-          </button>
+      {/* Not read-only: the project (or its folder) is archived, or the record was imported. The same line, above the conversation. */}
+      {!readOnly && (work.archivedAt || archivedFolder) ? (
+        <div className="column note-banner-row">
+          <NoteBanner action={{ label: "되돌리기", run: () => actions.restore(work.archivedAt ? { kind: "work", id: work.id } : { kind: "folder", id: archivedFolder!.id }) }}>
+            {work.archivedAt ? "보관한 프로젝트입니다." : `보관한 폴더(${archivedFolder!.name}) 안의 프로젝트입니다.`} 사이드바와 목록에는 보이지 않습니다.
+          </NoteBanner>
+        </div>
+      ) : null}
+      {!readOnly && active?.importedHistory ? (
+        <div className="column note-banner-row">
+          <NoteBanner tail={<span className="muted" title={active.importedHistory.nativeSessionId}>{PROVIDER_LABEL[active.importedHistory.provider]}</span>}>
+            {active.importedHistory.kind === "archive" ? "가져온 과거 기록 · 새 요청을 보내면 이어서 작업합니다." : "가져온 기록에서 이어 쓰는 대화"}
+          </NoteBanner>
         </div>
       ) : null}
 
-      {active?.importedHistory ? (
-        <div className="column archived-banner" role="status">
-          <Icon name="archive" size={15} />
-          <span>{active.importedHistory.kind === "archive" ? "가져온 과거 기록 · 새 요청을 보내면 이어서 작업합니다." : "가져온 기록에서 이어 쓰는 대화"}</span>
-          <span className="muted" title={active.importedHistory.nativeSessionId}>{PROVIDER_LABEL[active.importedHistory.provider]}</span>
-        </div>
-      ) : null}
-
-      {active ? (
+      {active && raw ? (
+        <RawNote api={api} sessionId={active.id} head={head} pulse={`${items.length}:${settled}:${working}`} running={working} />
+      ) : active ? (
+        <DocContext.Provider value={docsHere}>
         <Transcript
+          head={head}
+          band={band}
           sessionId={active.id}
           items={transcript?.items ?? []}
           provider={active.provider}
@@ -675,25 +574,28 @@ export function WorkView({
             actions.answer(active, itemId, decision, response);
           }}
           onTrust={() => actions.setAccess(active, active.provider, "full")}
-          onFork={busy ? undefined : (itemId) => actions.fork(active, itemId)}
+          onFork={busy || readOnly ? undefined : (itemId) => actions.fork(active, itemId)}
+          readOnly={Boolean(readOnly)}
           focusItem={focusItem ?? null}
           onFocusDone={onFocusDone}
           position={modes?.uiState?.chatScroll}
           onPosition={(chatScroll) => modes?.onUiState?.({ chatScroll })}
         />
+        </DocContext.Provider>
       ) : (
         <div className="transcript">
           <div className="column transcript-inner">
+            {head}
             <div className="empty-hint">아래에서 엔진을 고르고 이 작업의 첫 요청을 보내세요.</div>
           </div>
         </div>
       )}
 
-      {place(<div className={`column composer-area${noteDrop.over ? " note-over" : ""}`} {...noteDrop.props}>
+      <div className={`column composer-area${noteDrop.over ? " note-over" : ""}`} {...noteDrop.props}>
         {active ? <LinkBar session={active} /> : null}
-        {active ? <QueuedList session={active} busy={busy} actions={actions.queued} /> : null}
-        {active && !handoffTo ? <ChangeChip session={active} omit={omitChanges} onOmit={setOmitChanges} pulse={changePulse} /> : null}
-        {modes?.bar}
+        <ChildWork lines={children} onOpen={(child) => actions.selectSession(work, child)} />
+        {active ? <QueuedList session={active} busy={busy} actions={actions.queued} readOnly={Boolean(readOnly)} /> : null}
+        {active && !handoffTo && !readOnly ? <ChangeChip session={active} omit={omitChanges} onOmit={setOmitChanges} pulse={changePulse} /> : null}
         {!active ? (
           <EngineTabs
             value={engine}
@@ -703,7 +605,8 @@ export function WorkView({
             }}
           />
         ) : null}
-        <Composer
+        {readOnly ? <NoteBanner action={readOnly.action}>{readOnly.text}{keptDraft ? ` 쓰던 요청은 그대로 두었습니다. ${retired ? "문서를 되돌리면" : "되돌리면"} 입력창에 다시 나옵니다.` : null}</NoteBanner> : <Composer
+          provider={handoffTo?.provider ?? pickerProvider}
           disabled={Boolean(workspace?.archivedAt || workspace?.removedAt)}
           mentions={
             // A drawing goes without documents, so "@" is off while drawing is on.
@@ -714,14 +617,14 @@ export function WorkView({
                   onPick: (item) => setAttached((current) => (current.some((entry) => entry.id === item.id) ? current : [...current, { id: item.id, mode: "review" }])),
                 }
           }
-          draftKey={modes?.draftKey ?? `work:${work.id}:${active?.id ?? "none"}`}
+          draftKey={draftKey}
           voiceScope={(handoffTo ?? active) ? { workId: (handoffTo ?? active)!.workId, sessionId: (handoffTo ?? active)!.id } : undefined}
           voiceReply={state.transcripts[(handoffTo ?? active)?.id ?? ""]?.items.filter(item => item.kind === "assistant" && !item.streaming).map(item => item.kind === "assistant" ? item.text : "").at(-1)}
           placeholder={draw.on ? "그릴 그림을 설명하세요" : planFirst ? "계획부터 세울 요청 (계획을 보고 진행할지 고릅니다)" : "이 작업에 이어서 요청하기"}
           busy={busy}
           waiting={working}
           steerable={working && !handoffTo}
-          autoFocus={modes?.slot === undefined && !modes?.paned}
+          autoFocus={!modes?.paned}
           left={
             <>
               <AccessPicker provider={pickerProvider} value={access} onChange={(mode) => actions.setAccess(active, pickerProvider, mode)} />
@@ -743,7 +646,6 @@ export function WorkView({
                 ownerLabel={state.browser?.window.kind === "agent" ? (state.sessions[state.browser.window.sessionId]?.purpose ?? null) : null}
               />
               <VaultGuardPill provider={pickerProvider} access={access} workId={work.id} />
-              <InsightPill sessionId={active?.id ?? null} />
               <CreateTargetButton
                 tools={state.tools}
                 api={api}
@@ -915,9 +817,9 @@ export function WorkView({
             </div>
             </>
           }
-        />
+        />}
         <div className="footer-line">
-          {noteDrop.over ? (
+          {noteDrop.over && !readOnly ? (
             "놓으면 이 요청에 노트가 읽기 전용으로 붙습니다."
           ) : otherActive && !sidebarOpen ? (
             <>
@@ -928,7 +830,7 @@ export function WorkView({
             </>
           ) : null}
         </div>
-      </div>)}
+      </div>
     </main>
   );
 }

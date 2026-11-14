@@ -8,6 +8,40 @@ export type ModelChoice = { model: string | null; effort: string | null };
 
 const effortLabel = (effort: string) => EFFORT_LABEL[effort] ?? effort;
 
+export type Inherited = ModelChoice & { name: string };
+
+/**
+ * The model and effort the NEXT request uses: the session's own choice, else the role's, else the
+ * engine's default. The input's picker and the conversation head both read it from here.
+ */
+export function nextModel(models: ModelOption[], value: ModelChoice, inherited?: Inherited) {
+  const modelId = value.model ?? inherited?.model ?? null;
+  const fallback = models.find((model) => model.isDefault) ?? models[0];
+  const known = modelId ? models.find((model) => model.id === modelId) : fallback;
+  // A saved/custom model can disappear from a refreshed list. Its id is still sent to the engine:
+  // never label that request as a different default model, or silently replace the selection.
+  const selected: ModelOption = known ?? {
+    id: modelId ?? "", label: modelId ?? "모델 선택", description: modelId ? "현재 모델 목록에 없는 선택입니다. ID는 그대로 다음 요청에 전달됩니다." : "모델 목록을 확인하거나 모델 ID를 직접 입력할 수 있습니다.",
+    efforts: [], defaultEffort: null, isDefault: false,
+  };
+  const effort = value.effort ?? inherited?.effort ?? selected.defaultEffort;
+  return { selected, modelId, known, fallback, effort, fromRole: Boolean(inherited && !value.model), effortLabel: effort ? effortLabel(effort) : null };
+}
+
+/** An engine's own name for a model, without a trailing "(default)" marker: the default is marked in the menu. */
+export const plainModelLabel = (label: string) => label.replace(/(\S)\s*[(（]\s*(?:기본|기본값|default|recommended|추천|권장)\s*[)）]\s*$/i, "$1");
+
+/**
+ * What the input's bar reads, the same for either engine: the model's plain name, and the level
+ * chosen (by the person, else by the role) — "기본" when none is, whether or not the engine says
+ * which level its default is. Null: this model has no levels.
+ */
+export function barLabels(models: ModelOption[], value: ModelChoice, inherited?: Inherited): { model: string; effort: string | null } {
+  const { selected } = nextModel(models, value, inherited);
+  const chosen = value.effort ?? inherited?.effort ?? null;
+  return { model: plainModelLabel(selected.label), effort: chosen ? effortLabel(chosen) : selected.efforts.length ? "기본" : null };
+}
+
 /**
  * Model and reasoning-effort pickers. Lists come from the engine itself (Codex `model/list`,
  * Claude Code initialize). `null` means "engine default"; changes apply from the next message.
@@ -24,7 +58,7 @@ export function ModelPicker({
   onChange: (next: ModelChoice) => void;
   onRefresh?: () => Promise<unknown>;
   /** A role supplies defaults; choosing a model/effort here makes it an explicit session value. */
-  inherited?: ModelChoice & { name: string };
+  inherited?: Inherited;
 }) {
   const [open, setOpen] = useState<"model" | "effort" | "custom" | null>(null);
   const [customId, setCustomId] = useState("");
@@ -38,27 +72,19 @@ export function ModelPicker({
     finally { setRefreshing(false); }
   };
   const close = useCallback(() => setOpen(null), []);
-  const modelId = value.model ?? inherited?.model ?? null;
-  const fallback = models.find((model) => model.isDefault) ?? models[0];
-  const known = modelId ? models.find((model) => model.id === modelId) : fallback;
-  // A saved/custom model can disappear from a refreshed list. Its id is still sent to the engine:
-  // never label that request as a different default model, or silently replace the selection.
-  const selected: ModelOption = known ?? {
-    id: modelId ?? "", label: modelId ?? "모델 선택", description: modelId ? "현재 모델 목록에 없는 선택입니다. ID는 그대로 다음 요청에 전달됩니다." : "모델 목록을 확인하거나 모델 ID를 직접 입력할 수 있습니다.",
-    efforts: [], defaultEffort: null, isDefault: false,
-  };
-  const effectiveEffort = value.effort ?? inherited?.effort ?? selected.defaultEffort;
+  const { selected, modelId, known, fallback } = nextModel(models, value, inherited);
+  const labels = barLabels(models, value, inherited);
   const description = [selected.description, selected.resolvedModel ? `실제 모델: ${selected.resolvedModel}` : null, inherited && !value.model ? `${inherited.name} 역할 기본값` : null].filter(Boolean).join(" · ");
   const modelOpen = open === "model" || open === "custom";
 
   return (
     <>
       <div className="anchor">
-        <button type="button" className="plain-select" onClick={() => { setOpen(modelOpen ? null : "model"); if (!modelOpen) void refresh(); }} aria-label={`${selected.label}${inherited && !value.model ? " · 역할" : ""}`} aria-haspopup={open === "custom" ? "dialog" : "menu"} aria-expanded={modelOpen} title={description || undefined}>
-          {selected.label}{inherited && !value.model ? <span className="model-inherited"> · 역할</span> : null}
+        <button type="button" className="plain-select" onClick={() => { setOpen(modelOpen ? null : "model"); if (!modelOpen) void refresh(); }} aria-label={`${labels.model}${inherited && !value.model ? " · 역할" : ""}`} aria-haspopup={open === "custom" ? "dialog" : "menu"} aria-expanded={modelOpen} title={description || undefined}>
+          <span className="plain-select-label">{labels.model}</span>{inherited && !value.model ? <span className="model-inherited"> · 역할</span> : null}
           <Icon name={modelOpen ? "chevronUp" : "chevronDown"} size={13} />
         </button>
-        <Popover open={modelOpen} onClose={close} placement="above" align="right" className="model-menu" role={open === "custom" ? "dialog" : "menu"} label={open === "custom" ? "모델 ID 직접 입력" : "모델 선택"}>
+        <Popover open={modelOpen} onClose={close} placement="above" align="right" fitWithinClippingAncestors className="model-menu" role={open === "custom" ? "dialog" : "menu"} label={open === "custom" ? "모델 ID 직접 입력" : "모델 선택"}>
           {open === "custom" ? <form className="model-custom-form" onSubmit={event => {
             event.preventDefault();
             if (composing.current || !customId.trim()) return;
@@ -73,7 +99,7 @@ export function ModelPicker({
           {error ? <div className="menu-label" role="alert">{error}</div> : null}
           {!known && modelId ? <div className="menu-label">현재 선택: {modelId} · 목록에서 확인되지 않음</div> : null}
           {!models.length && !refreshing ? <div className="menu-label">발견된 모델이 없습니다. 모델 ID를 직접 입력할 수 있습니다.</div> : null}
-          <MenuItem active={!value.model} hint={inherited?.model ?? fallback?.label} onSelect={() => { onChange({ model: null, effort: null }); close(); }}>
+          <MenuItem active={!value.model} hint={inherited?.model ?? (fallback ? plainModelLabel(fallback.label) : undefined)} onSelect={() => { onChange({ model: null, effort: null }); close(); }}>
             {inherited ? "역할 기본값" : "엔진 기본값"}
           </MenuItem>
           {models.map((model) => (
@@ -88,7 +114,7 @@ export function ModelPicker({
                 close();
               }}
             >
-              {model.label}
+              {plainModelLabel(model.label)}
             </MenuItem>
           ))}
           <div className="menu-divider" />
@@ -96,13 +122,14 @@ export function ModelPicker({
           </>}
         </Popover>
       </div>
-      {selected.efforts.length || effectiveEffort ? (
+      {labels.effort ? (
         <div className="anchor">
-          <button type="button" className="plain-select" onClick={() => setOpen(open === "effort" ? null : "effort")} aria-expanded={open === "effort"} title="추론 강도">
-            {effectiveEffort ? effortLabel(effectiveEffort) : "기본 강도"}
+          <button type="button" className="plain-select" onClick={() => setOpen(open === "effort" ? null : "effort")} aria-expanded={open === "effort"}
+            title={`추론 강도${!value.effort && !inherited?.effort && selected.defaultEffort ? ` · 기본은 ${effortLabel(selected.defaultEffort)}` : ""}`}>
+            {labels.effort}
             <Icon name={open === "effort" ? "chevronUp" : "chevronDown"} size={13} />
           </button>
-          <Popover open={open === "effort"} onClose={close} placement="above" align="right">
+          <Popover open={open === "effort"} onClose={close} placement="above" align="right" fitWithinClippingAncestors>
             <div className="menu-label">추론 강도</div>
             <MenuItem active={!value.effort} hint={inherited?.effort ? effortLabel(inherited.effort) : undefined} onSelect={() => { onChange({ model: value.model, effort: null }); close(); }}>
               {inherited?.effort ? "역할 기본 강도" : "기본 강도"}

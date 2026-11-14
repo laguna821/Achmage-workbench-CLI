@@ -37,6 +37,29 @@ const theme = EditorView.theme({
   ".cm-placeholder": { color: "var(--faint)" },
 });
 
+// The project note's look: the same note in source form — the reading size and family, headings at
+// the reading heading size and weight, Markdown marks dimmed, list text in the text colour.
+const noteHighlight = HighlightStyle.define([
+  { tag: [tags.heading1, tags.heading2, tags.heading3, tags.heading4, tags.heading5, tags.heading6], fontWeight: "600", color: "var(--heading)" },
+  { tag: tags.strong, fontWeight: "700", color: "var(--strong)" },
+  { tag: tags.emphasis, fontStyle: "italic" },
+  { tag: [tags.link, tags.url], color: "var(--link)" },
+  { tag: tags.monospace, fontFamily: "var(--mono)" },
+  { tag: [tags.processingInstruction, tags.meta, tags.contentSeparator], color: "var(--faint)" },
+  { tag: tags.quote, color: "var(--text-soft)" },
+]);
+const noteTheme = EditorView.theme({
+  "&": { backgroundColor: "transparent", color: "var(--text)", fontSize: "15px" },
+  ".cm-scroller": { fontFamily: "var(--e-font)", lineHeight: "1.7", padding: "0" },
+  ".cm-content": { caretColor: "var(--accent)", padding: "0" },
+  ".cm-line": { padding: "0" },
+  "&.cm-focused": { outline: "none" },
+  ".cm-cursor": { borderLeftColor: "var(--accent)", borderLeftWidth: "2px" },
+  ".cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection": { backgroundColor: "color-mix(in srgb, var(--accent) 24%, transparent) !important" },
+  ".cm-activeLine": { backgroundColor: "transparent" },
+  ".cm-placeholder": { color: "var(--faint)" },
+});
+
 function selectionOf(state: EditorState): EditorSelection {
   const range = state.selection.main;
   if (range.empty) return null;
@@ -62,6 +85,7 @@ export function MarkdownEditor({
   images,
   position,
   onPosition,
+  look = "document",
 }: {
   value: string;
   readOnly?: boolean;
@@ -76,6 +100,8 @@ export function MarkdownEditor({
   images?: ImageHandling | null;
   position?: TabUiState;
   onPosition?: (position: TabUiState) => void;
+  /** "note": the project note's source look (reading size, dimmed marks) instead of the document editor's. */
+  look?: "document" | "note";
 }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
@@ -110,10 +136,10 @@ export function MarkdownEditor({
           history(),
           keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
           markdown(),
-          syntaxHighlighting(highlight),
+          syntaxHighlighting(look === "note" ? noteHighlight : highlight),
           EditorView.lineWrapping,
-          theme,
-          placeholderExtension("내용을 입력하세요"),
+          look === "note" ? noteTheme : theme,
+          placeholderExtension(look === "note" ? "노트에 적을 것을 씁니다" : "내용을 입력하세요"),
           access.current.of([EditorState.readOnly.of(Boolean(readOnly)), EditorView.editable.of(!readOnly)]),
           imagePaste(() => callbacks.current.images ?? null),
           EditorView.updateListener.of((update) => {

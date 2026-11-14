@@ -137,7 +137,7 @@ export class Workspaces {
     if (this.store.getMeta("workspaces.version") === "1"
       && this.store.works().every((entry) => linked(entry.defaultWorkspaceId, entry.id))
       && this.store.sessions().every((entry) => linked(entry.workspaceId, entry.workId))
-      && this.store.artifacts().every((entry) => linked(entry.workspaceId, entry.workId) && entry.relativePath !== undefined)) return;
+      && this.store.artifacts().every((entry) => entry.removed || (linked(entry.workspaceId, entry.workId) && entry.relativePath !== undefined))) return;
     this.store.transaction(() => {
       const works = this.store.works();
       for (const work of works) {
@@ -154,7 +154,8 @@ export class Workspaces {
         this.store.saveSession({ ...session, workspaceId: workspace.id });
       }
       for (const artifact of this.store.artifacts()) {
-        if (linked(artifact.workspaceId, artifact.workId) && artifact.relativePath !== undefined) continue;
+        // A removed document keeps the identity it had (its project may be gone).
+        if (artifact.removed || (linked(artifact.workspaceId, artifact.workId) && artifact.relativePath !== undefined)) continue;
         // Let the longest root win, including an existing worktree; an external file gets a folder boundary.
         this.store.saveArtifact({ ...artifact, ...this.fileIdentity(artifact.workId, dirname(artifact.path), artifact.path, false) });
       }

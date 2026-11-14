@@ -3,6 +3,6 @@
 .new-document-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .new-document-dialog h2 { margin: 0; font-size: 19px; }
 .new-document-dialog label { display: grid; gap: 8px; margin: 20px 0; font-size: 13px; }
-.new-document-dialog input, .new-document-dialog select { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg, Canvas); color: inherit; }
+.new-document-dialog input, .new-document-dialog select { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid var(--field-line); border-radius: 6px; background: var(--bg, Canvas); color: inherit; }
 .new-document-dialog footer { display: flex; justify-content: flex-end; margin-top: 24px; }
 .new-document-path { display: block; overflow-wrap: anywhere; }

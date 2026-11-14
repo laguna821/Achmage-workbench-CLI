@@ -1,4 +1,6 @@
-import { resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { browserSessionName } from "@workbench/contracts";
 import {
@@ -9,6 +11,7 @@ import {
   browserOffNote,
   describeBrowserCommand,
   describeRef,
+  isNamedBrowserCommand,
   isPlainBrowserCommand,
   parseCliArgs,
   targetUrl,
@@ -31,8 +34,17 @@ describe("browser commands", () => {
     for (const command of ["cookie-list", "cookie-get", "localstorage-get", "sessionstorage-list", "state-save", "run-code", "route", "requests", "request", "tracing-start", "kill-all", "close-all", "delete-data", "attach", "install", "show"]) {
       expect(browserCommandKind(command)).toBe("blocked");
     }
-    // A command a newer CLI adds counts as acting on the page until it is known.
-    expect(browserCommandKind("frobnicate")).toBe("act");
+    // A command a newer CLI adds does not run until it is named here.
+    expect(browserCommandKind("frobnicate")).toBe("blocked");
+  });
+
+  it("names every command of the bundled CLI, and blocks those that read network traffic or debug the page", () => {
+    const help = JSON.parse(readFileSync(join(dirname(createRequire(import.meta.url).resolve("playwright-core/package.json")), "lib/tools/cli-client/help.json"), "utf8")) as { commands: Record<string, unknown> };
+    const unnamed = Object.keys(help.commands).filter((command) => !isNamedBrowserCommand(command));
+    expect(unnamed).toEqual([]);
+    for (const command of ["request-body", "request-headers", "response-body", "response-headers", "config-print", "network-state-set", "pause-at", "resume", "step-over", "tray"]) {
+      expect(browserCommandKind(command)).toBe("blocked");
+    }
   });
 
   it("reads the session flag in every form the CLI accepts", () => {

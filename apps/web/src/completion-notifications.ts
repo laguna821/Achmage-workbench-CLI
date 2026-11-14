@@ -1,5 +1,7 @@
 import { PROVIDER_LABEL, type AttentionEvent, type AttentionList, type AttentionPayload, type AttentionTarget, type SequencedEvent, type Session, type Snapshot } from "@workbench/contracts";
+import { createContext, useContext, useEffect, useId } from "react";
 import type { Api } from "./api.ts";
+import type { Layout, Pane } from "./panes.ts";
 
 /** Live turn-end events survive React batching and include hidden document chats. */
 export class CompletionNotifications {
@@ -13,6 +15,51 @@ export class CompletionNotifications {
     if (!enabled || !session || session.muted || session.archivedAt) return null;
     return { title: `답이 왔습니다 · ${PROVIDER_LABEL[session.provider]}`, body: `${title} — ${session.purpose}`, session };
   }
+}
+
+export type CompletionSurface = "inline" | "toast";
+/** An answer arriving on screen speaks for itself; anything else is announced. */
+export const completionSurface = (sessionId: string, visibleSessionIds: ReadonlySet<string>): CompletionSurface =>
+  visibleSessionIds.has(sessionId) ? "inline" : "toast";
+
+/** Conversations laid out on screen: each pane's active tab (only the focused pane while collapsed) and open panels. */
+export function sessionsOnScreen<V extends { kind: string }>(layout: Layout<V>, { narrow, sessionOf, panels }: { narrow: boolean; sessionOf: (pane: Pane<V>) => string | undefined; panels: Iterable<string> }) {
+  const ids = new Set(panels);
+  for (const pane of layout.panes) {
+    if (narrow && pane.id !== layout.focus) continue;
+    if (pane.view.kind !== "work") continue;
+    const id = sessionOf(pane);
+    if (id) ids.add(id);
+  }
+  return ids;
+}
+/** What the user can see right now: nothing while the window is hidden or unfocused. */
+export const visibleSessionIds = (onScreen: ReadonlySet<string>, windowShown: boolean): ReadonlySet<string> => windowShown ? onScreen : new Set();
+
+/** Panels beside the panes (web side chat, a document's conversation) report the session they show. */
+export class ShownPanels {
+  private readonly shown = new Map<string, string>();
+  private readonly listeners = new Set<() => void>();
+  private key = "";
+  subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
+  /** A stable string, so React re-renders only when the set changes. */
+  getSnapshot = () => this.key;
+  ids = () => [...new Set(this.shown.values())];
+  show(owner: string, sessionId: string | null) {
+    if (sessionId) this.shown.set(owner, sessionId); else this.shown.delete(owner);
+    const key = this.ids().sort().join(",");
+    if (key === this.key) return;
+    this.key = key; this.listeners.forEach(listener => listener());
+  }
+}
+export const ShownPanelsContext = createContext<ShownPanels | null>(null);
+export function useShownPanel(sessionId: string | null) {
+  const panels = useContext(ShownPanelsContext), owner = useId();
+  useEffect(() => {
+    if (!panels) return;
+    panels.show(owner, sessionId);
+    return () => panels.show(owner, null);
+  }, [panels, owner, sessionId]);
 }
 
 type AttentionApi = Pick<Api, "attention" | "readAttention" | "attentionTarget" | "claimAttention" | "attentionPresence">;

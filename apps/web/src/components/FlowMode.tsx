@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { failure } from "../top-notice.ts";
 import type { CalendarEventsView, CalendarFeedView, Timeline, Work } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import type { State } from "../state.ts";
@@ -208,7 +209,7 @@ export function FlowMode({ api, state, open, lens }: { api: Api; state: State; o
         remember(calendars, key, result);
         redraw((value) => value + 1);
       })
-      .catch((reason: Error) => pkm?.onToast(reason.message))
+      .catch((reason: Error) => pkm?.onToast(failure(reason)))
       .finally(() => setRefreshing(false));
   };
 

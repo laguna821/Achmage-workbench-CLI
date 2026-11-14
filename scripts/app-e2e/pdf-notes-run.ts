@@ -30,7 +30,7 @@ try {
     await wd.frame(null);
     const selector = `${pane} iframe.office-frame[src*="/${kind}.html"]`;
     if (!(await wd.findAll(selector)).length) {
-      const choice = await wd.waitFor(`${pane} select[aria-label="표시할 칸"]`);
+      const choice = await wd.waitFor(`${pane} button[aria-label="표시할 칸"]`);
       await wd.execute('arguments[0].focus()', choice);
       const key = kind === "pdf" ? "\ue011" : "\ue010";
       await wd.keys([{ type: "keyDown", value: key }, { type: "keyUp", value: key }, { type: "keyDown", value: KEY.enter }, { type: "keyUp", value: KEY.enter }]);

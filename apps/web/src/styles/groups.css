@@ -167,7 +167,7 @@
   max-width: 100%;
   height: 28px;
   padding: 0 10px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--field-line);
   border-radius: var(--r-md);
   background: var(--surface);
   color: var(--text);
@@ -336,7 +336,7 @@
   width: 96px;
   height: 26px;
   padding: 0 8px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--field-line);
   border-radius: var(--r-sm);
   background: var(--surface);
   color: var(--text);
@@ -733,7 +733,6 @@
 
 .now-card-head .engine-mark {
   flex: 0 0 auto;
-  color: var(--accent);
 }
 
 .now-card-work {
@@ -954,40 +953,3 @@
   }
 }
 
-/* ── Property values to pick (the project page's properties, Notion's select) ─────────────────── */
-.prop-pick {
-  display: inline-flex;
-  flex-direction: column;
-  gap: 6px;
-  width: min(100%, 420px);
-}
-
-.prop-choices {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.prop-choice {
-  display: inline-flex;
-  align-items: center;
-  height: 24px;
-  padding: 0 var(--space-2);
-  border: 1px solid color-mix(in srgb, var(--group, var(--line-strong)) 45%, var(--line));
-  border-radius: var(--r-xs);
-  background: color-mix(in srgb, var(--group, var(--muted)) 8%, var(--surface));
-  color: var(--text-soft);
-  font-size: var(--fs-meta);
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.prop-choice:hover {
-  border-color: color-mix(in srgb, var(--group, var(--accent)) 60%, var(--line));
-  color: var(--text);
-}
-
-/* The choices show under the field; the browser's own list arrow would repeat them. */
-.prop-pick .prop-input::-webkit-calendar-picker-indicator {
-  display: none !important;
-}

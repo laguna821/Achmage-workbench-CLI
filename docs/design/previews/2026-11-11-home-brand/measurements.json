@@ -1,0 +1,762 @@
+{
+  "scope": "Linux WebKitGTK, private X11 DPR1, fixture data only",
+  "screens": {
+    "empty-light": {
+      "logo": {
+        "width": 63.296875,
+        "kind": "wordmark brand-wordmark",
+        "visible": true,
+        "ink": "rgb(0, 16, 46)",
+        "arc": "rgb(0, 168, 163)"
+      },
+      "contentVisible": true,
+      "nav": {
+        "x": 288,
+        "height": 63,
+        "y": 90,
+        "background": "rgb(243, 245, 248)"
+      },
+      "buttons": [
+        {
+          "mode": "now",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 721,
+          "color": "rgb(0, 91, 172)",
+          "checked": "true",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "지금",
+          "visible": true
+        },
+        {
+          "mode": "projects",
+          "width": 88,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 787,
+          "color": "rgb(78, 89, 104)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "프로젝트",
+          "visible": true
+        },
+        {
+          "mode": "flow",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 877,
+          "color": "rgb(78, 89, 104)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "흐름",
+          "visible": true
+        },
+        {
+          "mode": "docs",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 943,
+          "color": "rgb(78, 89, 104)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "문서",
+          "visible": true
+        }
+      ],
+      "chrome": "#f3f5f8",
+      "mode": "now",
+      "viewport": {
+        "dpr": 1,
+        "height": 1000,
+        "width": 1440
+      },
+      "accent": "#005bac",
+      "heading": "#00102e",
+      "horizontalOverflow": false
+    },
+    "now-light": {
+      "logo": {
+        "width": 63.296875,
+        "kind": "wordmark brand-wordmark",
+        "visible": true,
+        "ink": "rgb(0, 16, 46)",
+        "arc": "rgb(0, 168, 163)"
+      },
+      "contentVisible": true,
+      "nav": {
+        "x": 288,
+        "height": 63,
+        "y": 90,
+        "background": "rgb(243, 245, 248)"
+      },
+      "buttons": [
+        {
+          "mode": "now",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 721,
+          "color": "rgb(0, 91, 172)",
+          "checked": "true",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "지금",
+          "visible": true
+        },
+        {
+          "mode": "projects",
+          "width": 88,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 787,
+          "color": "rgb(78, 89, 104)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "프로젝트",
+          "visible": true
+        },
+        {
+          "mode": "flow",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 877,
+          "color": "rgb(78, 89, 104)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "흐름",
+          "visible": true
+        },
+        {
+          "mode": "docs",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 943,
+          "color": "rgb(78, 89, 104)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "문서",
+          "visible": true
+        }
+      ],
+      "chrome": "#f3f5f8",
+      "mode": "now",
+      "viewport": {
+        "dpr": 1,
+        "height": 1000,
+        "width": 1440
+      },
+      "accent": "#005bac",
+      "heading": "#00102e",
+      "horizontalOverflow": false
+    },
+    "projects-light": {
+      "logo": {
+        "width": 63.296875,
+        "kind": "wordmark brand-wordmark",
+        "visible": true,
+        "ink": "rgb(0, 16, 46)",
+        "arc": "rgb(0, 168, 163)"
+      },
+      "contentVisible": true,
+      "nav": {
+        "x": 288,
+        "height": 63,
+        "y": 90,
+        "background": "rgb(243, 245, 248)"
+      },
+      "buttons": [
+        {
+          "mode": "now",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 721,
+          "color": "rgb(78, 89, 104)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "지금",
+          "visible": true
+        },
+        {
+          "mode": "projects",
+          "width": 88,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 787,
+          "color": "rgb(0, 91, 172)",
+          "checked": "true",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "프로젝트",
+          "visible": true
+        },
+        {
+          "mode": "flow",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 877,
+          "color": "rgb(78, 89, 104)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "흐름",
+          "visible": true
+        },
+        {
+          "mode": "docs",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 943,
+          "color": "rgb(78, 89, 104)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "문서",
+          "visible": true
+        }
+      ],
+      "chrome": "#f3f5f8",
+      "mode": "projects",
+      "viewport": {
+        "dpr": 1,
+        "height": 1000,
+        "width": 1440
+      },
+      "accent": "#005bac",
+      "heading": "#00102e",
+      "horizontalOverflow": false
+    },
+    "flow-light": {
+      "logo": {
+        "width": 63.296875,
+        "kind": "wordmark brand-wordmark",
+        "visible": true,
+        "ink": "rgb(0, 16, 46)",
+        "arc": "rgb(0, 168, 163)"
+      },
+      "contentVisible": true,
+      "nav": {
+        "x": 288,
+        "height": 63,
+        "y": 90,
+        "background": "rgb(243, 245, 248)"
+      },
+      "buttons": [
+        {
+          "mode": "now",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 721,
+          "color": "rgb(78, 89, 104)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "지금",
+          "visible": true
+        },
+        {
+          "mode": "projects",
+          "width": 88,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 787,
+          "color": "rgb(78, 89, 104)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "프로젝트",
+          "visible": true
+        },
+        {
+          "mode": "flow",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 877,
+          "color": "rgb(0, 91, 172)",
+          "checked": "true",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "흐름",
+          "visible": true
+        },
+        {
+          "mode": "docs",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 943,
+          "color": "rgb(78, 89, 104)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "문서",
+          "visible": true
+        }
+      ],
+      "chrome": "#f3f5f8",
+      "mode": "flow",
+      "viewport": {
+        "dpr": 1,
+        "height": 1000,
+        "width": 1440
+      },
+      "accent": "#005bac",
+      "heading": "#00102e",
+      "horizontalOverflow": false
+    },
+    "docs-light": {
+      "logo": {
+        "width": 63.296875,
+        "kind": "wordmark brand-wordmark",
+        "visible": true,
+        "ink": "rgb(0, 16, 46)",
+        "arc": "rgb(0, 168, 163)"
+      },
+      "contentVisible": true,
+      "nav": {
+        "x": 288,
+        "height": 63,
+        "y": 90,
+        "background": "rgb(243, 245, 248)"
+      },
+      "buttons": [
+        {
+          "mode": "now",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 721,
+          "color": "rgb(78, 89, 104)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "지금",
+          "visible": true
+        },
+        {
+          "mode": "projects",
+          "width": 88,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 787,
+          "color": "rgb(78, 89, 104)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "프로젝트",
+          "visible": true
+        },
+        {
+          "mode": "flow",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 877,
+          "color": "rgb(78, 89, 104)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "흐름",
+          "visible": true
+        },
+        {
+          "mode": "docs",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 943,
+          "color": "rgb(0, 91, 172)",
+          "checked": "true",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "문서",
+          "visible": true
+        }
+      ],
+      "chrome": "#f3f5f8",
+      "mode": "docs",
+      "viewport": {
+        "dpr": 1,
+        "height": 1000,
+        "width": 1440
+      },
+      "accent": "#005bac",
+      "heading": "#00102e",
+      "horizontalOverflow": false
+    },
+    "now-dark": {
+      "logo": {
+        "width": 63.296875,
+        "kind": "wordmark brand-wordmark",
+        "visible": true,
+        "ink": "rgb(227, 231, 237)",
+        "arc": "rgb(0, 168, 163)"
+      },
+      "contentVisible": true,
+      "nav": {
+        "x": 288,
+        "height": 63,
+        "y": 90,
+        "background": "rgb(16, 21, 28)"
+      },
+      "buttons": [
+        {
+          "mode": "now",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 721,
+          "color": "rgb(125, 178, 240)",
+          "checked": "true",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "지금",
+          "visible": true
+        },
+        {
+          "mode": "projects",
+          "width": 88,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 787,
+          "color": "rgb(174, 174, 178)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "프로젝트",
+          "visible": true
+        },
+        {
+          "mode": "flow",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 877,
+          "color": "rgb(174, 174, 178)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "흐름",
+          "visible": true
+        },
+        {
+          "mode": "docs",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 943,
+          "color": "rgb(174, 174, 178)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "문서",
+          "visible": true
+        }
+      ],
+      "chrome": "#10151c",
+      "mode": "now",
+      "viewport": {
+        "dpr": 1,
+        "height": 1000,
+        "width": 1440
+      },
+      "accent": "#7db2f0",
+      "heading": "#8cc4ff",
+      "horizontalOverflow": false
+    },
+    "narrow-light": {
+      "logo": {
+        "width": 26,
+        "kind": "brand-symbol brand-compact",
+        "visible": true,
+        "ink": "rgb(0, 16, 46)",
+        "arc": "rgb(0, 168, 163)"
+      },
+      "contentVisible": true,
+      "nav": {
+        "x": 0,
+        "height": 63,
+        "y": 90,
+        "background": "rgb(243, 245, 248)"
+      },
+      "buttons": [
+        {
+          "mode": "now",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 217,
+          "color": "rgb(0, 91, 172)",
+          "checked": "true",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "지금",
+          "visible": true
+        },
+        {
+          "mode": "projects",
+          "width": 88,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 283,
+          "color": "rgb(78, 89, 104)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "프로젝트",
+          "visible": true
+        },
+        {
+          "mode": "flow",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 373,
+          "color": "rgb(78, 89, 104)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "흐름",
+          "visible": true
+        },
+        {
+          "mode": "docs",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 439,
+          "color": "rgb(78, 89, 104)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "문서",
+          "visible": true
+        }
+      ],
+      "chrome": "#f3f5f8",
+      "mode": "now",
+      "viewport": {
+        "dpr": 1,
+        "height": 900,
+        "width": 720
+      },
+      "accent": "#005bac",
+      "heading": "#00102e",
+      "horizontalOverflow": false
+    },
+    "narrow-projects": {
+      "logo": {
+        "width": 26,
+        "kind": "brand-symbol brand-compact",
+        "visible": true,
+        "ink": "rgb(0, 16, 46)",
+        "arc": "rgb(0, 168, 163)"
+      },
+      "contentVisible": true,
+      "nav": {
+        "x": 0,
+        "height": 63,
+        "y": 90,
+        "background": "rgb(243, 245, 248)"
+      },
+      "buttons": [
+        {
+          "mode": "now",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 217,
+          "color": "rgb(78, 89, 104)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "지금",
+          "visible": true
+        },
+        {
+          "mode": "projects",
+          "width": 88,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 283,
+          "color": "rgb(0, 91, 172)",
+          "checked": "true",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "프로젝트",
+          "visible": true
+        },
+        {
+          "mode": "flow",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 373,
+          "color": "rgb(78, 89, 104)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "흐름",
+          "visible": true
+        },
+        {
+          "mode": "docs",
+          "width": 64,
+          "hit": true,
+          "height": 32,
+          "y": 105,
+          "size": "14px",
+          "x": 439,
+          "color": "rgb(78, 89, 104)",
+          "checked": "false",
+          "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+          "label": "문서",
+          "visible": true
+        }
+      ],
+      "chrome": "#f3f5f8",
+      "mode": "projects",
+      "viewport": {
+        "dpr": 1,
+        "height": 900,
+        "width": 720
+      },
+      "accent": "#005bac",
+      "heading": "#00102e",
+      "horizontalOverflow": false
+    }
+  },
+  "scrolled": {
+    "logo": {
+      "width": 63.296875,
+      "kind": "wordmark brand-wordmark",
+      "visible": true,
+      "ink": "rgb(227, 231, 237)",
+      "arc": "rgb(0, 168, 163)"
+    },
+    "contentVisible": true,
+    "nav": {
+      "x": 288,
+      "height": 63,
+      "y": 90,
+      "background": "rgb(16, 21, 28)"
+    },
+    "buttons": [
+      {
+        "mode": "now",
+        "width": 64,
+        "hit": true,
+        "height": 32,
+        "y": 105,
+        "size": "14px",
+        "x": 721,
+        "color": "rgb(125, 178, 240)",
+        "checked": "true",
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "label": "지금",
+        "visible": true
+      },
+      {
+        "mode": "projects",
+        "width": 88,
+        "hit": true,
+        "height": 32,
+        "y": 105,
+        "size": "14px",
+        "x": 787,
+        "color": "rgb(174, 174, 178)",
+        "checked": "false",
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "label": "프로젝트",
+        "visible": true
+      },
+      {
+        "mode": "flow",
+        "width": 64,
+        "hit": true,
+        "height": 32,
+        "y": 105,
+        "size": "14px",
+        "x": 877,
+        "color": "rgb(174, 174, 178)",
+        "checked": "false",
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "label": "흐름",
+        "visible": true
+      },
+      {
+        "mode": "docs",
+        "width": 64,
+        "hit": true,
+        "height": 32,
+        "y": 105,
+        "size": "14px",
+        "x": 943,
+        "color": "rgb(174, 174, 178)",
+        "checked": "false",
+        "font": "\"Pretendard Variable\", Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", \"Malgun Gothic\", system-ui, sans-serif",
+        "label": "문서",
+        "visible": true
+      }
+    ],
+    "chrome": "#10151c",
+    "mode": "now",
+    "viewport": {
+      "dpr": 1,
+      "height": 1000,
+      "width": 1440
+    },
+    "accent": "#7db2f0",
+    "heading": "#8cc4ff",
+    "horizontalOverflow": false
+  },
+  "passed": true
+}

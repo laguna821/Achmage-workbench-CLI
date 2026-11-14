@@ -142,10 +142,10 @@ describe("recursive panes", () => {
   };
   it("creates 2×2 rectangles and collapses only the closed branch", () => {
     const layout = four();
-    const { panes, dividers } = paneGeometry(treeOf(layout), 1007, 807);
+    const { panes, dividers } = paneGeometry(treeOf(layout), 1008, 808);
     expect(Object.values(panes)).toEqual(expect.arrayContaining([
-      { left: 0, top: 0, width: 500, height: 400 }, { left: 0, top: 407, width: 500, height: 400 },
-      { left: 507, top: 0, width: 500, height: 400 }, { left: 507, top: 407, width: 500, height: 400 },
+      { left: 0, top: 0, width: 500, height: 400 }, { left: 0, top: 408, width: 500, height: 400 },
+      { left: 508, top: 0, width: 500, height: 400 }, { left: 508, top: 408, width: 500, height: 400 },
     ]));
     expect(dividers).toHaveLength(3);
     const closed = closePane(layout, "a");
@@ -175,7 +175,8 @@ describe("recursive panes", () => {
     expect(restoreLayout({ ...changed, panes: [changed.panes[0], changed.panes[0]] }, isString, fallback)).toBe(fallback);
     const legacy = { panes: layout.panes.slice(0, 2), focus: "a" };
     expect(restoreLayout(legacy, isString, fallback).panes).toEqual(legacy.panes);
-    expect(minimumSize(root)).toEqual({ width: MIN_PANE * 2 + DIVIDER, height: 447 });
+    expect(DIVIDER).toBe(8);
+    expect(minimumSize(root)).toEqual({ width: MIN_PANE * 2 + 8, height: 448 });
   });
   it("cycles focus through every pane, preserving all other sessions", () => {
     const layout = four();

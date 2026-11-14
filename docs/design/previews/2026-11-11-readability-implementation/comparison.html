@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Workbench 가독성 개선 전후</title>
+<style>
+@font-face{font-family:Pretendard;src:url("../../../../apps/web/public/fonts/pretendard/PretendardVariable.ttf");font-weight:45 920}
+*{box-sizing:border-box}body{margin:0;background:#f3f5f8;color:#202733;font:15px/1.6 Pretendard,system-ui,sans-serif}header{padding:20px 28px;background:white;border-bottom:1px solid #d6dce4}h1{font-size:22px;margin:0 0 6px}p{margin:6px 0;color:#4e5968}label{margin-right:12px}select,button{font:inherit;padding:5px 10px;border:1px solid #b8c1cd;border-radius:6px;background:white;color:inherit}main{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:20px}figure{margin:0;min-width:0}figcaption{font-weight:600;padding-bottom:8px}.image{overflow:auto;border:1px solid #d6dce4;background:white;border-radius:8px}img{display:block;width:100%;height:auto}.actual img{width:1440px;max-width:none}.actual main{grid-template-columns:1fr}@media(max-width:900px){main{grid-template-columns:1fr}}
+</style>
+<header><h1>가독성 개선 전후</h1><p>Pretendard를 유지하면서 이름 공간, 글자 위계, 탐색 대비와 작업 재개 맥락을 보완했습니다.</p>
+<label>화면 <select id="screen"><option value="chat-light">대화 · 라이트</option><option value="chat-dark">대화 · 다크</option><option value="home-light">홈 · 이어서 하기</option><option value="project-light">프로젝트 개요</option><option value="semantic-specimen">제목과 강조 표본</option></select></label>
+<button id="size">원본 크기로 보기</button><p>동일 Linux WebKitGTK·1440×1000·DPR 1의 테스트 데이터 화면입니다. 제목·강조 표본만 동일 HTML을 주입했습니다. 창 아래의 완료 알림은 임시 상태입니다.</p></header>
+<main><figure><figcaption>개선 전 · 0.4.1 로컬 수정본</figcaption><div class="image"><img id="before" alt="개선 전 앱 화면"></div></figure><figure><figcaption>이번 개선</figcaption><div class="image"><img id="after" alt="개선 후 앱 화면"></div></figure></main>
+<script>
+const pick=document.querySelector("#screen"),button=document.querySelector("#size");
+function show(){document.querySelector("#before").src="../2026-11-11-sametone-comparison/current-"+pick.value+".png";document.querySelector("#after").src=pick.value+".png"}
+pick.addEventListener("change",show);button.addEventListener("click",()=>{const actual=document.body.classList.toggle("actual");button.textContent=actual?"화면에 맞춰 보기":"원본 크기로 보기"});show();
+</script>
+</html>

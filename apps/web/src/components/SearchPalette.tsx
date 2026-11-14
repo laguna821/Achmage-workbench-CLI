@@ -27,6 +27,8 @@ import { ago } from "../format.ts";
 import { sessionHidden } from "../tree.ts";
 import { EngineMark } from "./EngineMark.tsx";
 import { Icon, type IconName } from "./Icon.tsx";
+import { Select } from "./ui/Select.tsx";
+import { layerOwns } from "./ui/layers.ts";
 import { lookStyle, NEUTRAL_LOOK, useAppearance } from "../appearance.ts";
 import "../styles/search.css";
 
@@ -594,11 +596,12 @@ export function SearchPalette({
     );
   };
 
+  const scopeWorks = Object.values(state.works).filter(work => archived || !work.archivedAt);
   const vaultShown = Boolean(first && (scope === "all" || scope === "vault") && first.counts.vault > 0);
   const places = first ? first.worksTotal ?? first.groupsTotal - (vaultShown ? 1 : 0) : 0;
 
   return (
-    <div className="palette-backdrop" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
+    <div className="palette-backdrop" onPointerDown={(event) => event.target === event.currentTarget && !layerOwns(event.nativeEvent) && onClose()}>
       <div
         className={`palette look-scope fast-find${showPreview ? " show-search-preview" : ""}${content ? " search-content" : ""}`}
         data-theme={appTheme}
@@ -606,7 +609,7 @@ export function SearchPalette({
         role="dialog"
         aria-label={content ? "내용 찾기" : "찾기"}
         onKeyDown={(event) => {
-          if (event.nativeEvent.isComposing || composing || event.nativeEvent.keyCode === 229) return;
+          if (event.nativeEvent.isComposing || composing || event.nativeEvent.keyCode === 229 || layerOwns(event.nativeEvent)) return;
           const target = event.target as HTMLElement;
           if (target !== input.current && target.matches("input, select, button") && event.key !== "Escape") return;
           if (event.key === "Escape") {
@@ -680,10 +683,8 @@ export function SearchPalette({
           </div>
         ) : null}
         {!commandMode && <div className="search-tools">
-          <select aria-label="프로젝트 범위" value={workId ?? ""} onChange={event => setWorkId(event.target.value || null)}>
-            <option value="">모든 프로젝트</option>
-            {Object.values(state.works).filter(work => archived || !work.archivedAt).map(work => <option key={work.id} value={work.id}>{work.title}</option>)}
-          </select>
+          <Select label="프로젝트 범위" value={workId ?? ""} onChange={value => setWorkId(value || null)} searchable={scopeWorks.length > 8} searchPlaceholder="프로젝트 찾기"
+            options={[{ value: "", label: "모든 프로젝트" }, ...scopeWorks.map(work => ({ value: work.id, label: work.title, hint: work.archivedAt ? "보관됨" : undefined }))]} />
           <label><input type="checkbox" checked={filesOnly} onChange={event => setFilesOnly(event.target.checked)} /> 제목·별칭만</label>
           <details className="search-property-filter"><summary>{propertyFilter ? `${propertyFilter.key}${propertyFilter.value === undefined ? " 있음" : ` = ${propertyFilter.value}`}` : "속성 조건"}</summary>
             <div><input aria-label="정확한 속성 키" placeholder="속성 키 (콜론 포함 그대로)" value={propertyKey} onChange={event => setPropertyKey(event.target.value)} />

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { failure } from "../../top-notice.ts";
 import {
   LAYOUT_LABEL,
   VIEW_LAYOUTS,
@@ -66,7 +67,7 @@ export function ViewTabs({ mode, views, onViews, className = "" }: { mode: HomeV
   const update = (id: string, change: (view: HomeView) => HomeView) => onViews({ ...views, views: list.map((view) => (view.id === id ? change(view) : view)) });
   const add = (view: HomeView) => {
     setAdding(false);
-    if (full) return pkm?.onToast(`보기는 모드마다 ${VIEW_LIMITS.views}개까지입니다.`);
+    if (full) return pkm?.onToast(failure(`보기는 모드마다 ${VIEW_LIMITS.views}개까지입니다.`));
     onViews({ views: [...list, view], current: view.id });
   };
   const remove = (id: string) => {

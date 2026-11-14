@@ -40,7 +40,7 @@ const capture = async (name: string) => {
   console.log(file);
 };
 const waitIdle = async (p: Page) => {
-  await p.waitForFunction(() => document.querySelector(".status-pill")?.textContent?.includes("대기 중"), null, { timeout: 240_000 });
+  await p.waitForFunction(() => document.querySelector(".note-props")?.textContent?.includes("대기 중"), null, { timeout: 240_000 });
 };
 
 const toggleTheme = async () => {
@@ -65,9 +65,9 @@ try {
   await page.waitForSelector(".turn-user");
   await page.waitForTimeout(700);
   await capture("claude-waiting-light");
-  await page.waitForSelector(".turn-assistant .markdown", { timeout: 240_000 });
+  await page.waitForSelector(".turn-answer .markdown", { timeout: 240_000 });
   await capture("claude-streaming-light");
-  await page.waitForSelector(".turn-assistant .markdown:not(.streaming)", { timeout: 240_000 });
+  await page.waitForSelector(".turn-answer .markdown:not(.streaming)", { timeout: 240_000 });
   await waitIdle(page);
   await capture("claude-reply-light");
 

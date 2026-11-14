@@ -16,7 +16,9 @@ export function scopedSnapshot(source: Snapshot, grant: DeviceGrant): Snapshot {
     for (const folder of source.folders) if (folderIds.has(folder.id) && folder.parentId && !folderIds.has(folder.parentId)) { folderIds.add(folder.parentId); changed = true; }
   }
   const attention = source.attention?.events.filter(x => workIds.has(x.workId)) ?? [];
-  return { ...source, works, sessions, artifacts, folders: source.folders.filter(x => folderIds.has(x.id)),
+  // Removed documents follow the same scoping as live ones.
+  const removedArtifacts = source.removedArtifacts?.filter(x => workIds.has(x.workId));
+  return { ...source, works, sessions, artifacts, removedArtifacts, folders: source.folders.filter(x => folderIds.has(x.id)),
     workspaces: source.workspaces?.filter(x => workIds.has(x.workId)),
     proposals: source.proposals.filter(x => artifactIds.has(x.artifactId)),
     handoffs: source.handoffs.filter(x => sessionIds.has(x.sourceSessionId) && sessionIds.has(x.targetSessionId)),
@@ -30,14 +32,15 @@ export function scopedSnapshot(source: Snapshot, grant: DeviceGrant): Snapshot {
 export function scopedEvent(event: SequencedEvent, manager: SessionManager, grant: DeviceGrant): SequencedEvent | null {
   const work = (id: string | null | undefined) => !!id && grant.workIds.includes(id);
   const session = (id: string) => work(manager.view.sessions.get(id)?.workId);
-  const artifact = (id: string) => work(manager.documents.get(id)?.workId);
+  const artifact = (id: string) => work(manager.documents.find(id)?.workId);
   switch (event.type) {
     case "item.delta": case "item.upserted": return session(event.sessionId) ? event : null;
     case "session.upserted": return work(event.session.workId) ? event : null;
     case "work.upserted": return work(event.work.id) ? event : null;
     case "work.removed": return work(event.workId) ? event : null;
     case "workspace.upserted": return work(event.workspace.workId) ? event : null;
-    case "artifact.upserted": return work(event.artifact.workId) ? event : null;
+    case "artifact.upserted": case "artifact.removed": return work(event.artifact.workId) ? event : null;
+    case "artifact.purged": return work(event.workId) ? event : null;
     case "proposal.upserted": return artifact(event.proposal.artifactId) ? event : null;
     case "handoff.upserted": return session(event.handoff.sourceSessionId) && session(event.handoff.targetSessionId) ? event : null;
     case "link.upserted": return event.link.participants.every(session) ? event : null;

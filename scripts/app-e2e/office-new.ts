@@ -22,7 +22,8 @@ export async function officeNewScenario(ctx: Ctx) {
       return false;
     }, 15000)) throw new Error(`Missing command ${text}`);
   };
-  const fileMenu = async () => { await wd.frame(null); await clickText('.office-file-menu button[aria-label="문서 파일 메뉴"]', "파일"); };
+  // The conversation's file commands live in its note menu (⋯); new documents one level down.
+  const fileMenu = async () => { await wd.frame(null); await wd.click(await wd.waitFor('.pane[data-pane-active="true"] button[aria-label="노트 메뉴"]')); };
   const editA1 = async () => {
     if (!await until(() => wd.execute<boolean>('return !!document.querySelector("#univer-container canvas") && !document.body.innerText.includes("통합 문서를 여는 중");'), 45000)) throw new Error("Workbook did not load");
     await wd.click(await wd.waitFor('[aria-label="Go To"]'));
@@ -35,7 +36,7 @@ export async function officeNewScenario(ctx: Ctx) {
   if (selected.some((format) => !BLANK_OFFICE_DOCUMENTS.some((kind) => kind.format === format))) throw new Error("Unknown blank document format");
   for (const kind of BLANK_OFFICE_DOCUMENTS.filter((kind) => selected.includes(kind.format))) {
     const format = kind.format === "markdown" ? "md" : kind.format, marker = `NEW DOCUMENT ${format.toUpperCase()}`;
-    await fileMenu(); await clickText('.office-file-menu [role="menuitem"]', `${kind.label}.${kind.extension}`);
+    await fileMenu(); await clickText('.note-menu [role="menuitem"]', "새 문서"); await clickText('.note-menu [role="menuitem"]', `${kind.label}.${kind.extension}`);
     let artifact: Artifact | undefined;
     if (!await until(async () => { artifact = (await snapshot()).artifacts.find((a) => a.workId === work.id && a.format === kind.format); return !!artifact; }, 30000)) throw new Error(`Creation failed ${format}`);
     const source = artifact!;
@@ -95,7 +96,7 @@ export async function officeNewScenario(ctx: Ctx) {
   // EPUB has no original blank command. Exercise existing-file open through the same menu.
   const path = join(work.cwd, "Existing.epub"); writeFileSync(path, await epubFixture());
   await wd.execute(`const original=window.fetch, target=window.__TAURI_INTERNALS__.convertFileSrc("plugin:dialog|open","ipc");window.__filePickerCalls=[];window.__filePickerChoice=arguments[0];window.fetch=(url,init)=>{if(String(url)===target){window.__filePickerCalls.push(JSON.parse(init.body));return Promise.resolve(new Response(JSON.stringify(window.__filePickerChoice),{headers:{"Content-Type":"application/json","Tauri-Response":"ok"}}));}return original(url,init);};`, path);
-  await fileMenu(); await clickText('.office-file-menu [role="menuitem"]', "파일 열기…");
+  await fileMenu(); await clickText('.note-menu [role="menuitem"]', "파일 열기…");
   const epubFrame = await wd.waitFor('iframe.office-frame[title*="Existing.epub"]', 30000); await wd.frame(epubFrame);
   await wd.frame(await wd.waitFor("iframe.epub-frame", 30000));
   const opened = await until(() => wd.execute<boolean>('return document.body.textContent.includes("First paragraph.");'), 30000);

@@ -1,0 +1,324 @@
+{
+  "scope": "Actual old/new Linux native frontend; shared private fixture profile; no real AI calls",
+  "screens": {
+    "before-light": {
+      "previewOverflow": false,
+      "firstRow": {
+        "x": 213,
+        "height": 70,
+        "width": 502,
+        "y": 370
+      },
+      "body": {
+        "x": 201,
+        "height": 614,
+        "width": 1038,
+        "y": 248
+      },
+      "titleSize": "15px",
+      "listOverflow": false,
+      "dialog": {
+        "x": 200,
+        "height": 820,
+        "width": 1040,
+        "y": 80
+      },
+      "section": [
+        "conversation",
+        "conversation",
+        "conversation",
+        "conversation",
+        "conversation",
+        "conversation",
+        "other",
+        "other"
+      ],
+      "snippetSize": "13px",
+      "inside": true,
+      "list": {
+        "x": 201,
+        "height": 614,
+        "width": 519,
+        "y": 248
+      },
+      "viewport": {
+        "height": 1000,
+        "width": 1440
+      },
+      "preview": {
+        "x": 720,
+        "height": 614,
+        "width": 519,
+        "y": 248
+      },
+      "previewSize": "15px",
+      "visibleRows": 6
+    },
+    "after-light": {
+      "previewOverflow": false,
+      "firstRow": {
+        "x": 52.203125,
+        "height": 56,
+        "width": 727.375,
+        "y": 290
+      },
+      "body": {
+        "x": 44.203125,
+        "height": 738,
+        "width": 1351.59375,
+        "y": 188
+      },
+      "titleSize": "15px",
+      "listOverflow": false,
+      "dialog": {
+        "x": 43.203125,
+        "height": 920,
+        "width": 1353.59375,
+        "y": 40
+      },
+      "section": [
+        "conversation",
+        "conversation",
+        "conversation",
+        "conversation",
+        "conversation",
+        "conversation",
+        "other",
+        "other"
+      ],
+      "snippetSize": "13px",
+      "inside": true,
+      "list": {
+        "x": 44.203125,
+        "height": 738,
+        "width": 743.375,
+        "y": 188
+      },
+      "viewport": {
+        "height": 1000,
+        "width": 1440
+      },
+      "preview": {
+        "x": 787.578125,
+        "height": 738,
+        "width": 608.21875,
+        "y": 188
+      },
+      "previewSize": "15px",
+      "visibleRows": 10
+    },
+    "after-dark": {
+      "previewOverflow": false,
+      "firstRow": {
+        "x": 52.203125,
+        "height": 56,
+        "width": 727.375,
+        "y": 290
+      },
+      "body": {
+        "x": 44.203125,
+        "height": 738,
+        "width": 1351.59375,
+        "y": 188
+      },
+      "titleSize": "15px",
+      "listOverflow": false,
+      "dialog": {
+        "x": 43.203125,
+        "height": 920,
+        "width": 1353.59375,
+        "y": 40
+      },
+      "section": [
+        "conversation",
+        "conversation",
+        "conversation",
+        "conversation",
+        "conversation",
+        "conversation",
+        "other",
+        "other"
+      ],
+      "snippetSize": "13px",
+      "inside": true,
+      "list": {
+        "x": 44.203125,
+        "height": 738,
+        "width": 743.375,
+        "y": 188
+      },
+      "viewport": {
+        "height": 1000,
+        "width": 1440
+      },
+      "preview": {
+        "x": 787.578125,
+        "height": 738,
+        "width": 608.21875,
+        "y": 188
+      },
+      "previewSize": "15px",
+      "visibleRows": 10
+    },
+    "large-dark": {
+      "previewOverflow": false,
+      "firstRow": {
+        "x": 69.484375,
+        "height": 56,
+        "width": 1025.15625,
+        "y": 298.234375
+      },
+      "body": {
+        "x": 61.484375,
+        "height": 927.515625,
+        "width": 1893.03125,
+        "y": 196.234375
+      },
+      "titleSize": "15px",
+      "listOverflow": false,
+      "dialog": {
+        "x": 60.484375,
+        "height": 1109.515625,
+        "width": 1895.03125,
+        "y": 48.234375
+      },
+      "section": [
+        "conversation",
+        "conversation",
+        "conversation",
+        "conversation",
+        "conversation",
+        "conversation",
+        "other",
+        "other"
+      ],
+      "snippetSize": "13px",
+      "inside": true,
+      "list": {
+        "x": 61.484375,
+        "height": 927.515625,
+        "width": 1041.15625,
+        "y": 196.234375
+      },
+      "viewport": {
+        "height": 1206,
+        "width": 2016
+      },
+      "preview": {
+        "x": 1102.640625,
+        "height": 927.515625,
+        "width": 851.875,
+        "y": 196.234375
+      },
+      "previewSize": "15px",
+      "visibleRows": 13
+    },
+    "narrow-results": {
+      "previewOverflow": false,
+      "firstRow": {
+        "x": 17,
+        "height": 56,
+        "width": 686,
+        "y": 258
+      },
+      "body": {
+        "x": 9,
+        "height": 702,
+        "width": 702,
+        "y": 156
+      },
+      "titleSize": "15px",
+      "listOverflow": false,
+      "dialog": {
+        "x": 8,
+        "height": 884,
+        "width": 704,
+        "y": 8
+      },
+      "section": [
+        "conversation",
+        "conversation",
+        "conversation",
+        "conversation",
+        "conversation",
+        "conversation",
+        "other",
+        "other"
+      ],
+      "snippetSize": "13px",
+      "inside": true,
+      "list": {
+        "x": 9,
+        "height": 702,
+        "width": 702,
+        "y": 156
+      },
+      "viewport": {
+        "height": 900,
+        "width": 720
+      },
+      "preview": {
+        "x": 0,
+        "height": 0,
+        "width": 0,
+        "y": 0
+      },
+      "previewSize": "15px",
+      "visibleRows": 10
+    }
+  },
+  "narrowPreview": {
+    "previewOverflow": false,
+    "firstRow": {
+      "x": 0,
+      "height": 0,
+      "width": 0,
+      "y": 0
+    },
+    "body": {
+      "x": 9,
+      "height": 702,
+      "width": 702,
+      "y": 156
+    },
+    "titleSize": "15px",
+    "listOverflow": false,
+    "dialog": {
+      "x": 8,
+      "height": 884,
+      "width": 704,
+      "y": 8
+    },
+    "section": [
+      "conversation",
+      "conversation",
+      "conversation",
+      "conversation",
+      "conversation",
+      "conversation",
+      "other",
+      "other"
+    ],
+    "snippetSize": "13px",
+    "inside": true,
+    "list": {
+      "x": 0,
+      "height": 0,
+      "width": 0,
+      "y": 0
+    },
+    "viewport": {
+      "height": 900,
+      "width": 720
+    },
+    "preview": {
+      "x": 9,
+      "height": 702,
+      "width": 702,
+      "y": 156
+    },
+    "previewSize": "15px",
+    "visibleRows": 29
+  },
+  "passed": true
+}

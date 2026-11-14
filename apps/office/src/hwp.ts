@@ -4,17 +4,20 @@ import { createOfficePreferences, legacyOfficePanel } from "./preferences.ts";
 import { Events, Gateway, GatewayError, handshake, listen, post } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
 import { installMcp } from "./mcp.ts";
-import type { HwpFormat, MeasuredTab, MemoSnapshot } from "../../../packages/contracts/src/hwp.ts";
+import type { HwpFormat, HwpStructure, MeasuredTab, MemoSnapshot } from "../../../packages/contracts/src/hwp.ts";
 import { encodeHwpSave } from "../../../packages/contracts/src/hwp.ts";
 import type { OfficeOutputPlan, SvgJob } from "../../../packages/contracts/src/office-output.ts";
 import { prepareOutput, commitOutput, cancelOutput, printOutput } from "./output.ts";
-import { installHwpEnhancements } from "./hwp-enhancements.ts";
+import { installHwpEnhancements, pinStudioSkin } from "./hwp-enhancements.ts";
+import { closeAiDockByDefault, installHwpAiDock, stepAsideForStudioDialogs } from "./hwp-ai-dock.ts";
 
 // Ieum's HWP screen owns editing, tables, memos, selection and serialization. This bridge owns
 // the Workbench revision, writer grant and recovery copy. No Electron main process is involved.
 const init = await handshake();
 const gateway = new Gateway(init.token), events = new Events();
 const ai = mountOfficeAi(init, gateway, events);
+// The editor's own AI dock is the document's 문서 AI: the tab opens and closes it and hears its state.
+const dock = installHwpAiDock(document, { post });
 const id = init.artifact.id, path = init.artifact.path;
 const format: HwpFormat = /\.hwpx$/i.test(path) ? "hwpx" : "hwp";
 const state = { revision: init.artifact.revision, theme: init.theme, dirty: false, kept: false, recovered: false, trackingDropped: false, saveBlocked: false, password: false, memoOpen: false, epoch: 0 };
@@ -100,6 +103,8 @@ listen((message) => {
     void flush();
   }
   if (message.type === "office:keep") void keepNow().then(() => post({ type: "office:flushed", revision: null }));
+  if (message.type === "office:ai-panel-set") dock.set(message.open, message.draft);
+  if (message.type === "office:ai-draft-set") dock.put(message.draft);
 });
 
 const pendingFeature = async (): Promise<never> => { throw new Error("이 메뉴의 Workbench 연결을 준비 중입니다. 현재 문서와 편집 내용은 그대로 유지됩니다."); };
@@ -127,23 +132,23 @@ const hwpApi = {
     if (exportedFormat !== (saveTurn?.output?.format ?? format)) throw new Error("문서 형식이 바뀌었습니다.");
     return gateway.hwpTabs(id, saveTurn?.revision ?? state.revision, bytes, exportedFormat);
   },
-  commitSave: async (bytes: Uint8Array, tabs?: MeasuredTab[], options?: { memos?: MemoSnapshot[] | null }) => {
+  commitSave: async (bytes: Uint8Array, tabs?: MeasuredTab[], options?: { memos?: MemoSnapshot[] | null; structure?: HwpStructure | null }) => {
     const turn = saveTurn;
     if (!turn || init.readOnly) return { ok: false, error: "저장 요청을 다시 시작하세요." };
     try {
       if (turn.output) {
-        const saved = await commitOutput(turn.output.id, encodeHwpSave({ tabs, memos: options?.memos }, bytes));
+        const saved = await commitOutput(turn.output.id, encodeHwpSave({ tabs, memos: options?.memos, structure: options?.structure }, bytes));
         await recovery.drop(id).catch(() => undefined);
         state.kept = state.recovered = state.dirty = false;
         post({ type: "office:copied", artifactId: saved.artifactId });
         return { ok: true, path: saved.path };
       }
-      const saved = await gateway.saveHwp(id, turn.revision, bytes, { tabs, memos: options?.memos });
+      const saved = await gateway.saveHwp(id, turn.revision, bytes, { tabs, memos: options?.memos, structure: options?.structure });
       state.revision = saved.revision;
       state.epoch++;
       state.kept = state.recovered = state.dirty = false;
       await recovery.drop(id).catch(() => undefined);
-      post({ type: "office:saved", revision: saved.revision });
+      post({ type: "office:saved", revision: saved.revision, ...(saved.text === "unchecked" || saved.structure === "unchecked" ? { unchecked: true } : {}) });
       return { ok: true, path };
     } catch (error) { return reportFailure(error); }
     finally { if (saveTurn === turn) saveTurn = null; }
@@ -232,11 +237,16 @@ new MutationObserver(() => {
     let stop = () => {};
     const bind = () => {
       frame.contentWindow?.addEventListener("keydown", keys, true);
-      stop(); stop = installHwpEnhancements(frame, init.token);
+      stop();
+      const stopEnhancements = installHwpEnhancements(frame, init.token);
+      const stopAside = frame.contentDocument ? stepAsideForStudioDialogs(document, frame.contentDocument) : () => {};
+      stop = () => { stopEnhancements(); stopAside(); };
     };
     window.addEventListener("pagehide", () => stop(), { once: true });
     frame.addEventListener("load", bind); bind();
   }
 }).observe(document.documentElement, { childList: true, subtree: true });
 
+pinStudioSkin(localStorage);
+closeAiDockByDefault(localStorage);
 await import("@ieum/apps/hwp/src/renderer/main.tsx");

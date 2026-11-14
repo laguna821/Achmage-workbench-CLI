@@ -82,6 +82,69 @@
       "sourceSha256": "16c0cc6c6fdd888e7084ebe030e9bca573c44c1eb8e4564d7fad851c0317a70e",
       "changes": "Original fontdb metadata enumeration as an app-owned CLI helper; installed OS fonts only. Invalid OS weight (e.g. Apple Chancery 0) becomes CSS Regular 400.",
       "outputSha256": "7fe0ce44c7e0070db8eeac521d61ce4825afd7eab30b66c556b1bdc410d7b035"
+    },
+    {
+      "source": "apps/studio-host/src/ui/custom-select.ts",
+      "output": "custom-select.ts",
+      "sourceSha256": "4239a53ea3587a3924696a27185a76a677df1e300b037b66d82ba252ce137292",
+      "changes": "Runs on the studio frame's own document; one focus stop announced as a combobox with a listbox, active option and labels; arrows move without applying, Enter applies, type-ahead; the list is placed in the viewport and inside the dialog that clips it (upward when the space below is short, further left when wide) and closes on scroll or resize; follows values set in code and selects built later; hidden options are not drawn and do not set its width (the list is rebuilt as it opens); a width the page gives the select is the control's; an option's short form (data-short) is shown in the closed control with the full text as its title, and the control is then named with the whole meaning (data-spoken) after its label; removable.",
+      "outputSha256": "d83d75d35c6eebc451e18f4229bb46e9442971e52609940245185136e9652b9a"
+    },
+    {
+      "source": "apps/studio-host/src/styles/custom-select.css",
+      "output": "../../apps/office/src/ui-adapters/hangul-studio.css",
+      "sourceSha256": "2555d5aa0f5129511c128a7b6bfa426b838ff7f2e6d177959387a9c47a3cec75",
+      "changes": "Drop-down rules scoped to the HWP studio and drawn with the app's tokens, 28px controls, 8/12px radii and no blurred shadow.",
+      "outputSha256": "dc4d11fd21cbca42d0e1cdac0bc8a7d233aeda72d516f903ff31ecf0b222eeee"
+    },
+    {
+      "source": "apps/studio-host/src/styles/achmage-theme.css",
+      "output": "../../apps/office/src/ui-adapters/hangul-studio.css",
+      "sourceSha256": "c5b48a6b87c081a26535776f5bc8f06506bbcb92fdcd68d0300edfcde182ad96",
+      "changes": "The role map onto the studio's --ui-* tokens only; the values are the Workbench app tokens (not the CMDS colours), following the app's theme.",
+      "outputSha256": "dc4d11fd21cbca42d0e1cdac0bc8a7d233aeda72d516f903ff31ecf0b222eeee"
+    },
+    {
+      "source": "apps/studio-host/src/core/font-authoring-policy.ts",
+      "output": "font-authoring-policy.ts",
+      "sourceSha256": "22fe380561425a123a8ef75b8d810408043a887ff5c6d409eef26c81b683d4cf",
+      "changes": "Installed families are passed in from the gateway's catalogue as a lookup of name keys made once per catalogue (Korean and English names of the same HY face treated as one); the cheap name pattern is tested before the lookup; the 함초롬 fallback is exported (what a missing font is drawn like); used by apps/office/src/hwp-fonts.ts (fontVerdict, the one rule) on the studio's DOM.",
+      "outputSha256": "c23405f295e757907e74d1581e40554ac921ac856f28088121c1f0f617edfc1b"
+    },
+    {
+      "source": "assets/fonts/NotoSansKR-Regular.woff2",
+      "output": "fonts/NotoSansKR-Regular.woff2",
+      "sourceSha256": "3aa0d1d63f3b5b2a33053a41a34512eac63abfb1dc2112aeda04733656a1a6d9",
+      "license": "OFL-1.1 (fonts/OFL.txt)",
+      "outputSha256": "3aa0d1d63f3b5b2a33053a41a34512eac63abfb1dc2112aeda04733656a1a6d9"
+    },
+    {
+      "source": "assets/fonts/NotoSansKR-Bold.woff2",
+      "output": "fonts/NotoSansKR-Bold.woff2",
+      "sourceSha256": "dab3d492daa687386292cff1499225db580f931f800ee0d124eb0636378c6020",
+      "license": "OFL-1.1 (fonts/OFL.txt)",
+      "outputSha256": "dab3d492daa687386292cff1499225db580f931f800ee0d124eb0636378c6020"
+    },
+    {
+      "source": "assets/fonts/NotoSerifKR-Regular.woff2",
+      "output": "fonts/NotoSerifKR-Regular.woff2",
+      "sourceSha256": "c9a1e3ac69994d680883b53b1fd83d520733b704792522a932bfaa276117de45",
+      "license": "OFL-1.1 (fonts/OFL.txt)",
+      "outputSha256": "c9a1e3ac69994d680883b53b1fd83d520733b704792522a932bfaa276117de45"
+    },
+    {
+      "source": "assets/fonts/NotoSerifKR-Bold.woff2",
+      "output": "fonts/NotoSerifKR-Bold.woff2",
+      "sourceSha256": "504d6af6abb882acd912d47bafa383c4512a6c8c33635e4e8fb37111d9310941",
+      "license": "OFL-1.1 (fonts/OFL.txt)",
+      "outputSha256": "504d6af6abb882acd912d47bafa383c4512a6c8c33635e4e8fb37111d9310941"
+    },
+    {
+      "source": "licenses/OFL-1.1.txt",
+      "output": "fonts/OFL.txt",
+      "sourceSha256": "8eea8287e5876b539670cadb82e99f9a7afddec6f6730811be1daf25d2e9bcfd",
+      "changes": "Preceded by the Noto Sans KR / Noto Serif KR copyright lines and where the four files come from.",
+      "outputSha256": "52dde8e8adc1ab95d649260e9c7b53610c0ae13ac9606e7d7b51991c2e03d318"
     }
   ],
   "excludedPatches": {

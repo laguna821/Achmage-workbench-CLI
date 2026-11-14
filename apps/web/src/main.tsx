@@ -1,3 +1,5 @@
+// First: the rest of the app needs crypto.randomUUID while its modules load (plain http has none).
+import "./secure-context.ts";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ConnectedWorkbench } from "./ConnectedWorkbench.tsx";
@@ -10,6 +12,8 @@ import "./styles/hig-shell.css";
 import "./styles/hig-entry.css";
 import "./styles/hig-workspace.css";
 import "./styles/hig-chat.css";
+import "./styles/chat-note.css";
+import "./styles/motion.css";
 
 readToken();
 applyFirstPaintTheme();

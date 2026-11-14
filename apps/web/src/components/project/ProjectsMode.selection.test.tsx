@@ -42,11 +42,17 @@ it("keeps selection through filtering, explicitly archives the chosen set and re
 });
 it.each(["cards", "list", "board"] as const)("%s exposes real selection without opening or moving the project", async layout => {
   const f = await setup(layout);
+  // At rest there is no bulk bar: it comes with the first choice and goes with the last.
+  const mode = document.querySelector<HTMLElement>(".projects-mode")!;
+  expect(screen.queryByRole("group", { name: "프로젝트 다중 선택" })).toBeNull();
+  expect(mode.dataset.selecting).toBeUndefined();
   fireEvent.click(screen.getByRole("checkbox", { name: "가 선택" }));
   expect((screen.getByRole("checkbox", { name: "가 선택" }) as HTMLInputElement).checked).toBe(true);
+  expect(mode.dataset.selecting).toBe("");
   expect(f.openProject).not.toHaveBeenCalled(); expect(f.updateWork).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "현재 결과 모두 선택" }));
   expect(screen.getByText("3개 선택")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "선택 해제" }));
-  expect(screen.getByText("0개 선택")).toBeTruthy();
+  expect(screen.queryByRole("group", { name: "프로젝트 다중 선택" })).toBeNull();
+  expect(mode.dataset.selecting).toBeUndefined();
 });

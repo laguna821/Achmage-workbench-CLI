@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { failure } from "../../top-notice.ts";
 import type { PageTemplate } from "@workbench/contracts";
 import { Icon } from "../Icon.tsx";
 import { usePkm } from "./PkmContext.tsx";
@@ -29,7 +30,7 @@ export function TemplateDialog({ workId, parentId }: { workId: string; parentId:
         setTemplates(list);
         if (list.length === 1) choose(list[0]!);
       })
-      .catch((error: Error) => pkm.onToast(error.message));
+      .catch((error: Error) => pkm.onToast(failure(error)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workId]);
 
@@ -52,7 +53,7 @@ export function TemplateDialog({ workId, parentId }: { workId: string; parentId:
       close();
       pkm.openArtifact(artifact);
     } catch (error) {
-      pkm.onToast(error instanceof Error ? error.message : String(error));
+      pkm.onToast(failure(error));
     } finally {
       setBusy(false);
     }

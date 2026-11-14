@@ -1,5 +1,5 @@
 import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { REMARK_BASE } from "../markdown/plugins.ts";
 import type { TranscriptItem } from "@workbench/contracts";
 import { Icon } from "./Icon.tsx";
 import "../styles/plan.css";
@@ -41,7 +41,7 @@ export function PlanApproval({ item, onAnswer }: { item: Approval; onAnswer: (de
       <div className="approval-title">{item.title}</div>
       {item.detail ? (
         <div className="plan-approval-text markdown">
-          <Markdown remarkPlugins={[remarkGfm]}>{item.detail}</Markdown>
+          <Markdown remarkPlugins={REMARK_BASE}>{item.detail}</Markdown>
         </div>
       ) : (
         <div className="approval-reason">위 계획을 확인해 주세요. 진행하면 지금 권한으로 실행합니다.</div>

@@ -94,7 +94,7 @@ async function flow(provider: Provider) {
     const opened = await until(async () => (await sessions()).some((entry) => entry.workId === work.id && entry.id !== engine.id), 10_000);
     const forked = (await sessions()).find((entry) => entry.workId === work.id && entry.id !== engine.id)!;
     await page.waitForFunction(() => document.querySelector<HTMLTextAreaElement>(".composer-input")?.value === "둘째 질문", undefined, { timeout: 10_000 });
-    const shown = await page.locator(".transcript-inner").innerText();
+    const shown = await page.locator(".transcript-inner:visible").innerText();
     await shot("01-forked.png");
     pass(
       "새 갈래에 첫 요청과 답만 있고, 고른 요청이 입력창에 돌아옴",

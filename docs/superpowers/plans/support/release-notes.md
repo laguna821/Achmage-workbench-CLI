@@ -98,10 +98,10 @@ npm ci --ignore-scripts
 node scripts/check-fast-find-sources.mjs
 cargo test --locked --release --manifest-path third_party/fast-find/crates/ff10k-core/Cargo.toml --features golden -- --test-threads=1
 cargo build --locked --release --manifest-path apps/desktop/search-worker/Cargo.toml
+node node_modules/playwright-core/cli.js install --with-deps chromium --only-shell
 npm run build
 npm run typecheck
 npx vitest run
-node node_modules/playwright-core/cli.js install --with-deps chromium --only-shell
 node scripts/urgent-parallel-check.ts "$WB_EVIDENCE/urgent-ui"
 ```
 CI는 별도 CARGO_TARGET_DIR/CARGO_BUILD_JOBS=2와 WORKBENCH_SEARCH_WORKER_BIN을 지정한다(release.yml:104–112). npm build는 Ieum source fetch·vendor 검증·Office WASM/renderer 빌드까지 포함하므로 가벼운 단순 UI 명령이 아니다. 각 경계 변경 중에는 해당 tests만 먼저 실행한다. 예: sessions/office-sessions/document-registry/attachments/models, provider map, document-session/completion-notifications/layout-persistence. 최종 candidate에는 전체 필수 CI를 수행한다.

@@ -1,3 +1,4 @@
+import type { Provider } from "@workbench/contracts";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { filterMentions, insertMention, mentionTriggerAt, relocateMentions, type MentionItem, type MentionSpan } from "../mention.ts";
 import { pastedFiles } from "./Attachments.tsx";
@@ -46,7 +47,10 @@ export function Composer({
   voiceScope,
   voiceReply,
   tools,
+  provider,
 }: {
+  /** The engine this input sends to: drawn as the line above it, so it must match the engine chip inside. */
+  provider?: Provider;
   draftKey: string;
   placeholder: string;
   busy: boolean;
@@ -249,6 +253,7 @@ export function Composer({
     <div
       className="composer hig-composer"
       aria-label="메시지 작성"
+      data-provider={provider}
       data-phase={waiting ? "waiting" : undefined}
       data-drop={dropping ? "" : undefined}
       onDragOver={(event) => {

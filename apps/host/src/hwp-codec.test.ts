@@ -10,6 +10,8 @@ import { hwpMemosOf, hwpToText } from "../../../third_party/ieumoffice/file-pars
 import { sectionTailsOf } from "../../../third_party/ieumoffice/hwp/section-tails.ts";
 import { decodeHwpSave, openHwpBytes, prepareHwpSave } from "./hwp-codec.ts";
 import { hwpWasmPath } from "./hwp-resource.ts";
+import { hwpStructureOf } from "./hwp-structure.ts";
+import { notesWithBreaks } from "./hwp-census-fixture.ts";
 import { EventBus } from "./bus.ts";
 import { createEditorsServer, EditorGrants, officeEditorKind } from "./editors.ts";
 import { SessionManager } from "./sessions.ts";
@@ -123,5 +125,129 @@ describe("Ieum HWP save boundary", () => {
       const bypass = await fetch(`${origin}/api/artifacts/${artifact.id}/bytes?expectedRevision=2`, { method: "PUT", headers: { authorization: `Bearer ${readToken}` }, body: edited.slice().buffer });
       expect(bypass.status).toBe(423);
     } finally { doc.free(); }
+  });
+});
+
+describe("Hangul save fingerprint", () => {
+  const LOSS = /보존할 수 없는 내용이 있어 저장하지 않았습니다/;
+  const live = (bytes: Uint8Array) => new HwpDocument(new Uint8Array(bytes));
+  function withTable() {
+    const doc = document(); doc.createTable(0, 0, 0, 2, 2); return doc;
+  }
+  const tableOf = (doc: HwpDocument) => (JSON.parse(doc.getControls()) as { ctrlId: string; para: number; controlIndex: number }[]).find((control) => control.ctrlId === "tbl")!;
+
+  it("refuses bytes that lost a table the editor still holds, and names it", async () => {
+    const doc = withTable(), lossy = document();
+    try {
+      const original = doc.exportHwpx();
+      await expect(prepareHwpSave(original, lossy.exportHwpx(), "hwpx", { memos: [], structure: hwpStructureOf(doc) }))
+        .rejects.toMatchObject({ status: 422, code: "hwp_content_loss", message: expect.stringMatching(LOSS) });
+      await expect(prepareHwpSave(original, lossy.exportHwpx(), "hwpx", { memos: [], structure: hwpStructureOf(doc) })).rejects.toThrow(/표 1→0/);
+    } finally { doc.free(); lossy.free(); }
+  });
+
+  it("saves a deliberate deletion the editor reports, and a normal edit", async () => {
+    const doc = withTable();
+    try {
+      const original = doc.exportHwpx(), table = tableOf(doc);
+      doc.insertText(0, 0, 0, "고침 ");
+      expect(await prepareHwpSave(original, doc.exportHwpx(), "hwpx", { memos: [], structure: hwpStructureOf(doc) })).toBeInstanceOf(Buffer);
+      doc.deleteTableControl(0, table.para, table.controlIndex);
+      const saved = await prepareHwpSave(original, doc.exportHwpx(), "hwpx", { memos: [], structure: hwpStructureOf(doc) });
+      const back = live(saved);
+      try { expect(hwpStructureOf(back).objects.tbl ?? 0).toBe(0); } finally { back.free(); }
+    } finally { doc.free(); }
+  });
+
+  it("refuses bytes that lost a section", async () => {
+    const original = fixture("master-page-next-section.hwpx"), doc = live((await openHwpBytes(original, "hwpx")).bytes), lossy = document();
+    try {
+      expect(hwpStructureOf(doc).sections).toBe(2);
+      await expect(prepareHwpSave(original, lossy.exportHwpx(), "hwpx", { memos: [], structure: hwpStructureOf(doc) })).rejects.toThrow(/구역 2→1/);
+    } finally { doc.free(); lossy.free(); }
+  });
+
+  it("refuses an HWP save that lost memos, which the HWPX memo check does not cover", async () => {
+    const original = fixture("memo.hwp"), doc = live((await openHwpBytes(original, "hwp")).bytes), lossy = live((await openHwpBytes(original, "hwp")).bytes);
+    try {
+      const held = hwpStructureOf(doc);
+      expect(held.memos).toBeGreaterThan(0);
+      for (const memo of JSON.parse(lossy.getMemoList()) as { id: number }[]) lossy.removeMemo(memo.id);
+      await expect(prepareHwpSave(original, lossy.exportHwp(), "hwp", { structure: held })).rejects.toThrow(new RegExp(`메모 ${held.memos}→0`));
+      // The person removed them in the editor: the editor reports what it holds, the save goes ahead.
+      expect(await prepareHwpSave(original, lossy.exportHwp(), "hwp", { structure: hwpStructureOf(lossy) })).toBeInstanceOf(Buffer);
+    } finally { doc.free(); lossy.free(); }
+  });
+
+  it("keeps the file on disk byte-identical when the gateway refuses, and saves the next good attempt", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "wb-hwp-print-"));
+    const manager = new SessionManager(new Store(join(dir, "state.sqlite")), new EventBus(), { hostId: "h", hostLabel: "지문 검사", managedWorksDir: join(dir, "works"), dataDir: dir });
+    const work = manager.createWork({ title: "한글", cwd: join(dir, "project") }); mkdirSync(work.cwd, { recursive: true });
+    const doc = withTable(), lossy = document(), original = Buffer.from(doc.exportHwpx());
+    writeFileSync(join(work.cwd, "문서.hwpx"), original);
+    const artifact = manager.openFile(work.id, "문서.hwpx");
+    const writer = manager.documents.registry.open(artifact.id, { viewId: "hwp-writer", windowId: "one", claim: true });
+    const token = new EditorGrants(), auth = token.issue(artifact.id, { viewId: writer.view.viewId, writeToken: writer.writeToken });
+    const server = createEditorsServer(manager.documents, token, null); servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const save = (bytes: Uint8Array) => fetch(`${origin}/api/artifacts/${artifact.id}/hwp/save?revision=1`, { method: "POST", headers: { authorization: `Bearer ${auth}` }, body: encodeHwpSave({ memos: [], structure: hwpStructureOf(doc) }, bytes) });
+    try {
+      const refused = await save(lossy.exportHwpx());
+      expect(refused.status).toBe(422);
+      expect(await refused.json()).toMatchObject({ code: "hwp_content_loss", message: expect.stringMatching(/표 1→0/) });
+      expect(readFileSync(artifact.path)).toEqual(original); expect(manager.documents.get(artifact.id).revision).toBe(1);
+      doc.insertText(0, 0, 0, "고침 ");
+      expect((await save(doc.exportHwpx())).status).toBe(200);
+    } finally { doc.free(); lossy.free(); }
+  });
+
+  // N2-1: a tab or a line break in a footnote/endnote made every save of the document impossible.
+  it("saves a document with a tab and a line break in its notes through the save route, with the text checked", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "wb-hwp-notes-"));
+    const manager = new SessionManager(new Store(join(dir, "state.sqlite")), new EventBus(), { hostId: "h", hostLabel: "각주 탭", managedWorksDir: join(dir, "works"), dataDir: dir });
+    const work = manager.createWork({ title: "한글", cwd: join(dir, "project") }); mkdirSync(work.cwd, { recursive: true });
+    const original = await notesWithBreaks(), doc = new HwpDocument(original);
+    writeFileSync(join(work.cwd, "각주.hwpx"), original);
+    const artifact = manager.openFile(work.id, "각주.hwpx");
+    const writer = manager.documents.registry.open(artifact.id, { viewId: "hwp-writer", windowId: "one", claim: true });
+    const token = new EditorGrants(), auth = token.issue(artifact.id, { viewId: writer.view.viewId, writeToken: writer.writeToken });
+    const server = createEditorsServer(manager.documents, token, null); servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    try {
+      doc.insertText(0, 0, 0, "고침 ");
+      const saved = await fetch(`${origin}/api/artifacts/${artifact.id}/hwp/save?revision=1`, { method: "POST", headers: { authorization: `Bearer ${auth}` }, body: encodeHwpSave({ memos: memos(doc), structure: hwpStructureOf(doc) }, doc.exportHwpx()) });
+      expect(saved.status).toBe(200);
+      expect(await saved.json()).toMatchObject({ revision: 2, text: "checked" });
+    } finally { doc.free(); }
+  });
+
+  it("saves an HWP as HWPX with the live report: duplicate page-number settings in one paragraph are one setting", async () => {
+    // memo-source.hwp holds 8 page-number-position controls in one paragraph; HWPX keeps one per paragraph.
+    const original = fixture("memo-source.hwp"), doc = live((await openHwpBytes(original, "hwp")).bytes);
+    try {
+      const report = hwpStructureOf(doc);
+      expect(await prepareHwpSave(original, doc.exportHwpx(), "hwpx", { memos: memos(doc), structure: report }, "save", "hwp")).toBeInstanceOf(Buffer);
+      expect(await prepareHwpSave(original, doc.exportHwp(), "hwp", { memos: memos(doc), structure: report })).toBeInstanceOf(Buffer);
+    } finally { doc.free(); }
+  }, 30_000);
+
+  it("tells the person the original is kept and Save As can keep a copy", async () => {
+    const doc = withTable(), lossy = document();
+    try {
+      await expect(prepareHwpSave(doc.exportHwpx(), lossy.exportHwpx(), "hwpx", { memos: [], structure: hwpStructureOf(doc) }))
+        .rejects.toThrow(/표 1→0.*원본 파일은 그대로입니다.*다른 이름으로 저장/);
+    } finally { doc.free(); lossy.free(); }
+  });
+
+  it("leaves recovery drafts alone and refuses a malformed structure in the request", async () => {
+    const doc = withTable(), lossy = document();
+    try {
+      await expect(prepareHwpSave(doc.exportHwpx(), lossy.exportHwpx(), "hwpx", { structure: hwpStructureOf(doc) }, "recovery")).resolves.toBeInstanceOf(Buffer);
+      const framed = Buffer.from(encodeHwpSave({ structure: { ...hwpStructureOf(doc), sections: -1 } }, Buffer.from([1, 2, 3])));
+      expect(() => decodeHwpSave(framed)).toThrow(/문서 구조 정보가 올바르지 않습니다/);
+      expect(decodeHwpSave(Buffer.from(encodeHwpSave({ structure: hwpStructureOf(doc) }, Buffer.from([1, 2, 3])))).metadata.structure?.objects.tbl).toBe(1);
+    } finally { doc.free(); lossy.free(); }
   });
 });

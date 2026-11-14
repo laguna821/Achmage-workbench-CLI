@@ -3,14 +3,21 @@ import { isUnseen } from "@workbench/contracts";
 import { projectMatcher, queryProject } from "../../project-query.ts";
 import type { State } from "../../state.ts";
 import { folderHidden, workHidden } from "../../tree.ts";
+import { DIVIDER, MIN_PANE } from "../../panes.ts";
 
 // The navigator as plain data (no React): the preferences it keeps, the projects a selection lists
 // in which order and under which group heads, folder counts, the tag tree and the shortcuts.
 // Notebook Navigator's rules where they apply: a folder lists its own projects, or those of its
 // subfolders too ("하위 포함"); pinned ones come first; dates group into 오늘·어제·이번 주….
 
-/** The desktop compact breakpoint; advanced layouts remain an explicit choice. */
-export const WIDE_WINDOW = 744;
+/** At this window width and below the sidebar lies over the work (App.tsx): never two panes there. */
+export const COMPACT_WINDOW = 900;
+/** The gap the work surface keeps from the window's right edge (panes.css). */
+export const FRAME_GAP = 8;
+/** The room the automatic choice leaves the work beside two navigator panes: two work panes side by side. */
+export const ROOMY = MIN_PANE * 2 + DIVIDER;
+/** The one-column sidebar (the tree, and the stacked panes): its width is the app's `sidebarWidth`. */
+export const SIDE_WIDTH = { min: 232, max: 480, initial: 288 };
 export const NAV_WIDTH = { min: 168, max: 360, initial: 216 };
 export const LIST_WIDTH = { min: 240, max: 520, initial: 300 };
 export const NAV_HEIGHT = { min: 0.15, max: 0.8, initial: 0.42 };
@@ -34,7 +41,7 @@ export type NavPrefs = {
 
 export const DEFAULT_SORT: NavSort = { key: "activity", desc: true };
 const SORT_KEYS: NavSortKey[] = ["activity", "created", "name", "due", "stage"];
-const SECTIONS: NavSectionId[] = ["now", "shortcuts", "projects", "tags", "views"];
+const SECTIONS: NavSectionId[] = ["now", "shortcuts", "projects", "tags", "views", "usage"];
 
 const record = (value: unknown): Record<string, unknown> => (value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {});
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -81,8 +88,49 @@ export function readNavigator(value: unknown): NavPrefs {
   };
 }
 
-/** One project navigator by default. Saved advanced layouts remain available. */
-export const layoutFor = (prefs: Pick<NavPrefs, "layout">, _windowWidth: number): NavLayout => prefs.layout ?? "tree";
+/** Two navigator panes side by side: both, and the hairline between them. */
+export const dualWidth = (prefs: Pick<NavPrefs, "navWidth" | "listWidth">) => prefs.navWidth + prefs.listWidth + 1;
+
+/** What a window leaves the work panes beside a sidebar this wide. */
+export const roomBeside = (windowWidth: number, sidebar: number) => windowWidth - sidebar - FRAME_GAP;
+
+/** How far below its threshold the automatic choice keeps two panes that are already drawn. */
+export const HOLD = 24;
+
+/**
+ * The layout drawn. Nothing stored: two panes where two work panes would still fit beside them,
+ * stacked on a narrower window; two panes already drawn (`was`) hold on for `HOLD` px below that,
+ * so a window's edge dragged across the threshold does not swap the sidebar on every pixel. A
+ * stored choice stands; chosen two panes are drawn stacked only where the work panes could not
+ * keep their least width (`paneMinimum`, panes.ts `minimumSize`) — which nothing ever goes below.
+ */
+export function layoutFor(prefs: Pick<NavPrefs, "layout" | "navWidth" | "listWidth">, windowWidth: number, paneMinimum = MIN_PANE, was: NavLayout | null = null): NavLayout {
+  if (prefs.layout === "tree" || prefs.layout === "stacked") return prefs.layout;
+  if (windowWidth <= COMPACT_WINDOW) return "stacked";
+  const roomy = Math.max(paneMinimum, ROOMY);
+  const needed = prefs.layout === "dual" ? paneMinimum : was === "dual" ? Math.max(paneMinimum, roomy - HOLD) : roomy;
+  return roomBeside(windowWidth, dualWidth(prefs)) >= needed ? "dual" : "stacked";
+}
+
+/** The sidebar's width in a layout (`single`: the one-column width the app keeps). */
+export const sidebarWidthFor = (layout: NavLayout, prefs: Pick<NavPrefs, "navWidth" | "listWidth">, single: number) => (layout === "dual" ? dualWidth(prefs) : single);
+
+export const LAYOUTS: { id: NavLayout; label: string; icon: "columns" | "rows" | "list" }[] = [
+  { id: "dual", label: "두 칸", icon: "columns" },
+  { id: "stacked", label: "위아래", icon: "rows" },
+  { id: "tree", label: "한 칸 (트리)", icon: "list" },
+];
+
+export type LayoutChoice = { id: NavLayout | "auto"; label: string; icon: "columns" | "rows" | "list" | "sidebar"; checked: boolean; hint?: string };
+
+/** The layouts as the menus offer them: the stored one checked, else "창 너비에 맞추기" with what it gives now. */
+export function layoutChoices(stored: NavLayout | null, drawn: NavLayout): LayoutChoice[] {
+  const now = LAYOUTS.find((entry) => entry.id === drawn)!.label;
+  return [
+    ...LAYOUTS.map((entry) => ({ ...entry, checked: stored === entry.id, ...(stored === entry.id && drawn !== entry.id ? { hint: `지금은 ${now}` } : {}) })),
+    { id: "auto", label: "창 너비에 맞추기", icon: "sidebar", checked: stored === null, ...(stored === null ? { hint: `지금 ${now}` } : {}) },
+  ];
+}
 
 /** The key a selection keeps its own sort under (Notebook Navigator sorts per folder). */
 export const selectionKey = (selection: NavSelection) => (selection.kind === "folder" ? selection.id : selection.kind === "tag" ? `tag:${selection.tag}` : selection.kind);

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ModelOption } from "@workbench/contracts";
-import { ModelPicker } from "./ModelPicker.tsx";
+import { ModelPicker, barLabels, plainModelLabel } from "./ModelPicker.tsx";
 
 afterEach(cleanup);
 const models: ModelOption[] = [
@@ -89,5 +89,52 @@ describe("ModelPicker request identity", () => {
     fireEvent.click(screen.getByRole("button", { name: "낮음" }));
     fireEvent.click(screen.getByRole("menuitemcheckbox", { name: /^높음/ }));
     expect(onChange).toHaveBeenLastCalledWith({ model: "alias", effort: "high" });
+  });
+});
+
+// Claude Code names its default model with a suffix and reports no default effort; Codex reports
+// both plainly. The input's bar reads the same for either: the plain model name and the level
+// chosen (기본 when none is). What the default is, is marked in the menu.
+describe("the bar's labels are the same for both engines", () => {
+  const claude: ModelOption[] = [{ id: "default", label: "Fake (기본)", description: null, efforts: ["low", "medium", "high"], defaultEffort: null, isDefault: true }];
+  const codex: ModelOption[] = [{ id: "fake", label: "Fake", description: null, efforts: ["low", "medium", "high"], defaultEffort: "medium", isDefault: true }];
+  const none = { model: null, effort: null };
+
+  it("nothing chosen: the default model's plain name and 기본, whichever engine", () => {
+    expect(barLabels(claude, none)).toEqual({ model: "Fake", effort: "기본" });
+    expect(barLabels(codex, none)).toEqual(barLabels(claude, none));
+  });
+
+  it("a chosen level reads the same for both", () => {
+    expect(barLabels(claude, { model: "default", effort: "high" })).toEqual({ model: "Fake", effort: "높음" });
+    expect(barLabels(codex, { model: "fake", effort: "high" })).toEqual({ model: "Fake", effort: "높음" });
+  });
+
+  it("a role's level shows as that level; a model without levels shows none", () => {
+    expect(barLabels(codex, none, { name: "연구", model: null, effort: "low" }).effort).toBe("낮음");
+    expect(barLabels([{ ...codex[0]!, efforts: [], defaultEffort: null }], none).effort).toBeNull();
+  });
+
+  it.each([
+    ["Fake (기본)", "Fake"], ["Default (recommended)", "Default"], ["Opus 4 (Default)", "Opus 4"], ["Sonnet（기본）", "Sonnet"],
+    ["GPT-5 (preview)", "GPT-5 (preview)"], ["기본 모델", "기본 모델"], ["(기본)", "(기본)"],
+  ])("only a trailing default marker is dropped: %s → %s", (label, plain) => {
+    expect(plainModelLabel(label)).toBe(plain);
+  });
+
+  it.each([["Claude", claude], ["Codex", codex]] as const)("%s: no default suffix in the bar; the default is marked in the menu", (_, models) => {
+    render(<ModelPicker models={[...models]} value={none} onChange={() => undefined} />);
+    expect(screen.getByRole("button", { name: "Fake" }).textContent).toBe("Fake");
+    const effort = screen.getByTitle(/추론 강도/);
+    expect(effort.textContent).toBe("기본");
+    fireEvent.click(screen.getByRole("button", { name: "Fake" }));
+    expect(within(screen.getByRole("menu", { name: "모델 선택" })).getByRole("menuitemcheckbox", { name: /^Fake/ }).textContent).toBe("Fake기본");
+  });
+
+  it("Codex: the level that is the default is marked in the menu", () => {
+    render(<ModelPicker models={codex} value={none} onChange={() => undefined} />);
+    fireEvent.click(screen.getByTitle(/추론 강도/));
+    expect(screen.getByRole("menuitemcheckbox", { name: /^중간/ }).textContent).toBe("중간기본");
+    expect(screen.getByRole("menuitemcheckbox", { name: /^높음/ }).textContent).toBe("높음");
   });
 });

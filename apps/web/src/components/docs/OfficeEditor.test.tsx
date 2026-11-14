@@ -87,7 +87,7 @@ it("allows leaving only after saving is acknowledged and the editor is clean", a
   const pending = ref.current!.leave();
   await message({ type: "office:saved", revision: 2 });
   await message({ type: "office:flushed", revision: 2 });
-  await expect(pending).resolves.toBeUndefined();
+  await expect(pending).resolves.toBe(2);
 });
 it("keeps the editor on timeout or a revision conflict", async () => {
   const { ref, message } = await setup();
@@ -112,7 +112,7 @@ it("opens a revision that arrived while the editor was still opening", async () 
   const second = screen.getByTitle("한글 편집기 · test.hwpx") as HTMLIFrameElement;
   expect(second).not.toBe(first);
   await act(async () => { window.dispatchEvent(new MessageEvent("message", { origin: "http://office.test", source: second.contentWindow, data: { type: "office:opened", revision: 2, recovered: false } })); });
-  expect(onStatus).toHaveBeenLastCalledWith({ revision: 2, dirty: false, conflict: null });
+  expect(onStatus).toHaveBeenLastCalledWith({ revision: 2, dirty: false, conflict: null, changed: false, same: false });
 });
 
 it("a committed Save As permits guarded navigation before the original frame reloads", async () => {
@@ -123,7 +123,7 @@ it("a committed Save As permits guarded navigation before the original frame rel
     commitOfficeOutput: async () => ({ path: "/copy.hwpx", artifact: { id: "copy" } }),
   } as unknown as Api;
   const artifact = { id: "doc", name: "test.hwpx", format: "hwpx", revision: 1, path: "/test.hwpx", sha256: "test" } as Artifact;
-  let leaving: Promise<void> | undefined;
+  let leaving: Promise<number | null> | undefined;
   const onCopied = vi.fn(() => { leaving = ref.current!.leave(); });
   const screen = render(<OfficeEditor {...aiProps} ref={ref} api={api} artifact={artifact} onNotice={() => {}} onStatus={() => {}} onCopied={onCopied} />);
   await act(async () => {});
@@ -135,7 +135,27 @@ it("a committed Save As permits guarded navigation before the original frame rel
   await act(async () => fireEvent.submit(screen.getByRole("dialog")));
   await message({ type: "office:output", requestId: "two", action: "commit", planId: "plan", bytes: new ArrayBuffer(8) });
   await message({ type: "office:copied", artifactId: "copy" });
-  expect(onCopied).toHaveBeenCalledWith("copy"); await expect(leaving).resolves.toBeUndefined();
+  expect(onCopied).toHaveBeenCalledWith("copy"); await expect(leaving).resolves.toBeNull();
+});
+
+it("tells the person what a Hangul copy saved to a new file lacks", async () => {
+  const warning = "새 파일에 저장했지만 저장본에 빠진 내용이 있습니다 (표 1→0). 원본 파일은 그대로입니다.";
+  const api = {
+    editorGrant: async () => ({ token: "test", sessionId: "session", origin: "http://office.test", url: "http://office.test/hwp" }),
+    prepareOfficeOutput: async () => ({ id: "plan", path: "/copy.hwpx", format: "hwpx", exists: false, size: 0 }),
+    commitOfficeOutput: async () => ({ path: "/copy.hwpx", artifact: { id: "copy" }, warning }),
+  } as unknown as Api;
+  const artifact = { id: "doc", name: "test.hwp", format: "hwp", revision: 1, path: "/test.hwp", sha256: "test" } as Artifact;
+  const onNotice = vi.fn();
+  const screen = render(<OfficeEditor {...aiProps} api={api} artifact={artifact} onNotice={onNotice} onStatus={() => {}} />);
+  await act(async () => {});
+  const frame = screen.getByTitle("한글 편집기 · test.hwp") as HTMLIFrameElement;
+  const message = async (data: unknown) => act(async () => { window.dispatchEvent(new MessageEvent("message", { origin: "http://office.test", source: frame.contentWindow, data })); });
+  await message({ type: "office:opened", revision: 1, recovered: false });
+  await message({ type: "office:output", requestId: "one", action: "prepare", revision: 1, format: "hwpx" });
+  await act(async () => fireEvent.submit(screen.getByRole("dialog")));
+  await message({ type: "office:output", requestId: "two", action: "commit", planId: "plan", bytes: new ArrayBuffer(8) });
+  expect(onNotice).toHaveBeenCalledWith(warning);
 });
 
 async function copyFlow(fail = false, format: "docx" | "pdf" = "docx") {
@@ -181,7 +201,7 @@ it("acknowledges a PDF copy without replacing the original pending-edit iframe o
   const leaving = f.ref.current!.leave();
   expect(f.sent).toHaveBeenCalledWith({ type: "office:flush" }, "http://office.test");
   await f.message({ type: "office:saved", revision: 2 }); await f.message({ type: "office:flushed", revision: 2 });
-  await expect(leaving).resolves.toBeUndefined();
+  await expect(leaving).resolves.toBe(2);
 });
 
 it("keeps the PDF source buffer when its copy receipt arrives after a conversation switch", async () => {
@@ -198,7 +218,7 @@ it("blocks navigation during a copy but releases it after a failed write without
   expect(f.sent).toHaveBeenCalledWith(expect.objectContaining({ requestId: "write", error: "storage unavailable" }), "http://office.test");
   const leaving = f.ref.current!.leave();
   await f.message({ type: "office:saved", revision: 2 }); await f.message({ type: "office:flushed", revision: 2 });
-  await expect(leaving).resolves.toBeUndefined(); expect(f.onCopied).not.toHaveBeenCalled();
+  await expect(leaving).resolves.toBe(2); expect(f.onCopied).not.toHaveBeenCalled();
 });
 it("restores the original draft when the conversation changes between receipt and copy handoff", async () => {
   const f = await copyFlow(); await f.prepare();
@@ -277,4 +297,96 @@ it("does not create a conversation when the first save fails or the request targ
   await f.message({ type: "office:flushed", revision: null });
   expect(f.onNewSession).not.toHaveBeenCalled();
   expect(f.sent).toHaveBeenCalledWith(expect.objectContaining({ requestId: "first", error: expect.stringContaining("저장하지 못") }), "http://office.test");
+});
+
+// After "저장하지 않고 옮기기" the editor's own recovery copy must not bring the dropped edits back:
+// the next opening of that document asks the editor not to recover (it then drops its copy).
+it("opens a document discarded without saving with recover: false, once; any other document recovers as before", async () => {
+  const { markDiscarded } = await import("../../discarded-edits.ts");
+  localStorage.clear();
+  const api = { editorGrant: async () => ({ token: "test", sessionId: "session", origin: "http://office.test", url: "http://office.test/docs" }) } as unknown as Api;
+  const open = async (id: string) => {
+    const artifact = { id, name: `${id}.docx`, format: "docx", revision: 1, path: `/${id}.docx`, sha256: "test" } as Artifact;
+    const screen = render(<OfficeEditor {...aiProps} api={api} artifact={artifact} onNotice={() => {}} onStatus={() => {}} />);
+    await act(async () => {});
+    const frame = screen.getByTitle(`워드 편집기 · ${id}.docx`) as HTMLIFrameElement, sent = vi.spyOn(frame.contentWindow!, "postMessage");
+    await act(async () => { window.dispatchEvent(new MessageEvent("message", { origin: "http://office.test", source: frame.contentWindow, data: { type: "office:ready" } })); });
+    const init = sent.mock.calls.map(([data]) => data as { type: string; recover?: boolean }).find((data) => data.type === "office:init");
+    screen.unmount();
+    return init?.recover;
+  };
+  markDiscarded("dropped");
+  expect(await open("kept")).toBe(true);
+  expect(await open("dropped")).toBe(false);
+  // Used once: the opening after that recovers again (the editor dropped its copy the first time).
+  expect(await open("dropped")).toBe(true);
+});
+
+// T3 (m3-1): a Hangul save that went on without its save check ("unchecked" text or structure) says so
+// to the person — one quiet line through the same notice as the Save As warning, once per document per session.
+it("says once per document when a Hangul save could not be checked (Save and Save As)", async () => {
+  const UNCHECKED = "저장했습니다. 이 문서는 저장 검사를 하지 못했습니다.";
+  let answer: Record<string, unknown> = { text: "unchecked", structure: "checked" };
+  const api = {
+    editorGrant: async () => ({ token: "test", sessionId: "session", origin: "http://office.test", url: "http://office.test/hwp" }),
+    prepareOfficeOutput: async () => ({ id: "plan", path: "/copy.hwpx", format: "hwpx", exists: false, size: 0 }),
+    commitOfficeOutput: async () => ({ path: "/copy.hwpx", artifact: { id: "copy" }, report: "compared", ...answer }),
+  } as unknown as Api;
+  const open = async (id: string) => {
+    const artifact = { id, name: `${id}.hwpx`, format: "hwpx", revision: 1, path: `/${id}.hwpx`, sha256: "test" } as Artifact;
+    const onNotice = vi.fn();
+    const screen = render(<OfficeEditor {...aiProps} api={api} artifact={artifact} onNotice={onNotice} onStatus={() => {}} />);
+    await act(async () => {});
+    const frame = screen.getByTitle(`한글 편집기 · ${id}.hwpx`) as HTMLIFrameElement;
+    const message = async (data: unknown) => act(async () => { window.dispatchEvent(new MessageEvent("message", { origin: "http://office.test", source: frame.contentWindow, data })); });
+    await message({ type: "office:opened", revision: 1, recovered: false });
+    const saveAs = async (requestId: string) => {
+      await message({ type: "office:output", requestId: `${requestId}-prepare`, action: "prepare", revision: 1, format: "hwpx" });
+      await act(async () => fireEvent.submit(screen.getByRole("dialog")));
+      await message({ type: "office:output", requestId, action: "commit", planId: "plan", bytes: new ArrayBuffer(8) });
+    };
+    const lines = () => onNotice.mock.calls.filter(([line]) => line === UNCHECKED).length;
+    return { screen, message, saveAs, lines, onNotice };
+  };
+  // Save: a checked save says nothing; an unchecked one says it once, however often it happens
+  const first = await open("checked-first");
+  await first.message({ type: "office:saved", revision: 2 });
+  expect(first.lines()).toBe(0);
+  await first.message({ type: "office:saved", revision: 3, unchecked: true });
+  await first.message({ type: "office:saved", revision: 4, unchecked: true });
+  expect(first.lines()).toBe(1);
+  // Save As of the same document in this session: already said
+  await first.saveAs("again");
+  expect(first.lines()).toBe(1);
+  first.screen.unmount();
+  // another document: Save As with the text unchecked says it once; a second Save As does not repeat it
+  const second = await open("other");
+  await second.saveAs("one");
+  await second.saveAs("two");
+  expect(second.lines()).toBe(1);
+  second.screen.unmount();
+  // structure unchecked counts too; a checked Save As says nothing
+  answer = { text: "checked", structure: "checked" };
+  const third = await open("third");
+  await third.saveAs("checked");
+  expect(third.lines()).toBe(0);
+  answer = { text: "unchecked", structure: "unchecked" };
+  await third.saveAs("structure");
+  expect(third.lines()).toBe(1);
+  // reopening the first document in this session does not say it again
+  const reopened = await open("checked-first");
+  await reopened.message({ type: "office:saved", revision: 5, unchecked: true });
+  expect(reopened.lines()).toBe(0);
+  reopened.screen.unmount();
+  // A Save As that lost something AND could not be checked: the loss is what the person must read. The
+  // unchecked line never comes after it (the top bar shows the last notice), and is not used up by it.
+  const WARNING = "새 파일에 저장했지만 저장본에 빠진 내용이 있습니다 (표 1→0). 원본 파일은 그대로입니다.";
+  answer = { text: "unchecked", structure: "checked", warning: WARNING };
+  const both = await open("both");
+  await both.saveAs("lossy");
+  expect(both.onNotice.mock.calls.at(-1)?.[0]).toBe(WARNING);
+  expect(both.lines()).toBe(0);
+  answer = { text: "unchecked", structure: "checked" };
+  await both.saveAs("plain");
+  expect(both.lines()).toBe(1);
 });

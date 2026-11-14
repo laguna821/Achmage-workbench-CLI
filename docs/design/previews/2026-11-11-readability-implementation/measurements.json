@@ -1,0 +1,760 @@
+{
+  "scope": "R17 shared frontend; actual Linux WebKitGTK on private X11, fixture data and stand-in engine, DPR1",
+  "screens": {
+    "home-light": {
+      "horizontalOverflow": false,
+      "selectedRows": 0,
+      "chrome": {
+        "secondary": null,
+        "background": "rgb(243, 245, 248)"
+      },
+      "viewport": {
+        "dpr": 1,
+        "height": 1000,
+        "width": 1440
+      },
+      "elements": [
+        {
+          "size": "14px",
+          "color": "rgb(32, 39, 51)",
+          "width": 288,
+          "weight": "500",
+          "background": "rgb(243, 245, 248)",
+          "clientWidth": 287,
+          "height": 952,
+          "scrollWidth": 290,
+          "selector": ".sidebar",
+          "text": " 새로 만들기찾기Ctrl K홈프로젝트AI와 글쓰기 · 3주차 강의활동 및 바로가기지금새 답 1AI와 글쓰기 · 3주차 강의 — 슬라이드 구성과 읽기 흐름바로가기프로젝트·폴더·태그를 여기로 끌어 놓으면 바로가기가 됩니",
+          "line": "20px"
+        },
+        {
+          "selector": ".row-session.current .side-row-label",
+          "missing": true
+        },
+        {
+          "selector": ".side-section-label",
+          "missing": true
+        },
+        {
+          "size": "15px",
+          "color": "rgb(32, 39, 51)",
+          "width": 84.640625,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 85,
+          "height": 30,
+          "scrollWidth": 85,
+          "selector": ".topbar-title",
+          "text": "작업공간홈",
+          "line": "22px"
+        },
+        {
+          "size": "14px",
+          "color": "rgb(30, 110, 244)",
+          "width": 12,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 12,
+          "height": 20,
+          "scrollWidth": 12,
+          "selector": ".group-tab.active .group-tab-title",
+          "text": "홈",
+          "line": "20px"
+        },
+        {
+          "selector": ".turn-assistant > .markdown",
+          "missing": true
+        },
+        {
+          "selector": ".turn-assistant > .markdown h3",
+          "missing": true
+        },
+        {
+          "selector": ".turn-assistant > .markdown h4",
+          "missing": true
+        },
+        {
+          "selector": ".turn-assistant > .markdown em",
+          "missing": true
+        },
+        {
+          "selector": ".turn-assistant > .markdown strong",
+          "missing": true
+        },
+        {
+          "size": "13px",
+          "color": "rgb(108, 108, 112)",
+          "width": 638,
+          "weight": "400",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 638,
+          "height": 20,
+          "scrollWidth": 1472,
+          "selector": ".session-resume-preview",
+          "text": "3주차 슬라이드 구성을 다시 짰습니다. 핵심은 질문을 먼저 세우고, 사례로 내려가는 순서입니다. 바꾼 점 1. 도입부를 질문 하나로 시작하게 바꿨습니다. 2. 겹치던 사례 슬라이드 두 장을 한 장으로 합쳤습니다. 3",
+          "line": "20px"
+        }
+      ]
+    },
+    "project-light": {
+      "horizontalOverflow": false,
+      "selectedRows": 1,
+      "chrome": {
+        "secondary": "rgb(78, 89, 104)",
+        "background": "rgb(243, 245, 248)"
+      },
+      "viewport": {
+        "dpr": 1,
+        "height": 1000,
+        "width": 1440
+      },
+      "elements": [
+        {
+          "size": "14px",
+          "color": "rgb(32, 39, 51)",
+          "width": 288,
+          "weight": "500",
+          "background": "rgb(243, 245, 248)",
+          "clientWidth": 287,
+          "height": 952,
+          "scrollWidth": 290,
+          "selector": ".sidebar",
+          "text": " 새로 만들기찾기Ctrl K홈프로젝트AI와 글쓰기 · 3주차 강의채팅 · 3슬라이드 구성과 읽기 흐름국내외 교육 사례 조사강의 자료 교정과 문장 정리문서 2활동 및 바로가기바로가기프로젝트·폴더·태그를 여기로 끌어 놓",
+          "line": "20px"
+        },
+        {
+          "selector": ".row-session.current .side-row-label",
+          "missing": true
+        },
+        {
+          "size": "13px",
+          "color": "rgb(78, 89, 104)",
+          "width": 271,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 271,
+          "height": 32,
+          "scrollWidth": 271,
+          "selector": ".side-section-label",
+          "text": "채팅 · 3",
+          "line": "20px"
+        },
+        {
+          "size": "15px",
+          "color": "rgb(32, 39, 51)",
+          "width": 280.984375,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 281,
+          "height": 30,
+          "scrollWidth": 281,
+          "selector": ".topbar-title",
+          "text": "프로젝트AI와 글쓰기 · 3주차 강의 · 프로젝트",
+          "line": "22px"
+        },
+        {
+          "size": "14px",
+          "color": "rgb(30, 110, 244)",
+          "width": 134,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 134,
+          "height": 20,
+          "scrollWidth": 134,
+          "selector": ".group-tab.active .group-tab-title",
+          "text": "AI와 글쓰기 · 3주차 강의",
+          "line": "20px"
+        },
+        {
+          "selector": ".turn-assistant > .markdown",
+          "missing": true
+        },
+        {
+          "selector": ".turn-assistant > .markdown h3",
+          "missing": true
+        },
+        {
+          "selector": ".turn-assistant > .markdown h4",
+          "missing": true
+        },
+        {
+          "selector": ".turn-assistant > .markdown em",
+          "missing": true
+        },
+        {
+          "selector": ".turn-assistant > .markdown strong",
+          "missing": true
+        },
+        {
+          "size": "13px",
+          "color": "rgb(108, 108, 112)",
+          "width": 870,
+          "weight": "400",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 870,
+          "height": 20,
+          "scrollWidth": 1472,
+          "selector": ".session-resume-preview",
+          "text": "3주차 슬라이드 구성을 다시 짰습니다. 핵심은 질문을 먼저 세우고, 사례로 내려가는 순서입니다. 바꾼 점 1. 도입부를 질문 하나로 시작하게 바꿨습니다. 2. 겹치던 사례 슬라이드 두 장을 한 장으로 합쳤습니다. 3",
+          "line": "20px"
+        }
+      ]
+    },
+    "chat-light": {
+      "horizontalOverflow": false,
+      "selectedRows": 1,
+      "chrome": {
+        "secondary": "rgb(78, 89, 104)",
+        "background": "rgb(243, 245, 248)"
+      },
+      "viewport": {
+        "dpr": 1,
+        "height": 1000,
+        "width": 1440
+      },
+      "elements": [
+        {
+          "size": "14px",
+          "color": "rgb(32, 39, 51)",
+          "width": 288,
+          "weight": "500",
+          "background": "rgb(243, 245, 248)",
+          "clientWidth": 287,
+          "height": 952,
+          "scrollWidth": 290,
+          "selector": ".sidebar",
+          "text": " 새로 만들기찾기Ctrl K홈프로젝트AI와 글쓰기 · 3주차 강의채팅 · 3슬라이드 구성과 읽기 흐름국내외 교육 사례 조사강의 자료 교정과 문장 정리문서 2활동 및 바로가기바로가기프로젝트·폴더·태그를 여기로 끌어 놓",
+          "line": "20px"
+        },
+        {
+          "size": "14px",
+          "color": "rgb(32, 39, 51)",
+          "width": 187,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 187,
+          "height": 20,
+          "scrollWidth": 187,
+          "selector": ".row-session.current .side-row-label",
+          "text": "슬라이드 구성과 읽기 흐름",
+          "line": "20px"
+        },
+        {
+          "size": "13px",
+          "color": "rgb(78, 89, 104)",
+          "width": 271,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 271,
+          "height": 32,
+          "scrollWidth": 271,
+          "selector": ".side-section-label",
+          "text": "채팅 · 3",
+          "line": "20px"
+        },
+        {
+          "size": "15px",
+          "color": "rgb(32, 39, 51)",
+          "width": 197.671875,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 198,
+          "height": 30,
+          "scrollWidth": 198,
+          "selector": ".topbar-title",
+          "text": "대화AI와 글쓰기 · 3주차 강의",
+          "line": "22px"
+        },
+        {
+          "size": "14px",
+          "color": "rgb(30, 110, 244)",
+          "width": 141,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 141,
+          "height": 20,
+          "scrollWidth": 141,
+          "selector": ".group-tab.active .group-tab-title",
+          "text": "슬라이드 구성과 읽기 흐름",
+          "line": "20px"
+        },
+        {
+          "size": "17px",
+          "color": "rgb(0, 0, 0)",
+          "width": 720,
+          "weight": "400",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 720,
+          "height": 529.078125,
+          "scrollWidth": 720,
+          "selector": ".turn-assistant > .markdown",
+          "text": "3주차 슬라이드 구성을 다시 짰습니다. 핵심은 질문을 먼저 세우고, 사례로 내려가는 순서입니다.\n바꾼 점\n\n도입부를 질문 하나로 시작하게 바꿨습니다.\n겹치던 사례 슬라이드 두 장을 한 장으로 합쳤습니다.\n마지막 장에",
+          "line": "29.75px"
+        },
+        {
+          "selector": ".turn-assistant > .markdown h3",
+          "missing": true
+        },
+        {
+          "selector": ".turn-assistant > .markdown h4",
+          "missing": true
+        },
+        {
+          "selector": ".turn-assistant > .markdown em",
+          "missing": true
+        },
+        {
+          "size": "17px",
+          "color": "rgb(0, 0, 0)",
+          "width": 279.6304931640625,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 0,
+          "height": 20,
+          "scrollWidth": 0,
+          "selector": ".turn-assistant > .markdown strong",
+          "text": "질문을 먼저 세우고, 사례로 내려가는 순서",
+          "line": "29.75px"
+        },
+        {
+          "selector": ".session-resume-preview",
+          "missing": true
+        }
+      ]
+    },
+    "chat-dark": {
+      "horizontalOverflow": false,
+      "selectedRows": 1,
+      "chrome": {
+        "secondary": "rgb(174, 174, 178)",
+        "background": "rgb(28, 28, 30)"
+      },
+      "viewport": {
+        "dpr": 1,
+        "height": 1000,
+        "width": 1440
+      },
+      "elements": [
+        {
+          "size": "14px",
+          "color": "rgb(255, 255, 255)",
+          "width": 288,
+          "weight": "500",
+          "background": "rgb(28, 28, 30)",
+          "clientWidth": 287,
+          "height": 952,
+          "scrollWidth": 290,
+          "selector": ".sidebar",
+          "text": " 새로 만들기찾기Ctrl K홈프로젝트AI와 글쓰기 · 3주차 강의채팅 · 3슬라이드 구성과 읽기 흐름국내외 교육 사례 조사강의 자료 교정과 문장 정리문서 2활동 및 바로가기바로가기프로젝트·폴더·태그를 여기로 끌어 놓",
+          "line": "20px"
+        },
+        {
+          "size": "14px",
+          "color": "rgb(255, 255, 255)",
+          "width": 187,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 187,
+          "height": 20,
+          "scrollWidth": 187,
+          "selector": ".row-session.current .side-row-label",
+          "text": "슬라이드 구성과 읽기 흐름",
+          "line": "20px"
+        },
+        {
+          "size": "13px",
+          "color": "rgb(174, 174, 178)",
+          "width": 271,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 271,
+          "height": 32,
+          "scrollWidth": 271,
+          "selector": ".side-section-label",
+          "text": "채팅 · 3",
+          "line": "20px"
+        },
+        {
+          "size": "15px",
+          "color": "rgb(255, 255, 255)",
+          "width": 197.671875,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 198,
+          "height": 30,
+          "scrollWidth": 198,
+          "selector": ".topbar-title",
+          "text": "대화AI와 글쓰기 · 3주차 강의",
+          "line": "22px"
+        },
+        {
+          "size": "14px",
+          "color": "rgb(255, 255, 255)",
+          "width": 141,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 141,
+          "height": 20,
+          "scrollWidth": 141,
+          "selector": ".group-tab.active .group-tab-title",
+          "text": "슬라이드 구성과 읽기 흐름",
+          "line": "20px"
+        },
+        {
+          "size": "17px",
+          "color": "rgb(255, 255, 255)",
+          "width": 720,
+          "weight": "400",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 720,
+          "height": 529.078125,
+          "scrollWidth": 720,
+          "selector": ".turn-assistant > .markdown",
+          "text": "3주차 슬라이드 구성을 다시 짰습니다. 핵심은 질문을 먼저 세우고, 사례로 내려가는 순서입니다.\n바꾼 점\n\n도입부를 질문 하나로 시작하게 바꿨습니다.\n겹치던 사례 슬라이드 두 장을 한 장으로 합쳤습니다.\n마지막 장에",
+          "line": "29.75px"
+        },
+        {
+          "selector": ".turn-assistant > .markdown h3",
+          "missing": true
+        },
+        {
+          "selector": ".turn-assistant > .markdown h4",
+          "missing": true
+        },
+        {
+          "selector": ".turn-assistant > .markdown em",
+          "missing": true
+        },
+        {
+          "size": "17px",
+          "color": "rgb(255, 255, 255)",
+          "width": 279.6304931640625,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 0,
+          "height": 20,
+          "scrollWidth": 0,
+          "selector": ".turn-assistant > .markdown strong",
+          "text": "질문을 먼저 세우고, 사례로 내려가는 순서",
+          "line": "29.75px"
+        },
+        {
+          "selector": ".session-resume-preview",
+          "missing": true
+        }
+      ]
+    },
+    "semantic-specimen": {
+      "horizontalOverflow": false,
+      "selectedRows": 1,
+      "chrome": {
+        "secondary": "rgb(78, 89, 104)",
+        "background": "rgb(243, 245, 248)"
+      },
+      "viewport": {
+        "dpr": 1,
+        "height": 1000,
+        "width": 1440
+      },
+      "elements": [
+        {
+          "size": "14px",
+          "color": "rgb(32, 39, 51)",
+          "width": 288,
+          "weight": "500",
+          "background": "rgb(243, 245, 248)",
+          "clientWidth": 287,
+          "height": 952,
+          "scrollWidth": 290,
+          "selector": ".sidebar",
+          "text": " 새로 만들기찾기Ctrl K홈프로젝트AI와 글쓰기 · 3주차 강의채팅 · 3슬라이드 구성과 읽기 흐름국내외 교육 사례 조사강의 자료 교정과 문장 정리문서 2활동 및 바로가기바로가기프로젝트·폴더·태그를 여기로 끌어 놓",
+          "line": "20px"
+        },
+        {
+          "size": "14px",
+          "color": "rgb(32, 39, 51)",
+          "width": 187,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 187,
+          "height": 20,
+          "scrollWidth": 187,
+          "selector": ".row-session.current .side-row-label",
+          "text": "슬라이드 구성과 읽기 흐름",
+          "line": "20px"
+        },
+        {
+          "size": "13px",
+          "color": "rgb(78, 89, 104)",
+          "width": 271,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 271,
+          "height": 32,
+          "scrollWidth": 271,
+          "selector": ".side-section-label",
+          "text": "채팅 · 3",
+          "line": "20px"
+        },
+        {
+          "size": "15px",
+          "color": "rgb(32, 39, 51)",
+          "width": 197.671875,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 198,
+          "height": 30,
+          "scrollWidth": 198,
+          "selector": ".topbar-title",
+          "text": "대화AI와 글쓰기 · 3주차 강의",
+          "line": "22px"
+        },
+        {
+          "size": "14px",
+          "color": "rgb(30, 110, 244)",
+          "width": 141,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 141,
+          "height": 20,
+          "scrollWidth": 141,
+          "selector": ".group-tab.active .group-tab-title",
+          "text": "슬라이드 구성과 읽기 흐름",
+          "line": "20px"
+        },
+        {
+          "size": "17px",
+          "color": "rgb(0, 0, 0)",
+          "width": 720,
+          "weight": "400",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 720,
+          "height": 287,
+          "scrollWidth": 720,
+          "selector": ".turn-assistant > .markdown",
+          "text": "읽기와 판단의 위계같은 내용을 읽어도 글자의 모양, 색, 여백에 따라 중요한 부분을 찾는 속도가 달라집니다.세 번째 단계 제목 · H3일반 문장 안에서 강조된 문구를 찾아봅니다. 굵게 강조한 문구와도 구분되어야 합니",
+          "line": "29.75px"
+        },
+        {
+          "size": "19.125px",
+          "color": "rgb(0, 0, 0)",
+          "width": 720,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 720,
+          "height": 26,
+          "scrollWidth": 720,
+          "selector": ".turn-assistant > .markdown h3",
+          "text": "세 번째 단계 제목 · H3",
+          "line": "26.775px"
+        },
+        {
+          "size": "17px",
+          "color": "rgb(0, 0, 0)",
+          "width": 720,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 720,
+          "height": 23,
+          "scrollWidth": 720,
+          "selector": ".turn-assistant > .markdown h4",
+          "text": "네 번째 단계 제목 · H4",
+          "line": "23.799999px"
+        },
+        {
+          "size": "17px",
+          "color": "rgb(0, 0, 0)",
+          "width": 79,
+          "weight": "550",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 0,
+          "height": 20,
+          "scrollWidth": 0,
+          "selector": ".turn-assistant > .markdown em",
+          "text": "강조된 문구",
+          "line": "29.75px"
+        },
+        {
+          "size": "17px",
+          "color": "rgb(0, 0, 0)",
+          "width": 113,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 0,
+          "height": 20,
+          "scrollWidth": 0,
+          "selector": ".turn-assistant > .markdown strong",
+          "text": "굵게 강조한 문구",
+          "line": "29.75px"
+        },
+        {
+          "selector": ".session-resume-preview",
+          "missing": true
+        }
+      ]
+    },
+    "narrow-light": {
+      "horizontalOverflow": false,
+      "selectedRows": 1,
+      "chrome": {
+        "secondary": "rgb(78, 89, 104)",
+        "background": "rgb(243, 245, 248)"
+      },
+      "viewport": {
+        "dpr": 1,
+        "height": 900,
+        "width": 1000
+      },
+      "elements": [
+        {
+          "size": "14px",
+          "color": "rgb(32, 39, 51)",
+          "width": 288,
+          "weight": "500",
+          "background": "rgb(243, 245, 248)",
+          "clientWidth": 287,
+          "height": 852,
+          "scrollWidth": 290,
+          "selector": ".sidebar",
+          "text": " 새로 만들기찾기Ctrl K홈프로젝트AI와 글쓰기 · 3주차 강의채팅 · 3슬라이드 구성과 읽기 흐름국내외 교육 사례 조사강의 자료 교정과 문장 정리문서 2활동 및 바로가기바로가기프로젝트·폴더·태그를 여기로 끌어 놓",
+          "line": "20px"
+        },
+        {
+          "size": "14px",
+          "color": "rgb(32, 39, 51)",
+          "width": 187,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 187,
+          "height": 20,
+          "scrollWidth": 187,
+          "selector": ".row-session.current .side-row-label",
+          "text": "슬라이드 구성과 읽기 흐름",
+          "line": "20px"
+        },
+        {
+          "size": "13px",
+          "color": "rgb(78, 89, 104)",
+          "width": 271,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 271,
+          "height": 32,
+          "scrollWidth": 271,
+          "selector": ".side-section-label",
+          "text": "채팅 · 3",
+          "line": "20px"
+        },
+        {
+          "size": "15px",
+          "color": "rgb(32, 39, 51)",
+          "width": 197.671875,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 198,
+          "height": 30,
+          "scrollWidth": 198,
+          "selector": ".topbar-title",
+          "text": "대화AI와 글쓰기 · 3주차 강의",
+          "line": "22px"
+        },
+        {
+          "size": "14px",
+          "color": "rgb(30, 110, 244)",
+          "width": 141,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 141,
+          "height": 20,
+          "scrollWidth": 141,
+          "selector": ".group-tab.active .group-tab-title",
+          "text": "슬라이드 구성과 읽기 흐름",
+          "line": "20px"
+        },
+        {
+          "size": "17px",
+          "color": "rgb(0, 0, 0)",
+          "width": 664,
+          "weight": "400",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 664,
+          "height": 287,
+          "scrollWidth": 664,
+          "selector": ".turn-assistant > .markdown",
+          "text": "읽기와 판단의 위계같은 내용을 읽어도 글자의 모양, 색, 여백에 따라 중요한 부분을 찾는 속도가 달라집니다.세 번째 단계 제목 · H3일반 문장 안에서 강조된 문구를 찾아봅니다. 굵게 강조한 문구와도 구분되어야 합니",
+          "line": "29.75px"
+        },
+        {
+          "size": "19.125px",
+          "color": "rgb(0, 0, 0)",
+          "width": 664,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 664,
+          "height": 26,
+          "scrollWidth": 664,
+          "selector": ".turn-assistant > .markdown h3",
+          "text": "세 번째 단계 제목 · H3",
+          "line": "26.775px"
+        },
+        {
+          "size": "17px",
+          "color": "rgb(0, 0, 0)",
+          "width": 664,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 664,
+          "height": 23,
+          "scrollWidth": 664,
+          "selector": ".turn-assistant > .markdown h4",
+          "text": "네 번째 단계 제목 · H4",
+          "line": "23.799999px"
+        },
+        {
+          "size": "17px",
+          "color": "rgb(0, 0, 0)",
+          "width": 79,
+          "weight": "550",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 0,
+          "height": 20,
+          "scrollWidth": 0,
+          "selector": ".turn-assistant > .markdown em",
+          "text": "강조된 문구",
+          "line": "29.75px"
+        },
+        {
+          "size": "17px",
+          "color": "rgb(0, 0, 0)",
+          "width": 113,
+          "weight": "600",
+          "background": "rgba(0, 0, 0, 0)",
+          "clientWidth": 0,
+          "height": 20,
+          "scrollWidth": 0,
+          "selector": ".turn-assistant > .markdown strong",
+          "text": "굵게 강조한 문구",
+          "line": "29.75px"
+        },
+        {
+          "selector": ".session-resume-preview",
+          "missing": true
+        }
+      ]
+    }
+  },
+  "customTheme": {
+    "bar": "rgb(28, 28, 30)",
+    "active": "rgb(44, 44, 46)",
+    "text": "rgb(255, 255, 255)"
+  },
+  "coarse": [
+    "44px",
+    "44px"
+  ],
+  "dense": {
+    "before": "17px",
+    "after": "17px"
+  },
+  "passed": true
+}

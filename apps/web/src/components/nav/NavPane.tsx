@@ -115,7 +115,10 @@ export function NowSection({ shared }: { shared: NavShared }) {
   );
 }
 
-type ShortcutView = { entry: NavShortcut; index: number; label: string; icon: IconName; color: string | null; current: boolean; disabled?: string; open: () => void };
+type ShortcutView = { entry: NavShortcut; index: number; label: string; icon: IconName; color: string | null; current: boolean; /** Selected as what the list shows (a folder, a tag). */ scope?: boolean; disabled?: string; open: () => void };
+
+/** What the list pane lists (a folder, a tag): marked apart from the project on screen. */
+const scopeMark = (selected: boolean) => (selected ? { "data-scope": "" } : {});
 
 /** "바로가기": projects, folders, tags, saved views and sessions, in the person's order. */
 export function ShortcutsSection({ shared }: { shared: NavShared }) {
@@ -139,14 +142,14 @@ export function ShortcutsSection({ shared }: { shared: NavShared }) {
       const folder = state.folders[entry.id];
       if (!folder || folderHidden(state, folder.id)) return;
       const selected = shared.nav.selected.kind === "folder" && shared.nav.selected.id === folder.id;
-      views.push({ ...base, label: entry.label ?? folder.name, icon: folderIcon(folder, false), color: folder.color ?? null, current: selected && !tree, open: () => shared.select({ kind: "folder", id: folder.id }) });
+      views.push({ ...base, label: entry.label ?? folder.name, icon: folderIcon(folder, false), color: folder.color ?? null, scope: selected && !tree, open: () => shared.select({ kind: "folder", id: folder.id }) });
     } else if (entry.kind === "tag") {
       const selected = shared.nav.selected.kind === "tag" && shared.nav.selected.tag === entry.id;
       views.push({
         ...base,
         label: entry.label ?? `#${entry.id}`,
         icon: "tag",
-        current: selected && !tree,
+        scope: selected && !tree,
         disabled: tree ? "태그 목록은 두 칸·위아래 배치에서 고를 수 있습니다." : undefined,
         open: () => shared.select({ kind: "tag", tag: entry.id }),
       });
@@ -209,6 +212,7 @@ export function ShortcutsSection({ shared }: { shared: NavShared }) {
                 data-shortcut-index={view.index}
                 data-shortcut-kind={view.entry.kind}
                 data-shortcut-id={view.entry.id}
+                {...scopeMark(Boolean(view.scope))}
                 title={view.disabled ?? (view.entry.label ? `원래 이름: ${view.entry.kind === "tag" ? `#${view.entry.id}` : view.label}` : undefined)}
                 onPointerDown={(event) => {
                   if ((event.target as HTMLElement).closest(".nav-shortcut-remove")) return;
@@ -247,7 +251,8 @@ export function ShortcutsSection({ shared }: { shared: NavShared }) {
           )}
         </div>
       ) : (
-        <div className="nav-empty">프로젝트·폴더·태그를 여기로 끌어 놓으면 바로가기가 됩니다.</div>
+        // The tag tree is drawn only beside the list: in the one-column layout there is no tag to drag.
+        <div className="nav-empty">{tree ? "프로젝트·폴더를" : "프로젝트·폴더·태그를"} 여기로 끌어 놓으면 바로가기가 됩니다.</div>
       )}
     </section>
   );
@@ -367,7 +372,8 @@ export function ProjectsSection({ shared }: { shared: NavShared }) {
             aria-level={1}
             aria-selected={isSelected(null)}
             tabIndex={tabbable === ROOT_ROW_ID ? 0 : -1}
-            className={`side-row nav-root${isSelected(null) ? " current" : ""}`}
+            className="side-row nav-root"
+            {...scopeMark(isSelected(null))}
             style={{ paddingLeft: 8 }}
             data-row-id={ROOT_ROW_ID}
             data-nav-row=""
@@ -413,7 +419,8 @@ export function ProjectsSection({ shared }: { shared: NavShared }) {
                     aria-expanded={children ? isOpen : undefined}
                     aria-selected={isSelected(folder.id)}
                     tabIndex={tabbable === folder.id ? 0 : -1}
-                    className={`side-row nav-folder${isSelected(folder.id) ? " current" : ""}${folder.color ? " colored" : ""}`}
+                    className={`side-row nav-folder${folder.color ? " colored" : ""}`}
+                    {...scopeMark(isSelected(folder.id))}
                     style={style}
                     data-row-id={folder.id}
                     data-nav-row=""
@@ -521,7 +528,8 @@ export function TagsSection({ shared }: { shared: NavShared }) {
           aria-expanded={node.children.length ? isOpen : undefined}
           aria-selected={current}
           tabIndex={current ? 0 : -1}
-          className={`side-row nav-tag${current ? " current" : ""}`}
+          className="side-row nav-tag"
+          {...scopeMark(current)}
           style={{ paddingLeft: 8 + depth * 14 }}
           data-nav-row=""
           data-tag={node.tag}
@@ -571,7 +579,8 @@ export function TagsSection({ shared }: { shared: NavShared }) {
               aria-level={1}
               aria-selected={untaggedCurrent}
               tabIndex={untaggedCurrent ? 0 : -1}
-              className={`side-row nav-tag nav-untagged${untaggedCurrent ? " current" : ""}`}
+              className="side-row nav-tag nav-untagged"
+              {...scopeMark(untaggedCurrent)}
               style={{ paddingLeft: 8 }}
               data-nav-row=""
               onClick={() => shared.select({ kind: "untagged" })}

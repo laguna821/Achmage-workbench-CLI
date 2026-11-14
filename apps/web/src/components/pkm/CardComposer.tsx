@@ -1,4 +1,5 @@
 import { forwardRef } from "react";
+import { failure } from "../../top-notice.ts";
 import type { Provider } from "@workbench/contracts";
 import { newRequestId, titleFrom } from "../../format.ts";
 import { Composer } from "../Composer.tsx";
@@ -35,7 +36,7 @@ export const CardComposer = forwardRef<
   const pkm = usePkm();
   // A note card or a note's pane header dropped here goes with the request (only Markdown notes).
   const drop = useNoteDrop((note) => {
-    if (!note.path.endsWith(".md")) return pkm.onToast("마크다운 노트만 요청에 붙일 수 있습니다.");
+    if (!note.path.endsWith(".md")) return pkm.onToast(failure("마크다운 노트만 요청에 붙일 수 있습니다."));
     if (!notes.some((entry) => entry.path === note.path)) onNotes([...notes, note]);
   });
   const dropping = held || drop.over;
@@ -49,7 +50,7 @@ export const CardComposer = forwardRef<
       pkm.showSession(work, session);
       return true;
     } catch (error) {
-      pkm.onToast(error instanceof Error ? error.message : String(error));
+      pkm.onToast(failure(error));
       return false;
     }
   };
@@ -57,6 +58,7 @@ export const CardComposer = forwardRef<
     <div ref={ref} {...drop.props} className={`column composer-area pkm-composer pkm-drop${dropping ? " dropping" : ""}`}>
       <EngineTabs value={engine} onChange={setEngine} />
       <Composer
+        provider={engine}
         draftKey={`pkm:${draftKey}`}
         placeholder={placeholder ?? (place.kind === "work" ? "이 작업에 새 세션으로 요청하기" : "노트를 붙여 새 세션 시작하기")}
         busy={false}

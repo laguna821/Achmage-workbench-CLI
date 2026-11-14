@@ -59,10 +59,6 @@
   color: var(--text-soft);
 }
 
-.linked-bar-who .engine-mark {
-  color: var(--accent);
-}
-
 .linked-bar-who.paused {
   color: var(--amber-text);
 }
@@ -180,43 +176,10 @@
   gap: 6px;
 }
 
-.linked-hop-from .engine-mark {
-  color: var(--accent);
-}
-
 .linked-hop-count {
   font-size: var(--fs-micro);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-}
-
-.linked-request {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-  max-width: min(82%, 680px);
-}
-
-/* Another session's words: not the user's own bubble. */
-.linked-request .user-bubble {
-  max-width: 100%;
-  border: 1px dashed var(--line-strong);
-  background: var(--surface-muted);
-  color: var(--text);
-  box-shadow: none;
-  white-space: normal;
-}
-
-.linked-request.folded .user-bubble {
-  max-height: 15em;
-  overflow: hidden;
-  mask-image: linear-gradient(to bottom, #000 70%, transparent);
-  -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent);
-}
-
-.linked-request-toggle {
-  font-size: var(--fs-micro);
 }
 
 .linked-end {
@@ -338,10 +301,6 @@
   background: color-mix(in srgb, var(--accent) 8%, var(--surface));
 }
 
-.linked-order-chip .engine-mark {
-  color: var(--accent);
-}
-
 .linked-order-no,
 .linked-candidate-check {
   display: inline-grid;
@@ -407,7 +366,6 @@
 
 .linked-candidate .engine-mark {
   flex: 0 0 auto;
-  color: var(--accent);
 }
 
 .linked-candidate-check {
@@ -584,10 +542,6 @@
   font-weight: 600;
 }
 
-.linked-view-who .engine-mark {
-  color: var(--accent);
-}
-
 .linked-view-body {
   flex: 1 1 auto;
   min-height: 0;
@@ -612,10 +566,6 @@
   font-size: var(--fs-meta);
   font-weight: 600;
   color: var(--text-soft);
-}
-
-.linked-turn-who .engine-mark {
-  color: var(--accent);
 }
 
 .linked-turn-who .link {

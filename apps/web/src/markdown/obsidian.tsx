@@ -5,7 +5,7 @@ import type { CSSProperties, ReactNode } from "react";
 import Markdown, { defaultUrlTransform, type Components, type Options } from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
-import remarkGfm from "remark-gfm";
+import { REMARK_BASE } from "./plugins.ts";
 import { Icon, type IconName } from "../components/Icon.tsx";
 import "../styles/markdown.css";
 
@@ -188,7 +188,7 @@ export const SANITIZE_SCHEMA = {
   strip: ["script", "style", "title", "template", "noscript", "iframe", "object", "embed", "textarea", "select"],
 };
 
-export const OBSIDIAN_REMARK: Plugins = [remarkGfm, remarkObsidian];
+export const OBSIDIAN_REMARK: Plugins = [...REMARK_BASE, remarkObsidian];
 export const OBSIDIAN_REHYPE: Plugins = [rehypeRaw, [rehypeSanitize, SANITIZE_SCHEMA], rehypeObsidian];
 
 export const obsidianUrlTransform = (url: string) => (/^(vault-note|vault-embed):/.test(url) ? url : defaultUrlTransform(url));
@@ -287,9 +287,23 @@ export function obsidianComponents(base: Components, options: { tagColor?: (tag:
 }
 
 /** Markdown with the Obsidian pieces; `components` should come from {@link obsidianComponents}. */
-export function ObsidianMarkdown({ children, components, urlTransform = obsidianUrlTransform }: { children: string; components: Components; urlTransform?: Options["urlTransform"] }) {
+const BLOCKS = new Set(["p", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre", "table", "tr", "hr", "div", "details"]);
+
+/** Marks each block with the source line it starts on (`data-src-line`), to put a caret where a reader clicked. */
+function rehypeSourceLines() {
+  return (tree: HastRoot) => {
+    const visit = (node: HastRoot | ElementContent) => {
+      if (node.type === "element" && BLOCKS.has(node.tagName) && node.position) node.properties = { ...node.properties, dataSrcLine: node.position.start.line };
+      if ("children" in node) for (const child of node.children) visit(child as ElementContent);
+    };
+    visit(tree);
+  };
+}
+const OBSIDIAN_REHYPE_LINES: Plugins = [...OBSIDIAN_REHYPE, rehypeSourceLines];
+
+export function ObsidianMarkdown({ children, components, urlTransform = obsidianUrlTransform, sourceLines = false }: { children: string; components: Components; urlTransform?: Options["urlTransform"]; sourceLines?: boolean }) {
   return (
-    <Markdown remarkPlugins={OBSIDIAN_REMARK} rehypePlugins={OBSIDIAN_REHYPE} remarkRehypeOptions={{ clobberPrefix: "" }} components={components} urlTransform={urlTransform}>
+    <Markdown remarkPlugins={OBSIDIAN_REMARK} rehypePlugins={sourceLines ? OBSIDIAN_REHYPE_LINES : OBSIDIAN_REHYPE} remarkRehypeOptions={{ clobberPrefix: "" }} components={components} urlTransform={urlTransform}>
       {children}
     </Markdown>
   );

@@ -40,5 +40,8 @@ if (!wasm) throw new Error('The studio does not contain the pinned engine WASM')
 // Only this generated directory belongs to the builder.
 rmSync(output, { recursive: true, force: true }); mkdirSync(dirname(output), { recursive: true }); cpSync(built, output, { recursive: true });
 cpSync(join(root, 'third_party/hop/LICENSE'), join(output, 'LICENSE-hop.txt'));
+// The minimal fallback faces (OFL; licence travels with them). Upstream's own font table already
+// names these files under fonts/; the build that strips upstream's font folder leaves them out.
+cpSync(join(root, 'third_party/hop/fonts'), join(output, 'fonts'), { recursive: true });
 writeFileSync(join(output, 'build.json'), JSON.stringify({ schemaVersion: 1, ieumCommit: commit, rhwpCommit: engine.rhwp.commit, engineVersion: engine.version, wasm: relative(built, wasm).split(sep).join('/'), wasmSha256: engine.rhwp.wasmSha256, studioStamp: readFileSync(join(built, '.stamp'), 'utf8').trim() }, null, 2) + '\n');
 console.log(`HWP studio ${engine.version}: ${relative(root, output)} (shared browser/host WASM)`);

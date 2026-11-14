@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { REMARK_BASE } from "../markdown/plugins.ts";
 import type { ScmReviewBatch, ScmReviewBatchRequest, ScmReviewCreate, ScmReviewList, ScmReviewNote, ScmReviewPlacement, ScmReviewSelection, ScmReviewSnapshot, Workspace } from "@workbench/contracts";
 import { ApiRequestError, type Api } from "../api.ts";
 
@@ -83,7 +83,7 @@ export function ScmReviewsProvider({ api, workspace, children }: { api: Api; wor
           const placement = data?.placements[note.id], sent = data?.batches.find((b) => b.notes.some((n) => n.id === note.id && n.version === note.version));
           return <article key={note.id} className={`scm-note${note.resolved ? " resolved" : ""}`} data-note-id={note.id}><header><label><input className="scm-note-select" type="checkbox" disabled={note.resolved || busy || !!retryBatch} checked={selected.includes(note.id)} onChange={(event) => setSelected((ids) => event.target.checked ? [...ids, note.id] : ids.filter((id) => id !== note.id))} /><strong>{note.anchor.path}</strong></label><small>v{note.version} · {note.resolved ? "해결됨" : "미해결"}</small></header>
             <p className="scm-note-location">{note.anchor.selection ? `${note.anchor.selection.side === "before" ? "이전" : "이후"} ${note.anchor.selection.start}–${note.anchor.selection.end}행 · ` : ""}{placementLabels[placement?.kind ?? "unavailable"]}{placement?.start ? ` · 현재 ${placement.start}–${placement.end}행` : ""}</p>
-            <div className="markdown scm-note-markdown"><Markdown remarkPlugins={[remarkGfm]} components={{ img: ({ alt }) => <span>{alt ?? "이미지"}</span> }}>{note.body}</Markdown></div>
+            <div className="markdown scm-note-markdown"><Markdown remarkPlugins={REMARK_BASE} components={{ img: ({ alt }) => <span>{alt ?? "이미지"}</span> }}>{note.body}</Markdown></div>
             <details className="scm-note-original"><summary>검토 당시 원문과 기준</summary><pre>{note.anchor.quote.length ? note.anchor.quote.join("\n") : "파일 의견"}</pre><code>{JSON.stringify(note.anchor.source)}</code><small>원문 해시 {note.anchor.contentHash ?? "파일 의견"} · 비교 {note.anchor.diffRevision}</small></details>
             {sent ? <small className="scm-note-delivery">이 버전: {batchLabels[sent.phase]} · {sent.target.provider} / {sent.target.purpose}</small> : <small className="scm-note-delivery">이 버전은 아직 전달 기록이 없습니다.</small>}
             <div className="scm-note-actions"><button className="text-button scm-note-edit" disabled={busy || !!retryCreate} onClick={() => { setError(""); setDraft({ path: note.anchor.path, snapshotId: "", selection: note.anchor.selection, body: note.body, note }); }}>수정</button><button className="text-button scm-note-resolve" disabled={busy} onClick={() => void mutate(note, { resolved: !note.resolved })}>{note.resolved ? "다시 검토" : "해결로 표시"}</button><details><summary>삭제</summary><button className="text-button scm-note-delete" disabled={busy} onClick={() => void mutate(note, { deleted: true })}>이 의견 삭제 · 전달 기록은 보존</button></details></div>

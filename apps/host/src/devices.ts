@@ -20,7 +20,7 @@ const MAX_PENDING = 64;
 const HEX_DIGEST = /^[a-f0-9]{64}$/;
 type StoredDevice = { grant: DeviceGrant; credentialHash: string | null };
 type StoredOffer = { offerId: string; tokenHash: string; createdAt: number; expiresAt: number; consumedAt: number | null };
-type StoredRequest = PairingRequest & { claimHash: string | null; connectionHash: string; claimedAt: number | null };
+type StoredRequest = PairingRequest & { remember: boolean; previousDeviceId: string | null; claimHash: string | null; connectionHash: string; claimedAt: number | null };
 type RegistryState = { version: 1; hostId: string; devices: StoredDevice[]; offers: StoredOffer[]; requests: StoredRequest[] };
 
 export class DeviceRegistryError extends Error {
@@ -36,8 +36,11 @@ export class DeviceRegistryError extends Error {
 function fail(code: DeviceErrorCode, status: number, message: string): never {
   throw new DeviceRegistryError(code, status, message);
 }
+// Control codes, and the marks that reorder displayed text (bidi embeddings, overrides, isolates and
+// direction marks): a name shown on the approval card must read as it was sent. Joiners stay (emoji).
+const UNSHOWABLE = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/;
 function text(value: unknown, field: string, max = 200): string {
-  if (typeof value !== "string" || !value.trim() || value.length > max || /[\u0000-\u001f]/.test(value)) {
+  if (typeof value !== "string" || !value.trim() || value.length > max || UNSHOWABLE.test(value)) {
     return fail("invalid_input", 400, `${field} 값이 올바르지 않습니다.`);
   }
   return value.trim();
@@ -69,6 +72,13 @@ function scopes(input: DeviceApproval, now: number, prior?: DeviceGrant): Pick<D
     return fail("invalid_input", 400, "기기 만료 시각은 현재 이후여야 합니다.");
   }
   return { permissions: [...new Set(input.permissions)], workIds: [...new Set(workIds)], expiresAt };
+}
+function replacedIds(input: DeviceApproval): Set<string> {
+  if (input.replaces === undefined) return new Set();
+  if (!Array.isArray(input.replaces) || input.replaces.length > 64 || !input.replaces.every((id) => typeof id === "string" && id.length > 0 && id.length <= 256)) {
+    return fail("invalid_input", 400, "정리할 이전 기기 목록이 올바르지 않습니다.");
+  }
+  return new Set(input.replaces);
 }
 
 /** The host instance lock owns this registry. All writes commit before authority changes.
@@ -153,7 +163,8 @@ export class DeviceRegistry {
   requestPairing(input: PairingRequestInput): PairingRequestTicket {
     this.requireOpen();
     const name = text(input.name, "기기 이름", 100);
-    const platform = input.platform === undefined ? null : text(input.platform, "기기 종류", 100);
+    // A browser reports itself by its user agent (cut to 160 characters by the pairing screen); real ones exceed 100.
+    const platform = input.platform === undefined ? null : text(input.platform, "기기 종류", 200);
     const connection = this.connection(input.connectionId);
     const now = this.now();
     const offer = this.state.offers.find((entry) => entry.offerId === input.offerId);
@@ -166,10 +177,14 @@ export class DeviceRegistry {
     }
     next.offers.find((entry) => entry.offerId === offer.offerId)!.consumedAt = now;
     const claimToken = this.secret();
+    // The named earlier approval is a hint for the owner. The ticket is the same whether or not it matched.
+    const previousDeviceId = typeof input.previousDeviceId === "string" && next.devices.some((entry) => entry.grant.deviceId === input.previousDeviceId)
+      ? input.previousDeviceId : null;
     const request: StoredRequest = {
       requestId: randomUUID(), hostId: this.hostId, name, platform,
       verificationCode: String(randomInt(1_000_000)).padStart(6, "0"),
       createdAt: now, expiresAt: offer.expiresAt, status: "pending", deviceId: null,
+      remember: input.remember === true, previousDeviceId,
       claimHash: this.digest("claim", claimToken), connectionHash: this.digest("connection", connection), claimedAt: null,
     };
     next.requests.push(request);
@@ -183,17 +198,20 @@ export class DeviceRegistry {
     const now = this.now(), next = structuredClone(this.state);
     const request = this.pending(next, requestId, now);
     const approvedScopes = scopes(input, now);
+    // Registering the same device again: the earlier entries the owner chose leave with this approval.
+    const replaced = this.drop(next, replacedIds(input));
     if (next.devices.length >= MAX_DEVICES) fail("registry_limit", 429, "등록 가능한 기기 수를 초과했습니다.");
     const grant: DeviceGrant = {
       deviceId: randomUUID(), hostId: this.hostId, name: request.name, platform: request.platform,
       ...approvedScopes, createdAt: request.createdAt, approvedAt: now, activatedAt: null,
-      revokedAt: null, credentialVersion: 1, lastRotatedAt: null,
+      revokedAt: null, credentialVersion: 1, lastRotatedAt: null, rememberedAt: request.remember ? now : null,
     };
     request.status = "approved";
     request.deviceId = grant.deviceId;
     next.devices.push({ grant, credentialHash: null });
     this.commit(next);
     this.emit({ type: "approved", requestId, deviceId: grant.deviceId });
+    for (const deviceId of replaced) this.emit({ type: "revoked", deviceId });
     return structuredClone(grant);
   }
 
@@ -281,6 +299,16 @@ export class DeviceRegistry {
     return structuredClone(stored.grant);
   }
 
+  /** Takes the entry off the list. Its credential ends with it, as with a revocation. */
+  remove(deviceId: string): void {
+    this.requireOpen();
+    const next = structuredClone(this.state);
+    this.device(next, deviceId);
+    this.drop(next, new Set([deviceId]));
+    this.commit(next);
+    this.emit({ type: "revoked", deviceId });
+  }
+
   /** Only the authenticated device receives its replacement; local UI uses revoke + a new offer. */
   rotate(credential: string): DeviceCredential {
     this.requireOpen();
@@ -304,8 +332,16 @@ export class DeviceRegistry {
   }
 
   private publicRequest(request: StoredRequest): PairingRequest {
-    const { requestId, hostId, name, platform, verificationCode, createdAt, expiresAt, status, deviceId } = request;
-    return { requestId, hostId, name, platform, verificationCode, createdAt, expiresAt, status, deviceId };
+    const { requestId, hostId, name, platform, verificationCode, createdAt, expiresAt, status, deviceId, remember, previousDeviceId } = request;
+    return { requestId, hostId, name, platform, verificationCode, createdAt, expiresAt, status, deviceId, remember, previousDeviceId };
+  }
+  /** Removes the named entries that exist, with the pairing records that point at them. */
+  private drop(state: RegistryState, ids: Set<string>): string[] {
+    const removed = state.devices.filter((entry) => ids.has(entry.grant.deviceId)).map((entry) => entry.grant.deviceId);
+    if (!removed.length) return removed;
+    state.devices = state.devices.filter((entry) => !ids.has(entry.grant.deviceId));
+    state.requests = state.requests.filter((request) => request.deviceId === null || !ids.has(request.deviceId));
+    return removed;
   }
   private pending(state: RegistryState, requestId: string, now: number): StoredRequest {
     const request = state.requests.find((entry) => entry.requestId === requestId);
@@ -416,12 +452,15 @@ export class DeviceRegistry {
         || !epoch(item.createdAt) || !epoch(item.approvedAt) || !nullableEpoch(item.activatedAt)
         || !nullableEpoch(item.expiresAt) || !nullableEpoch(item.revokedAt) || !nullableEpoch(item.lastRotatedAt)
         || typeof item.credentialVersion !== "number" || !Number.isSafeInteger(item.credentialVersion) || item.credentialVersion < 1
+        || (item.rememberedAt !== undefined && !nullableEpoch(item.rememberedAt))
         || (row.credentialHash !== null && (typeof row.credentialHash !== "string" || !HEX_DIGEST.test(row.credentialHash)))) throw Error("Invalid grant");
       const grant: DeviceGrant = {
         deviceId: item.deviceId, hostId: this.hostId, name: item.name, platform: item.platform,
         permissions: item.permissions, workIds: item.workIds, createdAt: item.createdAt, approvedAt: item.approvedAt,
         activatedAt: item.activatedAt, expiresAt: item.expiresAt, revokedAt: item.revokedAt,
         credentialVersion: item.credentialVersion, lastRotatedAt: item.lastRotatedAt,
+        // Absent in registries written before devices could be remembered.
+        rememberedAt: item.rememberedAt ?? null,
       };
       return { grant, credentialHash: row.credentialHash as string | null };
     });
@@ -438,12 +477,15 @@ export class DeviceRegistry {
         || !/^[0-9]{6}$/.test(item.verificationCode) || !epoch(item.createdAt) || !epoch(item.expiresAt)
         || !["pending", "approved", "rejected"].includes(String(item.status))
         || (item.deviceId !== null && typeof item.deviceId !== "string")
+        || (item.remember !== undefined && typeof item.remember !== "boolean")
+        || (item.previousDeviceId !== undefined && item.previousDeviceId !== null && typeof item.previousDeviceId !== "string")
         || (item.claimHash !== null && (typeof item.claimHash !== "string" || !HEX_DIGEST.test(item.claimHash)))
         || typeof item.connectionHash !== "string" || !HEX_DIGEST.test(item.connectionHash) || !nullableEpoch(item.claimedAt)) throw Error("Invalid pairing request");
       return {
         requestId: item.requestId, hostId: this.hostId, name: item.name, platform: item.platform,
         verificationCode: item.verificationCode, createdAt: item.createdAt, expiresAt: item.expiresAt,
         status: item.status as PairingRequest["status"], deviceId: item.deviceId,
+        remember: item.remember === true, previousDeviceId: item.previousDeviceId ?? null,
         claimHash: item.claimHash as string | null, connectionHash: item.connectionHash, claimedAt: item.claimedAt,
       };
     });

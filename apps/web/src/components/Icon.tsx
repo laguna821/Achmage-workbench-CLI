@@ -71,6 +71,8 @@ const GLYPHS = {
   <rect width="7" height="7" x="3" y="14" rx="1" /></>,
   sidebar: <><rect width="18" height="18" x="3" y="3" rx="2" />
   <path d="M9 3v18" /></>,
+  sidebarRight: <><rect width="18" height="18" x="3" y="3" rx="2" />
+  <path d="M15 3v18" /></>,
   sun: <><circle cx="12" cy="12" r="4" />
   <path d="M12 2v2" />
   <path d="M12 20v2" />

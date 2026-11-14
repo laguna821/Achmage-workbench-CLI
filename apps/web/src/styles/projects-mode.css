@@ -12,18 +12,6 @@
   gap: 10px;
 }
 
-.projects-filter {
-  flex: 0 1 280px;
-  height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  font-size: var(--fs-meta);
-}
-
 .projects-stage {
   --stage: var(--muted);
   display: inline-flex;
@@ -284,6 +272,14 @@ button.projects-stage {
   margin-left: auto;
 }
 
+/* A document's AI rides on its chip, as on its sidebar row: the engine mark, then its state dot. */
+.work-chip-ai {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .kanban-column {
     transition: none;
@@ -291,8 +287,19 @@ button.projects-stage {
 }
 .project-selection-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 9px 16px; border-bottom: 1px solid var(--line); font-size: 12px; }
 .project-selection-notice { margin: 8px 16px; font-size: 13px; overflow-wrap: anywhere; }
-.project-selection-choice { display: inline-flex; align-items: center; gap: 5px; margin-right: 10px; font-size: 12px; font-weight: normal; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.project-selection-choice { display: inline-flex; align-items: center; margin-right: 8px; cursor: pointer; }
+/* The box is named by its input ("가 선택"); no word beside it. */
+.project-selection-choice > span { display: none; }
 .project-selection-choice input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
-.work-card > .project-selection-choice, .board-card .project-selection-choice { margin-bottom: 6px; }
+/* On a card the box sits in its top corner, not on a row of its own. */
+.projects-mode :is(.work-card, .kanban-card) { position: relative; }
+.projects-mode .work-card > .project-selection-choice { position: absolute; top: 12px; right: 12px; margin: 0; }
+.projects-mode .kanban-card > .project-selection-choice { position: absolute; top: 8px; right: 8px; margin: 0; }
+.projects-mode :is(.work-card > .work-card-title, .kanban-card > .kanban-card-title) { max-width: calc(100% - 24px); }
+/* At rest (nothing chosen) the box shows under the pointer or the keyboard only; a touch screen keeps it. */
+@media (hover: hover) {
+  .projects-mode:not([data-selecting]) .project-selection-choice { opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); }
+  .projects-mode:not([data-selecting]) :is([data-work]:hover, [data-work]:focus-within) .project-selection-choice { opacity: 1; }
+}
 .projects-mode [data-work]:has(> .project-selection-choice input:checked), .projects-mode tr[data-work]:has(.project-selection-choice input:checked) { outline: 2px solid var(--accent); outline-offset: -2px; }
 .graph-key-hint { font-size: 11px; color: var(--muted); }

@@ -5,7 +5,7 @@ import { ATTENTION_LABEL, type AttentionEvent, type AttentionPayload, type Atten
 import { AttentionInbox, CompletionNotifications, watchAttentionPresence } from "../completion-notifications.ts";
 import { initialState } from "../state.ts";
 import { AttentionCenter } from "./AttentionCenter.tsx";
-import { ConversationSheet } from "./docs/ConversationDrawer.tsx";
+import { AgentColumn } from "./companion/AgentColumn.tsx";
 
 vi.mock("./Transcript.tsx", () => ({ Transcript: (props: { sessionId: string; focusItem?: { itemId: string; nonce: number } }) => <div data-testid="focused-transcript" data-session={props.sessionId} data-item={props.focusItem?.itemId} /> }));
 vi.mock("./ImageGen.tsx", () => ({ ImageCard: () => null }));
@@ -93,10 +93,11 @@ it("reports active-session presence on focus/visibility changes, every 15 second
   expect(f.attentionPresence).toHaveBeenLastCalledWith({ clientId: f.inbox.clientId, sessionId: "child", visible: false }, true);
 });
 
-it("passes an exact original item into the document conversation overlay without answering approval", () => {
+it("passes an exact original item into the document's conversation column without answering approval", () => {
   const onAnswer = vi.fn(), onClose = vi.fn();
-  render(<ConversationSheet state={state} session={session} focusItem={{ itemId: "approval-1", nonce: 7 }} onClose={onClose} onAnswer={onAnswer} />);
+  render(<AgentColumn state={state} session={session} kind="document" name="문서" focusItem={{ itemId: "approval-1", nonce: 7 }} onClose={onClose} onAnswer={onAnswer}>{null}</AgentColumn>);
   expect(screen.getByTestId("focused-transcript").getAttribute("data-session")).toBe("child"); expect(screen.getByTestId("focused-transcript").getAttribute("data-item")).toBe("approval-1");
-  expect(document.activeElement).toBe(screen.getByRole("button", { name: "대화 닫기" }));
-  fireEvent.keyDown(document.activeElement!, { key: "Escape" }); expect(onClose).toHaveBeenCalledOnce(); expect(onAnswer).not.toHaveBeenCalled();
+  // Looking is not answering: nothing is approved by opening it, nor by a key pressed on the column.
+  fireEvent.keyDown(screen.getByTestId("focused-transcript"), { key: "Escape" }); fireEvent.keyDown(screen.getByTestId("focused-transcript"), { key: "Enter" });
+  expect(onAnswer).not.toHaveBeenCalled(); expect(onClose).not.toHaveBeenCalled();
 });

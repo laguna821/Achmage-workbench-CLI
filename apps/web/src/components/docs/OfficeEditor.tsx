@@ -1,4 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { takeDiscarded } from "../../discarded-edits.ts";
+import { failure, type Notify } from "../../top-notice.ts";
 import type { Artifact, DocumentAccess, EditorGrant, OfficePageMessage } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
 import type { RendererControlRequest, RendererControlReply } from "../../../../../packages/contracts/src/office-control.ts";
@@ -19,9 +21,15 @@ import type { KnowledgeOpenRequest } from "../../../../../packages/contracts/src
 import type { PdfNoteRequest, PdfNoteResult } from "../../../../../packages/contracts/src/pdf-notes.ts";
 import { PdfNoteDialog } from "./PdfNoteDialog.tsx";
 
+const BUSY = failure("문서를 여는 중이거나 다른 출력을 처리 중입니다.");
+
 export type OfficeHandle = {
   /** Find and execute the mounted renderer's original menu/ribbon commands. */
   showCommands(): void;
+  /** Open or close the editor's own AI dock (the Hangul editor's, which is the document's 문서 AI). */
+  setAiPanel(open: boolean, draft?: string): void;
+  /** The document's one unsent AI draft, put in the editor's own AI input in place of what it holds. */
+  setAiDraft(draft: string): void;
   mcp(request: OfficeMcpRequest): Promise<OfficeMcpReply>;
   control(request: RendererControlRequest): Promise<RendererControlReply>;
   /** Run the original renderer's PDF action on current, possibly unsaved content. */
@@ -36,13 +44,29 @@ export type OfficeHandle = {
   rebase(revision: number): Promise<number | null>;
   /** Open the latest revision; unsaved edits in the editor are dropped. */
   reload(): void;
-  /** Before the view goes away: confirm saving. A failure/conflict keeps this editor mounted. */
-  leave(): Promise<void>;
+  /** Before the view goes away: confirm saving (the saved revision; null: never opened). A failure/conflict keeps this editor mounted. */
+  leave(): Promise<number | null>;
 };
 
 export type OfficeConflict = { code: string; message: string };
 /** `revision`: what the editor's content is based on (null until it has opened). */
-export type OfficeStatus = { dirty: boolean; revision: number | null; conflict: OfficeConflict | null };
+/**
+ * `dirty` is the editor's own report: closing, removing and navigating rely on it, exactly.
+ * The label reads the other two. `changed`: show "저장 안 됨" — the editor says dirty and its text
+ * is not known to equal the saved revision. `same`: the editor says dirty but its text was read and
+ * found equal (the Markdown editor reports dirty as it opens, see below): no unsaved mark, and no
+ * "저장됨" either — that word waits for the editor's own clean report.
+ */
+export type OfficeStatus = { dirty: boolean; revision: number | null; conflict: OfficeConflict | null; changed: boolean; same: boolean };
+/**
+ * A Hangul save that went on without its save check (the gateway answered `text`/`structure`
+ * "unchecked": an engine call it could not count with) is said to the person once per document per
+ * session, through the same notice as the Save As warning (T3, m3-1).
+ */
+export const HWP_UNCHECKED_NOTICE = "저장했습니다. 이 문서는 저장 검사를 하지 못했습니다.";
+const uncheckedNoticed = new Set<string>();
+/** A burst of hints that the text may have changed is one question to the editor. */
+const COMPARE_DELAY_MS = 400;
 
 /**
  * A Word, PowerPoint or Excel document in the central area, edited with IeumOffice's editor built
@@ -52,22 +76,41 @@ export type OfficeStatus = { dirty: boolean; revision: number | null; conflict: 
  */
 export const OfficeEditor = forwardRef<
   OfficeHandle,
-  { api: Api; artifact: Artifact; access?: DocumentAccess; sessionId: string | null; hidden?: boolean; onStatus(status: OfficeStatus): void; onNotice(message: string): void; onCopied?(artifactId: string, scope?: Pick<Artifact, "workId" | "workspaceId"> & { preserveSource?: boolean }): void; onPresent?(value: OfficePresentation): void; onPrepareAi(revision: number): Promise<void>; onNewSession(revision: number): Promise<string>; onAiSettings(): void }
->(function OfficeEditor({ api, artifact, access, sessionId, hidden = false, onStatus, onNotice, onCopied, onPresent, onPrepareAi, onNewSession, onAiSettings }, ref) {
+  { api: Api; artifact: Artifact; access?: DocumentAccess; sessionId: string | null; hidden?: boolean; onStatus(status: OfficeStatus): void; onAiPanel?(open: boolean, draft?: string, dock?: { ready: boolean; person: boolean; shown?: boolean }): void;
+    /** The editor's page is opened again in place (a new frame: its own AI dock, if any, is drawn afresh). */
+    onReload?(): void; onNotice: Notify; onCopied?(artifactId: string, scope?: Pick<Artifact, "workId" | "workspaceId"> & { preserveSource?: boolean }): void; onPresent?(value: OfficePresentation): void; onPrepareAi(revision: number): Promise<void>; onNewSession(revision: number): Promise<string>; onAiSettings(): void }
+>(function OfficeEditor({ api, artifact, access, sessionId, hidden = false, onStatus, onAiPanel, onReload, onNotice, onCopied, onPresent, onPrepareAi, onNewSession, onAiSettings }, ref) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [generation, setGeneration] = useState(0);
   // Each opening of the page gets its own grant (a token for this document only).
   const [grant, setGrant] = useState<{ generation: number; value: EditorGrant } | { generation: number; error: string } | null>(null);
   const opened = useRef<EditorGrant | null>(null);
-  const status = useRef<OfficeStatus>({ dirty: false, revision: null, conflict: null });
+  const status = useRef<OfficeStatus>({ dirty: false, revision: null, conflict: null, changed: false, same: false });
+  // The Markdown editor says "dirty" the moment it opens: registering its AI executor unlocks the
+  // editor (apps/office/execution-patch.ts → setEditable), TipTap emits an update for that, and the
+  // renderer counts every update as an edit. It then stays dirty, so a real edit sends nothing new.
+  // For the label its text is compared with the saved revision; other editors' reports are taken
+  // as they are.
+  const verifies = artifact.format === "markdown";
+  /** The last comparison of this dirty spell: "none" (not made, or the read failed: the report stands), equal, or different. */
+  const compared = useRef<"none" | "equal" | "different">("none");
+  const savedText = useRef<{ revision: number; text: string } | null>(null);
+  const comparing = useRef(false), compareAgain = useRef(false), compareTimer = useRef<number | undefined>(undefined);
   const own = useRef(new Set<number>());
   // When the page last said a save of its own is on its way (0: none).
   const savingSince = useRef(0);
   const waiters = useRef<((revision: number | null) => void)[]>([]);
   // False only for the reload right after "open the latest revision": kept edits are dropped then.
   const recover = useRef(true);
-  const handlers = useRef({ onStatus, onNotice, onCopied, onPresent, onPrepareAi, onNewSession, onAiSettings });
-  handlers.current = { onStatus, onNotice, onCopied, onPresent, onPrepareAi, onNewSession, onAiSettings };
+  const handlers = useRef({ onStatus, onAiPanel, onReload, onNotice, onCopied, onPresent, onPrepareAi, onNewSession, onAiSettings });
+  const noticeUnchecked = () => {
+    if (uncheckedNoticed.has(artifact.id)) return;
+    uncheckedNoticed.add(artifact.id); handlers.current.onNotice(HWP_UNCHECKED_NOTICE);
+  };
+  handlers.current = { onStatus, onAiPanel, onReload, onNotice, onCopied, onPresent, onPrepareAi, onNewSession, onAiSettings };
+  // The page opened again in place: whoever follows its AI dock must not take the new one for the old.
+  const firstGeneration = useRef(generation);
+  useEffect(() => { if (generation !== firstGeneration.current) handlers.current.onReload?.(); }, [generation]);
   const aiBusy = useRef(false);
   const referenceSnapshot = useRef<string | null>(null);
   const referenceSession = useRef<string | null>(null);
@@ -95,11 +138,67 @@ export const OfficeEditor = forwardRef<
   latest.current = artifact;
 
   const theme = () => (frame.current?.closest("[data-theme]")?.getAttribute("data-theme") === "dark" ? "dark" : "light");
-  const update = (patch: Partial<OfficeStatus>) => {
-    status.current = { ...status.current, ...patch };
+  const update = (patch: Partial<Omit<OfficeStatus, "changed" | "same">>) => {
+    const next = { ...status.current, ...patch };
+    if (!next.dirty) compared.current = "none";
+    else if (next.conflict) compared.current = "different";
+    const same = next.dirty && verifies && compared.current === "equal";
+    status.current = { ...next, changed: next.dirty && !same, same };
     if (frame.current) frame.current.dataset.revision = String(status.current.revision ?? "");
     handlers.current.onStatus(status.current);
   };
+  // The editor's text against the saved revision's, asked after a hint that it may have changed
+  // (never on a clock). Equal takes the unsaved mark back; anything else — different, busy, not
+  // ready, no answer, a saved text that cannot be read — leaves or puts back the editor's report.
+  const settle = (result: "none" | "equal" | "different") => {
+    if (compared.current === result) return;
+    compared.current = result;
+    update({});
+  };
+  const compareNow = useRef(async () => {});
+  compareNow.current = async () => {
+    const now = status.current, revision = now.revision;
+    if (!verifies || !now.dirty || compared.current === "different" || revision === null || !opened.current) return;
+    if (comparing.current) { compareAgain.current = true; return; }
+    comparing.current = true;
+    const owner = latest.current.id, target = frame.current?.contentWindow;
+    const current = () => target === frame.current?.contentWindow && latest.current.id === owner && status.current.revision === revision && status.current.dirty;
+    try {
+      if (savedText.current?.revision !== revision) {
+        try { savedText.current = { revision, text: (await api.artifactText(owner, revision)).text }; }
+        catch { if (current()) settle("none"); return; }
+      }
+      const reply = await new Promise<OfficeMcpReply>((resolve) => {
+        const requestId = crypto.randomUUID();
+        const timer = window.setTimeout(() => finish({ status: "not_ready" }), 1500);
+        const finish = (value: OfficeMcpReply) => { window.clearTimeout(timer); mcpWaiters.current.delete(requestId); resolve(value); };
+        mcpWaiters.current.set(requestId, finish);
+        send({ type: "office:mcp", requestId, request: { kind: "read" } });
+      });
+      if (!current()) return;
+      settle(reply.status !== "ok" ? "none" : reply.result.value === savedText.current.text ? "equal" : "different");
+    } finally {
+      comparing.current = false;
+      if (compareAgain.current) { compareAgain.current = false; hint.current(); }
+    }
+  };
+  /** Something that may have changed the editor's text, or shows the person leaving it: compare once things rest. */
+  const hint = useRef((_delay?: number) => {});
+  hint.current = (delay = COMPARE_DELAY_MS) => {
+    if (!verifies || !status.current.dirty || compared.current === "different") return;
+    window.clearTimeout(compareTimer.current);
+    compareTimer.current = window.setTimeout(() => void compareNow.current(), delay);
+  };
+  // The editor says nothing when a later edit is typed. The moments the app can see: the focus
+  // coming back from the frame, the page shown again (and the pointer leaving the frame, below).
+  useEffect(() => {
+    if (!verifies) return;
+    const onHint = () => hint.current();
+    const onVisible = () => { if (document.visibilityState === "visible") hint.current(); };
+    window.addEventListener("focus", onHint);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { window.removeEventListener("focus", onHint); document.removeEventListener("visibilitychange", onVisible); window.clearTimeout(compareTimer.current); };
+  }, [verifies, artifact.id]);
   const reconcile = () => {
     const shown = status.current.revision, revision = latest.current.revision;
     if (shown === null || revision <= shown || own.current.has(revision)) return;
@@ -319,6 +418,10 @@ export const OfficeEditor = forwardRef<
           if (result.artifact && (!message.intent || message.intent === "copy")) copied.current.set(result.artifact.id, ownerSession ?? null);
           reply({ path: result.path, artifactId: result.artifact?.id ?? null });
           if (result.backupPath) handlers.current.onNotice(`이전 파일을 백업했습니다: ${result.backupPath}`);
+          // The loss warning is what the person must read: the unchecked line never replaces it
+          // (the top bar shows the last notice) and waits for the next unchecked save.
+          if (result.warning) handlers.current.onNotice(result.warning);
+          else if (result.text === "unchecked" || result.structure === "unchecked") noticeUnchecked();
           if (message.intent === "open" && result.artifact) handlers.current.onCopied?.(result.artifact.id, { ...result.artifact, preserveSource: true });
           // Exporting does not change the source renderer or its unsaved recovery buffer.
           if (message.intent === "export") handlers.current.onNotice(`파일을 내보냈습니다: ${result.path}`);
@@ -552,6 +655,8 @@ export const OfficeEditor = forwardRef<
     const onMessage = (event: MessageEvent) => {
       if (!opened.current || event.origin !== opened.current.origin || event.source !== frame.current?.contentWindow) return;
       const message = event.data as OfficePageMessage;
+      // Whatever else the editor does (its AI, an output, a note) may have changed its text.
+      if (!["office:mcp-result", "office:control-result", "office:dirty", "office:saved", "office:opened", "office:ready"].includes(message.type)) hint.current();
       switch (message.type) {
         case "office:skills": void skillsHandler.current(message); break;
         case "office:wiki": void wikiHandler.current(message); break;
@@ -599,6 +704,9 @@ export const OfficeEditor = forwardRef<
           break;
         case "office:ready": {
           const doc = latest.current;
+          // Its unsaved edits were dropped by the person (저장하지 않고 옮기기): the editor must not
+          // restore its own recovery copy of them; recover: false makes it drop that copy.
+          const dropped = takeDiscarded(doc.id);
           send({
             type: "office:init",
             token: opened.current.token,
@@ -606,7 +714,7 @@ export const OfficeEditor = forwardRef<
             artifact: { id: doc.id, name: doc.name, path: doc.path, revision: doc.revision, sha256: doc.sha256 },
             readOnly: false,
             theme: theme(),
-            recover: recover.current,
+            recover: recover.current && !dropped,
           });
           recover.current = true;
           break;
@@ -624,6 +732,8 @@ export const OfficeEditor = forwardRef<
               },
             });
           } else {
+            // Edits recovered on opening are unsaved work: nothing to compare.
+            compared.current = message.recovered ? "different" : "none";
             update({ revision: message.revision, dirty: message.recovered, conflict: null });
             if (message.recovered) handlers.current.onNotice("저장하지 않았던 편집을 되살렸습니다.");
           }
@@ -631,17 +741,25 @@ export const OfficeEditor = forwardRef<
           // already ran with shown=null; reconcile again with the actual opened revision.
           reconcile();
           break;
+        case "office:ai-panel":
+          handlers.current.onAiPanel?.(message.open, message.draft, message.ready === undefined ? undefined : { ready: message.ready, person: Boolean(message.person), shown: message.shown ?? message.open });
+          break;
         case "office:saving":
           savingSince.current = Date.now();
           break;
         case "office:saved":
           savingSince.current = 0;
           own.current.add(message.revision);
+          if (message.unchecked) noticeUnchecked();
           update({ revision: message.revision, dirty: false, conflict: null });
           reconcile();
           break;
         case "office:dirty":
+          // An update shows as unsaved at once; the comparison may take the mark back.
+          if (message.dirty && compared.current === "equal") compared.current = "none";
           if (message.dirty !== status.current.dirty) update({ dirty: message.dirty });
+          else if (message.dirty) update({});
+          if (message.dirty) hint.current(status.current.changed && !savedText.current ? 0 : COMPARE_DELAY_MS);
           break;
         case "office:execution-refresh":
           if (!status.current.dirty) { recover.current = false; update({ revision: null }); setGeneration(value => value + 1); }
@@ -655,7 +773,7 @@ export const OfficeEditor = forwardRef<
           break;
         case "office:error":
           savingSince.current = 0;
-          handlers.current.onNotice(`저장하지 못했습니다: ${message.message}`);
+          handlers.current.onNotice(failure(message.message, "저장하지 못했습니다: "));
           break;
         case "office:clipboard-picture":
           // Only for the editor the user is pasting into; the page cannot read the desktop clipboard itself.
@@ -702,6 +820,12 @@ export const OfficeEditor = forwardRef<
     showCommands() {
       if (status.current.revision !== null) send({ type: "office:show-commands" });
     },
+    setAiPanel(open, draft) {
+      send(draft ? { type: "office:ai-panel-set", open, draft } : { type: "office:ai-panel-set", open });
+    },
+    setAiDraft(draft) {
+      send({ type: "office:ai-draft-set", draft });
+    },
     mcp(request) {
       if (status.current.revision === null) return Promise.resolve({ status: "not_ready" });
       if (request.kind !== "status" && (aiBusy.current || outputBusy.current || blockingOutputs())) return Promise.resolve({ status: "error", error: { reason: "busy", message: "이 문서에서 실행 중인 AI·저장 작업을 마친 뒤 다시 요청해 주세요." } });
@@ -734,31 +858,31 @@ export const OfficeEditor = forwardRef<
     },
     exportPdf() {
       if (status.current.revision === null || outputBusy.current || outputPlans.current.size) {
-        handlers.current.onNotice("문서를 여는 중이거나 다른 출력을 처리 중입니다."); return;
+        handlers.current.onNotice(BUSY); return;
       }
       send({ type: "office:export-pdf" });
     },
     exportDocx(open = false) {
       if (status.current.revision === null || outputBusy.current || outputPlans.current.size) {
-        handlers.current.onNotice("문서를 여는 중이거나 다른 출력을 처리 중입니다."); return;
+        handlers.current.onNotice(BUSY); return;
       }
       send({ type: "office:export-docx", open });
     },
     exportOdt() {
       if (status.current.revision === null || outputBusy.current || outputPlans.current.size) {
-        handlers.current.onNotice("문서를 여는 중이거나 다른 출력을 처리 중입니다."); return;
+        handlers.current.onNotice(BUSY); return;
       }
       send({ type: "office:export-odt" });
     },
     exportHtml() {
       if (status.current.revision === null || outputBusy.current || outputPlans.current.size) {
-        handlers.current.onNotice("문서를 여는 중이거나 다른 출력을 처리 중입니다."); return;
+        handlers.current.onNotice(BUSY); return;
       }
       send({ type: "office:export-html" });
     },
     exportImages() {
       if (status.current.revision === null || outputBusy.current || outputPlans.current.size || imageJobs.current.size) {
-        handlers.current.onNotice("문서를 여는 중이거나 다른 출력을 처리 중입니다."); return;
+        handlers.current.onNotice(BUSY); return;
       }
       send({ type: "office:export-images" });
     },
@@ -779,15 +903,18 @@ export const OfficeEditor = forwardRef<
     },
     async leave() {
       if (outputBusy.current || blockingOutputs() || copied.current.size) throw new Error("사본 저장을 마치거나 취소한 뒤 이동해 주세요.");
-      if (status.current.revision === null) return;
+      if (status.current.revision === null) return null;
       if (status.current.conflict) throw new Error("문서의 저장 충돌을 해결한 뒤 이동해 주세요. 편집 내용은 현재 탭에 있습니다.");
       const done = waitFlushed();
       send({ type: "office:flush" });
-      if (await done === null || status.current.dirty) throw new Error("문서 저장을 확인하지 못해 이동하지 않았습니다. 현재 탭에서 저장을 다시 시도해 주세요.");
+      const revision = await done;
+      if (revision === null || status.current.dirty) throw new Error("문서 저장을 확인하지 못해 이동하지 않았습니다. 현재 탭에서 저장을 다시 시도해 주세요.");
+      return revision;
     },
     reload() {
       recover.current = false;
-      status.current = { dirty: false, revision: null, conflict: null };
+      compared.current = "none";
+      status.current = { dirty: false, revision: null, conflict: null, changed: false, same: false };
       handlers.current.onStatus(status.current);
       setGeneration((value) => value + 1);
     },
@@ -814,6 +941,8 @@ export const OfficeEditor = forwardRef<
       key={`${artifact.id}:${generation}`}
       ref={frame}
       className="design-frame office-frame"
+      // The pointer leaving the editor: the person is done there for now, so its text is compared.
+      onPointerLeave={() => hint.current()}
       // Kept loaded (with its unsaved edits) while a comparison or an older revision is shown over it.
       style={hidden ? { display: "none" } : undefined}
       allow="fullscreen; clipboard-read; clipboard-write"

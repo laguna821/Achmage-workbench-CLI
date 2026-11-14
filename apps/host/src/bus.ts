@@ -12,6 +12,8 @@ export class EventBus {
   private readonly listeners = new Set<Listener>();
   private readonly capacity: number;
   readonly epoch: string;
+  /** Applied to every event as it is published, before anyone sees it (the credential scrubber's `SessionManager.shownEvent`). */
+  outgoing: ((event: WorkbenchEvent) => WorkbenchEvent) | null = null;
 
   constructor(capacity = 5000, epoch: string = randomUUID()) {
     this.capacity = capacity;
@@ -23,7 +25,7 @@ export class EventBus {
   }
 
   publish(event: WorkbenchEvent): SequencedEvent {
-    const sequenced = { ...event, seq: ++this.seq, at: Date.now(), epoch: this.epoch } as SequencedEvent;
+    const sequenced = { ...(this.outgoing ? this.outgoing(event) : event), seq: ++this.seq, at: Date.now(), epoch: this.epoch } as SequencedEvent;
     this.buffer.push(sequenced);
     if (this.buffer.length > this.capacity) {
       this.buffer.splice(0, this.buffer.length - this.capacity);

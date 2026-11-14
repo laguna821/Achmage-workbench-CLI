@@ -4,7 +4,8 @@ export const MAX_TABS = 128;
 /** Entity identity, independent of its group, presentation mode and scroll position. */
 export function contentKey<V>(content: PaneContent<V>): string {
   const view = content.view as Record<string, unknown>;
-  if (view.kind === "document" || view.kind === "split") return `doc:${view.artifactId}`;
+  if (view.kind === "document") return `doc:${view.artifactId}`;
+  // A conversation is its tab's identity, with or without a companion beside it.
   if (view.kind === "work") return content.sessionId ? `session:${content.sessionId}` : `work:${content.workId ?? ""}`;
   if (view.kind === "project") return `project:${view.workId}`;
   if (view.kind === "terminal") return `terminal:${view.terminalId}`;
@@ -112,4 +113,18 @@ export function addBackgroundTab<V>(layout: Layout<V>, paneId: string, content: 
   if (findTab(layout, contentKey(content))) return layout;
   if (layout.panes.reduce((sum, pane) => sum + tabsOf(pane).length, 0) >= MAX_TABS) return layout;
   return { ...layout, panes: layout.panes.map((pane) => pane.id === paneId ? { ...pane, tabs: [...tabsOf(pane), { id: `tab-${crypto.randomUUID()}`, ...content }] } : pane) };
+}
+
+/**
+ * Tabs whose view is gone (a document taken out of its project): `decide` closes a tab ("close"),
+ * gives it another view, or leaves it (null). The same layout back when nothing changed.
+ */
+export function dropTabs<V>(layout: Layout<V>, decide: (view: V) => "close" | V | null, fallback: PaneContent<V>): Layout<V> {
+  let next = layout;
+  for (const pane of layout.panes) for (const tab of tabsOf(pane)) {
+    const verdict = decide(tab.view);
+    if (verdict === null) continue;
+    next = verdict === "close" ? closeTab(next, pane.id, tab.id, fallback) : updateTabView(next, tab.id, () => verdict);
+  }
+  return next;
 }

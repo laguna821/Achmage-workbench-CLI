@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import type { IntegrationsView, McpDefinition, SkillEntry } from "@workbench/contracts";
 import { HttpError } from "./errors.ts";
+import { redact } from "./channels/redact.ts";
 import type { EngineCli } from "./providers/types.ts";
 
 // MCP servers and skills as the two engines themselves see them. Workbench keeps no store of its
@@ -114,6 +115,40 @@ export async function integrations(binaries: EngineBinaries, ieumSkill: string |
     paths: { claudeConfig: join(home(), ".claude.json"), codexConfig: join(home(), ".codex/config.toml"), claudeSkills: claudeSkillDirs()[0], codexSkills: codexSkillDirs()[0] },
     ieumSkill: ieumSkill ? { source: ieumSkill, claude: Boolean(claudeSkills.ieumoffice), codex: Boolean(codexSkills.ieumoffice) } : null,
   };
+}
+
+/**
+ * The view as it leaves the gateway (`GET /api/integrations` and the copy routes' answers): MCP
+ * servers' environment variables by name only, each value replaced by ""; arguments and addresses
+ * with obvious secrets blanked. The values stay here, where copying a server to the other engine
+ * reads them (design §6.7).
+ */
+const SECRET_NAME = /(?:key|token|secret|password|passwd|auth|credential)/i;
+/** Arguments with an obvious secret blanked: `--api-key=…`, the value after `--token`, and key shapes (sk-…, ghp_…). */
+function blankArgs(args: string[]): string[] {
+  return args.map((arg, index) => {
+    const inline = /^(--?[\w.-]+=)(.*)$/.exec(arg);
+    if (inline && SECRET_NAME.test(inline[1]!)) return inline[1]!;
+    if (index > 0 && /^--?[\w.-]+$/.test(args[index - 1]!) && SECRET_NAME.test(args[index - 1]!)) return "";
+    return redact(arg);
+  });
+}
+/** An address with the values of secret-named query parameters blanked, and key shapes hidden. */
+function blankUrl(url: string | null): string | null {
+  if (!url) return url;
+  try {
+    const parsed = new URL(url);
+    for (const name of [...parsed.searchParams.keys()]) if (SECRET_NAME.test(name)) parsed.searchParams.set(name, "");
+    if (parsed.password) parsed.password = "";
+    return redact(parsed.toString());
+  } catch {
+    return redact(url);
+  }
+}
+
+export function withoutEnvValues(view: IntegrationsView): IntegrationsView {
+  const named = (definition: McpDefinition | null) => (definition ? { ...definition, env: Object.fromEntries(Object.keys(definition.env).map((key) => [key, ""])), args: blankArgs(definition.args), url: blankUrl(definition.url) } : null);
+  return { ...view, mcp: view.mcp.map((entry) => ({ ...entry, claude: named(entry.claude), codex: named(entry.codex) })) };
 }
 
 const NAME = /^[A-Za-z0-9_.-]{1,64}$/;

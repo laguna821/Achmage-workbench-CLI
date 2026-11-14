@@ -112,7 +112,7 @@ store.setMeta("ui.prefs", JSON.stringify({ onboarding: "done", startScreen: "las
 store.close();
 
 // ── the gateway ────────────────────────────────────────────────────────────────────────────
-const child = spawn(process.execPath, ["apps/host/src/main.ts"], {
+const child = spawn(process.execPath, [process.env.HOST_ENTRY ?? "apps/host/src/main.ts"], {
   env: {
     ...process.env,
     WORKBENCH_DATA_DIR: dataDir,

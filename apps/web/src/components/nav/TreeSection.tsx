@@ -62,7 +62,7 @@ export function TreeSection({ shared, rows, treeRef, onSort }: { shared: NavShar
             {shared.creatingIn !== undefined && shared.creatingIn === row.id && row.type === "folder" ? <div style={{ paddingLeft: 14 * (row.depth + 1) }}>{creatingRow}</div> : null}
           </div>
         ))}
-        {!rows.length && shared.creatingIn === undefined ? <div className="empty-hint side-empty">아직 프로젝트가 없습니다. 위의 "새로 만들기"로 시작하세요.</div> : null}
+        {!rows.length && shared.creatingIn === undefined ? <div className="empty-hint side-empty">아직 프로젝트가 없습니다. 위의 “새로 만들기”로 시작하세요.</div> : null}
         <LinkLines tree={treeRef} />
       </div>
     </section>

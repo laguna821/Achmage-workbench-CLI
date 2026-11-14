@@ -2,18 +2,23 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import { DIVIDER, MAX_PANES, minimumSize, paneGeometry, resizeSplit, treeOf, type DividerRect, type DropEffect, type Layout, type Pane, type PaneId, type PaneItem, type PaneRect, type PaneTarget, type Side } from "../panes.ts";
 import { paneDrag, useDropArea, usePaneDrag, usePaneDragSlice } from "../panedrag.ts";
 import { Icon } from "./Icon.tsx";
+import { Select } from "./ui/Select.tsx";
 import { activeTab, tabsOf } from "../tabs.ts";
+import { fadeIn, returnTo, revealFrom } from "../flip.ts";
 import "../styles/panes.css";
 
-export type PaneHead = { title: string; icon: ReactNode; hint?: string; kindLabel?: string; project?: string; status?: string; item: PaneItem | null };
+/** `unseen`: an answer arrived there while it was off screen. */
+export type PaneHead = { title: string; icon: ReactNode; hint?: string; kindLabel?: string; project?: string; status?: string; unseen?: boolean; item: PaneItem | null };
 export type PaneScope = { theme: string; bubble: string; frame: boolean; glow: string; style: CSSProperties };
 const SIDE_LABEL = { left: "왼쪽으로 분할", right: "오른쪽으로 분할", top: "위로 분할", bottom: "아래로 분할", center: "이 칸에 열기" };
 
 /** The tree determines geometry; editors retain the same parent and React key when moved. */
-export function PaneLayout<V>({ layout, enabled, maximized = false, onMaximize, onResize, onFocus, onClose, onMove, onSplit, onDrop, head, scope, effectOf, render, onNarrow, tabBar }: {
+export function PaneLayout<V>({ layout, enabled, maximized = false, onMaximize, onPresent, onResize, onFocus, onClose, onMove, onSplit, onDrop, head, scope, effectOf, render, onNarrow, tabBar }: {
   layout: Layout<V>; enabled: boolean;
   maximized?: boolean;
   onMaximize?: (id: PaneId) => void;
+  /** Re-place native web views now that zoom or restore has moved the panes. */
+  onPresent?: () => void;
   onResize: (id: string, ratio: number) => void;
   onFocus: (id: PaneId) => void;
   onClose: (id: PaneId) => void;
@@ -50,6 +55,23 @@ export function PaneLayout<V>({ layout, enabled, maximized = false, onMaximize, 
     observer?.observe(element);
     return () => observer?.disconnect();
   }, []);
+  // Zoom and restore: the focused pane opens out from its cell and settles back into it; the others fade in.
+  const drawn = useRef<{ boxes: Record<string, PaneRect>; maximized: boolean } | null>(null);
+  useLayoutEffect(() => {
+    const last = drawn.current;
+    drawn.current = { boxes, maximized };
+    if (!last || last.maximized === maximized || !host.current) return;
+    for (const element of host.current.querySelectorAll<HTMLElement>(':scope > .pane[data-tab-active="true"]:not([hidden])')) {
+      // A native web view paints above the page and is placed by present(), not by CSS: its pane
+      // snaps. Moving the view with its pane belongs to the panel-snapshot work.
+      if (element.querySelector(".browser-viewport")) continue;
+      const before = last.boxes[element.dataset.pane!], after = boxes[element.dataset.pane!];
+      if (!before || !after) fadeIn(element);
+      else if (maximized) revealFrom(element, before, after);
+      else returnTo(element, before, after);
+    }
+    onPresent?.();
+  });
   useEffect(() => onNarrow?.(collapsed), [collapsed, onNarrow]);
   useEffect(() => () => cancelResize.current?.(), []);
   useDropArea(enabled ? {
@@ -108,6 +130,8 @@ export function PaneLayout<V>({ layout, enabled, maximized = false, onMaximize, 
       const pane = { ...group, view: tab.view, workId: tab.workId, sessionId: tab.sessionId };
       const active = activeTab(group).id === tab.id;
       const focused = active && pane.id === layout.focus, look = scope(pane, focused), title = head(pane);
+      // A tab behind this one holds an unseen answer.
+      const waiting = split && tabsOf(group).some((other) => other.id !== tab.id && head({ ...group, view: other.view, workId: other.workId, sessionId: other.sessionId }).unseen);
       const next = layout.panes[(layout.panes.indexOf(group) + 1) % layout.panes.length]!;
       return <section key={tab.id} className={`pane look-scope${focused ? " focused" : ""}`} data-pane={pane.id} data-tab={tab.id} data-tab-active={active ? "true" : "false"} data-pane-active={focused ? "true" : "false"}
         data-theme={look.theme} data-bubble={look.bubble} data-frame={look.frame ? "on" : "off"} data-glow={look.glow}
@@ -118,11 +142,10 @@ export function PaneLayout<V>({ layout, enabled, maximized = false, onMaximize, 
         }} onPointerDown={(event) => {
           if (takesFocus(event.target)) paneDrag.press({ item: { kind: "pane", id: pane.id }, label: title.title }, event);
         }}>
-          <span className="pane-head-icon" aria-hidden>{title.icon}</span><span className="pane-head-title">{title.project ? <small>{title.project}</small> : null}{title.title}</span>
+          <span className="pane-head-icon badged" aria-hidden>{title.icon}{waiting ? <span className="new-badge" /> : null}</span><span className="pane-head-title">{title.project ? <small>{title.project}</small> : null}{title.title}</span>
           {title.status ? <span className="pane-status">{title.status}</span> : null}
-          {collapsed ? <span className="pane-narrow"><select aria-label="표시할 칸" value={layout.focus} onChange={(event) => onFocus(event.target.value)}>
-            {layout.panes.map((entry, index) => <option key={entry.id} value={entry.id}>{index + 1}. {head(entry).title}</option>)}
-          </select></span> : null}
+          {collapsed ? <span className="pane-narrow"><Select className="plain" label="표시할 칸" value={layout.focus} onChange={onFocus}
+            options={layout.panes.map((entry, index) => { const shown = head(entry); return { value: entry.id, label: shown.title, icon: shown.icon, hint: String(index + 1) }; })} /></span> : null}
           <span className="pane-head-tools">
             {onMaximize ? <button type="button" className="icon-button small" aria-label={maximized ? "전체 칸 보기" : "이 칸 확대"} title={maximized ? "전체 칸 보기" : "이 칸 확대"} onClick={() => onMaximize(pane.id)}><Icon name={maximized ? "grid" : "expandAll"} size={14} /></button> : null}
             {enabled ? <>

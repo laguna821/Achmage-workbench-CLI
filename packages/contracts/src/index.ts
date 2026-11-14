@@ -22,6 +22,8 @@ export * from "./office-new.ts";
 export * from "./tasks.ts";
 export * from "./host-session.ts";
 export * from "./browser.ts";
+export * from "./channels.ts";
+export * from "./credentials.ts";
 
 export const PROTOCOL_VERSION = 1;
 
@@ -179,7 +181,13 @@ export type ContextUsage = { used: number; window: number | null; compactAt: num
  * A request written while the engine was working, sent as the next turn when this one ends.
  * `held`: kept after a stop, a failure, a restart or a steer the stop dropped — sent only by hand.
  */
-export type QueuedMessage = { id: string; text: string; refs: DocRef[]; create: CreateTarget | null; at: number; held?: boolean; attachments?: Attachment[]; plan?: boolean; notes?: string[]; runSettings?: import("./agent-profiles.ts").RunSettings };
+export type QueuedMessage = { id: string; text: string; refs: DocRef[]; create: CreateTarget | null; at: number; held?: boolean; attachments?: Attachment[]; plan?: boolean; notes?: string[]; runSettings?: import("./agent-profiles.ts").RunSettings; /** Sent from a paired messenger chat: kept while it waits (see `RequestOrigin`). */ origin?: import("./channels.ts").RequestOrigin;
+  /**
+   * Typed by the person (this PC's composer, an edit at this PC, or the paired chat): their draft,
+   * shown and edited exactly as typed (ruling R6). Absent: written by anything else (a workflow, a
+   * remote Hub, a review batch, an AI draft) or by a build before this mark: shown with stored values hidden.
+   */
+  draft?: boolean };
 
 /**
  * A file pasted or dropped into the input (a picture, a PDF, any file), kept by the gateway by its
@@ -226,8 +234,43 @@ export type Artifact = {
   readBy: Record<string, number>;
   /** The project's own note (project.ts): tracked like any document, left out of document lists. */
   role?: "project-note";
+  /**
+   * Taken out of the project (보관함 lists it). "trash": its file was moved to the app's trash
+   * (`trashPath`, inside the data folder) and comes back on restore; "unlisted": a file the app does
+   * not manage, left where it was. Revisions are kept either way until deleted for good.
+   */
+  removed?: {
+    at: number;
+    kind: "trash" | "unlisted";
+    trashPath?: string;
+    /** Where the file was moved from (and goes back to). */
+    source?: string;
+    /** A move recorded but not finished yet; the gateway finishes or reports it at start. */
+    pending?: "moving" | "restoring";
+    /** Its AI conversations, archived with it and restored with it. */
+    sessionIds?: string[];
+    /** The project was deleted after the document: its name then (the file waits in the trash). */
+    orphaned?: boolean;
+    workTitle?: string;
+  };
   createdAt: number;
   updatedAt: number;
+};
+
+/**
+ * What can be done with a document now, as the gateway decides it (GET /api/artifacts/:id/removal).
+ * "unlisted" (목록에서 빼기) only takes it off the list and never touches the file; "trash" (휴지통으로
+ * 옮기기) moves the file to the app's trash and is offered only in the narrow case the gateway can
+ * prove (a file of the app's own work area). While its AI works or a proposal is open, neither is
+ * offered (`actions` is empty). Unsaved edits (`dirty`) are saved first; removal is refused while they remain.
+ */
+export type DocumentRemovalPlan = {
+  actions: ("unlisted" | "trash")[];
+  /** Why the trash is not offered (or why nothing is). */
+  reason?: string;
+  running: { id: string; provider: Provider }[];
+  proposals: number;
+  dirty: boolean;
 };
 
 export type ArtifactRevision = {
@@ -314,6 +357,8 @@ export type Proposal = {
   appliedRevision: number | null;
   /** Why the working copy cannot be applied as it is (a design that is no longer valid JSON…). */
   problem?: string | null;
+  /** Hangul: what the working copy no longer holds against its base revision ("표 1→0"), shown before applying. */
+  removedStructure?: string[] | null;
   /** Made by a turn cut short ("중단된 턴의 일부 수정안"): what the working copy held when it ended. */
   interruptedBy?: TurnBreak | null;
   /** Who closed it (applied, discarded, or left empty); absent while open and in older records. */
@@ -340,6 +385,8 @@ export type Handoff = {
   attachments?: Attachment[];
   /** "다시 보내기": the handoff that sent this one again, and the one this one repeats. */
   resentAs?: string | null;
+  /** The note was typed by the person (posted by the PC): shown as typed (R6); otherwise hidden. */
+  draft?: boolean;
   resentFrom?: string | null;
   createdAt: number;
   answeredAt: number | null;
@@ -378,6 +425,8 @@ export type TranscriptItem = (
       link?: LinkHop | null;
       /** Vault notes given as read-only references (vault-relative paths). */
       notes?: { path: string; title: string }[];
+      /** Sent from a paired messenger chat, not typed at this PC (the desktop marks it "휴대폰"). */
+      origin?: import("./channels.ts").RequestOrigin;
     }
   | { kind: "assistant"; id: string; text: string; streaming: boolean; at: number; media?: import("./artifacts.ts").MessageMedia[] }
   | { kind: "reasoning"; id: string; text: string; at: number }
@@ -509,6 +558,8 @@ export type ProviderStatus = {
 
 export type WorkbenchEvent =
   | { type: "attention.changed" }
+  /** The messenger channel changed (pairing, a paired chat, a bot's connection): the screen fetches it again. */
+  | { type: "channels.changed" }
   | { type: "office.note.ready"; artifactId: string }
   | { type: "office.control" }
   | { type: "folder.upserted"; folder: Folder }
@@ -522,6 +573,10 @@ export type WorkbenchEvent =
   | { type: "item.delta"; sessionId: string; itemId: string; textDelta: string }
   | { type: "provider.status"; status: ProviderStatus }
   | { type: "artifact.upserted"; artifact: Artifact }
+  /** A document taken out of its project (`artifact.removed` says how); restore sends `artifact.upserted`. */
+  | { type: "artifact.removed"; artifact: Artifact }
+  /** A removed document deleted for good. */
+  | { type: "artifact.purged"; artifactId: string; workId: string }
   | { type: "proposal.upserted"; proposal: Proposal }
   | { type: "handoff.upserted"; handoff: Handoff }
   | { type: "link.upserted"; link: SessionLink }
@@ -531,7 +586,7 @@ export type WorkbenchEvent =
   /** The schedules changed (added, done, turned off or removed): all of them. */
   | { type: "schedules.changed"; schedules: Schedule[] }
   /** The vault mirror, saved views, rules or pins changed (pkm.ts); the UI fetches that part again. */
-  | { type: "pkm.changed"; scope: "vault" | "views" | "rules" | "pins" | "insights"; version: number }
+  | { type: "pkm.changed"; scope: "vault" | "views" | "rules" | "pins"; version: number }
   /** A project's note or its stages changed (project.ts); the UI fetches that project page again. */
   | { type: "project.changed"; workId: string | null };
 
@@ -590,6 +645,8 @@ export type Snapshot = {
   prefs: UiPrefs;
   attention?: import("./attention.ts").AttentionList;
   artifacts: Artifact[];
+  /** Documents taken out of their projects, restorable from 보관함 (absent from older gateways). */
+  removedArtifacts?: Artifact[];
   proposals: Proposal[];
   handoffs: Handoff[];
   links: SessionLink[];
@@ -719,6 +776,8 @@ export type HandoffRequest = {
   text: string;
   refs?: DocRef[];
   attachments?: Attachment[];
+  /** Posted by the person at the PC (the note is their draft, R6). */
+  draft?: boolean;
 };
 
 export type SaveArtifactRequest = { requestId: string; expectedRevision: number; text: string };
@@ -838,6 +897,10 @@ export type OfficeHostMessage =
     }
   | { type: "office:theme"; theme: "light" | "dark" }
   | { type: "office:show-commands" }
+  /** Open or close the editor's own AI dock (the Hangul editor: its dock is the document's 문서 AI); `draft`: put in its input in place of what it holds. */
+  | { type: "office:ai-panel-set"; open: boolean; draft?: string }
+  /** The document's one unsent AI draft, put in the editor's own AI input in place of what it holds (the Hangul editor's dock). */
+  | { type: "office:ai-draft-set"; draft: string }
   /** Refresh a scoped write capability without recreating the editor or dropping its undo state. */
   | { type: "office:grant"; token: string; sessionId: string | null }
   | { type: "office:skills-changed" }
@@ -869,11 +932,18 @@ export type OfficePageMessage =
   | { type: "office:ai-request"; requestId: string; action: "prepare" | "new-session" | "settings" | "skills"; sessionId: string | null; freezeReferences?: string[] }
   | { type: "office:copied"; artifactId: string; keepSource?: boolean }
   | { type: "office:ready" }
+  /**
+   * The editor's AI sidebar opened or closed (editors that report it). The Hangul dock also says
+   * `ready` (drawn: false before the editor draws it, and then `open` means nothing), `draft` (what
+   * is typed in it) and `person` (changed by its own button, not by the tab's request).
+   */
+  | { type: "office:ai-panel"; open: boolean; draft?: string; ready?: boolean; person?: boolean; /** Open AND on screen (the Hangul dock steps aside for a studio dialog at a narrow pane); absent: as `open`. */ shown?: boolean }
   /** The editor shows this revision; `recovered` when it reopened unsaved edits made on it. */
   | { type: "office:opened"; revision: number; recovered: boolean }
   /** A save of this page is on its way: the next revision the window hears of is this one (its "office:saved" follows). */
   | { type: "office:saving" }
-  | { type: "office:saved"; revision: number }
+  /** `unchecked` (Hangul): the gateway saved without its save check on some side (its answer said `text` or `structure` "unchecked"). */
+  | { type: "office:saved"; revision: number; unchecked?: boolean }
   | { type: "office:dirty"; dirty: boolean }
   /** After flush, rebase or keep: the saved revision, or null when the edits were not saved (then they are kept). */
   | { type: "office:flushed"; revision: number | null }

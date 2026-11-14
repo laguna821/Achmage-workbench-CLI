@@ -29,6 +29,7 @@
   "globe": "globe",
   "grid": "layout-grid",
   "sidebar": "panel-left",
+  "sidebarRight": "panel-right",
   "sun": "sun",
   "moon": "moon",
   "tool": "wrench",

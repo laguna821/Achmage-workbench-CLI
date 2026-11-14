@@ -10,4 +10,3 @@
 .attention-center-error { padding: var(--space-3) var(--space-5); background: var(--danger-soft); color: var(--danger); font-size: var(--fs-meta); }.attention-center-error .text-button { margin-left: var(--space-3); }
 .attention-center > footer { padding: var(--space-4) var(--space-5); border-top: 1px solid var(--chrome-line); color: var(--muted); font-size: var(--fs-micro); line-height: 1.6; }
 .shell-attention-count { min-width: 1.5em; padding: 1px 4px; border-radius: var(--r-xs); color: var(--accent); background: var(--accent-soft); text-align: center; font-size: var(--fs-micro); }
-.document-view > .drawer-sheet { inset: 12px; height: auto; min-height: 0; }

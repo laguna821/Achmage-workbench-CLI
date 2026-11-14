@@ -2,6 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Icon, type IconName } from "./Icon.tsx";
 import { lookStyle, NEUTRAL_LOOK, useAppearance } from "../appearance.ts";
 import { menuItems, moveMenuFocus, restoreSurfaceFocus } from "./controls/menu-navigation.ts";
+import { layerOwns } from "./ui/layers.ts";
 
 // Right-click menus (sidebar rows, tabs): groups, submenus, shortcut hints, a red "danger" item.
 // Opens at the pointer and stays inside the window; works fully from the keyboard (↑↓ move,
@@ -177,6 +178,7 @@ export function ContextMenu({ request, onClose }: { request: MenuRequest; onClos
   useEffect(() => {
     const surface = layer.current;
     const onPointer = (event: PointerEvent) => {
+      if (layerOwns(event)) return;
       if (!(event.target as HTMLElement).closest(".context-menu")) close();
     };
     document.addEventListener("pointerdown", onPointer, true);

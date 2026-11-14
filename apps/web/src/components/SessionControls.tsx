@@ -67,7 +67,8 @@ const tokens = (count: number) => (count >= 10_000 ? `${Math.round(count / 1000)
  * How full the conversation's context is, as a small ring next to the access; opened, the
  * figures, where the engine compacts on its own, and "지금 압축".
  */
-export function ContextGauge({ context, canCompact, onCompact }: { context: ContextUsage | null; canCompact: boolean; onCompact: () => void }) {
+/** `onCompact` absent (an archived conversation): the figures only, no "지금 압축". */
+export function ContextGauge({ context, canCompact, onCompact }: { context: ContextUsage | null; canCompact: boolean; onCompact?: () => void }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   if (!context) return null;
@@ -97,18 +98,20 @@ export function ContextGauge({ context, canCompact, onCompact }: { context: Cont
           <div className="context-note">
             {compactAt ? `${compactAt}에 이르면 엔진이 스스로 앞부분을 요약해 압축합니다.` : "가득 차면 엔진이 스스로 앞부분을 요약해 압축합니다."}
           </div>
-          <button
-            type="button"
-            className="button small"
-            disabled={!canCompact}
-            onClick={() => {
-              onCompact();
-              close();
-            }}
-            title={canCompact ? "앞부분을 요약해 공간을 비웁니다" : "응답이 끝난 뒤에 압축할 수 있습니다"}
-          >
-            지금 압축
-          </button>
+          {onCompact ? (
+            <button
+              type="button"
+              className="button small"
+              disabled={!canCompact}
+              onClick={() => {
+                onCompact();
+                close();
+              }}
+              title={canCompact ? "앞부분을 요약해 공간을 비웁니다" : "응답이 끝난 뒤에 압축할 수 있습니다"}
+            >
+              지금 압축
+            </button>
+          ) : null}
         </div>
       </Popover>
     </div>

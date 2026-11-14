@@ -1,47 +1,43 @@
-import { useEffect, useLayoutEffect, useRef, type ReactNode, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 import type { Proposal } from "@workbench/contracts";
 import type { State } from "./state.ts";
 import type { TabUiState } from "./panes.ts";
+import { viewDocument } from "./companion.ts";
 
-// Work screen modes (design 3.2), shown while a document of the work is open: 대화 · 문서 · 검토 ·
-// 나란히 · 읽기 (Alt+1–5). The conversation stays the default; "나란히" is only ever chosen and is
-// not restored when the app opens again (it lives in the view, never in the preferences).
+// Work screen modes (design 3.2), by key while a document of the work is open: 대화 · 문서 · 검토 ·
+// 나란히 · 읽기 (Alt+1–5). Each is also a control where the thing is: the companion's × (대화) and
+// "탭으로 넓게 열기" (문서), a proposal's 미리보기 (검토), a file card or the note's ⋯ in the
+// conversation (나란히: the document beside its conversation), the document head's 읽기.
 
 export type WorkMode = "chat" | "doc" | "review" | "split" | "read";
 
 export const WORK_MODES: { id: WorkMode; label: string; title: string }[] = [
-  { id: "chat", label: "대화", title: "대화" },
-  { id: "doc", label: "문서", title: "문서와 그 아래 대화 서랍" },
+  { id: "chat", label: "대화", title: "대화만" },
+  { id: "doc", label: "문서", title: "문서를 탭으로 넓게" },
   { id: "review", label: "검토", title: "이 문서의 수정안 비교" },
-  { id: "split", label: "나란히", title: "왼쪽 대화, 오른쪽 문서 · 입력창은 고른 쪽으로" },
+  { id: "split", label: "나란히", title: "대화 옆에 문서" },
   { id: "read", label: "읽기", title: "화면 가득 쪽 넘기며 읽기 · Esc로 돌아감" },
 ];
 
-export type ModeView =
-  | { kind: "work" }
-  | { kind: "document"; artifactId: string; proposalId: string | null }
-  | { kind: "split"; artifactId: string; draftKey: string; focus: "chat" | "doc" };
+type ModeViewOf = { kind: string; proposalId?: string | null; beside?: unknown };
 
 /** The mode a view is in (null for views without modes: home, archive). */
-export function modeOf(view: { kind: string; proposalId?: string | null }, reading: boolean): WorkMode | null {
+export function modeOf(view: ModeViewOf, reading: boolean): WorkMode | null {
   if (reading) return "read";
-  if (view.kind === "split") return "split";
   if (view.kind === "document") return view.proposalId ? "review" : "doc";
-  if (view.kind === "work") return "chat";
+  if (view.kind === "work") return viewDocument(view) ? "split" : "chat";
   return null;
 }
 
 /**
- * The view a mode asks for. "나란히" starts with the input on the side the user came from, and both
- * sides share that side's draft, so nothing typed is lost by switching.
+ * The document the modes are about, or null for none: the document the view shows (its own tab's,
+ * or the conversation's companion); else a document of the project open in a tab now (the one
+ * shown last, else the newest tab). A document shown once and closed since does not count.
  */
-export function viewFor(mode: Exclude<WorkMode, "read">, context: { docId: string; proposalId: string | null; from: WorkMode | null; chatDraft: string }): ModeView {
-  if (mode === "chat") return { kind: "work" };
-  if (mode === "split") {
-    const fromChat = context.from === "chat";
-    return { kind: "split", artifactId: context.docId, draftKey: fromChat ? context.chatDraft : `doc:${context.docId}`, focus: fromChat ? "chat" : "doc" };
-  }
-  return { kind: "document", artifactId: context.docId, proposalId: mode === "review" ? context.proposalId : null };
+export function modeDocument(view: { kind: string; artifactId?: unknown; beside?: unknown }, openTabs: string[], remembered: string | undefined): string | null {
+  const shown = viewDocument(view);
+  if (shown) return shown;
+  return remembered && openTabs.includes(remembered) ? remembered : (openTabs[openTabs.length - 1] ?? null);
 }
 
 /** The proposal "검토" opens: the newest one waiting on the current revision, else the newest waiting one. */
@@ -60,21 +56,28 @@ export function workModeKey(event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "m
   return digit ? WORK_MODES[Number(digit) - 1]!.id : null;
 }
 
-/** What the conversation and document views take from the mode they are shown in. */
+/** Alt+1–5 switch the work screen's modes (also from inside the input). */
+export function useWorkModeKeys(enabled: boolean, onMode: (mode: WorkMode) => void) {
+  const latest = useRef(onMode);
+  latest.current = onMode;
+  useEffect(() => {
+    if (!enabled) return;
+    const onKey = (event: KeyboardEvent) => {
+      const mode = workModeKey(event);
+      if (!mode) return;
+      event.preventDefault();
+      latest.current(mode);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [enabled]);
+}
+
+/** What the conversation view takes from where it is shown. */
 export type ModeProps = {
-  /** The mode bar, above the input. */
-  bar?: ReactNode;
-  /** "나란히": where the one input goes (this side has it), or null (the other side has it). */
-  slot?: HTMLElement | null;
-  /** "나란히": the draft both sides share. */
-  draftKey?: string;
-  /** "나란히": the conversation is beside the document (no drawer under it). */
-  split?: boolean;
-  /** The proposal the document's compare view shows ("검토"), null when it closes. */
-  onReview?: (proposalId: string | null) => void;
   /** A window of its own for one session: no tabs of the work's other sessions. */
   single?: boolean;
-  /** One of two panes: the input waits to be clicked (taking the focus would pull it from the other pane). */
+  /** One of several panes, or beside a companion: the input waits to be clicked (taking the focus would pull it from elsewhere). */
   paned?: boolean;
   /** Conversations and documents share the workspace's group tab bar. */
   groupedTabs?: boolean;

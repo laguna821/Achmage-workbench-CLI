@@ -4,6 +4,7 @@ import { ACCESS_LABEL, ACCESS_MODES, EFFORT_LABEL, PROVIDER_LABEL, type AgentPro
 import type { Api } from "../api.ts";
 import { Icon } from "./Icon.tsx";
 import { MenuItem, Popover } from "./Popover.tsx";
+import { plainModelLabel } from "./ModelPicker.tsx";
 import { restoreSurfaceFocus } from "./controls/menu-navigation.ts";
 import "../styles/agent-profiles.css";
 
@@ -59,7 +60,7 @@ function ProfileEditor({ profile, provider, models, onRefreshModels, onSave, onD
           </select></label>
         </div>
         <label>기본 모델 ID<input list={modelListId} value={draft.model ?? ""} placeholder="비워 두면 엔진 기본값" onChange={event => setDraft({ ...draft, model: event.target.value || null })} /></label>
-        <datalist id={modelListId}>{discovered.map(model => <option key={model.id} value={model.id}>{model.label}</option>)}</datalist>
+        <datalist id={modelListId}>{discovered.map(model => <option key={model.id} value={model.id}>{plainModelLabel(model.label)}</option>)}</datalist>
         <div className="profile-model-help"><small className="muted">{discovered.length ? `${PROVIDER_LABEL[engine]}에서 확인한 모델 ${discovered.length}개 · ID 직접 입력 가능` : `${PROVIDER_LABEL[engine]}의 모델 목록이 없습니다. ID를 직접 입력할 수 있습니다.`}</small>
           {onRefreshModels ? <button type="button" className="link" disabled={refreshing} onClick={async () => {
             setRefreshing(true); setError("");

@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { beforeAll, expect, it } from "vitest";
+import { beforeAll, expect, it, vi } from "vitest";
 import init, { HwpDocument } from "../../../third_party/hop/rhwp-core/rhwp.js";
 import { hwpWasmPath } from "./hwp-resource.ts";
 import { editHwp } from "./hwp-ops.mjs";
@@ -48,3 +48,25 @@ for (const format of ["hwp", "hwpx"] as const) it(`pins a binary ${format} propo
   await expect(manager.documents.applyProposal(stale.id, { viewId: "one", writeToken: writer.writeToken })).rejects.toMatchObject({ code: "stale_proposal" });
   expect(readFileSync(path)).toEqual(original);
 });
+
+// I-6: a proposal that removes structure says so before the person applies it (information, not a refusal:
+// the AI may delete on request). Also a working copy written directly, bypassing the editing tool.
+it("shows on a Hangul proposal what it removes against its base revision, and still lets the person apply it", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "wb-hwp-proposal-"));
+  const manager = new SessionManager(new Store(join(dir, "state.sqlite")), new EventBus(), { hostId: "test", hostLabel: "test", managedWorksDir: join(dir, "works"), dataDir: dir, kordoc: null });
+  const work = manager.createWork({ title: "한글", cwd: join(dir, "project") }); mkdirSync(work.cwd, { recursive: true });
+  const engine = HwpDocument.createEmpty(); engine.createBlankDocument(); engine.insertText(0, 0, 0, "표가 있는 문서");
+  engine.createTable(0, 0, 0, 2, 2);
+  const original = Buffer.from(engine.exportHwpx()); engine.free();
+  const without = HwpDocument.createEmpty(); without.createBlankDocument(); without.insertText(0, 0, 0, "표가 있는 문서");
+  const working = Buffer.from(without.exportHwpx()); without.free();
+  const path = join(work.cwd, "document.hwpx"); writeFileSync(path, original);
+  const artifact = manager.openFile(work.id, path), session = manager.createSession(work.id, { provider: "codex" });
+  const proposal = (await manager.documents.prepare({ artifactId: artifact.id, mode: "edit", revision: 1, selection: null }, session.id, "drop-table", work.cwd)).proposal!;
+  writeFileSync(proposal.workingPath, working);
+  manager.documents.finishProposal(proposal.id);
+  await vi.waitFor(() => expect(manager.documents.proposal(proposal.id).removedStructure).toEqual(expect.arrayContaining(["표 1→0"])), { timeout: 10_000 });
+  expect(manager.documents.proposal(proposal.id).problem ?? null).toBeNull();
+  const writer = manager.documents.registry.open(artifact.id, { viewId: "one", windowId: "one", claim: true });
+  expect((await manager.documents.applyProposal(proposal.id, { viewId: "one", writeToken: writer.writeToken })).artifact.revision).toBe(2);
+}, 30_000);

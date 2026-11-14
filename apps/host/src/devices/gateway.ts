@@ -158,7 +158,10 @@ export class DeviceGateway {
       if (!id && message.op !== "unsubscribe") throw new HttpError(400, "remote_id", "요청 식별자가 없습니다.");
       if (message.op === "pair") {
         const offer = message.offer as { offerId?: string; token?: string };
-        return reply(id, registry.requestPairing({ offerId: String(offer?.offerId ?? ""), token: String(offer?.token ?? ""), name: String(message.name ?? ""), platform: String(message.platform ?? ""), connectionId }));
+        // What the device says about itself: it keeps its credential, and which earlier approval was its own.
+        // Both only inform the owner's approval; neither grants anything.
+        return reply(id, registry.requestPairing({ offerId: String(offer?.offerId ?? ""), token: String(offer?.token ?? ""), name: String(message.name ?? ""), platform: String(message.platform ?? ""), connectionId,
+          remember: message.remember === true, ...(typeof message.previousDeviceId === "string" && message.previousDeviceId.length <= 64 ? { previousDeviceId: message.previousDeviceId } : {}) }));
       }
       if (message.op === "claim") return reply(id, registry.claimCredential({ requestId: String(message.requestId ?? ""), claimToken: String(message.claimToken ?? ""), connectionId }));
       if (message.op === "authenticate") {

@@ -1,0 +1,79 @@
+/* The right sidebar (RightSidebar.tsx): a sheet of the frame beside the panes, in the panes' own
+   grammar (hairline, 12px radius, the resting edge without blur). Opening changes the panes' width
+   once; only the sheet itself moves (transform + opacity), so the conversation never lays out per
+   frame. */
+
+.body > .right-sidebar {
+  position: relative;
+  flex: 0 0 var(--right-width, 280px);
+  width: var(--right-width, 280px);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 0 var(--space-2) var(--space-2) 0;
+  border: 1px solid var(--chrome-line);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: var(--shadow-worksurface);
+  overflow: hidden;
+  animation: right-sidebar-in var(--dur-base) var(--ease-out);
+}
+.body > .right-sidebar[data-state="closing"] { animation: right-sidebar-out var(--dur-fast) var(--ease-out) forwards; }
+@keyframes right-sidebar-in { from { transform: translateX(16px); opacity: 0; } }
+@keyframes right-sidebar-out { to { transform: translateX(16px); opacity: 0; } }
+
+/* The edge it is resized by: a grip wider than the line it shows. */
+.right-sidebar-edge { position: absolute; top: 0; bottom: 0; left: 0; z-index: 2; width: 6px; cursor: col-resize; touch-action: none; }
+.right-sidebar-edge:hover, .right-sidebar-edge:focus-visible { background: color-mix(in srgb, var(--accent) 50%, var(--line)); outline: none; }
+
+.right-sidebar-tabs { flex: 0 0 auto; margin: var(--space-2) var(--space-2) 0; }
+.right-sidebar-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--space-2); font: 400 13px/20px var(--font-ui); }
+.right-empty { margin: 0; padding: var(--space-2); color: var(--muted); font: 400 13px/20px var(--font-ui); }
+
+/* ── 개요: one line per request (two at most), its number where the note has it ── */
+.outline-list ol { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.outline-row { display: flex; align-items: flex-start; gap: 8px; width: 100%; min-height: 32px; padding: 6px 8px; border: 0; border-radius: var(--r-sm); background: none; color: var(--text); font: 400 13px/20px var(--font-ui); text-align: left; cursor: pointer; }
+.outline-row:hover { background: var(--hover); }
+.outline-row[aria-current="location"] { background: var(--surface-muted); font-weight: 500; }
+.outline-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.outline-no { flex: 0 0 auto; min-width: 16px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+.outline-text { flex: 1 1 auto; min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+.outline-row > .dot { margin-top: 6px; }
+.outline-row[data-level="2"] { padding-left: 20px; }
+.outline-row[data-level="3"], .outline-row[data-level="4"], .outline-row[data-level="5"], .outline-row[data-level="6"] { padding-left: 32px; color: var(--muted); }
+
+/* ── 연결: groups of one-line rows (kind icon · name · state/time) ── */
+.right-group + .right-group { margin-top: var(--space-3); padding-top: var(--space-2); border-top: 1px solid var(--line); }
+.right-group-label { display: flex; gap: 6px; margin: 0; padding: 4px 8px; color: var(--muted); font: 500 12px/16px var(--font-ui); }
+.right-group-label > span { font-variant-numeric: tabular-nums; }
+.right-group ul { margin: 0; padding: 0; list-style: none; }
+.right-link { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 4px 8px; border: 0; border-radius: var(--r-sm); background: none; color: var(--text); font: 400 13px/20px var(--font-ui); text-align: left; text-decoration: none; cursor: pointer; }
+.right-link:not([data-static]):hover { background: var(--hover); }
+.right-link[data-static] { color: var(--muted); cursor: default; }
+.right-link:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.right-link-icon { flex: 0 0 auto; color: var(--muted); }
+.right-link-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.right-link-meta { flex: 0 1 auto; min-width: 0; max-width: 50%; overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The compact request list of a conversation shown small (a document's or a web tab's AI). */
+.request-list-layer { width: min(320px, calc(100vw - 32px)); padding: var(--space-2); }
+
+/* A narrow window, or panes that would be squeezed: laid over the work from the right, under a
+   scrim; not remembered. */
+.body:has(> .right-sidebar[data-overlay]) { position: relative; }
+.right-sidebar-scrim { position: absolute; inset: 0; z-index: 19; border: 0; border-radius: 0; background: var(--scrim); animation: right-scrim-in var(--dur-base) var(--ease-out); }
+.right-sidebar-scrim[data-state="closing"] { opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); }
+@keyframes right-scrim-in { from { opacity: 0; } }
+.body > .right-sidebar[data-overlay] { position: absolute; top: 0; right: 0; bottom: 0; z-index: 20; width: min(var(--right-width, 280px), calc(100% - 48px)); }
+@media (max-width: 743px) {
+  .body > .right-sidebar { margin: 0; border-width: 1px 0 0 1px; border-radius: 0; }
+}
+
+@media (pointer: coarse) {
+  .outline-row, .right-link { min-height: 44px; }
+  .right-sidebar-edge { width: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .body > .right-sidebar, .body > .right-sidebar[data-state="closing"], .right-sidebar-scrim { animation: none; transition: none; }
+}

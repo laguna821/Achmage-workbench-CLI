@@ -245,7 +245,7 @@ async function flow(provider: Provider) {
     const inColumn = await until(async () => (await page.locator(`.kanban-column[data-stage-column="진행중"] .kanban-card[data-work="${movedWork}"]`).count()) === 1, 5000);
     await shot("03c-home-projects-kanban.png");
     pass("프로젝트 칸반: 카드를 '진행중'으로 끌면 그 프로젝트 노트에 단계가 써지고 그 열로", staged && inColumn, String(movedWork));
-    await page.locator(".toast button", { hasText: "되돌리기" }).click();
+    await page.locator(".top-notice button", { hasText: "되돌리기" }).click();
     await until(async () => (await api<{ workId: string; stage: string | null }[]>("GET", "/api/projects/")).some((entry) => entry.workId === movedWork && entry.stage === null), 8000);
     // The graph: a point per project; a point opens that project's page.
     await page.locator(".projects-layouts button", { hasText: "그래프" }).click();
@@ -326,11 +326,11 @@ async function flow(provider: Provider) {
     // ── work screen modes ────────────────────────────────────────────────────────────
     await page.locator(`.sidebar [data-row-id="${work.id}"]`).click();
     await page.waitForSelector(".work-view .transcript");
-    await page.locator(".docs-button").click();
-    await page.locator(".docs-menu .menu-item", { hasText: "강의안.md" }).click();
+    await page.locator(".note-head-more").click();
+    await page.locator(".note-menu [role=menuitem]", { hasText: "강의안.md" }).click();
     await page.waitForSelector(".document-view .work-mode-bar");
     const modeLabels = await page.locator(".work-mode-bar button").allInnerTexts();
-    const active = await page.locator(".work-mode-bar button.active").innerText();
+    const active = await page.locator(".work-mode-bar button[aria-checked=\"true\"]").innerText();
     pass("문서를 열면 입력창 위에 모드 막대(대화·문서·검토·나란히·읽기), 지금은 '문서'", modeLabels.join(",") === "대화,문서,검토,나란히,읽기" && active === "문서");
 
     // A proposal from a "고쳐" request, then 검토 (Alt+3) opens its compare view directly.
@@ -343,13 +343,13 @@ async function flow(provider: Provider) {
     await page.keyboard.press("Alt+3");
     await page.waitForSelector(".doc-compare", { timeout: 8000 });
     await page.waitForTimeout(300);
-    const reviewActive = await page.locator(".work-mode-bar button.active").innerText();
+    const reviewActive = await page.locator(".work-mode-bar button[aria-checked=\"true\"]").innerText();
     const diff = await page.locator(".doc-compare").innerText();
     await shot("07-review.png");
     await page.locator(".doc-compare-actions .button", { hasText: "닫기" }).click();
     await page.waitForSelector(".doc-compare", { state: "detached" });
-    await page.waitForFunction(() => document.querySelector(".work-mode-bar button.active")?.textContent === "문서", null, { timeout: 3000 }).catch(() => undefined);
-    const backToDoc = await page.locator(".work-mode-bar button.active").innerText();
+    await page.waitForFunction(() => document.querySelector(".work-mode-bar button[aria-checked=\"true\"]")?.textContent === "문서", null, { timeout: 3000 }).catch(() => undefined);
+    const backToDoc = await page.locator(".work-mode-bar button[aria-checked=\"true\"]").innerText();
     pass("검토(Alt+3): 이 문서의 수정안 비교가 바로 열리고, 닫으면 '문서'", proposed && reviewActive === "검토" && diff.includes("고친 문단") && backToDoc === "문서", `${reviewActive} → ${backToDoc}`);
 
     // 대화 ↔ 문서: each keeps where it was read.
@@ -424,8 +424,8 @@ async function flow(provider: Provider) {
     pass("읽기(Alt+5): 화면 가득 쪽 넘기기(읽던 쪽에서 시작), Esc로 나란히로 돌아옴", pages >= 3 && Number(second.split("/")[0]) === startPage + 1 && back === 1, `${first} → ${second}`);
 
     // A PDF reads as its real pages.
-    await page.locator(".split-chat .docs-button").click();
-    await page.locator(".docs-menu .menu-item", { hasText: "자료.pdf" }).click();
+    await page.locator(".split-chat .note-head-more").click();
+    await page.locator(".note-menu [role=menuitem]", { hasText: "자료.pdf" }).click();
     await page.waitForSelector(".document-view .pdf-page canvas");
     await page.keyboard.press("Alt+5");
     await page.waitForSelector(".reader img.reader-page", { timeout: 10_000 });

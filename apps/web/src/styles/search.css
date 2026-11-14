@@ -1,9 +1,12 @@
 /* ── "찾는 길": scope chips, groups by work, totals and "더 보기" in the Ctrl+K box ─────────── */
 
-.palette.fast-find { display: flex; flex-direction: column; width: min(1180px, 96vw); height: min(820px, 88vh); }
-.fast-find .palette-body { flex: 1; grid-template-columns: minmax(300px, 1fr) minmax(320px, 1fr); }
+.palette.fast-find { display: flex; flex-direction: column; }
+/* Match Fast Find's result-first 55:45 split; sizing is owned by hig-chat.css. */
+.fast-find .palette-body { flex: 1; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); }
+.fast-find .palette-list, .fast-find .palette-preview { min-width: 0; }
 .search-tools { display: flex; gap: 12px; align-items: center; padding: 7px 16px; border-bottom: 1px solid var(--line); font-size: var(--fs-micro); }
-.search-tools select, .search-property-filter input { max-width: 210px; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 4px 7px; }
+.search-tools .ui-select { max-width: 210px; font-size: inherit; }
+.search-property-filter input { max-width: 210px; background: var(--surface); color: var(--text); border: 1px solid var(--field-line); border-radius: var(--r-sm); padding: 4px 7px; }
 .search-tools label { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
 .search-property-filter { position: relative; }
 .search-property-filter summary { cursor: pointer; }
@@ -15,7 +18,7 @@
 .search-heading { grid-column: 2 / -1; color: var(--accent); font-size: var(--fs-micro); }
 .search-source { font-size: var(--fs-meta); line-height: 1.65; margin-top: 12px; }
 .search-source-line { display: grid; grid-template-columns: 32px minmax(0, 1fr); white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 4px; }
-.search-source-number { font-size: 10px; color: var(--faint); user-select: none; text-align: right; padding-right: 9px; }
+.search-source-number { font-size: var(--fs-micro); color: var(--faint); user-select: none; text-align: right; padding-right: 9px; }
 .search-source-h1, .search-source-h2, .search-source-h3 { color: var(--accent); font-weight: 650; margin-top: 6px; }
 .search-source-h1 { font-size: 1.2em; }
 .search-source-code { font-family: var(--font-mono); background: var(--surface-muted); }
@@ -35,7 +38,7 @@
   .fast-find.show-search-preview .palette-preview { display: block; flex: 1; }
   .search-preview-toggle { display: block; }
   .search-tools { gap: 8px; flex-wrap: wrap; }
-  .search-tools select { max-width: 150px; }
+  .search-tools .ui-select { max-width: 150px; }
 }
 
 /* The filters row holds the scope chips (Tab), then the engine chips and "보관 포함". */

@@ -46,7 +46,7 @@ gi.require_version("WebKit2", "4.1")
 from gi.repository import Gdk, GLib, Gtk, WebKit2  # noqa: E402
 
 host = subprocess.Popen(
-    ["node", "apps/host/src/main.ts"],
+    ["node", os.environ.get("HOST_ENTRY", "apps/host/src/main.ts")],
     cwd=repo,
     env={**os.environ, "WORKBENCH_DATA_DIR": data_dir, "WORKBENCH_WEB_DIR": "apps/web/dist", "WORKBENCH_CODEX_BIN": os.path.join(repo, "scripts/fixtures/fake-codex.mjs"), "WORKBENCH_CLAUDE_BIN": os.path.join(repo, "scripts/fixtures/fake-claude.mjs")},
     stdout=subprocess.PIPE,
@@ -152,15 +152,32 @@ try:
     view.load_uri(f"{url}/?token={token}")
     until(lambda: js("return Boolean(document.querySelector('.project-link'))"), 20)
     js("document.querySelector('.project-link').click(); return true")
-    until(lambda: js("return Boolean(document.querySelector('.project-view .project-stage'))"), 15)
-    js("document.querySelector('.project-stage').click(); return true")
-    until(lambda: js("return [...document.querySelectorAll('.context-menu-item')].some((item) => item.textContent.includes('진행중'))"), 10)
-    js("[...document.querySelectorAll('.context-menu-item')].find((item) => item.textContent.includes('진행중')).click(); return true")
+    # A new project has no stage yet: its row in the properties block says so, and opens the stage menu (the shared menu).
+    stage_row = "document.querySelector('.project-view .pn-props .pn-prop[data-key=\"단계\"] .pn-prop-button')"
+    until(lambda: js("return Boolean(" + stage_row + ")"), 15)
+    js(stage_row + ".click(); return true")
+    pick = "[...document.querySelectorAll('.ui-menu[data-state=open] [data-menu-item]')].find((item) => item.textContent.includes(%s))"
+    until(lambda: js("return Boolean(" + (pick % "'진행중'") + ")"), 10)
+    js((pick % "'진행중'") + ".click(); return true")
     written = until(lambda: "단계: 진행중" in read_note(), 10)
     pump(0.4)
     snapshot("webkit-project-page.png")
-    look = js("const pill = document.querySelector('.project-stage'); return { text: pill.textContent, color: getComputedStyle(pill).borderColor }")
-    check("WebKitGTK: 대화 머리 → 프로젝트 페이지, 단계 메뉴로 고른 '진행중'이 노트 파일에", written and "진행중" in (look or {}).get("text", ""), json.dumps(look, ensure_ascii=False))
+    look = js("const pill = document.querySelector('.project-view .pn-stage'); return pill && { text: pill.textContent, dot: getComputedStyle(pill.querySelector('.pn-stage-dot')).backgroundColor }")
+    check("WebKitGTK: 대화 머리 → 프로젝트 페이지, 속성 블록 단계 줄의 메뉴로 고른 '진행중'이 노트 파일에(제목 아래 칩에도)", written and "진행중" in (look or {}).get("text", ""), json.dumps(look, ensure_ascii=False))
+
+    # The note's words, edited in place: the editor stays open (no focus lost while the edit lease
+    # is asked for), and moving the focus out writes the real file.
+    js("document.querySelector('.project-view .pn-run').click(); return true")
+    opened = until(lambda: js("return Boolean(document.querySelector('.project-view .pn-body-edit .cm-content[contenteditable=true]'))"), 10)
+    pump(1.0)
+    stayed = js("return Boolean(document.querySelector('.project-view .pn-body-edit .cm-content[contenteditable=true]'))")
+    js("const content = document.querySelector('.project-view .pn-body-edit .cm-content'); content.focus(); document.execCommand('insertText', false, 'WebKit에서 제자리에서 고친 줄'); return true")
+    pump(0.4)
+    snapshot("webkit-project-body-edit.png")
+    js("document.querySelector('.project-view [aria-label=\"프로젝트 메뉴\"]').focus(); return true")
+    saved = until(lambda: "WebKit에서 제자리에서 고친 줄" in read_note(), 10)
+    closed = until(lambda: js("return !document.querySelector('.project-view .pn-body-edit') && Boolean(document.querySelector('.project-view .pn-body-read'))"), 10)
+    check("WebKitGTK: 본문을 누르면 그 자리에서 편집기가 열려 유지되고, 밖으로 나가면 실제 파일에 씀", bool(opened and stayed and saved and closed), f"opened={opened} stayed={stayed} saved={saved} closed={closed}")
 
     # Home "프로젝트": table, kanban (pointer events dispatched in WebKit), graph.
     js("document.querySelector('.topbar .brand').click(); return true")

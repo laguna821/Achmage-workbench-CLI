@@ -44,6 +44,10 @@ describe("callouts", () => {
 });
 
 describe("Obsidian marks", () => {
+  it("bolds Korean text that ends in punctuation before a particle", () => {
+    expect(html("**소요 시간(30분 57초)**입니다")).toContain("<strong>소요 시간(30분 57초)</strong>입니다");
+  });
+
   it("highlights ==text==, not inside code", () => {
     const out = html("이건 ==중요== 하고 `==코드==`는 그대로");
     expect(out).toContain("<mark>중요</mark>");

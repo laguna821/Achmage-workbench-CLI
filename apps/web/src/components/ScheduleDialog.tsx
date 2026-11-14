@@ -97,7 +97,8 @@ export function ScheduleDialog({ api, session, schedules, onClose, onError, onOp
                 <span className="schedule-text" title={entry.text}>
                   {entry.text.split("\n")[0]}
                 </span>
-                <span className="schedule-next">{entry.enabled ? nextText(entry.nextAt) : "꺼짐"}</span>
+                <span className="schedule-next">{entry.enabled ? nextText(entry.nextAt) : entry.offReason === "locked" ? "휴대폰 채팅을 잠가 꺼짐 · 잠금을 풀어야 켤 수 있습니다" : entry.offReason === "disconnected" ? "휴대폰 연결을 끊어 꺼짐" : "꺼짐"}</span>
+                {entry.origin ? <span className="schedule-next">휴대폰 채팅에서 만든 예약 · 결과는 그 채팅으로 갑니다</span> : null}
                 <span className="schedule-next">{entry.policy?.mode === "new_run" ? "매번 새 대화" : "현재 대화 이어서"} · {entry.policy?.timezone ?? "기기 시간대"} · {entry.runCount ?? 0}회 접수{entry.policy?.maxRuns ? ` / 최대 ${entry.policy.maxRuns}회` : ""}</span>
               </div>
               <button type="button" className="text-button" onClick={() => setHistory(history === entry.id ? null : entry.id)} aria-expanded={history === entry.id}>실행 기록</button>

@@ -4,7 +4,6 @@ import type { Api } from "../api.ts";
 import { entryClient, pickedWork } from "../entry.ts";
 import { folderPath, type State } from "../state.ts";
 import { readHomeMode, type HomeMode } from "../overview.ts";
-import { workHidden } from "../tree.ts";
 import { BrowseStart } from "./BrowseStart.tsx";
 import { Composer } from "./Composer.tsx";
 import { HomeModes } from "./HomeModes.tsx";
@@ -15,6 +14,7 @@ import { EngineMark } from "./EngineMark.tsx";
 import { ProjectChoice } from "./ProjectChoice.tsx";
 import { useAppearance } from "../appearance.ts";
 import { Segmented } from "./ui/Hig.tsx";
+import { HomeBrand } from "./BrandMark.tsx";
 
 const ENGINE_KEY = "workbench.lastEngine";
 
@@ -142,6 +142,8 @@ export function StartView({
   pickFolder,
   engine,
   setEngine,
+  motion = true,
+  onHero,
 }: {
   state: State;
   folderId: string | null;
@@ -158,7 +160,7 @@ export function StartView({
   onOpenSession: (session: Session, itemId?: string) => void;
   onOpenDoc: (artifactId: string) => void;
   api: Api;
-  /** The overview mode kept in the screen preferences (지금 · 보드 · 지도 · 흐름 · 문서). */
+  /** The overview mode kept in the screen preferences (지금 · 프로젝트 · 흐름 · 문서). */
   homeMode: unknown;
   onHomeMode: (mode: HomeMode) => void;
   /** Each mode's views (screen preferences `homeViews`). */
@@ -169,11 +171,12 @@ export function StartView({
   setEngine: (provider: Provider) => void;
   /** The logo's short entrance (off in settings or with reduced motion). */
   motion?: boolean;
+  /** Whether the home wordmark is on screen in this view. */
+  onHero?: (shown: boolean) => void;
 }) {
   const { openMenu } = useAppearance();
   const [cwd, setCwd] = useState<string | null>(null);
   const [choice, setChoice] = useState<ModelChoice>({ model: null, effort: null });
-  const [overviewOpen, setOverviewOpen] = useState(false);
   // "같은 폴더 = 같은 프로젝트": a folder that already has a live work sends there unless picked otherwise.
   const client = useMemo(() => entryClient(api), [api]);
   const [pick, setPick] = useState<ProjectPick>({ kind: "auto" });
@@ -194,8 +197,10 @@ export function StartView({
   const works = Object.values(state.works).sort((a, b) => b.updatedAt - a.updatedAt);
   const recentFolders = [...new Set(works.filter((work) => !work.cwdManaged).map((work) => work.cwd))].slice(0, 5);
   const path = folderPath(state, folderId);
-  // The overview needs something to show; a first launch is just the brand and the input.
-  const board = !path.length && Object.values(state.works).some((work) => !workHidden(state, work));
+  // Home navigation is available from the first launch, including its empty views.
+  // A folder-specific "new work" remains a composer, not the all-projects overview.
+  const board = !path.length;
+  const mode = readHomeMode(homeMode);
   /* Attribution Assurance License: shown each time the app starts (the design editor is doory). */
   const credit = (
     <p className="start-credit">
@@ -206,9 +211,9 @@ export function StartView({
     </p>
   );
 
-  return (
-    <main className={`start-view${board ? " with-board" : ""}`} onContextMenu={(event) => openMenu(event, engine)}>
+  const entry = (
       <div className="column start-inner">
+        <HomeBrand motion={motion} onShown={onHero} />
         <h1 className="home-title">무엇을 시작할까요?</h1>
         {path.length ? (
           <div className="start-folder">
@@ -228,6 +233,7 @@ export function StartView({
           }}
         />
         <Composer
+          provider={engine}
           draftKey={draftKey ?? `new:${folderId ?? "root"}`}
           placeholder={target ? "이 프로젝트에서 할 일을 입력하세요" : "AI에게 맡길 일을 입력하세요"}
           busy={false}
@@ -251,17 +257,17 @@ export function StartView({
           }
         />
         </BrowseStart>
-        {board ? <section className="home-recent" aria-label="최근 프로젝트">
-          <header><h2>이어서 하기</h2><button type="button" className="text-button" aria-expanded={overviewOpen} onClick={() => setOverviewOpen(!overviewOpen)}>{overviewOpen ? "간단히 보기" : "작업 모아보기"}<Icon name={overviewOpen ? "chevronUp" : "chevronDown"} size={14} /></button></header>
-          {!overviewOpen ? <div className="home-recent-list">{works.filter(work => !workHidden(state, work)).slice(0, 3).map(work => <button type="button" key={work.id} onClick={() => (onOpenProject ?? onOpenWork)(work)}><Icon name="project" size={18} /><span>{work.title}</span><Icon name="chevronRight" size={14} /></button>)}</div> : null}
-        </section> : null}
-        {!overviewOpen || !board ? credit : null}
+        {!board ? credit : null}
       </div>
-      {board && overviewOpen ? (
+  );
+
+  return (
+    <main className={`start-view${board ? " with-board" : ""}`} onContextMenu={(event) => openMenu(event, engine)}>
+      {board ? (
         <HomeModes
           api={api}
           state={state}
-          mode={readHomeMode(homeMode)}
+          mode={mode}
           onMode={onHomeMode}
           views={homeViews}
           onViews={onHomeViews}
@@ -269,9 +275,10 @@ export function StartView({
           onOpenWork={onOpenWork}
           onOpenProject={onOpenProject}
           onOpenDoc={onOpenDoc}
+          intro={mode === "now" ? entry : null}
           footer={<div className="column">{credit}</div>}
         />
-      ) : null}
+      ) : entry}
     </main>
   );
 }

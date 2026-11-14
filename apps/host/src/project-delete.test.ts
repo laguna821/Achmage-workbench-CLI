@@ -22,7 +22,8 @@ it("removes the project's records and search results across restart, preserving 
     f.manager.sink.upsertItem(f.session.id, { kind: "user", id: "prompt", text: "삭제할 원문 프롬프트", at: 1 });
     f.store.setMeta("project.notes", JSON.stringify({ [f.work.id]: f.file, [other.id]: "other.md" }));
     f.manager.updateWork(f.work.id, { archived: true });
-    expect(f.manager.deleteWork(f.work.id)).toEqual({ ok: true, preservedPath: f.work.cwd });
+    // No document of this project is in the app trash: none stays behind in 보관함.
+    expect(f.manager.deleteWork(f.work.id)).toEqual({ ok: true, preservedPath: f.work.cwd, trashedDocuments: 0 });
     expect(f.manager.snapshot().works.map(work => work.id)).toEqual([other.id]);
     expect(f.manager.snapshot().sessions).toEqual([]);
     expect(f.manager.snapshot().artifacts).toEqual([]);

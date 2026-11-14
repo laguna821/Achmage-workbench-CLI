@@ -1,7 +1,6 @@
-.topbar { min-height: 48px; gap: 12px; padding-inline: 12px; background: var(--chrome-bg); border-bottom: 1px solid var(--chrome-line); color: var(--chrome-text); }
-.hig-app-name { color: var(--chrome-text); font: 600 15px/20px var(--font-ui); letter-spacing: 0; }
-.hig-home-icon { display: none; }
-.topbar-title { min-width: 0; min-height: 28px; gap: 8px; font-size: 13px; }
+.topbar { min-height: 48px; gap: 12px; padding-inline: 12px; background: var(--chrome-bg); color: var(--chrome-text); }
+.topbar .brand { flex-shrink: 0; color: var(--brand-ink); }
+.topbar-title { min-width: 0; min-height: 28px; gap: 8px; font: 600 14px/20px var(--font-ui); }
 .topbar-right { gap: 4px; }
 .compact-toolbar-menu { display: flex; flex-direction: column; gap: 4px; padding: 8px; border-bottom: 1px solid var(--line); }
 .compact-toolbar-menu > button, .compact-toolbar-menu .workspace-layout-tools > button { justify-content: flex-start; width: 100%; min-height: 36px; }
@@ -18,7 +17,6 @@
 .layout-mini-1 { grid-template-columns: 1fr; }
 .layout-mini-9 { grid-template-columns: repeat(3, 1fr); }
 .layout-mini i { border: 1px solid currentColor; border-radius: 2px; }
-.panes.recursive { background: var(--chrome-bg); }
 .panes.recursive .pane { container-type: inline-size; container-name: work-pane; }
 .panes.recursive .pane-head { min-height: 40px; height: auto; padding: 4px 8px; gap: 8px; border-bottom: 1px solid var(--line); background: var(--chrome-bg); color: var(--chrome-text); }
 .pane-head-title { display: flex; flex-direction: column; min-width: 0; line-height: 1.4; font-size: 13px; }
@@ -41,8 +39,9 @@
 .work-link-dialog form { display: grid; gap: 16px; }
 .work-link-dialog label { display: grid; gap: 8px; font-size: 13px; }
 .work-link-pair { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center; }
-.work-link-pair label { min-width: 0; }
-.work-link-dialog select, .work-link-dialog textarea { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); padding: 8px 12px; }
+.work-link-field { display: grid; gap: 8px; min-width: 0; font-size: 13px; }
+.work-link-field .ui-select { width: 100%; min-height: 40px; padding: 8px 12px; background: var(--bg); font-size: 13px; }
+.work-link-dialog textarea { width: 100%; min-width: 0; border: 1px solid var(--field-line); border-radius: 8px; background: var(--bg); color: var(--text); padding: 8px 12px; }
 .work-link-dialog textarea { font-size: 15px; line-height: 1.6; resize: vertical; }
 .work-link-dialog footer { display: flex; align-items: center; gap: 12px; justify-content: flex-end; }
 .work-link-dialog footer span { margin-right: auto; font-size: 13px; color: var(--muted); }
@@ -56,7 +55,6 @@
   .pane-head { gap: 4px; }
   .pane-status { max-width: 72px; }
   .start-view.with-board .start-inner { padding-block: 24px; }
-  .start-view .home-modes { display: none; }
   .start-view .home-title { font-size: 17px; line-height: 22px; margin-bottom: 16px; }
 }
 @media (max-width: 743px) {
@@ -70,8 +68,7 @@
 }
 @media (max-width: 900px) {
   .topbar { display: flex; align-items: center; height: auto; min-height: 48px; }
-  .topbar-title, .topbar .hig-app-name, .shell-location-kind { display: none; }
-  .hig-home-icon { display: block; }
+  .topbar-title, .shell-location-kind { display: none; }
   .topbar-right { margin-left: auto; flex-wrap: nowrap; padding-bottom: 0; }
   .topbar > .topbar-right > :is(.shell-connections,.shell-tasks,.shell-theme) { display: none; }
   .topbar-left { min-width: 0; gap: 4px; }

@@ -8,9 +8,16 @@
   gap: 2px;
 }
 
+/* "새로 만들기" keeps the width it has in one column (288 − 2×12 − 2×28 − 2×8); in two panes the
+   layout button and ⋯ go to the row's end instead of the button stretching to meet them. */
 .side-head-row .side-new {
   flex: 1 1 auto;
   min-width: 0;
+  max-width: 192px;
+}
+
+.side-head-row .side-layout {
+  margin-left: auto;
 }
 
 .side-head-row .icon-button.small {
@@ -280,7 +287,7 @@ html.nav-dragging * {
   width: 100%;
   height: 30px;
   padding: 0 10px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--field-line);
   border-radius: var(--r-md);
   background: var(--surface);
   color: var(--text);
@@ -334,6 +341,23 @@ html.nav-dragging * {
   font-size: var(--fs-meta);
   line-height: 1.45;
   word-break: keep-all;
+}
+
+/* What to do about an empty list, right under the sentence that says why it is empty. */
+.list-empty-action {
+  display: block;
+  margin-top: var(--space-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.list-empty-action:hover {
+  text-decoration: underline;
 }
 
 /* A project like a note in Notebook Navigator: name and stage, the note's first words, date and tags.
@@ -434,10 +458,16 @@ html.nav-dragging * {
   font-variant-numeric: tabular-nums;
 }
 
+/* The folder gives way first (with an ellipsis); the date and the counts by kind never do. */
 .nav-project-folder {
   display: inline-flex;
   align-items: center;
   gap: 3px;
+  flex: 0 1 auto;
+  min-width: 28px;
+}
+
+.nav-project-folder > span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -457,15 +487,22 @@ html.nav-dragging * {
   color: var(--faint);
 }
 
-.nav-project-sessions {
+/* What the project holds, by kind: 대화 · 문서 · 웹, in the order they unfold. */
+.nav-project-kinds {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 8px;
   margin-left: auto;
   flex: 0 0 auto;
 }
 
-.nav-project-sessions svg {
+.nav-project-kinds > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.nav-project-kinds svg {
   color: var(--faint);
 }
 
@@ -618,7 +655,7 @@ html.nav-dragging * {
   min-width: 0;
   height: 28px;
   padding: 0 8px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--field-line);
   border-radius: var(--r-md);
   background: var(--surface);
   color: var(--text);
@@ -654,9 +691,11 @@ html.nav-dragging * {
   }
 }
 
-/* Project notes, conversations, and files have distinct, stable visual identities. */
-.nav-kind { flex: 0 0 auto; font-size: 10px; line-height: 1.5; padding: 1px 5px; border-radius: 4px; color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
-.nav-folder-heading { margin: 12px 8px 5px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 11px; font-weight: 600; color: var(--muted); }
-.nav-root { margin-bottom: 8px; border: 1px solid var(--line); border-radius: 6px; }
-.row-work .side-row-icon, .nav-project-line > svg { color: var(--accent); }
-.row-docs { margin-top: 6px; font-size: 11px; font-weight: 600; color: var(--muted); }
+/* A label inside a section ("정리 폴더"), on the kind labels' size (대화 · 문서 · 웹). */
+.nav-folder-heading {
+  margin: 8px 8px 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font: 600 12px/16px var(--font-ui);
+  color: var(--muted);
+}

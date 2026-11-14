@@ -1,9 +1,10 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { PROVIDER_LABEL, type BrowserPage, type BrowserPageCreate, type Session, type Workspace, type Provider } from "@workbench/contracts";
+import type { ReactNode } from "react";
 import type { Api } from "../api.ts";
 import { ApiRequestError } from "../api.ts";
 import { browserUrl, type SharedBrowser } from "../browser-state.ts";
-import { isBusy, type State, type Transcript as Conversation } from "../state.ts";
+import { isBusy, turnRunning, type State, type Transcript as Conversation } from "../state.ts";
 import { Icon } from "./Icon.tsx";
 import { IconButton } from "./ui/Hig.tsx";
 import { Popover, MenuItem } from "./Popover.tsx";
@@ -12,13 +13,20 @@ import { EngineTabs } from "./StartView.tsx";
 import { ModelPicker, type ModelChoice } from "./ModelPicker.tsx";
 export { BrowserSearch } from "./BrowseStart.tsx";
 import { Composer } from "./Composer.tsx";
-import { Transcript } from "./Transcript.tsx";
+import { readDraft, writeDraft } from "../draft.ts";
 import { BrowserTools } from "./BrowserTools.tsx";
-import type { WorkActions } from "./WorkView.tsx";
+import { useShownPanel } from "../completion-notifications.ts";
+import { QueuedList, type WorkActions } from "./WorkView.tsx";
+import { AgentColumn } from "./companion/AgentColumn.tsx";
+import { NoteBanner } from "../conversation/NoteBanner.tsx";
+import { Beside, useStoredRatio } from "./companion/Beside.tsx";
+import { EngineMark } from "./EngineMark.tsx";
+import { Select, type SelectOption } from "./ui/Select.tsx";
 import { restoreSurfaceFocus } from "./controls/menu-navigation.ts";
 import "../styles/browser.css";
 
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
+const ENGINES: SelectOption<Provider>[] = (["codex", "claude"] as const).map(provider => ({ value: provider, label: PROVIDER_LABEL[provider], icon: <EngineMark provider={provider} size={16} /> }));
 export type BrowserTarget = { workspaceId?: string; profileId?: string; url?: string };
 type NewTarget = BrowserTarget;
 const createKey = "workbench.browser.creation";
@@ -109,18 +117,27 @@ export function NewBrowserDialog({ browser, workspaces, target, onOpen, onClose 
   </dialog>;
 }
 
-export function BrowserView({ browser, api, state, pageId, visible, parentSessionId, actions, onNew, onStart, engine = "codex", onLeaveGuard, onTranscript, onOpenSession, focusItem, onFocusDone }: {
+export function BrowserView({ browser, api, state, pageId, visible, parentSessionId, actions, onNew, onStart, onClosed, engine = "codex", onLeaveGuard, onTranscript, onOpenSession, onSessionMenu, hosted, focusItem, onFocusDone }: {
   browser: SharedBrowser; api: Api; state: State; pageId: string; visible: boolean; parentSessionId: string | null;
   onStart?: (text: string, provider: Provider, choice: ModelChoice) => Promise<boolean>; engine?: Provider;
   actions: WorkActions; onNew: (target: NewTarget) => void; onClosed: () => void;
-  onLeaveGuard?: (guard: ((reason?: "close") => Promise<void>) | null) => void;
+  onLeaveGuard?: (guard: ((reason?: "close" | "discard") => Promise<void>) | null) => void;
   onTranscript: (sessionId: string, transcript: Conversation) => void; onOpenSession: (session: Session) => void;
+  /** This page's AI's own actions (rename, archive, mute…), from its conversation's head. */
+  onSessionMenu?: (session: Session, x: number, y: number) => void;
+  /**
+   * The page is a conversation's companion (beside it, in that conversation's tab): asking goes to
+   * that conversation, so this view shows no AI of its own. Its bar closes it (the page lives on),
+   * or opens it wide in a tab of its own.
+   */
+  hosted?: { onClose: () => void; onWide: () => void; /** It lies over the conversation: its bar carries the way back to the conversation, by name. */ over?: boolean; /** What the covered conversation is doing (e.g. 승인 필요). */ back?: string | null };
   focusItem: { sessionId: string; itemId: string; nonce: number } | null; onFocusDone: () => void;
 }) {
   const data = useSyncExternalStore(browser.subscribe, browser.getState);
   const page = data.pages.find(entry => entry.pageId === pageId);
   const [address, setAddress] = useState(page?.url ?? ""), editingAddress = useRef(false);
-  const [aiOpen, setAiOpen] = useState(Boolean(focusItem));
+  const [aiOpen, setAiOpen] = useState(Boolean(focusItem) && !hosted);
+  const [columnRatio, setColumnRatio] = useStoredRatio("workbench.agentColumn.web", 0.38);
   const [askEngine, setAskEngine] = useState<Provider>(engine);
   const [askChoice, setAskChoice] = useState<ModelChoice>({ model: null, effort: null });
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -129,17 +146,36 @@ export function BrowserView({ browser, api, state, pageId, visible, parentSessio
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const viewport = useRef<HTMLDivElement>(null), aiButton = useRef<HTMLButtonElement>(null), acting = useRef(false);
   const slot = useId(), transcriptCallback = useRef(onTranscript); transcriptCallback.current = onTranscript;
-  const session = (page?.sessionId ? state.sessions[page.sessionId] : undefined) ?? createdSession;
+  const storedSession = page?.sessionId ? state.sessions[page.sessionId] : undefined;
+  const session = createdSession && createdSession.id === page?.sessionId && (!storedSession || createdSession.updatedAt > storedSession.updatedAt) ? createdSession : storedSession;
   const transcript = session ? state.transcripts[session.id] : undefined;
   const ready = browser.available && data.connected && page?.status === "ready" && page.driverId === browser.driverId;
   const blank = page?.url === "about:blank";
+  const columnOpen = aiOpen && !blank && !hosted;
+  // An archived conversation is only looked at: read-only at both ends, and not marked seen.
+  const archived = Boolean(session?.archivedAt);
+  useShownPanel(visible && columnOpen && session && !archived ? session.id : null);
   const pending = data.pending[pageId];
+  const restoreAttempt = useRef("");
+  const [connecting, setConnecting] = useState(false);
+  const reconnect = async () => {
+    setConnecting(true); setError("");
+    try { await browser.restore(pageId); } catch (reason) { setError(message(reason)); }
+    finally { setConnecting(false); }
+  };
+  useEffect(() => {
+    if (!visible || !browser.available || !data.connected || ready || data.closedPageIds?.includes(pageId)) return;
+    const attempt = `${pageId}:${page?.driverId ?? ""}:${page?.status ?? "legacy"}:${page?.control.generation ?? 0}`;
+    if (restoreAttempt.current === attempt) return;
+    restoreAttempt.current = attempt;
+    void reconnect();
+  }, [browser, pageId, visible, data.connected, page?.driverId, page?.status, page?.control.generation, ready, data.closedPageIds]);
   const run = async (fn: () => Promise<void>) => {
     if (acting.current) return; acting.current = true; setBusy(true); setError("");
     try { await fn(); } catch (reason) { setError(message(reason)); } finally { acting.current = false; setBusy(false); }
   };
   useEffect(() => { if (!editingAddress.current && page?.url) setAddress(page.url); }, [page?.url]);
-  useEffect(() => { if (focusItem) setAiOpen(true); }, [focusItem]);
+  useEffect(() => { if (focusItem && !hosted) setAiOpen(true); }, [focusItem, Boolean(hosted)]);
   useEffect(() => {
     onLeaveGuard?.(async reason => { if (reason === "close") await browser.close(pageId); });
     return () => onLeaveGuard?.(null);
@@ -148,17 +184,17 @@ export function BrowserView({ browser, api, state, pageId, visible, parentSessio
     if (viewport.current) return browser.surface(slot, pageId, viewport.current, visible && !blank);
   }, [browser, slot, pageId, visible, ready, blank]);
   useEffect(() => {
-    if (!session || !aiOpen || (transcript && isBusy(session))) return;
+    if (!session || !columnOpen || (transcript && isBusy(session))) return;
     let cancelled = false;
     void api.items(session.id).then(result => { if (!cancelled) transcriptCallback.current(session.id, result); }).catch(reason => { if (!cancelled) setError(message(reason)); });
     return () => { cancelled = true; };
-  }, [api, session?.id, session?.status, !!transcript, transcript?.items.at(-1)?.kind === "turnEnd" ? transcript.items.at(-1)?.id : null, aiOpen]);
+  }, [api, session?.id, session?.status, !!transcript, transcript?.items.at(-1)?.kind === "turnEnd" ? transcript.items.at(-1)?.id : null, columnOpen]);
   useEffect(() => {
-    if (!ready || blank || !aiOpen || session) return;
+    if (!ready || !columnOpen || session) return;
     let cancelled = false;
     void browser.session(pageId, parentSessionId).then(child => { if (!cancelled) setCreatedSession(child); }).catch(reason => { if (!cancelled) setError(message(reason)); });
     return () => { cancelled = true; };
-  }, [browser, pageId, parentSessionId, ready, blank, aiOpen, session?.id]);
+  }, [browser, pageId, parentSessionId, ready, columnOpen, session?.id]);
   const ask = async () => { setAiOpen(true); };
   const humanAction = async (action: Parameters<SharedBrowser["action"]>[1]) => {
     await browser.control(pageId, "human"); await browser.action(pageId, action);
@@ -177,8 +213,9 @@ export function BrowserView({ browser, api, state, pageId, visible, parentSessio
   };
   const clone = () => onNew({ workspaceId: page?.workspaceId, profileId: page?.profileId, url: page?.url });
   if (!browser.available) return <div className="browser-unavailable"><h2>웹 탭</h2><p>공유 브라우저는 데스크톱 기본 창에서 사용할 수 있습니다. 기본 창에서 이 웹 탭을 열어 주세요.</p></div>;
-  return <section className="browser-view" aria-label="공유 웹 탭">
+  const pageMain = <section className="browser-view" aria-label="공유 웹 탭" data-hosted={hosted ? "" : undefined}>
     <div className="browser-toolbar">
+      {hosted?.over ? <button type="button" className="ghost-button browser-back" title="대화로 돌아가기 · 웹 페이지는 탭으로 남습니다" onClick={hosted.onClose}><Icon name="arrowLeft" size={15} /> 대화{hosted.back ? ` · ${hosted.back}` : ""}</button> : null}
       <div className="browser-navigation" role="group" aria-label="페이지 이동">
         <IconButton icon="arrowLeft" label="이전 페이지" disabled={!ready || busy || !!pending} onClick={() => void run(() => navigate("back"))} />
         <IconButton icon="arrowRight" label="다음 페이지" disabled={!ready || busy || !!pending} onClick={() => void run(() => navigate("forward"))} />
@@ -189,14 +226,20 @@ export function BrowserView({ browser, api, state, pageId, visible, parentSessio
         <button type="submit" className="browser-address-go hig-icon-button" aria-label="이동" title="이동" disabled={!ready || busy || !!pending}><Icon name="arrowRight" size={16} /></button>
       </form>
       {!blank ? <>
-      <button ref={aiButton} type="button" className="hk-btn hk-btn--tinted browser-ask" aria-expanded={aiOpen} disabled={!ready || busy} onClick={() => aiOpen ? setAiOpen(false) : void run(ask)}><Icon name="chat" size={16} />AI에게 요청</button>
+      {hosted ? null : <button ref={aiButton} type="button" className="hk-btn hk-btn--tinted browser-ask" aria-expanded={aiOpen} disabled={!ready || busy} title="이 페이지의 AI와 나누는 대화를 페이지 옆에 엽니다" onClick={() => aiOpen ? setAiOpen(false) : void run(ask)}><Icon name="chat" size={16} />AI에게 요청</button>}
       <div className="anchor browser-more">
         <IconButton icon="dots" label="웹 탭 메뉴" aria-expanded={moreOpen} onClick={() => setMoreOpen(!moreOpen)} />
         <Popover open={moreOpen} onClose={() => setMoreOpen(false)} align="right" label="웹 탭 메뉴">
           <MenuItem onSelect={() => { setMoreOpen(false); setToolsOpen(true); }}>다운로드·권한{page?.native?.permissions?.some(request => request.status === "pending") ? " · 결정 대기" : ""}</MenuItem>
           <MenuItem onSelect={() => { setMoreOpen(false); clone(); }}>프로필과 웹 탭 설정…</MenuItem>
+          <MenuItem onSelect={() => { setMoreOpen(false); void run(async () => { await browser.close(pageId); onClosed(); }); }}>웹 탭 닫기</MenuItem>
         </Popover>
       </div>
+      </> : null}
+      {hosted ? <>
+        <IconButton icon="openNew" label="탭으로 넓게 열기" onClick={hosted.onWide} />
+        {/* The page is not closed by this: it stays listed as a tab behind the conversation. */}
+        {hosted.over ? null : <IconButton icon="x" label="곁 화면 닫기" title="곁 화면 닫기 · 웹 페이지는 탭으로 남습니다" onClick={hosted.onClose} />}
       </> : null}
     </div>
     {error || data.error || page?.error ? <p role="alert" className="browser-error">{error || data.error || page?.error}</p> : null}
@@ -208,20 +251,58 @@ export function BrowserView({ browser, api, state, pageId, visible, parentSessio
           let opened = false; await run(async () => { await humanAction({ kind: "navigate", url: browserUrl(input) }); opened = true; }); return opened;
         }}>
           <EngineTabs value={askEngine} onChange={provider => { setAskEngine(provider); setAskChoice({ model: null, effort: null }); }} />
-          <Composer draftKey={`browser-start:${pageId}`} placeholder="새 작업의 첫 요청을 입력하세요" busy={false} disabled={!onStart || busy || !!pending} autoFocus onSend={(text) => onStart ? onStart(text, askEngine, askChoice) : Promise.resolve(false)} target={<ModelPicker models={state.providers[askEngine]?.models ?? []} value={askChoice} onChange={setAskChoice} onRefresh={() => api.refreshProviders(askEngine)} />} />
+          <Composer provider={askEngine} draftKey={`browser-start:${pageId}`} placeholder="새 작업의 첫 요청을 입력하세요" busy={false} disabled={!onStart || busy || !!pending} autoFocus onSend={(text) => onStart ? onStart(text, askEngine, askChoice) : Promise.resolve(false)} target={<ModelPicker models={state.providers[askEngine]?.models ?? []} value={askChoice} onChange={setAskChoice} onRefresh={() => api.refreshProviders(askEngine)} />} />
         </BrowseStart></div> : null}
-        {!ready ? <div className="browser-unavailable"><h2>{page?.status === "interrupted" ? "이 페이지의 연결이 끊겼습니다" : "웹 페이지 연결 대기"}</h2><p>{page?.status === "interrupted" ? "이전 페이지와 AI 작업을 자동으로 다시 시작하지 않습니다." : "데스크톱 브라우저와 호스트의 연결을 확인해 주세요."}</p><button type="button" className="button" onClick={clone}>새 웹 탭으로 열기…</button></div> : null}
+        {!ready ? <div className="browser-unavailable" role="status"><h2>{connecting || !data.connected ? "웹 탭을 다시 연결하고 있습니다" : "웹 탭을 연결하지 못했습니다"}</h2><p>{page?.url && page.url !== "about:blank" ? page.url : "저장된 페이지를 불러옵니다."}</p>{!connecting && data.connected ? <button type="button" className="button" onClick={() => void reconnect()}>다시 연결</button> : null}</div> : null}
       </div>
-      {aiOpen && !blank ? <aside className="browser-conversation" aria-label="웹 탭 AI 대화">
-        <header><div><strong>이 웹 탭에 요청</strong><small>{session ? PROVIDER_LABEL[session.provider] : "독립 대화 준비"} · {page?.title || "웹 페이지"}</small></div><IconButton icon="x" label="웹 탭 AI 대화 접기" onClick={() => { setAiOpen(false); aiButton.current?.focus(); }} /></header>
-        {session?.pageAgent?.parentSessionId && state.sessions[session.pageAgent.parentSessionId] ? <button type="button" className="text-button" onClick={() => onOpenSession(state.sessions[session.pageAgent!.parentSessionId!]!)}>원래 대화 열기</button> : null}
-        {session ? <>
-          <Transcript sessionId={session.id} items={transcript?.items ?? []} provider={session.provider} running={isBusy(session)} loading={!transcript} onAnswer={(id, decision) => actions.answer(session, id, decision)} focusItem={focusItem?.sessionId === session.id ? focusItem : null} onFocusDone={onFocusDone} />
-          {session.queued.length ? <div className="browser-queued" aria-label="대기 요청">{session.queued.map(request => <div key={request.id}><span>{request.text}</span>{request.held ? <button type="button" className="text-button" disabled={!ready || busy || !!pending} onClick={() => void run(async () => { await browser.control(pageId, session.id); actions.queued.send(session, request.id); })}>보내기</button> : null}<button type="button" className="text-button" onClick={() => actions.queued.cancel(session, request.id)}>대기 취소</button></div>)}</div> : null}
-          <Composer draftKey={`browser:${pageId}:${session.id}`} voiceScope={{ workId: session.workId, sessionId: session.id }} voiceReply={transcript?.items.filter(item => item.kind === "assistant" && !item.streaming).map(item => item.kind === "assistant" ? item.text : "").at(-1)} placeholder="이 웹 페이지에서 할 일을 입력하세요" busy={isBusy(session)} waiting={session.status === "awaitingApproval"} disabled={!ready || busy || !!pending} steerable={session.provider === "codex"} onSend={send} onStop={() => actions.interrupt(session)} />
-        </> : <p className="muted">대화를 준비하고 있습니다.</p>}
-      </aside> : null}
     </div>
     {toolsOpen && page ? <BrowserTools browser={browser} api={api} page={page} ready={Boolean(ready)} onOpenArtifact={actions.openArtifact} onClose={() => setToolsOpen(false)} /> : null}
   </section>;
+
+  // A conversation's companion: the page alone (the conversation beside it has the input).
+  if (hosted) return pageMain;
+
+  const closeColumn = () => { setAiOpen(false); aiButton.current?.focus(); };
+  const blocked = !ready || busy || !!pending;
+  // The page's AI as a conversation column: its head names it, its input sits under its transcript.
+  let input: ReactNode = null;
+  if (session && archived) {
+    // The gateway takes nothing for an archived conversation: one line where the input was, with its way out.
+    input = <>
+      <QueuedList session={session} busy={false} actions={actions.queued} readOnly />
+      <NoteBanner action={{ label: "되돌리기", run: () => actions.restore({ kind: "session", id: session.id }) }}>
+        보관한 대화입니다. 읽기만 할 수 있습니다.{readDraft(`browser:${pageId}:${session.id}`).trim() ? " 쓰던 요청은 그대로 두었습니다. 되돌리면 입력창에 다시 나옵니다." : null}
+      </NoteBanner>
+    </>;
+  } else if (session) {
+    input = <>
+      <QueuedList session={session} busy={isBusy(session)} actions={{
+        // The AI is given the page before a waiting request goes to it.
+        send: (target, queuedId) => void run(async () => { await browser.control(pageId, target.id); actions.queued.send(target, queuedId); }),
+        edit: actions.queued.edit, cancel: actions.queued.cancel,
+      }} />
+      <Composer provider={session.provider} draftKey={`browser:${pageId}:${session.id}`} voiceScope={{ workId: session.workId, sessionId: session.id }} voiceReply={transcript?.items.filter(item => item.kind === "assistant" && !item.streaming).map(item => item.kind === "assistant" ? item.text : "").at(-1)} placeholder="이 웹 페이지에서 할 일을 입력하세요" busy={isBusy(session)} waiting={turnRunning(session)} disabled={blocked} steerable={session.provider === "codex"} onSend={send} onStop={() => actions.interrupt(session)}
+        target={<span className="composer-group" inert={blocked}>
+          <ModelPicker key={session.id} models={state.providers[session.provider]?.models ?? []} value={{ model: session.model, effort: session.effort }} onRefresh={() => api.refreshProviders(session.provider)}
+            onChange={choice => void run(async () => { setCreatedSession(await api.updateSession(session.id, choice)); })} />
+          <Select className="plain agent-engine" label="이 대화의 AI 엔진" value={session.provider} disabled={isBusy(session) || session.queued.length > 0} side="top"
+            icon={<EngineMark provider={session.provider} size={14} />} options={ENGINES}
+            title={isBusy(session) || session.queued.length > 0 ? "응답과 대기 요청을 마치거나 멈춘 뒤 엔진을 바꿀 수 있습니다." : "엔진별 대화가 유지됩니다. 다른 엔진을 선택하면 해당 엔진의 대화가 열립니다."}
+            onChange={provider => void run(async () => {
+              const draft = readDraft(`browser:${pageId}:${session.id}`);
+              const next = await browser.session(pageId, session.pageAgent?.parentSessionId ?? parentSessionId, provider);
+              if (draft && !readDraft(`browser:${pageId}:${next.id}`)) writeDraft(`browser:${pageId}:${next.id}`, draft);
+              setCreatedSession(next);
+            })} />
+        </span>} />
+    </>;
+  }
+  const column = columnOpen ? (
+    <AgentColumn state={state} session={session ?? null} kind="web" name={page?.title || "웹 페이지"} inputClass="browser-composer" waiting="대화를 준비하고 있습니다." readOnly={archived}
+      onClose={closeColumn} onMenu={onSessionMenu} onOpenParent={onOpenSession} onAnswer={(answered, id, decision) => actions.answer(answered, id, decision)}
+      focusItem={focusItem?.sessionId === session?.id ? focusItem : null} onFocusDone={onFocusDone}>
+      {input}
+    </AgentColumn>
+  ) : null;
+  return <Beside chat={column} content={pageMain} over="chat" ratio={columnRatio} onRatio={setColumnRatio} resetRatio={0.38} chatLabel="웹 AI 대화" contentLabel="웹 페이지" onDismiss={closeColumn} />;
 }

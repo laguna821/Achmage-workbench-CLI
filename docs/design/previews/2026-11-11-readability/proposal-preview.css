@@ -1,0 +1,14 @@
+/* Readability proposal only; not installed. */
+:root,.look-scope[data-theme="light"]{--review-nav-text:#202733;--review-nav-secondary:#4e5968;--review-nav-bg:#f3f5f8;--review-nav-line:#d6dce4;--review-nav-size:14px;--review-nav-line-height:22px;--review-nav-meta:13px;--review-nav-weight:500;--review-nav-strong:600}
+ .look-scope[data-theme="light"] .sidebar,.look-scope[data-theme="light"] .group-tabs{background:var(--review-nav-bg)}
+ .sidebar .side-row,.sidebar .side-row.row-session,.sidebar .side-row.row-doc,.sidebar .side-row.row-docs{min-height:32px;font-size:var(--review-nav-size);font-weight:var(--review-nav-weight);line-height:var(--review-nav-line-height);color:var(--review-nav-text)}
+ .sidebar .row-work,.sidebar .side-row.current{font-weight:var(--review-nav-strong)}
+ .sidebar .side-row-icon{color:var(--review-nav-secondary)}
+ .sidebar .side-section-label,.sidebar .side-section-title,.sidebar .side-disclosure>summary,.sidebar .nav-kind,.sidebar .side-row-trail{color:var(--review-nav-secondary);font-size:var(--review-nav-meta)}
+ .sidebar .nav-kind{display:none}
+ .topbar,.topbar-title{font-size:var(--review-nav-size);color:var(--review-nav-text)}
+ .group-tabs .group-tab,.group-tabs .group-tab [role="tab"]{font-size:var(--review-nav-size);font-weight:var(--review-nav-weight);color:var(--review-nav-text)}
+ .group-tabs .group-tab-kind{font-size:var(--review-nav-meta);color:var(--review-nav-secondary)}
+ .group-tabs .group-tab.active [role="tab"]{font-weight:var(--review-nav-strong);color:var(--chrome-accent)}
+ .group-tabs .group-tab-close{color:var(--review-nav-secondary)}
+ 

@@ -19,6 +19,8 @@ export function ConnectedWorkbench() {
   const [token] = useState(readToken);
   const [initialOffer, setInitialOffer] = useState(() => location.hash.startsWith("#offer=") ? location.href : "");
   const [open, setOpen] = useState(() => !token || location.hash.startsWith("#offer="));
+  // "휴대폰 메신저 열기" in the device dialog: the app owns that dialog, so it is asked by a counter.
+  const [messengerRequest, setMessengerRequest] = useState(0);
   useEffect(() => {
     if (initialOffer && location.hash.startsWith("#offer=")) history.replaceState(null, "", location.pathname + location.search);
   }, [initialOffer]);
@@ -30,6 +32,7 @@ export function ConnectedWorkbench() {
     approve: (id, input) => local.request("POST", "/api/devices/enrollments/" + encodeURIComponent(id) + "/approve", input),
     reject: id => local.request("POST", "/api/devices/enrollments/" + encodeURIComponent(id) + "/reject", {}),
     revoke: id => local.request("POST", "/api/devices/" + encodeURIComponent(id) + "/revoke", {}),
+    remove: id => local.request("POST", "/api/devices/" + encodeURIComponent(id) + "/remove", {}),
     rotate: id => local.request("POST", "/api/devices/" + encodeURIComponent(id) + "/rotate", {}),
   }), [local]);
   const peer = hostConnections.peer();
@@ -66,11 +69,12 @@ export function ConnectedWorkbench() {
   }, [pushIntent, pushTarget, connections.activeHostId, reportPushError]);
   return <>
     {pushError ? <div role="status" className="connection-error">{pushError} {pushIntent ? <button type="button" className="button small" onClick={() => { setPushError(""); setPushAttempt(value => value + 1); }}>알림 다시 열기</button> : <button type="button" className="button small" onClick={() => setPushError("")}>닫기</button>}</div> : null}
-    {token || peer ? <App key={connections.activeHostId ?? "local"} apiOverride={apiOverride} onConnections={() => setOpen(true)} connectionsOpen={open}
+    {token || peer ? <App key={connections.activeHostId ?? "local"} apiOverride={apiOverride} onConnections={() => setOpen(true)} connectionsOpen={open} messengerRequest={messengerRequest}
       attentionRequest={pushIntent?.hostId === connections.activeHostId ? pushTarget : null} onAttentionOpened={openedPush}
       connectionLabel={selected ? selected.label + (connections.phase === "connected" ? " · 연결됨" : " · 연결 확인") : "기기 연결"} registerHostSwitchGuard={guard} />
       : <main style={{ maxWidth: 560, margin: "12vh auto", padding: 24 }}><h1>Achmage Workbench</h1><p>작업 중인 PC에 연결해 대화와 파일을 이어서 보세요.</p><button type="button" className="primary-button" onClick={() => setOpen(true)}>기기 연결</button></main>}
     <HostConnections open={open} api={management} controller={hostConnections} localAvailable={!!token} initialOffer={initialOffer}
+      onMessenger={token && !connections.activeHostId ? () => { setOpen(false); setInitialOffer(""); setMessengerRequest(value => value + 1); } : undefined}
       onClose={() => { setOpen(false); setInitialOffer(""); }} />
   </>;
 }

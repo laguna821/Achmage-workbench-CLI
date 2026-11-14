@@ -27,12 +27,3 @@
 .plan-approval .plan-approval-text > :last-child {
   margin-bottom: 0;
 }
-
-.plan-tag {
-  padding: 1px 6px;
-  border-radius: var(--r-xs);
-  background: var(--accent-soft);
-  color: var(--active-text);
-  font-size: var(--fs-micro);
-  font-weight: 600;
-}

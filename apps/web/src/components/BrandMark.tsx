@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState } from "react";
 import wordmark from "../brand/achmage-wordmark.json";
+import { reducedMotion } from "../flip.ts";
 
 // The Achmage wordmark and its Arc / Rune symbol, from the user's own site (laguna821/slides,
 // src/lib/brand-wordmark.json and src/lib/brand.ts @ cee81c0). The letters take the text colour of
@@ -35,4 +37,24 @@ export function BrandSymbol({ className, size = 24 }: { className?: string; size
       <path className="wordmark-arc" d={SYMBOL.arc} />
     </svg>
   );
+}
+
+let greeted = false;
+
+/** The home logo. With "홈 로고 움직임" on it makes one short entrance per launch (motion.css);
+ * with the setting off or reduced motion it is there from the first frame. */
+export function HomeBrand({ motion, onShown }: { motion: boolean; onShown?: (shown: boolean) => void }) {
+  const [greet] = useState(() => {
+    if (!motion || greeted || reducedMotion()) return false;
+    greeted = true;
+    return true;
+  });
+  // Tells the owner while the wordmark is on screen (the top bar then shows only the symbol).
+  const report = useRef(onShown);
+  report.current = onShown;
+  useEffect(() => {
+    report.current?.(true);
+    return () => report.current?.(false);
+  }, []);
+  return <div className={`home-brand${greet ? " greet" : ""}`}><Wordmark className="home-wordmark" /></div>;
 }

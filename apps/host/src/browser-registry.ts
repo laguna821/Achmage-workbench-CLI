@@ -5,11 +5,12 @@ import { HttpError } from "./errors.ts";
 
 type Receipt = { job: BrowserJob; hash: string; status: "queued" | "dispatched" | "completed" | "rejected" | "outcome_unknown"; result: BrowserJobResult | null };
 type Waiter = { resolve: (result: BrowserJobResult) => void; timer: NodeJS.Timeout; promise: Promise<BrowserJobResult> };
-type Hooks = { workspace(id: string): { workId: string }; session(id: string): Session; interrupted(sessionId: string, reason: string): void };
+type Hooks = { workspace(id: string): { workId: string }; session(id: string): Session; interrupted(sessionId: string, reason: string): void; closed?(pageId: string): void };
 const key = "shared-browser:v1", receiptKey = "shared-browser-command:";
 const idOk = (value: unknown): value is string => typeof value === "string" && /^[\w-]{1,160}$/.test(value);
 const fail = (code: string, text: string) => new HttpError(409, code, text);
 const sameControl = (a: BrowserControl, b: BrowserControl) => a.generation === b.generation && a.owner === b.owner;
+const observationAction = (action: BrowserAction) => action.kind === "snapshot" || action.kind === "read";
 const fingerprint = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 export function webUrl(value: unknown): string {
   if (typeof value !== "string" || value.length > 8192) throw new HttpError(400, "browser_url", "웹 주소를 확인해 주세요.");
@@ -23,6 +24,7 @@ export function pageAction(value: unknown): BrowserAction {
   if (!value || typeof value !== "object") throw new HttpError(400, "browser_action", "웹 동작을 다시 선택해 주세요.");
   const action = value as BrowserAction;
   if (["snapshot", "back", "forward", "reload", "stop", "close"].includes(action.kind)) return { kind: action.kind } as BrowserAction;
+  if (action.kind === "read" && Number.isSafeInteger(action.offset) && action.offset >= 0 && action.offset <= 10000000 && Number.isSafeInteger(action.limit) && action.limit > 0 && action.limit <= 24000) return { kind: "read", offset: action.offset, limit: action.limit };
   if (action.kind === "navigate") return { kind: "navigate", url: webUrl(action.url) };
   if (action.kind === "scroll" && Number.isFinite(action.x) && Number.isFinite(action.y)) return { kind: "scroll", x: Math.max(-10000, Math.min(10000, action.x)), y: Math.max(-10000, Math.min(10000, action.y)) };
   if ("ref" in action && /^e\d{1,5}$/.test(action.ref)) {
@@ -50,7 +52,7 @@ export class BrowserRegistry {
     if (saved) {
       const records = JSON.parse(saved) as BrowserList;
       for (const profile of records.profiles) this.profiles.set(profile.id, profile);
-      for (const page of records.pages) this.pages.set(page.pageId, page.status === "closed" ? page : { ...page, status: "interrupted", error: "이전 웹 페이지가 연결되어 있지 않습니다. 새 탭으로 다시 열어 주세요." });
+      for (const page of records.pages) this.pages.set(page.pageId, page.status === "closed" ? page : { ...page, native: null, status: "interrupted", error: null });
     }
     if (!this.profiles.size) this.profiles.set("default", { id: "default", name: "기본", createdAt: Date.now() });
     for (const row of store.metaEntries(receiptKey)) {
@@ -75,7 +77,7 @@ export class BrowserRegistry {
     const live = this.receipts.get(id); if (live) return live;
     const saved = this.store.getMeta(`${receiptKey}${id}`); return saved ? JSON.parse(saved) as Receipt : undefined;
   }
-  list(): BrowserList { this.expire(); return { pages: [...this.pages.values()].filter(page => page.status !== "closed"), profiles: [...this.profiles.values()] }; }
+  list(): BrowserList { this.expire(); return { pages: [...this.pages.values()].filter(page => page.status !== "closed"), profiles: [...this.profiles.values()], closedPageIds: [...this.pages.values()].filter(page => page.status === "closed" && page.closedAt !== undefined).map(page => page.pageId) }; }
   get(id: string): BrowserPage {
     const page = this.pages.get(id);
     if (!page) throw new HttpError(404, "browser_missing", "웹 탭을 찾지 못했습니다.");
@@ -100,6 +102,34 @@ export class BrowserRegistry {
     const now = Date.now();
     const page: BrowserPage = { pageId: input.requestId, profileId: input.profileId, driverId: input.driverId, workspaceId: input.workspaceId, workId: workspace.workId, url, title: url === "about:blank" ? "새 탭" : url, status: "opening", sessionId: null, control: { generation: 0, owner: "human" }, native: null, error: null, createdAt: now, updatedAt: now };
     this.pages.set(page.pageId, page); this.store.setMeta(`shared-browser-create:${input.requestId}`, createHash); this.save(); return page;
+  }
+  /** Reconnect identity/profile/URL, never replay a command from the previous native document. */
+  restore(pageId: string, driverId: unknown): BrowserPage {
+    const page = this.get(pageId); this.expire();
+    if (!idOk(driverId) || (this.drivers.get(driverId) ?? 0) < Date.now() - 15000) throw fail("browser_driver_missing", "데스크톱 브라우저 연결을 기다리고 있습니다.");
+    if (page.status === "closed" && page.closedAt !== undefined) throw fail("browser_closed", "닫은 웹 탭입니다.");
+    if (page.driverId !== driverId && (this.drivers.get(page.driverId) ?? 0) >= Date.now() - 15000) throw fail("browser_driver_busy", "이전 창의 연결을 마치는 중입니다. 잠시 뒤 자동으로 이어집니다.");
+    if (page.driverId === driverId && (page.status === "opening" || page.status === "ready")) return page;
+    // Older builds closed pages on host switch but retained their open layout entries.
+    // Only a requested, still-open layout tab takes this compatibility path.
+    this.settlePage(pageId, "웹 탭을 다시 연결해 이전 동작을 종료했습니다.");
+    page.driverId = driverId; page.status = "opening"; page.native = null; page.error = null;
+    page.control = { generation: page.control.generation + 1, owner: "human" }; page.updatedAt = Date.now();
+    this.observed.delete(pageId); this.save(); return page;
+  }
+  /** Closing remains possible with no native page or an unknown previous action result. */
+  close(pageId: string): BrowserPage {
+    const page = this.get(pageId);
+    if (page.status === "closed" && page.closedAt !== undefined) return page;
+    page.status = "closed"; page.closedAt = Date.now(); page.updatedAt = page.closedAt; page.error = null; page.native = null;
+    page.control = { generation: page.control.generation + 1, owner: "human" };
+    this.observed.delete(pageId); this.settlePage(pageId, "웹 탭을 닫아 이전 동작을 종료했습니다.");
+    this.save(); this.hooks.closed?.(pageId); return page;
+  }
+  private settlePage(pageId: string, error: string) {
+    for (const receipt of this.receipts.values()) if (receipt.job.pageId === pageId && (receipt.status === "queued" || receipt.status === "dispatched")) {
+      this.finish(receipt, { id: receipt.job.id, pageId, error }, receipt.status === "dispatched" ? "outcome_unknown" : "rejected");
+    }
   }
   attach(pageId: string, session: Session) {
     const page = this.get(pageId);
@@ -152,7 +182,7 @@ export class BrowserRegistry {
     const existing = this.readReceipt(input.requestId);
     if (existing) return this.replay(existing, page, action);
     this.requireReady(page);
-    if (page.control.owner !== "human" && action.kind !== "snapshot") throw fail("browser_agent_control", "‘직접 조작’을 눌러 제어권을 받은 뒤 이동해 주세요.");
+    if (page.control.owner !== "human" && !observationAction(action)) throw fail("browser_agent_control", "‘직접 조작’을 눌러 제어권을 받은 뒤 이동해 주세요.");
     return this.enqueue(page, input.requestId, action, input.expected ?? null, page.control);
   }
   generation(sessionId: string): BrowserControl {
@@ -165,7 +195,11 @@ export class BrowserRegistry {
     const page = this.agentPage(sessionId);
     if (!page) throw fail("browser_missing", "연결된 웹 탭이 없습니다.");
     let action: BrowserAction;
-    if (["snapshot", "read", "links"].includes(command) || (command === "open" && !args.length)) action = { kind: "snapshot" };
+    if (["snapshot", "links"].includes(command) || (command === "open" && !args.length)) action = { kind: "snapshot" };
+    else if (command === "read") {
+      if (args.length > 2 || args.some(value => !/^\d+$/.test(value))) throw fail("browser_read", "read [offset] [limit] 형식으로 사용하세요. limit은 1~24000입니다.");
+      action = pageAction({ kind: "read", offset: Number(args[0] ?? 0), limit: Number(args[1] ?? 12000) });
+    }
     else if (command === "open" || command === "goto") action = pageAction({ kind: "navigate", url: args[0] });
     else if (["go-back", "go-forward", "reload", "close"].includes(command)) action = { kind: command === "go-back" ? "back" : command === "go-forward" ? "forward" : command as "reload" | "close" };
     else if (command === "click") action = pageAction({ kind: "click", ref: args[0] });
@@ -176,7 +210,7 @@ export class BrowserRegistry {
     const id = `${sessionId}-${requestId}`, prior = this.readReceipt(id);
     if (prior) return this.replay(prior, page, action);
     this.requireReady(page);
-    if (action.kind !== "snapshot" && (control.owner !== sessionId || !sameControl(control, page.control))) throw fail("CONTROL_REVOKED", "사용자가 페이지를 직접 조작해 이번 동작을 멈췄습니다. 다음 채팅 요청에서 이어가세요. 이 동작은 실행되지 않았습니다.");
+    if (!observationAction(action) && (control.owner !== sessionId || !sameControl(control, page.control))) throw fail("CONTROL_REVOKED", "사용자가 페이지를 직접 조작해 이번 동작을 멈췄습니다. 다음 채팅 요청에서 이어가세요. 이 동작은 실행되지 않았습니다.");
     const expected = action.kind === "snapshot" ? null : this.observed.get(page.pageId) ?? null;
     if ("ref" in action && !expected) throw fail("STALE_DOCUMENT", "먼저 snapshot으로 이 페이지의 현재 요소를 읽어 주세요.");
     return this.enqueue(page, id, action, expected, control);
@@ -228,7 +262,7 @@ export class BrowserRegistry {
       this.finish(receipt, result, result.outcome === "unknown" ? "outcome_unknown" : result.error ? "rejected" : "completed");
       const page = this.pages.get(result.pageId);
       if (!page) continue;
-      if (!result.error && receipt.job.action.kind === "close") { page.status = "closed"; page.control = { generation: page.control.generation + 1, owner: "human" }; if (page.sessionId) this.hooks.interrupted(page.sessionId, "웹 탭을 닫아 브라우저 작업이 끝났습니다."); changed = true; }
+      if (!result.error && receipt.job.action.kind === "close" && page.driverId === input.driverId && sameControl(page.control, receipt.job.control)) { this.close(page.pageId); changed = true; }
       if (!result.error && result.observation && sameControl(page.control, receipt.job.control) && result.observation.target.pageId === page.pageId && result.observation.target.profileId === page.profileId) this.observed.set(page.pageId, result.observation);
     }
     const jobs: BrowserJob[] = [];
@@ -236,7 +270,7 @@ export class BrowserRegistry {
     const queued = [...this.receipts.values()].filter(r => r.job.driverId === input.driverId && r.status === "queued").sort((a, b) => Number(b.job.action.kind === "control") - Number(a.job.action.kind === "control"));
     for (const receipt of queued.slice(0, 32)) {
       const page = this.pages.get(receipt.job.pageId);
-      if (!page || page.status !== "ready" || receipt.job.deadline <= Date.now() || (receipt.job.action.kind !== "snapshot" && !sameControl(page.control, receipt.job.control))) { this.finish(receipt, { id: receipt.job.id, pageId: receipt.job.pageId, error: "CONTROL_REVOKED: 페이지 또는 제어권이 바뀌어 실행하지 않았습니다." }, "rejected"); continue; }
+      if (!page || page.status !== "ready" || receipt.job.deadline <= Date.now() || (!observationAction(receipt.job.action) && !sameControl(page.control, receipt.job.control))) { this.finish(receipt, { id: receipt.job.id, pageId: receipt.job.pageId, error: "CONTROL_REVOKED: 페이지 또는 제어권이 바뀌어 실행하지 않았습니다." }, "rejected"); continue; }
       receipt.status = "dispatched"; this.persistReceipt(receipt); jobs.push(receipt.job);
     }
     if (changed) this.save();
@@ -255,7 +289,7 @@ export class BrowserRegistry {
   }
   private expire() {
     let changed = false;
-    for (const page of this.pages.values()) if ((page.status === "ready" || page.status === "opening") && (this.drivers.get(page.driverId) ?? 0) < Date.now() - 15000) { this.interrupt(page, "데스크톱 웹 페이지 연결이 끊겼습니다. 결과를 확인하고 새 탭에서 다시 시작해 주세요."); changed = true; }
+    for (const page of this.pages.values()) if ((page.status === "ready" || page.status === "opening") && (this.drivers.get(page.driverId) ?? 0) < Date.now() - 15000) { this.interrupt(page, "웹 탭을 다시 연결하고 있습니다."); changed = true; }
     if (changed) this.save();
   }
   shutdown() {

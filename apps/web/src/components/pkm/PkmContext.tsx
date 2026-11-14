@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
+import { failure } from "../../top-notice.ts";
 import type { Artifact, PkmState, Session, VaultTree, Work } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
 import { expandablePaths, pkmClient, type PkmClient, type PkmTarget } from "../../pkm.ts";
@@ -12,10 +13,10 @@ import type { State } from "../../state.ts";
 const OPEN_KEY = "workbench.vaultOpen";
 
 /** Dialogs of the PKM layer: attaching the vault, a page from a template. */
-export type PkmDialog = { kind: "vault" } | { kind: "template"; workId: string; parentId: string | null } | { kind: "view"; id: string | null } | { kind: "rules" } | { kind: "insight"; sessionId: string };
+export type PkmDialog = { kind: "vault" } | { kind: "template"; workId: string; parentId: string | null } | { kind: "view"; id: string | null } | { kind: "rules" };
 
 /** A notice, with an action ("되돌리기") when there is one. */
-export type PkmToast = { text: string; action?: { label: string; run: () => void } };
+export type PkmToast = import("../../top-notice.ts").Note;
 
 export type PkmApi = {
   api: Api;
@@ -105,7 +106,7 @@ export function PkmProvider({
   });
   const toastRef = useRef(onToast);
   toastRef.current = onToast;
-  const fail = useCallback((error: unknown) => toastRef.current(error instanceof Error ? error.message : String(error)), []);
+  const fail = useCallback((error: unknown) => toastRef.current(failure(error)), []);
 
   const vaultVersion = state.pkm.vault ?? 0;
   const live = state.ready && state.connected;

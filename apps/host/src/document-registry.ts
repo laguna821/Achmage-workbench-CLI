@@ -6,6 +6,8 @@ import { DirectoryOperations, physicalPath, withinDirectory } from "./directory-
 import { DocumentExecutionLeases, samePhysicalFile, type DocumentExecutionLease, type ExecutorMode } from "./document-execution-lease.ts";
 
 const TTL = 60_000;
+/** A writer whose window renews every 10 s and missed that is taken to be gone (U38). */
+const MISSED_HEARTBEAT = 15_000;
 type LiveView = { presence: DocumentPresence; file: string; token: string | null };
 const id = (value: unknown): value is string => typeof value === "string" && /^[\w-]{1,100}$/.test(value);
 
@@ -68,6 +70,10 @@ export class DocumentRegistry {
       entry = { file, token: null, presence: { viewId: input.viewId, windowId: input.windowId, artifactId, sessionId: input.sessionId ?? null, label: String(input.label ?? artifact.name).slice(0, 120), mode: "read", dirty: false, revision: artifact.revision, expiresAt: this.now() + TTL } };
       this.views.set(input.viewId, entry);
     }
+    // An explicit claim: a writer that missed its heartbeat (its window disappeared without saying so)
+    // and has nothing unsaved gives way at once. Unsaved edits keep the lease until it runs out.
+    const stale = input.claim === true ? this.writer(file) : null;
+    if (stale && stale !== entry && !stale.presence.dirty && this.now() - (stale.presence.expiresAt - TTL) > MISSED_HEARTBEAT) this.views.delete(stale.presence.viewId);
     if (input.claim === true && !this.writer(file) && !this.executions.writer(file)) {
       entry.token = randomBytes(24).toString("base64url");
       entry.presence.mode = "write";

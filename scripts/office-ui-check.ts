@@ -60,11 +60,11 @@ const errors: string[] = [];
 page.on("pageerror", (error) => errors.push(error.message));
 await page.addInitScript((id) => localStorage.setItem("workbench.lastWork", id), work.id);
 await page.goto(`${ready.url}/?token=${ready.token}`);
-await page.waitForSelector(".docs-button");
+await page.waitForSelector(".note-head-more");
 
 const open = async (name: string, shot: string) => {
-  await page.locator(".docs-button").click();
-  await page.locator(".docs-menu").getByText(name, { exact: true }).click();
+  await page.locator(".note-head-more").click();
+  await page.locator(".note-menu").getByText(name, { exact: true }).click();
   await page.waitForSelector(".office-page img", { timeout: 60_000 });
   await page.waitForTimeout(800);
   await page.screenshot({ path: join(outDir, shot) });

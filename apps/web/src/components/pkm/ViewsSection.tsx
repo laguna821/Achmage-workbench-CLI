@@ -1,4 +1,5 @@
 import { Icon } from "../Icon.tsx";
+import { failure } from "../../top-notice.ts";
 import type { MenuEntry, MenuRequest } from "../ContextMenu.tsx";
 import { usePkm } from "./PkmContext.tsx";
 import "../../styles/pkm.css";
@@ -82,7 +83,7 @@ export function ViewsSection({
               { kind: "item", label: "고치기…", icon: "edit", onSelect: () => pkm.setDialog({ kind: "view", id: view.id }) },
               ...(menuExtras ? menuExtras(view) : []),
               { kind: "separator" },
-              { kind: "item", label: "지우기", icon: "x", danger: true, onSelect: () => void pkm.client.deleteView(view.id).catch((error: Error) => pkm.onToast(error.message)) },
+              { kind: "item", label: "지우기", icon: "x", danger: true, onSelect: () => void pkm.client.deleteView(view.id).catch((error: Error) => pkm.onToast(failure(error))) },
             ];
             openMenu({ x: event.clientX, y: event.clientY, title: view.name, items });
           }}

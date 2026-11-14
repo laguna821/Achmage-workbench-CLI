@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { failure } from "../../top-notice.ts";
 import { DISK_FOLDER, FORMAT_LABEL, PROVIDER_LABEL, type DocFormat, type PkmRule, type ProjectStage, type RuleChange } from "@workbench/contracts";
 import { Icon } from "../Icon.tsx";
 import { usePkm } from "./PkmContext.tsx";
@@ -45,7 +46,7 @@ export function RulesDialog() {
     pkm.api.projectStages().then((list) => setStages(list.filter((stage) => !stage.archive)), () => undefined);
   }, [pkm.api]);
   const close = () => pkm.setDialog(null);
-  const fail = (error: unknown) => pkm.onToast(error instanceof Error ? error.message : String(error));
+  const fail = (error: unknown) => pkm.onToast(failure(error));
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && pkm.setDialog(null);

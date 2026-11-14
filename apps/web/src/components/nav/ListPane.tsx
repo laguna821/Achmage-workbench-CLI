@@ -56,7 +56,10 @@ type ProjectRowProps = {
   sortKey: NavSortKey;
   density: "standard" | "compact";
   previewLines: number;
+  /** The project's own page is on screen. */
   current: boolean;
+  /** Something of the project is on screen (a conversation, a document): the tree's "current-project". */
+  holds: boolean;
   selected: boolean;
   focused: boolean;
   tab: boolean;
@@ -66,7 +69,7 @@ type ProjectRowProps = {
   handlers: RowHandlers;
 };
 
-const ProjectRow = memo(function ProjectRow({ project, folder, row, stage, sortKey, density, previewLines, current, selected, focused, tab, renaming, linkedId, handlers }: ProjectRowProps) {
+const ProjectRow = memo(function ProjectRow({ project, folder, row, stage, sortKey, density, previewLines, current, holds, selected, focused, tab, renaming, linkedId, handlers }: ProjectRowProps) {
   const { work } = project;
   const chevron = (
     <span
@@ -105,8 +108,13 @@ const ProjectRow = memo(function ProjectRow({ project, folder, row, stage, sortK
   ) : null;
   const dot = project.attention ? <span className="dot dot-attention" title="확인 필요" /> : project.busy ? <span className="dot dot-active" title="진행 중" /> : project.unseen ? <span className="dot dot-new" title="새 답" /> : null;
   const tags = project.tags.slice(0, 3);
+  // What it holds, by kind (as it unfolds): a document's AI belongs to its document, not to 대화.
+  const web = project.sessions.filter((session) => session.pageAgent).length;
+  const chats = project.sessions.filter((session) => !session.pageAgent && !session.documentAgent).length;
+  const kinds = [chats ? `대화 ${chats}` : "", row.docs.length ? `문서 ${row.docs.length}` : "", web ? `웹 ${web}` : ""].filter(Boolean).join(" · ");
   const classes = ["side-row", "row-work", "nav-project", density];
   if (current) classes.push("current");
+  if (holds) classes.push("current-project");
   if (selected) classes.push("selected");
   if (focused) classes.push("focused");
   if (work.pinned) classes.push("pinned");
@@ -115,6 +123,8 @@ const ProjectRow = memo(function ProjectRow({ project, folder, row, stage, sortK
       role="treeitem"
       aria-level={1}
       aria-expanded={row.expandable ? row.open : undefined}
+      aria-label={`프로젝트 · ${work.title}`}
+      aria-current={holds ? "location" : undefined}
       aria-selected={selected || current}
       tabIndex={tab ? 0 : -1}
       className={classes.join(" ")}
@@ -134,7 +144,8 @@ const ProjectRow = memo(function ProjectRow({ project, folder, row, stage, sortK
       {density === "standard" ? <ProjectThumbnail summary={project.summary} small /> : null}
       <div className="nav-project-line">
         {chevron}
-        <Icon name="project" size={14} /><span className="nav-project-title">{work.title}</span><span className="nav-kind">프로젝트</span>
+        <Icon name="project" size={14} className="side-row-icon" />
+        <span className="nav-project-title">{work.title}</span>
         {stamp}
         <span className="side-row-trail">
           <PlacementMark workId={work.id} />
@@ -156,7 +167,7 @@ const ProjectRow = memo(function ProjectRow({ project, folder, row, stage, sortK
           {folder ? (
             <span className="nav-project-folder" title={folder}>
               <Icon name="folder" size={12} />
-              {folder}
+              <span>{folder}</span>
             </span>
           ) : null}
           {tags.map((tag) => (
@@ -165,10 +176,11 @@ const ProjectRow = memo(function ProjectRow({ project, folder, row, stage, sortK
             </span>
           ))}
           {project.tags.length > tags.length ? <span className="nav-tag-chip more">+{project.tags.length - tags.length}</span> : null}
-          {project.sessions.length > 1 ? (
-            <span className="nav-project-sessions" title={`세션 ${project.sessions.length}개`}>
-              <Icon name="chat" size={12} />
-              {project.sessions.length}
+          {kinds ? (
+            <span className="nav-project-kinds" title={kinds}>
+              {chats ? <span><Icon name="chat" size={12} />{chats}</span> : null}
+              {row.docs.length ? <span><Icon name="file" size={12} />{row.docs.length}</span> : null}
+              {web ? <span><Icon name="globe" size={12} />{web}</span> : null}
             </span>
           ) : null}
         </div>
@@ -182,12 +194,14 @@ function sameRow(a: ProjectRowProps, b: ProjectRowProps) {
     a.project === b.project &&
     a.folder === b.folder &&
     a.row.open === b.row.open &&
+    a.row.docs.length === b.row.docs.length &&
     a.row.expandable === b.row.expandable &&
     a.stage === b.stage &&
     a.sortKey === b.sortKey &&
     a.density === b.density &&
     a.previewLines === b.previewLines &&
     a.current === b.current &&
+    a.holds === b.holds &&
     a.selected === b.selected &&
     a.focused === b.focused &&
     a.tab === b.tab &&
@@ -496,7 +510,7 @@ export function ListPane({
     const box = button.getBoundingClientRect();
     const [first, second] = DIRECTION[sort.key];
     const mixed = !subfolders || nav.includeSub;
-    actions.openMenu({
+    shared.menuUnder({
       x: box.left,
       y: box.bottom + 4,
       title: `${title} 정렬`,
@@ -556,7 +570,7 @@ export function ListPane({
             ]
           : []),
       ],
-    });
+    }, button);
   };
 
   const rows = items.map((item) => {
@@ -582,7 +596,8 @@ export function ListPane({
         sortKey={sort.key}
         density={nav.density}
         previewLines={nav.previewLines}
-        current={id === shared.currentWorkId && (!shared.visibleSessionId || !item.row.open)}
+        current={id === shared.currentWorkId && !shared.visibleSessionId && !shared.currentDocId}
+        holds={id === shared.currentWorkId && Boolean(shared.visibleSessionId || shared.currentDocId)}
         selected={selected.includes(id)}
         focused={focusId === id}
         tab={id === tabId}
@@ -671,7 +686,27 @@ export function ListPane({
           {rows}
           {!count ? (
             <div className="empty-hint list-empty">
-              {!anyProjects ? '아직 프로젝트가 없습니다. 위의 "새 세션"으로 시작하세요.' : query ? "거르기에 맞는 프로젝트가 없습니다." : selection.kind === "folder" ? "이 폴더에는 프로젝트가 없습니다. +로 만들거나 프로젝트를 이 폴더로 끌어 놓으세요." : "여기에는 프로젝트가 없습니다."}
+              {!anyProjects ? (
+                "아직 프로젝트가 없습니다. 위의 “새로 만들기”로 시작하세요."
+              ) : query ? (
+                <>
+                  거르기에 맞는 프로젝트가 없습니다.
+                  <button type="button" className="list-empty-action" onClick={() => setQuery("")}>거르기 지우기</button>
+                </>
+              ) : selection.kind === "folder" ? (
+                "이 폴더에는 프로젝트가 없습니다. 목록 위의 “+ 만들기”로 시작하거나 프로젝트를 이 폴더로 끌어 놓으세요."
+              ) : selection.kind === "tag" ? (
+                "이 태그가 붙은 프로젝트가 없습니다. 프로젝트 메뉴의 “태그 더하기…”로 붙일 수 있습니다."
+              ) : selection.kind === "untagged" ? (
+                "모든 프로젝트에 태그가 있습니다."
+              ) : !nav.includeSub ? (
+                <>
+                  폴더 밖에는 프로젝트가 없습니다.
+                  <button type="button" className="list-empty-action" onClick={() => shared.saveNav({ includeSub: true })}>폴더 안의 프로젝트도 보기</button>
+                </>
+              ) : (
+                "여기에는 프로젝트가 없습니다. 목록 위의 “+ 만들기”로 시작하세요."
+              )}
             </div>
           ) : null}
           <LinkLines tree={treeRef} />

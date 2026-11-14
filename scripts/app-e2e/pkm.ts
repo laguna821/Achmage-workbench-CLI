@@ -57,8 +57,8 @@ export async function pkmScenario(ctx: Ctx) {
   await wd.pointer([{ type: "pointerMove", ...workAt }, { type: "pointerDown", button: 2 }, { type: "pointerUp", button: 2 }]);
   await wd.releaseActions();
   await clickText('[role="menuitem"]', "프로젝트 페이지");
-  await clickText(".project-empty button", "템플릿으로 노트 만들기");
-  const copied = await until(() => wd.execute<boolean>('return document.querySelector(".project-note-body")?.textContent.includes("원문과 속성을 함께 시작합니다.") === true;'));
+  await clickText(".pn-from-template", "템플릿으로 시작");
+  const copied = await until(() => wd.execute<boolean>('return document.querySelector(".pn-body-read")?.textContent.includes("원문과 속성을 함께 시작합니다.") === true;'));
   const page = await api<{ note: { path: string; properties: [string, string[]][] } }>("GET", `/api/projects/${work.id}`);
   const original = readFileSync(page.note.path, "utf8");
   ctx.report.check(S, "상위 폴더 템플릿을 하위 프로젝트 새 노트에 복사", copied && original.includes('"DIKM_단계:": "I"') && original.includes("tags: [검증]") && original.includes("workbench_id:"), undefined, await shot(ctx, "3-template-note.png"));

@@ -6,7 +6,9 @@ export function EditableText({
   onSave,
   onDone,
   className,
+  label,
 }: {
+  label?: string;
   value: string;
   onSave: (next: string) => void;
   onDone: () => void;
@@ -26,6 +28,7 @@ export function EditableText({
     <input
       ref={ref}
       className={`inline-edit ${className ?? ""}`}
+      aria-label={label}
       value={draft}
       autoFocus
       onChange={(event) => setDraft(event.target.value)}

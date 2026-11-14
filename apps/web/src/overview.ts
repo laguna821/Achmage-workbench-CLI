@@ -1,6 +1,7 @@
 import { isUnseen, type Artifact, type Session, type Work } from "@workbench/contracts";
 import type { State } from "./state.ts";
 import { folderHidden, sessionHidden, workDocs, workHidden, workSessions } from "./tree.ts";
+import { statusText } from "./format.ts";
 
 // Home overview modes (design 3.3): the same sessions, works and documents grouped along five
 // axes — what waits for me, where things stall, where things are, when they happened, what was
@@ -50,6 +51,18 @@ export function bucketOf(session: Session): Bucket | null {
   if (working) return "running";
   if (session.queued.length) return "queued";
   return null;
+}
+
+/** Resume context must describe the current turn before showing an older answer. */
+export function sessionResume(session: Session) {
+  const bucket = bucketOf(session);
+  const label = bucket === "attention" ? "확인 필요" : bucket === "trouble" ? "오류·멈춤" : bucket === "unseen" ? "새 답" : bucket === "running" ? "진행 중" : bucket === "queued" ? "예약 있음" : session.previewAt ? "최근 답변" : "대기 중";
+  const summary = bucket === "attention" ? session.activity ?? "요청을 확인해 주세요."
+    : bucket === "trouble" ? session.lastError || (heldCount(session) ? "보류된 요청이 있습니다." : "작업이 멈췄습니다.")
+    : bucket === "running" ? statusText(session)
+    : bucket === "queued" ? `보낼 요청 ${session.queued.length}개`
+    : session.preview;
+  return { bucket, label, summary: summary?.replace(/\s+/g, " ").trim() || null };
 }
 
 /** Latest sign of life of a session (a reply, else any change). */

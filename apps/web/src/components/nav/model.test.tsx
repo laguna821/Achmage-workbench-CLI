@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { Folder, NavSort, ProjectStage, ProjectSummary, Session, Work } from "@workbench/contracts";
 import { initialState, type State } from "../../state.ts";
+import { sidebarDocks } from "../right/RightSidebar.tsx";
 import {
   addShortcuts,
   countText,
   dateGroup,
   dueGroup,
   folderCounts,
+  layoutChoices,
   layoutFor,
   listFor,
   moveShortcut,
@@ -15,6 +17,7 @@ import {
   readShortcuts,
   seedShortcuts,
   shortDate,
+  sidebarWidthFor,
   sortFor,
   tagTree,
   type ListEntry,
@@ -93,11 +96,166 @@ describe("navigator preferences", () => {
     expect(sortFor(prefs, { kind: "root" })).toEqual({ key: "activity", desc: true });
   });
 
-  it("keeps one project navigator at every width and preserves opt-in advanced layouts", () => {
-    for (const width of [390, 743, 744, 1000, 1440, 2560]) expect(layoutFor(readNavigator(undefined), width)).toBe("tree");
-    expect(layoutFor({ layout: "tree" }, 1440)).toBe("tree");
+  // 0.3.3's rule, measured against today's panes: two panes wherever two work panes (360 + 8 + 360)
+  // would still fit beside the navigator (216 + 1 + 300) and the frame's 8px.
+  it("choose two panes on a wide window and stacked on a narrow one, unless the person chose", () => {
+    const auto = readNavigator(undefined);
+    for (const width of [1280, 1440, 1920, 2560]) expect(layoutFor(auto, width)).toBe("dual");
+    for (const width of [390, 744, 1000, 1200]) expect(layoutFor(auto, width)).toBe("stacked");
+    // The edge: 517 + 8 + 728.
+    expect(layoutFor(auto, 1253)).toBe("dual");
+    expect(layoutFor(auto, 1252)).toBe("stacked");
+    // Only a width is stored (the list was dragged once): still the automatic choice.
+    expect(layoutFor(readNavigator({ listWidth: 320 }), 1440)).toBe("dual");
+  });
+
+  // The window's edge dragged across the threshold must not swap a 288px sidebar for a 517px one
+  // and back on every pixel: two panes hold on for 24px below it; stacked needs the threshold itself.
+  describe("the automatic choice at its edge (1253px with the default widths)", () => {
+    const auto = readNavigator(undefined);
+    it.each([
+      // window, what was drawn before, what is drawn now
+      [1253, null, "dual"],
+      [1252, null, "stacked"],
+      [1253, "stacked", "dual"],
+      [1252, "stacked", "stacked"],
+      [1240, "stacked", "stacked"],
+      [1252, "dual", "dual"],
+      [1240, "dual", "dual"],
+      [1229, "dual", "dual"],
+      [1228, "dual", "stacked"],
+      [1100, "dual", "stacked"],
+      [1300, "tree", "dual"],
+      [1252, "tree", "stacked"],
+    ] as const)("%ipx, drawn %s before → %s", (width, was, now) => {
+      expect(layoutFor(auto, width, 360, was)).toBe(now);
+    });
+
+    /** The layouts drawn while the window's width goes from one value to another, a pixel at a time. */
+    const drag = (from: number, to: number, start: ReturnType<typeof layoutFor> | null = null) => {
+      const seen: string[] = [];
+      let was = start;
+      for (let width = from; width !== to + Math.sign(to - from); width += Math.sign(to - from)) {
+        was = layoutFor(auto, width, 360, was);
+        if (seen.at(-1)?.split("@")[0] !== was) seen.push(`${was}@${width}`);
+      }
+      return seen;
+    };
+
+    it("flips once on the way down and once on the way up, 24px apart", () => {
+      expect(drag(1300, 1200)).toEqual(["dual@1300", "stacked@1228"]);
+      expect(drag(1200, 1300)).toEqual(["stacked@1200", "dual@1253"]);
+    });
+
+    it("does not flip while the edge is jiggled across the threshold", () => {
+      expect(drag(1252, 1253, "dual")).toEqual(["dual@1252"]);
+      expect(drag(1253, 1230, "dual")).toEqual(["dual@1253"]);
+      expect(drag(1230, 1252, "stacked")).toEqual(["stacked@1230"]);
+    });
+
+    it("never holds two panes below the work panes' least width, nor a stored choice by what was drawn", () => {
+      // Three work panes need 1096px: the edge is 517 + 8 + 1096 = 1621, with no slack below it.
+      expect(layoutFor(auto, 1621, 1096, "dual")).toBe("dual");
+      expect(layoutFor(auto, 1620, 1096, "dual")).toBe("stacked");
+      // Chosen two panes give way exactly where a pane would lose its 360px; chosen stacked and tree never move.
+      expect(layoutFor(readNavigator({ layout: "dual" }), 517 + 8 + 360, 360, "stacked")).toBe("stacked");
+      expect(layoutFor(readNavigator({ layout: "dual" }), 901, 360, "stacked")).toBe("dual");
+      expect(layoutFor(readNavigator({ layout: "stacked" }), 1440, 360, "dual")).toBe("stacked");
+      expect(layoutFor(readNavigator({ layout: "tree" }), 1440, 360, "dual")).toBe("tree");
+      // Where the sidebar lies over the work, never two panes, whatever was drawn.
+      expect(layoutFor(readNavigator({ navWidth: 168, listWidth: 240 }), 900, 360, "dual")).toBe("stacked");
+    });
+  });
+
+  it("respect a stored layout at every width", () => {
+    for (const width of [744, 1000, 1440, 2560]) {
+      expect(layoutFor(readNavigator({ layout: "tree" }), width)).toBe("tree");
+      expect(layoutFor(readNavigator({ layout: "stacked" }), width)).toBe("stacked");
+    }
     expect(layoutFor(readNavigator({ layout: "dual" }), 1440)).toBe("dual");
-    expect(layoutFor(readNavigator({ layout: "stacked" }), 743)).toBe("stacked");
+    // Chosen two panes stay on a window the automatic choice would stack, while a pane keeps 360px…
+    expect(layoutFor(readNavigator({ layout: "dual" }), 1000)).toBe("dual");
+    // …and are drawn stacked where it could not (the choice itself is kept).
+    expect(layoutFor(readNavigator({ layout: "dual" }), 884)).toBe("stacked");
+  });
+
+  it("count the navigator's own width and the pane layout's least width", () => {
+    const auto = readNavigator(undefined);
+    // Three work panes side by side need 1096px: not beside two navigator panes on a 1440px window.
+    expect(layoutFor(auto, 1440, 1096)).toBe("stacked");
+    expect(layoutFor(auto, 1920, 1096)).toBe("dual");
+    expect(layoutFor(readNavigator({ layout: "dual" }), 1440, 1096)).toBe("stacked");
+    // Both navigator panes dragged to their widest (360 + 520): a 1440px window no longer has the room.
+    const wide = readNavigator({ navWidth: 360, listWidth: 520 });
+    expect(layoutFor(wide, 1440)).toBe("stacked");
+    expect(layoutFor(wide, 1920)).toBe("dual");
+  });
+
+  it("never use two panes where the sidebar lies over the work (a window of 900px or less)", () => {
+    expect(layoutFor(readNavigator({ layout: "dual", navWidth: 168, listWidth: 240 }), 900)).toBe("stacked");
+    expect(layoutFor(readNavigator({ layout: "dual", navWidth: 168, listWidth: 240 }), 901)).toBe("dual");
+  });
+
+  it("give the sidebar the width of its layout", () => {
+    const prefs = readNavigator({ navWidth: 256, listWidth: 320 });
+    expect(sidebarWidthFor("dual", prefs, 288)).toBe(577);
+    expect(sidebarWidthFor("stacked", prefs, 288)).toBe(288);
+    expect(sidebarWidthFor("tree", prefs, 300)).toBe(300);
+  });
+
+  it("offer the layouts by their plain names, the stored one checked", () => {
+    const names = (stored: Parameters<typeof layoutChoices>[0], drawn: Parameters<typeof layoutChoices>[1]) => layoutChoices(stored, drawn).map((choice) => `${choice.checked ? "●" : "○"} ${choice.label}${choice.hint ? ` (${choice.hint})` : ""}`);
+    expect(names(null, "dual")).toEqual(["○ 두 칸", "○ 위아래", "○ 한 칸 (트리)", "● 창 너비에 맞추기 (지금 두 칸)"]);
+    expect(names(null, "stacked")).toEqual(["○ 두 칸", "○ 위아래", "○ 한 칸 (트리)", "● 창 너비에 맞추기 (지금 위아래)"]);
+    expect(names("tree", "tree")).toEqual(["○ 두 칸", "○ 위아래", "● 한 칸 (트리)", "○ 창 너비에 맞추기"]);
+    // Chosen two panes on a window too narrow for them: the choice stands, and says how it is drawn.
+    expect(names("dual", "stacked")).toEqual(["● 두 칸 (지금은 위아래)", "○ 위아래", "○ 한 칸 (트리)", "○ 창 너비에 맞추기"]);
+    expect(layoutChoices(null, "dual").map((choice) => choice.label).join()).not.toContain("고급");
+  });
+});
+
+// The left navigator, the work panes and the right sidebar (RightSidebar.tsx) in one window: at
+// every width each pane keeps its least width — the navigator stacks or the right sidebar lies
+// over the work; nothing is squeezed.
+describe("with the right sidebar open", () => {
+  const RIGHT = 280;
+  const GAP = 8;
+  const least = (panes: number) => panes * 360 + (panes - 1) * 8;
+  /** The window as App lays it out: navigator | panes | right sidebar (docked or over). */
+  const frame = (windowWidth: number, panes: number, prefs = readNavigator(undefined), single = 288, was: ReturnType<typeof layoutFor> | null = null) => {
+    const layout = layoutFor(prefs, windowWidth, least(panes), was);
+    const area = windowWidth - sidebarWidthFor(layout, prefs, single) - GAP;
+    const docked = sidebarDocks(area, least(panes), RIGHT, true);
+    return { layout, docked, panes: area - (docked ? RIGHT + GAP : 0) };
+  };
+
+  it("keeps every pane's least width at every window width", () => {
+    for (const panes of [1, 2, 3]) {
+      for (const prefs of [readNavigator(undefined), readNavigator({ layout: "dual" }), readNavigator({ navWidth: 360, listWidth: 520 }), readNavigator({ layout: "stacked" }), readNavigator({ layout: "tree" })]) {
+        // From the narrowest window where the panes fit beside a one-column sidebar at all.
+        for (let width = Math.max(901, 288 + GAP + least(panes)); width <= 2600; width += 7) {
+          // Also when two panes were drawn a moment ago (they hold on a little below the threshold).
+          for (const was of [null, "dual"] as const) {
+            const now = frame(width, panes, prefs, 288, was);
+            expect(now.panes, `${width}px · ${panes} pane(s) · ${prefs.layout ?? "auto"} · was ${was} → ${now.layout}${now.docked ? " + docked" : ""}`).toBeGreaterThanOrEqual(least(panes));
+          }
+        }
+      }
+    }
+  });
+
+  it("1920px: two navigator panes, the work and the docked right sidebar all fit", () => {
+    expect(frame(1920, 1)).toMatchObject({ layout: "dual", docked: true });
+    expect(frame(1920, 2)).toMatchObject({ layout: "dual", docked: true });
+  });
+
+  it("1440px with two work panes: the navigator stays in two panes and the right sidebar lies over", () => {
+    expect(frame(1440, 2)).toMatchObject({ layout: "dual", docked: false });
+    expect(frame(1440, 1)).toMatchObject({ layout: "dual", docked: true });
+  });
+
+  it("about 1000px: the navigator is stacked, and the right sidebar still docks beside one pane", () => {
+    expect(frame(1000, 1)).toMatchObject({ layout: "stacked", docked: true });
   });
 });
 

@@ -1,0 +1,90 @@
+/* "휴대폰 메신저" (PhoneMessenger.tsx): a management screen inside the FeatureDialog. Neutral and
+   one blue; status colour only on the status dot. */
+.phone-messenger { display: grid; gap: var(--space-3); max-width: 680px; }
+.phone-messenger h3 { font-size: var(--fs-lead); margin: 0; }
+.phone-messenger h3:focus { outline: none; }
+.phone-messenger h3:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-xs); }
+.phone-messenger p { margin: 0; }
+.pm-step, .pm-section { display: grid; gap: var(--space-2); }
+.pm-step-no { color: var(--muted); font-size: var(--fs-micro); font-weight: 600; }
+.pm-hint, .pm-foot { color: var(--muted); font-size: var(--fs-meta); }
+.pm-said { color: var(--muted); font-size: var(--fs-meta); }
+.pm-nav { margin-top: var(--space-2); }
+.pm-foot .text-button { font-size: inherit; }
+
+/* The two honest sentences: read, not skimmed past. */
+.pm-risks { display: grid; gap: var(--space-2); padding: var(--space-3); border-radius: var(--r-sm); background: var(--surface-muted); border-left: 3px solid var(--text); }
+.pm-risks p { font-size: var(--fs-ui); line-height: 1.55; color: var(--text); }
+
+.pm-copy-list { display: grid; gap: var(--space-3); margin: 0; padding-left: 24px; list-style: decimal; }
+.pm-copy-list > li::marker { color: var(--muted); font-variant-numeric: tabular-nums; }
+.pm-copy-list li { display: grid; gap: 6px; }
+.pm-copy { display: flex; gap: var(--space-2); align-items: center; }
+.pm-copy code { flex: 0 1 auto; min-width: 0; padding: 4px 10px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface-muted); font: 600 var(--fs-body) var(--mono); overflow-wrap: anywhere; }
+
+.pm-token { display: grid; gap: var(--space-2); max-width: 460px; }
+.pm-token label { margin: 0; }
+.pm-memory { display: grid; gap: 6px; justify-items: start; }
+
+.pm-head { display: grid; gap: 6px; padding-bottom: var(--space-3); border-bottom: 1px solid var(--line); }
+.pm-status-line { display: flex; gap: var(--space-3); align-items: center; justify-content: space-between; }
+.pm-status { display: flex; gap: var(--space-2); align-items: center; font-weight: 600; }
+.pm-status-text { color: var(--muted); font-size: var(--fs-ui); }
+.pm-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.pm-dot[data-tone="ok"] { background: var(--ok); }
+.pm-dot[data-tone="warn"] { background: var(--amber); }
+.pm-dot[data-tone="danger"] { background: var(--danger); }
+.pm-head .feature-actions { margin: 0; }
+
+.pm-panel { display: grid; gap: var(--space-4, 16px); padding-top: var(--space-2); }
+.pm-section + .pm-section { padding-top: var(--space-3); border-top: 1px solid var(--line); }
+.pm-facts { display: grid; gap: 6px; margin: 0; }
+.pm-facts > div { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: var(--space-3); }
+.pm-facts dt { color: var(--muted); font-size: var(--fs-meta); }
+.pm-facts dd { margin: 0; font-size: var(--fs-ui); }
+.pm-remove { color: var(--muted); }
+
+/* The QR is a picture of black on white in both themes, as cameras read it. */
+.pm-qr-row { display: flex; gap: var(--space-4, 16px); align-items: center; }
+.pm-qr-row > div { display: grid; gap: var(--space-2); }
+.pm-qr { flex: 0 0 auto; width: 208px; height: 208px; border-radius: var(--r-sm); background: #fff; border: 1px solid var(--line); }
+.pm-digits { display: grid; gap: 4px; justify-items: start; }
+.pm-digits > span { color: var(--muted); font-size: var(--fs-meta); }
+.pm-digits > strong { font: 600 var(--fs-heading) var(--mono); letter-spacing: .15em; }
+.pm-request { padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--r-md); }
+
+.pm-record { display: grid; margin: 0; padding: 0; list-style: none; }
+.pm-record li { display: grid; grid-template-columns: 52px 96px minmax(0, 1fr); gap: var(--space-2); align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: var(--fs-ui); }
+.pm-record li[data-day] { padding-top: var(--space-3); }
+.pm-record-day { grid-column: 1 / -1; color: var(--muted); font-size: var(--fs-micro); font-weight: 600; }
+.pm-record time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.pm-record strong { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-tip { color: var(--muted); font-size: var(--fs-meta); }
+
+@media (max-width: 640px) {
+  .pm-qr-row { flex-direction: column; align-items: flex-start; }
+  .pm-status-line { flex-wrap: wrap; }
+}
+
+/* Round 1: what could not be delivered (plain text, the dot stays the only status colour), the
+   request's sentence (it takes the focus when it arrives), the two-step removal, refused accounts. */
+.pm-warn-line { color: var(--text); }
+.pm-request-text:focus { outline: none; }
+.pm-request-text:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-xs); }
+.pm-remove-confirm { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--r-sm); }
+.pm-remove-confirm .feature-actions { margin: 0; }
+.pm-refused ul, .pm-others ul { margin: 4px 0 0; padding-left: 20px; font-size: var(--fs-ui); }
+.pm-head .pm-status-line .feature-actions { margin: 0; flex-wrap: nowrap; }
+.pm-token .notice { margin: 0; }
+
+/* Round 2: the pairing panel (step line, heading, live region, QR) spaced as one column. */
+.pm-pairing { display: grid; gap: var(--space-2); }
+.pm-live:empty { display: none; }
+
+/* Slack: numbered steps on Slack's own (English) screens, two token fields, the line to send. */
+.pm-steps-list { display: grid; gap: 6px; margin: 0; padding-left: 20px; font-size: var(--fs-ui); line-height: 1.55; }
+.pm-steps-list code { font: var(--fs-meta) var(--mono); }
+.pm-token-row { display: flex; gap: var(--space-2); align-items: flex-end; }
+.phone-messenger .pm-token .pm-token-row > label { flex: 1 1 auto; min-width: 0; margin: 0; }
+.pm-say { display: grid; gap: var(--space-2); }
+.phone-messenger .pm-step > label.pm-name { margin: 0; max-width: 360px; }

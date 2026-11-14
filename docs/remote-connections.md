@@ -10,18 +10,20 @@
 4. 다른 클라이언트의 기기 연결 화면에 링크를 붙여넣거나, QR에 담긴 웹 주소를 연다. 두 화면의 6자리 확인번호를 비교한 뒤 원래 PC에서 프로젝트와 권한을 선택해 승인한다. 새 프로젝트는 자동으로 허용되지 않는다.
 5. 승인 후 호스트 목록에서 해당 PC를 선택하면 같은 프로젝트·세션의 원문과 실행 상태를 연다. 연결을 끊어도 원래 PC의 작업을 중단하지 않는다. 기기를 철회하면 해당 기기의 기존 연결도 닫힌다.
 
+기기용 listener의 포트는 `0`(자동)이어도 처음 정해진 값을 데이터 폴더의 `remote-devices/port`에 남겨 다음 시작에도 그대로 쓴다. 그 포트를 다른 프로그램이 쓰고 있으면 다른 포트로 옮기지 않고 오류로 알린다. 로컬 API 포트(`port`)와는 별개다. 접속 주소가 없거나 이 PC 자신(loopback)을 가리키면 화면이 "아직 휴대폰에서 닿을 주소가 없습니다"라고 알리고 QR을 만들지 않는다. 같은 기기를 다시 등록하면 승인할 때 이전 승인을 목록에서 지울 수 있다. 같은 기기인지는 기기가 알려 온 이전 등록 번호와 이름으로만 짐작하며 증명된 사실이 아니므로, 지우는 것만 하고 이전 권한은 넘기지 않는다.
+
 ## 연결된 범위
 
 - Paseo 원본 보호 전송·Noise/E2EE·서버 키·relay/client WebSocket 코드와 offer parser를 사용한다. Workbench의 기존 HTTP·이벤트·receipt를 보호된 연결 안에 전달한다.
 - 프로젝트별 읽기, 요청 보내기, 승인, 중지, 터미널 권한을 구분한다. snapshot과 이벤트를 승인된 프로젝트로 제한하고, 각 요청의 실제 세션·문서·작업공간을 host에서 확인한다.
 - 사용자 첨부, 도구 이미지, AI 응답 이미지, 대기 메시지 첨부는 허용된 대화에서 읽는다. 전송 전 업로드는 해당 기기와 프로젝트 소유로 기록한다. 첨부 bytes는 기존 content-addressed 저장소를 사용한다.
 - 재접속 때 인증·이벤트 구독을 복구한다. 이력 범위를 벗어나거나 host epoch가 바뀌면 snapshot을 다시 받는다. 실행 결과를 모르는 변경 요청은 자동으로 재전송하지 않는다.
-- 로컬 owner token과 기기 credential은 URL query나 WebSocket upgrade 헤더에 넣지 않는다. 서버는 credential 해시만 저장한다. 설치형 Tauri 앱은 OS keyring에 credential을 저장하고 기존 세션 값은 저장 성공 후 이행한다. keyring 오류는 표시하며 웹 저장소로 자동 강등하지 않는다. 브라우저는 public 호스트 목록만 localStorage, credential은 해당 탭의 sessionStorage에 저장한다. sessionStorage를 사용할 수 없으면 메모리를 사용한다.
+- 로컬 owner token과 기기 credential은 URL query나 WebSocket upgrade 헤더에 넣지 않는다. 서버는 credential 해시만 저장한다. 설치형 Tauri 앱은 OS keyring에 credential을 저장하고 기존 세션 값은 저장 성공 후 이행한다. keyring 오류는 표시하며 웹 저장소로 자동 강등하지 않는다. 브라우저는 public 호스트 목록만 localStorage, credential은 해당 탭의 sessionStorage에 저장한다. sessionStorage를 사용할 수 없으면 메모리를 사용한다. 연결할 때 사람이 **이 기기 기억하기**를 켠 경우에만(기본 꺼짐) 그 credential을 탭 대신 같은 브라우저 프로필의 localStorage에 둔다. 일반 http로 연 페이지와 이 PC 자신의 주소(127.0.0.1·localhost)로 연 페이지에서는 화면이 이 선택을 제공하지 않는다(http는 페이지 코드가 전달 중에 바뀔 수 있고, 자기 주소는 그 포트를 잡은 다른 프로그램과 저장소를 함께 쓴다). 이것은 페이지가 정하는 것이며 host는 페이지가 어떻게 열렸는지 알 수 없다. 저장하는 것은 PC가 발급한 기기 credential이며 연결 링크의 일회용 토큰이 아니다. PC는 그 기기를 "연결을 기억하겠다고 알린 기기"와 승인 시각으로 표시하고(만료·철회 뒤에는 표시하지 않는다), **접근 철회**나 만료 뒤에는 저장된 값으로 연결할 수 없다. 기기용 listener가 내주는 페이지는 `Content-Security-Policy: frame-ancestors 'none'; object-src 'none'; base-uri 'none'`(디자인 편집 페이지만 `'self'`)와 `X-Content-Type-Options: nosniff`를 보낸다. 대화·보관함·서비스 응답에서 내려받는 파일은 원래 형식과 무관하게 `application/octet-stream`으로 브라우저에 넘긴다. 이 표시는 기기가 알려 온 내용의 기록이지 host가 강제하는 제한이 아니다. 실제 한계는 만료와 철회다.
 - 원격 호스트마다 화면 설정·이미지 cache 식별자를 구분한다. 원격 파일 경로로 이 PC의 앱을 실행하거나 원격 세션을 로컬 별도 창으로 떼어내는 동작은 차단한다.
 
 ## 남은 연결
 
-현재 원격 화면은 기존 Workbench App을 연결한 첫 구현이다. 모든 메뉴가 원격용으로 완성된 것은 아니며, 허용 목록에 없는 관리·Office native·브라우저 API는 거부한다. OS keyring·모바일 사진/카메라/파일 선택·첨부 다운로드/공유·IME 최종값·키보드 viewport·회전·완료 첨부 초안 복원·push의 코드 연결을 추가했다. 첨부는 선택한 기기와 대화에 묶으며 다른 호스트의 파일로 대체하지 않는다. QR 카메라 scan, 실제 모바일 동작과 CJK terminal 입력은 남은 범위다. 브라우저의 session credential이 소실되면 다시 승인 연결해야 하며 이를 native 영속 저장으로 표시하지 않는다.
+현재 원격 화면은 기존 Workbench App을 연결한 첫 구현이다. 모든 메뉴가 원격용으로 완성된 것은 아니며, 허용 목록에 없는 관리·Office native·브라우저 API는 거부한다. OS keyring·모바일 사진/카메라/파일 선택·첨부 다운로드/공유·IME 최종값·키보드 viewport·회전·완료 첨부 초안 복원·push의 코드 연결을 추가했다. 첨부는 선택한 기기와 대화에 묶으며 다른 호스트의 파일로 대체하지 않는다. QR 카메라 scan, 실제 모바일 동작과 CJK terminal 입력은 남은 범위다. 기억하기를 켜지 않은 브라우저의 session credential이 소실되면 다시 승인 연결해야 하며, 기억하기를 켠 경우도 native 영속 저장으로 표시하지 않는다.
 
 전체 Paseo SDK/공식 모바일 앱과의 protocol 호환, 공개 relay 서비스 운영, 인증된 HTTPS 배포, 실제 iOS/Android·외부망 사용은 완료했다고 표시하지 않는다. 현재 확보한 네트워크 증거는 실제 원본 전송을 사용한 localhost 두 클라이언트 시험이다. 앱·설치본·CI 빌드는 전체 기능 통합 뒤 진행한다.
 

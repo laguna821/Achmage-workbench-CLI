@@ -1,6 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { Folder, ProjectStage } from "@workbench/contracts";
 import { Icon, type IconName } from "../Icon.tsx";
+import { useReturnFocus } from "./focus.ts";
+
+/** A dialog opened from a row's menu (or a ⋯): when it closes, the focus is back where the menu came from. */
+export function FromMenu({ children }: { children: ReactNode }) {
+  useReturnFocus();
+  return <>{children}</>;
+}
 
 // The navigator's small windows: deleting a folder that is not empty (choose: only the folder, or
 // archive it with what is inside), a folder's colour and icon (Notebook Navigator's), and tags for

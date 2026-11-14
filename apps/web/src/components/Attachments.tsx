@@ -264,13 +264,37 @@ function useImage(attachment: Attachment, active = true) {
   return { url, problem, retry: () => setAttempt(value => value + 1), failed: () => setProblem("그림을 표시하지 못했습니다") };
 }
 
+/** Near enough to load (400px around the scroller, or the window): from the layout itself. */
+const NEAR = 400;
+function nearView(element: Element, root: Element | null) {
+  if (!element.isConnected) return false;
+  const box = element.getBoundingClientRect();
+  if (!box.width && !box.height) return false;
+  const area = root ? root.getBoundingClientRect() : { top: 0, left: 0, bottom: window.innerHeight, right: window.innerWidth };
+  return box.bottom >= area.top - NEAR && box.top <= area.bottom + NEAR && box.right >= area.left - NEAR && box.left <= area.right + NEAR;
+}
+
 function Thumb({ attachment, onOpen }: { attachment: Attachment; onOpen: () => void }) {
   const container = useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = useState(typeof IntersectionObserver === "undefined");
+  // The observer alone sometimes never reported a thumbnail in view (it stayed "그림", U38). The
+  // layout is also read: once mounted, when the transcript scrolls or changes size, and once more
+  // shortly after; the observer watches the transcript's scroller, its real root.
   useEffect(() => {
-    if (typeof IntersectionObserver === "undefined" || !container.current) return;
-    const observer = new IntersectionObserver(([entry]) => setVisible(Boolean(entry?.isIntersecting)), { rootMargin: "400px" });
-    observer.observe(container.current); return () => observer.disconnect();
+    const element = container.current;
+    if (typeof IntersectionObserver === "undefined" || !element) return;
+    const root = element.closest(".transcript");
+    const check = () => setVisible(nearView(element, root));
+    const observer = new IntersectionObserver(([entry]) => setVisible(Boolean(entry?.isIntersecting) || nearView(element, root)), { root, rootMargin: `${NEAR}px` });
+    observer.observe(element);
+    let frame = 0;
+    const soon = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; check(); }); };
+    const resized = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(soon);
+    if (root) resized?.observe(root);
+    (root ?? window).addEventListener("scroll", soon, { passive: true });
+    check();
+    const later = window.setTimeout(check, 1000);
+    return () => { observer.disconnect(); resized?.disconnect(); (root ?? window).removeEventListener("scroll", soon); cancelAnimationFrame(frame); window.clearTimeout(later); };
   }, []);
   const image = useImage(attachment, visible);
   return (

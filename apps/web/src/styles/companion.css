@@ -1,0 +1,64 @@
+/* 곁 화면: a conversation column on the left, what it is about (a document, a web page) on the
+   right. One arrangement for a conversation with its document, a document with its AI and a web
+   page with its AI. Side by side while both keep their minimum; otherwise one lies over the other. */
+.beside { position: relative; display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; height: 100%; }
+.beside-chat, .beside-content { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.beside-chat { flex: 1 1 0; }
+.beside-content { flex: 1 1 0; }
+.beside-chat > main, .beside-content > main, .beside-content > section { flex: 1 1 auto; min-width: 0; min-height: 0; }
+
+/* The line between the two, and the handle to resize them. */
+.beside-divider { flex: 0 0 7px; cursor: col-resize; background: linear-gradient(var(--line), var(--line)) center / 1px 100% no-repeat; touch-action: none; }
+.beside-divider:hover, .beside-divider:focus-visible { outline: none; background: linear-gradient(var(--accent), var(--accent)) center / 3px 100% no-repeat; }
+
+/* Not room for both. A document or page fills the tab over its conversation; a document's or
+   page's AI is a sheet from the left over a scrim, the document under it keeping its width. */
+.beside[data-fit="over"][data-over="content"] > .beside-content { position: absolute; inset: 0; z-index: 2; background: var(--bg); }
+/* The conversation under it keeps its place and its state but is not drawn (its pinned band and
+   "맨 아래로" would otherwise show through). */
+.beside[data-fit="over"][data-over="content"] > .beside-chat { visibility: hidden; }
+/* The document under the scrim is one layer: nothing of it rises above the sheet. */
+.beside[data-fit="over"][data-over="chat"] > .beside-content { position: relative; z-index: 0; }
+.beside[data-fit="over"][data-over="chat"] > .beside-chat { position: absolute; top: 0; bottom: 0; left: 0; z-index: 4; flex: none; width: min(420px, calc(100% - 48px)); border-right: 1px solid var(--line); background: var(--bg); animation: beside-sheet-in var(--dur-base) var(--ease-out); }
+.beside-scrim { position: absolute; inset: 0; z-index: 3; padding: 0; border: 0; border-radius: 0; background: var(--scrim); cursor: default; animation: beside-scrim-in var(--dur-base) var(--ease-out); }
+@keyframes beside-sheet-in { from { transform: translateX(-16px); opacity: 0; } }
+@keyframes beside-scrim-in { from { opacity: 0; } }
+
+/* A document's or web page's AI: the conversation's note head, transcript and input, in a column. */
+.agent-column { display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg); }
+.agent-column > .transcript { flex: 1 1 auto; }
+
+/* What the conversation's children (its documents' and pages' AIs) are doing: one line each,
+   above the input, opening that AI beside its document or page. */
+.child-work { display: flex; flex-direction: column; margin-bottom: 8px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); }
+.child-work-line { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 32px; padding: 4px 8px 4px 12px; border: 0; border-radius: 0; background: none; color: var(--text); font: 400 13px/20px var(--font-ui); text-align: left; cursor: pointer; }
+.child-work-line + .child-work-line { border-top: 1px solid var(--line); }
+.child-work-line:hover { background: var(--hover); }
+.child-work-line:first-child { border-radius: var(--r-md) var(--r-md) 0 0; }
+.child-work-line:last-child { border-radius: 0 0 var(--r-md) var(--r-md); }
+.child-work-line:only-child { border-radius: var(--r-md); }
+.child-work-who { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.child-work-state { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+/* What that AI last said, in its own words: the rest of the line. */
+.child-work-last { flex: 1 1 0; min-width: 0; overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.child-work-last::before { content: "— "; }
+.child-work-line > .child-work-state:nth-last-child(2) { flex: 1 1 auto; }
+.child-work-open { flex: none; margin-left: auto; color: var(--link, var(--accent)); }
+/* At the foot of a document whose AI waits for an approval while its conversation is closed. */
+.doc-agent-wait { flex: 0 0 auto; margin: 8px 16px 12px; }
+.doc-agent-wait .child-work-state { flex: 1 1 auto; }
+.doc-agent-toggle .doc-agent-said { color: var(--text); }
+.child-work-line > svg:last-child { flex: none; color: var(--muted); }
+
+/* The document's head: its AI's button says, with a dot, that the AI has something to show. */
+.doc-agent-toggle .doc-agent-dot { margin-left: 2px; }
+/* Pressed while the document's AI is on screen (the column, or the Hangul editor's dock): the app's pressed look. */
+.doc-agent-toggle[aria-expanded="true"] { color: var(--accent); background: var(--accent-soft); }
+
+@media (pointer: coarse) {
+  .beside-divider { flex-basis: 12px; }
+  .child-work-line { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .beside[data-fit="over"][data-over="chat"] > .beside-chat, .beside-scrim { animation: none; }
+}

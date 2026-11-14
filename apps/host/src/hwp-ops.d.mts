@@ -4,6 +4,8 @@ export interface HwpOpFailure { index: number; op: string; error: string; reason
 export interface HwpEditOutcome {
   bytes: Uint8Array; results: HwpOpResult[]; failures: HwpOpFailure[]; skipped: number;
   changed: boolean; trackingDropped: boolean;
+  /** After a save (changed): whether every structure / text census ran ("unchecked": saved without that comparison, T3). */
+  structure?: "checked" | "unchecked"; text?: "checked" | "unchecked";
 }
 export function editHwp(bytes: Uint8Array, format: HwpFormat, ops: unknown[], options?: { dryRun?: boolean; mode?: "atomic" | "best_effort" | "stop_on_error" }): Promise<HwpEditOutcome>;
 export function hwpCatalog(): Promise<{ domain: string; fingerprint: string; groups: { name: string; summary?: string; ops: string[] }[]; ops: { op: string; signature: string; note?: string; schema?: unknown }[] }>;

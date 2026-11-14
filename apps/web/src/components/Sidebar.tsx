@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
-import type { Artifact, Folder, NavigatorPrefs, NavLayout, NavSelection, NavShortcut, ProjectStage, ProjectSummary, UiPrefs, Work } from "@workbench/contracts";
+import { failure } from "../top-notice.ts";
+import type { Artifact, DocumentRemovalPlan, Folder, NavigatorPrefs, NavLayout, NavSelection, NavShortcut, ProjectStage, ProjectSummary, UiPrefs, Work } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import type { State } from "../state.ts";
-import { holds, linkPair, moveFor, nudge, toggleWork, treeRows, workTreeRows, type Row, type SortMode, type TreeOpenState } from "../tree.ts";
+import { docOpenTarget, holds, linkPair, moveFor, nudge, toggleWork, treeRows, workTreeRows, type Row, type SortMode, type TreeOpenState } from "../tree.ts";
 import { useAppearance } from "../appearance.ts";
 import { comboLabel, shortcutsOf } from "../shortcuts.ts";
-import { Icon, type IconName } from "./Icon.tsx";
+import { Icon } from "./Icon.tsx";
 import type { MenuEntry, MenuRequest } from "./ContextMenu.tsx";
 import { UsageCard } from "./UsageCard.tsx";
 import { linkable } from "./LinkSidebar.tsx";
@@ -13,12 +14,16 @@ import { ViewsSection } from "./pkm/ViewsSection.tsx";
 import { VaultSection } from "./pkm/VaultSection.tsx";
 import { useDragController, useGhost, zoneOf, type DragPayload, type DropTarget, type GhostStore } from "./nav/drag.ts";
 import {
+  FRAME_GAP,
   LIST_WIDTH,
   NAV_HEIGHT,
   NAV_WIDTH,
+  ROOMY,
+  SIDE_WIDTH,
   addShortcuts,
   folderCounts,
   folderOrder,
+  layoutChoices,
   layoutFor,
   listFor,
   moveShortcut,
@@ -27,6 +32,7 @@ import {
   readNavigator,
   readShortcuts,
   seedShortcuts,
+  sidebarWidthFor,
   sortFor,
   tagTree,
   type TagNode,
@@ -35,26 +41,26 @@ import { HomeRow, NavPane, NowSection, ROOT_ROW_ID, ShortcutsSection, beforeLast
 import { ListPane, type ListItem } from "./nav/ListPane.tsx";
 import { TreeSection } from "./nav/TreeSection.tsx";
 import { rowItem, rowLabel, type RowContext } from "./nav/rows.tsx";
+import { RowMenu } from "./nav/RowMenu.tsx";
+import { LayoutButton } from "./nav/LayoutButton.tsx";
+import { MIN_PANE } from "../panes.ts";
+import type { LayerAnchor } from "./ui/AnchoredLayer.tsx";
 import { FolderDeleteDialog, FolderStylePanel, TagPrompt } from "./nav/dialogs.tsx";
 import { onNavigatorFocus, takeNavigatorFocus } from "./nav/focus.ts";
+import { addNoteTags, tagsNotice } from "./nav/tags.ts";
 import type { NavDialog, NavShared, SidebarActions, Toast } from "./nav/shared.ts";
 import "../styles/navigator.css";
 
-// A single project navigator is the default. Each project opens its overview; disclosure
-// reveals its grouped chats, web AI and documents. Two-pane layouts remain opt-in.
+// The sidebar: a two-pane navigator shaped like Obsidian's Notebook Navigator. The navigation pane
+// holds 지금, 바로가기, the project folders (folders only), tags, saved views and the vault; the
+// list pane lists the projects of what is selected, one row per project like a note. Stacked on a
+// narrow window, or the single tree ("한 칸"); the head's layout button chooses. New, search and
+// home stay on top, the plan limits and the archive at the foot.
 
 export type { SidebarActions } from "./nav/shared.ts";
 export { rowItem } from "./nav/rows.tsx";
 
-const MIN_WIDTH = 232;
-const MAX_WIDTH = 480;
 const NO_SHORTCUTS: NavShortcut[] = [];
-
-const LAYOUTS: { id: NavLayout; label: string; icon: IconName }[] = [
-  { id: "tree", label: "프로젝트 목록", icon: "list" },
-  { id: "dual", label: "탐색 + 목록 (고급)", icon: "columns" },
-  { id: "stacked", label: "탐색 / 목록 (고급)", icon: "rows" },
-];
 
 const record = (value: unknown): Record<string, unknown> => (value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {});
 
@@ -147,6 +153,7 @@ export function Sidebar({
   onSortMode,
   width,
   onWidth,
+  paneMinimum = MIN_PANE,
   actions,
   pending,
   onPendingDone,
@@ -166,6 +173,8 @@ export function Sidebar({
   onSortMode: (mode: SortMode) => void;
   width: number;
   onWidth: (width: number) => void;
+  /** The least width the work panes need side by side (panes.ts `minimumSize`): the navigator never takes it. */
+  paneMinimum?: number;
   actions: SidebarActions;
   /** A rename or a new folder asked from a menu. */
   pending: { rename?: string; createIn?: string | null } | null;
@@ -182,12 +191,15 @@ export function Sidebar({
   const asideRef = useRef<HTMLElement>(null);
   const treeRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const fail = useCallback((error: unknown) => onToast(error instanceof Error ? error.message : String(error)), [onToast]);
+  const fail = useCallback((error: unknown) => onToast(failure(error)), [onToast]);
 
   // ── preferences: the navigator's own object and the shortcuts ───────────────────────────
   const nav = useMemo(() => readNavigator(prefs.navigator), [prefs.navigator]);
   const windowWidth = useWindowWidth();
-  const layout = layoutFor(nav, windowWidth);
+  // What was drawn last decides nothing but the automatic choice's edge (two panes hold on a little).
+  const drawn = useRef<NavLayout | null>(null);
+  const layout = layoutFor(nav, windowWidth, paneMinimum, drawn.current);
+  drawn.current = layout;
   // Several changes before the next render build on each other.
   const pendingNav = useRef<Record<string, unknown> | null>(null);
   useEffect(() => {
@@ -231,6 +243,8 @@ export function Sidebar({
   const [renaming, setRenaming] = useState<string | null>(null);
   const [creatingIn, setCreatingIn] = useState<string | null | undefined>(undefined);
   const [dialog, setDialog] = useState<NavDialog | null>(null);
+  /** A document row's menu (the shared Menu): at the pointer, or under its ⋯. */
+  const [rowMenu, setRowMenu] = useState<{ rowId: string; request: MenuRequest; anchor: LayerAnchor } | null>(null);
   const [live, setLive] = useState<{ nav?: number; list?: number; height?: number; width?: number } | null>(null);
 
   const sort = sortFor(navState, selected);
@@ -484,7 +498,12 @@ export function Sidebar({
     if (row.type === "folder" || row.type === "docs") return toggleRow(row);
     if (row.type === "work") return actions.openWork(row.work);
     if (row.type === "session") return actions.openSession(row.session);
-    if (row.type === "doc") return actions.openDoc(row.artifact);
+    if (row.type === "doc") {
+      // The row and the click agree: the AI shown beside the document is the one the row shows.
+      const target = docOpenTarget(row.agents, visibleSessionId);
+      if (target && actions.openDocAgent) return actions.openDocAgent(row.artifact, target);
+      return actions.openDoc(row.artifact);
+    }
   };
   /** "바로가기에 더하기" or "바로가기에서 빼기" for something. */
   const shortcutToggle = (entry: NavShortcut): MenuEntry =>
@@ -501,32 +520,24 @@ export function Sidebar({
       .catch(fail);
   };
   /**
-   * A row's menu: the app's, with the navigator's own items. "고정" of a session becomes a shortcut
-   * (shortcuts took the old "고정" section's place); works can be shortcuts; folders get a colour,
-   * an icon, a shortcut and "지우기…".
+   * A row's menu: the app's, with the navigator's own items. Works can be shortcuts; folders get a
+   * colour, an icon, a shortcut and "지우기…". (A session's "고정" is a shortcut already, in the app's menu.)
    */
-  const openMenuAt = (row: Row, x: number, y: number) => {
+  const openMenuAt = (row: Row, x: number, y: number, anchor?: HTMLElement) => {
+    if (row.type === "doc") {
+      // The 삭제 item says what the gateway would do with this file now.
+      const open = (removal?: DocumentRemovalPlan) => {
+        const request = actions.menuFor(row, x, y, removal);
+        if (request) setRowMenu({ rowId: row.id, request, anchor: anchor ?? { x, y } });
+      };
+      if (actions.docRemoval) void actions.docRemoval(row.artifact).then(open, () => open());
+      else open();
+      return;
+    }
     const request = actions.menuFor(row, x, y);
     if (!request) return;
     let items = request.items;
-    if (row.type === "session") {
-      // A pinned session sat under the old "고정"; now it is kept in 바로가기 (and `pinned` follows).
-      const entry = { kind: "session" as const, id: row.id };
-      const pinned = row.session.pinned || shortcuts.some((other) => sameShortcut(other, entry));
-      items = items.map((item) =>
-        item.kind === "item" && (item.label === "고정" || item.label === "고정 풀기")
-          ? {
-              ...item,
-              label: pinned ? "고정 풀기" : "고정",
-              hint: "바로가기",
-              onSelect: () => {
-                saveShortcuts(pinned ? shortcuts.filter((other) => !sameShortcut(other, entry)) : addShortcuts(shortcuts, [entry]));
-                void api.updateSession(row.id, { pinned: !pinned }).catch(fail);
-              },
-            }
-          : item,
-      );
-    } else if (row.type === "work") {
+    if (row.type === "work") {
       const at = items.findIndex((entry) => entry.kind === "item" && (entry.label === "고정" || entry.label === "고정 풀기"));
       items = at === -1 ? [...items, shortcutToggle({ kind: "work", id: row.id })] : [...items.slice(0, at + 1), shortcutToggle({ kind: "work", id: row.id }), ...items.slice(at + 1)];
     } else if (row.type === "folder") {
@@ -580,6 +591,10 @@ export function Sidebar({
       openMenuAt(row, rect.left + 24, rect.bottom - 4);
     } else if (event.key === "Delete" && (row.type === "folder" || row.type === "work" || row.type === "session")) {
       actions.archive({ kind: row.type, id: row.id });
+    } else if (event.key === "Delete" && row.type === "doc") {
+      // A document's Delete opens its menu: the person picks 목록에서 빼기 or 휴지통으로 옮기기 there.
+      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+      openMenuAt(row, rect.left + 24, rect.bottom - 4);
     } else {
       return;
     }
@@ -618,8 +633,14 @@ export function Sidebar({
       focusTreeRow(row.id);
     },
     onMenu: openMenuAt,
+    onMoreMenu: (row, anchor) => {
+      const box = anchor.getBoundingClientRect();
+      openMenuAt(row, box.right, box.bottom, anchor);
+    },
+    menuOpenId: rowMenu?.rowId ?? null,
     justDragged,
     openRight: actions.openRight,
+    closeWebTab: actions.closeWebTab,
     newSession: (folderId) => actions.newSession({ folderId }),
     newPage: (row) => actions.newPage(row.work),
     creationMenu: actions.creationMenu,
@@ -662,15 +683,16 @@ export function Sidebar({
     setDialog,
     moveProjects,
     rowMenu: openMenuAt,
+    menuUnder: (request, button) => setRowMenu({ rowId: "", request, anchor: button }),
     toast: onToast,
     fail,
   };
 
   // ── head menus ──────────────────────────────────────────────────────────────────────────
-  const layoutItems = (): MenuEntry[] => [
-    ...LAYOUTS.map((entry) => ({ kind: "item" as const, label: entry.label, icon: entry.icon, checked: layout === entry.id, onSelect: () => saveNav({ layout: entry.id }) })),
-    { kind: "item", label: "기본 배치로 되돌리기", hint: "프로젝트 목록", checked: nav.layout === null, onSelect: () => saveNav({ layout: undefined }) },
-  ];
+  // One list of layouts for the head's button and the ⋯ menu.
+  const choices = layoutChoices(nav.layout, layout);
+  const chooseLayout = (next: NavLayout | "auto") => saveNav({ layout: next === "auto" ? undefined : next });
+  const layoutItems = (): MenuEntry[] => choices.map((choice) => ({ kind: "item", label: choice.label, icon: choice.icon, hint: choice.hint, checked: choice.checked, onSelect: () => chooseLayout(choice.id) }));
   const menuAt = (button: HTMLElement, title: string, items: MenuEntry[]) => {
     const box = button.getBoundingClientRect();
     actions.openMenu({ x: box.left, y: box.bottom + 4, title, items });
@@ -740,9 +762,27 @@ export function Sidebar({
     latestSize.current = { ...latestSize.current, ...whole };
     setLive({ ...latestSize.current });
   };
+  // The widest the sidebar may be drawn: what the window has, less the room the work panes keep
+  // (the same room the layout was chosen by, so growing it never flips the layout).
+  const widest = windowWidth - FRAME_GAP - (nav.layout === "dual" ? paneMinimum : Math.max(paneMinimum, ROOMY));
+  // Never below the width it has: two panes holding on under the threshold are not shrunk by a key.
+  const listLimit = (navNow: number) => Math.max(LIST_WIDTH.min, Math.min(LIST_WIDTH.max, Math.max(widest - navNow - 1, nav.listWidth)));
+  const singleLimit = Math.max(SIDE_WIDTH.min, Math.min(SIDE_WIDTH.max, windowWidth - FRAME_GAP - paneMinimum));
   const startEdge = (event: ReactPointerEvent) => {
-    if (layout === "dual") drag(event, (dx) => setSize({ list: clamp(nav.listWidth + dx, LIST_WIDTH.min, LIST_WIDTH.max) }), finishResize);
-    else drag(event, (dx) => setSize({ width: clamp(width + dx, MIN_WIDTH, MAX_WIDTH) }), finishResize);
+    if (layout === "dual") drag(event, (dx) => setSize({ list: clamp(nav.listWidth + dx, LIST_WIDTH.min, listLimit(nav.navWidth)) }), finishResize);
+    else drag(event, (dx) => setSize({ width: clamp(width + dx, SIDE_WIDTH.min, singleLimit) }), finishResize);
+  };
+  const edgeKey = (event: ReactKeyboardEvent) => {
+    const grow = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+    if (!grow) return;
+    event.preventDefault();
+    if (layout === "dual") {
+      const next = clamp(nav.listWidth + grow * 16, LIST_WIDTH.min, listLimit(nav.navWidth));
+      if (next !== nav.listWidth) saveNav({ listWidth: next });
+    } else {
+      const next = clamp(width + grow * 16, SIDE_WIDTH.min, singleLimit);
+      if (next !== width) onWidth(next);
+    }
   };
   const startDivider = (event: ReactPointerEvent) => {
     if (layout === "dual") {
@@ -779,17 +819,11 @@ export function Sidebar({
     walk(tags.nodes);
     return out;
   }, [tags]);
+  // One tag per write, in order, per project (nav/tags.ts); a refusal says which went in and which did not.
   const addTags = (works: Work[], added: string[]) =>
-    void Promise.allSettled(
-      works.map((work) => {
-        const current = projects.find((project) => project.work.id === work.id)?.tags ?? work.tags ?? [];
-        return api.setProjectProperty(work.id, "tags", [...new Set([...current, ...added])], "tags");
-      }),
-    ).then((results) => {
-      const failed = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
-      if (failed) fail(failed.reason);
-      const done = results.filter((result) => result.status === "fulfilled").length;
-      if (done) onToast(`${added.map((tag) => `#${tag}`).join(" ")} 태그를 더했습니다${done > 1 ? ` (프로젝트 ${done}개)` : ""}.`);
+    void Promise.all(works.map((work) => addNoteTags(api, work, projects.find((project) => project.work.id === work.id)?.tags ?? work.tags ?? [], added))).then((results) => {
+      const notice = tagsNotice(results);
+      if (notice) onToast(notice.ok ? notice.text : { kind: "error", text: notice.text });
     });
   const deleteDialog = (folder: Folder) => {
     const parent = folder.parentId ? state.folders[folder.parentId] : undefined;
@@ -825,7 +859,7 @@ export function Sidebar({
 
   // The combinations set in ⋯ › 단축키, as the buttons' hints.
   const keys = shortcutsOf(state.prefs);
-  const totalWidth = layout === "dual" ? navWidth + listWidth + 1 : singleWidth;
+  const totalWidth = sidebarWidthFor(layout, { navWidth, listWidth }, singleWidth);
   const listPane = (
     <ListPane
       shared={shared}
@@ -870,6 +904,7 @@ export function Sidebar({
           }} title={`새로 만들기 (${comboLabel(keys.newWork)})`}>
             <Icon name="plus" size={15} /> 새로 만들기
           </button>
+          <LayoutButton drawn={layout} choices={choices} onChoose={chooseLayout} />
           <button type="button" className="icon-button small" title="사이드바 메뉴" aria-label="사이드바 메뉴" aria-haspopup="menu" onClick={(event) => sideMenu(event.currentTarget)}>
             <Icon name="dots" size={16} />
           </button>
@@ -899,39 +934,43 @@ export function Sidebar({
       ) : (
         <div className="side-scroll">
           <HomeRow shared={shared} />
+          <NowSection shared={shared} />
+          <ShortcutsSection shared={shared} />
           <TreeSection shared={shared} rows={rows} treeRef={treeRef} onSort={openSort} />
-          <details className="side-disclosure side-activity">
-            <summary>활동 및 바로가기</summary>
-            <NowSection shared={shared} />
-            <ShortcutsSection shared={shared} />
-          </details>
-          <details className="side-disclosure side-library">
-            <summary>라이브러리</summary>
-            <ViewsSection openMenu={actions.openMenu} folded={Boolean(nav.sections.views)} onFold={(folded) => saveNav({ sections: { ...nav.sections, views: folded } })} menuExtras={(view) => [viewShortcutEntry(shared, view.id)]} />
-            <VaultSection theme={appTheme} openMenu={actions.openMenu} />
-          </details>
+          <ViewsSection openMenu={actions.openMenu} folded={Boolean(nav.sections.views)} onFold={(folded) => saveNav({ sections: { ...nav.sections, views: folded } })} menuExtras={(view) => [viewShortcutEntry(shared, view.id)]} />
+          <VaultSection theme={appTheme} openMenu={actions.openMenu} />
         </div>
       )}
 
       <div className="side-foot">
-        <details className="side-disclosure side-usage">
-          <summary>사용량</summary>
-          <UsageCard providers={state.providers} onRefresh={actions.refreshUsage} />
-        </details>
-        <button type="button" className="side-row" onClick={actions.openArchive} title="보관한 세션·작업·폴더">
+        <UsageCard providers={state.providers} onRefresh={actions.refreshUsage} folded={Boolean(nav.sections.usage)} onFold={(folded) => saveNav({ sections: { ...nav.sections, usage: folded } })} />
+        <button type="button" className="side-row" onClick={actions.openArchive} title="보관한 세션·작업·폴더와 지운 문서">
           <Icon name="archive" size={15} className="side-row-icon" />
           <span className="side-row-label">보관함</span>
           {(() => {
             const count =
               Object.values(state.folders).filter((folder) => folder.archivedAt).length +
               Object.values(state.works).filter((work) => work.archivedAt).length +
-              Object.values(state.sessions).filter((session) => session.archivedAt).length;
+              Object.values(state.sessions).filter((session) => session.archivedAt).length +
+              Object.keys(state.removedArtifacts).length;
             return count ? <span className="side-row-trail muted">{count}</span> : null;
           })()}
         </button>
       </div>
-      <div className="side-resize" onPointerDown={startEdge} role="separator" aria-orientation="vertical" aria-label="사이드바 너비" />
+      <div
+        className="side-resize"
+        role="separator"
+        tabIndex={0}
+        aria-orientation="vertical"
+        aria-label="사이드바 너비"
+        aria-valuemin={layout === "dual" ? NAV_WIDTH.min + LIST_WIDTH.min + 1 : SIDE_WIDTH.min}
+        aria-valuemax={layout === "dual" ? navWidth + listLimit(navWidth) + 1 : singleLimit}
+        aria-valuenow={totalWidth}
+        onPointerDown={startEdge}
+        onKeyDown={edgeKey}
+      />
       <DragGhost store={store} />
+      {rowMenu ? <RowMenu request={rowMenu.request} anchor={rowMenu.anchor} onClose={() => setRowMenu(null)} /> : null}
       {dialog?.kind === "delete" ? deleteDialog(state.folders[dialog.folder.id] ?? dialog.folder) : null}
       {dialog?.kind === "style" && state.folders[dialog.folder.id] ? (
         <FolderStylePanel

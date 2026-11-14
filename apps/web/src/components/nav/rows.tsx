@@ -1,7 +1,7 @@
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { FORMAT_LABEL, PROVIDER_LABEL, isUnseen, type Artifact, type Provider, type Session, type Work } from "@workbench/contracts";
 import type { State } from "../../state.ts";
-import type { Row } from "../../tree.ts";
+import { docAgentLabel, leadAgent, type AgentTone, type Row } from "../../tree.ts";
 import { statusText, statusTone } from "../../format.ts";
 import type { Look } from "../../appearance.ts";
 import { EditableText } from "../EditableText.tsx";
@@ -26,7 +26,22 @@ export function rowItem(row: Row): PaneItem | null {
   return null;
 }
 
-export const rowLabel = (row: Row) => (row.type === "folder" ? row.folder.name : row.type === "work" ? row.work.title : row.type === "session" ? row.session.purpose : row.type === "doc" ? row.artifact.name : row.type === "section" ? row.label : "");
+const sessionRowLabel = (session: Session) => (session.documentAgent ? docAgentLabel(session) : session.purpose);
+
+export const rowLabel = (row: Row) => (row.type === "folder" ? row.folder.name : row.type === "work" ? row.work.title : row.type === "session" ? sessionRowLabel(row.session) : row.type === "doc" ? row.artifact.name : row.type === "section" ? row.label : "");
+
+const TONE_TEXT: Record<Exclude<AgentTone, null>, string> = { attention: "확인 필요", error: "오류", active: "진행 중", new: "새 답" };
+
+/** One AI of a document, as read out and shown in the row's tooltip ("새 답" included). */
+function agentText(agent: Session, visibleSessionId: string | null) {
+  const unseen = agent.id !== visibleSessionId && statusTone(agent) === "idle" && isUnseen(agent);
+  return `문서 AI · ${PROVIDER_LABEL[agent.provider]} · ${statusText(agent)}${unseen ? " · 새 답" : ""}`;
+}
+
+/** The state dot of an AI at a row's end, the same language as conversation rows. */
+function AgentDot({ tone }: { tone: AgentTone }) {
+  return tone ? <span className={`dot dot-${tone}`} title={TONE_TEXT[tone]} /> : null;
+}
 
 /** Ctrl/Cmd+click or a middle click asks for the right pane. */
 export const sideClick = (event: { ctrlKey: boolean; metaKey: boolean; button: number }) => event.button === 1 || ((event.ctrlKey || event.metaKey) && event.button === 0);
@@ -77,8 +92,13 @@ export type RowContext = {
   onRename: (row: Row, name: string) => void;
   onRenameDone: (row: Row) => void;
   onMenu: (row: Row, x: number, y: number) => void;
+  /** The ⋯ on a document row: its menu under the button. */
+  onMoreMenu?: (row: Row, anchor: HTMLElement) => void;
+  /** The row whose menu is open (its ⋯ stays shown). */
+  menuOpenId?: string | null;
   justDragged: () => boolean;
   openRight?: (item: PaneItem) => void;
+  closeWebTab?: (session: Session) => void;
   newSession: (folderId: string) => void;
   newPage: (row: Extract<Row, { type: "work" }>) => void;
   creationMenu?: (work: Work | null, x: number, y: number) => void;
@@ -91,11 +111,18 @@ export function TreeRow({ row, ctx }: { row: Row; ctx: RowContext }) {
   const { state, visibleSessionId, currentWorkId, currentDocId } = ctx;
   if (row.type === "section") {
     return (
-      <div className="side-section-label" style={{ paddingLeft: 8 + row.depth * 14 }} data-row-id={row.id} onContextMenu={event => {
+      <div className={`side-section-label${row.kind ? " side-kind" : ""}`} style={{ paddingLeft: 8 + row.depth * 14 }} data-row-id={row.id} onContextMenu={event => {
         if (!row.workId) return;
         event.preventDefault(); event.stopPropagation(); ctx.onMenu(row, event.clientX, event.clientY);
       }}>
-        {row.label}
+        {row.kind ? (
+          <>
+            <span className="row-chevron blank" aria-hidden />
+            <Icon name={row.kind === "web" ? "globe" : "chat"} size={13} className="side-kind-icon" />
+            <span>{row.label}</span>
+            <span className="side-kind-count">{row.count}</span>
+          </>
+        ) : row.label}
       </div>
     );
   }
@@ -129,6 +156,10 @@ export function TreeRow({ row, ctx }: { row: Row; ctx: RowContext }) {
   let icon: IconName = "folder";
   let label = "";
   let trailing: ReactNode = null;
+  let count: ReactNode = null;
+  let ariaLabel: string | undefined;
+  /** The row stands for where the user is (a document open on screen, its group when folded). */
+  let here = false;
   let style: CSSProperties = indent;
   let title: string | undefined;
   if (row.type === "folder") {
@@ -165,8 +196,8 @@ export function TreeRow({ row, ctx }: { row: Row; ctx: RowContext }) {
     );
     title = `프로젝트 · ${row.work.title}\n오버뷰와 속성 열기\n${row.work.cwd}`;
   } else if (row.type === "session") {
-    icon = row.session.pageAgent ? "globe" : row.session.documentAgent ? "file" : "chat";
-    label = row.session.purpose;
+    icon = row.session.pageAgent ? "globe" : "chat";
+    label = sessionRowLabel(row.session);
     const tone = statusTone(row.session);
     const unseen = row.session.id !== visibleSessionId && isUnseen(row.session);
     trailing = (
@@ -174,33 +205,68 @@ export function TreeRow({ row, ctx }: { row: Row; ctx: RowContext }) {
         <LinkBadge sessionId={row.session.id} />
         <EngineMark provider={row.session.provider} size={13} className="side-row-engine" />
         {tone !== "idle" ? <span className={`dot dot-${tone}`} title={statusText(row.session)} /> : unseen ? <span className="dot dot-new" title="새 답" /> : null}
+        {row.session.pageAgent && ctx.closeWebTab ? <button type="button" className="row-web-close" title="웹 탭 닫기 · 대화는 보관함에 유지" aria-label={`${row.session.purpose} 웹 탭 닫기`}
+          onPointerDown={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}
+          onClick={event => { event.stopPropagation(); ctx.closeWebTab!(row.session); }}><Icon name="x" size={13} /></button> : null}
       </span>
     );
-    title = `${row.session.pageAgent ? "웹 AI" : row.session.documentAgent ? "문서 AI" : "채팅"} · ${PROVIDER_LABEL[row.session.provider]} · ${statusText(row.session)}`;
+    title = `${row.session.pageAgent ? "웹 AI" : row.session.documentAgent ? "문서 AI" : "대화"} · ${PROVIDER_LABEL[row.session.provider]} · ${statusText(row.session)}`;
   } else if (row.type === "docs") {
     icon = "file";
-    label = `문서 ${row.count}`;
+    label = "문서";
+    // Folded, the group still says that one of its documents' AIs needs the user or answered.
+    // Folded, the group stands for its documents: where the user is, and their AIs' most pressing state.
+    const lead = row.open ? null : leadAgent(row.agents, visibleSessionId);
+    const shown = currentDocId ? state.artifacts[currentDocId] : undefined;
+    here = !row.open && Boolean(shown && shown.workId === row.work.id && shown.role !== "project-note");
+    count = <span className="side-kind-count">{row.count}</span>;
+    trailing = lead ? (
+      <span className="side-row-trail">
+        <EngineMark provider={lead.session.provider} size={13} className="side-row-engine" />
+        <AgentDot tone={lead.tone} />
+      </span>
+    ) : null;
+    ariaLabel = `문서 ${row.count}${lead?.tone ? ` · ${TONE_TEXT[lead.tone]}` : ""}`;
   } else if (row.type === "doc") {
     icon = docIcon(row.artifact);
     label = row.artifact.name;
     const artifact = row.artifact;
+    const lead = leadAgent(row.agents, visibleSessionId);
     trailing = (
-      <span className="side-row-trail muted">
-        {artifact.format === "markdown" && ctx.newSubpage ? <RowAdd label="하위 페이지" onAdd={() => ctx.newSubpage!(artifact)} /> : null}r{artifact.revision}
+      <span className="side-row-trail">
+        {artifact.format === "markdown" && ctx.newSubpage ? <RowAdd label="하위 페이지" onAdd={() => ctx.newSubpage!(artifact)} /> : null}
+        {ctx.onMoreMenu ? (
+          <button type="button" className="row-more" aria-label={`${artifact.name} 메뉴`} title="메뉴" aria-haspopup="menu" aria-expanded={ctx.menuOpenId === row.id}
+            onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}
+            onClick={(event) => { event.stopPropagation(); ctx.onMoreMenu!(row, event.currentTarget); }}>
+            <Icon name="dots" size={14} />
+          </button>
+        ) : null}
+        <span className="side-row-rev">r{artifact.revision}</span>
+        {lead ? <EngineMark provider={lead.session.provider} size={13} className="side-row-engine" /> : null}
+        <AgentDot tone={lead?.tone ?? null} />
       </span>
     );
     title = `${FORMAT_LABEL[row.artifact.format]} · ${row.artifact.path}`;
+    if (lead) {
+      title += `\n${row.agents.map((agent) => agentText(agent, visibleSessionId)).join("\n")}`;
+      ariaLabel = `${label} · ${row.agents.map((agent) => agentText(agent, visibleSessionId)).join(" · ")}`;
+    }
+    here = row.id === currentDocId;
   }
   const classes = ["side-row", `row-${row.type}`];
   if (row.type === "folder" && row.folder.color) classes.push("nav-folder", "colored");
   if (row.id === ctx.focusId) classes.push("focused");
   if (row.type === "work" && row.id === currentWorkId && !visibleSessionId && !currentDocId) classes.push("current");
+  if (row.type === "work" && row.id === currentWorkId && (visibleSessionId || currentDocId)) classes.push("current-project");
   if (row.type === "session" && row.id === visibleSessionId) classes.push("current");
-  if (row.type === "doc" && row.id === currentDocId) classes.push("current");
+  if ((row.type === "doc" || row.type === "docs") && here) classes.push("current");
   const item = rowItem(row);
   return (
     <div
       role="treeitem"
+      aria-label={row.type === "session" ? `${label} · ${title}` : row.type === "work" ? `프로젝트 · ${label}` : ariaLabel}
+      aria-current={(row.type === "work" && row.id === currentWorkId && (visibleSessionId || currentDocId)) || (row.type === "docs" && here) ? "location" : undefined}
       aria-level={row.depth + 1}
       aria-expanded={expandable ? isOpen : undefined}
       aria-selected={row.type === "work" ? row.id === currentWorkId && !visibleSessionId && !currentDocId : row.id === visibleSessionId || row.id === currentDocId}
@@ -239,7 +305,7 @@ export function TreeRow({ row, ctx }: { row: Row; ctx: RowContext }) {
         <Icon name={icon} size={15} className="side-row-icon" />
       )}
       <span className="side-row-label">{label}</span>
-      {row.type === "session" ? <span className="nav-kind">{row.session.pageAgent ? "웹 AI" : row.session.documentAgent ? "문서 AI" : "채팅"}</span> : null}
+      {count}
       {trailing}
     </div>
   );

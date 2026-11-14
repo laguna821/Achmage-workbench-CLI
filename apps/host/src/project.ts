@@ -14,7 +14,6 @@ import {
   turnEndText,
   type Artifact,
   type BaseDocument,
-  type AchmageBrief,
   type ArtifactRevision,
   type ChangeLine,
   type FolderNoteTemplate,
@@ -23,6 +22,7 @@ import {
   type ProjectEvent,
   type ProjectFacts,
   type ProjectNote,
+  type PropertyRow,
   type ProjectPage,
   type ProjectStage,
   type ProjectSummary,
@@ -35,12 +35,12 @@ import {
   type Work,
 } from "@workbench/contracts";
 import { PROJECT_NOTE_IN_GIT, WORKBENCH_DIR } from "./artifacts.ts";
+import { asUnwritable, writeAtomic } from "./atomic-write.ts";
 import type { EventBus } from "./bus.ts";
 import { HttpError } from "./errors.ts";
 import type { Pkm } from "./pkm.ts";
-import { ID_KEY, appendEntry, newNote, noteFileName, notePreview, readNote, setBody, setEntryDone, setFrontmatterKey, type ReadNote } from "./project-note.ts";
+import { FrontmatterEditError, ID_KEY, applySpan, bodyStart, entryEdit, keyEdit, keyShapes, listValues, newNote, noteFileName, notePreview, readNote, runEdit, setFrontmatterKey, tickEdit, verifySpan, type KeyChange, type ReadNote, type Span, type SpanScope } from "./project-note.ts";
 import type { IndexEntry, WorkExtras } from "./search-index.ts";
-import { Achmage } from "./achmage.ts";
 import { DEFAULT_PROPERTY_TEMPLATE, cleanTemplate, inferType, keyStyle, normalizeValues, propertyRows, templateFromMarkdown, vaultPropertyTypes } from "./project-properties.ts";
 import { firstImage, noteTags, parseFrontmatter, splitFrontmatter } from "./frontmatter.ts";
 import { baseProperties } from "./project-base.ts";
@@ -84,8 +84,6 @@ export const entryGist = (text: string) =>
     .replace(/^\d{4}-\d{2}-\d{2}\s+/, "")
     .trim();
 
-/** The `achmage_work` key of a note's properties (its first value), or null. */
-export const achmageWorkOf = (properties: [string, string[] | null][]) => properties.find(([key]) => key.trim().replace(/:$/, "").toLowerCase() === "achmage_work")?.[1]?.[0]?.trim() || null;
 
 const SOURCE_LINK = /\(\[원문\]\(workbench:\/\/session\/([^#)\s]+)(?:#([^)\s]+))?\)\)/;
 
@@ -168,8 +166,6 @@ export class Projects {
   private readonly summaryCache = new Map<string, { key: string; read: ReadNote; at: number; base: BaseDocument | null }>();
   /** Works this module is archiving or restoring itself: the archive listener leaves those alone. */
   private readonly quiet = new Set<string>();
-  /** The user's Achmage runtime, if this computer has one (achmage.ts). */
-  achmageRuntime = new Achmage();
 
   constructor(store: Store, bus: EventBus, manager: SessionManager, pkm: Pkm) {
     this.store = store;
@@ -309,7 +305,7 @@ export class Projects {
     const revisions = artifact ? this.manager.documents.revisions(artifact.id) : [];
     const last = revisions.at(-1) ?? null;
     const base = { path, revision: artifact?.revision ?? null, lastAuthor: last?.author ?? null, lastSessionId: last?.sessionId ?? null, artifactId: artifact?.id ?? null };
-    if (!existsSync(path)) return { ...base, exists: false, properties: [], stage: null, tags: work.tags ?? [], decisions: [], questions: [], body: "", problem: null };
+    if (!existsSync(path)) return { ...base, exists: false, properties: [], stage: null, tags: work.tags ?? [], decisions: [], questions: [], body: "", runs: [{ start: 0, end: 0, text: "" }], source: "", problem: null };
     let text: string;
     try {
       text = readFileSync(snapshot && artifact ? this.manager.documents.revisionPath(artifact.id, artifact.revision) : path, "utf8");
@@ -317,7 +313,31 @@ export class Projects {
       return { ...base, exists: true, properties: [], stage: null, tags: [], decisions: [], questions: [], body: "", problem: `노트를 읽지 못했습니다: ${error instanceof Error ? error.message : String(error)}` };
     }
     const read = readNote(text);
-    return { ...base, exists: true, properties: read.properties, stage: read.stage, tags: read.tags, decisions: read.decisions, questions: read.questions, body: read.body, problem: read.problem };
+    return { ...base, exists: true, properties: read.properties, stage: read.stage, tags: read.tags, decisions: read.decisions, questions: read.questions, body: read.body, free: read.free, runs: read.runs, source: text, problem: read.problem };
+  }
+
+  /** The properties panel rows, each marked editable unless its value has a shape the page leaves to the source. */
+  private rowsOf(work: Work, properties: [string, string[] | null][], text: string): PropertyRow[] {
+    const shapes = keyShapes(text);
+    return propertyRows(this.fieldsFor(work), properties, this.typeResolver(work)).map((row) => ({ ...row, editable: shapes[row.key] !== "opaque" }));
+  }
+
+  /** The newest revision whose front matter still reads, for a note whose front matter does not (§4). */
+  private lastReadable(work: Work, note: ProjectNote): ProjectPage["lastReadable"] {
+    if (!note.artifactId || !note.revision) return null;
+    const revisions = this.manager.documents.revisions(note.artifactId);
+    for (let index = revisions.length - 1; index >= 0; index -= 1) {
+      const revision = revisions[index]!;
+      if (revision.revision >= note.revision) continue;
+      const text = this.revisionText(note.artifactId, revision.revision);
+      if (text === null) continue;
+      const read = readNote(text);
+      if (read.problem) continue;
+      // Who made the change that broke it: the revision after the readable one.
+      const breaking = revisions.find((entry) => entry.revision === revision.revision + 1) ?? revision;
+      return { revision: revision.revision, author: breaking.author, sessionId: breaking.sessionId, at: breaking.at, rows: this.rowsOf(work, read.properties, text), text, current: note.source ?? "" };
+    }
+    return null;
   }
 
   /** The stage shown: the archive stage for an archived work, else what the note says. */
@@ -339,7 +359,8 @@ export class Projects {
       card: this.pkm.cardFor(work),
       stages: this.stages(),
       readNotes: this.pkm.notesReadBy(sessionIds),
-      rows: propertyRows(this.fieldsFor(work), note.properties, this.typeResolver(work)),
+      rows: this.rowsOf(work, note.properties, note.source ?? ""),
+      lastReadable: note.problem ? this.lastReadable(work, note) : null,
       knownKeys: this.knownKeys(),
       noteTemplate: noteTemplate ? { folderId: noteTemplate.folderId, folderName: noteTemplate.folderName } : null,
     };
@@ -421,7 +442,7 @@ export class Projects {
   /** Explicit create, or the first property/entry write, copies the template without touching it. */
   initializeNote(workId: string): ProjectWrite {
     if (this.note(this.work(workId)).exists) throw new HttpError(409, "note_exists", "프로젝트 노트가 이미 있어 템플릿으로 덮어쓰지 않았습니다.");
-    return this.write(workId, "폴더 템플릿 적용", (text) => text);
+    return this.write(workId, "폴더 템플릿 적용", () => null);
   }
 
   private vaultTypes() {
@@ -765,30 +786,73 @@ export class Projects {
 
   // ── writing (one key or one line), with a way back ──────────────────────────────────────
 
-  private write(workId: string, summary: string, change: (text: string) => string, side: { unarchive?: boolean; rearchive?: boolean; baseRevision?: number | null; access?: DocumentAccess } = {}): ProjectWrite {
+  /**
+   * Write the note: one writer at a time (this is synchronous), one base. Before anything, a file
+   * changed outside the app is recorded as a revision of its own, so no outside change is ever lost
+   * from the history. Then, when `baseRevision` is given (every write a person makes), the write is
+   * refused unless it is the current revision (null: the person saw no file, and there is none) —
+   * always, whatever changed and wherever; nothing is re-applied. The edit is one span computed from
+   * the current text, applied as `before[0:start] + replacement + before[end:]` and checked by
+   * `verifySpan`; any failure leaves the file untouched.
+   */
+  private write(workId: string, summary: string | ((before: string, after: string) => string), edit: (text: string) => { span: Span; scope: SpanScope } | null, side: { unarchive?: boolean; rearchive?: boolean; baseRevision?: number | null; access?: DocumentAccess; allowBroken?: boolean } = {}): ProjectWrite {
     const work = this.work(workId);
     const path = this.notePath(work);
     this.manager.documents.registry.assertPath(path, side.access);
+    this.recordOutside(work, path);
     const before = existsSync(path) ? readFileSync(path) : null;
-    if (side.baseRevision !== undefined) {
-      const artifact = this.noteArtifact(work, path);
-      const sameDisk = before === null ? artifact === null : artifact !== null && createHash("sha256").update(before).digest("hex") === artifact.sha256;
-      if ((artifact?.revision ?? null) !== side.baseRevision || !sameDisk) throw new HttpError(409, "note_changed", "그 사이 노트가 바뀌거나 삭제되었습니다. 내 편집은 유지했습니다. 최신 노트를 확인해 주세요.");
+    if (side.baseRevision !== undefined && !this.isCurrent(work, path, before !== null, side.baseRevision)) {
+      throw new HttpError(409, "note_changed", "그 사이 노트가 바뀌거나 삭제되었습니다. 내 편집은 유지했습니다. 최신 노트를 확인해 주세요.");
     }
     const template = before ? null : this.effectiveTemplate(work.folderId);
     const text = before ? before.toString("utf8") : template ? setFrontmatterKey(template.markdown, ID_KEY, [work.id]) : newNote(work.id);
-    if (before && readNote(text).problem) throw new HttpError(409, "note_unreadable", "노트의 속성 부분이 망가져 있어 고치지 않았습니다. 노트를 직접 열어 고쳐 주세요.");
-    const next = change(text);
-    if (before && next === text) return { token: "", created: false, summary, page: this.page(workId) };
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, next);
+    if (before && !side.allowBroken && readNote(text).problem) throw new HttpError(409, "note_unreadable", "노트의 속성 부분이 망가져 있어 고치지 않았습니다. 마지막으로 읽힌 판으로 되돌려 주세요.");
+    let next = text;
+    try {
+      const planned = edit(text);
+      if (planned) {
+        next = applySpan(text, planned.span);
+        verifySpan(text, next, planned.span, planned.scope);
+      }
+    } catch (error) {
+      if (error instanceof FrontmatterEditError) throw new HttpError(409, `note_${error.code}`, error.message);
+      throw error;
+    }
+    const said = typeof summary === "function" ? summary(text, next) : summary;
+    if (before && next === text) return { token: "", created: false, summary: said, page: this.page(workId) };
+    try {
+      mkdirSync(dirname(path), { recursive: true });
+    } catch (error) {
+      throw asUnwritable(path, error);
+    }
+    writeAtomic(path, next);
     this.writeJson(NOTES_KEY, { ...this.notePaths(), [work.id]: path });
     this.recordRevision(work, path, null);
     const token = randomUUID();
     this.writes.set(token, { workId, path, before, after: Buffer.from(next), at: Date.now(), unarchive: Boolean(side.unarchive), rearchive: Boolean(side.rearchive) });
     for (const [key, entry] of this.writes) if (Date.now() - entry.at > 3600_000 || this.writes.size > 100) this.writes.delete(key);
     this.publish(workId);
-    return { token, created: !before, summary, page: this.page(workId) };
+    return { token, created: !before, summary: said, page: this.page(workId) };
+  }
+
+  /** Record the bytes on disk as a revision of their own when they differ from the latest recorded one (an outside change). */
+  private recordOutside(work: Work, path: string) {
+    if (!existsSync(path)) return;
+    const tracked = this.manager.documents.track(work.id, work.cwd, path, "external", null, "앱 밖에서 바뀐 프로젝트 노트");
+    if (tracked) this.manager.documents.setRole(tracked.artifact.id, "project-note");
+  }
+
+  /** Is `revision` (what the person saw) still the note: the current revision, or no file seen and none there. */
+  private isCurrent(work: Work, path: string, exists: boolean, revision: number | null) {
+    return exists ? (this.noteArtifact(work, path)?.revision ?? null) === revision : revision === null;
+  }
+
+  /** A key write: the one span `keyEdit` declares, checked as a key edit. */
+  private keyed(name: string, change: KeyChange, how: Parameters<typeof setFrontmatterKey>[3] = {}) {
+    return (text: string) => {
+      const edit = keyEdit(text, name, change, how);
+      return edit && { span: edit, scope: { kind: "key" as const, key: name, intended: edit.intended } };
+    };
   }
 
   /** The note as a document: each write is a revision; the note stays out of document lists. */
@@ -798,21 +862,44 @@ export class Projects {
     if (artifact) this.manager.documents.setRole(artifact.id, "project-note");
   }
 
-  /** Write a property in its kind's form (`type`: as the panel knows it; else the kind this name has). */
-  setProperty(workId: string, key: string, values: string[] | null, type: PropertyType | null = null, access?: DocumentAccess): ProjectWrite {
+  /**
+   * Write a property in its kind's form (`type`: as the panel knows it; else the kind this name has).
+   * A list changes one item per write: `change` adds, removes or renames one (the new value is
+   * normalised — tag aliasing, a date — the existing items stay as written); `values` sets a scalar
+   * or a list one item away from what it is.
+   */
+  setProperty(workId: string, key: string, values: string[] | null, type: PropertyType | null = null, access?: DocumentAccess, baseRevision?: number | null, change?: { add?: string; remove?: string; rename?: [string, string] }): ProjectWrite {
     const name = key.trim();
     if (!name || name === ID_KEY) throw new HttpError(400, "bad_key", "그 이름의 속성은 쓸 수 없습니다.");
-    if (name === STAGE_KEY) return this.setStage(workId, values?.[0] ?? null, null, access);
-    const kind = type ?? this.typeOf(name, values, this.work(workId));
-    const clean = values === null ? null : normalizeValues(kind, values);
-    const result = this.write(workId, values === null ? `${name} 지움` : `${name}: ${clean!.join(", ") || "(빈 값)"}`, (text) => setFrontmatterKey(text, name, clean, keyStyle(kind)), { access });
-    if (name === "tags") this.manager.updateWork(workId, { tags: (clean ?? []).map((tag) => tag.replace(/^#/, "")) });
+    if (name === STAGE_KEY) return this.setStage(workId, values?.[0] ?? null, null, access, baseRevision);
+    const kind = type ?? this.typeOf(name, values ?? (change?.add !== undefined ? [change.add] : null), this.work(workId));
+    const one = (value: string) => {
+      const out = normalizeValues(kind, [value]);
+      if (out.length !== 1) throw new HttpError(400, "one_value", "한 번에 한 값씩 넣어 주세요.");
+      return out[0]!;
+    };
+    const asked = (text: string): KeyChange => {
+      if (change?.add !== undefined) return { add: one(change.add) };
+      if (change?.remove !== undefined) return { remove: change.remove };
+      if (change?.rename) return { rename: [change.rename[0], one(change.rename[1])] };
+      if (values === null) return { set: null };
+      if (kind === "list" || kind === "tags" || kind === "links") {
+        const current = listValues(text, name) ?? [];
+        return { set: values.filter(Boolean).map((value) => (current.includes(value) ? value : one(value))) };
+      }
+      return { set: normalizeValues(kind, values) };
+    };
+    // The notice says what the note now holds for the key, from what it held before.
+    const shown = (text: string) => readNote(text).properties.find(([entry]) => entry === name)?.[1]?.join(", ") || "값 없음";
+    const said = (before: string, after: string) => (values === null && !change ? `${name} 지움 (${shown(before)})` : `${name}: ${shown(before)} → ${shown(after)}`);
+    const result = this.write(workId, said, (text) => this.keyed(name, asked(text), keyStyle(kind))(text), { access, baseRevision });
+    if (name === "tags") this.manager.updateWork(workId, { tags: result.page.note.tags });
     return result;
   }
 
   /** Set the stage; the archive stage puts the work in the archive, leaving it takes it out. */
   /** `via`: what set it when not the person's menu (a rule), said in the record. */
-  setStage(workId: string, name: string | null, via: string | null = null, access?: DocumentAccess): ProjectWrite {
+  setStage(workId: string, name: string | null, via: string | null = null, access?: DocumentAccess, baseRevision?: number | null): ProjectWrite {
     const work = this.work(workId);
     const stages = this.stages();
     const target = name ? stages.find((stage) => stage.name === name) : null;
@@ -828,7 +915,7 @@ export class Projects {
       this.quiet.delete(workId);
     }
     try {
-      const written = this.write(workId, `단계: ${previous ?? "값 없음"} → ${name ?? "값 없음"}`, (text) => setFrontmatterKey(text, STAGE_KEY, name ? [name] : null), { unarchive: archiving, rearchive: leaving, access });
+      const written = this.write(workId, `단계: ${previous ?? "값 없음"} → ${name ?? "값 없음"}`, this.keyed(STAGE_KEY, { set: name ? [name] : null }), { unarchive: archiving, rearchive: leaving, access, baseRevision });
       if (written.token) this.logEntry({ workId, section: "stage", text: `단계 ${previous ?? "값 없음"} → ${name ?? "값 없음"}${via ? ` (${via})` : ""}`, sessionId: null, itemId: null }, written.token);
       return written.token ? { ...written, page: this.page(workId) } : written;
     } catch (error) {
@@ -855,7 +942,7 @@ export class Projects {
         this.setStage(workId, fill.stage, `규칙 「${fill.rule}」`);
       }
       const note = this.note(work);
-      if (fill.tag && note.exists && !note.problem && !note.tags.includes(fill.tag)) this.setProperty(workId, "tags", [...note.tags, fill.tag]);
+      if (fill.tag && note.exists && !note.problem && !note.tags.includes(fill.tag)) this.setProperty(workId, "tags", null, "tags", undefined, undefined, { add: fill.tag });
     } catch {
       // The rule placed the work; its note is left as it was.
     }
@@ -870,7 +957,7 @@ export class Projects {
     const stamp = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     const source = session ? ` — ${session.provider === "claude" ? "Claude" : "Codex"} · ${session.purpose || "세션"} ([원문](workbench://session/${session.id}${request.itemId ? `#${request.itemId}` : ""}))` : "";
     const line = `${stamp} ${text}${source}`;
-    const result = this.write(workId, section === "decision" ? `결정: ${text}` : `열린 질문: ${text}`, (current) => appendEntry(current, section, line), { access });
+    const result = this.write(workId, section === "decision" ? `결정: ${text}` : `열린 질문: ${text}`, (current) => ({ span: entryEdit(current, section, line), scope: { kind: "body", section } }), { access, ...(request.baseRevision !== undefined ? { baseRevision: request.baseRevision } : {}) });
     this.logEntry({ workId, section, text, sessionId: session?.id ?? null, itemId: request.itemId ?? null }, result.token);
     return { ...result, page: this.page(workId) };
   }
@@ -885,20 +972,50 @@ export class Projects {
     if (write) write.logged = at;
   }
 
-  setQuestionDone(workId: string, line: number, done: boolean, access?: DocumentAccess): ProjectWrite {
-    return this.write(workId, done ? "열린 질문 닫음" : "열린 질문 다시 엶", (text) => setEntryDone(text, line, done), { access });
+  /** Tick or untick the open question on `line` (which must still read `text`). */
+  setQuestionDone(workId: string, line: number, done: boolean, access?: DocumentAccess, baseRevision?: number | null, text?: string): ProjectWrite {
+    const tick = (current: string) => {
+      const question = readNote(current).questions.find((entry) => entry.line === line);
+      if (!question || (text !== undefined && question.text !== text)) throw new FrontmatterEditError("moved", "그 사이 그 열린 질문이 바뀌었습니다. 노트를 다시 확인해 주세요.");
+      return { span: tickEdit(current, line, done), scope: { kind: "body" as const, section: "question" as const } };
+    };
+    return this.write(workId, done ? "열린 질문 닫음" : "열린 질문 다시 엶", tick, { access, ...(baseRevision !== undefined ? { baseRevision } : {}) });
   }
+
 
   /** The body as edited in the app; refused when the note changed since the editor read it. */
   setBodyText(workId: string, body: string, baseRevision: number | null, access?: DocumentAccess): ProjectWrite {
-    return this.write(workId, "노트 본문 고침", (text) => setBody(text, body), { baseRevision, access });
+    return this.write(workId, "노트 본문 고침", (text) => ({ span: { start: bodyStart(text), end: text.length, replacement: body }, scope: { kind: "body-all" } }), { baseRevision, access });
+  }
+
+  /** One run of the note's words, as edited in place: only `start`..`end` changes, and only if it still reads `expected`. */
+  setRun(workId: string, run: { index: number; expected: string; text: string }, baseRevision: number | null, access?: DocumentAccess): ProjectWrite {
+    return this.write(workId, "노트 본문 고침", (text) => ({ span: runEdit(text, run.index, run.expected, run.text), scope: { kind: "body" } }), { baseRevision, access });
+  }
+
+  /** The whole file, as edited in "원문 전체": refused when its front matter would not read. */
+  setSource(workId: string, text: string, baseRevision: number | null, access?: DocumentAccess): ProjectWrite {
+    return this.write(workId, "노트 원문 고침", (current) => ({ span: { start: 0, end: current.length, replacement: text }, scope: { kind: "whole" } }), { baseRevision, access, allowBroken: true });
+  }
+
+  /** Put an earlier revision back (the last readable one, when the front matter broke), whoever changed it since. */
+  revertTo(workId: string, revision: number, access?: DocumentAccess, baseRevision?: number | null): ProjectWrite {
+    const note = this.note(this.work(workId));
+    const text = note.artifactId ? this.revisionText(note.artifactId, revision) : null;
+    if (!note.artifactId || text === null || revision >= (note.revision ?? 0)) throw new HttpError(409, "nothing_to_revert", "되돌릴 판이 없습니다.");
+    return this.write(workId, `노트를 r${revision}로 되돌림`, (current) => ({ span: { start: 0, end: current.length, replacement: text }, scope: { kind: "whole" } }), { access, allowBroken: true, ...(baseRevision !== undefined ? { baseRevision } : {}) });
   }
 
   /** Put the note back as it was before a write, if nothing changed it since. */
-  undo(workId: string, token: string, access?: DocumentAccess): ProjectPage {
+  undo(workId: string, token: string, access?: DocumentAccess, baseRevision?: number | null): ProjectPage {
     const entry = this.writes.get(token);
     if (!entry || entry.workId !== workId) throw new HttpError(404, "write_not_found", "되돌릴 수 있는 기록이 없습니다.");
     this.manager.documents.registry.assertPath(entry.path, access);
+    // Like every write: outside bytes recorded first, and only from the revision the person was shown.
+    this.recordOutside(this.work(workId), entry.path);
+    if (baseRevision !== undefined && !this.isCurrent(this.work(workId), entry.path, existsSync(entry.path), baseRevision)) {
+      throw new HttpError(409, "note_changed", "그 뒤에 노트가 바뀌어 되돌리지 않았습니다.");
+    }
     const current = existsSync(entry.path) ? readFileSync(entry.path) : null;
     if (!current || !current.equals(entry.after)) throw new HttpError(409, "note_changed", "그 뒤에 노트가 바뀌어 되돌리지 않았습니다.");
     const work = this.work(workId);
@@ -910,7 +1027,7 @@ export class Projects {
       const artifact = this.noteArtifact(work, entry.path);
       if (artifact) this.manager.documents.check(artifact.id);
     } else {
-      writeFileSync(entry.path, entry.before);
+      writeAtomic(entry.path, entry.before);
       this.recordRevision(work, entry.path, null);
     }
     this.quiet.add(workId);
@@ -927,12 +1044,12 @@ export class Projects {
   }
 
   /** An engine changed the note: put back the revision before its change (as a person's write). */
-  revertEngineEdit(workId: string, access?: DocumentAccess): ProjectWrite {
+  revertEngineEdit(workId: string, access?: DocumentAccess, baseRevision?: number | null): ProjectWrite {
     const work = this.work(workId);
     const note = this.note(work);
     if (!note.artifactId || note.lastAuthor !== "engine" || !note.revision || note.revision < 2) throw new HttpError(409, "nothing_to_revert", "되돌릴 엔진의 변경이 없습니다.");
     const before = readFileSync(this.manager.documents.revisionPath(note.artifactId, note.revision - 1), "utf8");
-    return this.write(workId, `엔진이 바꾼 노트를 r${note.revision - 1}로 되돌림`, () => before, { access });
+    return this.write(workId, `엔진이 바꾼 노트를 r${note.revision - 1}로 되돌림`, (current) => ({ span: { start: 0, end: current.length, replacement: before }, scope: { kind: "whole" } }), { access, ...(baseRevision !== undefined ? { baseRevision } : {}) });
   }
 
   // ── what the engines are told ───────────────────────────────────────────────────────────
@@ -947,14 +1064,7 @@ export class Projects {
       tags: note.tags,
       decisions: note.decisions.slice(-5).map((entry) => entryGist(entry.text)),
       questions: note.questions.filter((entry) => !entry.done).slice(-3).map((entry) => entryGist(entry.text)),
-      achmage: achmageWorkOf(note.properties),
     };
-  }
-
-  /** The Achmage work the note names (`achmage_work`), as the user's Achmage runtime describes it; null when none. */
-  async achmage(workId: string): Promise<AchmageBrief | null> {
-    const id = achmageWorkOf(this.note(this.work(workId)).properties);
-    return id ? this.achmageRuntime.brief(id) : null;
   }
 
   private told() {
@@ -1063,7 +1173,7 @@ export class Projects {
     const note = readNote(readFileSync(path, "utf8"));
     if (note.problem) return;
     const change = (from: string | null, to: string | null) => {
-      this.write(work.id, `단계: ${from ?? "값 없음"} → ${to ?? "값 없음"}`, (text) => setFrontmatterKey(text, STAGE_KEY, to ? [to] : null));
+      this.write(work.id, `단계: ${from ?? "값 없음"} → ${to ?? "값 없음"}`, this.keyed(STAGE_KEY, { set: to ? [to] : null }));
       this.logEntry({ workId: work.id, section: "stage", text: `단계 ${from ?? "값 없음"} → ${to ?? "값 없음"} (보관함에서)`, sessionId: null, itemId: null });
     };
     if (archived && note.stage !== archiveStage) change(note.stage, archiveStage);

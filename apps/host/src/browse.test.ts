@@ -1,11 +1,13 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { delimiter, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { browserSessionName, type AccessMode, type AgentBrowserStatus, type Session, type TranscriptItem, type Work } from "@workbench/contracts";
 import { AgentBrowser, readSignedIn, signedInSites } from "./browse.ts";
+import { browserCommandKind } from "./browse-policy.ts";
 import { claudeSdkEnv, engineEnv } from "./engine-env.ts";
 
 // The agent browser in the gateway, with the stand-in CLI (no browser): the wrapper on an
@@ -20,7 +22,7 @@ afterEach(async () => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-function setup(access: AccessMode = "full", provider: Session["provider"] = "claude", waitGraceMs?: number) {
+function setup(access: AccessMode = "full", provider: Session["provider"] = "claude", waitGraceMs?: number, cliPath = FAKE_CLI) {
   const dataDir = mkdtempSync(join(tmpdir(), "wb-browse-"));
   const cwd = mkdtempSync(join(tmpdir(), "wb-browse-work-"));
   dirs.push(dataDir, cwd);
@@ -30,7 +32,7 @@ function setup(access: AccessMode = "full", provider: Session["provider"] = "cla
   const items: TranscriptItem[] = [];
   const statuses: AgentBrowserStatus[] = [];
   const state = { session, access };
-  const browser = new AgentBrowser({ dataDir, cli: FAKE_CLI, idleCloseMs: 60_000, waitGraceMs });
+  const browser = new AgentBrowser({ dataDir, cli: cliPath, idleCloseMs: 60_000, waitGraceMs });
   browsers.push(browser);
   browser.bind({
     lookup: (id) => (id === state.session.id ? { session: state.session, work, access: state.access } : null),
@@ -84,7 +86,7 @@ describe("agent browser through the wrapper", () => {
     expect(statuses.some((status) => status.window.kind === "agent" && status.window.busy)).toBe(true);
     // Links to files the CLI wrote come back absolute (the conversation's image scan finds them).
     const shot = await cli([`-s=${name}`, "screenshot"]);
-    expect(shot.out).toMatch(/\[Screenshot of viewport\]\(\/.*\.playwright-cli\/page-1\.png\)/);
+    expect(shot.out).toMatch(/\[Screenshot of viewport\]\(\/.*\.png\)/);
   });
 
   it("refuses credential and window-management commands outright", async () => {
@@ -95,6 +97,47 @@ describe("agent browser through the wrapper", () => {
       expect(result.out).toContain("쓸 수 없습니다");
     }
   });
+
+  it("a help or version request runs only the argv the gateway builds; anything with -- or more words is judged as its command", async () => {
+    // A recorder in place of the CLI: every argv it is started with, help or not.
+    const recDir = mkdtempSync(join(tmpdir(), "wb-browse-rec-"));
+    dirs.push(recDir);
+    const recorder = join(recDir, "rec.mjs");
+    const log = join(recDir, "argv.log");
+    writeFileSync(recorder, `import { appendFileSync } from "node:fs";\nappendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + "\\n");\nconsole.log("help");\n`);
+    const runs = () => (existsSync(log) ? readFileSync(log, "utf8").trim().split("\n").filter(Boolean).map((line) => JSON.parse(line) as string[]) : []);
+    const { name, cli } = setup("ask", "claude", undefined, recorder);
+    const help = JSON.parse(readFileSync(join(dirname(createRequire(import.meta.url).resolve("playwright-core/package.json")), "lib/tools/cli-client/help.json"), "utf8")) as { commands: Record<string, unknown> };
+    const blocked = Object.keys(help.commands).filter((command) => browserCommandKind(command) === "blocked");
+    expect(blocked.length).toBeGreaterThan(40);
+    for (const command of blocked) {
+      for (const form of [[command, "--", "--help"], [command, "--", "--version"], [command, "--help", "extra"], ["--", command], ["--help", "--", command], [command, "-h", "--", "x"]]) {
+        const result = await cli([`-s=${name}`, ...form]);
+        expect(result.code, form.join(" ")).toBe(1);
+        expect(result.out, form.join(" ")).toContain("쓸 수 없습니다");
+      }
+    }
+    expect(runs()).toEqual([]);
+    // Nothing named and not a plain help form: refused, nothing runs.
+    for (const form of [["--", "--help"], ["--help", "--"], ["--frobnicate"]]) {
+      const result = await cli([`-s=${name}`, ...form]);
+      expect(result.code, form.join(" ")).toBe(1);
+    }
+    expect(runs()).toEqual([]);
+    // The plain forms reach the CLI as the gateway writes them.
+    for (const form of [["state-save", "--help"], ["state-save", "-h"], ["--help"], ["--version"], ["click", "--version"], []]) {
+      const result = await cli([`-s=${name}`, ...form]);
+      expect(result.code, form.join(" ")).toBe(0);
+    }
+    expect(runs()).toEqual([
+      [`-s=${name}`, "state-save", "--help"],
+      [`-s=${name}`, "state-save", "--help"],
+      [`-s=${name}`, "--help"],
+      [`-s=${name}`, "--version"],
+      [`-s=${name}`, "--version"],
+      [`-s=${name}`, "--help"],
+    ]);
+  }, 120_000);
 
   it("자동 reads and stays on known sites, and asks to act (naming the element) or to open a new site", async () => {
     const { browser, name, cli, approvals, until, state } = setup("auto");

@@ -286,8 +286,8 @@ def status():
 def open_doc(name):
     js("""const back = document.querySelector('.doc-tab.conversation'); if (back) back.click(); return true;""")
     pump(0.6)
-    js("""document.querySelector('.docs-button').click();
-          setTimeout(() => { const item = [...document.querySelectorAll('.docs-menu *')].find((el) => el.children.length === 0 && el.textContent.trim() === %s); item && item.click(); }, 300);
+    js("""document.querySelector('.note-head-more').click();
+          setTimeout(() => { const item = [...document.querySelectorAll('.note-menu *')].find((el) => el.children.length === 0 && el.textContent.trim() === %s); item && item.click(); }, 300);
           return true;""" % json.dumps(name))
 
 
@@ -306,7 +306,7 @@ def snapshot(name):
 clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
 try:
     view.load_uri(f"{url}/?token={token}")
-    if not until(lambda: js("return Boolean(document.querySelector('.docs-button'))"), 60):
+    if not until(lambda: js("return Boolean(document.querySelector('.note-head-more'))"), 60):
         raise RuntimeError("the work view did not open")
 
     # ── Word ───────────────────────────────────────────────────────────────

@@ -35,7 +35,8 @@ const check = (step: string, ok: boolean, detail = "") => {
   console.log(`${ok ? "PASS" : "FAIL"} ${step}${detail ? ` — ${detail}` : ""}`);
 };
 
-const child = spawn(process.execPath, ["apps/host/src/main.ts"], {
+// NAVIGATOR_CHECK_HOST_ENTRY=apps/host/dist/host.mjs runs the bundled gateway (where the source one cannot start).
+const child = spawn(process.execPath, [process.env.NAVIGATOR_CHECK_HOST_ENTRY ?? "apps/host/src/main.ts"], {
   env: {
     ...process.env,
     WORKBENCH_DATA_DIR: dataDir,
@@ -111,7 +112,13 @@ async function drag(page: Page, from: Locator, to: Locator, at: "middle" | "top"
 }
 
 async function menuItem(page: Page, label: string | RegExp) {
-  await page.locator(".context-menu [role=menuitem]", { hasText: label }).first().click();
+  // A checkable item is a menuitemcheckbox.
+  await page.locator(".context-menu [role^=menuitem]", { hasText: label }).first().click();
+}
+
+/** An item of the navigator's own menus on the shared Menu (the layout button's, the list's sort menu); `level` 1 is a submenu. */
+async function ownMenuItem(page: Page, label: string | RegExp, level = 0) {
+  await page.locator(".ui-menu[data-state=open]").nth(level).locator("[data-menu-item]", { hasText: label }).first().click();
 }
 
 async function flow(provider: Provider) {
@@ -239,7 +246,7 @@ async function flow(provider: Provider) {
       await shot("06-drag-many.png");
     });
     const both = await until(async () => (await Promise.all(two.map((work) => workOf(work.id)))).every((work) => work?.folderId === sub.id));
-    const toast = await page.locator(".toast").innerText().catch(() => "");
+    const toast = await page.locator(".top-notice").innerText().catch(() => "");
     pass("Ctrl+클릭으로 여럿 골라 함께 끌어 폴더로(알림 '프로젝트 2개를 …')", picked === 2 && both && toast.includes("프로젝트 2개"), `골라진 ${picked} · ${toast.split("\n")[0]}`);
 
     // ── shortcuts: drag a project in, a folder from its menu, rename, reorder, remove ────────
@@ -276,7 +283,7 @@ async function flow(provider: Provider) {
     // ── sorting: by name at the root, a folder keeps its own ─────────────────────────────────
     await navRow(page, "nav:root").click();
     await page.locator('.list-tools [aria-label="정렬과 줄 모양"]').click();
-    await menuItem(page, /^이름$/);
+    await ownMenuItem(page, /^이름$/);
     await page.waitForTimeout(300);
     const byName = (await listTitles(page)).filter((title) => title.startsWith(label));
     const sorted = [...byName].sort((a, b) => a.localeCompare(b, "ko"));
@@ -284,7 +291,7 @@ async function flow(provider: Provider) {
     await navRow(page, sub.id).click();
     const folderSortTitle = await page.locator('.list-tools [aria-label="정렬과 줄 모양"]').getAttribute("title");
     await page.locator('.list-tools [aria-label="정렬과 줄 모양"]').click();
-    await menuItem(page, "만든 날");
+    await ownMenuItem(page, "만든 날");
     const ownSort = await until(async () => ((await navPrefs()).sortByFolder as Record<string, { key: string }> | undefined)?.[sub.id]?.key === "created");
     pass(
       "정렬: '프로젝트'에서 이름순(이 목록만), 폴더는 자기 정렬(기본 최근 활동 → 만든 날)",
@@ -296,14 +303,14 @@ async function flow(provider: Provider) {
     await navRow(page, top.id).click();
     const dateHeads = await groupHeads(page);
     await page.locator('.list-tools [aria-label="정렬과 줄 모양"]').click();
-    await page.locator(".context-menu [role=menuitem]", { hasText: "묶기" }).hover();
-    await page.locator(".context-menu").nth(1).locator("[role=menuitem]", { hasText: "폴더별" }).click();
+    await ownMenuItem(page, "묶기");
+    await ownMenuItem(page, "폴더별", 1);
     await page.waitForTimeout(300);
     const folderHeads = await groupHeads(page);
     await shot("08-group-by-folder.png");
     await page.locator('.list-tools [aria-label="정렬과 줄 모양"]').click();
-    await page.locator(".context-menu [role=menuitem]", { hasText: "묶기" }).hover();
-    await page.locator(".context-menu").nth(1).locator("[role=menuitem]", { hasText: "날짜별" }).click();
+    await ownMenuItem(page, "묶기");
+    await ownMenuItem(page, "날짜별", 1);
     pass("'하위 포함' 목록의 묶음 머리: 날짜별(오늘…) 또는 폴더별(이 폴더 · 하위 폴더)", dateHeads.includes("오늘") && folderHeads.includes(`${label} 강의실`) && folderHeads.includes("2026-2"), `${dateHeads.join("·")} / ${folderHeads.join("·")}`);
 
     // ── the filter box (the shared project query) ───────────────────────────────────────────
@@ -382,7 +389,7 @@ async function flow(provider: Provider) {
     await listRow(page, firstId).focus();
     await page.keyboard.press("Delete");
     const archived = await until(async () => Boolean((await workOf(firstId))?.archivedAt));
-    await page.locator(".toast button", { hasText: "되돌리기" }).click();
+    await page.locator(".top-notice button", { hasText: "되돌리기" }).click();
     const restored = await until(async () => !(await workOf(firstId))?.archivedAt);
     pass(
       "키보드: Ctrl+Shift+E로 목록에 초점 · ↓ · Enter로 열기 · ←/→로 칸 사이 · F2 이름 · Delete 보관(되돌리기)",
@@ -480,7 +487,7 @@ async function shared() {
 
     // ── stacked, then the single tree, from the head's switch ───────────────────────────────
     await page.locator(".side-head .side-layout").click();
-    await menuItem(page, "위아래");
+    await ownMenuItem(page, "위아래");
     await page.waitForSelector(".nav-body.stacked");
     const navTop = (await page.locator(".nav-pane").boundingBox())!;
     const listTop = (await page.locator(".list-pane").boundingBox())!;
@@ -498,7 +505,7 @@ async function shared() {
     const tree = (await page.locator(".list-pane").count()) === 0 && (await page.locator(".sidebar .side-tree [data-row-id]").count()) > 3;
     await shot("03-tree.png");
     await page.locator(".side-head .side-layout").click();
-    await menuItem(page, "창 너비에 맞추기");
+    await ownMenuItem(page, "창 너비에 맞추기");
     await page.waitForSelector(".sidebar.nav-dual");
     await page.setViewportSize({ width: 1000, height: 820 });
     const narrow = await page.waitForSelector(".sidebar.nav-stacked", { timeout: 3000 }).then(() => true).catch(() => false);
@@ -533,8 +540,8 @@ async function shared() {
     const oneLine = await lineHeight();
     const linesMenu = async (label: string) => {
       await page.locator('.list-tools [aria-label="정렬과 줄 모양"]').click();
-      await page.locator(".context-menu [role=menuitem]", { hasText: "줄 모양" }).hover();
-      await page.locator(".context-menu").nth(1).locator("[role=menuitem]", { hasText: label }).click();
+      await ownMenuItem(page, "줄 모양");
+      await ownMenuItem(page, label, 1);
       await page.waitForTimeout(250);
     };
     await linesMenu("미리보기 3줄");

@@ -100,3 +100,13 @@ it("exposes a loading error and keeps missing saved roles unresolved", async () 
   expect(api.updateSession).not.toHaveBeenCalled();
   expect(onResolved).toHaveBeenLastCalledWith(null);
 });
+
+it("lists discovered models by their plain names, as the input's picker does (no default marker)", async () => {
+  const api = profileApi();
+  const marked: ModelOption[] = [{ id: "default", label: "Fake (기본)", description: null, efforts: [], defaultEffort: null, isDefault: true }];
+  render(<AgentProfilePicker api={asApi(api)} session={session} models={{ codex: marked }} />);
+  fireEvent.click(screen.getByRole("button", { name: "역할: 없음" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "새 역할 만들기…" }));
+  const option = screen.getByRole("dialog", { name: "새 역할 만들기" }).querySelector('option[value="default"]');
+  expect(option?.textContent).toBe("Fake");
+});

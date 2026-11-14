@@ -25,6 +25,9 @@
         },
         {
           "url": "obsidian://*"
+        },
+        {
+          "url": "tg://resolve*"
         }
       ]
     },

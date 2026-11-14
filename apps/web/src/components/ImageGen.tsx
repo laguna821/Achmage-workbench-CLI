@@ -301,7 +301,7 @@ function ImageViewer({ info, url, onClose }: { info: ImageInfo; url: string; onC
  * A picture in a conversation: drawing (who draws, "멈춤"), drawn (the picture, "열기", "경로
  * 복사", "현재 문서에 넣기", "다시 그리기"), or failed (why, "다시 그리기").
  */
-export function ImageCard({ item, viewer, compact }: { item: ImageItem; viewer: string; compact?: boolean }) {
+export function ImageCard({ item, viewer }: { item: ImageItem; viewer: string }) {
   const { state, actions } = useDocs();
   useDocVersion();
   const info = item.image;
@@ -337,7 +337,7 @@ export function ImageCard({ item, viewer, compact }: { item: ImageItem; viewer: 
   const status = info.status === "drawing" ? (drawer?.status === "awaitingApproval" ? "Codex 세션이 승인을 기다립니다" : "그리는 중…") : info.status === "failed" ? "그리지 못했습니다" : "그림";
   const meta = [info.template, info.aspect !== "auto" ? ASPECT_LABEL[info.aspect] : null, info.transparent ? "투명" : null, info.width ? `${info.width}×${info.height}` : null].filter(Boolean).join(" · ");
   return (
-    <figure className={`image-card status-${info.status}${compact ? " compact" : ""}`} data-image-id={info.id}>
+    <figure className={`image-card status-${info.status}`} data-image-id={info.id}>
       <div className="image-card-head">
         <Icon name="image" size={14} />
         <span className="image-card-status">{status}</span>
@@ -378,11 +378,9 @@ export function ImageCard({ item, viewer, compact }: { item: ImageItem; viewer: 
             <button type="button" className="button small" onClick={() => picture.url && setViewing(true)} disabled={!picture.url}>
               열기
             </button>
-            {compact ? null : (
-              <button type="button" className="button small" onClick={() => void copyText(info.path!).then(() => say("경로를 복사했습니다."))}>
-                경로 복사
-              </button>
-            )}
+            <button type="button" className="button small" onClick={() => void copyText(info.path!).then(() => say("경로를 복사했습니다."))}>
+              경로 복사
+            </button>
             <button
               type="button"
               className="button small"
@@ -404,7 +402,7 @@ export function ImageCard({ item, viewer, compact }: { item: ImageItem; viewer: 
             멈춤
           </button>
         ) : null}
-        {info.status !== "drawing" && !compact ? (
+        {info.status !== "drawing" ? (
           <button type="button" className="text-button" onClick={() => void again()} title="같은 요청·템플릿으로 한 장 더">
             <Icon name="refresh" size={13} /> 다시 그리기
           </button>

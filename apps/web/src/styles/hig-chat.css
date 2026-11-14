@@ -2,7 +2,6 @@
    House values: 720px reading measure, 4px rhythm, 28px pointer / 44px coarse targets.
    --e-font/size/weight/line remain the user's per-engine conversation preferences. */
 .transcript .transcript-inner,
-.transcript .turn-pin-inner,
 .composer-area.column {
   box-sizing: border-box;
   width: 100%;
@@ -12,42 +11,19 @@
 }
 .transcript { background: var(--bg); scrollbar-gutter: stable; }
 .transcript:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.transcript .transcript-inner { padding-block: 12px 32px; }
-.transcript .turn { gap: 24px; padding-block: 24px; border: 0; }
-.transcript .turn + .turn { padding-top: 32px; }
-.transcript .turn-request { gap: 8px; }
-.transcript .turn-meta { flex-wrap: wrap; justify-content: flex-end; gap: 4px 8px; font: 400 13px/20px var(--font-ui); color: var(--muted); }
-.transcript .turn-no { min-width: 20px; height: 20px; padding: 0 4px; color: var(--muted); background: var(--surface-muted); border-radius: 4px; font-size: 13px; }
-.transcript .user-bubble.markdown { max-width: min(88%, 640px); padding: 12px 16px; border: 0; border-radius: 16px; background: var(--surface-muted); color: var(--text); box-shadow: none; white-space: normal; }
-.transcript .user-bubble.markdown a { color: var(--accent); }
-.transcript .turn-body { gap: 16px; }
-.transcript .turn-assistant > .markdown { padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
 .transcript .markdown { font-family: var(--e-font, var(--font-ui)); font-size: var(--e-size, 17px); font-weight: var(--e-weight, 400); line-height: var(--e-line, 1.75); color: var(--text); }
-.transcript .markdown :is(h1,h2,h3,h4) { color: var(--text); line-height: 1.35; font-weight: 600; margin-block: 24px 12px; }
-.transcript .markdown h1 { font-size: max(26px, 1.5em); }
-.transcript .markdown h2 { font-size: max(22px, 1.25em); }
-.transcript .markdown h3 { font-size: 1em; }
+.transcript .markdown :is(h1,h2,h3,h4) { line-height: 1.4; font-weight: 600; letter-spacing: normal; margin-block: 24px 12px; }
+.transcript .markdown h1 { font-size: max(26px, 1.5em); color: var(--h1); }
+.transcript .markdown h2 { font-size: max(22px, 1.25em); color: var(--h2); }
+.transcript .markdown h3 { font-size: 1.125em; color: var(--h3); }
+.transcript .markdown h4 { font-size: 1em; color: var(--h4); margin-block: 20px 8px; }
 .transcript .markdown :is(p,ul,ol,blockquote) { margin-block: 0 16px; }
 .transcript .markdown > :last-child { margin-bottom: 0; }
 .transcript .markdown pre { padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-muted); }
 .transcript .markdown :is(pre,code) { font-family: var(--mono, ui-monospace, monospace); }
-.transcript .speaker.engine { gap: 8px; margin-bottom: 8px; font: 600 13px/20px var(--font-ui); color: var(--muted); }
-.transcript .speaker.engine .engine-mark { color: inherit; }
-.transcript .turn-meta .fork-button { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding-inline: 4px; opacity: 1; color: var(--muted); font-size: 13px; }
-.transcript .turn-end { gap: 4px; margin-top: 0; font: 400 13px/20px var(--font-ui); color: var(--muted); border: 0; }
-.transcript .turn-end-failed, .transcript .turn-end-interrupted { color: var(--danger); }
-.transcript .turn-pin { background: var(--bg); border-color: var(--line); box-shadow: none; }
-.transcript .turn-pin-inner { gap: 8px; min-height: 48px; padding-block: 8px; }
-.transcript .turn-pin-main { font: 400 13px/20px var(--font-ui); }
-.transcript .turn-pin-full .user-bubble.markdown { max-width: 100%; padding: 0; background: none; font-size: 15px; }
-.transcript-wrap .to-bottom { height: auto; min-height: 28px; padding: 4px 12px; border-radius: 8px; background: var(--surface-raised, var(--surface)); color: var(--text); font: 400 13px/20px var(--font-ui); box-shadow: 0 4px 16px var(--shadow-ink-soft); }
 .transcript .empty-hint { font: 400 15px/24px var(--font-ui); color: var(--muted); padding-block: 24px; }
 
 /* Read the response first; disclose commands and reasoning as needed. */
-.transcript .work-block { padding: 0; border: 0; background: none; box-shadow: none; }
-.transcript .work-summary { display: flex; align-items: center; gap: 8px; min-height: 28px; max-width: 100%; padding: 4px 0; border: 0; background: none; color: var(--muted); font: 400 13px/20px var(--font-ui); }
-.transcript .work-summary:hover { color: var(--text); background: none; }
-.transcript .work-summary-text.running { color: var(--text); animation: none; background: none; -webkit-text-fill-color: currentColor; }
 .transcript .work-list { margin: 8px 0 0 8px; padding: 0 0 0 12px; border-left: 1px solid var(--line); background: none; }
 .transcript .tool-row { border: 0; }
 .transcript .tool-row-head { min-height: 28px; gap: 8px; padding: 4px 0; font-size: 13px; }
@@ -56,30 +32,28 @@
 .transcript .tool-output { max-height: 320px; margin-block: 4px 12px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-muted); font: 400 13px/20px var(--mono, ui-monospace, monospace); }
 .transcript .reasoning-row { padding: 8px 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
 .transcript .work-problems { margin-top: 4px; color: var(--danger); }
-.transcript :is(.approval-card,.plan-card) { padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: none; }
+.transcript .approval-card { padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: none; }
 .transcript .approval-title { color: var(--text); font: 600 17px/24px var(--font-ui); }
 .transcript .approval-detail { padding: 12px; background: var(--surface-muted); border-radius: 8px; font-size: 13px; }
 .transcript .approval-reason { color: var(--muted); font-size: 15px; line-height: 1.6; }
 .transcript .approval-actions { flex-wrap: wrap; gap: 8px; margin-top: 16px; }
 .transcript .approval-decisions { display: flex; gap: 8px; margin-left: auto; }
-.transcript :is(.approval-done,.plan-head,.plan-step) { font-size: 13px; }
-.transcript :is(.doc-card,.proposal-card,.handoff-card) { border-color: var(--line); border-radius: 12px; box-shadow: none; }
-.turn-outline { position: absolute; top: 12px; right: 12px; z-index: 8; font: 400 13px/20px var(--font-ui); }
-.turn-outline > summary { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--muted); cursor: pointer; list-style: none; }
-.turn-outline > summary::-webkit-details-marker { display: none; }
-.turn-outline > nav { position: absolute; top: calc(100% + 8px); right: 0; width: min(320px, 80vw); max-height: min(400px, 60vh); overflow: auto; padding: 8px; background: var(--surface-raised, var(--surface)); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-float); }
-.turn-outline-label { padding: 4px 8px 8px; color: var(--muted); }
-.turn-outline nav button { display: flex; align-items: start; gap: 8px; width: 100%; min-height: 28px; padding: 8px; text-align: left; border: 0; border-radius: 6px; background: none; color: var(--text); }
-.turn-outline nav button > span:nth-child(2) { flex: 1; overflow-wrap: anywhere; }
-.turn-outline nav button:is(:hover,[aria-current]) { background: var(--surface-muted); }
-.turn-outline-attention { color: var(--danger); white-space: nowrap; }
+.transcript .approval-done { font-size: 13px; }
+.transcript .ref-chip { min-height: 28px; }
+
+/* Back to the newest output (Transcript.tsx): a band under the conversation, as the pinned request
+   is a band above it. The button keeps to the reading column, so it never covers a request's time
+   or the words, whatever stands beside the pane. */
+.jump-band { position: absolute; left: 0; right: 0; bottom: 0; z-index: 7; background: var(--bg); animation: pending-arrive var(--dur-fast) var(--ease-out); }
+.jump-band-inner { box-sizing: border-box; display: flex; justify-content: flex-end; width: 100%; max-width: 768px; margin-inline: auto; padding: 4px 24px; }
+.jump-end { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 4px 12px 4px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font: 400 13px/20px var(--font-ui); white-space: nowrap; cursor: pointer; }
+.jump-end:hover { border-color: var(--line-strong); }
+@media (prefers-reduced-motion: reduce) { .jump-band { animation: none; } }
 
 /* One quiet input surface. Core actions stay on the toolbar; optional request tools are grouped. */
 .composer-area.column { padding-top: 8px; padding-bottom: 12px; }
 .hig-composer { padding: 16px 12px 8px; border: var(--e-border, 1px) solid var(--composer-border, var(--line)); border-radius: var(--e-radius, 16px); background: var(--surface); box-shadow: var(--shadow-composer); }
 .hig-composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
-[data-glow="off"] .hig-composer[data-phase="waiting"]::before,
-[data-glow="off"] .hig-composer[data-phase="waiting"]::after { display: none; }
 .hig-composer .composer-input { padding-inline: 4px; min-height: 32px; font-family: var(--e-font, var(--font-ui)); font-size: var(--e-size, 17px); line-height: var(--e-line, 1.75); color: var(--text); }
 .hig-composer .composer-input::placeholder { color: var(--muted); opacity: 1; }
 .hig-composer .composer-header { margin-bottom: 12px; padding: 0 4px; }
@@ -93,8 +67,7 @@
 .hig-composer .composer-bar .icon-button.primary { background: var(--accent); color: var(--on-accent); }
 .hig-composer .composer-bar .icon-button.primary:disabled { background: var(--surface-muted); color: var(--muted); opacity: 1; cursor: not-allowed; }
 .hig-composer .composer-bar .stop-secondary { color: var(--text); border: 1px solid var(--line); }
-.hig-composer .composer-bar .feature-pill .pill-label,
-.hig-composer .composer-bar .insight-pill .pkm-pill-label { display: inline; }
+.hig-composer .composer-bar .feature-pill .pill-label { display: inline; }
 .hig-composer .voice-input { position: static; margin: 0; padding: 0; border: 0; }
 .hig-composer .voice-input > button { white-space: nowrap; }
 .hig-composer .voice-panel { position: absolute; inset: auto 0 calc(100% + 8px); z-index: 30; max-height: min(520px, 65dvh); overflow: auto; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-raised, var(--surface)); box-shadow: var(--shadow-float); font: 400 13px/20px var(--font-ui); }
@@ -116,16 +89,15 @@
 
 /* Inline pictures retain natural proportions; the whole preview opens the gallery. */
 .transcript .attach-strip { gap: 12px; margin-top: 8px; max-width: 100%; }
-.transcript .turn-request > .attach-strip { justify-content: flex-end; }
 .transcript .attach-preview { max-width: min(100%, 520px); }
 .transcript .message-image { max-width: 100%; margin-block: 12px; }
 .transcript .attach-thumb { max-width: 100%; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-muted); }
 .transcript .attach-thumb img { max-width: min(100%, 520px); max-height: 400px; width: auto; height: auto; object-fit: contain; }
 .transcript .attach-thumb-wait { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; width: min(360px, 64vw); min-height: 160px; height: auto; padding: 16px; color: var(--muted); font: 400 13px/20px var(--font-ui); }
 .transcript .attach-retry { min-height: 28px; font-size: 13px; }
-.transcript .image-card:not(.compact) { width: min(100%, 520px); gap: 12px; padding: 0; border: 0; background: none; box-shadow: none; }
-.transcript .image-card:not(.compact) .image-card-picture { border-radius: 12px; }
-.transcript .image-card:not(.compact) .image-card-picture img { max-height: 440px; }
+.transcript .image-card { width: min(100%, 520px); gap: 12px; padding: 0; border: 0; background: none; box-shadow: none; }
+.transcript .image-card .image-card-picture { border-radius: 12px; }
+.transcript .image-card .image-card-picture img { max-height: 440px; }
 .transcript .image-card-wait { display: flex; align-items: center; justify-content: center; min-height: 160px; padding: 16px; margin: 0; border-radius: 12px; background: var(--surface-muted); font-size: 15px; }
 .transcript .image-card :is(.image-card-head,.image-card-brief,.image-card-via,.image-card-actions,.image-card-meta) { font-size: 13px; }
 .transcript .image-card-brief { display: block; max-height: none; overflow: visible; color: var(--muted); }
@@ -146,7 +118,7 @@
 .feature-dialog .feature-body { padding: 20px 24px 24px; }
 :is(.feature-dialog,.stage-dialog,.linked-dialog,.new-document-dialog,.session-picker,.schedule-dialog,.dropbox-dialog,.office-settings-dialog,.terminal-dialog) :is(.sheet-hint,.muted,small,.picker-meta,.picker-foot) { color: var(--muted); font-size: 13px; line-height: 1.6; }
 :is(.feature-dialog,.stage-dialog,.linked-dialog,.new-document-dialog,.session-picker,.schedule-dialog,.dropbox-dialog,.office-settings-dialog,.terminal-dialog) :is(button,input:not([type=checkbox]):not([type=radio]),select) { min-height: 28px; }
-:is(.feature-dialog,.stage-dialog,.linked-dialog,.new-document-dialog,.session-picker,.schedule-dialog,.dropbox-dialog,.office-settings-dialog,.terminal-dialog) :is(input:not([type=checkbox]):not([type=radio]):not([type=color]),select,textarea) { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 15px; padding: 8px 12px; }
+:is(.feature-dialog,.stage-dialog,.linked-dialog,.new-document-dialog,.session-picker,.schedule-dialog,.dropbox-dialog,.office-settings-dialog,.terminal-dialog) :is(input:not([type=checkbox]):not([type=radio]):not([type=color]),select,textarea) { border: 1px solid var(--field-line); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 15px; padding: 8px 12px; }
 :is(.feature-dialog,.stage-dialog,.linked-dialog,.new-document-dialog,.session-picker,.schedule-dialog,.dropbox-dialog,.office-settings-dialog,.terminal-dialog) :is(pre,code,.mono,.feature-mono) { font-family: var(--mono, ui-monospace, monospace); }
 :is(.feature-dialog,.stage-dialog,.linked-dialog,.new-document-dialog,.session-picker,.schedule-dialog,.dropbox-dialog,.office-settings-dialog,.terminal-dialog) .feature-section { padding-block: 16px; border-color: var(--line); }
 
@@ -169,36 +141,43 @@
 .appearance-sheet .sheet-section { padding-block: 20px; gap: 12px; border-color: var(--line); }
 .appearance-sheet .sheet-label { font-size: 15px; color: var(--text); }
 .appearance-sheet :is(.sheet-hint,.color-row,.slider-row,.option-row,.check-row) { font-size: 13px; line-height: 1.6; }
-.appearance-sheet :is(.sheet-input,.sheet-select,.hex) { min-height: 28px; border-color: var(--line); border-radius: 6px; background: var(--surface); font-size: 13px; }
+.appearance-sheet :is(.sheet-input,.sheet-select,.hex) { min-height: 28px; border-color: var(--field-line); border-radius: 6px; background: var(--surface); font-size: 13px; }
 .appearance-sheet .look-card { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: none; }
 .appearance-sheet .look-card.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 
-/* Search is a list and an optional reading pane, with clear selected state. */
-.palette.fast-find { width: min(1040px, calc(100% - 48px)); max-height: calc(100dvh - 48px); border: 1px solid var(--line); border-radius: 16px; background: var(--surface-raised, var(--surface)); box-shadow: 0 16px 64px var(--shadow-ink-dialog); font: 400 13px/20px var(--font-ui); }
-.palette .palette-input { min-height: 64px; gap: 12px; padding: 16px 20px; background: none; border-bottom: 1px solid var(--line); }
+/* Search is a working surface for scanning results beside their source, not a small
+   command menu. Keep text sizes; reclaim space from the frame and row padding. */
+.palette-backdrop { align-items: center; padding: 0; }
+.palette.fast-find { width: 94vw; height: 92dvh; max-height: calc(100dvh - 16px); border: 1px solid var(--line); border-radius: 12px; background: var(--surface-raised, var(--surface)); box-shadow: 0 16px 64px var(--shadow-ink-dialog); font: 400 13px/20px var(--font-ui); }
+.palette.fast-find > :not(.palette-body) { flex-shrink: 0; }
+.palette .palette-input { height: 52px; min-height: 52px; gap: 10px; padding: 8px 14px; background: none; border-bottom: 1px solid var(--line); }
 .palette .palette-input input { font: 400 17px/24px var(--font-ui); }
 .palette .palette-input input { min-height: 28px; }
 .palette :is(.palette-took,.search-scope.empty:not(.on)) { opacity: 1; }
-.palette .palette-filters, .palette .search-tools { padding: 8px 16px; gap: 8px; flex-wrap: wrap; background: none; }
+.palette .palette-filters, .palette .search-tools { padding: 6px 12px; gap: 8px; flex-wrap: wrap; background: none; }
 .palette :is(.filter-chip,.search-scope,.search-preview-toggle,summary,select) { min-height: 28px; border-radius: 6px; font-size: 13px; }
-.palette :is(.palette-group-label,.search-section-label) { padding: 12px 12px 8px; font-size: 13px; color: var(--muted); }
-.palette .palette-entry { margin: 0 4px; padding: 12px; min-height: 44px; gap: 4px 12px; border-radius: 8px; color: var(--text); }
+.palette :is(.palette-group-label,.search-section-label) { padding: 8px 10px 4px; font-size: 13px; color: var(--muted); }
+.palette .palette-list { padding: 4px 8px; border-right: 0; }
+.palette .search-summary { flex-wrap: wrap; padding: 6px 10px 4px; }
+.palette .palette-entry { grid-template-columns: 18px minmax(0, 1fr) fit-content(36%); margin: 0; padding: 6px 10px; min-height: 32px; gap: 2px 8px; border-radius: 6px; color: var(--text); }
 .palette .palette-entry.focused { background: var(--accent-soft); outline: 1px solid var(--accent); outline-offset: -1px; box-shadow: none; }
-.palette .palette-title { font-size: 15px; line-height: 22px; color: var(--text); font-weight: 500; }
+/* On the type ladder (styles.css :root; foundation.css redefines the --fs-* names, so steps are written out): 14 = list names, 18 = lead, 16 = body. */
+.palette .palette-title { font-size: 14px; line-height: 22px; color: var(--text); font-weight: 500; }
 .palette :is(.palette-meta,.palette-snippet,.palette-who,.palette-took,.palette-preview-who,.palette-preview-foot,.palette-foot,.search-summary) { font-size: 13px; line-height: 20px; color: var(--muted); }
-.palette .palette-preview { padding: 20px; background: var(--bg); border-left: 1px solid var(--line); }
-.palette .palette-preview-head { font: 600 17px/24px var(--font-ui); color: var(--text); }
-.palette .palette-preview-hit { padding-block: 16px; font-size: 15px; line-height: 1.75; }
+.palette .palette-meta { overflow: hidden; text-overflow: ellipsis; }
+.palette .palette-snippet { color: var(--text); }
+.palette .palette-preview { padding: 12px 16px; background: var(--bg); border-left: 1px solid var(--line); }
+.palette .palette-preview-head { font-family: var(--font-ui); font-size: 18px; font-weight: 600; line-height: 24px; color: var(--text); }
+.palette .palette-preview-hit { padding: 10px 12px; font-size: 16px; line-height: 1.65; }
 .palette .palette-preview-hit.current { border-color: var(--line); background: none; }
-.palette .palette-foot { padding: 8px 16px; background: none; border-top: 1px solid var(--line); }
+.palette .palette-foot { flex-wrap: wrap; gap: 4px 16px; padding: 6px 14px; background: none; border-top: 1px solid var(--line); }
 
-:is(.hig-composer,.transcript,.turn-outline,.appearance-sheet,.connections,.palette,.attach-lightbox,.image-viewer) :is(button,summary,a,input,select,textarea):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+:is(.hig-composer,.transcript,.appearance-sheet,.connections,.palette,.attach-lightbox,.image-viewer) :is(button,summary,a,input,select,textarea):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .hig-composer .composer-input:focus-visible, .palette .palette-input input:focus-visible { outline: none; }
 .palette .palette-input:focus-within { box-shadow: inset 0 -2px var(--accent); }
 .transcript .markdown pre code { font-size: .8125rem; line-height: 1.6; }
 
 /* In a dense project grid, keep the response visible. Focusing the input reveals its tools. */
-.panes[data-dense] .work-view > .context-row { display: none; }
 .panes[data-dense] .group-tabs { min-height: 32px; }
 .panes[data-dense] .group-tab { min-height: 28px; }
 .panes[data-dense] .pane-start { padding: 12px; gap: 8px; }
@@ -208,21 +187,8 @@
 .transcript :is(.message-page,.message-keep,.ref-role) { min-width: 28px; min-height: 28px; }
 .transcript .button.primary kbd { color: inherit; background: transparent; }
 .transcript .button.primary kbd { font-weight: 700; opacity: 1; }
-.transcript .ref-chip, .transcript .linked-request button { min-height: 28px; }
-.panes .pane-narrow select { min-height: 28px; }
 
-/* Text enlargement may add rows; context controls must never overlap the transcript. */
-.work-view > .context-row { height: auto; flex-wrap: wrap; row-gap: 8px; }
-.context-row .breadcrumb-anchor { min-width: 0; flex: 1 1 160px; }
-.context-row :is(.breadcrumb,.docs-button,.status-pill) { height: auto; min-height: 28px; min-width: 28px; padding-block: 4px; }
-.context-row :is(.docs-button,.status-pill) { white-space: nowrap; }
-.context-row .status-pill { max-width: 100%; }
-.context-row .status-pill > span { flex-shrink: 0; }
-.context-row .status-engine, .context-row .status-host { border-left: 1px solid var(--line); padding-left: 8px; }
-.context-row .docs-button > span { white-space: nowrap; }
-.context-row .breadcrumb { margin-left: 0; }
 .topbar .brand { min-width: 28px; }
-.toast button { min-height: 28px; }
 .panes[data-dense] .composer-area.column { padding: 4px 8px 8px; }
 .panes[data-dense] .composer-area .footer-line { display: none; }
 .panes[data-dense] .hig-composer:not(:focus-within) { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px; align-items: end; padding: 8px; }
@@ -233,12 +199,9 @@
 .panes[data-dense] .hig-composer:not(:focus-within) .composer-status { display: none; }
 .panes[data-dense] .hig-composer:not(:focus-within) :is(.composer-header,.composer-file-problem) { grid-column: 1 / -1; }
 .panes[data-dense] .transcript .transcript-inner { padding: 12px; }
-.panes[data-dense] .transcript .turn-pin-inner { min-height: 28px; padding: 4px 12px; }
-.panes[data-dense] .transcript .markdown { font-size: .9375rem; line-height: 1.6; }
+/* Splitting a workspace changes its available width, not the person's reading size. */
 @media (max-width: 743px) {
-  .transcript .transcript-inner, .transcript .turn-pin-inner, .composer-area.column { padding-inline: 16px; }
-  .transcript .turn { padding-block: 16px; gap: 20px; }
-  .transcript .user-bubble.markdown { max-width: 96%; padding: 12px; }
+  .transcript .transcript-inner, .composer-area.column { padding-inline: 16px; }
   .hig-composer { padding: 12px 8px 8px; }
   .hig-composer .composer-bar { gap: 4px; }
   .hig-composer .composer-left { flex: 1 1 auto; min-width: 0; }
@@ -247,28 +210,21 @@
   .transcript .approval-actions .approval-trust { flex-basis: 100%; margin: 0; justify-content: flex-start; }
   .hig-composer .composer-status > span:last-child { display: none; }
   .hig-composer .voice-panel { padding: 16px; }
-  .turn-outline { top: 8px; right: 8px; }
-  .palette.fast-find { width: calc(100% - 16px); max-height: calc(100dvh - 16px); border-radius: 12px; }
-  .palette .palette-input { padding: 12px 16px; }
-  .palette .palette-preview { padding: 16px; }
+  .palette.fast-find { width: calc(100% - 16px); height: calc(100dvh - 16px); border-radius: 12px; }
+  .palette .palette-input { padding: 8px 12px; }
+  .palette .palette-preview { padding: 12px; }
 }
 @media (pointer: coarse) {
   .hig-composer :is(.plain-select,.select-button,.ghost-button,.icon-button,.composer-tools > summary),
   .hig-composer .composer-bar .icon-button,
   .transcript :is(button,.attach-retry),
-  .turn-outline > summary, .turn-outline nav button,
   .connections button, .appearance-sheet button,
   .palette :is(button,summary,select),
   .attach-lightbox :is(button,a), .image-viewer button { min-height: 44px; }
-  .hig-composer .composer-bar .icon-button, .turn-outline > summary { width: 44px; height: 44px; }
+  .hig-composer .composer-bar .icon-button { width: 44px; height: 44px; }
   .transcript .attach-chip button, .hig-composer .attach-chip button { min-width: 44px; min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .hig-composer, .transcript :is(.turn-pin,.response-pending-dots i), .attach-lightbox, .image-viewer { animation: none; transition: none; }
+  .hig-composer, .transcript .response-pending-dots i, .attach-lightbox, .image-viewer { animation: none; transition: none; }
 }
 
-/* Explicit appearance choices remain effective; the default soft bubble stays neutral. */
-.look-scope[data-bubble="filled"] .transcript .user-bubble.markdown { background: var(--bubble-bg); color: var(--bubble-text); }
-.look-scope[data-bubble="filled"] .transcript .user-bubble.markdown a { color: inherit; }
-.look-scope[data-bubble="rail"] .transcript .user-bubble.markdown { border-left: 2px solid var(--accent); border-radius: 8px; }
-.look-scope[data-bubble="rail"] .transcript .turn-assistant > .markdown { border-left: 1px solid var(--line); padding-left: 16px; }

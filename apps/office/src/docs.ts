@@ -254,7 +254,7 @@ const desktop = stubBridge(
     signalMcpReady: mcp.signal,
     reportMcpResult: mcp.result,
     onMcpCommand: events.on("mcpCommand"),
-    reportViewMenuState: () => undefined,
+    reportViewMenuState: (state: { aiSidebar?: boolean }) => { if (typeof state?.aiSidebar === "boolean") post({ type: "office:ai-panel", open: state.aiSidebar }); },
     respondToZotero: () => undefined,
     consumeHeadlessExport: async () => headless.consume(),
     headlessExportDone: headless.done,

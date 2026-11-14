@@ -4,7 +4,8 @@
 Driven by scripts/design-shots.ts, which seeds a gateway (stand-in engines, fixture vault) and
 writes a scenario: the gateway's address, the screens and, for each, the steps that reach it (the
 same scripts the Chromium pass runs inside the page). Runs on a private GTK Broadway display with
-GPU compositing off, in a window made active as the app's window is while in use. Writes
+GPU compositing off, in a window made active as the app's window is while in use. Writes a motion
+`burst` step as webkit-<theme>-<screen>-<name>-NN.png; `reducedMotion` emulates reduced motion. Writes
 webkit-<theme>-<screen>.png into the scenario's out folder.
 Usage: python3 scripts/webkit-design-shots.py <scenario.json>
 """
@@ -53,9 +54,91 @@ def request(method, path, body=None):
 
 Gdk.Screen.get_default().set_resolution(96.0)
 viewport = scenario["viewport"]
+# WebKitGTK answers prefers-reduced-motion from GTK's animation setting.
+if scenario.get("reducedMotion"):
+    Gtk.Settings.get_default().set_property("gtk-enable-animations", False)
 window = Gtk.OffscreenWindow()
 window.set_default_size(viewport["width"], viewport["height"])
 view = WebKit2.WebView()
+
+# The private display has a touchscreen and no mouse, so the engine answers `pointer: coarse` and
+# `hover: none`, and the app would draw its touch sizes and layout. The app runs on a desktop with a
+# mouse: answer the pointer and hover media features as that desktop does (width queries untouched).
+DESKTOP_POINTER = r"""
+(() => {
+  const YES = '(min-width: 0px)', NO = '(max-width: 0px)';
+  const answers = [
+    [/\(\s*(any-)?pointer\s*:\s*fine\s*\)/g, YES], [/\(\s*(any-)?pointer\s*:\s*(coarse|none)\s*\)/g, NO],
+    [/\(\s*(any-)?hover\s*:\s*hover\s*\)/g, YES], [/\(\s*(any-)?hover\s*:\s*none\s*\)/g, NO],
+  ];
+  const rewrite = (query) => answers.reduce((text, [pattern, value]) => text.replace(pattern, value), String(query));
+  const real = window.matchMedia.bind(window);
+  window.matchMedia = (query) => real(rewrite(query));
+  const visit = (rules) => {
+    for (const rule of rules) {
+      if (rule.media && /pointer|hover/.test(rule.media.mediaText)) rule.media.mediaText = rewrite(rule.media.mediaText);
+      if (rule.cssRules) visit(rule.cssRules);
+    }
+  };
+  window.__desktopPointer = () => {
+    for (const sheet of document.styleSheets) { try { visit(sheet.cssRules); } catch (error) { /* another origin */ } }
+    return true;
+  };
+  new MutationObserver(() => window.__desktopPointer()).observe(document, { childList: true, subtree: true });
+  addEventListener('load', () => window.__desktopPointer(), true);
+})();
+"""
+if os.environ.get("DESIGN_SHOTS_TOUCH") != "1":
+    view.get_user_content_manager().add_script(WebKit2.UserScript(DESKTOP_POINTER, WebKit2.UserContentInjectedFrames.TOP_FRAME, WebKit2.UserScriptInjectionTime.START, None, None))
+    print("POINTER desktop (emulated: the private display has only a touchscreen)", flush=True)
+else:
+    print("POINTER touch (as the private display reports)", flush=True)
+
+# The web tab is a native child window the off-screen engine cannot show. With `nativeStub` the
+# page gets a stand-in for the desktop shell's bridge, answering only the shared-browser commands
+# (list, create, present, close, execute), so the real web-tab frame renders around an empty page
+# area. Everything else the bridge is asked for is refused.
+NATIVE_STUB = r"""
+(() => {
+  const pages = new Map();
+  const title = (url) => { try { const u = new URL(url); return u.hostname.includes('example.ac.kr') ? 'AI 글쓰기 평가 루브릭 안내 — 교수학습센터' : u.hostname; } catch (error) { return url; } };
+  const shared = (command) => {
+    if (command.kind === 'list') return [...pages.values()];
+    if (command.kind === 'create') {
+      const page = { pageId: command.pageId, profileId: command.profileId, navigationRevision: 1, capabilities: ['observe', 'navigate', 'dom_actions', 'persistent_profile'], url: command.url, title: title(command.url), loading: false, control: command.control, popups: [], error: null };
+      pages.set(page.pageId, page); return page;
+    }
+    if (command.kind === 'close') { pages.delete(command.pageId); return null; }
+    if (command.kind === 'present') { window.__nativePlacements = command.pages ?? command.placements ?? null; return null; }
+    if (command.kind === 'execute') {
+      const job = command.job, page = pages.get(job.pageId);
+      if (!page) return { id: job.id, pageId: job.pageId, error: 'no page' };
+      const next = { ...page, control: job.control };
+      if (job.action.kind === 'control') next.control = job.action.control;
+      if (job.action.kind === 'navigate') { next.url = job.action.url; next.title = title(job.action.url); next.navigationRevision += 1; }
+      pages.set(next.pageId, next);
+      return { id: job.id, pageId: job.pageId, page: next, observation: { target: { pageId: next.pageId, profileId: next.profileId, navigationRevision: next.navigationRevision, capabilities: next.capabilities }, documentNonce: 'stub-' + next.navigationRevision, observedAt: Date.now(), text: next.title } };
+    }
+    return null;
+  };
+  let callbacks = 0;
+  window.__TAURI_INTERNALS__ = {
+    metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main', windowLabel: 'main' } },
+    transformCallback(callback) { const id = ++callbacks; window['_' + id] = callback; return id; },
+    unregisterCallback() {},
+    convertFileSrc: (path) => path,
+    invoke: async (name, args) => {
+      if (name === 'shared_browser') return shared(args.command);
+      if (String(name).startsWith('plugin:event|')) return 0;
+      throw new Error('unsupported');
+    },
+  };
+  window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener() {} };
+})();
+"""
+if scenario.get("nativeStub"):
+    view.get_user_content_manager().add_script(WebKit2.UserScript(NATIVE_STUB, WebKit2.UserContentInjectedFrames.TOP_FRAME, WebKit2.UserScriptInjectionTime.START, None, None))
+    print("NATIVE stand-in bridge (shared-browser commands only)", flush=True)
 view.get_settings().set_hardware_acceleration_policy(WebKit2.HardwareAccelerationPolicy.NEVER)
 window.add(view)
 window.show_all()
@@ -105,13 +188,19 @@ def until(expression, timeout=12):
 
 
 def resize(size):
-    window.resize(size["width"], size["height"])
+    # An offscreen window is at least its default size and its child's request: set both, so a
+    # screen with a narrower viewport (u27-narrow) gets narrow, not only a wider one.
     view.set_size_request(size["width"], size["height"])
+    window.set_default_size(size["width"], size["height"])
+    window.resize(size["width"], size["height"])
     pump(0.4)
 
 
 def snapshot(name):
     box = {}
+    # Style sheets that arrived since the last pass (lazy chunks) get the same pointer answers.
+    js("return window.__desktopPointer ? window.__desktopPointer() : false")
+    pump(0.05)
 
     def saved(source, result):
         source.get_snapshot_finish(result).write_to_png(os.path.join(out_dir, name))
@@ -137,10 +226,31 @@ def step(entry):
         pump(0.5)
     if entry.get("js"):
         js(f"{entry['js']}; return true")
+    if entry.get("press"):
+        # A real key through GTK (not a DOM event), so default actions such as a dialog's cancel run.
+        keyval = Gdk.keyval_from_name(entry["press"])
+        keyboard = Gdk.Display.get_default().get_default_seat().get_keyboard()
+        for kind in (Gdk.EventType.KEY_PRESS, Gdk.EventType.KEY_RELEASE):
+            event = Gdk.Event.new(kind)
+            event.key.window = view.get_window()
+            event.key.send_event = 1
+            event.key.keyval = keyval
+            keys = Gdk.Keymap.get_for_display(Gdk.Display.get_default()).get_entries_for_keyval(keyval)
+            event.key.hardware_keycode = keys[1][0].keycode if keys[0] else 0
+            event.key.time = Gtk.get_current_event_time()
+            event.set_device(keyboard)
+            view.event(event)
+            pump(0.05)
+        pump(0.3)
     if entry.get("wait"):
         until(entry["wait"])
     if entry.get("pause"):
         pump(entry["pause"] / 1000)
+    if entry.get("probe"):
+        value = js(f"return ({entry['probe']})")
+        print(f"PROBE {current_theme[0]} {current_screen[0]}: {json.dumps(value, ensure_ascii=False)}", flush=True)
+    if entry.get("burst"):
+        burst(entry["burst"])
     if entry.get("assert"):
         name = entry["assert"]
         result = js(f"return {scenario['invariants'][name]}") or {}
@@ -150,12 +260,34 @@ def step(entry):
             failures.append(f"{current_theme[0]} {name}: {result.get('detail')}")
 
 
+def burst(spec):
+    """A motion as a run of snapshots `every` ms apart (default 40), after `js` starts it."""
+    if spec.get("until"):
+        end = time.time() + 12
+        while js(f"return Boolean({spec['until']})") is not True:
+            if time.time() > end:
+                raise TimeoutError(f"waited for {spec['until']}")
+            context.iteration(False)
+    if spec.get("js"):
+        js(f"{spec['js']}; return true")
+    start = time.time()
+    stamps = []
+    for index in range(spec.get("frames", 10)):
+        due = start + index * spec.get("every", 40) / 1000
+        while time.time() < due:
+            context.iteration(False)
+        stamps.append(round((time.time() - start) * 1000))
+        snapshot(f"webkit-{current_theme[0]}-{current_screen[0]}-{spec.get('name', 'burst')}-{index:02d}.png")
+    print(f"BURST {current_theme[0]} {current_screen[0]} {spec.get('name', 'burst')} at ms {stamps}", flush=True)
+
+
 def load():
     view.load_uri(scenario["url"])
     until(scenario["appReady"], 25)
 
 
 current_theme = [None]
+current_screen = [None]
 
 try:
     for theme in scenario["themes"]:
@@ -164,6 +296,7 @@ try:
         load()
         for screen in scenario["screens"]:
             name = f"webkit-{theme}-{screen['name']}.png"
+            current_screen[0] = screen["name"]
             try:
                 resize(screen.get("viewport") or viewport)
                 for entry in screen["steps"]:

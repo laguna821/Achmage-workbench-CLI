@@ -14,7 +14,7 @@ import { BrowseStart } from "./components/BrowseStart.tsx";
 import { AppearanceContext, DEFAULT_APPEARANCE } from "./appearance.ts";
 import { sessionToOpen } from "./entry.ts";
 
-vi.mock("./components/Transcript.tsx", () => ({ Transcript: (props: { sessionId: string; focusItem?: { itemId: string }; onAnswer: (id: string, decision: "accept") => void }) => <div data-testid="browser-transcript" data-session={props.sessionId} data-item={props.focusItem?.itemId}><button type="button" onClick={() => props.onAnswer("approval-exact", "accept")}>요청 확인</button></div> }));
+vi.mock("./components/Transcript.tsx", () => ({ Transcript: (props: { sessionId: string; head?: React.ReactNode; focusItem?: { itemId: string }; onAnswer: (id: string, decision: "accept") => void }) => <div data-testid="browser-transcript" data-session={props.sessionId} data-item={props.focusItem?.itemId}>{props.head}<button type="button" onClick={() => props.onAnswer("approval-exact", "accept")}>요청 확인</button></div> }));
 vi.mock("./components/Composer.tsx", () => ({ Composer: (props: { disabled: boolean; onSend: (text: string) => Promise<boolean>; onStop: () => void }) => <form aria-label="웹 요청" onSubmit={event => { event.preventDefault(); void props.onSend("이 페이지를 읽어 주세요"); }}><button type="submit" disabled={props.disabled}>요청 보내기</button><button type="button" onClick={props.onStop}>AI 실행 멈추기</button></form> }));
 
 const driverId = "driver-owned";
@@ -36,13 +36,25 @@ afterEach(() => { cleanup(); vi.clearAllTimers(); vi.useRealTimers(); vi.restore
 function fixture(initial: BrowserPage[] = [page()]) {
   let rows = initial, natives = initial.flatMap(row => row.native ? [row.native] : []), jobs: BrowserJob[] = [];
   const profiles = [{ id: "default", name: "기본", createdAt: 1 }];
-  const list = vi.fn(async () => ({ pages: rows, profiles }));
+  const listing = () => ({ pages: rows.filter(row => row.status !== "closed"), profiles, closedPageIds: rows.filter(row => row.closedAt !== undefined).map(row => row.pageId) });
+  const list = vi.fn(async () => listing());
   const profile = vi.fn(async (name: string) => ({ id: "profile-new", name, createdAt: 2 }));
   const create = vi.fn(async (input: BrowserPageCreate): Promise<BrowserPage> => {
     const row = { ...page(input.requestId), workspaceId: input.workspaceId, url: input.url, profileId: input.profileId, native: null, status: "opening" as const };
     rows = [...rows, row]; return row;
   });
   const session = vi.fn(async (_pageId: string, _parent: string | null) => child);
+  const restore = vi.fn(async (pageId: string, nextDriver: string): Promise<BrowserPage> => {
+    const before = rows.find(row => row.pageId === pageId)!;
+    if (before.closedAt) throw new Error("closed");
+    const next: BrowserPage = { ...before, status: "opening", native: null, driverId: nextDriver, error: null, control: { owner: "human", generation: before.control.generation + 1 } };
+    rows = rows.map(row => row.pageId === pageId ? next : row); return next;
+  });
+  const close = vi.fn(async (pageId: string): Promise<BrowserPage> => {
+    const before = rows.find(row => row.pageId === pageId)!;
+    const next: BrowserPage = { ...before, status: "closed", closedAt: Date.now(), native: null };
+    rows = rows.map(row => row.pageId === pageId ? next : row); return next;
+  });
   const control = vi.fn(async (pageId: string, owner: string, generation: number): Promise<BrowserPage> => {
     const before = rows.find(row => row.pageId === pageId)!;
     const next = { ...before, control: { owner, generation: generation + 1 }, native: { ...before.native!, control: { owner, generation: generation + 1 } } };
@@ -53,18 +65,19 @@ function fixture(initial: BrowserPage[] = [page()]) {
   const poll = vi.fn(async (input: BrowserDriverPoll): Promise<BrowserDriverReply> => {
     rows = rows.map(row => {
       const live = input.pages.find(native => native.pageId === row.pageId);
-      return row.status === "interrupted" ? row : live ? { ...row, native: live, url: live.url, status: "ready", control: live.control } : row.status === "ready" ? { ...row, native: null, status: "interrupted", error: "native gone" } : row;
+      return row.status === "interrupted" || row.status === "closed" ? row : live ? { ...row, native: live, url: live.url, status: "ready", control: live.control } : row.status === "ready" ? { ...row, native: null, status: "interrupted", error: "native gone" } : row;
     });
-    const batch = jobs; jobs = []; return { pages: rows, profiles, jobs: batch };
+    const batch = jobs; jobs = []; return { ...listing(), jobs: batch };
   });
   const execute = vi.fn(async (job: BrowserJob): Promise<BrowserJobResult> => ({ id: job.id, pageId: job.pageId }));
   const native = vi.fn(async (command: BrowserNativeCommand): Promise<unknown> => {
     if (command.kind === "list") return natives;
+    if (command.kind === "close") { natives = natives.filter(row => row.pageId !== command.pageId); return null; }
     if (command.kind === "execute") return execute(command.job);
     if (command.kind === "create") { const next = { ...nativePage(command.pageId), url: command.url, profileId: command.profileId, control: command.control }; natives = [...natives, next]; return next; }
     return null;
   });
-  const endpoint = { list, profile, create, session, control, action, receipt, poll };
+  const endpoint = { list, profile, create, restore, close, session, control, action, receipt, poll };
   const browser = new SharedBrowser(endpoint, native as BrowserNative, driverId);
   const api = { sharedBrowser: endpoint, items: vi.fn(async () => ({ items: [], seq: 1 })) } as unknown as Api;
   const send = vi.fn(async (_session: Session, _text: string) => true), interrupt = vi.fn(), answer = vi.fn();
@@ -79,9 +92,9 @@ it("automatically hands off on send, sends only to the page child, and keeps the
   const f = fixture(); await f.browser.poll();
   const onNew = vi.fn(), onOpenSession = vi.fn();
   await act(async () => render(<BrowserView browser={f.browser} api={f.api} state={f.state} pageId="page-a" visible parentSessionId="main" actions={f.actions} onNew={onNew} onClosed={() => {}} onTranscript={() => {}} onOpenSession={onOpenSession} focusItem={null} onFocusDone={() => {}} />));
-  expect(screen.queryByRole("complementary", { name: "웹 탭 AI 대화" })).toBeNull();
+  expect(screen.queryByRole("region", { name: "웹 AI 대화" })).toBeNull();
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "AI에게 요청" })));
-  expect(f.endpoint.session).toHaveBeenCalledWith("page-a", "main"); expect(f.endpoint.control).not.toHaveBeenCalled();
+  expect(f.endpoint.session).toHaveBeenCalledWith("page-a", "main", undefined); expect(f.endpoint.control).not.toHaveBeenCalled();
   expect((screen.getByRole("button", { name: "요청 보내기" }) as HTMLButtonElement).disabled).toBe(false);
   expect(screen.queryByRole("button", { name: "AI에게 맡기기" })).toBeNull();
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "요청 보내기" })));
@@ -96,7 +109,9 @@ it("automatically hands off on send, sends only to the page child, and keeps the
   expect(f.endpoint.control).toHaveBeenLastCalledWith("page-a", "human", 1);
   expect((screen.getByRole("button", { name: "이전 페이지" }) as HTMLButtonElement).disabled).toBe(false);
   expect(f.state.works.work.activeSessionId).toBe("main"); expect(sessionToOpen(f.state, work)?.id).toBe("main");
-  fireEvent.click(screen.getByRole("button", { name: "원래 대화 열기" })); expect(onOpenSession).toHaveBeenCalledWith(main);
+  // The conversation column's head: whose it is, and the conversation it was started from.
+  expect(screen.getByRole("region", { name: "웹 AI 대화" }).querySelector("h1")?.textContent).toBe("웹 AI · 원본 웹 페이지");
+  fireEvent.click(screen.getByTitle("원래 대화 열기")); expect(onOpenSession).toHaveBeenCalledWith(main);
   fireEvent.click(screen.getByRole("button", { name: "웹 탭 메뉴" }));
   fireEvent.click(screen.getByRole("menuitem", { name: "프로필과 웹 탭 설정…" })); expect(onNew).toHaveBeenCalledWith({ workspaceId: "space", profileId: "default", url: "https://example.com/" });
 });
@@ -148,6 +163,28 @@ it("uses measured native bounds, hides pages for DOM overlays and tab removal, a
   await f.browser.poll(); expect(f.native.mock.calls.some(call => call[0].kind === "create")).toBe(false); surface.remove();
 });
 
+it("keeps pages visible beside side-chat menus and forms, hides only overlaps, and still blocks for modals", async () => {
+  const f = fixture([page("page-a"), page("page-b")]); await f.browser.poll();
+  const left = document.createElement("div"), right = document.createElement("div"), popup = document.createElement("div");
+  document.body.append(left, right, popup); popup.className = "popover"; popup.setAttribute("role", "menu");
+  vi.spyOn(left, "getBoundingClientRect").mockReturnValue(new DOMRect(10, 50, 300, 500));
+  vi.spyOn(right, "getBoundingClientRect").mockReturnValue(new DOMRect(330, 50, 300, 500));
+  vi.spyOn(popup, "getClientRects").mockImplementation(() => [popup.getBoundingClientRect()] as unknown as DOMRectList);
+  const bounds = vi.spyOn(popup, "getBoundingClientRect").mockReturnValue(new DOMRect(650, 150, 300, 350));
+  f.browser.surface("left", "page-a", left, true); f.browser.surface("right", "page-b", right, true);
+  const visible = () => f.native.mock.calls.map(call => call[0]).filter((command): command is Extract<BrowserNativeCommand, { kind: "present" }> => command.kind === "present").at(-1)!.pages.map(p => p.visible);
+  await f.browser.present(); expect(visible()).toEqual([true, true]);
+  popup.setAttribute("role", "dialog"); // Custom model ID is a local form, not a modal.
+  await f.browser.present(); expect(visible()).toEqual([true, true]);
+  bounds.mockReturnValue(new DOMRect(500, 150, 300, 350));
+  await f.browser.present(); expect(visible()).toEqual([true, false]);
+  popup.setAttribute("aria-modal", "true");
+  await f.browser.present(); expect(visible()).toEqual([false, false]);
+  popup.hidden = true;
+  await f.browser.present(); expect(visible()).toEqual([true, true]);
+  left.remove(); right.remove(); popup.remove();
+});
+
 it("creates one native page after a lost host response, offers profiles, and preserves tab identity when moved", async () => {
   const f = fixture([]); await f.browser.poll();
   f.endpoint.create.mockImplementationOnce(async input => {
@@ -173,7 +210,7 @@ it("creates one native page after a lost host response, offers profiles, and pre
   expect(createActions({ workId: "work", workspaceId: "space", folderId: null }).find(action => action.kind === "browser")?.label).toBe("새 웹 탭");
 });
 
-it("closes the native page only for an explicit close guard, with takeover before close and no duplicate footer close", async () => {
+it("closes only for an explicit tab close, without requiring a working page script or replaying an action", async () => {
   const controlled = { owner: "child", generation: 4 };
   const f = fixture([{ ...page(), sessionId: "child", control: controlled, native: { ...nativePage(), control: controlled } }]);
   await f.browser.poll();
@@ -185,12 +222,28 @@ it("closes the native page only for an explicit close guard, with takeover befor
   mounted.unmount(); expect(f.endpoint.action).not.toHaveBeenCalled(); expect(holder.guard).toBeNull();
   await act(async () => { mounted = render(<BrowserView browser={f.browser} api={f.api} state={f.state} pageId="page-a" visible parentSessionId="main" actions={f.actions} onNew={() => {}} onClosed={() => {}} onLeaveGuard={capture} onTranscript={() => {}} onOpenSession={() => {}} focusItem={null} onFocusDone={() => {}} />); });
   await act(async () => { await Promise.all([holder.guard!("close"), f.browser.close("page-a")]); });
-  expect(f.endpoint.control).toHaveBeenCalledWith("page-a", "human", 4);
-  expect(f.endpoint.control.mock.invocationCallOrder[0]!).toBeLessThan(f.endpoint.action.mock.invocationCallOrder[0]!);
-  expect(f.endpoint.action).toHaveBeenCalledWith("page-a", expect.any(String), { kind: "close" });
-  await holder.guard!("close"); expect(f.endpoint.action).toHaveBeenCalledOnce(); expect(f.browser.getState().pages[0]?.status).toBe("closed");
+  expect(f.endpoint.close).toHaveBeenCalledOnce();
+  expect(f.native).toHaveBeenCalledWith({ kind: "close", pageId: "page-a", profileId: "default" });
+  expect(f.endpoint.control).not.toHaveBeenCalled(); expect(f.endpoint.action).not.toHaveBeenCalled();
+  await holder.guard!("close"); expect(f.endpoint.close).toHaveBeenCalledOnce(); expect(f.browser.getState().closedPageIds).toContain("page-a");
 });
 
+
+it.each(["interrupted", "closed"] as const)("automatically restores an existing %s tab with its URL, profile and child conversation", async status => {
+  const prior = { ...page(), status, native: null, sessionId: child.id, driverId: "previous-driver", profileId: "research-profile", url: "https://example.com/saved-article" };
+  const f = fixture([prior]); await f.browser.poll();
+  await act(async () => { render(<BrowserView browser={f.browser} api={f.api} state={f.state} pageId="page-a" visible parentSessionId="main" actions={f.actions} onNew={() => {}} onClosed={() => {}} onTranscript={() => {}} onOpenSession={() => {}} focusItem={null} onFocusDone={() => {}} />); });
+  await act(settle);
+  expect(f.endpoint.restore).toHaveBeenCalledOnce();
+  expect(f.endpoint.create).not.toHaveBeenCalled();
+  expect(f.browser.getState().pages[0]).toMatchObject({ pageId: "page-a", status: "ready", profileId: prior.profileId, url: prior.url, sessionId: child.id });
+  expect(screen.getByRole("textbox", { name: "현재 웹 주소" })).toHaveProperty("value", prior.url);
+  expect(f.endpoint.action).not.toHaveBeenCalled();
+  await act(async () => { await f.browser.close("page-a"); await f.browser.poll(); });
+  expect(f.browser.getState().pages).toEqual([]);
+  expect(f.browser.getState().closedPageIds).toEqual(["page-a"]);
+  await expect(f.browser.restore("page-a")).rejects.toThrow("닫은 웹 탭");
+});
 
 it("opens a direct blank tab with the inherited workspace/profile and searches without a dialog", async () => {
   const f = fixture([]); await f.browser.poll();
@@ -223,9 +276,9 @@ it("keeps the composer available after human takeover and does not send when con
 
 it("hands a queued request to the same page session only after control is granted", async () => {
   const f = fixture([{ ...page(), sessionId: "child" }]); await f.browser.poll();
-  const queued = { ...child, queued: [{ id: "q1", text: "검색해 주세요", held: true }] } as Session;
+  const queued = { ...child, queued: [{ id: "q1", text: "검색해 주세요", refs: [], create: null, at: 3, held: true }] } as Session;
   await act(async () => render(<BrowserView browser={f.browser} api={f.api} state={{ ...f.state, sessions: { ...f.state.sessions, child: queued } }} pageId="page-a" visible parentSessionId="main" actions={f.actions} onNew={() => {}} onClosed={() => {}} onTranscript={() => {}} onOpenSession={() => {}} focusItem={{ sessionId: "child", itemId: "a", nonce: 1 }} onFocusDone={() => {}} />));
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "보내기" })));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "지금 보내기" })));
   expect(f.endpoint.control).toHaveBeenCalledWith("page-a", "child", 0);
   expect(f.actions.queued.send).toHaveBeenCalledWith(queued, "q1");
   expect(f.endpoint.control.mock.invocationCallOrder[0]!).toBeLessThan(vi.mocked(f.actions.queued.send).mock.invocationCallOrder[0]!);
@@ -270,7 +323,7 @@ it("routes blank-tab Ask to the main task callback without creating a page child
   const onStart = vi.fn(async () => true);
   const appearance = { lookOf: (provider: "codex" | "claude") => DEFAULT_APPEARANCE[provider].light } as React.ContextType<typeof AppearanceContext>;
   await act(async () => render(<AppearanceContext.Provider value={appearance}><BrowserView browser={f.browser} api={f.api} state={f.state} pageId="page-a" visible parentSessionId="main" actions={f.actions} onNew={() => {}} onClosed={() => {}} onStart={onStart} engine="codex" onTranscript={() => {}} onOpenSession={() => {}} focusItem={null} onFocusDone={() => {}} /></AppearanceContext.Provider>));
-  expect(screen.queryByRole("complementary", { name: "웹 탭 AI 대화" })).toBeNull();
+  expect(screen.queryByRole("region", { name: "웹 AI 대화" })).toBeNull();
   expect(screen.queryByRole("button", { name: "AI에게 요청" })).toBeNull();
   expect(screen.getByRole("search")).toBeTruthy();
   fireEvent.click(screen.getByRole("tab", { name: "Ask" }));
@@ -278,4 +331,20 @@ it("routes blank-tab Ask to the main task callback without creating a page child
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "요청 보내기" })));
   expect(onStart).toHaveBeenCalledWith("이 페이지를 읽어 주세요", "claude", { model: null, effort: null });
   expect(f.endpoint.session).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
+});
+
+it("gives way to a sheet laid over the work (the narrow right sidebar and its scrim) and comes back when it goes", async () => {
+  const f = fixture(); await f.browser.poll();
+  const surface = document.createElement("div"); document.body.append(surface);
+  vi.spyOn(surface, "getBoundingClientRect").mockReturnValue(new DOMRect(10, 50, 600, 500));
+  f.browser.surface("slot", "page-a", surface, true);
+  const visible = () => f.native.mock.calls.map(call => call[0]).filter((command): command is Extract<BrowserNativeCommand, { kind: "present" }> => command.kind === "present").at(-1)!.pages[0]!.visible;
+  await f.browser.present(); expect(visible()).toBe(true);
+  const sheet = document.createElement("aside"); sheet.setAttribute("data-covers-web", ""); document.body.append(sheet);
+  vi.spyOn(sheet, "getClientRects").mockReturnValue([new DOMRect(400, 50, 280, 500)] as unknown as DOMRectList);
+  vi.spyOn(sheet, "getBoundingClientRect").mockReturnValue(new DOMRect(400, 50, 280, 500));
+  await f.browser.present(); expect(visible()).toBe(false);
+  sheet.remove();
+  await f.browser.present(); expect(visible()).toBe(true);
+  surface.remove();
 });

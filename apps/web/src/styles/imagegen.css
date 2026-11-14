@@ -217,7 +217,7 @@
 .draw-form textarea {
   width: 100%;
   padding: 7px 9px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--field-line);
   border-radius: var(--r-md);
   background: var(--bg);
   color: var(--text);
@@ -262,12 +262,6 @@
   color: var(--muted);
 }
 
-/* On a request that asked for a picture. */
-.steer-tag.draw-tag {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
 /* A picture in the conversation. */
 .image-card {
   display: flex;
@@ -280,39 +274,6 @@
   border-radius: var(--r-lg);
   background: var(--surface);
   box-shadow: 0 2px 8px color-mix(in srgb, var(--heading) 5%, transparent);
-}
-
-/* In the drawer under a document: the picture small on the left, the rest beside it. */
-.image-card.compact {
-  display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
-  align-items: start;
-  column-gap: 12px;
-  row-gap: 4px;
-  width: min(100%, 520px);
-  padding: 8px 10px;
-}
-
-.image-card.compact > .image-card-picture,
-.image-card.compact > .image-card-wait,
-.image-card.compact > .image-card-error {
-  grid-column: 1;
-  grid-row: 1 / span 4;
-}
-
-.image-card.compact > .image-card-head,
-.image-card.compact > .image-card-brief,
-.image-card.compact > .image-card-via,
-.image-card.compact > .image-card-actions {
-  grid-column: 2;
-}
-
-.image-card.compact .image-card-wait {
-  min-height: 72px;
-}
-
-.image-card.compact .image-card-brief {
-  -webkit-line-clamp: 2;
 }
 
 .image-card-head {
@@ -356,10 +317,6 @@
   height: auto;
   max-height: 420px;
   object-fit: contain;
-}
-
-.image-card.compact .image-card-picture img {
-  max-height: 96px;
 }
 
 .image-card-wait {
@@ -529,7 +486,7 @@
 .inline-draw textarea {
   width: 100%;
   padding: 8px 10px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--field-line);
   border-radius: var(--r-md);
   background: var(--bg);
   color: var(--text);
@@ -544,7 +501,7 @@
   min-width: 0;
   height: 32px;
   padding: 0 8px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--field-line);
   border-radius: var(--r-md);
   background: var(--surface);
   color: var(--text);

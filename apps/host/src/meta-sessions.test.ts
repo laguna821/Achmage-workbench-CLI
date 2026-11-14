@@ -1,8 +1,8 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import { isUnseen, type ApprovalDecision, type ProviderStatus, type Session, type Work } from "@workbench/contracts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { isUnseen, type ApprovalDecision, type NativeTaskControl, type NativeTaskIdentity, type NativeTaskSnapshot, type ProviderStatus, type Session, type Work } from "@workbench/contracts";
 import { EventBus } from "./bus.ts";
 import { HttpError, SessionManager, snippetOf } from "./sessions.ts";
 import { Store } from "./store.ts";
@@ -99,6 +99,107 @@ describe("folders and listing", () => {
     const seen = manager.updateSession(session.id, { seen: true });
     expect(isUnseen(seen)).toBe(false);
     expect(isUnseen(manager.updateSession(session.id, { seen: false }))).toBe(true);
+  });
+
+  it("refuses requests to an archived conversation until it is brought back", async () => {
+    const { manager } = setup();
+    const work = manager.createWork({ title: "w" });
+    const session = manager.createSession(work.id, { provider: "claude" });
+    await send(manager, session.id, "첫 질문");
+    manager.updateSession(session.id, { archived: true });
+    await expect(send(manager, session.id, "보관한 뒤의 질문")).rejects.toMatchObject({ status: 409, code: "archived" });
+    await expect(manager.send(session.id, `r${++request}`, "끝나면", [], null, null, "queue")).rejects.toMatchObject({ code: "archived" });
+    expect(manager.snapshot().sessions.find((entry) => entry.id === session.id)!.queued).toEqual([]);
+    manager.updateSession(session.id, { archived: false });
+    await expect(send(manager, session.id, "되돌린 뒤의 질문")).resolves.toBeTruthy();
+  });
+
+  it("keeps a waiting request in place when sending it to an archived conversation is refused", async () => {
+    const { manager } = setup();
+    const work = manager.createWork({ title: "w" });
+    const session = manager.createSession(work.id, { provider: "claude" });
+    const waiting = { id: "q1", text: "다음에 할 일", refs: [], create: null, at: 1, held: true };
+    manager.sink.updateSession(session.id, { queued: [waiting] });
+    manager.updateSession(session.id, { archived: true });
+    await expect(manager.sendQueued(session.id, "q1")).rejects.toMatchObject({ status: 409, code: "archived" });
+    expect(manager.snapshot().sessions.find((entry) => entry.id === session.id)!.queued).toEqual([waiting]);
+    manager.updateSession(session.id, { archived: false });
+    await expect(manager.sendQueued(session.id, "q1")).resolves.toBeTruthy();
+    expect(manager.snapshot().sessions.find((entry) => entry.id === session.id)!.queued).toEqual([]);
+  });
+
+  it("answers no approval of an archived conversation, and the approval still waits after 되돌리기", async () => {
+    const { manager } = setup();
+    const work = manager.createWork({ title: "w" });
+    const session = manager.createSession(work.id, { provider: "claude" });
+    const plan = { kind: "approval" as const, id: "plan:p1", title: "계획", detail: "1. 읽기", reason: null, decision: null, at: 1, plan: true };
+    const tool = { kind: "approval" as const, id: "ap1", title: "ls -la", detail: null, reason: null, decision: null, at: 2 };
+    manager.sink.upsertItem(session.id, plan);
+    manager.sink.upsertItem(session.id, tool);
+    manager.updateSession(session.id, { archived: true });
+    for (const [itemId, decision] of [["plan:p1", "accept"], ["plan:p1", "decline"], ["ap1", "accept"], ["ap1", "decline"]] as const) {
+      await expect(manager.answerApproval(session.id, itemId, decision)).rejects.toMatchObject({ status: 409, code: "archived" });
+    }
+    const waitingNow = () => manager.items(session.id).items.filter((item) => item.kind === "approval").map((item) => item.kind === "approval" ? [item.id, item.decision] : null);
+    expect(waitingNow()).toEqual([["plan:p1", null], ["ap1", null]]);
+    manager.updateSession(session.id, { archived: false });
+    await manager.answerApproval(session.id, "plan:p1", "decline");
+    expect(waitingNow()).toEqual([["plan:p1", "decline"], ["ap1", null]]);
+  });
+
+  it("starts no compaction in an archived conversation", async () => {
+    const { manager, engine } = setup();
+    const compact = vi.fn(async () => true);
+    Object.assign(engine, { compact });
+    const work = manager.createWork({ title: "w" });
+    const session = manager.createSession(work.id, { provider: "claude" });
+    manager.sink.updateSession(session.id, { nativeSessionId: "native-1" });
+    manager.updateSession(session.id, { archived: true });
+    const now = () => manager.snapshot().sessions.find((entry) => entry.id === session.id)!;
+    const before = now();
+    await expect(manager.compact(session.id)).rejects.toMatchObject({ status: 409, code: "archived" });
+    expect(compact).not.toHaveBeenCalled();
+    expect(now()).toEqual(before);
+    manager.updateSession(session.id, { archived: false });
+    await expect(manager.compact(session.id)).resolves.toEqual({ ok: true });
+    expect(compact).toHaveBeenCalledTimes(1);
+  });
+
+  it("hands no native-task control to the engine of an archived conversation", async () => {
+    const { manager, engine } = setup();
+    const identity: NativeTaskIdentity = { provider: "claude", parentNativeSessionId: "native-1", childId: "child-1", generation: "g1", nativeRunId: null };
+    const child: NativeTaskSnapshot = {
+      identity, parentRequestId: null, parentChildId: null, title: "하위 작업", state: "running", preview: null, activity: null, updatedAt: 1,
+      sourceItemId: null, approvalIds: [], capabilities: { observe: true, send: false, queue: false, steer: false, stop: true, approve: false }, controlDetail: "",
+    };
+    const control = vi.fn(async () => {});
+    Object.assign(engine, { nativeTasks: () => [child], controlNativeTask: control });
+    const work = manager.createWork({ title: "w" });
+    const session = manager.createSession(work.id, { provider: "claude" });
+    manager.sink.updateSession(session.id, { nativeSessionId: "native-1" });
+    const task = manager.tasks.list().tasks.find((entry) => entry.nativeTask?.childId === "child-1")!;
+    const target = { hostId: task.hostId, workspaceId: task.workspaceId, sessionId: task.sessionId, nativeSessionId: task.nativeSessionId, runId: task.runId, parentRunId: task.parentRunId, executorKind: task.executorKind, nativeTask: task.nativeTask };
+    manager.updateSession(session.id, { archived: true });
+    // The task command (paired devices, the task list) does not find an archived conversation.
+    await expect(manager.tasks.command({ commandId: "c1", kind: "stop", target })).rejects.toMatchObject({ status: 409 });
+    // The gateway's own step that hands the control to the engine refuses as every other route does.
+    const { hooks } = manager.tasks as unknown as { hooks: { controlNative(session: Session, target: NativeTaskIdentity, command: NativeTaskControl): Promise<void> } };
+    const archived = manager.snapshot().sessions.find((entry) => entry.id === session.id)!;
+    await expect(hooks.controlNative(archived, identity, { kind: "stop", commandId: "c2" })).rejects.toMatchObject({ status: 409, code: "archived" });
+    expect(control).not.toHaveBeenCalled();
+    manager.updateSession(session.id, { archived: false });
+    expect((await manager.tasks.command({ commandId: "c3", kind: "stop", target })).status).toBe("completed");
+    expect(control).toHaveBeenCalledTimes(1);
+  });
+
+  it("never makes an archived conversation the project's active one", () => {
+    const { manager } = setup();
+    const work = manager.createWork({ title: "w" });
+    const live = manager.createSession(work.id, { provider: "claude" });
+    const old = manager.createSession(work.id, { provider: "claude" });
+    manager.updateSession(old.id, { archived: true });
+    expect(() => manager.updateWork(work.id, { activeSessionId: old.id })).toThrowError(expect.objectContaining({ status: 409, code: "archived" }));
+    expect(manager.updateWork(work.id, { activeSessionId: live.id }).activeSessionId).toBe(live.id);
   });
 
   it("refuses to archive what is still working", () => {

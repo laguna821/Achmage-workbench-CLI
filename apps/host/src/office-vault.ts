@@ -9,25 +9,39 @@ export type OfficeVaultCodec = { seal(plain: string): string; open(sealed: strin
 const unavailable = () => new HttpError(503, "office_vault_unavailable", "운영체제의 보안 저장소를 사용할 수 없습니다. 저장소 잠금을 해제한 뒤 다시 시도해 주세요. 키를 평문으로 저장하지 않았습니다.");
 const legacy = () => new HttpError(409, "office_legacy_secret", "이전 Electron 앱에서 봉인한 키입니다. 기존 값은 보존했으며 키를 다시 입력하거나 이행 절차를 사용해야 합니다.");
 
-function sealOfficeSecret(plain: string, entry: OfficeVaultKey) {
-  if (!plain || plain.startsWith("sealed:v1:")) return plain;
+/**
+ * What else the same master key seals, besides Office AI keys: the messenger channel's tokens and
+ * the credential store. The purpose is part of the envelope and of what the seal authenticates, so
+ * a value sealed for one use does not open as another (nor as an Office key, nor the reverse).
+ */
+export type VaultPurpose = "channel" | "cred";
+const label = (entry: OfficeVaultKey, purpose?: VaultPurpose) => `${OFFICE_SEALED_PREFIX}${entry.id}${purpose ? `:${purpose}` : ""}`;
+/** What the seal authenticates: the envelope's label, and where the value belongs (`bind`, never written into the envelope). */
+const aad = (entry: OfficeVaultKey, purpose?: VaultPurpose, bind?: string) => Buffer.from(`${label(entry, purpose)}${bind ? `\n${bind}` : ""}`);
+
+function sealOfficeSecret(plain: string, entry: OfficeVaultKey, purpose?: VaultPurpose, bind?: string) {
+  // An Office key that is already sealed stays as it is. For another purpose every value is sealed,
+  // whatever it looks like (a person's secret may begin with any text).
+  if (!plain || (!purpose && plain.startsWith("sealed:v1:"))) return plain;
   const nonce = randomBytes(12), cipher = createCipheriv("aes-256-gcm", entry.key, nonce);
-  cipher.setAAD(Buffer.from(`${OFFICE_SEALED_PREFIX}${entry.id}`));
+  cipher.setAAD(aad(entry, purpose, bind));
   const bytes = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
-  return `${OFFICE_SEALED_PREFIX}${entry.id}:${nonce.toString("base64url")}.${bytes.toString("base64url")}.${cipher.getAuthTag().toString("base64url")}`;
+  return `${label(entry, purpose)}:${nonce.toString("base64url")}.${bytes.toString("base64url")}.${cipher.getAuthTag().toString("base64url")}`;
 }
 
 /** The same codec serves the gateway and the original CLI's synchronous reveal contract. */
-export function openOfficeSecret(sealed: string, entry: OfficeVaultKey | null) {
+export function openOfficeSecret(sealed: string, entry: OfficeVaultKey | null, purpose?: VaultPurpose, bind?: string) {
   if (!sealed.startsWith(OFFICE_SEALED_PREFIX)) throw legacy();
-  const match = /^([a-f0-9]{32}):([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/.exec(sealed.slice(OFFICE_SEALED_PREFIX.length));
+  const match = (purpose
+    ? new RegExp(`^([a-f0-9]{32}):${purpose}:([A-Za-z0-9_-]+)\\.([A-Za-z0-9_-]+)\\.([A-Za-z0-9_-]+)$`)
+    : /^([a-f0-9]{32}):([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/).exec(sealed.slice(OFFICE_SEALED_PREFIX.length));
   if (!match || sealed.length > 200_000) throw new HttpError(422, "office_secret_invalid", "보관된 키의 형식이 올바르지 않습니다. 기존 값은 변경하지 않았습니다.");
   if (!entry || entry.id !== match[1]) throw unavailable();
   try {
     const nonce = Buffer.from(match[2]!, "base64url"), body = Buffer.from(match[3]!, "base64url"), tag = Buffer.from(match[4]!, "base64url");
     if (nonce.length !== 12 || tag.length !== 16) throw new Error("invalid envelope");
     const decipher = createDecipheriv("aes-256-gcm", entry.key, nonce);
-    decipher.setAAD(Buffer.from(`${OFFICE_SEALED_PREFIX}${entry.id}`)); decipher.setAuthTag(tag);
+    decipher.setAAD(aad(entry, purpose, bind)); decipher.setAuthTag(tag);
     return Buffer.concat([decipher.update(body), decipher.final()]).toString("utf8");
   } catch { throw new HttpError(422, "office_secret_invalid", "보관된 키를 확인하지 못했습니다. 기존 값은 변경하지 않았습니다."); }
 }
@@ -89,6 +103,20 @@ export class OfficeVault {
   async open(sealed: string) {
     if (!sealed.startsWith(OFFICE_SEALED_PREFIX)) throw legacy();
     return openOfficeSecret(sealed, await this.key(false));
+  }
+  /**
+   * Seal for another use of the same master key (see `VaultPurpose`); never returns the plain value.
+   * `bind` (a credential's entry and field) is authenticated with it, so the sealed value opens only
+   * where it was sealed for.
+   */
+  async sealFor(purpose: VaultPurpose, plain: string, bind?: string) {
+    if (!plain) return "";
+    const entry = await this.key(true); if (!entry) throw unavailable();
+    return sealOfficeSecret(plain, entry, purpose, bind);
+  }
+  async openFor(purpose: VaultPurpose, sealed: string, bind?: string) {
+    if (!sealed.startsWith(OFFICE_SEALED_PREFIX)) throw new HttpError(422, "office_secret_invalid", "보관된 값의 형식이 올바르지 않습니다. 기존 값은 변경하지 않았습니다.");
+    return openOfficeSecret(sealed, await this.key(false), purpose, bind);
   }
   /** Prepare once for upstream controllers whose durable record port is synchronous. */
   async prepareCodec(create: boolean): Promise<OfficeVaultCodec> {

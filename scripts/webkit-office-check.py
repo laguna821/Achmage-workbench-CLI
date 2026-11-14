@@ -317,9 +317,9 @@ def tick():
         text = frame.get("text") or ""
         if state["phase"] == "app" and value.get("docs"):
             evaluate(
-                """document.querySelector('.docs-button').click();
+                """document.querySelector('.note-head-more').click();
                    setTimeout(() => {
-                     const item = [...document.querySelectorAll('.docs-menu *')].find((el) => el.children.length === 0 && el.textContent.trim() === %s);
+                     const item = [...document.querySelectorAll('.note-menu *')].find((el) => el.children.length === 0 && el.textContent.trim() === %s);
                      item && item.click();
                    }, 300);
                    return { clicked: true };""" % json.dumps(DOC_NAME),
@@ -349,7 +349,7 @@ def tick():
             GLib.timeout_add(800, lambda: snapshot_then_quit() and False)
 
     evaluate(
-        """return { docs: Boolean(document.querySelector('.docs-button')),
+        """return { docs: Boolean(document.querySelector('.note-head-more')),
                     status: (document.querySelector('.save-state') || {}).textContent || null,
                     frame: window.__frame };""",
         on_state,

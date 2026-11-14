@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Artifact, Folder, Session, Work } from "@workbench/contracts";
 import { initialState, type State } from "./state.ts";
-import { EMPTY_OPEN, between, holds, linkPair, moveFor, nowSessions, nudge, pinnedItems, toggleWork, treeRows, zoneAt, type Row } from "./tree.ts";
+import { EMPTY_OPEN, between, docAgentLabel, docOpenTarget, holds, leadAgent, linkPair, moveFor, nowSessions, nudge, pinnedItems, toggleWork, treeRows, zoneAt, type Row } from "./tree.ts";
 
 const folder = (id: string, parentId: string | null, sort: number, archivedAt: number | null = null): Folder => ({ id, parentId, name: id, sort, archivedAt });
 const work = (id: string, folderId: string | null, sort: number, extra: Partial<Work> = {}): Work => ({
@@ -62,7 +62,7 @@ describe("tree rows", () => {
     [folder("강의", null, 0), folder("2026-2", "강의", 0), folder("보관됨", null, 1, 5)],
     [work("7주차", "2026-2", 2), work("8주차", "2026-2", 1), work("숨은", "보관됨", 0), work("메모", null, 0)],
     [session("s1", "7주차", 1), session("s2", "7주차", 2), session("s3", "7주차", 3, { archivedAt: 9 }), session("solo", "8주차", 1)],
-    [{ id: "d1", workId: "7주차", name: "강의안.md", updatedAt: 3 }],
+    [{ id: "d1", workId: "7주차", name: "강의안.md", path: "/w/7주차/강의안.md", updatedAt: 3 }],
   );
 
   it("lists folders, works in their order and leaves archived things (and what is inside them) out", () => {
@@ -76,7 +76,7 @@ describe("tree rows", () => {
     expect(ids(rows)).not.toContain("        session:s3");
     expect(rows.find((row) => row.id === "8주차")).toMatchObject({ expandable: true });
     expect(treeRows(state, EMPTY_OPEN, "manual", "8주차").some((row) => row.type === "session" && row.id === "solo")).toBe(true);
-    expect(rows.find((row) => row.id === "chats:7주차")).toMatchObject({ type: "section", label: "채팅 · 2" });
+    expect(rows.find((row) => row.id === "chats:7주차")).toMatchObject({ type: "section", kind: "chat", label: "대화", count: 2 });
     const folded = toggleWork(EMPTY_OPEN, "7주차", true);
     expect(ids(treeRows(state, folded, "manual", "7주차"))).not.toContain("        session:s1");
     expect(ids(treeRows(state, toggleWork(folded, "7주차", false), "manual", "7주차"))).toContain("        session:s1");
@@ -98,6 +98,67 @@ describe("tree rows", () => {
     expect([now.attention, now.running, now.unseen].map((list) => list.map((entry) => entry.id))).toEqual([["ask"], ["run"], ["new"]]);
     expect(nowSessions(busy, "new").unseen).toEqual([]);
     expect(pinnedItems(busy)).toMatchObject({ works: [{ id: "w" }], sessions: [{ id: "read" }] });
+  });
+});
+
+describe("kinds under a project", () => {
+  // The user's case: six documents, four of them with a document AI, one main chat, one web tab.
+  const docs = ["a", "b", "c", "d", "e", "f"].map((id, index) => ({ id: `doc-${id}`, workId: "w", name: `${id}.md`, path: `/w/${id}.md`, format: "markdown", revision: 1, updatedAt: 10 - index }) as Partial<Artifact>);
+  const agent = (id: string, artifactId: string, sort: number, extra: Partial<Session> = {}) =>
+    session(id, "w", sort, { purpose: `${artifactId} · 문서 AI`, documentAgent: { artifactId, parentSessionId: "main" }, ...extra });
+  const state = stateOf([], [work("w", null, 0)], [
+    session("main", "w", 1),
+    agent("ai-a", "doc-a", 2, { previewAt: 10, seenAt: 5 }),
+    agent("ai-b", "doc-b", 3, { provider: "codex" }),
+    agent("ai-c", "doc-c", 4),
+    agent("ai-d", "doc-d", 5, { status: "running" }),
+    agent("gone", "doc-gone", 6, { purpose: "옛 메모.md · 문서 AI" }),
+    session("web", "w", 7, { pageAgent: { pageId: "p", parentSessionId: "main" } }),
+  ], docs);
+  const open = { ...EMPTY_OPEN, openWorks: ["w"], openDocs: ["w"] };
+  const rows = treeRows(state, open, "manual", null);
+
+  it("groups a project as 대화 · 문서 · 웹, in that order, with counts", () => {
+    const groups = rows.filter((row) => row.type === "section" || row.type === "docs").map((row) => (row.type === "section" ? `${row.label} ${row.count}` : `문서 ${row.count}`));
+    expect(groups).toEqual(["대화 2", "문서 6", "웹 1"]);
+  });
+
+  it("draws six document rows and no row of their own for the four document AIs", () => {
+    const docRows = rows.filter((row) => row.type === "doc");
+    expect(docRows).toHaveLength(6);
+    expect(docRows.filter((row) => row.type === "doc" && row.agents.length).map((row) => row.id)).toEqual(["doc-a", "doc-b", "doc-c", "doc-d"]);
+    for (const id of ["ai-a", "ai-b", "ai-c", "ai-d"]) expect(rows.some((row) => row.id === id)).toBe(false);
+  });
+
+  it("keeps a document AI whose document is gone under 대화, named after its document", () => {
+    const orphan = rows.find((row) => row.id === "gone");
+    expect(orphan).toMatchObject({ type: "session" });
+    expect(docAgentLabel(state.sessions.gone!)).toBe("옛 메모.md · 문서 AI");
+    expect(docAgentLabel({ ...state.sessions.gone!, purpose: "요약" })).toBe("요약 · 문서 AI");
+    const chats = rows.slice(rows.findIndex((row) => row.id === "chats:w") + 1, rows.findIndex((row) => row.type === "docs")).map((row) => row.id);
+    expect(chats).toEqual(["main", "gone"]);
+  });
+
+  it("puts a web AI on its web row", () => {
+    const at = rows.findIndex((row) => row.id === "pages:w");
+    expect(rows[at + 1]).toMatchObject({ type: "session", id: "web" });
+  });
+
+  it("shows the most pressing AI of a document: 확인 › 오류 › 진행 › 새 답 › 쉼", () => {
+    const of = (...sessions: Session[]) => leadAgent(sessions, null);
+    const s = (id: string, extra: Partial<Session>) => agent(id, "doc-a", 1, extra);
+    expect(of(s("idle", {}), s("new", { previewAt: 9, seenAt: 1 }))).toMatchObject({ session: { id: "new" }, tone: "new" });
+    expect(of(s("new", { previewAt: 9, seenAt: 1 }), s("run", { status: "running" }))).toMatchObject({ session: { id: "run" }, tone: "active" });
+    expect(of(s("run", { status: "running" }), s("err", { status: "error" }))).toMatchObject({ session: { id: "err" }, tone: "error" });
+    expect(of(s("err", { status: "error" }), s("ask", { status: "awaitingApproval" }))).toMatchObject({ session: { id: "ask" }, tone: "attention" });
+    expect(of(s("old", {}), s("fresh", { createdAt: 50 }))).toMatchObject({ session: { id: "fresh" }, tone: null });
+    // An answer on screen is not new.
+    expect(leadAgent([s("new", { previewAt: 9, seenAt: 1 })], "new")).toMatchObject({ tone: null });
+  });
+
+  it("a folded 문서 group still carries its documents' AIs", () => {
+    const folded = treeRows(state, { ...open, openDocs: [] }, "manual", null);
+    expect(folded.find((row) => row.type === "docs")).toMatchObject({ agents: expect.arrayContaining([expect.objectContaining({ id: "ai-a" })]) });
   });
 });
 
@@ -156,3 +217,15 @@ describe("moving rows", () => {
     expect(between(undefined, undefined)).toBe(0);
   });
 });
+
+describe("opening a document row", () => {
+  const agent = (id: string, extra: Partial<Session> = {}) => session(id, "w", 1, { documentAgent: { artifactId: "d", parentSessionId: null }, ...extra });
+  it("opens the AI whose state the row shows, in every state", () => {
+    const ask = agent("ask", { status: "awaitingApproval", createdAt: 1 }), fresh = agent("fresh", { createdAt: 9 });
+    expect(docOpenTarget([fresh, ask], null)).toBe(ask);
+    expect(docOpenTarget([fresh, agent("run", { status: "running", createdAt: 2 })], null)?.id).toBe("run");
+    expect(docOpenTarget([fresh, agent("old", { createdAt: 2 })], null)).toBe(fresh);
+    expect(docOpenTarget([], null)).toBeNull();
+  });
+});
+

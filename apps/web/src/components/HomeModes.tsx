@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { failure } from "../top-notice.ts";
 import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { REMARK_BASE } from "../markdown/plugins.ts";
 import {
   FORMAT_LABEL,
   PROVIDER_LABEL,
@@ -23,16 +24,16 @@ import { accentStyle, useAppearance } from "../appearance.ts";
 import { ago, statusText, statusTone } from "../format.ts";
 import { measure, play, type FlipFirst } from "../flip.ts";
 import { boardOf, colorOf, foldKey, groupItems, localDay, nestGroups, sortItems, type Group, type KeyDef } from "../groups.ts";
-import { HOME_MODES, bucketOf, docEntries, heldCount, isWorking, lastExchange, nowGroups, recentWorks, resumeSessions, type DocEntry, type HomeMode } from "../overview.ts";
+import { HOME_MODES, bucketOf, docEntries, heldCount, isWorking, lastExchange, nowGroups, recentWorks, resumeSessions, sessionResume, type DocEntry, type HomeMode } from "../overview.ts";
 import { projectMatcher, queryProject } from "../project-query.ts";
 import { sessionHidden } from "../tree.ts";
 import { thumbOf, type Thumb } from "../thumbs.ts";
 import { FormatBadge } from "./DocCards.tsx";
 import { EngineMark } from "./EngineMark.tsx";
 import { Icon } from "./Icon.tsx";
-import { ModeBar } from "./ModeBar.tsx";
+import { Segmented } from "./ui/Hig.tsx";
 import { ProjectsMode } from "./project/ProjectsMode.tsx";
-import { foldedReply } from "./docs/ConversationDrawer.tsx";
+import { foldedReply } from "../fold-reply.ts";
 import { FlowMode, type FlowLens } from "./FlowMode.tsx";
 import { useOptionalPkm } from "./pkm/PkmContext.tsx";
 import { DEFAULT_DOC_FIELDS, DOC_FIELDS, docKeys, docSorts, projectKeys, projectQuery, projectRows, propertyKey, sessionKeys, sessionSorts, type ProjectRow } from "./views/keys.ts";
@@ -44,7 +45,7 @@ import { ViewHead, ViewTabs, ViewTools, type ShownGroups } from "./views/ViewHea
 import "../styles/views.css";
 import "../styles/groups.css";
 
-// Home overview modes: 지금 · 프로젝트 · 흐름 · 문서, one bar at the bottom, keys 1–4. The same
+// Home overview modes: 지금 · 프로젝트 · 흐름 · 문서, one bar at the top, keys 1–4. The same
 // sessions, works and documents along four axes; each mode has named views (tabs) that group,
 // sort, filter and colour them the person's way (프로젝트-내비게이터-그룹보기-설계 §3). Switching
 // keeps things in place (FLIP) and keeps what was being read where it was. Lists are capped with
@@ -72,11 +73,7 @@ function stateLabel(session: Session) {
 
 /** The line under a session's name: what it does now, what went wrong, or the start of its last reply. */
 function lineOf(session: Session) {
-  if (isWorking(session) || session.status === "awaitingApproval") return statusText(session);
-  if (session.lastError) return `오류: ${session.lastError}`;
-  const held = session.queued.find((entry) => entry.held);
-  if (held) return `남겨 둔 요청: ${held.text}`;
-  return session.preview ?? "아직 답이 없습니다";
+  return sessionResume(session).summary ?? "아직 답이 없습니다";
 }
 
 /** The last request and reply of a session, the reply folded to its points (textfold, no model). */
@@ -113,13 +110,13 @@ function LastReply({ api, state, session }: { api: Api; state: State; session: S
       )}
       {request ? (
         <div className="home-reply-request" title={request}>
-          <span className="drawer-label">요청</span> {request.split("\n").find((line) => line.trim()) ?? request}
+          <span className="home-reply-label">요청</span> {request.split("\n").find((line) => line.trim()) ?? request}
         </div>
       ) : null}
       {answer ? (
         <div className="home-reply-answer">
           <div className="markdown">
-            <Markdown remarkPlugins={[remarkGfm]}>{folded && !whole ? folded : answer}</Markdown>
+            <Markdown remarkPlugins={REMARK_BASE}>{folded && !whole ? folded : answer}</Markdown>
           </div>
           {folded ? (
             <button type="button" className="link" onClick={() => setWhole(!whole)}>
@@ -367,7 +364,7 @@ function NowMode({ api, state, open, views, onViews }: { api: Api; state: State;
           card={(session) => <NowCard state={state} session={session} />}
           onOpen={(session) => open.session(session)}
           canMove={fixed}
-          onMove={() => pkm?.onToast(fixed() ?? "")}
+          onMove={() => pkm?.onToast(failure(fixed() ?? ""))}
           cardHint="누르면 세션 열기"
         />
         {!ordered.length ? <p className="home-quiet">지금 기다리는 일은 없습니다.</p> : null}
@@ -699,8 +696,8 @@ const legacyPrefs = () => {
 };
 
 /**
- * The home overview: the current mode's views and content, then `footer`, then the mode bar
- * (sticky at the bottom centre). Keys 1–4 switch modes when focus is not in a text field.
+ * Home navigation stays above the content, including on first launch and while scrolling.
+ * Keys 1–4 switch modes when focus is not in a text field.
  */
 export function HomeModes({
   api,
@@ -713,6 +710,7 @@ export function HomeModes({
   onOpenWork,
   onOpenDoc,
   onOpenProject,
+  intro,
   footer,
 }: {
   api: Api;
@@ -728,12 +726,13 @@ export function HomeModes({
   onOpenDoc: (artifactId: string) => void;
   /** A project's page (from "프로젝트"); its conversation when there is none. */
   onOpenProject?: (work: Work) => void;
+  intro?: ReactNode;
   footer?: ReactNode;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const first = useRef<FlipFirst | null>(null);
   const pointer = useRef<{ x: number; y: number } | null>(null);
-  const open: Open = useMemo(() => ({ session: onOpenSession, work: onOpenWork, doc: onOpenDoc }), [onOpenSession, onOpenWork, onOpenDoc]);
+  const open: Open = useMemo(() => ({ session: onOpenSession, work: onOpenProject ?? onOpenWork, doc: onOpenDoc }), [onOpenSession, onOpenWork, onOpenProject, onOpenDoc]);
   const scroller = () => root.current?.closest<HTMLElement>(".start-view") ?? null;
   const homeViews = useMemo(() => readHomeViews(views, legacyPrefs()), [views]);
   // Without a place to keep them (tests), views change for this window only.
@@ -779,6 +778,16 @@ export function HomeModes({
 
   return (
     <>
+      <nav className="home-mode-nav" aria-label="홈 탐색">
+        <Segmented
+          className="home-mode-bar"
+          label="홈 보기"
+          options={HOME_MODES.map((entry, index) => ({ value: entry.id, label: entry.label, title: `${entry.label} — ${entry.question} (${index + 1})` }))}
+          value={mode}
+          onChange={switchTo}
+        />
+      </nav>
+      {intro}
       <div
         ref={root}
         className={`home-modes mode-${mode}`}
@@ -800,14 +809,6 @@ export function HomeModes({
         )}
       </div>
       {footer}
-      <ModeBar
-        className="home-mode-bar"
-        label="홈 보기"
-        keyHint=""
-        modes={HOME_MODES.map((entry) => ({ id: entry.id, label: entry.label, title: `${entry.label} — ${entry.question}` }))}
-        value={mode}
-        onChange={switchTo}
-      />
     </>
   );
 }

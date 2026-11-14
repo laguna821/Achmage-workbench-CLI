@@ -1,25 +1,8 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { pickAnchor, startFrame } from "./flip.ts";
-import { ModeBar } from "./components/ModeBar.tsx";
 
-// The mode bar, and the FLIP arithmetic behind mode changes.
-
-afterEach(() => cleanup());
-
-describe("ModeBar", () => {
-  it("is a radio group whose buttons say their key", () => {
-    const onChange = vi.fn();
-    render(<ModeBar label="보기" keyHint="Alt+" value="b" onChange={onChange} modes={[{ id: "a", label: "대화" }, { id: "b", label: "문서" }, { id: "c", label: "검토", disabled: true }]} />);
-    expect(screen.getByRole("radio", { name: "문서" }).getAttribute("aria-checked")).toBe("true");
-    expect(screen.getByRole("radio", { name: "대화" }).getAttribute("title")).toBe("대화 (Alt+1)");
-    fireEvent.click(screen.getByRole("radio", { name: "대화" }));
-    fireEvent.click(screen.getByRole("radio", { name: "검토" }));
-    expect(onChange).toHaveBeenCalledTimes(1);
-    expect(onChange).toHaveBeenCalledWith("a");
-  });
-});
+// The FLIP arithmetic behind mode changes.
 
 describe("FLIP", () => {
   it("keeps the thing at the reading line (or nearest to it) as the anchor", () => {

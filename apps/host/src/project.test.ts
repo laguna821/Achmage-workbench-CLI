@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -533,3 +533,346 @@ describe("a project in search (찾는 길)", () => {
     expect((await found(manager, "루브릭", "decision"))).toHaveLength(1);
   });
 });
+
+// Review round 1: the user's note file is never damaged by the page.
+describe("writes that keep the note whole", () => {
+  const seeded = (text: string) => {
+    const context = setup();
+    const page = context.projects.setBodyText(context.work.id, "본문\n", null).page;
+    writeFileSync(page.note.path, text);
+    return { ...context, path: page.note.path, page: context.projects.page(context.work.id) };
+  };
+
+  it("refuses to edit a block scalar or a map, leaves the file as it was, and marks them not editable", () => {
+    const text = "---\nworkbench_id: x\nsummary: |\n  첫 줄\n\n  셋째 줄\nmeta:\n  owner: 나\n종류: 강의\n---\n본문\n";
+    const { projects, work, path, page } = seeded(text);
+    expect(page.rows!.find((row) => row.key === "summary")!.editable).toBe(false);
+    expect(page.rows!.find((row) => row.key === "meta")!.editable).toBe(false);
+    expect(page.rows!.find((row) => row.key === "종류")!.editable).toBe(true);
+    expect(() => projects.setProperty(work.id, "summary", ["새 값"])).toThrow(/원문에서/);
+    expect(() => projects.setProperty(work.id, "meta", ["owner: 너"])).toThrow(/원문에서/);
+    expect(readFileSync(path, "utf8")).toBe(text);
+  });
+
+  it("says in the notice the value it wrote, not what was typed", () => {
+    const { projects, work } = seeded("---\nworkbench_id: x\n마감일: 2026-11-20\n---\n본문\n");
+    const write = projects.setProperty(work.id, "마감일", ["2026-11-27"], "date");
+    expect(write.summary).toBe("마감일: 2026-11-20 → 2026-11-27");
+  });
+
+  it("writes one run of the body and leaves the front matter, the sections and the other run byte for byte", () => {
+    const text = "---\r\nworkbench_id: x\r\n---\r\n머리말\r\n\r\n## 결정\r\n- 2026-11-12 정함\r\n\r\n## 메모\r\n메모\r\n";
+    const { projects, work, path, page } = seeded(text);
+    const [, memo] = page.note.runs!;
+    const written = projects.setRun(work.id, { index: 1, expected: memo!.text, text: "## 메모\r\n고친 메모\r\n" }, page.note.revision);
+    expect(memo!.end).toBe(text.length);
+    expect(readFileSync(path, "utf8")).toBe(text.slice(0, memo!.start) + "## 메모\r\n고친 메모\r\n");
+    expect(written.page.note.revision).toBe(page.note.revision! + 1);
+    // Words that are no longer that run's are refused, and the file stays.
+    const now = readFileSync(path, "utf8");
+    expect(() => projects.setRun(work.id, { index: 1, expected: memo!.text, text: "x" }, written.page.note.revision)).toThrow();
+    expect(readFileSync(path, "utf8")).toBe(now);
+  });
+
+  it("shows the last readable revision's properties when the front matter breaks, and reverts to it whoever broke it", () => {
+    const good = "---\nworkbench_id: x\n단계: 진행중\n종류: 강의\n---\n본문\n";
+    const { projects, work, path } = seeded(good);
+    const readable = projects.page(work.id);
+    expect(readable.note.problem).toBeNull();
+    const broken = "---\nworkbench_id: x\n단계: 진행중\n종류: [강의\n---\n본문\n";
+    writeFileSync(path, broken);
+    const page = projects.page(work.id);
+    expect(page.note.problem).toMatch(/YAML/);
+    expect(page.lastReadable).toMatchObject({ revision: readable.note.revision, author: "external", text: good, current: broken });
+    expect(page.lastReadable!.rows.find((row) => row.key === "종류")!.values).toEqual(["강의"]);
+    // Writes are refused on the broken note; the revert puts the readable bytes back as a new revision.
+    expect(() => projects.setProperty(work.id, "종류", ["세미나"])).toThrow();
+    const reverted = projects.revertTo(work.id, page.lastReadable!.revision);
+    expect(readFileSync(path, "utf8")).toBe(good);
+    expect(reverted.page.note.problem).toBeNull();
+    expect(reverted.token).not.toBe("");
+  });
+
+  it("writes the whole source only when its front matter reads", () => {
+    const { projects, work, path, page } = seeded("---\nworkbench_id: x\n---\n본문\n");
+    expect(() => projects.setSource(work.id, "---\nworkbench_id: x\na: [\n---\n본문\n", page.note.revision)).toThrow(/YAML/);
+    expect(readFileSync(path, "utf8")).toBe("---\nworkbench_id: x\n---\n본문\n");
+    projects.setSource(work.id, "---\nworkbench_id: x\na: 1\n---\n새 본문\n", page.note.revision);
+    expect(readFileSync(path, "utf8")).toBe("---\nworkbench_id: x\na: 1\n---\n새 본문\n");
+  });
+});
+
+// Review round 3: one writer, one base. A write whose base is not the current revision is refused,
+// always, after the bytes on disk are recorded; nothing is re-applied.
+describe("writes against what the person saw", () => {
+  const seeded = (text: string) => {
+    const context = setup();
+    const page = context.projects.setBodyText(context.work.id, "본문\n", null).page;
+    writeFileSync(page.note.path, text);
+    return { ...context, path: page.note.path, seen: context.projects.page(context.work.id).note.revision! };
+  };
+  const texts = (manager: SessionManager, artifact: string) => manager.documents.revisions(artifact).map((revision) => readFileSync(manager.documents.revisionPath(artifact, revision.revision), "utf8"));
+
+  it("refuses a same-key change made outside since, and keeps that outside change in the history first", () => {
+    const { projects, work, path, seen, manager } = seeded("---\nworkbench_id: x\n마감일: 2026-11-20\n---\n본문\n");
+    const outside = "---\nworkbench_id: x\n마감일: 2026-12-01\n---\n본문\n";
+    writeFileSync(path, outside);
+    expect(() => projects.setProperty(work.id, "마감일", ["2026-11-27"], "date", undefined, seen)).toThrow(/바뀌/);
+    expect(readFileSync(path, "utf8")).toBe(outside);
+    const artifact = projects.page(work.id).note.artifactId!;
+    expect(texts(manager, artifact).at(-1)).toBe(outside);
+    expect(manager.documents.revisions(artifact).at(-1)!.author).toBe("external");
+  });
+
+  it("refuses a write to another key too: nothing is re-applied", () => {
+    const { projects, work, path, seen } = seeded("---\nworkbench_id: x\n종류: 강의\n마감일: 2026-11-20\n---\n본문\n");
+    const outside = "---\nworkbench_id: x\n종류: 세미나\n마감일: 2026-11-20\n---\n본문\n";
+    writeFileSync(path, outside);
+    expect(() => projects.setProperty(work.id, "마감일", ["2026-11-27"], "date", undefined, seen)).toThrow(/바뀌/);
+    expect(readFileSync(path, "utf8")).toBe(outside);
+  });
+
+  it("refuses stale first words in a sections-only note instead of splicing them into another paragraph", () => {
+    const { projects, work, path } = seeded("---\nworkbench_id: x\n단계: 진행중\n---\n## 결정\n- a\n\n## 열린 질문\n- [ ] q\n");
+    const page = projects.page(work.id);
+    const outside = "---\nworkbench_id: x\n단계: 끝\n---\n엔진이 쓴 요약 문단입니다.\n\n## 결정\n- a\n\n## 열린 질문\n- [ ] q\n";
+    writeFileSync(path, outside);
+    expect(() => projects.setRun(work.id, { index: 0, expected: "", text: "첫 문장" }, page.note.revision)).toThrow(/바뀌/);
+    expect(readFileSync(path, "utf8")).toBe(outside);
+  });
+
+  it("refuses a stale body run even when its words are unchanged", () => {
+    const { projects, work, path } = seeded("---\nworkbench_id: x\n---\nA 문단\n\n## 결정\n- a\n");
+    const page = projects.page(work.id);
+    const outside = "---\nworkbench_id: x\n종류: 회의\n---\nA 문단\n\n## 결정\n- a\n";
+    writeFileSync(path, outside);
+    expect(() => projects.setRun(work.id, { index: 0, expected: "A 문단\n\n", text: "A2\n" }, page.note.revision)).toThrow(/바뀌/);
+    expect(readFileSync(path, "utf8")).toBe(outside);
+  });
+
+  it("writes first words after a properties-only note with no final newline on their own line", () => {
+    const { projects, work, path } = seeded("---\nworkbench_id: x\n---");
+    const page = projects.page(work.id);
+    projects.setRun(work.id, { index: 0, expected: "", text: "첫 문장" }, page.note.revision);
+    expect(readFileSync(path, "utf8")).toBe("---\nworkbench_id: x\n---\n첫 문장");
+    expect(projects.page(work.id).note.problem).toBeNull();
+  });
+
+  it("records an outside change before any write, even one that is then refused", () => {
+    const { projects, work, path, manager, seen } = seeded("---\nworkbench_id: x\n---\n본문\n");
+    const outside = "---\nworkbench_id: x\n---\n본문 (Obsidian)\n";
+    writeFileSync(path, outside);
+    expect(() => projects.addEntry(work.id, { section: "decision", text: "정함", baseRevision: seen })).toThrow(/바뀌/);
+    expect(texts(manager, projects.page(work.id).note.artifactId!)).toContain(outside);
+    expect(readFileSync(path, "utf8")).toBe(outside);
+  });
+
+  it("refuses a revert, the engine-edit 되돌리기 and an undo when the note changed after the person looked", () => {
+    const good = "---\nworkbench_id: x\n단계: 진행중\n---\n본문\n";
+    const { projects, work, path } = seeded(good);
+    writeFileSync(path, "---\nworkbench_id: x\n단계: [진행중\n---\n본문2\n");
+    const page = projects.page(work.id);
+    const later = "---\nworkbench_id: x\n단계: [진행중\n---\n본문3\n";
+    writeFileSync(path, later);
+    expect(() => projects.revertTo(work.id, page.lastReadable!.revision, undefined, page.note.revision)).toThrow(/바뀌/);
+    expect(() => projects.revertEngineEdit(work.id, undefined, page.note.revision)).toThrow(/바뀌|되돌릴/);
+    expect(readFileSync(path, "utf8")).toBe(later);
+  });
+
+  it("refuses an undo whose base is not the revision its write made", () => {
+    const { projects, work, path, seen } = seeded("---\nworkbench_id: x\n종류: 강의\n---\n본문\n");
+    const write = projects.setProperty(work.id, "종류", ["세미나"], "text", undefined, seen);
+    expect(() => projects.undo(work.id, write.token, undefined, seen)).toThrow(/바뀌/);
+    projects.undo(work.id, write.token, undefined, write.page.note.revision);
+    expect(readFileSync(path, "utf8")).toContain("종류: 강의");
+  });
+
+  it("ticks the open question the person saw at the current revision, and refuses a stale tick", () => {
+    const { projects, work, path, seen } = seeded("---\nworkbench_id: x\n---\n## 열린 질문\n- [ ] 언제?\n");
+    const question = projects.page(work.id).note.questions[0]!;
+    const ticked = projects.setQuestionDone(work.id, question.line, true, undefined, seen, question.text);
+    expect(readFileSync(path, "utf8")).toBe("---\nworkbench_id: x\n---\n## 열린 질문\n- [x] 언제?\n");
+    writeFileSync(path, "---\nworkbench_id: x\n---\n머리말\n\n## 열린 질문\n- [x] 언제?\n");
+    expect(() => projects.setQuestionDone(work.id, question.line, false, undefined, ticked.page.note.revision, question.text)).toThrow(/바뀌/);
+  });
+
+  it("adds two tags one after the other, each against the revision the last one returned", () => {
+    const { projects, work, path, seen } = seeded('---\nworkbench_id: x\ntags: ["#회의", 강의]\n---\n본문\n');
+    const first = projects.setProperty(work.id, "tags", null, "tags", undefined, seen, { add: "가" });
+    projects.setProperty(work.id, "tags", null, "tags", undefined, first.page.note.revision, { add: "나" });
+    expect(readFileSync(path, "utf8")).toBe('---\nworkbench_id: x\ntags: ["#회의", 강의, 가, 나]\n---\n본문\n');
+  });
+
+  it("keeps a tag written with # when another is added through the page's own row values", () => {
+    const { projects, work, path, seen } = seeded('---\nworkbench_id: x\ntags: ["#회의", 강의]\n---\n본문\n');
+    const row = projects.page(work.id).rows!.find((entry) => entry.key === "tags")!;
+    projects.setProperty(work.id, "tags", [...row.values!, "새값"], "tags", undefined, seen);
+    expect(readFileSync(path, "utf8")).toBe('---\nworkbench_id: x\ntags: ["#회의", 강의, 새값]\n---\n본문\n');
+  });
+
+  it("refuses through the service a key write the guard catches (a column-0 list), leaving the file", () => {
+    const text = "---\nworkbench_id: x\na:\n- x\n- y\n---\n본문\n";
+    const { projects, work, path } = seeded(text);
+    expect(() => projects.setProperty(work.id, "a", ["x", "y", "z"], "list")).toThrow();
+    expect(readFileSync(path, "utf8")).toBe(text);
+  });
+});
+
+describe("a note the person saw as not there", () => {
+  it("writes when the person saw no file and there still is none (after an undone first write)", () => {
+    const { projects, work } = setup();
+    const first = projects.setProperty(work.id, "종류", ["강의"], "list", undefined, null);
+    projects.undo(work.id, first.token);
+    const page = projects.page(work.id);
+    expect(page.note.exists).toBe(false);
+    const again = projects.setProperty(work.id, "종류", ["세미나"], "list", undefined, null);
+    expect(readFileSync(again.page.note.path, "utf8")).toContain("세미나");
+  });
+
+  it("refuses when the person saw no file but one was made meanwhile", () => {
+    const { projects, work } = setup();
+    const path = projects.page(work.id).note.path;
+    const made = `---\nworkbench_id: ${work.id}\n종류: 회의\n---\n`;
+    writeFileSync(path, made);
+    expect(() => projects.setProperty(work.id, "종류", ["세미나"], "list", undefined, null)).toThrow(/바뀌/);
+    expect(readFileSync(path, "utf8")).toBe(made);
+  });
+
+});
+
+// Review round 4: the note is synced by Dropbox and open in Obsidian while the app writes it.
+describe("the note is replaced whole, never rewritten in place", () => {
+  const seeded = (text: string) => {
+    const context = setup();
+    const page = context.projects.setBodyText(context.work.id, "본문\n", null).page;
+    writeFileSync(page.note.path, text);
+    return { ...context, path: page.note.path, seen: context.projects.page(context.work.id).note.revision! };
+  };
+  const TEXT = "---\nworkbench_id: x\n종류: 강의\n---\n본문\n";
+  /** What a reader that opened the note before a write still reads from it afterwards. */
+  const heldOpen = (path: string, write: () => void) => {
+    const reader = openSync(path, "r");
+    try {
+      write();
+      return readFileSync(reader, "utf8");
+    } finally {
+      closeSync(reader);
+    }
+  };
+
+  it("leaves a reader that already opened the note with the whole old note, and keeps the file's mode", () => {
+    const { projects, work, path, seen } = seeded(TEXT);
+    chmodSync(path, 0o600);
+    let write!: ReturnType<typeof projects.setProperty>;
+    expect(heldOpen(path, () => { write = projects.setProperty(work.id, "종류", ["세미나"], "text", undefined, seen); })).toBe(TEXT);
+    expect(readFileSync(path, "utf8")).toBe(TEXT.replace("강의", "세미나"));
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+    // The undo replaces it the same way.
+    expect(heldOpen(path, () => projects.undo(work.id, write.token, undefined, write.page.note.revision))).toBe(TEXT.replace("강의", "세미나"));
+    expect(readFileSync(path, "utf8")).toBe(TEXT);
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(readdirSync(join(path, "..")).filter((name) => name.endsWith(".tmp"))).toEqual([]);
+  });
+
+  it("writes through a linked note: the link stays a link and its target holds the new note", () => {
+    const { projects, work, path, dir } = seeded(TEXT);
+    const real = join(dir, "vault", "실제 노트.md");
+    mkdirSync(join(dir, "vault"));
+    renameSync(path, real);
+    symlinkSync(real, path);
+    const seen = projects.page(work.id).note.revision!;
+    expect(heldOpen(real, () => projects.setProperty(work.id, "종류", ["세미나"], "text", undefined, seen))).toBe(TEXT);
+    expect(lstatSync(path).isSymbolicLink()).toBe(true);
+    expect(lstatSync(real).isSymbolicLink()).toBe(false);
+    expect(readFileSync(real, "utf8")).toBe(TEXT.replace("강의", "세미나"));
+    // The temporary file was made beside the target, and is gone.
+    expect(readdirSync(join(dir, "vault"))).toEqual(["실제 노트.md"]);
+    expect(readdirSync(join(path, "..")).filter((name) => name.endsWith(".tmp"))).toEqual([]);
+  });
+
+  it("leaves the note's bytes and no temporary file when the write fails", () => {
+    const { projects, work, path, seen } = seeded(TEXT);
+    const folder = join(path, "..");
+    const before = readdirSync(folder).sort();
+    // A folder that takes no new file: the replacement cannot be made.
+    chmodSync(folder, 0o555);
+    try {
+      // Said as a refusal in a plain sentence (which note, nothing changed), not a raw system error.
+      expect(() => projects.setProperty(work.id, "종류", ["세미나"], "text", undefined, seen)).toThrow(/안녕\.md.*쓸 수 없습니다.*바꾸지 않았습니다/);
+      expect(readFileSync(path, "utf8")).toBe(TEXT);
+      expect(readdirSync(folder).sort()).toEqual(before);
+    } finally {
+      chmodSync(folder, 0o755);
+    }
+    // Nothing was recorded as written: the same base still writes once the folder allows it.
+    projects.setProperty(work.id, "종류", ["세미나"], "text", undefined, seen);
+    expect(readFileSync(path, "utf8")).toBe(TEXT.replace("강의", "세미나"));
+  });
+
+  // Review round 5.
+  it("refuses a note whose file is read-only, as before this unit, and leaves it read-only", () => {
+    const { projects, work, path, seen } = seeded(TEXT);
+    chmodSync(path, 0o444);
+    try {
+      expect(() => projects.setProperty(work.id, "종류", ["세미나"], "text", undefined, seen)).toThrow(/쓸 수 없습니다.*바꾸지 않았습니다/);
+      expect(readFileSync(path, "utf8")).toBe(TEXT);
+      expect(statSync(path).mode & 0o777).toBe(0o444);
+      expect(readdirSync(join(path, "..")).filter((name) => name.endsWith(".tmp"))).toEqual([]);
+    } finally {
+      chmodSync(path, 0o644);
+    }
+    // Nothing was recorded as written: the same base writes once the file allows it.
+    projects.setProperty(work.id, "종류", ["세미나"], "text", undefined, seen);
+    expect(readFileSync(path, "utf8")).toBe(TEXT.replace("강의", "세미나"));
+  });
+
+  it("refuses a note that is a link to nothing, and leaves the link", () => {
+    const { projects, work, cwd } = setup();
+    const path = projects.page(work.id).note.path;
+    symlinkSync(join(cwd, "없는 곳", "실제 노트.md"), path);
+    expect(() => projects.setProperty(work.id, "종류", ["세미나"], "text", undefined, null)).toThrow(/링크.*바꾸지 않았습니다/);
+    expect(lstatSync(path).isSymbolicLink()).toBe(true);
+    expect(existsSync(path)).toBe(false);
+  });
+
+  it("refuses through the service a body run that would give a note without front matter one", () => {
+    const { projects, work, path } = seeded("본문\n");
+    const page = projects.page(work.id);
+    expect(() => projects.setRun(work.id, { index: 0, expected: "본문\n", text: "---\nk: v\n---\n본문\n" }, page.note.revision)).toThrow(/속성 부분이 바뀌어/);
+    expect(readFileSync(path, "utf8")).toBe("본문\n");
+  });
+});
+
+// Review round 4 (I4): what the sidebar's "태그 더하기" sends.
+describe("tags added from the sidebar", () => {
+  const seeded = (text: string) => {
+    const context = setup();
+    const page = context.projects.setBodyText(context.work.id, "본문\n", null).page;
+    writeFileSync(page.note.path, text);
+    return { ...context, path: page.note.path };
+  };
+
+  it("takes one add per tag, the first onto the note as it is and the next from the revision returned, leaving a # tag as written", () => {
+    const { projects, work, path } = seeded('---\nworkbench_id: x\ntags: ["#회의"]\n---\n본문\n');
+    const first = projects.setProperty(work.id, "tags", null, "tags", undefined, undefined, { add: "가" });
+    projects.setProperty(work.id, "tags", null, "tags", undefined, first.page.note.revision, { add: "나" });
+    expect(readFileSync(path, "utf8")).toBe('---\nworkbench_id: x\ntags: ["#회의", 가, 나]\n---\n본문\n');
+    expect(projects.page(work.id).note.tags).toEqual(["회의", "가", "나"]);
+  });
+
+  it("refuses the whole list the sidebar used to send (the # stripped, or two tags at once), leaving the file", () => {
+    const text = '---\nworkbench_id: x\ntags: ["#회의"]\n---\n본문\n';
+    const { projects, work, path } = seeded(text);
+    expect(() => projects.setProperty(work.id, "tags", ["회의", "가"], "tags")).toThrow(/한 번에 한 항목/);
+    expect(() => projects.setProperty(work.id, "tags", ["#회의", "가", "나"], "tags")).toThrow(/한 번에 한 항목/);
+    expect(readFileSync(path, "utf8")).toBe(text);
+  });
+
+  it("gives a note that keeps its tags under `tag:` a `tags:` list beside it, the old key as written", () => {
+    const { projects, work, path } = seeded("---\nworkbench_id: x\ntag: 회의\n---\n본문\n");
+    projects.setProperty(work.id, "tags", null, "tags", undefined, undefined, { add: "가" });
+    expect(readFileSync(path, "utf8")).toBe("---\nworkbench_id: x\ntag: 회의\ntags:\n  - 가\n---\n본문\n");
+    expect(projects.page(work.id).note.tags).toEqual(["가", "회의"]);
+  });
+});
+

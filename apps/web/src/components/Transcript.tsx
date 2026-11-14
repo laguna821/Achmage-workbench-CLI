@@ -1,8 +1,7 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { REMARK_BASE } from "../markdown/plugins.ts";
 import { PROVIDER_LABEL, turnEndText, type MessageMedia, type Provider, type TranscriptItem } from "@workbench/contracts";
-import { EngineMark } from "./EngineMark.tsx";
 import { FileCard, HandoffCard, ProposalCard, RefChips, useDocs } from "./DocCards.tsx";
 import { CREATE_LABEL } from "@workbench/contracts";
 import { Icon, type IconName } from "./Icon.tsx";
@@ -14,17 +13,24 @@ import { ImageCard } from "./ImageGen.tsx";
 import { LinkEndCard, LinkHopBadge, LinkRequestText } from "./LinkCards.tsx";
 import { NoteChips } from "./pkm/NoteChips.tsx";
 import { MessageActions } from "./pkm/MessageActions.tsx";
+import { RequestText } from "./note/RequestText.tsx";
 import { captureReadingAnchor, nearTranscriptEnd, readingAnchorTop, type ChatPosition, type ReadingAnchor } from "../conversation/reading-anchor.ts";
+import { firstLine, registerNoteTarget, setReadingAt } from "../conversation/outline.ts";
+import { approvalKeyApplies } from "../conversation/approval-keys.ts";
 
 const DRAWN = diagramComponents();
 const STREAMING = diagramComponents(true);
 
 type Item<K extends TranscriptItem["kind"]> = Extract<TranscriptItem, { kind: K }>;
 
+/** What folds into one "실행 상세" line: tool calls, reasoning, and a plan once every step is done. */
+type Step = Item<"tool"> | Item<"reasoning"> | Item<"plan">;
+const planDone = (item: Item<"plan">) => item.steps.length > 0 && item.steps.every((step) => step.status === "completed");
+
 type Block =
   | { type: "user"; item: Item<"user"> }
-  | { type: "assistant"; item: Item<"assistant">; speaker: boolean }
-  | { type: "work"; id: string; items: (Item<"tool"> | Item<"reasoning">)[]; speaker: boolean }
+  | { type: "assistant"; item: Item<"assistant"> }
+  | { type: "work"; id: string; items: Step[] }
   | { type: "approval"; item: Item<"approval"> }
   | { type: "plan"; item: Item<"plan"> }
   | { type: "notice"; item: Item<"notice"> }
@@ -35,38 +41,39 @@ type Block =
   | { type: "link"; item: Item<"link"> }
   | { type: "turnEnd"; item: Item<"turnEnd"> };
 
-/** Group consecutive tool calls and reasoning into one folded block, Codex-style. */
+/**
+ * Group consecutive tool calls and reasoning into one folded block, Codex-style. A finished plan
+ * joins them (it was a step of the work); a plan still running stands open on its own.
+ */
 export function toBlocks(items: TranscriptItem[]): Block[] {
   const blocks: Block[] = [];
-  let speakerShown = false;
   for (const item of items) {
     switch (item.kind) {
       case "user":
         blocks.push({ type: "user", item });
-        speakerShown = false;
         break;
       case "assistant":
         if (!item.text.trim() && !item.streaming) break;
-        blocks.push({ type: "assistant", item, speaker: !speakerShown });
-        speakerShown = true;
+        blocks.push({ type: "assistant", item });
         break;
       case "tool":
-      case "reasoning": {
+      case "reasoning":
+      case "plan": {
         if (item.kind === "reasoning" && !item.text.trim()) break;
+        if (item.kind === "plan" && !planDone(item)) {
+          blocks.push({ type: "plan", item });
+          break;
+        }
         const last = blocks[blocks.length - 1];
         if (last?.type === "work") {
           last.items.push(item);
         } else {
-          blocks.push({ type: "work", id: `work:${item.id}`, items: [item], speaker: !speakerShown });
-          speakerShown = true;
+          blocks.push({ type: "work", id: `work:${item.id}`, items: [item] });
         }
         break;
       }
       case "approval":
         blocks.push({ type: "approval", item });
-        break;
-      case "plan":
-        blocks.push({ type: "plan", item });
         break;
       case "notice":
         blocks.push({ type: "notice", item });
@@ -108,7 +115,7 @@ const AssistantText = memo(function AssistantText({ text, streaming, media = [] 
   const gallery = media.map(entry => entry.attachment);
   return (
     <div className={`markdown${streaming ? " streaming" : ""}`}>
-      <Markdown remarkPlugins={[remarkGfm]} urlTransform={(url, key) => key === "src" ? url : defaultUrlTransform(url)} components={{ ...(streaming ? STREAMING : DRAWN), img: ({ src, alt }) => {
+      <Markdown remarkPlugins={REMARK_BASE} urlTransform={(url, key) => key === "src" ? url : defaultUrlTransform(url)} components={{ ...(streaming ? STREAMING : DRAWN), img: ({ src, alt }) => {
         const saved = media.find(entry => entry.source === src);
         return saved ? <MessageImage attachment={saved.attachment} gallery={gallery} />
           : <span className="muted">{alt || "그림"}{typeof src === "string" && /^https?:\/\//i.test(src) ? <> · <a href={src} target="_blank" rel="noreferrer">원본 링크</a></> : streaming ? " · 응답 후 미리보기" : " · 미리보기 없음"}</span>;
@@ -119,55 +126,19 @@ const AssistantText = memo(function AssistantText({ text, streaming, media = [] 
   );
 });
 
-type MdNode = { type: string; value?: string; children?: MdNode[] };
-
-/**
- * A line break typed in a request stays a line break (chat, not a document: Markdown would join
- * the lines). Code keeps its own lines anyway.
- */
-function remarkLineBreaks() {
-  const walk = (node: MdNode) => {
-    if (!node.children) return;
-    const next: MdNode[] = [];
-    for (const child of node.children) {
-      if (child.type === "text" && child.value?.includes("\n")) {
-        child.value.split("\n").forEach((part, index) => {
-          if (index > 0) next.push({ type: "break" });
-          if (part) next.push({ type: "text", value: part });
-        });
-      } else {
-        walk(child);
-        next.push(child);
-      }
-    }
-    node.children = next;
-  };
-  return (tree: MdNode) => walk(tree);
-}
-
-/** What the user typed, read as Markdown (headings, lists, code, tables), line breaks kept. */
-const RequestText = memo(function RequestText({ text }: { text: string }) {
-  return (
-    <div className="user-bubble markdown">
-      <Markdown remarkPlugins={[remarkGfm, remarkLineBreaks]} components={DRAWN}>
-        {text}
-      </Markdown>
-    </div>
-  );
-});
-
-function workSummary(items: (Item<"tool"> | Item<"reasoning">)[]) {
+function workSummary(items: Step[]) {
   const tools = items.filter((item): item is Item<"tool"> => item.kind === "tool");
   const running = tools.find((tool) => tool.status === "running");
   if (running) return { text: running.title, running: true };
   const counts = new Map<string, number>();
   for (const tool of tools) counts.set(tool.tool, (counts.get(tool.tool) ?? 0) + 1);
   const parts: string[] = [];
+  for (const plan of items) if (plan.kind === "plan") parts.push(`계획 ${plan.steps.length}/${plan.steps.length}`);
   if (counts.get("command")) parts.push(`명령 ${counts.get("command")}개`);
   if (counts.get("fileChange")) parts.push(`파일 변경 ${counts.get("fileChange")}건`);
   const other = tools.length - (counts.get("command") ?? 0) - (counts.get("fileChange") ?? 0);
   if (other) parts.push(`도구 ${other}개`);
-  if (!tools.length) parts.push("생각 정리");
+  if (!parts.length) parts.push("생각 정리");
   return { text: parts.join(" · "), running: false };
 }
 
@@ -203,8 +174,8 @@ function WorkBlock({ block, focusItemId }: { block: Extract<Block, { type: "work
     .filter((image, index, all) => all.findIndex((other) => other.id === image.id) === index);
   return (
     <>
-    <div className="work-block">
-      <button type="button" className="work-summary" onClick={() => setOpen(!open)} aria-expanded={open}>
+    <div className="work-block note-callout">
+      <button type="button" className="note-callout-head work-summary" onClick={() => setOpen(!open)} aria-expanded={open}>
         <Icon name={open ? "chevronDown" : "chevronRight"} size={14} />
         <span className={summary.running ? "work-summary-text running" : "work-summary-text"}>실행 상세 · {summary.text}</span>
         {summary.running ? <span className="spinner" /> : null}
@@ -215,6 +186,10 @@ function WorkBlock({ block, focusItemId }: { block: Extract<Block, { type: "work
           {block.items.map((item) =>
             item.kind === "tool" ? (
               <ToolRow key={item.id} item={item} focused={item.id === focusItemId} />
+            ) : item.kind === "plan" ? (
+              <li key={item.id} className="plan-row" data-item-id={item.id}>
+                <PlanSteps item={item} />
+              </li>
             ) : (
               <li key={item.id} className="reasoning-row" data-item-id={item.id}>
                 {item.text}
@@ -229,7 +204,17 @@ function WorkBlock({ block, focusItemId }: { block: Extract<Block, { type: "work
   );
 }
 
-function ApprovalCard({ item, onAnswer, onTrust }: { item: Item<"approval">; onAnswer: (decision: "accept" | "decline", response?: import("@workbench/contracts").OfficeInteractionResponse) => void; onTrust?: () => void }) {
+function ApprovalCard({ item, onAnswer, onTrust, readOnly = false }: { item: Item<"approval">; onAnswer: (decision: "accept" | "decline", response?: import("@workbench/contracts").OfficeInteractionResponse) => void; onTrust?: () => void; readOnly?: boolean }) {
+  // An archived conversation answers nothing: what waited is shown, without its answers.
+  if (readOnly && item.decision === null) {
+    return (
+      <div className="approval-card" role="note">
+        <div className="approval-title">{item.title}</div>
+        {item.detail ? <pre className="approval-detail">{item.detail}</pre> : null}
+        <div className="approval-reason">답하지 않은 채 보관했습니다. 대화를 되돌리면 답할 수 있습니다.</div>
+      </div>
+    );
+  }
   if (item.officeInteraction) return <OfficeQuestion item={item} onAnswer={onAnswer} />;
   if (item.plan) return <PlanApproval item={item} onAnswer={onAnswer} />;
   if (item.decision !== null) {
@@ -266,24 +251,30 @@ function ApprovalCard({ item, onAnswer, onTrust }: { item: Item<"approval">; onA
   );
 }
 
+function PlanSteps({ item }: { item: Item<"plan"> }) {
+  return (
+    <ol className="plan-steps">
+      {item.steps.map((step, index) => (
+        <li key={index} className={`plan-step ${step.status}`}>
+          <span className="plan-mark">{step.status === "completed" ? <Icon name="check" size={13} /> : step.status === "inProgress" ? <span className="spinner small" /> : null}</span>
+          <span>{step.text}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** A plan still running: an open callout (finished, it folds into the steps around it). */
 function PlanCard({ item }: { item: Item<"plan"> }) {
   const done = item.steps.filter((step) => step.status === "completed").length;
+  const [open, setOpen] = useState(true);
   return (
-    <div className="plan-card">
-      <div className="plan-head">
-        <span>계획</span>
-        <span className="plan-progress">
-          {done}/{item.steps.length}
-        </span>
-      </div>
-      <ol className="plan-steps">
-        {item.steps.map((step, index) => (
-          <li key={index} className={`plan-step ${step.status}`}>
-            <span className="plan-mark">{step.status === "completed" ? <Icon name="check" size={13} /> : step.status === "inProgress" ? <span className="spinner small" /> : null}</span>
-            <span>{step.text}</span>
-          </li>
-        ))}
-      </ol>
+    <div className="plan-card note-callout">
+      <button type="button" className="note-callout-head plan-head" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Icon name={open ? "chevronDown" : "chevronRight"} size={14} />
+        <span>계획 · {done}/{item.steps.length}</span>
+      </button>
+      {open ? <PlanSteps item={item} /> : null}
     </div>
   );
 }
@@ -318,19 +309,67 @@ function duration(ms: number | null) {
   return seconds < 60 ? `${seconds}초` : `${Math.floor(seconds / 60)}분 ${seconds % 60}초`;
 }
 
-type RailMark = { id: string; index: number; top: number; text: string; attention: boolean };
-
 const PIN_OPEN_KEY = "workbench.pinOpen";
 /** Where each conversation was read, while it is shown again after another view (mode switches). */
 const readAt = new Map<string, { top: number; anchor?: ReadingAnchor }>();
 /** Height of the folded request band; the band appears once the request slides under it. */
 const PIN_HEIGHT = 46;
 
-/** The first line of a request, without the Markdown marks that start it. */
-function firstLine(text: string) {
-  const line = text.split("\n").find((entry) => entry.trim()) ?? text;
-  return line.replace(/^\s*(#{1,6}\s+|[-*+]\s+|\d+[.)]\s+|>\s*)/, "").trim();
-}
+/**
+ * A request as a block of the note: its number, the words (folded when long), what came with it
+ * (always in view, pictures as thumbnails); the time and its tags on the right. Same left edge as
+ * the answers; no bubble. Memoised on the item: it never re-renders while a later answer streams.
+ */
+const RequestBlock = memo(function RequestBlock({ index, user, reveal, onFork, onOpenSession }: { index: number; user: Item<"user">; reveal: number; onFork?: (itemId: string) => void; onOpenSession: (sessionId: string) => void }) {
+  const kind = user.link ? (user.link.fromSessionId ? "받은 답" : "목표") : user.peer ? "받은 메시지" : "요청";
+  return (
+    <article className={`turn-request${user.link || user.peer ? " received" : ""}`} aria-label={`${kind} ${index}`} data-item-id={user.id} data-reading-id={user.id}>
+      <span className="turn-no" aria-hidden>{index}</span>
+      <div className="request-main">
+        {user.from ? (
+          <button type="button" className="from-badge" onClick={() => user.from && onOpenSession(user.from.sessionId)}>
+            <Icon name="arrowLeft" size={12} /> {user.from.label}에서 온 요청
+          </button>
+        ) : null}
+        {user.peer ? (
+          <span className="from-badge peer-badge" title={user.peer.from ? `보낸 세션: ${user.peer.from} (보낸 쪽이 밝힌 이름)` : undefined}>
+            <Icon name="arrowLeft" size={12} /> 다른 세션에서 온 메시지{user.peer.name ? ` · ${user.peer.name}` : ""}
+          </span>
+        ) : null}
+        {user.link ? <LinkHopBadge hop={user.link} /> : null}
+        {user.link?.fromSessionId ? <LinkRequestText text={user.text} reveal={reveal} /> : <RequestText text={user.text} reveal={reveal} />}
+        {user.attachments?.length ? <AttachmentStrip attachments={user.attachments} /> : null}
+        {user.refs?.length ? <RefChips refs={user.refs} /> : null}
+        {user.notes?.length ? <NoteChips notes={user.notes} /> : null}
+        {user.create ? (
+          <div className="ref-chips">
+            <span className="ref-chip create-chip" title={user.create.path}>
+              → 새 {CREATE_LABEL[user.create.format]}: {user.create.name}
+            </span>
+          </div>
+        ) : null}
+      </div>
+      <div className="request-side">
+        {user.plan ? <span className="request-tag plan-tag">계획 먼저</span> : null}
+        {user.scheduled ? <span className="request-tag scheduled-tag" title="예약 작업으로 보낸 요청">예약</span> : null}
+        {user.origin ? <span className="request-tag phone-tag" title="휴대폰 메신저에서 보낸 요청">휴대폰</span> : null}
+        {user.undelivered ? (
+          <span className="request-tag steer-tag undelivered" title="멈춰서 엔진에 전해지지 않았습니다. 입력창 위 목록에서 다시 보낼 수 있습니다.">전해지지 않음</span>
+        ) : user.steered ? (
+          <span className="request-tag steer-tag" title="응답하는 중에 보내 하던 작업에 전한 요청">작업 중 보냄</span>
+        ) : null}
+        {user.draw ? <span className="request-tag draw-tag" title="GPT Image로 그린 요청">그림{user.draw.template ? ` · ${user.draw.template}` : ""}</span> : null}
+        {onFork && !user.link && !user.peer ? (
+          <button type="button" className="icon-button small fork-button" onClick={() => onFork(user.id)} aria-label="이 요청 전으로"
+            title="이 요청 전으로 · 이 요청 앞까지의 대화로 새 갈래를 만들고, 이 요청을 고쳐 다시 묻습니다(이 대화는 그대로)">
+            <Icon name="restore" size={14} />
+          </button>
+        ) : null}
+        <time className="request-time" dateTime={new Date(user.at).toISOString()}>{clock(user.at)}</time>
+      </div>
+    </article>
+  );
+});
 
 export function Transcript({
   sessionId,
@@ -345,7 +384,16 @@ export function Transcript({
   onFocusDone,
   position,
   onPosition,
+  head,
+  band,
+  readOnly = false,
 }: {
+  /** An archived conversation: nothing is answered here (no approvals, by click or key). */
+  readOnly?: boolean;
+  /** The note's head (inline title and properties): the first thing in the reading column. */
+  head?: ReactNode;
+  /** While the head is out of view, the pinned band says the title (when no request is pinned) and carries `tail` at its end. */
+  band?: { title: string; tail: ReactNode };
   position?: ChatPosition;
   onPosition?: (position: ChatPosition) => void;
   sessionId: string;
@@ -382,22 +430,38 @@ export function Transcript({
   // The engine is working but nothing has arrived since the last request yet.
   const waitingFirst = running && blocks[blocks.length - 1]?.type === "user";
   const [sticky, setSticky] = useState<Turn | null>(null);
-  const [rail, setRail] = useState<{ marks: RailMark[]; viewTop: number; viewHeight: number; current: string | null }>({ marks: [], viewTop: 0, viewHeight: 1, current: null });
+  const [headGone, setHeadGone] = useState(false);
+  // A request a search hit or a jump lands in opens its folded words: every time (a new nonce per
+  // event), also after the reader folded it again.
+  const [revealed, setRevealed] = useState<{ id: string; nonce: number } | null>(null);
+  const reveal = (id: string) => setRevealed((previous) => ({ id, nonce: (previous?.nonce ?? 0) + 1 }));
+  // The search hit already opened (its nonce), so one hit opens once and the next one again.
+  const revealedFor = useRef<number | null>(null);
+  // Stable for the memoised request blocks: a streaming answer must not re-render earlier requests.
+  const forkRef = useRef(onFork);
+  forkRef.current = onFork;
+  const fork = useCallback((itemId: string) => forkRef.current?.(itemId), []);
+  const openSessionRef = useRef(docActions.openSession);
+  openSessionRef.current = docActions.openSession;
+  const openSession = useCallback((id: string) => openSessionRef.current(id), []);
 
-  // Which request the reader is inside (sticky header) and where every request sits (turn rail).
+  // Which request the reader is inside: the pinned band, and the outline (right sidebar) as it
+  // follows the reading. At the very end, the last request on screen counts even if it cannot
+  // reach the top.
   const measure = () => {
     const element = scroller.current;
     if (!element) return;
     const top = element.scrollTop;
-    const height = Math.max(element.scrollHeight, 1);
+    const atEnd = nearTranscriptEnd(element);
     let current: Turn | null = null;
-    const marks: RailMark[] = [];
+    let reading: Turn | null = null;
     for (const turn of turns) {
       const section = sections.current.get(turn.id);
       if (!section || !turn.user) continue;
-      marks.push({ id: turn.id, index: turn.index, top: section.offsetTop / height, text: turn.user.text, attention: turn.attention });
       if (section.offsetTop <= top + 12) current = turn;
+      if (section.offsetTop <= top + 12 || (atEnd && section.offsetTop < top + element.clientHeight)) reading = turn;
     }
+    setReadingAt(`chat:${sessionId}`, reading?.id ?? null);
     const header = current ? sections.current.get(current.id)?.querySelector<HTMLElement>(".turn-request") : null;
     const section = current ? sections.current.get(current.id) : null;
     // Offsets are relative to the scroller (the positioned ancestor of both). The band takes over
@@ -410,12 +474,9 @@ export function Transcript({
     const stillInside = section ? section.offsetTop + section.offsetHeight > top + cover + 48 : false;
     const nextSticky = current && headerGone && stillInside ? current : null;
     setSticky((previous) => (previous?.id === nextSticky?.id ? previous : nextSticky));
-    setAtBottom(nearTranscriptEnd(element));
-    const next = { marks, viewTop: top / height, viewHeight: element.clientHeight / height, current: current?.id ?? null };
-    // Measuring runs after every render, so state only changes when something visible moved.
-    const key = (value: typeof next) =>
-      `${value.current}|${value.viewTop.toFixed(3)}|${value.viewHeight.toFixed(3)}|${value.marks.map((mark) => `${mark.id}:${mark.top.toFixed(3)}:${mark.attention}`).join(",")}`;
-    setRail((previous) => (key(previous) === key(next) ? previous : next));
+    const headElement = element.querySelector<HTMLElement>(".note-head");
+    setHeadGone(Boolean(headElement) && headElement!.offsetTop + headElement!.offsetHeight < top + 4);
+    setAtBottom(atEnd);
   };
 
   // Another session: start at its newest output again — or where the reader left it, when this
@@ -447,6 +508,12 @@ export function Transcript({
       element.scrollTop = Math.min(top ?? restorePending.current, Math.max(0, element.scrollHeight - element.clientHeight));
       ownTop.current = element.scrollTop; lastTop.current = element.scrollTop;
       pinned.current = false; restorePending.current = null;
+    }
+    // Moved since the last scroll event (a key, the scroll bar, a script; the event comes a frame
+    // later): that is where the reader is now, not a layout shift to undo.
+    if (!pinned.current && restorePending.current === null && Math.abs(element.scrollTop - lastTop.current) > 0.5) {
+      lastTop.current = element.scrollTop;
+      readingAnchor.current = captureReadingAnchor(element);
     }
     if (!pinned.current && readingAnchor.current && restorePending.current === null && !focusItem) {
       const top = readingAnchorTop(element, readingAnchor.current);
@@ -489,6 +556,12 @@ export function Transcript({
     if (!focusItem || loading) return;
     const target = scroller.current?.querySelector<HTMLElement>(`[data-item-id="${CSS.escape(focusItem.itemId)}"]`);
     if (!target) return;
+    // A hit inside folded words: open them first; this runs again once they are open.
+    if (target.querySelector(".request-text .markdown.folded") && revealedFor.current !== focusItem.nonce) {
+      revealedFor.current = focusItem.nonce;
+      reveal(focusItem.itemId);
+      return;
+    }
     if (flashTarget.current) { window.clearTimeout(flashTarget.current.timer); flashTarget.current.element.classList.remove("flash"); }
     pinned.current = false;
     restorePending.current = null;
@@ -504,23 +577,29 @@ export function Transcript({
     const timer = window.setTimeout(() => { target.classList.remove("flash"); flashTarget.current = null; }, 2400);
     flashTarget.current = { element: target, timer };
     onFocusDone?.();
-  }, [focusItem, loading, items.length, onFocusDone]);
+  }, [focusItem, loading, items.length, onFocusDone, revealed]);
 
-  // Enter / Esc answer the pending approval when focus is not in a text field.
+  // Enter / Esc answer the pending approval (or plan), only from the page itself or from inside
+  // this conversation away from controls: never a key meant for the sidebar, a menu, another pane.
+  const wrap = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!pending || pending.officeInteraction) return;
+    if (!pending || pending.officeInteraction || readOnly) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
-      const target = event.target as HTMLElement;
-      if (target.closest("textarea, input, select, button, [contenteditable=true], [role=menu], [role=dialog], dialog")) return;
-      // With two panes, only the conversation in the focused one answers from the keyboard.
-      if (scroller.current?.closest('[data-pane-active="false"]')) return;
+      if (!approvalKeyApplies(event, wrap.current)) return;
       if (event.key === "Enter") onAnswer(pending.id, "accept");
       else if (event.key === "Escape") onAnswer(pending.id, "decline");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [pending, onAnswer]);
+  }, [pending, onAnswer, readOnly]);
+
+  const toTop = () => {
+    const element = scroller.current;
+    if (!element) return;
+    pinned.current = false;
+    readingAnchor.current = null;
+    element.scrollTo({ top: 0, behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  };
 
   const jumpTo = (turnId: string) => {
     const section = sections.current.get(turnId);
@@ -528,8 +607,14 @@ export function Transcript({
     if (!section || !element) return;
     pinned.current = false;
     readingAnchor.current = null;
+    reveal(turnId);
     element.scrollTo({ top: section.offsetTop - 8, behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   };
+
+  // The outline (right sidebar, a compact request list) jumps here with the same path.
+  const jumpRef = useRef(jumpTo);
+  jumpRef.current = jumpTo;
+  useEffect(() => registerNoteTarget(`chat:${sessionId}`, { element: () => scroller.current, jump: (turnId) => jumpRef.current(turnId) }), [sessionId]);
 
   const toBottom = () => {
     const element = scroller.current;
@@ -541,34 +626,23 @@ export function Transcript({
     onPosition?.({ top: element.scrollTop, follow: true });
   };
 
-  const speaker = (
-    <div className="speaker engine">
-      <EngineMark provider={provider} size={15} />
-      {PROVIDER_LABEL[provider]}
-    </div>
-  );
-
   const renderBlockContent = (block: Block) => {
     switch (block.type) {
       case "user":
         return null;
       case "assistant":
         return (
-          <div key={block.item.id} className="turn-assistant">
-            {block.speaker ? speaker : null}
+          <div key={block.item.id} className="turn-answer">
             <AssistantText text={block.item.text} streaming={block.item.streaming} media={block.item.media} />
             <MessageActions sessionId={sessionId} itemId={block.item.id} streaming={block.item.streaming} />
           </div>
         );
       case "work":
         return (
-          <div key={block.id} className="turn-assistant">
-            {block.speaker ? speaker : null}
-            <WorkBlock block={block} focusItemId={focusItem?.itemId} />
-          </div>
+          <WorkBlock key={block.id} block={block} focusItemId={focusItem?.itemId} />
         );
       case "approval":
-        return <ApprovalCard key={block.item.id} item={block.item} onAnswer={(decision, response) => onAnswer(block.item.id, decision, response)} onTrust={onTrust} />;
+        return <ApprovalCard key={block.item.id} item={block.item} readOnly={readOnly} onAnswer={(decision, response) => onAnswer(block.item.id, decision, response)} onTrust={onTrust} />;
       case "plan":
         return <PlanCard key={block.item.id} item={block.item} />;
       case "notice":
@@ -603,7 +677,7 @@ export function Transcript({
   };
 
   return (
-    <div className="transcript-wrap" data-screen="S03" data-follow-output={pinned.current}>
+    <div className="transcript-wrap" ref={wrap} data-screen="S03" data-follow-output={pinned.current}>
       <div
         className="transcript"
         role="region"
@@ -641,36 +715,46 @@ export function Transcript({
         }}
       >
         <div className="turn-pin-slot">
-          {sticky?.user ? (
-            <div className={`turn-pin${pinOpen ? " open" : ""}`}>
+          {sticky?.user || (headGone && band) ? (
+            <div className={`turn-pin${pinOpen && sticky?.user ? " open" : ""}`}>
               <div className="column turn-pin-inner">
-                <button type="button" className="turn-pin-main" onClick={() => jumpTo(sticky.id)} title="이 요청으로 올라가기">
-                  <span className="turn-no">{sticky.index}</span>
-                  {pinOpen ? null : <span className="turn-pin-text">{firstLine(sticky.user.text)}</span>}
-                </button>
-                {pinOpen ? (
-                  <div className="turn-pin-full">
-                    <RequestText text={sticky.user.text} />
-                  </div>
-                ) : null}
-                <button
-                  type="button"
-                  className="icon-button small turn-pin-toggle"
-                  onClick={() => {
-                    setPinOpen(!pinOpen);
-                    localStorage.setItem(PIN_OPEN_KEY, pinOpen ? "0" : "1");
-                  }}
-                  aria-expanded={pinOpen}
-                  title={pinOpen ? "요청 접기" : "요청 전체 보기"}
-                  aria-label={pinOpen ? "요청 접기" : "요청 전체 보기"}
-                >
-                  <Icon name={pinOpen ? "chevronUp" : "chevronDown"} size={15} />
-                </button>
+                {sticky?.user ? (
+                  <>
+                    <button type="button" className="turn-pin-main" onClick={() => jumpTo(sticky.id)} title="이 요청으로 올라가기">
+                      <span className="turn-no">{sticky.index}</span>
+                      {pinOpen ? null : <span className="turn-pin-text">{firstLine(sticky.user.text)}</span>}
+                    </button>
+                    {pinOpen ? (
+                      <div className="turn-pin-full">
+                        <RequestText text={sticky.user.text} fold={false} />
+                      </div>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="icon-button small turn-pin-toggle"
+                      onClick={() => {
+                        setPinOpen(!pinOpen);
+                        localStorage.setItem(PIN_OPEN_KEY, pinOpen ? "0" : "1");
+                      }}
+                      aria-expanded={pinOpen}
+                      title={pinOpen ? "요청 접기" : "요청 전체 보기"}
+                      aria-label={pinOpen ? "요청 접기" : "요청 전체 보기"}
+                    >
+                      <Icon name={pinOpen ? "chevronUp" : "chevronDown"} size={15} />
+                    </button>
+                  </>
+                ) : (
+                  <button type="button" className="turn-pin-main turn-pin-title" onClick={toTop} title="맨 위(제목)로">
+                    <span className="turn-pin-text">{band!.title}</span>
+                  </button>
+                )}
+                {headGone && band ? <div className="turn-pin-tail">{band.tail}</div> : null}
               </div>
             </div>
           ) : null}
         </div>
         <div className="column transcript-inner">
+          {head}
           {loading ? <div className="empty-hint" role="status">대화를 불러오는 중…</div> : null}
           {!loading && !blocks.length ? <div className="empty-hint">이 세션에 요청을 보내면 여기에 대화가 이어집니다.</div> : null}
           {turns.map((turn, position) => (
@@ -682,68 +766,11 @@ export function Transcript({
                 else sections.current.delete(turn.id);
               }}
             >
-              {turn.user ? (
-                <header className="turn-request" data-item-id={turn.user.id} data-reading-id={turn.user.id}>
-                  <div className="turn-meta">
-                    <span className="turn-no">{turn.index}</span>
-                    <span>{turn.user.link ? (turn.user.link.fromSessionId ? "받은 답" : "목표") : turn.user.peer ? "받은 메시지" : "요청"}</span>
-                    <span className="turn-meta-sep">·</span>
-                    <span>{clock(turn.user.at)}</span>
-                    {turn.user.plan ? <span className="plan-tag">계획 먼저</span> : null}
-                    {turn.user.scheduled ? (
-                      <span className="scheduled-tag" title="예약 작업으로 보낸 요청">
-                        예약
-                      </span>
-                    ) : null}
-                    {onFork && !turn.user.link && !turn.user.peer ? (
-                      <button type="button" className="fork-button" onClick={() => onFork(turn.user!.id)} title="이 요청 앞까지의 대화로 새 갈래를 만들고, 이 요청을 고쳐 다시 묻습니다(이 대화는 그대로)">
-                        <Icon name="restore" size={12} /> 이 요청 전으로
-                      </button>
-                    ) : null}
-                    {turn.user.undelivered ? (
-                      <span className="steer-tag undelivered" title="멈춰서 엔진에 전해지지 않았습니다. 입력창 위 목록에서 다시 보낼 수 있습니다.">
-                        전해지지 않음
-                      </span>
-                    ) : turn.user.steered ? (
-                      <span className="steer-tag" title="응답하는 중에 보내 하던 작업에 전한 요청">
-                        작업 중 보냄
-                      </span>
-                    ) : null}
-                    {turn.user.draw ? (
-                      <span className="steer-tag draw-tag" title="GPT Image로 그린 요청">
-                        그림{turn.user.draw.template ? ` · ${turn.user.draw.template}` : ""}
-                      </span>
-                    ) : null}
-                  </div>
-                  {turn.user.from ? (
-                    <button type="button" className="from-badge" onClick={() => turn.user?.from && docActions.openSession(turn.user.from.sessionId)}>
-                      <Icon name="arrowLeft" size={12} /> {turn.user.from.label}에서 온 요청
-                    </button>
-                  ) : null}
-                  {turn.user.peer ? (
-                    <span className="from-badge peer-badge" title={turn.user.peer.from ? `보낸 세션: ${turn.user.peer.from} (보낸 쪽이 밝힌 이름)` : undefined}>
-                      <Icon name="arrowLeft" size={12} /> 다른 세션에서 온 메시지{turn.user.peer.name ? ` · ${turn.user.peer.name}` : ""}
-                    </span>
-                  ) : null}
-                  {turn.user.link ? <LinkHopBadge hop={turn.user.link} /> : null}
-                  {turn.user.link?.fromSessionId ? <LinkRequestText text={turn.user.text} /> : <RequestText text={turn.user.text} />}
-                  {turn.user.attachments?.length ? <AttachmentStrip attachments={turn.user.attachments} /> : null}
-                  {turn.user.refs?.length ? <RefChips refs={turn.user.refs} /> : null}
-                  {turn.user.notes?.length ? <NoteChips notes={turn.user.notes} /> : null}
-                  {turn.user.create ? (
-                    <div className="ref-chips">
-                      <span className="ref-chip create-chip" title={turn.user.create.path}>
-                        → 새 {CREATE_LABEL[turn.user.create.format]}: {turn.user.create.name}
-                      </span>
-                    </div>
-                  ) : null}
-                </header>
-              ) : null}
+              {turn.user ? <RequestBlock index={turn.index} user={turn.user} reveal={revealed?.id === turn.user.id ? revealed.nonce : 0} onFork={onFork ? fork : undefined} onOpenSession={openSession} /> : null}
               <div className="turn-body">
                 {turn.blocks.map(renderBlock)}
                 {waitingFirst && position === turns.length - 1 ? (
-                  <div className="turn-assistant">
-                    {speaker}
+                  <div className="turn-answer">
                     <div className="response-pending" role="status" aria-label="응답을 기다리는 중">
                       <span className="response-pending-dots">
                         <i />
@@ -766,26 +793,16 @@ export function Transcript({
           ))}
         </div>
       </div>
+      {/* Back to the newest output: a band of its own under the conversation, the button inside the
+          reading column — it ends the scroll area there instead of floating over the words. */}
       {!atBottom ? (
-        <button type="button" className="to-bottom" onClick={toBottom} title="맨 아래로">
-          <Icon name="chevronDown" size={15} /> {running ? "새 응답 보기" : "맨 아래로"}
-        </button>
-      ) : null}
-      {rail.marks.length >= 3 ? (
-        <details className="turn-outline" onKeyDown={event => {
-          if (event.key !== "Escape" || event.defaultPrevented) return;
-          event.preventDefault(); event.stopPropagation(); event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus();
-        }}>
-          <summary aria-label="요청 목록" title="요청 목록"><Icon name="list" size={16} /></summary>
-          <nav aria-label="요청 목록">
-            <div className="turn-outline-label">이 대화의 요청</div>
-            {rail.marks.map(mark => <button key={mark.id} type="button" aria-current={mark.id === rail.current ? "location" : undefined} onClick={event => {
-              jumpTo(mark.id);
-              const disclosure = event.currentTarget.closest("details");
-              if (disclosure) { disclosure.open = false; disclosure.querySelector("summary")?.focus(); }
-            }}><span>{mark.index}</span><span>{firstLine(mark.text) || "첨부한 파일"}</span>{mark.attention ? <span className="turn-outline-attention">확인 필요</span> : null}</button>)}
-          </nav>
-        </details>
+        <div className="jump-band">
+          <div className="jump-band-inner">
+            <button type="button" className="jump-end" onClick={toBottom} title="맨 아래로">
+              <Icon name="chevronDown" size={15} /> {running ? "새 응답 보기" : "맨 아래로"}
+            </button>
+          </div>
+        </div>
       ) : null}
     </div>
   );

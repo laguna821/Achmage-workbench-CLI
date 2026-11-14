@@ -5,63 +5,6 @@
   transform-origin: 0 0;
 }
 
-/* The mode bar: a segmented row like the others; the raised cell slides to the chosen mode. */
-.mode-bar {
-  position: relative;
-  isolation: isolate;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--segmented-bg);
-  font-family: var(--font);
-}
-
-.mode-bar button {
-  position: relative;
-  z-index: 1;
-  height: 28px;
-  padding: 0 var(--space-3);
-  border: none;
-  border-radius: var(--r-sm);
-  background: transparent;
-  color: var(--muted);
-  font-size: var(--fs-meta);
-  font-weight: 500;
-  white-space: nowrap;
-  transition: color var(--dur-fast) var(--ease-out);
-}
-
-.mode-bar button:hover:not(:disabled):not(.active) {
-  color: var(--text);
-}
-
-.mode-bar button.active {
-  color: var(--text);
-  font-weight: 600;
-}
-
-.mode-bar button:disabled {
-  color: var(--faint);
-}
-
-.mode-pill {
-  position: absolute;
-  top: 2px;
-  left: 0;
-  height: 28px;
-  border-radius: var(--r-sm);
-  background: var(--surface);
-  box-shadow:
-    0 0 0 1px var(--line),
-    var(--elev-1);
-  transition:
-    transform var(--dur-base) var(--ease-out),
-    width var(--dur-base) var(--ease-out);
-}
-
 /* ── Home ─────────────────────────────────────────────────────────────── */
 .start-view.with-board .start-inner {
   margin-top: 0;
@@ -86,15 +29,44 @@
   margin-top: 0;
 }
 
-/* Sticky at the bottom centre while home scrolls; below the content when it is short. */
-.home-mode-bar {
+/* Home's four views are a primary navigation choice, not a footer disclosure. */
+.home-mode-nav {
   position: sticky;
-  bottom: var(--space-3);
+  top: 0;
   z-index: 15;
-  align-self: center;
-  margin: auto 0 var(--space-3);
-  background: var(--surface);
-  box-shadow: var(--elev-2);
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--chrome-line);
+  background: var(--chrome-bg);
+}
+.home-mode-nav .home-mode-bar {
+  max-width: 100%;
+  background: var(--chrome-bg);
+  box-shadow: inset 0 0 0 1px var(--chrome-line);
+}
+.home-mode-nav .home-mode-bar > button {
+  min-height: 32px;
+  padding-inline: 20px;
+  color: var(--chrome-muted);
+  font-size: 14px;
+}
+.home-mode-nav .home-mode-bar > button[aria-checked="true"] {
+  color: var(--chrome-accent);
+}
+.home-mode-nav .home-mode-bar .hk-seg__indicator {
+  background: var(--chrome-surface);
+  box-shadow: 0 0 0 1px var(--chrome-line);
+}
+@container work-pane (max-width: 500px) {
+  .home-mode-nav { padding: 8px; }
+  .home-mode-nav .home-mode-bar { width: 100%; }
+  .home-mode-nav .home-mode-bar > button { min-width: 0; padding-inline: 4px; }
+  .home-modes { padding-inline: 12px; }
+}
+@media (pointer: coarse) {
+  .home-mode-nav .home-mode-bar > button { min-height: 44px; }
 }
 
 .home-count {
@@ -145,7 +117,6 @@
 
 .home-row .home-session .engine-mark {
   flex: 0 0 auto;
-  color: var(--accent);
 }
 
 .home-row .home-row-toggle {
@@ -289,7 +260,6 @@
 
 .work-chip .engine-mark {
   flex: 0 0 auto;
-  color: var(--accent);
 }
 
 .work-chip-text {
@@ -410,7 +380,6 @@
 
 .board-card-head .engine-mark {
   flex: 0 0 auto;
-  color: var(--accent);
 }
 
 .board-card-work {
@@ -607,83 +576,19 @@
   box-shadow: 0 0 0 1px var(--line);
 }
 
-/* ── Work screen ──────────────────────────────────────────────────────── */
-.work-mode-row {
-  display: flex;
-  justify-content: center;
-  margin: 0 0 var(--space-2);
-}
-
-.work-mode-bar button {
-  height: 24px;
-  padding: 0 10px;
-  font-size: var(--fs-micro);
-}
-
-.work-mode-bar .mode-pill {
-  height: 24px;
-}
-
-/* "나란히": conversation | document, one input under both. */
-.split-host {
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-}
-
-.split-panes {
-  flex: 1 1 auto;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  min-height: 0;
-}
-
-.split-pane {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-}
-
-.split-pane > main {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-.split .split-pane.focused {
-  box-shadow: inset 0 2px 0 color-mix(in srgb, var(--accent) 55%, transparent);
-}
-
-.split-divider {
-  cursor: col-resize;
-  background: linear-gradient(var(--line), var(--line)) center / 1px 100% no-repeat;
-}
-
-.split-divider:hover,
-.split-divider:focus-visible {
-  outline: none;
-  background: linear-gradient(var(--accent), var(--accent)) center / 3px 100% no-repeat;
-}
-
-.split-input {
-  flex: 0 0 auto;
-  border-top: 1px solid var(--line);
-}
-
-/* Half a window: the document's name keeps its line, its controls go under it. */
-.split-host.split .doc-header {
+/* A document beside a conversation, or with its AI beside it: half a pane. The document's name
+   keeps its line, its controls go under it. */
+.beside[data-fit="beside"] .doc-header {
   grid-template-columns: auto minmax(0, 1fr);
   row-gap: 6px;
   padding: 8px 16px;
 }
 
-.split-host.split .doc-title {
+.beside[data-fit="beside"] .doc-title {
   justify-content: flex-start;
 }
 
-.split-host.split .doc-header-right {
+.beside[data-fit="beside"] .doc-header-right {
   grid-column: 1 / -1;
   justify-content: flex-end;
   flex-wrap: wrap;
@@ -791,12 +696,6 @@
 
 .reader-wait {
   color: var(--muted);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .mode-pill {
-    transition: none;
-  }
 }
 
 @media (max-width: 720px) {

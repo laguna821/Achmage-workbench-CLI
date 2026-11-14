@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import type { Artifact, Proposal } from "@workbench/contracts";
 import { initialState, type State } from "./state.ts";
-import { modeOf, restorePosition, reviewProposal, viewFor, workModeKey } from "./workmodes.ts";
+import { modeDocument, modeOf, restorePosition, reviewProposal, workModeKey } from "./workmodes.ts";
 
 // Work screen modes: which view a mode asks for, what 검토 opens, Alt+1–5, the reading position.
 
@@ -13,18 +13,28 @@ describe("work modes", () => {
     expect(modeOf({ kind: "work" }, false)).toBe("chat");
     expect(modeOf({ kind: "document", proposalId: null }, false)).toBe("doc");
     expect(modeOf({ kind: "document", proposalId: "p" }, false)).toBe("review");
-    expect(modeOf({ kind: "split" }, false)).toBe("split");
+    // 나란히: the document beside its conversation, in that conversation's tab.
+    expect(modeOf({ kind: "work", beside: { kind: "document", artifactId: "d", proposalId: null } }, false)).toBe("split");
+    // A web page beside a conversation is not a document mode.
+    expect(modeOf({ kind: "work", beside: { kind: "browser", pageId: "p" } }, false)).toBe("chat");
     expect(modeOf({ kind: "document", proposalId: null }, true)).toBe("read");
     expect(modeOf({ kind: "new" }, false)).toBeNull();
   });
 
-  it("opens 나란히 with the input on the side the user came from, sharing that side's draft", () => {
-    const context = { docId: "d", proposalId: "p", chatDraft: "work:w:s" };
-    expect(viewFor("split", { ...context, from: "chat" })).toEqual({ kind: "split", artifactId: "d", draftKey: "work:w:s", focus: "chat" });
-    expect(viewFor("split", { ...context, from: "doc" })).toEqual({ kind: "split", artifactId: "d", draftKey: "doc:d", focus: "doc" });
-    expect(viewFor("review", { ...context, from: "doc" })).toEqual({ kind: "document", artifactId: "d", proposalId: "p" });
-    expect(viewFor("doc", { ...context, from: "review" })).toEqual({ kind: "document", artifactId: "d", proposalId: null });
-    expect(viewFor("chat", { ...context, from: "split" })).toEqual({ kind: "work" });
+  it("is about the document the view shows: its own tab's, or the conversation's companion", () => {
+    expect(modeDocument({ kind: "document", artifactId: "a" }, ["b"], "b")).toBe("a");
+    expect(modeDocument({ kind: "work", beside: { kind: "document", artifactId: "a", proposalId: null } }, ["b"], "b")).toBe("a");
+  });
+
+  it("in a conversation with nothing beside it: a document of the project open in a tab now — the one shown last, else the newest tab", () => {
+    expect(modeDocument({ kind: "work" }, ["a", "b"], "a")).toBe("a");
+    expect(modeDocument({ kind: "work" }, ["a", "b"], undefined)).toBe("b");
+    expect(modeDocument({ kind: "work" }, ["a", "b"], "closed")).toBe("b");
+  });
+
+  it("no document open: no modes — a document shown once and closed since does not bring them back", () => {
+    expect(modeDocument({ kind: "work" }, [], undefined)).toBeNull();
+    expect(modeDocument({ kind: "work" }, [], "closed")).toBeNull();
   });
 
   it("reviews the newest proposal made on the current revision first", () => {

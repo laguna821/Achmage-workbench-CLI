@@ -5,6 +5,7 @@ export type BrowserPlacement = { pageId: string; x: number; y: number; width: nu
 export type BrowserNativeCommand =
   | { kind: "create"; pageId: string; profileId: string; url: string; control: BrowserControl }
   | { kind: "list" }
+  | { kind: "close"; pageId: string; profileId: string }
   | { kind: "present"; pages: BrowserPlacement[] }
   | { kind: "download-directory"; pageId: string; directory: string | null }
   | { kind: "download-cancel"; pageId: string; downloadId: string }
@@ -56,6 +57,7 @@ export class SharedBrowser {
   private readonly accepted = new Set<string>();
   private readonly lanes = new Map<string, Promise<void>>();
   private readonly closing = new Map<string, Promise<void>>();
+  private readonly restoring = new Map<string, Promise<BrowserPage>>();
   private readonly surfaces = new Map<string, Surface>();
   private readonly nativeCreates = createdPages();
   private readonly creationErrors = new Map<string, string>();
@@ -127,7 +129,7 @@ export class SharedBrowser {
         if (this.results.get(result.id) === result) this.results.delete(result.id);
         if (this.value.pending[result.pageId]?.id === result.id && !result.error) this.pending(result.pageId, null);
       }
-      if (version === this.version) this.change({ pages: reply.pages.map(page => this.creationState(page)), profiles: reply.profiles, connected: true, error: null });
+      if (version === this.version) this.change({ pages: reply.pages.map(page => this.creationState(page)), profiles: reply.profiles, closedPageIds: reply.closedPageIds ?? [], connected: true, error: null });
       else this.change({ connected: true, error: null });
       for (const job of reply.jobs) this.scheduleJob(job);
       // Host-created agent tabs use this same native driver; never a URL-copy viewer.
@@ -183,6 +185,23 @@ export class SharedBrowser {
     const error = this.creationErrors.get(page.pageId);
     return error && page.status === "opening" ? { ...page, status: "interrupted", error } : page;
   }
+  restore(pageId: string): Promise<BrowserPage> {
+    const closing = this.closing.get(pageId);
+    if (closing || this.value.closedPageIds?.includes(pageId)) return Promise.reject(new Error("닫은 웹 탭입니다."));
+    const previous = this.restoring.get(pageId); if (previous) return previous;
+    const restoring = this.restorePage(pageId).finally(() => { if (this.restoring.get(pageId) === restoring) this.restoring.delete(pageId); });
+    this.restoring.set(pageId, restoring); return restoring;
+  }
+  private async restorePage(pageId: string): Promise<BrowserPage> {
+    if (!this.api || !this.native) throw new Error("데스크톱 기본 창에서 열어 주세요.");
+    const current = this.value.pages.find(page => page.pageId === pageId);
+    if (current?.status === "ready" && current.driverId === this.driverId) return current;
+    const page = await this.api.restore(pageId, this.driverId);
+    if (page.pageId !== pageId || page.driverId !== this.driverId) throw new Error("복원할 웹 탭의 대상이 일치하지 않습니다.");
+    this.creationErrors.delete(pageId); this.nativeCreates.delete(pageId);
+    this.pending(pageId, null); // Old receipts remain in the host; no old action is resent.
+    return this.connectCreated(page);
+  }
   async reconcileCreation(input: BrowserPageCreate): Promise<BrowserPage | null> {
     const page = (await this.refresh()).pages.find(entry => entry.pageId === input.requestId);
     if (!page) return null;
@@ -194,6 +213,11 @@ export class SharedBrowser {
     this.upsert(this.creationState(page));
     if (page.status !== "opening") return page;
     const existing = (await this.native<NativeBrowserPage[]>({ kind: "list" })).find(entry => entry.pageId === page.pageId);
+    if (existing && existing.profileId !== page.profileId) throw new Error("다른 프로필의 웹 탭입니다.");
+    if (existing && !sameBrowserControl(existing.control, page.control)) {
+      const result = await this.native<BrowserJobResult>({ kind: "execute", job: { id: `restore-${crypto.randomUUID()}`, pageId: page.pageId, driverId: this.driverId, action: { kind: "control", control: page.control }, expected: null, control: page.control, deadline: Date.now() + 20000 } });
+      if (result.error) throw new Error(result.error);
+    }
     if (!existing) {
       if (this.nativeCreates.has(page.pageId)) {
         this.creationErrors.set(page.pageId, "이 웹 페이지의 생성 결과를 확인할 수 없습니다. 새 탭으로 다시 열어 주세요.");
@@ -212,9 +236,9 @@ export class SharedBrowser {
     }
     await this.poll(); return this.value.pages.find(entry => entry.pageId === page.pageId) ?? page;
   }
-  async session(pageId: string, parentSessionId: string | null) {
+  async session(pageId: string, parentSessionId: string | null, provider?: import("@workbench/contracts").Provider) {
     if (!this.api) throw new Error("호스트에 연결해 주세요.");
-    const session = await this.api.session(pageId, parentSessionId);
+    const session = await this.api.session(pageId, parentSessionId, provider);
     const page = this.value.pages.find(entry => entry.pageId === pageId);
     if (page) this.upsert({ ...page, sessionId: session.id }); return session;
   }
@@ -281,15 +305,14 @@ export class SharedBrowser {
     this.closing.set(pageId, closing); return closing;
   }
   private async closePage(pageId: string): Promise<void> {
-    let page = this.value.pages.find(entry => entry.pageId === pageId);
-    if (!page || page.status === "closed" || page.status === "interrupted") return;
-    if (this.value.pending[pageId]) {
-      const result = await this.reconcile(pageId);
-      if (!result) throw new Error("앞선 동작의 결과를 확인한 뒤 웹 탭을 닫아 주세요.");
-      if (result.error) throw new Error(result.error);
-    }
-    if (page.control.owner !== "human" || !page.native || !sameBrowserControl(page.control, page.native.control)) page = await this.control(pageId, "human");
-    await this.action(page.pageId, { kind: "close" });
+    if (!this.api) throw new Error("호스트에 연결해 주세요.");
+    if (this.value.closedPageIds?.includes(pageId)) return;
+    await this.restoring.get(pageId)?.catch(() => {});
+    const page = await this.api.close(pageId);
+    // Persist closure before disposing a view. Broken page scripts cannot prevent closing.
+    this.upsert(page); this.pending(pageId, null);
+    this.change({ closedPageIds: [...new Set([...(this.value.closedPageIds ?? []), pageId])] });
+    if (this.native) await this.native({ kind: "close", pageId, profileId: page.profileId });
   }
   surface(id: string, pageId: string, element: HTMLElement, visible: boolean): () => void {
     this.surfaces.set(id, { pageId, element, visible }); this.resize?.observe(element); this.schedulePresentation();
@@ -302,7 +325,12 @@ export class SharedBrowser {
   /** Public for deterministic layout checks; native rectangles use logical CSS pixels. */
   async present(forceHide = false): Promise<void> {
     if (!this.native) return;
-    const blocked = forceHide || document.hidden || !this.value.connected || Array.from(document.querySelectorAll<HTMLElement>('dialog[open], [role="dialog"], [role="menu"], .popover, .context-menu, .palette-backdrop')).some(element => element.getClientRects().length > 0 && getComputedStyle(element).visibility !== "hidden" && !element.closest('[hidden], [aria-hidden="true"]'));
+    const overlays = Array.from(document.querySelectorAll<HTMLElement>('dialog[open], [role="dialog"], [role="menu"], .popover, .context-menu, .palette-backdrop, [data-covers-web]')).filter(element => element.getClientRects().length > 0 && getComputedStyle(element).visibility !== "hidden" && !element.closest('[hidden], [aria-hidden="true"]'));
+    // Native child views paint above DOM content. Modal surfaces block the whole window;
+    // local menus/forms only hide pages they actually overlap, leaving side chat usable.
+    // `data-covers-web`: a sheet laid over the work (the narrow right sidebar and its scrim).
+    const blocked = forceHide || document.hidden || !this.value.connected || overlays.some(element => element.matches('dialog[open], [aria-modal="true"], .palette-backdrop, [role="dialog"]:not(.popover)'));
+    const obstructions = overlays.map(element => element.getBoundingClientRect());
     const placements = new Map<string, BrowserPlacement>(this.nativePages.map(page => [page.pageId, { pageId: page.pageId, x: 0, y: 0, width: 1, height: 1, visible: false }]));
     if (!blocked) for (const surface of this.surfaces.values()) {
       if (!surface.visible || !surface.element.isConnected || surface.element.closest('[hidden], [aria-hidden="true"]')) continue;
@@ -310,6 +338,7 @@ export class SharedBrowser {
       if (!page || page.status !== "ready" || page.driverId !== this.driverId) continue;
       const box = surface.element.getBoundingClientRect();
       const x = Math.max(0, box.left), y = Math.max(0, box.top), width = Math.min(window.innerWidth, box.right) - x, height = Math.min(window.innerHeight, box.bottom) - y;
+      if (obstructions.some(rect => rect.left < x + width && rect.right > x && rect.top < y + height && rect.bottom > y)) continue;
       if (width > 1 && height > 1 && getComputedStyle(surface.element).visibility !== "hidden") placements.set(surface.pageId, { pageId: surface.pageId, x, y, width, height, visible: true });
     }
     const pages = [...placements.values()], serialized = JSON.stringify(pages);

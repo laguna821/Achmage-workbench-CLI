@@ -1,19 +1,19 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { REMARK_BASE } from "../markdown/plugins.ts";
 import { diagramComponents } from "./Diagram.tsx";
 
 const DRAWN = diagramComponents();
-import { FORMAT_LABEL, PROVIDER_LABEL, isOfficeFormat, type Artifact, type DocFormat, type Handoff, type Proposal, type RefSummary } from "@workbench/contracts";
+import { PROVIDER_LABEL, isOfficeFormat, type Artifact, type DocFormat, type Handoff, type Proposal, type RefSummary } from "@workbench/contracts";
 import { accentStyle, useAppearance } from "../appearance.ts";
 import { ago } from "../format.ts";
 import { changeKindLabel, designChanges, firstChangedPage, proposalTexts, useDesignThumb, type DesignChange } from "../design.ts";
-import { useOfficePage } from "../office.ts";
 import type { State } from "../state.ts";
 import { EngineMark } from "./EngineMark.tsx";
 import { Icon } from "./Icon.tsx";
 import { HandoffResend, PartialNote } from "./Recovery.tsx";
 import { appendDraft, quotedAnswer } from "../draft.ts";
+import { useOfficePage } from "../office.ts";
 
 // Cards for documents inside the conversation: files an engine wrote, proposals waiting for a
 // decision, and requests sent to other sessions with their answers.
@@ -56,18 +56,6 @@ export function FormatBadge({ format }: { format: DocFormat }) {
   return <span className={`format-badge format-${format}`}>{FORMAT_MARK[format]}</span>;
 }
 
-/** First page of a design revision, drawn small for the conversation. */
-function DesignCardThumb({ artifactId, revision }: { artifactId: string; revision: number }) {
-  const thumb = useDesignThumb({ artifactId, revision }, 0, 240);
-  return <span className="design-card-thumb">{thumb.url ? <img src={thumb.url} alt="" /> : <span className="design-thumb-wait">{thumb.error ? "미리보기 없음" : ""}</span>}</span>;
-}
-
-/** First page of a Word/PowerPoint/Excel revision, as IeumOffice renders it. */
-function OfficeCardThumb({ artifactId, revision }: { artifactId: string; revision: number }) {
-  const image = useOfficePage({ artifactId, revision }, 1);
-  return <span className="design-card-thumb">{image.url ? <img src={image.url} alt="" /> : <span className="design-thumb-wait">{image.error ? "미리보기 없음" : ""}</span>}</span>;
-}
-
 /** Base and proposed first pages of a Word/PowerPoint/Excel proposal. */
 function OfficeProposalPreview({ proposal }: { proposal: Proposal }) {
   const before = useOfficePage({ proposalId: proposal.id, side: "base" }, 1);
@@ -89,34 +77,37 @@ function OfficeProposalPreview({ proposal }: { proposal: Proposal }) {
   );
 }
 
+/** First page of a design revision, drawn small: a picture is shown, not named. */
+function DesignCardThumb({ artifactId, revision }: { artifactId: string; revision: number }) {
+  const thumb = useDesignThumb({ artifactId, revision }, 0, 240);
+  return <span className="design-card-thumb">{thumb.url ? <img src={thumb.url} alt="" /> : <span className="design-thumb-wait">{thumb.error ? "미리보기 없음" : ""}</span>}</span>;
+}
+
+/** First page of a Word/PowerPoint/Excel revision, as IeumOffice renders it. */
+function OfficeCardThumb({ artifactId, revision }: { artifactId: string; revision: number }) {
+  const image = useOfficePage({ artifactId, revision }, 1);
+  return <span className="design-card-thumb">{image.url ? <img src={image.url} alt="" /> : <span className="design-thumb-wait">{image.error ? "미리보기 없음" : ""}</span>}</span>;
+}
+
+/**
+ * A file the work made or changed: one line that opens it, as a link in a note. What had a
+ * preview keeps it in place of the format badge: a design's picture, an Office file's first page.
+ */
 export function FileCard({ artifact, revision, change }: { artifact: Artifact; revision: number; change: "created" | "modified" }) {
   const { actions } = useDocs();
   const newer = artifact.revision > revision;
+  const preview = artifact.format === "design" ? <DesignCardThumb artifactId={artifact.id} revision={revision} />
+    : isOfficeFormat(artifact.format) ? <OfficeCardThumb artifactId={artifact.id} revision={revision} /> : null;
   return (
-    <button
-      type="button"
-      className={`doc-card${artifact.format === "design" || isOfficeFormat(artifact.format) ? " design" : ""}`}
-      onClick={() => actions.openArtifact(artifact.id)}
-      title={artifact.path}
-    >
-      {artifact.format === "design" ? (
-        <DesignCardThumb artifactId={artifact.id} revision={revision} />
-      ) : isOfficeFormat(artifact.format) ? (
-        <OfficeCardThumb artifactId={artifact.id} revision={revision} />
-      ) : (
-        <FormatBadge format={artifact.format} />
-      )}
-      <span className="doc-card-main">
-        <span className="doc-card-name">{artifact.name}</span>
-        <span className="doc-card-meta">
-          {change === "created" ? "새 파일" : "수정"} · r{revision}
-          {newer ? ` · 지금 r${artifact.revision}` : ""}
-          {artifact.diskState !== "same" ? " · 디스크와 다름" : ""} · {FORMAT_LABEL[artifact.format]}
-        </span>
+    <button type="button" className={`doc-card${preview ? " with-thumb" : ""}`} onClick={() => actions.openArtifact(artifact.id)} title={`${artifact.path} · 열기`}>
+      {preview ?? <FormatBadge format={artifact.format} />}
+      <span className="doc-card-name">{artifact.name}</span>
+      <span className="doc-card-meta">
+        {change === "created" ? "새 파일" : "수정"} · r{revision}
+        {newer ? ` · 지금 r${artifact.revision}` : ""}
+        {artifact.diskState !== "same" ? " · 디스크와 다름" : ""}
       </span>
-      <span className="doc-card-open">
-        열기 <Icon name="arrowRight" size={14} />
-      </span>
+      <Icon name="arrowRight" size={14} className="doc-card-open" />
     </button>
   );
 }
@@ -166,6 +157,9 @@ function DesignProposalPreview({ proposal }: { proposal: Proposal }) {
   );
 }
 
+/** A Hangul proposal that no longer holds something its base revision held: said before applying, not refused. */
+export const removedLine = (removed: string[]) => `이 수정안을 적용하면 없어집니다: ${removed.join(", ")}`;
+
 export function ProposalCard({ proposal }: { proposal: Proposal }) {
   const { state, actions } = useDocs();
   const { lookOf } = useAppearance();
@@ -195,6 +189,7 @@ export function ProposalCard({ proposal }: { proposal: Proposal }) {
       {artifact.format === "design" && proposal.status !== "running" && proposal.status !== "empty" ? <DesignProposalPreview proposal={proposal} /> : null}
       {isOfficeFormat(artifact.format) && proposal.status !== "running" && proposal.status !== "empty" ? <OfficeProposalPreview proposal={proposal} /> : null}
       {proposal.problem && proposal.status === "pending" ? <div className="proposal-warning">디자인 파일이 올바르지 않아 적용할 수 없습니다: {proposal.problem}</div> : null}
+      {proposal.removedStructure?.length && proposal.status === "pending" ? <div className="proposal-warning">{removedLine(proposal.removedStructure)}</div> : null}
       {proposal.status === "pending" ? (
         stale ? (
           <>
@@ -290,7 +285,7 @@ export function HandoffCard({ handoff, viewer }: { handoff: Handoff; viewer: str
       {handoff.reply ? (
         <div className={`handoff-reply${open ? " open" : ""}`}>
           <div className="markdown">
-            <Markdown remarkPlugins={[remarkGfm]} components={open ? DRAWN : undefined}>
+            <Markdown remarkPlugins={REMARK_BASE} components={open ? DRAWN : undefined}>
               {open ? handoff.reply : handoff.reply.slice(0, 400) + (handoff.reply.length > 400 ? "…" : "")}
             </Markdown>
           </div>

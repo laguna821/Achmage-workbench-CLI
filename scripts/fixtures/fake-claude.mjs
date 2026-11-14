@@ -26,6 +26,10 @@
 //          `playwright-cli -s=<name> open <address>` through Bash from its PATH like a model would
 //   "찾아 줘: <질의>"  runs `workbench-find "<질의>"` through Bash from its PATH (leading --flags stay
 //          flags), asking first unless the permission mode lets it through, and answers with the output
+//   "비밀 필요: <args>"  runs `workbench-credential <args>` through Bash from its PATH (as a model asks
+//          for something only the person has), and answers with its one line; a continuation
+//          request ("[자동 이어 하기] '<이름>'가 준비되었습니다…") runs `workbench-credential need --name <이름>`
+//   "화면 명령: <args>"  runs `playwright-cli -s=<name> <args>` after the above (with the browser's instructions)
 //   "고쳐"  appends to the working copy the request names
 //   "실패해"  the turn fails without an answer, as Claude Code reports an API error (is_error result)
 // Vault notes attached to a request are named back ("받은 노트 사본: …").
@@ -359,6 +363,32 @@ async function runTurn(text) {
     send({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolId, content: result.output, is_error: result.code !== 0 }] }, parent_tool_use_id: null, ...base() });
     findLine = allowed ? `workbench-find 결과 (종료 코드 ${result.code}):\n\n\`\`\`text\n${result.output.trimEnd()}\n\`\`\`` : "workbench-find: 거절됨";
   }
+  let credentialLine = null;
+  const credentialArgs = /비밀 필요:\s*([^\n]+)/.exec(text)?.[1]?.trim() ?? (/'([^'\n]+)'가 준비되었습니다\. 멈춘 곳에서 이어 하세요\./.exec(text) ? `need --name "${/'([^'\n]+)'가 준비되었습니다/.exec(text)[1].replace(/"/g, "")}"` : null);
+  if (credentialArgs) {
+    const toolId = `toolu_${randomUUID().slice(0, 8)}`;
+    const input = { command: `workbench-credential ${credentialArgs}`, description: "사람만 가진 값 넘겨받기" };
+    send({ type: "assistant", message: { id: `msg_${randomUUID().slice(0, 8)}`, type: "message", role: "assistant", model: MODEL, content: [{ type: "tool_use", id: toolId, name: "Bash", input }], stop_reason: "tool_use", stop_sequence: null, usage: { input_tokens: 10, output_tokens: 20, cache_creation_input_tokens: 0, cache_read_input_tokens: used } }, parent_tool_use_id: null, ...base() });
+    let allowed = permissionMode === "bypassPermissions" || permissionMode === "dontAsk";
+    if (!allowed) {
+      const answerToTool = await ask({ subtype: "can_use_tool", tool_name: "Bash", input, tool_use_id: toolId, decision_reason: "명령 실행은 확인이 필요합니다" });
+      allowed = answerToTool?.behavior === "allow";
+    }
+    const result = allowed ? await runCommand(input.command) : { code: 1, output: "The user declined this action." };
+    send({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolId, content: result.output, is_error: result.code !== 0 }] }, parent_tool_use_id: null, ...base() });
+    credentialLine = allowed ? `workbench-credential: ${result.output.trim().split("\n")[0]}` : "workbench-credential: 거절됨";
+  }
+  // "화면 명령: <args>": one more agent browser command after the above (a snapshot after a fill), as a model would.
+  let pageLine = null;
+  const pageArgs = /화면 명령:\s*([^\n]+)/.exec(text)?.[1]?.trim();
+  if (pageArgs && browser) {
+    const toolId = `toolu_${randomUUID().slice(0, 8)}`;
+    const input = { command: `playwright-cli -s=${browser.name} ${pageArgs}`, description: "브라우저 명령" };
+    send({ type: "assistant", message: { id: `msg_${randomUUID().slice(0, 8)}`, type: "message", role: "assistant", model: MODEL, content: [{ type: "tool_use", id: toolId, name: "Bash", input }], stop_reason: "tool_use", stop_sequence: null, usage: { input_tokens: 10, output_tokens: 20, cache_creation_input_tokens: 0, cache_read_input_tokens: used } }, parent_tool_use_id: null, ...base() });
+    const result = await runCommand(input.command);
+    send({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolId, content: result.output, is_error: result.code !== 0 }] }, parent_tool_use_id: null, ...base() });
+    pageLine = `화면 명령: 종료 코드 ${result.code}`;
+  }
   // A document edit: the gateway names the working copy to change; the file itself stays as it is.
   const working = text.match(/작업 사본만 수정하세요: (.+)/);
   if (text.includes("고쳐") && working) appendFileSync(resolve(process.cwd(), working[1].trim()), "\n\n고친 문단입니다. 도입부를 질문 하나로 시작하게 바꿨습니다.\n");
@@ -421,6 +451,8 @@ async function runTurn(text) {
     const chunks = [];
     if (browserLine) chunks.push({ text: `${browserLine}\n\n`, wait: 30 });
     if (findLine) chunks.push({ text: `${findLine}\n\n`, wait: 30 });
+    if (credentialLine) chunks.push({ text: `${credentialLine}\n\n`, wait: 30 });
+    if (pageLine) chunks.push({ text: `${pageLine}\n\n`, wait: 30 });
     if (steer) chunks.push({ text: steer, wait: 30 });
     if (text.includes("작업 폴더")) chunks.push({ text: `작업 폴더: ${process.cwd()}\n\n`, wait: 30 });
     if (resumedRequests !== null) {

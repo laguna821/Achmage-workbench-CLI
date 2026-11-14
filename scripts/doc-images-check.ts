@@ -264,8 +264,8 @@ const png = (seed: number, name = "image.png") => ({ b64: makePng(180 + seed * 1
 async function openDoc(page: Page, name: string) {
   // The documents menu is in the conversation view.
   if (await page.locator(".doc-tab.conversation").count()) await page.locator(".doc-tab.conversation").click();
-  await page.locator(".docs-button").click();
-  await page.locator(".docs-menu").getByText(name, { exact: true }).click();
+  await page.locator(".note-head-more").click();
+  await page.locator(".note-menu").getByText(name, { exact: true }).click();
 }
 const editorFrame = (page: Page, kind: string) => page.frames().find((frame) => frame.url().includes(`/office/${kind}.html`));
 const saveState = (page: Page) => page.locator(".save-state").innerText().catch(() => "");
@@ -295,11 +295,11 @@ async function flow(provider: Provider, index: number) {
   page.on("response", (response) => response.status() >= 500 && logs.push(`[${label} HTTP ${response.status()}] ${response.url().replace(/token=[^&]+/, "token=…").slice(0, 160)}`));
   const shot = (name: string) => page.screenshot({ path: join(outDir, `${provider}-${name}`) });
   const pass = (step: string, ok: boolean, detail = "") => check(`[${label}] ${step}`, ok, detail);
-  const toast = async () => (await page.locator(".toast").innerText().catch(() => "")).replace(/\s+/g, " ");
+  const toast = async () => (await page.locator(".top-notice").innerText().catch(() => "")).replace(/\s+/g, " ");
   try {
     await page.addInitScript((id) => localStorage.setItem("workbench.lastWork", id), work.id);
     await page.goto(`${ready.url}/?token=${ready.token}`);
-    await page.waitForSelector(".docs-button");
+    await page.waitForSelector(".note-head-more");
 
     // ── R2 settings ─────────────────────────────────────────────────────
     await page.locator('button[aria-label="연결과 설정"]').click();

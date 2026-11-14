@@ -26,6 +26,33 @@ describe("dates typed by a person", () => {
     expect(parseDate("2026-02-30", NOW)).toBeNull();
     expect(parseDate("다음 주", NOW)).toBeNull();
   });
+
+  // NOW is Thursday 2026-10-29. A date without a year is its next occurrence (today included).
+  it.each([
+    ["11월 20일", "2026-11-20"],
+    ["11월20일", "2026-11-20"],
+    ["10월 29일", "2026-10-29"],
+    ["3월 2일", "2027-03-02"],
+    ["2026년 11월 20일", "2026-11-20"],
+    ["11/20", "2026-11-20"],
+    ["11.20", "2026-11-20"],
+    ["1/5", "2027-01-05"],
+    ["2026-11-20", "2026-11-20"],
+    ["2026-11-20T09:30", "2026-11-20"],
+    ["오늘", "2026-10-29"],
+    ["내일", "2026-10-30"],
+    ["모레", "2026-10-31"],
+    ["다음 주 금요일", "2026-11-06"],
+    ["이번 주 금요일", "2026-10-30"],
+    ["금요일", "2026-10-30"],
+    ["다음주 월요일", "2026-11-02"],
+  ])("reads %s as %s", (typed, written) => {
+    expect(parseDate(typed, NOW)).toBe(written);
+  });
+
+  it.each(["11월 31일", "13/1", "언젠가", "다음 주 금"])("refuses %s", (typed) => {
+    expect(parseDate(typed, NOW)).toBeNull();
+  });
 });
 
 describe("a value in its kind", () => {

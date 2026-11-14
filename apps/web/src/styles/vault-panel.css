@@ -1,0 +1,32 @@
+/* "비밀 보관함" (VaultPanel.tsx) inside the 휴대폰 메신저 dialog: a management list, neutral, with
+   hairlines between rows; the waiting requests and the form are the only boxes. */
+.vault { display: grid; gap: var(--space-3); }
+.vault p { margin: 0; }
+.vault-waiting { display: grid; gap: var(--space-2); }
+.vault-wait { display: grid; gap: 4px; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--r-md); }
+.vault-wait .feature-actions { margin: 4px 0 0; }
+.vault-where { color: var(--muted); font-size: var(--fs-meta); }
+.vault-site { color: var(--muted); }
+.vault-form { display: grid; gap: var(--space-2); max-width: 460px; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--r-md); }
+.vault-form label, .vault-rename label { margin: 0; }
+.vault-form .feature-actions { margin: 0; }
+.vault-field { display: flex; gap: var(--space-2); align-items: end; }
+.vault-field label { flex: 1 1 auto; min-width: 0; }
+.vault-show { flex: 0 0 auto; margin-bottom: 6px; }
+.vault-list { display: grid; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.vault-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--space-3); align-items: center; padding: var(--space-2) 0; border-bottom: 1px solid var(--line); }
+.vault-main { display: grid; gap: 2px; min-width: 0; }
+.vault-main strong { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vault-meta { color: var(--muted); font-size: var(--fs-meta); overflow-wrap: anywhere; }
+.vault-ask { margin: 0; white-space: nowrap; }
+.vault-actions { margin: 0; flex-wrap: nowrap; }
+.vault-delete { color: var(--muted); }
+.vault-rename { grid-column: 1 / -1; display: grid; gap: 4px; }
+.vault-rename-row { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
+.vault-rename-row input { flex: 0 1 240px; min-width: 0; }
+.vault-said .text-button { font-size: inherit; }
+
+@media (max-width: 640px) {
+  .vault-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+  .vault-actions { flex-wrap: wrap; }
+}

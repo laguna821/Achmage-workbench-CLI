@@ -59,3 +59,14 @@ it("makes failed inline image loading visible and allows a retry", async () => {
   await waitFor(() => expect(screen.getByRole("button", { name: "결과.png 크게 보기" }).hasAttribute("disabled")).toBe(false));
   expect(media.retain).toHaveBeenCalledTimes(2);
 });
+
+it("marks the input with the engine it sends to, even when the pane around it shows another engine", () => {
+  // A Claude chat's document whose document AI was switched to Codex: the line follows the send target.
+  const view = render(<section className="pane" data-theme="light"><Composer draftKey="doc-ai" placeholder="이 문서에 요청하기" busy={false} provider="codex" onSend={vi.fn()} /></section>);
+  const composer = () => view.container.querySelector<HTMLElement>(".hig-composer")!;
+  expect(composer().dataset.provider).toBe("codex");
+  view.rerender(<section className="pane" data-theme="light"><Composer draftKey="doc-ai" placeholder="이 문서에 요청하기" busy={false} provider="claude" onSend={vi.fn()} /></section>);
+  expect(composer().dataset.provider).toBe("claude");
+  view.rerender(<section className="pane" data-theme="light"><Composer draftKey="doc-ai" placeholder="이 문서에 요청하기" busy={false} onSend={vi.fn()} /></section>);
+  expect(composer().hasAttribute("data-provider")).toBe(false);
+});

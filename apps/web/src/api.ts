@@ -13,7 +13,6 @@ import type {
   GitHubActionContext, GitHubActionPreview, GitHubActionInput, GitHubActionJob, GitHubDraft, GitHubTemplate, GitHubRecoveryPreview,
   GitHubDiscussionView, GitHubDiscussionDraft, GitHubFeedbackList, GitHubFeedbackRequest, GitHubFeedbackBatch,
   ScmReviewList, ScmReviewCreate, ScmReviewEdit, ScmReviewNote, ScmReviewBatchRequest, ScmReviewBatch,
-  AchmageBrief,
   AgentBrowserStatus,
   ChangeLine,
   FolderNoteTemplate,
@@ -27,6 +26,7 @@ import type {
   PropertyType,
   ApiError,
   Artifact,
+  DocumentRemovalPlan,
   Attachment,
   EngineCommand,
   ImportCandidate,
@@ -232,7 +232,7 @@ export class Api {
     const response = await this.transport(`/api/artifacts/${artifactId}/outputs/${id}?replace=${replace ? 1 : 0}${sourceRevision === undefined ? "" : `&sourceRevision=${sourceRevision}`}${generatedId ? `&generatedId=${encodeURIComponent(generatedId)}` : ""}`, { method: "POST", headers: { authorization: `Bearer ${this.token}`, ...this.editorHeaders(), "content-type": "application/octet-stream" }, body: bytes });
     const json = await response.json();
     if (!response.ok) throw new ApiRequestError(response.status, json);
-    return json as { path: string; artifact: Artifact | null; backupPath?: string };
+    return json as { path: string; artifact: Artifact | null; backupPath?: string; warning?: string; report?: "compared" | "absent"; text?: "checked" | "unchecked"; structure?: "checked" | "unchecked" };
   }
   userSkills = (scope: SkillScope = {}) => this.request<WorkbenchSkill[]>("GET", skillUrl("", scope));
   userSkill = (id: string, scope: SkillScope = {}) => this.request<WorkbenchSkillDetail>("GET", skillUrl(`/${encodeURIComponent(id)}`, scope));
@@ -410,8 +410,13 @@ export class Api {
   projects = () => this.request<ProjectSummary[]>("GET", "/api/projects/");
   project = (workId: string) => this.request<ProjectPage>("GET", `/api/projects/${encodeURIComponent(workId)}`);
   projectEvents = (workId: string) => this.request<ProjectEvent[]>("GET", `/api/projects/${encodeURIComponent(workId)}/events`);
-  setProjectProperty = (workId: string, key: string, values: string[] | null, type?: PropertyType) =>
-    this.request<ProjectWrite>("PUT", `/api/projects/${encodeURIComponent(workId)}/property`, { key, values, ...(type ? { type } : {}) });
+  /** `baseRevision`: the note's revision the person saw; a change to this key since is refused (409), to another key re-applied. */
+  /**
+   * `baseRevision`: the note's revision the page showed (null: no file); any change since refuses the
+   * write (409). `change`: one list item added, removed or renamed (instead of `values`).
+   */
+  setProjectProperty = (workId: string, key: string, values: string[] | null, type?: PropertyType, baseRevision?: number | null, change?: { add?: string; remove?: string; rename?: [string, string] }) =>
+    this.request<ProjectWrite>("PUT", `/api/projects/${encodeURIComponent(workId)}/property`, { key, values, ...(type ? { type } : {}), ...(baseRevision !== undefined ? { baseRevision } : {}), ...(change ? { change } : {}) });
   propertyTemplate = () => this.request<PropertyField[]>("GET", "/api/projects/template");
   savePropertyTemplate = (fields: PropertyField[] | null) => this.request<PropertyField[]>("PUT", "/api/projects/template", fields === null ? { reset: true } : { fields });
   importPropertyTemplate = (markdown: string) => this.request<PropertyField[]>("POST", "/api/projects/template/import", { markdown });
@@ -420,15 +425,23 @@ export class Api {
   saveFolderNoteTemplate = (folderId: string, markdown: string | null) => this.request<FolderNoteTemplate>("PUT", `/api/projects/folder-templates/${encodeURIComponent(folderId)}`, { markdown });
   initializeProjectNote = (workId: string) => this.request<ProjectWrite>("POST", `/api/projects/${encodeURIComponent(workId)}/initialize-note`, {});
   setPropertyType = (key: string, type: PropertyType) => this.request<Record<string, PropertyType>>("PUT", "/api/projects/types", { key, type });
-  setProjectStage = (workId: string, stage: string | null) => this.request<ProjectWrite>("PUT", `/api/projects/${encodeURIComponent(workId)}/stage`, { stage });
+  setProjectStage = (workId: string, stage: string | null, baseRevision?: number | null) => this.request<ProjectWrite>("PUT", `/api/projects/${encodeURIComponent(workId)}/stage`, { stage, ...(baseRevision !== undefined ? { baseRevision } : {}) });
   addProjectEntry = (workId: string, entry: ProjectEntryRequest) => this.request<ProjectWrite>("POST", `/api/projects/${encodeURIComponent(workId)}/entries`, entry);
-  setProjectQuestion = (workId: string, line: number, done: boolean) => this.request<ProjectWrite>("PUT", `/api/projects/${encodeURIComponent(workId)}/entries/${line}`, { done });
+  /** `text`: the question as the person saw it (found again when lines moved since). */
+  setProjectQuestion = (workId: string, line: number, done: boolean, baseRevision: number | null, text?: string) => this.request<ProjectWrite>("PUT", `/api/projects/${encodeURIComponent(workId)}/entries/${line}`, { done, baseRevision, ...(text !== undefined ? { text } : {}) });
+  /** One run of the note's words: only start..end changes, and only while it still reads `expected`. */
+  setProjectRun = (workId: string, run: { index: number; expected: string; text: string }, baseRevision: number | null) => this.request<ProjectWrite>("PUT", `/api/projects/${encodeURIComponent(workId)}/run`, { ...run, baseRevision });
+  /** The whole note file ("원문 전체"); refused when its front matter would not read. */
+  setProjectSource = (workId: string, text: string, baseRevision: number | null) => this.request<ProjectWrite>("PUT", `/api/projects/${encodeURIComponent(workId)}/source`, { text, baseRevision });
+  /** Put an earlier revision of the note back (the last readable one), whoever changed it since. */
+  revertProjectNoteTo = (workId: string, revision: number, baseRevision: number | null) => this.request<ProjectWrite>("POST", `/api/projects/${encodeURIComponent(workId)}/revert`, { revision, baseRevision });
   setProjectBody = (workId: string, body: string, baseRevision: number | null) => this.request<ProjectWrite>("PUT", `/api/projects/${encodeURIComponent(workId)}/body`, { body, baseRevision });
-  undoProject = (workId: string, token: string) => this.request<ProjectPage>("POST", `/api/projects/${encodeURIComponent(workId)}/undo`, { token });
-  revertProjectNote = (workId: string) => this.request<ProjectWrite>("POST", `/api/projects/${encodeURIComponent(workId)}/revert`);
+  /** Undo a write; `baseRevision`: the revision that write made (the page then showing). */
+  undoProject = (workId: string, token: string, baseRevision?: number | null) => this.request<ProjectPage>("POST", `/api/projects/${encodeURIComponent(workId)}/undo`, { token, ...(baseRevision !== undefined ? { baseRevision } : {}) });
+  /** Put back the note before an engine's change, from the revision the page shows. */
+  revertProjectNote = (workId: string, baseRevision: number | null) => this.request<ProjectWrite>("POST", `/api/projects/${encodeURIComponent(workId)}/revert`, { baseRevision });
   projectStages = () => this.request<ProjectStage[]>("GET", "/api/projects/stages");
   vaultTags = () => this.request<{ tag: string; count: number }[]>("GET", "/api/pkm/tags");
-  projectAchmage = (workId: string) => this.request<AchmageBrief | null>("GET", `/api/projects/${encodeURIComponent(workId)}/achmage`);
   setProjectStages = (stages: ProjectStage[]) => this.request<ProjectStage[]>("PUT", "/api/projects/stages", { stages });
   /** "알릴 변경": what the next request of a session will be told changed since its last one. */
   changes = (sessionId: string) => this.request<ChangeLine[]>("GET", `/api/projects/changes?${new URLSearchParams({ sessionId })}`);
@@ -471,7 +484,22 @@ export class Api {
   proposalOfficePages = (proposalId: string, side: "base" | "proposed") =>
     this.request<{ side: string; pages: { page: number; width: number; height: number }[] }>("GET", `/api/proposals/${proposalId}/office-pages?side=${side}`);
   openExternal = (artifactId: string, target: "ieum" | "default" = "ieum") => this.request<{ app: string }>("POST", `/api/artifacts/${artifactId}/open-external`, { target });
-  documentSession = (artifactId: string, parentSessionId: string | null, fresh = false) => this.request<Session>("POST", `/api/artifacts/${artifactId}/document-session`, { parentSessionId, fresh });
+  /** "삭제": to the app's trash (or off the list for a file the app does not manage). `stop`: its AI and proposals were named and may stop. */
+  /** The action the person chose: "unlisted" (목록에서 빼기, file untouched) or "trash" (휴지통으로 옮기기). Done exactly, or refused. */
+  removeDocument = (artifactId: string, action: "trash" | "unlisted") => this.request<Artifact>("POST", `/api/artifacts/${artifactId}/remove`, { action });
+  /** What can be done with a document now, as the gateway decides it. */
+  documentRemoval = (artifactId: string) => this.request<DocumentRemovalPlan>("GET", `/api/artifacts/${artifactId}/removal`);
+  restoreDocument = (artifactId: string) => this.request<Artifact>("POST", `/api/artifacts/${artifactId}/restore`, {});
+  /** "다른 곳에 저장" of a deleted project's trashed document: a copy, never over a file; the record stays. */
+  saveDocumentCopy = (artifactId: string, to: string) => this.request<{ path: string }>("POST", `/api/artifacts/${artifactId}/save-copy`, { to });
+  /** The trash file of a deleted project's document (to save it from a browser). */
+  async trashFile(artifactId: string): Promise<Blob> {
+    const response = await this.transport(`/api/artifacts/${artifactId}/trash-file`, { headers: { authorization: `Bearer ${this.token}` } });
+    if (!response.ok) throw new ApiRequestError(response.status, { code: "trash_file", message: response.statusText });
+    return response.blob();
+  }
+  purgeDocument = (artifactId: string) => this.request<{ ok: true }>("DELETE", `/api/artifacts/${artifactId}`);
+  documentSession = (artifactId: string, parentSessionId: string | null, fresh = false, provider?: Provider) => this.request<Session>("POST", `/api/artifacts/${artifactId}/document-session`, { parentSessionId, fresh, provider });
   refreshTools = () => this.request<DocumentTools>("POST", "/api/tools/refresh");
   /** Bound transport waits without retrying mutations. Unknown outcomes use their durable receipt. */
   private async browserRequest<T>(method: string, path: string, body?: unknown, timeout = 10000): Promise<T> {
@@ -483,7 +511,9 @@ export class Api {
     list: () => this.browserRequest<BrowserList>("GET", "/api/browser/pages"),
     profile: (name: string) => this.browserRequest<BrowserProfile>("POST", "/api/browser/profiles", { name }),
     create: (input: BrowserPageCreate) => this.browserRequest<BrowserPage>("POST", "/api/browser/pages", input),
-    session: (pageId: string, parentSessionId: string | null) => this.browserRequest<Session>("POST", `/api/browser/pages/${encodeURIComponent(pageId)}/session`, { parentSessionId }),
+    restore: (pageId: string, driverId: string) => this.browserRequest<BrowserPage>("POST", `/api/browser/pages/${encodeURIComponent(pageId)}/restore`, { driverId }),
+    close: (pageId: string) => this.browserRequest<BrowserPage>("POST", `/api/browser/pages/${encodeURIComponent(pageId)}/close`),
+    session: (pageId: string, parentSessionId: string | null, provider?: Provider) => this.browserRequest<Session>("POST", `/api/browser/pages/${encodeURIComponent(pageId)}/session`, { parentSessionId, provider }),
     control: (pageId: string, owner: string, expectedGeneration: number) => this.browserRequest<BrowserPage>("POST", `/api/browser/pages/${encodeURIComponent(pageId)}/control`, { owner, expectedGeneration }, 30000),
     action: (pageId: string, requestId: string, action: BrowserAction, expected?: BrowserObservation) => this.browserRequest<BrowserJobResult>("POST", `/api/browser/pages/${encodeURIComponent(pageId)}/action`, { requestId, action, expected }, 30000),
     receipt: (id: string) => this.browserRequest<{ status: "queued" | "dispatched" | "completed" | "rejected" | "outcome_unknown"; result: BrowserJobResult | null } | null>("GET", `/api/browser/jobs/${encodeURIComponent(id)}`),

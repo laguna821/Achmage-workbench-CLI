@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { failure } from "../../top-notice.ts";
 import { Icon } from "../Icon.tsx";
 import { usePkm } from "./PkmContext.tsx";
 import "../../styles/pkm.css";
@@ -56,7 +57,7 @@ export function ViewDialog({ id }: { id: string | null }) {
       close();
       pkm.open?.({ kind: "view", id: view.id });
     } catch (error) {
-      pkm.onToast(error instanceof Error ? error.message : String(error));
+      pkm.onToast(failure(error));
     }
   };
 
