@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import QRCode from "qrcode";
-import type { ChannelBinding, ChannelBot, ChannelKind, ChannelPairingLink, ChannelsState } from "@workbench/contracts";
+import { PROVIDER_LABEL, type ChannelBinding, type ChannelBot, type ChannelKind, type ChannelPairingLink, type ChannelsState, type Provider } from "@workbench/contracts";
 import type { EventBus } from "../bus.ts";
 import { HttpError } from "../errors.ts";
 import { readBody, sendJson } from "../http.ts";
@@ -26,7 +26,8 @@ import { TELEGRAM_API, TelegramAdapter, identifyTelegram, type TelegramOptions }
 // its other services and closes it with them (see `start` / `close`).
 
 /** Slack: `id` is the bot id, `username` the bot user's name, `name` the workspace; `userId` the bot's own user, `teamId`/`appId` for the link that opens its DM. */
-type BotRecord = { kind: ChannelKind; id: string; username: string; name: string; createdAt: number; teamId?: string; userId?: string; appId?: string | null; appName?: string };
+/** `defaultEngine`: "이 메신저의 기본 엔진" (not a secret; absent: not set). Kept across a token replace, gone with the bot. */
+type BotRecord = { kind: ChannelKind; id: string; username: string; name: string; createdAt: number; teamId?: string; userId?: string; appId?: string | null; appName?: string; defaultEngine?: Provider };
 
 const BOTS = "channel.bots";
 /** Slack apps are kept apart from the bots: an older gateway reads `channel.bots` as Telegram bots only, and never sees these. */
@@ -97,7 +98,11 @@ export class ChannelService {
     this.log = new ChannelLog(redactor, options.log ?? fileLog(options.dataDir));
     this.telegramApi = (options.telegramUrl ?? TELEGRAM_API).replace(/\/+$/, "");
     this.slackApi = (options.slackUrl ?? SLACK_API).replace(/\/+$/, "");
-    this.core = new ChannelCore({ store: options.store, manager: options.manager, bus: options.bus, log: this.log, projects: () => options.projects ?? null, dataDir: options.dataDir });
+    this.core = new ChannelCore({
+      store: options.store, manager: options.manager, bus: options.bus, log: this.log, projects: () => options.projects ?? null, dataDir: options.dataDir,
+      // The messenger's default engine lives in its bot's record; set from the chat's engine screen it reaches the PC's screen as any change does.
+      defaultEngine: { get: (kind, botId) => this.engineOf(kind, botId), set: (kind, botId, provider) => void this.keepEngine(kind, botId, provider) },
+    });
     if (options.credentials) {
       const vault = { service: options.credentials, manager: options.manager, store: options.store, sealPage: options.sealPage ?? null };
       this.vault = options.logins ? new LoginChat({ ...vault, logins: options.logins }) : new VaultChat(vault);
@@ -114,6 +119,44 @@ export class ChannelService {
     const slack = bots.filter((bot) => bot.kind === "slack");
     // Written only once Slack was ever registered: a Telegram-only PC gets no new key.
     if (slack.length || this.options.store.getMeta(SLACK_BOTS) !== null) this.options.store.setMeta(SLACK_BOTS, JSON.stringify(slack));
+    this.markHomes();
+  }
+
+  /**
+   * Each messenger's own place for conversations (`Work.messengerHome`, made by the core on first use)
+   * is locked at the PC only while that messenger's bot is registered: said here whenever the bots change
+   * and when the gateway starts. Nothing is written when nothing differs (a PC without a home: nothing at all).
+   */
+  private markHomes() {
+    const bots = this.bots();
+    for (const kind of ["telegram", "slack"] as const) this.options.manager.setMessengerRegistered(kind, bots.some((bot) => bot.kind === kind));
+  }
+
+  private engineOf(kind: ChannelKind, botId: string): Provider | null {
+    const engine = this.bots().find((bot) => bot.kind === kind && bot.id === botId)?.defaultEngine;
+    return engine === "claude" || engine === "codex" ? engine : null;
+  }
+
+  /** Written into the bot's record (nothing is written for a bot that is not registered, or when it is that already). */
+  private keepEngine(kind: ChannelKind, botId: string, provider: Provider | null): boolean {
+    const bots = this.bots(), bot = bots.find((entry) => entry.kind === kind && entry.id === botId);
+    if (!bot || (bot.defaultEngine ?? null) === provider) return false;
+    const { defaultEngine: _was, ...rest } = bot;
+    this.saveBots(bots.map((entry) => (entry === bot ? { ...rest, ...(provider ? { defaultEngine: provider } : {}) } : entry)));
+    this.changed();
+    return true;
+  }
+
+  /**
+   * "이 메신저의 기본 엔진" from the PC's screen: Claude, Codex or null (not set), for one messenger's bot.
+   * As in the chat, an engine this PC does not have is not taken. No conversation that exists is changed.
+   */
+  setDefaultEngine(kind: string, botId: string, provider: unknown): ChannelsState {
+    const bot = this.requireBot(kind, botId);
+    if (provider !== null && provider !== "claude" && provider !== "codex") throw new HttpError(400, "channel_input", "기본 엔진은 Claude, Codex 또는 정하지 않음 가운데 하나여야 합니다.");
+    if (provider && !this.options.manager.snapshot().providers.find((status) => status.provider === provider)?.installed) throw new HttpError(409, "channel_engine_missing", `${PROVIDER_LABEL[provider]}가 이 PC에 설치되어 있지 않습니다.`);
+    this.keepEngine(bot.kind, bot.id, provider);
+    return this.state();
   }
 
   private secretId(bot: Pick<BotRecord, "kind" | "id">) {
@@ -183,6 +226,7 @@ export class ChannelService {
    */
   async start() {
     this.started = true;
+    this.markHomes();
     if (this.bots().length) await this.run(this.generation);
   }
 
@@ -254,6 +298,7 @@ export class ChannelService {
       const token = this.held(bot);
       return {
         ...bot,
+        defaultEngine: this.engineOf(bot.kind, bot.id),
         token,
         status: token === "none" ? { state: "stopped", detail: NO_TOKEN } : problem ? { state: "stopped", detail: problem } : this.core.status(bot.kind, bot.id),
         pairing: this.core.pairing(bot.kind, bot.id),
@@ -275,7 +320,7 @@ export class ChannelService {
     // One bot per messenger: a Slack app beside it is fine, a second Telegram bot is not.
     if (bots.some((bot) => bot.kind === "telegram" && bot.id !== me.id)) throw new HttpError(409, "channel_bot_exists", "텔레그램 봇은 하나만 등록합니다. 다른 봇을 쓰려면 지금 봇을 먼저 지워 주세요.");
     const known = bots.find((bot) => bot.kind === "telegram" && bot.id === me.id);
-    const record: BotRecord = { kind: "telegram", id: me.id, username: me.username, name: me.name, createdAt: known?.createdAt ?? Date.now() };
+    const record: BotRecord = { kind: "telegram", id: me.id, username: me.username, name: me.name, createdAt: known?.createdAt ?? Date.now(), ...(known?.defaultEngine ? { defaultEngine: known.defaultEngine } : {}) };
     await this.secrets.keep(this.secretId(record), token.trim(), options);
     this.saveBots([...bots.filter((bot) => !(bot.kind === "telegram" && bot.id === me.id)), record]);
     this.options.store.channels.audit({ at: Date.now(), bindingId: null, kind: "telegram", action: known ? "token.replaced" : "bot.registered", target: `bot:${me.id}`, result: options.memoryOnly ? "memory" : "sealed" });
@@ -311,7 +356,7 @@ export class ChannelService {
     // The name typed in the wizard (shown only on the PC: what to search for in Slack); new tokens keep the old one.
     const typed = typeof options.appName === "string" ? options.appName.replace(/[\p{Cc}\p{Cf}]+/gu, "").replace(/\s+/gu, " ").trim().slice(0, 35) : "";
     const appName = typed || known?.appName;
-    const record: BotRecord = { kind: "slack", id: me.id, username: me.username, name: me.name, createdAt: known?.createdAt ?? Date.now(), teamId: me.teamId, userId: me.userId, appId: me.appId, ...(appName ? { appName } : {}) };
+    const record: BotRecord = { kind: "slack", id: me.id, username: me.username, name: me.name, createdAt: known?.createdAt ?? Date.now(), teamId: me.teamId, userId: me.userId, appId: me.appId, ...(appName ? { appName } : {}), ...(known?.defaultEngine ? { defaultEngine: known.defaultEngine } : {}) };
     const [botSecret, appSecret] = this.secretIds(record) as [string, string];
     try {
       await this.secrets.keep(botSecret, botToken.trim(), options);
@@ -431,6 +476,11 @@ export class ChannelService {
         ? await this.registerSlack(input.botToken, input.appToken, { memoryOnly: input.memoryOnly === true, appName: input.appName })
         : await this.registerTelegram(input.token, { memoryOnly: input.memoryOnly === true });
     } else if (parts.length === 5 && parts[3] === "bots" && method === "DELETE") value = await this.removeBot(kind(parts[2]), parts[4]!);
+    else if (parts.length === 5 && parts[3] === "bots" && method === "PATCH") {
+      const input = await body();
+      if (input.defaultEngine === undefined) throw new HttpError(400, "channel_input", "바꿀 것이 없습니다.");
+      value = this.setDefaultEngine(kind(parts[2]), parts[4]!, input.defaultEngine);
+    }
     else if (parts.length === 6 && parts[3] === "bots" && parts[5] === "reconnect" && method === "POST") value = await this.reconnect(kind(parts[2]), parts[4]!);
     else if (parts.length === 6 && parts[3] === "bots" && parts[5] === "pairing" && method === "DELETE") {
       const bot = this.requireBot(kind(parts[2]), parts[4]!);

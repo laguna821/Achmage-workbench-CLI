@@ -8,6 +8,7 @@ import { isBusy, sessionsOf, turnRunning, type State } from "../state.ts";
 import { sessionLabel, statusText } from "../format.ts";
 import { Composer } from "./Composer.tsx";
 import { readDraft } from "../draft.ts";
+import { useKeepAwake } from "../tab-sleep.ts";
 import { ChangeChip } from "./project/ChangeChip.tsx";
 import { ModelPicker, type ModelChoice } from "./ModelPicker.tsx";
 import { AgentProfilePicker } from "./AgentProfilePicker.tsx";
@@ -465,6 +466,9 @@ export function WorkView({
     : undefined;
   // "계획 먼저": on until a plan is accepted (or turned off), for this work.
   const [planFirst, setPlanFirst] = useState(false);
+  // Tab sleep: what is set for the next request lives in this view only (the typed text and the uploaded files are kept
+  // elsewhere), and a file still on its way up is this view's work: the tab stays awake while any of it is there.
+  useKeepAwake(attached.length > 0 || notes.length > 0 || handoffTo !== null || create !== null || draw.on || planFirst || pending.files.some((file) => !file.attachment && !file.error));
   // "알릴 변경": lines of what changed the user chose not to send with the next request.
   const [omitChanges, setOmitChanges] = useState<string[]>([]);
   useEffect(() => setOmitChanges([]), [active?.id]);

@@ -269,3 +269,108 @@ it("reopening a closed page brings back the page AI the close put in the archive
   expect(manager.view.sessions.get(child.id)?.archivedAt).toBeNull();
   expect(manager.sharedBrowser.get(page.pageId)).toMatchObject({ status: "opening", sessionId: child.id });
 });
+
+// 0.5.1, tab sleep: a web page whose tab has been off screen is released as a browser discards a background tab.
+it("rests a page: its record stays (same identity, profile, last URL and title), nothing is said in its conversation, and restore opens it again", () => {
+  const { registry, driverId, create, sessions, interrupted } = fixture(), page = create();
+  const child = { id: "reader", workId: "work", workspaceId: "workspace", status: "idle", pageAgent: { pageId: page.pageId, parentSessionId: "parent" } } as Session;
+  sessions.set(child.id, child); registry.attach(page.pageId, child);
+  const state = { ...native(page), url: "https://example.com/read/3", title: "읽던 글" };
+  registry.poll({ driverId, pages: [state], results: [] });
+  const rested = registry.rest(page.pageId);
+  expect(rested).toMatchObject({ pageId: page.pageId, profileId: page.profileId, url: "https://example.com/read/3", title: "읽던 글", status: "interrupted", native: null, error: null, sessionId: "reader" });
+  expect(rested.closedAt).toBeUndefined();
+  // The driver's next reports — the native page still there for a moment, then gone — change nothing and tell the conversation nothing.
+  registry.poll({ driverId, pages: [state], results: [] });
+  registry.poll({ driverId, pages: [], results: [] });
+  expect(registry.get(page.pageId).status).toBe("interrupted");
+  expect(interrupted).not.toHaveBeenCalled();
+  expect(registry.list().pages.map(entry => entry.pageId)).toContain(page.pageId);
+  expect(registry.list().closedPageIds ?? []).not.toContain(page.pageId);
+  // Shown again: the existing open-page path, the same URL and profile.
+  const restored = registry.restore(page.pageId, driverId);
+  expect(restored).toMatchObject({ pageId: page.pageId, profileId: page.profileId, url: "https://example.com/read/3", status: "opening" });
+  registry.poll({ driverId, pages: [{ ...native(restored), url: restored.url }], results: [] });
+  expect(registry.get(page.pageId).status).toBe("ready");
+});
+
+it("does not rest a page an AI is using: its conversation at work, the AI holding the page, or an action on its way — and a page that is not open is left as it is", async () => {
+  const { registry, driverId, create, sessions } = fixture(), page = create();
+  const child = { id: "reader", workId: "work", workspaceId: "workspace", status: "running", pageAgent: { pageId: page.pageId, parentSessionId: "parent" } } as Session;
+  sessions.set(child.id, child); registry.attach(page.pageId, child);
+  const state = native(page);
+  registry.poll({ driverId, pages: [state], results: [] });
+  expect(() => registry.rest(page.pageId)).toThrow(/AI/);
+  child.status = "idle";
+  // An action waiting to be carried out.
+  const pending = registry.human(page.pageId, { requestId: "reload-1", action: { kind: "reload" } });
+  expect(() => registry.rest(page.pageId)).toThrow();
+  const job = registry.poll({ driverId, pages: [state], results: [] }).jobs[0]!;
+  expect(() => registry.rest(page.pageId)).toThrow();
+  registry.poll({ driverId, pages: [state], results: [{ id: job.id, pageId: page.pageId }] });
+  await pending;
+  expect(registry.get(page.pageId).status).toBe("ready");
+  // The AI holds the page (its conversation was handed control).
+  const handed = registry.control(page.pageId, child.id, page.control.generation);
+  const handoff = registry.poll({ driverId, pages: [state], results: [] }).jobs[0]!;
+  registry.poll({ driverId, pages: [{ ...state, control: handoff.control }], results: [{ id: handoff.id, pageId: page.pageId }] });
+  await handed;
+  expect(() => registry.rest(page.pageId)).toThrow(/AI/);
+  expect(registry.get(page.pageId).status).toBe("ready");
+  // Not open (closed by the person): left closed.
+  const other = create();
+  registry.close(other.pageId);
+  expect(registry.rest(other.pageId).status).toBe("closed");
+});
+
+// Round 2: an AI handed a request for a resting page never meets "아직 연결되지 않았습니다" — the page is woken first.
+it("wakes a resting page for the AI that is asked to use it: the driver is asked for the same page again (same URL, same profile) and the request goes on once it is there", async () => {
+  const { registry, driverId, create, sessions } = fixture(), page = create();
+  const child = { id: "reader", workId: "work", workspaceId: "workspace", status: "idle", pageAgent: { pageId: page.pageId, parentSessionId: "parent" } } as Session;
+  sessions.set(child.id, child); registry.attach(page.pageId, child);
+  const first = { ...native(page), url: "https://example.com/read/3", title: "읽던 글" };
+  registry.poll({ driverId, pages: [first], results: [] });
+  const rested = registry.rest(page.pageId);
+  expect(rested.restedAt).toEqual(expect.any(Number));
+  registry.poll({ driverId, pages: [], results: [] });
+  // The AI's command arrives while the page rests (another conversation handed it a request).
+  const asked = registry.agent(child.id, "after-rest", "snapshot", [], rested.control);
+  const waking = registry.get(page.pageId);
+  expect(waking).toMatchObject({ pageId: page.pageId, profileId: page.profileId, url: "https://example.com/read/3", status: "opening", driverId });
+  // Still marked as a page that rested, so the driver knows to make it again.
+  expect(registry.poll({ driverId, pages: [], results: [] }).pages.find(entry => entry.pageId === page.pageId)).toMatchObject({ status: "opening", restedAt: rested.restedAt });
+  const again = { ...native(waking), url: waking.url };
+  registry.poll({ driverId, pages: [again], results: [] });
+  expect(registry.get(page.pageId)).toMatchObject({ status: "ready", url: "https://example.com/read/3" });
+  expect(registry.get(page.pageId).restedAt).toBeUndefined();
+  await new Promise(resolve => setTimeout(resolve, 120));
+  const job = registry.poll({ driverId, pages: [again], results: [] }).jobs[0]!;
+  expect(job).toMatchObject({ pageId: page.pageId, action: { kind: "snapshot" } });
+  registry.poll({ driverId, pages: [again], results: [{ id: job.id, pageId: page.pageId }] });
+  expect((await asked).error).toBeUndefined();
+});
+
+it("waking for an AI before its turn reads the page's control; a page that was lost (not rested) is not opened behind the person's back; with no desktop connected it says so", async () => {
+  const { registry, driverId, create, sessions } = fixture(), page = create();
+  const child = { id: "reader", workId: "work", workspaceId: "workspace", status: "idle", pageAgent: { pageId: page.pageId, parentSessionId: "parent" } } as Session;
+  sessions.set(child.id, child); registry.attach(page.pageId, child);
+  registry.poll({ driverId, pages: [native(page)], results: [] });
+  registry.rest(page.pageId);
+  expect(() => registry.generation(child.id)).toThrow();
+  const woken = registry.wake(child.id);
+  registry.poll({ driverId, pages: [native(registry.get(page.pageId))], results: [] });
+  await woken;
+  expect(registry.generation(child.id)).toMatchObject({ owner: "human" });
+  // Lost, not rested: as before.
+  registry.poll({ driverId, pages: [], results: [] });
+  expect(registry.get(page.pageId)).toMatchObject({ status: "interrupted" });
+  expect(registry.get(page.pageId).restedAt).toBeUndefined();
+  await registry.wake(child.id);
+  expect(registry.get(page.pageId).status).toBe("interrupted");
+  await expect(registry.agent(child.id, "lost", "snapshot", [], page.control)).rejects.toThrow();
+  // Closing a resting page forgets that it rested.
+  const other = create();
+  registry.poll({ driverId, pages: [native(other)], results: [] });
+  registry.rest(other.pageId);
+  expect(registry.close(other.pageId).restedAt).toBeUndefined();
+});

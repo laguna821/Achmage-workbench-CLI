@@ -80,6 +80,8 @@ export function paletteOf(theme: Theme): string | undefined {
 /** 사용 한도 표시 (설정 › 화면): 목록 칸 아래 (the default; old records), 창 아래 줄, 숨기기. */
 export type UsagePlace = "list" | "bottom" | "hidden";
 export const readUsagePlace = (value: unknown): UsagePlace => (value === "bottom" || value === "hidden" ? value : "list");
+/** 메모리 표시 (설정 › 화면, `memoryShown`): 켜기 (the default; old records), 끄기 only when stored so. */
+export const readMemoryShown = (value: unknown): boolean => value !== false;
 
 /** 글꼴 (설정 › 화면): "pretendard" (the default; old records), "system", or "custom:<family>". */
 export type UiFont = string;

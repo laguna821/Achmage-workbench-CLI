@@ -73,6 +73,13 @@ export type Work = {
   updatedAt: number;
   /** Tags a rule (pkm) or the user gave the work; matched by `#tag` in saved views. */
   tags?: string[];
+  /**
+   * This record is a messenger's own place ("텔레그램 대화", "Slack 대화"), not a project of the person's:
+   * the conversations the channel makes for that messenger's chats live here unless the person chose a
+   * project in the chat. Made by the channel on first use. `registered`: that messenger's bot is
+   * registered now — the place then keeps its name and cannot be moved, archived or deleted.
+   */
+  messengerHome?: { kind: import("./channels.ts").ChannelKind; registered: boolean };
 };
 
 export type SessionStatus =
@@ -994,6 +1001,7 @@ export * from "./schedules.ts";
 export * from "./worktrees.ts";
 export * from "./project.ts";
 export * from "./entry.ts";
+export * from "./bookmarks.ts";
 export * from "./recovery.ts";
 export * from "./search.ts";
 export * from "./setup.ts";
@@ -1018,3 +1026,4 @@ export * from "./event-hub.ts";
 export * from "./terminal-runtime.ts";
 
 export * from "./push.ts";
+export * from "./memory.ts";

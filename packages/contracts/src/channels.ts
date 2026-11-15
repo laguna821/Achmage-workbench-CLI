@@ -2,6 +2,12 @@
 
 export type ChannelKind = "telegram" | "slack";
 
+/** A messenger by its name, and the name of its own place for conversations (`Work.messengerHome`). */
+export const MESSENGER_LABEL: Record<ChannelKind, string> = { telegram: "텔레그램", slack: "Slack" };
+export const MESSENGER_HOME_TITLE: Record<ChannelKind, string> = { telegram: "텔레그램 대화", slack: "Slack 대화" };
+/** Why a home keeps its name and place while its messenger is registered, in one line. */
+export const messengerHomeLocked = (kind: ChannelKind) => `${MESSENGER_LABEL[kind]}을 연결해 둔 동안에는 '${MESSENGER_HOME_TITLE[kind]}'의 이름을 바꾸거나 옮기거나 보관·삭제할 수 없습니다.`;
+
 /**
  * Who sent a request that was not typed at this PC: a paired messenger chat. Kept on the request,
  * on the request while it waits in a queue, and on its user item. `context`: the version of the
@@ -99,6 +105,12 @@ export type ChannelBot = {
   /** Slack: the app's name as the person typed it in the wizard (what they search for in Slack); absent if not given. */
   appName?: string;
   createdAt: number;
+  /**
+   * "이 메신저의 기본 엔진": the engine of the conversations the channel makes for this messenger's chats when
+   * none was named (the first one, "새 대화", a move to another project). Null or absent: not set (the
+   * chat's conversation's engine, else the project's). Set at the PC or from the chat's engine screen.
+   */
+  defaultEngine?: import("./index.ts").Provider | null;
   token: ChannelTokenHold;
   status: ChannelConnection;
   pairing: ChannelPairing;

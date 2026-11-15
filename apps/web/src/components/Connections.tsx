@@ -32,7 +32,7 @@ const key = (label: string, onClick: () => void, extra: { primary?: boolean; dis
 
 // ── 일반 ─────────────────────────────────────────────────────────────────────────────────────
 
-export function GeneralSection({ startScreen, onStartScreen, notifications, onNotifications, brandMotion, onBrandMotion, worksDir, background, onPropertyTemplate, shortcutSettings, onOnboarding }: {
+export function GeneralSection({ startScreen, onStartScreen, notifications, onNotifications, brandMotion, onBrandMotion, worksDir, background, bookmarks, onPropertyTemplate, shortcutSettings, onOnboarding }: {
   startScreen: "home" | "last"; onStartScreen(next: "home" | "last"): void;
   notifications: boolean; onNotifications(next: boolean): void;
   brandMotion: boolean; onBrandMotion(next: boolean): void;
@@ -40,6 +40,8 @@ export function GeneralSection({ startScreen, onStartScreen, notifications, onNo
   worksDir?: ReactNode;
   /** 앱을 닫아도 계속 (BackgroundHost). */
   background?: ReactNode;
+  /** 웹 즐겨찾기 (BookmarkSettings): its own group. */
+  bookmarks?: ReactNode;
   onPropertyTemplate?: () => void;
   shortcutSettings?: ReactNode;
   onOnboarding(): void;
@@ -58,6 +60,7 @@ export function GeneralSection({ startScreen, onStartScreen, notifications, onNo
       {worksDir}
       {onPropertyTemplate ? <SettingsRow label="프로젝트 속성 템플릿" hint="모든 프로젝트의 속성 칸(단계, 마감 …)이 따르는 틀입니다." control={key("템플릿 고치기…", onPropertyTemplate, { haspopup: true })} /> : null}
     </SettingsGroup>
+    {bookmarks}
     {shortcutSettings ? <SettingsGroup title="단축키">
       <SettingsRow label="키 조합 바꾸기" hint="칸을 누르고 새 조합을 누릅니다. Esc는 그만두기, Backspace는 기본값으로 되돌리기입니다." detail={shortcutSettings} />
     </SettingsGroup> : null}

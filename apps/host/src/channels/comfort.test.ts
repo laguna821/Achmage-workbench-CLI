@@ -93,7 +93,7 @@ describe("the app answers what the app knows", () => {
     kit.manager.sink.updateSession(sessionId, { engineModel: "claude-opus-9-20261101" });
     await say(kit, "상태");
     expect(last(kit).out.text).toBe([
-      `지금: 「휴대폰」 › 「${sessionOf(kit, sessionId).purpose}」`,
+      `지금: 「텔레그램 대화」 › 「${sessionOf(kit, sessionId).purpose}」`,
       "엔진: Claude · 모델 claude-opus-9 · 엔진 기본값",
       "노력: 높음 (high) · 기본값",
       "지난 답의 모델: claude-opus-9-20261101",

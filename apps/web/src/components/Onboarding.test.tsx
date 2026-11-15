@@ -3,8 +3,8 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, expect, it, vi } from "vitest";
 import { Onboarding } from "./Onboarding.tsx";
 
-// The first run (atlas-look): one centred panel, three steps — 화면, AI 엔진, 휴대폰 메신저 — in a teacher's
-// words; every step can be left for later; the gate (onDone → prefs.onboarding) and the actions stay.
+// The first run (atlas-look): one centred panel, four steps — 화면, AI 엔진, 휴대폰 메신저, 즐겨찾기 (0.5.1) —
+// in a teacher's words; every step can be left for later; the gate (onDone → prefs.onboarding) and the actions stay.
 // (The earlier 첫 프로젝트 step left the first run: the empty list's 새 프로젝트 makes the first project.)
 
 vi.mock("./pkm/PkmContext.tsx", () => ({ usePkm: () => ({ dialog: null }) }));
@@ -19,15 +19,16 @@ const mount = async (extra: Partial<Parameters<typeof Onboarding>[0]> = {}) => {
 const steps = () => within(screen.getByRole("list", { name: "처음 설정 단계" })).getAllByRole("button").map((key) => key.textContent);
 const next = () => act(async () => { fireEvent.click(screen.getAllByRole("button").find((key) => ["다음", "AI 없이 계속", "건너뛰기", "시작하기"].includes(key.textContent ?? ""))!); });
 
-it("walks three steps, one idea each: 화면, AI 엔진, 휴대폰 메신저", async () => {
+it("walks four steps, one idea each: 화면, AI 엔진, 휴대폰 메신저, 즐겨찾기", async () => {
   const props = await mount();
-  expect(steps()).toEqual(["1화면", "2AI 엔진", "3휴대폰 메신저"]);
+  expect(steps()).toEqual(["1화면", "2AI 엔진", "3휴대폰 메신저", "4즐겨찾기"]);
   const seen: string[] = [];
-  for (let at = 0; at < 3; at++) {
+  for (let at = 0; at < 4; at++) {
     seen.push(screen.getByRole("heading", { level: 2 }).textContent!);
+    if (at < 3) expect(props.onDone).not.toHaveBeenCalled();
     await next();
   }
-  expect(seen).toEqual(["화면을 고르세요", "AI 엔진에 로그인하세요", "휴대폰 메신저로도 쓰기"]);
+  expect(seen).toEqual(["화면을 고르세요", "AI 엔진에 로그인하세요", "휴대폰 메신저로도 쓰기", "쓰던 즐겨찾기 가져오기"]);
   expect(props.onDone).toHaveBeenCalledTimes(1);
 });
 
@@ -42,10 +43,10 @@ it("is one panel: the steps on its left, the step and its keys on its right, the
 
 it("speaks a teacher's words on every step: no CLI, OS 등록, 이음 앱, 호스트, orchestration, raw commands or middle dots", async () => {
   await mount();
-  for (let at = 0; at < 3; at++) {
+  for (let at = 0; at < 4; at++) {
     const text = document.body.textContent!;
     expect(text).not.toMatch(/CLI|OS 등록|이음 앱|호스트|orchestration|세션|워크스페이스| · |npm |brew /);
-    if (at < 2) await next();
+    if (at < 3) await next();
   }
 });
 
@@ -96,6 +97,9 @@ it("every step can be left for later; 텔레그램 and Slack each hand over to �
   fireEvent.click(screen.getByRole("button", { name: "텔레그램 연결하기" }));
   fireEvent.click(screen.getByRole("button", { name: "Slack 연결하기" }));
   expect(vi.mocked(props.onOpenMessenger!).mock.calls).toEqual([["telegram"], ["slack"]]);
+  expect(screen.queryByRole("button", { name: "건너뛰기" })).toBeNull();
+  await next();
+  expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("쓰던 즐겨찾기 가져오기");
   fireEvent.click(screen.getByRole("button", { name: "건너뛰기" }));
   await act(async () => undefined);
   expect(props.onDone).toHaveBeenCalledTimes(1);
@@ -167,5 +171,68 @@ it("휴대폰 메신저: two independent rows, each with its own state and key �
   const rows = [...document.querySelectorAll(".onboarding-ways li")].map((row) => [row.getAttribute("data-messenger"), row.querySelector(".onboarding-way-state")!.textContent, row.querySelector("button")!.textContent]);
   expect(rows).toEqual([["telegram", "연결됨, @my_wb_bot", "열기"], ["slack", "연결됨, 내 Workbench", "열기"]]);
   expect(document.body.textContent).not.toContain("한 번에 하나만");
-  expect(screen.getByRole("button", { name: "건너뛰기" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "나중에 설정" })).toBeTruthy();
+});
+
+// ── 즐겨찾기 (0.5.1): the fourth step — the browsers found on this PC, one key each ──────────────────
+const bookmarkApi = (sources: unknown[]) => {
+  const request = vi.fn(async (_method: string, path: string, _body?: unknown) => {
+    if (path === "/api/bookmarks/sources") return sources;
+    if (path === "/api/bookmarks/import") return { bookmarks: { showBar: true, items: [] }, items: 132, folders: 9, message: "즐겨찾기 132개, 폴더 9개를 가져왔습니다." };
+    if (path === "/api/bookmarks") return { showBar: true, items: [] };
+    return { bots: [] };
+  });
+  return { request, isRemote: false };
+};
+const toBookmarks = async () => { await next(); await next(); await next(); await act(async () => undefined); };
+
+it("즐겨찾기, browsers found: one key naming each browser (each profile when there are several); pressing it brings them in and one line says what came in", async () => {
+  const api = bookmarkApi([
+    { id: "chrome", label: "Chrome", profiles: [{ id: "Default", name: "기본 프로필" }, { id: "Profile 2", name: "프로필 2" }] },
+    { id: "firefox", label: "Firefox", profiles: [{ id: "0:Profile0", name: "default-release" }] },
+  ]);
+  const props = await mount({ api: api as never });
+  await toBookmarks();
+  expect(document.querySelector(".onboarding-count")!.textContent).toBe("4 / 4, 즐겨찾기");
+  const rows = [...document.querySelectorAll(".onboarding-ways li")].map((row) => [row.getAttribute("data-browser"), row.querySelector("div")!.textContent, row.querySelector("button")!.textContent, row.querySelector("button")!.getAttribute("aria-label")]);
+  expect(rows).toEqual([
+    ["chrome", "Chrome기본 프로필", "Chrome에서 가져오기", "Chrome 기본 프로필에서 가져오기"],
+    ["chrome", "Chrome프로필 2", "Chrome에서 가져오기", "Chrome 프로필 2에서 가져오기"],
+    ["firefox", "Firefox", "Firefox에서 가져오기", "Firefox에서 가져오기"],
+  ]);
+  // Nothing is read before a key is pressed: only the list of browsers was asked for.
+  expect(api.request.mock.calls.filter((call) => String(call[1]).startsWith("/api/bookmarks")).map((call) => call[1])).toEqual(["/api/bookmarks/sources"]);
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Chrome 프로필 2에서 가져오기" })); });
+  expect(api.request).toHaveBeenCalledWith("POST", "/api/bookmarks/import", { source: "chrome", profile: "Profile 2" });
+  expect(screen.getByRole("status").textContent).toBe("즐겨찾기 132개, 폴더 9개를 가져왔습니다.");
+  expect(document.body.textContent).toContain("즐겨찾기만 읽습니다. 암호, 방문 기록, 로그인 정보는 읽지 않습니다.");
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "시작하기" })); });
+  expect(props.onDone).toHaveBeenCalledTimes(1);
+});
+
+it("즐겨찾기, no browser found: the step says so in one line and can be passed", async () => {
+  const props = await mount({ api: bookmarkApi([]) as never });
+  await toBookmarks();
+  expect(document.querySelector(".onboarding-ways")).toBeNull();
+  expect(document.querySelector(".onboarding-page")!.textContent).toContain("이 PC에서 즐겨찾기를 가져올 브라우저를 찾지 못했습니다. 건너뛰어도 됩니다.");
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "시작하기" })); });
+  expect(props.onDone).toHaveBeenCalledTimes(1);
+});
+
+it("즐겨찾기, skipped: 건너뛰기 finishes the first run and nothing is brought in; 이전 goes back to 휴대폰 메신저", async () => {
+  const api = bookmarkApi([{ id: "edge", label: "Edge", profiles: [{ id: "Default", name: "기본 프로필" }] }]);
+  const props = await mount({ api: api as never });
+  await toBookmarks();
+  fireEvent.click(screen.getByRole("button", { name: "이전" }));
+  expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("휴대폰 메신저로도 쓰기");
+  await act(async () => { fireEvent.click(within(screen.getByRole("list", { name: "처음 설정 단계" })).getByRole("button", { name: /즐겨찾기/ })); });
+  expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("쓰던 즐겨찾기 가져오기");
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "건너뛰기" })); });
+  expect(props.onDone).toHaveBeenCalledTimes(1);
+  expect(api.request.mock.calls.some((call) => call[1] === "/api/bookmarks/import")).toBe(false);
+});
+
+it("즐겨찾기 is not a step on a phone joined to another PC (no web tabs there): three steps as before", async () => {
+  await mount({ api: { ...bookmarkApi([]), isRemote: true } as never });
+  expect(steps()).toEqual(["1화면", "2AI 엔진", "3휴대폰 메신저"]);
 });

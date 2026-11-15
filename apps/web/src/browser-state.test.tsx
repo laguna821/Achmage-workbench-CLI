@@ -56,6 +56,12 @@ function fixture(initial: BrowserPage[] = [page()]) {
     const next: BrowserPage = { ...before, status: "closed", closedAt: Date.now(), native: null };
     rows = rows.map(row => row.pageId === pageId ? next : row); return next;
   });
+  const rest = vi.fn(async (pageId: string): Promise<BrowserPage> => {
+    const before = rows.find(row => row.pageId === pageId)!;
+    if (before.control.owner !== "human") throw new Error("in use");
+    const next: BrowserPage = { ...before, status: "interrupted", native: null, error: null, restedAt: 5, control: { owner: "human", generation: before.control.generation + 1 } };
+    rows = rows.map(row => row.pageId === pageId ? next : row); return next;
+  });
   const reopen = vi.fn(async (pageId: string, nextDriver: string): Promise<BrowserPage> => {
     const before = rows.find(row => row.pageId === pageId)!;
     if (before.forgottenAt) throw new Error("forgotten");
@@ -78,7 +84,9 @@ function fixture(initial: BrowserPage[] = [page()]) {
   const poll = vi.fn(async (input: BrowserDriverPoll): Promise<BrowserDriverReply> => {
     rows = rows.map(row => {
       const live = input.pages.find(native => native.pageId === row.pageId);
-      return row.status === "interrupted" || row.status === "closed" ? row : live ? { ...row, native: live, url: live.url, status: "ready", control: live.control } : row.status === "ready" ? { ...row, native: null, status: "interrupted", error: "native gone" } : row;
+      if (row.status === "interrupted" || row.status === "closed") return row;
+      if (live) { const { restedAt: _rested, ...awake } = row; return { ...awake, native: live, url: live.url, status: "ready" as const, control: live.control }; }
+      return row.status === "ready" ? { ...row, native: null, status: "interrupted" as const, error: "native gone" } : row;
     });
     const batch = jobs; jobs = []; return { ...listing(), jobs: batch };
   });
@@ -90,13 +98,13 @@ function fixture(initial: BrowserPage[] = [page()]) {
     if (command.kind === "create") { const next = { ...nativePage(command.pageId), url: command.url, profileId: command.profileId, control: command.control }; natives = [...natives, next]; return next; }
     return null;
   });
-  const endpoint = { list, profile, create, restore, reopen, forget, close, session, control, action, receipt, poll };
+  const endpoint = { list, profile, create, restore, rest, reopen, forget, close, session, control, action, receipt, poll };
   const browser = new SharedBrowser(endpoint, native as BrowserNative, driverId);
   const api = { sharedBrowser: endpoint, items: vi.fn(async () => ({ items: [], seq: 1 })) } as unknown as Api;
   const send = vi.fn(async (_session: Session, _text: string) => true), interrupt = vi.fn(), answer = vi.fn();
   const actions = { send, interrupt, answer, queued: { send: vi.fn(), cancel: vi.fn() } } as unknown as WorkActions;
   const state = { ...initialState, sessions: { main, child }, works: { work }, workspaces: { space } };
-  return { browser, native, execute, endpoint, api, actions, send, interrupt, answer, state, setRows: (next: BrowserPage[]) => { rows = next; }, setNatives: (next: NativeBrowserPage[]) => { natives = next; }, setJobs: (next: BrowserJob[]) => { jobs = next; } };
+  return { browser, native, execute, endpoint, api, actions, send, interrupt, answer, state, rows: () => rows, setRows: (next: BrowserPage[]) => { rows = next; }, setNatives: (next: NativeBrowserPage[]) => { natives = next; }, setJobs: (next: BrowserJob[]) => { jobs = next; } };
 }
 const job = (id: string, pageId: string): BrowserJob => ({ id, pageId, driverId, action: { kind: "reload" }, expected: null, control: { owner: "human", generation: 0 }, deadline: Date.now() + 20000 });
 const settle = async () => { for (let turn = 0; turn < 12; turn++) await Promise.resolve(); };
@@ -395,4 +403,90 @@ it("× on a web tab whose page AI is working keeps the page open (its AI keeps g
   await act(async () => { await f.browser.releaseHeld("page-a"); });
   expect(f.endpoint.close).toHaveBeenCalledOnce();
   expect(f.browser.getState().heldPageIds).toEqual([]);
+});
+
+// 0.5.1, tab sleep (Part 3): a web page whose tab has been off screen is released as a browser discards a background tab.
+it("rests a page: the native page is released, its record and tab stay — and shown again it loads the same URL in the same profile", async () => {
+  const f = fixture([{ ...page(), url: "https://example.com/read/3", title: "읽던 글", profileId: "school", native: { ...nativePage(), url: "https://example.com/read/3", title: "읽던 글", profileId: "school" } }]);
+  await f.browser.poll();
+  await f.browser.rest("page-a");
+  expect(f.endpoint.rest).toHaveBeenCalledWith("page-a");
+  expect(f.native.mock.calls.map(([command]) => command).filter(command => command.kind === "close")).toEqual([{ kind: "close", pageId: "page-a", profileId: "school" }]);
+  // Not closed: the page is still listed with its title and address, and no tab of it is asked to close.
+  expect(f.endpoint.close).not.toHaveBeenCalled();
+  expect(f.browser.getState().closedPageIds ?? []).toEqual([]);
+  expect(f.browser.getState().pages.find(entry => entry.pageId === "page-a")).toMatchObject({ status: "interrupted", native: null, error: null, url: "https://example.com/read/3", title: "읽던 글", profileId: "school" });
+  // Polling again does not bring it back or mark it lost.
+  await f.browser.poll();
+  expect(f.browser.getState().pages.find(entry => entry.pageId === "page-a")).toMatchObject({ status: "interrupted", error: null });
+  // Woken (its view shown again restores it): the same URL and profile, through the existing open-page path.
+  await f.browser.restore("page-a");
+  expect(f.native.mock.calls.map(([command]) => command).filter(command => command.kind === "create")).toEqual([expect.objectContaining({ kind: "create", pageId: "page-a", profileId: "school", url: "https://example.com/read/3" })]);
+  expect(f.browser.getState().pages.find(entry => entry.pageId === "page-a")).toMatchObject({ status: "ready", url: "https://example.com/read/3", profileId: "school" });
+});
+
+it("a page shown again after resting is restored by its view, without being asked", async () => {
+  const f = fixture(); await f.browser.poll();
+  await f.browser.rest("page-a");
+  await act(async () => render(<BrowserView browser={f.browser} api={f.api} state={f.state} pageId="page-a" visible parentSessionId="main" actions={f.actions} onNew={() => {}} onClosed={() => {}} onTranscript={() => {}} onOpenSession={() => {}} focusItem={null} onFocusDone={() => {}} />));
+  await act(async () => { await settle(); await vi.advanceTimersByTimeAsync(600); await settle(); });
+  expect(f.endpoint.restore).toHaveBeenCalledWith("page-a", driverId);
+  expect(f.browser.getState().pages.find(entry => entry.pageId === "page-a")?.status).toBe("ready");
+});
+
+it("does not rest a page that is in use: held for its AI, an action without a result, or refused by the gateway — the native page stays", async () => {
+  const f = fixture(); await f.browser.poll();
+  await f.browser.closeView("page-a", true);
+  await expect(f.browser.rest("page-a")).rejects.toThrow();
+  await f.browser.releaseHeld("page-a", true);
+  f.setRows([{ ...page(), control: { owner: "child", generation: 1 }, native: { ...nativePage(), control: { owner: "child", generation: 1 } } }]);
+  f.setNatives([{ ...nativePage(), control: { owner: "child", generation: 1 } }]);
+  await f.browser.poll();
+  await expect(f.browser.rest("page-a")).rejects.toThrow();
+  expect(f.native.mock.calls.some(([command]) => command.kind === "close")).toBe(false);
+  expect(f.browser.getState().pages.find(entry => entry.pageId === "page-a")?.status).toBe("ready");
+});
+
+// Round 2 of tab sleep.
+it("a resting page the gateway wakes for its AI is made again by this window, its tab still off screen: the same URL and profile, once", async () => {
+  const f = fixture([{ ...page(), url: "https://example.com/read/3", profileId: "school", native: { ...nativePage(), url: "https://example.com/read/3", profileId: "school" } }]);
+  await f.browser.poll();
+  await f.browser.rest("page-a");
+  await f.browser.poll();
+  expect(f.native.mock.calls.some(([command]) => command.kind === "create")).toBe(false);
+  // The gateway, asked by the page's AI: the record goes to "opening", still marked as rested.
+  f.setRows(f.rows().map(row => ({ ...row, status: "opening" as const, control: { owner: "human", generation: row.control.generation + 1 } })));
+  await f.browser.poll(); await settle();
+  await f.browser.poll(); await settle();
+  await f.browser.poll(); await settle();
+  expect(f.native.mock.calls.map(([command]) => command).filter(command => command.kind === "create")).toEqual([expect.objectContaining({ kind: "create", pageId: "page-a", profileId: "school", url: "https://example.com/read/3" })]);
+  expect(f.endpoint.restore).not.toHaveBeenCalled();
+  expect(f.browser.getState().pages.find(entry => entry.pageId === "page-a")).toMatchObject({ status: "ready", url: "https://example.com/read/3", profileId: "school" });
+});
+
+it("closing the tab of a resting page closes the page's record, as closing a live one does; a page that is not resting is left to its own view", async () => {
+  const f = fixture([page(), page("page-b")]); await f.browser.poll();
+  await f.browser.rest("page-a");
+  await f.browser.closeResting("page-a");
+  expect(f.endpoint.close).toHaveBeenCalledWith("page-a");
+  expect(f.browser.getState().closedPageIds).toContain("page-a");
+  expect(f.browser.getState().pages.find(entry => entry.pageId === "page-a")?.status).toBe("closed");
+  await f.browser.closeResting("page-b");
+  expect(f.endpoint.close).toHaveBeenCalledTimes(1);
+  expect(f.browser.getState().pages.find(entry => entry.pageId === "page-b")?.status).toBe("ready");
+});
+
+it("a resting page reads as an ordinary open page in the 새 웹 탭 list (no 연결 중단), and choosing it opens it; a page that was lost still says 연결 중단", async () => {
+  const f = fixture([{ ...page(), title: "쉬는 글" }, { ...page("page-b"), title: "끊긴 글" }]); await f.browser.poll();
+  await f.browser.rest("page-a");
+  f.setRows(f.rows().map(row => row.pageId === "page-b" ? { ...row, status: "interrupted" as const, native: null, error: "native gone" } : row));
+  f.setNatives([]);
+  await f.browser.poll();
+  const onOpen = vi.fn();
+  await act(async () => { render(<NewBrowserDialog browser={f.browser} workspaces={[space]} target={{ workspaceId: "space", url: "example.com" }} onOpen={onOpen} onClose={() => {}} />); });
+  const resting = screen.getByRole("button", { name: /쉬는 글/ }), lost = screen.getByRole("button", { name: /끊긴 글/ });
+  expect(resting.textContent).not.toContain("연결 중단");
+  expect(lost.textContent).toContain("연결 중단");
+  fireEvent.click(resting);
+  expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ pageId: "page-a" }));
 });

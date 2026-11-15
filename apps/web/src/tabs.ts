@@ -26,7 +26,7 @@ const project = <V>(pane: Pane<V>, tabs: PaneTab<V>[], activeId: string, recent 
  */
 let keeper: (<V>(tab: PaneTab<V>) => boolean) | null = null;
 export function setTabKeeper(check: (<V>(tab: PaneTab<V>) => boolean) | null) { keeper = check; }
-const showsWeb = (view: unknown) => {
+export const showsWeb = (view: unknown) => {
   const value = view as { kind?: string; beside?: { kind?: string } };
   return value.kind === "browser" || value.beside?.kind === "browser";
 };

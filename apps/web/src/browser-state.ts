@@ -137,6 +137,13 @@ export class SharedBrowser {
       for (const page of reply.pages) if (page.agentSessionId && page.driverId === this.driverId && page.status === "opening" && !this.nativeCreates.has(page.pageId)) {
         void this.connectCreated(page).catch(error => { this.creationErrors.set(page.pageId, message(error)); });
       }
+      // Tab sleep: a resting page the gateway woke for its AI (its tab still off screen) is made again here — once;
+      // a view shown meanwhile joins this instead of making it a second time (`restore`).
+      for (const page of reply.pages) if (page.restedAt !== undefined && !page.agentSessionId && page.driverId === this.driverId && page.status === "opening" && !this.nativeCreates.has(page.pageId) && !this.restoring.has(page.pageId)) {
+        const waking: Promise<BrowserPage> = this.connectCreated(page).finally(() => { if (this.restoring.get(page.pageId) === waking) this.restoring.delete(page.pageId); });
+        this.restoring.set(page.pageId, waking);
+        void waking.catch(error => { this.creationErrors.set(page.pageId, message(error)); });
+      }
       this.schedulePresentation();
     } catch (error) { this.change({ connected: false, error: message(error) }); this.schedulePresentation(); }
   }
@@ -234,6 +241,35 @@ export class SharedBrowser {
   async closeView(pageId: string, working: boolean): Promise<void> {
     if (working) { if (!this.value.heldPageIds?.includes(pageId)) this.change({ heldPageIds: [...(this.value.heldPageIds ?? []), pageId] }); return; }
     await this.close(pageId);
+  }
+  /**
+   * Tab sleep (0.5.1): the page's tab has been off screen for a while — its native page is released, as a browser
+   * discards a background tab. The gateway keeps the record (identity, profile, last URL, title, its project, its AI
+   * conversation) and the tab stays; `restore` — what a page's view does when it is shown and not connected — loads
+   * that URL again in the same profile. Refused (the page stays as it is) while it is held for its AI, an action on
+   * it has no result yet, or the gateway says an AI is using it. A page with no native page here is left alone.
+   */
+  async rest(pageId: string): Promise<void> {
+    if (!this.api || !this.native) return;
+    const page = this.value.pages.find(entry => entry.pageId === pageId);
+    if (!page || page.status !== "ready" || page.driverId !== this.driverId) return;
+    if (this.value.heldPageIds?.includes(pageId) || this.value.pending[pageId] || this.lanes.has(pageId)) throw new Error("쓰고 있는 웹 페이지입니다.");
+    this.upsert(await this.api.rest(pageId));
+    await this.native({ kind: "close", pageId, profileId: page.profileId });
+    // Made again later under the same identity (shown, or woken by the gateway for its AI): not a creation in doubt.
+    this.nativeCreates.delete(pageId);
+    try { sessionStorage.setItem("workbench.browser.created", JSON.stringify([...this.nativeCreates])); } catch { /* As in connectCreated. */ }
+    await this.poll();
+  }
+  /**
+   * The tab of a resting page is closed (no view of it is mounted to do it): its record is closed as closing a live
+   * page's tab does — its row in 웹 becomes a closed page's. A page that is not resting is its own view's to close.
+   */
+  async closeResting(pageId: string): Promise<void> {
+    const page = this.value.pages.find(entry => entry.pageId === pageId);
+    if (!this.api || !page || page.restedAt === undefined || page.status !== "interrupted") return;
+    this.upsert(await this.api.close(pageId)); this.pending(pageId, null);
+    this.change({ closedPageIds: [...new Set([...(this.value.closedPageIds ?? []), pageId])] });
   }
   /** A held page whose AI is done (or shown again): released, or only un-held when `keep`. */
   async releaseHeld(pageId: string, keep = false): Promise<void> {

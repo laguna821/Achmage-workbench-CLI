@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { DIVIDER, MAX_PANES, minimumSize, paneGeometry, resizeSplit, treeOf, type PaneNeed, type DividerRect, type DropEffect, type Layout, type Pane, type PaneId, type PaneItem, type PaneRect, type PaneTarget, type Side } from "../panes.ts";
+import { DIVIDER, MAX_PANES, minimumSize, paneGeometry, resizeSplit, treeOf, type PaneNeed, type DividerRect, type DropEffect, type Layout, type Pane, type PaneId, type PaneItem, type PaneRect, type PaneTab, type PaneTarget, type Side } from "../panes.ts";
 import { paneDrag, useDropArea, usePaneDrag, usePaneDragSlice } from "../panedrag.ts";
 import { Icon } from "./Icon.tsx";
 import { Select } from "./ui/Select.tsx";
 import { activeTab, tabsOf } from "../tabs.ts";
+import { SleepTab, heldAwake, sleepPlan, tabSleepAfter } from "../tab-sleep.ts";
 import { fadeIn, returnTo, revealFrom } from "../flip.ts";
 import "../styles/panes.css";
 
@@ -12,9 +13,25 @@ export type PaneHead = { title: string; icon: ReactNode; hint?: string; kindLabe
 export type PaneScope = { theme: string; bubble: string; frame: boolean; glow: string; style: CSSProperties };
 const SIDE_LABEL = { left: "왼쪽으로 분할", right: "오른쪽으로 분할", top: "위로 분할", bottom: "아래로 분할", center: "이 칸에 열기" };
 
+/**
+ * Tab sleep (tab-sleep.ts): what the app knows of its tabs. `unsaved`: the keeper — the tab holds unsaved edits, or its
+ * editor cannot tell. `atWork`: something is at work in it (unsure: true). `before`: what is done before the view is
+ * taken down (null: there is no way to — the tab stays awake). Unsaved edits: the tab's save-on-leave path (its leave
+ * guard) — resolves once its editor says saved, rejects when it could not save or would need the person. A web page:
+ * its native page is released — rejects while it is in use. It must open nothing.
+ */
+export type TabSleep<V> = { unsaved: (tab: PaneTab<V>) => boolean; atWork: (tab: PaneTab<V>) => boolean; before: (tab: PaneTab<V>) => (() => Promise<void>) | null };
+
 /** The tree determines geometry; editors retain the same parent and React key when moved. */
-export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, maximized = false, onMaximize, onPresent, onResize, onFocus, onClose, onMove, onSplit, onDrop, head, scope, effectOf, render, onNarrow, tabBar, minWidthOf, foot }: {
+export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, maximized = false, onMaximize, onPresent, onResize, onFocus, onClose, onMove, onSplit, onDrop, head, scope, effectOf, render, onNarrow, tabBar, minWidthOf, foot, sleep, onSleeping }: {
   layout: Layout<V>; enabled: boolean;
+  /**
+   * Given: a view that has been off screen for ten minutes is unmounted (its tab stays; shown again, it is mounted
+   * again), by tab-sleep.ts `sleepPlan`. Not given: a view stays mounted until its tab closes.
+   */
+  sleep?: TabSleep<V>;
+  /** Told the number of tabs asleep right now — views this window took down that are neither shown again nor closed — at the start and whenever it changes. */
+  onSleeping?: (count: number) => void;
   /**
    * Project tabs: the layout as drawn (tabs.ts `drawnLayout`) — the panes of the window's project,
    * their neighbours taking the room of the others. A pane of `layout` that is not in it stays where
@@ -57,6 +74,52 @@ export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, maximized = 
   const mountedTabs = useRef(new Set<string>());
   const shown = drawnPanes ?? layout, onScreen = new Set(shown.panes.map((pane) => pane.id));
   for (const pane of shown.panes) mountedTabs.current.add(activeTab(pane).id);
+  // Tab sleep: when each tab was last on screen — now for those in front, and for those that have just left.
+  const rest = useRef({ shownAt: new Map<string, number>(), askedAt: new Map<string, number>(), front: new Set<string>(), asleep: new Set<string>() });
+  {
+    const front = new Set(shown.panes.map((pane) => activeTab(pane).id)), now = Date.now();
+    for (const id of [...rest.current.front, ...front]) rest.current.shownAt.set(id, now);
+    rest.current.front = front;
+    // Asleep: taken down here, and neither shown again (it is mounted again) nor closed.
+    const open = new Set(layout.panes.flatMap(tabsOf).map((tab) => tab.id));
+    for (const id of [...rest.current.asleep]) if (front.has(id) || !open.has(id)) rest.current.asleep.delete(id);
+  }
+  const sleeping = rest.current.asleep.size;
+  useEffect(() => onSleeping?.(sleeping), [sleeping, onSleeping]);
+  const [, slept] = useState(0);
+  const latest = useRef({ layout, shown, sleep });
+  latest.current = { layout, shown, sleep };
+  const sleeps = Boolean(sleep);
+  useEffect(() => {
+    if (!sleeps) return;
+    const after = tabSleepAfter();
+    /** The plan as things are now; `saved`: a tab whose editor has just answered saved, or whose web page was just released. Its sleepers are unmounted. */
+    const settle = (saved?: string) => {
+      const { layout, shown, sleep } = latest.current, { shownAt, askedAt, front } = rest.current, now = Date.now();
+      if (!sleep) return [];
+      const open = new Set(layout.panes.flatMap(tabsOf).map((tab) => tab.id));
+      for (const known of [mountedTabs.current, shownAt, askedAt]) for (const id of [...known.keys()]) if (!open.has(id)) known.delete(id);
+      for (const id of front) shownAt.set(id, now);
+      const plan = sleepPlan({ layout, drawn: shown, mounted: mountedTabs.current, now, shownAt, askedAt, after, unsaved: sleep.unsaved,
+        atWork: (tab) => heldAwake(tab.id) || sleep.atWork(tab), saved: saved ? new Set([saved]) : undefined });
+      const down = saved ? plan.sleep.filter((id) => id === saved) : plan.sleep;
+      for (const id of down) { mountedTabs.current.delete(id); rest.current.asleep.add(id); }
+      if (down.length) slept((count) => count + 1);
+      return saved ? [] : plan.ask;
+    };
+    const timer = window.setInterval(() => {
+      for (const id of settle()) {
+        // Unsaved edits: the editor saves through its tab's leave path first; a web page: its native page is released
+        // first. Done: decided again, as things are then. Refused, failed or no way to: the view stays, and is asked
+        // again one interval from now.
+        rest.current.askedAt.set(id, Date.now());
+        const tab = latest.current.layout.panes.flatMap(tabsOf).find((entry) => entry.id === id);
+        const before = tab && latest.current.sleep?.before(tab);
+        if (before) void before().then(() => { settle(id); }, () => undefined);
+      }
+    }, Math.min(30_000, Math.max(250, after / 4)));
+    return () => window.clearInterval(timer);
+  }, [sleeps]);
   const split = shown.panes.length > 1;
   const tree = treeOf(live ? resizeSplit(shown, live.id, live.ratio) : shown);
   const need: PaneNeed | undefined = minWidthOf && split && !layout.grid ? (id) => { const pane = layout.panes.find((entry) => entry.id === id); return pane ? minWidthOf(pane) : 0; } : undefined;
@@ -177,7 +240,7 @@ export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, maximized = 
           </span>
         </header> : null}
         {tabBar?.(group)}
-        {render(pane, { focused, split, tabId: tab.id, active })}
+        <SleepTab.Provider value={tab.id}>{render(pane, { focused, split, tabId: tab.id, active })}</SleepTab.Provider>
       </section>;
     })}
     {split && !collapsed ? geometry.dividers.map((divider) => {

@@ -11,6 +11,7 @@ import { Icon } from "./Icon.tsx";
 import { restoreSurfaceFocus } from "./controls/menu-navigation.ts";
 import { usePkm } from "./pkm/PkmContext.tsx";
 import { MESSENGER_NEEDS } from "./phone-words.ts";
+import { BookmarkImportStep } from "./BookmarkImport.tsx";
 import "../styles/onboarding.css";
 
 // The first run (atlas-look, 2026-11-15, the owner: "온보딩 설정화면 가운데 뜨는 화면도 atlas랑 거의 똑같이"):
@@ -19,13 +20,17 @@ import "../styles/onboarding.css";
 // AI 엔진 (Claude and Codex as rows), 휴대폰 메신저 (텔레그램 / Slack, 건너뛰기 always there). Everything
 // the earlier steps offered stays in 설정 (the first project: the empty list's 새 프로젝트). The gate
 // (prefs.onboarding) and the Paseo visit model stay; steps the model has that are not shown are passed over.
+// 0.5.1 (the owner, 2026-11-16): a FOURTH step after 휴대폰 메신저 — 즐겨찾기, the browsers found on this PC,
+// one key each. The model has no such step, so it is kept here (`extra`) while the model stands on its
+// last step (phone); a phone joined to another PC has no web tabs and is not shown it.
 
 export { toolState } from "./Connections.tsx";
 
 /** The steps a person sees, in order (the model's "projects" and "orchestration" are passed over). */
 const SHOWN: OnboardingStepId[] = ["appearance", "providers", "phone"];
-const STEP_LABELS: Record<OnboardingStepId, string> = {
-  appearance: "화면", providers: "AI 엔진", projects: "첫 프로젝트", orchestration: "문서 도구", phone: "휴대폰 메신저",
+type ShownStep = OnboardingStepId | "bookmarks";
+const STEP_LABELS: Record<ShownStep, string> = {
+  appearance: "화면", providers: "AI 엔진", projects: "첫 프로젝트", orchestration: "문서 도구", phone: "휴대폰 메신저", bookmarks: "즐겨찾기",
 };
 const THEMES: { id: ThemePref; label: string; icon: "sun" | "moon" | "settings" }[] = [
   { id: "light", label: "밝게", icon: "sun" },
@@ -82,8 +87,13 @@ export function Onboarding({ foot, providers, engineActions, onRefresh, onDone, 
   const raw = flow.status === "open" ? flow.steps[flow.stepIndex]! : null;
   // The model may stand on a step not shown here: it is passed over, forwards.
   useEffect(() => { if (raw && !SHOWN.includes(raw)) model.goTo("phone"); }, [raw, model]);
-  const step = raw && SHOWN.includes(raw) ? raw : null;
-  const index = step ? SHOWN.indexOf(step) : 0;
+  // The fourth step: on while the model stands on its last (phone); gone when the first run closes.
+  const [extra, setExtra] = useState(false);
+  const withBookmarks = !api?.isRemote;
+  const steps: ShownStep[] = withBookmarks ? [...SHOWN, "bookmarks"] : SHOWN;
+  useEffect(() => { if (flow.status !== "open" || raw !== "phone") setExtra(false); }, [flow.status, raw]);
+  const step: ShownStep | null = raw && SHOWN.includes(raw) ? (extra && raw === "phone" && withBookmarks ? "bookmarks" : raw) : null;
+  const index = step ? steps.indexOf(step) : 0;
   const shown = !effectiveSuspended && flow.status === "open" && step !== null;
   // 휴대폰 메신저: what is connected now, read again whenever the step is in front (e.g. back from 설정 › 메신저).
   const [channels, setChannels] = useState<ChannelsState | null>(null);
@@ -135,9 +145,10 @@ export function Onboarding({ foot, providers, engineActions, onRefresh, onDone, 
     };
   }, [model, effectiveSuspended, flow.status]);
   if (flow.status !== "open" || effectiveSuspended || !step) return null;
-  const last = index === SHOWN.length - 1;
-  const next = () => last ? model.next(flow.visit) : model.goTo(SHOWN[index + 1]!);
-  const back = () => model.goTo(SHOWN[index - 1]!);
+  const last = index === steps.length - 1;
+  const show = (id: ShownStep) => { if (id === "bookmarks") { model.goTo("phone"); setExtra(true); } else { setExtra(false); model.goTo(id); } };
+  const next = () => last ? model.next(flow.visit) : show(steps[index + 1]!);
+  const back = () => show(steps[index - 1]!);
   const finish = () => void model.complete();
   const anyEngine = ready(providers.claude) || ready(providers.codex);
   // One filled key per step (I2): with no engine ready the engine rows' keys are the way on, so 'AI 없이 계속' is quiet.
@@ -154,8 +165,8 @@ export function Onboarding({ foot, providers, engineActions, onRefresh, onDone, 
       <nav className="onboarding-side" aria-label="처음 설정">
         <p className="onboarding-side-head">처음 설정</p>
         <ol className="onboarding-steps" aria-label="처음 설정 단계">
-          {SHOWN.map((id, at) => <li key={id} className={at === index ? "active" : at < index ? "done" : ""}>
-            <button type="button" aria-current={at === index ? "step" : undefined} onClick={() => model.goTo(id)}>
+          {steps.map((id, at) => <li key={id} className={at === index ? "active" : at < index ? "done" : ""}>
+            <button type="button" aria-current={at === index ? "step" : undefined} onClick={() => show(id)}>
               <span className="onboarding-step-no" aria-hidden>{at < index ? <Icon name="check" size={12} /> : at + 1}</span>{STEP_LABELS[id]}
             </button>
           </li>)}
@@ -164,7 +175,7 @@ export function Onboarding({ foot, providers, engineActions, onRefresh, onDone, 
       </nav>
       <section className="onboarding-pane">
         <div className="onboarding-page">
-          <p className="onboarding-count">{index + 1} / {SHOWN.length}, {STEP_LABELS[step]}</p>
+          <p className="onboarding-count">{index + 1} / {steps.length}, {STEP_LABELS[step]}</p>
           {step === "appearance" ? <>
             <h2 id="onboarding-title" ref={heading} tabIndex={-1}>화면을 고르세요</h2>
             <p className="onboarding-lead">고르면 바로 바뀝니다. 나중에 설정 › 화면에서 바꿀 수 있습니다.</p>
@@ -212,6 +223,11 @@ export function Onboarding({ foot, providers, engineActions, onRefresh, onDone, 
               })}
             </ul>
             <p className="onboarding-note">{onOpenMessenger ? "설정 › 메신저가 열리고, 닫으면 이 안내로 돌아옵니다." : "이 PC의 앱에서 설정 › 메신저로 연결합니다."}</p>
+          </> : null}
+          {step === "bookmarks" ? <>
+            <h2 id="onboarding-title" ref={heading} tabIndex={-1}>쓰던 즐겨찾기 가져오기</h2>
+            <p className="onboarding-lead">쓰던 브라우저의 즐겨찾기를 가져오면 웹 탭의 주소 바로 아래 즐겨찾기 줄에 나옵니다. 지금 하지 않아도 됩니다.</p>
+            <BookmarkImportStep api={api} />
           </> : null}
         </div>
         <div className="onboarding-actions">

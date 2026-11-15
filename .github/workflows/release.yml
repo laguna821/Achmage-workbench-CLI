@@ -44,7 +44,7 @@ on:
       upgrade_from:
         description: 'Published release to install before the upgrade check'
         type: string
-        default: 'v0.4.1'
+        default: 'v0.5.0'
       upgrade_to:
         description: 'Published release to install over the old version (empty: normal build/publish)'
         type: string
@@ -429,7 +429,7 @@ jobs:
     timeout-minutes: 15
     env:
       GH_TOKEN: ${{ github.token }}
-      UPGRADE_FROM: ${{ inputs.upgrade_from || 'v0.4.1' }}
+      UPGRADE_FROM: ${{ inputs.upgrade_from || 'v0.5.0' }}
       UPGRADE_TO: ${{ inputs.upgrade_to }}
     steps:
       - uses: actions/checkout@v4

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import type { ChannelAuditRow, ChannelBinding, ChannelBot, ChannelKind, ChannelPairingLink, ChannelPairingRequest, ChannelsState } from "@workbench/contracts";
+import { PROVIDER_LABEL, type ChannelAuditRow, type ChannelBinding, type ChannelBot, type ChannelKind, type ChannelPairingLink, type ChannelPairingRequest, type ChannelsState, type Provider } from "@workbench/contracts";
 import { ApiRequestError, type Api } from "../api.ts";
 import { FeatureDialog, featureError } from "./FeatureDialog.tsx";
 import { SlackPairingLine, SlackTokenForm, SlackWizard, messengerName, slackPlace } from "./PhoneMessengerSlack.tsx";
@@ -52,6 +52,10 @@ const RISKS = [
 const NO_KEYRING = "이 PC에는 토큰을 봉인해 둘 보안 저장소(키링)가 없습니다. 토큰을 평문으로 저장하지 않습니다.";
 const BOT_NAME = "내 Workbench";
 const AUTOSTART = "PC를 켜면 자동으로 시작";
+// "이 메신저의 기본 엔진": the engine of the conversations a messenger's chat makes (the first one, 새 대화, a move
+// to another project) when none was named. Also set from the chat's own engine screen; each shows the other's.
+const DEFAULT_ENGINE = "기본 엔진";
+const ENGINE_CHOICES: { value: Provider | "none"; label: string }[] = [{ value: "none", label: "정하지 않음" }, { value: "claude", label: PROVIDER_LABEL.claude }, { value: "codex", label: PROVIDER_LABEL.codex }];
 const REMOVE_WARNING = "이 PC에서 봇 등록을 지웁니다. 휴대폰 연결도 끊어지고, 다시 쓰려면 토큰을 넣고 다시 연결해야 합니다. 봇과 토큰은 텔레그램에 그대로 남습니다(끝내려면 BotFather에서 토큰을 폐기하세요).";
 const REMOVE_WARNING_SLACK = "이 PC에서 Slack 앱 등록을 지웁니다. 연결도 끊어지고, 다시 쓰려면 토큰 두 개를 넣고 다시 연결해야 합니다. Slack 앱과 토큰은 Slack에 그대로 남습니다(끝내려면 api.slack.com에서 앱을 지우세요).";
 const POLL_MS = 2_000;
@@ -151,7 +155,7 @@ function MessengerRows({ state, onOpen, onVault }: { state: ChannelsState; onOpe
     const binding = bot.bindings[0] ?? null;
     const status = statusOf(bot, binding);
     return <SettingsRow key={which} label={name} state={{ text: status.word, tone: status.tone === "ok" ? "ok" : status.tone === "idle" ? "" : "warn" }}
-      hint={<>@{bot.username}{bot.kind === "slack" ? <> · <Name>{bot.name}</Name></> : null} · {binding ? <Name>{binding.displayName}</Name> : "휴대폰 연결 전"}</>}
+      hint={<>@{bot.username}{bot.kind === "slack" ? <> · <Name>{bot.name}</Name></> : null} · {binding ? <Name>{binding.displayName}</Name> : "휴대폰 연결 전"}{bot.defaultEngine ? ` · ${DEFAULT_ENGINE} ${PROVIDER_LABEL[bot.defaultEngine]}` : null}</>}
       control={<button type="button" className="button small" aria-label={`${name} 열기`} onClick={() => onOpen(which)}>열기</button>} />;
   };
   return <>
@@ -323,6 +327,13 @@ function Registered({ api, bot, autostart, notice, setNotice, setError, setState
   const patch = (body: Record<string, unknown>, said = "") => act(() => api.request<ChannelsState>("PATCH", `/api/channels/bindings/${encodeURIComponent(binding!.id)}`, body), said);
   const base = `/api/channels/${bot.kind}/bots/${encodeURIComponent(bot.id)}`;
   const replaceButton = <button type="button" className="button small" disabled={busy} onClick={() => { setReplacing(true); setRemoving(false); setNotice(""); }}>토큰 바꾸기</button>;
+  const setEngine = (next: Provider | "none") => {
+    const engine = next === "none" ? null : next, name = messengerName(bot.kind);
+    if (engine === (bot.defaultEngine ?? null)) return;
+    void act(() => api.request<ChannelsState>("PATCH", base, { defaultEngine: engine }), engine
+      ? `앞으로 ${name}의 새 대화는 ${PROVIDER_LABEL[engine]}로 만듭니다. 지금 있는 대화는 그대로입니다.`
+      : `기본 엔진을 정하지 않았습니다. ${name}의 새 대화는 전처럼 지금 대화나 프로젝트의 엔진으로 만듭니다.`);
+  };
   return <>
     <header className="pm-head">
       <div className="pm-status-line">
@@ -353,6 +364,8 @@ function Registered({ api, bot, autostart, notice, setNotice, setError, setState
           </dl>
           <div className="feature-actions"><button type="button" className="button small" disabled={busy} onClick={() => void patch({ revoked: true }, "연결을 끊었습니다. 그 휴대폰에서 온 글은 이제 실행하지 않습니다.")}>연결 끊기</button></div>
         </section> : <Pairing api={api} bot={bot} busy={busy} act={act} refresh={refresh} openExternal={openExternal} copy={copy} />}
+        <SettingsGroup><SettingsRow label={DEFAULT_ENGINE} hint="이 메신저에서 새 대화를 만들 때 쓰는 엔진입니다. 휴대폰의 메뉴 › 엔진·모델에서도 바꿉니다."
+          control={<Segmented label={DEFAULT_ENGINE} value={bot.defaultEngine ?? "none"} onChange={setEngine} options={ENGINE_CHOICES} />} /></SettingsGroup>
         <section className="pm-section" aria-label="토큰 보관">
           <dl className="pm-facts"><div><dt>{bot.kind === "slack" ? "토큰 두 개" : "봇 토큰"}</dt><dd>{bot.token === "sealed" ? "보안 저장소에 봉인해 두었습니다." : bot.token === "memory" ? "이번 실행 동안만 기억합니다. PC를 다시 켜면 다시 넣어야 합니다." : "없습니다. 다시 넣어 주세요."}</dd></div></dl>
           {replacing ? (bot.kind === "slack" ? <SlackTokenForm api={api} fresh readClipboard={readClipboard} onCancel={() => setReplacing(false)}

@@ -10,6 +10,9 @@ export default defineConfig({
     { name: "workbench-office-file-parse", enforce: "pre", resolveId: officeFileParseResolve },
     { name: "workbench-hwp-engine", enforce: "pre", resolveId: hwpEngineResolve }],
   test: {
+    // The messenger tests wait on real timers; under load (a full run beside other work, a CI runner) a 5 s
+    // limit has failed tests that pass alone. The limit is for a test that hangs, not for a slow machine.
+    testTimeout: 15_000,
     // each test file in its own temp folder, removed after it (apps/host/src/test-temp-root.ts)
     setupFiles: ["apps/host/src/test-temp-root.ts"],
     globalSetup: ["apps/host/src/test-temp-global.ts"],

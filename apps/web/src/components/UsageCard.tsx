@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Popover } from "./Popover.tsx";
 import { PROVIDER_LABEL, type Provider, type ProviderStatus } from "@workbench/contracts";
 import { resetIn, usageText } from "../format.ts";
@@ -98,16 +98,17 @@ export function UsageCard({ providers, onRefresh, folded = false, onFold }: { pr
 }
 
 /**
- * 사용 한도 표시 = 창 아래 줄 (atlas-look): a slim line along the window's bottom edge, as Orca has —
- * each engine's mark and its limits as short bars with percentages in one row; a click opens the full card.
+ * 창 아래 줄 (atlas-look): a slim line along the window's bottom edge, as Orca has. 사용 한도 표시 = 창 아래 줄
+ * puts each engine's mark and its limits there as short bars with percentages in one row (a click opens the
+ * full card); `end` is what the line holds at its right end (메모리 표시). With neither there is no line.
  */
-export function UsageLine({ providers, onRefresh }: { providers: Partial<Record<Provider, ProviderStatus>>; onRefresh: () => Promise<unknown> }) {
+export function UsageLine({ providers, onRefresh, end }: { providers: Partial<Record<Provider, ProviderStatus>>; onRefresh: () => Promise<unknown>; end?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const engines = ENGINES.filter((provider) => providers[provider]?.installed);
-  if (!engines.length) return null;
+  if (!engines.length && !end) return null;
   return (
-    <div className="usage-line" role="group" aria-label="사용 한도">
-      <button type="button" className="usage-line-key" aria-expanded={open} aria-haspopup="dialog" title="사용 한도 자세히" onClick={() => setOpen(!open)}>
+    <div className="usage-line" role="group" aria-label={!engines.length ? "메모리" : end ? "사용 한도와 메모리" : "사용 한도"}>
+      {engines.length ? <button type="button" className="usage-line-key" aria-expanded={open} aria-haspopup="dialog" title="사용 한도 자세히" onClick={() => setOpen(!open)}>
         {engines.map((provider) => {
           const windows = providers[provider]!.usage.filter((window) => window.usedPercent !== null);
           return (
@@ -119,10 +120,11 @@ export function UsageLine({ providers, onRefresh }: { providers: Partial<Record<
             </span>
           );
         })}
-      </button>
-      <Popover open={open} onClose={() => setOpen(false)} placement="above" className="usage-line-pop" label="사용 한도">
+      </button> : null}
+      {engines.length ? <Popover open={open} onClose={() => setOpen(false)} placement="above" className="usage-line-pop" label="사용 한도">
         <UsageCard providers={providers} onRefresh={onRefresh} />
-      </Popover>
+      </Popover> : null}
+      {end}
     </div>
   );
 }

@@ -146,6 +146,45 @@ export class BrowserRegistry {
     page.control = { generation: page.control.generation + 1, owner: "human" }; page.updatedAt = Date.now();
     this.observed.delete(pageId); this.save(); return page;
   }
+  /**
+   * Tab sleep (0.5.1): the page's tab has been off screen and its native page is about to be released, as a browser
+   * discards a background tab. The record stays as it is — identity, profile, last URL and title, its project, its AI
+   * conversation — and `restore` opens it again when the tab is shown. Unlike a page that was lost, nothing is
+   * interrupted and nothing is said in its conversation: so it is refused while an AI is using the page (its
+   * conversation at work, the AI holding the page, an action on its way). A page that is not open is left as it is.
+   */
+  rest(pageId: string): BrowserPage {
+    const page = this.get(pageId);
+    if (page.status !== "ready") return page;
+    const working = (id: string | null | undefined) => { try { const session = id ? this.hooks.session(id) : undefined; return Boolean(session && session.status !== "idle" && session.status !== "error"); } catch { return false; } };
+    if (page.control.owner !== "human" || working(page.sessionId) || working(page.agentSessionId)
+      || [...this.receipts.values()].some(receipt => receipt.job.pageId === pageId && (receipt.status === "queued" || receipt.status === "dispatched"))) throw fail("browser_in_use", "AI가 쓰고 있는 웹 페이지입니다.");
+    page.status = "interrupted"; page.native = null; page.error = null; page.restedAt = Date.now();
+    page.control = { generation: page.control.generation + 1, owner: "human" }; page.updatedAt = page.restedAt;
+    this.observed.delete(pageId); this.save(); return page;
+  }
+  /**
+   * A resting page an AI is asked to use is opened again first: the record goes to "opening" for a connected desktop
+   * (its own, else the latest), still marked as rested so that driver makes the page again — the same URL and profile —
+   * and this waits until it is there (as a page an agent opens is waited for). A page that was lost, or closed, is not
+   * touched: only resting is undone without the person.
+   */
+  private async awaken(page: BrowserPage): Promise<void> {
+    if (page.status !== "interrupted" || page.restedAt === undefined) return;
+    const live = (id: string) => (this.drivers.get(id) ?? 0) >= Date.now() - 15000;
+    const driverId = live(page.driverId) ? page.driverId : [...this.drivers].sort((a, b) => b[1] - a[1]).find(([id]) => live(id))?.[0];
+    if (!driverId) throw fail("browser_driver_missing", "데스크톱 브라우저 연결을 기다리고 있습니다.");
+    page.driverId = driverId; page.status = "opening"; page.native = null; page.error = null;
+    page.control = { generation: page.control.generation + 1, owner: "human" }; page.updatedAt = Date.now();
+    this.observed.delete(page.pageId); this.save();
+    const until = Date.now() + 12000;
+    while (page.status === "opening" && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  /** Before an AI's turn reads its page's control: its page, if it rests, is opened again. */
+  async wake(sessionId: string): Promise<void> {
+    const page = this.agentPage(sessionId);
+    if (page) await this.awaken(page);
+  }
   /** Skin 2 · B, "목록에서 지우기": the explicit, final removal from the 웹 list (closing it first if open). */
   forget(pageId: string): BrowserPage {
     const page = this.close(pageId);
@@ -156,7 +195,7 @@ export class BrowserRegistry {
   close(pageId: string): BrowserPage {
     const page = this.get(pageId);
     if (page.status === "closed" && page.closedAt !== undefined) return page;
-    page.status = "closed"; page.closedAt = Date.now(); page.updatedAt = page.closedAt; page.error = null; page.native = null;
+    page.status = "closed"; page.closedAt = Date.now(); page.updatedAt = page.closedAt; page.error = null; page.native = null; delete page.restedAt;
     page.control = { generation: page.control.generation + 1, owner: "human" };
     this.observed.delete(pageId); this.settlePage(pageId, "웹 탭을 닫아 이전 동작을 종료했습니다.");
     this.save(); this.hooks.closed?.(pageId); return page;
@@ -182,6 +221,7 @@ export class BrowserRegistry {
     const driverId = [...this.drivers].sort((a, b) => b[1] - a[1]).find(([, at]) => at > Date.now() - 15000)?.[0];
     if (!driverId || !session.workspaceId) throw fail("browser_driver_missing", "웹 탭을 열려면 데스크톱 앱에 연결해 주세요.");
     let page = this.agentPage(sessionId);
+    if (page) await this.awaken(page);
     if (!page || page.status === "interrupted" || page.status === "closed") {
       page = this.create({ requestId: randomUUID(), driverId, workspaceId: session.workspaceId, profileId: "default", url });
       page.agentSessionId = sessionId; this.save();
@@ -244,6 +284,8 @@ export class BrowserRegistry {
     else throw fail("browser_command_unsupported", `공유 웹 탭은 ${command} 명령을 지원하지 않습니다. playwright-cli --help에서 지원 명령을 확인하세요.`);
     const id = `${sessionId}-${requestId}`, prior = this.readReceipt(id);
     if (prior) return this.replay(prior, page, action);
+    // Only a resting page waits here: a page that is there is used in the same step, as before.
+    if (page.status === "interrupted" && page.restedAt !== undefined) await this.awaken(page);
     this.requireReady(page);
     if (!observationAction(action) && (control.owner !== sessionId || !sameControl(control, page.control))) throw fail("CONTROL_REVOKED", "사용자가 페이지를 직접 조작해 이번 동작을 멈췄습니다. 다음 채팅 요청에서 이어가세요. 이 동작은 실행되지 않았습니다.");
     const expected = action.kind === "snapshot" ? null : this.observed.get(page.pageId) ?? null;
@@ -285,6 +327,7 @@ export class BrowserRegistry {
       if (!Number.isSafeInteger(native.navigationRevision) || !native.control || !Number.isSafeInteger(native.control.generation) || (native.control.owner !== "human" && native.control.owner !== page.sessionId && native.control.owner !== page.agentSessionId)) continue;
       if (native.control.generation > page.control.generation) { page.control = { ...native.control }; this.observed.delete(page.pageId); }
       if (JSON.stringify(page.native) !== JSON.stringify(native) || page.status !== "ready") {
+        delete page.restedAt;
         page.native = native; page.url = native.url; page.title = native.title || native.url; page.status = "ready"; page.error = native.error; page.updatedAt = Date.now(); changed = true;
       }
     }
@@ -319,7 +362,7 @@ export class BrowserRegistry {
     if (waiter) { clearTimeout(waiter.timer); this.waiters.delete(receipt.job.id); waiter.resolve(result); }
   }
   private interrupt(page: BrowserPage, error: string) {
-    page.status = "interrupted"; page.error = error; page.control = { generation: page.control.generation + 1, owner: "human" }; this.observed.delete(page.pageId);
+    page.status = "interrupted"; page.error = error; delete page.restedAt; page.control = { generation: page.control.generation + 1, owner: "human" }; this.observed.delete(page.pageId);
     if (page.sessionId) this.hooks.interrupted(page.sessionId, error);
   }
   private expire() {

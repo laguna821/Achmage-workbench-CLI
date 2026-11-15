@@ -82,6 +82,17 @@ const control = createServer((req, res) => {
         await api("POST", `/api/channels/slack/bots/${slack.botId}/pairing/${(await botOf("slack"))!.pairing.request!.id}`, { approve: true });
         return done();
       }
+      case "/engines": {
+        // Each messenger's own default engine, as the person sets it (Codex through Telegram, Claude through Slack).
+        await api("PATCH", `/api/channels/telegram/bots/${tg.botId}`, { defaultEngine: "codex" });
+        await api("PATCH", `/api/channels/slack/bots/${slack.botId}`, { defaultEngine: "claude" });
+        return done();
+      }
+      case "/project": {
+        // A project of the person's own, beside the messengers' places.
+        await api("POST", "/api/works", { title: "연구계획서" });
+        return done();
+      }
       case "/say-both": {
         tg.message("어제 받은 학생 명단 정리해 줘");
         slack.message("회의록 정리해 줘");
@@ -125,6 +136,17 @@ const SCREENS: Screen[] = [
   { name: "msg2-04-both", steps: [{ js: phone("/slack"), wait: `${row("Slack", "연결됨")} && ${row("Slack", "길동")}` }, { js: "__wb.blur()" }], settle: 600 },
   { name: "msg2-05-record-both", steps: [{ js: phone("/say-both"), pause: 4000 }, { js: labelled("텔레그램 열기"), wait: has(`${DIALOG} [role=tab]`, "기록") },
     { js: click(`${DIALOG} [role=tab]`, "기록"), wait: `${has(`${DIALOG} .pm-record li`, "Slack · ")} && ${has(`${DIALOG} .pm-record li`, "텔레그램 · ")}` }, { js: "__wb.blur()" }], settle: 600 },
+  // "기본 엔진": Telegram's own screen with the control, then the two rows saying each messenger's own.
+  { name: "msg2-06-default-engine-status", steps: [{ js: phone("/engines"), pause: 2500 }, { js: click(`${DIALOG} [role=tab]`, "연결"), wait: `__wb.q('${DIALOG} [role=radiogroup][aria-label="기본 엔진"] [aria-checked=true]')?.textContent === 'Codex'` }, { js: "__wb.blur()" }], settle: 600 },
+  { name: "msg2-07-default-engine-rows", steps: [{ js: back, wait: `${row("텔레그램", "기본 엔진 Codex")} && ${row("Slack", "기본 엔진 Claude")}` }, { js: "__wb.blur()" }], settle: 600 },
+  // Messenger homes: the list of all projects with "메신저" above 폴더 (each messenger's own place), then Telegram's opened.
+  { name: "msg2-08-messenger-section", steps: [
+    { js: phone("/project"), pause: 800 },
+    { js: click(".settings-dialog[open] .settings-close"), wait: "!__wb.has('.settings-dialog[open]')" },
+    { js: click(".nav-rail [data-rail=projects]"), pause: 400 },
+    { js: "if (__wb.has('.sidebar[data-level=project]')) __wb.click('.sidebar .nav-back')", wait: `${has(`.sidebar[data-level=projects] [role=tree][aria-label="메신저"] [data-row-id]`, "텔레그램 대화")} && ${has(`.sidebar[data-level=projects] [role=tree][aria-label="메신저"] [data-row-id]`, "Slack 대화")}` },
+    { js: "__wb.blur()" }], settle: 600 },
+  { name: "msg2-09-messenger-home-open", steps: [{ js: click(`.sidebar [role=tree][aria-label="메신저"] [data-row-id]`, "텔레그램 대화"), wait: "__wb.has('.sidebar[data-level=project]')" }, { js: "__wb.blur()" }], settle: 800 },
 ];
 
 function capture() {

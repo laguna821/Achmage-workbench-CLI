@@ -8,7 +8,7 @@ import type { MenuEntry } from "../ContextMenu.tsx";
 import { LinkBadge } from "../LinkSidebar.tsx";
 import { PlacementMark, ViewsSection } from "../pkm/ViewsSection.tsx";
 import { linkOfSession } from "../../links.ts";
-import { DEFAULT_SORT, SORT_LABEL, filterOf, holdings, levelOneRows, selectionKey, shortDate, sortFor, type LevelOneRow, type ListProject } from "./model.ts";
+import { DEFAULT_SORT, SORT_LABEL, filterOf, holdings, levelOneRows, messengerHomes, ownProjects, selectionKey, shortDate, sortFor, type LevelOneRow, type ListProject } from "./model.ts";
 import { ROOT_ROW_ID, ShortcutsSection, TagsSection, viewShortcutEntry } from "./NavPane.tsx";
 import { RowAdd, RowMore, StateMark } from "./rows.tsx";
 import { ListEmpty } from "./Lists.tsx";
@@ -16,11 +16,14 @@ import { typeAhead } from "./focus.ts";
 import { ROW_STATES } from "../../row-state.ts";
 import { projectActions } from "./projectMenus.ts";
 import type { NavShared } from "./shared.ts";
+import { homeLocked } from "../../messenger-home.ts";
 
 // Level 1 of the list column (N1): every project, in its folders, Obsidian-style. One row height,
 // the name, a quiet count of what the project holds and ONE status mark. Folders fold and stay
 // folded; 바로가기 sits on top (Slack's starred), 태그 and 저장한 보기 below as sections of this level
 // (a tag filters this list). Clicking a project goes inside it (level 2) and brings back its tabs.
+// A messenger's own place for its conversations ("텔레그램 대화", "Slack 대화") is not a row among the
+// person's projects and folders: the homes stand in their own short section "메신저" above 폴더.
 
 const DIRECTION: Record<NavSortKey, [string, string]> = {
   activity: ["최근 것부터", "오래된 것부터"],
@@ -72,13 +75,17 @@ export function ProjectsLevel({ shared, local, docCount, onChoose, onFolderNew, 
 }) {
   const { state, actions, nav } = shared;
   const scroller = useRef<HTMLDivElement>(null);
-  const tree = useRef<HTMLDivElement>(null);
+  /** The 메신저 rows and the tree together: what the arrow keys walk. */
+  const lists = useRef<HTMLElement>(null);
   const field = useRef<HTMLInputElement>(null);
   const sort = sortFor(nav, { kind: "root" });
+  // The person's projects, and the messengers' own places apart from them.
+  const projects = useMemo(() => ownProjects(shared.projects), [shared.projects]);
+  const homes = useMemo(() => messengerHomes(shared.projects, local.query, Boolean(filterOf(nav.selected))), [shared.projects, local.query, nav.selected]);
   const { rows, count } = useMemo(
-    () => levelOneRows(shared.projects, state.folders, { closedFolders: shared.open.closedFolders, query: local.query, filter: nav.selected, sortMode: shared.sortMode, groupBy: nav.groupBy, sort, stages: shared.stages, now: Date.now(), keep: [...(shared.currentWorkId ? [shared.currentWorkId] : []), ...shared.projects.filter((project) => project.attention).map((project) => project.work.id)] }),
+    () => levelOneRows(projects, state.folders, { closedFolders: shared.open.closedFolders, query: local.query, filter: nav.selected, sortMode: shared.sortMode, groupBy: nav.groupBy, sort, stages: shared.stages, now: Date.now(), keep: [...(shared.currentWorkId ? [shared.currentWorkId] : []), ...projects.filter((project) => project.attention).map((project) => project.work.id)] }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [shared.projects, state.folders, shared.open.closedFolders, local.query, nav.selected, shared.sortMode, nav.groupBy, sort.key, sort.desc, shared.stages, shared.currentWorkId],
+    [projects, state.folders, shared.open.closedFolders, local.query, nav.selected, shared.sortMode, nav.groupBy, sort.key, sort.desc, shared.stages, shared.currentWorkId],
   );
   const projectIds = useMemo(() => rows.flatMap((row) => (row.type === "project" ? [row.id] : [])), [rows]);
   const menus = projectActions(shared, () => local.setPicked([]));
@@ -98,7 +105,8 @@ export function ProjectsLevel({ shared, local, docCount, onChoose, onFolderNew, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [local.scroll]);
 
-  const tabId = local.focusId && rows.some((row) => row.id === local.focusId) ? local.focusId : shared.currentWorkId && projectIds.includes(shared.currentWorkId) ? shared.currentWorkId : (rows.find((row) => row.type !== "group")?.id ?? null);
+  const tabId = local.focusId && (rows.some((row) => row.id === local.focusId) || homes.some((home) => home.work.id === local.focusId)) ? local.focusId
+    : shared.currentWorkId && (projectIds.includes(shared.currentWorkId) || homes.some((home) => home.work.id === shared.currentWorkId)) ? shared.currentWorkId : (rows.find((row) => row.type !== "group")?.id ?? homes[0]?.work.id ?? null);
   const chosenWorks = (work: Work) => (local.picked.length > 1 && local.picked.includes(work.id) ? local.picked.map((id) => state.works[id]).filter((entry): entry is Work => Boolean(entry)) : [work]);
   const workRow = (project: ListProject): Extract<Row, { type: "work" }> => ({ type: "work", id: project.work.id, depth: 0, work: project.work, open: false, expandable: false, sessions: project.sessions, docs: [] });
   const toggleFolder = (id: string, open: boolean) => {
@@ -109,10 +117,10 @@ export function ProjectsLevel({ shared, local, docCount, onChoose, onFolderNew, 
   };
   const focusRow = (id: string | null | undefined) => {
     if (!id) return;
-    window.requestAnimationFrame(() => tree.current?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(id)}"]`)?.focus());
+    window.requestAnimationFrame(() => lists.current?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(id)}"]`)?.focus());
   };
   const step = (from: HTMLElement, offset: number | "first" | "last") => {
-    const list = [...(tree.current?.querySelectorAll<HTMLElement>("[data-list-row]") ?? [])];
+    const list = [...(lists.current?.querySelectorAll<HTMLElement>("[data-list-row]") ?? [])];
     const index = list.indexOf(from);
     if (offset === -1 && index === 0) { field.current?.focus(); return null; }
     const next = offset === "first" ? list[0] : offset === "last" ? list.at(-1) : list[Math.max(0, Math.min(list.length - 1, index + offset))];
@@ -125,6 +133,8 @@ export function ProjectsLevel({ shared, local, docCount, onChoose, onFolderNew, 
   const projectClick = (event: ReactMouseEvent, project: ListProject) => {
     if (shared.justDragged()) return;
     const id = project.work.id;
+    // A messenger's place is opened, never picked with the projects.
+    if (project.work.messengerHome) { local.setPicked([]); onChoose(project.work); return; }
     if (event.shiftKey) {
       const from = projectIds.indexOf(local.anchor ?? id);
       const to = projectIds.indexOf(id);
@@ -144,10 +154,11 @@ export function ProjectsLevel({ shared, local, docCount, onChoose, onFolderNew, 
   const projectKey = (event: ReactKeyboardEvent<HTMLElement>, project: ListProject) => {
     const element = event.currentTarget;
     const id = project.work.id;
-    if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) shared.rowCtx.onKey(event, workRow(project));
+    // Alt+arrows move a project among the projects and folders: a messenger's place is not moved.
+    if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) { if (!project.work.messengerHome) shared.rowCtx.onKey(event, workRow(project)); }
     else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       const next = step(element, event.key === "ArrowDown" ? 1 : -1);
-      if (event.shiftKey && next && projectIds.includes(next)) {
+      if (event.shiftKey && next && projectIds.includes(next) && projectIds.includes(id)) {
         const from = projectIds.indexOf(local.anchor ?? id);
         const to = projectIds.indexOf(next);
         local.setPicked(projectIds.slice(Math.min(from, to), Math.max(from, to) + 1));
@@ -161,8 +172,8 @@ export function ProjectsLevel({ shared, local, docCount, onChoose, onFolderNew, 
     } else if (event.key === "ArrowLeft") {
       const folderId = project.work.folderId;
       if (folderId && state.folders[folderId]) focusRow(folderId);
-    } else if (event.key === "F2") shared.setRenaming(id);
-    else if (event.key === "Delete") menus.archive(chosenWorks(project.work));
+    } else if (event.key === "F2") { if (!homeLocked(project.work)) shared.setRenaming(id); }
+    else if (event.key === "Delete") { if (!homeLocked(project.work)) menus.archive(chosenWorks(project.work)); }
     else if (event.key === "Escape" && local.picked.length) local.setPicked([]);
     else if ((event.key === "a" || event.code === "KeyA") && (event.ctrlKey || event.metaKey)) local.setPicked(projectIds);
     else if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") {
@@ -175,13 +186,16 @@ export function ProjectsLevel({ shared, local, docCount, onChoose, onFolderNew, 
   const projectRow = (row: Extract<LevelOneRow, { type: "project" }>) => {
     const { project } = row;
     const { work } = project;
+    // A messenger's place: the same row (its marks, its menu, opening it), never dragged or picked; its name and place are kept while its messenger is registered.
+    const home = Boolean(work.messengerHome), locked = homeLocked(work);
+    const mark = home ? "chat" : "project";
     const indent = { paddingLeft: 8 + row.depth * 16 } as CSSProperties;
     if (shared.renaming === work.id) {
       return (
         <div key={row.id} className="side-row renaming nav-project" style={indent} data-row-id={work.id}>
           {/* The field sits on the row's one line beside the mark, as the name did (never under it). */}
           <div className="nav-project-line">
-            <ItemIcon kind="project" size={15} className="side-row-icon" />
+            <ItemIcon kind={mark} size={15} className="side-row-icon" />
             <EditableText className="side-rename" label={`${work.title} 이름 바꾸기`} value={work.title} onSave={(next) => actions.rename({ kind: "work", id: work.id }, next)} onDone={() => { shared.setRenaming(null); focusRow(work.id); }} />
           </div>
         </div>
@@ -217,11 +231,12 @@ export function ProjectsLevel({ shared, local, docCount, onChoose, onFolderNew, 
           if (event.button === 1 && actions.openRight) event.preventDefault();
           if (event.button !== 0 || shared.renaming) return;
           if ((event.target as HTMLElement).closest("input, .row-add")) return;
+          if (home) return;
           shared.press({ kind: "projects", works: chosenWorks(work) }, event);
         }}
         onClick={(event) => projectClick(event, project)}
         onAuxClick={(event) => event.button === 1 && actions.openRight?.({ kind: "project", id: work.id })}
-        onDoubleClick={(event) => !event.ctrlKey && !event.metaKey && !event.shiftKey && shared.setRenaming(work.id)}
+        onDoubleClick={(event) => !event.ctrlKey && !event.metaKey && !event.shiftKey && !locked && shared.setRenaming(work.id)}
         onContextMenu={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -232,7 +247,7 @@ export function ProjectsLevel({ shared, local, docCount, onChoose, onFolderNew, 
         onFocus={() => local.setFocusId(work.id)}
       >
         <div className="nav-project-line">
-          <ItemIcon kind="project" size={15} className="side-row-icon" />
+          <ItemIcon kind={mark} size={15} className="side-row-icon" />
           <span className="side-row-label">{work.title}</span>
           <span className="side-row-trail">
             <PlacementMark workId={work.id} />
@@ -381,7 +396,7 @@ export function ProjectsLevel({ shared, local, docCount, onChoose, onFolderNew, 
     shared.menuUnder({ x: button.getBoundingClientRect().left, y: button.getBoundingClientRect().bottom + 4, title: "보기", items }, button);
   };
 
-  const anyProjects = shared.projects.length > 0;
+  const anyProjects = projects.length > 0;
   return (
     <div className="nav-level nav-level-one" data-level="projects"
       // Escape in level 1 clears a tag filter (a field or menu that used the key first keeps it).
@@ -421,7 +436,7 @@ export function ProjectsLevel({ shared, local, docCount, onChoose, onFolderNew, 
           onChange={(event) => local.setQuery(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (local.query) local.setQuery(""); else local.setFieldOpen(false); }
-            else if (event.key === "ArrowDown") { event.preventDefault(); tree.current?.querySelector<HTMLElement>("[data-list-row]")?.focus(); }
+            else if (event.key === "ArrowDown") { event.preventDefault(); lists.current?.querySelector<HTMLElement>("[data-list-row]")?.focus(); }
           }}
         />
       </label> : null}
@@ -434,7 +449,16 @@ export function ProjectsLevel({ shared, local, docCount, onChoose, onFolderNew, 
       ) : null}
       <div className="nav-scroll side-scroll" ref={scroller}>
         <ShortcutsSection shared={shared} />
-        <section className="side-section nav-projects" aria-label="프로젝트">
+        <section className="side-section nav-projects" aria-label="프로젝트" ref={lists}>
+          {/* The messengers' own places, apart from the person's projects and folders (absent when there is none). */}
+          {homes.length ? (
+            <>
+              <div className="nav-folders-head"><span className="nav-folders-title">메신저</span></div>
+              <div className="side-tree nav-tree" role="tree" aria-label="메신저">
+                {homes.map((project) => projectRow({ type: "project", id: project.work.id, project, depth: 0 }))}
+              </div>
+            </>
+          ) : null}
           {/* The concept named once (the owner: folders of projects are the app's own idea): a quiet head 폴더 with +. */}
           {nav.groupBy === "folder" ? (
             <div className="nav-folders-head">
@@ -446,7 +470,7 @@ export function ProjectsLevel({ shared, local, docCount, onChoose, onFolderNew, 
             <ListEmpty line="폴더를 만들어 프로젝트를 묶을 수 있습니다." action="새 폴더" onAction={() => onFolderNew(null)} />
           ) : null}
           {shared.creatingIn === null ? <NewFolderRow shared={shared} depth={0} /> : null}
-          <div className="side-tree nav-tree" role="tree" aria-label="폴더별 프로젝트" aria-multiselectable ref={tree}>
+          <div className="side-tree nav-tree" role="tree" aria-label="폴더별 프로젝트" aria-multiselectable>
             {rows.map((row) => (
               row.type === "group" ? (
                 <div key={row.id} className="nav-group" role="presentation" data-row-id={row.id === "group:loose" ? ROOT_ROW_ID : undefined} data-nav-folder={row.id === "group:loose" ? "" : undefined}><span>{row.label}</span><span className="nav-count">{row.count}</span></div>
@@ -460,7 +484,7 @@ export function ProjectsLevel({ shared, local, docCount, onChoose, onFolderNew, 
           </div>
           {!count ? (
             !anyProjects ? <ListEmpty line="아직 프로젝트가 없습니다." action="새 프로젝트" onAction={(anchor) => { const box = anchor.getBoundingClientRect(); if (actions.creationMenu) actions.creationMenu(null, box.left, box.bottom); else actions.newSession({}); }} />
-            : local.query ? <ListEmpty line="찾는 이름의 프로젝트가 없습니다." action="찾기 지우기" onAction={() => local.setQuery("")} />
+            : local.query ? (homes.length ? null : <ListEmpty line="찾는 이름의 프로젝트가 없습니다." action="찾기 지우기" onAction={() => local.setQuery("")} />)
             : filter ? <ListEmpty line="이 태그가 붙은 프로젝트가 없습니다." action="태그 거르기 풀기" onAction={() => shared.select({ kind: "root" })} /> : null
           ) : null}
         </section>

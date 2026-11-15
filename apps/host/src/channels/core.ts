@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
-import { ACCESS_LABEL, PROVIDER_LABEL, isOfficeFormat, type Artifact, type Schedule, type Attachment, type AttentionEvent, type ChannelAuditRow, type ChannelKind, type ChannelPairing, type Provider, type RequestOrigin, type SearchPage, type Session, type TranscriptItem, type Work } from "@workbench/contracts";
+import { ACCESS_LABEL, MESSENGER_HOME_TITLE, PROVIDER_LABEL, isOfficeFormat, type Artifact, type Schedule, type Attachment, type AttentionEvent, type ChannelAuditRow, type ChannelKind, type ChannelPairing, type Provider, type RequestOrigin, type SearchPage, type Session, type TranscriptItem, type Work } from "@workbench/contracts";
 import type { EventBus } from "../bus.ts";
 import { HttpError } from "../errors.ts";
 import { MAX_ATTACHMENT, attachmentsDir } from "../attachments.ts";
@@ -47,7 +47,12 @@ export type CoreDeps = {
   dataDir?: string;
   /** The footer under finished answers where a chat has not chosen (on; tests of earlier units turn it off). */
   footer?: boolean;
+  /** "이 메신저의 기본 엔진": kept with the bot's record (service.ts). Without it (the core's own tests): in memory. */
+  defaultEngine?: DefaultEngines;
 };
+
+/** Each messenger's default engine, where it is kept. `set` with null: not set. */
+export type DefaultEngines = { get(kind: ChannelKind, botId: string): Provider | null; set(kind: ChannelKind, botId: string, provider: Provider | null): void };
 
 /** At most this many files go with one answer. */
 const MAX_FILES = 10;
@@ -231,6 +236,9 @@ export class ChannelCore {
   private readonly projects: () => Projects | null;
   private readonly search: (query: string) => Promise<SearchPage>;
   private readonly dataDir: string | null;
+  private readonly engines: DefaultEngines;
+  /** The one line owed to a chat whose 새 대화 just went to the messenger's home for the first time, until its answer takes it. */
+  private readonly homeNotes = new Map<string, string>();
   /** Files that did not go with a message that did (by its outbox key), for the line that names them. */
   private readonly unsent = new Map<string, { name: string; delivered: "no" | "unknown" }[]>();
   private scratch: string | null = null;
@@ -282,6 +290,11 @@ export class ChannelCore {
     this.projects = deps.projects ?? (() => null);
     this.dataDir = deps.dataDir ?? null;
     this.footer = deps.footer ?? true;
+    const kept = new Map<string, Provider>();
+    this.engines = deps.defaultEngine ?? {
+      get: (kind, botId) => kept.get(adapterKey(kind, botId)) ?? null,
+      set: (kind, botId, provider) => void (provider ? kept.set(adapterKey(kind, botId), provider) : kept.delete(adapterKey(kind, botId))),
+    };
     this.search = deps.search ?? ((query) => this.manager.search(query, { limit: 4, per: 3 }));
     const owner = this;
     this.menu = new ChannelMenu({
@@ -297,7 +310,14 @@ export class ChannelCore {
       hidden: (work) => this.hidden(work),
       recentWork: () => this.recentWork(),
       newConversation: (binding) => this.newConversation(binding),
+      homeNote: (binding) => this.takeHomeNote(binding.id),
+      home: (binding) => this.manager.ensureMessengerHome(binding.kind),
+      chose: (binding) => this.placed(binding.id),
       conversationIn: (binding, work, provider) => this.conversationIn(binding, work, provider),
+      defaultEngine: (binding) => this.defaultEngine(binding.kind, binding.botId),
+      setDefaultEngine: (binding, provider) => this.setDefaultEngine(binding.kind, binding.botId, provider),
+      preferredEngine: (binding) => this.preferredEngine(binding),
+      engineMissing: (binding, wanted, used) => this.engineMissing(binding, wanted, used),
       setPointer: (bindingId, sessionId) => this.setPointer(bindingId, sessionId),
       target: (binding) => { const place = this.place(this.channels.binding(binding.id) ?? binding); return "session" in place ? place.session : null; },
       strictNote: (binding, session) => this.strictNote(binding, session),
@@ -950,7 +970,8 @@ export class ChannelCore {
         return null;
       case "new": {
         const session = this.newConversation(binding);
-        await reply(`새 대화를 만들었습니다: ${this.label(session)}`);
+        const note = this.takeHomeNote(binding.id);
+        await reply(`새 대화를 만들었습니다: ${this.label(session)}${note ? `\n${note}` : ""}`);
         return null;
       }
       case "lock":
@@ -1174,9 +1195,13 @@ export class ChannelCore {
     return statusWords(this.manager, session, this.where(binding), session ? this.progress.get(`${binding.id}:${session.id}`)?.startedAt ?? null : null, this.now());
   }
 
-  /** The project used last at the PC (not archived, not in an archived folder). */
+  /**
+   * The project used last at the PC (not archived, not in an archived folder, not a messenger's own
+   * place). Only for what the menu SHOWS a chat that has no conversation yet (its files, its note);
+   * no conversation is made there by itself (see `newConversation`).
+   */
   private recentWork(): Work | null {
-    return [...this.manager.view.works.values()].filter((work) => !this.hidden(work)).sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt)[0] ?? null;
+    return [...this.manager.view.works.values()].filter((work) => !this.hidden(work) && !work.messengerHome).sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt)[0] ?? null;
   }
 
   private providerFor(work: Work): Provider {
@@ -1187,39 +1212,98 @@ export class ChannelCore {
     return installed.includes("claude") || !installed.length ? "claude" : installed[0]!;
   }
 
+  /** "이 메신저의 기본 엔진" of a messenger's bot, or null when none is set. */
+  defaultEngine(kind: ChannelKind, botId: string): Provider | null {
+    return this.engines.get(kind, botId);
+  }
+
+  /** Set (or with null: clear) a messenger's default engine. No conversation that exists is changed. */
+  setDefaultEngine(kind: ChannelKind, botId: string, provider: Provider | null) {
+    this.engines.set(kind, botId, provider);
+  }
+
+  /** The default engine of the chat's messenger and whether this PC has it; null when none is set. */
+  private preferredEngine(binding: Binding): { provider: Provider; installed: boolean } | null {
+    const provider = this.defaultEngine(binding.kind, binding.botId);
+    if (!provider) return null;
+    return { provider, installed: Boolean(this.manager.snapshot().providers.find((status) => status.provider === provider)?.installed) };
+  }
+
+  /** The messenger's default engine is not on this PC and a conversation was made with another: said to the chat once, in one line. */
+  private engineMissing(binding: Binding, wanted: Provider, used: Provider) {
+    const adapter = this.adapters.get(adapterKey(binding.kind, binding.botId));
+    if (!adapter) return;
+    const text = `이 메신저의 기본 엔진 ${PROVIDER_LABEL[wanted]}가 이 PC에 설치되어 있지 않아 ${PROVIDER_LABEL[used]}로 만들었습니다.`;
+    this.track(this.say(adapter, this.channels.binding(binding.id) ?? binding, `engine-default:${binding.id}:${wanted}`, { text }).catch((error: unknown) => this.log.note("engine_default_note_failed", error)));
+  }
+
   /**
    * A conversation the channel makes: in the engine's full-access mode (the channel asks nothing),
    * with the agent browser on (web work is asked for in plain words; in full access it shows no
    * approval card, browse-policy.ts `browserDecision`), named "휴대폰 · 월/일", and not made the one
-   * the desktop shows.
+   * the desktop shows. Its engine: the one named › the messenger's default (when this PC has it) ›
+   * `like`'s › the project's. `like`'s model and effort go along only into the same engine.
    */
-  private createConversation(work: Work, like: Session | null, provider?: Provider): Session {
+  private createConversation(binding: Binding, work: Work, like: Session | null, named?: Provider): Session {
     const date = new Date(this.now());
-    return this.manager.createSession(work.id, {
-      provider: provider ?? like?.provider ?? this.providerFor(work),
+    const preferred = named ? null : this.preferredEngine(binding);
+    const provider = named ?? (preferred?.installed ? preferred.provider : like?.provider ?? this.providerFor(work));
+    const same = like?.provider === provider ? like : null;
+    const session = this.manager.createSession(work.id, {
+      provider,
       access: "full",
       browser: true,
       purpose: `휴대폰 · ${date.getMonth() + 1}/${date.getDate()}`,
       ...(like?.workspaceId && like.workId === work.id ? { workspaceId: like.workspaceId } : {}),
-      ...(like?.model ? { model: like.model } : {}),
-      ...(like?.effort ? { effort: like.effort } : {}),
+      ...(same?.model ? { model: same.model } : {}),
+      ...(same?.effort ? { effort: same.effort } : {}),
     }, false);
+    if (preferred && !preferred.installed) this.engineMissing(binding, preferred.provider, provider);
+    return session;
   }
 
-  /** A new conversation in the chat's project (the project used last when it has none, a new "휴대폰" project when there is none), and the chat moves to it. */
+  /**
+   * The chat's place follows the home rule from here on (`prefs.placed`): it is at the messenger's home,
+   * or in a project the person chose in the chat's menu. A chat without the mark comes from before
+   * the homes: its conversation may sit in a project it was never told to use.
+   */
+  private placed(bindingId: string) {
+    const binding = this.channels.binding(bindingId);
+    if (binding && !binding.prefs.placed) this.channels.updateBinding(bindingId, { prefs: { ...binding.prefs, placed: 1 } });
+  }
+
+  /** The line owed for a 새 대화 that went to the home for the first time (see `newConversation`), once. */
+  private takeHomeNote(bindingId: string): string | null {
+    const note = this.homeNotes.get(bindingId) ?? null;
+    this.homeNotes.delete(bindingId);
+    return note;
+  }
+
+  /**
+   * A new conversation the channel makes WITHOUT the person choosing a project, and the chat moves to
+   * it: in the messenger's home ("텔레그램 대화" / "Slack 대화", made on first use). A chat that is in a
+   * project the person chose in its menu stays in that project. It never picks a project of the
+   * person's by itself. A chat from before the homes (no mark) whose conversation sits in a project:
+   * that conversation stays where it is, this one goes home, and the answer says so in one line, once.
+   */
   private newConversation(binding: Binding): Session {
-    const old = binding.pointerSessionId ? this.manager.view.sessions.get(binding.pointerSessionId) ?? null : null;
+    const fresh = this.channels.binding(binding.id) ?? binding;
+    const old = fresh.pointerSessionId ? this.manager.view.sessions.get(fresh.pointerSessionId) ?? null : null;
     const oldWork = old ? this.manager.view.works.get(old.workId) : undefined;
-    const work = (oldWork && !this.hidden(oldWork) ? oldWork : null) ?? this.recentWork() ?? this.manager.createWork({ title: "휴대폰", titleSource: "user" });
-    const session = this.createConversation(work, old && !old.documentAgent && !old.pageAgent ? old : null);
-    this.channels.updateBinding(binding.id, { pointerWorkId: work.id, pointerSessionId: session.id });
+    const here = oldWork && !this.hidden(oldWork) ? oldWork : null;
+    const stays = here && (here.messengerHome?.kind === binding.kind || Boolean(fresh.prefs.placed));
+    const work = stays ? here : this.manager.ensureMessengerHome(binding.kind);
+    const session = this.createConversation(binding, work, old && !old.documentAgent && !old.pageAgent ? old : null);
+    if (here && !stays) this.homeNotes.set(binding.id, `새 대화는 이제 '${MESSENGER_HOME_TITLE[binding.kind]}'에 만듭니다. 프로젝트에서 하려면 메뉴의 [프로젝트 바꾸기]에서 고르세요.`);
+    else this.homeNotes.delete(binding.id);
+    this.channels.updateBinding(binding.id, { pointerWorkId: work.id, pointerSessionId: session.id, prefs: { ...fresh.prefs, placed: 1 } });
     this.changed();
     return session;
   }
 
   /** A new conversation the channel makes in a chosen project (with another engine, when asked), and the chat moves to it. */
   private conversationIn(binding: Binding, work: Work, provider?: Provider): Session {
-    const session = this.createConversation(work, null, provider);
+    const session = this.createConversation(binding, work, null, provider);
     this.channels.updateBinding(binding.id, { pointerWorkId: work.id, pointerSessionId: session.id });
     this.changed();
     return session;
@@ -2140,6 +2224,8 @@ export class ChannelCore {
         }
         const session = this.newConversation(binding);
         await this.ack(adapter, event.ackHandle, "새 대화에서 합니다");
+        const note = this.takeHomeNote(binding.id);
+        if (note) await reply(note, "home");
         const requestId = `ch:${chat.kind}:${chat.botId}:${eventId}`;
         const moved = this.enqueue(binding.id, (order) => this.handoff(adapter, binding.id, order, { text: original.text, requestId, eventId: null, sessionId: session.id, reply }));
         return { settled: moved.settled.then((disposition) => { if (!this.closed) this.channels.done(chat.kind, chat.botId, eventId); return disposition; }) };

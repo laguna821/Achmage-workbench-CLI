@@ -513,6 +513,8 @@ export class Api {
     create: (input: BrowserPageCreate) => this.browserRequest<BrowserPage>("POST", "/api/browser/pages", input),
     restore: (pageId: string, driverId: string) => this.browserRequest<BrowserPage>("POST", `/api/browser/pages/${encodeURIComponent(pageId)}/restore`, { driverId }),
     close: (pageId: string) => this.browserRequest<BrowserPage>("POST", `/api/browser/pages/${encodeURIComponent(pageId)}/close`),
+    /** Tab sleep: the gateway keeps the page's record and lets its native page go (refused while an AI is using it). */
+    rest: (pageId: string) => this.browserRequest<BrowserPage>("POST", `/api/browser/pages/${encodeURIComponent(pageId)}/rest`),
     /** Skin 2 · B: 다시 열기 (a page whose tab was closed) and 목록에서 지우기. */
     reopen: (pageId: string, driverId: string) => this.browserRequest<BrowserPage>("POST", `/api/browser/pages/${encodeURIComponent(pageId)}/reopen`, { driverId }),
     forget: (pageId: string) => this.browserRequest<BrowserPage>("POST", `/api/browser/pages/${encodeURIComponent(pageId)}/forget`),
@@ -636,6 +638,8 @@ export class Api {
   /** "설치": the engine for this user; progress arrives as provider.status events. */
   installEngine = (provider: Provider) => this.request<ProviderStatus>("POST", `/api/providers/${provider}/install`);
   refreshProviders = (provider?: Provider) => this.request("POST", `/api/providers/refresh${provider ? `?provider=${provider}` : ""}`);
+  /** What the app uses now (the readout in the window's bottom line); the gateway reads at most once in 30 s. */
+  memory = () => this.request<import("@workbench/contracts").AppMemory>("GET", "/api/memory");
 
   /**
    * Subscribe to events after `since`. Reconnects with the last seen seq so nothing is applied

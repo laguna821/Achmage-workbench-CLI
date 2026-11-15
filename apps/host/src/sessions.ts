@@ -97,6 +97,7 @@ import { imagesNamed, keepImage, withImages } from "./tool-images.ts";
 import { captureMessageMedia } from "./media-references.ts";
 import { AgentProfiles } from "./agent-profiles.ts";
 import type { RunSettings } from "@workbench/contracts";
+import { MESSENGER_HOME_TITLE, messengerHomeLocked, type ChannelKind } from "@workbench/contracts";
 import { ImageGen } from "./imagegen.ts";
 import { SessionLinks } from "./links.ts";
 import { Schedules } from "./schedules.ts";
@@ -697,6 +698,7 @@ export class SessionManager {
       updateSession: (sessionId, patch) => this.sink.updateSession(sessionId, patch),
       publish: (status) => this.bus.publish({ type: "browser.status", status }),
       pageControl: id => this.sharedBrowser.generation(id),
+      wakePage: id => this.sharedBrowser.wake(id),
       hasPage: id => Boolean(this.sharedBrowser.agentPage(id)),
       openPage: (id, url) => this.sharedBrowser.openAgentPage(id, url),
       pageCommand: (id, requestId, command, args, control) => this.sharedBrowser.agent(id, requestId, command, args, control),
@@ -1367,8 +1369,33 @@ export class SessionManager {
    * Rename, move, reorder, pin, archive or note the session last looked at. None of these is
    * activity: `updatedAt` (and so "최근" order) changes only when the work itself does something.
    */
+  /** A messenger's own place for its conversations (`Work.messengerHome`): the newest one that is not in the archive, or null. */
+  messengerHome(kind: ChannelKind): Work | null {
+    return [...this.works.values()].filter((work) => work.messengerHome?.kind === kind && !this.hidden(work.id)).sort((a, b) => b.createdAt - a.createdAt)[0] ?? null;
+  }
+
+  /** The same, made when there is none (the channel calls this the first time a chat of that messenger needs it). */
+  ensureMessengerHome(kind: ChannelKind): Work {
+    const home = this.messengerHome(kind);
+    if (home) return home;
+    const work = this.createWork({ title: MESSENGER_HOME_TITLE[kind], titleSource: "user" });
+    this.saveWork({ ...work, messengerHome: { kind, registered: true } });
+    return this.requireWork(work.id);
+  }
+
+  /** The messenger's bot was registered or removed: its home is locked (name, place, archive) only while it is registered. */
+  setMessengerRegistered(kind: ChannelKind, registered: boolean) {
+    for (const work of [...this.works.values()]) {
+      if (work.messengerHome?.kind !== kind || work.messengerHome.registered === registered || (registered && this.hidden(work.id))) continue;
+      this.saveWork({ ...work, messengerHome: { kind, registered } });
+    }
+  }
+
   updateWork(workId: string, patch: UpdateWorkRequest): Work {
     const work = this.requireWork(workId);
+    if (work.messengerHome?.registered && ((patch.title !== undefined && patch.title.trim() !== work.title) || patch.archived === true || (patch.folderId !== undefined && (patch.folderId ?? null) !== work.folderId))) {
+      throw new HttpError(409, "messenger_home", messengerHomeLocked(work.messengerHome.kind));
+    }
     if (patch.activeSessionId && this.sessions.get(patch.activeSessionId)?.workId !== workId) {
       throw new HttpError(400, "invalid_session", "다른 작업의 세션입니다.");
     }
@@ -1398,6 +1425,7 @@ export class SessionManager {
 
   deleteWork(workId: string) {
     const work = this.requireWork(workId);
+    if (work.messengerHome?.registered) throw new HttpError(409, "messenger_home", messengerHomeLocked(work.messengerHome.kind));
     for (const workspace of this.workspaces.list().filter(space => space.workId === workId)) this.assertWorkspaceIdle(workspace);
     const sessions = [...this.sessions.values()].filter(session => session.workId === workId), ids = new Set(sessions.map(session => session.id));
     if (sessions.some(session => this.office.busy(session.id)) || this.links.list().some(link => link.state !== "ended" && link.participants.some(id => ids.has(id)))) throw new HttpError(409, "project_busy", "프로젝트의 AI 작업·세션 연결을 마치거나 멈춘 뒤 삭제해 주세요.");
@@ -1625,8 +1653,12 @@ export class SessionManager {
     return session;
   }
 
-  /** Reuse a durable document child. Creating it never activates or interrupts the parent. */
-  documentSession(artifactId: string, parentSessionId: string | null, fresh = false, provider?: Provider): Session {
+  /**
+   * Reuse a durable document child. Creating it never activates or interrupts the parent.
+   * `preferred` (the messenger channel's default engine): the engine of a child that has to be MADE when
+   * the document has none yet; it never replaces or changes one that exists.
+   */
+  documentSession(artifactId: string, parentSessionId: string | null, fresh = false, provider?: Provider, preferred?: Provider): Session {
     if (provider !== undefined && provider !== "claude" && provider !== "codex") throw new HttpError(400, "invalid_provider", "지원하지 않는 엔진입니다.");
     const artifact = this.documents.get(artifactId), work = this.requireWork(artifact.workId);
     const workspace = this.workspaces.requireActive(artifact.workspaceId ?? this.workspaces.defaultFor(work).id, work.id);
@@ -1640,7 +1672,7 @@ export class SessionManager {
     const prior = children.find(entry => entry.id === this.store.getMeta(selectionKey)) ?? children[0];
     if (prior && !fresh && (!provider || prior.provider === provider)) return prior;
     if (children.some(entry => this.office.busy(entry.id) || !["idle", "error"].includes(entry.status) || entry.queued.length)) throw new HttpError(409, "document_agent_busy", "진행 중인 문서 AI와 대기 요청을 마치거나 멈춘 뒤 엔진이나 대화를 바꿔 주세요.");
-    const chosen = provider ?? prior?.provider ?? parent?.provider ?? (this.prefs().engine === "codex" ? "codex" : "claude");
+    const chosen = provider ?? prior?.provider ?? preferred ?? parent?.provider ?? (this.prefs().engine === "codex" ? "codex" : "claude");
     const existing = !fresh ? children.find(entry => entry.provider === chosen) : null;
     if (existing) { this.store.setMeta(selectionKey, existing.id); return existing; }
     const defaults = prior?.provider === chosen ? prior : parent?.provider === chosen ? parent : null;

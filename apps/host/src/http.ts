@@ -12,6 +12,7 @@ import { HttpError, type SessionManager } from "./sessions.ts";
 import { handleRuntimeHttp } from "./runtime-http.ts";
 import { DeviceRegistryError } from "./devices.ts";
 import { DESIGN_PRESETS, systemFonts, type DesignPreset } from "./design.ts";
+import { AppMemoryReader } from "./app-memory.ts";
 import { parseCreate } from "./create.ts";
 import { officeEditorKind, type EditorGrants } from "./editors.ts";
 import { parseDrawRequest } from "./imagegen.ts";
@@ -156,6 +157,10 @@ export type HttpOptions = {
   projects?: (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<boolean>;
   /** `/api/entry/*` (entry.ts): the live work of a folder, the location of new project folders. */
   entry?: (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<boolean>;
+  /** `GET /api/memory` (app-memory.ts): what the app uses now; read only when asked, at most once in 30 s. */
+  memory?: import("./app-memory.ts").AppMemoryReader;
+  /** `/api/bookmarks…` (bookmarks.ts): the app's own web bookmarks and bringing a browser's in; local only. */
+  bookmarks?: (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<boolean>;
 };
 
 function sameToken(given: string | null, expected: string) {
@@ -248,6 +253,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
   const pdfNotes = new PdfNotes(manager, bus);
   const imageOutputs = new OfficeImageOutputs(manager.documents);
   const pdfImages = pdfImageOutputs(manager.documents);
+  const memory = options.memory ?? new AppMemoryReader();
   const server = createServer(async (req, res) => {
     if (options.servicePreviews?.handle(req, res, "local")) return;
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -334,6 +340,8 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
           const id = parts[2]!, body = await readJson(req);
           if (parts[3] === "restore") return sendJson(res, 200, manager.sharedBrowser.restore(id, body.driverId));
           if (parts[3] === "close") return sendJson(res, 200, manager.sharedBrowser.close(id));
+          // Tab sleep: the native page is released, its record stays (restore opens it again).
+          if (parts[3] === "rest") return sendJson(res, 200, manager.sharedBrowser.rest(id));
           // Skin 2 · B: 다시 열기 from the 웹 list, and 목록에서 지우기.
           if (parts[3] === "reopen") return sendJson(res, 200, manager.sharedBrowser.reopen(id, body.driverId));
           if (parts[3] === "forget") return sendJson(res, 200, manager.sharedBrowser.forget(id));
@@ -495,6 +503,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
       if (path.startsWith("/api/pkm/") && options.pkm && (await options.pkm(req, res, url))) return;
       if (path.startsWith("/api/projects/") && options.projects && (await options.projects(req, res, url))) return;
       if (path.startsWith("/api/entry/") && options.entry && (await options.entry(req, res, url))) return;
+      if ((path === "/api/bookmarks" || path.startsWith("/api/bookmarks/")) && options.bookmarks && (await options.bookmarks(req, res, url))) return;
       if (method === "GET" && path === "/api/events") {
         return streamEvents(req, res, bus, Number(url.searchParams.get("since") ?? bus.currentSeq), url.searchParams.get("epoch") ?? undefined);
       }
@@ -913,6 +922,7 @@ export function createHttpServer(manager: SessionManager, bus: EventBus, options
         return sendJson(res, 200, options.timeline(from, Number.isFinite(until) && until > from ? until : undefined));
       }
       if (method === "GET" && path === "/api/fonts") return sendJson(res, 200, { fonts: systemFonts() });
+      if (method === "GET" && path === "/api/memory") return sendJson(res, 200, await memory.read());
       if (options.officeMcp && method === "POST" && path === "/api/office-mcp/invoke") {
         const body = await readJson(req, 16_000);
         if (!Array.isArray(body.args) || body.args.length > 1) throw new HttpError(400, "mcp_request", "MCP 설정 요청이 올바르지 않습니다.");

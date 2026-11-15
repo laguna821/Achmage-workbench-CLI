@@ -18,7 +18,7 @@ const BOT = "7000000001";
 const labels = (entry: { out: { buttons?: { label: string }[][] } } | null) => entry?.out.buttons?.flat().map((button) => button.label) ?? [];
 
 describe("the conversation a chat writes to", () => {
-  it("starts as a new full-access conversation in the project used last at the PC, and leaves the PC's own conversation where it was", async () => {
+  it("starts as a new full-access conversation in the messenger's own place (not the project used last at the PC), and leaves the PC's projects and conversations where they were", async () => {
     const kit = await startKit();
     const older = kit.manager.createWork({ title: "지난 학기" });
     await tick();
@@ -29,37 +29,44 @@ describe("the conversation a chat writes to", () => {
     const [turn] = kit.engine.sent;
     const session = sessionOf(kit, turn!.sessionId);
     // Full access, and the agent browser on: web work is asked for in plain words, with nobody at the PC to switch it on.
-    expect(session).toMatchObject({ workId: recent.id, access: "full", browser: true });
+    const home = kit.manager.snapshot().works.find((work) => work.messengerHome?.kind === "telegram")!;
+    expect(home.title).toBe("텔레그램 대화");
+    expect(session).toMatchObject({ workId: home.id, access: "full", browser: true });
     expect(session.purpose).toMatch(/^휴대폰 · \d{1,2}\/\d{1,2}$/);
     expect(turn!.access).toBe("full");
     expect(session.id).not.toBe(desk.id);
     // The PC's current conversation of that project is not moved by the phone.
     expect(kit.manager.snapshot().works.find((work) => work.id === recent.id)!.activeSessionId).toBe(desk.id);
     expect(kit.manager.snapshot().works.find((work) => work.id === older.id)!.activeSessionId).toBeNull();
-    expect(kit.core.bindings()[0]).toMatchObject({ id: binding.id, pointerWorkId: recent.id, pointerSessionId: session.id });
+    expect(kit.manager.snapshot().sessions.filter((entry) => entry.workId === recent.id).map((entry) => entry.id)).toEqual([desk.id]);
+    expect(kit.core.bindings()[0]).toMatchObject({ id: binding.id, pointerWorkId: home.id, pointerSessionId: session.id });
     // The next line goes to the same conversation.
     kit.engine.finish(session.id);
     await say(kit, "하나 더");
     expect(kit.engine.sent.map((entry) => entry.sessionId)).toEqual([session.id, session.id]);
   });
 
-  it("makes a 휴대폰 project when there is none", async () => {
+  it("makes the messenger's place (텔레그램 대화) when there is none", async () => {
     const kit = await startKit();
     await pair(kit);
     await say(kit, "안녕");
     const works = kit.manager.snapshot().works;
-    expect(works.map((work) => work.title)).toEqual(["휴대폰"]);
+    expect(works.map((work) => work.title)).toEqual(["텔레그램 대화"]);
+    expect(works[0]!.messengerHome).toEqual({ kind: "telegram", registered: true });
     expect(sessionOf(kit, kit.engine.sent[0]!.sessionId).workId).toBe(works[0]!.id);
   });
 
-  it("does not pick an archived project", async () => {
+  it("does not pick a project of the person's, archived or not", async () => {
     const kit = await startKit();
     const live = kit.manager.createWork({ title: "살아 있는 프로젝트" });
     const archived = kit.manager.createWork({ title: "보관한 프로젝트" });
     kit.manager.updateWork(archived.id, { archived: true });
     await pair(kit);
     await say(kit, "안녕");
-    expect(sessionOf(kit, kit.engine.sent[0]!.sessionId).workId).toBe(live.id);
+    const at = sessionOf(kit, kit.engine.sent[0]!.sessionId).workId;
+    expect(at).not.toBe(live.id);
+    expect(at).not.toBe(archived.id);
+    expect(kit.manager.snapshot().works.find((work) => work.id === at)!.messengerHome?.kind).toBe("telegram");
   });
 
   it("moves to a new conversation of the same project on 새 대화", async () => {
@@ -88,11 +95,11 @@ describe("the conversation a chat writes to", () => {
     await say(kit, "둘째 일");
     await say(kit, "상태");
     const status = kit.adapter.texts().at(-1)!;
-    expect(status).toMatch(/^지금: 「휴대폰」 › 「.+」\n엔진: Claude · 모델 엔진 기본값\(엔진이 이름을 아직 알려 주지 않았습니다\)\n노력: 엔진 기본값\n접근: 전체 접근 · 묻지 않음\n일하는 중 · \d+:\d{2}\n기다리는 요청 1개\n1\. 둘째 일$/);
+    expect(status).toMatch(/^지금: 「텔레그램 대화」 › 「.+」\n엔진: Claude · 모델 엔진 기본값\(엔진이 이름을 아직 알려 주지 않았습니다\)\n노력: 엔진 기본값\n접근: 전체 접근 · 묻지 않음\n일하는 중 · \d+:\d{2}\n기다리는 요청 1개\n1\. 둘째 일$/);
     kit.engine.finish(kit.engine.sent[0]!.sessionId, "interrupted", "stop");
     await settle(kit);
     await say(kit, "메뉴");
-    expect(kit.adapter.texts().at(-1)).toMatch(/^메뉴 · 지금: 「휴대폰」 › 「.+」 \(Claude · 전체 접근\)$/);
+    expect(kit.adapter.texts().at(-1)).toMatch(/^메뉴 · 지금: 「텔레그램 대화」 › 「.+」 \(Claude · 전체 접근\)$/);
   });
 
   it("turns an archived conversation's refusal into one line with a way on, and never brings the conversation back", async () => {

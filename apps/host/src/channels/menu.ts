@@ -1,4 +1,4 @@
-import { ACCESS_LABEL, EFFORT_LABEL, PROVIDER_LABEL, SEARCH_KIND_LABEL, isAccessMode, type AccessMode, type Artifact, type Provider, type Schedule, type ScheduleWhen, type SearchPage, type Session, type Work } from "@workbench/contracts";
+import { ACCESS_LABEL, EFFORT_LABEL, MESSENGER_HOME_TITLE, PROVIDER_LABEL, SEARCH_KIND_LABEL, isAccessMode, type AccessMode, type Artifact, type Provider, type Schedule, type ScheduleWhen, type SearchPage, type Session, type Work } from "@workbench/contracts";
 import { HttpError } from "../errors.ts";
 import type { Projects } from "../project.ts";
 import type { SessionManager } from "../sessions.ts";
@@ -21,10 +21,12 @@ export type MenuAct =
   | { a: "sessions"; workId?: string; move?: string }
   | { a: "pick"; sessionId: string; move?: string }
   | { a: "works"; move?: string }
+  | { a: "home"; move?: string }
   | { a: "newin"; workId: string; move?: string }
   | { a: "newwork" }
   | { a: "engine"; note?: string }
   | { a: "provider"; provider: Provider }
+  | { a: "engine-default-clear" }
   | { a: "model"; model: string | null }
   | { a: "effort"; effort: string | null }
   | { a: "access"; access: AccessMode }
@@ -186,7 +188,20 @@ export type MenuCore = {
   hidden(work: Work): boolean;
   recentWork(): Work | null;
   newConversation(binding: Binding): Session;
+  /** The line owed when that 새 대화 went to the messenger's home for the first time (a chat from before the homes), once. */
+  homeNote(binding: Binding): string | null;
+  /** The messenger's own place for its conversations, made when there is none yet. */
+  home(binding: Binding): Work;
+  /** The person chose a project in the menu: the chat stays there (새 대화 too) until they choose again. */
+  chose(binding: Binding): void;
   conversationIn(binding: Binding, work: Work, provider?: Provider): Session;
+  /** "이 메신저의 기본 엔진" of the chat's messenger (null: not set), and setting or clearing it. */
+  defaultEngine(binding: Binding): Provider | null;
+  setDefaultEngine(binding: Binding, provider: Provider | null): void;
+  /** The same with whether this PC has that engine; null when none is set. */
+  preferredEngine(binding: Binding): { provider: Provider; installed: boolean } | null;
+  /** A conversation was made with `used` because the default (`wanted`) is not on this PC: said to the chat once. */
+  engineMissing(binding: Binding, wanted: Provider, used: Provider): void;
   setPointer(bindingId: string, sessionId: string): Binding;
   /** The conversation a line of the chat goes to now (made when there is none); null when it is archived. */
   target(binding: Binding): Session | null;
@@ -323,15 +338,18 @@ export class ChannelMenu {
       case "main": return show(this.mainScreen(binding));
       case "new": {
         const session = this.core.newConversation(binding);
-        return show({ text: `새 대화를 만들었습니다: ${this.core.label(session)}`, buttons: [[BACK]] });
+        const note = this.core.homeNote(binding);
+        return show({ text: `새 대화를 만들었습니다: ${this.core.label(session)}${note ? `\n${note}` : ""}`, buttons: [[BACK]] });
       }
       case "sessions": return show(this.sessionsScreen(binding, act.workId, act.move));
       case "works": return show(this.worksScreen(binding, act.move));
+      case "home": return show(this.sessionsScreen(binding, this.core.home(binding).id, act.move));
       case "pick": return show(await this.pick(adapter, binding, chat, act.sessionId, act.move));
       case "newin": {
         const work = this.manager.view.works.get(act.workId);
         if (!work || this.core.hidden(work)) return show({ text: "보관한 프로젝트입니다. 다른 프로젝트를 골라 주세요.", buttons: [[{ label: "프로젝트 바꾸기", act: { a: "works" } }, BACK]] });
         const session = this.core.conversationIn(binding, work);
+        this.core.chose(binding);
         if (act.move) await this.core.moveParked(adapter, binding, chat, act.move, session.id);
         return show({ text: `「${work.title}」에 새 대화를 만들었습니다: ${this.core.label(session)}`, buttons: [[BACK]] });
       }
@@ -340,6 +358,7 @@ export class ChannelMenu {
         return show({ text: "새 프로젝트 이름을 적어 보내 주세요.", buttons: [[{ label: "취소", act: { a: "cancel" } }]] });
       case "engine": return show(this.engineScreen(binding, act.note));
       case "provider": return show(this.engineScreen(binding, this.provider(binding, act.provider)));
+      case "engine-default-clear": return show(this.engineScreen(binding, this.clearDefault(binding)));
       case "model":
       case "effort":
       case "access": return show(this.engineScreen(binding, this.setting(binding, act)));
@@ -442,28 +461,42 @@ export class ChannelMenu {
       label: `${session.id === current ? "✓ " : ""}${this.clip(session.purpose, 20)} · ${ago(session.updatedAt, now)}`,
       act: { a: "pick", sessionId: session.id, ...(move ? { move } : {}) },
     }]);
-    rows.push([{ label: "이 프로젝트에 새 대화", act: { a: "newin", workId: work.id, ...(move ? { move } : {}) } }]);
+    rows.push([{ label: work.messengerHome ? "여기에 새 대화" : "이 프로젝트에 새 대화", act: { a: "newin", workId: work.id, ...(move ? { move } : {}) } }]);
     rows.push([{ label: "다른 프로젝트…", act: { a: "works", ...(move ? { move } : {}) } }, BACK]);
     return { text: `「${work.title}」의 최근 대화${move ? "\n보낼 대화를 고르세요." : ""}`, buttons: rows };
   }
 
+  /**
+   * "프로젝트 바꾸기": the messenger's own place first ("텔레그램 대화" / "Slack 대화"), then the person's
+   * projects; one line says where the chat is now (at home until it has a conversation elsewhere).
+   */
   private worksScreen(binding: Binding, move?: string): Screen {
-    const current = this.work(binding)?.id;
-    const works = [...this.manager.view.works.values()].filter((work) => !this.core.hidden(work)).sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt).slice(0, 6);
-    const rows: MenuButton[][] = works.map((work) => [{ label: `${work.id === current ? "✓ " : ""}${this.clip(work.title, 24)}`, act: { a: "sessions", workId: work.id, ...(move ? { move } : {}) } }]);
+    const session = this.pointer(binding);
+    const at = session ? this.manager.view.works.get(session.workId) : undefined;
+    const here = at && !this.core.hidden(at) ? at : null;
+    const home = MESSENGER_HOME_TITLE[binding.kind], atHome = !here || here.messengerHome?.kind === binding.kind;
+    // A messenger's place is not a project to go to (the other messenger's neither).
+    const works = [...this.manager.view.works.values()].filter((work) => !this.core.hidden(work) && !work.messengerHome).sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt).slice(0, 6);
+    const rows: MenuButton[][] = [
+      [{ label: `${atHome ? "✓ " : ""}${home}`, act: { a: "home", ...(move ? { move } : {}) } }],
+      ...works.map((work): MenuButton[] => [{ label: `${work.id === here?.id ? "✓ " : ""}${this.clip(work.title, 24)}`, act: { a: "sessions", workId: work.id, ...(move ? { move } : {}) } }]),
+    ];
     if (!move) rows.push([{ label: "새 프로젝트", act: { a: "newwork" } }]);
     rows.push([BACK]);
-    return { text: works.length ? "어느 프로젝트로 갈까요?" : "프로젝트가 없습니다.", buttons: rows };
+    return { text: `어느 프로젝트로 갈까요?\n지금: 「${atHome ? home : this.clip(here!.title, 24)}」`, buttons: rows };
   }
 
   private async pick(adapter: ChannelAdapter, binding: Binding, chat: ChatRef, sessionId: string, move?: string): Promise<Screen> {
     let next: Binding;
+    const was = this.pointer(binding);
     try {
       next = this.core.setPointer(binding.id, sessionId);
     } catch (error) {
       return { text: error instanceof HttpError && error.code === "archived" ? "보관한 대화라 옮길 수 없습니다. 다른 대화를 골라 주세요." : "그 대화를 찾지 못했습니다.", buttons: [[{ label: "대화 바꾸기", act: { a: "sessions", ...(move ? { move } : {}) } }, BACK]] };
     }
     const session = this.manager.view.sessions.get(sessionId)!;
+    // A conversation of another project: the person chose that project (새 대화 stays there).
+    if (session.workId !== was?.workId) this.core.chose(next);
     this.core.audit(next, "pointer", { sessionId });
     if (move) await this.core.moveParked(adapter, next, chat, move, sessionId);
     const strict = this.core.strictNote(next, session);
@@ -480,10 +513,16 @@ export class ChannelMenu {
 
   private engineScreen(binding: Binding, note?: string): Screen {
     const session = this.pointer(binding);
-    if (!session) return { text: `${note ? `${note}\n` : ""}아직 대화가 없습니다. 적어 보내면 새 대화가 생깁니다.`, buttons: [[BACK]] };
-    const status = this.manager.snapshot().providers.find((entry) => entry.provider === session.provider);
     const mark = (on: boolean, label: string) => `${on ? "✓ " : ""}${label}`;
-    const rows: MenuButton[][] = [(["claude", "codex"] as const).map((provider) => ({ label: mark(session.provider === provider, PROVIDER_LABEL[provider]), act: { a: "provider", provider } }))];
+    // The messenger's default engine: said in one line, set by choosing an engine here, cleared by its own key.
+    const preset = this.core.defaultEngine(binding);
+    const presetLine = `이 메신저의 기본 엔진: ${preset ? PROVIDER_LABEL[preset] : "정하지 않음"}`;
+    const rows: MenuButton[][] = [
+      (["claude", "codex"] as const).map((provider) => ({ label: mark(session?.provider === provider, PROVIDER_LABEL[provider]), act: { a: "provider", provider } })),
+      [{ label: mark(!preset, "기본 엔진: 정하지 않음"), act: { a: "engine-default-clear" } }],
+    ];
+    if (!session) return { text: `${note ? `${note}\n` : ""}아직 대화가 없습니다. 적어 보내면 새 대화가 생깁니다.\n${presetLine}`, buttons: [...rows, [BACK]] };
+    const status = this.manager.snapshot().providers.find((entry) => entry.provider === session.provider);
     const models = status?.models ?? [];
     const options: { id: string | null; label: string }[] = [{ id: null, label: "기본" }, ...models.slice(0, 5).map((model) => ({ id: model.id, label: model.label }))];
     for (let index = 0; index < options.length; index += 3) rows.push(options.slice(index, index + 3).map((option) => ({ label: mark(session.model === option.id, `모델: ${cutAt(option.label, 14)}`), act: { a: "model", model: option.id } })));
@@ -493,16 +532,22 @@ export class ChannelMenu {
     const access = this.manager.accessOf(session);
     rows.push(...(["ask", "auto", "full"] as const).map((mode): MenuButton[] => [{ label: mark(access === mode && session.access === mode, MODE_LABEL[mode]), act: { a: "access", access: mode } }]));
     rows.push([BACK]);
-    return { text: `${note ? `${note}\n\n` : ""}지금: ${this.settings(session)}\n「${session.purpose}」`, buttons: rows };
+    return { text: `${note ? `${note}\n\n` : ""}지금: ${this.settings(session)}\n「${session.purpose}」\n${presetLine}`, buttons: rows };
   }
 
-  /** The engine is fixed per conversation (as at the PC): another engine is a new conversation. */
+  /**
+   * The engine is fixed per conversation (as at the PC): another engine is a new conversation. The
+   * engine chosen here is also made this messenger's default: the answer says what happened to this
+   * conversation, then what the messenger's new conversations will be made with.
+   */
   private provider(binding: Binding, provider: Provider): string {
-    const session = this.pointer(binding);
-    if (!session) return "아직 대화가 없습니다.";
-    if (session.provider === provider) return `이미 ${PROVIDER_LABEL[provider]} 대화입니다.`;
+    const session = this.pointer(binding), label = PROVIDER_LABEL[provider];
     const installed = this.manager.snapshot().providers.find((entry) => entry.provider === provider)?.installed;
-    if (!installed) return `${PROVIDER_LABEL[provider]}가 이 PC에 설치되어 있지 않습니다.`;
+    if (!installed) return `${label}가 이 PC에 설치되어 있지 않습니다. 이 메신저의 기본 엔진은 그대로입니다.`;
+    this.core.setDefaultEngine(binding, provider);
+    const later = `앞으로 이 메신저의 새 대화는 ${label}로 만듭니다.`;
+    if (!session) return later;
+    if (session.provider === provider) return `이미 ${label} 대화입니다.\n${later}`;
     let next: Session;
     try {
       if (session.documentAgent) {
@@ -510,14 +555,20 @@ export class ChannelMenu {
         this.core.setPointer(binding.id, next.id);
       } else {
         const work = this.manager.view.works.get(session.workId);
-        if (!work || this.core.hidden(work)) return "보관한 프로젝트라 새 대화를 만들 수 없습니다.";
+        if (!work || this.core.hidden(work)) return `보관한 프로젝트라 새 대화를 만들 수 없습니다.\n${later}`;
         next = this.core.conversationIn(binding, work, provider);
       }
     } catch (error) {
-      return `바꾸지 못했습니다: ${this.core.clean(error)}`;
+      return `바꾸지 못했습니다: ${this.core.clean(error)}\n${later}`;
     }
     this.core.audit(binding, "engine", { sessionId: next.id, result: provider });
-    return `이 대화를 ${PROVIDER_LABEL[provider]}로 바꿀 수 없어 ${PROVIDER_LABEL[provider]}로 새 대화를 만들었습니다: 「${next.purpose}」.`;
+    return `이 대화를 ${label}로 바꿀 수 없어 ${label}로 새 대화를 만들었습니다: 「${next.purpose}」.\n${later}`;
+  }
+
+  /** "기본 엔진: 정하지 않음": the messenger has no default again; no conversation is touched. */
+  private clearDefault(binding: Binding): string {
+    this.core.setDefaultEngine(binding, null);
+    return "이 메신저의 기본 엔진을 정하지 않았습니다. 앞으로 새 대화는 전처럼 지금 대화나 프로젝트의 엔진으로 만듭니다.";
   }
 
   private setting(binding: Binding, act: Extract<MenuAct, { a: "model" | "effort" | "access" }>): string {
@@ -614,16 +665,20 @@ export class ChannelMenu {
     if (!artifact) return { text: "그 파일을 찾지 못했습니다.", buttons: [[BACK]] };
     const pointer = this.pointer(binding);
     const parent = pointer && !pointer.documentAgent && !pointer.pageAgent && pointer.workId === artifact.workId ? pointer.id : null;
+    // A document's AI that has to be made follows the messenger's default engine (when this PC has it); one that exists is used as it is.
+    const preferred = this.core.preferredEngine(binding), engine = preferred?.installed ? preferred.provider : undefined;
+    const known = new Set(this.manager.view.sessions.keys());
     let session: Session;
     try {
       try {
-        session = this.manager.documentSession(artifactId, parent, false);
+        session = this.manager.documentSession(artifactId, parent, false, undefined, engine);
       } catch (error) {
         // The chat's conversation is in another workspace of the project: the document's own default parent.
         if (!(error instanceof HttpError && error.code === "document_session_scope") || !parent) throw error;
-        session = this.manager.documentSession(artifactId, null, false);
+        session = this.manager.documentSession(artifactId, null, false, undefined, engine);
       }
       this.core.setPointer(binding.id, session.id);
+      if (preferred && !preferred.installed && !known.has(session.id)) this.core.engineMissing(binding, preferred.provider, session.provider);
     } catch (error) {
       return { text: `문서 AI로 옮기지 못했습니다: ${this.core.clean(error)}`, buttons: [[BACK]] };
     }
@@ -921,6 +976,7 @@ export class ChannelMenu {
       case "work-title": {
         const work = this.manager.createWork({ title: text.replace(/\s+/g, " "), titleSource: "user" });
         const session = this.core.conversationIn(binding, work);
+        this.core.chose(binding);
         this.core.audit(binding, "work.created", { sessionId: session.id, target: `work:${work.id}` });
         await send({ text: `「${work.title}」 프로젝트를 만들고 새 대화로 옮겼습니다: ${this.core.label(session)}` });
         break;

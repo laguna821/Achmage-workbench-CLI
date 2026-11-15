@@ -596,3 +596,124 @@ it("no row in the list column is named with a middle dot", () => {
   fireEvent.keyDown(row("강의 준비")!, { key: "Enter" });
   expect(names().filter((name) => name.includes("·"))).toEqual([]);
 });
+
+// 0.5.1, messenger homes: a messenger's own place for its conversations ("텔레그램 대화", "Slack 대화",
+// `Work.messengerHome`) is not a row among the person's projects and folders. It stands in its own short
+// section "메신저" above 폴더; opening it goes inside it as a project does. While its messenger is
+// registered it keeps its name and place: the row's menu says why.
+describe("level 1: 메신저, each messenger's own place", () => {
+  const telegram = work("텔레그램 대화", null, NOW - 500, { messengerHome: { kind: "telegram", registered: true } });
+  const slack = work("Slack 대화", null, NOW - 400, { messengerHome: { kind: "slack", registered: false } });
+  const withHomes: State = {
+    ...state,
+    works: { ...state.works, [slack.id]: slack, [telegram.id]: telegram },
+    sessions: { ...state.sessions, ...byId([session("휴대폰 11/16", telegram.id, { status: "awaitingApproval" } as Partial<Session>), session("휴대폰 11/15", telegram.id)]) },
+  };
+  const section = () => within(sidebar()).queryByRole("tree", { name: "메신저" });
+  const tree = () => within(sidebar()).getByRole("tree", { name: "폴더별 프로젝트" });
+  const MENU: MenuRequest["items"] = [
+    { kind: "item", label: "열기", onSelect: () => {} },
+    { kind: "item", label: "이름 바꾸기", onSelect: () => {} },
+    { kind: "item", label: "고정", onSelect: () => {} },
+    { kind: "submenu", label: "옮기기", items: [] },
+    { kind: "item", label: "보관", onSelect: () => {} },
+    { kind: "item", label: "프로젝트 삭제…", onSelect: () => {} },
+  ];
+  const menuOf = (id: string) => {
+    const menuFor = vi.fn((_row: unknown, x: number, y: number): MenuRequest => ({ x, y, title: id, items: MENU }));
+    const openMenu = vi.fn();
+    render(<Frame now={withHomes} actions={{ menuFor, openMenu } as unknown as Partial<SidebarActions>} />);
+    fireEvent.contextMenu(row(id)!);
+    return (openMenu.mock.calls.at(-1)![0] as MenuRequest).items.flatMap((entry) => (entry.kind === "item" || entry.kind === "submenu" ? [{ label: entry.label, disabled: Boolean(entry.disabled), why: entry.disabledReason }] : []));
+  };
+
+  it("no home: no 메신저 section at all", () => {
+    render(<Frame />);
+    expect(section()).toBeNull();
+    expect(within(sidebar()).queryByText("메신저")).toBeNull();
+  });
+
+  it("the homes stand under 메신저 above 폴더, Telegram's first, with a project row's marks; they are not among the projects", () => {
+    render(<Frame now={withHomes} />);
+    const homes = section()!;
+    expect([...homes.querySelectorAll<HTMLElement>("[data-row-id]")].map((element) => element.dataset.rowId)).toEqual(["텔레그램 대화", "Slack 대화"]);
+    expect(within(sidebar()).getByText("메신저").compareDocumentPosition(within(sidebar()).getByText("폴더")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The person's projects and folders are as they were: no home among them, "폴더 밖" counts one.
+    expect([...tree().querySelectorAll<HTMLElement>("[data-list-row][data-row-id]")].map((element) => element.dataset.rowId)).toEqual(["빈 폴더", "수업", "강의 준비", "2026-2", "과제 채점", "논문 메모"]);
+    expect(within(tree()).getByText("폴더 밖").parentElement!.querySelector(".nav-count")!.textContent).toBe("1");
+    // The marks a project row has: what needs the person.
+    expect(row("텔레그램 대화")!.querySelector(".nav-pill")!.textContent).toBe("1");
+    expect(row("텔레그램 대화")!.getAttribute("aria-label")).toBe("텔레그램 대화, 확인 필요 1개");
+    expect(row("Slack 대화")!.querySelector(".nav-pill")).toBeNull();
+  });
+
+  it("opening a home goes inside it as a project does (the same level 2, with the way back)", () => {
+    const chooseProject = vi.fn();
+    render(<Frame now={withHomes} actions={{ chooseProject }} />);
+    fireEvent.click(row("텔레그램 대화")!);
+    expect(chooseProject).toHaveBeenCalledTimes(1);
+    expect(level()).toBe("project");
+    expect(within(sidebar()).getByRole("button", { name: "프로젝트 목록으로" })).toBeTruthy();
+    expect(ids()).toEqual(expect.arrayContaining(["휴대폰 11/16", "휴대폰 11/15"]));
+    // Back: the section is where it was. The keyboard opens one too.
+    fireEvent.click(within(sidebar()).getByRole("button", { name: "프로젝트 목록으로" }));
+    expect(level()).toBe("projects");
+    fireEvent.keyDown(row("Slack 대화")!, { key: "Enter" });
+    expect(level()).toBe("project");
+  });
+
+  it("while its messenger is registered the row's menu keeps the name, the place, 보관 and 삭제 off and says why; the rest works", () => {
+    const why = "텔레그램을 연결해 둔 동안에는 할 수 없습니다.";
+    const items = menuOf("텔레그램 대화");
+    expect(items.filter((entry) => entry.disabled)).toEqual([
+      { label: "이름 바꾸기", disabled: true, why },
+      { label: "폴더로 옮기기", disabled: true, why },
+      { label: "보관", disabled: true, why },
+      { label: "프로젝트 삭제…", disabled: true, why },
+    ]);
+    expect(items.filter((entry) => !entry.disabled).map((entry) => entry.label)).toEqual(expect.arrayContaining(["열기", "고정"]));
+  });
+
+  it("its messenger removed: the row stays under 메신저 and its menu allows all of it", () => {
+    expect(menuOf("Slack 대화").filter((entry) => entry.disabled)).toEqual([]);
+  });
+
+  it("a registered home is not renamed by F2 or a double click, nor archived by Delete; a free one is", () => {
+    const archive = vi.fn();
+    render(<Frame now={withHomes} actions={{ archive }} />);
+    fireEvent.keyDown(row("텔레그램 대화")!, { key: "F2" });
+    fireEvent.doubleClick(row("텔레그램 대화")!);
+    fireEvent.keyDown(row("텔레그램 대화")!, { key: "Delete" });
+    expect(sidebar().querySelector("input.side-rename")).toBeNull();
+    expect(archive).not.toHaveBeenCalled();
+    fireEvent.keyDown(row("Slack 대화")!, { key: "Delete" });
+    expect(archive).toHaveBeenCalledWith({ kind: "work", id: "Slack 대화" });
+    fireEvent.keyDown(row("Slack 대화")!, { key: "F2" });
+    expect(sidebar().querySelector("input.side-rename")).toBeTruthy();
+  });
+
+  it("a home is never part of a pick of projects (Ctrl, Shift, Ctrl+A)", () => {
+    const openMenu = vi.fn();
+    render(<Frame now={withHomes} actions={{ openMenu }} />);
+    fireEvent.click(row("강의 준비")!, { ctrlKey: true });
+    fireEvent.keyDown(row("강의 준비")!, { key: "a", ctrlKey: true });
+    fireEvent.contextMenu(row("논문 메모")!);
+    expect((openMenu.mock.calls.at(-1)![0] as MenuRequest).title).toBe("프로젝트 3개");
+    expect(row("텔레그램 대화")!.classList.contains("selected")).toBe(false);
+  });
+
+  it("찾기 narrows the section by name with the projects; a tag filter shows projects only", async () => {
+    render(<Frame now={withHomes} />);
+    fireEvent.click(within(sidebar()).getByRole("button", { name: "찾기" }));
+    fireEvent.change(within(sidebar()).getByRole("textbox", { name: "프로젝트·폴더 찾기" }), { target: { value: "텔레" } });
+    expect(ids()).toEqual(["텔레그램 대화"]);
+    fireEvent.change(within(sidebar()).getByRole("textbox", { name: "프로젝트·폴더 찾기" }), { target: { value: "논문" } });
+    expect(section()).toBeNull();
+    expect(ids()).toEqual(["논문 메모"]);
+    fireEvent.change(within(sidebar()).getByRole("textbox", { name: "프로젝트·폴더 찾기" }), { target: { value: "" } });
+    await waitFor(() => expect(within(sidebar()).getByRole("region", { name: "태그" })).toBeTruthy());
+    fireEvent.click(within(within(sidebar()).getByRole("region", { name: "태그" })).getByText("강의"));
+    await waitFor(() => expect(ids()).toEqual(["수업", "강의 준비"]));
+    expect(section()).toBeNull();
+  });
+});

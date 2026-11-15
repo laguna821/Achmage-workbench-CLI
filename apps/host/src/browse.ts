@@ -155,6 +155,8 @@ export type BrowseHost = {
   updateSession(sessionId: string, patch: Partial<Session>): void;
   publish(status: AgentBrowserStatus): void;
   pageControl?(sessionId: string): BrowserControl;
+  /** Tab sleep: the session's shared page, if it rests, is opened again before it is used. */
+  wakePage?(sessionId: string): Promise<void>;
   hasPage?(sessionId: string): boolean;
   openPage?(sessionId: string, url: string): Promise<unknown>;
   pageCommand?(sessionId: string, requestId: string, command: string, args: string[], control: BrowserControl): Promise<BrowserJobResult>;
@@ -570,6 +572,7 @@ export class AgentBrowser {
     if (!shared && !tabOpen) this.blocker(sessionId);
     if (!shared && parsed.command === "close") return this.closeOwn(sessionId);
     // Capture authority before the approval card. A later human takeover cannot authorize this old request.
+    if (shared && !tabOpen) await this.host?.wakePage?.(sessionId);
     let pageControl = shared && !tabOpen ? this.host?.pageControl?.(sessionId) : null;
     const url = kind === "navigate" && parsed.command !== "search" ? targetUrl(parsed.args) : null;
     const sites = this.sites.get(sessionId) ?? new Set<string>();

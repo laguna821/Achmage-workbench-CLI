@@ -4881,6 +4881,26 @@ kbd {
 .usage-line-key .usage-bar { background: var(--line); }
 .usage-line-pop { min-width: 280px; }
 
+/* 메모리 표시: the app's memory at the line's right end — small, muted, steady digits; its parts in a small popover. */
+.memory-readout {
+  position: relative;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  color: var(--muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.memory-readout-text { padding: 0 var(--space-xs); border-radius: var(--radius-pill); cursor: default; }
+.memory-readout-text:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.popover.memory-pop { min-width: 0; padding: var(--space-xs) var(--space-sm); color: var(--text-soft); font-size: var(--fs-meta); }
+.memory-parts { display: grid; gap: var(--space-2xs); margin: 0; }
+.memory-parts > div { display: flex; justify-content: space-between; gap: var(--space-lg); }
+.memory-parts dt { color: var(--muted); }
+.memory-parts dd { margin: 0; }
+.memory-note { margin: var(--space-xs) 0 0; padding-top: var(--space-xs); border-top: 1px solid var(--line); color: var(--muted); }
+
 /* ── Home ────────────────────────────────────────────────────────────── */
 /* The wordmark in ink, whatever the look's heading color: the brand is the arc's teal. */
 .home-brand {

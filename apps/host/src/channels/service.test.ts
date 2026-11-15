@@ -180,7 +180,7 @@ describe("from the phone to the conversation and back", () => {
     await until(() => r.fake.texts().some((text) => text.startsWith("3학년 27명을 「명단-3학년.xlsx」로 저장했습니다.\n\nClaude · ")));
     expect(r.fake.of("editMessageText").at(-1)!.params.text).toMatch(/^끝남 · \d+:\d{2}$/);
     // The pointer is shown to the PC screen by name.
-    expect((await r.state()).bots[0]!.bindings[0]!.pointerLabel).toMatch(/^「휴대폰」 › 「휴대폰 · \d+\/\d+」/);
+    expect((await r.state()).bots[0]!.bindings[0]!.pointerLabel).toMatch(/^「텔레그램 대화」 › 「휴대폰 · \d+\/\d+」/);
     // The stop word, and a group: it leaves.
     r.fake.message("오래 걸리는 일");
     await until(() => r.g.engine.sent.length === 2);

@@ -36,6 +36,12 @@ export type BrowserPage = {
   createdAt: number; updatedAt: number; error: string | null;
   /** Explicitly closed by the user/agent, distinct from legacy disconnected records. */
   closedAt?: number;
+  /**
+   * Tab sleep (0.5.1): its native page was released while its tab was off screen (status "interrupted", no error).
+   * It is an open page that rests: opened again — the same URL and profile — when its tab is shown or an AI is asked
+   * to use it; kept while it opens, gone once it is there again, closed or lost.
+   */
+  restedAt?: number;
   /** Skin 2 · B: taken out of the 웹 list for good (목록에서 지우기); closed pages without it stay listed. */
   forgottenAt?: number;
 };

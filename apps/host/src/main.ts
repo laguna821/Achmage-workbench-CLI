@@ -2,7 +2,7 @@ import { UpdatePolicy } from "./update-policy.ts";
 import { ServicePreviews } from "./service-previews.ts";
 import { randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir, hostname } from "node:os";
+import { homedir, hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { EventBus } from "./bus.ts";
 import { createHttpServer } from "./http.ts";
@@ -36,6 +36,8 @@ import { handlePkm } from "./pkm-http.ts";
 import { Projects } from "./project.ts";
 import { handleProject } from "./project-http.ts";
 import { handleEntry, WorksDir } from "./entry.ts";
+import { BookmarkStore, handleBookmarks } from "./bookmarks.ts";
+import { thisPc } from "./bookmark-import.ts";
 import { DropboxFolders } from "./dropbox.ts";
 import { pdfLoader } from "./pdf-loader.ts";
 import { FindTool, withFindTool } from "./find-tool.ts";
@@ -212,6 +214,7 @@ const officeMcp = officeControl ? new OfficeMcp(manager, officeControl, dataDir,
 officeAi.executorOutputs = new OfficeExecutorOutputs(manager.documents, manager.office, officeMcp?.outputs ?? new OfficeOutputs(manager.documents, (...args) => manager.registerOfficeCopy(...args)));
 const officeDrive = officeControl ? new OfficeDrive(manager, officeControl, dataDir, { vault }) : undefined;
 const officeImport = officeControl ? new OfficeImport(manager.documents, manager.ieumDesktop, dataDir, { vault }) : undefined;
+const bookmarks = new BookmarkStore(join(dataDir, "bookmarks.json"));
 const dropbox = new DropboxFolders(store, manager, dataDir);
 officeAi.drive = officeDrive;
 const voice = new VoiceService({ dataDir, sessionExists: id => { const s = manager.view.sessions.get(id); return !!s && !s.archivedAt; } });
@@ -260,6 +263,8 @@ const server = createHttpServer(manager, bus, {
   pkm: (req, res, url) => handlePkm(pkm, req, res, url),
   projects: (req, res, url) => handleProject(projects, req, res, url),
   entry: (req, res, url) => handleEntry({ view: () => manager.view, worksDir }, req, res, url),
+  // The app's own web bookmarks: one small file beside the state database; a browser's are read only when asked.
+  bookmarks: (req, res, url) => handleBookmarks({ store: bookmarks, places: thisPc(), tempDir: tmpdir() }, req, res, url),
 });
 
 /** Listen on the port used last time, or on any free one when it is taken; remember the one bound. */

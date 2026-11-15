@@ -31,7 +31,7 @@ describe("the menu", () => {
     await pair(kit);
     await say(kit, "첫 일");
     const id = await menu(kit);
-    expect(shownText(kit, id)).toMatch(/^메뉴 · 지금: 「휴대폰」 › 「휴대폰 · \d+\/\d+」/);
+    expect(shownText(kit, id)).toMatch(/^메뉴 · 지금: 「텔레그램 대화」 › 「휴대폰 · \d+\/\d+」/);
     expect(labelsOf(kit, id)).toEqual(["새 대화", "대화 바꾸기", "프로젝트 바꾸기", "엔진·모델", "최근 파일", "프로젝트 노트", "찾기", "예약", "사용량", "알림", "상태·대기열", "채널 잠금"]);
     const count = kit.adapter.sent.length;
     await press(kit, "엔진·모델");
@@ -109,6 +109,11 @@ describe("switching conversation and project", () => {
     const work = kit.manager.createWork({ title: "연구계획서" });
     const desk = kit.manager.createSession(work.id, { provider: "claude", purpose: "문헌 목록", access: "full" });
     await pair(kit);
+    // The person chose this project in the chat's menu (a line alone goes to the messenger's own place).
+    await menu(kit);
+    await press(kit, "프로젝트 바꾸기");
+    await press(kit, "연구계획서");
+    await press(kit, "이 프로젝트에 새 대화");
     await say(kit, "첫 일");
     const phone = kit.engine.sent[0]!.sessionId;
     kit.engine.finish(phone);
@@ -157,7 +162,9 @@ describe("switching conversation and project", () => {
     const id = await menu(kit);
     await press(kit, "프로젝트 바꾸기");
     const shown = labelsOf(kit, id);
-    expect(shown.map((label) => label.replace("✓ ", "")).sort()).toEqual(["← 메뉴", "새 프로젝트", "연구계획서", "지난 학기"].sort());
+    // The messenger's own place first (where the chat is until the person chooses), then the person's projects.
+    expect(shown[0]).toBe("✓ 텔레그램 대화");
+    expect(shown.map((label) => label.replace("✓ ", "")).sort()).toEqual(["← 메뉴", "새 프로젝트", "연구계획서", "지난 학기", "텔레그램 대화"].sort());
     expect(shown.filter((label) => label.startsWith("✓ "))).toHaveLength(1);
     await press(kit, shown.find((label) => label.endsWith("지난 학기"))!);
     expect(shownText(kit, id)).toBe("「지난 학기」의 최근 대화");
@@ -194,7 +201,7 @@ describe("switching conversation and project", () => {
     const refusal = kit.adapter.last()!;
     expect(refusal.out.buttons!.flat().map((button) => button.label)).toEqual(["새 대화에서 하기", "대화 바꾸기"]);
     await press(kit, "대화 바꾸기");
-    expect(shownText(kit, refusal.messageId)).toBe("「휴대폰」의 최근 대화\n보낼 대화를 고르세요.");
+    expect(shownText(kit, refusal.messageId)).toBe("「텔레그램 대화」의 최근 대화\n보낼 대화를 고르세요.");
     await press(kit, labelsOf(kit, refusal.messageId).find((label) => label.startsWith("살아 있는 대화"))!);
     expect(kit.core.bindings()[0]!.pointerSessionId).toBe(other.id);
     expect(userItems(kit, other.id).map((item) => item.text)).toEqual(["보관한 뒤에 보낸 일"]);
@@ -216,7 +223,7 @@ describe("engine, model, effort, access", () => {
     kit.engine.finish(session);
     const id = await menu(kit);
     await press(kit, "엔진·모델");
-    expect(labelsOf(kit, id)).toEqual(["✓ Claude", "Codex", "✓ 모델: 기본", "모델: Opus", "모델: Sonnet", "✓ 노력: 기본", "노력: 낮음", "노력: 중간", "노력: 높음", "묻기 · 매번 확인", "자동 · 명령은 확인", "✓ 전체 접근 · 묻지 않음", "← 메뉴"]);
+    expect(labelsOf(kit, id)).toEqual(["✓ Claude", "Codex", "✓ 기본 엔진: 정하지 않음", "✓ 모델: 기본", "모델: Opus", "모델: Sonnet", "✓ 노력: 기본", "노력: 낮음", "노력: 중간", "노력: 높음", "묻기 · 매번 확인", "자동 · 명령은 확인", "✓ 전체 접근 · 묻지 않음", "← 메뉴"]);
     await press(kit, "모델: Sonnet");
     await press(kit, "노력: 높음");
     expect(shownText(kit, id)).toMatch(/^바꿨습니다\. 다음 요청부터 적용합니다\.\n\n지금: Claude · sonnet · 노력 높음 · 전체 접근/);
@@ -364,6 +371,11 @@ describe("the project note", () => {
     const kit = await startKit({ projects: true });
     const work = kit.manager.createWork({ title: "연구계획서" });
     await pair(kit);
+    // The person chose this project in the chat's menu (a line alone goes to the messenger's own place).
+    await menu(kit);
+    await press(kit, "프로젝트 바꾸기");
+    await press(kit, "연구계획서");
+    await press(kit, "이 프로젝트에 새 대화");
     await say(kit, "첫 일");
     kit.engine.finish(kit.engine.sent[0]!.sessionId);
     await settle(kit);
@@ -593,7 +605,7 @@ describe("usage and notifications", () => {
     const session = kit.engine.sent[0]!.sessionId;
     const id = await menu(kit);
     await press(kit, "알림");
-    await press(kit, labelsOf(kit, id).find((label) => label.endsWith("휴대폰"))!);
+    await press(kit, labelsOf(kit, id).find((label) => label.endsWith("텔레그램 대화"))!);
     kit.engine.say(session, "끝냈습니다.");
     kit.engine.finish(session);
     await settle(kit);

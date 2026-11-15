@@ -551,6 +551,21 @@ export function moveShortcut(list: NavShortcut[], from: number, to: number): Nav
 
 // ── N1: level 1 (every project in its folders) and level 2 (inside one project) ─────────────
 
+/** The person's own projects: every project that is not a messenger's place (`Work.messengerHome`). */
+export const ownProjects = (projects: ListProject[]) => projects.filter((project) => !project.work.messengerHome);
+
+/**
+ * The messengers' own places ("텔레그램 대화", "Slack 대화") for level 1's "메신저" section: Telegram's first.
+ * A query narrows them by name as it does projects; they have no tags (a tag filter shows projects only).
+ */
+export function messengerHomes(projects: ListProject[], query = "", filtered = false): ListProject[] {
+  if (filtered) return [];
+  const text = query.trim().toLocaleLowerCase("ko");
+  return projects
+    .filter((project) => project.work.messengerHome && (!text || project.work.title.toLocaleLowerCase("ko").includes(text)))
+    .sort((a, b) => (a.work.messengerHome!.kind === b.work.messengerHome!.kind ? a.work.createdAt - b.work.createdAt : a.work.messengerHome!.kind === "telegram" ? -1 : 1));
+}
+
 export type LevelOneRow =
   | { type: "folder"; id: string; folder: Folder; depth: number; open: boolean; count: number; children: boolean }
   | { type: "project"; id: string; project: ListProject; depth: number }

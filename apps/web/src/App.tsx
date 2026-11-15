@@ -40,6 +40,7 @@ import { usePhoneWidth } from "./mobile-layout.ts";
 import { readNavigator, type RailDest } from "./components/nav/model.ts";
 import { STARTS_AT_NOW, litPlace, placePrefix, useListFollows, useNavPlace } from "./components/nav/place.ts";
 import { renameFirst } from "./components/nav/menu-order.ts";
+import { homeMenu } from "./messenger-home.ts";
 import { RightSidebar, sideNoteOf, useRightSidebar } from "./components/right/RightSidebar.tsx";
 import { requestNavigatorFocus } from "./components/nav/focus.ts";
 import { FromMenu } from "./components/nav/dialogs.tsx";
@@ -59,6 +60,7 @@ import { StartView, useEngineChoice } from "./components/StartView.tsx";
 import { WorkView, type WorkActions } from "./components/WorkView.tsx";
 import type { DrawState } from "./components/ImageGen.tsx";
 import { AppearancePanel, type SheetTarget } from "./components/AppearanceSheet.tsx";
+import { BookmarkSettings } from "./components/BookmarkImport.tsx";
 import { EngineMenu } from "./components/EngineMenu.tsx";
 import { Switcher, UnseenContext } from "./components/SessionCards.tsx";
 import { DocContext, FormatBadge, type DocActions } from "./components/DocCards.tsx";
@@ -79,6 +81,8 @@ import { KnowledgeLibrary } from "./components/KnowledgeLibrary.tsx";
 import { Onboarding } from "./components/Onboarding.tsx";
 import { ItemIcon } from "./components/ItemIcon.tsx";
 import { UsageLine } from "./components/UsageCard.tsx";
+import { MemoryReadout, useAppMemory } from "./components/MemoryReadout.tsx";
+import { readMemoryShown } from "./theme.ts";
 import { LaunchCredit } from "./components/LaunchCredit.tsx";
 import { LicenceList } from "./components/LicenceList.tsx";
 import type { EngineActions } from "./components/EngineSetup.tsx";
@@ -97,7 +101,7 @@ import { LinkContext, hopsText, linkOfSession, useLinkApi } from "./links.ts";
 import { Beside, useBesideRoom } from "./components/companion/Beside.tsx";
 import { heldPageMayClose } from "./held-page.ts";
 import { projectChoiceMoves, useOverlayKeep } from "./overlay-keep.ts";
-import { besideOf, isCompanion, readMinimum, oneViewPerDocument, upgradeStoredLayout, viewDocument, viewsOfDocument, viewsOfPage, withoutCompanion, type Companion } from "./companion.ts";
+import { besideOf, isCompanion, readMinimum, oneViewPerDocument, upgradeStoredLayout, viewDocument, viewPage, viewsOfDocument, viewsOfPage, withoutCompanion, type Companion } from "./companion.ts";
 import { createDesk, settleLayout } from "./companion-desk.ts";
 import { MoveQuestion } from "./components/companion/MoveQuestion.tsx";
 import { keepPosition, keptPosition, modeDocument, modeOf, readingPosition, restorePosition, reviewProposal, useWorkModeKeys, type ModeProps, type ReadingPosition, type WorkMode } from "./workmodes.ts";
@@ -114,7 +118,8 @@ import { EngineMark } from "./components/EngineMark.tsx";
 import { LeaveGate } from "./leave-gate.ts";
 import { LayoutPersistence, keepChosen, layoutKey, skippedNotice } from "./layout-persistence.ts";
 import { activeTab, activateTab, addBackgroundTab, closeTab, contentKey, drawnLayout, dropTabs, findTab, followScope, lastTabOf, moveTab, projectOfTab, setTabKeeper, storedTabs, stripScopes, tabsOf, updateTabUi, updateTabView, withTabs } from "./tabs.ts";
-import { PaneLayout, type PaneHead, type PaneScope } from "./components/Panes.tsx";
+import { PaneLayout, type PaneHead, type PaneScope, type TabSleep } from "./components/Panes.tsx";
+import { SLEEP_SAVE_WAIT_MS, tabAtWork } from "./tab-sleep.ts";
 import { NewDocumentDialog, type NewDocumentTarget } from "./components/NewDocumentButton.tsx";
 import { IeumAppDialog } from "./components/IeumAppDialog.tsx";
 import { OfficeImportDialog } from "./components/OfficeImportDialog.tsx";
@@ -732,6 +737,9 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
   useEffect(() => setRootUiFont(uiFont), [uiFont]);
   // 사용 한도 표시 (설정 › 화면): 목록 칸 아래 (old records), 창 아래 줄, 숨기기.
   const usagePlace = readUsagePlace(prefs.usagePlace);
+  // 메모리 표시 (설정 › 화면): the app's memory at the right end of the window's bottom line (old records: on).
+  const memoryShown = readMemoryShown(prefs.memoryShown);
+  const memory = useAppMemory(api && memoryShown && !single && !api.isRemote ? api.memory : null);
   const appearance = useMemo(() => readAppearance(prefs.appearance), [prefs.appearance]);
   // The sidebar is where many sessions live: open unless the user closed it (decision 2026-10-28).
   const [expandedEditorTab, setExpandedEditorTab] = useState<string | null>(null);
@@ -2063,7 +2071,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
           { kind: "item", label: "프로젝트 삭제…", icon: "trash", disabled: busy, disabledReason: "진행 중인 대화가 끝나면 삭제할 수 있습니다.", onSelect: () => setDeletingWork(owner) },
         ];
         items.splice(1, 0, { kind: "item", label: "프로젝트 페이지", icon: "project", onSelect: () => actions.openProject(owner) }, { kind: "item", label: "카드로 보기", icon: "grid", onSelect: () => setView({ kind: "pkm", target: { kind: "work", id: owner.id } }) });
-        return { x, y, title: owner.title, items: renameFirst(items) };
+        return { x, y, title: owner.title, items: homeMenu(owner, renameFirst(items)) };
       }
       if (row.type === "folder") {
         const folder = row.folder;
@@ -2121,10 +2129,27 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
   const editors = useRef(new EditorRegistry());
   const onEditorHandle = useCallback((artifactId: string, viewId: string, handle: EditorHandle | null) => editors.current.set(artifactId, viewId, handle), []);
   // Skin 2 · B: at the shared tab cap a tab with unsaved edits (or an editor that cannot tell) never steps back.
+  const tabUnsaved = useCallback(<V,>(tab: PaneTab<V>) => { const artifactId = viewDocument(tab.view as View); return Boolean(artifactId && editors.current.states(artifactId).some((dirty) => dirty !== false)); }, []);
   useEffect(() => {
-    setTabKeeper((tab) => { const artifactId = viewDocument(tab.view as View); return Boolean(artifactId && editors.current.states(artifactId).some((dirty) => dirty !== false)); });
+    setTabKeeper(tabUnsaved);
     return () => setTabKeeper(null);
-  }, []);
+  }, [tabUnsaved]);
+  // Tab sleep (tab-sleep.ts): the same keeper; what is at work, from the app's state; and what comes before a view is
+  // taken down — a web page's native page is released (the gateway keeps its record: shown again, it loads its address
+  // again), unsaved edits are saved by the tab's own leave guard, the one run when a person leaves the tab. Neither
+  // asks anything of the person: it is done, or it is refused and the tab stays awake.
+  // How many tabs this window has put to sleep (Panes tells it): shown beside the memory readout.
+  const [sleepingTabs, setSleepingTabs] = useState(0);
+  const tabSleep = useMemo<TabSleep<View>>(() => ({
+    unsaved: tabUnsaved,
+    atWork: (tab) => { const web = sharedBrowser.getState(); return tabAtWork(tab, { sessions: stateRef.current.sessions, proposals: stateRef.current.proposals, pages: web.pages, heldPageIds: web.heldPageIds, pending: web.pending }); },
+    before: (tab) => {
+      const pageId = viewPage(tab.view);
+      if (pageId) return sharedBrowser.available ? () => sharedBrowser.rest(pageId) : null;
+      const guard = leaveGuards.current[tab.id];
+      return guard ? () => leaveEditors([() => guard()], SLEEP_SAVE_WAIT_MS) : null;
+    },
+  }), [tabUnsaved, sharedBrowser]);
   documentTabsRef.current = (artifactId: string) => documentTabs(artifactId);
   const [unsavedAsk, setUnsavedAsk] = useState<{ name: string; certain: boolean; answer: (go: boolean) => void } | null>(null);
   /** The tabs (in every pane) showing a document, alone or beside its conversation. */
@@ -2537,13 +2562,15 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
     }
     updateLayout((latest) => splitPane(latest, id, side, { view: { kind: "new", folderId: null }, workId: null, sessionId: null }, keptOf(focusedPane(current))));
   };
+  /** What a tab's × runs first: its view's leave guard — or, for a web page asleep (no view of it is mounted), the closing of its record. */
+  const closeGuardOf = (tab: PaneTab<View>) => leaveGuards.current[tab.id] ?? (tab.view.kind === "browser" ? (() => { const { pageId } = tab.view; return async (reason?: "close" | "discard") => { if (reason === "close") await sharedBrowser.closeResting(pageId); }; })() : undefined);
   const closePaneNow = (id: PaneId) => {
     const current = layoutRef.current;
     if (current.panes.length < 2) return;
     const next = closePane(current, id);
     const rest = focusedPane(next);
     const previous = paneById(current, rest.id);
-    const guards = tabsOf(paneById(current, id)!).map((tab) => leaveGuards.current[tab.id]).filter((guard) => !!guard);
+    const guards = tabsOf(paneById(current, id)!).map(closeGuardOf).filter((guard) => !!guard);
     leaveGate.current.run(id, async () => { await Promise.all(guards.map((guard) => guard("close"))); }, () => {
       updateLayout((latest) => closePane(latest, id));
       if (rest.id !== current.focus && previous) showSessionOf(previous.workId, previous.sessionId);
@@ -2561,7 +2588,8 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
   };
   selectTabRef.current = selectTabNow;
   const closeTabNow = (paneId: string, tabId: string) => {
-    const guard = leaveGuards.current[tabId];
+    const tab = layoutRef.current.panes.flatMap(tabsOf).find((entry) => entry.id === tabId);
+    const guard = tab ? closeGuardOf(tab) : leaveGuards.current[tabId];
     leaveGate.current.run(paneId, guard ? () => guard("close") : null, () => {
       updateLayout((current) => closeTab(current, paneId, tabId, { view: { kind: "new", folderId: null }, workId: null, sessionId: null }));
     }, fail, tabId);
@@ -2717,6 +2745,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
           return startWork(text, provider, null, null, choice, page ? { kind: "work", workId: page.workId } : { kind: "new" }, pane.id);
         }}
         onNew={target => setNewBrowser({ ...target, paneId: pane.id })}
+        onOpenUrl={url => { const page = sharedBrowser.getState().pages.find(page => page.pageId === pageId); void openBrowserRef.current(pane.id, { workspaceId: page?.workspaceId, profileId: page?.profileId, url }); }}
         onClosed={hosted ? () => updateLayout((current) => withoutCompanion(current, tabId)) : closeThisTab} onOpenSession={openSession} onLeaveGuard={guardOf[tabId]}
         onSessionMenu={(agent, x, y) => {
           const request = menuFor({ type: "session", id: agent.id, depth: 0, session: agent, work: state.works[agent.workId] }, x, y);
@@ -2977,6 +3006,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
         brandMotion={prefs.brandMotion !== false} onBrandMotion={(next) => savePrefs({ brandMotion: next })}
         worksDir={<WorksDirRow api={api} pickFolder={inDesktop ? (start) => pickFolderNative("새 프로젝트 폴더 위치", start) : null} />}
         background={<BackgroundHost api={api} />}
+        bookmarks={api.isRemote ? undefined : <BookmarkSettings api={api} />}
         onPropertyTemplate={fromSettings(() => setPropertyTemplateOpen(true))}
         shortcutSettings={<ShortcutSettings shortcuts={shortcuts} onRecording={setRecordingShortcut} onChange={(id, combo) => {
           const saved = { ...((prefs.shortcuts as Record<string, string> | undefined) ?? {}) };
@@ -2985,7 +3015,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
           savePrefs({ shortcuts: saved });
         }} />}
         onOnboarding={fromSettings(() => setOnboardingAgain(true))} />;
-      case "screen": return <AppearancePanel target={sheet ?? { provider: focusedProvider, theme: focusedTheme }} onTarget={setSheet} themePref={themePref} onThemePref={(pref) => savePrefs({ theme: pref })} palette={palette} onPalette={pickPalette} uiFont={uiFont} onUiFont={(next) => savePrefs({ uiFont: next })} usagePlace={usagePlace} onUsagePlace={(next) => savePrefs({ usagePlace: next })} />;
+      case "screen": return <AppearancePanel target={sheet ?? { provider: focusedProvider, theme: focusedTheme }} onTarget={setSheet} themePref={themePref} onThemePref={(pref) => savePrefs({ theme: pref })} palette={palette} onPalette={pickPalette} uiFont={uiFont} onUiFont={(next) => savePrefs({ uiFont: next })} usagePlace={usagePlace} onUsagePlace={(next) => savePrefs({ usagePlace: next })} memoryShown={memoryShown} onMemoryShown={(next) => savePrefs({ memoryShown: next })} />;
       case "engines": return <EnginesSection providers={state.providers} connected={state.connected} engineActions={engineActions}
         onRefresh={() => void api.refreshProviders().catch(fail)} browser={state.browser} browserActions={browserActions}
         onIntegrations={fromSettings(() => setIntegrationsOpen(true))} voice={<OnboardingModelCache api={api} />} />;
@@ -3218,6 +3248,8 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
         <PaneLayout
           layout={layout}
           drawn={drawn}
+          sleep={tabSleep}
+          onSleeping={setSleepingTabs}
           maximized={editorFocus || paneFocus}
           onMaximize={id => { focusPaneNow(id); setPaneFocus(value => !value); }}
           onPresent={() => void sharedBrowser.present()}
@@ -3247,7 +3279,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
           onOpenPage={sharedBrowser.available && !single ? (page) => void openBrowserRef.current(layoutRef.current.focus, { workspaceId: page.workspaceId, workId: page.workId, profileId: page.profileId, url: page.url }) : undefined} />
       ) : null}
       </div>
-      {usagePlace === "bottom" && !single ? <UsageLine providers={state.providers} onRefresh={() => api?.refreshProviders().catch(fail) ?? Promise.resolve()} /> : null}
+      {(usagePlace === "bottom" || memory) && !single ? <UsageLine providers={usagePlace === "bottom" ? state.providers : {}} onRefresh={() => api?.refreshProviders().catch(fail) ?? Promise.resolve()} end={memory ? <MemoryReadout memory={memory} sleeping={sleepingTabs} /> : null} /> : null}
       {reading && state.artifacts[reading.artifactId] ? (
         <Suspense fallback={null}>
           <Reader api={api} state={state} artifact={state.artifacts[reading.artifactId]!} start={reading.start} onClose={closeReader} />

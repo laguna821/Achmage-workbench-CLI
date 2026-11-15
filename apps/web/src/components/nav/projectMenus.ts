@@ -3,6 +3,7 @@ import { folderChoices, type Row } from "../../tree.ts";
 import type { MenuEntry } from "../ContextMenu.tsx";
 import { addShortcuts, sameShortcut } from "./model.ts";
 import type { NavShared } from "./shared.ts";
+import { homeMenu } from "../../messenger-home.ts";
 
 // A project row's menu (the list pane's, kept whole for level 1): the app's work menu with the
 // navigator's own items (폴더로 옮기기, 바로가기, 단계, 태그 더하기), and for several projects picked
@@ -89,7 +90,8 @@ export function projectActions(shared: NavShared, clearPicked: () => void) {
     const extras = [shortcutEntry(works), stageMenu(works), tagEntry(works, x, y)];
     if (pinAt === -1) items.push({ kind: "separator" }, ...extras);
     else items.splice(pinAt + 1, 0, ...extras);
-    actions.openMenu({ ...base, items });
+    // A messenger's place keeps its name and place while its messenger is registered (the entries say why).
+    actions.openMenu({ ...base, items: homeMenu(works[0]!, items) });
   };
   return { open, archive };
 }

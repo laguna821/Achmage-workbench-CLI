@@ -23,3 +23,20 @@
 .browser-blank .browse-start { max-width: 680px; }
 .browser-blank .browser-search { max-width: none; }
 .browser-blank .engine-tabs { justify-content: center; }
+
+/* The bookmark bar (BookmarkBar.tsx): one quiet row directly under the address row, as wide as the web
+   tab. Its keys wear the quiet key (controls.css); this sheet gives them their place and muted ink only. */
+.bookmark-bar { display: flex; align-items: center; gap: var(--space-2xs); flex: 0 0 auto; min-width: 0; box-sizing: border-box; height: var(--nav-row); padding: 0 var(--space-xs); border-bottom: 1px solid var(--line); }
+.bookmark-bar-items { position: relative; display: flex; align-items: center; gap: var(--space-3xs); flex: 1 1 0; min-width: 0; height: 100%; overflow: hidden; }
+.bookmark-bar :is(.bookmark-item, .bookmark-more) { --c-ink: var(--muted); position: relative; flex: 0 0 auto; display: inline-flex; align-items: center; gap: var(--space-2xs); height: var(--target); min-height: 0; padding: 0 var(--space-xs); font-size: var(--text-sm); font-weight: var(--weight-regular); line-height: 1; white-space: nowrap; user-select: none; -webkit-user-select: none; }
+.bookmark-bar .bookmark-item[data-overflow] { visibility: hidden; }
+.bookmark-bar .bookmark-item[data-dragging] { --c-fill: var(--pressed); --c-ink: var(--text); cursor: grabbing; }
+.bookmark-title { overflow: hidden; text-overflow: ellipsis; max-width: 20em; }
+/* No site icon is kept: a bookmark is marked by its first letter, in the web item's hue, in the item icon's box. */
+.bookmark-mark { flex: 0 0 auto; display: inline-grid; place-items: center; width: var(--space-md); height: var(--space-md); border-radius: var(--radius-well); background: color-mix(in oklab, var(--item-web) 16%, transparent); color: var(--item-web); font-size: var(--text-xs); font-weight: var(--weight-strong); line-height: 1; }
+/* Where a dragged item would land. */
+.bookmark-item[data-drop]::before { content: ""; position: absolute; inset-block: var(--space-2xs); width: var(--space-3xs); border-radius: var(--radius-round); background: var(--color-current); }
+.bookmark-item[data-drop="before"]::before { left: calc(-1 * var(--space-3xs)); }
+.bookmark-item[data-drop="after"]::before { right: calc(-1 * var(--space-3xs)); }
+/* The star at the end of the address field: filled when the page is a bookmark. */
+.bookmark-star[aria-pressed="true"] svg { fill: currentColor; }

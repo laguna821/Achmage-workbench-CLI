@@ -766,6 +766,13 @@ export function Transcript({
         onTouchMove={() => {
           pinned.current = false;
         }}
+        onPointerDown={(event) => {
+          // A press on the scroll bar (the strip beside what the scroller holds): the reader takes the
+          // view. The bar's move tells itself a frame later (its scroll event), and while an answer is
+          // written a render came first and put the view back at the end.
+          const element = event.currentTarget;
+          if (event.target === element && element.offsetWidth > element.clientWidth && event.clientX >= element.getBoundingClientRect().left + element.clientLeft + element.clientWidth) pinned.current = false;
+        }}
         onScroll={(event) => {
           const element = event.currentTarget;
           if (element.closest(".pane[hidden]")) return;
@@ -773,8 +780,14 @@ export function Transcript({
           const own = ownTop.current !== null && Math.abs(top - ownTop.current) < 1;
           ownTop.current = null;
           if (!own) {
-            if (nearTranscriptEnd(element)) pinned.current = true;
-            else if (top < lastTop.current - 0.5) pinned.current = false;
+            // A move up that leaves the very end is the reader's, however small: a touchpad, a finger, a
+            // slowly dragged scroll bar and a wheel the browser animates move a few pixels at a time. Inside
+            // the end's margin it used to count as "at the end", and the next render put the view back —
+            // the reader could not scroll up at all. Still at the very end after a move up: the content got
+            // shorter and the browser clamped the position, so following goes on.
+            const left = top < lastTop.current - 0.5 && element.scrollHeight - top - element.clientHeight > 1;
+            if (left) pinned.current = false;
+            else if (nearTranscriptEnd(element)) pinned.current = true;
           }
           lastTop.current = top;
           readingAnchor.current = captureReadingAnchor(element);

@@ -45,6 +45,7 @@ import { useDocImages } from "./DocImages.tsx";
 import type { TabUiState } from "../../panes.ts";
 import { useDocumentSession } from "../../document-session.ts";
 import { clearRecoveredDraft, keepDraft, newestDraft } from "../../document-drafts.ts";
+import { useKeepAwake } from "../../tab-sleep.ts";
 import { readDraft, writeDraft } from "../../draft.ts";
 import { markDiscarded } from "../../discarded-edits.ts";
 import { registerDocumentCommands } from "../../document-commands.ts";
@@ -496,6 +497,8 @@ export default function DocumentView({
   const markdownDoc = artifact?.format === "markdown";
   const [editorView, setEditorView] = useState<EditorView | null>(null);
   const [drawOpen, setDrawOpen] = useState(false);
+  // Tab sleep: a drawing being made is this view's alone until it is put into the text.
+  useKeepAwake(drawOpen);
   const drawExtensions = useMemo(() => (markdownDoc ? [drawExtension(artifactId)] : undefined), [artifactId, markdownDoc]);
   const pictures = useMemo(() => (artifact ? docPictureComponents(DRAWN, work.id, artifact.path) : DRAWN), [work.id, artifact?.path]);
   const previewComponents = useMemo(() => obsidianComponents({ ...pictures, ...docImages.components }), [pictures, docImages.components]);

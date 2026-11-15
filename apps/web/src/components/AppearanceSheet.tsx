@@ -127,7 +127,7 @@ function UiFontRow({ value, onChange }: { value: string; onChange: (font: string
     </> : null} />;
 }
 
-export function AppearancePanel({ target, onTarget, themePref, onThemePref, palette = DEFAULT_SET, onPalette, uiFont = "pretendard", onUiFont, usagePlace = "list", onUsagePlace }: {
+export function AppearancePanel({ target, onTarget, themePref, onThemePref, palette = DEFAULT_SET, onPalette, uiFont = "pretendard", onUiFont, usagePlace = "list", onUsagePlace, memoryShown = true, onMemoryShown }: {
   target: SheetTarget;
   onTarget: (target: SheetTarget) => void;
   themePref: ThemePref;
@@ -140,6 +140,9 @@ export function AppearancePanel({ target, onTarget, themePref, onThemePref, pale
   onUiFont?: (font: string) => void;
   usagePlace?: UsagePlace;
   onUsagePlace?: (place: UsagePlace) => void;
+  /** 메모리 표시: the app's memory at the right end of the window's bottom line. */
+  memoryShown?: boolean;
+  onMemoryShown?: (shown: boolean) => void;
 }) {
   const { appearance, updateLook, setMode, resetLook } = useAppearance();
   const { provider, theme } = target;
@@ -168,6 +171,8 @@ export function AppearancePanel({ target, onTarget, themePref, onThemePref, pale
       {onUiFont ? <UiFontRow value={uiFont} onChange={onUiFont} /> : null}
       {onUsagePlace ? <SettingsRow label="사용 한도 표시" hint="Claude와 Codex의 5시간, 주간 한도를 어디에 보일지 고릅니다. 창 아래 줄을 누르면 자세히 보입니다."
         control={<Segmented label="사용 한도 표시" value={usagePlace} onChange={onUsagePlace} options={USAGE_PLACES.map(({ id, label }) => ({ value: id, label }))} />} /> : null}
+      {onMemoryShown ? <SettingsRow label="메모리 표시" hint="앱이 지금 쓰는 메모리를 창 오른쪽 아래에 작게 보입니다. 마우스를 올리면 창, AI 엔진과 도구, 게이트웨이로 나누어 보입니다."
+        control={<Segmented label="메모리 표시" value={memoryShown ? "on" : "off"} onChange={(next) => onMemoryShown(next === "on")} options={[{ value: "on", label: "켜기" }, { value: "off", label: "끄기" }]} />} /> : null}
     </SettingsGroup>
 
     <SettingsGroup title="대화 글자">

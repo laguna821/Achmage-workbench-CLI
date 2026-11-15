@@ -15,6 +15,7 @@ export { BrowserSearch } from "./BrowseStart.tsx";
 import { Composer } from "./Composer.tsx";
 import { readDraft, writeDraft } from "../draft.ts";
 import { BrowserTools } from "./BrowserTools.tsx";
+import { useBookmarkUi } from "./BookmarkBar.tsx";
 import { useShownPanel } from "../completion-notifications.ts";
 import { QueuedList, type WorkActions } from "./WorkView.tsx";
 import { AgentColumn } from "./companion/AgentColumn.tsx";
@@ -113,14 +114,16 @@ export function NewBrowserDialog({ browser, workspaces, target, onOpen, onClose 
       </form>
     </>}
     {error || data.error ? <p role="alert" className="browser-error">{error || data.error}</p> : null}
-    {data.pages.length ? <section className="browser-existing"><h3>열려 있는 웹 페이지</h3><p className="muted">다른 탭이나 작업공간을 보는 동안에도 페이지와 진행 중인 AI 작업은 유지됩니다.</p>{data.pages.filter(page => page.status !== "closed" && (!workspaceId || page.workspaceId === workspaceId)).map(page => <button type="button" className="ghost-button" key={page.pageId} onClick={() => { onOpen(page); onClose(); }}><strong>{page.title || page.url}</strong><small>{page.status === "interrupted" ? "연결 중단 · " : ""}{data.profiles.find(profile => profile.id === page.profileId)?.name} · {page.url}</small></button>)}</section> : null}
+    {data.pages.length ? <section className="browser-existing"><h3>열려 있는 웹 페이지</h3><p className="muted">다른 탭이나 작업공간을 보는 동안에도 페이지와 진행 중인 AI 작업은 유지됩니다.</p>{data.pages.filter(page => page.status !== "closed" && (!workspaceId || page.workspaceId === workspaceId)).map(page => <button type="button" className="ghost-button" key={page.pageId} onClick={() => { onOpen(page); onClose(); }}><strong>{page.title || page.url}</strong><small>{/* A page that rests (tab sleep) is an open page like any other: choosing it opens it again. */ page.status === "interrupted" && page.restedAt === undefined ? "연결 중단 · " : ""}{data.profiles.find(profile => profile.id === page.profileId)?.name} · {page.url}</small></button>)}</section> : null}
   </dialog>;
 }
 
-export function BrowserView({ browser, api, state, pageId, visible, parentSessionId, actions, onNew, onStart, onClosed, engine = "codex", onLeaveGuard, onTranscript, onOpenSession, onSessionMenu, hosted, focusItem, onFocusDone }: {
+export function BrowserView({ browser, api, state, pageId, visible, parentSessionId, actions, onNew, onOpenUrl, onStart, onClosed, engine = "codex", onLeaveGuard, onTranscript, onOpenSession, onSessionMenu, hosted, focusItem, onFocusDone }: {
   browser: SharedBrowser; api: Api; state: State; pageId: string; visible: boolean; parentSessionId: string | null;
   onStart?: (text: string, provider: Provider, choice: ModelChoice) => Promise<boolean>; engine?: Provider;
   actions: WorkActions; onNew: (target: NewTarget) => void; onClosed: () => void;
+  /** A bookmark opened in a new web tab of this page's project (middle click, Ctrl/⌘-click, 새 탭에서 열기). */
+  onOpenUrl?: (url: string) => void;
   onLeaveGuard?: (guard: ((reason?: "close" | "discard") => Promise<void>) | null) => void;
   onTranscript: (sessionId: string, transcript: Conversation) => void; onOpenSession: (session: Session) => void;
   /** This page's AI's own actions (rename, archive, mute…), from its conversation's head. */
@@ -216,6 +219,12 @@ export function BrowserView({ browser, api, state, pageId, visible, parentSessio
     finally { acting.current = false; setBusy(false); }
   };
   const clone = () => onNew({ workspaceId: page?.workspaceId, profileId: page?.profileId, url: page?.url });
+  // The bookmark bar under the address row and the star in the address field (BookmarkBar.tsx).
+  const marks = useBookmarkUi({ api, active: visible, page: page && !blank ? { url: page.url, title: page.title } : null, onOpen: (url, newTab) => {
+    if (!newTab) void run(() => humanAction({ kind: "navigate", url }));
+    else if (onOpenUrl) onOpenUrl(url);
+    else onNew({ workspaceId: page?.workspaceId, profileId: page?.profileId, url });
+  } });
   if (!browser.available) return <div className="browser-unavailable"><h2>웹 탭</h2><p>공유 브라우저는 데스크톱 기본 창에서 사용할 수 있습니다. 기본 창에서 이 웹 탭을 열어 주세요.</p></div>;
   const pageMain = <section className="browser-view" aria-label="공유 웹 탭" data-hosted={hosted ? "" : undefined}>
     <div className="browser-toolbar">
@@ -227,6 +236,7 @@ export function BrowserView({ browser, api, state, pageId, visible, parentSessio
       </div>
       <form onSubmit={event => { event.preventDefault(); void run(async () => { await humanAction({ kind: "navigate", url: browserUrl(address) }); editingAddress.current = false; }); }}>
         <input aria-label="현재 웹 주소" type="text" inputMode="url" spellCheck={false} autoCapitalize="none" placeholder="검색 또는 주소 입력" value={blank && address === "about:blank" ? "" : address} disabled={!ready || busy || !!pending} onFocus={() => { editingAddress.current = true; }} onBlur={() => { editingAddress.current = false; }} onChange={event => setAddress(event.target.value)} />
+        {marks.star}
         <button type="submit" className="browser-address-go hig-icon-button" aria-label="이동" title="이동" disabled={!ready || busy || !!pending}><Icon name="arrowRight" size={16} /></button>
       </form>
       {!blank ? <>
@@ -246,6 +256,7 @@ export function BrowserView({ browser, api, state, pageId, visible, parentSessio
         {hosted.over ? null : <IconButton icon="x" label="곁 화면 닫기" title="곁 화면 닫기 · 웹 페이지는 탭으로 남습니다" onClick={hosted.onClose} />}
       </> : null}
     </div>
+    {marks.bar}
     {error || data.error || page?.error ? <p role="alert" className="browser-error">{error || data.error || page?.error}</p> : null}
     {pending ? <div className="browser-pending" role="status">앞선 동작 결과 확인 중 <button type="button" className="button small" disabled={busy} onClick={() => void run(async () => { const result = await browser.reconcile(pageId); if (!result) throw new Error("아직 실행 결과를 기다리고 있습니다."); if (result.error) throw new Error(result.error); })}>결과 다시 확인</button>{pending.status === "unknown" ? <button type="button" className="ghost-button small" disabled={busy} onClick={() => { browser.dismissPending(pageId); setError("결과 확인을 끝냈습니다. 이전 동작을 다시 실행하지 않았습니다."); }}>페이지를 직접 확인했어요</button> : null}</div> : null}
     {page?.native?.popups.length ? <div className="browser-popups"><span>차단된 새 창</span>{page.native.popups.map(popup => <button type="button" className="text-button" key={popup.id} title={popup.url} onClick={() => onNew({ workspaceId: page.workspaceId, profileId: page.profileId, url: popup.url })}>{popup.url} · 새 탭으로 열기</button>)}</div> : null}
