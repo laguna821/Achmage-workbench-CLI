@@ -230,7 +230,9 @@ fn platform_output(webview: tauri::webview::PlatformWebview, job: HtmlJob, path:
     operation.set_page_setup(&setup);
     let settings = gtk::PrintSettings::new(); settings.set_scale(job.scale * 100.0); settings.set_use_color(true);
     if !print {
-        settings.set_printer("Print to File"); settings.set("output-file-format", Some("pdf"));
+        // GTK names its file printer in the person's language ("파일로 인쇄" in Korean): asked for by its English
+        // name, a Korean system answered "프린터를 찾을 수 없습니다" and no PDF was written (2026-11-15).
+        settings.set_printer(gtk::glib::dgettext(Some("gtk30"), "Print to File").as_str()); settings.set("output-file-format", Some("pdf"));
         settings.set("output-uri", Some(url::Url::from_file_path(path).unwrap().as_str()));
     }
     operation.set_print_settings(&settings);
