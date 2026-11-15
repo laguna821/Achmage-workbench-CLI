@@ -37,7 +37,8 @@ it("watches only the active tab: an earlier active tab is let go", () => {
 });
 
 // N1: the strip shows the current project's tabs; another project's are one list away (still open).
-it("shows the current project's tabs, lists the others under 다른 프로젝트, and names a tab from another project", async () => {
+// Project tabs (2026-11-15): a tab of no project is off the strip too, and the ⌄ key counts nothing of theirs.
+it("shows the current project's tabs, lists the others under 다른 프로젝트, and names a tab from another project only while all are shown", async () => {
   const { fireEvent, screen, within } = await import("@testing-library/react");
   const mixed: Pane<View> = {
     id: "a", view: { kind: "work" }, workId: "A", sessionId: "a1", activeTabId: "a1",
@@ -46,16 +47,16 @@ it("shows the current project's tabs, lists the others under 다른 프로젝트
   const names = (id: string) => ({ A: "강의", B: "연구" })[id] ?? id;
   const onSelect = vi.fn();
   const view = render(<GroupTabs pane={mixed} head={head} onSelect={onSelect} onClose={() => {}} onReorder={() => {}} onNew={() => {}} scope={{ workId: "A", all: false, projectName: names, onShowAll: () => {} }} />);
-  expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["a1", "h"]);
-  // One calm count: the key says "1개 더" (not a bare number beside a chevron), its name has no middle dot.
-  const more = screen.getByRole("button", { name: "열린 탭 목록, 1개 더" });
-  expect(more.textContent).toBe("1개 더");
+  expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["a1"]);
+  // No overflow of its own: the bare chevron (the "N개 더" count is the project's own overflow: GroupTabs.scope.test.tsx).
+  const more = screen.getByRole("button", { name: "열린 탭 목록" });
+  expect(more.textContent).toBe("");
   fireEvent.click(more);
   const list = await screen.findByRole("menu", { name: "열린 탭" });
   fireEvent.click(within(list).getByRole("menuitem", { name: /연구 · b1/ }));
   expect(onSelect).toHaveBeenCalledWith("b1");
-  // Side by side: a pane whose tab on screen is another project's says that project on the tab.
-  view.rerender(<GroupTabs pane={mixed} head={head} onSelect={onSelect} onClose={() => {}} onReorder={() => {}} onNew={() => {}} scope={{ workId: "B", all: false, projectName: names, onShowAll: () => {} }} />);
+  // 모든 프로젝트의 탭 보기: a tab of another project than the pane's says that project on the tab.
+  view.rerender(<GroupTabs pane={mixed} head={head} onSelect={onSelect} onClose={() => {}} onReorder={() => {}} onNew={() => {}} scope={{ workId: "B", all: true, projectName: names, onShowAll: () => {} }} />);
   expect(screen.getAllByRole("tab")[0]!.querySelector(".group-tab-project")!.textContent).toBe("강의");
 });
 

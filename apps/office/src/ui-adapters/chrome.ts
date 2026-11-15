@@ -26,7 +26,7 @@ const formatSheets: Partial<Record<OfficeUiFormat, string>> = { hangul: hangulSt
 /** Stylesheet-only integration: no editor remount, control replacement or body font. */
 export function installOfficeChrome(doc: Document, format: OfficeUiFormat, theme: UiTheme, documents: () => Document[]) {
   const skins = new Map<Document, { style: HTMLStyleElement; format: string | null; theme: string | null; palette: string | null }>();
-  // 색 조합 (the app's office:theme carries it): "atlas", or none for Workbench.
+  // 색 조합 (the app's office:theme carries it): the id of an Atlas set (chrome.css has a block per set), or none for Workbench.
   let palette: string | null = null;
   // The editor origin serves /office assets only, independently from the main app origin.
   const fontUrl = new URL("/office/fonts/pretendard/PretendardVariable.ttf", doc.location.href).href;

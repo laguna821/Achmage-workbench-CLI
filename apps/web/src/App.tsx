@@ -18,7 +18,7 @@ import { useOfficeControl } from "./office-control.ts";
 import { configureDesign } from "./design.ts";
 import { initialState, isBusy, reducer, sessionsOf } from "./state.ts";
 import { becomesActive, lookingChangesState, opensBeside, restoreRefusal, restoredAgentPlan, sessionEntries, sessionRoute } from "./session-route.ts";
-import { applyPanePreset, type PanePreset } from "./layout-presets.ts";
+import { applyDrawnPreset, applyPanePreset, type PanePreset } from "./layout-presets.ts";
 import { WorkspaceLayoutTools, PaneStart, WorkLinkDialog } from "./components/WorkspaceLayoutTools.tsx";
 import { newRequestId, titleFrom, statusText } from "./format.ts";
 import { folderChoices, readOpenState, sessionHidden, workSessions, type Move, type Row, type SortMode, type TreeOpenState } from "./tree.ts";
@@ -113,7 +113,7 @@ import { WorksDirRow } from "./components/WorksDirRow.tsx";
 import { EngineMark } from "./components/EngineMark.tsx";
 import { LeaveGate } from "./leave-gate.ts";
 import { LayoutPersistence, keepChosen, layoutKey, skippedNotice } from "./layout-persistence.ts";
-import { activeTab, activateTab, addBackgroundTab, closeTab, contentKey, dropTabs, findTab, lastTabOf, moveTab, paneScopes, projectOfTab, setTabKeeper, storedTabs, tabsOf, updateTabUi, updateTabView, withTabs } from "./tabs.ts";
+import { activeTab, activateTab, addBackgroundTab, closeTab, contentKey, drawnLayout, dropTabs, findTab, followScope, lastTabOf, moveTab, projectOfTab, setTabKeeper, storedTabs, stripScopes, tabsOf, updateTabUi, updateTabView, withTabs } from "./tabs.ts";
 import { PaneLayout, type PaneHead, type PaneScope } from "./components/Panes.tsx";
 import { NewDocumentDialog, type NewDocumentTarget } from "./components/NewDocumentButton.tsx";
 import { IeumAppDialog } from "./components/IeumAppDialog.tsx";
@@ -126,7 +126,7 @@ const DocumentView = lazy(() => import("./components/docs/DocumentView.tsx"));
 const Reader = lazy(() => import("./components/Reader.tsx"));
 const TerminalView = lazy(() => import("./components/TerminalView.tsx"));
 import { AppearanceContext, DEFAULT_APPEARANCE, engineTheme, lookStyle, readAppearance, type AppearanceApi } from "./appearance.ts";
-import { isThemePref, readPalette, readUiFont, readUsagePlace, resolveTheme, setRootPalette, setRootTheme, setRootUiFont, useSystemTheme, type ThemePref } from "./theme.ts";
+import { isThemePref, readPalettes, readUiFont, readUsagePlace, resolveTheme, setRootPalette, setRootTheme, setRootUiFont, useSystemTheme, type PaletteSet, type ThemePref } from "./theme.ts";
 
 const PREFS_CACHE_KEY = "workbench.prefsCache";
 /** The shell's two widths (Hallmark U4): the sidebar lies over the work below 60rem, and narrows below 75rem. */
@@ -241,7 +241,8 @@ function resumeCommand(session: Session, work: Work) {
 type View =
   /** A conversation; `beside`: the document or web page open beside it, in its tab (곁 화면). */
   | { kind: "work"; beside?: Companion }
-  | { kind: "new"; folderId: string | null }
+  /** `project`: an empty pane made inside that project — its tab, drawn only with it (tabs.ts `projectOfTab`). Home (지금) has none. */
+  | { kind: "new"; folderId: string | null; project?: string }
   | { kind: "archive" }
   | { kind: "terminal"; terminalId: string; workspaceId: string; label: string }
   | { kind: "browser"; pageId: string }
@@ -258,7 +259,7 @@ function isView(value: unknown): value is View {
   const view = value as View;
   if (view.kind === "work") return view.beside === undefined || isCompanion(view.beside);
   if (view.kind === "archive") return true;
-  if (view.kind === "new") return view.folderId === null || typeof view.folderId === "string";
+  if (view.kind === "new") return (view.folderId === null || typeof view.folderId === "string") && (view.project === undefined || typeof view.project === "string");
   if (view.kind === "project") return typeof view.workId === "string";
   if (view.kind === "terminal") return typeof view.terminalId === "string" && typeof view.workspaceId === "string" && typeof view.label === "string";
   if (view.kind === "browser") return typeof view.pageId === "string";
@@ -340,20 +341,21 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
   const layoutRef = useRef(layout);
   // Preview capabilities are transient. The persisted tab stores only its source identity.
   const presentations = useRef(new Map<string, { url: string; title: string }>());
-  const updateLayout = useCallback((change: (current: Layout<View>) => Layout<View>) => {
+  // Project tabs: true while "모든 프로젝트의 탭 보기" is on (set where the preferences are read): no pane is hidden or made to follow.
+  const scopeAll = useRef(true);
+  const updateLayout = useCallback((change: (current: Layout<View>) => Layout<View>, restored = false, gone?: string) => {
     const changed = change(layoutRef.current);
     if (changed === layoutRef.current) return;
-    // A conversation gone to again keeps its companion; a document never has two views.
-    const next = settleLayout(changed, layoutRef.current);
+    // A conversation gone to again keeps its companion; a document never has two views; the window stays one project
+    // (`restored`: a stored layout read, not a close; `gone`: the project being deleted).
+    const next = settleLayout(changed, layoutRef.current, { all: scopeAll.current, home: { view: { kind: "new", folderId: null }, workId: null, sessionId: null }, restored, gone });
     layoutRef.current = next;
     setLayout(next);
   }, []);
   const { view, workId } = focusedPane(layout);
-  // N1: the project the tab strips belong to: the focused tab's project (home and other places keep the last one).
+  // The last project looked at: what a pane on home keeps on its strip while "모든 프로젝트의 탭 보기" is on.
   const scopeOwner = projectOfTab(activeTab(focusedPane(layout)));
   const [scopeWorkId, setScopeWorkId] = useState<string | null>(() => scopeOwner);
-  // Skin 2 · B: each pane's strip follows its own tab's project; panes of different projects name theirs.
-  const scopes = useMemo(() => paneScopes(layout, scopeWorkId), [layout, scopeWorkId]);
   useEffect(() => { if (scopeOwner) setScopeWorkId(scopeOwner); }, [scopeOwner]);
   useEffect(() => {
     const tabs = layout.panes.flatMap(tabsOf), owners = new Set(tabs.map(tab => tab.id));
@@ -633,7 +635,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
               let next = current;
               for (const pane of current.panes) for (const tab of tabsOf(pane)) if (tab.workId === event.workId || (tab.view.kind === "project" && tab.view.workId === event.workId)) next = closeTab(next, pane.id, tab.id, { view: { kind: "new", folderId: null }, workId: null, sessionId: null });
               return next;
-            });
+            }, false, event.workId);
             // A document taken out of its project: its tabs close; a conversation beside it stays.
             // No save check runs here: the gateway refuses a removal while any view reports unsaved
             // edits (the app saves first, through each editor's leave path), and a removed document
@@ -681,6 +683,14 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
   const [brandGreet, brandGreeted] = useBrandGreeting(prefs.brandMotion !== false);
   const prefsRef = useRef(prefs);
   prefsRef.current = prefs;
+  // Project tabs: the window shows ONE project — the focused tab's, or none (home): its tabs on every strip, its
+  // panes on screen (tabs.ts). Off for "모든 프로젝트의 탭 보기", a window of one session, and until the preferences are read.
+  const everyProject = Boolean(single) || !state.ready || readNavigator(prefs.navigator).tabsAll;
+  scopeAll.current = everyProject;
+  const scopes = useMemo(() => stripScopes(layout, scopeWorkId, everyProject), [layout, scopeWorkId, everyProject]);
+  /** The layout as drawn: only the panes of the window's project (the others stay mounted, as a tab behind another is). */
+  const drawn = useMemo(() => drawnLayout(layout, everyProject), [layout, everyProject]);
+  useEffect(() => { updateLayout((current) => followScope(current, everyProject)); }, [everyProject, updateLayout]);
   useEffect(() => {
     if (state.ready) localStorage.setItem(PREFS_CACHE_KEY, JSON.stringify(state.prefs));
   }, [state.ready, state.prefs]);
@@ -710,9 +720,13 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
   const systemTheme = useSystemTheme();
   const themePref: ThemePref = isThemePref(prefs.theme) ? prefs.theme : "system";
   const appTheme = resolveTheme(themePref, systemTheme);
-  // 색 조합 (설정 › 화면, the first run): stored with the theme in this PC's screen preferences; none = Workbench.
-  const palette = readPalette(prefs.palette);
+  // 색 조합 (설정 › 화면, the first run): one light set and one dark set, stored with the theme in this PC's screen
+  // preferences; a record of before the sets reads as it looked (theme.ts readPalettes).
+  const { light: paletteLight, dark: paletteDark } = readPalettes(prefs);
+  const palette = useMemo(() => ({ light: paletteLight, dark: paletteDark }), [paletteLight, paletteDark]);
   useEffect(() => setRootPalette(palette), [palette]);
+  // Picking a set chooses it for its mode and shows that mode, so the person sees what they picked.
+  const pickPalette = (set: PaletteSet) => savePrefs(set.mode === "light" ? { paletteLight: set.id, theme: "light" } : { paletteDark: set.id, theme: "dark" });
   // 글꼴 (설정 › 화면): the app's UI face through the one font token; old records = Pretendard.
   const uiFont = readUiFont(prefs.uiFont);
   useEffect(() => setRootUiFont(uiFont), [uiFont]);
@@ -773,8 +787,8 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
   const besideExtra = useBesideRoom();
   // A document side by side asks for its editor's width (Hallmark U4); the right sidebar docks only where that is kept.
   const paneNeed = (pane: Pane<View>) => activeTab(pane).view.kind === "document" ? EDITOR_MIN_WIDTH + 2 : 0;
-  const needOf = !layout.grid && layout.panes.length > 1 ? (id: string) => { const pane = layout.panes.find((entry) => entry.id === id); return pane ? paneNeed(pane) : 0; } : undefined;
-  const paneMinimum = (editorFocus || paneFocus ? MIN_PANE : minimumSize(treeOf(layout), !!layout.grid, needOf).width) + besideExtra;
+  const needOf = !drawn.grid && drawn.panes.length > 1 ? (id: string) => { const pane = drawn.panes.find((entry) => entry.id === id); return pane ? paneNeed(pane) : 0; } : undefined;
+  const paneMinimum = (editorFocus || paneFocus ? MIN_PANE : minimumSize(treeOf(drawn), !!drawn.grid, needOf).width) + besideExtra;
   const right = useRightSidebar({ prefs, savePrefs, scope: single ? "window" : "main", compact: compactShell, minimum: paneMinimum, ready: layoutReady && state.ready });
   const toggleRight = useRef(right.toggle);
   toggleRight.current = right.toggle;
@@ -862,7 +876,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
       const upgraded = restoreWorkspaceLayout(record?.layout ?? state.prefs.paneLayout ?? readJson(PANE_LAYOUT_KEY, null), layoutRef.current);
       layoutScopeRef.current = key; setLayoutScope(key);
       // A choice made on this device's copy while the record was read is not undone (keepChosen).
-      updateLayout((current) => keepChosen(upgraded, current, navigated.current)); setLayoutReady(true);
+      updateLayout((current) => keepChosen(upgraded, current, navigated.current), true); setLayoutReady(true);
     }).catch((error: unknown) => setLayoutProblem({ key, message: error instanceof Error ? error.message : String(error) }));
   }, [state.ready, single, layoutPersistence]);
   useEffect(() => {
@@ -1290,7 +1304,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
   // 확인 필요, one story (Hallmark merge): while home's 지금 ledger is the focused view it lists what
   // waits as entries under its own count, so the top bar's 확인 N steps back and the sidebar's 지금
   // keeps only counts. Everywhere else the sidebar lists them and 확인 N jumps to the first.
-  const homeLedgerShown = view.kind === "new" && view.folderId === null && readHomeMode(prefs.homeMode) === "now";
+  const homeLedgerShown = view.kind === "new" && view.folderId === null && !view.project && readHomeMode(prefs.homeMode) === "now";
 
   // New replies: kept by the gateway, so every window agrees. Looking at a session marks it seen,
   // except right after the user marked it unread while looking at it.
@@ -1315,7 +1329,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
   const [narrowPanes, setNarrowPanes] = useState(false);
   // Everything a completion could be watched in: pane tabs on screen, and a document's or web page's AI column beside it.
   const panelKey = useSyncExternalStore(shownPanels.subscribe, shownPanels.getSnapshot);
-  const onScreen = sessionsOnScreen(layout, { narrow: narrowPanes, sessionOf: (pane) => (coveredTabs[activeTab(pane).id] ? undefined : sessionIn(pane)?.id), panels: shownPanels.ids() });
+  const onScreen = sessionsOnScreen(drawn, { narrow: narrowPanes, sessionOf: (pane) => (coveredTabs[activeTab(pane).id] ? undefined : sessionIn(pane)?.id), panels: shownPanels.ids() });
   const visibleSessions = [...onScreen].map((id) => state.sessions[id]).filter((session): session is Session => Boolean(session));
   const visibleIds = `${visibleSessions.map((session) => session.id).join(",")}|${panelKey}`;
   const onScreenRef = useRef(onScreen); onScreenRef.current = onScreen;
@@ -1526,7 +1540,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
     if (startSettled.current || !state.ready) return;
     startSettled.current = true;
     if (state.prefs.paneLayout) return;
-    if (state.prefs.startScreen === "last" && view.kind === "new" && view.folderId === null && workId && state.works[workId]) setView({ kind: "work" });
+    if (state.prefs.startScreen === "last" && view.kind === "new" && view.folderId === null && !view.project && workId && state.works[workId]) setView({ kind: "work" });
   }, [state.ready, state.prefs.startScreen, state.works, view, workId, setView]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1874,7 +1888,20 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
       return;
     }
     const project = target.workId ? stateRef.current.works[target.workId] : undefined;
-    if (action.kind === "project" || !project || !action.provider) { setViewOf(paneId, { kind: "new", folderId: target.folderId }); return; }
+    if (action.kind === "project") {
+      // "새 프로젝트…" makes the project at once (it used to lead to home's input, where nothing visibly happened;
+      // the owner, 2026-11-15): it opens, and its row in the list waits for its name.
+      if (!api) return;
+      void api.createWork("새 프로젝트", target.folderId, null).then(async (work) => {
+        for (let turn = 0; turn < 100 && !stateRef.current.works[work.id]; turn++) await new Promise((done) => setTimeout(done, 30));
+        if (!stateRef.current.works[work.id]) return;
+        navigateTo({ workId: work.id, sessionId: null, view: { kind: "project", workId: work.id } });
+        // After the list has followed the opened project: back to the list of projects, the new row being named.
+        window.setTimeout(() => { showSidebar(); setSidebarPending({ rename: work.id }); }, 120);
+      }).catch(fail);
+      return;
+    }
+    if (!project || !action.provider) { setViewOf(paneId, { kind: "new", folderId: target.folderId }); return; }
     if (!api) return;
     void api.createSession(project.id, action.provider, { workspaceId: target.workspaceId }).then(session => {
       dispatch({ type: "focus", work: project, session });
@@ -2383,7 +2410,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
       }
       const restored = restoreWorkspaceLayout(record?.layout, fallback);
       layoutScopeRef.current = key; setLayoutScope(key); layoutSaved.current = "";
-      updateLayout(() => restored);
+      updateLayout(() => restored, true);
       const focused = focusedPane(restored);
       showSessionOf(focused.workId, focused.sessionId);
       savePrefs({ layoutScope: key, paneLayout: undefined });
@@ -2404,7 +2431,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
       else {
         const restored = restoreWorkspaceLayout(record?.layout ?? prefsRef.current.paneLayout, singleLayout<View>({ kind: "new", folderId: null }, null));
         layoutScopeRef.current = key; setLayoutScope(key); layoutSaved.current = "";
-        updateLayout(() => restored); setLayoutReady(true);
+        updateLayout(() => restored, true); setLayoutReady(true);
       }
       savePrefs({ layoutScope: key, paneLayout: undefined });
       setLayoutProblem(null);
@@ -2422,7 +2449,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
   };
   // ⋯ › 단축키 "다른 칸으로": the keyboard handler above calls the current one (false: one pane).
   focusOtherPane.current = () => {
-    const other = otherPane(layoutRef.current);
+    const other = otherPane(drawnLayout(layoutRef.current, scopeAll.current));
     if (!other) return false;
     focusPaneNow(other.id);
     return true;
@@ -2580,6 +2607,8 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
       };
     }
     if (at.kind === "archive") return { title: "보관함", icon: <Icon name="archive" size={14} />, item: null };
+    // A project's empty pane (made by a split or a 화면 배치 preset inside it) is not home.
+    if (at.kind === "new" && at.project) return { title: "빈 칸", icon: <Icon name="grid" size={14} />, hint: "이 프로젝트의 빈 칸: 여기에 대화나 문서를 엽니다", item: null, home: true };
     return { title: at.kind === "new" && at.folderId ? "새 작업" : "지금", icon: <Icon name="home" size={14} />, item: null, home: !(at.kind === "new" && at.folderId) };
   };
 
@@ -2877,10 +2906,11 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
       />
     );
   };
-  const workspaceLayoutTools = !single ? <WorkspaceLayoutTools inline={compactShell} count={layout.panes.length} disabled={!layoutReady} onPreset={(count: PanePreset) => {
+  const workspaceLayoutTools = !single ? <WorkspaceLayoutTools inline={compactShell} count={drawn.panes.length} disabled={!layoutReady} onPreset={(count: PanePreset) => {
             closeMenu();
             setPaneFocus(false);
-            updateLayout(current => applyPanePreset(current, count, () => ({ view: { kind: "new", folderId: null }, workId: null, sessionId: null })));
+            // Project tabs: the preset arranges the panes on screen (the project's); with every project shown, all panes as before.
+            updateLayout(current => { const empty = () => ({ view: { kind: "new" as const, folderId: null }, workId: null, sessionId: null }); return scopeAll.current ? applyPanePreset(current, count, empty) : applyDrawnPreset(current, drawnLayout(current), count, empty); });
           }} onLink={() => { closeMenu(); setWorkLinksOpen(true); }} onAdvanced={anchor => {
             const box = anchor.getBoundingClientRect();
             closeMenu();
@@ -2955,7 +2985,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
           savePrefs({ shortcuts: saved });
         }} />}
         onOnboarding={fromSettings(() => setOnboardingAgain(true))} />;
-      case "screen": return <AppearancePanel target={sheet ?? { provider: focusedProvider, theme: focusedTheme }} onTarget={setSheet} themePref={themePref} onThemePref={(pref) => savePrefs({ theme: pref })} palette={palette} onPalette={(next) => savePrefs({ palette: next })} uiFont={uiFont} onUiFont={(next) => savePrefs({ uiFont: next })} usagePlace={usagePlace} onUsagePlace={(next) => savePrefs({ usagePlace: next })} />;
+      case "screen": return <AppearancePanel target={sheet ?? { provider: focusedProvider, theme: focusedTheme }} onTarget={setSheet} themePref={themePref} onThemePref={(pref) => savePrefs({ theme: pref })} palette={palette} onPalette={pickPalette} uiFont={uiFont} onUiFont={(next) => savePrefs({ uiFont: next })} usagePlace={usagePlace} onUsagePlace={(next) => savePrefs({ usagePlace: next })} />;
       case "engines": return <EnginesSection providers={state.providers} connected={state.connected} engineActions={engineActions}
         onRefresh={() => void api.refreshProviders().catch(fail)} browser={state.browser} browserActions={browserActions}
         onIntegrations={fromSettings(() => setIntegrationsOpen(true))} voice={<OnboardingModelCache api={api} />} />;
@@ -2977,7 +3007,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
   // ── The rail (N1): the six places, one lit; the list column is what it chooses ─────────────
   const navPrefs = { ...readNavigator(prefs.navigator), rail: navPlace.rail, level: navPlace.level };
   const saveNavigator = (patch: Record<string, unknown>) => savePrefs((current) => ({ navigator: { ...((current.navigator && typeof current.navigator === "object" ? current.navigator : {}) as Record<string, unknown>), ...patch } }));
-  const homeShown = view.kind === "new" && view.folderId === null;
+  const homeShown = view.kind === "new" && view.folderId === null && !view.project;
   const railLit: RailPlace | null = litPlace({ homeShown, atNow: railAtNow, sidebarOpen, rail: navPrefs.rail });
   const runningCount = Object.values(state.sessions).filter((session) => (session.status === "starting" || session.status === "running" || session.status === "interrupting") && !sessionHidden(state, session)).length;
   const showList = (dest: RailDest) => {
@@ -3162,7 +3192,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
           open={treeOpen}
           onOpenChange={(next: TreeOpenState) => savePrefs({ tree: next })}
           sortMode={sortMode}
-          homeActive={view.kind === "new" && view.folderId === null}
+          homeActive={homeShown}
           homeOwnsNow={homeLedgerShown}
           atNow={railLit === "now"}
           onLeaveNow={() => showList("projects")}
@@ -3187,6 +3217,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
       ) : (
         <PaneLayout
           layout={layout}
+          drawn={drawn}
           maximized={editorFocus || paneFocus}
           onMaximize={id => { focusPaneNow(id); setPaneFocus(value => !value); }}
           onPresent={() => void sharedBrowser.present()}
@@ -3200,7 +3231,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
           head={paneHead}
           scope={paneScope}
           effectOf={effectOf}
-          tabBar={single ? undefined : (pane) => <GroupTabs pane={pane} head={paneHead} scope={{ workId: scopes[pane.id]?.workId ?? scopeWorkId, label: scopes[pane.id]?.named && scopes[pane.id]?.workId ? state.works[scopes[pane.id]!.workId!]?.title ?? null : null, all: navPrefs.tabsAll, projectName: (id) => state.works[id]?.title ?? "프로젝트", onShowAll: (all) => saveNavigator({ tabsAll: all }) }} onSelect={(tabId) => selectTabNow(pane.id, tabId)} onClose={(tabId) => closeTabNow(pane.id, tabId)} onReorder={(tabId, index) => updateLayout((current) => moveTab(current, tabId, { paneId: pane.id, side: "center" }, index))} onNew={anchor => { const box = anchor.getBoundingClientRect(); setContextMenu(creationMenu(pane.id, null, box.left, box.bottom)); }} />}
+          tabBar={single ? undefined : (pane) => <GroupTabs pane={pane} head={paneHead} scope={{ workId: scopes[pane.id]?.workId ?? null, label: scopes[pane.id]?.named && scopes[pane.id]?.workId ? state.works[scopes[pane.id]!.workId!]?.title ?? null : null, all: navPrefs.tabsAll, projectName: (id) => state.works[id]?.title ?? "프로젝트", onShowAll: (all) => saveNavigator({ tabsAll: all }) }} onSelect={(tabId) => selectTabNow(pane.id, tabId)} onClose={(tabId) => closeTabNow(pane.id, tabId)} onReorder={(tabId, index) => updateLayout((current) => moveTab(current, tabId, { paneId: pane.id, side: "center" }, index))} onNew={anchor => { const box = anchor.getBoundingClientRect(); setContextMenu(creationMenu(pane.id, null, box.left, box.bottom)); }} />}
           render={(pane, info) => paneView(pane, info.focused, info.split, info.tabId, info.active)}
           // A document beside another pane keeps its editor's width (the page, not two letters a line); the conversation gives way first.
           minWidthOf={paneNeed}
@@ -3229,7 +3260,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
         const targetId = findTab(layoutRef.current, contentKey(content))?.pane.id ?? newBrowser.paneId;
         afterLeaving(targetId, content.view, () => updateLayout(current => ({ ...setPane(current, targetId, content), focus: targetId })), findTab(layoutRef.current, contentKey(content))?.tab.id ?? null);
       }} /> : null}
-      {workLinksOpen ? <WorkLinkDialog state={state} initialSource={sessionIn(focusedPane(layout))?.id} visibleIds={layout.panes.map(pane => sessionIn(pane)?.id).filter((id): id is string => !!id)} onSend={actions.handoff} onOpen={openSession} onClose={() => setWorkLinksOpen(false)} /> : null}
+      {workLinksOpen ? <WorkLinkDialog state={state} initialSource={sessionIn(focusedPane(layout))?.id} visibleIds={drawn.panes.map(pane => sessionIn(pane)?.id).filter((id): id is string => !!id)} onSend={actions.handoff} onOpen={openSession} onClose={() => setWorkLinksOpen(false)} /> : null}
       {taskPanelOpen ? <TaskPanel api={api} workId={view.kind === "project" ? view.workId : work?.id} onClose={() => setTaskPanelOpen(false)} onOpen={(sessionId, itemId) => {
         const target = stateRef.current.sessions[sessionId];
         if (!target) { setToast(failure("원문 대화를 찾을 수 없습니다.")); return; }
@@ -3270,7 +3301,7 @@ export function App({ apiOverride, onConnections, devicePanel, connectionsOpen =
           themePref={themePref}
           onTheme={(pref) => savePrefs({ theme: pref })}
           palette={palette}
-          onPalette={(next) => savePrefs({ palette: next })}
+          onPalette={(next) => savePrefs({ paletteLight: next.light, paletteDark: next.dark })}
           providers={state.providers}
           tools={state.tools}
           engineActions={engineActions}

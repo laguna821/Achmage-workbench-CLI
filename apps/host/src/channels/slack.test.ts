@@ -96,6 +96,8 @@ describe("checking the two tokens", () => {
     r.fake.botApp = "A0OTHERAPP1";
     await expect(identifySlack(FAKE_BOT_TOKEN, FAKE_APP_TOKEN, r.fake.api)).rejects.toMatchObject({ code: "channel_tokens_mismatch" });
     r.fake.botApp = r.fake.appId;
+    // Slack's Socket Mode address names a hash as `app_id`, never the app's id: a matching pair is taken (it was refused, 2026-11-15).
+    expect((await identifySlack(FAKE_BOT_TOKEN, FAKE_APP_TOKEN, r.fake.api)).appId).toBe("A0FAKEAPP01");
     r.fake.scopes = ["chat:write", "im:history"];
     await expect(identifySlack(FAKE_BOT_TOKEN, FAKE_APP_TOKEN, r.fake.api)).rejects.toThrow("files:read, files:write, users:read");
   });

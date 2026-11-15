@@ -192,11 +192,13 @@ export async function identifySlack(botToken: string, appToken: string, baseUrl 
     const missing = SLACK_SCOPES.filter((scope) => !held.has(scope));
     if (missing.length) throw new HttpError(400, "channel_scopes_missing", `앱에 권한이 빠져 있습니다: ${missing.join(", ")}. Workbench가 준 매니페스트로 앱을 만들고 다시 설치해 주세요.`);
   }
-  let socketApp: string | null = null;
+  // The app the app-level token was made in is written in the token itself (xapp-1-A0…-…). The
+  // Socket Mode address also carries an `app_id`, but Slack puts a hash there, not the app's id:
+  // comparing it with the bot's app refused every real pair of tokens (2026-11-15).
+  const tokenApp = /^xapp-\d+-(A[A-Z0-9]{6,})-/.exec(app)?.[1] ?? null;
   try {
-    const opened = (await call(baseUrl, app, "apps.connections.open", {}, signal())).body;
-    // The address carries a one-time ticket; it is not used, and only its app id is read.
-    try { socketApp = new URL(String(opened.url)).searchParams.get("app_id"); } catch { socketApp = null; }
+    // The address carries a one-time ticket; it is asked for only to see that Slack takes the token, and is not used.
+    await call(baseUrl, app, "apps.connections.open", {}, signal());
   } catch (error) {
     if (error instanceof SlackRefusal && error.status !== 429 && error.status < 500) throw new HttpError(400, "channel_app_token_invalid", "Slack이 이 앱 토큰을 받지 않습니다. App-Level Token(xapp-)을 connections:write 권한으로 만들어 다시 붙여 넣어 주세요.");
     throw unreachable();
@@ -207,8 +209,8 @@ export async function identifySlack(botToken: string, appToken: string, baseUrl 
     const info = (await call(baseUrl, bot, "bots.info", { bot: me.bot_id }, signal())).body.bot as Json | undefined;
     appId = typeof info?.app_id === "string" ? info.app_id : null;
   } catch { appId = null; }
-  if (appId && socketApp && appId !== socketApp) throw new HttpError(400, "channel_tokens_mismatch", "두 토큰이 서로 다른 Slack 앱의 것입니다. 같은 앱의 봇 토큰과 앱 토큰을 넣어 주세요.");
-  return { id: me.bot_id, username: shown(me.user) || "workbench", name: shown(me.team), teamId: String(me.team_id ?? ""), userId: me.user_id, appId: appId ?? socketApp };
+  if (appId && tokenApp && /^A[A-Z0-9]{6,}$/.test(appId) && appId !== tokenApp) throw new HttpError(400, "channel_tokens_mismatch", "두 토큰이 서로 다른 Slack 앱의 것입니다. 같은 앱의 봇 토큰과 앱 토큰을 넣어 주세요.");
+  return { id: me.bot_id, username: shown(me.user) || "workbench", name: shown(me.team), teamId: String(me.team_id ?? ""), userId: me.user_id, appId: appId ?? tokenApp };
 }
 
 export type SlackOptions = {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { PROVIDER_LABEL, type Provider } from "@workbench/contracts";
 import {
   FONT_PRESETS,
@@ -12,7 +12,9 @@ import {
   type Look,
   ENGINE_COLOR_HINT,
 } from "../appearance.ts";
-import type { PaletteId, Theme, ThemePref, UsagePlace } from "../theme.ts";
+import { PALETTE_SETS, type PaletteChoice, type PaletteSet, type Theme, type ThemePref, type UsagePlace } from "../theme.ts";
+import { DEFAULT_SET, WORKBENCH_SET } from "../styles/atlas-sets.ts";
+import { Icon } from "./Icon.tsx";
 import { EngineMark } from "./EngineMark.tsx";
 import { SettingsGroup, SettingsRow, SettingsSwitch } from "./SettingsSheet.tsx";
 import { Segmented } from "./ui/Hig.tsx";
@@ -43,12 +45,42 @@ export const THEME_PREFS: { id: ThemePref; label: string }[] = [
   { id: "light", label: "밝게" },
   { id: "dark", label: "어둡게" },
 ];
-/** 색 조합: Atlas (the default) and Workbench; the one quiet line says where Atlas's colours come from. */
-export const PALETTES: { id: PaletteId; label: string }[] = [
-  { id: "atlas", label: "Atlas (기본)" },
-  { id: "workbench", label: "Workbench" },
+/** The first run's two keys: the default pair (Atlas Light and Graphite) and Workbench; every set is in 설정 › 화면. */
+export const PALETTES: { id: string; label: string; choice: PaletteChoice }[] = [
+  { id: "atlas", label: "Atlas (기본)", choice: { ...DEFAULT_SET } },
+  { id: "workbench", label: "Workbench", choice: { light: WORKBENCH_SET, dark: WORKBENCH_SET } },
 ];
-export const PALETTE_CREDIT = "Atlas는 Atlas File Manager의 색 조합을 따랐습니다.";
+/** The one quiet line that says where the colour sets come from. */
+export const PALETTE_CREDIT = "색 조합은 Atlas File Manager의 것을 따랐습니다. Dracula, Nord, Rosé Pine은 각 프로젝트의 색입니다.";
+const SET_GROUPS: { mode: Theme; label: string }[] = [{ mode: "light", label: "밝은 색" }, { mode: "dark", label: "어두운 색" }];
+
+/**
+ * 색 조합: the sets of one mode as swatches (name; ground, rail, accent and ink as chips; the chosen one marked).
+ * A radio group: Tab reaches the chosen swatch, the arrows (Home, End) move to another and choose it.
+ */
+function SetSwatches({ mode, label, value, onPick }: { mode: Theme; label: string; value: string; onPick: (set: PaletteSet) => void }) {
+  const id = useId(), sets = PALETTE_SETS[mode];
+  const chosen = sets.findIndex((set) => set.id === value);
+  return <div className="palette-group">
+    <p className="palette-group-head" id={`${id}-head`}>{label}</p>
+    <div className="palette-swatches" role="radiogroup" aria-labelledby={`${id}-head`} onKeyDown={(event) => {
+      const step = event.key === "Home" || ["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : event.key === "End" || ["ArrowLeft", "ArrowUp"].includes(event.key) ? -1 : 0;
+      if (!step) return;
+      event.preventDefault();
+      const next = ((event.key === "Home" ? -1 : event.key === "End" ? sets.length : Math.max(0, chosen)) + step + sets.length) % sets.length;
+      if (next === chosen) return;
+      onPick(sets[next]!);
+      document.getElementById(`${id}-${next}`)?.focus();
+    }}>
+      {sets.map((set, at) => <button key={set.id} id={`${id}-${at}`} type="button" role="radio" aria-checked={set.id === value} tabIndex={at === Math.max(0, chosen) ? 0 : -1}
+        className={`palette-swatch${set.id === value ? " chosen" : ""}`} onClick={() => onPick(set)}>
+        <span className="palette-chips" data-set-chips={set.id === WORKBENCH_SET ? `${WORKBENCH_SET}-${mode}` : set.id} aria-hidden><i /><i /><i /><i /></span>
+        <span className="palette-swatch-name">{set.name}{set.id === DEFAULT_SET[mode] ? <span className="palette-swatch-note"> (기본)</span> : null}</span>
+        {set.id === value ? <Icon name="check" size={14} /> : null}
+      </button>)}
+    </div>
+  </div>;
+}
 const MODE_WORD: Record<Theme, string> = { light: "밝을 때", dark: "어두울 때" };
 /** "빛 궤적 보조색" was a developer's name for the working mark's second colour. */
 const FIELD_LABEL: Partial<Record<keyof Look["palette"], string>> = { motion: "작업 표시 보조색", surface: "입력창과 카드", headingAlt: "작은 제목과 기울임" };
@@ -95,13 +127,15 @@ function UiFontRow({ value, onChange }: { value: string; onChange: (font: string
     </> : null} />;
 }
 
-export function AppearancePanel({ target, onTarget, themePref, onThemePref, palette = "atlas", onPalette, uiFont = "pretendard", onUiFont, usagePlace = "list", onUsagePlace }: {
+export function AppearancePanel({ target, onTarget, themePref, onThemePref, palette = DEFAULT_SET, onPalette, uiFont = "pretendard", onUiFont, usagePlace = "list", onUsagePlace }: {
   target: SheetTarget;
   onTarget: (target: SheetTarget) => void;
   themePref: ThemePref;
   onThemePref: (pref: ThemePref) => void;
-  palette?: PaletteId;
-  onPalette?: (palette: PaletteId) => void;
+  /** The chosen light set and dark set. */
+  palette?: PaletteChoice;
+  /** A swatch was picked: the set (it names its mode). The app stores it for that mode and shows that mode. */
+  onPalette?: (set: PaletteSet) => void;
   uiFont?: string;
   onUiFont?: (font: string) => void;
   usagePlace?: UsagePlace;
@@ -124,8 +158,11 @@ export function AppearancePanel({ target, onTarget, themePref, onThemePref, pale
   return <div className="appearance-panel">
     <SettingsGroup title="앱 화면">
       {/* The owner's order (2026-11-15): 색 조합, 밝게 / 어둡게 / 시스템 따라, 글꼴, then the conversation's 글자 크기 and colours below. */}
-      {onPalette ? <SettingsRow label="색 조합" hint={PALETTE_CREDIT}
-        control={<Segmented label="색 조합" value={palette} onChange={onPalette} options={PALETTES.map(({ id, label }) => ({ value: id, label }))} />} /> : null}
+      {onPalette ? <SettingsRow className="palette-row" label="색 조합" hint="고르면 그 색으로 바로 바뀝니다. 밝을 때와 어두울 때의 색을 하나씩 정해 둡니다."
+        detail={<>
+          {SET_GROUPS.map(({ mode, label }) => <SetSwatches key={mode} mode={mode} label={label} value={palette[mode]} onPick={onPalette} />)}
+          <p className="palette-credit">{PALETTE_CREDIT}</p>
+        </>} /> : null}
       <SettingsRow label="화면 모양" hint="시스템 따라는 컴퓨터의 밝게, 어둡게 설정을 따릅니다."
         control={<Segmented label="화면" className="theme-choice" value={themePref} onChange={onThemePref} options={THEME_PREFS.map(({ id, label }) => ({ value: id, label }))} />} />
       {onUiFont ? <UiFontRow value={uiFont} onChange={onUiFont} /> : null}

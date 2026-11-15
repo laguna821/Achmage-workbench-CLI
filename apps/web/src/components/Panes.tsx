@@ -13,8 +13,16 @@ export type PaneScope = { theme: string; bubble: string; frame: boolean; glow: s
 const SIDE_LABEL = { left: "왼쪽으로 분할", right: "오른쪽으로 분할", top: "위로 분할", bottom: "아래로 분할", center: "이 칸에 열기" };
 
 /** The tree determines geometry; editors retain the same parent and React key when moved. */
-export function PaneLayout<V>({ layout, enabled, maximized = false, onMaximize, onPresent, onResize, onFocus, onClose, onMove, onSplit, onDrop, head, scope, effectOf, render, onNarrow, tabBar, minWidthOf, foot }: {
+export function PaneLayout<V>({ layout, drawn: drawnPanes, enabled, maximized = false, onMaximize, onPresent, onResize, onFocus, onClose, onMove, onSplit, onDrop, head, scope, effectOf, render, onNarrow, tabBar, minWidthOf, foot }: {
   layout: Layout<V>; enabled: boolean;
+  /**
+   * Project tabs: the layout as drawn (tabs.ts `drawnLayout`) — the panes of the window's project,
+   * their neighbours taking the room of the others. A pane of `layout` that is not in it stays where
+   * it is, mounted and hidden exactly as a tab behind another is (its view is told `active: false`),
+   * so its editor, its page and its conversation are as they were when its project comes back.
+   * Not given: every pane is drawn.
+   */
+  drawn?: Layout<V>;
   /**
    * The width a pane's content reads at (a document page), beyond a pane's own. Side by side the
    * divider gives it that width first, the other pane giving way down to its own minimum; where the
@@ -47,9 +55,10 @@ export function PaneLayout<V>({ layout, enabled, maximized = false, onMaximize, 
   const [live, setLive] = useState<{ id: string; ratio: number } | null>(null);
   const cancelResize = useRef<(() => void) | null>(null);
   const mountedTabs = useRef(new Set<string>());
-  for (const pane of layout.panes) mountedTabs.current.add(activeTab(pane).id);
-  const split = layout.panes.length > 1;
-  const tree = treeOf(live ? resizeSplit(layout, live.id, live.ratio) : layout);
+  const shown = drawnPanes ?? layout, onScreen = new Set(shown.panes.map((pane) => pane.id));
+  for (const pane of shown.panes) mountedTabs.current.add(activeTab(pane).id);
+  const split = shown.panes.length > 1;
+  const tree = treeOf(live ? resizeSplit(shown, live.id, live.ratio) : shown);
   const need: PaneNeed | undefined = minWidthOf && split && !layout.grid ? (id) => { const pane = layout.panes.find((entry) => entry.id === id); return pane ? minWidthOf(pane) : 0; } : undefined;
   const minimum = minimumSize(tree, !!layout.grid, need);
   const narrow = split && size.width > 0 && (size.width < minimum.width || size.height < minimum.height);
@@ -139,11 +148,11 @@ export function PaneLayout<V>({ layout, enabled, maximized = false, onMaximize, 
   return <div ref={host} data-grid={layout.grid} data-dense={layout.grid && !collapsed ? "true" : undefined} className={`panes recursive${split && !narrow ? " two" : ""}${narrow ? " narrow" : ""}`}>
     {layout.panes.flatMap((group) => tabsOf(group).filter((tab) => mountedTabs.current.has(tab.id)).map((tab) => ({ group, tab }))).sort((a, b) => a.tab.id.localeCompare(b.tab.id)).map(({ group, tab }) => {
       const pane = { ...group, view: tab.view, workId: tab.workId, sessionId: tab.sessionId };
-      const active = activeTab(group).id === tab.id;
+      const active = onScreen.has(group.id) && activeTab(group).id === tab.id;
       const focused = active && pane.id === layout.focus, look = scope(pane, focused), title = head(pane);
       // A tab behind this one holds an unseen answer.
       const waiting = split && tabsOf(group).some((other) => other.id !== tab.id && head({ ...group, view: other.view, workId: other.workId, sessionId: other.sessionId }).unseen);
-      const next = layout.panes[(layout.panes.indexOf(group) + 1) % layout.panes.length]!;
+      const next = shown.panes[(shown.panes.findIndex((entry) => entry.id === group.id) + 1) % shown.panes.length]!;
       return <section key={tab.id} className={`pane look-scope${focused ? " focused" : ""}`} data-pane={pane.id} data-tab={tab.id} data-tab-active={active ? "true" : "false"} data-pane-active={focused ? "true" : "false"}
         data-theme={look.theme} data-bubble={look.bubble} data-frame={look.frame ? "on" : "off"} data-glow={look.glow}
         style={{ ...look.style, ...(boxes[pane.id] ?? whole) }} hidden={!active || (collapsed && !focused)} aria-label={split ? `${title.title} 칸` : undefined}
@@ -156,7 +165,7 @@ export function PaneLayout<V>({ layout, enabled, maximized = false, onMaximize, 
           <span className="pane-head-icon badged" aria-hidden>{title.icon}{waiting ? <span className="new-badge" /> : null}</span><span className="pane-head-title">{title.project ? <small>{title.project}</small> : null}{title.title}</span>
           {/* No state word here (release unit A): the active tab's own mark says it, one calm strip. */}
           {collapsed ? <span className="pane-narrow"><Select className="plain" label="표시할 칸" value={layout.focus} onChange={onFocus}
-            options={layout.panes.map((entry, index) => { const shown = head(entry); return { value: entry.id, label: shown.title, icon: shown.icon, hint: String(index + 1) }; })} /></span> : null}
+            options={shown.panes.map((entry, index) => { const shown = head(entry); return { value: entry.id, label: shown.title, icon: shown.icon, hint: String(index + 1) }; })} /></span> : null}
           <span className="pane-head-tools">
             {onMaximize ? <button type="button" className="icon-button small" aria-label={maximized ? "전체 칸 보기" : "이 칸 확대"} title={maximized ? "전체 칸 보기" : "이 칸 확대"} onClick={() => onMaximize(pane.id)}><Icon name={maximized ? "grid" : "expandAll"} size={14} /></button> : null}
             {enabled ? <>

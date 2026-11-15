@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { ChannelKind, ChannelsState, DocumentTools, Provider, ProviderStatus } from "@workbench/contracts";
 import type { Api } from "../api.ts";
-import type { PaletteId, ThemePref } from "../theme.ts";
+import type { PaletteChoice, ThemePref } from "../theme.ts";
+import { DEFAULT_SET } from "../styles/atlas-sets.ts";
 import { createOnboardingModel, type OnboardingStepId } from "../../../../vendor/paseo/onboarding/model.ts";
 import { isImeComposingKeyboardEvent } from "../../../../vendor/paseo/mobile-web/keyboard-ime.ts";
 import { PALETTES, PALETTE_CREDIT } from "./AppearanceSheet.tsx";
@@ -51,8 +52,9 @@ export type OnboardingProps = {
   suspended?: boolean;
   themePref?: ThemePref;
   onTheme?(pref: ThemePref): void;
-  palette?: PaletteId;
-  onPalette?(palette: PaletteId): void;
+  /** The chosen light and dark sets; the two keys here are the default pair and Workbench (every set: 설정 › 화면). */
+  palette?: PaletteChoice;
+  onPalette?(palette: PaletteChoice): void;
   /** Hands over to 설정 › 메신저 for that messenger (its own wizard); the first run comes back when it closes. */
   onOpenMessenger?(kind: ChannelKind): void;
   /** The launch's attribution line (LaunchCredit) when the app opens on the first run: the panel's last row. */
@@ -60,7 +62,7 @@ export type OnboardingProps = {
 };
 
 /** Original Paseo visit fencing and completion model; Workbench owns the existing settings/actions. */
-export function Onboarding({ foot, providers, engineActions, onRefresh, onDone, api, hostLabel = "현재 PC", suspended = false, themePref = "system", onTheme, palette = "atlas", onPalette, onOpenMessenger }: OnboardingProps) {
+export function Onboarding({ foot, providers, engineActions, onRefresh, onDone, api, hostLabel = "현재 PC", suspended = false, themePref = "system", onTheme, palette = DEFAULT_SET, onPalette, onOpenMessenger }: OnboardingProps) {
   const pkm = usePkm();
   const effectiveSuspended = suspended || Boolean(pkm.dialog);
   const done = useRef(onDone); done.current = onDone;
@@ -176,9 +178,9 @@ export function Onboarding({ foot, providers, engineActions, onRefresh, onDone, 
                 </div>
                 <p className="onboarding-group-head" id="onboarding-palette-head">색 조합</p>
                 <div className="onboarding-tiles" role="radiogroup" aria-labelledby="onboarding-palette-head">
-                  {PALETTES.map(choice => <button key={choice.id} type="button" role="radio" aria-checked={palette === choice.id} className={`onboarding-tile${palette === choice.id ? " chosen" : ""}`} onClick={() => onPalette?.(choice.id)}>
+                  {PALETTES.map(choice => { const on = palette.light === choice.choice.light && palette.dark === choice.choice.dark; return <button key={choice.id} type="button" role="radio" aria-checked={on} className={`onboarding-tile${on ? " chosen" : ""}`} onClick={() => onPalette?.(choice.choice)}>
                     <span className={`onboarding-swatch swatch-${choice.id}`} aria-hidden><i /><i /><i /></span><span>{choice.label}</span>
-                  </button>)}
+                  </button>; })}
                 </div>
                 <p className="onboarding-credit">{PALETTE_CREDIT}</p>
               </div>

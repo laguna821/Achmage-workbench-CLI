@@ -18,14 +18,14 @@ export function rootTokens(doc: Document): Map<string, string> {
   return new Map([...raw].map(([name, value]) => [name, resolve(value)]));
 }
 
-/** The app's tokens in one theme (and colour combination), read from tokens.css in a document of its own (jsdom). */
-export async function appTokens(theme: "light" | "dark", palette: "workbench" | "atlas" = "workbench"): Promise<Map<string, string>> {
+/** The app's tokens in one theme (and colour set of that theme: an Atlas set's id, or "workbench"), read from tokens.css in a document of its own (jsdom). */
+export async function appTokens(theme: "light" | "dark", palette = "workbench"): Promise<Map<string, string>> {
   const { readFileSync } = await import("node:fs");
   // A document with a browsing context, so its style sheet is parsed (as the app's is).
   const frame = document.createElement("iframe"); document.body.append(frame);
   const doc = frame.contentDocument!;
   doc.documentElement.setAttribute("data-theme", theme);
-  if (palette === "atlas") doc.documentElement.setAttribute("data-palette", "atlas");
+  if (palette !== "workbench") doc.documentElement.setAttribute(`data-palette-${theme}`, palette);
   const style = doc.createElement("style"); style.textContent = readFileSync("apps/web/src/styles/tokens.css", "utf8"); doc.head.append(style);
   const tokens = rootTokens(doc); frame.remove();
   return tokens;
@@ -78,10 +78,9 @@ export const CHROME_MIRRORS: Record<string, string> = {
   "--wb-ui-on-key": "--on-key-primary",
 };
 
-/** The `--wb-ui-*: #hex` declarations of chrome.css's root block for one theme (and colour combination). */
-export function chromeMirrors(css: string, theme: "light" | "dark", palette: "workbench" | "atlas" = "workbench"): Map<string, string> {
-  const atlas = palette === "atlas" ? '[data-wb-office-palette="atlas"]' : "";
-  const head = theme === "light" ? `__WB_ROOT__${atlas} {` : `__WB_ROOT__${atlas}[data-wb-office-theme="dark"] {`;
+/** The `--wb-ui-*: #hex` declarations of chrome.css's root block for one theme (Workbench), or for one Atlas set (a set has one mode). */
+export function chromeMirrors(css: string, theme: "light" | "dark", palette = "workbench"): Map<string, string> {
+  const head = palette !== "workbench" ? `__WB_ROOT__[data-wb-office-palette="${palette}"] {` : theme === "light" ? "__WB_ROOT__ {" : '__WB_ROOT__[data-wb-office-theme="dark"] {';
   const at = css.indexOf(head);
   if (at < 0) throw new Error(`chrome.css has no ${theme} root block`);
   const body = css.slice(at + head.length, css.indexOf("}", at));

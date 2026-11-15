@@ -164,7 +164,12 @@ fn gateway_command(app: &tauri::AppHandle, action: &str) -> Result<Command, Stri
     // gateway is started by `--host-runtime` instead.
     if !service { command.env("WORKBENCH_GATEWAY_TICKET", "stdin"); }
     if let Some(root) = office_cli::data_dir(app) {
+        // An export started by a document tool of the SERVICE gateway inherits that gateway's environment.
+        // Its own private gateway is the window's kind: it must print its address on stdout (a service
+        // gateway does not), or this process waits for it for ever (2026-11-15: every export from the
+        // installed app hung at "gateway-spawn").
         command.env("WORKBENCH_DATA_DIR", root.join("gateway"))
+            .env("WORKBENCH_HOST_MODE", "shell")
             .env("WORKBENCH_CLI_INPUT", &app.state::<std::sync::Arc<office_cli::ExportJob>>().request.input)
             .env("WORKBENCH_PORT", "0").env("WORKBENCH_EDITORS_PORT", "0")
             .env_remove("WORKBENCH_TOKEN");

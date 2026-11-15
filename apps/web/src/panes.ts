@@ -155,6 +155,19 @@ function removeLeaf(tree: PaneTree, id: string): PaneTree | null {
   return first && second ? { ...tree, first, second } : first ?? second;
 }
 
+/**
+ * Project tabs: the layout as it is drawn — only these panes; the room of the others goes to their
+ * neighbours (a split left with one side closes). A view for drawing: the layout it is given keeps
+ * every pane, its tabs and its split. The same layout back when every pane is kept.
+ */
+export function onlyPanes<V>(layout: Layout<V>, ids: readonly PaneId[]): Layout<V> {
+  const out = layout.panes.filter((pane) => !ids.includes(pane.id));
+  if (!out.length || out.length === layout.panes.length) return layout;
+  let tree: PaneTree = treeOf(layout);
+  for (const pane of out) tree = removeLeaf(tree, pane.id) ?? tree;
+  return { ...layout, tree, panes: orderedPanes(tree, layout.panes) };
+}
+
 function uniqueId(tree: PaneTree, prefix: string) {
   const ids = new Set<string>();
   mapTree(tree, (node) => { ids.add(node.id); return node; });

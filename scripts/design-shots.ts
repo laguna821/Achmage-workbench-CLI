@@ -33,6 +33,11 @@ const higMode = args.includes("--hig");
 const auditSource = process.env.HIG_AUDIT_SOURCE ? readFileSync(process.env.HIG_AUDIT_SOURCE, "utf8") : null;
 const only = option("only")?.split(",").filter(Boolean) ?? null;
 const themes = (option("themes")?.split(",") ?? ["light", "dark"]).filter((theme) => theme === "light" || theme === "dark");
+// --sets=<mode>:<id>,… (atlas-themes): one Chromium pass per 색 조합 set in its own mode instead of per theme, e.g.
+// --sets=light:rose,dark:nord,dark:workbench; the files are chromium-<id or workbench-mode>-<screen>.png.
+const passes: { tag: string; prefs: Record<string, unknown> }[] = option("sets")
+  ? option("sets")!.split(",").filter(Boolean).map((entry) => { const [mode, id] = entry.split(":") as ["light" | "dark", string]; return { tag: id === "workbench" ? `workbench-${mode}` : id, prefs: { theme: mode, [mode === "light" ? "paletteLight" : "paletteDark"]: id } }; })
+  : themes.map((theme) => ({ tag: theme, prefs: { theme } }));
 const runChromium = !args.includes("--webkit-only");
 const runWebkit = !args.includes("--chromium-only");
 mkdirSync(outDir, { recursive: true });
@@ -159,6 +164,8 @@ writeFileSync(join(researchDir, "리뷰 메모.md"), "# 리뷰 메모\n\n방법�
 // --palette=workbench|atlas: the whole set in that 색 조합 (atlas-look); without it, the default (Atlas).
 const palettePref = option("palette") === "workbench" || option("palette") === "atlas" ? { palette: option("palette") } : {};
 await setPrefs({ onboarding: "done", startScreen: "last", theme: "light", sidebar: true, navigator: { rail: "projects", level: "projects" }, ...palettePref });
+// --sets: every pass's set is stored up front as well, so the WebKitGTK pass (which only turns the theme) shows the light and the dark set named.
+if (option("sets")) await setPrefs(Object.assign({}, ...passes.map((pass) => pass.prefs), { theme: "light" }));
 await api("PUT", "/api/pkm/vault", { path: vaultDir });
 const lectures = await api<Folder>("POST", "/api/folders", { name: "강의", parentId: null });
 const term = await api<Folder>("POST", "/api/folders", { name: "2026-2학기", parentId: lectures.id });
@@ -2023,9 +2030,10 @@ const SKIN2B_SCREENS: Screen[] = skin2b ? [
     { js: `const r = __wb.q('${LECTURE_WEB} .row-web.closed'); r.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.getBoundingClientRect().left + 40, clientY: r.getBoundingClientRect().bottom }))`, wait: "__wb.has('.context-menu-item, [role=menuitem]', '목록에서 지우기')", pause: 300 },
     { probe: "({ items: [...document.querySelectorAll('.context-menu-item, [role=menuitem]')].map((e) => e.textContent.trim()) })" }], settle: 400,
     cleanup: [{ press: "Escape", wait: "!__wb.has('.context-menu-item, [role=menuitem]', '목록에서 지우기')" }] },
-  // Two panes, two projects (a stored layout, read at start): each pane says its project before its tabs; each strip
-  // is its own project's. The record also holds one tab of a view kind this build does not know: it is skipped
-  // (parked in the record) and one notice says so; every other tab comes back.
+  // Two panes, two projects (a stored layout, read at start). Project tabs (2026-11-15): the window shows ONE project,
+  // so the focused pane's project is drawn and the other project's pane is not (--only=ptabs shows the switching).
+  // The record also holds one tab of a view kind this build does not know: it is skipped (parked in the record) and
+  // one notice says so; every other tab comes back.
   ...[["skin2b-panes-1440", { width: 1440, height: 900 }], ["skin2b-panes-1000", { width: 1000, height: 800 }]].map(([name, viewport]) => ({ name: name as string, viewport: viewport as { width: number; height: number }, steps: [
     { js: `window.__s2bLayout = 0; (async () => { const h = { authorization: 'Bearer ' + sessionStorage.getItem('workbench.token'), 'content-type': 'application/json' }; await new Promise((done) => setTimeout(done, 700)); const { record } = await (await fetch('/api/layouts/global', { headers: h })).json();
       const tab = (id, view, workId, sessionId) => ({ id, view, workId, sessionId });
@@ -2036,9 +2044,42 @@ const SKIN2B_SCREENS: Screen[] = skin2b ? [
       let revision = record ? record.revision : 0;
       for (let attempt = 0; attempt < 5; attempt++) { const put = await fetch('/api/layouts/global', { method: 'PUT', headers: h, body: JSON.stringify({ expectedRevision: revision, layout }) }); if (put.ok) break; revision = ((await (await fetch('/api/layouts/global', { headers: h })).json()).record || { revision: 0 }).revision; }
       localStorage.removeItem('workbench.paneLayout.v1'); window.__s2bLayout = 1; })()`, wait: "window.__s2bLayout === 1" },
-    { reload: true, wait: "document.querySelectorAll('.pane').length >= 2 && __wb.has('.group-tabs-project')", pause: 900 },
+    { reload: true, wait: "__wb.has('.pane .group-tab')", pause: 900 },
     { js: "__wb.blur()", pause: 300 },
     { probe: "({ notice: [...document.querySelectorAll('.top-notice, [role=status]')].map((e) => e.textContent.trim()).filter(Boolean), labels: [...document.querySelectorAll('.group-tabs-project')].map((e) => e.textContent), strips: [...document.querySelectorAll('.group-tabs')].map((nav) => nav.getAttribute('aria-label') + ': ' + [...nav.querySelectorAll('.group-tab-title')].map((t) => t.textContent).join(' | ')) })" }], settle: 300 })),
+] : [];
+// ── Project tabs (--only=ptabs, 1440×900): a project is the unit — its tabs and its split show only while it is chosen ──
+// Opened the way a person does: project 1's conversation and note in the left pane, its second conversation beside
+// (Ctrl+click), then project 2's one conversation. Home: no tab on the strip, home alone. Project 1: its tabs, its
+// split. Project 2: its one tab, one pane. Back to project 1: as it was left. A split made there: the project's
+// empty pane beside. Home again: home alone (the empty pane is the project's, not home's).
+const ptabsSet = only?.some((name) => name.startsWith("ptabs")) ?? false;
+const PTABS = `({ panes: [...document.querySelectorAll('.panes > .pane:not([hidden])')].map((p) => ({ id: p.dataset.pane, width: Math.round(p.getBoundingClientRect().width), tabs: [...p.querySelectorAll('.group-tab:not([data-overflowed]) .group-tab-title')].map((t) => t.textContent), front: p.querySelector('.group-tab.active .group-tab-title')?.textContent ?? null, more: p.querySelector('.group-tab-more') ? p.querySelector('.group-tab-more').textContent || '⌄' : null, listed: [...p.querySelectorAll('.group-tab[data-overflowed] .group-tab-title')].map((t) => t.textContent), room: p.querySelector('.group-tabs [role=tablist]')?.clientWidth ?? 0, widths: [...p.querySelectorAll('.group-tab')].map((t) => { const out = t.hasAttribute('data-overflowed'); t.removeAttribute('data-overflowed'); const w = t.offsetWidth; if (out) t.setAttribute('data-overflowed', ''); return w; }), tools: Math.round(p.querySelector('.pane-head')?.getBoundingClientRect().width ?? 0), stripHeight: Math.round(p.querySelector('.group-tabs')?.getBoundingClientRect().height ?? 0) })), mounted: document.querySelectorAll('.panes > .pane').length, dividers: document.querySelectorAll('.pane-divider').length })`;
+const ptabsShown = (count: number) => `document.querySelectorAll('.panes > .pane:not([hidden])').length === ${count}`;
+const ptabsChoose = (id: string): Step[] => [sidebarOpen, railTo("projects"), toLevelOne, { js: `__wb.click('.sidebar [data-row-id="${id}"]')`, wait: `__wb.has('.sidebar [data-project-id="${id}"]')`, pause: 500 }];
+const ptabsChat = (id: string): Step[] => [sidebarOpen, { wait: `__wb.reveal('${id}')` }, { js: `__wb.click('${row(id)}')`, wait: "__wb.has('.work-view .transcript')", pause: 400 }];
+const PTABS_SCREENS: Screen[] = ptabsSet ? [
+  { name: "ptabs-1-home", viewport: { width: 1440, height: 900 }, steps: [
+    // Project 1, left: its conversation, then its note.
+    ...ptabsChat(codex.id), { js: "__wb.click('.sidebar .nav-note')", wait: "__wb.has('.project-view')", pause: 400 },
+    // Project 1, beside: its second conversation (Ctrl+click opens it to the right).
+    { wait: `__wb.reveal('${claude.id}')` }, { js: `__wb.q('${row(claude.id)}')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true }))`, wait: ptabsShown(2), pause: 600 },
+    // Project 2: one conversation (its note, opened on the first visit, is closed again).
+    ...ptabsChat(minutes.id),
+    { js: "[...document.querySelectorAll('.panes > .pane:not([hidden]) .group-tab')].find((tab) => tab.querySelector('.group-tab-title')?.textContent === '학과 회의록 정리')?.querySelector('.group-tab-close')?.click()", wait: "!__wb.has('.panes > .pane:not([hidden]) .group-tab-title', '학과 회의록 정리')", pause: 400 },
+    // Home: nothing is chosen.
+    { js: "__wb.click('.nav-rail [data-rail=now]')", wait: `__wb.has('.start-view') && ${ptabsShown(1)}`, pause: 600 },
+    sidebarOpen, railTo("projects"), toLevelOne, { js: "__wb.blur()", pause: 300 }, { probe: PTABS }], settle: 500 },
+  // The other projects' tabs are one list away: the bare chevron, no count.
+  { name: "ptabs-1-home-list", viewport: { width: 1440, height: 900 }, steps: [{ js: "__wb.click('.pane[data-pane-active=\"true\"] .group-tab-more')", wait: "__wb.has('.group-tab-list [role^=menuitem]')", pause: 300 },
+    { probe: "({ list: [...document.querySelectorAll('.group-tab-list [role^=menuitem]')].map((e) => e.textContent.trim()) })" }], settle: 300,
+    cleanup: [{ press: "Escape", wait: "!__wb.has('.group-tab-list [role^=menuitem]')" }] },
+  { name: "ptabs-2-project1", viewport: { width: 1440, height: 900 }, steps: [...ptabsChoose(lecture.id), { wait: ptabsShown(2), pause: 600 }, { js: "__wb.blur()", pause: 300 }, { probe: PTABS }], settle: 600 },
+  { name: "ptabs-3-project2", viewport: { width: 1440, height: 900 }, steps: [...ptabsChoose(meeting.id), { wait: `${ptabsShown(1)} && __wb.has('.work-view .transcript')`, pause: 600 }, { js: "__wb.blur()", pause: 300 }, { probe: PTABS }], settle: 600 },
+  { name: "ptabs-4-project1-again", viewport: { width: 1440, height: 900 }, steps: [...ptabsChoose(lecture.id), { wait: ptabsShown(2), pause: 600 }, { js: "__wb.blur()", pause: 300 }, { probe: PTABS }], settle: 600 },
+  // A split made inside project 1: the new empty pane is the project's (빈 칸), beside its two panes; the window stays in the project.
+  { name: "ptabs-5-project1-split", viewport: { width: 1440, height: 900 }, steps: [{ js: "__wb.click('.panes > .pane:not([hidden]) .pane-head-tools [aria-label=\"오른쪽으로 분할\"]')", wait: `${ptabsShown(3)} && __wb.has('.panes > .pane:not([hidden]) .group-tab-title', '빈 칸')`, pause: 600 }, { js: "__wb.blur()", pause: 300 }, { probe: PTABS }], settle: 600 },
+  { name: "ptabs-6-home-again", viewport: { width: 1440, height: 900 }, steps: [{ js: "__wb.click('.nav-rail [data-rail=now]')", wait: `__wb.has('.start-view') && ${ptabsShown(1)}`, pause: 600 }, { js: "__wb.blur()", pause: 300 }, { probe: PTABS }], settle: 600 },
 ] : [];
 // ── Skin 2 · unit D (--only=skin2d): home 지금, the project note, the conversation's head ────────────
 const SKIN2D_SCREENS: Screen[] = skin2d ? [
@@ -2327,7 +2368,7 @@ const REL_A_SCREENS: Screen[] = relA ? [
     { name: `rela-phone-${size}-doc-ai-esc`, viewport, steps: [{ js: "__wb.q('.beside-chat .composer-input, .beside-chat textarea, .beside-chat button')?.focus()" }, { press: "Escape", pause: 500 }, { wait: "!__wb.has('.beside-chat')" }, { probe: "({ ai: __wb.has('.beside-chat'), doc: __wb.has('.document-view .doc-header') })" }], settle: 400 },
   ]),
 ] : [];
-const availableScreens = relA ? REL_A_SCREENS : relbSet ? (only!.some((name) => name.startsWith("relb-phone")) ? RELB_PHONE : RELB_SCREENS) : fix1Set ? FIX1_SCREENS : rvSet ? RV_SCREENS : ownerSet ? OWNER_SCREENS : phone ? PHONE_SCREENS : c2 ? C2_SCREENS : skin2b ? SKIN2B_SCREENS : skin2d ? SKIN2D_SCREENS : u38 ? U38_SCREENS : u28 ? (args.includes("--native-stub") ? U28_WEB_SCREENS : U28_SCREENS) : higMode ? HIG_SCREENS : args.includes("--motion") ? MOTION_SCREENS : navMode ? NAV_SCREENS : only?.some(name => name.startsWith("completion")) ? COMPLETION_SCREENS : u26 ? U26_SCREENS : m01 ? M01_SCREENS : SCREENS;
+const availableScreens = ptabsSet ? PTABS_SCREENS : relA ? REL_A_SCREENS : relbSet ? (only!.some((name) => name.startsWith("relb-phone")) ? RELB_PHONE : RELB_SCREENS) : fix1Set ? FIX1_SCREENS : rvSet ? RV_SCREENS : ownerSet ? OWNER_SCREENS : phone ? PHONE_SCREENS : c2 ? C2_SCREENS : skin2b ? SKIN2B_SCREENS : skin2d ? SKIN2D_SCREENS : u38 ? U38_SCREENS : u28 ? (args.includes("--native-stub") ? U28_WEB_SCREENS : U28_SCREENS) : higMode ? HIG_SCREENS : args.includes("--motion") ? MOTION_SCREENS : navMode ? NAV_SCREENS : only?.some(name => name.startsWith("completion")) ? COMPLETION_SCREENS : u26 ? U26_SCREENS : m01 ? M01_SCREENS : SCREENS;
 const screens = (only ? availableScreens.filter((screen) => only.some((name) => screen.name.includes(name))) : availableScreens)
   // N1: rows are reached through the list column's levels (see __wb.reveal).
   .map((screen) => ({ ...screen, steps: expandSteps(screen.steps), ...(screen.cleanup ? { cleanup: expandSteps(screen.cleanup) } : {}) }));
@@ -2371,8 +2412,8 @@ async function chromiumPass() {
   // The screen being reached, so a console error says where it came from.
   let shown = "start";
   try {
-    for (const theme of themes) {
-      await setPrefs({ theme });
+    for (const { tag: theme, prefs: passPrefs } of passes) {
+      await setPrefs(passPrefs);
       // The phone floor: a touch screen (coarse pointer, mobile viewport), as the remote client runs on a phone.
       const page = await browser.newPage({ viewport: VIEWPORT, ...(phone ? { hasTouch: true, isMobile: true } : {}) });
       // Skin 2 · B: Chromium gets the same stand-in for the desktop's web-page bridge as WebKitGTK (--native-stub).

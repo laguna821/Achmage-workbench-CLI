@@ -59,20 +59,24 @@ const table = () => screen.getByRole("table");
 const rowNames = () => within(table()).getAllByRole("row").slice(1).map((row) => row.querySelector(".now-cell-work")?.textContent);
 
 describe("home 지금", () => {
-  it("heads the page with 지금 and today's date, and no four-way switch", () => {
+  it("heads the page with 지금, today's date and the four views of home in sight", () => {
     view();
     expect(screen.getByRole("heading", { level: 1, name: "지금" })).toBeTruthy();
     expect(document.querySelector(".home-date")?.textContent).toMatch(/\d+월 \d+일/);
-    expect(screen.queryByRole("radiogroup", { name: "홈 보기" })).toBeNull();
-    expect(document.querySelector(".home-mode-bar")).toBeNull();
+    const views = screen.getByRole("radiogroup", { name: "홈 보기" });
+    expect(Array.from(views.querySelectorAll("button")).map((entry) => entry.textContent)).toEqual(["지금", "보드와 표", "달력", "문서"]);
   });
 
-  it("has no other-views key in 지금's head; another view has a key back to 지금", () => {
+  it("switches to the board, the calendar and the documents from the head, and back to 지금 from any of them", () => {
     view();
-    expect(screen.queryByRole("button", { name: /다른 보기/ })).toBeNull();
+    fireEvent.click(screen.getByRole("radio", { name: "보드와 표" }));
+    expect(open.mode).toHaveBeenCalledWith("projects");
+    fireEvent.click(screen.getByRole("radio", { name: "달력" }));
+    expect(open.mode).toHaveBeenCalledWith("flow");
     cleanup();
     view(full, "docs");
-    fireEvent.click(screen.getByRole("button", { name: "지금" }));
+    expect(screen.getByRole("heading", { level: 1, name: "문서" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("radio", { name: "지금" }));
     expect(open.mode).toHaveBeenCalledWith("now");
   });
 

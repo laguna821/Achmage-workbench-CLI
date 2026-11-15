@@ -895,8 +895,8 @@ export type OfficeHostMessage =
       /** An independently owned original renderer attaches to this admitted turn. */
       execution?: { turnId: string; images?: { base64: string; mime: string }[]; referenceSnapshot?: string };
     }
-  /** `palette`: the app's 색 조합 (absent = Workbench); the editors' chrome mirrors it (ui-adapters/chrome.css). */
-  | { type: "office:theme"; theme: "light" | "dark"; palette?: "atlas" }
+  /** `palette`: the app's 색 조합 for that mode — the id of an Atlas set (absent = Workbench); the editors' chrome mirrors it (ui-adapters/chrome.css). */
+  | { type: "office:theme"; theme: "light" | "dark"; palette?: string }
   | { type: "office:show-commands" }
   /** Open or close the editor's own AI dock (the Hangul editor: its dock is the document's 문서 AI); `draft`: put in its input in place of what it holds. */
   | { type: "office:ai-panel-set"; open: boolean; draft?: string }

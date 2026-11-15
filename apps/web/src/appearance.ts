@@ -420,17 +420,19 @@ export function ownEngineColor(value: Look): string | null {
 
 /**
  * 색 조합: a look colour still at today's default (the N1 hex mirrors, and the frame's look) names its role,
- * so the Atlas combination (tokens.css `--palette-look-*`) can give it Atlas's value; a colour the person
- * chose stays. Under Workbench the names are not set and the same hex is the fallback (nothing changes).
- * White is white in both combinations and is not named.
+ * so the chosen Atlas set (tokens.css `--palette-look-*`) can give it the set's value; a colour the person
+ * chose stays. Under Workbench (and for a role a set does not name) the same hex is the fallback: nothing
+ * changes. The light look's white is its ground and its field: a light set whose ground is not white
+ * (Windows, Rosé) names them; the default pair does not, so white stays white there.
  */
 const PALETTE_FOLLOW = new Map<string, string>([
   [N1_LIGHT.text, "light-ink"], [N1_LIGHT.muted, "light-muted"], [N1_LIGHT.line, "light-rule"], [N1_LIGHT.codeBg, "light-well"],
   [NEUTRAL_LOOK.dark.palette.bg, "dark-paper"], [N1_DARK.bg, "dark-sheet"], [N1_DARK.surface, "dark-field"], [N1_DARK.text, "dark-ink"],
   [N1_DARK.muted, "dark-muted"], [N1_DARK.line, "dark-rule"], [N1_DARK.codeBg, "dark-well"],
 ]);
-const follow = (hex: string) => {
-  const role = typeof hex === "string" ? PALETTE_FOLLOW.get(hex.trim().toLowerCase()) : undefined;
+const follow = (hex: string, white?: "light-sheet" | "light-field") => {
+  const key = typeof hex === "string" ? hex.trim().toLowerCase() : "";
+  const role = PALETTE_FOLLOW.get(key) ?? (key === N1_LIGHT.bg ? white : undefined);
   return role ? `var(--palette-look-${role}, ${hex})` : hex;
 };
 
@@ -438,8 +440,8 @@ const follow = (hex: string) => {
 export function lookStyle(value: Look): CSSProperties {
   const { palette } = value;
   return {
-    "--bg": follow(palette.bg),
-    "--surface": follow(palette.surface),
+    "--bg": follow(palette.bg, "light-sheet"),
+    "--surface": follow(palette.surface, "light-field"),
     "--text": follow(palette.text),
     "--muted": follow(palette.muted),
     "--line": follow(palette.line),

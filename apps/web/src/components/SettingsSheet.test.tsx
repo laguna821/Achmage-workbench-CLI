@@ -155,6 +155,45 @@ it("화면: the app's look first, then the reading face and size for the engine 
   expect(onTarget).toHaveBeenCalledWith({ provider: "codex", theme: "light" });
 });
 
+// atlas-themes: every colour set Atlas offers can be chosen, one for light and one for dark.
+it("화면 › 색 조합: the sets as swatches in 밝은 색 and 어두운 색, the chosen one of each marked; a pick names the set and its mode; the arrows move and choose", () => {
+  const onPalette = vi.fn();
+  const api = { appearance: readAppearance({ ...DEFAULT_APPEARANCE, v: 8 }), appTheme: "light", updateLook: vi.fn(), setMode: vi.fn(), resetLook: vi.fn(), lookOf: () => DEFAULT_APPEARANCE.claude.light } as unknown as AppearanceApi;
+  const view = (palette: { light: string; dark: string }) => <AppearanceContext.Provider value={api}><AppearancePanel target={{ provider: "claude", theme: "light" }} onTarget={() => {}} themePref="system" onThemePref={() => {}} palette={palette} onPalette={onPalette} /></AppearanceContext.Provider>;
+  const shown = render(view({ light: "atlas", dark: "graphite" }));
+  const light = screen.getByRole("radiogroup", { name: "밝은 색" }), dark = screen.getByRole("radiogroup", { name: "어두운 색" });
+  const names = (group: HTMLElement) => within(group).getAllByRole("radio").map((swatch) => `${swatch.textContent}${swatch.getAttribute("aria-checked") === "true" ? " ✓" : ""}`);
+  expect(names(light)).toEqual(["Atlas Light (기본) ✓", "Windows", "Rosé", "Workbench"]);
+  expect(names(dark)).toEqual(["Graphite (기본) ✓", "Midnight", "Noir", "Ember", "Dracula", "Nord", "Rosé Pine", "Windows 어둡게", "Workbench"]);
+  // Each swatch shows its set in four chips (ground, rail, accent, ink) drawn from that set's own chip tokens.
+  const chips = [...light.querySelectorAll(".palette-chips"), ...dark.querySelectorAll(".palette-chips")];
+  expect(chips.map((chip) => chip.getAttribute("data-set-chips"))).toEqual(["atlas", "windows", "rose", "workbench-light", "graphite", "midnight", "noir", "ember", "dracula", "nord", "rose-pine", "windows-dark", "workbench-dark"]);
+  expect(chips.every((chip) => chip.children.length === 4 && chip.getAttribute("aria-hidden") === "true")).toBe(true);
+  // One tab stop per group: the chosen swatch.
+  expect(within(dark).getAllByRole("radio").filter((swatch) => swatch.tabIndex === 0).map((swatch) => swatch.textContent)).toEqual(["Graphite (기본)"]);
+  fireEvent.click(within(dark).getByRole("radio", { name: "Nord" }));
+  expect(onPalette).toHaveBeenLastCalledWith({ id: "nord", name: "Nord", mode: "dark" });
+  fireEvent.click(within(light).getByRole("radio", { name: "Workbench" }));
+  expect(onPalette).toHaveBeenLastCalledWith({ id: "workbench", name: "Workbench", mode: "light" });
+  shown.rerender(view({ light: "workbench", dark: "nord" }));
+  expect(names(light).at(-1)).toBe("Workbench ✓");
+  expect(names(dark).filter((name) => name.endsWith("✓"))).toEqual(["Nord ✓"]);
+  // Arrows: the next swatch is chosen and takes focus; the ends wrap; Home and End go to the first and the last.
+  fireEvent.keyDown(within(dark).getByRole("radio", { name: "Nord" }), { key: "ArrowRight" });
+  expect(onPalette).toHaveBeenLastCalledWith({ id: "rose-pine", name: "Rosé Pine", mode: "dark" });
+  expect(document.activeElement?.textContent).toBe("Rosé Pine");
+  fireEvent.keyDown(within(dark).getByRole("radio", { name: "Nord" }), { key: "ArrowLeft" });
+  expect(onPalette).toHaveBeenLastCalledWith({ id: "dracula", name: "Dracula", mode: "dark" });
+  fireEvent.keyDown(within(light).getByRole("radio", { name: "Workbench" }), { key: "ArrowDown" });
+  expect(onPalette).toHaveBeenLastCalledWith({ id: "atlas", name: "Atlas Light", mode: "light" });
+  fireEvent.keyDown(within(dark).getByRole("radio", { name: "Nord" }), { key: "End" });
+  expect(onPalette).toHaveBeenLastCalledWith({ id: "workbench", name: "Workbench", mode: "dark" });
+  fireEvent.keyDown(within(dark).getByRole("radio", { name: "Nord" }), { key: "Home" });
+  expect(onPalette).toHaveBeenLastCalledWith({ id: "graphite", name: "Graphite", mode: "dark" });
+  // The credit stays one quiet line.
+  expect(document.body.textContent).toContain("색 조합은 Atlas File Manager의 것을 따랐습니다. Dracula, Nord, Rosé Pine은 각 프로젝트의 색입니다.");
+});
+
 // Tech review 2 (mutants that survived): Home/End reach the first and the LAST section; the list is one tab stop.
 it("Home opens the first section and End the last; the section list is ONE tab stop (the current section)", () => {
   const onSection = vi.fn();

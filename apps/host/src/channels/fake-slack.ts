@@ -333,7 +333,8 @@ export class FakeSlack {
       if (this.openRefusal) return refuse(this.openRefusal);
       const ticket = `t${this.nextTicket++}`;
       this.tickets.add(ticket);
-      return ok({ url: `${this.url.replace(/^http/, "ws")}/link?ticket=${ticket}&app_id=${this.appId}` });
+      // As Slack does: the address's `app_id` is a hash, not the app's id (A0…).
+      return ok({ url: `${this.url.replace(/^http/, "ws")}/link?ticket=${ticket}&app_id=${"5e".repeat(32)}` });
     }
     if (token !== "bot" || this.revoked) return refuse(token === "app" ? "not_allowed_token_type" : "invalid_auth");
     switch (method) {

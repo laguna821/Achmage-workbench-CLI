@@ -502,7 +502,7 @@ function ProjectNotePage({
       ...(!note.exists && page.noteTemplate ? [{ kind: "item" as const, label: `「${page.noteTemplate.folderName}」 템플릿으로 노트 만들기`, icon: "file" as const, onSelect: () => void api.initializeProjectNote(workId).then((write) => wrote(write)).catch(onError) }] : []),
       { kind: "separator" },
       { kind: "item", label: "속성 템플릿…", icon: "list", onSelect: () => setTemplateOpen(true) },
-      { kind: "item", label: "단계 이름과 색 바꾸기…", icon: "palette", onSelect: () => setStagesOpen(true) },
+      { kind: "item", label: "단계 편집…", icon: "palette", onSelect: () => setStagesOpen(true) },
       { kind: "separator" },
       { kind: "item", label: "노트 경로 복사", icon: "copy", onSelect: () => void navigator.clipboard?.writeText(note.path) },
       { kind: "item", label: "폴더 경로 복사", icon: "copy", onSelect: () => void navigator.clipboard?.writeText(work.cwd) },

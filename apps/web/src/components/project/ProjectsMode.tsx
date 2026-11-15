@@ -16,7 +16,9 @@ import { GroupHead, More, groupStyle, lookProps, toggleFold, usePaint } from "..
 import { BoardCardBody, ListRow, TableHead, TableRow, WorkCard, tableColumns, useWorkContents, type OpenThings } from "../views/ProjectBits.tsx";
 import { useProjectData } from "../views/useProjectData.ts";
 import { ViewHead, ViewTabs, ViewTools, type ShownGroups } from "../views/ViewHead.tsx";
+import { Icon } from "../Icon.tsx";
 import { ProjectsGraph } from "./ProjectsGraph.tsx";
+import { StageDialog } from "./StageDialog.tsx";
 import { ProjectSelectionCheckbox, ProjectSelectionScope } from "./ProjectSelection.tsx";
 import "../../styles/projects-mode.css";
 import "../../styles/groups.css";
@@ -172,6 +174,8 @@ export function ProjectsMode({
     void steps.writes.reduce<Promise<unknown>>((chain, [def, value]) => chain.then(() => write(row.work, def, value)), Promise.resolve()).catch((error: Error) => pkm?.onToast(failure(error)));
   };
 
+  // The stages themselves (names, how many, order, colours) are edited from where they are seen: the board by stage.
+  const [stagesOpen, setStagesOpen] = useState(false);
   const stageMenu = (work: Work, x: number, y: number) => {
     const current = summaries.get(work.id)?.stage ?? null;
     pkm?.openMenu({
@@ -182,6 +186,8 @@ export function ProjectsMode({
         ...stages.map((stage) => ({ kind: "item" as const, label: stage.name, checked: stage.name === current, onSelect: () => void moveStage(work, stage.name).catch((error: Error) => pkm?.onToast(failure(error))) })),
         { kind: "separator" as const },
         { kind: "item" as const, label: "값 없음", checked: !current, onSelect: () => void moveStage(work, null).catch((error: Error) => pkm?.onToast(failure(error))) },
+        { kind: "separator" as const },
+        { kind: "item" as const, label: "단계 편집…", icon: "palette" as const, onSelect: () => setStagesOpen(true) },
       ],
     });
   };
@@ -246,6 +252,12 @@ export function ProjectsMode({
   } else if (board && groupDef) {
     body = (
       <>
+        {groupDef.key === "stage" || subDef?.key === "stage" ? (
+          <div className="mode-head stage-edit-head">
+            <span className="muted">단계 {stages.length}개</span>
+            <button type="button" className="ghost-button small" title="단계의 이름, 개수, 순서, 색을 바꿉니다" onClick={() => setStagesOpen(true)}><Icon name="palette" size={14} />단계 편집</button>
+          </div>
+        ) : null}
         <GroupBoard
           view={view}
           onView={setView}
@@ -366,6 +378,7 @@ export function ProjectsMode({
       {selectionNotice ? <p className="project-selection-notice" role="status">{selectionNotice}</p> : null}
       {body}
       {panel}
+      {stagesOpen ? <StageDialog api={api} stages={stages} onClose={() => setStagesOpen(false)} onSaved={() => data.reload()} onError={(error) => pkm?.onToast(failure(error as Error))} /> : null}
     </div>
     </ProjectSelectionScope>
   );

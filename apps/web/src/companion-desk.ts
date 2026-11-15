@@ -2,7 +2,7 @@ import { besideOf, oneViewPerDocument, keepCompanions, leavesView, releaseViews,
 import type { EditorState } from "./doc-editors.ts";
 import type { LeaveGate } from "./leave-gate.ts";
 import { paneById, setPane, type Layout, type PaneContent, type PaneId } from "./panes.ts";
-import { activeTab, addBackgroundTab, contentKey, findTab, tabsOf, withTabs } from "./tabs.ts";
+import { activeTab, addBackgroundTab, contentKey, findTab, settleScope, tabsOf, withTabs, type ScopeRule } from "./tabs.ts";
 
 // The app's side of 곁 화면: how a view is left, shown, put beside a conversation and closed.
 // Plain functions over the layout the app lends (no React), so the rules are tested with real
@@ -16,8 +16,15 @@ import { activeTab, addBackgroundTab, contentKey, findTab, tabsOf, withTabs } fr
 //   asked first and can cancel; nothing is flushed before the answer.
 // - A web page has no edits: it only changes place, and never stops running by being moved.
 
-/** Every layout change settles the same way: a conversation gone to again keeps its companion, and a document never has two views. */
-export const settleLayout = <V>(changed: Layout<V>, previous: Layout<V>): Layout<V> => oneViewPerDocument(withTabs(keepCompanions(changed), previous));
+/**
+ * Every layout change settles the same way: a conversation gone to again keeps its companion, a
+ * document never has two views — and, given `scope` (the app's window; tabs.ts "Project tabs"), the
+ * window stays one project: the panes follow the focused tab's project, a close never leaves it for another.
+ */
+export const settleLayout = <V>(changed: Layout<V>, previous: Layout<V>, scope?: ScopeRule<V>): Layout<V> => {
+  const tabbed = withTabs(keepCompanions(changed), previous);
+  return oneViewPerDocument(scope ? settleScope(tabbed, previous, scope) : tabbed);
+};
 
 export type DeskDeps<V> = {
   layout: () => Layout<V>;

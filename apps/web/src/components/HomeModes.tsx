@@ -26,6 +26,7 @@ import { useAppearance } from "../appearance.ts";
 import { ago, statusText, statusTone } from "../format.ts";
 import { measure, play, type FlipFirst } from "../flip.ts";
 import { boardOf, colorOf, foldKey, groupItems, localDay, nestGroups, sortItems, type Group, type KeyDef } from "../groups.ts";
+import { Segmented } from "./ui/Hig.tsx";
 import { HOME_MODES, needsCount, rowState, bucketOf, docEntries, isWorking, lastExchange, nowGroups, recency, recentWorks, resumeSessions, sessionResume, type DocEntry, type HomeMode } from "../overview.ts";
 import { needsPerson, type RowStateInfo as StateInfo } from "../row-state.ts";
 import { StateWord } from "./StateMark.tsx";
@@ -1040,6 +1041,9 @@ const legacyPrefs = () => {
  * the request row on the column's lower edge. The head scrolls with the page; keys 1–4 switch
  * modes from anywhere when focus is not in a text field.
  */
+/** What each view of home is called on the page and on its switch. */
+const HOME_VIEW_LABEL: Record<HomeMode, string> = { now: "지금", projects: "보드와 표", flow: "달력", docs: "문서" };
+
 export function HomeModes({
   api,
   state,
@@ -1126,7 +1130,7 @@ export function HomeModes({
   }, [switchTo]);
 
   const today = new Date().toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "long" });
-  const title = mode === "now" ? "지금" : mode === "projects" ? "보드와 표" : mode === "flow" ? "달력" : "문서";
+  const title = HOME_VIEW_LABEL[mode];
   return (
     <>
       {/* The page head: the place ("지금", or the view's name) and today's date; another view has a key back to 지금. */}
@@ -1135,12 +1139,17 @@ export function HomeModes({
           <h1 className="home-title">{title}</h1>
           {mode === "now" ? <p className="home-date">{today}</p> : null}
         </div>
-        {mode !== "now" ? (
-          <div className="home-head-tools">
-            {/* 보드·표 (프로젝트 › 보기), 달력 (활동) and 문서 are reached from the list; this key returns to 지금 (also key 1). */}
-            <button type="button" className="button small quiet home-back-now" onClick={() => switchTo("now")} title="지금으로 (1)"><Icon name="chevronLeft" size={16} />지금</button>
-          </div>
-        ) : null}
+        {/* The four views of home, always in sight (the owner, 2026-11-15: the board, the table and the calendar are the
+            point of home — they had gone behind the list's menus). Keys 1–4 switch too. */}
+        <nav className="home-mode-nav" aria-label="홈 탐색">
+          <Segmented
+            className="home-mode-bar"
+            label="홈 보기"
+            options={HOME_MODES.map((entry, index) => ({ value: entry.id, label: HOME_VIEW_LABEL[entry.id], title: `${HOME_VIEW_LABEL[entry.id]}: ${entry.question} (${index + 1})` }))}
+            value={mode}
+            onChange={switchTo}
+          />
+        </nav>
       </header>
       {intro}
       <div

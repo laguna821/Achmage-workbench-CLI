@@ -415,7 +415,7 @@ function StagePicker({ row, anchor, props, onClose }: PickerProps) {
       <MenuSeparator />
       <MenuItem value="none" type="radio" checked={!name} onSelect={() => name && write(null)}>값 없음</MenuItem>
       <MenuSeparator />
-      <MenuItem value="settings" icon="palette" more onSelect={props.onStages}>단계 이름·색 바꾸기…</MenuItem>
+      <MenuItem value="settings" icon="palette" more onSelect={props.onStages}>단계 편집…</MenuItem>
     </Menu>
   );
 }

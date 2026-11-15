@@ -268,7 +268,7 @@ async function flow(provider: Provider) {
     const card = await page.locator(".project-view:visible .project-card pre").innerText();
     pass("'엔진이 아는 것'에 노트 경로·단계·태그·최근 결정", card.includes(`프로젝트 노트: ${notePath}`) && card.includes("단계: 진행중 · 태그: #강의") && card.includes("최근 결정"));
     await page.locator(".project-view:visible .pn-stage").click();
-    await uiPick(page, "단계 이름·색 바꾸기");
+    await uiPick(page, "단계 편집");
     await page.waitForSelector(".stage-dialog");
     await page.locator(".stage-name").first().fill("준비");
     await page.locator(".stage-dialog .button.primary", { hasText: "저장" }).click();

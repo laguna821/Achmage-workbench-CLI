@@ -1097,7 +1097,7 @@ html.nav-dragging * {
 /* Ruling 7 — the current row keeps its teal wash and its 2 px teal mark at ALL times; while the keyboard is
    elsewhere (the usual case) the wash is one step lighter (7 % for 12 %) and the mark the deep teal at 60 %:
    still teal, never the grey it was. */
-.nav-column:not(:focus-within) { --color-current-soft: color-mix(in oklab, var(--color-teal) 7%, var(--color-paper-2)); }
+.nav-column:not(:focus-within) { --color-current-soft: color-mix(in oklab, var(--color-teal) var(--palette-wash-idle-share, 7%), var(--color-paper-2)); }
 .nav-column:not(:focus-within) .side-row:is(.current, [aria-current="page"], [aria-current="true"]) { --c-mark: inset 2px 0 0 color-mix(in oklab, var(--color-teal-ink) 60%, transparent); }
 /* Ruling 8 — the quiet heads (folders' head, 지금's and 활동's group heads, section heads, level 2's folds) are
    13 px muted 600 (--text-label, ≥ 4.5:1: muted is 6.5:1 on white, 7:1+ on dark); 12 px stays for meta. */
@@ -1107,6 +1107,8 @@ html.nav-dragging * {
 .nav-column .nav-inside-head .nav-fold,
 .nav-column .nav-group { font: 600 var(--text-label)/18px var(--font-ui); }
 .nav-column .nav-more { margin: var(--space-xs) var(--space-xs) 0; font-size: var(--text-sm); }
-/* Dark: 7 % of teal on the near-black sheet reads grey; the lighter step there is 10 % (focused: 12 %). */
+/* Dark: 7 % of teal on the near-black sheet reads grey; the lighter step there is 10 % (focused: 12 %). A generated
+   색 조합 set names its own share (tokens.css --palette-wash-idle-share: on a black ground 10 % cannot be seen);
+   without it these literals stand. */
 :root[data-theme="dark"] .nav-column:not(:focus-within),
-.look-scope[data-theme="dark"] .nav-column:not(:focus-within) { --color-current-soft: color-mix(in oklab, var(--color-teal) 10%, var(--color-paper-2)); }
+.look-scope[data-theme="dark"] .nav-column:not(:focus-within) { --color-current-soft: color-mix(in oklab, var(--color-teal) var(--palette-wash-idle-share, 10%), var(--color-paper-2)); }

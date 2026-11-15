@@ -554,10 +554,12 @@
    step of the same blue (#0064d2, their pressed key, 5.6:1); the filled key is that step too, so its white
    label reads 5.6:1. Their state colours are fills; where a state colour is words on white it is mixed
    toward their ink until it reads 4.5:1. The rail is their sidebar grey (graphite on dark), ink icons.
-   Set by `data-palette="atlas"` on <html> (theme.ts); absent = Workbench. The office chrome mirrors
+   These two are the default pair. A person keeps ONE light set and ONE dark set (설정 › 화면): <html> carries
+   `data-palette-light` and `data-palette-dark` (theme.ts); an attribute that is absent = Workbench for that
+   mode. The other Atlas sets are generated below from the same role mapping. The office chrome mirrors
    these (apps/office/src/ui-adapters/chrome.css, checked by chrome.test.ts). ── */
-:root[data-palette="atlas"],
-[data-palette="atlas"] .look-scope[data-theme="light"] {
+:root[data-palette-light="atlas"]:not([data-theme="dark"]),
+[data-palette-light="atlas"] .look-scope[data-theme="light"] {
   --color-paper: #ffffff;                     /* list column, top bar, tab strip: their list */
   --color-paper-2: #ffffff;                   /* panes, menus, dialogs: their background */
   --color-paper-3: #f2f2f7;                   /* the well: their muted background */
@@ -591,9 +593,11 @@
   --on-key-primary: #ffffff;
   --color-current-soft: color-mix(in oklab, #007aff 8%, #ffffff); /* their list.active wash */
   --active-bg: var(--color-current-soft);
+  --palette-key: #0064d2;                     /* the key, handed down to the look scopes inside (below) */
+  --palette-on-key: #ffffff;
 }
-:root[data-palette="atlas"][data-theme="dark"],
-[data-palette="atlas"] .look-scope[data-theme="dark"] {
+:root[data-palette-dark="graphite"][data-theme="dark"],
+[data-palette-dark="graphite"] .look-scope[data-theme="dark"] {
   --color-paper: #1c1c1e;
   --color-paper-2: #1c1c1e;
   --color-paper-3: #2c2c2e;
@@ -627,18 +631,488 @@
   --on-key-primary: #ffffff;
   --color-current-soft: color-mix(in oklab, #0a84ff 12%, #1c1c1e);
   --active-bg: var(--color-current-soft);
+  --palette-key: #0064d2;
+  --palette-on-key: #ffffff;
 }
-:root[data-palette="atlas"] {
-  /* A pane's look colour still at its default (appearance.ts lookStyle) follows the combination; one the
-     person chose stays. Without this block the look keeps its own value (the fallback). */
+/* A pane's look colour still at its default (appearance.ts lookStyle) follows the set of its mode; one the
+   person chose stays. Without these the look keeps its own value (the fallback). */
+:root[data-palette-light="atlas"] {
   --palette-look-light-ink: #1d1d1f; --palette-look-light-muted: #626268; --palette-look-light-rule: #e5e5ea; --palette-look-light-well: #f2f2f7;
+}
+:root[data-palette-dark="graphite"] {
   --palette-look-dark-paper: #1c1c1e; --palette-look-dark-sheet: #1c1c1e; --palette-look-dark-field: #242426; --palette-look-dark-ink: #f5f5f7;
   --palette-look-dark-muted: #98989d; --palette-look-dark-rule: #38383a; --palette-look-dark-well: #2c2c2e;
 }
-/* The derived roles a look scope re-declares (the alias block above) are re-set under Atlas. */
-[data-palette="atlas"] .look-scope {
+
+/* ── The other Atlas sets, by the same role mapping: written by scripts/atlas-sets.ts from the table of their
+   values (styles/atlas-sets.ts); palette-atlas.test.ts fails when this region is not what the script gives, and
+   checks every text pair of every set. Per set: its role block, the look defaults, the swatch's chips. ── */
+/* generated:atlas-sets begin (scripts/atlas-sets.ts; do not edit by hand) */
+/* Windows: their "Atlas Windows" (light). */
+:root[data-palette-light="windows"]:not([data-theme="dark"]),
+[data-palette-light="windows"] .look-scope[data-theme="light"] {
+  --color-paper: #ffffff;
+  --color-paper-2: #f7f9fd;
+  --color-paper-3: #eef3fb;
+  --color-field: #ffffff;
+  --color-ink: #1b1f2a;
+  --color-ink-2: #373b45;
+  --color-muted: #576174;
+  --color-faint: #576174;
+  --color-rule: #dbe3f1;
+  --color-edge: #8b919e;
+  --rule-ink: #dbdcde;
+  --color-teal: #2563eb;
+  --color-teal-ink: #1d4ed8;
+  --color-attention: #f59e0b;
+  --color-attention-ink: #1b1f2a;
+  --color-attention-text: #906535;
+  --color-attention-soft: #f8f0ea;
+  --color-done: #237d44;
+  --color-done-soft: #e8f2ef;
+  --color-error: #cd2a29;
+  --color-error-soft: #f8eaec;
+  --color-scrim: #1b1f2a26;
+  --color-rail: #f3f7fd;
+  --color-rail-ink: #1b1f2a;
+  --color-rail-muted: #576174;
+  --color-rail-hover: #dfe3ea;
+  --color-rail-current: #dae6fd;
+  --color-rail-mark: #2563eb;
+  --color-rail-rule: #dbe3f1;
+  --color-rail-focus: #1d4ed8;
+  --key-primary: #1d4ed8;
+  --on-key-primary: #ffffff;
+  --color-current-soft: #e6eefd;
+  --active-bg: var(--color-current-soft);
+  --accent-soft: color-mix(in oklab, var(--accent) 10%, var(--surface));
+  --color-format-docx: #2b579a;
+  --color-format-pptx: #b93d1f;
+  --color-format-xlsx: #217346;
+  --palette-key: #1d4ed8;
+  --palette-on-key: #ffffff;
+  --palette-wash-share: 8%;
+  --palette-wash-idle-share: 7%;
+  --palette-soft-share: 10%;
+}
+:root[data-palette-light="windows"] { --palette-look-light-sheet: #f7f9fd; --palette-look-light-field: #ffffff; --palette-look-light-ink: #1b1f2a; --palette-look-light-muted: #576174; --palette-look-light-rule: #dbe3f1; --palette-look-light-well: #eef3fb; }
+[data-set-chips="windows"] { --chip-ground: #f7f9fd; --chip-rail: #f3f7fd; --chip-accent: #2563eb; --chip-ink: #1b1f2a; }
+/* Rosé: their "Atlas Rosé" (light). */
+:root[data-palette-light="rose"]:not([data-theme="dark"]),
+[data-palette-light="rose"] .look-scope[data-theme="light"] {
+  --color-paper: #fdf7f8;
+  --color-paper-2: #fdf7f8;
+  --color-paper-3: #f5eaed;
+  --color-field: #fdf7f8;
+  --color-ink: #2e1f24;
+  --color-ink-2: #493b3f;
+  --color-muted: #755963;
+  --color-faint: #755963;
+  --color-rule: #ecd9de;
+  --color-edge: #9d8b90;
+  --rule-ink: #ddd5d7;
+  --color-teal: #d4637b;
+  --color-teal-ink: #ab495d;
+  --color-attention: #e5984e;
+  --color-attention-ink: #2e1f24;
+  --color-attention-text: #926240;
+  --color-attention-soft: #fbeee8;
+  --color-done: #467948;
+  --color-done-soft: #eff1eb;
+  --color-error: #bd4245;
+  --color-error-soft: #feeaea;
+  --color-scrim: #2e1f2420;
+  --color-rail: #f7eef1;
+  --color-rail-ink: #2e1f24;
+  --color-rail-muted: #755963;
+  --color-rail-hover: #e5dbdf;
+  --color-rail-current: #f5dce1;
+  --color-rail-mark: #c95f75;
+  --color-rail-rule: #ecd9de;
+  --color-rail-focus: #ab495d;
+  --key-primary: #ab495d;
+  --on-key-primary: #ffffff;
+  --color-current-soft: #fbebed;
+  --active-bg: var(--color-current-soft);
+  --accent-soft: color-mix(in oklab, var(--accent) 10%, var(--surface));
+  --color-format-docx: #2b579a;
+  --color-format-pptx: #b23c20;
+  --color-format-xlsx: #217346;
+  --palette-key: #ab495d;
+  --palette-on-key: #ffffff;
+  --palette-wash-share: 8%;
+  --palette-wash-idle-share: 8%;
+  --palette-soft-share: 10%;
+}
+:root[data-palette-light="rose"] { --palette-look-light-sheet: #fdf7f8; --palette-look-light-field: #fdf7f8; --palette-look-light-ink: #2e1f24; --palette-look-light-muted: #755963; --palette-look-light-rule: #ecd9de; --palette-look-light-well: #f5eaed; }
+[data-set-chips="rose"] { --chip-ground: #fdf7f8; --chip-rail: #f7eef1; --chip-accent: #d4637b; --chip-ink: #2e1f24; }
+/* Midnight: their "Atlas Midnight" (dark). */
+:root[data-palette-dark="midnight"][data-theme="dark"],
+[data-palette-dark="midnight"] .look-scope[data-theme="dark"] {
+  --color-paper: #000000;
+  --color-paper-2: #000000;
+  --color-paper-3: #1c1c1e;
+  --color-field: #0a0a0a;
+  --color-ink: #e5e5ea;
+  --color-ink-2: #b8b8bc;
+  --color-muted: #838386;
+  --color-faint: #838386;
+  --color-rule: #1c1c1e;
+  --color-edge: #5e5e61;
+  --rule-ink: #212122;
+  --color-teal: #0a84ff;
+  --color-teal-ink: #409cff;
+  --color-attention: #ffd60a;
+  --color-attention-ink: #000000;
+  --color-attention-text: #ffd60a;
+  --color-attention-soft: #0d0900;
+  --color-done: #30d158;
+  --color-done-soft: #010c02;
+  --color-error: #ff453a;
+  --color-error-soft: #180201;
+  --color-scrim: #00000080;
+  --color-rail: #1c1c1e;
+  --color-rail-ink: #e5e5ea;
+  --color-rail-muted: #838386;
+  --color-rail-hover: #29292c;
+  --color-rail-current: #202b3b;
+  --color-rail-mark: #0a84ff;
+  --color-rail-rule: #262628;
+  --color-rail-focus: #409cff;
   --key-primary: #0064d2;
   --on-key-primary: #ffffff;
+  --color-current-soft: #000e26;
+  --active-bg: var(--color-current-soft);
+  --accent-soft: color-mix(in oklab, var(--accent) 12%, var(--surface));
+  --color-format-docx: #6584b5;
+  --color-format-pptx: #ce6147;
+  --color-format-xlsx: #568e6b;
+  --palette-key: #0064d2;
+  --palette-on-key: #ffffff;
+  --palette-wash-share: 27%;
+  --palette-wash-idle-share: 25%;
+  --palette-soft-share: 12%;
+}
+:root[data-palette-dark="midnight"] { --palette-look-dark-paper: #000000; --palette-look-dark-sheet: #000000; --palette-look-dark-field: #0a0a0a; --palette-look-dark-ink: #e5e5ea; --palette-look-dark-muted: #838386; --palette-look-dark-rule: #1c1c1e; --palette-look-dark-well: #1c1c1e; }
+[data-set-chips="midnight"] { --chip-ground: #000000; --chip-rail: #1c1c1e; --chip-accent: #0a84ff; --chip-ink: #e5e5ea; }
+/* Noir: their "Atlas Noir" (dark). */
+:root[data-palette-dark="noir"][data-theme="dark"],
+[data-palette-dark="noir"] .look-scope[data-theme="dark"] {
+  --color-paper: #161618;
+  --color-paper-2: #161618;
+  --color-paper-3: #1e1e22;
+  --color-field: #1a1a1c;
+  --color-ink: #cdcdcf;
+  --color-ink-2: #aeaeb0;
+  --color-muted: #8e8e92;
+  --color-faint: #8e8e92;
+  --color-rule: #2a2a2e;
+  --color-edge: #65656a;
+  --rule-ink: #2d2d2f;
+  --color-teal: #8b8bf5;
+  --color-teal-ink: #b5b5fa;
+  --color-attention: #f0b442;
+  --color-attention-ink: #161618;
+  --color-attention-text: #f0b442;
+  --color-attention-soft: #2c2620;
+  --color-done: #4cc764;
+  --color-done-soft: #1e2821;
+  --color-error: #f5555d;
+  --color-error-soft: #2e1f20;
+  --color-scrim: #00000066;
+  --color-rail: #1e1e22;
+  --color-rail-ink: #cdcdcf;
+  --color-rail-muted: #8e8e92;
+  --color-rail-hover: #2a2a2e;
+  --color-rail-current: #2c2d3d;
+  --color-rail-mark: #8b8bf5;
+  --color-rail-rule: #2a2a2e;
+  --color-rail-focus: #b5b5fa;
+  --key-primary: #7676e0;
+  --on-key-primary: #161618;
+  --color-current-soft: #22232e;
+  --active-bg: var(--color-current-soft);
+  --accent-soft: color-mix(in oklab, var(--accent) 10%, var(--surface));
+  --color-format-docx: #7c93b7;
+  --color-format-pptx: #ce7a66;
+  --color-format-xlsx: #729a80;
+  --palette-key: #7676e0;
+  --palette-on-key: #161618;
+  --palette-wash-share: 12%;
+  --palette-wash-idle-share: 10%;
+  --palette-soft-share: 10%;
+}
+:root[data-palette-dark="noir"] { --palette-look-dark-paper: #161618; --palette-look-dark-sheet: #161618; --palette-look-dark-field: #1a1a1c; --palette-look-dark-ink: #cdcdcf; --palette-look-dark-muted: #8e8e92; --palette-look-dark-rule: #2a2a2e; --palette-look-dark-well: #1e1e22; }
+[data-set-chips="noir"] { --chip-ground: #161618; --chip-rail: #1e1e22; --chip-accent: #8b8bf5; --chip-ink: #cdcdcf; }
+/* Ember: their "Atlas Ember" (dark). */
+:root[data-palette-dark="ember"][data-theme="dark"],
+[data-palette-dark="ember"] .look-scope[data-theme="dark"] {
+  --color-paper: #0b0b0b;
+  --color-paper-2: #000000;
+  --color-paper-3: #141414;
+  --color-field: #0b0b0b;
+  --color-ink: #e8e8e8;
+  --color-ink-2: #bbbbbb;
+  --color-muted: #818181;
+  --color-faint: #818181;
+  --color-rule: #1f1f1f;
+  --color-edge: #5f5f5f;
+  --rule-ink: #262626;
+  --color-teal: #e5481e;
+  --color-teal-ink: #ff8358;
+  --color-attention: #f0b442;
+  --color-attention-ink: #000000;
+  --color-attention-text: #f0b442;
+  --color-attention-soft: #0e0701;
+  --color-done: #4cc764;
+  --color-done-soft: #010b02;
+  --color-error: #f5555d;
+  --color-error-soft: #170303;
+  --color-scrim: #00000099;
+  --color-rail: #000000;
+  --color-rail-ink: #e8e8e8;
+  --color-rail-muted: #818181;
+  --color-rail-hover: #131313;
+  --color-rail-current: #2c0701;
+  --color-rail-mark: #e5481e;
+  --color-rail-rule: #1f1f1f;
+  --color-rail-focus: #ff8358;
+  --key-primary: #c93c15;
+  --on-key-primary: #ffffff;
+  --color-current-soft: #230501;
+  --active-bg: var(--color-current-soft);
+  --accent-soft: color-mix(in oklab, var(--accent) 11%, var(--surface));
+  --color-format-docx: #6685b5;
+  --color-format-pptx: #cf6349;
+  --color-format-xlsx: #578f6b;
+  --palette-key: #c93c15;
+  --palette-on-key: #ffffff;
+  --palette-wash-share: 28%;
+  --palette-wash-idle-share: 26%;
+  --palette-soft-share: 11%;
+}
+:root[data-palette-dark="ember"] { --palette-look-dark-paper: #0b0b0b; --palette-look-dark-sheet: #000000; --palette-look-dark-field: #0b0b0b; --palette-look-dark-ink: #e8e8e8; --palette-look-dark-muted: #818181; --palette-look-dark-rule: #1f1f1f; --palette-look-dark-well: #141414; }
+[data-set-chips="ember"] { --chip-ground: #000000; --chip-rail: #000000; --chip-accent: #e5481e; --chip-ink: #e8e8e8; }
+/* Dracula: their "Atlas Dracula" (dark). */
+:root[data-palette-dark="dracula"][data-theme="dark"],
+[data-palette-dark="dracula"] .look-scope[data-theme="dark"] {
+  --color-paper: #282a36;
+  --color-paper-2: #282a36;
+  --color-paper-3: #44475a;
+  --color-field: #2c2e3b;
+  --color-ink: #f8f8f2;
+  --color-ink-2: #d5d6d3;
+  --color-muted: #adb6cd;
+  --color-faint: #adb6cd;
+  --color-rule: #44475a;
+  --color-edge: #757885;
+  --rule-ink: #3d3f4a;
+  --color-teal: #bd93f9;
+  --color-teal-ink: #c8a7f9;
+  --color-attention: #ffb86c;
+  --color-attention-ink: #282a36;
+  --color-attention-text: #ffb86c;
+  --color-attention-soft: #3e3a3e;
+  --color-done: #50fa7b;
+  --color-done-soft: #304040;
+  --color-error: #ff736d;
+  --color-error-soft: #41323b;
+  --color-scrim: #00000020;
+  --color-rail: #44475a;
+  --color-rail-ink: #f8f8f2;
+  --color-rail-muted: #adb6cd;
+  --color-rail-hover: #515465;
+  --color-rail-current: #555270;
+  --color-rail-mark: #bd93f9;
+  --color-rail-rule: #4c4f61;
+  --color-rail-focus: #c8a7f9;
+  --key-primary: #bd93f9;
+  --on-key-primary: #282a36;
+  --color-current-soft: #38364b;
+  --active-bg: var(--color-current-soft);
+  --accent-soft: color-mix(in oklab, var(--accent) 10%, var(--surface));
+  --color-format-docx: #96adcc;
+  --color-format-pptx: #e39882;
+  --color-format-xlsx: #90b498;
+  --palette-key: #bd93f9;
+  --palette-on-key: #282a36;
+  --palette-wash-share: 12%;
+  --palette-wash-idle-share: 10%;
+  --palette-soft-share: 10%;
+}
+:root[data-palette-dark="dracula"] { --palette-look-dark-paper: #282a36; --palette-look-dark-sheet: #282a36; --palette-look-dark-field: #2c2e3b; --palette-look-dark-ink: #f8f8f2; --palette-look-dark-muted: #adb6cd; --palette-look-dark-rule: #44475a; --palette-look-dark-well: #44475a; }
+[data-set-chips="dracula"] { --chip-ground: #282a36; --chip-rail: #44475a; --chip-accent: #bd93f9; --chip-ink: #f8f8f2; }
+/* Nord: their "Atlas Nord" (dark). */
+:root[data-palette-dark="nord"][data-theme="dark"],
+[data-palette-dark="nord"] .look-scope[data-theme="dark"] {
+  --color-paper: #2e3440;
+  --color-paper-2: #2e3440;
+  --color-paper-3: #3b4252;
+  --color-field: #343b48;
+  --color-ink: #d8dee9;
+  --color-ink-2: #bcc2cd;
+  --color-muted: #adb4c3;
+  --color-faint: #adb4c3;
+  --color-rule: #3b4252;
+  --color-edge: #7d8493;
+  --rule-ink: #404652;
+  --color-teal: #88c0d0;
+  --color-teal-ink: #88c0d0;
+  --color-attention: #ebcb8b;
+  --color-attention-ink: #2e3440;
+  --color-attention-text: #ebcb8b;
+  --color-attention-soft: #42454a;
+  --color-done: #a3be8c;
+  --color-done-soft: #3a4349;
+  --color-error: #ce99a0;
+  --color-error-soft: #3f3a45;
+  --color-scrim: #00000020;
+  --color-rail: #3b4252;
+  --color-rail-ink: #d8dee9;
+  --color-rail-muted: #adb4c3;
+  --color-rail-hover: #464d5d;
+  --color-rail-current: #465364;
+  --color-rail-mark: #88c0d0;
+  --color-rail-rule: #434a5a;
+  --color-rail-focus: #88c0d0;
+  --key-primary: #88c0d0;
+  --on-key-primary: #2e3440;
+  --color-current-soft: #384350;
+  --active-bg: var(--color-current-soft);
+  --accent-soft: color-mix(in oklab, var(--accent) 10%, var(--surface));
+  --color-format-docx: #aebed8;
+  --color-format-pptx: #d9b5b2;
+  --color-format-xlsx: #acc3be;
+  --palette-key: #88c0d0;
+  --palette-on-key: #2e3440;
+  --palette-wash-share: 12%;
+  --palette-wash-idle-share: 10%;
+  --palette-soft-share: 10%;
+}
+:root[data-palette-dark="nord"] { --palette-look-dark-paper: #2e3440; --palette-look-dark-sheet: #2e3440; --palette-look-dark-field: #343b48; --palette-look-dark-ink: #d8dee9; --palette-look-dark-muted: #adb4c3; --palette-look-dark-rule: #3b4252; --palette-look-dark-well: #3b4252; }
+[data-set-chips="nord"] { --chip-ground: #2e3440; --chip-rail: #3b4252; --chip-accent: #88c0d0; --chip-ink: #d8dee9; }
+/* Rosé Pine: their "Atlas Rosé Pine" (dark). */
+:root[data-palette-dark="rose-pine"][data-theme="dark"],
+[data-palette-dark="rose-pine"] .look-scope[data-theme="dark"] {
+  --color-paper: #191724;
+  --color-paper-2: #191724;
+  --color-paper-3: #26233a;
+  --color-field: #1d1a29;
+  --color-ink: #e0def4;
+  --color-ink-2: #bebcd1;
+  --color-muted: #928eab;
+  --color-faint: #928eab;
+  --color-rule: #26233a;
+  --color-edge: #68667d;
+  --rule-ink: #2f2d3b;
+  --color-teal: #ebbcba;
+  --color-teal-ink: #ebbcba;
+  --color-attention: #f6c177;
+  --color-attention-ink: #191724;
+  --color-attention-text: #f6c177;
+  --color-attention-soft: #2f292f;
+  --color-done: #9ccfd8;
+  --color-done-soft: #272a37;
+  --color-error: #eb6f92;
+  --color-error-soft: #2f2130;
+  --color-scrim: #00000020;
+  --color-rail: #26233a;
+  --color-rail-ink: #e0def4;
+  --color-rail-muted: #928eab;
+  --color-rail-hover: #333047;
+  --color-rail-current: #3f384c;
+  --color-rail-mark: #ebbcba;
+  --color-rail-rule: #2f2d44;
+  --color-rail-focus: #ebbcba;
+  --key-primary: #ebbcba;
+  --on-key-primary: #191724;
+  --color-current-soft: #2e2834;
+  --active-bg: var(--color-current-soft);
+  --accent-soft: color-mix(in oklab, var(--accent) 10%, var(--surface));
+  --color-format-docx: #7c94c4;
+  --color-format-pptx: #d3796a;
+  --color-format-xlsx: #719c87;
+  --palette-key: #ebbcba;
+  --palette-on-key: #191724;
+  --palette-wash-share: 12%;
+  --palette-wash-idle-share: 10%;
+  --palette-soft-share: 10%;
+}
+:root[data-palette-dark="rose-pine"] { --palette-look-dark-paper: #191724; --palette-look-dark-sheet: #191724; --palette-look-dark-field: #1d1a29; --palette-look-dark-ink: #e0def4; --palette-look-dark-muted: #928eab; --palette-look-dark-rule: #26233a; --palette-look-dark-well: #26233a; }
+[data-set-chips="rose-pine"] { --chip-ground: #191724; --chip-rail: #26233a; --chip-accent: #ebbcba; --chip-ink: #e0def4; }
+/* Windows 어둡게: their "Atlas Windows Glass" (dark). */
+:root[data-palette-dark="windows-dark"][data-theme="dark"],
+[data-palette-dark="windows-dark"] .look-scope[data-theme="dark"] {
+  --color-paper: #101114;
+  --color-paper-2: #101114;
+  --color-paper-3: #18191d;
+  --color-field: #181a20;
+  --color-ink: #f5f5f7;
+  --color-ink-2: #ceced0;
+  --color-muted: #c7c7cc;
+  --color-faint: #c7c7cc;
+  --color-rule: #252528;
+  --color-edge: #666769;
+  --rule-ink: #28292c;
+  --color-teal: #0a84ff;
+  --color-teal-ink: #409cff;
+  --color-attention: #ffd60a;
+  --color-attention-ink: #101114;
+  --color-attention-text: #ffd60a;
+  --color-attention-soft: #27251c;
+  --color-done: #30d158;
+  --color-done-soft: #18241d;
+  --color-error: #ff453a;
+  --color-error-soft: #291a1a;
+  --color-scrim: #00000059;
+  --color-rail: #18191d;
+  --color-rail-ink: #f5f5f7;
+  --color-rail-muted: #c7c7cc;
+  --color-rail-hover: #26272b;
+  --color-rail-current: #1d283a;
+  --color-rail-mark: #0a84ff;
+  --color-rail-rule: #030304;
+  --color-rail-focus: #409cff;
+  --key-primary: #0064d2;
+  --on-key-primary: #ffffff;
+  --color-current-soft: #141e2b;
+  --active-bg: var(--color-current-soft);
+  --accent-soft: color-mix(in oklab, var(--accent) 10%, var(--surface));
+  --color-format-docx: #7793c0;
+  --color-format-pptx: #d7755d;
+  --color-format-xlsx: #6a9c7c;
+  --palette-key: #0064d2;
+  --palette-on-key: #ffffff;
+  --palette-wash-share: 12%;
+  --palette-wash-idle-share: 10%;
+  --palette-soft-share: 10%;
+}
+:root[data-palette-dark="windows-dark"] { --palette-look-dark-paper: #101114; --palette-look-dark-sheet: #101114; --palette-look-dark-field: #181a20; --palette-look-dark-ink: #f5f5f7; --palette-look-dark-muted: #c7c7cc; --palette-look-dark-rule: #252528; --palette-look-dark-well: #18191d; }
+[data-set-chips="windows-dark"] { --chip-ground: #101114; --chip-rail: #18191d; --chip-accent: #0a84ff; --chip-ink: #f5f5f7; }
+/* The default pair's chips (their blocks are the hand-written ones above). */
+[data-set-chips="atlas"] { --chip-ground: #ffffff; --chip-rail: #f2f2f7; --chip-accent: #007aff; --chip-ink: #1d1d1f; }
+[data-set-chips="graphite"] { --chip-ground: #1c1c1e; --chip-rail: #2c2c2e; --chip-accent: #0a84ff; --chip-ink: #f5f5f7; }
+/* generated:atlas-sets end */
+/* Workbench's chips: its own tokens of each mode (the light and dark blocks at the top), whichever mode is on. */
+[data-set-chips="workbench-light"] { --chip-ground: oklch(100% 0 0); --chip-rail: var(--color-brand-navy); --chip-accent: oklch(56% 0.098 192); --chip-ink: oklch(22% 0.03 262); }
+[data-set-chips="workbench-dark"] { --chip-ground: oklch(21.3% 0.005 260); --chip-rail: oklch(13.5% 0.045 262); --chip-accent: oklch(72% 0.11 190); --chip-ink: oklch(93.5% 0.004 260); }
+
+/* The derived roles a look scope re-declares (the alias block above) are re-set under an Atlas set: a set hands
+   its key down as --palette-key / --palette-on-key, and a generated set the share of its selection wash and of
+   --accent-soft (on a near-black ground the usual share cannot be seen). Without them the alias's own formula
+   stands, so the default pair and Workbench derive exactly as before. `:where` keeps this at the alias's own
+   weight: a rule that sets one of these for its own part (the list column's wash while the keyboard is
+   elsewhere, navigator.css) still wins, as it does over the alias. */
+:where([data-palette-light], [data-palette-dark]) .look-scope {
+  --key-primary: var(--palette-key, var(--color-ink));
+  --on-key-primary: var(--palette-on-key, var(--color-paper));
+  --color-current-soft: color-mix(in oklab, var(--color-teal) var(--palette-wash-share, 12%), var(--color-paper-2));
+  --accent-soft: color-mix(in oklab, var(--accent) var(--palette-soft-share, 10%), var(--surface));
+}
+/* A scope in the mode whose set is Workbench (the other mode's is an Atlas set) drops what the root handed down. */
+:root:not([data-palette-dark]) .look-scope[data-theme="dark"],
+:root:not([data-palette-light]) .look-scope[data-theme="light"] {
+  --palette-key: initial; --palette-on-key: initial; --palette-wash-share: initial; --palette-wash-idle-share: initial; --palette-soft-share: initial;
 }
 
 /* More contrast asked for: rules become edges. */

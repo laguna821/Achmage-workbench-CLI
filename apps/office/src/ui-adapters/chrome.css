@@ -51,8 +51,9 @@ __WB_ROOT__[data-wb-office-theme="dark"] {
   --wb-ui-key: #e8e9ec;
   --wb-ui-on-key: #101113;
 }
-/* 색 조합 Atlas (tokens.css `[data-palette="atlas"]`): the same mirrors of the same roles; the app sends the
-   combination with the theme (office:theme), chrome.ts sets data-wb-office-palette. */
+/* 색 조합 (tokens.css, the Atlas sets): the same mirrors of the same roles, one block per set (a set has one
+   mode). The app sends the set of the editor's mode with the theme (office:theme), chrome.ts sets
+   data-wb-office-palette; none = Workbench. "atlas" and "graphite" are the default pair. */
 __WB_ROOT__[data-wb-office-palette="atlas"] {
   --wb-ui-bg: #ffffff;
   --wb-ui-group: #ffffff;
@@ -67,7 +68,7 @@ __WB_ROOT__[data-wb-office-palette="atlas"] {
   --wb-ui-key: #0064d2;
   --wb-ui-on-key: #ffffff;
 }
-__WB_ROOT__[data-wb-office-palette="atlas"][data-wb-office-theme="dark"] {
+__WB_ROOT__[data-wb-office-palette="graphite"] {
   --wb-ui-bg: #242426;
   --wb-ui-group: #1c1c1e;
   --wb-ui-text: #f5f5f7;
@@ -81,6 +82,135 @@ __WB_ROOT__[data-wb-office-palette="atlas"][data-wb-office-theme="dark"] {
   --wb-ui-key: #0064d2;
   --wb-ui-on-key: #ffffff;
 }
+/* The other Atlas sets: written by scripts/atlas-sets.ts (the same rule as tokens.css's region). */
+/* generated:atlas-sets begin (scripts/atlas-sets.ts; do not edit by hand) */
+__WB_ROOT__[data-wb-office-palette="windows"] {
+  --wb-ui-bg: #ffffff;
+  --wb-ui-group: #ffffff;
+  --wb-ui-text: #1b1f2a;
+  --wb-ui-muted: #576174;
+  --wb-ui-line: #dbe3f1;
+  --wb-ui-focus: #1d4ed8;
+  --wb-ui-on-accent: #ffffff;
+  --wb-ui-hover: #eef3fb;
+  --wb-ui-selected: #e7eefd;
+  --wb-ui-danger: #cd2a29;
+  --wb-ui-key: #1d4ed8;
+  --wb-ui-on-key: #ffffff;
+}
+__WB_ROOT__[data-wb-office-palette="rose"] {
+  --wb-ui-bg: #fdf7f8;
+  --wb-ui-group: #fdf7f8;
+  --wb-ui-text: #2e1f24;
+  --wb-ui-muted: #755963;
+  --wb-ui-line: #ecd9de;
+  --wb-ui-focus: #ab495d;
+  --wb-ui-on-accent: #ffffff;
+  --wb-ui-hover: #f5eaed;
+  --wb-ui-selected: #f6e5e7;
+  --wb-ui-danger: #bd4245;
+  --wb-ui-key: #ab495d;
+  --wb-ui-on-key: #ffffff;
+}
+__WB_ROOT__[data-wb-office-palette="midnight"] {
+  --wb-ui-bg: #0a0a0a;
+  --wb-ui-group: #000000;
+  --wb-ui-text: #e5e5ea;
+  --wb-ui-muted: #838386;
+  --wb-ui-line: #1c1c1e;
+  --wb-ui-focus: #409cff;
+  --wb-ui-on-accent: #101113;
+  --wb-ui-hover: #1c1c1e;
+  --wb-ui-selected: #121921;
+  --wb-ui-danger: #ff453a;
+  --wb-ui-key: #0064d2;
+  --wb-ui-on-key: #ffffff;
+}
+__WB_ROOT__[data-wb-office-palette="noir"] {
+  --wb-ui-bg: #1a1a1c;
+  --wb-ui-group: #161618;
+  --wb-ui-text: #cdcdcf;
+  --wb-ui-muted: #8e8e92;
+  --wb-ui-line: #2a2a2e;
+  --wb-ui-focus: #b5b5fa;
+  --wb-ui-on-accent: #101113;
+  --wb-ui-hover: #1e1e22;
+  --wb-ui-selected: #27272e;
+  --wb-ui-danger: #f5555d;
+  --wb-ui-key: #7676e0;
+  --wb-ui-on-key: #161618;
+}
+__WB_ROOT__[data-wb-office-palette="ember"] {
+  --wb-ui-bg: #0b0b0b;
+  --wb-ui-group: #0b0b0b;
+  --wb-ui-text: #e8e8e8;
+  --wb-ui-muted: #818181;
+  --wb-ui-line: #1f1f1f;
+  --wb-ui-focus: #ff8358;
+  --wb-ui-on-accent: #101113;
+  --wb-ui-hover: #141414;
+  --wb-ui-selected: #211713;
+  --wb-ui-danger: #f5555d;
+  --wb-ui-key: #c93c15;
+  --wb-ui-on-key: #ffffff;
+}
+__WB_ROOT__[data-wb-office-palette="dracula"] {
+  --wb-ui-bg: #2c2e3b;
+  --wb-ui-group: #282a36;
+  --wb-ui-text: #f8f8f2;
+  --wb-ui-muted: #adb6cd;
+  --wb-ui-line: #44475a;
+  --wb-ui-focus: #c8a7f9;
+  --wb-ui-on-accent: #101113;
+  --wb-ui-hover: #44475a;
+  --wb-ui-selected: #3a394c;
+  --wb-ui-danger: #ff736d;
+  --wb-ui-key: #bd93f9;
+  --wb-ui-on-key: #282a36;
+}
+__WB_ROOT__[data-wb-office-palette="nord"] {
+  --wb-ui-bg: #343b48;
+  --wb-ui-group: #2e3440;
+  --wb-ui-text: #d8dee9;
+  --wb-ui-muted: #adb4c3;
+  --wb-ui-line: #3b4252;
+  --wb-ui-focus: #88c0d0;
+  --wb-ui-on-accent: #101113;
+  --wb-ui-hover: #3b4252;
+  --wb-ui-selected: #3c4754;
+  --wb-ui-danger: #ce99a0;
+  --wb-ui-key: #88c0d0;
+  --wb-ui-on-key: #2e3440;
+}
+__WB_ROOT__[data-wb-office-palette="rose-pine"] {
+  --wb-ui-bg: #1d1a29;
+  --wb-ui-group: #191724;
+  --wb-ui-text: #e0def4;
+  --wb-ui-muted: #928eab;
+  --wb-ui-line: #26233a;
+  --wb-ui-focus: #ebbcba;
+  --wb-ui-on-accent: #101113;
+  --wb-ui-hover: #26233a;
+  --wb-ui-selected: #2e2836;
+  --wb-ui-danger: #eb6f92;
+  --wb-ui-key: #ebbcba;
+  --wb-ui-on-key: #191724;
+}
+__WB_ROOT__[data-wb-office-palette="windows-dark"] {
+  --wb-ui-bg: #181a20;
+  --wb-ui-group: #101114;
+  --wb-ui-text: #f5f5f7;
+  --wb-ui-muted: #c7c7cc;
+  --wb-ui-line: #252528;
+  --wb-ui-focus: #409cff;
+  --wb-ui-on-accent: #101113;
+  --wb-ui-hover: #18191d;
+  --wb-ui-selected: #1d2633;
+  --wb-ui-danger: #ff453a;
+  --wb-ui-key: #0064d2;
+  --wb-ui-on-key: #ffffff;
+}
+/* generated:atlas-sets end */
 __WB_CHROME__ {
   /* Rebind renderer chrome tokens locally. Never change renderer :root tokens:
      those can also supply page, canvas, selection and export styling. */

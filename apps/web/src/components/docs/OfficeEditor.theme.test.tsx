@@ -26,6 +26,14 @@ it("attaches theme updates after a delayed grant and keeps the dirty iframe thro
   await message({ type: "office:dirty", dirty: true });
   await act(async () => { screen.container.querySelector("section")!.dataset.theme = "dark"; });
   expect(sent).toHaveBeenCalledWith({ type: "office:theme", theme: "dark" }, "http://office.test");
+  // 색 조합: the editors' chrome is sent the chosen set of the pane's own mode; choosing another reaches it at once.
+  await act(async () => { document.documentElement.dataset.paletteLight = "rose"; document.documentElement.dataset.paletteDark = "nord"; });
+  expect(sent).toHaveBeenLastCalledWith({ type: "office:theme", theme: "dark", palette: "nord" }, "http://office.test");
+  await act(async () => { screen.container.querySelector("section")!.dataset.theme = "light"; });
+  expect(sent).toHaveBeenLastCalledWith({ type: "office:theme", theme: "light", palette: "rose" }, "http://office.test");
+  await act(async () => { delete document.documentElement.dataset.paletteLight; });
+  expect(sent).toHaveBeenLastCalledWith({ type: "office:theme", theme: "light" }, "http://office.test");
+  await act(async () => { delete document.documentElement.dataset.paletteDark; });
   screen.rerender(view(true));
   screen.rerender(view(false));
   ref.current!.showCommands();

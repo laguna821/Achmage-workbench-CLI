@@ -62,7 +62,7 @@ type MountedUi = { root: HTMLElement; theme: UiTheme; notify: (theme: UiTheme) =
 const mounted = new Map<string, MountedUi>();
 
 /** Only UI state and the original theme event change. Document state stays in its renderer. */
-export async function applyOfficeTheme(viewId: string, theme: UiTheme, palette?: "atlas" | null): Promise<{ remounted: false }> {
+export async function applyOfficeTheme(viewId: string, theme: UiTheme, palette?: string | null): Promise<{ remounted: false }> {
   const view = mounted.get(viewId);
   if (!view) throw new Error("편집기 UI가 아직 준비되지 않았습니다.");
   view.root.dataset.theme = theme;

@@ -20,6 +20,7 @@ import type { OfficeWikiRequest } from "../../../../../packages/contracts/src/of
 import type { KnowledgeOpenRequest } from "../../../../../packages/contracts/src/office-knowledge.ts";
 import type { PdfNoteRequest, PdfNoteResult } from "../../../../../packages/contracts/src/pdf-notes.ts";
 import { PdfNoteDialog } from "./PdfNoteDialog.tsx";
+import { paletteOf } from "../../theme.ts";
 
 const BUSY = failure("문서를 여는 중이거나 다른 출력을 처리 중입니다.");
 
@@ -148,8 +149,8 @@ export const OfficeEditor = forwardRef<
   latest.current = artifact;
 
   const theme = () => (frame.current?.closest("[data-theme]")?.getAttribute("data-theme") === "dark" ? "dark" : "light");
-  // The app's 색 조합 (theme.ts sets it on <html>); the editors' chrome mirrors it.
-  const themeMessage = () => ({ type: "office:theme" as const, theme: theme(), ...(document.documentElement.dataset.palette === "atlas" ? { palette: "atlas" as const } : {}) });
+  // The app's 색 조합 (theme.ts sets the chosen light and dark sets on <html>): the editors' chrome mirrors the set of this pane's mode.
+  const themeMessage = () => { const mode = theme(), palette = paletteOf(mode); return { type: "office:theme" as const, theme: mode, ...(palette ? { palette } : {}) }; };
   const update = (patch: Partial<Omit<OfficeStatus, "changed" | "same">>) => {
     const next = { ...status.current, ...patch };
     if (!next.dirty) compared.current = "none";
@@ -811,7 +812,7 @@ export const OfficeEditor = forwardRef<
     if (!frame.current || !opened.current) return;
     const notify = () => send(themeMessage());
     const observer = new MutationObserver(notify);
-    for (let scope: HTMLElement | null = frame.current.parentElement; scope; scope = scope.parentElement) observer.observe(scope, { attributes: true, attributeFilter: ["data-theme", "data-palette"] });
+    for (let scope: HTMLElement | null = frame.current.parentElement; scope; scope = scope.parentElement) observer.observe(scope, { attributes: true, attributeFilter: ["data-theme", "data-palette-light", "data-palette-dark"] });
     notify();
     return () => observer.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps

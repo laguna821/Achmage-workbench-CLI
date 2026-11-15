@@ -155,7 +155,8 @@ describe("tabs and projects (N1)", () => {
     let layout = withTabs(singleLayout<View>({ kind: "new" }, "A"));
     expect(lastTabOf(layout, "A")).toBeNull();
     layout = go(layout, conversation("b1", "B"));
-    expect(offScope(focusedPane(layout), "B")).toEqual([]);
+    // Project tabs (2026-11-15): home is no project's, so it is not on a project's strip either (one list away).
+    expect(offScope(focusedPane(layout), "B")).toEqual([findTab(layout, JSON.stringify({ kind: "new" }))!.tab.id]);
   });
 
   it("prefers the focused pane, then another pane (a project open beside)", () => {
@@ -166,16 +167,19 @@ describe("tabs and projects (N1)", () => {
     expect(lastTabOf(layout, "B")!.pane.id).toBe(layout.focus);
   });
 
-  it("the strip leaves out other projects' tabs (open and running), never the tab on screen; all shows them", () => {
+  it("the strip leaves out everything that is not the project's (open and running, one list away); all shows them", () => {
     let layout = withTabs(singleLayout<View>({ kind: "new" }, null));
     layout = go(layout, conversation("a1", "A"));
     layout = go(layout, conversation("b1", "B"));
     const pane = focusedPane(layout);
     const a1 = findTab(layout, "session:a1")!.tab.id;
-    expect(offScope(pane, "B")).toEqual([a1]);
-    // A pane showing A while B is current keeps its own tab on its strip.
-    expect(offScope(pane, "A")).toEqual([findTab(layout, "session:b1")!.tab.id].filter((id) => id !== activeTab(pane).id));
+    const homeTab = findTab(layout, JSON.stringify({ kind: "new" }))!.tab.id, b1 = findTab(layout, "session:b1")!.tab.id;
+    expect(offScope(pane, "B")).toEqual([homeTab, a1]);
+    // Project tabs (2026-11-15): the strip is the window's project only — a tab of another project is off it
+    // even where it is the pane's tab on screen (the panes follow the window's project: tabs.ts followScope).
+    expect(offScope(pane, "A")).toEqual([homeTab, b1]);
     expect(offScope(pane, "B", true)).toEqual([]);
-    expect(offScope(pane, null)).toEqual([]);
+    // No project chosen: no tab on the strip.
+    expect(offScope(pane, null)).toEqual([homeTab, a1, b1]);
   });
 });

@@ -169,9 +169,11 @@ class TabStrip extends Component<{ paneId: string; activeId: string; onOverflow:
 }
 
 /**
- * N1: the strip shows the current project's tabs (per-project restore); other projects' tabs stay
- * open and running and are one list away (⌄, under "다른 프로젝트"). A pane showing another
- * project's tab says that project on the tab. `all` shows every project's tabs, as before.
+ * Project tabs: the strip shows the window's project's tabs and nothing else — no home tab, no other
+ * project's tab; with no project chosen (`workId` null) it shows no tab at all. Everything else stays
+ * open and running, one list away (⌄: home, then "다른 프로젝트"). The ⌄ key counts this project's
+ * own overflow only. `all` shows every project's tabs, as before (a tab of another project then says
+ * its project).
  */
 export type TabScope = { workId: string | null; all: boolean; projectName: (workId: string) => string; onShowAll: (all: boolean) => void;
   /** Skin 2 · B: this pane's project, said before its tabs while panes show different projects. */
@@ -189,7 +191,11 @@ export function GroupTabs<V>({ pane, head, onSelect, onClose, onReorder, onNew, 
   const [overflowed, setOverflowed] = useState<string[]>([]);
   const list = useMenuTrigger();
   const shownOverflow = overflowed.filter((id) => tabs.some((tab) => tab.id === id));
-  const listed = shownOverflow.length + behind.size;
+  // The count is this project's own overflow; what is behind (home, other projects) is not announced.
+  const listed = shownOverflow.length;
+  const apart = all.filter((tab) => behind.has(tab.id) && projectOfTab(tab) === null), others = all.filter((tab) => behind.has(tab.id) && projectOfTab(tab) !== null);
+  // Something to list beyond what the strip shows: the overflow, another project's tab, a second place (home behind a project; the archive beside home).
+  const more = listed > 0 || others.length > 0 || apart.some((tab) => tab.id !== activeId) || Boolean(scope?.all && all.some((tab) => { const owner = projectOfTab(tab); return owner && owner !== scope.workId; }));
   return <nav className="group-tabs" data-pane-id={pane.id} aria-label={scope?.label ? `${scope.label} 탭` : "작업공간 탭"}>
     {scope?.label ? <span className="group-tabs-project" title={`이 칸의 프로젝트: ${scope.label}`}>{scope.label}</span> : null}
     <TabStrip paneId={pane.id} activeId={activeId} onOverflow={setOverflowed}>
@@ -231,7 +237,7 @@ export function GroupTabs<V>({ pane, head, onSelect, onClose, onReorder, onNew, 
       })}
     </TabStrip>
     {/* Tabs that do not fit are one list away: every open tab, the current one checked. */}
-    {listed || (scope?.all && all.some((tab) => { const owner = projectOfTab(tab); return owner && owner !== scope.workId; })) ? <>
+    {more ? <>
       <button type="button" ref={list.anchorRef} className="ghost-button small group-tab-more" aria-label={listed ? `열린 탭 목록, ${listed}개 더` : "열린 탭 목록"} title="열린 탭 모두 보기 (다른 프로젝트의 탭 포함)" {...list.triggerProps}>
         {/* One calm count (release unit A): "2개 더", no chevron beside a bare number. */}
         {listed ? <span className="group-tab-more-count">{listed}개 더</span> : <Icon name="chevronDown" size={14} />}
@@ -242,8 +248,12 @@ export function GroupTabs<V>({ pane, head, onSelect, onClose, onReorder, onNew, 
           return <MenuItem key={tab.id} icon={<span className="badged" aria-hidden>{title.icon}{title.unseen && tab.id !== activeId ? <span className="new-badge" /> : null}</span>}
             checked={tab.id === activeId} type="radio" value={tab.id} textValue={title.title} onSelect={() => onSelect(tab.id)}>{title.title}</MenuItem>;
         })}
-        {behind.size ? <MenuItem key="other-head" disabled textValue="다른 프로젝트" onSelect={() => undefined}>다른 프로젝트 (열려 있고 계속 실행 중)</MenuItem> : null}
-        {all.filter((tab) => behind.has(tab.id)).map((tab) => {
+        {apart.map((tab) => {
+          const title = head({ ...pane, view: tab.view, workId: tab.workId, sessionId: tab.sessionId });
+          return <MenuItem key={tab.id} icon={<span className="badged" aria-hidden>{title.icon}</span>} checked={tab.id === activeId} type="radio" value={tab.id} textValue={title.title} onSelect={() => onSelect(tab.id)}>{title.title}</MenuItem>;
+        })}
+        {others.length ? <MenuItem key="other-head" disabled textValue="다른 프로젝트" onSelect={() => undefined}>다른 프로젝트 (열려 있고 계속 실행 중)</MenuItem> : null}
+        {others.map((tab) => {
           const title = head({ ...pane, view: tab.view, workId: tab.workId, sessionId: tab.sessionId });
           const holder = projectOfTab(tab);
           const owner = holder && scope ? scope.projectName(holder) : "";

@@ -49,15 +49,17 @@ it("speaks a teacher's words on every step: no CLI, OS 등록, 이음 앱, 호�
   }
 });
 
-it("화면 sets the look at once: 밝기 and 색 조합 (Atlas the default, Workbench; the one quiet line)", async () => {
+it("화면 sets the look at once: 밝기 and 색 조합 (the default pair or Workbench; every set is in 설정 › 화면; the one quiet line)", async () => {
   const props = await mount();
   fireEvent.click(screen.getByRole("radio", { name: /어둡게/ }));
   expect(props.onTheme).toHaveBeenCalledWith("dark");
   const palette = screen.getByRole("radiogroup", { name: "색 조합" });
   expect(within(palette).getAllByRole("radio").map((choice) => [choice.textContent, choice.getAttribute("aria-checked")])).toEqual([["Atlas (기본)", "true"], ["Workbench", "false"]]);
   fireEvent.click(within(palette).getByRole("radio", { name: "Workbench" }));
-  expect(props.onPalette).toHaveBeenCalledWith("workbench");
-  expect(document.body.textContent).toContain("Atlas File Manager의 색 조합을 따랐습니다");
+  expect(props.onPalette).toHaveBeenCalledWith({ light: "workbench", dark: "workbench" });
+  fireEvent.click(within(palette).getByRole("radio", { name: "Atlas (기본)" }));
+  expect(props.onPalette).toHaveBeenLastCalledWith({ light: "atlas", dark: "graphite" });
+  expect(document.body.textContent).toContain("색 조합은 Atlas File Manager의 것을 따랐습니다. Dracula, Nord, Rosé Pine은 각 프로젝트의 색입니다.");
   expect(screen.getByRole("img", { name: "고른 화면 미리 보기" })).toBeTruthy();
 });
 

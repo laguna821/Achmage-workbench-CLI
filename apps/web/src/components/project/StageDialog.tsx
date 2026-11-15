@@ -8,7 +8,7 @@ import "../../styles/project.css";
 const SWATCHES = ["#e5484d", "#f76b15", "#e2a400", "#30a46c", "#12a594", "#3e63dd", "#8e4ec6", "#d6409f", "#8b8d98"];
 
 /**
- * "단계 이름·색 바꾸기": the stages every project chooses from. Notes keep the names they were
+ * "단계 편집" (names, how many, order, colours): the stages every project chooses from. Notes keep the names they were
  * written with; one stage may archive the project (앱 보관함).
  */
 export function StageDialog({ api, stages, onClose, onSaved, onError }: { api: Api; stages: ProjectStage[]; onClose: () => void; onSaved: (stages: ProjectStage[]) => void; onError: (error: unknown) => void }) {
@@ -46,9 +46,9 @@ export function StageDialog({ api, stages, onClose, onSaved, onError }: { api: A
 
   return (
     <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <div className="stage-dialog" role="dialog" aria-label="단계 이름·색 바꾸기">
-        <h2>단계 이름·색</h2>
-        <p className="muted">모든 프로젝트가 고르는 단계입니다. 이미 노트에 적힌 이름은 그대로 남습니다. "보관" 표시가 있는 단계를 고르면 프로젝트가 보관함으로 갑니다.</p>
+      <div className="stage-dialog" role="dialog" aria-label="단계 편집">
+        <h2>단계 편집</h2>
+        <p className="muted">모든 프로젝트가 고르는 단계입니다. 이름과 색을 바꾸고, 단계를 더하거나 지우고, 순서를 옮길 수 있습니다. 이미 노트에 적힌 이름은 그대로 남습니다. "보관" 표시가 있는 단계를 고르면 프로젝트가 보관함으로 갑니다.</p>
         <ol className="stage-rows">
           {list.map((stage, index) => (
             <li key={index} className="stage-row">

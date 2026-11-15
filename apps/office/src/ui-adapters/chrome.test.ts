@@ -2,13 +2,17 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 import { appTokens, CHROME_MIRRORS, chromeMirrors, srgbHex } from "./app-tokens.ts";
+import { ATLAS_SETS } from "../../../web/src/styles/atlas-sets.ts";
 
 const css = readFileSync("apps/office/src/ui-adapters/chrome.css", "utf8");
 
 // The editors' chrome cannot read the app's custom properties (another origin): chrome.css copies them as hex.
 // Every copy must be the app's token, light and dark, and no copy may exist without a token it follows.
-it("mirrors every app token the editors' chrome copies, light and dark, in both colour combinations, and copies nothing without a token", async () => {
-  for (const palette of ["workbench", "atlas"] as const) for (const theme of ["light", "dark"] as const) {
+const SETS: ["light" | "dark", string][] = [["light", "workbench"], ["dark", "workbench"], ...ATLAS_SETS.map(set => [set.mode, set.id] as ["light" | "dark", string])];
+
+it("mirrors every app token the editors' chrome copies, light and dark, in Workbench and in every Atlas set, and copies nothing without a token", async () => {
+  expect(SETS.length).toBe(13);
+  for (const [theme, palette] of SETS) {
     const mirrors = chromeMirrors(css, theme, palette), app = await appTokens(theme, palette), at = `${palette} ${theme}`;
     expect([at, [...mirrors.keys()].filter(name => !(name in CHROME_MIRRORS))]).toEqual([at, []]);
     expect([at, Object.keys(CHROME_MIRRORS).filter(name => !mirrors.has(name))]).toEqual([at, []]);
@@ -19,8 +23,8 @@ it("mirrors every app token the editors' chrome copies, light and dark, in both 
   }
 });
 
-it("keeps every colour of the chrome sheets on the mirrors: no hex outside chrome.css's root blocks (two per colour combination)", () => {
-  const rest = css.replace(/__WB_ROOT__(?:\[data-wb-office-palette="atlas"\])?(?:\[data-wb-office-theme="dark"\])? \{[^}]*\}/g, "");
+it("keeps every colour of the chrome sheets on the mirrors: no hex outside chrome.css's root blocks (Workbench's two, one per Atlas set)", () => {
+  const rest = css.replace(/__WB_ROOT__(?:\[data-wb-office-palette="[\w-]+"\])?(?:\[data-wb-office-theme="dark"\])? \{[^}]*\}/g, "");
   expect(rest.match(/#[0-9a-f]{3,8}\b/gi) ?? []).toEqual([]);
   // The formats' own sheets (Hangul studio, Markdown ribbon) draw only with the mirrors as well.
   for (const sheet of ["hangul-studio.css", "markdown-ribbon.css"]) {
