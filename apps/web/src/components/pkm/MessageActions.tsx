@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { failure } from "../../top-notice.ts";
 import { Icon } from "../Icon.tsx";
 import { useOptionalPkm } from "./PkmContext.tsx";
 import "../../styles/pkm.css";
@@ -35,10 +36,10 @@ export function MessageActions({ sessionId, itemId, streaming }: { sessionId: st
       .then((write) =>
         pkm.onToast({
           text: `${section === "decision" ? "결정" : "열린 질문"}으로 프로젝트 노트에 남겼습니다.`,
-          action: write.token ? { label: "되돌리기", run: () => void pkm.api.undoProject(session.workId, write.token).catch((error: Error) => pkm.onToast(error.message)) } : undefined,
+          action: write.token ? { label: "되돌리기", run: () => void pkm.api.undoProject(session.workId, write.token).catch((error: Error) => pkm.onToast(failure(error))) } : undefined,
         }),
       )
-      .catch((error: Error) => pkm.onToast(error.message));
+      .catch((error: Error) => pkm.onToast(failure(error)));
   };
   const makePage = () => {
     // A selection inside this reply narrows the page to it.
@@ -49,7 +50,7 @@ export function MessageActions({ sessionId, itemId, streaming }: { sessionId: st
         pkm.onToast(`페이지를 만들었습니다: ${artifact.name}`);
         pkm.openArtifact(artifact);
       })
-      .catch((error: Error) => pkm.onToast(error.message));
+      .catch((error: Error) => pkm.onToast(failure(error)));
   };
   return (
     <div ref={ref} className="message-actions">

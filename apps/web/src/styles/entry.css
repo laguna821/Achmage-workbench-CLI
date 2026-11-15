@@ -11,8 +11,8 @@
 }
 
 .project-button.existing {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
-  color: var(--text);
+  --c-edge: color-mix(in srgb, var(--accent) 45%, var(--line));
+  --c-ink: var(--text);
 }
 
 .project-button.existing > svg:first-child {
@@ -26,11 +26,11 @@
 .project-filter {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 2px 2px 6px;
+  gap: var(--space-xs);
+  margin: var(--space-3xs) var(--space-3xs) 6px;
   padding: 0 10px;
   height: 36px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--field-line);
   border-radius: var(--r-md);
   background: var(--surface);
   color: var(--muted);
@@ -45,8 +45,8 @@
   min-width: 0;
   border: none;
   outline: none;
-  background: transparent;
-  color: var(--text);
+  --c-fill: transparent;
+  --c-ink: var(--text);
   font: inherit;
   font-size: var(--fs-ui);
 }
@@ -73,12 +73,12 @@
 }
 
 .project-empty {
-  padding: 8px 10px 10px;
+  padding: var(--space-xs) 10px 10px;
   font-size: var(--fs-meta);
   color: var(--faint);
 }
 
-/* The setting in "연결과 설정". */
+/* The setting in 설정 › 일반. */
 .works-dir-path {
   font-size: var(--fs-meta);
   color: var(--text);
@@ -87,30 +87,24 @@
 .works-dir-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--space-xs);
+  margin-top: var(--space-xs);
 }
 
 .works-dir-form {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-top: 8px;
+  margin-top: var(--space-xs);
 }
 
 .works-dir-form input {
   width: 100%;
   padding: 7px 9px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--surface);
-  color: var(--text);
+  border-width: 1px; border-style: solid; --c-edge: var(--field-line);
+  --c-fill: var(--surface);
+  --c-ink: var(--text);
   font-size: var(--fs-meta);
-}
-
-.works-dir-form input:focus {
-  outline: none;
-  border-color: var(--accent);
 }
 
 /* The settings popover is taller than a short window: it scrolls inside the window instead of

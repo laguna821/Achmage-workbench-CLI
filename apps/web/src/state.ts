@@ -35,6 +35,8 @@ export type State = {
   transcripts: Record<string, Transcript>;
   prefs: UiPrefs;
   artifacts: Record<string, Artifact>;
+  /** Documents taken out of their projects ("삭제"), restorable from 보관함. */
+  removedArtifacts: Record<string, Artifact>;
   proposals: Record<string, Proposal>;
   handoffs: Record<string, Handoff>;
   /** Linked sessions ("세션 잇기"), live and ended. */
@@ -61,6 +63,7 @@ export const initialState: State = {
   transcripts: {},
   prefs: {},
   artifacts: {},
+  removedArtifacts: {},
   proposals: {},
   handoffs: {},
   links: {},
@@ -103,6 +106,7 @@ export function reducer(state: State, action: Action): State {
         transcripts: {},
         prefs: snapshot.prefs ?? {},
         artifacts: byId(snapshot.artifacts ?? []),
+        removedArtifacts: byId(snapshot.removedArtifacts ?? []),
         proposals: byId(snapshot.proposals ?? []),
         handoffs: byId(snapshot.handoffs ?? []),
         links: byId(snapshot.links ?? []),
@@ -146,6 +150,7 @@ export function reducer(state: State, action: Action): State {
             sessions: Object.fromEntries(Object.entries(state.sessions).filter(([id]) => !ids.has(id))),
             transcripts: Object.fromEntries(Object.entries(state.transcripts).filter(([id]) => !ids.has(id))),
             artifacts: Object.fromEntries(Object.entries(state.artifacts).filter(([id]) => !artifacts.has(id))),
+            removedArtifacts: Object.fromEntries(Object.entries(state.removedArtifacts).filter(([, artifact]) => artifact.workId !== event.workId)),
             proposals: Object.fromEntries(Object.entries(state.proposals).filter(([, proposal]) => !artifacts.has(proposal.artifactId))),
             handoffs: Object.fromEntries(Object.entries(state.handoffs).filter(([, handoff]) => !ids.has(handoff.sourceSessionId) && !ids.has(handoff.targetSessionId))),
             links: Object.fromEntries(Object.entries(state.links).filter(([, link]) => !link.participants.some(id => ids.has(id)))),
@@ -158,8 +163,18 @@ export function reducer(state: State, action: Action): State {
           return { ...next, sessions: { ...state.sessions, [event.session.id]: event.session } };
         case "prefs.updated":
           return { ...next, prefs: event.prefs };
-        case "artifact.upserted":
-          return { ...next, artifacts: { ...state.artifacts, [event.artifact.id]: event.artifact } };
+        case "artifact.upserted": {
+          const { [event.artifact.id]: _restored, ...removedArtifacts } = state.removedArtifacts;
+          return { ...next, artifacts: { ...state.artifacts, [event.artifact.id]: event.artifact }, removedArtifacts };
+        }
+        case "artifact.removed": {
+          const { [event.artifact.id]: _gone, ...artifacts } = state.artifacts;
+          return { ...next, artifacts, removedArtifacts: { ...state.removedArtifacts, [event.artifact.id]: event.artifact } };
+        }
+        case "artifact.purged": {
+          const { [event.artifactId]: _purged, ...removedArtifacts } = state.removedArtifacts;
+          return { ...next, removedArtifacts };
+        }
         case "proposal.upserted":
           return { ...next, proposals: { ...state.proposals, [event.proposal.id]: event.proposal } };
         case "tools.status":
@@ -202,6 +217,12 @@ export function reducer(state: State, action: Action): State {
 
 export const isBusy = (session: Session | undefined) =>
   Boolean(session && session.status !== "idle" && session.status !== "error");
+
+/**
+ * The engine is working on a turn (the input's progress line): not while it waits for the user's
+ * approval (the approval capsule says that), nor once it is stopping, finished or failed.
+ */
+export const turnRunning = (session: Session | null | undefined) => session?.status === "starting" || session?.status === "running";
 
 export function sessionsOf(state: State, workId: string) {
   return Object.values(state.sessions)

@@ -1,11 +1,12 @@
 import { useMemo, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
-import { BASE_FILE_LABELS, isUnseen, type Artifact, type ProjectStage, type PropertyType, type Session, type SortRule, type Work } from "@workbench/contracts";
+import { ItemIcon } from "../ItemIcon.tsx";
+import { BASE_FILE_LABELS, PROVIDER_LABEL, isUnseen, type Artifact, type ProjectStage, type PropertyType, type Session, type SortRule, type Work } from "@workbench/contracts";
 import { ago, statusText, statusTone } from "../../format.ts";
 import { isWorking, recency } from "../../overview.ts";
 import { linkLabel, stageOf } from "../../project.ts";
 import { folderPath } from "../../project-query.ts";
 import type { State } from "../../state.ts";
-import { workDocs } from "../../tree.ts";
+import { leadAgent, workDocs } from "../../tree.ts";
 import { FormatBadge } from "../DocCards.tsx";
 import { EngineMark } from "../EngineMark.tsx";
 import { Icon } from "../Icon.tsx";
@@ -27,18 +28,18 @@ export function StagePill({ stages, name, onClick }: { stages: ProjectStage[]; n
   const body = (
     <>
       <span className="projects-stage-dot" aria-hidden />
-      {stage ? stage.name : "값 없음"}
+      {stage ? stage.name : "단계 정하기"}
     </>
   );
   return onClick ? (
     <button type="button" className={`projects-stage${stage ? "" : " empty"}`} style={style} onClick={onClick} title="단계 바꾸기">
       {body}
     </button>
-  ) : (
-    <span className={`projects-stage${stage ? "" : " empty"}`} style={style}>
+  ) : stage ? (
+    <span className="projects-stage" style={style}>
       {body}
     </span>
-  );
+  ) : null; /* fix 1: an empty stage is not shown as a "값 없음" chip */
 }
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -130,12 +131,14 @@ export function WorkCard({
   const chips = fields.includes("chips");
   const last = Math.max(work.updatedAt, ...sessions.map(recency));
   const path = fields.includes("folder") ? folderPath(state.folders, work.folderId)?.replaceAll("/", " / ") : null;
+  const listed = new Set(docs.slice(0, 4).map((artifact) => artifact.id));
+  const onCard = (session: Session) => Boolean(session.documentAgent && listed.has(session.documentAgent.artifactId));
   return (
     <div className={`work-card${chips ? " with-chips" : ""}`} data-flip={`w:${work.id}`} data-work={work.id}>
       <ProjectSelectionCheckbox id={work.id} title={work.title} disabled={row?.archived ?? Boolean(work.archivedAt)} />
       {fields.includes("thumbnail") ? <ProjectThumbnail summary={row?.summary} /> : null}
       <button type="button" className="work-card-title" onClick={() => open.project(work)} title={work.cwd}>
-        <Icon name="project" size={14} />
+        <ItemIcon kind="project" size={14} />
         <span>{work.title}</span>
       </button>
       {stage !== undefined && fields.includes("stage") ? <StagePill stages={stages} name={stage} /> : null}
@@ -144,9 +147,9 @@ export function WorkCard({
       {row && fields.includes("tags") && tagsOf(row).length ? <span className="kanban-card-tags">{tagsOf(row).map((tag) => `#${tag}`).join(" ")}</span> : null}
       {row ? <PropChips row={row} fields={fields} /> : null}
       {chips ? ([
-        { key: "chats", label: "채팅", members: sessions.filter(session => !session.pageAgent && !session.documentAgent) },
-        { key: "web", label: "웹 AI", members: sessions.filter(session => session.pageAgent) },
-        { key: "document-ai", label: "문서 AI", members: sessions.filter(session => session.documentAgent && !session.pageAgent) },
+        // A document's AI belongs to its document chip; one whose document is not on the card stays a conversation.
+        { key: "chats", label: "대화", members: sessions.filter(session => !session.pageAgent && !onCard(session)) },
+        { key: "web", label: "웹", members: sessions.filter(session => session.pageAgent) },
       ] as const).filter(group => group.members.length).map(group => (
         <div className="work-content-group" key={group.key}>
           <span className="work-content-label">{group.label} · {group.members.length}</span>
@@ -158,7 +161,7 @@ export function WorkCard({
                 className={`work-chip session tone-${statusTone(session)}`}
                 data-flip={`s:${session.id}`}
                 onClick={() => open.session(session)}
-                title={`${group.label} · ${session.purpose} · ${statusText(session)}`}
+                title={[group.label, session.purpose, statusText(session)].filter(Boolean).join(", ")}
               >
                 {isWorking(session) || session.status === "awaitingApproval" ? <span className={`dot dot-${statusTone(session)}`} /> : <EngineMark provider={session.provider} size={12} />}
                 <span className="work-chip-text">{session.purpose}</span>
@@ -173,20 +176,26 @@ export function WorkCard({
         <div className="work-content-group">
           <span className="work-content-label">문서 · {docs.length}</span>
           <div className="work-chips">
-          {docs.slice(0, 4).map((artifact) => (
-            <button key={artifact.id} type="button" className="work-chip doc" data-flip={`d:${artifact.id}`} onClick={() => open.doc(artifact.id)} title={artifact.path}>
-              <FormatBadge format={artifact.format} />
-              <span className="work-chip-text">{artifact.name}</span>
-              {pending.get(artifact.id) ? <span className="work-chip-count" title="검토할 수정안">{pending.get(artifact.id)}</span> : null}
-            </button>
-          ))}
+          {docs.slice(0, 4).map((artifact) => {
+            const agents = sessions.filter((session) => session.documentAgent?.artifactId === artifact.id && !session.pageAgent);
+            const lead = leadAgent(agents, null);
+            const ai = agents.map((agent) => [`문서 AI`, PROVIDER_LABEL[agent.provider], statusText(agent)].filter(Boolean).join(", ")).join("; ");
+            return (
+              <button key={artifact.id} type="button" className="work-chip doc" data-flip={`d:${artifact.id}`} onClick={() => open.doc(artifact.id)} title={ai ? `${artifact.path}\n${ai}` : artifact.path}>
+                <FormatBadge format={artifact.format} />
+                <span className="work-chip-text">{artifact.name}</span>
+                {pending.get(artifact.id) ? <span className="work-chip-count" title="검토할 수정안">{pending.get(artifact.id)}</span> : null}
+                {lead ? <span className="work-chip-ai" aria-label={ai}><EngineMark provider={lead.session.provider} size={12} />{lead.tone ? <span className={`dot dot-${lead.tone}`} aria-hidden /> : null}</span> : null}
+              </button>
+            );
+          })}
           {docs.length > 4 ? <button type="button" className="work-chip more" onClick={() => open.project(work)} aria-label="문서 전체 보기">+{docs.length - 4}</button> : null}
           </div>
         </div>
       ) : null}
       {fields.includes("sessions") || fields.includes("activity") ? (
         <span className="work-card-meta">
-          {[fields.includes("sessions") ? `세션 ${sessions.length}${docs.length ? ` · 문서 ${docs.length}` : ""}` : "", fields.includes("activity") ? ago(last) : ""].filter(Boolean).join(" · ")}
+          {[fields.includes("sessions") ? `대화 ${sessions.length}${docs.length ? `, 문서 ${docs.length}` : ""}` : "", fields.includes("activity") ? ago(last) : ""].filter(Boolean).join(", ")}
         </span>
       ) : null}
     </div>
@@ -212,7 +221,7 @@ export function BoardCardBody({ row, fields, stages, showStage, folders }: { row
         {row.unseen ? <span className="kanban-badge">새 답 {row.unseen}</span> : null}
         {fields.includes("sessions") || fields.includes("activity") || fields.includes("created") ? (
           <span className="muted">
-            {[fields.includes("sessions") ? `세션 ${row.sessions.length}` : "", fields.includes("activity") ? ago(row.last) : "", fields.includes("created") ? `만듦 ${ago(row.work.createdAt)}` : ""].filter(Boolean).join(" · ")}
+            {[fields.includes("sessions") ? `대화 ${row.sessions.length}` : "", fields.includes("activity") ? ago(row.last) : "", fields.includes("created") ? `만듦 ${ago(row.work.createdAt)}` : ""].filter(Boolean).join(", ")}
           </span>
         ) : null}
       </span>
@@ -257,7 +266,7 @@ export function tableColumns(fields: string[], stages: ProjectStage[], state: St
         out.push({ id: field, label: "미리보기", sort: null, cell: (row) => <span className="projects-preview">{row.summary?.preview ?? ""}</span> });
         break;
       case "sessions":
-        out.push({ id: field, label: "세션", sort: "sessions", num: true, cell: (row) => row.sessions.length });
+        out.push({ id: field, label: "대화", sort: "sessions", num: true, cell: (row) => row.sessions.length });
         break;
       case "attention":
         out.push({ id: field, label: "확인 필요", sort: "attention", num: true, cell: (row) => row.attention || "", className: (row) => (row.attention ? "hot" : "") });

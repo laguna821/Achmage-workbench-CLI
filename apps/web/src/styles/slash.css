@@ -7,19 +7,19 @@
 }
 
 .slash-row {
-  gap: 8px;
+  gap: var(--space-xs);
 }
 
 .slash-name {
   flex: 0 0 auto;
-  font-family: var(--mono, ui-monospace, monospace);
+  font-family: var(--font-outlier);
   font-size: var(--fs-meta);
   color: var(--text);
 }
 
 .slash-hint {
   flex: 0 0 auto;
-  font-family: var(--mono, ui-monospace, monospace);
+  font-family: var(--font-outlier);
   font-size: var(--fs-micro);
   color: var(--muted);
 }
@@ -49,7 +49,7 @@
 }
 
 .slash-empty {
-  padding: 8px;
+  padding: var(--space-xs);
   font-size: var(--fs-meta);
   color: var(--muted);
 }

@@ -33,16 +33,31 @@ export function missingDirs(current: string | undefined, shellDirs: string[]): s
   return out;
 }
 
+/**
+ * What runs between the gateway and the login shell: a plain Node process that starts the shell,
+ * passes its output back and ends it after a few seconds. The shell reads rc files any program of
+ * the person can write; an `exec` there replaces the SHELL, never the gateway's direct child, which
+ * is this intermediate (sec-vault round 2, C1 d — the review's rc-file case). And the vault helper
+ * answers no child without the gateway's ticket anyway.
+ */
+export const INTERMEDIATE = `const { spawn } = require("node:child_process");
+const [shell, script] = process.argv.slice(1);
+const child = spawn(shell, ["-ilc", script], { stdio: ["ignore", "pipe", "ignore"], env: process.env });
+child.stdout.pipe(process.stdout);
+child.on("error", () => process.exit(1));
+child.on("close", () => process.exit(0));
+setTimeout(() => { try { child.kill("SIGKILL"); } catch {} process.exit(1); }, 4500).unref();`;
+
 /** The login shell's PATH (interactive, like a terminal), or null within a few seconds. */
-export function loginShellPath(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): Promise<string[] | null> {
+export function loginShellPath(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform, node: string = process.execPath): Promise<string[] | null> {
   const shell = env.SHELL;
   if (platform === "win32" || !shell || !isAbsolute(shell)) return Promise.resolve(null);
   // `printenv` prints PATH the same way in every shell (fish keeps PATH as a list).
   const script = `printf '%s' '${MARK}'; printenv PATH; printf '%s' '${MARK}'`;
   return new Promise((resolve) => {
     execFile(
-      shell,
-      ["-ilc", script],
+      node,
+      ["-e", INTERMEDIATE, shell, script],
       // No terminal: rc files that wait for input get end of file at once.
       { timeout: 5000, maxBuffer: 1024 * 1024, env: { ...env, WORKBENCH_SHELL_PROBE: "1" }, windowsHide: true },
       (_error, stdout) => resolve(parseShellPath(String(stdout ?? ""))),

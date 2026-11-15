@@ -25,7 +25,7 @@ function placeMenu(anchor: HTMLElement | null): { placement: "above" | "below"; 
 }
 
 /** What the chip says: a new project, or a new session in an existing one. */
-export const projectLabel = (target: Work | null) => (target ? `→ ${target.title}에 새 세션` : "새 프로젝트");
+export const projectLabel = (target: Work | null) => (target ? `→ ${target.title}에 새 대화` : "새 프로젝트");
 
 /**
  * `[프로젝트 ▾]` beside the folder chip on home: where the request goes. The folder's live work is

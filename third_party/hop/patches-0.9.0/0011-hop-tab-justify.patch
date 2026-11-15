@@ -1,0 +1,154 @@
+Achmage Workbench — rhwp v0.9.0 form of a 0.8.7 engine patch (third_party/hop/patches-0.9.0).
+Origin: HOP 0011 (third_party/hop/patches/0011-hop-tab-justify.patch, sha256 cc4043392222ba3dee529883389636c5e305fe828bbcee212ccb5f8e3be4c791; original author hop-workbench <hop@localhost>)
+Status: ported
+Differs from the 0.8.7 form: rewritten on 0.9.0's per-run no-extra-spacing prefix (hop_last_tab_prefix_by_run): in a justified line with a tab and no inline objects or footnotes only spaces after the last tab get the extra spacing. Not carried: hanging trailing tabs past the right margin in sections whose default tab width is 0.
+Regression test: renderer::layout::paragraph_layout tests hop_0011_justify_spreads_only_after_the_last_tab (new)
+
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: h4a <h4a@localhost>
+Date: Sat, 14 Nov 2026 11:49:28 +0900
+Subject: [PATCH] HOP 0011 hop-tab-justify (0.9.0 port)
+
+
+diff --git a/src/renderer/layout/paragraph_layout.rs b/src/renderer/layout/paragraph_layout.rs
+index cc98f57c..c6876f62 100755
+--- a/src/renderer/layout/paragraph_layout.rs
++++ b/src/renderer/layout/paragraph_layout.rs
+@@ -2273,6 +2273,48 @@ fn fixed_auto_tab_prefix_by_run(line: &ComposedLine) -> Vec<usize> {
+         .collect()
+ }
+ 
++/// [HOP patch 0011] 한글 2024의 탭이 든 양쪽 정렬 줄 [한글 2024 인쇄 결과와 비교]:
++/// 여분은 줄 안 마지막 탭 뒤 공백에만 나누고 탭 앞 공백은 자연 폭이다. 위치는 줄의 그려지는
++/// 텍스트 기준이다. 마지막 탭 뒤에 (말미가 아닌) 공백이 없으면 `None` — 종전 배분을 쓴다.
++/// (0.9.0: expressed through upstream's per-run `unjustified_leading_spaces` prefix, which
++/// both the slack count and the emitted advances already honour, instead of the 0.8.7
++/// `HopTabJustify` / `TextStyle::hop_word_spacing_from` pair. Upstream fixes only the prefix up
++/// to the *first* tab of auto-tab-left hanging lines (`fixed_auto_tab_prefix_by_run`); this
++/// extends it to the last tab of any justified line. Not ported: the 0.8.7 rule that also hangs
++/// trailing tabs past the right margin in sections whose default tab width is 0.)
++fn hop_last_tab_prefix_by_run(line: &ComposedLine, trailing_space_limit: usize) -> Option<Vec<usize>> {
++    let chars: Vec<char> = line
++        .runs
++        .iter()
++        .flat_map(|run| effective_text_for_metrics(run).chars())
++        .collect();
++    let trailing = chars
++        .iter()
++        .rev()
++        .take_while(|c| **c == ' ')
++        .count()
++        .min(trailing_space_limit);
++    let visible = &chars[..chars.len() - trailing];
++    let from = visible.iter().rposition(|c| *c == '\t')? + 1;
++    if !visible[from..].contains(&' ') {
++        return None;
++    }
++    let mut remaining = from;
++    Some(
++        line.runs
++            .iter()
++            .map(|run| {
++                let count = effective_text_for_metrics(run)
++                    .chars()
++                    .count()
++                    .min(remaining);
++                remaining -= count;
++                count
++            })
++            .collect(),
++    )
++}
++
+ /// 낱말 공백과 대시가 함께 있는 양쪽 정렬 줄의 복원 예산.
+ /// 대시는 해당 런의 자연 전진까지만 복원하고 남은 폭은 낱말 공백이 소비한다.
+ /// 방출과 같은 정규화 런·표시 문자열을 사용하여 다른 글꼴/크기의 대시에도
+@@ -7622,7 +7664,17 @@ impl LayoutEngine {
+             // 공백 한계·잔여 글자 사이 압축은 같은 Justify 계약을 따른다.
+             let needs_justify_spacing = needs_justify || negative_justified_last_line;
+             // 실제 배치할 run 분할이 확정된 뒤 같은 소유 배열을 만든다.
+-            let unjustified_leading_spaces = if needs_justify_spacing
++            // [HOP patch 0011] 각주·인라인 개체가 없는 양쪽 정렬 줄만: 마지막 탭까지는 여분 없음.
++            let hop_tab_prefix = (needs_justify_spacing
++                && has_tabs
++                && !is_hancom_company_pua_logo_line
++                && line_tac_offsets_for_width.is_empty()
++                && composed.footnote_positions.is_empty())
++            .then(|| hop_last_tab_prefix_by_run(&leading_space_plan.line, trailing_space_limit))
++            .flatten();
++            let unjustified_leading_spaces = if let Some(prefix) = hop_tab_prefix {
++                prefix
++            } else if needs_justify_spacing
+                 && has_tabs
+                 && styles
+                     .para_styles
+@@ -12231,6 +12283,69 @@ mod issue_2809_split_alignment_tests {
+         }
+     }
+ 
++    /// [HOP patch 0011] 탭이 든 양쪽 정렬 줄은 마지막 탭 뒤 공백에만 여분을 나눈다.
++    #[test]
++    fn hop_0011_justify_spreads_only_after_the_last_tab() {
++        let line_of = |texts: &[&str]| ComposedLine {
++            runs: texts
++                .iter()
++                .map(|text| ComposedTextRun {
++                    text: text.to_string(),
++                    ..Default::default()
++                })
++                .collect(),
++            ..split_label_line()
++        };
++        // 마지막 탭까지(가·공백·나·탭 = 4자)는 여분 없음; run 이 나뉘어도 같은 경계.
++        let line = line_of(&["가 나\t다 라"]);
++        assert_eq!(super::hop_last_tab_prefix_by_run(&line, usize::MAX), Some(vec![4]));
++        assert_eq!(
++            super::hop_last_tab_prefix_by_run(&line_of(&["가 ", "나\t다", " 라"]), usize::MAX),
++            Some(vec![2, 2, 0])
++        );
++        assert_eq!(
++            super::hop_last_tab_prefix_by_run(&line_of(&["가\t나 \t다 라 "]), usize::MAX),
++            Some(vec![5]),
++            "마지막 탭 기준, 말미 공백은 매단다"
++        );
++        // 마지막 탭 뒤에 내부 공백이 없으면 종전 배분.
++        assert_eq!(super::hop_last_tab_prefix_by_run(&line_of(&["가 나\t다라 "]), usize::MAX), None);
++        assert_eq!(super::hop_last_tab_prefix_by_run(&line_of(&["가 나 다"]), usize::MAX), None);
++
++        // 슬랙 60px: 마지막 탭 뒤 공백 하나가 전부 받는다(종전: 탭 앞 공백과 반씩).
++        let extra = |prefix: &[usize]| {
++            compute_line_extra_spacing(
++                &line,
++                0,
++                usize::MAX,
++                &LeadingSpacePlan::new(&line, None),
++                0.0,
++                0.0,
++                prefix,
++                &ResolvedStyleSet::default(),
++                None,
++                Alignment::Justify,
++                false,
++                true,
++                false,
++                false,
++                true,
++                false,
++                false,
++                false,
++                7,
++                30.0,
++                90.0,
++                40.0,
++                0,
++            )
++            .0
++        };
++        let hop = super::hop_last_tab_prefix_by_run(&line, usize::MAX).unwrap();
++        assert!((extra(&hop) - 60.0).abs() < 0.001, "hop: {}", extra(&hop));
++        assert!((extra(&[0]) - 30.0).abs() < 0.001, "without: {}", extra(&[0]));
++    }
++
+     #[test]
+     fn split_distributes_single_last_line_but_justify_does_not() {
+         assert!(needs_word_distribution(Alignment::Split, true, false));

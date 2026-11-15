@@ -1,5 +1,5 @@
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ApprovalDecision, ProviderStatus, Session, Work } from "@workbench/contracts";
@@ -10,6 +10,7 @@ import { Store } from "./store.ts";
 import { emptyStatus, type AdapterSink, type ProviderAdapter } from "./providers/types.ts";
 import { editHwp } from "./hwp-ops.mjs";
 import { Documents } from "./artifacts.ts";
+import { tempDir } from "./test-temp.ts";
 
 /** Engine stand-in: records prompts and runs a per-test action, then ends the turn. */
 class ScriptedAdapter implements ProviderAdapter {
@@ -46,7 +47,7 @@ class ScriptedAdapter implements ProviderAdapter {
 }
 
 function setup() {
-  const dir = mkdtempSync(join(tmpdir(), "wb-docs-"));
+  const dir = tempDir("wb-docs-");
   const store = new Store(join(dir, "state.sqlite"));
   const manager = new SessionManager(store, new EventBus(), { hostId: "h", hostLabel: "노트북", managedWorksDir: join(dir, "works"), kordoc: new Kordoc() });
   const claude = new ScriptedAdapter("claude", () => manager.sink);

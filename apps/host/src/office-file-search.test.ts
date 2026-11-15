@@ -9,6 +9,7 @@ import { EventBus } from "./bus.ts";
 import { Store } from "./store.ts";
 import { SessionManager } from "./sessions.ts";
 import { Pkm } from "./pkm.ts";
+import { itWithSearch } from "./search-worker-test.ts";
 
 const key = "synthetic-search-key-".repeat(20);
 const config = { rerank: true, endpoint: "custom", keys: { custom: key }, customBaseUrl: "http://127.0.0.1:8009/v1/systemone", customModel: "local-decider" };
@@ -77,7 +78,7 @@ it("falls back when the original endpoint fails or a file changes while the judg
     expect(await f.service.probe(f.service.snapshot().settings)).toEqual({ ok: false, error: "HTTP 403" });
   } finally { await f.close(); }
 });
-it("orders visible document and vault hits without moving conversations, exposing hidden notes or rewriting files", async () => {
+itWithSearch("orders visible document and vault hits without moving conversations, exposing hidden notes or rewriting files", async () => {
   const calls: string[] = [], f = fixture(async (_url, body) => { calls.push(body); return reply(body); });
   const pkm = new Pkm(f.store, f.bus, f.manager);
   try {

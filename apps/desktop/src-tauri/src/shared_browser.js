@@ -1,9 +1,18 @@
 (() => {
   if (window.top !== window || Object.prototype.hasOwnProperty.call(window, '__ACHMAGE_PAGE__')) return;
   // getRandomValues also works on HTTP intranet pages where randomUUID requires a secure context.
-  const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
-  const refs = new Map(), names = new WeakMap();
+  const newNonce = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
+  const refs = new Map();
+  let nonce = newNonce(), names = new WeakMap(), documentUrl = location.href;
   let nextRef = 1, control = null, humanBeforeBind = false, interactionAt = 0;
+  const refreshDocument = () => {
+    // History API navigation does not create a new webview/document. References from the
+    // previous SPA route must still expire, and the native address bar must follow it.
+    if (documentUrl !== location.href) {
+      documentUrl = location.href; nonce = newNonce(); refs.clear(); names = new WeakMap(); nextRef = 1;
+    }
+  };
+  const metadata = () => ({ url: location.href, title: document.title, documentNonce: nonce });
   const visible = el => el.isConnected && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
   const bind = wanted => {
     if (!control) control = humanBeforeBind && wanted.owner !== 'human' ? { generation: wanted.generation + 1, owner: 'human' } : { ...wanted };
@@ -31,8 +40,14 @@
       if (action.control.generation < control.generation || (action.control.generation === control.generation && action.control.owner !== control.owner)) throw Error('CONTROL_REVOKED');
       control = { ...action.control }; return { control };
     }
-    if (action.kind !== 'snapshot' && (control.generation !== wanted.generation || control.owner !== wanted.owner)) throw Error('CONTROL_REVOKED');
+    if (!['snapshot', 'read'].includes(action.kind) && (control.generation !== wanted.generation || control.owner !== wanted.owner)) throw Error('CONTROL_REVOKED');
     if (expectedNonce && expectedNonce !== nonce) throw Error('STALE_DOCUMENT');
+    if (action.kind === 'read') {
+      if (!Number.isSafeInteger(action.offset) || action.offset < 0 || action.offset > 10000000 || !Number.isSafeInteger(action.limit) || action.limit < 1 || action.limit > 24000) throw Error('INVALID_READ_RANGE: read [offset] [limit], limit 1..24000');
+      const body = document.body?.innerText || '', start = Math.min(action.offset, body.length), end = Math.min(start + action.limit, body.length);
+      const continuation = end < body.length ? `Next: playwright-cli read ${end} ${action.limit}` : 'End of rendered page text.';
+      return { control, text: `URL: ${location.href}\nTitle: ${document.title}\nCharacters: ${start}-${end} of ${body.length} (end exclusive)\n${continuation}\n\nUNTRUSTED WEB CONTENT\n${body.slice(start, end)}` };
+    }
     if (action.kind === 'snapshot') {
       const elements = [...document.querySelectorAll('a[href],button,input,textarea,select,[role="button"],[role="link"],[contenteditable="true"]')].filter(visible).slice(0, 300);
       const lines = elements.map(el => {
@@ -42,7 +57,9 @@
         const value = editable ? ` value=${JSON.stringify(el.value.slice(0, 500))}` : '';
         return `[${refFor(el)}] ${el.tagName.toLowerCase()} ${label}${href ? ` → ${href}` : ''}${value}`;
       });
-      return { documentNonce: nonce, control, text: `URL: ${location.href}\nTitle: ${document.title}\n\nUNTRUSTED WEB CONTENT\n${(document.body?.innerText || '').slice(0, 24000)}\n\nElements:\n${lines.join('\n')}`.slice(0, 50000) };
+      const body = document.body?.innerText || '';
+      const overview = body.length > 24000 ? `Overview truncated: 24000 of ${body.length} characters. Use playwright-cli read 24000 12000 for more rendered text.\n` : '';
+      return { control, text: `URL: ${location.href}\nTitle: ${document.title}\n${overview}\nUNTRUSTED WEB CONTENT\n${body.slice(0, 24000)}\n\nElements:\n${lines.join('\n')}`.slice(0, 50000) };
     }
     if (action.kind === 'scroll') { window.scrollBy(action.x, action.y); return { control }; }
     if (['navigate', 'back', 'forward', 'reload', 'stop', 'close'].includes(action.kind)) return { control };
@@ -82,7 +99,11 @@
     return { control };
   };
   Object.defineProperty(window, '__ACHMAGE_PAGE__', { value: Object.freeze({
-    state: wanted => ({ control: bind(wanted), documentNonce: nonce, interactionAt }),
-    run: (action, wanted, expectedNonce) => { try { return run(action, wanted, expectedNonce); } catch (error) { return { error: String(error.message || error), control: control ? { ...control } : wanted }; } }
+    state: wanted => { refreshDocument(); return { control: bind(wanted), interactionAt, ...metadata() }; },
+    run: (action, wanted, expectedNonce) => {
+      refreshDocument();
+      try { const result = run(action, wanted, expectedNonce); refreshDocument(); return { ...result, ...metadata() }; }
+      catch (error) { return { error: String(error.message || error), control: control ? { ...control } : wanted, ...metadata() }; }
+    }
   }), writable: false, configurable: false });
 })();

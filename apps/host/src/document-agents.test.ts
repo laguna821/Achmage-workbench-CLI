@@ -76,6 +76,28 @@ it("keeps old main-chat document history readable, rejects cross-document bindin
   } finally { await f.close(); }
 });
 
+it("selects a document engine without replacing either engine's history or the main conversation", async () => {
+  const f = setup();
+  try {
+    const a = f.doc("엔진 선택.md");
+    f.manager.updateSession(a.child.id, { model: "claude-choice", effort: "high" });
+    f.manager.sink.upsertItem(a.child.id, { id: "original-prompt", kind: "user", text: "유지할 문서 요청", at: 1 });
+    const codex = f.manager.documentSession(a.artifact.id, f.main.id, false, "codex");
+    expect(codex).toMatchObject({ provider: "codex", model: null, effort: null, documentAgent: { parentSessionId: f.main.id } });
+    f.manager.updateSession(codex.id, { model: "codex-choice" });
+    const claude = f.manager.documentSession(a.artifact.id, f.main.id, false, "claude");
+    expect(claude).toMatchObject({ id: a.child.id, model: "claude-choice", effort: "high" });
+    expect(f.manager.items(claude.id).items.some(item => item.id === "original-prompt")).toBe(true);
+    expect(f.manager.documentSession(a.artifact.id, f.main.id).id).toBe(claude.id);
+    expect(f.manager.view.works.get(f.work.id)?.activeSessionId).toBe(f.main.id);
+    expect(f.manager.view.sessions.get(f.main.id)?.model).toBeNull();
+    f.manager.sink.updateSession(claude.id, { status: "running" });
+    expect(() => f.manager.documentSession(a.artifact.id, f.main.id, false, "codex")).toThrow(/진행 중/);
+    f.manager.sink.updateSession(claude.id, { status: "idle" });
+    expect(f.manager.documentSession(a.artifact.id, f.main.id, false, "codex")).toMatchObject({ id: codex.id, model: "codex-choice" });
+  } finally { await f.close(); }
+});
+
 it("opens the saved file in Ieum, adopts its external save, and supplies the current revision to main chat", async () => {
   const f = setup();
   try {

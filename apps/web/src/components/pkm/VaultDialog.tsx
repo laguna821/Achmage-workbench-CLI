@@ -1,16 +1,15 @@
 import { useEffect, useState } from "react";
 import { Icon } from "../Icon.tsx";
 import { usePkm } from "./PkmContext.tsx";
+import { PathDetail, SettingsRow } from "../SettingsSheet.tsx";
 import { TemplateDialog } from "./TemplateDialog.tsx";
 import { ViewDialog } from "./ViewDialog.tsx";
 import { RulesDialog } from "./RulesDialog.tsx";
-import { InsightDialog } from "./InsightDialog.tsx";
 import "../../styles/pkm.css";
 
 /**
  * "옵시디언 볼트 연결": pick the vault folder (the one with `.obsidian`). The vault found on this
- * computer is offered first. Workbench only reads it; the only way anything reaches the vault is
- * an insight published through Achmage.
+ * computer is offered first. Workbench only reads it.
  */
 export function VaultDialog({ pickFolder }: { pickFolder: (() => Promise<string | null>) | null }) {
   const pkm = usePkm();
@@ -114,42 +113,21 @@ export function VaultDialogHost({ pickFolder }: { pickFolder: (() => Promise<str
   if (pkm.dialog?.kind === "template") return <TemplateDialog workId={pkm.dialog.workId} parentId={pkm.dialog.parentId} />;
   if (pkm.dialog?.kind === "view") return <ViewDialog id={pkm.dialog.id} />;
   if (pkm.dialog?.kind === "rules") return <RulesDialog />;
-  if (pkm.dialog?.kind === "insight") return <InsightDialog sessionId={pkm.dialog.sessionId} />;
   return null;
 }
 
-/** The vault line in the settings popover (⋯): which vault is attached, and a way to change it. */
+/** 설정 › 문서 도구 › 볼트: which vault is attached, and a way to change it. */
 export function VaultSettingsRow({ onOpen }: { onOpen: () => void }) {
   const pkm = usePkm();
   const status = pkm.tree?.status;
+  const ready = Boolean(status?.path && !status.problem);
   return (
-    <>
-      <div className="menu-divider" />
-      <div className="menu-label">옵시디언 볼트</div>
-      <div className="connection">
-        <div className="connection-head">
-          <span className="connection-name">{status?.name ?? "연결 안 됨"}</span>
-          <span className={`connection-state ${status?.path && !status.problem ? "ok" : ""}`}>{status?.path ? (status.problem ? "찾을 수 없음" : "읽기 전용") : ""}</span>
-        </div>
-        {status?.path ? <div className="connection-meta muted mono">{status.path}</div> : null}
-        {status?.path && !status.problem ? (
-          <div className="connection-meta muted">
-            노트 {status.notes} · 폴더 {status.folders}
-            {status.navigator ? " · Notebook Navigator 설정" : ""}
-            {status.borders ? " · 테두리 애드온" : ""}
-          </div>
-        ) : null}
-      </div>
-      <button
-        type="button"
-        className="text-button"
-        onClick={() => {
-          onOpen();
-          pkm.setDialog({ kind: "vault" });
-        }}
-      >
-        {status?.path ? "볼트 바꾸기…" : "볼트 연결…"}
-      </button>
-    </>
+    <SettingsRow
+      label="볼트 (옵시디언)"
+      state={status?.path ? (status.problem ? { text: "찾을 수 없음", tone: "warn" } : { text: "읽기만 함", tone: "ok" }) : { text: "연결 안 됨" }}
+      hint={ready ? `${status!.name}: 노트 ${status!.notes}개, 폴더 ${status!.folders}개${status!.navigator ? ", Notebook Navigator 설정 씀" : ""}${status!.borders ? ", 테두리 애드온 씀" : ""}` : "찾아보고 인용할 옵시디언 볼트를 연결합니다. 노트의 내용과 태그, 링크는 고치지 않습니다."}
+      control={<button type="button" className="button small" aria-haspopup="dialog" onClick={() => { onOpen(); pkm.setDialog({ kind: "vault" }); }}>{status?.path ? "볼트 바꾸기…" : "볼트 연결…"}</button>}
+      detail={<PathDetail value={status?.path} />}
+    />
   );
 }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { failure, type Notify } from "../../top-notice.ts";
 import type { Components } from "react-markdown";
 import type { Artifact } from "@workbench/contracts";
 import type { Api } from "../../api.ts";
@@ -56,15 +57,17 @@ export function DocImage({ api, artifactId, src, alt, title }: { api: Api; artif
 const REFUSE_HANGUL = "한글 문서의 글 보기에는 그림을 넣지 못합니다. 그림은 HOP에서 넣어 주세요.";
 
 /** What a pasted or dropped picture becomes in this document, and how the preview shows pictures. */
-export function useDocImages(api: Api, artifact: Artifact | undefined, onToast: (message: string) => void) {
+export function useDocImages(api: Api, artifact: Artifact | undefined, onToast: Notify) {
   const id = artifact?.id ?? "";
   const format = artifact?.format;
   const handling = useMemo<ImageHandling | null>(() => {
     const clipboard = () => api.clipboardPicture();
-    if (format === "hwpx" || format === "hwp") return { refuse: REFUSE_HANGUL, notice: onToast, clipboard };
+    // The paste handler reports only refusals and failures.
+    const notice = (text: string) => onToast(failure(text));
+    if (format === "hwpx" || format === "hwp") return { refuse: REFUSE_HANGUL, notice, clipboard };
     if (format !== "markdown") return null;
     return {
-      notice: onToast,
+      notice,
       clipboard,
       insert: async (file) => {
         try {
@@ -72,7 +75,7 @@ export function useDocImages(api: Api, artifact: Artifact | undefined, onToast: 
           if (result.fallback) onToast(`R2에 올리지 못해 작업 폴더(assets)에 저장했습니다: ${result.fallback}`);
           return result.markdown;
         } catch (error) {
-          onToast(`그림을 넣지 못했습니다: ${error instanceof Error ? error.message : String(error)}`);
+          onToast(failure(error, "그림을 넣지 못했습니다: "));
           return null;
         }
       },

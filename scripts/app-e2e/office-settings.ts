@@ -31,7 +31,9 @@ export async function officeSettingsScenario(ctx: Ctx, launch: Omit<LaunchOption
   const saved = () => JSON.parse(readFileSync(path, "utf8"));
   const snapshot = () => ctx.app.api<{ revision: string; settings: any }>("GET", "/api/office-ai/settings");
   const open = async () => {
-    await click('button[aria-label="연결과 설정"]');
+    // 설정 › 문서 도구 › 문서 AI (was the ⋯ "연결과 설정" popover): the rail's 설정 key, then the section.
+    await wd.frame(null); if (!await wd.find(".settings-dialog[open]")) await click('button[data-rail="settings"]');
+    await click('.settings-dialog[open] .settings-nav [data-section="documents"]'); await wd.waitFor('.settings-dialog[open] .settings-pane[data-section="documents"]');
     const button = await wd.execute<Record<string, string>>('return [...document.querySelectorAll("button")].find(b => b.textContent.trim() === "문서 AI 설정…");');
     if (!button) throw new Error("Office settings menu missing");
     await wd.click(button);
@@ -50,7 +52,7 @@ export async function officeSettingsScenario(ctx: Ctx, launch: Omit<LaunchOption
     mkdirSync(join(ctx.app.dataDir, "office"), { recursive: true }); writeFileSync(path, JSON.stringify(initial));
     const untouched = readFileSync(path);
     await open();
-    ctx.report.check(S, "메뉴에서 원본 구독·무료 연결·고급 설정 화면 열기", await wd.execute<boolean>('return !!document.querySelector("#set-free-ai") && !!window.aiOffice && !!window.aiOfficeSubscription && !window.homeApi;'), undefined, await shot(ctx, "office-settings-open.png"));
+    ctx.report.check(S, "설정 › 문서 도구에서 원본 구독·무료 연결·고급 설정 화면 열기", await wd.execute<boolean>('return !!document.querySelector("#set-free-ai") && !!window.aiOffice && !!window.aiOfficeSubscription && !window.homeApi;'), undefined, await shot(ctx, "office-settings-open.png"));
     const subscriptions = await ctx.app.api<Record<string, { state: string }>>("GET", "/api/office-ai/statuses?refresh=1");
     ctx.report.check(S, "경로 입력 없이 Workbench가 선택한 두 CLI의 원본 로그인 상태 확인", subscriptions.codex?.state === "ready" && subscriptions["claude-code"]?.state === "ready");
     await until(() => wd.execute<boolean>('return [...document.querySelectorAll(".ai-sub-card")].filter(card => card.textContent.includes("fake@example.com")).length === 2;'), 10000);
@@ -95,7 +97,7 @@ export async function officeSettingsScenario(ctx: Ctx, launch: Omit<LaunchOption
     ctx.report.check(S, "앱 테마와 원본 설정·대화상자 테마 동기화", dark && darkShell, undefined, await shot(ctx, "office-settings-dark.png"));
     const firstErrors = await pageErrors(wd); await close();
     await ctx.app.close(); ctx.app = await ctx.stage.launch({ ...launch, name: "office-settings-reopened", freshPort: true }); wd = ctx.app.wd;
-    await wd.waitFor('button[aria-label="연결과 설정"]'); await open(); await advanced();
+    await wd.waitFor('button[data-rail="settings"]'); await open(); await advanced();
     const masked = await wd.execute<string>('return document.querySelector("#set-ai-key").value;');
     const count = requests.filter((r) => r.path === "/v1/chat/completions").length;
     await click(".set-pane-actions > button:nth-last-child(2)");

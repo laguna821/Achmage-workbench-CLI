@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PROVIDER_LABEL, type Provider } from "@workbench/contracts";
-import { ACCENT_SWATCHES, BG_SWATCHES, accentStyle, useAppearance, type Bubble } from "../appearance.ts";
+import { ACCENT_SWATCHES, BG_SWATCHES, ENGINE_COLOR_HINT, useAppearance, type Bubble } from "../appearance.ts";
 import { EngineMark } from "./EngineMark.tsx";
 
 const BUBBLES: { id: Bubble; label: string }[] = [
@@ -46,13 +46,13 @@ export function EngineMenu({ provider, x, y, onClose }: { provider: Provider; x:
   );
 
   return (
-    <div ref={ref} className="engine-menu popover" role="menu" style={{ ...position, ...accentStyle(look) }} onContextMenu={(event) => event.preventDefault()}>
+    <div ref={ref} className="engine-menu popover" role="menu" style={position} onContextMenu={(event) => event.preventDefault()}>
       <div className="engine-menu-head">
         <EngineMark provider={provider} size={16} />
         {PROVIDER_LABEL[provider]} · {THEME_LABEL[theme]} 외형
       </div>
 
-      <div className="menu-label">엔진 색</div>
+      <div className="menu-label" title={ENGINE_COLOR_HINT}>엔진 표시 색</div>
       <div className="swatch-row">
         {ACCENT_SWATCHES[theme].map((color) =>
           swatch(color, look.palette.accent === color, () => updateLook(provider, theme, { palette: { accent: color } }), color),

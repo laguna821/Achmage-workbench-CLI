@@ -13,6 +13,9 @@ import { createEditorsServer, EditorGrants } from "./editors.ts";
 import { OfficeAi } from "./office-ai.ts";
 import type { OfficeAiEngine } from "./office-ai-engine.mjs";
 import { epubFixture } from "../../../scripts/app-e2e/epub-fixture.ts";
+// Each test starts a whole gateway with its store, git and stand-in hosts: under the full host suite a
+// test took 5–14 s where it takes 1–2 s alone. The limit is for a loaded machine; nothing waits on it.
+vi.setConfig({ testTimeout: 60_000 });
 
 function fixture(extension = "md", content: string | Buffer = "처음 문서\n") {
   const dir = mkdtempSync(join(tmpdir(), "wb-office-session-")), store = new Store(join(dir, "state.sqlite")), bus = new EventBus();

@@ -2,10 +2,10 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Achmage Workbench",
   "mainBinaryName": "achmage-workbench",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "identifier": "kr.achmage.workbench",
   "build": {
-    "frontendDist": "../../web/dist",
+    "frontendDist": "../placeholder",
     "beforeBuildCommand": "node scripts/clean-web.mjs"
   },
   "app": {

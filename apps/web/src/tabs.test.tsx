@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeTab, activateTab, closeTab, findTab, moveTab, tabsOf, updateTabView, withTabs } from "./tabs.ts";
+import { activeTab, activateTab, closeTab, dropTabs, findTab, lastTabOf, moveTab, offScope, tabsOf, updateTabView, withTabs } from "./tabs.ts";
 import { closePane, focusPane, focusedPane, restoreLayout, setPane, singleLayout, splitPane } from "./panes.ts";
 
 type View = { kind: "work" } | { kind: "document"; artifactId: string } | { kind: "new" } | { kind: "terminal"; terminalId: string; label: string };
@@ -86,8 +86,96 @@ describe("group tabs", () => {
     expect(restored).toEqual(layout);
     const corrupt = JSON.parse(JSON.stringify({ version: 2, ...layout }));
     corrupt.panes[1].tabs[0].id = corrupt.panes[0].tabs[0].id;
-    expect(restoreLayout(corrupt, valid, fallback)).toBe(fallback);
+    // Skin 2 · B: the repeated tab is skipped; every other tab (and its pane) stays.
+    const tolerant = restoreLayout(corrupt, valid, fallback);
+    expect(tolerant.panes.flatMap(tabsOf).map((tab) => tab.id)).toEqual(layout.panes.flatMap(tabsOf).map((tab) => tab.id).filter((id) => id !== layout.panes[1]!.tabs![0]!.id));
     const closed = closeTab(layout, layout.focus, activeTab(focusedPane(layout)).id, home);
     expect(tabsOf(focusedPane(closed)).length).toBeGreaterThan(0);
+  });
+});
+
+describe("a document taken out of its project", () => {
+  it("closes its document tabs and leaves the other tabs as they were", () => {
+    const first = open(singleLayout<View>(home.view, null), "kept");
+    const both = open(first, "gone");
+    const dropped = dropTabs(both, (view) => (view.kind === "document" && view.artifactId === "gone" ? "close" : null), home);
+    expect(tabsOf(focusedPane(dropped)).map((tab) => (tab.view as { artifactId?: string }).artifactId)).toEqual(["kept"]);
+    expect(dropTabs(both, () => null, home)).toBe(both);
+  });
+  it("gives a tab another view when asked (a conversation beside the document stays)", () => {
+    const layout = open(singleLayout<View>(home.view, null), "gone");
+    const changed = dropTabs(layout, (view) => (view.kind === "document" ? ({ kind: "work" } as View) : null), home);
+    expect(activeTab(focusedPane(changed)).view).toEqual({ kind: "work" });
+  });
+});
+
+// N1, the owner's navigation: one tab per item, closing a tab stops nothing, and choosing a project
+// brings back the tab it was last looked at in (per-project restore), while other projects' tabs stay open.
+describe("tabs and projects (N1)", () => {
+  const conversation = (id: string, workId: string) => ({ view: { kind: "work" } as View, workId, sessionId: id });
+  const go = (layout: ReturnType<typeof singleLayout<View>>, content: ReturnType<typeof conversation>) => withTabs(setPane(layout, layout.focus, content), layout);
+
+  it("an item opens in one tab by its stable id: going to it again goes to that tab", () => {
+    let layout = withTabs(singleLayout<View>({ kind: "new" }, null));
+    layout = go(layout, conversation("s1", "A"));
+    layout = go(layout, conversation("s2", "A"));
+    const first = findTab(layout, "session:s1")!.tab.id;
+    layout = go(layout, conversation("s1", "A"));
+    expect(tabsOf(focusedPane(layout)).filter((tab) => tab.sessionId === "s1")).toHaveLength(1);
+    expect(activeTab(focusedPane(layout)).id).toBe(first);
+  });
+
+  it("closing a tab removes the view only: the item's session, its project and the other tabs stay", () => {
+    let layout = withTabs(singleLayout<View>({ kind: "new" }, null));
+    layout = go(layout, conversation("running", "A"));
+    layout = go(layout, conversation("other", "A"));
+    const before = JSON.stringify(tabsOf(focusedPane(layout)).filter((tab) => tab.sessionId !== "running"));
+    const closed = closeTab(layout, layout.focus, findTab(layout, "session:running")!.tab.id, home);
+    expect(findTab(closed, "session:running")).toBeNull();
+    expect(JSON.stringify(tabsOf(focusedPane(closed)).filter((tab) => tab.sessionId !== "running"))).toBe(before);
+    // Nothing in a tab carries a stop: the layout holds views only (the session is the gateway's).
+    expect(Object.keys(activeTab(focusedPane(closed))).sort()).toEqual(["id", "sessionId", "view", "workId"]);
+  });
+
+  it("a project chosen again comes back to the tab it was last looked at in, not its first one", () => {
+    let layout = withTabs(singleLayout<View>({ kind: "new" }, null));
+    layout = go(layout, conversation("a1", "A"));
+    layout = go(layout, conversation("a2", "A"));
+    layout = go(layout, conversation("b1", "B"));
+    // A's tabs are a1 then a2; a2 was looked at last.
+    expect(lastTabOf(layout, "A")!.tab.sessionId).toBe("a2");
+    layout = go(layout, conversation("a1", "A"));
+    layout = go(layout, conversation("b1", "B"));
+    expect(lastTabOf(layout, "A")!.tab.sessionId).toBe("a1");
+    expect(lastTabOf(layout, "B")!.tab.sessionId).toBe("b1");
+    expect(lastTabOf(layout, "C")).toBeNull();
+  });
+
+  it("home and the archive are no project's tab, though they carry the last project's id", () => {
+    let layout = withTabs(singleLayout<View>({ kind: "new" }, "A"));
+    expect(lastTabOf(layout, "A")).toBeNull();
+    layout = go(layout, conversation("b1", "B"));
+    expect(offScope(focusedPane(layout), "B")).toEqual([]);
+  });
+
+  it("prefers the focused pane, then another pane (a project open beside)", () => {
+    let layout = withTabs(singleLayout<View>({ kind: "new" }, null));
+    layout = go(layout, conversation("a1", "A"));
+    layout = withTabs(splitPane(layout, layout.focus, "right", conversation("b1", "B"), null), layout);
+    expect(lastTabOf(layout, "A")!.pane.id).not.toBe(layout.focus);
+    expect(lastTabOf(layout, "B")!.pane.id).toBe(layout.focus);
+  });
+
+  it("the strip leaves out other projects' tabs (open and running), never the tab on screen; all shows them", () => {
+    let layout = withTabs(singleLayout<View>({ kind: "new" }, null));
+    layout = go(layout, conversation("a1", "A"));
+    layout = go(layout, conversation("b1", "B"));
+    const pane = focusedPane(layout);
+    const a1 = findTab(layout, "session:a1")!.tab.id;
+    expect(offScope(pane, "B")).toEqual([a1]);
+    // A pane showing A while B is current keeps its own tab on its strip.
+    expect(offScope(pane, "A")).toEqual([findTab(layout, "session:b1")!.tab.id].filter((id) => id !== activeTab(pane).id));
+    expect(offScope(pane, "B", true)).toEqual([]);
+    expect(offScope(pane, null)).toEqual([]);
   });
 });

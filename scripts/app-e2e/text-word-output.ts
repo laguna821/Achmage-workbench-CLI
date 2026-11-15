@@ -20,7 +20,7 @@ export async function textWordOutputScenario(ctx: Ctx) {
   };
   const pane = '.pane[data-tab-active="true"]';
   const enter = async () => { await wd.frame(null); await wd.frame(await wd.waitFor(`${pane} iframe.office-frame`, 30000)); };
-  const menu = async (label: string) => { await wd.frame(null); await wd.click(await wd.waitFor(`${pane} button[aria-label="문서 파일 메뉴"]`)); await click(label, ".office-file-menu [role=menuitem]"); };
+  const menu = async (label: string) => { await wd.frame(null); await wd.click(await wd.waitFor(`${pane} button[aria-label="문서 메뉴"]`)); await click("내보내기", ".doc-menu [role=menuitem]"); await click(label, ".doc-menu [role=menuitem]"); };
   const destination = async (path: string) => {
     await wd.frame(null);
     const field = await wd.waitFor('.office-output-dialog input[aria-label="저장할 파일 경로"]', 90000);

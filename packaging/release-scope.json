@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "applicationVersion": "0.4.1",
+  "applicationVersion": "0.5.0",
   "channel": "stable",
-  "label": "0.4.1 — HIG 작업공간과 공유 웹 탭 수정",
+  "label": "0.5.0 — 새 화면, 새 한글 편집기, 더 단단한 비밀 보관함",
   "implemented": [
     "Fast Find 사용자 프롬프트·AI 대화 원문 우선 검색, 원문 위치 이동",
     "Apple HIG 기반 공통 컴포넌트·Pretendard Variable·프로젝트/세션/문서 구분·직접 YAML 개요·1/2/4/9분할과 작업 전달",
@@ -19,7 +19,8 @@
     "원본 터미널·모바일 키 입력·서비스 실행 관리·전체 HTTP/WebSocket 서비스 화면",
     "Paseo 원본 음성 worker·모델 관리·확장 실행·outbound Hub 연결과 사건 이력",
     "클라이언트/호스트 protocol·schema 호환성, 업데이트 실행 보호, migration 전 로컬 DB 백업과 future schema 거절",
-    "네이티브 빈 탭·탭 복귀 크기·iframe 주소 덮임·Linux 앱 메뉴 클릭 차단 수정, 좁은 화면 메뉴·입력창·승인 버튼 마감"
+    "네이티브 빈 탭·탭 복귀 크기·iframe 주소 덮임·Linux 앱 메뉴 클릭 차단 수정, 좁은 화면 메뉴·입력창·승인 버튼 마감",
+    "새 탐색 화면(레일과 두 단계 목록), Atlas 기본 색 조합과 남색 선택, Icons8 아이콘과 글꼴 선택, 설정 한 곳, 처음 실행 세 단계, 위쪽 검색 칸, 사용 한도 막대, 텔레그램과 슬랙 동시 연결, 휴대폰 화면, 한글 편집기 rhwp 0.9.0, 비밀 보관함 열쇠 보호"
   ],
   "inProgress": [],
   "remaining": [],
@@ -28,7 +29,8 @@
     "설치 smoke는 시험용 AI 엔진을 사용합니다. 실제 수행 결과는 installer-provenance.json에 표시합니다.",
     "원격 서비스 전체 웹 화면에는 별도 HTTPS preview 도메인이 필요합니다. relay-only 연결이 자동으로 웹 페이지까지 전달하지 않습니다.",
     "Claude SDK에 없는 직접 하위 작업 send/steer는 제공하지 않습니다. Linux 사이트 권한은 일회성입니다.",
-    "실제 Codex 웹 탭 입력과 메인 채팅 병렬 실행은 Linux에서 확인했습니다. Windows/macOS/Linux 공통 네이티브 10항목 확인과 전체 앱·외부 사이트의 모든 조합은 구분합니다."
+    "실제 Codex 웹 탭 입력과 메인 채팅 병렬 실행은 Linux에서 확인했습니다. Windows/macOS/Linux 공통 네이티브 10항목 확인과 전체 앱·외부 사이트의 모든 조합은 구분합니다.",
+    "0.5.0의 알려진 한계는 docs/releases/v0.5.0.md에 적었습니다."
   ],
   "buildPolicy": "전체 기능 통합 뒤 빌드·릴리즈; 기능 추가마다 중간 설치본 생성하지 않음"
 }

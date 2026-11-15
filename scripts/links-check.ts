@@ -182,7 +182,7 @@ async function dialogFlow(first: Provider) {
     await page.locator(".linked-view").screenshot({ path: join(outDir, `${first}-04-exchanged.png`) });
     await page.locator(".linked-view .text-button", { hasText: "작업 폴더에 저장" }).click();
     const saved = await until(async () => existsSync(records) && readdirSync(records).filter((name) => name.includes("세션 잇기")).length === before + 1, 5000);
-    const toast = await page.locator(".toast").innerText().catch(() => "");
+    const toast = await page.locator(".top-notice").innerText().catch(() => "");
     pass("'주고받은 내용'은 두 세션의 차례를 순서대로 한 열에, 작업 폴더에 마크다운으로 저장", ordered && saved && toast.includes("세션 기록/"), `${turns.map((text) => text.replace(/\s+/g, " ").slice(0, 14)).join(" / ")} · ${toast.slice(0, 50)}`);
     await page.keyboard.press("Escape");
     await page.waitForSelector(".linked-view", { state: "detached" });

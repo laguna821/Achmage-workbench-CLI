@@ -1,21 +1,19 @@
-import { Fragment, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import type { Folder, NavSectionId, NavShortcut } from "@workbench/contracts";
-import { folderHidden, nowSessions, workHidden, type Row } from "../../tree.ts";
+import { folderHidden, nowSessions, workHidden } from "../../tree.ts";
 import { EditableText } from "../EditableText.tsx";
 import { Icon, iconName, type IconName } from "../Icon.tsx";
 import type { MenuEntry } from "../ContextMenu.tsx";
 import { useOptionalPkm } from "../pkm/PkmContext.tsx";
-import { ViewsSection } from "../pkm/ViewsSection.tsx";
-import { VaultSection } from "../pkm/VaultSection.tsx";
-import { addShortcuts, countText, folderOrder, sameShortcut, type TagNode } from "./model.ts";
+import { addShortcuts, sameShortcut, type TagNode } from "./model.ts";
 import { NowRow } from "./rows.tsx";
 import type { NavShared } from "./shared.ts";
+import { StateMark } from "../StateMark.tsx";
+import { ROW_STATES } from "../../row-state.ts";
 
-// The navigation pane: 홈, 지금, 바로가기, the project folders (the "프로젝트" root and folders only,
-// no projects or sessions), the projects' tags, then the saved views and the vault as before. Every
-// section head folds to its line and stays so (prefs `navigator.sections`).
-
-const folderRowOf = (folder: Folder, depth = 0, open = true): Extract<Row, { type: "folder" }> => ({ type: "folder", id: folder.id, depth, folder, open, empty: false });
+// Sections the list column shares (N1): 지금 (in 활동), 바로가기 and 태그 (in level 1), each head
+// folding to its line and staying so (prefs `navigator.sections`). 홈 became the rail's 지금, the
+// folder pane became level 1's folders (nav/ProjectsLevel.tsx).
 
 export const ROOT_ROW_ID = "nav:root";
 
@@ -58,15 +56,6 @@ function folderIcon(folder: Folder, open: boolean): IconName {
   return iconName(folder.icon) ?? (open ? "folderOpen" : "folder");
 }
 
-export function HomeRow({ shared }: { shared: NavShared }) {
-  return (
-    <button type="button" className={`side-row side-home${shared.homeActive ? " current" : ""}`} onClick={shared.actions.openHome} title="모든 작업의 지금 상황과 새 세션">
-      <Icon name="home" size={15} className="side-row-icon" />
-      <span className="side-row-label">홈</span>
-    </button>
-  );
-}
-
 /** "지금": sessions waiting for the person, working, or with a new reply. */
 export function NowSection({ shared }: { shared: NavShared }) {
   const { state, actions, visibleSessionId } = shared;
@@ -87,13 +76,16 @@ export function NowSection({ shared }: { shared: NavShared }) {
         : groups.map((group) => (
             <div key={group.key} className={`now-group now-${group.key}`}>
               <div className="now-group-label">
+                <StateMark state={ROW_STATES[group.key === "attention" ? "attention" : group.key === "running" ? "running" : "unseen"]} size={14} />
                 {group.label} <span className="count">{group.sessions.length}</span>
               </div>
-              {group.sessions.map((session) => (
+              {/* Home lists these in full (the entries and the ledger): beside it the sidebar keeps only the counts. */}
+              {shared.homeOwnsNow ? null : group.sessions.map((session) => (
                 <NowRow
                   key={session.id}
                   session={session}
-                  label={`${state.works[session.workId]?.title ?? ""} — ${session.purpose}`}
+                  label={session.purpose}
+                  meta={state.works[session.workId]?.title}
                   current={session.id === visibleSessionId}
                   look={shared.lookOf(session.provider)}
                   onOpen={() => actions.openSession(session)}
@@ -107,15 +99,18 @@ export function NowSection({ shared }: { shared: NavShared }) {
             </div>
           ))}
       {!folded && now.running.length > 4 ? (
-        <div className="now-memory" title="Claude·Codex 세션 하나가 엔진 프로세스로 약 250~350MB를 씁니다(이 노트북 측정). 막지는 않습니다.">
-          동시에 {now.running.length}개 진행 중 · 메모리를 세션당 약 300MB 씁니다
+        <div className="now-memory" title="Claude나 Codex 대화 하나가 약 250~350MB를 씁니다(이 노트북에서 잰 값). 막지는 않습니다.">
+          동시에 {now.running.length}개 진행 중입니다. 대화마다 메모리를 약 300MB 씁니다.
         </div>
       ) : null}
     </section>
   );
 }
 
-type ShortcutView = { entry: NavShortcut; index: number; label: string; icon: IconName; color: string | null; current: boolean; disabled?: string; open: () => void };
+type ShortcutView = { entry: NavShortcut; index: number; label: string; icon: IconName; color: string | null; current: boolean; /** Selected as what the list shows (a folder, a tag). */ scope?: boolean; disabled?: string; open: () => void };
+
+/** What the list pane lists (a folder, a tag): marked apart from the project on screen. */
+const scopeMark = (selected: boolean) => (selected ? { "data-scope": "" } : {});
 
 /** "바로가기": projects, folders, tags, saved views and sessions, in the person's order. */
 export function ShortcutsSection({ shared }: { shared: NavShared }) {
@@ -139,14 +134,14 @@ export function ShortcutsSection({ shared }: { shared: NavShared }) {
       const folder = state.folders[entry.id];
       if (!folder || folderHidden(state, folder.id)) return;
       const selected = shared.nav.selected.kind === "folder" && shared.nav.selected.id === folder.id;
-      views.push({ ...base, label: entry.label ?? folder.name, icon: folderIcon(folder, false), color: folder.color ?? null, current: selected && !tree, open: () => shared.select({ kind: "folder", id: folder.id }) });
+      views.push({ ...base, label: entry.label ?? folder.name, icon: folderIcon(folder, false), color: folder.color ?? null, scope: selected && !tree, open: () => shared.select({ kind: "folder", id: folder.id }) });
     } else if (entry.kind === "tag") {
       const selected = shared.nav.selected.kind === "tag" && shared.nav.selected.tag === entry.id;
       views.push({
         ...base,
         label: entry.label ?? `#${entry.id}`,
         icon: "tag",
-        current: selected && !tree,
+        scope: selected && !tree,
         disabled: tree ? "태그 목록은 두 칸·위아래 배치에서 고를 수 있습니다." : undefined,
         open: () => shared.select({ kind: "tag", tag: entry.id }),
       });
@@ -190,7 +185,7 @@ export function ShortcutsSection({ shared }: { shared: NavShared }) {
   };
   return (
     <section className="side-section nav-shortcuts" aria-label="바로가기" data-drop-shortcuts="">
-      <SectionHead id="shortcuts" label="바로가기" shared={shared} count={views.length || undefined} />
+      <SectionHead id="shortcuts" label="바로가기" shared={shared} count={views.length || undefined} tools={views.length ? undefined : <span className="nav-empty-hint" title={`${tree ? "프로젝트·폴더를" : "프로젝트·폴더·태그를"} 여기로 끌어 놓거나, 메뉴의 "바로가기에 더하기"로 더합니다.`}>끌어 놓아 더하기</span>} />
       {folded ? null : views.length ? (
         <div role="list" aria-label="바로가기">
           {views.map((view) =>
@@ -209,6 +204,7 @@ export function ShortcutsSection({ shared }: { shared: NavShared }) {
                 data-shortcut-index={view.index}
                 data-shortcut-kind={view.entry.kind}
                 data-shortcut-id={view.entry.id}
+                {...scopeMark(Boolean(view.scope))}
                 title={view.disabled ?? (view.entry.label ? `원래 이름: ${view.entry.kind === "tag" ? `#${view.entry.id}` : view.label}` : undefined)}
                 onPointerDown={(event) => {
                   if ((event.target as HTMLElement).closest(".nav-shortcut-remove")) return;
@@ -247,219 +243,8 @@ export function ShortcutsSection({ shared }: { shared: NavShared }) {
           )}
         </div>
       ) : (
-        <div className="nav-empty">프로젝트·폴더·태그를 여기로 끌어 놓으면 바로가기가 됩니다.</div>
-      )}
-    </section>
-  );
-}
-
-/** "프로젝트": the root (projects outside any folder) and the folder tree, folders only. */
-export function ProjectsSection({ shared }: { shared: NavShared }) {
-  const { state, actions, nav, counts, open } = shared;
-  const [folderName, setFolderName] = useState("");
-  const folded = Boolean(nav.sections.projects);
-  const closed = new Set(open.closedFolders);
-  const all = folderOrder(state.folders, null);
-  const visible: { folder: Folder; depth: number; open: boolean; children: boolean }[] = [];
-  let hiddenBelow: number | null = null;
-  for (const { folder, depth } of all) {
-    if (hiddenBelow !== null && depth > hiddenBelow) continue;
-    hiddenBelow = null;
-    const children = all.some((entry) => entry.folder.parentId === folder.id);
-    const isOpen = children && !closed.has(folder.id);
-    visible.push({ folder, depth, open: isOpen, children });
-    if (!isOpen) hiddenBelow = depth;
-  }
-  const selected = nav.selected;
-  const isSelected = (folderId: string | null) => (folderId === null ? selected.kind === "root" : selected.kind === "folder" && selected.id === folderId);
-  const tabbable = selected.kind === "root" || selected.kind === "folder" ? (selected.kind === "folder" ? selected.id : ROOT_ROW_ID) : null;
-  const toggle = (folderId: string, isOpen: boolean) => {
-    const next = new Set(open.closedFolders);
-    if (isOpen) next.add(folderId);
-    else next.delete(folderId);
-    shared.onOpenChange({ ...open, closedFolders: [...next] });
-  };
-  const folderMenu = (folder: Folder, x: number, y: number) => shared.rowMenu(folderRowOf(folder), x, y);
-  const rootMenu = (x: number, y: number) =>
-    actions.openMenu({
-      x,
-      y,
-      title: "프로젝트",
-      items: [
-        { kind: "item", label: "새 프로젝트", icon: "plus", onSelect: () => actions.newSession({ folderId: null }) },
-        { kind: "item", label: "새 정리 폴더", icon: "folder", onSelect: () => shared.setCreatingIn(null) },
-      ],
-    });
-  const onKey = (event: ReactKeyboardEvent<HTMLElement>, folder: Folder | null, isOpen: boolean, children: boolean) => {
-    const element = event.currentTarget;
-    if (event.key === "ArrowDown") stepFocus(element, 1);
-    else if (event.key === "ArrowUp") stepFocus(element, -1);
-    else if (event.key === "Home") stepFocus(element, "first");
-    else if (event.key === "End") stepFocus(element, "last");
-    else if (event.key === "ArrowRight") {
-      if (folder && children && !isOpen) toggle(folder.id, false);
-      else shared.focusList();
-    } else if (event.key === "ArrowLeft") {
-      if (folder && children && isOpen) toggle(folder.id, true);
-      else if (folder) element.closest(".nav-folder-tree")?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(folder.parentId && state.folders[folder.parentId] ? folder.parentId : ROOT_ROW_ID)}"]`)?.focus();
-    } else if (event.key === "Enter") shared.select(folder ? { kind: "folder", id: folder.id } : { kind: "root" });
-    else if (event.key === "F2" && folder) shared.setRenaming(folder.id);
-    else if (event.key === "Delete" && folder) actions.archive({ kind: "folder", id: folder.id });
-    else if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") {
-      const box = element.getBoundingClientRect();
-      if (folder) folderMenu(folder, box.left + 24, box.bottom - 4);
-      else rootMenu(box.left + 24, box.bottom - 4);
-    } else return;
-    event.preventDefault();
-    event.stopPropagation();
-  };
-  const creatingRow = (depth: number) => (
-    <form
-      className="side-row creating"
-      style={{ paddingLeft: 8 + depth * 14 }}
-      onSubmit={(event) => {
-        event.preventDefault();
-        const name = folderName.trim();
-        if (!name) return;
-        const parentId = shared.creatingIn ?? null;
-        void actions.createFolder(name, parentId).then(() => {
-          shared.setCreatingIn(undefined);
-          setFolderName("");
-        });
-      }}
-    >
-      <span className="row-chevron blank" />
-      <Icon name="folder" size={15} />
-      <input
-        autoFocus
-        value={folderName}
-        placeholder="새 정리 폴더 이름"
-        aria-label="새 정리 폴더 이름"
-        onChange={(event) => setFolderName(event.target.value)}
-        onBlur={() => !folderName.trim() && shared.setCreatingIn(undefined)}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            shared.setCreatingIn(undefined);
-            setFolderName("");
-          }
-        }}
-      />
-    </form>
-  );
-  const root = counts.root;
-  return (
-    <section className="side-section nav-projects" aria-label="프로젝트">
-      <SectionHead
-        id="projects"
-        label="프로젝트 탐색"
-        shared={shared}
-        count={`전체 ${root.own + root.below}개`}
-        tools={
-          <button type="button" className="icon-button small" title="새 정리 폴더" aria-label="새 정리 폴더" onClick={() => shared.setCreatingIn(null)}>
-            <Icon name="plus" size={13} />
-          </button>
-        }
-      />
-      {folded ? null : (
-        <div className="nav-folder-tree" role="tree" aria-label="프로젝트 폴더">
-          <div
-            role="treeitem"
-            aria-level={1}
-            aria-selected={isSelected(null)}
-            tabIndex={tabbable === ROOT_ROW_ID ? 0 : -1}
-            className={`side-row nav-root${isSelected(null) ? " current" : ""}`}
-            style={{ paddingLeft: 8 }}
-            data-row-id={ROOT_ROW_ID}
-            data-nav-row=""
-            data-nav-folder=""
-            title={`폴더 밖 ${root.own}개 · 폴더 안 ${root.below}개`}
-            onClick={() => !shared.justDragged() && shared.select({ kind: "root" })}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              rootMenu(event.clientX, event.clientY);
-            }}
-            onKeyDown={(event) => onKey(event, null, true, false)}
-          >
-            <span className="row-chevron blank" />
-            <Icon name="grid" size={15} className="side-row-icon" />
-            <span className="side-row-label">{nav.includeSub ? "전체 프로젝트 보기" : "폴더 밖 프로젝트 보기"}</span>
-          </div>
-          <div className="nav-folder-heading" role="presentation">정리 폴더</div>
-          {shared.creatingIn === null ? creatingRow(0) : null}
-          {visible.map(({ folder, depth, open: isOpen, children }) => {
-            const count = counts.folders.get(folder.id);
-            const style = { paddingLeft: 8 + depth * 14, ...(folder.color ? { "--folder-color": folder.color } : {}) } as CSSProperties;
-            return (
-              <Fragment key={folder.id}>
-                {shared.renaming === folder.id ? (
-                  <div className="side-row renaming nav-folder" style={style} data-row-id={folder.id}>
-                    <span className="row-chevron blank" />
-                    <Icon name={folderIcon(folder, isOpen)} size={15} />
-                    <EditableText
-                      className="side-rename"
-                      value={folder.name}
-                      onSave={(next) => actions.rename({ kind: "folder", id: folder.id }, next)}
-                      onDone={() => {
-                        shared.setRenaming(null);
-                        window.requestAnimationFrame(() => document.querySelector<HTMLElement>(`.nav-folder-tree [data-row-id="${CSS.escape(folder.id)}"]`)?.focus());
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <div
-                    role="treeitem"
-                    aria-level={depth + 2}
-                    aria-expanded={children ? isOpen : undefined}
-                    aria-selected={isSelected(folder.id)}
-                    tabIndex={tabbable === folder.id ? 0 : -1}
-                    className={`side-row nav-folder${isSelected(folder.id) ? " current" : ""}${folder.color ? " colored" : ""}`}
-                    style={style}
-                    data-row-id={folder.id}
-                    data-nav-row=""
-                    data-nav-folder=""
-                    title={`${folder.name} · 이 폴더 ${count?.own ?? 0}개${count?.below ? ` · 하위 ${count.below}개` : ""}`}
-                    onPointerDown={(event) => {
-                      if ((event.target as HTMLElement).closest(".row-chevron")) return;
-                      shared.press({ kind: "row", row: folderRowOf(folder, depth, isOpen) }, event);
-                    }}
-                    onClick={(event) => {
-                      if (shared.justDragged()) return;
-                      if ((event.button === 1 || event.ctrlKey || event.metaKey) && actions.openRight) actions.openRight({ kind: "folder", id: folder.id });
-                      else shared.select({ kind: "folder", id: folder.id });
-                    }}
-                    onAuxClick={(event) => event.button === 1 && actions.openRight?.({ kind: "folder", id: folder.id })}
-                    onDoubleClick={() => shared.setRenaming(folder.id)}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      folderMenu(folder, event.clientX, event.clientY);
-                    }}
-                    onKeyDown={(event) => onKey(event, folder, isOpen, children)}
-                  >
-                    <span
-                      className={`row-chevron${children ? "" : " blank"}`}
-                      onClick={(event) => {
-                        if (!children) return;
-                        event.stopPropagation();
-                        toggle(folder.id, isOpen);
-                      }}
-                      aria-hidden
-                    >
-                      {children ? <Icon name={isOpen ? "chevronDown" : "chevronRight"} size={13} /> : null}
-                    </span>
-                    <span className="side-row-icon nav-folder-icon">
-                      <Icon name={folderIcon(folder, isOpen)} size={15} />
-                    </span>
-                    <span className="side-row-label">{folder.name}</span>
-                    <span className="side-row-trail muted nav-count">{countText(count)}</span>
-                  </div>
-                )}
-                {shared.creatingIn === folder.id ? creatingRow(depth + 1) : null}
-              </Fragment>
-            );
-          })}
-        </div>
+        // N1: an empty 바로가기 is its head line only (still the place to drop onto); the hint is its title.
+        null
       )}
     </section>
   );
@@ -521,7 +306,8 @@ export function TagsSection({ shared }: { shared: NavShared }) {
           aria-expanded={node.children.length ? isOpen : undefined}
           aria-selected={current}
           tabIndex={current ? 0 : -1}
-          className={`side-row nav-tag${current ? " current" : ""}`}
+          className="side-row nav-tag"
+          {...scopeMark(current)}
           style={{ paddingLeft: 8 + depth * 14 }}
           data-nav-row=""
           data-tag={node.tag}
@@ -571,7 +357,8 @@ export function TagsSection({ shared }: { shared: NavShared }) {
               aria-level={1}
               aria-selected={untaggedCurrent}
               tabIndex={untaggedCurrent ? 0 : -1}
-              className={`side-row nav-tag nav-untagged${untaggedCurrent ? " current" : ""}`}
+              className="side-row nav-tag nav-untagged"
+              {...scopeMark(untaggedCurrent)}
               style={{ paddingLeft: 8 }}
               data-nav-row=""
               onClick={() => shared.select({ kind: "untagged" })}
@@ -586,26 +373,6 @@ export function TagsSection({ shared }: { shared: NavShared }) {
         </div>
       )}
     </section>
-  );
-}
-
-/** The navigation pane as a whole (two-pane and stacked layouts). */
-export function NavPane({ shared }: { shared: NavShared }) {
-  return (
-    <div className="nav-pane side-scroll" aria-label="탐색">
-      <HomeRow shared={shared} />
-      <NowSection shared={shared} />
-      <ShortcutsSection shared={shared} />
-      <ProjectsSection shared={shared} />
-      <TagsSection shared={shared} />
-      <ViewsSection
-        openMenu={shared.actions.openMenu}
-        folded={Boolean(shared.nav.sections.views)}
-        onFold={(folded) => shared.saveNav({ sections: { ...shared.nav.sections, views: folded } })}
-        menuExtras={(view) => [viewShortcutEntry(shared, view.id)]}
-      />
-      <VaultSection theme={shared.theme} openMenu={shared.actions.openMenu} />
-    </div>
   );
 }
 

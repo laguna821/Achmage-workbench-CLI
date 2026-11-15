@@ -13,6 +13,10 @@
  *
  * Needs git, rustup (the tag's rust-toolchain.toml selects the toolchain and
  * the wasm32 target) and wasm-pack. The app build itself never runs this.
+ *
+ * Workbench: `node scripts/rebuild-hwp-engine.mjs --target 0.9.0 [--from DIR] [--keep]` builds the
+ * second engine, rhwp v0.9.0 with third_party/hop/patches-0.9.0, into third_party/hop/rhwp-core-0.9.0
+ * (scripts/rebuild-hwp-engine-090.mjs); the default target stays the shipped 0.8.7 engine.
  */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -22,6 +26,16 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+// `--target 0.9.0` builds the second engine (third_party/hop/rhwp-core-0.9.0) from its own pin and
+// patch set (rebuild-hwp-engine-090.mjs); without it this script builds the shipped 0.8.7 engine as before.
+const targetIndex = process.argv.indexOf('--target')
+const target = targetIndex >= 0 ? process.argv[targetIndex + 1] : '0.8.7'
+if (target === '0.9.0') {
+  const { rebuild090 } = await import('./rebuild-hwp-engine-090.mjs')
+  await rebuild090(ROOT, process.argv)
+  process.exit(0)
+}
+if (target !== '0.8.7') throw new Error(`Unknown --target ${target} (0.8.7 or 0.9.0)`)
 const VENDOR = join(ROOT, 'third_party/hop/rhwp-core')
 const MANIFEST = join(VENDOR, 'package.json')
 const REPO = 'https://github.com/edwardkim/rhwp.git'

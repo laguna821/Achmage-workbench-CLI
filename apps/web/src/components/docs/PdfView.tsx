@@ -143,9 +143,9 @@ export function PdfView({
   return (
     <div className="pdf-view">
       <div className="doc-tools">
-        <span className="muted">{pdf ? `${pdf.numPages}쪽 · r${revision}` : "불러오는 중…"}</span>
+        <span className="muted">{pdf ? `${pdf.numPages}쪽, ${revision}판` : "PDF를 여는 중"}</span>
         <span className="doc-tools-sep" />
-        <span className="muted">{pages.length ? `${pages.join(", ")}쪽 고름` : "페이지를 고르면 회전·삭제"}</span>
+        <span className="muted">{pages.length ? `${pages.join(", ")}쪽 고름` : "쪽을 고르면 돌리거나 지울 수 있습니다"}</span>
         <button type="button" className="button small" disabled={!pages.length || busy} onClick={() => void run({ rotate: [{ pages, degrees: 90 }] })}>
           오른쪽으로 돌리기
         </button>

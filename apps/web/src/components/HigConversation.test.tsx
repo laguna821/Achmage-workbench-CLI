@@ -37,6 +37,28 @@ it("keeps core controls available and closes optional tools with Escape without 
   expect(stop).toHaveBeenCalledTimes(1);
 });
 
+it("the quiet row: 첨부, 도구, the engine and send in view; every other control one disclosure away, unchanged", async () => {
+  const send = vi.fn().mockResolvedValue(true);
+  const view = render(<Composer draftKey="quiet-test" placeholder="요청 쓰기" busy={false} onSend={send} onFiles={vi.fn()}
+    engine={<button className="select-button">Codex</button>} toolsOn={["계획 먼저"]}
+    left={<><button>자동</button><button>13%</button></>} target={<><button>Fake</button><button>기본</button></>} tools={<><button>계획 먼저</button><button aria-label="프로젝트 문서 붙이기">문서 붙이기</button></>} />);
+  const bar = view.container.querySelector<HTMLElement>(".composer-bar")!;
+  const row = [...bar.querySelectorAll(".composer-left > *, .composer-right > *")];
+  expect(row.map((element) => element.className.split(" ")[0])).toEqual(["composer-file-picker", "composer-tools", "select-button", "icon-button"]);
+  const disclosure = view.container.querySelector<HTMLDetailsElement>(".composer-tools")!;
+  expect(disclosure.open).toBe(false);
+  // What is on stays named on the closed key.
+  expect(disclosure.querySelector("summary")!.textContent).toContain("계획 먼저");
+  for (const name of ["자동", "13%", "Fake", "기본", "계획 먼저", "프로젝트 문서 붙이기"]) expect(disclosure.contains(screen.getAllByRole("button", { name, hidden: true }).at(-1)!)).toBe(true);
+  disclosure.open = true;
+  fireEvent.keyDown(screen.getByRole("button", { name: "Fake" }), { key: "Escape" });
+  expect(disclosure.open).toBe(false);
+  expect(screen.getByRole("button", { name: "사진 또는 파일 첨부" })).toBeTruthy();
+  fireEvent.change(screen.getByRole("textbox", { name: "요청 입력" }), { target: { value: "요청" } });
+  fireEvent.click(screen.getByRole("button", { name: "보내기" }));
+  await waitFor(() => expect(send).toHaveBeenCalledWith("요청", "auto"));
+});
+
 const attachment = { id: "picture", name: "결과.png", mime: "image/png", size: 1024 } as Attachment;
 it("opens a captured inline image even without a supplied gallery and restores keyboard focus", async () => {
   render(<MessageImage attachment={attachment} gallery={[]} />);
@@ -58,4 +80,15 @@ it("makes failed inline image loading visible and allows a retry", async () => {
   fireEvent.click(screen.getByRole("button", { name: "다시 불러오기" }));
   await waitFor(() => expect(screen.getByRole("button", { name: "결과.png 크게 보기" }).hasAttribute("disabled")).toBe(false));
   expect(media.retain).toHaveBeenCalledTimes(2);
+});
+
+it("marks the input with the engine it sends to, even when the pane around it shows another engine", () => {
+  // A Claude chat's document whose document AI was switched to Codex: the line follows the send target.
+  const view = render(<section className="pane" data-theme="light"><Composer draftKey="doc-ai" placeholder="이 문서에 요청하기" busy={false} provider="codex" onSend={vi.fn()} /></section>);
+  const composer = () => view.container.querySelector<HTMLElement>(".hig-composer")!;
+  expect(composer().dataset.provider).toBe("codex");
+  view.rerender(<section className="pane" data-theme="light"><Composer draftKey="doc-ai" placeholder="이 문서에 요청하기" busy={false} provider="claude" onSend={vi.fn()} /></section>);
+  expect(composer().dataset.provider).toBe("claude");
+  view.rerender(<section className="pane" data-theme="light"><Composer draftKey="doc-ai" placeholder="이 문서에 요청하기" busy={false} onSend={vi.fn()} /></section>);
+  expect(composer().hasAttribute("data-provider")).toBe(false);
 });

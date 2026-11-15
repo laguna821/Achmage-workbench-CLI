@@ -1,21 +1,24 @@
-import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+
 import { beforeAll, expect, it } from "vitest";
-import init, { HwpDocument } from "../../../third_party/hop/rhwp-core/rhwp.js";
+import init, { HwpDocument } from "../../../third_party/hop/engine.ts";
 import { encodeHwpSave } from "../../../packages/contracts/src/hwp.ts";
 import { hwpToText, hwpMemosOf } from "../../../third_party/ieumoffice/file-parse/hwp.ts";
 import { hwpWasmPath } from "./hwp-resource.ts";
+import { hwpStructureOf } from "./hwp-structure.ts";
+import { notesWithBreaks } from "./hwp-census-fixture.ts";
 import { EventBus } from "./bus.ts";
 import { SessionManager } from "./sessions.ts";
 import { Store } from "./store.ts";
 import { OfficeOutputs } from "./office-output.ts";
 import { runSave, type SaveEditorPort } from "../../office/src/hwp-save.ts";
 import { exportOdt } from "../../office/src/text-word-engine.mjs";
+import { tempDir } from "./test-temp.ts";
 
 beforeAll(async () => { await init({ module_or_path: readFileSync(hwpWasmPath()) }); });
 function setup(format: "hwp" | "hwpx" = "hwpx") {
-  const dir = mkdtempSync(join(tmpdir(), "wb-office-output-"));
+  const dir = tempDir("wb-office-output-");
   const manager = new SessionManager(new Store(join(dir, "state.sqlite")), new EventBus(), { hostId: "test", hostLabel: "test", managedWorksDir: join(dir, "works"), dataDir: dir, kordoc: null });
   const work = manager.createWork({ title: "한글", cwd: join(dir, "project") }); mkdirSync(work.cwd, { recursive: true });
   const doc = HwpDocument.createEmpty(); doc.createBlankDocument(); doc.insertText(0, 0, 0, "원본 한글");
@@ -157,3 +160,42 @@ it("refuses source paths, foreign tickets, corrupt bytes, symlinks and new-file 
     expect(readFileSync(path)).toEqual(bytes);
   } finally { doc.free(); }
 });
+
+// I-5: a refusal never traps the person. Save As to a NEW file goes through with a warning naming
+// what the copy lacks; saving over an existing file (and the original, via Save) stays refused.
+it("saves a Hangul copy that lacks something the editor holds to a new file, with a warning, and refuses it over an existing file", async () => {
+  const { outputs, artifact, doc, path, bytes, work } = setup("hwpx");
+  try {
+    const held = hwpStructureOf(doc), claimed = { ...held, objects: { ...held.objects, tbl: (held.objects.tbl ?? 0) + 1 } };
+    const body = () => Buffer.from(encodeHwpSave({ memos: JSON.parse(doc.getMemoList()), structure: claimed }, doc.exportHwpx()));
+    const plan = outputs.prepare(artifact.id, 1, "copy.hwpx");
+    const result = await outputs.commit(artifact.id, plan.id, body(), false);
+    expect(result.warning).toMatch(/새 파일에 저장했지만 저장본에 빠진 내용이 있습니다 \(표 1→0\)\. 원본 파일은 그대로입니다\./);
+    expect(await hwpToText(readFileSync(result.path))).toContain("원본 한글");
+    expect(readFileSync(path)).toEqual(bytes);
+    const existing = join(work.cwd, "existing.hwpx"); writeFileSync(existing, bytes);
+    const over = outputs.prepare(artifact.id, 1, existing);
+    await expect(outputs.commit(artifact.id, over.id, body(), true)).rejects.toMatchObject({ code: "hwp_content_loss", message: expect.stringMatching(/표 1→0/) });
+    expect(readFileSync(existing)).toEqual(bytes);
+    // A complete copy has nothing to warn about.
+    const clean = outputs.prepare(artifact.id, 1, "clean.hwp");
+    expect((await outputs.commit(artifact.id, clean.id, Buffer.from(encodeHwpSave({ memos: JSON.parse(doc.getMemoList()), structure: held }, doc.exportHwp())), false)).warning).toBeUndefined();
+  } finally { doc.free(); }
+});
+
+// N2-1: Save As of a document with a tab and a line break in its notes, both formats, says the text was checked.
+it("saves a Hangul copy of a document with a tab and a line break in its notes, in both formats", async () => {
+  const { outputs, manager, work } = setup("hwpx");
+  const original = await notesWithBreaks(), path = join(work.cwd, "notes.hwpx"); writeFileSync(path, original);
+  const artifact = manager.openFile(work.id, path), doc = new HwpDocument(original);
+  try {
+    for (const name of ["notes-copy.hwpx", "notes-copy.hwp"]) {
+      const plan = outputs.prepare(artifact.id, 1, name);
+      const bytes = name.endsWith(".hwp") ? doc.exportHwp() : doc.exportHwpx();
+      const result = await outputs.commit(artifact.id, plan.id, Buffer.from(encodeHwpSave({ memos: JSON.parse(doc.getMemoList()), structure: hwpStructureOf(doc) }, bytes)), false);
+      expect(result).toMatchObject({ text: "checked" });
+      expect(result.warning).toBeUndefined();
+    }
+  } finally { doc.free(); }
+});
+

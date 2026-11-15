@@ -92,7 +92,7 @@ export function KnowledgeHome({ api, state, workId, theme, visible, refreshToken
         <option value="">프로젝트 선택</option>{projects.map(work => <option key={work.id} value={work.id}>{work.title}</option>)}
       </select></label>
       {spaces.length > 1 && <select aria-label="지식베이스 문서 작업공간" value={workspace} onChange={event => setWorkspace(event.target.value)}>{spaces.map(space => <option key={space.id} value={space.id}>{space.label}</option>)}</select>}
-      <button type="button" disabled={creating} onClick={() => void createProject()}>{creating ? "만드는 중…" : "새 프로젝트"}</button>
+      <button aria-busy={creating ? true : undefined} type="button" disabled={creating} onClick={() => void createProject()}>{creating ? "만드는 중…" : "새 프로젝트"}</button>
       <small>닫기 전에 필요한 답변을 문서로 저장하세요.</small>
     </div>
     {error && <p role="alert">{error}</p>}

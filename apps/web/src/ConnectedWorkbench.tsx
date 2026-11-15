@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { App } from "./App.tsx";
 import { Api, readToken, setMediaConnection } from "./api.ts";
-import { HostConnections } from "./components/HostConnections.tsx";
+import { HostConnections, HostConnectionsPanel } from "./components/HostConnections.tsx";
 import { hostConnections } from "./remote-hosts.ts";
 import type { LocalDeviceApi } from "./host-connections.ts";
 import { installMobileLayout } from "./mobile-layout.ts";
@@ -19,6 +19,9 @@ export function ConnectedWorkbench() {
   const [token] = useState(readToken);
   const [initialOffer, setInitialOffer] = useState(() => location.hash.startsWith("#offer=") ? location.href : "");
   const [open, setOpen] = useState(() => !token || location.hash.startsWith("#offer="));
+  // "휴대폰 메신저 열기" in the device dialog: the app owns that dialog, so it is asked by a counter.
+  const [messengerRequest, setMessengerRequest] = useState(0);
+  const toMessenger = token && !connections.activeHostId ? () => { setOpen(false); setInitialOffer(""); setMessengerRequest(value => value + 1); } : undefined;
   useEffect(() => {
     if (initialOffer && location.hash.startsWith("#offer=")) history.replaceState(null, "", location.pathname + location.search);
   }, [initialOffer]);
@@ -30,6 +33,7 @@ export function ConnectedWorkbench() {
     approve: (id, input) => local.request("POST", "/api/devices/enrollments/" + encodeURIComponent(id) + "/approve", input),
     reject: id => local.request("POST", "/api/devices/enrollments/" + encodeURIComponent(id) + "/reject", {}),
     revoke: id => local.request("POST", "/api/devices/" + encodeURIComponent(id) + "/revoke", {}),
+    remove: id => local.request("POST", "/api/devices/" + encodeURIComponent(id) + "/remove", {}),
     rotate: id => local.request("POST", "/api/devices/" + encodeURIComponent(id) + "/rotate", {}),
   }), [local]);
   const peer = hostConnections.peer();
@@ -65,12 +69,14 @@ export function ConnectedWorkbench() {
     }).catch(reportPushError);
   }, [pushIntent, pushTarget, connections.activeHostId, reportPushError]);
   return <>
-    {pushError ? <div role="status" className="connection-error">{pushError} {pushIntent ? <button type="button" className="button small" onClick={() => { setPushError(""); setPushAttempt(value => value + 1); }}>알림 다시 열기</button> : <button type="button" className="button small" onClick={() => setPushError("")}>닫기</button>}</div> : null}
-    {token || peer ? <App key={connections.activeHostId ?? "local"} apiOverride={apiOverride} onConnections={() => setOpen(true)} connectionsOpen={open}
+    {pushError ? <div role="status" className="connection-error">알림을 열지 못했습니다. {pushError} {pushIntent ? <button type="button" className="button small" onClick={() => { setPushError(""); setPushAttempt(value => value + 1); }}>알림 다시 열기</button> : <button type="button" className="button small" onClick={() => setPushError("")}>닫기</button>}</div> : null}
+    {token || peer ? <App key={connections.activeHostId ?? "local"} apiOverride={apiOverride} onConnections={() => setOpen(true)} connectionsOpen={open} messengerRequest={messengerRequest}
+      devicePanel={() => <HostConnectionsPanel api={management} controller={hostConnections} localAvailable={!!token} onMessenger={toMessenger} />}
       attentionRequest={pushIntent?.hostId === connections.activeHostId ? pushTarget : null} onAttentionOpened={openedPush}
       connectionLabel={selected ? selected.label + (connections.phase === "connected" ? " · 연결됨" : " · 연결 확인") : "기기 연결"} registerHostSwitchGuard={guard} />
-      : <main style={{ maxWidth: 560, margin: "12vh auto", padding: 24 }}><h1>Achmage Workbench</h1><p>작업 중인 PC에 연결해 대화와 파일을 이어서 보세요.</p><button type="button" className="primary-button" onClick={() => setOpen(true)}>기기 연결</button></main>}
+      : <main className="connect-first"><h1>Achmage Workbench</h1><p>작업하는 PC에 연결하면 그 PC의 프로젝트와 대화, 문서를 이 기기에서 이어서 봅니다.</p><button type="button" className="button primary" onClick={() => setOpen(true)}>PC에 연결</button></main>}
     <HostConnections open={open} api={management} controller={hostConnections} localAvailable={!!token} initialOffer={initialOffer}
+      onMessenger={toMessenger}
       onClose={() => { setOpen(false); setInitialOffer(""); }} />
   </>;
 }

@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -91,7 +91,11 @@ it.skipIf(process.platform === "win32")("a version symlink stays registered afte
   await next.bootstrap();
 });
 
-it.skipIf(process.platform !== "linux")("Linux app-menu launch is independent of Workbench and preserves quoted paths/arguments", async () => {
+// The launch goes through the desktop's own `gio launch`. ux/run-isolated.sh (the checks' wrapper)
+// replaces gio with a stand-in that only records the call, so nothing is launched there: the test is
+// skipped with that reason instead of failing on the missing launch.
+const realGio = process.platform === "linux" && (() => { try { return /\d+\.\d+/.test(execFileSync("gio", ["--version"], { encoding: "utf8" })); } catch { return false; } })();
+it.skipIf(process.platform !== "linux" || !realGio)(`Linux app-menu launch is independent of Workbench and preserves quoted paths/arguments${process.platform === "linux" && !realGio ? " [skipped: no real gio here (a stand-in or none), nothing can be launched]" : ""}`, async () => {
   const f = fixture();
   const externalData = join(f.root, '이음 앱 $금액 `값` "표" 100%'), app = join(externalData, "installed", "ieumoffice");
   mkdirSync(dirname(app), { recursive: true });

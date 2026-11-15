@@ -220,7 +220,7 @@ export function VaultNoteView({ path, location }: { path: string; location?: { l
           ) : null}
         </div>
       </div>
-      <CardComposer draftKey={`note:${path}`} place={{ kind: "new", folderId: null }} notes={notes} onNotes={setNotes} engine={engine} setEngine={setEngine} dropping={false} placeholder="이 노트를 붙여 새 세션 시작하기" hint="노트는 지금 내용의 읽기 전용 사본으로 요청에 붙습니다. 고치려면 Obsidian에서 여세요." />
+      <CardComposer draftKey={`note:${path}`} place={{ kind: "new", folderId: null }} notes={notes} onNotes={setNotes} engine={engine} setEngine={setEngine} dropping={false} placeholder="이 노트를 붙여 새 대화 시작하기" hint="노트는 지금 내용의 읽기 전용 사본으로 요청에 붙습니다. 고치려면 Obsidian에서 여세요." />
     </main>
   );
 }

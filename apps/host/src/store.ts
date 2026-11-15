@@ -6,7 +6,9 @@ import type { Workspace, WorktreeCreation, TerminalSession, PreparationJob } fro
 import type { Artifact, ArtifactRevision, Folder, Handoff, Proposal, Session, SessionLink, TimelineRevision, TranscriptItem, Work } from "@workbench/contracts";
 import type { TurnMark } from "./timeline.ts";
 import { SearchIndex, documentEntry, documentKey, itemEntries, itemKey, sessionEntry, workEntry, type WorkExtras } from "./search-index.ts";
-import type { HubJournalEntry } from "@workbench/contracts";
+import type { HubJournalEntry, RequestOrigin } from "@workbench/contracts";
+import { isRequestOrigin } from "@workbench/contracts";
+import { ChannelStore } from "./channels/store.ts";
 
 // Local state only: works, folders, sessions, transcript items and request ids.
 // Never place this database in Dropbox (live SQLite must not be synced).
@@ -115,6 +117,9 @@ export class Store {
       CREATE INDEX IF NOT EXISTS hub_deliveries_state ON hub_deliveries(state);
       COMMIT;
     `);
+    // Additive, without a schema version: an older gateway names its columns and never reads this one.
+    if (!this.db.prepare("SELECT 1 AS found FROM pragma_table_info('requests') WHERE name = 'origin'").get()) this.db.exec("ALTER TABLE requests ADD COLUMN origin TEXT");
+    this.channels = new ChannelStore(this.db);
     this.search = new SearchIndex(this.db);
     if (this.getMeta("search.version") !== SEARCH_VERSION) this.rebuildSearch();
     this.db.exec(`PRAGMA user_version = ${STORE_SCHEMA_VERSION}`);
@@ -124,6 +129,9 @@ export class Store {
 
   /** The search index ("찾는 길"): every request, reply, plan, document, work, session and note. */
   readonly search: SearchIndex;
+
+  /** The messenger channel's tables (channels/store.ts): new tables beside the existing ones. */
+  readonly channels: ChannelStore;
 
   /** What the project layer adds to a work's search entry (aliases, tags, properties); see search-index.ts. */
   workExtras: ((workId: string) => WorkExtras | null) | null = null;
@@ -215,12 +223,28 @@ export class Store {
     const row = this.db.prepare("SELECT json FROM artifacts WHERE id = ?").get(artifactId);
     if (!row) return;
     const artifact = JSON.parse(String(row.json)) as Artifact;
+    // A removed document is not found (a late background read must not bring it back).
+    if (artifact.removed) return this.removeDocumentEntry(artifactId);
     const latest = this.db.prepare("SELECT json FROM revisions WHERE artifact_id = ? ORDER BY revision DESC LIMIT 1").get(artifactId);
     this.indexSafely(() => {
       const entry = documentEntry(artifact, latest ? (JSON.parse(String(latest.json)) as ArtifactRevision) : null, text);
       if (entry) this.search.put(entry);
       else this.search.remove(`doc:${artifactId}`);
     });
+  }
+
+  /** A document leaves search (taken out of its project; found again once restored). */
+  removeDocumentEntry(artifactId: string) {
+    this.indexSafely(() => this.search.remove(documentKey(artifactId)));
+  }
+
+  /** A document deleted for good: its record, revisions and proposals. */
+  deleteArtifact(artifactId: string) {
+    this.transaction(() => {
+      for (const table of ["proposals", "revisions"]) this.db.prepare(`DELETE FROM ${table} WHERE artifact_id = ?`).run(artifactId);
+      this.db.prepare("DELETE FROM artifacts WHERE id = ?").run(artifactId);
+    });
+    this.removeDocumentEntry(artifactId);
   }
 
   /** Whether a document is in the search index yet (by its name at least). */
@@ -319,7 +343,7 @@ export class Store {
     return this.db
       .prepare(
         `SELECT r.json FROM revisions r JOIN artifacts a ON a.id = r.artifact_id
-          WHERE a.work_id = ? AND json_extract(r.json, '$.at') >= ?
+          WHERE a.work_id = ? AND json_extract(a.json, '$.removed') IS NULL AND json_extract(r.json, '$.at') >= ?
           ORDER BY json_extract(r.json, '$.at') DESC LIMIT ?`,
       )
       .all(workId, since, limit)
@@ -332,7 +356,7 @@ export class Store {
       .prepare(
         `SELECT r.artifact_id, a.work_id, r.revision, json_extract(r.json, '$.at') AS at, json_extract(r.json, '$.author') AS author
            FROM revisions r JOIN artifacts a ON a.id = r.artifact_id
-          WHERE json_extract(r.json, '$.at') >= ? AND json_extract(r.json, '$.at') < ?`,
+          WHERE json_extract(a.json, '$.removed') IS NULL AND json_extract(r.json, '$.at') >= ? AND json_extract(r.json, '$.at') < ?`,
       )
       .all(since, until)
       .map((row) => ({
@@ -411,18 +435,21 @@ export class Store {
   }
 
   /** Remove app records only. Project files and the engines' own archives stay on disk. */
-  deleteWork(id: string) {
+  /** `keep`: documents that outlive the project (trashed ones waiting in 보관함), with their revisions. */
+  deleteWork(id: string, keep: ReadonlySet<string> = new Set()) {
     const sessionIds = new Set(this.sessions().filter(session => session.workId === id).map(session => session.id));
     this.transaction(() => {
       this.search.removeWork(id);
       for (const table of ["items", "requests"]) this.db.prepare(`DELETE FROM ${table} WHERE session_id IN (SELECT id FROM sessions WHERE work_id = ?)`).run(id);
+      const kept = JSON.stringify([...keep]);
       this.db.prepare("DELETE FROM proposals WHERE artifact_id IN (SELECT id FROM artifacts WHERE work_id = ?)").run(id);
-      this.db.prepare("DELETE FROM revisions WHERE artifact_id IN (SELECT id FROM artifacts WHERE work_id = ?)").run(id);
+      this.db.prepare("DELETE FROM revisions WHERE artifact_id IN (SELECT id FROM artifacts WHERE work_id = ? AND id NOT IN (SELECT value FROM json_each(?)))").run(id, kept);
       this.db.prepare("DELETE FROM terminal_output WHERE terminal_id IN (SELECT id FROM terminals WHERE workspace_id IN (SELECT id FROM workspaces WHERE work_id = ?))").run(id);
       for (const table of ["terminals", "workspace_preparations"]) this.db.prepare(`DELETE FROM ${table} WHERE workspace_id IN (SELECT id FROM workspaces WHERE work_id = ?)`).run(id);
       for (const handoff of this.handoffs()) if (sessionIds.has(handoff.sourceSessionId) || sessionIds.has(handoff.targetSessionId)) this.db.prepare("DELETE FROM handoffs WHERE id = ?").run(handoff.id);
       for (const link of this.links()) if (link.participants.some(sessionId => sessionIds.has(sessionId))) this.db.prepare("DELETE FROM links WHERE id = ?").run(link.id);
-      for (const table of ["sessions", "artifacts", "worktree_creations", "workspaces"]) this.db.prepare(`DELETE FROM ${table} WHERE work_id = ?`).run(id);
+      for (const table of ["sessions", "worktree_creations", "workspaces"]) this.db.prepare(`DELETE FROM ${table} WHERE work_id = ?`).run(id);
+      this.db.prepare("DELETE FROM artifacts WHERE work_id = ? AND id NOT IN (SELECT value FROM json_each(?))").run(id, kept);
       this.db.prepare("DELETE FROM works WHERE id = ?").run(id);
       for (const [key, removed] of [["project.notes", new Set([id])], ["project.told", sessionIds]] as const) {
         const raw = this.getMeta(key);
@@ -456,7 +483,11 @@ export class Store {
       .map((row) => JSON.parse(String(row.json)) as TranscriptItem);
   }
 
-  saveItem(sessionId: string, item: TranscriptItem) {
+  /** Applied to every item before it is stored or indexed (the credential scrubber, credentials/install.ts). */
+  itemFilter: ((item: TranscriptItem) => TranscriptItem) | null = null;
+
+  saveItem(sessionId: string, raw: TranscriptItem) {
+    const item = this.itemFilter ? this.itemFilter(raw) : raw;
     const existing = this.db
       .prepare("SELECT ord FROM items WHERE session_id = ? AND item_id = ?")
       .get(sessionId, item.id);
@@ -532,10 +563,23 @@ export class Store {
     return row ? { sessionId: String(row.session_id), textHash: String(row.text_hash) } : null;
   }
 
-  saveRequest(requestId: string, sessionId: string, textHash: string) {
+  /** `origin`: who sent it when it was not typed at this PC (a paired messenger chat). */
+  saveRequest(requestId: string, sessionId: string, textHash: string, origin: RequestOrigin | null = null) {
     this.db
-      .prepare("INSERT INTO requests (request_id, session_id, text_hash, created_at) VALUES (?, ?, ?, ?)")
-      .run(requestId, sessionId, textHash, Date.now());
+      .prepare("INSERT INTO requests (request_id, session_id, text_hash, created_at, origin) VALUES (?, ?, ?, ?, ?)")
+      .run(requestId, sessionId, textHash, Date.now(), origin ? JSON.stringify(origin) : null);
+  }
+
+  /** Who sent a request, when it came from a paired messenger chat (null: typed at this PC, or unknown). */
+  requestOrigin(requestId: string): RequestOrigin | null {
+    const raw = this.db.prepare("SELECT origin FROM requests WHERE request_id = ?").get(requestId)?.origin;
+    if (typeof raw !== "string") return null;
+    try {
+      const origin: unknown = JSON.parse(raw);
+      return isRequestOrigin(origin) ? origin : null;
+    } catch {
+      return null;
+    }
   }
 
   getMeta(key: string): string | null {

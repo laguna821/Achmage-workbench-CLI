@@ -19,6 +19,7 @@ mod notifications;
 mod host_credentials;
 pub mod host_runtime;
 pub mod office_secrets;
+mod gateway_caller;
 pub mod office_fonts;
 pub mod terminal_worker;
 pub mod search_worker;
@@ -112,6 +113,8 @@ fn node_binary(app: &tauri::AppHandle) -> PathBuf {
 }
 
 fn node_in(dirs: &[PathBuf]) -> PathBuf {
+    // A release build never takes the program that will hold the vault's ticket from the environment.
+    #[cfg(debug_assertions)]
     if let Some(node) = std::env::var_os("WORKBENCH_NODE") {
         return PathBuf::from(node);
     }
@@ -119,37 +122,31 @@ fn node_in(dirs: &[PathBuf]) -> PathBuf {
     dirs.iter()
         .map(|dir| dir.join("node").join(name))
         .find(|path| path.exists())
+        .or_else(|| system_program(name))
         .unwrap_or_else(|| PathBuf::from(name))
+}
+
+/// A program found on PATH, preferring folders the person cannot write (the system's) over the
+/// person's own (`~/.local/bin`, a data folder): a same-user program can plant a file only in the latter.
+pub(crate) fn system_program(name: &str) -> Option<PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    let found: Vec<PathBuf> = std::env::split_paths(&path).filter(|dir| dir.is_absolute()).map(|dir| dir.join(name)).filter(|file| file.is_file()).collect();
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        let writable = |file: &PathBuf| file.parent().map(|dir| {
+            let c = std::ffi::CString::new(dir.as_os_str().as_bytes()).unwrap_or_default();
+            unsafe { libc::access(c.as_ptr(), libc::W_OK) == 0 }
+        }).unwrap_or(true);
+        if let Some(system) = found.iter().find(|file| !writable(file)) { return Some(system.clone()); }
+    }
+    found.into_iter().next()
 }
 
 // macOS embeds an Info.plist symbol at each generate_context! expansion. Keep a
 // single expansion per crate, shared by the shell and headless helper entrypoints.
 pub(crate) fn app_context() -> tauri::Context<tauri::Wry> {
     tauri::generate_context!()
-}
-
-/// Original Office CLI credential protocol. Never starts a window or writes settings.
-pub fn reveal_ai_secrets() -> i32 {
-    let context = app_context();
-    let dirs = resource_dirs(tauri::utils::platform::resource_dir(context.package_info(), &Default::default()).ok());
-    let worker = dirs.iter().map(|dir| dir.join("host/office-reveal.mjs"))
-        .find(|path| path.is_file())
-        .or_else(|| if cfg!(debug_assertions) {
-            let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../host/dist/office-reveal.mjs");
-            path.is_file().then_some(path)
-        } else { None });
-    let Some(worker) = worker else { return 1; };
-    let Ok(exe) = std::env::current_exe() else { return 1; };
-    let mut command = Command::new(node_in(&dirs));
-    command.arg(worker).env("WORKBENCH_SECRET_BIN", exe)
-        .env_remove("ELECTRON_RUN_AS_NODE")
-        .stdin(Stdio::inherit()).stdout(Stdio::inherit()).stderr(Stdio::null());
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x0800_0000);
-    }
-    command.status().ok().and_then(|status| status.code()).unwrap_or(1)
 }
 
 fn service_enabled(app: &tauri::AppHandle) -> bool {
@@ -161,6 +158,11 @@ fn gateway_command(app: &tauri::AppHandle, action: &str) -> Result<Command, Stri
     let service = service_enabled(app);
     let mut command = Command::new(node_binary(app));
     command.env_remove("WORKBENCH_CLI_INPUT");
+    host_runtime::without_code_loaders(&mut command);
+    // In the window's own mode this process is the gateway's launcher: the per-run vault ticket
+    // comes as the first line of the gateway's stdin (host_runtime::hand_ticket). As a service the
+    // gateway is started by `--host-runtime` instead.
+    if !service { command.env("WORKBENCH_GATEWAY_TICKET", "stdin"); }
     if let Some(root) = office_cli::data_dir(app) {
         command.env("WORKBENCH_DATA_DIR", root.join("gateway"))
             .env("WORKBENCH_CLI_INPUT", &app.state::<std::sync::Arc<office_cli::ExportJob>>().request.input)
@@ -221,6 +223,12 @@ fn start_gateway(app: &tauri::AppHandle) -> Result<(Child, Ready), String> {
     let mut child = gateway_command(app, "start")?
         .spawn()
         .map_err(|error| format!("Node.js를 실행하지 못했습니다 ({error}). Node 24 이상이 필요합니다."))?;
+    let launched = if service_enabled(app) { None } else {
+        let folder = office_cli::data_dir(app).map(|root| root.join("gateway")).unwrap_or_else(host_runtime::profile_dir);
+        let folder = host_runtime::real_folder(&folder).and_then(|folder| host_runtime::hand_ticket(&mut child, &folder).map(|ticket| (folder, ticket)));
+        match folder { Ok(launched) => Some(launched), Err(error) => { let _ = child.kill(); return Err(error); } }
+    };
+    let pid = child.id();
     let stdout = child.stdout.take().ok_or("게이트웨이 출력을 읽지 못했습니다.")?;
     let mut lines = BufReader::new(stdout).lines();
     let ready = loop {
@@ -242,8 +250,11 @@ fn start_gateway(app: &tauri::AppHandle) -> Result<(Child, Ready), String> {
             }
         }
     };
-    // Keep draining stdout so the gateway never blocks on a full pipe.
-    std::thread::spawn(move || for _ in lines {});
+    // Keep draining stdout so the gateway never blocks on a full pipe (and act on its asking to be
+    // registered again with the vault).
+    std::thread::spawn(move || for line in lines.map_while(Result::ok) {
+        if let Some((folder, ticket)) = &launched { host_runtime::launcher_line(line.as_bytes(), folder, pid, ticket); }
+    });
     Ok((child, ready))
 }
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { WorkspaceService } from "@workbench/contracts";
 import type { TerminalSearchResult } from "../../../../packages/contracts/src/terminal-runtime.ts";
 import type { Api } from "../api.ts";
+import { saveBlobAs } from "../mobile-platform.ts";
 
 /** A service request stays inside the existing authenticated connection, including on a phone. */
 export function WorkspaceServiceInspect({ api, service, mode, onClose }: { api: Api; service: WorkspaceService; mode: "logs" | "proxy"; onClose(): void }) {
@@ -53,8 +54,7 @@ export function WorkspaceServiceInspect({ api, service, mode, onClose }: { api: 
       {result.text?.length === 256_000 ? <p className="muted">화면에는 앞 256,000자만 표시합니다. 저장 파일에는 전체 응답이 들어갑니다.</p> : null}
       <button type="button" className="button small" onClick={() => {
         const blob = responseBlob.current; if (!blob) return;
-        const url = URL.createObjectURL(blob), anchor = document.createElement("a");
-        anchor.href = url; anchor.download = `service-${service.id.slice(0, 12)}-response`; anchor.rel = "noopener"; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+        saveBlobAs(blob, `service-${service.id.slice(0, 12)}-response`);
       }}>응답 파일 저장</button>
     </div> : null}
   </section>;

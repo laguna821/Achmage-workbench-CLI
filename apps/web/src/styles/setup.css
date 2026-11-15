@@ -16,7 +16,7 @@
 }
 
 .connection .setup-engine {
-  gap: 4px;
+  gap: var(--space-2xs);
 }
 
 .setup-hint {
@@ -71,19 +71,20 @@
   inset: 0 auto 0 0;
   border-radius: inherit;
   background: var(--accent);
-  transition: width 0.4s ease;
+  /* the bar's width follows the figure at once: width never animates (Floor 2) */
 }
 
 .setup-progress > span.indeterminate {
-  animation: setup-sweep 1.4s ease-in-out infinite;
+  animation: setup-sweep 1.4s var(--ease-in-out) infinite;
 }
 
+/* The span is 30% of the track: -100% puts it just off the left end, 334% just off the right. */
 @keyframes setup-sweep {
   from {
-    left: -30%;
+    transform: translateX(-100%);
   }
   to {
-    left: 100%;
+    transform: translateX(334%);
   }
 }
 
@@ -92,7 +93,7 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
-  padding: 8px 10px;
+  padding: var(--space-xs) 10px;
   border-radius: var(--r-md);
   background: var(--surface-muted);
 }
@@ -107,7 +108,7 @@
 .setup-user-code {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--space-xs);
   font-size: var(--fs-meta);
   color: var(--muted);
 }
@@ -122,7 +123,7 @@
 .setup-code {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-2xs);
   width: 100%;
 }
 
@@ -135,11 +136,10 @@
   flex: 1;
   min-width: 0;
   height: 30px;
-  padding: 0 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--bg);
-  color: var(--text);
+  padding: 0 var(--space-xs);
+  border-width: 1px; border-style: solid; --c-edge: var(--field-line);
+  --c-fill: var(--bg);
+  --c-ink: var(--text);
   font-family: var(--mono);
   font-size: var(--fs-micro);
 }
@@ -148,7 +148,7 @@
 .setup-update {
   align-self: flex-start;
   /* Text in line with the card's other lines; the hover background still has room. */
-  margin-left: -8px;
+  margin-left: calc(var(--space-xs) * -1);
   font-size: var(--fs-meta);
 }
 
@@ -164,6 +164,6 @@
 
   .setup-progress > span.indeterminate {
     animation: none;
-    left: 0;
+    transform: none;
   }
 }

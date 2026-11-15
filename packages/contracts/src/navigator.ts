@@ -15,8 +15,8 @@ export type NavSort = { key: NavSortKey; desc: boolean };
 /** What the navigation pane has selected: the "프로젝트" root, a folder, a tag (with those under it) or "태그 없음". */
 export type NavSelection = { kind: "root" } | { kind: "folder"; id: string } | { kind: "tag"; tag: string } | { kind: "untagged" };
 
-/** Section heads of the navigation pane that fold (the vault keeps its own fold). */
-export type NavSectionId = "now" | "shortcuts" | "projects" | "tags" | "views";
+/** Section heads that fold (the vault keeps its own fold); "usage" is the plan limits at the foot; N1: "history" (활동), "chats" / "docs" / "web" (inside a project). */
+export type NavSectionId = "now" | "shortcuts" | "projects" | "tags" | "views" | "usage" | "history" | "chats" | "docs" | "web";
 
 /** prefs `navigator`: one object, every field optional (missing ones take the defaults). */
 export type NavigatorPrefs = {
@@ -40,6 +40,16 @@ export type NavigatorPrefs = {
   sections?: Partial<Record<NavSectionId, boolean>>;
   /** Tags unfolded in the tag tree. */
   openTags?: string[];
+  /** N1: what the one list column shows (the rail's destination). */
+  rail?: "projects" | "docs" | "activity" | "vault";
+  /** N1: the projects level ("projects", all in folders) or inside one project ("project"). */
+  level?: "projects" | "project";
+  /** N1: the project shown inside (level "project"). */
+  project?: string | null;
+  /** N1: level 1 as the folder tree ("folder") or one flat list grouped by the sort ("list"). */
+  groupBy?: "folder" | "list";
+  /** N1: the tab strip shows every project's tabs (true), or the current project's (default). */
+  tabsAll?: boolean;
 };
 
 /**

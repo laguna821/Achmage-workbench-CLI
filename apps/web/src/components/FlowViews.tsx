@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { PROVIDER_LABEL, type CalendarEvent, type Provider, type Session, type Work } from "@workbench/contracts";
-import { accentStyle, onColor, useAppearance } from "../appearance.ts";
+import { onColor } from "../appearance.ts";
 import {
   WEEKDAYS,
   WEEK_ORDER,
@@ -46,12 +46,12 @@ type GridProps = {
   paint?: (work: Work) => string | null;
 };
 
-/** The colour a work's marks are drawn in: the view's colour for it, else the engine's. */
+/** The colour a work's marks are drawn in: the view's colour for it, else the app's (skin 2, S9: an
+ *  engine's colour is drawn only on its own mark). */
 function useInk(paint: GridProps["paint"]) {
-  const { lookOf } = useAppearance();
-  return (work: Work, provider: Provider): CSSProperties => {
+  return (work: Work, _provider: Provider): CSSProperties | undefined => {
     const color = paint?.(work);
-    return color ? ({ "--accent": color, "--on-accent": onColor(color) } as CSSProperties) : accentStyle(lookOf(provider));
+    return color ? ({ "--accent": color, "--on-accent": onColor(color) } as CSSProperties) : undefined;
   };
 }
 
@@ -179,7 +179,6 @@ function blockTitle(block: DayBlock) {
 /** "하루": hours down the side, a column per work (blocks of turns, revision marks), calendar events beside them. */
 export function DayGrid({ period, activity, events, colors, names, now, open, paint }: GridProps & { open: FlowOpen }) {
   const day = period.days[0]!;
-  const { lookOf } = useAppearance();
   const ink = useInk(paint);
   const pick = usePick(open);
   const [all, setAll] = useState(false);
@@ -205,7 +204,7 @@ export function DayGrid({ period, activity, events, colors, names, now, open, pa
             <span className="flow-day-colname">{column.work.title}</span>
             <span className="flow-day-colmeta">
               {column.providers.map((provider) => (
-                <span key={provider} style={accentStyle(lookOf(provider))} className="flow-engine">
+                <span key={provider} className="flow-engine">
                   <EngineMark provider={provider} size={12} />
                 </span>
               ))}

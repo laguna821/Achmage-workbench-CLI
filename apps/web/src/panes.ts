@@ -37,8 +37,8 @@ export type PaneItem =
 
 /** A pane narrower than this is not usable (the input's controls stop fitting). */
 export const MIN_PANE = 360;
-/** The divider between the panes (its line is 1px; the rest is room to grab it). */
-export const DIVIDER = 7;
+/** The gap between panes: the window shows through it, and it is the handle to resize them. */
+export const DIVIDER = 8;
 export const MIN_PANE_HEIGHT = 220;
 export const MAX_PANES = 16;
 const MIN_RATIO = 0.2;
@@ -217,14 +217,16 @@ export function resizeSplit<V>(layout: Layout<V>, id: string, ratio: number): La
 
 export type PaneRect = { left: number; top: number; width: number; height: number };
 export type DividerRect = PaneRect & { id: string; axis: "horizontal" | "vertical"; parent: PaneRect; ratio: number; min: number; max: number };
-export function minimumSize(tree: PaneTree, compact = false): { width: number; height: number } {
-  if (tree.kind === "pane") return { width: compact ? 240 : MIN_PANE, height: compact ? 180 : MIN_PANE_HEIGHT };
-  const a = minimumSize(tree.first, compact), b = minimumSize(tree.second, compact);
+/** `need`: the width a pane's content reads at, beyond a pane's own (a document page); paneGeometry gives it while it fits. */
+export type PaneNeed = (id: PaneId) => number;
+export function minimumSize(tree: PaneTree, compact = false, need?: PaneNeed): { width: number; height: number } {
+  if (tree.kind === "pane") return { width: Math.max(compact ? 240 : MIN_PANE, need?.(tree.id) ?? 0), height: compact ? 180 : MIN_PANE_HEIGHT };
+  const a = minimumSize(tree.first, compact, need), b = minimumSize(tree.second, compact, need);
   return tree.axis === "horizontal" ? { width: a.width + b.width + DIVIDER, height: Math.max(a.height, b.height) } : { width: Math.max(a.width, b.width), height: a.height + b.height + DIVIDER };
 }
 
 /** Flat rectangles keep React's editor keys/parents stable when panes move in the tree. */
-export function paneGeometry(tree: PaneTree, width: number, height: number, compact = false) {
+export function paneGeometry(tree: PaneTree, width: number, height: number, compact = false, need?: PaneNeed) {
   const panes: Record<string, PaneRect> = {};
   const dividers: DividerRect[] = [];
   const walk = (node: PaneTree, box: PaneRect) => {
@@ -232,8 +234,14 @@ export function paneGeometry(tree: PaneTree, width: number, height: number, comp
     const horizontal = node.axis === "horizontal";
     const dimension = horizontal ? "width" : "height";
     const available = Math.max(0, box[dimension] - DIVIDER);
-    const min = Math.max(0.1, available ? minimumSize(node.first, compact)[dimension] / available : 0.5);
-    const max = Math.min(0.9, available ? 1 - minimumSize(node.second, compact)[dimension] / available : 0.5);
+    const bounds = (asked?: PaneNeed) => [
+      Math.max(0.1, available ? minimumSize(node.first, compact, asked)[dimension] / available : 0.5),
+      Math.min(0.9, available ? 1 - minimumSize(node.second, compact, asked)[dimension] / available : 0.5),
+    ];
+    // A pane's own need moves the divider while both sides still fit; where they cannot, the panes'
+    // plain minimum holds (the content then takes its own narrow form).
+    const asked = bounds(need);
+    const [min, max] = asked[0]! <= asked[1]! ? asked : bounds();
     const ratio = min > max ? 0.5 : Math.max(min, Math.min(max, node.ratio));
     const size = available * ratio;
     dividers.push({ ...box, id: node.id, axis: node.axis, parent: box, ratio, min, max, ...(horizontal ? { left: box.left + size, width: DIVIDER } : { top: box.top + size, height: DIVIDER }) });
@@ -244,44 +252,101 @@ export function paneGeometry(tree: PaneTree, width: number, height: number, comp
   return { panes, dividers };
 }
 
-/** Validate persisted layouts before rendering; reject duplicate/missing leaves and unknown views. */
-export function restoreLayout<V>(raw: unknown, isView: (value: unknown) => value is V, fallback: Layout<V>): Layout<V> {
-  if (!raw || typeof raw !== "object") return fallback;
-  const data = raw as Partial<Layout<V>> & { version?: unknown };
-  if (data.version !== undefined && data.version !== 1 && data.version !== 2) return fallback;
-  if (!Array.isArray(data.panes) || !data.panes.length || data.panes.length > MAX_PANES) return fallback;
-  const panes: Pane<V>[] = [];
-  const tabIds = new Set<string>();
-  for (const pane of data.panes) {
-    if (!pane || typeof pane.id !== "string" || !/^[\w-]{1,80}$/.test(pane.id) || !isView(pane.view) || !(pane.workId === null || typeof pane.workId === "string") || !(pane.sessionId === null || typeof pane.sessionId === "string")) return fallback;
-    const restored: Pane<V> = { id: pane.id, view: pane.view, workId: pane.workId, sessionId: pane.sessionId };
-    if (pane.tabs !== undefined) {
-      if (!Array.isArray(pane.tabs) || !pane.tabs.length || pane.tabs.length > 128) return fallback;
-      restored.tabs = [];
-      for (const tab of pane.tabs) {
-        if (!tab || typeof tab.id !== "string" || !/^[\w-]{1,100}$/.test(tab.id) || tabIds.has(tab.id) || !isView(tab.view) || !(tab.workId === null || typeof tab.workId === "string") || !(tab.sessionId === null || typeof tab.sessionId === "string")) return fallback;
-        tabIds.add(tab.id);
-        if (tabIds.size > 128) return fallback;
-        const ui: TabUiState = {};
-        if (tab.ui?.cursor && [tab.ui.cursor.anchor, tab.ui.cursor.head].every((n) => Number.isSafeInteger(n) && n >= 0)) ui.cursor = { anchor: tab.ui.cursor.anchor, head: tab.ui.cursor.head };
-        if (tab.ui?.scroll && [tab.ui.scroll.top, tab.ui.scroll.left].every((n) => Number.isFinite(n) && n >= 0)) ui.scroll = { top: tab.ui.scroll.top, left: tab.ui.scroll.left };
-        if (typeof tab.ui?.mode === "string" && tab.ui.mode.length < 40) ui.mode = tab.ui.mode;
-        if (tab.ui?.chatScroll && Number.isFinite(tab.ui.chatScroll.top) && tab.ui.chatScroll.top >= 0 && typeof tab.ui.chatScroll.follow === "boolean") {
-          const { top, follow, anchor } = tab.ui.chatScroll;
-          ui.chatScroll = { top, follow, ...(anchor && typeof anchor.messageId === "string" && Number.isFinite(anchor.offsetPx) ? { anchor: { messageId: anchor.messageId, offsetPx: anchor.offsetPx } } : {}) };
-        }
-        if (tab.ui?.terminalScroll && Number.isSafeInteger(tab.ui.terminalScroll.line) && tab.ui.terminalScroll.line >= 0 && typeof tab.ui.terminalScroll.follow === "boolean") ui.terminalScroll = { line: tab.ui.terminalScroll.line, follow: tab.ui.terminalScroll.follow };
-        if (tab.ui?.reading && (tab.ui.reading.page === null || (Number.isSafeInteger(tab.ui.reading.page) && tab.ui.reading.page >= 0)) && Number.isFinite(tab.ui.reading.fraction)) ui.reading = { page: tab.ui.reading.page, fraction: Math.max(0, Math.min(1, tab.ui.reading.fraction)), ...(typeof tab.ui.reading.top === "number" && tab.ui.reading.top >= 0 ? { top: tab.ui.reading.top } : {}) };
-        restored.tabs.push({ id: tab.id, view: tab.view, workId: tab.workId, sessionId: tab.sessionId, ...(Object.keys(ui).length ? { ui } : {}) });
-      }
-      const active = restored.tabs.find((tab) => tab.id === pane.activeTabId) ?? restored.tabs[0]!;
-      restored.activeTabId = active.id;
-      restored.recentTabIds = [active.id, ...new Set((pane.recentTabIds ?? []).filter((id) => id !== active.id && restored.tabs!.some((tab) => tab.id === id)))];
-      restored.view = active.view; restored.workId = active.workId; restored.sessionId = active.sessionId;
-    } else if (data.version === 2) return fallback;
-    panes.push(restored);
+/**
+ * A tab kept in the stored record although this window cannot show it (a view kind it does not know,
+ * written by a newer window): written back as it was, so another window that knows it still finds it.
+ */
+export type ParkedTab = { paneId: PaneId; tab: Record<string, unknown> };
+export const MAX_PARKED = 32;
+export type LayoutReading<V> = { layout: Layout<V>; skipped: number; parked: ParkedTab[] };
+
+const TAB_ID = /^[\w-]{1,100}$/;
+const PANE_ID = /^[\w-]{1,80}$/;
+const readUi = (raw: TabUiState | undefined): TabUiState => {
+  const ui: TabUiState = {};
+  if (!raw || typeof raw !== "object") return ui;
+  if (raw.cursor && [raw.cursor.anchor, raw.cursor.head].every((n) => Number.isSafeInteger(n) && n >= 0)) ui.cursor = { anchor: raw.cursor.anchor, head: raw.cursor.head };
+  if (raw.scroll && [raw.scroll.top, raw.scroll.left].every((n) => Number.isFinite(n) && n >= 0)) ui.scroll = { top: raw.scroll.top, left: raw.scroll.left };
+  if (typeof raw.mode === "string" && raw.mode.length < 40) ui.mode = raw.mode;
+  if (raw.chatScroll && Number.isFinite(raw.chatScroll.top) && raw.chatScroll.top >= 0 && typeof raw.chatScroll.follow === "boolean") {
+    const { top, follow, anchor } = raw.chatScroll;
+    ui.chatScroll = { top, follow, ...(anchor && typeof anchor.messageId === "string" && Number.isFinite(anchor.offsetPx) ? { anchor: { messageId: anchor.messageId, offsetPx: anchor.offsetPx } } : {}) };
   }
-  if (new Set(panes.map((pane) => pane.id)).size !== panes.length) return fallback;
+  if (raw.terminalScroll && Number.isSafeInteger(raw.terminalScroll.line) && raw.terminalScroll.line >= 0 && typeof raw.terminalScroll.follow === "boolean") ui.terminalScroll = { line: raw.terminalScroll.line, follow: raw.terminalScroll.follow };
+  if (raw.reading && (raw.reading.page === null || (Number.isSafeInteger(raw.reading.page) && raw.reading.page >= 0)) && Number.isFinite(raw.reading.fraction)) ui.reading = { page: raw.reading.page, fraction: Math.max(0, Math.min(1, raw.reading.fraction)), ...(typeof raw.reading.top === "number" && raw.reading.top >= 0 ? { top: raw.reading.top } : {}) };
+  return ui;
+};
+const owner = (value: unknown) => value === null || typeof value === "string";
+
+/**
+ * Read a stored layout, skipping what cannot be read instead of dropping everything (skin 2 · B):
+ * a tab with a bad or repeated id, an unknown view or bad owners is left out and counted; a tab whose
+ * only fault is a view kind this window does not know is parked (kept for the record, not shown);
+ * a pane left without tabs folds away (the split it sat in closes); a tree that no longer matches its
+ * panes is rebuilt side by side. Only a record with no readable pane at all gives the fallback.
+ * `keep(tab)` may refuse a readable tab (its item is gone): it is skipped and counted too.
+ */
+export function readLayout<V>(raw: unknown, isView: (value: unknown) => value is V, fallback: Layout<V>, keep: (tab: PaneTab<V>) => boolean = () => true): LayoutReading<V> {
+  const none: LayoutReading<V> = { layout: fallback, skipped: 0, parked: [] };
+  if (!raw || typeof raw !== "object") return none;
+  const data = raw as Partial<Layout<V>> & { version?: unknown; parked?: unknown };
+  if (data.version !== undefined && data.version !== 1 && data.version !== 2) return none;
+  if (!Array.isArray(data.panes) || !data.panes.length) return none;
+  const panes: Pane<V>[] = [];
+  const paneIds = new Set<string>(), tabIds = new Set<string>();
+  const parked: ParkedTab[] = [];
+  let skipped = 0;
+  const readTab = (tab: PaneTab<V> | undefined, paneId: string): PaneTab<V> | null => {
+    if (!tab || typeof tab !== "object" || typeof tab.id !== "string" || !TAB_ID.test(tab.id) || tabIds.has(tab.id) || !owner(tab.workId) || !owner(tab.sessionId)) { skipped++; return null; }
+    if (!isView(tab.view)) {
+      skipped++;
+      const kind = tab.view && typeof tab.view === "object" ? (tab.view as { kind?: unknown }).kind : undefined;
+      if (typeof kind === "string") { tabIds.add(tab.id); parked.push({ paneId, tab: tab as unknown as Record<string, unknown> }); }
+      return null;
+    }
+    const ui = readUi(tab.ui);
+    const read: PaneTab<V> = { id: tab.id, view: tab.view, workId: tab.workId, sessionId: tab.sessionId, ...(Object.keys(ui).length ? { ui } : {}) };
+    if (!keep(read)) { skipped++; return null; }
+    tabIds.add(tab.id);
+    return read;
+  };
+  for (const pane of data.panes.slice(0, MAX_PANES)) {
+    const tabs = pane && typeof pane === "object" && Array.isArray(pane.tabs) ? pane.tabs : null;
+    if (!pane || typeof pane.id !== "string" || !PANE_ID.test(pane.id) || paneIds.has(pane.id)) { skipped += tabs?.length ?? 1; continue; }
+    if (!tabs) {
+      // A pane from before tabs (version 1): its one view is its tab.
+      if (data.version === 2 || pane.tabs !== undefined || !isView(pane.view) || !owner(pane.workId) || !owner(pane.sessionId)) { skipped++; continue; }
+      paneIds.add(pane.id);
+      panes.push({ id: pane.id, view: pane.view, workId: pane.workId, sessionId: pane.sessionId });
+      continue;
+    }
+    const read: PaneTab<V>[] = [];
+    for (const tab of tabs) {
+      if (tabIds.size >= MAX_TABS_STORED) { skipped++; continue; }
+      const kept = readTab(tab, pane.id);
+      if (kept) read.push(kept);
+    }
+    if (!read.length) continue;
+    paneIds.add(pane.id);
+    const active = read.find((tab) => tab.id === pane.activeTabId) ?? read[0]!;
+    const recent = Array.isArray(pane.recentTabIds) ? pane.recentTabIds : [];
+    panes.push({ id: pane.id, view: active.view, workId: active.workId, sessionId: active.sessionId, tabs: read, activeTabId: active.id,
+      recentTabIds: [active.id, ...new Set(recent.filter((id) => id !== active.id && read.some((tab) => tab.id === id)))] });
+  }
+  skipped += Math.max(0, data.panes.length - MAX_PANES);
+  // Tabs parked by an earlier window: shown again once readable, else kept parked.
+  if (Array.isArray(data.parked)) for (const entry of data.parked as Partial<ParkedTab>[]) {
+    const tab = entry?.tab as PaneTab<V> | undefined;
+    if (!entry || typeof entry.paneId !== "string" || !tab || typeof tab !== "object" || typeof tab.id !== "string" || !TAB_ID.test(tab.id) || tabIds.has(tab.id)) continue;
+    if (!isView(tab.view) || !owner(tab.workId) || !owner(tab.sessionId) || tabIds.size >= MAX_TABS_STORED) { tabIds.add(tab.id); parked.push({ paneId: entry.paneId, tab: tab as unknown as Record<string, unknown> }); continue; }
+    const home = panes.find((pane) => pane.id === entry.paneId && pane.tabs) ?? panes.find((pane) => pane.tabs);
+    const read: PaneTab<V> = { id: tab.id, view: tab.view, workId: tab.workId, sessionId: tab.sessionId };
+    if (!home || !keep(read)) continue;
+    tabIds.add(tab.id);
+    home.tabs = [...home.tabs!, read];
+    home.recentTabIds = [...(home.recentTabIds ?? []), read.id];
+  }
+  if (!panes.length) return { ...none, skipped, parked: parked.slice(-MAX_PARKED) };
   const focus = panes.some((pane) => pane.id === data.focus) ? data.focus! : panes[0]!.id;
   const seen = new Set<string>();
   const parse = (value: unknown, depth = 0): PaneTree | null => {
@@ -291,12 +356,20 @@ export function restoreLayout<V>(raw: unknown, isView: (value: unknown) => value
     seen.add(node.id);
     if (node.kind === "pane") return panes.some((pane) => pane.id === node.id) ? { kind: "pane", id: node.id } : null;
     if (node.kind !== "split" || (node.axis !== "horizontal" && node.axis !== "vertical") || typeof node.ratio !== "number" || !Number.isFinite(node.ratio)) return null;
+    // A pane that folded away takes its split with it: the other side fills the place.
     const first = parse(node.first, depth + 1), second = parse(node.second, depth + 1);
-    return first && second ? { kind: "split", id: node.id, axis: node.axis, ratio: Math.max(0.1, Math.min(0.9, node.ratio)), first, second } : null;
+    return first && second ? { kind: "split", id: node.id, axis: node.axis, ratio: Math.max(0.1, Math.min(0.9, node.ratio)), first, second } : first ?? second;
   };
-  const tree = data.tree === undefined ? treeOf({ panes, focus }) : parse(data.tree);
-  if (!tree || leafIds(tree).length !== panes.length) return fallback;
-  return { tree, panes: orderedPanes(tree, panes), focus, ...(data.grid === 2 || data.grid === 3 ? { grid: data.grid } : {}) };
+  const parsed = data.tree === undefined ? null : parse(data.tree);
+  const tree = parsed && leafIds(parsed).length === panes.length ? parsed : treeOf({ panes, focus });
+  return { layout: { tree, panes: orderedPanes(tree, panes), focus, ...(data.grid === 2 || data.grid === 3 ? { grid: data.grid } : {}) }, skipped, parked: parked.slice(-MAX_PARKED) };
+}
+/** The tabs a stored record may hold (the gateway's bound). */
+export const MAX_TABS_STORED = 128;
+
+/** Validate persisted layouts before rendering; a tab that cannot be read is skipped (readLayout). */
+export function restoreLayout<V>(raw: unknown, isView: (value: unknown) => value is V, fallback: Layout<V>): Layout<V> {
+  return readLayout(raw, isView, fallback).layout;
 }
 
 // ── the divider ───────────────────────────────────────────────────────────────────────────────

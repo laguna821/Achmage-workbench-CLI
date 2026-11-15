@@ -142,10 +142,10 @@ describe("recursive panes", () => {
   };
   it("creates 2×2 rectangles and collapses only the closed branch", () => {
     const layout = four();
-    const { panes, dividers } = paneGeometry(treeOf(layout), 1007, 807);
+    const { panes, dividers } = paneGeometry(treeOf(layout), 1008, 808);
     expect(Object.values(panes)).toEqual(expect.arrayContaining([
-      { left: 0, top: 0, width: 500, height: 400 }, { left: 0, top: 407, width: 500, height: 400 },
-      { left: 507, top: 0, width: 500, height: 400 }, { left: 507, top: 407, width: 500, height: 400 },
+      { left: 0, top: 0, width: 500, height: 400 }, { left: 0, top: 408, width: 500, height: 400 },
+      { left: 508, top: 0, width: 500, height: 400 }, { left: 508, top: 408, width: 500, height: 400 },
     ]));
     expect(dividers).toHaveLength(3);
     const closed = closePane(layout, "a");
@@ -171,11 +171,17 @@ describe("recursive panes", () => {
     const fallback = singleLayout("home", null);
     const isString = (value: unknown): value is string => typeof value === "string";
     expect(restoreLayout(JSON.parse(JSON.stringify({ version: 1, ...changed })), isString, fallback)).toEqual(changed);
-    expect(restoreLayout({ ...changed, tree: { kind: "pane", id: "a" } }, isString, fallback)).toBe(fallback);
-    expect(restoreLayout({ ...changed, panes: [changed.panes[0], changed.panes[0]] }, isString, fallback)).toBe(fallback);
+    // Skin 2 · B: a tree that no longer fits its panes is rebuilt (every pane kept); a repeated pane is skipped, not the layout.
+    const rebuilt = restoreLayout({ ...changed, tree: { kind: "pane", id: "a" } }, isString, fallback);
+    expect(rebuilt.panes.map((pane) => pane.view)).toEqual(changed.panes.map((pane) => pane.view));
+    expect(leafIds(rebuilt.tree!)).toEqual(changed.panes.map((pane) => pane.id));
+    const repeated = restoreLayout({ ...changed, panes: [changed.panes[0], changed.panes[0]] }, isString, fallback);
+    expect(repeated.panes).toEqual([changed.panes[0]]);
+    expect(restoreLayout({ ...changed, panes: [] }, isString, fallback)).toBe(fallback);
     const legacy = { panes: layout.panes.slice(0, 2), focus: "a" };
     expect(restoreLayout(legacy, isString, fallback).panes).toEqual(legacy.panes);
-    expect(minimumSize(root)).toEqual({ width: MIN_PANE * 2 + DIVIDER, height: 447 });
+    expect(DIVIDER).toBe(8);
+    expect(minimumSize(root)).toEqual({ width: MIN_PANE * 2 + 8, height: 448 });
   });
   it("cycles focus through every pane, preserving all other sessions", () => {
     const layout = four();
@@ -187,5 +193,21 @@ describe("recursive panes", () => {
       expect(treeOf(next)).toEqual(treeOf(layout));
     }
     expect(visited.size).toBe(4);
+  });
+});
+
+describe("a pane's own need (Hallmark U4: a document beside a conversation)", () => {
+  const tree = { kind: "split", id: "s", axis: "horizontal", ratio: 0.5, first: { kind: "pane", id: "chat" }, second: { kind: "pane", id: "doc" } } as const;
+  const need = (id: string) => (id === "doc" ? 682 : 0);
+  it("moves the divider so the document gets its width while the other pane keeps its own minimum", () => {
+    const { panes } = paneGeometry(tree, 1160, 800, false, need);
+    expect(Math.round(panes.doc!.width)).toBe(682);
+    expect(Math.round(panes.chat!.width)).toBe(470);
+  });
+  it("leaves the plain halves where both cannot fit (the document takes its own narrow form)", () => {
+    const { panes } = paneGeometry(tree, 1000, 800, false, need);
+    expect(Math.round(panes.doc!.width)).toBe(496);
+    expect(minimumSize(tree, false, need).width).toBe(1050);
+    expect(minimumSize(tree).width).toBe(728);
   });
 });

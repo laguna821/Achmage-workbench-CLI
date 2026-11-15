@@ -159,12 +159,15 @@ export async function officeConversationScenario(ctx: Ctx) {
     await wd.frame(null);
     if (mainSession) {
       await wd.click(await wd.waitFor('.pane[data-pane-active="true"] .group-tab[data-tab-id="office-main-tab"] [role="tab"]'));
-      await wd.click(await wd.waitFor(`.sidebar [data-row-id="${next.id}"]`));
+      // A document AI has no sidebar row of its own: it is on its document's row, which opens the
+      // document with its newest AI (`next`) beside it.
+      if (!await wd.find(`.sidebar [data-row-id="${artifact.id}"]`)) await wd.click(await wd.waitFor(`.sidebar [data-row-id="docs:${work.id}"]`));
+      await wd.click(await wd.waitFor(`.sidebar [data-row-id="${artifact.id}"]`));
       await wd.click(await wd.waitFor('.pane[data-pane-active="true"] .doc-name'));
       ctx.report.check(S, "문서 AI 목록을 열고 편집기에 초점을 줘도 메인 대화 선택 유지", (await snapshot()).works.find(entry => entry.id === work.id)?.activeSessionId === mainSession.id);
       await wd.click(await wd.waitFor('.pane[data-pane-active="true"] .group-tab[data-tab-id="office-main-tab"] [role="tab"]'));
       await wd.keys([{ type: "keyDown", value: "\uE009" }]);
-      try { await wd.click(await wd.waitFor(`.sidebar [data-row-id="${next.id}"]`)); }
+      try { await wd.click(await wd.waitFor(`.sidebar [data-row-id="${artifact.id}"]`)); }
       finally { await wd.keys([{ type: "keyUp", value: "\uE009" }]); }
       await wd.click(await wd.waitFor('.pane[data-pane-active="true"] .doc-name'));
       await wd.frame(await wd.waitFor('.pane[data-pane-active="true"] iframe.office-frame'));

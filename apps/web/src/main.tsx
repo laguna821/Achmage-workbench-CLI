@@ -1,15 +1,24 @@
+// First: the rest of the app needs crypto.randomUUID while its modules load (plain http has none).
+import "./secure-context.ts";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ConnectedWorkbench } from "./ConnectedWorkbench.tsx";
 import { readToken } from "./api.ts";
 import { applyFirstPaintTheme } from "./theme.ts";
+// The one token source first (Hallmark U1), the kit's controls, the Floor's base rules, then the app's rules.
+import "./styles/tokens.css";
 import "./vendor/hig-kit/kit.css";
+import "./styles/base.css";
 import "./styles.css";
 import "./styles/foundation.css";
 import "./styles/hig-shell.css";
 import "./styles/hig-entry.css";
 import "./styles/hig-workspace.css";
 import "./styles/hig-chat.css";
+import "./styles/chat-note.css";
+import "./styles/motion.css";
+// Last: the control family (Hallmark U2) paints every key, row, tab, item, chip, card and field.
+import "./styles/controls.css";
 
 readToken();
 applyFirstPaintTheme();

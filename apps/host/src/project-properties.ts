@@ -52,28 +52,49 @@ export function inferType(key: string, values: string[] | null): PropertyType {
 const pad = (value: number) => String(value).padStart(2, "0");
 const ymd = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 
+const WEEKDAYS = "월화수목금토일";
+
 /**
- * A date typed by a person, as YYYY-MM-DD: 2026-10-29, 2026.10.29, 2026/10/29, 10-29-2026,
- * 10/29 (this year), "오늘", "내일", "어제". Null when it is not one.
+ * A date typed by a person, as YYYY-MM-DD (an Obsidian date property): ISO (a time after it is
+ * ignored), 2026.10.29, 2026/10/29, 10-29-2026, 2026년 11월 20일; without a year — 11월 20일, 11/20,
+ * 11.20, 11-20 — the next such day (today included); 오늘, 내일, 모레, 어제; 금요일 (the next one),
+ * 이번 주 금요일, 다음 주 금요일. Null when it is not a day.
  */
 export function parseDate(text: string, now = new Date()): string | null {
-  const value = text.trim();
-  const day = (offset: number) => ymd(new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset));
-  if (value === "오늘" || value.toLowerCase() === "today") return day(0);
-  if (value === "내일" || value.toLowerCase() === "tomorrow") return day(1);
-  if (value === "어제" || value.toLowerCase() === "yesterday") return day(-1);
+  const value = text.trim().replace(/\s+/g, " ");
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const day = (offset: number) => ymd(new Date(today.getFullYear(), today.getMonth(), today.getDate() + offset));
+  const relative: Record<string, number> = { 오늘: 0, today: 0, 내일: 1, tomorrow: 1, 모레: 2, 어제: -1, yesterday: -1 };
+  if (value.toLowerCase() in relative) return day(relative[value.toLowerCase()]!);
+  const weekday = /^(?:(이번 ?주|다음 ?주|담주) )?([월화수목금토일])요일$/.exec(value);
+  if (weekday) {
+    const want = WEEKDAYS.indexOf(weekday[2]!);
+    const mine = (today.getDay() + 6) % 7;
+    if (!weekday[1]) return day((want - mine + 7) % 7);
+    return day(want - mine + (weekday[1].startsWith("이번") ? 0 : 7));
+  }
   const valid = (year: number, month: number, date: number) => {
     const made = new Date(year, month - 1, date);
     return made.getFullYear() === year && made.getMonth() === month - 1 && made.getDate() === date ? ymd(made) : null;
   };
-  let match = /^(\d{4})[-./ ](\d{1,2})[-./ ](\d{1,2})\.?$/.exec(value);
+  /** A month and day without a year: this year's, or next year's once it has passed. */
+  const next = (month: number, date: number) => {
+    const here = valid(today.getFullYear(), month, date);
+    if (here && new Date(today.getFullYear(), month - 1, date) >= today) return here;
+    return valid(today.getFullYear() + 1, month, date);
+  };
+  let match = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ]\d{1,2}:\d{2}(?::\d{2})?.*)?$/.exec(value);
+  if (match) return valid(Number(match[1]), Number(match[2]), Number(match[3]));
+  match = /^(\d{4})[./ ](\d{1,2})[./ ](\d{1,2})\.?$/.exec(value);
   if (match) return valid(Number(match[1]), Number(match[2]), Number(match[3]));
   match = /^(\d{1,2})[-./](\d{1,2})[-./](\d{4})$/.exec(value);
   if (match) return valid(Number(match[3]), Number(match[1]), Number(match[2]));
-  match = /^(\d{1,2})[-./](\d{1,2})$/.exec(value);
-  if (match) return valid(now.getFullYear(), Number(match[1]), Number(match[2]));
-  match = /^(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일$/.exec(value);
+  match = /^(\d{1,2})[-./](\d{1,2})\.?$/.exec(value);
+  if (match) return next(Number(match[1]), Number(match[2]));
+  match = /^(\d{4})년 ?(\d{1,2})월 ?(\d{1,2})일$/.exec(value);
   if (match) return valid(Number(match[1]), Number(match[2]), Number(match[3]));
+  match = /^(\d{1,2})월 ?(\d{1,2})일$/.exec(value);
+  if (match) return next(Number(match[1]), Number(match[2]));
   return null;
 }
 
@@ -90,7 +111,7 @@ export function normalizeValues(type: PropertyType, values: string[], now = new 
     case "date":
       return list.slice(0, 1).map((value) => {
         const date = parseDate(value, now);
-        if (!date) throw new HttpError(400, "bad_date", `날짜로 읽지 못했습니다: ${value} (예: 2026-10-29, 10-29, 오늘)`);
+        if (!date) throw new HttpError(400, "bad_date", "날짜로 읽지 못했습니다. 예: 11월 20일, 내일, 다음 주 금요일");
         return date;
       });
     case "datetime":

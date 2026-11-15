@@ -17,7 +17,15 @@ export function moveMenuFocus(menu: HTMLElement, key: string): boolean {
 
 /** Do not steal focus from the dialog or field opened by a menu action. */
 export function restoreSurfaceFocus(opener: Element | null, surface: HTMLElement | null) {
+  // A modal <dialog> still open makes everything outside it inert, and focus() on an inert element
+  // does nothing (skin 2 fix 1: closing 알림 left the focus on the page's body). Close it first.
+  if (typeof HTMLDialogElement !== "undefined" && surface instanceof HTMLDialogElement && surface.open && typeof surface.close === "function") surface.close();
   if (!(opener instanceof HTMLElement) || !opener.isConnected) return;
   const active = document.activeElement;
-  if (!active || active === document.body || surface?.contains(active)) opener.focus({ preventScroll: true });
+  if (!active || active === document.body || surface?.contains(active)) {
+    opener.focus({ preventScroll: true });
+    // A key shown only under the hand or the keyboard (a row's ⋯ or +) is hidden once its menu took the
+    // focus, and refuses it: the focus goes to the nearest focusable thing that holds it (its row).
+    if (document.activeElement !== opener) opener.parentElement?.closest<HTMLElement>("[tabindex], button, a[href], input, textarea, select")?.focus({ preventScroll: true });
+  }
 }

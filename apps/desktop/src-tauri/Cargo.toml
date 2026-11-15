@@ -1,6 +1,6 @@
 [package]
 name = "achmage-workbench"
-version = "0.4.1"
+version = "0.5.0"
 description = "Achmage Workbench desktop shell"
 edition = "2021"
 
@@ -45,7 +45,7 @@ cairo-rs = { version = "0.18", features = ["png"] }
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39"
-windows = { version = "0.62", features = ["Win32_Foundation"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Threading"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"

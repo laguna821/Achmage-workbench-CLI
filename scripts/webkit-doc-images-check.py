@@ -286,8 +286,8 @@ def status():
 def open_doc(name):
     js("""const back = document.querySelector('.doc-tab.conversation'); if (back) back.click(); return true;""")
     pump(0.6)
-    js("""document.querySelector('.docs-button').click();
-          setTimeout(() => { const item = [...document.querySelectorAll('.docs-menu *')].find((el) => el.children.length === 0 && el.textContent.trim() === %s); item && item.click(); }, 300);
+    js("""document.querySelector('.note-head-more').click();
+          setTimeout(() => { const item = [...document.querySelectorAll('.note-menu *')].find((el) => el.children.length === 0 && el.textContent.trim() === %s); item && item.click(); }, 300);
           return true;""" % json.dumps(name))
 
 
@@ -306,13 +306,13 @@ def snapshot(name):
 clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
 try:
     view.load_uri(f"{url}/?token={token}")
-    if not until(lambda: js("return Boolean(document.querySelector('.docs-button'))"), 60):
+    if not until(lambda: js("return Boolean(document.querySelector('.note-head-more'))"), 60):
         raise RuntimeError("the work view did not open")
 
     # ── Word ───────────────────────────────────────────────────────────────
     started = time.time()
     open_doc("계획.docx")
-    opened = until(lambda: "가을 특강" in (frame("docs").get("text") or "") and "r1 저장됨" in status(), 90)
+    opened = until(lambda: "가을 특강" in (frame("docs").get("text") or "") and "1판 저장됨" in status(), 90)
     check("WebKitGTK: 워드 편집기 열림", opened, f"{time.time() - started:.1f}s")
     pump(1.5)
     clipboard.set_image(picture)
@@ -325,13 +325,13 @@ try:
     check("Ctrl+V: WebKitGTK는 붙여넣기에 그림을 주지 않음 → 데스크톱 클립보드 그림이 워드에 들어감", inserted and first and first["files"] == 0, json.dumps(first))
     snapshot("webkit-docx.png")
     to_frame({"__test": "save"})
-    saved = until(lambda: "r2 저장됨" in status(), 30)
+    saved = until(lambda: "2판 저장됨" in status(), 30)
     found = media(docs["계획.docx"]["id"], 2) if saved else []
     check("Ctrl+S → r2, docx 안에 그림(word/media)", saved and len(found) == 1, ",".join(found))
 
     # ── PowerPoint ─────────────────────────────────────────────────────────
     open_doc("표지.pptx")
-    opened = until(lambda: "특강" in (frame("slides").get("text") or "") and "r1 저장됨" in status(), 90)
+    opened = until(lambda: "특강" in (frame("slides").get("text") or "") and "1판 저장됨" in status(), 90)
     check("WebKitGTK: PPT 편집기 열림", opened)
     pump(1.5)
     before = frame("slides").get("images", 0)
@@ -349,7 +349,7 @@ try:
     check("편집기 안에서 복사(Ctrl+C)한 그림은 Ctrl+V로 그 그림이 붙음(클립보드 표시)", copied, f"→ {frame('slides').get('images')}")
     snapshot("webkit-pptx.png")
     to_frame({"__test": "save"})
-    saved = until(lambda: "r2 저장됨" in status(), 40)
+    saved = until(lambda: "2판 저장됨" in status(), 40)
     found = media(docs["표지.pptx"]["id"], 2) if saved else []
     check("Ctrl+S → r2, pptx 안에 그림(ppt/media)", saved and len(found) >= 1, ",".join(found))
 
@@ -364,7 +364,7 @@ try:
     linked = until(lambda: js("return /!\\[image\\]\\(assets\\/[0-9a-f]{16}\\.png\\)/.test(document.querySelector('.md-editor .cm-content').innerText)"), 15)
     stored = os.listdir(os.path.join(cwd, "assets")) if os.path.isdir(os.path.join(cwd, "assets")) else []
     check("마크다운 Ctrl+V: 데스크톱 그림 → 작업 폴더 assets/ + 상대 링크", linked and len(stored) == 1, ",".join(stored))
-    until(lambda: "r2 저장됨" in status(), 15)
+    until(lambda: "2판 저장됨" in status(), 15)
     js("""[...document.querySelectorAll('.document-view .segmented [role=radio]')].find((b) => b.textContent.trim() === '미리보기').click(); return true;""")
     shown = until(lambda: js("const img = document.querySelector('.doc-preview .markdown img'); return Boolean(img && img.complete && img.naturalWidth > 0 && img.src.startsWith('blob:'))"), 15)
     check("WebKitGTK 미리보기에 작업 폴더 그림이 보임", shown)

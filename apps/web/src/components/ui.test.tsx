@@ -85,7 +85,7 @@ describe("Composer", () => {
 });
 
 describe("toBlocks", () => {
-  it("folds consecutive tool calls and shows the engine label once per turn", () => {
+  it("folds consecutive tool calls into one block between answers", () => {
     const items: TranscriptItem[] = [
       { kind: "user", id: "u", text: "q", at: 1 },
       { kind: "assistant", id: "a1", text: "먼저 볼게요", streaming: false, at: 2 },
@@ -96,6 +96,5 @@ describe("toBlocks", () => {
     ];
     const blocks = toBlocks(items);
     expect(blocks.map((block) => block.type)).toEqual(["user", "assistant", "work", "assistant"]);
-    expect(blocks.filter((block) => "speaker" in block && block.speaker)).toHaveLength(1);
   });
 });

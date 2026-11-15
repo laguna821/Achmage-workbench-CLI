@@ -1,0 +1,151 @@
+/* The conversation read as one growing Markdown note (U25): an inline title and one line of
+   properties, requests as numbered blocks in the 720px reading column, steps and plans as folded
+   callouts, files as one-line links. Requests and answers share the column's left edge. */
+
+/* ── Head: the note's title and properties ─────────────────────────────── */
+/* One head for every note (conversation, project note): the kind icon, the title in heading ink
+   (at most two lines), the tools at the end, then the properties as one kind of chip. */
+.note-head { display: flex; flex-direction: column; gap: var(--space-2xs); padding: 28px 0 var(--space-md); font-family: var(--font-ui); }
+.note-head-title { display: flex; align-items: flex-start; gap: var(--space-xs); min-width: 0; }
+.note-kind { flex: none; margin-top: var(--space-xs); color: var(--muted); }
+.note-title { display: -webkit-box; flex: 1 1 auto; min-width: 0; margin: 0; overflow: hidden; color: var(--heading); font: 600 var(--fs-display)/36px var(--font-ui); letter-spacing: normal; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.note-title-edit { flex: 1 1 auto; min-width: 0; height: 36px; font: 600 var(--fs-display)/36px var(--font-ui); }
+.note-head-tools { display: flex; flex: none; align-items: center; gap: var(--space-2xs); min-height: 36px; }
+.note-head-tools .icon-button { width: 28px; height: 28px; --c-ink: var(--muted); }
+
+.note-props { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-2xs); min-width: 0; margin: 0 0 0 calc(var(--space-xs) * -1); padding: 0; list-style: none; }
+.note-props > li { display: flex; min-width: 0; }
+.note-prop { display: inline-flex; align-items: center; gap: 6px; max-width: 280px; min-height: 28px; height: auto; padding: var(--space-2xs) var(--space-xs); overflow: hidden; border: 0; font: 400 var(--text-sm)/20px var(--font-ui); text-overflow: ellipsis; white-space: nowrap; }
+.note-props .workspace-trigger { display: inline-flex; align-items: center; gap: 6px; max-width: 280px; min-height: 28px; height: auto; padding: var(--space-2xs) var(--space-xs); overflow: hidden; border: 0; --c-fill: transparent; --c-ink: var(--muted); font: 400 var(--text-sm)/20px var(--font-ui); text-overflow: ellipsis; white-space: nowrap; }
+.note-prop > span { overflow: hidden; text-overflow: ellipsis; }
+.note-prop > svg { flex: none; }
+.note-prop code { font-size: var(--text-xs); }
+button.note-prop { cursor: pointer; }
+
+.note-props .workspace-trigger > svg:last-child { display: none; }
+.note-path-form { display: flex; gap: var(--space-xs); padding: var(--space-2xs); }
+.note-path-form input { min-width: 240px; min-height: 28px; padding: var(--space-2xs) var(--space-xs); border-width: 1px; border-style: solid; --c-edge: var(--field-line); --c-fill: var(--surface); --c-ink: var(--text); font: inherit; }
+
+/* ── Turns ─────────────────────────────────────────────────────────────── */
+.transcript .turn { display: flex; flex-direction: column; gap: var(--space-md); padding-block: var(--space-lg) var(--space-xs); }
+.transcript .note-head + .turn { padding-top: var(--space-xs); }
+.transcript .turn-body { display: flex; flex-direction: column; gap: var(--space-md); }
+.transcript .turn-answer { min-width: 0; }
+.transcript .turn-end { display: inline-flex; align-items: center; gap: var(--space-2xs); align-self: flex-start; min-height: 20px; color: var(--muted); font: 400 var(--text-sm)/20px var(--font-ui); font-variant-numeric: tabular-nums; }
+.transcript .turn-end-completed svg { color: var(--ok); }
+.transcript .turn-end .entry-cell { display: inline-flex; align-items: center; gap: var(--space-2xs); }
+.transcript :is(.turn-end-interrupted, .turn-end-failed) .entry-cell:first-child { color: var(--danger); }
+
+/* A request opens a page of the record: an ink rule over it, its number in the margin, the words,
+   the time on the right. No tinted slip: the rule is what parts one request from the next. */
+.transcript .turn-request { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; column-gap: var(--space-sm); align-items: start; padding: var(--space-sm) 0 0; border-top: 1px solid var(--rule-ink); border-radius: 0; background: none; }
+.transcript .turn-request.received { border-top-style: dashed; border-top-color: var(--line-strong); }
+.transcript .turn-no { display: inline-grid; place-items: start; min-width: 24px; height: 24px; color: var(--muted); font: 600 var(--text-sm)/24px var(--font-ui); font-variant-numeric: tabular-nums; }
+.turn-pin .turn-no { place-items: center; line-height: 20px; }
+.transcript .request-main { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-xs); min-width: 0; }
+.transcript .request-side { display: flex; align-items: center; gap: var(--space-xs); min-height: 24px; color: var(--muted); font: 400 var(--text-sm)/20px var(--font-ui); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.transcript .request-tag { padding: 0 6px; border: 1px solid var(--color-rule); border-radius: var(--radius-well); background: none; color: var(--muted); font: 500 var(--text-xs)/18px var(--font-ui); }
+.transcript .request-tag.undelivered { color: var(--danger); }
+.transcript .turn-request .fork-button { width: 24px; height: 24px; --c-ink: var(--muted); opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); }
+.transcript .turn-request:is(:hover, :focus-within) .fork-button { opacity: 1; }
+
+/* The words: reading type, a step lighter than a heading, so a page of requests does not shout. */
+.transcript .request-text { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2xs); min-width: 0; max-width: 100%; }
+.transcript .request-text .markdown { max-width: 100%; color: var(--text); font-family: var(--e-font, var(--font-ui)); font-size: var(--text-md); font-weight: 500; line-height: 1.65; white-space: normal; overflow-wrap: anywhere; }
+.transcript .request-text .markdown.folded { max-height: calc(var(--fold-lines) * 1.65em); overflow: hidden; }
+.transcript .request-text .markdown :is(p, ul, ol, blockquote) { margin: 0 0 0.5em; }
+.transcript .request-text .markdown > :first-child { margin-top: 0; }
+.transcript .request-text .markdown > :last-child { margin-bottom: 0; }
+.transcript .request-text .markdown :is(h1, h2, h3, h4) { margin: 0.6em 0 0.3em; color: inherit; font-size: 1.05em; }
+.transcript .request-text .markdown pre { margin: 0 0 0.5em; overflow-x: auto; white-space: pre; }
+.transcript .request-text .markdown a { color: var(--accent); }
+.transcript .request-more { min-height: 28px; padding: 0; border: 0; background: none; color: var(--accent); font: 500 var(--text-sm)/20px var(--font-ui); cursor: pointer; }
+.transcript .request-more:hover { text-decoration: underline; }
+.transcript .request-more-hint { color: var(--muted); font-weight: 400; }
+.transcript .turn-request .attach-strip { margin-top: 0; }
+.transcript .turn-request .attach-thumb img { max-height: 240px; }
+
+/* Appearance choices of the request ("메시지 모양"), kept on the block. */
+.look-scope[data-bubble="filled"] .transcript .turn-request:not(.received) { background: var(--bubble-bg); }
+.look-scope[data-bubble="filled"] .transcript .turn-request:not(.received) :is(.request-text .markdown, .request-side) { color: var(--bubble-text); }
+.look-scope[data-bubble="filled"] .transcript .turn-request:not(.received) .request-text .markdown a { color: inherit; }
+.look-scope[data-bubble="rail"] .transcript .turn-request:not(.received) { border-left: 2px solid var(--accent); }
+.look-scope[data-bubble="rail"] .transcript .turn-answer > .markdown { padding-left: var(--space-md); border-left: 1px solid var(--line); }
+
+/* ── Callouts: steps and plans, folded to one line ─────────────────────── */
+.transcript .note-callout { align-self: stretch; max-width: 100%; font-family: var(--font-ui); }
+.transcript .note-callout-head { display: inline-flex; align-items: center; gap: var(--space-xs); max-width: 100%; min-height: 28px; margin-left: calc(var(--space-2xs) * -1); padding: var(--space-2xs) var(--space-xs) var(--space-2xs) var(--space-2xs); border: 0; border-radius: var(--radius-pill); background: none; color: var(--muted); font: 400 var(--text-sm)/20px var(--font-ui); text-align: left; cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
+.transcript .note-callout-head:hover { background: var(--hover); color: var(--text); }
+.transcript .work-summary-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.transcript .work-summary-text.running { color: var(--text-soft); }
+/* Callouts in a row read as one list of steps, not as separate paragraphs. */
+.transcript .transcript-block:has(> .note-callout:last-child) + .transcript-block:has(> .note-callout:first-child) { margin-top: calc(var(--space-sm) * -1); }
+.transcript .plan-card .plan-steps { margin: 0; padding: 0 0 var(--space-xs); font-size: var(--text-sm); list-style: none; }
+.transcript .plan-card .plan-step { display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: baseline; border-bottom: 1px solid var(--color-rule); }
+.transcript .plan-card .plan-step:last-child { border-bottom: 0; }
+.transcript .plan-card .plan-step.completed { color: var(--muted); }
+.transcript .plan-row .plan-steps { padding-block: var(--space-2xs); font-size: var(--text-sm); }
+.transcript :is(.plan-card, .plan-row) .plan-step { padding: var(--space-2xs) 0; }
+
+/* ── Files: one line that opens them ───────────────────────────────────── */
+.doc-card { display: flex; align-items: center; gap: var(--space-xs); width: min(100%, 640px); min-height: 40px; padding: var(--space-2xs) var(--space-sm) var(--space-2xs) var(--space-xs); border-width: 1px; border-style: solid; font: 400 var(--text-sm)/20px var(--font-ui); text-align: left; cursor: pointer; }
+
+.doc-card .format-badge { flex: none; }
+.doc-card-name { flex: 0 1 auto; min-width: 0; overflow: hidden; font-size: var(--text-sm); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.doc-card-meta { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--muted); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.doc-card-open { flex: none; color: var(--muted); }
+.doc-card:hover .doc-card-open { color: var(--accent); }
+.doc-card.with-thumb { padding: 6px var(--space-sm) 6px 6px; }
+.design-card-thumb { flex: none; display: grid; place-items: center; width: 96px; min-height: 72px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--surface-muted); }
+.design-card-thumb img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.design-card-thumb .design-thumb-wait { min-height: 72px; }
+/* The band carries the head's essentials at its end while the head is out of view. */
+.turn-pin-tail { display: flex; flex: none; align-items: center; gap: var(--space-2xs); margin-left: auto; }
+.turn-pin-tail .note-prop { max-width: 200px; }
+.turn-pin-tail .icon-button { width: 28px; height: 28px; --c-ink: var(--muted); }
+
+.turn-pin-title .turn-pin-text { font-weight: 600; }
+.raw-note-pending { margin: calc(var(--space-md) * -1) 0 32px; color: var(--muted); font: 400 var(--text-sm)/20px var(--font-ui); }
+
+/* ── The request band pinned over a long answer ────────────────────────── */
+.turn-pin-slot { position: sticky; top: 0; z-index: 6; height: 0; }
+.turn-pin { position: absolute; top: 0; left: 0; right: 0; border-bottom: 1px solid var(--line); background: var(--bg); animation: pending-arrive var(--dur-fast) var(--ease-out); }
+.turn-pin-inner { box-sizing: border-box; display: flex; align-items: center; gap: var(--space-xs); width: 100%; max-width: 768px; min-height: 46px; margin-inline: auto; padding: var(--space-xs) var(--space-lg); }
+.turn-pin.open .turn-pin-inner { align-items: flex-start; }
+.turn-pin-main { display: flex; flex: 1 1 auto; align-items: center; gap: var(--space-sm); min-width: 0; min-height: 28px; padding: 0 var(--space-xs) 0 var(--space-sm); border: 0; border-radius: var(--radius-pill); background: none; color: var(--text); font: 500 var(--text-sm)/20px var(--font-ui); text-align: left; cursor: pointer; }
+.turn-pin-main:hover { background: var(--hover); }
+.turn-pin.open .turn-pin-main { flex: 0 0 auto; }
+.turn-pin-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.turn-pin-full { flex: 1 1 auto; min-width: 0; max-height: min(40vh, 340px); overflow-y: auto; padding: var(--space-3xs) 0; }
+.turn-pin-toggle { flex: none; }
+
+/* Back to the newest output: beside the column's right edge when there is room, never over the words. */
+
+/* ── Raw: the Markdown file itself ─────────────────────────────────────── */
+.raw-note-text { margin: 0 0 32px; padding: 0; color: var(--text); font: 400 var(--text-sm)/1.7 var(--font-outlier); white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 2; user-select: text; }
+
+/* ── Dense grids, narrow panes, touch, reduced motion ──────────────────── */
+.panes[data-dense] .note-head { display: none; }
+.panes[data-dense] .turn-pin-inner { min-height: 28px; padding: var(--space-2xs) var(--space-sm); }
+@media (max-width: 743px) {
+  .note-head { padding-top: 20px; }
+  .note-title, .note-title-edit { font-size: var(--fs-title); line-height: 32px; }
+  .note-kind { margin-top: 6px; }
+  .note-head-tools { min-height: 32px; }
+  .transcript .turn { padding-block: var(--space-md) var(--space-2xs); }
+  .transcript .turn-request { grid-template-columns: 24px minmax(0, 1fr); row-gap: var(--space-2xs); }
+  .transcript .request-side { grid-column: 2; grid-row: 1; justify-self: end; }
+  .transcript .request-main { grid-column: 1 / -1; }
+  .turn-pin-inner { padding-inline: var(--space-md); }
+}
+@media (hover: none) {
+  .transcript .turn-request .fork-button { opacity: 1; }
+}
+@media (pointer: coarse) {
+  :is(.note-prop, .note-props .workspace-trigger, .transcript .note-callout-head, .transcript .request-more) { min-height: 44px; }
+  .note-head-tools .icon-button, .transcript .turn-request .fork-button { width: 44px; height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .turn-pin { animation: none; }
+  button.note-prop, .transcript .note-callout-head, .transcript .turn-request .fork-button, .doc-card { transition: none; }
+}

@@ -13,7 +13,9 @@ export type HostInstance = {
   buildId: string;
 };
 export type EventCursor = { epoch: string; seq: number };
-export type HostStatus = { instance: HostInstance; cursor: EventCursor; state: "running" | "stopping"; activeTasks: number; compatibility?: ProtocolHandshake; update?: HostUpdateStatus };
+/** The gateway's vault as the OS vault helper answered it (sec-vault round 2): `message` says why and what to do; never a secret. */
+export type HostVaultStatus = { state: "unknown" | "open" | "refused"; reason: string | null; message: string | null };
+export type HostStatus = { instance: HostInstance; cursor: EventCursor; state: "running" | "stopping"; activeTasks: number; compatibility?: ProtocolHandshake; update?: HostUpdateStatus; vault?: HostVaultStatus };
 export type StopReceipt = { instanceId: string; state: "stopping" | "stopped"; requestedAt: number };
 
 export type HostUpdateBlocker = { kind: "task" | "office" | "terminal"; id: string; label: string };

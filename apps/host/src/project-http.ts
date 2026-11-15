@@ -25,6 +25,32 @@ const kindOf = (value: unknown): PropertyType | null => (PROPERTY_TYPES.some((en
 const strings = (value: unknown): string[] | null => (value === null ? null : Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : typeof value === "string" ? [value] : null);
 
 /** Handle one project request; false when the path is not one of these routes. */
+/**
+ * The revision the page was showing (null: no file). The project page sends it with every write;
+ * writes from other screens (kanban, sidebar tag drop, list bulk stage, "결정으로") do not yet, and go
+ * unchecked against it (they are still single spans, guarded, after outside bytes are recorded).
+ */
+function baseOf(body: Record<string, unknown>): number | null | undefined {
+  return typeof body.baseRevision === "number" || body.baseRevision === null ? (body.baseRevision as number | null) : undefined;
+}
+
+/** The base for the routes only the project page calls (body, run, source): required. */
+function requiredBase(body: Record<string, unknown>): number | null {
+  const base = baseOf(body);
+  if (base === undefined) throw new HttpError(400, "base_required", "어느 판을 보고 고쳤는지 알 수 없어 쓰지 않았습니다. 노트를 다시 연 뒤 고쳐 주세요.");
+  return base;
+}
+
+/** One list item added, removed or renamed. */
+function changeOf(value: unknown): { add?: string; remove?: string; rename?: [string, string] } | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const change = value as Record<string, unknown>;
+  if (typeof change.add === "string") return { add: change.add };
+  if (typeof change.remove === "string") return { remove: change.remove };
+  if (Array.isArray(change.rename) && change.rename.length === 2) return { rename: [String(change.rename[0]), String(change.rename[1])] };
+  return undefined;
+}
+
 export async function handleProject(projects: Projects, req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
   const method = req.method ?? "GET";
   const parts = url.pathname.replace(/^\/api\/projects\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
@@ -73,15 +99,14 @@ export async function handleProject(projects: Projects, req: IncomingMessage, re
   const action = parts[1] ?? "";
   if (method === "POST" && action === "initialize-note") return (sendJson(res, 200, projects.initializeNote(workId)), true);
   if (method === "GET" && !action) return (sendJson(res, 200, projects.page(workId)), true);
-  if (method === "GET" && action === "achmage") return (sendJson(res, 200, await projects.achmage(workId)), true);
   if (method === "GET" && action === "events") return (sendJson(res, 200, projects.allEvents(workId)), true);
   if (method === "PUT" && action === "property") {
     const body = await readJson(req);
-    return (sendJson(res, 200, projects.setProperty(workId, String(body.key ?? ""), strings(body.values), kindOf(body.type), documentAccess(req))), true);
+    return (sendJson(res, 200, projects.setProperty(workId, String(body.key ?? ""), strings(body.values), kindOf(body.type), documentAccess(req), baseOf(body), changeOf(body.change))), true);
   }
   if (method === "PUT" && action === "stage") {
     const body = await readJson(req);
-    return (sendJson(res, 200, projects.setStage(workId, typeof body.stage === "string" && body.stage ? body.stage : null, null, documentAccess(req))), true);
+    return (sendJson(res, 200, projects.setStage(workId, typeof body.stage === "string" && body.stage ? body.stage : null, null, documentAccess(req), baseOf(body))), true);
   }
   if (method === "POST" && action === "entries") {
     const body = await readJson(req);
@@ -94,6 +119,7 @@ export async function handleProject(projects: Projects, req: IncomingMessage, re
           text: String(body.text ?? ""),
           sessionId: typeof body.sessionId === "string" ? body.sessionId : null,
           itemId: typeof body.itemId === "string" ? body.itemId : null,
+          baseRevision: baseOf(body),
         }, documentAccess(req)),
       ),
       true
@@ -101,16 +127,29 @@ export async function handleProject(projects: Projects, req: IncomingMessage, re
   }
   if (method === "PUT" && action === "entries" && parts[2] !== undefined) {
     const body = await readJson(req);
-    return (sendJson(res, 200, projects.setQuestionDone(workId, Number(parts[2]), body.done === true, documentAccess(req))), true);
+    return (sendJson(res, 200, projects.setQuestionDone(workId, Number(parts[2]), body.done === true, documentAccess(req), baseOf(body), typeof body.text === "string" ? body.text : undefined)), true);
   }
   if (method === "PUT" && action === "body") {
     const body = await readJson(req);
-    return (sendJson(res, 200, projects.setBodyText(workId, String(body.body ?? ""), typeof body.baseRevision === "number" ? body.baseRevision : null, documentAccess(req))), true);
+    return (sendJson(res, 200, projects.setBodyText(workId, String(body.body ?? ""), requiredBase(body), documentAccess(req))), true);
   }
-  if (method === "POST" && action === "revert") return (sendJson(res, 200, projects.revertEngineEdit(workId, documentAccess(req))), true);
+  if (method === "PUT" && action === "run") {
+    const body = await readJson(req);
+    const run = { index: Number(body.index), expected: String(body.expected ?? ""), text: String(body.text ?? "") };
+    return (sendJson(res, 200, projects.setRun(workId, run, requiredBase(body), documentAccess(req))), true);
+  }
+  if (method === "PUT" && action === "source") {
+    const body = await readJson(req);
+    return (sendJson(res, 200, projects.setSource(workId, String(body.text ?? ""), requiredBase(body), documentAccess(req))), true);
+  }
+  if (method === "POST" && action === "revert") {
+    const body = await readJson(req);
+    if (typeof body.revision === "number") return (sendJson(res, 200, projects.revertTo(workId, body.revision, documentAccess(req), baseOf(body))), true);
+    return (sendJson(res, 200, projects.revertEngineEdit(workId, documentAccess(req), baseOf(body))), true);
+  }
   if (method === "POST" && action === "undo") {
     const body = await readJson(req);
-    return (sendJson(res, 200, projects.undo(workId, String(body.token ?? ""), documentAccess(req))), true);
+    return (sendJson(res, 200, projects.undo(workId, String(body.token ?? ""), documentAccess(req), baseOf(body))), true);
   }
   return false;
 }

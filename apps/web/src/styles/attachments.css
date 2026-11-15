@@ -6,11 +6,8 @@
   gap: 6px;
   max-width: 260px;
   height: 30px;
-  padding: 0 4px 0 4px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--surface);
-  color: var(--text);
+  padding: 0 var(--space-2xs) 0 var(--space-2xs);
+  border-width: 1px; border-style: solid;
   font-size: var(--fs-micro);
 }
 
@@ -34,10 +31,6 @@
   color: var(--muted);
 }
 
-.attach-chip.failed {
-  border-color: var(--danger);
-}
-
 .attach-chip.failed .attach-size {
   color: var(--danger);
 }
@@ -47,22 +40,16 @@
   flex: none;
   padding: 3px;
   border: 0;
-  border-radius: var(--r-xs);
-  background: none;
-  color: var(--muted);
+  --c-fill: transparent;
+  --c-ink: var(--muted);
   cursor: pointer;
-}
-
-.attach-chip button:hover {
-  background: var(--surface-muted);
-  color: var(--text);
 }
 
 .attach-strip {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--space-xs);
+  margin-top: var(--space-xs);
 }
 
 .attach-thumb {
@@ -75,8 +62,8 @@
   cursor: zoom-in;
 }
 
-.attach-preview { display: inline-flex; flex-direction: column; gap: 4px; max-width: 100%; }
-.message-image { display: inline-block; margin-block: 8px; }
+.attach-preview { display: inline-flex; flex-direction: column; gap: var(--space-2xs); max-width: 100%; }
+.message-image { display: inline-block; margin-block: var(--space-xs); }
 .attach-retry { font-size: var(--fs-micro); }
 
 /* Never larger than the picture itself (a small one stays sharp). */
@@ -103,16 +90,16 @@
   z-index: 1000;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 12px;
+  gap: var(--space-sm);
   padding: 20px;
-  background: rgb(0 0 0 / 0.72);
-  color: white;
+  background: var(--color-viewer-scrim);
+  color: var(--color-on-viewer);
 }
 
 .attach-lightbox header, .attach-lightbox footer { display: flex; gap: 20px; align-items: center; justify-content: center; }
 .attach-lightbox header { justify-content: space-between; }
-.attach-lightbox button, .attach-lightbox a { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 12px; border: 1px solid rgb(255 255 255 / 0.3); border-radius: var(--r-md); color: white; background: rgb(0 0 0 / 0.25); }
-.attach-lightbox button:disabled { opacity: 0.4; }
+.attach-lightbox button, .attach-lightbox a { display: inline-flex; align-items: center; gap: var(--space-xs); min-height: 36px; padding: 6px var(--space-sm); border: 1px solid var(--color-viewer-edge); border-radius: var(--r-md); color: var(--color-on-viewer); background: var(--color-viewer-fill); }
+.attach-lightbox button:disabled { color: color-mix(in oklab, var(--color-on-viewer) 45%, transparent); background-color: transparent; cursor: not-allowed; }
 .attach-gallery-image { min-height: 0; display: flex; align-items: center; justify-content: center; }
 
 .attach-lightbox img {
@@ -145,32 +132,37 @@
 .composer-file-picker, .attach-file { position: relative; display: inline-flex; min-width: 0; }
 .composer-file-picker > input[hidden] { display: none; }
 .composer-file-problem { color: var(--danger); font-size: var(--fs-meta); overflow-wrap: anywhere; }
-.composer-file-picker > .composer-file-problem { position: absolute; bottom: 100%; padding: 8px; width: min(300px, 75vw); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); z-index: 8; }
-.attach-pending { display: inline-flex; flex-direction: column; gap: 4px; max-width: 100%; }
+.composer-file-picker > .composer-file-problem { position: absolute; bottom: 100%; padding: var(--space-xs); width: min(300px, 75vw); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); z-index: 8; }
+.attach-pending { display: inline-flex; flex-direction: column; gap: var(--space-2xs); max-width: 100%; }
 .attach-pending-error { color: var(--danger); font-size: var(--fs-micro); max-width: 280px; overflow-wrap: anywhere; }
 .attach-file-button { cursor: pointer; text-align: left; }
-.attach-file-button:hover { border-color: var(--accent); }
-.attach-file-menu { max-width: min(360px, calc(100vw - 32px)); min-width: min(280px, calc(100vw - 32px)); padding: 12px; }
-.attach-file-title { display: block; overflow-wrap: anywhere; margin-bottom: 8px; }
-.attach-file-actions { display: inline-flex; flex-direction: column; gap: 8px; max-width: 100%; font-size: var(--fs-meta); }
+
+.attach-file-menu { max-width: min(360px, calc(100vw - 32px)); min-width: min(280px, calc(100vw - 32px)); padding: var(--space-sm); }
+.attach-file-title { display: block; overflow-wrap: anywhere; margin-bottom: var(--space-xs); }
+.attach-file-actions { display: inline-flex; flex-direction: column; gap: var(--space-xs); max-width: 100%; font-size: var(--fs-meta); }
 .attach-file-actions small { max-width: 280px; line-height: 1.5; }
-.attach-file-buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.attach-file-buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-xs); }
 .attach-file-buttons button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--r-md); color: inherit; background: var(--surface); }
-.attach-file-buttons button:disabled { opacity: 0.5; }
+.attach-file-buttons button:disabled { color: color-mix(in oklab, var(--muted) 62%, var(--bg)); cursor: not-allowed; }
 .attach-file-error { display: grid; gap: 6px; color: var(--danger); overflow-wrap: anywhere; }
-.attach-lightbox .attach-file-buttons button { background: rgb(0 0 0 / 0.25); }
-.attach-lightbox .attach-file-error { color: white; }
+.attach-lightbox .attach-file-buttons button { background: var(--color-viewer-fill); }
+.attach-lightbox .attach-file-error { color: var(--color-on-viewer); }
 .attach-lightbox header > span { overflow-wrap: anywhere; min-width: 0; }
 .attach-lightbox header > button { flex: none; }
 .attach-lightbox footer { flex-wrap: wrap; }
+/* Narrow windows and touch screens: the file menu becomes a sheet, the viewer fills the visible screen. */
 @media (max-width: 900px), (pointer: coarse) {
-  .attach-chip { height: auto; min-height: 44px; max-width: min(100%, 360px); }
-  .attach-chip button { min-width: 44px; min-height: 44px; align-items: center; justify-content: center; }
-  .attach-file-buttons button, .attach-retry { min-height: 44px; }
+  .attach-chip { max-width: min(100%, 360px); }
   .attach-file .popover { position: fixed; inset: auto 16px max(16px, env(safe-area-inset-bottom, 0px)); max-height: 65dvh; width: auto; max-width: none; overflow-y: auto; }
-  .attach-lightbox { top: var(--mobile-top, 0px); left: var(--mobile-left, 0px); right: auto; bottom: auto; width: var(--mobile-width, 100vw); height: var(--mobile-height, 100dvh); padding: max(12px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); }
-  .attach-lightbox header, .attach-lightbox footer { gap: 8px; }
-  .attach-lightbox button, .attach-lightbox a { min-height: 44px; }
+  .attach-lightbox { top: var(--mobile-top, 0px); left: var(--mobile-left, 0px); right: auto; bottom: auto; width: var(--mobile-width, 100vw); height: var(--mobile-height, 100dvh); padding: max(var(--space-sm), env(safe-area-inset-top, 0px)) max(var(--space-sm), env(safe-area-inset-right, 0px)) max(var(--space-sm), env(safe-area-inset-bottom, 0px)) max(var(--space-sm), env(safe-area-inset-left, 0px)); }
+  .attach-lightbox header, .attach-lightbox footer { gap: var(--space-xs); }
   .attach-lightbox footer { max-height: 40dvh; overflow-y: auto; }
   .attach-thumb img { max-width: min(280px, 75vw); }
+}
+/* Finger-sized keys follow the pointer, never the window's width (Hallmark U4/U5 merge). */
+@media (pointer: coarse) {
+  .attach-chip { height: auto; min-height: 44px; }
+  .attach-chip button { min-width: 44px; min-height: 44px; align-items: center; justify-content: center; }
+  .attach-file-buttons button, .attach-retry { min-height: 44px; }
+  .attach-lightbox button, .attach-lightbox a { min-height: 44px; }
 }

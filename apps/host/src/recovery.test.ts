@@ -11,6 +11,7 @@ import { heldNotice, restartTurnEnd, stampTurnEnd } from "./recovery.ts";
 import { Kordoc } from "./kordoc.ts";
 import { ClaudeAdapter } from "./providers/claude.ts";
 import { CodexAdapter } from "./providers/codex.ts";
+import { itWithSearch, NO_SEARCH_WORKER, withSearchReason } from "./search-worker-test.ts";
 
 // "끊기는 길": a turn that is stopped, fails, or whose engine dies still ends — with its cause — so the
 // waiting requests stay, a changed working copy becomes a proposal, another session's request is
@@ -299,7 +300,7 @@ describe("Office documents in search (Hangul uses the bundled WASM reader below)
     return { tool, reads, release: () => waiting.splice(0).forEach((done) => done()) };
   }
 
-  it("indexes each new revision's text in the background, keeping the old entry until it is ready", async () => {
+  itWithSearch("indexes each new revision's text in the background, keeping the old entry until it is ready", async () => {
     const dir = mkdtempSync(join(tmpdir(), "wb-recovery-index-"));
     dirs.push(dir);
     const office = slowTool();
@@ -350,7 +351,7 @@ describe("Office documents in search (Hangul uses the bundled WASM reader below)
 
 describe("Hangul documents an engine writes, with the installed kordoc", () => {
   // Uses the installed kordoc engine; skipped where it is not installed.
-  it.runIf(new Kordoc().available)("are found by their text after each new revision", async () => {
+  it.runIf(new Kordoc().available && !NO_SEARCH_WORKER)(withSearchReason("are found by their text after each new revision"), async () => {
     const dir = mkdtempSync(join(tmpdir(), "wb-recovery-kordoc-"));
     dirs.push(dir);
     const { execFileSync } = await import("node:child_process");

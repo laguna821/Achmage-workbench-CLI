@@ -70,6 +70,21 @@ it("follows output only near the bottom and keeps a reader above the stream", ()
   expect(scroll.scrollTop).toBe(1500);
 });
 
+it("does not undo a move the browser has not reported yet when the conversation re-renders", () => {
+  geometry = { q: [0, 80], answer: [80, 1120] };
+  const items = [user("q"), reply("answer")];
+  const ui = render(view(items, { sessionId: "unreported" }));
+  const scroll = ui.container.querySelector<HTMLElement>(".transcript")!;
+  scroll.scrollTop = 300; fireEvent.wheel(scroll, { deltaY: -100 }); fireEvent.scroll(scroll);
+  // Back to the top (a key, the scroll bar, a script); the scroll event comes a frame later.
+  scroll.scrollTop = 0;
+  ui.rerender(view(items, { sessionId: "unreported", running: true }));
+  expect(scroll.scrollTop).toBe(0);
+  fireEvent.scroll(scroll);
+  height = 1300; geometry.answer = [80, 1220]; act(() => resized());
+  expect(scroll.scrollTop).toBe(0);
+});
+
 it("keeps the final answer, failed tools, plan and approval visible while details are folded, and mounts a searched tool", () => {
   const items: TranscriptItem[] = [user("q"),
     { kind: "tool", id: "tool", tool: "command", title: "원고 변환", detail: null, output: "실패 원문 로그", status: "failed", at: 2 },
@@ -80,7 +95,7 @@ it("keeps the final answer, failed tools, plan and approval visible while detail
   ];
   const ui = render(view(items, { sessionId: "details" }));
   expect(screen.getByText("최종 답변을 읽습니다.")).toBeTruthy();
-  expect(screen.getByText("실패 · 원고 변환")).toBeTruthy();
+  expect(screen.getByText("실패: 원고 변환")).toBeTruthy();
   expect(screen.getByText("남은 결과 확인")).toBeTruthy();
   expect(screen.getByRole("button", { name: /허용/ })).toBeTruthy();
   expect(screen.queryByText("실패 원문 로그")).toBeNull();

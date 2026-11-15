@@ -62,10 +62,15 @@ fn current(app: &tauri::AppHandle, id: &str) -> Result<Page, String> {
     app.state::<SharedBrowser>().pages.lock().unwrap().get(id).cloned().ok_or_else(|| "웹 페이지가 닫혔습니다.".into())
 }
 fn update_control(app: &tauri::AppHandle, id: &str, value: &Value) {
+    let observed_url = value["url"].as_str().and_then(|raw| allowed_url(app, raw).ok());
     if let Ok(control) = serde_json::from_value::<Control>(value["control"].clone()) {
         if let Some(page) = app.state::<SharedBrowser>().pages.lock().unwrap().get_mut(id) {
             if control.generation >= page.control.generation { page.control = control; }
             if let Some(at) = value["interactionAt"].as_u64() { page.interaction_at = page.interaction_at.max(at); }
+            if let Some(url) = observed_url {
+                if page.url != url.as_str() { page.url = url.to_string(); page.navigation_revision += 1; }
+                if let Some(title) = value["title"].as_str() { page.title = if page.url == "about:blank" { "새 탭".into() } else { title.chars().take(300).collect() }; }
+            }
         }
     }
 }
@@ -206,10 +211,11 @@ async fn execute_inner(app: &tauri::AppHandle, job: &Value) -> Result<Value, Str
     let id = field(job, "id")?; let page_id = field(job, "pageId")?;
     if job["deadline"].as_u64().unwrap_or(0) < now() { return Err("REQUEST_EXPIRED: 이전 요청을 실행하지 않았습니다.".into()); }
     let action = &job["action"]; let kind = field(action, "kind")?;
+    let observing = kind == "snapshot" || kind == "read";
     let page = current(app, page_id)?;
     let control: Control = serde_json::from_value(job["control"].clone()).map_err(|_| "제어권 정보가 올바르지 않습니다.")?;
     let view = app.get_webview(&label(page_id)).ok_or("웹 페이지가 닫혔습니다.")?;
-    if kind != "snapshot" && kind != "control" && control != page.control { return Err("CONTROL_REVOKED".into()); }
+    if !observing && kind != "control" && control != page.control { return Err("CONTROL_REVOKED".into()); }
     if kind == "control" {
         if control.generation < page.control.generation || (control.generation == page.control.generation && control.owner != page.control.owner) { return Err("CONTROL_REVOKED".into()); }
         if let Some(record) = app.state::<SharedBrowser>().pages.lock().unwrap().get_mut(page_id) { record.control = control.clone(); }
@@ -222,10 +228,12 @@ async fn execute_inner(app: &tauri::AppHandle, job: &Value) -> Result<Value, Str
         api_expression(&format!("(()=>{{const result={run};if(!result.error)location.assign({});return result;}})()", json!(target.as_str())))
     } else { api_expression(&run) };
     let value = evaluate(view.clone(), expression).await?;
+    // Check a real document navigation before applying the same-document URL observed in
+    // this result. A freshly observed SPA route is valid; an in-flight page reload is not.
+    if observing && current(app, page_id)?.navigation_revision != page.navigation_revision { return Err("STALE_DOCUMENT".into()); }
     update_control(app, page_id, &value);
     if let Some(error) = value["error"].as_str() { return Err(error.to_string()); }
     // The actual page can navigate while a callback is in flight. Never relabel old observations.
-    if kind == "snapshot" && current(app, page_id)?.navigation_revision != page.navigation_revision { return Err("STALE_DOCUMENT".into()); }
     if kind == "control" && current(app, page_id)?.control != control { return Err("CONTROL_REVOKED".into()); }
     match kind {
         "navigate" => (),
@@ -237,13 +245,13 @@ async fn execute_inner(app: &tauri::AppHandle, job: &Value) -> Result<Value, Str
             if let Some(error) = checked["error"].as_str() { return Err(error.into()); }
         }
         "close" => { platform::detach(&view, page_id)?; view.close().map_err(|e| e.to_string())?; app.state::<SharedBrowser>().pages.lock().unwrap().remove(page_id); return Ok(json!({"id":id,"pageId":page_id})); }
-        "snapshot" | "control" | "click" | "fill" | "select" | "press" | "scroll" => (),
+        "snapshot" | "read" | "control" | "click" | "fill" | "select" | "press" | "scroll" => (),
         _ => return Err("지원하지 않는 웹 동작입니다.".into()),
     }
     let fresh = current(app, page_id)?;
     let mut result = json!({"id":id,"pageId":page_id,"page":fresh});
-    if kind == "snapshot" {
-        result["observation"] = json!({"target":{"pageId":page_id,"profileId":page.profile_id,"navigationRevision":page.navigation_revision,"capabilities":page.capabilities},"documentNonce":value["documentNonce"],"observedAt":now(),"text":value["text"]});
+    if observing {
+        result["observation"] = json!({"target":{"pageId":page_id,"profileId":page.profile_id,"navigationRevision":fresh.navigation_revision,"capabilities":page.capabilities},"documentNonce":value["documentNonce"],"observedAt":now(),"text":value["text"]});
     }
     Ok(result)
 }
@@ -254,6 +262,22 @@ pub async fn shared_browser(app: tauri::AppHandle, webview: Webview, command: Va
     if webview.label() != "main" { return Err("기본 앱 화면에서만 웹 탭을 관리할 수 있습니다.".into()); }
     match field(&command, "kind")? {
         "create" => create(&app, &webview, &command).await,
+        // Explicit trusted-shell close works even if the document script has crashed.
+        // This is never exposed as a remote-page or AI command.
+        "close" => {
+            let id = field(&command, "pageId")?;
+            let profile = field(&command, "profileId")?;
+            if !identifier(id) || !identifier(profile) { return Err("웹 탭 식별자가 올바르지 않습니다.".into()); }
+            if let Ok(page) = current(&app, id) {
+                if page.profile_id != profile { return Err("다른 프로필의 웹 탭입니다.".into()); }
+                if let Some(view) = app.get_webview(&label(id)) {
+                    platform::detach(&view, id)?;
+                    view.close().map_err(|error| error.to_string())?;
+                }
+                app.state::<SharedBrowser>().pages.lock().unwrap().remove(id);
+            }
+            Ok(Value::Null)
+        }
         "execute" => execute(&app, &command["job"]).await,
         "download-directory" => {
             let id = field(&command, "pageId")?; let page = current(&app, id)?;

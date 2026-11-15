@@ -15,9 +15,11 @@
   padding-bottom: max(var(--space-3), env(safe-area-inset-bottom, 0px));
 }
 :root[data-mobile-keyboard="open"] .composer-area { padding-bottom: var(--space-2); }
-@media (max-width: 900px), (pointer: coarse) {
+/* Touch sizing follows the pointer, never the window's width: a narrow window under a mouse keeps
+   its 28–32px controls on one row (Hallmark U4; responsive.md "never by width"). */
+@media (pointer: coarse) {
   .composer-input { font-size: max(16px, var(--e-size)); max-height: min(280px, 32dvh); }
-  .composer-bar { gap: 6px; }
+  .composer-bar { gap: var(--space-xs); }
   .composer-left { flex: 1 1 100%; }
   .composer-right { flex-wrap: wrap; max-width: 100%; }
   .composer-bar .icon-button:not(.primary), .composer-bar .icon-button.primary,
@@ -26,7 +28,7 @@
     min-width: 44px;
   }
   .composer-bar .plain-select { min-height: 44px; }
-  .composer .popover { max-width: min(360px, calc(100vw - 32px)); max-height: min(360px, 60dvh); overflow-y: auto; }
+  .composer .popover { max-width: min(360px, calc(var(--mobile-width, 392px) - 32px)); max-height: min(360px, 60dvh); overflow-y: auto; }
   .approval-actions { flex-wrap: wrap; }
   .approval-actions button { min-height: 44px; }
 }

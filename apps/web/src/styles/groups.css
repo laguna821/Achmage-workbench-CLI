@@ -23,7 +23,7 @@
 .view-tabs {
   display: flex;
   align-items: flex-end;
-  gap: 2px;
+  gap: var(--space-3xs);
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -31,7 +31,7 @@
 .view-tab-list {
   display: flex;
   align-items: flex-end;
-  gap: 2px;
+  gap: var(--space-3xs);
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
@@ -47,22 +47,12 @@
   height: 34px;
   padding: 0 var(--space-2);
   border: none;
-  border-radius: var(--r-sm) var(--r-sm) 0 0;
-  background: none;
-  color: var(--muted);
   font-size: var(--fs-meta);
   font-weight: 500;
   white-space: nowrap;
-  transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
-}
-
-.view-tab:hover {
-  background: var(--hover);
-  color: var(--text);
 }
 
 .view-tab.on {
-  color: var(--text);
   font-weight: 600;
 }
 
@@ -81,17 +71,13 @@
 .view-tab-input {
   flex: 0 0 auto;
   height: 28px;
-  margin: 0 2px 3px;
+  margin: 0 var(--space-3xs) 3px;
   padding: 0 var(--space-2);
-  border: 1px solid var(--accent);
-  border-radius: var(--r-sm);
-  background: var(--surface);
-  color: var(--text);
+  border-width: 1px; border-style: solid;
   font: inherit;
   font-size: var(--fs-meta);
   font-weight: 600;
   outline: none;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .view-add-anchor {
@@ -108,7 +94,7 @@
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 2px;
+  gap: var(--space-3xs);
   margin-left: auto;
   padding-bottom: 3px;
 }
@@ -116,7 +102,7 @@
 .view-tool {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-2xs);
   height: 28px;
   padding: 0 var(--space-2);
   border: none;
@@ -167,7 +153,7 @@
   max-width: 100%;
   height: 28px;
   padding: 0 10px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--field-line);
   border-radius: var(--r-md);
   background: var(--surface);
   color: var(--text);
@@ -203,14 +189,14 @@
 
 .view-pop-list .menu-item {
   min-height: 30px;
-  padding: 4px 10px;
+  padding: var(--space-2xs) 10px;
   font-size: var(--fs-meta);
 }
 
 .view-pop-options {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-3xs);
   margin-top: var(--space-1);
   padding: var(--space-1) 0;
   border-top: 1px solid var(--line);
@@ -218,7 +204,7 @@
 
 .view-pop-options .link {
   align-self: flex-start;
-  margin: 4px 10px;
+  margin: var(--space-2xs) 10px;
   font-size: var(--fs-meta);
 }
 
@@ -230,7 +216,7 @@
 
 .view-segments {
   align-self: flex-start;
-  margin: 4px 10px;
+  margin: var(--space-2xs) 10px;
 }
 
 .check-row.switch-row.view-switch {
@@ -240,7 +226,7 @@
 
 .slider-row.view-range {
   grid-template-columns: 64px 1fr 40px;
-  padding: 4px 10px;
+  padding: var(--space-2xs) 10px;
   font-size: var(--fs-meta);
 }
 
@@ -258,7 +244,7 @@
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 2px var(--space-2);
+  gap: var(--space-3xs) var(--space-2);
   padding: 1px 10px;
 }
 
@@ -304,7 +290,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 4px 0 6px;
+  padding: var(--space-2xs) 0 6px;
 }
 
 .color-swatches {
@@ -335,8 +321,8 @@
 .color-hex {
   width: 96px;
   height: 26px;
-  padding: 0 8px;
-  border: 1px solid var(--line-strong);
+  padding: 0 var(--space-xs);
+  border: 1px solid var(--field-line);
   border-radius: var(--r-sm);
   background: var(--surface);
   color: var(--text);
@@ -378,7 +364,7 @@
 }
 
 .group-paint-hint {
-  margin: 4px 0 0;
+  margin: var(--space-2xs) 0 0;
   color: var(--muted);
   font-size: var(--fs-micro);
 }
@@ -397,8 +383,8 @@
   gap: 6px;
   min-width: 0;
   max-width: 100%;
-  margin-left: -4px;
-  padding: 2px 4px;
+  margin-left: calc(var(--space-2xs) * -1);
+  padding: var(--space-3xs) var(--space-2xs);
   border: none;
   border-radius: var(--r-sm);
   background: none;
@@ -436,7 +422,7 @@
 .look-heading .group-head .group-label {
   color: var(--text);
   font-size: var(--fs-body);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .look-heading .group-head.has-color .group-label {
@@ -471,7 +457,7 @@
 
 .group-section .map-grid,
 .group-section .docs-grid {
-  margin-top: 2px;
+  margin-top: var(--space-3xs);
 }
 
 .group-subs {
@@ -517,7 +503,7 @@
 
 /* ── Boards ────────────────────────────────────────────────────────────────────────────────── */
 .group-board .kanban-head {
-  padding: 8px 10px 6px;
+  padding: var(--space-xs) 10px 6px;
 }
 
 .group-board .kanban-head .group-toggle {
@@ -585,7 +571,7 @@
   left: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-3xs);
   box-shadow: var(--elev-1);
   will-change: transform;
 }
@@ -695,7 +681,7 @@
 
 .kanban-cell-count {
   display: block;
-  padding: 4px;
+  padding: var(--space-2xs);
   color: var(--muted);
   font-size: var(--fs-micro);
   text-align: center;
@@ -733,7 +719,6 @@
 
 .now-card-head .engine-mark {
   flex: 0 0 auto;
-  color: var(--accent);
 }
 
 .now-card-work {
@@ -747,14 +732,14 @@
 .view-props {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--space-2xs);
   min-width: 0;
 }
 
 .view-prop {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-2xs);
   max-width: 100%;
   height: 20px;
   padding: 0 6px;
@@ -774,7 +759,7 @@
 /* ── Table groups ──────────────────────────────────────────────────────────────────────────── */
 .projects-th {
   display: inline-block;
-  padding: 6px 8px;
+  padding: 6px var(--space-xs);
 }
 
 .projects-preview {
@@ -787,7 +772,7 @@
 }
 
 .projects-table .group-row td {
-  padding: var(--space-4) 4px 4px;
+  padding: var(--space-4) var(--space-2xs) var(--space-2xs);
   border-bottom: 1px solid var(--line);
   font-size: var(--fs-micro);
   font-weight: 600;
@@ -799,7 +784,7 @@
 }
 
 .projects-table .group-row.sub td {
-  padding: var(--space-2) 4px 2px var(--space-4);
+  padding: var(--space-2) var(--space-2xs) var(--space-3xs) var(--space-4);
 }
 
 .projects-table tr.group-row:hover td {
@@ -954,40 +939,3 @@
   }
 }
 
-/* ── Property values to pick (the project page's properties, Notion's select) ─────────────────── */
-.prop-pick {
-  display: inline-flex;
-  flex-direction: column;
-  gap: 6px;
-  width: min(100%, 420px);
-}
-
-.prop-choices {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.prop-choice {
-  display: inline-flex;
-  align-items: center;
-  height: 24px;
-  padding: 0 var(--space-2);
-  border: 1px solid color-mix(in srgb, var(--group, var(--line-strong)) 45%, var(--line));
-  border-radius: var(--r-xs);
-  background: color-mix(in srgb, var(--group, var(--muted)) 8%, var(--surface));
-  color: var(--text-soft);
-  font-size: var(--fs-meta);
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.prop-choice:hover {
-  border-color: color-mix(in srgb, var(--group, var(--accent)) 60%, var(--line));
-  color: var(--text);
-}
-
-/* The choices show under the field; the browser's own list arrow would repeat them. */
-.prop-pick .prop-input::-webkit-calendar-picker-indicator {
-  display: none !important;
-}

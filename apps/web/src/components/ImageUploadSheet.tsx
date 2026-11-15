@@ -2,6 +2,7 @@ import { useEffect, useState, type ChangeEvent, type InputHTMLAttributes } from 
 import type { ImageUploadCheck, ImageUploadInput, ImageUploadMode, ImageUploadView } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import { Icon } from "./Icon.tsx";
+import { PathDetail, SettingsRow } from "./SettingsSheet.tsx";
 import "../styles/doc-images.css";
 
 // Where pictures pasted into Markdown documents go: the user's Cloudflare R2 bucket, through the
@@ -37,24 +38,13 @@ export function ImageUploadRow({ api, onOpen }: { api: Api; onOpen: () => void }
     void api.imageUpload().then(setView, () => undefined);
   }, [api]);
   return (
-    <>
-      <div className="menu-divider" />
-      <div className="menu-label">문서에 붙여 넣는 그림</div>
-      <div className="connection">
-        <div className="connection-head">
-          <span className="connection-name">Cloudflare R2</span>
-          <span className={`connection-state ${view?.configured ? "ok" : ""}`}>
-            {!view ? "확인 중" : view.configured ? `연결됨 · ${view.mode === "worker" ? hostOf(view.workerUrl) : view.bucket}` : "설정 안 됨"}
-          </span>
-        </div>
-        <div className="connection-meta muted">
-          {view?.configured ? "마크다운에 붙여 넣은 그림을 R2에 올리고 공개 주소로 링크합니다." : "마크다운에 붙여 넣은 그림은 작업 폴더의 assets/에 저장합니다."}
-        </div>
-      </div>
-      <button type="button" className="text-button" onClick={onOpen}>
-        그림 올리기 · Cloudflare R2…
-      </button>
-    </>
+    <SettingsRow
+      label="문서에 붙여 넣는 그림"
+      state={!view ? { text: "확인 중" } : view.configured ? { text: "Cloudflare R2에 올림", tone: "ok" } : { text: "작업 폴더에 저장" }}
+      hint={view?.configured ? "Markdown 문서에 붙여 넣은 그림을 Cloudflare R2에 올리고 공개 주소로 잇습니다." : "Markdown 문서에 붙여 넣은 그림은 작업 폴더의 assets 폴더에 저장합니다."}
+      control={<button type="button" className="button small" aria-haspopup="dialog" onClick={onOpen}>그림 올릴 곳 설정…</button>}
+      detail={view?.configured ? <PathDetail value={view.mode === "worker" ? hostOf(view.workerUrl) : view.bucket} label="올리는 곳 보기" /> : null}
+    />
   );
 }
 

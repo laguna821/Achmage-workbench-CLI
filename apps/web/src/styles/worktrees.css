@@ -18,8 +18,8 @@
   height: min(86vh, 860px);
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 22px 24px 16px;
+  gap: var(--space-sm);
+  padding: 22px var(--space-lg) var(--space-md);
   border: 1px solid var(--line);
   border-radius: var(--r-xl);
   background: var(--surface);
@@ -37,7 +37,7 @@
 }
 
 .worktree-empty {
-  padding: 10px 2px;
+  padding: 10px var(--space-3xs);
   color: var(--muted);
 }
 
@@ -56,7 +56,7 @@
 .worktree-files li {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-xs);
 }
 
 .worktree-status {
@@ -83,14 +83,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--mono, ui-monospace, monospace);
+  font-family: var(--font-outlier);
 }
 
 .worktree-diff {
   flex: 1 1 auto;
   min-height: 0;
   margin: 0;
-  padding: 10px 12px;
+  padding: 10px var(--space-sm);
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
@@ -121,7 +121,7 @@
 .worktree-foot {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-xs);
 }
 
 .worktree-spacer {

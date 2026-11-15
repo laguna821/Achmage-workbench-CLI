@@ -47,6 +47,17 @@ describe("access defaults", () => {
     ]);
     expect(usageFromPlan(null)).toEqual([]);
   });
+
+  it("reads every limit the plan reports, Fable too, whatever model follows seven_day_ (atlas-look)", () => {
+    const at = "2026-11-16T09:00:00Z";
+    expect(usageFromPlan({
+      seven_day_sonnet: { utilization: 5, resets_at: at }, seven_day_fable: { utilization: 93, resets_at: at }, five_hour: { utilization: 12, resets_at: at },
+      seven_day_opus: { utilization: 40, resets_at: null }, seven_day: { utilization: 78, resets_at: at }, seven_day_haiku_4: { utilization: 1, resets_at: null },
+      extra_usage: { utilization: 7, resets_at: null }, model_scoped: [], seven_day_oauth_apps: null,
+    }).map((window) => [window.label, window.usedPercent])).toEqual([
+      ["5시간", 12], ["주간", 78], ["주간 Fable", 93], ["주간 Haiku 4", 1], ["주간 Opus", 40], ["주간 Sonnet", 5], ["Extra Usage", 7],
+    ]);
+  });
 });
 
 class AccessEngine implements ProviderAdapter {

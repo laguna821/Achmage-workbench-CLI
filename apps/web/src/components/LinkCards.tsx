@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { REMARK_BASE } from "../markdown/plugins.ts";
 import { LINK_REASON_LABEL, linkMaxHops, type LinkHop, type LinkTurn, type SessionLink } from "@workbench/contracts";
 import type { Api } from "../api.ts";
-import { accentStyle, useAppearance } from "../appearance.ts";
 import { durationText, goalLine, hopsText, participantName, useLinks, useNow } from "../links.ts";
 import { diagramComponents } from "./Diagram.tsx";
 import { EngineMark } from "./EngineMark.tsx";
+import { RequestText } from "./note/RequestText.tsx";
 import { Icon } from "./Icon.tsx";
 import { LinkDialog } from "./LinkDialog.tsx";
 import "../styles/links.css";
@@ -21,7 +21,6 @@ const clock = (at: number) => new Date(at).toLocaleTimeString("ko-KR", { hour: "
 /** On a request a link handed over: whose answer it is (or the goal), and which message of how many. */
 export function LinkHopBadge({ hop }: { hop: LinkHop }) {
   const { state, openSession, openView } = useLinks();
-  const { lookOf } = useAppearance();
   const from = hop.fromSessionId ? state.sessions[hop.fromSessionId] : undefined;
   // Several answers handed over at once (three or more sessions): every speaker, oldest first.
   const speakers = (hop.from?.length ?? 0) > 1 ? [...new Set(hop.from)].map((id) => participantName(state.sessions[id])).join(", ") : null;
@@ -30,7 +29,6 @@ export function LinkHopBadge({ hop }: { hop: LinkHop }) {
       <button
         type="button"
         className="from-badge linked-hop-from"
-        style={from ? accentStyle(lookOf(from.provider)) : undefined}
         onClick={() => (from ? openSession(from.id) : openView(hop.linkId))}
         title={from ? "그 세션 열기" : "주고받은 내용 보기"}
       >
@@ -45,24 +43,9 @@ export function LinkHopBadge({ hop }: { hop: LinkHop }) {
   );
 }
 
-/** Another session's reply as this session received it: folded when long. */
-export function LinkRequestText({ text }: { text: string }) {
-  const long = text.length > 700 || text.split("\n").length > 14;
-  const [open, setOpen] = useState(false);
-  return (
-    <div className={`linked-request${long && !open ? " folded" : ""}`}>
-      <div className="user-bubble markdown">
-        <Markdown remarkPlugins={[remarkGfm]} components={DRAWN}>
-          {text}
-        </Markdown>
-      </div>
-      {long ? (
-        <button type="button" className="link linked-request-toggle" onClick={() => setOpen(!open)}>
-          {open ? "접기" : "받은 답 전체 보기"}
-        </button>
-      ) : null}
-    </div>
-  );
+/** Another session's reply as this session received it: folded when long, like a long request. */
+export function LinkRequestText({ text, reveal = 0 }: { text: string; reveal?: number }) {
+  return <RequestText text={text} received reveal={reveal} />;
 }
 
 /** Where a link ended, in each participant's conversation: rounds, why, how long. */
@@ -98,7 +81,6 @@ const STATUS_NOTE: Record<LinkTurn["status"], string | null> = { running: "답�
 /** "주고받은 내용": the goal, then each turn of every participant in the order handed over. */
 export function LinkView({ api, linkId, inDesktop, onClose }: { api: Api; linkId: string; inDesktop: boolean; onClose: () => void }) {
   const links = useLinks();
-  const { lookOf } = useAppearance();
   const link: SessionLink | undefined = links.state.links[linkId];
   const [turns, setTurns] = useState<LinkTurn[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -135,7 +117,7 @@ export function LinkView({ api, linkId, inDesktop, onClose }: { api: Api; linkId
             <h2>주고받은 내용</h2>
             <div className="linked-view-meta">
               {names.map((session, index) => (
-                <span key={link.participants[index]} className="linked-view-who" style={session ? accentStyle(lookOf(session.provider)) : undefined}>
+                <span key={link.participants[index]} className="linked-view-who">
                   {session ? <EngineMark provider={session.provider} size={13} /> : null}
                   {participantName(session)}
                   {index < names.length - 1 ? <span className="muted"> ⇄ </span> : null}
@@ -157,7 +139,7 @@ export function LinkView({ api, linkId, inDesktop, onClose }: { api: Api; linkId
               <span className="linked-turn-no">목표</span> 나 · {clock(link.startedAt)}
             </div>
             <div className="markdown">
-              <Markdown remarkPlugins={[remarkGfm]} components={DRAWN}>
+              <Markdown remarkPlugins={REMARK_BASE} components={DRAWN}>
                 {link.goal}
               </Markdown>
             </div>
@@ -165,7 +147,7 @@ export function LinkView({ api, linkId, inDesktop, onClose }: { api: Api; linkId
           {(turns ?? []).map((turn) => {
             const session = links.state.sessions[turn.sessionId];
             return (
-              <section key={turn.id} className={`linked-turn status-${turn.status}`} style={session ? accentStyle(lookOf(session.provider)) : undefined}>
+              <section key={turn.id} className={`linked-turn status-${turn.status}`}>
                 <div className="linked-turn-who">
                   <span className="linked-turn-no">{turn.hop}</span>
                   {session ? <EngineMark provider={session.provider} size={14} /> : null}
@@ -177,7 +159,7 @@ export function LinkView({ api, linkId, inDesktop, onClose }: { api: Api; linkId
                 </div>
                 {turn.reply ? (
                   <div className="markdown">
-                    <Markdown remarkPlugins={[remarkGfm]} components={DRAWN}>
+                    <Markdown remarkPlugins={REMARK_BASE} components={DRAWN}>
                       {turn.reply}
                     </Markdown>
                   </div>

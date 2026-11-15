@@ -32,7 +32,7 @@ export function HwpxView({ api, artifact, revision }: { api: Api; artifact: Arti
     <div className="hwpx-view">
       <div className="doc-tools">
         <span className="muted">
-          {pages ? `${pages.length}쪽 · r${revision}` : error ? "미리보기 없음" : "쪽 그리는 중…"} · 이음 한글
+          {pages ? `${pages.length}쪽, ${revision}판` : error ? "쪽을 그리지 못했습니다" : "쪽을 그리는 중"}
         </span>
       </div>
       <div className="hwpx-stage">

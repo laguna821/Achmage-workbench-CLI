@@ -101,7 +101,7 @@ async function flow(provider: Provider) {
     await page.waitForTimeout(800);
     const later = await scroll(page);
     pass("마우스 휠로 올리면 그 자리에 머묾(맨 아래로 끌려가지 않음)", later.distance > 200 && Math.abs(later.top - lifted.top) < 2, `top ${lifted.top}→${later.top}, distance=${later.distance}`);
-    const toBottom = await page.locator(".to-bottom").innerText().catch(() => "");
+    const toBottom = await page.locator(".jump-end").innerText().catch(() => "");
     pass("위로 올리면 '새 응답 보기' 단추", toBottom.includes("새 응답 보기"), toBottom);
 
     await page.waitForSelector(".turn-pin", { timeout: 5000 });
@@ -121,7 +121,7 @@ async function flow(provider: Provider) {
     await page.locator(".turn-pin-toggle").click();
     await page.waitForSelector(".turn-pin:not(.open)");
 
-    await page.locator(".to-bottom").click();
+    await page.locator(".jump-end").click();
     await page.waitForTimeout(900);
     const back = await scroll(page);
     await page.waitForTimeout(600);

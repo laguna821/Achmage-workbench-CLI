@@ -1,0 +1,29 @@
+/* The Doory attribution at launch (LaunchCredit.tsx; vendor/doory/LICENSE clause 2): one banner line at
+   the foot of the work area — quiet ink on the work's own surface, one hairline above it, the lead
+   "디자인 편집기" then the three items. Under the panes it takes real room (the panes' margin is the
+   line's measured height), so nothing in the work is covered; on the first run it is the setup panel's last row. */
+
+.launch-credit {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  min-height: var(--target);
+  padding: var(--space-3xs) var(--space-2xs) var(--space-3xs) var(--space-md);
+  border-top: 1px solid var(--chrome-line);
+  background: var(--chrome-surface);
+  color: var(--chrome-text);
+  font: 400 var(--text-xs)/1.4 var(--font-ui);
+}
+.launch-credit-lead { flex: 0 0 auto; font-weight: 600; }
+.launch-credit-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.launch-credit-text a { color: var(--color-teal-ink); text-decoration: underline; text-underline-offset: 2px; }
+.launch-credit-text a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--radius-well); }
+.launch-credit-close { flex: 0 0 auto; }
+
+/* Under the panes: laid in the margin the panes leave for it. */
+.panes > .launch-credit { position: absolute; top: 100%; left: 0; right: 0; z-index: 1; }
+.body > .panes.recursive:has(> .launch-credit) { margin-bottom: var(--launch-credit-h, var(--target)); }
+
+/* On the first run: the centred panel's last row, under the steps and the keys (Onboarding.tsx .onboarding-foot). */
+
+@media (pointer: coarse) { .launch-credit { min-height: 44px; } }

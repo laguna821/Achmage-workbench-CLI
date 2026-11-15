@@ -1,0 +1,31 @@
+/* The Markdown editor only (chrome.ts adds it for the markdown format). Ieum's Markdown ribbon has no menu
+   tabs, so its quick row (저장, 다른 이름으로 저장, 실행 취소, 다시 실행, 찾기, 자동 저장) stood alone as a band
+   above the toolbar. Here it is the toolbar's first group, in two short lines, with a hairline after it:
+   one band under the document's head. Same controls, same order (the keyboard meets them as before).
+   Folded (리본 접기), the quick row is the band again, as in the editor. */
+/* Only where the editor is wide enough (1000 px): the quick group takes about 190 px of the toolbar, which
+   scrolls sideways when it does not fit; in a narrower editor the quick row stays a row of its own so the
+   toolbar keeps its width. */
+@media (min-width: 1000px) {
+  __WB_ROOT__ .ribbon.ribbon-collapsible:not(.ribbon-collapsed) { display: flex; align-items: stretch; }
+  __WB_ROOT__ .ribbon.ribbon-collapsible:not(.ribbon-collapsed) > .ribbon-tabs {
+    flex: 0 0 auto;
+    display: grid;
+    /* line 1: 저장, 다른 이름으로 저장; line 2: 실행 취소, 다시 실행, 찾기, 자동 저장 */
+    grid-template-columns: 30px 30px 30px auto;
+    grid-auto-rows: 30px;
+    align-content: center;
+    align-items: center;
+    gap: 4px 2px;
+    min-height: 0;
+    padding: 6px 8px 6px 12px;
+    border-inline-end: 1px solid var(--wb-ui-line);
+  }
+  __WB_ROOT__ .ribbon.ribbon-collapsible:not(.ribbon-collapsed) > .ribbon-tabs > .qa-save-as { grid-column: 2 / span 3; justify-self: start; }
+  __WB_ROOT__ .ribbon.ribbon-collapsible:not(.ribbon-collapsed) > .ribbon-tabs > .autosave-toggle { margin-inline: 6px 0; }
+  __WB_ROOT__ .ribbon.ribbon-collapsible:not(.ribbon-collapsed) > .ribbon-body { flex: 1 1 auto; min-width: 0; }
+}
+__WB_ROOT__ .ribbon .autosave-text { font-size: var(--wb-ui-text-sm); color: var(--wb-ui-muted); }
+
+/* 형광펜 (highlight): a grey marker under the letters in the one ink, not a yellow block among ink icons. */
+__WB_ROOT__ .ribbon .rb-btn mark { background: color-mix(in srgb, var(--wb-ui-text) 16%, transparent); color: inherit; }

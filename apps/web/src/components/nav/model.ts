@@ -1,16 +1,28 @@
-import type { Folder, NavLayout, NavSectionId, NavSelection, NavShortcut, NavSort, NavSortKey, ProjectStage, ProjectSummary, Session, Work } from "@workbench/contracts";
-import { isUnseen } from "@workbench/contracts";
+import type { Artifact, Folder, NavLayout, NavSectionId, NavSelection, NavShortcut, NavSort, NavSortKey, ProjectStage, ProjectSummary, Session, Work } from "@workbench/contracts";
+import { groupState, leadState, rowState, type RowStateInfo } from "../../row-state.ts";
 import { projectMatcher, queryProject } from "../../project-query.ts";
 import type { State } from "../../state.ts";
-import { folderHidden, workHidden } from "../../tree.ts";
+import { folderHidden, workHidden, workTreeRows, type Row, type SortMode } from "../../tree.ts";
+import { DIVIDER, MIN_PANE } from "../../panes.ts";
 
+// N1 (the owner's navigation, 2026-11-14): a deep-navy rail of destinations and ONE white list
+// column with two levels: every project in its folders (level 1), and inside one project its note,
+// 대화 · 문서 · 웹 (level 2). The three old layouts (두 칸 · 위아래 · 한 칸) collapse into it; their
+// stored preferences are read and kept (a `layout`, widths, a selected folder or tag, folds, sorts).
+//
 // The navigator as plain data (no React): the preferences it keeps, the projects a selection lists
 // in which order and under which group heads, folder counts, the tag tree and the shortcuts.
 // Notebook Navigator's rules where they apply: a folder lists its own projects, or those of its
 // subfolders too ("하위 포함"); pinned ones come first; dates group into 오늘·어제·이번 주….
 
-/** The desktop compact breakpoint; advanced layouts remain an explicit choice. */
-export const WIDE_WINDOW = 744;
+/** At this window width and below the sidebar lies over the work (App.tsx): never two panes there. */
+export const COMPACT_WINDOW = 959;
+/** The gap the work surface keeps from the window's right edge (panes.css). */
+export const FRAME_GAP = 8;
+/** The room the automatic choice leaves the work beside two navigator panes: two work panes side by side. */
+export const ROOMY = MIN_PANE * 2 + DIVIDER;
+/** The one-column sidebar (the tree, and the stacked panes): its width is the app's `sidebarWidth`. */
+export const SIDE_WIDTH = { min: 232, max: 480, initial: 288 };
 export const NAV_WIDTH = { min: 168, max: 360, initial: 216 };
 export const LIST_WIDTH = { min: 240, max: 520, initial: 300 };
 export const NAV_HEIGHT = { min: 0.15, max: 0.8, initial: 0.42 };
@@ -30,11 +42,24 @@ export type NavPrefs = {
   groupSub: "folder" | "date";
   sections: Partial<Record<NavSectionId, boolean>>;
   openTags: string[];
+  /** N1: what the list column shows. */
+  rail: RailDest;
+  /** N1: level 1 (every project) or level 2 (inside `project`). */
+  level: "projects" | "project";
+  project: string | null;
+  /** N1: level 1 as the folder tree, or one list grouped by the sort. */
+  groupBy: "folder" | "list";
+  /** N1: the tab strip shows every project's tabs. */
+  tabsAll: boolean;
 };
+
+/** The rail's destinations that the list column shows (지금 is a page, 찾기 the search). */
+export type RailDest = "projects" | "docs" | "activity" | "vault";
+export const RAIL_DESTS: RailDest[] = ["projects", "docs", "activity", "vault"];
 
 export const DEFAULT_SORT: NavSort = { key: "activity", desc: true };
 const SORT_KEYS: NavSortKey[] = ["activity", "created", "name", "due", "stage"];
-const SECTIONS: NavSectionId[] = ["now", "shortcuts", "projects", "tags", "views"];
+const SECTIONS: NavSectionId[] = ["now", "shortcuts", "projects", "tags", "views", "usage", "history", "chats", "docs", "web"];
 
 const record = (value: unknown): Record<string, unknown> => (value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {});
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -73,16 +98,66 @@ export function readNavigator(value: unknown): NavPrefs {
     sortDefault: readSort(raw.sortDefault) ?? DEFAULT_SORT,
     sortByFolder,
     includeSub: raw.includeSub !== false,
-    density: raw.density === "compact" ? "compact" : "standard",
+    // N1: one row per project unless the person asked for the detailed rows ("자세히", the old standard).
+    density: raw.density === "standard" ? "standard" : "compact",
     previewLines: lines === 0 || lines === 1 || lines === 2 || lines === 3 ? lines : 1,
     groupSub: raw.groupSub === "folder" ? "folder" : "date",
     sections,
     openTags: Array.isArray(raw.openTags) ? raw.openTags.filter((tag): tag is string => typeof tag === "string") : [],
+    rail: RAIL_DESTS.includes(raw.rail as RailDest) ? (raw.rail as RailDest) : "projects",
+    level: raw.level === "project" && typeof raw.project === "string" && raw.project ? "project" : "projects",
+    project: typeof raw.project === "string" && raw.project ? raw.project : null,
+    groupBy: raw.groupBy === "list" ? "list" : "folder",
+    tabsAll: raw.tabsAll === true,
   };
 }
 
-/** One project navigator by default. Saved advanced layouts remain available. */
-export const layoutFor = (prefs: Pick<NavPrefs, "layout">, _windowWidth: number): NavLayout => prefs.layout ?? "tree";
+/** Level 1's filter: a tag or "태그 없음" chosen (from the tag section, a shortcut, or an old selection); a folder or the root filter nothing. */
+export const filterOf = (selection: NavSelection): Extract<NavSelection, { kind: "tag" } | { kind: "untagged" }> | null => (selection.kind === "tag" || selection.kind === "untagged" ? selection : null);
+
+/** Two navigator panes side by side: both, and the hairline between them. */
+export const dualWidth = (prefs: Pick<NavPrefs, "navWidth" | "listWidth">) => prefs.navWidth + prefs.listWidth + 1;
+
+/** What a window leaves the work panes beside a sidebar this wide. */
+export const roomBeside = (windowWidth: number, sidebar: number) => windowWidth - sidebar - FRAME_GAP;
+
+/** How far below its threshold the automatic choice keeps two panes that are already drawn. */
+export const HOLD = 24;
+
+/**
+ * The layout drawn. Nothing stored: two panes where two work panes would still fit beside them,
+ * stacked on a narrower window; two panes already drawn (`was`) hold on for `HOLD` px below that,
+ * so a window's edge dragged across the threshold does not swap the sidebar on every pixel. A
+ * stored choice stands; chosen two panes are drawn stacked only where the work panes could not
+ * keep their least width (`paneMinimum`, panes.ts `minimumSize`) — which nothing ever goes below.
+ */
+export function layoutFor(prefs: Pick<NavPrefs, "layout" | "navWidth" | "listWidth">, windowWidth: number, paneMinimum = MIN_PANE, was: NavLayout | null = null): NavLayout {
+  if (prefs.layout === "tree" || prefs.layout === "stacked") return prefs.layout;
+  if (windowWidth <= COMPACT_WINDOW) return "stacked";
+  const roomy = Math.max(paneMinimum, ROOMY);
+  const needed = prefs.layout === "dual" ? paneMinimum : was === "dual" ? Math.max(paneMinimum, roomy - HOLD) : roomy;
+  return roomBeside(windowWidth, dualWidth(prefs)) >= needed ? "dual" : "stacked";
+}
+
+/** The sidebar's width in a layout (`single`: the one-column width the app keeps). */
+export const sidebarWidthFor = (layout: NavLayout, prefs: Pick<NavPrefs, "navWidth" | "listWidth">, single: number) => (layout === "dual" ? dualWidth(prefs) : single);
+
+export const LAYOUTS: { id: NavLayout; label: string; icon: "columns" | "rows" | "list" }[] = [
+  { id: "dual", label: "두 칸", icon: "columns" },
+  { id: "stacked", label: "위아래", icon: "rows" },
+  { id: "tree", label: "한 칸 (트리)", icon: "list" },
+];
+
+export type LayoutChoice = { id: NavLayout | "auto"; label: string; icon: "columns" | "rows" | "list" | "sidebar"; checked: boolean; hint?: string };
+
+/** The layouts as the menus offer them: the stored one checked, else "창 너비에 맞추기" with what it gives now. */
+export function layoutChoices(stored: NavLayout | null, drawn: NavLayout): LayoutChoice[] {
+  const now = LAYOUTS.find((entry) => entry.id === drawn)!.label;
+  return [
+    ...LAYOUTS.map((entry) => ({ ...entry, checked: stored === entry.id, ...(stored === entry.id && drawn !== entry.id ? { hint: `지금은 ${now}` } : {}) })),
+    { id: "auto", label: "창 너비에 맞추기", icon: "sidebar", checked: stored === null, ...(stored === null ? { hint: `지금 ${now}` } : {}) },
+  ];
+}
 
 /** The key a selection keeps its own sort under (Notebook Navigator sorts per folder). */
 export const selectionKey = (selection: NavSelection) => (selection.kind === "folder" ? selection.id : selection.kind === "tag" ? `tag:${selection.tag}` : selection.kind);
@@ -107,6 +182,8 @@ export type ListProject = {
   due: number | null;
   /** The note's first words, else the start of the latest reply. */
   preview: string | null;
+  /** Conversations that need the person (확인 필요 + 실패): the number pill. */
+  needs: number;
   attention: boolean;
   busy: boolean;
   unseen: boolean;
@@ -123,6 +200,12 @@ export function dayOf(value: string | undefined): number | null {
 }
 
 export const tagsOf = (work: Work, summary: ProjectSummary | undefined) => (summary?.tags.length ? summary.tags : (work.tags ?? [])).map((tag) => tag.replace(/^#/, "").trim()).filter(Boolean);
+
+/** A project's marks by its conversations' one state: how many need the person (확인 필요 + 실패), at work, unseen. */
+function marksOf(sessions: Session[], visibleSessionId: string | null) {
+  const marks = groupState(sessions, visibleSessionId);
+  return { needs: marks.needs, attention: marks.needs > 0, busy: marks.running > 0, unseen: marks.unseen > 0 };
+}
 
 /** Every project not in the archive (nor under an archived folder), with what lists show of it. */
 export function projectsOf(state: Pick<State, "works" | "sessions" | "folders">, summaries: Map<string, ProjectSummary>, visibleSessionId: string | null = null): ListProject[] {
@@ -150,9 +233,7 @@ export function projectsOf(state: Pick<State, "works" | "sessions" | "folders">,
       stage: summary?.stage ?? null,
       due: dayOf(due),
       preview: summary?.preview ?? latest?.preview ?? null,
-      attention: sessions.some((session) => session.status === "awaitingApproval"),
-      busy: sessions.some((session) => session.status === "starting" || session.status === "running" || session.status === "interrupting"),
-      unseen: sessions.some((session) => session.id !== visibleSessionId && isUnseen(session)),
+      ...marksOf(sessions, visibleSessionId),
     });
   }
   return out;
@@ -385,7 +466,7 @@ export function folderCounts(projects: ListProject[], folders: Record<string, Fo
 }
 
 /** "3 · 9" (this folder · below), "3", or nothing. */
-export const countText = (count: { own: number; below: number } | undefined) => (!count || (!count.own && !count.below) ? "" : count.below ? `${count.own} · ${count.below}` : String(count.own));
+export const countText = (count: { own: number; below: number } | undefined) => (!count || (!count.own && !count.below) ? "" : count.below ? `${count.own}/${count.below}` : String(count.own));
 
 export type TagNode = { tag: string; name: string; count: number; children: TagNode[] };
 
@@ -465,4 +546,154 @@ export function moveShortcut(list: NavShortcut[], from: number, to: number): Nav
   const rest = list.filter((_, at) => at !== from);
   rest.splice(to > from ? to - 1 : to, 0, entry);
   return rest;
+}
+
+
+// ── N1: level 1 (every project in its folders) and level 2 (inside one project) ─────────────
+
+export type LevelOneRow =
+  | { type: "folder"; id: string; folder: Folder; depth: number; open: boolean; count: number; children: boolean }
+  | { type: "project"; id: string; project: ListProject; depth: number }
+  | { type: "group"; id: string; label: string; count: number };
+
+/** What a project holds, by kind (a document's AI belongs to its document): for the row's quiet count. */
+export function holdings(project: ListProject, docs: number) {
+  const web = project.sessions.filter((session) => session.pageAgent).length;
+  const chats = project.sessions.filter((session) => !session.pageAgent && !session.documentAgent).length;
+  return { chats, docs, web, total: chats + docs + web };
+}
+
+/** The one status of a project: the most pressing state of its conversations (row-state.ts). */
+export function projectTone(project: ListProject, visibleSessionId: string | null = null): RowStateInfo | null {
+  return leadState(project.sessions, (session) => rowState(session, { onScreen: session.id === visibleSessionId }))?.state ?? null;
+}
+
+const byManual = (a: ListProject, b: ListProject) => a.work.sort - b.work.sort || b.work.createdAt - a.work.createdAt;
+const orderBy = (mode: SortMode) => (a: ListProject, b: ListProject) =>
+  mode === "name" ? a.work.title.localeCompare(b.work.title, "ko") : mode === "recent" ? b.activity - a.activity || byManual(a, b) : byManual(a, b);
+
+export type LevelOneOptions = {
+  closedFolders: string[];
+  query: string;
+  filter: NavSelection;
+  sortMode: SortMode;
+  groupBy: "folder" | "list";
+  sort: NavSort;
+  stages: ProjectStage[];
+  now: number;
+  /** Projects a folded folder still shows (the current one, those needing the person). */
+  keep?: string[];
+};
+
+/**
+ * Level 1's rows: every folder (Obsidian-style, folding) with its projects inside, in the tree's
+ * order (직접 · 최근 · 이름), and the projects outside folders under "폴더 밖" last. A query or a tag
+ * narrows it: folders without a match drop out and those with one open; a folder whose name
+ * matches keeps all its projects. "list" groups one flat list by the sort instead (the old list).
+ */
+export function levelOneRows(projects: ListProject[], folders: Record<string, Folder>, options: LevelOneOptions): { rows: LevelOneRow[]; count: number } {
+  const filter = filterOf(options.filter);
+  const tagged = filter ? projects.filter((project) => (filter.kind === "tag" ? hasTag(project.tags, filter.tag) : project.tags.length === 0)) : projects;
+  if (options.groupBy === "list") {
+    const listed = listFor(tagged, { kind: "root" }, { includeSub: true, query: options.query, sort: options.sort, groupSub: "date", stages: options.stages, folders, now: options.now });
+    return {
+      count: listed.count,
+      rows: listed.entries.map((entry) => (entry.type === "group" ? { type: "group" as const, id: `group:${entry.key}`, label: entry.label, count: entry.count } : { type: "project" as const, id: entry.project.work.id, project: entry.project, depth: 0 })),
+    };
+  }
+  const text = options.query.trim();
+  const matcher = text ? projectMatcher(text) : null;
+  const folderHit = (folder: Folder) => Boolean(text) && !/[#:]/.test(text) && folder.name.toLocaleLowerCase("ko").includes(text.toLocaleLowerCase("ko"));
+  const tree = folderOrder(folders, null);
+  const parentOf = (id: string) => (folders[id]?.parentId && folders[folders[id]!.parentId!] ? folders[id]!.parentId : null);
+  const hitFolders = new Set<string>();
+  for (const { folder } of tree) {
+    for (let at: string | null = folder.id; at; at = parentOf(at)) if (folderHit(folders[at]!)) { hitFolders.add(folder.id); break; }
+  }
+  const shown = tagged.filter((project) => {
+    const at = folderOf(folders, project.work);
+    if (at && hitFolders.has(at)) return true;
+    return !matcher || matcher(queryProject(project.work, project.summary, folders));
+  });
+  const order = orderBy(options.sortMode);
+  const byFolder = new Map<string | null, ListProject[]>();
+  for (const project of shown) {
+    const at = folderOf(folders, project.work);
+    byFolder.set(at, [...(byFolder.get(at) ?? []), project]);
+  }
+  for (const list of byFolder.values()) list.sort(order);
+  // Projects in each folder and below it (what the folder row counts).
+  const below = new Map<string, number>();
+  for (const { folder } of [...tree].reverse()) {
+    const own = byFolder.get(folder.id)?.length ?? 0;
+    const kids = tree.filter((entry) => parentOf(entry.folder.id) === folder.id).reduce((sum, entry) => sum + (below.get(entry.folder.id) ?? 0), 0);
+    below.set(folder.id, own + kids);
+  }
+  const narrowing = Boolean(matcher || filter);
+  const closed = new Set(options.closedFolders);
+  const rows: LevelOneRow[] = [];
+  let hiddenUnder: number | null = null;
+  for (const { folder, depth } of tree) {
+    if (hiddenUnder !== null && depth > hiddenUnder) continue;
+    hiddenUnder = null;
+    const count = below.get(folder.id) ?? 0;
+    if (narrowing && !count && !hitFolders.has(folder.id)) {
+      hiddenUnder = depth;
+      continue;
+    }
+    const children = tree.some((entry) => parentOf(entry.folder.id) === folder.id) || Boolean(byFolder.get(folder.id)?.length);
+    const open = narrowing || !closed.has(folder.id);
+    rows.push({ type: "folder", id: folder.id, folder, depth, open, count, children });
+    if (!open) {
+      hiddenUnder = depth;
+      // A folded folder still shows its current project and those that need the person.
+      const keep = new Set(options.keep ?? []);
+      const within = (at: string | null): boolean => { for (let id = at, guard = 0; id && guard < 32; id = parentOf(id), guard += 1) if (id === folder.id) return true; return false; };
+      for (const project of shown) if (keep.has(project.work.id) && within(folderOf(folders, project.work))) rows.push({ type: "project", id: project.work.id, project, depth: depth + 1 });
+      continue;
+    }
+    for (const project of byFolder.get(folder.id) ?? []) rows.push({ type: "project", id: project.work.id, project, depth: depth + 1 });
+  }
+  // Projects in a folder come after that folder's subfolders in Obsidian; here they come first,
+  // right under their folder's name, so a folder's own projects never hide below its children.
+  const loose = byFolder.get(null) ?? [];
+  if (loose.length) {
+    if (tree.length) rows.push({ type: "group", id: "group:loose", label: "폴더 밖", count: loose.length });
+    for (const project of loose) rows.push({ type: "project", id: project.work.id, project, depth: 0 });
+  }
+  return { rows, count: shown.length };
+}
+
+/** Folder names from the top down to a project's folder ("강의 / 2026-2학기"), or "" outside folders. */
+export function folderPath(folders: Record<string, Folder>, folderId: string | null): string {
+  const names: string[] = [];
+  for (let at = folderId && folders[folderId] ? folderId : null, guard = 0; at && guard < 32; at = folders[at]?.parentId ?? null, guard += 1) names.unshift(folders[at]!.name);
+  return names.join(" / ");
+}
+
+export type InsideSections = {
+  chats: Extract<Row, { type: "session" }>[];
+  docs: Extract<Row, { type: "doc" }>[];
+  web: Extract<Row, { type: "session" }>[];
+};
+
+/** Level 2's three sections: 대화, 문서 (subpages under their page, each with its AI), 웹 — the tree's rows, drawn flat. */
+export function insideSections(state: Parameters<typeof workTreeRows>[0], work: Work, sessions?: Session[], docs?: Artifact[]): InsideSections {
+  const rows = workTreeRows(state, work, { closedFolders: [], openWorks: [work.id], closedWorks: [], openDocs: [work.id] }, null, -2, sessions, docs);
+  const out: InsideSections = { chats: [], docs: [], web: [] };
+  let kind: "chat" | "web" | "docs" | null = null;
+  for (const row of rows) {
+    if (row.type === "section") kind = row.kind ?? null;
+    else if (row.type === "docs") kind = "docs";
+    else if (row.type === "session") (kind === "web" ? out.web : out.chats).push(row);
+    else if (row.type === "doc") out.docs.push(row);
+  }
+  return out;
+}
+
+/** A document's kind as its file says it: "MD", "PPTX", "HWPX" (the extension), else the format. */
+export function docKind(name: string, format: string): string {
+  const ext = /\.([a-z0-9]{1,5})$/i.exec(name)?.[1];
+  if (ext) return ext.toUpperCase();
+  return format === "markdown" ? "MD" : format.toUpperCase().slice(0, 5);
 }

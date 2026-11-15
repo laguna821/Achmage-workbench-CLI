@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import type { Workspace } from "@workbench/contracts";
 import type { Api } from "../api.ts";
 import { Icon } from "./Icon.tsx";
+import { PathDetail } from "./SettingsSheet.tsx";
 import { restoreSurfaceFocus } from "./controls/menu-navigation.ts";
 import "./new-document.css";
 
@@ -24,12 +25,12 @@ export function NewDirectoryDialog({ api, workspace, onCreated, onClose }: {
   };
   return <dialog ref={dialog} className="new-document-dialog" aria-labelledby="new-directory-title" aria-busy={busy} onCancel={event => { if (busy) event.preventDefault(); else onClose(); }}>
     <form onSubmit={event => { event.preventDefault(); void create(); }}>
-      <header><h2 id="new-directory-title">프로젝트 안 새 폴더</h2><button type="button" className="icon-button" aria-label="새 폴더 닫기" disabled={busy} onClick={onClose}><Icon name="x" size={18} /></button></header>
-      <p className="muted">이 작업공간에 실제 폴더를 만듭니다.</p>
-      <div className="new-document-path"><strong>{workspace.label}</strong><div>{workspace.cwd}</div></div>
-      <label>폴더 상대 경로<input autoFocus value={path} disabled={busy} placeholder="자료" onChange={event => setPath(event.target.value)} /><small className="muted">상위 폴더는 이미 있어야 합니다. 같은 경로는 덮어쓰지 않습니다.</small></label>
+      <header><h2 id="new-directory-title">프로젝트 폴더 안에 새 폴더</h2><button type="button" className="icon-button" aria-label="새 폴더 닫기" disabled={busy} onClick={onClose}><Icon name="x" size={18} /></button></header>
+      <p className="muted">「{workspace.label}」 폴더 안에 새 폴더를 만듭니다.</p>
+      <PathDetail value={workspace.cwd} label="어느 폴더인지 보기" />
+      <label>새 폴더 이름<input autoFocus value={path} disabled={busy} placeholder="자료" onChange={event => setPath(event.target.value)} /><small className="muted">자료/1주차처럼 안쪽 폴더도 적을 수 있습니다. 바깥 폴더는 이미 있어야 하고, 같은 이름은 덮어쓰지 않습니다.</small></label>
       {error ? <p role="alert">{error}</p> : null}
-      <footer><button type="button" className="ghost-button" disabled={busy} onClick={onClose}>취소</button><button type="submit" className="button primary" disabled={busy || !path.trim()}>{busy ? "만드는 중…" : "폴더 만들기"}</button></footer>
+      <footer><button type="button" className="button" disabled={busy} onClick={onClose}>취소</button><button aria-busy={busy ? true : undefined} type="submit" className="button primary" disabled={busy || !path.trim()}>{busy ? "만드는 중…" : "폴더 만들기"}</button></footer>
     </form>
   </dialog>;
 }

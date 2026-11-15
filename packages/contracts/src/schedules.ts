@@ -16,6 +16,12 @@ export type Schedule = {
   createdAt: number;
   policy?: SchedulePolicy;
   runCount?: number;
+  /** Made by the person (the PC's schedule form): its text is their draft, shown as typed (R6); otherwise hidden. */
+  draft?: boolean;
+  /** Made from a paired messenger chat: its request carries this origin, so the result goes back to that chat. */
+  origin?: import("./channels.ts").RequestOrigin;
+  /** Turned off because the chat that made it was locked or disconnected (shown at the PC; cleared when turned on). */
+  offReason?: "locked" | "disconnected";
 };
 
 export type SchedulePolicy = {
@@ -25,7 +31,7 @@ export type SchedulePolicy = {
   expiresAt: number | null;
   maxRuns: number | null;
 };
-export type CreateScheduleRequest = { sessionId: string; text: string; when: ScheduleWhen; policy?: Partial<SchedulePolicy> };
+export type CreateScheduleRequest = { sessionId: string; text: string; when: ScheduleWhen; policy?: Partial<SchedulePolicy>; draft?: boolean };
 export type ScheduleOccurrence = {
   id: string; scheduleId: string; dueAt: number; admittedAt: number; updatedAt: number;
   commandId: string; status: "accepted" | "submitted" | "rejected" | "outcome_unknown" | "skipped";

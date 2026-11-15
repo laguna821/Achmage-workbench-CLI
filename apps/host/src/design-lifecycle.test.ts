@@ -1,16 +1,17 @@
 import { afterEach, expect, it } from "vitest";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+
 import { join } from "node:path";
 import { EventBus } from "./bus.ts";
 import { SessionManager } from "./sessions.ts";
 import { Store } from "./store.ts";
 import { blankDesign } from "./design.ts";
+import { tempDir } from "./test-temp.ts";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0)) await cleanup(); });
 function setup() {
-  const dir = mkdtempSync(join(tmpdir(), "wb-design-lifecycle-"));
+  const dir = tempDir("wb-design-lifecycle-");
   const store = new Store(join(dir, "state.sqlite"));
   const options = { hostId: "h", hostLabel: "test", managedWorksDir: join(dir, "works"), dataDir: dir };
   const manager = new SessionManager(store, new EventBus(), options);

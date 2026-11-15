@@ -1,7 +1,7 @@
-import { mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { tmpdir } from "node:os";
+
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { CalendarEventsView, CalendarFeedView, Session, Timeline } from "@workbench/contracts";
@@ -12,6 +12,7 @@ import { createHttpServer } from "./http.ts";
 import { SessionManager } from "./sessions.ts";
 import { Store } from "./store.ts";
 import { buildTimeline } from "./timeline.ts";
+import { tempDir } from "./test-temp.ts";
 
 // Calendar feeds: the secret address stays in a 0600 file and never comes back; copies are
 // fetched at most every 10 minutes (and when asked); a failed fetch keeps the last copy and says why.
@@ -76,7 +77,7 @@ async function standIn(): Promise<Stand> {
 const feedPath = `/calendar/ical/laguna%40example.com/${SECRET}/basic.ics`;
 
 function setup() {
-  const dir = mkdtempSync(join(tmpdir(), "wb-calendar-"));
+  const dir = tempDir("wb-calendar-");
   let now = seoul(2026, 10, 29, 9);
   const feeds = new CalendarFeeds({ dataDir: dir, now: () => now });
   return { dir, feeds, advance: (ms: number) => (now += ms) };
@@ -197,7 +198,7 @@ describe("feeds", () => {
 describe("routes", () => {
   it("answer with views only, and give the timeline of a window (the old call still works)", async () => {
     const stand = await standIn();
-    const dir = mkdtempSync(join(tmpdir(), "wb-calendar-routes-"));
+    const dir = tempDir("wb-calendar-routes-");
     const store = new Store(join(dir, "state.sqlite"));
     const manager = new SessionManager(store, new EventBus(), { hostId: "h", hostLabel: "노트북", managedWorksDir: join(dir, "works"), dataDir: dir });
     store.saveSession({ id: "s", workId: "w", provider: "codex" } as Session);

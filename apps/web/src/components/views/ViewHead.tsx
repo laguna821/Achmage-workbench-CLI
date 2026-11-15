@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { failure } from "../../top-notice.ts";
 import {
   LAYOUT_LABEL,
   VIEW_LAYOUTS,
@@ -20,9 +21,9 @@ import { ColorPick, groupStyle, paintGroup } from "./parts.tsx";
 import { BaseTransferDialog } from "./BaseTransferDialog.tsx";
 
 // The head of a home mode: its views as tabs (like the view list of a .base file; "+" adds one,
-// a right click renames, duplicates, deletes or resets it) and a calm row of small popovers for the
-// view shown — 묶기 · 하위 묶기 · 정렬 · 거르기 · 속성 · 모양 (흐름: 거르기 · 색 기준). Every change is
-// saved to the view at once, as Notion does.
+// a right click renames, duplicates, deletes or resets it) and ONE "보기" key that unfolds the
+// view's tools — 묶기, 하위 묶기, 정렬, 거르기, 속성, 모양 (흐름: 거르기, 색 기준) — as a strip of
+// small popovers under the tabs. Every change is saved to the view at once, as Notion does.
 
 export type KeyChoice = { key: string; label: string; dated?: boolean };
 
@@ -66,7 +67,7 @@ export function ViewTabs({ mode, views, onViews, className = "" }: { mode: HomeV
   const update = (id: string, change: (view: HomeView) => HomeView) => onViews({ ...views, views: list.map((view) => (view.id === id ? change(view) : view)) });
   const add = (view: HomeView) => {
     setAdding(false);
-    if (full) return pkm?.onToast(`보기는 모드마다 ${VIEW_LIMITS.views}개까지입니다.`);
+    if (full) return pkm?.onToast(failure(`보기는 모드마다 ${VIEW_LIMITS.views}개까지입니다.`));
     onViews({ views: [...list, view], current: view.id });
   };
   const remove = (id: string) => {
@@ -198,7 +199,8 @@ function Tool({ label, value, on, children, wide = false }: { label: string; val
         {value ? <span className="view-tool-value">{value}</span> : null}
         <Icon name="chevronDown" size={12} />
       </button>
-      <Popover open={open} onClose={close} align="right" className={`view-pop${wide ? " wide" : ""}`}>
+      {/* The strip runs from the left edge, so each tool's popover opens under it to the right. */}
+      <Popover open={open} onClose={close} className={`view-pop${wide ? " wide" : ""}`}>
         {children(close)}
       </Popover>
     </div>
@@ -332,6 +334,10 @@ export function ViewTools({
   const [filtering, setFiltering] = useState(Boolean(view.filter));
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => setFiltering((current) => current || Boolean(view.filter)), [view.filter]);
+  // The tools fold behind one "보기" key (Hallmark U6): opened, they lie in a ruled strip under the
+  // tabs; a view that filters opens with the strip shown, so the words it filters by stay in sight.
+  const [unfolded, setUnfolded] = useState(Boolean(view.filter));
+  const panel = useId();
   const groupLabel = groupKeys.find((entry) => entry.key === view.group?.key)?.label;
   const subLabel = groupKeys.find((entry) => entry.key === view.subgroup?.key)?.label;
   const sortLabel = sortKeys.find((entry) => entry.key === view.sort?.key)?.label;
@@ -342,8 +348,24 @@ export function ViewTools({
   const nesting = view.layout !== "graph" && view.layout !== "calendar" && Boolean(view.group);
   const fieldsShown = Boolean(fields?.length) && view.layout !== "graph" && view.layout !== "calendar";
 
+  const set = [view.baseFilters !== undefined, Boolean(view.group), Boolean(view.subgroup), Boolean(view.sort), Boolean(view.filter), Boolean(view.fields), colorKeys ? (view.colorBy ?? "engine") !== "engine" : view.look.border || view.look.heading || view.look.tint > 0].filter(Boolean).length;
   return (
-    <div className="view-tools" role="toolbar" aria-label="보기 설정">
+    <>
+      <button
+        type="button"
+        className={`select-button view-fold${set ? " set" : ""}`}
+        aria-label="보기 설정"
+        aria-expanded={unfolded}
+        aria-controls={panel}
+        title={set ? `보기 설정 ${set}개 적용 중` : "묶기, 정렬, 거르기, 모양"}
+        onClick={() => setUnfolded(!unfolded)}
+      >
+        <Icon name="sort" size={14} />
+        보기
+        {set ? <span className="view-fold-count">{set}</span> : null}
+        <Icon name={unfolded ? "chevronUp" : "chevronDown"} size={12} />
+      </button>
+      {unfolded ? <ToolsPanel id={panel} onClose={() => setUnfolded(false)}>
       {view.baseFilters !== undefined ? <Tool label="Bases 필터" on wide>{() => <><pre className="base-filter-preview">{JSON.stringify(view.baseFilters, null, 2)}</pre><button type="button" className="button small" onClick={() => { const next = { ...view }; delete next.baseFilters; onView(next); }}>가져온 필터 해제</button></>}</Tool> : null}
       {filtering ? (
         <input
@@ -488,6 +510,27 @@ export function ViewTools({
           )}
         </Tool>
       )}
+      </ToolsPanel> : null}
+    </>
+  );
+}
+
+/** The unfolded strip of tools; Escape (when no menu inside takes it) folds it back onto its key. */
+function ToolsPanel({ id, onClose, children }: { id: string; onClose: () => void; children: ReactNode }) {
+  return (
+    <div
+      id={id}
+      className="view-tools"
+      role="toolbar"
+      aria-label="보기 설정"
+      onKeyDown={(event) => {
+        if (event.key !== "Escape" || event.defaultPrevented || event.target instanceof HTMLInputElement) return;
+        event.preventDefault();
+        onClose();
+        document.querySelector<HTMLElement>(`[aria-controls="${id}"]`)?.focus();
+      }}
+    >
+      {children}
     </div>
   );
 }

@@ -11,6 +11,7 @@ import { FormatBadge } from "./DocCards.tsx";
 import { diagramComponents } from "./Diagram.tsx";
 import { Icon } from "./Icon.tsx";
 import { HtmlView } from "./docs/HtmlView.tsx";
+import { restoreSurfaceFocus } from "./controls/menu-navigation.ts";
 import "../styles/views.css";
 
 const DRAWN = obsidianComponents(diagramComponents());
@@ -77,6 +78,14 @@ export default function Reader({ api, state, artifact, start, onClose }: { api: 
   const flow = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const placed = useRef(false);
+  // A modal reader takes the focus (itself: no ring drawn on a key nobody chose) and gives it back to what opened it.
+  const surface = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const opener = document.activeElement;
+    surface.current?.focus({ preventScroll: true });
+    const element = surface.current;
+    return () => restoreSurfaceFocus(opener, element);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -140,7 +149,7 @@ export default function Reader({ api, state, artifact, start, onClose }: { api: 
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
       if (event.key === "Escape") {
         // Only the reader closes: nothing under it (an approval's Esc) hears this one.
         event.preventDefault();
@@ -151,6 +160,11 @@ export default function Reader({ api, state, artifact, start, onClose }: { api: 
       const forward = event.key === "ArrowRight" || event.key === "PageDown" || (event.key === " " && !event.shiftKey);
       const back = event.key === "ArrowLeft" || event.key === "PageUp" || (event.key === " " && event.shiftKey);
       if (!forward && !back && event.key !== "Home" && event.key !== "End") return;
+      // A field keeps what is typed in it, and a key keeps Space (it presses the key) — inside the reader or
+      // anywhere else (tech review 4); the arrows on the reader's own keys still turn its pages.
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest("input, textarea, select, [contenteditable=''], [contenteditable='true'], [role=textbox]")) return;
+      if (event.key === " " && target?.closest("button, a[href], [role=button]")) return;
       event.preventDefault();
       event.stopPropagation();
       if (event.key === "Home") go(0);
@@ -163,11 +177,20 @@ export default function Reader({ api, state, artifact, start, onClose }: { api: 
 
   const paged = content?.kind === "flow" || content?.kind === "pages";
   return (
-    <div className="reader" role="dialog" aria-modal="true" aria-label={`읽기 · ${artifact.name}`}>
+    <div ref={surface} tabIndex={-1} className="reader" role="dialog" aria-modal="true" aria-label={`${artifact.name} 읽기`} onKeyDown={(event) => {
+      // aria-modal: Tab stays inside the reader (tech review 4).
+      if (event.key !== "Tab") return;
+      const keys = [...(surface.current?.querySelectorAll<HTMLElement>("button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex='0']") ?? [])];
+      const first = keys[0], last = keys.at(-1);
+      if (!first || !last) { event.preventDefault(); return; }
+      const at = document.activeElement;
+      if (event.shiftKey && (at === first || at === surface.current)) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && at === last) { event.preventDefault(); first.focus(); }
+    }}>
       <header className="reader-bar">
         <FormatBadge format={artifact.format} />
         <span className="reader-name">{artifact.name}</span>
-        <span className="muted">r{artifact.revision}</span>
+        <span className="muted">{artifact.revision}판</span>
         <span className="reader-spacer" />
         {paged ? (
           <>

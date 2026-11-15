@@ -122,7 +122,7 @@ export function WorkspaceServices({ api, workspace, onOpen, onClose, openExterna
       <label>실행 명령<textarea value={draft.command} maxLength={8192} rows={3} disabled={busy || !!pending} placeholder="실행할 명령을 입력하세요" onChange={event => change({ command: event.target.value })} /></label>
       <label>포트 · 선택<input inputMode="numeric" value={draft.port} disabled={busy || !!pending} placeholder="예: 3000" onChange={event => change({ port: event.target.value })} /></label>
       <p className="muted">지정한 포트를 PORT 환경 변수로 전달합니다. 도구에 포트 옵션이 필요하면 실행 명령에도 넣어 주세요.</p>
-      {!pending ? <button className="button primary" type="submit" disabled={busy || !result?.available || unavailable || !draft.label.trim() || !draft.command.trim()}>{busy ? "요청 처리 중…" : "명령 실행"}</button> : null}
+      {!pending ? <button aria-busy={busy ? true : undefined} className="button primary" type="submit" disabled={busy || !result?.available || unavailable || !draft.label.trim() || !draft.command.trim()}>{busy ? "요청 처리 중…" : "명령 실행"}</button> : null}
     </form>
     {pending ? <div className="workspace-service-pending" role="status"><strong>{busy ? "실행 요청 확인 중…" : "실행 결과 확인 필요"}</strong><p>응답이 확인되기 전까지 입력한 명령을 유지합니다. 기록을 확인한 뒤 같은 요청만 다시 보낼 수 있습니다.</p><div className="workspace-service-actions"><button type="button" className="button small" disabled={busy} onClick={() => void run(async () => { await readList(); })}>실행 기록 확인</button><button type="button" className="button small" disabled={busy || unavailable} onClick={() => void retry()}>같은 요청 다시 보내기</button></div></div> : null}
     {unavailable ? <p className="muted">보관되거나 제거된 작업공간입니다. 기존 출력 확인과 실행 종료를 할 수 있습니다.</p> : null}

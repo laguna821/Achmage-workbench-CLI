@@ -2,12 +2,12 @@
 // Browser check of ① 들어가는 길 (docs/design/프로젝트-노트-설계.md §3, §13), for Codex and Claude
 // alike, against a real gateway driving stand-in engines (no model):
 // - the home input's project chip: "새 프로젝트" by default and without a folder a new project as
-//   before; a folder that already has a live project defaults to it ("→ ‹작업›에 새 세션") and the
+//   before; a folder that already has a live project defaults to it ("→ ‹작업›에 새 대화") and the
 //   request becomes a new session there; "새 프로젝트" picked by hand makes one in that folder; a
 //   project found by name in the chip gets the new session;
 // - opening a work (its sidebar row) lands on the session that needs the user: waiting for an
 //   approval, then a failed turn, then an unseen reply, then the one looked at last;
-// - "새 프로젝트 폴더 위치" in the settings: the next project started without a folder is made under
+// - 설정 › 일반 › "프로젝트 기본 폴더" (was "새 프로젝트 폴더 위치"): the next project started without a folder is made under
 //   the chosen folder, older works stay where they are, "기본으로" goes back.
 // Usage: node scripts/entry-check.ts [outDir] [codex|claude]
 
@@ -35,7 +35,7 @@ const check = (step: string, ok: boolean, detail = "") => {
   console.log(`${ok ? "PASS" : "FAIL"} ${step}${detail ? ` — ${detail}` : ""}`);
 };
 
-const child = spawn(process.execPath, ["apps/host/src/main.ts"], {
+const child = spawn(process.execPath, [process.env.HOST_ENTRY ?? "apps/host/src/main.ts"], {
   env: {
     ...process.env,
     WORKBENCH_DATA_DIR: dataDir,
@@ -81,6 +81,14 @@ async function flow(provider: Provider) {
   page.on("pageerror", (error) => logs.push(`[${label} pageerror] ${error.message.slice(0, 200)}`));
   const shot = (name: string) => page.screenshot({ path: join(outDir, `${provider}-${name}`) });
   const pass = (step: string, ok: boolean, detail = "") => check(`[${label}] ${step}`, ok, detail);
+  // 설정 (one dialog): the rail's 설정 key, then the section in its left list.
+  const openSettings = async (section: string) => {
+    await page.locator('.nav-rail button[data-rail="settings"]').click();
+    await page.locator(`.settings-dialog[open] .settings-nav [data-section="${section}"]`).click();
+    await page.waitForSelector(`.settings-dialog[open] .settings-pane[data-section="${section}"]`);
+  };
+  // 프로젝트 기본 폴더: the path is behind the row's "경로 보기" (textContent reads it folded).
+  const worksPath = async () => ((await page.locator(".works-dir details.settings-path code").textContent()) ?? "").trim();
   const chip = () => page.locator(".start-view .project-button");
   const chipText = async () => (await chip().innerText()).trim();
   const home = async (p: Page = page) => {
@@ -141,7 +149,7 @@ async function flow(provider: Provider) {
     await home();
     const leftOver = await page.locator(".start-view .composer-input").inputValue();
     await pickFolder(`${folderX}/`);
-    const defaulted = await page.waitForFunction(() => document.querySelector(".project-button")?.textContent?.includes("에 새 세션"), undefined, { timeout: 5000 }).then(() => true).catch(() => false);
+    const defaulted = await page.waitForFunction(() => document.querySelector(".project-button")?.textContent?.includes("에 새 대화"), undefined, { timeout: 5000 }).then(() => true).catch(() => false);
     const sameText = await chipText();
     await shot("02-folder-default.png");
     const sessionsBefore = (await sessionsIn(workX.id)).length;
@@ -154,15 +162,15 @@ async function flow(provider: Provider) {
     const shownTitle = (await page.locator(".topbar-title").innerText()).trim();
     await shot("03-same-project.png");
     pass(
-      "프로젝트가 있는 폴더를 고르면 그 프로젝트가 기본 → 거기에 새 세션(새 작업 없음)",
-      leftOver === "" && defaulted && sameText === `→ ${workX.title}에 새 세션` && (await worksNow()).length === worksBefore && added.provider === provider && (await workOf(workX.id)).activeSessionId === added.id && shownTitle === workX.title,
+      "프로젝트가 있는 폴더를 고르면 그 프로젝트가 기본 → 거기에 새 대화(새 작업 없음)",
+      leftOver === "" && defaulted && sameText === `→ ${workX.title}에 새 대화` && (await worksNow()).length === worksBefore && added.provider === provider && (await workOf(workX.id)).activeSessionId === added.id && shownTitle === workX.title,
       `input="${leftOver}" chip="${sameText}" works ${worksBefore}→${(await worksNow()).length} sessions ${sessionsBefore}→${sessionsBefore + 1} engine=${added.provider} title=${shownTitle}`,
     );
 
     // "새 프로젝트" picked by hand in the same folder.
     await home();
     await pickFolder(folderX);
-    await page.waitForFunction(() => document.querySelector(".project-button")?.textContent?.includes("에 새 세션"), undefined, { timeout: 5000 }).catch(() => undefined);
+    await page.waitForFunction(() => document.querySelector(".project-button")?.textContent?.includes("에 새 대화"), undefined, { timeout: 5000 }).catch(() => undefined);
     await chip().click();
     await page.waitForSelector(".project-menu");
     await page.waitForTimeout(150);
@@ -198,7 +206,7 @@ async function flow(provider: Provider) {
     const pickedSession = (await sessionsIn(workX.id)).sort((a, b) => b.createdAt - a.createdAt)[0]!;
     pass(
       "칩에서 이름으로 찾은 기존 프로젝트에 고른 엔진으로 새 세션",
-      listed.length === 2 && picked === `→ ${workX.title}에 새 세션` && folderShown === `${provider}-강의` && (await worksNow()).length === worksBeforePick && pickedSession.provider === provider,
+      listed.length === 2 && picked === `→ ${workX.title}에 새 대화` && folderShown === `${provider}-강의` && (await worksNow()).length === worksBeforePick && pickedSession.provider === provider,
       `list=${listed.map((entry) => entry.replace(/\s+/g, " ")).join(" | ")} chip="${picked}" folder=${folderShown}`,
     );
 
@@ -266,25 +274,26 @@ async function flow(provider: Provider) {
     await shot("09-open-last.png");
     pass("기다리는 것이 없으면 마지막에 본 세션", toLast, `active=${await activeTab()}`);
 
-    // ── "새 프로젝트 폴더 위치" ────────────────────────────────────────────────────────────
-    await page.locator('.topbar button[aria-label="연결과 설정"]').click();
-    await page.waitForSelector(".works-dir .works-dir-path");
-    await page.waitForFunction(() => !document.querySelector(".works-dir .works-dir-path")?.textContent?.includes("확인 중"));
+    // ── 설정 › 일반 › "프로젝트 기본 폴더" (was ⋯ "새 프로젝트 폴더 위치") ─────────────────────
+    await openSettings("general");
+    await page.waitForSelector(".works-dir details.settings-path code");
+    await page.waitForFunction(() => !document.querySelector(".works-dir .settings-state")?.textContent?.includes("확인 중"));
     const settingRow = page.locator(".works-dir");
     await settingRow.scrollIntoViewIfNeeded();
-    const shownDefault = (await settingRow.locator(".works-dir-path").innerText()).trim();
-    const defaultNote = await settingRow.innerText();
+    const shownDefault = await worksPath();
+    const defaultNote = (await settingRow.locator(".settings-state").innerText()).trim();
     await shot("10-settings-default.png");
     const chosen = join(roots, `${provider}-새 프로젝트들`);
-    await settingRow.locator("button", { hasText: "위치 바꾸기" }).click();
+    // No system folder dialog in a browser: "다른 폴더 고르기…" opens the typed form.
+    await settingRow.locator("button", { hasText: "다른 폴더 고르기" }).click();
     await settingRow.locator(".works-dir-form input").fill(chosen);
     await settingRow.locator(".works-dir-form button", { hasText: "저장" }).click();
-    const changed = await page.waitForFunction((path) => document.querySelector(".works-dir .works-dir-path")?.textContent?.trim() === path, chosen, { timeout: 5000 }).then(() => true).catch(() => false);
-    const changedNote = await settingRow.innerText();
+    const changed = await page.waitForFunction((path) => document.querySelector(".works-dir details.settings-path code")?.textContent?.trim() === path, chosen, { timeout: 5000 }).then(() => true).catch(() => false);
+    const changedNote = (await settingRow.locator(".settings-state").innerText()).trim();
     await settingRow.screenshot({ path: join(outDir, `${provider}-11-settings-changed.png`) });
     pass(
-      "설정에 지금 위치(기본)가 보이고, 고른 폴더로 바꿈",
-      shownDefault === defaultDir && defaultNote.includes("기본 위치") && changed && changedNote.includes("고른 위치") && existsSync(chosen),
+      "설정에 지금 위치(기본 폴더)가 보이고, 고른 폴더로 바꿈",
+      shownDefault === defaultDir && defaultNote === "기본 폴더" && changed && changedNote === "고른 폴더" && existsSync(chosen),
       `${shownDefault} → ${chosen}`,
     );
     await page.keyboard.press("Escape");
@@ -304,10 +313,10 @@ async function flow(provider: Provider) {
     );
 
     // Back to the default from the setting.
-    await page.locator('.topbar button[aria-label="연결과 설정"]').click();
-    await page.waitForSelector(".works-dir .works-dir-path");
+    await openSettings("general");
+    await page.waitForSelector(".works-dir details.settings-path code");
     await page.locator(".works-dir button", { hasText: "기본으로" }).click();
-    const reset = await page.waitForFunction((path) => document.querySelector(".works-dir .works-dir-path")?.textContent?.trim() === path, defaultDir, { timeout: 5000 }).then(() => true).catch(() => false);
+    const reset = await page.waitForFunction((path) => document.querySelector(".works-dir details.settings-path code")?.textContent?.trim() === path, defaultDir, { timeout: 5000 }).then(() => true).catch(() => false);
     const view = await api<WorksDirView>("GET", "/api/entry/works-dir");
     await page.keyboard.press("Escape");
     pass("'기본으로'를 누르면 기본 위치로 돌아감", reset && !view.custom && view.path === defaultDir && (await workOf(placed.id)).cwd === placed.cwd, view.path);

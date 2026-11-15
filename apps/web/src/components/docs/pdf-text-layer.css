@@ -1,3 +1,4 @@
+/* Hallmark · shape: app screen · genre: modern-minimal · theme: Furrow (deal 1/3) · redesign: full · governed by styles/tokens.css (stamp, critique and the one token source there) */
 /* Text layer rules from pdfjs-dist/web/pdf_viewer.css (Apache-2.0), only what text selection needs. */
 .textLayer {
   color-scheme: only light;
@@ -61,8 +62,8 @@
   }
 
   .highlight {
-    --highlight-bg-color: rgb(180 0 170 / 0.25);
-    --highlight-selected-bg-color: rgb(0 100 0 / 0.25);
+    --highlight-bg-color: color-mix(in oklab, var(--color-highlight) 70%, transparent);
+    --highlight-selected-bg-color: color-mix(in oklab, var(--color-accent) 25%, transparent);
     --highlight-backdrop-filter: none;
     --highlight-selected-backdrop-filter: none;
 
@@ -79,18 +80,18 @@
     padding: 1px;
     background-color: var(--highlight-bg-color);
     backdrop-filter: var(--highlight-backdrop-filter);
-    border-radius: 4px;
+    border-radius: var(--radius-well);
 
     &.appended {
       position: initial;
     }
 
     &.begin {
-      border-radius: 4px 0 0 4px;
+      border-radius: var(--radius-well) 0 0 var(--radius-well);
     }
 
     &.end {
-      border-radius: 0 4px 4px 0;
+      border-radius: 0 var(--radius-well) var(--radius-well) 0;
     }
 
     &.middle {
@@ -105,13 +106,13 @@
   }
 
   ::-moz-selection {
-    background: rgba(0 0 255 / 0.25);
+    background: color-mix(in oklab, var(--color-accent) 25%, transparent);
     background: color-mix(in srgb, AccentColor, transparent 50%);
     color: transparent;
   }
 
   ::selection {
-    background: rgba(0 0 255 / 0.25);
+    background: color-mix(in oklab, var(--color-accent) 25%, transparent);
     background: color-mix(in srgb, AccentColor, transparent 50%);
     color: transparent;
   }

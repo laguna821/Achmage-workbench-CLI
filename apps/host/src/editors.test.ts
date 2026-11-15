@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import type { Server } from "node:http";
 import type { DocumentRegistration } from "@workbench/contracts";
 import type { AddressInfo } from "node:net";
-import { tmpdir } from "node:os";
+
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { EventBus } from "./bus.ts";
@@ -11,6 +11,7 @@ import { createHttpServer } from "./http.ts";
 import { createOfficeSettingsServer } from "./office-settings-server.ts";
 import { SessionManager } from "./sessions.ts";
 import { Store } from "./store.ts";
+import { tempDir } from "./test-temp.ts";
 
 // The office editors' own origin: pages and the one document a grant opens, nothing else.
 
@@ -49,7 +50,7 @@ it("separates privileged settings from both the document and application origins
 });
 
 function setup() {
-  const dir = mkdtempSync(join(tmpdir(), "wb-editors-"));
+  const dir = tempDir("wb-editors-");
   const web = join(dir, "web");
   mkdirSync(join(web, "office"), { recursive: true });
   writeFileSync(join(web, "office", "docs.html"), "<!doctype html><title>docs</title>");

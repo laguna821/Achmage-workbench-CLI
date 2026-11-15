@@ -30,7 +30,7 @@ const check = (step: string, ok: boolean, detail = "") => {
   console.log(`${ok ? "PASS" : "FAIL"} ${step}${detail ? ` — ${detail}` : ""}`);
 };
 
-const child = spawn(process.execPath, ["apps/host/src/main.ts"], {
+const child = spawn(process.execPath, [process.env.HOST_ENTRY ?? "apps/host/src/main.ts"], {
   env: {
     ...process.env,
     WORKBENCH_DATA_DIR: dataDir,
@@ -188,13 +188,14 @@ async function flow(provider: Provider) {
     const offAgain = await lastAnswer();
     pass("끄면 다음 요청부터 엔진이 브라우저를 쓰지 않음", off && offAgain.includes("브라우저 지침: 없음"), offAgain.split("\n")[0]);
 
-    // ── the ⋯ menu: the agent browser, ready, with sign-in links ───────────────────────────────
-    await page.locator('[aria-label="연결과 설정"]').click();
-    await page.waitForSelector(".browser-connection");
-    const connection = await page.locator(".browser-connection").innerText();
-    await page.locator(".browser-connection").screenshot({ path: join(outDir, `${provider}-06-connections.png`) });
+    // ── 설정 › AI 엔진: the agent browser, ready, with sign-in links ────────────────────────────
+    await page.locator('.nav-rail button[data-rail="settings"]').click();
+    await page.locator('.settings-dialog[open] .settings-nav [data-section="engines"]').click();
+    await page.waitForSelector('.settings-dialog[open] .settings-pane[data-section="engines"] .browser-connection');
+    const connection = await page.locator(".settings-dialog .browser-connection").innerText();
+    await page.locator(".settings-dialog .browser-connection").screenshot({ path: join(outDir, `${provider}-06-connections.png`) });
     await page.keyboard.press("Escape");
-    pass("⋯ 연결에 '에이전트 브라우저 · 준비됨'과 로그인하기", connection.includes("에이전트 브라우저") && connection.includes("준비됨") && connection.includes("네이버"), connection.replace(/\s+/g, " ").slice(0, 80));
+    pass("설정 › AI 엔진에 'AI가 쓰는 웹 브라우저 · 준비됨'과 로그인하기", connection.includes("AI가 쓰는 웹 브라우저") && connection.includes("준비됨") && connection.includes("네이버"), connection.replace(/\s+/g, " ").slice(0, 80));
     await shot("07-final.png");
   } catch (error) {
     pass("실행", false, error instanceof Error ? error.message.split("\n")[0]! : String(error));

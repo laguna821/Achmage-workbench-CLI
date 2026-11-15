@@ -69,7 +69,7 @@ try {
   );
   const unseenRow = await page.locator(".side-now .now-unseen").innerText().catch(() => "");
   check("지금 › 새 답에 읽지 않은 답이 있는 세션", unseenRow.includes("자료 검토"), unseenRow.replace(/\s+/g, " "));
-  const bubble = await page.locator(".turn-request .user-bubble").first().innerHTML();
+  const bubble = await page.locator(".turn-request .request-text .markdown").first().innerHTML();
   check("요청도 마크다운으로 보임(굵게·목록·줄바꿈)", bubble.includes("<strong>두 문단</strong>") && bubble.includes("<li>"), bubble.slice(0, 120));
 
   // Opening the session with the new reply marks it read (kept by the gateway).
@@ -93,7 +93,7 @@ try {
   await page.waitForSelector(".context-menu >> nth=1");
   await shot("03-export-submenu.png");
   await page.locator(".context-menu").nth(1).locator(".context-menu-item", { hasText: "작업 폴더에 저장" }).click();
-  await page.waitForSelector(".toast");
+  await page.waitForSelector(".top-notice");
   const exported = join(works[0]!.cwd, "세션 기록");
   const files = existsSync(exported) ? (await import("node:fs")).readdirSync(exported) : [];
   const markdown = files[0] ? readFileSync(join(exported, files[0]), "utf8") : "";

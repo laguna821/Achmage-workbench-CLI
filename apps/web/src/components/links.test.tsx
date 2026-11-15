@@ -84,7 +84,8 @@ describe("LinkDialog", () => {
     expect((screen.getByRole("option", { name: /편집/ }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByRole("option", { name: /편집/ }).textContent).toContain("다른 잇기 중");
     fireEvent.click(screen.getByRole("option", { name: /초안/ }));
-    expect(screen.getByText(/응답 중인 세션이 끝나야 시작할 수 있습니다: 초안/)).toBeTruthy();
+    // Release unit A: the one state vocabulary (진행 중) and the owner's word (대화), not "응답 중인 세션".
+    expect(screen.getByText(/진행 중인 대화가 끝나야 시작할 수 있습니다: 초안/)).toBeTruthy();
   });
 });
 

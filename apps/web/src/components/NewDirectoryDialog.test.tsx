@@ -13,11 +13,11 @@ function setup() {
   const createWorkspaceDirectory = vi.fn(async (_workspace: string, path: string) => ({ workspaceId: "branch", path: "/project-branch/" + path, relativePath: path }));
   const onCreated = vi.fn(), onClose = vi.fn();
   render(<NewDirectoryDialog api={{ createWorkspaceDirectory } as unknown as Api} workspace={workspace} onCreated={onCreated} onClose={onClose} />);
-  return { createWorkspaceDirectory, onCreated, onClose, path: screen.getByRole("textbox", { name: /폴더 상대 경로/ }), submit: screen.getByRole("button", { name: "폴더 만들기" }) };
+  return { createWorkspaceDirectory, onCreated, onClose, path: screen.getByRole("textbox", { name: /새 폴더 이름/ }), submit: screen.getByRole("button", { name: "폴더 만들기" }) };
 }
 it("offers actual workspace directories separately and creates in the selected branch", async () => {
   const actions = createActions({ workId: "project", workspaceId: "branch", folderId: null });
-  expect(actions.find(action => action.kind === "folder")?.label).toBe("새 정리 폴더…");
+  expect(actions.find(action => action.kind === "folder")?.label).toBe("목록에 새 폴더…");
   expect(actions.find(action => action.kind === "directory")?.target.workspaceId).toBe("branch");
   expect(createActions({ workId: null, folderId: null }).some(action => action.kind === "directory")).toBe(false);
   const f = setup();

@@ -10,7 +10,7 @@ import { HttpError } from "./errors.ts";
 import { fontFace, matchFont } from "./fonts.ts";
 import { hwpFontFace, hwpFontSnapshot } from "./hwp-fonts.ts";
 import { MIME, readBody, sendJson, serveStatic } from "./http.ts";
-import { decodeHwpSave, hwpFormat, hwpTabs, HWP_MAX_BYTES, openHwpBytes, prepareHwpSave } from "./hwp-codec.ts";
+import { decodeHwpSave, hwpFormat, hwpTabs, HWP_MAX_BYTES, openHwpBytes, prepareHwpSave, type HwpLossPolicy } from "./hwp-codec.ts";
 import { hwpToText } from "../../../third_party/ieumoffice/file-parse/hwp.ts";
 import { OFFICE_IMAGE_MAX_BYTES, readOfficeAsset, saveOfficeImage } from "./office-assets.ts";
 import { buildPreviewDocument } from "../../../third_party/ieumoffice/text-assets/preview-document.ts";
@@ -320,13 +320,16 @@ export function createEditorsServer(documents: Documents, grants: EditorGrants, 
           if (operation === "save") documents.registry.assertWrite(id!, grants.access(bearer!));
           const { bytes, metadata } = decodeHwpSave(await readBody(req, HWP_MAX_BYTES + 1_000_004));
           const original = readFileSync(documents.revisionPath(id!, revision));
-          const fixed = await prepareHwpSave(original, bytes, format, metadata, operation === "repair" ? "recovery" : "save");
+          const check: NonNullable<HwpLossPolicy["check"]> = {};
+          const fixed = await prepareHwpSave(original, bytes, format, metadata, operation === "repair" ? "recovery" : "save", format, { check });
           if (operation === "repair") {
             // Repair returns a draft to this document's frame, without writing any file.
             // A view whose writer lease expired must still be able to keep its unsaved edits.
             res.writeHead(200, { "content-type": "application/octet-stream", "cache-control": "no-store" }); res.end(fixed); return;
           }
-          return sendJson(res, 200, documents.saveHwpBytes(id!, revision, fixed, grants.access(bearer!)));
+          // `report`: whether the fingerprint had the editor's live structure ("compared") or only its export ("absent");
+          // `text`: whether every text census could be computed ("unchecked": the save went on with the structure counts only)
+          return sendJson(res, 200, { ...documents.saveHwpBytes(id!, revision, fixed, grants.access(bearer!)), report: metadata.structure ? "compared" : "absent", text: check.text ?? "unchecked", structure: check.structure ?? "unchecked" });
         }
         throw new HttpError(405, "method_not_allowed", "허용되지 않은 한글 요청입니다.");
       }

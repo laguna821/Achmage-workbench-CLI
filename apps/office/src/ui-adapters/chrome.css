@@ -7,51 +7,109 @@
   font-style: normal;
   font-display: swap;
 }
+/* The app's own tokens, as hex mirrors of apps/web/src/styles/tokens.css (Hallmark N1).
+   The editor runs on its own origin, so it cannot read the app's custom properties; a test
+   (ui-adapters.test.ts) keeps these equal to the app's resolved tokens, light and dark:
+   bg = --surface (the field), group = --chrome-bg (the desk paper), line = --line,
+   focus = --accent (skin 2: the deep teal), on-accent = --on-action, hover = --surface-muted (the well),
+   selected = --accent-soft, danger = --danger, key / on-key = --key-primary / --on-key-primary (skin 2: the
+   one filled key is navy ink, never the focus teal). Every hex here is checked against its token, light and
+   dark, by ui-adapters/chrome.test.ts (the list: CHROME_MIRRORS in ui-adapters/app-tokens.ts). */
 __WB_ROOT__ {
   --wb-ui-font: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, "Noto Sans KR", sans-serif;
-  --wb-ui-bg: #fff;
-  --wb-ui-group: #f2f2f7;
-  --wb-ui-text: #000;
-  --wb-ui-muted: #6c6c70;
-  --wb-ui-line: #d1d1d6;
-  --wb-ui-focus: #1e6ef4;
-  --wb-ui-on-accent: #fff;
-  --wb-ui-hover: #f2f2f7;
-  --wb-ui-selected: color-mix(in srgb, #1e6ef4 10%, #fff);
+  --wb-ui-bg: #ffffff;
+  --wb-ui-group: #ffffff;
+  --wb-ui-text: #131b29;
+  --wb-ui-muted: #585e68;
+  --wb-ui-line: #e1e4e8;
+  --wb-ui-line-strong: color-mix(in srgb, var(--wb-ui-line) 72%, var(--wb-ui-text));
+  --wb-ui-focus: #007370;
+  --wb-ui-on-accent: #ffffff;
+  --wb-ui-hover: #f3f5f7;
+  --wb-ui-selected: #e8f0f0;
+  --wb-ui-danger: #ba1e20;
+  --wb-ui-key: #131b29;
+  --wb-ui-on-key: #ffffff;
   --wb-ui-target: 28px;
+  --wb-ui-text-sm: 14px;
+  --wb-ui-radius-key: 6px;
+  --wb-ui-radius-card: 10px;
+  --wb-ui-radius-dialog: 14px;
 }
 __WB_ROOT__[data-wb-office-theme="dark"] {
-  --wb-ui-bg: #2c2c2e;
+  --wb-ui-bg: #1c1d20;
+  --wb-ui-group: #101113;
+  --wb-ui-text: #e8e9ec;
+  --wb-ui-muted: #a0a5ac;
+  --wb-ui-line: #2b2d30;
+  --wb-ui-line-strong: color-mix(in srgb, var(--wb-ui-line) 70%, var(--wb-ui-text));
+  --wb-ui-focus: #59c5bf;
+  --wb-ui-on-accent: #101113;
+  --wb-ui-hover: #202225;
+  --wb-ui-selected: #232c2d;
+  --wb-ui-danger: #f47c70;
+  --wb-ui-key: #e8e9ec;
+  --wb-ui-on-key: #101113;
+}
+/* 색 조합 Atlas (tokens.css `[data-palette="atlas"]`): the same mirrors of the same roles; the app sends the
+   combination with the theme (office:theme), chrome.ts sets data-wb-office-palette. */
+__WB_ROOT__[data-wb-office-palette="atlas"] {
+  --wb-ui-bg: #ffffff;
+  --wb-ui-group: #ffffff;
+  --wb-ui-text: #1d1d1f;
+  --wb-ui-muted: #626268;
+  --wb-ui-line: #e5e5ea;
+  --wb-ui-focus: #0064d2;
+  --wb-ui-on-accent: #ffffff;
+  --wb-ui-hover: #f2f2f7;
+  --wb-ui-selected: #e7f0fc;
+  --wb-ui-danger: #c43a30;
+  --wb-ui-key: #0064d2;
+  --wb-ui-on-key: #ffffff;
+}
+__WB_ROOT__[data-wb-office-palette="atlas"][data-wb-office-theme="dark"] {
+  --wb-ui-bg: #242426;
   --wb-ui-group: #1c1c1e;
-  --wb-ui-text: #fff;
-  --wb-ui-muted: #aeaeb2;
-  --wb-ui-line: #3a3a3c;
-  --wb-ui-focus: #5cb8ff;
-  --wb-ui-on-accent: #1c1c1e;
-  --wb-ui-hover: #3a3a3c;
-  --wb-ui-selected: color-mix(in srgb, #5cb8ff 14%, #2c2c2e);
+  --wb-ui-text: #f5f5f7;
+  --wb-ui-muted: #98989d;
+  --wb-ui-line: #38383a;
+  --wb-ui-focus: #409cff;
+  --wb-ui-on-accent: #101113;
+  --wb-ui-hover: #2c2c2e;
+  --wb-ui-selected: #292f39;
+  --wb-ui-danger: #ff6961;
+  --wb-ui-key: #0064d2;
+  --wb-ui-on-key: #ffffff;
 }
 __WB_CHROME__ {
   /* Rebind renderer chrome tokens locally. Never change renderer :root tokens:
      those can also supply page, canvas, selection and export styling. */
   --gs-font-sans: var(--wb-ui-font);
   --font-ui: var(--wb-ui-font);
-  --text-small: 13px;
-  --text-caption: 13px;
-  --radius-6: 8px;
-  --radius-16: 18px;
+  --text-small: var(--wb-ui-text-sm);
+  --text-caption: var(--wb-ui-text-sm);
+  --radius-6: var(--wb-ui-radius-key);
+  --radius-16: var(--wb-ui-radius-dialog);
   --color-text-primary: var(--wb-ui-text);
   --color-bg-page: var(--wb-ui-bg);
   --color-bg-subtle: var(--wb-ui-group);
   --color-border-default: var(--wb-ui-line);
   --color-border-strong: var(--wb-ui-line);
   --color-border-brand: var(--wb-ui-focus);
-  --color-btn-primary: var(--wb-ui-focus);
-  --color-btn-primary-hover: var(--wb-ui-focus);
-  --color-btn-primary-text: var(--wb-ui-on-accent);
-  --color-ai-action: var(--wb-ui-focus);
-  --color-ai-action-hover: var(--wb-ui-focus);
-  --color-ai-action-text: var(--wb-ui-on-accent);
+  --color-btn-primary: var(--wb-ui-key);
+  --color-btn-primary-hover: var(--wb-ui-key);
+  --color-btn-primary-text: var(--wb-ui-on-key);
+  --color-ai-action: var(--wb-ui-key);
+  --color-ai-action-hover: var(--wb-ui-key);
+  --color-ai-action-text: var(--wb-ui-on-key);
+  /* The editors' own accent colour (Ieum's blue: AI feature icons, send keys, markers) is the app's ink:
+     one ink for icons, the navy key for fills. */
+  --color-brand-secondary: var(--wb-ui-key);
+  /* The spreadsheet's Univer parts (sheet tabs, its toolbar and side panels) take their accent from these. */
+  --univer-primary-50: var(--wb-ui-selected);
+  --univer-primary-500: var(--wb-ui-focus);
+  --univer-primary-600: var(--wb-ui-focus);
+  --univer-primary-700: var(--wb-ui-focus);
   --surface: var(--wb-ui-bg);
   --surface-raised: var(--wb-ui-bg);
   --chrome-bg: var(--wb-ui-bg);
@@ -79,17 +137,18 @@ __WB_CHROME__ {
   background: var(--wb-ui-bg) !important;
   border-color: var(--wb-ui-line) !important;
   font-family: var(--wb-ui-font) !important;
-  font-size: 13px !important;
-  line-height: 16px;
+  font-size: var(--wb-ui-text-sm) !important;
+  line-height: 18px;
 }
-__WB_CHROME__ :is(button, input, select, textarea, [role="button"], [role="menuitem"], [role="tab"])__WB_SAFE__ {
+/* A range (zoom slider) keeps its own track: the 28 px floor turned its track into a thick pill. */
+__WB_CHROME__ :is(button, input:not([type="range"]), select, textarea, [role="button"], [role="menuitem"], [role="tab"])__WB_SAFE__ {
   box-sizing: border-box;
   min-height: var(--wb-ui-target);
   min-width: var(--wb-ui-target);
-  border-radius: 8px;
+  border-radius: var(--wb-ui-radius-key);
   font-family: var(--wb-ui-font);
-  font-size: 13px;
-  line-height: 16px;
+  font-size: var(--wb-ui-text-sm);
+  line-height: 18px;
   accent-color: var(--wb-ui-focus);
 }
 /* Font samples and color swatches retain their actual typeface/color. */
@@ -112,11 +171,11 @@ __WB_CHROME__ :is(.ribbon-tab.active, .rb-btn.active, .rb-btn.on, .ribbon-tool.i
 }
 __WB_CHROME__ :is(button, [role="button"], [role="menuitem"], input, select, textarea, [tabindex]):focus-visible__WB_SAFE__ { outline: 2px solid var(--wb-ui-focus); outline-offset: 2px; }
 __WB_CHROME__ :is(button:disabled, [aria-disabled="true"])__WB_SAFE__ { color: var(--wb-ui-muted); cursor: default; }
-__WB_CHROME__ :is(.ribbon-group-label, .rb-menu-group-label, .file-menu-key, .status-item, .status-msg, .sb-field-label, .tb-label)__WB_SAFE__ { color: var(--wb-ui-muted); font-size: 13px; }
+__WB_CHROME__ :is(.ribbon-group-label, .rb-menu-group-label, .file-menu-key, .status-item, .status-msg, .sb-field-label, .tb-label)__WB_SAFE__ { color: var(--wb-ui-muted); font-size: var(--wb-ui-text-sm); }
 __WB_CHROME__ :is(.ribbon-tabs, .ribbon-body, .ribbon-group-items, .dialog-actions, .modal-actions, .dialog-footer)__WB_SAFE__ { gap: 4px; }
 __WB_CHROME__:is(.status-bar, .epub-status, #status-bar) { min-height: var(--wb-ui-target); background: var(--wb-ui-group) !important; }
-__WB_CHROME__:is(.file-menu, .ctx-menu, .ctx-submenu, .rb-menu, .menu-dropdown, .tb-split-menu, .sb-dropdown-menu, .sheet-tab-menu, .context-menu, .slash-menu, .md-block-menu, .md-theme-menu) { border-radius: 12px; }
-__WB_CHROME__:is(.modal, .dialog-wrap, .pdf-modal, .mm-modal, .bt-dialog, .redact-dialog, .memo-modal, .print-dialog, .font-dialog, .zoom-dialog) { border-radius: 18px; }
+__WB_CHROME__:is(.file-menu, .ctx-menu, .ctx-submenu, .rb-menu, .menu-dropdown, .tb-split-menu, .sb-dropdown-menu, .sheet-tab-menu, .context-menu, .slash-menu, .md-block-menu, .md-theme-menu) { border-radius: var(--wb-ui-radius-card); }
+__WB_CHROME__:is(.modal, .dialog-wrap, .pdf-modal, .mm-modal, .bt-dialog, .redact-dialog, .memo-modal, .print-dialog, .font-dialog, .zoom-dialog) { border-radius: var(--wb-ui-radius-dialog); }
 __WB_CHROME__ :is(.modal-title, .dialog-title, .pdf-modal-title, .mm-modal-title, .redact-dialog-title, .memo-modal-title)__WB_SAFE__ { font-size: 17px; line-height: 22px; font-weight: 600; color: var(--wb-ui-text); background: var(--wb-ui-bg); }
 @media (pointer: coarse) { __WB_ROOT__ { --wb-ui-target: 44px; } }
 @media (prefers-contrast: more) { __WB_ROOT__ { --wb-ui-line: var(--wb-ui-muted); } }
@@ -128,10 +187,55 @@ __WB_CHROME__ :is(.modal-title, .dialog-title, .pdf-modal-title, .mm-modal-title
 /* File tabs are navigation; reserve a filled accent for an existing primary action. */
 __WB_CHROME__ :is(.ribbon-tab-file, .ribbon-file, .file-tab-wrap)__WB_SAFE__ { color: var(--wb-ui-text) !important; background: transparent !important; }
 __WB_CHROME__ :is(button.primary, .btn-primary, .primary-action, .dialog-btn-primary, .ai-send-btn:not(.ai-stop-btn)):not(.danger, .destructive):not(:disabled)__WB_SAFE__ {
-  color: var(--wb-ui-on-accent) !important;
-  background: var(--wb-ui-focus) !important;
-  border-color: var(--wb-ui-focus);
-  font-weight: 700;
+  color: var(--wb-ui-on-key) !important;
+  background: var(--wb-ui-key) !important;
+  border-color: var(--wb-ui-key);
+  font-weight: 600;
 }
 __WB_CHROME__ :is(.ai-panel-title, .ai-input-box, .ai-input-footer, .ai-input-hint)__WB_SAFE__ { font-family: var(--wb-ui-font); }
-__WB_CHROME__ .ai-panel-title__WB_SAFE__ { font-size: 15px; line-height: 20px; font-weight: 600; }
+__WB_CHROME__ .ai-panel-title__WB_SAFE__ { font-size: 16px; line-height: 22px; font-weight: 600; }
+
+/* Stacked small keys (잘라내기 / 복사 / 서식 복사 beside 붙여넣기): three in the ribbon's 68 px band. At the 28 px
+   floor the third was cut by the band's edge; here they keep a 22 px line (still wider than tall). */
+__WB_CHROME__ .rb-col > .rb-small__WB_SAFE__ { min-height: 22px; }
+__WB_CHROME__ .rb-col__WB_SAFE__ { gap: 1px; }
+/* The current slide and the chosen slides in the slide list: the app's selection teal, not Ieum's orange. Only
+   the frame of a thumbnail: the slide drawn inside it is the document. */
+__WB_ROOT__ .slide-list .thumb:is(.active, .selected) { border-color: var(--wb-ui-focus); }
+__WB_ROOT__ .slide-list .thumb.drop-before { box-shadow: 0 -7px 0 -2.5px var(--wb-ui-focus); }
+__WB_ROOT__ .slide-list .thumb.drop-after { box-shadow: 0 7px 0 -2.5px var(--wb-ui-focus); }
+/* The spreadsheet's current sheet tab: Ieum recolours Univer's label to its Excel green at the root; here the
+   app's selection teal. */
+__WB_ROOT__ [data-u-comp='slide-tab-item'][aria-selected='true'] { color: var(--wb-ui-focus) !important; }
+
+/* The editor's own AI 도우미 in a narrow pane (design review I7, m13): it lies over the page instead
+   of squeezing it to a few letters a line, as the Hangul studio's dock does (hangul-studio.css). The
+   page keeps the pane's width under it; closing the panel shows it whole. */
+@media (max-width: 1039px) {
+  __WB_ROOT__:not([data-wb-office-format="hangul"]) .app-main:has(> .ai-dock) { position: relative; }
+  __WB_ROOT__:not([data-wb-office-format="hangul"]) .app-main > .ai-dock:not(.collapsed) {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    z-index: 30;
+    max-width: calc(100% - 48px);
+    background: var(--wb-ui-bg);
+    border-inline-end: 1px solid var(--wb-ui-line);
+  }
+  __WB_ROOT__[data-ai-panel-side="right"]:not([data-wb-office-format="hangul"]) .app-main > .ai-dock:not(.collapsed) {
+    inset-inline-start: auto;
+    inset-inline-end: 0;
+    border-inline-end: 0;
+    border-inline-start: 1px solid var(--wb-ui-line);
+  }
+  __WB_ROOT__ .sheet-body:has(> .copilot:not(.collapsed)) { position: relative; grid-template-columns: 34px minmax(0, 1fr); }
+  __WB_ROOT__ .sheet-body > .copilot:not(.collapsed) {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    z-index: 30;
+    width: min(calc(var(--copilot-width, 360px) * var(--ui-scale, 1)), calc(100% - 48px));
+    background: var(--wb-ui-bg);
+    border-inline-end: 1px solid var(--wb-ui-line);
+  }
+}

@@ -5,7 +5,7 @@
   align-items: center;
   gap: 5px;
   align-self: flex-start;
-  padding: 2px 9px;
+  padding: var(--space-3xs) 9px;
   border-radius: var(--r-xs);
   background: var(--amber-soft);
   color: var(--amber-text);
@@ -16,7 +16,7 @@
 
 .partial-note.compact {
   align-self: auto;
-  padding: 0 8px;
+  padding: 0 var(--space-xs);
   font-size: var(--fs-micro);
 }
 

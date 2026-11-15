@@ -1,23 +1,166 @@
-.onboarding-host { margin: 0 0 12px; color: var(--muted); font-size: var(--fs-meta) !important; }
-.onboarding-steps { flex-wrap: wrap; }
-.onboarding-steps button { border: 0; padding: 6px 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
-.onboarding-path { display: grid; gap: 10px; padding-left: 22px; }
-.onboarding-file-path { overflow-wrap: anywhere; font-size: var(--fs-meta) !important; }
-.onboarding-tool-details { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 12px; }
-.onboarding-tool-details summary { padding-block: 8px; cursor: pointer; font-weight: 600; }
-.onboarding-ready-list { display: grid; gap: 8px; padding: 12px; border-radius: var(--r-md); background: var(--surface-muted); font-size: var(--fs-meta); }
-.onboarding-extra-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.onboarding-card select { display: block; margin-top: 8px; width: 100%; padding: 8px; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-sm); }
-.onboarding-model-row { display: grid; gap: 6px; padding: 12px 0; border-bottom: 1px solid var(--line); }
-.onboarding-model-row small { color: var(--muted); overflow-wrap: anywhere; }
-.onboarding h2:focus { outline: none; }
-@media (max-width: 700px), (pointer: coarse) {
-  .onboarding-backdrop { top: var(--mobile-top, 0px); left: var(--mobile-left, 0px); right: auto; bottom: auto; width: var(--mobile-width, 100vw); height: var(--mobile-height, 100dvh); padding: max(8px, env(safe-area-inset-top, 0px)) max(8px, env(safe-area-inset-right, 0px)) max(8px, env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px)); }
-  .onboarding { max-height: 100%; padding: 20px 16px; }
-  .onboarding h2 { font-size: clamp(24px, 6vw, 32px); }
-  .onboarding-steps { gap: 8px 14px; }
-  .onboarding-steps button, .onboarding button { min-height: 44px; }
-  .onboarding-actions { flex-wrap: wrap; }
-  .onboarding-card { padding: 12px; }
-  .onboarding select, .onboarding input { font-size: 16px; }
+/* The first run (atlas-look): ONE panel in the centre of the window over the dimmed shell, as Atlas File
+   Manager's setup is — about 760 × 520, the steps listed on the left, the step on the right, the keys at
+   the right pane's foot; full screen on a phone. Tokens only, so it wears the chosen 색 조합.
+   (styles.css keeps the earlier dialog's rules for .onboarding; .onboarding-first overrides them.) */
+
+.onboarding-backdrop.onboarding-first {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: grid;
+  place-items: center;
+  padding: var(--space-md);
+  background: var(--scrim);
+  animation: onboarding-in var(--dur-long) var(--ease-out);
 }
+@keyframes onboarding-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .onboarding-backdrop.onboarding-first { animation-duration: var(--dur-micro); } }
+/* The rail is seen, not used, while the first run is up. */
+.app:has(.onboarding-first) .nav-rail { pointer-events: none; }
+
+/* The panel: the step list beside the step, the launch's attribution line (LaunchCredit) as its last row. */
+.onboarding-first .onboarding {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  width: min(760px, 100%);
+  height: min(520px, 100%);
+  max-height: none;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-entry);
+  background: var(--surface);
+  box-shadow: var(--shadow-lift);
+  animation: none;
+  font: var(--text-md)/1.6 var(--font-ui);
+  color: var(--text);
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+/* The left: where you are, the steps as rows. */
+.onboarding-side { display: flex; flex-direction: column; gap: var(--space-2xs); min-height: 0; padding: var(--space-md) var(--space-sm); border-right: 1px solid var(--line); background: var(--surface-muted); }
+.onboarding-side-head { margin: 0 0 var(--space-xs); padding: 0 var(--space-xs); color: var(--muted); font: 600 var(--text-label)/1.4 var(--font-ui); }
+.onboarding-first .onboarding-steps { display: flex; flex-direction: column; gap: var(--space-3xs); margin: 0; padding: 0; border: 0; list-style: none; color: var(--text-soft); font-size: var(--text-sm); }
+.onboarding-first .onboarding-steps li { padding: 0; }
+/* The earlier dialog's rules (styles.css) drew a counter and an underline on the steps: none here. */
+.onboarding-first .onboarding-steps li::before, .onboarding-first .onboarding-steps li::after,
+.onboarding-first .onboarding-steps li.active::before, .onboarding-first .onboarding-steps li.active::after { content: none; }
+.onboarding-first .onboarding-steps button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  width: 100%;
+  min-height: 36px;
+  padding: 0 var(--space-xs);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-micro) var(--ease-out);
+}
+@media (hover: hover) { .onboarding-first .onboarding-steps li:not(.active) button:hover { background: var(--hover); } }
+.onboarding-first .onboarding-steps button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.onboarding-step-no {
+  display: inline-grid; place-items: center; flex: 0 0 auto; width: 20px; height: 20px; border-radius: var(--radius-round);
+  box-shadow: inset 0 0 0 1px var(--field-line); font: 600 var(--text-xs)/1 var(--font-ui); font-variant-numeric: tabular-nums;
+}
+.onboarding-first .onboarding-steps li.active button { background: var(--active-bg); color: var(--active-text); font-weight: 600; }
+.onboarding-first .onboarding-steps li.active .onboarding-step-no { background: var(--key-primary); box-shadow: none; color: var(--on-key-primary); }
+.onboarding-first .onboarding-steps li.done .onboarding-step-no { box-shadow: none; color: var(--active-text); }
+.onboarding-side-note { margin: auto 0 0; padding: 0 var(--space-xs); color: var(--muted); font-size: var(--text-xs); line-height: 1.5; }
+
+/* The right: the step, then its keys. */
+.onboarding-pane { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
+.onboarding-page { min-height: 0; overflow-y: auto; padding: var(--space-lg) var(--space-lg) var(--space-md); }
+/* The step list says where the person is; "n / 3" with the step's name stands in for it on a phone. */
+.onboarding-count { display: none; margin: 0 0 var(--space-2xs); color: var(--muted); font: 600 var(--text-label)/1.4 var(--font-ui); font-variant-numeric: tabular-nums; }
+.onboarding-first .onboarding h2 { margin: 0 0 var(--space-2xs); font: 600 var(--text-xl)/1.3 var(--font-ui); letter-spacing: -0.01em; color: var(--text); text-wrap: balance; }
+.onboarding-first .onboarding h2:focus { outline: none; }
+.onboarding-first .onboarding p, .onboarding-first .onboarding li { font-size: inherit; line-height: inherit; }
+.onboarding-first .onboarding .onboarding-lead { margin: 0 0 var(--space-md); color: var(--text-soft); font-size: var(--text-sm); line-height: 1.55; }
+.onboarding-first .onboarding .onboarding-note { margin: var(--space-sm) 0 0; color: var(--muted); font-size: var(--text-sm); }
+
+.onboarding-first .onboarding-actions { display: flex; align-items: center; gap: var(--space-xs); margin: 0; padding: var(--space-sm) var(--space-lg); border-top: 1px solid var(--line); }
+.onboarding-first .onboarding-actions .spacer { flex: 1; }
+.onboarding-foot { grid-column: 1 / -1; min-width: 0; }
+
+/* 화면: 밝기 and 색 조합 as tiles, the live picture beside them. */
+.onboarding-look { display: grid; grid-template-columns: minmax(0, 1fr) 152px; gap: var(--space-lg); align-items: start; }
+.onboarding-first .onboarding .onboarding-group-head { margin: var(--space-md) 0 var(--space-xs); color: var(--muted); font: 600 var(--text-label)/1.4 var(--font-ui); }
+.onboarding-first .onboarding .onboarding-group-head:first-child { margin-top: 0; }
+.onboarding-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-xs); }
+.onboarding-tiles.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.onboarding-tile {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2xs);
+  min-height: 64px; padding: var(--space-xs); border: 1px solid var(--line); border-radius: var(--radius-card);
+  background: var(--surface); color: var(--muted); font: 600 var(--text-sm)/1.3 var(--font-ui); cursor: pointer;
+  transition: background-color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out);
+}
+@media (hover: hover) { .onboarding-tile:hover:not(.chosen) { background: var(--hover); color: var(--text); } }
+.onboarding-tile.chosen { border-color: var(--color-current); background: var(--active-bg); color: var(--text); }
+.onboarding-tile:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* Each combination in its own colours: rail, sheet, accent (three overlapping dots). */
+.onboarding-swatch { display: inline-flex; }
+.onboarding-swatch i { width: 14px; height: 14px; border-radius: var(--radius-round); box-shadow: 0 0 0 1px var(--line); }
+.onboarding-swatch i + i { margin-left: calc(-1 * var(--space-2xs)); }
+.onboarding-swatch.swatch-workbench i:nth-child(1) { background: var(--color-brand-navy); }
+.onboarding-swatch.swatch-atlas i:nth-child(1) { background: var(--swatch-atlas-sidebar); }
+.onboarding-swatch i:nth-child(2) { background: var(--color-page); }
+.onboarding-swatch.swatch-workbench i:nth-child(3) { background: var(--color-brand-teal); }
+.onboarding-swatch.swatch-atlas i:nth-child(3) { background: var(--swatch-atlas-accent); }
+.onboarding-first .onboarding .onboarding-credit { margin: var(--space-xs) 0 0; color: var(--muted); font-size: var(--text-xs); }
+.onboarding-preview { display: grid; grid-template-columns: 22px 44px minmax(0, 1fr); height: 132px; margin-top: calc(var(--text-label) * 1.4 + var(--space-xs)); overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-card); }
+.onboarding-preview > span { display: flex; flex-direction: column; gap: var(--space-2xs); padding: var(--space-xs) var(--space-2xs); }
+.onboarding-preview i { display: block; border-radius: var(--radius-well); }
+.onboarding-preview-rail { align-items: center; background: var(--color-rail); }
+.onboarding-preview-rail i { width: 12px; height: 12px; background: var(--color-rail-muted); opacity: 0.45; }
+.onboarding-preview-rail i.current { background: var(--color-rail-current); box-shadow: inset 0 -2px 0 var(--color-rail-mark); opacity: 1; }
+.onboarding-preview-list { border-right: 1px solid var(--line); background: var(--color-paper); }
+.onboarding-preview-list i { height: 10px; background: var(--line); }
+.onboarding-preview-list i.current { background: var(--active-bg); box-shadow: inset 2px 0 0 var(--color-current); }
+.onboarding-preview-work { background: var(--color-paper-2); }
+.onboarding-preview-work i { height: 6px; width: 80%; background: var(--line); }
+.onboarding-preview-work i:nth-child(2) { width: 56%; }
+.onboarding-preview-work i.key { width: 40px; height: 14px; margin-top: auto; align-self: flex-end; border-radius: var(--radius-pill); background: var(--key-primary); }
+
+/* AI 엔진: the engines as rows (the settings row recipe). */
+.onboarding-engines { display: flex; flex-direction: column; }
+.onboarding-engines .setup-engine + .setup-engine { border-top: 1px solid var(--line); }
+
+/* 휴대폰 메신저: 텔레그램 and Slack as rows, one key each. */
+.onboarding-first .onboarding .onboarding-ways { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.onboarding-ways li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-md); min-height: 56px; padding: var(--space-xs) 0; }
+.onboarding-ways li + li { border-top: 1px solid var(--line); }
+.onboarding-ways li > div { display: grid; gap: var(--space-3xs); }
+.onboarding-ways strong { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-xs); font-weight: 600; }
+.onboarding-first .onboarding .onboarding-ways .onboarding-way-state { color: var(--muted); font-size: var(--text-xs); font-weight: 500; }
+.onboarding-first .onboarding .onboarding-ways .onboarding-way-state.on { color: var(--color-done); }
+.onboarding-first .onboarding .onboarding-ways span { color: var(--muted); font-size: var(--text-sm); }
+
+/* The phone: the panel is the screen; the step list gives way to "n / 3"; keys 44 px tall. */
+@media (max-width: 40rem) {
+  .onboarding-backdrop.onboarding-first { padding: 0; }
+  .onboarding-first .onboarding { grid-template-columns: minmax(0, 1fr); width: 100%; height: 100%; border: 0; border-radius: 0; }
+  .onboarding-side { display: none; }
+  .onboarding-count { display: block; }
+  .onboarding-page { padding: var(--space-lg) var(--space-md); }
+  .onboarding-first .onboarding-actions { flex-wrap: wrap; padding: var(--space-sm) var(--space-md) max(var(--space-sm), env(safe-area-inset-bottom, 0px)); }
+  .onboarding-first .onboarding button { min-height: 44px; }
+  .onboarding-look { grid-template-columns: minmax(0, 1fr); }
+  .onboarding-preview { height: 96px; margin-top: 0; }
+  .onboarding-ways li { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Kept for the voice-model cache (onboarding/ModelCache.tsx), now shown in 설정 › AI 엔진. */
+.onboarding-tool-details { margin-top: var(--space-xs); }
+.onboarding-tool-details summary { width: max-content; color: var(--color-teal-ink); font-size: var(--text-sm); cursor: pointer; }
+.onboarding-file-path { overflow-wrap: anywhere; font: var(--text-xs)/1.6 var(--font-outlier); color: var(--muted); }
+.onboarding-extra-actions { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+.onboarding-model-row { display: grid; gap: var(--space-2xs); padding: var(--space-sm) 0; border-bottom: 1px solid var(--line); }
+.onboarding-model-row small { color: var(--muted); overflow-wrap: anywhere; }

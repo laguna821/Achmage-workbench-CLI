@@ -1,3 +1,4 @@
+import { ownTool } from "./own-tools.ts";
 import { execFile } from "node:child_process";
 import { constants } from "node:fs";
 import { chmod, copyFile, lstat, mkdir, readdir, readlink, realpath, stat, symlink } from "node:fs/promises";
@@ -15,7 +16,7 @@ export async function present(path: string) { try { await lstat(path); return tr
 async function ignored(root: string, paths: string[]) {
   if (!paths.length) return new Set<string>();
   return new Promise<Set<string>>((resolve, reject) => {
-    const child = execFile("git", ["--no-optional-locks", "-C", root, "check-ignore", "--stdin", "-z"], { windowsHide: true, maxBuffer: 8 * 1024 * 1024 }, (error, stdout, stderr) => {
+    const child = execFile(ownTool("git"), ["--no-optional-locks", "-C", root, "check-ignore", "--stdin", "-z"], { windowsHide: true, maxBuffer: 8 * 1024 * 1024 }, (error, stdout, stderr) => {
       if (error && error.code !== 1) reject(new Error(stderr || error.message));
       else resolve(new Set(stdout.split("\0").filter(Boolean)));
     });

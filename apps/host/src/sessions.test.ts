@@ -1,5 +1,5 @@
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+
+
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ApprovalDecision, ProviderStatus, Session, Work } from "@workbench/contracts";
@@ -7,6 +7,7 @@ import { EventBus } from "./bus.ts";
 import { HttpError, SessionManager, previewOf } from "./sessions.ts";
 import { Store } from "./store.ts";
 import { emptyStatus, type AdapterSink, type ProviderAdapter } from "./providers/types.ts";
+import { tempDir } from "./test-temp.ts";
 
 class FakeAdapter implements ProviderAdapter {
   readonly provider = "claude" as const;
@@ -38,7 +39,7 @@ class FakeAdapter implements ProviderAdapter {
   async shutdown() {}
 }
 
-function setup(dir = mkdtempSync(join(tmpdir(), "wb-test-"))) {
+function setup(dir = tempDir("wb-test-")) {
   const store = new Store(join(dir, "state.sqlite"));
   const bus = new EventBus();
   const manager = new SessionManager(store, bus, { hostId: "h", hostLabel: "노트북", managedWorksDir: join(dir, "works") });

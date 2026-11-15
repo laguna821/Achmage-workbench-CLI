@@ -12,6 +12,9 @@ import { Store } from "./store.ts";
 import { SessionManager } from "./sessions.ts";
 import { EventBus } from "./bus.ts";
 import { githubDiscussionFixture, githubDiscussionRead, githubDiscussionWrite } from "../../../scripts/fixtures/github-discussion.ts";
+// Each test starts a whole gateway with its store, git and stand-in hosts: under the full host suite a
+// test took 5–14 s where it takes 1–2 s alone. The limit is for a loaded machine; nothing waits on it.
+vi.setConfig({ testTimeout: 60_000 });
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });

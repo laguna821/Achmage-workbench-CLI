@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import { gatewayOnly } from "../gateway-env.ts";
 
 const run = promisify(execFile);
 const xml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -49,8 +50,11 @@ export class HostAutostart {
     if (enabled) {
       mkdirSync(this.dir, { recursive: true, mode: 0o700 });
       const environment: Record<string, string> = { WORKBENCH_DATA_DIR: this.dir, WORKBENCH_IEUM_BOOTSTRAP: "0" };
-      for (const key of (this.runner ? ["PATH", "WORKBENCH_HOST_RUNNER", "WORKBENCH_HOST_ID", "WORKBENCH_HOST_LABEL"] : ["PATH", "WORKBENCH_WEB_DIR", "WORKBENCH_RESOURCES_DIR", "WORKBENCH_PTY_BIN", "WORKBENCH_SECRET_BIN", "WORKBENCH_APP_BIN", "WORKBENCH_HOST_ID", "WORKBENCH_HOST_LABEL"]))
-        if (process.env[key]) environment[key] = process.env[key]!;
+      for (const key of (this.runner ? ["PATH", "WORKBENCH_HOST_RUNNER", "WORKBENCH_HOST_ID", "WORKBENCH_HOST_LABEL"] : ["PATH", "WORKBENCH_WEB_DIR", "WORKBENCH_RESOURCES_DIR", "WORKBENCH_PTY_BIN", "WORKBENCH_SECRET_BIN", "WORKBENCH_APP_BIN", "WORKBENCH_HOST_ID", "WORKBENCH_HOST_LABEL"])) {
+        // The helper paths are no longer in the gateway's environment (gateway-env.ts).
+        const value = key === "WORKBENCH_PTY_BIN" || key === "WORKBENCH_SECRET_BIN" ? gatewayOnly(key) : process.env[key];
+        if (value) environment[key] = value;
+      }
       // Only paths and host identity are captured; no credentials or provider auth are copied.
       if (!this.runner) writeFileSync(this.launcher, `Object.assign(process.env, ${JSON.stringify(environment)});\nprocess.argv[2] = "start";\nawait import(${JSON.stringify(pathToFileURL(resolve(this.cli)).href)});\n`, { mode: 0o600 });
       if (process.platform === "linux") {

@@ -12,6 +12,7 @@ import { parseQuery, snippetOf, wordTokens } from "./search-text.ts";
 import { SessionManager } from "./sessions.ts";
 import { Store } from "./store.ts";
 import { put } from "./vault-fixture.ts";
+import { itSearch, itWithSearch, withSearchReason } from "./search-worker-test.ts";
 
 const searchManagers: SessionManager[] = [];
 const dirs: string[] = [];
@@ -97,7 +98,7 @@ describe("query text", () => {
 });
 
 describe("one ranked index", () => {
-  it("finds Korean two-syllable words, longer words, words with particles, spaced and joined", async () => {
+  itWithSearch("finds Korean two-syllable words, longer words, words with particles, spaced and joined", async () => {
     const { manager } = setup();
     const { session } = work(manager, "강의", "codex", "과제 정리");
     const [request, reply] = say(manager, session.id, ["user", "채점 기준을 세 단계로 나눠 줘"], ["assistant", "채점기준표를 만들었습니다. 평가 항목은 셋입니다."]);
@@ -123,7 +124,7 @@ describe("one ranked index", () => {
     expect(marked.ranges.map(([from, to]) => marked.snippet.slice(from, to))).toEqual(["채점", "기준"]);
   });
 
-  it("ranks conversation text above titles, and the user's own words above the same words in a reply", async () => {
+  itWithSearch("ranks conversation text above titles, and the user's own words above the same words in a reply", async () => {
     const { manager } = setup();
     const titled = work(manager, "루브릭 설계", "claude", "준비");
     const other = work(manager, "수업 운영", "codex", "메모");
@@ -137,7 +138,7 @@ describe("one ranked index", () => {
     expect(order.indexOf(mine!)).toBeLessThan(order.indexOf(theirs!));
   });
 
-  it.each(["assistant", "plan"] as const)("keeps a document's matching %s as a conversation result and preserves the document's related reply", async (kind) => {
+  itSearch.each(["assistant", "plan"] as const)(withSearchReason("keeps a document's matching %s as a conversation result and preserves the document's related reply"), async (kind) => {
     const { manager } = setup();
     const { work: lecture, session } = work(manager, "보고", "claude", "보고서 쓰기");
     const [request] = say(manager, session.id, ["user", "보고서 초안을 써 줘"]);
@@ -169,7 +170,7 @@ describe("one ranked index", () => {
     expect(hits((await manager.search("예산 집행", all))).some((hit) => hit.artifactId === exported.artifactId)).toBe(false);
   });
 
-  it("finds plans waiting for the go-ahead and the names of attached files", async () => {
+  itWithSearch("finds plans waiting for the go-ahead and the names of attached files", async () => {
     const { manager } = setup();
     const { session } = work(manager, "연구", "claude", "설문");
     const [claudePlan] = say(manager, session.id, { kind: "approval", id: "approval:t1", title: "이 계획대로 진행할까요?", detail: "1. 설문 문항을 고친다\n2. 표본을 늘린다", reason: null, decision: null, plan: true, at: 0 });
@@ -183,7 +184,7 @@ describe("one ranked index", () => {
     expect(found[0]!.snippet).toContain("강의계획서_2026.pdf");
   });
 
-  it("groups by work with totals and pages, counts every scope, and leaves archived things out unless asked", async () => {
+  itWithSearch("groups by work with totals and pages, counts every scope, and leaves archived things out unless asked", async () => {
     const { manager } = setup();
     const sessions: Session[] = [];
     for (let index = 0; index < 12; index += 1) {
@@ -213,7 +214,7 @@ describe("one ranked index", () => {
     expect((await manager.search("회의록", { ...all, archived: true })).total).toBe(24);
   });
 
-  it("shows the original prompt in the first project preview after a document was created", async () => {
+  itWithSearch("shows the original prompt in the first project preview after a document was created", async () => {
     const { manager } = setup();
     const { work: project, session } = work(manager, "mermaid 마크다운 문서", "codex", "mermaid 마크다운 문서 만들기");
     const prompt = "방금 이 앱을 새로 설치했는데 간단한 마크다운 문서를 하나 만들어봐 mermaid 그림이랑 테이블도 같이 포함해서";
@@ -230,7 +231,7 @@ describe("one ranked index", () => {
 
   // Catches ranking only the visible page, or grouping mixed document/conversation rows by
   // work before applying the global conversation priority. Every dependency is real.
-  it.each([1, 3])("pages conversation text before title-heavy projects and duplicate files with %i preview rows", async (per) => {
+  itSearch.each([1, 3])(withSearchReason("pages conversation text before title-heavy projects and duplicate files with %i preview rows"), async (per) => {
     const { manager, dir, bus, store } = setup();
     const title = "mermaid 마크다운 문서";
     const prompt = "방금 이 앱을 새로 설치했는데 간단한 마크다운 문서를 하나 만들어봐 mermaid 그림이랑 테이블도 같이 포함해서";
@@ -309,7 +310,7 @@ describe("one ranked index", () => {
     expect(existsSync(join(vault, "비밀/자료.md"))).toBe(true);
   });
 
-  it("keeps original prompts visible among many repeated assistant body matches", async () => {
+  itWithSearch("keeps original prompts visible among many repeated assistant body matches", async () => {
     const { manager } = setup();
     const { session } = work(manager, "일반 프로젝트");
     const [request] = say(manager, session.id, ["user", "초롱프롬프트를 찾아 주세요. " + "상세한 배경 설명입니다. ".repeat(80)]);
@@ -332,7 +333,7 @@ describe("one ranked index", () => {
     expect(again.getMeta("search.version")).toBe("5-fast-find-prompt-recovery");
   });
 
-  it("rebuilds an index written by an older version once", async () => {
+  itWithSearch("rebuilds an index written by an older version once", async () => {
     const { dir, store, manager } = setup();
     const { session } = work(manager, "옛 작업", "codex", "오래된 대화");
     say(manager, session.id, ["user", "옛날 색인에 있던 핵심 문장"]);
@@ -360,7 +361,7 @@ describe("one ranked index", () => {
     third.close();
   });
 
-  it("lets other modules add their own source of entries (decisions, open questions, events)", async () => {
+  itWithSearch("lets other modules add their own source of entries (decisions, open questions, events)", async () => {
     const { store, manager } = setup();
     const { work: project } = work(manager, "안녕", "codex", "표지");
     const decisions = () => [{ key: `decision:${project.id}:1`, kind: "decision" as const, scope: "decision" as const, workId: project.id, at: Date.now(), title: "표지는 B안", body: "표지는 B안으로 정했다" }];
@@ -373,7 +374,7 @@ describe("one ranked index", () => {
 });
 
 describe("workbench-find", () => {
-  it("prints records with where they come from, the calling session's work unless --all, at most 4 KB", async () => {
+  itWithSearch("prints records with where they come from, the calling session's work unless --all, at most 4 KB", async () => {
     const { manager } = setup();
     const { session } = work(manager, "안녕", "codex", "과제 채점 기준표");
     const other = work(manager, "다른 일", "claude", "다른 세션").session;
@@ -445,7 +446,7 @@ describe("vault notes", () => {
     return out.sort();
   };
 
-  it("indexes notes but never the folders and files hidden in Notebook Navigator, and follows the mirror", async () => {
+  itWithSearch("indexes notes but never the folders and files hidden in Notebook Navigator, and follows the mirror", async () => {
     const { bus, manager, vault, pkm } = vaultSetup();
     const before = listing(vault);
     await manager.finder.useVault(pkm.vault, bus);
@@ -474,7 +475,7 @@ describe("vault notes", () => {
     expect(listing(vault).filter((line) => !line.includes("새 노트") && !line.includes("notebook-navigator"))).toEqual(before.filter((line) => !line.includes("notebook-navigator")));
   });
 
-  it("lets a saved view's plain words find what was said in a session", async () => {
+  itWithSearch("lets a saved view's plain words find what was said in a session", async () => {
     const { bus, manager, pkm } = vaultSetup();
     await manager.finder.useVault(pkm.vault, bus);
     const { session } = work(manager, "수업 준비", "codex", "첫 주");
@@ -487,7 +488,7 @@ describe("vault notes", () => {
     expect(existsSync(join(pkm.vault.root!, "비밀/일기.md"))).toBe(true);
   });
 
-  it("uses exact property scope for results, preview and related notes, including later hiding", async () => {
+  itWithSearch("uses exact property scope for results, preview and related notes, including later hiding", async () => {
     const { manager, pkm, vault, bus } = vaultSetup();
     put(vault, "수업/자료.md", '---\ntitle: 자료 모음\n"단계:": A\n"빈값:":\n---\n# 📝 형성평가\n원문 표시 확인');
     put(vault, "수업/자료 사본.md", '---\ntitle: 자료 모음\n"단계:": A\n---\n비슷한 항목');
@@ -509,7 +510,7 @@ describe("vault notes", () => {
     expect((await manager.search("자료", options)).total).toBe(0);
   });
 
-  it("searches original Canvas nodes/edges and Bases text through the same service", async () => {
+  itWithSearch("searches original Canvas nodes/edges and Bases text through the same service", async () => {
     const { manager, pkm, vault, bus } = vaultSetup();
     put(vault, "도식.canvas", JSON.stringify({ nodes: [{ type: "group", label: "수업 연결" }, { type: "text", text: "나비정원" }], edges: [{ label: "해바라기연결" }] }));
     put(vault, "목록.base", 'views:\n  - name: 가을강의목록\n    type: table\n');

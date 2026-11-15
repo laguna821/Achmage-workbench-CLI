@@ -49,7 +49,9 @@ export async function officeKnowledgeScenario(ctx: Ctx) {
     await wd.execute('arguments[0].scrollIntoView({block:"center"});', button); await wd.click(button);
   };
   const openLibrary = async () => {
-    await wd.frame(null); await wd.click(await wd.waitFor('button[aria-label="연결과 설정"]'));
+    // 설정 › 문서 도구 › 지식베이스 (was the ⋯ "연결과 설정" popover): the rail's 설정 key, then the section.
+    await wd.frame(null); if (!await wd.find(".settings-dialog[open]")) await wd.click(await wd.waitFor('button[data-rail="settings"]'));
+    await wd.click(await wd.waitFor('.settings-dialog[open] .settings-nav [data-section="documents"]')); await wd.waitFor('.settings-dialog[open] .settings-pane[data-section="documents"]');
     await clickText("지식베이스…"); await wd.waitFor('.knowledge-library[role="dialog"]');
   };
   const enter = async (contains: string, selector = ".tiptap") => {

@@ -310,7 +310,7 @@ export class Gateway {
   async saveHwp(artifactId: string, revision: number, bytes: Uint8Array, metadata: HwpSaveMetadata) {
     post({ type: "office:saving" });
     const response = await this.call("POST", `/api/artifacts/${artifactId}/hwp/save?revision=${revision}`, encodeHwpSave(metadata, bytes), { "content-type": "application/octet-stream" });
-    return (await response.json()) as { id: string; revision: number; sha256: string };
+    return (await response.json()) as { id: string; revision: number; sha256: string; text?: "checked" | "unchecked"; structure?: "checked" | "unchecked" };
   }
 
   async repairHwp(artifactId: string, revision: number, bytes: Uint8Array, metadata: HwpSaveMetadata) {

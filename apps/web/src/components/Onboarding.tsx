@@ -1,31 +1,42 @@
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
-import type { Artifact, DocumentTools, Provider, ProviderStatus, ToolStatus } from "@workbench/contracts";
-import type { DropboxState } from "../../../../packages/contracts/src/dropbox.ts";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import type { ChannelKind, ChannelsState, DocumentTools, Provider, ProviderStatus } from "@workbench/contracts";
 import type { Api } from "../api.ts";
+import type { PaletteId, ThemePref } from "../theme.ts";
 import { createOnboardingModel, type OnboardingStepId } from "../../../../vendor/paseo/onboarding/model.ts";
 import { isImeComposingKeyboardEvent } from "../../../../vendor/paseo/mobile-web/keyboard-ime.ts";
-import { EngineCard, engineState, type EngineActions } from "./EngineSetup.tsx";
-import { OnboardingModelCache } from "./onboarding/ModelCache.tsx";
+import { PALETTES, PALETTE_CREDIT } from "./AppearanceSheet.tsx";
+import { EngineCard, type EngineActions } from "./EngineSetup.tsx";
+import { Icon } from "./Icon.tsx";
 import { restoreSurfaceFocus } from "./controls/menu-navigation.ts";
 import { usePkm } from "./pkm/PkmContext.tsx";
+import { MESSENGER_NEEDS } from "./phone-words.ts";
 import "../styles/onboarding.css";
 
-/** Shared by Connections: reflect setup/registration separately from merely finding the binary. */
-export function toolState(status: ToolStatus) {
-  if (status.setup === "error") return { text: "설정 중단", tone: "warn" };
-  if (status.setup === "checking") return { text: "앱 확인 중…", tone: "" };
-  if (status.setup === "registering") return { text: "OS에 등록 중…", tone: "" };
-  if (status.busy || status.setup === "installing") return { text: "설치 중…", tone: "" };
-  if (status.registered === true) return { text: `독립 앱 등록·연결됨${status.version ? ` · ${status.version}` : ""}`, tone: "ok" };
-  if (status.registered === false && status.available) return { text: "앱 있음 · OS 등록 필요", tone: "warn" };
-  if (status.bundled) return { text: `앱에 포함${status.version ? ` · ${status.version}` : ""}`, tone: "ok" };
-  if (status.available) return { text: `사용 가능${status.version ? ` · ${status.version}` : ""}`, tone: "ok" };
-  return { text: "아직 없음", tone: "warn" };
-}
+// The first run (atlas-look, 2026-11-15, the owner: "온보딩 설정화면 가운데 뜨는 화면도 atlas랑 거의 똑같이"):
+// ONE panel in the centre of the window over the dimmed, inert shell — the steps listed on its left, the
+// step on its right, the keys at the right pane's foot — and only three steps: 화면 (밝기 and 색 조합),
+// AI 엔진 (Claude and Codex as rows), 휴대폰 메신저 (텔레그램 / Slack, 건너뛰기 always there). Everything
+// the earlier steps offered stays in 설정 (the first project: the empty list's 새 프로젝트). The gate
+// (prefs.onboarding) and the Paseo visit model stay; steps the model has that are not shown are passed over.
 
+export { toolState } from "./Connections.tsx";
+
+/** The steps a person sees, in order (the model's "projects" and "orchestration" are passed over). */
+const SHOWN: OnboardingStepId[] = ["appearance", "providers", "phone"];
 const STEP_LABELS: Record<OnboardingStepId, string> = {
-  appearance: "환영", providers: "AI 연결", projects: "작업 폴더", orchestration: "문서 도구", phone: "시작하기",
+  appearance: "화면", providers: "AI 엔진", projects: "첫 프로젝트", orchestration: "문서 도구", phone: "휴대폰 메신저",
 };
+const THEMES: { id: ThemePref; label: string; icon: "sun" | "moon" | "settings" }[] = [
+  { id: "light", label: "밝게", icon: "sun" },
+  { id: "dark", label: "어둡게", icon: "moon" },
+  { id: "system", label: "시스템 따라", icon: "settings" },
+];
+// Two independent rows (the owner: both can be connected at once): each says its own state and has its own key.
+const MESSENGERS: { id: ChannelKind; label: string; hint: string }[] = [
+  { id: "telegram", label: "텔레그램", hint: "봇 하나를 만들어 이 PC와 잇습니다." },
+  { id: "slack", label: "Slack", hint: "내 Slack에 앱 하나를 만들어 이 PC와 잇습니다." },
+];
+const ready = (status: ProviderStatus | undefined) => Boolean(status?.installed && status.loggedIn);
 
 export type OnboardingProps = {
   providers: Partial<Record<Provider, ProviderStatus>>;
@@ -36,19 +47,20 @@ export type OnboardingProps = {
   onDone(): void;
   api?: Api;
   hostLabel?: string;
-  /** Keep the same original step visit while an existing setup dialog is in front. */
+  /** Keep the same original step visit while an existing setup dialog (설정 › 메신저) is in front. */
   suspended?: boolean;
-  artifacts?: Artifact[];
-  onOpenDropbox?(): void;
-  onOpenVault?(): void;
-  onOpenDevices?(): void;
-  onOpenDocument?(artifactId: string): void;
-  onCreateDocument?(): void;
-  onImportHistory?(): void;
+  themePref?: ThemePref;
+  onTheme?(pref: ThemePref): void;
+  palette?: PaletteId;
+  onPalette?(palette: PaletteId): void;
+  /** Hands over to 설정 › 메신저 for that messenger (its own wizard); the first run comes back when it closes. */
+  onOpenMessenger?(kind: ChannelKind): void;
+  /** The launch's attribution line (LaunchCredit) when the app opens on the first run: the panel's last row. */
+  foot?: ReactNode;
 };
 
 /** Original Paseo visit fencing and completion model; Workbench owns the existing settings/actions. */
-export function Onboarding({ providers, tools, engineActions, onRefresh, onInstallIeum, onDone, api, hostLabel = "현재 PC", suspended = false, artifacts = [], onOpenDropbox, onOpenVault, onOpenDevices, onOpenDocument, onCreateDocument, onImportHistory }: OnboardingProps) {
+export function Onboarding({ foot, providers, engineActions, onRefresh, onDone, api, hostLabel = "현재 PC", suspended = false, themePref = "system", onTheme, palette = "atlas", onPalette, onOpenMessenger }: OnboardingProps) {
   const pkm = usePkm();
   const effectiveSuspended = suspended || Boolean(pkm.dialog);
   const done = useRef(onDone); done.current = onDone;
@@ -59,19 +71,50 @@ export function Onboarding({ providers, tools, engineActions, onRefresh, onInsta
     markCompleted: async () => done.current(),
   } }));
   const flow = useSyncExternalStore(model.subscribe, model.getState, model.getState);
-  const surface = useRef<HTMLDivElement>(null), heading = useRef<HTMLHeadingElement>(null);
-  const [selected, setSelected] = useState("");
+  const surface = useRef<HTMLDivElement>(null), heading = useRef<HTMLHeadingElement>(null), backdrop = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let active = true;
     void model.ready.then(() => { if (active) model.reopen(hostLabel, { includePhoneStep: true }); });
     return () => { active = false; };
   }, [model, api]);
-  const step = flow.status === "open" ? flow.steps[flow.stepIndex]! : null;
+  const raw = flow.status === "open" ? flow.steps[flow.stepIndex]! : null;
+  // The model may stand on a step not shown here: it is passed over, forwards.
+  useEffect(() => { if (raw && !SHOWN.includes(raw)) model.goTo("phone"); }, [raw, model]);
+  const step = raw && SHOWN.includes(raw) ? raw : null;
+  const index = step ? SHOWN.indexOf(step) : 0;
+  const shown = !effectiveSuspended && flow.status === "open" && step !== null;
+  // 휴대폰 메신저: what is connected now, read again whenever the step is in front (e.g. back from 설정 › 메신저).
+  const [channels, setChannels] = useState<ChannelsState | null>(null);
+  useEffect(() => {
+    if (!shown || step !== "phone" || !api) return;
+    let live = true;
+    void api.request<ChannelsState>("GET", "/api/channels").then(next => { if (live) setChannels(next); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [shown, step, api]);
+  // The first run holds the focus (design review I1): everything beside it and under it — the rail,
+  // the list, the panes and their composer — is inert while it is up, so Tab, a screen reader and a
+  // stray autofocus stay inside the panel. Only what this sets is taken back.
+  useLayoutEffect(() => {
+    const root = backdrop.current;
+    if (!shown || !root) return;
+    const marked: Element[] = [];
+    for (let node: Element | null = root; node && node !== document.body && node.parentElement; node = node.parentElement) {
+      for (const sibling of Array.from(node.parentElement.children)) {
+        if (sibling === node || sibling.hasAttribute("inert") || sibling.tagName === "SCRIPT") continue;
+        sibling.setAttribute("inert", ""); marked.push(sibling);
+      }
+    }
+    return () => marked.forEach((element) => element.removeAttribute("inert"));
+  }, [shown]);
   useLayoutEffect(() => {
     if (effectiveSuspended || flow.status !== "open") return;
     const opener = document.activeElement, dialog = surface.current;
     heading.current?.focus({ preventScroll: true });
-    return () => restoreSurfaceFocus(opener, dialog);
+    // A view under it that focuses its own field after mounting does not take the focus away.
+    const again = requestAnimationFrame(() => {
+      if (!(document.activeElement instanceof Node) || !dialog?.contains(document.activeElement)) heading.current?.focus({ preventScroll: true });
+    });
+    return () => { cancelAnimationFrame(again); restoreSurfaceFocus(opener, dialog); };
   }, [effectiveSuspended, step]);
   useEffect(() => {
     if (effectiveSuspended || flow.status !== "open") return;
@@ -89,107 +132,93 @@ export function Onboarding({ providers, tools, engineActions, onRefresh, onInsta
       document.removeEventListener("visibilitychange", refresh);
     };
   }, [model, effectiveSuspended, flow.status]);
-  if (flow.status !== "open" || effectiveSuspended) return null;
-  const standalone = tools?.ieumApp;
-  const chosen = artifacts.find(artifact => artifact.id === selected && artifact.diskState !== "missing") ?? artifacts.find(artifact => artifact.diskState !== "missing");
-  const useDocument = () => {
-    if (!chosen || !onOpenDocument) return;
-    void model.complete(); onOpenDocument(chosen.id);
-  };
-  return <div className="onboarding-backdrop" role="dialog" aria-modal="true" aria-labelledby="onboarding-title" onKeyDown={event => {
+  if (flow.status !== "open" || effectiveSuspended || !step) return null;
+  const last = index === SHOWN.length - 1;
+  const next = () => last ? model.next(flow.visit) : model.goTo(SHOWN[index + 1]!);
+  const back = () => model.goTo(SHOWN[index - 1]!);
+  const finish = () => void model.complete();
+  const anyEngine = ready(providers.claude) || ready(providers.codex);
+  // One filled key per step (I2): with no engine ready the engine rows' keys are the way on, so 'AI 없이 계속' is quiet.
+  const quietNext = step === "providers" && !anyEngine;
+
+  return <div ref={backdrop} className="onboarding-backdrop onboarding-first" role="dialog" aria-modal="true" aria-labelledby="onboarding-title" onKeyDown={event => {
     if (event.key !== "Tab") return;
     const nodes = [...(surface.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), a[href], summary, [tabindex="0"]') ?? [])].filter(node => node.getClientRects().length > 0);
-    const first = nodes[0], last = nodes.at(-1);
-    if (event.shiftKey && (document.activeElement === first || document.activeElement === heading.current)) { event.preventDefault(); last?.focus(); }
-    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    const first = nodes[0], lastNode = nodes.at(-1);
+    if (event.shiftKey && (document.activeElement === first || document.activeElement === heading.current)) { event.preventDefault(); lastNode?.focus(); }
+    else if (!event.shiftKey && document.activeElement === lastNode) { event.preventDefault(); first?.focus(); }
   }}>
     <div className="onboarding" ref={surface}>
-      <p className="onboarding-host">설정 대상 · {hostLabel}</p>
-      <ol className="onboarding-steps">
-        {flow.steps.map((id, index) => <li key={id} className={index === flow.stepIndex ? "active" : index < flow.stepIndex ? "done" : ""}>
-          <button type="button" aria-current={index === flow.stepIndex ? "step" : undefined} onClick={() => model.goTo(id)}>{STEP_LABELS[id]}</button>
-        </li>)}
-      </ol>
-      {step === "appearance" ? <section>
-        <h2 id="onboarding-title" ref={heading} tabIndex={-1}>작업을 시작할 준비</h2>
-        <p>Codex·Claude Code 계정을 연결하고, Dropbox 작업 폴더와 독립 이음오피스를 이어 씁니다. 이미 설치한 도구와 설정은 그대로 사용합니다.</p>
-        <ol className="onboarding-path"><li>필요한 CLI 설치 → 기존 계정 로그인</li><li>Dropbox 폴더 연결 → 원래 위치의 문서 열기</li><li>독립 이음 앱 설치·OS 등록 → 같은 파일 열기·저장·복귀</li></ol>
-        <p className="onboarding-notice">AI 계정 연결 없이도 내장 편집기에서 새 문서를 만들고 편집할 수 있습니다. 필요한 설정만 진행하고 나머지는 나중에 돌아와도 됩니다.</p>
-      </section> : null}
-      {step === "providers" ? <section>
-        <h2 id="onboarding-title" ref={heading} tabIndex={-1}>Codex와 Claude 연결</h2>
-        <p>설치와 로그인은 이 호스트의 기존 연결 기능으로 진행합니다. 계정 암호를 Workbench에 입력하지 않습니다.</p>
-        {(["codex", "claude"] as const).map(provider => <div key={provider} className="onboarding-card"><EngineCard provider={provider} status={providers[provider]} actions={engineActions} /></div>)}
-        <p className="onboarding-notice">요청과 첨부 문서는 선택한 AI 제공자에게 전달됩니다. 구독·종량제 상태를 확인한 뒤 사용하세요.</p>
-        <button type="button" className="text-button" onClick={onRefresh}>설치·로그인 상태 다시 확인</button>
-      </section> : null}
-      {step === "projects" ? <section>
-        <h2 id="onboarding-title" ref={heading} tabIndex={-1}>Dropbox부터 연결</h2>
-        <p>Dropbox 앱이 동기화하는 폴더를 연결합니다. 문서를 복제하거나 옮기지 않고 같은 파일을 Workbench와 이음오피스에서 사용합니다.</p>
-        <DropboxStatus api={api} onOpen={onOpenDropbox} />
-        <div className="onboarding-card"><strong>옵시디언 볼트 · 읽기 전용</strong><p>찾아보기와 인용에 사용할 기존 볼트를 연결합니다. 노트의 내용·태그·링크는 자동으로 고치지 않습니다.</p>
-          {onOpenVault ? <button type="button" className="button" onClick={onOpenVault}>볼트 연결·설정</button> : <p className="muted">연결과 설정에서 볼트를 고를 수 있습니다.</p>}
+      <nav className="onboarding-side" aria-label="처음 설정">
+        <p className="onboarding-side-head">처음 설정</p>
+        <ol className="onboarding-steps" aria-label="처음 설정 단계">
+          {SHOWN.map((id, at) => <li key={id} className={at === index ? "active" : at < index ? "done" : ""}>
+            <button type="button" aria-current={at === index ? "step" : undefined} onClick={() => model.goTo(id)}>
+              <span className="onboarding-step-no" aria-hidden>{at < index ? <Icon name="check" size={12} /> : at + 1}</span>{STEP_LABELS[id]}
+            </button>
+          </li>)}
+        </ol>
+        <p className="onboarding-side-note">모두 나중에 설정에서 바꿀 수 있습니다.</p>
+      </nav>
+      <section className="onboarding-pane">
+        <div className="onboarding-page">
+          <p className="onboarding-count">{index + 1} / {SHOWN.length}, {STEP_LABELS[step]}</p>
+          {step === "appearance" ? <>
+            <h2 id="onboarding-title" ref={heading} tabIndex={-1}>화면을 고르세요</h2>
+            <p className="onboarding-lead">고르면 바로 바뀝니다. 나중에 설정 › 화면에서 바꿀 수 있습니다.</p>
+            <div className="onboarding-look">
+              <div className="onboarding-look-choices">
+                <p className="onboarding-group-head" id="onboarding-theme-head">밝기</p>
+                <div className="onboarding-tiles three" role="radiogroup" aria-labelledby="onboarding-theme-head">
+                  {THEMES.map(theme => <button key={theme.id} type="button" role="radio" aria-checked={themePref === theme.id} className={`onboarding-tile${themePref === theme.id ? " chosen" : ""}`} onClick={() => onTheme?.(theme.id)}>
+                    <Icon name={theme.icon} size={18} /><span>{theme.label}</span>
+                  </button>)}
+                </div>
+                <p className="onboarding-group-head" id="onboarding-palette-head">색 조합</p>
+                <div className="onboarding-tiles" role="radiogroup" aria-labelledby="onboarding-palette-head">
+                  {PALETTES.map(choice => <button key={choice.id} type="button" role="radio" aria-checked={palette === choice.id} className={`onboarding-tile${palette === choice.id ? " chosen" : ""}`} onClick={() => onPalette?.(choice.id)}>
+                    <span className={`onboarding-swatch swatch-${choice.id}`} aria-hidden><i /><i /><i /></span><span>{choice.label}</span>
+                  </button>)}
+                </div>
+                <p className="onboarding-credit">{PALETTE_CREDIT}</p>
+              </div>
+              {/* The live preview: the shell's own tokens, so it is whatever was just chosen. */}
+              <span className="onboarding-preview" role="img" aria-label="고른 화면 미리 보기">
+                <span className="onboarding-preview-rail"><i className="current" /><i /><i /></span>
+                <span className="onboarding-preview-list"><i className="current" /><i /><i /></span>
+                <span className="onboarding-preview-work"><i /><i /><i className="key" /></span>
+              </span>
+            </div>
+          </> : null}
+          {step === "providers" ? <>
+            <h2 id="onboarding-title" ref={heading} tabIndex={-1}>AI 엔진에 로그인하세요</h2>
+            <p className="onboarding-lead">이 앱은 Claude나 Codex에게 일을 맡깁니다. 하나만 연결해도 됩니다.</p>
+            <div className="onboarding-engines">
+              {(["claude", "codex"] as const).map(provider => <EngineCard key={provider} provider={provider} status={providers[provider]} actions={engineActions} />)}
+            </div>
+            <p className="onboarding-note">로그인은 각 엔진의 로그인 페이지에서 하며, 암호를 이 앱에 넣지 않습니다. <button type="button" className="text-button" onClick={onRefresh}>다시 확인</button></p>
+          </> : null}
+          {step === "phone" ? <>
+            <h2 id="onboarding-title" ref={heading} tabIndex={-1}>휴대폰 메신저로도 쓰기</h2>
+            <p className="onboarding-lead">밖에서 휴대폰 메신저로 이 PC의 AI에게 일을 시키고 결과를 받습니다. {MESSENGER_NEEDS} 지금 하지 않아도 됩니다.</p>
+            <ul className="onboarding-ways">
+              {MESSENGERS.map(way => {
+                const bot = channels?.bots.find(entry => entry.kind === way.id);
+                const name = bot ? (bot.kind === "slack" ? bot.appName || bot.name : bot.username ? `@${bot.username}` : bot.name) : "";
+                return <li key={way.id} data-messenger={way.id}><div><strong>{way.label} <span className={`onboarding-way-state${bot ? " on" : ""}`}>{bot ? `연결됨${name ? `, ${name}` : ""}` : "연결 안 됨"}</span></strong><span>{way.hint}</span></div>
+                  {onOpenMessenger ? <button type="button" className="button small" aria-label={`${way.label} ${bot ? "열기" : "연결하기"}`} onClick={() => onOpenMessenger(way.id)}>{bot ? "열기" : "연결하기"}</button> : null}</li>;
+              })}
+            </ul>
+            <p className="onboarding-note">{onOpenMessenger ? "설정 › 메신저가 열리고, 닫으면 이 안내로 돌아옵니다." : "이 PC의 앱에서 설정 › 메신저로 연결합니다."}</p>
+          </> : null}
         </div>
-        <p className="muted">Dropbox 동기화 진행과 오프라인 사용 여부는 Dropbox 앱에서 확인하세요. Google Drive 전용 연결은 아직 제공하지 않습니다. 로컬 폴더로도 작업을 시작할 수 있습니다.</p>
-      </section> : null}
-      {step === "orchestration" ? <section>
-        <h2 id="onboarding-title" ref={heading} tabIndex={-1}>독립 이음 앱까지 연결</h2>
-        <p>내장 편집기와 별도 이음오피스 앱을 함께 씁니다. 독립 앱은 Workbench 설치·첫 실행 때 준비하며, 중단된 설치와 OS 등록은 아래에서 이어갈 수 있습니다.</p>
-        <div className="onboarding-card">
-          <div className="connection-head"><strong>이음오피스 독립 앱</strong><span className={`connection-state ${standalone ? toolState(standalone).tone : "warn"}`}>{standalone ? toolState(standalone).text : "설치 상태 확인 필요"}</span></div>
-          {standalone?.message ? <p role="status">{standalone.message}</p> : null}
-          {standalone?.path ? <p className="mono onboarding-file-path">{standalone.path}</p> : null}
-          <p>OS 앱 목록에 등록한 독립 앱입니다. 문서의 ‘앱으로 열기’가 현재 파일 경로를 이 앱으로 전달합니다.</p>
-          <button type="button" className="button primary" onClick={onInstallIeum}>{standalone?.busy ? "설치 진행 보기" : standalone?.registered ? "독립 앱 연결·업데이트" : "독립 앱 설치·OS 등록"}</button>
+        <div className="onboarding-actions">
+          {index > 0 ? <button type="button" className="text-button" onClick={back}>이전</button> : null}<span className="spacer" />
+          <button type="button" className="text-button" onClick={finish}>{last ? "건너뛰기" : "나중에 설정"}</button>
+          <button type="button" className={quietNext ? "button" : "button primary"} onClick={next}>{last ? "시작하기" : quietNext ? "AI 없이 계속" : "다음"}</button>
         </div>
-        <details className="onboarding-tool-details"><summary>내장 문서 도구 상태</summary>
-          {tools ? ([{ name: "이음오피스 문서 편집기", status: tools.ieumoffice }, { name: "hallym-kordoc 스킬", status: tools.kordoc }, ...(tools.hwp ? [{ name: "이음 한글", status: tools.hwp }] : []), ...(tools.pdf ? [{ name: "이음 PDF", status: tools.pdf }] : [])]).map(row => <p key={row.name}>{row.name} <span className="muted">· {toolState(row.status).text}</span></p>) : <p>도구 상태를 불러오는 중입니다.</p>}
-        </details>
-        <OnboardingModelCache api={api} />
-      </section> : null}
-      {step === "phone" ? <section>
-        <h2 id="onboarding-title" ref={heading} tabIndex={-1}>같은 문서로 이어서 작업</h2>
-        <div className="onboarding-ready-list">
-          {(["codex", "claude"] as const).map(provider => <span key={provider}>{provider === "codex" ? "Codex" : "Claude Code"} · {engineState(providers[provider]).text}</span>)}
-          <span>이음 독립 앱 · {standalone ? toolState(standalone).text : "설정에서 확인"}</span>
-        </div>
-        <ol className="onboarding-path"><li>아래 문서를 열고 상단 ‘앱으로 열기’를 누릅니다. 미저장 내용은 먼저 저장합니다.</li><li>독립 이음 앱에서 같은 파일을 편집하고 저장합니다.</li><li>Workbench로 돌아오면 외부 저장을 새 판으로 받아 이어갑니다. 동시 편집 충돌은 덮어쓰지 않고 표시합니다.</li></ol>
-        {chosen && onOpenDocument ? <div className="onboarding-card">
-          <label htmlFor="onboarding-document">이어서 사용할 문서</label>
-          <select id="onboarding-document" value={chosen.id} onChange={event => setSelected(event.target.value)}>{artifacts.filter(artifact => artifact.diskState !== "missing").map(artifact => <option key={artifact.id} value={artifact.id}>{artifact.name}</option>)}</select>
-          <p className="mono onboarding-file-path">{chosen.path}</p>
-          <button type="button" className="button primary" onClick={useDocument}>안내를 마치고 이 문서 열기</button>
-        </div> : <p className="muted">아직 열린 문서가 없습니다. Dropbox에서 문서를 열거나 새 문서를 만들어 시작하세요.</p>}
-        <div className="onboarding-extra-actions">
-          {onCreateDocument ? <button type="button" className="button" onClick={() => { void model.complete(); onCreateDocument(); }}>AI 없이 새 문서</button> : null}
-          {onOpenDropbox ? <button type="button" className="button" onClick={onOpenDropbox}>Dropbox 문서·프로젝트 열기</button> : null}
-          {onOpenDevices ? <button type="button" className="button" onClick={onOpenDevices}>휴대폰·다른 기기 연결</button> : null}
-          {onImportHistory ? <button type="button" className="text-button" onClick={onImportHistory}>CLI 대화 기록 가져오기</button> : null}
-        </div>
-        <p className="muted">가져온 대화는 보관 기록입니다. 옛 요청을 자동으로 실행하지 않습니다. 휴대폰은 호스트의 QR 또는 연결 링크로 연결합니다.</p>
-      </section> : null}
-      <div className="onboarding-actions">
-        <button type="button" className="text-button" onClick={() => void model.complete()}>나중에 설정</button><span className="spacer" />
-        {flow.stepIndex > 0 ? <button type="button" className="button" onClick={model.back}>이전</button> : null}
-        <button type="button" className="button primary" onClick={() => model.next(flow.visit)}>{flow.stepIndex < flow.steps.length - 1 ? "다음" : "시작하기"}</button>
-      </div>
+      </section>
+      {foot ? <div className="onboarding-foot">{foot}</div> : null}
     </div>
-  </div>;
-}
-
-function DropboxStatus({ api, onOpen }: { api?: Api; onOpen?: () => void }) {
-  const [state, setState] = useState<DropboxState | null>(null), [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    if (!api) return;
-    let active = true;
-    setState(null); setError(null);
-    void api.request<DropboxState>("GET", "/api/dropbox").then(value => { if (active) setState(value); }, reason => { if (active) setError(reason instanceof Error ? reason.message : String(reason)); });
-    return () => { active = false; };
-  }, [api]);
-  return <div className="onboarding-card">
-    <strong>{state?.selected ? state.selected.available ? "Dropbox 폴더 연결됨" : "연결 폴더를 현재 찾을 수 없음" : "Dropbox 폴더 선택"}</strong>
-    {state?.selected ? <p className="mono onboarding-file-path">{state.selected.path}</p> : <p>호스트에서 찾은 동기화 폴더를 고르거나 이미 사용하는 폴더를 지정합니다.</p>}
-    {error ? <p role="alert" className="warn">{error}</p> : null}
-    {onOpen ? <button type="button" className="button primary" onClick={onOpen}>{state?.selected ? "Dropbox 문서·프로젝트 열기" : "Dropbox 연결·폴더 선택"}</button> : <p className="muted">연결과 설정 → Dropbox 폴더 연결에서 이어갈 수 있습니다.</p>}
   </div>;
 }

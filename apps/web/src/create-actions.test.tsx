@@ -27,14 +27,15 @@ it("shares all manual formats and preserves the chosen project/workspace in the 
     "docx", "pptx", "xlsx", "hwpx", "pdf", "markdown", "html", "xmind", "design",
   ]);
   expect(commands.filter(action => action.kind === "session").map(action => action.target)).toEqual([target, target]);
-  expect(commands.find(action => action.kind === "folder")?.label).toBe("새 정리 폴더…");
+  expect(commands.find(action => action.kind === "folder")?.label).toBe("목록에 새 폴더…");
   const created = { id: "file", workId: "project", workspaceId: "branch" } as Artifact;
   const createOfficeDocument = vi.fn(async () => created), createDesign = vi.fn(async () => created), onOpen = vi.fn();
   const api = { createOfficeDocument, createDesign } as unknown as Api;
   for (const command of commands) {
     if (command.kind !== "document") continue;
     const view = render(<NewDocumentDialog api={api} state={{ ...initialState, works: { project: work }, workspaces }} request={{ ...command.target, format: command.format }} onOpen={onOpen} onClose={() => {}} />);
-    expect(screen.getByText("원고 · /research-branch")).toBeTruthy();
+    expect(screen.getByText("저장할 폴더: 원고")).toBeTruthy();
+    expect(screen.getByText("/research-branch")).toBeTruthy();
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "만들고 열기" })); });
     if (command.format === "design") expect(createDesign).toHaveBeenLastCalledWith("project", expect.any(String), "square", "branch");
     else expect(createOfficeDocument).toHaveBeenLastCalledWith("project", expect.objectContaining({ format: command.format, workspaceId: "branch" }));
@@ -47,4 +48,11 @@ it("resolves a workspace only within the selected project and falls back to its 
   expect(creationWorkspace(work, ["branch", "foreign"], workspaces)).toBe("branch");
   expect(creationWorkspace(work, ["foreign"], workspaces)).toBe("main");
   expect(creationWorkspace(work, ["branch"], { ...workspaces, branch: { ...workspaces.branch!, archivedAt: 1 } })).toBe("main");
+});
+
+it("speaks the owner's words when a person starts something (I5): 대화, 문서, 폴더, never 세션 or 작업공간", () => {
+  const labels = createActions({ workId: "project", workspaceId: "main", folderId: null }).map(action => action.label);
+  expect(labels).toEqual(expect.arrayContaining(["Claude와 새 대화", "Codex와 새 대화", "목록에 새 폴더…", "프로젝트 폴더 안에 새 폴더…", "새 디자인"]));
+  expect(createActions({ folderId: null }).map(action => action.label)).toContain("새 대화");
+  expect(labels.join("\n")).not.toMatch(/세션|작업공간|doory|정리 폴더/);
 });

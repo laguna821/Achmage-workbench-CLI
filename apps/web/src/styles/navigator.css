@@ -5,24 +5,26 @@
 .side-head-row {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-3xs);
 }
 
+/* "새로 만들기" keeps the width it has in one column (288 − 2×12 − 2×28 − 2×8); in two panes the
+   layout button and ⋯ go to the row's end instead of the button stretching to meet them. */
 .side-head-row .side-new {
   flex: 1 1 auto;
   min-width: 0;
+  max-width: 192px;
+}
+
+.side-head-row .side-layout {
+  margin-left: auto;
 }
 
 .side-head-row .icon-button.small {
   flex: 0 0 auto;
   width: 28px;
   height: 28px;
-  border-radius: var(--r-sm);
-  color: var(--muted);
-}
-
-.side-head-row .icon-button.small:hover {
-  color: var(--text);
+  --c-ink: var(--muted);
 }
 
 /* ── layouts ─────────────────────────────────────────────────────────────────────────────────── */
@@ -108,8 +110,8 @@ html.nav-dragging * {
   align-items: center;
   gap: 6px;
   min-width: 0;
-  margin-left: -4px;
-  padding: 2px 4px;
+  margin-left: calc(var(--space-2xs) * -1);
+  padding: var(--space-3xs) var(--space-2xs);
   border: 0;
   border-radius: var(--r-sm);
   background: transparent;
@@ -150,7 +152,7 @@ html.nav-dragging * {
 }
 
 .nav-empty {
-  padding: 2px 10px 6px 30px;
+  padding: var(--space-3xs) 10px 6px 30px;
   font-size: var(--fs-micro);
   color: var(--muted);
   line-height: 1.4;
@@ -259,31 +261,20 @@ html.nav-dragging * {
 .list-tools .icon-button.small {
   width: 26px;
   height: 26px;
-  border-radius: var(--r-sm);
-  color: var(--muted);
-}
-
-.list-tools .icon-button.small:hover {
-  color: var(--text);
-}
-
-.list-tools .icon-button.small.pressed {
-  background: var(--accent-soft);
-  color: var(--accent);
+  --c-ink: var(--muted);
 }
 
 .list-filter {
-  padding: 2px 8px 6px;
+  padding: var(--space-3xs) var(--space-xs) 6px;
 }
 
 .list-filter input {
   width: 100%;
   height: 30px;
   padding: 0 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
-  background: var(--surface);
-  color: var(--text);
+  border-width: 1px; border-style: solid; --c-edge: var(--field-line);
+  --c-fill: var(--surface);
+  --c-ink: var(--text);
   font: inherit;
   font-size: var(--fs-meta);
   outline: none;
@@ -291,11 +282,6 @@ html.nav-dragging * {
 
 .list-filter input::placeholder {
   color: var(--muted);
-}
-
-.list-filter input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .list-scroll {
@@ -309,14 +295,14 @@ html.nav-dragging * {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 12px 8px 4px;
+  padding: var(--space-sm) var(--space-xs) var(--space-2xs);
   font-size: var(--fs-micro);
   font-weight: 600;
   color: var(--muted);
 }
 
 .list-group:first-child {
-  padding-top: 4px;
+  padding-top: var(--space-2xs);
 }
 
 .list-group .count {
@@ -336,21 +322,37 @@ html.nav-dragging * {
   word-break: keep-all;
 }
 
+/* What to do about an empty list, right under the sentence that says why it is empty. */
+.list-empty-action {
+  display: block;
+  margin-top: var(--space-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.list-empty-action:hover {
+  text-decoration: underline;
+}
+
 /* A project like a note in Notebook Navigator: name and stage, the note's first words, date and tags.
    No `content-visibility: auto` here: in WebKitGTK it made scrolling 300 rows cost three times the
    CPU (measured: 46% vs 15%, frames 22.7 vs 16.1ms) for rows that are cheap to paint anyway. */
 .side-row.nav-project {
   display: block;
   min-height: 0;
-  padding: 6px 8px 7px;
-  border-radius: var(--r-md);
+  padding: 6px var(--space-xs) 7px;
 }
 
 .side-row.nav-project.compact {
   display: flex;
   align-items: center;
   min-height: 30px;
-  padding: 0 8px;
+  padding: 0 var(--space-xs);
 }
 
 .nav-project-line {
@@ -403,7 +405,7 @@ html.nav-dragging * {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  margin: 2px 0 0 20px;
+  margin: var(--space-3xs) 0 0 20px;
   font-size: var(--fs-meta);
   line-height: 1.4;
   color: var(--muted);
@@ -434,10 +436,16 @@ html.nav-dragging * {
   font-variant-numeric: tabular-nums;
 }
 
+/* The folder gives way first (with an ellipsis); the date and the counts by kind never do. */
 .nav-project-folder {
   display: inline-flex;
   align-items: center;
   gap: 3px;
+  flex: 0 1 auto;
+  min-width: 28px;
+}
+
+.nav-project-folder > span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -457,29 +465,26 @@ html.nav-dragging * {
   color: var(--faint);
 }
 
-.nav-project-sessions {
+/* What the project holds, by kind: 대화 · 문서 · 웹, in the order they unfold. */
+.nav-project-kinds {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-xs);
   margin-left: auto;
   flex: 0 0 auto;
 }
 
-.nav-project-sessions svg {
+.nav-project-kinds > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3xs);
+}
+
+.nav-project-kinds svg {
   color: var(--faint);
 }
 
 /* Picked with Ctrl/Shift+click: a tint, the current one stays the lifted slip. */
-.side-row.nav-project.selected {
-  background: var(--accent-soft);
-}
-
-.side-row.nav-project.selected.current {
-  background: var(--surface);
-  box-shadow:
-    0 0 0 1px var(--accent-line),
-    var(--elev-1);
-}
 
 .side-row.nav-project.renaming .nav-project-line {
   min-height: 26px;
@@ -492,7 +497,7 @@ html.nav-dragging * {
   flex-direction: column;
   gap: var(--space-3);
   width: min(440px, calc(100vw - 40px));
-  padding: 22px 24px 16px;
+  padding: 22px var(--space-lg) var(--space-md);
   border: 1px solid var(--line);
   border-radius: var(--r-xl);
   background: var(--surface);
@@ -526,8 +531,8 @@ html.nav-dragging * {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
-  padding: 10px 12px;
+  gap: var(--space-3xs);
+  padding: 10px var(--space-sm);
   border: 1px solid var(--line-strong);
   border-radius: var(--r-lg);
   background: var(--surface);
@@ -573,7 +578,7 @@ html.nav-dragging * {
 }
 
 .nav-floating-title {
-  margin: 2px 2px 8px;
+  margin: var(--space-3xs) var(--space-3xs) var(--space-xs);
   font-size: var(--fs-micro);
   font-weight: 600;
   color: var(--muted);
@@ -583,7 +588,7 @@ html.nav-dragging * {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin: 0 2px 10px;
+  margin: 0 var(--space-3xs) 10px;
 }
 
 .folder-swatch {
@@ -610,31 +615,26 @@ html.nav-dragging * {
 .folder-hex {
   display: flex;
   gap: 6px;
-  margin: 0 0 12px;
+  margin: 0 0 var(--space-sm);
 }
 
 .folder-hex input {
   flex: 1 1 auto;
   min-width: 0;
   height: 28px;
-  padding: 0 8px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
-  background: var(--surface);
-  color: var(--text);
+  padding: 0 var(--space-xs);
+  border-width: 1px; border-style: solid; --c-edge: var(--field-line);
+  --c-fill: var(--surface);
+  --c-ink: var(--text);
   font: inherit;
   font-size: var(--fs-meta);
   outline: none;
 }
 
-.folder-hex input:focus {
-  border-color: var(--accent);
-}
-
 .folder-icons {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
-  gap: 2px;
+  gap: var(--space-3xs);
 }
 
 .folder-icons .icon-button.small {
@@ -654,9 +654,459 @@ html.nav-dragging * {
   }
 }
 
-/* Project notes, conversations, and files have distinct, stable visual identities. */
-.nav-kind { flex: 0 0 auto; font-size: 10px; line-height: 1.5; padding: 1px 5px; border-radius: 4px; color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
-.nav-folder-heading { margin: 12px 8px 5px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 11px; font-weight: 600; color: var(--muted); }
-.nav-root { margin-bottom: 8px; border: 1px solid var(--line); border-radius: 6px; }
-.row-work .side-row-icon, .nav-project-line > svg { color: var(--accent); }
-.row-docs { margin-top: 6px; font-size: 11px; font-weight: 600; color: var(--muted); }
+/* A label inside a section ("정리 폴더"), on the kind labels' size (대화 · 문서 · 웹). */
+.nav-folder-heading {
+  margin: var(--space-xs) var(--space-xs) var(--space-2xs);
+  padding-top: var(--space-xs);
+  border-top: 1px solid var(--line);
+  font: 600 var(--text-xs)/16px var(--font-ui);
+  color: var(--muted);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════════════════════
+   N1 — the owner's navigation (2026-11-14): a deep-navy rail at the far left, full height, and
+   ONE white list column beside it (프로젝트 level 1 / level 2, 문서, 활동, 볼트). Linear's restraint:
+   one row height (32px), thin rules, quiet meta at a row's end, no nested boxes, no bold rows.
+   ════════════════════════════════════════════════════════════════════════════════════════════ */
+:root { --rail-width: 72px; }
+@media (width < 50rem) { :root { --rail-width: 52px; } }
+
+/* The rail stands outside the top bar and the work, the whole window's height. */
+.app.with-rail,
+:root[data-mobile-layout] .app.with-rail { padding-left: calc(var(--rail-width) + env(safe-area-inset-left, 0px)); }
+.nav-rail {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: var(--z-sheet);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: var(--rail-width);
+  padding: var(--space-sm) 0;
+  background: var(--color-rail);
+  color: var(--color-rail-muted);
+  font: 500 var(--text-xs)/16px var(--font-ui);
+}
+.rail-brand {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-bottom: var(--space-sm);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-card);
+  background: none;
+  color: var(--color-rail-ink);
+  cursor: pointer;
+}
+.rail-brand:focus-visible { outline: 2px solid var(--color-rail-focus); outline-offset: 2px; }
+.rail-places {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  width: 100%;
+  margin: 0;
+  padding: 0 var(--space-xs);
+  list-style: none;
+}
+.rail-key {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3xs);
+  width: 100%;
+  min-height: 52px;
+  padding: var(--space-2xs) 0;
+  font: inherit;
+  cursor: pointer;
+}
+.nav-rail.compact .rail-key { min-height: 40px; }
+.rail-icon { position: relative; display: grid; place-items: center; width: 24px; height: 24px; }
+.rail-label { white-space: nowrap; letter-spacing: 0; }
+.rail-count {
+  position: absolute;
+  top: calc(var(--space-2xs) * -1);
+  right: calc(var(--space-xs) * -1);
+  min-width: 16px;
+  height: 16px;
+  padding: 0 var(--space-2xs);
+  border-radius: var(--radius-round);
+  background: var(--color-attention);
+  color: var(--color-attention-ink);
+  font: 600 var(--text-xs)/16px var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.rail-foot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  width: 100%;
+  margin-top: auto;
+  padding: var(--space-xs) var(--space-xs) 0;
+  border-top: 1px solid var(--color-rail-rule);
+}
+.rail-settings { position: relative; width: 100%; }
+.rail-settings .popover { left: calc(100% + var(--space-xs)); bottom: 0; }
+.rail-turn {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-rail-mark);
+  border-inline-start-color: transparent;
+  border-radius: var(--radius-round);
+  animation: c-turn 900ms linear infinite;
+}
+@media (prefers-reduced-motion: reduce) { .rail-turn { animation: none; border-style: dotted; border-inline-start-color: var(--color-rail-mark); } }
+.nav-rail .wordmark-ink { fill: var(--color-rail-ink); }
+.nav-rail .wordmark-arc { fill: var(--color-rail-mark); }
+
+/* ── the list column: white, one column ───────────────────────────────────────────────────── */
+.sidebar.nav-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--chrome-bg);
+  font: 400 var(--text-sm)/20px var(--font-ui);
+}
+.nav-column .nav-level { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.nav-column .nav-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 48px;
+  padding: 0 var(--space-xs) 0 var(--space-md);
+}
+.nav-column .nav-title { flex: 1 1 auto; min-width: 0; margin: 0; font: 600 var(--text-md)/24px var(--font-ui); color: var(--text); }
+.nav-column .nav-head-tools { display: flex; align-items: center; gap: var(--space-3xs); margin-left: auto; }
+.nav-column .nav-head .ghost-button.small { gap: var(--space-2xs); height: 28px; padding: 0 var(--space-xs); --c-ink: var(--muted); }
+.nav-column .nav-head .icon-button.small { width: 28px; height: 28px; --c-ink: var(--muted); }
+.nav-column .nav-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  height: 32px;
+  margin: 0 var(--space-sm) var(--space-xs);
+  padding: 0 var(--space-xs);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--muted);
+}
+.nav-column .nav-field:focus-within { border-color: var(--focus); box-shadow: inset 0 0 0 1px var(--focus); }
+.nav-column .nav-field input { flex: 1 1 auto; min-width: 0; height: 30px; padding: 0; border: 0; outline: 0; background: none; color: var(--text); font: 400 var(--text-sm)/20px var(--font-ui); }
+.nav-column .nav-field input::placeholder { color: var(--muted); }
+.nav-column .nav-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 0 var(--space-xs) var(--space-sm); }
+
+/* One row height, one rhythm: 32px rows; meta at the end in 12px muted figures; one mark. */
+.nav-column .side-row { min-height: var(--nav-row); padding: 0 var(--space-xs); gap: var(--space-xs); font: 400 var(--text-sm)/20px var(--font-ui); }
+.nav-column .side-row.current,
+.nav-column .side-row.nav-project.selected { font-weight: 500; }
+.nav-column .side-row .side-row-icon { flex: 0 0 auto; color: var(--muted); }
+.nav-column .side-row-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-column .side-row-trail { display: flex; align-items: center; gap: var(--space-xs); margin-left: auto; font-size: var(--text-xs); }
+.nav-column :is(.nav-count, .nav-meta, .row-kind, .side-row-rev) { color: var(--muted); font: 400 var(--text-xs)/16px var(--font-ui); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.nav-column .row-kind { min-width: 36px; text-align: end; letter-spacing: 0; }
+.nav-column .nav-owner { max-width: 96px; overflow: hidden; text-overflow: ellipsis; }
+
+/* Level 1: folders (Obsidian-style folds) and projects as single rows. */
+.nav-column .nav-tree-item { display: contents; }
+.nav-column .side-row.nav-folder { display: flex; align-items: center; margin-top: var(--space-2xs); --c-ink: var(--text); font-weight: 500; }
+.nav-column .side-row.nav-folder .side-row-icon,
+.nav-column .side-row.nav-folder .nav-folder-icon { color: var(--folder-color, var(--muted)); }
+.nav-column .side-row.nav-folder > .row-chevron { width: 16px; margin-left: calc(var(--space-2xs) * -1); color: var(--muted); }
+.nav-column .side-row.nav-project { display: block; min-height: var(--nav-row); padding: 0 var(--space-xs); }
+.nav-column .side-row.nav-project .nav-project-line { display: flex; align-items: center; gap: var(--space-xs); min-height: var(--nav-row); }
+.nav-column .side-row.nav-project .side-row-label { font-weight: inherit; color: var(--text); }
+.nav-column .side-row.nav-project.current .side-row-label { color: var(--text); }
+.nav-column .nav-project-detail { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-xs); margin: calc(var(--space-2xs) * -1) 0 var(--space-xs) var(--space-lg); color: var(--muted); font: 400 var(--text-xs)/16px var(--font-ui); }
+.nav-column .nav-project-detail .nav-project-preview { flex-basis: 100%; margin: 0; font-size: var(--text-xs); }
+/* A row's + shows where the hand or the keyboard is, never at rest (the current row too). */
+.nav-column .side-row:not(:hover, :focus-within) > .row-add,
+.nav-column .side-row:not(:hover, :focus-within) .side-row-trail > .row-add { display: none; }
+/* The one status mark: an 8px slot at the row's end, always there so names and counts align. */
+.nav-column .nav-mark { flex: 0 0 auto; width: 8px; height: 8px; }
+.nav-column .nav-mark.dot-active { width: 10px; height: 10px; margin: -1px; }
+.nav-column .nav-group { display: flex; align-items: center; gap: var(--space-xs); min-height: 28px; margin-top: var(--space-sm); padding: 0 var(--space-xs); color: var(--muted); font: 500 var(--text-xs)/16px var(--font-ui); }
+.nav-column .nav-group .nav-count { margin-left: auto; }
+.nav-column .nav-filter { display: flex; align-items: center; gap: var(--space-xs); margin: 0 var(--space-sm) var(--space-xs); padding: 0 var(--space-2xs) 0 var(--space-xs); min-height: 28px; border-radius: var(--radius-pill); background: var(--accent-soft); color: var(--text); font: 500 var(--text-sm)/20px var(--font-ui); }
+.nav-column .nav-filter-label { display: inline-flex; align-items: center; gap: var(--space-2xs); }
+.nav-column .nav-filter-count { margin-left: auto; color: var(--muted); font: 400 var(--text-xs)/16px var(--font-ui); }
+/* The sections of level 1 part by one hairline, as before. */
+.nav-column .nav-scroll > .side-section + .side-section,
+.nav-column .nav-scroll > .side-section + section { margin-top: var(--space-xs); padding-top: var(--space-xs); border-top: 1px solid var(--line); }
+
+/* Level 2: back, the path, the name, the pinned note, the three sections. */
+.nav-column .nav-head-inside { min-height: 44px; padding-left: var(--space-xs); }
+.nav-column .nav-back { --c-ink: var(--text); font: 500 var(--text-sm)/20px var(--font-ui); }
+.nav-column .nav-back svg { color: var(--muted); }
+.nav-column .nav-project-head { padding: 0 var(--space-md) var(--space-xs); }
+.nav-column .nav-path { overflow: hidden; color: var(--muted); font: 400 var(--text-xs)/16px var(--font-ui); text-overflow: ellipsis; white-space: nowrap; }
+.nav-column .nav-project-name { margin: var(--space-3xs) 0 0; overflow: hidden; color: var(--text); font: 600 var(--text-lg)/28px var(--font-ui); text-overflow: ellipsis; white-space: nowrap; }
+.nav-column .side-row.nav-note { display: flex; align-items: center; width: auto; margin: 0 var(--space-xs) var(--space-xs); cursor: pointer; }
+.nav-column .nav-empty-hint { color: var(--muted); font: 400 var(--text-xs)/16px var(--font-ui); }
+.nav-column .nav-inside-section { margin-top: var(--space-xs); }
+.nav-column .nav-inside-head { display: flex; align-items: center; min-height: 28px; padding: 0 0 0 var(--space-2xs); }
+.nav-column .nav-inside-head .nav-fold { display: inline-flex; flex: 1 1 auto; align-items: center; gap: var(--space-2xs); min-height: 28px; padding: 0 var(--space-2xs); border: 0; border-radius: var(--radius-pill); background: none; color: var(--muted); font: 600 var(--text-xs)/16px var(--font-ui); cursor: pointer; text-align: start; }
+.nav-column .nav-inside-head .nav-fold:hover { color: var(--text); }
+.nav-column .nav-inside-head .nav-count { margin-left: var(--space-2xs); font-weight: 400; }
+.nav-column .nav-inside-add { --c-ink: var(--muted); }
+.nav-column .nav-inside-empty { padding: var(--space-2xs) var(--space-md) var(--space-xs); color: var(--muted); font: 400 var(--text-xs)/16px var(--font-ui); }
+.nav-column .nav-inside-section .side-row { display: flex; align-items: center; }
+/* Inside, a state word replaces the old revision figure; the dot stays the one mark. */
+.nav-column .nav-inside-section .side-row-trail .dot { flex: 0 0 auto; }
+
+/* 문서 · 활동 · 볼트 */
+.nav-column .nav-links { display: flex; flex-direction: column; padding-bottom: var(--space-xs); margin-bottom: var(--space-xs); border-bottom: 1px solid var(--line); }
+.nav-column .side-row.nav-link-row,
+.nav-column .side-row.nav-doc-row,
+.nav-column .side-row.nav-history-row { display: flex; align-items: center; width: 100%; border: 0; text-align: start; cursor: pointer; }
+/* 문서 and 활동 read as an inbox: the name, then its project and time on a quiet second line. */
+.nav-column .side-row.nav-doc-row,
+.nav-column .side-row.nav-history-row { align-items: flex-start; min-height: 44px; padding-block: var(--space-2xs); }
+.nav-column :is(.nav-doc-row, .nav-history-row) .side-row-icon { margin-top: var(--space-3xs); }
+.nav-column .nav-two { display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; }
+.nav-column .nav-two .side-row-label { flex: none; }
+.nav-column .nav-two .nav-under { overflow: hidden; color: var(--muted); font: 400 var(--text-xs)/16px var(--font-ui); text-overflow: ellipsis; white-space: nowrap; }
+.nav-column :is(.nav-doc-row, .nav-history-row) .side-row-trail { align-self: center; }
+.nav-column .now-row .nav-under { margin-left: auto; padding-left: var(--space-xs); color: var(--muted); font: 400 var(--text-xs)/16px var(--font-ui); white-space: nowrap; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
+.nav-column .nav-vault-note { margin: var(--space-sm) var(--space-xs) 0; color: var(--muted); font: 400 var(--text-xs)/16px var(--font-ui); }
+
+/* The foot keeps its two lines, on one hairline. */
+.nav-column .side-foot { border-top: 1px solid var(--line); padding: var(--space-2xs) var(--space-xs) var(--space-xs); }
+
+/* The tab strip says another project's name on a tab it shows from there (side by side). */
+.group-tab-project { flex: 0 1 auto; max-width: 96px; overflow: hidden; margin-right: var(--space-2xs); padding: 0 var(--space-2xs); border-radius: var(--radius-well); background: var(--surface-muted); color: var(--muted); font: 500 var(--text-xs)/16px var(--font-ui); text-overflow: ellipsis; white-space: nowrap; }
+/* A folded section that holds what is on screen says so (the tab's teal, as a quiet mark). */
+.nav-column .nav-inside-head .nav-fold.here { color: var(--text); }
+.nav-column .nav-inside-head .nav-fold .dot { margin-left: var(--space-2xs); }
+
+/* N1 addendum (coordinator's rulings): a conversation's or web row's state glyph at the front, one
+   word at the end; 16px marks; the word in 12px at 4.5:1 (teal words in the deep step). */
+/* (the state glyphs and words moved to styles/state-mark.css: one mark for every surface) */
+
+/* N1 addendum: the rail keeps its labels at every width (64px under 50rem); the icon sits on a tile. */
+@media (width < 50rem) { :root { --rail-width: 64px; } }
+.nav-rail .rail-icon { width: 36px; height: 28px; border-radius: var(--radius-card); transition: background-color var(--dur-micro) var(--ease-out); }
+.nav-rail .rail-key { min-height: 48px; gap: var(--space-3xs); }
+.nav-rail .rail-label { font: 500 var(--text-xs)/16px var(--font-ui); }
+/* 찾기 is an action, set apart from the four places; 볼트 after it. */
+.nav-rail .rail-places > li:has([data-rail="search"]) { margin-top: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid var(--color-rail-rule); }
+
+/* The column: white, parted from the work by one hairline. */
+.sidebar.nav-column { border-right: 1px solid var(--line); }
+/* The current row: the teal wash (grey while the column is not where the keyboard is) and 600. */
+.nav-column:not(:focus-within) { --color-current-soft: color-mix(in oklab, var(--text) 7%, var(--color-paper-2)); }
+.nav-column .side-row.current,
+.nav-column .side-row.nav-project.selected,
+.nav-column .side-row[aria-current="page"] { font-weight: 600; }
+.nav-column .side-row.current .side-row-icon { color: var(--color-teal-ink); }
+/* One head row: the title and icon keys; the filter field only when asked for. */
+.nav-column .nav-head { min-height: 44px; }
+.nav-column .nav-find.pressed { --c-ink: var(--text); }
+/* Level 2: the name (19/600, two lines at most), the path quiet below it. */
+.nav-column .nav-project-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; word-break: keep-all; line-height: 26px; margin: 0; }
+.nav-column .nav-path { margin-top: var(--space-3xs); }
+.nav-column .nav-project-head { padding-top: var(--space-2xs); padding-bottom: var(--space-sm); }
+/* Folder heads (level 1) and section heads (level 2): 12px/600 muted labels, the count after the name, twice the space above as below. */
+.nav-column .side-row.nav-folder { margin-top: var(--space-sm); margin-bottom: var(--space-2xs); min-height: 28px; --c-ink: var(--muted); font: 600 var(--text-xs)/18px var(--font-ui); }
+.nav-column .nav-folder .nav-folder-name { flex: 0 1 auto; color: var(--muted); }
+.nav-column .nav-folder-count { margin-left: var(--space-2xs); }
+.nav-column .nav-inside-section { margin-top: var(--space-md); }
+.nav-column .nav-inside-head { margin-bottom: var(--space-2xs); }
+.nav-column .nav-inside-head .nav-fold { font: 600 var(--text-xs)/18px var(--font-ui); }
+/* A project's one trailing fact: what needs the person, as a small number. */
+.nav-column .nav-pill { min-width: 18px; height: 18px; padding: 0 var(--space-2xs); border-radius: var(--radius-round); background: var(--color-attention-soft); color: var(--color-attention-text); font: 600 var(--text-xs)/18px var(--font-ui); font-variant-numeric: tabular-nums; text-align: center; }
+.nav-column .nav-under { display: flex; gap: var(--space-xs); }
+.nav-column .nav-under > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+/* A level comes in with a short travel and a fade (220ms); reduced motion: the fade only. */
+@keyframes nav-level-in { from { opacity: 0; transform: translateX(var(--space-sm)); } to { opacity: 1; transform: none; } }
+@keyframes nav-level-fade { from { opacity: 0; } to { opacity: 1; } }
+.nav-column .nav-level { animation: nav-level-in var(--dur-short) var(--ease-out); }
+@media (prefers-reduced-motion: reduce) { .nav-column .nav-level { animation: nav-level-fade var(--dur-short) linear; } }
+
+/* ════════════════════════════════════════════════════════════════════════════════════════════
+   Skin 2 · unit A — the rail and the list column finished to the rules (a1–a11, b1–b23):
+   one row recipe at both levels (32px, radius 6, 14/400, 16px leading mark, ONE trailing fact),
+   heads 12/600 muted with the count after the name, space between rows and sections (hairlines
+   only between layers: column | work, list | foot), the current row teal-washed with a 2px deep
+   teal bar inside (grey wash while the column is not where the keyboard is).
+   ════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* Rail: a press darkens, it never moves (a6); 찾기 is set apart by space, not a rule (a1). */
+.nav-rail .rail-key:active { transform: none; }
+.nav-rail .rail-places > li:has([data-rail="search"]) { margin-top: var(--space-md); padding-top: 0; border-top: 0; }
+.nav-rail .rail-key.current .rail-label { font-weight: 600; }
+.nav-rail .rail-count { border-radius: var(--radius-round); box-shadow: 0 0 0 2px var(--color-rail); }
+
+/* Rows: one recipe. */
+.nav-column .side-row,
+.nav-column .side-row.nav-project .nav-project-line { min-height: var(--nav-row); }
+.nav-column .side-row { font: 400 var(--text-sm)/20px var(--font-ui); }
+.nav-column .side-row > .side-row-icon,
+.nav-column .side-row .nav-project-line > .side-row-icon { width: 16px; height: 16px; }
+.nav-column .side-row:is(.current, [aria-current="page"], [aria-current="true"]) {
+  --c-mark: inset 2px 0 0 var(--color-teal-ink);
+  font-weight: 600;
+}
+.nav-column .side-row.nav-project.selected:not(.current) { --c-mark: none; font-weight: 400; }
+.nav-column:not(:focus-within) .side-row:is(.current, [aria-current="page"], [aria-current="true"]) { --c-mark: inset 2px 0 0 var(--color-edge); }
+.nav-column .side-row.current .side-row-icon { color: var(--color-teal-ink); }
+.nav-column .side-row-trail { gap: var(--space-2xs); }
+.nav-column .nav-owner { max-width: 45%; overflow: hidden; color: var(--muted); font: 400 var(--text-xs)/16px var(--font-ui); text-overflow: ellipsis; white-space: nowrap; }
+/* The project a row belongs to is named with the project's own mark (a note with a pen; the owner, 11-14). */
+.nav-column .nav-owner { display: inline-flex; align-items: center; gap: var(--space-3xs); }
+.nav-column .nav-owner > svg { flex: none; }
+.nav-column .nav-owner > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.nav-column .side-row-trail:has(.nav-owner) { min-width: 0; max-width: 45%; }
+.nav-column .side-row-trail .nav-owner { max-width: 100%; }
+
+/* 문서 · 활동 · 지금 rows are single rows now (the project is their one trailing fact). */
+.nav-column .side-row:is(.nav-doc-row, .nav-history-row) { align-items: center; min-height: var(--nav-row); padding-block: 0; }
+.nav-column :is(.nav-doc-row, .nav-history-row) .side-row-icon { margin-top: 0; }
+.nav-column .now-row { padding-left: var(--space-xs); }
+.nav-column .now-row .side-row-trail { margin-left: auto; }
+.nav-column .now-group-label { display: flex; align-items: center; gap: var(--space-2xs); min-height: 28px; margin-top: var(--space-xs); padding: 0 var(--space-xs); color: var(--muted); font: 600 var(--text-xs)/16px var(--font-ui); }
+.nav-column .now-group-label::before { content: none; }
+.nav-column .now-group-label .count { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+
+/* Heads: folders, groups and sections share one quiet label, count right after the name. */
+.nav-column .side-row.nav-folder { gap: var(--space-2xs); }
+.nav-column .nav-folder-count,
+.nav-column .nav-inside-head .nav-count,
+.nav-column .nav-fold .nav-count { margin-left: var(--space-2xs); font-weight: 400; }
+.nav-column .nav-group { justify-content: flex-start; gap: var(--space-2xs); font-weight: 600; }
+.nav-column .nav-group .nav-count { margin-left: 0; font-weight: 400; }
+.nav-column .side-section-title { color: var(--muted); font: 600 var(--text-xs)/16px var(--font-ui); letter-spacing: 0; text-transform: none; }
+
+/* Space, not rules, between the sections of a level (a hairline parts layers only). */
+.nav-column .nav-scroll > .side-section + .side-section,
+.nav-column .nav-scroll > .side-section + section { margin-top: var(--space-md); padding-top: 0; border-top: 0; }
+.nav-column .nav-links { margin-bottom: var(--space-xs); padding-bottom: 0; border-bottom: 0; }
+
+/* Level 2's back key: the standard back control, quiet, ≥ 28px (b9). */
+.nav-column .nav-back { min-height: 28px; padding-inline: var(--space-2xs) var(--space-xs); border-radius: var(--radius-pill); }
+
+/* Empty lists: one line, one action (k1). */
+.nav-column .nav-empty { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-xs); padding: var(--space-md) var(--space-xs); }
+.nav-column .nav-empty p { margin: 0; color: var(--muted); font: 400 var(--text-sm)/20px var(--font-ui); word-break: keep-all; }
+.nav-column .nav-inside-empty:empty { display: none; }
+
+/* Level change: ≤ 8px of travel with the fade (b10, amended), from the tokens. */
+@keyframes nav-level-in-2 { from { opacity: 0; transform: translateX(var(--space-xs)); } to { opacity: 1; transform: none; } }
+.nav-column .nav-level { animation: nav-level-in-2 var(--dur-short) var(--ease-out); }
+@media (prefers-reduced-motion: reduce) { .nav-column .nav-level { animation: nav-level-fade var(--dur-short) linear; } }
+.nav-column.sidebar .side-scroll > .side-section ~ :is(.side-section, .side-tree-section) { margin-top: var(--space-md); padding-top: 0; border-top: 0; }
+/* An empty 바로가기 says how to fill it only while something is dragged (its tooltip says it always). */
+:root:not(.nav-dragging) .nav-column .nav-empty-hint { visibility: hidden; }
+.nav-column .nav-empty-hint:focus-visible { visibility: visible; }
+.nav-column .row-doc-ai { display: inline-flex; align-items: center; gap: var(--space-2xs); }
+/* Folder heads keep the one row pitch (32px): a head is a quiet label on the same rhythm. */
+.nav-column .side-row.nav-folder { min-height: var(--nav-row); margin-top: var(--space-xs); margin-bottom: 0; }
+/* The column's one filled key (its paint is the recipe's: controls.css primary = navy ink, flat). */
+.nav-column .button.primary.nav-new {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-xs);
+  height: 32px;
+  margin: 0 var(--space-sm) var(--space-xs);
+  padding: 0 var(--space-sm);
+  font: 600 var(--text-sm)/20px var(--font-ui);
+}
+/* 지금's group heads carry the state mark itself: no extra coloured dot before them (R16). */
+.nav-column.sidebar :is(.now-attention, .now-unseen, .now-running) .now-group-label::before { content: none; display: none; }
+/* 볼트: its head says 읽기 전용 once (a9); the section's own chip is not repeated beside it. The
+   vault's group frames are the person's own colours (their border settings): kept. */
+.nav-column .nav-vault .vault-readonly { display: none; }
+
+/* ════════════════════════════════════════════════════════════════════════════════════════════
+   The owner's corrections, 2026-11-14 evening (skin 2 merge):
+   1. a project's mark is a note with a pen (Icon "project"); the rail's 프로젝트 the same note with a pen (the owner's later correction, fix 1);
+   2. a folder at level 1 is a ROW that looks like a folder — the folder icon always (16 px, ink-2,
+      or the person's own colour), the name 14/500, the count of projects as the one trailing fact;
+      the real section heads (바로가기, 태그, 저장한 보기, 폴더 밖, 폴더) stay quiet 12/600 labels without icons;
+   3. ⋯ under the hand: every row shows its ⋯ at the end on hover and on keyboard focus, in the
+      trailing fact's place (the fact steps aside; the row does not move), 28 px, always on touch.
+   ════════════════════════════════════════════════════════════════════════════════════════════ */
+.nav-column .side-row.nav-folder { margin-top: 0; margin-bottom: 0; min-height: var(--nav-row); --c-ink: var(--text); font: 500 var(--text-sm)/20px var(--font-ui); }
+.nav-column .side-row.nav-folder + * { margin-top: 0; }
+.nav-column .nav-folder .nav-folder-name { flex: 1 1 auto; min-width: 0; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-column .nav-folder .nav-folder-icon { display: inline-grid; place-items: center; width: 16px; height: 16px; color: var(--folder-color, var(--color-ink-2)); }
+.nav-column .side-row.nav-folder > .row-chevron { width: 12px; min-width: 12px; margin-left: calc(var(--space-2xs) * -1); color: var(--muted); }
+.nav-column .nav-folder .nav-folder-count { margin-left: 0; color: var(--muted); font: 400 var(--text-xs)/16px var(--font-ui); font-variant-numeric: tabular-nums; }
+.nav-column .nav-folders-head { display: flex; align-items: center; gap: var(--space-2xs); min-height: 28px; margin-top: var(--space-xs); padding: 0 var(--space-2xs) 0 var(--space-xs); color: var(--muted); font: 600 var(--text-xs)/16px var(--font-ui); }
+.nav-column .nav-folders-head .nav-folders-add { margin-left: auto; }
+/* ⋯: not in the flow until the hand or the keyboard is on the row; then the trailing fact steps aside. */
+.nav-column .side-row .row-more { display: none; flex: 0 0 28px; width: 28px; height: 28px; opacity: 1; }
+.nav-column .side-row:is(:hover, :focus-within) .row-more,
+.nav-column .side-row .row-more[aria-expanded="true"] { display: inline-grid; }
+.nav-column .side-row:is(:hover, :focus-within) .side-row-trail > :not(.row-more, .row-add, .row-web-close, .linked-badge, .rule-mark),
+.nav-column .side-row:has(.row-more[aria-expanded="true"]) .side-row-trail > :not(.row-more, .row-add, .row-web-close, .linked-badge, .rule-mark) { display: none; }
+.nav-column .side-row .row-more:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+@media (hover: none) {
+  .nav-column .side-row .row-more { display: inline-grid; }
+}
+
+/* ── The phone floor (skin 2 merge, S8): under 40rem the work is full width; the rail comes in WITH the
+   list column when the top bar's key lays it over the work (and leaves with it on choosing an item). ── */
+@media (width < 40rem) {
+  .app.with-rail,
+  :root[data-mobile-layout] .app.with-rail { padding-left: env(safe-area-inset-left, 0px); }
+  .nav-rail { visibility: hidden; transform: translateX(-100%); }
+  :root:has(.sidebar-scrim) .nav-rail { visibility: visible; transform: none; }
+  .body > .sidebar { left: var(--rail-width); max-width: calc(100% - var(--rail-width) - 40px); }
+}
+/* Touch: every row and head of the column takes the 44 px a finger needs (fine pointers keep 32 px). */
+@media (pointer: coarse) {
+  .nav-column .side-row,
+  .nav-column .side-row.nav-project .nav-project-line,
+  .nav-column .nav-inside-head .nav-fold,
+  .nav-column .nav-folders-head,
+  .nav-column .nav-back { min-height: 44px; }
+}
+@media (pointer: coarse) { .nav-column.sidebar { --nav-row: 44px; } }
+@media (width < 40rem) { .app .body > .sidebar.nav-column { left: var(--rail-width); } }
+
+/* ════════════════════════════════════════════════════════════════════════════════════════════
+   Skin 2 · fix round 1 (the independent design review's findings)
+   ════════════════════════════════════════════════════════════════════════════════════════════ */
+/* Finding 2 — rename in place: the field takes the name's place on the row's one line (beside the
+   mark, at the name's 14 px), shrinks with the column, and draws the deep-teal edge; the column
+   never scrolls sideways (a row that clips at its left edge reads as broken). */
+.nav-column .nav-scroll { overflow-x: hidden; }
+.nav-column .side-row.renaming { display: flex; align-items: center; }
+.nav-column .side-row.nav-project.renaming { display: block; }
+.nav-column .side-row.renaming .inline-edit {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  height: 24px;
+  margin: 0;
+  padding: 0 var(--space-2xs);
+  border: 1px solid var(--focus);
+  border-radius: var(--radius-pill);
+  /* The edge is the focus mark: 2 px of deep teal in all (the 1 px edge + 1 px ring), no outline beside it. */
+  box-shadow: 0 0 0 1px var(--focus);
+  outline: none;
+  font: 400 var(--text-sm)/20px var(--font-ui);
+}
+@media (pointer: coarse) { .nav-column .side-row.renaming .inline-edit { height: 32px; } }
+/* Ruling 7 — the current row keeps its teal wash and its 2 px teal mark at ALL times; while the keyboard is
+   elsewhere (the usual case) the wash is one step lighter (7 % for 12 %) and the mark the deep teal at 60 %:
+   still teal, never the grey it was. */
+.nav-column:not(:focus-within) { --color-current-soft: color-mix(in oklab, var(--color-teal) 7%, var(--color-paper-2)); }
+.nav-column:not(:focus-within) .side-row:is(.current, [aria-current="page"], [aria-current="true"]) { --c-mark: inset 2px 0 0 color-mix(in oklab, var(--color-teal-ink) 60%, transparent); }
+/* Ruling 8 — the quiet heads (folders' head, 지금's and 활동's group heads, section heads, level 2's folds) are
+   13 px muted 600 (--text-label, ≥ 4.5:1: muted is 6.5:1 on white, 7:1+ on dark); 12 px stays for meta. */
+.nav-column .nav-folders-head,
+.nav-column .now-group-label,
+.nav-column .side-section-title,
+.nav-column .nav-inside-head .nav-fold,
+.nav-column .nav-group { font: 600 var(--text-label)/18px var(--font-ui); }
+.nav-column .nav-more { margin: var(--space-xs) var(--space-xs) 0; font-size: var(--text-sm); }
+/* Dark: 7 % of teal on the near-black sheet reads grey; the lighter step there is 10 % (focused: 12 %). */
+:root[data-theme="dark"] .nav-column:not(:focus-within),
+.look-scope[data-theme="dark"] .nav-column:not(:focus-within) { --color-current-soft: color-mix(in oklab, var(--color-teal) 10%, var(--color-paper-2)); }

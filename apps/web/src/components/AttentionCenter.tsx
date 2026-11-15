@@ -34,7 +34,7 @@ export function AttentionCenter({ inbox, state, onOpen, onClose }: {
           <div className="attention-entry-title">{work?.title ?? "프로젝트"}{session ? ` · ${session.purpose}` : " · 이전 대화"}</div>
           <time dateTime={new Date(entry.createdAt).toISOString()}>{new Date(entry.createdAt).toLocaleString()}</time>
           {entry.deliveryError ? <details className="attention-delivery"><summary>시스템 알림 전달 상태</summary>{entry.deliveryError}</details> : null}
-          <div className="attention-entry-actions"><button type="button" className="button small" disabled={busy !== null} onClick={() => void act(entry.id, () => onOpen(entry.id))}>{busy === entry.id ? "처리 중…" : "원문 열기"}</button>
+          <div className="attention-entry-actions"><button aria-busy={busy === entry.id ? true : undefined} type="button" className="button small" disabled={busy !== null} onClick={() => void act(entry.id, () => onOpen(entry.id))}>{busy === entry.id ? "처리 중…" : "원문 열기"}</button>
             {entry.readAt === null ? <button type="button" className="ghost-button small" disabled={busy !== null} onClick={() => void act(entry.id, () => inbox.read(entry.id))}>읽음 표시</button> : null}
           </div>
         </article>;

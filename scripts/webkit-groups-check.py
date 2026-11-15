@@ -272,7 +272,7 @@ try:
     check("WebKitGTK: '마감 × 중요도'에서 카드를 보통 → 높음 줄로 끌면 노트에 중요도", importance and hovered["over"] == 1, json.dumps(hovered))
     autumn = works["autumn"]["id"]
     hovered = drag(f".kanban-cell[data-col=\"tomorrow\"] .kanban-card[data-work=\"{autumn}\"]", '.kanban-cell[data-col="today"][data-lane="높음"]')
-    told = until(lambda: "끌어서 정할 수 없습니다" in (js("return document.querySelector('.toast')?.textContent || ''") or ""), 6)
+    told = until(lambda: "끌어서 정할 수 없습니다" in (js("return document.querySelector('.top-notice')?.textContent || ''") or ""), 6)
     check("WebKitGTK: 날짜 기간 열 사이로는 옮기지 않고(놓을 자리 거절 표시) 까닭을 알림, 마감일 그대로", told and hovered["refuse"] == 1 and prop(autumn, "마감일") == [day(1)], json.dumps(hovered))
 
     # Grouped by the vault's DIKM key: the columns take their emoji's colour.

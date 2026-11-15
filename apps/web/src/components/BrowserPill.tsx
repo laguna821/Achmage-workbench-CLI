@@ -97,7 +97,7 @@ export function BrowserInstall({ status, actions }: { status: AgentBrowserStatus
       ) : (
         <>
           <div className="browser-note">
-            {install.state === "error" ? install.message : status.engine === "lightpanda" ? "AI가 화면 없이 탐색할 Lightpanda를 앱 데이터 폴더에 받습니다. Windows x64에서는 WSL 설치가 필요 없습니다." : "호환 브라우저용 Playwright CLI와 Chromium을 앱 데이터 폴더에 받습니다(내려받기 약 200MB, 설치 후 약 420MB)."}
+            {install.state === "error" ? install.message : status.engine === "lightpanda" ? `AI가 화면 없이 탐색할 Lightpanda를 앱 데이터 폴더에 받습니다.${onWindows() ? " Windows x64에서는 WSL 설치가 필요 없습니다." : ""}` : "호환 브라우저용 Playwright CLI와 Chromium을 앱 데이터 폴더에 받습니다(내려받기 약 200MB, 설치 후 약 420MB)."}
           </div>
           <button type="button" className="button small" onClick={actions.install}>
             {install.state === "error" ? "다시 설치" : "설치"}
@@ -108,11 +108,14 @@ export function BrowserInstall({ status, actions }: { status: AgentBrowserStatus
   );
 }
 
+/** The WSL sentence is about Windows only (design review m10). */
+const onWindows = () => typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent);
+
 export function BrowserEngine({ status, actions }: { status: AgentBrowserStatus; actions: BrowserActions }) {
   if (!actions.engine) return null;
   return <label className="browser-note">탐색 방식 <select aria-label="탐색 방식" value={status.engine ?? "chromium"} disabled={status.install.state === "installing" || status.window.kind === "login" || (status.window.kind === "agent" && status.window.busy)} onChange={event => actions.engine?.(event.target.value as "lightpanda" | "chromium")}>
-    <option value="lightpanda">Lightpanda · 백그라운드 수집</option>
-    <option value="chromium">Chromium · 로그인·화면·호환</option>
+    <option value="lightpanda">빠르게, 화면 없이</option>
+    <option value="chromium">로그인이 필요한 사이트도</option>
   </select></label>;
 }
 

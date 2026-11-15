@@ -85,8 +85,8 @@ async function flow(provider: Provider) {
     await page.locator(".menu-item", { hasText: "격리 사본에서" }).filter({ hasText: label }).click();
     const made = await until(async () => (await sessions()).some((entry) => entry.workId === work.id && entry.worktree), 10_000);
     const isolated = (await sessions()).find((entry) => entry.workId === work.id && entry.worktree)!;
-    await page.waitForSelector(".worktree-chip", { timeout: 10_000 });
-    const chip = await page.locator(".worktree-chip").innerText();
+    await page.waitForSelector(".worktree-chip:visible", { timeout: 10_000 });
+    const chip = await page.locator(".worktree-chip:visible").innerText();
     await page.locator(".composer-input").fill("작업 폴더 알려줘");
     await page.locator(".composer-input").press("Enter");
     const answered = await until(async () => (await items(isolated.id)).some((item) => item.kind === "assistant" && item.text.includes("작업 폴더:")), 15_000);
@@ -101,7 +101,7 @@ async function flow(provider: Provider) {
     // ── what changed in the copy, then applied to the original ────────────────────────────────
     writeFileSync(join(isolated.worktree!.path, "강의계획.md"), "# 강의계획\n\n1주차: 소개\n2주차: 실습\n");
     writeFileSync(join(isolated.worktree!.path, "과제.md"), "# 과제\n");
-    await page.locator(".worktree-chip .text-button", { hasText: "변경 검토" }).click();
+    await page.locator("button.worktree-chip:visible").click();
     await page.waitForSelector(".worktree-review .worktree-files li", { timeout: 10_000 });
     const files = await page.locator(".worktree-review .worktree-files").innerText();
     const diff = await page.locator(".worktree-review .worktree-diff").innerText();

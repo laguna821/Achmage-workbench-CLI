@@ -1,4 +1,5 @@
 import { connectOfficeUi } from "./ui-adapters/connect.ts";
+import { keepPaperWhite } from "./ui-adapters/paper.ts";
 import "./docs.css";
 import { Events, Gateway, GatewayError, handshake, headlessExport, listen, post, stubBridge } from "./bridge.ts";
 import { recovery } from "./recovery.ts";
@@ -254,7 +255,7 @@ const desktop = stubBridge(
     signalMcpReady: mcp.signal,
     reportMcpResult: mcp.result,
     onMcpCommand: events.on("mcpCommand"),
-    reportViewMenuState: () => undefined,
+    reportViewMenuState: (state: { aiSidebar?: boolean }) => { if (typeof state?.aiSidebar === "boolean") post({ type: "office:ai-panel", open: state.aiSidebar }); },
     respondToZotero: () => undefined,
     consumeHeadlessExport: async () => headless.consume(),
     headlessExportDone: headless.done,
@@ -286,4 +287,6 @@ window.setInterval(() => void askDirty(), 2000);
 convertForeignPictures();
 pasteDesktopPictures();
 
+// The page stays white paper in the dark theme (the canvas around it goes dark) unless the person chose otherwise.
+keepPaperWhite(localStorage);
 await import("@ieum/apps/docs/src/renderer/main.tsx");

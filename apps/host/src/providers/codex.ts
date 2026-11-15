@@ -170,6 +170,7 @@ export class CodexAdapter implements ProviderAdapter {
   /** threadId -> what its turns run with now: access, vault guard and browser roots ("plan" for a turn that only plans) */
   private readonly threadAccess = new Map<string, string>();
   private readonly extraToolInstructions = new Map<string, string>();
+  private readonly browserInstructions = new Map<string, string>();
   /** cwd -> skills Codex found there (name -> path), for "/name" requests */
   private readonly skills = new Map<string, Map<string, { name: string; description: string; path: string }>>();
   /** sessionId -> the access the user last set (approvals arriving meanwhile follow it) */
@@ -510,7 +511,10 @@ export class CodexAdapter implements ProviderAdapter {
       });
       threadId = started.thread.id;
       if (extraTools) this.extraToolInstructions.set(threadId, extraTools);
-      if (browsing) this.browser?.setTold(session.id, true);
+      if (browsing) {
+        this.browserInstructions.set(threadId, browsing);
+        this.browser?.setTold(session.id, true);
+      }
       this.sink.updateSession(session.id, { nativeSessionId: threadId, engineModel: started.model, engineEffort: started.reasoningEffort });
       this.loaded.add(threadId);
       this.threadAccess.set(threadId, `${startKey}|`);
@@ -633,9 +637,9 @@ export class CodexAdapter implements ProviderAdapter {
   }
 
   /**
-   * The browser was switched on or off since the thread last heard about it. Codex keeps the
-   * developer instructions a thread started with and ignores new ones on resume, so the change
-   * goes into the thread's history as a developer message before the turn.
+   * Refresh actual guidance, not only the enabled flag: upgrades and binding a shared tab
+   * change the tools while browsing stays enabled. Inject once before the next turn, including
+   * resumed threads whose persisted boolean cannot identify which guidance they received.
    */
   private async tellBrowser(session: Session, threadId: string) {
     if (!this.browser) return;
@@ -645,10 +649,12 @@ export class CodexAdapter implements ProviderAdapter {
       this.extraToolInstructions.set(threadId, extra);
     }
     const want = Boolean(session.browser);
-    if (want === (this.browser.told(session.id) ?? false)) return;
     const text = want ? this.browser.instructions(session) : this.browser.offNote(session);
     if (!text) return;
+    if (this.browserInstructions.get(threadId) === text) return;
+    if (!want && !this.browserInstructions.has(threadId) && !this.browser.told(session.id)) return;
     await this.rpc!.request("thread/inject_items", { threadId, items: [{ type: "message", role: "developer", content: [{ type: "input_text", text }] }] });
+    this.browserInstructions.set(threadId, text);
     this.browser.setTold(session.id, want);
   }
 

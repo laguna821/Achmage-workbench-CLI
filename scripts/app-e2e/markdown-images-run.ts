@@ -32,7 +32,7 @@ try {
     if (!await until(async () => { for (const button of await wd.findAll(selector)) if (await wd.displayed(button) && await wd.execute<boolean>("return arguments[0].textContent.trim()===arguments[1]", button, text)) { await wd.click(button); return true; } return false; }, 15000)) throw new Error(`Missing command: ${text}`);
   };
   const control = (key: string) => wd.keys([{ type: "keyDown", value: KEY.control }, { type: "keyDown", value: key }, { type: "keyUp", value: key }, { type: "keyUp", value: KEY.control }]);
-  const exportMenu = async () => { await wd.frame(null); await wd.click(await wd.waitFor(`${pane} button[aria-label="문서 파일 메뉴"]`)); await click("PNG 그림으로 내보내기", ".office-file-menu [role=menuitem]"); await wd.waitFor('.office-output-dialog[aria-label="PNG 그림으로 내보내기"]', 30000); };
+  const exportMenu = async () => { await wd.frame(null); await wd.click(await wd.waitFor(`${pane} button[aria-label="문서 메뉴"]`)); await click("내보내기", ".doc-menu [role=menuitem]"); await click("PNG 그림으로 내보내기", ".doc-menu [role=menuitem]"); await wd.waitFor('.office-output-dialog[aria-label="PNG 그림으로 내보내기"]', 30000); };
   const destination = async () => { const field = await wd.waitFor('.office-output-dialog input[aria-label="그림을 저장할 폴더"]'); await wd.click(field); await control("a"); await wd.sendKeys(field, output); await wd.click(await wd.waitFor('.office-output-dialog button[type="submit"]')); await enter(); };
   await enter(); await installProbe(wd);
   const editor = await wd.waitFor('.tiptap[contenteditable="true"]', 60000); await wd.click(await wd.waitFor(".tiptap h1")); await control("\ue011"); await wd.sendKeys(editor, `${marker} `);

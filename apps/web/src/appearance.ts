@@ -45,13 +45,16 @@ export type EngineAppearance = { mode: EngineMode; light: Look; dark: Look };
 /** Versioned defaults let installed clients receive the current design without losing custom looks. */
 export type Appearance = Record<Provider, EngineAppearance> & { v?: number };
 
+/** What the engine colour affects now (S9): said where it is chosen. */
+export const ENGINE_COLOR_HINT = "엔진 표시 색은 이 엔진의 표시(마크)에만 쓰입니다. 탭, 칸, 선, 입력창 테두리는 앱의 색을 따릅니다.";
+
 export const PALETTE_FIELDS: { key: keyof Palette; label: string }[] = [
   { key: "bg", label: "화면 배경" },
   { key: "surface", label: "입력창 · 카드" },
   { key: "text", label: "본문 글자" },
   { key: "muted", label: "보조 글자" },
   { key: "line", label: "선" },
-  { key: "accent", label: "엔진 색" },
+  { key: "accent", label: "엔진 표시 색" },
   { key: "motion", label: "빛 궤적 보조색" },
   { key: "heading", label: "제목" },
   { key: "headingAlt", label: "작은 제목 · 기울임" },
@@ -154,7 +157,7 @@ const look = (palette: Palette, rest: Partial<Look> = {}): Look => ({
   ...rest,
 });
 
-export const APPEARANCE_VERSION = 3;
+export const APPEARANCE_VERSION = 8;
 
 const V2_DEFAULT_APPEARANCE: Appearance = {
   claude: {
@@ -167,10 +170,10 @@ const V2_DEFAULT_APPEARANCE: Appearance = {
     light: look(ACHMAGE_LIGHT, { fontSize: 16, lineHeight: 1.7, bubble: "soft" }),
     dark: look(CODEX_MIDNIGHT, { fontSize: 16, lineHeight: 1.7, bubble: "rail" }),
   },
-  v: APPEARANCE_VERSION,
+  v: 2,
 };
 
-// Neutral HIG roles. These match foundation.css; provider identity is carried by its label/icon.
+// Keep the shipped v3 palette as a migration baseline, not the current brand contract.
 const HIG_LIGHT: Palette = {
   bg: "#ffffff", surface: "#ffffff", text: "#000000", muted: "#6c6c70", line: "#d1d1d6",
   accent: "#1e6ef4", motion: "#008932", heading: "#000000", headingAlt: "#000000", strong: "#000000",
@@ -181,17 +184,72 @@ const HIG_DARK: Palette = {
   accent: "#5cb8ff", motion: "#4ad968", heading: "#ffffff", headingAlt: "#ffffff", strong: "#ffffff",
   link: "#5cb8ff", codeBg: "#2c2c2e", codeText: "#ffffff",
 };
+// v4: the Achmage 0.3 color roles on Apple system greys. Kept as the v5 migration baseline.
+const V4_LIGHT: Palette = {
+  ...HIG_LIGHT,
+  accent: ACHMAGE_LIGHT.accent, motion: ACHMAGE_LIGHT.motion,
+  heading: ACHMAGE_LIGHT.heading, headingAlt: ACHMAGE_LIGHT.headingAlt,
+  strong: ACHMAGE_LIGHT.strong, link: ACHMAGE_LIGHT.link,
+};
+const V4_DARK: Palette = {
+  ...HIG_DARK,
+  accent: "#7db2f0", motion: CODEX_MIDNIGHT.motion,
+  heading: CODEX_MIDNIGHT.heading, headingAlt: CODEX_MIDNIGHT.headingAlt,
+  strong: CODEX_MIDNIGHT.strong, link: "#7db2f0",
+};
+// v5 "떠 있는 작업면": the same roles on navy-tinted neutrals, so the reading surface shares the
+// navigation's colour temperature. Both engines read alike; the engine shows only as a mark.
+const BRAND_LIGHT: Palette = {
+  ...V4_LIGHT,
+  text: "#151b27", muted: "#566173", line: "#dce1e8", codeBg: "#f1f4f8", codeText: "#151b27",
+};
+const V5_DARK: Palette = {
+  ...V4_DARK,
+  bg: "#131820", surface: "#1b222c", text: "#e8ecf2", muted: "#a3adba", line: "#2c3541", codeBg: "#1b222c", codeText: "#e8ecf2",
+};
+// v6: headings, small ones too, are ink in dark as they are in light (v5 drew them link blue and teal).
+const BRAND_DARK: Palette = { ...V5_DARK, heading: V5_DARK.text, headingAlt: V5_DARK.text };
 const higLook = (palette: Palette): Look => look(palette, {
   font: "pretendard", fontSize: 17, lineHeight: 1.75, bubble: "soft", frame: false,
 });
+// v7 (Hallmark U1, "Furrow"): the reading sheet on warm paper, navy ink, Achmage blue as the one
+// signal, teal for "working". These are the hex mirrors of styles/tokens.css (--color-paper-2,
+// --color-field, --color-ink, --color-muted, --color-rule, --color-accent, --color-teal,
+// --color-paper-3); tokens.test.ts keeps them equal. A look stays hex: the colour fields edit it.
+const FURROW_LIGHT: Palette = {
+  bg: "#fffdf8", surface: "#fffdf8", text: "#121a2b", muted: "#5a544d", line: "#d3cbbe",
+  accent: "#005bac", motion: "#00a8a3", heading: "#121a2b", headingAlt: "#121a2b", strong: "#121a2b",
+  link: "#005bac", codeBg: "#f6f2ea", codeText: "#121a2b",
+};
+const FURROW_DARK: Palette = {
+  bg: "#201c17", surface: "#26221c", text: "#ebe7e0", muted: "#ada79e", line: "#39352d",
+  accent: "#76afee", motion: "#39bab4", heading: "#ebe7e0", headingAlt: "#ebe7e0", strong: "#ebe7e0",
+  link: "#76afee", codeBg: "#2d2821", codeText: "#ebe7e0",
+};
+// v8 (Hallmark N1, the owner's direction): white work surfaces, cool neutral greys, navy ink, the
+// brand teal set for marks on white; dark is a neutral dark. Hex mirrors of styles/tokens.css as above.
+const N1_LIGHT: Palette = {
+  bg: "#ffffff", surface: "#ffffff", text: "#131b29", muted: "#585e68", line: "#e1e4e8",
+  accent: "#005bac", motion: "#008683", heading: "#131b29", headingAlt: "#131b29", strong: "#131b29",
+  link: "#005bac", codeBg: "#f3f5f7", codeText: "#131b29",
+};
+const N1_DARK: Palette = {
+  bg: "#18191b", surface: "#1c1d20", text: "#e8e9ec", muted: "#a0a5ac", line: "#2b2d30",
+  accent: "#76afee", motion: "#39bab4", heading: "#e8e9ec", headingAlt: "#e8e9ec", strong: "#e8e9ec",
+  link: "#76afee", codeBg: "#202225", codeText: "#e8e9ec",
+};
+/** Radius of a look before v7 (the cards now take the system's 10px). */
+const V6_RADIUS = 12;
+const furrowLook = (palette: Palette): Look => ({ ...higLook(palette), radius: 10 });
 export const DEFAULT_APPEARANCE: Appearance = {
-  claude: { mode: "follow", light: higLook(HIG_LIGHT), dark: higLook(HIG_DARK) },
-  codex: { mode: "follow", light: higLook(HIG_LIGHT), dark: higLook(HIG_DARK) },
+  claude: { mode: "follow", light: furrowLook(N1_LIGHT), dark: furrowLook(N1_DARK) },
+  codex: { mode: "follow", light: furrowLook(N1_LIGHT), dark: furrowLook(N1_DARK) },
   v: APPEARANCE_VERSION,
 };
+/** The frame's look (menus opened on the frame): the paper (--color-paper) under the sheet. */
 export const NEUTRAL_LOOK: Record<Theme, Look> = {
-  light: higLook({ ...HIG_LIGHT, bg: "#f2f2f7" }),
-  dark: higLook(HIG_DARK),
+  light: furrowLook({ ...N1_LIGHT, bg: "#ffffff" }),
+  dark: furrowLook({ ...N1_DARK, bg: "#101113", surface: "#18191b" }),
 };
 
 const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -232,8 +290,8 @@ function upgradeLook(stored: Partial<Look>, base: Look, legacy: (typeof LEGACY_D
 
 /** Quick choices for the right-click menu and the settings sheet. */
 export const ACCENT_SWATCHES: Record<Theme, string[]> = {
-  light: ["#1e6ef4", "#b5532f", "#0e8a6a", "#6b4fd8", "#c2410c", "#be185d", "#0891b2", "#1f2937"],
-  dark: ["#5cb8ff", "#f27aa4", "#e08a6b", "#2bc48a", "#a78bfa", "#fb923c", "#22d3ee", "#e5e7eb"],
+  light: ["#005bac", "#b5532f", "#0e8a6a", "#6b4fd8", "#c2410c", "#be185d", "#0891b2", "#1f2937"],
+  dark: ["#7db2f0", "#f27aa4", "#e08a6b", "#2bc48a", "#a78bfa", "#fb923c", "#22d3ee", "#e5e7eb"],
 };
 
 export const BG_SWATCHES: Record<Theme, string[]> = {
@@ -263,6 +321,36 @@ export function readAppearance(stored: unknown): Appearance {
         migrated.palette = palette;
       }
       given = migrated;
+    }
+    // A stored value moves only if it equals the default of the version it was saved under.
+    if ((version === 3 || version === 4) && isObject(given.palette)) {
+      const prior = version === 3 ? (theme === "dark" ? HIG_DARK : HIG_LIGHT) : (theme === "dark" ? V4_DARK : V4_LIGHT);
+      const palette = { ...given.palette };
+      for (const key of Object.keys(prior) as (keyof Palette)[]) {
+        if (sameValue(palette[key], prior[key])) palette[key] = base.palette[key];
+      }
+      given = { ...given, palette };
+    }
+    if (version === 5 && theme === "dark" && isObject(given.palette)) {
+      const palette = { ...given.palette };
+      for (const key of ["heading", "headingAlt"] as const) if (sameValue(palette[key], V5_DARK[key])) palette[key] = base.palette[key];
+      given = { ...given, palette: palette as Palette };
+    }
+    // v7: a colour still at the v5/v6 default takes the Furrow paper and ink; a colour the user
+    // chose stays. The v6 card radius (12) takes the system's 10.
+    if ((version === 5 || version === 6) && isObject(given.palette)) {
+      const prior = theme === "dark" ? (version === 5 ? V5_DARK : BRAND_DARK) : BRAND_LIGHT;
+      const palette = { ...given.palette };
+      for (const key of Object.keys(prior) as (keyof Palette)[]) if (sameValue(palette[key], prior[key])) palette[key] = base.palette[key];
+      given = { ...given, palette: palette as Palette };
+    }
+    if (version >= 3 && version < 7 && sameValue(given.radius, V6_RADIUS)) given = { ...given, radius: base.radius };
+    // v8: a colour still at the v7 (Furrow) default takes the N1 white and grey; one the user chose stays.
+    if (version === 7 && isObject(given.palette)) {
+      const prior = theme === "dark" ? FURROW_DARK : FURROW_LIGHT;
+      const palette = { ...given.palette };
+      for (const key of Object.keys(prior) as (keyof Palette)[]) if (sameValue(palette[key], prior[key])) palette[key] = base.palette[key];
+      given = { ...given, palette: palette as Palette };
     }
     return { ...base, ...given, palette: { ...base.palette, ...(isObject(given.palette) ? given.palette : {}) } };
   };
@@ -300,24 +388,70 @@ export function onColor(hex: string) {
 
 const GLOW: Record<Glow, string> = { off: "0", soft: "var(--theme-glow)", neon: "1.7" };
 
+/**
+ * Skin 2 (S9): an engine's colour ("엔진 색", `palette.accent`) is drawn ONLY on that engine's own
+ * mark (EngineMark, and so the message's small author mark). It never paints a scope's accent, a
+ * tab, a chip, a rule or a frame. The stored value is kept as it was; only where it applies changed.
+ * The look scope's accent is the app's own interaction accent (tokens.css: the deep teal, per theme).
+ */
+const SCOPE_ACCENT = { "--accent": "var(--color-teal-ink)", "--on-accent": "var(--color-accent-ink)" } as const;
+
+/** The default engine colours of every version a look could carry unchanged (no colour of the person's own). */
+const DEFAULT_ACCENTS = new Set(
+  [N1_LIGHT, N1_DARK, FURROW_LIGHT, FURROW_DARK, BRAND_LIGHT, V5_DARK, V4_LIGHT, V4_DARK, HIG_LIGHT, HIG_DARK].map((palette) => palette.accent.toLowerCase()),
+);
+
+/** The default link colours of every look version (the person never chose these). */
+const DEFAULT_LINKS = new Set(
+  [N1_LIGHT, N1_DARK, FURROW_LIGHT, FURROW_DARK, BRAND_LIGHT, V5_DARK, V4_LIGHT, V4_DARK, HIG_LIGHT, HIG_DARK].map((palette) => palette.link.toLowerCase()),
+);
+
+/** The link colour a person gave a look, or null while it keeps a stored default. */
+export function ownLinkColor(value: Look): string | null {
+  const link = value.palette.link;
+  return typeof link === "string" && link.trim() && !DEFAULT_LINKS.has(link.trim().toLowerCase()) ? link : null;
+}
+
+/** The colour a person gave an engine (its mark takes it), or null while the look keeps a default. */
+export function ownEngineColor(value: Look): string | null {
+  const accent = value.palette.accent;
+  return typeof accent === "string" && accent.trim() && !DEFAULT_ACCENTS.has(accent.trim().toLowerCase()) ? accent : null;
+}
+
+/**
+ * 색 조합: a look colour still at today's default (the N1 hex mirrors, and the frame's look) names its role,
+ * so the Atlas combination (tokens.css `--palette-look-*`) can give it Atlas's value; a colour the person
+ * chose stays. Under Workbench the names are not set and the same hex is the fallback (nothing changes).
+ * White is white in both combinations and is not named.
+ */
+const PALETTE_FOLLOW = new Map<string, string>([
+  [N1_LIGHT.text, "light-ink"], [N1_LIGHT.muted, "light-muted"], [N1_LIGHT.line, "light-rule"], [N1_LIGHT.codeBg, "light-well"],
+  [NEUTRAL_LOOK.dark.palette.bg, "dark-paper"], [N1_DARK.bg, "dark-sheet"], [N1_DARK.surface, "dark-field"], [N1_DARK.text, "dark-ink"],
+  [N1_DARK.muted, "dark-muted"], [N1_DARK.line, "dark-rule"], [N1_DARK.codeBg, "dark-well"],
+]);
+const follow = (hex: string) => {
+  const role = typeof hex === "string" ? PALETTE_FOLLOW.get(hex.trim().toLowerCase()) : undefined;
+  return role ? `var(--palette-look-${role}, ${hex})` : hex;
+};
+
 /** Base tokens of one look. The stylesheet derives the rest on `.look-scope`. */
 export function lookStyle(value: Look): CSSProperties {
   const { palette } = value;
   return {
-    "--bg": palette.bg,
-    "--surface": palette.surface,
-    "--text": palette.text,
-    "--muted": palette.muted,
-    "--line": palette.line,
-    "--accent": palette.accent,
-    "--on-accent": onColor(palette.accent),
+    "--bg": follow(palette.bg),
+    "--surface": follow(palette.surface),
+    "--text": follow(palette.text),
+    "--muted": follow(palette.muted),
+    "--line": follow(palette.line),
+    ...SCOPE_ACCENT,
     "--motion": palette.motion,
-    "--heading": palette.heading,
-    "--heading-alt": palette.headingAlt,
-    "--strong": palette.strong,
-    "--link": palette.link,
-    "--code-bg": palette.codeBg,
-    "--code-text": palette.codeText,
+    "--heading": follow(palette.heading),
+    "--heading-alt": follow(palette.headingAlt),
+    "--strong": follow(palette.strong),
+    // A link colour the person chose is kept; the stored defaults (Achmage blue) give way to the app's link teal.
+    "--link": ownLinkColor(value) ?? "var(--link-default)",
+    "--code-bg": follow(palette.codeBg),
+    "--code-text": follow(palette.codeText),
     "--e-font": fontStack(value.font),
     "--e-size": `${value.fontSize / 16}rem`,
     "--e-line": String(value.lineHeight),
@@ -328,9 +462,21 @@ export function lookStyle(value: Look): CSSProperties {
   } as CSSProperties;
 }
 
-/** Only an engine's color, for marks and tabs of an engine that is not in focus. */
+/**
+ * Formerly an engine's colour for whatever it wrapped (tabs, chips, rows, menus). Since S9 the
+ * engine's colour is drawn only by its own mark (EngineMark reads it itself), so this paints
+ * nothing on chrome: it only hands a mark inside the person's own engine colour, the same one the
+ * mark would take anyway. Kept so callers in other units' files keep working until they drop it.
+ */
 export function accentStyle(value: Look): CSSProperties {
-  return { "--accent": value.palette.accent, "--on-accent": onColor(value.palette.accent) } as CSSProperties;
+  const own = ownEngineColor(value);
+  return (own ? { "--engine-own": own } : {}) as CSSProperties;
+}
+
+/** The style an engine's mark carries: the person's own engine colour, or nothing (the stylesheet's engine colour). */
+export function engineMarkStyle(value: Look | null | undefined): CSSProperties | undefined {
+  const own = value ? ownEngineColor(value) : null;
+  return own ? ({ "--engine-own": own } as CSSProperties) : undefined;
 }
 
 /** True when a font family is actually installed or loaded (canvas width test against two fallbacks). */

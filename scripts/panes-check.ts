@@ -37,7 +37,7 @@ const check = (step: string, ok: boolean, detail = "") => {
   console.log(`${ok ? "PASS" : "FAIL"} ${step}${detail ? ` — ${detail}` : ""}`);
 };
 
-const child = spawn(process.execPath, ["apps/host/src/main.ts"], {
+const child = spawn(process.execPath, [process.env.HOST_ENTRY ?? "apps/host/src/main.ts"], {
   env: {
     ...process.env,
     WORKBENCH_DATA_DIR: dataDir,
@@ -167,8 +167,8 @@ async function flow(provider: Provider) {
 
     // ── the document on screen: its tab dragged to the right half, its conversation stays left ──
     const doc = await api<{ id: string; name: string }>("POST", `/api/works/${work.id}/pages`, { name: "수업 계획" });
-    await page.locator(".work-view .docs-button").click();
-    await page.locator(".docs-menu .menu-item", { hasText: "수업 계획" }).click();
+    await page.locator(".work-view .note-head-more").click();
+    await page.locator(".note-menu [role=menuitem]", { hasText: "수업 계획" }).click();
     await page.waitForSelector(".document-view .doc-tab-open");
     const tab = page.locator(".doc-tab-open", { hasText: "수업 계획" });
     const area = (await page.locator(".panes").boundingBox())!;
@@ -178,7 +178,7 @@ async function flow(provider: Provider) {
     });
     await page.waitForSelector(".panes.two .pane.right .document-view", { timeout: 10_000 });
     const conversationLeft = await page.locator(".pane.left .work-view").count();
-    const splitRests = await page.locator('.pane.right .work-mode-bar [data-mode="split"]').isDisabled();
+    const splitRests = await page.locator('.pane.right .work-mode-bar [data-value="split"]').isDisabled();
     await page.waitForTimeout(300);
     await shot("03a-doc-tab.png");
     pass("보던 문서의 탭을 오른쪽 반에 끌면 문서는 오른쪽, 그 작업의 대화는 왼쪽('나란히'는 쉼)", docPreview.includes("오른쪽에 열기") && conversationLeft === 1 && splitRests, doc.name);

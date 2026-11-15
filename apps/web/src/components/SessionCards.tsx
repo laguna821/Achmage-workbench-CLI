@@ -59,7 +59,7 @@ export function SessionCard({
       {showPurpose ? <span className="session-card-purpose">{session.purpose}</span> : null}
       {!compact ? (
         <span className="session-card-preview">
-          {busy ? (session.activity ?? "응답 중") : session.preview ?? (session.lastError ? `오류: ${session.lastError}` : "아직 답이 없습니다")}
+          {busy ? (session.activity ?? "진행 중") : session.preview ?? (session.lastError ? `오류: ${session.lastError}` : "아직 답이 없습니다")}
         </span>
       ) : null}
       <span className="session-card-foot">

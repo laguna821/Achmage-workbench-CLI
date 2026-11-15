@@ -30,11 +30,11 @@ const check = (step: string, ok: boolean, detail = "") => {
 };
 const numbers: string[] = [];
 
-const child = spawn(process.execPath, ["apps/host/src/main.ts"], {
+const child = spawn(process.execPath, [process.env.HOST_ENTRY ?? "apps/host/src/main.ts"], {
   env: {
     ...process.env,
     WORKBENCH_DATA_DIR: dataDir,
-    WORKBENCH_WEB_DIR: "apps/web/dist",
+    WORKBENCH_WEB_DIR: process.env.WORKBENCH_WEB_DIR ?? "apps/web/dist",
     WORKBENCH_HOST_LABEL: "노트북",
     WORKBENCH_CODEX_BIN: resolve("scripts/fixtures/fake-codex.mjs"),
     WORKBENCH_CLAUDE_BIN: resolve("scripts/fixtures/fake-claude.mjs"),
@@ -178,7 +178,7 @@ async function drag(page: Page, from: Locator, to: Locator) {
   return hovered;
 }
 
-const toastText = (page: Page) => page.locator(".toast").last().innerText().catch(() => "");
+const toastText = (page: Page) => page.locator(".top-notice").last().innerText().catch(() => "");
 
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1200 } });
@@ -290,7 +290,7 @@ try {
   check("보드 끌기: '예산 보고'를 낮음 → 높음 열로 끌면 노트의 중요도: 높음, 카드도 그 칸으로", importance && movedCard && toHigh.over === 1, JSON.stringify(toHigh));
   const toDone = await drag(page, cellOf("높음", "보류").locator(`.kanban-card[data-work="${works.budget.id}"]`), cellOf("높음", "완료"));
   const staged = await until(async () => (await stageOf(works.budget.id)) === "완료", 8000);
-  await page.locator(".toast button", { hasText: "되돌리기" }).click();
+  await page.locator(".top-notice button", { hasText: "되돌리기" }).click();
   const undone = await until(async () => (await stageOf(works.budget.id)) === "보류", 8000);
   check("가로줄 끌기: 보류 → 완료 줄로 끌면 단계가 바뀌고 '되돌리기'로 보류로", staged && undone && toDone.over === 1, JSON.stringify(toDone));
 
@@ -329,7 +329,7 @@ try {
   const toDoneStage = await until(async () => (await stageOf(works.draft.id)) === "완료", 8000);
   const inDone = await until(async () => (await page.locator(`.kanban-column[data-stage-column="완료"] .kanban-card[data-work="${works.draft.id}"]`).count()) === 1, 5000);
   await shot("07-stage-board.png");
-  await page.locator(".toast button", { hasText: "되돌리기" }).click();
+  await page.locator(".top-notice button", { hasText: "되돌리기" }).click();
   const backToDo = await until(async () => (await stageOf(works.draft.id)) === "할일", 8000);
   check(
     "'단계' 보기(전의 칸반): 열은 단계 순서 · 아카이브 · 값 없음, 단계 색 띠, 끌면 노트에 단계 → 되돌리기",
@@ -365,7 +365,7 @@ try {
     await page.mouse.up();
     const cleared = await until(async () => (await stageOf(works.draft.id)) === null, 8000);
     await shot("07b-board-edge-scroll.png");
-    await page.locator(".toast button", { hasText: "되돌리기" }).click();
+    await page.locator(".top-notice button", { hasText: "되돌리기" }).click();
     const restored = await until(async () => (await stageOf(works.draft.id)) === "할일", 8000);
     check(
       "가운데보다 넓은 보드(두 칸 내비게이터 옆): 카드를 가장자리로 가져가면 보드가 넘어가 화면 밖 열('값 없음')에 놓임 → 되돌리기",
@@ -414,7 +414,7 @@ try {
   const movedFolder = await until(async () => (await snapshot()).works.find((work) => work.id === works.talk.id)?.folderId === admin.id, 8000);
   await until(async () => (await toastText(page)).includes("연구 → 행정"), 4000);
   const folderNotice = await toastText(page);
-  await page.locator(".toast button", { hasText: "되돌리기" }).click();
+  await page.locator(".top-notice button", { hasText: "되돌리기" }).click();
   const folderBack = await until(async () => (await snapshot()).works.find((work) => work.id === works.talk.id)?.folderId === research.id, 8000);
   check("폴더로 묶은 보드: 카드를 '행정' 열로 끌면 프로젝트가 그 폴더로(PATCH folderId), 되돌리기로 제자리", movedFolder && folderBack && folderNotice.includes("연구 → 행정"), folderNotice);
   // This view goes back to how it shipped.
@@ -465,17 +465,23 @@ try {
   // ── the project page: values to pick for a text and a list property (Notion's select) ───────
   await view(page, "표");
   await page.locator(".projects-table .projects-name", { hasText: "혼자 쓰는 노트" }).click();
-  await page.waitForSelector('.properties-panel .prop-row[data-key="중요도"]');
-  await page.locator('.properties-panel .prop-row[data-key="중요도"] .prop-value').click();
-  await page.waitForSelector('.prop-row[data-key="중요도"] .prop-choice');
-  const importanceChoices = await texts(page, '.prop-row[data-key="중요도"] .prop-choice');
+  // Empty keys are rows of the properties block; pressing one's value opens its picker.
+  const addProperty = async (key: string) => {
+    await page.locator(`.project-view:visible .pn-props .pn-prop[data-key="${key}"] .pn-prop-button`).click();
+    await page.waitForSelector(".ui-menu[data-state=open]");
+  };
+  await page.waitForSelector(".project-view:visible .pn-prop-add");
+  await addProperty("중요도");
+  await page.waitForFunction(() => document.querySelectorAll(".ui-menu[data-state=open] [data-menu-item]").length >= 3);
+  const importanceChoices = (await page.locator(".ui-menu[data-state=open] [data-menu-item] .ui-menu-text").allInnerTexts()).map((text) => text.trim());
   await shot("11b-property-choices.png");
-  await page.locator('.prop-row[data-key="중요도"] .prop-choice', { hasText: "보통" }).click();
+  await page.locator(".ui-menu[data-state=open] [data-menu-item]", { hasText: "보통" }).first().click();
   const picked = await until(async () => (await prop(works.alone.id, "중요도")).join() === "보통", 8000);
-  await page.locator('.properties-panel .prop-row[data-key="종류"] .prop-add-value').click();
-  await page.waitForSelector('.prop-row[data-key="종류"] .prop-choice');
-  const kindChoices = await texts(page, '.prop-row[data-key="종류"] .prop-choice');
-  await page.locator('.prop-row[data-key="종류"] .prop-choice', { hasText: "연구" }).click();
+  await addProperty("종류");
+  await page.waitForFunction(() => document.querySelectorAll(".ui-menu[data-state=open] [data-menu-item]").length >= 4);
+  const kindChoices = (await page.locator(".ui-menu[data-state=open] [data-menu-item] .ui-menu-text").allInnerTexts()).map((text) => text.trim());
+  await page.locator(".ui-menu[data-state=open] [data-menu-item]", { hasText: "연구" }).first().click();
+  await page.keyboard.press("Escape");
   const kindPicked = await until(async () => (await prop(works.alone.id, "종류")).join() === "연구", 8000);
   check(
     "프로젝트 페이지 속성: 중요도는 템플릿의 높음·보통·낮음, 종류는 다른 프로젝트가 쓴 값을 골라 씀",

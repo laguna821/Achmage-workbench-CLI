@@ -3,12 +3,13 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect } from "vitest";
 import { EventBus } from "./bus.ts";
 import { FindTool, findSessionName, isPlainFindCommand, withFindTool } from "./find-tool.ts";
 import { FIND_HEAD } from "./search.ts";
 import { SessionManager } from "./sessions.ts";
 import { Store } from "./store.ts";
+import { itWithSearch } from "./search-worker-test.ts";
 
 // workbench-find as engines run it: the command on PATH writes a request into its session's
 // spool folder and the gateway answers with a file (no socket: Codex's sandbox allows none).
@@ -45,7 +46,7 @@ function work(manager: SessionManager, title: string, provider: "claude" | "code
 }
 
 describe("workbench-find through the spool", () => {
-  it("runs from an engine's PATH through the spool, for Claude (session variable) and Codex (thread id)", async () => {
+  itWithSearch("runs from an engine's PATH through the spool, for Claude (session variable) and Codex (thread id)", async () => {
     const { dir, bus, manager } = setup();
     const { session: codex } = work(manager, "안녕", "codex", "과제 채점 기준표");
     const claude = manager.createSession(codex.workId, { provider: "claude", purpose: "슬라이드" });

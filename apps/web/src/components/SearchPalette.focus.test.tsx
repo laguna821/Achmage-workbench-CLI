@@ -21,7 +21,7 @@ function setup() {
   function Harness() {
     const [open, setOpen] = useState(true);
     return <AppearanceContext.Provider value={{ appTheme: "light", lookOf: () => NEUTRAL_LOOK.light } as unknown as AppearanceApi}>
-      {open && <SearchPalette api={api} state={initialState} commands={[{ id: "open", label: "대상 열기", icon: "file", run }]} onClose={() => setOpen(false)} onOpenSession={vi.fn()} onOpenHit={vi.fn()} onOpenWork={vi.fn()} onOpenDoc={vi.fn()} />}
+      {open && <SearchPalette api={api} state={initialState} commands={[{ id: "open", label: "대상 열기", aliases: ["예전 이름"], icon: "file", run }]} onClose={() => setOpen(false)} onOpenSession={vi.fn()} onOpenHit={vi.fn()} onOpenWork={vi.fn()} onOpenDoc={vi.fn()} />}
     </AppearanceContext.Provider>;
   }
   render(<Harness />);
@@ -47,4 +47,10 @@ it("does not close during IME composition and restores on outside dismissal", ()
   fireEvent.compositionEnd(f.input);
   fireEvent.pointerDown(document.querySelector(".palette-backdrop")!);
   expect(document.activeElement).toBe(f.opener);
+});
+it("finds a command by a former name it keeps as an alias (지금 is found by 홈)", async () => {
+  const f = setup();
+  fireEvent.change(f.input, { target: { value: ">예전" } });
+  await act(async () => { fireEvent.keyDown(f.input, { key: "Enter" }); });
+  expect(f.run).toHaveBeenCalledOnce();
 });

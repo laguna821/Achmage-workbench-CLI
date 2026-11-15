@@ -22,7 +22,7 @@
 .markdown .callout-icon {
   display: inline-flex;
   flex: none;
-  margin-top: 2px;
+  margin-top: var(--space-3xs);
 }
 
 .markdown .callout-title-inner {
@@ -52,11 +52,11 @@
   flex: none;
   width: 7px;
   height: 7px;
-  margin: 6px 4px 0 auto;
+  margin: 6px var(--space-2xs) 0 auto;
   border-right: 1.75px solid currentColor;
   border-bottom: 1.75px solid currentColor;
   transform: rotate(-45deg);
-  transition: transform 0.15s ease;
+  transition: transform var(--dur-micro) var(--ease-out);
 }
 
 .markdown details.callout[open] > summary::after {
@@ -124,14 +124,14 @@
 
 /* ==highlight== */
 .markdown mark {
-  padding: 0 2px;
+  padding: 0 var(--space-3xs);
   border-radius: var(--r-xs);
-  background: rgba(255, 208, 0, 0.4);
+  background: var(--color-highlight);
   color: inherit;
 }
 
 :root[data-theme="dark"] .markdown mark {
-  background: rgba(255, 208, 0, 0.28);
+  background: var(--color-highlight);
 }
 
 /* #tag in the text, like the tag pills on cards. */
@@ -171,8 +171,8 @@
 }
 
 .markdown .footnotes {
-  margin-top: 24px;
-  padding-top: 8px;
+  margin-top: var(--space-lg);
+  padding-top: var(--space-xs);
   border-top: 1px solid var(--line);
   font-size: 0.9em;
   color: var(--muted);
@@ -180,8 +180,8 @@
 
 /* ![[another note]]: that note's text in place, with its name to open it. */
 .markdown .note-embed {
-  margin: 12px 0;
-  padding: 8px 14px 4px;
+  margin: var(--space-sm) 0;
+  padding: var(--space-xs) 14px var(--space-2xs);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
 }
@@ -190,11 +190,11 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 4px;
+  margin-bottom: var(--space-2xs);
   font-size: var(--fs-meta);
   color: var(--muted);
 }
 
 .markdown .note-embed-body > :first-child {
-  margin-top: 4px;
+  margin-top: var(--space-2xs);
 }

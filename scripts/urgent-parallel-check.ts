@@ -89,19 +89,130 @@ try {
   page.on("request", request => { const path = new URL(request.url()).pathname; if (path.startsWith("/api/")) calls.push({ method: request.method(), path }); });
   await page.addInitScript(id => localStorage.setItem("workbench.lastWork", id), work.id);
   await page.goto(`${ready.url}/?token=${ready.token}`);
+  // Since Hallmark N1 (in the skin base) a pane's strip holds the tabs of ITS project; another project's
+  // open tabs are one ⌄ away ("다른 프로젝트 · …", still open and running). A tab not on the strip is
+  // reached the way a person reaches it: the ⌄ list.
+  // How each tab is named in the ⌄ list (another project's tab is "<project> · <title>").
+  const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const named = (title: string) => new RegExp(`(^| · )${escape(title)}$`);
+  const listName: Record<string, RegExp> = { "doc-a": named("문서 A.docx"), "doc-b": named("문서 B.docx"), main: named(main.purpose), second: named(second.purpose), other: new RegExp(`^${escape(other.title)} · `) };
   const activate = async (id: string, editor = false) => {
-    await page!.locator(`.pane[data-pane-active="true"] .group-tab[data-tab-id="${id}"] [role="tab"]`).click();
+    const onStrip = page!.locator(`.pane[data-pane-active="true"] .group-tab[data-tab-id="${id}"] [role="tab"]`);
+    if (await onStrip.waitFor({ timeout: 5_000 }).then(() => true, () => false)) await onStrip.click();
+    else {
+      await page!.locator('.pane[data-pane-active="true"] .group-tab-more').click();
+      await page!.locator('.group-tab-list [role^="menuitem"]:not([aria-disabled="true"])').filter({ hasText: listName[id] ?? id }).first().click();
+    }
     const pane = page!.locator(`.pane[data-pane-active="true"][data-tab="${id}"]`); await pane.waitFor();
-    if (editor) { const frame = pane.frameLocator("iframe.office-frame"); await frame.locator('.tiptap[contenteditable="true"]').waitFor({ timeout: 60_000 }); await frame.locator(".ai-panel textarea").waitFor(); return frame; }
+    if (editor) { const frame = pane.frameLocator("iframe.office-frame"); await frame.locator('.tiptap[contenteditable="true"]').waitFor({ timeout: 60_000 }); 
+      // The editor's own AI 도우미 starts closed (design review I7): open it through its rail key, as a person does.
+      const rail = frame.locator(".ai-dock.collapsed .ai-rail");
+      if (await rail.count()) await rail.click();
+      await frame.locator(".ai-panel textarea").waitFor(); return frame; }
   };
   if (process.argv.includes("--completion-only")) {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    // Nothing a notice draws may lie over a visible control outside it (the faded-out title it replaces is not one).
+    const covers = (selector: string) => page!.evaluate((selector) => {
+      const notice = document.querySelector(selector)!, box = notice.getBoundingClientRect();
+      const hits = (r: DOMRect) => r.width > 0 && r.height > 0 && r.left < box.right && box.left < r.right && r.top < box.bottom && box.top < r.bottom;
+      return Array.from(document.querySelectorAll("button, a[href], input, textarea, select, [role=tab], [tabindex]"))
+        .filter(element => !notice.contains(element) && !element.contains(notice) && getComputedStyle(element).visibility !== "hidden" && getComputedStyle(element).opacity !== "0" && hits(element.getBoundingClientRect()))
+        .map(element => element.getAttribute("aria-label") || element.textContent?.trim().slice(0, 20) || element.tagName);
+    }, selector);
+    // Every control in the top bar's side clusters, by position: none may move while a notice comes and goes.
+    // Compared with the notice present and taken out of layout, so the bell's own unread count (which a
+    // completion also raises) is not mistaken for movement.
+    const clusters = () => page!.evaluate(() => Array.from(document.querySelectorAll(".topbar-left > *, .topbar-right > *")).map(element => { const r = element.getBoundingClientRect(); return `${Math.round(r.left)}:${Math.round(r.width)}`; }).join(" "));
+    const stillWithout = async () => {
+      const shown = await clusters();
+      await page!.evaluate(() => document.querySelector<HTMLElement>(".topbar > .top-notice")!.style.display = "none");
+      const without = await clusters();
+      await page!.evaluate(() => document.querySelector<HTMLElement>(".topbar > .top-notice")!.style.display = "");
+      return shown === without ? "same" : `${without} → ${shown}`;
+    };
+    const textWidth = async () => Math.round((await page!.locator(".topbar > .top-notice .top-notice-text").boundingBox())?.width ?? 0);
+    // On screen: the answer arrives with nothing laid over the conversation.
+    const composer = page.locator('.pane[data-pane-active="true"] .composer-input');
+    const send = async (text: string) => { await composer.fill(text); await page!.locator('.pane[data-pane-active="true"]').getByRole("button", { name: "보내기", exact: true }).click(); };
+    const ends = async () => (await items(main.id)).filter((i: any) => i.kind === "turnEnd" && i.status === "completed").length;
     await activate("main");
-    await page.locator('.pane[data-pane-active="true"] .composer-input').fill("완료 알림 확인");
-    await page.locator('.pane[data-pane-active="true"]').getByRole("button", { name: "보내기", exact: true }).click();
-    await page.locator(".toast").filter({ hasText: "답변 완료" }).waitFor();
-    const announcement = await page.locator(".toast").innerText();
-    check("foreground completion is announced", announcement.includes("답변 완료"), announcement);
-    await page.screenshot({ path: join(out, "foreground-completed.png") });
+    await send("완료 알림 확인");
+    await until(async () => await ends() === 1);
+    await new Promise(done => setTimeout(done, 1_000));
+    const box = await composer.boundingBox();
+    const onTop = box ? await page.evaluate(([x, y]) => Boolean(document.elementFromPoint(x!, y!)?.closest(".composer")), [box.x + box.width / 2, box.y + box.height / 2]) : false;
+    check("visible completion raises no notice and nothing over the composer", await page.locator(".top-notice").count() === 0 && onTop);
+    await page.screenshot({ path: join(out, "visible-completed.png") });
+    // Off screen (a tab behind): announced on its tab, in the sidebar and by a capsule in the top bar that covers nothing.
+    await send("길게 숨은 탭 완료 확인");
+    await until(async () => (await snapshot()).sessions.find((s: any) => s.id === main.id)?.status === "running");
+    await activate("second");
+    const capsule = page.locator(".topbar > .top-notice[data-kind=completion][role=status]");
+    await capsule.filter({ hasText: "답변 완료" }).waitFor({ timeout: 30_000 });
+    await new Promise(done => setTimeout(done, 300));
+    await page.screenshot({ path: join(out, "hidden-completed.png") });
+    const announcement = await capsule.innerText(), during = await stillWithout(), covered = await covers(".top-notice"), readable = await textWidth();
+    check("hidden completion is announced in the title's place, over no control", announcement.includes("답변 완료") && covered.length === 0, `${announcement.replace(/\s+/g, " ")} · covered ${JSON.stringify(covered)}`);
+    check("its text is readable: at least 160px at 1280px with the sidebar open", readable >= 160, `${readable}px`);
+    const tabDot = await page.locator('.pane[data-pane-active="true"] .group-tab[data-tab-id="main"] .badged > .new-badge').count();
+    const rowDot = await page.locator(`.sidebar :is([data-row-id="${main.id}"], [data-row-id="${work.id}"]) .dot-new`).count();
+    check("hidden completion marks its tab and sidebar row", tabDot === 1 && rowDot > 0, `tab ${tabDot} row ${rowDot}`);
+    // Opening its tab directly (not 열기): the notice leaves at once and the badge clears.
+    await activate("main");
+    const gone = await capsule.count() === 0 || await capsule.waitFor({ state: "detached", timeout: 1_500 }).then(() => true, () => false);
+    const cleared = await until(async () => await page!.locator('.group-tab[data-tab-id="main"] .new-badge').count() === 0, 5_000).then(() => true, () => false);
+    check("looking at it withdraws the notice at once and clears the badge", gone && cleared, `notice gone ${gone} · badge cleared ${cleared}`);
+    check("the side clusters do not move for a completion notice (1280px)", during === "same", during);
+    // The user's own action, then an error: the same slot, over no control, no shadow, clusters still.
+    const runCommand = async (label: string) => {
+      await page!.keyboard.press("Control+k");
+      await page!.locator(".palette").waitFor();
+      await page!.locator(".palette").getByText(label, { exact: false }).first().click();
+    };
+    for (const [kind, role, file] of [["info", "status", "action-toast"], ["error", "alert", "error-toast"]] as const) {
+      if (kind === "error") await page.evaluate(() => { const real = window.fetch; (window as any).__realFetch = real; window.fetch = () => Promise.reject(new TypeError("호스트에 연결하지 못했습니다.")); });
+      await runCommand("지금 대화를 마크다운으로 복사");
+      const slot = page.locator(`.topbar > .top-notice[data-kind=${kind}][role=${role}]`);
+      await slot.waitFor({ timeout: 10_000 });
+      await new Promise(done => setTimeout(done, 300));
+      await page.screenshot({ path: join(out, `${file}.png`) });
+      const hit = await covers(".top-notice"), shadow = await slot.evaluate(element => getComputedStyle(element).boxShadow), still = await stillWithout();
+      check(`an ${kind} notice sits in the title's place over no control, without a shadow, clusters still`, hit.length === 0 && shadow === "none" && still === "same", `${(await slot.innerText()).replace(/\s+/g, " ")} · covered ${JSON.stringify(hit)} · shadow ${shadow} · clusters ${still}`);
+      if (kind === "error") await page.evaluate(() => { window.fetch = (window as any).__realFetch; });
+      await slot.getByRole("button", { name: "알림 닫기" }).click();
+    }
+    // Keyboard: while a notice shows, the faded title is out of the tab order and does nothing on Enter or Space.
+    await runCommand("지금 대화를 마크다운으로 복사");
+    const info = page.locator(".topbar > .top-notice[data-kind=info]");
+    await info.waitFor({ timeout: 10_000 });
+    const title = page.locator(".topbar .topbar-title");
+    await page.locator(".topbar .brand").focus();
+    let reached = false;
+    for (let step = 0; step < 4; step++) { await page.keyboard.press("Tab"); if (await title.evaluate(element => element === document.activeElement)) reached = true; }
+    await title.evaluate(element => (element as HTMLElement).focus());
+    const focusable = await title.evaluate(element => element === document.activeElement);
+    await page.keyboard.press("Enter"); await page.keyboard.press("Space");
+    const opened = await page.locator(".topbar-title-edit").count();
+    check("the faded title cannot be reached by Tab, focused or activated", !reached && !focusable && opened === 0, `tab ${reached} · focus ${focusable} · rename opened ${opened}`);
+    await info.getByRole("button", { name: "알림 닫기" }).click();
+    // A rename in progress is never hidden: a completion arriving meanwhile waits for it to commit.
+    const finished = await ends();
+    await send("길게 이름 바꾸는 동안 끝나는 답");
+    await until(async () => (await snapshot()).sessions.find((s: any) => s.id === main.id)?.status === "running");
+    await activate("second");
+    await title.click();
+    const editor = page.locator(".topbar .topbar-title-edit");
+    await editor.waitFor();
+    await until(async () => await ends() > finished, 30_000);
+    await new Promise(done => setTimeout(done, 800));
+    const editorShown = await editor.evaluate(element => element === document.activeElement && getComputedStyle(element).opacity === "1");
+    const heldBack = await page.locator(".topbar > .top-notice").count() === 0;
+    await editor.fill("완료 알림 · 이름 바꿈");
+    await page.keyboard.press("Enter");
+    const after = await page.locator(".topbar > .top-notice[data-kind=completion]").waitFor({ timeout: 5_000 }).then(() => true, () => false);
+    check("a completion during a rename waits, the input stays visible and focused, and it shows after commit", editorShown && heldBack && after, `input shown ${editorShown} · held ${heldBack} · shown after commit ${after}`);
+    await page.screenshot({ path: join(out, "after-rename.png") });
   } else {
   for (const [id, marker] of [["doc-a", "PARALLEL_DOC_A"], ["doc-b", "PARALLEL_DOC_B"]]) {
     const frame = (await activate(id!, true))!;
@@ -136,19 +247,28 @@ try {
   }
   const mainRows = await items(main.id);
   check("main receives both document reports without child prompts", docs.every(doc => mainRows.some((i: any) => i.kind === "notice" && i.text.includes(doc.name))) && !mainRows.some((i: any) => i.kind === "user" && i.text.includes("PARALLEL_DOC")) && mainRows.some((i: any) => i.kind === "turnEnd" && i.status === "completed"));
-  const announcement = await page.locator('.toast').innerText().catch(() => "");
-  check("foreground completion is announced", announcement.includes("답변 완료"), announcement);
+  // Main finished behind the "other" tab: announced in the top bar.
+  // The passing notice only: a standing row (a layout problem; the vault refused — as here, where the gateway is started
+  // without the app's launcher) is a .top-notice too and stands beside it.
+  const announcement = await page.locator(".topbar > .top-notice:not(.layout-problem)").innerText().catch(() => "");
+  check("foreground completion is announced", announcement.includes("새 답") /* skin 2 fix 1: one state vocabulary (was "답변 완료") */, announcement);
   await activate("doc-a", true); await page.screenshot({ path: join(out, "parallel-completed.png") });
   await activate("other");
   const refreshBefore = calls.filter(c => c.path === "/api/providers/refresh").length;
+  // Hallmark U5: a conversation's model picker lives in the composer's 도구 sheet (the quiet row).
+  const tools = page.locator('.pane[data-pane-active="true"] .work-view .composer-tools:not([open]) > summary');
+  if (await tools.count()) await tools.click();
   await page.locator('.pane[data-pane-active="true"]').getByRole("button", { name: "Fake", exact: true }).click();
   await until(async () => calls.filter(c => c.path === "/api/providers/refresh").length > refreshBefore);
   check("model chooser asks the engine for a fresh catalog", true); await page.keyboard.press("Escape");
   const source = join(work.cwd, "문서 A.docx"), bytes = readFileSync(source);
+  // Since N1 the list follows the open project (level 2): a project's own row is at level 1 (← 프로젝트 목록).
+  const back = page.locator('.sidebar[data-level="project"] .nav-back');
+  if (await back.count()) { await back.click(); await page.locator('.sidebar[data-level="projects"]').waitFor(); }
   await page.locator(`.sidebar [data-row-id="${work.id}"]`).click({ button: "right" });
   await page.getByRole("menuitem", { name: "프로젝트 삭제…", exact: true }).click();
-  check("project deletion explains document preservation", await page.getByRole("dialog", { name: "프로젝트 삭제", exact: true }).getByText("문서 파일과 작업 폴더는 그대로 보존합니다.").isVisible());
-  await page.getByRole("dialog", { name: "프로젝트 삭제", exact: true }).getByRole("button", { name: "프로젝트 삭제", exact: true }).click();
+  check("project deletion explains document preservation", await page.getByRole("dialog", { name: /프로젝트를 삭제할까요\?$/ }).getByText("문서 파일과 작업 폴더는 그대로 보존합니다.").isVisible());
+  await page.getByRole("dialog", { name: /프로젝트를 삭제할까요\?$/ }).getByRole("button", { name: "프로젝트 삭제", exact: true }).click();
   await until(async () => !(await snapshot()).works.some((w: any) => w.id === work.id));
   check("project menu deletes records, closes tabs, preserves files and other project", readFileSync(source).equals(bytes) && (await snapshot()).works.some((w: any) => w.id === other.id) && await page.locator('.group-tab[data-tab-id="doc-a"]').count() === 0);
   check("no browser exceptions or cancelled provider streams", errors.length === 0 && cancelled === 0, errors.join("; "));

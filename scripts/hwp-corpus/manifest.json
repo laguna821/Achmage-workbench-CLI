@@ -1,0 +1,1190 @@
+{
+ "schema": 1,
+ "documents": [
+  {
+   "id": "repo:강의계획서.hwpx",
+   "root": "repo",
+   "path": "apps/host/src/channels/fixtures/강의계획서.hwpx",
+   "sha256": "ab88a778ca8e8c59d678c3ec1dc1d54417f009fc34c72f2a6ecd8b3de3702039",
+   "size": 36765,
+   "format": "hwpx",
+   "covers": [
+    "app fixture",
+    "course syllabus",
+    "table form"
+   ],
+   "contains": [
+    "tables 1",
+    "pages 1"
+   ],
+   "source": "Workbench channel fixture (this repository)",
+   "licence": "Workbench repository"
+  },
+  {
+   "id": "repo:간이기안문_서식.hwpx",
+   "root": "repo",
+   "path": "third_party/skills/hallym-kordoc/core/templates/간이기안문_서식.hwpx",
+   "sha256": "2b58ef61f74a58126e125841d3850c5769bb642e29d3a2e9e3fb67cf5c58ee29",
+   "size": 7261,
+   "format": "hwpx",
+   "covers": [
+    "hallym-kordoc template",
+    "official draft form"
+   ],
+   "contains": [
+    "unnamed controls (form objects, field marks) 13",
+    "tables 4",
+    "clickhere fields 13",
+    "pages 1"
+   ],
+   "source": "hallym-kordoc skill template (this repository)",
+   "licence": "MIT (hallym-kordoc)"
+  },
+  {
+   "id": "repo:일반기안문_서식.hwpx",
+   "root": "repo",
+   "path": "third_party/skills/hallym-kordoc/core/templates/일반기안문_서식.hwpx",
+   "sha256": "7d40e770a018ae571ab10b5745376b03fd5ffa65fceaf5cce0d87cd0e4d4f437",
+   "size": 6871,
+   "format": "hwpx",
+   "covers": [
+    "hallym-kordoc template",
+    "official draft form"
+   ],
+   "contains": [
+    "unnamed controls (form objects, field marks) 23",
+    "clickhere fields 23",
+    "pages 1"
+   ],
+   "source": "hallym-kordoc skill template (this repository)",
+   "licence": "MIT (hallym-kordoc)"
+  },
+  {
+   "id": "repo:blank.hwp",
+   "root": "repo",
+   "path": "vendor/ieumoffice/apps/hwp/src/renderer/assets/blank.hwp",
+   "sha256": "170529f775ea480ff61bc7715e2a15dd3e21f0765912e7ad2b1b567de778c450",
+   "size": 12800,
+   "format": "hwp",
+   "covers": [
+    "blank document the studio starts from"
+   ],
+   "contains": [
+    "pages 1"
+   ],
+   "source": "Ieum Office test fixture (vendor/ieumoffice, pinned checkout)",
+   "licence": "Apache-2.0 (Ieum Office)"
+  },
+  {
+   "id": "repo:duplicate-field-ids.hwpx",
+   "root": "repo",
+   "path": "vendor/ieumoffice/apps/hwp/tests/fixtures/duplicate-field-ids.hwpx",
+   "sha256": "6120638da6df525e571cee949b69d0dde3be05bd9a0f17a24efda26302734096",
+   "size": 7741,
+   "format": "hwpx",
+   "covers": [
+    "duplicate field ids"
+   ],
+   "contains": [
+    "unnamed controls (form objects, field marks) 3",
+    "clickhere fields 3",
+    "pages 1"
+   ],
+   "source": "Ieum Office test fixture (vendor/ieumoffice, pinned checkout)",
+   "licence": "Apache-2.0 (Ieum Office)"
+  },
+  {
+   "id": "repo:format-copy-table.hwp",
+   "root": "repo",
+   "path": "vendor/ieumoffice/apps/hwp/tests/fixtures/format-copy-table.hwp",
+   "sha256": "d90a4045fa4a1cb72fdb287580721a681ad73753519ff4eaa6b0816485b7a6df",
+   "size": 13312,
+   "format": "hwp",
+   "covers": [
+    "format copy table"
+   ],
+   "contains": [
+    "tables 1",
+    "clickhere fields 2",
+    "pages 1"
+   ],
+   "source": "Ieum Office test fixture (vendor/ieumoffice, pinned checkout)",
+   "licence": "Apache-2.0 (Ieum Office)"
+  },
+  {
+   "id": "repo:hancom-page-number-no-dash.hwpx",
+   "root": "repo",
+   "path": "vendor/ieumoffice/apps/hwp/tests/fixtures/hancom-page-number-no-dash.hwpx",
+   "sha256": "0efb38444e51a9ab77549871c2062d1deebb50cd51edc205d61f8bc6e4f66083",
+   "size": 12157,
+   "format": "hwpx",
+   "covers": [
+    "hancom page number no dash"
+   ],
+   "contains": [
+    "page-number position 1",
+    "pages 1"
+   ],
+   "source": "Ieum Office test fixture (vendor/ieumoffice, pinned checkout)",
+   "licence": "Apache-2.0 (Ieum Office)"
+  },
+  {
+   "id": "repo:header-footer-paper-shapes.hwpx",
+   "root": "repo",
+   "path": "vendor/ieumoffice/apps/hwp/tests/fixtures/header-footer-paper-shapes.hwpx",
+   "sha256": "0b0fc5da97cd9b5ac81408b1eee3d18fb8cf3295885d7429f707e10d6437033b",
+   "size": 15391,
+   "format": "hwpx",
+   "covers": [
+    "header footer paper shapes"
+   ],
+   "contains": [
+    "footer 1",
+    "header 1",
+    "pages 1"
+   ],
+   "source": "Ieum Office test fixture (vendor/ieumoffice, pinned checkout)",
+   "licence": "Apache-2.0 (Ieum Office)"
+  },
+  {
+   "id": "repo:header-footer-paper-tables.hwpx",
+   "root": "repo",
+   "path": "vendor/ieumoffice/apps/hwp/tests/fixtures/header-footer-paper-tables.hwpx",
+   "sha256": "f3a258957ce8945858c46be064b609c85cec2a4f0725690174a879d23f0c21b3",
+   "size": 14805,
+   "format": "hwpx",
+   "covers": [
+    "header footer paper tables"
+   ],
+   "contains": [
+    "footer 1",
+    "header 1",
+    "pages 1"
+   ],
+   "source": "Ieum Office test fixture (vendor/ieumoffice, pinned checkout)",
+   "licence": "Apache-2.0 (Ieum Office)"
+  },
+  {
+   "id": "repo:header-picture-and-text.hwpx",
+   "root": "repo",
+   "path": "vendor/ieumoffice/apps/hwp/tests/fixtures/header-picture-and-text.hwpx",
+   "sha256": "67ae732c9cbb6cfced62befec3d38196dec615a71dc4b926860e57e1cb3a698c",
+   "size": 8500,
+   "format": "hwpx",
+   "covers": [
+    "header picture and text"
+   ],
+   "contains": [
+    "header 1",
+    "pages 1"
+   ],
+   "source": "Ieum Office test fixture (vendor/ieumoffice, pinned checkout)",
+   "licence": "Apache-2.0 (Ieum Office)"
+  },
+  {
+   "id": "repo:master-page-next-section.hwpx",
+   "root": "repo",
+   "path": "vendor/ieumoffice/apps/hwp/tests/fixtures/master-page-next-section.hwpx",
+   "sha256": "1fab0477ae7891bbbc4a540fa0771fcf647ec90aaf54c498f5fe7876a40108b1",
+   "size": 15729,
+   "format": "hwpx",
+   "covers": [
+    "master page next section"
+   ],
+   "contains": [
+    "sections 2",
+    "pages 2"
+   ],
+   "source": "Ieum Office test fixture (vendor/ieumoffice, pinned checkout)",
+   "licence": "Apache-2.0 (Ieum Office)"
+  },
+  {
+   "id": "repo:memo-short-header-tail.hwp",
+   "root": "repo",
+   "path": "vendor/ieumoffice/apps/hwp/tests/fixtures/memo-short-header-tail.hwp",
+   "sha256": "1be2736df6b21687f5c1627bac307cc689171928f6ceb0a235af0bc727eb6372",
+   "size": 95232,
+   "format": "hwp",
+   "covers": [
+    "memo short header tail"
+   ],
+   "contains": [
+    "unnamed controls (form objects, field marks) 9",
+    "pictures 1",
+    "memos 9",
+    "pages 3"
+   ],
+   "source": "Ieum Office test fixture (vendor/ieumoffice, pinned checkout)",
+   "licence": "Apache-2.0 (Ieum Office)"
+  },
+  {
+   "id": "repo:memo-source.hwp",
+   "root": "repo",
+   "path": "vendor/ieumoffice/apps/hwp/tests/fixtures/memo-source.hwp",
+   "sha256": "660567a041a39470f7bb94a5752fa2bf53d0b2809e62f47ebe8bbdea15d6b350",
+   "size": 910848,
+   "format": "hwp",
+   "covers": [
+    "memo source"
+   ],
+   "contains": [
+    "unnamed controls (form objects, field marks) 1",
+    "footnotes 1",
+    "footer 3",
+    "pictures 16",
+    "header 1",
+    "new numbers 1",
+    "page-number position 11",
+    "tables 52",
+    "clickhere fields 12",
+    "memos 1",
+    "pages 40"
+   ],
+   "source": "Ieum Office test fixture (vendor/ieumoffice, pinned checkout)",
+   "licence": "Apache-2.0 (Ieum Office)"
+  },
+  {
+   "id": "repo:memo.hwp",
+   "root": "repo",
+   "path": "vendor/ieumoffice/apps/hwp/tests/fixtures/memo.hwp",
+   "sha256": "c5790e0d99d8b290825e232835e88b881c27827e1e2a3301dc8d55e8afefbe2e",
+   "size": 13312,
+   "format": "hwp",
+   "covers": [
+    "memo"
+   ],
+   "contains": [
+    "unnamed controls (form objects, field marks) 3",
+    "rectangles/text boxes 1",
+    "tables 1",
+    "memos 3",
+    "pages 1"
+   ],
+   "source": "Ieum Office test fixture (vendor/ieumoffice, pinned checkout)",
+   "licence": "Apache-2.0 (Ieum Office)"
+  },
+  {
+   "id": "repo:memo.hwpx",
+   "root": "repo",
+   "path": "vendor/ieumoffice/apps/hwp/tests/fixtures/memo.hwpx",
+   "sha256": "68692a82ecf445b386753224489e1a997e8d7d7f30d9705607120f764d069531",
+   "size": 8712,
+   "format": "hwpx",
+   "covers": [
+    "memo"
+   ],
+   "contains": [
+    "unnamed controls (form objects, field marks) 3",
+    "rectangles/text boxes 1",
+    "tables 1",
+    "memos 3",
+    "pages 1"
+   ],
+   "source": "Ieum Office test fixture (vendor/ieumoffice, pinned checkout)",
+   "licence": "Apache-2.0 (Ieum Office)"
+  },
+  {
+   "id": "repo:nested-form.hwp",
+   "root": "repo",
+   "path": "vendor/ieumoffice/apps/hwp/tests/fixtures/nested-form.hwp",
+   "sha256": "1211911609e8907721ef0f513b51376ded0640f0bf0ba3c426e4f192fce4cf71",
+   "size": 50176,
+   "format": "hwp",
+   "covers": [
+    "nested form"
+   ],
+   "contains": [
+    "tables 4",
+    "pages 2"
+   ],
+   "source": "Ieum Office test fixture (vendor/ieumoffice, pinned checkout)",
+   "licence": "Apache-2.0 (Ieum Office)"
+  },
+  {
+   "id": "repo:paper-square-table-tac-host.hwpx",
+   "root": "repo",
+   "path": "vendor/ieumoffice/apps/hwp/tests/fixtures/paper-square-table-tac-host.hwpx",
+   "sha256": "3caa6a7579208c69e19fbfcb30536731dde32871ca8e1835351e485494a3614f",
+   "size": 30629,
+   "format": "hwpx",
+   "covers": [
+    "paper square table tac host"
+   ],
+   "contains": [
+    "footnotes 1",
+    "hide header/footer 1",
+    "tables 3",
+    "pages 1"
+   ],
+   "source": "Ieum Office test fixture (vendor/ieumoffice, pinned checkout)",
+   "licence": "Apache-2.0 (Ieum Office)"
+  },
+  {
+   "id": "repo:paper-topbottom-box-stale-ladder.hwpx",
+   "root": "repo",
+   "path": "vendor/ieumoffice/apps/hwp/tests/fixtures/paper-topbottom-box-stale-ladder.hwpx",
+   "sha256": "bf0ba96b9a760d034b3b755e184407555c5b2353f9f28a8e2ed04f488b3d2279",
+   "size": 37681,
+   "format": "hwpx",
+   "covers": [
+    "paper topbottom box stale ladder"
+   ],
+   "contains": [
+    "rectangles/text boxes 2",
+    "tables 1",
+    "pages 2"
+   ],
+   "source": "Ieum Office test fixture (vendor/ieumoffice, pinned checkout)",
+   "licence": "Apache-2.0 (Ieum Office)"
+  },
+  {
+   "id": "repo:square-picture-after-page-reset.hwpx",
+   "root": "repo",
+   "path": "vendor/ieumoffice/apps/hwp/tests/fixtures/square-picture-after-page-reset.hwpx",
+   "sha256": "981170934ffc8de4e587c806b6a70742aa663a3c07d63dc370b75caaf06e3637",
+   "size": 64255,
+   "format": "hwpx",
+   "covers": [
+    "square picture after page reset"
+   ],
+   "contains": [
+    "pictures 1",
+    "tables 1",
+    "pages 2"
+   ],
+   "source": "Ieum Office test fixture (vendor/ieumoffice, pinned checkout)",
+   "licence": "Apache-2.0 (Ieum Office)"
+  },
+  {
+   "id": "repo:title-table-then-inline-table.hwpx",
+   "root": "repo",
+   "path": "vendor/ieumoffice/apps/hwp/tests/fixtures/title-table-then-inline-table.hwpx",
+   "sha256": "a8c41628c068aa9266c742153aebde21296667235d6569c89c3e8915470e0f3d",
+   "size": 35776,
+   "format": "hwpx",
+   "covers": [
+    "title table then inline table"
+   ],
+   "contains": [
+    "footnotes 1",
+    "hide header/footer 1",
+    "tables 3",
+    "pages 1"
+   ],
+   "source": "Ieum Office test fixture (vendor/ieumoffice, pinned checkout)",
+   "licence": "Apache-2.0 (Ieum Office)"
+  },
+  {
+   "id": "repo:title-table-zone-fill.hwpx",
+   "root": "repo",
+   "path": "vendor/ieumoffice/apps/hwp/tests/fixtures/title-table-zone-fill.hwpx",
+   "sha256": "cc7b6f1d77bba05bb55cae80ac77255f6cb247ade0f58db7f98fae595d2e5375",
+   "size": 30635,
+   "format": "hwpx",
+   "covers": [
+    "title table zone fill"
+   ],
+   "contains": [
+    "footnotes 1",
+    "hide header/footer 1",
+    "tables 3",
+    "pages 1"
+   ],
+   "source": "Ieum Office test fixture (vendor/ieumoffice, pinned checkout)",
+   "licence": "Apache-2.0 (Ieum Office)"
+  },
+  {
+   "id": "rhwp:inner-table-01.hwp",
+   "root": "corpus",
+   "path": "samples/inner-table-01.hwp",
+   "sha256": "15c24b0dabec0353da4e8445155f16a46eac6d370d5d65c81e8aa1cf47759bc1",
+   "size": 32768,
+   "format": "hwp",
+   "covers": [
+    "nested table"
+   ],
+   "contains": [
+    "rectangles/text boxes 1",
+    "tables 2",
+    "pages 2"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:nested_tac_table_wrap.hwp",
+   "root": "corpus",
+   "path": "samples/nested_tac_table_wrap.hwp",
+   "sha256": "7e1b32b9f57d3b13b6e32a9af872bbc64bc326bc815eaf6b6d4bfd566031f393",
+   "size": 114688,
+   "format": "hwp",
+   "covers": [
+    "nested table",
+    "table treated as character"
+   ],
+   "contains": [
+    "tables 12",
+    "pages 6"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:issue2007_nested_cell_pagination_42065.hwp",
+   "root": "corpus",
+   "path": "samples/basic/issue2007_nested_cell_pagination_42065.hwp",
+   "sha256": "bebd4ce3691246b0fb3ae332e1d40bc51d9035cddb9fc3d378466b6a8a2b5626",
+   "size": 51712,
+   "format": "hwp",
+   "covers": [
+    "nested table",
+    "cell pagination"
+   ],
+   "contains": [
+    "unnamed controls (form objects, field marks) 13",
+    "bookmarks 2",
+    "new numbers 1",
+    "page-number position 13",
+    "tables 23",
+    "clickhere fields 31",
+    "formula fields 5",
+    "pages 17"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:table_scattered_header_rowbreak.hwp",
+   "root": "corpus",
+   "path": "samples/table_scattered_header_rowbreak.hwp",
+   "sha256": "65bbf7f22c8ab664f0f916b3a25257faf7a65ad564d58706955580e4f63c649b",
+   "size": 204800,
+   "format": "hwp",
+   "covers": [
+    "row-break table",
+    "repeated header row"
+   ],
+   "contains": [
+    "tables 17",
+    "pages 52"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:issue1937_rowbreak_footnote_overpagination.hwp",
+   "root": "corpus",
+   "path": "samples/issue1937_rowbreak_footnote_overpagination.hwp",
+   "sha256": "a3a075594994e4741a7fbe973bc230d95ae75fdee6578ac6017cec0d52844990",
+   "size": 147456,
+   "format": "hwp",
+   "covers": [
+    "row-break table",
+    "footnote"
+   ],
+   "contains": [
+    "footnotes 44",
+    "page-number position 1",
+    "tables 13",
+    "pages 51"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:cellzone-merged-end-fill.hwpx",
+   "root": "corpus",
+   "path": "samples/cellzone-merged-end-fill.hwpx",
+   "sha256": "a64e772b67d89bd0da2f901e34b703bbe878f510f9bf3440aad082a076f7839c",
+   "size": 31460,
+   "format": "hwpx",
+   "covers": [
+    "merged cells",
+    "cell fill"
+   ],
+   "contains": [
+    "footnotes 1",
+    "hide header/footer 1",
+    "tables 2",
+    "pages 1"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:대각선샘플.hwp",
+   "root": "corpus",
+   "path": "samples/대각선샘플.hwp",
+   "sha256": "0ca676c2e2fdca79cc01b01d2743197a8d6dbf078726564085d2e3f8da8a1b8a",
+   "size": 55296,
+   "format": "hwp",
+   "covers": [
+    "diagonal cell borders"
+   ],
+   "contains": [
+    "tables 1",
+    "pages 1"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:header-footer-paper-frame.hwpx",
+   "root": "corpus",
+   "path": "samples/header-footer-paper-frame.hwpx",
+   "sha256": "8589147dc4a70140d9ccd0c83b899932432541c9db9e714cc59cfdd4c16c67b6",
+   "size": 15531,
+   "format": "hwpx",
+   "covers": [
+    "header",
+    "footer"
+   ],
+   "contains": [
+    "footer 1",
+    "header 1",
+    "pages 1"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:pic-in-head-01.hwp",
+   "root": "corpus",
+   "path": "samples/pic-in-head-01.hwp",
+   "sha256": "c73145d60f3f0b041bc8fee64b65e6d419a1fc78aa62a90fa150b36f35278f4a",
+   "size": 179200,
+   "format": "hwp",
+   "covers": [
+    "picture in header"
+   ],
+   "contains": [
+    "unnamed controls (form objects, field marks) 25",
+    "bookmarks 1",
+    "pictures 4",
+    "header 1",
+    "new numbers 1",
+    "page-number position 1",
+    "tables 65",
+    "bookmark fields 9",
+    "crossref fields 13",
+    "hyperlink fields 3",
+    "pages 22"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:footnote-01.hwp",
+   "root": "corpus",
+   "path": "samples/footnote-01.hwp",
+   "sha256": "5bbc8a8fd23415aad59dd91d1eb261050946d9c64635933fcd49609ec2cc94e5",
+   "size": 32768,
+   "format": "hwp",
+   "covers": [
+    "footnotes"
+   ],
+   "contains": [
+    "footnotes 9",
+    "hide header/footer 1",
+    "page-number position 1",
+    "tables 4",
+    "pages 6"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:endnote-01.hwp",
+   "root": "corpus",
+   "path": "samples/endnote-01.hwp",
+   "sha256": "07ae69995ef24da322ae85f99c9f5dbee9a919bea15077863ebced38e13e1541",
+   "size": 32768,
+   "format": "hwp",
+   "covers": [
+    "endnotes"
+   ],
+   "contains": [
+    "endnotes 6",
+    "hide header/footer 1",
+    "page-number position 1",
+    "tables 4",
+    "pages 5"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:field-01.hwp",
+   "root": "corpus",
+   "path": "samples/field-01.hwp",
+   "sha256": "518cb939079e6e0640a5f813597f744e2528a17ca52ee418929f1c8f4b5380c0",
+   "size": 514560,
+   "format": "hwp",
+   "covers": [
+    "click-here fields",
+    "text boxes"
+   ],
+   "contains": [
+    "unnamed controls (form objects, field marks) 6",
+    "rectangles/text boxes 6",
+    "clickhere fields 11",
+    "sections 3",
+    "pages 3"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:issue1893_clickhere_field_roundtrip.hwpx",
+   "root": "corpus",
+   "path": "samples/issue1893_clickhere_field_roundtrip.hwpx",
+   "sha256": "4f079abf122b2b3e20b552348e17b1a0e378d885b1e87dde43edc283171bb678",
+   "size": 15662,
+   "format": "hwpx",
+   "covers": [
+    "click-here fields"
+   ],
+   "contains": [
+    "unnamed controls (form objects, field marks) 11",
+    "tables 3",
+    "clickhere fields 20",
+    "pages 1"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:pic-in-table-01.hwp",
+   "root": "corpus",
+   "path": "samples/pic-in-table-01.hwp",
+   "sha256": "c73145d60f3f0b041bc8fee64b65e6d419a1fc78aa62a90fa150b36f35278f4a",
+   "size": 179200,
+   "format": "hwp",
+   "covers": [
+    "pictures in cells"
+   ],
+   "contains": [
+    "unnamed controls (form objects, field marks) 25",
+    "bookmarks 1",
+    "pictures 4",
+    "header 1",
+    "new numbers 1",
+    "page-number position 1",
+    "tables 65",
+    "bookmark fields 9",
+    "crossref fields 13",
+    "hyperlink fields 3",
+    "pages 22"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:hwp-img-001.hwp",
+   "root": "corpus",
+   "path": "samples/hwp-img-001.hwp",
+   "sha256": "0d632afcea1111c5af14413f10f91d982055a67257dc73e5e5db2c04c1c00f60",
+   "size": 160256,
+   "format": "hwp",
+   "covers": [
+    "pictures"
+   ],
+   "contains": [
+    "unnamed controls (form objects, field marks) 1",
+    "pictures 4",
+    "tables 4",
+    "hyperlink fields 1",
+    "pages 1"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:test-image.hwpx",
+   "root": "corpus",
+   "path": "samples/test-image.hwpx",
+   "sha256": "4405f89db156da688d1a10ae0c0829f0159ad24ad4ad5e083902577a8304338a",
+   "size": 22602,
+   "format": "hwpx",
+   "covers": [
+    "pictures"
+   ],
+   "contains": [
+    "pictures 5",
+    "pages 5"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:eq-01.hwp",
+   "root": "corpus",
+   "path": "samples/eq-01.hwp",
+   "sha256": "d4b5e4730da12395c953d16c026c979adfdf3235eee4be605cef0ab758a7e5ec",
+   "size": 16384,
+   "format": "hwp",
+   "covers": [
+    "equations"
+   ],
+   "contains": [
+    "equations 3",
+    "tables 2",
+    "pages 1"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:eq-002.hwpx",
+   "root": "corpus",
+   "path": "samples/hwpx/eq-002.hwpx",
+   "sha256": "ecb229b47bfa221bdd3cba06fd72887b1536fb944549e789969ea19cde87a8bb",
+   "size": 18665,
+   "format": "hwpx",
+   "covers": [
+    "equations"
+   ],
+   "contains": [
+    "auto numbers 1",
+    "equations 16",
+    "pages 1"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:꺽은선형.hwp",
+   "root": "corpus",
+   "path": "samples/chart/라인/꺽은선형.hwp",
+   "sha256": "a842f19fc05b47c626e050235020a0c0cc72dda42cbe9ced2d02525b5c4e6489",
+   "size": 50176,
+   "format": "hwp",
+   "covers": [
+    "chart (Hancom 2022)"
+   ],
+   "contains": [
+    "OLE/chart 1",
+    "pages 1"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:묶은세로막대형.hwpx",
+   "root": "corpus",
+   "path": "samples/chart/세로막대형/묶은세로막대형.hwpx",
+   "sha256": "e8ffa2ef81e630b5ac7e0a230c101924b96bd4d61be958cf608161bfe9a7365a",
+   "size": 40484,
+   "format": "hwpx",
+   "covers": [
+    "chart (Hancom 2022)"
+   ],
+   "contains": [
+    "OLE/chart 1",
+    "pages 1"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:table-in-tbox.hwp",
+   "root": "corpus",
+   "path": "samples/table-in-tbox.hwp",
+   "sha256": "02b0ced8b96cec5b6e1cad6dd1926b701a2875ea9591c589e57edf7653daf4af",
+   "size": 163328,
+   "format": "hwp",
+   "covers": [
+    "text box",
+    "table in text box",
+    "pictures"
+   ],
+   "contains": [
+    "unnamed controls (form objects, field marks) 2",
+    "pictures 14",
+    "rectangles/text boxes 2",
+    "tables 9",
+    "hyperlink fields 2",
+    "pages 2"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:footnote-tbox-01.hwp",
+   "root": "corpus",
+   "path": "samples/footnote-tbox-01.hwp",
+   "sha256": "4fae695a6ff7c8e3f769d7502f7dcb1e6c38847d85c9411c8ad7e356f7ddd49a",
+   "size": 9216,
+   "format": "hwp",
+   "covers": [
+    "text box",
+    "footnote"
+   ],
+   "contains": [
+    "footnotes 2",
+    "rectangles/text boxes 1",
+    "pages 1"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:draw-group.hwp",
+   "root": "corpus",
+   "path": "samples/draw-group.hwp",
+   "sha256": "e20643e6f8a4d73cd9b01a600fd9613133201d09e1715e86254778e5e2022fae",
+   "size": 34816,
+   "format": "hwp",
+   "covers": [
+    "grouped drawing"
+   ],
+   "contains": [
+    "auto numbers 1",
+    "drawing groups 1",
+    "pages 1"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:hwp-multi-001.hwp",
+   "root": "corpus",
+   "path": "samples/hwp-multi-001.hwp",
+   "sha256": "cb810b94394d8116de0aff1be70d5c63f381090a55050c77f02d4ba67e89523e",
+   "size": 492032,
+   "format": "hwp",
+   "covers": [
+    "multi-column",
+    "two sections"
+   ],
+   "contains": [
+    "drawing groups 1",
+    "pictures 2",
+    "hide header/footer 4",
+    "page-number position 2",
+    "tables 26",
+    "clickhere fields 11",
+    "sections 2",
+    "pages 9"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:lseg-05-tab.hwp",
+   "root": "corpus",
+   "path": "samples/lseg-05-tab.hwp",
+   "sha256": "0066108df04204324c0802414087563e7673e30f3d142dd014af14e318153d2c",
+   "size": 18432,
+   "format": "hwp",
+   "covers": [
+    "tabs"
+   ],
+   "contains": [
+    "pages 1"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:biz_plan.hwp",
+   "root": "corpus",
+   "path": "samples/biz_plan.hwp",
+   "sha256": "8b786d6824622afae2220b203beeef6e5592157e1896fea055ebc602817113c1",
+   "size": 33792,
+   "format": "hwp",
+   "covers": [
+    "business plan",
+    "outline numbering"
+   ],
+   "contains": [
+    "header 1",
+    "new numbers 1",
+    "hide header/footer 2",
+    "page-number position 1",
+    "tables 8",
+    "pages 6"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:2025 행정업무운영 편람(최종).hwp",
+   "root": "corpus",
+   "path": "samples/2025 행정업무운영 편람(최종).hwp",
+   "sha256": "40d6d05eac4d55bdc4b0c62c42d93af104d5123b447581246f36fd15de7bd46f",
+   "size": 10687488,
+   "format": "hwp",
+   "covers": [
+    "long document",
+    "public-sector manual"
+   ],
+   "contains": [
+    "unnamed controls (form objects, field marks) 8",
+    "footnotes 1",
+    "footer 2",
+    "drawing groups 41",
+    "pictures 24",
+    "rectangles/text boxes 14",
+    "lines 5",
+    "header 1",
+    "new numbers 1",
+    "hide header/footer 21",
+    "tables 324",
+    "clickhere fields 150",
+    "hyperlink fields 14",
+    "sections 14",
+    "pages 381"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:21_언어_기출_편집가능본.hwp",
+   "root": "corpus",
+   "path": "samples/21_언어_기출_편집가능본.hwp",
+   "sha256": "905454045ca2e236839a7cab59750678116d08af3db31dbf846819af355b8d15",
+   "size": 435200,
+   "format": "hwp",
+   "covers": [
+    "exam paper",
+    "multi-column"
+   ],
+   "contains": [
+    "auto numbers 2",
+    "pictures 1",
+    "rectangles/text boxes 21",
+    "lines 1",
+    "tables 16",
+    "pages 15"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:hwp3-sample16-hwp5-2018.hwp",
+   "root": "corpus",
+   "path": "samples/hwp3-sample16-hwp5-2018.hwp",
+   "sha256": "9c3e00a1948a76f524603b3f7d5aba90a524b6e21583d199e40c2539845ae116",
+   "size": 3053056,
+   "format": "hwp",
+   "covers": [
+    "saved by Hancom 2018"
+   ],
+   "contains": [
+    "bookmarks 10",
+    "equations 2",
+    "footer 2",
+    "pictures 6",
+    "rectangles/text boxes 10",
+    "ellipses 3",
+    "new numbers 1",
+    "page-number position 1",
+    "tables 91",
+    "pages 64"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:hwp3-sample16-hwp5-2024.hwp",
+   "root": "corpus",
+   "path": "samples/hwp3-sample16-hwp5-2024.hwp",
+   "sha256": "f737ee22888b0a11171622b3e1c12d71d0f42cf066f729d3c98dde9ca6cc122d",
+   "size": 3044864,
+   "format": "hwp",
+   "covers": [
+    "saved by Hancom 2024"
+   ],
+   "contains": [
+    "bookmarks 10",
+    "equations 2",
+    "footer 2",
+    "pictures 6",
+    "rectangles/text boxes 10",
+    "ellipses 3",
+    "new numbers 1",
+    "page-number position 1",
+    "tables 91",
+    "pages 64"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:hwp3-sample5-hwp5-v2024.hwp",
+   "root": "corpus",
+   "path": "samples/hwp3-sample5-hwp5-v2024.hwp",
+   "sha256": "510b5ee95a29c6e2c9e3d760c382c300c34035b401e42661adb7996afdd072e3",
+   "size": 285184,
+   "format": "hwp",
+   "covers": [
+    "saved by Hancom 2024"
+   ],
+   "contains": [
+    "pictures 7",
+    "new numbers 1",
+    "page-number position 1",
+    "pages 64"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:복학원서.hwp",
+   "root": "corpus",
+   "path": "samples/복학원서.hwp",
+   "sha256": "da81b4010331bcac290f900c7cf224c97ee8355399614725ce46c197ff1a22a4",
+   "size": 114688,
+   "format": "hwp",
+   "covers": [
+    "university form"
+   ],
+   "contains": [
+    "pictures 2",
+    "ellipses 1",
+    "tables 3",
+    "pages 1"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:복학원서.hwpx",
+   "root": "corpus",
+   "path": "samples/복학원서.hwpx",
+   "sha256": "3fbd1693b4c78fa3911e0de0b632d26e949af6a29fb38bfd6b298592da6d2634",
+   "size": 222775,
+   "format": "hwpx",
+   "covers": [
+    "university form"
+   ],
+   "contains": [
+    "pictures 2",
+    "ellipses 1",
+    "tables 3",
+    "pages 1"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:2024년 1분기 해외직접투자 보도자료 ff.hwpx",
+   "root": "corpus",
+   "path": "samples/hwpx/2024년 1분기 해외직접투자 보도자료 ff.hwpx",
+   "sha256": "8be6e931347112bd04eb2d78e7fa1d7ab484deed181335cf02320d2f325165e4",
+   "size": 561024,
+   "format": "hwpx",
+   "covers": [
+    "government press release",
+    "charts and tables"
+   ],
+   "contains": [
+    "drawing groups 1",
+    "pictures 2",
+    "hide header/footer 4",
+    "page-number position 2",
+    "tables 26",
+    "clickhere fields 11",
+    "sections 2",
+    "pages 9"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:issue5169_viewtext_changetracking.hwp",
+   "root": "corpus",
+   "path": "samples/issue5169_viewtext_changetracking.hwp",
+   "sha256": "c003cdb0dd9aac5fda9c82d4f3be20a327522cf2deb680dc25134c7c6c8c3462",
+   "size": 225280,
+   "format": "hwp",
+   "covers": [
+    "tracked changes"
+   ],
+   "contains": [
+    "new numbers 1",
+    "hide header/footer 1",
+    "page-number position 1",
+    "tables 4",
+    "pages 6"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:셀보호.hwpx",
+   "root": "corpus",
+   "path": "samples/셀보호.hwpx",
+   "sha256": "ca4118e50e6cc34f5e644c3998de1dc103e97df349b3badc59f2119c225cc5d2",
+   "size": 16467,
+   "format": "hwpx",
+   "covers": [
+    "cell protection"
+   ],
+   "contains": [
+    "tables 1",
+    "clickhere fields 1",
+    "pages 1"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:한셀OLE.hwp",
+   "root": "corpus",
+   "path": "samples/한셀OLE.hwp",
+   "sha256": "fdc595a2f5f99f97653b91e57b4c74090391495ce5f84ef2e60308ea4b8e9da3",
+   "size": 18944,
+   "format": "hwp",
+   "covers": [
+    "OLE object"
+   ],
+   "contains": [
+    "OLE/chart 1",
+    "pages 1"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:form-01.hwp",
+   "root": "corpus",
+   "path": "samples/form-01.hwp",
+   "sha256": "75b6b8bb9121c6aeebf567aaa158ac7ec95caae597fd8a5ec7d4c84a25b927ac",
+   "size": 18432,
+   "format": "hwp",
+   "covers": [
+    "form controls"
+   ],
+   "contains": [
+    "unnamed controls (form objects, field marks) 6",
+    "clickhere fields 1",
+    "pages 1"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  },
+  {
+   "id": "rhwp:issue5524_hangul2024_compat_letterhead.hwp",
+   "root": "corpus",
+   "path": "samples/issue5524_hangul2024_compat_letterhead.hwp",
+   "sha256": "8bd6158e398c9e56e41011aa4aeb5316574cb9695b9dd2193fdf55a71d81beaa",
+   "size": 172032,
+   "format": "hwp",
+   "covers": [
+    "Hangul 2024 compatibility",
+    "letterhead"
+   ],
+   "contains": [
+    "pictures 1",
+    "header 1",
+    "page-number position 1",
+    "tables 2",
+    "pages 2"
+   ],
+   "source": "rhwp 0.9.0 repository samples/ (public sample documents)",
+   "licence": "MIT (rhwp repository licence; no separate licence on samples/)"
+  }
+ ]
+}

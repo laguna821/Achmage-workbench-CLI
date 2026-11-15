@@ -41,6 +41,7 @@ CLI 검사는 UTF-8/EUC-KR CSV와 HTML .xls도 포함한다. 실제 BIFF5 자료
 필요 도구: `broadwayd`, GTK 3 개발 파일(`pkg-config gtk+-3.0`), C 컴파일러, `dbus-run-session`, `~/.cargo/bin/tauri-driver`, `~/.local/opt/webkit-webdriver/WebKitWebDriver`. 드라이버 경로는 `APP_E2E_TAURI_DRIVER`, `APP_E2E_WEBKIT_DRIVER`로 지정할 수 있다.
 
 ```bash
+node node_modules/playwright-core/cli.js install chromium --only-shell   # once: the office build checks the Hangul studio in it
 npm run build
 npm run tauri -w @workbench/desktop -- build --debug --no-bundle
 node scripts/app-e2e/run.ts apps/desktop/src-tauri/target/debug/achmage-workbench /tmp/workbench-native-result --only=start,panes,pkm,workspaces,navigation,tabs --engines=stand-in
